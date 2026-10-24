@@ -67,7 +67,18 @@ void main() {
     );
     expect(
       () => types.addOverride('/xl/workbook.xml', ContentType.worksheet),
-      throwsStateError,
+      throwsA(
+        isA<StateError>().having(
+          (StateError e) => e.message,
+          'message',
+          allOf(
+            contains('part'),
+            contains('/xl/workbook.xml'),
+            contains(ContentType.workbook),
+            contains(ContentType.worksheet),
+          ),
+        ),
+      ),
     );
   });
 

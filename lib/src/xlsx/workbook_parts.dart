@@ -31,9 +31,10 @@ typedef WorkbookSheet = ({String name, int number});
 /// The relationship id of the worksheet created [number]th (1-based).
 ///
 /// `workbook.xml` refers to the worksheet by this id and
-/// `workbook.xml.rels` declares it. [writeWorkbookRelationships] lists the
-/// worksheets first, in creation order, so [Relationships.add] hands out the
-/// same ids; the one helper keeps both parts agreeing.
+/// `workbook.xml.rels` declares it. [writeWorkbookRelationships] passes this
+/// id to [Relationships.add] for each worksheet, so both parts take it from
+/// here. The styles and shared strings get automatic ids, which skip the ids
+/// the worksheets use.
 String worksheetRelationshipId(int number) => 'rId$number';
 
 /// The ZIP entry name of the worksheet created [number]th (1-based).
@@ -82,11 +83,11 @@ void writeWorkbook(
 void writeWorkbookRelationships(XmlWriter w, int sheetCount) {
   final Relationships rels = Relationships();
   for (int number = 1; number <= sheetCount; number++) {
-    final String id = rels.add(
+    rels.add(
       RelType.worksheet,
       'worksheets/sheet$number.xml',
+      id: worksheetRelationshipId(number),
     );
-    assert(id == worksheetRelationshipId(number), 'Relationship id drift.');
   }
   rels
     ..add(RelType.styles, 'styles.xml')

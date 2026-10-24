@@ -145,4 +145,23 @@ void main() {
     expect(worksheetPartName(1), 'xl/worksheets/sheet1.xml');
     expect(worksheetPartName(12), 'xl/worksheets/sheet12.xml');
   });
+
+  test('worksheet relationship ids come from worksheetRelationshipId', () {
+    final StringBuffer out = StringBuffer();
+    writeWorkbookRelationships(XmlWriter(out), 12);
+    final String xml = out.toString();
+    for (int n = 1; n <= 12; n++) {
+      expect(
+        xml,
+        contains(
+          'Id="${worksheetRelationshipId(n)}" Type="${RelType.worksheet}" '
+          'Target="worksheets/sheet$n.xml"',
+        ),
+      );
+    }
+    final Set<String> ids = RegExp(
+      r'Id="([^"]+)"',
+    ).allMatches(xml).map((RegExpMatch m) => m.group(1)!).toSet();
+    expect(ids, hasLength(14));
+  });
 }

@@ -271,7 +271,8 @@ final class XlsxResult {
   final Uint8List bytes;
 
   /// Data problems the writer repaired, in first-occurrence order. Empty
-  /// when the data was written exactly as given. Unmodifiable.
+  /// when the data was written exactly as given. Unmodifiable, and final once
+  /// `close()` has returned.
   final List<XlsxWarning> warnings;
 }
 
