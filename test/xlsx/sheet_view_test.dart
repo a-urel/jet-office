@@ -142,6 +142,30 @@ void main() {
       );
     });
 
+    test('accept a split offset up to 2^31 - 1 twips, rounded (R12)', () {
+      // 107,374,182.35 points are 2,147,483,647 twips; 107,374,182.374 are
+      // 2,147,483,647.48 twips, which round down to it.
+      checkPane(const XlsxPane.split(x: 107374182.35));
+      checkPane(const XlsxPane.split(y: 107374182.374));
+    });
+
+    test('reject a split offset past 2^31 - 1 twips (R12)', () {
+      // 2,147,483,647.5 twips round up to 2^31.
+      expect(
+        () => checkPane(const XlsxPane.split(x: 107374182.375)),
+        rejects('x'),
+      );
+      expect(
+        () => checkPane(const XlsxPane.split(y: 107374182.4)),
+        rejects('y'),
+      );
+      expect(() => checkPane(const XlsxPane.split(x: 1e308)), rejects('x'));
+      expect(
+        () => checkPane(const XlsxPane.split(y: double.maxFinite)),
+        rejects('y'),
+      );
+    });
+
     test('reject split offsets that are negative, NaN or infinite', () {
       expect(() => checkPane(const XlsxPane.split(x: -1)), rejects('x'));
       expect(() => checkPane(const XlsxPane.split(y: -1)), rejects('y'));

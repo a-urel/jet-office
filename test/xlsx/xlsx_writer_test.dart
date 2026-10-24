@@ -1457,6 +1457,19 @@ void main() {
         expectRejected((XlsxSheetWriter s) => s.split(x: double.infinity), 'x');
       });
 
+      test('a split past 2^31 - 1 twips throws at the call (R12)', () {
+        expectRejected((XlsxSheetWriter s) => s.split(x: 1e308), 'x');
+        expectRejected((XlsxSheetWriter s) => s.split(y: 107374182.4), 'y');
+      });
+
+      test('a split of 2^31 - 1 twips is written', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('S')
+          ..split(x: 107374182.35)
+          ..row(<Object?>[1]);
+        expect(sheetXml(book), contains('<pane xSplit="2147483647" '));
+      });
+
       test('a tab color that is out of range', () {
         expectRejected(
           (XlsxSheetWriter s) => s.tabColor(const XlsxColor.theme(99)),

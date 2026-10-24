@@ -30,10 +30,11 @@ final class XlsxPane {
       y = 0;
 
   /// A pane split at [x] points from the left edge and [y] points from the
-  /// top, both at least 0 and finite. The writer stores the offsets in
+  /// top, both finite and at least 0. The writer stores the offsets in
   /// whole twentieths of a point (twips), rounded: an axis whose offset
-  /// rounds to 0 twips does not split, and a split of 0 on both axes is no
-  /// pane.
+  /// rounds to 0 twips does not split, a split of 0 on both axes is no
+  /// pane, and an offset of more than 2^31 - 1 twips (above 107,374,182.35
+  /// points) is rejected.
   const XlsxPane.split({this.x = 0, this.y = 0})
     : isFrozen = false,
       rows = 0,
@@ -205,7 +206,7 @@ void checkSheetView(XlsxSheetView view) {
 
 /// Throws [ArgumentError] unless [pane] freezes a number of rows from 0 to
 /// the last row and of columns from 0 to the last column, or splits at
-/// finite offsets of at least 0.
+/// finite offsets of at least 0 and at most 2^31 - 1 twips each.
 void checkPane(XlsxPane pane) {
   if (pane.isFrozen) {
     if (pane.rows < 0 || pane.rows >= XlsxLimits.maxRows) {
@@ -228,6 +229,14 @@ void checkPane(XlsxPane pane) {
   _checkOffset(pane.y, 'y');
 }
 
+/// The largest split offset the writer stores, in twips. `xSplit` and
+/// `ySplit` are read as 32-bit signed integers; a larger offset also made
+/// `close()` fail on the VM, and the VM and the browser printed huge
+/// rounded offsets differently.
+const double _maxSplitTwips = 2147483647;
+
+/// Throws unless [offset] is a finite number of points, at least 0, whose
+/// twips (`offset * 20`, rounded) do not exceed 2^31 - 1 (ruling R12).
 void _checkOffset(double offset, String name) {
   // Written so that NaN fails too.
   if (!(offset >= 0 && offset.isFinite)) {
@@ -235,6 +244,16 @@ void _checkOffset(double offset, String name) {
       offset,
       name,
       'A split offset must be a finite number of points, at least 0.',
+    );
+  }
+  // In doubles: the product of a huge offset is infinite, and rounding it
+  // to an int would throw.
+  if ((offset * 20).roundToDouble() > _maxSplitTwips) {
+    throw ArgumentError.value(
+      offset,
+      name,
+      'A split offset must be at most 107374182.35 points '
+      '(2147483647 twips).',
     );
   }
 }

@@ -402,7 +402,9 @@ abstract final class XlsxSheetWriter {
   /// pane, if any, is replaced. A split of 0 on both axes writes no pane.
   ///
   /// Throws [StateError] like [columns], and [ArgumentError] for an offset
-  /// that is negative, NaN or infinite; nothing is recorded then.
+  /// that is negative, NaN or infinite, or whose twips (`offset * 20`,
+  /// rounded) exceed 2^31 - 1, that is above 107,374,182.35 points; nothing
+  /// is recorded then.
   void split({double x = 0, double y = 0});
 
   /// Colors the sheet's tab. A later call replaces the earlier one.
