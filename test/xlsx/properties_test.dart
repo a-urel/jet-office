@@ -84,6 +84,17 @@ void main() {
     );
   });
 
+  test('fractions of a second are cut, never rounded up', () {
+    final String xml = _core(
+      XlsxProperties(
+        created: DateTime.utc(2026, 10, 24, 9, 30, 15, 999, 999),
+        modified: DateTime.utc(2026, 12, 31, 23, 59, 59, 999),
+      ),
+    );
+    expect(xml, contains('>2026-10-24T09:30:15Z<'));
+    expect(xml, contains('>2026-12-31T23:59:59Z<'));
+  });
+
   test('text is escaped', () {
     expect(
       _core(const XlsxProperties(title: 'A & B <c>')),

@@ -36,12 +36,73 @@ void main() {
     expect(xml.indexOf('sheet10.xml'), lessThan(xml.indexOf('sheet2.xml')));
   });
 
-  test('a later add for the same key replaces the earlier one', () {
+  test('the same key with the same type is a no-op', () {
     final ContentTypes types = ContentTypes()
-      ..addDefault('xml', 'a/b')
-      ..addDefault('xml', ContentType.xml);
-    expect(_render(types), contains('ContentType="application/xml"'));
-    expect(_render(types), isNot(contains('a/b')));
+      ..addDefault('xml', ContentType.xml)
+      ..addDefault('xml', ContentType.xml)
+      ..addOverride('/xl/workbook.xml', ContentType.workbook)
+      ..addOverride('/xl/workbook.xml', ContentType.workbook);
+    final String xml = _render(types);
+    expect('<Default '.allMatches(xml).length, 1);
+    expect('<Override '.allMatches(xml).length, 1);
+  });
+
+  test('the same key with another type throws StateError', () {
+    final ContentTypes types = ContentTypes()
+      ..addDefault('xml', ContentType.xml)
+      ..addOverride('/xl/workbook.xml', ContentType.workbook);
+    expect(
+      () => types.addDefault('xml', 'a/b'),
+      throwsA(
+        isA<StateError>().having(
+          (StateError e) => e.message,
+          'message',
+          allOf(contains('xml'), contains('a/b'), contains(ContentType.xml)),
+        ),
+      ),
+    );
+    expect(
+      () => types.addOverride('/xl/workbook.xml', ContentType.worksheet),
+      throwsStateError,
+    );
+  });
+
+  test('keys are case-insensitive: a conflict is still a conflict', () {
+    final ContentTypes types = ContentTypes()
+      ..addDefault('xml', ContentType.xml)
+      ..addOverride('/xl/workbook.xml', ContentType.workbook);
+    expect(() => types.addDefault('XML', 'a/b'), throwsStateError);
+    expect(
+      () => types.addOverride('/xl/Workbook.xml', ContentType.worksheet),
+      throwsStateError,
+    );
+  });
+
+  test('case variants with the same type are a no-op, first spelling wins', () {
+    final ContentTypes types = ContentTypes()
+      ..addDefault('Xml', ContentType.xml)
+      ..addDefault('XML', ContentType.xml.toUpperCase())
+      ..addOverride('/xl/Workbook.xml', ContentType.workbook)
+      ..addOverride('/xl/workbook.xml', ContentType.workbook);
+    final String xml = _render(types);
+    expect('<Default '.allMatches(xml).length, 1);
+    expect('<Override '.allMatches(xml).length, 1);
+    expect(xml, contains('Extension="Xml"'));
+    expect(xml, contains('PartName="/xl/Workbook.xml"'));
+  });
+
+  test('bad extensions and part names throw ArgumentError', () {
+    final ContentTypes types = ContentTypes();
+    expect(() => types.addDefault('', ContentType.xml), throwsArgumentError);
+    expect(
+      () => types.addDefault('.xml', ContentType.xml),
+      throwsArgumentError,
+    );
+    expect(() => types.addDefault('a.b', ContentType.xml), throwsArgumentError);
+    expect(
+      () => types.addOverride('xl/workbook.xml', ContentType.workbook),
+      throwsArgumentError,
+    );
   });
 
   test('constants hold the ECMA-376 values', () {
