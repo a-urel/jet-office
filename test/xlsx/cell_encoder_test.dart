@@ -286,6 +286,50 @@ void main() {
     );
   });
 
+  test('an empty formula is an ArgumentError naming the cell and sheet', () {
+    final Matcher namesCell = throwsA(
+      isA<ArgumentError>().having(
+        (ArgumentError e) => e.toString(),
+        'message',
+        allOf(contains('A1'), contains('"S"'), contains('empty')),
+      ),
+    );
+    expect(() => enc(const XlsxFormula('')), namesCell);
+    expect(() => enc(const XlsxFormula('=')), namesCell);
+    expect(encoder.wroteFormula, isFalse);
+  });
+
+  test('a formula longer than 8,192 characters is an ArgumentError', () {
+    final String max = '1+' * 4095 + '11'; // 8,192 code units
+    expect(max.length, 8192);
+    expect(enc(XlsxFormula(max)), '<c r="A1"><f>$max</f></c>');
+    expect(enc(XlsxFormula('=$max')), '<c r="A1"><f>$max</f></c>');
+    expect(
+      () => enc(XlsxFormula('${max}1')),
+      throwsA(
+        isA<ArgumentError>().having(
+          (ArgumentError e) => e.toString(),
+          'message',
+          allOf(contains('A1'), contains('"S"'), contains('8192')),
+        ),
+      ),
+    );
+  });
+
+  test('a cached string past the cell limit is truncated with a warning', () {
+    final String out = enc(
+      XlsxFormula('A2', cached: '${'x' * 32766}\u{1F600}tail'),
+    );
+    expect(out, '<c r="A1" t="str"><f>A2</f><v>${'x' * 32766}</v></c>');
+    expect(codes(), <XlsxWarningCode>[XlsxWarningCode.textTruncated]);
+    expect(warnings.warnings.single.cells, <String>['A1']);
+  });
+
+  test('a cached string of exactly 32,767 units is kept', () {
+    enc(XlsxFormula('A2', cached: 'z' * 32767));
+    expect(warnings.warnings, isEmpty);
+  });
+
   test('a formula with a non-finite cached number is an ArgumentError', () {
     expect(
       () => enc(const XlsxFormula('A1', cached: double.nan)),

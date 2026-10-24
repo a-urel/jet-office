@@ -6,6 +6,7 @@ library;
 import 'package:jet_office/src/xlsx/cell_encoder.dart';
 import 'package:jet_office/src/xlsx/shared_strings.dart';
 import 'package:jet_office/src/xlsx/style_registry.dart';
+import 'package:jet_office/src/xlsx/values.dart';
 import 'package:jet_office/src/xlsx/warnings.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
 import 'package:test/test.dart';
@@ -37,6 +38,17 @@ void main() {
 
   test('int beyond 2^53 warns', () {
     expect(enc(9007199254740993), '<c r="A1"><v>9007199254740993</v></c>');
+    expect(warnings.warnings.map((XlsxWarning w) => w.code), <XlsxWarningCode>[
+      XlsxWarningCode.intPrecisionLost,
+    ]);
+  });
+
+  test('a cached int beyond 2^53 warns like a plain int', () {
+    expect(
+      enc(const XlsxFormula('A2', cached: 9007199254740993)),
+      '<c r="A1"><f>A2</f><v>9007199254740993</v></c>',
+    );
+    expect(enc(const XlsxFormula('A2', cached: 9007199254740992)), isNotEmpty);
     expect(warnings.warnings.map((XlsxWarning w) => w.code), <XlsxWarningCode>[
       XlsxWarningCode.intPrecisionLost,
     ]);

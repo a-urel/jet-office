@@ -27,6 +27,12 @@ import 'warnings.dart';
 /// The largest whole number a `double` holds exactly (2^53).
 const int _maxExactInt = 9007199254740992;
 
+/// The most characters (UTF-16 code units) Excel accepts in a formula.
+const int _maxFormulaLength = 8192;
+
+/// Whether Excel, which stores every number as a double, may round [v].
+bool _losesPrecision(int v) => v.abs() > _maxExactInt;
+
 /// Encodes cell values as `<c>` elements.
 ///
 /// One encoder serves one workbook: it shares the workbook's string table,
@@ -60,10 +66,12 @@ final class CellEncoder {
   ///
   /// Data problems (characters XML forbids, text past 32,767 UTF-16 code
   /// units, integers past 2^53, dates outside 1900 to 9999, a date shown in
-  /// a non-date format) are repaired and reported to the warning collector.
+  /// a non-date format) are repaired and reported to the warning collector;
+  /// a formula's cached string or integer is treated like a plain one.
   /// Programmer errors throw an [ArgumentError]: an unsupported type, a
-  /// nested [XlsxCell], a `NaN` or infinite number, an impossible date, an
-  /// invalid formula or cached value; an invalid style throws like
+  /// nested [XlsxCell], a `NaN` or infinite number, an impossible date, a
+  /// formula that is empty after its leading `=`, longer than 8,192 UTF-16
+  /// code units or holds characters XML forbids, an invalid cached value; an invalid style throws like
   /// [StyleRegistry.idFor]. When it throws, nothing is written to [out] and
   /// nothing is recorded: the string table, the style registry and the
   /// warnings are as they were.
@@ -101,7 +109,7 @@ final class CellEncoder {
         _write(out, ref, _styles.idFor(style), 'b', '<v>${v ? 1 : 0}</v>');
       case int():
         final int id = _styles.idFor(style);
-        if (v.abs() > _maxExactInt) {
+        if (_losesPrecision(v)) {
           _warnings.add(
             XlsxWarningCode.intPrecisionLost,
             sheet: sheet,
@@ -247,6 +255,17 @@ final class CellEncoder {
     final String text = formula.text.startsWith('=')
         ? formula.text.substring(1)
         : formula.text;
+    if (text.isEmpty) {
+      throw ArgumentError(
+        'The formula in cell $ref on sheet "$sheet" is empty.',
+      );
+    }
+    if (text.length > _maxFormulaLength) {
+      throw ArgumentError(
+        'The formula in cell $ref on sheet "$sheet" has ${text.length} '
+        'characters; Excel accepts at most $_maxFormulaLength.',
+      );
+    }
     if (scrubXmlText(text).removed > 0) {
       throw ArgumentError(
         'The formula in cell $ref on sheet "$sheet" contains characters '
@@ -256,6 +275,7 @@ final class CellEncoder {
     final Object? cached = formula.cached;
     String? type;
     String? cachedXml;
+    XlsxWarningCode? warning;
     switch (cached) {
       case null:
         break;
@@ -266,14 +286,21 @@ final class CellEncoder {
             '"$sheet" contains characters XML forbids.',
           );
         }
+        final String kept = _truncate(cached);
+        if (kept.length < cached.length) {
+          warning = XlsxWarningCode.textTruncated;
+        }
         type = 'str';
-        cachedXml = '<v>${escapeXmlText(cached)}</v>';
+        cachedXml = '<v>${escapeXmlText(kept)}</v>';
       case bool():
         type = 'b';
         cachedXml = '<v>${cached ? 1 : 0}</v>';
       case num() when !cached.isFinite:
         throw _nonFinite(cached, sheet, ref);
       case num():
+        if (cached is int && _losesPrecision(cached)) {
+          warning = XlsxWarningCode.intPrecisionLost;
+        }
         cachedXml = '<v>$cached</v>';
       default:
         throw ArgumentError(
@@ -281,10 +308,13 @@ final class CellEncoder {
           'is a ${cached.runtimeType}; expected null, num, String or bool.',
         );
     }
+    // The style can throw; resolve it before the warning is recorded.
+    final int id = _styles.idFor(style);
+    if (warning != null) _warnings.add(warning, sheet: sheet, cell: ref);
     _write(
       out,
       ref,
-      _styles.idFor(style),
+      id,
       type,
       '<f>${escapeXmlText(text)}</f>${cachedXml ?? ''}',
     );

@@ -15,7 +15,9 @@
 ///    ending with an apostrophe;
 /// 7. `workbookView/@activeTab` is a valid sheet index;
 /// 8. every cell `s` is below the `cellXfs` count;
-/// 9. cell references in a row strictly increase and sit on that row.
+/// 9. cell references in a row strictly increase and sit on that row;
+/// 10. every formula (`<f>`) is non-empty and at most 8,192 UTF-16 code
+///     units.
 ///
 /// Pure Dart (no `dart:io`), so it runs in a browser too.
 library;
@@ -67,6 +69,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkActiveTab(docs, sheetNames.length, violations);
   _checkSharedStrings(docs, violations);
   _checkCells(docs, violations);
+  _checkFormulas(docs, violations);
   return violations;
 }
 
@@ -341,6 +344,26 @@ void _checkCells(Map<String, XmlDocument> docs, List<String> violations) {
             );
           }
         }
+      }
+    }
+  }
+}
+
+/// Rule 10.
+void _checkFormulas(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement f in _all(sheet.value, 'f')) {
+      final String text = f.innerText;
+      final String ref = f.parentElement == null
+          ? '?'
+          : _attr(f.parentElement!, 'r');
+      if (text.isEmpty) {
+        violations.add('rule 10: ${sheet.key}: cell $ref has an empty formula');
+      } else if (text.length > 8192) {
+        violations.add(
+          'rule 10: ${sheet.key}: cell $ref has a formula of ${text.length} '
+          'characters; Excel accepts 8192',
+        );
       }
     }
   }

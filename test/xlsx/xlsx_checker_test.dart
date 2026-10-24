@@ -7,13 +7,14 @@ import 'package:test/test.dart';
 
 import '../support/xlsx_checker.dart';
 
-/// A small valid workbook: two sheets, shared strings and a styled cell.
+/// A small valid workbook: two sheets, shared strings, a styled cell and a
+/// formula.
 Uint8List _good() {
   final XlsxWriter book = XlsxWriter();
   book.addSheet('Data')
     ..row(<Object?>['a', 'b', 1])
     ..row(<Object?>['a', 2.5, const XlsxDate(2026, 10, 24)]);
-  book.addSheet('Other').row(<Object?>['c']);
+  book.addSheet('Other').row(<Object?>['c', const XlsxFormula('1+1')]);
   return book.close().bytes;
 }
 
@@ -57,6 +58,7 @@ void _expectRule(Uint8List bytes, int rule) {
 }
 
 const String _sheet1 = 'xl/worksheets/sheet1.xml';
+const String _sheet2 = 'xl/worksheets/sheet2.xml';
 
 void main() {
   test('a valid workbook has no violations', () {
@@ -276,6 +278,38 @@ void main() {
       _expectRule(
         _broken(_sheet1, (String x) => x.replaceFirst('r="A1"', 'r="A2"')),
         9,
+      );
+    });
+  });
+
+  group('rule 10: formula text', () {
+    test('an empty formula', () {
+      _expectRule(
+        _broken(_sheet2, (String x) => x.replaceFirst('<f>1+1</f>', '<f></f>')),
+        10,
+      );
+      _expectRule(
+        _broken(_sheet2, (String x) => x.replaceFirst('<f>1+1</f>', '<f/>')),
+        10,
+      );
+    });
+    test('a formula longer than 8,192 characters', () {
+      final String max = '1+' * 4095 + '11';
+      expect(
+        checkXlsx(
+          _broken(
+            _sheet2,
+            (String x) => x.replaceFirst('<f>1+1</f>', '<f>$max</f>'),
+          ),
+        ),
+        isEmpty,
+      );
+      _expectRule(
+        _broken(
+          _sheet2,
+          (String x) => x.replaceFirst('<f>1+1</f>', '<f>${max}1</f>'),
+        ),
+        10,
       );
     });
   });
