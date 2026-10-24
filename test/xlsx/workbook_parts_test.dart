@@ -38,6 +38,22 @@ void main() {
       );
     });
 
+    test('escapes _xHHHH_ in a sheet name, then XML-escapes it', () {
+      final String xml = _render(
+        (XmlWriter w) => writeWorkbook(
+          w,
+          tabs: const <WorkbookSheet>[
+            (name: '_x0041_', number: 1),
+            (name: 'a&_x0042_', number: 2),
+          ],
+          activeTab: 0,
+          fullCalcOnLoad: false,
+        ),
+      );
+      expect(xml, contains('<sheet name="_x005F_x0041_" sheetId="1"'));
+      expect(xml, contains('<sheet name="a&amp;_x005F_x0042_" sheetId="2"'));
+    });
+
     test('adds calcPr after sheets only for formulas', () {
       final String xml = _render(
         (XmlWriter w) => writeWorkbook(

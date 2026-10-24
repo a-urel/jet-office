@@ -65,9 +65,9 @@ asked for.
 - The active sheet, open on load, is `şube (2)`.
 - `Sheet10`'s A1 is `asked: ` with nothing after it (the empty name).
 - `History (2)`'s A1 is `asked: History` (Excel reserves `History`).
-- The last tab's name is stored as `_x0041_`, unescaped. Record under
-  Results whether Excel's tab shows `_x0041_` or `A`. Its A1 shows
-  `asked: _x0041_` either way.
+- The last tab's name is stored as `_x005F_x0041_`, escaped like cell text.
+  Excel's tab must read `_x0041_` literally, not `A`. Its A1 shows
+  `asked: _x0041_`.
 
 ### `m1_formulas`
 

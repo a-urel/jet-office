@@ -17,11 +17,13 @@ library;
 import '../opc/content_types.dart';
 import '../opc/ooxml.dart';
 import '../opc/relationships.dart';
+import '../xml/xml_escape.dart';
 import '../xml/xml_writer.dart';
 
 /// A worksheet as the workbook lists it.
 ///
-/// `name` is the final, valid sheet name. `number` is the sheet's 1-based
+/// `name` is the final, valid sheet name, unescaped; [writeWorkbook] escapes
+/// `_xHHHH_` sequences when it writes it. `number` is the sheet's 1-based
 /// creation order: it names the part (`sheet{number}.xml`), is the
 /// `sheetId`, and its relationship id is `rId{number}`.
 typedef WorkbookSheet = ({String name, int number});
@@ -51,7 +53,7 @@ void writeWorkbook(
   w.start('sheets');
   for (final WorkbookSheet sheet in tabs) {
     w.empty('sheet', <String, String>{
-      'name': sheet.name,
+      'name': escapeXstring(sheet.name),
       'sheetId': '${sheet.number}',
       'r:id': 'rId${sheet.number}',
     });

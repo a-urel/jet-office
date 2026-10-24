@@ -74,7 +74,8 @@ Map<String, List<List<String>>> _storedValues(Uint8List bytes) {
         if (column > columns) columns = column;
       }
     }
-    result[sheet.getAttribute('name')!] = <List<String>>[
+    // A reader decodes `_xHHHH_` in sheet names too (ruling R22).
+    result[decodeXstring(sheet.getAttribute('name')!)] = <List<String>>[
       for (int r = 1; r <= rows; r++)
         <String>[for (int c = 1; c <= columns; c++) cells[(r, c)] ?? ''],
     ];
@@ -182,6 +183,7 @@ void main() {
         s.getAttribute('name')!,
     ];
     expect(names.first, 'Başlangıç');
+    expect(names.last, '_x005F_x0041_'); // the sheet `_x0041_`, escaped
     expect(
       names[int.parse(
         book.findAllElements('workbookView').single.getAttribute('activeTab')!,

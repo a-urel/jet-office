@@ -20,6 +20,7 @@ habit.
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | Sheet name with `[ ] : * ? / \`, longer than 31, or empty | sanitized, warning `sheetNameChanged` | Excel refuses the file otherwise | `test/xlsx/sheet_name_test.dart` |
+| `_xHHHH_` in a sheet name (such as `_x0041_`) | kept in the name; written escaped as `_x005F_x0041_`, like cell text, so Excel and LibreOffice show the name as given. The 31-unit limit and uniqueness use the original name | both read ST_Xstring escapes in sheet names | `test/xlsx/workbook_parts_test.dart`, `test/xlsx/xlsx_writer_test.dart` |
 | Duplicate sheet name (case-insensitive, Turkish and German letters included) | suffixed ` (2)`, warning `sheetNameDuplicated` | same | `test/xlsx/sheet_name_test.dart` |
 | Control character U+0000–U+001F other than tab, LF, CR, or a lone UTF-16 surrogate | removed, warning `invalidCharactersRemoved` | XML 1.0 forbids it | `test/xml/xml_escape_test.dart`, `test/xlsx/cell_encoder_test.dart` |
 | Text longer than 32,767 characters (UTF-16 code units) | truncated without splitting a surrogate pair, warning `textTruncated` | Excel's cell limit | `test/xlsx/cell_encoder_test.dart` |

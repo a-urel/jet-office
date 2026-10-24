@@ -102,15 +102,15 @@ final RegExp _xstringStart = RegExp(r'_(?=x[0-9A-Fa-f]{4}_)');
 
 /// Protects [text] from ST_Xstring decoding.
 ///
-/// Excel and LibreOffice read `_xHHHH_` in cell text as the character
+/// Excel and LibreOffice read `_xHHHH_` in cell text and sheet names as the character
 /// U+HHHH, so the text `_x0041_` would show as `A`. Every `_` that starts
 /// such a sequence becomes `_x005F_` (the escape of `_` itself), which makes
 /// a reader show the text as given: `_x0041_` is written `_x005F_x0041_`.
 /// Overlapping sequences are covered too: `_x0041_x0042_` becomes
 /// `_x005F_x0041_x005F_x0042_`.
 ///
-/// Apply it to shared-string and cached formula text when writing, then
-/// [escapeXmlText]. The result is longer than [text] when anything is
+/// Apply it to shared-string, cached formula text and sheet names when
+/// writing, then [escapeXmlText] (or [escapeXmlAttribute] for a name). The result is longer than [text] when anything is
 /// escaped; Excel's cell limit applies to the decoded text.
 String escapeXstring(String text) =>
     text.contains('_x') ? text.replaceAll(_xstringStart, '_x005F_') : text;

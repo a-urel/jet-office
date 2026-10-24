@@ -182,6 +182,56 @@ void main() {
         6,
       );
     });
+    test('decodes _xHHHH_ before comparing: A and an unescaped _x0041_', () {
+      _expectRule(
+        _broken(
+          'xl/workbook.xml',
+          (String x) => x
+              .replaceFirst('name="Data"', 'name="A"')
+              .replaceFirst('name="Other"', 'name="_x0041_"'),
+        ),
+        6,
+      );
+    });
+    test('an escaped _x005F_x0041_ next to A is not a duplicate', () {
+      final List<String> violations = checkXlsx(
+        _broken(
+          'xl/workbook.xml',
+          (String x) => x
+              .replaceFirst('name="Data"', 'name="A"')
+              .replaceFirst('name="Other"', 'name="_x005F_x0041_"'),
+        ),
+      );
+      expect(violations, isEmpty);
+    });
+    test('the length is that of the decoded name', () {
+      final String escaped = '_x005F_x0041_${'a' * 24}'; // decodes to 31
+      expect(
+        checkXlsx(
+          _broken(
+            'xl/workbook.xml',
+            (String x) => x.replaceFirst('name="Other"', 'name="$escaped"'),
+          ),
+        ),
+        isEmpty,
+      );
+      _expectRule(
+        _broken(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst('name="Other"', 'name="${escaped}a"'),
+        ),
+        6,
+      );
+    });
+    test('a forbidden character written as an escape is found', () {
+      _expectRule(
+        _broken(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst('name="Other"', 'name="a_x003A_b"'),
+        ),
+        6,
+      );
+    });
     test('longer than 31 characters', () {
       _expectRule(
         _broken(

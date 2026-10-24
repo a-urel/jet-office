@@ -423,6 +423,36 @@ void main() {
     expect(out.warnings.single.cells, hasLength(10));
   });
 
+  test('a sheet name that looks like an escape is written escaped', () {
+    final XlsxWriter book = XlsxWriter();
+    final XlsxSheetWriter sheet = book.addSheet('_x0041_');
+    expect(sheet.name, '_x0041_');
+    sheet.row(<Object?>['x']);
+    final XlsxResult out = book.close();
+    expect(out.warnings, isEmpty);
+    expect(
+      readXlsx(out.bytes)['xl/workbook.xml'],
+      contains('<sheet name="_x005F_x0041_" sheetId="1" r:id="rId1"/>'),
+    );
+    expect(checkXlsx(out.bytes), isEmpty);
+  });
+
+  test('the 31-unit limit counts the original name, not the escaped one', () {
+    final String name = '_x0041_${'a' * 24}';
+    expect(name.length, 31);
+    final XlsxWriter book = XlsxWriter();
+    final XlsxSheetWriter sheet = book.addSheet(name);
+    expect(sheet.name, name);
+    sheet.row(<Object?>['x']);
+    final XlsxResult out = book.close();
+    expect(out.warnings, isEmpty);
+    expect(
+      readXlsx(out.bytes)['xl/workbook.xml'],
+      contains('<sheet name="_x005F_x0041_${'a' * 24}"'),
+    );
+    expect(checkXlsx(out.bytes), isEmpty);
+  });
+
   test('sheet-name warnings use the final name', () {
     final XlsxWriter book = XlsxWriter();
     final XlsxSheetWriter sheet = book.addSheet('a/b');

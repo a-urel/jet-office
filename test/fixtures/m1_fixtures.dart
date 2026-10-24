@@ -254,8 +254,8 @@ const List<(String, String)> _sheetNames = <(String, String)>[
   ('', 'Sheet10'),
   ('History', 'History (2)'),
   ('this name is far longer than allowed', 'this name is far longer than al'),
-  // Written verbatim (ruling R19); docs/excel-checks.md asks how Excel
-  // shows it.
+  // Written escaped as `_x005F_x0041_` (ruling R22); its tab reads
+  // `_x0041_` and the CSV export is `m1_sheets-_x0041_.csv`.
   ('_x0041_', '_x0041_'),
 ];
 

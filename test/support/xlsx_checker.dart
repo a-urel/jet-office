@@ -10,7 +10,8 @@
 /// 4. `sst/@count` equals the number of `t="s"` cells and
 ///    `sst/@uniqueCount` the number of `si`;
 /// 5. every `t="s"` index is below `uniqueCount`;
-/// 6. sheet names are unique ignoring case, at most 31 UTF-16 code units,
+/// 6. sheet names (after decoding `_xHHHH_`, as Excel does) are unique
+///    ignoring case, at most 31 UTF-16 code units,
 ///    free of `[]:*?/\`, not the reserved `History` and not starting or
 ///    ending with an apostrophe;
 /// 7. `workbookView/@activeTab` is a valid sheet index;
@@ -32,6 +33,8 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:jet_office/src/xlsx/sheet_name.dart' show sheetNameKey;
 import 'package:xml/xml.dart';
+
+import '../../tool/src/csv_compare.dart' show decodeXstring;
 
 const String _contentTypesPart = '[Content_Types].xml';
 const String _sharedStringsPart = 'xl/sharedStrings.xml';
@@ -188,7 +191,8 @@ List<String> _checkSheetNames(
   final XmlDocument? doc = docs[_workbookPart];
   if (doc == null) return const <String>[];
   final List<String> names = <String>[
-    for (final XmlElement s in _all(doc, 'sheet')) _attr(s, 'name'),
+    for (final XmlElement s in _all(doc, 'sheet'))
+      decodeXstring(_attr(s, 'name')),
   ];
   final Map<String, String> seen = <String, String>{};
   for (final String name in names) {
