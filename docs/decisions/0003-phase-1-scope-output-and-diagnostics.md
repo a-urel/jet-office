@@ -17,15 +17,15 @@ Excel is the reference reader: a file that LibreOffice opens but Excel
 "repairs" is a bug.
 
 That aim leaves four things the earlier records do not settle. The phase-1
-feature list is too small. The output API was left open (0002 did not say whether
-`close()` returns bytes or writes to a sink). The earlier records do not define
-warnings, and the users who read them speak English, German and Turkish. "Opens in Excel" has no
-check behind it yet.
+feature list is too small. The output API was left open (0002 did not say
+whether `close()` returns bytes or writes to a sink). The earlier records do
+not define warnings, and the users who read them speak English, German and
+Turkish. "Opens in Excel" has no check behind it yet.
 
 One fact constrains the output. `package:archive` 4.0.9 and 4.5.2 cannot
 deflate a single ZIP entry incrementally. An entry is compressed from a whole
-byte buffer. 0002 named per-sheet buffering as the fallback for this case: the adapter
-buffers each sheet as UTF-8 bytes and compresses it once.
+byte buffer. 0002 named per-sheet buffering as the fallback for this case:
+the adapter buffers each sheet as UTF-8 bytes and compresses it once.
 
 The full design is in
 `docs/superpowers/specs/2026-10-24-phase-1-xlsx-writer-design.md`. That folder
@@ -43,7 +43,8 @@ feature list in 0001.**
     and document properties; the ZIP adapter; the cell encoder; the
     shared-string table; a minimal style registry; multiple sheets with name
     sanitizing and case-insensitive uniqueness; limits and lifecycle errors;
-    warnings.
+    warnings; a CI job that validates the fixtures with the Open XML SDK and
+    LibreOffice.
   - **M2, styling and layout:** fonts, fills (solid, pattern, gradient),
     borders, alignment, cell protection, number formats, column and row
     settings, merges, freeze and split panes, autofilter, sheet view, tab
@@ -123,13 +124,16 @@ before M5. Each milestone grows the types it needs, and M5's dartdoc review
 settles the shape that ships. There is no release deadline: phase 1 ships when
 its features are complete and verified.
 
-**Peak memory is one sheet's bytes plus the unique strings.** It scales with
-unique strings and one sheet's bytes, not with cell objects. The 100,000 by 12
+**Peak memory is one sheet's UTF-8 bytes (briefly twice while they are handed
+to the ZIP adapter), the unique strings and, in memory mode, the compressed
+file so far.** It does not scale with cell objects. The 100,000 by 12
 benchmark in M5 records time and peak memory on Chrome and on the VM. It is a
 recorded figure, not a pass or fail threshold yet.
 
-**CI gains two jobs and a dependency on `dotnet` and LibreOffice.** Locally
-they are optional. The three-command gate is unchanged and still runs first.
+**CI gains one `validate` job, which runs both the Open XML SDK validation
+and the LibreOffice comparison, and a dependency on `dotnet` and
+LibreOffice.** Locally they are optional. The three-command gate is unchanged
+and still runs first.
 
 **Three languages of messages are three tables to keep complete.** The German
 and Turkish texts are written by the builder and checked by a native speaker
