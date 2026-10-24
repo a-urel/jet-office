@@ -1,8 +1,8 @@
 name: CI
 
 # Runs the quality gate from AGENTS.md, then validates the fixtures with the
-# Open XML SDK and LibreOffice (decision 0003). A clean checkout must pass both
-# jobs.
+# Open XML SDK and LibreOffice (decision 0003) and proves that both checks
+# reject a corrupt file. A clean checkout must pass both jobs.
 on:
   push:
     branches: [main]
@@ -12,10 +12,11 @@ on:
 jobs:
   quality-gate:
     name: quality gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Dart
         uses: dart-lang/setup-dart@v1
@@ -39,11 +40,12 @@ jobs:
 
   validate:
     name: validate fixtures
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: quality-gate
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Dart
         uses: dart-lang/setup-dart@v1
@@ -81,3 +83,46 @@ jobs:
 
       - name: Compare the CSV files with the expected values
         run: dart run tool/compare_csv.dart build/fixtures
+
+      # Negative control: both checks must reject m1_corrupt.xlsx (see
+      # tool/write_fixtures.dart). Each tool exits with 1 when it finds a
+      # problem and with 2 or 64 for a usage error, so the step requires
+      # exit code 1 and the expected message, not merely a failure.
+      - name: Prove both checks reject a corrupt file
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          dart run tool/write_fixtures.dart build/corrupt --corrupt
+          # Keep only the corrupt workbook, so nothing else can fail.
+          find build/corrupt -type f ! -name 'm1_corrupt.*' -delete
+          ls -1 build/corrupt
+
+          status=0
+          dotnet run --project tool/ooxml_validate -- build/corrupt \
+            | tee build/corrupt-validate.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The Open XML SDK validator exited with $status on a corrupt file; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'FAIL  m1_corrupt.xlsx' build/corrupt-validate.log; then
+            echo "::error::The Open XML SDK validator did not report m1_corrupt.xlsx."
+            exit 1
+          fi
+
+          soffice --headless \
+            --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,false,false,false,-1' \
+            --outdir build/corrupt build/corrupt/m1_corrupt.xlsx
+          ls -1 build/corrupt
+
+          status=0
+          dart run tool/compare_csv.dart build/corrupt \
+            | tee build/corrupt-compare.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The CSV comparison exited with $status on a corrupt file; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'A2: expected 42, got "41"' build/corrupt-compare.log; then
+            echo "::error::The CSV comparison did not report the corrupt value in A2."
+            exit 1
+          fi
+          echo "Both checks rejected the corrupt file."

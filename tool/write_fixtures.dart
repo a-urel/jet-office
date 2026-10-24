@@ -14,8 +14,9 @@
 /// `--corrupt` also writes `m1_corrupt.xlsx` and its `.expected.json`, to
 /// prove that both checks fail on a bad file. It is `m1_values` with two
 /// faults: a cell after `</sheetData>`, which the Open XML SDK rejects, and
-/// its `42` stored as `41`, which the CSV comparison rejects. CI never
-/// passes the flag.
+/// its `42` stored as `41`, which the CSV comparison rejects. CI passes the
+/// flag with a separate directory, `build/corrupt`, as a standing negative
+/// control and requires both checks to reject that file.
 library;
 
 import 'dart:convert';
