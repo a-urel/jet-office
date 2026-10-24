@@ -6,8 +6,8 @@
 /// spreadsheet package uses (`OfficeNamespaces`, `OfficeContentTypes`),
 /// regrouped as [Ns], [RelType] and [ContentType]. What changed: the Word,
 /// PowerPoint, VML and other constants nothing in the XLSX writer needs are
-/// not ported. Every value was checked against the ECMA-376 transitional
-/// schemas, and none differs from Quds.
+/// not ported. The values are the ECMA-376 transitional ones and none differs
+/// from Quds.
 library;
 
 /// XML namespace URIs.

@@ -1,10 +1,9 @@
 /// A1-style cell references.
 ///
-/// Ported from quds_office_engine `lib/src/builders/office_markup.dart` at
-/// commit 15c5d29 (`colName`). What changed: the function is top-level
-/// rather than a static method, indexes outside the sheet throw
-/// [RangeError] instead of producing names Excel cannot open, and [cellRef]
-/// is new.
+/// Ported from quds_office_engine `lib/src/builders/office_markup.dart` at commit 15c5d29.
+/// Ported: `colName`. What changed: the function is top-level rather
+/// than a static method, indexes outside the sheet throw [RangeError] instead
+/// of producing names Excel cannot open, and [cellRef] is new.
 library;
 
 import 'limits.dart';

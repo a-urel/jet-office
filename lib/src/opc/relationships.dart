@@ -20,7 +20,16 @@ final class Relationships {
   ///
   /// [target] is written as given, relative to the source part (for example
   /// `worksheets/sheet1.xml`), or to the package root in `_rels/.rels`.
+  ///
+  /// Throws [ArgumentError] when [type] or [target] is empty; nothing is
+  /// added then.
   String add(String type, String target) {
+    if (type.isEmpty) {
+      throw ArgumentError.value(type, 'type', 'Must not be empty.');
+    }
+    if (target.isEmpty) {
+      throw ArgumentError.value(target, 'target', 'Must not be empty.');
+    }
     final String id = 'rId${_items.length + 1}';
     _items.add((id: id, type: type, target: target));
     return id;

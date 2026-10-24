@@ -2,7 +2,7 @@ import 'package:jet_office/src/xlsx/date_serial.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('date serial edges', () {
+  test('dateSerial at the edges of Excel\'s range and of the calendar', () {
     expect(dateSerial(1900, 1, 1), 1);
     expect(dateSerial(1900, 2, 28), 59);
     expect(dateSerial(1900, 3, 1), 61);
@@ -14,22 +14,18 @@ void main() {
     expect(() => dateSerial(2026, 2, 30), throwsArgumentError);
   });
 
-  test('date-time serials use wall-clock fields', () {
+  test('dateTimeSerial uses the wall-clock fields and the day fraction', () {
     expect(dateTimeSerial(DateTime(2026, 10, 24)), 46319.0);
     expect(dateTimeSerial(DateTime(2026, 10, 24, 12)), 46319.5);
     expect(dateTimeSerial(DateTime.utc(2026, 10, 24, 12)), 46319.5);
     expect(
       dateTimeSerial(DateTime(2026, 10, 24, 23, 59, 59, 999)),
-      closeTo(46319.9999999884259259, 1e-9),
-    );
-    expect(
-      dateTimeSerial(DateTime(2026, 10, 24, 23, 59, 59, 999))! < 46320,
-      isTrue,
+      allOf(closeTo(46319.9999999884259259, 1e-9), lessThan(46320)),
     );
     expect(dateTimeSerial(DateTime(1899, 12, 31, 23)), isNull);
   });
 
-  test('dates after 9999-12-31 have no serial', () {
+  test('dateSerial and dateTimeSerial return null after 9999-12-31', () {
     expect(dateSerial(10000, 1, 1), isNull);
     final last = dateTimeSerial(DateTime(9999, 12, 31, 23, 59, 59));
     expect(last, isNotNull);
@@ -37,16 +33,18 @@ void main() {
     expect(dateTimeSerial(DateTime(10000)), isNull);
   });
 
-  test('a time on 9999-12-31 that rounds to the next day has no serial', () {
-    // The fraction is just below 1, but the double sum rounds to 2958466.
-    expect(
-      dateTimeSerial(DateTime(9999, 12, 31, 23, 59, 59, 999, 999)),
-      isNull,
-    );
-    expect(dateTimeSerial(DateTime(9999, 12, 31, 23, 59, 59)), isNotNull);
-  });
+  test(
+    'dateTimeSerial returns null when 9999-12-31 rounds to the next day',
+    () {
+      // The fraction is just below 1, but the double sum rounds to 2958466.
+      expect(
+        dateTimeSerial(DateTime(9999, 12, 31, 23, 59, 59, 999, 999)),
+        isNull,
+      );
+    },
+  );
 
-  test('leap-year boundaries', () {
+  test('invalid days are rejected and 1900 has no 29 February', () {
     expect(() => dateSerial(1900, 2, 29), throwsArgumentError);
     expect(dateSerial(2024, 2, 29), 45351);
     expect(() => dateSerial(2026, 1, 0), throwsArgumentError);

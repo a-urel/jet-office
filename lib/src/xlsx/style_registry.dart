@@ -99,7 +99,8 @@ final class StyleRegistry {
       w.end();
     }
     w.raw(
-      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font>'
+      '</fonts>'
       '<fills count="2"><fill><patternFill patternType="none"/></fill>'
       '<fill><patternFill patternType="gray125"/></fill></fills>'
       '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/>'

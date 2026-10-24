@@ -25,8 +25,16 @@ import '../xml/xml_writer.dart';
 /// `name` is the final, valid sheet name, unescaped; [writeWorkbook] escapes
 /// `_xHHHH_` sequences when it writes it. `number` is the sheet's 1-based
 /// creation order: it names the part (`sheet{number}.xml`), is the
-/// `sheetId`, and its relationship id is `rId{number}`.
+/// `sheetId`, and its relationship id is [worksheetRelationshipId].
 typedef WorkbookSheet = ({String name, int number});
+
+/// The relationship id of the worksheet created [number]th (1-based).
+///
+/// `workbook.xml` refers to the worksheet by this id and
+/// `workbook.xml.rels` declares it. [writeWorkbookRelationships] lists the
+/// worksheets first, in creation order, so [Relationships.add] hands out the
+/// same ids; the one helper keeps both parts agreeing.
+String worksheetRelationshipId(int number) => 'rId$number';
 
 /// The ZIP entry name of the worksheet created [number]th (1-based).
 String worksheetPartName(int number) => 'xl/worksheets/sheet$number.xml';
@@ -55,7 +63,7 @@ void writeWorkbook(
     w.empty('sheet', <String, String>{
       'name': escapeXstring(sheet.name),
       'sheetId': '${sheet.number}',
-      'r:id': 'rId${sheet.number}',
+      'r:id': worksheetRelationshipId(sheet.number),
     });
   }
   w.end();
@@ -68,13 +76,17 @@ void writeWorkbook(
 /// Writes `xl/_rels/workbook.xml.rels` for a workbook of [sheetCount]
 /// sheets to [w].
 ///
-/// The worksheets come first, `rId1` to `rId{sheetCount}` in creation order
-/// (matching [writeWorkbook]), followed by the styles and the shared-string
-/// table.
+/// The worksheets come first, in creation order, with the ids of
+/// [worksheetRelationshipId] (matching [writeWorkbook]), followed by the
+/// styles and the shared-string table.
 void writeWorkbookRelationships(XmlWriter w, int sheetCount) {
   final Relationships rels = Relationships();
   for (int number = 1; number <= sheetCount; number++) {
-    rels.add(RelType.worksheet, 'worksheets/sheet$number.xml');
+    final String id = rels.add(
+      RelType.worksheet,
+      'worksheets/sheet$number.xml',
+    );
+    assert(id == worksheetRelationshipId(number), 'Relationship id drift.');
   }
   rels
     ..add(RelType.styles, 'styles.xml')

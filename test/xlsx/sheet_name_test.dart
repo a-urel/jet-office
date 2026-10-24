@@ -150,4 +150,16 @@ void main() {
     expect(SheetNamer(w).assign('${'x' * 30} y'), 'x' * 30);
     expect(w.warnings.any((XlsxWarning x) => x.sheet.isEmpty), isFalse);
   });
+
+  test('a base cut for the suffix never leaves a double space', () {
+    final String name = '${'a' * 26} x';
+    expect(n.assign(name), name);
+    expect(n.assign(name), '${'a' * 26} (2)');
+  });
+
+  test('a base cut for the suffix drops a trailing apostrophe too', () {
+    final String name = "${'b' * 26}'x";
+    expect(n.assign(name), name);
+    expect(n.assign(name), '${'b' * 26} (2)');
+  });
 }

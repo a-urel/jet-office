@@ -15,16 +15,17 @@ abstract final class XlsxLimits {
   /// The maximum number of columns in a worksheet (column `XFD`).
   static const int maxColumns = 16384;
 
-  /// The maximum number of characters in a single cell.
+  /// The maximum length of the text in a single cell, in UTF-16 code units.
   static const int maxCellTextLength = 32767;
 
-  /// The maximum number of characters in a sheet name.
+  /// The maximum length of a sheet name, in UTF-16 code units.
   static const int maxSheetNameLength = 31;
 
   /// The maximum number of unique cell formats in a workbook.
   static const int maxCellFormats = 65490;
 
-  /// The maximum number of hyperlinks in a worksheet.
+  /// The maximum number of hyperlinks in a worksheet. No writer enforces it
+  /// yet; the sheet writer will once it can write hyperlinks.
   static const int maxHyperlinksPerSheet = 65530;
 }
 

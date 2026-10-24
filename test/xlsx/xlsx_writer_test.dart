@@ -1,4 +1,4 @@
-// ignore_for_file: close_sinks (the writers close their sinks)
+// ignore_for_file: close_sinks
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -214,6 +214,42 @@ void main() {
         'Id="rId3" Type="$_rel/worksheet" Target="worksheets/sheet3.xml"',
       ),
     );
+  });
+
+  test('ten or more sheets get matching ids, parts and relationships', () {
+    final XlsxWriter book = XlsxWriter();
+    for (int i = 1; i <= 12; i++) {
+      book.addSheet('S$i').row(<Object?>[i]);
+    }
+    final Map<String, String> parts = readXlsx(book.close().bytes);
+    final String wb = parts['xl/workbook.xml']!;
+    final String rels = parts['xl/_rels/workbook.xml.rels']!;
+    final String types = parts['[Content_Types].xml']!;
+    for (int i = 1; i <= 12; i++) {
+      expect(wb, contains('<sheet name="S$i" sheetId="$i" r:id="rId$i"/>'));
+      expect(
+        rels,
+        contains(
+          'Id="rId$i" Type="$_rel/worksheet" '
+          'Target="worksheets/sheet$i.xml"',
+        ),
+      );
+      expect(types, contains('PartName="/xl/worksheets/sheet$i.xml"'));
+      expect(parts, contains('xl/worksheets/sheet$i.xml'));
+    }
+    // The styles and shared strings follow the twelve worksheets.
+    expect(rels, contains('Id="rId13" Type="$_rel/styles"'));
+    expect(rels, contains('Id="rId14" Type="$_rel/sharedStrings"'));
+    expect(parts['xl/worksheets/sheet10.xml'], contains('<v>10</v>'));
+  });
+
+  test('the warnings of a result cannot be modified', () {
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('S').row(<Object?>['a\u0001b']);
+    final XlsxResult out = book.close();
+    expect(out.warnings, hasLength(1));
+    expect(() => out.warnings.clear(), throwsUnsupportedError);
+    expect(() => out.warnings.single.cells.add('Z9'), throwsUnsupportedError);
   });
 
   test('the active tab defaults to the first tab and follows inserts', () {

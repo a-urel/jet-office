@@ -53,7 +53,9 @@ double? dateTimeSerial(DateTime value) {
       value.millisecond * 1000 +
       value.microsecond;
   final double serial = days + micros / _microsPerDay;
-  // Near 3e6 a double has about 5e-10 of precision, so a time within a
-  // fraction of a millisecond of midnight rounds to the next whole day.
+  // Near 3e6 doubles are spaced 2^-31 of a day apart (about 40 microseconds),
+  // so on 9999-12-31 a time within about 20 microseconds of midnight, such as
+  // 23:59:59.999999, rounds up to 2958466. That serial is outside Excel's
+  // range, so the value gets none and the caller writes it as text.
   return serial >= _maxSerial + 1 ? null : serial;
 }

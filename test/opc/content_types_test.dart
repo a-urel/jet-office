@@ -28,13 +28,17 @@ void main() {
     );
   });
 
-  test('sorts sheet10 after sheet2 by plain string order (deterministic)', () {
-    final ContentTypes types = ContentTypes()
-      ..addOverride('/xl/worksheets/sheet2.xml', ContentType.worksheet)
-      ..addOverride('/xl/worksheets/sheet10.xml', ContentType.worksheet);
-    final String xml = _render(types);
-    expect(xml.indexOf('sheet10.xml'), lessThan(xml.indexOf('sheet2.xml')));
-  });
+  test(
+    'overrides are sorted by plain string order, so output is deterministic',
+    () {
+      final ContentTypes types = ContentTypes()
+        ..addOverride('/xl/worksheets/sheet2.xml', ContentType.worksheet)
+        ..addOverride('/xl/worksheets/sheet10.xml', ContentType.worksheet);
+      final String xml = _render(types);
+      // Plain string order puts sheet10 before sheet2, always.
+      expect(xml.indexOf('sheet10.xml'), lessThan(xml.indexOf('sheet2.xml')));
+    },
+  );
 
   test('the same key with the same type is a no-op', () {
     final ContentTypes types = ContentTypes()
@@ -71,7 +75,16 @@ void main() {
     final ContentTypes types = ContentTypes()
       ..addDefault('xml', ContentType.xml)
       ..addOverride('/xl/workbook.xml', ContentType.workbook);
-    expect(() => types.addDefault('XML', 'a/b'), throwsStateError);
+    expect(
+      () => types.addDefault('XML', 'a/b'),
+      throwsA(
+        isA<StateError>().having(
+          (StateError e) => e.message,
+          'message',
+          allOf(contains('"XML"'), contains('"xml"')),
+        ),
+      ),
+    );
     expect(
       () => types.addOverride('/xl/Workbook.xml', ContentType.worksheet),
       throwsStateError,

@@ -77,4 +77,29 @@ void main() {
     expect(s.values, <String>['_x0041_', '_x005F_x0041_']);
     expect(s.uniqueCount, 2);
   });
+
+  test('tab-only, CR-only and whitespace-only text is preserved', () {
+    final SharedStrings s = SharedStrings()
+      ..indexOf('\t')
+      ..indexOf('\r')
+      ..indexOf('  ');
+    final StringBuffer out = StringBuffer();
+    s.writeXml(XmlWriter(out));
+    expect(
+      out.toString(),
+      contains(
+        '<si><t xml:space="preserve">\t</t></si>'
+        '<si><t xml:space="preserve">&#13;</t></si>'
+        '<si><t xml:space="preserve">  </t></si>',
+      ),
+    );
+  });
+
+  test('values is a snapshot: later strings do not change it', () {
+    final SharedStrings s = SharedStrings()..indexOf('a');
+    final List<String> before = s.values;
+    s.indexOf('b');
+    expect(before, <String>['a']);
+    expect(s.values, <String>['a', 'b']);
+  });
 }

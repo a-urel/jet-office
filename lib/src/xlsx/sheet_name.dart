@@ -25,6 +25,13 @@ const int _apostrophe = 0x27;
 /// `liste`/`LİSTE` and `straße`/`STRASSE` clash on every platform. The
 /// folding is deliberately generous: an extra rename never makes Excel refuse
 /// a file, a missed one does.
+///
+/// Two exotic cases are left to `toUpperCase()`. The long s (U+017F) is
+/// folded: it gives `S`, so it clashes with `s` and `S`. The Kelvin sign
+/// (U+212A) is not: it is already an upper-case letter that stays as it is,
+/// so it does not clash with `k` or `K` here, although `toLowerCase()` would
+/// fold it to `k`. The key does not add either case; a Kelvin-sign name is
+/// far too rare to justify another mapping.
 String sheetNameKey(String name) => name
     .replaceAll('İ', 'I')
     .replaceAll('ı', 'I')
@@ -104,9 +111,10 @@ final class SheetNamer {
     if (clash) {
       for (int n = 2; ; n++) {
         final String suffix = ' ($n)';
-        final String base = _truncate(
-          name,
-          XlsxLimits.maxSheetNameLength - suffix.length,
+        // Trimmed again, so a cut that ends in a space (or an apostrophe)
+        // never leaves a double space before the suffix.
+        final String base = _trimStable(
+          _truncate(name, XlsxLimits.maxSheetNameLength - suffix.length),
         );
         unique = '$base$suffix';
         if (!_isTaken(unique)) break;

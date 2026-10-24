@@ -51,4 +51,11 @@ void main() {
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>',
     );
   });
+
+  test('an empty type or target throws ArgumentError and adds nothing', () {
+    final Relationships rels = Relationships();
+    expect(() => rels.add('', 'styles.xml'), throwsArgumentError);
+    expect(() => rels.add(RelType.styles, ''), throwsArgumentError);
+    expect(rels.add(RelType.styles, 'styles.xml'), 'rId1');
+  });
 }

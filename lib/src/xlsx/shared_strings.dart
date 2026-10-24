@@ -44,7 +44,8 @@ final class SharedStrings {
   /// The number of distinct strings, that is, of `<si>` items.
   int get uniqueCount => _values.length;
 
-  /// The distinct strings in index order. The list cannot be modified.
+  /// The distinct strings in index order, as a snapshot: a list that cannot
+  /// be modified and does not change when strings are added afterwards.
   List<String> get values => List<String>.unmodifiable(_values);
 
   /// Writes the whole part, XML declaration included, to [w].
