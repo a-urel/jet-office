@@ -1,0 +1,24 @@
+name: jet_office
+description: >-
+  Pure-Dart library that generates, reads and modifies XLSX and DOCX files.
+  Bytes in, bytes out: no Flutter and no dart:io, so it runs on the web,
+  desktop, mobile and server alike.
+version: 0.1.0-dev.1
+repository: https://github.com/a-urel/jet-office
+issue_tracker: https://github.com/a-urel/jet-office/issues
+# Not published until phase 1 ships (docs/decisions/0001).
+publish_to: none
+
+environment:
+  # Matches Monépro's floor, the first consumer.
+  sdk: ^3.9.0
+
+# archive is the only runtime dependency (decision 0001). Its lower bound is
+# the version Monépro and jet_print already lock, so neither gets a forced bump.
+# Only lib/src/zip/archive_adapter.dart may import it.
+dependencies:
+  archive: ^4.0.9
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.0

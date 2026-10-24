@@ -1,0 +1,34 @@
+name: CI
+
+# Runs the quality gate from AGENTS.md. A clean checkout must pass all three
+# commands.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  quality-gate:
+    name: quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.5
+
+      - name: Resolve dependencies
+        run: dart pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze (zero infos)
+        run: dart analyze --fatal-infos
+
+      - name: Run tests
+        run: dart test
