@@ -5,18 +5,22 @@
 /// produces 60: dates up to 1900-02-28 map to 1 to 59 and dates from
 /// 1900-03-01 on map to 61 and up.
 ///
+/// Excel stores dates from 1900-01-01 to 9999-12-31 only. Both functions
+/// return `null` outside that range; the caller writes such values as text.
+///
 /// Only the wall-clock fields of a [DateTime] are used; `isUtc` and the time
 /// zone offset are ignored. This file is new in jet_office; Quds wrote
 /// `DateTime` values as strings.
 library;
 
 final DateTime _epoch = DateTime.utc(1899, 12, 30);
+const int _maxSerial = 2958465; // 9999-12-31
 const int _microsPerDay = 86400 * 1000000;
 
 /// Returns the Excel serial number of the date [year]-[month]-[day].
 ///
-/// Returns `null` for dates before 1900-01-01, which have no serial; the
-/// caller writes those as text. Throws an [ArgumentError] if the date does not
+/// Returns `null` for dates outside Excel's range (before 1900-01-01 or after
+/// 9999-12-31), which have no serial; the caller writes those as text. Throws an [ArgumentError] if the date does not
 /// exist, for example month 13 or 30 February.
 int? dateSerial(int year, int month, int day) {
   final date = DateTime.utc(year, month, day);
@@ -28,6 +32,7 @@ int? dateSerial(int year, int month, int day) {
   // Whole days between UTC midnights: no DST gaps, always exact.
   final days = date.difference(_epoch).inDays;
   if (days < 2) return null; // before 1900-01-01
+  if (days > _maxSerial) return null; // after 9999-12-31
   // Days before 1900-03-01 skip Excel's phantom 29 February 1900.
   return days < 61 ? days - 1 : days;
 }
@@ -35,8 +40,8 @@ int? dateSerial(int year, int month, int day) {
 /// Returns the Excel serial number of [value], with the time of day as the
 /// fraction.
 ///
-/// Uses the wall-clock fields only. Returns `null` for values before
-/// 1900-01-01. The fraction is
+/// Uses the wall-clock fields only. Returns `null` for values outside Excel's
+/// range (before 1900-01-01 or after 9999-12-31). The fraction is
 /// `(h*3600 + m*60 + s + ms/1000 + us/1e6) / 86400`.
 double? dateTimeSerial(DateTime value) {
   final days = dateSerial(value.year, value.month, value.day);
