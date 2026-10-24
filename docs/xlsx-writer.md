@@ -35,6 +35,7 @@ habit.
 | Formula text empty after its one leading `=` | `ArgumentError` naming the cell and sheet | Excel refuses an empty formula | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/xlsx_checker_test.dart` |
 | Formula text longer than 8,192 characters (UTF-16 code units) | `ArgumentError` naming the cell and sheet | Excel's formula limit | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/xlsx_checker_test.dart` |
 | Invalid number format: a built-in id outside 0–163, or a custom code that is empty or holds characters XML forbids | `ArgumentError` | Excel refuses the style otherwise | `test/xlsx/style_registry_test.dart`, `test/xlsx/cell_encoder_test.dart` |
+| Alignment indent outside 0–250, or text rotation outside 0–180 other than 255 | `ArgumentError` naming the field | ECMA-376 limits; Excel refuses the style otherwise | `test/xlsx/alignment_test.dart` |
 | Characters XML forbids in a document property or in formula text | `ArgumentError` | the caller built the text; silently dropping characters would change a formula's meaning | `test/xlsx/properties_test.dart`, `test/xlsx/xlsx_writer_test.dart`, `test/xlsx/cell_encoder_test.dart` |
 | A formula's cached value that is not `null`, `num`, `String` or `bool` | `ArgumentError` | a cached value is a programmer's choice | `test/xlsx/cell_encoder_test.dart` |
 | An `XlsxDate` that does not exist, such as 30 February | `ArgumentError` | no serial or text can stand for it | `test/xlsx/date_serial_test.dart`, `test/xlsx/cell_encoder_test.dart` |
@@ -94,6 +95,8 @@ comment (AGENTS.md). Quds paths are relative to
 | `xlsx/color.dart` | `sheet/styles/sml_styles.dart` → `SmlStyleSheet.normalizeRgb` | the idea only: invalid input throws instead of returning `''`; theme, indexed and auto colors added |
 | `xlsx/font.dart` | `builders/xlsx_io.dart` → `_Font` | public `XlsxFont` with every `CT_Font` property, nullable fields and `merge`; validated at registration |
 | `xlsx/fill.dart` | `builders/xlsx_io.dart` → `_Fill` | public `XlsxFill` (all 19 patterns, linear and path gradients) replacing a single solid color; validated at registration |
+| `xlsx/border.dart` | `builders/xlsx_io.dart` → `_Border` | public `XlsxBorder` with all seven sides, diagonal flags and 13 line styles, side-wise `merge`; validated at registration |
+| `xlsx/alignment.dart` | `builders/xlsx_io.dart` → `_Xf` alignment fields | public `XlsxAlignment` and `XlsxProtection` with nullable fields and `merge`; all-default values write nothing; validated at registration |
 | `xlsx/range.dart` | — (new) | `XlsxRange`; Quds keeps ranges as strings |
 | `xlsx/properties.dart` | `office/office_document_properties.dart` | only a workbook's fields, dates only when given, text checked for forbidden characters |
 | `xlsx/xlsx_table.dart` | — (new) | |

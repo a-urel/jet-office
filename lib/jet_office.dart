@@ -8,6 +8,14 @@
 /// and a type is public only once it is exported here.
 library;
 
+export 'src/xlsx/alignment.dart'
+    show
+        XlsxAlignment,
+        XlsxHorizontalAlignment,
+        XlsxProtection,
+        XlsxReadingOrder,
+        XlsxVerticalAlignment;
+export 'src/xlsx/border.dart' show XlsxBorder, XlsxBorderSide, XlsxBorderStyle;
 export 'src/xlsx/color.dart' show XlsxColor;
 export 'src/xlsx/fill.dart'
     show
