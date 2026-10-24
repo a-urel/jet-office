@@ -1,3 +1,9 @@
+# AI-agent working files. Designs, implementation plans and task notes are
+# scaffolding for work in progress, not repository history. Durable decisions
+# go in docs/decisions/ (AGENTS.md).
+docs/superpowers/
+.superpowers/
+
 # See https://www.dartlang.org/guides/libraries/private-files
 
 # Files and directories created by pub

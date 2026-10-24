@@ -41,12 +41,16 @@ Never report work as done without running these and reading the output.
   (not "`foo` API."), tests, and passes the lints. Do not port modules outside
   the current phase.
 - **Data problems warn, programmer errors throw.** See the table in
-  `docs/superpowers/phase-1-xlsx-writer-api.md`, §3.
+  `docs/xlsx-writer.md`, "Rules the writer enforces".
 - **Decisions live in `docs/decisions/`.** An accepted record is never edited;
   write a new one that supersedes it.
 
 ## Reference
 
 Quds is cloned read-only next to this repo at `../quds_office_suite`. The port
-map is in `docs/superpowers/phase-1-xlsx-writer-api.md`, §4. Read the Quds file
-before porting it, and never import from it.
+map is in `docs/xlsx-writer.md`, "Port map". Read the Quds file before porting
+it, and never import from it.
+
+`docs/superpowers/` is git-ignored: working designs and plans live there and
+are not repository history. Knowledge that must outlive a branch goes in a
+tracked page under `docs/`, a decision record, or this file.
