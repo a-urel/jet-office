@@ -6,9 +6,11 @@
 /// `colWidth` and row heights of `XlsxSheetBuilder` and `_sheetXml`. What
 /// changed: Quds kept every sheet as a list of rows and serialized the whole
 /// workbook in `build`; here rows are encoded as they arrive, one sheet is
-/// open at a time, and a finished sheet goes straight to the ZIP, its header
-/// (`worksheet_parts.dart`) assembled around the row chunks without joining
-/// them, so memory is bounded by one sheet's buffer. Header settings
+/// open at a time, and a finished sheet goes straight to the ZIP: its header
+/// (`worksheet_parts.dart`) is rendered and handed over with the row chunks
+/// and the trailer, which `ZipWriter.addChunks` copies once into one buffer
+/// for the encoder. Memory is bounded by one sheet's body, held twice while
+/// it is handed over. Header settings
 /// (columns, default sizes) are frozen at the first row; rows carry a
 /// height, visibility and outline level. Tab order is independent of
 /// creation order, the active tab is chosen by the caller, a workbook
@@ -512,7 +514,8 @@ abstract final class XlsxSheetWriter {
 /// Rows are encoded into a body buffer as they arrive. The header, which
 /// depends on settings and on the deepest row outline level, is rendered
 /// when the sheet is finished and handed to the ZIP with the body's chunks
-/// and the trailer, so the body is never joined into one array.
+/// and the trailer. The body is never built as one string; its chunks are
+/// copied exactly once, by `ZipWriter.addChunks`, into the entry's buffer.
 final class _SheetWriter implements XlsxSheetWriter {
   _SheetWriter(this._book, this.name, this._number, this.visibility) {
     final Utf8Buffer body = Utf8Buffer();
@@ -798,7 +801,8 @@ final class _SheetWriter implements XlsxSheetWriter {
   }
 
   /// Assembles the part, header, body chunks and trailer, and hands it to
-  /// the ZIP, keeping no bytes. The body is never joined into one array.
+  /// the ZIP, keeping no bytes. `ZipWriter.addChunks` copies the chunks
+  /// once into one buffer for the encoder; nothing here joins them.
   ///
   /// The sheet is detached first, so it is finished even when the ZIP
   /// throws and never takes a row after `</worksheet>`.
