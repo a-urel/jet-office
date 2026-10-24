@@ -1240,6 +1240,17 @@ void main() {
       );
     });
 
+    test('a later tabColor replaces an earlier one', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..tabColor(const XlsxColor.rgb(0xFF0000))
+        ..tabColor(const XlsxColor.rgb(0x00FF00))
+        ..row(<Object?>[1]);
+      final String xml = sheetXml(book);
+      expect(xml, contains('<tabColor rgb="FF00FF00"/>'));
+      expect(xml, isNot(contains('FFFF0000')));
+    });
+
     test('outlineSummary with the defaults writes no sheetPr', () {
       final XlsxWriter book = XlsxWriter();
       book.addSheet('S')
@@ -1461,26 +1472,40 @@ void main() {
         book.addSheet('V');
         final XlsxResult out = book.close();
         expect(checkXlsx(out.bytes), isEmpty);
+        final Map<String, String> parts = readXlsx(out.bytes);
         expect(
-          readXlsx(out.bytes)['xl/workbook.xml'],
-          contains('state="hidden"'),
+          parts['xl/workbook.xml'],
+          allOf(
+            contains('state="hidden"'),
+            matches(RegExp('name="H".*name="V"')),
+            contains('<workbookView activeTab="1"/>'),
+          ),
         );
+        expect(parts['xl/worksheets/sheet1.xml'], contains('<row r="1">'));
       });
 
-      test('the stream writer sends no workbook part before it throws', () {
+      test('the stream writer retries to the bytes XlsxWriter makes', () {
+        void script(XlsxWriterBase book, void Function() tryClose) {
+          book.addSheet('H', visibility: XlsxSheetVisibility.veryHidden).row(
+            <Object?>['x'],
+          );
+          book.addSheet('H2', visibility: XlsxSheetVisibility.hidden);
+          tryClose();
+          book.addSheet('V').row(<Object?>[1]);
+        }
+
         final _CollectingSink sink = _CollectingSink();
-        final XlsxStreamWriter book = XlsxStreamWriter(sink);
-        book.addSheet('H', visibility: XlsxSheetVisibility.veryHidden);
-        book.addSheet('H2', visibility: XlsxSheetVisibility.hidden);
-        expect(book.close, throwsStateError);
-        expect(sink.closed, isFalse);
-        expect(
-          String.fromCharCodes(sink.bytes),
-          isNot(contains('workbook.xml')),
-        );
-        book.addSheet('V').row(<Object?>[1]);
-        book.close();
+        final XlsxStreamWriter stream = XlsxStreamWriter(sink);
+        script(stream, () {
+          expect(stream.close, throwsStateError);
+          expect(sink.closed, isFalse);
+        });
+        stream.close();
         expect(sink.closed, isTrue);
+
+        final XlsxWriter memory = XlsxWriter();
+        script(memory, () => expect(memory.close, throwsStateError));
+        expect(sink.bytes, memory.close().bytes);
         expect(checkXlsx(sink.bytes), isEmpty);
       });
 

@@ -51,7 +51,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:jet_office/src/xlsx/cell_ref.dart' show cellRef;
 import 'package:jet_office/src/xlsx/sheet_name.dart' show sheetNameKey;
 import 'package:xml/xml.dart';
 
@@ -726,12 +725,7 @@ void _checkFrozenPanes(Map<String, XmlDocument> docs, List<String> violations) {
         );
         continue;
       }
-      String topLeft;
-      try {
-        topLeft = cellRef(y, x);
-      } on RangeError {
-        topLeft = '';
-      }
+      final String topLeft = '${_columnLetters(x)}${y + 1}';
       if (pane.getAttribute('topLeftCell') != topLeft) {
         violations.add(
           'rule 19: ${sheet.key}: frozen pane topLeftCell is '
@@ -752,4 +746,17 @@ void _checkFrozenPanes(Map<String, XmlDocument> docs, List<String> violations) {
       }
     }
   }
+}
+
+/// The letters of the 0-based column [index], computed here so that the rule
+/// does not lean on the writer's own conversion.
+String _columnLetters(int index) {
+  String letters = '';
+  int n = index + 1;
+  while (n > 0) {
+    final int rest = (n - 1) % 26;
+    letters = String.fromCharCode(65 + rest) + letters;
+    n = (n - 1) ~/ 26;
+  }
+  return letters;
 }

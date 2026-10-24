@@ -163,22 +163,24 @@ const int _twipsPerPoint = 20;
 /// Writes `pane` and `selection` for [pane], or nothing when it splits
 /// nothing.
 ///
-/// The active part is the one the splits leave: `topRight` when only the
-/// columns split, `bottomLeft` when only the rows do, `bottomRight` when
-/// both do. A frozen pane also gives the top-left cell of that part.
+/// A split offset is rounded to whole twips; an axis that rounds to 0 does
+/// not split. The active part is the one the splits leave: `topRight` when
+/// only the columns split, `bottomLeft` when only the rows do, `bottomRight`
+/// when both do. A frozen pane also gives the top-left cell of that part.
 void _writePane(XmlWriter w, XlsxPane pane) {
-  final double x = pane.isFrozen ? pane.columns.toDouble() : pane.x;
-  final double y = pane.isFrozen ? pane.rows.toDouble() : pane.y;
+  final int x = pane.isFrozen
+      ? pane.columns
+      : (pane.x * _twipsPerPoint).round();
+  final int y = pane.isFrozen ? pane.rows : (pane.y * _twipsPerPoint).round();
   if (x == 0 && y == 0) return;
   final String active = x == 0
       ? 'bottomLeft'
       : y == 0
       ? 'topRight'
       : 'bottomRight';
-  final double scale = pane.isFrozen ? 1 : _twipsPerPoint.toDouble();
   w.start('pane');
-  if (x != 0) w.attribute('xSplit', formatXmlDouble(x * scale));
-  if (y != 0) w.attribute('ySplit', formatXmlDouble(y * scale));
+  if (x != 0) w.attribute('xSplit', '$x');
+  if (y != 0) w.attribute('ySplit', '$y');
   if (pane.isFrozen) {
     w.attribute('topLeftCell', cellRef(pane.rows, pane.columns));
   }

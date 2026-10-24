@@ -1,4 +1,6 @@
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/sheet_view.dart'
+    show checkPane, checkSheetView;
 import 'package:test/test.dart';
 
 void main() {
@@ -102,6 +104,55 @@ void main() {
     test('is 10 to 400', () {
       expect(XlsxLimits.minZoom, 10);
       expect(XlsxLimits.maxZoom, 400);
+    });
+  });
+
+  group('checkSheetView and checkPane', () {
+    Matcher rejects(String field) => throwsA(
+      isA<ArgumentError>().having((ArgumentError e) => e.name, 'name', field),
+    );
+
+    test('accept the limits', () {
+      checkSheetView(const XlsxSheetView(zoom: 10));
+      checkSheetView(const XlsxSheetView(zoom: 400));
+      checkPane(const XlsxPane.frozen(rows: 1048575, columns: 16383));
+      checkPane(const XlsxPane.split(x: 0, y: 1e6));
+    });
+
+    test('reject a zoom outside 10 to 400', () {
+      expect(
+        () => checkSheetView(const XlsxSheetView(zoom: 9)),
+        rejects('zoom'),
+      );
+      expect(
+        () => checkSheetView(const XlsxSheetView(zoom: 401)),
+        rejects('zoom'),
+      );
+    });
+
+    test('reject frozen counts out of range', () {
+      expect(() => checkPane(const XlsxPane.frozen(rows: -1)), rejects('rows'));
+      expect(
+        () => checkPane(const XlsxPane.frozen(rows: 1048576)),
+        rejects('rows'),
+      );
+      expect(
+        () => checkPane(const XlsxPane.frozen(columns: 16384)),
+        rejects('columns'),
+      );
+    });
+
+    test('reject split offsets that are negative, NaN or infinite', () {
+      expect(() => checkPane(const XlsxPane.split(x: -1)), rejects('x'));
+      expect(() => checkPane(const XlsxPane.split(y: -1)), rejects('y'));
+      expect(
+        () => checkPane(const XlsxPane.split(x: double.nan)),
+        rejects('x'),
+      );
+      expect(
+        () => checkPane(const XlsxPane.split(y: double.infinity)),
+        rejects('y'),
+      );
     });
   });
 }

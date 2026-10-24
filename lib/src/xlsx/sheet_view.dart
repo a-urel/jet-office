@@ -30,8 +30,10 @@ final class XlsxPane {
       y = 0;
 
   /// A pane split at [x] points from the left edge and [y] points from the
-  /// top, both at least 0 and finite. A split of 0 on both axes is no
-  /// pane. The writer stores the offsets in twentieths of a point.
+  /// top, both at least 0 and finite. The writer stores the offsets in
+  /// whole twentieths of a point (twips), rounded: an axis whose offset
+  /// rounds to 0 twips does not split, and a split of 0 on both axes is no
+  /// pane.
   const XlsxPane.split({this.x = 0, this.y = 0})
     : isFrozen = false,
       rows = 0,

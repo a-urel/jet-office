@@ -370,6 +370,27 @@ void main() {
       );
     });
 
+    test('split offsets are rounded to whole twips', () {
+      expect(
+        views(const XlsxSheetView(pane: XlsxPane.split(x: 100.04))),
+        contains('<pane xSplit="2001" activePane="topRight"/>'),
+      );
+    });
+
+    test('an axis that rounds to 0 twips is no split on that axis', () {
+      expect(
+        views(const XlsxSheetView(pane: XlsxPane.split(x: 0.01))),
+        '<sheetViews><sheetView workbookViewId="0"/></sheetViews>',
+      );
+      expect(
+        views(const XlsxSheetView(pane: XlsxPane.split(x: 0.01, y: 50))),
+        contains(
+          '<pane ySplit="1000" activePane="bottomLeft"/>'
+          '<selection pane="bottomLeft"/>',
+        ),
+      );
+    });
+
     test('a pane of zeros writes no pane and no selection', () {
       for (final XlsxPane pane in const <XlsxPane>[
         XlsxPane.frozen(),
