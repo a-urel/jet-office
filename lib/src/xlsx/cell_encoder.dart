@@ -31,7 +31,10 @@ const int _maxExactInt = 9007199254740992;
 const int _maxFormulaLength = 8192;
 
 /// Whether Excel, which stores every number as a double, may round [v].
-bool _losesPrecision(int v) => v.abs() > _maxExactInt;
+///
+/// Not `v.abs()`: the absolute value of the 64-bit minimum overflows to
+/// itself, a negative number.
+bool _losesPrecision(int v) => v > _maxExactInt || v < -_maxExactInt;
 
 /// Encodes cell values as `<c>` elements.
 ///

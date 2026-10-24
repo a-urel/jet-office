@@ -54,6 +54,16 @@ void main() {
     ]);
   });
 
+  test('the int64 minimum warns (its abs() overflows)', () {
+    expect(
+      enc(-9223372036854775808),
+      '<c r="A1"><v>-9223372036854775808</v></c>',
+    );
+    expect(warnings.warnings.map((XlsxWarning w) => w.code), <XlsxWarningCode>[
+      XlsxWarningCode.intPrecisionLost,
+    ]);
+  });
+
   test('int at 2^53 does not warn', () {
     enc(9007199254740992);
     enc(-9007199254740992);
