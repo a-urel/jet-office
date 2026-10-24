@@ -24,6 +24,10 @@ abstract final class XlsxLimits {
   /// The maximum number of unique cell formats in a workbook.
   static const int maxCellFormats = 65490;
 
+  /// The maximum number of unique fonts in a workbook. The default font
+  /// counts as one.
+  static const int maxFonts = 512;
+
   /// The maximum number of custom number formats in a workbook.
   ///
   /// Microsoft's "Excel specifications and limits" page gives 200 to 250,

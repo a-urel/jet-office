@@ -232,31 +232,41 @@ void validateBorder(XlsxBorder border) {
   }
 }
 
-void _writeSide(XmlWriter w, String name, XlsxBorderSide? side) {
+/// Whether [side] draws a line: it has a style other than `none`.
+bool _draws(XlsxBorderSide? side) {
   final XlsxBorderStyle? style = side?.style;
-  final XlsxColor? color = side?.color;
+  return style != null && style != XlsxBorderStyle.none;
+}
+
+/// Writes [side] as the element [name]. A side that draws no line is
+/// written empty, its color dropped, so it reads like an unset side.
+void _writeSide(XmlWriter w, String name, XlsxBorderSide? side) {
   w.start(name);
-  if (style != null && style != XlsxBorderStyle.none) {
+  if (side != null && _draws(side)) {
+    final XlsxBorderStyle style = side.style!;
     w.attribute(
       'style',
       style == XlsxBorderStyle.doubleLine ? 'double' : style.name,
     );
-  }
-  if (color != null) {
-    w.start('color');
-    writeColorAttributes(w, color);
-    w.end();
+    final XlsxColor? color = side.color;
+    if (color != null) {
+      w.start('color');
+      writeColorAttributes(w, color);
+      w.end();
+    }
   }
   w.end();
 }
 
 /// Writes [border] as one `<border>` element, children in `CT_Border` order.
 ///
-/// `left`, `right`, `top`, `bottom` and `diagonal` are always written, empty
-/// when unset; `vertical` and `horizontal` only when given. `diagonalUp` and
-/// `diagonalDown` are written when `true`, `outline` when `false`. The border
-/// must have passed [validateBorder]. The registry dedupes borders on this
-/// text.
+/// `left`, `right`, `top`, `bottom` and `diagonal` are always written;
+/// `vertical` and `horizontal` only when they draw a line. A side that draws
+/// no line (no style, or `none`) is written empty and without its color, so
+/// it reads like an unset side. `diagonalUp` and `diagonalDown` are written
+/// when `true`, `outline` when `false`. Borders that look the same therefore
+/// write the same text, which the registry dedupes on. The border must have
+/// passed [validateBorder].
 void writeBorderXml(XmlWriter w, XlsxBorder border) {
   w.start('border');
   if (border.diagonalUp ?? false) {
@@ -273,10 +283,10 @@ void writeBorderXml(XmlWriter w, XlsxBorder border) {
   _writeSide(w, 'top', border.top);
   _writeSide(w, 'bottom', border.bottom);
   _writeSide(w, 'diagonal', border.diagonal);
-  if (border.vertical != null) {
+  if (_draws(border.vertical)) {
     _writeSide(w, 'vertical', border.vertical);
   }
-  if (border.horizontal != null) {
+  if (_draws(border.horizontal)) {
     _writeSide(w, 'horizontal', border.horizontal);
   }
   w.end();

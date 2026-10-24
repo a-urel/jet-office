@@ -30,6 +30,8 @@ habit.
 | Date in a number format that shows no date | written with that format, warning `dateInNonDateFormat` | the caller chose the format, but the cell shows a bare serial | `test/xlsx/cell_encoder_test.dart` |
 | Row 1,048,577 or column 16,385 | `XlsxLimitError` | the caller decides whether to split into sheets | `test/xlsx/xlsx_writer_test.dart` |
 | More than 65,490 unique cell formats | `XlsxLimitError` | Excel's limit | `test/xlsx/style_registry_test.dart` |
+| More than 512 unique fonts (the default font counts as one) | `XlsxLimitError('fonts', 512)`, nothing registered | Excel's limit per workbook | `test/xlsx/style_registry_test.dart` |
+| Styles that look the same but are spelled differently (`XlsxFont()` and Calibri 11, a hex and an rgb color, a `none` pattern and no fill, a border side that draws no line and no side, General alignment or an explicit General and nothing) | one cell format: fonts, fills and borders are deduplicated by the XML they write, cell formats by their parts | keeps the file small and the 65,490 limit far away | `test/xlsx/style_registry_test.dart`, `test/xlsx/border_test.dart` |
 | More than 200 distinct custom number format codes | `XlsxLimitError('number formats', 200)`, nothing registered | Excel's lowest limit across language versions (200–250) | `test/xlsx/style_registry_test.dart` |
 | An invalid `XlsxNumFmt.number`, `percent` or `money` argument: decimals outside 0–30, or a symbol with `"` or characters XML forbids | `ArgumentError` at once | a programmer's choice; Excel would refuse the format | `test/xlsx/number_format_test.dart` |
 | `NaN` / infinity | `ArgumentError` | no valid XML number exists | `test/xlsx/cell_encoder_test.dart` |
@@ -37,7 +39,8 @@ habit.
 | Formula text empty after its one leading `=` | `ArgumentError` naming the cell and sheet | Excel refuses an empty formula | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/xlsx_checker_test.dart` |
 | Formula text longer than 8,192 characters (UTF-16 code units) | `ArgumentError` naming the cell and sheet | Excel's formula limit | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/xlsx_checker_test.dart` |
 | Invalid number format: a built-in id outside 0–163, or a custom code that is empty or holds characters XML forbids | `ArgumentError` | Excel refuses the style otherwise | `test/xlsx/style_registry_test.dart`, `test/xlsx/cell_encoder_test.dart` |
-| Alignment indent outside 0–250, or text rotation outside 0–180 other than 255 | `ArgumentError` naming the field | ECMA-376 limits; Excel refuses the style otherwise | `test/xlsx/alignment_test.dart` |
+| Alignment indent outside 0–250, or text rotation outside 0–180 other than 255 | `ArgumentError` naming the field | ECMA-376 limits; Excel refuses the style otherwise | `test/xlsx/alignment_test.dart`, `test/xlsx/style_registry_test.dart` |
+| An invalid style part: a font name that is empty, longer than 31 or not XML-clean, a font size outside 1–409, a family outside 0–14 or a charset outside 0–255; a color out of range (theme 0–11, tint −1–1, indexed 0–65, RGB 0–FFFFFF); a gradient with fewer than two stops, stop positions outside 0–1 or decreasing, a non-finite degree or an edge outside 0–1 | `ArgumentError` naming the field when the style is first used, nothing registered | a programmer's choice; Excel refuses the style otherwise | `test/xlsx/style_registry_test.dart`, `test/xlsx/font_test.dart`, `test/xlsx/fill_test.dart`, `test/xlsx/color_test.dart`, `test/xlsx/border_test.dart` |
 | Characters XML forbids in a document property or in formula text | `ArgumentError` | the caller built the text; silently dropping characters would change a formula's meaning | `test/xlsx/properties_test.dart`, `test/xlsx/xlsx_writer_test.dart`, `test/xlsx/cell_encoder_test.dart` |
 | A formula's cached value that is not `null`, `num`, `String` or `bool` | `ArgumentError` | a cached value is a programmer's choice | `test/xlsx/cell_encoder_test.dart` |
 | An `XlsxDate` that does not exist, such as 30 February | `ArgumentError` | no serial or text can stand for it | `test/xlsx/date_serial_test.dart`, `test/xlsx/cell_encoder_test.dart` |
@@ -89,7 +92,8 @@ comment (AGENTS.md). Quds paths are relative to
 | `opc/ooxml.dart` | `xml/namespaces.dart` → `OfficeNamespaces`; `opc/content_types.dart` → `OfficeContentTypes` | only the namespaces, relationship types and content types a spreadsheet uses |
 | `zip/archive_adapter.dart` | — (new) | the only file that imports `package:archive`; `addChunks` adds an entry from unjoined chunks |
 | `xlsx/cell_encoder.dart` | `builders/xlsx_io.dart` → `_sheetXml` cell branch | the one encoder from 0002: dates, decimals, formulas, NaN |
-| `xlsx/style_registry.dart` | `builders/xlsx_io.dart` → `style`, `_Font`, `_Fill`, `_Border`, `_Xf`; `sheet/styles/` | value-typed `XlsxStyle`, built-in number format ids |
+| `xlsx/style_registry.dart` | `builders/xlsx_io.dart` → `style` with its `_Font`, `_Fill` and `_Xf` dedupe, `_numFmtId`, `_stylesXml` | value-typed `XlsxStyle` with the full vocabulary; fonts, fills and borders deduplicated by their rendered XML and cell formats by their parts; every part validated; atomic registration; font, number format and cell format limits |
+| `xlsx/style.dart` | — (new) | `XlsxStyle` with six optional parts and `merge`; Quds' `style` takes loose parameters |
 | `xlsx/xlsx_writer.dart` | `builders/xlsx_io.dart` → `XlsxWorkbookBuilder`, `XlsxSheetBuilder` | streams rows, shared strings written last |
 | `xlsx/workbook_parts.dart` | `builders/xlsx_io.dart` → package, relationship and `workbook.xml` steps of `XlsxWorkbookBuilder.build` | tab order apart from creation order, active tab, `calcPr` |
 | `xlsx/sheet_name.dart` | `builders/office_markup.dart` → `sheetName` | case-insensitive uniqueness |
@@ -103,7 +107,6 @@ comment (AGENTS.md). Quds paths are relative to
 | `xlsx/properties.dart` | `office/office_document_properties.dart` | only a workbook's fields, dates only when given, text checked for forbidden characters |
 | `xlsx/xlsx_table.dart` | — (new) | |
 | `xlsx/shared_strings.dart` | `sheet/shared_strings.dart` | written last, `count`/`uniqueCount` checked |
-| `xlsx/styles/` (fonts, fills, borders, alignment, protection) | `sheet/styles/sml_styles.dart` | model-neutral value types, gradient fills added (M2) |
 | `xlsx/validation.dart`, `xlsx/conditional_format.dart`, `xlsx/defined_names.dart`, `xlsx/table_part.dart`, `xlsx/protection.dart` | `sheet/serial/sheet_serial.dart` (data validation, conditional formats, defined names, table part, protection) | element writers take the public value types (M3, M4) |
 | `xlsx/drawing.dart` | `sheet/serial/sheet_drawing_io.dart` | PNG and JPEG, one-cell and two-cell anchors (M4) |
 

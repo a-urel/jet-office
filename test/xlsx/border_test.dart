@@ -69,6 +69,25 @@ void main() {
     );
   });
 
+  test('a side that draws no line writes like an unset side', () {
+    const String empty =
+        '<border><left/><right/><top/><bottom/><diagonal/></border>';
+    const XlsxColor red = XlsxColor.rgb(0xFF0000);
+    for (final XlsxBorder border in <XlsxBorder>[
+      const XlsxBorder(
+        left: XlsxBorderSide(style: XlsxBorderStyle.none, color: red),
+      ),
+      const XlsxBorder(top: XlsxBorderSide(color: red)),
+      const XlsxBorder(vertical: XlsxBorderSide()),
+      const XlsxBorder(
+        horizontal: XlsxBorderSide(style: XlsxBorderStyle.none, color: red),
+      ),
+      const XlsxBorder(diagonalUp: false, diagonalDown: false, outline: true),
+    ]) {
+      expect(xml(border), empty, reason: '$border');
+    }
+  });
+
   test('every style name is the ST_BorderStyle value', () {
     final Map<XlsxBorderStyle, String> expected = <XlsxBorderStyle, String>{
       XlsxBorderStyle.thin: 'thin',

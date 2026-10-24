@@ -8,7 +8,8 @@ import 'package:test/test.dart';
 import '../support/xlsx_checker.dart';
 
 /// A small valid workbook: two sheets, shared strings, styled cells (one
-/// with a custom number format) and a formula.
+/// with a custom number format, one with a font, fill and border) and a
+/// formula.
 Uint8List _good() {
   final XlsxWriter book = XlsxWriter();
   book.addSheet('Data')
@@ -18,6 +19,14 @@ Uint8List _good() {
     'c',
     const XlsxFormula('1+1'),
     const XlsxCell(1.5, style: XlsxStyle(numFmt: XlsxNumFmt.custom('0.000'))),
+    const XlsxCell(
+      7,
+      style: XlsxStyle(
+        font: XlsxFont(bold: true),
+        fill: XlsxFill.solid(XlsxColor.rgb(0xFFFF00)),
+        border: XlsxBorder.all(XlsxBorderSide(style: XlsxBorderStyle.thin)),
+      ),
+    ),
   ]);
   return book.close().bytes;
 }
@@ -446,5 +455,75 @@ void main() {
       ),
       13,
     );
+  });
+
+  group('rule 14: style tables', () {
+    Uint8List styles(String Function(String xml) change) =>
+        _broken('xl/styles.xml', change);
+    String bumpCount(String xml, String table) => xml.replaceFirstMapped(
+      RegExp('<$table count="(\\d+)"'),
+      (Match m) => '<$table count="${int.parse(m.group(1)!) + 1}"',
+    );
+    String lastXf(String xml, String attribute, String value) {
+      final int xfs = xml.indexOf('<cellXfs');
+      final int last = xml.lastIndexOf('<xf ', xml.indexOf('</cellXfs>'));
+      expect(last, greaterThan(xfs));
+      return xml.substring(0, last) +
+          xml
+              .substring(last)
+              .replaceFirst(RegExp('$attribute="\\d+"'), '$attribute="$value"');
+    }
+
+    for (final String table in <String>[
+      'fonts',
+      'fills',
+      'borders',
+      'cellStyleXfs',
+    ]) {
+      test('$table count off by one', () {
+        _expectRule(styles((String x) => bumpCount(x, table)), 14);
+      });
+    }
+    test('the good workbook uses its font, fill and border tables', () {
+      final String xml = utf8.decode(
+        ZipDecoder()
+            .decodeBytes(_good())
+            .files
+            .firstWhere((ArchiveFile f) => f.name == 'xl/styles.xml')
+            .content,
+      );
+      expect(xml, contains('<fonts count="2">'));
+      expect(xml, contains('<fills count="3">'));
+      expect(xml, contains('<borders count="2">'));
+    });
+    test('a fontId past the font table', () {
+      _expectRule(styles((String x) => lastXf(x, 'fontId', '2')), 14);
+    });
+    test('a fillId past the fill table', () {
+      _expectRule(styles((String x) => lastXf(x, 'fillId', '3')), 14);
+    });
+    test('a borderId past the border table', () {
+      _expectRule(styles((String x) => lastXf(x, 'borderId', '2')), 14);
+    });
+    test('fill 1 is not gray125', () {
+      _expectRule(
+        styles(
+          (String x) => x.replaceFirst(
+            'patternType="gray125"',
+            'patternType="lightGray"',
+          ),
+        ),
+        14,
+      );
+    });
+    test('fill 0 is not none', () {
+      _expectRule(
+        styles(
+          (String x) =>
+              x.replaceFirst('patternType="none"', 'patternType="gray0625"'),
+        ),
+        14,
+      );
+    });
   });
 }

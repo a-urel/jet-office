@@ -21,7 +21,11 @@
 /// 11. row numbers (`row/@r`) strictly increase within a sheet;
 /// 12. `cellXfs/@count` equals the number of its `xf` children;
 /// 13. every `numFmtId` of 164 or more used by a `cellXfs` `xf` is declared
-///     in `numFmts`.
+///     in `numFmts`;
+/// 14. the `count` of `fonts`, `fills`, `borders` and `cellStyleXfs` equals
+///     the number of their children; every `xf`'s `fontId`, `fillId` and
+///     `borderId` is below the count of its table; fill 0 is
+///     `patternType="none"` and fill 1 is `gray125`.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -82,6 +86,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkFormulas(docs, violations);
   _checkRowOrder(docs, violations);
   _checkStyles(docs, violations);
+  _checkStyleTables(docs, violations);
   return violations;
 }
 
@@ -432,6 +437,73 @@ void _checkStyles(Map<String, XmlDocument> docs, List<String> violations) {
       violations.add(
         'rule 13: cellXfs xf $i uses numFmtId $id, which numFmts does not '
         'declare',
+      );
+    }
+  }
+}
+
+/// Rule 14.
+void _checkStyleTables(Map<String, XmlDocument> docs, List<String> violations) {
+  final XmlDocument? styles = docs[_stylesPart];
+  if (styles == null) return;
+  final XmlElement root = styles.rootElement;
+  final Map<String, int> sizes = <String, int>{};
+  for (final (String table, String child) in <(String, String)>[
+    ('fonts', 'font'),
+    ('fills', 'fill'),
+    ('borders', 'border'),
+    ('cellStyleXfs', 'xf'),
+  ]) {
+    final XmlElement? element = root.getElement(table);
+    if (element == null) {
+      violations.add('rule 14: styles.xml has no $table');
+      continue;
+    }
+    final int children = element.findElements(child).length;
+    sizes[table] = children;
+    final String count = _attr(element, 'count');
+    if (int.tryParse(count) != children) {
+      violations.add(
+        'rule 14: $table count is "$count" but it has $children $child',
+      );
+    }
+  }
+  for (final String list in <String>['cellStyleXfs', 'cellXfs']) {
+    final List<XmlElement> xfs =
+        root.getElement(list)?.findElements('xf').toList() ??
+        const <XmlElement>[];
+    for (int i = 0; i < xfs.length; i++) {
+      for (final (String attribute, String table) in <(String, String)>[
+        ('fontId', 'fonts'),
+        ('fillId', 'fills'),
+        ('borderId', 'borders'),
+      ]) {
+        final String text = _attr(xfs[i], attribute);
+        final int? id = int.tryParse(text);
+        final int? size = sizes[table];
+        if (id == null || id < 0 || (size != null && id >= size)) {
+          violations.add(
+            'rule 14: $list xf $i has $attribute "$text"; $table holds '
+            '$size',
+          );
+        }
+      }
+    }
+  }
+  final List<XmlElement> fills =
+      root.getElement('fills')?.findElements('fill').toList() ??
+      const <XmlElement>[];
+  for (final (int index, String pattern) in <(int, String)>[
+    (0, 'none'),
+    (1, 'gray125'),
+  ]) {
+    final String? actual = index < fills.length
+        ? fills[index].getElement('patternFill')?.getAttribute('patternType')
+        : null;
+    if (actual != pattern) {
+      violations.add(
+        'rule 14: fill $index has patternType "$actual"; Excel requires '
+        '"$pattern"',
       );
     }
   }

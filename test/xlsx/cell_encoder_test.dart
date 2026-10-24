@@ -75,10 +75,12 @@ void main() {
     expect(enc(1, rowStyle: const XlsxStyle()), '<c r="A1"><v>1</v></c>');
   });
 
-  test('an explicit general format is a style of its own', () {
+  test('an explicit general format shares the default cell format', () {
+    // General is numFmtId 0, like cell format 0, so the two would be the
+    // same `<xf>`.
     expect(
       enc(1, rowStyle: const XlsxStyle(numFmt: XlsxNumFmt.general)),
-      '<c r="A1" s="1"><v>1</v></c>',
+      '<c r="A1"><v>1</v></c>',
     );
   });
 
