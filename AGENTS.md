@@ -2,8 +2,8 @@
 
 `jet_office` is a pure-Dart library that generates, reads and modifies XLSX and
 DOCX files. It has no editors, no rendering and no PDF. It is ported from
-`quds_office_engine` (MIT); see `docs/decisions/0001`, `0002` and `0003`
-before any design change.
+`quds_office_engine` (MIT); see `docs/decisions/0001`, `0002`, `0003` and
+`0004` (which supersedes part of `0003`) before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -29,7 +29,10 @@ Never report work as done without running these and reading the output.
 ## Validation
 
 CI's `validate` job runs after the quality gate and is required. Locally it is
-optional, because it needs the .NET SDK (8 or later) and LibreOffice:
+optional. The Open XML SDK step runs whenever `dotnet` (8 or later) is
+installed; the LibreOffice steps need LibreOffice as well. The fixtures come
+from `allFixtures()` (`test/fixtures/fixtures.dart`), so a fixture added to a
+milestone list is validated without further wiring:
 
 ```bash
 dart run tool/write_fixtures.dart build/fixtures
@@ -40,12 +43,14 @@ LC_ALL=C.UTF-8 soffice --headless \
 dart run tool/compare_csv.dart build/fixtures
 ```
 
-- `tool/write_fixtures.dart` writes each fixture of
-  `test/fixtures/m1_fixtures.dart` as `<name>.xlsx` and its expected values as
-  `<name>.expected.json`. `--corrupt` adds a deliberately broken
-  `m1_corrupt.xlsx`, to prove both checks still fail on a bad file. The
-  `validate` job's last step writes it to `build/corrupt` and requires both
-  checks to reject it.
+- `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
+  (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
+  `<name>.xlsx` and its expected values as `<name>.expected.json`.
+  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, to prove both
+  checks still fail on a bad file. The `validate` job's last step writes it
+  to `build/corrupt` and requires both checks to reject it.
+- `tool/write_fixtures.dart` imports test helpers that use `package:archive`.
+  That is allowed: the archive rule covers `lib/` only.
 - `tool/ooxml_validate` validates every `.xlsx` with the Open XML SDK against
   the Microsoft 365 schemas and fails on any error. An error there is a writer
   bug.
@@ -62,8 +67,9 @@ dart run tool/compare_csv.dart build/fixtures
   `test/architecture/platform_imports_test.dart`.
 - **The public API is exactly what `lib/jet_office.dart` exports.**
   Everything under `lib/src/` is private.
-- **`package:archive` is reachable only from `lib/src/zip/archive_adapter.dart`.**
-  Enforced by `test/architecture/archive_isolation_test.dart`.
+- **`package:archive` is reachable only from
+  `lib/src/zip/archive_adapter.dart`.** Enforced by
+  `test/architecture/archive_isolation_test.dart`.
 - **One cell encoder.** Only `lib/src/xlsx/cell_encoder.dart` writes `<c ` or
   `<v>` (decision 0002). Enforced by `test/architecture/cell_encoder_test.dart`.
 - **Every warning code has a message in `en`, `de` and `tr`.** Enforced by

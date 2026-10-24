@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:jet_office/src/xml/utf8_buffer.dart';
 import 'package:test/test.dart';
@@ -46,5 +47,84 @@ void main() {
     b.takeBytes();
     expect(b.takeBytes(), isEmpty);
     expect(b.lengthInBytes, 0);
+  });
+
+  test(
+    'takeChunks returns the bytes takeBytes would and empties the buffer',
+    () {
+      Utf8Buffer fill() => Utf8Buffer(chunkSize: 4)
+        ..write('abc')
+        ..write('😀')
+        ..write('ğüşİ')
+        ..write('tail');
+      final Utf8Buffer b = fill();
+      final List<Uint8List> chunks = b.takeChunks();
+      expect(chunks.length, greaterThan(1));
+      expect(
+        Uint8List.fromList(chunks.expand((Uint8List c) => c).toList()),
+        fill().takeBytes(),
+      );
+      expect(b.lengthInBytes, 0);
+      expect(b.takeChunks(), isEmpty);
+      expect(b.takeBytes(), isEmpty);
+    },
+  );
+
+  test('takeChunks encodes an unpaired trailing high surrogate as U+FFFD', () {
+    final Utf8Buffer b = Utf8Buffer()..write('a\uD83D');
+    final List<int> all = b.takeChunks().expand((Uint8List c) => c).toList();
+    expect(all, utf8.encode('a\uFFFD'));
+  });
+
+  test('takeChunks result is independent of later writes', () {
+    final Utf8Buffer b = Utf8Buffer(chunkSize: 2)..write('abcd');
+    final List<Uint8List> first = b.takeChunks();
+    b.write('zz');
+    expect(first.expand((Uint8List c) => c), utf8.encode('abcd'));
+    expect(b.takeBytes(), utf8.encode('zz'));
+  });
+
+  test('chunkSize must be between 1 and 2^30', () {
+    expect(() => Utf8Buffer(chunkSize: 0), throwsRangeError);
+    expect(() => Utf8Buffer(chunkSize: -1), throwsRangeError);
+    expect(() => Utf8Buffer(chunkSize: (1 << 30) + 1), throwsRangeError);
+    expect(Utf8Buffer(chunkSize: 1), isNotNull);
+    expect(Utf8Buffer(chunkSize: 1 << 30), isNotNull);
+  });
+
+  test('writeCharCode holds a high surrogate back with chunkSize 1', () {
+    final Utf8Buffer b = Utf8Buffer(chunkSize: 1);
+    b.writeCharCode(0xD83D);
+    expect(b.lengthInBytes, 0, reason: 'waiting for its pair');
+    b.writeCharCode(0xDE00);
+    expect(b.lengthInBytes, 4);
+    b.writeCharCode(0x61);
+    expect(b.takeBytes(), utf8.encode('😀a'));
+  });
+
+  test('a first test chunk that does not end on a low surrogate', () {
+    final Utf8Buffer b = Utf8Buffer(chunkSize: 4);
+    b.write('a😀c'); // flushes at 4 units, ending on a plain character
+    b.write('d');
+    expect(b.takeBytes(), utf8.encode('a😀cd'));
+  });
+
+  test('lengthInBytes while a high surrogate is held back', () {
+    final Utf8Buffer b = Utf8Buffer(chunkSize: 2);
+    b.write('a\uD83D');
+    expect(b.lengthInBytes, 1);
+    b.write('\uDE00');
+    expect(b.lengthInBytes, 5);
+  });
+
+  test('lengthInBytes counts pending text and does not split the buffer', () {
+    final Utf8Buffer b = Utf8Buffer()..write('aş');
+    expect(b.lengthInBytes, 3);
+    expect(b.lengthInBytes, 3);
+    expect(
+      b.takeChunks().length,
+      1,
+      reason: 'reading the length never flushes',
+    );
   });
 }

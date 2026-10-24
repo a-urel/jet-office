@@ -108,14 +108,153 @@ One sheet, `Dates`, values in A1:F1.
 - A1 `28.02.1900` (serial 59) and B1 `01.03.1900` (serial 61): Excel's
   fictitious 29.02.1900 sits between them.
 - C1 `24.10.2026 00:00`.
-- D1 is 23:59:59.999 on 24.10.2026. It shows `24.10.2026 23:59`, on the same
-  day; the built-in date-time format has no seconds. With a custom format
-  that shows seconds it shows `23:59:59`. If Excel shows 25.10.2026 00:00
-  instead, record it: Excel rounded the milliseconds up.
+- D1 is 23:59:59.999 on 24.10.2026, stored as serial 46319.99999998842.
+  Excel should show `24.10.2026 23:59` on the built-in date-time format (no
+  seconds): the same day, the time cut to the minute and not rounded up to
+  00:00 on the 25th. With a custom format that shows seconds it should show
+  `23:59:59`. Record what it actually shows if it differs.
 - E1 `1850-06-15T00:00:00.000`, left-aligned text: a date before 1900 has
   no Excel serial.
 - F1 `46.319,00`: a date written with the number format `#,##0.00`, so it
   shows the serial.
+
+## M2
+
+Open every fixture with Turkish regional settings. The numbers below follow
+them (decimal comma, dot for thousands).
+
+### `m2_styles`
+
+One sheet, `Styles`: one row per style, the sample or value in column A and
+its label in column B. Read each row against its label.
+
+- Fonts: bold, italic, each underline kind (`single`, `doubleLine`, and the two
+  accounting kinds), strike, superscript, subscript, size 18, Arial.
+- The `font theme 4 tint 0.4` row: the package has no theme part, so Excel
+  uses its default Office theme. Theme color 4 is accent 1, so the text
+  should be a lightened blue (Office's `4472C4` at 40 % tint). Record the
+  color you see; a black or missing color means Excel ignored the theme.
+- One row per pattern type, each with a blue foreground and a yellow
+  background: `solid` shows plain blue (the foreground only), every other
+  pattern draws blue marks on yellow, and `none` shows no fill.
+- Two gradient rows: `gradient linear 90` (yellow to blue, top to bottom or
+  the reverse) and `gradient path` (from the centre outwards).
+- One row per border style, all four sides in blue; then a diagonal border
+  going up and one going down.
+- Horizontal alignment (general, left, center, right, fill, justify,
+  centerContinuous, distributed) and vertical alignment (top, center, bottom,
+  justify, distributed). `wrap text` wraps onto several lines and Excel
+  makes the row taller. `indent 3` indents the left-aligned text; `rotation
+  45` slants it; `vertical text` stacks the letters; `shrink to fit` shrinks
+  it into the column; `reading order RTL` shows it right to left.
+- `locked false` and `hidden true` look the same as the others; check them in
+  Format Cells > Protection (unlocked, hidden).
+- Number formats, each on `1234,5` and on 24.10.2026. Compare each shown text
+  with its label (`integer`, `decimal2`, `thousands`, `thousands2`,
+  `scientific`, `fraction`, `time`, `elapsedTime`, `text`, the grouped,
+  red-negative, percent and money variants with `₺`, `$` first and `€`). A
+  date in a format that shows no date (all but `time` and `elapsedTime`)
+  shows the serial 46319 formatted by that format, not a date, so it looks
+  different in each: `percent` shows `4631900%` and `scientific`
+  `4,63E+04`, for example. That is expected.
+
+### `m2_columns_rows`
+
+Two sheets, `Layout` and `Defaults`.
+
+- `Layout` row 1: the column widths are 5, 12, 40 and 255 characters (the
+  last is as wide as Excel allows); column E is hidden (the header jumps from
+  D to F); columns F, G and H carry an outline bar above the headings
+  (F level 1, G and H level 2).
+- Row 2 is 30 points tall, row 3 only 5 points. Row 4 is hidden, with no
+  outline bar, and rows 5 to 7 are hidden too, so the row numbers jump from
+  3 to 8.
+- Rows 5 to 7 are hidden detail rows: rows 5 and 6 at outline level 2, row 7
+  at level 1. Row 8, `total (collapsed)`, shows a plus sign. Expand it and
+  record what Excel shows: rows 5 and 6 are stored hidden at level 2 and
+  row 7 is not marked collapsed, so the inner group may open with the
+  outer one or stay closed behind its own plus sign at row 7.
+- `Defaults`: the default row height is 18 points and the default column
+  width 11 characters, on every row and column of the sheet.
+
+### `m2_style_precedence`
+
+One sheet, `Precedence`, with a money column B (`€`) and a date column C
+(`yyyy-mm-dd`) set on the columns.
+
+- Row 1, `Item`, `Amount`, `Date`, is bold in all three cells.
+- Rows 2 and 3: B shows `1.200,50 €`-style money (`€` with two decimals) and
+  C shows `2026-10-24`.
+- Row 4, `Date in money`: B holds a date, so it shows the serial 46319 in
+  the money format (`46.319,00 €`), and C shows `2026-10-24`.
+- Row 5, `Total`: a thin top border runs across all of A5:C5. C5 holds no
+  value; it is an empty cell written only to carry the row's border. B5
+  shows `1.245,75 €` in italic (the cell style adds to the row style and the
+  column's money format).
+
+### `m2_views`
+
+Seven sheets; two are hidden. Excel must open on the `View` sheet. No tab
+should look "grouped": the file sets the active tab but not `tabSelected`, so
+Excel selects the active tab only; if the title bar says `[Group]`, record it.
+
+- `Frozen`: row 1 and column A stay put while the other cells scroll (the
+  header and the `Row` column).
+- `Split`: a split, not a freeze: two panes with a movable divider, about 120
+  points from the left and 60 from the top.
+- `View`: zoom 85 %, no gridlines, no row and column headings, and the `0` in
+  B1 is not shown (the sheet hides zeros); the tab is red.
+- `RTL`: the sheet runs right to left (column A at the right edge); the
+  Arabic and Hebrew text reads correctly.
+- `Outline`: rows 2 and 3 group under row 1, which sits above them (the
+  plus/minus sign is at row 1, not below row 3).
+- `Hidden` appears in the Unhide dialog (right-click a tab > Unhide).
+  `VeryHidden` does not appear there; it shows only in the VBA editor.
+
+### `m2_merges_filter`
+
+Two sheets, `Bob's Data` and `Plain`.
+
+- `Bob's Data`: A1:D1 is merged, `Quarterly report` bold, 14 points,
+  centered. B3:C4 is merged and shows `A merged block of text`.
+- Row 6 (`Id`, `Name`, `Qty`, `Price`) carries the filter dropdown arrows,
+  and filtering the list (for example `Qty`) works on rows 7 to 20.
+- The workbook holds a hidden defined name `_xlnm._FilterDatabase` for that
+  sheet. There must be no repair prompt. Excel's Name Manager (Formulas >
+  Name Manager) does not list hidden names, so it should show no name for
+  it; a working filter is what shows the name was read. Record anything
+  the Name Manager does list.
+- `Plain` has no filter and no merges.
+
+### `m2_formula_xstring`
+
+Two sheets, `Probe` and `_x0041_`. On `Probe`, A1 holds the formula
+`="_x0041_"` and A2 the text `_x0041_`.
+
+- A2 must read `_x0041_`, as typed.
+- Write down what A1 shows: `_x0041_` or `A`. The answer settles whether
+  readers decode `_xHHHH_` inside `<f>`; the file stores the formula as
+  given, not escaped. If it shows `A`, record that and ask for a ruling;
+  do not change the encoder.
+- The second tab reads `_x0041_`, as typed. Row 1 (`Key`, `Value`) carries
+  the filter dropdown arrows, and filtering rows 2 and 3 works. Its hidden
+  `_xlnm._FilterDatabase` name stores `'_x0041_'!$A$1:$B$3` as given, like a
+  formula. The filter must work, there must be no repair prompt, and the
+  Name Manager must show no name with a broken (`#REF!`) reference; the
+  hidden name itself is not listed there. That means Excel reads the text
+  undecoded too, so formulas and defined names are settled together. If
+  the filter is lost or Excel repairs the file, record it and ask for a
+  ruling.
+
+### Open question
+
+Whether Excel treats a sheet named with the Kelvin sign (U+212A, which looks
+like K) as equal to one named with the Latin letter K (U+004B) is
+unverified. The writer's duplicate check maps the Turkish `İ` and `ı` and
+the German `ß` before it compares upper case, and deliberately does not
+fold the Kelvin sign (see `sheetNameKey` in `lib/src/xlsx/sheet_name.dart`),
+so it keeps `K` and the Kelvin sign apart. No fixture covers it. Settle it
+when convenient and record the answer here.
 
 ## Results
 

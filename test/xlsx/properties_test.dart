@@ -78,6 +78,9 @@ void main() {
 
   test('a local DateTime is converted to UTC', () {
     final DateTime local = DateTime.utc(2026, 6, 1, 12).toLocal();
+    // toLocal() on a UTC machine still returns a local value, so this holds
+    // everywhere and the test never passes by comparing UTC with UTC.
+    expect(local.isUtc, isFalse);
     expect(
       _core(XlsxProperties(modified: local)),
       contains('>2026-06-01T12:00:00Z<'),

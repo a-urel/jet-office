@@ -47,4 +47,57 @@ void main() {
     expect(() => escapeXmlText('a\u0001'), throwsArgumentError);
     expect(() => escapeXmlAttribute('\uD800'), throwsArgumentError);
   });
+
+  test('scrub removes U+FFFE and U+FFFF', () {
+    final ScrubResult r = scrubXmlText('a\uFFFEb\uFFFFc');
+    expect(r.text, 'abc');
+    expect(r.removed, 2);
+  });
+  test('scrub counts high, high, low as two removed units', () {
+    final ScrubResult r = scrubXmlText('\uD83D\uD83D\uDE00');
+    expect(r.text, '\uD83D\uDE00');
+    expect(r.removed, 1);
+    final ScrubResult lone = scrubXmlText('\uD83D\uD83Dx');
+    expect(lone.text, 'x');
+    expect(lone.removed, 2);
+  });
+  test('scrub boundaries: U+001F goes, U+0020 and U+007F stay', () {
+    expect(scrubXmlText('\u001F').text, '');
+    expect(scrubXmlText(' ').text, ' ');
+    expect(scrubXmlText('\u007F').text, '\u007F');
+  });
+  test('escapeXmlText returns the identical instance when nothing changes', () {
+    final String s = 'Şube '.padRight(10, 'x');
+    expect(identical(escapeXmlText(s), s), isTrue);
+    expect(identical(escapeXmlAttribute(s), s), isTrue);
+  });
+  test('escapeXmlAttribute throws on U+FFFF and U+FFFE', () {
+    expect(() => escapeXmlAttribute('a\uFFFF'), throwsArgumentError);
+    expect(() => escapeXmlText('\uFFFE'), throwsArgumentError);
+  });
+  test('the error names the index and code unit, not the whole string', () {
+    final String long = 'x' * 500;
+    try {
+      escapeXmlText('$long\u0001$long');
+      fail('should throw');
+    } on ArgumentError catch (e) {
+      final String m = e.toString();
+      expect(m, contains('500'));
+      expect(m, contains('0x0001'));
+      expect(m.length, lessThan(300));
+    }
+  });
+  test('runs between replacements survive intact', () {
+    expect(escapeXmlText('ab&cd<ef😀gh>ij'), 'ab&amp;cd&lt;ef😀gh&gt;ij');
+    expect(
+      escapeXmlAttribute('long text here "q" and more text'),
+      'long text here &quot;q&quot; and more text',
+    );
+  });
+
+  test('escapeFormulaText escapes XML only, never _xHHHH_ (ST_Formula)', () {
+    expect(escapeFormulaText('"_x0041_"&A1<2'), '"_x0041_"&amp;A1&lt;2');
+    expect(escapeFormulaText("'D_x0041_'!\$A\$1"), "'D_x0041_'!\$A\$1");
+    expect(() => escapeFormulaText('a\u0001'), throwsArgumentError);
+  });
 }

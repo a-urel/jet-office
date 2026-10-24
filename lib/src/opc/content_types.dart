@@ -13,7 +13,9 @@ import 'ooxml.dart';
 /// Collects the default and override content types and writes the part.
 ///
 /// Extensions and part names are case-insensitive in OPC, so `xml` and `XML`
-/// are the same key here; the first spelling given is the one written.
+/// are the same key here. When case variants are added, the first spelling
+/// wins: it is the one written, and a later variant with the same type is
+/// ignored.
 /// Output is deterministic: defaults are sorted by extension and overrides by
 /// part name (plain string order), whatever the order they were added in.
 final class ContentTypes {
@@ -89,8 +91,8 @@ final class ContentTypes {
       map[folded] = (key: key, type: type);
     } else if (known.type.toLowerCase() != type.toLowerCase()) {
       throw StateError(
-        'The $what "$key" already has the content type "${known.type}"; '
-        'cannot give it "$type".',
+        'The $what "$key" already has the content type "${known.type}" '
+        '(first given as "${known.key}"); cannot give it "$type".',
       );
     }
   }

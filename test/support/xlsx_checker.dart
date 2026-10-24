@@ -11,9 +11,8 @@
 ///    `sst/@uniqueCount` the number of `si`;
 /// 5. every `t="s"` index is below `uniqueCount`;
 /// 6. sheet names (after decoding `_xHHHH_`, as Excel does) are unique
-///    ignoring case, at most 31 UTF-16 code units,
-///    free of `[]:*?/\`, not the reserved `History` and not starting or
-///    ending with an apostrophe;
+///    ignoring case, at most 31 UTF-16 code units, free of `[]:*?/\`, not
+///    the reserved `History` and not starting or ending with an apostrophe;
 /// 7. `workbookView/@activeTab` is a valid sheet index;
 /// 8. every cell `s` is below the `cellXfs` count;
 /// 9. cell references in a row strictly increase and sit on that row;
@@ -22,7 +21,35 @@
 /// 11. row numbers (`row/@r`) strictly increase within a sheet;
 /// 12. `cellXfs/@count` equals the number of its `xf` children;
 /// 13. every `numFmtId` of 164 or more used by a `cellXfs` `xf` is declared
-///     in `numFmts`.
+///     in `numFmts`;
+/// 14. the `count` of `fonts`, `fills`, `borders` and `cellStyleXfs` equals
+///     the number of their children; every `xf`'s `fontId`, `fillId` and
+///     `borderId` is below the count of its table; fill 0 is
+///     `patternType="none"` and fill 1 is `gray125`;
+/// 15. worksheet children are elements `CT_Worksheet` knows, in its order,
+///     each at most once (`conditionalFormatting` may repeat);
+/// 16. every `<col>` has `1 <= min <= max <= 16384`, the ranges ascend
+///     without overlapping, and `style` is below the `cellXfs` count;
+/// 17. every `row/@outlineLevel` and `col/@outlineLevel` is in `0..7` and
+///     at most `sheetFormatPr/@outlineLevelRow` or `@outlineLevelCol`
+///     (0 when absent), and every `row/@ht` is in `0..409`;
+/// 18. at least one `sheet` has no `state` (or `state="visible"`), and the
+///     `activeTab` sheet is not hidden;
+/// 19. a frozen `pane` has `topLeftCell` at the cell (`ySplit`, `xSplit`),
+///     and `activePane` is `bottomRight` when both splits are non-zero,
+///     `topRight` when only `xSplit` is and `bottomLeft` when only `ySplit`
+///     is; a frozen pane with neither split is wrong too;
+/// 20. every `mergeCell` covers at least two cells inside the sheet, with
+///     its first corner not after its last; no two merges of a sheet
+///     overlap; and `mergeCells/@count` equals the number of its children;
+/// 21. defined names are unique per scope (the name ignoring case, and
+///     `localSheetId`, which is absent for the workbook scope); every
+///     `localSheetId` is a number below the sheet count; and every
+///     `autoFilter/@ref` is a valid range inside the sheet.
+///
+/// Element lookups use local names and assume the default SpreadsheetML
+/// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
+/// The writer never does.
 ///
 /// Pure Dart (no `dart:io`), so it runs in a browser too.
 library;
@@ -43,6 +70,7 @@ const String _workbookPart = 'xl/workbook.xml';
 final RegExp _sheetPart = RegExp(r'^xl/worksheets/[^/]+\.xml$');
 final RegExp _forbiddenInName = RegExp(r'[\[\]:*?/\\]');
 final RegExp _cellRef = RegExp(r'^([A-Z]+)([0-9]+)$');
+final RegExp _rangeRef = RegExp(r'^([A-Z]+)([0-9]+)(?::([A-Z]+)([0-9]+))?$');
 
 /// The violations found in the XLSX file [bytes]; empty means clean.
 List<String> checkXlsx(Uint8List bytes) {
@@ -79,6 +107,15 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkFormulas(docs, violations);
   _checkRowOrder(docs, violations);
   _checkStyles(docs, violations);
+  _checkStyleTables(docs, violations);
+  _checkWorksheetOrder(docs, violations);
+  _checkColumns(docs, violations);
+  _checkOutlines(docs, violations);
+  _checkVisibility(docs, violations);
+  _checkFrozenPanes(docs, violations);
+  _checkMerges(docs, violations);
+  _checkDefinedNames(docs, violations);
+  _checkAutoFilters(docs, violations);
   return violations;
 }
 
@@ -116,9 +153,13 @@ String _sourceOf(String relsName) {
   final int slash = relsName.lastIndexOf('/');
   final String dir = slash < 0 ? '' : relsName.substring(0, slash);
   final String file = relsName.substring(slash + 1);
-  final String parent = dir.endsWith('_rels')
+  final String parent = dir == '_rels'
+      ? ''
+      : dir.endsWith('/_rels')
       ? dir.substring(0, dir.length - '_rels'.length)
-      : dir;
+      : dir.isEmpty
+      ? ''
+      : '$dir/';
   final String source = file.endsWith('.rels')
       ? file.substring(0, file.length - '.rels'.length)
       : file;
@@ -276,6 +317,12 @@ void _checkSharedStrings(
     if (cells > 0) {
       violations.add('rule 4: $cells string cells but no $_sharedStringsPart');
     }
+    for (final (String part, int index) in indexes) {
+      violations.add(
+        'rule 5: $part: string index $index has no $_sharedStringsPart to '
+        'point into',
+      );
+    }
     return;
   }
   final XmlElement root = sst.rootElement;
@@ -308,13 +355,7 @@ int _columnNumber(String letters) {
 
 /// Rules 8 and 9.
 void _checkCells(Map<String, XmlDocument> docs, List<String> violations) {
-  final XmlDocument? styles = docs[_stylesPart];
-  final XmlElement? cellXfs = styles == null
-      ? null
-      : _all(styles, 'cellXfs').firstOrNull;
-  final int? xfCount = cellXfs == null
-      ? null
-      : int.tryParse(_attr(cellXfs, 'count'));
+  final int? xfCount = _cellXfsCount(docs);
   for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
     for (final XmlElement row in _all(sheet.value, 'row')) {
       final String rowText = _attr(row, 'r');
@@ -420,6 +461,434 @@ void _checkStyles(Map<String, XmlDocument> docs, List<String> violations) {
         'rule 13: cellXfs xf $i uses numFmtId $id, which numFmts does not '
         'declare',
       );
+    }
+  }
+}
+
+/// Rule 14.
+void _checkStyleTables(Map<String, XmlDocument> docs, List<String> violations) {
+  final XmlDocument? styles = docs[_stylesPart];
+  if (styles == null) return;
+  final XmlElement root = styles.rootElement;
+  final Map<String, int> sizes = <String, int>{};
+  for (final (String table, String child) in <(String, String)>[
+    ('fonts', 'font'),
+    ('fills', 'fill'),
+    ('borders', 'border'),
+    ('cellStyleXfs', 'xf'),
+  ]) {
+    final XmlElement? element = root.getElement(table);
+    if (element == null) {
+      violations.add('rule 14: styles.xml has no $table');
+      continue;
+    }
+    final int children = element.findElements(child).length;
+    sizes[table] = children;
+    final String count = _attr(element, 'count');
+    if (int.tryParse(count) != children) {
+      violations.add(
+        'rule 14: $table count is "$count" but it has $children $child',
+      );
+    }
+  }
+  for (final String list in <String>['cellStyleXfs', 'cellXfs']) {
+    final List<XmlElement> xfs =
+        root.getElement(list)?.findElements('xf').toList() ??
+        const <XmlElement>[];
+    for (int i = 0; i < xfs.length; i++) {
+      for (final (String attribute, String table) in <(String, String)>[
+        ('fontId', 'fonts'),
+        ('fillId', 'fills'),
+        ('borderId', 'borders'),
+      ]) {
+        final String text = _attr(xfs[i], attribute);
+        final int? id = int.tryParse(text);
+        final int? size = sizes[table];
+        if (id == null || id < 0 || (size != null && id >= size)) {
+          violations.add(
+            'rule 14: $list xf $i has $attribute "$text"; $table holds '
+            '$size',
+          );
+        }
+      }
+    }
+  }
+  final List<XmlElement> fills =
+      root.getElement('fills')?.findElements('fill').toList() ??
+      const <XmlElement>[];
+  for (final (int index, String pattern) in <(int, String)>[
+    (0, 'none'),
+    (1, 'gray125'),
+  ]) {
+    final String? actual = index < fills.length
+        ? fills[index].getElement('patternFill')?.getAttribute('patternType')
+        : null;
+    if (actual != pattern) {
+      violations.add(
+        'rule 14: fill $index has patternType "$actual"; Excel requires '
+        '"$pattern"',
+      );
+    }
+  }
+}
+
+/// The children of `CT_Worksheet`, in schema order (ECMA-376 Part 1,
+/// §18.3.1.99).
+const List<String> _worksheetChildren = <String>[
+  'sheetPr',
+  'dimension',
+  'sheetViews',
+  'sheetFormatPr',
+  'cols',
+  'sheetData',
+  'sheetCalcPr',
+  'sheetProtection',
+  'protectedRanges',
+  'scenarios',
+  'autoFilter',
+  'sortState',
+  'dataConsolidate',
+  'customSheetViews',
+  'mergeCells',
+  'phoneticPr',
+  'conditionalFormatting',
+  'dataValidations',
+  'hyperlinks',
+  'printOptions',
+  'pageMargins',
+  'pageSetup',
+  'headerFooter',
+  'rowBreaks',
+  'colBreaks',
+  'customProperties',
+  'cellWatches',
+  'ignoredErrors',
+  'smartTags',
+  'drawing',
+  'legacyDrawing',
+  'legacyDrawingHF',
+  'drawingHF',
+  'picture',
+  'oleObjects',
+  'controls',
+  'webPublishItems',
+  'tableParts',
+  'extLst',
+];
+
+/// Rule 15.
+void _checkWorksheetOrder(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    int last = -1;
+    String? previous;
+    for (final XmlElement child in sheet.value.rootElement.childElements) {
+      final String local = child.name.local;
+      final int index = _worksheetChildren.indexOf(local);
+      if (index < 0) {
+        violations.add(
+          'rule 15: ${sheet.key}: <$local> is not a child of a worksheet',
+        );
+        continue;
+      }
+      if (index < last || (index == last && local != 'conditionalFormatting')) {
+        violations.add(
+          'rule 15: ${sheet.key}: <$local> after <$previous> breaks the '
+          'CT_Worksheet order',
+        );
+      }
+      last = index;
+      previous = local;
+    }
+  }
+}
+
+/// The `cellXfs` count of styles.xml, or null when it has none.
+int? _cellXfsCount(Map<String, XmlDocument> docs) {
+  final XmlDocument? styles = docs[_stylesPart];
+  final XmlElement? cellXfs = styles == null
+      ? null
+      : _all(styles, 'cellXfs').firstOrNull;
+  return cellXfs == null ? null : int.tryParse(_attr(cellXfs, 'count'));
+}
+
+/// Rule 16.
+void _checkColumns(Map<String, XmlDocument> docs, List<String> violations) {
+  final int? xfCount = _cellXfsCount(docs);
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    int lastMax = 0;
+    for (final XmlElement col in _all(sheet.value, 'col')) {
+      final String minText = _attr(col, 'min');
+      final String maxText = _attr(col, 'max');
+      final int? min = int.tryParse(minText);
+      final int? max = int.tryParse(maxText);
+      if (min == null || max == null || min < 1 || min > max || max > 16384) {
+        violations.add(
+          'rule 16: ${sheet.key}: col min="$minText" max="$maxText" is not '
+          'a range within 1..16384',
+        );
+      } else {
+        if (min <= lastMax) {
+          violations.add(
+            'rule 16: ${sheet.key}: col $min..$max does not follow the '
+            'previous range, which ends at $lastMax',
+          );
+        }
+        lastMax = max;
+      }
+      final String s = _attr(col, 'style');
+      if (s.isNotEmpty) {
+        final int? style = int.tryParse(s);
+        if (xfCount == null || style == null || style < 0 || style >= xfCount) {
+          violations.add(
+            'rule 16: ${sheet.key}: col $minText..$maxText has style "$s"; '
+            'cellXfs count is $xfCount',
+          );
+        }
+      }
+    }
+  }
+}
+
+/// Rule 17.
+void _checkOutlines(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final XmlElement? format = _all(sheet.value, 'sheetFormatPr').firstOrNull;
+    for (final (String element, String limit) in <(String, String)>[
+      ('row', 'outlineLevelRow'),
+      ('col', 'outlineLevelCol'),
+    ]) {
+      final int deepest =
+          int.tryParse(format?.getAttribute(limit) ?? '0') ?? -1;
+      for (final XmlElement e in _all(sheet.value, element)) {
+        final String text = e.getAttribute('outlineLevel') ?? '0';
+        final int? level = int.tryParse(text);
+        if (level == null || level < 0 || level > 7) {
+          violations.add(
+            'rule 17: ${sheet.key}: $element outlineLevel "$text" is not in '
+            '0..7',
+          );
+        } else if (level > deepest) {
+          violations.add(
+            'rule 17: ${sheet.key}: $element outlineLevel $level is deeper '
+            'than sheetFormatPr $limit $deepest',
+          );
+        }
+      }
+    }
+    for (final XmlElement row in _all(sheet.value, 'row')) {
+      final String? text = row.getAttribute('ht');
+      if (text == null) continue;
+      final double? height = double.tryParse(text);
+      if (height == null || height < 0 || height > 409) {
+        violations.add(
+          'rule 17: ${sheet.key}: row ${_attr(row, 'r')} has ht "$text"; '
+          'expected 0..409',
+        );
+      }
+    }
+  }
+}
+
+/// Rule 18.
+void _checkVisibility(Map<String, XmlDocument> docs, List<String> violations) {
+  final XmlDocument? doc = docs[_workbookPart];
+  if (doc == null) return;
+  final List<XmlElement> sheets = _all(doc, 'sheet').toList();
+  if (sheets.isEmpty) return;
+  bool hidden(XmlElement sheet) {
+    final String? state = sheet.getAttribute('state');
+    return state != null && state != 'visible';
+  }
+
+  if (sheets.every(hidden)) {
+    violations.add('rule 18: every sheet is hidden; one must be visible');
+  }
+  for (final XmlElement view in _all(doc, 'workbookView')) {
+    final int? index = int.tryParse(view.getAttribute('activeTab') ?? '0');
+    if (index != null &&
+        index >= 0 &&
+        index < sheets.length &&
+        hidden(sheets[index])) {
+      violations.add(
+        'rule 18: activeTab $index is the sheet '
+        '"${_attr(sheets[index], 'name')}", which is '
+        '${_attr(sheets[index], 'state')}',
+      );
+    }
+  }
+}
+
+/// Rule 19.
+void _checkFrozenPanes(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement pane in _all(sheet.value, 'pane')) {
+      if (pane.getAttribute('state') != 'frozen') continue;
+      final int x = int.tryParse(pane.getAttribute('xSplit') ?? '0') ?? -1;
+      final int y = int.tryParse(pane.getAttribute('ySplit') ?? '0') ?? -1;
+      if (x < 0 || y < 0 || (x == 0 && y == 0)) {
+        violations.add(
+          'rule 19: ${sheet.key}: frozen pane has xSplit '
+          '"${_attr(pane, 'xSplit')}" and ySplit "${_attr(pane, 'ySplit')}"; '
+          'expected whole numbers, one at least 1',
+        );
+        continue;
+      }
+      final String topLeft = '${_columnLetters(x)}${y + 1}';
+      if (pane.getAttribute('topLeftCell') != topLeft) {
+        violations.add(
+          'rule 19: ${sheet.key}: frozen pane topLeftCell is '
+          '"${_attr(pane, 'topLeftCell')}"; the splits ($x, $y) put it at '
+          '"$topLeft"',
+        );
+      }
+      final String active = x == 0
+          ? 'bottomLeft'
+          : y == 0
+          ? 'topRight'
+          : 'bottomRight';
+      if (pane.getAttribute('activePane') != active) {
+        violations.add(
+          'rule 19: ${sheet.key}: frozen pane activePane is '
+          '"${_attr(pane, 'activePane')}"; the splits make it "$active"',
+        );
+      }
+    }
+  }
+}
+
+/// The letters of the 0-based column [index], computed here so that the rule
+/// does not lean on the writer's own conversion.
+String _columnLetters(int index) {
+  String letters = '';
+  int n = index + 1;
+  while (n > 0) {
+    final int rest = (n - 1) % 26;
+    letters = String.fromCharCode(65 + rest) + letters;
+    n = (n - 1) ~/ 26;
+  }
+  return letters;
+}
+
+/// A rectangle of cells for rules 20 and 21: 1-based, inclusive.
+typedef _Rect = ({int row1, int col1, int row2, int col2});
+
+/// The rectangle of [ref] (`B2` or `B2:D10`), or null when [ref] is not a
+/// range of cell references. It may lie outside the sheet or be reversed;
+/// [_problemWith] says whether it does.
+_Rect? _parseRect(String ref) {
+  final RegExpMatch? m = _rangeRef.firstMatch(ref);
+  if (m == null) return null;
+  final int row1 = int.parse(m.group(2)!);
+  final int col1 = _columnNumber(m.group(1)!);
+  final bool two = m.group(3) != null;
+  return (
+    row1: row1,
+    col1: col1,
+    row2: two ? int.parse(m.group(4)!) : row1,
+    col2: two ? _columnNumber(m.group(3)!) : col1,
+  );
+}
+
+/// What is wrong with [r] as a range of the sheet, or null when nothing is.
+String? _problemWith(_Rect r) {
+  if (r.row1 < 1 || r.col1 < 1 || r.row2 > 1048576 || r.col2 > 16384) {
+    return 'lies outside the sheet';
+  }
+  if (r.row1 > r.row2 || r.col1 > r.col2) {
+    return 'has its first corner after its last';
+  }
+  return null;
+}
+
+/// Rule 20.
+void _checkMerges(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement merges in _all(sheet.value, 'mergeCells')) {
+      final List<XmlElement> cells = merges.findElements('mergeCell').toList();
+      final String count = _attr(merges, 'count');
+      if (int.tryParse(count) != cells.length) {
+        violations.add(
+          'rule 20: ${sheet.key}: mergeCells count is "$count" but it has '
+          '${cells.length} mergeCell',
+        );
+      }
+      final List<(String, _Rect)> seen = <(String, _Rect)>[];
+      for (final XmlElement cell in cells) {
+        final String ref = _attr(cell, 'ref');
+        final _Rect? r = _parseRect(ref);
+        final String? problem = r == null ? 'is not a range' : _problemWith(r);
+        if (problem != null) {
+          violations.add('rule 20: ${sheet.key}: mergeCell "$ref" $problem');
+          continue;
+        }
+        if (r!.row1 == r.row2 && r.col1 == r.col2) {
+          violations.add(
+            'rule 20: ${sheet.key}: mergeCell "$ref" covers a single cell',
+          );
+        }
+        for (final (String other, _Rect o) in seen) {
+          if (r.row1 <= o.row2 &&
+              o.row1 <= r.row2 &&
+              r.col1 <= o.col2 &&
+              o.col1 <= r.col2) {
+            violations.add(
+              'rule 20: ${sheet.key}: mergeCell "$ref" overlaps "$other"',
+            );
+          }
+        }
+        seen.add((ref, r));
+      }
+    }
+  }
+}
+
+/// Rule 21, defined names.
+void _checkDefinedNames(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final XmlDocument? doc = docs[_workbookPart];
+  if (doc == null) return;
+  final int sheetCount = _all(doc, 'sheet').length;
+  final Map<String, String> seen = <String, String>{};
+  for (final XmlElement n in _all(doc, 'definedName')) {
+    final String name = _attr(n, 'name');
+    final String? scopeText = n.getAttribute('localSheetId');
+    String scope = 'workbook';
+    if (scopeText != null) {
+      final int? id = int.tryParse(scopeText);
+      if (id == null || id < 0 || id >= sheetCount) {
+        violations.add(
+          'rule 21: defined name "$name" has localSheetId "$scopeText"; '
+          'the workbook has $sheetCount sheets',
+        );
+      }
+      scope = 'sheet ${id ?? scopeText}';
+    }
+    final String key = '${name.toLowerCase()}|$scope';
+    if (seen.containsKey(key)) {
+      violations.add(
+        'rule 21: defined name "$name" is defined twice in $scope '
+        '(as "${seen[key]}" too)',
+      );
+    }
+    seen[key] = name;
+  }
+}
+
+/// Rule 21, auto filter ranges.
+void _checkAutoFilters(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement filter in _all(sheet.value, 'autoFilter')) {
+      final String ref = _attr(filter, 'ref');
+      final _Rect? r = _parseRect(ref);
+      final String? problem = r == null ? 'is not a range' : _problemWith(r);
+      if (problem != null) {
+        violations.add('rule 21: ${sheet.key}: autoFilter ref "$ref" $problem');
+      }
     }
   }
 }

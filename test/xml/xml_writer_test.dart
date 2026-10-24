@@ -62,4 +62,24 @@ void main() {
     expect(() => w.attribute('k', 'a\u0000'), throwsArgumentError);
     expect(() => w.text('\uD800'), throwsArgumentError);
   });
+
+  test('a rejected attribute leaves no partial output', () {
+    final StringBuffer out = StringBuffer();
+    final XmlWriter w = XmlWriter(out)..start('a');
+    final String before = out.toString();
+    expect(() => w.attribute('k', 'a\u0000'), throwsArgumentError);
+    expect(out.toString(), before);
+  });
+
+  test('a rejected empty element leaves no partial output', () {
+    final StringBuffer out = StringBuffer();
+    final XmlWriter w = XmlWriter(out);
+    expect(
+      () => w.empty('a', <String, String>{'ok': '1', 'bad': '\uFFFF'}),
+      throwsArgumentError,
+    );
+    expect(out.toString(), isEmpty);
+    w.empty('b');
+    expect(out.toString(), '<b/>');
+  });
 }

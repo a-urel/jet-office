@@ -63,4 +63,22 @@ void main() {
     expect(() => c.warnings.clear(), throwsUnsupportedError);
     expect(() => c.warnings.single.cells.add('Z9'), throwsUnsupportedError);
   });
+
+  test('cells and warnings return the same view on every call', () {
+    final WarningCollector c = WarningCollector()
+      ..add(XlsxWarningCode.textTruncated, sheet: 'A', cell: 'A1');
+    expect(identical(c.warnings, c.warnings), isTrue);
+    expect(identical(c.warnings.single.cells, c.warnings.single.cells), isTrue);
+  });
+
+  test('the views follow later additions', () {
+    final WarningCollector c = WarningCollector()
+      ..add(XlsxWarningCode.textTruncated, sheet: 'A', cell: 'A1');
+    final List<XlsxWarning> warnings = c.warnings;
+    final List<String> cells = warnings.single.cells;
+    c.add(XlsxWarningCode.textTruncated, sheet: 'A', cell: 'A2');
+    c.add(XlsxWarningCode.invalidCharactersRemoved, sheet: 'A', cell: 'A3');
+    expect(cells, <String>['A1', 'A2']);
+    expect(warnings, hasLength(2));
+  });
 }

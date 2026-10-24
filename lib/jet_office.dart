@@ -8,9 +8,31 @@
 /// and a type is public only once it is exported here.
 library;
 
+export 'src/xlsx/alignment.dart'
+    show
+        XlsxAlignment,
+        XlsxHorizontalAlignment,
+        XlsxProtection,
+        XlsxReadingOrder,
+        XlsxVerticalAlignment;
+export 'src/xlsx/border.dart' show XlsxBorder, XlsxBorderSide, XlsxBorderStyle;
+export 'src/xlsx/color.dart' show XlsxColor;
+export 'src/xlsx/column.dart' show XlsxColumn;
+export 'src/xlsx/fill.dart'
+    show
+        XlsxFill,
+        XlsxGradientFill,
+        XlsxGradientStop,
+        XlsxPatternFill,
+        XlsxPatternType;
+export 'src/xlsx/font.dart'
+    show XlsxFont, XlsxFontScheme, XlsxFontScript, XlsxUnderline;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/number_format.dart' show XlsxNumFmt;
 export 'src/xlsx/properties.dart' show XlsxProperties;
+export 'src/xlsx/range.dart' show XlsxRange;
+export 'src/xlsx/sheet_view.dart'
+    show XlsxPane, XlsxSheetView, XlsxSheetVisibility;
 export 'src/xlsx/style.dart' show XlsxStyle;
 export 'src/xlsx/values.dart' show XlsxCell, XlsxDate, XlsxDecimal, XlsxFormula;
 export 'src/xlsx/warnings.dart' show XlsxLocale, XlsxWarning, XlsxWarningCode;

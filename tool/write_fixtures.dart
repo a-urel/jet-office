@@ -1,10 +1,10 @@
-/// Writes the M1 fixtures for the CI validation job.
+/// Writes the fixtures for the CI validation job.
 ///
 /// ```bash
 /// dart run tool/write_fixtures.dart build/fixtures [--corrupt]
 /// ```
 ///
-/// For every fixture of `m1Fixtures()` it writes `<dir>/<name>.xlsx` and
+/// For every fixture of `allFixtures()` it writes `<dir>/<name>.xlsx` and
 /// `<dir>/<name>.expected.json`, the fixture's `expectedValues` as a JSON
 /// object of sheet name to rows (strings, numbers, booleans and `null`).
 /// `tool/ooxml_validate` validates the `.xlsx` files and
@@ -25,7 +25,7 @@ import 'dart:typed_data';
 
 import 'package:jet_office/src/zip/archive_adapter.dart';
 
-import '../test/fixtures/m1_fixtures.dart';
+import '../test/fixtures/fixtures.dart';
 import '../test/support/read_xlsx.dart';
 
 void main(List<String> args) {
@@ -43,7 +43,7 @@ void main(List<String> args) {
   }
   final Directory dir = Directory(paths.single)..createSync(recursive: true);
   const JsonEncoder json = JsonEncoder.withIndent('  ');
-  final List<Fixture> fixtures = m1Fixtures();
+  final List<Fixture> fixtures = allFixtures();
   for (final Fixture fixture in fixtures) {
     _write(dir, fixture.name, fixture.build(), json, fixture.expectedValues);
   }

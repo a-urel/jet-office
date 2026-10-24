@@ -51,4 +51,32 @@ void main() {
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>',
     );
   });
+
+  test('an empty type or target throws ArgumentError and adds nothing', () {
+    final Relationships rels = Relationships();
+    expect(() => rels.add('', 'styles.xml'), throwsArgumentError);
+    expect(() => rels.add(RelType.styles, ''), throwsArgumentError);
+    expect(rels.add(RelType.styles, 'styles.xml'), 'rId1');
+  });
+
+  test('an explicit id is used, and automatic ids never collide with it', () {
+    final Relationships rels = Relationships();
+    expect(rels.add(RelType.worksheet, 'a.xml', id: 'rId2'), 'rId2');
+    expect(rels.add(RelType.styles, 'styles.xml'), 'rId3');
+    expect(rels.add(RelType.sharedStrings, 'sharedStrings.xml'), 'rId4');
+  });
+
+  test('an empty or duplicate id throws ArgumentError and adds nothing', () {
+    final Relationships rels = Relationships()
+      ..add(RelType.worksheet, 'a.xml', id: 'rId1');
+    expect(
+      () => rels.add(RelType.worksheet, 'b.xml', id: ''),
+      throwsArgumentError,
+    );
+    expect(
+      () => rels.add(RelType.worksheet, 'b.xml', id: 'rId1'),
+      throwsArgumentError,
+    );
+    expect(rels.add(RelType.styles, 'styles.xml'), 'rId2');
+  });
 }

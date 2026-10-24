@@ -39,6 +39,15 @@ void main() {
       ]);
     });
 
+    test(
+      'a quote inside an unquoted field is kept, as LibreOffice writes it',
+      () {
+        expect(parseCsv('a"b,c\n'), <List<String>>[
+          <String>['a"b', 'c'],
+        ]);
+      },
+    );
+
     test('empty text has no rows', () {
       expect(parseCsv(''), isEmpty);
     });
@@ -61,6 +70,28 @@ void main() {
 
     test('malformed UTF-8 is a FormatException', () {
       expect(() => decodeCsv(<int>[0x61, 0xFF, 0x62]), throwsFormatException);
+    });
+  });
+
+  group('xlsxWithoutExpectations', () {
+    test('names each .xlsx that has no .expected.json', () {
+      expect(
+        xlsxWithoutExpectations(<String>[
+          'a.xlsx',
+          'a.expected.json',
+          'b.xlsx',
+          'c.expected.json',
+          'notes.txt',
+        ]),
+        <String>['no expectations for b.xlsx'],
+      );
+    });
+
+    test('is empty when every .xlsx has expectations', () {
+      expect(
+        xlsxWithoutExpectations(<String>['a.xlsx', 'a.expected.json']),
+        isEmpty,
+      );
     });
   });
 
@@ -173,6 +204,52 @@ void main() {
           <Object?>[46319],
         ], '10/25/2026\n'),
         <String>['A1: expected 46319, got "10/25/2026"'],
+      );
+    });
+
+    test('an expected number matches its percent text (R9)', () {
+      // The failing CI cases: 1234.5 and the date 46319 in `0%`.
+      expect(
+        compareSheet(<List<Object?>>[
+          <Object?>[1234.5, 46319, 1234.5, 0.125],
+        ], '123450%,4631900%,123450.0%,12.5%\n'),
+        isEmpty,
+      );
+    });
+
+    test('percent text of another number is a mismatch', () {
+      expect(
+        compareSheet(<List<Object?>>[
+          <Object?>[1234.5, 1234.5, 46319],
+        ], '123451%,1234.5%,4631900\n'),
+        <String>[
+          'A1: expected 1234.5, got "123451%"',
+          'B1: expected 1234.5, got "1234.5%"',
+          'C1: expected 46319, got "4631900"',
+        ],
+      );
+    });
+
+    test('an expected number matches [h]:mm:ss text within a second (R9)', () {
+      // The failing CI case: 1234.5 days are 29628 hours.
+      expect(
+        compareSheet(<List<Object?>>[
+          <Object?>[1234.5, 46319, 0.5, 1234.5, 46319.99999998842],
+        ], '29628:00:00,1111656:00:00,12:00:00,29628:00:01,1111679:59:59\n'),
+        isEmpty,
+      );
+    });
+
+    test('elapsed time more than a second off is a mismatch', () {
+      expect(
+        compareSheet(<List<Object?>>[
+          <Object?>[1234.5, 1234.5, 1234.5],
+        ], '29628:00:02,29627:00:00,29628:60:00\n'),
+        <String>[
+          'A1: expected 1234.5, got "29628:00:02"',
+          'B1: expected 1234.5, got "29627:00:00"',
+          'C1: expected 1234.5, got "29628:60:00"',
+        ],
       );
     });
 

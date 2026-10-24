@@ -1,3 +1,4 @@
+import 'package:jet_office/jet_office.dart' show XlsxRange, XlsxSheetVisibility;
 import 'package:jet_office/src/opc/ooxml.dart';
 import 'package:jet_office/src/xlsx/workbook_parts.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
@@ -18,9 +19,24 @@ void main() {
         (XmlWriter w) => writeWorkbook(
           w,
           tabs: const <WorkbookSheet>[
-            (name: 'Summary', number: 3),
-            (name: 'Detail A', number: 1),
-            (name: 'Detail B', number: 2),
+            (
+              name: 'Summary',
+              number: 3,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
+            (
+              name: 'Detail A',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
+            (
+              name: 'Detail B',
+              number: 2,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
           ],
           activeTab: 0,
           fullCalcOnLoad: false,
@@ -38,13 +54,61 @@ void main() {
       );
     });
 
+    test('writes state for a hidden and a very hidden sheet', () {
+      final String xml = _render(
+        (XmlWriter w) => writeWorkbook(
+          w,
+          tabs: const <WorkbookSheet>[
+            (
+              name: 'V',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
+            (
+              name: 'H',
+              number: 2,
+              visibility: XlsxSheetVisibility.hidden,
+              autoFilter: null,
+            ),
+            (
+              name: 'X',
+              number: 3,
+              visibility: XlsxSheetVisibility.veryHidden,
+              autoFilter: null,
+            ),
+          ],
+          activeTab: 0,
+          fullCalcOnLoad: false,
+        ),
+      );
+      expect(
+        xml,
+        contains(
+          '<sheet name="V" sheetId="1" r:id="rId1"/>'
+          '<sheet name="H" sheetId="2" state="hidden" r:id="rId2"/>'
+          '<sheet name="X" sheetId="3" state="veryHidden" r:id="rId3"/>',
+        ),
+      );
+    });
+
     test('escapes _xHHHH_ in a sheet name, then XML-escapes it', () {
       final String xml = _render(
         (XmlWriter w) => writeWorkbook(
           w,
           tabs: const <WorkbookSheet>[
-            (name: '_x0041_', number: 1),
-            (name: 'a&_x0042_', number: 2),
+            (
+              name: '_x0041_',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
+            (
+              name: 'a&_x0042_',
+              number: 2,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
           ],
           activeTab: 0,
           fullCalcOnLoad: false,
@@ -58,7 +122,14 @@ void main() {
       final String xml = _render(
         (XmlWriter w) => writeWorkbook(
           w,
-          tabs: const <WorkbookSheet>[(name: 'A', number: 1)],
+          tabs: const <WorkbookSheet>[
+            (
+              name: 'A',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
+          ],
           activeTab: 0,
           fullCalcOnLoad: true,
         ),
@@ -71,8 +142,18 @@ void main() {
         (XmlWriter w) => writeWorkbook(
           w,
           tabs: const <WorkbookSheet>[
-            (name: 'P&L "2026"', number: 1),
-            (name: 'B', number: 2),
+            (
+              name: 'P&L "2026"',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
+            (
+              name: 'B',
+              number: 2,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
           ],
           activeTab: 1,
           fullCalcOnLoad: false,
@@ -80,6 +161,76 @@ void main() {
       );
       expect(xml, contains('<sheet name="P&amp;L &quot;2026&quot;"'));
       expect(xml, contains('<workbookView activeTab="1"/>'));
+    });
+  });
+
+  group('_xlnm._FilterDatabase', () {
+    String workbook(List<WorkbookSheet> tabs, {bool calc = false}) => _render(
+      (XmlWriter w) =>
+          writeWorkbook(w, tabs: tabs, activeTab: 0, fullCalcOnLoad: calc),
+    );
+
+    WorkbookSheet sheet(String name, int number, [String? filter]) => (
+      name: name,
+      number: number,
+      visibility: XlsxSheetVisibility.visible,
+      autoFilter: filter == null ? null : XlsxRange.parse(filter),
+    );
+
+    test('no filter writes no definedNames', () {
+      expect(
+        workbook(<WorkbookSheet>[sheet('A', 1)]),
+        isNot(contains('defin')),
+      );
+    });
+
+    test('quotes the sheet name, doubles quotes, uses the tab index', () {
+      expect(
+        workbook(<WorkbookSheet>[sheet("Bob's Data", 1, 'A6:D20')]),
+        endsWith(
+          '</sheets><definedNames><definedName name="_xlnm._FilterDatabase" '
+          'localSheetId="0" hidden="1">\'Bob\'\'s Data\'!\$A\$6:\$D\$20'
+          '</definedName></definedNames></workbook>',
+        ),
+      );
+    });
+
+    test('one name per filtered sheet, in tab order, before calcPr', () {
+      final String xml = workbook(<WorkbookSheet>[
+        sheet('Plain', 3),
+        sheet('B', 1, 'A1:B2'),
+        sheet('C', 2, 'C3'),
+      ], calc: true);
+      expect(
+        xml,
+        contains(
+          '</sheets><definedNames>'
+          '<definedName name="_xlnm._FilterDatabase" localSheetId="1" '
+          "hidden=\"1\">'B'!\$A\$1:\$B\$2</definedName>"
+          '<definedName name="_xlnm._FilterDatabase" localSheetId="2" '
+          "hidden=\"1\">'C'!\$C\$3</definedName>"
+          '</definedNames><calcPr fullCalcOnLoad="1"/></workbook>',
+        ),
+      );
+    });
+
+    test('the text is written like <f> text: XML escaping only', () {
+      // Ruling R10: a defined name is ST_Formula, like `<f>`, which readers
+      // do not decode, so `_xHHHH_` stays as given while the sheet name
+      // itself is escaped (R22).
+      final String xml = workbook(<WorkbookSheet>[
+        sheet('D_x0041_', 1, 'A1:B1'),
+        sheet('a&_x0041_', 2, 'A1:B2'),
+      ]);
+      expect(xml, contains('<sheet name="D_x005F_x0041_" sheetId="1"'));
+      expect(
+        xml,
+        contains(
+          '<definedName name="_xlnm._FilterDatabase" localSheetId="0" '
+          "hidden=\"1\">'D_x0041_'!\$A\$1:\$B\$1</definedName>",
+        ),
+      );
+      expect(xml, contains(">'a&amp;_x0041_'!\$A\$1:\$B\$2</definedName>"));
     });
   });
 
@@ -144,5 +295,24 @@ void main() {
   test('worksheet part names follow the creation number', () {
     expect(worksheetPartName(1), 'xl/worksheets/sheet1.xml');
     expect(worksheetPartName(12), 'xl/worksheets/sheet12.xml');
+  });
+
+  test('worksheet relationship ids come from worksheetRelationshipId', () {
+    final StringBuffer out = StringBuffer();
+    writeWorkbookRelationships(XmlWriter(out), 12);
+    final String xml = out.toString();
+    for (int n = 1; n <= 12; n++) {
+      expect(
+        xml,
+        contains(
+          'Id="${worksheetRelationshipId(n)}" Type="${RelType.worksheet}" '
+          'Target="worksheets/sheet$n.xml"',
+        ),
+      );
+    }
+    final Set<String> ids = RegExp(
+      r'Id="([^"]+)"',
+    ).allMatches(xml).map((RegExpMatch m) => m.group(1)!).toSet();
+    expect(ids, hasLength(14));
   });
 }

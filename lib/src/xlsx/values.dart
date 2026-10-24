@@ -14,19 +14,26 @@ import 'style.dart';
 
 /// A cell value together with the style of that one cell.
 ///
-/// The style applies to this cell only and replaces the row's style (styles
-/// are not merged). Wrap a value only when the cell needs a style other than
-/// the row's; a bare value uses the row style.
+/// The style applies to this cell only and is merged over the row's style,
+/// which is merged over the column's (see `XlsxStyle.merge`): a field the
+/// cell style sets wins, one it leaves `null` is inherited. Wrap a value only
+/// when the cell needs a style other than the row's; a bare value uses the
+/// row style.
 ///
 /// [value] may be anything a cell accepts except another [XlsxCell]; nesting
 /// is a programmer error and throws an [ArgumentError] when the cell is
-/// written.
+/// written. A `null` [value] with a [style] is an empty styled cell: it is
+/// written with the merged style and no value, so a border or fill reaches
+/// a cell that holds nothing. When the merged style is the default, or
+/// [style] is `null`, nothing is written.
 final class XlsxCell {
   /// Creates a cell holding [value], styled with [style] when given.
   const XlsxCell(this.value, {this.style});
 
   /// The value to write: a `String`, `int`, `double`, `bool`, [DateTime],
-  /// [XlsxDate], [XlsxDecimal], [XlsxFormula] or `null` (writes no cell).
+  /// [XlsxDate], [XlsxDecimal], [XlsxFormula] or `null` (an empty cell,
+  /// written only when it has a [style] that does not merge to the
+  /// default).
   final Object? value;
 
   /// The style of this cell, or `null` to use the row's style.

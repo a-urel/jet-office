@@ -14,7 +14,8 @@
 /// `decodeXstring`), so `<name>-<decoded sheet>.csv` is accepted too, with a
 /// note naming the decoded name. It prints
 /// every mismatch and exits with 1 on any, or 2 when there is nothing to
-/// compare.
+/// compare. A `.xlsx` with no `.expected.json` is a mismatch
+/// (`no expectations for <name>.xlsx`), not skipped.
 ///
 /// The CI job exports the CSV files with LibreOffice headless:
 ///
@@ -41,8 +42,9 @@
 /// 9. `false`: **do not** save cell contents as shown, so a number is
 ///    written at full precision without its number format (`1234.5`, not
 ///    `1,234.50`). LibreOffice still writes a date-formatted number as date
-///    text in its edit form (`10/24/2026 13:45:00` in en-US), which
-///    `compareSheet` turns back into a serial.
+///    text in its edit form (`10/24/2026 13:45:00` in en-US), a percent as
+///    `123450%` and an elapsed time as `29628:00:00`, which `compareSheet`
+///    turns back into numbers.
 /// 10. `false`: write formula results, not formula text.
 /// 11. `false`: do not remove spaces (import only).
 /// 12. `-1`: export every sheet, each to its own `<name>-<sheet>.csv`.
@@ -68,12 +70,21 @@ void main(List<String> args) {
             .where((File f) => f.path.endsWith('.expected.json'))
             .toList()
           ..sort((File a, File b) => a.path.compareTo(b.path)));
+  final List<String> unexpected = xlsxWithoutExpectations(<String>[
+    for (final File f
+        in dir.existsSync() ? dir.listSync().whereType<File>() : <File>[])
+      _basename(f.path),
+  ]);
   if (expectations.isEmpty) {
     stderr.writeln('No .expected.json files in ${dir.path}.');
     exitCode = 2;
     return;
   }
   int mismatches = 0;
+  for (final String message in unexpected) {
+    stdout.writeln('FAIL  $message');
+    mismatches++;
+  }
   for (final File file in expectations) {
     final String name = _basename(
       file.path,

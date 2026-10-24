@@ -7,6 +7,8 @@
 /// references, not 100,000 objects.
 library;
 
+import 'dart:collection';
+
 import 'warning_messages.dart';
 
 /// The language of a warning message.
@@ -54,7 +56,8 @@ enum XlsxWarningCode {
 ///
 /// Cell-level warnings ([XlsxWarningCode.invalidCharactersRemoved],
 /// [XlsxWarningCode.textTruncated], [XlsxWarningCode.intPrecisionLost],
-/// [XlsxWarningCode.dateOutsideExcelRange], [XlsxWarningCode.dateInNonDateFormat])
+/// [XlsxWarningCode.dateOutsideExcelRange],
+/// [XlsxWarningCode.dateInNonDateFormat])
 /// cover every affected cell of one sheet: [count] says how many and [cells]
 /// names the first ten. Sheet-name warnings
 /// ([XlsxWarningCode.sheetNameChanged], [XlsxWarningCode.sheetNameDuplicated])
@@ -65,7 +68,7 @@ final class XlsxWarning {
   XlsxWarning._(this.code, this.sheet, this.originalName);
 
   /// How many cell references a warning keeps.
-  static const int maxCells = 10;
+  static const int _maxCells = 10;
 
   /// The kind of problem.
   final XlsxWarningCode code;
@@ -79,14 +82,16 @@ final class XlsxWarning {
 
   int _count = 0;
   final List<String> _cells = <String>[];
+  late final List<String> _cellsView = UnmodifiableListView<String>(_cells);
 
   /// How many cells (or, for a sheet-name warning, sheets) are affected.
   int get count => _count;
 
   /// A1-style references of the first ten affected cells, in write order.
   ///
-  /// Empty for sheet-name warnings. Unmodifiable.
-  List<String> get cells => List<String>.unmodifiable(_cells);
+  /// Empty for sheet-name warnings. An unmodifiable view, the same object on
+  /// every call, that shows references added later.
+  List<String> get cells => _cellsView;
 
   /// A human-readable description in [locale].
   String message([XlsxLocale locale = XlsxLocale.en]) =>
@@ -101,9 +106,11 @@ final class XlsxWarning {
 ///
 /// Cell-level codes aggregate by `(sheet, code)`; sheet-name codes give one
 /// warning per [add] call. Memory stays bounded: a warning keeps at most
-/// [XlsxWarning.maxCells] references however often it recurs.
+/// ten references however often it recurs.
 final class WarningCollector {
   final List<XlsxWarning> _warnings = <XlsxWarning>[];
+  late final List<XlsxWarning> _warningsView =
+      UnmodifiableListView<XlsxWarning>(_warnings);
   final Map<(String, XlsxWarningCode), XlsxWarning> _aggregated =
       <(String, XlsxWarningCode), XlsxWarning>{};
 
@@ -132,11 +139,12 @@ final class WarningCollector {
       });
     }
     warning._count++;
-    if (cell != null && warning._cells.length < XlsxWarning.maxCells) {
+    if (cell != null && warning._cells.length < XlsxWarning._maxCells) {
       warning._cells.add(cell);
     }
   }
 
-  /// The warnings so far, in first-occurrence order. Unmodifiable.
-  List<XlsxWarning> get warnings => List<XlsxWarning>.unmodifiable(_warnings);
+  /// The warnings so far, in first-occurrence order. An unmodifiable view,
+  /// the same object on every call, that shows warnings added later.
+  List<XlsxWarning> get warnings => _warningsView;
 }

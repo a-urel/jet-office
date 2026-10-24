@@ -3,8 +3,8 @@
 /// Ported from quds_office_engine `lib/src/opc/relationships.dart` at commit 15c5d29.
 /// Ported: `RelationshipCollection` and its `toXml`, as the write side only
 /// (no parsing, no lookup, no external targets). What changed: ids are
-/// assigned by [Relationships.add] as `rId1`, `rId2`, ... in call order, and
-/// the part is written to an `XmlWriter`.
+/// assigned by [Relationships.add] as `rId1`, `rId2`, ... in call order
+/// unless the caller gives one, and the part is written to an `XmlWriter`.
 library;
 
 import '../xml/xml_writer.dart';
@@ -14,16 +14,46 @@ import 'ooxml.dart';
 final class Relationships {
   final List<({String id, String type, String target})> _items =
       <({String id, String type, String target})>[];
+  final Set<String> _ids = <String>{};
 
-  /// Adds a relationship of [type] to [target] and returns its id, `rId1` for
-  /// the first call, `rId2` for the second, and so on.
+  /// Adds a relationship of [type] to [target] and returns its id.
+  ///
+  /// Without [id], the id is the first of `rId1`, `rId2`, ... that no
+  /// relationship of this part uses yet, so automatic ids never collide with
+  /// explicit ones. With [id], that id is used as given; the caller owns its
+  /// meaning, for example a part that another part refers to by id.
   ///
   /// [target] is written as given, relative to the source part (for example
   /// `worksheets/sheet1.xml`), or to the package root in `_rels/.rels`.
-  String add(String type, String target) {
-    final String id = 'rId${_items.length + 1}';
-    _items.add((id: id, type: type, target: target));
-    return id;
+  ///
+  /// Throws [ArgumentError] when [type], [target] or [id] is empty, or when
+  /// [id] is already in use; nothing is added then.
+  String add(String type, String target, {String? id}) {
+    if (type.isEmpty) {
+      throw ArgumentError.value(type, 'type', 'Must not be empty.');
+    }
+    if (target.isEmpty) {
+      throw ArgumentError.value(target, 'target', 'Must not be empty.');
+    }
+    String chosen;
+    if (id != null) {
+      if (id.isEmpty) {
+        throw ArgumentError.value(id, 'id', 'Must not be empty.');
+      }
+      if (_ids.contains(id)) {
+        throw ArgumentError.value(id, 'id', 'Is already used.');
+      }
+      chosen = id;
+    } else {
+      int n = _items.length + 1;
+      while (_ids.contains('rId$n')) {
+        n++;
+      }
+      chosen = 'rId$n';
+    }
+    _ids.add(chosen);
+    _items.add((id: chosen, type: type, target: target));
+    return chosen;
   }
 
   /// Writes the whole part, XML declaration included, to [w].
