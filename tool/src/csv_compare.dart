@@ -2,8 +2,8 @@
 /// values.
 ///
 /// `tool/compare_csv.dart` runs this against LibreOffice's export of every
-/// M1 fixture. The contract is the one `Fixture.expectedValues` documents in
-/// `test/fixtures/m1_fixtures.dart`:
+/// fixture of every milestone. The contract is the one
+/// `Fixture.expectedValues` documents in `test/fixtures/fixture.dart`:
 ///
 /// - Values are raw, not formatted.
 /// - Numbers are equal within a relative tolerance of 1e-12, which absorbs a
@@ -23,6 +23,15 @@
 /// shows 28.02.1900. One second covers a reader that truncates a time to
 /// whole seconds and one that rounds it.
 ///
+/// Two more, for the same reason (ruling R9): LibreOffice also keeps a
+/// percent format and an elapsed-time format in its raw export. An expected
+/// number therefore also matches
+///
+/// - percent text, the number times 100 followed by `%` (`123450%` for
+///   1234.5), within the numeric tolerance above; and
+/// - `[h]:mm:ss` elapsed-time text, the number as days counted in hours,
+///   minutes and seconds (`29628:00:00` for 1234.5), within one second.
+///
 /// Pure Dart with no `dart:io`, so its tests run on the web too.
 library;
 
@@ -33,9 +42,9 @@ import 'dart:convert';
 ///
 /// A quoted field may hold commas, quotes and line breaks. A quote that is
 /// not the first character of a field is plain text, as LibreOffice writes
-/// `a"b` for the text `a"b`. A final line
-/// break does not start another row, and empty text has no rows. Throws a
-/// [FormatException] for a quote that is never closed.
+/// `a"b` for the text `a"b`. A final line break does not start another row,
+/// and empty text has no rows. Throws a [FormatException] for a quote that
+/// is never closed.
 List<List<String>> parseCsv(String text) {
   final List<List<String>> rows = <List<String>>[];
   List<String> row = <String>[];
@@ -205,8 +214,31 @@ bool _matches(Object? want, String got) {
   }
   final double w = (want as num).toDouble();
   if (_number.hasMatch(got)) return _closeEnough(w, double.parse(got));
-  final double? serial = _dateSerial(got);
+  if (got.endsWith('%')) {
+    final String percent = got.substring(0, got.length - 1);
+    return _number.hasMatch(percent) &&
+        _closeEnough(w * 100, double.parse(percent));
+  }
+  final double? serial = _dateSerial(got) ?? _elapsedDays(got);
   return serial != null && (serial - w).abs() <= _oneSecond;
+}
+
+final RegExp _elapsed = RegExp(
+  r'^(-?)(\d+):([0-5]\d):([0-5]\d)(?:[.,](\d+))?$',
+);
+
+/// The days of `[h]:mm:ss` elapsed-time text, such as `29628:00:00` for
+/// 1234.5, or `null` when [text] is not such a time.
+double? _elapsedDays(String text) {
+  final RegExpMatch? m = _elapsed.firstMatch(text);
+  if (m == null) return null;
+  final double fraction = m[5] == null ? 0 : double.parse('0.${m[5]}');
+  final double seconds =
+      int.parse(m[2]!) * 3600 +
+      int.parse(m[3]!) * 60 +
+      int.parse(m[4]!) +
+      fraction;
+  return (m[1]!.isEmpty ? seconds : -seconds) / 86400;
 }
 
 final RegExp _number = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$');

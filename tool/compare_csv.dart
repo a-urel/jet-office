@@ -42,8 +42,9 @@
 /// 9. `false`: **do not** save cell contents as shown, so a number is
 ///    written at full precision without its number format (`1234.5`, not
 ///    `1,234.50`). LibreOffice still writes a date-formatted number as date
-///    text in its edit form (`10/24/2026 13:45:00` in en-US), which
-///    `compareSheet` turns back into a serial.
+///    text in its edit form (`10/24/2026 13:45:00` in en-US), a percent as
+///    `123450%` and an elapsed time as `29628:00:00`, which `compareSheet`
+///    turns back into numbers.
 /// 10. `false`: write formula results, not formula text.
 /// 11. `false`: do not remove spaces (import only).
 /// 12. `-1`: export every sheet, each to its own `<name>-<sheet>.csv`.
