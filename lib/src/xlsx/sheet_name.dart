@@ -43,16 +43,23 @@ String _truncate(String text, int max) {
   return text.substring(0, end);
 }
 
-String _stripApostrophes(String text) {
-  int start = 0;
-  int end = text.length;
-  while (start < end && text.codeUnitAt(start) == _apostrophe) {
-    start++;
+/// Removes surrounding whitespace and apostrophes until neither is left, so
+/// `' ' x` becomes `x`.
+String _trimStable(String text) {
+  String current = text.trim();
+  while (true) {
+    int start = 0;
+    int end = current.length;
+    while (start < end && current.codeUnitAt(start) == _apostrophe) {
+      start++;
+    }
+    while (end > start && current.codeUnitAt(end - 1) == _apostrophe) {
+      end--;
+    }
+    final String next = current.substring(start, end).trim();
+    if (next == current) return current;
+    current = next;
   }
-  while (end > start && text.codeUnitAt(end - 1) == _apostrophe) {
-    end--;
-  }
-  return text.substring(start, end);
 }
 
 /// Turns the sheet names callers ask for into the unique, valid names of a
@@ -86,10 +93,10 @@ final class SheetNamer {
   /// the final name as `sheet` and [requested] as `originalName`.
   String assign(String requested) {
     String name = scrubXmlText(requested).text;
-    name = name.replaceAll(RegExp(r'[\[\]:*?/\\]'), '_').trim();
-    name = _stripApostrophes(name).trim();
+    name = name.replaceAll(RegExp(r'[\[\]:*?/\\]'), '_');
+    name = _trimStable(name);
+    name = _trimStable(_truncate(name, XlsxLimits.maxSheetNameLength));
     if (name.isEmpty) name = 'Sheet${_assigned + 1}';
-    name = _stripApostrophes(_truncate(name, XlsxLimits.maxSheetNameLength));
     final bool changed = name != requested;
 
     String unique = name;

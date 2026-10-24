@@ -134,4 +134,20 @@ void main() {
     expect(n.assign('Data (2)'), 'Data (2)');
     expect(n.assign('data'), 'data (3)');
   });
+
+  test('names of only apostrophes and spaces fall back to Sheet{n}', () {
+    expect(n.assign("' ' '"), 'Sheet1');
+    expect(n.assign("'"), 'Sheet2');
+    expect(n.assign("''"), 'Sheet3');
+  });
+
+  test('apostrophes and spaces are stripped until stable', () {
+    expect(n.assign("' ' x"), 'x');
+  });
+
+  test('truncation that exposes an apostrophe or space is cleaned', () {
+    expect(n.assign("${'x' * 30}'y"), 'x' * 30);
+    expect(SheetNamer(w).assign('${'x' * 30} y'), 'x' * 30);
+    expect(w.warnings.any((XlsxWarning x) => x.sheet.isEmpty), isFalse);
+  });
 }
