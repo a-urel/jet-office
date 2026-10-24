@@ -49,4 +49,32 @@ void main() {
     SharedStrings().writeXml(XmlWriter(out));
     expect(out.toString(), endsWith('count="0" uniqueCount="0"/>'));
   });
+
+  test('text that looks like an _xHHHH_ escape is written escaped', () {
+    final SharedStrings s = SharedStrings()
+      ..indexOf('_x0041_')
+      ..indexOf('a_x00e9_b')
+      ..indexOf('_x0041_x0042_')
+      ..indexOf('_x00G1_ _x041_ x0041_');
+    final StringBuffer out = StringBuffer();
+    s.writeXml(XmlWriter(out));
+    expect(
+      out.toString(),
+      contains(
+        '<si><t>_x005F_x0041_</t></si>'
+        '<si><t>a_x005F_x00e9_b</t></si>'
+        '<si><t>_x005F_x0041_x005F_x0042_</t></si>'
+        '<si><t>_x00G1_ _x041_ x0041_</t></si>',
+      ),
+    );
+  });
+
+  test('the table keeps and deduplicates the original text', () {
+    final SharedStrings s = SharedStrings();
+    expect(s.indexOf('_x0041_'), 0);
+    expect(s.indexOf('_x005F_x0041_'), 1);
+    expect(s.indexOf('_x0041_'), 0);
+    expect(s.values, <String>['_x0041_', '_x005F_x0041_']);
+    expect(s.uniqueCount, 2);
+  });
 }

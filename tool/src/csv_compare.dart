@@ -95,6 +95,19 @@ String decodeCsv(List<int> bytes) {
   return text.startsWith('﻿') ? text.substring(1) : text;
 }
 
+final RegExp _xstringEscape = RegExp(r'_x([0-9A-Fa-f]{4})_');
+
+/// [text] with its `_xHHHH_` escapes decoded, left to right, as Excel and
+/// LibreOffice read an ST_Xstring: `_x0041_` is `A` and `_x005F_x0041_` is
+/// the text `_x0041_`.
+///
+/// The fixtures store text that looks like an escape in escaped form, so a
+/// stored string is compared with an expected one after this decoding.
+String decodeXstring(String text) => text.replaceAllMapped(
+  _xstringEscape,
+  (Match m) => String.fromCharCode(int.parse(m.group(1)!, radix: 16)),
+);
+
 /// Compares the [expected] rows of one sheet with the [csv] text a reader
 /// exported for it, under the contract in the library comment.
 ///

@@ -36,7 +36,7 @@ One sheet, `Values`. Row 1 holds the column labels, row 2 the values.
 
 ### `m1_dirty_text`
 
-One sheet, `Text`, values in A1:A9. Use `=LEN(...)` in column B to count
+One sheet, `Text`, values in A1:A11. Use `=LEN(...)` in column B to count
 characters.
 
 - A1 `abcd`, A2 `xy`, A3 `pq`: the control characters and lone surrogates
@@ -49,19 +49,25 @@ characters.
 - A7 `Şube Müdürü`, A8 `Straße`, A9 an emoji, ` emoji `, then a man and a
   woman joined by a zero-width joiner (one family glyph or two people,
   depending on the font).
+- A10 `_x0041_` and A11 `a_x00e9_b`, exactly as typed: not `A` and not
+  `aéb`. The file stores them as `_x005F_x0041_` and `a_x005F_x00e9_b`,
+  because Excel decodes `_xHHHH_` in cell text.
 
 ### `m1_sheets`
 
-Thirteen sheets. Each sheet's A1 says `asked: ` and the name the caller asked
-for.
+Fourteen sheets. Each sheet's A1 says `asked: ` and the name the caller
+asked for.
 
 - Tab order: `Başlangıç`, `Özet`, `a_b`, `A_B (2)`, `ŞUBE`, `şube (2)`,
   `LİSTE`, `liste (2)`, `STRASSE`, `straße (2)`, `Sheet10`, `History (2)`,
-  `this name is far longer than al`.
+  `this name is far longer than al`, `_x0041_`.
 - `Başlangıç` is first although it was added last (inserted at position 0).
 - The active sheet, open on load, is `şube (2)`.
 - `Sheet10`'s A1 is `asked: ` with nothing after it (the empty name).
 - `History (2)`'s A1 is `asked: History` (Excel reserves `History`).
+- The last tab's name is stored as `_x0041_`, unescaped. Record under
+  Results whether Excel's tab shows `_x0041_` or `A`. Its A1 shows
+  `asked: _x0041_` either way.
 
 ### `m1_formulas`
 

@@ -209,6 +209,15 @@ void main() {
     expect(encoder.wroteFormula, isTrue);
   });
 
+  test('text that looks like an _xHHHH_ escape keeps its meaning', () {
+    expect(enc('_x0041_'), '<c r="A1" t="s"><v>0</v></c>');
+    expect(strings.values.single, '_x0041_');
+    expect(
+      enc(const XlsxFormula('A2', cached: 'a_x00e9_b')),
+      '<c r="A1" t="str"><f>A2</f><v>a_x005F_x00e9_b</v></c>',
+    );
+  });
+
   test('only one leading equals sign is stripped', () {
     expect(enc(const XlsxFormula('==1')), '<c r="A1"><f>=1</f></c>');
   });

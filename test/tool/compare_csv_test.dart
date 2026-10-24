@@ -64,6 +64,20 @@ void main() {
     });
   });
 
+  group('decodeXstring', () {
+    test('decodes _xHHHH_ escapes left to right', () {
+      expect(decodeXstring('_x0041_'), 'A');
+      expect(decodeXstring('a_x00e9_b'), 'aéb');
+      expect(decodeXstring('_x005F_x0041_'), '_x0041_');
+      expect(decodeXstring('_x005F_x0041_x005F_x0042_'), '_x0041_x0042_');
+      expect(decodeXstring('_x0041_x0042_'), 'Ax0042_');
+    });
+    test('leaves everything else alone', () {
+      expect(decodeXstring('plain'), 'plain');
+      expect(decodeXstring('_x00G1_ _x041_ x0041_'), '_x00G1_ _x041_ x0041_');
+    });
+  });
+
   group('compareSheet', () {
     test('equal values give no mismatch', () {
       expect(

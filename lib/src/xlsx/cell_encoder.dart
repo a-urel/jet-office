@@ -294,7 +294,7 @@ final class CellEncoder {
           warning = XlsxWarningCode.textTruncated;
         }
         type = 'str';
-        cachedXml = '<v>${escapeXmlText(kept)}</v>';
+        cachedXml = '<v>${escapeXmlText(escapeXstring(kept))}</v>';
       case bool():
         type = 'b';
         cachedXml = '<v>${cached ? 1 : 0}</v>';

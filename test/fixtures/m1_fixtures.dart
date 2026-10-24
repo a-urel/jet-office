@@ -8,6 +8,12 @@
 /// truncation, and empty cells as `''`. Each sheet's rows form a rectangle
 /// that ends at the last row and column holding a cell.
 ///
+/// Excel and LibreOffice decode `_xHHHH_` in cell text (ST_Xstring), so the
+/// writer stores text that looks like such an escape with its `_` escaped as
+/// `_x005F_`. [Fixture.storedValues] hold that stored form, while
+/// [Fixture.expectedValues] hold the text a reader shows, which is the text
+/// the caller passed in.
+///
 /// Whole-number doubles are avoided on purpose: `1.0` prints as `1` on the
 /// web and `1.0` on the VM, so the fixtures use `int`s for whole numbers.
 library;
@@ -33,8 +39,9 @@ final class Fixture {
 
   /// Sheet name (the final, sanitized one) to rows of the text stored in the
   /// file: numbers as in `<v>`, dates as serials, booleans `1`/`0`, strings
-  /// after scrubbing and truncation, empty cells `''`. Rectangular per sheet.
-  /// The tests check it against the file itself.
+  /// after scrubbing and truncation and with `_xHHHH_` look-alikes escaped,
+  /// empty cells `''`. Rectangular per sheet. The tests check it against the
+  /// file itself.
   final Map<String, List<List<String>>> storedValues;
 
   /// Sheet name to rows of the values a reader should see, typed: `String`
@@ -45,7 +52,8 @@ final class Fixture {
   /// The comparison contract Task 15 implements against LibreOffice's CSV
   /// export: raw (not formatted) values; numbers are equal within a relative
   /// tolerance of 1e-12; a `bool` matches `TRUE`/`FALSE` or `1`/`0`; strings
-  /// are equal exactly; `null` matches `""`; trailing empty rows and trailing
+  /// are equal exactly (a stored string is compared after decoding its
+  /// `_xHHHH_` escapes, as a reader does); `null` matches `""`; trailing empty rows and trailing
   /// empty cells are ignored on both sides. A CSV cannot tell an empty sheet
   /// from a sheet whose only cell is `''`, so both expect no rows; the
   /// checker and [storedValues] still tell them apart.
@@ -196,6 +204,8 @@ Fixture _dirtyText() => Fixture(
       <String>['Şube Müdürü'],
       <String>['Straße'],
       <String>['\u{1F600} emoji \u{1F468}‍\u{1F469}'],
+      <String>['_x005F_x0041_'],
+      <String>['a_x005F_x00e9_b'],
     ],
   },
   <String, List<List<Object?>>>{
@@ -209,6 +219,8 @@ Fixture _dirtyText() => Fixture(
       <Object?>['Şube Müdürü'],
       <Object?>['Straße'],
       <Object?>['\u{1F600} emoji \u{1F468}\u200D\u{1F469}'],
+      <Object?>['_x0041_'],
+      <Object?>['a_x00e9_b'],
     ],
   },
   () => _make((XlsxWriter book) {
@@ -221,7 +233,9 @@ Fixture _dirtyText() => Fixture(
       ..row(<Object?>['  padded  '])
       ..row(<Object?>['Şube Müdürü'])
       ..row(<Object?>['Straße'])
-      ..row(<Object?>['\u{1F600} emoji \u{1F468}‍\u{1F469}']);
+      ..row(<Object?>['\u{1F600} emoji \u{1F468}‍\u{1F469}'])
+      ..row(<Object?>['_x0041_']) // shown as typed, not as `A`
+      ..row(<Object?>['a_x00e9_b']); // shown as typed, not as `aéb`
   }),
 );
 
@@ -239,14 +253,22 @@ const List<(String, String)> _sheetNames = <(String, String)>[
   ('', 'Sheet10'),
   ('History', 'History (2)'),
   ('this name is far longer than allowed', 'this name is far longer than al'),
+  // Written verbatim (ruling R19); docs/excel-checks.md asks how Excel
+  // shows it.
+  ('_x0041_', '_x0041_'),
 ];
+
+/// [text] as the writer stores it in a cell: an `_` that starts an
+/// `_xHHHH_` look-alike is escaped as `_x005F_`.
+String _storedText(String text) =>
+    text.replaceAll(RegExp(r'_(?=x[0-9A-Fa-f]{4}_)'), '_x005F_');
 
 Fixture _sheets() => Fixture(
   'm1_sheets',
   <String, List<List<String>>>{
     for (final (String asked, String got) in _sheetNames)
       got: <List<String>>[
-        <String>['asked: $asked'],
+        <String>['asked: ${_storedText(asked)}'],
       ],
     'Başlangıç': <List<String>>[
       <String>['asked: Başlangıç'],

@@ -4,6 +4,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
 
+import '../../tool/src/csv_compare.dart' show decodeXstring;
 import '../fixtures/m1_fixtures.dart';
 import '../support/read_xlsx.dart';
 import '../support/xlsx_checker.dart';
@@ -146,7 +147,8 @@ void main() {
                     reason: at,
                   );
                 case String():
-                  expect(s, e, reason: at);
+                  // A reader decodes the `_xHHHH_` escapes of stored text.
+                  expect(decodeXstring(s), e, reason: at);
                 default:
                   fail('$at: unsupported expected type ${e.runtimeType}');
               }

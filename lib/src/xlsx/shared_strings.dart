@@ -4,10 +4,12 @@
 /// Ported: `SharedStringTable.intern`, `values` and `toXml`, as the write
 /// side only (no parsing). What changed: the table counts every reference
 /// (`count`) apart from the distinct strings (`uniqueCount`), where Quds
-/// wrote the same number for both, and `xml:space="preserve"` is written only
-/// for text with leading or trailing whitespace.
+/// wrote the same number for both, `xml:space="preserve"` is written only
+/// for text with leading or trailing whitespace, and text that looks like an
+/// `_xHHHH_` escape is written escaped so readers show it as given.
 library;
 
+import '../xml/xml_escape.dart';
 import '../xml/xml_writer.dart';
 
 const String _mainNamespace =
@@ -15,8 +17,10 @@ const String _mainNamespace =
 
 /// Interns the strings of string cells and writes the `sst` part.
 ///
-/// Text must already be scrubbed and truncated by the cell encoder. Memory
-/// grows with the number of distinct strings, not with the number of cells.
+/// Text must already be scrubbed and truncated by the cell encoder. The
+/// table keeps and deduplicates the text as given; [writeXml] protects text
+/// that looks like an `_xHHHH_` escape with [escapeXstring]. Memory grows
+/// with the number of distinct strings, not with the number of cells.
 final class SharedStrings {
   final List<String> _values = <String>[];
   final Map<String, int> _ids = <String, int>{};
@@ -54,7 +58,7 @@ final class SharedStrings {
       w.start('si');
       w.start('t');
       if (_isPadded(text)) w.attribute('xml:space', 'preserve');
-      w.text(text);
+      w.text(escapeXstring(text));
       w.end();
       w.end();
     }

@@ -9,7 +9,10 @@
 /// `tool/write_fixtures.dart`) it reads `<name>-<sheet>.csv` for each sheet
 /// and compares it on raw values with `compareSheet` from
 /// `tool/src/csv_compare.dart`, whose library comment states the contract.
-/// A one-sheet workbook may also be exported as `<name>.csv`. It prints
+/// A one-sheet workbook may also be exported as `<name>.csv`. A sheet name
+/// that holds an `_xHHHH_` escape may be decoded by the reader (see
+/// `decodeXstring`), so `<name>-<decoded sheet>.csv` is accepted too, with a
+/// note naming the decoded name. It prints
 /// every mismatch and exits with 1 on any, or 2 when there is nothing to
 /// compare.
 ///
@@ -78,6 +81,16 @@ void main(List<String> args) {
     final Map<String, List<List<Object?>>> sheets = _readExpected(file);
     sheets.forEach((String sheet, List<List<Object?>> rows) {
       File csv = File('${dir.path}/$name-$sheet.csv');
+      final String decoded = decodeXstring(sheet);
+      if (!csv.existsSync() && decoded != sheet) {
+        final File renamed = File('${dir.path}/$name-$decoded.csv');
+        if (renamed.existsSync()) {
+          stdout.writeln(
+            'note  $name / $sheet: the reader named the sheet "$decoded"',
+          );
+          csv = renamed;
+        }
+      }
       if (!csv.existsSync() && sheets.length == 1) {
         csv = File('${dir.path}/$name.csv');
       }
