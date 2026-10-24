@@ -15,6 +15,7 @@ List<Fixture> m2Fixtures() => <Fixture>[
   _stylePrecedence(),
   _views(),
   _mergesFilter(),
+  _formulaXstring(),
 ];
 
 /// The text in column A of every row that does not show a number format.
@@ -570,3 +571,31 @@ Fixture _mergesFilter() {
     },
   );
 }
+
+/// A probe for the parked M1 question: does a reader decode `_xHHHH_` inside
+/// `<f>`? A1 is the formula `"_x0041_"`, written as given (a formula is not
+/// escaped), and A2 is the same text as a string, which the writer escapes
+/// to `_x005F_x0041_`, so a reader shows `_x0041_` for A2. A reader that
+/// shows `A` for A1 decodes inside `<f>`; the Excel check records which.
+Fixture _formulaXstring() => Fixture(
+  'm2_formula_xstring',
+  <String, List<List<String>>>{
+    'Probe': <List<String>>[
+      <String>[''],
+      <String>['_x005F_x0041_'],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Probe': <List<Object?>>[
+      <Object?>['_x0041_'],
+      <Object?>['_x0041_'],
+    ],
+  },
+  () {
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('Probe')
+      ..row(<Object?>[const XlsxFormula('"_x0041_"')])
+      ..row(<Object?>['_x0041_']);
+    return book.close();
+  },
+);

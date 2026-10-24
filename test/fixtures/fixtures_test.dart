@@ -338,4 +338,16 @@ void main() {
       ),
     );
   });
+
+  test('m2_formula_xstring probes _xHHHH_ inside a formula and in text', () {
+    final Map<String, String> parts = readXlsx(
+      named('m2_formula_xstring').build(),
+    );
+    final String sheet = parts['xl/worksheets/sheet1.xml']!;
+    // The formula is written as given: `_x0041_` is not escaped inside
+    // `<f>`. Whether a reader decodes it is what the Excel check records.
+    expect(sheet, contains('<f>"_x0041_"</f>'));
+    expect(sheet, contains('<c r="A2" t="s">'));
+    expect(parts['xl/sharedStrings.xml'], contains('_x005F_x0041_'));
+  });
 }

@@ -29,7 +29,10 @@ Never report work as done without running these and reading the output.
 ## Validation
 
 CI's `validate` job runs after the quality gate and is required. Locally it is
-optional, because it needs the .NET SDK (8 or later) and LibreOffice:
+optional. The Open XML SDK step runs whenever `dotnet` (8 or later) is
+installed; the LibreOffice steps need LibreOffice as well. The fixtures come
+from `allFixtures()` (`test/fixtures/fixtures.dart`), so a fixture added to a
+milestone list is validated without further wiring:
 
 ```bash
 dart run tool/write_fixtures.dart build/fixtures

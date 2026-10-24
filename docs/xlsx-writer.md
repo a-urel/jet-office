@@ -68,6 +68,30 @@ habit.
 | `close()` with no sheets | `StateError` | a workbook needs at least one sheet | `test/xlsx/xlsx_writer_test.dart` |
 | `close()` twice, or a row after `close()` | `StateError` | | `test/xlsx/xlsx_writer_test.dart` |
 
+## What the writer supports
+
+Milestones M1 and M2 of phase 1. Later milestones extend this list.
+
+**M1, foundation**
+
+- Cell values: text, numbers, booleans, dates, decimals, empty cells and
+  formulas with an optional cached value.
+- Sheets: sanitized, unique names, tab order, the active sheet.
+- Workbook document properties.
+- Streaming output: rows go to the file as written, shared strings last.
+- Warnings for data problems, in English, German and Turkish.
+
+**M2, styling and layout**
+
+- Styles: fonts, pattern and gradient fills, borders, alignment, cell
+  protection and number formats, as value types merged in the order column,
+  row, cell.
+- Columns and rows: widths, heights, hidden, outline levels and collapsed
+  groups, default sizes, the outline summary position.
+- Sheet views: zoom, gridlines, headings, zeros, right to left, freeze and
+  split panes, tab colors, hidden and very hidden sheets.
+- Merged cells and the auto filter with its `_xlnm._FilterDatabase` name.
+
 ## Money
 
 Monépro holds amounts in `Decimal` from `package:decimal`. On 2026-10-24 its
@@ -127,7 +151,7 @@ comment (AGENTS.md). Quds paths are relative to
 | `xlsx/properties.dart` | `office/office_document_properties.dart` | only a workbook's fields, dates only when given, text checked for forbidden characters |
 | `xlsx/xlsx_table.dart` | — (new) | |
 | `xlsx/shared_strings.dart` | `sheet/shared_strings.dart` | written last, `count`/`uniqueCount` checked |
-| `xlsx/validation.dart`, `xlsx/conditional_format.dart`, `xlsx/defined_names.dart`, `xlsx/table_part.dart`, `xlsx/protection.dart` | `sheet/serial/sheet_serial.dart` (data validation, conditional formats, defined names, table part, protection) | element writers take the public value types (M3, M4) |
-| `xlsx/drawing.dart` | `sheet/serial/sheet_drawing_io.dart` | PNG and JPEG, one-cell and two-cell anchors (M4) |
+| `xlsx/validation.dart`, `xlsx/conditional_format.dart`, `xlsx/defined_names.dart`, `xlsx/table_part.dart`, `xlsx/sheet_protection.dart` | `sheet/serial/sheet_serial.dart` (data validation, conditional formats, defined names, table part, sheet protection) | element writers take the public value types (M3, M4); cell protection is `XlsxProtection` in `alignment.dart` |
+| `xlsx/drawing.dart` | `sheet/serial/sheet_drawing_io.dart`; `builders/xlsx_io.dart` → `addPicture` | PNG and JPEG, one-cell and two-cell anchors (M4) |
 
 Out of phase 1: see [`0003`](decisions/0003-phase-1-scope-output-and-diagnostics.md).
