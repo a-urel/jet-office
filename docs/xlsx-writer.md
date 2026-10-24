@@ -33,6 +33,12 @@ habit.
 | `XlsxDecimal` text that is not plain digits | `ArgumentError` | see [Money](#money) | `test/xlsx/values_test.dart`, `test/xlsx/cell_encoder_test.dart` |
 | Formula text empty after its one leading `=` | `ArgumentError` naming the cell and sheet | Excel refuses an empty formula | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/xlsx_checker_test.dart` |
 | Formula text longer than 8,192 characters (UTF-16 code units) | `ArgumentError` naming the cell and sheet | Excel's formula limit | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/xlsx_checker_test.dart` |
+| Invalid number format: a built-in id outside 0–163, or a custom code that is empty or holds characters XML forbids | `ArgumentError` | Excel refuses the style otherwise | `test/xlsx/style_registry_test.dart`, `test/xlsx/cell_encoder_test.dart` |
+| Characters XML forbids in a document property or in formula text | `ArgumentError` | the caller built the text; silently dropping characters would change a formula's meaning | `test/xlsx/properties_test.dart`, `test/xlsx/xlsx_writer_test.dart`, `test/xlsx/cell_encoder_test.dart` |
+| A formula's cached value that is not `null`, `num`, `String` or `bool` | `ArgumentError` | a cached value is a programmer's choice | `test/xlsx/cell_encoder_test.dart` |
+| An `XlsxDate` that does not exist, such as 30 February | `ArgumentError` | no serial or text can stand for it | `test/xlsx/date_serial_test.dart`, `test/xlsx/cell_encoder_test.dart` |
+| `addSheet` at a position outside 0 to the number of sheets | `RangeError` | | `test/xlsx/xlsx_writer_test.dart` |
+| `setActiveSheet` with a sheet of another writer | `ArgumentError` | | `test/xlsx/xlsx_writer_test.dart` |
 | A cell value of an unsupported type | `ArgumentError` | a value is a programmer's choice, so guessing would hide the bug | `test/xlsx/cell_encoder_test.dart` |
 | An `XlsxCell` holding another `XlsxCell` | `ArgumentError` | a cell has one value and one style | `test/xlsx/cell_encoder_test.dart` |
 | Column/freeze/header setting after the first row | `StateError` | forward-only writer (0002) | not yet: M1 has no such setting |
@@ -72,13 +78,18 @@ comment (AGENTS.md). Quds paths are relative to
 | jet_office file (`lib/src/`) | Ported from Quds | Changes |
 |---|---|---|
 | `xml/xml_escape.dart` | `xml/xml_reader.dart` → `encodeXmlText`, `encodeXmlAttribute` | strips forbidden control characters, reports them |
-| `xml/xml_writer.dart` | `xml/` writer used by `sheet/serial/sheet_serial.dart` | writes UTF-8 bytes in chunks, not one string |
-| `opc/` (content types, relationships, part names) | `opc/content_types.dart`, `opc/relationships.dart`, `opc/opc_archive.dart` (write side) | write-only in phase 1, no crypto |
+| `xml/xml_writer.dart` | `xml/xml_writer.dart` | writes to any `StringSink`, so a sheet streams into a `Utf8Buffer`; text and attributes go through the scrub-checked escapers |
+| `xml/utf8_buffer.dart` | — (new) | stores written text as UTF-8 bytes in chunks, not one string |
+| `opc/content_types.dart`, `opc/relationships.dart` | `opc/content_types.dart`, `opc/relationships.dart` (write side) | write-only in phase 1, no crypto |
+| `opc/ooxml.dart` | `xml/namespaces.dart` → `OfficeNamespaces`; `opc/content_types.dart` → `OfficeContentTypes` | only the namespaces, relationship types and content types a spreadsheet uses |
 | `zip/archive_adapter.dart` | — (new) | the only file that imports `package:archive` |
 | `xlsx/cell_encoder.dart` | `builders/xlsx_io.dart` → `_sheetXml` cell branch | the one encoder from 0002: dates, decimals, formulas, NaN |
 | `xlsx/style_registry.dart` | `builders/xlsx_io.dart` → `style`, `_Font`, `_Fill`, `_Border`, `_Xf`; `sheet/styles/` | value-typed `XlsxStyle`, built-in number format ids |
 | `xlsx/xlsx_writer.dart` | `builders/xlsx_io.dart` → `XlsxWorkbookBuilder`, `XlsxSheetBuilder` | streams rows, shared strings written last |
+| `xlsx/workbook_parts.dart` | `builders/xlsx_io.dart` → package, relationship and `workbook.xml` steps of `XlsxWorkbookBuilder.build` | tab order apart from creation order, active tab, `calcPr` |
 | `xlsx/sheet_name.dart` | `builders/office_markup.dart` → `sheetName` | case-insensitive uniqueness |
+| `xlsx/cell_ref.dart` | `builders/office_markup.dart` → `colName` | top-level; an index outside the sheet throws `RangeError`; `cellRef` is new |
+| `xlsx/properties.dart` | `office/office_document_properties.dart` | only a workbook's fields, dates only when given, text checked for forbidden characters |
 | `xlsx/xlsx_table.dart` | — (new) | |
 | `xlsx/shared_strings.dart` | `sheet/shared_strings.dart` | written last, `count`/`uniqueCount` checked |
 | `xlsx/styles/` (fonts, fills, borders, alignment, protection) | `sheet/styles/sml_styles.dart` | model-neutral value types, gradient fills added (M2) |
