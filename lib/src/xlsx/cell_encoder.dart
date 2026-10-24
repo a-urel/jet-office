@@ -349,7 +349,7 @@ final class CellEncoder {
       ref,
       id,
       type,
-      '<f>${escapeXmlText(text)}</f>${cachedXml ?? ''}',
+      '<f>${escapeFormulaText(text)}</f>${cachedXml ?? ''}',
     );
     _wroteFormula = true;
   }

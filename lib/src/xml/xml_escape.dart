@@ -129,6 +129,20 @@ final RegExp _xstringStart = RegExp(r'_(?=x[0-9A-Fa-f]{4}_)');
 String escapeXstring(String text) =>
     text.contains('_x') ? text.replaceAll(_xstringStart, '_x005F_') : text;
 
+/// Escapes formula text (ST_Formula) for XML character data: a cell's `<f>`
+/// and a `definedName`'s text.
+///
+/// Only [escapeXmlText] is applied, never [escapeXstring]: readers do not
+/// decode `_xHHHH_` inside a formula (LibreOffice shows the formula
+/// `"_x0041_"` as `_x0041_`), so `_x005F_` there would change the formula,
+/// and a defined name that refers to the sheet `D_x0041_` must spell it as
+/// `'D_x0041_'` to match the formula a user types. Both places use this one
+/// function so they cannot disagree.
+///
+/// [text] must already be scrubbed with [scrubXmlText]; otherwise this
+/// throws [ArgumentError].
+String escapeFormulaText(String text) => escapeXmlText(text);
+
 String _escape(String text, {required bool attribute}) {
   StringBuffer? buffer;
   int runStart = 0;

@@ -11,8 +11,8 @@
 /// load; the root relationships point to the property parts; and every part
 /// is written through `XmlWriter` with scrub-checked attribute values instead
 /// of string concatenation; a sheet with an auto filter gets the hidden
-/// `_xlnm._FilterDatabase` defined name Excel expects. Drawings, charts, pictures and passwords are not
-/// ported in this phase.
+/// `_xlnm._FilterDatabase` defined name Excel expects. Drawings, charts,
+/// pictures and passwords are not ported in this phase.
 library;
 
 import '../opc/content_types.dart';
@@ -62,8 +62,9 @@ String worksheetPartName(int number) => 'xl/worksheets/sheet$number.xml';
 /// After `sheets`, one hidden `_xlnm._FilterDatabase` defined name is written
 /// per filtered sheet, in tab order, scoped by `localSheetId` (the tab index)
 /// and reading `'<name>'!<absoluteRef>`: the name is always quoted with `'`
-/// doubled, and the whole text goes through [escapeXstring] like the sheet
-/// name does.
+/// doubled. The text is a formula (ST_Formula), so it goes through
+/// [escapeFormulaText] like `<f>` text and keeps `_xHHHH_` as given, while
+/// the `sheet` element's name attribute is escaped with [escapeXstring].
 void writeWorkbook(
   XmlWriter w, {
   required List<WorkbookSheet> tabs,
@@ -108,7 +109,7 @@ void _writeFilterNames(XmlWriter w, List<WorkbookSheet> tabs) {
     w.attribute('name', '_xlnm._FilterDatabase');
     w.attribute('localSheetId', '$index');
     w.attribute('hidden', '1');
-    w.text(escapeXstring('$quoted!${filter.absoluteRef}'));
+    w.raw(escapeFormulaText('$quoted!${filter.absoluteRef}'));
     w.end();
   }
   w.end();

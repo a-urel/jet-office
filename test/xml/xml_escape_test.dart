@@ -94,4 +94,10 @@ void main() {
       'long text here &quot;q&quot; and more text',
     );
   });
+
+  test('escapeFormulaText escapes XML only, never _xHHHH_ (ST_Formula)', () {
+    expect(escapeFormulaText('"_x0041_"&A1<2'), '"_x0041_"&amp;A1&lt;2');
+    expect(escapeFormulaText("'D_x0041_'!\$A\$1"), "'D_x0041_'!\$A\$1");
+    expect(() => escapeFormulaText('a\u0001'), throwsArgumentError);
+  });
 }

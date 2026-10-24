@@ -577,6 +577,11 @@ Fixture _mergesFilter() {
 /// escaped), and A2 is the same text as a string, which the writer escapes
 /// to `_x005F_x0041_`, so a reader shows `_x0041_` for A2. A reader that
 /// shows `A` for A1 decodes inside `<f>`; the Excel check records which.
+///
+/// The second sheet, `_x0041_`, has an auto filter. Its name is written
+/// escaped as `_x005F_x0041_` (R22), while its `_xlnm._FilterDatabase` text
+/// is a formula like `<f>` and reads `'_x0041_'!$A$1:$B$3` (R10), so the one
+/// Excel check settles formulas and defined names together.
 Fixture _formulaXstring() => Fixture(
   'm2_formula_xstring',
   <String, List<List<String>>>{
@@ -584,11 +589,21 @@ Fixture _formulaXstring() => Fixture(
       <String>[''],
       <String>['_x005F_x0041_'],
     ],
+    '_x0041_': <List<String>>[
+      <String>['Key', 'Value'],
+      <String>['a', '1'],
+      <String>['b', '2'],
+    ],
   },
   <String, List<List<Object?>>>{
     'Probe': <List<Object?>>[
       <Object?>['_x0041_'],
       <Object?>['_x0041_'],
+    ],
+    '_x0041_': <List<Object?>>[
+      <Object?>['Key', 'Value'],
+      <Object?>['a', 1],
+      <Object?>['b', 2],
     ],
   },
   () {
@@ -596,6 +611,11 @@ Fixture _formulaXstring() => Fixture(
     book.addSheet('Probe')
       ..row(<Object?>[const XlsxFormula('"_x0041_"')])
       ..row(<Object?>['_x0041_']);
+    book.addSheet('_x0041_')
+      ..row(<Object?>['Key', 'Value'])
+      ..row(<Object?>['a', 1])
+      ..row(<Object?>['b', 2])
+      ..autoFilter(XlsxRange.parse('A1:B3'));
     return book.close();
   },
 );

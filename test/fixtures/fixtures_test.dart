@@ -349,5 +349,21 @@ void main() {
     expect(sheet, contains('<f>"_x0041_"</f>'));
     expect(sheet, contains('<c r="A2" t="s">'));
     expect(parts['xl/sharedStrings.xml'], contains('_x005F_x0041_'));
+    // The sheet `_x0041_` is named escaped (R22), while its filter's
+    // defined name is a formula and spells it as given (R10).
+    final String workbook = parts['xl/workbook.xml']!;
+    expect(workbook, contains('<sheet name="_x005F_x0041_" sheetId="2"'));
+    expect(
+      workbook,
+      contains(
+        '<definedNames><definedName name="_xlnm._FilterDatabase" '
+        'localSheetId="1" hidden="1">\'_x0041_\'!\$A\$1:\$B\$3'
+        '</definedName></definedNames>',
+      ),
+    );
+    expect(
+      parts['xl/worksheets/sheet2.xml'],
+      contains('<autoFilter ref="A1:B3"/>'),
+    );
   });
 }
