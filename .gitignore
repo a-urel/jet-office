@@ -10,6 +10,10 @@ docs/superpowers/
 .dart_tool/
 .packages
 build/
+
+# Build output of the Open XML SDK validator (tool/ooxml_validate).
+tool/ooxml_validate/bin/
+tool/ooxml_validate/obj/
 # If you're building an application, you may want to check-in your pubspec.lock
 pubspec.lock
 

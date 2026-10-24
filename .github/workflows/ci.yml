@@ -1,7 +1,8 @@
 name: CI
 
-# Runs the quality gate from AGENTS.md. A clean checkout must pass all three
-# commands.
+# Runs the quality gate from AGENTS.md, then validates the fixtures with the
+# Open XML SDK and LibreOffice (decision 0003). A clean checkout must pass both
+# jobs.
 on:
   push:
     branches: [main]
@@ -32,3 +33,51 @@ jobs:
 
       - name: Run tests
         run: dart test
+
+      - name: Run tests on Chrome
+        run: dart test -p chrome
+
+  validate:
+    name: validate fixtures
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.5
+
+      - name: Resolve dependencies
+        run: dart pub get
+
+      - name: Write the fixtures
+        run: dart run tool/write_fixtures.dart build/fixtures
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Validate with the Open XML SDK
+        run: dotnet run --project tool/ooxml_validate -- build/fixtures
+
+      - name: Install LibreOffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice-calc
+
+      # Filter options: tool/compare_csv.dart explains each token.
+      - name: Export every sheet to CSV with LibreOffice
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          soffice --headless \
+            --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,false,false,false,-1' \
+            --outdir build/fixtures build/fixtures/*.xlsx
+          ls -1 build/fixtures
+
+      - name: Compare the CSV files with the expected values
+        run: dart run tool/compare_csv.dart build/fixtures

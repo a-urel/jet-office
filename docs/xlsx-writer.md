@@ -17,18 +17,24 @@ Data problems become warnings and the file still opens. Programmer errors
 throw. This follows `jet_print`'s "render, don't crash, report diagnostics"
 habit.
 
-| Case | Behaviour | Why |
-|---|---|---|
-| Sheet name with `[ ] : * ? / \`, longer than 31, or empty | sanitized, warning | Excel refuses the file otherwise |
-| Duplicate sheet name (case-insensitive) | suffixed ` (2)`, warning | same |
-| Control character U+0000–U+001F other than tab, LF, CR | removed, warning | XML 1.0 forbids it |
-| Text longer than 32,767 characters | truncated, warning | Excel's cell limit |
-| Row 1,048,577 | `XlsxLimitError` | the caller decides whether to split into sheets |
-| `NaN` / infinity | `ArgumentError` | no valid XML number exists |
-| `XlsxDecimal` text that is not plain digits | `ArgumentError` | see [Money](#money) |
-| A cell value of an unsupported type | `ArgumentError` | a value is a programmer's choice, so guessing would hide the bug |
-| Column/freeze/header setting after the first row | `StateError` | forward-only writer (0002) |
-| `close()` twice, or a row after `close()` | `StateError` | |
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| Sheet name with `[ ] : * ? / \`, longer than 31, or empty | sanitized, warning `sheetNameChanged` | Excel refuses the file otherwise | `test/xlsx/sheet_name_test.dart` |
+| Duplicate sheet name (case-insensitive, Turkish and German letters included) | suffixed ` (2)`, warning `sheetNameDuplicated` | same | `test/xlsx/sheet_name_test.dart` |
+| Control character U+0000–U+001F other than tab, LF, CR, or a lone UTF-16 surrogate | removed, warning `invalidCharactersRemoved` | XML 1.0 forbids it | `test/xml/xml_escape_test.dart`, `test/xlsx/cell_encoder_test.dart` |
+| Text longer than 32,767 characters (UTF-16 code units) | truncated without splitting a surrogate pair, warning `textTruncated` | Excel's cell limit | `test/xlsx/cell_encoder_test.dart` |
+| `int` beyond 2^53 | written, warning `intPrecisionLost` | Excel stores every number as a double, so it may round the value | `test/xlsx/cell_encoder_int_test.dart` |
+| Date before 1900-01-01 or after 9999-12-31 | ISO 8601 text, warning `dateOutsideExcelRange` | Excel has no date serial for it | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/date_serial_test.dart` |
+| Date in a number format that shows no date | written with that format, warning `dateInNonDateFormat` | the caller chose the format, but the cell shows a bare serial | `test/xlsx/cell_encoder_test.dart` |
+| Row 1,048,577 or column 16,385 | `XlsxLimitError` | the caller decides whether to split into sheets | `test/xlsx/xlsx_writer_test.dart` |
+| More than 65,490 unique cell formats | `XlsxLimitError` | Excel's limit | `test/xlsx/style_registry_test.dart` |
+| `NaN` / infinity | `ArgumentError` | no valid XML number exists | `test/xlsx/cell_encoder_test.dart` |
+| `XlsxDecimal` text that is not plain digits | `ArgumentError` | see [Money](#money) | `test/xlsx/values_test.dart`, `test/xlsx/cell_encoder_test.dart` |
+| A cell value of an unsupported type | `ArgumentError` | a value is a programmer's choice, so guessing would hide the bug | `test/xlsx/cell_encoder_test.dart` |
+| An `XlsxCell` holding another `XlsxCell` | `ArgumentError` | a cell has one value and one style | `test/xlsx/cell_encoder_test.dart` |
+| Column/freeze/header setting after the first row | `StateError` | forward-only writer (0002) | not yet: M1 has no such setting |
+| `close()` with no sheets | `StateError` | a workbook needs at least one sheet | `test/xlsx/xlsx_writer_test.dart` |
+| `close()` twice, or a row after `close()` | `StateError` | | `test/xlsx/xlsx_writer_test.dart` |
 
 ## Money
 
