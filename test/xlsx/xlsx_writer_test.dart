@@ -32,6 +32,46 @@ final class _CollectingSink implements Sink<List<int>> {
   void close() => closed = true;
 }
 
+/// What [_ThrowingSink] throws.
+final class _SinkFailure implements Exception {
+  const _SinkFailure();
+
+  @override
+  String toString() => 'disk full';
+}
+
+/// A sink that throws on every add, like a full disk, and records close().
+final class _ThrowingSink implements Sink<List<int>> {
+  int adds = 0;
+  bool closed = false;
+
+  @override
+  void add(List<int> data) {
+    adds++;
+    throw const _SinkFailure();
+  }
+
+  @override
+  void close() => closed = true;
+}
+
+/// Fills [sheet] with enough poorly compressing numbers that finishing it
+/// sends at least one chunk to the sink.
+void _fillBig(XlsxSheetWriter sheet) {
+  final Random random = Random(7);
+  for (int r = 0; r < 5000; r++) {
+    sheet.row(<Object?>[for (int c = 0; c < 10; c++) random.nextDouble()]);
+  }
+}
+
+final Matcher _throwsFailedState = throwsA(
+  isA<StateError>().having(
+    (StateError e) => e.message,
+    'message',
+    allOf(contains('failed earlier'), contains('disk full')),
+  ),
+);
+
 /// A workbook touching every value type, a style, a formula, a renamed sheet
 /// and a dirty string, so it produces warnings.
 void _mixedScript(XlsxWriterBase book) {
@@ -233,6 +273,33 @@ void main() {
     book.addSheet('Next');
     expect(sink.chunks, isNotEmpty);
     book.close();
+  });
+
+  test('a sink that fails while a sheet is finished stops the writer', () {
+    final _ThrowingSink sink = _ThrowingSink();
+    final XlsxStreamWriter book = XlsxStreamWriter(sink);
+    final XlsxSheetWriter big = book.addSheet('Big');
+    _fillBig(big);
+    expect(() => book.addSheet('Next'), throwsA(isA<_SinkFailure>()));
+    expect(sink.adds, 1);
+    expect(sink.closed, isTrue);
+    expect(() => big.row(<Object?>[1]), _throwsFailedState);
+    expect(big.blankRow, _throwsFailedState);
+    expect(() => book.addSheet('Other'), _throwsFailedState);
+    expect(() => book.setActiveSheet(big), _throwsFailedState);
+    expect(book.close, _throwsFailedState);
+    expect(sink.adds, 1);
+  });
+
+  test('a sink that fails in close stops the writer', () {
+    final _ThrowingSink sink = _ThrowingSink();
+    final XlsxStreamWriter book = XlsxStreamWriter(sink);
+    final XlsxSheetWriter sheet = book.addSheet('Small')..row(<Object?>[1]);
+    expect(book.close, throwsA(isA<_SinkFailure>()));
+    expect(sink.closed, isTrue);
+    expect(book.close, _throwsFailedState);
+    expect(() => sheet.row(<Object?>[2]), _throwsFailedState);
+    expect(() => book.addSheet('Other'), _throwsFailedState);
   });
 
   test('deterministic output', () {

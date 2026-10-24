@@ -25,6 +25,17 @@ class _CollectingSink implements Sink<List<int>> {
   void close() => closed = true;
 }
 
+/// Throws on every add, like a full disk, and records close().
+class _ThrowingSink implements Sink<List<int>> {
+  bool closed = false;
+
+  @override
+  void add(List<int> data) => throw const FormatException('disk full');
+
+  @override
+  void close() => closed = true;
+}
+
 /// Bytes that deflate poorly, so the archive is large enough to span chunks.
 Uint8List _noise(int length) {
   final Random r = Random(42);
@@ -107,6 +118,24 @@ void main() {
     final ZipWriter z = ZipWriter()..add('a.xml', utf8.encode('<a/>'));
     z.close();
     expect(() => z.add('b.xml', <int>[1]), throwsStateError);
+    expect(z.close, throwsStateError);
+  });
+
+  test('a sink that throws in add is closed and the error rethrown', () {
+    final _ThrowingSink sink = _ThrowingSink();
+    final ZipWriter z = ZipWriter(sink: sink);
+    expect(() => z.add('big.bin', _noise(300 * 1024)), throwsFormatException);
+    expect(sink.closed, isTrue);
+    expect(() => z.add('b.xml', <int>[1]), throwsStateError);
+    expect(z.close, throwsStateError);
+  });
+
+  test('a sink that throws in close is closed and the error rethrown', () {
+    final _ThrowingSink sink = _ThrowingSink();
+    final ZipWriter z = ZipWriter(sink: sink)
+      ..add('a.xml', utf8.encode('<a/>'));
+    expect(z.close, throwsFormatException);
+    expect(sink.closed, isTrue);
     expect(z.close, throwsStateError);
   });
 }

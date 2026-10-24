@@ -75,6 +75,9 @@ sealed class XlsxWriterBase {
   _SheetWriter? _active;
   bool _closed = false;
 
+  /// What the ZIP work threw, once it has failed; the writer is then dead.
+  Object? _failure;
+
   /// Finishes the open sheet and starts a new one named [name].
   ///
   /// The name is made valid and unique as Excel requires; a changed name is
@@ -86,13 +89,16 @@ sealed class XlsxWriterBase {
   /// come first.
   ///
   /// Throws [RangeError] when [position] is outside `0` to the number of
-  /// sheets so far, and [StateError] after `close()`.
+  /// sheets so far, and [StateError] after `close()` or after a failure.
+  /// Rethrows what the sink throws while the open sheet is finished; the
+  /// writer has then failed (see [XlsxStreamWriter]).
   XlsxSheetWriter addSheet(String name, {int? position}) {
     _checkOpen();
     if (position != null) {
       RangeError.checkValueInInterval(position, 0, _tabs.length, 'position');
     }
-    _open?._finish();
+    final _SheetWriter? open = _open;
+    if (open != null) _zipWork(open._finish);
     final _SheetWriter sheet = _SheetWriter(
       this,
       _namer.assign(name),
@@ -109,7 +115,7 @@ sealed class XlsxWriterBase {
   /// resolved at `close()`, so later inserts before [sheet] keep it active.
   ///
   /// Throws [ArgumentError] when [sheet] was not added to this writer, and
-  /// [StateError] after `close()`.
+  /// [StateError] after `close()` or after a failure.
   void setActiveSheet(XlsxSheetWriter sheet) {
     _checkOpen();
     if (sheet is! _SheetWriter || !identical(sheet._book, this)) {
@@ -123,8 +129,29 @@ sealed class XlsxWriterBase {
   }
 
   void _checkOpen() {
+    _checkNotFailed();
     if (_closed) {
       throw StateError('The XLSX writer is already closed.');
+    }
+  }
+
+  void _checkNotFailed() {
+    final Object? failure = _failure;
+    if (failure != null) {
+      throw StateError(
+        'The writer failed earlier and cannot continue: $failure',
+      );
+    }
+  }
+
+  /// Runs [work], which hands bytes to the ZIP; if it throws, the writer
+  /// has failed and every later call throws a [StateError].
+  T _zipWork<T>(T Function() work) {
+    try {
+      return work();
+    } on Object catch (error) {
+      _failure = error;
+      rethrow;
     }
   }
 
@@ -135,9 +162,17 @@ sealed class XlsxWriterBase {
     if (_tabs.isEmpty) {
       throw StateError('A workbook needs at least one sheet; add one first.');
     }
-    _closed = true;
-    _open?._finish();
-    _open = null;
+    return _zipWork(() {
+      _open?._finish();
+      _open = null;
+      final Uint8List? bytes = _writeWorkbookParts();
+      _closed = true;
+      return bytes;
+    });
+  }
+
+  /// Writes the workbook-level parts and finishes the ZIP.
+  Uint8List? _writeWorkbookParts() {
     final int sheetCount = _tabs.length;
     final _SheetWriter active = _active ?? _tabs.first;
     _zip
@@ -197,9 +232,15 @@ final class XlsxWriter extends XlsxWriterBase {
 
 /// Writes an XLSX file to a sink as it goes.
 ///
-/// Each finished sheet is compressed and sent to the sink right away, and the
-/// writer keeps none of the bytes it has sent. The bytes that reach the sink
-/// are identical to what [XlsxWriter] returns for the same calls.
+/// Each finished sheet is compressed, and the compressed bytes reach the sink
+/// in chunks of about 64 KiB as parts finish; the writer keeps none of the
+/// bytes it has sent. The bytes that reach the sink are identical to what
+/// [XlsxWriter] returns for the same calls.
+///
+/// When the sink throws, the call that was writing to it (`addSheet` or
+/// `close()`) rethrows the error, the sink is closed and the writer has
+/// failed: every later call throws a [StateError]. The file in the sink is
+/// then incomplete and should be discarded.
 final class XlsxStreamWriter extends XlsxWriterBase {
   /// Creates a writer that sends the file to [sink], with the document
   /// properties [properties].
@@ -214,8 +255,8 @@ final class XlsxStreamWriter extends XlsxWriterBase {
   /// Finishes the open sheet and the file, closes the sink and returns the
   /// warnings about data that had to be changed.
   ///
-  /// Throws [StateError] when no sheet was added (the sink then stays open)
-  /// or when called twice.
+  /// Throws [StateError] when no sheet was added (the sink then stays open),
+  /// when called twice or after a failure. Rethrows what the sink throws.
   List<XlsxWarning> close() {
     _close();
     return _warnings.warnings;
@@ -335,8 +376,10 @@ final class _SheetWriter implements XlsxSheetWriter {
     _rowCount++;
   }
 
-  /// The XML writer, after checking the sheet is open and has room for a row.
+  /// The XML writer, after checking the writer has not failed and the sheet
+  /// is open and has room for a row.
   XmlWriter _checkWritable() {
+    _book._checkNotFailed();
     final XmlWriter? xml = _xml;
     if (xml == null) {
       throw StateError(
@@ -351,12 +394,17 @@ final class _SheetWriter implements XlsxSheetWriter {
   }
 
   /// Closes the XML and hands the part to the ZIP, keeping no bytes.
+  ///
+  /// The sheet is detached first, so it is finished even when the ZIP
+  /// throws and never takes a row after `</worksheet>`.
   void _finish() {
-    _xml!
+    final XmlWriter xml = _xml!;
+    final Utf8Buffer buffer = _buffer!;
+    _xml = null;
+    _buffer = null;
+    xml
       ..end() // sheetData
       ..end(); // worksheet
-    _book._zip.add(worksheetPartName(_number), _buffer!.takeBytes());
-    _buffer = null;
-    _xml = null;
+    _book._zip.add(worksheetPartName(_number), buffer.takeBytes());
   }
 }

@@ -25,6 +25,10 @@ const int _chunkSize = 64 * 1024;
 /// With a `sink`, bytes are forwarded to it in chunks of at least 64 KiB
 /// (the last chunk may be smaller) as entries are added, and [close] closes
 /// the sink and returns `null`.
+///
+/// When the sink throws, the writer closes it (ignoring a second error from
+/// `close`), rethrows the original error and accepts no further calls; the
+/// archive in the sink is then incomplete.
 final class ZipWriter {
   /// Creates a writer, streaming to [sink] when one is given.
   ZipWriter({Sink<List<int>>? sink})
@@ -41,31 +45,54 @@ final class ZipWriter {
 
   /// Adds one entry named [name] holding [bytes].
   ///
-  /// Throws a [StateError] after [close].
+  /// Throws a [StateError] after [close] or after an earlier failure, and
+  /// rethrows what the sink throws.
   void add(String name, List<int> bytes) {
     if (_closed) {
       throw StateError('Cannot add "$name": the ZIP writer is closed.');
     }
-    _encoder.add(ArchiveFile.bytes(name, bytes));
+    try {
+      _encoder.add(ArchiveFile.bytes(name, bytes));
+    } on Object {
+      _abandon();
+      rethrow;
+    }
   }
 
   /// Finishes the archive.
   ///
   /// Returns the archive bytes in memory mode, or `null` in sink mode after
-  /// closing the sink. Throws a [StateError] when called twice.
+  /// closing the sink. Throws a [StateError] when called twice or after an
+  /// earlier failure, and rethrows what the sink throws.
   Uint8List? close() {
     if (_closed) {
       throw StateError('The ZIP writer is already closed.');
     }
     _closed = true;
-    _encoder.endEncode();
     final OutputStream out = _output;
+    try {
+      _encoder.endEncode();
+      if (out is _SinkOutputStream) out.finish();
+    } on Object {
+      _abandon();
+      rethrow;
+    }
     if (out is _SinkOutputStream) {
-      out.finish();
       _sink!.close();
       return null;
     }
     return out.getBytes();
+  }
+
+  /// After a failure: refuses further calls and closes the sink, ignoring
+  /// an error from `close` so the caller sees the original one.
+  void _abandon() {
+    _closed = true;
+    try {
+      _sink?.close();
+    } on Object {
+      // The original error is the one worth reporting.
+    }
   }
 }
 
