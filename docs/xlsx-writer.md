@@ -90,7 +90,9 @@ comment (AGENTS.md). Quds paths are relative to
 | `xlsx/xlsx_writer.dart` | `builders/xlsx_io.dart` → `XlsxWorkbookBuilder`, `XlsxSheetBuilder` | streams rows, shared strings written last |
 | `xlsx/workbook_parts.dart` | `builders/xlsx_io.dart` → package, relationship and `workbook.xml` steps of `XlsxWorkbookBuilder.build` | tab order apart from creation order, active tab, `calcPr` |
 | `xlsx/sheet_name.dart` | `builders/office_markup.dart` → `sheetName` | case-insensitive uniqueness |
-| `xlsx/cell_ref.dart` | `builders/office_markup.dart` → `colName` | top-level; an index outside the sheet throws `RangeError`; `cellRef` is new |
+| `xlsx/cell_ref.dart` | `builders/office_markup.dart` → `colName` | top-level; an index outside the sheet throws `RangeError`; `cellRef` and `parseCellRef` are new |
+| `xlsx/color.dart` | `sheet/styles/sml_styles.dart` → `SmlStyleSheet.normalizeRgb` | the idea only: invalid input throws instead of returning `''`; theme, indexed and auto colors added |
+| `xlsx/range.dart` | — (new) | `XlsxRange`; Quds keeps ranges as strings |
 | `xlsx/properties.dart` | `office/office_document_properties.dart` | only a workbook's fields, dates only when given, text checked for forbidden characters |
 | `xlsx/xlsx_table.dart` | — (new) | |
 | `xlsx/shared_strings.dart` | `sheet/shared_strings.dart` | written last, `count`/`uniqueCount` checked |
