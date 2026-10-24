@@ -277,9 +277,10 @@ final class XlsxResult {
 
 /// Writes the rows of one worksheet.
 ///
-/// Obtained from [XlsxWriterBase.addSheet]. A sheet accepts rows until the
-/// next `addSheet` or `close()` finishes it.
-abstract interface class XlsxSheetWriter {
+/// Obtained from [XlsxWriterBase.addSheet], the only way to get one: the
+/// class cannot be implemented or extended outside this package. A sheet
+/// accepts rows until the next `addSheet` or `close()` finishes it.
+abstract final class XlsxSheetWriter {
   /// The sheet's name in the file, after any renaming (see
   /// [XlsxWriterBase.addSheet]).
   String get name;
