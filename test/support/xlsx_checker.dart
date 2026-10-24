@@ -17,7 +17,11 @@
 /// 8. every cell `s` is below the `cellXfs` count;
 /// 9. cell references in a row strictly increase and sit on that row;
 /// 10. every formula (`<f>`) is non-empty and at most 8,192 UTF-16 code
-///     units.
+///     units;
+/// 11. row numbers (`row/@r`) strictly increase within a sheet;
+/// 12. `cellXfs/@count` equals the number of its `xf` children;
+/// 13. every `numFmtId` of 164 or more used by a `cellXfs` `xf` is declared
+///     in `numFmts`.
 ///
 /// Pure Dart (no `dart:io`), so it runs in a browser too.
 library;
@@ -70,6 +74,8 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkSharedStrings(docs, violations);
   _checkCells(docs, violations);
   _checkFormulas(docs, violations);
+  _checkRowOrder(docs, violations);
+  _checkStyles(docs, violations);
   return violations;
 }
 
@@ -365,6 +371,51 @@ void _checkFormulas(Map<String, XmlDocument> docs, List<String> violations) {
           'characters; Excel accepts 8192',
         );
       }
+    }
+  }
+}
+
+/// Rule 11.
+void _checkRowOrder(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    int last = 0;
+    for (final XmlElement row in _all(sheet.value, 'row')) {
+      final String text = _attr(row, 'r');
+      final int? number = int.tryParse(text);
+      if (number == null || number <= last) {
+        violations.add(
+          'rule 11: ${sheet.key}: row "$text" does not follow row $last',
+        );
+      }
+      if (number != null) last = number;
+    }
+  }
+}
+
+/// Rules 12 and 13.
+void _checkStyles(Map<String, XmlDocument> docs, List<String> violations) {
+  final XmlDocument? styles = docs[_stylesPart];
+  if (styles == null) return;
+  final XmlElement? cellXfs = _all(styles, 'cellXfs').firstOrNull;
+  if (cellXfs == null) return;
+  final List<XmlElement> xfs = cellXfs.findElements('xf').toList();
+  final String count = _attr(cellXfs, 'count');
+  if (int.tryParse(count) != xfs.length) {
+    violations.add(
+      'rule 12: cellXfs count is "$count" but it has ${xfs.length} xf',
+    );
+  }
+  final Set<int> declared = <int>{
+    for (final XmlElement f in _all(styles, 'numFmt'))
+      if (int.tryParse(_attr(f, 'numFmtId')) case final int id) id,
+  };
+  for (int i = 0; i < xfs.length; i++) {
+    final int? id = int.tryParse(_attr(xfs[i], 'numFmtId'));
+    if (id != null && id >= 164 && !declared.contains(id)) {
+      violations.add(
+        'rule 13: cellXfs xf $i uses numFmtId $id, which numFmts does not '
+        'declare',
+      );
     }
   }
 }

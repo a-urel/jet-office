@@ -7,14 +7,18 @@ import 'package:test/test.dart';
 
 import '../support/xlsx_checker.dart';
 
-/// A small valid workbook: two sheets, shared strings, a styled cell and a
-/// formula.
+/// A small valid workbook: two sheets, shared strings, styled cells (one
+/// with a custom number format) and a formula.
 Uint8List _good() {
   final XlsxWriter book = XlsxWriter();
   book.addSheet('Data')
     ..row(<Object?>['a', 'b', 1])
     ..row(<Object?>['a', 2.5, const XlsxDate(2026, 10, 24)]);
-  book.addSheet('Other').row(<Object?>['c', const XlsxFormula('1+1')]);
+  book.addSheet('Other').row(<Object?>[
+    'c',
+    const XlsxFormula('1+1'),
+    const XlsxCell(1.5, style: XlsxStyle(numFmt: XlsxNumFmt.custom('0.000'))),
+  ]);
   return book.close().bytes;
 }
 
@@ -312,5 +316,53 @@ void main() {
         10,
       );
     });
+  });
+
+  group('rule 11: row numbers', () {
+    test('a repeated row number', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x.replaceFirst('<row r="2"', '<row r="1"'),
+        ),
+        11,
+      );
+    });
+    test('a row number lower than the one before', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x
+              .replaceFirst('<row r="1"', '<row r="TMP"')
+              .replaceFirst('<row r="2"', '<row r="1"')
+              .replaceFirst('<row r="TMP"', '<row r="2"'),
+        ),
+        11,
+      );
+    });
+  });
+
+  test('rule 12: cellXfs count differs from its xf children', () {
+    _expectRule(
+      _broken(
+        'xl/styles.xml',
+        (String x) => x.replaceFirstMapped(
+          RegExp(r'<cellXfs count="(\d+)"'),
+          (Match m) => '<cellXfs count="${int.parse(m.group(1)!) + 1}"',
+        ),
+      ),
+      12,
+    );
+  });
+
+  test('rule 13: an xf uses a custom number format that is not declared', () {
+    _expectRule(
+      _broken(
+        'xl/styles.xml',
+        (String x) =>
+            x.replaceFirst('<numFmt numFmtId="164"', '<numFmt numFmtId="165"'),
+      ),
+      13,
+    );
   });
 }
