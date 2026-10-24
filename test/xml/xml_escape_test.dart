@@ -36,8 +36,12 @@ void main() {
   test('escapeXmlAttribute encodes quote and whitespace controls', () {
     expect(escapeXmlAttribute('a"b\tc\nd\re'), 'a&quot;b&#9;c&#10;d&#13;e');
   });
-  test('escapeXmlText leaves tab, LF, CR and valid pairs alone', () {
-    expect(escapeXmlText('a\tb\nc\r😀'), 'a\tb\nc\r😀');
+  test('escapeXmlText leaves tab, LF and valid pairs alone', () {
+    expect(escapeXmlText('a\tb\nc😀'), 'a\tb\nc😀');
+  });
+  test('escapeXmlText writes CR as a character reference', () {
+    // A reader turns a literal CR (and CRLF) into LF (XML 1.0, 2.11).
+    expect(escapeXmlText('a\rb\r\nc'), 'a&#13;b&#13;\nc');
   });
   test('escaping unscrubbed text is a programmer error', () {
     expect(() => escapeXmlText('a\u0001'), throwsArgumentError);

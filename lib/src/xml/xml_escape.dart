@@ -4,9 +4,9 @@
 /// 15c5d29 (`encodeXmlText`, `encodeXmlAttribute`, `_escape`). What changed:
 /// Quds let control characters and lone surrogates through, which produces
 /// XML that Excel refuses to open. Here [scrubXmlText] removes every
-/// character XML 1.0 forbids, and the escape functions refuse text that was
-/// not scrubbed first. Entity decoding (the reader half of the Quds file) is
-/// not ported.
+/// character XML 1.0 forbids, the escape functions refuse text that was
+/// not scrubbed first, and character data keeps a CR as `&#13;`. Entity
+/// decoding (the reader half of the Quds file) is not ported.
 library;
 
 /// The result of [scrubXmlText].
@@ -76,7 +76,8 @@ void _requireScrubbed(String text) {
   }
 }
 
-/// Escapes [text] for XML character data: `&`, `<` and `>`.
+/// Escapes [text] for XML character data: `&`, `<` and `>`, plus CR as
+/// `&#13;`, because every XML reader turns a literal CR (and CRLF) into LF.
 ///
 /// [text] must already be scrubbed with [scrubXmlText]; otherwise this
 /// throws [ArgumentError].
@@ -125,7 +126,7 @@ String _escape(String text, {required bool attribute}) {
       0x22 when attribute => '&quot;',
       0x09 when attribute => '&#9;',
       0x0A when attribute => '&#10;',
-      0x0D when attribute => '&#13;',
+      0x0D => '&#13;',
       _ => null,
     };
     if (replacement != null) {

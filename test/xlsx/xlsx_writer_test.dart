@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
-import 'package:xml/xml.dart' show XmlDocument;
+import 'package:xml/xml.dart';
 
 import '../support/read_xlsx.dart';
 import '../support/xlsx_checker.dart';
@@ -424,6 +424,31 @@ void main() {
     final XlsxResult out = book.close();
     expect(out.warnings, isEmpty);
     expect(checkXlsx(out.bytes), isEmpty);
+  });
+
+  test('a CR in cell text survives a conforming XML reader', () {
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('S').row(<Object?>[
+      'a\rb',
+      'c\r\nd',
+      const XlsxFormula('A1', cached: 'e\rf'),
+    ]);
+    final Map<String, String> parts = readXlsx(book.close().bytes);
+    // End-of-line handling (XML 1.0, 2.11): every literal CRLF and CR in
+    // the document reaches the application as LF.
+    String normalized(String xml) =>
+        xml.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final XmlDocument sst = XmlDocument.parse(
+      normalized(parts['xl/sharedStrings.xml']!),
+    );
+    expect(
+      sst.findAllElements('t').map((XmlElement t) => t.innerText),
+      <String>['a\rb', 'c\r\nd'],
+    );
+    final XmlDocument sheet = XmlDocument.parse(
+      normalized(parts['xl/worksheets/sheet1.xml']!),
+    );
+    expect(sheet.findAllElements('v').last.innerText, 'e\rf');
   });
 
   test('formulas switch on full recalculation', () {
