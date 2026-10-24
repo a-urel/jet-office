@@ -24,6 +24,13 @@ abstract final class XlsxLimits {
   /// The maximum number of unique cell formats in a workbook.
   static const int maxCellFormats = 65490;
 
+  /// The maximum number of custom number formats in a workbook.
+  ///
+  /// Microsoft's "Excel specifications and limits" page gives 200 to 250,
+  /// depending on the language version of Excel. The lowest figure is used,
+  /// so a workbook opens in every language version.
+  static const int maxNumberFormats = 200;
+
   /// The maximum number of hyperlinks in a worksheet. No writer enforces it
   /// yet; the sheet writer will once it can write hyperlinks.
   static const int maxHyperlinksPerSheet = 65530;

@@ -35,7 +35,9 @@ final class StyleRegistry {
   /// Throws [ArgumentError] for a built-in id outside `0..163` or an empty
   /// custom code, or one XML cannot carry. Throws [XlsxLimitError] when the
   /// workbook would hold more than [XlsxLimits.maxCellFormats] cell formats
-  /// (the default format counts as one).
+  /// (the default format counts as one) or more than
+  /// [XlsxLimits.maxNumberFormats] custom number format codes. Both limits
+  /// are checked before anything is recorded, so a throw registers nothing.
   int idFor(XlsxStyle? style) {
     if (style == null) return 0;
     final int? known = _ids[style];
@@ -45,7 +47,12 @@ final class StyleRegistry {
     if (_styles.length >= XlsxLimits.maxCellFormats) {
       throw XlsxLimitError('cell formats', XlsxLimits.maxCellFormats);
     }
-    if (fmt != null && fmt.code != null && !_customIds.containsKey(fmt.code)) {
+    final bool newCode =
+        fmt != null && fmt.code != null && !_customIds.containsKey(fmt.code);
+    if (newCode && _customCodes.length >= XlsxLimits.maxNumberFormats) {
+      throw XlsxLimitError('number formats', XlsxLimits.maxNumberFormats);
+    }
+    if (newCode) {
       _customIds[fmt.code!] = 164 + _customCodes.length;
       _customCodes.add(fmt.code!);
     }

@@ -30,6 +30,8 @@ habit.
 | Date in a number format that shows no date | written with that format, warning `dateInNonDateFormat` | the caller chose the format, but the cell shows a bare serial | `test/xlsx/cell_encoder_test.dart` |
 | Row 1,048,577 or column 16,385 | `XlsxLimitError` | the caller decides whether to split into sheets | `test/xlsx/xlsx_writer_test.dart` |
 | More than 65,490 unique cell formats | `XlsxLimitError` | Excel's limit | `test/xlsx/style_registry_test.dart` |
+| More than 200 distinct custom number format codes | `XlsxLimitError('number formats', 200)`, nothing registered | Excel's lowest limit across language versions (200–250) | `test/xlsx/style_registry_test.dart` |
+| An invalid `XlsxNumFmt.number`, `percent` or `money` argument: decimals outside 0–30, or a symbol with `"` or characters XML forbids | `ArgumentError` at once | a programmer's choice; Excel would refuse the format | `test/xlsx/number_format_test.dart` |
 | `NaN` / infinity | `ArgumentError` | no valid XML number exists | `test/xlsx/cell_encoder_test.dart` |
 | `XlsxDecimal` text that is not plain digits | `ArgumentError` | see [Money](#money) | `test/xlsx/values_test.dart`, `test/xlsx/cell_encoder_test.dart` |
 | Formula text empty after its one leading `=` | `ArgumentError` naming the cell and sheet | Excel refuses an empty formula | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/xlsx_checker_test.dart` |

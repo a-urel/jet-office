@@ -80,15 +80,54 @@ void main() {
     expect(t.copyWith().numFmt, XlsxNumFmt.localeShortDate);
     expect(s, isNot(t));
   });
-  test('too many cell formats', () {
+  test('the second custom code gets id 165', () {
+    final StyleRegistry r = StyleRegistry()
+      ..idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.000')))
+      ..idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.0000')));
+    final StringBuffer out = StringBuffer();
+    r.writeStylesXml(XmlWriter(out));
+    expect(out.toString(), contains('numFmtId="164" formatCode="0.000"'));
+    expect(out.toString(), contains('numFmtId="165" formatCode="0.0000"'));
+  });
+  test('equal codes share an id', () {
     final StyleRegistry r = StyleRegistry();
-    expect(() {
-      for (int i = 0; i < 65490; i++) {
-        r.idFor(
-          XlsxStyle(numFmt: XlsxNumFmt.custom('0.${'0' * (i % 30)}"$i"')),
-        );
-      }
-    }, throwsA(isA<XlsxLimitError>()));
+    final int a = r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.000')));
+    final int b = r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.000')));
+    expect(b, a);
+    final StringBuffer out = StringBuffer();
+    r.writeStylesXml(XmlWriter(out));
+    expect(out.toString(), contains('<numFmts count="1">'));
+  });
+  test('an explicit General differs from no number format', () {
+    final StyleRegistry r = StyleRegistry();
+    expect(r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.general)), isNot(0));
+  });
+  // The cell format limit (65,490) cannot be reached while a style carries
+  // only a number format: 164 built-in ids and 200 custom codes make about
+  // 364 distinct styles. The boundary test returns in Task 8, when fonts,
+  // fills and alignment make enough distinct styles.
+  test('the 201st custom code throws and registers nothing', () {
+    final StyleRegistry r = StyleRegistry();
+    for (int i = 0; i < XlsxLimits.maxNumberFormats; i++) {
+      expect(r.idFor(XlsxStyle(numFmt: XlsxNumFmt.custom('0.0"$i"'))), i + 1);
+    }
+    expect(
+      () => r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.0"x"'))),
+      throwsA(
+        isA<XlsxLimitError>()
+            .having((e) => e.limit, 'limit', 'number formats')
+            .having((e) => e.max, 'max', 200),
+      ),
+    );
+    // Nothing was registered: a code already known still works, and a
+    // built-in format takes the next cell format id.
+    expect(r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.0"0"'))), 1);
+    expect(r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.builtin(14))), 201);
+    final StringBuffer out = StringBuffer();
+    r.writeStylesXml(XmlWriter(out));
+    expect(out.toString(), contains('<numFmts count="200">'));
+    expect(out.toString(), contains('<cellXfs count="202">'));
+    expect(out.toString(), isNot(contains('0.0&quot;x&quot;')));
   });
 }
 
