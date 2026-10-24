@@ -7,3 +7,17 @@
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 library;
+
+export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
+export 'src/xlsx/number_format.dart' show XlsxNumFmt;
+export 'src/xlsx/properties.dart' show XlsxProperties;
+export 'src/xlsx/style.dart' show XlsxStyle;
+export 'src/xlsx/values.dart' show XlsxCell, XlsxDate, XlsxDecimal, XlsxFormula;
+export 'src/xlsx/warnings.dart' show XlsxLocale, XlsxWarning, XlsxWarningCode;
+export 'src/xlsx/xlsx_writer.dart'
+    show
+        XlsxResult,
+        XlsxSheetWriter,
+        XlsxStreamWriter,
+        XlsxWriter,
+        XlsxWriterBase;
