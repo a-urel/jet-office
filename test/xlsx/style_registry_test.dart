@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:jet_office/src/xlsx/limits.dart';
 import 'package:jet_office/src/xlsx/number_format.dart';
 import 'package:jet_office/src/xlsx/style.dart';
@@ -25,10 +23,7 @@ void main() {
       ..idFor(const XlsxStyle(numFmt: XlsxNumFmt.localeShortDate));
     final StringBuffer out = StringBuffer();
     r.writeStylesXml(XmlWriter(out));
-    final String golden = File(
-      'test/golden/m1/styles_custom_and_builtin.xml',
-    ).readAsStringSync();
-    expect(out.toString(), golden);
+    expect(out.toString(), _stylesGolden);
   });
   test('an empty registry writes no numFmts', () {
     final StringBuffer out = StringBuffer();
@@ -96,3 +91,20 @@ void main() {
     }, throwsA(isA<XlsxLimitError>()));
   });
 }
+
+/// The `styles.xml` for one custom format (`0.000`) and one built-in date
+/// format (id 14). Embedded rather than read from a file, so the test runs on
+/// the web as well as the VM.
+const String _stylesGolden =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.000"/></numFmts>'
+    '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+    '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>'
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+    '<dxfs count="0"/>'
+    '<tableStyles count="0"/>'
+    '</styleSheet>';
