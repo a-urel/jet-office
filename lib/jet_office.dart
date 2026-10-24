@@ -9,6 +9,15 @@
 library;
 
 export 'src/xlsx/color.dart' show XlsxColor;
+export 'src/xlsx/fill.dart'
+    show
+        XlsxFill,
+        XlsxGradientFill,
+        XlsxGradientStop,
+        XlsxPatternFill,
+        XlsxPatternType;
+export 'src/xlsx/font.dart'
+    show XlsxFont, XlsxFontScheme, XlsxFontScript, XlsxUnderline;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/number_format.dart' show XlsxNumFmt;
 export 'src/xlsx/properties.dart' show XlsxProperties;
