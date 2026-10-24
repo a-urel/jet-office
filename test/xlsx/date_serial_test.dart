@@ -37,6 +37,15 @@ void main() {
     expect(dateTimeSerial(DateTime(10000)), isNull);
   });
 
+  test('a time on 9999-12-31 that rounds to the next day has no serial', () {
+    // The fraction is just below 1, but the double sum rounds to 2958466.
+    expect(
+      dateTimeSerial(DateTime(9999, 12, 31, 23, 59, 59, 999, 999)),
+      isNull,
+    );
+    expect(dateTimeSerial(DateTime(9999, 12, 31, 23, 59, 59)), isNotNull);
+  });
+
   test('leap-year boundaries', () {
     expect(() => dateSerial(1900, 2, 29), throwsArgumentError);
     expect(dateSerial(2024, 2, 29), 45351);

@@ -20,8 +20,9 @@ const int _microsPerDay = 86400 * 1000000;
 /// Returns the Excel serial number of the date [year]-[month]-[day].
 ///
 /// Returns `null` for dates outside Excel's range (before 1900-01-01 or after
-/// 9999-12-31), which have no serial; the caller writes those as text. Throws an [ArgumentError] if the date does not
-/// exist, for example month 13 or 30 February.
+/// 9999-12-31), which have no serial; the caller writes those as text.
+/// Throws an [ArgumentError] if the date does not exist, for example month
+/// 13 or 30 February.
 int? dateSerial(int year, int month, int day) {
   final date = DateTime.utc(year, month, day);
   // Dart normalizes out-of-range fields (2026-02-30 becomes 2026-03-02), so a
@@ -41,8 +42,9 @@ int? dateSerial(int year, int month, int day) {
 /// fraction.
 ///
 /// Uses the wall-clock fields only. Returns `null` for values outside Excel's
-/// range (before 1900-01-01 or after 9999-12-31). The fraction is
-/// `(h*3600 + m*60 + s + ms/1000 + us/1e6) / 86400`.
+/// range (before 1900-01-01 or after 9999-12-31), including a time so close
+/// to midnight on 9999-12-31 that the serial rounds up to the next day. The
+/// fraction is `(h*3600 + m*60 + s + ms/1000 + us/1e6) / 86400`.
 double? dateTimeSerial(DateTime value) {
   final days = dateSerial(value.year, value.month, value.day);
   if (days == null) return null;
@@ -50,5 +52,8 @@ double? dateTimeSerial(DateTime value) {
       ((value.hour * 60 + value.minute) * 60 + value.second) * 1000000 +
       value.millisecond * 1000 +
       value.microsecond;
-  return days + micros / _microsPerDay;
+  final double serial = days + micros / _microsPerDay;
+  // Near 3e6 a double has about 5e-10 of precision, so a time within a
+  // fraction of a millisecond of midnight rounds to the next whole day.
+  return serial >= _maxSerial + 1 ? null : serial;
 }
