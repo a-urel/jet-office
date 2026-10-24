@@ -53,10 +53,11 @@ final class Fixture {
   /// export: raw (not formatted) values; numbers are equal within a relative
   /// tolerance of 1e-12; a `bool` matches `TRUE`/`FALSE` or `1`/`0`; strings
   /// are equal exactly (a stored string is compared after decoding its
-  /// `_xHHHH_` escapes, as a reader does); `null` matches `""`; trailing empty rows and trailing
-  /// empty cells are ignored on both sides. A CSV cannot tell an empty sheet
-  /// from a sheet whose only cell is `''`, so both expect no rows; the
-  /// checker and [storedValues] still tell them apart.
+  /// `_xHHHH_` escapes, as a reader does); `null` matches `""`; trailing
+  /// empty rows and trailing empty cells are ignored on both sides. A CSV
+  /// cannot tell an empty sheet from a sheet whose only cell is `''`, so
+  /// both expect no rows; the checker and [storedValues] still tell them
+  /// apart.
   final Map<String, List<List<Object?>>> expectedValues;
 
   /// Builds the workbook and returns its bytes. The same bytes every time.

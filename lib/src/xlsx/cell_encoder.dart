@@ -74,10 +74,10 @@ final class CellEncoder {
   /// Programmer errors throw an [ArgumentError]: an unsupported type, a
   /// nested [XlsxCell], a `NaN` or infinite number, an impossible date, a
   /// formula that is empty after its leading `=`, longer than 8,192 UTF-16
-  /// code units or holds characters XML forbids, an invalid cached value; an invalid style throws like
-  /// [StyleRegistry.idFor]. When it throws, nothing is written to [out] and
-  /// nothing is recorded: the string table, the style registry and the
-  /// warnings are as they were.
+  /// code units or holds characters XML forbids, an invalid cached value.
+  /// An invalid style throws like [StyleRegistry.idFor]. When it throws,
+  /// nothing is written to [out] and nothing is recorded: the string table,
+  /// the style registry and the warnings are as they were.
   void encode(
     XmlWriter out, {
     required String sheet,
