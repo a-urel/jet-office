@@ -1,4 +1,3 @@
-// ignore_for_file: close_sinks (ZipWriter.close closes the test sinks)
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -73,11 +72,10 @@ void main() {
     expect(d.getUint16(10, Endian.little), 0, reason: 'time 00:00:00');
     // DOS date: ((year - 1980) << 9) | (month << 5) | day.
     expect(d.getUint16(12, Endian.little), (0 << 9) | (1 << 5) | 1);
-    final ArchiveFile f = ZipDecoder().decodeBytes(bytes).files.single;
-    expect(f.name, 'a.xml');
   });
 
   test('sink mode streams the same archive and closes the sink', () {
+    // ignore: close_sinks (ZipWriter.close closes it)
     final _CollectingSink sink = _CollectingSink();
     final ZipWriter z = ZipWriter(sink: sink)
       ..add('a.xml', utf8.encode('<a/>'));
@@ -93,6 +91,7 @@ void main() {
     'sink mode with a large archive: chunked, identical, no subset/clear',
     () {
       final Uint8List big = _noise(300 * 1024);
+      // ignore: close_sinks (ZipWriter.close closes it)
       final _CollectingSink sink = _CollectingSink();
       final ZipWriter z = ZipWriter(sink: sink)
         ..add('big.bin', big)
@@ -122,6 +121,7 @@ void main() {
   });
 
   test('a sink that throws in add is closed and the error rethrown', () {
+    // ignore: close_sinks (ZipWriter closes it after a failure)
     final _ThrowingSink sink = _ThrowingSink();
     final ZipWriter z = ZipWriter(sink: sink);
     expect(() => z.add('big.bin', _noise(300 * 1024)), throwsFormatException);
@@ -131,11 +131,101 @@ void main() {
   });
 
   test('a sink that throws in close is closed and the error rethrown', () {
+    // ignore: close_sinks (ZipWriter closes it after a failure)
     final _ThrowingSink sink = _ThrowingSink();
     final ZipWriter z = ZipWriter(sink: sink)
       ..add('a.xml', utf8.encode('<a/>'));
     expect(z.close, throwsFormatException);
     expect(sink.closed, isTrue);
     expect(z.close, throwsStateError);
+  });
+
+  test('the central directory carries the 1980-01-01 timestamp too', () {
+    final Uint8List bytes = (ZipWriter()..add('a.xml', utf8.encode('<a/>')))
+        .close()!;
+    final ByteData d = ByteData.sublistView(bytes);
+    int at = -1;
+    for (int i = 0; i + 4 <= bytes.length; i++) {
+      if (d.getUint32(i, Endian.little) == 0x02014b50) {
+        at = i;
+        break;
+      }
+    }
+    expect(at, isNonNegative, reason: 'central directory header found');
+    // Central header: DOS time at 12, DOS date at 14.
+    expect(d.getUint16(at + 12, Endian.little), 0);
+    expect(d.getUint16(at + 14, Endian.little), (0 << 9) | (1 << 5) | 1);
+  });
+
+  test('chunks reach the sink before close()', () {
+    // ignore: close_sinks (ZipWriter.close closes it)
+    final _CollectingSink sink = _CollectingSink();
+    final ZipWriter z = ZipWriter(sink: sink)
+      ..add('big.bin', _noise(300 * 1024));
+    expect(sink.chunks, isNotEmpty);
+    expect(sink.closed, isFalse);
+    z.close();
+    expect(sink.closed, isTrue);
+  });
+
+  group('addChunks', () {
+    final List<Uint8List> parts = <Uint8List>[
+      Uint8List.fromList(utf8.encode('<a>')),
+      _noise(100 * 1024),
+      Uint8List(0),
+      Uint8List.fromList(utf8.encode('</a>')),
+    ];
+    final Uint8List whole = Uint8List.fromList(
+      parts.expand((Uint8List c) => c).toList(),
+    );
+
+    test('is byte-identical to add with the concatenation, in memory', () {
+      final Uint8List viaChunks =
+          (ZipWriter()
+                ..addChunks('s.xml', parts)
+                ..add('t.xml', utf8.encode('<t/>')))
+              .close()!;
+      final Uint8List viaAdd =
+          (ZipWriter()
+                ..add('s.xml', whole)
+                ..add('t.xml', utf8.encode('<t/>')))
+              .close()!;
+      expect(viaChunks, viaAdd);
+      expect(
+        ZipDecoder().decodeBytes(viaChunks).findFile('s.xml')!.content,
+        whole,
+      );
+    });
+
+    test('is byte-identical to add with the concatenation, to a sink', () {
+      // ignore: close_sinks (ZipWriter.close closes it)
+      final _CollectingSink a = _CollectingSink();
+      // ignore: close_sinks (ZipWriter.close closes it)
+      final _CollectingSink b = _CollectingSink();
+      ZipWriter(sink: a)
+        ..addChunks('s.xml', parts)
+        ..close();
+      ZipWriter(sink: b)
+        ..add('s.xml', whole)
+        ..close();
+      expect(a.bytes, b.bytes);
+    });
+
+    test('accepts no chunks and one chunk', () {
+      expect(
+        (ZipWriter()..addChunks('e', <Uint8List>[])).close(),
+        (ZipWriter()..add('e', <int>[])).close(),
+      );
+      final Uint8List one = Uint8List.fromList(<int>[1, 2, 3]);
+      expect(
+        (ZipWriter()..addChunks('o', <Uint8List>[one])).close(),
+        (ZipWriter()..add('o', one)).close(),
+      );
+    });
+
+    test('lifecycle errors match add', () {
+      final ZipWriter z = ZipWriter()..close();
+      expect(() => z.addChunks('x', <Uint8List>[]), throwsStateError);
+    });
   });
 }

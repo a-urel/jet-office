@@ -29,6 +29,9 @@ final class XmlWriter {
   }
 
   /// Opens the element [name]. Attributes may follow until content is written.
+  ///
+  /// Names are written as given and must be valid XML names; they are not
+  /// validated.
   void start(String name) {
     _closeStartTag();
     _sink
@@ -40,6 +43,8 @@ final class XmlWriter {
 
   /// Writes the attribute [name]="[value]" on the open start tag.
   ///
+  /// [name] must be a valid XML name (it is not validated). The value is
+  /// escaped before anything is written, so a throw leaves no partial output.
   /// [value] must already be scrubbed with `scrubXmlText`; otherwise this
   /// throws [ArgumentError]. Throws [StateError] when no start tag is open,
   /// that is, when nothing was started or content was already written.
@@ -47,11 +52,15 @@ final class XmlWriter {
     if (!_inStartTag) {
       throw StateError('Attributes can only be written on an open start tag.');
     }
+    _writeAttribute(name, escapeXmlAttribute(value));
+  }
+
+  void _writeAttribute(String name, String escaped) {
     _sink
       ..write(' ')
       ..write(name)
       ..write('="')
-      ..write(escapeXmlAttribute(value))
+      ..write(escaped)
       ..write('"');
   }
 
@@ -92,9 +101,18 @@ final class XmlWriter {
   }
 
   /// Writes the element [name] with [attributes] and no content.
+  ///
+  /// Every attribute value is escaped before anything is written, so a throw
+  /// leaves no partial output. Names must be valid XML names (not validated).
   void empty(String name, [Map<String, String> attributes = const {}]) {
+    final List<String> escaped = <String>[
+      for (final String value in attributes.values) escapeXmlAttribute(value),
+    ];
     start(name);
-    attributes.forEach(attribute);
+    int i = 0;
+    for (final String key in attributes.keys) {
+      _writeAttribute(key, escaped[i++]);
+    }
     end();
   }
 

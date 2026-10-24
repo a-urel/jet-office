@@ -32,16 +32,19 @@ const int _chunkSize = 64 * 1024;
 final class ZipWriter {
   /// Creates a writer, streaming to [sink] when one is given.
   ZipWriter({Sink<List<int>>? sink})
-    : _sink = sink,
-      _output = sink == null ? OutputMemoryStream() : _SinkOutputStream(sink) {
+    : _output = sink == null ? OutputMemoryStream() : _SinkOutputStream(sink) {
     _encoder = ZipEncoder()
       ..startEncode(_output, level: _deflateLevel, modified: _fixedTime);
   }
 
-  final Sink<List<int>>? _sink;
   final OutputStream _output;
   late final ZipEncoder _encoder;
   bool _closed = false;
+
+  Sink<List<int>>? get _sink {
+    final OutputStream out = _output;
+    return out is _SinkOutputStream ? out._sink : null;
+  }
 
   /// Adds one entry named [name] holding [bytes].
   ///
@@ -57,6 +60,28 @@ final class ZipWriter {
       _abandon();
       rethrow;
     }
+  }
+
+  /// Adds one entry named [name] holding the concatenation of [chunks].
+  ///
+  /// The entry, and so the archive, is byte-identical to the one `add`
+  /// produces for the concatenated bytes. The chunks are copied once, into
+  /// a single buffer for the encoder; they are not concatenated twice.
+  void addChunks(String name, List<Uint8List> chunks) {
+    if (_closed) {
+      throw StateError('Cannot add "$name": the ZIP writer is closed.');
+    }
+    int total = 0;
+    for (final Uint8List chunk in chunks) {
+      total += chunk.length;
+    }
+    final Uint8List joined = Uint8List(total);
+    int offset = 0;
+    for (final Uint8List chunk in chunks) {
+      joined.setRange(offset, offset + chunk.length, chunk);
+      offset += chunk.length;
+    }
+    add(name, joined);
   }
 
   /// Finishes the archive.

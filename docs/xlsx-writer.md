@@ -80,10 +80,11 @@ comment (AGENTS.md). Quds paths are relative to
 |---|---|---|
 | `xml/xml_escape.dart` | `xml/xml_reader.dart` → `encodeXmlText`, `encodeXmlAttribute` | strips forbidden control characters, reports them |
 | `xml/xml_writer.dart` | `xml/xml_writer.dart` | writes to any `StringSink`, so a sheet streams into a `Utf8Buffer`; text and attributes go through the scrub-checked escapers |
-| `xml/utf8_buffer.dart` | — (new) | stores written text as UTF-8 bytes in chunks, not one string |
+| `xml/utf8_buffer.dart` | — (new) | stores written text as UTF-8 bytes in chunks, not one string; `takeChunks` hands them out unjoined |
+| `xml/xml_number.dart` | — (new) | `formatXmlDouble`: attribute numbers print the same on the VM and in the browser |
 | `opc/content_types.dart`, `opc/relationships.dart` | `opc/content_types.dart`, `opc/relationships.dart` (write side) | write-only in phase 1, no crypto |
 | `opc/ooxml.dart` | `xml/namespaces.dart` → `OfficeNamespaces`; `opc/content_types.dart` → `OfficeContentTypes` | only the namespaces, relationship types and content types a spreadsheet uses |
-| `zip/archive_adapter.dart` | — (new) | the only file that imports `package:archive` |
+| `zip/archive_adapter.dart` | — (new) | the only file that imports `package:archive`; `addChunks` adds an entry from unjoined chunks |
 | `xlsx/cell_encoder.dart` | `builders/xlsx_io.dart` → `_sheetXml` cell branch | the one encoder from 0002: dates, decimals, formulas, NaN |
 | `xlsx/style_registry.dart` | `builders/xlsx_io.dart` → `style`, `_Font`, `_Fill`, `_Border`, `_Xf`; `sheet/styles/` | value-typed `XlsxStyle`, built-in number format ids |
 | `xlsx/xlsx_writer.dart` | `builders/xlsx_io.dart` → `XlsxWorkbookBuilder`, `XlsxSheetBuilder` | streams rows, shared strings written last |
