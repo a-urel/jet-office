@@ -56,6 +56,9 @@ final class CellEncoder {
   final WarningCollector _warnings;
   bool _wroteFormula = false;
 
+  /// The `beforeWrite` callback of the [encode] call in progress.
+  void Function()? _beforeWrite;
+
   // The resolved layers of the last cell of each column. Layers are
   // immutable, so a cell in that column with the same three layer objects
   // (compared by identity, which costs no hashing, and bounded by the number
@@ -78,11 +81,16 @@ final class CellEncoder {
   ///
   /// [value] is a `String`, `int`, `double`, `bool`, [DateTime], [XlsxDate],
   /// [XlsxDecimal], [XlsxFormula], an [XlsxCell] wrapping one of those, or
-  /// `null`, which writes nothing. The effective style is [columnStyle]
-  /// merged with [rowStyle] and then with the [XlsxCell]'s style, so a cell
-  /// beats its row and a row beats its column (see [XlsxStyle.merge]): a
-  /// field a higher layer leaves `null` is inherited, one it sets, even back
-  /// to its default (a font that is not bold, `XlsxNumFmt.general`), wins.
+  /// `null`, which writes nothing. An [XlsxCell] whose value is `null` and
+  /// whose style is not writes an empty styled cell, `<c r="C5" s="7"/>`,
+  /// when the merged style below is not the default; with the default
+  /// style, or with no cell style, it writes nothing (ruling R11).
+  ///
+  /// The effective style is [columnStyle] merged with [rowStyle] and then
+  /// with the [XlsxCell]'s style, so a cell beats its row and a row beats
+  /// its column (see [XlsxStyle.merge]): a field a higher layer leaves
+  /// `null` is inherited, one it sets, even back to its default (a font
+  /// that is not bold, `XlsxNumFmt.general`), wins.
   ///
   /// Data problems (characters XML forbids, text past 32,767 UTF-16 code
   /// units, integers past 2^53, dates outside 1900 to 9999, a date shown in
@@ -101,6 +109,11 @@ final class CellEncoder {
   /// An invalid style throws like [StyleRegistry.idFor]. When it throws,
   /// nothing is written to [out] and nothing is recorded: the string table,
   /// the style registry and the warnings are as they were.
+  ///
+  /// [beforeWrite], when given, is called once right before the cell
+  /// element is written, after everything that can throw, and not at all
+  /// when nothing is written. The sheet writer opens the row's element in
+  /// it, so a row whose cells all write nothing gets no element.
   void encode(
     XmlWriter out, {
     required String sheet,
@@ -109,7 +122,9 @@ final class CellEncoder {
     required Object? value,
     XlsxStyle? rowStyle,
     XlsxStyle? columnStyle,
+    void Function()? beforeWrite,
   }) {
+    _beforeWrite = beforeWrite;
     final String ref = cellRef(row, column);
     XlsxStyle? cellStyle;
     Object? v = value;
@@ -123,7 +138,12 @@ final class CellEncoder {
         );
       }
     }
-    if (v == null) return;
+    if (v == null) {
+      if (cellStyle == null) return;
+      final int id = _idOf(_resolve(column, columnStyle, rowStyle, cellStyle));
+      if (id != 0) _write(out, ref, id, null, null);
+      return;
+    }
     final _Resolved style = _resolve(column, columnStyle, rowStyle, cellStyle);
     switch (v) {
       case String():
@@ -396,15 +416,21 @@ final class CellEncoder {
       );
 
   /// Writes the cell element with the style id [id], resolved by the caller
-  /// before it recorded anything.
-  void _write(XmlWriter out, String ref, int id, String? type, String body) {
+  /// before it recorded anything, after calling the `beforeWrite` callback.
+  /// A `null` [body] writes an empty cell.
+  void _write(XmlWriter out, String ref, int id, String? type, String? body) {
+    _beforeWrite?.call();
     final StringBuffer cell = StringBuffer('<c r="$ref"');
     if (id != 0) cell.write(' s="$id"');
     if (type != null) cell.write(' t="$type"');
-    cell
-      ..write('>')
-      ..write(body)
-      ..write('</c>');
+    if (body == null) {
+      cell.write('/>');
+    } else {
+      cell
+        ..write('>')
+        ..write(body)
+        ..write('</c>');
+    }
     out.raw(cell.toString());
   }
 

@@ -134,7 +134,9 @@ its label in column B. Read each row against its label.
   uses its default Office theme. Theme color 4 is accent 1, so the text
   should be a lightened blue (Office's `4472C4` at 40 % tint). Record the
   color you see; a black or missing color means Excel ignored the theme.
-- One row per pattern type, in blue on yellow; a `none` pattern shows no fill.
+- One row per pattern type, each with a blue foreground and a yellow
+  background: `solid` shows plain blue (the foreground only), every other
+  pattern draws blue marks on yellow, and `none` shows no fill.
 - Two gradient rows: `gradient linear 90` (yellow to blue, top to bottom or
   the reverse) and `gradient path` (from the centre outwards).
 - One row per border style, all four sides in blue; then a diagonal border
@@ -148,11 +150,13 @@ its label in column B. Read each row against its label.
 - `locked false` and `hidden true` look the same as the others; check them in
   Format Cells > Protection (unlocked, hidden).
 - Number formats, each on `1234,5` and on 24.10.2026. Compare each shown text
-  with its label (`integer`, `decimal2`, `thousands`, `scientific`,
-  `fraction`, `time`, `elapsedTime`, `text`, the grouped, red-negative,
-  percent and money variants with `₺`, `$` first and `€`). A date in a
-  format that shows no date (all but `time` and `elapsedTime`) shows its
-  serial `46319` in that format; that is expected.
+  with its label (`integer`, `decimal2`, `thousands`, `thousands2`,
+  `scientific`, `fraction`, `time`, `elapsedTime`, `text`, the grouped,
+  red-negative, percent and money variants with `₺`, `$` first and `€`). A
+  date in a format that shows no date (all but `time` and `elapsedTime`)
+  shows the serial 46319 formatted by that format, not a date, so it looks
+  different in each: `percent` shows `4631900%` and `scientific`
+  `4,63E+04`, for example. That is expected.
 
 ### `m2_columns_rows`
 
@@ -162,11 +166,14 @@ Two sheets, `Layout` and `Defaults`.
   last is as wide as Excel allows); column E is hidden (the header jumps from
   D to F); columns F, G and H carry an outline bar above the headings
   (F level 1, G and H level 2).
-- Row 2 is 30 points tall, row 3 only 5 points. Row 4 is hidden (the numbers
-  jump from 3 to 5, with no outline bar).
+- Row 2 is 30 points tall, row 3 only 5 points. Row 4 is hidden, with no
+  outline bar, and rows 5 to 7 are hidden too, so the row numbers jump from
+  3 to 8.
 - Rows 5 to 7 are hidden detail rows: rows 5 and 6 at outline level 2, row 7
-  at level 1. Row 8, `total (collapsed)`, shows a plus sign, and expanding
-  it shows rows 5 to 7, with the inner group (rows 5 and 6) open.
+  at level 1. Row 8, `total (collapsed)`, shows a plus sign. Expand it and
+  record what Excel shows: rows 5 and 6 are stored hidden at level 2 and
+  row 7 is not marked collapsed, so the inner group may open with the
+  outer one or stay closed behind its own plus sign at row 7.
 - `Defaults`: the default row height is 18 points and the default column
   width 11 characters, on every row and column of the sheet.
 
@@ -178,10 +185,11 @@ One sheet, `Precedence`, with a money column B (`€`) and a date column C
 - Row 1, `Item`, `Amount`, `Date`, is bold in all three cells.
 - Rows 2 and 3: B shows `1.200,50 €`-style money (`€` with two decimals) and
   C shows `2026-10-24`.
-- Row 4, `Date in money`: B holds a date, so it shows the serial `46319` in
-  the money format, and C shows `2026-10-24`.
-- Row 5, `Total`: a thin top border on all of A5:C5, and B5 shows
-  `1.245,75 €` in italic (the cell style adds to the row style and the
+- Row 4, `Date in money`: B holds a date, so it shows the serial 46319 in
+  the money format (`46.319,00 €`), and C shows `2026-10-24`.
+- Row 5, `Total`: a thin top border runs across all of A5:C5. C5 holds no
+  value; it is an empty cell written only to carry the row's border. B5
+  shows `1.245,75 €` in italic (the cell style adds to the row style and the
   column's money format).
 
 ### `m2_views`
@@ -212,8 +220,10 @@ Two sheets, `Bob's Data` and `Plain`.
 - Row 6 (`Id`, `Name`, `Qty`, `Price`) carries the filter dropdown arrows,
   and filtering the list (for example `Qty`) works on rows 7 to 20.
 - The workbook holds a hidden defined name `_xlnm._FilterDatabase` for that
-  sheet. There must be no repair prompt. The Name Manager (Formulas > Name
-  Manager) may list it as `_FilterDatabase`; record what it shows.
+  sheet. There must be no repair prompt. Excel's Name Manager (Formulas >
+  Name Manager) does not list hidden names, so it should show no name for
+  it; a working filter is what shows the name was read. Record anything
+  the Name Manager does list.
 - `Plain` has no filter and no merges.
 
 ### `m2_formula_xstring`
@@ -238,10 +248,13 @@ Two sheets, `Probe` and `_x0041_`. On `Probe`, A1 holds the formula
 
 ### Open question
 
-Whether Excel treats a sheet named with the Kelvin sign (U+212A, which
-looks like K) as equal to one named with the Latin letter K (U+004B) is unverified. The writer's duplicate check
-folds case with Turkish and German rules but has no fixture for it. Settle
-it when convenient and record the answer here.
+Whether Excel treats a sheet named with the Kelvin sign (U+212A, which looks
+like K) as equal to one named with the Latin letter K (U+004B) is
+unverified. The writer's duplicate check maps the Turkish `İ` and `ı` and
+the German `ß` before it compares upper case, and deliberately does not
+fold the Kelvin sign (see `sheetNameKey` in `lib/src/xlsx/sheet_name.dart`),
+so it keeps `K` and the Kelvin sign apart. No fixture covers it. Settle it
+when convenient and record the answer here.
 
 ## Results
 

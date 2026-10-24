@@ -395,7 +395,8 @@ const XlsxDate _day = XlsxDate(2026, 10, 24);
 
 /// The rows of `m2_style_precedence`: under a money column B and a date
 /// column C, a bold header row, a date in the money column, and a totals
-/// row with a top border whose amount is also italic.
+/// row with a top border whose amount is also italic. The totals row's C5
+/// is a styled empty cell, so the border spans A5:C5.
 final List<_LayoutRow> _precedenceRows = <_LayoutRow>[
   _row(<Object?>['Item', 'Amount', 'Date'], style: _bold),
   _row(<Object?>['Rent', 1200.5, _day]),
@@ -404,6 +405,7 @@ final List<_LayoutRow> _precedenceRows = <_LayoutRow>[
   _row(<Object?>[
     'Total',
     const XlsxCell(1245.75, style: _italic),
+    const XlsxCell(null, style: _topBorder),
   ], style: _topBorder),
 ];
 

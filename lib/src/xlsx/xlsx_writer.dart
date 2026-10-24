@@ -453,12 +453,20 @@ abstract final class XlsxSheetWriter {
   /// that, field by field: a field a higher layer sets wins, one it leaves
   /// `null` is inherited.
   ///
+  /// `XlsxCell(null, style: s)` with a non-null `s` writes an empty cell
+  /// that carries the effective style, for example a border across a
+  /// totals row; it writes nothing when the effective style is the
+  /// default. A bare `null` and `XlsxCell(null)` write no cell, even under
+  /// a row or column style.
+  ///
   /// [height] is the row's height in points, `null` for the default.
   /// [hidden] hides the row. [outlineLevel] groups it, from 0 (not grouped)
   /// to [XlsxLimits.maxOutlineLevel]. [collapsed] marks the row that carries
-  /// the expand button of a collapsed group next to it. A row of only
-  /// `null`s writes nothing unless it has one of these attributes, but it
-  /// still counts.
+  /// the expand button of a collapsed group next to it. A row in which no
+  /// cell is written (only `null`s, or styled empties whose effective style
+  /// is the default) writes nothing unless it has one of these attributes,
+  /// but it still counts; a row whose only cells are styled empties is
+  /// written.
   ///
   /// Data problems are repaired and reported as warnings. Throws
   /// [XlsxLimitError] for more than [XlsxLimits.maxColumns] values or a row
@@ -670,23 +678,24 @@ final class _SheetWriter implements XlsxSheetWriter {
     _checkRowAttributes(height, outlineLevel);
     final int row = _rowCount;
     _rowCount++;
-    final bool attributes =
-        height != null || hidden || outlineLevel != 0 || collapsed;
     bool opened = false;
-    if (attributes) {
+    if (height != null || hidden || outlineLevel != 0 || collapsed) {
       _startRow(xml, row, height, hidden, outlineLevel, collapsed);
       opened = true;
     }
+    // Without attributes, the row is opened by its first written cell, so
+    // cells that write nothing (an XlsxCell of null, a styled empty whose
+    // style is the default, a cell that throws) leave no empty element.
+    void open() {
+      if (opened) return;
+      _startRow(xml, row, null, false, 0, false);
+      opened = true;
+    }
+
     try {
       for (int column = 0; column < values.length; column++) {
         final Object? value = values[column];
-        if (value == null || (value is XlsxCell && value.value == null)) {
-          continue;
-        }
-        if (!opened) {
-          _startRow(xml, row, null, false, 0, false);
-          opened = true;
-        }
+        if (value == null) continue;
         _book._encoder.encode(
           xml,
           sheet: name,
@@ -697,6 +706,7 @@ final class _SheetWriter implements XlsxSheetWriter {
           columnStyle: column < _columnStyles.length
               ? _columnStyles[column]
               : null,
+          beforeWrite: open,
         );
       }
     } finally {

@@ -1030,6 +1030,78 @@ void main() {
       expect(checkXlsx(out.bytes), isEmpty);
     });
 
+    group('styled empty cells (ruling R11)', () {
+      const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+
+      test('a row of only styled empties is written', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('S').row(<Object?>[
+          null,
+          const XlsxCell(null),
+          const XlsxCell(null, style: bold),
+        ]);
+        final XlsxResult out = book.close();
+        expect(
+          readXlsx(out.bytes)['xl/worksheets/sheet1.xml'],
+          contains('<sheetData><row r="1"><c r="C1" s="1"/></row></sheetData>'),
+        );
+        expect(checkXlsx(out.bytes), isEmpty);
+      });
+
+      test('the row style and the column style merge into it', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('S')
+          ..columns(const <XlsxColumn?>[
+            XlsxColumn(style: XlsxStyle(numFmt: XlsxNumFmt.custom('0.0'))),
+          ])
+          ..row(<Object?>[
+            const XlsxCell(
+              null,
+              style: XlsxStyle(font: XlsxFont(italic: true)),
+            ),
+          ], style: bold);
+        final Map<String, String> parts = readXlsx(book.close().bytes);
+        // 1 is the column's own format; 2 merges all three layers.
+        expect(
+          parts['xl/worksheets/sheet1.xml'],
+          contains('<row r="1"><c r="A1" s="2"/></row>'),
+        );
+        expect(parts['xl/styles.xml'], contains('<cellXfs count="3">'));
+      });
+
+      test('a styled empty that resolves to the default writes no row', () {
+        final XlsxWriter book = XlsxWriter();
+        final XlsxSheetWriter s = book.addSheet('S');
+        s.row(<Object?>[const XlsxCell(null, style: XlsxStyle())]);
+        expect(s.rowCount, 1);
+        expect(
+          readXlsx(book.close().bytes)['xl/worksheets/sheet1.xml'],
+          _sheetXml('<sheetData/>'),
+        );
+      });
+
+      test('an invalid style throws and records nothing', () {
+        final XlsxWriter book = XlsxWriter();
+        final XlsxSheetWriter s = book.addSheet('S');
+        expect(
+          () => s.row(<Object?>[
+            const XlsxCell(
+              null,
+              style: XlsxStyle(numFmt: XlsxNumFmt.builtin(200)),
+            ),
+          ]),
+          throwsArgumentError,
+        );
+        expect(s.rowCount, 1);
+        final XlsxResult out = book.close();
+        final Map<String, String> parts = readXlsx(out.bytes);
+        expect(parts['xl/worksheets/sheet1.xml'], _sheetXml('<sheetData/>'));
+        expect(parts['xl/styles.xml'], contains('<cellXfs count="1">'));
+        expect(out.warnings, isEmpty);
+        expect(checkXlsx(out.bytes), isEmpty);
+      });
+    });
+
     test('a row whose cell throws still closes, attributes kept', () {
       final XlsxWriter book = XlsxWriter();
       final XlsxSheetWriter s = book.addSheet('S');

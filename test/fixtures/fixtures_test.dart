@@ -273,6 +273,15 @@ void main() {
     expect(fontOf(total), contains('<i/>'));
     expect(xfOf('A5').getAttribute('borderId'), total.getAttribute('borderId'));
     expect(xfOf('A5').getAttribute('numFmtId'), '0');
+    // C5 is a styled empty cell (R11), so the border spans A5:C5; it keeps
+    // the date column's format.
+    expect(sheet.toXmlString(), contains(RegExp(r'<c r="C5" s="\d+"/>')));
+    final XmlElement emptyTotal = xfOf('C5');
+    expect(emptyTotal.getAttribute('borderId'), total.getAttribute('borderId'));
+    expect(
+      emptyTotal.getAttribute('numFmtId'),
+      xfOf('C2').getAttribute('numFmtId'),
+    );
   });
 
   test('m2_views writes its views, panes, tab color and visibility', () {

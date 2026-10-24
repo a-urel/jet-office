@@ -22,13 +22,18 @@ import 'style.dart';
 ///
 /// [value] may be anything a cell accepts except another [XlsxCell]; nesting
 /// is a programmer error and throws an [ArgumentError] when the cell is
-/// written.
+/// written. A `null` [value] with a [style] is an empty styled cell: it is
+/// written with the merged style and no value, so a border or fill reaches
+/// a cell that holds nothing. When the merged style is the default, or
+/// [style] is `null`, nothing is written.
 final class XlsxCell {
   /// Creates a cell holding [value], styled with [style] when given.
   const XlsxCell(this.value, {this.style});
 
   /// The value to write: a `String`, `int`, `double`, `bool`, [DateTime],
-  /// [XlsxDate], [XlsxDecimal], [XlsxFormula] or `null` (writes no cell).
+  /// [XlsxDate], [XlsxDecimal], [XlsxFormula] or `null` (an empty cell,
+  /// written only when it has a [style] that does not merge to the
+  /// default).
   final Object? value;
 
   /// The style of this cell, or `null` to use the row's style.

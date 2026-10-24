@@ -553,6 +553,70 @@ void main() {
       expect(codes(), <XlsxWarningCode>[XlsxWarningCode.dateInNonDateFormat]);
     });
 
+    group('a styled empty cell (ruling R11)', () {
+      test('XlsxCell(null, style: s) writes an empty styled cell', () {
+        expect(enc(const XlsxCell(null, style: bold)), '<c r="A1" s="1"/>');
+        expect(strings.values, isEmpty);
+        expect(warnings.warnings, isEmpty);
+      });
+
+      test('the merged style decides s', () {
+        expect(
+          enc(
+            const XlsxCell(null, style: italic),
+            rowStyle: bold,
+            columnStyle: money,
+          ),
+          '<c r="A1" s="1"/>',
+        );
+        expect(
+          styles.idFor(
+            const XlsxStyle(
+              numFmt: XlsxNumFmt.custom('#,##0.00'),
+              font: XlsxFont(bold: true, italic: true),
+            ),
+          ),
+          1,
+        );
+      });
+
+      test('a style that resolves to the default writes nothing', () {
+        expect(enc(const XlsxCell(null, style: XlsxStyle())), '');
+        expect(
+          enc(
+            const XlsxCell(null, style: XlsxStyle(font: XlsxFont(bold: false))),
+            rowStyle: bold,
+          ),
+          '',
+        );
+        expect(formatCount(), 1);
+      });
+
+      test('a bare null or an XlsxCell without a style writes nothing', () {
+        expect(enc(null, rowStyle: bold, columnStyle: money), '');
+        expect(enc(const XlsxCell(null), rowStyle: bold), '');
+        expect(formatCount(), 1);
+      });
+
+      test('an invalid style throws and records nothing', () {
+        const XlsxStyle bad = XlsxStyle(numFmt: XlsxNumFmt.builtin(200));
+        final StringBuffer out = StringBuffer();
+        expect(
+          () => encoder.encode(
+            XmlWriter(out),
+            sheet: 'S',
+            row: 0,
+            column: 0,
+            value: const XlsxCell(null, style: bad),
+          ),
+          throwsArgumentError,
+        );
+        expect('$out', isEmpty);
+        expect(formatCount(), 1);
+        expect(warnings.warnings, isEmpty);
+      });
+    });
+
     test('an invalid layer throws and registers nothing', () {
       final int before = formatCount();
       const XlsxStyle bad = XlsxStyle(numFmt: XlsxNumFmt.custom(''));
