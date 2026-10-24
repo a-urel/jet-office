@@ -1,3 +1,4 @@
+import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/worksheet_parts.dart';
 import 'package:test/test.dart';
 
@@ -235,6 +236,160 @@ void main() {
           throwsArgumentError,
         );
       }
+    });
+  });
+
+  group('sheetPr', () {
+    const String declared =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<worksheet xmlns="$_main" xmlns:r="$_rel">';
+    const String defaultViews =
+        '<sheetViews><sheetView workbookViewId="0"/></sheetViews>';
+
+    String header(WorksheetSettings s) => worksheetHeader(s, hasRows: true);
+
+    test('a tab color and a summary position', () {
+      expect(
+        header(
+          const WorksheetSettings(
+            tabColor: XlsxColor.rgb(0xFF0000),
+            summaryBelow: false,
+          ),
+        ),
+        '$declared<sheetPr><tabColor rgb="FFFF0000"/>'
+        '<outlinePr summaryBelow="0"/></sheetPr>$defaultViews<sheetData>',
+      );
+    });
+
+    test('a tab color alone', () {
+      expect(
+        header(const WorksheetSettings(tabColor: XlsxColor.theme(4))),
+        '$declared<sheetPr><tabColor theme="4"/></sheetPr>'
+        '$defaultViews<sheetData>',
+      );
+    });
+
+    test('summaryRight alone, and both', () {
+      expect(
+        header(const WorksheetSettings(summaryRight: false)),
+        '$declared<sheetPr><outlinePr summaryRight="0"/></sheetPr>'
+        '$defaultViews<sheetData>',
+      );
+      expect(
+        header(
+          const WorksheetSettings(summaryBelow: false, summaryRight: false),
+        ),
+        '$declared<sheetPr><outlinePr summaryBelow="0" summaryRight="0"/>'
+        '</sheetPr>$defaultViews<sheetData>',
+      );
+    });
+  });
+
+  group('sheetView', () {
+    String views(XlsxSheetView view) {
+      final String header = worksheetHeader(
+        WorksheetSettings(view: view),
+        hasRows: true,
+      );
+      final int start = header.indexOf('<sheetViews>');
+      return header.substring(start, header.indexOf('<sheetData>'));
+    }
+
+    test('every option', () {
+      expect(
+        views(
+          const XlsxSheetView(
+            zoom: 85,
+            showGridLines: false,
+            showHeadings: false,
+            rightToLeft: true,
+            showZeros: false,
+            showFormulas: true,
+          ),
+        ),
+        '<sheetViews><sheetView showFormulas="1" showGridLines="0" '
+        'showRowColHeaders="0" showZeros="0" rightToLeft="1" '
+        'zoomScale="85" workbookViewId="0"/></sheetViews>',
+      );
+    });
+
+    test('a frozen row', () {
+      expect(
+        views(const XlsxSheetView(pane: XlsxPane.frozen(rows: 1))),
+        '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" '
+        'topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'
+        '<selection pane="bottomLeft"/></sheetView></sheetViews>',
+      );
+    });
+
+    test('frozen columns', () {
+      expect(
+        views(const XlsxSheetView(pane: XlsxPane.frozen(columns: 2))),
+        contains(
+          '<pane xSplit="2" topLeftCell="C1" activePane="topRight" '
+          'state="frozen"/><selection pane="topRight"/>',
+        ),
+      );
+    });
+
+    test('a frozen row and column', () {
+      expect(
+        views(const XlsxSheetView(pane: XlsxPane.frozen(rows: 1, columns: 1))),
+        contains(
+          '<pane xSplit="1" ySplit="1" topLeftCell="B2" '
+          'activePane="bottomRight" state="frozen"/>'
+          '<selection pane="bottomRight"/>',
+        ),
+      );
+    });
+
+    test('a split pane is in twips and has no topLeftCell', () {
+      expect(
+        views(const XlsxSheetView(pane: XlsxPane.split(x: 100, y: 50))),
+        contains(
+          '<pane xSplit="2000" ySplit="1000" activePane="bottomRight"/>'
+          '<selection pane="bottomRight"/>',
+        ),
+      );
+    });
+
+    test('a split on one axis', () {
+      expect(
+        views(const XlsxSheetView(pane: XlsxPane.split(x: 12.5))),
+        contains(
+          '<pane xSplit="250" activePane="topRight"/>'
+          '<selection pane="topRight"/>',
+        ),
+      );
+      expect(
+        views(const XlsxSheetView(pane: XlsxPane.split(y: 60))),
+        contains(
+          '<pane ySplit="1200" activePane="bottomLeft"/>'
+          '<selection pane="bottomLeft"/>',
+        ),
+      );
+    });
+
+    test('a pane of zeros writes no pane and no selection', () {
+      for (final XlsxPane pane in const <XlsxPane>[
+        XlsxPane.frozen(),
+        XlsxPane.split(),
+      ]) {
+        expect(
+          views(XlsxSheetView(pane: pane)),
+          '<sheetViews><sheetView workbookViewId="0"/></sheetViews>',
+        );
+      }
+    });
+
+    test('the pane comes with the other options', () {
+      expect(
+        views(const XlsxSheetView(zoom: 150, pane: XlsxPane.frozen(rows: 2))),
+        '<sheetViews><sheetView zoomScale="150" workbookViewId="0">'
+        '<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" '
+        'state="frozen"/><selection pane="bottomLeft"/></sheetView>'
+        '</sheetViews>',
+      );
     });
   });
 }

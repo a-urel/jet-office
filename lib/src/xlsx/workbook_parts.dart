@@ -19,6 +19,7 @@ import '../opc/ooxml.dart';
 import '../opc/relationships.dart';
 import '../xml/xml_escape.dart';
 import '../xml/xml_writer.dart';
+import 'sheet_view.dart';
 
 /// A worksheet as the workbook lists it.
 ///
@@ -26,7 +27,12 @@ import '../xml/xml_writer.dart';
 /// `_xHHHH_` sequences when it writes it. `number` is the sheet's 1-based
 /// creation order: it names the part (`sheet{number}.xml`), is the
 /// `sheetId`, and its relationship id is [worksheetRelationshipId].
-typedef WorkbookSheet = ({String name, int number});
+/// `visibility` is written as the `state` of a hidden sheet.
+typedef WorkbookSheet = ({
+  String name,
+  int number,
+  XlsxSheetVisibility visibility,
+});
 
 /// The relationship id of the worksheet created [number]th (1-based).
 ///
@@ -43,9 +49,10 @@ String worksheetPartName(int number) => 'xl/worksheets/sheet$number.xml';
 /// Writes `xl/workbook.xml`, XML declaration included, to [w].
 ///
 /// [tabs] lists the sheets in tab order. [activeTab] is the index in [tabs]
-/// of the tab Excel opens on. [fullCalcOnLoad] asks Excel to recalculate
-/// every formula when the file is opened, which a workbook with formulas
-/// needs because the writer does not compute their results.
+/// of the tab Excel opens on, which must not be hidden. [fullCalcOnLoad]
+/// asks Excel to recalculate every formula when the file is opened, which a
+/// workbook with formulas needs because the writer does not compute their
+/// results.
 void writeWorkbook(
   XmlWriter w, {
   required List<WorkbookSheet> tabs,
@@ -64,6 +71,8 @@ void writeWorkbook(
     w.empty('sheet', <String, String>{
       'name': escapeXstring(sheet.name),
       'sheetId': '${sheet.number}',
+      if (sheet.visibility != XlsxSheetVisibility.visible)
+        'state': sheet.visibility.name,
       'r:id': worksheetRelationshipId(sheet.number),
     });
   }

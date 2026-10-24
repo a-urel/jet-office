@@ -274,4 +274,42 @@ void main() {
     expect(xfOf('A5').getAttribute('borderId'), total.getAttribute('borderId'));
     expect(xfOf('A5').getAttribute('numFmtId'), '0');
   });
+
+  test('m2_views writes its views, panes, tab color and visibility', () {
+    final Map<String, String> parts = readXlsx(named('m2_views').build());
+    final String workbook = parts['xl/workbook.xml']!;
+    expect(workbook, contains('<workbookView activeTab="2"/>'));
+    expect(
+      workbook,
+      contains('<sheet name="Hidden" sheetId="6" state="hidden"'),
+    );
+    expect(
+      workbook,
+      contains('<sheet name="VeryHidden" sheetId="7" state="veryHidden"'),
+    );
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      contains(
+        '<pane xSplit="1" ySplit="1" topLeftCell="B2" '
+        'activePane="bottomRight" state="frozen"/>',
+      ),
+    );
+    expect(
+      parts['xl/worksheets/sheet2.xml'],
+      contains('<pane xSplit="2400" ySplit="1200" activePane="bottomRight"/>'),
+    );
+    expect(
+      parts['xl/worksheets/sheet3.xml'],
+      contains(
+        '<sheetPr><tabColor rgb="FFFF0000"/></sheetPr><sheetViews>'
+        '<sheetView showGridLines="0" showRowColHeaders="0" showZeros="0" '
+        'zoomScale="85" workbookViewId="0"/>',
+      ),
+    );
+    expect(parts['xl/worksheets/sheet4.xml'], contains('rightToLeft="1"'));
+    expect(
+      parts['xl/worksheets/sheet5.xml'],
+      contains('<sheetPr><outlinePr summaryBelow="0"/></sheetPr>'),
+    );
+  });
 }

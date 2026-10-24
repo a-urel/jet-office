@@ -709,4 +709,110 @@ void main() {
       );
     });
   });
+
+  group('rule 18: visible sheets and the active tab', () {
+    test('every sheet hidden', () {
+      _expectRule(
+        _broken(
+          'xl/workbook.xml',
+          (String x) => x.replaceAll('sheetId=', 'state="hidden" sheetId='),
+        ),
+        18,
+      );
+    });
+    test('the active tab is hidden', () {
+      _expectRule(
+        _broken(
+          'xl/workbook.xml',
+          (String x) =>
+              x.replaceFirst('sheetId="1"', 'state="veryHidden" sheetId="1"'),
+        ),
+        18,
+      );
+    });
+    test('a hidden tab that is not active is fine', () {
+      expect(
+        checkXlsx(
+          _broken(
+            'xl/workbook.xml',
+            (String x) =>
+                x.replaceFirst('sheetId="2"', 'state="hidden" sheetId="2"'),
+          ),
+        ),
+        isEmpty,
+      );
+    });
+    test('an explicit state="visible" counts as visible', () {
+      expect(
+        checkXlsx(
+          _broken(
+            'xl/workbook.xml',
+            (String x) =>
+                x.replaceFirst('sheetId="1"', 'state="visible" sheetId="1"'),
+          ),
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  group('rule 19: frozen panes', () {
+    Uint8List frozen() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('F')
+        ..freeze(rows: 2, columns: 3)
+        ..row(<Object?>[1]);
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      frozen(),
+      edit: <String, String? Function(String)>{_sheet1: change},
+    );
+
+    test('a valid frozen pane has no violations', () {
+      expect(checkXlsx(frozen()), isEmpty);
+    });
+    test('topLeftCell that is not at the split', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst('topLeftCell="D3"', 'topLeftCell="C4"'),
+        ),
+        19,
+      );
+    });
+    test('a missing topLeftCell', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst(' topLeftCell="D3"', '')),
+        19,
+      );
+    });
+    test('activePane that does not follow the splits', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            'activePane="bottomRight"',
+            'activePane="bottomLeft"',
+          ),
+        ),
+        19,
+      );
+    });
+    test('xSplit dropped but the pane left as bottomRight', () {
+      _expectRule(tamper((String x) => x.replaceFirst('xSplit="3" ', '')), 19);
+    });
+    test('a frozen pane without any split', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('xSplit="3" ySplit="2"', '')),
+        19,
+      );
+    });
+    test('a split pane is not checked', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..split(x: 10, y: 10)
+        ..row(<Object?>[1]);
+      expect(checkXlsx(book.close().bytes), isEmpty);
+    });
+  });
 }

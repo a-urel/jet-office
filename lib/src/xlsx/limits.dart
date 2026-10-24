@@ -49,6 +49,16 @@ abstract final class XlsxLimits {
   /// points. A taller row is a programmer error and throws [ArgumentError].
   static const int maxRowHeight = 409;
 
+  /// The smallest zoom of a sheet view, in percent.
+  ///
+  /// Microsoft's "Excel specifications and limits" page: zoom 10 to 400
+  /// percent. A zoom outside that range is a programmer error and throws
+  /// [ArgumentError] when the view is set.
+  static const int minZoom = 10;
+
+  /// The largest zoom of a sheet view, in percent. See [minZoom].
+  static const int maxZoom = 400;
+
   /// The deepest outline (grouping) level of a row or column; 0 is not
   /// grouped.
   ///

@@ -14,7 +14,9 @@
 /// creation order, the active tab is chosen by the caller, a workbook
 /// without sheets is an error instead of silently gaining `Sheet1`, Excel's
 /// row and column limits are enforced, and data problems are returned as
-/// warnings. Merges, panes, filters, charts and pictures are not ported yet.
+/// warnings. A sheet has a view (zoom, gridlines, frozen or split panes), a
+/// tab color, an outline summary position and a visibility. Merges,
+/// filters, charts and pictures are not ported yet.
 library;
 
 import 'dart:convert';
@@ -25,11 +27,13 @@ import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import '../zip/archive_adapter.dart';
 import 'cell_encoder.dart';
+import 'color.dart';
 import 'column.dart';
 import 'limits.dart';
 import 'properties.dart';
 import 'shared_strings.dart';
 import 'sheet_name.dart';
+import 'sheet_view.dart';
 import 'style.dart';
 import 'style_registry.dart';
 import 'values.dart';
@@ -94,11 +98,19 @@ sealed class XlsxWriterBase {
   /// order sheets are written in, so a summary can be written last and still
   /// come first.
   ///
+  /// A sheet that is [XlsxSheetVisibility.hidden] or
+  /// [XlsxSheetVisibility.veryHidden] gets no visible tab but takes rows as
+  /// any other; a workbook needs at least one visible sheet by `close()`.
+  ///
   /// Throws [RangeError] when [position] is outside `0` to the number of
   /// sheets so far, and [StateError] after `close()` or after a failure.
   /// Rethrows what the sink throws while the open sheet is finished; the
   /// writer has then failed (see [XlsxStreamWriter]).
-  XlsxSheetWriter addSheet(String name, {int? position}) {
+  XlsxSheetWriter addSheet(
+    String name, {
+    int? position,
+    XlsxSheetVisibility visibility = XlsxSheetVisibility.visible,
+  }) {
     _checkOpen();
     if (position != null) {
       RangeError.checkValueInInterval(position, 0, _tabs.length, 'position');
@@ -109,6 +121,7 @@ sealed class XlsxWriterBase {
       this,
       _namer.assign(name),
       _tabs.length + 1,
+      visibility,
     );
     _tabs.insert(position ?? _tabs.length, sheet);
     _open = sheet;
@@ -117,10 +130,12 @@ sealed class XlsxWriterBase {
 
   /// Makes [sheet] the tab Excel shows when the file is opened.
   ///
-  /// Without a call, the first tab in tab order is active. The tab index is
-  /// resolved at `close()`, so later inserts before [sheet] keep it active.
+  /// Without a call, the first visible tab in tab order is active. The tab
+  /// index is resolved at `close()`, so later inserts before [sheet] keep it
+  /// active.
   ///
-  /// Throws [ArgumentError] when [sheet] was not added to this writer, and
+  /// Throws [ArgumentError] when [sheet] was not added to this writer or is
+  /// hidden (a hidden sheet cannot be the one Excel opens on), and
   /// [StateError] after `close()` or after a failure.
   void setActiveSheet(XlsxSheetWriter sheet) {
     _checkOpen();
@@ -129,6 +144,13 @@ sealed class XlsxWriterBase {
         sheet.name,
         'sheet',
         'Not a sheet of this writer.',
+      );
+    }
+    if (sheet.visibility != XlsxSheetVisibility.visible) {
+      throw ArgumentError.value(
+        sheet.name,
+        'sheet',
+        'A ${sheet.visibility.name} sheet cannot be the active sheet.',
       );
     }
     _active = sheet;
@@ -168,6 +190,12 @@ sealed class XlsxWriterBase {
     if (_tabs.isEmpty) {
       throw StateError('A workbook needs at least one sheet; add one first.');
     }
+    if (_activeTab() < 0) {
+      throw StateError(
+        'A workbook needs at least one visible sheet; every sheet is hidden. '
+        'Add a visible sheet first.',
+      );
+    }
     return _zipWork(() {
       _open?._finish();
       _open = null;
@@ -177,10 +205,19 @@ sealed class XlsxWriterBase {
     });
   }
 
+  /// The tab index Excel opens on: the sheet chosen with [setActiveSheet],
+  /// else the first visible tab; -1 when no tab is visible.
+  int _activeTab() {
+    final _SheetWriter? chosen = _active;
+    if (chosen != null) return _tabs.indexOf(chosen);
+    return _tabs.indexWhere(
+      (_SheetWriter s) => s.visibility == XlsxSheetVisibility.visible,
+    );
+  }
+
   /// Writes the workbook-level parts and finishes the ZIP.
   Uint8List? _writeWorkbookParts() {
     final int sheetCount = _tabs.length;
-    final _SheetWriter active = _active ?? _tabs.first;
     _zip
       ..add('xl/sharedStrings.xml', _render(_strings.writeXml))
       ..add('xl/styles.xml', _render(_styles.writeStylesXml))
@@ -191,9 +228,9 @@ sealed class XlsxWriterBase {
             w,
             tabs: <WorkbookSheet>[
               for (final _SheetWriter s in _tabs)
-                (name: s.name, number: s._number),
+                (name: s.name, number: s._number, visibility: s.visibility),
             ],
-            activeTab: _tabs.indexOf(active),
+            activeTab: _activeTab(),
             fullCalcOnLoad: _encoder.wroteFormula,
           ),
         ),
@@ -288,9 +325,10 @@ final class XlsxResult {
 /// class cannot be implemented or extended outside this package. A sheet
 /// accepts rows until the next `addSheet` or `close()` finishes it.
 ///
-/// The header settings, [columns] and [defaultSizes], describe the sheet as
-/// a whole and must come before the first [row] or [blankRow]; after that
-/// they throw [StateError]. Calling one again before the first row replaces
+/// The header settings, [columns], [defaultSizes], [view], [freeze],
+/// [split], [tabColor] and [outlineSummary], describe the sheet as a whole
+/// and must come before the first [row] or [blankRow]; after that they throw
+/// [StateError]. Calling one again before the first row replaces
 /// what the earlier call set.
 abstract final class XlsxSheetWriter {
   /// The sheet's name in the file, after any renaming (see
@@ -327,6 +365,50 @@ abstract final class XlsxSheetWriter {
   /// [rowHeight] outside 0 to [XlsxLimits.maxRowHeight] or a [columnWidth]
   /// outside 0 to [XlsxLimits.maxColumnWidth]; nothing is recorded then.
   void defaultSizes({double? rowHeight, double? columnWidth});
+
+  /// Whether the sheet is shown as a tab; set by
+  /// [XlsxWriterBase.addSheet].
+  XlsxSheetVisibility get visibility;
+
+  /// Sets how the sheet is shown: zoom, gridlines, headings, right-to-left
+  /// and its panes. Replaces the whole earlier view, its pane included.
+  ///
+  /// Throws [StateError] like [columns], and [ArgumentError] for a zoom
+  /// outside [XlsxLimits.minZoom] to [XlsxLimits.maxZoom] or an invalid pane
+  /// (see [freeze] and [split]); nothing is recorded then.
+  void view(XlsxSheetView view);
+
+  /// Freezes the first [rows] rows and [columns] columns, so they stay in
+  /// view while the rest scrolls. The rest of the current view (zoom and so
+  /// on) is kept; the earlier pane, if any, is replaced. Freezing 0 rows and
+  /// 0 columns writes no pane, so a header count computed from the data may
+  /// be 0.
+  ///
+  /// Throws [StateError] like [columns], and [ArgumentError] for [rows]
+  /// outside 0 to 1,048,575 or [columns] outside 0 to 16,383; nothing is
+  /// recorded then.
+  void freeze({int rows = 0, int columns = 0});
+
+  /// Splits the sheet into panes [x] points from the left edge and [y]
+  /// points from the top. The rest of the current view is kept; the earlier
+  /// pane, if any, is replaced. A split of 0 on both axes writes no pane.
+  ///
+  /// Throws [StateError] like [columns], and [ArgumentError] for an offset
+  /// that is negative, NaN or infinite; nothing is recorded then.
+  void split({double x = 0, double y = 0});
+
+  /// Colors the sheet's tab. A later call replaces the earlier one.
+  ///
+  /// Throws [StateError] like [columns], and [ArgumentError] for a color out
+  /// of range (see [XlsxColor]); nothing is recorded then.
+  void tabColor(XlsxColor color);
+
+  /// Sets where the summary row and column of an outline group (see
+  /// [row]'s `outlineLevel` and [columns]) sit: [below] its detail rows and
+  /// [right] of its detail columns, as Excel does by default.
+  ///
+  /// Throws [StateError] like [columns].
+  void outlineSummary({bool below = true, bool right = true});
 
   /// Appends a row whose cells hold [values], from column A on.
   ///
@@ -387,7 +469,7 @@ abstract final class XlsxSheetWriter {
 /// when the sheet is finished and handed to the ZIP with the body's chunks
 /// and the trailer, so the body is never joined into one array.
 final class _SheetWriter implements XlsxSheetWriter {
-  _SheetWriter(this._book, this.name, this._number) {
+  _SheetWriter(this._book, this.name, this._number, this.visibility) {
     final Utf8Buffer body = Utf8Buffer();
     _body = body;
     _xml = XmlWriter(body);
@@ -400,6 +482,9 @@ final class _SheetWriter implements XlsxSheetWriter {
 
   @override
   final String name;
+
+  @override
+  final XlsxSheetVisibility visibility;
 
   /// The rows so far and their writer; null once the sheet is finished.
   Utf8Buffer? _body;
@@ -416,6 +501,10 @@ final class _SheetWriter implements XlsxSheetWriter {
   double? _defaultRowHeight;
   double? _defaultColumnWidth;
   int _outlineLevelRow = 0;
+  XlsxSheetView _view = const XlsxSheetView();
+  XlsxColor? _tabColor;
+  bool _summaryBelow = true;
+  bool _summaryRight = true;
 
   @override
   int get rowCount => _rowCount;
@@ -461,6 +550,43 @@ final class _SheetWriter implements XlsxSheetWriter {
     if (columnWidth != null) checkColumnWidth(columnWidth, 'columnWidth');
     _defaultRowHeight = rowHeight;
     _defaultColumnWidth = columnWidth;
+  }
+
+  @override
+  void view(XlsxSheetView view) {
+    _checkHeaderOpen('view');
+    checkSheetView(view);
+    _view = view;
+  }
+
+  @override
+  void freeze({int rows = 0, int columns = 0}) {
+    _checkHeaderOpen('freeze');
+    final XlsxPane pane = XlsxPane.frozen(rows: rows, columns: columns);
+    checkPane(pane);
+    _view = _view.copyWith(pane: pane);
+  }
+
+  @override
+  void split({double x = 0, double y = 0}) {
+    _checkHeaderOpen('split');
+    final XlsxPane pane = XlsxPane.split(x: x, y: y);
+    checkPane(pane);
+    _view = _view.copyWith(pane: pane);
+  }
+
+  @override
+  void tabColor(XlsxColor color) {
+    _checkHeaderOpen('tabColor');
+    validateColor(color, 'color');
+    _tabColor = color;
+  }
+
+  @override
+  void outlineSummary({bool below = true, bool right = true}) {
+    _checkHeaderOpen('outlineSummary');
+    _summaryBelow = below;
+    _summaryRight = right;
   }
 
   @override
@@ -606,6 +732,10 @@ final class _SheetWriter implements XlsxSheetWriter {
       defaultColumnWidth: _defaultColumnWidth,
       defaultRowHeight: _defaultRowHeight,
       outlineLevelRow: _outlineLevelRow,
+      view: _view,
+      tabColor: _tabColor,
+      summaryBelow: _summaryBelow,
+      summaryRight: _summaryRight,
     );
     _book._zip.addChunks(worksheetPartName(_number), <Uint8List>[
       utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),

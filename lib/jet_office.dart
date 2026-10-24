@@ -31,6 +31,8 @@ export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/number_format.dart' show XlsxNumFmt;
 export 'src/xlsx/properties.dart' show XlsxProperties;
 export 'src/xlsx/range.dart' show XlsxRange;
+export 'src/xlsx/sheet_view.dart'
+    show XlsxPane, XlsxSheetView, XlsxSheetVisibility;
 export 'src/xlsx/style.dart' show XlsxStyle;
 export 'src/xlsx/values.dart' show XlsxCell, XlsxDate, XlsxDecimal, XlsxFormula;
 export 'src/xlsx/warnings.dart' show XlsxLocale, XlsxWarning, XlsxWarningCode;

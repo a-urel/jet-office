@@ -1,3 +1,4 @@
+import 'package:jet_office/jet_office.dart' show XlsxSheetVisibility;
 import 'package:jet_office/src/opc/ooxml.dart';
 import 'package:jet_office/src/xlsx/workbook_parts.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
@@ -18,9 +19,21 @@ void main() {
         (XmlWriter w) => writeWorkbook(
           w,
           tabs: const <WorkbookSheet>[
-            (name: 'Summary', number: 3),
-            (name: 'Detail A', number: 1),
-            (name: 'Detail B', number: 2),
+            (
+              name: 'Summary',
+              number: 3,
+              visibility: XlsxSheetVisibility.visible,
+            ),
+            (
+              name: 'Detail A',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+            ),
+            (
+              name: 'Detail B',
+              number: 2,
+              visibility: XlsxSheetVisibility.visible,
+            ),
           ],
           activeTab: 0,
           fullCalcOnLoad: false,
@@ -38,13 +51,44 @@ void main() {
       );
     });
 
+    test('writes state for a hidden and a very hidden sheet', () {
+      final String xml = _render(
+        (XmlWriter w) => writeWorkbook(
+          w,
+          tabs: const <WorkbookSheet>[
+            (name: 'V', number: 1, visibility: XlsxSheetVisibility.visible),
+            (name: 'H', number: 2, visibility: XlsxSheetVisibility.hidden),
+            (name: 'X', number: 3, visibility: XlsxSheetVisibility.veryHidden),
+          ],
+          activeTab: 0,
+          fullCalcOnLoad: false,
+        ),
+      );
+      expect(
+        xml,
+        contains(
+          '<sheet name="V" sheetId="1" r:id="rId1"/>'
+          '<sheet name="H" sheetId="2" state="hidden" r:id="rId2"/>'
+          '<sheet name="X" sheetId="3" state="veryHidden" r:id="rId3"/>',
+        ),
+      );
+    });
+
     test('escapes _xHHHH_ in a sheet name, then XML-escapes it', () {
       final String xml = _render(
         (XmlWriter w) => writeWorkbook(
           w,
           tabs: const <WorkbookSheet>[
-            (name: '_x0041_', number: 1),
-            (name: 'a&_x0042_', number: 2),
+            (
+              name: '_x0041_',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+            ),
+            (
+              name: 'a&_x0042_',
+              number: 2,
+              visibility: XlsxSheetVisibility.visible,
+            ),
           ],
           activeTab: 0,
           fullCalcOnLoad: false,
@@ -58,7 +102,9 @@ void main() {
       final String xml = _render(
         (XmlWriter w) => writeWorkbook(
           w,
-          tabs: const <WorkbookSheet>[(name: 'A', number: 1)],
+          tabs: const <WorkbookSheet>[
+            (name: 'A', number: 1, visibility: XlsxSheetVisibility.visible),
+          ],
           activeTab: 0,
           fullCalcOnLoad: true,
         ),
@@ -71,8 +117,12 @@ void main() {
         (XmlWriter w) => writeWorkbook(
           w,
           tabs: const <WorkbookSheet>[
-            (name: 'P&L "2026"', number: 1),
-            (name: 'B', number: 2),
+            (
+              name: 'P&L "2026"',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+            ),
+            (name: 'B', number: 2, visibility: XlsxSheetVisibility.visible),
           ],
           activeTab: 1,
           fullCalcOnLoad: false,

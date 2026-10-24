@@ -1098,4 +1098,405 @@ void main() {
       expect(checkXlsx(book.close().bytes), isEmpty);
     });
   });
+
+  group('views, panes, tab color and visibility', () {
+    String sheetXml(XlsxWriter book, [int n = 1]) =>
+        readXlsx(book.close().bytes)['xl/worksheets/sheet$n.xml']!;
+
+    String views(void Function(XlsxSheetWriter s) set) {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter s = book.addSheet('S');
+      set(s);
+      s.row(<Object?>[1]);
+      final String xml = sheetXml(book);
+      final int start = xml.indexOf('<sheetViews>');
+      return xml.substring(start, xml.indexOf('</sheetViews>') + 13);
+    }
+
+    test('the default view is the M1 bytes, with no sheetPr', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S').row(<Object?>[1]);
+      final String xml = sheetXml(book);
+      expect(xml, isNot(contains('sheetPr')));
+      expect(
+        xml,
+        contains(
+          '<worksheet xmlns="$_main" xmlns:r="$_rel">'
+          '<sheetViews><sheetView workbookViewId="0"/></sheetViews>'
+          '<sheetData>',
+        ),
+      );
+    });
+
+    test('view writes every option', () {
+      expect(
+        views(
+          (XlsxSheetWriter s) => s.view(
+            const XlsxSheetView(
+              zoom: 85,
+              showGridLines: false,
+              showHeadings: false,
+              rightToLeft: true,
+              showZeros: false,
+              showFormulas: true,
+            ),
+          ),
+        ),
+        '<sheetViews><sheetView showFormulas="1" showGridLines="0" '
+        'showRowColHeaders="0" showZeros="0" rightToLeft="1" '
+        'zoomScale="85" workbookViewId="0"/></sheetViews>',
+      );
+    });
+
+    test('freeze rows writes bottomLeft, not Quds\' bottomRight', () {
+      expect(
+        views((XlsxSheetWriter s) => s.freeze(rows: 1)),
+        '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" '
+        'topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'
+        '<selection pane="bottomLeft"/></sheetView></sheetViews>',
+      );
+    });
+
+    test('freeze columns, and rows with columns', () {
+      expect(
+        views((XlsxSheetWriter s) => s.freeze(columns: 2)),
+        contains(
+          '<pane xSplit="2" topLeftCell="C1" activePane="topRight" '
+          'state="frozen"/><selection pane="topRight"/>',
+        ),
+      );
+      expect(
+        views((XlsxSheetWriter s) => s.freeze(rows: 1, columns: 1)),
+        contains(
+          '<pane xSplit="1" ySplit="1" topLeftCell="B2" '
+          'activePane="bottomRight" state="frozen"/>'
+          '<selection pane="bottomRight"/>',
+        ),
+      );
+    });
+
+    test('freeze of zero rows and columns writes no pane', () {
+      expect(
+        views((XlsxSheetWriter s) => s.freeze()),
+        '<sheetViews><sheetView workbookViewId="0"/></sheetViews>',
+      );
+    });
+
+    test('split is written in twips', () {
+      expect(
+        views((XlsxSheetWriter s) => s.split(x: 100, y: 50)),
+        contains(
+          '<pane xSplit="2000" ySplit="1000" activePane="bottomRight"/>'
+          '<selection pane="bottomRight"/>',
+        ),
+      );
+    });
+
+    test('freeze keeps the rest of the view; view replaces all of it', () {
+      expect(
+        views(
+          (XlsxSheetWriter s) => s
+            ..view(const XlsxSheetView(zoom: 85, showGridLines: false))
+            ..freeze(rows: 1),
+        ),
+        '<sheetViews><sheetView showGridLines="0" zoomScale="85" '
+        'workbookViewId="0"><pane ySplit="1" topLeftCell="A2" '
+        'activePane="bottomLeft" state="frozen"/>'
+        '<selection pane="bottomLeft"/></sheetView></sheetViews>',
+      );
+      expect(
+        views(
+          (XlsxSheetWriter s) => s
+            ..freeze(rows: 1)
+            ..view(const XlsxSheetView(zoom: 85)),
+        ),
+        '<sheetViews><sheetView zoomScale="85" workbookViewId="0"/>'
+        '</sheetViews>',
+      );
+      expect(
+        views(
+          (XlsxSheetWriter s) => s
+            ..freeze(rows: 1)
+            ..split(x: 10),
+        ),
+        contains('<pane xSplit="200" activePane="topRight"/>'),
+      );
+    });
+
+    test('tabColor and outlineSummary write sheetPr first', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..tabColor(const XlsxColor.rgb(0xFF0000))
+        ..outlineSummary(below: false)
+        ..row(<Object?>[1]);
+      final String xml = sheetXml(book);
+      expect(
+        xml,
+        contains(
+          '<worksheet xmlns="$_main" xmlns:r="$_rel">'
+          '<sheetPr><tabColor rgb="FFFF0000"/>'
+          '<outlinePr summaryBelow="0"/></sheetPr><sheetViews>',
+        ),
+      );
+    });
+
+    test('outlineSummary with the defaults writes no sheetPr', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..outlineSummary(below: false)
+        ..outlineSummary()
+        ..row(<Object?>[1]);
+      expect(sheetXml(book), isNot(contains('sheetPr')));
+    });
+
+    test('a workbook with views passes the checker', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('A')
+        ..freeze(rows: 1, columns: 2)
+        ..tabColor(const XlsxColor.theme(3))
+        ..row(<Object?>[1]);
+      book.addSheet('B')
+        ..split(x: 10, y: 20)
+        ..row(<Object?>[1]);
+      expect(checkXlsx(book.close().bytes), isEmpty);
+    });
+
+    group('settings are frozen at the first row', () {
+      final Map<String, void Function(XlsxSheetWriter)> settings =
+          <String, void Function(XlsxSheetWriter)>{
+            'view': (XlsxSheetWriter s) => s.view(const XlsxSheetView()),
+            'freeze': (XlsxSheetWriter s) => s.freeze(rows: 1),
+            'split': (XlsxSheetWriter s) => s.split(x: 1),
+            'tabColor': (XlsxSheetWriter s) =>
+                s.tabColor(const XlsxColor.rgb(0xFF0000)),
+            'outlineSummary': (XlsxSheetWriter s) =>
+                s.outlineSummary(below: false),
+          };
+      settings.forEach((String name, void Function(XlsxSheetWriter) set) {
+        test('$name after blankRow writes nothing', () {
+          final XlsxWriter book = XlsxWriter();
+          final XlsxSheetWriter s = book.addSheet('S')..blankRow();
+          expect(
+            () => set(s),
+            throwsA(
+              isA<StateError>().having(
+                (StateError e) => e.message,
+                'message',
+                allOf(contains('"S"'), contains(name)),
+              ),
+            ),
+          );
+          final String xml = sheetXml(book);
+          expect(xml, isNot(contains('sheetPr')));
+          expect(xml, isNot(contains('<pane')));
+          expect(xml, contains('<sheetView workbookViewId="0"/>'));
+        });
+        test('$name after row, and on a finished sheet', () {
+          final XlsxWriter book = XlsxWriter();
+          final XlsxSheetWriter s = book.addSheet('S')..row(<Object?>[1]);
+          expect(() => set(s), throwsStateError);
+          final XlsxSheetWriter fresh = book.addSheet('T');
+          expect(() => set(s), throwsStateError);
+          set(fresh);
+        });
+      });
+    });
+
+    group('invalid values throw and record nothing', () {
+      void expectRejected(void Function(XlsxSheetWriter s) bad, String field) {
+        final XlsxWriter book = XlsxWriter();
+        final XlsxSheetWriter s = book.addSheet('S')
+          ..view(const XlsxSheetView(zoom: 85));
+        expect(
+          () => bad(s),
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError e) => e.name,
+              'name',
+              field,
+            ),
+          ),
+        );
+        s.row(<Object?>[1]);
+        final String xml = sheetXml(book);
+        expect(xml, contains('zoomScale="85"'));
+        expect(xml, isNot(contains('<pane')));
+        expect(xml, isNot(contains('sheetPr')));
+      }
+
+      test('zoom', () {
+        expectRejected(
+          (XlsxSheetWriter s) => s.view(const XlsxSheetView(zoom: 9)),
+          'zoom',
+        );
+        expectRejected(
+          (XlsxSheetWriter s) => s.view(const XlsxSheetView(zoom: 401)),
+          'zoom',
+        );
+      });
+
+      test('a pane inside view', () {
+        expectRejected(
+          (XlsxSheetWriter s) =>
+              s.view(const XlsxSheetView(pane: XlsxPane.frozen(rows: -1))),
+          'rows',
+        );
+        expectRejected(
+          (XlsxSheetWriter s) =>
+              s.view(const XlsxSheetView(pane: XlsxPane.split(x: -1))),
+          'x',
+        );
+      });
+
+      test('freeze rows and columns', () {
+        expectRejected((XlsxSheetWriter s) => s.freeze(rows: -1), 'rows');
+        expectRejected((XlsxSheetWriter s) => s.freeze(rows: 1048576), 'rows');
+        expectRejected((XlsxSheetWriter s) => s.freeze(columns: -1), 'columns');
+        expectRejected(
+          (XlsxSheetWriter s) => s.freeze(columns: 16384),
+          'columns',
+        );
+      });
+
+      test('the last row and column can be frozen', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('S')
+          ..freeze(rows: 1048575, columns: 16383)
+          ..row(<Object?>[1]);
+        expect(sheetXml(book), contains('topLeftCell="XFD1048576"'));
+      });
+
+      test('split', () {
+        expectRejected((XlsxSheetWriter s) => s.split(x: -1), 'x');
+        expectRejected((XlsxSheetWriter s) => s.split(y: -1), 'y');
+        expectRejected((XlsxSheetWriter s) => s.split(x: double.nan), 'x');
+        expectRejected((XlsxSheetWriter s) => s.split(y: double.nan), 'y');
+        expectRejected((XlsxSheetWriter s) => s.split(x: double.infinity), 'x');
+      });
+
+      test('a tab color that is out of range', () {
+        expectRejected(
+          (XlsxSheetWriter s) => s.tabColor(const XlsxColor.theme(99)),
+          'color',
+        );
+      });
+    });
+
+    group('visibility', () {
+      String workbookXml(XlsxWriter book) =>
+          readXlsx(book.close().bytes)['xl/workbook.xml']!;
+
+      test('a sheet is visible by default', () {
+        final XlsxWriter book = XlsxWriter();
+        expect(book.addSheet('S').visibility, XlsxSheetVisibility.visible);
+        expect(workbookXml(book), contains('<sheet name="S" sheetId="1" r:id'));
+        expect(
+          workbookXml(XlsxWriter()..addSheet('S')),
+          isNot(contains('state')),
+        );
+      });
+
+      test('hidden and veryHidden are written as the state', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('V');
+        final XlsxSheetWriter h = book.addSheet(
+          'H',
+          visibility: XlsxSheetVisibility.hidden,
+        );
+        book.addSheet('X', visibility: XlsxSheetVisibility.veryHidden);
+        expect(h.visibility, XlsxSheetVisibility.hidden);
+        final String wb = workbookXml(book);
+        expect(wb, contains('<sheet name="H" sheetId="2" state="hidden" '));
+        expect(wb, contains('<sheet name="X" sheetId="3" state="veryHidden" '));
+      });
+
+      test('setActiveSheet on a hidden sheet throws and changes nothing', () {
+        for (final XlsxSheetVisibility v in <XlsxSheetVisibility>[
+          XlsxSheetVisibility.hidden,
+          XlsxSheetVisibility.veryHidden,
+        ]) {
+          final XlsxWriter book = XlsxWriter();
+          final XlsxSheetWriter a = book.addSheet('A');
+          final XlsxSheetWriter b = book.addSheet('B');
+          final XlsxSheetWriter hidden = book.addSheet('H', visibility: v);
+          book.setActiveSheet(b);
+          expect(() => book.setActiveSheet(hidden), throwsArgumentError);
+          expect(a.name, 'A');
+          expect(workbookXml(book), contains('<workbookView activeTab="1"/>'));
+        }
+      });
+
+      test('the first visible tab is active when the first is hidden', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('H', visibility: XlsxSheetVisibility.hidden);
+        book.addSheet('X', visibility: XlsxSheetVisibility.veryHidden);
+        book.addSheet('V');
+        final String wb = workbookXml(book);
+        expect(wb, contains('<workbookView activeTab="2"/>'));
+      });
+
+      test('tab order decides which visible tab is first', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('H', visibility: XlsxSheetVisibility.hidden);
+        book.addSheet('V');
+        book.addSheet('First', position: 0);
+        expect(workbookXml(book), contains('<workbookView activeTab="0"/>'));
+      });
+
+      test('close with every sheet hidden throws and can be retried', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('H', visibility: XlsxSheetVisibility.hidden).row(
+          <Object?>[1],
+        );
+        expect(
+          book.close,
+          throwsA(
+            isA<StateError>().having(
+              (StateError e) => e.message,
+              'message',
+              contains('visible'),
+            ),
+          ),
+        );
+        book.addSheet('V');
+        final XlsxResult out = book.close();
+        expect(checkXlsx(out.bytes), isEmpty);
+        expect(
+          readXlsx(out.bytes)['xl/workbook.xml'],
+          contains('state="hidden"'),
+        );
+      });
+
+      test('the stream writer sends no workbook part before it throws', () {
+        final _CollectingSink sink = _CollectingSink();
+        final XlsxStreamWriter book = XlsxStreamWriter(sink);
+        book.addSheet('H', visibility: XlsxSheetVisibility.veryHidden);
+        book.addSheet('H2', visibility: XlsxSheetVisibility.hidden);
+        expect(book.close, throwsStateError);
+        expect(sink.closed, isFalse);
+        expect(
+          String.fromCharCodes(sink.bytes),
+          isNot(contains('workbook.xml')),
+        );
+        book.addSheet('V').row(<Object?>[1]);
+        book.close();
+        expect(sink.closed, isTrue);
+        expect(checkXlsx(sink.bytes), isEmpty);
+      });
+
+      test('a hidden sheet still takes rows', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('V');
+        book.addSheet('H', visibility: XlsxSheetVisibility.hidden).row(
+          <Object?>['x'],
+        );
+        final XlsxResult out = book.close();
+        expect(
+          readXlsx(out.bytes)['xl/worksheets/sheet2.xml'],
+          contains('<row'),
+        );
+        expect(checkXlsx(out.bytes), isEmpty);
+      });
+    });
+  });
 }

@@ -13,6 +13,7 @@ List<Fixture> m2Fixtures() => <Fixture>[
   _styles(),
   _columnsRows(),
   _stylePrecedence(),
+  _views(),
 ];
 
 /// The text in column A of every row that does not show a number format.
@@ -433,4 +434,88 @@ Fixture _stylePrecedence() {
       XlsxWarningCode.dateInNonDateFormat: 1,
     },
   );
+}
+
+/// The rows of `m2_views`' `Frozen` sheet: a header and 40 data rows.
+final List<_LayoutRow> _frozenRows = <_LayoutRow>[
+  _row(<Object?>['Row', 'Square', 'Label'], style: _bold),
+  for (int i = 1; i <= 40; i++) _row(<Object?>[i, i * i, 'Item $i']),
+];
+
+final List<_LayoutRow> _splitRows = <_LayoutRow>[
+  for (int i = 1; i <= 30; i++) _row(<Object?>['Split $i', i, i * 2]),
+];
+
+/// A `0` cell, which the `View` sheet hides, between two others.
+final List<_LayoutRow> _viewRows = <_LayoutRow>[
+  _row(<Object?>['zoom 85, no gridlines, no headings', 0, 7]),
+];
+
+/// Arabic and Hebrew text, written as is.
+final List<_LayoutRow> _rtlRows = <_LayoutRow>[
+  _row(<Object?>['مرحبا بالعالم', 'שלום עולם', 1]),
+];
+
+/// Rows 2 and 3 group under the summary row 1, which sits above them.
+final List<_LayoutRow> _outlineRows = <_LayoutRow>[
+  _row(<Object?>['summary (above)', 6]),
+  _row(<Object?>['detail a', 1], outlineLevel: 1),
+  _row(<Object?>['detail b', 5], outlineLevel: 1),
+];
+
+final List<_LayoutRow> _hiddenRows = <_LayoutRow>[
+  _row(<Object?>['a hidden sheet', 1]),
+];
+
+final List<_LayoutRow> _veryHiddenRows = <_LayoutRow>[
+  _row(<Object?>['a very hidden sheet', 2]),
+];
+
+Fixture _views() {
+  final Map<String, List<_LayoutRow>> sheets = <String, List<_LayoutRow>>{
+    'Frozen': _frozenRows,
+    'Split': _splitRows,
+    'View': _viewRows,
+    'RTL': _rtlRows,
+    'Outline': _outlineRows,
+    'Hidden': _hiddenRows,
+    'VeryHidden': _veryHiddenRows,
+  };
+  return Fixture('m2_views', _storedOf(sheets), _expectedOf(sheets), () {
+    final XlsxWriter book = XlsxWriter();
+    _writeRows(
+      book.addSheet('Frozen')..freeze(rows: 1, columns: 1),
+      _frozenRows,
+    );
+    _writeRows(book.addSheet('Split')..split(x: 120, y: 60), _splitRows);
+    final XlsxSheetWriter view = book.addSheet('View')
+      ..view(
+        const XlsxSheetView(
+          zoom: 85,
+          showGridLines: false,
+          showHeadings: false,
+          showZeros: false,
+        ),
+      )
+      ..tabColor(const XlsxColor.rgb(0xFF0000));
+    _writeRows(view, _viewRows);
+    _writeRows(
+      book.addSheet('RTL')..view(const XlsxSheetView(rightToLeft: true)),
+      _rtlRows,
+    );
+    _writeRows(
+      book.addSheet('Outline')..outlineSummary(below: false),
+      _outlineRows,
+    );
+    _writeRows(
+      book.addSheet('Hidden', visibility: XlsxSheetVisibility.hidden),
+      _hiddenRows,
+    );
+    _writeRows(
+      book.addSheet('VeryHidden', visibility: XlsxSheetVisibility.veryHidden),
+      _veryHiddenRows,
+    );
+    book.setActiveSheet(view);
+    return book.close();
+  });
 }

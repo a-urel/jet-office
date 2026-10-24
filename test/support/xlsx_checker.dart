@@ -32,7 +32,13 @@
 ///     without overlapping, and `style` is below the `cellXfs` count;
 /// 17. every `row/@outlineLevel` and `col/@outlineLevel` is in `0..7` and
 ///     at most `sheetFormatPr/@outlineLevelRow` or `@outlineLevelCol`
-///     (0 when absent), and every `row/@ht` is in `0..409`.
+///     (0 when absent), and every `row/@ht` is in `0..409`;
+/// 18. at least one `sheet` has no `state` (or `state="visible"`), and the
+///     `activeTab` sheet is not hidden;
+/// 19. a frozen `pane` has `topLeftCell` at the cell (`ySplit`, `xSplit`),
+///     and `activePane` is `bottomRight` when both splits are non-zero,
+///     `topRight` when only `xSplit` is and `bottomLeft` when only `ySplit`
+///     is; a frozen pane with neither split is wrong too.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -45,6 +51,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:jet_office/src/xlsx/cell_ref.dart' show cellRef;
 import 'package:jet_office/src/xlsx/sheet_name.dart' show sheetNameKey;
 import 'package:xml/xml.dart';
 
@@ -97,6 +104,8 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkWorksheetOrder(docs, violations);
   _checkColumns(docs, violations);
   _checkOutlines(docs, violations);
+  _checkVisibility(docs, violations);
+  _checkFrozenPanes(docs, violations);
   return violations;
 }
 
@@ -667,6 +676,78 @@ void _checkOutlines(Map<String, XmlDocument> docs, List<String> violations) {
         violations.add(
           'rule 17: ${sheet.key}: row ${_attr(row, 'r')} has ht "$text"; '
           'expected 0..409',
+        );
+      }
+    }
+  }
+}
+
+/// Rule 18.
+void _checkVisibility(Map<String, XmlDocument> docs, List<String> violations) {
+  final XmlDocument? doc = docs[_workbookPart];
+  if (doc == null) return;
+  final List<XmlElement> sheets = _all(doc, 'sheet').toList();
+  if (sheets.isEmpty) return;
+  bool hidden(XmlElement sheet) {
+    final String? state = sheet.getAttribute('state');
+    return state != null && state != 'visible';
+  }
+
+  if (sheets.every(hidden)) {
+    violations.add('rule 18: every sheet is hidden; one must be visible');
+  }
+  for (final XmlElement view in _all(doc, 'workbookView')) {
+    final int? index = int.tryParse(view.getAttribute('activeTab') ?? '0');
+    if (index != null &&
+        index >= 0 &&
+        index < sheets.length &&
+        hidden(sheets[index])) {
+      violations.add(
+        'rule 18: activeTab $index is the sheet '
+        '"${_attr(sheets[index], 'name')}", which is '
+        '${_attr(sheets[index], 'state')}',
+      );
+    }
+  }
+}
+
+/// Rule 19.
+void _checkFrozenPanes(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement pane in _all(sheet.value, 'pane')) {
+      if (pane.getAttribute('state') != 'frozen') continue;
+      final int x = int.tryParse(pane.getAttribute('xSplit') ?? '0') ?? -1;
+      final int y = int.tryParse(pane.getAttribute('ySplit') ?? '0') ?? -1;
+      if (x < 0 || y < 0 || (x == 0 && y == 0)) {
+        violations.add(
+          'rule 19: ${sheet.key}: frozen pane has xSplit '
+          '"${_attr(pane, 'xSplit')}" and ySplit "${_attr(pane, 'ySplit')}"; '
+          'expected whole numbers, one at least 1',
+        );
+        continue;
+      }
+      String topLeft;
+      try {
+        topLeft = cellRef(y, x);
+      } on RangeError {
+        topLeft = '';
+      }
+      if (pane.getAttribute('topLeftCell') != topLeft) {
+        violations.add(
+          'rule 19: ${sheet.key}: frozen pane topLeftCell is '
+          '"${_attr(pane, 'topLeftCell')}"; the splits ($x, $y) put it at '
+          '"$topLeft"',
+        );
+      }
+      final String active = x == 0
+          ? 'bottomLeft'
+          : y == 0
+          ? 'topRight'
+          : 'bottomRight';
+      if (pane.getAttribute('activePane') != active) {
+        violations.add(
+          'rule 19: ${sheet.key}: frozen pane activePane is '
+          '"${_attr(pane, 'activePane')}"; the splits make it "$active"',
         );
       }
     }

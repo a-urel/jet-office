@@ -9,16 +9,22 @@
 /// into one `<col>`; columns carry a style, visibility and outline level;
 /// `sheetFormatPr` carries the default sizes and the deepest outline levels;
 /// numbers are written with `formatXmlDouble`, so the VM and the browser
-/// agree. Panes, filters and merges are not ported here yet.
+/// agree; `sheetPr` carries the tab color and the outline summary position;
+/// `sheetView` carries zoom, gridlines, headings, zeros, formulas and
+/// right-to-left, and the pane of `sheet_view.dart` with its `selection`.
+/// Filters and merges are not ported here yet.
 ///
-/// Children follow the `CT_Worksheet` order: `sheetViews`, `sheetFormatPr`
-/// and `cols` before `sheetData`.
+/// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
+/// `sheetFormatPr` and `cols` before `sheetData`.
 library;
 
 import '../opc/ooxml.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
+import 'cell_ref.dart';
+import 'color.dart';
 import 'limits.dart';
+import 'sheet_view.dart';
 
 /// The width Excel gives a column of Calibri 11 when nothing sets one: 8.43
 /// characters plus padding, as Excel itself writes it.
@@ -50,6 +56,10 @@ final class WorksheetSettings {
     this.defaultColumnWidth,
     this.defaultRowHeight,
     this.outlineLevelRow = 0,
+    this.view = const XlsxSheetView(),
+    this.tabColor,
+    this.summaryBelow = true,
+    this.summaryRight = true,
   });
 
   /// The columns from A on; `null` keeps a column at its default.
@@ -63,10 +73,24 @@ final class WorksheetSettings {
 
   /// The deepest outline level of the rows written.
   final int outlineLevelRow;
+
+  /// How the sheet is shown: zoom, gridlines, headings and panes.
+  final XlsxSheetView view;
+
+  /// The color of the sheet's tab, or `null` for none.
+  final XlsxColor? tabColor;
+
+  /// Whether the summary row of an outline group is below its detail rows.
+  final bool summaryBelow;
+
+  /// Whether the summary column of an outline group is right of its detail
+  /// columns.
+  final bool summaryRight;
 }
 
 /// The `<worksheet>` frame before the rows: the XML declaration, the
-/// `<worksheet>` start tag, `sheetViews`, `sheetFormatPr` when a default
+/// `<worksheet>` start tag, `sheetPr` when a tab color or an outline summary
+/// position calls for it, `sheetViews`, `sheetFormatPr` when a default
 /// size or an outline level calls for it, `cols` when a column differs from
 /// the default, and `<sheetData>`.
 ///
@@ -77,7 +101,8 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
   final XmlWriter w = XmlWriter(out);
   w.declaration();
   w.raw('<worksheet xmlns="${Ns.main}" xmlns:r="${Ns.rel}">');
-  w.raw('<sheetViews><sheetView workbookViewId="0"/></sheetViews>');
+  _writeSheetPr(w, settings);
+  _writeSheetViews(w, settings.view);
   final List<_ColumnRun> runs = _runs(settings.columns);
   _writeSheetFormat(w, settings, runs);
   _writeCols(w, settings, runs);
@@ -89,6 +114,79 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 /// then `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
 String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) =>
     hasRows ? '</sheetData></worksheet>' : '</worksheet>';
+
+/// Writes `sheetPr` when the sheet has a tab color or an outline summary
+/// that is not Excel's default (below and right).
+void _writeSheetPr(XmlWriter w, WorksheetSettings settings) {
+  final XlsxColor? tabColor = settings.tabColor;
+  if (tabColor == null && settings.summaryBelow && settings.summaryRight) {
+    return;
+  }
+  w.start('sheetPr');
+  if (tabColor != null) {
+    w.start('tabColor');
+    writeColorAttributes(w, tabColor);
+    w.end();
+  }
+  if (!settings.summaryBelow || !settings.summaryRight) {
+    w.start('outlinePr');
+    if (!settings.summaryBelow) w.attribute('summaryBelow', '0');
+    if (!settings.summaryRight) w.attribute('summaryRight', '0');
+    w.end();
+  }
+  w.end();
+}
+
+/// Writes `sheetViews` with the one view of [view].
+///
+/// Attributes in `CT_SheetView` order, those that differ from Excel's
+/// default only, then `pane` and `selection`.
+void _writeSheetViews(XmlWriter w, XlsxSheetView view) {
+  w.start('sheetViews');
+  w.start('sheetView');
+  if (view.showFormulas) w.attribute('showFormulas', '1');
+  if (!view.showGridLines) w.attribute('showGridLines', '0');
+  if (!view.showHeadings) w.attribute('showRowColHeaders', '0');
+  if (!view.showZeros) w.attribute('showZeros', '0');
+  if (view.rightToLeft) w.attribute('rightToLeft', '1');
+  if (view.zoom != 100) w.attribute('zoomScale', '${view.zoom}');
+  w.attribute('workbookViewId', '0');
+  final XlsxPane? pane = view.pane;
+  if (pane != null) _writePane(w, pane);
+  w.end();
+  w.end();
+}
+
+/// The twips in a point: split offsets are stored in twentieths of a point.
+const int _twipsPerPoint = 20;
+
+/// Writes `pane` and `selection` for [pane], or nothing when it splits
+/// nothing.
+///
+/// The active part is the one the splits leave: `topRight` when only the
+/// columns split, `bottomLeft` when only the rows do, `bottomRight` when
+/// both do. A frozen pane also gives the top-left cell of that part.
+void _writePane(XmlWriter w, XlsxPane pane) {
+  final double x = pane.isFrozen ? pane.columns.toDouble() : pane.x;
+  final double y = pane.isFrozen ? pane.rows.toDouble() : pane.y;
+  if (x == 0 && y == 0) return;
+  final String active = x == 0
+      ? 'bottomLeft'
+      : y == 0
+      ? 'topRight'
+      : 'bottomRight';
+  final double scale = pane.isFrozen ? 1 : _twipsPerPoint.toDouble();
+  w.start('pane');
+  if (x != 0) w.attribute('xSplit', formatXmlDouble(x * scale));
+  if (y != 0) w.attribute('ySplit', formatXmlDouble(y * scale));
+  if (pane.isFrozen) {
+    w.attribute('topLeftCell', cellRef(pane.rows, pane.columns));
+  }
+  w.attribute('activePane', active);
+  if (pane.isFrozen) w.attribute('state', 'frozen');
+  w.end();
+  w.empty('selection', <String, String>{'pane': active});
+}
 
 /// Adjacent columns that write the same `<col>`, from `min` to `max`
 /// (1-based, inclusive).
