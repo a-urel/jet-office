@@ -18,54 +18,10 @@
 /// web and `1.0` on the VM, so the fixtures use `int`s for whole numbers.
 library;
 
-import 'dart:typed_data';
-
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xml/xml_escape.dart' show escapeXstring;
 
-/// A named workbook builder with the values its file stores.
-final class Fixture {
-  /// Creates a fixture. [run] builds the workbook.
-  Fixture(
-    this.name,
-    this.storedValues,
-    this.expectedValues,
-    XlsxResult Function() run,
-  ) : _run = run;
-
-  final XlsxResult Function() _run;
-
-  /// The fixture's name, also its file name stem.
-  final String name;
-
-  /// Sheet name (the final, sanitized one) to rows of the text stored in the
-  /// file: numbers as in `<v>`, dates as serials, booleans `1`/`0`, strings
-  /// after scrubbing and truncation and with `_xHHHH_` look-alikes escaped,
-  /// empty cells `''`. Rectangular per sheet. The tests check it against the
-  /// file itself.
-  final Map<String, List<List<String>>> storedValues;
-
-  /// Sheet name to rows of the values a reader should see, typed: `String`
-  /// for text, `num` for numbers and date serials, `bool` for booleans and
-  /// `null` for empty cells. A formula cell holds the value Excel or
-  /// LibreOffice computes.
-  ///
-  /// The comparison contract Task 15 implements against LibreOffice's CSV
-  /// export: raw (not formatted) values; numbers are equal within a relative
-  /// tolerance of 1e-12; a `bool` matches `TRUE`/`FALSE` or `1`/`0`; strings
-  /// are equal exactly (a stored string is compared after decoding its
-  /// `_xHHHH_` escapes, as a reader does); `null` matches `""`; trailing
-  /// empty rows and trailing empty cells are ignored on both sides. A CSV
-  /// cannot tell an empty sheet from a sheet whose only cell is `''`, so
-  /// both expect no rows; the checker and [storedValues] still tell them
-  /// apart.
-  final Map<String, List<List<Object?>>> expectedValues;
-
-  /// Builds the workbook and returns its bytes. The same bytes every time.
-  Uint8List build() => _run().bytes;
-
-  /// The warnings [build] produces.
-  List<XlsxWarning> warnings() => _run().warnings;
-}
+import 'fixture.dart';
 
 /// The seven fixtures of milestone M1.
 List<Fixture> m1Fixtures() => <Fixture>[
@@ -238,6 +194,10 @@ Fixture _dirtyText() => Fixture(
       ..row(<Object?>['_x0041_']) // shown as typed, not as `A`
       ..row(<Object?>['a_x00e9_b']); // shown as typed, not as `aéb`
   }),
+  expectedWarnings: <XlsxWarningCode, int>{
+    XlsxWarningCode.invalidCharactersRemoved: 3,
+    XlsxWarningCode.textTruncated: 2,
+  },
 );
 
 /// The names asked for, in order, and the names the file gets.
@@ -259,17 +219,12 @@ const List<(String, String)> _sheetNames = <(String, String)>[
   ('_x0041_', '_x0041_'),
 ];
 
-/// [text] as the writer stores it in a cell: an `_` that starts an
-/// `_xHHHH_` look-alike is escaped as `_x005F_`.
-String _storedText(String text) =>
-    text.replaceAll(RegExp(r'_(?=x[0-9A-Fa-f]{4}_)'), '_x005F_');
-
 Fixture _sheets() => Fixture(
   'm1_sheets',
   <String, List<List<String>>>{
     for (final (String asked, String got) in _sheetNames)
       got: <List<String>>[
-        <String>['asked: ${_storedText(asked)}'],
+        <String>['asked: ${escapeXstring(asked)}'],
       ],
     'Başlangıç': <List<String>>[
       <String>['asked: Başlangıç'],
@@ -294,6 +249,10 @@ Fixture _sheets() => Fixture(
     book.addSheet('Başlangıç', position: 0).row(<Object?>['asked: Başlangıç']);
     book.setActiveSheet(active!);
   }),
+  expectedWarnings: <XlsxWarningCode, int>{
+    XlsxWarningCode.sheetNameChanged: 3,
+    XlsxWarningCode.sheetNameDuplicated: 5,
+  },
 );
 
 Fixture _formulas() => Fixture(
@@ -431,4 +390,8 @@ Fixture _dates() => Fixture(
       const XlsxCell(XlsxDate(2026, 10, 24), style: _twoDecimals),
     ]);
   }),
+  expectedWarnings: <XlsxWarningCode, int>{
+    XlsxWarningCode.dateOutsideExcelRange: 1,
+    XlsxWarningCode.dateInNonDateFormat: 1,
+  },
 );

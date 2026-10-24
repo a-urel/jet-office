@@ -11,9 +11,8 @@
 ///    `sst/@uniqueCount` the number of `si`;
 /// 5. every `t="s"` index is below `uniqueCount`;
 /// 6. sheet names (after decoding `_xHHHH_`, as Excel does) are unique
-///    ignoring case, at most 31 UTF-16 code units,
-///    free of `[]:*?/\`, not the reserved `History` and not starting or
-///    ending with an apostrophe;
+///    ignoring case, at most 31 UTF-16 code units, free of `[]:*?/\`, not
+///    the reserved `History` and not starting or ending with an apostrophe;
 /// 7. `workbookView/@activeTab` is a valid sheet index;
 /// 8. every cell `s` is below the `cellXfs` count;
 /// 9. cell references in a row strictly increase and sit on that row;
@@ -23,6 +22,10 @@
 /// 12. `cellXfs/@count` equals the number of its `xf` children;
 /// 13. every `numFmtId` of 164 or more used by a `cellXfs` `xf` is declared
 ///     in `numFmts`.
+///
+/// Element lookups use local names and assume the default SpreadsheetML
+/// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
+/// The writer never does.
 ///
 /// Pure Dart (no `dart:io`), so it runs in a browser too.
 library;
@@ -116,9 +119,13 @@ String _sourceOf(String relsName) {
   final int slash = relsName.lastIndexOf('/');
   final String dir = slash < 0 ? '' : relsName.substring(0, slash);
   final String file = relsName.substring(slash + 1);
-  final String parent = dir.endsWith('_rels')
+  final String parent = dir == '_rels'
+      ? ''
+      : dir.endsWith('/_rels')
       ? dir.substring(0, dir.length - '_rels'.length)
-      : dir;
+      : dir.isEmpty
+      ? ''
+      : '$dir/';
   final String source = file.endsWith('.rels')
       ? file.substring(0, file.length - '.rels'.length)
       : file;
@@ -275,6 +282,12 @@ void _checkSharedStrings(
   if (sst == null) {
     if (cells > 0) {
       violations.add('rule 4: $cells string cells but no $_sharedStringsPart');
+    }
+    for (final (String part, int index) in indexes) {
+      violations.add(
+        'rule 5: $part: string index $index has no $_sharedStringsPart to '
+        'point into',
+      );
     }
     return;
   }

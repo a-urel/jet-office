@@ -14,7 +14,8 @@
 /// `decodeXstring`), so `<name>-<decoded sheet>.csv` is accepted too, with a
 /// note naming the decoded name. It prints
 /// every mismatch and exits with 1 on any, or 2 when there is nothing to
-/// compare.
+/// compare. A `.xlsx` with no `.expected.json` is a mismatch
+/// (`no expectations for <name>.xlsx`), not skipped.
 ///
 /// The CI job exports the CSV files with LibreOffice headless:
 ///
@@ -68,12 +69,21 @@ void main(List<String> args) {
             .where((File f) => f.path.endsWith('.expected.json'))
             .toList()
           ..sort((File a, File b) => a.path.compareTo(b.path)));
+  final List<String> unexpected = xlsxWithoutExpectations(<String>[
+    for (final File f
+        in dir.existsSync() ? dir.listSync().whereType<File>() : <File>[])
+      _basename(f.path),
+  ]);
   if (expectations.isEmpty) {
     stderr.writeln('No .expected.json files in ${dir.path}.');
     exitCode = 2;
     return;
   }
   int mismatches = 0;
+  for (final String message in unexpected) {
+    stdout.writeln('FAIL  $message');
+    mismatches++;
+  }
   for (final File file in expectations) {
     final String name = _basename(
       file.path,

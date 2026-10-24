@@ -110,6 +110,24 @@ void main() {
     });
   });
 
+  test(
+    'only a folder named exactly _rels holds relationships of its parent',
+    () {
+      // `xl/a_rels/` is not a `_rels` folder, so its targets resolve from
+      // that folder itself.
+      final Uint8List bytes = _rebuild(
+        _good(),
+        add: <String, String>{
+          'xl/a_rels/x.xml.rels':
+              '<Relationships xmlns="http://schemas.openxmlformats.org/package/'
+              '2006/relationships"><Relationship Id="rId1" Type="t" '
+              'Target="../workbook.xml"/></Relationships>',
+        },
+      );
+      expect(checkXlsx(bytes), isEmpty);
+    },
+  );
+
   group('rule 3: content types', () {
     test('a part with no content type', () {
       _expectRule(
@@ -151,6 +169,18 @@ void main() {
         4,
       );
     });
+  });
+
+  test('rule 5: a string cell when there is no sharedStrings part', () {
+    _expectRule(
+      _rebuild(
+        _good(),
+        edit: <String, String? Function(String)>{
+          'xl/sharedStrings.xml': (String x) => null,
+        },
+      ),
+      5,
+    );
   });
 
   test('rule 5: a string index past uniqueCount', () {
@@ -250,7 +280,7 @@ void main() {
         6,
       );
     });
-    test('a leading or trailing apostrophe', () {
+    test('a leading apostrophe', () {
       _expectRule(
         _broken(
           'xl/workbook.xml',
@@ -258,6 +288,8 @@ void main() {
         ),
         6,
       );
+    });
+    test('a trailing apostrophe', () {
       _expectRule(
         _broken(
           'xl/workbook.xml',

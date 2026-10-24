@@ -5,34 +5,17 @@ import 'package:test/test.dart';
 import 'package:xml/xml.dart';
 
 import '../../tool/src/csv_compare.dart' show decodeXstring;
-import '../fixtures/m1_fixtures.dart';
 import '../support/read_xlsx.dart';
 import '../support/xlsx_checker.dart';
+import 'fixtures.dart';
 
-/// The warning counts per code each fixture must produce, by fixture name.
-const Map<String, Map<XlsxWarningCode, int>> _expectedWarnings =
-    <String, Map<XlsxWarningCode, int>>{
-      'm1_values': <XlsxWarningCode, int>{},
-      'm1_dirty_text': <XlsxWarningCode, int>{
-        XlsxWarningCode.invalidCharactersRemoved: 3,
-        XlsxWarningCode.textTruncated: 2,
-      },
-      'm1_sheets': <XlsxWarningCode, int>{
-        XlsxWarningCode.sheetNameChanged: 3,
-        XlsxWarningCode.sheetNameDuplicated: 5,
-      },
-      'm1_formulas': <XlsxWarningCode, int>{},
-      'm1_empty': <XlsxWarningCode, int>{},
-      'm1_properties': <XlsxWarningCode, int>{},
-      'm1_dates': <XlsxWarningCode, int>{
-        XlsxWarningCode.dateOutsideExcelRange: 1,
-        XlsxWarningCode.dateInNonDateFormat: 1,
-      },
-    };
+/// What a sheet stores: its rectangle of cell text and the cells that hold a
+/// formula, as (row, column) pairs counted from 1.
+typedef _Sheet = ({List<List<String>> rows, Set<(int, int)> formulas});
 
-/// The cell values of every sheet in [bytes], as stored, in a rectangle per
-/// sheet (empty cells are `''`), keyed by sheet name.
-Map<String, List<List<String>>> _storedValues(Uint8List bytes) {
+/// Every sheet in [bytes], as stored, keyed by decoded sheet name. Empty
+/// cells are `''`.
+Map<String, _Sheet> _readSheets(Uint8List bytes) {
   final Map<String, String> parts = readXlsx(bytes);
   final List<String> strings = <String>[
     for (final XmlElement si in XmlDocument.parse(
@@ -46,7 +29,7 @@ Map<String, List<List<String>>> _storedValues(Uint8List bytes) {
     ).findAllElements('Relationship'))
       r.getAttribute('Id')!: 'xl/${r.getAttribute('Target')!}',
   };
-  final Map<String, List<List<String>>> result = <String, List<List<String>>>{};
+  final Map<String, _Sheet> result = <String, _Sheet>{};
   for (final XmlElement sheet in XmlDocument.parse(
     parts['xl/workbook.xml']!,
   ).findAllElements('sheet')) {
@@ -54,6 +37,7 @@ Map<String, List<List<String>>> _storedValues(Uint8List bytes) {
       parts[targets[sheet.getAttribute('r:id')!]]!,
     );
     final Map<(int, int), String> cells = <(int, int), String>{};
+    final Set<(int, int)> formulas = <(int, int)>{};
     int rows = 0;
     int columns = 0;
     for (final XmlElement row in doc.findAllElements('row')) {
@@ -70,28 +54,34 @@ Map<String, List<List<String>>> _storedValues(Uint8List bytes) {
         cells[(r, column)] = c.getAttribute('t') == 's'
             ? strings[int.parse(v)]
             : v;
+        if (c.getElement('f') != null) formulas.add((r, column));
         if (r > rows) rows = r;
         if (column > columns) columns = column;
       }
     }
     // A reader decodes `_xHHHH_` in sheet names too (ruling R22).
-    result[decodeXstring(sheet.getAttribute('name')!)] = <List<String>>[
-      for (int r = 1; r <= rows; r++)
-        <String>[for (int c = 1; c <= columns; c++) cells[(r, c)] ?? ''],
-    ];
+    result[decodeXstring(sheet.getAttribute('name')!)] = (
+      rows: <List<String>>[
+        for (int r = 1; r <= rows; r++)
+          <String>[for (int c = 1; c <= columns; c++) cells[(r, c)] ?? ''],
+      ],
+      formulas: formulas,
+    );
   }
   return result;
 }
 
 void main() {
-  test('the seven M1 fixtures exist, under unique names', () {
+  final List<Fixture> fixtures = allFixtures();
+
+  test('fixture names are unique', () {
     final List<String> names = <String>[
-      for (final Fixture f in m1Fixtures()) f.name,
+      for (final Fixture f in fixtures) f.name,
     ];
-    expect(names, _expectedWarnings.keys.toList());
+    expect(names.toSet(), hasLength(names.length));
   });
 
-  for (final Fixture f in m1Fixtures()) {
+  for (final Fixture f in fixtures) {
     group(f.name, () {
       test('passes the consistency checker', () {
         expect(checkXlsx(f.build()), isEmpty);
@@ -102,22 +92,21 @@ void main() {
       });
 
       test('storedValues describe what the file stores', () {
-        expect(_storedValues(f.build()), f.storedValues);
+        final Map<String, _Sheet> sheets = _readSheets(f.build());
+        expect(<String, List<List<String>>>{
+          for (final MapEntry<String, _Sheet> e in sheets.entries)
+            e.key: e.value.rows,
+        }, f.storedValues);
       });
 
       test('expectedValues agree with storedValues', () {
-        // Formula cells hold the computed value, which the file may not
-        // store, so a sheet of formulas is exempt.
-        final Set<String> formulaSheets = <String>{
-          if (f.name == 'm1_formulas') 'Formulas',
-        };
+        final Map<String, _Sheet> sheets = _readSheets(f.build());
         expect(
           f.expectedValues.keys.toSet(),
           f.storedValues.keys.toSet(),
           reason: 'same sheets',
         );
         f.expectedValues.forEach((String sheet, List<List<Object?>> rows) {
-          if (formulaSheets.contains(sheet)) return;
           final List<List<String>> stored = f.storedValues[sheet]!;
           final int height = rows.length > stored.length
               ? rows.length
@@ -129,6 +118,9 @@ void main() {
                 ? want.length
                 : raw.length;
             for (int c = 0; c < width; c++) {
+              // A formula cell holds the value a reader computes, which the
+              // file may not store, so only its cell is exempt.
+              if (sheets[sheet]!.formulas.contains((r + 1, c + 1))) continue;
               final Object? e = c < want.length ? want[c] : null;
               final String s = c < raw.length ? raw[c] : '';
               final String at = '$sheet r${r + 1} c${c + 1}';
@@ -167,16 +159,16 @@ void main() {
             ifAbsent: () => w.count,
           );
         }
-        expect(counts, _expectedWarnings[f.name]);
+        expect(counts, f.expectedWarnings);
       });
     });
   }
 
+  Fixture named(String name) =>
+      fixtures.firstWhere((Fixture f) => f.name == name);
+
   test('m1_sheets orders the tabs and picks the active one', () {
-    final Fixture f = m1Fixtures().firstWhere(
-      (Fixture f) => f.name == 'm1_sheets',
-    );
-    final Map<String, String> parts = readXlsx(f.build());
+    final Map<String, String> parts = readXlsx(named('m1_sheets').build());
     final XmlDocument book = XmlDocument.parse(parts['xl/workbook.xml']!);
     final List<String> names = <String>[
       for (final XmlElement s in book.findAllElements('sheet'))
@@ -190,5 +182,15 @@ void main() {
       )],
       'şube (2)',
     );
+  });
+
+  test('m1_properties writes the title and creator', () {
+    final Map<String, String> parts = readXlsx(named('m1_properties').build());
+    final XmlDocument core = XmlDocument.parse(parts['docProps/core.xml']!);
+    expect(
+      core.findAllElements('dc:title').single.innerText,
+      'Quarterly report',
+    );
+    expect(core.findAllElements('dc:creator').single.innerText, 'Ahmet Urel');
   });
 }

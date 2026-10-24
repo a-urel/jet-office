@@ -39,6 +39,15 @@ void main() {
       ]);
     });
 
+    test(
+      'a quote inside an unquoted field is kept, as LibreOffice writes it',
+      () {
+        expect(parseCsv('a"b,c\n'), <List<String>>[
+          <String>['a"b', 'c'],
+        ]);
+      },
+    );
+
     test('empty text has no rows', () {
       expect(parseCsv(''), isEmpty);
     });
@@ -61,6 +70,28 @@ void main() {
 
     test('malformed UTF-8 is a FormatException', () {
       expect(() => decodeCsv(<int>[0x61, 0xFF, 0x62]), throwsFormatException);
+    });
+  });
+
+  group('xlsxWithoutExpectations', () {
+    test('names each .xlsx that has no .expected.json', () {
+      expect(
+        xlsxWithoutExpectations(<String>[
+          'a.xlsx',
+          'a.expected.json',
+          'b.xlsx',
+          'c.expected.json',
+          'notes.txt',
+        ]),
+        <String>['no expectations for b.xlsx'],
+      );
+    });
+
+    test('is empty when every .xlsx has expectations', () {
+      expect(
+        xlsxWithoutExpectations(<String>['a.xlsx', 'a.expected.json']),
+        isEmpty,
+      );
     });
   });
 

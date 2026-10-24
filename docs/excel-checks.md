@@ -108,10 +108,11 @@ One sheet, `Dates`, values in A1:F1.
 - A1 `28.02.1900` (serial 59) and B1 `01.03.1900` (serial 61): Excel's
   fictitious 29.02.1900 sits between them.
 - C1 `24.10.2026 00:00`.
-- D1 is 23:59:59.999 on 24.10.2026. It shows `24.10.2026 23:59`, on the same
-  day; the built-in date-time format has no seconds. With a custom format
-  that shows seconds it shows `23:59:59`. If Excel shows 25.10.2026 00:00
-  instead, record it: Excel rounded the milliseconds up.
+- D1 is 23:59:59.999 on 24.10.2026, stored as serial 46319.99999998842.
+  Excel should show `24.10.2026 23:59` on the built-in date-time format (no
+  seconds): the same day, the time cut to the minute and not rounded up to
+  00:00 on the 25th. With a custom format that shows seconds it should show
+  `23:59:59`. Record what it actually shows if it differs.
 - E1 `1850-06-15T00:00:00.000`, left-aligned text: a date before 1900 has
   no Excel serial.
 - F1 `46.319,00`: a date written with the number format `#,##0.00`, so it
