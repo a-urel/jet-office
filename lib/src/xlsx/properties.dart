@@ -17,8 +17,9 @@ import '../xml/xml_writer.dart';
 ///
 /// Every field is optional; only the fields that are set are written. Text
 /// must not contain characters XML cannot represent (control characters other
-/// than tab, line feed and carriage return, and lone surrogates), otherwise
-/// writing the workbook throws [ArgumentError].
+/// than tab, line feed and carriage return, and lone surrogates); otherwise
+/// the writer constructors, `XlsxWriter` and `XlsxStreamWriter`, throw an
+/// [ArgumentError].
 final class XlsxProperties {
   /// Creates the properties. All fields are optional.
   const XlsxProperties({

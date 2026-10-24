@@ -298,10 +298,15 @@ abstract final class XlsxSheetWriter {
   /// still counts.
   ///
   /// Data problems are repaired and reported as warnings. Throws
-  /// [XlsxLimitError] for more than [XlsxLimits.maxColumns] values or a row
-  /// past [XlsxLimits.maxRows], [StateError] when the sheet is finished, and
-  /// [ArgumentError] for a value the writer cannot store; in that last case
-  /// the cells before it are kept and the row still counts.
+  /// [XlsxLimitError] for more than [XlsxLimits.maxColumns] values, a row
+  /// past [XlsxLimits.maxRows] or a style that would make the workbook hold
+  /// more than [XlsxLimits.maxCellFormats] cell formats (limit
+  /// `cell formats`); [StateError] when the sheet is finished or the writer
+  /// has failed; and [ArgumentError] for a value the writer cannot store or
+  /// an invalid style (a built-in number format id outside `0..163`, or an
+  /// empty custom format code or one with characters XML forbids). After an
+  /// [ArgumentError] or a cell-format [XlsxLimitError], the cells before
+  /// the failing one are kept and the row still counts.
   void row(List<Object?> values, {XlsxStyle? style});
 
   /// Appends an empty row. Throws like [row].
