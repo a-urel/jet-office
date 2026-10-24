@@ -312,4 +312,30 @@ void main() {
       contains('<sheetPr><outlinePr summaryBelow="0"/></sheetPr>'),
     );
   });
+
+  test('m2_merges_filter writes its merges, filter and defined name', () {
+    final Map<String, String> parts = readXlsx(
+      named('m2_merges_filter').build(),
+    );
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      endsWith(
+        '</sheetData><autoFilter ref="A6:D20"/><mergeCells count="2">'
+        '<mergeCell ref="A1:D1"/><mergeCell ref="B3:C4"/></mergeCells>'
+        '</worksheet>',
+      ),
+    );
+    expect(
+      parts['xl/worksheets/sheet2.xml'],
+      isNot(anyOf(contains('autoFilter'), contains('mergeCell'))),
+    );
+    expect(
+      parts['xl/workbook.xml'],
+      contains(
+        '</sheets><definedNames><definedName name="_xlnm._FilterDatabase" '
+        'localSheetId="0" hidden="1">\'Bob\'\'s Data\'!\$A\$6:\$D\$20'
+        '</definedName></definedNames>',
+      ),
+    );
+  });
 }

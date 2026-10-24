@@ -38,7 +38,14 @@
 /// 19. a frozen `pane` has `topLeftCell` at the cell (`ySplit`, `xSplit`),
 ///     and `activePane` is `bottomRight` when both splits are non-zero,
 ///     `topRight` when only `xSplit` is and `bottomLeft` when only `ySplit`
-///     is; a frozen pane with neither split is wrong too.
+///     is; a frozen pane with neither split is wrong too;
+/// 20. every `mergeCell` covers at least two cells inside the sheet, with
+///     its first corner not after its last; no two merges of a sheet
+///     overlap; and `mergeCells/@count` equals the number of its children;
+/// 21. defined names are unique per scope (the name ignoring case, and
+///     `localSheetId`, which is absent for the workbook scope); every
+///     `localSheetId` is a number below the sheet count; and every
+///     `autoFilter/@ref` is a valid range inside the sheet.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -63,6 +70,7 @@ const String _workbookPart = 'xl/workbook.xml';
 final RegExp _sheetPart = RegExp(r'^xl/worksheets/[^/]+\.xml$');
 final RegExp _forbiddenInName = RegExp(r'[\[\]:*?/\\]');
 final RegExp _cellRef = RegExp(r'^([A-Z]+)([0-9]+)$');
+final RegExp _rangeRef = RegExp(r'^([A-Z]+)([0-9]+)(?::([A-Z]+)([0-9]+))?$');
 
 /// The violations found in the XLSX file [bytes]; empty means clean.
 List<String> checkXlsx(Uint8List bytes) {
@@ -105,6 +113,9 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkOutlines(docs, violations);
   _checkVisibility(docs, violations);
   _checkFrozenPanes(docs, violations);
+  _checkMerges(docs, violations);
+  _checkDefinedNames(docs, violations);
+  _checkAutoFilters(docs, violations);
   return violations;
 }
 
@@ -759,4 +770,125 @@ String _columnLetters(int index) {
     n = (n - 1) ~/ 26;
   }
   return letters;
+}
+
+/// A rectangle of cells for rules 20 and 21: 1-based, inclusive.
+typedef _Rect = ({int row1, int col1, int row2, int col2});
+
+/// The rectangle of [ref] (`B2` or `B2:D10`), or null when [ref] is not a
+/// range of cell references. It may lie outside the sheet or be reversed;
+/// [_problemWith] says whether it does.
+_Rect? _parseRect(String ref) {
+  final RegExpMatch? m = _rangeRef.firstMatch(ref);
+  if (m == null) return null;
+  final int row1 = int.parse(m.group(2)!);
+  final int col1 = _columnNumber(m.group(1)!);
+  final bool two = m.group(3) != null;
+  return (
+    row1: row1,
+    col1: col1,
+    row2: two ? int.parse(m.group(4)!) : row1,
+    col2: two ? _columnNumber(m.group(3)!) : col1,
+  );
+}
+
+/// What is wrong with [r] as a range of the sheet, or null when nothing is.
+String? _problemWith(_Rect r) {
+  if (r.row1 < 1 || r.col1 < 1 || r.row2 > 1048576 || r.col2 > 16384) {
+    return 'lies outside the sheet';
+  }
+  if (r.row1 > r.row2 || r.col1 > r.col2) {
+    return 'has its first corner after its last';
+  }
+  return null;
+}
+
+/// Rule 20.
+void _checkMerges(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement merges in _all(sheet.value, 'mergeCells')) {
+      final List<XmlElement> cells = merges.findElements('mergeCell').toList();
+      final String count = _attr(merges, 'count');
+      if (int.tryParse(count) != cells.length) {
+        violations.add(
+          'rule 20: ${sheet.key}: mergeCells count is "$count" but it has '
+          '${cells.length} mergeCell',
+        );
+      }
+      final List<(String, _Rect)> seen = <(String, _Rect)>[];
+      for (final XmlElement cell in cells) {
+        final String ref = _attr(cell, 'ref');
+        final _Rect? r = _parseRect(ref);
+        final String? problem = r == null ? 'is not a range' : _problemWith(r);
+        if (problem != null) {
+          violations.add('rule 20: ${sheet.key}: mergeCell "$ref" $problem');
+          continue;
+        }
+        if (r!.row1 == r.row2 && r.col1 == r.col2) {
+          violations.add(
+            'rule 20: ${sheet.key}: mergeCell "$ref" covers a single cell',
+          );
+        }
+        for (final (String other, _Rect o) in seen) {
+          if (r.row1 <= o.row2 &&
+              o.row1 <= r.row2 &&
+              r.col1 <= o.col2 &&
+              o.col1 <= r.col2) {
+            violations.add(
+              'rule 20: ${sheet.key}: mergeCell "$ref" overlaps "$other"',
+            );
+          }
+        }
+        seen.add((ref, r));
+      }
+    }
+  }
+}
+
+/// Rule 21, defined names.
+void _checkDefinedNames(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final XmlDocument? doc = docs[_workbookPart];
+  if (doc == null) return;
+  final int sheetCount = _all(doc, 'sheet').length;
+  final Map<String, String> seen = <String, String>{};
+  for (final XmlElement n in _all(doc, 'definedName')) {
+    final String name = _attr(n, 'name');
+    final String? scopeText = n.getAttribute('localSheetId');
+    String scope = 'workbook';
+    if (scopeText != null) {
+      final int? id = int.tryParse(scopeText);
+      if (id == null || id < 0 || id >= sheetCount) {
+        violations.add(
+          'rule 21: defined name "$name" has localSheetId "$scopeText"; '
+          'the workbook has $sheetCount sheets',
+        );
+      }
+      scope = 'sheet ${id ?? scopeText}';
+    }
+    final String key = '${name.toLowerCase()}|$scope';
+    if (seen.containsKey(key)) {
+      violations.add(
+        'rule 21: defined name "$name" is defined twice in $scope '
+        '(as "${seen[key]}" too)',
+      );
+    }
+    seen[key] = name;
+  }
+}
+
+/// Rule 21, auto filter ranges.
+void _checkAutoFilters(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement filter in _all(sheet.value, 'autoFilter')) {
+      final String ref = _attr(filter, 'ref');
+      final _Rect? r = _parseRect(ref);
+      final String? problem = r == null ? 'is not a range' : _problemWith(r);
+      if (problem != null) {
+        violations.add('rule 21: ${sheet.key}: autoFilter ref "$ref" $problem');
+      }
+    }
+  }
 }

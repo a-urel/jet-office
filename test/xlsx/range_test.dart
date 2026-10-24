@@ -39,6 +39,31 @@ void main() {
     expect(XlsxRange.parse('B2').absoluteRef, r'$B$2');
   });
 
+  test(
+    'ref and absoluteRef throw RangeError for a corner outside the sheet',
+    () {
+      for (final XlsxRange bad in <XlsxRange>[
+        const XlsxRange(1048576, 0),
+        const XlsxRange(0, 0, 1048576, 0),
+        const XlsxRange(0, 16384),
+        const XlsxRange(0, 0, 0, 16384),
+        const XlsxRange(-1, 0),
+      ]) {
+        expect(() => bad.ref, throwsRangeError, reason: '$bad');
+        expect(() => bad.absoluteRef, throwsRangeError, reason: '$bad');
+      }
+      expect(const XlsxRange(1048575, 16383).ref, 'XFD1048576');
+    },
+  );
+
+  test('a hand-built reversed range formats its corners as given', () {
+    const XlsxRange reversed = XlsxRange(9, 3, 1, 1);
+    expect(reversed.ref, 'D10:B2');
+    expect(reversed.absoluteRef, r'$D$10:$B$2');
+    expect(reversed.toString(), 'XlsxRange(D10:B2)');
+    expect(reversed, isNot(XlsxRange.parse('D10:B2')));
+  });
+
   test('value equality and toString', () {
     expect(const XlsxRange(0, 0, 1, 1), XlsxRange.parse('A1:B2'));
     expect(

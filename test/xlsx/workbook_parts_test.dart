@@ -1,4 +1,4 @@
-import 'package:jet_office/jet_office.dart' show XlsxSheetVisibility;
+import 'package:jet_office/jet_office.dart' show XlsxRange, XlsxSheetVisibility;
 import 'package:jet_office/src/opc/ooxml.dart';
 import 'package:jet_office/src/xlsx/workbook_parts.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
@@ -23,16 +23,19 @@ void main() {
               name: 'Summary',
               number: 3,
               visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
             ),
             (
               name: 'Detail A',
               number: 1,
               visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
             ),
             (
               name: 'Detail B',
               number: 2,
               visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
             ),
           ],
           activeTab: 0,
@@ -56,9 +59,24 @@ void main() {
         (XmlWriter w) => writeWorkbook(
           w,
           tabs: const <WorkbookSheet>[
-            (name: 'V', number: 1, visibility: XlsxSheetVisibility.visible),
-            (name: 'H', number: 2, visibility: XlsxSheetVisibility.hidden),
-            (name: 'X', number: 3, visibility: XlsxSheetVisibility.veryHidden),
+            (
+              name: 'V',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
+            (
+              name: 'H',
+              number: 2,
+              visibility: XlsxSheetVisibility.hidden,
+              autoFilter: null,
+            ),
+            (
+              name: 'X',
+              number: 3,
+              visibility: XlsxSheetVisibility.veryHidden,
+              autoFilter: null,
+            ),
           ],
           activeTab: 0,
           fullCalcOnLoad: false,
@@ -83,11 +101,13 @@ void main() {
               name: '_x0041_',
               number: 1,
               visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
             ),
             (
               name: 'a&_x0042_',
               number: 2,
               visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
             ),
           ],
           activeTab: 0,
@@ -103,7 +123,12 @@ void main() {
         (XmlWriter w) => writeWorkbook(
           w,
           tabs: const <WorkbookSheet>[
-            (name: 'A', number: 1, visibility: XlsxSheetVisibility.visible),
+            (
+              name: 'A',
+              number: 1,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
           ],
           activeTab: 0,
           fullCalcOnLoad: true,
@@ -121,8 +146,14 @@ void main() {
               name: 'P&L "2026"',
               number: 1,
               visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
             ),
-            (name: 'B', number: 2, visibility: XlsxSheetVisibility.visible),
+            (
+              name: 'B',
+              number: 2,
+              visibility: XlsxSheetVisibility.visible,
+              autoFilter: null,
+            ),
           ],
           activeTab: 1,
           fullCalcOnLoad: false,
@@ -130,6 +161,67 @@ void main() {
       );
       expect(xml, contains('<sheet name="P&amp;L &quot;2026&quot;"'));
       expect(xml, contains('<workbookView activeTab="1"/>'));
+    });
+  });
+
+  group('_xlnm._FilterDatabase', () {
+    String workbook(List<WorkbookSheet> tabs, {bool calc = false}) => _render(
+      (XmlWriter w) =>
+          writeWorkbook(w, tabs: tabs, activeTab: 0, fullCalcOnLoad: calc),
+    );
+
+    WorkbookSheet sheet(String name, int number, [String? filter]) => (
+      name: name,
+      number: number,
+      visibility: XlsxSheetVisibility.visible,
+      autoFilter: filter == null ? null : XlsxRange.parse(filter),
+    );
+
+    test('no filter writes no definedNames', () {
+      expect(
+        workbook(<WorkbookSheet>[sheet('A', 1)]),
+        isNot(contains('defin')),
+      );
+    });
+
+    test('quotes the sheet name, doubles quotes, uses the tab index', () {
+      expect(
+        workbook(<WorkbookSheet>[sheet("Bob's Data", 1, 'A6:D20')]),
+        endsWith(
+          '</sheets><definedNames><definedName name="_xlnm._FilterDatabase" '
+          'localSheetId="0" hidden="1">\'Bob\'\'s Data\'!\$A\$6:\$D\$20'
+          '</definedName></definedNames></workbook>',
+        ),
+      );
+    });
+
+    test('one name per filtered sheet, in tab order, before calcPr', () {
+      final String xml = workbook(<WorkbookSheet>[
+        sheet('Plain', 3),
+        sheet('B', 1, 'A1:B2'),
+        sheet('C', 2, 'C3'),
+      ], calc: true);
+      expect(
+        xml,
+        contains(
+          '</sheets><definedNames>'
+          '<definedName name="_xlnm._FilterDatabase" localSheetId="1" '
+          "hidden=\"1\">'B'!\$A\$1:\$B\$2</definedName>"
+          '<definedName name="_xlnm._FilterDatabase" localSheetId="2" '
+          "hidden=\"1\">'C'!\$C\$3</definedName>"
+          '</definedNames><calcPr fullCalcOnLoad="1"/></workbook>',
+        ),
+      );
+    });
+
+    test('the text goes through escapeXstring, then XML escaping', () {
+      final String xml = workbook(<WorkbookSheet>[
+        sheet('a&_x0041_', 1, 'A1:B2'),
+      ]);
+      expect(
+        xml,
+        contains(">'a&amp;_x005F_x0041_'!\$A\$1:\$B\$2</definedName>"),
+      );
     });
   });
 

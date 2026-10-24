@@ -81,18 +81,26 @@ final class XlsxRange {
 
   /// The A1-style reference: `B2:D10`, or `B2` for a single cell.
   ///
-  /// Throws [RangeError] when a corner is outside the sheet.
+  /// The corners are written as they are: a hand-built range whose first
+  /// corner is after its last gives `D10:B2` for `XlsxRange(9, 3, 1, 1)`;
+  /// only [XlsxRange.parse] puts them in order. Throws [RangeError] when a
+  /// row or column of a corner is outside the sheet.
   String get ref => _format(absolute: false);
 
   /// The reference with `$` before every column and row: `$B$2:$D$10`, or
-  /// `$B$2` for a single cell.
+  /// `$B$2` for a single cell. Corners are written as given, like [ref].
   ///
-  /// Throws [RangeError] when a corner is outside the sheet.
+  /// Throws [RangeError] when a row or column of a corner is outside the
+  /// sheet.
   String get absoluteRef => _format(absolute: true);
 
   String _format({required bool absolute}) {
-    final String d = absolute ? r'$' : '';
-    String corner(int row, int column) => '$d${columnName(column)}$d${row + 1}';
+    String corner(int row, int column) {
+      // cellRef checks both indexes; the dollars are added around its parts.
+      final String relative = cellRef(row, column);
+      return absolute ? '\$${columnName(column)}\$${row + 1}' : relative;
+    }
+
     final String first = corner(firstRow, firstColumn);
     return isSingleCell ? first : '$first:${corner(lastRow, lastColumn)}';
   }

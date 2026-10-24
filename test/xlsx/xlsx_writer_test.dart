@@ -1524,4 +1524,209 @@ void main() {
       });
     });
   });
+
+  group('merged cells and autofilter', () {
+    String sheetXml(XlsxWriter book, [int n = 1]) =>
+        readXlsx(book.close().bytes)['xl/worksheets/sheet$n.xml']!;
+
+    String workbookXml(XlsxWriter book) =>
+        readXlsx(book.close().bytes)['xl/workbook.xml']!;
+
+    test('writes the filter and the merges in the trailer', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet("Bob's Data")
+        ..row(<Object?>['Title'])
+        ..autoFilter(XlsxRange.parse('A6:D20'))
+        ..merge(XlsxRange.parse('A1:D1'))
+        ..merge(XlsxRange.parse('B3:C4'));
+      final XlsxResult out = book.close();
+      final Map<String, String> parts = readXlsx(out.bytes);
+      expect(
+        parts['xl/worksheets/sheet1.xml'],
+        endsWith(
+          '</sheetData><autoFilter ref="A6:D20"/><mergeCells count="2">'
+          '<mergeCell ref="A1:D1"/><mergeCell ref="B3:C4"/></mergeCells>'
+          '</worksheet>',
+        ),
+      );
+      expect(
+        parts['xl/workbook.xml'],
+        contains(
+          '</sheets><definedNames><definedName name="_xlnm._FilterDatabase" '
+          'localSheetId="0" hidden="1">\'Bob\'\'s Data\'!\$A\$6:\$D\$20'
+          '</definedName></definedNames>',
+        ),
+      );
+      expect(checkXlsx(out.bytes), isEmpty);
+    });
+
+    test('they work after rows, on a sheet with no rows too', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..merge(XlsxRange.parse('A1:B1'))
+        ..autoFilter(XlsxRange.parse('A1:B1'));
+      final String xml = sheetXml(book);
+      expect(
+        xml,
+        contains(
+          '<sheetData/><autoFilter ref="A1:B1"/><mergeCells count="1">'
+          '<mergeCell ref="A1:B1"/></mergeCells></worksheet>',
+        ),
+      );
+    });
+
+    test('a second autoFilter replaces the first', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..autoFilter(XlsxRange.parse('A1:B2'))
+        ..autoFilter(XlsxRange.parse('C3:D4'));
+      final XlsxResult out = book.close();
+      final Map<String, String> parts = readXlsx(out.bytes);
+      expect(
+        parts['xl/worksheets/sheet1.xml'],
+        contains('<autoFilter ref="C3:D4"/>'),
+      );
+      expect(parts['xl/worksheets/sheet1.xml'], isNot(contains('A1:B2')));
+      expect(parts['xl/workbook.xml'], contains(r"'S'!$C$3:$D$4"));
+      expect(
+        RegExp('_FilterDatabase').allMatches(parts['xl/workbook.xml']!),
+        hasLength(1),
+      );
+    });
+
+    test('localSheetId is the final tab index', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('Filtered').autoFilter(XlsxRange.parse('A1:B2'));
+      book.addSheet('Front', position: 0);
+      final String wb = workbookXml(book);
+      expect(wb, contains('localSheetId="1"'));
+      expect(wb, contains(r"'Filtered'!$A$1:$B$2"));
+    });
+
+    test('only the filtered sheet gets a defined name', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('Plain').row(<Object?>[1]);
+      book.addSheet('Filtered').autoFilter(XlsxRange.parse('A1:B2'));
+      book.addSheet('Plain 2').row(<Object?>[1]);
+      final String wb = workbookXml(book);
+      expect(RegExp('<definedName ').allMatches(wb), hasLength(1));
+      expect(wb, contains('localSheetId="1"'));
+    });
+
+    test('overlapping merges throw naming both ranges, the first stays', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter s = book.addSheet('S')
+        ..merge(XlsxRange.parse('A1:B2'));
+      expect(
+        () => s.merge(XlsxRange.parse('B2:C3')),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.toString(),
+            'message',
+            allOf(contains('B2:C3'), contains('A1:B2')),
+          ),
+        ),
+      );
+      s.merge(XlsxRange.parse('C3:D4'));
+      final String xml = sheetXml(book);
+      expect(
+        xml,
+        contains(
+          '<mergeCells count="2"><mergeCell ref="A1:B2"/>'
+          '<mergeCell ref="C3:D4"/></mergeCells>',
+        ),
+      );
+    });
+
+    test('the same range twice overlaps', () {
+      final XlsxSheetWriter s = XlsxWriter().addSheet('S')
+        ..merge(XlsxRange.parse('A1:B2'));
+      expect(() => s.merge(XlsxRange.parse('A1:B2')), throwsArgumentError);
+    });
+
+    test('touching merges do not overlap', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..merge(XlsxRange.parse('A1:B2'))
+        ..merge(XlsxRange.parse('C1:D2'))
+        ..merge(XlsxRange.parse('A3:B4'));
+      expect(checkXlsx(book.close().bytes), isEmpty);
+    });
+
+    test('invalid merges throw ArgumentError and record nothing', () {
+      for (final XlsxRange bad in <XlsxRange>[
+        const XlsxRange(0, 0),
+        XlsxRange.parse('C3'),
+        const XlsxRange(0, 0, 1048576, 1),
+        const XlsxRange(0, 0, 1, 16384),
+        const XlsxRange(-1, 0, 1, 1),
+        const XlsxRange(5, 5, 1, 1),
+        const XlsxRange(1, 1, 0, 3),
+      ]) {
+        final XlsxWriter book = XlsxWriter();
+        final XlsxSheetWriter s = book.addSheet('S');
+        expect(() => s.merge(bad), throwsArgumentError, reason: '$bad');
+        expect(sheetXml(book), isNot(contains('mergeCell')), reason: '$bad');
+      }
+    });
+
+    test('invalid autoFilter throws and keeps the earlier filter', () {
+      for (final XlsxRange bad in <XlsxRange>[
+        const XlsxRange(0, 0, 1048576, 1),
+        const XlsxRange(0, 16384),
+        const XlsxRange(5, 5, 1, 1),
+      ]) {
+        final XlsxWriter book = XlsxWriter();
+        final XlsxSheetWriter s = book.addSheet('S')
+          ..autoFilter(XlsxRange.parse('A1:B2'));
+        expect(() => s.autoFilter(bad), throwsArgumentError, reason: '$bad');
+        expect(sheetXml(book), contains('<autoFilter ref="A1:B2"/>'));
+      }
+      final XlsxWriter book = XlsxWriter();
+      expect(
+        () => book.addSheet('S').autoFilter(const XlsxRange(0, 0, 1048576, 0)),
+        throwsArgumentError,
+      );
+      expect(workbookXml(book), isNot(contains('definedName')));
+    });
+
+    test('a single-cell autoFilter is allowed', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S').autoFilter(XlsxRange.parse('B2'));
+      final XlsxResult out = book.close();
+      expect(
+        readXlsx(out.bytes)['xl/worksheets/sheet1.xml'],
+        contains('<autoFilter ref="B2"/>'),
+      );
+      expect(checkXlsx(out.bytes), isEmpty);
+    });
+
+    test('after the next addSheet both throw StateError, nothing written', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter s = book.addSheet('S')..row(<Object?>[1]);
+      book.addSheet('T');
+      expect(() => s.merge(XlsxRange.parse('A1:B1')), throwsStateError);
+      expect(() => s.autoFilter(XlsxRange.parse('A1:B1')), throwsStateError);
+      final XlsxResult out = book.close();
+      final Map<String, String> parts = readXlsx(out.bytes);
+      expect(parts['xl/worksheets/sheet1.xml'], isNot(contains('merge')));
+      expect(parts['xl/worksheets/sheet1.xml'], isNot(contains('autoFilter')));
+      expect(parts['xl/workbook.xml'], isNot(contains('definedName')));
+    });
+
+    test('a state error wins over a bad range', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter s = book.addSheet('S');
+      book.addSheet('T');
+      expect(() => s.merge(const XlsxRange(0, 0)), throwsStateError);
+    });
+
+    test('both throw StateError after close()', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter s = book.addSheet('S');
+      book.close();
+      expect(() => s.merge(XlsxRange.parse('A1:B1')), throwsStateError);
+      expect(() => s.autoFilter(XlsxRange.parse('A1:B1')), throwsStateError);
+    });
+  });
 }

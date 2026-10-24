@@ -14,6 +14,7 @@ List<Fixture> m2Fixtures() => <Fixture>[
   _columnsRows(),
   _stylePrecedence(),
   _views(),
+  _mergesFilter(),
 ];
 
 /// The text in column A of every row that does not show a number format.
@@ -518,4 +519,54 @@ Fixture _views() {
     book.setActiveSheet(view);
     return book.close();
   });
+}
+
+/// The rows of `m2_merges_filter`'s `Bob's Data` sheet: a title over A1:D1,
+/// a text block over B3:C4, a header at row 6 and 14 data rows under it.
+final List<_LayoutRow> _filterRows = <_LayoutRow>[
+  _row(
+    <Object?>['Quarterly report'],
+    style: const XlsxStyle(
+      font: XlsxFont(bold: true, size: 14),
+      alignment: XlsxAlignment(horizontal: XlsxHorizontalAlignment.center),
+    ),
+  ),
+  _row(<Object?>[]),
+  _row(<Object?>[null, 'A merged block of text']),
+  _row(<Object?>[]),
+  _row(<Object?>[]),
+  _row(<Object?>['Id', 'Name', 'Qty', 'Price'], style: _bold),
+  for (int i = 1; i <= 14; i++)
+    _row(<Object?>[i, 'Item $i', i * 3, i * 2 + 0.5]),
+];
+
+final List<_LayoutRow> _plainRows = <_LayoutRow>[
+  _row(<Object?>['no filter here', 1]),
+  _row(<Object?>['nor here', 2]),
+];
+
+/// Merged cells and an auto filter on a sheet whose name needs quoting, and
+/// a second sheet with neither, so the filter's defined name must point at
+/// tab 0 only.
+Fixture _mergesFilter() {
+  final Map<String, List<_LayoutRow>> sheets = <String, List<_LayoutRow>>{
+    "Bob's Data": _filterRows,
+    'Plain': _plainRows,
+  };
+  return Fixture(
+    'm2_merges_filter',
+    _storedOf(sheets),
+    _expectedOf(sheets),
+    () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter data = book.addSheet("Bob's Data");
+      _writeRows(data, _filterRows);
+      data
+        ..merge(XlsxRange.parse('A1:D1'))
+        ..merge(XlsxRange.parse('B3:C4'))
+        ..autoFilter(XlsxRange.parse('A6:D20'));
+      _writeRows(book.addSheet('Plain'), _plainRows);
+      return book.close();
+    },
+  );
 }

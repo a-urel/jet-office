@@ -11,11 +11,14 @@
 /// numbers are written with `formatXmlDouble`, so the VM and the browser
 /// agree; `sheetPr` carries the tab color and the outline summary position;
 /// `sheetView` carries zoom, gridlines, headings, zeros, formulas and
-/// right-to-left, and the pane of `sheet_view.dart` with its `selection`.
-/// Filters and merges are not ported here yet.
+/// right-to-left, and the pane of `sheet_view.dart` with its `selection`;
+/// the trailer writes `autoFilter` and `mergeCells` from ranges that the
+/// writer has validated (Quds wrote any filter string unchecked and accepted
+/// overlapping merges).
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
-/// `sheetFormatPr` and `cols` before `sheetData`.
+/// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter` and
+/// `mergeCells`.
 library;
 
 import '../opc/ooxml.dart';
@@ -24,6 +27,7 @@ import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
 import 'color.dart';
 import 'limits.dart';
+import 'range.dart';
 import 'sheet_view.dart';
 
 /// The width Excel gives a column of Calibri 11 when nothing sets one: 8.43
@@ -60,6 +64,8 @@ final class WorksheetSettings {
     this.tabColor,
     this.summaryBelow = true,
     this.summaryRight = true,
+    this.autoFilter,
+    this.merges = const <XlsxRange>[],
   });
 
   /// The columns from A on; `null` keeps a column at its default.
@@ -86,6 +92,12 @@ final class WorksheetSettings {
   /// Whether the summary column of an outline group is right of its detail
   /// columns.
   final bool summaryRight;
+
+  /// The range of the sheet's auto filter, or `null` for none.
+  final XlsxRange? autoFilter;
+
+  /// The merged ranges, in the order they were merged.
+  final List<XlsxRange> merges;
 }
 
 /// The `<worksheet>` frame before the rows: the XML declaration, the
@@ -111,9 +123,27 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 }
 
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
-/// then `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
-String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) =>
-    hasRows ? '</sheetData></worksheet>' : '</worksheet>';
+/// then `autoFilter` and `mergeCells` when the sheet has them, then
+/// `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
+String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
+  final StringBuffer out = StringBuffer();
+  final XmlWriter w = XmlWriter(out);
+  if (hasRows) w.raw('</sheetData>');
+  final XlsxRange? filter = settings.autoFilter;
+  if (filter != null) {
+    w.empty('autoFilter', <String, String>{'ref': filter.ref});
+  }
+  if (settings.merges.isNotEmpty) {
+    w.start('mergeCells');
+    w.attribute('count', '${settings.merges.length}');
+    for (final XlsxRange merge in settings.merges) {
+      w.empty('mergeCell', <String, String>{'ref': merge.ref});
+    }
+    w.end();
+  }
+  w.raw('</worksheet>');
+  return out.toString();
+}
 
 /// Writes `sheetPr` when the sheet has a tab color or an outline summary
 /// that is not Excel's default (below and right).

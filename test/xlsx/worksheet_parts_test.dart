@@ -413,4 +413,46 @@ void main() {
       );
     });
   });
+
+  group('autoFilter and mergeCells', () {
+    final XlsxRange filter = XlsxRange.parse('A6:D20');
+    final List<XlsxRange> merges = <XlsxRange>[
+      XlsxRange.parse('A1:D1'),
+      XlsxRange.parse('B3:C4'),
+    ];
+
+    test('the trailer writes autoFilter before mergeCells', () {
+      expect(
+        worksheetTrailer(
+          WorksheetSettings(autoFilter: filter, merges: merges),
+          hasRows: true,
+        ),
+        '</sheetData><autoFilter ref="A6:D20"/><mergeCells count="2">'
+        '<mergeCell ref="A1:D1"/><mergeCell ref="B3:C4"/></mergeCells>'
+        '</worksheet>',
+      );
+    });
+
+    test('each alone, and with no rows', () {
+      expect(
+        worksheetTrailer(WorksheetSettings(autoFilter: filter), hasRows: true),
+        '</sheetData><autoFilter ref="A6:D20"/></worksheet>',
+      );
+      expect(
+        worksheetTrailer(WorksheetSettings(merges: merges), hasRows: false),
+        '<mergeCells count="2"><mergeCell ref="A1:D1"/>'
+        '<mergeCell ref="B3:C4"/></mergeCells></worksheet>',
+      );
+    });
+
+    test('a single-cell filter writes its one reference', () {
+      expect(
+        worksheetTrailer(
+          const WorksheetSettings(autoFilter: XlsxRange(0, 0)),
+          hasRows: false,
+        ),
+        '<autoFilter ref="A1"/></worksheet>',
+      );
+    });
+  });
 }

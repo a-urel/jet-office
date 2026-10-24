@@ -815,4 +815,176 @@ void main() {
       expect(checkXlsx(book.close().bytes), isEmpty);
     });
   });
+
+  group('rule 20: merged cells', () {
+    Uint8List merged() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('M')
+        ..row(<Object?>[1])
+        ..merge(XlsxRange.parse('A1:B2'))
+        ..merge(XlsxRange.parse('D4:E4'));
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      merged(),
+      edit: <String, String? Function(String)>{_sheet1: change},
+    );
+
+    test('valid merges have no violations', () {
+      expect(checkXlsx(merged()), isEmpty);
+    });
+    test('a single-cell merge', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="D4:E4"', 'ref="D4"')),
+        20,
+      );
+    });
+    test('a single-cell merge written as a range', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="D4:E4"', 'ref="D4:D4"')),
+        20,
+      );
+    });
+    test('overlapping merges', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="D4:E4"', 'ref="B2:C3"')),
+        20,
+      );
+    });
+    test('a merge outside the sheet', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="D4:E4"', 'ref="D4:XFE4"')),
+        20,
+      );
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst('ref="D4:E4"', 'ref="D4:E1048577"'),
+        ),
+        20,
+      );
+    });
+    test('a reversed or malformed merge', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="D4:E4"', 'ref="E4:D4"')),
+        20,
+      );
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="D4:E4"', 'ref="D4:"')),
+        20,
+      );
+    });
+    test('a count that differs from the children', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('count="2"', 'count="3"')),
+        20,
+      );
+    });
+    test('a missing count', () {
+      _expectRule(
+        tamper(
+          (String x) =>
+              x.replaceFirst('<mergeCells count="2">', '<mergeCells>'),
+        ),
+        20,
+      );
+    });
+  });
+
+  group('rule 21: defined names and the filter range', () {
+    Uint8List filtered() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('F')
+        ..row(<Object?>[1, 2])
+        ..autoFilter(XlsxRange.parse('A1:B2'));
+      book.addSheet('G').autoFilter(XlsxRange.parse('A1:B2'));
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String part, String Function(String xml) change) =>
+        _rebuild(
+          filtered(),
+          edit: <String, String? Function(String)>{part: change},
+        );
+
+    test('valid names and filters have no violations', () {
+      expect(checkXlsx(filtered()), isEmpty);
+    });
+    test('the same name twice in one scope', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst('localSheetId="1"', 'localSheetId="0"'),
+        ),
+        21,
+      );
+    });
+    test('names differing only in case are the same name', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x
+              .replaceFirst('localSheetId="1"', 'localSheetId="0"')
+              .replaceFirst(
+                'name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\'G',
+                'name="_XLNM._filterdatabase" localSheetId="0" hidden="1">\'G',
+              ),
+        ),
+        21,
+      );
+    });
+    test('a localSheetId that is not a sheet', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst('localSheetId="1"', 'localSheetId="2"'),
+        ),
+        21,
+      );
+    });
+    test('a localSheetId that is not a number', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst('localSheetId="1"', 'localSheetId="x"'),
+        ),
+        21,
+      );
+    });
+    test('a global and a local name of one name are different scopes', () {
+      expect(
+        checkXlsx(
+          tamper(
+            'xl/workbook.xml',
+            (String x) => x.replaceFirst(
+              '</definedNames>',
+              '<definedName name="_xlnm._FilterDatabase">F!A1</definedName>'
+                  '</definedNames>',
+            ),
+          ),
+        ),
+        isEmpty,
+      );
+    });
+    test('an autoFilter ref that is not a range', () {
+      for (final String bad in <String>[
+        'A:A',
+        'XFE1:XFE2',
+        'B2:A1',
+        'hello',
+        '',
+      ]) {
+        _expectRule(
+          tamper(
+            _sheet1,
+            (String x) => x.replaceFirst(
+              'autoFilter ref="A1:B2"',
+              'autoFilter ref="$bad"',
+            ),
+          ),
+          21,
+        );
+      }
+    });
+  });
 }

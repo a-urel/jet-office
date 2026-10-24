@@ -10,7 +10,8 @@
 /// tab and, when a formula was written, `calcPr` for full recalculation on
 /// load; the root relationships point to the property parts; and every part
 /// is written through `XmlWriter` with scrub-checked attribute values instead
-/// of string concatenation. Drawings, charts, pictures and passwords are not
+/// of string concatenation; a sheet with an auto filter gets the hidden
+/// `_xlnm._FilterDatabase` defined name Excel expects. Drawings, charts, pictures and passwords are not
 /// ported in this phase.
 library;
 
@@ -19,6 +20,7 @@ import '../opc/ooxml.dart';
 import '../opc/relationships.dart';
 import '../xml/xml_escape.dart';
 import '../xml/xml_writer.dart';
+import 'range.dart';
 import 'sheet_view.dart';
 
 /// A worksheet as the workbook lists it.
@@ -27,11 +29,14 @@ import 'sheet_view.dart';
 /// `_xHHHH_` sequences when it writes it. `number` is the sheet's 1-based
 /// creation order: it names the part (`sheet{number}.xml`), is the
 /// `sheetId`, and its relationship id is [worksheetRelationshipId].
-/// `visibility` is written as the `state` of a hidden sheet.
+/// `visibility` is written as the `state` of a hidden sheet. `autoFilter` is
+/// the sheet's filter range, or `null`; it becomes the `_xlnm._FilterDatabase`
+/// defined name.
 typedef WorkbookSheet = ({
   String name,
   int number,
   XlsxSheetVisibility visibility,
+  XlsxRange? autoFilter,
 });
 
 /// The relationship id of the worksheet created [number]th (1-based).
@@ -53,6 +58,12 @@ String worksheetPartName(int number) => 'xl/worksheets/sheet$number.xml';
 /// asks Excel to recalculate every formula when the file is opened, which a
 /// workbook with formulas needs because the writer does not compute their
 /// results.
+///
+/// After `sheets`, one hidden `_xlnm._FilterDatabase` defined name is written
+/// per filtered sheet, in tab order, scoped by `localSheetId` (the tab index)
+/// and reading `'<name>'!<absoluteRef>`: the name is always quoted with `'`
+/// doubled, and the whole text goes through [escapeXstring] like the sheet
+/// name does.
 void writeWorkbook(
   XmlWriter w, {
   required List<WorkbookSheet> tabs,
@@ -77,8 +88,28 @@ void writeWorkbook(
     });
   }
   w.end();
+  _writeFilterNames(w, tabs);
   if (fullCalcOnLoad) {
     w.empty('calcPr', const <String, String>{'fullCalcOnLoad': '1'});
+  }
+  w.end();
+}
+
+/// Writes `definedNames` with a `_xlnm._FilterDatabase` for each sheet of
+/// [tabs] that has an auto filter, or nothing when none has.
+void _writeFilterNames(XmlWriter w, List<WorkbookSheet> tabs) {
+  if (!tabs.any((WorkbookSheet s) => s.autoFilter != null)) return;
+  w.start('definedNames');
+  for (int index = 0; index < tabs.length; index++) {
+    final XlsxRange? filter = tabs[index].autoFilter;
+    if (filter == null) continue;
+    final String quoted = "'${tabs[index].name.replaceAll("'", "''")}'";
+    w.start('definedName');
+    w.attribute('name', '_xlnm._FilterDatabase');
+    w.attribute('localSheetId', '$index');
+    w.attribute('hidden', '1');
+    w.text(escapeXstring('$quoted!${filter.absoluteRef}'));
+    w.end();
   }
   w.end();
 }

@@ -15,8 +15,10 @@
 /// without sheets is an error instead of silently gaining `Sheet1`, Excel's
 /// row and column limits are enforced, and data problems are returned as
 /// warnings. A sheet has a view (zoom, gridlines, frozen or split panes), a
-/// tab color, an outline summary position and a visibility. Merges,
-/// filters, charts and pictures are not ported yet.
+/// tab color, an outline summary position and a visibility. Merged ranges
+/// and the auto filter are trailer settings, checked when set: Quds accepted
+/// overlapping merges and any filter text, and wrote no filter database
+/// name. Charts and pictures are not ported yet.
 library;
 
 import 'dart:convert';
@@ -31,6 +33,7 @@ import 'color.dart';
 import 'column.dart';
 import 'limits.dart';
 import 'properties.dart';
+import 'range.dart';
 import 'shared_strings.dart';
 import 'sheet_name.dart';
 import 'sheet_view.dart';
@@ -228,7 +231,12 @@ sealed class XlsxWriterBase {
             w,
             tabs: <WorkbookSheet>[
               for (final _SheetWriter s in _tabs)
-                (name: s.name, number: s._number, visibility: s.visibility),
+                (
+                  name: s.name,
+                  number: s._number,
+                  visibility: s.visibility,
+                  autoFilter: s._autoFilter,
+                ),
             ],
             activeTab: _activeTab(),
             fullCalcOnLoad: _encoder.wroteFormula,
@@ -410,6 +418,31 @@ abstract final class XlsxSheetWriter {
   /// Throws [StateError] like [columns].
   void outlineSummary({bool below = true, bool right = true});
 
+  /// Merges the cells of [range] into one, which shows the top-left cell.
+  ///
+  /// A trailer setting: allowed after rows, until the next `addSheet` or
+  /// `close()` finishes the sheet. Merges are written in the order made.
+  /// Excel keeps only the top-left cell's value, so write the value there;
+  /// the other cells of the range should be empty.
+  ///
+  /// Throws [StateError] when the sheet is finished or the writer has failed;
+  /// [ArgumentError] when [range] is a single cell, lies outside the sheet,
+  /// has its first corner after its last, or overlaps an earlier merge (the
+  /// message names both ranges). When it throws, nothing is recorded.
+  void merge(XlsxRange range);
+
+  /// Puts an auto filter, the drop-down buttons of a header row, on [range],
+  /// whose first row is the header. A later call replaces the earlier one.
+  ///
+  /// A trailer setting like [merge]. The workbook also gets the hidden
+  /// `_xlnm._FilterDatabase` name Excel keeps for the filter. A single-cell
+  /// [range] is accepted.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] when [range] lies
+  /// outside the sheet or has its first corner after its last; the earlier
+  /// filter, if any, stays in force then.
+  void autoFilter(XlsxRange range);
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
@@ -505,6 +538,8 @@ final class _SheetWriter implements XlsxSheetWriter {
   XlsxColor? _tabColor;
   bool _summaryBelow = true;
   bool _summaryRight = true;
+  final List<XlsxRange> _merges = <XlsxRange>[];
+  XlsxRange? _autoFilter;
 
   @override
   int get rowCount => _rowCount;
@@ -587,6 +622,36 @@ final class _SheetWriter implements XlsxSheetWriter {
     _checkHeaderOpen('outlineSummary');
     _summaryBelow = below;
     _summaryRight = right;
+  }
+
+  @override
+  void merge(XlsxRange range) {
+    _checkOpenSheet();
+    validateRange(range, 'range');
+    if (range.isSingleCell) {
+      throw ArgumentError.value(
+        range,
+        'range',
+        'A merged range must cover at least two cells.',
+      );
+    }
+    for (final XlsxRange earlier in _merges) {
+      if (earlier.overlaps(range)) {
+        throw ArgumentError.value(
+          range,
+          'range',
+          'The range ${range.ref} overlaps the merged range ${earlier.ref}.',
+        );
+      }
+    }
+    _merges.add(range);
+  }
+
+  @override
+  void autoFilter(XlsxRange range) {
+    _checkOpenSheet();
+    validateRange(range, 'range');
+    _autoFilter = range;
   }
 
   @override
@@ -736,6 +801,8 @@ final class _SheetWriter implements XlsxSheetWriter {
       tabColor: _tabColor,
       summaryBelow: _summaryBelow,
       summaryRight: _summaryRight,
+      autoFilter: _autoFilter,
+      merges: _merges,
     );
     _book._zip.addChunks(worksheetPartName(_number), <Uint8List>[
       utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),
