@@ -422,6 +422,77 @@ void main() {
     expect(xml, isNot(contains('One too many')));
   });
 
+  group('idsFor', () {
+    test('gives the ids idFor gives, in order', () {
+      final StyleRegistry r = StyleRegistry();
+      const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+      expect(r.idsFor(<XlsxStyle?>[null, bold, const XlsxStyle(), bold]), <int>[
+        0,
+        1,
+        0,
+        1,
+      ]);
+      expect(r.idFor(bold), 1);
+    });
+
+    test('a limit hit by a later style records none of the earlier', () {
+      final StyleRegistry r = StyleRegistry();
+      for (int i = 1; i < XlsxLimits.maxFonts - 1; i++) {
+        r.idFor(XlsxStyle(font: XlsxFont(name: 'F$i')));
+      }
+      // 511 fonts: the first new font fits, the second does not.
+      expect(
+        () => r.idsFor(const <XlsxStyle?>[
+          XlsxStyle(font: XlsxFont(name: 'F1')),
+          XlsxStyle(
+            font: XlsxFont(name: 'Fits'),
+            numFmt: XlsxNumFmt.custom('0.0'),
+          ),
+          XlsxStyle(
+            font: XlsxFont(name: 'F2'),
+            fill: XlsxFill.solid(XlsxColor.rgb(1)),
+          ),
+          XlsxStyle(font: XlsxFont(name: 'Too many')),
+        ]),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      final String xml = _xml(r);
+      expect(xml, contains('<fonts count="511">'));
+      expect(xml, contains('<fills count="2">'));
+      expect(xml, isNot(contains('numFmts')));
+      expect(xml, contains('<cellXfs count="511">'));
+      // The font, code and cell format id handed out before the throw are
+      // free again: the same style registers as if for the first time.
+      expect(
+        r.idFor(
+          const XlsxStyle(
+            font: XlsxFont(name: 'Fits'),
+            numFmt: XlsxNumFmt.custom('0.0'),
+          ),
+        ),
+        511,
+      );
+      expect(_xml(r), contains('<fonts count="512">'));
+      expect(_xml(r), contains('numFmtId="164" formatCode="0.0"'));
+    });
+
+    test('an invalid later style records none of the earlier', () {
+      final StyleRegistry r = StyleRegistry();
+      expect(
+        () => r.idsFor(const <XlsxStyle?>[
+          XlsxStyle(font: XlsxFont(bold: true)),
+          XlsxStyle(numFmt: XlsxNumFmt.builtin(200)),
+        ]),
+        throwsArgumentError,
+      );
+      expect(_xml(r), _xml(StyleRegistry()));
+      expect(
+        r.idFor(const XlsxStyle(alignment: XlsxAlignment(wrapText: true))),
+        1,
+      );
+    });
+  });
+
   test('a limit hit by one part records none of the others', () {
     final StyleRegistry r = StyleRegistry();
     for (int i = 0; i < XlsxLimits.maxNumberFormats; i++) {

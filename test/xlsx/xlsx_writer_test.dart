@@ -654,4 +654,448 @@ void main() {
       );
     }
   });
+
+  group('columns, rows and default sizes', () {
+    const XlsxStyle money = XlsxStyle(numFmt: XlsxNumFmt.thousands2);
+    const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+
+    /// The first worksheet of [book], after closing it.
+    String sheet1(XlsxWriter book) =>
+        readXlsx(book.close().bytes)['xl/worksheets/sheet1.xml']!;
+
+    test('columns write joined <col> elements', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..columns(const <XlsxColumn?>[
+          XlsxColumn(width: 12),
+          XlsxColumn(width: 12),
+          null,
+          XlsxColumn(hidden: true),
+        ])
+        ..row(<Object?>[1]);
+      expect(
+        sheet1(book),
+        _sheetXml(
+          '<cols><col min="1" max="2" width="12" customWidth="1"/>'
+          '<col min="4" max="4" width="9.140625" hidden="1"/></cols>'
+          '<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>',
+        ),
+      );
+    });
+
+    test('a column with only a style writes its cell format', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S').columns(const <XlsxColumn?>[
+        null,
+        null,
+        XlsxColumn(style: money),
+      ]);
+      final XlsxResult out = book.close();
+      final Map<String, String> parts = readXlsx(out.bytes);
+      expect(
+        parts['xl/worksheets/sheet1.xml'],
+        contains(
+          '<cols><col min="3" max="3" width="9.140625" style="1"/></cols>',
+        ),
+      );
+      expect(parts['xl/styles.xml'], contains('<cellXfs count="2">'));
+      expect(checkXlsx(out.bytes), isEmpty);
+    });
+
+    test('default sizes write sheetFormatPr', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S').defaultSizes(rowHeight: 18, columnWidth: 10);
+      expect(
+        sheet1(book),
+        contains(
+          '<sheetViews><sheetView workbookViewId="0"/></sheetViews>'
+          '<sheetFormatPr defaultColWidth="10" defaultRowHeight="18" '
+          'customHeight="1"/><sheetData/>',
+        ),
+      );
+    });
+
+    test('a null column width takes the default column width', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..columns(const <XlsxColumn?>[XlsxColumn(hidden: true)])
+        ..defaultSizes(columnWidth: 11);
+      expect(
+        sheet1(book),
+        contains(
+          '<sheetFormatPr defaultColWidth="11" defaultRowHeight="15"/>'
+          '<cols><col min="1" max="1" width="11" hidden="1"/></cols>',
+        ),
+      );
+    });
+
+    test('row attributes', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..row(<Object?>['a'], height: 30)
+        ..row(<Object?>['b'], hidden: true)
+        ..row(<Object?>['c'], outlineLevel: 1)
+        ..row(<Object?>['d'], collapsed: true)
+        ..blankRow(height: 5)
+        ..row(<Object?>[null, null], hidden: true)
+        ..row(
+          <Object?>['e'],
+          height: 12.5,
+          hidden: true,
+          outlineLevel: 2,
+          collapsed: true,
+        );
+      final String xml = sheet1(book);
+      expect(
+        xml,
+        contains(
+          '<sheetFormatPr defaultRowHeight="15" outlineLevelRow="2"/>'
+          '<sheetData>'
+          '<row r="1" ht="30" customHeight="1"><c r="A1" t="s"><v>0</v></c>'
+          '</row>'
+          '<row r="2" hidden="1"><c r="A2" t="s"><v>1</v></c></row>'
+          '<row r="3" outlineLevel="1"><c r="A3" t="s"><v>2</v></c></row>'
+          '<row r="4" collapsed="1"><c r="A4" t="s"><v>3</v></c></row>'
+          '<row r="5" ht="5" customHeight="1"/>'
+          '<row r="6" hidden="1"/>'
+          '<row r="7" ht="12.5" hidden="1" customHeight="1" outlineLevel="2" '
+          'collapsed="1"><c r="A7" t="s"><v>4</v></c></row>'
+          '</sheetData>',
+        ),
+      );
+    });
+
+    test('rows that carry only attributes are written', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..blankRow(height: 30)
+        ..row(<Object?>[null, null], hidden: true)
+        ..blankRow(outlineLevel: 3)
+        ..blankRow(outlineLevel: 1)
+        ..blankRow();
+      final XlsxResult out = book.close();
+      expect(
+        readXlsx(out.bytes)['xl/worksheets/sheet1.xml'],
+        contains(
+          '<sheetFormatPr defaultRowHeight="15" outlineLevelRow="3"/>'
+          '<sheetData>'
+          '<row r="1" ht="30" customHeight="1"/>'
+          '<row r="2" hidden="1"/>'
+          '<row r="3" outlineLevel="3"/>'
+          '<row r="4" outlineLevel="1"/>'
+          '</sheetData>',
+        ),
+      );
+      expect(checkXlsx(out.bytes), isEmpty);
+    });
+
+    test('heights and hidden rows alone write no sheetFormatPr', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..row(<Object?>[1], height: 20)
+        ..blankRow(hidden: true);
+      expect(sheet1(book), isNot(contains('sheetFormatPr')));
+    });
+
+    test('a column style reaches the cells under the row style', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..columns(const <XlsxColumn?>[null, null, XlsxColumn(style: money)])
+        ..row(<Object?>['a', 'b', 1.5])
+        ..row(<Object?>['c', 'd', 2.5], style: bold);
+      final XlsxResult out = book.close();
+      final Map<String, String> parts = readXlsx(out.bytes);
+      final XmlDocument sheet = XmlDocument.parse(
+        parts['xl/worksheets/sheet1.xml']!,
+      );
+      String styleOf(String ref) => sheet
+          .findAllElements('c')
+          .firstWhere((XmlElement c) => c.getAttribute('r') == ref)
+          .getAttribute('s')!;
+      final List<XmlElement> xfs = XmlDocument.parse(
+        parts['xl/styles.xml']!,
+      ).findAllElements('cellXfs').single.findElements('xf').toList();
+      final XmlElement c1 = xfs[int.parse(styleOf('C1'))];
+      expect(c1.getAttribute('numFmtId'), '4');
+      expect(c1.getAttribute('fontId'), '0');
+      final XmlElement c2 = xfs[int.parse(styleOf('C2'))];
+      expect(c2.getAttribute('numFmtId'), '4');
+      expect(c2.getAttribute('fontId'), '1');
+      final XmlElement a2 = xfs[int.parse(styleOf('A2'))];
+      expect(a2.getAttribute('numFmtId'), '0');
+      expect(a2.getAttribute('fontId'), '1');
+      expect(checkXlsx(out.bytes), isEmpty);
+    });
+
+    group('header settings are frozen at the first row', () {
+      Matcher frozen(String setting) => throwsA(
+        isA<StateError>().having(
+          (StateError e) => e.message,
+          'message',
+          allOf(contains('"S"'), contains(setting)),
+        ),
+      );
+
+      test('columns after row', () {
+        final XlsxSheetWriter s = XlsxWriter().addSheet('S');
+        s.row(<Object?>[1]);
+        expect(
+          () => s.columns(const <XlsxColumn?>[XlsxColumn(width: 5)]),
+          frozen('columns'),
+        );
+      });
+
+      test('columns after blankRow', () {
+        final XlsxSheetWriter s = XlsxWriter().addSheet('S');
+        s.blankRow();
+        expect(
+          () => s.columns(const <XlsxColumn?>[XlsxColumn(width: 5)]),
+          frozen('columns'),
+        );
+      });
+
+      test('defaultSizes after row', () {
+        final XlsxSheetWriter s = XlsxWriter().addSheet('S');
+        s.row(<Object?>[]);
+        expect(() => s.defaultSizes(rowHeight: 20), frozen('defaultSizes'));
+      });
+
+      test('a refused setting changes nothing', () {
+        final XlsxWriter book = XlsxWriter();
+        final XlsxSheetWriter s = book.addSheet('S');
+        s.blankRow(height: 10);
+        expect(
+          () => s.columns(const <XlsxColumn?>[XlsxColumn(style: bold)]),
+          throwsStateError,
+        );
+        expect(() => s.defaultSizes(columnWidth: 3), throwsStateError);
+        final XlsxResult out = book.close();
+        final Map<String, String> parts = readXlsx(out.bytes);
+        expect(parts['xl/worksheets/sheet1.xml'], isNot(contains('<cols')));
+        expect(
+          parts['xl/worksheets/sheet1.xml'],
+          isNot(contains('sheetFormatPr')),
+        );
+        expect(parts['xl/styles.xml'], contains('<cellXfs count="1">'));
+      });
+
+      test('a later call before any row replaces the earlier one', () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('S')
+          ..columns(const <XlsxColumn?>[XlsxColumn(width: 5)])
+          ..columns(const <XlsxColumn?>[null, XlsxColumn(width: 6)])
+          ..defaultSizes(rowHeight: 20)
+          ..defaultSizes(columnWidth: 8)
+          ..row(<Object?>[1, 2]);
+        final String xml = sheet1(book);
+        expect(
+          xml,
+          contains(
+            '<sheetFormatPr defaultColWidth="8" defaultRowHeight="15"/>'
+            '<cols><col min="2" max="2" width="6" customWidth="1"/></cols>',
+          ),
+        );
+      });
+
+      test('a finished sheet refuses settings', () {
+        final XlsxWriter book = XlsxWriter();
+        final XlsxSheetWriter s = book.addSheet('S');
+        book.addSheet('T');
+        expect(() => s.columns(const <XlsxColumn?>[]), throwsStateError);
+        expect(s.defaultSizes, throwsStateError);
+      });
+    });
+
+    group('invalid layout values throw and record nothing', () {
+      /// Runs [bad], which must throw [ArgumentError] naming [field], on a
+      /// fresh sheet, and checks that the file is as if it was never called.
+      void expectRejected(void Function(XlsxSheetWriter s) bad, String field) {
+        final XlsxWriter book = XlsxWriter();
+        final XlsxSheetWriter s = book.addSheet('S');
+        expect(
+          () => bad(s),
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError e) => e.name,
+              'name',
+              field,
+            ),
+          ),
+        );
+        expect(s.rowCount, 0);
+        // Not frozen: a header setting is still accepted.
+        s.defaultSizes();
+        final XlsxResult out = book.close();
+        final Map<String, String> parts = readXlsx(out.bytes);
+        expect(parts['xl/worksheets/sheet1.xml'], _sheetXml('<sheetData/>'));
+        expect(parts['xl/styles.xml'], contains('<cellXfs count="1">'));
+        expect(parts['xl/styles.xml'], contains('<fonts count="1">'));
+      }
+
+      for (final double width in <double>[-1, 256, double.nan]) {
+        test('column width $width', () {
+          expectRejected(
+            (XlsxSheetWriter s) => s.columns(<XlsxColumn?>[
+              const XlsxColumn(style: bold),
+              XlsxColumn(width: width),
+            ]),
+            'columns[1].width',
+          );
+        });
+        test('default column width $width', () {
+          expectRejected(
+            (XlsxSheetWriter s) => s.defaultSizes(columnWidth: width),
+            'columnWidth',
+          );
+        });
+      }
+
+      for (final double height in <double>[-1, 410]) {
+        test('row height $height', () {
+          expectRejected(
+            (XlsxSheetWriter s) => s.row(<Object?>['x'], height: height),
+            'height',
+          );
+        });
+        test('blank row height $height', () {
+          expectRejected(
+            (XlsxSheetWriter s) => s.blankRow(height: height),
+            'height',
+          );
+        });
+        test('default row height $height', () {
+          expectRejected(
+            (XlsxSheetWriter s) => s.defaultSizes(rowHeight: height),
+            'rowHeight',
+          );
+        });
+      }
+
+      for (final int level in <int>[-1, 8]) {
+        test('row outline level $level', () {
+          expectRejected(
+            (XlsxSheetWriter s) => s.row(<Object?>['x'], outlineLevel: level),
+            'outlineLevel',
+          );
+        });
+        test('blank row outline level $level', () {
+          expectRejected(
+            (XlsxSheetWriter s) => s.blankRow(outlineLevel: level),
+            'outlineLevel',
+          );
+        });
+        test('column outline level $level', () {
+          expectRejected(
+            (XlsxSheetWriter s) => s.columns(<XlsxColumn?>[
+              const XlsxColumn(style: bold),
+              XlsxColumn(outlineLevel: level),
+            ]),
+            'columns[1].outlineLevel',
+          );
+        });
+      }
+
+      test('an invalid column style after a valid one', () {
+        expectRejected(
+          (XlsxSheetWriter s) => s.columns(const <XlsxColumn?>[
+            XlsxColumn(style: bold),
+            XlsxColumn(style: XlsxStyle(numFmt: XlsxNumFmt.builtin(200))),
+          ]),
+          'numFmt',
+        );
+      });
+    });
+
+    test('more than 16,384 columns', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter s = book.addSheet('S');
+      expect(
+        () => s.columns(
+          List<XlsxColumn?>.filled(16385, const XlsxColumn(width: 1)),
+        ),
+        throwsA(
+          isA<XlsxLimitError>()
+              .having((XlsxLimitError e) => e.limit, 'limit', 'columns')
+              .having((XlsxLimitError e) => e.max, 'max', 16384),
+        ),
+      );
+      s.columns(List<XlsxColumn?>.filled(16384, const XlsxColumn(width: 1)));
+      final XlsxResult out = book.close();
+      expect(
+        readXlsx(out.bytes)['xl/worksheets/sheet1.xml'],
+        contains(
+          '<cols><col min="1" max="16384" width="1" customWidth="1"/></cols>',
+        ),
+      );
+      expect(checkXlsx(out.bytes), isEmpty);
+    });
+
+    test('a row whose cell throws still closes, attributes kept', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter s = book.addSheet('S');
+      expect(
+        () => s.row(<Object?>['ok', Object()], height: 20),
+        throwsArgumentError,
+      );
+      expect(
+        () => s.row(<Object?>[Object()], hidden: true),
+        throwsArgumentError,
+      );
+      expect(s.rowCount, 2);
+      final XlsxResult out = book.close();
+      expect(
+        readXlsx(out.bytes)['xl/worksheets/sheet1.xml'],
+        contains(
+          '<sheetData>'
+          '<row r="1" ht="20" customHeight="1"><c r="A1" t="s"><v>0</v></c>'
+          '</row><row r="2" hidden="1"/></sheetData>',
+        ),
+      );
+      expect(checkXlsx(out.bytes), isEmpty);
+    });
+
+    test('a sheet larger than one buffer chunk is assembled byte-exact', () {
+      // The body buffer encodes every 16 KiB; 4,000 rows are about 200 KB,
+      // so the part is a header, many body chunks and a trailer.
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter s = book.addSheet('S')
+        ..columns(const <XlsxColumn?>[XlsxColumn(width: 20)])
+        ..defaultSizes(rowHeight: 16);
+      final StringBuffer rows = StringBuffer();
+      for (int r = 1; r <= 4000; r++) {
+        final int level = r % 3;
+        s.row(<Object?>[r, r + 0.5], outlineLevel: level);
+        rows.write('<row r="$r"');
+        if (level > 0) rows.write(' outlineLevel="$level"');
+        rows.write(
+          '><c r="A$r"><v>$r</v></c><c r="B$r"><v>${r + 0.5}</v></c></row>',
+        );
+      }
+      final String xml = sheet1(book);
+      expect(xml.length, greaterThan(10 * 16384));
+      expect(
+        xml,
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<worksheet xmlns="$_main" xmlns:r="$_rel">'
+        '<sheetViews><sheetView workbookViewId="0"/></sheetViews>'
+        '<sheetFormatPr defaultRowHeight="16" customHeight="1" '
+        'outlineLevelRow="2"/>'
+        '<cols><col min="1" max="1" width="20" customWidth="1"/></cols>'
+        '<sheetData>$rows</sheetData></worksheet>',
+      );
+    });
+
+    test('a styled, grouped workbook passes the checker', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S')
+        ..columns(const <XlsxColumn?>[
+          XlsxColumn(width: 30, style: bold, outlineLevel: 1),
+          XlsxColumn(style: money, outlineLevel: 2, hidden: true),
+        ])
+        ..row(<Object?>['a', 1], outlineLevel: 2, hidden: true)
+        ..row(<Object?>['b', 2], outlineLevel: 1, hidden: true)
+        ..row(<Object?>['total', 3], collapsed: true);
+      expect(checkXlsx(book.close().bytes), isEmpty);
+    });
+  });
 }

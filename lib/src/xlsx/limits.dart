@@ -1,6 +1,7 @@
 /// Excel's hard size limits and the error raised when one is exceeded.
 ///
-/// The figures come from Microsoft's "Excel specifications and limits" page.
+/// The figures come from Microsoft's "Excel specifications and limits" page,
+/// except where a constant names ECMA-376.
 /// This file is new in jet_office; Quds has no equivalent.
 library;
 
@@ -34,6 +35,27 @@ abstract final class XlsxLimits {
   /// depending on the language version of Excel. The lowest figure is used,
   /// so a workbook opens in every language version.
   static const int maxNumberFormats = 200;
+
+  /// The widest a column can be, in characters of the default font.
+  ///
+  /// Microsoft's "Excel specifications and limits" page: column width 255
+  /// characters. A wider column is a programmer error and throws
+  /// [ArgumentError] when the columns are set.
+  static const int maxColumnWidth = 255;
+
+  /// The tallest a row can be, in points.
+  ///
+  /// Microsoft's "Excel specifications and limits" page: row height 409
+  /// points. A taller row is a programmer error and throws [ArgumentError].
+  static const int maxRowHeight = 409;
+
+  /// The deepest outline (grouping) level of a row or column; 0 is not
+  /// grouped.
+  ///
+  /// ECMA-376 Part 1 types `outlineLevel` of `row` (§18.3.1.73) and `col`
+  /// (§18.3.1.13) as an unsigned byte; Excel accepts 0 to 7, eight levels
+  /// counting the ungrouped one. A deeper level throws [ArgumentError].
+  static const int maxOutlineLevel = 7;
 
   /// The maximum number of hyperlinks in a worksheet. No writer enforces it
   /// yet; the sheet writer will once it can write hyperlinks.

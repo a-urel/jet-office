@@ -193,4 +193,85 @@ void main() {
     );
     expect(core.findAllElements('dc:creator').single.innerText, 'Ahmet Urel');
   });
+
+  test('m2_columns_rows writes its columns, rows and default sizes', () {
+    final Map<String, String> parts = readXlsx(
+      named('m2_columns_rows').build(),
+    );
+    final String layout = parts['xl/worksheets/sheet1.xml']!;
+    expect(
+      layout,
+      contains(
+        '<sheetFormatPr defaultRowHeight="15" outlineLevelRow="2" '
+        'outlineLevelCol="2"/>'
+        '<cols><col min="1" max="1" width="5" customWidth="1"/>'
+        '<col min="2" max="2" width="12" customWidth="1"/>'
+        '<col min="3" max="3" width="40" customWidth="1"/>'
+        '<col min="4" max="4" width="255" customWidth="1"/>'
+        '<col min="5" max="5" width="9.140625" hidden="1"/>'
+        '<col min="6" max="6" width="9.140625" outlineLevel="1"/>'
+        '<col min="7" max="8" width="9.140625" outlineLevel="2"/></cols>',
+      ),
+    );
+    for (final String row in <String>[
+      '<row r="2" ht="30" customHeight="1">',
+      '<row r="3" ht="5" customHeight="1">',
+      '<row r="4" hidden="1">',
+      '<row r="5" hidden="1" outlineLevel="2">',
+      '<row r="7" hidden="1" outlineLevel="1">',
+      '<row r="8" collapsed="1">',
+    ]) {
+      expect(layout, contains(row));
+    }
+    expect(
+      parts['xl/worksheets/sheet2.xml'],
+      contains(
+        '<sheetFormatPr defaultColWidth="11" defaultRowHeight="18" '
+        'customHeight="1"/>',
+      ),
+    );
+  });
+
+  test('m2_style_precedence merges column, row and cell styles', () {
+    final Map<String, String> parts = readXlsx(
+      named('m2_style_precedence').build(),
+    );
+    final XmlDocument sheet = XmlDocument.parse(
+      parts['xl/worksheets/sheet1.xml']!,
+    );
+    final XmlDocument styles = XmlDocument.parse(parts['xl/styles.xml']!);
+    final List<XmlElement> xfs = styles
+        .findAllElements('cellXfs')
+        .single
+        .findElements('xf')
+        .toList();
+    XmlElement xfOf(String ref) =>
+        xfs[int.parse(
+          sheet
+                  .findAllElements('c')
+                  .firstWhere((XmlElement c) => c.getAttribute('r') == ref)
+                  .getAttribute('s') ??
+              '0',
+        )];
+    String fontOf(XmlElement xf) => styles
+        .findAllElements('fonts')
+        .single
+        .findElements('font')
+        .elementAt(int.parse(xf.getAttribute('fontId')!))
+        .toXmlString();
+    final String money = xfOf('B2').getAttribute('numFmtId')!;
+    expect(int.parse(money), greaterThanOrEqualTo(164));
+    // Header: bold over money.
+    expect(xfOf('B1').getAttribute('numFmtId'), money);
+    expect(fontOf(xfOf('B1')), contains('<b/>'));
+    // A date in the money column keeps the money format.
+    expect(xfOf('B4').getAttribute('numFmtId'), money);
+    // Totals: italic cell over the bordered row over the money column.
+    final XmlElement total = xfOf('B5');
+    expect(total.getAttribute('numFmtId'), money);
+    expect(total.getAttribute('borderId'), isNot('0'));
+    expect(fontOf(total), contains('<i/>'));
+    expect(xfOf('A5').getAttribute('borderId'), total.getAttribute('borderId'));
+    expect(xfOf('A5').getAttribute('numFmtId'), '0');
+  });
 }

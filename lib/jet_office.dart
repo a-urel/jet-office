@@ -17,6 +17,7 @@ export 'src/xlsx/alignment.dart'
         XlsxVerticalAlignment;
 export 'src/xlsx/border.dart' show XlsxBorder, XlsxBorderSide, XlsxBorderStyle;
 export 'src/xlsx/color.dart' show XlsxColor;
+export 'src/xlsx/column.dart' show XlsxColumn;
 export 'src/xlsx/fill.dart'
     show
         XlsxFill,

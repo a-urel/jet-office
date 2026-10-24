@@ -8,12 +8,17 @@ import 'package:test/test.dart';
 import '../support/xlsx_checker.dart';
 
 /// A small valid workbook: two sheets, shared strings, styled cells (one
-/// with a custom number format, one with a font, fill and border) and a
-/// formula.
+/// with a custom number format, one with a font, fill and border), a
+/// formula, and on the first sheet two styled, grouped columns and grouped
+/// rows with heights.
 Uint8List _good() {
   final XlsxWriter book = XlsxWriter();
   book.addSheet('Data')
-    ..row(<Object?>['a', 'b', 1])
+    ..columns(const <XlsxColumn?>[
+      XlsxColumn(width: 12, style: XlsxStyle(font: XlsxFont(bold: true))),
+      XlsxColumn(outlineLevel: 1),
+    ])
+    ..row(<Object?>['a', 'b', 1], height: 20, outlineLevel: 1)
     ..row(<Object?>['a', 2.5, const XlsxDate(2026, 10, 24)]);
   book.addSheet('Other').row(<Object?>[
     'c',
@@ -523,6 +528,184 @@ void main() {
               x.replaceFirst('patternType="none"', 'patternType="gray0625"'),
         ),
         14,
+      );
+    });
+  });
+
+  group('rule 15: worksheet child order', () {
+    test('the good sheet has the parts the tests move', () {
+      final String xml = utf8.decode(
+        ZipDecoder()
+            .decodeBytes(_good())
+            .files
+            .firstWhere((ArchiveFile f) => f.name == _sheet1)
+            .content,
+      );
+      expect(
+        xml,
+        contains(
+          '<sheetViews><sheetView workbookViewId="0"/></sheetViews>'
+          '<sheetFormatPr defaultRowHeight="15" outlineLevelRow="1" '
+          'outlineLevelCol="1"/>'
+          '<cols><col min="1" max="1" width="12" style="1" customWidth="1"/>'
+          '<col min="2" max="2" width="9.140625" outlineLevel="1"/></cols>'
+          '<sheetData><row r="1" ht="20" customHeight="1" outlineLevel="1">',
+        ),
+      );
+    });
+    test('cols after sheetData', () {
+      _expectRule(
+        _broken(_sheet1, (String x) {
+          final int start = x.indexOf('<cols>');
+          final int end = x.indexOf('</cols>') + '</cols>'.length;
+          final String cols = x.substring(start, end);
+          return (x.substring(0, start) + x.substring(end)).replaceFirst(
+            '</sheetData>',
+            '</sheetData>$cols',
+          );
+        }),
+        15,
+      );
+    });
+    test('sheetViews twice', () {
+      const String views =
+          '<sheetViews><sheetView workbookViewId="0"/></sheetViews>';
+      _expectRule(
+        _broken(_sheet1, (String x) => x.replaceFirst(views, '$views$views')),
+        15,
+      );
+    });
+    test('an element CT_Worksheet does not know', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x.replaceFirst('<sheetData>', '<columns/><sheetData>'),
+        ),
+        15,
+      );
+    });
+  });
+
+  group('rule 16: columns', () {
+    test('min above max', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x.replaceFirst('<col min="1"', '<col min="3"'),
+        ),
+        16,
+      );
+    });
+    test('min of 0', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) =>
+              x.replaceFirst('<col min="1" max="1"', '<col min="0" max="1"'),
+        ),
+        16,
+      );
+    });
+    test('max past column 16,384', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            '<col min="2" max="2"',
+            '<col min="2" max="16385"',
+          ),
+        ),
+        16,
+      );
+    });
+    test('overlapping ranges', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x.replaceFirst('<col min="2"', '<col min="1"'),
+        ),
+        16,
+      );
+    });
+    test('descending ranges', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) =>
+              x.replaceFirst('<col min="1" max="1"', '<col min="3" max="3"'),
+        ),
+        16,
+      );
+    });
+    test('a style past cellXfs', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x.replaceFirst('style="1"', 'style="99"'),
+        ),
+        16,
+      );
+    });
+  });
+
+  group('rule 17: outline levels and heights', () {
+    test('a row level above outlineLevelRow', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            'customHeight="1" outlineLevel="1"',
+            'customHeight="1" outlineLevel="2"',
+          ),
+        ),
+        17,
+      );
+    });
+    test('a column level above outlineLevelCol', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            'width="9.140625" outlineLevel="1"',
+            'width="9.140625" outlineLevel="2"',
+          ),
+        ),
+        17,
+      );
+    });
+    test('a level of 8', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x
+              .replaceFirst('outlineLevelRow="1"', 'outlineLevelRow="8"')
+              .replaceFirst(
+                'customHeight="1" outlineLevel="1"',
+                'customHeight="1" outlineLevel="8"',
+              ),
+        ),
+        17,
+      );
+    });
+    test('a row level without sheetFormatPr', () {
+      _expectRule(
+        _broken(
+          _sheet1,
+          (String x) => x.replaceFirst(RegExp('<sheetFormatPr[^>]*/>'), ''),
+        ),
+        17,
+      );
+    });
+    test('a row height of 410', () {
+      _expectRule(
+        _broken(_sheet1, (String x) => x.replaceFirst('ht="20"', 'ht="410"')),
+        17,
+      );
+    });
+    test('a negative row height', () {
+      _expectRule(
+        _broken(_sheet1, (String x) => x.replaceFirst('ht="20"', 'ht="-1"')),
+        17,
       );
     });
   });

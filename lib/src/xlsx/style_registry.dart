@@ -176,6 +176,42 @@ final class StyleRegistry {
     return id;
   }
 
+  /// The ids of [styles], in order, each as [idFor] gives it.
+  ///
+  /// All or nothing: when one style throws (for the reasons [idFor] lists),
+  /// the styles before it are unregistered again, so the registry is as it
+  /// was before the call. A column list registers its styles this way.
+  List<int> idsFor(List<XlsxStyle?> styles) {
+    final int fonts = _fonts.length;
+    final int fills = _fills.length;
+    final int borders = _borders.length;
+    final int codes = _customCodes.length;
+    final int xfs = _xfs.length;
+    final List<XlsxStyle> added = <XlsxStyle>[];
+    final List<int> ids = <int>[];
+    try {
+      for (final XlsxStyle? style in styles) {
+        if (style != null && !_ids.containsKey(style)) added.add(style);
+        ids.add(idFor(style));
+      }
+    } on Object {
+      added.forEach(_ids.remove);
+      _truncate(_fonts, _fontIds, fonts);
+      _truncate(_fills, _fillIds, fills);
+      _truncate(_borders, _borderIds, borders);
+      _truncate(_customCodes, _customIds, codes);
+      _truncate(_xfs, _xfIds, xfs);
+      rethrow;
+    }
+    return ids;
+  }
+
+  /// Drops the entries of [list] from index [length] on, and their [ids].
+  static void _truncate<T>(List<T> list, Map<T, int> ids, int length) {
+    list.sublist(length).forEach(ids.remove);
+    list.removeRange(length, list.length);
+  }
+
   /// The checked `<font>` of [font] after [resolveFont], or null for no
   /// font (the default font, id 0).
   static String? _fontXmlOf(XlsxFont? font) {
