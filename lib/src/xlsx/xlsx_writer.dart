@@ -295,8 +295,9 @@ abstract final class XlsxSheetWriter {
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
   /// [DateTime], [XlsxDate], [XlsxDecimal], [XlsxFormula], or an [XlsxCell]
   /// wrapping one of those with its own style. [style] applies to every cell
-  /// that has no style of its own. A row of only `null`s writes nothing but
-  /// still counts.
+  /// of the row; a cell's own style is merged over it field by field (a field
+  /// the cell sets wins, one it leaves `null` is inherited). A row of only
+  /// `null`s writes nothing but still counts.
   ///
   /// Data problems are repaired and reported as warnings. Throws
   /// [XlsxLimitError] for more than [XlsxLimits.maxColumns] values or a row

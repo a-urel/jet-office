@@ -15,6 +15,8 @@ library;
 
 final DateTime _epoch = DateTime.utc(1899, 12, 30);
 const int _maxSerial = 2958465; // 9999-12-31
+/// Years beyond this are outside `DateTime`'s range (about 275,760).
+const int _maxDartYear = 270000;
 const int _microsPerDay = 86400 * 1000000;
 
 /// Returns the Excel serial number of the date [year]-[month]-[day].
@@ -24,6 +26,13 @@ const int _microsPerDay = 86400 * 1000000;
 /// Throws an [ArgumentError] if the date does not exist, for example month
 /// 13 or 30 February.
 int? dateSerial(int year, int month, int day) {
+  if (year > _maxDartYear || year < -_maxDartYear) {
+    // Beyond what DateTime holds, so DateTime.utc cannot check the date.
+    if (month < 1 || month > 12 || day < 1 || day > _daysIn(year, month)) {
+      throw ArgumentError('Invalid date: $year-$month-$day.');
+    }
+    return null;
+  }
   final date = DateTime.utc(year, month, day);
   // Dart normalizes out-of-range fields (2026-02-30 becomes 2026-03-02), so a
   // date that does not round-trip its fields does not exist.
@@ -58,4 +67,12 @@ double? dateTimeSerial(DateTime value) {
   // 23:59:59.999999, rounds up to 2958466. That serial is outside Excel's
   // range, so the value gets none and the caller writes it as text.
   return serial >= _maxSerial + 1 ? null : serial;
+}
+
+int _daysIn(int year, int month) {
+  if (month == 2) {
+    final bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    return leap ? 29 : 28;
+  }
+  return const <int>[4, 6, 9, 11].contains(month) ? 30 : 31;
 }

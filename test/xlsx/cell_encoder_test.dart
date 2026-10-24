@@ -1,4 +1,5 @@
 import 'package:jet_office/src/xlsx/cell_encoder.dart';
+import 'package:jet_office/src/xlsx/font.dart';
 import 'package:jet_office/src/xlsx/number_format.dart';
 import 'package:jet_office/src/xlsx/shared_strings.dart';
 import 'package:jet_office/src/xlsx/style.dart';
@@ -21,7 +22,7 @@ void main() {
     encoder = CellEncoder(strings: strings, styles: styles, warnings: warnings);
   });
 
-  String enc(Object? value, {XlsxStyle? rowStyle}) {
+  String enc(Object? value, {XlsxStyle? rowStyle, XlsxStyle? columnStyle}) {
     final StringBuffer buffer = StringBuffer();
     encoder.encode(
       XmlWriter(buffer),
@@ -30,6 +31,7 @@ void main() {
       column: 0,
       value: value,
       rowStyle: rowStyle,
+      columnStyle: columnStyle,
     );
     return buffer.toString();
   }
@@ -239,7 +241,7 @@ void main() {
     );
   });
 
-  test('XlsxCell style replaces the row style', () {
+  test('XlsxCell number format beats the row number format', () {
     const XlsxStyle s1 = XlsxStyle(numFmt: XlsxNumFmt.custom('0.0'));
     const XlsxStyle s2 = XlsxStyle(numFmt: XlsxNumFmt.custom('0.00'));
     expect(
@@ -422,5 +424,164 @@ void main() {
     encoder.encode(out, sheet: 'S', row: 0, column: 1, value: 1);
     out.end();
     expect(buffer.toString(), '<row r="1"><c r="B1"><v>1</v></c></row>');
+  });
+
+  group('style layers', () {
+    int formatCount() {
+      final StringBuffer out = StringBuffer();
+      styles.writeStylesXml(XmlWriter(out));
+      return int.parse(
+        RegExp(r'<cellXfs count="(\d+)"').firstMatch('$out')!.group(1)!,
+      );
+    }
+
+    const XlsxStyle money = XlsxStyle(numFmt: XlsxNumFmt.custom('#,##0.00'));
+    const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+    const XlsxStyle italic = XlsxStyle(font: XlsxFont(italic: true));
+
+    test('column, row and cell styles merge into one cell format', () {
+      expect(
+        enc(
+          const XlsxCell(1, style: italic),
+          rowStyle: bold,
+          columnStyle: money,
+        ),
+        '<c r="A1" s="1"><v>1</v></c>',
+      );
+      expect(
+        styles.idFor(
+          const XlsxStyle(
+            numFmt: XlsxNumFmt.custom('#,##0.00'),
+            font: XlsxFont(bold: true, italic: true),
+          ),
+        ),
+        1,
+      );
+    });
+
+    test('the same triple on 1,000 cells adds one cell format', () {
+      const XlsxCell cell = XlsxCell(1, style: italic);
+      enc(cell, rowStyle: bold, columnStyle: money);
+      final int before = formatCount();
+      for (int i = 0; i < 1000; i++) {
+        enc(cell, rowStyle: bold, columnStyle: money);
+      }
+      expect(formatCount(), before);
+    });
+
+    test('a row font that is not bold beats a bold column', () {
+      expect(
+        enc(
+          1,
+          rowStyle: const XlsxStyle(font: XlsxFont(bold: false)),
+          columnStyle: bold,
+        ),
+        '<c r="A1"><v>1</v></c>',
+      );
+    });
+
+    test('a cell General beats a money column', () {
+      expect(
+        enc(
+          const XlsxCell(1, style: XlsxStyle(numFmt: XlsxNumFmt.general)),
+          columnStyle: money,
+        ),
+        '<c r="A1"><v>1</v></c>',
+      );
+    });
+
+    test('a DateTime in a money column keeps money and warns', () {
+      expect(
+        enc(DateTime(2026, 1, 1), columnStyle: money),
+        '<c r="A1" s="1"><v>46023</v></c>',
+      );
+      expect(codes(), <XlsxWarningCode>[XlsxWarningCode.dateInNonDateFormat]);
+    });
+
+    test('a DateTime under an explicit General gets no date format', () {
+      enc(
+        DateTime(2026, 1, 1),
+        columnStyle: money,
+        rowStyle: const XlsxStyle(numFmt: XlsxNumFmt.general),
+      );
+      expect(codes(), <XlsxWarningCode>[XlsxWarningCode.dateInNonDateFormat]);
+    });
+
+    test('a DateTime in a bold column gets a date format and stays bold', () {
+      final String xml = enc(DateTime(2026, 1, 1), columnStyle: bold);
+      expect(xml, contains('s="1"'));
+      expect(
+        styles.idFor(
+          const XlsxStyle(
+            font: XlsxFont(bold: true),
+            numFmt: XlsxNumFmt.localeDateTime,
+          ),
+        ),
+        1,
+      );
+      expect(warnings.warnings, isEmpty);
+    });
+
+    test('alternating column styles resolve once per column', () {
+      final XlsxStyle other = XlsxStyle(numFmt: XlsxNumFmt.percent());
+      for (int r = 0; r < 500; r++) {
+        for (int c = 0; c < 2; c++) {
+          encoder.encode(
+            XmlWriter(StringBuffer()),
+            sheet: 'S',
+            row: r,
+            column: c,
+            value: 1,
+            rowStyle: bold,
+            columnStyle: c == 0 ? money : other,
+          );
+        }
+      }
+      expect(encoder.resolveCount, 2);
+      expect(formatCount(), 3);
+    });
+
+    test('a DateTime under a merged General has no s and warns', () {
+      expect(
+        enc(
+          DateTime(2026, 1, 1),
+          columnStyle: money,
+          rowStyle: const XlsxStyle(numFmt: XlsxNumFmt.general),
+        ),
+        '<c r="A1"><v>46023</v></c>',
+      );
+      expect(codes(), <XlsxWarningCode>[XlsxWarningCode.dateInNonDateFormat]);
+    });
+
+    test('an invalid layer throws and registers nothing', () {
+      final int before = formatCount();
+      const XlsxStyle bad = XlsxStyle(numFmt: XlsxNumFmt.custom(''));
+      expect(() => enc('x', columnStyle: bad), throwsArgumentError);
+      expect(() => enc('x', columnStyle: bad), throwsArgumentError);
+      expect(strings.values, isEmpty);
+      expect(formatCount(), before);
+    });
+  });
+
+  test('an impossible XlsxDate names the cell and sheet', () {
+    expect(
+      () => enc(const XlsxDate(2026, 2, 30)),
+      throwsA(
+        isA<ArgumentError>().having(
+          (ArgumentError e) => '${e.message}',
+          'message',
+          allOf(contains('A1'), contains('"S"')),
+        ),
+      ),
+    );
+  });
+
+  test('a year beyond DateTime is text, not a throw', () {
+    expect(enc(const XlsxDate(300000, 1, 1)), '<c r="A1" t="s"><v>0</v></c>');
+    expect(strings.values.single, '300000-01-01');
+    expect(codes(), <XlsxWarningCode>[XlsxWarningCode.dateOutsideExcelRange]);
+    expect(enc(const XlsxDate(-300000, 1, 1)), contains('t="s"'));
+    expect(strings.values.last, '-300000-01-01');
+    expect(() => enc(const XlsxDate(300000, 2, 30)), throwsArgumentError);
   });
 }

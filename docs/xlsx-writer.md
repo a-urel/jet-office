@@ -25,8 +25,9 @@ habit.
 | Control character U+0000–U+001F other than tab, LF, CR, or a lone UTF-16 surrogate | removed, warning `invalidCharactersRemoved` | XML 1.0 forbids it | `test/xml/xml_escape_test.dart`, `test/xlsx/cell_encoder_test.dart` |
 | Text longer than 32,767 characters (UTF-16 code units) | truncated without splitting a surrogate pair, warning `textTruncated` | Excel's cell limit | `test/xlsx/cell_encoder_test.dart` |
 | A formula's cached string longer than 32,767 characters | truncated like text, warning `textTruncated` | same | `test/xlsx/cell_encoder_test.dart` |
-| `int` beyond 2^53, also as a formula's cached value | written, warning `intPrecisionLost` | Excel stores every number as a double, so it may round the value | `test/xlsx/cell_encoder_int_test.dart` |
-| Date before 1900-01-01 or after 9999-12-31 | ISO 8601 text, warning `dateOutsideExcelRange` | Excel has no date serial for it | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/date_serial_test.dart` |
+| `int` beyond 2^53, also as a formula's cached value | written, warning `intPrecisionLost`. On the web a whole `double` beyond 2^53 is indistinguishable from an `int`, so it warns too | Excel stores every number as a double, so it may round the value | `test/xlsx/cell_encoder_int_test.dart` |
+| Date before 1900-01-01 or after 9999-12-31, however far (`XlsxDate(300000, 1, 1)` too) | ISO 8601 text with a sign for negative years and at least four year digits, warning `dateOutsideExcelRange` | Excel has no date serial for it | `test/xlsx/cell_encoder_test.dart`, `test/xlsx/date_serial_test.dart` |
+| Column, row and cell styles on one cell | merged: cell over row over column, field by field; a field set back to its default (`XlsxFont(bold: false)`, `XlsxNumFmt.general`) wins over a lower layer. The date format (14/22) is added only when the merged number format is `null`. Identical layer triples share one cell format | a layer that says nothing inherits; one that says something decides | `test/xlsx/cell_encoder_test.dart` |
 | Date in a number format that shows no date | written with that format, warning `dateInNonDateFormat` | the caller chose the format, but the cell shows a bare serial | `test/xlsx/cell_encoder_test.dart` |
 | Row 1,048,577 or column 16,385 | `XlsxLimitError` | the caller decides whether to split into sheets | `test/xlsx/xlsx_writer_test.dart` |
 | More than 65,490 unique cell formats | `XlsxLimitError` | Excel's limit | `test/xlsx/style_registry_test.dart` |
@@ -43,7 +44,7 @@ habit.
 | An invalid style part: a font name that is empty, longer than 31 or not XML-clean, a font size outside 1–409, a family outside 0–14 or a charset outside 0–255; a color out of range (theme 0–11, tint −1–1, indexed 0–65, RGB 0–FFFFFF); a gradient with fewer than two stops, stop positions outside 0–1 or decreasing, a non-finite degree or an edge outside 0–1 | `ArgumentError` naming the field when the style is first used, nothing registered | a programmer's choice; Excel refuses the style otherwise | `test/xlsx/style_registry_test.dart`, `test/xlsx/font_test.dart`, `test/xlsx/fill_test.dart`, `test/xlsx/color_test.dart`, `test/xlsx/border_test.dart` |
 | Characters XML forbids in a document property or in formula text | `ArgumentError` | the caller built the text; silently dropping characters would change a formula's meaning | `test/xlsx/properties_test.dart`, `test/xlsx/xlsx_writer_test.dart`, `test/xlsx/cell_encoder_test.dart` |
 | A formula's cached value that is not `null`, `num`, `String` or `bool` | `ArgumentError` | a cached value is a programmer's choice | `test/xlsx/cell_encoder_test.dart` |
-| An `XlsxDate` that does not exist, such as 30 February | `ArgumentError` | no serial or text can stand for it | `test/xlsx/date_serial_test.dart`, `test/xlsx/cell_encoder_test.dart` |
+| An `XlsxDate` that does not exist, such as 30 February | `ArgumentError` naming the cell and sheet | no serial or text can stand for it | `test/xlsx/date_serial_test.dart`, `test/xlsx/cell_encoder_test.dart` |
 | `addSheet` at a position outside 0 to the number of sheets | `RangeError` | | `test/xlsx/xlsx_writer_test.dart` |
 | `setActiveSheet` with a sheet of another writer | `ArgumentError` | | `test/xlsx/xlsx_writer_test.dart` |
 | A cell value of an unsupported type | `ArgumentError` | a value is a programmer's choice, so guessing would hide the bug | `test/xlsx/cell_encoder_test.dart` |
@@ -73,7 +74,8 @@ client used `decimal ^3.2.6` in 360 files, and its amount fields were 419
   and rejects `NaN` and infinity.
 - **Excel keeps 15 significant digits.** It reads every number as an IEEE
   double. Money fits easily. `XlsxDecimal` prevents a second rounding in Dart,
-  not Excel's own.
+  not Excel's own. A value beyond the `double` range (about 1.8e308) is
+  still written verbatim and Excel rounds it.
 
 ## Port map
 

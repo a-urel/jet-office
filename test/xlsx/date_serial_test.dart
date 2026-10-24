@@ -51,4 +51,13 @@ void main() {
     expect(dateTimeSerial(DateTime(1900)), 1.0);
     expect(dateTimeSerial(DateTime(1900, 3, 1, 12)), 61.5);
   });
+
+  test('dateSerial beyond DateTime checks the calendar by hand', () {
+    expect(dateSerial(300000, 2, 29), isNull); // 300000 is a leap year
+    expect(dateSerial(-300000, 1, 1), isNull);
+    expect(() => dateSerial(300001, 2, 29), throwsArgumentError);
+    expect(() => dateSerial(300000, 13, 1), throwsArgumentError);
+    expect(() => dateSerial(300000, 1, 0), throwsArgumentError);
+    expect(() => dateSerial(300000, 4, 31), throwsArgumentError);
+  });
 }

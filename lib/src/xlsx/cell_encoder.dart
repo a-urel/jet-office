@@ -56,6 +56,20 @@ final class CellEncoder {
   final WarningCollector _warnings;
   bool _wroteFormula = false;
 
+  // The resolved layers of the last cell of each column. Layers are
+  // immutable, so a cell in that column with the same three layer objects
+  // (compared by identity, which costs no hashing, and bounded by the number
+  // of columns, unlike a map keyed on freshly allocated styles) reuses the
+  // merged style and its cell format id. Keyed by column because the cells
+  // of one row usually differ in column style while a column's cells repeat.
+  final List<_Resolved?> _byColumn = <_Resolved?>[];
+  int _resolveCount = 0;
+
+  /// How many times the style layers of a cell were merged and resolved
+  /// afresh instead of coming from the cache. A diagnostic for tests: it
+  /// shows that a sheet of many rows costs one resolution per column.
+  int get resolveCount => _resolveCount;
+
   /// Whether any formula cell has been written, so the workbook can ask
   /// Excel to recalculate on load.
   bool get wroteFormula => _wroteFormula;
@@ -64,12 +78,21 @@ final class CellEncoder {
   ///
   /// [value] is a `String`, `int`, `double`, `bool`, [DateTime], [XlsxDate],
   /// [XlsxDecimal], [XlsxFormula], an [XlsxCell] wrapping one of those, or
-  /// `null`, which writes nothing. The effective style is the [XlsxCell]'s
-  /// style, else [rowStyle]; styles are replaced, not merged.
+  /// `null`, which writes nothing. The effective style is [columnStyle]
+  /// merged with [rowStyle] and then with the [XlsxCell]'s style, so a cell
+  /// beats its row and a row beats its column (see [XlsxStyle.merge]): a
+  /// field a higher layer leaves `null` is inherited, one it sets, even back
+  /// to its default (a font that is not bold, `XlsxNumFmt.general`), wins.
   ///
   /// Data problems (characters XML forbids, text past 32,767 UTF-16 code
   /// units, integers past 2^53, dates outside 1900 to 9999, a date shown in
-  /// a non-date format) are repaired and reported to the warning collector;
+  /// a non-date format) are repaired and reported to the warning collector.
+  /// On the web a whole `double` beyond 2^53 is indistinguishable from an
+  /// `int`, so it also warns `intPrecisionLost`. An [XlsxDecimal] beyond the
+  /// `double` range is written verbatim, and Excel rounds it.
+  /// A date gets the date-time or short-date format only when the merged
+  /// number format is `null`; in any other format it keeps that format, and
+  /// warns when that format shows no date.
   /// a formula's cached string or integer is treated like a plain one.
   /// Programmer errors throw an [ArgumentError]: an unsupported type, a
   /// nested [XlsxCell], a `NaN` or infinite number, an impossible date, a
@@ -85,12 +108,13 @@ final class CellEncoder {
     required int column,
     required Object? value,
     XlsxStyle? rowStyle,
+    XlsxStyle? columnStyle,
   }) {
     final String ref = cellRef(row, column);
-    XlsxStyle? style = rowStyle;
+    XlsxStyle? cellStyle;
     Object? v = value;
     if (v is XlsxCell) {
-      style = v.style ?? rowStyle;
+      cellStyle = v.style;
       v = v.value;
       if (v is XlsxCell) {
         throw ArgumentError(
@@ -99,9 +123,9 @@ final class CellEncoder {
         );
       }
     }
+    if (v == null) return;
+    final _Resolved style = _resolve(column, columnStyle, rowStyle, cellStyle);
     switch (v) {
-      case null:
-        return;
       case String():
         _writeString(out, sheet, ref, v, style);
       case num() when !v.isFinite:
@@ -109,9 +133,9 @@ final class CellEncoder {
         // `is int`.
         throw _nonFinite(v, sheet, ref);
       case bool():
-        _write(out, ref, _styles.idFor(style), 'b', '<v>${v ? 1 : 0}</v>');
+        _write(out, ref, _idOf(style), 'b', '<v>${v ? 1 : 0}</v>');
       case int():
-        final int id = _styles.idFor(style);
+        final int id = _idOf(style);
         if (_losesPrecision(v)) {
           _warnings.add(
             XlsxWarningCode.intPrecisionLost,
@@ -121,9 +145,9 @@ final class CellEncoder {
         }
         _write(out, ref, id, null, '<v>$v</v>');
       case double():
-        _write(out, ref, _styles.idFor(style), null, '<v>$v</v>');
+        _write(out, ref, _idOf(style), null, '<v>$v</v>');
       case XlsxDecimal():
-        _write(out, ref, _styles.idFor(style), null, '<v>${v.digits}</v>');
+        _write(out, ref, _idOf(style), null, '<v>${v.digits}</v>');
       case DateTime():
         final double? serial = dateTimeSerial(v);
         if (serial == null) {
@@ -148,7 +172,15 @@ final class CellEncoder {
           );
         }
       case XlsxDate():
-        final int? serial = dateSerial(v.year, v.month, v.day);
+        final int? serial;
+        try {
+          serial = dateSerial(v.year, v.month, v.day);
+        } on ArgumentError {
+          throw ArgumentError(
+            'Cell $ref on sheet "$sheet" holds the date '
+            '${v.year}-${v.month}-${v.day}, which does not exist.',
+          );
+        }
         if (serial == null) {
           _writeString(
             out,
@@ -185,13 +217,13 @@ final class CellEncoder {
     String sheet,
     String ref,
     String text,
-    XlsxStyle? style, {
+    _Resolved style, {
     bool outsideDateRange = false,
   }) {
     final ScrubResult scrubbed = scrubXmlText(text);
     final String result = _truncate(scrubbed.text);
     // The style can throw; resolve it before anything is recorded.
-    final int id = _styles.idFor(style);
+    final int id = _idOf(style);
     if (scrubbed.removed > 0) {
       _warnings.add(
         XlsxWarningCode.invalidCharactersRemoved,
@@ -228,16 +260,14 @@ final class CellEncoder {
     String sheet,
     String ref,
     String serial,
-    XlsxStyle? style,
+    _Resolved style,
     XlsxNumFmt defaultFormat,
   ) {
-    XlsxStyle? effective = style;
-    final XlsxNumFmt? format = style?.numFmt;
-    if (format == null) {
-      effective = (style ?? const XlsxStyle()).copyWith(numFmt: defaultFormat);
-    }
+    final XlsxNumFmt? format = style.style?.numFmt;
     // The style can throw; resolve it before the warning is recorded.
-    final int id = _styles.idFor(effective);
+    final int id = format == null
+        ? _dateIdOf(style, defaultFormat)
+        : _idOf(style);
     if (format != null && !isDateFormat(format)) {
       _warnings.add(
         XlsxWarningCode.dateInNonDateFormat,
@@ -253,7 +283,7 @@ final class CellEncoder {
     String sheet,
     String ref,
     XlsxFormula formula,
-    XlsxStyle? style,
+    _Resolved style,
   ) {
     final String text = formula.text.startsWith('=')
         ? formula.text.substring(1)
@@ -312,7 +342,7 @@ final class CellEncoder {
         );
     }
     // The style can throw; resolve it before the warning is recorded.
-    final int id = _styles.idFor(style);
+    final int id = _idOf(style);
     if (warning != null) _warnings.add(warning, sheet: sheet, cell: ref);
     _write(
       out,
@@ -323,6 +353,41 @@ final class CellEncoder {
     );
     _wroteFormula = true;
   }
+
+  /// The layers merged, cell over row over column, reusing the result last
+  /// computed for column [index] when the three layer objects are the same.
+  _Resolved _resolve(
+    int index,
+    XlsxStyle? column,
+    XlsxStyle? row,
+    XlsxStyle? cell,
+  ) {
+    while (_byColumn.length <= index) {
+      _byColumn.add(null);
+    }
+    final _Resolved? last = _byColumn[index];
+    if (last != null &&
+        identical(last.column, column) &&
+        identical(last.row, row) &&
+        identical(last.cell, cell)) {
+      return last;
+    }
+    _resolveCount++;
+    XlsxStyle? merged = column;
+    for (final XlsxStyle? layer in <XlsxStyle?>[row, cell]) {
+      if (layer != null) merged = merged == null ? layer : merged.merge(layer);
+    }
+    return _byColumn[index] = _Resolved(column, row, cell, merged);
+  }
+
+  /// The cell format id of [r], registered on first use. A throw leaves
+  /// nothing cached, so the next call throws again.
+  int _idOf(_Resolved r) => r.id ??= _styles.idFor(r.style);
+
+  /// The id of [r] with [format] as its number format, for a date whose
+  /// merged style has none.
+  int _dateIdOf(_Resolved r, XlsxNumFmt format) => r.dateIds[format] ??= _styles
+      .idFor((r.style ?? const XlsxStyle()).copyWith(numFmt: format));
 
   ArgumentError _nonFinite(num value, String sheet, String ref) =>
       ArgumentError(
@@ -349,4 +414,23 @@ final class CellEncoder {
     final String day = date.day.toString().padLeft(2, '0');
     return '${date.year < 0 ? '-' : ''}$year-$month-$day';
   }
+}
+
+/// The three style layers of a cell with their merged result and the cell
+/// format ids already assigned to it.
+final class _Resolved {
+  _Resolved(this.column, this.row, this.cell, this.style);
+
+  final XlsxStyle? column;
+  final XlsxStyle? row;
+  final XlsxStyle? cell;
+
+  /// The layers merged; `null` when all three are.
+  final XlsxStyle? style;
+
+  /// The id of [style], once registered.
+  int? id;
+
+  /// The ids of [style] with a date format added, by that format.
+  final Map<XlsxNumFmt, int> dateIds = <XlsxNumFmt, int>{};
 }

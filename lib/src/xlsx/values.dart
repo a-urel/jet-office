@@ -14,9 +14,11 @@ import 'style.dart';
 
 /// A cell value together with the style of that one cell.
 ///
-/// The style applies to this cell only and replaces the row's style (styles
-/// are not merged). Wrap a value only when the cell needs a style other than
-/// the row's; a bare value uses the row style.
+/// The style applies to this cell only and is merged over the row's style,
+/// which is merged over the column's (see `XlsxStyle.merge`): a field the
+/// cell style sets wins, one it leaves `null` is inherited. Wrap a value only
+/// when the cell needs a style other than the row's; a bare value uses the
+/// row style.
 ///
 /// [value] may be anything a cell accepts except another [XlsxCell]; nesting
 /// is a programmer error and throws an [ArgumentError] when the cell is
