@@ -39,7 +39,7 @@ Never report work as done without running these and reading the output.
   keeps Quds' MIT licence text.
 - **Port, don't copy.** A Quds file is not added until it has real dartdoc
   (not "`foo` API."), tests, and passes the lints. Do not port modules outside
-  the current phase.
+  the current phase (phase 1 scope: `docs/decisions/0003`).
 - **Data problems warn, programmer errors throw.** See the table in
   `docs/xlsx-writer.md`, "Rules the writer enforces".
 - **Decisions live in `docs/decisions/`.** An accepted record is never edited;

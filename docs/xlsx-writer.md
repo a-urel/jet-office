@@ -2,7 +2,9 @@
 
 What phase 1 builds and the rules it holds to. The writer's shape comes from
 [`0001`](decisions/0001-port-a-file-engine-from-quds.md) and
-[`0002`](decisions/0002-two-xlsx-paths-stream-and-model.md). The draft API
+[`0002`](decisions/0002-two-xlsx-paths-stream-and-model.md). The phase-1 scope,
+output shape and diagnostics are
+[`0003`](decisions/0003-phase-1-scope-output-and-diagnostics.md). The draft API
 lives in a git-ignored working document under `docs/superpowers/`. This page
 keeps what has to outlive it.
 
@@ -69,7 +71,9 @@ comment (AGENTS.md). Quds paths are relative to
 | `xlsx/xlsx_writer.dart` | `builders/xlsx_io.dart` → `XlsxWorkbookBuilder`, `XlsxSheetBuilder` | streams rows, shared strings written last |
 | `xlsx/sheet_name.dart` | `builders/office_markup.dart` → `sheetName` | case-insensitive uniqueness |
 | `xlsx/xlsx_table.dart` | — (new) | |
+| `xlsx/shared_strings.dart` | `sheet/shared_strings.dart` | written last, `count`/`uniqueCount` checked |
+| `xlsx/styles/` (fonts, fills, borders, alignment, protection) | `sheet/styles/sml_styles.dart` | model-neutral value types, gradient fills added (M2) |
+| `xlsx/validation.dart`, `xlsx/conditional_format.dart`, `xlsx/defined_names.dart`, `xlsx/table_part.dart`, `xlsx/protection.dart` | `sheet/serial/sheet_serial.dart` (data validation, conditional formats, defined names, table part, protection) | element writers take the public value types (M3, M4) |
+| `xlsx/drawing.dart` | `sheet/serial/sheet_drawing_io.dart` | PNG and JPEG, one-cell and two-cell anchors (M4) |
 
-Not ported in phase 1: charts and pictures (`addChart`, `addPicture`), the
-reader (`XlsxGridReader`, phase 2), `SmlWorkbook` (phase 3), formula
-evaluation, encryption.
+Out of phase 1: see [`0003`](decisions/0003-phase-1-scope-output-and-diagnostics.md).
