@@ -10,8 +10,9 @@
 /// 4. `sst/@count` equals the number of `t="s"` cells and
 ///    `sst/@uniqueCount` the number of `si`;
 /// 5. every `t="s"` index is below `uniqueCount`;
-/// 6. sheet names are unique ignoring case, at most 31 UTF-16 code units and
-///    free of `[]:*?/\`;
+/// 6. sheet names are unique ignoring case, at most 31 UTF-16 code units,
+///    free of `[]:*?/\`, not the reserved `History` and not starting or
+///    ending with an apostrophe;
 /// 7. `workbookView/@activeTab` is a valid sheet index;
 /// 8. every cell `s` is below the `cellXfs` count;
 /// 9. cell references in a row strictly increase and sit on that row.
@@ -192,6 +193,14 @@ List<String> _checkSheetNames(
       violations.add(
         'rule 6: sheet name "$name" has ${name.length} characters; '
         'expected 1 to 31',
+      );
+    }
+    if (sheetNameKey(name) == sheetNameKey('History')) {
+      violations.add('rule 6: sheet name "$name" is reserved');
+    }
+    if (name.startsWith("'") || name.endsWith("'")) {
+      violations.add(
+        'rule 6: sheet name "$name" starts or ends with an apostrophe',
       );
     }
     if (_forbiddenInName.hasMatch(name)) {

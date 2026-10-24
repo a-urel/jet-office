@@ -185,6 +185,31 @@ void main() {
         6,
       );
     });
+    test('the reserved name History, in any case', () {
+      _expectRule(
+        _broken(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst('name="Other"', 'name="hISTORY"'),
+        ),
+        6,
+      );
+    });
+    test('a leading or trailing apostrophe', () {
+      _expectRule(
+        _broken(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst('name="Other"', "name=\"'Other\""),
+        ),
+        6,
+      );
+      _expectRule(
+        _broken(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst('name="Other"', "name=\"Other'\""),
+        ),
+        6,
+      );
+    });
     test('a forbidden character', () {
       _expectRule(
         _broken(

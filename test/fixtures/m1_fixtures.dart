@@ -19,16 +19,37 @@ import 'package:jet_office/jet_office.dart';
 /// A named workbook builder with the values its file stores.
 final class Fixture {
   /// Creates a fixture. [run] builds the workbook.
-  Fixture(this.name, this.expectedValues, XlsxResult Function() run)
-    : _run = run;
+  Fixture(
+    this.name,
+    this.storedValues,
+    this.expectedValues,
+    XlsxResult Function() run,
+  ) : _run = run;
 
   final XlsxResult Function() _run;
 
   /// The fixture's name, also its file name stem.
   final String name;
 
-  /// Sheet name (the final, sanitized one) to rows of stored cell text.
-  final Map<String, List<List<String>>> expectedValues;
+  /// Sheet name (the final, sanitized one) to rows of the text stored in the
+  /// file: numbers as in `<v>`, dates as serials, booleans `1`/`0`, strings
+  /// after scrubbing and truncation, empty cells `''`. Rectangular per sheet.
+  /// The tests check it against the file itself.
+  final Map<String, List<List<String>>> storedValues;
+
+  /// Sheet name to rows of the values a reader should see, typed: `String`
+  /// for text, `num` for numbers and date serials, `bool` for booleans and
+  /// `null` for empty cells. A formula cell holds the value Excel or
+  /// LibreOffice computes.
+  ///
+  /// The comparison contract Task 15 implements against LibreOffice's CSV
+  /// export: raw (not formatted) values; numbers are equal within a relative
+  /// tolerance of 1e-12; a `bool` matches `TRUE`/`FALSE` or `1`/`0`; strings
+  /// are equal exactly; `null` matches `""`; trailing empty rows and trailing
+  /// empty cells are ignored on both sides. A CSV cannot tell an empty sheet
+  /// from a sheet whose only cell is `''`, so both expect no rows; the
+  /// checker and [storedValues] still tell them apart.
+  final Map<String, List<List<Object?>>> expectedValues;
 
   /// Builds the workbook and returns its bytes. The same bytes every time.
   Uint8List build() => _run().bytes;
@@ -93,6 +114,38 @@ Fixture _values() => Fixture(
       ],
     ],
   },
+  <String, List<List<Object?>>>{
+    'Values': <List<Object?>>[
+      <Object?>[
+        'int',
+        'double',
+        'negative',
+        'true',
+        'false',
+        'text',
+        'decimal',
+        'date',
+        'datetime',
+        'styled',
+        'gap',
+        'big',
+      ],
+      <Object?>[
+        42,
+        3.14159,
+        -0.25,
+        true,
+        false,
+        'plain text',
+        1234.5,
+        46319,
+        46319.5729166666,
+        1234.5,
+        null,
+        9007199254740992,
+      ],
+    ],
+  },
   () => _make((XlsxWriter book) {
     book.addSheet('Values')
       ..row(<Object?>[
@@ -145,6 +198,19 @@ Fixture _dirtyText() => Fixture(
       <String>['\u{1F600} emoji \u{1F468}‍\u{1F469}'],
     ],
   },
+  <String, List<List<Object?>>>{
+    'Text': <List<Object?>>[
+      <Object?>['abcd'],
+      <Object?>['xy'],
+      <Object?>['pq'],
+      <Object?>['a' * 32767],
+      <Object?>['a' * 32766],
+      <Object?>['  padded  '],
+      <Object?>['Şube Müdürü'],
+      <Object?>['Straße'],
+      <Object?>['\u{1F600} emoji \u{1F468}\u200D\u{1F469}'],
+    ],
+  },
   () => _make((XlsxWriter book) {
     book.addSheet('Text')
       ..row(<Object?>['a\u0000b\u0008c\u000Bd']) // control characters
@@ -186,6 +252,15 @@ Fixture _sheets() => Fixture(
       <String>['asked: Başlangıç'],
     ],
   },
+  <String, List<List<Object?>>>{
+    for (final (String asked, String got) in _sheetNames)
+      got: <List<Object?>>[
+        <Object?>['asked: $asked'],
+      ],
+    'Başlangıç': <List<Object?>>[
+      <Object?>['asked: Başlangıç'],
+    ],
+  },
   () => _make((XlsxWriter book) {
     XlsxSheetWriter? active;
     for (final (String asked, String got) in _sheetNames) {
@@ -203,6 +278,11 @@ Fixture _formulas() => Fixture(
   <String, List<List<String>>>{
     'Formulas': <List<String>>[
       <String>['2', 'hello', '1', ''],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Formulas': <List<Object?>>[
+      <Object?>[2, 'hello', true, 3],
     ],
   },
   () => _make((XlsxWriter book) {
@@ -232,6 +312,22 @@ Fixture _empty() => Fixture(
       <String>[''],
     ],
   },
+  // Trailing empty rows and cells are ignored, so `Empty` and `EmptyString`
+  // both expect no rows (a CSV cannot tell them apart); `storedValues` and
+  // the checker still do.
+  <String, List<List<Object?>>>{
+    'Empty': <List<Object?>>[],
+    'Nulls': <List<Object?>>[
+      <Object?>[null],
+      <Object?>['x'],
+    ],
+    'Blank': <List<Object?>>[
+      <Object?>['a', null],
+      <Object?>[null, null],
+      <Object?>[null, 'b'],
+    ],
+    'EmptyString': <List<Object?>>[],
+  },
   () => _make((XlsxWriter book) {
     book.addSheet('Empty');
     book.addSheet('Nulls')
@@ -250,6 +346,11 @@ Fixture _properties() => Fixture(
   <String, List<List<String>>>{
     'Props': <List<String>>[
       <String>['properties'],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Props': <List<Object?>>[
+      <Object?>['properties'],
     ],
   },
   () => _make(
@@ -282,6 +383,18 @@ Fixture _dates() => Fixture(
         '46319.999999988424',
         '1850-06-15T00:00:00.000',
         '46319',
+      ],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Dates': <List<Object?>>[
+      <Object?>[
+        59,
+        61,
+        46319,
+        46319.99999998842,
+        '1850-06-15T00:00:00.000',
+        46319,
       ],
     ],
   },
