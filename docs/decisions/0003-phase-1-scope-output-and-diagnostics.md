@@ -17,15 +17,15 @@ Excel is the reference reader: a file that LibreOffice opens but Excel
 "repairs" is a bug.
 
 That aim leaves four things the earlier records do not settle. The phase-1
-feature list is too small. The output type was left open (0002 only said the
-ZIP adapter may buffer). Warnings were described as a list of strings, and the
-users who read them speak English, German and Turkish. "Opens in Excel" has no
+feature list is too small. The output API was left open (0002 did not say whether
+`close()` returns bytes or writes to a sink). The earlier records do not define
+warnings, and the users who read them speak English, German and Turkish. "Opens in Excel" has no
 check behind it yet.
 
 One fact constrains the output. `package:archive` 4.0.9 and 4.5.2 cannot
 deflate a single ZIP entry incrementally. An entry is compressed from a whole
-byte buffer. 0002 named this case: the adapter buffers each sheet as UTF-8
-bytes and compresses it once.
+byte buffer. 0002 named per-sheet buffering as the fallback for this case: the adapter
+buffers each sheet as UTF-8 bytes and compresses it once.
 
 The full design is in
 `docs/superpowers/specs/2026-10-24-phase-1-xlsx-writer-design.md`. That folder
@@ -104,6 +104,18 @@ feature list in 0001.**
   input then gives the same bytes. Byte-identity across `archive` versions or
   across the VM and JavaScript is not promised.
 
+**Out of phase 1:**
+
+- Reading or modifying files. The random-access model (`XlsxWorkbook`) is
+  phase 3. Whether it also gets a "build in memory, write later" mode is
+  decided there.
+- Charts, sparklines, pivot tables, slicers, threaded comments, form controls
+  and external links. They follow phase 1 as separate pieces of work if a
+  consumer asks.
+- Formula evaluation. Formula text is written and Excel computes it.
+- The 1904 date system, `.xlsb`, legacy `.xls` and Strict OOXML.
+- Macros and encryption, ever.
+
 ## Consequences
 
 **The public API may break between milestones.** No consumer uses a milestone
@@ -111,11 +123,10 @@ before M5. Each milestone grows the types it needs, and M5's dartdoc review
 settles the shape that ships. There is no release deadline: phase 1 ships when
 its features are complete and verified.
 
-**Peak memory is one sheet's bytes plus the unique strings.** It is not the
-streaming figure 0002 hoped for if `archive` could deflate incrementally. It
-still avoids cell objects and the doubled UTF-16 string. The 100,000 by 12
+**Peak memory is one sheet's bytes plus the unique strings.** It scales with
+unique strings and one sheet's bytes, not with cell objects. The 100,000 by 12
 benchmark in M5 records time and peak memory on Chrome and on the VM. It is a
-recorded figure, not a pass or fail threshold.
+recorded figure, not a pass or fail threshold yet.
 
 **CI gains two jobs and a dependency on `dotnet` and LibreOffice.** Locally
 they are optional. The three-command gate is unchanged and still runs first.
@@ -136,8 +147,8 @@ dependency stays `archive`.
   in 0001 and 0002.
 - **Inline versus shared strings per value.** That stays an encoder detail
   (0002).
-- **Native charts, formula evaluation, SHA-512 protection, PPTX, legacy
-  formats.** They are outside phase 1.
+- **SHA-512 protection and PPTX.** SHA-512 would need a crypto dependency.
+  0001 already excludes PPTX.
 - **Publishing.** Removing `publish_to: none` is the owner's decision after M5.
 - **How the validation jobs are wired.** A fixture generator, a small `dotnet`
   tool and the LibreOffice command line are the builder's choice.
