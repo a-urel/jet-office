@@ -77,7 +77,7 @@ enum XlsxPatternType {
 /// throws [ArgumentError].
 sealed class XlsxFill {
   /// A fill of the single [color].
-  const factory XlsxFill.solid(XlsxColor color) = _SolidFill;
+  const factory XlsxFill.solid(XlsxColor color) = XlsxPatternFill._solid;
 
   /// A pattern fill of [type] with an optional [foreground] and [background].
   const factory XlsxFill.pattern(
@@ -87,18 +87,18 @@ sealed class XlsxFill {
   }) = XlsxPatternFill;
 }
 
-final class _SolidFill extends XlsxPatternFill {
-  const _SolidFill(XlsxColor color)
-    : super(XlsxPatternType.solid, foreground: color);
-}
-
 /// A fill made of a [type] pattern in a [foreground] and [background] color
 /// (`CT_PatternFill`).
 ///
 /// For a solid fill the cell shows [foreground].
-base class XlsxPatternFill implements XlsxFill {
+final class XlsxPatternFill implements XlsxFill {
   /// Creates a pattern fill.
   const XlsxPatternFill(this.type, {this.foreground, this.background});
+
+  const XlsxPatternFill._solid(XlsxColor color)
+    : type = XlsxPatternType.solid,
+      foreground = color,
+      background = null;
 
   /// The pattern.
   final XlsxPatternType type;

@@ -113,6 +113,7 @@ void main() {
       const XlsxFill.solid(white).hashCode,
       const XlsxFill.pattern(XlsxPatternType.solid, foreground: white).hashCode,
     );
+    expect(const XlsxFill.solid(white).runtimeType, XlsxPatternFill);
     expect(const XlsxFill.solid(white), isNot(const XlsxFill.solid(blue)));
     expect(const XlsxFill.solid(white).toString(), contains('solid'));
   });
@@ -164,8 +165,16 @@ void main() {
   });
 
   group('validateFill', () {
-    void bad(XlsxFill f) =>
-        expect(() => impl.validateFill(f), throwsArgumentError);
+    void bad(XlsxFill f, [String? field]) => expect(
+      () => impl.validateFill(f),
+      throwsA(
+        isA<ArgumentError>().having(
+          (ArgumentError e) => e.name,
+          'name',
+          field ?? anything,
+        ),
+      ),
+    );
     XlsxGradientFill lin(List<XlsxGradientStop> s, {double degree = 0}) =>
         XlsxGradientFill.linear(degree: degree, stops: s);
 
@@ -181,8 +190,8 @@ void main() {
     });
 
     test('rejects a gradient with fewer than two stops', () {
-      bad(lin(const <XlsxGradientStop>[XlsxGradientStop(0, white)]));
-      bad(lin(const <XlsxGradientStop>[]));
+      bad(lin(const <XlsxGradientStop>[XlsxGradientStop(0, white)]), 'stops');
+      bad(lin(const <XlsxGradientStop>[]), 'stops');
     });
 
     test('rejects bad positions', () {
@@ -211,15 +220,15 @@ void main() {
         XlsxGradientStop(0, white),
         XlsxGradientStop(1, blue),
       ];
-      bad(lin(ok, degree: double.nan));
-      bad(lin(ok, degree: double.infinity));
-      bad(XlsxGradientFill.path(left: 1.5, stops: ok));
-      bad(XlsxGradientFill.path(top: -0.1, stops: ok));
-      bad(XlsxGradientFill.path(bottom: double.nan, stops: ok));
+      bad(lin(ok, degree: double.nan), 'degree');
+      bad(lin(ok, degree: double.infinity), 'degree');
+      bad(XlsxGradientFill.path(left: 1.5, stops: ok), 'left');
+      bad(XlsxGradientFill.path(top: -0.1, stops: ok), 'top');
+      bad(XlsxGradientFill.path(bottom: double.nan, stops: ok), 'bottom');
     });
 
     test('rejects invalid colors', () {
-      bad(const XlsxFill.solid(XlsxColor.theme(12)));
+      bad(const XlsxFill.solid(XlsxColor.theme(12)), 'foreground');
       bad(
         const XlsxFill.pattern(
           XlsxPatternType.solid,
