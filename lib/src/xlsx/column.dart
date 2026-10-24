@@ -5,6 +5,7 @@
 /// outline level.
 library;
 
+import '../xml/xml_number.dart';
 import 'style.dart';
 
 /// How one worksheet column looks: its width, its style, whether it is
@@ -64,7 +65,7 @@ final class XlsxColumn {
   @override
   String toString() {
     final List<String> fields = <String>[
-      if (width != null) 'width: $width',
+      if (width case final double w) 'width: ${describeDouble(w)}',
       if (style != null) 'style: $style',
       if (hidden) 'hidden: true',
       if (outlineLevel != 0) 'outlineLevel: $outlineLevel',

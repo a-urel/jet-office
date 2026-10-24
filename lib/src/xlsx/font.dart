@@ -10,6 +10,7 @@ import '../xml/xml_escape.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import 'color.dart';
+import 'limits.dart';
 
 /// The name [resolveFont] gives a font without one.
 const String _defaultFontName = 'Calibri';
@@ -92,7 +93,7 @@ final class XlsxFont {
   /// The typeface name, 1 to 31 UTF-16 code units.
   final String? name;
 
-  /// The size in points, finite within `1..409`.
+  /// The size in points, finite within 1 to [XlsxLimits.maxFontSize].
   final double? size;
 
   /// The text color.
@@ -268,7 +269,7 @@ XlsxFont resolveFont(XlsxFont? font) => (font ?? const XlsxFont()).copyWith(
 );
 
 /// Checks a resolved [font] against Excel's limits: a non-empty XML-clean
-/// name of at most 31 UTF-16 code units, a finite size within `1..409`, a
+/// name of at most 31 UTF-16 code units, a finite size within 1 to 409, a
 /// family within `0..14`, a charset within `0..255` and a valid color.
 ///
 /// Throws [ArgumentError] naming the field.
@@ -287,11 +288,13 @@ void validateFont(XlsxFont font) {
     }
   }
   final double? size = font.size;
-  if (size != null && !(size.isFinite && size >= 1 && size <= 409)) {
+  if (size != null &&
+      !(size.isFinite && size >= 1 && size <= XlsxLimits.maxFontSize)) {
     throw ArgumentError.value(
       size,
       'size',
-      'A font size must be finite and within 1..409 points.',
+      'A font size must be finite and within '
+          '1..${XlsxLimits.maxFontSize} points.',
     );
   }
   final int? family = font.family;

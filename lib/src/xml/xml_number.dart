@@ -26,3 +26,9 @@ String formatXmlDouble(double value) {
   }
   return value.toString();
 }
+
+/// [value] as [formatXmlDouble] prints it, or as `NaN`, `Infinity` or
+/// `-Infinity` when it is not finite, for a `toString` that must not throw
+/// on a value the writer has not validated yet.
+String describeDouble(double value) =>
+    value.isFinite ? formatXmlDouble(value) : '$value';

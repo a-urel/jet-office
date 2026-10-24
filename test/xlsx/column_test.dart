@@ -47,4 +47,15 @@ void main() {
       'XlsxColumn(style: $bold)',
     );
   });
+
+  test('toString prints the width like the file does, on every platform', () {
+    // `formatXmlDouble`, as XlsxPane does: `12`, not the VM's `12.0`.
+    expect(const XlsxColumn(width: 12).toString(), 'XlsxColumn(width: 12)');
+    expect(const XlsxColumn(width: 1e-7).toString(), 'XlsxColumn(width: 1e-7)');
+    // Not yet validated, so toString must not throw on it.
+    expect(
+      const XlsxColumn(width: double.nan).toString(),
+      'XlsxColumn(width: NaN)',
+    );
+  });
 }

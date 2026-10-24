@@ -49,6 +49,35 @@ abstract final class XlsxLimits {
   /// points. A taller row is a programmer error and throws [ArgumentError].
   static const int maxRowHeight = 409;
 
+  /// The largest font size, in points.
+  ///
+  /// Microsoft's "Excel specifications and limits" page: font size 409
+  /// points. A larger size, or one below 1, is a programmer error and
+  /// throws [ArgumentError] when the style is first used.
+  static const int maxFontSize = 409;
+
+  /// The deepest indent of a cell's text, in character widths.
+  ///
+  /// ECMA-376 Part 1 §18.8.1 types the `indent` of `alignment` as an
+  /// unsigned integer; Excel's Format Cells dialog accepts 0 to 250. A
+  /// deeper indent is a programmer error and throws [ArgumentError] when
+  /// the style is first used.
+  static const int maxIndent = 250;
+
+  /// The largest text rotation in degrees, apart from
+  /// [verticalTextRotation]: `0..90` turn the text counterclockwise and
+  /// `91..180` clockwise by the value less 90.
+  ///
+  /// ECMA-376 Part 1, the `ST_TextRotation` type of the `textRotation` of
+  /// `alignment` (§18.8.1). Any other value throws [ArgumentError] when the
+  /// style is first used.
+  static const int maxTextRotation = 180;
+
+  /// The text rotation that stacks the letters vertically, the one value
+  /// outside `0..`[maxTextRotation] that `ST_TextRotation` allows
+  /// (ECMA-376 Part 1). Also `XlsxAlignment.verticalText`.
+  static const int verticalTextRotation = 255;
+
   /// The smallest zoom of a sheet view, in percent.
   ///
   /// Microsoft's "Excel specifications and limits" page: zoom 10 to 400

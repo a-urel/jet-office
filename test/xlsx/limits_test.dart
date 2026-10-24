@@ -22,6 +22,15 @@ void main() {
     expect(XlsxLimits.maxOutlineLevel, 7);
   });
 
+  test('style limits match Excel and ECMA-376', () {
+    // Enforced in `font_test.dart` and `alignment_test.dart`.
+    expect(XlsxLimits.maxFontSize, 409);
+    expect(XlsxLimits.maxIndent, 250);
+    expect(XlsxLimits.maxTextRotation, 180);
+    expect(XlsxLimits.verticalTextRotation, 255);
+    expect(XlsxAlignment.verticalText, XlsxLimits.verticalTextRotation);
+  });
+
   group('XlsxLimitError', () {
     test('keeps the limit name and the maximum', () {
       final XlsxLimitError e = XlsxLimitError('rows', 1048576);

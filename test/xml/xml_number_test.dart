@@ -32,4 +32,12 @@ void main() {
     expect(() => formatXmlDouble(double.infinity), throwsArgumentError);
     expect(() => formatXmlDouble(double.negativeInfinity), throwsArgumentError);
   });
+
+  test('describeDouble prints like formatXmlDouble and never throws', () {
+    expect(describeDouble(12.0), '12');
+    expect(describeDouble(0.5), '0.5');
+    expect(describeDouble(double.nan), 'NaN');
+    expect(describeDouble(double.infinity), 'Infinity');
+    expect(describeDouble(double.negativeInfinity), '-Infinity');
+  });
 }

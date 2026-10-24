@@ -89,6 +89,11 @@ void main() {
         const XlsxPane.split(x: 100, y: 50).toString(),
         'XlsxPane.split(x: 100, y: 50)',
       );
+      // Not yet validated, so toString must not throw on it.
+      expect(
+        const XlsxPane.split(x: double.nan, y: double.infinity).toString(),
+        'XlsxPane.split(x: NaN, y: Infinity)',
+      );
     });
   });
 

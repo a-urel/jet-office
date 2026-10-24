@@ -353,7 +353,9 @@ abstract final class XlsxSheetWriter {
   /// like an [XlsxColumn] that sets nothing, keeps the column at its
   /// default. A column's style applies to its cells beneath the row and cell
   /// styles (see [row]) and to its empty cells. Equal adjacent columns are
-  /// written as one range.
+  /// written as one range. A second call before the first row replaces the
+  /// columns, but the first call's styles stay in `styles.xml` as unused
+  /// cell formats, because styles are registered when the columns are set.
   ///
   /// Throws [StateError] after the first [row] or [blankRow], when the sheet
   /// is finished or the writer has failed; [XlsxLimitError] for more than

@@ -70,7 +70,7 @@ final class XlsxPane {
   @override
   String toString() => isFrozen
       ? 'XlsxPane.frozen(rows: $rows, columns: $columns)'
-      : 'XlsxPane.split(x: ${formatXmlDouble(x)}, y: ${formatXmlDouble(y)})';
+      : 'XlsxPane.split(x: ${describeDouble(x)}, y: ${describeDouble(y)})';
 }
 
 /// The view of one worksheet: how it is displayed when it is opened.

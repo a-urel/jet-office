@@ -240,6 +240,57 @@ void main() {
       });
     }
 
+    test('styles that differ in one field get different cell formats', () {
+      const XlsxColor blue = XlsxColor.rgb(0x0000FF);
+      final List<(String, XlsxStyle, XlsxStyle)> differing =
+          <(String, XlsxStyle, XlsxStyle)>[
+            (
+              'fill background color',
+              const XlsxStyle(
+                fill: XlsxFill.pattern(
+                  XlsxPatternType.darkGrid,
+                  foreground: blue,
+                  background: XlsxColor.rgb(0xFFFF00),
+                ),
+              ),
+              const XlsxStyle(
+                fill: XlsxFill.pattern(
+                  XlsxPatternType.darkGrid,
+                  foreground: blue,
+                  background: XlsxColor.rgb(0xFF0000),
+                ),
+              ),
+            ),
+            (
+              'protection hidden',
+              const XlsxStyle(fill: yellow, protection: XlsxProtection()),
+              const XlsxStyle(
+                fill: yellow,
+                protection: XlsxProtection(hidden: true),
+              ),
+            ),
+            (
+              'one alignment field',
+              const XlsxStyle(
+                alignment: XlsxAlignment(
+                  horizontal: XlsxHorizontalAlignment.left,
+                  indent: 2,
+                ),
+              ),
+              const XlsxStyle(
+                alignment: XlsxAlignment(
+                  horizontal: XlsxHorizontalAlignment.left,
+                  indent: 3,
+                ),
+              ),
+            ),
+          ];
+      for (final (String field, XlsxStyle a, XlsxStyle b) in differing) {
+        final StyleRegistry r = StyleRegistry();
+        expect(r.idFor(a), isNot(r.idFor(b)), reason: field);
+      }
+    });
+
     test('every default spelling is cell format 0', () {
       final StyleRegistry r = StyleRegistry();
       for (final XlsxStyle style in <XlsxStyle>[

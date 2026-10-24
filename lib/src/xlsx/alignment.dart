@@ -8,6 +8,7 @@
 library;
 
 import '../xml/xml_writer.dart';
+import 'limits.dart';
 
 /// Horizontal text placement (`ST_HorizontalAlignment`).
 enum XlsxHorizontalAlignment {
@@ -87,7 +88,7 @@ final class XlsxAlignment {
 
   /// The [textRotation] that stacks the text vertically, one letter above
   /// the next.
-  static const int verticalText = 255;
+  static const int verticalText = XlsxLimits.verticalTextRotation;
 
   /// The horizontal placement.
   final XlsxHorizontalAlignment? horizontal;
@@ -98,11 +99,12 @@ final class XlsxAlignment {
   /// Whether long text wraps onto more lines.
   final bool? wrapText;
 
-  /// The indent in character widths, within `0..250`.
+  /// The indent in character widths, within 0 to [XlsxLimits.maxIndent].
   final int? indent;
 
   /// The rotation in degrees: `0..90` counterclockwise, `91..180` clockwise
-  /// (`90` less the value), or [verticalText].
+  /// (`90` less the value; [XlsxLimits.maxTextRotation] is the largest), or
+  /// [verticalText].
   final int? textRotation;
 
   /// Whether the text shrinks to fit the cell.
@@ -226,21 +228,22 @@ final class XlsxProtection {
 /// Throws [ArgumentError] naming the field.
 void validateAlignment(XlsxAlignment a) {
   final int? indent = a.indent;
-  if (indent != null && (indent < 0 || indent > 250)) {
+  if (indent != null && (indent < 0 || indent > XlsxLimits.maxIndent)) {
     throw ArgumentError.value(
       indent,
       'indent',
-      'An indent must be within 0..250.',
+      'An indent must be within 0..${XlsxLimits.maxIndent}.',
     );
   }
   final int? rotation = a.textRotation;
   if (rotation != null &&
-      (rotation < 0 || rotation > 180) &&
+      (rotation < 0 || rotation > XlsxLimits.maxTextRotation) &&
       rotation != XlsxAlignment.verticalText) {
     throw ArgumentError.value(
       rotation,
       'textRotation',
-      'A text rotation must be within 0..180, or 255 for vertical text.',
+      'A text rotation must be within 0..${XlsxLimits.maxTextRotation}, '
+          'or ${XlsxAlignment.verticalText} for vertical text.',
     );
   }
 }
