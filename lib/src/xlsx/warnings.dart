@@ -42,9 +42,9 @@ enum XlsxWarningCode {
   /// written and may be rounded.
   intPrecisionLost,
 
-  /// A date before 1900, which Excel cannot store as a date, was written as
-  /// text.
-  dateBefore1900,
+  /// A date outside the range Excel can store as a date (before 1900-01-01 or
+  /// after 9999-12-31) was written as text.
+  dateOutsideExcelRange,
 
   /// A date was written with a number format that does not display dates.
   dateInNonDateFormat,
@@ -54,7 +54,7 @@ enum XlsxWarningCode {
 ///
 /// Cell-level warnings ([XlsxWarningCode.invalidCharactersRemoved],
 /// [XlsxWarningCode.textTruncated], [XlsxWarningCode.intPrecisionLost],
-/// [XlsxWarningCode.dateBefore1900], [XlsxWarningCode.dateInNonDateFormat])
+/// [XlsxWarningCode.dateOutsideExcelRange], [XlsxWarningCode.dateInNonDateFormat])
 /// cover every affected cell of one sheet: [count] says how many and [cells]
 /// names the first ten. Sheet-name warnings
 /// ([XlsxWarningCode.sheetNameChanged], [XlsxWarningCode.sheetNameDuplicated])

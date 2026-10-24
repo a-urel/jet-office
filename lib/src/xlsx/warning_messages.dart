@@ -54,12 +54,12 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
       '$count ganze Zahl(en) im Blatt „$sheet“ sind größer, als Excel exakt speichern kann, und werden möglicherweise gerundet ($cells).',
     (XlsxWarningCode.intPrecisionLost, XlsxLocale.tr) =>
       "“$sheet” sayfasındaki $count tam sayı, Excel'in tam olarak saklayabileceğinden büyük; yuvarlanabilir ($cells).",
-    (XlsxWarningCode.dateBefore1900, XlsxLocale.en) =>
-      "$count date(s) on sheet '$sheet' are before 1900, which Excel cannot store as dates, and were written as text ($cells).",
-    (XlsxWarningCode.dateBefore1900, XlsxLocale.de) =>
-      '$count Datumswert(e) im Blatt „$sheet“ liegen vor 1900; Excel kann sie nicht als Datum speichern, sie wurden als Text geschrieben ($cells).',
-    (XlsxWarningCode.dateBefore1900, XlsxLocale.tr) =>
-      "“$sheet” sayfasındaki $count tarih 1900'den önce olduğu için Excel'de tarih olarak saklanamaz; metin olarak yazıldı ($cells).",
+    (XlsxWarningCode.dateOutsideExcelRange, XlsxLocale.en) =>
+      "$count date(s) on sheet '$sheet' are outside the range Excel can store as dates (1900–9999) and were written as text ($cells).",
+    (XlsxWarningCode.dateOutsideExcelRange, XlsxLocale.de) =>
+      '$count Datumswert(e) im Blatt „$sheet“ liegen außerhalb des Bereichs, den Excel als Datum speichern kann (1900–9999); sie wurden als Text geschrieben ($cells).',
+    (XlsxWarningCode.dateOutsideExcelRange, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count tarih, Excel\'in tarih olarak saklayabildiği aralığın (1900–9999) dışında olduğu için metin olarak yazıldı ($cells).',
     (XlsxWarningCode.dateInNonDateFormat, XlsxLocale.en) =>
       "$count date(s) on sheet '$sheet' use a number format that does not show dates ($cells).",
     (XlsxWarningCode.dateInNonDateFormat, XlsxLocale.de) =>

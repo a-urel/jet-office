@@ -51,4 +51,32 @@ void main() {
       "Sheet name 'a/b' is not allowed in Excel and was changed to 'a_b'.",
     );
   });
+
+  test('dateOutsideExcelRange messages name the 1900-9999 range', () {
+    final XlsxWarning w =
+        (WarningCollector()..add(
+              XlsxWarningCode.dateOutsideExcelRange,
+              sheet: 'S',
+              cell: 'A1',
+            ))
+            .warnings
+            .single;
+    expect(
+      w.message(),
+      "1 date(s) on sheet 'S' are outside the range Excel can store as dates "
+      '(1900\u20139999) and were written as text (A1).',
+    );
+    expect(
+      w.message(XlsxLocale.de),
+      '1 Datumswert(e) im Blatt \u201eS\u201c liegen au\u00dferhalb des '
+      'Bereichs, den Excel als Datum speichern kann (1900\u20139999); sie '
+      'wurden als Text geschrieben (A1).',
+    );
+    expect(
+      w.message(XlsxLocale.tr),
+      '\u201cS\u201d sayfas\u0131ndaki 1 tarih, Excel\'in tarih olarak '
+      'saklayabildi\u011fi aral\u0131\u011f\u0131n (1900\u20139999) '
+      'd\u0131\u015f\u0131nda oldu\u011fu i\u00e7in metin olarak yaz\u0131ld\u0131 (A1).',
+    );
+  });
 }
