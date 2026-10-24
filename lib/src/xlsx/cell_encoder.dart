@@ -63,8 +63,10 @@ final class CellEncoder {
   /// a non-date format) are repaired and reported to the warning collector.
   /// Programmer errors throw an [ArgumentError]: an unsupported type, a
   /// nested [XlsxCell], a `NaN` or infinite number, an impossible date, an
-  /// invalid formula or cached value. Nothing is written to [out] when it
-  /// throws.
+  /// invalid formula or cached value; an invalid style throws like
+  /// [StyleRegistry.idFor]. When it throws, nothing is written to [out] and
+  /// nothing is recorded: the string table, the style registry and the
+  /// warnings are as they were.
   void encode(
     XmlWriter out, {
     required String sheet,
@@ -96,8 +98,9 @@ final class CellEncoder {
         // `is int`.
         throw _nonFinite(v, sheet, ref);
       case bool():
-        _write(out, ref, style, 'b', '<v>${v ? 1 : 0}</v>');
+        _write(out, ref, _styles.idFor(style), 'b', '<v>${v ? 1 : 0}</v>');
       case int():
+        final int id = _styles.idFor(style);
         if (v.abs() > _maxExactInt) {
           _warnings.add(
             XlsxWarningCode.intPrecisionLost,
@@ -105,19 +108,21 @@ final class CellEncoder {
             cell: ref,
           );
         }
-        _write(out, ref, style, null, '<v>$v</v>');
+        _write(out, ref, id, null, '<v>$v</v>');
       case double():
-        _write(out, ref, style, null, '<v>$v</v>');
+        _write(out, ref, _styles.idFor(style), null, '<v>$v</v>');
       case XlsxDecimal():
-        _write(out, ref, style, null, '<v>${v.digits}</v>');
+        _write(out, ref, _styles.idFor(style), null, '<v>${v.digits}</v>');
       case DateTime():
         final double? serial = dateTimeSerial(v);
         if (serial == null) {
-          _writeString(out, sheet, ref, v.toIso8601String(), style);
-          _warnings.add(
-            XlsxWarningCode.dateOutsideExcelRange,
-            sheet: sheet,
-            cell: ref,
+          _writeString(
+            out,
+            sheet,
+            ref,
+            v.toIso8601String(),
+            style,
+            outsideDateRange: true,
           );
         } else {
           _writeDate(
@@ -134,11 +139,13 @@ final class CellEncoder {
       case XlsxDate():
         final int? serial = dateSerial(v.year, v.month, v.day);
         if (serial == null) {
-          _writeString(out, sheet, ref, _isoDate(v), style);
-          _warnings.add(
-            XlsxWarningCode.dateOutsideExcelRange,
-            sheet: sheet,
-            cell: ref,
+          _writeString(
+            out,
+            sheet,
+            ref,
+            _isoDate(v),
+            style,
+            outsideDateRange: true,
           );
         } else {
           _writeDate(
@@ -160,14 +167,20 @@ final class CellEncoder {
     }
   }
 
+  /// Writes [text] as a shared-string cell. With [outsideDateRange], the
+  /// text stands for a date Excel cannot store, which is reported too.
   void _writeString(
     XmlWriter out,
     String sheet,
     String ref,
     String text,
-    XlsxStyle? style,
-  ) {
+    XlsxStyle? style, {
+    bool outsideDateRange = false,
+  }) {
     final ScrubResult scrubbed = scrubXmlText(text);
+    final String result = _truncate(scrubbed.text);
+    // The style can throw; resolve it before anything is recorded.
+    final int id = _styles.idFor(style);
     if (scrubbed.removed > 0) {
       _warnings.add(
         XlsxWarningCode.invalidCharactersRemoved,
@@ -175,16 +188,28 @@ final class CellEncoder {
         cell: ref,
       );
     }
-    String result = scrubbed.text;
-    if (result.length > XlsxLimits.maxCellTextLength) {
-      int cut = XlsxLimits.maxCellTextLength;
-      // A high surrogate in the last kept unit would lose its low half.
-      final int last = result.codeUnitAt(cut - 1);
-      if (last >= 0xD800 && last <= 0xDBFF) cut--;
-      result = result.substring(0, cut);
+    if (result.length < scrubbed.text.length) {
       _warnings.add(XlsxWarningCode.textTruncated, sheet: sheet, cell: ref);
     }
-    _write(out, ref, style, 's', '<v>${_strings.indexOf(result)}</v>');
+    if (outsideDateRange) {
+      _warnings.add(
+        XlsxWarningCode.dateOutsideExcelRange,
+        sheet: sheet,
+        cell: ref,
+      );
+    }
+    _write(out, ref, id, 's', '<v>${_strings.indexOf(result)}</v>');
+  }
+
+  /// [text] cut to [XlsxLimits.maxCellTextLength] UTF-16 code units without
+  /// splitting a surrogate pair; [text] itself when it fits.
+  static String _truncate(String text) {
+    if (text.length <= XlsxLimits.maxCellTextLength) return text;
+    int cut = XlsxLimits.maxCellTextLength;
+    // A high surrogate in the last kept unit would lose its low half.
+    final int last = text.codeUnitAt(cut - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) cut--;
+    return text.substring(0, cut);
   }
 
   void _writeDate(
@@ -199,14 +224,17 @@ final class CellEncoder {
     final XlsxNumFmt? format = style?.numFmt;
     if (format == null) {
       effective = (style ?? const XlsxStyle()).copyWith(numFmt: defaultFormat);
-    } else if (!isDateFormat(format)) {
+    }
+    // The style can throw; resolve it before the warning is recorded.
+    final int id = _styles.idFor(effective);
+    if (format != null && !isDateFormat(format)) {
       _warnings.add(
         XlsxWarningCode.dateInNonDateFormat,
         sheet: sheet,
         cell: ref,
       );
     }
-    _write(out, ref, effective, null, '<v>$serial</v>');
+    _write(out, ref, id, null, '<v>$serial</v>');
   }
 
   void _writeFormula(
@@ -256,7 +284,7 @@ final class CellEncoder {
     _write(
       out,
       ref,
-      style,
+      _styles.idFor(style),
       type,
       '<f>${escapeXmlText(text)}</f>${cachedXml ?? ''}',
     );
@@ -269,14 +297,9 @@ final class CellEncoder {
         'infinity.',
       );
 
-  void _write(
-    XmlWriter out,
-    String ref,
-    XlsxStyle? style,
-    String? type,
-    String body,
-  ) {
-    final int id = _styles.idFor(style);
+  /// Writes the cell element with the style id [id], resolved by the caller
+  /// before it recorded anything.
+  void _write(XmlWriter out, String ref, int id, String? type, String body) {
     final StringBuffer cell = StringBuffer('<c r="$ref"');
     if (id != 0) cell.write(' s="$id"');
     if (type != null) cell.write(' t="$type"');

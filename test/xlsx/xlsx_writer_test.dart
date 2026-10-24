@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 import 'package:xml/xml.dart' show XmlDocument;
 
 import '../support/read_xlsx.dart';
+import '../support/xlsx_checker.dart';
 
 const String _main =
     'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
@@ -405,6 +406,24 @@ void main() {
         '<row r="2"><c r="A2" t="s"><v>1</v></c></row>',
       ),
     );
+  });
+
+  test('a cell that throws on its style changes no string or warning', () {
+    final XlsxWriter book = XlsxWriter();
+    final XlsxSheetWriter s = book.addSheet('S');
+    expect(
+      () => s.row(<Object?>[
+        const XlsxCell(
+          'a\u0001b',
+          style: XlsxStyle(numFmt: XlsxNumFmt.builtin(200)),
+        ),
+      ]),
+      throwsArgumentError,
+    );
+    s.row(<Object?>['ok']);
+    final XlsxResult out = book.close();
+    expect(out.warnings, isEmpty);
+    expect(checkXlsx(out.bytes), isEmpty);
   });
 
   test('formulas switch on full recalculation', () {

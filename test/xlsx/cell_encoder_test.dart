@@ -312,6 +312,53 @@ void main() {
     expect(buffer.toString(), '');
   });
 
+  group('a cell that throws records nothing', () {
+    const XlsxStyle invalid = XlsxStyle(numFmt: XlsxNumFmt.builtin(200));
+
+    String stylesXml() {
+      final StringBuffer buffer = StringBuffer();
+      styles.writeStylesXml(XmlWriter(buffer));
+      return buffer.toString();
+    }
+
+    void expectUntouched() {
+      expect(strings.count, 0);
+      expect(strings.uniqueCount, 0);
+      expect(warnings.warnings, isEmpty);
+      expect(stylesXml(), contains('<cellXfs count="1">'));
+    }
+
+    test('a string with forbidden characters and an invalid style', () {
+      expect(() => enc('a\u0001b', rowStyle: invalid), throwsArgumentError);
+      expectUntouched();
+    });
+
+    test('a date outside Excel\'s range with an invalid style', () {
+      expect(() => enc(DateTime(1850), rowStyle: invalid), throwsArgumentError);
+      expectUntouched();
+    });
+
+    test('a date in an invalid, non-date format', () {
+      expect(
+        () => enc(const XlsxDate(2026, 1, 1), rowStyle: invalid),
+        throwsArgumentError,
+      );
+      expectUntouched();
+    });
+
+    test('an invalid formula with a valid style registers no style', () {
+      expect(
+        () => enc(
+          const XlsxFormula('A1\u0001'),
+          rowStyle: const XlsxStyle(numFmt: XlsxNumFmt.custom('0.0')),
+        ),
+        throwsArgumentError,
+      );
+      expectUntouched();
+      expect(encoder.wroteFormula, isFalse);
+    });
+  });
+
   test('it closes an open row start tag first', () {
     final StringBuffer buffer = StringBuffer();
     final XmlWriter out = XmlWriter(buffer)
