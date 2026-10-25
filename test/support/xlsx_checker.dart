@@ -56,7 +56,13 @@
 ///     sheet and an `r:id` or a `location`; every `r:id` resolves in the
 ///     sheet's relationships to a hyperlink relationship whose
 ///     `TargetMode` is `External`; no two `hyperlink` elements of a sheet
-///     share a `ref`; and a sheet has at most 65,530 of them.
+///     share a `ref`; and a sheet has at most 65,530 of them;
+/// 23. `dataValidations/@count` equals its `dataValidation` children; every
+///     range of every `sqref` is a valid range inside the sheet; no two
+///     ranges of a sheet's validations overlap; `formula1` is present
+///     unless the type is `none` (or absent); and `formula2` is present for
+///     `between` (the default operator) and `notBetween` on `whole`,
+///     `decimal`, `date`, `time` and `textLength`.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -129,6 +135,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkAutoFilters(docs, violations);
   _checkFilterNames(docs, violations);
   _checkHyperlinks(docs, violations);
+  _checkDataValidations(docs, violations);
   return violations;
 }
 
@@ -1031,6 +1038,83 @@ void _checkHyperlinks(Map<String, XmlDocument> docs, List<String> violations) {
           'rule 22: ${sheet.key}: hyperlink "$ref" r:id "$id" is not an '
           'external hyperlink relationship',
         );
+      }
+    }
+  }
+}
+
+const Set<String> _comparingTypes = <String>{
+  'whole',
+  'decimal',
+  'date',
+  'time',
+  'textLength',
+};
+
+/// Rule 23.
+void _checkDataValidations(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement root in _all(sheet.value, 'dataValidations')) {
+      final List<XmlElement> items = root
+          .findElements('dataValidation')
+          .toList();
+      final String count = _attr(root, 'count');
+      if (int.tryParse(count) != items.length) {
+        violations.add(
+          'rule 23: ${sheet.key}: dataValidations count is "$count" but it '
+          'has ${items.length} dataValidation',
+        );
+      }
+      final List<(String, _Rect)> seen = <(String, _Rect)>[];
+      for (final XmlElement item in items) {
+        final String sqref = _attr(item, 'sqref');
+        if (sqref.trim().isEmpty) {
+          violations.add(
+            'rule 23: ${sheet.key}: a dataValidation has no sqref',
+          );
+        }
+        for (final String ref
+            in sqref.split(' ').where((String r) => r != '')) {
+          final _Rect? r = _parseRect(ref);
+          final String? problem = r == null
+              ? 'is not a range'
+              : _problemWith(r);
+          if (problem != null) {
+            violations.add('rule 23: ${sheet.key}: sqref "$ref" $problem');
+            continue;
+          }
+          for (final (String other, _Rect o) in seen) {
+            if (r!.row1 <= o.row2 &&
+                o.row1 <= r.row2 &&
+                r.col1 <= o.col2 &&
+                o.col1 <= r.col2) {
+              violations.add(
+                'rule 23: ${sheet.key}: sqref "$ref" overlaps "$other"',
+              );
+            }
+          }
+          seen.add((ref, r!));
+        }
+        final String type = item.getAttribute('type') ?? 'none';
+        final bool hasFormula1 = item.getElement('formula1') != null;
+        if (type != 'none' && !hasFormula1) {
+          violations.add(
+            'rule 23: ${sheet.key}: dataValidation "$sqref" of type $type '
+            'has no formula1',
+          );
+        }
+        final String operator = item.getAttribute('operator') ?? 'between';
+        if (_comparingTypes.contains(type) &&
+            (operator == 'between' || operator == 'notBetween') &&
+            item.getElement('formula2') == null) {
+          violations.add(
+            'rule 23: ${sheet.key}: dataValidation "$sqref" with operator '
+            '$operator has no formula2',
+          );
+        }
       }
     }
   }

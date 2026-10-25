@@ -98,7 +98,11 @@ void main() {
       'm2_merges_filter',
       'm2_formula_xstring',
     ]);
-    expect(names(m3Fixtures()), <String>['m3_names', 'm3_hyperlinks']);
+    expect(names(m3Fixtures()), <String>[
+      'm3_names',
+      'm3_hyperlinks',
+      'm3_validation',
+    ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
@@ -427,6 +431,20 @@ void main() {
       ),
     );
     expect(parts['xl/worksheets/sheet1.xml'], contains('<f>TaxRate*100</f>'));
+  });
+
+  test('m3_validation writes a validation of every kind', () {
+    final String sheet = readXlsx(
+      named('m3_validation').build(),
+    )['xl/worksheets/sheet1.xml']!;
+    expect(sheet, contains('<dataValidations count="9">'));
+    expect(sheet, contains('<formula1>"Fish,say ""hi"",R&amp;D"</formula1>'));
+    expect(sheet, contains(r'<formula1>$D$2:$D$4</formula1>'));
+    expect(sheet, contains('<formula1>46319</formula1>'));
+    expect(sheet, contains('<formula1>0.5</formula1>'));
+    expect(sheet, contains('<formula1>ISEVEN(B9)</formula1>'));
+    expect(sheet, contains('errorStyle="warning"'));
+    expect(sheet.indexOf('</sheetData>'), lessThan(sheet.indexOf('<dataV')));
   });
 
   test('m2_formula_xstring probes _xHHHH_ inside a formula and in text', () {

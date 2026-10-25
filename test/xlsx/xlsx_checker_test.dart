@@ -1223,4 +1223,108 @@ void main() {
       );
     });
   });
+
+  group('rule 23: data validations', () {
+    Uint8List validated() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('V')
+        ..row(<Object?>[1])
+        ..dataValidation(
+          XlsxDataValidation.whole(
+            <XlsxRange>[XlsxRange.parse('A1')],
+            XlsxComparison.between,
+            1,
+            b: 10,
+          ),
+        )
+        ..dataValidation(
+          XlsxDataValidation.list(
+            <XlsxRange>[XlsxRange.parse('B1:B3')],
+            <String>['a', 'b'],
+          ),
+        )
+        ..dataValidation(
+          XlsxDataValidation.any(<XlsxRange>[XlsxRange.parse('C1')]),
+        );
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      validated(),
+      edit: <String, String? Function(String)>{_sheet1: change},
+    );
+
+    test('valid validations have no violations', () {
+      expect(checkXlsx(validated()), isEmpty);
+    });
+    test('a count that differs from the children', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            '<dataValidations count="3">',
+            '<dataValidations count="2">',
+          ),
+        ),
+        23,
+      );
+    });
+    test('an sqref outside the sheet', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('sqref="A1"', 'sqref="A1048577"')),
+        23,
+      );
+    });
+    test('an sqref that is not a range', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('sqref="B1:B3"', 'sqref="B:B"')),
+        23,
+      );
+    });
+    test('two validations whose ranges overlap', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('sqref="C1"', 'sqref="B3"')),
+        23,
+      );
+    });
+    test('a missing formula1', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<formula1>1</formula1>', '')),
+        23,
+      );
+    });
+    test('a missing formula2 for between', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<formula2>10</formula2>', '')),
+        23,
+      );
+    });
+    test('a missing formula2 for notBetween', () {
+      _expectRule(
+        tamper(
+          (String x) => x
+              .replaceFirst('<formula2>10</formula2>', '')
+              .replaceFirst(
+                'type="whole"',
+                'type="whole" operator="notBetween"',
+              ),
+        ),
+        23,
+      );
+    });
+    test('a comparison without formula2 is fine', () {
+      expect(
+        checkXlsx(
+          tamper(
+            (String x) => x
+                .replaceFirst('<formula2>10</formula2>', '')
+                .replaceFirst(
+                  'type="whole"',
+                  'type="whole" operator="greaterThan"',
+                ),
+          ),
+        ),
+        isEmpty,
+      );
+    });
+  });
 }

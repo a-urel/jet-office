@@ -16,11 +16,13 @@
 /// writer has validated (Quds wrote any filter string unchecked and accepted
 /// overlapping merges); `hyperlinks` come from links the writer has
 /// validated, and the sheet's relationships part, which Quds did not write,
-/// carries their external targets.
+/// carries their external targets; `dataValidations` (see
+/// `data_validation.dart`) come between them, where Quds wrote them before
+/// `mergeCells`.
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
 /// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter`,
-/// `mergeCells` and `hyperlinks`.
+/// `mergeCells`, `dataValidations` and `hyperlinks`.
 library;
 
 import '../opc/ooxml.dart';
@@ -30,6 +32,7 @@ import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
 import 'color.dart';
+import 'data_validation.dart';
 import 'limits.dart';
 import 'range.dart';
 import 'sheet_view.dart';
@@ -83,6 +86,7 @@ final class WorksheetSettings {
     this.summaryRight = true,
     this.autoFilter,
     this.merges = const <XlsxRange>[],
+    this.dataValidations = const <XlsxDataValidation>[],
     this.hyperlinks = const <WorksheetHyperlink>[],
   });
 
@@ -117,6 +121,9 @@ final class WorksheetSettings {
   /// The merged ranges, in the order they were merged.
   final List<XlsxRange> merges;
 
+  /// The data validations, in the order they were added.
+  final List<XlsxDataValidation> dataValidations;
+
   /// The hyperlinks, in cell order of writing.
   final List<WorksheetHyperlink> hyperlinks;
 }
@@ -144,7 +151,8 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 }
 
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
-/// then `autoFilter`, `mergeCells` and `hyperlinks` when the sheet has them,
+/// then `autoFilter`, `mergeCells`, `dataValidations` and `hyperlinks` when
+/// the sheet has them,
 /// then `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
 String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
   final StringBuffer out = StringBuffer();
@@ -162,6 +170,7 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
     }
     w.end();
   }
+  writeDataValidations(w, settings.dataValidations);
   if (settings.hyperlinks.isNotEmpty) {
     w.start('hyperlinks');
     for (final WorksheetHyperlink link in settings.hyperlinks) {

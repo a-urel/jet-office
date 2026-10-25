@@ -16,6 +16,7 @@
 /// frozen or split panes), a tab color, an outline summary position and a
 /// visibility. Merged ranges and the auto filter are trailer settings,
 /// checked when set: Quds accepted overlapping merges and any filter text.
+/// Data validations are trailer settings too, checked when added.
 /// A hyperlink is a cell value: the row checks it before its cell is
 /// encoded, and the finished sheet writes its `hyperlinks` and, for the
 /// external ones, a relationships part with one relationship per address.
@@ -33,6 +34,7 @@ import 'cell_encoder.dart';
 import 'cell_ref.dart';
 import 'color.dart';
 import 'column.dart';
+import 'data_validation.dart';
 import 'defined_name.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
@@ -204,6 +206,17 @@ abstract final class XlsxSheetWriter {
   /// then.
   void printTitles({(int, int)? rows, (int, int)? columns});
 
+  /// Adds [validation], a rule on what the cells of its ranges may hold.
+  ///
+  /// A trailer setting like [merge]. Validations are written in the order
+  /// added.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] naming the field
+  /// when [validation] is invalid (see [XlsxDataValidation]) or any of its
+  /// ranges overlaps a range of an earlier validation or of itself (the
+  /// message names both). When it throws, nothing is recorded.
+  void dataValidation(XlsxDataValidation validation);
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
@@ -324,6 +337,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
   (int, int)? _printTitleRows;
   (int, int)? _printTitleColumns;
   final List<XlsxDefinedName> _names = <XlsxDefinedName>[];
+  final List<XlsxDataValidation> _validations = <XlsxDataValidation>[];
 
   /// The hyperlinks written so far, with the reference of their cell.
   final List<(String, XlsxHyperlink)> _links = <(String, XlsxHyperlink)>[];
@@ -460,6 +474,13 @@ final class WorksheetWriter implements XlsxSheetWriter {
   void defineName(XlsxDefinedName name) {
     _checkOpenSheet();
     _names.add(checkDefinedName(name, _names));
+  }
+
+  @override
+  void dataValidation(XlsxDataValidation validation) {
+    _checkOpenSheet();
+    checkDataValidation(validation, _validations);
+    _validations.add(validation);
   }
 
   @override
@@ -691,6 +712,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       summaryRight: _summaryRight,
       autoFilter: _autoFilter,
       merges: _merges,
+      dataValidations: _validations,
       hyperlinks: links,
     );
     context.zip.addChunks(worksheetPartName(number), <Uint8List>[

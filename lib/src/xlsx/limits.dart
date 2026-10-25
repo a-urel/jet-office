@@ -131,6 +131,33 @@ abstract final class XlsxLimits {
   /// The longest comment of a defined name, in UTF-16 code units. Same
   /// source as [maxDefinedNameLength].
   static const int maxDefinedNameCommentLength = 255;
+
+  /// The longest title of a validation's input or error message, in UTF-16
+  /// code units.
+  ///
+  /// The M3 plan sets 32, the length Excel's Data Validation dialog accepts
+  /// for its Title fields. A longer title throws [ArgumentError] when the
+  /// validation is registered. Not confirmed against Microsoft's limits
+  /// page, which gives no figure.
+  static const int maxValidationTitleLength = 32;
+
+  /// The longest input or error message of a validation, in UTF-16 code
+  /// units.
+  ///
+  /// The M3 plan sets 255, the length Excel's Data Validation dialog accepts
+  /// for its message fields. A longer message throws [ArgumentError] when
+  /// the validation is registered.
+  static const int maxValidationMessageLength = 255;
+
+  /// The longest inline validation list, in UTF-16 code units, counted
+  /// between the outer quotes as written (a quote inside an item counts
+  /// twice, a comma between items once).
+  ///
+  /// Microsoft's "Excel specifications and limits" page gives no figure; 255
+  /// is the limit Excel's Data Validation dialog enforces on a typed Source.
+  /// A longer list throws [ArgumentError] when the validation is registered;
+  /// `XlsxDataValidation.listFrom` takes a range or a name instead.
+  static const int maxValidationListLength = 255;
 }
 
 /// Thrown when a write would exceed one of the [XlsxLimits].

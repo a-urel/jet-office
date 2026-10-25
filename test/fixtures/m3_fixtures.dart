@@ -9,7 +9,7 @@ import 'package:jet_office/jet_office.dart';
 import 'fixture.dart';
 
 /// The fixtures of milestone M3.
-List<Fixture> m3Fixtures() => <Fixture>[_names(), _hyperlinks()];
+List<Fixture> m3Fixtures() => <Fixture>[_names(), _hyperlinks(), _validation()];
 
 /// Defined names, a print area and print titles.
 ///
@@ -145,6 +145,129 @@ Fixture _hyperlinks() => Fixture(
       ..row(<Object?>[null, 'B2'])
       ..row(<Object?>[null, null, 'C3']);
     book.defineName(const XlsxDefinedName('Target', r"'O''Brien'!$C$3"));
+    return book.close();
+  },
+);
+
+/// Data validation of every kind, on `Form`.
+///
+/// Row 1 is the header; rows 2 to 10 each hold a label in column A and its
+/// validated input cell in column B, which stays empty (a validation only
+/// restricts what is typed): a list with a quoted item, a list from the
+/// range `D2:D4`, a whole number from 1 to 10 with an input message, a
+/// decimal above 0, a date after 24.10.2026, a time before 12:00, a text of
+/// at most 5 characters, a custom `ISEVEN(B9)` with a warning-style error,
+/// and an `any` validation that only prompts. Excel shows the drop-downs,
+/// messages and warning; the values below are what a reader computes.
+Fixture _validation() => Fixture(
+  'm3_validation',
+  <String, List<List<String>>>{
+    'Form': <List<String>>[
+      <String>['Field', 'Input', '', 'Choices'],
+      <String>['Quoted list', '', '', 'red'],
+      <String>['List from range', '', '', 'green'],
+      <String>['Whole 1 to 10', '', '', 'blue'],
+      <String>['Decimal above 0', '', '', ''],
+      <String>['Date after 24.10.2026', '', '', ''],
+      <String>['Time before 12:00', '', '', ''],
+      <String>['Text of at most 5', '', '', ''],
+      <String>['Even number', '', '', ''],
+      <String>['Prompt only', '', '', ''],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Form': <List<Object?>>[
+      <Object?>['Field', 'Input', null, 'Choices'],
+      <Object?>['Quoted list', null, null, 'red'],
+      <Object?>['List from range', null, null, 'green'],
+      <Object?>['Whole 1 to 10', null, null, 'blue'],
+      <Object?>['Decimal above 0'],
+      <Object?>['Date after 24.10.2026'],
+      <Object?>['Time before 12:00'],
+      <Object?>['Text of at most 5'],
+      <Object?>['Even number'],
+      <Object?>['Prompt only'],
+    ],
+  },
+  () {
+    final XlsxWriter book = XlsxWriter();
+    XlsxRange input(int row) => XlsxRange(row, 1);
+    book.addSheet('Form')
+      ..row(<Object?>['Field', 'Input', null, 'Choices'])
+      ..row(<Object?>['Quoted list', null, null, 'red'])
+      ..row(<Object?>['List from range', null, null, 'green'])
+      ..row(<Object?>['Whole 1 to 10', null, null, 'blue'])
+      ..row(<Object?>['Decimal above 0'])
+      ..row(<Object?>['Date after 24.10.2026'])
+      ..row(<Object?>['Time before 12:00'])
+      ..row(<Object?>['Text of at most 5'])
+      ..row(<Object?>['Even number'])
+      ..row(<Object?>['Prompt only'])
+      ..dataValidation(
+        XlsxDataValidation.list(
+          <XlsxRange>[input(1)],
+          <String>['Fish', 'say "hi"', 'R&D'],
+        ),
+      )
+      ..dataValidation(
+        XlsxDataValidation.listFrom(<XlsxRange>[input(2)], r'$D$2:$D$4'),
+      )
+      ..dataValidation(
+        XlsxDataValidation.whole(
+          <XlsxRange>[input(3)],
+          XlsxComparison.between,
+          1,
+          b: 10,
+          promptTitle: 'Count',
+          prompt: 'Enter a whole number from 1 to 10.',
+          errorTitle: 'Not allowed',
+          error: 'Use 1 to 10.',
+        ),
+      )
+      ..dataValidation(
+        XlsxDataValidation.decimal(
+          <XlsxRange>[input(4)],
+          XlsxComparison.greaterThan,
+          0,
+        ),
+      )
+      ..dataValidation(
+        XlsxDataValidation.date(
+          <XlsxRange>[input(5)],
+          XlsxComparison.greaterThan,
+          const XlsxDate(2026, 10, 24),
+        ),
+      )
+      ..dataValidation(
+        XlsxDataValidation.time(
+          <XlsxRange>[input(6)],
+          XlsxComparison.lessThan,
+          const Duration(hours: 12),
+        ),
+      )
+      ..dataValidation(
+        XlsxDataValidation.textLength(
+          <XlsxRange>[input(7)],
+          XlsxComparison.lessThanOrEqual,
+          5,
+        ),
+      )
+      ..dataValidation(
+        XlsxDataValidation.custom(
+          <XlsxRange>[input(8)],
+          'ISEVEN(B9)',
+          errorStyle: XlsxValidationErrorStyle.warning,
+          errorTitle: 'Odd',
+          error: 'The number is not even.',
+        ),
+      )
+      ..dataValidation(
+        XlsxDataValidation.any(
+          <XlsxRange>[input(9)],
+          promptTitle: 'Note',
+          prompt: 'Anything goes here.',
+        ),
+      );
     return book.close();
   },
 );
