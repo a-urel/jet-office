@@ -281,7 +281,7 @@ final class CellEncoder {
     bool outsideDateRange = false,
   }) {
     final ScrubResult scrubbed = scrubXmlText(text);
-    final String result = _truncate(scrubbed.text);
+    final String result = truncateCellText(scrubbed.text);
     // The style can throw; resolve it before anything is recorded.
     final int id = _idOf(style);
     if (scrubbed.removed > 0) {
@@ -306,7 +306,7 @@ final class CellEncoder {
 
   /// [text] cut to [XlsxLimits.maxCellTextLength] UTF-16 code units without
   /// splitting a surrogate pair; [text] itself when it fits.
-  static String _truncate(String text) {
+  static String truncateCellText(String text) {
     if (text.length <= XlsxLimits.maxCellTextLength) return text;
     int cut = XlsxLimits.maxCellTextLength;
     // A high surrogate in the last kept unit would lose its low half.
@@ -379,7 +379,7 @@ final class CellEncoder {
             '"$sheet" contains characters XML forbids.',
           );
         }
-        final String kept = _truncate(cached);
+        final String kept = truncateCellText(cached);
         if (kept.length < cached.length) {
           warning = XlsxWarningCode.textTruncated;
         }

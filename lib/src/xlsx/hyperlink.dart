@@ -54,7 +54,8 @@ final class XlsxHyperlink {
 
   /// A link that starts a new e-mail to [address].
   ///
-  /// The [XlsxHyperlink.address] is `mailto:<address>`, followed by
+  /// The [XlsxHyperlink.address] is `mailto:<address>` with the address
+  /// percent-encoded by [encodeUriText] (which keeps the `@`), followed by
   /// `?subject=` and the [subject] percent-encoded as a URI component when
   /// a subject is given: `&`, `=`, `?`, `#` and spaces are encoded, so
   /// `Q&A` stays one subject. [text] defaults to the bare [address].
@@ -65,7 +66,7 @@ final class XlsxHyperlink {
     String? tooltip,
   }) => XlsxHyperlink._(
     address:
-        'mailto:$address'
+        'mailto:${encodeUriText(address)}'
         '${subject == null ? '' : '?subject=${Uri.encodeComponent(subject)}'}',
     text: text ?? address,
     tooltip: tooltip,

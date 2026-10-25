@@ -29,6 +29,7 @@ import 'dart:typed_data';
 import '../xml/utf8_buffer.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
+import 'cell_encoder.dart';
 import 'cell_ref.dart';
 import 'color.dart';
 import 'column.dart';
@@ -208,13 +209,14 @@ abstract final class XlsxSheetWriter {
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
   /// [DateTime], [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxHyperlink],
   /// or an [XlsxCell] wrapping one of those with its own style. [style]
-  /// applies to every cell of the row. The effective style of a cell is its column's style (see
-  /// [columns]), with [style] merged over it and the cell's own style over
-  /// that, field by field: a field a higher layer sets wins, one it leaves
-  /// `null` is inherited. Pass the same style object on every row that
-  /// shares a style, a `const` or one built once before the loop: the
-  /// encoder caches the merged style per column by the identity of its
-  /// layers, and a style built afresh for each row misses that cache.
+  /// applies to every cell of the row. The effective style of a cell is its
+  /// column's style (see [columns]), with [style] merged over it and the
+  /// cell's own style over that, field by field: a field a higher layer
+  /// sets wins, one it leaves `null` is inherited. Pass the same style
+  /// object on every row that shares a style, a `const` or one built once
+  /// before the loop: the encoder caches the merged style per column by the
+  /// identity of its layers, and a style built afresh for each row misses
+  /// that cache.
   ///
   /// `XlsxCell(null, style: s)` with a non-null `s` writes an empty cell
   /// that carries the effective style, for example a border across a
@@ -241,11 +243,11 @@ abstract final class XlsxSheetWriter {
   /// one can happen in the middle of a row. Further, it throws [StateError]
   /// when the sheet is finished or the writer has failed, and
   /// [ArgumentError] for a value the writer cannot store, an invalid
-  /// [XlsxHyperlink] (see there), `XlsxLimitError('hyperlinks', ...)` for a
-  /// sheet's 65,531st link, or an invalid style
-  /// (a built-in number format id outside `0..163`, or an empty custom
-  /// format code or one with characters XML forbids). After an
-  /// [ArgumentError] or a cell-format [XlsxLimitError] in the middle of a
+  /// [XlsxHyperlink] (see there) or an invalid style (a built-in number
+  /// format id outside `0..163`, or an empty custom format code or one with
+  /// characters XML forbids), and `XlsxLimitError('hyperlinks', ...)` for a
+  /// sheet's 65,531st link. After an [ArgumentError], a cell-format
+  /// [XlsxLimitError] or a hyperlinks [XlsxLimitError] in the middle of a
   /// row, the cells before the failing one are kept, the row keeps its
   /// attributes and still counts.
   void row(
@@ -675,7 +677,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
             : ids.putIfAbsent(address, () => 'rId${ids.length + 1}'),
         location: link.location,
         tooltip: link.tooltip,
-        display: link.text,
+        display: CellEncoder.truncateCellText(link.text),
       ));
     }
     final WorksheetSettings settings = WorksheetSettings(

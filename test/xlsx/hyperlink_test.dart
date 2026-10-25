@@ -100,6 +100,13 @@ void main() {
         'mailto:a@b.com?subject=a%3Db%3Fc%23d',
       );
     });
+    test('email percent-encodes the address but keeps the @', () {
+      expect(XlsxHyperlink.email('a b@c.com').address, 'mailto:a%20b@c.com');
+      expect(
+        XlsxHyperlink.email('ç@c.com', subject: 's').address,
+        'mailto:%C3%A7@c.com?subject=s',
+      );
+    });
     test('email without a subject has no query', () {
       expect(XlsxHyperlink.email('a@b.com').address, 'mailto:a@b.com');
     });
@@ -252,6 +259,45 @@ void main() {
       expect(result.warnings.map((XlsxWarning w) => w.code), <XlsxWarningCode>[
         XlsxWarningCode.textTruncated,
       ]);
+      final Map<String, String> parts = readXlsx(result.bytes);
+      final String display = RegExp(
+        'display="([^"]*)"',
+      ).firstMatch(parts[_sheet1]!)!.group(1)!;
+      expect(display.length, 32767);
+      expect(parts['xl/sharedStrings.xml'], contains('>$display<'));
+    });
+
+    test('display is cut without splitting a surrogate pair', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S').row(<Object?>[
+        XlsxHyperlink.url('https://a.org', text: '${'x' * 32766}\u{1F600}yy'),
+      ]);
+      final String sheet = readXlsx(book.close().bytes)[_sheet1]!;
+      final String display = RegExp(
+        'display="([^"]*)"',
+      ).firstMatch(sheet)!.group(1)!;
+      expect(display, 'x' * 32766);
+    });
+
+    test('a sheet link to a renamed sheet uses the final quoted name', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter target = book.addSheet('a/b');
+      final XlsxSheetWriter from = book.addSheet('From');
+      from.row(<Object?>[
+        XlsxHyperlink.sheet(target.name, range: XlsxRange.parse('B2')),
+      ]);
+      expect(target.name, isNot('a/b'));
+      final String sheet = readXlsx(
+        book.close().bytes,
+      )['xl/worksheets/sheet2.xml']!;
+      expect(sheet, contains('location="\'${target.name}\'!B2"'));
+    });
+
+    test('a sheet name that needs quotes is quoted', () {
+      final String sheet = _parts(<List<Object?>>[
+        <Object?>[XlsxHyperlink.sheet('Q1 2026')],
+      ])[_sheet1]!;
+      expect(sheet, contains('''location="'Q1 2026'!A1"'''));
     });
 
     test('links in several rows keep their cell references', () {
@@ -431,10 +477,8 @@ void main() {
       );
       expectRejected(XlsxHyperlink.location('a\u0001'), field: 'location');
     });
-    test('an address holding U+0001', () {
-      // encodeUriText encodes the control character, so build the link
-      // from an email address, whose address part is not encoded.
-      expectRejected(XlsxHyperlink.email('a\u0001@b.com'), field: 'address');
+    test('an address holding U+0001 is encoded, so it is accepted', () {
+      expect(XlsxHyperlink.email('a\u0001@b.com').address, 'mailto:a%01@b.com');
     });
     test('a link inside an XlsxCell is checked too', () {
       expectRejected(XlsxCell(XlsxHyperlink.url('')), field: 'address');

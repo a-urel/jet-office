@@ -2,9 +2,10 @@
 ///
 /// Ported from quds_office_engine `lib/src/opc/relationships.dart` at commit 15c5d29.
 /// Ported: `RelationshipCollection` and its `toXml`, as the write side only
-/// (no parsing, no lookup). What changed: ids are
-/// assigned by [Relationships.add] as `rId1`, `rId2`, ... in call order
-/// unless the caller gives one, and the part is written to an `XmlWriter`.
+/// (no parsing, no lookup). What changed: ids are assigned by
+/// [Relationships.add] as `rId1`, `rId2`, ... in call order unless the
+/// caller gives one, a relationship can be external (a hyperlink), and the
+/// part is written to an `XmlWriter`.
 library;
 
 import '../xml/xml_writer.dart';
