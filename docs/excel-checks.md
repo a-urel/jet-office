@@ -366,11 +366,14 @@ Page Setup > Header/Footer shows `Different odd and even pages` and
 
 - Print Preview page 1 (the first page): header `Cover`, no footer.
 - Page 2 (even): no header, footer `Report`, the sheet name.
-- Pages the fixture does not show at 100 %: Custom Header shows `R&D` in the
-  left section and the date in the right (`&D`), and Custom Footer (odd
-  pages) shows `Page &P of &N`. To see them printed, set Page Layout > Scale
-  to Fit to 150 %, which gives a third page, with `R&D` and the date in the
-  header and `Page 3 of 3` in the footer; then discard the change.
+- The odd-page texts do not print on pages 1 and 2. Primary check: Custom
+  Header shows `R&&D` in the left section (the stored code, with the
+  ampersand doubled; the printed page shows `R&D`, so this is not a bug) and
+  the date code `&D` in the right section, and Custom Footer (odd pages)
+  shows `Page &P of &N`. To see them printed, in Page Layout set Scale (not
+  Scale to Fit) and raise it until Print Preview shows 3 pages, about 200 %
+  on A4 or Letter. Page 3 then shows the odd header (`R&D` left, the date
+  right) and `Page 3 of 3`; discard the change afterwards.
 
 ### `m3_protection`
 
@@ -398,7 +401,8 @@ Statistics and Custom tabs.
 - Title `Quarterly report`, Subject `Accounts`, Author `Ahmet Urel`, Manager
   `Ayse Yilmaz`, Company `Jetronik`, Category `Finance`, Keywords
   `report; accounts`, Comments `Fixture for the document properties`.
-- Status `Final`; Last saved by `Jet Office`.
+- Last saved by `Jet Office`. Status `Final` is checked under File > Info
+  (it may not appear on the Advanced Properties tabs).
 - Created 24.10.2026 09:30 UTC and modified 25.10.2026 18:45:10 UTC, in
   local time (12:30 and 21:45:10 in Türkiye).
 - Custom: `Project` (text) `Atlas`, `Count` (number) `3`, `Ratio` (number)
