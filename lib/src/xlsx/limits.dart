@@ -99,6 +99,18 @@ abstract final class XlsxLimits {
   /// The maximum number of hyperlinks in a worksheet. No writer enforces it
   /// yet; the sheet writer will once it can write hyperlinks.
   static const int maxHyperlinksPerSheet = 65530;
+
+  /// The longest defined name, in UTF-16 code units. A longer name throws
+  /// [ArgumentError] when it is registered.
+  ///
+  /// Microsoft's "Excel specifications and limits" page gives no figure for
+  /// names; 255 is the limit the M3 plan sets, which Excel's own Name box
+  /// enforces. It was not confirmed against ECMA-376 here.
+  static const int maxDefinedNameLength = 255;
+
+  /// The longest comment of a defined name, in UTF-16 code units. Same
+  /// source as [maxDefinedNameLength].
+  static const int maxDefinedNameCommentLength = 255;
 }
 
 /// Thrown when a write would exceed one of the [XlsxLimits].

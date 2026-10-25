@@ -11,7 +11,8 @@
 /// the caller, a workbook without sheets is an error instead of silently
 /// gaining `Sheet1`, and data problems are returned as warnings. The
 /// workbook gets the hidden `_xlnm._FilterDatabase` name of each sheet's
-/// auto filter, which Quds did not write. Charts and pictures are not
+/// auto filter, which Quds did not write, and the defined names, print areas
+/// and print titles (see `workbook_parts.dart`). Charts and pictures are not
 /// ported yet.
 library;
 
@@ -20,6 +21,7 @@ import 'dart:typed_data';
 import '../xml/utf8_buffer.dart';
 import '../xml/xml_writer.dart';
 import '../zip/archive_adapter.dart';
+import 'defined_name.dart';
 import 'properties.dart';
 import 'sheet_name.dart';
 import 'sheet_view.dart';
@@ -62,6 +64,9 @@ sealed class XlsxWriterBase {
 
   /// The sheets in tab order.
   final List<WorksheetWriter> _tabs = <WorksheetWriter>[];
+
+  /// The workbook-scope defined names, in definition order.
+  final List<XlsxDefinedName> _names = <XlsxDefinedName>[];
   WorksheetWriter? _open;
   WorksheetWriter? _active;
   bool _closed = false;
@@ -134,6 +139,22 @@ sealed class XlsxWriterBase {
     _active = sheet;
   }
 
+  /// Defines [name] for the whole workbook.
+  ///
+  /// Names are written in the order made, before the names of any sheet; use
+  /// [XlsxSheetWriter.defineName] for a name that belongs to one sheet. A
+  /// workbook name is allowed until `close()`. The same spelling may also be
+  /// defined on a sheet, where it hides this one.
+  ///
+  /// Throws [ArgumentError] for an invalid name, comment or formula (see
+  /// [XlsxDefinedName]) or a name already defined in the workbook scope,
+  /// ignoring case; the earlier names stay then. Throws [StateError] after
+  /// `close()` or after a failure.
+  void defineName(XlsxDefinedName name) {
+    _checkOpen();
+    _names.add(checkDefinedName(name, _names));
+  }
+
   void _checkOpen() {
     _context.checkNotFailed();
     if (_closed) {
@@ -203,8 +224,10 @@ sealed class XlsxWriterBase {
                   number: s.number,
                   visibility: s.visibility,
                   autoFilter: s.autoFilterRange,
+                  names: s.sheetNames,
                 ),
             ],
+            workbookNames: _names,
             activeTab: _activeTab(),
             fullCalcOnLoad: _context.encoder.wroteFormula,
           ),

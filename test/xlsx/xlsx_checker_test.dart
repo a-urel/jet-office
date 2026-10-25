@@ -1011,7 +1011,8 @@ void main() {
             'xl/workbook.xml',
             (String x) => x.replaceFirst(
               '</definedNames>',
-              '<definedName name="_xlnm._FilterDatabase">F!A1</definedName>'
+              '<definedName name="Dup">1</definedName>'
+                  '<definedName name="Dup" localSheetId="0">1</definedName>'
                   '</definedNames>',
             ),
           ),
@@ -1068,6 +1069,40 @@ void main() {
         ),
         21,
       );
+    });
+    test('a built-in _xlnm name without a localSheetId', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(
+            '</definedNames>',
+            '<definedName name="_xlnm.Print_Area">F!A1</definedName>'
+                '</definedNames>',
+          ),
+        ),
+        21,
+      );
+    });
+    test('a defined name with no text', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(
+            '</definedNames>',
+            '<definedName name="Empty"> </definedName></definedNames>',
+          ),
+        ),
+        21,
+      );
+    });
+    test('names with print settings and a user name are valid', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('F')
+        ..printArea(<XlsxRange>[XlsxRange.parse('A1:B2')])
+        ..printTitles(rows: (0, 0))
+        ..defineName(const XlsxDefinedName('Mine', 'F!A1'));
+      book.defineName(const XlsxDefinedName('Mine', '1'));
+      expect(checkXlsx(book.close().bytes), isEmpty);
     });
     test('an autoFilter ref that is not a range', () {
       for (final String bad in <String>[

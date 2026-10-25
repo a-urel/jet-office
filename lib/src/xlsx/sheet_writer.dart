@@ -28,6 +28,7 @@ import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import 'color.dart';
 import 'column.dart';
+import 'defined_name.dart';
 import 'limits.dart';
 import 'range.dart';
 import 'sheet_view.dart';
@@ -159,6 +160,44 @@ abstract final class XlsxSheetWriter {
   /// filter, if any, stays in force then.
   void autoFilter(XlsxRange range);
 
+  /// Defines [name] for this sheet only: it hides a workbook name of the
+  /// same spelling on this sheet.
+  ///
+  /// A trailer setting like [merge]. Names are written in the order made;
+  /// use `XlsxWriterBase.defineName` for a workbook-wide name. Reference
+  /// this sheet in the formula as Excel does, quoting its name when it needs
+  /// it.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] for an invalid
+  /// name, comment or formula (see [XlsxDefinedName]) or a name this sheet
+  /// already has, ignoring case; the earlier names stay then.
+  void defineName(XlsxDefinedName name);
+
+  /// Sets the cells printed, replacing an earlier call: each of [ranges]
+  /// becomes one area of the print, on its own page.
+  ///
+  /// A trailer setting like [merge]. The workbook gets the `_xlnm.Print_Area`
+  /// name of the sheet, with absolute references to this sheet's final name,
+  /// quoted.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] when [ranges] is
+  /// empty or a range lies outside the sheet or has its first corner after
+  /// its last; the earlier print area stays then.
+  void printArea(List<XlsxRange> ranges);
+
+  /// Repeats rows and columns on every printed page, replacing an earlier
+  /// call; a call with neither argument removes the titles.
+  ///
+  /// [rows] and [columns] are zero-based (first, last) pairs, both
+  /// inclusive: `rows: (0, 0)` repeats the first row, `columns: (0, 1)` the
+  /// columns A and B. A trailer setting like [merge].
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] naming `rows` or
+  /// `columns` for a span outside 0 to 1,048,575 rows or 0 to 16,383
+  /// columns, or whose first is after its last; the earlier titles stay
+  /// then.
+  void printTitles({(int, int)? rows, (int, int)? columns});
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
@@ -272,9 +311,22 @@ final class WorksheetWriter implements XlsxSheetWriter {
   bool _summaryRight = true;
   final List<XlsxRange> _merges = <XlsxRange>[];
   XlsxRange? _autoFilter;
+  List<XlsxRange> _printArea = const <XlsxRange>[];
+  (int, int)? _printTitleRows;
+  (int, int)? _printTitleColumns;
+  final List<XlsxDefinedName> _names = <XlsxDefinedName>[];
 
   /// The range of the auto filter, if [autoFilter] set one.
   XlsxRange? get autoFilterRange => _autoFilter;
+
+  /// The defined names of this sheet that `workbook.xml` lists: its print
+  /// area and titles and the names registered with [defineName].
+  SheetNames get sheetNames => SheetNames(
+    printArea: _printArea,
+    printTitleRows: _printTitleRows,
+    printTitleColumns: _printTitleColumns,
+    defined: List<XlsxDefinedName>.unmodifiable(_names),
+  );
 
   @override
   int get rowCount => _rowCount;
@@ -390,6 +442,55 @@ final class WorksheetWriter implements XlsxSheetWriter {
     _checkOpenSheet();
     validateRange(range, 'range');
     _autoFilter = range;
+  }
+
+  @override
+  void defineName(XlsxDefinedName name) {
+    _checkOpenSheet();
+    _names.add(checkDefinedName(name, _names));
+  }
+
+  @override
+  void printArea(List<XlsxRange> ranges) {
+    _checkOpenSheet();
+    if (ranges.isEmpty) {
+      throw ArgumentError.value(
+        ranges,
+        'ranges',
+        'A print area needs at least one range.',
+      );
+    }
+    for (int i = 0; i < ranges.length; i++) {
+      validateRange(ranges[i], 'ranges[$i]');
+    }
+    _printArea = List<XlsxRange>.unmodifiable(ranges);
+  }
+
+  @override
+  void printTitles({(int, int)? rows, (int, int)? columns}) {
+    _checkOpenSheet();
+    if (rows != null) _checkSpan(rows, 'rows', XlsxLimits.maxRows);
+    if (columns != null) _checkSpan(columns, 'columns', XlsxLimits.maxColumns);
+    _printTitleRows = rows;
+    _printTitleColumns = columns;
+  }
+
+  static void _checkSpan((int, int) span, String field, int count) {
+    final (int first, int last) = span;
+    if (first < 0 || last >= count) {
+      throw ArgumentError.value(
+        span,
+        field,
+        'The span lies outside the sheet: 0 to ${count - 1} are allowed.',
+      );
+    }
+    if (first > last) {
+      throw ArgumentError.value(
+        span,
+        field,
+        'The first of the span must not be after its last.',
+      );
+    }
   }
 
   @override

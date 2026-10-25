@@ -98,7 +98,7 @@ void main() {
       'm2_merges_filter',
       'm2_formula_xstring',
     ]);
-    expect(m3Fixtures(), isA<List<Fixture>>());
+    expect(names(m3Fixtures()), <String>['m3_names']);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
@@ -409,6 +409,24 @@ void main() {
         '</definedName></definedNames>',
       ),
     );
+  });
+
+  test('m3_names writes its names, print area and print titles', () {
+    final Map<String, String> parts = readXlsx(named('m3_names').build());
+    expect(
+      parts['xl/workbook.xml'],
+      contains(
+        '<definedNames><definedName name="TaxRate">0.18</definedName>'
+        '<definedName name="Local" localSheetId="0">Data!\$B\$2'
+        '</definedName>'
+        '<definedName name="_xlnm.Print_Area" localSheetId="1">'
+        "'O''Brien'!\$A\$1:\$B\$4,'O''Brien'!\$D\$1:\$D\$3</definedName>"
+        '<definedName name="_xlnm.Print_Titles" localSheetId="1">'
+        "'O''Brien'!\$A:\$A,'O''Brien'!\$1:\$1</definedName>"
+        '</definedNames>',
+      ),
+    );
+    expect(parts['xl/worksheets/sheet1.xml'], contains('<f>TaxRate*100</f>'));
   });
 
   test('m2_formula_xstring probes _xHHHH_ inside a formula and in text', () {

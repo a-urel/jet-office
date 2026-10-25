@@ -49,7 +49,9 @@
 ///     `autoFilter/@ref` is a valid range inside the sheet; and each sheet
 ///     with an `autoFilter` has exactly one `_xlnm._FilterDatabase` name,
 ///     sheet-scoped to it and spelling `'<sheet name>'!<absolute ref>`,
-///     while a sheet without one has none.
+///     while a sheet without one has none; every `_xlnm.*` name has a
+///     `localSheetId` (Excel scopes its built-in names to a sheet); and no
+///     `definedName` has empty text.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -864,6 +866,15 @@ void _checkDefinedNames(
   for (final XmlElement n in _all(doc, 'definedName')) {
     final String name = _attr(n, 'name');
     final String? scopeText = n.getAttribute('localSheetId');
+    if (name.toLowerCase().startsWith('_xlnm.') && scopeText == null) {
+      violations.add(
+        'rule 21: defined name "$name" has no localSheetId; Excel scopes '
+        'its built-in names to a sheet',
+      );
+    }
+    if (n.innerText.trim().isEmpty) {
+      violations.add('rule 21: defined name "$name" has no text');
+    }
     String scope = 'workbook';
     if (scopeText != null) {
       final int? id = int.tryParse(scopeText);

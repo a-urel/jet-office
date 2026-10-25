@@ -22,6 +22,12 @@ void main() {
     expect(XlsxLimits.maxOutlineLevel, 7);
   });
 
+  test('defined name limits match the plan', () {
+    // Enforced in `defined_name_test.dart`.
+    expect(XlsxLimits.maxDefinedNameLength, 255);
+    expect(XlsxLimits.maxDefinedNameCommentLength, 255);
+  });
+
   test('style limits match Excel and ECMA-376', () {
     // Enforced in `font_test.dart` and `alignment_test.dart`.
     expect(XlsxLimits.maxFontSize, 409);
