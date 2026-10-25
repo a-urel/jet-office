@@ -19,6 +19,23 @@ export 'src/xlsx/border.dart' show XlsxBorder, XlsxBorderSide, XlsxBorderStyle;
 export 'src/xlsx/color.dart' show XlsxColor;
 export 'src/xlsx/column.dart' show XlsxColumn;
 export 'src/xlsx/comparison.dart' show XlsxComparison;
+export 'src/xlsx/conditional_format.dart'
+    show
+        XlsxAverageRule,
+        XlsxCellValueRule,
+        XlsxCfValue,
+        XlsxCfValueType,
+        XlsxColorScale,
+        XlsxConditionalFormat,
+        XlsxConditionalRule,
+        XlsxDataBar,
+        XlsxDuplicateRule,
+        XlsxExpressionRule,
+        XlsxIconSet,
+        XlsxIconSetType,
+        XlsxTextOperator,
+        XlsxTextRule,
+        XlsxTopBottomRule;
 export 'src/xlsx/data_validation.dart'
     show XlsxDataValidation, XlsxValidationErrorStyle, XlsxValidationType;
 export 'src/xlsx/defined_name.dart' show XlsxDefinedName;

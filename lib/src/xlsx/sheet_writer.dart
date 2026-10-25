@@ -16,7 +16,9 @@
 /// frozen or split panes), a tab color, an outline summary position and a
 /// visibility. Merged ranges and the auto filter are trailer settings,
 /// checked when set: Quds accepted overlapping merges and any filter text.
-/// Data validations are trailer settings too, checked when added.
+/// Data validations are trailer settings too, checked when added, and so
+/// are conditional formats, whose styles become differential styles and
+/// whose rules take the sheet's next priorities.
 /// A hyperlink is a cell value: the row checks it before its cell is
 /// encoded, and the finished sheet writes its `hyperlinks` and, for the
 /// external ones, a relationships part with one relationship per address.
@@ -34,6 +36,7 @@ import 'cell_encoder.dart';
 import 'cell_ref.dart';
 import 'color.dart';
 import 'column.dart';
+import 'conditional_format.dart';
 import 'data_validation.dart';
 import 'defined_name.dart';
 import 'hyperlink.dart';
@@ -217,6 +220,23 @@ abstract final class XlsxSheetWriter {
   /// message names both). When it throws, nothing is recorded.
   void dataValidation(XlsxDataValidation validation);
 
+  /// Adds [format], rules that format the cells of its ranges when their
+  /// conditions hold.
+  ///
+  /// A trailer setting like [merge]. Each rule gets the sheet's next
+  /// priority, from 1 on, across every call: the rules of an earlier call
+  /// take precedence over those of a later one. The rules' styles are
+  /// registered as differential styles; equal styles share one. Formats are
+  /// written in the order added, and their ranges may overlap.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] naming the field
+  /// (`ranges[i]`, `rules[i].<field>`, `rules[i].style.<field>`) when
+  /// [format] is invalid (see [XlsxConditionalFormat] and its rules); and
+  /// `XlsxLimitError('number formats', ...)` when a style's number format
+  /// does not fit. When it throws, nothing is recorded: no rule, priority
+  /// or differential style.
+  void conditionalFormat(XlsxConditionalFormat format);
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
@@ -338,6 +358,11 @@ final class WorksheetWriter implements XlsxSheetWriter {
   (int, int)? _printTitleColumns;
   final List<XlsxDefinedName> _names = <XlsxDefinedName>[];
   final List<XlsxDataValidation> _validations = <XlsxDataValidation>[];
+  final List<WorksheetConditionalFormat> _conditionalFormats =
+      <WorksheetConditionalFormat>[];
+
+  /// The priority the next conditional-format rule gets.
+  int _nextPriority = 1;
 
   /// The hyperlinks written so far, with the reference of their cell.
   final List<(String, XlsxHyperlink)> _links = <(String, XlsxHyperlink)>[];
@@ -481,6 +506,31 @@ final class WorksheetWriter implements XlsxSheetWriter {
     _checkOpenSheet();
     checkDataValidation(validation, _validations);
     _validations.add(validation);
+  }
+
+  @override
+  void conditionalFormat(XlsxConditionalFormat format) {
+    _checkOpenSheet();
+    checkConditionalFormat(format);
+    // Only after every rule is checked: dxfIdsFor is all or nothing, so a
+    // throw here leaves no differential style behind either.
+    final List<XlsxStyle?> styles = <XlsxStyle?>[
+      for (final XlsxConditionalRule rule in format.rules)
+        conditionalRuleStyle(rule),
+    ];
+    final Iterator<int> ids = context.styles
+        .dxfIdsFor(styles.nonNulls.toList())
+        .iterator;
+    final List<int?> dxfIds = <int?>[
+      for (final XlsxStyle? style in styles)
+        if (style == null) null else (ids..moveNext()).current,
+    ];
+    _conditionalFormats.add((
+      format: format,
+      dxfIds: List<int?>.unmodifiable(dxfIds),
+      firstPriority: _nextPriority,
+    ));
+    _nextPriority += format.rules.length;
   }
 
   @override
@@ -712,6 +762,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       summaryRight: _summaryRight,
       autoFilter: _autoFilter,
       merges: _merges,
+      conditionalFormats: _conditionalFormats,
       dataValidations: _validations,
       hyperlinks: links,
     );

@@ -102,6 +102,7 @@ void main() {
       'm3_names',
       'm3_hyperlinks',
       'm3_validation',
+      'm3_conditional',
     ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
@@ -445,6 +446,36 @@ void main() {
     expect(sheet, contains('<formula1>ISEVEN(B9)</formula1>'));
     expect(sheet, contains('errorStyle="warning"'));
     expect(sheet.indexOf('</sheetData>'), lessThan(sheet.indexOf('<dataV')));
+  });
+
+  test('m3_conditional writes a format of every kind', () {
+    final Map<String, String> parts = readXlsx(named('m3_conditional').build());
+    final String sheet = parts['xl/worksheets/sheet1.xml']!;
+    for (final String type in <String>[
+      'cellIs',
+      'expression',
+      'top10',
+      'aboveAverage',
+      'duplicateValues',
+      'containsText',
+      'colorScale',
+      'dataBar',
+      'iconSet',
+    ]) {
+      expect(sheet, contains('<cfRule type="$type"'));
+    }
+    // Ten rules, priorities 1 to 10 in order; the second format on column B
+    // overlaps the first.
+    expect(
+      RegExp(
+        r'priority="(\d+)"',
+      ).allMatches(sheet).map((Match m) => int.parse(m.group(1)!)),
+      <int>[for (int i = 1; i <= 10; i++) i],
+    );
+    expect(sheet, contains('<conditionalFormatting sqref="B2:B21">'));
+    expect(sheet, contains('<conditionalFormatting sqref="B2:C21">'));
+    expect(parts['xl/styles.xml'], contains('<dxfs count="3">'));
+    expect(sheet.indexOf('</sheetData>'), lessThan(sheet.indexOf('<condit')));
   });
 
   test('m2_formula_xstring probes _xHHHH_ inside a formula and in text', () {

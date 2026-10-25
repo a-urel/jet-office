@@ -1327,4 +1327,156 @@ void main() {
       );
     });
   });
+
+  group('rule 24: conditional formats', () {
+    Uint8List formatted() {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxStyle red = XlsxStyle(
+        fill: XlsxFill.solid(XlsxColor.hex('FFC7CE')),
+      );
+      book.addSheet('C')
+        ..row(<Object?>[1, 'a'])
+        ..conditionalFormat(
+          XlsxConditionalFormat(
+            <XlsxRange>[XlsxRange.parse('A1:A9')],
+            <XlsxConditionalRule>[
+              XlsxCellValueRule(
+                XlsxComparison.between,
+                '1',
+                formula2: '5',
+                style: red,
+              ),
+              const XlsxExpressionRule('A1>3'),
+            ],
+          ),
+        )
+        ..conditionalFormat(
+          XlsxConditionalFormat(
+            <XlsxRange>[XlsxRange.parse('B1:B9')],
+            <XlsxConditionalRule>[
+              const XlsxTextRule(XlsxTextOperator.contains, 'a'),
+              XlsxColorScale(
+                <XlsxCfValue>[
+                  const XlsxCfValue.min(),
+                  XlsxCfValue.percentile(50),
+                  const XlsxCfValue.max(),
+                ],
+                <XlsxColor>[
+                  XlsxColor.hex('F8696B'),
+                  XlsxColor.hex('FFEB84'),
+                  XlsxColor.hex('63BE7B'),
+                ],
+              ),
+            ],
+          ),
+        );
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      formatted(),
+      edit: <String, String? Function(String)>{_sheet1: change},
+    );
+
+    test('valid conditional formats have no violations', () {
+      expect(checkXlsx(formatted()), isEmpty);
+    });
+    test('an sqref outside the sheet', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst('sqref="A1:A9"', 'sqref="A1:A1048577"'),
+        ),
+        24,
+      );
+    });
+    test('an sqref that is not a range', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('sqref="B1:B9"', 'sqref="B:B"')),
+        24,
+      );
+    });
+    test('two rules share a priority', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('priority="3"', 'priority="1"')),
+        24,
+      );
+    });
+    test('a priority below 1, or missing', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('priority="1"', 'priority="0"')),
+        24,
+      );
+      _expectRule(
+        tamper((String x) => x.replaceFirst(' priority="2"', '')),
+        24,
+      );
+    });
+    test('a dxfId not below the dxfs count', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('dxfId="0"', 'dxfId="1"')),
+        24,
+      );
+    });
+    test('cellIs between with one formula', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<formula>5</formula>', '')),
+        24,
+      );
+    });
+    test('cellIs greaterThan with two formulas', () {
+      _expectRule(
+        tamper(
+          (String x) =>
+              x.replaceFirst('operator="between"', 'operator="greaterThan"'),
+        ),
+        24,
+      );
+    });
+    test('cellIs notBetween with two formulas is fine', () {
+      expect(
+        checkXlsx(
+          tamper(
+            (String x) =>
+                x.replaceFirst('operator="between"', 'operator="notBetween"'),
+          ),
+        ),
+        isEmpty,
+      );
+    });
+    test('an expression without a formula', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<formula>A1&gt;3</formula>', '')),
+        24,
+      );
+    });
+    test('a text rule with two formulas', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            '</formula></cfRule><cfRule type="colorScale"',
+            '</formula><formula>1</formula></cfRule><cfRule type="colorScale"',
+          ),
+        ),
+        24,
+      );
+    });
+    test('a color scale whose cfvo and color counts differ', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<color rgb="FF63BE7B"/>', '')),
+        24,
+      );
+    });
+    test('a color scale of one point', () {
+      _expectRule(
+        tamper(
+          (String x) => x
+              .replaceFirst('<cfvo type="percentile" val="50"/>', '')
+              .replaceFirst('<cfvo type="max"/>', '')
+              .replaceFirst('<color rgb="FFFFEB84"/>', '')
+              .replaceFirst('<color rgb="FF63BE7B"/>', ''),
+        ),
+        24,
+      );
+    });
+  });
 }

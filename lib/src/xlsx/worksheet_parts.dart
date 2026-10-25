@@ -16,13 +16,15 @@
 /// writer has validated (Quds wrote any filter string unchecked and accepted
 /// overlapping merges); `hyperlinks` come from links the writer has
 /// validated, and the sheet's relationships part, which Quds did not write,
-/// carries their external targets; `dataValidations` (see
-/// `data_validation.dart`) come between them, where Quds wrote them before
+/// carries their external targets; `conditionalFormatting` (see
+/// `conditional_format.dart`) and `dataValidations` (see
+/// `data_validation.dart`) come between them, where Quds wrote both before
 /// `mergeCells`.
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
 /// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter`,
-/// `mergeCells`, `dataValidations` and `hyperlinks`.
+/// `mergeCells`, `conditionalFormatting`, `dataValidations` and
+/// `hyperlinks`.
 library;
 
 import '../opc/ooxml.dart';
@@ -32,6 +34,7 @@ import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
 import 'color.dart';
+import 'conditional_format.dart';
 import 'data_validation.dart';
 import 'limits.dart';
 import 'range.dart';
@@ -86,6 +89,7 @@ final class WorksheetSettings {
     this.summaryRight = true,
     this.autoFilter,
     this.merges = const <XlsxRange>[],
+    this.conditionalFormats = const <WorksheetConditionalFormat>[],
     this.dataValidations = const <XlsxDataValidation>[],
     this.hyperlinks = const <WorksheetHyperlink>[],
   });
@@ -121,6 +125,10 @@ final class WorksheetSettings {
   /// The merged ranges, in the order they were merged.
   final List<XlsxRange> merges;
 
+  /// The conditional formats, in the order they were registered, with
+  /// their dxf ids and priorities.
+  final List<WorksheetConditionalFormat> conditionalFormats;
+
   /// The data validations, in the order they were added.
   final List<XlsxDataValidation> dataValidations;
 
@@ -151,9 +159,9 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 }
 
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
-/// then `autoFilter`, `mergeCells`, `dataValidations` and `hyperlinks` when
-/// the sheet has them,
-/// then `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
+/// then `autoFilter`, `mergeCells`, `conditionalFormatting`,
+/// `dataValidations` and `hyperlinks` when the sheet has them, then
+/// `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
 String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
   final StringBuffer out = StringBuffer();
   final XmlWriter w = XmlWriter(out);
@@ -170,6 +178,7 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
     }
     w.end();
   }
+  writeConditionalFormats(w, settings.conditionalFormats);
   writeDataValidations(w, settings.dataValidations);
   if (settings.hyperlinks.isNotEmpty) {
     w.start('hyperlinks');

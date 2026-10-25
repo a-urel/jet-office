@@ -9,7 +9,12 @@ import 'package:jet_office/jet_office.dart';
 import 'fixture.dart';
 
 /// The fixtures of milestone M3.
-List<Fixture> m3Fixtures() => <Fixture>[_names(), _hyperlinks(), _validation()];
+List<Fixture> m3Fixtures() => <Fixture>[
+  _names(),
+  _hyperlinks(),
+  _validation(),
+  _conditional(),
+];
 
 /// Defined names, a print area and print titles.
 ///
@@ -271,3 +276,156 @@ Fixture _validation() => Fixture(
     return book.close();
   },
 );
+
+/// The names of the `Scores` rows; `Ana`, `Dana` and `Hanna` contain `an`.
+const List<String> _scoreNames = <String>[
+  'Ana',
+  'Ben',
+  'Cem',
+  'Dana',
+  'Eda',
+  'Fred',
+  'Gul',
+  'Hanna',
+  'Ivo',
+  'Jale',
+  'Kim',
+  'Lea',
+  'Mert',
+  'Nil',
+  'Oskar',
+  'Pia',
+  'Rana',
+  'Sven',
+  'Tom',
+  'Ugur',
+];
+
+/// The teams of the `Scores` rows, which repeat; the last row's team,
+/// `Gold`, occurs once.
+const List<String> _scoreTeams = <String>['Red', 'Blue', 'Green'];
+
+/// Row `i` (0 to 19) of `Scores`: a name, five scores, a team, hours,
+/// progress and a rating.
+List<Object> _scoreRow(int i) {
+  final int n = i + 1;
+  return <Object>[
+    _scoreNames[i],
+    n * 37 % 100,
+    (n * 53 + 11) % 100,
+    (n * 29 + 7) % 100,
+    (n * 61 + 3) % 100,
+    if (i == 19) 'Gold' else _scoreTeams[i % 3],
+    n * 2,
+    n * 17 % 101,
+    n * 7 % 5 + 1,
+  ];
+}
+
+/// Conditional formatting of every kind, on `Scores`.
+///
+/// Row 1 is the header; rows 2 to 21 hold a name and numbers. Each column
+/// has a format of its own kind: A names containing `an` (red), B maths
+/// of 70 or more (green), C art above the column average by formula
+/// (green), D the top 3 music scores (red), E sport below the average or
+/// equal to it (green), F duplicate teams (red, all but `Gold`), G a
+/// three-color scale on the hours, H a data bar on the progress and I three
+/// arrows on the rating. A second format on `B2:C21`, which overlaps the
+/// first, makes scores below 40 bold. Excel shows the colors, bars and
+/// icons; the values below are what a reader computes, as conditional
+/// formatting changes no value.
+Fixture _conditional() {
+  final List<List<Object>> rows = <List<Object>>[
+    for (int i = 0; i < 20; i++) _scoreRow(i),
+  ];
+  const List<String> header = <String>[
+    'Name',
+    'Maths',
+    'Art',
+    'Music',
+    'Sport',
+    'Team',
+    'Hours',
+    'Progress',
+    'Rating',
+  ];
+  return Fixture(
+    'm3_conditional',
+    <String, List<List<String>>>{
+      'Scores': <List<String>>[
+        header,
+        for (final List<Object> row in rows)
+          <String>[for (final Object v in row) '$v'],
+      ],
+    },
+    <String, List<List<Object?>>>{
+      'Scores': <List<Object?>>[header, ...rows],
+    },
+    () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxStyle red = XlsxStyle(
+        font: XlsxFont(color: XlsxColor.hex('9C0006')),
+        fill: XlsxFill.solid(XlsxColor.hex('FFC7CE')),
+      );
+      final XlsxStyle green = XlsxStyle(
+        font: XlsxFont(color: XlsxColor.hex('006100')),
+        fill: XlsxFill.solid(XlsxColor.hex('C6EFCE')),
+      );
+      const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+      XlsxRange column(int c) => XlsxRange(1, c, 20, c);
+      final XlsxSheetWriter sheet = book.addSheet('Scores')..row(header);
+      rows.forEach(sheet.row);
+      void format(XlsxRange range, XlsxConditionalRule rule) =>
+          sheet.conditionalFormat(
+            XlsxConditionalFormat(
+              <XlsxRange>[range],
+              <XlsxConditionalRule>[rule],
+            ),
+          );
+      format(
+        column(0),
+        XlsxTextRule(XlsxTextOperator.contains, 'an', style: red),
+      );
+      format(
+        column(1),
+        XlsxCellValueRule(
+          XlsxComparison.greaterThanOrEqual,
+          '70',
+          style: green,
+        ),
+      );
+      format(
+        column(2),
+        XlsxExpressionRule(r'C2>AVERAGE($C$2:$C$21)', style: green),
+      );
+      format(column(3), XlsxTopBottomRule(rank: 3, style: red));
+      format(
+        column(4),
+        XlsxAverageRule(above: false, orEqual: true, style: green),
+      );
+      format(column(5), XlsxDuplicateRule(style: red));
+      format(
+        column(6),
+        XlsxColorScale(
+          <XlsxCfValue>[
+            const XlsxCfValue.min(),
+            XlsxCfValue.percentile(50),
+            const XlsxCfValue.max(),
+          ],
+          <XlsxColor>[
+            XlsxColor.hex('F8696B'),
+            XlsxColor.hex('FFEB84'),
+            XlsxColor.hex('63BE7B'),
+          ],
+        ),
+      );
+      format(column(7), XlsxDataBar(color: XlsxColor.hex('638EC6')));
+      format(column(8), XlsxIconSet(XlsxIconSetType.threeArrows));
+      format(
+        XlsxRange.parse('B2:C21'),
+        const XlsxCellValueRule(XlsxComparison.lessThan, '40', style: bold),
+      );
+      return book.close();
+    },
+  );
+}

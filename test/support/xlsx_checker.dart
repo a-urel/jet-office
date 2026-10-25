@@ -62,7 +62,14 @@
 ///     ranges of a sheet's validations overlap; `formula1` is present
 ///     unless the type is `none` (or absent); and `formula2` is present for
 ///     `between` (the default operator) and `notBetween` on `whole`,
-///     `decimal`, `date`, `time` and `textLength`.
+///     `decimal`, `date`, `time` and `textLength`;
+/// 24. every range of every `conditionalFormatting/@sqref` is a valid range
+///     inside the sheet; every `cfRule` has a `priority` of 1 or more,
+///     unique on its sheet; every `dxfId` is below `dxfs/@count` (0 when
+///     absent); a `cellIs` rule has one `formula`, or two for `between`
+///     and `notBetween`; an `expression`, `containsText`,
+///     `notContainsText`, `beginsWith` or `endsWith` rule has one; and a
+///     `colorScale` has 2 or 3 `cfvo` and as many `color` children.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -136,6 +143,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkFilterNames(docs, violations);
   _checkHyperlinks(docs, violations);
   _checkDataValidations(docs, violations);
+  _checkConditionalFormats(docs, violations);
   return violations;
 }
 
@@ -1114,6 +1122,92 @@ void _checkDataValidations(
             'rule 23: ${sheet.key}: dataValidation "$sqref" with operator '
             '$operator has no formula2',
           );
+        }
+      }
+    }
+  }
+}
+
+/// The `cfRule` types that carry exactly one `formula`.
+const Set<String> _oneFormulaTypes = <String>{
+  'expression',
+  'containsText',
+  'notContainsText',
+  'beginsWith',
+  'endsWith',
+};
+
+/// Rule 24.
+void _checkConditionalFormats(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final XmlElement? dxfs = docs[_stylesPart]
+      ?.findAllElements('dxfs')
+      .firstOrNull;
+  final int dxfCount = int.tryParse(dxfs?.getAttribute('count') ?? '') ?? 0;
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final Set<int> priorities = <int>{};
+    // Direct children of the worksheet only: the x14 rules of an extLst
+    // follow their own schema.
+    for (final XmlElement format in sheet.value.rootElement.findElements(
+      'conditionalFormatting',
+    )) {
+      final String sqref = _attr(format, 'sqref');
+      if (sqref.trim().isEmpty) {
+        violations.add(
+          'rule 24: ${sheet.key}: a conditionalFormatting has no sqref',
+        );
+      }
+      for (final String ref in sqref.split(' ').where((String r) => r != '')) {
+        final _Rect? r = _parseRect(ref);
+        final String? problem = r == null ? 'is not a range' : _problemWith(r);
+        if (problem != null) {
+          violations.add('rule 24: ${sheet.key}: sqref "$ref" $problem');
+        }
+      }
+      for (final XmlElement rule in format.findElements('cfRule')) {
+        final String type = _attr(rule, 'type');
+        final String where = 'rule 24: ${sheet.key}: cfRule $type on "$sqref"';
+        final String priorityText = _attr(rule, 'priority');
+        final int? priority = int.tryParse(priorityText);
+        if (priority == null || priority < 1) {
+          violations.add('$where has priority "$priorityText"');
+        } else if (!priorities.add(priority)) {
+          violations.add('$where repeats priority $priority');
+        }
+        final String? dxfText = rule.getAttribute('dxfId');
+        if (dxfText != null) {
+          final int? dxf = int.tryParse(dxfText);
+          if (dxf == null || dxf < 0 || dxf >= dxfCount) {
+            violations.add('$where has dxfId "$dxfText"; dxfs holds $dxfCount');
+          }
+        }
+        final int formulas = rule.findElements('formula').length;
+        if (type == 'cellIs') {
+          final String operator = _attr(rule, 'operator');
+          final int want = operator == 'between' || operator == 'notBetween'
+              ? 2
+              : 1;
+          if (formulas != want) {
+            violations.add(
+              '$where with operator "$operator" has $formulas formula; '
+              'expected $want',
+            );
+          }
+        } else if (_oneFormulaTypes.contains(type) && formulas != 1) {
+          violations.add('$where has $formulas formula; expected 1');
+        }
+        final XmlElement? scale = rule.getElement('colorScale');
+        if (scale != null) {
+          final int cfvos = scale.findElements('cfvo').length;
+          final int colors = scale.findElements('color').length;
+          if (cfvos < 2 || cfvos > 3 || colors != cfvos) {
+            violations.add(
+              '$where has $cfvos cfvo and $colors color; expected 2 or 3 '
+              'of each',
+            );
+          }
         }
       }
     }

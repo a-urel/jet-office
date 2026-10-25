@@ -158,6 +158,15 @@ abstract final class XlsxLimits {
   /// A longer list throws [ArgumentError] when the validation is registered;
   /// `XlsxDataValidation.listFrom` takes a range or a name instead.
   static const int maxValidationListLength = 255;
+
+  /// The highest rank of a top or bottom conditional-format rule: the top
+  /// 1,000 items. A percent rank goes from 1 to 100 instead.
+  ///
+  /// Microsoft's "Excel specifications and limits" page gives no figure;
+  /// 1,000 is the most Excel's Top 10 Items dialog accepts (and 100 its Top
+  /// 10 % dialog). A rank outside 1 to this, or 1 to 100 for a percent,
+  /// throws [ArgumentError] when the format is registered.
+  static const int maxTopBottomRank = 1000;
 }
 
 /// Thrown when a write would exceed one of the [XlsxLimits].

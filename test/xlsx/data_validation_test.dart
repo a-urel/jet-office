@@ -737,22 +737,39 @@ void main() {
   });
 
   group('worksheet order', () {
-    test('mergeCells, dataValidations, hyperlinks (Quds wrote them first)', () {
+    test('mergeCells, conditionalFormatting, dataValidations, hyperlinks '
+        '(Quds wrote validations and conditional formats first)', () {
       final XlsxWriter book = XlsxWriter();
       book.addSheet('S')
         ..row(<Object?>[XlsxHyperlink.location('S!A1'), null])
         ..dataValidation(XlsxDataValidation.custom(<XlsxRange>[_b2], 'TRUE'))
+        ..conditionalFormat(
+          XlsxConditionalFormat(
+            <XlsxRange>[_a1],
+            <XlsxConditionalRule>[const XlsxExpressionRule('TRUE')],
+          ),
+        )
+        ..conditionalFormat(
+          XlsxConditionalFormat(
+            <XlsxRange>[_b2],
+            <XlsxConditionalRule>[const XlsxDuplicateRule()],
+          ),
+        )
         ..merge(XlsxRange.parse('C1:D1'));
       final XlsxResult result = book.close();
       final String xml = readXlsx(result.bytes)[_sheet1]!;
       final List<int> at = <int>[
         xml.indexOf('<mergeCells'),
+        xml.indexOf('<conditionalFormatting'),
+        xml.lastIndexOf('</conditionalFormatting>'),
         xml.indexOf('<dataValidations'),
         xml.indexOf('<hyperlinks'),
       ];
       expect(at, everyElement(greaterThan(-1)));
-      expect(at[0], lessThan(at[1]));
-      expect(at[1], lessThan(at[2]));
+      for (int i = 1; i < at.length; i++) {
+        expect(at[i - 1], lessThan(at[i]));
+      }
+      expect(xml, contains('</conditionalFormatting><conditionalFormatting'));
       expect(xml.indexOf('</sheetData>'), lessThan(at[0]));
       expect(checkXlsx(result.bytes), isEmpty);
     });
