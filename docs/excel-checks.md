@@ -232,19 +232,17 @@ Two sheets, `Probe` and `_x0041_`. On `Probe`, A1 holds the formula
 `="_x0041_"` and A2 the text `_x0041_`.
 
 - A2 must read `_x0041_`, as typed.
-- Write down what A1 shows: `_x0041_` or `A`. The answer settles whether
-  readers decode `_xHHHH_` inside `<f>`; the file stores the formula as
-  given, not escaped. If it shows `A`, record that and ask for a ruling;
-  do not change the encoder.
+- A1 must read `_x0041_`, and the formula bar `="_x0041_"`. The file stores
+  the formula as `"_x005F_x0041_"`, escaped like cell text, because Excel
+  decodes `_xHHHH_` inside `<f>` (decision 0005). `A` there is a writer bug.
 - The second tab reads `_x0041_`, as typed. Row 1 (`Key`, `Value`) carries
   the filter dropdown arrows, and filtering rows 2 and 3 works. Its hidden
-  `_xlnm._FilterDatabase` name stores `'_x0041_'!$A$1:$B$3` as given, like a
-  formula. The filter must work, there must be no repair prompt, and the
-  Name Manager must show no name with a broken (`#REF!`) reference; the
-  hidden name itself is not listed there. That means Excel reads the text
-  undecoded too, so formulas and defined names are settled together. If
-  the filter is lost or Excel repairs the file, record it and ask for a
-  ruling.
+  `_xlnm._FilterDatabase` name stores `'_x005F_x0041_'!$A$1:$B$3`, escaped
+  like the formula. The filter must work, there must be no repair prompt,
+  and the Name Manager must show no name with a broken (`#REF!`) reference;
+  the hidden name itself is not listed there. Save a copy and open its
+  `xl/workbook.xml`: the name must still point at the sheet `_x0041_`, and
+  the copy must have no `xl/externalLinks/` part.
 
 ### Open question
 

@@ -353,20 +353,20 @@ void main() {
       named('m2_formula_xstring').build(),
     );
     final String sheet = parts['xl/worksheets/sheet1.xml']!;
-    // The formula is written as given: `_x0041_` is not escaped inside
-    // `<f>`. Whether a reader decodes it is what the Excel check records.
-    expect(sheet, contains('<f>"_x0041_"</f>'));
+    // Excel decodes `_xHHHH_` inside `<f>`, so the formula is escaped like
+    // cell text, as Excel writes it itself (decision 0005).
+    expect(sheet, contains('<f>"_x005F_x0041_"</f>'));
     expect(sheet, contains('<c r="A2" t="s">'));
     expect(parts['xl/sharedStrings.xml'], contains('_x005F_x0041_'));
-    // The sheet `_x0041_` is named escaped (R22), while its filter's
-    // defined name is a formula and spells it as given (R10).
+    // The sheet `_x0041_` is named escaped (R22), and its filter's defined
+    // name spells it escaped the same way (decision 0005).
     final String workbook = parts['xl/workbook.xml']!;
     expect(workbook, contains('<sheet name="_x005F_x0041_" sheetId="2"'));
     expect(
       workbook,
       contains(
         '<definedNames><definedName name="_xlnm._FilterDatabase" '
-        'localSheetId="1" hidden="1">\'_x0041_\'!\$A\$1:\$B\$3'
+        'localSheetId="1" hidden="1">\'_x005F_x0041_\'!\$A\$1:\$B\$3'
         '</definedName></definedNames>',
       ),
     );

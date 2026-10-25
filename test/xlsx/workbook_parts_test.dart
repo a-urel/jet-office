@@ -214,10 +214,10 @@ void main() {
       );
     });
 
-    test('the text is written like <f> text: XML escaping only', () {
-      // Ruling R10: a defined name is ST_Formula, like `<f>`, which readers
-      // do not decode, so `_xHHHH_` stays as given while the sheet name
-      // itself is escaped (R22).
+    test('the text is written like <f> text, _xHHHH_ escaped', () {
+      // Decision 0005: a defined name is ST_Formula, like `<f>`, and Excel
+      // decodes `_xHHHH_` there, so the quoted sheet name is escaped exactly
+      // like the sheet's own name (R22).
       final String xml = workbook(<WorkbookSheet>[
         sheet('D_x0041_', 1, 'A1:B1'),
         sheet('a&_x0041_', 2, 'A1:B2'),
@@ -227,10 +227,13 @@ void main() {
         xml,
         contains(
           '<definedName name="_xlnm._FilterDatabase" localSheetId="0" '
-          "hidden=\"1\">'D_x0041_'!\$A\$1:\$B\$1</definedName>",
+          "hidden=\"1\">'D_x005F_x0041_'!\$A\$1:\$B\$1</definedName>",
         ),
       );
-      expect(xml, contains(">'a&amp;_x0041_'!\$A\$1:\$B\$2</definedName>"));
+      expect(
+        xml,
+        contains(">'a&amp;_x005F_x0041_'!\$A\$1:\$B\$2</definedName>"),
+      );
     });
   });
 

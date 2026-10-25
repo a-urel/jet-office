@@ -17,7 +17,7 @@
 /// 8. every cell `s` is below the `cellXfs` count;
 /// 9. cell references in a row strictly increase and sit on that row;
 /// 10. every formula (`<f>`) is non-empty and at most 8,192 UTF-16 code
-///     units;
+///     units once its `_xHHHH_` escapes are decoded;
 /// 11. row numbers (`row/@r`) strictly increase within a sheet;
 /// 12. `cellXfs/@count` equals the number of its `xf` children;
 /// 13. every `numFmtId` of 164 or more used by a `cellXfs` `xf` is declared
@@ -404,7 +404,8 @@ void _checkCells(Map<String, XmlDocument> docs, List<String> violations) {
 void _checkFormulas(Map<String, XmlDocument> docs, List<String> violations) {
   for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
     for (final XmlElement f in _all(sheet.value, 'f')) {
-      final String text = f.innerText;
+      // Excel decodes `_xHHHH_` in a formula; its limit is on that text.
+      final String text = decodeXstring(f.innerText);
       final String ref = f.parentElement == null
           ? '?'
           : _attr(f.parentElement!, 'r');

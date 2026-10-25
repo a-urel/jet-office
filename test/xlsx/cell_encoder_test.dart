@@ -220,6 +220,11 @@ void main() {
       enc(const XlsxFormula('A2', cached: 'a_x00e9_b')),
       '<c r="A1" t="str"><f>A2</f><v>a_x005F_x00e9_b</v></c>',
     );
+    // Decision 0005: Excel decodes `_xHHHH_` inside `<f>` too.
+    expect(
+      enc(const XlsxFormula('"_x0041_"&"<"')),
+      '<c r="A1"><f>"_x005F_x0041_"&amp;"&lt;"</f></c>',
+    );
   });
 
   test('only one leading equals sign is stripped', () {
