@@ -247,17 +247,15 @@ Two sheets, `Probe` and `_x0041_`. On `Probe`, A1 holds the formula
 ### Open question
 
 Whether Excel treats a sheet named with the Kelvin sign (U+212A, which looks
-like K) as equal to one named with the Latin letter K (U+004B) is
-unverified. The writer's duplicate check maps the Turkish `İ` and `ı` and
-the German `ß` before it compares upper case, and deliberately does not
-fold the Kelvin sign (see `sheetNameKey` in `lib/src/xlsx/sheet_name.dart`),
-so it keeps `K` and the Kelvin sign apart. No fixture covers it. Settle it
-when convenient and record the answer here.
+like K) as equal to one named with the Latin letter K (U+004B). The writer's
+duplicate check maps the Turkish `İ` and `ı` and the German `ß` before it
+compares upper case, and at M2 did not fold the Kelvin sign.
 
 Answered in the M2 check on 2026-10-25, by hand in Excel for the web: in a
 workbook with a sheet named `K`, renaming another sheet to the Kelvin sign
 was refused because the name is already in use. Excel treats the two as
-equal, so the writer's key is too narrow (see "Open issues", M3).
+equal, so `sheetNameKey` in `lib/src/xlsx/sheet_name.dart` now maps the
+Kelvin sign to K (see "Open issues", closed by fbaa999).
 
 ## Open issues
 
@@ -301,10 +299,14 @@ Last modified by and the created and modified times are not checked in Excel.
 M3 adds the rest of the document properties, so its Excel check covers all of
 them in desktop Excel.
 
-### Excel decodes `_xHHHH_` in formulas (open, M3)
+### Excel decodes `_xHHHH_` in formulas (closed, fbaa999)
 
 Found in the M2 check on 2026-10-25, `m2_formula_xstring`. The owner accepted
-M2 with this issue open; it needs a ruling before the fix.
+M2 with this issue open; it needed a ruling before the fix.
+
+Closed by fbaa999: decision 0005 supersedes R10, and `escapeFormulaText`
+escapes `_x` as `_x005F_x` in formulas and defined names, like cell text.
+The account below is what the M2 check found before the fix.
 
 `Probe!A1` stores `<f>"_x0041_"</f>`, unescaped, because `escapeFormulaText`
 in `lib/src/xml/xml_escape.dart` does XML escaping only (ruling R10 in
@@ -337,9 +339,11 @@ still confirm this and check LibreOffice, which CI showed does not decode
 `test/fixtures/m2_fixtures.dart`, starts with a failing regression test, and
 updates R10's row in `docs/xlsx-writer.md`.
 
-### Kelvin sign and K clash as sheet names (open, M3)
+### Kelvin sign and K clash as sheet names (closed, fbaa999)
 
 Found in the M2 check on 2026-10-25, answering the "Open question" above.
+Closed by fbaa999, which maps the Kelvin sign to K in `sheetNameKey`. The
+account below is what the M2 check found before the fix.
 Excel refuses a sheet named with the Kelvin sign (U+212A) when a sheet `K`
 exists. `sheetNameKey` in `lib/src/xlsx/sheet_name.dart` does not fold the
 Kelvin sign, so the writer can produce two sheet names that Excel treats as
