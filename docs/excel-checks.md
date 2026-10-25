@@ -256,6 +256,11 @@ fold the Kelvin sign (see `sheetNameKey` in `lib/src/xlsx/sheet_name.dart`),
 so it keeps `K` and the Kelvin sign apart. No fixture covers it. Settle it
 when convenient and record the answer here.
 
+Answered in the M2 check on 2026-10-25, by hand in Excel for the web: in a
+workbook with a sheet named `K`, renaming another sheet to the Kelvin sign
+was refused because the name is already in use. Excel treats the two as
+equal, so the writer's key is too narrow (see "Open issues", M3).
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
@@ -298,6 +303,58 @@ Last modified by and the created and modified times are not checked in Excel.
 M3 adds the rest of the document properties, so its Excel check covers all of
 them in desktop Excel.
 
+### Excel decodes `_xHHHH_` in formulas (open, M3)
+
+Found in the M2 check on 2026-10-25, `m2_formula_xstring`. The owner accepted
+M2 with this issue open; it needs a ruling before the fix.
+
+`Probe!A1` stores `<f>"_x0041_"</f>`, unescaped, because `escapeFormulaText`
+in `lib/src/xml/xml_escape.dart` does XML escaping only (ruling R10 in
+`docs/xlsx-writer.md`, the auto filter row). Excel for the web shows `A` in
+A1 and `="A"` in the formula bar, so Excel decodes `_xHHHH_` inside `<f>`,
+unlike LibreOffice. R10's premise does not hold for Excel: a formula that
+contains `_xHHHH_` text changes meaning.
+
+The defined name is not settled. The `_x0041_` sheet's hidden
+`_xlnm._FilterDatabase` name stores `'_x0041_'!$A$1:$B$3` unescaped. There
+was no repair prompt, the filter works and the Name Manager lists nothing,
+but the filter's range is also in the sheet's `<autoFilter ref>`, so a
+working filter does not prove that Excel read the name undecoded. If Excel
+decodes it, the name points at a sheet `A` that does not exist.
+
+The ruling decides whether `<f>` and defined names escape `_x` as
+`_x005F_x`, like cell text and sheet names, and must settle the defined name
+first (for example by a fixture whose defined name is visible in the Name
+Manager). The fix changes `m2_formula_xstring` and its expected values in
+`test/fixtures/m2_fixtures.dart`, starts with a failing regression test, and
+updates R10's row in `docs/xlsx-writer.md`.
+
+### Kelvin sign and K clash as sheet names (open, M3)
+
+Found in the M2 check on 2026-10-25, answering the "Open question" above.
+Excel refuses a sheet named with the Kelvin sign (U+212A) when a sheet `K`
+exists. `sheetNameKey` in `lib/src/xlsx/sheet_name.dart` does not fold the
+Kelvin sign, so the writer can produce two sheet names that Excel treats as
+the same. What Excel does when it opens such a file (repair or refusal) is
+not checked. The fix folds the Kelvin sign in `sheetNameKey`, starts with a
+failing regression test, and corrects its doc comment, which calls the case
+too rare to map.
+
+### Some M2 settings not checked in desktop Excel (open, M3)
+
+Found in the M2 check on 2026-10-25. Excel for the web does not show these,
+although each is written as the checklist expects:
+
+- `m2_styles`: the diagonal borders (rows 47 and 48), the row growing to fit
+  `wrap text` (row 62 has no `ht`, so Excel sizes it), `reading order RTL`
+  (row 67 stays left-aligned), and `locked false` and `hidden true` (the
+  Protection tab was not reached).
+- `m2_views`: the `View` sheet's 85 % zoom (stored `zoomScale="85"`; the web
+  stays at 100 %) and the `Split` sheet's split (stored
+  `<pane xSplit="2400" ySplit="1200"/>`; Excel for the web has no split).
+
+M3's Excel check covers them in desktop Excel, with the document properties.
+
 ## Results
 
 | Date | Excel version and platform | Fixture | Result | Notes |
@@ -309,3 +366,9 @@ them in desktop Excel.
 | 2026-10-24 | Microsoft 365, Excel for the web, build 16.0.20613.42304, Chrome on macOS | `m1_empty` | ok | No repair prompt. All four sheets as expected; `ISBLANK` gives `FALSE` and `LEN` gives 0 on `EmptyString!A1`. |
 | 2026-10-24 | Microsoft 365, Excel for the web, build 16.0.20613.42304, Chrome on macOS | `m1_properties` | ok (kısmi) | No repair prompt, A1 as expected. Excel for the web shows no document properties. GridCraft (not Excel) showed Title, Subject, Author, Company, Keywords and Description as expected. Category, Last modified by and the two dates are not checked (see "Open issues", M3). |
 | 2026-10-24 | Microsoft 365, Excel for the web, build 16.0.20613.42304, Chrome on macOS | `m1_dates` | sorun | No repair prompt. A1, B1, C1, E1 and F1 as expected. D1 (stored `46319.999999988424`, 23:59:59.999) never shows 23:59. With Turkish regional settings it shows `24.10.2026 00:00` and `=DAY(D1)` gives 24. With US regional settings, same file, it showed `10/25/2026 0:00` and `=DAY(D1)` gave 25. In both, the formula bar showed 24.10 at 00:00 and `=D1<DATE(2026,10,25)` gave `TRUE`. The stored value is right; Excel rounds it to the second for display (see "Open issues", M5). |
+| 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_styles` | ok (kısmi) | No repair prompt. Fonts, the pattern fills, both gradients, the border styles (`thin` and `hair` checked at 200 %), alignments and every number format as labelled. `font theme 4 tint 0.4` shows a light blue, so Excel falls back to its Office theme. Diagonal borders, the `wrap text` row height, `reading order RTL` and the Protection settings are not shown in Excel for the web (see "Open issues", M3). |
+| 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_columns_rows` | ok | No repair prompt. Widths 5, 12, 40 and 255, column E hidden, column outline F (level 1) and G:H (level 2), rows 2 and 3 at 30 and 5 points, rows 4 to 7 hidden. Expanding row 8 opened rows 5, 6 and 7 together; the inner group did not stay collapsed. Row 4 stays hidden. `Defaults` rows and columns are larger than the default. |
+| 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_style_precedence` | ok | No repair prompt. Row 1 bold, B money with `€`, C `2026-10-24`, B4 `46.319,00 €`. The top border runs across A5:C5, B5 included, and B5 shows `1.245,75 €` in italic. |
+| 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_views` | ok (kısmi) | No repair prompt. Opens on `View`, only that tab selected (no `[Group]`), tab red, no gridlines or headings, B1's `0` hidden. `Frozen`, `RTL` and `Outline` (button at row 1) as expected. Unhide lists `Hidden` only. The 85 % zoom and the `Split` panes are not shown in Excel for the web (see "Open issues", M3). |
+| 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_merges_filter` | ok | No repair prompt. A1:D1 and B3:C4 merged, the title bold and centred. Filtering `Qty` works ("11 of 14 records found"). Name Manager lists nothing. `Plain` has no filter and no merges. |
+| 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_formula_xstring` | sorun | No repair prompt. A2 and the second tab read `_x0041_`. A1 shows `A`, formula bar `="A"`: Excel decodes `_xHHHH_` in `<f>` (see "Open issues", M3). The `_x0041_` sheet's filter works and Name Manager lists nothing, which does not settle the defined name. |
