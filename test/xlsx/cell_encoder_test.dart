@@ -48,6 +48,25 @@ void main() {
     expect(styles.idFor(const XlsxStyle(numFmt: XlsxNumFmt.localeDateTime)), 1);
   });
 
+  test('encode lets go of its beforeWrite callback, even when it throws', () {
+    var opened = 0;
+    void open() => opened++;
+    void encodeWith(Object value) => encoder.encode(
+      XmlWriter(StringBuffer()),
+      sheet: 'S',
+      row: 0,
+      column: 0,
+      value: value,
+      beforeWrite: open,
+    );
+    encodeWith(1);
+    expect(opened, 1);
+    expect(encoder.holdsBeforeWrite, isFalse);
+    expect(() => encodeWith(Object()), throwsArgumentError);
+    expect(opened, 1);
+    expect(encoder.holdsBeforeWrite, isFalse);
+  });
+
   test('NaN and infinity are ArgumentErrors (Quds wrote them verbatim)', () {
     expect(() => enc(double.nan), throwsArgumentError);
     expect(() => enc(double.infinity), throwsArgumentError);

@@ -630,6 +630,73 @@ void main() {
     );
   });
 
+  group('custom document properties', () {
+    final Map<String, Object> custom = <String, Object>{
+      'Project': 'Atlas',
+      'Count': 3,
+    };
+
+    test('write docProps/custom.xml, a relationship and an override', () {
+      final XlsxWriter book = XlsxWriter(
+        properties: XlsxProperties(custom: custom),
+      );
+      book.addSheet('S');
+      final Map<String, String> parts = readXlsx(book.close().bytes);
+      expect(
+        parts['docProps/custom.xml'],
+        contains(
+          '<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" '
+          'pid="2" name="Project">',
+        ),
+      );
+      expect(
+        parts['_rels/.rels'],
+        contains(
+          'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+          'relationships/custom-properties" Target="docProps/custom.xml"',
+        ),
+      );
+      expect(
+        parts['[Content_Types].xml'],
+        contains(
+          '<Override PartName="/docProps/custom.xml" ContentType='
+          '"application/vnd.openxmlformats-officedocument.'
+          'custom-properties+xml"/>',
+        ),
+      );
+    });
+
+    test('an empty map writes no part, relationship or override', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S');
+      final Map<String, String> parts = readXlsx(book.close().bytes);
+      expect(parts.keys, isNot(contains('docProps/custom.xml')));
+      expect(parts['_rels/.rels'], isNot(contains('custom')));
+      expect(parts['[Content_Types].xml'], isNot(contains('custom')));
+    });
+
+    test('an invalid value throws before anything reaches a sink', () {
+      final _CollectingSink sink = _CollectingSink();
+      expect(
+        () => XlsxStreamWriter(
+          sink,
+          properties: const XlsxProperties(
+            custom: <String, Object>{'N': double.nan},
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(sink.chunks, isEmpty);
+      expect(sink.closed, isFalse);
+      expect(
+        () => XlsxWriter(
+          properties: const XlsxProperties(custom: <String, Object>{'': 1}),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
   test('every part is well-formed XML', () {
     final XlsxWriter book = XlsxWriter(
       properties: XlsxProperties(
@@ -860,6 +927,12 @@ void main() {
         expect(() => s.defaultSizes(rowHeight: 20), frozen('defaultSizes'));
       });
 
+      test('defaultSizes after blankRow', () {
+        final XlsxSheetWriter s = XlsxWriter().addSheet('S');
+        s.blankRow();
+        expect(() => s.defaultSizes(rowHeight: 20), frozen('defaultSizes'));
+      });
+
       test('a refused setting changes nothing', () {
         final XlsxWriter book = XlsxWriter();
         final XlsxSheetWriter s = book.addSheet('S');
@@ -868,7 +941,7 @@ void main() {
           () => s.columns(const <XlsxColumn?>[XlsxColumn(style: bold)]),
           throwsStateError,
         );
-        expect(() => s.defaultSizes(columnWidth: 3), throwsStateError);
+        expect(() => s.defaultSizes(columnWidth: 3), frozen('defaultSizes'));
         final XlsxResult out = book.close();
         final Map<String, String> parts = readXlsx(out.bytes);
         expect(parts['xl/worksheets/sheet1.xml'], isNot(contains('<cols')));
@@ -1001,7 +1074,7 @@ void main() {
             XlsxColumn(style: bold),
             XlsxColumn(style: XlsxStyle(numFmt: XlsxNumFmt.builtin(200))),
           ]),
-          'numFmt',
+          'columns[1].style',
         );
       });
     });
@@ -1687,6 +1760,22 @@ void main() {
       expect(wb, contains('localSheetId="1"'));
       expect(wb, contains(r"'Filtered'!$A$1:$B$2"));
     });
+
+    test(
+      'a hidden filtered sheet keeps its localSheetId after a front sheet',
+      () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('Shown').row(<Object?>[1]);
+        book.addSheet('Hid', visibility: XlsxSheetVisibility.hidden)
+          ..row(<Object?>[1])
+          ..autoFilter(XlsxRange.parse('A1:B2'));
+        book.addSheet('Front', position: 0);
+        final String wb = workbookXml(book);
+        // Tabs are Front, Shown, Hid.
+        expect(wb, contains('localSheetId="2"'));
+        expect(wb, contains(r"'Hid'!$A$1:$B$2"));
+      },
+    );
 
     test('only the filtered sheet gets a defined name', () {
       final XlsxWriter book = XlsxWriter();

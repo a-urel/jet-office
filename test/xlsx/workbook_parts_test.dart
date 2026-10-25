@@ -24,18 +24,21 @@ void main() {
               number: 3,
               visibility: XlsxSheetVisibility.visible,
               autoFilter: null,
+              names: SheetNames.none,
             ),
             (
               name: 'Detail A',
               number: 1,
               visibility: XlsxSheetVisibility.visible,
               autoFilter: null,
+              names: SheetNames.none,
             ),
             (
               name: 'Detail B',
               number: 2,
               visibility: XlsxSheetVisibility.visible,
               autoFilter: null,
+              names: SheetNames.none,
             ),
           ],
           activeTab: 0,
@@ -64,18 +67,21 @@ void main() {
               number: 1,
               visibility: XlsxSheetVisibility.visible,
               autoFilter: null,
+              names: SheetNames.none,
             ),
             (
               name: 'H',
               number: 2,
               visibility: XlsxSheetVisibility.hidden,
               autoFilter: null,
+              names: SheetNames.none,
             ),
             (
               name: 'X',
               number: 3,
               visibility: XlsxSheetVisibility.veryHidden,
               autoFilter: null,
+              names: SheetNames.none,
             ),
           ],
           activeTab: 0,
@@ -102,12 +108,14 @@ void main() {
               number: 1,
               visibility: XlsxSheetVisibility.visible,
               autoFilter: null,
+              names: SheetNames.none,
             ),
             (
               name: 'a&_x0042_',
               number: 2,
               visibility: XlsxSheetVisibility.visible,
               autoFilter: null,
+              names: SheetNames.none,
             ),
           ],
           activeTab: 0,
@@ -128,6 +136,7 @@ void main() {
               number: 1,
               visibility: XlsxSheetVisibility.visible,
               autoFilter: null,
+              names: SheetNames.none,
             ),
           ],
           activeTab: 0,
@@ -147,12 +156,14 @@ void main() {
               number: 1,
               visibility: XlsxSheetVisibility.visible,
               autoFilter: null,
+              names: SheetNames.none,
             ),
             (
               name: 'B',
               number: 2,
               visibility: XlsxSheetVisibility.visible,
               autoFilter: null,
+              names: SheetNames.none,
             ),
           ],
           activeTab: 1,
@@ -175,6 +186,7 @@ void main() {
       number: number,
       visibility: XlsxSheetVisibility.visible,
       autoFilter: filter == null ? null : XlsxRange.parse(filter),
+      names: SheetNames.none,
     );
 
     test('no filter writes no definedNames', () {
@@ -267,6 +279,32 @@ void main() {
       '<Relationship Id="rId3" Type="${RelType.extendedProperties}" '
       'Target="docProps/app.xml"/>'
       '</Relationships>',
+    );
+  });
+
+  test('root relationships gain custom-properties when asked', () {
+    final String xml = _render(
+      (XmlWriter w) => writeRootRelationships(w, custom: true),
+    );
+    expect(
+      xml,
+      contains(
+        '<Relationship Id="rId4" Type="${RelType.customProperties}" '
+        'Target="docProps/custom.xml"/>',
+      ),
+    );
+  });
+
+  test('content types gain the custom properties override when asked', () {
+    final String xml = _render(
+      (XmlWriter w) => writeContentTypes(w, 1, custom: true),
+    );
+    expect(
+      xml,
+      contains(
+        '<Override PartName="/docProps/custom.xml" '
+        'ContentType="${ContentType.customProperties}"/>',
+      ),
     );
   });
 

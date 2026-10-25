@@ -31,7 +31,9 @@ final class Utf8Buffer implements StringSink {
   /// The number of bytes [takeBytes] would return, except that a trailing
   /// high surrogate still waiting for its pair is not counted yet.
   ///
-  /// Reading it never encodes or flushes anything.
+  /// Reading it never encodes or flushes anything. Its cost is linear in the
+  /// pending text, which it copies and scans, so it is bounded by the
+  /// `chunkSize` flush threshold and not by everything written so far.
   int get lengthInBytes {
     final String text = _pending.toString();
     final int length = text.length;

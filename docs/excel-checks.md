@@ -257,6 +257,184 @@ was refused because the name is already in use. Excel treats the two as
 equal, so `sheetNameKey` in `lib/src/xlsx/sheet_name.dart` now maps the
 Kelvin sign to K (see "Open issues", closed by fbaa999).
 
+## M3
+
+Open every M3 fixture in **desktop Excel** (Windows or macOS) with Turkish
+regional settings. Excel for the web does not show print settings, protection
+details or document properties, which is why M3 is checked on the desktop. As
+for M1 and M2, first check that each file opens without a repair prompt.
+
+### `m3_names`
+
+Two sheets, `Data` and `O'Brien`.
+
+- Formulas > Name Manager lists `TaxRate` (`0.18`, workbook scope) and `Local`
+  (`=Data!$B$2`, scope `Data`). It also lists the two print names of
+  `O'Brien`, `Print_Area` and `Print_Titles`, scoped to that sheet.
+- `Data!A1` shows `18` (the formula `TaxRate*100`); the formula bar shows
+  `=TaxRate*100`. B1 is `Tax percent`, A2 `Local`, B2 `5`.
+- `O'Brien`, Page Layout > Print Titles (or Page Setup > Sheet): the print
+  area is `$A$1:$B$4,$D$1:$D$3`, rows to repeat `$1:$1`, columns to repeat
+  `$A:$A`. Print Preview prints the two ranges on separate pages, each with
+  the repeated row and column.
+
+### `m3_hyperlinks`
+
+Two sheets, `Links` and `O'Brien`. Click each link in `Links` (Ctrl-click on
+macOS if single clicks only select).
+
+- A1 `https://example.com/a b` opens `https://example.com/a%20b` in the
+  browser.
+- B1 `sales@example.com` opens a new e-mail to that address with the subject
+  `Q&A ç`; hovering shows the tooltip `Write to sales`.
+- C1 `Bold link` goes to the cell `C3` on `O'Brien` (through the workbook
+  name `Target`); it is bold, blue and underlined, because column C is bold.
+- D1 `Red link` opens `https://example.com/red`; it is red and underlined.
+- A2 `O'Brien` goes to `O'Brien!B2`; B2 `Target` goes to `O'Brien!C3`.
+- The links without a style of their own (A1, B1, A2 and B2) are blue and
+  underlined, the theme's hyperlink color (the rule "A hyperlink cell's font"
+  in `docs/xlsx-writer.md`).
+
+### `m3_validation`
+
+One sheet, `Form`. Select each input cell in column B (all are empty), read
+the prompt, open the drop-down if any, and type a bad value to read the
+alert.
+
+- B2: a drop-down of `Fish`, `say "hi"` and `R&D`, three items, the quotes and
+  the ampersand shown as typed. Any other text is refused (stop alert).
+- B3: a drop-down of `red`, `green`, `blue` (the range `D2:D4`).
+- B4: whole number 1 to 10. Selecting it shows the prompt `Count`, `Enter a
+  whole number from 1 to 10.`; `11` is refused with `Not allowed`, `Use 1 to
+  10.`
+- B5: decimal above 0; `-1` is refused with Excel's default alert.
+- B6: date after 24.10.2026; `24.10.2026` is refused, `25.10.2026` accepted.
+- B7: time before 12:00; `13:00` is refused, `11:30` accepted.
+- B8: text of at most 5 characters; `abcdef` is refused.
+- B9: custom `ISEVEN(B9)`; `3` shows the alert `Odd`, `The number is not
+  even.` with Yes, No and Cancel (a warning, which lets the value stay if you
+  click Yes); `4` is accepted without an alert.
+- B10: any value is accepted, but selecting it shows the prompt `Note`,
+  `Anything goes here.`
+
+### `m3_conditional`
+
+One sheet, `Scores`, 20 data rows under the header. Each column has its own
+rule; check the colors against the column's numbers.
+
+- A: names containing `an` (`Ana`, `Dana`, `Hanna`, `Rana`) in dark red text on
+  pink.
+- B (Maths): values of 70 or more in dark green on light green; values below
+  40 are bold (the second rule on `B2:C21`), so a value can be both.
+- C (Art): values above the column average green; below 40 bold.
+- D (Music): the three highest values red.
+- E (Sport): values at or below the average green.
+- F (Team): `Red`, `Blue` and `Green` (all repeated) red; `Gold`, which occurs
+  once, plain.
+- G (Hours): a three-color scale, red for the lowest, yellow at the middle
+  and green for the highest.
+- H (Progress): blue gradient data bars, longer for larger values.
+- I (Rating): three arrows (up, sideways, down) by value.
+
+### `m3_conditional_x14`
+
+One sheet, `Bars`, the values -50 to 50 in steps of 5 in all five columns.
+These need Excel 2010 or later; check that none shows a repair prompt.
+
+- A `Bar`: blue bars to the right of a middle axis for positive values, red
+  bars to its left for negative ones, drawn from the middle of the cell.
+- B `Solid`: solid green bars (no gradient) with a border.
+- C `Stars`, D `Triangles` and E `Boxes`: three stars, three triangles and
+  five boxes by value. Excel for the web and LibreOffice may not show these.
+
+### `m3_page_setup`
+
+Two sheets, `Landscape` and `Scaled`. Check File > Print (Print Preview) and
+Page Layout > Page Setup for each.
+
+- `Landscape`: landscape orientation, A4 paper, fit to 1 page wide (and
+  automatic tall), page centered horizontally, gridlines printed.
+- `Scaled`: 85 % scale, margins left and right 0.25 in, top and bottom 0.5 in,
+  header and footer margins 0.2 in, first page number 3 (Page Setup > Page
+  shows `3`), page order over, then down (Page Setup > Sheet).
+
+### `m3_header_footer`
+
+One sheet, `Report`, 60 rows. At the default scale it prints on two pages.
+Page Setup > Header/Footer shows `Different odd and even pages` and
+`Different first page` both ticked.
+
+- Print Preview page 1 (the first page): header `Cover`, no footer.
+- Page 2 (even): no header, footer `Report`, the sheet name.
+- The odd-page texts do not print on pages 1 and 2. Primary check: Custom
+  Header shows `R&&D` in the left section (the stored code, with the
+  ampersand doubled; the printed page shows `R&D`, so this is not a bug) and
+  the date code `&D` in the right section, and Custom Footer (odd pages)
+  shows `Page &P of &N`. To see them printed, in Page Layout set Scale (not
+  Scale to Fit) and raise it until Print Preview shows 3 pages, about 200 %
+  on A4 or Letter. Page 3 then shows the odd header (`R&D` left, the date
+  right) and `Page 3 of 3`; discard the change afterwards.
+
+### `m3_protection`
+
+One sheet, `Locked`, with `Locked label` in A1, `input` in B2 and a formula in
+C3 that shows `2`.
+
+- Review shows `Unprotect Sheet` and `Protect Workbook` active.
+- Only B2 can be edited. Typing in A1 or C3 (or any other cell) gives the
+  "protected cell" message.
+- Selecting C3 shows `2` in the cell, and the formula bar is empty (the
+  formula `1+1` is hidden).
+- Home > Format > Column Width works, because the sheet allows formatting
+  columns; Row Height is refused.
+- Review > Unprotect Sheet asks for a password; `password` unprotects it.
+- Right-clicking the tab shows Insert, Delete, Rename and Move or Copy greyed
+  out, and the + button adds no sheet, until Review > Protect Workbook is
+  switched off with the password `test`.
+
+### `m3_properties`
+
+One sheet, `Info`, with `Properties` and `set`. Check File > Info > Properties
+> Advanced Properties (Windows) or File > Properties (macOS), on the Summary,
+Statistics and Custom tabs.
+
+- Title `Quarterly report`, Subject `Accounts`, Author `Ahmet Urel`, Manager
+  `Ayse Yilmaz`, Company `Jetronik`, Category `Finance`, Keywords
+  `report; accounts`, Comments `Fixture for the document properties`.
+- Last saved by `Jet Office`. Status `Final` is checked under File > Info
+  (it may not appear on the Advanced Properties tabs).
+- Created 24.10.2026 09:30 UTC and modified 25.10.2026 18:45:10 UTC, in
+  local time (12:30 and 21:45:10 in Türkiye).
+- Custom: `Project` (text) `Atlas`, `Count` (number) `3`, `Ratio` (number)
+  `0,5`, `Final` (yes or no) `Yes`, `Due` (date) 24.10.2026.
+
+### Desktop re-checks of M1 and M2
+
+The two open issues "Some document properties not checked in Excel" and "Some
+M2 settings not checked in desktop Excel" close with these checks. When the
+owner records them in "Results", mark both issues closed, with the date.
+
+`m1_properties` (File > Info > Properties > Advanced Properties):
+
+- Category `Reports`, Last modified by `jet_office`.
+- Created 24.10.2026 08:30 UTC and modified 24.10.2026 09:45:30 UTC, in local
+  time (11:30 and 12:45 in Türkiye).
+
+`m2_styles`:
+
+- Rows 47 and 48: the diagonal borders, one going up and one going down.
+- Row 62, `wrap text`: the row grows to fit the wrapped text (the file stores
+  no height for it).
+- Row 67, `reading order RTL`: the text reads right to left.
+- `locked false` and `hidden true`: Format Cells > Protection shows Locked
+  cleared for the first and Hidden ticked for the second.
+
+`m2_views`:
+
+- `View`: the zoom is 85 % (the status bar's zoom slider).
+- `Split`: two panes with a movable divider, about 120 points from the left
+  and 60 from the top (View > Split is highlighted).
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
@@ -298,6 +476,8 @@ Subject, Author, Company, Keywords and Description as expected. Category,
 Last modified by and the created and modified times are not checked in Excel.
 M3 adds the rest of the document properties, so its Excel check covers all of
 them in desktop Excel.
+
+The M3 section's "Desktop re-checks of M1 and M2" covers `m1_properties`.
 
 ### Excel decodes `_xHHHH_` in formulas (closed, fbaa999)
 
@@ -366,6 +546,9 @@ although each is written as the checklist expects:
   `<pane xSplit="2400" ySplit="1200"/>`; Excel for the web has no split).
 
 M3's Excel check covers them in desktop Excel, with the document properties.
+
+The M3 section's "Desktop re-checks of M1 and M2" covers `m2_styles` and
+`m2_views`.
 
 ## Results
 

@@ -15,6 +15,49 @@ void main() {
     expect(isDateFormat(const XlsxNumFmt.custom('General')), isFalse);
     expect(isDateFormat(const XlsxNumFmt.custom(r'0\d')), isFalse);
   });
+  test('AM/PM and A/P alone are not dates', () {
+    for (final String code in <String>[
+      'AM/PM',
+      'am/pm',
+      'Am/pM',
+      'A/P',
+      'a/p',
+      '0 AM/PM',
+      '"x" AM/PM',
+    ]) {
+      expect(isDateFormat(XlsxNumFmt.custom(code)), isFalse, reason: code);
+    }
+    for (final String code in <String>['h AM/PM', 'AM/PM h', 'hh:mm A/P']) {
+      expect(isDateFormat(XlsxNumFmt.custom(code)), isTrue, reason: code);
+    }
+  });
+  test('the character after _ or * is not a date letter', () {
+    for (final String code in <String>[
+      '0_d',
+      '0*d',
+      '#,##0_);(#,##0)',
+      '0*s',
+      '0_',
+      '0*',
+      '_',
+    ]) {
+      expect(isDateFormat(XlsxNumFmt.custom(code)), isFalse, reason: code);
+    }
+    for (final String code in <String>['0_)d', '0*-d', '_ d']) {
+      expect(isDateFormat(XlsxNumFmt.custom(code)), isTrue, reason: code);
+    }
+  });
+  test('scanner edge cases', () {
+    // An unterminated quote or bracket swallows the rest of the code.
+    expect(isDateFormat(const XlsxNumFmt.custom('"d')), isFalse);
+    expect(isDateFormat(const XlsxNumFmt.custom('[h')), isFalse);
+    // A date letter before a trailing backslash still counts.
+    expect(isDateFormat(const XlsxNumFmt.custom(r'd\')), isTrue);
+    expect(isDateFormat(const XlsxNumFmt.custom(r'0\')), isFalse);
+    // The word General in any case is skipped, the rest is still scanned.
+    expect(isDateFormat(const XlsxNumFmt.custom('GeNeRaL')), isFalse);
+    expect(isDateFormat(const XlsxNumFmt.custom('GeNeRaL dd')), isTrue);
+  });
   test('built-in date id ranges', () {
     for (final int id in <int>[
       14,

@@ -15,7 +15,10 @@ library;
 import '../xml/xml_escape.dart';
 import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
+import 'color.dart';
 import 'date_serial.dart';
+import 'font.dart';
+import 'hyperlink.dart';
 import 'limits.dart';
 import 'number_format.dart';
 import 'shared_strings.dart';
@@ -29,6 +32,13 @@ const int _maxExactInt = 9007199254740992;
 
 /// The most characters (UTF-16 code units) Excel accepts in a formula.
 const int _maxFormulaLength = 8192;
+
+/// The font of a hyperlink cell: the theme's hyperlink color, underlined.
+/// The lowest font layer: whatever a column, row or cell font sets wins.
+const XlsxFont _hyperlinkFont = XlsxFont(
+  color: XlsxColor.theme(10),
+  underline: XlsxUnderline.single,
+);
 
 /// Whether Excel, which stores every number as a double, may round [v].
 ///
@@ -73,6 +83,11 @@ final class CellEncoder {
   /// shows that a sheet of many rows costs one resolution per column.
   int get resolveCount => _resolveCount;
 
+  /// Whether the encoder still holds a `beforeWrite` callback. A diagnostic
+  /// for tests: it is `false` whenever no [encode] call is in progress, so
+  /// a callback, and the row state it captures, is never kept alive.
+  bool get holdsBeforeWrite => _beforeWrite != null;
+
   /// Whether any formula cell has been written, so the workbook can ask
   /// Excel to recalculate on load.
   bool get wroteFormula => _wroteFormula;
@@ -80,17 +95,22 @@ final class CellEncoder {
   /// Writes the cell at zero-based [row] and [column] of [sheet] to [out].
   ///
   /// [value] is a `String`, `int`, `double`, `bool`, [DateTime], [XlsxDate],
-  /// [XlsxDecimal], [XlsxFormula], an [XlsxCell] wrapping one of those, or
-  /// `null`, which writes nothing. An [XlsxCell] whose value is `null` and
-  /// whose style is not writes an empty styled cell, `<c r="C5" s="7"/>`,
-  /// when the merged style below is not the default; with the default
-  /// style, or with no cell style, it writes nothing (ruling R11).
+  /// [XlsxDecimal], [XlsxFormula], [XlsxHyperlink], an [XlsxCell] wrapping
+  /// one of those, or `null`, which writes nothing. An [XlsxCell] whose
+  /// value is `null` and whose style is not writes an empty styled cell,
+  /// `<c r="C5" s="7"/>`, when the merged style below is not the default;
+  /// with the default style, or with no cell style, it writes nothing
+  /// (ruling R11).
   ///
   /// The effective style is [columnStyle] merged with [rowStyle] and then
   /// with the [XlsxCell]'s style, so a cell beats its row and a row beats
   /// its column (see [XlsxStyle.merge]): a field a higher layer leaves
   /// `null` is inherited, one it sets, even back to its default (a font
   /// that is not bold, `XlsxNumFmt.general`), wins.
+  ///
+  /// A hyperlink is written as its text, a string, with the hyperlink font
+  /// merged beneath the effective style's font; the sheet writer records
+  /// the link itself (and validates it, which the encoder does not).
   ///
   /// Data problems (characters XML forbids, text past 32,767 UTF-16 code
   /// units, integers past 2^53, dates outside 1900 to 9999, a date shown in
@@ -125,6 +145,24 @@ final class CellEncoder {
     void Function()? beforeWrite,
   }) {
     _beforeWrite = beforeWrite;
+    try {
+      _encode(out, sheet, row, column, value, rowStyle, columnStyle);
+    } finally {
+      // Not kept past the call: it captures the sheet's row state.
+      _beforeWrite = null;
+    }
+  }
+
+  /// The body of [encode], which holds [_beforeWrite] while this runs.
+  void _encode(
+    XmlWriter out,
+    String sheet,
+    int row,
+    int column,
+    Object? value,
+    XlsxStyle? rowStyle,
+    XlsxStyle? columnStyle,
+  ) {
     final String ref = cellRef(row, column);
     XlsxStyle? cellStyle;
     Object? v = value;
@@ -222,6 +260,8 @@ final class CellEncoder {
         }
       case XlsxFormula():
         _writeFormula(out, sheet, ref, v, style);
+      case XlsxHyperlink():
+        _writeString(out, sheet, ref, v.text, style.linked);
       default:
         throw ArgumentError(
           'Cell $ref on sheet "$sheet" holds a ${v.runtimeType}, which is not '
@@ -241,7 +281,7 @@ final class CellEncoder {
     bool outsideDateRange = false,
   }) {
     final ScrubResult scrubbed = scrubXmlText(text);
-    final String result = _truncate(scrubbed.text);
+    final String result = truncateCellText(scrubbed.text);
     // The style can throw; resolve it before anything is recorded.
     final int id = _idOf(style);
     if (scrubbed.removed > 0) {
@@ -266,7 +306,7 @@ final class CellEncoder {
 
   /// [text] cut to [XlsxLimits.maxCellTextLength] UTF-16 code units without
   /// splitting a surrogate pair; [text] itself when it fits.
-  static String _truncate(String text) {
+  static String truncateCellText(String text) {
     if (text.length <= XlsxLimits.maxCellTextLength) return text;
     int cut = XlsxLimits.maxCellTextLength;
     // A high surrogate in the last kept unit would lose its low half.
@@ -339,7 +379,7 @@ final class CellEncoder {
             '"$sheet" contains characters XML forbids.',
           );
         }
-        final String kept = _truncate(cached);
+        final String kept = truncateCellText(cached);
         if (kept.length < cached.length) {
           warning = XlsxWarningCode.textTruncated;
         }
@@ -446,6 +486,17 @@ final class CellEncoder {
 /// format ids already assigned to it.
 final class _Resolved {
   _Resolved(this.column, this.row, this.cell, this.style);
+
+  /// This style with the hyperlink font beneath its font, resolved and
+  /// cached with it so a column of links costs one resolution.
+  late final _Resolved linked = _Resolved(
+    column,
+    row,
+    cell,
+    (style ?? const XlsxStyle()).copyWith(
+      font: _hyperlinkFont.merge(style?.font),
+    ),
+  );
 
   final XlsxStyle? column;
   final XlsxStyle? row;

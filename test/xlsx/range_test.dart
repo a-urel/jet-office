@@ -119,5 +119,19 @@ void main() {
         expect(() => parseCellRef(bad), throwsArgumentError, reason: bad);
       }
     });
+    test('rejects a row with leading zeros', () {
+      for (final String bad in <String>[
+        'A01',
+        'A0000001',
+        r'$A$01',
+        'B010',
+        'A00',
+      ]) {
+        expect(() => parseCellRef(bad), throwsArgumentError, reason: bad);
+      }
+      expect(parseCellRef('A10'), (row: 9, column: 0));
+      expect(parseCellRef('A1048576'), (row: 1048575, column: 0));
+      expect(() => XlsxRange.parse('A01:B2'), throwsArgumentError);
+    });
   });
 }

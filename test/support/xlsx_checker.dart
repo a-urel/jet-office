@@ -38,18 +38,56 @@
 /// 19. a frozen `pane` has `topLeftCell` at the cell (`ySplit`, `xSplit`),
 ///     and `activePane` is `bottomRight` when both splits are non-zero,
 ///     `topRight` when only `xSplit` is and `bottomLeft` when only `ySplit`
-///     is; a frozen pane with neither split is wrong too;
+///     is; a frozen pane with neither split, `xSplit` above 16383 or
+///     `ySplit` above 1048575 is wrong too;
 /// 20. every `mergeCell` covers at least two cells inside the sheet, with
 ///     its first corner not after its last; no two merges of a sheet
 ///     overlap; and `mergeCells/@count` equals the number of its children;
 /// 21. defined names are unique per scope (the name ignoring case, and
 ///     `localSheetId`, which is absent for the workbook scope); every
-///     `localSheetId` is a number below the sheet count; and every
-///     `autoFilter/@ref` is a valid range inside the sheet.
+///     `localSheetId` is a number below the sheet count; every
+///     `autoFilter/@ref` is a valid range inside the sheet; and each sheet
+///     with an `autoFilter` has exactly one `_xlnm._FilterDatabase` name,
+///     sheet-scoped to it and spelling `'<sheet name>'!<absolute ref>`,
+///     while a sheet without one has none; every `_xlnm.*` name has a
+///     `localSheetId` (Excel scopes its built-in names to a sheet); and no
+///     `definedName` has empty text;
+/// 22. every `hyperlink` has a `ref` that is a valid range inside the
+///     sheet and an `r:id` or a `location`; every `r:id` resolves in the
+///     sheet's relationships to a hyperlink relationship whose
+///     `TargetMode` is `External`; no two `hyperlink` elements of a sheet
+///     share a `ref`; and a sheet has at most 65,530 of them;
+/// 23. `dataValidations/@count` equals its `dataValidation` children; every
+///     range of every `sqref` is a valid range inside the sheet; no two
+///     ranges of a sheet's validations overlap; `formula1` is present
+///     unless the type is `none` (or absent); and `formula2` is present for
+///     `between` (the default operator) and `notBetween` on `whole`,
+///     `decimal`, `date`, `time` and `textLength`;
+/// 24. every range of every `conditionalFormatting/@sqref` is a valid range
+///     inside the sheet; every `cfRule` has a `priority` of 1 or more,
+///     unique on its sheet; every `dxfId` is below `dxfs/@count` (0 when
+///     absent); a `cellIs` rule has one `formula`, or two for `between`
+///     and `notBetween`; an `expression`, `containsText`,
+///     `notContainsText`, `beginsWith` or `endsWith` rule has one; and a
+///     `colorScale` has 2 or 3 `cfvo` and as many `color` children;
+/// 25. in the Excel 2010 extensions of conditional formats: every `x14:id`
+///     in the `extLst` of a `cfRule` names exactly one `x14:cfRule` of the
+///     worksheet's `extLst`, and every `x14:cfRule` is named by exactly one
+///     `x14:id`, except an x14-only rule (one no `x14:id` names), which
+///     has a `priority` of 1 or more, unique among the sheet's `cfRule` and
+///     x14-only priorities; no two `x14:cfRule` of the workbook share an
+///     `id`; and a worksheet's `extLst` is its last child;
+/// 26. every `sheetProtection/@password` and
+///     `workbookProtection/@workbookPassword` is four hexadecimal digits,
+///     and every `sheetProtection` has `sheet="1"`;
+/// 27. in `docProps/custom.xml`, every `property` has a `pid` that is an
+///     integer of at least 2, unique in the part, a `name` no earlier
+///     property has (ignoring case) and exactly one value child.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
-/// The writer never does.
+/// The writer never does. Rule 25 matches the Excel 2010 elements by
+/// namespace, whatever their prefix.
 ///
 /// Pure Dart (no `dart:io`), so it runs in a browser too.
 library;
@@ -70,6 +108,7 @@ const String _workbookPart = 'xl/workbook.xml';
 final RegExp _sheetPart = RegExp(r'^xl/worksheets/[^/]+\.xml$');
 final RegExp _forbiddenInName = RegExp(r'[\[\]:*?/\\]');
 final RegExp _cellRef = RegExp(r'^([A-Z]+)([0-9]+)$');
+final RegExp _legacyHash = RegExp(r'^[0-9A-Fa-f]{4}$');
 final RegExp _rangeRef = RegExp(r'^([A-Z]+)([0-9]+)(?::([A-Z]+)([0-9]+))?$');
 
 /// The violations found in the XLSX file [bytes]; empty means clean.
@@ -116,6 +155,13 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkMerges(docs, violations);
   _checkDefinedNames(docs, violations);
   _checkAutoFilters(docs, violations);
+  _checkFilterNames(docs, violations);
+  _checkHyperlinks(docs, violations);
+  _checkDataValidations(docs, violations);
+  _checkConditionalFormats(docs, violations);
+  _checkConditionalExtensions(docs, violations);
+  _checkProtection(docs, violations);
+  _checkCustomProperties(docs, violations);
   return violations;
 }
 
@@ -729,11 +775,12 @@ void _checkFrozenPanes(Map<String, XmlDocument> docs, List<String> violations) {
       if (pane.getAttribute('state') != 'frozen') continue;
       final int x = int.tryParse(pane.getAttribute('xSplit') ?? '0') ?? -1;
       final int y = int.tryParse(pane.getAttribute('ySplit') ?? '0') ?? -1;
-      if (x < 0 || y < 0 || (x == 0 && y == 0)) {
+      if (x < 0 || y < 0 || (x == 0 && y == 0) || x > 16383 || y > 1048575) {
         violations.add(
           'rule 19: ${sheet.key}: frozen pane has xSplit '
           '"${_attr(pane, 'xSplit')}" and ySplit "${_attr(pane, 'ySplit')}"; '
-          'expected whole numbers, one at least 1',
+          'expected whole numbers, one at least 1, xSplit at most 16383 and '
+          'ySplit at most 1048575',
         );
         continue;
       }
@@ -858,6 +905,15 @@ void _checkDefinedNames(
   for (final XmlElement n in _all(doc, 'definedName')) {
     final String name = _attr(n, 'name');
     final String? scopeText = n.getAttribute('localSheetId');
+    if (name.toLowerCase().startsWith('_xlnm.') && scopeText == null) {
+      violations.add(
+        'rule 21: defined name "$name" has no localSheetId; Excel scopes '
+        'its built-in names to a sheet',
+      );
+    }
+    if (n.innerText.trim().isEmpty) {
+      violations.add('rule 21: defined name "$name" has no text');
+    }
     String scope = 'workbook';
     if (scopeText != null) {
       final int? id = int.tryParse(scopeText);
@@ -890,6 +946,451 @@ void _checkAutoFilters(Map<String, XmlDocument> docs, List<String> violations) {
       if (problem != null) {
         violations.add('rule 21: ${sheet.key}: autoFilter ref "$ref" $problem');
       }
+    }
+  }
+}
+
+/// Rule 21, the `_xlnm._FilterDatabase` name of each filtered sheet.
+void _checkFilterNames(Map<String, XmlDocument> docs, List<String> violations) {
+  final XmlDocument? book = docs[_workbookPart];
+  final XmlDocument? rels = docs['xl/_rels/workbook.xml.rels'];
+  if (book == null || rels == null) return;
+  final Map<String, String> targets = <String, String>{
+    for (final XmlElement r in _all(rels, 'Relationship'))
+      _attr(r, 'Id'): 'xl/${_attr(r, 'Target')}',
+  };
+  final List<XmlElement> names = <XmlElement>[
+    for (final XmlElement n in _all(book, 'definedName'))
+      if (_attr(n, 'name').toLowerCase() == '_xlnm._filterdatabase') n,
+  ];
+  final List<XmlElement> sheets = _all(book, 'sheet').toList();
+  for (int index = 0; index < sheets.length; index++) {
+    final String name = _attr(sheets[index], 'name');
+    final XmlDocument? doc = docs[targets[_attr(sheets[index], 'r:id')]];
+    if (doc == null) continue;
+    final List<XmlElement> filters = _all(doc, 'autoFilter').toList();
+    final List<XmlElement> mine = <XmlElement>[
+      for (final XmlElement n in names)
+        if (n.getAttribute('localSheetId') == '$index') n,
+    ];
+    if (filters.isEmpty) {
+      if (mine.isNotEmpty) {
+        violations.add(
+          'rule 21: sheet "$name" has no autoFilter but a '
+          '_xlnm._FilterDatabase name',
+        );
+      }
+      continue;
+    }
+    if (mine.length != 1) {
+      violations.add(
+        'rule 21: sheet "$name" has an autoFilter and ${mine.length} '
+        '_xlnm._FilterDatabase names; expected exactly one',
+      );
+      continue;
+    }
+    final String ref = _attr(filters.first, 'ref');
+    final _Rect? r = _parseRect(ref);
+    if (r == null || _problemWith(r) != null) continue; // reported above
+    // A single cell is written as one absolute cell, a range as two.
+    final String first = '\$${_columnLetters(r.col1 - 1)}\$${r.row1}';
+    final String last = '\$${_columnLetters(r.col2 - 1)}\$${r.row2}';
+    final String want =
+        "'${name.replaceAll("'", "''")}'!"
+        '${ref.contains(':') ? '$first:$last' : first}';
+    if (mine.single.innerText != want) {
+      violations.add(
+        'rule 21: sheet "$name" _xlnm._FilterDatabase is '
+        '"${mine.single.innerText}"; the filter makes it "$want"',
+      );
+    }
+  }
+}
+
+const String _hyperlinkRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'hyperlink';
+
+/// Rule 22.
+void _checkHyperlinks(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final List<XmlElement> links = _all(sheet.value, 'hyperlink').toList();
+    if (links.isEmpty) continue;
+    if (links.length > 65530) {
+      violations.add(
+        'rule 22: ${sheet.key}: ${links.length} hyperlinks; Excel allows '
+        '65530',
+      );
+    }
+    final String relsName =
+        '${_dirOf(sheet.key)}_rels/'
+        '${sheet.key.substring(sheet.key.lastIndexOf('/') + 1)}.rels';
+    final Map<String, XmlElement> rels = <String, XmlElement>{
+      if (docs[relsName] case final XmlDocument doc)
+        for (final XmlElement rel in _all(doc, 'Relationship'))
+          _attr(rel, 'Id'): rel,
+    };
+    final Set<String> refs = <String>{};
+    for (final XmlElement link in links) {
+      final String ref = _attr(link, 'ref');
+      final _Rect? r = _parseRect(ref);
+      final String? problem = r == null ? 'is not a range' : _problemWith(r);
+      if (problem != null) {
+        violations.add('rule 22: ${sheet.key}: hyperlink ref "$ref" $problem');
+      }
+      if (!refs.add(ref)) {
+        violations.add(
+          'rule 22: ${sheet.key}: two hyperlinks share the ref "$ref"',
+        );
+      }
+      final String? id = link.getAttribute('r:id');
+      final String? location = link.getAttribute('location');
+      if (id == null && location == null) {
+        violations.add(
+          'rule 22: ${sheet.key}: hyperlink "$ref" has neither r:id nor '
+          'location',
+        );
+      }
+      if (id == null) continue;
+      final XmlElement? rel = rels[id];
+      if (rel == null) {
+        violations.add(
+          'rule 22: ${sheet.key}: hyperlink "$ref" has r:id "$id", which '
+          '$relsName does not declare',
+        );
+      } else if (_attr(rel, 'Type') != _hyperlinkRelType ||
+          _attr(rel, 'TargetMode') != 'External') {
+        violations.add(
+          'rule 22: ${sheet.key}: hyperlink "$ref" r:id "$id" is not an '
+          'external hyperlink relationship',
+        );
+      }
+    }
+  }
+}
+
+const Set<String> _comparingTypes = <String>{
+  'whole',
+  'decimal',
+  'date',
+  'time',
+  'textLength',
+};
+
+/// Rule 23.
+void _checkDataValidations(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement root in _all(sheet.value, 'dataValidations')) {
+      final List<XmlElement> items = root
+          .findElements('dataValidation')
+          .toList();
+      final String count = _attr(root, 'count');
+      if (int.tryParse(count) != items.length) {
+        violations.add(
+          'rule 23: ${sheet.key}: dataValidations count is "$count" but it '
+          'has ${items.length} dataValidation',
+        );
+      }
+      final List<(String, _Rect)> seen = <(String, _Rect)>[];
+      for (final XmlElement item in items) {
+        final String sqref = _attr(item, 'sqref');
+        if (sqref.trim().isEmpty) {
+          violations.add(
+            'rule 23: ${sheet.key}: a dataValidation has no sqref',
+          );
+        }
+        for (final String ref
+            in sqref.split(' ').where((String r) => r != '')) {
+          final _Rect? r = _parseRect(ref);
+          final String? problem = r == null
+              ? 'is not a range'
+              : _problemWith(r);
+          if (problem != null) {
+            violations.add('rule 23: ${sheet.key}: sqref "$ref" $problem');
+            continue;
+          }
+          for (final (String other, _Rect o) in seen) {
+            if (r!.row1 <= o.row2 &&
+                o.row1 <= r.row2 &&
+                r.col1 <= o.col2 &&
+                o.col1 <= r.col2) {
+              violations.add(
+                'rule 23: ${sheet.key}: sqref "$ref" overlaps "$other"',
+              );
+            }
+          }
+          seen.add((ref, r!));
+        }
+        final String type = item.getAttribute('type') ?? 'none';
+        final bool hasFormula1 = item.getElement('formula1') != null;
+        if (type != 'none' && !hasFormula1) {
+          violations.add(
+            'rule 23: ${sheet.key}: dataValidation "$sqref" of type $type '
+            'has no formula1',
+          );
+        }
+        final String operator = item.getAttribute('operator') ?? 'between';
+        if (_comparingTypes.contains(type) &&
+            (operator == 'between' || operator == 'notBetween') &&
+            item.getElement('formula2') == null) {
+          violations.add(
+            'rule 23: ${sheet.key}: dataValidation "$sqref" with operator '
+            '$operator has no formula2',
+          );
+        }
+      }
+    }
+  }
+}
+
+/// The `cfRule` types that carry exactly one `formula`.
+const Set<String> _oneFormulaTypes = <String>{
+  'expression',
+  'containsText',
+  'notContainsText',
+  'beginsWith',
+  'endsWith',
+};
+
+/// Rule 24.
+void _checkConditionalFormats(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final XmlElement? dxfs = docs[_stylesPart]
+      ?.findAllElements('dxfs')
+      .firstOrNull;
+  final int dxfCount = int.tryParse(dxfs?.getAttribute('count') ?? '') ?? 0;
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final Set<int> priorities = <int>{};
+    // Direct children of the worksheet only: the x14 rules of an extLst
+    // follow their own schema.
+    for (final XmlElement format in sheet.value.rootElement.findElements(
+      'conditionalFormatting',
+    )) {
+      final String sqref = _attr(format, 'sqref');
+      if (sqref.trim().isEmpty) {
+        violations.add(
+          'rule 24: ${sheet.key}: a conditionalFormatting has no sqref',
+        );
+      }
+      for (final String ref in sqref.split(' ').where((String r) => r != '')) {
+        final _Rect? r = _parseRect(ref);
+        final String? problem = r == null ? 'is not a range' : _problemWith(r);
+        if (problem != null) {
+          violations.add('rule 24: ${sheet.key}: sqref "$ref" $problem');
+        }
+      }
+      for (final XmlElement rule in format.findElements('cfRule')) {
+        final String type = _attr(rule, 'type');
+        final String where = 'rule 24: ${sheet.key}: cfRule $type on "$sqref"';
+        final String priorityText = _attr(rule, 'priority');
+        final int? priority = int.tryParse(priorityText);
+        if (priority == null || priority < 1) {
+          violations.add('$where has priority "$priorityText"');
+        } else if (!priorities.add(priority)) {
+          violations.add('$where repeats priority $priority');
+        }
+        final String? dxfText = rule.getAttribute('dxfId');
+        if (dxfText != null) {
+          final int? dxf = int.tryParse(dxfText);
+          if (dxf == null || dxf < 0 || dxf >= dxfCount) {
+            violations.add('$where has dxfId "$dxfText"; dxfs holds $dxfCount');
+          }
+        }
+        final int formulas = rule.findElements('formula').length;
+        if (type == 'cellIs') {
+          final String operator = _attr(rule, 'operator');
+          final int want = operator == 'between' || operator == 'notBetween'
+              ? 2
+              : 1;
+          if (formulas != want) {
+            violations.add(
+              '$where with operator "$operator" has $formulas formula; '
+              'expected $want',
+            );
+          }
+        } else if (_oneFormulaTypes.contains(type) && formulas != 1) {
+          violations.add('$where has $formulas formula; expected 1');
+        }
+        final XmlElement? scale = rule.getElement('colorScale');
+        if (scale != null) {
+          final int cfvos = scale.findElements('cfvo').length;
+          final int colors = scale.findElements('color').length;
+          if (cfvos < 2 || cfvos > 3 || colors != cfvos) {
+            violations.add(
+              '$where has $cfvos cfvo and $colors color; expected 2 or 3 '
+              'of each',
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
+/// The namespace of the Excel 2010 SpreadsheetML extensions (`x14:`).
+const String _x14 =
+    'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
+
+/// The descendants of [e] named [local] in the `x14` namespace.
+Iterable<XmlElement> _x14Elements(XmlElement e, String local) =>
+    e.descendantElements.where(
+      (XmlElement d) => d.name.local == local && d.name.namespaceUri == _x14,
+    );
+
+/// Rule 25.
+void _checkConditionalExtensions(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final Map<String, String> idSheets = <String, String>{};
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final String where = 'rule 25: ${sheet.key}';
+    final XmlElement root = sheet.value.rootElement;
+    final List<XmlElement> children = root.childElements.toList();
+    for (int i = 0; i < children.length - 1; i++) {
+      if (children[i].name.local == 'extLst') {
+        violations.add(
+          '$where: <extLst> is followed by <${children[i + 1].name.local}>; '
+          'it must be the last child',
+        );
+      }
+    }
+    // The ids the Excel 2007 rules name, and their priorities.
+    final Map<String, int> named = <String, int>{};
+    final Set<int> priorities = <int>{};
+    for (final XmlElement format in root.findElements(
+      'conditionalFormatting',
+    )) {
+      for (final XmlElement rule in format.findElements('cfRule')) {
+        final int? priority = int.tryParse(_attr(rule, 'priority'));
+        if (priority != null) priorities.add(priority);
+        for (final XmlElement ext in rule.findElements('extLst')) {
+          for (final XmlElement id in _x14Elements(ext, 'id')) {
+            named.update(id.innerText, (int n) => n + 1, ifAbsent: () => 1);
+          }
+        }
+      }
+    }
+    // The Excel 2010 rules of the worksheet's extLst, by id.
+    final Map<String, int> rules = <String, int>{};
+    final List<XmlElement> x14Rules = <XmlElement>[
+      for (final XmlElement ext in root.findElements('extLst'))
+        ..._x14Elements(ext, 'cfRule'),
+    ];
+    for (final XmlElement rule in x14Rules) {
+      final String id = _attr(rule, 'id');
+      rules.update(id, (int n) => n + 1, ifAbsent: () => 1);
+      final String? other = idSheets[id];
+      if (other != null && other != sheet.key && id != '') {
+        violations.add('$where: x14:cfRule id $id is used in $other too');
+      }
+      idSheets[id] = sheet.key;
+    }
+    named.forEach((String id, int count) {
+      final int found = rules[id] ?? 0;
+      if (count != 1 || found != 1) {
+        violations.add(
+          '$where: x14:id $id is named by $count cfRule and has $found '
+          'x14:cfRule; expected 1 of each',
+        );
+      }
+    });
+    final Set<String> repeated = <String>{};
+    for (final XmlElement rule in x14Rules) {
+      final String id = _attr(rule, 'id');
+      if (named.containsKey(id)) continue;
+      final String type = _attr(rule, 'type');
+      if ((rules[id] ?? 0) > 1 && repeated.add(id)) {
+        violations.add('$where: ${rules[id]} x14:cfRule share the id "$id"');
+      }
+      // An x14-only rule: it has no Excel 2007 rule to hold its priority.
+      final String text = _attr(rule, 'priority');
+      final int? priority = int.tryParse(text);
+      if (priority == null || priority < 1) {
+        violations.add(
+          '$where: x14-only x14:cfRule $type "$id" has priority "$text"',
+        );
+      } else if (!priorities.add(priority)) {
+        violations.add(
+          '$where: x14-only x14:cfRule $type "$id" repeats priority '
+          '$priority',
+        );
+      }
+    }
+  }
+}
+
+/// Rule 26.
+void _checkProtection(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement p in _all(sheet.value, 'sheetProtection')) {
+      final String? password = p.getAttribute('password');
+      if (password != null && !_legacyHash.hasMatch(password)) {
+        violations.add(
+          'rule 26: ${sheet.key}: sheetProtection password "$password" is '
+          'not four hexadecimal digits',
+        );
+      }
+      if (p.getAttribute('sheet') != '1') {
+        violations.add(
+          'rule 26: ${sheet.key}: sheetProtection has sheet="'
+          '${_attr(p, 'sheet')}", expected "1"',
+        );
+      }
+    }
+  }
+  final XmlDocument? book = docs[_workbookPart];
+  if (book == null) return;
+  for (final XmlElement p in _all(book, 'workbookProtection')) {
+    final String? password = p.getAttribute('workbookPassword');
+    if (password != null && !_legacyHash.hasMatch(password)) {
+      violations.add(
+        'rule 26: workbook: workbookPassword "$password" is not four '
+        'hexadecimal digits',
+      );
+    }
+  }
+}
+
+/// Rule 27.
+void _checkCustomProperties(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final XmlDocument? doc = docs['docProps/custom.xml'];
+  if (doc == null) return;
+  final Set<String> pids = <String>{};
+  final Set<String> names = <String>{};
+  for (final XmlElement p in _all(doc, 'property')) {
+    final String name = _attr(p, 'name');
+    final String pid = _attr(p, 'pid');
+    final int? number = int.tryParse(pid);
+    if (number == null || number < 2) {
+      violations.add(
+        'rule 27: custom property "$name": pid "$pid" is not an integer of '
+        'at least 2',
+      );
+    }
+    if (!pids.add(pid)) {
+      violations.add('rule 27: custom property "$name": pid "$pid" repeats');
+    }
+    if (!names.add(name.toLowerCase())) {
+      violations.add(
+        'rule 27: custom property name "$name" repeats an earlier name, '
+        'ignoring case',
+      );
+    }
+    final int values = p.childElements.length;
+    if (values != 1) {
+      violations.add(
+        'rule 27: custom property "$name" has $values value children, '
+        'expected 1',
+      );
     }
   }
 }

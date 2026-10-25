@@ -8,6 +8,9 @@ import '../../tool/src/csv_compare.dart' show decodeXstring;
 import '../support/read_xlsx.dart';
 import '../support/xlsx_checker.dart';
 import 'fixtures.dart';
+import 'm1_fixtures.dart';
+import 'm2_fixtures.dart';
+import 'm3_fixtures.dart';
 
 /// What a sheet stores: its rectangle of cell text and the cells that hold a
 /// formula, as (row, column) pairs counted from 1.
@@ -73,6 +76,45 @@ Map<String, _Sheet> _readSheets(Uint8List bytes) {
 
 void main() {
   final List<Fixture> fixtures = allFixtures();
+
+  test('the milestone lists name their fixtures', () {
+    List<String> names(List<Fixture> list) => <String>[
+      for (final Fixture f in list) f.name,
+    ];
+    expect(names(m1Fixtures()), <String>[
+      'm1_values',
+      'm1_dirty_text',
+      'm1_sheets',
+      'm1_formulas',
+      'm1_empty',
+      'm1_properties',
+      'm1_dates',
+    ]);
+    expect(names(m2Fixtures()), <String>[
+      'm2_styles',
+      'm2_columns_rows',
+      'm2_style_precedence',
+      'm2_views',
+      'm2_merges_filter',
+      'm2_formula_xstring',
+    ]);
+    expect(names(m3Fixtures()), <String>[
+      'm3_names',
+      'm3_hyperlinks',
+      'm3_validation',
+      'm3_conditional',
+      'm3_conditional_x14',
+      'm3_page_setup',
+      'm3_header_footer',
+      'm3_protection',
+      'm3_properties',
+    ]);
+    expect(names(allFixtures()), <String>[
+      ...names(m1Fixtures()),
+      ...names(m2Fixtures()),
+      ...names(m3Fixtures()),
+    ]);
+  });
 
   test('fixture names are unique', () {
     final List<String> names = <String>[
@@ -192,6 +234,37 @@ void main() {
       'Quarterly report',
     );
     expect(core.findAllElements('dc:creator').single.innerText, 'Ahmet Urel');
+  });
+
+  test('m2_styles writes the pattern none fill as fill 0', () {
+    final Map<String, String> parts = readXlsx(named('m2_styles').build());
+    final XmlDocument sheet = XmlDocument.parse(
+      parts['xl/worksheets/sheet1.xml']!,
+    );
+    final XmlDocument styles = XmlDocument.parse(parts['xl/styles.xml']!);
+    final List<XmlElement> xfs = styles
+        .findAllElements('cellXfs')
+        .single
+        .findElements('xf')
+        .toList();
+    final List<String> labels = <String>[
+      for (final XmlElement si in XmlDocument.parse(
+        parts['xl/sharedStrings.xml']!,
+      ).findAllElements('si'))
+        si.findAllElements('t').map((XmlElement t) => t.innerText).join(),
+    ];
+    final XmlElement row = sheet.findAllElements('row').firstWhere((
+      XmlElement r,
+    ) {
+      final XmlElement label = r.findElements('c').elementAt(1);
+      return labels[int.parse(label.getElement('v')!.innerText)] ==
+          'pattern none';
+    });
+    final XmlElement cell = row.findElements('c').first;
+    expect(
+      xfs[int.parse(cell.getAttribute('s') ?? '0')].getAttribute('fillId'),
+      '0',
+    );
   });
 
   test('m2_columns_rows writes its columns, rows and default sizes', () {
@@ -348,6 +421,102 @@ void main() {
     );
   });
 
+  test('m3_names writes its names, print area and print titles', () {
+    final Map<String, String> parts = readXlsx(named('m3_names').build());
+    expect(
+      parts['xl/workbook.xml'],
+      contains(
+        '<definedNames><definedName name="TaxRate">0.18</definedName>'
+        '<definedName name="Local" localSheetId="0">Data!\$B\$2'
+        '</definedName>'
+        '<definedName name="_xlnm.Print_Area" localSheetId="1">'
+        "'O''Brien'!\$A\$1:\$B\$4,'O''Brien'!\$D\$1:\$D\$3</definedName>"
+        '<definedName name="_xlnm.Print_Titles" localSheetId="1">'
+        "'O''Brien'!\$A:\$A,'O''Brien'!\$1:\$1</definedName>"
+        '</definedNames>',
+      ),
+    );
+    expect(parts['xl/worksheets/sheet1.xml'], contains('<f>TaxRate*100</f>'));
+  });
+
+  test('m3_validation writes a validation of every kind', () {
+    final String sheet = readXlsx(
+      named('m3_validation').build(),
+    )['xl/worksheets/sheet1.xml']!;
+    expect(sheet, contains('<dataValidations count="9">'));
+    expect(sheet, contains('<formula1>"Fish,say ""hi"",R&amp;D"</formula1>'));
+    expect(sheet, contains(r'<formula1>$D$2:$D$4</formula1>'));
+    expect(sheet, contains('<formula1>46319</formula1>'));
+    expect(sheet, contains('<formula1>0.5</formula1>'));
+    expect(sheet, contains('<formula1>ISEVEN(B9)</formula1>'));
+    expect(sheet, contains('errorStyle="warning"'));
+    expect(sheet.indexOf('</sheetData>'), lessThan(sheet.indexOf('<dataV')));
+  });
+
+  test('m3_conditional writes a format of every kind', () {
+    final Map<String, String> parts = readXlsx(named('m3_conditional').build());
+    final String sheet = parts['xl/worksheets/sheet1.xml']!;
+    for (final String type in <String>[
+      'cellIs',
+      'expression',
+      'top10',
+      'aboveAverage',
+      'duplicateValues',
+      'containsText',
+      'colorScale',
+      'dataBar',
+      'iconSet',
+    ]) {
+      expect(sheet, contains('<cfRule type="$type"'));
+    }
+    // Ten rules, priorities 1 to 10 in order; the second format on column B
+    // overlaps the first.
+    expect(
+      RegExp(
+        r'priority="(\d+)"',
+      ).allMatches(sheet).map((Match m) => int.parse(m.group(1)!)),
+      <int>[for (int i = 1; i <= 10; i++) i],
+    );
+    expect(sheet, contains('<conditionalFormatting sqref="B2:B21">'));
+    expect(sheet, contains('<conditionalFormatting sqref="B2:C21">'));
+    expect(parts['xl/styles.xml'], contains('<dxfs count="3">'));
+    expect(sheet.indexOf('</sheetData>'), lessThan(sheet.indexOf('<condit')));
+  });
+
+  test('m3_conditional_x14 writes the Excel 2010 bars and icon sets', () {
+    final String sheet = readXlsx(
+      named('m3_conditional_x14').build(),
+    )['xl/worksheets/sheet1.xml']!;
+    // Two data bars keep their 2007 rules; the x14-only icon sets have none.
+    expect(RegExp('<cfRule type="dataBar"').allMatches(sheet), hasLength(2));
+    expect(sheet, isNot(contains('<cfRule type="iconSet"')));
+    expect(
+      sheet,
+      contains(
+        '<x14:dataBar minLength="0" maxLength="100" '
+        'negativeBarColorSameAsPositive="0" axisPosition="middle">',
+      ),
+    );
+    expect(
+      sheet,
+      contains(
+        '<x14:dataBar minLength="0" maxLength="100" border="1" '
+        'gradient="0">',
+      ),
+    );
+    for (final String set in <String>['3Stars', '3Triangles', '5Boxes']) {
+      expect(sheet, contains('<x14:iconSet iconSet="$set">'));
+    }
+    // The icon sets take priorities 3 to 5 after the bars' 1 and 2.
+    expect(
+      RegExp(
+        r'priority="(\d+)"',
+      ).allMatches(sheet).map((Match m) => int.parse(m.group(1)!)),
+      <int>[1, 2, 3, 4, 5],
+    );
+    expect(sheet, endsWith('</extLst></worksheet>'));
+  });
+
   test('m2_formula_xstring probes _xHHHH_ inside a formula and in text', () {
     final Map<String, String> parts = readXlsx(
       named('m2_formula_xstring').build(),
@@ -374,5 +543,91 @@ void main() {
       parts['xl/worksheets/sheet2.xml'],
       contains('<autoFilter ref="A1:B3"/>'),
     );
+  });
+
+  test('m3_page_setup writes landscape fit-to-width and a scaled sheet', () {
+    final Map<String, String> parts = readXlsx(named('m3_page_setup').build());
+    final String landscape = parts['xl/worksheets/sheet1.xml']!;
+    expect(landscape, contains('<pageSetUpPr fitToPage="1"/>'));
+    expect(
+      landscape,
+      contains(
+        '<printOptions horizontalCentered="1" gridLines="1"/>'
+        '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" '
+        'header="0.3" footer="0.3"/><pageSetup paperSize="9" fitToWidth="1" '
+        'fitToHeight="0" orientation="landscape"/>',
+      ),
+    );
+    final String scaled = parts['xl/worksheets/sheet2.xml']!;
+    expect(scaled, isNot(contains('pageSetUpPr')));
+    expect(
+      scaled,
+      contains(
+        '<pageMargins left="0.25" right="0.25" top="0.5" bottom="0.5" '
+        'header="0.2" footer="0.2"/><pageSetup scale="85" '
+        'firstPageNumber="3" pageOrder="overThenDown" '
+        'useFirstPageNumber="1"/>',
+      ),
+    );
+  });
+
+  test('m3_header_footer writes the texts after pageSetup order', () {
+    final Map<String, String> parts = readXlsx(
+      named('m3_header_footer').build(),
+    );
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      contains(
+        '<headerFooter differentOddEven="1" differentFirst="1">'
+        '<oddHeader>&amp;LR&amp;&amp;D&amp;R&amp;D</oddHeader>'
+        '<oddFooter>Page &amp;P of &amp;N</oddFooter>'
+        '<evenFooter>&amp;A</evenFooter>'
+        '<firstHeader>Cover</firstHeader></headerFooter>',
+      ),
+    );
+  });
+
+  test('m3_protection writes both protections and the cell flags', () {
+    final Map<String, String> parts = readXlsx(named('m3_protection').build());
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      contains(
+        '</sheetData><sheetProtection password="83AF" sheet="1" '
+        'objects="1" scenarios="1" formatColumns="0"/>',
+      ),
+    );
+    expect(
+      parts['xl/workbook.xml'],
+      contains(
+        '<workbookProtection workbookPassword="CBEB" lockStructure="1"/>'
+        '<bookViews>',
+      ),
+    );
+    expect(parts['xl/styles.xml'], contains('<protection locked="0"/>'));
+    expect(parts['xl/styles.xml'], contains('<protection hidden="1"/>'));
+  });
+
+  test('m3_properties writes every field and the five custom properties', () {
+    final Map<String, String> parts = readXlsx(named('m3_properties').build());
+    expect(parts['docProps/core.xml'], contains('<dc:title>Quarterly report'));
+    expect(
+      parts['docProps/core.xml'],
+      contains('<cp:category>Finance</cp:category><cp:contentStatus>Final'),
+    );
+    expect(
+      parts['docProps/app.xml'],
+      contains('<Company>Jetronik</Company><Manager>Ayse Yilmaz</Manager>'),
+    );
+    final String custom = parts['docProps/custom.xml']!;
+    for (final String type in <String>[
+      'vt:lpwstr',
+      'vt:i4',
+      'vt:r8',
+      'vt:bool',
+      'vt:filetime',
+    ]) {
+      expect(custom, contains('<$type>'));
+    }
+    expect(custom, contains('<vt:filetime>2026-10-24T00:00:00Z'));
   });
 }

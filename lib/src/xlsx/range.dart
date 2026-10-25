@@ -28,7 +28,8 @@ final class XlsxRange {
   /// case. Corners given in reverse order are swapped (`D10:B2` is `B2:D10`).
   ///
   /// Throws [ArgumentError] for whole-row or whole-column references (`A:A`,
-  /// `1:3`), references outside the sheet and malformed text.
+  /// `1:3`), references outside the sheet, rows written with leading zeros
+  /// (`A01`) and malformed text.
   factory XlsxRange.parse(String ref) {
     final List<String> parts = ref.split(':');
     if (parts.length > 2) {

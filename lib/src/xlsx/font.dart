@@ -269,8 +269,9 @@ XlsxFont resolveFont(XlsxFont? font) => (font ?? const XlsxFont()).copyWith(
 );
 
 /// Checks a resolved [font] against Excel's limits: a non-empty XML-clean
-/// name of at most 31 UTF-16 code units, a finite size within 1 to 409, a
-/// family within `0..14`, a charset within `0..255` and a valid color.
+/// name of at most 31 UTF-16 code units, a finite size from 1 to 409
+/// points, a family within `0..14`, a charset within `0..255` and a valid
+/// color.
 ///
 /// Throws [ArgumentError] naming the field.
 void validateFont(XlsxFont font) {

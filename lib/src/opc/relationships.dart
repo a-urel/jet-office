@@ -2,9 +2,10 @@
 ///
 /// Ported from quds_office_engine `lib/src/opc/relationships.dart` at commit 15c5d29.
 /// Ported: `RelationshipCollection` and its `toXml`, as the write side only
-/// (no parsing, no lookup, no external targets). What changed: ids are
-/// assigned by [Relationships.add] as `rId1`, `rId2`, ... in call order
-/// unless the caller gives one, and the part is written to an `XmlWriter`.
+/// (no parsing, no lookup). What changed: ids are assigned by
+/// [Relationships.add] as `rId1`, `rId2`, ... in call order unless the
+/// caller gives one, a relationship can be external (a hyperlink), and the
+/// part is written to an `XmlWriter`.
 library;
 
 import '../xml/xml_writer.dart';
@@ -12,8 +13,8 @@ import 'ooxml.dart';
 
 /// Collects the relationships of one source part and writes its `.rels` part.
 final class Relationships {
-  final List<({String id, String type, String target})> _items =
-      <({String id, String type, String target})>[];
+  final List<({String id, String type, String target, bool external})> _items =
+      <({String id, String type, String target, bool external})>[];
   final Set<String> _ids = <String>{};
 
   /// Adds a relationship of [type] to [target] and returns its id.
@@ -26,9 +27,13 @@ final class Relationships {
   /// [target] is written as given, relative to the source part (for example
   /// `worksheets/sheet1.xml`), or to the package root in `_rels/.rels`.
   ///
+  /// With [external], the relationship is written with
+  /// `TargetMode="External"` and [target] is an address outside the package,
+  /// such as a URL.
+  ///
   /// Throws [ArgumentError] when [type], [target] or [id] is empty, or when
   /// [id] is already in use; nothing is added then.
-  String add(String type, String target, {String? id}) {
+  String add(String type, String target, {String? id, bool external = false}) {
     if (type.isEmpty) {
       throw ArgumentError.value(type, 'type', 'Must not be empty.');
     }
@@ -52,7 +57,7 @@ final class Relationships {
       chosen = 'rId$n';
     }
     _ids.add(chosen);
-    _items.add((id: chosen, type: type, target: target));
+    _items.add((id: chosen, type: type, target: target, external: external));
     return chosen;
   }
 
@@ -66,6 +71,7 @@ final class Relationships {
       w.attribute('Id', item.id);
       w.attribute('Type', item.type);
       w.attribute('Target', item.target);
+      if (item.external) w.attribute('TargetMode', 'External');
       w.end();
     }
     w.end();

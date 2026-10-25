@@ -14,20 +14,42 @@
 /// right-to-left, and the pane of `sheet_view.dart` with its `selection`;
 /// the trailer writes `autoFilter` and `mergeCells` from ranges that the
 /// writer has validated (Quds wrote any filter string unchecked and accepted
-/// overlapping merges).
+/// overlapping merges); `hyperlinks` come from links the writer has
+/// validated, and the sheet's relationships part, which Quds did not write,
+/// carries their external targets; `conditionalFormatting` (see
+/// `conditional_format.dart`) and `dataValidations` (see
+/// `data_validation.dart`) come between them, where Quds wrote both before
+/// `mergeCells`; the `extLst` of the Excel 2010 conditional formats (see
+/// `conditional_format_x14.dart`) comes last; the page setup (see
+/// `page_setup.dart`) writes `pageSetUpPr` in `sheetPr` and, after
+/// `hyperlinks`, `printOptions`, `pageMargins` and `pageSetup`; the header and
+/// footer (see `header_footer.dart`) write `headerFooter` after `pageSetup`;
+/// the protection (see `sheet_protection.dart`) writes `sheetProtection`
+/// right after `sheetData`, where Quds wrote it after `autoFilter`.
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
-/// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter` and
-/// `mergeCells`.
+/// `sheetFormatPr` and `cols` before `sheetData`, then `sheetProtection`,
+/// `autoFilter`,
+/// `mergeCells`, `conditionalFormatting`, `dataValidations`,
+/// `hyperlinks`, `printOptions`, `pageMargins`, `pageSetup`, `headerFooter`
+/// and `extLst`.
 library;
 
 import '../opc/ooxml.dart';
+import '../opc/relationships.dart';
+import '../xml/xml_escape.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
 import 'color.dart';
+import 'conditional_format.dart';
+import 'conditional_format_x14.dart';
+import 'data_validation.dart';
+import 'header_footer.dart';
 import 'limits.dart';
+import 'page_setup.dart';
 import 'range.dart';
+import 'sheet_protection.dart';
 import 'sheet_view.dart';
 
 /// The width Excel gives a column of Calibri 11 when nothing sets one: 8.43
@@ -49,6 +71,19 @@ typedef WorksheetColumn = ({
   bool collapsed,
 });
 
+/// One `hyperlink` element as the trailer writes it.
+///
+/// `relationshipId` is the `r:id` of an external link, `null` for an
+/// internal one; `location` and `tooltip` are `null` when absent. The
+/// strings are unescaped: the trailer applies `escapeXstring`.
+typedef WorksheetHyperlink = ({
+  String ref,
+  String? relationshipId,
+  String? location,
+  String? tooltip,
+  String display,
+});
+
 /// What the header and the trailer of a worksheet are made from.
 ///
 /// Plain, already checked values: the writer validates them when they are
@@ -56,6 +91,7 @@ typedef WorksheetColumn = ({
 final class WorksheetSettings {
   /// Creates the settings of one worksheet.
   const WorksheetSettings({
+    required this.sheetNumber,
     this.columns = const <WorksheetColumn?>[],
     this.defaultColumnWidth,
     this.defaultRowHeight,
@@ -66,7 +102,17 @@ final class WorksheetSettings {
     this.summaryRight = true,
     this.autoFilter,
     this.merges = const <XlsxRange>[],
+    this.conditionalFormats = const <WorksheetConditionalFormat>[],
+    this.dataValidations = const <XlsxDataValidation>[],
+    this.hyperlinks = const <WorksheetHyperlink>[],
+    this.pageSetup,
+    this.headerFooter,
+    this.protection,
   });
+
+  /// The sheet's 1-based creation order, which the ids of its Excel 2010
+  /// conditional-format rules carry.
+  final int sheetNumber;
 
   /// The columns from A on; `null` keeps a column at its default.
   final List<WorksheetColumn?> columns;
@@ -98,6 +144,25 @@ final class WorksheetSettings {
 
   /// The merged ranges, in the order they were merged.
   final List<XlsxRange> merges;
+
+  /// The conditional formats, in the order they were registered, with
+  /// their dxf ids and priorities.
+  final List<WorksheetConditionalFormat> conditionalFormats;
+
+  /// The data validations, in the order they were added.
+  final List<XlsxDataValidation> dataValidations;
+
+  /// The hyperlinks, in cell order of writing.
+  final List<WorksheetHyperlink> hyperlinks;
+
+  /// How the sheet prints, or `null` for no page setup.
+  final XlsxPageSetup? pageSetup;
+
+  /// The text printed in the margins, or `null` for none.
+  final XlsxHeaderFooter? headerFooter;
+
+  /// What the sheet's protection allows, or `null` for an unprotected sheet.
+  final XlsxSheetProtection? protection;
 }
 
 /// The `<worksheet>` frame before the rows: the XML declaration, the
@@ -123,12 +188,17 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 }
 
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
-/// then `autoFilter` and `mergeCells` when the sheet has them, then
-/// `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
+/// then `sheetProtection`, `autoFilter`, `mergeCells`, `conditionalFormatting`,
+/// `dataValidations`, `hyperlinks`, the page setup's `printOptions`,
+/// `pageMargins`, `pageSetup` and `headerFooter`, and the `extLst` of the
+/// Excel 2010 conditional formats when the sheet has them, then `</worksheet>`.
+/// [hasRows] must match the call to [worksheetHeader].
 String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
   final StringBuffer out = StringBuffer();
   final XmlWriter w = XmlWriter(out);
   if (hasRows) w.raw('</sheetData>');
+  final XlsxSheetProtection? protection = settings.protection;
+  if (protection != null) writeSheetProtection(w, protection);
   final XlsxRange? filter = settings.autoFilter;
   if (filter != null) {
     w.empty('autoFilter', <String, String>{'ref': filter.ref});
@@ -141,15 +211,74 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
     }
     w.end();
   }
+  writeConditionalFormats(w, settings.conditionalFormats, settings.sheetNumber);
+  writeDataValidations(w, settings.dataValidations);
+  if (settings.hyperlinks.isNotEmpty) {
+    w.start('hyperlinks');
+    for (final WorksheetHyperlink link in settings.hyperlinks) {
+      // CT_Hyperlink attribute order: ref, r:id, location, tooltip, display.
+      final String? id = link.relationshipId;
+      final String? location = link.location;
+      final String? tooltip = link.tooltip;
+      w.empty('hyperlink', <String, String>{
+        'ref': link.ref,
+        'r:id': ?id,
+        if (location != null) 'location': escapeXstring(location),
+        if (tooltip != null) 'tooltip': escapeXstring(tooltip),
+        'display': escapeXstring(link.display),
+      });
+    }
+    w.end();
+  }
+  final XlsxPageSetup? pageSetup = settings.pageSetup;
+  if (pageSetup != null) writePageSetup(w, pageSetup);
+  final XlsxHeaderFooter? headerFooter = settings.headerFooter;
+  if (headerFooter != null) writeHeaderFooter(w, headerFooter);
+  // Last: CT_Worksheet ends with extLst.
+  writeX14ConditionalFormats(
+    w,
+    settings.conditionalFormats,
+    settings.sheetNumber,
+  );
   w.raw('</worksheet>');
   return out.toString();
 }
 
-/// Writes `sheetPr` when the sheet has a tab color or an outline summary
-/// that is not Excel's default (below and right).
+/// The ZIP entry name of the relationships part of the worksheet created
+/// [number]th (1-based).
+String worksheetRelsPartName(int number) =>
+    'xl/worksheets/_rels/sheet$number.xml.rels';
+
+/// Renders the relationships part of a worksheet whose external hyperlink
+/// targets are the keys of [relationshipIds], or returns `null` when there
+/// are none.
+///
+/// Each target gets the id it maps to, the same id its `hyperlink` elements
+/// carry as `r:id`; the caller assigns the ids, so this part never numbers
+/// them on its own. Relationships are written in map order. The targets
+/// are written as given; the caller has percent-encoded them.
+String? worksheetRelationshipsXml(Map<String, String> relationshipIds) {
+  if (relationshipIds.isEmpty) return null;
+  final Relationships rels = Relationships();
+  for (final MapEntry<String, String> e in relationshipIds.entries) {
+    rels.add(RelType.hyperlink, e.key, id: e.value, external: true);
+  }
+  final StringBuffer out = StringBuffer();
+  rels.write(XmlWriter(out));
+  return out.toString();
+}
+
+/// Writes `sheetPr` when the sheet has a tab color, an outline summary that
+/// is not Excel's default (below and right) or a page setup that fits the
+/// sheet to pages.
 void _writeSheetPr(XmlWriter w, WorksheetSettings settings) {
   final XlsxColor? tabColor = settings.tabColor;
-  if (tabColor == null && settings.summaryBelow && settings.summaryRight) {
+  final XlsxPageSetup? pageSetup = settings.pageSetup;
+  final bool fitToPage = pageSetup != null && pageSetupFitsToPage(pageSetup);
+  if (tabColor == null &&
+      settings.summaryBelow &&
+      settings.summaryRight &&
+      !fitToPage) {
     return;
   }
   w.start('sheetPr');
@@ -164,6 +293,7 @@ void _writeSheetPr(XmlWriter w, WorksheetSettings settings) {
     if (!settings.summaryRight) w.attribute('summaryRight', '0');
     w.end();
   }
+  if (fitToPage) w.empty('pageSetUpPr', <String, String>{'fitToPage': '1'});
   w.end();
 }
 

@@ -307,6 +307,24 @@ void main() {
       expect(_xml(r), _emptyGolden);
     });
 
+    test('a diagonal side without a direction shares the border of none', () {
+      const XlsxBorderSide thin = XlsxBorderSide(style: XlsxBorderStyle.thin);
+      final StyleRegistry r = StyleRegistry();
+      final int plain = r.idFor(
+        const XlsxStyle(border: XlsxBorder(left: thin)),
+      );
+      expect(
+        r.idFor(
+          const XlsxStyle(
+            border: XlsxBorder(left: thin, diagonal: thin),
+          ),
+        ),
+        plain,
+      );
+      expect(r.idFor(const XlsxStyle(border: XlsxBorder(diagonal: thin))), 0);
+      expect(_xml(r), contains('<borders count="2">'));
+    });
+
     test('a colorless gray125 pattern is fill 1', () {
       final StyleRegistry r = StyleRegistry();
       expect(
@@ -431,6 +449,26 @@ void main() {
     });
   });
 
+  test('an invalid border after a valid new font and fill registers none', () {
+    final StyleRegistry r = StyleRegistry();
+    expect(
+      () => r.idFor(
+        const XlsxStyle(
+          font: XlsxFont(name: 'New font'),
+          fill: XlsxFill.solid(XlsxColor.rgb(0xFFFF00)),
+          border: XlsxBorder(
+            left: XlsxBorderSide(
+              style: XlsxBorderStyle.thin,
+              color: XlsxColor.indexed(66),
+            ),
+          ),
+        ),
+      ),
+      throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'left')),
+    );
+    expect(_xml(r), _emptyGolden);
+  });
+
   test('an invalid part that is unused by the file is still rejected', () {
     // A none pattern writes fill 0 whatever its colors, but a bad color is
     // still the caller's mistake.
@@ -525,6 +563,45 @@ void main() {
       );
       expect(_xml(r), contains('<fonts count="512">'));
       expect(_xml(r), contains('numFmtId="164" formatCode="0.0"'));
+    });
+
+    test('a border of a rolled-back list is not kept', () {
+      final StyleRegistry r = StyleRegistry();
+      expect(
+        () => r.idsFor(const <XlsxStyle?>[
+          XlsxStyle(
+            border: XlsxBorder(
+              top: XlsxBorderSide(style: XlsxBorderStyle.thin),
+            ),
+          ),
+          XlsxStyle(numFmt: XlsxNumFmt.builtin(200)),
+        ]),
+        throwsArgumentError,
+      );
+      expect(_xml(r), contains('<borders count="1">'));
+      expect(_xml(r), _xml(StyleRegistry()));
+    });
+
+    test('names the failing style with fieldName, keeping the message', () {
+      final StyleRegistry r = StyleRegistry();
+      expect(
+        () => r.idsFor(const <XlsxStyle?>[
+          XlsxStyle(font: XlsxFont(bold: true)),
+          null,
+          XlsxStyle(numFmt: XlsxNumFmt.builtin(200)),
+        ], fieldName: (int i) => 'columns[$i].style'),
+        throwsA(
+          isA<ArgumentError>()
+              .having((ArgumentError e) => e.name, 'name', 'columns[2].style')
+              .having((ArgumentError e) => e.invalidValue, 'value', 200)
+              .having(
+                (ArgumentError e) => e.message,
+                'message',
+                'A built-in number format id must be in 0..163.',
+              ),
+        ),
+      );
+      expect(_xml(r), _xml(StyleRegistry()));
     });
 
     test('an invalid later style records none of the earlier', () {

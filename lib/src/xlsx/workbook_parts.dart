@@ -11,8 +11,11 @@
 /// load; the root relationships point to the property parts; and every part
 /// is written through `XmlWriter` with scrub-checked attribute values instead
 /// of string concatenation; a sheet with an auto filter gets the hidden
-/// `_xlnm._FilterDatabase` defined name Excel expects. Drawings, charts,
-/// pictures and passwords are not ported in this phase.
+/// `_xlnm._FilterDatabase` defined name Excel expects, and the defined
+/// names, print areas and print titles are written by one `definedNames`
+/// writer (Quds' print titles were relative and unquoted). Drawings, charts
+/// and pictures are not ported in this phase; `workbookProtection` (see
+/// `sheet_protection.dart`) comes before `bookViews`.
 library;
 
 import '../opc/content_types.dart';
@@ -20,7 +23,11 @@ import '../opc/ooxml.dart';
 import '../opc/relationships.dart';
 import '../xml/xml_escape.dart';
 import '../xml/xml_writer.dart';
+import 'cell_ref.dart';
+import 'defined_name.dart';
+import 'formula_text.dart';
 import 'range.dart';
+import 'sheet_protection.dart';
 import 'sheet_view.dart';
 
 /// A worksheet as the workbook lists it.
@@ -31,13 +38,44 @@ import 'sheet_view.dart';
 /// `sheetId`, and its relationship id is [worksheetRelationshipId].
 /// `visibility` is written as the `state` of a hidden sheet. `autoFilter` is
 /// the sheet's filter range, or `null`; it becomes the `_xlnm._FilterDatabase`
-/// defined name.
+/// defined name. `names` holds the sheet's other defined names.
 typedef WorkbookSheet = ({
   String name,
   int number,
   XlsxSheetVisibility visibility,
   XlsxRange? autoFilter,
+  SheetNames names,
 });
+
+/// The defined names of one sheet besides its filter: its print area and
+/// titles, and the names registered on it.
+final class SheetNames {
+  /// Names of a sheet; each part defaults to none.
+  const SheetNames({
+    this.printArea = const <XlsxRange>[],
+    this.printTitleRows,
+    this.printTitleColumns,
+    this.defined = const <XlsxDefinedName>[],
+  });
+
+  /// A sheet with no print setting and no names.
+  static const SheetNames none = SheetNames();
+
+  /// The print area's ranges; empty for none.
+  final List<XlsxRange> printArea;
+
+  /// The first and last row (0-based, inclusive) repeated on every printed
+  /// page, or `null`.
+  final (int, int)? printTitleRows;
+
+  /// The first and last column (0-based, inclusive) repeated on every
+  /// printed page, or `null`.
+  final (int, int)? printTitleColumns;
+
+  /// The sheet-scoped names, in definition order; their formulas are
+  /// already checked (see [checkDefinedName]).
+  final List<XlsxDefinedName> defined;
+}
 
 /// The relationship id of the worksheet created [number]th (1-based).
 ///
@@ -59,23 +97,32 @@ String worksheetPartName(int number) => 'xl/worksheets/sheet$number.xml';
 /// workbook with formulas needs because the writer does not compute their
 /// results.
 ///
-/// After `sheets`, one hidden `_xlnm._FilterDatabase` defined name is written
-/// per filtered sheet, in tab order, scoped by `localSheetId` (the tab index)
-/// and reading `'<name>'!<absoluteRef>`: the name is always quoted with `'`
-/// doubled. The text is a formula (ST_Formula), so it goes through
-/// [escapeFormulaText] like `<f>` text, which escapes `_xHHHH_` exactly as
-/// [escapeXstring] escapes the `sheet` element's name attribute; the two
-/// spellings therefore agree.
+/// [protection], when given, writes `workbookProtection` before `bookViews`.
+///
+/// After `sheets`, `definedNames` lists [workbookNames] in definition
+/// order, then for each tab in tab order its hidden `_xlnm._FilterDatabase`
+/// (when it has an auto filter), `_xlnm.Print_Area`, `_xlnm.Print_Titles` and
+/// the names registered on it. A name of a tab is scoped by `localSheetId`,
+/// the tab index. Every sheet reference is `'<name>'!<ref>`, always quoted
+/// with `'` doubled and absolute (Quds wrote relative, unquoted print
+/// titles). The text is a formula (ST_Formula), so it goes through
+/// [escapeFormulaText] once, like `<f>` text, which escapes `_xHHHH_`
+/// exactly as [escapeXstring] escapes the `sheet` element's name attribute;
+/// the two spellings therefore agree. Print titles list the columns before
+/// the rows, as Excel writes them.
 void writeWorkbook(
   XmlWriter w, {
   required List<WorkbookSheet> tabs,
   required int activeTab,
   required bool fullCalcOnLoad,
+  List<XlsxDefinedName> workbookNames = const <XlsxDefinedName>[],
+  XlsxWorkbookProtection? protection,
 }) {
   w.declaration();
   w.start('workbook');
   w.attribute('xmlns', Ns.main);
   w.attribute('xmlns:r', Ns.rel);
+  if (protection != null) writeWorkbookProtection(w, protection);
   w.start('bookViews');
   w.empty('workbookView', <String, String>{'activeTab': '$activeTab'});
   w.end();
@@ -90,29 +137,117 @@ void writeWorkbook(
     });
   }
   w.end();
-  _writeFilterNames(w, tabs);
+  _writeDefinedNames(w, workbookNames, tabs);
   if (fullCalcOnLoad) {
     w.empty('calcPr', const <String, String>{'fullCalcOnLoad': '1'});
   }
   w.end();
 }
 
-/// Writes `definedNames` with a `_xlnm._FilterDatabase` for each sheet of
-/// [tabs] that has an auto filter, or nothing when none has.
-void _writeFilterNames(XmlWriter w, List<WorkbookSheet> tabs) {
-  if (!tabs.any((WorkbookSheet s) => s.autoFilter != null)) return;
+/// Writes `definedNames` for [workbookNames] and [tabs], or nothing when
+/// there is no name.
+void _writeDefinedNames(
+  XmlWriter w,
+  List<XlsxDefinedName> workbookNames,
+  List<WorkbookSheet> tabs,
+) {
+  final bool any =
+      workbookNames.isNotEmpty ||
+      tabs.any(
+        (WorkbookSheet s) =>
+            s.autoFilter != null ||
+            s.names.printArea.isNotEmpty ||
+            s.names.printTitleRows != null ||
+            s.names.printTitleColumns != null ||
+            s.names.defined.isNotEmpty,
+      );
+  if (!any) return;
   w.start('definedNames');
-  for (int index = 0; index < tabs.length; index++) {
-    final XlsxRange? filter = tabs[index].autoFilter;
-    if (filter == null) continue;
-    final String quoted = "'${tabs[index].name.replaceAll("'", "''")}'";
-    w.start('definedName');
-    w.attribute('name', '_xlnm._FilterDatabase');
-    w.attribute('localSheetId', '$index');
-    w.attribute('hidden', '1');
-    w.raw(escapeFormulaText('$quoted!${filter.absoluteRef}'));
-    w.end();
+  for (final XlsxDefinedName name in workbookNames) {
+    _writeName(
+      w,
+      name.name,
+      null,
+      name.formula,
+      hidden: name.hidden,
+      comment: name.comment,
+    );
   }
+  for (int index = 0; index < tabs.length; index++) {
+    final WorkbookSheet tab = tabs[index];
+    final String sheet = tab.name;
+    final XlsxRange? filter = tab.autoFilter;
+    if (filter != null) {
+      _writeName(
+        w,
+        '_xlnm._FilterDatabase',
+        index,
+        quotedSheetRef(sheet, filter.absoluteRef),
+        hidden: true,
+      );
+    }
+    final SheetNames names = tab.names;
+    if (names.printArea.isNotEmpty) {
+      _writeName(
+        w,
+        '_xlnm.Print_Area',
+        index,
+        <String>[
+          for (final XlsxRange r in names.printArea)
+            quotedSheetRef(sheet, r.absoluteRef),
+        ].join(','),
+      );
+    }
+    final (int, int)? rows = names.printTitleRows;
+    final (int, int)? columns = names.printTitleColumns;
+    if (rows != null || columns != null) {
+      _writeName(
+        w,
+        '_xlnm.Print_Titles',
+        index,
+        <String>[
+          if (columns != null)
+            quotedSheetRef(
+              sheet,
+              '\$${columnName(columns.$1)}:\$${columnName(columns.$2)}',
+            ),
+          if (rows != null)
+            quotedSheetRef(sheet, '\$${rows.$1 + 1}:\$${rows.$2 + 1}'),
+        ].join(','),
+      );
+    }
+    for (final XlsxDefinedName name in names.defined) {
+      _writeName(
+        w,
+        name.name,
+        index,
+        name.formula,
+        hidden: name.hidden,
+        comment: name.comment,
+      );
+    }
+  }
+  w.end();
+}
+
+/// Writes one `definedName`: its [name], the scope [localSheetId] (the tab
+/// index, or `null` for the workbook), the [text] as a formula, and its
+/// optional [comment] and [hidden] flag. The name and comment are
+/// ST_Xstring, the text ST_Formula.
+void _writeName(
+  XmlWriter w,
+  String name,
+  int? localSheetId,
+  String text, {
+  bool hidden = false,
+  String? comment,
+}) {
+  w.start('definedName');
+  w.attribute('name', escapeXstring(name));
+  if (localSheetId != null) w.attribute('localSheetId', '$localSheetId');
+  if (comment != null) w.attribute('comment', escapeXstring(comment));
+  if (hidden) w.attribute('hidden', '1');
+  w.raw(escapeFormulaText(text));
   w.end();
 }
 
@@ -138,21 +273,23 @@ void writeWorkbookRelationships(XmlWriter w, int sheetCount) {
 }
 
 /// Writes the package relationships, `_rels/.rels`, to [w]: the workbook
-/// and the core and extended property parts.
-void writeRootRelationships(XmlWriter w) {
-  (Relationships()
-        ..add(RelType.officeDocument, 'xl/workbook.xml')
-        ..add(RelType.coreProperties, 'docProps/core.xml')
-        ..add(RelType.extendedProperties, 'docProps/app.xml'))
-      .write(w);
+/// and the core and extended property parts, and with [custom] the custom
+/// property part.
+void writeRootRelationships(XmlWriter w, {bool custom = false}) {
+  final Relationships rels = Relationships()
+    ..add(RelType.officeDocument, 'xl/workbook.xml')
+    ..add(RelType.coreProperties, 'docProps/core.xml')
+    ..add(RelType.extendedProperties, 'docProps/app.xml');
+  if (custom) rels.add(RelType.customProperties, 'docProps/custom.xml');
+  rels.write(w);
 }
 
 /// Writes `[Content_Types].xml` for a workbook of [sheetCount] sheets to [w].
 ///
 /// Relationship parts and other XML get default types; the workbook, every
 /// worksheet, the styles, the shared strings and both property parts get an
-/// override.
-void writeContentTypes(XmlWriter w, int sheetCount) {
+/// override, and with [custom] so does the custom property part.
+void writeContentTypes(XmlWriter w, int sheetCount, {bool custom = false}) {
   final ContentTypes types = ContentTypes()
     ..addDefault('rels', ContentType.relationships)
     ..addDefault('xml', ContentType.xml)
@@ -161,6 +298,9 @@ void writeContentTypes(XmlWriter w, int sheetCount) {
     ..addOverride('/xl/sharedStrings.xml', ContentType.sharedStrings)
     ..addOverride('/docProps/core.xml', ContentType.coreProperties)
     ..addOverride('/docProps/app.xml', ContentType.extendedProperties);
+  if (custom) {
+    types.addOverride('/docProps/custom.xml', ContentType.customProperties);
+  }
   for (int number = 1; number <= sheetCount; number++) {
     types.addOverride('/${worksheetPartName(number)}', ContentType.worksheet);
   }

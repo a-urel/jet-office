@@ -80,6 +80,28 @@ void main() {
       expect(const XlsxPane.split(x: 1).isFrozen, isFalse);
     });
 
+    test('compares split offsets as the rounded twips written', () {
+      // 10.02 and 9.99 points are 200.4 and 199.8 twips, both written 200.
+      for (final (XlsxPane a, XlsxPane b) in <(XlsxPane, XlsxPane)>[
+        (const XlsxPane.split(x: 10), const XlsxPane.split(x: 10.02)),
+        (const XlsxPane.split(y: 10), const XlsxPane.split(y: 9.99)),
+        (const XlsxPane.split(x: 0.01), const XlsxPane.split()),
+        (const XlsxPane.split(x: -0.01), const XlsxPane.split()),
+      ]) {
+        expect(a, b, reason: '$a, $b');
+        expect(a.hashCode, b.hashCode, reason: '$a, $b');
+      }
+      // 10.03 points is 200.6 twips, written 201.
+      expect(
+        const XlsxPane.split(x: 10),
+        isNot(const XlsxPane.split(x: 10.03)),
+      );
+      // Not constants, so the two panes are distinct instances.
+      final double nan = double.parse('NaN');
+      expect(XlsxPane.split(x: nan), XlsxPane.split(x: -nan));
+      expect(XlsxPane.split(x: nan).hashCode, XlsxPane.split(x: -nan).hashCode);
+    });
+
     test('toString', () {
       expect(
         const XlsxPane.frozen(rows: 1, columns: 2).toString(),

@@ -96,9 +96,110 @@ abstract final class XlsxLimits {
   /// counting the ungrouped one. A deeper level throws [ArgumentError].
   static const int maxOutlineLevel = 7;
 
-  /// The maximum number of hyperlinks in a worksheet. No writer enforces it
-  /// yet; the sheet writer will once it can write hyperlinks.
+  /// The maximum number of hyperlinks in a worksheet.
+  ///
+  /// Microsoft's "Excel specifications and limits" page: hyperlinks in a
+  /// worksheet, 65,530. A sheet's 65,531st link throws [XlsxLimitError]
+  /// (`hyperlinks`) from the sheet writer's `row`, before its cell is
+  /// written.
   static const int maxHyperlinksPerSheet = 65530;
+
+  /// The longest hyperlink address, in UTF-16 code units, counted as
+  /// written (after percent-encoding).
+  ///
+  /// The M3 plan sets 2,079, the length Excel's own Insert Hyperlink
+  /// dialog accepts. A longer address throws [ArgumentError] when its cell
+  /// is written. It was not confirmed against Microsoft's limits page,
+  /// which gives no figure.
+  static const int maxHyperlinkAddressLength = 2079;
+
+  /// The longest ScreenTip (hyperlink tooltip), in UTF-16 code units.
+  ///
+  /// The M3 plan sets 255, the length Excel's Set Hyperlink ScreenTip
+  /// dialog accepts. A longer tooltip throws [ArgumentError] when its cell
+  /// is written.
+  static const int maxScreenTipLength = 255;
+
+  /// The longest defined name, in UTF-16 code units. A longer name throws
+  /// [ArgumentError] when it is registered.
+  ///
+  /// Microsoft's "Excel specifications and limits" page gives no figure for
+  /// names; 255 is the limit the M3 plan sets, which Excel's own Name box
+  /// enforces. It was not confirmed against ECMA-376 here.
+  static const int maxDefinedNameLength = 255;
+
+  /// The longest comment of a defined name, in UTF-16 code units. Same
+  /// source as [maxDefinedNameLength].
+  static const int maxDefinedNameCommentLength = 255;
+
+  /// The longest name of a custom document property, in UTF-16 code units.
+  ///
+  /// The M3 plan sets 255, the length of Excel's Custom Properties name box.
+  /// Not confirmed against Microsoft's limits page, which gives no figure.
+  static const int maxCustomPropertyNameLength = 255;
+
+  /// The longest title of a validation's input or error message, in UTF-16
+  /// code units.
+  ///
+  /// The M3 plan sets 32, the length Excel's Data Validation dialog accepts
+  /// for its Title fields. A longer title throws [ArgumentError] when the
+  /// validation is registered. Not confirmed against Microsoft's limits
+  /// page, which gives no figure.
+  static const int maxValidationTitleLength = 32;
+
+  /// The longest input or error message of a validation, in UTF-16 code
+  /// units.
+  ///
+  /// The M3 plan sets 255, the length Excel's Data Validation dialog accepts
+  /// for its message fields. A longer message throws [ArgumentError] when
+  /// the validation is registered.
+  static const int maxValidationMessageLength = 255;
+
+  /// The longest inline validation list, in UTF-16 code units, counted
+  /// between the outer quotes as written (a quote inside an item counts
+  /// twice, a comma between items once).
+  ///
+  /// Microsoft's "Excel specifications and limits" page gives no figure; 255
+  /// is the limit Excel's Data Validation dialog enforces on a typed Source.
+  /// A longer list throws [ArgumentError] when the validation is registered;
+  /// `XlsxDataValidation.listFrom` takes a range or a name instead.
+  static const int maxValidationListLength = 255;
+
+  /// The highest rank of a top or bottom conditional-format rule: the top
+  /// 1,000 items. A percent rank goes from 1 to 100 instead.
+  ///
+  /// Microsoft's "Excel specifications and limits" page gives no figure;
+  /// 1,000 is the most Excel's Top 10 Items dialog accepts (and 100 its Top
+  /// 10 % dialog). A rank outside 1 to this, or 1 to 100 for a percent,
+  /// throws [ArgumentError] when the format is registered.
+  static const int maxTopBottomRank = 1000;
+
+  /// The lowest print scale of a page setup, in percent. ECMA-376 and
+  /// Excel's Page Setup dialog both allow 10.
+  static const int minPageScale = 10;
+
+  /// The highest print scale of a page setup, in percent. Excel's Page Setup
+  /// dialog allows 400. A scale outside 10 to this throws [ArgumentError]
+  /// when the page setup is registered.
+  static const int maxPageScale = 400;
+
+  /// The most pages a page setup can fit the sheet to, wide or tall: the
+  /// `unsignedShort` maximum of ECMA-376's `fitToWidth` and `fitToHeight`.
+  static const int maxFitToPages = 32767;
+
+  /// The highest first page number of a page setup: Excel's Page Setup
+  /// dialog accepts up to 32,767.
+  static const int maxFirstPageNumber = 32767;
+
+  /// The highest paper size id of a page setup: ECMA-376's `paperSize`
+  /// list, the one Excel uses, runs from 1 to 118.
+  static const int maxPaperSize = 118;
+
+  /// The most characters one header or footer text holds: Excel's Header
+  /// & Footer dialog and its "Excel specifications and limits" page allow
+  /// 255, field codes included. A longer text throws [ArgumentError] when
+  /// the header or footer is registered.
+  static const int maxHeaderFooterLength = 255;
 }
 
 /// Thrown when a write would exceed one of the [XlsxLimits].

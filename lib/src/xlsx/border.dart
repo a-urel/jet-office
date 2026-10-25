@@ -264,9 +264,11 @@ void _writeSide(XmlWriter w, String name, XlsxBorderSide? side) {
 /// `vertical` and `horizontal` only when they draw a line. A side that draws
 /// no line (no style, or `none`) is written empty and without its color, so
 /// it reads like an unset side. `diagonalUp` and `diagonalDown` are written
-/// when `true`, `outline` when `false`. Borders that look the same therefore
-/// write the same text, which the registry dedupes on. The border must have
-/// passed [validateBorder].
+/// when `true`, `outline` when `false`. The `diagonal` side's line is
+/// written only when `diagonalUp` or `diagonalDown` is set; without a
+/// direction Excel draws no diagonal, so it is written empty. Borders that
+/// look the same therefore write the same text, which the registry dedupes
+/// on. The border must have passed [validateBorder].
 void writeBorderXml(XmlWriter w, XlsxBorder border) {
   w.start('border');
   if (border.diagonalUp ?? false) {
@@ -282,7 +284,11 @@ void writeBorderXml(XmlWriter w, XlsxBorder border) {
   _writeSide(w, 'right', border.right);
   _writeSide(w, 'top', border.top);
   _writeSide(w, 'bottom', border.bottom);
-  _writeSide(w, 'diagonal', border.diagonal);
+  // Without a direction the diagonal side is never drawn; written empty, the
+  // border dedupes with the same border without one.
+  final bool diagonal =
+      (border.diagonalUp ?? false) || (border.diagonalDown ?? false);
+  _writeSide(w, 'diagonal', diagonal ? border.diagonal : null);
   if (_draws(border.vertical)) {
     _writeSide(w, 'vertical', border.vertical);
   }

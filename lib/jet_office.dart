@@ -18,6 +18,28 @@ export 'src/xlsx/alignment.dart'
 export 'src/xlsx/border.dart' show XlsxBorder, XlsxBorderSide, XlsxBorderStyle;
 export 'src/xlsx/color.dart' show XlsxColor;
 export 'src/xlsx/column.dart' show XlsxColumn;
+export 'src/xlsx/comparison.dart' show XlsxComparison;
+export 'src/xlsx/conditional_format.dart'
+    show
+        XlsxAverageRule,
+        XlsxCellValueRule,
+        XlsxCfValue,
+        XlsxCfValueType,
+        XlsxColorScale,
+        XlsxConditionalFormat,
+        XlsxConditionalRule,
+        XlsxDataBar,
+        XlsxDataBarAxis,
+        XlsxDuplicateRule,
+        XlsxExpressionRule,
+        XlsxIconSet,
+        XlsxIconSetType,
+        XlsxTextOperator,
+        XlsxTextRule,
+        XlsxTopBottomRule;
+export 'src/xlsx/data_validation.dart'
+    show XlsxDataValidation, XlsxValidationErrorStyle, XlsxValidationType;
+export 'src/xlsx/defined_name.dart' show XlsxDefinedName;
 export 'src/xlsx/fill.dart'
     show
         XlsxFill,
@@ -27,19 +49,26 @@ export 'src/xlsx/fill.dart'
         XlsxPatternType;
 export 'src/xlsx/font.dart'
     show XlsxFont, XlsxFontScheme, XlsxFontScript, XlsxUnderline;
+export 'src/xlsx/header_footer.dart' show XlsxHeaderFooter;
+export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/number_format.dart' show XlsxNumFmt;
+export 'src/xlsx/page_setup.dart'
+    show
+        XlsxOrientation,
+        XlsxPageMargins,
+        XlsxPageOrder,
+        XlsxPageSetup,
+        XlsxPaperSize;
 export 'src/xlsx/properties.dart' show XlsxProperties;
 export 'src/xlsx/range.dart' show XlsxRange;
+export 'src/xlsx/sheet_protection.dart'
+    show XlsxSheetProtection, XlsxWorkbookProtection;
 export 'src/xlsx/sheet_view.dart'
     show XlsxPane, XlsxSheetView, XlsxSheetVisibility;
+export 'src/xlsx/sheet_writer.dart' show XlsxSheetWriter;
 export 'src/xlsx/style.dart' show XlsxStyle;
 export 'src/xlsx/values.dart' show XlsxCell, XlsxDate, XlsxDecimal, XlsxFormula;
 export 'src/xlsx/warnings.dart' show XlsxLocale, XlsxWarning, XlsxWarningCode;
 export 'src/xlsx/xlsx_writer.dart'
-    show
-        XlsxResult,
-        XlsxSheetWriter,
-        XlsxStreamWriter,
-        XlsxWriter,
-        XlsxWriterBase;
+    show XlsxResult, XlsxStreamWriter, XlsxWriter, XlsxWriterBase;

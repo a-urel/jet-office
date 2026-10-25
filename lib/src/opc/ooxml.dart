@@ -7,7 +7,8 @@
 /// regrouped as [Ns], [RelType] and [ContentType]. What changed: the Word,
 /// PowerPoint, VML and other constants nothing in the XLSX writer needs are
 /// not ported. The values are the ECMA-376 transitional ones and none differs
-/// from Quds.
+/// from Quds; [Ns.x14] and [Ns.xm], Microsoft's extension namespaces for the
+/// Excel 2010 conditional formats, are new.
 library;
 
 /// XML namespace URIs.
@@ -48,6 +49,24 @@ abstract final class Ns {
   /// Extended (application) properties, `docProps/app.xml`.
   static const String extendedProperties =
       'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties';
+
+  /// Custom properties, `docProps/custom.xml`.
+  static const String customProperties =
+      'http://schemas.openxmlformats.org/officeDocument/2006/custom-properties';
+
+  /// Document property value types (`vt:`), used by `docProps/custom.xml`.
+  static const String docPropsVTypes =
+      'http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes';
+
+  /// SpreadsheetML 2009 (`x14:`), Excel 2010's extensions (MS-XLSX):
+  /// the data bars and icon sets of its conditional formats.
+  static const String x14 =
+      'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
+
+  /// Excel 2006 main (`xm:`, MS-XLSX): the formulas (`xm:f`) and ranges
+  /// (`xm:sqref`) inside Excel 2010 extensions.
+  static const String xm =
+      'http://schemas.microsoft.com/office/excel/2006/main';
 }
 
 /// Relationship type URIs.
@@ -68,6 +87,10 @@ abstract final class RelType {
   static const String sharedStrings =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings';
 
+  /// A hyperlink to an external target; used with `TargetMode="External"`.
+  static const String hyperlink =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+
   /// Core properties, `docProps/core.xml`. Note the `package` namespace.
   static const String coreProperties =
       'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties';
@@ -75,6 +98,10 @@ abstract final class RelType {
   /// Extended properties, `docProps/app.xml`.
   static const String extendedProperties =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties';
+
+  /// Custom properties, `docProps/custom.xml`.
+  static const String customProperties =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties';
 }
 
 /// Content types (MIME types) of package parts.
@@ -102,6 +129,10 @@ abstract final class ContentType {
   /// The extended properties part.
   static const String extendedProperties =
       'application/vnd.openxmlformats-officedocument.extended-properties+xml';
+
+  /// The custom properties part.
+  static const String customProperties =
+      'application/vnd.openxmlformats-officedocument.custom-properties+xml';
 
   /// A relationships part (`.rels`).
   static const String relationships =

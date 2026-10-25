@@ -22,6 +22,26 @@ void main() {
     expect(XlsxLimits.maxOutlineLevel, 7);
   });
 
+  test('defined name limits match the plan', () {
+    // Enforced in `defined_name_test.dart`.
+    expect(XlsxLimits.maxDefinedNameLength, 255);
+    expect(XlsxLimits.maxDefinedNameCommentLength, 255);
+  });
+
+  test('page setup limits match ECMA-376 and Excel', () {
+    // Enforced in `page_setup_test.dart`.
+    expect(XlsxLimits.minPageScale, 10);
+    expect(XlsxLimits.maxPageScale, 400);
+    expect(XlsxLimits.maxFitToPages, 32767);
+    expect(XlsxLimits.maxFirstPageNumber, 32767);
+    expect(XlsxLimits.maxPaperSize, 118);
+  });
+
+  test('header and footer limit matches Excel', () {
+    // Enforced in `header_footer_test.dart`.
+    expect(XlsxLimits.maxHeaderFooterLength, 255);
+  });
+
   test('style limits match Excel and ECMA-376', () {
     // Enforced in `font_test.dart` and `alignment_test.dart`.
     expect(XlsxLimits.maxFontSize, 409);

@@ -827,6 +827,39 @@ void main() {
         19,
       );
     });
+    test('xSplit past the last column', () {
+      _expectRule(
+        tamper(
+          (String x) => x
+              .replaceFirst('xSplit="3"', 'xSplit="16384"')
+              .replaceFirst('topLeftCell="D3"', 'topLeftCell="XFE3"'),
+        ),
+        19,
+      );
+    });
+    test('ySplit past the last row', () {
+      _expectRule(
+        tamper(
+          (String x) => x
+              .replaceFirst('ySplit="2"', 'ySplit="1048576"')
+              .replaceFirst('topLeftCell="D3"', 'topLeftCell="D1048577"'),
+        ),
+        19,
+      );
+    });
+    test('the largest splits are valid', () {
+      expect(
+        checkXlsx(
+          tamper(
+            (String x) => x
+                .replaceFirst('xSplit="3"', 'xSplit="16383"')
+                .replaceFirst('ySplit="2"', 'ySplit="1048575"')
+                .replaceFirst('topLeftCell="D3"', 'topLeftCell="XFD1048576"'),
+          ),
+        ),
+        isEmpty,
+      );
+    });
     test('a split pane is not checked', () {
       final XlsxWriter book = XlsxWriter();
       book.addSheet('S')
@@ -978,13 +1011,98 @@ void main() {
             'xl/workbook.xml',
             (String x) => x.replaceFirst(
               '</definedNames>',
-              '<definedName name="_xlnm._FilterDatabase">F!A1</definedName>'
+              '<definedName name="Dup">1</definedName>'
+                  '<definedName name="Dup" localSheetId="0">1</definedName>'
                   '</definedNames>',
             ),
           ),
         ),
         isEmpty,
       );
+    });
+    test('a filtered sheet without its _FilterDatabase name', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(
+            RegExp(
+              r'<definedName [^>]*localSheetId="0"[^>]*>[^<]*</definedName>',
+            ),
+            '',
+          ),
+        ),
+        21,
+      );
+    });
+    test('a _FilterDatabase name on a sheet with no autoFilter', () {
+      _expectRule(
+        tamper(
+          _sheet2,
+          (String x) => x.replaceFirst(RegExp(r'<autoFilter [^>]*/>'), ''),
+        ),
+        21,
+      );
+    });
+    test('a _FilterDatabase name whose range is not the filter', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(r"'F'!$A$1:$B$2", r"'F'!$A$1:$B$3"),
+        ),
+        21,
+      );
+    });
+    test('a _FilterDatabase name that names another sheet', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(r"'F'!$A$1:$B$2", r"'G'!$A$1:$B$2"),
+        ),
+        21,
+      );
+    });
+    test('a _FilterDatabase name with the range not absolute', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(r"'F'!$A$1:$B$2", "'F'!A1:B2"),
+        ),
+        21,
+      );
+    });
+    test('a built-in _xlnm name without a localSheetId', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(
+            '</definedNames>',
+            '<definedName name="_xlnm.Print_Area">F!A1</definedName>'
+                '</definedNames>',
+          ),
+        ),
+        21,
+      );
+    });
+    test('a defined name with no text', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(
+            '</definedNames>',
+            '<definedName name="Empty"> </definedName></definedNames>',
+          ),
+        ),
+        21,
+      );
+    });
+    test('names with print settings and a user name are valid', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('F')
+        ..printArea(<XlsxRange>[XlsxRange.parse('A1:B2')])
+        ..printTitles(rows: (0, 0))
+        ..defineName(const XlsxDefinedName('Mine', 'F!A1'));
+      book.defineName(const XlsxDefinedName('Mine', '1'));
+      expect(checkXlsx(book.close().bytes), isEmpty);
     });
     test('an autoFilter ref that is not a range', () {
       for (final String bad in <String>[
@@ -1005,6 +1123,588 @@ void main() {
           21,
         );
       }
+    });
+  });
+
+  group('rule 22: hyperlinks', () {
+    Uint8List linked() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('L').row(<Object?>[
+        XlsxHyperlink.url('https://a.org'),
+        XlsxHyperlink.location('X'),
+      ]);
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(
+      String Function(String xml) change, {
+      String part = _sheet1,
+    }) => _rebuild(
+      linked(),
+      edit: <String, String? Function(String)>{part: change},
+    );
+
+    const String rels = 'xl/worksheets/_rels/sheet1.xml.rels';
+
+    test('valid hyperlinks have no violations', () {
+      expect(checkXlsx(linked()), isEmpty);
+    });
+    test('a ref outside the sheet', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="B1"', 'ref="B1048577"')),
+        22,
+      );
+    });
+    test('a ref that is not a range', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="B1"', 'ref="B"')),
+        22,
+      );
+    });
+    test('neither r:id nor location', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst(' location="X"', '')),
+        22,
+      );
+    });
+    test('an r:id the relationships do not declare', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('r:id="rId1"', 'r:id="rId9"')),
+        22,
+      );
+    });
+    test('an r:id and no relationships part', () {
+      _expectRule(
+        _rebuild(
+          linked(),
+          edit: <String, String? Function(String)>{rels: (String x) => null},
+        ),
+        22,
+      );
+    });
+    test('a relationship that is not external', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(' TargetMode="External"', ''),
+          part: rels,
+        ),
+        22,
+      );
+    });
+    test('a relationship of another type', () {
+      _expectRule(
+        tamper(
+          (String x) =>
+              x.replaceFirst('relationships/hyperlink', 'relationships/image'),
+          part: rels,
+        ),
+        22,
+      );
+    });
+    test('two hyperlinks with the same ref', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="B1"', 'ref="A1"')),
+        22,
+      );
+    });
+    test('more than 65,530 hyperlinks', () {
+      _expectRule(
+        tamper((String x) {
+          final String many = [
+            for (int i = 1; i <= 65531; i++)
+              '<hyperlink ref="A$i" location="X"/>',
+          ].join();
+          return x.replaceFirst(
+            RegExp('<hyperlinks>.*</hyperlinks>'),
+            '<hyperlinks>$many</hyperlinks>',
+          );
+        }),
+        22,
+      );
+    });
+  });
+
+  group('rule 23: data validations', () {
+    Uint8List validated() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('V')
+        ..row(<Object?>[1])
+        ..dataValidation(
+          XlsxDataValidation.whole(
+            <XlsxRange>[XlsxRange.parse('A1')],
+            XlsxComparison.between,
+            1,
+            b: 10,
+          ),
+        )
+        ..dataValidation(
+          XlsxDataValidation.list(
+            <XlsxRange>[XlsxRange.parse('B1:B3')],
+            <String>['a', 'b'],
+          ),
+        )
+        ..dataValidation(
+          XlsxDataValidation.any(<XlsxRange>[XlsxRange.parse('C1')]),
+        );
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      validated(),
+      edit: <String, String? Function(String)>{_sheet1: change},
+    );
+
+    test('valid validations have no violations', () {
+      expect(checkXlsx(validated()), isEmpty);
+    });
+    test('a count that differs from the children', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            '<dataValidations count="3">',
+            '<dataValidations count="2">',
+          ),
+        ),
+        23,
+      );
+    });
+    test('an sqref outside the sheet', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('sqref="A1"', 'sqref="A1048577"')),
+        23,
+      );
+    });
+    test('an sqref that is not a range', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('sqref="B1:B3"', 'sqref="B:B"')),
+        23,
+      );
+    });
+    test('two validations whose ranges overlap', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('sqref="C1"', 'sqref="B3"')),
+        23,
+      );
+    });
+    test('a missing formula1', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<formula1>1</formula1>', '')),
+        23,
+      );
+    });
+    test('a missing formula2 for between', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<formula2>10</formula2>', '')),
+        23,
+      );
+    });
+    test('a missing formula2 for notBetween', () {
+      _expectRule(
+        tamper(
+          (String x) => x
+              .replaceFirst('<formula2>10</formula2>', '')
+              .replaceFirst(
+                'type="whole"',
+                'type="whole" operator="notBetween"',
+              ),
+        ),
+        23,
+      );
+    });
+    test('a comparison without formula2 is fine', () {
+      expect(
+        checkXlsx(
+          tamper(
+            (String x) => x
+                .replaceFirst('<formula2>10</formula2>', '')
+                .replaceFirst(
+                  'type="whole"',
+                  'type="whole" operator="greaterThan"',
+                ),
+          ),
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  group('rule 24: conditional formats', () {
+    Uint8List formatted() {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxStyle red = XlsxStyle(
+        fill: XlsxFill.solid(XlsxColor.hex('FFC7CE')),
+      );
+      book.addSheet('C')
+        ..row(<Object?>[1, 'a'])
+        ..conditionalFormat(
+          XlsxConditionalFormat(
+            <XlsxRange>[XlsxRange.parse('A1:A9')],
+            <XlsxConditionalRule>[
+              XlsxCellValueRule(
+                XlsxComparison.between,
+                '1',
+                formula2: '5',
+                style: red,
+              ),
+              const XlsxExpressionRule('A1>3'),
+            ],
+          ),
+        )
+        ..conditionalFormat(
+          XlsxConditionalFormat(
+            <XlsxRange>[XlsxRange.parse('B1:B9')],
+            <XlsxConditionalRule>[
+              const XlsxTextRule(XlsxTextOperator.contains, 'a'),
+              XlsxColorScale(
+                <XlsxCfValue>[
+                  const XlsxCfValue.min(),
+                  XlsxCfValue.percentile(50),
+                  const XlsxCfValue.max(),
+                ],
+                <XlsxColor>[
+                  XlsxColor.hex('F8696B'),
+                  XlsxColor.hex('FFEB84'),
+                  XlsxColor.hex('63BE7B'),
+                ],
+              ),
+            ],
+          ),
+        );
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      formatted(),
+      edit: <String, String? Function(String)>{_sheet1: change},
+    );
+
+    test('valid conditional formats have no violations', () {
+      expect(checkXlsx(formatted()), isEmpty);
+    });
+    test('an sqref outside the sheet', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst('sqref="A1:A9"', 'sqref="A1:A1048577"'),
+        ),
+        24,
+      );
+    });
+    test('an sqref that is not a range', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('sqref="B1:B9"', 'sqref="B:B"')),
+        24,
+      );
+    });
+    test('two rules share a priority', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('priority="3"', 'priority="1"')),
+        24,
+      );
+    });
+    test('a priority below 1, or missing', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('priority="1"', 'priority="0"')),
+        24,
+      );
+      _expectRule(
+        tamper((String x) => x.replaceFirst(' priority="2"', '')),
+        24,
+      );
+    });
+    test('a dxfId not below the dxfs count', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('dxfId="0"', 'dxfId="1"')),
+        24,
+      );
+    });
+    test('cellIs between with one formula', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<formula>5</formula>', '')),
+        24,
+      );
+    });
+    test('cellIs greaterThan with two formulas', () {
+      _expectRule(
+        tamper(
+          (String x) =>
+              x.replaceFirst('operator="between"', 'operator="greaterThan"'),
+        ),
+        24,
+      );
+    });
+    test('cellIs notBetween with two formulas is fine', () {
+      expect(
+        checkXlsx(
+          tamper(
+            (String x) =>
+                x.replaceFirst('operator="between"', 'operator="notBetween"'),
+          ),
+        ),
+        isEmpty,
+      );
+    });
+    test('an expression without a formula', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<formula>A1&gt;3</formula>', '')),
+        24,
+      );
+    });
+    test('a text rule with two formulas', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            '</formula></cfRule><cfRule type="colorScale"',
+            '</formula><formula>1</formula></cfRule><cfRule type="colorScale"',
+          ),
+        ),
+        24,
+      );
+    });
+    test('a color scale whose cfvo and color counts differ', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<color rgb="FF63BE7B"/>', '')),
+        24,
+      );
+    });
+    test('a color scale of one point', () {
+      _expectRule(
+        tamper(
+          (String x) => x
+              .replaceFirst('<cfvo type="percentile" val="50"/>', '')
+              .replaceFirst('<cfvo type="max"/>', '')
+              .replaceFirst('<color rgb="FFFFEB84"/>', '')
+              .replaceFirst('<color rgb="FF63BE7B"/>', ''),
+        ),
+        24,
+      );
+    });
+  });
+
+  group('rule 25: Excel 2010 conditional-format extensions', () {
+    Uint8List extended() {
+      final XlsxWriter book = XlsxWriter();
+      for (final String name in <String>['A', 'B']) {
+        book.addSheet(name)
+          ..row(<Object?>[1, 2])
+          ..conditionalFormat(
+            XlsxConditionalFormat(
+              <XlsxRange>[XlsxRange.parse('A1:A9')],
+              <XlsxConditionalRule>[
+                const XlsxExpressionRule('A1>3'),
+                XlsxDataBar(color: XlsxColor.hex('638EC6')),
+                XlsxIconSet(XlsxIconSetType.threeStars),
+              ],
+            ),
+          );
+      }
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String part, String Function(String xml) change) =>
+        _rebuild(
+          extended(),
+          edit: <String, String? Function(String)>{part: change},
+        );
+
+    /// The `x14:cfRule` of the icon set on sheet 1.
+    const String stars =
+        '<x14:cfRule type="iconSet" priority="3" '
+        'id="{00000001-0000-4000-8000-000000000002}">';
+
+    test('valid extensions have no violations', () {
+      expect(checkXlsx(extended()), isEmpty);
+    });
+    test('a cfRule x14:id without its x14:cfRule', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            '<x14:id>{00000001-0000-4000-8000-000000000001}</x14:id>',
+            '<x14:id>{00000001-0000-4000-8000-0000000000FF}</x14:id>',
+          ),
+        ),
+        25,
+      );
+    });
+    test('an x14 data bar whose cfRule partner is gone', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            RegExp('<extLst><ext uri="{B025F937[^]*?</extLst>'),
+            '',
+          ),
+        ),
+        25,
+      );
+    });
+    test('two x14:cfRule elements share an id', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            'id="{00000001-0000-4000-8000-000000000002}"',
+            'id="{00000001-0000-4000-8000-000000000001}"',
+          ),
+        ),
+        25,
+      );
+    });
+    test('an x14 rule id repeated on another sheet', () {
+      _expectRule(
+        tamper(_sheet2, (String x) => x.replaceAll('{00000002-', '{00000001-')),
+        25,
+      );
+    });
+    test('an x14-only rule repeats a 2007 priority', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            stars,
+            stars.replaceFirst('priority="3"', 'priority="1"'),
+          ),
+        ),
+        25,
+      );
+    });
+    test('an x14-only rule without a priority', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) =>
+              x.replaceFirst(stars, stars.replaceFirst(' priority="3"', '')),
+        ),
+        25,
+      );
+    });
+    test('the extLst is not the last worksheet child', () {
+      _expectRule(
+        tamper(_sheet1, (String x) {
+          final RegExpMatch ext = RegExp(
+            r'<extLst><ext uri="\{78C0D931[^]*</extLst>',
+          ).firstMatch(x)!;
+          return x
+              .replaceFirst(ext.group(0)!, '')
+              .replaceFirst(
+                '<conditionalFormatting',
+                '${ext.group(0)}<conditionalFormatting',
+              );
+        }),
+        25,
+      );
+    });
+  });
+
+  group('rule 26: protection', () {
+    Uint8List protectedBook() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('P')
+        ..row(<Object?>[1])
+        ..protect(const XlsxSheetProtection(password: 'password'));
+      book.protectWorkbook(const XlsxWorkbookProtection(password: 'test'));
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String part, String Function(String xml) change) =>
+        _rebuild(
+          protectedBook(),
+          edit: <String, String? Function(String)>{part: change},
+        );
+
+    test('a protected workbook is clean', () {
+      expect(checkXlsx(protectedBook()), isEmpty);
+    });
+    test('a sheet password that is not four hex digits', () {
+      for (final String bad in <String>['83A', '83AFF', '83AG', '']) {
+        _expectRule(
+          tamper(
+            _sheet1,
+            (String x) => x.replaceFirst('password="83AF"', 'password="$bad"'),
+          ),
+          26,
+        );
+      }
+    });
+    test('a workbook password that is not four hex digits', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(
+            'workbookPassword="CBEB"',
+            'workbookPassword="CBE"',
+          ),
+        ),
+        26,
+      );
+    });
+    test('a sheetProtection without sheet="1"', () {
+      _expectRule(
+        tamper(_sheet1, (String x) => x.replaceFirst(' sheet="1"', '')),
+        26,
+      );
+      _expectRule(
+        tamper(_sheet1, (String x) => x.replaceFirst('sheet="1"', 'sheet="0"')),
+        26,
+      );
+    });
+  });
+
+  group('rule 27: custom properties', () {
+    Uint8List customBook() {
+      final XlsxWriter book = XlsxWriter(
+        properties: const XlsxProperties(
+          custom: <String, Object>{'Project': 'Atlas', 'Count': 3},
+        ),
+      );
+      book.addSheet('P').row(<Object?>[1]);
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      customBook(),
+      edit: <String, String? Function(String)>{'docProps/custom.xml': change},
+    );
+
+    test('a workbook with custom properties is clean', () {
+      expect(checkXlsx(customBook()), isEmpty);
+    });
+    test('a duplicate pid', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('pid="3"', 'pid="2"')),
+        27,
+      );
+    });
+    test('a pid below 2', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('pid="2"', 'pid="1"')),
+        27,
+      );
+    });
+    test('names that are equal ignoring case', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('name="Count"', 'name="PROJECT"')),
+        27,
+      );
+    });
+    test('a property with no value', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst('<vt:lpwstr>Atlas</vt:lpwstr>', ''),
+        ),
+        27,
+      );
+    });
+    test('a property with two values', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            '<vt:i4>3</vt:i4>',
+            '<vt:i4>3</vt:i4><vt:i4>4</vt:i4>',
+          ),
+        ),
+        27,
+      );
     });
   });
 }
