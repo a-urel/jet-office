@@ -28,6 +28,7 @@ export 'src/xlsx/fill.dart'
         XlsxPatternType;
 export 'src/xlsx/font.dart'
     show XlsxFont, XlsxFontScheme, XlsxFontScript, XlsxUnderline;
+export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/number_format.dart' show XlsxNumFmt;
 export 'src/xlsx/properties.dart' show XlsxProperties;

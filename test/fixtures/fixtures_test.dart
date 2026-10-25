@@ -98,7 +98,7 @@ void main() {
       'm2_merges_filter',
       'm2_formula_xstring',
     ]);
-    expect(names(m3Fixtures()), <String>['m3_names']);
+    expect(names(m3Fixtures()), <String>['m3_names', 'm3_hyperlinks']);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),

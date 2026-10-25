@@ -16,6 +16,9 @@
 /// frozen or split panes), a tab color, an outline summary position and a
 /// visibility. Merged ranges and the auto filter are trailer settings,
 /// checked when set: Quds accepted overlapping merges and any filter text.
+/// A hyperlink is a cell value: the row checks it before its cell is
+/// encoded, and the finished sheet writes its `hyperlinks` and, for the
+/// external ones, a relationships part with one relationship per address.
 /// The sheet reaches the workbook's encoder, styles and ZIP through a
 /// [WorkbookContext].
 library;
@@ -26,9 +29,11 @@ import 'dart:typed_data';
 import '../xml/utf8_buffer.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
+import 'cell_ref.dart';
 import 'color.dart';
 import 'column.dart';
 import 'defined_name.dart';
+import 'hyperlink.dart';
 import 'limits.dart';
 import 'range.dart';
 import 'sheet_view.dart';
@@ -201,9 +206,9 @@ abstract final class XlsxSheetWriter {
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
-  /// [DateTime], [XlsxDate], [XlsxDecimal], [XlsxFormula], or an [XlsxCell]
-  /// wrapping one of those with its own style. [style] applies to every cell
-  /// of the row. The effective style of a cell is its column's style (see
+  /// [DateTime], [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxHyperlink],
+  /// or an [XlsxCell] wrapping one of those with its own style. [style]
+  /// applies to every cell of the row. The effective style of a cell is its column's style (see
   /// [columns]), with [style] merged over it and the cell's own style over
   /// that, field by field: a field a higher layer sets wins, one it leaves
   /// `null` is inherited. Pass the same style object on every row that
@@ -235,7 +240,9 @@ abstract final class XlsxSheetWriter {
   /// workbook hold more than [XlsxLimits.maxCellFormats] cell formats; that
   /// one can happen in the middle of a row. Further, it throws [StateError]
   /// when the sheet is finished or the writer has failed, and
-  /// [ArgumentError] for a value the writer cannot store or an invalid style
+  /// [ArgumentError] for a value the writer cannot store, an invalid
+  /// [XlsxHyperlink] (see there), `XlsxLimitError('hyperlinks', ...)` for a
+  /// sheet's 65,531st link, or an invalid style
   /// (a built-in number format id outside `0..163`, or an empty custom
   /// format code or one with characters XML forbids). After an
   /// [ArgumentError] or a cell-format [XlsxLimitError] in the middle of a
@@ -315,6 +322,9 @@ final class WorksheetWriter implements XlsxSheetWriter {
   (int, int)? _printTitleRows;
   (int, int)? _printTitleColumns;
   final List<XlsxDefinedName> _names = <XlsxDefinedName>[];
+
+  /// The hyperlinks written so far, with the reference of their cell.
+  final List<(String, XlsxHyperlink)> _links = <(String, XlsxHyperlink)>[];
 
   /// The range of the auto filter, if [autoFilter] set one.
   XlsxRange? get autoFilterRange => _autoFilter;
@@ -527,6 +537,10 @@ final class WorksheetWriter implements XlsxSheetWriter {
       for (int column = 0; column < values.length; column++) {
         final Object? value = values[column];
         if (value == null) continue;
+        final XlsxHyperlink? link = _linkOf(value);
+        // Before the cell: a bad link, or the one past the limit, leaves
+        // nothing of its cell behind.
+        if (link != null) _checkLink(link);
         context.encoder.encode(
           xml,
           sheet: name,
@@ -539,9 +553,24 @@ final class WorksheetWriter implements XlsxSheetWriter {
               : null,
           beforeWrite: open,
         );
+        if (link != null) _links.add((cellRef(row, column), link));
       }
     } finally {
       if (opened) xml.end();
+    }
+  }
+
+  /// The hyperlink [value] is or wraps, or `null`.
+  static XlsxHyperlink? _linkOf(Object value) {
+    final Object? inner = value is XlsxCell ? value.value : value;
+    return inner is XlsxHyperlink ? inner : null;
+  }
+
+  /// Throws unless [link] is valid and the sheet has room for one more.
+  void _checkLink(XlsxHyperlink link) {
+    checkHyperlink(link);
+    if (_links.length >= XlsxLimits.maxHyperlinksPerSheet) {
+      throw XlsxLimitError('hyperlinks', XlsxLimits.maxHyperlinksPerSheet);
     }
   }
 
@@ -634,6 +663,21 @@ final class WorksheetWriter implements XlsxSheetWriter {
     final Utf8Buffer body = _body!;
     _xml = null;
     _body = null;
+    // One relationship per distinct address, numbered in first-use order.
+    final Map<String, String> ids = <String, String>{};
+    final List<WorksheetHyperlink> links = <WorksheetHyperlink>[];
+    for (final (String ref, XlsxHyperlink link) in _links) {
+      final String? address = link.address;
+      links.add((
+        ref: ref,
+        relationshipId: address == null
+            ? null
+            : ids.putIfAbsent(address, () => 'rId${ids.length + 1}'),
+        location: link.location,
+        tooltip: link.tooltip,
+        display: link.text,
+      ));
+    }
     final WorksheetSettings settings = WorksheetSettings(
       columns: _columns,
       defaultColumnWidth: _defaultColumnWidth,
@@ -645,11 +689,18 @@ final class WorksheetWriter implements XlsxSheetWriter {
       summaryRight: _summaryRight,
       autoFilter: _autoFilter,
       merges: _merges,
+      hyperlinks: links,
     );
     context.zip.addChunks(worksheetPartName(number), <Uint8List>[
       utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),
       ...body.takeChunks(),
       utf8.encode(worksheetTrailer(settings, hasRows: _wroteRow)),
     ]);
+    final String? rels = worksheetRelationshipsXml(ids.keys.toList());
+    if (rels != null) {
+      context.zip.addChunks(worksheetRelsPartName(number), <Uint8List>[
+        utf8.encode(rels),
+      ]);
+    }
   }
 }

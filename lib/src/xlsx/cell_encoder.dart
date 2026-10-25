@@ -15,7 +15,10 @@ library;
 import '../xml/xml_escape.dart';
 import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
+import 'color.dart';
 import 'date_serial.dart';
+import 'font.dart';
+import 'hyperlink.dart';
 import 'limits.dart';
 import 'number_format.dart';
 import 'shared_strings.dart';
@@ -29,6 +32,13 @@ const int _maxExactInt = 9007199254740992;
 
 /// The most characters (UTF-16 code units) Excel accepts in a formula.
 const int _maxFormulaLength = 8192;
+
+/// The font of a hyperlink cell: the theme's hyperlink color, underlined.
+/// The lowest font layer: whatever a column, row or cell font sets wins.
+const XlsxFont _hyperlinkFont = XlsxFont(
+  color: XlsxColor.theme(10),
+  underline: XlsxUnderline.single,
+);
 
 /// Whether Excel, which stores every number as a double, may round [v].
 ///
@@ -85,17 +95,22 @@ final class CellEncoder {
   /// Writes the cell at zero-based [row] and [column] of [sheet] to [out].
   ///
   /// [value] is a `String`, `int`, `double`, `bool`, [DateTime], [XlsxDate],
-  /// [XlsxDecimal], [XlsxFormula], an [XlsxCell] wrapping one of those, or
-  /// `null`, which writes nothing. An [XlsxCell] whose value is `null` and
-  /// whose style is not writes an empty styled cell, `<c r="C5" s="7"/>`,
-  /// when the merged style below is not the default; with the default
-  /// style, or with no cell style, it writes nothing (ruling R11).
+  /// [XlsxDecimal], [XlsxFormula], [XlsxHyperlink], an [XlsxCell] wrapping
+  /// one of those, or `null`, which writes nothing. An [XlsxCell] whose
+  /// value is `null` and whose style is not writes an empty styled cell,
+  /// `<c r="C5" s="7"/>`, when the merged style below is not the default;
+  /// with the default style, or with no cell style, it writes nothing
+  /// (ruling R11).
   ///
   /// The effective style is [columnStyle] merged with [rowStyle] and then
   /// with the [XlsxCell]'s style, so a cell beats its row and a row beats
   /// its column (see [XlsxStyle.merge]): a field a higher layer leaves
   /// `null` is inherited, one it sets, even back to its default (a font
   /// that is not bold, `XlsxNumFmt.general`), wins.
+  ///
+  /// A hyperlink is written as its text, a string, with the hyperlink font
+  /// merged beneath the effective style's font; the sheet writer records
+  /// the link itself (and validates it, which the encoder does not).
   ///
   /// Data problems (characters XML forbids, text past 32,767 UTF-16 code
   /// units, integers past 2^53, dates outside 1900 to 9999, a date shown in
@@ -245,6 +260,8 @@ final class CellEncoder {
         }
       case XlsxFormula():
         _writeFormula(out, sheet, ref, v, style);
+      case XlsxHyperlink():
+        _writeString(out, sheet, ref, v.text, style.linked);
       default:
         throw ArgumentError(
           'Cell $ref on sheet "$sheet" holds a ${v.runtimeType}, which is not '
@@ -469,6 +486,17 @@ final class CellEncoder {
 /// format ids already assigned to it.
 final class _Resolved {
   _Resolved(this.column, this.row, this.cell, this.style);
+
+  /// This style with the hyperlink font beneath its font, resolved and
+  /// cached with it so a column of links costs one resolution.
+  late final _Resolved linked = _Resolved(
+    column,
+    row,
+    cell,
+    (style ?? const XlsxStyle()).copyWith(
+      font: _hyperlinkFont.merge(style?.font),
+    ),
+  );
 
   final XlsxStyle? column;
   final XlsxStyle? row;

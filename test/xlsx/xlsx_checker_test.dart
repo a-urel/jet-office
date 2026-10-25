@@ -1125,4 +1125,102 @@ void main() {
       }
     });
   });
+
+  group('rule 22: hyperlinks', () {
+    Uint8List linked() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('L').row(<Object?>[
+        XlsxHyperlink.url('https://a.org'),
+        XlsxHyperlink.location('X'),
+      ]);
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(
+      String Function(String xml) change, {
+      String part = _sheet1,
+    }) => _rebuild(
+      linked(),
+      edit: <String, String? Function(String)>{part: change},
+    );
+
+    const String rels = 'xl/worksheets/_rels/sheet1.xml.rels';
+
+    test('valid hyperlinks have no violations', () {
+      expect(checkXlsx(linked()), isEmpty);
+    });
+    test('a ref outside the sheet', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="B1"', 'ref="B1048577"')),
+        22,
+      );
+    });
+    test('a ref that is not a range', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="B1"', 'ref="B"')),
+        22,
+      );
+    });
+    test('neither r:id nor location', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst(' location="X"', '')),
+        22,
+      );
+    });
+    test('an r:id the relationships do not declare', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('r:id="rId1"', 'r:id="rId9"')),
+        22,
+      );
+    });
+    test('an r:id and no relationships part', () {
+      _expectRule(
+        _rebuild(
+          linked(),
+          edit: <String, String? Function(String)>{rels: (String x) => null},
+        ),
+        22,
+      );
+    });
+    test('a relationship that is not external', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(' TargetMode="External"', ''),
+          part: rels,
+        ),
+        22,
+      );
+    });
+    test('a relationship of another type', () {
+      _expectRule(
+        tamper(
+          (String x) =>
+              x.replaceFirst('relationships/hyperlink', 'relationships/image'),
+          part: rels,
+        ),
+        22,
+      );
+    });
+    test('two hyperlinks with the same ref', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('ref="B1"', 'ref="A1"')),
+        22,
+      );
+    });
+    test('more than 65,530 hyperlinks', () {
+      _expectRule(
+        tamper((String x) {
+          final String many = [
+            for (int i = 1; i <= 65531; i++)
+              '<hyperlink ref="A$i" location="X"/>',
+          ].join();
+          return x.replaceFirst(
+            RegExp('<hyperlinks>.*</hyperlinks>'),
+            '<hyperlinks>$many</hyperlinks>',
+          );
+        }),
+        22,
+      );
+    });
+  });
 }

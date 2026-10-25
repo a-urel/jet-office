@@ -14,14 +14,18 @@
 /// right-to-left, and the pane of `sheet_view.dart` with its `selection`;
 /// the trailer writes `autoFilter` and `mergeCells` from ranges that the
 /// writer has validated (Quds wrote any filter string unchecked and accepted
-/// overlapping merges).
+/// overlapping merges); `hyperlinks` come from links the writer has
+/// validated, and the sheet's relationships part, which Quds did not write,
+/// carries their external targets.
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
-/// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter` and
-/// `mergeCells`.
+/// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter`,
+/// `mergeCells` and `hyperlinks`.
 library;
 
 import '../opc/ooxml.dart';
+import '../opc/relationships.dart';
+import '../xml/xml_escape.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
@@ -49,6 +53,19 @@ typedef WorksheetColumn = ({
   bool collapsed,
 });
 
+/// One `hyperlink` element as the trailer writes it.
+///
+/// `relationshipId` is the `r:id` of an external link, `null` for an
+/// internal one; `location` and `tooltip` are `null` when absent. The
+/// strings are unescaped: the trailer applies `escapeXstring`.
+typedef WorksheetHyperlink = ({
+  String ref,
+  String? relationshipId,
+  String? location,
+  String? tooltip,
+  String display,
+});
+
 /// What the header and the trailer of a worksheet are made from.
 ///
 /// Plain, already checked values: the writer validates them when they are
@@ -66,6 +83,7 @@ final class WorksheetSettings {
     this.summaryRight = true,
     this.autoFilter,
     this.merges = const <XlsxRange>[],
+    this.hyperlinks = const <WorksheetHyperlink>[],
   });
 
   /// The columns from A on; `null` keeps a column at its default.
@@ -98,6 +116,9 @@ final class WorksheetSettings {
 
   /// The merged ranges, in the order they were merged.
   final List<XlsxRange> merges;
+
+  /// The hyperlinks, in cell order of writing.
+  final List<WorksheetHyperlink> hyperlinks;
 }
 
 /// The `<worksheet>` frame before the rows: the XML declaration, the
@@ -123,8 +144,8 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 }
 
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
-/// then `autoFilter` and `mergeCells` when the sheet has them, then
-/// `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
+/// then `autoFilter`, `mergeCells` and `hyperlinks` when the sheet has them,
+/// then `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
 String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
   final StringBuffer out = StringBuffer();
   final XmlWriter w = XmlWriter(out);
@@ -141,7 +162,46 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
     }
     w.end();
   }
+  if (settings.hyperlinks.isNotEmpty) {
+    w.start('hyperlinks');
+    for (final WorksheetHyperlink link in settings.hyperlinks) {
+      // CT_Hyperlink attribute order: ref, r:id, location, tooltip, display.
+      final String? id = link.relationshipId;
+      final String? location = link.location;
+      final String? tooltip = link.tooltip;
+      w.empty('hyperlink', <String, String>{
+        'ref': link.ref,
+        'r:id': ?id,
+        if (location != null) 'location': escapeXstring(location),
+        if (tooltip != null) 'tooltip': escapeXstring(tooltip),
+        'display': escapeXstring(link.display),
+      });
+    }
+    w.end();
+  }
   w.raw('</worksheet>');
+  return out.toString();
+}
+
+/// The ZIP entry name of the relationships part of the worksheet created
+/// [number]th (1-based).
+String worksheetRelsPartName(int number) =>
+    'xl/worksheets/_rels/sheet$number.xml.rels';
+
+/// Renders the relationships part of a worksheet whose external hyperlink
+/// targets are [addresses], or returns `null` when there are none.
+///
+/// The relationship ids are `rId1`, `rId2`, ... in the order of [addresses],
+/// so address `i` is `rId${i + 1}`. The targets are written as given; the
+/// caller has percent-encoded them.
+String? worksheetRelationshipsXml(List<String> addresses) {
+  if (addresses.isEmpty) return null;
+  final Relationships rels = Relationships();
+  for (final String address in addresses) {
+    rels.add(RelType.hyperlink, address, external: true);
+  }
+  final StringBuffer out = StringBuffer();
+  rels.write(XmlWriter(out));
   return out.toString();
 }
 

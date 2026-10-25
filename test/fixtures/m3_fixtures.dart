@@ -9,7 +9,7 @@ import 'package:jet_office/jet_office.dart';
 import 'fixture.dart';
 
 /// The fixtures of milestone M3.
-List<Fixture> m3Fixtures() => <Fixture>[_names()];
+List<Fixture> m3Fixtures() => <Fixture>[_names(), _hyperlinks()];
 
 /// Defined names, a print area and print titles.
 ///
@@ -66,6 +66,85 @@ Fixture _names() => Fixture(
       ])
       ..printTitles(rows: (0, 0), columns: (0, 0));
     book.defineName(const XlsxDefinedName('TaxRate', '0.18'));
+    return book.close();
+  },
+);
+
+/// Hyperlinks of every kind, on `Links`, and the places they go to.
+///
+/// Row 1 holds a web link whose address has a space (`%20` in the rels
+/// part), an e-mail with a subject, a link in the bold column C and a link
+/// whose cell font is red. Row 2 holds a link to `'O''Brien'!B2` and one to
+/// the workbook name `Target`, which is `'O''Brien'!$C$3`. Excel shows the
+/// links blue and underlined, the bold one bold, the red one red and
+/// underlined, and follows them on click; a CSV reader sees the display
+/// texts, which are the expected values.
+Fixture _hyperlinks() => Fixture(
+  'm3_hyperlinks',
+  <String, List<List<String>>>{
+    'Links': <List<String>>[
+      <String>[
+        'https://example.com/a b',
+        'sales@example.com',
+        'Bold link',
+        'Red link',
+      ],
+      <String>["O'Brien", 'Target', '', ''],
+    ],
+    "O'Brien": <List<String>>[
+      <String>['top', '', ''],
+      <String>['', 'B2', ''],
+      <String>['', '', 'C3'],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Links': <List<Object?>>[
+      <Object?>[
+        'https://example.com/a b',
+        'sales@example.com',
+        'Bold link',
+        'Red link',
+      ],
+      <Object?>["O'Brien", 'Target'],
+    ],
+    "O'Brien": <List<Object?>>[
+      <Object?>['top'],
+      <Object?>[null, 'B2'],
+      <Object?>[null, null, 'C3'],
+    ],
+  },
+  () {
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('Links')
+      ..columns(<XlsxColumn?>[
+        null,
+        null,
+        const XlsxColumn(style: XlsxStyle(font: XlsxFont(bold: true))),
+      ])
+      ..row(<Object?>[
+        XlsxHyperlink.url('https://example.com/a b'),
+        XlsxHyperlink.email(
+          'sales@example.com',
+          subject: 'Q&A ç',
+          tooltip: 'Write to sales',
+        ),
+        XlsxHyperlink.location('Target', text: 'Bold link'),
+        XlsxCell(
+          XlsxHyperlink.url('https://example.com/red', text: 'Red link'),
+          style: const XlsxStyle(
+            font: XlsxFont(color: XlsxColor.rgb(0xFF0000)),
+          ),
+        ),
+      ])
+      ..row(<Object?>[
+        XlsxHyperlink.sheet("O'Brien", range: XlsxRange.parse('B2')),
+        XlsxHyperlink.location('Target'),
+      ]);
+    book.addSheet("O'Brien")
+      ..row(<Object?>['top'])
+      ..row(<Object?>[null, 'B2'])
+      ..row(<Object?>[null, null, 'C3']);
+    book.defineName(const XlsxDefinedName('Target', r"'O''Brien'!$C$3"));
     return book.close();
   },
 );

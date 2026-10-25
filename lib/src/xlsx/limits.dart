@@ -96,9 +96,29 @@ abstract final class XlsxLimits {
   /// counting the ungrouped one. A deeper level throws [ArgumentError].
   static const int maxOutlineLevel = 7;
 
-  /// The maximum number of hyperlinks in a worksheet. No writer enforces it
-  /// yet; the sheet writer will once it can write hyperlinks.
+  /// The maximum number of hyperlinks in a worksheet.
+  ///
+  /// Microsoft's "Excel specifications and limits" page: hyperlinks in a
+  /// worksheet, 65,530. A sheet's 65,531st link throws [XlsxLimitError]
+  /// (`hyperlinks`) from the sheet writer's `row`, before its cell is
+  /// written.
   static const int maxHyperlinksPerSheet = 65530;
+
+  /// The longest hyperlink address, in UTF-16 code units, counted as
+  /// written (after percent-encoding).
+  ///
+  /// The M3 plan sets 2,079, the length Excel's own Insert Hyperlink
+  /// dialog accepts. A longer address throws [ArgumentError] when its cell
+  /// is written. It was not confirmed against Microsoft's limits page,
+  /// which gives no figure.
+  static const int maxHyperlinkAddressLength = 2079;
+
+  /// The longest ScreenTip (hyperlink tooltip), in UTF-16 code units.
+  ///
+  /// The M3 plan sets 255, the length Excel's Set Hyperlink ScreenTip
+  /// dialog accepts. A longer tooltip throws [ArgumentError] when its cell
+  /// is written.
+  static const int maxScreenTipLength = 255;
 
   /// The longest defined name, in UTF-16 code units. A longer name throws
   /// [ArgumentError] when it is registered.

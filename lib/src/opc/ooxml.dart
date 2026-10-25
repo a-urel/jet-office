@@ -68,6 +68,10 @@ abstract final class RelType {
   static const String sharedStrings =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings';
 
+  /// A hyperlink to an external target; used with `TargetMode="External"`.
+  static const String hyperlink =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+
   /// Core properties, `docProps/core.xml`. Note the `package` namespace.
   static const String coreProperties =
       'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties';

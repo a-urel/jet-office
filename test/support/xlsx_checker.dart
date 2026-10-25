@@ -51,7 +51,12 @@
 ///     sheet-scoped to it and spelling `'<sheet name>'!<absolute ref>`,
 ///     while a sheet without one has none; every `_xlnm.*` name has a
 ///     `localSheetId` (Excel scopes its built-in names to a sheet); and no
-///     `definedName` has empty text.
+///     `definedName` has empty text;
+/// 22. every `hyperlink` has a `ref` that is a valid range inside the
+///     sheet and an `r:id` or a `location`; every `r:id` resolves in the
+///     sheet's relationships to a hyperlink relationship whose
+///     `TargetMode` is `External`; no two `hyperlink` elements of a sheet
+///     share a `ref`; and a sheet has at most 65,530 of them.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -123,6 +128,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkDefinedNames(docs, violations);
   _checkAutoFilters(docs, violations);
   _checkFilterNames(docs, violations);
+  _checkHyperlinks(docs, violations);
   return violations;
 }
 
@@ -964,6 +970,68 @@ void _checkFilterNames(Map<String, XmlDocument> docs, List<String> violations) {
         'rule 21: sheet "$name" _xlnm._FilterDatabase is '
         '"${mine.single.innerText}"; the filter makes it "$want"',
       );
+    }
+  }
+}
+
+const String _hyperlinkRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'hyperlink';
+
+/// Rule 22.
+void _checkHyperlinks(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final List<XmlElement> links = _all(sheet.value, 'hyperlink').toList();
+    if (links.isEmpty) continue;
+    if (links.length > 65530) {
+      violations.add(
+        'rule 22: ${sheet.key}: ${links.length} hyperlinks; Excel allows '
+        '65530',
+      );
+    }
+    final String relsName =
+        '${_dirOf(sheet.key)}_rels/'
+        '${sheet.key.substring(sheet.key.lastIndexOf('/') + 1)}.rels';
+    final Map<String, XmlElement> rels = <String, XmlElement>{
+      if (docs[relsName] case final XmlDocument doc)
+        for (final XmlElement rel in _all(doc, 'Relationship'))
+          _attr(rel, 'Id'): rel,
+    };
+    final Set<String> refs = <String>{};
+    for (final XmlElement link in links) {
+      final String ref = _attr(link, 'ref');
+      final _Rect? r = _parseRect(ref);
+      final String? problem = r == null ? 'is not a range' : _problemWith(r);
+      if (problem != null) {
+        violations.add('rule 22: ${sheet.key}: hyperlink ref "$ref" $problem');
+      }
+      if (!refs.add(ref)) {
+        violations.add(
+          'rule 22: ${sheet.key}: two hyperlinks share the ref "$ref"',
+        );
+      }
+      final String? id = link.getAttribute('r:id');
+      final String? location = link.getAttribute('location');
+      if (id == null && location == null) {
+        violations.add(
+          'rule 22: ${sheet.key}: hyperlink "$ref" has neither r:id nor '
+          'location',
+        );
+      }
+      if (id == null) continue;
+      final XmlElement? rel = rels[id];
+      if (rel == null) {
+        violations.add(
+          'rule 22: ${sheet.key}: hyperlink "$ref" has r:id "$id", which '
+          '$relsName does not declare',
+        );
+      } else if (_attr(rel, 'Type') != _hyperlinkRelType ||
+          _attr(rel, 'TargetMode') != 'External') {
+        violations.add(
+          'rule 22: ${sheet.key}: hyperlink "$ref" r:id "$id" is not an '
+          'external hyperlink relationship',
+        );
+      }
     }
   }
 }
