@@ -374,6 +374,39 @@ void main() {
         ),
       );
     });
+    test('a stray formula2 on custom, list or any is ignored, not '
+        'written, and close() succeeds', () {
+      for (final (XlsxValidationType type, String? first)
+          in <(XlsxValidationType, String?)>[
+            (XlsxValidationType.custom, 'TRUE'),
+            (XlsxValidationType.list, r'$D$1:$D$9'),
+            (XlsxValidationType.any, null),
+          ]) {
+        for (final String stray in <String>['', '=', 'B1']) {
+          final String xml = _one(
+            XlsxDataValidation(
+              <XlsxRange>[_a1],
+              type,
+              formula1: first,
+              formula2: stray,
+            ),
+          );
+          expect(xml, isNot(contains('formula2')), reason: '$type $stray');
+        }
+      }
+    });
+    test('a stray formula1 on any is not written', () {
+      expect(
+        _one(
+          XlsxDataValidation(
+            <XlsxRange>[_a1],
+            XlsxValidationType.any,
+            formula1: '',
+          ),
+        ),
+        isNot(contains('formula1')),
+      );
+    });
     test('any writes no type and no formula', () {
       expect(
         _one(

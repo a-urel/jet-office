@@ -30,6 +30,21 @@ void main() {
     });
   });
 
+  group('writtenFormulaText', () {
+    test('strips one leading = and nothing else', () {
+      expect(writtenFormulaText('=SUM(A1)'), 'SUM(A1)');
+      expect(writtenFormulaText('SUM(A1)'), 'SUM(A1)');
+      expect(writtenFormulaText('==1'), '=1');
+    });
+
+    test('unchecked text fails an assertion, never an ArgumentError', () {
+      bool asserts = false;
+      assert(asserts = true);
+      if (!asserts) return;
+      expect(() => writtenFormulaText('='), throwsA(isA<AssertionError>()));
+    });
+  });
+
   group('quotedSheetRef', () {
     test('quotes the name and doubles every quote', () {
       expect(quotedSheetRef("O'Brien", r'$A$1'), r"'O''Brien'!$A$1");

@@ -42,6 +42,26 @@ String checkFormulaText(String text, String name) {
   return stripped;
 }
 
+/// Formula text that registration has checked, as it is written: one
+/// leading `=` removed, nothing else.
+///
+/// Write paths use this instead of [checkFormulaText], so text that slipped
+/// past registration cannot make writing throw and leave the writer dead.
+/// An assertion confirms in debug builds that the text is valid.
+String writtenFormulaText(String text) {
+  assert(_isValidFormula(text), 'Unchecked formula text: "$text".');
+  return text.startsWith('=') ? text.substring(1) : text;
+}
+
+bool _isValidFormula(String text) {
+  try {
+    checkFormulaText(text, 'text');
+    return true;
+  } on ArgumentError {
+    return false;
+  }
+}
+
 /// The reference [ref] on the sheet [sheetName], as `'<name>'!<ref>`.
 ///
 /// The name is always quoted, with each `'` doubled, so it needs no test

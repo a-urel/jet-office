@@ -1161,7 +1161,7 @@ void _writeRule(
 
 void _writeFormula(XmlWriter w, String text) {
   w.start('formula');
-  w.raw(escapeFormulaText(checkFormulaText(text, 'formula')));
+  w.raw(escapeFormulaText(writtenFormulaText(text)));
   w.end();
 }
 
@@ -1170,7 +1170,7 @@ void _writeCfValue(XmlWriter w, XlsxCfValue cfvo) {
   w.attribute('type', cfvo.type.xmlName);
   final String? value = cfvo.value;
   if (value != null) {
-    w.attribute('val', escapeXstring(checkFormulaText(value, 'val')));
+    w.attribute('val', escapeXstring(writtenFormulaText(value)));
   }
   if (!cfvo.greaterOrEqual) w.attribute('gte', '0');
   w.end();

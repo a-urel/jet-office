@@ -441,11 +441,14 @@ final class XlsxDataValidation {
   final XlsxComparison comparison;
 
   /// The first operand, the list or the formula, as text, or `null` for
-  /// [XlsxValidationType.any].
+  /// [XlsxValidationType.any], which ignores it.
   final String? formula1;
 
   /// The second operand of [XlsxComparison.between] and
   /// [XlsxComparison.notBetween], or `null`.
+  ///
+  /// The other kinds ([XlsxValidationType.list], `custom` and `any`) ignore
+  /// it: it is neither checked nor written.
   final String? formula2;
 
   /// Whether an empty cell is accepted. XML `allowBlank`.
@@ -719,7 +722,10 @@ void _checkText(String? text, String field, int max) {
 /// Attributes follow `CT_DataValidation`; those at the schema default are
 /// left out: `type="none"`, `errorStyle="stop"`, `operator="between"` and the
 /// flags that are false. Titles and messages go through `escapeXstring`,
-/// formulas through `escapeFormulaText`.
+/// formulas through `escapeFormulaText`. Only what [checkDataValidation]
+/// checked is written: `formula1` for every type but `any`, `formula2` for
+/// a comparing type with `between` or `notBetween`; so writing never
+/// throws.
 void writeDataValidations(XmlWriter w, List<XlsxDataValidation> validations) {
   if (validations.isEmpty) return;
   w.start('dataValidations');
@@ -754,7 +760,9 @@ void writeDataValidations(XmlWriter w, List<XlsxDataValidation> validations) {
     final String? formula2 = v.formula2;
     if (v.type != XlsxValidationType.any && formula1 != null) {
       _writeFormula(w, 'formula1', formula1);
-      if (formula2 != null) _writeFormula(w, 'formula2', formula2);
+    }
+    if (_takesSecondOperand(v) && formula2 != null) {
+      _writeFormula(w, 'formula2', formula2);
     }
     w.end();
   }
@@ -763,6 +771,12 @@ void writeDataValidations(XmlWriter w, List<XlsxDataValidation> validations) {
 
 void _writeFormula(XmlWriter w, String element, String text) {
   w.start(element);
-  w.raw(escapeFormulaText(checkFormulaText(text, element)));
+  w.raw(escapeFormulaText(writtenFormulaText(text)));
   w.end();
 }
+
+/// Whether [v] has a second operand: a type that compares, with
+/// [XlsxComparison.between] or [XlsxComparison.notBetween]. Only then is
+/// [XlsxDataValidation.formula2] checked and written.
+bool _takesSecondOperand(XlsxDataValidation v) =>
+    v.type.compares && v.comparison.takesTwoOperands;

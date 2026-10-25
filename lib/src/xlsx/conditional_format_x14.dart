@@ -211,7 +211,7 @@ void _writeCfValue(XmlWriter w, XlsxCfValue cfvo, {required bool automatic}) {
   final String? value = cfvo.value;
   if (cfvo.type.needsValue && value != null) {
     w.start('xm:f');
-    w.raw(escapeFormulaText(checkFormulaText(value, 'value')));
+    w.raw(escapeFormulaText(writtenFormulaText(value)));
     w.end();
   }
   w.end();
