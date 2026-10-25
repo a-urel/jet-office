@@ -16,6 +16,7 @@ import '../xml/xml_escape.dart';
 import '../xml/xml_writer.dart';
 import 'alignment.dart';
 import 'border.dart';
+import 'differential_style.dart';
 import 'fill.dart';
 import 'font.dart';
 import 'limits.dart';
@@ -60,7 +61,8 @@ String _render(void Function(XmlWriter w) write) {
 /// formats by their parts, so styles that look the same share one id however
 /// they are spelled. Fill 0 is `none` and fill 1 is `gray125`, as Excel
 /// requires. Custom number format codes are numbered from 164 and
-/// deduplicated by code.
+/// deduplicated by code. Differential styles ([dxfIdFor]) are deduplicated
+/// by their rendered XML and share the number format table.
 final class StyleRegistry {
   /// Creates a registry holding only the default style.
   StyleRegistry() {
@@ -90,6 +92,8 @@ final class StyleRegistry {
   final Map<String, int> _borderIds = <String, int>{};
   final List<String> _customCodes = <String>[];
   final Map<String, int> _customIds = <String, int>{};
+  final List<String> _dxfs = <String>[];
+  final Map<String, int> _dxfIds = <String, int>{};
 
   static void _addPart(List<String> parts, Map<String, int> ids, String xml) {
     ids[xml] = parts.length;
@@ -221,6 +225,81 @@ final class StyleRegistry {
     return ids;
   }
 
+  /// The id of [style] as a differential style (`dxfId`), registering it on
+  /// first use.
+  ///
+  /// A differential style writes only what [style] sets, so it is not
+  /// resolved like a cell format; see [validateDifferentialStyle] for what
+  /// it refuses. Its number format is numbered like a cell format's, from the
+  /// same table, and counts toward [XlsxLimits.maxNumberFormats]. Styles
+  /// that render the same share an id.
+  ///
+  /// Throws [ArgumentError] naming the field for a style that cannot be a
+  /// differential style, for an invalid part, or for a built-in number
+  /// format id without a known code; throws [XlsxLimitError] when the
+  /// number format table is full. A throw registers nothing.
+  int dxfIdFor(XlsxStyle style) {
+    validateDifferentialStyle(style);
+    final XlsxNumFmt? fmt = style.numFmt;
+    String? newCode;
+    DifferentialNumFmt? numFmt;
+    if (fmt != null) {
+      _validateNumFmt(fmt);
+      final String? code = fmt.code;
+      if (code == null) {
+        final String? builtin = builtinNumberFormatCode(fmt.builtinId!);
+        if (builtin == null) {
+          throw ArgumentError.value(
+            fmt.builtinId,
+            'numFmt',
+            'A differential style needs a built-in number format with a '
+                'known code (ids 0-22 and 37-49).',
+          );
+        }
+        numFmt = (id: fmt.builtinId!, code: builtin);
+      } else {
+        final int? known = _customIds[code];
+        if (known == null) newCode = code;
+        numFmt = (id: known ?? 164 + _customCodes.length, code: code);
+      }
+    }
+    final String xml = _render(
+      (XmlWriter w) => writeDifferentialStyleXml(w, style, numFmt),
+    );
+    final int? existing = _dxfIds[xml];
+    if (existing != null) return existing;
+    if (newCode != null && _customCodes.length >= XlsxLimits.maxNumberFormats) {
+      throw XlsxLimitError('number formats', XlsxLimits.maxNumberFormats);
+    }
+
+    // Nothing below throws.
+    if (newCode != null) {
+      _customIds[newCode] = 164 + _customCodes.length;
+      _customCodes.add(newCode);
+    }
+    _addPart(_dxfs, _dxfIds, xml);
+    return _dxfs.length - 1;
+  }
+
+  /// The differential style ids of [styles], in order, each as [dxfIdFor]
+  /// gives it.
+  ///
+  /// All or nothing: when one style throws, the styles before it are
+  /// unregistered again, with any number format code they added. A
+  /// conditional format registers its rules' styles this way, after
+  /// checking the rules, so a bad rule leaves no dxf behind.
+  List<int> dxfIdsFor(List<XlsxStyle> styles) {
+    final int dxfs = _dxfs.length;
+    final int codes = _customCodes.length;
+    try {
+      return <int>[for (final XlsxStyle style in styles) dxfIdFor(style)];
+    } on Object {
+      _truncate(_dxfs, _dxfIds, dxfs);
+      _truncate(_customCodes, _customIds, codes);
+      rethrow;
+    }
+  }
+
   /// Drops the entries of [list] from index [length] on, and their [ids].
   static void _truncate<T>(List<T> list, Map<T, int> ids, int length) {
     list.sublist(length).forEach(ids.remove);
@@ -304,9 +383,14 @@ final class StyleRegistry {
     w.end();
     w.raw(
       '<cellStyles count="1">'
-      '<cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
-      '<dxfs count="0"/><tableStyles count="0"/>',
+      '<cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>',
     );
+    if (_dxfs.isEmpty) {
+      w.raw('<dxfs count="0"/>');
+    } else {
+      _writeTable(w, 'dxfs', _dxfs);
+    }
+    w.raw('<tableStyles count="0"/>');
     w.end();
   }
 
