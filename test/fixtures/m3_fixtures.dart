@@ -16,6 +16,7 @@ List<Fixture> m3Fixtures() => <Fixture>[
   _conditional(),
   _conditionalX14(),
   _pageSetup(),
+  _headerFooter(),
 ];
 
 /// Defined names, a print area and print titles.
@@ -560,6 +561,47 @@ Fixture _pageSetup() {
             header: 0.2,
             footer: 0.2,
           ),
+        ),
+      );
+      return book.close();
+    },
+  );
+}
+
+/// Headers and footers on a sheet that prints on two pages.
+///
+/// `Report` has 60 rows. Its odd footer is `Page &P of &N`, its even footer
+/// the sheet name, its first-page header `Cover`, and its odd header `R&D`
+/// on the left (through `XlsxHeaderFooter.literal`) and the date on the
+/// right. Headers change no value, so the values below are what a reader
+/// computes; Excel's Print Preview shows the text.
+Fixture _headerFooter() {
+  final List<List<Object?>> rows = <List<Object?>>[
+    for (int i = 1; i <= 60; i++) <Object?>['Row $i', i],
+  ];
+  return Fixture(
+    'm3_header_footer',
+    <String, List<List<String>>>{
+      'Report': <List<String>>[
+        for (int i = 1; i <= 60; i++) <String>['Row $i', '$i'],
+      ],
+    },
+    <String, List<List<Object?>>>{'Report': rows},
+    () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter sheet = book.addSheet('Report');
+      rows.forEach(sheet.row);
+      sheet.headerFooter(
+        XlsxHeaderFooter(
+          oddHeader: XlsxHeaderFooter.sections(
+            left: XlsxHeaderFooter.literal('R&D'),
+            right: XlsxHeaderFooter.date,
+          ),
+          oddFooter:
+              'Page ${XlsxHeaderFooter.pageNumber} of '
+              '${XlsxHeaderFooter.pageCount}',
+          evenFooter: XlsxHeaderFooter.sheetName,
+          firstHeader: 'Cover',
         ),
       );
       return book.close();

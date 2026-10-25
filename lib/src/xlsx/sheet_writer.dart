@@ -39,6 +39,7 @@ import 'column.dart';
 import 'conditional_format.dart';
 import 'data_validation.dart';
 import 'defined_name.dart';
+import 'header_footer.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
 import 'page_setup.dart';
@@ -255,6 +256,19 @@ abstract final class XlsxSheetWriter {
   /// earlier setup stays then.
   void pageSetup(XlsxPageSetup setup);
 
+  /// Sets the text printed in the top and bottom margins of the sheet,
+  /// replacing an earlier call.
+  ///
+  /// A trailer setting like [merge]. An [XlsxHeaderFooter] with no text and
+  /// no flag off its default writes nothing.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] naming the field
+  /// (`oddHeader`, `oddFooter`, `evenHeader`, `evenFooter`, `firstHeader` or
+  /// `firstFooter`) when a text is longer than 255 characters, holds a
+  /// character XML forbids or ends in a lone `&` (see [XlsxHeaderFooter]);
+  /// the earlier setting stays then.
+  void headerFooter(XlsxHeaderFooter headerFooter);
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
@@ -380,6 +394,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       <WorksheetConditionalFormat>[];
 
   XlsxPageSetup? _pageSetup;
+  XlsxHeaderFooter? _headerFooter;
 
   /// The priority the next conditional-format rule gets.
   int _nextPriority = 1;
@@ -558,6 +573,13 @@ final class WorksheetWriter implements XlsxSheetWriter {
     _checkOpenSheet();
     checkPageSetup(setup);
     _pageSetup = setup;
+  }
+
+  @override
+  void headerFooter(XlsxHeaderFooter headerFooter) {
+    _checkOpenSheet();
+    checkHeaderFooter(headerFooter);
+    _headerFooter = headerFooter;
   }
 
   @override
@@ -794,6 +816,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       dataValidations: _validations,
       hyperlinks: links,
       pageSetup: _pageSetup,
+      headerFooter: _headerFooter,
     );
     context.zip.addChunks(worksheetPartName(number), <Uint8List>[
       utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),

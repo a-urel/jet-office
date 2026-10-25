@@ -188,6 +188,12 @@ abstract final class XlsxLimits {
   /// The highest paper size id of a page setup: ECMA-376's `paperSize`
   /// list, the one Excel uses, runs from 1 to 118.
   static const int maxPaperSize = 118;
+
+  /// The most characters one header or footer text holds: Excel's Header
+  /// & Footer dialog and its "Excel specifications and limits" page allow
+  /// 255, field codes included. A longer text throws [ArgumentError] when
+  /// the header or footer is registered.
+  static const int maxHeaderFooterLength = 255;
 }
 
 /// Thrown when a write would exceed one of the [XlsxLimits].

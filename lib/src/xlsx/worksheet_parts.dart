@@ -22,12 +22,14 @@
 /// `mergeCells`; the `extLst` of the Excel 2010 conditional formats (see
 /// `conditional_format_x14.dart`) comes last; the page setup (see
 /// `page_setup.dart`) writes `pageSetUpPr` in `sheetPr` and, after
-/// `hyperlinks`, `printOptions`, `pageMargins` and `pageSetup`.
+/// `hyperlinks`, `printOptions`, `pageMargins` and `pageSetup`; the header and
+/// footer (see `header_footer.dart`) write `headerFooter` after `pageSetup`.
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
 /// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter`,
 /// `mergeCells`, `conditionalFormatting`, `dataValidations`,
-/// `hyperlinks`, `printOptions`, `pageMargins`, `pageSetup` and `extLst`.
+/// `hyperlinks`, `printOptions`, `pageMargins`, `pageSetup`, `headerFooter`
+/// and `extLst`.
 library;
 
 import '../opc/ooxml.dart';
@@ -40,6 +42,7 @@ import 'color.dart';
 import 'conditional_format.dart';
 import 'conditional_format_x14.dart';
 import 'data_validation.dart';
+import 'header_footer.dart';
 import 'limits.dart';
 import 'page_setup.dart';
 import 'range.dart';
@@ -99,6 +102,7 @@ final class WorksheetSettings {
     this.dataValidations = const <XlsxDataValidation>[],
     this.hyperlinks = const <WorksheetHyperlink>[],
     this.pageSetup,
+    this.headerFooter,
   });
 
   /// The sheet's 1-based creation order, which the ids of its Excel 2010
@@ -148,6 +152,9 @@ final class WorksheetSettings {
 
   /// How the sheet prints, or `null` for no page setup.
   final XlsxPageSetup? pageSetup;
+
+  /// The text printed in the margins, or `null` for none.
+  final XlsxHeaderFooter? headerFooter;
 }
 
 /// The `<worksheet>` frame before the rows: the XML declaration, the
@@ -175,8 +182,8 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
 /// then `autoFilter`, `mergeCells`, `conditionalFormatting`,
 /// `dataValidations`, `hyperlinks`, the page setup's `printOptions`,
-/// `pageMargins` and `pageSetup`, and the `extLst` of the Excel 2010
-/// conditional formats when the sheet has them, then `</worksheet>`.
+/// `pageMargins`, `pageSetup` and `headerFooter`, and the `extLst` of the
+/// Excel 2010 conditional formats when the sheet has them, then `</worksheet>`.
 /// [hasRows] must match the call to [worksheetHeader].
 String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
   final StringBuffer out = StringBuffer();
@@ -215,6 +222,8 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
   }
   final XlsxPageSetup? pageSetup = settings.pageSetup;
   if (pageSetup != null) writePageSetup(w, pageSetup);
+  final XlsxHeaderFooter? headerFooter = settings.headerFooter;
+  if (headerFooter != null) writeHeaderFooter(w, headerFooter);
   // Last: CT_Worksheet ends with extLst.
   writeX14ConditionalFormats(
     w,

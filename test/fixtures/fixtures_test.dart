@@ -105,6 +105,7 @@ void main() {
       'm3_conditional',
       'm3_conditional_x14',
       'm3_page_setup',
+      'm3_header_footer',
     ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
@@ -564,6 +565,22 @@ void main() {
         'header="0.2" footer="0.2"/><pageSetup scale="85" '
         'firstPageNumber="3" pageOrder="overThenDown" '
         'useFirstPageNumber="1"/>',
+      ),
+    );
+  });
+
+  test('m3_header_footer writes the texts after pageSetup order', () {
+    final Map<String, String> parts = readXlsx(
+      named('m3_header_footer').build(),
+    );
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      contains(
+        '<headerFooter differentOddEven="1" differentFirst="1">'
+        '<oddHeader>&amp;LR&amp;&amp;D&amp;R&amp;D</oddHeader>'
+        '<oddFooter>Page &amp;P of &amp;N</oddFooter>'
+        '<evenFooter>&amp;A</evenFooter>'
+        '<firstHeader>Cover</firstHeader></headerFooter>',
       ),
     );
   });

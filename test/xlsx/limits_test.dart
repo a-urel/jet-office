@@ -37,6 +37,11 @@ void main() {
     expect(XlsxLimits.maxPaperSize, 118);
   });
 
+  test('header and footer limit matches Excel', () {
+    // Enforced in `header_footer_test.dart`.
+    expect(XlsxLimits.maxHeaderFooterLength, 255);
+  });
+
   test('style limits match Excel and ECMA-376', () {
     // Enforced in `font_test.dart` and `alignment_test.dart`.
     expect(XlsxLimits.maxFontSize, 409);
