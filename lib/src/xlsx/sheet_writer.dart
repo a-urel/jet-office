@@ -419,6 +419,23 @@ final class WorksheetWriter implements XlsxSheetWriter {
   /// The range of the auto filter, if [autoFilter] set one.
   XlsxRange? get autoFilterRange => _autoFilter;
 
+  /// Whether the sheet still holds what its part is rendered from beyond
+  /// what `close()` needs: links, merges, validations, conditional formats,
+  /// columns, view and page settings. False once [finish] has run; tests
+  /// use it to confirm a finished sheet lets that data go.
+  bool get holdsTrailerData =>
+      _links.isNotEmpty ||
+      _merges.isNotEmpty ||
+      _validations.isNotEmpty ||
+      _conditionalFormats.isNotEmpty ||
+      _columns.isNotEmpty ||
+      _columnStyles.isNotEmpty ||
+      _pageSetup != null ||
+      _headerFooter != null ||
+      _protection != null ||
+      _tabColor != null ||
+      _view != const XlsxSheetView();
+
   /// The defined names of this sheet that `workbook.xml` lists: its print
   /// area and titles and the names registered with [defineName].
   SheetNames get sheetNames => SheetNames(
@@ -807,11 +824,40 @@ final class WorksheetWriter implements XlsxSheetWriter {
   /// once into one buffer for the encoder; nothing here joins them.
   ///
   /// The sheet is detached first, so it is finished even when the ZIP
-  /// throws and never takes a row after `</worksheet>`.
+  /// throws and never takes a row after `</worksheet>`. Then, even on a
+  /// throw, it drops what the part was rendered from and keeps only what
+  /// `close()` needs: the name, number and visibility, the filter range and
+  /// the defined names (sheet names, print area and titles).
   void finish() {
     final Utf8Buffer body = _body!;
     _xml = null;
     _body = null;
+    try {
+      _writePart(body);
+    } finally {
+      _dropTrailerData();
+    }
+  }
+
+  /// Empties everything [holdsTrailerData] reports; a finished sheet keeps
+  /// up to 65,530 links and its other trailer lists no longer.
+  void _dropTrailerData() {
+    _links.clear();
+    _merges.clear();
+    _validations.clear();
+    _conditionalFormats.clear();
+    _columns = const <WorksheetColumn?>[];
+    _columnStyles = const <XlsxStyle?>[];
+    _pageSetup = null;
+    _headerFooter = null;
+    _protection = null;
+    _tabColor = null;
+    _view = const XlsxSheetView();
+  }
+
+  /// Renders the header, the trailer and the relationships part from the
+  /// settings and hands them with [body]'s chunks to the ZIP.
+  void _writePart(Utf8Buffer body) {
     // One relationship per distinct address, numbered in first-use order:
     // the one place ids are assigned. The links and the relationships part
     // both take them from this map.
