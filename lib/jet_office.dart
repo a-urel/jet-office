@@ -33,13 +33,9 @@ export 'src/xlsx/properties.dart' show XlsxProperties;
 export 'src/xlsx/range.dart' show XlsxRange;
 export 'src/xlsx/sheet_view.dart'
     show XlsxPane, XlsxSheetView, XlsxSheetVisibility;
+export 'src/xlsx/sheet_writer.dart' show XlsxSheetWriter;
 export 'src/xlsx/style.dart' show XlsxStyle;
 export 'src/xlsx/values.dart' show XlsxCell, XlsxDate, XlsxDecimal, XlsxFormula;
 export 'src/xlsx/warnings.dart' show XlsxLocale, XlsxWarning, XlsxWarningCode;
 export 'src/xlsx/xlsx_writer.dart'
-    show
-        XlsxResult,
-        XlsxSheetWriter,
-        XlsxStreamWriter,
-        XlsxWriter,
-        XlsxWriterBase;
+    show XlsxResult, XlsxStreamWriter, XlsxWriter, XlsxWriterBase;

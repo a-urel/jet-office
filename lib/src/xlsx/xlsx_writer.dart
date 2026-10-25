@@ -2,49 +2,30 @@
 /// [XlsxStreamWriter] (to a sink).
 ///
 /// Ported from quds_office_engine `lib/src/builders/xlsx_io.dart` at commit 15c5d29.
-/// Ported: `XlsxWorkbookBuilder.addSheet` and `build`, and the row loop,
-/// `colWidth` and row heights of `XlsxSheetBuilder` and `_sheetXml`. What
-/// changed: Quds kept every sheet as a list of rows and serialized the whole
-/// workbook in `build`; here rows are encoded as they arrive, one sheet is
-/// open at a time, and a finished sheet goes straight to the ZIP: its header
-/// (`worksheet_parts.dart`) is rendered and handed over with the row chunks
-/// and the trailer, which `ZipWriter.addChunks` copies once into one buffer
-/// for the encoder. Memory is bounded by one sheet's body, held twice while
-/// it is handed over. Header settings
-/// (columns, default sizes) are frozen at the first row; rows carry a
-/// height, visibility and outline level. Tab order is independent of
-/// creation order, the active tab is chosen by the caller, a workbook
-/// without sheets is an error instead of silently gaining `Sheet1`, Excel's
-/// row and column limits are enforced, and data problems are returned as
-/// warnings. A sheet has a view (zoom, gridlines, frozen or split panes), a
-/// tab color, an outline summary position and a visibility. Merged ranges
-/// and the auto filter are trailer settings, checked when set: Quds accepted
-/// overlapping merges and any filter text, and wrote no filter database
-/// name. Charts and pictures are not ported yet.
+/// Ported: `XlsxWorkbookBuilder.addSheet` and `build`. What changed: Quds
+/// kept every sheet as a list of rows and serialized the whole workbook in
+/// `build`; here one sheet is open at a time, [XlsxWriterBase.addSheet]
+/// finishes the open one, whose part goes straight to the ZIP (see
+/// `sheet_writer.dart`), and `close()` writes only the workbook-level parts. Tab order is independent
+/// of creation order, the active tab is chosen by the caller, a workbook
+/// without sheets is an error instead of silently gaining `Sheet1`, and data
+/// problems are returned as warnings. The workbook gets the hidden
+/// `_xlnm._FilterDatabase` name of each sheet's auto filter, which Quds did
+/// not write. Charts and pictures are not ported yet.
 library;
 
-import 'dart:convert';
 import 'dart:typed_data';
 
 import '../xml/utf8_buffer.dart';
-import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import '../zip/archive_adapter.dart';
-import 'cell_encoder.dart';
-import 'color.dart';
-import 'column.dart';
-import 'limits.dart';
 import 'properties.dart';
-import 'range.dart';
-import 'shared_strings.dart';
 import 'sheet_name.dart';
 import 'sheet_view.dart';
-import 'style.dart';
-import 'style_registry.dart';
-import 'values.dart';
+import 'sheet_writer.dart';
 import 'warnings.dart';
+import 'workbook_context.dart';
 import 'workbook_parts.dart';
-import 'worksheet_parts.dart';
 
 /// Writes a part with [write] and returns its UTF-8 bytes.
 Uint8List _render(void Function(XmlWriter w) write) {
@@ -69,29 +50,20 @@ sealed class XlsxWriterBase {
   XlsxWriterBase._(XlsxProperties properties, ZipWriter Function() createZip)
     : _coreXml = _render((XmlWriter w) => writeCoreProperties(w, properties)),
       _appXml = _render((XmlWriter w) => writeAppProperties(w, properties)),
-      _zip = createZip();
+      _context = WorkbookContext(createZip());
 
   final Uint8List _coreXml;
   final Uint8List _appXml;
-  final ZipWriter _zip;
-  final WarningCollector _warnings = WarningCollector();
-  late final SheetNamer _namer = SheetNamer(_warnings);
-  final SharedStrings _strings = SharedStrings();
-  final StyleRegistry _styles = StyleRegistry();
-  late final CellEncoder _encoder = CellEncoder(
-    strings: _strings,
-    styles: _styles,
-    warnings: _warnings,
-  );
+
+  /// The encoder, styles, ZIP and failure state every sheet shares.
+  final WorkbookContext _context;
+  late final SheetNamer _namer = SheetNamer(_context.warnings);
 
   /// The sheets in tab order.
-  final List<_SheetWriter> _tabs = <_SheetWriter>[];
-  _SheetWriter? _open;
-  _SheetWriter? _active;
+  final List<WorksheetWriter> _tabs = <WorksheetWriter>[];
+  WorksheetWriter? _open;
+  WorksheetWriter? _active;
   bool _closed = false;
-
-  /// What the ZIP work threw, once it has failed; the writer is then dead.
-  Object? _failure;
 
   /// Finishes the open sheet and starts a new one named [name].
   ///
@@ -120,10 +92,10 @@ sealed class XlsxWriterBase {
     if (position != null) {
       RangeError.checkValueInInterval(position, 0, _tabs.length, 'position');
     }
-    final _SheetWriter? open = _open;
-    if (open != null) _zipWork(open._finish);
-    final _SheetWriter sheet = _SheetWriter(
-      this,
+    final WorksheetWriter? open = _open;
+    if (open != null) _zipWork(open.finish);
+    final WorksheetWriter sheet = WorksheetWriter(
+      _context,
       _namer.assign(name),
       _tabs.length + 1,
       visibility,
@@ -144,7 +116,7 @@ sealed class XlsxWriterBase {
   /// [StateError] after `close()` or after a failure.
   void setActiveSheet(XlsxSheetWriter sheet) {
     _checkOpen();
-    if (sheet is! _SheetWriter || !identical(sheet._book, this)) {
+    if (sheet is! WorksheetWriter || !identical(sheet.context, _context)) {
       throw ArgumentError.value(
         sheet.name,
         'sheet',
@@ -162,18 +134,9 @@ sealed class XlsxWriterBase {
   }
 
   void _checkOpen() {
-    _checkNotFailed();
+    _context.checkNotFailed();
     if (_closed) {
       throw StateError('The XLSX writer is already closed.');
-    }
-  }
-
-  void _checkNotFailed() {
-    final Object? failure = _failure;
-    if (failure != null) {
-      throw StateError(
-        'The writer failed earlier and cannot continue: $failure',
-      );
     }
   }
 
@@ -183,7 +146,7 @@ sealed class XlsxWriterBase {
     try {
       return work();
     } on Object catch (error) {
-      _failure = error;
+      _context.recordFailure(error);
       rethrow;
     }
   }
@@ -202,7 +165,7 @@ sealed class XlsxWriterBase {
       );
     }
     return _zipWork(() {
-      _open?._finish();
+      _open?.finish();
       _open = null;
       final Uint8List? bytes = _writeWorkbookParts();
       _closed = true;
@@ -213,35 +176,36 @@ sealed class XlsxWriterBase {
   /// The tab index Excel opens on: the sheet chosen with [setActiveSheet],
   /// else the first visible tab; -1 when no tab is visible.
   int _activeTab() {
-    final _SheetWriter? chosen = _active;
+    final WorksheetWriter? chosen = _active;
     if (chosen != null) return _tabs.indexOf(chosen);
     return _tabs.indexWhere(
-      (_SheetWriter s) => s.visibility == XlsxSheetVisibility.visible,
+      (WorksheetWriter s) => s.visibility == XlsxSheetVisibility.visible,
     );
   }
 
   /// Writes the workbook-level parts and finishes the ZIP.
   Uint8List? _writeWorkbookParts() {
     final int sheetCount = _tabs.length;
-    _zip
-      ..add('xl/sharedStrings.xml', _render(_strings.writeXml))
-      ..add('xl/styles.xml', _render(_styles.writeStylesXml))
+    final ZipWriter zip = _context.zip;
+    zip
+      ..add('xl/sharedStrings.xml', _render(_context.strings.writeXml))
+      ..add('xl/styles.xml', _render(_context.styles.writeStylesXml))
       ..add(
         'xl/workbook.xml',
         _render(
           (XmlWriter w) => writeWorkbook(
             w,
             tabs: <WorkbookSheet>[
-              for (final _SheetWriter s in _tabs)
+              for (final WorksheetWriter s in _tabs)
                 (
                   name: s.name,
-                  number: s._number,
+                  number: s.number,
                   visibility: s.visibility,
-                  autoFilter: s._autoFilter,
+                  autoFilter: s.autoFilterRange,
                 ),
             ],
             activeTab: _activeTab(),
-            fullCalcOnLoad: _encoder.wroteFormula,
+            fullCalcOnLoad: _context.encoder.wroteFormula,
           ),
         ),
       )
@@ -256,7 +220,7 @@ sealed class XlsxWriterBase {
         '[Content_Types].xml',
         _render((XmlWriter w) => writeContentTypes(w, sheetCount)),
       );
-    return _zip.close();
+    return zip.close();
   }
 }
 
@@ -280,7 +244,7 @@ final class XlsxWriter extends XlsxWriterBase {
   /// warnings about data that had to be changed.
   ///
   /// Throws [StateError] when no sheet was added or when called twice.
-  XlsxResult close() => XlsxResult._(_close()!, _warnings.warnings);
+  XlsxResult close() => XlsxResult._(_close()!, _context.warnings.warnings);
 }
 
 /// Writes an XLSX file to a sink as it goes.
@@ -312,7 +276,7 @@ final class XlsxStreamWriter extends XlsxWriterBase {
   /// when called twice or after a failure. Rethrows what the sink throws.
   List<XlsxWarning> close() {
     _close();
-    return _warnings.warnings;
+    return _context.warnings.warnings;
   }
 }
 
@@ -327,505 +291,4 @@ final class XlsxResult {
   /// when the data was written exactly as given. Unmodifiable, and final once
   /// `close()` has returned.
   final List<XlsxWarning> warnings;
-}
-
-/// Writes the rows of one worksheet.
-///
-/// Obtained from [XlsxWriterBase.addSheet], the only way to get one: the
-/// class cannot be implemented or extended outside this package. A sheet
-/// accepts rows until the next `addSheet` or `close()` finishes it.
-///
-/// The header settings, [columns], [defaultSizes], [view], [freeze],
-/// [split], [tabColor] and [outlineSummary], describe the sheet as a whole
-/// and must come before the first [row] or [blankRow]; after that they throw
-/// [StateError]. Calling one again before the first row replaces
-/// what the earlier call set.
-abstract final class XlsxSheetWriter {
-  /// The sheet's name in the file, after any renaming (see
-  /// [XlsxWriterBase.addSheet]).
-  String get name;
-
-  /// The number of rows written so far, blank rows included. The next row
-  /// is row `rowCount + 1` in Excel.
-  int get rowCount;
-
-  /// Sets the widths, styles, visibility and outline levels of the columns.
-  ///
-  /// Index `i` of [columns] describes column `i`, A being 0; a `null` entry,
-  /// like an [XlsxColumn] that sets nothing, keeps the column at its
-  /// default. A column's style applies to its cells beneath the row and cell
-  /// styles (see [row]) and to its empty cells. Equal adjacent columns are
-  /// written as one range. A second call before the first row replaces the
-  /// columns, but the first call's styles stay in `styles.xml` as unused
-  /// cell formats, because styles are registered when the columns are set.
-  ///
-  /// Throws [StateError] after the first [row] or [blankRow], when the sheet
-  /// is finished or the writer has failed; [XlsxLimitError] for more than
-  /// [XlsxLimits.maxColumns] entries; [ArgumentError] for a width outside 0
-  /// to [XlsxLimits.maxColumnWidth], an outline level outside 0 to
-  /// [XlsxLimits.maxOutlineLevel], or an invalid style (as [row] describes);
-  /// and `XlsxLimitError('cell formats', ...)` like [row]. When it throws,
-  /// nothing is recorded: the earlier columns, if any, stay in force and no
-  /// style is registered.
-  void columns(List<XlsxColumn?> columns);
-
-  /// Sets the sheet's default row height in points and default column width
-  /// in characters; `null` keeps Excel's default (15 points and 9.140625
-  /// characters for Calibri 11).
-  ///
-  /// Throws [StateError] like [columns], and [ArgumentError] for a
-  /// [rowHeight] outside 0 to [XlsxLimits.maxRowHeight] or a [columnWidth]
-  /// outside 0 to [XlsxLimits.maxColumnWidth]; nothing is recorded then.
-  void defaultSizes({double? rowHeight, double? columnWidth});
-
-  /// Whether the sheet is shown as a tab; set by
-  /// [XlsxWriterBase.addSheet].
-  XlsxSheetVisibility get visibility;
-
-  /// Sets how the sheet is shown: zoom, gridlines, headings, right-to-left
-  /// and its panes. Replaces the whole earlier view, its pane included.
-  ///
-  /// Throws [StateError] like [columns], and [ArgumentError] for a zoom
-  /// outside [XlsxLimits.minZoom] to [XlsxLimits.maxZoom] or an invalid pane
-  /// (see [freeze] and [split]); nothing is recorded then.
-  void view(XlsxSheetView view);
-
-  /// Freezes the first [rows] rows and [columns] columns, so they stay in
-  /// view while the rest scrolls. The rest of the current view (zoom and so
-  /// on) is kept; the earlier pane, if any, is replaced. Freezing 0 rows and
-  /// 0 columns writes no pane, so a header count computed from the data may
-  /// be 0.
-  ///
-  /// Throws [StateError] like [columns], and [ArgumentError] for [rows]
-  /// outside 0 to 1,048,575 or [columns] outside 0 to 16,383; nothing is
-  /// recorded then.
-  void freeze({int rows = 0, int columns = 0});
-
-  /// Splits the sheet into panes [x] points from the left edge and [y]
-  /// points from the top. The rest of the current view is kept; the earlier
-  /// pane, if any, is replaced. A split of 0 on both axes writes no pane.
-  ///
-  /// Throws [StateError] like [columns], and [ArgumentError] for an offset
-  /// that is negative, NaN or infinite, or whose twips (`offset * 20`,
-  /// rounded) exceed 2^31 - 1, that is above 107,374,182.35 points; nothing
-  /// is recorded then.
-  void split({double x = 0, double y = 0});
-
-  /// Colors the sheet's tab. A later call replaces the earlier one.
-  ///
-  /// Throws [StateError] like [columns], and [ArgumentError] for a color out
-  /// of range (see [XlsxColor]); nothing is recorded then.
-  void tabColor(XlsxColor color);
-
-  /// Sets where the summary row and column of an outline group (see
-  /// [row]'s `outlineLevel` and [columns]) sit: [below] its detail rows and
-  /// [right] of its detail columns, as Excel does by default.
-  ///
-  /// Throws [StateError] like [columns].
-  void outlineSummary({bool below = true, bool right = true});
-
-  /// Merges the cells of [range] into one, which shows the top-left cell.
-  ///
-  /// A trailer setting: allowed after rows, until the next `addSheet` or
-  /// `close()` finishes the sheet. Merges are written in the order made.
-  /// Excel keeps only the top-left cell's value, so write the value there;
-  /// the other cells of the range should be empty.
-  ///
-  /// Throws [StateError] when the sheet is finished or the writer has failed;
-  /// [ArgumentError] when [range] is a single cell, lies outside the sheet,
-  /// has its first corner after its last, or overlaps an earlier merge (the
-  /// message names both ranges). When it throws, nothing is recorded.
-  void merge(XlsxRange range);
-
-  /// Puts an auto filter, the drop-down buttons of a header row, on [range],
-  /// whose first row is the header. A later call replaces the earlier one.
-  ///
-  /// A trailer setting like [merge]. The workbook also gets the hidden
-  /// `_xlnm._FilterDatabase` name Excel keeps for the filter. A single-cell
-  /// [range] is accepted.
-  ///
-  /// Throws [StateError] like [merge], and [ArgumentError] when [range] lies
-  /// outside the sheet or has its first corner after its last; the earlier
-  /// filter, if any, stays in force then.
-  void autoFilter(XlsxRange range);
-
-  /// Appends a row whose cells hold [values], from column A on.
-  ///
-  /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
-  /// [DateTime], [XlsxDate], [XlsxDecimal], [XlsxFormula], or an [XlsxCell]
-  /// wrapping one of those with its own style. [style] applies to every cell
-  /// of the row. The effective style of a cell is its column's style (see
-  /// [columns]), with [style] merged over it and the cell's own style over
-  /// that, field by field: a field a higher layer sets wins, one it leaves
-  /// `null` is inherited.
-  ///
-  /// `XlsxCell(null, style: s)` with a non-null `s` writes an empty cell
-  /// that carries the effective style, for example a border across a
-  /// totals row; it writes nothing when the effective style is the
-  /// default. A bare `null` and `XlsxCell(null)` write no cell, even under
-  /// a row or column style.
-  ///
-  /// [height] is the row's height in points, `null` for the default.
-  /// [hidden] hides the row. [outlineLevel] groups it, from 0 (not grouped)
-  /// to [XlsxLimits.maxOutlineLevel]. [collapsed] marks the row that carries
-  /// the expand button of a collapsed group next to it. A row in which no
-  /// cell is written (only `null`s, or styled empties whose effective style
-  /// is the default) writes nothing unless it has one of these attributes,
-  /// but it still counts; a row whose only cells are styled empties is
-  /// written.
-  ///
-  /// Data problems are repaired and reported as warnings. Throws
-  /// [XlsxLimitError] for more than [XlsxLimits.maxColumns] values or a row
-  /// past [XlsxLimits.maxRows], and [ArgumentError] for a [height] outside 0
-  /// to [XlsxLimits.maxRowHeight] or an [outlineLevel] out of range, all
-  /// before anything is written. It also throws
-  /// `XlsxLimitError('cell formats', ...)` for a style that would make the
-  /// workbook hold more than [XlsxLimits.maxCellFormats] cell formats; that
-  /// one can happen in the middle of a row. Further, it throws [StateError]
-  /// when the sheet is finished or the writer has failed, and
-  /// [ArgumentError] for a value the writer cannot store or an invalid style
-  /// (a built-in number format id outside `0..163`, or an empty custom
-  /// format code or one with characters XML forbids). After an
-  /// [ArgumentError] or a cell-format [XlsxLimitError] in the middle of a
-  /// row, the cells before the failing one are kept, the row keeps its
-  /// attributes and still counts.
-  void row(
-    List<Object?> values, {
-    XlsxStyle? style,
-    double? height,
-    bool hidden = false,
-    int outlineLevel = 0,
-    bool collapsed = false,
-  });
-
-  /// Appends a row without cells, with the attributes [row] describes. A
-  /// blank row without attributes writes nothing but counts. Throws like
-  /// [row].
-  void blankRow({
-    double? height,
-    bool hidden = false,
-    int outlineLevel = 0,
-    bool collapsed = false,
-  });
-}
-
-/// The sheet writer of [XlsxWriterBase]: one worksheet part being written.
-///
-/// Rows are encoded into a body buffer as they arrive. The header, which
-/// depends on settings and on the deepest row outline level, is rendered
-/// when the sheet is finished and handed to the ZIP with the body's chunks
-/// and the trailer. The body is never built as one string; its chunks are
-/// copied exactly once, by `ZipWriter.addChunks`, into the entry's buffer.
-final class _SheetWriter implements XlsxSheetWriter {
-  _SheetWriter(this._book, this.name, this._number, this.visibility) {
-    final Utf8Buffer body = Utf8Buffer();
-    _body = body;
-    _xml = XmlWriter(body);
-  }
-
-  final XlsxWriterBase _book;
-
-  /// The 1-based creation order: part name, `sheetId` and relationship id.
-  final int _number;
-
-  @override
-  final String name;
-
-  @override
-  final XlsxSheetVisibility visibility;
-
-  /// The rows so far and their writer; null once the sheet is finished.
-  Utf8Buffer? _body;
-  XmlWriter? _xml;
-  int _rowCount = 0;
-
-  /// Whether any `<row>` element was written.
-  bool _wroteRow = false;
-
-  /// The columns as set, their styles (the same objects on every row, so
-  /// the encoder's per-column cache holds) and their header form.
-  List<XlsxStyle?> _columnStyles = const <XlsxStyle?>[];
-  List<WorksheetColumn?> _columns = const <WorksheetColumn?>[];
-  double? _defaultRowHeight;
-  double? _defaultColumnWidth;
-  int _outlineLevelRow = 0;
-  XlsxSheetView _view = const XlsxSheetView();
-  XlsxColor? _tabColor;
-  bool _summaryBelow = true;
-  bool _summaryRight = true;
-  final List<XlsxRange> _merges = <XlsxRange>[];
-  XlsxRange? _autoFilter;
-
-  @override
-  int get rowCount => _rowCount;
-
-  @override
-  void columns(List<XlsxColumn?> columns) {
-    _checkHeaderOpen('columns');
-    if (columns.length > XlsxLimits.maxColumns) {
-      throw XlsxLimitError('columns', XlsxLimits.maxColumns);
-    }
-    for (int i = 0; i < columns.length; i++) {
-      final XlsxColumn? column = columns[i];
-      if (column == null) continue;
-      final double? width = column.width;
-      if (width != null) checkColumnWidth(width, 'columns[$i].width');
-      checkOutlineLevel(column.outlineLevel, 'columns[$i].outlineLevel');
-    }
-    final List<XlsxStyle?> styles = <XlsxStyle?>[
-      for (final XlsxColumn? column in columns) column?.style,
-    ];
-    // Atomic: a style that throws leaves none of the others registered.
-    final List<int> ids = _book._styles.idsFor(styles);
-    _columnStyles = List<XlsxStyle?>.unmodifiable(styles);
-    _columns = List<WorksheetColumn?>.unmodifiable(<WorksheetColumn?>[
-      for (int i = 0; i < columns.length; i++)
-        if (columns[i] case final XlsxColumn c)
-          (
-            width: c.width,
-            style: ids[i],
-            hidden: c.hidden,
-            outlineLevel: c.outlineLevel,
-            collapsed: c.collapsed,
-          )
-        else
-          null,
-    ]);
-  }
-
-  @override
-  void defaultSizes({double? rowHeight, double? columnWidth}) {
-    _checkHeaderOpen('defaultSizes');
-    if (rowHeight != null) checkRowHeight(rowHeight, 'rowHeight');
-    if (columnWidth != null) checkColumnWidth(columnWidth, 'columnWidth');
-    _defaultRowHeight = rowHeight;
-    _defaultColumnWidth = columnWidth;
-  }
-
-  @override
-  void view(XlsxSheetView view) {
-    _checkHeaderOpen('view');
-    checkSheetView(view);
-    _view = view;
-  }
-
-  @override
-  void freeze({int rows = 0, int columns = 0}) {
-    _checkHeaderOpen('freeze');
-    final XlsxPane pane = XlsxPane.frozen(rows: rows, columns: columns);
-    checkPane(pane);
-    _view = _view.copyWith(pane: pane);
-  }
-
-  @override
-  void split({double x = 0, double y = 0}) {
-    _checkHeaderOpen('split');
-    final XlsxPane pane = XlsxPane.split(x: x, y: y);
-    checkPane(pane);
-    _view = _view.copyWith(pane: pane);
-  }
-
-  @override
-  void tabColor(XlsxColor color) {
-    _checkHeaderOpen('tabColor');
-    validateColor(color, 'color');
-    _tabColor = color;
-  }
-
-  @override
-  void outlineSummary({bool below = true, bool right = true}) {
-    _checkHeaderOpen('outlineSummary');
-    _summaryBelow = below;
-    _summaryRight = right;
-  }
-
-  @override
-  void merge(XlsxRange range) {
-    _checkOpenSheet();
-    validateRange(range, 'range');
-    if (range.isSingleCell) {
-      throw ArgumentError.value(
-        range,
-        'range',
-        'A merged range must cover at least two cells.',
-      );
-    }
-    for (final XlsxRange earlier in _merges) {
-      if (earlier.overlaps(range)) {
-        throw ArgumentError.value(
-          range,
-          'range',
-          'The range ${range.ref} overlaps the merged range ${earlier.ref}.',
-        );
-      }
-    }
-    _merges.add(range);
-  }
-
-  @override
-  void autoFilter(XlsxRange range) {
-    _checkOpenSheet();
-    validateRange(range, 'range');
-    _autoFilter = range;
-  }
-
-  @override
-  void row(
-    List<Object?> values, {
-    XlsxStyle? style,
-    double? height,
-    bool hidden = false,
-    int outlineLevel = 0,
-    bool collapsed = false,
-  }) {
-    final XmlWriter xml = _checkWritable();
-    if (values.length > XlsxLimits.maxColumns) {
-      throw XlsxLimitError('columns', XlsxLimits.maxColumns);
-    }
-    _checkRowAttributes(height, outlineLevel);
-    final int row = _rowCount;
-    _rowCount++;
-    bool opened = false;
-    if (height != null || hidden || outlineLevel != 0 || collapsed) {
-      _startRow(xml, row, height, hidden, outlineLevel, collapsed);
-      opened = true;
-    }
-    // Without attributes, the row is opened by its first written cell, so
-    // cells that write nothing (an XlsxCell of null, a styled empty whose
-    // style is the default, a cell that throws) leave no empty element.
-    void open() {
-      if (opened) return;
-      _startRow(xml, row, null, false, 0, false);
-      opened = true;
-    }
-
-    try {
-      for (int column = 0; column < values.length; column++) {
-        final Object? value = values[column];
-        if (value == null) continue;
-        _book._encoder.encode(
-          xml,
-          sheet: name,
-          row: row,
-          column: column,
-          value: value,
-          rowStyle: style,
-          columnStyle: column < _columnStyles.length
-              ? _columnStyles[column]
-              : null,
-          beforeWrite: open,
-        );
-      }
-    } finally {
-      if (opened) xml.end();
-    }
-  }
-
-  @override
-  void blankRow({
-    double? height,
-    bool hidden = false,
-    int outlineLevel = 0,
-    bool collapsed = false,
-  }) {
-    final XmlWriter xml = _checkWritable();
-    _checkRowAttributes(height, outlineLevel);
-    final int row = _rowCount;
-    _rowCount++;
-    if (height != null || hidden || outlineLevel != 0 || collapsed) {
-      _startRow(xml, row, height, hidden, outlineLevel, collapsed);
-      xml.end();
-    }
-  }
-
-  static void _checkRowAttributes(double? height, int outlineLevel) {
-    if (height != null) checkRowHeight(height, 'height');
-    checkOutlineLevel(outlineLevel, 'outlineLevel');
-  }
-
-  /// Opens the `<row>` of zero-based [row] with its attributes, in `CT_Row`
-  /// order, and records its outline level for `sheetFormatPr`.
-  void _startRow(
-    XmlWriter xml,
-    int row,
-    double? height,
-    bool hidden,
-    int outlineLevel,
-    bool collapsed,
-  ) {
-    xml.start('row');
-    xml.attribute('r', '${row + 1}');
-    if (height != null) xml.attribute('ht', formatXmlDouble(height));
-    if (hidden) xml.attribute('hidden', '1');
-    if (height != null) xml.attribute('customHeight', '1');
-    if (outlineLevel != 0) xml.attribute('outlineLevel', '$outlineLevel');
-    if (collapsed) xml.attribute('collapsed', '1');
-    if (outlineLevel > _outlineLevelRow) _outlineLevelRow = outlineLevel;
-    _wroteRow = true;
-  }
-
-  /// Throws unless a header setting named [setting] may still be changed:
-  /// the writer has not failed, the sheet is open and has no rows yet.
-  void _checkHeaderOpen(String setting) {
-    _checkOpenSheet();
-    if (_rowCount > 0) {
-      throw StateError(
-        'Sheet "$name" already has rows; $setting must be set before the '
-        'first row() or blankRow().',
-      );
-    }
-  }
-
-  /// The XML writer, after checking the writer has not failed and the sheet
-  /// is open.
-  XmlWriter _checkOpenSheet() {
-    _book._checkNotFailed();
-    final XmlWriter? xml = _xml;
-    if (xml == null) {
-      throw StateError(
-        'Sheet "$name" is finished; rows and settings can only be added to '
-        'the sheet added last, before close().',
-      );
-    }
-    return xml;
-  }
-
-  /// The XML writer, after checking the writer has not failed and the sheet
-  /// is open and has room for a row.
-  XmlWriter _checkWritable() {
-    final XmlWriter xml = _checkOpenSheet();
-    if (_rowCount >= XlsxLimits.maxRows) {
-      throw XlsxLimitError('rows', XlsxLimits.maxRows);
-    }
-    return xml;
-  }
-
-  /// Assembles the part, header, body chunks and trailer, and hands it to
-  /// the ZIP, keeping no bytes. `ZipWriter.addChunks` copies the chunks
-  /// once into one buffer for the encoder; nothing here joins them.
-  ///
-  /// The sheet is detached first, so it is finished even when the ZIP
-  /// throws and never takes a row after `</worksheet>`.
-  void _finish() {
-    final Utf8Buffer body = _body!;
-    _xml = null;
-    _body = null;
-    final WorksheetSettings settings = WorksheetSettings(
-      columns: _columns,
-      defaultColumnWidth: _defaultColumnWidth,
-      defaultRowHeight: _defaultRowHeight,
-      outlineLevelRow: _outlineLevelRow,
-      view: _view,
-      tabColor: _tabColor,
-      summaryBelow: _summaryBelow,
-      summaryRight: _summaryRight,
-      autoFilter: _autoFilter,
-      merges: _merges,
-    );
-    _book._zip.addChunks(worksheetPartName(_number), <Uint8List>[
-      utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),
-      ...body.takeChunks(),
-      utf8.encode(worksheetTrailer(settings, hasRows: _wroteRow)),
-    ]);
-  }
 }
