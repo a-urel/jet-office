@@ -85,8 +85,11 @@ final class XlsxProperties {
   /// Custom properties, shown by Excel under File > Info > Properties >
   /// Advanced Properties > Custom, in map order.
   ///
-  /// A value is a [String], an [int] in the 32-bit range, a finite
-  /// [double], a [bool] or a [DateTime] (written in UTC with whole seconds).
+  /// A value is a [String], a finite number, a [bool] or a [DateTime]
+  /// (written in UTC with whole seconds). An [int] in the signed 32-bit
+  /// range is written as an integer (`vt:i4`), any other number as a double
+  /// (`vt:r8`); on the web a whole [double] is an [int], so `3.0` is an
+  /// integer there.
   /// A name is 1 to [XlsxLimits.maxCustomPropertyNameLength] UTF-16 code
   /// units, holds no character XML forbids and is unique ignoring case.
   /// When empty, no custom part is written. The writer constructors throw an
@@ -204,9 +207,14 @@ const String _customFormatId = '{D5CDD505-2E9C-101B-9397-08002B2CF9AE}';
 /// Throws [ArgumentError] naming `custom` for a name that is empty, longer
 /// than [XlsxLimits.maxCustomPropertyNameLength], holds forbidden characters
 /// or repeats an earlier name ignoring case, and naming `custom["<name>"]`
-/// for a value that is not a [String], a 32-bit [int], a finite [double], a
-/// [bool] or a [DateTime], or a string holding forbidden characters. Check
-/// everything before writing, so a throw leaves no partial part.
+/// for a value that is not a [String], a finite number, a [bool] or a
+/// [DateTime], or a string holding forbidden characters. Check everything
+/// before writing, so a throw leaves no partial part.
+///
+/// An [int] within the signed 32-bit range is written `vt:i4`; any other
+/// finite number, [int] or [double], is `vt:r8`, so no finite number
+/// throws. On the web a whole [double] is an [int]: `3.0` is `vt:i4` there
+/// and `vt:r8` on the VM, while `3e9` is `vt:r8` on both.
 void writeCustomProperties(XmlWriter w, XlsxProperties p) {
   final Set<String> seen = <String>{};
   for (final MapEntry<String, Object> e in p.custom.entries) {
@@ -228,12 +236,12 @@ void writeCustomProperties(XmlWriter w, XlsxProperties p) {
       case String():
         w.start('vt:lpwstr');
         w.text(v);
-      case int():
+      case int() when _fitsI4(v):
         w.start('vt:i4');
         w.text('$v');
-      case double():
+      case num():
         w.start('vt:r8');
-        w.text(formatXmlDouble(v));
+        w.text(formatXmlDouble(v.toDouble()));
       case bool():
         w.start('vt:bool');
         w.text(v ? 'true' : 'false');
@@ -248,6 +256,9 @@ void writeCustomProperties(XmlWriter w, XlsxProperties p) {
   }
   w.end();
 }
+
+/// Whether [value] fits `vt:i4`, a signed 32-bit integer.
+bool _fitsI4(int value) => value >= -2147483648 && value <= 2147483647;
 
 void _checkCustomName(String name, Set<String> seen) {
   if (name.isEmpty) {
@@ -290,13 +301,9 @@ void _checkCustomValue(String name, Object value) {
           'surrogates).',
         );
       }
-    case int():
-      if (value < -2147483648 || value > 2147483647) {
-        throw ArgumentError.value(value, field, 'An int must fit in 32 bits.');
-      }
-    case double():
+    case num():
       if (!value.isFinite) {
-        throw ArgumentError.value(value, field, 'A double must be finite.');
+        throw ArgumentError.value(value, field, 'A number must be finite.');
       }
     case bool() || DateTime():
       break;

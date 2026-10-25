@@ -251,12 +251,31 @@ void main() {
       'Name': 'x',
       'NAME': 'y',
     }, 'custom');
-    bad('an int above 32 bits', <String, Object>{
-      'N': 2147483648,
-    }, 'custom["N"]');
-    bad('an int below 32 bits', <String, Object>{
-      'N': -2147483649,
-    }, 'custom["N"]');
+    group('numbers on the VM and the web alike', () {
+      String value(Object number) => RegExp(r'<vt:\w+>[^<]*</vt:\w+>')
+          .firstMatch(
+            _custom(XlsxProperties(custom: <String, Object>{'N': number})),
+          )!
+          .group(0)!;
+
+      test('an int within 32 bits is vt:i4', () {
+        expect(value(2147483647), '<vt:i4>2147483647</vt:i4>');
+        expect(value(-2147483648), '<vt:i4>-2147483648</vt:i4>');
+      });
+
+      test('an int outside 32 bits is vt:r8', () {
+        expect(value(2147483648), '<vt:r8>2147483648</vt:r8>');
+        expect(value(-2147483649), '<vt:r8>-2147483649</vt:r8>');
+        // 2^40, written as a literal: on the web `1 << 40` wraps to 32 bits.
+        expect(value(1099511627776), '<vt:r8>1099511627776</vt:r8>');
+      });
+
+      test('a whole double outside 32 bits is vt:r8, not a throw', () {
+        // On the web both are ints; they must not be refused there.
+        expect(value(3e9), '<vt:r8>3000000000</vt:r8>');
+        expect(value(1e10), '<vt:r8>10000000000</vt:r8>');
+      });
+    });
     bad('NaN', <String, Object>{'N': double.nan}, 'custom["N"]');
     bad('infinity', <String, Object>{'N': double.infinity}, 'custom["N"]');
     bad('another value type', <String, Object>{
