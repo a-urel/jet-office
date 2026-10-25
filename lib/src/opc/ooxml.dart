@@ -7,7 +7,8 @@
 /// regrouped as [Ns], [RelType] and [ContentType]. What changed: the Word,
 /// PowerPoint, VML and other constants nothing in the XLSX writer needs are
 /// not ported. The values are the ECMA-376 transitional ones and none differs
-/// from Quds.
+/// from Quds; [Ns.x14] and [Ns.xm], Microsoft's extension namespaces for the
+/// Excel 2010 conditional formats, are new.
 library;
 
 /// XML namespace URIs.
@@ -48,6 +49,16 @@ abstract final class Ns {
   /// Extended (application) properties, `docProps/app.xml`.
   static const String extendedProperties =
       'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties';
+
+  /// SpreadsheetML 2009 (`x14:`), Excel 2010's extensions (MS-XLSX):
+  /// the data bars and icon sets of its conditional formats.
+  static const String x14 =
+      'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
+
+  /// Excel 2006 main (`xm:`, MS-XLSX): the formulas (`xm:f`) and ranges
+  /// (`xm:sqref`) inside Excel 2010 extensions.
+  static const String xm =
+      'http://schemas.microsoft.com/office/excel/2006/main';
 }
 
 /// Relationship type URIs.

@@ -103,6 +103,7 @@ void main() {
       'm3_hyperlinks',
       'm3_validation',
       'm3_conditional',
+      'm3_conditional_x14',
     ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
@@ -476,6 +477,40 @@ void main() {
     expect(sheet, contains('<conditionalFormatting sqref="B2:C21">'));
     expect(parts['xl/styles.xml'], contains('<dxfs count="3">'));
     expect(sheet.indexOf('</sheetData>'), lessThan(sheet.indexOf('<condit')));
+  });
+
+  test('m3_conditional_x14 writes the Excel 2010 bars and icon sets', () {
+    final String sheet = readXlsx(
+      named('m3_conditional_x14').build(),
+    )['xl/worksheets/sheet1.xml']!;
+    // Two data bars keep their 2007 rules; the x14-only icon sets have none.
+    expect(RegExp('<cfRule type="dataBar"').allMatches(sheet), hasLength(2));
+    expect(sheet, isNot(contains('<cfRule type="iconSet"')));
+    expect(
+      sheet,
+      contains(
+        '<x14:dataBar minLength="0" maxLength="100" '
+        'negativeBarColorSameAsPositive="0" axisPosition="middle">',
+      ),
+    );
+    expect(
+      sheet,
+      contains(
+        '<x14:dataBar minLength="0" maxLength="100" border="1" '
+        'gradient="0">',
+      ),
+    );
+    for (final String set in <String>['3Stars', '3Triangles', '5Boxes']) {
+      expect(sheet, contains('<x14:iconSet iconSet="$set">'));
+    }
+    // The icon sets take priorities 3 to 5 after the bars' 1 and 2.
+    expect(
+      RegExp(
+        r'priority="(\d+)"',
+      ).allMatches(sheet).map((Match m) => int.parse(m.group(1)!)),
+      <int>[1, 2, 3, 4, 5],
+    );
+    expect(sheet, endsWith('</extLst></worksheet>'));
   });
 
   test('m2_formula_xstring probes _xHHHH_ inside a formula and in text', () {

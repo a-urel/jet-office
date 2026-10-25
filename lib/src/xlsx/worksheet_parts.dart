@@ -19,12 +19,13 @@
 /// carries their external targets; `conditionalFormatting` (see
 /// `conditional_format.dart`) and `dataValidations` (see
 /// `data_validation.dart`) come between them, where Quds wrote both before
-/// `mergeCells`.
+/// `mergeCells`; the `extLst` of the Excel 2010 conditional formats (see
+/// `conditional_format_x14.dart`) comes last.
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
 /// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter`,
-/// `mergeCells`, `conditionalFormatting`, `dataValidations` and
-/// `hyperlinks`.
+/// `mergeCells`, `conditionalFormatting`, `dataValidations`,
+/// `hyperlinks` and `extLst`.
 library;
 
 import '../opc/ooxml.dart';
@@ -35,6 +36,7 @@ import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
 import 'color.dart';
 import 'conditional_format.dart';
+import 'conditional_format_x14.dart';
 import 'data_validation.dart';
 import 'limits.dart';
 import 'range.dart';
@@ -79,6 +81,7 @@ typedef WorksheetHyperlink = ({
 final class WorksheetSettings {
   /// Creates the settings of one worksheet.
   const WorksheetSettings({
+    this.sheetNumber = 1,
     this.columns = const <WorksheetColumn?>[],
     this.defaultColumnWidth,
     this.defaultRowHeight,
@@ -93,6 +96,10 @@ final class WorksheetSettings {
     this.dataValidations = const <XlsxDataValidation>[],
     this.hyperlinks = const <WorksheetHyperlink>[],
   });
+
+  /// The sheet's 1-based creation order, which the ids of its Excel 2010
+  /// conditional-format rules carry.
+  final int sheetNumber;
 
   /// The columns from A on; `null` keeps a column at its default.
   final List<WorksheetColumn?> columns;
@@ -160,8 +167,9 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
 /// then `autoFilter`, `mergeCells`, `conditionalFormatting`,
-/// `dataValidations` and `hyperlinks` when the sheet has them, then
-/// `</worksheet>`. [hasRows] must match the call to [worksheetHeader].
+/// `dataValidations`, `hyperlinks` and the `extLst` of the Excel 2010
+/// conditional formats when the sheet has them, then `</worksheet>`.
+/// [hasRows] must match the call to [worksheetHeader].
 String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
   final StringBuffer out = StringBuffer();
   final XmlWriter w = XmlWriter(out);
@@ -178,7 +186,7 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
     }
     w.end();
   }
-  writeConditionalFormats(w, settings.conditionalFormats);
+  writeConditionalFormats(w, settings.conditionalFormats, settings.sheetNumber);
   writeDataValidations(w, settings.dataValidations);
   if (settings.hyperlinks.isNotEmpty) {
     w.start('hyperlinks');
@@ -197,6 +205,12 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
     }
     w.end();
   }
+  // Last: CT_Worksheet ends with extLst.
+  writeX14ConditionalFormats(
+    w,
+    settings.conditionalFormats,
+    settings.sheetNumber,
+  );
   w.raw('</worksheet>');
   return out.toString();
 }

@@ -227,7 +227,10 @@ abstract final class XlsxSheetWriter {
   /// priority, from 1 on, across every call: the rules of an earlier call
   /// take precedence over those of a later one. The rules' styles are
   /// registered as differential styles; equal styles share one. Formats are
-  /// written in the order added, and their ranges may overlap.
+  /// written in the order added, and their ranges may overlap. Data bars and
+  /// the icon sets only Excel 2010 has ([XlsxIconSetType.isX14Only]) are
+  /// written as Excel 2010 rules too; such an icon set takes a priority like
+  /// any other rule.
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] naming the field
   /// (`ranges[i]`, `rules[i].<field>`, `rules[i].style.<field>`) when
@@ -752,6 +755,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       ));
     }
     final WorksheetSettings settings = WorksheetSettings(
+      sheetNumber: number,
       columns: _columns,
       defaultColumnWidth: _defaultColumnWidth,
       defaultRowHeight: _defaultRowHeight,

@@ -13,7 +13,9 @@
 /// checks it when it is registered, registers the rules' styles as
 /// differential styles (`differential_style.dart`) and numbers the rules
 /// with the sheet's next priorities; the trailer writes `cfRule`
-/// attributes in `CT_CfRule` order.
+/// attributes in `CT_CfRule` order. The Excel 2010 rules of data bars and
+/// of the icon sets only Excel 2010 has are written by
+/// `conditional_format_x14.dart`.
 library;
 
 import '../xml/xml_escape.dart';
@@ -22,6 +24,7 @@ import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
 import 'color.dart';
 import 'comparison.dart';
+import 'conditional_format_x14.dart';
 import 'differential_style.dart';
 import 'formula_text.dart';
 import 'limits.dart';
@@ -378,8 +381,15 @@ final class XlsxColorScale extends XlsxConditionalRule {
 /// longest [maxLength]; both 0 to 100, with [minLength] not above
 /// [maxLength], checked when the format is registered. [showValue] false
 /// hides the cell's value behind the bar.
+///
+/// Excel 2010 and later draw a bar from its Excel 2010 rule, which the
+/// writer adds to every data bar (`conditional_format_x14.dart`); Excel
+/// 2007 draws the plain rule. Only the Excel 2010 rule has [gradient],
+/// [border], the negative colors and the [axis]; it draws from 0 to 100
+/// percent when [minLength] and [maxLength] are the defaults 10 and 90,
+/// and a [min] or [max] of `min` or `max` is Excel's automatic bound.
 final class XlsxDataBar extends XlsxConditionalRule {
-  /// A data bar of [color] from [min] to [max].
+  /// A data bar of [color] from [min] to [max], with every field given.
   const XlsxDataBar({
     this.min = const XlsxCfValue.min(),
     this.max = const XlsxCfValue.max(),
@@ -387,6 +397,13 @@ final class XlsxDataBar extends XlsxConditionalRule {
     this.showValue = true,
     this.minLength = 10,
     this.maxLength = 90,
+    this.gradient = true,
+    this.border = false,
+    this.borderColor,
+    this.negativeFillColor,
+    this.negativeBorderColor,
+    this.axis = XlsxDataBarAxis.automatic,
+    this.axisColor,
     super.stopIfTrue,
   });
 
@@ -408,6 +425,28 @@ final class XlsxDataBar extends XlsxConditionalRule {
   /// The length of the longest bar, in percent of the cell's width.
   final int maxLength;
 
+  /// Whether the bar fades out to the right, rather than being solid.
+  final bool gradient;
+
+  /// Whether the bar has a border.
+  final bool border;
+
+  /// The border's color, or `null` for [color]; used only with [border].
+  final XlsxColor? borderColor;
+
+  /// The color of a bar for a negative value, or `null` for Excel's.
+  final XlsxColor? negativeFillColor;
+
+  /// The border color of a bar for a negative value, or `null` for the
+  /// border's own; used only with [border].
+  final XlsxColor? negativeBorderColor;
+
+  /// Where the axis between negative and positive bars lies.
+  final XlsxDataBarAxis axis;
+
+  /// The axis's color, or `null` for Excel's.
+  final XlsxColor? axisColor;
+
   @override
   bool operator ==(Object other) =>
       other is XlsxDataBar &&
@@ -417,18 +456,62 @@ final class XlsxDataBar extends XlsxConditionalRule {
       other.showValue == showValue &&
       other.minLength == minLength &&
       other.maxLength == maxLength &&
+      other.gradient == gradient &&
+      other.border == border &&
+      other.borderColor == borderColor &&
+      other.negativeFillColor == negativeFillColor &&
+      other.negativeBorderColor == negativeBorderColor &&
+      other.axis == axis &&
+      other.axisColor == axisColor &&
       other.stopIfTrue == stopIfTrue;
 
   @override
-  int get hashCode =>
-      Object.hash(min, max, color, showValue, minLength, maxLength, stopIfTrue);
+  int get hashCode => Object.hash(
+    min,
+    max,
+    color,
+    showValue,
+    minLength,
+    maxLength,
+    gradient,
+    border,
+    borderColor,
+    negativeFillColor,
+    negativeBorderColor,
+    axis,
+    axisColor,
+    stopIfTrue,
+  );
 
   @override
-  String toString() => 'XlsxDataBar($min, $max, $color)';
+  String toString() =>
+      'XlsxDataBar($min, $max, $color, gradient: $gradient, '
+      'border: $border, borderColor: $borderColor, '
+      'negativeFillColor: $negativeFillColor, '
+      'negativeBorderColor: $negativeBorderColor, axis: ${axis.name}, '
+      'axisColor: $axisColor)';
 }
 
-/// The icon sets of Excel 2007 (`ST_IconSetType`), with their XML name and
+/// Where the axis of an [XlsxDataBar] lies (`ST_DataBarAxisPosition` of
+/// Excel 2010). XML `axisPosition`, the name of the value.
+enum XlsxDataBarAxis {
+  /// Where zero falls between the lowest and the highest value; with no
+  /// negative value, at the left edge.
+  automatic,
+
+  /// In the middle of the cell, negative bars to the left of it.
+  middle,
+
+  /// No axis: negative bars are drawn to the right, like positive ones.
+  none,
+}
+
+/// The icon sets of Excel (`ST_IconSetType`), with their XML name and
 /// number of icons.
+///
+/// [threeStars], [threeTriangles] and [fiveBoxes] came with Excel 2010
+/// ([isX14Only]): they have no Excel 2007 rule, and Excel 2007 shows no
+/// icons for them.
 enum XlsxIconSetType {
   /// Up, sideways and down arrows in color.
   threeArrows('3Arrows', 3),
@@ -479,15 +562,28 @@ enum XlsxIconSetType {
   fiveRating('5Rating', 5),
 
   /// Five quarters of a circle.
-  fiveQuarters('5Quarters', 5);
+  fiveQuarters('5Quarters', 5),
 
-  const XlsxIconSetType(this.xmlName, this.iconCount);
+  /// Three stars: empty, half and full. Excel 2010.
+  threeStars('3Stars', 3, isX14Only: true),
+
+  /// Three triangles: down, a dash and up. Excel 2010.
+  threeTriangles('3Triangles', 3, isX14Only: true),
+
+  /// Five boxes, from empty to full. Excel 2010.
+  fiveBoxes('5Boxes', 5, isX14Only: true);
+
+  const XlsxIconSetType(this.xmlName, this.iconCount, {this.isX14Only = false});
 
   /// The name the file uses, such as `3Arrows`.
   final String xmlName;
 
   /// How many icons the set has, and so how many thresholds it takes.
   final int iconCount;
+
+  /// Whether the set came with Excel 2010, so that only an Excel 2010 rule
+  /// can show it.
+  final bool isX14Only;
 }
 
 /// Shows one icon of [type] in each cell, chosen by the [thresholds] its
@@ -686,7 +782,10 @@ XlsxStyle? conditionalRuleStyle(XlsxConditionalRule rule) => switch (rule) {
 
 /// A registered format as the trailer writes it: the rules' `dxfId`s
 /// (`null` for a rule without a style) and the priority of its first rule;
-/// rule `i` has priority `firstPriority + i`.
+/// rule `i` has priority `firstPriority + i`. Priorities run from 1 over
+/// every rule of the sheet, Excel 2010 ones included, so rule `i` is rule
+/// `firstPriority + i - 1` of the sheet (0-based), which its Excel 2010 id
+/// encodes (`x14RuleId`).
 typedef WorksheetConditionalFormat = ({
   XlsxConditionalFormat format,
   List<int?> dxfIds,
@@ -822,6 +921,14 @@ void _checkRule(XlsxConditionalRule rule, String field, XlsxRange first) {
       _checkCfValue(rule.min, '$field.min');
       _checkCfValue(rule.max, '$field.max');
       validateColor(rule.color, '$field.color');
+      for (final (XlsxColor? color, String name) in <(XlsxColor?, String)>[
+        (rule.borderColor, 'borderColor'),
+        (rule.negativeFillColor, 'negativeFillColor'),
+        (rule.negativeBorderColor, 'negativeBorderColor'),
+        (rule.axisColor, 'axisColor'),
+      ]) {
+        if (color != null) validateColor(color, '$field.$name');
+      }
       _checkLength(rule.minLength, '$field.minLength');
       _checkLength(rule.maxLength, '$field.maxLength');
       if (rule.minLength > rule.maxLength) {
@@ -907,13 +1014,20 @@ String textRuleFormula(XlsxTextRule rule, XlsxRange first) {
 
 /// The default thresholds of an icon set of [count] icons: equal percent
 /// steps from 0, as Excel writes them.
-List<XlsxCfValue> _defaultThresholds(int count) => <XlsxCfValue>[
+List<XlsxCfValue> defaultIconSetThresholds(int count) => <XlsxCfValue>[
   for (int i = 0; i < count; i++)
     XlsxCfValue(XlsxCfValueType.percent, value: '${(i * 100 / count).round()}'),
 ];
 
 /// Writes one `conditionalFormatting` element per format of [formats],
 /// which the writer has checked, in the order registered.
+///
+/// An icon set only Excel 2010 has gets no `cfRule` (see
+/// `writeX14ConditionalFormats`), and a format of nothing else no
+/// `conditionalFormatting`, which needs a `cfRule`; its priority stays
+/// taken. A data bar's `cfRule` ends with the `extLst` naming its Excel
+/// 2010 rule, whose id [sheetNumber], the sheet's creation order, and the
+/// rule's index on the sheet make (`x14RuleId`).
 ///
 /// `cfRule` attributes follow `CT_CfRule` (`type`, `dxfId`, `priority`,
 /// `stopIfTrue`, `aboveAverage`, `percent`, `bottom`, `operator`, `text`,
@@ -924,25 +1038,39 @@ List<XlsxCfValue> _defaultThresholds(int count) => <XlsxCfValue>[
 void writeConditionalFormats(
   XmlWriter w,
   List<WorksheetConditionalFormat> formats,
+  int sheetNumber,
 ) {
   for (final WorksheetConditionalFormat f in formats) {
+    final List<XlsxConditionalRule> rules = f.format.rules;
+    if (rules.every(isX14OnlyRule)) continue;
     final List<XlsxRange> ranges = f.format.ranges;
     w.start('conditionalFormatting');
     w.attribute('sqref', ranges.map((XlsxRange r) => r.ref).join(' '));
-    final List<XlsxConditionalRule> rules = f.format.rules;
     for (int i = 0; i < rules.length; i++) {
-      _writeRule(w, rules[i], f.dxfIds[i], f.firstPriority + i, ranges.first);
+      if (isX14OnlyRule(rules[i])) continue;
+      final int priority = f.firstPriority + i;
+      _writeRule(
+        w,
+        rules[i],
+        f.dxfIds[i],
+        priority,
+        ranges.first,
+        x14RuleId(sheetNumber, priority - 1),
+      );
     }
     w.end();
   }
 }
 
+/// Writes the `cfRule` of [rule]; [x14Id] is the id of its Excel 2010
+/// rule, used when it is a data bar.
 void _writeRule(
   XmlWriter w,
   XlsxConditionalRule rule,
   int? dxfId,
   int priority,
   XlsxRange first,
+  String x14Id,
 ) {
   w.start('cfRule');
   w.attribute('type', switch (rule) {
@@ -1015,13 +1143,14 @@ void _writeRule(
       _writeCfValue(w, rule.max);
       _writeColor(w, rule.color);
       w.end();
+      writeX14RuleReference(w, x14Id);
     case XlsxIconSet():
       w.start('iconSet');
       w.attribute('iconSet', rule.type.xmlName);
       if (!rule.showValue) w.attribute('showValue', '0');
       if (rule.reverse) w.attribute('reverse', '1');
       final List<XlsxCfValue> thresholds =
-          rule.thresholds ?? _defaultThresholds(rule.type.iconCount);
+          rule.thresholds ?? defaultIconSetThresholds(rule.type.iconCount);
       for (final XlsxCfValue threshold in thresholds) {
         _writeCfValue(w, threshold);
       }

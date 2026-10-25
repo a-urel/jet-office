@@ -14,6 +14,7 @@ List<Fixture> m3Fixtures() => <Fixture>[
   _hyperlinks(),
   _validation(),
   _conditional(),
+  _conditionalX14(),
 ];
 
 /// Defined names, a print area and print titles.
@@ -425,6 +426,73 @@ Fixture _conditional() {
         XlsxRange.parse('B2:C21'),
         const XlsxCellValueRule(XlsxComparison.lessThan, '40', style: bold),
       );
+      return book.close();
+    },
+  );
+}
+
+/// The Excel 2010 data bars and icon sets, on `Bars`.
+///
+/// Row 1 is the header; rows 2 to 22 hold the values -50 to 50 in steps of
+/// 5, the same in every column. A has a blue data bar with a red negative
+/// fill and the axis in the middle of the cell; B a solid green bar with a
+/// border; C three stars, D three triangles and E five boxes, icon sets
+/// that only Excel 2010 and later show. Excel draws the bars and icons;
+/// the values below are what a reader computes, as conditional formatting
+/// changes no value.
+Fixture _conditionalX14() {
+  final List<List<int>> rows = <List<int>>[
+    for (int v = -50; v <= 50; v += 5) <int>[v, v, v, v, v],
+  ];
+  const List<String> header = <String>[
+    'Bar',
+    'Solid',
+    'Stars',
+    'Triangles',
+    'Boxes',
+  ];
+  return Fixture(
+    'm3_conditional_x14',
+    <String, List<List<String>>>{
+      'Bars': <List<String>>[
+        header,
+        for (final List<int> row in rows)
+          <String>[for (final int v in row) '$v'],
+      ],
+    },
+    <String, List<List<Object?>>>{
+      'Bars': <List<Object?>>[header, ...rows],
+    },
+    () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter sheet = book.addSheet('Bars')..row(header);
+      rows.forEach(sheet.row);
+      void format(int column, XlsxConditionalRule rule) =>
+          sheet.conditionalFormat(
+            XlsxConditionalFormat(
+              <XlsxRange>[XlsxRange(1, column, rows.length, column)],
+              <XlsxConditionalRule>[rule],
+            ),
+          );
+      format(
+        0,
+        XlsxDataBar(
+          color: XlsxColor.hex('638EC6'),
+          negativeFillColor: XlsxColor.hex('FF0000'),
+          axis: XlsxDataBarAxis.middle,
+        ),
+      );
+      format(
+        1,
+        XlsxDataBar(
+          color: XlsxColor.hex('63C384'),
+          gradient: false,
+          border: true,
+        ),
+      );
+      format(2, XlsxIconSet(XlsxIconSetType.threeStars));
+      format(3, XlsxIconSet(XlsxIconSetType.threeTriangles));
+      format(4, XlsxIconSet(XlsxIconSetType.fiveBoxes));
       return book.close();
     },
   );

@@ -1479,4 +1479,120 @@ void main() {
       );
     });
   });
+
+  group('rule 25: Excel 2010 conditional-format extensions', () {
+    Uint8List extended() {
+      final XlsxWriter book = XlsxWriter();
+      for (final String name in <String>['A', 'B']) {
+        book.addSheet(name)
+          ..row(<Object?>[1, 2])
+          ..conditionalFormat(
+            XlsxConditionalFormat(
+              <XlsxRange>[XlsxRange.parse('A1:A9')],
+              <XlsxConditionalRule>[
+                const XlsxExpressionRule('A1>3'),
+                XlsxDataBar(color: XlsxColor.hex('638EC6')),
+                XlsxIconSet(XlsxIconSetType.threeStars),
+              ],
+            ),
+          );
+      }
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String part, String Function(String xml) change) =>
+        _rebuild(
+          extended(),
+          edit: <String, String? Function(String)>{part: change},
+        );
+
+    /// The `x14:cfRule` of the icon set on sheet 1.
+    const String stars =
+        '<x14:cfRule type="iconSet" priority="3" '
+        'id="{00000001-0000-4000-8000-000000000002}">';
+
+    test('valid extensions have no violations', () {
+      expect(checkXlsx(extended()), isEmpty);
+    });
+    test('a cfRule x14:id without its x14:cfRule', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            '<x14:id>{00000001-0000-4000-8000-000000000001}</x14:id>',
+            '<x14:id>{00000001-0000-4000-8000-0000000000FF}</x14:id>',
+          ),
+        ),
+        25,
+      );
+    });
+    test('an x14 data bar whose cfRule partner is gone', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            RegExp('<extLst><ext uri="{B025F937[^]*?</extLst>'),
+            '',
+          ),
+        ),
+        25,
+      );
+    });
+    test('two x14:cfRule elements share an id', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            'id="{00000001-0000-4000-8000-000000000002}"',
+            'id="{00000001-0000-4000-8000-000000000001}"',
+          ),
+        ),
+        25,
+      );
+    });
+    test('an x14 rule id repeated on another sheet', () {
+      _expectRule(
+        tamper(_sheet2, (String x) => x.replaceAll('{00000002-', '{00000001-')),
+        25,
+      );
+    });
+    test('an x14-only rule repeats a 2007 priority', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            stars,
+            stars.replaceFirst('priority="3"', 'priority="1"'),
+          ),
+        ),
+        25,
+      );
+    });
+    test('an x14-only rule without a priority', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) =>
+              x.replaceFirst(stars, stars.replaceFirst(' priority="3"', '')),
+        ),
+        25,
+      );
+    });
+    test('the extLst is not the last worksheet child', () {
+      _expectRule(
+        tamper(_sheet1, (String x) {
+          final RegExpMatch ext = RegExp(
+            r'<extLst><ext uri="\{78C0D931[^]*</extLst>',
+          ).firstMatch(x)!;
+          return x
+              .replaceFirst(ext.group(0)!, '')
+              .replaceFirst(
+                '<conditionalFormatting',
+                '${ext.group(0)}<conditionalFormatting',
+              );
+        }),
+        25,
+      );
+    });
+  });
 }

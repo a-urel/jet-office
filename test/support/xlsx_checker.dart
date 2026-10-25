@@ -69,11 +69,19 @@
 ///     absent); a `cellIs` rule has one `formula`, or two for `between`
 ///     and `notBetween`; an `expression`, `containsText`,
 ///     `notContainsText`, `beginsWith` or `endsWith` rule has one; and a
-///     `colorScale` has 2 or 3 `cfvo` and as many `color` children.
+///     `colorScale` has 2 or 3 `cfvo` and as many `color` children;
+/// 25. in the Excel 2010 extensions of conditional formats: every `x14:id`
+///     in the `extLst` of a `cfRule` names exactly one `x14:cfRule` of the
+///     worksheet's `extLst`, and every `x14:cfRule` is named by exactly one
+///     `x14:id`, except an x14-only rule (one no `x14:id` names), which
+///     has a `priority` of 1 or more, unique among the sheet's `cfRule` and
+///     x14-only priorities; no two `x14:cfRule` of the workbook share an
+///     `id`; and a worksheet's `extLst` is its last child.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
-/// The writer never does.
+/// The writer never does. Rule 25 matches the Excel 2010 elements by
+/// namespace, whatever their prefix.
 ///
 /// Pure Dart (no `dart:io`), so it runs in a browser too.
 library;
@@ -144,6 +152,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkHyperlinks(docs, violations);
   _checkDataValidations(docs, violations);
   _checkConditionalFormats(docs, violations);
+  _checkConditionalExtensions(docs, violations);
   return violations;
 }
 
@@ -1209,6 +1218,99 @@ void _checkConditionalFormats(
             );
           }
         }
+      }
+    }
+  }
+}
+
+/// The namespace of the Excel 2010 SpreadsheetML extensions (`x14:`).
+const String _x14 =
+    'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
+
+/// The descendants of [e] named [local] in the `x14` namespace.
+Iterable<XmlElement> _x14Elements(XmlElement e, String local) =>
+    e.descendantElements.where(
+      (XmlElement d) => d.name.local == local && d.name.namespaceUri == _x14,
+    );
+
+/// Rule 25.
+void _checkConditionalExtensions(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final Map<String, String> idSheets = <String, String>{};
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final String where = 'rule 25: ${sheet.key}';
+    final XmlElement root = sheet.value.rootElement;
+    final List<XmlElement> children = root.childElements.toList();
+    for (int i = 0; i < children.length - 1; i++) {
+      if (children[i].name.local == 'extLst') {
+        violations.add(
+          '$where: <extLst> is followed by <${children[i + 1].name.local}>; '
+          'it must be the last child',
+        );
+      }
+    }
+    // The ids the Excel 2007 rules name, and their priorities.
+    final Map<String, int> named = <String, int>{};
+    final Set<int> priorities = <int>{};
+    for (final XmlElement format in root.findElements(
+      'conditionalFormatting',
+    )) {
+      for (final XmlElement rule in format.findElements('cfRule')) {
+        final int? priority = int.tryParse(_attr(rule, 'priority'));
+        if (priority != null) priorities.add(priority);
+        for (final XmlElement ext in rule.findElements('extLst')) {
+          for (final XmlElement id in _x14Elements(ext, 'id')) {
+            named.update(id.innerText, (int n) => n + 1, ifAbsent: () => 1);
+          }
+        }
+      }
+    }
+    // The Excel 2010 rules of the worksheet's extLst, by id.
+    final Map<String, int> rules = <String, int>{};
+    final List<XmlElement> x14Rules = <XmlElement>[
+      for (final XmlElement ext in root.findElements('extLst'))
+        ..._x14Elements(ext, 'cfRule'),
+    ];
+    for (final XmlElement rule in x14Rules) {
+      final String id = _attr(rule, 'id');
+      rules.update(id, (int n) => n + 1, ifAbsent: () => 1);
+      final String? other = idSheets[id];
+      if (other != null && other != sheet.key && id != '') {
+        violations.add('$where: x14:cfRule id $id is used in $other too');
+      }
+      idSheets[id] = sheet.key;
+    }
+    named.forEach((String id, int count) {
+      final int found = rules[id] ?? 0;
+      if (count != 1 || found != 1) {
+        violations.add(
+          '$where: x14:id $id is named by $count cfRule and has $found '
+          'x14:cfRule; expected 1 of each',
+        );
+      }
+    });
+    final Set<String> repeated = <String>{};
+    for (final XmlElement rule in x14Rules) {
+      final String id = _attr(rule, 'id');
+      if (named.containsKey(id)) continue;
+      final String type = _attr(rule, 'type');
+      if ((rules[id] ?? 0) > 1 && repeated.add(id)) {
+        violations.add('$where: ${rules[id]} x14:cfRule share the id "$id"');
+      }
+      // An x14-only rule: it has no Excel 2007 rule to hold its priority.
+      final String text = _attr(rule, 'priority');
+      final int? priority = int.tryParse(text);
+      if (priority == null || priority < 1) {
+        violations.add(
+          '$where: x14-only x14:cfRule $type "$id" has priority "$text"',
+        );
+      } else if (!priorities.add(priority)) {
+        violations.add(
+          '$where: x14-only x14:cfRule $type "$id" repeats priority '
+          '$priority',
+        );
       }
     }
   }

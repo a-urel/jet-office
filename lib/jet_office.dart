@@ -29,6 +29,7 @@ export 'src/xlsx/conditional_format.dart'
         XlsxConditionalFormat,
         XlsxConditionalRule,
         XlsxDataBar,
+        XlsxDataBarAxis,
         XlsxDuplicateRule,
         XlsxExpressionRule,
         XlsxIconSet,

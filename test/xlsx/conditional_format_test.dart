@@ -7,6 +7,14 @@ import '../support/xlsx_checker.dart';
 const String _sheet1 = 'xl/worksheets/sheet1.xml';
 const String _styles = 'xl/styles.xml';
 
+/// The `extLst` the `cfRule` of a data bar carries when it is the first
+/// rule of sheet 1: the id of its Excel 2010 rule.
+const String _x14Reference =
+    '<extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" '
+    'xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/'
+    'main"><x14:id>{00000001-0000-4000-8000-000000000000}</x14:id></ext>'
+    '</extLst>';
+
 /// The parts of a workbook in which [setup] adds conditional formats to the
 /// sheet `S`, which holds one row.
 Map<String, String> _book(void Function(XlsxSheetWriter sheet) setup) {
@@ -479,7 +487,8 @@ void main() {
       expect(
         _rule(XlsxDataBar(color: XlsxColor.hex('638EC6'))),
         '<cfRule type="dataBar" priority="1"><dataBar><cfvo type="min"/>'
-        '<cfvo type="max"/><color rgb="FF638EC6"/></dataBar></cfRule>',
+        '<cfvo type="max"/><color rgb="FF638EC6"/></dataBar>'
+        '$_x14Reference</cfRule>',
       );
     });
     test('lengths and showValue are written when they differ', () {
@@ -497,7 +506,8 @@ void main() {
         '<cfRule type="dataBar" priority="1">'
         '<dataBar minLength="0" maxLength="100" showValue="0">'
         '<cfvo type="num" val="0"/><cfvo type="percent" val="80"/>'
-        '<color rgb="FF638EC6"/></dataBar></cfRule>',
+        '<color rgb="FF638EC6"/></dataBar>'
+        '$_x14Reference</cfRule>',
       );
     });
     test('minLength above maxLength, or outside 0 to 100, throws', () {
@@ -578,7 +588,7 @@ void main() {
       expect(
         <String>[
           for (final XlsxIconSetType t in XlsxIconSetType.values)
-            '${t.xmlName}/${t.iconCount}',
+            if (!t.isX14Only) '${t.xmlName}/${t.iconCount}',
         ],
         <String>[
           '3Arrows/3',
