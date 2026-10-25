@@ -20,12 +20,14 @@
 /// `conditional_format.dart`) and `dataValidations` (see
 /// `data_validation.dart`) come between them, where Quds wrote both before
 /// `mergeCells`; the `extLst` of the Excel 2010 conditional formats (see
-/// `conditional_format_x14.dart`) comes last.
+/// `conditional_format_x14.dart`) comes last; the page setup (see
+/// `page_setup.dart`) writes `pageSetUpPr` in `sheetPr` and, after
+/// `hyperlinks`, `printOptions`, `pageMargins` and `pageSetup`.
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
 /// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter`,
 /// `mergeCells`, `conditionalFormatting`, `dataValidations`,
-/// `hyperlinks` and `extLst`.
+/// `hyperlinks`, `printOptions`, `pageMargins`, `pageSetup` and `extLst`.
 library;
 
 import '../opc/ooxml.dart';
@@ -39,6 +41,7 @@ import 'conditional_format.dart';
 import 'conditional_format_x14.dart';
 import 'data_validation.dart';
 import 'limits.dart';
+import 'page_setup.dart';
 import 'range.dart';
 import 'sheet_view.dart';
 
@@ -95,6 +98,7 @@ final class WorksheetSettings {
     this.conditionalFormats = const <WorksheetConditionalFormat>[],
     this.dataValidations = const <XlsxDataValidation>[],
     this.hyperlinks = const <WorksheetHyperlink>[],
+    this.pageSetup,
   });
 
   /// The sheet's 1-based creation order, which the ids of its Excel 2010
@@ -141,6 +145,9 @@ final class WorksheetSettings {
 
   /// The hyperlinks, in cell order of writing.
   final List<WorksheetHyperlink> hyperlinks;
+
+  /// How the sheet prints, or `null` for no page setup.
+  final XlsxPageSetup? pageSetup;
 }
 
 /// The `<worksheet>` frame before the rows: the XML declaration, the
@@ -167,7 +174,8 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
 /// then `autoFilter`, `mergeCells`, `conditionalFormatting`,
-/// `dataValidations`, `hyperlinks` and the `extLst` of the Excel 2010
+/// `dataValidations`, `hyperlinks`, the page setup's `printOptions`,
+/// `pageMargins` and `pageSetup`, and the `extLst` of the Excel 2010
 /// conditional formats when the sheet has them, then `</worksheet>`.
 /// [hasRows] must match the call to [worksheetHeader].
 String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
@@ -205,6 +213,8 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
     }
     w.end();
   }
+  final XlsxPageSetup? pageSetup = settings.pageSetup;
+  if (pageSetup != null) writePageSetup(w, pageSetup);
   // Last: CT_Worksheet ends with extLst.
   writeX14ConditionalFormats(
     w,
@@ -237,11 +247,17 @@ String? worksheetRelationshipsXml(List<String> addresses) {
   return out.toString();
 }
 
-/// Writes `sheetPr` when the sheet has a tab color or an outline summary
-/// that is not Excel's default (below and right).
+/// Writes `sheetPr` when the sheet has a tab color, an outline summary that
+/// is not Excel's default (below and right) or a page setup that fits the
+/// sheet to pages.
 void _writeSheetPr(XmlWriter w, WorksheetSettings settings) {
   final XlsxColor? tabColor = settings.tabColor;
-  if (tabColor == null && settings.summaryBelow && settings.summaryRight) {
+  final XlsxPageSetup? pageSetup = settings.pageSetup;
+  final bool fitToPage = pageSetup != null && pageSetupFitsToPage(pageSetup);
+  if (tabColor == null &&
+      settings.summaryBelow &&
+      settings.summaryRight &&
+      !fitToPage) {
     return;
   }
   w.start('sheetPr');
@@ -256,6 +272,7 @@ void _writeSheetPr(XmlWriter w, WorksheetSettings settings) {
     if (!settings.summaryRight) w.attribute('summaryRight', '0');
     w.end();
   }
+  if (fitToPage) w.empty('pageSetUpPr', <String, String>{'fitToPage': '1'});
   w.end();
 }
 

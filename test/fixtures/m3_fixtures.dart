@@ -15,6 +15,7 @@ List<Fixture> m3Fixtures() => <Fixture>[
   _validation(),
   _conditional(),
   _conditionalX14(),
+  _pageSetup(),
 ];
 
 /// Defined names, a print area and print titles.
@@ -493,6 +494,74 @@ Fixture _conditionalX14() {
       format(2, XlsxIconSet(XlsxIconSetType.threeStars));
       format(3, XlsxIconSet(XlsxIconSetType.threeTriangles));
       format(4, XlsxIconSet(XlsxIconSetType.fiveBoxes));
+      return book.close();
+    },
+  );
+}
+
+/// Page setup on two sheets.
+///
+/// `Landscape` prints on A4 landscape, fitted one page wide, centered, with
+/// gridlines; `Scaled` prints at 85 %, with narrow margins, from page 3,
+/// over then down. Page setup changes no value, so the values below are what
+/// a reader computes; Excel's Page Setup dialog and Print Preview show the
+/// settings.
+Fixture _pageSetup() {
+  const List<List<int>> rows = <List<int>>[
+    <int>[1, 2, 3],
+    <int>[4, 5, 6],
+  ];
+  return Fixture(
+    'm3_page_setup',
+    <String, List<List<String>>>{
+      'Landscape': <List<String>>[
+        <String>['a', 'b', 'c'],
+        <String>['1', '2', '3'],
+        <String>['4', '5', '6'],
+      ],
+      'Scaled': <List<String>>[
+        <String>['1', '2', '3'],
+        <String>['4', '5', '6'],
+      ],
+    },
+    <String, List<List<Object?>>>{
+      'Landscape': <List<Object?>>[
+        <Object?>['a', 'b', 'c'],
+        ...rows,
+      ],
+      'Scaled': <List<Object?>>[...rows],
+    },
+    () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter landscape = book.addSheet('Landscape')
+        ..row(<Object?>['a', 'b', 'c']);
+      rows.forEach(landscape.row);
+      landscape.pageSetup(
+        const XlsxPageSetup(
+          orientation: XlsxOrientation.landscape,
+          paperSize: XlsxPaperSize.a4,
+          fitToWidth: 1,
+          centerHorizontally: true,
+          printGridLines: true,
+        ),
+      );
+      final XlsxSheetWriter scaled = book.addSheet('Scaled');
+      rows.forEach(scaled.row);
+      scaled.pageSetup(
+        const XlsxPageSetup(
+          scale: 85,
+          firstPageNumber: 3,
+          pageOrder: XlsxPageOrder.overThenDown,
+          margins: XlsxPageMargins(
+            left: 0.25,
+            right: 0.25,
+            top: 0.5,
+            bottom: 0.5,
+            header: 0.2,
+            footer: 0.2,
+          ),
+        ),
+      );
       return book.close();
     },
   );

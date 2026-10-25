@@ -41,6 +41,7 @@ import 'data_validation.dart';
 import 'defined_name.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
+import 'page_setup.dart';
 import 'range.dart';
 import 'sheet_view.dart';
 import 'style.dart';
@@ -240,6 +241,20 @@ abstract final class XlsxSheetWriter {
   /// or differential style.
   void conditionalFormat(XlsxConditionalFormat format);
 
+  /// Sets how the sheet prints, replacing an earlier call: paper,
+  /// orientation, scale or fit-to pages, margins, centering, gridlines and
+  /// headings.
+  ///
+  /// A trailer setting like [merge]. A page setup always writes the page
+  /// margins, Excel's "Normal" ones unless [setup] gives others; a setup that
+  /// fits the sheet to pages also marks the sheet as such in its properties.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] naming the field
+  /// (`scale`, `fitToWidth`, `fitToHeight`, `firstPageNumber`, `paperSize`,
+  /// `margins.left`, ...) when [setup] is invalid (see [XlsxPageSetup]); the
+  /// earlier setup stays then.
+  void pageSetup(XlsxPageSetup setup);
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
@@ -363,6 +378,8 @@ final class WorksheetWriter implements XlsxSheetWriter {
   final List<XlsxDataValidation> _validations = <XlsxDataValidation>[];
   final List<WorksheetConditionalFormat> _conditionalFormats =
       <WorksheetConditionalFormat>[];
+
+  XlsxPageSetup? _pageSetup;
 
   /// The priority the next conditional-format rule gets.
   int _nextPriority = 1;
@@ -534,6 +551,13 @@ final class WorksheetWriter implements XlsxSheetWriter {
       firstPriority: _nextPriority,
     ));
     _nextPriority += format.rules.length;
+  }
+
+  @override
+  void pageSetup(XlsxPageSetup setup) {
+    _checkOpenSheet();
+    checkPageSetup(setup);
+    _pageSetup = setup;
   }
 
   @override
@@ -769,6 +793,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       conditionalFormats: _conditionalFormats,
       dataValidations: _validations,
       hyperlinks: links,
+      pageSetup: _pageSetup,
     );
     context.zip.addChunks(worksheetPartName(number), <Uint8List>[
       utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),

@@ -167,6 +167,27 @@ abstract final class XlsxLimits {
   /// 10 % dialog). A rank outside 1 to this, or 1 to 100 for a percent,
   /// throws [ArgumentError] when the format is registered.
   static const int maxTopBottomRank = 1000;
+
+  /// The lowest print scale of a page setup, in percent. ECMA-376 and
+  /// Excel's Page Setup dialog both allow 10.
+  static const int minPageScale = 10;
+
+  /// The highest print scale of a page setup, in percent. Excel's Page Setup
+  /// dialog allows 400. A scale outside 10 to this throws [ArgumentError]
+  /// when the page setup is registered.
+  static const int maxPageScale = 400;
+
+  /// The most pages a page setup can fit the sheet to, wide or tall: the
+  /// `unsignedShort` maximum of ECMA-376's `fitToWidth` and `fitToHeight`.
+  static const int maxFitToPages = 32767;
+
+  /// The highest first page number of a page setup: Excel's Page Setup
+  /// dialog accepts up to 32,767.
+  static const int maxFirstPageNumber = 32767;
+
+  /// The highest paper size id of a page setup: ECMA-376's `paperSize`
+  /// list, the one Excel uses, runs from 1 to 118.
+  static const int maxPaperSize = 118;
 }
 
 /// Thrown when a write would exceed one of the [XlsxLimits].

@@ -52,6 +52,13 @@ export 'src/xlsx/font.dart'
 export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/number_format.dart' show XlsxNumFmt;
+export 'src/xlsx/page_setup.dart'
+    show
+        XlsxOrientation,
+        XlsxPageMargins,
+        XlsxPageOrder,
+        XlsxPageSetup,
+        XlsxPaperSize;
 export 'src/xlsx/properties.dart' show XlsxProperties;
 export 'src/xlsx/range.dart' show XlsxRange;
 export 'src/xlsx/sheet_view.dart'

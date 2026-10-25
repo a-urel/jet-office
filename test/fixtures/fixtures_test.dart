@@ -104,6 +104,7 @@ void main() {
       'm3_validation',
       'm3_conditional',
       'm3_conditional_x14',
+      'm3_page_setup',
     ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
@@ -538,6 +539,32 @@ void main() {
     expect(
       parts['xl/worksheets/sheet2.xml'],
       contains('<autoFilter ref="A1:B3"/>'),
+    );
+  });
+
+  test('m3_page_setup writes landscape fit-to-width and a scaled sheet', () {
+    final Map<String, String> parts = readXlsx(named('m3_page_setup').build());
+    final String landscape = parts['xl/worksheets/sheet1.xml']!;
+    expect(landscape, contains('<pageSetUpPr fitToPage="1"/>'));
+    expect(
+      landscape,
+      contains(
+        '<printOptions horizontalCentered="1" gridLines="1"/>'
+        '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" '
+        'header="0.3" footer="0.3"/><pageSetup paperSize="9" fitToWidth="1" '
+        'fitToHeight="0" orientation="landscape"/>',
+      ),
+    );
+    final String scaled = parts['xl/worksheets/sheet2.xml']!;
+    expect(scaled, isNot(contains('pageSetUpPr')));
+    expect(
+      scaled,
+      contains(
+        '<pageMargins left="0.25" right="0.25" top="0.5" bottom="0.5" '
+        'header="0.2" footer="0.2"/><pageSetup scale="85" '
+        'firstPageNumber="3" pageOrder="overThenDown" '
+        'useFirstPageNumber="1"/>',
+      ),
     );
   });
 }
