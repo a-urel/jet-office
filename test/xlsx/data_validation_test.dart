@@ -619,6 +619,78 @@ void main() {
     });
   });
 
+  group('constructor', () {
+    test('holds what the XML allows: whole greaterThan with a reference', () {
+      expect(
+        _one(
+          XlsxDataValidation(
+            <XlsxRange>[_a1],
+            XlsxValidationType.whole,
+            comparison: XlsxComparison.greaterThan,
+            formula1: r'$A$1',
+            showDropDownArrow: false,
+          ),
+        ),
+        '<dataValidation type="whole" operator="greaterThan" '
+        'allowBlank="1" showDropDown="1" showInputMessage="1" '
+        'showErrorMessage="1" sqref="A1">'
+        r'<formula1>$A$1</formula1></dataValidation>',
+      );
+    });
+    test('defaults are those of the schema and the brief', () {
+      final XlsxDataValidation v = XlsxDataValidation(
+        <XlsxRange>[_a1],
+        XlsxValidationType.custom,
+        formula1: 'TRUE',
+      );
+      expect(v.comparison, XlsxComparison.between);
+      expect(v.allowBlank && v.showDropDownArrow, isTrue);
+      expect(v.showInputMessage && v.showErrorMessage, isTrue);
+      expect(v.errorStyle, XlsxValidationErrorStyle.stop);
+      expect(v, XlsxDataValidation.custom(<XlsxRange>[_a1], 'TRUE'));
+    });
+    test('an invalid value is rejected at registration, nothing recorded', () {
+      final String xml = _validations((XlsxSheetWriter s) {
+        expect(
+          () => s.dataValidation(
+            XlsxDataValidation(
+              <XlsxRange>[_a1],
+              XlsxValidationType.whole,
+              formula1: '1',
+            ),
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError e) => e.name,
+              'name',
+              'formula2',
+            ),
+          ),
+        );
+      });
+      expect(xml, '');
+    });
+    test('ranges is copied and every field takes part in equality', () {
+      final List<XlsxRange> source = <XlsxRange>[_a1];
+      final XlsxDataValidation v = XlsxDataValidation(
+        source,
+        XlsxValidationType.any,
+      );
+      source.add(_b2);
+      expect(v.ranges, <XlsxRange>[_a1]);
+      expect(
+        v,
+        isNot(
+          XlsxDataValidation(
+            <XlsxRange>[_a1],
+            XlsxValidationType.any,
+            showDropDownArrow: false,
+          ),
+        ),
+      );
+    });
+  });
+
   group('value semantics', () {
     test('equal validations are equal and hash alike', () {
       XlsxDataValidation make() => XlsxDataValidation.whole(

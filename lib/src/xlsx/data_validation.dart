@@ -74,32 +74,42 @@ enum XlsxValidationErrorStyle {
 
 /// A rule on the values of [ranges], with optional input and error messages.
 ///
-/// Build one with a factory for its kind; register it with the sheet
-/// writer's `dataValidation`, which checks it and throws [ArgumentError]
-/// naming the field. The factories only build the formula text; they do not
-/// validate (apart from [XlsxDataValidation.list], which cannot keep an item
-/// with a comma, and [XlsxDataValidation.date], which needs a date Excel
-/// can store).
+/// The constructor takes every field, so any validation the XML can hold can
+/// be built. The factories are conveniences over it, one per kind, that
+/// build the formula text from typed operands. Register the value with the
+/// sheet writer's `dataValidation`, which checks it and throws
+/// [ArgumentError] naming the field. Neither validates, apart from
+/// [XlsxDataValidation.list], which cannot keep an item with a comma, and
+/// [XlsxDataValidation.date], which needs a date Excel can store.
 ///
 /// Only the fields of the kind count: [comparison] and [formula2] belong to
 /// the kinds that compare, and [XlsxDataValidation.list], `custom` and
 /// `any` ignore the comparison.
 final class XlsxDataValidation {
-  XlsxDataValidation._(
+  /// A validation of [type] on [ranges] with every field given.
+  ///
+  /// It holds whatever the XML allows, so a reader can build the same type
+  /// from a parsed file; the factories are conveniences over it. [ranges] is
+  /// copied into an unmodifiable list, so the constructor is not `const`.
+  /// Nothing is checked here: the writer's `dataValidation` checks the value
+  /// when it is registered. The defaults are Excel's own except
+  /// [allowBlank], [showDropDownArrow], [showInputMessage] and
+  /// [showErrorMessage], which are on.
+  XlsxDataValidation(
     List<XlsxRange> ranges,
-    this.type,
+    this.type, {
+    this.comparison = XlsxComparison.between,
     this.formula1,
     this.formula2,
-    this.comparison, {
-    required this.allowBlank,
-    required this.showDropDownArrow,
-    required this.showInputMessage,
-    required this.showErrorMessage,
-    required this.errorStyle,
-    required this.errorTitle,
-    required this.error,
-    required this.promptTitle,
-    required this.prompt,
+    this.allowBlank = true,
+    this.showDropDownArrow = true,
+    this.showInputMessage = true,
+    this.showErrorMessage = true,
+    this.errorStyle = XlsxValidationErrorStyle.stop,
+    this.errorTitle,
+    this.error,
+    this.promptTitle,
+    this.prompt,
   }) : ranges = List<XlsxRange>.unmodifiable(ranges);
 
   /// A validation that lets [items] be chosen from a drop-down list.
@@ -137,12 +147,12 @@ final class XlsxDataValidation {
     final String joined = items
         .map((String item) => item.replaceAll('"', '""'))
         .join(',');
-    return XlsxDataValidation._(
+    return XlsxDataValidation(
       ranges,
       XlsxValidationType.list,
-      '"$joined"',
-      null,
-      XlsxComparison.between,
+      formula1: '"$joined"',
+      formula2: null,
+      comparison: XlsxComparison.between,
       allowBlank: allowBlank,
       showDropDownArrow: showDropDownArrow,
       showInputMessage: showInputMessage,
@@ -170,12 +180,12 @@ final class XlsxDataValidation {
     String? error,
     String? promptTitle,
     String? prompt,
-  }) => XlsxDataValidation._(
+  }) => XlsxDataValidation(
     ranges,
     XlsxValidationType.list,
-    formula,
-    null,
-    XlsxComparison.between,
+    formula1: formula,
+    formula2: null,
+    comparison: XlsxComparison.between,
     allowBlank: allowBlank,
     showDropDownArrow: showDropDownArrow,
     showInputMessage: showInputMessage,
@@ -205,14 +215,13 @@ final class XlsxDataValidation {
     String? error,
     String? promptTitle,
     String? prompt,
-  }) => XlsxDataValidation._(
+  }) => XlsxDataValidation(
     ranges,
     XlsxValidationType.whole,
-    '$a',
-    b == null ? null : '$b',
-    comparison,
+    formula1: '$a',
+    formula2: b == null ? null : '$b',
+    comparison: comparison,
     allowBlank: allowBlank,
-    showDropDownArrow: true,
     showInputMessage: showInputMessage,
     showErrorMessage: showErrorMessage,
     errorStyle: errorStyle,
@@ -241,14 +250,13 @@ final class XlsxDataValidation {
     String? error,
     String? promptTitle,
     String? prompt,
-  }) => XlsxDataValidation._(
+  }) => XlsxDataValidation(
     ranges,
     XlsxValidationType.decimal,
-    _number(a),
-    b == null ? null : _number(b),
-    comparison,
+    formula1: _number(a),
+    formula2: b == null ? null : _number(b),
+    comparison: comparison,
     allowBlank: allowBlank,
-    showDropDownArrow: true,
     showInputMessage: showInputMessage,
     showErrorMessage: showErrorMessage,
     errorStyle: errorStyle,
@@ -277,14 +285,13 @@ final class XlsxDataValidation {
     String? error,
     String? promptTitle,
     String? prompt,
-  }) => XlsxDataValidation._(
+  }) => XlsxDataValidation(
     ranges,
     XlsxValidationType.textLength,
-    '$a',
-    b == null ? null : '$b',
-    comparison,
+    formula1: '$a',
+    formula2: b == null ? null : '$b',
+    comparison: comparison,
     allowBlank: allowBlank,
-    showDropDownArrow: true,
     showInputMessage: showInputMessage,
     showErrorMessage: showErrorMessage,
     errorStyle: errorStyle,
@@ -314,14 +321,13 @@ final class XlsxDataValidation {
     String? error,
     String? promptTitle,
     String? prompt,
-  }) => XlsxDataValidation._(
+  }) => XlsxDataValidation(
     ranges,
     XlsxValidationType.date,
-    _serial(a, 'a'),
-    b == null ? null : _serial(b, 'b'),
-    comparison,
+    formula1: _serial(a, 'a'),
+    formula2: b == null ? null : _serial(b, 'b'),
+    comparison: comparison,
     allowBlank: allowBlank,
-    showDropDownArrow: true,
     showInputMessage: showInputMessage,
     showErrorMessage: showErrorMessage,
     errorStyle: errorStyle,
@@ -350,14 +356,13 @@ final class XlsxDataValidation {
     String? error,
     String? promptTitle,
     String? prompt,
-  }) => XlsxDataValidation._(
+  }) => XlsxDataValidation(
     ranges,
     XlsxValidationType.time,
-    _dayFraction(a),
-    b == null ? null : _dayFraction(b),
-    comparison,
+    formula1: _dayFraction(a),
+    formula2: b == null ? null : _dayFraction(b),
+    comparison: comparison,
     allowBlank: allowBlank,
-    showDropDownArrow: true,
     showInputMessage: showInputMessage,
     showErrorMessage: showErrorMessage,
     errorStyle: errorStyle,
@@ -381,14 +386,13 @@ final class XlsxDataValidation {
     String? error,
     String? promptTitle,
     String? prompt,
-  }) => XlsxDataValidation._(
+  }) => XlsxDataValidation(
     ranges,
     XlsxValidationType.custom,
-    formula,
-    null,
-    XlsxComparison.between,
+    formula1: formula,
+    formula2: null,
+    comparison: XlsxComparison.between,
     allowBlank: allowBlank,
-    showDropDownArrow: true,
     showInputMessage: showInputMessage,
     showErrorMessage: showErrorMessage,
     errorStyle: errorStyle,
@@ -410,14 +414,13 @@ final class XlsxDataValidation {
     String? error,
     String? promptTitle,
     String? prompt,
-  }) => XlsxDataValidation._(
+  }) => XlsxDataValidation(
     ranges,
     XlsxValidationType.any,
-    null,
-    null,
-    XlsxComparison.between,
+    formula1: null,
+    formula2: null,
+    comparison: XlsxComparison.between,
     allowBlank: allowBlank,
-    showDropDownArrow: true,
     showInputMessage: showInputMessage,
     showErrorMessage: showErrorMessage,
     errorStyle: errorStyle,
