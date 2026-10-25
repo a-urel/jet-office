@@ -181,7 +181,14 @@ final class StyleRegistry {
   /// All or nothing: when one style throws (for the reasons [idFor] lists),
   /// the styles before it are unregistered again, so the registry is as it
   /// was before the call. A column list registers its styles this way.
-  List<int> idsFor(List<XlsxStyle?> styles) {
+  ///
+  /// With [fieldName], an [ArgumentError] from `styles[i]` is rethrown with
+  /// the name `fieldName(i)`, its value and message kept, so the caller can
+  /// say which entry was invalid; other errors pass through unchanged.
+  List<int> idsFor(
+    List<XlsxStyle?> styles, {
+    String Function(int index)? fieldName,
+  }) {
     final int fonts = _fonts.length;
     final int fills = _fills.length;
     final int borders = _borders.length;
@@ -194,13 +201,21 @@ final class StyleRegistry {
         if (style != null && !_ids.containsKey(style)) added.add(style);
         ids.add(idFor(style));
       }
-    } on Object {
+    } on Object catch (error) {
       added.forEach(_ids.remove);
       _truncate(_fonts, _fontIds, fonts);
       _truncate(_fills, _fillIds, fills);
       _truncate(_borders, _borderIds, borders);
       _truncate(_customCodes, _customIds, codes);
       _truncate(_xfs, _xfIds, xfs);
+      if (fieldName != null && error is ArgumentError) {
+        // ids holds one entry per style before the failing one.
+        throw ArgumentError.value(
+          error.invalidValue,
+          fieldName(ids.length),
+          error.message,
+        );
+      }
       rethrow;
     }
     return ids;

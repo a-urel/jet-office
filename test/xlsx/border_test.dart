@@ -46,6 +46,27 @@ void main() {
     );
   });
 
+  test('a diagonal side without a direction writes an empty diagonal', () {
+    const String empty =
+        '<border><left/><right/><top/><bottom/><diagonal/></border>';
+    expect(xml(const XlsxBorder(diagonal: thinBlack)), empty);
+    expect(
+      xml(
+        const XlsxBorder(
+          diagonalUp: false,
+          diagonalDown: false,
+          diagonal: thinBlack,
+        ),
+      ),
+      empty,
+    );
+    expect(
+      xml(const XlsxBorder(diagonalDown: true, diagonal: thinBlack)),
+      '<border diagonalDown="1"><left/><right/><top/><bottom/>'
+      '<diagonal style="thin"><color rgb="FF000000"/></diagonal></border>',
+    );
+  });
+
   test('diagonalDown, outline and vertical and horizontal sides', () {
     expect(
       xml(

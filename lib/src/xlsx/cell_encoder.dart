@@ -73,6 +73,11 @@ final class CellEncoder {
   /// shows that a sheet of many rows costs one resolution per column.
   int get resolveCount => _resolveCount;
 
+  /// Whether the encoder still holds a `beforeWrite` callback. A diagnostic
+  /// for tests: it is `false` whenever no [encode] call is in progress, so
+  /// a callback, and the row state it captures, is never kept alive.
+  bool get holdsBeforeWrite => _beforeWrite != null;
+
   /// Whether any formula cell has been written, so the workbook can ask
   /// Excel to recalculate on load.
   bool get wroteFormula => _wroteFormula;
@@ -125,6 +130,24 @@ final class CellEncoder {
     void Function()? beforeWrite,
   }) {
     _beforeWrite = beforeWrite;
+    try {
+      _encode(out, sheet, row, column, value, rowStyle, columnStyle);
+    } finally {
+      // Not kept past the call: it captures the sheet's row state.
+      _beforeWrite = null;
+    }
+  }
+
+  /// The body of [encode], which holds [_beforeWrite] while this runs.
+  void _encode(
+    XmlWriter out,
+    String sheet,
+    int row,
+    int column,
+    Object? value,
+    XlsxStyle? rowStyle,
+    XlsxStyle? columnStyle,
+  ) {
     final String ref = cellRef(row, column);
     XlsxStyle? cellStyle;
     Object? v = value;

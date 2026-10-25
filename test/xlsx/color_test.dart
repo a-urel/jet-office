@@ -30,6 +30,19 @@ void main() {
     expect(XlsxColor.auto, XlsxColor.auto);
   });
 
+  test('a NaN tint equals a NaN tint, so == is reflexive', () {
+    // Not constants, so the two colors are distinct instances.
+    final double nan = double.parse('NaN');
+    final XlsxColor a = XlsxColor.theme(4, tint: nan);
+    final XlsxColor b = XlsxColor.theme(4, tint: -nan);
+    expect(a, a);
+    expect(a, b);
+    expect(a.hashCode, b.hashCode);
+    expect(a, isNot(const XlsxColor.theme(4)));
+    expect(a, isNot(XlsxColor.theme(5, tint: nan)));
+    expect(<XlsxColor>{a, b}, hasLength(1));
+  });
+
   test('hex rejects malformed text', () {
     expect(() => XlsxColor.hex('GG0000'), throwsArgumentError);
     expect(() => XlsxColor.hex('12345'), throwsArgumentError);

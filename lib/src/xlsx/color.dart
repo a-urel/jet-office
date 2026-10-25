@@ -108,11 +108,21 @@ final class XlsxColor {
       other._kind == _kind &&
       other._alpha == _alpha &&
       other._value == _value &&
-      other.tint == tint;
+      (other.tint == tint || (other.tint.isNaN && tint.isNaN));
 
+  /// Equal tints hash alike: `-0.0` as `0.0` and every NaN as one NaN, so
+  /// that `==`, which treats two NaN tints as equal, stays consistent.
   @override
-  int get hashCode =>
-      Object.hash(_kind, _alpha, _value, tint == 0 ? 0.0 : tint);
+  int get hashCode => Object.hash(
+    _kind,
+    _alpha,
+    _value,
+    tint == 0
+        ? 0.0
+        : tint.isNaN
+        ? double.nan
+        : tint,
+  );
 
   @override
   String toString() {

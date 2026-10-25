@@ -165,8 +165,11 @@ XlsxNumFmt? _builtinFor(String code) => switch (code) {
 ///
 /// Built-in ids 14 to 22 and 45 to 47 are date formats. A custom code is one
 /// when a single left-to-right scan finds any of `d m y h s` outside quoted
-/// literals (`"..."`), backslash escapes, `[...]` sections and the word
-/// `General` (any case).
+/// literals (`"..."`), backslash escapes, the character after `_` (a space
+/// as wide as it) or `*` (it repeated to fill the cell), `[...]` sections,
+/// the word `General` and the markers `AM/PM` and `A/P` (each in any case).
+/// An unterminated quote or bracket ends the scan. So `AM/PM` alone, `0_d`
+/// and `0*d` are not dates, while `h AM/PM` is.
 bool isDateFormat(XlsxNumFmt format) {
   final int? id = format.builtinId;
   if (id != null) {
@@ -180,14 +183,20 @@ bool isDateFormat(XlsxNumFmt format) {
       final int close = code.indexOf('"', i + 1);
       if (close < 0) return false;
       i = close + 1;
-    } else if (c == r'\') {
+    } else if (c == r'\' || c == '_' || c == '*') {
+      // The next character is a literal, a width or a fill; a lone one at
+      // the end is skipped harmlessly.
       i += 2;
     } else if (c == '[') {
       final int close = code.indexOf(']', i + 1);
       if (close < 0) return false;
       i = close + 1;
-    } else if (_isGeneralAt(code, i)) {
+    } else if (_isWordAt(code, i, _generalWord)) {
       i += _generalWord.length;
+    } else if (_isWordAt(code, i, _amPm)) {
+      i += _amPm.length;
+    } else if (_isWordAt(code, i, _aP)) {
+      i += _aP.length;
     } else if ('dmyhsDMYHS'.contains(c)) {
       return true;
     } else {
@@ -198,7 +207,10 @@ bool isDateFormat(XlsxNumFmt format) {
 }
 
 const String _generalWord = 'general';
+const String _amPm = 'am/pm';
+const String _aP = 'a/p';
 
-bool _isGeneralAt(String code, int i) =>
-    i + _generalWord.length <= code.length &&
-    code.substring(i, i + _generalWord.length).toLowerCase() == _generalWord;
+/// Whether [code] holds the lowercase [word] at [i], in any case.
+bool _isWordAt(String code, int i, String word) =>
+    i + word.length <= code.length &&
+    code.substring(i, i + word.length).toLowerCase() == word;

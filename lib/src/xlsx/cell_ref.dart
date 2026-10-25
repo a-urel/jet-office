@@ -38,15 +38,18 @@ String cellRef(int row, int column) {
   return '${columnName(column)}${row + 1}';
 }
 
-final RegExp _cellRefPattern = RegExp(r'^\$?([A-Za-z]{1,3})\$?([0-9]{1,7})$');
+final RegExp _cellRefPattern = RegExp(
+  r'^\$?([A-Za-z]{1,3})\$?([1-9][0-9]{0,6})$',
+);
 
 /// Parses the A1-style cell reference [ref] into 0-based indexes.
 ///
 /// Accepts an optional `$` before the column and before the row, and letters
 /// of either case: `B2`, `$B$2` and `b2` are all row 1, column 1.
 ///
-/// Throws [ArgumentError] when [ref] is not a cell reference or names a cell
-/// outside the sheet (`XFE1`, `A0`, `A1048577`).
+/// Throws [ArgumentError] when [ref] is not a cell reference, writes its row
+/// with leading zeros (`A01`), or names a cell outside the sheet (`XFE1`,
+/// `A0`, `A1048577`).
 ({int row, int column}) parseCellRef(String ref) {
   final RegExpMatch? match = _cellRefPattern.firstMatch(ref);
   if (match == null) {

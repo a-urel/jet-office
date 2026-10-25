@@ -16,7 +16,9 @@ import 'limits.dart';
 /// The panes of a sheet: frozen at a number of rows and columns, or split
 /// at an offset in points.
 ///
-/// Passed in [XlsxSheetView.pane]. Values are compared by their contents.
+/// Passed in [XlsxSheetView.pane]. Values are compared by their contents,
+/// split offsets as the whole twips the writer stores (see
+/// [XlsxPane.split]): two offsets that write the same split are equal.
 /// The `const` constructors cannot check their fields; the writer checks
 /// them when the view is set and throws [ArgumentError] naming the field.
 final class XlsxPane {
@@ -61,16 +63,35 @@ final class XlsxPane {
       other.isFrozen == isFrozen &&
       other.rows == rows &&
       other.columns == columns &&
-      other.x == x &&
-      other.y == y;
+      _sameTwips(other.x, x) &&
+      _sameTwips(other.y, y);
 
   @override
-  int get hashCode => Object.hash(isFrozen, rows, columns, x, y);
+  int get hashCode =>
+      Object.hash(isFrozen, rows, columns, _twips(x), _twips(y));
 
   @override
   String toString() => isFrozen
       ? 'XlsxPane.frozen(rows: $rows, columns: $columns)'
       : 'XlsxPane.split(x: ${describeDouble(x)}, y: ${describeDouble(y)})';
+}
+
+/// A split offset of [points] as the writer stores it: whole twips,
+/// rounded. Kept a double, so a NaN or infinite offset (rejected when the
+/// pane is set) does not throw here; `-0.0` becomes `0.0` and every NaN the
+/// one [double.nan], so equal offsets hash alike.
+double _twips(double points) {
+  final double twips = (points * 20).roundToDouble();
+  if (twips.isNaN) return double.nan;
+  return twips == 0 ? 0.0 : twips;
+}
+
+/// Whether split offsets [a] and [b] are written alike: the same rounded
+/// twips, or both NaN.
+bool _sameTwips(double a, double b) {
+  final double ta = _twips(a);
+  final double tb = _twips(b);
+  return ta == tb || (ta.isNaN && tb.isNaN);
 }
 
 /// The view of one worksheet: how it is displayed when it is opened.

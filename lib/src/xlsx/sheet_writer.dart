@@ -72,10 +72,11 @@ abstract final class XlsxSheetWriter {
   /// is finished or the writer has failed; [XlsxLimitError] for more than
   /// [XlsxLimits.maxColumns] entries; [ArgumentError] for a width outside 0
   /// to [XlsxLimits.maxColumnWidth], an outline level outside 0 to
-  /// [XlsxLimits.maxOutlineLevel], or an invalid style (as [row] describes);
-  /// and `XlsxLimitError('cell formats', ...)` like [row]. When it throws,
-  /// nothing is recorded: the earlier columns, if any, stay in force and no
-  /// style is registered.
+  /// [XlsxLimits.maxOutlineLevel], or an invalid style (as [row] describes;
+  /// named `columns[i].style`, with the value and message of the style field
+  /// at fault); and `XlsxLimitError('cell formats', ...)` like [row]. When
+  /// it throws, nothing is recorded: the earlier columns, if any, stay in
+  /// force and no style is registered.
   void columns(List<XlsxColumn?> columns);
 
   /// Sets the sheet's default row height in points and default column width
@@ -166,7 +167,10 @@ abstract final class XlsxSheetWriter {
   /// of the row. The effective style of a cell is its column's style (see
   /// [columns]), with [style] merged over it and the cell's own style over
   /// that, field by field: a field a higher layer sets wins, one it leaves
-  /// `null` is inherited.
+  /// `null` is inherited. Pass the same style object on every row that
+  /// shares a style, a `const` or one built once before the loop: the
+  /// encoder caches the merged style per column by the identity of its
+  /// layers, and a style built afresh for each row misses that cache.
   ///
   /// `XlsxCell(null, style: s)` with a non-null `s` writes an empty cell
   /// that carries the effective style, for example a border across a
@@ -292,7 +296,10 @@ final class WorksheetWriter implements XlsxSheetWriter {
       for (final XlsxColumn? column in columns) column?.style,
     ];
     // Atomic: a style that throws leaves none of the others registered.
-    final List<int> ids = context.styles.idsFor(styles);
+    final List<int> ids = context.styles.idsFor(
+      styles,
+      fieldName: (int i) => 'columns[$i].style',
+    );
     _columnStyles = List<XlsxStyle?>.unmodifiable(styles);
     _columns = List<WorksheetColumn?>.unmodifiable(<WorksheetColumn?>[
       for (int i = 0; i < columns.length; i++)
