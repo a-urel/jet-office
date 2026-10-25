@@ -25,14 +25,24 @@ import 'range.dart';
 /// line.
 ///
 /// A link is external when it has an [address] and internal when it has a
-/// [location]. Build one with a factory. The factories derive text but do
-/// not validate; the writer checks the link when the cell is written and
-/// throws [ArgumentError] for an empty or too long address, an empty
-/// location, a [tooltip] of more than [XlsxLimits.maxScreenTipLength] code
-/// units, or text in any field that XML forbids, and
-/// [XlsxLimitError] for a sheet's 65,531st link.
+/// [location]; with both, it opens the external file at that place. Build
+/// one with a factory, or with the constructor for any link the XML can
+/// hold. Neither validates (the factories derive text); the writer checks
+/// the link when the cell is written and throws [ArgumentError] for a link
+/// with neither an address nor a location, an empty or too long address,
+/// an empty location, a [tooltip] of more than
+/// [XlsxLimits.maxScreenTipLength] code units, or text in any field that
+/// XML forbids, and [XlsxLimitError] for a sheet's 65,531st link.
 final class XlsxHyperlink {
-  const XlsxHyperlink._({
+  /// A link with every field given, as a reader builds it from a parsed
+  /// file: [address] an external target, [location] a place (in this
+  /// workbook, or in the target when both are set), or both.
+  ///
+  /// [address] is written as given, so it must already be a valid URI;
+  /// [XlsxHyperlink.url] percent-encodes one. Nothing is checked here: the
+  /// writer checks the link when the cell is written, and throws
+  /// [ArgumentError] when neither [address] nor [location] is set.
+  const XlsxHyperlink({
     this.address,
     this.location,
     required this.text,
@@ -42,11 +52,12 @@ final class XlsxHyperlink {
   /// A link to a web address (or any other URL).
   ///
   /// [url] is percent-encoded with [encodeUriText] (a space becomes `%20`,
-  /// an existing `%20` stays) to make the [address]. [text], the cell's
+  /// an existing `%20` stays, a `%` that starts no escape becomes `%25`) to
+  /// make the [address]. [text], the cell's
   /// text, defaults to [url] as given. [tooltip] is the text Excel shows on
   /// hover.
   factory XlsxHyperlink.url(String url, {String? text, String? tooltip}) =>
-      XlsxHyperlink._(
+      XlsxHyperlink(
         address: encodeUriText(url),
         text: text ?? url,
         tooltip: tooltip,
@@ -64,7 +75,7 @@ final class XlsxHyperlink {
     String? subject,
     String? text,
     String? tooltip,
-  }) => XlsxHyperlink._(
+  }) => XlsxHyperlink(
     address:
         'mailto:${encodeUriText(address)}'
         '${subject == null ? '' : '?subject=${Uri.encodeComponent(subject)}'}',
@@ -79,7 +90,7 @@ final class XlsxHyperlink {
     String location, {
     String? text,
     String? tooltip,
-  }) => XlsxHyperlink._(
+  }) => XlsxHyperlink(
     location: location,
     text: text ?? location,
     tooltip: tooltip,
@@ -96,7 +107,7 @@ final class XlsxHyperlink {
     XlsxRange? range,
     String? text,
     String? tooltip,
-  }) => XlsxHyperlink._(
+  }) => XlsxHyperlink(
     location: quotedSheetRef(sheetName, range?.ref ?? 'A1'),
     text: text ?? sheetName,
     tooltip: tooltip,
@@ -106,8 +117,8 @@ final class XlsxHyperlink {
   /// inside the workbook.
   final String? address;
 
-  /// The place in the workbook the link goes to, or `null` for an external
-  /// link.
+  /// The place the link goes to: in this workbook, or in the [address]'s
+  /// file when both are set; `null` for a link to the target as a whole.
   final String? location;
 
   /// The text the cell shows.
@@ -134,26 +145,44 @@ final class XlsxHyperlink {
 }
 
 /// The characters [encodeUriText] leaves as they are: the unreserved and
-/// reserved characters of RFC 3986 and the `%` of an existing escape.
+/// reserved characters of RFC 3986. A `%` is kept only when it starts an
+/// existing escape.
 final Set<int> _uriKept = <int>{
-  for (final int c in "-._~:/?#[]@!\$&'()*+,;=%".codeUnits) c,
+  for (final int c in "-._~:/?#[]@!\$&'()*+,;=".codeUnits) c,
   for (int c = 0x30; c <= 0x39; c++) c,
   for (int c = 0x41; c <= 0x5A; c++) c,
   for (int c = 0x61; c <= 0x7A; c++) c,
 };
 
+const int _percent = 0x25;
+
+bool _isHexDigit(int c) =>
+    (c >= 0x30 && c <= 0x39) ||
+    (c >= 0x41 && c <= 0x46) ||
+    (c >= 0x61 && c <= 0x66);
+
+/// Whether the `%` at [i] in [bytes] starts an escape: two hex digits
+/// follow it.
+bool _startsEscape(List<int> bytes, int i) =>
+    i + 2 < bytes.length &&
+    _isHexDigit(bytes[i + 1]) &&
+    _isHexDigit(bytes[i + 2]);
+
 /// Percent-encodes [text] for use as a URI, as uppercase `%XX` of its UTF-8
 /// bytes, every character outside `A-Z a-z 0-9` and
-/// `` - . _ ~ : / ? # [ ] @ ! $ & ' ( ) * + , ; = % ``.
+/// `` - . _ ~ : / ? # [ ] @ ! $ & ' ( ) * + , ; = ``.
 ///
-/// The `%` is kept, so text that is already encoded is not encoded twice;
-/// a bare `%` is the caller's mistake.
+/// A `%` followed by two hex digits is an existing escape and is kept as it
+/// is, so text that is already encoded is not encoded twice (`a%20b` stays,
+/// in either case of hex digit). Any other `%` is encoded as `%25`:
+/// `100% done` becomes `100%25%20done`, `%zz` becomes `%25zz` and a
+/// trailing `%` becomes `%25`.
 String encodeUriText(String text) {
   StringBuffer? out;
   final List<int> bytes = utf8.encode(text);
   for (int i = 0; i < bytes.length; i++) {
     final int b = bytes[i];
-    if (_uriKept.contains(b)) {
+    if (_uriKept.contains(b) || (b == _percent && _startsEscape(bytes, i))) {
       out?.writeCharCode(b);
       continue;
     }
@@ -197,7 +226,11 @@ void checkHyperlink(XlsxHyperlink link) {
     _checkClean(location, 'location');
   }
   if (address == null && location == null) {
-    throw ArgumentError('A hyperlink needs an address or a location.');
+    throw ArgumentError.value(
+      address,
+      'address',
+      'A hyperlink needs an address, a location or both.',
+    );
   }
   _checkClean(link.text, 'text');
   final String? tooltip = link.tooltip;

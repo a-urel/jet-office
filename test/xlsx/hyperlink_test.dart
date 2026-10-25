@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/hyperlink.dart';
 import 'package:jet_office/src/xlsx/worksheet_parts.dart';
@@ -58,8 +60,18 @@ void main() {
       expect(encodeUriText('https://x.org/%20'), 'https://x.org/%20');
     });
     test('keeps every reserved and unreserved character', () {
-      const String kept = 'AZaz09-._~:/?#[]@!\$&\'()*+,;=%';
+      const String kept = 'AZaz09-._~:/?#[]@!\$&\'()*+,;=%2F';
       expect(encodeUriText(kept), kept);
+    });
+    test('encodes a % that does not start an escape as %25', () {
+      expect(encodeUriText('100% done'), '100%25%20done');
+      expect(encodeUriText('a%20b'), 'a%20b');
+      expect(encodeUriText('a%2fb'), 'a%2fb');
+      expect(encodeUriText('%zz'), '%25zz');
+      expect(encodeUriText('%2'), '%252');
+      expect(encodeUriText('50%'), '50%25');
+      expect(encodeUriText('%'), '%25');
+      expect(encodeUriText('%%41'), '%25%41');
     });
     test('encodes quotes, angle brackets, backslash and braces', () {
       expect(encodeUriText('"<>\\^`{|}'), '%22%3C%3E%5C%5E%60%7B%7C%7D');
@@ -163,6 +175,47 @@ void main() {
           'relationships/hyperlink" '
           'Target="https://example.com/a%20b" TargetMode="External"/>',
         ),
+      );
+    });
+
+    test('a link with an address and a location writes both', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S').row(<Object?>[
+        const XlsxHyperlink(
+          address: 'https://example.com/book.xlsx',
+          location: "'Q1 2026'!B2",
+          text: 'Q1',
+          tooltip: 'Open',
+        ),
+      ]);
+      final Uint8List bytes = book.close().bytes;
+      expect(checkXlsx(bytes), isEmpty);
+      final Map<String, String> parts = readXlsx(bytes);
+      expect(
+        parts[_sheet1],
+        contains(
+          '<hyperlink ref="A1" r:id="rId1" location="\'Q1 2026\'!B2" '
+          'tooltip="Open" display="Q1"/>',
+        ),
+      );
+      expect(
+        parts[_rels1],
+        contains(
+          'Target="https://example.com/book.xlsx" TargetMode="External"',
+        ),
+      );
+    });
+    test('the public constructor holds a parsed link as given', () {
+      const XlsxHyperlink link = XlsxHyperlink(
+        address: 'https://x.org/a%20b',
+        location: 'Name',
+        text: 't',
+      );
+      expect(link.address, 'https://x.org/a%20b');
+      expect(link.location, 'Name');
+      expect(
+        XlsxHyperlink.url('https://x.org/a b', text: 't'),
+        const XlsxHyperlink(address: 'https://x.org/a%20b', text: 't'),
       );
     });
 
@@ -479,6 +532,9 @@ void main() {
     });
     test('an address holding U+0001 is encoded, so it is accepted', () {
       expect(XlsxHyperlink.email('a\u0001@b.com').address, 'mailto:a%01@b.com');
+    });
+    test('a link with neither address nor location', () {
+      expectRejected(const XlsxHyperlink(text: 't'), field: 'address');
     });
     test('a link inside an XlsxCell is checked too', () {
       expectRejected(XlsxCell(XlsxHyperlink.url('')), field: 'address');
