@@ -54,10 +54,16 @@ sealed class XlsxWriterBase {
   XlsxWriterBase._(XlsxProperties properties, ZipWriter Function() createZip)
     : _coreXml = _render((XmlWriter w) => writeCoreProperties(w, properties)),
       _appXml = _render((XmlWriter w) => writeAppProperties(w, properties)),
+      _customXml = properties.custom.isEmpty
+          ? null
+          : _render((XmlWriter w) => writeCustomProperties(w, properties)),
       _context = WorkbookContext(createZip());
 
   final Uint8List _coreXml;
   final Uint8List _appXml;
+
+  /// `docProps/custom.xml`, null when there are no custom properties.
+  final Uint8List? _customXml;
 
   /// The encoder, styles, ZIP and failure state every sheet shares.
   final WorkbookContext _context;
@@ -256,11 +262,20 @@ sealed class XlsxWriterBase {
         _render((XmlWriter w) => writeWorkbookRelationships(w, sheetCount)),
       )
       ..add('docProps/core.xml', _coreXml)
-      ..add('docProps/app.xml', _appXml)
-      ..add('_rels/.rels', _render(writeRootRelationships))
+      ..add('docProps/app.xml', _appXml);
+    final Uint8List? customXml = _customXml;
+    if (customXml != null) zip.add('docProps/custom.xml', customXml);
+    final bool custom = customXml != null;
+    zip
+      ..add(
+        '_rels/.rels',
+        _render((XmlWriter w) => writeRootRelationships(w, custom: custom)),
+      )
       ..add(
         '[Content_Types].xml',
-        _render((XmlWriter w) => writeContentTypes(w, sheetCount)),
+        _render(
+          (XmlWriter w) => writeContentTypes(w, sheetCount, custom: custom),
+        ),
       );
     return zip.close();
   }
@@ -278,7 +293,8 @@ sealed class XlsxWriterBase {
 final class XlsxWriter extends XlsxWriterBase {
   /// Creates a writer whose document properties are [properties].
   ///
-  /// Throws [ArgumentError] when a property holds characters XML forbids.
+  /// Throws [ArgumentError] when a property holds characters XML forbids or
+  /// a custom property has an invalid name or value.
   XlsxWriter({XlsxProperties properties = const XlsxProperties()})
     : super._(properties, ZipWriter.new);
 
@@ -304,8 +320,9 @@ final class XlsxStreamWriter extends XlsxWriterBase {
   /// Creates a writer that sends the file to [sink], with the document
   /// properties [properties].
   ///
-  /// Throws [ArgumentError] when a property holds characters XML forbids;
-  /// nothing has been sent to [sink] then.
+  /// Throws [ArgumentError] when a property holds characters XML forbids or
+  /// a custom property has an invalid name or value; nothing has been sent
+  /// to [sink] then.
   XlsxStreamWriter(
     Sink<List<int>> sink, {
     XlsxProperties properties = const XlsxProperties(),

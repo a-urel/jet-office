@@ -50,6 +50,14 @@ abstract final class Ns {
   static const String extendedProperties =
       'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties';
 
+  /// Custom properties, `docProps/custom.xml`.
+  static const String customProperties =
+      'http://schemas.openxmlformats.org/officeDocument/2006/custom-properties';
+
+  /// Document property value types (`vt:`), used by `docProps/custom.xml`.
+  static const String docPropsVTypes =
+      'http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes';
+
   /// SpreadsheetML 2009 (`x14:`), Excel 2010's extensions (MS-XLSX):
   /// the data bars and icon sets of its conditional formats.
   static const String x14 =
@@ -90,6 +98,10 @@ abstract final class RelType {
   /// Extended properties, `docProps/app.xml`.
   static const String extendedProperties =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties';
+
+  /// Custom properties, `docProps/custom.xml`.
+  static const String customProperties =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties';
 }
 
 /// Content types (MIME types) of package parts.
@@ -117,6 +129,10 @@ abstract final class ContentType {
   /// The extended properties part.
   static const String extendedProperties =
       'application/vnd.openxmlformats-officedocument.extended-properties+xml';
+
+  /// The custom properties part.
+  static const String customProperties =
+      'application/vnd.openxmlformats-officedocument.custom-properties+xml';
 
   /// A relationships part (`.rels`).
   static const String relationships =

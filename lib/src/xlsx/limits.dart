@@ -132,6 +132,12 @@ abstract final class XlsxLimits {
   /// source as [maxDefinedNameLength].
   static const int maxDefinedNameCommentLength = 255;
 
+  /// The longest name of a custom document property, in UTF-16 code units.
+  ///
+  /// The M3 plan sets 255, the length of Excel's Custom Properties name box.
+  /// Not confirmed against Microsoft's limits page, which gives no figure.
+  static const int maxCustomPropertyNameLength = 255;
+
   /// The longest title of a validation's input or error message, in UTF-16
   /// code units.
   ///

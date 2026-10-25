@@ -282,6 +282,32 @@ void main() {
     );
   });
 
+  test('root relationships gain custom-properties when asked', () {
+    final String xml = _render(
+      (XmlWriter w) => writeRootRelationships(w, custom: true),
+    );
+    expect(
+      xml,
+      contains(
+        '<Relationship Id="rId4" Type="${RelType.customProperties}" '
+        'Target="docProps/custom.xml"/>',
+      ),
+    );
+  });
+
+  test('content types gain the custom properties override when asked', () {
+    final String xml = _render(
+      (XmlWriter w) => writeContentTypes(w, 1, custom: true),
+    );
+    expect(
+      xml,
+      contains(
+        '<Override PartName="/docProps/custom.xml" '
+        'ContentType="${ContentType.customProperties}"/>',
+      ),
+    );
+  });
+
   test('content types: defaults and one override per part', () {
     final String xml = _render((XmlWriter w) => writeContentTypes(w, 2));
     expect(

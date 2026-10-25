@@ -158,6 +158,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkConditionalFormats(docs, violations);
   _checkConditionalExtensions(docs, violations);
   _checkProtection(docs, violations);
+  _checkCustomProperties(docs, violations);
   return violations;
 }
 
@@ -1348,6 +1349,44 @@ void _checkProtection(Map<String, XmlDocument> docs, List<String> violations) {
       violations.add(
         'rule 26: workbook: workbookPassword "$password" is not four '
         'hexadecimal digits',
+      );
+    }
+  }
+}
+
+/// Rule 27.
+void _checkCustomProperties(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final XmlDocument? doc = docs['docProps/custom.xml'];
+  if (doc == null) return;
+  final Set<String> pids = <String>{};
+  final Set<String> names = <String>{};
+  for (final XmlElement p in _all(doc, 'property')) {
+    final String name = _attr(p, 'name');
+    final String pid = _attr(p, 'pid');
+    final int? number = int.tryParse(pid);
+    if (number == null || number < 2) {
+      violations.add(
+        'rule 27: custom property "$name": pid "$pid" is not an integer of '
+        'at least 2',
+      );
+    }
+    if (!pids.add(pid)) {
+      violations.add('rule 27: custom property "$name": pid "$pid" repeats');
+    }
+    if (!names.add(name.toLowerCase())) {
+      violations.add(
+        'rule 27: custom property name "$name" repeats an earlier name, '
+        'ignoring case',
+      );
+    }
+    final int values = p.childElements.length;
+    if (values != 1) {
+      violations.add(
+        'rule 27: custom property "$name" has $values value children, '
+        'expected 1',
       );
     }
   }

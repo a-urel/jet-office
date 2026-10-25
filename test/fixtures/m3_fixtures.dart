@@ -18,6 +18,7 @@ List<Fixture> m3Fixtures() => <Fixture>[
   _pageSetup(),
   _headerFooter(),
   _protection(),
+  _properties(),
 ];
 
 /// Defined names, a print area and print titles.
@@ -661,6 +662,56 @@ Fixture _protection() => Fixture(
         ),
       );
     book.protectWorkbook(const XlsxWorkbookProtection(password: 'test'));
+    return book.close();
+  },
+);
+
+/// Every core and app property, and the five kinds of custom property.
+///
+/// One sheet, `Info`, holds a label and a value. The values are what a
+/// reader computes; the properties do not change them. Excel's File > Info
+/// shows the title, subject, author, keywords, comments (the description),
+/// category, company, manager and status, and Advanced Properties > Custom
+/// lists `Project` (text), `Count` (number), `Ratio` (number), `Final`
+/// (yes/no) and `Due` (date, 24 October 2026). `created` and `modified` are
+/// fixed, so the file is the same on every run.
+Fixture _properties() => Fixture(
+  'm3_properties',
+  <String, List<List<String>>>{
+    'Info': <List<String>>[
+      <String>['Properties', 'set'],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Info': <List<Object?>>[
+      <Object?>['Properties', 'set'],
+    ],
+  },
+  () {
+    final XlsxWriter book = XlsxWriter(
+      properties: XlsxProperties(
+        title: 'Quarterly report',
+        subject: 'Accounts',
+        creator: 'Ahmet Urel',
+        keywords: 'report; accounts',
+        description: 'Fixture for the document properties',
+        lastModifiedBy: 'Jet Office',
+        category: 'Finance',
+        contentStatus: 'Final',
+        company: 'Jetronik',
+        manager: 'Ayse Yilmaz',
+        created: DateTime.utc(2026, 10, 24, 9, 30),
+        modified: DateTime.utc(2026, 10, 25, 18, 45, 10),
+        custom: <String, Object>{
+          'Project': 'Atlas',
+          'Count': 3,
+          'Ratio': 0.5,
+          'Final': true,
+          'Due': DateTime.utc(2026, 10, 24),
+        },
+      ),
+    );
+    book.addSheet('Info').row(<Object?>['Properties', 'set']);
     return book.close();
   },
 );

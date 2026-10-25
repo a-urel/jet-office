@@ -107,6 +107,7 @@ void main() {
       'm3_page_setup',
       'm3_header_footer',
       'm3_protection',
+      'm3_properties',
     ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
@@ -604,5 +605,29 @@ void main() {
     );
     expect(parts['xl/styles.xml'], contains('<protection locked="0"/>'));
     expect(parts['xl/styles.xml'], contains('<protection hidden="1"/>'));
+  });
+
+  test('m3_properties writes every field and the five custom properties', () {
+    final Map<String, String> parts = readXlsx(named('m3_properties').build());
+    expect(parts['docProps/core.xml'], contains('<dc:title>Quarterly report'));
+    expect(
+      parts['docProps/core.xml'],
+      contains('<cp:category>Finance</cp:category><cp:contentStatus>Final'),
+    );
+    expect(
+      parts['docProps/app.xml'],
+      contains('<Company>Jetronik</Company><Manager>Ayse Yilmaz</Manager>'),
+    );
+    final String custom = parts['docProps/custom.xml']!;
+    for (final String type in <String>[
+      'vt:lpwstr',
+      'vt:i4',
+      'vt:r8',
+      'vt:bool',
+      'vt:filetime',
+    ]) {
+      expect(custom, contains('<$type>'));
+    }
+    expect(custom, contains('<vt:filetime>2026-10-24T00:00:00Z'));
   });
 }

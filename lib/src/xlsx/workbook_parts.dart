@@ -273,21 +273,23 @@ void writeWorkbookRelationships(XmlWriter w, int sheetCount) {
 }
 
 /// Writes the package relationships, `_rels/.rels`, to [w]: the workbook
-/// and the core and extended property parts.
-void writeRootRelationships(XmlWriter w) {
-  (Relationships()
-        ..add(RelType.officeDocument, 'xl/workbook.xml')
-        ..add(RelType.coreProperties, 'docProps/core.xml')
-        ..add(RelType.extendedProperties, 'docProps/app.xml'))
-      .write(w);
+/// and the core and extended property parts, and with [custom] the custom
+/// property part.
+void writeRootRelationships(XmlWriter w, {bool custom = false}) {
+  final Relationships rels = Relationships()
+    ..add(RelType.officeDocument, 'xl/workbook.xml')
+    ..add(RelType.coreProperties, 'docProps/core.xml')
+    ..add(RelType.extendedProperties, 'docProps/app.xml');
+  if (custom) rels.add(RelType.customProperties, 'docProps/custom.xml');
+  rels.write(w);
 }
 
 /// Writes `[Content_Types].xml` for a workbook of [sheetCount] sheets to [w].
 ///
 /// Relationship parts and other XML get default types; the workbook, every
 /// worksheet, the styles, the shared strings and both property parts get an
-/// override.
-void writeContentTypes(XmlWriter w, int sheetCount) {
+/// override, and with [custom] so does the custom property part.
+void writeContentTypes(XmlWriter w, int sheetCount, {bool custom = false}) {
   final ContentTypes types = ContentTypes()
     ..addDefault('rels', ContentType.relationships)
     ..addDefault('xml', ContentType.xml)
@@ -296,6 +298,9 @@ void writeContentTypes(XmlWriter w, int sheetCount) {
     ..addOverride('/xl/sharedStrings.xml', ContentType.sharedStrings)
     ..addOverride('/docProps/core.xml', ContentType.coreProperties)
     ..addOverride('/docProps/app.xml', ContentType.extendedProperties);
+  if (custom) {
+    types.addOverride('/docProps/custom.xml', ContentType.customProperties);
+  }
   for (int number = 1; number <= sheetCount; number++) {
     types.addOverride('/${worksheetPartName(number)}', ContentType.worksheet);
   }

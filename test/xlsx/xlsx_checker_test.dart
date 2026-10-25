@@ -1649,4 +1649,62 @@ void main() {
       );
     });
   });
+
+  group('rule 27: custom properties', () {
+    Uint8List customBook() {
+      final XlsxWriter book = XlsxWriter(
+        properties: const XlsxProperties(
+          custom: <String, Object>{'Project': 'Atlas', 'Count': 3},
+        ),
+      );
+      book.addSheet('P').row(<Object?>[1]);
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      customBook(),
+      edit: <String, String? Function(String)>{'docProps/custom.xml': change},
+    );
+
+    test('a workbook with custom properties is clean', () {
+      expect(checkXlsx(customBook()), isEmpty);
+    });
+    test('a duplicate pid', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('pid="3"', 'pid="2"')),
+        27,
+      );
+    });
+    test('a pid below 2', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('pid="2"', 'pid="1"')),
+        27,
+      );
+    });
+    test('names that are equal ignoring case', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('name="Count"', 'name="PROJECT"')),
+        27,
+      );
+    });
+    test('a property with no value', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst('<vt:lpwstr>Atlas</vt:lpwstr>', ''),
+        ),
+        27,
+      );
+    });
+    test('a property with two values', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            '<vt:i4>3</vt:i4>',
+            '<vt:i4>3</vt:i4><vt:i4>4</vt:i4>',
+          ),
+        ),
+        27,
+      );
+    });
+  });
 }
