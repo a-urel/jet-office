@@ -116,32 +116,38 @@ final RegExp _xstringStart = RegExp(r'_(?=x[0-9A-Fa-f]{4}_)');
 /// Protects [text] from ST_Xstring decoding.
 ///
 /// Excel and LibreOffice read `_xHHHH_` in cell text and sheet names as the
-/// character U+HHHH, so the text `_x0041_` would show as `A`. Every `_` that
+/// character U+HHHH, so the text `_x0041_` would show as `A`. Excel reads it
+/// in formulas and defined names too (see [escapeFormulaText]). Every `_` that
 /// starts such a sequence becomes `_x005F_` (the escape of `_` itself), which
 /// makes a reader show the text as given: `_x0041_` is written `_x005F_x0041_`.
 /// Overlapping sequences are covered too: `_x0041_x0042_` becomes
 /// `_x005F_x0041_x005F_x0042_`.
 ///
 /// Apply it to shared-string, cached formula text and sheet names when
-/// writing, then [escapeXmlText] (or [escapeXmlAttribute] for a name). The
-/// result is longer than [text] when anything is escaped; Excel's cell limit
-/// applies to the decoded text.
+/// writing, then [escapeXmlText] (or [escapeXmlAttribute] for a name);
+/// [escapeFormulaText] applies both. The result is longer than [text] when
+/// anything is escaped; Excel's cell, formula and sheet-name limits apply to
+/// the decoded text.
 String escapeXstring(String text) =>
     text.contains('_x') ? text.replaceAll(_xstringStart, '_x005F_') : text;
 
 /// Escapes formula text (ST_Formula) for XML character data: a cell's `<f>`
 /// and a `definedName`'s text.
 ///
-/// Only [escapeXmlText] is applied, never [escapeXstring]: readers do not
-/// decode `_xHHHH_` inside a formula (LibreOffice shows the formula
-/// `"_x0041_"` as `_x0041_`), so `_x005F_` there would change the formula,
-/// and a defined name that refers to the sheet `D_x0041_` must spell it as
-/// `'D_x0041_'` to match the formula a user types. Both places use this one
-/// function so they cannot disagree.
+/// Applies [escapeXstring], then [escapeXmlText], exactly as for cell text
+/// (decision 0005). Excel decodes `_xHHHH_` inside a formula, so `<f>`
+/// holding `"_x0041_"` shows `A`, and Excel itself writes the typed formula
+/// `="_x0041_"` as `"_x005F_x0041_"`. A defined name is decoded the same way:
+/// the filter name `'_x0041_'!$A$1` would point at a sheet `A`. Escaped, it
+/// spells the sheet `_x0041_` as `'_x005F_x0041_'`, matching the sheet's own
+/// escaped name. Both places use this one function so they cannot disagree.
+///
+/// LibreOffice does not decode inside a formula, so it shows the escaped
+/// text; Excel is the reference reader (decision 0003).
 ///
 /// [text] must already be scrubbed with [scrubXmlText]; otherwise this
 /// throws [ArgumentError].
-String escapeFormulaText(String text) => escapeXmlText(text);
+String escapeFormulaText(String text) => escapeXmlText(escapeXstring(text));
 
 String _escape(String text, {required bool attribute}) {
   StringBuffer? buffer;

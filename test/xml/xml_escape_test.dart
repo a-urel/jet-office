@@ -95,9 +95,13 @@ void main() {
     );
   });
 
-  test('escapeFormulaText escapes XML only, never _xHHHH_ (ST_Formula)', () {
-    expect(escapeFormulaText('"_x0041_"&A1<2'), '"_x0041_"&amp;A1&lt;2');
-    expect(escapeFormulaText("'D_x0041_'!\$A\$1"), "'D_x0041_'!\$A\$1");
+  test('escapeFormulaText escapes _xHHHH_ like cell text, then XML', () {
+    // Decision 0005: Excel decodes `_xHHHH_` inside `<f>` and defined names,
+    // and writes `_x005F_x` there itself.
+    expect(escapeFormulaText('"_x0041_"&A1<2'), '"_x005F_x0041_"&amp;A1&lt;2');
+    expect(escapeFormulaText("'D_x0041_'!\$A\$1"), "'D_x005F_x0041_'!\$A\$1");
+    expect(escapeFormulaText('"_x0041_x0042_"'), '"_x005F_x0041_x005F_x0042_"');
+    expect(escapeFormulaText('A1_x'), 'A1_x');
     expect(() => escapeFormulaText('a\u0001'), throwsArgumentError);
   });
 }

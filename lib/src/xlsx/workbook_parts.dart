@@ -63,8 +63,9 @@ String worksheetPartName(int number) => 'xl/worksheets/sheet$number.xml';
 /// per filtered sheet, in tab order, scoped by `localSheetId` (the tab index)
 /// and reading `'<name>'!<absoluteRef>`: the name is always quoted with `'`
 /// doubled. The text is a formula (ST_Formula), so it goes through
-/// [escapeFormulaText] like `<f>` text and keeps `_xHHHH_` as given, while
-/// the `sheet` element's name attribute is escaped with [escapeXstring].
+/// [escapeFormulaText] like `<f>` text, which escapes `_xHHHH_` exactly as
+/// [escapeXstring] escapes the `sheet` element's name attribute; the two
+/// spellings therefore agree.
 void writeWorkbook(
   XmlWriter w, {
   required List<WorkbookSheet> tabs,

@@ -412,6 +412,26 @@ void main() {
         10,
       );
     });
+    test('the length is that of the decoded formula', () {
+      // `"_x005F_x0041_"` decodes to `"_x0041_"`, 9 units (decision 0005).
+      final String max = '"_x005F_x0041_"&${'1' * 8182}';
+      expect(
+        checkXlsx(
+          _broken(
+            _sheet2,
+            (String x) => x.replaceFirst('<f>1+1</f>', '<f>$max</f>'),
+          ),
+        ),
+        isEmpty,
+      );
+      _expectRule(
+        _broken(
+          _sheet2,
+          (String x) => x.replaceFirst('<f>1+1</f>', '<f>${max}1</f>'),
+        ),
+        10,
+      );
+    });
   });
 
   group('rule 11: row numbers', () {

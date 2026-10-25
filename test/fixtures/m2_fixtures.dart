@@ -574,16 +574,17 @@ Fixture _mergesFilter() {
   );
 }
 
-/// A probe for the parked M1 question: does a reader decode `_xHHHH_` inside
-/// `<f>`? A1 is the formula `"_x0041_"`, written as given (a formula is not
-/// escaped), and A2 is the same text as a string, which the writer escapes
-/// to `_x005F_x0041_`, so a reader shows `_x0041_` for A2. A reader that
-/// shows `A` for A1 decodes inside `<f>`; the Excel check records which.
+/// `_xHHHH_` inside `<f>`, in a defined name and in text. A1 is the formula
+/// `"_x0041_"` and A2 the same text as a string. Excel decodes `_xHHHH_` in
+/// both, so the writer escapes both, to `"_x005F_x0041_"` and
+/// `_x005F_x0041_`, and Excel shows `_x0041_` in A1 and A2 (decision 0005).
+/// LibreOffice does not decode inside `<f>`: it computes the escaped text,
+/// `_x005F_x0041_`, for A1, which is what its expected value holds.
 ///
 /// The second sheet, `_x0041_`, has an auto filter. Its name is written
-/// escaped as `_x005F_x0041_` (R22), while its `_xlnm._FilterDatabase` text
-/// is a formula like `<f>` and reads `'_x0041_'!$A$1:$B$3` (R10), so the one
-/// Excel check settles formulas and defined names together.
+/// escaped as `_x005F_x0041_` (R22), and its `_xlnm._FilterDatabase` text is
+/// a formula escaped the same way, `'_x005F_x0041_'!$A$1:$B$3`, so Excel
+/// reads it as the sheet `_x0041_` (decision 0005).
 Fixture _formulaXstring() => Fixture(
   'm2_formula_xstring',
   <String, List<List<String>>>{
@@ -599,7 +600,7 @@ Fixture _formulaXstring() => Fixture(
   },
   <String, List<List<Object?>>>{
     'Probe': <List<Object?>>[
-      <Object?>['_x0041_'],
+      <Object?>['_x005F_x0041_'], // LibreOffice; Excel shows `_x0041_`
       <Object?>['_x0041_'],
     ],
     '_x0041_': <List<Object?>>[

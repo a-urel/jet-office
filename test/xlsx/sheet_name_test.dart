@@ -31,10 +31,21 @@ void main() {
     expect(n.assign('STRASSE'), 'STRASSE (2)');
   });
 
-  test('sheetNameKey folds case, dotted and dotless i, and sharp s', () {
+  test('the Kelvin sign clashes with K and k, as in Excel', () {
+    // Excel for the web refuses the Kelvin sign (U+212A) as a sheet name
+    // when a sheet `K` exists (M2 Excel check, 2026-10-25).
+    expect(n.assign('K'), 'K');
+    expect(n.assign('\u212A'), '\u212A (2)');
+    expect(n.assign('k'), 'k (3)');
+    expect(n.assign('\u212Aelvin'), '\u212Aelvin');
+    expect(n.assign('KELVIN'), 'KELVIN (2)');
+  });
+
+  test('sheetNameKey folds case, dotted and dotless i, sharp s and Kelvin', () {
     expect(sheetNameKey('liste'), sheetNameKey('LİSTE'));
     expect(sheetNameKey('ısı'), sheetNameKey('ISI'));
     expect(sheetNameKey('straße'), sheetNameKey('STRASSE'));
+    expect(sheetNameKey('\u212A'), sheetNameKey('k'));
     expect(sheetNameKey('a'), isNot(sheetNameKey('b')));
   });
 

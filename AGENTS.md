@@ -2,8 +2,9 @@
 
 `jet_office` is a pure-Dart library that generates, reads and modifies XLSX and
 DOCX files. It has no editors, no rendering and no PDF. It is ported from
-`quds_office_engine` (MIT); see `docs/decisions/0001`, `0002`, `0003` and
-`0004` (which supersedes part of `0003`) before any design change.
+`quds_office_engine` (MIT); see `docs/decisions/0001`, `0002`, `0003`,
+`0004` (which supersedes part of `0003`) and `0005` (which supersedes ruling
+R10 in `docs/xlsx-writer.md`) before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
