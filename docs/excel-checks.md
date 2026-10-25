@@ -315,17 +315,27 @@ A1 and `="A"` in the formula bar, so Excel decodes `_xHHHH_` inside `<f>`,
 unlike LibreOffice. R10's premise does not hold for Excel: a formula that
 contains `_xHHHH_` text changes meaning.
 
-The defined name is not settled. The `_x0041_` sheet's hidden
+Excel decodes defined names too. The `_x0041_` sheet's hidden
 `_xlnm._FilterDatabase` name stores `'_x0041_'!$A$1:$B$3` unescaped. There
 was no repair prompt, the filter works and the Name Manager lists nothing,
-but the filter's range is also in the sheet's `<autoFilter ref>`, so a
-working filter does not prove that Excel read the name undecoded. If Excel
-decodes it, the name points at a sheet `A` that does not exist.
+because the filter's range is also in the sheet's `<autoFilter ref>`. But
+when the owner saved a copy from Excel for the web, the name came back as
+`[1]A!$A$1:$B$3`, with a new `xl/externalLinks/externalLink1.xml` pointing
+at an external workbook `A`: Excel read the name as a sheet `A`, found none,
+and turned the reference into a link to another file. The owner did not
+touch the name, so the damage happens on load.
 
-The ruling decides whether `<f>` and defined names escape `_x` as
-`_x005F_x`, like cell text and sheet names, and must settle the defined name
-first (for example by a fixture whose defined name is visible in the Name
-Manager). The fix changes `m2_formula_xstring` and its expected values in
+The same copy shows what Excel writes itself. After the owner typed
+`="_x0041_"` into `Probe!A1` by hand (it then showed `_x0041_`), Excel saved
+`<f>"_x005F_x0041_"</f>` with the cached value `_x005F_x0041_`. Excel
+escapes `_x` in `<f>` as `_x005F_x`, exactly as in cell text, and the sheet
+name as `_x005f_x0041_`.
+
+So R10 is wrong for Excel, for formulas and defined names alike: both must
+escape `_x` as `_x005F_x`, like cell text and sheet names. The ruling must
+still confirm this and check LibreOffice, which CI showed does not decode
+`<f>` and would then show `_x005F_x0041_`. The fix changes
+`m2_formula_xstring` and its expected values in
 `test/fixtures/m2_fixtures.dart`, starts with a failing regression test, and
 updates R10's row in `docs/xlsx-writer.md`.
 
@@ -371,4 +381,4 @@ M3's Excel check covers them in desktop Excel, with the document properties.
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_style_precedence` | ok | No repair prompt. Row 1 bold, B money with `€`, C `2026-10-24`, B4 `46.319,00 €`. The top border runs across A5:C5, B5 included, and B5 shows `1.245,75 €` in italic. |
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_views` | ok (kısmi) | No repair prompt. Opens on `View`, only that tab selected (no `[Group]`), tab red, no gridlines or headings, B1's `0` hidden. `Frozen`, `RTL` and `Outline` (button at row 1) as expected. Unhide lists `Hidden` only. The 85 % zoom and the `Split` panes are not shown in Excel for the web (see "Open issues", M3). |
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_merges_filter` | ok | No repair prompt. A1:D1 and B3:C4 merged, the title bold and centred. Filtering `Qty` works ("11 of 14 records found"). Name Manager lists nothing. `Plain` has no filter and no merges. |
-| 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_formula_xstring` | sorun | No repair prompt. A2 and the second tab read `_x0041_`. A1 shows `A`, formula bar `="A"`: Excel decodes `_xHHHH_` in `<f>` (see "Open issues", M3). The `_x0041_` sheet's filter works and Name Manager lists nothing, which does not settle the defined name. |
+| 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_formula_xstring` | sorun | No repair prompt. A2 and the second tab read `_x0041_`. A1 shows `A`, formula bar `="A"`: Excel decodes `_xHHHH_` in `<f>` (see "Open issues", M3). The `_x0041_` sheet's filter works and Name Manager lists nothing, but a copy saved from Excel turned the hidden filter name into an external link `[1]A!$A$1:$B$3`, so Excel decodes defined names too. |
