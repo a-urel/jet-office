@@ -1595,4 +1595,58 @@ void main() {
       );
     });
   });
+
+  group('rule 26: protection', () {
+    Uint8List protectedBook() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('P')
+        ..row(<Object?>[1])
+        ..protect(const XlsxSheetProtection(password: 'password'));
+      book.protectWorkbook(const XlsxWorkbookProtection(password: 'test'));
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String part, String Function(String xml) change) =>
+        _rebuild(
+          protectedBook(),
+          edit: <String, String? Function(String)>{part: change},
+        );
+
+    test('a protected workbook is clean', () {
+      expect(checkXlsx(protectedBook()), isEmpty);
+    });
+    test('a sheet password that is not four hex digits', () {
+      for (final String bad in <String>['83A', '83AFF', '83AG', '']) {
+        _expectRule(
+          tamper(
+            _sheet1,
+            (String x) => x.replaceFirst('password="83AF"', 'password="$bad"'),
+          ),
+          26,
+        );
+      }
+    });
+    test('a workbook password that is not four hex digits', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(
+            'workbookPassword="CBEB"',
+            'workbookPassword="CBE"',
+          ),
+        ),
+        26,
+      );
+    });
+    test('a sheetProtection without sheet="1"', () {
+      _expectRule(
+        tamper(_sheet1, (String x) => x.replaceFirst(' sheet="1"', '')),
+        26,
+      );
+      _expectRule(
+        tamper(_sheet1, (String x) => x.replaceFirst('sheet="1"', 'sheet="0"')),
+        26,
+      );
+    });
+  });
 }

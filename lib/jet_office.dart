@@ -62,6 +62,8 @@ export 'src/xlsx/page_setup.dart'
         XlsxPaperSize;
 export 'src/xlsx/properties.dart' show XlsxProperties;
 export 'src/xlsx/range.dart' show XlsxRange;
+export 'src/xlsx/sheet_protection.dart'
+    show XlsxSheetProtection, XlsxWorkbookProtection;
 export 'src/xlsx/sheet_view.dart'
     show XlsxPane, XlsxSheetView, XlsxSheetVisibility;
 export 'src/xlsx/sheet_writer.dart' show XlsxSheetWriter;

@@ -76,7 +76,10 @@
 ///     `x14:id`, except an x14-only rule (one no `x14:id` names), which
 ///     has a `priority` of 1 or more, unique among the sheet's `cfRule` and
 ///     x14-only priorities; no two `x14:cfRule` of the workbook share an
-///     `id`; and a worksheet's `extLst` is its last child.
+///     `id`; and a worksheet's `extLst` is its last child;
+/// 26. every `sheetProtection/@password` and
+///     `workbookProtection/@workbookPassword` is four hexadecimal digits,
+///     and every `sheetProtection` has `sheet="1"`.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -102,6 +105,7 @@ const String _workbookPart = 'xl/workbook.xml';
 final RegExp _sheetPart = RegExp(r'^xl/worksheets/[^/]+\.xml$');
 final RegExp _forbiddenInName = RegExp(r'[\[\]:*?/\\]');
 final RegExp _cellRef = RegExp(r'^([A-Z]+)([0-9]+)$');
+final RegExp _legacyHash = RegExp(r'^[0-9A-Fa-f]{4}$');
 final RegExp _rangeRef = RegExp(r'^([A-Z]+)([0-9]+)(?::([A-Z]+)([0-9]+))?$');
 
 /// The violations found in the XLSX file [bytes]; empty means clean.
@@ -153,6 +157,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkDataValidations(docs, violations);
   _checkConditionalFormats(docs, violations);
   _checkConditionalExtensions(docs, violations);
+  _checkProtection(docs, violations);
   return violations;
 }
 
@@ -1312,6 +1317,38 @@ void _checkConditionalExtensions(
           '$priority',
         );
       }
+    }
+  }
+}
+
+/// Rule 26.
+void _checkProtection(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    for (final XmlElement p in _all(sheet.value, 'sheetProtection')) {
+      final String? password = p.getAttribute('password');
+      if (password != null && !_legacyHash.hasMatch(password)) {
+        violations.add(
+          'rule 26: ${sheet.key}: sheetProtection password "$password" is '
+          'not four hexadecimal digits',
+        );
+      }
+      if (p.getAttribute('sheet') != '1') {
+        violations.add(
+          'rule 26: ${sheet.key}: sheetProtection has sheet="'
+          '${_attr(p, 'sheet')}", expected "1"',
+        );
+      }
+    }
+  }
+  final XmlDocument? book = docs[_workbookPart];
+  if (book == null) return;
+  for (final XmlElement p in _all(book, 'workbookProtection')) {
+    final String? password = p.getAttribute('workbookPassword');
+    if (password != null && !_legacyHash.hasMatch(password)) {
+      violations.add(
+        'rule 26: workbook: workbookPassword "$password" is not four '
+        'hexadecimal digits',
+      );
     }
   }
 }

@@ -13,8 +13,9 @@
 /// of string concatenation; a sheet with an auto filter gets the hidden
 /// `_xlnm._FilterDatabase` defined name Excel expects, and the defined
 /// names, print areas and print titles are written by one `definedNames`
-/// writer (Quds' print titles were relative and unquoted). Drawings, charts,
-/// pictures and passwords are not ported in this phase.
+/// writer (Quds' print titles were relative and unquoted). Drawings, charts
+/// and pictures are not ported in this phase; `workbookProtection` (see
+/// `sheet_protection.dart`) comes before `bookViews`.
 library;
 
 import '../opc/content_types.dart';
@@ -26,6 +27,7 @@ import 'cell_ref.dart';
 import 'defined_name.dart';
 import 'formula_text.dart';
 import 'range.dart';
+import 'sheet_protection.dart';
 import 'sheet_view.dart';
 
 /// A worksheet as the workbook lists it.
@@ -95,6 +97,8 @@ String worksheetPartName(int number) => 'xl/worksheets/sheet$number.xml';
 /// workbook with formulas needs because the writer does not compute their
 /// results.
 ///
+/// [protection], when given, writes `workbookProtection` before `bookViews`.
+///
 /// After `sheets`, `definedNames` lists [workbookNames] in definition
 /// order, then for each tab in tab order its hidden `_xlnm._FilterDatabase`
 /// (when it has an auto filter), `_xlnm.Print_Area`, `_xlnm.Print_Titles` and
@@ -112,11 +116,13 @@ void writeWorkbook(
   required int activeTab,
   required bool fullCalcOnLoad,
   List<XlsxDefinedName> workbookNames = const <XlsxDefinedName>[],
+  XlsxWorkbookProtection? protection,
 }) {
   w.declaration();
   w.start('workbook');
   w.attribute('xmlns', Ns.main);
   w.attribute('xmlns:r', Ns.rel);
+  if (protection != null) writeWorkbookProtection(w, protection);
   w.start('bookViews');
   w.empty('workbookView', <String, String>{'activeTab': '$activeTab'});
   w.end();

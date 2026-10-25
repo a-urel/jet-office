@@ -106,6 +106,7 @@ void main() {
       'm3_conditional_x14',
       'm3_page_setup',
       'm3_header_footer',
+      'm3_protection',
     ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
@@ -583,5 +584,25 @@ void main() {
         '<firstHeader>Cover</firstHeader></headerFooter>',
       ),
     );
+  });
+
+  test('m3_protection writes both protections and the cell flags', () {
+    final Map<String, String> parts = readXlsx(named('m3_protection').build());
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      contains(
+        '</sheetData><sheetProtection password="83AF" sheet="1" '
+        'objects="1" scenarios="1" formatColumns="0"/>',
+      ),
+    );
+    expect(
+      parts['xl/workbook.xml'],
+      contains(
+        '<workbookProtection workbookPassword="CBEB" lockStructure="1"/>'
+        '<bookViews>',
+      ),
+    );
+    expect(parts['xl/styles.xml'], contains('<protection locked="0"/>'));
+    expect(parts['xl/styles.xml'], contains('<protection hidden="1"/>'));
   });
 }

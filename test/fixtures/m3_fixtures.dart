@@ -17,6 +17,7 @@ List<Fixture> m3Fixtures() => <Fixture>[
   _conditionalX14(),
   _pageSetup(),
   _headerFooter(),
+  _protection(),
 ];
 
 /// Defined names, a print area and print titles.
@@ -608,3 +609,58 @@ Fixture _headerFooter() {
     },
   );
 }
+
+/// A protected sheet and a workbook with locked structure.
+///
+/// `Locked` has a label in A1 (locked, as every cell is by default), an
+/// unlocked input cell in B2 (`XlsxProtection(locked: false)`) and a
+/// formula `1+1` in C3 whose formula is hidden. The sheet is protected with
+/// the password `password` and allows column formatting; the workbook
+/// structure is locked with the password `test`. Protection changes no value,
+/// so the values below are what a reader computes; Excel's Review tab shows
+/// the protection, and a user can edit B2 only.
+Fixture _protection() => Fixture(
+  'm3_protection',
+  <String, List<List<String>>>{
+    'Locked': <List<String>>[
+      <String>['Locked label', '', ''],
+      <String>['', 'input', ''],
+      <String>['', '', '2'],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Locked': <List<Object?>>[
+      <Object?>['Locked label'],
+      <Object?>[null, 'input'],
+      <Object?>[null, null, 2],
+    ],
+  },
+  () {
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('Locked')
+      ..row(<Object?>['Locked label'])
+      ..row(<Object?>[
+        null,
+        const XlsxCell(
+          'input',
+          style: XlsxStyle(protection: XlsxProtection(locked: false)),
+        ),
+      ])
+      ..row(<Object?>[
+        null,
+        null,
+        const XlsxCell(
+          XlsxFormula('1+1', cached: 2),
+          style: XlsxStyle(protection: XlsxProtection(hidden: true)),
+        ),
+      ])
+      ..protect(
+        const XlsxSheetProtection(
+          password: 'password',
+          allowFormatColumns: true,
+        ),
+      );
+    book.protectWorkbook(const XlsxWorkbookProtection(password: 'test'));
+    return book.close();
+  },
+);

@@ -44,6 +44,7 @@ import 'hyperlink.dart';
 import 'limits.dart';
 import 'page_setup.dart';
 import 'range.dart';
+import 'sheet_protection.dart';
 import 'sheet_view.dart';
 import 'style.dart';
 import 'values.dart';
@@ -269,6 +270,18 @@ abstract final class XlsxSheetWriter {
   /// the earlier setting stays then.
   void headerFooter(XlsxHeaderFooter headerFooter);
 
+  /// Protects the sheet, replacing an earlier call: [protection] says what
+  /// users may still do and gives the password that lifts it.
+  ///
+  /// A trailer setting like [merge]. Protection locks the cells whose style
+  /// does not set `XlsxProtection(locked: false)`. It is not security: the
+  /// password hash is weak and nothing is encrypted.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] naming `password`
+  /// when it is not 1 to 15 characters from U+0020 to U+007E; the earlier
+  /// protection stays then.
+  void protect(XlsxSheetProtection protection);
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
@@ -395,6 +408,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
 
   XlsxPageSetup? _pageSetup;
   XlsxHeaderFooter? _headerFooter;
+  XlsxSheetProtection? _protection;
 
   /// The priority the next conditional-format rule gets.
   int _nextPriority = 1;
@@ -580,6 +594,13 @@ final class WorksheetWriter implements XlsxSheetWriter {
     _checkOpenSheet();
     checkHeaderFooter(headerFooter);
     _headerFooter = headerFooter;
+  }
+
+  @override
+  void protect(XlsxSheetProtection protection) {
+    _checkOpenSheet();
+    checkProtectionPassword(protection.password);
+    _protection = protection;
   }
 
   @override
@@ -817,6 +838,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       hyperlinks: links,
       pageSetup: _pageSetup,
       headerFooter: _headerFooter,
+      protection: _protection,
     );
     context.zip.addChunks(worksheetPartName(number), <Uint8List>[
       utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),

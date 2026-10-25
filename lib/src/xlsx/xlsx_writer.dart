@@ -24,6 +24,7 @@ import '../zip/archive_adapter.dart';
 import 'defined_name.dart';
 import 'properties.dart';
 import 'sheet_name.dart';
+import 'sheet_protection.dart';
 import 'sheet_view.dart';
 import 'sheet_writer.dart';
 import 'warnings.dart';
@@ -67,6 +68,7 @@ sealed class XlsxWriterBase {
 
   /// The workbook-scope defined names, in definition order.
   final List<XlsxDefinedName> _names = <XlsxDefinedName>[];
+  XlsxWorkbookProtection? _protection;
   WorksheetWriter? _open;
   WorksheetWriter? _active;
   bool _closed = false;
@@ -155,6 +157,21 @@ sealed class XlsxWriterBase {
     _names.add(checkDefinedName(name, _names));
   }
 
+  /// Protects the workbook, replacing an earlier call: [protection] says
+  /// what is locked and gives the password that lifts it.
+  ///
+  /// Allowed until `close()`. It is not security: the password hash is weak
+  /// and nothing is encrypted.
+  ///
+  /// Throws [ArgumentError] naming `password` when it is not 1 to 15
+  /// characters from U+0020 to U+007E (the earlier protection stays then),
+  /// and [StateError] after `close()` or after a failure.
+  void protectWorkbook(XlsxWorkbookProtection protection) {
+    _checkOpen();
+    checkProtectionPassword(protection.password);
+    _protection = protection;
+  }
+
   void _checkOpen() {
     _context.checkNotFailed();
     if (_closed) {
@@ -228,6 +245,7 @@ sealed class XlsxWriterBase {
                 ),
             ],
             workbookNames: _names,
+            protection: _protection,
             activeTab: _activeTab(),
             fullCalcOnLoad: _context.encoder.wroteFormula,
           ),

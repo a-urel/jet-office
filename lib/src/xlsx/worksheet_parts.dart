@@ -23,10 +23,13 @@
 /// `conditional_format_x14.dart`) comes last; the page setup (see
 /// `page_setup.dart`) writes `pageSetUpPr` in `sheetPr` and, after
 /// `hyperlinks`, `printOptions`, `pageMargins` and `pageSetup`; the header and
-/// footer (see `header_footer.dart`) write `headerFooter` after `pageSetup`.
+/// footer (see `header_footer.dart`) write `headerFooter` after `pageSetup`;
+/// the protection (see `sheet_protection.dart`) writes `sheetProtection`
+/// right after `sheetData`, where Quds wrote it after `autoFilter`.
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
-/// `sheetFormatPr` and `cols` before `sheetData`, then `autoFilter`,
+/// `sheetFormatPr` and `cols` before `sheetData`, then `sheetProtection`,
+/// `autoFilter`,
 /// `mergeCells`, `conditionalFormatting`, `dataValidations`,
 /// `hyperlinks`, `printOptions`, `pageMargins`, `pageSetup`, `headerFooter`
 /// and `extLst`.
@@ -46,6 +49,7 @@ import 'header_footer.dart';
 import 'limits.dart';
 import 'page_setup.dart';
 import 'range.dart';
+import 'sheet_protection.dart';
 import 'sheet_view.dart';
 
 /// The width Excel gives a column of Calibri 11 when nothing sets one: 8.43
@@ -103,6 +107,7 @@ final class WorksheetSettings {
     this.hyperlinks = const <WorksheetHyperlink>[],
     this.pageSetup,
     this.headerFooter,
+    this.protection,
   });
 
   /// The sheet's 1-based creation order, which the ids of its Excel 2010
@@ -155,6 +160,9 @@ final class WorksheetSettings {
 
   /// The text printed in the margins, or `null` for none.
   final XlsxHeaderFooter? headerFooter;
+
+  /// What the sheet's protection allows, or `null` for an unprotected sheet.
+  final XlsxSheetProtection? protection;
 }
 
 /// The `<worksheet>` frame before the rows: the XML declaration, the
@@ -180,7 +188,7 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
 }
 
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
-/// then `autoFilter`, `mergeCells`, `conditionalFormatting`,
+/// then `sheetProtection`, `autoFilter`, `mergeCells`, `conditionalFormatting`,
 /// `dataValidations`, `hyperlinks`, the page setup's `printOptions`,
 /// `pageMargins`, `pageSetup` and `headerFooter`, and the `extLst` of the
 /// Excel 2010 conditional formats when the sheet has them, then `</worksheet>`.
@@ -189,6 +197,8 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
   final StringBuffer out = StringBuffer();
   final XmlWriter w = XmlWriter(out);
   if (hasRows) w.raw('</sheetData>');
+  final XlsxSheetProtection? protection = settings.protection;
+  if (protection != null) writeSheetProtection(w, protection);
   final XlsxRange? filter = settings.autoFilter;
   if (filter != null) {
     w.empty('autoFilter', <String, String>{'ref': filter.ref});
