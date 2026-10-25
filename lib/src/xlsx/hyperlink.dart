@@ -53,9 +53,8 @@ final class XlsxHyperlink {
   ///
   /// [url] is percent-encoded with [encodeUriText] (a space becomes `%20`,
   /// an existing `%20` stays, a `%` that starts no escape becomes `%25`) to
-  /// make the [address]. [text], the cell's
-  /// text, defaults to [url] as given. [tooltip] is the text Excel shows on
-  /// hover.
+  /// make the [address]. [text], the cell's text, defaults to [url] as
+  /// given. [tooltip] is the text Excel shows on hover.
   factory XlsxHyperlink.url(String url, {String? text, String? tooltip}) =>
       XlsxHyperlink(
         address: encodeUriText(url),

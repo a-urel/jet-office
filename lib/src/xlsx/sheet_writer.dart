@@ -839,8 +839,8 @@ final class WorksheetWriter implements XlsxSheetWriter {
     }
   }
 
-  /// Empties everything [holdsTrailerData] reports; a finished sheet keeps
-  /// up to 65,530 links and its other trailer lists no longer.
+  /// Empties everything [holdsTrailerData] reports, so a finished sheet no
+  /// longer keeps its links (up to 65,530) and its other trailer data.
   void _dropTrailerData() {
     _links.clear();
     _merges.clear();
