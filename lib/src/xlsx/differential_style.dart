@@ -41,6 +41,8 @@ void validateDifferentialStyle(XlsxStyle style) {
   final XlsxBorder? border = style.border;
   if (border != null) {
     _refuse(border.diagonal, 'diagonal');
+    _refuse(border.diagonalUp, 'diagonalUp');
+    _refuse(border.diagonalDown, 'diagonalDown');
     _refuse(border.vertical, 'vertical');
     _refuse(border.horizontal, 'horizontal');
     validateBorder(border);
@@ -72,12 +74,7 @@ void writeDifferentialStyleXml(
 ) {
   w.start('dxf');
   final XlsxFont? font = style.font;
-  if (font != null) {
-    final StringBuffer fontXml = StringBuffer();
-    writeFontXml(XmlWriter(fontXml), font);
-    // A font that sets nothing writes nothing, like no font.
-    if (fontXml.toString() != '<font/>') w.raw(fontXml.toString());
-  }
+  if (font != null) _writeFont(w, font);
   if (numFmt != null) {
     w.empty('numFmt', <String, String>{
       'numFmtId': '${numFmt.id}',
@@ -88,8 +85,8 @@ void writeDifferentialStyleXml(
   if (fill != null) _writeFill(w, fill);
   final XlsxBorder? border = style.border;
   if (border != null) {
-    // Only the four sides are written; a diagonal flag would point at a
-    // diagonal side that is not there.
+    // Only the four sides are written; validation refused the diagonal side
+    // and its flags.
     writeBorderXml(
       w,
       XlsxBorder(
@@ -122,4 +119,63 @@ void _writeFill(XmlWriter w, XlsxFill fill) {
     return;
   }
   writeFillXml(w, fill);
+}
+
+/// Writes [font] as a `<font>` that says only what it sets: `true` is
+/// `<b/>`, `false` is `<b val="0"/>` (a decision to switch the style off on
+/// a cell that has it), and `null` writes nothing, so the cell's font
+/// shows through. A font that sets nothing writes nothing at all.
+void _writeFont(XmlWriter w, XlsxFont font) {
+  final XlsxUnderline? underline = font.underline;
+  final XlsxFontScript? script = font.script;
+  final XlsxColor? color = font.color;
+  final bool writesScript = script != null && script != XlsxFontScript.baseline;
+  if (font.bold == null &&
+      font.italic == null &&
+      font.strike == null &&
+      font.condense == null &&
+      font.extend == null &&
+      font.outline == null &&
+      font.shadow == null &&
+      underline == null &&
+      !writesScript &&
+      color == null) {
+    return;
+  }
+  w.start('font');
+  _writeSwitch(w, 'b', font.bold);
+  _writeSwitch(w, 'i', font.italic);
+  _writeSwitch(w, 'strike', font.strike);
+  _writeSwitch(w, 'condense', font.condense);
+  _writeSwitch(w, 'extend', font.extend);
+  _writeSwitch(w, 'outline', font.outline);
+  _writeSwitch(w, 'shadow', font.shadow);
+  if (underline != null) {
+    switch (underline) {
+      case XlsxUnderline.none:
+        w.empty('u', <String, String>{'val': 'none'});
+      case XlsxUnderline.single:
+        w.empty('u');
+      case XlsxUnderline.doubleLine:
+        w.empty('u', <String, String>{'val': 'double'});
+      case XlsxUnderline.singleAccounting:
+        w.empty('u', <String, String>{'val': 'singleAccounting'});
+      case XlsxUnderline.doubleAccounting:
+        w.empty('u', <String, String>{'val': 'doubleAccounting'});
+    }
+  }
+  if (writesScript) {
+    w.empty('vertAlign', <String, String>{'val': script.name});
+  }
+  if (color != null) {
+    w.start('color');
+    writeColorAttributes(w, color);
+    w.end();
+  }
+  w.end();
+}
+
+void _writeSwitch(XmlWriter w, String name, bool? value) {
+  if (value == null) return;
+  w.empty(name, value ? const {} : const <String, String>{'val': '0'});
 }

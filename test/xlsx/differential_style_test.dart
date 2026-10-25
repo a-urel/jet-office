@@ -117,6 +117,36 @@ void main() {
     );
   });
 
+  test('explicit off switches are written, null inherits', () {
+    final StyleRegistry r = StyleRegistry();
+    expect(r.dxfIdFor(const XlsxStyle(font: XlsxFont(bold: false))), 0);
+    expect(r.dxfIdFor(const XlsxStyle()), 1);
+    r.dxfIdFor(
+      const XlsxStyle(
+        font: XlsxFont(
+          bold: false,
+          italic: false,
+          strike: false,
+          condense: false,
+          extend: false,
+          outline: false,
+          shadow: false,
+          underline: XlsxUnderline.none,
+        ),
+      ),
+    );
+    final String d = _dxfs(r);
+    expect(d, contains('<dxf><font><b val="0"/></font></dxf>'));
+    expect(
+      d,
+      contains(
+        '<dxf><font><b val="0"/><i val="0"/><strike val="0"/>'
+        '<condense val="0"/><extend val="0"/><outline val="0"/>'
+        '<shadow val="0"/><u val="none"/></font></dxf>',
+      ),
+    );
+  });
+
   test('border writes the four sides', () {
     final StyleRegistry r = StyleRegistry()
       ..dxfIdFor(
@@ -195,6 +225,8 @@ void main() {
           horizontal: XlsxBorderSide(style: XlsxBorderStyle.thin),
         ),
       ),
+      'diagonalUp': const XlsxStyle(border: XlsxBorder(diagonalUp: true)),
+      'diagonalDown': const XlsxStyle(border: XlsxBorder(diagonalDown: true)),
       'numFmt': const XlsxStyle(numFmt: XlsxNumFmt.builtin(30)),
     };
     for (final MapEntry<String, XlsxStyle> e in bad.entries) {
