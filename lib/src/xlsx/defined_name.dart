@@ -35,8 +35,10 @@ final class XlsxDefinedName {
 
   /// The name: a letter, `_` or `\` followed by letters, digits, `_`, `.`
   /// or `\`; at most [XlsxLimits.maxDefinedNameLength] characters; not a
-  /// cell reference such as `A1` or `R1C1`, and not `R` or `C`; and not
-  /// starting with `_xlnm.`, which Excel reserves.
+  /// cell reference such as `A1` or `R1C1`, and not `R` or `C`; not
+  /// starting with `_xlnm.`, which Excel reserves; and not `Print_Area`,
+  /// `Print_Titles` or `_FilterDatabase` in any case, the built-in names
+  /// that a sheet's `printArea`, `printTitles` and `autoFilter` write.
   final String name;
 
   /// The formula the name stands for.
@@ -66,6 +68,15 @@ final class XlsxDefinedName {
       '${hidden ? ', hidden: true' : ''}'
       '${comment == null ? '' : ', comment: $comment'})';
 }
+
+/// The spellings of Excel's built-in names without their `_xlnm.` prefix,
+/// keyed by [sheetNameKey], each with the sheet setting that writes it.
+/// Excel reads a user name with such a spelling as the built-in.
+final Map<String, String> _builtInSettings = <String, String>{
+  sheetNameKey('Print_Area'): 'printArea',
+  sheetNameKey('Print_Titles'): 'printTitles',
+  sheetNameKey('_FilterDatabase'): 'autoFilter',
+};
 
 final RegExp _nameShape = RegExp(
   r'^[\p{L}_\\][\p{L}\p{N}_.\\]*$',
@@ -125,6 +136,15 @@ XlsxDefinedName checkDefinedName(
       name,
       'name',
       'Names starting with "_xlnm." are reserved for Excel.',
+    );
+  }
+  final String? setting = _builtInSettings[sheetNameKey(name)];
+  if (setting != null) {
+    throw ArgumentError.value(
+      name,
+      'name',
+      '"$name" is the name of an Excel built-in; use the sheet\'s $setting '
+          'instead.',
     );
   }
   if (name.length == 1 && 'RrCc'.contains(name)) {

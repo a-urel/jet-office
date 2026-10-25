@@ -804,7 +804,8 @@ const int _maxStandardDeviations = 3;
 /// describes; and each style as a differential style
 /// (`validateDifferentialStyle`), whose errors are named
 /// `rules[i].style.<field>`. The number formats of the styles are checked
-/// when they are registered. Nothing is recorded here.
+/// when they are registered, and their errors are named
+/// `rules[i].style.numFmt` too. Nothing is recorded here.
 void checkConditionalFormat(XlsxConditionalFormat format) {
   final List<XlsxRange> ranges = format.ranges;
   if (ranges.isEmpty) {

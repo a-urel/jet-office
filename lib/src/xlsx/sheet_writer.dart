@@ -568,7 +568,13 @@ final class WorksheetWriter implements XlsxSheetWriter {
         conditionalRuleStyle(rule),
     ];
     final Iterator<int> ids = context.styles
-        .dxfIdsFor(styles.nonNulls.toList())
+        .dxfIdsFor(
+          styles.nonNulls.toList(),
+          fields: <String>[
+            for (int i = 0; i < styles.length; i++)
+              if (styles[i] != null) 'rules[$i].style',
+          ],
+        )
         .iterator;
     final List<int?> dxfIds = <int?>[
       for (final XlsxStyle? style in styles)
@@ -806,7 +812,9 @@ final class WorksheetWriter implements XlsxSheetWriter {
     final Utf8Buffer body = _body!;
     _xml = null;
     _body = null;
-    // One relationship per distinct address, numbered in first-use order.
+    // One relationship per distinct address, numbered in first-use order:
+    // the one place ids are assigned. The links and the relationships part
+    // both take them from this map.
     final Map<String, String> ids = <String, String>{};
     final List<WorksheetHyperlink> links = <WorksheetHyperlink>[];
     for (final (String ref, XlsxHyperlink link) in _links) {
@@ -845,7 +853,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       ...body.takeChunks(),
       utf8.encode(worksheetTrailer(settings, hasRows: _wroteRow)),
     ]);
-    final String? rels = worksheetRelationshipsXml(ids.keys.toList());
+    final String? rels = worksheetRelationshipsXml(ids);
     if (rels != null) {
       context.zip.addChunks(worksheetRelsPartName(number), <Uint8List>[
         utf8.encode(rels),

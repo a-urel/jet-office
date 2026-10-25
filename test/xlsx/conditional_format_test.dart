@@ -824,12 +824,54 @@ void main() {
               ],
             ),
           ),
-          throwsArgumentError,
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError e) => e.name,
+              'name',
+              'rules[1].style.numFmt',
+            ),
+          ),
         );
       });
       expect(parts[_sheet1], isNot(contains('conditionalFormatting')));
       expect(parts[_styles], contains('<dxfs count="0"/>'));
       expect(parts[_styles], isNot(contains('0.0#')));
+    });
+
+    test('a registry error names the rule, counting rules with no style', () {
+      final Map<String, String> parts = _book((XlsxSheetWriter s) {
+        expect(
+          () => s.conditionalFormat(
+            XlsxConditionalFormat(
+              <XlsxRange>[_a1],
+              <XlsxConditionalRule>[
+                XlsxDuplicateRule(style: _red),
+                XlsxColorScale(
+                  <XlsxCfValue>[
+                    const XlsxCfValue.min(),
+                    const XlsxCfValue.max(),
+                  ],
+                  <XlsxColor>[XlsxColor.hex('FFFFFF'), XlsxColor.hex('000000')],
+                ),
+                const XlsxExpressionRule(
+                  'TRUE',
+                  style: XlsxStyle(numFmt: XlsxNumFmt.builtin(30)),
+                ),
+              ],
+            ),
+          ),
+          throwsA(
+            isA<ArgumentError>()
+                .having(
+                  (ArgumentError e) => e.name,
+                  'name',
+                  'rules[2].style.numFmt',
+                )
+                .having((ArgumentError e) => e.invalidValue, 'value', 30),
+          ),
+        );
+      });
+      expect(parts[_styles], contains('<dxfs count="0"/>'));
     });
   });
 

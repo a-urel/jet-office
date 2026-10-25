@@ -295,6 +295,48 @@ void main() {
       expect(xml, contains('operator="lessThan"'));
       expect(xml, contains('<formula1>0.5</formula1>'));
     });
+    test('a time outside one day throws naming the operand', () {
+      void rejects(Duration a, Duration? b, String field) {
+        expect(
+          () => _validations(
+            (XlsxSheetWriter s) => s.dataValidation(
+              XlsxDataValidation.time(
+                <XlsxRange>[_a1],
+                b == null ? XlsxComparison.lessThan : XlsxComparison.between,
+                a,
+                b: b,
+              ),
+            ),
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError e) => e.name,
+              'name',
+              field,
+            ),
+          ),
+          reason: '$a $b',
+        );
+      }
+
+      rejects(const Duration(hours: -5), null, 'formula1');
+      rejects(const Duration(hours: 24), null, 'formula1');
+      rejects(Duration.zero, const Duration(hours: 24), 'formula2');
+      rejects(Duration.zero, const Duration(microseconds: -1), 'formula2');
+    });
+    test('a time from 00:00 to 23:59:59 is allowed', () {
+      expect(
+        _one(
+          XlsxDataValidation.time(
+            <XlsxRange>[_a1],
+            XlsxComparison.between,
+            Duration.zero,
+            b: const Duration(hours: 23, minutes: 59, seconds: 59),
+          ),
+        ),
+        contains('<formula1>0</formula1><formula2>0.999988425925926'),
+      );
+    });
     test('textLength writes the length', () {
       expect(
         _one(

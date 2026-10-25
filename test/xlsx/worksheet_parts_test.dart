@@ -41,7 +41,7 @@ String _between(WorksheetSettings settings) {
 
 void main() {
   group('default settings', () {
-    const WorksheetSettings none = WorksheetSettings();
+    const WorksheetSettings none = WorksheetSettings(sheetNumber: 1);
 
     test('a sheet with rows gets the M1 frame', () {
       expect(worksheetHeader(none, hasRows: true), '$_preamble<sheetData>');
@@ -59,6 +59,7 @@ void main() {
       expect(
         _between(
           WorksheetSettings(
+            sheetNumber: 1,
             columns: <WorksheetColumn?>[
               _col(width: 12),
               _col(width: 12),
@@ -76,6 +77,7 @@ void main() {
       expect(
         _between(
           WorksheetSettings(
+            sheetNumber: 1,
             columns: <WorksheetColumn?>[null, null, _col(style: 1)],
           ),
         ),
@@ -87,6 +89,7 @@ void main() {
       expect(
         _between(
           WorksheetSettings(
+            sheetNumber: 1,
             columns: <WorksheetColumn?>[_col(style: 1)],
             defaultColumnWidth: 10,
           ),
@@ -100,6 +103,7 @@ void main() {
       expect(
         _between(
           WorksheetSettings(
+            sheetNumber: 1,
             columns: <WorksheetColumn?>[
               _col(
                 width: 7.5,
@@ -119,7 +123,12 @@ void main() {
 
     test('a column that sets nothing writes nothing', () {
       expect(
-        _between(WorksheetSettings(columns: <WorksheetColumn?>[_col(), null])),
+        _between(
+          WorksheetSettings(
+            sheetNumber: 1,
+            columns: <WorksheetColumn?>[_col(), null],
+          ),
+        ),
         '',
       );
     });
@@ -128,6 +137,7 @@ void main() {
       expect(
         _between(
           WorksheetSettings(
+            sheetNumber: 1,
             columns: <WorksheetColumn?>[
               _col(width: 12),
               _col(width: 12, style: 1),
@@ -146,6 +156,7 @@ void main() {
       expect(
         _between(
           WorksheetSettings(
+            sheetNumber: 1,
             columns: <WorksheetColumn?>[_col(width: 5), null, _col(width: 5)],
           ),
         ),
@@ -159,7 +170,11 @@ void main() {
     test('default sizes', () {
       expect(
         _between(
-          const WorksheetSettings(defaultRowHeight: 18, defaultColumnWidth: 10),
+          const WorksheetSettings(
+            sheetNumber: 1,
+            defaultRowHeight: 18,
+            defaultColumnWidth: 10,
+          ),
         ),
         '<sheetFormatPr defaultColWidth="10" defaultRowHeight="18" '
         'customHeight="1"/>',
@@ -168,14 +183,16 @@ void main() {
 
     test('row outline levels alone', () {
       expect(
-        _between(const WorksheetSettings(outlineLevelRow: 2)),
+        _between(const WorksheetSettings(sheetNumber: 1, outlineLevelRow: 2)),
         '<sheetFormatPr defaultRowHeight="15" outlineLevelRow="2"/>',
       );
     });
 
     test('a fractional default height', () {
       expect(
-        _between(const WorksheetSettings(defaultRowHeight: 12.75)),
+        _between(
+          const WorksheetSettings(sheetNumber: 1, defaultRowHeight: 12.75),
+        ),
         '<sheetFormatPr defaultRowHeight="12.75" customHeight="1"/>',
       );
     });
@@ -184,6 +201,7 @@ void main() {
       expect(
         _between(
           WorksheetSettings(
+            sheetNumber: 1,
             columns: <WorksheetColumn?>[
               _col(outlineLevel: 1),
               _col(outlineLevel: 3),
@@ -252,6 +270,7 @@ void main() {
       expect(
         header(
           const WorksheetSettings(
+            sheetNumber: 1,
             tabColor: XlsxColor.rgb(0xFF0000),
             summaryBelow: false,
           ),
@@ -263,7 +282,9 @@ void main() {
 
     test('a tab color alone', () {
       expect(
-        header(const WorksheetSettings(tabColor: XlsxColor.theme(4))),
+        header(
+          const WorksheetSettings(sheetNumber: 1, tabColor: XlsxColor.theme(4)),
+        ),
         '$declared<sheetPr><tabColor theme="4"/></sheetPr>'
         '$defaultViews<sheetData>',
       );
@@ -271,13 +292,17 @@ void main() {
 
     test('summaryRight alone, and both', () {
       expect(
-        header(const WorksheetSettings(summaryRight: false)),
+        header(const WorksheetSettings(sheetNumber: 1, summaryRight: false)),
         '$declared<sheetPr><outlinePr summaryRight="0"/></sheetPr>'
         '$defaultViews<sheetData>',
       );
       expect(
         header(
-          const WorksheetSettings(summaryBelow: false, summaryRight: false),
+          const WorksheetSettings(
+            sheetNumber: 1,
+            summaryBelow: false,
+            summaryRight: false,
+          ),
         ),
         '$declared<sheetPr><outlinePr summaryBelow="0" summaryRight="0"/>'
         '</sheetPr>$defaultViews<sheetData>',
@@ -288,7 +313,7 @@ void main() {
   group('sheetView', () {
     String views(XlsxSheetView view) {
       final String header = worksheetHeader(
-        WorksheetSettings(view: view),
+        WorksheetSettings(sheetNumber: 1, view: view),
         hasRows: true,
       );
       final int start = header.indexOf('<sheetViews>');
@@ -424,7 +449,7 @@ void main() {
     test('the trailer writes autoFilter before mergeCells', () {
       expect(
         worksheetTrailer(
-          WorksheetSettings(autoFilter: filter, merges: merges),
+          WorksheetSettings(sheetNumber: 1, autoFilter: filter, merges: merges),
           hasRows: true,
         ),
         '</sheetData><autoFilter ref="A6:D20"/><mergeCells count="2">'
@@ -435,11 +460,17 @@ void main() {
 
     test('each alone, and with no rows', () {
       expect(
-        worksheetTrailer(WorksheetSettings(autoFilter: filter), hasRows: true),
+        worksheetTrailer(
+          WorksheetSettings(sheetNumber: 1, autoFilter: filter),
+          hasRows: true,
+        ),
         '</sheetData><autoFilter ref="A6:D20"/></worksheet>',
       );
       expect(
-        worksheetTrailer(WorksheetSettings(merges: merges), hasRows: false),
+        worksheetTrailer(
+          WorksheetSettings(sheetNumber: 1, merges: merges),
+          hasRows: false,
+        ),
         '<mergeCells count="2"><mergeCell ref="A1:D1"/>'
         '<mergeCell ref="B3:C4"/></mergeCells></worksheet>',
       );
@@ -448,7 +479,7 @@ void main() {
     test('a single-cell filter writes its one reference', () {
       expect(
         worksheetTrailer(
-          const WorksheetSettings(autoFilter: XlsxRange(0, 0)),
+          const WorksheetSettings(sheetNumber: 1, autoFilter: XlsxRange(0, 0)),
           hasRows: false,
         ),
         '<autoFilter ref="A1"/></worksheet>',

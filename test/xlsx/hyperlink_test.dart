@@ -487,13 +487,25 @@ void main() {
 
   group('worksheetRelationshipsXml', () {
     test('has no part without addresses', () {
-      expect(worksheetRelationshipsXml(const <String>[]), isNull);
+      expect(worksheetRelationshipsXml(const <String, String>{}), isNull);
     });
     test('lists the addresses as external hyperlink relationships', () {
-      final String xml = worksheetRelationshipsXml(<String>['a', 'b'])!;
+      final String xml = worksheetRelationshipsXml(<String, String>{
+        'a': 'rId1',
+        'b': 'rId2',
+      })!;
       expect(xml, contains('Id="rId1"'));
       expect(xml, contains('Id="rId2"'));
       expect(xml, contains('Target="b" TargetMode="External"'));
+    });
+    test('writes the ids it is given, not ids of its own', () {
+      final String xml = worksheetRelationshipsXml(<String, String>{
+        'a': 'rId7',
+        'b': 'rId3',
+      })!;
+      expect(xml, contains('Id="rId7" '));
+      expect(xml, contains('Id="rId3" '));
+      expect(xml, isNot(contains('rId1')));
     });
     test('names the part by sheet number', () {
       expect(worksheetRelsPartName(3), 'xl/worksheets/_rels/sheet3.xml.rels');

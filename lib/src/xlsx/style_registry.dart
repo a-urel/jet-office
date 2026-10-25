@@ -288,14 +288,35 @@ final class StyleRegistry {
   /// unregistered again, with any number format code they added. A
   /// conditional format registers its rules' styles this way, after
   /// checking the rules, so a bad rule leaves no dxf behind.
-  List<int> dxfIdsFor(List<XlsxStyle> styles) {
+  ///
+  /// [fields], when given, names each style as the caller knows it (one per
+  /// style): an [ArgumentError] of `styles[i]` naming a field, such as
+  /// `numFmt`, is rethrown naming `${fields[i]}.numFmt`, with the same
+  /// value, message and stack.
+  List<int> dxfIdsFor(List<XlsxStyle> styles, {List<String>? fields}) {
+    assert(fields == null || fields.length == styles.length);
     final int dxfs = _dxfs.length;
     final int codes = _customCodes.length;
+    int i = 0;
     try {
-      return <int>[for (final XlsxStyle style in styles) dxfIdFor(style)];
-    } on Object {
+      final List<int> ids = <int>[];
+      for (; i < styles.length; i++) {
+        ids.add(dxfIdFor(styles[i]));
+      }
+      return ids;
+    } on Object catch (e, stack) {
       _truncate(_dxfs, _dxfIds, dxfs);
       _truncate(_customCodes, _customIds, codes);
+      if (e is ArgumentError && fields != null) {
+        Error.throwWithStackTrace(
+          ArgumentError.value(
+            e.invalidValue,
+            '${fields[i]}.${e.name}',
+            e.message,
+          ),
+          stack,
+        );
+      }
       rethrow;
     }
   }

@@ -81,6 +81,41 @@ void main() {
       }
     });
 
+    test('built-in name spellings are refused in both scopes, pointing to '
+        'their setting', () {
+      for (final (String name, String setting) in <(String, String)>[
+        ('Print_Area', 'printArea'),
+        ('print_area', 'printArea'),
+        ('Print_Titles', 'printTitles'),
+        ('PRINT_TITLES', 'printTitles'),
+        ('_FilterDatabase', 'autoFilter'),
+        ('_filterdatabase', 'autoFilter'),
+      ]) {
+        final XlsxWriter book = _book();
+        final XlsxSheetWriter sheet = book.addSheet('S');
+        final Matcher refused = throwsA(
+          isA<ArgumentError>()
+              .having((ArgumentError e) => e.name, 'name', 'name')
+              .having(
+                (ArgumentError e) => e.message,
+                'message',
+                contains(setting),
+              ),
+        );
+        expect(
+          () => book.defineName(XlsxDefinedName(name, '1')),
+          refused,
+          reason: 'workbook "$name"',
+        );
+        expect(
+          () => sheet.defineName(XlsxDefinedName(name, '1')),
+          refused,
+          reason: 'sheet "$name"',
+        );
+        expect(_workbook(book), isNot(contains('definedName')));
+      }
+    });
+
     test('a name of 255 characters is accepted', () {
       final XlsxWriter book = _book();
       book.addSheet('S');

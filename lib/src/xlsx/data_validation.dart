@@ -338,7 +338,9 @@ final class XlsxDataValidation {
   );
 
   /// A validation for times of day compared with [a]; the formula is the
-  /// fraction of a day, so 12 hours is `0.5`.
+  /// fraction of a day, so 12 hours is `0.5`. A time is from zero up to but
+  /// not including 24 hours; a negative or longer one throws [ArgumentError]
+  /// naming `formula1` or `formula2` when the validation is registered.
   ///
   /// [b] is the second operand: [XlsxComparison.between] and
   /// [XlsxComparison.notBetween] need it, any other comparison must not have
@@ -562,10 +564,11 @@ String _dayFraction(Duration time) =>
 /// another range of this or an earlier validation; the formulas (see
 /// `checkFormulaText`), the second operand present exactly for
 /// [XlsxComparison.between] and [XlsxComparison.notBetween], a finite
-/// decimal, a text length that is not negative, a list literal that is not
-/// empty and fits [XlsxLimits.maxValidationListLength]; and the lengths and
-/// characters of the titles and messages. Nothing is recorded here, so a
-/// throw leaves the caller's state alone.
+/// decimal, a text length that is not negative, a time from 0 up to but not
+/// including 1 day, a list literal that is not empty and fits
+/// [XlsxLimits.maxValidationListLength]; and the lengths and characters of
+/// the titles and messages. Nothing is recorded here, so a throw leaves the
+/// caller's state alone.
 void checkDataValidation(
   XlsxDataValidation validation,
   Iterable<XlsxDataValidation> earlier,
@@ -681,13 +684,22 @@ void _checkFormulas(XlsxDataValidation v) {
   }
 }
 
-/// Rejects a decimal that is not finite and a negative text length, when
-/// [text] reads as a number; text that is a reference or a formula passes.
+/// Rejects a decimal that is not finite, a negative text length and a time
+/// outside one day, when [text] reads as a number; text that is a reference
+/// or a formula passes.
 void _checkNumber(XlsxValidationType type, String text, String field) {
   final double? number = double.tryParse(text);
   if (number == null) return;
   if (type == XlsxValidationType.decimal && !number.isFinite) {
     throw ArgumentError.value(text, field, 'A decimal must be finite.');
+  }
+  if (type == XlsxValidationType.time && !(number >= 0 && number < 1)) {
+    throw ArgumentError.value(
+      text,
+      field,
+      'A time is a fraction of a day, from 0 (00:00) up to but not '
+      'including 1 (24:00).',
+    );
   }
   if (type == XlsxValidationType.textLength && number < 0) {
     throw ArgumentError.value(

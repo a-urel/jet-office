@@ -91,7 +91,7 @@ typedef WorksheetHyperlink = ({
 final class WorksheetSettings {
   /// Creates the settings of one worksheet.
   const WorksheetSettings({
-    this.sheetNumber = 1,
+    required this.sheetNumber,
     this.columns = const <WorksheetColumn?>[],
     this.defaultColumnWidth,
     this.defaultRowHeight,
@@ -250,16 +250,18 @@ String worksheetRelsPartName(int number) =>
     'xl/worksheets/_rels/sheet$number.xml.rels';
 
 /// Renders the relationships part of a worksheet whose external hyperlink
-/// targets are [addresses], or returns `null` when there are none.
+/// targets are the keys of [relationshipIds], or returns `null` when there
+/// are none.
 ///
-/// The relationship ids are `rId1`, `rId2`, ... in the order of [addresses],
-/// so address `i` is `rId${i + 1}`. The targets are written as given; the
-/// caller has percent-encoded them.
-String? worksheetRelationshipsXml(List<String> addresses) {
-  if (addresses.isEmpty) return null;
+/// Each target gets the id it maps to, the same id its `hyperlink` elements
+/// carry as `r:id`; the caller assigns the ids, so this part never numbers
+/// them on its own. Relationships are written in map order. The targets
+/// are written as given; the caller has percent-encoded them.
+String? worksheetRelationshipsXml(Map<String, String> relationshipIds) {
+  if (relationshipIds.isEmpty) return null;
   final Relationships rels = Relationships();
-  for (final String address in addresses) {
-    rels.add(RelType.hyperlink, address, external: true);
+  for (final MapEntry<String, String> e in relationshipIds.entries) {
+    rels.add(RelType.hyperlink, e.key, id: e.value, external: true);
   }
   final StringBuffer out = StringBuffer();
   rels.write(XmlWriter(out));
