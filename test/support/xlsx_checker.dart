@@ -79,7 +79,10 @@
 ///     `id`; and a worksheet's `extLst` is its last child;
 /// 26. every `sheetProtection/@password` and
 ///     `workbookProtection/@workbookPassword` is four hexadecimal digits,
-///     and every `sheetProtection` has `sheet="1"`.
+///     and every `sheetProtection` has `sheet="1"`;
+/// 27. in `docProps/custom.xml`, every `property` has a `pid` that is an
+///     integer of at least 2, unique in the part, a `name` no earlier
+///     property has (ignoring case) and exactly one value child.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
