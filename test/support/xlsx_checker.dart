@@ -38,14 +38,18 @@
 /// 19. a frozen `pane` has `topLeftCell` at the cell (`ySplit`, `xSplit`),
 ///     and `activePane` is `bottomRight` when both splits are non-zero,
 ///     `topRight` when only `xSplit` is and `bottomLeft` when only `ySplit`
-///     is; a frozen pane with neither split is wrong too;
+///     is; a frozen pane with neither split, `xSplit` above 16383 or
+///     `ySplit` above 1048575 is wrong too;
 /// 20. every `mergeCell` covers at least two cells inside the sheet, with
 ///     its first corner not after its last; no two merges of a sheet
 ///     overlap; and `mergeCells/@count` equals the number of its children;
 /// 21. defined names are unique per scope (the name ignoring case, and
 ///     `localSheetId`, which is absent for the workbook scope); every
-///     `localSheetId` is a number below the sheet count; and every
-///     `autoFilter/@ref` is a valid range inside the sheet.
+///     `localSheetId` is a number below the sheet count; every
+///     `autoFilter/@ref` is a valid range inside the sheet; and each sheet
+///     with an `autoFilter` has exactly one `_xlnm._FilterDatabase` name,
+///     sheet-scoped to it and spelling `'<sheet name>'!<absolute ref>`,
+///     while a sheet without one has none.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -116,6 +120,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkMerges(docs, violations);
   _checkDefinedNames(docs, violations);
   _checkAutoFilters(docs, violations);
+  _checkFilterNames(docs, violations);
   return violations;
 }
 
@@ -729,11 +734,12 @@ void _checkFrozenPanes(Map<String, XmlDocument> docs, List<String> violations) {
       if (pane.getAttribute('state') != 'frozen') continue;
       final int x = int.tryParse(pane.getAttribute('xSplit') ?? '0') ?? -1;
       final int y = int.tryParse(pane.getAttribute('ySplit') ?? '0') ?? -1;
-      if (x < 0 || y < 0 || (x == 0 && y == 0)) {
+      if (x < 0 || y < 0 || (x == 0 && y == 0) || x > 16383 || y > 1048575) {
         violations.add(
           'rule 19: ${sheet.key}: frozen pane has xSplit '
           '"${_attr(pane, 'xSplit')}" and ySplit "${_attr(pane, 'ySplit')}"; '
-          'expected whole numbers, one at least 1',
+          'expected whole numbers, one at least 1, xSplit at most 16383 and '
+          'ySplit at most 1048575',
         );
         continue;
       }
@@ -890,6 +896,63 @@ void _checkAutoFilters(Map<String, XmlDocument> docs, List<String> violations) {
       if (problem != null) {
         violations.add('rule 21: ${sheet.key}: autoFilter ref "$ref" $problem');
       }
+    }
+  }
+}
+
+/// Rule 21, the `_xlnm._FilterDatabase` name of each filtered sheet.
+void _checkFilterNames(Map<String, XmlDocument> docs, List<String> violations) {
+  final XmlDocument? book = docs[_workbookPart];
+  final XmlDocument? rels = docs['xl/_rels/workbook.xml.rels'];
+  if (book == null || rels == null) return;
+  final Map<String, String> targets = <String, String>{
+    for (final XmlElement r in _all(rels, 'Relationship'))
+      _attr(r, 'Id'): 'xl/${_attr(r, 'Target')}',
+  };
+  final List<XmlElement> names = <XmlElement>[
+    for (final XmlElement n in _all(book, 'definedName'))
+      if (_attr(n, 'name').toLowerCase() == '_xlnm._filterdatabase') n,
+  ];
+  final List<XmlElement> sheets = _all(book, 'sheet').toList();
+  for (int index = 0; index < sheets.length; index++) {
+    final String name = _attr(sheets[index], 'name');
+    final XmlDocument? doc = docs[targets[_attr(sheets[index], 'r:id')]];
+    if (doc == null) continue;
+    final List<XmlElement> filters = _all(doc, 'autoFilter').toList();
+    final List<XmlElement> mine = <XmlElement>[
+      for (final XmlElement n in names)
+        if (n.getAttribute('localSheetId') == '$index') n,
+    ];
+    if (filters.isEmpty) {
+      if (mine.isNotEmpty) {
+        violations.add(
+          'rule 21: sheet "$name" has no autoFilter but a '
+          '_xlnm._FilterDatabase name',
+        );
+      }
+      continue;
+    }
+    if (mine.length != 1) {
+      violations.add(
+        'rule 21: sheet "$name" has an autoFilter and ${mine.length} '
+        '_xlnm._FilterDatabase names; expected exactly one',
+      );
+      continue;
+    }
+    final String ref = _attr(filters.first, 'ref');
+    final _Rect? r = _parseRect(ref);
+    if (r == null || _problemWith(r) != null) continue; // reported above
+    // A single cell is written as one absolute cell, a range as two.
+    final String first = '\$${_columnLetters(r.col1 - 1)}\$${r.row1}';
+    final String last = '\$${_columnLetters(r.col2 - 1)}\$${r.row2}';
+    final String want =
+        "'${name.replaceAll("'", "''")}'!"
+        '${ref.contains(':') ? '$first:$last' : first}';
+    if (mine.single.innerText != want) {
+      violations.add(
+        'rule 21: sheet "$name" _xlnm._FilterDatabase is '
+        '"${mine.single.innerText}"; the filter makes it "$want"',
+      );
     }
   }
 }

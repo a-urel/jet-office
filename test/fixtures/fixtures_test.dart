@@ -8,6 +8,9 @@ import '../../tool/src/csv_compare.dart' show decodeXstring;
 import '../support/read_xlsx.dart';
 import '../support/xlsx_checker.dart';
 import 'fixtures.dart';
+import 'm1_fixtures.dart';
+import 'm2_fixtures.dart';
+import 'm3_fixtures.dart';
 
 /// What a sheet stores: its rectangle of cell text and the cells that hold a
 /// formula, as (row, column) pairs counted from 1.
@@ -73,6 +76,35 @@ Map<String, _Sheet> _readSheets(Uint8List bytes) {
 
 void main() {
   final List<Fixture> fixtures = allFixtures();
+
+  test('the milestone lists name their fixtures', () {
+    List<String> names(List<Fixture> list) => <String>[
+      for (final Fixture f in list) f.name,
+    ];
+    expect(names(m1Fixtures()), <String>[
+      'm1_values',
+      'm1_dirty_text',
+      'm1_sheets',
+      'm1_formulas',
+      'm1_empty',
+      'm1_properties',
+      'm1_dates',
+    ]);
+    expect(names(m2Fixtures()), <String>[
+      'm2_styles',
+      'm2_columns_rows',
+      'm2_style_precedence',
+      'm2_views',
+      'm2_merges_filter',
+      'm2_formula_xstring',
+    ]);
+    expect(m3Fixtures(), isA<List<Fixture>>());
+    expect(names(allFixtures()), <String>[
+      ...names(m1Fixtures()),
+      ...names(m2Fixtures()),
+      ...names(m3Fixtures()),
+    ]);
+  });
 
   test('fixture names are unique', () {
     final List<String> names = <String>[
@@ -192,6 +224,37 @@ void main() {
       'Quarterly report',
     );
     expect(core.findAllElements('dc:creator').single.innerText, 'Ahmet Urel');
+  });
+
+  test('m2_styles writes the pattern none fill as fill 0', () {
+    final Map<String, String> parts = readXlsx(named('m2_styles').build());
+    final XmlDocument sheet = XmlDocument.parse(
+      parts['xl/worksheets/sheet1.xml']!,
+    );
+    final XmlDocument styles = XmlDocument.parse(parts['xl/styles.xml']!);
+    final List<XmlElement> xfs = styles
+        .findAllElements('cellXfs')
+        .single
+        .findElements('xf')
+        .toList();
+    final List<String> labels = <String>[
+      for (final XmlElement si in XmlDocument.parse(
+        parts['xl/sharedStrings.xml']!,
+      ).findAllElements('si'))
+        si.findAllElements('t').map((XmlElement t) => t.innerText).join(),
+    ];
+    final XmlElement row = sheet.findAllElements('row').firstWhere((
+      XmlElement r,
+    ) {
+      final XmlElement label = r.findElements('c').elementAt(1);
+      return labels[int.parse(label.getElement('v')!.innerText)] ==
+          'pattern none';
+    });
+    final XmlElement cell = row.findElements('c').first;
+    expect(
+      xfs[int.parse(cell.getAttribute('s') ?? '0')].getAttribute('fillId'),
+      '0',
+    );
   });
 
   test('m2_columns_rows writes its columns, rows and default sizes', () {

@@ -36,6 +36,16 @@ class _ThrowingSink implements Sink<List<int>> {
 }
 
 /// Bytes that deflate poorly, so the archive is large enough to span chunks.
+/// A [ZipWriter] streaming to a sink made by [make], with that sink.
+///
+/// The writer closes the sink in `close` (or after a failure), so the
+/// `close_sinks` lint is silenced here, once, instead of at every test.
+(ZipWriter, T) _sinkWriter<T extends Sink<List<int>>>(T Function() make) {
+  // ignore: close_sinks (ZipWriter closes it)
+  final T sink = make();
+  return (ZipWriter(sink: sink), sink);
+}
+
 Uint8List _noise(int length) {
   final Random r = Random(42);
   return Uint8List.fromList(List<int>.generate(length, (_) => r.nextInt(256)));
@@ -75,10 +85,10 @@ void main() {
   });
 
   test('sink mode streams the same archive and closes the sink', () {
-    // ignore: close_sinks (ZipWriter.close closes it)
-    final _CollectingSink sink = _CollectingSink();
-    final ZipWriter z = ZipWriter(sink: sink)
-      ..add('a.xml', utf8.encode('<a/>'));
+    final (ZipWriter z, _CollectingSink sink) = _sinkWriter(
+      _CollectingSink.new,
+    );
+    z.add('a.xml', utf8.encode('<a/>'));
     expect(z.close(), isNull);
     expect(sink.closed, isTrue);
     expect(
@@ -91,9 +101,10 @@ void main() {
     'sink mode with a large archive: chunked, identical, no subset/clear',
     () {
       final Uint8List big = _noise(300 * 1024);
-      // ignore: close_sinks (ZipWriter.close closes it)
-      final _CollectingSink sink = _CollectingSink();
-      final ZipWriter z = ZipWriter(sink: sink)
+      final (ZipWriter z, _CollectingSink sink) = _sinkWriter(
+        _CollectingSink.new,
+      );
+      z
         ..add('big.bin', big)
         ..add('small.xml', utf8.encode('<s/>'));
       expect(z.close(), isNull);
@@ -121,9 +132,7 @@ void main() {
   });
 
   test('a sink that throws in add is closed and the error rethrown', () {
-    // ignore: close_sinks (ZipWriter closes it after a failure)
-    final _ThrowingSink sink = _ThrowingSink();
-    final ZipWriter z = ZipWriter(sink: sink);
+    final (ZipWriter z, _ThrowingSink sink) = _sinkWriter(_ThrowingSink.new);
     expect(() => z.add('big.bin', _noise(300 * 1024)), throwsFormatException);
     expect(sink.closed, isTrue);
     expect(() => z.add('b.xml', <int>[1]), throwsStateError);
@@ -131,10 +140,8 @@ void main() {
   });
 
   test('a sink that throws in close is closed and the error rethrown', () {
-    // ignore: close_sinks (ZipWriter closes it after a failure)
-    final _ThrowingSink sink = _ThrowingSink();
-    final ZipWriter z = ZipWriter(sink: sink)
-      ..add('a.xml', utf8.encode('<a/>'));
+    final (ZipWriter z, _ThrowingSink sink) = _sinkWriter(_ThrowingSink.new);
+    z.add('a.xml', utf8.encode('<a/>'));
     expect(z.close, throwsFormatException);
     expect(sink.closed, isTrue);
     expect(z.close, throwsStateError);
@@ -158,10 +165,10 @@ void main() {
   });
 
   test('chunks reach the sink before close()', () {
-    // ignore: close_sinks (ZipWriter.close closes it)
-    final _CollectingSink sink = _CollectingSink();
-    final ZipWriter z = ZipWriter(sink: sink)
-      ..add('big.bin', _noise(300 * 1024));
+    final (ZipWriter z, _CollectingSink sink) = _sinkWriter(
+      _CollectingSink.new,
+    );
+    z.add('big.bin', _noise(300 * 1024));
     expect(sink.chunks, isNotEmpty);
     expect(sink.closed, isFalse);
     z.close();
@@ -198,14 +205,16 @@ void main() {
     });
 
     test('is byte-identical to add with the concatenation, to a sink', () {
-      // ignore: close_sinks (ZipWriter.close closes it)
-      final _CollectingSink a = _CollectingSink();
-      // ignore: close_sinks (ZipWriter.close closes it)
-      final _CollectingSink b = _CollectingSink();
-      ZipWriter(sink: a)
+      final (ZipWriter za, _CollectingSink a) = _sinkWriter(
+        _CollectingSink.new,
+      );
+      final (ZipWriter zb, _CollectingSink b) = _sinkWriter(
+        _CollectingSink.new,
+      );
+      za
         ..addChunks('s.xml', parts)
         ..close();
-      ZipWriter(sink: b)
+      zb
         ..add('s.xml', whole)
         ..close();
       expect(a.bytes, b.bytes);

@@ -860,6 +860,12 @@ void main() {
         expect(() => s.defaultSizes(rowHeight: 20), frozen('defaultSizes'));
       });
 
+      test('defaultSizes after blankRow', () {
+        final XlsxSheetWriter s = XlsxWriter().addSheet('S');
+        s.blankRow();
+        expect(() => s.defaultSizes(rowHeight: 20), frozen('defaultSizes'));
+      });
+
       test('a refused setting changes nothing', () {
         final XlsxWriter book = XlsxWriter();
         final XlsxSheetWriter s = book.addSheet('S');
@@ -868,7 +874,7 @@ void main() {
           () => s.columns(const <XlsxColumn?>[XlsxColumn(style: bold)]),
           throwsStateError,
         );
-        expect(() => s.defaultSizes(columnWidth: 3), throwsStateError);
+        expect(() => s.defaultSizes(columnWidth: 3), frozen('defaultSizes'));
         final XlsxResult out = book.close();
         final Map<String, String> parts = readXlsx(out.bytes);
         expect(parts['xl/worksheets/sheet1.xml'], isNot(contains('<cols')));
@@ -1687,6 +1693,22 @@ void main() {
       expect(wb, contains('localSheetId="1"'));
       expect(wb, contains(r"'Filtered'!$A$1:$B$2"));
     });
+
+    test(
+      'a hidden filtered sheet keeps its localSheetId after a front sheet',
+      () {
+        final XlsxWriter book = XlsxWriter();
+        book.addSheet('Shown').row(<Object?>[1]);
+        book.addSheet('Hid', visibility: XlsxSheetVisibility.hidden)
+          ..row(<Object?>[1])
+          ..autoFilter(XlsxRange.parse('A1:B2'));
+        book.addSheet('Front', position: 0);
+        final String wb = workbookXml(book);
+        // Tabs are Front, Shown, Hid.
+        expect(wb, contains('localSheetId="2"'));
+        expect(wb, contains(r"'Hid'!$A$1:$B$2"));
+      },
+    );
 
     test('only the filtered sheet gets a defined name', () {
       final XlsxWriter book = XlsxWriter();

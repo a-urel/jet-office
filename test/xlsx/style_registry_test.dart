@@ -431,6 +431,26 @@ void main() {
     });
   });
 
+  test('an invalid border after a valid new font and fill registers none', () {
+    final StyleRegistry r = StyleRegistry();
+    expect(
+      () => r.idFor(
+        const XlsxStyle(
+          font: XlsxFont(name: 'New font'),
+          fill: XlsxFill.solid(XlsxColor.rgb(0xFFFF00)),
+          border: XlsxBorder(
+            left: XlsxBorderSide(
+              style: XlsxBorderStyle.thin,
+              color: XlsxColor.indexed(66),
+            ),
+          ),
+        ),
+      ),
+      throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'left')),
+    );
+    expect(_xml(r), _emptyGolden);
+  });
+
   test('an invalid part that is unused by the file is still rejected', () {
     // A none pattern writes fill 0 whatever its colors, but a bad color is
     // still the caller's mistake.
@@ -525,6 +545,23 @@ void main() {
       );
       expect(_xml(r), contains('<fonts count="512">'));
       expect(_xml(r), contains('numFmtId="164" formatCode="0.0"'));
+    });
+
+    test('a border of a rolled-back list is not kept', () {
+      final StyleRegistry r = StyleRegistry();
+      expect(
+        () => r.idsFor(const <XlsxStyle?>[
+          XlsxStyle(
+            border: XlsxBorder(
+              top: XlsxBorderSide(style: XlsxBorderStyle.thin),
+            ),
+          ),
+          XlsxStyle(numFmt: XlsxNumFmt.builtin(200)),
+        ]),
+        throwsArgumentError,
+      );
+      expect(_xml(r), contains('<borders count="1">'));
+      expect(_xml(r), _xml(StyleRegistry()));
     });
 
     test('an invalid later style records none of the earlier', () {

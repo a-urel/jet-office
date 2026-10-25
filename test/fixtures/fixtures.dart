@@ -8,8 +8,13 @@ library;
 import 'fixture.dart';
 import 'm1_fixtures.dart';
 import 'm2_fixtures.dart';
+import 'm3_fixtures.dart';
 
 export 'fixture.dart';
 
 /// The fixtures of all milestones, in milestone order.
-List<Fixture> allFixtures() => <Fixture>[...m1Fixtures(), ...m2Fixtures()];
+List<Fixture> allFixtures() => <Fixture>[
+  ...m1Fixtures(),
+  ...m2Fixtures(),
+  ...m3Fixtures(),
+];

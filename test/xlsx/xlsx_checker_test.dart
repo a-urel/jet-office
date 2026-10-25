@@ -827,6 +827,39 @@ void main() {
         19,
       );
     });
+    test('xSplit past the last column', () {
+      _expectRule(
+        tamper(
+          (String x) => x
+              .replaceFirst('xSplit="3"', 'xSplit="16384"')
+              .replaceFirst('topLeftCell="D3"', 'topLeftCell="XFE3"'),
+        ),
+        19,
+      );
+    });
+    test('ySplit past the last row', () {
+      _expectRule(
+        tamper(
+          (String x) => x
+              .replaceFirst('ySplit="2"', 'ySplit="1048576"')
+              .replaceFirst('topLeftCell="D3"', 'topLeftCell="D1048577"'),
+        ),
+        19,
+      );
+    });
+    test('the largest splits are valid', () {
+      expect(
+        checkXlsx(
+          tamper(
+            (String x) => x
+                .replaceFirst('xSplit="3"', 'xSplit="16383"')
+                .replaceFirst('ySplit="2"', 'ySplit="1048575"')
+                .replaceFirst('topLeftCell="D3"', 'topLeftCell="XFD1048576"'),
+          ),
+        ),
+        isEmpty,
+      );
+    });
     test('a split pane is not checked', () {
       final XlsxWriter book = XlsxWriter();
       book.addSheet('S')
@@ -984,6 +1017,56 @@ void main() {
           ),
         ),
         isEmpty,
+      );
+    });
+    test('a filtered sheet without its _FilterDatabase name', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(
+            RegExp(
+              r'<definedName [^>]*localSheetId="0"[^>]*>[^<]*</definedName>',
+            ),
+            '',
+          ),
+        ),
+        21,
+      );
+    });
+    test('a _FilterDatabase name on a sheet with no autoFilter', () {
+      _expectRule(
+        tamper(
+          _sheet2,
+          (String x) => x.replaceFirst(RegExp(r'<autoFilter [^>]*/>'), ''),
+        ),
+        21,
+      );
+    });
+    test('a _FilterDatabase name whose range is not the filter', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(r"'F'!$A$1:$B$2", r"'F'!$A$1:$B$3"),
+        ),
+        21,
+      );
+    });
+    test('a _FilterDatabase name that names another sheet', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(r"'F'!$A$1:$B$2", r"'G'!$A$1:$B$2"),
+        ),
+        21,
+      );
+    });
+    test('a _FilterDatabase name with the range not absolute', () {
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(r"'F'!$A$1:$B$2", "'F'!A1:B2"),
+        ),
+        21,
       );
     });
     test('an autoFilter ref that is not a range', () {

@@ -75,15 +75,15 @@ void main(List<String> args) {
         in dir.existsSync() ? dir.listSync().whereType<File>() : <File>[])
       _basename(f.path),
   ]);
-  if (expectations.isEmpty) {
-    stderr.writeln('No .expected.json files in ${dir.path}.');
-    exitCode = 2;
-    return;
-  }
   int mismatches = 0;
   for (final String message in unexpected) {
     stdout.writeln('FAIL  $message');
     mismatches++;
+  }
+  if (expectations.isEmpty) {
+    stderr.writeln('No .expected.json files in ${dir.path}.');
+    exitCode = 2;
+    return;
   }
   for (final File file in expectations) {
     final String name = _basename(
