@@ -6,12 +6,13 @@
 /// kept every sheet as a list of rows and serialized the whole workbook in
 /// `build`; here one sheet is open at a time, [XlsxWriterBase.addSheet]
 /// finishes the open one, whose part goes straight to the ZIP (see
-/// `sheet_writer.dart`), and `close()` writes only the workbook-level parts. Tab order is independent
-/// of creation order, the active tab is chosen by the caller, a workbook
-/// without sheets is an error instead of silently gaining `Sheet1`, and data
-/// problems are returned as warnings. The workbook gets the hidden
-/// `_xlnm._FilterDatabase` name of each sheet's auto filter, which Quds did
-/// not write. Charts and pictures are not ported yet.
+/// `sheet_writer.dart`), and `close()` writes only the workbook-level parts.
+/// Tab order is independent of creation order, the active tab is chosen by
+/// the caller, a workbook without sheets is an error instead of silently
+/// gaining `Sheet1`, and data problems are returned as warnings. The
+/// workbook gets the hidden `_xlnm._FilterDatabase` name of each sheet's
+/// auto filter, which Quds did not write. Charts and pictures are not
+/// ported yet.
 library;
 
 import 'dart:typed_data';
