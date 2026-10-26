@@ -418,7 +418,9 @@ owner records them in "Results", mark both issues closed, with the date.
 
 - Category `Reports`, Last modified by `jet_office`.
 - Created 24.10.2026 08:30 UTC and modified 24.10.2026 09:45:30 UTC, in local
-  time (11:30 and 12:45 in Türkiye).
+  time (11:30 and 12:45 in Türkiye). Excel for Mac (File > Properties >
+  Statistics) shows the file's own disk time as "Modified" instead; checked
+  on 2026-10-26 (see the closed open issue).
 
 `m2_styles`:
 
@@ -468,7 +470,16 @@ Either way the fix changes the M1 date fixture and its expected value in
 `test/fixtures/m1_fixtures.dart`, starts with a failing regression test, and
 adds a line to "Rules the writer enforces" in `docs/xlsx-writer.md`.
 
-### Some document properties not checked in Excel (open, M3)
+### Some document properties not checked in Excel (closed, 2026-10-26)
+
+Closed on 2026-10-26 by the desktop check of `m1_properties` in Excel for Mac
+(see "Results"). File > Properties showed every core and app field as
+expected: Summary had Title, Subject, Author, Company, Category `Reports`,
+Keywords and Comments, and Statistics had Created 24.10.2026 11:30 (08:30 UTC)
+and Last saved by `jet_office`. Statistics' "Modified" showed the time the
+file was written to disk (26.10.2026 04:36), not the stored
+`dcterms:modified` (09:45:30 UTC): Excel for Mac reads that field from the
+file system, so the stored value is checked by the tests, not by Excel.
 
 Found in the M1 check on 2026-10-24, `m1_properties`. Excel for the web shows
 no document properties. GridCraft, which is not Excel, showed Title,
@@ -567,3 +578,4 @@ The M3 section's "Desktop re-checks of M1 and M2" covers `m2_styles` and
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_views` | ok (kısmi) | No repair prompt. Opens on `View`, only that tab selected (no `[Group]`), tab red, no gridlines or headings, B1's `0` hidden. `Frozen`, `RTL` and `Outline` (button at row 1) as expected. Unhide lists `Hidden` only. The 85 % zoom and the `Split` panes are not shown in Excel for the web (see "Open issues", M3). |
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_merges_filter` | ok | No repair prompt. A1:D1 and B3:C4 merged, the title bold and centred. Filtering `Qty` works ("11 of 14 records found"). Name Manager lists nothing. `Plain` has no filter and no merges. |
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_formula_xstring` | sorun | No repair prompt. A2 and the second tab read `_x0041_`. A1 shows `A`, formula bar `="A"`: Excel decodes `_xHHHH_` in `<f>` (see "Open issues", M3). The `_x0041_` sheet's filter works and Name Manager lists nothing, but a copy saved from Excel turned the hidden filter name into an external link `[1]A!$A$1:$B$3`, so Excel decodes defined names too. |
+| 2026-10-26 | Microsoft 365, Excel for Mac, build not recorded | `m1_properties` (desktop re-check) | ok | No repair prompt. File > Properties: Summary shows Title `Quarterly report`, Subject `Sales`, Author `Ahmet Urel`, Company `Jetronik`, Category `Reports`, Keywords `sales; q3`, Comments `A test workbook`. Statistics shows Created 24.10.2026 11:30 and Last saved by `jet_office`. "Modified" shows the file's disk time (26.10.2026 04:36), not the stored 09:45:30 UTC; Excel for Mac reads it from the file system. |
