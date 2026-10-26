@@ -29,8 +29,7 @@
 ///
 /// Children follow the `CT_Worksheet` order: `sheetPr`, `sheetViews`,
 /// `sheetFormatPr` and `cols` before `sheetData`, then `sheetProtection`,
-/// `autoFilter`,
-/// `mergeCells`, `conditionalFormatting`, `dataValidations`,
+/// `autoFilter`, `mergeCells`, `conditionalFormatting`, `dataValidations`,
 /// `hyperlinks`, `printOptions`, `pageMargins`, `pageSetup`, `headerFooter`
 /// and `extLst`.
 library;

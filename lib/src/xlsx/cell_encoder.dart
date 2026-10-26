@@ -18,6 +18,7 @@ import 'cell_ref.dart';
 import 'color.dart';
 import 'date_serial.dart';
 import 'font.dart';
+import 'formula_text.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
 import 'number_format.dart';
@@ -29,9 +30,6 @@ import 'warnings.dart';
 
 /// The largest whole number a `double` holds exactly (2^53).
 const int _maxExactInt = 9007199254740992;
-
-/// The most characters (UTF-16 code units) Excel accepts in a formula.
-const int _maxFormulaLength = 8192;
 
 /// The font of a hyperlink cell: the theme's hyperlink color, underlined.
 /// The lowest font layer: whatever a column, row or cell font sets wins.
@@ -121,11 +119,13 @@ final class CellEncoder {
   /// A date gets the date-time or short-date format only when the merged
   /// number format is `null`; in any other format it keeps that format, and
   /// warns when that format shows no date.
-  /// a formula's cached string or integer is treated like a plain one.
+  /// A formula's cached string or integer is treated like a plain one.
   /// Programmer errors throw an [ArgumentError]: an unsupported type, a
   /// nested [XlsxCell], a `NaN` or infinite number, an impossible date, a
   /// formula that is empty after its leading `=`, longer than 8,192 UTF-16
-  /// code units or holds characters XML forbids, an invalid cached value.
+  /// code units or holds characters XML forbids (the checks of
+  /// `checkFormulaText`, named `text`, with the cell in the message), an
+  /// invalid cached value.
   /// An invalid style throws like [StyleRegistry.idFor]. When it throws,
   /// nothing is written to [out] and nothing is recorded: the string table,
   /// the style registry and the warnings are as they were.
@@ -345,24 +345,19 @@ final class CellEncoder {
     XlsxFormula formula,
     _Resolved style,
   ) {
-    final String text = formula.text.startsWith('=')
-        ? formula.text.substring(1)
-        : formula.text;
-    if (text.isEmpty) {
-      throw ArgumentError(
-        'The formula in cell $ref on sheet "$sheet" is empty.',
-      );
-    }
-    if (text.length > _maxFormulaLength) {
-      throw ArgumentError(
-        'The formula in cell $ref on sheet "$sheet" has ${text.length} '
-        'characters; Excel accepts at most $_maxFormulaLength.',
-      );
-    }
-    if (scrubXmlText(text).removed > 0) {
-      throw ArgumentError(
-        'The formula in cell $ref on sheet "$sheet" contains characters '
-        'XML forbids.',
+    final String text;
+    try {
+      text = checkFormulaText(formula.text, 'text');
+    } on ArgumentError catch (error, stack) {
+      // The check every formula shares, told at the cell.
+      Error.throwWithStackTrace(
+        ArgumentError.value(
+          error.invalidValue,
+          error.name,
+          'The formula in cell $ref on sheet "$sheet" is invalid: '
+          '${error.message}',
+        ),
+        stack,
       );
     }
     final Object? cached = formula.cached;

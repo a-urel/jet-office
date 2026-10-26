@@ -49,6 +49,10 @@ final class WorkbookContext {
 
   /// Records that handing bytes to the ZIP threw [error]; every later
   /// [checkNotFailed] throws.
+  ///
+  /// Called only by the workbook writer's ZIP work (`_zipWork` in
+  /// `xlsx_writer.dart`). Sheet code reaches the context too, but must not
+  /// call this: an error it throws on its own leaves the writer usable.
   void recordFailure(Object error) {
     _failure = error;
   }

@@ -582,7 +582,7 @@ void main() {
       expect(_xml(r), _xml(StyleRegistry()));
     });
 
-    test('names the failing style with fieldName, keeping the message', () {
+    test('names the failing style and its field with fieldName', () {
       final StyleRegistry r = StyleRegistry();
       expect(
         () => r.idsFor(const <XlsxStyle?>[
@@ -592,7 +592,11 @@ void main() {
         ], fieldName: (int i) => 'columns[$i].style'),
         throwsA(
           isA<ArgumentError>()
-              .having((ArgumentError e) => e.name, 'name', 'columns[2].style')
+              .having(
+                (ArgumentError e) => e.name,
+                'name',
+                'columns[2].style.numFmt',
+              )
               .having((ArgumentError e) => e.invalidValue, 'value', 200)
               .having(
                 (ArgumentError e) => e.message,
@@ -602,6 +606,21 @@ void main() {
         ),
       );
       expect(_xml(r), _xml(StyleRegistry()));
+    });
+
+    test('the renamed error keeps the stack of the failing check', () {
+      StackTrace? stack;
+      try {
+        StyleRegistry().idsFor(const <XlsxStyle?>[
+          XlsxStyle(numFmt: XlsxNumFmt.builtin(200)),
+        ], fieldName: (int i) => 'columns[$i].style');
+      } on ArgumentError catch (_, s) {
+        stack = s;
+      }
+      expect(stack, isNotNull);
+      // The frame of the check that threw; a fresh throw in idsFor's catch
+      // would show only idsFor and its callers.
+      expect(stack.toString(), contains('_validateNumFmt'));
     });
 
     test('an invalid later style records none of the earlier', () {

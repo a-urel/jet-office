@@ -1074,7 +1074,7 @@ void main() {
             XlsxColumn(style: bold),
             XlsxColumn(style: XlsxStyle(numFmt: XlsxNumFmt.builtin(200))),
           ]),
-          'columns[1].style',
+          'columns[1].style.numFmt',
         );
       });
     });

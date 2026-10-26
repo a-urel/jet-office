@@ -150,6 +150,23 @@ void main() {
       // The 2007 rule keeps its own lengths.
       expect(xml, contains('<dataBar minLength="5" maxLength="95">'));
     });
+    test('the x14 lengths: the defaults 10 and 90 become 0 and 100', () {
+      String lengths(int minLength, int maxLength) {
+        final String xml = _sheet(
+          (XlsxSheetWriter s) => _add(s, <XlsxConditionalRule>[
+            XlsxDataBar(
+              color: _blue,
+              minLength: minLength,
+              maxLength: maxLength,
+            ),
+          ]),
+        );
+        return RegExp(r'<x14:dataBar [^>]*>').firstMatch(xml)!.group(0)!;
+      }
+
+      expect(lengths(10, 90), '<x14:dataBar minLength="0" maxLength="100">');
+      expect(lengths(5, 95), '<x14:dataBar minLength="5" maxLength="95">');
+    });
     test('percent and percentile carry xm:f; gte="0" is written', () {
       final String xml = _sheet(
         (XlsxSheetWriter s) => _add(s, <XlsxConditionalRule>[

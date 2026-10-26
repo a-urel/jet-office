@@ -1,7 +1,8 @@
 /// Excel's hard size limits and the error raised when one is exceeded.
 ///
 /// The figures come from Microsoft's "Excel specifications and limits" page,
-/// except where a constant names ECMA-376.
+/// except where a constant names another source: ECMA-376, another
+/// Microsoft page or an Excel dialog.
 /// This file is new in jet_office; Quds has no equivalent.
 library;
 
@@ -109,8 +110,8 @@ abstract final class XlsxLimits {
   ///
   /// The M3 plan sets 2,079, the length Excel's own Insert Hyperlink
   /// dialog accepts. A longer address throws [ArgumentError] when its cell
-  /// is written. It was not confirmed against Microsoft's limits page,
-  /// which gives no figure.
+  /// is written. The value is not on Microsoft's "Excel specifications and
+  /// limits" page, which counts hyperlinks but gives no address length.
   static const int maxHyperlinkAddressLength = 2079;
 
   /// The longest ScreenTip (hyperlink tooltip), in UTF-16 code units.
@@ -123,19 +124,22 @@ abstract final class XlsxLimits {
   /// The longest defined name, in UTF-16 code units. A longer name throws
   /// [ArgumentError] when it is registered.
   ///
-  /// Microsoft's "Excel specifications and limits" page gives no figure for
-  /// names; 255 is the limit the M3 plan sets, which Excel's own Name box
-  /// enforces. It was not confirmed against ECMA-376 here.
+  /// Microsoft's "Names in formulas" support page: "A name can contain up
+  /// to 255 characters." Its "Excel specifications and limits" page counts
+  /// names (limited by memory) but gives no length.
   static const int maxDefinedNameLength = 255;
 
-  /// The longest comment of a defined name, in UTF-16 code units. Same
-  /// source as [maxDefinedNameLength].
+  /// The longest comment of a defined name, in UTF-16 code units.
+  ///
+  /// Microsoft's "Names in formulas" support page gives 255 for the
+  /// comment (the "additional information about the name").
   static const int maxDefinedNameCommentLength = 255;
 
   /// The longest name of a custom document property, in UTF-16 code units.
   ///
   /// The M3 plan sets 255, the length of Excel's Custom Properties name box.
-  /// Not confirmed against Microsoft's limits page, which gives no figure.
+  /// The value is not on Microsoft's "Excel specifications and limits"
+  /// page.
   static const int maxCustomPropertyNameLength = 255;
 
   /// The longest title of a validation's input or error message, in UTF-16
@@ -143,8 +147,8 @@ abstract final class XlsxLimits {
   ///
   /// The M3 plan sets 32, the length Excel's Data Validation dialog accepts
   /// for its Title fields. A longer title throws [ArgumentError] when the
-  /// validation is registered. Not confirmed against Microsoft's limits
-  /// page, which gives no figure.
+  /// validation is registered. The value is not on Microsoft's "Excel
+  /// specifications and limits" page.
   static const int maxValidationTitleLength = 32;
 
   /// The longest input or error message of a validation, in UTF-16 code
@@ -159,18 +163,19 @@ abstract final class XlsxLimits {
   /// between the outer quotes as written (a quote inside an item counts
   /// twice, a comma between items once).
   ///
-  /// Microsoft's "Excel specifications and limits" page gives no figure; 255
-  /// is the limit Excel's Data Validation dialog enforces on a typed Source.
-  /// A longer list throws [ArgumentError] when the validation is registered;
-  /// `XlsxDataValidation.listFrom` takes a range or a name instead.
+  /// 255 is the limit Excel's Data Validation dialog enforces on a typed
+  /// Source; the value is not on Microsoft's "Excel specifications and
+  /// limits" page. A longer list throws [ArgumentError] when the validation
+  /// is registered; `XlsxDataValidation.listFrom` takes a range or a name
+  /// instead.
   static const int maxValidationListLength = 255;
 
   /// The highest rank of a top or bottom conditional-format rule: the top
   /// 1,000 items. A percent rank goes from 1 to 100 instead.
   ///
-  /// Microsoft's "Excel specifications and limits" page gives no figure;
   /// 1,000 is the most Excel's Top 10 Items dialog accepts (and 100 its Top
-  /// 10 % dialog). A rank outside 1 to this, or 1 to 100 for a percent,
+  /// 10 % dialog); the value is not on Microsoft's "Excel specifications
+  /// and limits" page. A rank outside 1 to this, or 1 to 100 for a percent,
   /// throws [ArgumentError] when the format is registered.
   static const int maxTopBottomRank = 1000;
 
@@ -195,10 +200,11 @@ abstract final class XlsxLimits {
   /// list, the one Excel uses, runs from 1 to 118.
   static const int maxPaperSize = 118;
 
-  /// The most characters one header or footer text holds: Excel's Header
-  /// & Footer dialog and its "Excel specifications and limits" page allow
-  /// 255, field codes included. A longer text throws [ArgumentError] when
-  /// the header or footer is registered.
+  /// The most UTF-16 code units one header or footer text holds, field
+  /// codes included: Excel's Header & Footer dialog and Microsoft's "Excel
+  /// specifications and limits" page ("Characters in a header or footer")
+  /// allow 255. A longer text throws [ArgumentError] when the header or
+  /// footer is registered.
   static const int maxHeaderFooterLength = 255;
 }
 

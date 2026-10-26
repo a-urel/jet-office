@@ -857,6 +857,43 @@ void main() {
       );
       expect(make().toString(), startsWith('XlsxDataValidation('));
     });
+    test('toString names every field == compares', () {
+      final String text = XlsxDataValidation(
+        <XlsxRange>[_a1, _b2],
+        XlsxValidationType.list,
+        comparison: XlsxComparison.lessThan,
+        formula1: r'$D$1:$D$9',
+        formula2: '7',
+        allowBlank: false,
+        showDropDownArrow: false,
+        showInputMessage: false,
+        showErrorMessage: false,
+        errorStyle: XlsxValidationErrorStyle.warning,
+        errorTitle: 'et',
+        error: 'em',
+        promptTitle: 'pt',
+        prompt: 'pm',
+      ).toString();
+      for (final String field in <String>[
+        'ranges: [',
+        'type: list',
+        'comparison: lessThan',
+        r'formula1: $D$1:$D$9',
+        'formula2: 7',
+        'allowBlank: false',
+        'showDropDownArrow: false',
+        'showInputMessage: false',
+        'showErrorMessage: false',
+        'errorStyle: warning',
+        'errorTitle: et',
+        'error: em',
+        'promptTitle: pt',
+        'prompt: pm',
+      ]) {
+        expect(text, contains(field));
+      }
+      expect(text, startsWith('XlsxDataValidation('));
+    });
     test('ranges is an unmodifiable copy', () {
       final List<XlsxRange> source = <XlsxRange>[_a1];
       final XlsxDataValidation v = XlsxDataValidation.custom(source, 'TRUE');

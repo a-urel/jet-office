@@ -186,9 +186,11 @@ final class StyleRegistry {
   /// the styles before it are unregistered again, so the registry is as it
   /// was before the call. A column list registers its styles this way.
   ///
-  /// With [fieldName], an [ArgumentError] from `styles[i]` is rethrown with
-  /// the name `fieldName(i)`, its value and message kept, so the caller can
-  /// say which entry was invalid; other errors pass through unchanged.
+  /// With [fieldName], an [ArgumentError] from `styles[i]` is rethrown named
+  /// `${fieldName(i)}.<field>`, such as `columns[2].style.numFmt`, or
+  /// `fieldName(i)` when it names no field, with its value, message and
+  /// stack kept, so the caller can say which entry was invalid; other
+  /// errors pass through unchanged.
   List<int> idsFor(
     List<XlsxStyle?> styles, {
     String Function(int index)? fieldName,
@@ -205,7 +207,7 @@ final class StyleRegistry {
         if (style != null && !_ids.containsKey(style)) added.add(style);
         ids.add(idFor(style));
       }
-    } on Object catch (error) {
+    } on Object catch (error, stack) {
       added.forEach(_ids.remove);
       _truncate(_fonts, _fontIds, fonts);
       _truncate(_fills, _fillIds, fills);
@@ -214,10 +216,15 @@ final class StyleRegistry {
       _truncate(_xfs, _xfIds, xfs);
       if (fieldName != null && error is ArgumentError) {
         // ids holds one entry per style before the failing one.
-        throw ArgumentError.value(
-          error.invalidValue,
-          fieldName(ids.length),
-          error.message,
+        final String entry = fieldName(ids.length);
+        final String? field = error.name;
+        Error.throwWithStackTrace(
+          ArgumentError.value(
+            error.invalidValue,
+            field == null ? entry : '$entry.$field',
+            error.message,
+          ),
+          stack,
         );
       }
       rethrow;
@@ -260,6 +267,10 @@ final class StyleRegistry {
       } else {
         final int? known = _customIds[code];
         if (known == null) newCode = code;
+        // A new code takes the next free id before the limit check below:
+        // the dxf is rendered with its id, and the rendered XML is the
+        // dedupe key. Nothing is recorded until that check passes, so a
+        // full table throws without taking the id.
         numFmt = (id: known ?? 164 + _customCodes.length, code: code);
       }
     }

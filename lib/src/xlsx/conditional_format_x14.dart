@@ -10,7 +10,9 @@
 /// Excel 2016 draws the 2007 bar. The elements follow the `x14` schema of
 /// MS-XLSX, as the Open XML SDK validates it: `CT_ConditionalFormatting`
 /// (`cfRule`, then `xm:sqref`), `CT_CfRule`, `CT_DataBar`, `CT_IconSet` and
-/// `CT_Cfvo`.
+/// `CT_Cfvo`. What both files need, [isX14OnlyRule], [x14RuleId] and
+/// [writeX14RuleReference], lives in `conditional_format.dart`, so only
+/// this file imports the other.
 library;
 
 import '../opc/ooxml.dart';
@@ -21,9 +23,6 @@ import 'conditional_format.dart';
 import 'formula_text.dart';
 import 'range.dart';
 
-/// The `uri` of the `ext` of a `cfRule` that names its Excel 2010 rule.
-const String _ruleExtUri = '{B025F937-C7B1-47D3-B67F-A62EFF666E3E}';
-
 /// The `uri` of the worksheet `ext` that holds Excel 2010 conditional
 /// formats. Excel writes it with the lowercase `d`.
 const String _sheetExtUri = '{78C0D931-6437-407d-A8EE-F0AAD7539E65}';
@@ -32,38 +31,6 @@ const String _sheetExtUri = '{78C0D931-6437-407d-A8EE-F0AAD7539E65}';
 /// Excel 2010 has.
 bool hasX14Rule(XlsxConditionalRule rule) =>
     rule is XlsxDataBar || isX14OnlyRule(rule);
-
-/// Whether [rule] has only an Excel 2010 rule and no Excel 2007 `cfRule`:
-/// an icon set whose type [XlsxIconSetType.isX14Only].
-bool isX14OnlyRule(XlsxConditionalRule rule) =>
-    rule is XlsxIconSet && rule.type.isX14Only;
-
-/// The id of the Excel 2010 rule of the [ruleIndex]th rule (0-based, in
-/// registration order, across all formats) of the sheet created
-/// [sheetNumber]th: `{SSSSSSSS-0000-4000-8000-RRRRRRRRRRRR}`, S the sheet
-/// number and R the rule index in uppercase hex.
-///
-/// Derived from creation order, never random, so the output is
-/// deterministic; the sheet number keeps the ids of different sheets apart.
-String x14RuleId(int sheetNumber, int ruleIndex) =>
-    '{${_hex(sheetNumber, 8)}-0000-4000-8000-${_hex(ruleIndex, 12)}}';
-
-String _hex(int value, int width) =>
-    value.toRadixString(16).toUpperCase().padLeft(width, '0');
-
-/// Writes the `extLst` of an Excel 2007 `cfRule` that names its Excel 2010
-/// rule [id].
-void writeX14RuleReference(XmlWriter w, String id) {
-  w.start('extLst');
-  w.start('ext');
-  w.attribute('uri', _ruleExtUri);
-  w.attribute('xmlns:x14', Ns.x14);
-  w.start('x14:id');
-  w.text(id);
-  w.end();
-  w.end();
-  w.end();
-}
 
 /// Writes the worksheet `extLst` holding the Excel 2010 rules of
 /// [formats], which the writer has checked, or nothing when no rule has

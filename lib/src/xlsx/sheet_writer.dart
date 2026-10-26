@@ -51,11 +51,10 @@ import 'values.dart';
 import 'workbook_context.dart';
 import 'workbook_parts.dart';
 import 'worksheet_parts.dart';
-import 'xlsx_writer.dart';
 
 /// Writes the rows of one worksheet.
 ///
-/// Obtained from [XlsxWriterBase.addSheet], the only way to get one: the
+/// Obtained from `XlsxWriterBase.addSheet`, the only way to get one: the
 /// class cannot be implemented or extended outside this package. A sheet
 /// accepts rows until the next `addSheet` or `close()` finishes it.
 ///
@@ -66,7 +65,7 @@ import 'xlsx_writer.dart';
 /// what the earlier call set.
 abstract final class XlsxSheetWriter {
   /// The sheet's name in the file, after any renaming (see
-  /// [XlsxWriterBase.addSheet]).
+  /// `XlsxWriterBase.addSheet`).
   String get name;
 
   /// The number of rows written so far, blank rows included. The next row
@@ -88,10 +87,11 @@ abstract final class XlsxSheetWriter {
   /// [XlsxLimits.maxColumns] entries; [ArgumentError] for a width outside 0
   /// to [XlsxLimits.maxColumnWidth], an outline level outside 0 to
   /// [XlsxLimits.maxOutlineLevel], or an invalid style (as [row] describes;
-  /// named `columns[i].style`, with the value and message of the style field
-  /// at fault); and `XlsxLimitError('cell formats', ...)` like [row]. When
-  /// it throws, nothing is recorded: the earlier columns, if any, stay in
-  /// force and no style is registered.
+  /// named `columns[i].style.<field>`, such as `columns[2].style.numFmt`,
+  /// with the value, message and stack of the style check that failed); and
+  /// `XlsxLimitError('cell formats', ...)` like [row]. When it throws,
+  /// nothing is recorded: the earlier columns, if any, stay in force and no
+  /// style is registered.
   void columns(List<XlsxColumn?> columns);
 
   /// Sets the sheet's default row height in points and default column width
@@ -104,7 +104,7 @@ abstract final class XlsxSheetWriter {
   void defaultSizes({double? rowHeight, double? columnWidth});
 
   /// Whether the sheet is shown as a tab; set by
-  /// [XlsxWriterBase.addSheet].
+  /// `XlsxWriterBase.addSheet`.
   XlsxSheetVisibility get visibility;
 
   /// Sets how the sheet is shown: zoom, gridlines, headings, right-to-left
@@ -265,7 +265,8 @@ abstract final class XlsxSheetWriter {
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] naming the field
   /// (`oddHeader`, `oddFooter`, `evenHeader`, `evenFooter`, `firstHeader` or
-  /// `firstFooter`) when a text is longer than 255 characters, holds a
+  /// `firstFooter`) when a text is longer than
+  /// [XlsxLimits.maxHeaderFooterLength] (255) UTF-16 code units, holds a
   /// character XML forbids or ends in a lone `&` (see [XlsxHeaderFooter]);
   /// the earlier setting stays then.
   void headerFooter(XlsxHeaderFooter headerFooter);
@@ -348,7 +349,7 @@ abstract final class XlsxSheetWriter {
   });
 }
 
-/// The sheet writer of [XlsxWriterBase]: one worksheet part being written.
+/// The sheet writer of `XlsxWriterBase`: one worksheet part being written.
 ///
 /// Rows are encoded into a body buffer as they arrive. The header, which
 /// depends on settings and on the deepest row outline level, is rendered
