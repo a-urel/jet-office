@@ -11,6 +11,7 @@ import 'fixtures.dart';
 import 'm1_fixtures.dart';
 import 'm2_fixtures.dart';
 import 'm3_fixtures.dart';
+import 'm4_fixtures.dart';
 
 /// What a sheet stores: its rectangle of cell text and the cells that hold a
 /// formula, as (row, column) pairs counted from 1.
@@ -109,10 +110,18 @@ void main() {
       'm3_protection',
       'm3_properties',
     ]);
+    expect(names(m4Fixtures()), <String>[
+      'm4_rich_text',
+      'm4_notes',
+      'm4_images',
+      'm4_tables',
+      'm4_objects',
+    ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
       ...names(m3Fixtures()),
+      ...names(m4Fixtures()),
     ]);
   });
 
@@ -483,6 +492,27 @@ void main() {
     expect(sheet.indexOf('</sheetData>'), lessThan(sheet.indexOf('<condit')));
   });
 
+  test('m3_conditional column H data bar writes the default colors', () {
+    // Task 3 of M4 (Ruling R4) changed this M3 fixture: H has a data bar
+    // with no negative fill or axis color, which now gets an x14:dataBar
+    // with Excel's defaults.
+    final String sheet = readXlsx(
+      named('m3_conditional').build(),
+    )['xl/worksheets/sheet1.xml']!;
+    expect(
+      sheet,
+      matches(
+        RegExp(
+          r'<x14:dataBar [^>]*><x14:cfvo type="autoMin"/>'
+          r'<x14:cfvo type="autoMax"/>'
+          r'<x14:negativeFillColor rgb="FFFF0000"/>'
+          r'<x14:axisColor rgb="FF000000"/></x14:dataBar>',
+        ),
+      ),
+    );
+    expect(sheet, contains('<xm:sqref>H2:H21</xm:sqref>'));
+  });
+
   test('m3_conditional_x14 writes the Excel 2010 bars and icon sets', () {
     final String sheet = readXlsx(
       named('m3_conditional_x14').build(),
@@ -490,18 +520,27 @@ void main() {
     // Two data bars keep their 2007 rules; the x14-only icon sets have none.
     expect(RegExp('<cfRule type="dataBar"').allMatches(sheet), hasLength(2));
     expect(sheet, isNot(contains('<cfRule type="iconSet"')));
+    // Both bars write a negative fill and an axis color, Excel's defaults
+    // where the rule has none (A's axis, both of B's), which the M3 Excel
+    // check found missing.
     expect(
       sheet,
       contains(
-        '<x14:dataBar minLength="0" maxLength="100" '
-        'negativeBarColorSameAsPositive="0" axisPosition="middle">',
+        '<x14:dataBar minLength="0" maxLength="100" axisPosition="middle">'
+        '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>'
+        '<x14:negativeFillColor rgb="FFFF0000"/>'
+        '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
       ),
     );
     expect(
       sheet,
       contains(
         '<x14:dataBar minLength="0" maxLength="100" border="1" '
-        'gradient="0">',
+        'gradient="0">'
+        '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>'
+        '<x14:borderColor rgb="FF63C384"/>'
+        '<x14:negativeFillColor rgb="FFFF0000"/>'
+        '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
       ),
     );
     for (final String set in <String>['3Stars', '3Triangles', '5Boxes']) {
@@ -629,5 +668,342 @@ void main() {
       expect(custom, contains('<$type>'));
     }
     expect(custom, contains('<vt:filetime>2026-10-24T00:00:00Z'));
+  });
+
+  test('m4_rich_text writes its runs and shares A5 with A6', () {
+    final Map<String, String> parts = readXlsx(named('m4_rich_text').build());
+    final String sheet = parts['xl/worksheets/sheet1.xml']!;
+    final List<String> items = <String>[
+      for (final XmlElement si in XmlDocument.parse(
+        parts['xl/sharedStrings.xml']!,
+      ).findAllElements('si'))
+        si.toXmlString(),
+    ];
+    String itemOf(String ref) =>
+        items[int.parse(
+          RegExp(
+            '<c r="$ref"[^>]* t="s"><v>(\\d+)</v>',
+          ).firstMatch(sheet)!.group(1)!,
+        )];
+    expect(
+      itemOf('A1'),
+      '<si><r><rPr><b/><sz val="11"/><rFont val="Calibri"/></rPr>'
+      '<t xml:space="preserve">Total: </t></r><r><t>42</t></r></si>',
+    );
+    expect(
+      itemOf('A2'),
+      '<si><r><rPr><i/><sz val="11"/><color rgb="FFFF0000"/>'
+      '<rFont val="Calibri"/></rPr><t>Red italic</t></r>'
+      '<r><rPr><u/><sz val="11"/><rFont val="Calibri"/></rPr>'
+      '<t xml:space="preserve"> and underlined</t></r></si>',
+    );
+    expect(
+      itemOf('A3'),
+      '<si><r><t>x</t></r><r><rPr><vertAlign val="superscript"/>'
+      '<sz val="11"/><rFont val="Calibri"/></rPr><t>2</t></r></si>',
+    );
+    // Decision 3: the bold run carries the cell's Arial 14.
+    expect(
+      itemOf('A4'),
+      '<si><r><rPr><b/><sz val="14"/><rFont val="Arial"/></rPr>'
+      '<t>Bold</t></r><r><t xml:space="preserve"> in Arial 14</t></r></si>',
+    );
+    expect(sheet, contains(RegExp('<c r="A4" s="[1-9][0-9]*" t="s">')));
+    expect(itemOf('A5'), '<si><t>Same text</t></si>');
+    expect(
+      RegExp('<c r="A5" t="s"><v>(\\d+)</v>').firstMatch(sheet)!.group(1),
+      RegExp('<c r="A6" t="s"><v>(\\d+)</v>').firstMatch(sheet)!.group(1),
+    );
+  });
+
+  test('m4_notes writes its notes and their boxes', () {
+    final Map<String, String> parts = readXlsx(named('m4_notes').build());
+    final String comments1 = parts['xl/comments1.xml']!;
+    expect(
+      comments1,
+      contains(
+        '<authors><author>Ahmet</author><author>Ayse Yilmaz</author>'
+        '</authors><commentList>'
+        '<comment ref="B2" authorId="0"><text><t>Check this</t></text>'
+        '</comment>'
+        '<comment ref="C3" authorId="0"><text>'
+        '<r><rPr><b/></rPr><t>Ahmet:</t></r>'
+        '<r><t xml:space="preserve">\nThe total is checked.</t></r>'
+        '</text></comment>'
+        '<comment ref="D4" authorId="1"><text><t>Always shown</t></text>'
+        '</comment></commentList>',
+      ),
+    );
+    final String vml1 = parts['xl/drawings/vmlDrawing1.vml']!;
+    expect(vml1, contains('<o:idmap v:ext="edit" data="1"/>'));
+    for (final (int id, String anchor, int row, int column)
+        in <(int, String, int, int)>[
+          (1025, '2, 15, 0, 10, 4, 15, 4, 4', 1, 1),
+          (1026, '3, 15, 1, 10, 5, 15, 5, 4', 2, 2),
+          (1027, '4, 15, 2, 10, 6, 15, 6, 4', 3, 3),
+        ]) {
+      expect(
+        vml1,
+        matches(
+          '<v:shape id="_x0000_s$id" [^>]*>.*?<x:Anchor>$anchor</x:Anchor>'
+          '<x:AutoFill>False</x:AutoFill><x:Row>$row</x:Row>'
+          '<x:Column>$column</x:Column>',
+        ),
+      );
+    }
+    expect('visibility:visible'.allMatches(vml1), hasLength(1));
+    expect(vml1, contains('<x:Column>3</x:Column><x:Visible/>'));
+
+    // Right and Bottom each hold one edge note, in their own block.
+    for (final (int n, String ref, String anchor, int row, int column)
+        in <(int, String, String, int, int)>[
+          (2, 'XFD1', '16380, 15, 0, 2, 16382, 15, 4, 16', 0, 16383),
+          (3, 'A1048576', '1, 15, 1048571, 10, 3, 15, 1048575, 4', 1048575, 0),
+        ]) {
+      expect(
+        RegExp('<comment ref="([A-Z]+[0-9]+)"')
+            .allMatches(parts['xl/comments$n.xml']!)
+            .map((RegExpMatch m) => m.group(1)),
+        <String>[ref],
+      );
+      final String vml = parts['xl/drawings/vmlDrawing$n.vml']!;
+      expect(vml, contains('<o:idmap v:ext="edit" data="$n"/>'));
+      expect(
+        RegExp(
+          '<v:shape id="_x0000_s([0-9]+)"',
+        ).allMatches(vml).map((RegExpMatch m) => m.group(1)),
+        <String>['${1024 * n + 1}'],
+      );
+      expect(
+        vml,
+        contains(
+          '<x:Anchor>$anchor</x:Anchor>'
+          '<x:AutoFill>False</x:AutoFill><x:Row>$row</x:Row>'
+          '<x:Column>$column</x:Column>',
+        ),
+      );
+    }
+    for (final int n in <int>[1, 2, 3]) {
+      expect(
+        parts['xl/worksheets/sheet$n.xml'],
+        endsWith('<legacyDrawing r:id="rId1"/></worksheet>'),
+      );
+    }
+  });
+
+  test('m4_images writes its pictures and shares the PNG', () {
+    final Uint8List bytes = named('m4_images').build();
+    final Map<String, String> parts = readXlsx(bytes);
+    String marker(String name, int row, int column) =>
+        '<xdr:$name><xdr:col>$column</xdr:col><xdr:colOff>0</xdr:colOff>'
+        '<xdr:row>$row</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:$name>';
+    String pic(int id, String names, String embed) =>
+        '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="$id" $names/>'
+        '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>'
+        '</xdr:nvPicPr><xdr:blipFill><a:blip r:embed="$embed"/>'
+        '<a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr>';
+    const String rect = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
+    String xfrm(int cx, int cy) =>
+        '<a:xfrm><a:off x="0" y="0"/><a:ext cx="$cx" cy="$cy"/></a:xfrm>';
+
+    // Pictures: the PNG at B2 in its size, the JPEG at E2 60 pixels wide
+    // (100 high, its aspect kept) and the PNG over B6:D10, moving with
+    // its cells.
+    expect(
+      parts['xl/drawings/drawing1.xml'],
+      endsWith(
+        '<xdr:oneCellAnchor>${marker('from', 1, 1)}'
+        '<xdr:ext cx="38100" cy="19050"/>'
+        '${pic(2, 'name="Picture 1"', 'rId1')}${xfrm(38100, 19050)}$rect'
+        '</xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>'
+        '<xdr:oneCellAnchor>${marker('from', 1, 4)}'
+        '<xdr:ext cx="571500" cy="952500"/>'
+        '${pic(3, 'name="Picture 2"', 'rId2')}${xfrm(571500, 952500)}$rect'
+        '</xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>'
+        '<xdr:twoCellAnchor editAs="oneCell">'
+        '${marker('from', 5, 1)}${marker('to', 10, 4)}'
+        '${pic(4, 'name="Picture 3" descr="The PNG over B6:D10"', 'rId1')}'
+        '$rect</xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>'
+        '</xdr:wsDr>',
+      ),
+    );
+    expect(
+      parts['xl/drawings/_rels/drawing1.xml.rels'],
+      contains(
+        'Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/'
+        '2006/relationships/image" Target="../media/image1.png"/>'
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/'
+        'officeDocument/2006/relationships/image" '
+        'Target="../media/image2.jpeg"/></Relationships>',
+      ),
+    );
+    // Again: the same PNG list at A1, whose media part Pictures wrote.
+    expect(
+      parts['xl/drawings/drawing2.xml'],
+      contains(
+        '<xdr:oneCellAnchor>${marker('from', 0, 0)}'
+        '<xdr:ext cx="38100" cy="19050"/>',
+      ),
+    );
+    expect(
+      parts['xl/drawings/_rels/drawing2.xml.rels'],
+      contains('Target="../media/image1.png"/></Relationships>'),
+    );
+    for (final int n in <int>[1, 2]) {
+      expect(
+        parts['xl/worksheets/sheet$n.xml'],
+        endsWith('<drawing r:id="rId1"/></worksheet>'),
+      );
+    }
+    final Map<String, Uint8List> media = <String, Uint8List>{
+      for (final MapEntry<String, Uint8List> e in readXlsxBytes(bytes).entries)
+        if (e.key.startsWith('xl/media/')) e.key: e.value,
+    };
+    expect(media.keys, <String>['xl/media/image1.png', 'xl/media/image2.jpeg']);
+    expect(media['xl/media/image1.png'], png4x2);
+    expect(media['xl/media/image2.jpeg'], jpeg3x5);
+  });
+
+  test('m4_tables writes its tables and fills their header and totals', () {
+    final Map<String, String> parts = readXlsx(named('m4_tables').build());
+    const String decl =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    const String ns =
+        'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    expect(
+      parts['xl/tables/table1.xml'],
+      '$decl<table xmlns="$ns" id="1" name="Sales" displayName="Sales" '
+      'ref="A1:C5" totalsRowCount="1"><autoFilter ref="A1:C4"/>'
+      '<tableColumns count="3"><tableColumn id="1" name="Region" '
+      'totalsRowLabel="Total"/><tableColumn id="2" name="Amount" '
+      'totalsRowFunction="sum"/><tableColumn id="3" name="Note"/>'
+      '</tableColumns><tableStyleInfo name="TableStyleMedium2" '
+      'showFirstColumn="0" showLastColumn="0" showRowStripes="1" '
+      'showColumnStripes="0"/></table>',
+    );
+    expect(
+      parts['xl/tables/table2.xml'],
+      '$decl<table xmlns="$ns" id="2" name="Costs" displayName="Costs" '
+      'ref="E1:F3" totalsRowShown="0"><autoFilter ref="E1:F3"/>'
+      '<tableColumns count="2"><tableColumn id="1" name="Item"/>'
+      '<tableColumn id="2" name="Cost"/></tableColumns>'
+      '<tableStyleInfo name="TableStyleLight9" showFirstColumn="0" '
+      'showLastColumn="0" showRowStripes="1" showColumnStripes="1"/>'
+      '</table>',
+    );
+    expect(
+      parts['xl/tables/table3.xml'],
+      '$decl<table xmlns="$ns" id="3" name="Numbers" displayName="Numbers" '
+      'ref="A1:B2" headerRowCount="0" totalsRowShown="0">'
+      '<tableColumns count="2"><tableColumn id="1" name="X"/>'
+      '<tableColumn id="2" name="Y"/></tableColumns></table>',
+    );
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      contains('<c r="B5"><f>SUBTOTAL(109,B2:B4)</f></c>'),
+    );
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      endsWith(
+        '<tableParts count="2"><tablePart r:id="rId1"/>'
+        '<tablePart r:id="rId2"/></tableParts></worksheet>',
+      ),
+    );
+    expect(
+      parts['xl/worksheets/sheet2.xml'],
+      endsWith(
+        '<tableParts count="1"><tablePart r:id="rId1"/></tableParts>'
+        '</worksheet>',
+      ),
+    );
+    for (final int id in <int>[1, 2, 3]) {
+      expect(
+        parts['[Content_Types].xml'],
+        contains(
+          '<Override PartName="/xl/tables/table$id.xml" ContentType="'
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.'
+          'table+xml"/>',
+        ),
+      );
+    }
+  });
+
+  test('m4_objects gives each object of one sheet its relationship id', () {
+    final Map<String, String> parts = readXlsx(named('m4_objects').build());
+    const String rels =
+        'http://schemas.openxmlformats.org/officeDocument/'
+        '2006/relationships';
+    final Map<String, (String, String, String?)> all =
+        <String, (String, String, String?)>{
+          for (final XmlElement r in XmlDocument.parse(
+            parts['xl/worksheets/_rels/sheet1.xml.rels']!,
+          ).findAllElements('Relationship'))
+            r.getAttribute('Id')!: (
+              r.getAttribute('Type')!,
+              r.getAttribute('Target')!,
+              r.getAttribute('TargetMode'),
+            ),
+        };
+    expect(all, <String, (String, String, String?)>{
+      'rId1': ('$rels/hyperlink', 'https://example.com/a', 'External'),
+      'rId2': ('$rels/hyperlink', 'https://example.com/b', 'External'),
+      'rId3': ('$rels/drawing', '../drawings/drawing1.xml', null),
+      'rId4': ('$rels/vmlDrawing', '../drawings/vmlDrawing1.vml', null),
+      'rId5': ('$rels/comments', '../comments1.xml', null),
+      'rId6': ('$rels/table', '../tables/table1.xml', null),
+      'rId7': ('$rels/table', '../tables/table2.xml', null),
+    });
+    final String sheet = parts['xl/worksheets/sheet1.xml']!;
+    expect(
+      sheet,
+      contains(
+        '<hyperlinks><hyperlink ref="A1" r:id="rId1" display="Site A"/>'
+        '<hyperlink ref="B1" r:id="rId2" display="Site B"/></hyperlinks>',
+      ),
+    );
+    expect(
+      sheet,
+      endsWith(
+        '<drawing r:id="rId3"/><legacyDrawing r:id="rId4"/>'
+        '<tableParts count="2"><tablePart r:id="rId6"/>'
+        '<tablePart r:id="rId7"/></tableParts></worksheet>',
+      ),
+    );
+    expect(parts['xl/tables/table1.xml'], contains('id="1" name="Stock"'));
+    expect(parts['xl/tables/table2.xml'], contains('id="2" name="Prices"'));
+    expect(
+      parts['xl/comments1.xml'],
+      contains('<comment ref="C1" authorId="0">'),
+    );
+    expect(
+      parts['xl/drawings/drawing1.xml'],
+      contains('<xdr:from><xdr:col>6</xdr:col>'),
+    );
+    // The second sheet's note takes the next VML id block.
+    expect(
+      parts['xl/drawings/vmlDrawing1.vml'],
+      contains('<o:idmap v:ext="edit" data="1"/>'),
+    );
+    expect(
+      parts['xl/drawings/vmlDrawing2.vml'],
+      contains('<o:idmap v:ext="edit" data="2"/>'),
+    );
+    expect(
+      parts['xl/drawings/vmlDrawing2.vml'],
+      contains('<v:shape id="_x0000_s2049"'),
+    );
+    // Content types cover every part (the checker's rule 3 too).
+    final String types = parts['[Content_Types].xml']!;
+    for (final String part in <String>[
+      '/xl/drawings/drawing1.xml',
+      '/xl/comments1.xml',
+      '/xl/comments2.xml',
+      '/xl/tables/table1.xml',
+      '/xl/tables/table2.xml',
+    ]) {
+      expect(types, contains('<Override PartName="$part"'));
+    }
+    expect(types, contains('<Default Extension="png"'));
+    expect(types, contains('<Default Extension="vml"'));
   });
 }

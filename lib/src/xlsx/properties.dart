@@ -86,14 +86,20 @@ final class XlsxProperties {
   /// Advanced Properties > Custom, in map order.
   ///
   /// A value is a [String], a finite number, a [bool] or a [DateTime]
-  /// (written in UTC with whole seconds). An [int] in the signed 32-bit
-  /// range is written as an integer (`vt:i4`), any other number as a double
-  /// (`vt:r8`); on the web a whole [double] is an [int], so `3.0` is an
-  /// integer there.
+  /// (written in UTC with whole seconds). A whole number in the signed
+  /// 32-bit range, an [int] or a [double] such as `3.0`, is written as an
+  /// integer (`vt:i4`), any other number as a double (`vt:r8`), the same on
+  /// the VM and the web.
   /// A name is 1 to [XlsxLimits.maxCustomPropertyNameLength] UTF-16 code
   /// units, holds no character XML forbids and is unique ignoring case.
   /// When empty, no custom part is written. The writer constructors throw an
   /// [ArgumentError] naming `custom` or `custom["<name>"]` for a bad entry.
+  ///
+  /// The map is held as given, not copied: the `const` default rules out
+  /// `Map.unmodifiable` in the constructor. Do not change it after the
+  /// writer is created: the writer checks and renders it then, so a later
+  /// change would make this value differ from the file, and its `==` and
+  /// `hashCode` change with it.
   final Map<String, Object> custom;
 
   @override
@@ -211,10 +217,11 @@ const String _customFormatId = '{D5CDD505-2E9C-101B-9397-08002B2CF9AE}';
 /// [DateTime], or a string holding forbidden characters. Check everything
 /// before writing, so a throw leaves no partial part.
 ///
-/// An [int] within the signed 32-bit range is written `vt:i4`; any other
-/// finite number, [int] or [double], is `vt:r8`, so no finite number
-/// throws. On the web a whole [double] is an [int]: `3.0` is `vt:i4` there
-/// and `vt:r8` on the VM, while `3e9` is `vt:r8` on both.
+/// A whole number within the signed 32-bit range, an [int] or a [double]
+/// such as `3.0`, is written `vt:i4`; any other finite number, [int] or
+/// [double], is `vt:r8`, so no finite number throws. The VM and the web
+/// agree, although a whole [double] is an [int] on the web: `3.0` is
+/// `vt:i4` and `0.5` and `3e9` are `vt:r8` on both.
 void writeCustomProperties(XmlWriter w, XlsxProperties p) {
   final Set<String> seen = <String>{};
   for (final MapEntry<String, Object> e in p.custom.entries) {
@@ -236,9 +243,10 @@ void writeCustomProperties(XmlWriter w, XlsxProperties p) {
       case String():
         w.start('vt:lpwstr');
         w.text(v);
-      case int() when _fitsI4(v):
+      case num() when _isI4(v):
         w.start('vt:i4');
-        w.text('$v');
+        // toInt: on the web -0.0 is an int that prints as "-0.0".
+        w.text('${v.toInt()}');
       case num():
         w.start('vt:r8');
         w.text(formatXmlDouble(v.toDouble()));
@@ -257,8 +265,14 @@ void writeCustomProperties(XmlWriter w, XlsxProperties p) {
   w.end();
 }
 
-/// Whether [value] fits `vt:i4`, a signed 32-bit integer.
-bool _fitsI4(int value) => value >= -2147483648 && value <= 2147483647;
+/// Whether [value], a finite number, is written `vt:i4`: a whole number,
+/// an [int] or a [double] such as `3.0`, in the signed 32-bit range.
+///
+/// A whole [double] counts, so the VM writes what the web writes, where
+/// it is an [int]. The range is tested first, so `truncate` cannot
+/// overflow.
+bool _isI4(num value) =>
+    value >= -2147483648 && value <= 2147483647 && value == value.truncate();
 
 void _checkCustomName(String name, Set<String> seen) {
   if (name.isEmpty) {

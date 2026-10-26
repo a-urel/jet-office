@@ -4,7 +4,7 @@
 /// "We found a problem with some content". Every violation starts with
 /// `rule N:`, N being the rule's number below. Later milestones add rules.
 ///
-/// 1. every part and `.rels` is well-formed XML;
+/// 1. every `.xml`, `.rels` and `.vml` part is well-formed XML;
 /// 2. every relationship target exists;
 /// 3. every part has a content type, and every override names a part;
 /// 4. `sst/@count` equals the number of `t="s"` cells and
@@ -76,18 +76,66 @@
 ///     `x14:id`, except an x14-only rule (one no `x14:id` names), which
 ///     has a `priority` of 1 or more, unique among the sheet's `cfRule` and
 ///     x14-only priorities; no two `x14:cfRule` of the workbook share an
-///     `id`; and a worksheet's `extLst` is its last child;
+///     `id`; and a worksheet's `extLst` is its last child; an unnamed
+///     `x14:cfRule` counts as x14-only only when it is an icon set of an
+///     x14-only type (`3Stars`, `3Triangles`, `5Boxes` or `NoIcons`), any
+///     other is a violation; and the `ext/@uri` of a `cfRule`'s `extLst` is
+///     `{B025F937-C7B1-47D3-B67F-A62EFF666E3E}` and that of the worksheet's
+///     `extLst` is `{78C0D931-6437-407d-A8EE-F0AAD7539E65}`, compared
+///     exactly;
 /// 26. every `sheetProtection/@password` and
-///     `workbookProtection/@workbookPassword` is four hexadecimal digits,
-///     and every `sheetProtection` has `sheet="1"`;
+///     `workbookProtection/@workbookPassword` is four uppercase hexadecimal
+///     digits, and every `sheetProtection` has `sheet="1"`;
 /// 27. in `docProps/custom.xml`, every `property` has a `pid` that is an
 ///     integer of at least 2, unique in the part, a `name` no earlier
-///     property has (ignoring case) and exactly one value child.
+///     property has (ignoring case), the `fmtid`
+///     `{D5CDD505-2E9C-101B-9397-08002B2CF9AE}` and exactly one value child,
+///     which is in the `vt:` namespace;
+/// 28. every `si` of the shared strings holds either one `t`, or one or
+///     more `r` and nothing else; and every `r` holds exactly one `t` and
+///     at most one `rPr`, and nothing else;
+/// 29. in a sheet's comments part, every `comment/@ref` is a single cell
+///     inside the sheet, unique in its part, and every `authorId` is below
+///     the number of `author`s; a sheet with a comments relationship has a
+///     `legacyDrawing`, whose `r:id` is a VML drawing relationship of the
+///     sheet, and that drawing holds exactly one `Note` shape per comment,
+///     on the comment's cell by its `x:Row` and `x:Column` (zero-based),
+///     and no `Note` shape without a comment; in every VML drawing, every
+///     `x:Anchor` is 8 integers whose columns (the 1st and 5th) are within
+///     0..16383 and rows (the 3rd and 7th) within 0..1048575, with left not
+///     after right and top not after bottom; every `o:idmap` block is a
+///     number listed by one drawing of the workbook only; and every
+///     `v:shape/@id` is unique across the workbook and, when it is
+///     `_x0000_s{n}`, n ÷ 1024 is a block of its drawing's `o:idmap`;
+/// 30. a sheet's `drawing/@r:id` names a drawing relationship of the
+///     sheet; in every drawing part, each `oneCellAnchor` has the
+///     children `from`, `ext`, `pic` and `clientData`, each
+///     `twoCellAnchor` `from`, `to`, `pic` and `clientData`; each anchor's
+///     `from` and `to` are four integers whose cell lies inside the sheet
+///     (`col` within 0..16383, `row` within 0..1048575), and its `to` is
+///     not before its `from` on either axis, by cell and then by offset;
+///     every `xdr:ext`
+///     and `a:ext` has a positive integer `cx` and `cy`; the `cNvPr` ids
+///     are unique in the part; and every `a:blip/@r:embed` names an image
+///     relationship of the drawing whose target exists and whose content
+///     type is `image/png` or `image/jpeg`;
+/// 31. table ids are unique across the workbook; table names are unique
+///     ignoring case, among tables and against defined names; each table's
+///     `ref` is a range inside its sheet with rows for the header (unless
+///     `headerRowCount="0"`), one data row and the totals
+///     (`totalsRowCount`); `tableColumns/@count` equals the ref's width and
+///     its children, and the column names are unique ignoring case; with a
+///     header row, every header cell is a string (`t="s"`) whose text,
+///     decoded, equals its column name, decoded; an `autoFilter/@ref` is
+///     the ref without the totals row; no two tables of a sheet overlap,
+///     and none overlaps the sheet's `autoFilter` or a `mergeCell`; and
+///     every table part is named by exactly one `tablePart`.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
 /// The writer never does. Rule 25 matches the Excel 2010 elements by
-/// namespace, whatever their prefix.
+/// namespace, whatever their prefix, and so do rule 29 the VML elements
+/// and rule 30 the DrawingML ones.
 ///
 /// Pure Dart (no `dart:io`), so it runs in a browser too.
 library;
@@ -108,7 +156,7 @@ const String _workbookPart = 'xl/workbook.xml';
 final RegExp _sheetPart = RegExp(r'^xl/worksheets/[^/]+\.xml$');
 final RegExp _forbiddenInName = RegExp(r'[\[\]:*?/\\]');
 final RegExp _cellRef = RegExp(r'^([A-Z]+)([0-9]+)$');
-final RegExp _legacyHash = RegExp(r'^[0-9A-Fa-f]{4}$');
+final RegExp _legacyHash = RegExp(r'^[0-9A-F]{4}$');
 final RegExp _rangeRef = RegExp(r'^([A-Z]+)([0-9]+)(?::([A-Z]+)([0-9]+))?$');
 
 /// The violations found in the XLSX file [bytes]; empty means clean.
@@ -129,7 +177,11 @@ List<String> checkXlsx(Uint8List bytes) {
   // Rule 1.
   final Map<String, XmlDocument> docs = <String, XmlDocument>{};
   raw.forEach((String name, Uint8List data) {
-    if (!name.endsWith('.xml') && !name.endsWith('.rels')) return;
+    if (!name.endsWith('.xml') &&
+        !name.endsWith('.rels') &&
+        !name.endsWith('.vml')) {
+      return;
+    }
     try {
       docs[name] = XmlDocument.parse(utf8.decode(data));
     } on Object catch (e) {
@@ -162,6 +214,12 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkConditionalExtensions(docs, violations);
   _checkProtection(docs, violations);
   _checkCustomProperties(docs, violations);
+  _checkSharedStringItems(docs, violations);
+  _checkNotes(docs, violations);
+  _checkVmlDrawings(docs, violations);
+  _checkDrawingRefs(docs, violations);
+  _checkDrawings(raw, docs, violations);
+  _checkTables(docs, violations);
   return violations;
 }
 
@@ -1242,6 +1300,30 @@ Iterable<XmlElement> _x14Elements(XmlElement e, String local) =>
       (XmlElement d) => d.name.local == local && d.name.namespaceUri == _x14,
     );
 
+/// The `ext/@uri` of a `cfRule`'s `extLst`, as the writer's `_ruleExtUri`.
+const String _ruleExtUri = '{B025F937-C7B1-47D3-B67F-A62EFF666E3E}';
+
+/// The `ext/@uri` of the worksheet's conditional-format `extLst`, as the
+/// writer's `_sheetExtUri`. Excel writes the lowercase `d`.
+const String _sheetExtUri = '{78C0D931-6437-407d-A8EE-F0AAD7539E65}';
+
+/// The icon sets only Excel 2010 has, which have no Excel 2007 `cfRule`.
+const Set<String> _x14OnlyIconSets = <String>{
+  '3Stars',
+  '3Triangles',
+  '5Boxes',
+  'NoIcons',
+};
+
+/// Whether [rule], an `x14:cfRule` no `x14:id` names, is one an Excel 2007
+/// `cfRule` does not stand for: an icon set of an x14-only type.
+bool _isX14Only(XmlElement rule) =>
+    _attr(rule, 'type') == 'iconSet' &&
+    _x14Elements(
+      rule,
+      'iconSet',
+    ).any((XmlElement set) => _x14OnlyIconSets.contains(_attr(set, 'iconSet')));
+
 /// Rule 25.
 void _checkConditionalExtensions(
   Map<String, XmlDocument> docs,
@@ -1270,6 +1352,14 @@ void _checkConditionalExtensions(
         final int? priority = int.tryParse(_attr(rule, 'priority'));
         if (priority != null) priorities.add(priority);
         for (final XmlElement ext in rule.findElements('extLst')) {
+          for (final XmlElement e in ext.findElements('ext')) {
+            if (e.getAttribute('uri') != _ruleExtUri) {
+              violations.add(
+                '$where: a cfRule ext has uri "${_attr(e, 'uri')}", '
+                'expected $_ruleExtUri',
+              );
+            }
+          }
           for (final XmlElement id in _x14Elements(ext, 'id')) {
             named.update(id.innerText, (int n) => n + 1, ifAbsent: () => 1);
           }
@@ -1282,6 +1372,16 @@ void _checkConditionalExtensions(
       for (final XmlElement ext in root.findElements('extLst'))
         ..._x14Elements(ext, 'cfRule'),
     ];
+    for (final XmlElement ext in root.findElements('extLst')) {
+      for (final XmlElement e in ext.findElements('ext')) {
+        if (e.getAttribute('uri') != _sheetExtUri) {
+          violations.add(
+            '$where: the worksheet ext has uri "${_attr(e, 'uri')}", '
+            'expected $_sheetExtUri',
+          );
+        }
+      }
+    }
     for (final XmlElement rule in x14Rules) {
       final String id = _attr(rule, 'id');
       rules.update(id, (int n) => n + 1, ifAbsent: () => 1);
@@ -1309,6 +1409,13 @@ void _checkConditionalExtensions(
         violations.add('$where: ${rules[id]} x14:cfRule share the id "$id"');
       }
       // An x14-only rule: it has no Excel 2007 rule to hold its priority.
+      if (!_isX14Only(rule)) {
+        violations.add(
+          '$where: x14:cfRule $type "$id" is named by no x14:id and is not '
+          'an icon set only Excel 2010 has',
+        );
+        continue;
+      }
       final String text = _attr(rule, 'priority');
       final int? priority = int.tryParse(text);
       if (priority == null || priority < 1) {
@@ -1333,7 +1440,7 @@ void _checkProtection(Map<String, XmlDocument> docs, List<String> violations) {
       if (password != null && !_legacyHash.hasMatch(password)) {
         violations.add(
           'rule 26: ${sheet.key}: sheetProtection password "$password" is '
-          'not four hexadecimal digits',
+          'not four uppercase hexadecimal digits',
         );
       }
       if (p.getAttribute('sheet') != '1') {
@@ -1351,11 +1458,18 @@ void _checkProtection(Map<String, XmlDocument> docs, List<String> violations) {
     if (password != null && !_legacyHash.hasMatch(password)) {
       violations.add(
         'rule 26: workbook: workbookPassword "$password" is not four '
-        'hexadecimal digits',
+        'uppercase hexadecimal digits',
       );
     }
   }
 }
+
+/// The `fmtid` every custom property has.
+const String _customFmtid = '{D5CDD505-2E9C-101B-9397-08002B2CF9AE}';
+
+/// The namespace of the `vt:` value elements of document properties.
+const String _vtNamespace =
+    'http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes';
 
 /// Rule 27.
 void _checkCustomProperties(
@@ -1385,11 +1499,695 @@ void _checkCustomProperties(
         'ignoring case',
       );
     }
-    final int values = p.childElements.length;
-    if (values != 1) {
+    if (p.getAttribute('fmtid') != _customFmtid) {
       violations.add(
-        'rule 27: custom property "$name" has $values value children, '
-        'expected 1',
+        'rule 27: custom property "$name": fmtid "${_attr(p, 'fmtid')}" is '
+        'not $_customFmtid',
+      );
+    }
+    final List<XmlElement> children = p.childElements.toList();
+    if (children.length != 1) {
+      violations.add(
+        'rule 27: custom property "$name" has ${children.length} value '
+        'children, expected 1',
+      );
+    }
+    for (final XmlElement value in children) {
+      if (value.name.namespaceUri != _vtNamespace) {
+        violations.add(
+          'rule 27: custom property "$name": value <${value.name.qualified}> '
+          'is not in the vt namespace',
+        );
+      }
+    }
+  }
+}
+
+/// The local names of the child elements of [e], as `<a>, <b>`, or
+/// `nothing`.
+String _describeChildren(XmlElement e) {
+  final List<String> names = <String>[
+    for (final XmlElement child in e.childElements) '<${child.name.local}>',
+  ];
+  return names.isEmpty ? 'nothing' : names.join(', ');
+}
+
+/// Rule 28.
+void _checkSharedStringItems(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final XmlDocument? sst = docs[_sharedStringsPart];
+  if (sst == null) return;
+  int index = 0;
+  for (final XmlElement si in sst.rootElement.findElements('si')) {
+    final List<String> children = <String>[
+      for (final XmlElement child in si.childElements) child.name.local,
+    ];
+    final bool plain = children.length == 1 && children.single == 't';
+    final bool runs =
+        children.isNotEmpty && children.every((String c) => c == 'r');
+    if (!plain && !runs) {
+      violations.add(
+        'rule 28: si $index holds ${_describeChildren(si)}; expected one '
+        '<t> or one or more <r>',
+      );
+    }
+    if (runs) {
+      int run = 0;
+      for (final XmlElement r in si.childElements) {
+        final List<String> parts = <String>[
+          for (final XmlElement child in r.childElements) child.name.local,
+        ];
+        final int texts = parts.where((String p) => p == 't').length;
+        final int properties = parts.where((String p) => p == 'rPr').length;
+        if (texts != 1 ||
+            properties > 1 ||
+            texts + properties != parts.length) {
+          violations.add(
+            'rule 28: si $index run $run holds ${_describeChildren(r)}; '
+            'expected one <t> and at most one <rPr>',
+          );
+        }
+        run++;
+      }
+    }
+    index++;
+  }
+}
+
+const String _commentsRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'comments';
+
+const String _vmlDrawingRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'vmlDrawing';
+
+/// The VML namespaces (`v:`, `o:` and `x:`).
+const String _vml = 'urn:schemas-microsoft-com:vml';
+const String _vmlOffice = 'urn:schemas-microsoft-com:office:office';
+const String _vmlExcel = 'urn:schemas-microsoft-com:office:excel';
+
+/// The descendants of [node] named [local] in the namespace [namespace].
+Iterable<XmlElement> _elementsIn(
+  XmlNode node,
+  String namespace,
+  String local,
+) => node.descendantElements.where(
+  (XmlElement d) => d.name.local == local && d.name.namespaceUri == namespace,
+);
+
+/// The relationships of the worksheet part [sheet], by id.
+Map<String, XmlElement> _sheetRelationships(
+  Map<String, XmlDocument> docs,
+  String sheet,
+) {
+  final String relsName =
+      '${_dirOf(sheet)}_rels/${sheet.substring(sheet.lastIndexOf('/') + 1)}'
+      '.rels';
+  return <String, XmlElement>{
+    if (docs[relsName] case final XmlDocument doc)
+      for (final XmlElement rel in _all(doc, 'Relationship'))
+        _attr(rel, 'Id'): rel,
+  };
+}
+
+/// Rule 29, per sheet: comments, `legacyDrawing` and note shapes.
+void _checkNotes(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final String where = 'rule 29: ${sheet.key}';
+    final Map<String, XmlElement> rels = _sheetRelationships(docs, sheet.key);
+    final XmlElement? commentsRel = rels.values
+        .where((XmlElement r) => _attr(r, 'Type') == _commentsRelType)
+        .firstOrNull;
+    final XmlElement? legacy = sheet.value.rootElement.getElement(
+      'legacyDrawing',
+    );
+    if (commentsRel == null && legacy == null) continue;
+    // The refs of the comments, by their zero-based cell as "row, column".
+    final Map<String, String> commented = <String, String>{};
+    if (commentsRel != null) {
+      final String part = _resolve(
+        _dirOf(sheet.key),
+        _attr(commentsRel, 'Target'),
+      );
+      final XmlDocument? comments = docs[part];
+      // A missing part is rule 2's.
+      if (comments != null) {
+        _checkComments(comments, '$where: $part', commented, violations);
+      }
+      if (legacy == null) {
+        violations.add(
+          '$where: has a comments relationship but no <legacyDrawing>',
+        );
+        continue;
+      }
+    }
+    final String id = _attr(legacy!, 'r:id');
+    final XmlElement? rel = rels[id];
+    if (rel == null || _attr(rel, 'Type') != _vmlDrawingRelType) {
+      violations.add(
+        '$where: legacyDrawing r:id "$id" is not a VML drawing relationship',
+      );
+      continue;
+    }
+    final String vmlPart = _resolve(_dirOf(sheet.key), _attr(rel, 'Target'));
+    final XmlDocument? vml = docs[vmlPart];
+    if (vml == null) continue;
+    final Map<String, int> shapes = <String, int>{};
+    for (final XmlElement data in _elementsIn(vml, _vmlExcel, 'ClientData')) {
+      if (_attr(data, 'ObjectType') != 'Note') continue;
+      String field(String local) =>
+          _elementsIn(data, _vmlExcel, local).firstOrNull?.innerText.trim() ??
+          '';
+      final String cell = '${field('Row')}, ${field('Column')}';
+      shapes.update(cell, (int n) => n + 1, ifAbsent: () => 1);
+    }
+    commented.forEach((String cell, String ref) {
+      final int count = shapes[cell] ?? 0;
+      if (count != 1) {
+        violations.add(
+          '$where: the comment on $ref has $count note shapes in $vmlPart; '
+          'expected 1',
+        );
+      }
+    });
+    for (final String cell in shapes.keys) {
+      if (!commented.containsKey(cell)) {
+        final List<String> rowColumn = cell.split(', ');
+        violations.add(
+          '$where: $vmlPart has a note shape on row ${rowColumn.first}, '
+          'column ${rowColumn.last}, which has no comment',
+        );
+      }
+    }
+  }
+}
+
+/// Rule 29 for the comments part [comments], reported as [where]: adds the
+/// ref of each comment inside the sheet to [commented], keyed by its
+/// zero-based cell as "row, column".
+void _checkComments(
+  XmlDocument comments,
+  String where,
+  Map<String, String> commented,
+  List<String> violations,
+) {
+  final int authors = _all(comments, 'author').length;
+  final Set<String> refs = <String>{};
+  for (final XmlElement comment in _all(comments, 'comment')) {
+    final String ref = _attr(comment, 'ref');
+    final RegExpMatch? m = _cellRef.firstMatch(ref);
+    if (m == null) {
+      violations.add('$where: comment ref "$ref" is not a single cell');
+    } else {
+      final _Rect cell = _parseRect(ref)!;
+      final String? problem = _problemWith(cell);
+      if (problem != null) {
+        violations.add('$where: comment ref "$ref" $problem');
+      } else {
+        commented['${cell.row1 - 1}, ${cell.col1 - 1}'] = ref;
+      }
+    }
+    if (!refs.add(ref)) {
+      violations.add('$where: two comments share the ref "$ref"');
+    }
+    final String text = _attr(comment, 'authorId');
+    final int? authorId = int.tryParse(text);
+    if (authorId == null || authorId < 0 || authorId >= authors) {
+      violations.add(
+        '$where: comment "$ref" has authorId "$text"; the part has $authors '
+        'authors',
+      );
+    }
+  }
+}
+
+final RegExp _shapeId = RegExp(r'^_x0000_s(\d+)$');
+
+/// Rule 29 across the workbook's VML drawings: anchors, id blocks and
+/// shape ids.
+void _checkVmlDrawings(Map<String, XmlDocument> docs, List<String> violations) {
+  final Map<int, String> blockParts = <int, String>{};
+  final Map<String, String> shapeParts = <String, String>{};
+  docs.forEach((String part, XmlDocument vml) {
+    if (!part.endsWith('.vml')) return;
+    final String where = 'rule 29: $part';
+    final Set<int> blocks = <int>{};
+    for (final XmlElement idmap in _elementsIn(vml, _vmlOffice, 'idmap')) {
+      final String data = idmap.getAttribute('data') ?? '';
+      for (final String text in data.split(',')) {
+        final int? block = int.tryParse(text.trim());
+        if (block == null || block < 0) {
+          violations.add('$where: o:idmap data "$data" is not a block list');
+          continue;
+        }
+        blocks.add(block);
+        final String? other = blockParts[block];
+        if (other != null) {
+          violations.add('$where: id block $block is listed by $other too');
+        }
+        blockParts[block] = part;
+      }
+    }
+    for (final XmlElement shape in _elementsIn(vml, _vml, 'shape')) {
+      final String id = _attr(shape, 'id');
+      final String? other = shapeParts[id];
+      if (other != null) {
+        violations.add('$where: shape id $id is used by $other too');
+      }
+      shapeParts[id] = part;
+      final RegExpMatch? m = _shapeId.firstMatch(id);
+      if (m != null && !blocks.contains(int.parse(m.group(1)!) ~/ 1024)) {
+        violations.add(
+          '$where: shape id $id lies outside the id blocks of its o:idmap',
+        );
+      }
+    }
+    for (final XmlElement anchor in _elementsIn(vml, _vmlExcel, 'Anchor')) {
+      final String text = anchor.innerText;
+      final List<int?> values = <int?>[
+        for (final String v in text.split(',')) int.tryParse(v.trim()),
+      ];
+      if (values.length != 8 || values.contains(null)) {
+        violations.add('$where: x:Anchor "$text" is not 8 integers');
+        continue;
+      }
+      final int left = values[0]!;
+      final int top = values[2]!;
+      final int right = values[4]!;
+      final int bottom = values[6]!;
+      if (<int>[left, right].any((int c) => c < 0 || c > 16383) ||
+          <int>[top, bottom].any((int r) => r < 0 || r > 1048575)) {
+        violations.add('$where: x:Anchor "$text" lies outside the sheet');
+      } else if (left > right || top > bottom) {
+        violations.add('$where: x:Anchor "$text" ends before it starts');
+      }
+    }
+  });
+}
+
+const String _drawingRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'drawing';
+
+const String _imageRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'image';
+
+/// The DrawingML namespaces (`xdr:`, `a:`) and the relationships one
+/// (`r:`).
+const String _xdr =
+    'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing';
+const String _drawingMain =
+    'http://schemas.openxmlformats.org/drawingml/2006/main';
+const String _relNamespace =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+/// Rule 30, per sheet: the `drawing` element names a drawing relationship.
+void _checkDrawingRefs(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final XmlElement? drawing = sheet.value.rootElement.getElement('drawing');
+    if (drawing == null) continue;
+    final String id = _attr(drawing, 'r:id');
+    final XmlElement? rel = _sheetRelationships(docs, sheet.key)[id];
+    if (rel == null || _attr(rel, 'Type') != _drawingRelType) {
+      violations.add(
+        'rule 30: ${sheet.key}: drawing r:id "$id" is not a drawing '
+        'relationship',
+      );
+    }
+  }
+}
+
+/// The content type `[Content_Types].xml` gives [part]: its override, or
+/// the default of its extension, or `null`.
+String? _contentTypeOf(Map<String, XmlDocument> docs, String part) {
+  final XmlDocument? types = docs[_contentTypesPart];
+  if (types == null) return null;
+  for (final XmlElement o in _all(types, 'Override')) {
+    if (_attr(o, 'PartName') == '/$part') return _attr(o, 'ContentType');
+  }
+  final int dot = part.lastIndexOf('.');
+  final String ext = dot < 0 ? '' : part.substring(dot + 1).toLowerCase();
+  for (final XmlElement d in _all(types, 'Default')) {
+    if (_attr(d, 'Extension').toLowerCase() == ext) {
+      return _attr(d, 'ContentType');
+    }
+  }
+  return null;
+}
+
+/// Rule 30 in every drawing part: anchors, sizes, ids and images.
+void _checkDrawings(
+  Map<String, Uint8List> raw,
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  docs.forEach((String part, XmlDocument doc) {
+    final XmlElement root = doc.rootElement;
+    if (root.name.local != 'wsDr' || root.name.namespaceUri != _xdr) return;
+    final String where = 'rule 30: $part';
+    for (final String kind in <String>['oneCellAnchor', 'twoCellAnchor']) {
+      for (final XmlElement anchor in _elementsIn(doc, _xdr, kind)) {
+        _checkAnchor(anchor, where, violations);
+      }
+    }
+    for (final XmlElement ext in <XmlElement>[
+      ..._elementsIn(doc, _xdr, 'ext'),
+      ..._elementsIn(doc, _drawingMain, 'ext'),
+    ]) {
+      for (final String axis in <String>['cx', 'cy']) {
+        final String text = ext.getAttribute(axis) ?? '';
+        final int? size = int.tryParse(text);
+        if (size == null || size <= 0) {
+          violations.add(
+            '$where: <${ext.name.qualified}> $axis "$text" is not a '
+            'positive integer',
+          );
+        }
+      }
+    }
+    final Set<String> ids = <String>{};
+    for (final XmlElement c in _elementsIn(doc, _xdr, 'cNvPr')) {
+      final String id = _attr(c, 'id');
+      if (!ids.add(id)) violations.add('$where: cNvPr id "$id" repeats');
+    }
+    final String relsName =
+        '${_dirOf(part)}_rels/${part.substring(part.lastIndexOf('/') + 1)}'
+        '.rels';
+    final Map<String, XmlElement> rels = <String, XmlElement>{
+      if (docs[relsName] case final XmlDocument relsDoc)
+        for (final XmlElement rel in _all(relsDoc, 'Relationship'))
+          _attr(rel, 'Id'): rel,
+    };
+    for (final XmlElement blip in _elementsIn(doc, _drawingMain, 'blip')) {
+      final String id =
+          blip.getAttribute('embed', namespaceUri: _relNamespace) ?? '';
+      final XmlElement? rel = rels[id];
+      if (rel == null || _attr(rel, 'Type') != _imageRelType) {
+        violations.add(
+          '$where: blip r:embed "$id" is not an image relationship of '
+          '$relsName',
+        );
+        continue;
+      }
+      final String image = _resolve(_dirOf(part), _attr(rel, 'Target'));
+      if (!raw.containsKey(image)) {
+        violations.add(
+          '$where: blip r:embed "$id" points at $image, which does not exist',
+        );
+        continue;
+      }
+      final String? type = _contentTypeOf(docs, image);
+      if (type != 'image/png' && type != 'image/jpeg') {
+        violations.add(
+          '$where: blip r:embed "$id" points at $image, whose content type '
+          '"$type" is neither image/png nor image/jpeg',
+        );
+      }
+    }
+  });
+}
+
+/// Rule 30 for one anchor: it has its children, its `from` and `to` lie
+/// inside the sheet, and `to` is not before `from`.
+void _checkAnchor(XmlElement anchor, String where, List<String> violations) {
+  final String kind = anchor.name.local;
+  for (final String child in <String>[
+    'from',
+    if (kind == 'oneCellAnchor') 'ext' else 'to',
+    'pic',
+    'clientData',
+  ]) {
+    final bool has = anchor.childElements.any(
+      (XmlElement e) => e.name.local == child && e.name.namespaceUri == _xdr,
+    );
+    if (!has) violations.add('$where: <xdr:$kind> has no <xdr:$child>');
+  }
+  final Map<String, List<int>> markers = <String, List<int>>{};
+  for (final String name in <String>['from', 'to']) {
+    final XmlElement? marker = _elementsIn(anchor, _xdr, name).firstOrNull;
+    if (marker == null) continue;
+    final List<int?> values = <int?>[
+      for (final String local in <String>['col', 'colOff', 'row', 'rowOff'])
+        int.tryParse(
+          _elementsIn(marker, _xdr, local).firstOrNull?.innerText.trim() ?? '',
+        ),
+    ];
+    final String text = marker.innerText;
+    if (values.contains(null)) {
+      violations.add(
+        '$where: <xdr:$name> "$text" is not four integers (col, colOff, '
+        'row, rowOff)',
+      );
+      continue;
+    }
+    final int column = values[0]!;
+    final int row = values[2]!;
+    if (column < 0 || column > 16383 || row < 0 || row > 1048575) {
+      violations.add(
+        '$where: <xdr:$name> at column $column, row $row lies outside the '
+        'sheet',
+      );
+      continue;
+    }
+    markers[name] = <int>[for (final int? v in values) v!];
+  }
+  final List<int>? from = markers['from'];
+  final List<int>? to = markers['to'];
+  if (from == null || to == null) return;
+  // Column, then its offset; row, then its offset.
+  bool before(int cell, int offset, int fromCell, int fromOffset) =>
+      cell < fromCell || (cell == fromCell && offset < fromOffset);
+  if (before(to[0], to[1], from[0], from[1]) ||
+      before(to[2], to[3], from[2], from[3])) {
+    violations.add(
+      '$where: the ${anchor.name.local} from column ${from[0]}, row '
+      '${from[2]} to column ${to[0]}, row ${to[2]} ends before it starts',
+    );
+  }
+}
+
+const String _tableRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'table';
+
+/// The rectangle [r] as an A1 range, for messages.
+String _rectRef(_Rect r) =>
+    '${_columnLetters(r.col1 - 1)}${r.row1}:'
+    '${_columnLetters(r.col2 - 1)}${r.row2}';
+
+/// Whether [a] and [b] share a cell.
+bool _rectsOverlap(_Rect a, _Rect b) =>
+    a.row1 <= b.row2 &&
+    b.row1 <= a.row2 &&
+    a.col1 <= b.col2 &&
+    b.col1 <= a.col2;
+
+/// Rule 31: tables, their names, ranges, columns and header cells.
+void _checkTables(Map<String, XmlDocument> docs, List<String> violations) {
+  const String rule = 'rule 31';
+  final XmlDocument? sst = docs[_sharedStringsPart];
+  final List<String> strings = <String>[
+    if (sst != null)
+      for (final XmlElement si in sst.rootElement.findElements('si'))
+        si.findAllElements('t').map((XmlElement t) => t.innerText).join(),
+  ];
+  // Defined names, ignoring case; table names are compared against them.
+  final Set<String> definedNames = <String>{
+    if (docs[_workbookPart] case final XmlDocument book)
+      for (final XmlElement n in _all(book, 'definedName'))
+        sheetNameKey(_attr(n, 'name')),
+  };
+  // How many tablePart elements name each table part.
+  final Map<String, int> named = <String, int>{};
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final Map<String, XmlElement> rels = _sheetRelationships(docs, sheet.key);
+    final List<(String, _Rect)> tables = <(String, _Rect)>[];
+    for (final XmlElement part in _all(sheet.value, 'tablePart')) {
+      final String id = _attr(part, 'r:id');
+      final XmlElement? rel = rels[id];
+      if (rel == null || _attr(rel, 'Type') != _tableRelType) {
+        violations.add(
+          '$rule: ${sheet.key}: tablePart r:id "$id" is not a table '
+          'relationship',
+        );
+        continue;
+      }
+      final String target = _resolve(_dirOf(sheet.key), _attr(rel, 'Target'));
+      named.update(target, (int n) => n + 1, ifAbsent: () => 1);
+      final XmlDocument? table = docs[target];
+      // A missing part is rule 2's.
+      if (table == null) continue;
+      final _Rect? r = _checkTableRange(table, target, violations);
+      if (r == null) continue;
+      _checkTableHeader(table, target, r, sheet.value, strings, violations);
+      for (final (String other, _Rect o) in tables) {
+        if (_rectsOverlap(r, o)) {
+          violations.add(
+            '$rule: $target over ${_rectRef(r)} overlaps the table $other',
+          );
+        }
+      }
+      tables.add((target, r));
+      for (final String local in <String>['autoFilter', 'mergeCell']) {
+        for (final XmlElement e in _all(sheet.value, local)) {
+          final _Rect? o = _parseRect(_attr(e, 'ref'));
+          if (o != null && _rectsOverlap(r, o)) {
+            violations.add(
+              '$rule: $target over ${_rectRef(r)} overlaps the $local '
+              '"${_attr(e, 'ref')}" of ${sheet.key}',
+            );
+          }
+        }
+      }
+    }
+  }
+  final Map<String, String> ids = <String, String>{};
+  final Map<String, String> names = <String, String>{};
+  for (final MapEntry<String, XmlDocument> e in docs.entries) {
+    final XmlElement root = e.value.rootElement;
+    if (root.name.local != 'table' || !e.key.startsWith('xl/tables/')) {
+      continue;
+    }
+    final int count = named[e.key] ?? 0;
+    if (count != 1) {
+      violations.add(
+        '$rule: ${e.key} is named by $count tablePart elements; expected 1',
+      );
+    }
+    final String id = _attr(root, 'id');
+    final String? earlierId = ids[id];
+    if (earlierId != null) {
+      violations.add('$rule: ${e.key} has the id "$id" of $earlierId');
+    }
+    ids[id] = e.key;
+    final String name = decodeXstring(_attr(root, 'name'));
+    final String key = sheetNameKey(name);
+    final String? earlierName = names[key];
+    if (earlierName != null) {
+      violations.add(
+        '$rule: ${e.key} has the name "$name" of $earlierName, ignoring case',
+      );
+    }
+    names[key] = e.key;
+    if (definedNames.contains(key)) {
+      violations.add(
+        '$rule: ${e.key} has the name "$name" of a defined name, ignoring '
+        'case',
+      );
+    }
+  }
+}
+
+/// Rule 31 for one table part: its ref, rows, columns and filter. Returns
+/// the ref's rectangle, or null when the ref is not a range in the sheet.
+_Rect? _checkTableRange(
+  XmlDocument table,
+  String part,
+  List<String> violations,
+) {
+  const String rule = 'rule 31';
+  final XmlElement root = table.rootElement;
+  final String ref = _attr(root, 'ref');
+  final _Rect? r = _parseRect(ref);
+  final String? problem = r == null ? 'is not a range' : _problemWith(r);
+  if (problem != null) {
+    violations.add('$rule: $part: ref "$ref" $problem');
+    return null;
+  }
+  final int header =
+      int.tryParse(root.getAttribute('headerRowCount') ?? '') ?? 1;
+  final int totals =
+      int.tryParse(root.getAttribute('totalsRowCount') ?? '') ?? 0;
+  final int rows = r!.row2 - r.row1 + 1;
+  if (rows < header + 1 + totals) {
+    violations.add(
+      '$rule: $part: ref "$ref" has $rows rows; a header of $header, one '
+      'data row and totals of $totals need ${header + 1 + totals}',
+    );
+  }
+  final int width = r.col2 - r.col1 + 1;
+  final XmlElement? columns = root.getElement('tableColumns');
+  final List<XmlElement> children =
+      columns?.findElements('tableColumn').toList() ?? <XmlElement>[];
+  final String count = columns == null ? '' : _attr(columns, 'count');
+  if (int.tryParse(count) != width || children.length != width) {
+    violations.add(
+      '$rule: $part: tableColumns count "$count" and its ${children.length} '
+      'tableColumn children must both equal the width $width of "$ref"',
+    );
+  }
+  final Map<String, String> seen = <String, String>{};
+  for (final XmlElement column in children) {
+    final String name = decodeXstring(_attr(column, 'name'));
+    final String? earlier = seen[sheetNameKey(name)];
+    if (earlier != null) {
+      violations.add(
+        '$rule: $part: column "$name" repeats "$earlier", ignoring case',
+      );
+    }
+    seen[sheetNameKey(name)] = name;
+  }
+  final XmlElement? filter = root.getElement('autoFilter');
+  if (filter != null) {
+    final String expected = _rectRef((
+      row1: r.row1,
+      col1: r.col1,
+      row2: r.row2 - totals,
+      col2: r.col2,
+    ));
+    final String got = _attr(filter, 'ref');
+    final _Rect? f = _parseRect(got);
+    if (f == null || _rectRef(f) != expected) {
+      violations.add(
+        '$rule: $part: autoFilter ref "$got" is not the ref without its '
+        'totals row, "$expected"',
+      );
+    }
+  }
+  return r;
+}
+
+/// Rule 31 for the header cells of the table part [part] over [r] on the
+/// worksheet [sheet]: each a shared string equal to its column's name.
+void _checkTableHeader(
+  XmlDocument table,
+  String part,
+  _Rect r,
+  XmlDocument sheet,
+  List<String> strings,
+  List<String> violations,
+) {
+  const String rule = 'rule 31';
+  final XmlElement root = table.rootElement;
+  if (root.getAttribute('headerRowCount') == '0') return;
+  final List<XmlElement> columns =
+      root.getElement('tableColumns')?.findElements('tableColumn').toList() ??
+      <XmlElement>[];
+  final Map<String, XmlElement> cells = <String, XmlElement>{
+    for (final XmlElement c in _all(sheet, 'c')) _attr(c, 'r'): c,
+  };
+  for (int i = 0; i < columns.length && r.col1 + i <= r.col2; i++) {
+    final String name = decodeXstring(_attr(columns[i], 'name'));
+    final String ref = '${_columnLetters(r.col1 + i - 1)}${r.row1}';
+    final XmlElement? cell = cells[ref];
+    if (cell == null || _attr(cell, 't') != 's') {
+      violations.add(
+        '$rule: $part: header cell $ref is not a string; expected "$name"',
+      );
+      continue;
+    }
+    final int? index = int.tryParse(cell.getElement('v')?.innerText ?? '');
+    final String? text = index == null || index < 0 || index >= strings.length
+        ? null
+        : decodeXstring(strings[index]);
+    if (text != name) {
+      violations.add(
+        '$rule: $part: header cell $ref holds "$text"; its column is named '
+        '"$name"',
       );
     }
   }

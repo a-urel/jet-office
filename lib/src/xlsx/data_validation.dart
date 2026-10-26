@@ -168,6 +168,12 @@ final class XlsxDataValidation {
   /// A validation that lets a value of the list [formula] be chosen: a range
   /// (`$D$1:$D$9`, `Data!$A:$A`), a defined name or a formula that returns
   /// one. [formula] may start with `=`.
+  ///
+  /// A [formula] that starts and ends with `"`, after the `=`, is taken for
+  /// an inline list like [XlsxDataValidation.list]'s, so it must hold items
+  /// and is held to [XlsxLimits.maxValidationListLength] between the quotes
+  /// when the validation is registered, even if it is a longer formula
+  /// such as `"a"&"b"`.
   factory XlsxDataValidation.listFrom(
     List<XlsxRange> ranges,
     String formula, {
@@ -533,10 +539,14 @@ final class XlsxDataValidation {
 
   @override
   String toString() =>
-      'XlsxDataValidation(${type.name}, $ranges'
-      '${type.compares ? ', ${comparison.name}' : ''}'
-      '${formula1 == null ? '' : ', $formula1'}'
-      '${formula2 == null ? '' : ', $formula2'})';
+      'XlsxDataValidation(ranges: $ranges, type: ${type.name}, '
+      'comparison: ${comparison.name}, formula1: $formula1, '
+      'formula2: $formula2, allowBlank: $allowBlank, '
+      'showDropDownArrow: $showDropDownArrow, '
+      'showInputMessage: $showInputMessage, '
+      'showErrorMessage: $showErrorMessage, errorStyle: ${errorStyle.name}, '
+      'errorTitle: $errorTitle, error: $error, promptTitle: $promptTitle, '
+      'prompt: $prompt)';
 }
 
 String _number(double value) =>

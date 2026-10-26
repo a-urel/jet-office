@@ -70,21 +70,7 @@ void main(List<String> args) {
             .where((File f) => f.path.endsWith('.expected.json'))
             .toList()
           ..sort((File a, File b) => a.path.compareTo(b.path)));
-  final List<String> unexpected = xlsxWithoutExpectations(<String>[
-    for (final File f
-        in dir.existsSync() ? dir.listSync().whereType<File>() : <File>[])
-      _basename(f.path),
-  ]);
-  int mismatches = 0;
-  for (final String message in unexpected) {
-    stdout.writeln('FAIL  $message');
-    mismatches++;
-  }
-  if (expectations.isEmpty) {
-    stderr.writeln('No .expected.json files in ${dir.path}.');
-    exitCode = 2;
-    return;
-  }
+  final List<SheetResult> results = <SheetResult>[];
   for (final File file in expectations) {
     final String name = _basename(
       file.path,
@@ -92,39 +78,41 @@ void main(List<String> args) {
     final Map<String, List<List<Object?>>> sheets = _readExpected(file);
     sheets.forEach((String sheet, List<List<Object?>> rows) {
       File csv = File('${dir.path}/$name-$sheet.csv');
+      String? note;
       final String decoded = decodeXstring(sheet);
       if (!csv.existsSync() && decoded != sheet) {
         final File renamed = File('${dir.path}/$name-$decoded.csv');
         if (renamed.existsSync()) {
-          stdout.writeln(
-            'note  $name / $sheet: the reader named the sheet "$decoded"',
-          );
+          note = '$name / $sheet: the reader named the sheet "$decoded"';
           csv = renamed;
         }
       }
       if (!csv.existsSync() && sheets.length == 1) {
         csv = File('${dir.path}/$name.csv');
       }
-      final List<String> messages = csv.existsSync()
-          ? compareSheet(rows, decodeCsv(csv.readAsBytesSync()))
-          : <String>['missing ${dir.path}/$name-$sheet.csv'];
-      if (messages.isEmpty) {
-        stdout.writeln('ok    $name / $sheet');
-      } else {
-        mismatches += messages.length;
-        stdout.writeln('FAIL  $name / $sheet');
-        for (final String message in messages) {
-          stdout.writeln('      $message');
-        }
-      }
+      results.add((
+        name: name,
+        sheet: sheet,
+        note: note,
+        messages: csv.existsSync()
+            ? compareSheet(rows, decodeCsv(csv.readAsBytesSync()))
+            : <String>['missing ${dir.path}/$name-$sheet.csv'],
+      ));
     });
   }
-  if (mismatches > 0) {
-    stdout.writeln('$mismatches mismatch(es).');
-    exitCode = 1;
-  } else {
-    stdout.writeln('All sheets match.');
-  }
+  final CsvReport report = assembleReport(
+    fileNames: <String>[
+      for (final File f
+          in dir.existsSync() ? dir.listSync().whereType<File>() : <File>[])
+        _basename(f.path),
+    ],
+    expectationCount: expectations.length,
+    sheets: results,
+    dir: dir.path,
+  );
+  report.lines.forEach(stdout.writeln);
+  if (report.error != null) stderr.writeln(report.error);
+  exitCode = report.exitCode;
 }
 
 String _basename(String path) =>

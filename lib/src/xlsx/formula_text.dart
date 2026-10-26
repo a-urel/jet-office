@@ -1,5 +1,5 @@
-/// The shared checks and builders for formula-typed text: defined names,
-/// and the formulas of later features.
+/// The shared checks and builders for formula-typed text: cell formulas,
+/// defined names, data validations and conditional formats.
 ///
 /// New in jet_office. Quds wrote formula text and sheet references by string
 /// concatenation: print titles without `$` and without quoting the sheet

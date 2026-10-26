@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/hyperlink.dart';
-import 'package:jet_office/src/xlsx/worksheet_parts.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
 
@@ -454,17 +453,6 @@ void main() {
       expect(sheet, contains('<c r="B1" s="1" t="s">'));
       expect(sheet, contains('<c r="C1" t="s">'));
     });
-
-    test('many link cells in one column resolve their style once', () {
-      final XlsxWriter book = XlsxWriter();
-      final XlsxSheetWriter sheet = book.addSheet('S');
-      const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
-      for (int i = 0; i < 50; i++) {
-        sheet.row(<Object?>[XlsxHyperlink.location('X$i')], style: bold);
-      }
-      final String xml = readXlsx(book.close().bytes)['xl/styles.xml']!;
-      expect(xml, contains('<cellXfs count="2">'));
-    });
   });
 
   group('validation', () {
@@ -533,38 +521,16 @@ void main() {
     test('an address holding U+0001 is encoded, so it is accepted', () {
       expect(XlsxHyperlink.email('a\u0001@b.com').address, 'mailto:a%01@b.com');
     });
+    test('an email whose text holds U+0001 is rejected through row', () {
+      // The address is percent-encoded, but the default text is the raw
+      // address, which holds a character XML forbids.
+      expectRejected(XlsxHyperlink.email('a\u0001@b.com'), field: 'text');
+    });
     test('a link with neither address nor location', () {
       expectRejected(const XlsxHyperlink(text: 't'), field: 'address');
     });
     test('a link inside an XlsxCell is checked too', () {
       expectRejected(XlsxCell(XlsxHyperlink.url('')), field: 'address');
-    });
-  });
-
-  group('worksheetRelationshipsXml', () {
-    test('has no part without addresses', () {
-      expect(worksheetRelationshipsXml(const <String, String>{}), isNull);
-    });
-    test('lists the addresses as external hyperlink relationships', () {
-      final String xml = worksheetRelationshipsXml(<String, String>{
-        'a': 'rId1',
-        'b': 'rId2',
-      })!;
-      expect(xml, contains('Id="rId1"'));
-      expect(xml, contains('Id="rId2"'));
-      expect(xml, contains('Target="b" TargetMode="External"'));
-    });
-    test('writes the ids it is given, not ids of its own', () {
-      final String xml = worksheetRelationshipsXml(<String, String>{
-        'a': 'rId7',
-        'b': 'rId3',
-      })!;
-      expect(xml, contains('Id="rId7" '));
-      expect(xml, contains('Id="rId3" '));
-      expect(xml, isNot(contains('rId1')));
-    });
-    test('names the part by sheet number', () {
-      expect(worksheetRelsPartName(3), 'xl/worksheets/_rels/sheet3.xml.rels');
     });
   });
 }

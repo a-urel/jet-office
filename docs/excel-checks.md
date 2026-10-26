@@ -345,10 +345,13 @@ These need Excel 2010 or later; check that none shows a repair prompt.
 
 - A `Bar`: blue bars to the right of a middle axis for positive values, red
   bars to its left for negative ones, drawn from the middle of the cell, with
-  a dashed axis line between them. The rule's Negative Value and Axis
-  settings show the red negative fill and the axis at the cell midpoint.
+  a black dashed axis line between them. The rule's Negative Value and Axis
+  settings show the red negative fill and a black axis at the cell midpoint.
 - B `Solid`: solid green bars (no gradient) with a border; bars for negative
-  values are filled too, in Excel's default red.
+  values are filled too, in Excel's default red, with the green border, to
+  the left of a black axis where zero falls (the cell's middle, as the
+  values run from -50 to 50). The rule's Negative Value and Axis settings
+  show the red fill and the black axis.
 - C `Stars`, D `Triangles` and E `Boxes`: three stars, three triangles and
   five boxes by value. The default thresholds of 33 % and 67 % fall at -17
   and 17: -50 to -20 show an empty star and a red down triangle, -15 to 15 a
@@ -357,8 +360,9 @@ These need Excel 2010 or later; check that none shows a repair prompt.
   to 50). Excel for the web and LibreOffice may not show these.
 
 In Excel for Mac on 2026-10-26 the axis line did not show and B's negative
-bars were green outlines with no fill: the file stores neither color, and
-Excel shows both as white (see "Open issues", M4).
+bars were green outlines with no fill: the file stored neither color, and
+Excel showed both as white (see "Open issues", M4). The file now stores
+Excel's defaults; the M4 Excel check is to confirm the look above.
 
 ### `m3_page_setup`
 
@@ -465,6 +469,112 @@ owner records them in "Results", mark both issues closed, with the date.
 - `View`: the zoom is 85 % (the status bar's zoom slider).
 - `Split`: two panes with a movable divider, about 120 points from the left
   and 60 from the top (View > Split is highlighted).
+
+## M4
+
+Open every M4 fixture in **desktop Excel** (the owner has Excel for Mac
+16.114.1) with Turkish regional settings, and in Excel for the web where it
+shows the object. As before, first check that each file opens without the
+repair prompt. M4 also changed an M3 fixture, `m3_conditional`, so its column
+H is re-checked below.
+
+### `m4_rich_text`
+
+One sheet, `Rich`, one cell per row in column A.
+
+- A1 `Total: 42`: `Total: ` bold, `42` plain.
+- A2 `Red italic and underlined`: `Red italic` italic and red, ` and
+  underlined` underlined (single).
+- A3 `x2`: the `2` is a superscript, so it reads x squared.
+- A4 `Bold in Arial 14`: the cell is Arial 14, and the bold run is Arial 14
+  bold too, the same size and face as ` in Arial 14` (Decision 3 of the M4
+  plan). Click into the cell: the formula bar shows the runs in Arial.
+- A5 and A6 `Same text` look alike, in the same plain font.
+
+### `m4_notes`
+
+Three sheets, `Notes`, `Right` and `Bottom`. Notes are called comments in
+older Excel; Excel for Mac 16.114.1 may call them notes or comments, so look
+for the red triangle in the cell's corner.
+
+- `Notes`: hovering B2 shows `Check this` with the author `Ahmet`; hovering C3
+  shows a bold `Ahmet:` line, then `The total is checked.`; D4's note
+  `Always shown` is shown without hovering, with the author `Ayse Yilmaz`.
+  Review > Notes (or Comments) lists three notes.
+- `Right`: A1 and B1 hold text; the note of `XFD1` (the last column) opens
+  inside the window when you go to `XFD1` and hover it, not outside the sheet.
+- `Bottom`: the same for the note of `A1048576` (the last row).
+- No repair prompt on any of them.
+
+### `m4_images`
+
+Two sheets, `Pictures` and `Again`. Set the zoom to 100 %. The pictures are
+tiny test images (a red-green gradient).
+
+- `Pictures`: the PNG at B2 is 4 × 2 pixels (Format Picture > Size shows
+  its size; at 100 % zoom it is a few screen pixels); the JPEG at
+  E2 is 60 pixels wide, its height 100 pixels, aspect kept.
+- The two-cell picture fills `B6:D10` exactly. Widen column C: it does not
+  resize, but it moves when a column to its left is widened (`move`, the
+  property "Move but don't size with cells").
+- Right-click the picture over `B6:D10` > View Alt Text: it reads `The PNG
+  over B6:D10`.
+- `Again` shows the same PNG at A1, 4 × 2 pixels.
+
+### `m4_tables`
+
+Two sheets, `Sales` and `Plain`. Click inside each table; Table Design (or
+Table) appears.
+
+- `Sales` has the table `Sales` over A1:C5: style Medium 2 with banded rows, a
+  header row `Region`, `Amount`, `Note` (C1 filled in by the writer) and a
+  totals row, A5 `Total`, B5 `245,5`, C5 empty. Select B5: the formula bar
+  shows `=SUBTOTAL(109,B2:B4)`, and Excel accepts it without repair. The
+  totals drop-down of B5 shows Sum (Decision 2 of the M4 plan: an A1 range,
+  not a structured reference).
+- Beside it, `Costs` over E1:F3: style Light 9 with banded columns (stripes
+  down the columns, not along the rows), header `Item`, `Cost`.
+- The filter buttons of both headers work: filter `Region` to `North`.
+- Inserting a row inside `Sales` (right-click a data row > Insert > Table
+  Rows Above) extends the table, and the totals formula follows.
+- `Plain` has the table `Numbers` over A1:B2 with no header row and no style:
+  the cells hold 1, 2 and 3, 4, and Table Design shows Header Row off. Its
+  stored column names, `X` and `Y`, show when Header Row is turned on.
+- Formulas > Name Manager lists `Sales`, `Costs` and `Numbers`.
+
+### `m4_objects`
+
+Two sheets, `All` and `More`. No repair prompt.
+
+- `All`: A1 `Site A` and B1 `Site B` are links (to `https://example.com/a` and
+  `/b`); C1 `Noted` has a note `Check C1` by `Ahmet`; the PNG shows at G2;
+  the tables `Stock` (A3:B5) and `Prices` (D3:E5) show with their headers.
+  Every one of these objects shows at the same time.
+- `More`: A1 has a note `The second sheet`.
+
+### Re-check of the data bars (an M4 open issue)
+
+The M3 check found that Excel draws no negative fill and no axis for a data
+bar that stores neither color (see "Open issues", M4). The writer now stores
+Excel's defaults (`FFFF0000` for the negative fill, `FF000000` for the axis).
+Open `m3_conditional_x14` and `m3_conditional` again:
+
+- `m3_conditional_x14`, B `Solid`: the negative bars are red (filled, with
+  the green border), left of a black axis.
+- `m3_conditional_x14`, A `Bar` and B `Solid`: both columns show an axis line
+  in the middle of the cell.
+- `m3_conditional`, H `Progress`: it has a data bar with no colors of its
+  own, which M4 changed (it now has an `x14:dataBar` with the default
+  negative fill and axis). Look at the rule: Home > Conditional Formatting > Manage Rules > Edit Rule >
+  Negative Value and Axis shows a red fill and a black axis, and the blue
+  gradient bars look as before.
+- A question for the owner: B `Solid` has a border and stores no
+  `x14:negativeBorderColor`. Does Excel draw the negative bars' border red
+  (its default) or not? Record what the Edit Formatting Rule dialog and the
+  bars show.
+
+When the owner records it, mark "Data bars draw no negative fill or axis by
+default" closed, with the date.
 
 ## Open issues
 
@@ -618,6 +728,10 @@ Excel writes both colors on every data bar it saves, its defaults being
 writes those defaults when the rule has no color of its own (or changes the
 dartdoc), starts with a failing regression test, and updates
 `m3_conditional_x14`'s checklist entry if the expected look changes.
+
+Fixed in 43a8471; open, awaiting the owner's M4 Excel check. M4 also changed
+`m3_conditional`, whose column H data bar had no colors and now gets the same
+defaults; the M4 check re-checks it.
 
 ### Reading order and Status not checked in Excel (open, M5)
 

@@ -10,7 +10,9 @@
 /// Excel 2016 draws the 2007 bar. The elements follow the `x14` schema of
 /// MS-XLSX, as the Open XML SDK validates it: `CT_ConditionalFormatting`
 /// (`cfRule`, then `xm:sqref`), `CT_CfRule`, `CT_DataBar`, `CT_IconSet` and
-/// `CT_Cfvo`.
+/// `CT_Cfvo`. What both files need, [isX14OnlyRule], [x14RuleId] and
+/// [writeX14RuleReference], lives in `conditional_format.dart`, so only
+/// this file imports the other.
 library;
 
 import '../opc/ooxml.dart';
@@ -21,9 +23,6 @@ import 'conditional_format.dart';
 import 'formula_text.dart';
 import 'range.dart';
 
-/// The `uri` of the `ext` of a `cfRule` that names its Excel 2010 rule.
-const String _ruleExtUri = '{B025F937-C7B1-47D3-B67F-A62EFF666E3E}';
-
 /// The `uri` of the worksheet `ext` that holds Excel 2010 conditional
 /// formats. Excel writes it with the lowercase `d`.
 const String _sheetExtUri = '{78C0D931-6437-407d-A8EE-F0AAD7539E65}';
@@ -32,38 +31,6 @@ const String _sheetExtUri = '{78C0D931-6437-407d-A8EE-F0AAD7539E65}';
 /// Excel 2010 has.
 bool hasX14Rule(XlsxConditionalRule rule) =>
     rule is XlsxDataBar || isX14OnlyRule(rule);
-
-/// Whether [rule] has only an Excel 2010 rule and no Excel 2007 `cfRule`:
-/// an icon set whose type [XlsxIconSetType.isX14Only].
-bool isX14OnlyRule(XlsxConditionalRule rule) =>
-    rule is XlsxIconSet && rule.type.isX14Only;
-
-/// The id of the Excel 2010 rule of the [ruleIndex]th rule (0-based, in
-/// registration order, across all formats) of the sheet created
-/// [sheetNumber]th: `{SSSSSSSS-0000-4000-8000-RRRRRRRRRRRR}`, S the sheet
-/// number and R the rule index in uppercase hex.
-///
-/// Derived from creation order, never random, so the output is
-/// deterministic; the sheet number keeps the ids of different sheets apart.
-String x14RuleId(int sheetNumber, int ruleIndex) =>
-    '{${_hex(sheetNumber, 8)}-0000-4000-8000-${_hex(ruleIndex, 12)}}';
-
-String _hex(int value, int width) =>
-    value.toRadixString(16).toUpperCase().padLeft(width, '0');
-
-/// Writes the `extLst` of an Excel 2007 `cfRule` that names its Excel 2010
-/// rule [id].
-void writeX14RuleReference(XmlWriter w, String id) {
-  w.start('extLst');
-  w.start('ext');
-  w.attribute('uri', _ruleExtUri);
-  w.attribute('xmlns:x14', Ns.x14);
-  w.start('x14:id');
-  w.text(id);
-  w.end();
-  w.end();
-  w.end();
-}
 
 /// Writes the worksheet `extLst` holding the Excel 2010 rules of
 /// [formats], which the writer has checked, or nothing when no rule has
@@ -137,6 +104,12 @@ void _writeRule(
   w.end();
 }
 
+/// The negative fill Excel writes on a data bar it creates: red.
+const XlsxColor _defaultNegativeFill = XlsxColor.argb(0xFFFF0000);
+
+/// The axis color Excel writes on a data bar it creates: black.
+const XlsxColor _defaultAxis = XlsxColor.argb(0xFF000000);
+
 /// Writes `x14:dataBar`: attributes in `CT_DataBar` order, those at the
 /// schema default left out except the lengths; then the two `x14:cfvo`,
 /// `x14:borderColor`, `x14:negativeFillColor`, `x14:negativeBorderColor`
@@ -145,21 +118,21 @@ void _writeRule(
 /// The lengths are 0 and 100 when the Excel 2007 ones are their defaults,
 /// 10 and 90, as Excel writes them. The border colors are written only
 /// with a border; a border without its own color takes the bar's.
-/// `negativeBarColorSameAsPositive="0"` comes with a negative fill color and
-/// `negativeBarBorderColorSameAsPositive="0"` with a negative border color,
-/// as Excel ignores the colors otherwise.
+/// `negativeBarBorderColorSameAsPositive="0"` comes with a negative border
+/// color, as Excel ignores the color otherwise.
+///
+/// The negative fill and the axis color are always written, Excel's
+/// defaults, red and black, when the rule has none: Excel does not fall
+/// back to them, and shows a missing color as white. The axis color is
+/// written with no axis too, as Excel does. With the fill always written,
+/// `negativeBarColorSameAsPositive` keeps its schema default, false.
 void _writeDataBar(XmlWriter w, XlsxDataBar bar) {
-  final XlsxColor? negativeFill = bar.negativeFillColor;
   final XlsxColor? negativeBorder = bar.border ? bar.negativeBorderColor : null;
-  final XlsxColor? axisColor = bar.axisColor;
   w.start('x14:dataBar');
   w.attribute('minLength', '${bar.minLength == 10 ? 0 : bar.minLength}');
   w.attribute('maxLength', '${bar.maxLength == 90 ? 100 : bar.maxLength}');
   if (bar.border) w.attribute('border', '1');
   if (!bar.gradient) w.attribute('gradient', '0');
-  if (negativeFill != null) {
-    w.attribute('negativeBarColorSameAsPositive', '0');
-  }
   if (negativeBorder != null) {
     w.attribute('negativeBarBorderColorSameAsPositive', '0');
   }
@@ -171,13 +144,15 @@ void _writeDataBar(XmlWriter w, XlsxDataBar bar) {
   if (bar.border) {
     _writeColor(w, 'x14:borderColor', bar.borderColor ?? bar.color);
   }
-  if (negativeFill != null) {
-    _writeColor(w, 'x14:negativeFillColor', negativeFill);
-  }
+  _writeColor(
+    w,
+    'x14:negativeFillColor',
+    bar.negativeFillColor ?? _defaultNegativeFill,
+  );
   if (negativeBorder != null) {
     _writeColor(w, 'x14:negativeBorderColor', negativeBorder);
   }
-  if (axisColor != null) _writeColor(w, 'x14:axisColor', axisColor);
+  _writeColor(w, 'x14:axisColor', bar.axisColor ?? _defaultAxis);
   w.end();
 }
 

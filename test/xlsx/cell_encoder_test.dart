@@ -1,5 +1,6 @@
 import 'package:jet_office/src/xlsx/cell_encoder.dart';
 import 'package:jet_office/src/xlsx/font.dart';
+import 'package:jet_office/src/xlsx/hyperlink.dart';
 import 'package:jet_office/src/xlsx/number_format.dart';
 import 'package:jet_office/src/xlsx/shared_strings.dart';
 import 'package:jet_office/src/xlsx/style.dart';
@@ -353,6 +354,32 @@ void main() {
     );
   });
 
+  test('a bad formula fails the shared formula check, told at the cell', () {
+    Matcher fails(String value, String reason) => throwsA(
+      isA<ArgumentError>()
+          .having((ArgumentError e) => e.name, 'name', 'text')
+          .having((ArgumentError e) => e.invalidValue, 'value', value)
+          .having(
+            (ArgumentError e) => e.message,
+            'message',
+            'The formula in cell A1 on sheet "S" is invalid: $reason',
+          ),
+    );
+    expect(
+      () => enc(const XlsxFormula('=')),
+      fails('=', 'A formula must not be empty.'),
+    );
+    expect(
+      () => enc(XlsxFormula('1' * 8193)),
+      fails('8193 characters', 'A formula has at most 8192 characters.'),
+    );
+    expect(
+      () => enc(const XlsxFormula('A1\u0001')),
+      fails('A1\u0001', 'A formula must not contain characters XML forbids.'),
+    );
+    expect(encoder.wroteFormula, isFalse);
+  });
+
   test('a cached string past the cell limit is truncated with a warning', () {
     final String out = enc(
       XlsxFormula('A2', cached: '${'x' * 32766}\u{1F600}tail'),
@@ -563,6 +590,20 @@ void main() {
       }
       expect(encoder.resolveCount, 2);
       expect(formatCount(), 3);
+    });
+
+    test('many link cells in one column resolve their style once', () {
+      for (int r = 0; r < 50; r++) {
+        encoder.encode(
+          XmlWriter(StringBuffer()),
+          sheet: 'S',
+          row: r,
+          column: 0,
+          value: XlsxHyperlink.location('X$r'),
+          rowStyle: bold,
+        );
+      }
+      expect(encoder.resolveCount, 1);
     });
 
     test('a DateTime under a merged General has no s and warns', () {

@@ -807,36 +807,39 @@ void main() {
       expect(parts[_sheet1], isNot(contains('conditionalFormatting')));
       expect(parts[_styles], contains('<dxfs count="0"/>'));
     });
-    test('a number format the dxf table cannot hold registers nothing', () {
-      final Map<String, String> parts = _book((XlsxSheetWriter s) {
-        expect(
-          () => s.conditionalFormat(
-            XlsxConditionalFormat(
-              <XlsxRange>[_a1],
-              <XlsxConditionalRule>[
-                const XlsxDuplicateRule(
-                  style: XlsxStyle(numFmt: XlsxNumFmt.custom('0.0#')),
-                ),
-                const XlsxExpressionRule(
-                  'TRUE',
-                  style: XlsxStyle(numFmt: XlsxNumFmt.builtin(30)),
-                ),
-              ],
+    test(
+      'a number format beyond the dxf limit throws and registers nothing',
+      () {
+        final Map<String, String> parts = _book((XlsxSheetWriter s) {
+          expect(
+            () => s.conditionalFormat(
+              XlsxConditionalFormat(
+                <XlsxRange>[_a1],
+                <XlsxConditionalRule>[
+                  const XlsxDuplicateRule(
+                    style: XlsxStyle(numFmt: XlsxNumFmt.custom('0.0#')),
+                  ),
+                  const XlsxExpressionRule(
+                    'TRUE',
+                    style: XlsxStyle(numFmt: XlsxNumFmt.builtin(30)),
+                  ),
+                ],
+              ),
             ),
-          ),
-          throwsA(
-            isA<ArgumentError>().having(
-              (ArgumentError e) => e.name,
-              'name',
-              'rules[1].style.numFmt',
+            throwsA(
+              isA<ArgumentError>().having(
+                (ArgumentError e) => e.name,
+                'name',
+                'rules[1].style.numFmt',
+              ),
             ),
-          ),
-        );
-      });
-      expect(parts[_sheet1], isNot(contains('conditionalFormatting')));
-      expect(parts[_styles], contains('<dxfs count="0"/>'));
-      expect(parts[_styles], isNot(contains('0.0#')));
-    });
+          );
+        });
+        expect(parts[_sheet1], isNot(contains('conditionalFormatting')));
+        expect(parts[_styles], contains('<dxfs count="0"/>'));
+        expect(parts[_styles], isNot(contains('0.0#')));
+      },
+    );
 
     test('a registry error names the rule, counting rules with no style', () {
       final Map<String, String> parts = _book((XlsxSheetWriter s) {
@@ -1002,6 +1005,190 @@ void main() {
       expect(
         XlsxCfValue.percent(33),
         const XlsxCfValue(XlsxCfValueType.percent, value: '33'),
+      );
+    });
+  });
+
+  group('toString names every field == compares', () {
+    /// A matcher for the text of a [type] that shows each of [fields].
+    Matcher shows(String type, List<String> fields) => allOf(<Matcher>[
+      startsWith('$type('),
+      for (final String field in fields) contains(field),
+    ]);
+
+    test('XlsxCellValueRule', () {
+      expect(
+        XlsxCellValueRule(
+          XlsxComparison.between,
+          '1',
+          formula2: '2',
+          style: _red,
+          stopIfTrue: true,
+        ).toString(),
+        shows('XlsxCellValueRule', <String>[
+          'comparison: between',
+          'formula1: 1',
+          'formula2: 2',
+          'style: XlsxStyle(',
+          'stopIfTrue: true',
+        ]),
+      );
+    });
+
+    test('XlsxExpressionRule', () {
+      expect(
+        XlsxExpressionRule('A1>0', style: _red, stopIfTrue: true).toString(),
+        shows('XlsxExpressionRule', <String>[
+          'formula: A1>0',
+          'style: XlsxStyle(',
+          'stopIfTrue: true',
+        ]),
+      );
+    });
+
+    test('XlsxTopBottomRule', () {
+      expect(
+        XlsxTopBottomRule(
+          rank: 5,
+          percent: true,
+          bottom: true,
+          style: _red,
+          stopIfTrue: true,
+        ).toString(),
+        shows('XlsxTopBottomRule', <String>[
+          'rank: 5',
+          'percent: true',
+          'bottom: true',
+          'style: XlsxStyle(',
+          'stopIfTrue: true',
+        ]),
+      );
+    });
+
+    test('XlsxAverageRule', () {
+      expect(
+        XlsxAverageRule(
+          above: false,
+          orEqual: true,
+          standardDeviations: 2,
+          style: _red,
+          stopIfTrue: true,
+        ).toString(),
+        shows('XlsxAverageRule', <String>[
+          'above: false',
+          'orEqual: true',
+          'standardDeviations: 2',
+          'style: XlsxStyle(',
+          'stopIfTrue: true',
+        ]),
+      );
+    });
+
+    test('XlsxDuplicateRule', () {
+      expect(
+        XlsxDuplicateRule(
+          unique: true,
+          style: _red,
+          stopIfTrue: true,
+        ).toString(),
+        shows('XlsxDuplicateRule', <String>[
+          'unique: true',
+          'style: XlsxStyle(',
+          'stopIfTrue: true',
+        ]),
+      );
+    });
+
+    test('XlsxTextRule', () {
+      expect(
+        XlsxTextRule(
+          XlsxTextOperator.beginsWith,
+          'ab',
+          style: _red,
+          stopIfTrue: true,
+        ).toString(),
+        shows('XlsxTextRule', <String>[
+          'operator: beginsWith',
+          'text: ab',
+          'style: XlsxStyle(',
+          'stopIfTrue: true',
+        ]),
+      );
+    });
+
+    test('XlsxColorScale', () {
+      expect(
+        XlsxColorScale(
+          <XlsxCfValue>[const XlsxCfValue.min(), const XlsxCfValue.max()],
+          <XlsxColor>[XlsxColor.hex('FFFFFF'), XlsxColor.hex('000000')],
+          stopIfTrue: true,
+        ).toString(),
+        shows('XlsxColorScale', <String>[
+          'points: [XlsxCfValue(min), XlsxCfValue(max)]',
+          'colors: [',
+          'stopIfTrue: true',
+        ]),
+      );
+    });
+
+    test('XlsxDataBar', () {
+      expect(
+        XlsxDataBar(
+          min: XlsxCfValue.number(1),
+          max: XlsxCfValue.number(9),
+          color: XlsxColor.hex('638EC6'),
+          showValue: false,
+          minLength: 5,
+          maxLength: 95,
+          gradient: false,
+          border: true,
+          borderColor: XlsxColor.hex('203864'),
+          negativeFillColor: XlsxColor.hex('FF0000'),
+          negativeBorderColor: XlsxColor.hex('C00000'),
+          axis: XlsxDataBarAxis.middle,
+          axisColor: XlsxColor.hex('000000'),
+          stopIfTrue: true,
+        ).toString(),
+        shows('XlsxDataBar', <String>[
+          'min: XlsxCfValue(number 1)',
+          'max: XlsxCfValue(number 9)',
+          'color: XlsxColor',
+          'showValue: false',
+          'minLength: 5',
+          'maxLength: 95',
+          'gradient: false',
+          'border: true',
+          'borderColor: XlsxColor',
+          'negativeFillColor: XlsxColor',
+          'negativeBorderColor: XlsxColor',
+          'axis: middle',
+          'axisColor: XlsxColor',
+          'stopIfTrue: true',
+        ]),
+      );
+    });
+
+    test('XlsxIconSet', () {
+      expect(
+        XlsxIconSet(
+          XlsxIconSetType.threeFlags,
+          thresholds: <XlsxCfValue>[
+            XlsxCfValue.percent(0),
+            XlsxCfValue.percent(40),
+            XlsxCfValue.percent(80),
+          ],
+          reverse: true,
+          showValue: false,
+          stopIfTrue: true,
+        ).toString(),
+        shows('XlsxIconSet', <String>[
+          'type: threeFlags',
+          'thresholds: [XlsxCfValue(percent 0), XlsxCfValue(percent 40), '
+              'XlsxCfValue(percent 80)]',
+          'reverse: true',
+          'showValue: false',
+          'stopIfTrue: true',
+        ]),
       );
     });
   });

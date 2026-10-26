@@ -128,6 +128,67 @@ List<String> xlsxWithoutExpectations(Iterable<String> fileNames) {
   ];
 }
 
+/// The comparison of one sheet of one fixture: `messages` are the
+/// mismatches (empty when it matches) and `note`, when set, is a line of
+/// explanation printed before the sheet's result.
+typedef SheetResult = ({
+  String name,
+  String sheet,
+  String? note,
+  List<String> messages,
+});
+
+/// What `tool/compare_csv.dart` prints and how it exits.
+///
+/// `lines` go to standard output. `error`, when set, goes to standard error.
+/// `exitCode` is 0, 1 on any mismatch, or 2 when there is nothing to compare.
+typedef CsvReport = ({List<String> lines, String? error, int exitCode});
+
+/// The report for the files in [fileNames] (the directory listing) and the
+/// per-sheet [sheets] already compared, in order.
+///
+/// The order is part of the contract: a `.xlsx` with no expectations is
+/// reported first, even when the report stops with exit code 2 because
+/// `expectationCount`, the number of `.expected.json` files, is 0. Then each
+/// sheet prints its `note`, if any, and `ok    <name> / <sheet>` or
+/// `FAIL  <name> / <sheet>` followed by its indented messages. The last
+/// line is the verdict. `dir` only names the directory in the error text.
+CsvReport assembleReport({
+  required Iterable<String> fileNames,
+  required int expectationCount,
+  required List<SheetResult> sheets,
+  String dir = '.',
+}) {
+  final List<String> lines = <String>[];
+  int mismatches = 0;
+  for (final String message in xlsxWithoutExpectations(fileNames)) {
+    lines.add('FAIL  $message');
+    mismatches++;
+  }
+  if (expectationCount == 0) {
+    return (
+      lines: lines,
+      error: 'No .expected.json files in $dir.',
+      exitCode: 2,
+    );
+  }
+  for (final SheetResult sheet in sheets) {
+    final String at = '${sheet.name} / ${sheet.sheet}';
+    if (sheet.note != null) lines.add('note  ${sheet.note}');
+    if (sheet.messages.isEmpty) {
+      lines.add('ok    $at');
+    } else {
+      mismatches += sheet.messages.length;
+      lines.add('FAIL  $at');
+      for (final String message in sheet.messages) {
+        lines.add('      $message');
+      }
+    }
+  }
+  lines.add(mismatches > 0 ? '$mismatches mismatch(es).' : 'All sheets match.');
+  return (lines: lines, error: null, exitCode: mismatches > 0 ? 1 : 0);
+}
+
 final RegExp _xstringEscape = RegExp(r'_x([0-9A-Fa-f]{4})_');
 
 /// [text] with its `_xHHHH_` escapes decoded, left to right, as Excel and

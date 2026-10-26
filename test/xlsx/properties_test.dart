@@ -1,7 +1,9 @@
-import 'package:jet_office/jet_office.dart' show XlsxLimits;
+import 'package:jet_office/jet_office.dart' show XlsxLimits, XlsxWriter;
 import 'package:jet_office/src/xlsx/properties.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
 import 'package:test/test.dart';
+
+import '../support/read_xlsx.dart';
 
 String _core(XlsxProperties p) {
   final StringBuffer out = StringBuffer();
@@ -270,6 +272,15 @@ void main() {
         expect(value(1099511627776), '<vt:r8>1099511627776</vt:r8>');
       });
 
+      test('a whole double within 32 bits is vt:i4, a fraction vt:r8', () {
+        // On the web 3.0 is an int; the VM must write the same.
+        expect(value(3.0), '<vt:i4>3</vt:i4>');
+        expect(value(-2147483648.0), '<vt:i4>-2147483648</vt:i4>');
+        expect(value(-0.0), '<vt:i4>0</vt:i4>');
+        expect(value(0.5), '<vt:r8>0.5</vt:r8>');
+        expect(value(2147483647.5), '<vt:r8>2147483647.5</vt:r8>');
+      });
+
       test('a whole double outside 32 bits is vt:r8, not a throw', () {
         // On the web both are ints; they must not be refused there.
         expect(value(3e9), '<vt:r8>3000000000</vt:r8>');
@@ -293,8 +304,15 @@ void main() {
       );
     });
 
-    test('an empty custom map writes nothing to compare', () {
-      expect(const XlsxProperties().custom, isEmpty);
+    test('an empty custom map writes no custom part', () {
+      final XlsxWriter book = XlsxWriter(
+        properties: const XlsxProperties(title: 't'),
+      );
+      book.addSheet('S');
+      final Map<String, String> parts = readXlsx(book.close().bytes);
+      expect(parts.keys, isNot(contains('docProps/custom.xml')));
+      expect(parts['[Content_Types].xml'], isNot(contains('custom')));
+      expect(parts['_rels/.rels'], isNot(contains('custom')));
     });
 
     test('== and hashCode compare the map entry by entry, in order', () {

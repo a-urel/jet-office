@@ -18,13 +18,13 @@
 /// `conditional_format_x14.dart`.
 library;
 
+import '../opc/ooxml.dart';
 import '../xml/xml_escape.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
 import 'color.dart';
 import 'comparison.dart';
-import 'conditional_format_x14.dart';
 import 'differential_style.dart';
 import 'formula_text.dart';
 import 'limits.dart';
@@ -129,8 +129,9 @@ final class XlsxCellValueRule extends XlsxConditionalRule {
 
   @override
   String toString() =>
-      'XlsxCellValueRule(${comparison.name}, $formula1'
-      '${formula2 == null ? '' : ', $formula2'})';
+      'XlsxCellValueRule(comparison: ${comparison.name}, '
+      'formula1: $formula1, formula2: $formula2, style: $style, '
+      'stopIfTrue: $stopIfTrue)';
 }
 
 /// Formats a cell for which [formula] is true. XML type `expression`.
@@ -160,7 +161,9 @@ final class XlsxExpressionRule extends XlsxConditionalRule {
   int get hashCode => Object.hash(formula, style, stopIfTrue);
 
   @override
-  String toString() => 'XlsxExpressionRule($formula)';
+  String toString() =>
+      'XlsxExpressionRule(formula: $formula, style: $style, '
+      'stopIfTrue: $stopIfTrue)';
 }
 
 /// Formats the [rank] highest values of the ranges, or the lowest with
@@ -205,8 +208,8 @@ final class XlsxTopBottomRule extends XlsxConditionalRule {
 
   @override
   String toString() =>
-      'XlsxTopBottomRule(${bottom ? 'bottom' : 'top'} $rank'
-      '${percent ? '%' : ''})';
+      'XlsxTopBottomRule(rank: $rank, percent: $percent, bottom: $bottom, '
+      'style: $style, stopIfTrue: $stopIfTrue)';
 }
 
 /// Formats the values [above] the average of the ranges, or below it; with
@@ -255,9 +258,9 @@ final class XlsxAverageRule extends XlsxConditionalRule {
 
   @override
   String toString() =>
-      'XlsxAverageRule(${above ? 'above' : 'below'}'
-      '${orEqual ? ' or equal' : ''}'
-      '${standardDeviations == null ? '' : ', $standardDeviations sd'})';
+      'XlsxAverageRule(above: $above, orEqual: $orEqual, '
+      'standardDeviations: $standardDeviations, style: $style, '
+      'stopIfTrue: $stopIfTrue)';
 }
 
 /// Formats the values that occur more than once in the ranges, or with
@@ -284,7 +287,9 @@ final class XlsxDuplicateRule extends XlsxConditionalRule {
   int get hashCode => Object.hash(unique, style, stopIfTrue);
 
   @override
-  String toString() => 'XlsxDuplicateRule(${unique ? 'unique' : 'duplicate'})';
+  String toString() =>
+      'XlsxDuplicateRule(unique: $unique, style: $style, '
+      'stopIfTrue: $stopIfTrue)';
 }
 
 /// How an [XlsxTextRule] matches a cell's text. Matching ignores case.
@@ -333,7 +338,9 @@ final class XlsxTextRule extends XlsxConditionalRule {
   int get hashCode => Object.hash(operator, text, style, stopIfTrue);
 
   @override
-  String toString() => 'XlsxTextRule(${operator.name}, $text)';
+  String toString() =>
+      'XlsxTextRule(operator: ${operator.name}, text: $text, style: $style, '
+      'stopIfTrue: $stopIfTrue)';
 }
 
 /// Shades each cell by where its value lies between [points], blending
@@ -371,7 +378,9 @@ final class XlsxColorScale extends XlsxConditionalRule {
       Object.hash(Object.hashAll(points), Object.hashAll(colors), stopIfTrue);
 
   @override
-  String toString() => 'XlsxColorScale($points, $colors)';
+  String toString() =>
+      'XlsxColorScale(points: $points, colors: $colors, '
+      'stopIfTrue: $stopIfTrue)';
 }
 
 /// Draws a bar of [color] in each cell, as long as its value lies between
@@ -420,9 +429,16 @@ final class XlsxDataBar extends XlsxConditionalRule {
   final bool showValue;
 
   /// The length of the shortest bar, in percent of the cell's width.
+  ///
+  /// The Excel 2010 rule writes the default 10 as 0 and the [maxLength]
+  /// default 90 as 100, as Excel does, each on its own: `minLength: 10,
+  /// maxLength: 90` is written there as 0 and 100. Other lengths are
+  /// written as given to both rules: `minLength: 5, maxLength: 95` as 5
+  /// and 95.
   final int minLength;
 
-  /// The length of the longest bar, in percent of the cell's width.
+  /// The length of the longest bar, in percent of the cell's width; see
+  /// [minLength] for how the Excel 2010 rule writes it.
   final int maxLength;
 
   /// Whether the bar fades out to the right, rather than being solid.
@@ -434,7 +450,8 @@ final class XlsxDataBar extends XlsxConditionalRule {
   /// The border's color, or `null` for [color]; used only with [border].
   final XlsxColor? borderColor;
 
-  /// The color of a bar for a negative value, or `null` for Excel's.
+  /// The color of a bar for a negative value; `null` writes Excel's
+  /// default, red `FFFF0000`.
   final XlsxColor? negativeFillColor;
 
   /// The border color of a bar for a negative value, or `null` for the
@@ -444,7 +461,8 @@ final class XlsxDataBar extends XlsxConditionalRule {
   /// Where the axis between negative and positive bars lies.
   final XlsxDataBarAxis axis;
 
-  /// The axis's color, or `null` for Excel's.
+  /// The axis's color, written with no axis too; `null` writes Excel's
+  /// default, black `FF000000`.
   final XlsxColor? axisColor;
 
   @override
@@ -485,11 +503,12 @@ final class XlsxDataBar extends XlsxConditionalRule {
 
   @override
   String toString() =>
-      'XlsxDataBar($min, $max, $color, gradient: $gradient, '
-      'border: $border, borderColor: $borderColor, '
+      'XlsxDataBar(min: $min, max: $max, color: $color, '
+      'showValue: $showValue, minLength: $minLength, maxLength: $maxLength, '
+      'gradient: $gradient, border: $border, borderColor: $borderColor, '
       'negativeFillColor: $negativeFillColor, '
       'negativeBorderColor: $negativeBorderColor, axis: ${axis.name}, '
-      'axisColor: $axisColor)';
+      'axisColor: $axisColor, stopIfTrue: $stopIfTrue)';
 }
 
 /// Where the axis of an [XlsxDataBar] lies (`ST_DataBarAxisPosition` of
@@ -648,8 +667,8 @@ final class XlsxIconSet extends XlsxConditionalRule {
 
   @override
   String toString() =>
-      'XlsxIconSet(${type.xmlName}'
-      '${thresholds == null ? '' : ', $thresholds'})';
+      'XlsxIconSet(type: ${type.name}, thresholds: $thresholds, '
+      'reverse: $reverse, showValue: $showValue, stopIfTrue: $stopIfTrue)';
 }
 
 /// What an [XlsxCfValue] measures (`ST_CfvoType`).
@@ -1019,6 +1038,41 @@ List<XlsxCfValue> defaultIconSetThresholds(int count) => <XlsxCfValue>[
   for (int i = 0; i < count; i++)
     XlsxCfValue(XlsxCfValueType.percent, value: '${(i * 100 / count).round()}'),
 ];
+
+/// The `uri` of the `ext` of a `cfRule` that names its Excel 2010 rule.
+const String _ruleExtUri = '{B025F937-C7B1-47D3-B67F-A62EFF666E3E}';
+
+/// Whether [rule] has only an Excel 2010 rule and no Excel 2007 `cfRule`:
+/// an icon set whose type [XlsxIconSetType.isX14Only].
+bool isX14OnlyRule(XlsxConditionalRule rule) =>
+    rule is XlsxIconSet && rule.type.isX14Only;
+
+/// The id of the Excel 2010 rule of the [ruleIndex]th rule (0-based, in
+/// registration order, across all formats) of the sheet created
+/// [sheetNumber]th: `{SSSSSSSS-0000-4000-8000-RRRRRRRRRRRR}`, S the sheet
+/// number and R the rule index in uppercase hex.
+///
+/// Derived from creation order, never random, so the output is
+/// deterministic; the sheet number keeps the ids of different sheets apart.
+String x14RuleId(int sheetNumber, int ruleIndex) =>
+    '{${_hex(sheetNumber, 8)}-0000-4000-8000-${_hex(ruleIndex, 12)}}';
+
+String _hex(int value, int width) =>
+    value.toRadixString(16).toUpperCase().padLeft(width, '0');
+
+/// Writes the `extLst` of an Excel 2007 `cfRule` that names its Excel 2010
+/// rule [id].
+void writeX14RuleReference(XmlWriter w, String id) {
+  w.start('extLst');
+  w.start('ext');
+  w.attribute('uri', _ruleExtUri);
+  w.attribute('xmlns:x14', Ns.x14);
+  w.start('x14:id');
+  w.text(id);
+  w.end();
+  w.end();
+  w.end();
+}
 
 /// Writes one `conditionalFormatting` element per format of [formats],
 /// which the writer has checked, in the order registered.

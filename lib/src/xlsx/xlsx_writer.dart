@@ -12,8 +12,13 @@
 /// gaining `Sheet1`, and data problems are returned as warnings. The
 /// workbook gets the hidden `_xlnm._FilterDatabase` name of each sheet's
 /// auto filter, which Quds did not write, and the defined names, print areas
-/// and print titles (see `workbook_parts.dart`). Charts and pictures are not
-/// ported yet.
+/// and print titles (see `workbook_parts.dart`); its `[Content_Types].xml`
+/// lists the content types the sheets registered in the shared
+/// `WorkbookContext`. Pictures are written by their sheets (see
+/// `drawing.dart`), which share the workbook's media numbering through the
+/// context, and so are tables (see `table.dart`), which share the table ids
+/// and, with the defined names, one namespace of names; charts are not
+/// ported.
 library;
 
 import 'dart:typed_data';
@@ -155,12 +160,16 @@ sealed class XlsxWriterBase {
   /// defined on a sheet, where it hides this one.
   ///
   /// Throws [ArgumentError] for an invalid name, comment or formula (see
-  /// [XlsxDefinedName]) or a name already defined in the workbook scope,
-  /// ignoring case; the earlier names stay then. Throws [StateError] after
+  /// [XlsxDefinedName]), a name already defined in the workbook scope or
+  /// the name of a table (see `XlsxSheetWriter.table`), ignoring case; the
+  /// earlier names stay then. Throws [StateError] after
   /// `close()` or after a failure.
   void defineName(XlsxDefinedName name) {
     _checkOpen();
-    _names.add(checkDefinedName(name, _names));
+    final XlsxDefinedName checked = checkDefinedName(name, _names);
+    _context.checkNotTableName(name.name, 'name');
+    _names.add(checked);
+    _context.reserveDefinedName(name.name);
   }
 
   /// Protects the workbook, replacing an earlier call: [protection] says
@@ -274,7 +283,13 @@ sealed class XlsxWriterBase {
       ..add(
         '[Content_Types].xml',
         _render(
-          (XmlWriter w) => writeContentTypes(w, sheetCount, custom: custom),
+          (XmlWriter w) => writeContentTypes(
+            w,
+            sheetCount,
+            custom: custom,
+            defaults: _context.contentTypes.defaults,
+            overrides: _context.contentTypes.overrides,
+          ),
         ),
       );
     return zip.close();

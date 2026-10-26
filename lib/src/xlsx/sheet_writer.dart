@@ -21,7 +21,22 @@
 /// whose rules take the sheet's next priorities.
 /// A hyperlink is a cell value: the row checks it before its cell is
 /// encoded, and the finished sheet writes its `hyperlinks` and, for the
-/// external ones, a relationships part with one relationship per address.
+/// external ones, a relationships part with one relationship per address,
+/// whose ids `SheetRelationships` assigns.
+/// Notes are trailer settings too, checked when added and held until the
+/// sheet finishes, which writes them sorted by cell as a comments part and
+/// a VML drawing (see `note.dart`) with the VML id blocks the workbook
+/// hands out, after the worksheet and its relationships.
+/// Pictures are trailer settings too, checked when added and held, bytes
+/// included, until the sheet finishes, which writes them as a drawing part
+/// with its relationships (see `drawing.dart`) and each media part no
+/// earlier sheet wrote, numbered by the workbook, before the notes.
+/// Tables are trailer settings too, checked when added (see `table.dart`),
+/// except that a table with a header row must come before that row: the
+/// sheet fills in its header and totals cells as those rows are written,
+/// writes the rows the sheet never reached when it finishes, and then
+/// writes one table part per table, numbered across the workbook, after
+/// the notes.
 /// The sheet reaches the workbook's encoder, styles and ZIP through a
 /// [WorkbookContext].
 library;
@@ -29,6 +44,7 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../opc/ooxml.dart';
 import '../xml/utf8_buffer.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
@@ -39,23 +55,27 @@ import 'column.dart';
 import 'conditional_format.dart';
 import 'data_validation.dart';
 import 'defined_name.dart';
+import 'drawing.dart';
 import 'header_footer.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
+import 'note.dart';
 import 'page_setup.dart';
 import 'range.dart';
+import 'rich_text.dart';
 import 'sheet_protection.dart';
 import 'sheet_view.dart';
 import 'style.dart';
+import 'table.dart';
 import 'values.dart';
+import 'warnings.dart';
 import 'workbook_context.dart';
 import 'workbook_parts.dart';
 import 'worksheet_parts.dart';
-import 'xlsx_writer.dart';
 
 /// Writes the rows of one worksheet.
 ///
-/// Obtained from [XlsxWriterBase.addSheet], the only way to get one: the
+/// Obtained from `XlsxWriterBase.addSheet`, the only way to get one: the
 /// class cannot be implemented or extended outside this package. A sheet
 /// accepts rows until the next `addSheet` or `close()` finishes it.
 ///
@@ -66,7 +86,7 @@ import 'xlsx_writer.dart';
 /// what the earlier call set.
 abstract final class XlsxSheetWriter {
   /// The sheet's name in the file, after any renaming (see
-  /// [XlsxWriterBase.addSheet]).
+  /// `XlsxWriterBase.addSheet`).
   String get name;
 
   /// The number of rows written so far, blank rows included. The next row
@@ -88,10 +108,11 @@ abstract final class XlsxSheetWriter {
   /// [XlsxLimits.maxColumns] entries; [ArgumentError] for a width outside 0
   /// to [XlsxLimits.maxColumnWidth], an outline level outside 0 to
   /// [XlsxLimits.maxOutlineLevel], or an invalid style (as [row] describes;
-  /// named `columns[i].style`, with the value and message of the style field
-  /// at fault); and `XlsxLimitError('cell formats', ...)` like [row]. When
-  /// it throws, nothing is recorded: the earlier columns, if any, stay in
-  /// force and no style is registered.
+  /// named `columns[i].style.<field>`, such as `columns[2].style.numFmt`,
+  /// with the value, message and stack of the style check that failed); and
+  /// `XlsxLimitError('cell formats', ...)` like [row]. When it throws,
+  /// nothing is recorded: the earlier columns, if any, stay in force and no
+  /// style is registered.
   void columns(List<XlsxColumn?> columns);
 
   /// Sets the sheet's default row height in points and default column width
@@ -104,7 +125,7 @@ abstract final class XlsxSheetWriter {
   void defaultSizes({double? rowHeight, double? columnWidth});
 
   /// Whether the sheet is shown as a tab; set by
-  /// [XlsxWriterBase.addSheet].
+  /// `XlsxWriterBase.addSheet`.
   XlsxSheetVisibility get visibility;
 
   /// Sets how the sheet is shown: zoom, gridlines, headings, right-to-left
@@ -158,8 +179,9 @@ abstract final class XlsxSheetWriter {
   ///
   /// Throws [StateError] when the sheet is finished or the writer has failed;
   /// [ArgumentError] when [range] is a single cell, lies outside the sheet,
-  /// has its first corner after its last, or overlaps an earlier merge (the
-  /// message names both ranges). When it throws, nothing is recorded.
+  /// has its first corner after its last, or overlaps an earlier merge or a
+  /// table (the message names both ranges). When it throws, nothing is
+  /// recorded.
   void merge(XlsxRange range);
 
   /// Puts an auto filter, the drop-down buttons of a header row, on [range],
@@ -170,8 +192,9 @@ abstract final class XlsxSheetWriter {
   /// [range] is accepted.
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] when [range] lies
-  /// outside the sheet or has its first corner after its last; the earlier
-  /// filter, if any, stays in force then.
+  /// outside the sheet, has its first corner after its last or overlaps a
+  /// table, which has its own filter; the earlier filter, if any, stays in
+  /// force then.
   void autoFilter(XlsxRange range);
 
   /// Defines [name] for this sheet only: it hides a workbook name of the
@@ -183,8 +206,9 @@ abstract final class XlsxSheetWriter {
   /// it.
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] for an invalid
-  /// name, comment or formula (see [XlsxDefinedName]) or a name this sheet
-  /// already has, ignoring case; the earlier names stay then.
+  /// name, comment or formula (see [XlsxDefinedName]), a name this sheet
+  /// already has or the name of a table (see [table]), ignoring case; the
+  /// earlier names stay then.
   void defineName(XlsxDefinedName name);
 
   /// Sets the cells printed, replacing an earlier call: each of [ranges]
@@ -265,7 +289,8 @@ abstract final class XlsxSheetWriter {
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] naming the field
   /// (`oddHeader`, `oddFooter`, `evenHeader`, `evenFooter`, `firstHeader` or
-  /// `firstFooter`) when a text is longer than 255 characters, holds a
+  /// `firstFooter`) when a text is longer than
+  /// [XlsxLimits.maxHeaderFooterLength] (255) UTF-16 code units, holds a
   /// character XML forbids or ends in a lone `&` (see [XlsxHeaderFooter]);
   /// the earlier setting stays then.
   void headerFooter(XlsxHeaderFooter headerFooter);
@@ -282,19 +307,113 @@ abstract final class XlsxSheetWriter {
   /// protection stays then.
   void protect(XlsxSheetProtection protection);
 
+  /// Puts [note] on the zero-based cell ([row], [column]): a yellow box
+  /// Excel shows when the cell is hovered, or all the time for a visible
+  /// note.
+  ///
+  /// A trailer setting like [merge]; the cell need not hold a value. The
+  /// notes are written sorted by row, then column, whatever order they
+  /// were added in, and their authors in the order those notes use them
+  /// first. A note's box takes about two columns right of the cell and
+  /// four rows, moved left or up at the sheet's last column or row.
+  ///
+  /// The text is data: characters XML forbids are removed and text past
+  /// [XlsxLimits.maxCellTextLength] UTF-16 code units is cut, with the
+  /// warnings `invalidCharactersRemoved` and `textTruncated` at the note's
+  /// cell, as for cell text. Its runs' fonts are written as given.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] when [row] or
+  /// [column] lies outside the sheet (named `row` or `column`), the cell
+  /// already has a note (the message names the cell), the author holds a
+  /// character XML forbids or is longer than
+  /// [XlsxLimits.maxNoteAuthorLength] UTF-16 code units (named `author`),
+  /// the text has no runs (named `runs`) or a run's font is invalid (named
+  /// `runs[i].font.<field>`). When it throws, nothing is recorded: no note
+  /// and no warning.
+  void note(int row, int column, XlsxNote note);
+
+  /// Puts [picture] on the sheet: a PNG or JPEG at a one-cell or two-cell
+  /// anchor (see [XlsxOneCellAnchor] and [XlsxTwoCellAnchor]).
+  ///
+  /// A trailer setting like [merge]. Pictures are written in the order
+  /// added, the later ones in front; a picture without a name is named
+  /// `Picture {k}`, k being its 1-based position among the sheet's
+  /// pictures. Sizes and offsets are in pixels at 96 dpi, 9,525 EMU each,
+  /// rounded to a whole EMU; a one-cell picture without a size takes the
+  /// image's, and with one size the other follows the image's aspect
+  /// ratio. The image's bytes are held, not copied, until the sheet
+  /// finishes. Every picture of the workbook whose image holds the same
+  /// `Uint8List` shows one media part, written once; equal bytes in
+  /// another list are written again. Media parts are numbered across the
+  /// workbook in the order sheets finish and, within a sheet, in the order
+  /// its pictures were added.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError], whose message
+  /// names the picture and the sheet: named `image` when the bytes are not
+  /// a PNG or a JPEG whose size can be read (GIF, WebP, cut short, a PNG
+  /// whose first chunk is not `IHDR`, a JPEG without a frame header or
+  /// whose frame header is short or not SOF0, SOF1 or SOF2, a width or
+  /// height of 0); `from` or `to` when an anchor point's cell
+  /// lies outside the sheet, as the `to` of [XlsxTwoCellAnchor.range] does
+  /// for a range on the last row or column; `from.offsetX` and the like
+  /// for an offset that is negative, NaN, infinite or above
+  /// 27,273,042,316,900 EMU; `width` or `height` for a size that is not a
+  /// finite number above 0 or that, once rounded to EMU, is 0 or above
+  /// 2,147,483,647 EMU (about 225,457 pixels); `to` when a
+  /// two-cell `to` is not right of and below its `from`; and `name` or
+  /// `description` for text with a character XML forbids. When it throws,
+  /// nothing is recorded: no picture, no position among the sheet's
+  /// pictures and no media number.
+  void picture(XlsxPicture picture);
+
+  /// Adds [table], an Excel table over its range: a header row of column
+  /// names, filter buttons, banded rows and an optional totals row.
+  ///
+  /// A trailer setting like [merge], with one exception (Decision 1 of the
+  /// M4 plan): a table with a header row must be added before that row is
+  /// written, because the sheet checks and fills in its header cells as the
+  /// row goes by. Tables are numbered across the workbook in the order
+  /// added, and each is written as its own part when the sheet finishes.
+  ///
+  /// In the header row, a `null` cell of the table (or one a shorter row
+  /// leaves out) becomes the column name, written with the row's style; a
+  /// `String` or an [XlsxCell] holding the column name is written as given;
+  /// [row] throws [ArgumentError] named `values[i]` for any other value,
+  /// before anything of the row is written, and the row does not count.
+  /// [blankRow] at the header row writes the names. In the totals row, a
+  /// `null` cell of the table becomes the column's label, a `SUBTOTAL` of
+  /// its function over the column's data rows (`SUBTOTAL(109,B2:B4)`), or
+  /// its custom formula; a given value is written as given, and [blankRow]
+  /// fills the row in. In both rows, `XlsxCell(null, style: s)` is filled
+  /// in like `null` and written in `s`; for none it stays a styled empty
+  /// cell. A header or totals row the sheet has not reached when it
+  /// finishes is written then, in row order, after the last row.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] naming the field
+  /// when [table] is invalid (see [XlsxTable] and [XlsxTableColumn]): its
+  /// `name` is malformed or already names a table or a defined name of any
+  /// scope, ignoring case; its `range` lies outside the sheet, has too few
+  /// rows, overlaps another table of the sheet, its auto filter or a
+  /// merged range, or starts at a header row already written; and the
+  /// fields `columns`, `columns[i].name`, `columns[i].totalsLabel`,
+  /// `columns[i].totalsFormula` and `style` as `XlsxTable` describes. When
+  /// it throws, nothing is recorded: no table, table id or name.
+  void table(XlsxTable table);
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
   /// [DateTime], [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxHyperlink],
-  /// or an [XlsxCell] wrapping one of those with its own style. [style]
-  /// applies to every cell of the row. The effective style of a cell is its
-  /// column's style (see [columns]), with [style] merged over it and the
-  /// cell's own style over that, field by field: a field a higher layer
-  /// sets wins, one it leaves `null` is inherited. Pass the same style
-  /// object on every row that shares a style, a `const` or one built once
-  /// before the loop: the encoder caches the merged style per column by the
-  /// identity of its layers, and a style built afresh for each row misses
-  /// that cache.
+  /// [XlsxRichText], or an [XlsxCell] wrapping one of those with its own
+  /// style. [style] applies to every cell of the row. The effective style
+  /// of a cell is its column's style (see [columns]), with [style] merged
+  /// over it and the cell's own style over that, field by field: a field a
+  /// higher layer sets wins, one it leaves `null` is inherited. A rich text
+  /// run's font is merged over the effective font of its cell in the same
+  /// way. Pass the same style object on every row that shares a style, a
+  /// `const` or one built once before the loop: the encoder caches the
+  /// merged style per column by the identity of its layers, and a style
+  /// built afresh for each row misses that cache.
   ///
   /// `XlsxCell(null, style: s)` with a non-null `s` writes an empty cell
   /// that carries the effective style, for example a border across a
@@ -321,13 +440,15 @@ abstract final class XlsxSheetWriter {
   /// one can happen in the middle of a row. Further, it throws [StateError]
   /// when the sheet is finished or the writer has failed, and
   /// [ArgumentError] for a value the writer cannot store, an invalid
-  /// [XlsxHyperlink] (see there) or an invalid style (a built-in number
-  /// format id outside `0..163`, or an empty custom format code or one with
-  /// characters XML forbids), and `XlsxLimitError('hyperlinks', ...)` for a
-  /// sheet's 65,531st link. After an [ArgumentError], a cell-format
-  /// [XlsxLimitError] or a hyperlinks [XlsxLimitError] in the middle of a
-  /// row, the cells before the failing one are kept, the row keeps its
-  /// attributes and still counts.
+  /// [XlsxHyperlink] (see there), an [XlsxRichText] without runs (named
+  /// `runs`) or with a run font that is invalid once merged over its cell's
+  /// font (named `runs[i].font.<field>`), or an invalid style (a built-in
+  /// number format id outside `0..163`, or an empty custom format code or
+  /// one with characters XML forbids), and
+  /// `XlsxLimitError('hyperlinks', ...)` for a sheet's 65,531st link. After
+  /// an [ArgumentError], a cell-format [XlsxLimitError] or a hyperlinks
+  /// [XlsxLimitError] in the middle of a row, the cells before the failing
+  /// one are kept, the row keeps its attributes and still counts.
   void row(
     List<Object?> values, {
     XlsxStyle? style,
@@ -348,7 +469,7 @@ abstract final class XlsxSheetWriter {
   });
 }
 
-/// The sheet writer of [XlsxWriterBase]: one worksheet part being written.
+/// The sheet writer of `XlsxWriterBase`: one worksheet part being written.
 ///
 /// Rows are encoded into a body buffer as they arrive. The header, which
 /// depends on settings and on the deepest row outline level, is rendered
@@ -416,15 +537,30 @@ final class WorksheetWriter implements XlsxSheetWriter {
   /// The hyperlinks written so far, with the reference of their cell.
   final List<(String, XlsxHyperlink)> _links = <(String, XlsxHyperlink)>[];
 
+  /// The notes, keyed by `row * XlsxLimits.maxColumns + column`, so the
+  /// keys sort by row, then column.
+  final Map<int, WorksheetNote> _notes = <int, WorksheetNote>{};
+
+  /// The pictures, checked, in the order added.
+  final List<WorksheetPicture> _pictures = <WorksheetPicture>[];
+
+  /// The tables, checked, with their workbook-wide ids, in the order added.
+  final List<({int id, XlsxTable table})> _tables =
+      <({int id, XlsxTable table})>[];
+
   /// The range of the auto filter, if [autoFilter] set one.
   XlsxRange? get autoFilterRange => _autoFilter;
 
-  /// Whether the sheet still holds what its part is rendered from beyond
+  /// Whether the sheet still holds what its parts are rendered from beyond
   /// what `close()` needs: links, merges, validations, conditional formats,
-  /// columns, view and page settings. False once [finish] has run; tests
-  /// use it to confirm a finished sheet lets that data go.
+  /// notes, pictures (their image bytes included), tables, columns, view and
+  /// page settings. False once [finish] has run; tests use it to confirm a
+  /// finished sheet lets that data go.
   bool get holdsTrailerData =>
       _links.isNotEmpty ||
+      _notes.isNotEmpty ||
+      _pictures.isNotEmpty ||
+      _tables.isNotEmpty ||
       _merges.isNotEmpty ||
       _validations.isNotEmpty ||
       _conditionalFormats.isNotEmpty ||
@@ -551,6 +687,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
         );
       }
     }
+    _checkNoTableOverlap(range);
     _merges.add(range);
   }
 
@@ -558,13 +695,32 @@ final class WorksheetWriter implements XlsxSheetWriter {
   void autoFilter(XlsxRange range) {
     _checkOpenSheet();
     validateRange(range, 'range');
+    _checkNoTableOverlap(range);
     _autoFilter = range;
   }
 
   @override
   void defineName(XlsxDefinedName name) {
     _checkOpenSheet();
-    _names.add(checkDefinedName(name, _names));
+    final XlsxDefinedName checked = checkDefinedName(name, _names);
+    context.checkNotTableName(name.name, 'name');
+    _names.add(checked);
+    context.reserveDefinedName(name.name);
+  }
+
+  /// Throws [ArgumentError] named `range` when [range] overlaps a table of
+  /// the sheet.
+  void _checkNoTableOverlap(XlsxRange range) {
+    for (final ({int id, XlsxTable table}) t in _tables) {
+      if (t.table.range.overlaps(range)) {
+        throw ArgumentError.value(
+          range,
+          'range',
+          'The range ${range.ref} overlaps the table "${t.table.name}" over '
+              '${t.table.range.ref}.',
+        );
+      }
+    }
   }
 
   @override
@@ -627,6 +783,100 @@ final class WorksheetWriter implements XlsxSheetWriter {
   }
 
   @override
+  void note(int row, int column, XlsxNote note) {
+    _checkOpenSheet();
+    checkNote(name, row, column, note);
+    final int key = row * XlsxLimits.maxColumns + column;
+    final String ref = cellRef(row, column);
+    if (_notes.containsKey(key)) {
+      throw ArgumentError.value(
+        note,
+        'note',
+        'Cell $ref on sheet "$name" already has a note; a cell takes one.',
+      );
+    }
+    final ({XlsxRichText text, int removed, bool truncated}) clean =
+        cleanRichText(note.text);
+    // Only after every check: a note that throws leaves no warning.
+    if (clean.removed > 0) {
+      context.warnings.add(
+        XlsxWarningCode.invalidCharactersRemoved,
+        sheet: name,
+        cell: ref,
+      );
+    }
+    if (clean.truncated) {
+      context.warnings.add(
+        XlsxWarningCode.textTruncated,
+        sheet: name,
+        cell: ref,
+      );
+    }
+    _notes[key] = (
+      row: row,
+      column: column,
+      text: clean.text,
+      author: note.author,
+      visible: note.visible,
+    );
+  }
+
+  @override
+  void picture(XlsxPicture picture) {
+    _checkOpenSheet();
+    _pictures.add(checkPicture(name, _pictures.length + 1, picture));
+  }
+
+  @override
+  void table(XlsxTable table) {
+    _checkOpenSheet();
+    checkTable(table);
+    context.checkNameFree(table.name, 'name');
+    final XlsxRange range = table.range;
+    for (final ({int id, XlsxTable table}) t in _tables) {
+      if (t.table.range.overlaps(range)) {
+        throw ArgumentError.value(
+          range,
+          'range',
+          'The table "${table.name}" over ${range.ref} overlaps the table '
+              '"${t.table.name}" over ${t.table.range.ref}.',
+        );
+      }
+    }
+    final XlsxRange? filter = _autoFilter;
+    if (filter != null && filter.overlaps(range)) {
+      throw ArgumentError.value(
+        range,
+        'range',
+        'The table "${table.name}" over ${range.ref} overlaps the auto filter '
+            '${filter.ref}; a table has its own.',
+      );
+    }
+    for (final XlsxRange merge in _merges) {
+      if (merge.overlaps(range)) {
+        throw ArgumentError.value(
+          range,
+          'range',
+          'The table "${table.name}" over ${range.ref} overlaps the merged '
+              'range ${merge.ref}.',
+        );
+      }
+    }
+    if (table.headerRow && range.firstRow < _rowCount) {
+      throw ArgumentError.value(
+        range,
+        'range',
+        'The header row ${range.firstRow + 1} of the table "${table.name}" on '
+            'sheet "$name" is already written; add a table with a header row '
+            'before that row.',
+      );
+    }
+    // Only after every check: a table that throws takes no id or name.
+    context.reserveTableName(table.name);
+    _tables.add((id: context.takeTableId(), table: table));
+  }
+
+  @override
   void printArea(List<XlsxRange> ranges) {
     _checkOpenSheet();
     if (ranges.isEmpty) {
@@ -683,6 +933,8 @@ final class WorksheetWriter implements XlsxSheetWriter {
       throw XlsxLimitError('columns', XlsxLimits.maxColumns);
     }
     _checkRowAttributes(height, outlineLevel);
+    // Before the row counts: a header cell that throws leaves nothing.
+    final List<Object?> cells = _withTableCells(values, _rowCount);
     final int row = _rowCount;
     _rowCount++;
     bool opened = false;
@@ -700,8 +952,8 @@ final class WorksheetWriter implements XlsxSheetWriter {
     }
 
     try {
-      for (int column = 0; column < values.length; column++) {
-        final Object? value = values[column];
+      for (int column = 0; column < cells.length; column++) {
+        final Object? value = cells[column];
         if (value == null) continue;
         final XlsxHyperlink? link = _linkOf(value);
         // Before the cell: a bad link, or the one past the limit, leaves
@@ -726,6 +978,33 @@ final class WorksheetWriter implements XlsxSheetWriter {
     }
   }
 
+  /// [values] with the header and totals cells of the tables whose header
+  /// or totals row is the zero-based [row] filled in (see [table]); [values]
+  /// itself when no table has a row there.
+  List<Object?> _withTableCells(List<Object?> values, int row) {
+    List<Object?>? cells;
+    for (final ({int id, XlsxTable table}) t in _tables) {
+      final XlsxTable table = t.table;
+      final bool header = isTableHeaderRow(table, row);
+      if (!header && !isTableTotalsRow(table, row)) continue;
+      final List<Object?> out = cells ??= List<Object?>.of(values);
+      final XlsxRange range = table.range;
+      if (out.length <= range.lastColumn) out.length = range.lastColumn + 1;
+      for (int c = range.firstColumn; c <= range.lastColumn; c++) {
+        out[c] = header
+            ? tableHeaderCell(table, c, out[c])
+            : tableTotalsCell(table, c, out[c]);
+      }
+    }
+    return cells ?? values;
+  }
+
+  /// Whether the zero-based [row] is the header or totals row of a table.
+  bool _isTableRow(int row) => _tables.any(
+    (({int id, XlsxTable table}) t) =>
+        isTableHeaderRow(t.table, row) || isTableTotalsRow(t.table, row),
+  );
+
   /// The hyperlink [value] is or wraps, or `null`.
   static XlsxHyperlink? _linkOf(Object value) {
     final Object? inner = value is XlsxCell ? value.value : value;
@@ -749,6 +1028,17 @@ final class WorksheetWriter implements XlsxSheetWriter {
   }) {
     final XmlWriter xml = _checkWritable();
     _checkRowAttributes(height, outlineLevel);
+    if (_isTableRow(_rowCount)) {
+      // A table's header or totals row is filled in (ruling R12).
+      this.row(
+        const <Object?>[],
+        height: height,
+        hidden: hidden,
+        outlineLevel: outlineLevel,
+        collapsed: collapsed,
+      );
+      return;
+    }
     final int row = _rowCount;
     _rowCount++;
     if (height != null || hidden || outlineLevel != 0 || collapsed) {
@@ -823,26 +1113,55 @@ final class WorksheetWriter implements XlsxSheetWriter {
   /// the ZIP, keeping no bytes. `ZipWriter.addChunks` copies the chunks
   /// once into one buffer for the encoder; nothing here joins them.
   ///
-  /// The sheet is detached first, so it is finished even when the ZIP
-  /// throws and never takes a row after `</worksheet>`. Then, even on a
-  /// throw, it drops what the part was rendered from and keeps only what
-  /// `close()` needs: the name, number and visibility, the filter range and
-  /// the defined names (sheet names, print area and titles).
+  /// First the header and totals rows of tables that the sheet has not
+  /// reached are written, in row order. Then the sheet is detached, so it
+  /// is finished even when the ZIP throws and never takes a row after
+  /// `</worksheet>`. Then, even on a throw, it drops what the part was
+  /// rendered from and keeps only what `close()` needs: the name, number
+  /// and visibility, the filter range and the defined names (sheet names,
+  /// print area and titles).
   void finish() {
     final Utf8Buffer body = _body!;
-    _xml = null;
-    _body = null;
     try {
+      _writePendingTableRows();
+      _xml = null;
+      _body = null;
       _writePart(body);
     } finally {
+      // Detached on a throw too, so a failed sheet never takes a row.
+      _xml = null;
+      _body = null;
       _dropTrailerData();
     }
   }
 
+  /// Writes the header and totals rows of the tables that lie past the last
+  /// row written, in row order; the rows between them stay blank.
+  void _writePendingTableRows() {
+    final List<int> rows = <int>{
+      for (final ({int id, XlsxTable table}) t in _tables) ...<int>[
+        if (t.table.headerRow && t.table.range.firstRow >= _rowCount)
+          t.table.range.firstRow,
+        if (t.table.totalsRow && t.table.range.lastRow >= _rowCount)
+          t.table.range.lastRow,
+      ],
+    }.toList()..sort();
+    for (final int index in rows) {
+      // The rows skipped are blank rows without attributes: they count but
+      // write nothing.
+      _rowCount = index;
+      row(const <Object?>[]);
+    }
+  }
+
   /// Empties everything [holdsTrailerData] reports, so a finished sheet no
-  /// longer keeps its links (up to 65,530) and its other trailer data.
+  /// longer keeps its links (up to 65,530), its pictures' bytes and its
+  /// other trailer data.
   void _dropTrailerData() {
     _links.clear();
+    _notes.clear();
+    _pictures.clear();
+    _tables.clear();
     _merges.clear();
     _validations.clear();
     _conditionalFormats.clear();
@@ -856,25 +1175,37 @@ final class WorksheetWriter implements XlsxSheetWriter {
   }
 
   /// Renders the header, the trailer and the relationships part from the
-  /// settings and hands them with [body]'s chunks to the ZIP.
+  /// settings and hands them with [body]'s chunks to the ZIP, then the
+  /// drawing of the pictures with its relationships and new media, the
+  /// comments part and the VML drawing of the notes, and the table parts in
+  /// id order, if any, whose content types it registers.
   void _writePart(Utf8Buffer body) {
-    // One relationship per distinct address, numbered in first-use order:
-    // the one place ids are assigned. The links and the relationships part
-    // both take them from this map.
-    final Map<String, String> ids = <String, String>{};
-    final List<WorksheetHyperlink> links = <WorksheetHyperlink>[];
-    for (final (String ref, XlsxHyperlink link) in _links) {
-      final String? address = link.address;
-      links.add((
-        ref: ref,
-        relationshipId: address == null
-            ? null
-            : ids.putIfAbsent(address, () => 'rId${ids.length + 1}'),
-        location: link.location,
-        tooltip: link.tooltip,
-        display: CellEncoder.truncateCellText(link.text),
-      ));
-    }
+    final List<WorksheetNote> notes = <WorksheetNote>[
+      for (final int key in _notes.keys.toList()..sort()) _notes[key]!,
+    ];
+    // One relationship per distinct address, in first-use order. The links
+    // and the relationships part both take their ids from [rels].
+    final SheetRelationships rels = SheetRelationships(
+      sheetNumber: number,
+      hyperlinkTargets: <String>{
+        for (final (String _, XlsxHyperlink link) in _links) ?link.address,
+      },
+      drawing: _pictures.isNotEmpty,
+      notes: notes.isNotEmpty,
+      tableIds: <int>[
+        for (final ({int id, XlsxTable table}) t in _tables) t.id,
+      ],
+    );
+    final List<WorksheetHyperlink> links = <WorksheetHyperlink>[
+      for (final (String ref, XlsxHyperlink link) in _links)
+        (
+          ref: ref,
+          relationshipId: rels.hyperlinkIds[link.address],
+          location: link.location,
+          tooltip: link.tooltip,
+          display: CellEncoder.truncateCellText(link.text),
+        ),
+    ];
     final WorksheetSettings settings = WorksheetSettings(
       sheetNumber: number,
       columns: _columns,
@@ -893,17 +1224,95 @@ final class WorksheetWriter implements XlsxSheetWriter {
       pageSetup: _pageSetup,
       headerFooter: _headerFooter,
       protection: _protection,
+      drawingId: rels.drawingId,
+      legacyDrawingId: rels.vmlDrawingId,
+      tablePartIds: rels.tableRelationshipIds,
     );
     context.zip.addChunks(worksheetPartName(number), <Uint8List>[
       utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),
       ...body.takeChunks(),
       utf8.encode(worksheetTrailer(settings, hasRows: _wroteRow)),
     ]);
-    final String? rels = worksheetRelationshipsXml(ids);
-    if (rels != null) {
+    final String? relsXml = rels.toXml();
+    if (relsXml != null) {
       context.zip.addChunks(worksheetRelsPartName(number), <Uint8List>[
-        utf8.encode(rels),
+        utf8.encode(relsXml),
       ]);
     }
+    if (_pictures.isNotEmpty) _writeDrawing(_pictures);
+    if (notes.isNotEmpty) _writeNotes(notes);
+    for (final ({int id, XlsxTable table}) t in _tables) {
+      final StringBuffer table = StringBuffer();
+      writeTable(XmlWriter(table), t.id, t.table);
+      context.zip.addChunks(tablePartName(t.id), <Uint8List>[
+        utf8.encode(table.toString()),
+      ]);
+      context.contentTypes.addOverride(
+        '/${tablePartName(t.id)}',
+        ContentType.table,
+      );
+    }
+  }
+
+  /// Hands the drawing of [pictures], its relationships part and each
+  /// media part new to the workbook to the ZIP, in that order, and
+  /// registers their content types: an override for the drawing and a
+  /// default for each image extension used. The media numbers are taken
+  /// here, in picture order, so they follow the order sheets finish in;
+  /// a picture that threw when added took none.
+  void _writeDrawing(List<WorksheetPicture> pictures) {
+    // Each distinct media part of the sheet gets one relationship id, in
+    // first-use order; the pictures refer to the parts by these ids.
+    final Map<String, String> mediaIds = <String, String>{};
+    final List<String> embedIds = <String>[];
+    final List<(String, Uint8List)> newMedia = <(String, Uint8List)>[];
+    for (final WorksheetPicture picture in pictures) {
+      final (String part, bool isNew) = context.mediaPartFor(picture.image);
+      if (isNew) newMedia.add((part, picture.image.bytes));
+      embedIds.add(
+        mediaIds.putIfAbsent(part, () => 'rId${mediaIds.length + 1}'),
+      );
+      context.contentTypes.addDefault(
+        picture.format.extension,
+        picture.format.contentType,
+      );
+    }
+    final StringBuffer drawing = StringBuffer();
+    writeDrawing(XmlWriter(drawing), pictures, embedIds);
+    context.zip.addChunks(drawingPartName(number), <Uint8List>[
+      utf8.encode(drawing.toString()),
+    ]);
+    final StringBuffer rels = StringBuffer();
+    writeDrawingRelationships(XmlWriter(rels), mediaIds);
+    context.zip.addChunks(drawingRelsPartName(number), <Uint8List>[
+      utf8.encode(rels.toString()),
+    ]);
+    for (final (String part, Uint8List bytes) in newMedia) {
+      context.zip.add(part, bytes);
+    }
+    context.contentTypes.addOverride(
+      '/${drawingPartName(number)}',
+      ContentType.drawing,
+    );
+  }
+
+  /// Hands the comments part and the VML drawing of [notes] to the ZIP and
+  /// registers their content types. The VML id blocks are taken here, so
+  /// they follow the order sheets finish in.
+  void _writeNotes(List<WorksheetNote> notes) {
+    final int firstBlock = context.takeVmlBlocks(vmlBlockCount(notes.length));
+    final StringBuffer comments = StringBuffer();
+    writeComments(XmlWriter(comments), notes);
+    context.zip.addChunks(commentsPartName(number), <Uint8List>[
+      utf8.encode(comments.toString()),
+    ]);
+    final StringBuffer vml = StringBuffer();
+    writeVmlDrawing(XmlWriter(vml), notes, firstBlock);
+    context.zip.addChunks(vmlDrawingPartName(number), <Uint8List>[
+      utf8.encode(vml.toString()),
+    ]);
+    context.contentTypes
+      ..addDefault('vml', ContentType.vmlDrawing)
+      ..addOverride('/${commentsPartName(number)}', ContentType.comments);
   }
 }

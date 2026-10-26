@@ -108,12 +108,87 @@ void main() {
           'id="{00000001-0000-4000-8000-000000000000}">'
           '<x14:dataBar minLength="0" maxLength="100">'
           '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>'
+          '<x14:negativeFillColor rgb="FFFF0000"/>'
+          '<x14:axisColor rgb="FF000000"/>'
           '</x14:dataBar></x14:cfRule>',
           range: 'B2:B20',
         ),
       );
       expect(xml, endsWith('</extLst></worksheet>'));
     });
+    test('without colors, Excel\'s default negative fill and axis are '
+        'written in CT_DataBar order', () {
+      // The M3 Excel check: Excel for Mac showed both colors of a rule that
+      // stores neither as white, and drew no negative fill and no axis.
+      final String xml = _sheet(
+        (XlsxSheetWriter s) => _add(s, <XlsxConditionalRule>[
+          XlsxDataBar(
+            color: _blue,
+            border: true,
+            borderColor: XlsxColor.hex('203864'),
+            negativeBorderColor: XlsxColor.hex('C00000'),
+          ),
+        ]),
+      );
+      expect(
+        _extLst(xml),
+        contains(
+          '<x14:dataBar minLength="0" maxLength="100" border="1" '
+          'negativeBarBorderColorSameAsPositive="0">'
+          '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>'
+          '<x14:borderColor rgb="FF203864"/>'
+          '<x14:negativeFillColor rgb="FFFF0000"/>'
+          '<x14:negativeBorderColor rgb="FFC00000"/>'
+          '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
+        ),
+      );
+      // The schema default of negativeBarColorSameAsPositive is false, so
+      // the negative fill applies without it.
+      expect(xml, isNot(contains('negativeBarColorSameAsPositive')));
+    });
+    test(
+      'a rule\'s own negative fill and axis colors replace the defaults',
+      () {
+        String colors(XlsxDataBar bar) {
+          final String xml = _sheet(
+            (XlsxSheetWriter s) => _add(s, <XlsxConditionalRule>[bar]),
+          );
+          return RegExp(
+            '<x14:dataBar [^>]*>.*</x14:dataBar>',
+          ).firstMatch(xml)!.group(0)!;
+        }
+
+        const String head =
+            '<x14:dataBar minLength="0" maxLength="100">'
+            '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>';
+        expect(
+          colors(
+            XlsxDataBar(
+              color: _blue,
+              negativeFillColor: XlsxColor.hex('C00000'),
+              axisColor: XlsxColor.hex('808080'),
+            ),
+          ),
+          '$head<x14:negativeFillColor rgb="FFC00000"/>'
+          '<x14:axisColor rgb="FF808080"/></x14:dataBar>',
+        );
+        expect(
+          colors(
+            XlsxDataBar(
+              color: _blue,
+              negativeFillColor: XlsxColor.hex('C00000'),
+            ),
+          ),
+          '$head<x14:negativeFillColor rgb="FFC00000"/>'
+          '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
+        );
+        expect(
+          colors(XlsxDataBar(color: _blue, axisColor: XlsxColor.hex('808080'))),
+          '$head<x14:negativeFillColor rgb="FFFF0000"/>'
+          '<x14:axisColor rgb="FF808080"/></x14:dataBar>',
+        );
+      },
+    );
     test('writes every x14 attribute and child in schema order', () {
       final String xml = _sheet(
         (XlsxSheetWriter s) => _add(s, <XlsxConditionalRule>[
@@ -137,7 +212,7 @@ void main() {
         _extLst(xml),
         contains(
           '<x14:dataBar minLength="5" maxLength="95" border="1" '
-          'gradient="0" negativeBarColorSameAsPositive="0" '
+          'gradient="0" '
           'negativeBarBorderColorSameAsPositive="0" axisPosition="middle">'
           '<x14:cfvo type="num"><xm:f>-10</xm:f></x14:cfvo>'
           r'<x14:cfvo type="formula"><xm:f>$C$1</xm:f></x14:cfvo>'
@@ -149,6 +224,23 @@ void main() {
       );
       // The 2007 rule keeps its own lengths.
       expect(xml, contains('<dataBar minLength="5" maxLength="95">'));
+    });
+    test('the x14 lengths: the defaults 10 and 90 become 0 and 100', () {
+      String lengths(int minLength, int maxLength) {
+        final String xml = _sheet(
+          (XlsxSheetWriter s) => _add(s, <XlsxConditionalRule>[
+            XlsxDataBar(
+              color: _blue,
+              minLength: minLength,
+              maxLength: maxLength,
+            ),
+          ]),
+        );
+        return RegExp(r'<x14:dataBar [^>]*>').firstMatch(xml)!.group(0)!;
+      }
+
+      expect(lengths(10, 90), '<x14:dataBar minLength="0" maxLength="100">');
+      expect(lengths(5, 95), '<x14:dataBar minLength="5" maxLength="95">');
     });
     test('percent and percentile carry xm:f; gte="0" is written', () {
       final String xml = _sheet(
@@ -179,7 +271,9 @@ void main() {
         contains(
           '<x14:dataBar minLength="0" maxLength="100" border="1">'
           '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>'
-          '<x14:borderColor rgb="FF638EC6"/></x14:dataBar>',
+          '<x14:borderColor rgb="FF638EC6"/>'
+          '<x14:negativeFillColor rgb="FFFF0000"/>'
+          '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
         ),
       );
     });
@@ -198,27 +292,25 @@ void main() {
         contains(
           '<x14:dataBar minLength="0" maxLength="100">'
           '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>'
-          '</x14:dataBar>',
+          '<x14:negativeFillColor rgb="FFFF0000"/>'
+          '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
         ),
       );
     });
-    test('no axis writes axisPosition none; a negative fill alone', () {
+    test('no axis writes axisPosition none and still the axis color', () {
+      // Excel writes the axis color with no axis too.
       final String xml = _sheet(
         (XlsxSheetWriter s) => _add(s, <XlsxConditionalRule>[
-          XlsxDataBar(
-            color: _blue,
-            axis: XlsxDataBarAxis.none,
-            negativeFillColor: XlsxColor.hex('FF0000'),
-          ),
+          XlsxDataBar(color: _blue, axis: XlsxDataBarAxis.none),
         ]),
       );
       expect(
         _extLst(xml),
         contains(
-          '<x14:dataBar minLength="0" maxLength="100" '
-          'negativeBarColorSameAsPositive="0" axisPosition="none">'
+          '<x14:dataBar minLength="0" maxLength="100" axisPosition="none">'
           '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>'
-          '<x14:negativeFillColor rgb="FFFF0000"/></x14:dataBar>',
+          '<x14:negativeFillColor rgb="FFFF0000"/>'
+          '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
         ),
       );
     });

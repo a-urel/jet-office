@@ -1,8 +1,13 @@
-import 'package:jet_office/jet_office.dart' show XlsxRange, XlsxSheetVisibility;
+import 'package:jet_office/jet_office.dart'
+    show XlsxRange, XlsxSheetVisibility, XlsxWriter;
 import 'package:jet_office/src/opc/ooxml.dart';
+import 'package:jet_office/src/xlsx/sheet_writer.dart';
+import 'package:jet_office/src/xlsx/workbook_context.dart';
 import 'package:jet_office/src/xlsx/workbook_parts.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
 import 'package:test/test.dart';
+
+import '../support/read_xlsx.dart';
 
 String _render(void Function(XmlWriter w) write) {
   final StringBuffer out = StringBuffer();
@@ -331,6 +336,122 @@ void main() {
       'ContentType="${ContentType.worksheet}"/>'
       '</Types>',
     );
+  });
+
+  test('content types: the sheets\' defaults and overrides join the sorted '
+      'lists', () {
+    final String xml = _render(
+      (XmlWriter w) => writeContentTypes(
+        w,
+        1,
+        defaults: const <String, String>{'png': ContentType.png},
+        overrides: const <String, String>{
+          '/xl/tables/table1.xml': ContentType.table,
+        },
+      ),
+    );
+    expect(
+      xml,
+      '$_decl<Types xmlns="${Ns.contentTypes}">'
+      '<Default Extension="png" ContentType="image/png"/>'
+      '<Default Extension="rels" ContentType="${ContentType.relationships}"/>'
+      '<Default Extension="xml" ContentType="${ContentType.xml}"/>'
+      '<Override PartName="/docProps/app.xml" '
+      'ContentType="${ContentType.extendedProperties}"/>'
+      '<Override PartName="/docProps/core.xml" '
+      'ContentType="${ContentType.coreProperties}"/>'
+      '<Override PartName="/xl/sharedStrings.xml" '
+      'ContentType="${ContentType.sharedStrings}"/>'
+      '<Override PartName="/xl/styles.xml" '
+      'ContentType="${ContentType.styles}"/>'
+      '<Override PartName="/xl/tables/table1.xml" ContentType="'
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml'
+      '"/>'
+      '<Override PartName="/xl/workbook.xml" '
+      'ContentType="${ContentType.workbook}"/>'
+      '<Override PartName="/xl/worksheets/sheet1.xml" '
+      'ContentType="${ContentType.worksheet}"/>'
+      '</Types>',
+    );
+  });
+
+  test('content types: empty extras change nothing', () {
+    expect(
+      _render(
+        (XmlWriter w) => writeContentTypes(
+          w,
+          2,
+          custom: true,
+          defaults: const <String, String>{},
+          overrides: const <String, String>{},
+        ),
+      ),
+      _render((XmlWriter w) => writeContentTypes(w, 2, custom: true)),
+    );
+  });
+
+  group('PackageContentTypes', () {
+    test('a default keeps its first type and its first place', () {
+      final PackageContentTypes types = PackageContentTypes()
+        ..addDefault('vml', ContentType.vmlDrawing)
+        ..addDefault('png', ContentType.png)
+        ..addDefault('vml', ContentType.xml);
+      expect(types.defaults, <String, String>{
+        'vml': ContentType.vmlDrawing,
+        'png': ContentType.png,
+      });
+      expect(types.defaults.keys, <String>['vml', 'png']);
+      expect(types.overrides, isEmpty);
+    });
+
+    test('overrides in the order added; a part keeps its first type', () {
+      final PackageContentTypes types = PackageContentTypes()
+        ..addOverride('/xl/tables/table2.xml', ContentType.table)
+        ..addOverride('/xl/comments1.xml', ContentType.comments)
+        ..addOverride('/xl/tables/table2.xml', ContentType.xml);
+      expect(types.overrides, <String, String>{
+        '/xl/tables/table2.xml': ContentType.table,
+        '/xl/comments1.xml': ContentType.comments,
+      });
+      expect(types.overrides.keys, <String>[
+        '/xl/tables/table2.xml',
+        '/xl/comments1.xml',
+      ]);
+      expect(types.defaults, isEmpty);
+    });
+
+    test('the maps it hands out cannot be changed', () {
+      final PackageContentTypes types = PackageContentTypes();
+      expect(
+        () => types.defaults['png'] = ContentType.png,
+        throwsUnsupportedError,
+      );
+      expect(
+        () => types.overrides['/a.xml'] = ContentType.xml,
+        throwsUnsupportedError,
+      );
+    });
+
+    test('the writer lists what its sheets registered', () {
+      final XlsxWriter book = XlsxWriter();
+      final WorksheetWriter sheet = book.addSheet('S') as WorksheetWriter;
+      sheet.row(<Object?>[1]);
+      sheet.context.contentTypes
+        ..addDefault('png', ContentType.png)
+        ..addOverride('/xl/tables/table1.xml', ContentType.table);
+      final String xml = readXlsx(book.close().bytes)['[Content_Types].xml']!;
+      expect(
+        xml,
+        contains('<Default Extension="png" ContentType="image/png"/>'),
+      );
+      expect(
+        xml,
+        contains(
+          '<Override PartName="/xl/tables/table1.xml" '
+          'ContentType="${ContentType.table}"/>',
+        ),
+      );
+    });
   });
 
   test('worksheet part names follow the creation number', () {

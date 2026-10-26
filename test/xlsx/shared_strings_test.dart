@@ -1,3 +1,5 @@
+import 'package:jet_office/src/xlsx/font.dart';
+import 'package:jet_office/src/xlsx/rich_text.dart';
 import 'package:jet_office/src/xlsx/shared_strings.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
 import 'package:test/test.dart';
@@ -101,5 +103,114 @@ void main() {
     s.indexOf('b');
     expect(before, <String>['a']);
     expect(s.values, <String>['a', 'b']);
+  });
+
+  group('indexOfRich', () {
+    const XlsxFont bold = XlsxFont(bold: true);
+    XlsxRichText rich(List<XlsxTextRun> runs) => XlsxRichText(runs);
+
+    String xml(SharedStrings s) {
+      final StringBuffer out = StringBuffer();
+      s.writeXml(XmlWriter(out));
+      return out.toString();
+    }
+
+    test('deduplicates equal rich texts and counts every reference', () {
+      final SharedStrings s = SharedStrings();
+      expect(s.indexOf('a'), 0);
+      expect(
+        s.indexOfRich(
+          rich(const <XlsxTextRun>[
+            XlsxTextRun('a', font: bold),
+            XlsxTextRun('b'),
+          ]),
+        ),
+        1,
+      );
+      expect(
+        s.indexOfRich(
+          rich(const <XlsxTextRun>[
+            XlsxTextRun('a', font: XlsxFont(bold: true)),
+            XlsxTextRun('b'),
+          ]),
+        ),
+        1,
+      );
+      expect(
+        s.indexOfRich(
+          rich(const <XlsxTextRun>[
+            XlsxTextRun('a'),
+            XlsxTextRun('b', font: bold),
+          ]),
+        ),
+        2,
+      );
+      expect(s.count, 4);
+      expect(s.uniqueCount, 3);
+    });
+
+    test('one run without a font is the plain string', () {
+      final SharedStrings s = SharedStrings();
+      expect(s.indexOfRich(rich(const <XlsxTextRun>[XlsxTextRun('abc')])), 0);
+      expect(s.indexOf('abc'), 0);
+      expect(s.count, 2);
+      expect(s.uniqueCount, 1);
+      expect(xml(s), endsWith('uniqueCount="1"><si><t>abc</t></si></sst>'));
+    });
+
+    test('no runs is the plain empty string', () {
+      final SharedStrings s = SharedStrings();
+      expect(s.indexOfRich(rich(const <XlsxTextRun>[])), 0);
+      expect(s.indexOf(''), 0);
+      expect(s.count, 2);
+      expect(s.uniqueCount, 1);
+      expect(xml(s), endsWith('uniqueCount="1"><si><t></t></si></sst>'));
+    });
+
+    test('one run with a font is a rich entry', () {
+      final SharedStrings s = SharedStrings();
+      expect(s.indexOf('abc'), 0);
+      expect(
+        s.indexOfRich(
+          rich(const <XlsxTextRun>[XlsxTextRun('abc', font: bold)]),
+        ),
+        1,
+      );
+      expect(s.uniqueCount, 2);
+    });
+
+    test('rich entries are written as runs, in index order', () {
+      final SharedStrings s = SharedStrings()
+        ..indexOf(' x')
+        ..indexOfRich(
+          rich(const <XlsxTextRun>[
+            XlsxTextRun('Total: ', font: bold),
+            XlsxTextRun('_x0041_'),
+          ]),
+        )
+        ..indexOf('y');
+      expect(
+        xml(s),
+        endsWith(
+          'count="3" uniqueCount="3">'
+          '<si><t xml:space="preserve"> x</t></si>'
+          '<si><r><rPr><b/></rPr><t xml:space="preserve">Total: </t></r>'
+          '<r><t>_x005F_x0041_</t></r></si>'
+          '<si><t>y</t></si></sst>',
+        ),
+      );
+    });
+
+    test('values gives a rich entry as its joined text', () {
+      final SharedStrings s = SharedStrings()
+        ..indexOf('a')
+        ..indexOfRich(
+          rich(const <XlsxTextRun>[
+            XlsxTextRun('b', font: bold),
+            XlsxTextRun('c'),
+          ]),
+        );
+      expect(s.values, <String>['a', 'bc']);
+    });
   });
 }

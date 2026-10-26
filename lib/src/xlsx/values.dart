@@ -1,15 +1,19 @@
 /// The cell value types the XLSX writer accepts beyond plain Dart values.
 ///
 /// A cell value is one of: `null` (no cell), `String`, `int`, `double`,
-/// `bool`, [DateTime], and the wrappers in this library: [XlsxCell] (a value
+/// `bool`, [DateTime], the wrappers in this library: [XlsxCell] (a value
 /// with its own style), [XlsxDate] (a calendar date without a time),
-/// [XlsxDecimal] (an exact decimal number) and [XlsxFormula].
+/// [XlsxDecimal] (an exact decimal number) and [XlsxFormula], and
+/// [XlsxHyperlink] and [XlsxRichText] (text in runs with their own fonts)
+/// from their own libraries.
 ///
 /// This file is new in jet_office; it has no counterpart in
 /// quds_office_engine. Quds stored a `DateTime` as its `toString()` text and
 /// had no decimal, date-only or formula value type.
 library;
 
+import 'hyperlink.dart';
+import 'rich_text.dart';
 import 'style.dart';
 
 /// A cell value together with the style of that one cell.
@@ -31,9 +35,9 @@ final class XlsxCell {
   const XlsxCell(this.value, {this.style});
 
   /// The value to write: a `String`, `int`, `double`, `bool`, [DateTime],
-  /// [XlsxDate], [XlsxDecimal], [XlsxFormula] or `null` (an empty cell,
-  /// written only when it has a [style] that does not merge to the
-  /// default).
+  /// [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxHyperlink],
+  /// [XlsxRichText] or `null` (an empty cell, written only when it has a
+  /// [style] that does not merge to the default).
   final Object? value;
 
   /// The style of this cell, or `null` to use the row's style.

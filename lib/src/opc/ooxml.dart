@@ -4,11 +4,18 @@
 /// Ported from quds_office_engine `lib/src/opc/content_types.dart` at commit 15c5d29.
 /// Ported: the namespace URIs, relationship types and content types that a
 /// spreadsheet package uses (`OfficeNamespaces`, `OfficeContentTypes`),
-/// regrouped as [Ns], [RelType] and [ContentType]. What changed: the Word,
-/// PowerPoint, VML and other constants nothing in the XLSX writer needs are
-/// not ported. The values are the ECMA-376 transitional ones and none differs
-/// from Quds; [Ns.x14] and [Ns.xm], Microsoft's extension namespaces for the
-/// Excel 2010 conditional formats, are new.
+/// regrouped as [Ns], [RelType] and [ContentType]. The drawing namespaces
+/// (Quds' `xdr` and `a`) and the VML namespaces (Quds' `v` and `o`) are
+/// [Ns.xdr], [Ns.drawingMain], [Ns.vml] and [Ns.vmlOffice]; the `drawing`,
+/// `image` and `comments` relationship types and the drawing, PNG and JPEG
+/// content types come from Quds too. What changed: the Word, PowerPoint and
+/// other constants nothing in the XLSX writer needs are not ported. The
+/// values are the ECMA-376 transitional ones, and no ported value differs
+/// from Quds. New: [Ns.x14] and [Ns.xm], Microsoft's extension namespaces
+/// for the Excel 2010 conditional formats; [Ns.vmlExcel], the Excel VML
+/// namespace of notes, which Quds lacks; the `vmlDrawing` and `table`
+/// relationship types; and the comments, VML drawing and table content
+/// types.
 library;
 
 /// XML namespace URIs.
@@ -67,6 +74,24 @@ abstract final class Ns {
   /// (`xm:sqref`) inside Excel 2010 extensions.
   static const String xm =
       'http://schemas.microsoft.com/office/excel/2006/main';
+
+  /// Spreadsheet DrawingML (`xdr:`), the root namespace of a drawing part.
+  static const String xdr =
+      'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing';
+
+  /// DrawingML main (`a:`), the shapes and pictures inside a drawing.
+  static const String drawingMain =
+      'http://schemas.openxmlformats.org/drawingml/2006/main';
+
+  /// VML (`v:`), the shapes of a VML drawing part.
+  static const String vml = 'urn:schemas-microsoft-com:vml';
+
+  /// Office VML (`o:`), the shape layout and ids of a VML drawing part.
+  static const String vmlOffice = 'urn:schemas-microsoft-com:office:office';
+
+  /// Excel VML (`x:`), the `x:ClientData` that ties a VML shape to a note's
+  /// cell.
+  static const String vmlExcel = 'urn:schemas-microsoft-com:office:excel';
 }
 
 /// Relationship type URIs.
@@ -102,6 +127,26 @@ abstract final class RelType {
   /// Custom properties, `docProps/custom.xml`.
   static const String customProperties =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties';
+
+  /// A worksheet's drawing part, which holds its pictures.
+  static const String drawing =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing';
+
+  /// An image part, such as `xl/media/image1.png`, from a drawing.
+  static const String image =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+
+  /// A worksheet's comments part, the text of its notes.
+  static const String comments =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments';
+
+  /// A worksheet's VML drawing part, the boxes of its notes.
+  static const String vmlDrawing =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing';
+
+  /// A table part of a worksheet.
+  static const String table =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/table';
 }
 
 /// Content types (MIME types) of package parts.
@@ -140,4 +185,26 @@ abstract final class ContentType {
 
   /// Generic XML.
   static const String xml = 'application/xml';
+
+  /// A drawing part.
+  static const String drawing =
+      'application/vnd.openxmlformats-officedocument.drawing+xml';
+
+  /// A worksheet's comments part.
+  static const String comments =
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml';
+
+  /// A VML drawing part (`.vml`).
+  static const String vmlDrawing =
+      'application/vnd.openxmlformats-officedocument.vmlDrawing';
+
+  /// A table part.
+  static const String table =
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml';
+
+  /// A PNG image.
+  static const String png = 'image/png';
+
+  /// A JPEG image.
+  static const String jpeg = 'image/jpeg';
 }

@@ -5,8 +5,8 @@
 /// as its `toString()` text and `NaN` and infinity verbatim; both are fixed
 /// here (dates become serials, non-finite numbers throw). Added: strings go
 /// through the shared-string table after scrubbing and truncation to Excel's
-/// limit, decimals, date-only values and formulas, and warnings for lossy
-/// conversions.
+/// limit, decimals, date-only values, formulas, hyperlinks and rich text,
+/// and warnings for lossy conversions.
 ///
 /// Both the streaming writer and the workbook model call [CellEncoder]; no
 /// other file under `lib/` writes a cell element.
@@ -18,9 +18,11 @@ import 'cell_ref.dart';
 import 'color.dart';
 import 'date_serial.dart';
 import 'font.dart';
+import 'formula_text.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
 import 'number_format.dart';
+import 'rich_text.dart';
 import 'shared_strings.dart';
 import 'style.dart';
 import 'style_registry.dart';
@@ -29,9 +31,6 @@ import 'warnings.dart';
 
 /// The largest whole number a `double` holds exactly (2^53).
 const int _maxExactInt = 9007199254740992;
-
-/// The most characters (UTF-16 code units) Excel accepts in a formula.
-const int _maxFormulaLength = 8192;
 
 /// The font of a hyperlink cell: the theme's hyperlink color, underlined.
 /// The lowest font layer: whatever a column, row or cell font sets wins.
@@ -95,12 +94,12 @@ final class CellEncoder {
   /// Writes the cell at zero-based [row] and [column] of [sheet] to [out].
   ///
   /// [value] is a `String`, `int`, `double`, `bool`, [DateTime], [XlsxDate],
-  /// [XlsxDecimal], [XlsxFormula], [XlsxHyperlink], an [XlsxCell] wrapping
-  /// one of those, or `null`, which writes nothing. An [XlsxCell] whose
-  /// value is `null` and whose style is not writes an empty styled cell,
-  /// `<c r="C5" s="7"/>`, when the merged style below is not the default;
-  /// with the default style, or with no cell style, it writes nothing
-  /// (ruling R11).
+  /// [XlsxDecimal], [XlsxFormula], [XlsxHyperlink], [XlsxRichText], an
+  /// [XlsxCell] wrapping one of those, or `null`, which writes nothing. An
+  /// [XlsxCell] whose value is `null` and whose style is not writes an empty
+  /// styled cell, `<c r="C5" s="7"/>`, when the merged style below is not
+  /// the default; with the default style, or with no cell style, it writes
+  /// nothing (ruling R11).
   ///
   /// The effective style is [columnStyle] merged with [rowStyle] and then
   /// with the [XlsxCell]'s style, so a cell beats its row and a row beats
@@ -112,20 +111,36 @@ final class CellEncoder {
   /// merged beneath the effective style's font; the sheet writer records
   /// the link itself (and validates it, which the encoder does not).
   ///
+  /// A rich text is a shared string whose `<si>` holds its runs. A run with
+  /// a font carries that font merged over the effective style's font and
+  /// resolved (Calibri 11 where neither sets a name or size), so a bold run
+  /// in an Arial 14 cell is Arial 14 bold; a run without a font carries
+  /// none and shows the cell's font. The same rich text in cells of
+  /// different fonts is therefore two shared strings. A run left with no
+  /// text is dropped. A rich text left with one run without a font shares
+  /// the `<si>` of that plain string, and one left with no runs that of the
+  /// empty string.
+  ///
   /// Data problems (characters XML forbids, text past 32,767 UTF-16 code
   /// units, integers past 2^53, dates outside 1900 to 9999, a date shown in
   /// a non-date format) are repaired and reported to the warning collector.
+  /// Rich text is cleaned with [cleanRichText] and warns once per cell for
+  /// each kind of repair.
   /// On the web a whole `double` beyond 2^53 is indistinguishable from an
   /// `int`, so it also warns `intPrecisionLost`. An [XlsxDecimal] beyond the
   /// `double` range is written verbatim, and Excel rounds it.
   /// A date gets the date-time or short-date format only when the merged
   /// number format is `null`; in any other format it keeps that format, and
   /// warns when that format shows no date.
-  /// a formula's cached string or integer is treated like a plain one.
+  /// A formula's cached string or integer is treated like a plain one.
   /// Programmer errors throw an [ArgumentError]: an unsupported type, a
   /// nested [XlsxCell], a `NaN` or infinite number, an impossible date, a
   /// formula that is empty after its leading `=`, longer than 8,192 UTF-16
-  /// code units or holds characters XML forbids, an invalid cached value.
+  /// code units or holds characters XML forbids (the checks of
+  /// `checkFormulaText`, named `text`, with the cell in the message), an
+  /// invalid cached value, a rich text without runs (named `runs`), a run
+  /// font that is invalid once merged over the cell's font (named
+  /// `runs[i].font.<field>`, the checks of `validateFont`).
   /// An invalid style throws like [StyleRegistry.idFor]. When it throws,
   /// nothing is written to [out] and nothing is recorded: the string table,
   /// the style registry and the warnings are as they were.
@@ -262,6 +277,8 @@ final class CellEncoder {
         _writeFormula(out, sheet, ref, v, style);
       case XlsxHyperlink():
         _writeString(out, sheet, ref, v.text, style.linked);
+      case XlsxRichText():
+        _writeRichText(out, sheet, ref, v, style);
       default:
         throw ArgumentError(
           'Cell $ref on sheet "$sheet" holds a ${v.runtimeType}, which is not '
@@ -302,6 +319,88 @@ final class CellEncoder {
       );
     }
     _write(out, ref, id, 's', '<v>${_strings.indexOf(result)}</v>');
+  }
+
+  /// Writes [text] as a shared-string cell whose `<si>` holds its runs, each
+  /// run's font merged over the font of [style] (Decision 3).
+  void _writeRichText(
+    XmlWriter out,
+    String sheet,
+    String ref,
+    XlsxRichText text,
+    _Resolved style,
+  ) {
+    if (text.runs.isEmpty) {
+      throw ArgumentError.value(
+        text.runs,
+        'runs',
+        'The rich text in cell $ref on sheet "$sheet" has no runs.',
+      );
+    }
+    final XlsxRichText merged = _mergeRunFonts(
+      sheet,
+      ref,
+      text,
+      style.style?.font,
+    );
+    final ({XlsxRichText text, int removed, bool truncated}) clean =
+        cleanRichText(merged);
+    // The style can throw; resolve it before anything is recorded.
+    final int id = _idOf(style);
+    if (clean.removed > 0) {
+      _warnings.add(
+        XlsxWarningCode.invalidCharactersRemoved,
+        sheet: sheet,
+        cell: ref,
+      );
+    }
+    if (clean.truncated) {
+      _warnings.add(XlsxWarningCode.textTruncated, sheet: sheet, cell: ref);
+    }
+    _write(out, ref, id, 's', '<v>${_strings.indexOfRich(clean.text)}</v>');
+  }
+
+  /// [text] with the font of each run that has one merged over [cellFont],
+  /// resolved and checked; [text] itself when no run has a font.
+  ///
+  /// Throws [ArgumentError] named `runs[i].font.<field>` for a merged font
+  /// that fails `validateFont`, with the cell in the message.
+  static XlsxRichText _mergeRunFonts(
+    String sheet,
+    String ref,
+    XlsxRichText text,
+    XlsxFont? cellFont,
+  ) {
+    if (text.runs.every((XlsxTextRun run) => run.font == null)) return text;
+    final List<XlsxTextRun> runs = <XlsxTextRun>[];
+    for (int i = 0; i < text.runs.length; i++) {
+      final XlsxTextRun run = text.runs[i];
+      final XlsxFont? font = run.font;
+      if (font == null) {
+        runs.add(run);
+        continue;
+      }
+      final XlsxFont merged = resolveFont(
+        cellFont == null ? font : cellFont.merge(font),
+      );
+      try {
+        validateFont(merged);
+      } on ArgumentError catch (error, stack) {
+        final String? field = error.name;
+        Error.throwWithStackTrace(
+          ArgumentError.value(
+            error.invalidValue,
+            field == null ? 'runs[$i].font' : 'runs[$i].font.$field',
+            'The font of run $i of the rich text in cell $ref on sheet '
+            '"$sheet", merged over the cell\'s font, is invalid: '
+            '${error.message}',
+          ),
+          stack,
+        );
+      }
+      runs.add(XlsxTextRun(run.text, font: merged));
+    }
+    return XlsxRichText(runs);
   }
 
   /// [text] cut to [XlsxLimits.maxCellTextLength] UTF-16 code units without
@@ -345,24 +444,19 @@ final class CellEncoder {
     XlsxFormula formula,
     _Resolved style,
   ) {
-    final String text = formula.text.startsWith('=')
-        ? formula.text.substring(1)
-        : formula.text;
-    if (text.isEmpty) {
-      throw ArgumentError(
-        'The formula in cell $ref on sheet "$sheet" is empty.',
-      );
-    }
-    if (text.length > _maxFormulaLength) {
-      throw ArgumentError(
-        'The formula in cell $ref on sheet "$sheet" has ${text.length} '
-        'characters; Excel accepts at most $_maxFormulaLength.',
-      );
-    }
-    if (scrubXmlText(text).removed > 0) {
-      throw ArgumentError(
-        'The formula in cell $ref on sheet "$sheet" contains characters '
-        'XML forbids.',
+    final String text;
+    try {
+      text = checkFormulaText(formula.text, 'text');
+    } on ArgumentError catch (error, stack) {
+      // The check every formula shares, told at the cell.
+      Error.throwWithStackTrace(
+        ArgumentError.value(
+          error.invalidValue,
+          error.name,
+          'The formula in cell $ref on sheet "$sheet" is invalid: '
+          '${error.message}',
+        ),
+        stack,
       );
     }
     final Object? cached = formula.cached;
