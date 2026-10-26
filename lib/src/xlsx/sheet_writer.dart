@@ -21,7 +21,8 @@
 /// whose rules take the sheet's next priorities.
 /// A hyperlink is a cell value: the row checks it before its cell is
 /// encoded, and the finished sheet writes its `hyperlinks` and, for the
-/// external ones, a relationships part with one relationship per address.
+/// external ones, a relationships part with one relationship per address,
+/// whose ids `SheetRelationships` assigns.
 /// The sheet reaches the workbook's encoder, styles and ZIP through a
 /// [WorkbookContext].
 library;
@@ -859,23 +860,24 @@ final class WorksheetWriter implements XlsxSheetWriter {
   /// Renders the header, the trailer and the relationships part from the
   /// settings and hands them with [body]'s chunks to the ZIP.
   void _writePart(Utf8Buffer body) {
-    // One relationship per distinct address, numbered in first-use order:
-    // the one place ids are assigned. The links and the relationships part
-    // both take them from this map.
-    final Map<String, String> ids = <String, String>{};
-    final List<WorksheetHyperlink> links = <WorksheetHyperlink>[];
-    for (final (String ref, XlsxHyperlink link) in _links) {
-      final String? address = link.address;
-      links.add((
-        ref: ref,
-        relationshipId: address == null
-            ? null
-            : ids.putIfAbsent(address, () => 'rId${ids.length + 1}'),
-        location: link.location,
-        tooltip: link.tooltip,
-        display: CellEncoder.truncateCellText(link.text),
-      ));
-    }
+    // One relationship per distinct address, in first-use order. The links
+    // and the relationships part both take their ids from [rels].
+    final SheetRelationships rels = SheetRelationships(
+      sheetNumber: number,
+      hyperlinkTargets: <String>{
+        for (final (String _, XlsxHyperlink link) in _links) ?link.address,
+      },
+    );
+    final List<WorksheetHyperlink> links = <WorksheetHyperlink>[
+      for (final (String ref, XlsxHyperlink link) in _links)
+        (
+          ref: ref,
+          relationshipId: rels.hyperlinkIds[link.address],
+          location: link.location,
+          tooltip: link.tooltip,
+          display: CellEncoder.truncateCellText(link.text),
+        ),
+    ];
     final WorksheetSettings settings = WorksheetSettings(
       sheetNumber: number,
       columns: _columns,
@@ -900,10 +902,10 @@ final class WorksheetWriter implements XlsxSheetWriter {
       ...body.takeChunks(),
       utf8.encode(worksheetTrailer(settings, hasRows: _wroteRow)),
     ]);
-    final String? rels = worksheetRelationshipsXml(ids);
-    if (rels != null) {
+    final String? relsXml = rels.toXml();
+    if (relsXml != null) {
       context.zip.addChunks(worksheetRelsPartName(number), <Uint8List>[
-        utf8.encode(rels),
+        utf8.encode(relsXml),
       ]);
     }
   }

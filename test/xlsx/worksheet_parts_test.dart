@@ -1,4 +1,5 @@
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/conditional_format.dart';
 import 'package:jet_office/src/xlsx/worksheet_parts.dart';
 import 'package:test/test.dart';
 
@@ -484,6 +485,208 @@ void main() {
         ),
         '<autoFilter ref="A1"/></worksheet>',
       );
+    });
+  });
+
+  group('object references', () {
+    test('drawing, legacyDrawing and tableParts come after headerFooter and '
+        'before extLst', () {
+      final String xml = worksheetTrailer(
+        WorksheetSettings(
+          sheetNumber: 1,
+          conditionalFormats: <WorksheetConditionalFormat>[
+            (
+              format: XlsxConditionalFormat(
+                <XlsxRange>[XlsxRange.parse('A1:A5')],
+                <XlsxConditionalRule>[
+                  XlsxDataBar(color: XlsxColor.hex('638EC6')),
+                ],
+              ),
+              dxfIds: const <int?>[null],
+              firstPriority: 1,
+            ),
+          ],
+          headerFooter: const XlsxHeaderFooter(oddFooter: '&P'),
+          drawingId: 'rId3',
+          legacyDrawingId: 'rId4',
+          tablePartIds: const <String>['rId6', 'rId7'],
+        ),
+        hasRows: true,
+      );
+      expect(
+        xml,
+        contains(
+          '</headerFooter>'
+          '<drawing r:id="rId3"/>'
+          '<legacyDrawing r:id="rId4"/>'
+          '<tableParts count="2">'
+          '<tablePart r:id="rId6"/><tablePart r:id="rId7"/>'
+          '</tableParts>'
+          '<extLst>',
+        ),
+      );
+      expect(xml, endsWith('</extLst></worksheet>'));
+    });
+
+    test('each alone, and with no rows', () {
+      expect(
+        worksheetTrailer(
+          const WorksheetSettings(sheetNumber: 1, drawingId: 'rId1'),
+          hasRows: false,
+        ),
+        '<drawing r:id="rId1"/></worksheet>',
+      );
+      expect(
+        worksheetTrailer(
+          const WorksheetSettings(sheetNumber: 1, legacyDrawingId: 'rId2'),
+          hasRows: false,
+        ),
+        '<legacyDrawing r:id="rId2"/></worksheet>',
+      );
+      expect(
+        worksheetTrailer(
+          const WorksheetSettings(
+            sheetNumber: 1,
+            tablePartIds: <String>['rId1'],
+          ),
+          hasRows: true,
+        ),
+        '</sheetData><tableParts count="1"><tablePart r:id="rId1"/>'
+        '</tableParts></worksheet>',
+      );
+    });
+  });
+
+  group('SheetRelationships', () {
+    const String decl =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    const String package =
+        'http://schemas.openxmlformats.org/package/2006/relationships';
+    String type(String kind) => '$_rel/$kind';
+
+    SheetRelationships everything() => SheetRelationships(
+      sheetNumber: 3,
+      hyperlinkTargets: <String>['https://a', 'https://b'],
+      drawing: true,
+      notes: true,
+      tableIds: <int>[4, 9],
+    );
+
+    test('numbers links, drawing, VML, comments and tables in that order', () {
+      final SheetRelationships rels = everything();
+      expect(rels.hyperlinkIds, <String, String>{
+        'https://a': 'rId1',
+        'https://b': 'rId2',
+      });
+      expect(rels.drawingId, 'rId3');
+      expect(rels.vmlDrawingId, 'rId4');
+      expect(rels.commentsId, 'rId5');
+      expect(rels.tableIds, <String>['rId6', 'rId7']);
+    });
+
+    test('its part targets each object with its type', () {
+      expect(
+        everything().toXml(),
+        '$decl<Relationships xmlns="$package">'
+        '<Relationship Id="rId1" Type="${type('hyperlink')}" '
+        'Target="https://a" TargetMode="External"/>'
+        '<Relationship Id="rId2" Type="${type('hyperlink')}" '
+        'Target="https://b" TargetMode="External"/>'
+        '<Relationship Id="rId3" Type="${type('drawing')}" '
+        'Target="../drawings/drawing3.xml"/>'
+        '<Relationship Id="rId4" Type="${type('vmlDrawing')}" '
+        'Target="../drawings/vmlDrawing3.vml"/>'
+        '<Relationship Id="rId5" Type="${type('comments')}" '
+        'Target="../comments3.xml"/>'
+        '<Relationship Id="rId6" Type="${type('table')}" '
+        'Target="../tables/table4.xml"/>'
+        '<Relationship Id="rId7" Type="${type('table')}" '
+        'Target="../tables/table9.xml"/>'
+        '</Relationships>',
+      );
+    });
+
+    test('a sheet with only links writes the part it wrote before', () {
+      final SheetRelationships rels = SheetRelationships(
+        sheetNumber: 1,
+        hyperlinkTargets: <String>['https://a', 'mailto:b@c.d'],
+      );
+      expect(rels.drawingId, isNull);
+      expect(rels.vmlDrawingId, isNull);
+      expect(rels.commentsId, isNull);
+      expect(rels.tableIds, isEmpty);
+      expect(
+        rels.toXml(),
+        '$decl<Relationships xmlns="$package">'
+        '<Relationship Id="rId1" Type="${type('hyperlink')}" '
+        'Target="https://a" TargetMode="External"/>'
+        '<Relationship Id="rId2" Type="${type('hyperlink')}" '
+        'Target="mailto:b@c.d" TargetMode="External"/>'
+        '</Relationships>',
+      );
+    });
+
+    test('ids continue from the kinds present, without gaps', () {
+      final SheetRelationships linksAndTable = SheetRelationships(
+        sheetNumber: 2,
+        hyperlinkTargets: <String>['https://a'],
+        tableIds: <int>[1],
+      );
+      expect(linksAndTable.drawingId, isNull);
+      expect(linksAndTable.tableIds, <String>['rId2']);
+
+      final SheetRelationships notesOnly = SheetRelationships(
+        sheetNumber: 2,
+        notes: true,
+      );
+      expect(notesOnly.hyperlinkIds, isEmpty);
+      expect(notesOnly.vmlDrawingId, 'rId1');
+      expect(notesOnly.commentsId, 'rId2');
+
+      final SheetRelationships drawingAndTables = SheetRelationships(
+        sheetNumber: 2,
+        drawing: true,
+        tableIds: <int>[3, 2],
+      );
+      expect(drawingAndTables.drawingId, 'rId1');
+      expect(drawingAndTables.vmlDrawingId, isNull);
+      expect(drawingAndTables.tableIds, <String>['rId2', 'rId3']);
+    });
+
+    test('a repeated link target keeps its first id', () {
+      final SheetRelationships rels = SheetRelationships(
+        sheetNumber: 1,
+        hyperlinkTargets: <String>['https://a', 'https://b', 'https://a'],
+        drawing: true,
+      );
+      expect(rels.hyperlinkIds, <String, String>{
+        'https://a': 'rId1',
+        'https://b': 'rId2',
+      });
+      expect(rels.drawingId, 'rId3');
+    });
+
+    test('a sheet without relationships has no part', () {
+      final SheetRelationships rels = SheetRelationships(sheetNumber: 1);
+      expect(rels.hyperlinkIds, isEmpty);
+      expect(rels.tableIds, isEmpty);
+      expect(rels.toXml(), isNull);
+    });
+  });
+
+  group('part names', () {
+    test('a sheet\'s parts follow its number', () {
+      expect(worksheetRelsPartName(3), 'xl/worksheets/_rels/sheet3.xml.rels');
+      expect(drawingPartName(3), 'xl/drawings/drawing3.xml');
+      expect(drawingRelsPartName(3), 'xl/drawings/_rels/drawing3.xml.rels');
+      expect(vmlDrawingPartName(3), 'xl/drawings/vmlDrawing3.vml');
+      expect(commentsPartName(3), 'xl/comments3.xml');
+    });
+
+    test('tables and media follow their workbook-wide numbers', () {
+      expect(tablePartName(12), 'xl/tables/table12.xml');
+      expect(mediaPartName(2, 'png'), 'xl/media/image2.png');
+      expect(mediaPartName(5, 'jpeg'), 'xl/media/image5.jpeg');
     });
   });
 }

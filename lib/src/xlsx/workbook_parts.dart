@@ -15,7 +15,9 @@
 /// names, print areas and print titles are written by one `definedNames`
 /// writer (Quds' print titles were relative and unquoted). Drawings, charts
 /// and pictures are not ported in this phase; `workbookProtection` (see
-/// `sheet_protection.dart`) comes before `bookViews`.
+/// `sheet_protection.dart`) comes before `bookViews`; `[Content_Types].xml`
+/// also lists the content types the sheets registered for their other
+/// parts (see `PackageContentTypes`).
 library;
 
 import '../opc/content_types.dart';
@@ -289,10 +291,24 @@ void writeRootRelationships(XmlWriter w, {bool custom = false}) {
 /// Relationship parts and other XML get default types; the workbook, every
 /// worksheet, the styles, the shared strings and both property parts get an
 /// override, and with [custom] so does the custom property part.
-void writeContentTypes(XmlWriter w, int sheetCount, {bool custom = false}) {
+///
+/// [defaults] and [overrides] are the extra types the sheets registered
+/// (see `PackageContentTypes`): the defaults are added after `rels` and
+/// `xml`, the overrides after the worksheets. [ContentTypes] writes each
+/// list sorted, so the output does not depend on the order they were added
+/// in, and empty extras leave the part as it was.
+void writeContentTypes(
+  XmlWriter w,
+  int sheetCount, {
+  bool custom = false,
+  Map<String, String> defaults = const <String, String>{},
+  Map<String, String> overrides = const <String, String>{},
+}) {
   final ContentTypes types = ContentTypes()
     ..addDefault('rels', ContentType.relationships)
-    ..addDefault('xml', ContentType.xml)
+    ..addDefault('xml', ContentType.xml);
+  defaults.forEach(types.addDefault);
+  types
     ..addOverride('/xl/workbook.xml', ContentType.workbook)
     ..addOverride('/xl/styles.xml', ContentType.styles)
     ..addOverride('/xl/sharedStrings.xml', ContentType.sharedStrings)
@@ -304,5 +320,6 @@ void writeContentTypes(XmlWriter w, int sheetCount, {bool custom = false}) {
   for (int number = 1; number <= sheetCount; number++) {
     types.addOverride('/${worksheetPartName(number)}', ContentType.worksheet);
   }
+  overrides.forEach(types.addOverride);
   types.write(w);
 }

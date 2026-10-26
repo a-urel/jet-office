@@ -12,8 +12,9 @@
 /// gaining `Sheet1`, and data problems are returned as warnings. The
 /// workbook gets the hidden `_xlnm._FilterDatabase` name of each sheet's
 /// auto filter, which Quds did not write, and the defined names, print areas
-/// and print titles (see `workbook_parts.dart`). Charts and pictures are not
-/// ported yet.
+/// and print titles (see `workbook_parts.dart`); its `[Content_Types].xml`
+/// lists the content types the sheets registered in the shared
+/// `WorkbookContext`. Charts and pictures are not ported yet.
 library;
 
 import 'dart:typed_data';
@@ -274,7 +275,13 @@ sealed class XlsxWriterBase {
       ..add(
         '[Content_Types].xml',
         _render(
-          (XmlWriter w) => writeContentTypes(w, sheetCount, custom: custom),
+          (XmlWriter w) => writeContentTypes(
+            w,
+            sheetCount,
+            custom: custom,
+            defaults: _context.contentTypes.defaults,
+            overrides: _context.contentTypes.overrides,
+          ),
         ),
       );
     return zip.close();

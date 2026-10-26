@@ -1,12 +1,18 @@
 /// [WorkbookContext], the workbook-level state a sheet writer shares with
-/// its workbook writer.
+/// its workbook writer, and [PackageContentTypes], the content types the
+/// sheets add to the package.
 ///
 /// New in jet_office. Quds' `XlsxSheetBuilder` held its rows and handed them
 /// to `XlsxWorkbookBuilder.build`, which serialized everything at the end;
 /// here a sheet encodes its cells as they arrive and hands its finished part
 /// to the ZIP itself, so it needs the workbook's encoder, styles and ZIP. This
 /// class gives it those without exposing the workbook writer's other state.
+/// A finished sheet's parts beyond the worksheet (drawings, notes, tables)
+/// need content types, which the workbook writes only at `close()`; the
+/// sheet records them in [WorkbookContext.contentTypes].
 library;
+
+import 'dart:collection';
 
 import '../zip/archive_adapter.dart';
 import 'cell_encoder.dart';
@@ -36,6 +42,10 @@ final class WorkbookContext {
 
   /// The workbook's distinct styles, written last as `styles.xml`.
   final StyleRegistry styles = StyleRegistry();
+
+  /// The content types of the parts the sheets wrote beyond the worksheets,
+  /// which `close()` adds to `[Content_Types].xml`.
+  final PackageContentTypes contentTypes = PackageContentTypes();
 
   /// The one cell encoder of the workbook (decision 0002).
   late final CellEncoder encoder = CellEncoder(
@@ -67,4 +77,37 @@ final class WorkbookContext {
       );
     }
   }
+}
+
+/// The default and override content types the sheets of one workbook
+/// register for the parts they write, such as `png` images or a table part.
+///
+/// Both are kept in the order first registered; `writeContentTypes` writes
+/// them with the workbook's own. Nothing is checked here: the values come
+/// from the writer's own constants, not from the caller.
+final class PackageContentTypes {
+  final Map<String, String> _defaults = <String, String>{};
+  final Map<String, String> _overrides = <String, String>{};
+
+  /// Declares [type] for every part whose name ends in [extension] (without
+  /// the dot). The first registration wins: a later one for the same
+  /// extension changes nothing, so each sheet may register what it uses.
+  void addDefault(String extension, String type) {
+    _defaults.putIfAbsent(extension, () => type);
+  }
+
+  /// Declares [type] for the single part named [partName], an absolute name
+  /// such as `/xl/tables/table1.xml`. The first registration wins, as with
+  /// [addDefault].
+  void addOverride(String partName, String type) {
+    _overrides.putIfAbsent(partName, () => type);
+  }
+
+  /// The extensions and their types, in first-registration order; a view
+  /// that cannot be changed.
+  Map<String, String> get defaults => UnmodifiableMapView(_defaults);
+
+  /// The part names and their types, in first-registration order; a view
+  /// that cannot be changed.
+  Map<String, String> get overrides => UnmodifiableMapView(_overrides);
 }
