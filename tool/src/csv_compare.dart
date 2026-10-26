@@ -151,8 +151,8 @@ typedef CsvReport = ({List<String> lines, String? error, int exitCode});
 /// reported first, even when the report stops with exit code 2 because
 /// `expectationCount`, the number of `.expected.json` files, is 0. Then each
 /// sheet prints its `note`, if any, and `ok    <name> / <sheet>` or
-/// `FAIL  <name> / <sheet>` followed by its indented messages. The last line is the verdict. `dir` only names the
-/// directory in the error text.
+/// `FAIL  <name> / <sheet>` followed by its indented messages. The last
+/// line is the verdict. `dir` only names the directory in the error text.
 CsvReport assembleReport({
   required Iterable<String> fileNames,
   required int expectationCount,
