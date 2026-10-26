@@ -114,6 +114,8 @@ void main() {
       'm4_rich_text',
       'm4_notes',
       'm4_images',
+      'm4_tables',
+      'm4_objects',
     ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
@@ -839,5 +841,148 @@ void main() {
     expect(media.keys, <String>['xl/media/image1.png', 'xl/media/image2.jpeg']);
     expect(media['xl/media/image1.png'], png4x2);
     expect(media['xl/media/image2.jpeg'], jpeg3x5);
+  });
+
+  test('m4_tables writes its tables and fills their header and totals', () {
+    final Map<String, String> parts = readXlsx(named('m4_tables').build());
+    const String decl =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    const String ns =
+        'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    expect(
+      parts['xl/tables/table1.xml'],
+      '$decl<table xmlns="$ns" id="1" name="Sales" displayName="Sales" '
+      'ref="A1:C5" totalsRowCount="1"><autoFilter ref="A1:C4"/>'
+      '<tableColumns count="3"><tableColumn id="1" name="Region" '
+      'totalsRowLabel="Total"/><tableColumn id="2" name="Amount" '
+      'totalsRowFunction="sum"/><tableColumn id="3" name="Note"/>'
+      '</tableColumns><tableStyleInfo name="TableStyleMedium2" '
+      'showFirstColumn="0" showLastColumn="0" showRowStripes="1" '
+      'showColumnStripes="0"/></table>',
+    );
+    expect(
+      parts['xl/tables/table2.xml'],
+      '$decl<table xmlns="$ns" id="2" name="Costs" displayName="Costs" '
+      'ref="E1:F3" totalsRowShown="0"><autoFilter ref="E1:F3"/>'
+      '<tableColumns count="2"><tableColumn id="1" name="Item"/>'
+      '<tableColumn id="2" name="Cost"/></tableColumns>'
+      '<tableStyleInfo name="TableStyleLight9" showFirstColumn="0" '
+      'showLastColumn="0" showRowStripes="1" showColumnStripes="1"/>'
+      '</table>',
+    );
+    expect(
+      parts['xl/tables/table3.xml'],
+      '$decl<table xmlns="$ns" id="3" name="Numbers" displayName="Numbers" '
+      'ref="A1:B2" headerRowCount="0" totalsRowShown="0">'
+      '<tableColumns count="2"><tableColumn id="1" name="X"/>'
+      '<tableColumn id="2" name="Y"/></tableColumns></table>',
+    );
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      contains('<c r="B5"><f>SUBTOTAL(109,B2:B4)</f></c>'),
+    );
+    expect(
+      parts['xl/worksheets/sheet1.xml'],
+      endsWith(
+        '<tableParts count="2"><tablePart r:id="rId1"/>'
+        '<tablePart r:id="rId2"/></tableParts></worksheet>',
+      ),
+    );
+    expect(
+      parts['xl/worksheets/sheet2.xml'],
+      endsWith(
+        '<tableParts count="1"><tablePart r:id="rId1"/></tableParts>'
+        '</worksheet>',
+      ),
+    );
+    for (final int id in <int>[1, 2, 3]) {
+      expect(
+        parts['[Content_Types].xml'],
+        contains(
+          '<Override PartName="/xl/tables/table$id.xml" ContentType="'
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.'
+          'table+xml"/>',
+        ),
+      );
+    }
+  });
+
+  test('m4_objects gives each object of one sheet its relationship id', () {
+    final Map<String, String> parts = readXlsx(named('m4_objects').build());
+    const String rels =
+        'http://schemas.openxmlformats.org/officeDocument/'
+        '2006/relationships';
+    final Map<String, (String, String, String?)> all =
+        <String, (String, String, String?)>{
+          for (final XmlElement r in XmlDocument.parse(
+            parts['xl/worksheets/_rels/sheet1.xml.rels']!,
+          ).findAllElements('Relationship'))
+            r.getAttribute('Id')!: (
+              r.getAttribute('Type')!,
+              r.getAttribute('Target')!,
+              r.getAttribute('TargetMode'),
+            ),
+        };
+    expect(all, <String, (String, String, String?)>{
+      'rId1': ('$rels/hyperlink', 'https://example.com/a', 'External'),
+      'rId2': ('$rels/hyperlink', 'https://example.com/b', 'External'),
+      'rId3': ('$rels/drawing', '../drawings/drawing1.xml', null),
+      'rId4': ('$rels/vmlDrawing', '../drawings/vmlDrawing1.vml', null),
+      'rId5': ('$rels/comments', '../comments1.xml', null),
+      'rId6': ('$rels/table', '../tables/table1.xml', null),
+      'rId7': ('$rels/table', '../tables/table2.xml', null),
+    });
+    final String sheet = parts['xl/worksheets/sheet1.xml']!;
+    expect(
+      sheet,
+      contains(
+        '<hyperlinks><hyperlink ref="A1" r:id="rId1" display="Site A"/>'
+        '<hyperlink ref="B1" r:id="rId2" display="Site B"/></hyperlinks>',
+      ),
+    );
+    expect(
+      sheet,
+      endsWith(
+        '<drawing r:id="rId3"/><legacyDrawing r:id="rId4"/>'
+        '<tableParts count="2"><tablePart r:id="rId6"/>'
+        '<tablePart r:id="rId7"/></tableParts></worksheet>',
+      ),
+    );
+    expect(parts['xl/tables/table1.xml'], contains('id="1" name="Stock"'));
+    expect(parts['xl/tables/table2.xml'], contains('id="2" name="Prices"'));
+    expect(
+      parts['xl/comments1.xml'],
+      contains('<comment ref="C1" authorId="0">'),
+    );
+    expect(
+      parts['xl/drawings/drawing1.xml'],
+      contains('<xdr:from><xdr:col>6</xdr:col>'),
+    );
+    // The second sheet's note takes the next VML id block.
+    expect(
+      parts['xl/drawings/vmlDrawing1.vml'],
+      contains('<o:idmap v:ext="edit" data="1"/>'),
+    );
+    expect(
+      parts['xl/drawings/vmlDrawing2.vml'],
+      contains('<o:idmap v:ext="edit" data="2"/>'),
+    );
+    expect(
+      parts['xl/drawings/vmlDrawing2.vml'],
+      contains('<v:shape id="_x0000_s2049"'),
+    );
+    // Content types cover every part (the checker's rule 3 too).
+    final String types = parts['[Content_Types].xml']!;
+    for (final String part in <String>[
+      '/xl/drawings/drawing1.xml',
+      '/xl/comments1.xml',
+      '/xl/comments2.xml',
+      '/xl/tables/table1.xml',
+      '/xl/tables/table2.xml',
+    ]) {
+      expect(types, contains('<Override PartName="$part"'));
+    }
+    expect(types, contains('<Default Extension="png"'));
+    expect(types, contains('<Default Extension="vml"'));
   });
 }

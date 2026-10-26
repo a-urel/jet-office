@@ -115,7 +115,18 @@
 ///     and `a:ext` has a positive integer `cx` and `cy`; the `cNvPr` ids
 ///     are unique in the part; and every `a:blip/@r:embed` names an image
 ///     relationship of the drawing whose target exists and whose content
-///     type is `image/png` or `image/jpeg`.
+///     type is `image/png` or `image/jpeg`;
+/// 31. table ids are unique across the workbook; table names are unique
+///     ignoring case, among tables and against defined names; each table's
+///     `ref` is a range inside its sheet with rows for the header (unless
+///     `headerRowCount="0"`), one data row and the totals
+///     (`totalsRowCount`); `tableColumns/@count` equals the ref's width and
+///     its children, and the column names are unique ignoring case; with a
+///     header row, every header cell is a string (`t="s"`) whose text,
+///     decoded, equals its column name, decoded; an `autoFilter/@ref` is
+///     the ref without the totals row; no two tables of a sheet overlap,
+///     and none overlaps the sheet's `autoFilter` or a `mergeCell`; and
+///     every table part is named by exactly one `tablePart`.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -205,6 +216,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkVmlDrawings(docs, violations);
   _checkDrawingRefs(docs, violations);
   _checkDrawings(raw, docs, violations);
+  _checkTables(docs, violations);
   return violations;
 }
 
@@ -1940,5 +1952,228 @@ void _checkAnchor(XmlElement anchor, String where, List<String> violations) {
       '$where: the ${anchor.name.local} from column ${from[0]}, row '
       '${from[2]} to column ${to[0]}, row ${to[2]} ends before it starts',
     );
+  }
+}
+
+const String _tableRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'table';
+
+/// The rectangle [r] as an A1 range, for messages.
+String _rectRef(_Rect r) =>
+    '${_columnLetters(r.col1 - 1)}${r.row1}:'
+    '${_columnLetters(r.col2 - 1)}${r.row2}';
+
+/// Whether [a] and [b] share a cell.
+bool _rectsOverlap(_Rect a, _Rect b) =>
+    a.row1 <= b.row2 &&
+    b.row1 <= a.row2 &&
+    a.col1 <= b.col2 &&
+    b.col1 <= a.col2;
+
+/// Rule 31: tables, their names, ranges, columns and header cells.
+void _checkTables(Map<String, XmlDocument> docs, List<String> violations) {
+  const String rule = 'rule 31';
+  final XmlDocument? sst = docs[_sharedStringsPart];
+  final List<String> strings = <String>[
+    if (sst != null)
+      for (final XmlElement si in sst.rootElement.findElements('si'))
+        si.findAllElements('t').map((XmlElement t) => t.innerText).join(),
+  ];
+  // Defined names, ignoring case; table names are compared against them.
+  final Set<String> definedNames = <String>{
+    if (docs[_workbookPart] case final XmlDocument book)
+      for (final XmlElement n in _all(book, 'definedName'))
+        sheetNameKey(_attr(n, 'name')),
+  };
+  // How many tablePart elements name each table part.
+  final Map<String, int> named = <String, int>{};
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final Map<String, XmlElement> rels = _sheetRelationships(docs, sheet.key);
+    final List<(String, _Rect)> tables = <(String, _Rect)>[];
+    for (final XmlElement part in _all(sheet.value, 'tablePart')) {
+      final String id = _attr(part, 'r:id');
+      final XmlElement? rel = rels[id];
+      if (rel == null || _attr(rel, 'Type') != _tableRelType) {
+        violations.add(
+          '$rule: ${sheet.key}: tablePart r:id "$id" is not a table '
+          'relationship',
+        );
+        continue;
+      }
+      final String target = _resolve(_dirOf(sheet.key), _attr(rel, 'Target'));
+      named.update(target, (int n) => n + 1, ifAbsent: () => 1);
+      final XmlDocument? table = docs[target];
+      // A missing part is rule 2's.
+      if (table == null) continue;
+      final _Rect? r = _checkTableRange(table, target, violations);
+      if (r == null) continue;
+      _checkTableHeader(table, target, r, sheet.value, strings, violations);
+      for (final (String other, _Rect o) in tables) {
+        if (_rectsOverlap(r, o)) {
+          violations.add(
+            '$rule: $target over ${_rectRef(r)} overlaps the table $other',
+          );
+        }
+      }
+      tables.add((target, r));
+      for (final String local in <String>['autoFilter', 'mergeCell']) {
+        for (final XmlElement e in _all(sheet.value, local)) {
+          final _Rect? o = _parseRect(_attr(e, 'ref'));
+          if (o != null && _rectsOverlap(r, o)) {
+            violations.add(
+              '$rule: $target over ${_rectRef(r)} overlaps the $local '
+              '"${_attr(e, 'ref')}" of ${sheet.key}',
+            );
+          }
+        }
+      }
+    }
+  }
+  final Map<String, String> ids = <String, String>{};
+  final Map<String, String> names = <String, String>{};
+  for (final MapEntry<String, XmlDocument> e in docs.entries) {
+    final XmlElement root = e.value.rootElement;
+    if (root.name.local != 'table' || !e.key.startsWith('xl/tables/')) {
+      continue;
+    }
+    final int count = named[e.key] ?? 0;
+    if (count != 1) {
+      violations.add(
+        '$rule: ${e.key} is named by $count tablePart elements; expected 1',
+      );
+    }
+    final String id = _attr(root, 'id');
+    final String? earlierId = ids[id];
+    if (earlierId != null) {
+      violations.add('$rule: ${e.key} has the id "$id" of $earlierId');
+    }
+    ids[id] = e.key;
+    final String name = decodeXstring(_attr(root, 'name'));
+    final String key = sheetNameKey(name);
+    final String? earlierName = names[key];
+    if (earlierName != null) {
+      violations.add(
+        '$rule: ${e.key} has the name "$name" of $earlierName, ignoring case',
+      );
+    }
+    names[key] = e.key;
+    if (definedNames.contains(key)) {
+      violations.add(
+        '$rule: ${e.key} has the name "$name" of a defined name, ignoring '
+        'case',
+      );
+    }
+  }
+}
+
+/// Rule 31 for one table part: its ref, rows, columns and filter. Returns
+/// the ref's rectangle, or null when the ref is not a range in the sheet.
+_Rect? _checkTableRange(
+  XmlDocument table,
+  String part,
+  List<String> violations,
+) {
+  const String rule = 'rule 31';
+  final XmlElement root = table.rootElement;
+  final String ref = _attr(root, 'ref');
+  final _Rect? r = _parseRect(ref);
+  final String? problem = r == null ? 'is not a range' : _problemWith(r);
+  if (problem != null) {
+    violations.add('$rule: $part: ref "$ref" $problem');
+    return null;
+  }
+  final int header =
+      int.tryParse(root.getAttribute('headerRowCount') ?? '') ?? 1;
+  final int totals =
+      int.tryParse(root.getAttribute('totalsRowCount') ?? '') ?? 0;
+  final int rows = r!.row2 - r.row1 + 1;
+  if (rows < header + 1 + totals) {
+    violations.add(
+      '$rule: $part: ref "$ref" has $rows rows; a header of $header, one '
+      'data row and totals of $totals need ${header + 1 + totals}',
+    );
+  }
+  final int width = r.col2 - r.col1 + 1;
+  final XmlElement? columns = root.getElement('tableColumns');
+  final List<XmlElement> children =
+      columns?.findElements('tableColumn').toList() ?? <XmlElement>[];
+  final String count = columns == null ? '' : _attr(columns, 'count');
+  if (int.tryParse(count) != width || children.length != width) {
+    violations.add(
+      '$rule: $part: tableColumns count "$count" and its ${children.length} '
+      'tableColumn children must both equal the width $width of "$ref"',
+    );
+  }
+  final Map<String, String> seen = <String, String>{};
+  for (final XmlElement column in children) {
+    final String name = decodeXstring(_attr(column, 'name'));
+    final String? earlier = seen[sheetNameKey(name)];
+    if (earlier != null) {
+      violations.add(
+        '$rule: $part: column "$name" repeats "$earlier", ignoring case',
+      );
+    }
+    seen[sheetNameKey(name)] = name;
+  }
+  final XmlElement? filter = root.getElement('autoFilter');
+  if (filter != null) {
+    final String expected = _rectRef((
+      row1: r.row1,
+      col1: r.col1,
+      row2: r.row2 - totals,
+      col2: r.col2,
+    ));
+    final String got = _attr(filter, 'ref');
+    final _Rect? f = _parseRect(got);
+    if (f == null || _rectRef(f) != expected) {
+      violations.add(
+        '$rule: $part: autoFilter ref "$got" is not the ref without its '
+        'totals row, "$expected"',
+      );
+    }
+  }
+  return r;
+}
+
+/// Rule 31 for the header cells of the table part [part] over [r] on the
+/// worksheet [sheet]: each a shared string equal to its column's name.
+void _checkTableHeader(
+  XmlDocument table,
+  String part,
+  _Rect r,
+  XmlDocument sheet,
+  List<String> strings,
+  List<String> violations,
+) {
+  const String rule = 'rule 31';
+  final XmlElement root = table.rootElement;
+  if (root.getAttribute('headerRowCount') == '0') return;
+  final List<XmlElement> columns =
+      root.getElement('tableColumns')?.findElements('tableColumn').toList() ??
+      <XmlElement>[];
+  final Map<String, XmlElement> cells = <String, XmlElement>{
+    for (final XmlElement c in _all(sheet, 'c')) _attr(c, 'r'): c,
+  };
+  for (int i = 0; i < columns.length && r.col1 + i <= r.col2; i++) {
+    final String name = decodeXstring(_attr(columns[i], 'name'));
+    final String ref = '${_columnLetters(r.col1 + i - 1)}${r.row1}';
+    final XmlElement? cell = cells[ref];
+    if (cell == null || _attr(cell, 't') != 's') {
+      violations.add(
+        '$rule: $part: header cell $ref is not a string; expected "$name"',
+      );
+      continue;
+    }
+    final int? index = int.tryParse(cell.getElement('v')?.innerText ?? '');
+    final String? text = index == null || index < 0 || index >= strings.length
+        ? null
+        : decodeXstring(strings[index]);
+    if (text != name) {
+      violations.add(
+        '$rule: $part: header cell $ref holds "$text"; its column is named '
+        '"$name"',
+      );
+    }
   }
 }

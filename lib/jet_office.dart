@@ -79,6 +79,8 @@ export 'src/xlsx/sheet_view.dart'
     show XlsxPane, XlsxSheetView, XlsxSheetVisibility;
 export 'src/xlsx/sheet_writer.dart' show XlsxSheetWriter;
 export 'src/xlsx/style.dart' show XlsxStyle;
+export 'src/xlsx/table.dart'
+    show XlsxTable, XlsxTableColumn, XlsxTableStyle, XlsxTotalsFunction;
 export 'src/xlsx/values.dart' show XlsxCell, XlsxDate, XlsxDecimal, XlsxFormula;
 export 'src/xlsx/warnings.dart' show XlsxLocale, XlsxWarning, XlsxWarningCode;
 export 'src/xlsx/xlsx_writer.dart'

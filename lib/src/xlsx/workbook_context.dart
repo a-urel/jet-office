@@ -11,7 +11,9 @@
 /// need content types, which the workbook writes only at `close()`; the
 /// sheet records them in [WorkbookContext.contentTypes]. The media parts of
 /// pictures are shared across sheets, so the context numbers them
-/// ([WorkbookContext.mediaPartFor]).
+/// ([WorkbookContext.mediaPartFor]), and so are the table ids and the names
+/// tables share with defined names ([WorkbookContext.takeTableId],
+/// [WorkbookContext.checkNameFree]).
 library;
 
 import 'dart:collection';
@@ -21,6 +23,7 @@ import '../zip/archive_adapter.dart';
 import 'cell_encoder.dart';
 import 'image.dart';
 import 'shared_strings.dart';
+import 'sheet_name.dart';
 import 'style_registry.dart';
 import 'warnings.dart';
 import 'worksheet_parts.dart';
@@ -113,6 +116,66 @@ final class WorkbookContext {
     final String part = mediaPartName(++_mediaCount, format.extension);
     _mediaParts[bytes] = part;
     return (part, true);
+  }
+
+  /// The number of table ids handed out so far.
+  int _tableCount = 0;
+
+  /// Takes the workbook's next table id, from 1, in the order tables are
+  /// registered; it also numbers the table's part, `xl/tables/table{id}.xml`.
+  /// Call it only once the table is checked, so a table that throws takes
+  /// no id.
+  int takeTableId() => ++_tableCount;
+
+  /// The names of the tables, keyed by [sheetNameKey], with their spelling.
+  final Map<String, String> _tableNames = <String, String>{};
+
+  /// The names defined in any scope, keyed by [sheetNameKey], with the
+  /// first spelling.
+  final Map<String, String> _definedNames = <String, String>{};
+
+  /// Throws [ArgumentError] named [field] when a table or a defined name of
+  /// any scope already has [name], ignoring case as [sheetNameKey] does.
+  ///
+  /// A table's name lives in the same namespace as the defined names of
+  /// every scope: a formula refers to `Sales[Amount]` from any sheet.
+  void checkNameFree(String name, String field) {
+    checkNotTableName(name, field);
+    final String? defined = _definedNames[sheetNameKey(name)];
+    if (defined != null) {
+      throw ArgumentError.value(
+        name,
+        field,
+        'The name "$name" is already a defined name, "$defined"; table '
+        'names and defined names are compared ignoring case.',
+      );
+    }
+  }
+
+  /// Throws [ArgumentError] named [field] when a table already has [name],
+  /// ignoring case. A defined name checks this one: the same spelling may
+  /// be defined in two scopes, but never next to a table.
+  void checkNotTableName(String name, String field) {
+    final String? table = _tableNames[sheetNameKey(name)];
+    if (table != null) {
+      throw ArgumentError.value(
+        name,
+        field,
+        'The name "$name" is already the name of the table "$table"; table '
+        'names and defined names are compared ignoring case.',
+      );
+    }
+  }
+
+  /// Records that a table is named [name]; call it after [checkNameFree].
+  void reserveTableName(String name) {
+    _tableNames[sheetNameKey(name)] = name;
+  }
+
+  /// Records that a name [name] is defined in some scope; call it after
+  /// [checkNotTableName]. A repeat in another scope changes nothing.
+  void reserveDefinedName(String name) {
+    _definedNames.putIfAbsent(sheetNameKey(name), () => name);
   }
 
   /// What the ZIP work threw, once it has failed; the writer is then dead.

@@ -2519,6 +2519,251 @@ void main() {
       );
     });
   });
+
+  group('rule 31: tables', () {
+    const String table1 = 'xl/tables/table1.xml';
+    const String table2 = 'xl/tables/table2.xml';
+    const String table3 = 'xl/tables/table3.xml';
+
+    /// Two sheets of tables: `T` with `Sales` over A1:C5 (header, three
+    /// data rows, totals), `Costs` over E1:F3, an auto filter on H1:I3 and
+    /// a merge of H6:I6; `U` with `Third` over A1:B3; and the workbook name
+    /// `Rate`.
+    Uint8List tablesBook() {
+      final XlsxWriter book = XlsxWriter();
+      book.defineName(const XlsxDefinedName('Rate', '0.18'));
+      book.addSheet('T')
+        ..table(
+          XlsxTable('Sales', XlsxRange.parse('A1:C5'), const <XlsxTableColumn>[
+            XlsxTableColumn('Region', totalsLabel: 'Total'),
+            XlsxTableColumn('Amount', totalsFunction: XlsxTotalsFunction.sum),
+            XlsxTableColumn('Note'),
+          ], totalsRow: true),
+        )
+        ..table(
+          XlsxTable('Costs', XlsxRange.parse('E1:F3'), const <XlsxTableColumn>[
+            XlsxTableColumn('Item'),
+            XlsxTableColumn('Cost'),
+          ]),
+        )
+        ..autoFilter(XlsxRange.parse('H1:I3'))
+        ..merge(XlsxRange.parse('H6:I6'))
+        ..row(<Object?>[])
+        ..row(<Object?>['North', 1, null, null, 'Paper', 2]);
+      book
+          .addSheet('U')
+          .table(
+            XlsxTable(
+              'Third',
+              XlsxRange.parse('A1:B3'),
+              const <XlsxTableColumn>[
+                XlsxTableColumn('X'),
+                XlsxTableColumn('Y'),
+              ],
+            ),
+          );
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(Map<String, String Function(String xml)> edits) =>
+        _rebuild(
+          tablesBook(),
+          edit: <String, String? Function(String)>{
+            for (final MapEntry<String, String Function(String)> e
+                in edits.entries)
+              e.key: e.value,
+          },
+        );
+
+    /// Expects a rule 31 violation that contains [fragment].
+    void expectViolation(Uint8List bytes, String fragment) {
+      final List<String> violations = checkXlsx(bytes);
+      expect(
+        violations.where(
+          (String v) => v.startsWith('rule 31:') && v.contains(fragment),
+        ),
+        isNotEmpty,
+        reason: 'violations: $violations',
+      );
+    }
+
+    /// Replaces [from] by [to] once in a part, failing when it is missing.
+    String Function(String) swap(String from, String to) => (String xml) {
+      expect(xml, contains(from));
+      return xml.replaceFirst(from, to);
+    };
+
+    test('a workbook with tables is clean', () {
+      expect(checkXlsx(tablesBook()), isEmpty);
+    });
+
+    test('table ids are unique across the workbook', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table3: swap('id="3"', 'id="1"'),
+        }),
+        'id "1"',
+      );
+    });
+
+    test('table names are unique ignoring case', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table2: swap(
+            'name="Costs" displayName="Costs"',
+            'name="SALES" displayName="SALES"',
+          ),
+        }),
+        'name "SALES"',
+      );
+    });
+
+    test('a table name is not a defined name', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table3: swap(
+            'name="Third" displayName="Third"',
+            'name="rate" displayName="rate"',
+          ),
+        }),
+        'name "rate"',
+      );
+    });
+
+    test('a ref lies inside the sheet', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table3: swap('ref="A1:B3"', 'ref="A1:B1048577"'),
+        }),
+        'ref "A1:B1048577"',
+      );
+    });
+
+    test('a ref has rows for the header, a data row and the totals', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table1: swap('ref="A1:C5"', 'ref="A1:C2"'),
+        }),
+        'ref "A1:C2" has 2 rows',
+      );
+    });
+
+    test('tableColumns count equals the width and the children', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table1: swap('<tableColumns count="3">', '<tableColumns count="4">'),
+        }),
+        'count "4"',
+      );
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table1: swap('<tableColumn id="3" name="Note"/>', ''),
+        }),
+        '2 tableColumn',
+      );
+    });
+
+    test('column names are unique ignoring case', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table2: swap('name="Cost"', 'name="ITEM"'),
+        }),
+        'column "ITEM"',
+      );
+    });
+
+    test('every header cell is a string equal to its column name', () {
+      // The text differs.
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table1: swap('name="Note"', 'name="Notes"'),
+        }),
+        'header cell C1',
+      );
+      // Not a string.
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet1: (String xml) {
+            final RegExp c1 = RegExp('<c r="F1" t="s"><v>[0-9]+</v></c>');
+            expect(xml, contains(c1));
+            return xml.replaceFirst(c1, '<c r="F1"><v>1</v></c>');
+          },
+        }),
+        'header cell F1',
+      );
+      // Missing.
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet2: (String xml) {
+            final RegExp a1 = RegExp('<c r="A1" t="s"><v>[0-9]+</v></c>');
+            expect(xml, contains(a1));
+            return xml.replaceFirst(a1, '');
+          },
+        }),
+        'header cell A1',
+      );
+    });
+
+    test('autoFilter covers the ref without the totals row', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table1: swap(
+            '<autoFilter ref="A1:C4"/>',
+            '<autoFilter ref="A1:C5"/>',
+          ),
+        }),
+        'autoFilter ref "A1:C5"',
+      );
+    });
+
+    test('tables do not overlap each other, the filter or a merge', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          table2: swap('ref="E1:F3"', 'ref="C1:D3"'),
+        }),
+        'overlaps the table',
+      );
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet1: swap(
+            '<autoFilter ref="H1:I3"/>',
+            '<autoFilter ref="F3:G4"/>',
+          ),
+        }),
+        'overlaps the autoFilter',
+      );
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet1: swap('<mergeCell ref="H6:I6"/>', '<mergeCell ref="B5:C5"/>'),
+        }),
+        'overlaps the mergeCell',
+      );
+    });
+
+    test('a tablePart names a table relationship', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet1: swap('<tablePart r:id="rId2"/>', '<tablePart r:id="rId9"/>'),
+        }),
+        'tablePart r:id "rId9"',
+      );
+    });
+
+    test('every table part is named by exactly one tablePart', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet1: swap('<tablePart r:id="rId2"/>', ''),
+        }),
+        '$table2 is named by 0',
+      );
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet1: swap('<tablePart r:id="rId2"/>', '<tablePart r:id="rId1"/>'),
+        }),
+        '$table1 is named by 2',
+      );
+    });
+  });
 }
 
 const String _drawingRelType =

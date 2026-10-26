@@ -12,7 +12,13 @@ import 'package:jet_office/jet_office.dart';
 import 'fixture.dart';
 
 /// The fixtures of milestone M4.
-List<Fixture> m4Fixtures() => <Fixture>[_richText(), _notes(), _images()];
+List<Fixture> m4Fixtures() => <Fixture>[
+  _richText(),
+  _notes(),
+  _images(),
+  _tables(),
+  _objects(),
+];
 
 /// A real 4 × 2 PNG, 87 bytes: 8-bit RGB, each pixel's red rising from 0
 /// to 255 across, green from 0 to 255 down, blue 128.
@@ -306,6 +312,156 @@ Fixture _images() => Fixture(
           const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
         ),
       );
+    return book.close();
+  },
+);
+
+/// Tables on two sheets.
+///
+/// `Sales` has the table `Sales` over A1:C5: a header row, three data rows
+/// and a totals row. The caller writes the header cells of A and B and
+/// leaves C to the writer, which fills in `Note`; the sheet ends before row
+/// 5, so the writer writes the totals row: `Total` under `Region`,
+/// `SUBTOTAL(109,B2:B4)` under `Amount` (Decision 2) and nothing under
+/// `Note`. Beside it, the table `Costs` over E1:F3 has the style
+/// `TableStyleLight9` with column stripes, and its header, on the same row,
+/// is filled in entirely. `Plain` has the table `Numbers` over A1:B2,
+/// without a header row and without a style. A reader shows the cells; the
+/// tables are pinned in `fixtures_test.dart`.
+Fixture _tables() => Fixture(
+  'm4_tables',
+  <String, List<List<String>>>{
+    'Sales': <List<String>>[
+      <String>['Region', 'Amount', 'Note', '', 'Item', 'Cost'],
+      <String>['North', '120', 'Checked', '', 'Paper', '15'],
+      <String>['South', '80', '', '', 'Ink', '30.5'],
+      <String>['East', '45.5', '', '', '', ''],
+      <String>['Total', '', '', '', '', ''],
+    ],
+    'Plain': <List<String>>[
+      <String>['1', '2'],
+      <String>['3', '4'],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Sales': <List<Object?>>[
+      <Object?>['Region', 'Amount', 'Note', null, 'Item', 'Cost'],
+      <Object?>['North', 120, 'Checked', null, 'Paper', 15],
+      <Object?>['South', 80, null, null, 'Ink', 30.5],
+      <Object?>['East', 45.5],
+      <Object?>['Total', 245.5, null],
+    ],
+    'Plain': <List<Object?>>[
+      <Object?>[1, 2],
+      <Object?>[3, 4],
+    ],
+  },
+  () {
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('Sales')
+      ..table(
+        XlsxTable('Sales', XlsxRange.parse('A1:C5'), const <XlsxTableColumn>[
+          XlsxTableColumn('Region', totalsLabel: 'Total'),
+          XlsxTableColumn('Amount', totalsFunction: XlsxTotalsFunction.sum),
+          XlsxTableColumn('Note'),
+        ], totalsRow: true),
+      )
+      ..table(
+        XlsxTable('Costs', XlsxRange.parse('E1:F3'), const <XlsxTableColumn>[
+          XlsxTableColumn('Item'),
+          XlsxTableColumn('Cost'),
+        ], style: XlsxTableStyle.light(9, showColumnStripes: true)),
+      )
+      ..row(<Object?>['Region', 'Amount'])
+      ..row(<Object?>['North', 120, 'Checked', null, 'Paper', 15])
+      ..row(<Object?>['South', 80, null, null, 'Ink', 30.5])
+      ..row(<Object?>['East', 45.5]);
+    book.addSheet('Plain')
+      ..table(
+        XlsxTable(
+          'Numbers',
+          XlsxRange.parse('A1:B2'),
+          const <XlsxTableColumn>[XlsxTableColumn('X'), XlsxTableColumn('Y')],
+          headerRow: false,
+          style: null,
+        ),
+      )
+      ..row(<Object?>[1, 2])
+      ..row(<Object?>[3, 4]);
+    return book.close();
+  },
+);
+
+/// One sheet with every kind of object (Review Focus 5 of the M4 plan),
+/// and a second sheet with a note.
+///
+/// `All` has links to two addresses in A1 and B1, a note on C1, the PNG
+/// of [png4x2] at G2, and the tables `Stock` over A3:B5 and `Prices` over
+/// D3:E5, whose header row the writer fills in from a row of `null`s. Its
+/// relationships are `rId1` and `rId2` for the links, `rId3` for the
+/// drawing, `rId4` for the VML drawing, `rId5` for the comments and `rId6`
+/// and `rId7` for the tables. `More` has one note on A1, whose VML drawing
+/// takes the next id block. The ids are pinned in `fixtures_test.dart`.
+Fixture _objects() => Fixture(
+  'm4_objects',
+  <String, List<List<String>>>{
+    'All': <List<String>>[
+      <String>['Site A', 'Site B', 'Noted', '', ''],
+      <String>['', '', '', '', ''],
+      <String>['Item', 'Qty', '', 'Code', 'Price'],
+      <String>['Bolt', '10', '', 'B-1', '0.25'],
+      <String>['Nut', '25', '', 'N-1', '0.1'],
+    ],
+    'More': <List<String>>[
+      <String>['One note'],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'All': <List<Object?>>[
+      <Object?>['Site A', 'Site B', 'Noted'],
+      <Object?>[],
+      <Object?>['Item', 'Qty', null, 'Code', 'Price'],
+      <Object?>['Bolt', 10, null, 'B-1', 0.25],
+      <Object?>['Nut', 25, null, 'N-1', 0.1],
+    ],
+    'More': <List<Object?>>[
+      <Object?>['One note'],
+    ],
+  },
+  () {
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('All')
+      ..table(
+        XlsxTable('Stock', XlsxRange.parse('A3:B5'), const <XlsxTableColumn>[
+          XlsxTableColumn('Item'),
+          XlsxTableColumn('Qty'),
+        ]),
+      )
+      ..table(
+        XlsxTable('Prices', XlsxRange.parse('D3:E5'), const <XlsxTableColumn>[
+          XlsxTableColumn('Code'),
+          XlsxTableColumn('Price'),
+        ]),
+      )
+      ..row(<Object?>[
+        XlsxHyperlink.url('https://example.com/a', text: 'Site A'),
+        XlsxHyperlink.url('https://example.com/b', text: 'Site B'),
+        'Noted',
+      ])
+      ..note(0, 2, XlsxNote.plain('Check C1', author: 'Ahmet'))
+      ..blankRow()
+      ..row(<Object?>[null, null, null, null, null])
+      ..row(<Object?>['Bolt', 10, null, 'B-1', 0.25])
+      ..row(<Object?>['Nut', 25, null, 'N-1', 0.1])
+      ..picture(
+        XlsxPicture(
+          XlsxImage(png4x2),
+          const XlsxOneCellAnchor(XlsxAnchorPoint(1, 6)),
+        ),
+      );
+    book.addSheet('More')
+      ..row(<Object?>['One note'])
+      ..note(0, 0, XlsxNote.plain('The second sheet', author: 'Ahmet'));
     return book.close();
   },
 );

@@ -214,6 +214,24 @@ abstract final class XlsxLimits {
   /// `ST_Xstring`, without a length. A longer author throws
   /// [ArgumentError] when the note is added.
   static const int maxNoteAuthorLength = 255;
+
+  /// The longest table name, in UTF-16 code units.
+  ///
+  /// A table name follows the defined-name rules (Microsoft's "Rename an
+  /// Excel table" support page), and Microsoft's "Names in formulas"
+  /// support page gives 255 for a name ("A name can contain up to 255
+  /// characters"). The "Excel specifications and limits" page gives no
+  /// figure for it. A longer name throws [ArgumentError] when the table is
+  /// added.
+  static const int maxTableNameLength = 255;
+
+  /// The longest table column name, in UTF-16 code units.
+  ///
+  /// The M4 plan sets 255; Excel's "Excel specifications and limits" page
+  /// gives no figure for it, and ECMA-376 types `tableColumn/@name` as
+  /// `ST_Xstring`, without a length. A longer name throws [ArgumentError]
+  /// when the table is added.
+  static const int maxTableColumnNameLength = 255;
 }
 
 /// Thrown when a write would exceed one of the [XlsxLimits].

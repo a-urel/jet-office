@@ -16,7 +16,9 @@
 /// lists the content types the sheets registered in the shared
 /// `WorkbookContext`. Pictures are written by their sheets (see
 /// `drawing.dart`), which share the workbook's media numbering through the
-/// context; charts are not ported.
+/// context, and so are tables (see `table.dart`), which share the table ids
+/// and, with the defined names, one namespace of names; charts are not
+/// ported.
 library;
 
 import 'dart:typed_data';
@@ -158,12 +160,16 @@ sealed class XlsxWriterBase {
   /// defined on a sheet, where it hides this one.
   ///
   /// Throws [ArgumentError] for an invalid name, comment or formula (see
-  /// [XlsxDefinedName]) or a name already defined in the workbook scope,
-  /// ignoring case; the earlier names stay then. Throws [StateError] after
+  /// [XlsxDefinedName]), a name already defined in the workbook scope or
+  /// the name of a table (see `XlsxSheetWriter.table`), ignoring case; the
+  /// earlier names stay then. Throws [StateError] after
   /// `close()` or after a failure.
   void defineName(XlsxDefinedName name) {
     _checkOpen();
-    _names.add(checkDefinedName(name, _names));
+    final XlsxDefinedName checked = checkDefinedName(name, _names);
+    _context.checkNotTableName(name.name, 'name');
+    _names.add(checked);
+    _context.reserveDefinedName(name.name);
   }
 
   /// Protects the workbook, replacing an earlier call: [protection] says
