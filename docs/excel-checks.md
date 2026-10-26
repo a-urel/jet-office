@@ -299,7 +299,9 @@ macOS if single clicks only select).
 
 One sheet, `Form`. Select each input cell in column B (all are empty), read
 the prompt, open the drop-down if any, and type a bad value to read the
-alert.
+alert. Type the values: pasting into a cell replaces its validation with the
+source's, so a pasted bad value is accepted without an alert and Data
+Validation then shows `Any value`.
 
 - B2: a drop-down of `Fish`, `say "hi"` and `R&D`, three items, the quotes and
   the ampersand shown as typed. Any other text is refused (stop alert).
@@ -342,15 +344,28 @@ One sheet, `Bars`, the values -50 to 50 in steps of 5 in all five columns.
 These need Excel 2010 or later; check that none shows a repair prompt.
 
 - A `Bar`: blue bars to the right of a middle axis for positive values, red
-  bars to its left for negative ones, drawn from the middle of the cell.
-- B `Solid`: solid green bars (no gradient) with a border.
+  bars to its left for negative ones, drawn from the middle of the cell, with
+  a dashed axis line between them. The rule's Negative Value and Axis
+  settings show the red negative fill and the axis at the cell midpoint.
+- B `Solid`: solid green bars (no gradient) with a border; bars for negative
+  values are filled too, in Excel's default red.
 - C `Stars`, D `Triangles` and E `Boxes`: three stars, three triangles and
-  five boxes by value. Excel for the web and LibreOffice may not show these.
+  five boxes by value. The default thresholds of 33 % and 67 % fall at -17
+  and 17: -50 to -20 show an empty star and a red down triangle, -15 to 15 a
+  half star and a yellow dash, 20 to 50 a full star and a green up
+  triangle. The boxes fill from none (-50 to -35) to all four quarters (30
+  to 50). Excel for the web and LibreOffice may not show these.
+
+In Excel for Mac on 2026-10-26 the axis line did not show and B's negative
+bars were green outlines with no fill: the file stores neither color, and
+Excel shows both as white (see "Open issues", M4).
 
 ### `m3_page_setup`
 
 Two sheets, `Landscape` and `Scaled`. Check File > Print (Print Preview) and
-Page Layout > Page Setup for each.
+Page Layout > Page Setup (File > Page Setup on macOS) for each. Excel for
+Mac's Page Setup has no paper size; its Print dialog shows A4, which is also
+what it shows for a sheet that stores none, so A4 is not told apart there.
 
 - `Landscape`: landscape orientation, A4 paper, fit to 1 page wide (and
   automatic tall), page centered horizontally, gridlines printed.
@@ -369,11 +384,18 @@ Page Setup > Header/Footer shows `Different odd and even pages` and
 - The odd-page texts do not print on pages 1 and 2. Primary check: Custom
   Header shows `R&&D` in the left section (the stored code, with the
   ampersand doubled; the printed page shows `R&D`, so this is not a bug) and
-  the date code `&D` in the right section, and Custom Footer (odd pages)
-  shows `Page &P of &N`. To see them printed, in Page Layout set Scale (not
-  Scale to Fit) and raise it until Print Preview shows 3 pages, about 200 %
-  on A4 or Letter. Page 3 then shows the odd header (`R&D` left, the date
-  right) and `Page 3 of 3`; discard the change afterwards.
+  the date code in the right section (`&[Date]` in Excel for Mac), and Custom
+  Footer (odd pages) shows `Page &[Page] of &[Pages]`. Excel for Mac's
+  Custom Header and Custom Footer have no tabs for the first, odd and even
+  pages: while `Different first page` is ticked they show the first page's
+  texts (`Cover` in the centre, an empty footer). Untick it, read them, then
+  Cancel. The Header/Footer tab's own preview shows the odd header as it
+  prints, `R&D` left and the date right.
+- To see the odd texts printed, in Page Setup > Page set Adjust to (not Fit
+  to) and raise it until Print Preview shows 3 pages: about 200 % on A4,
+  where the pages hold rows 1 to 26, 27 to 52 and 53 to 60. Page 3 then
+  shows the odd header (`R&D` left, the date right) and `Page 3 of 3`;
+  discard the change afterwards.
 
 ### `m3_protection`
 
@@ -402,9 +424,13 @@ Statistics and Custom tabs.
   `Ayse Yilmaz`, Company `Jetronik`, Category `Finance`, Keywords
   `report; accounts`, Comments `Fixture for the document properties`.
 - Last saved by `Jet Office`. Status `Final` is checked under File > Info
-  (it may not appear on the Advanced Properties tabs).
+  (it may not appear on the Advanced Properties tabs). Excel for Mac shows
+  no Status: none of its File > Properties tabs (General, Summary,
+  Statistics, Content, Custom) has the field (see "Open issues", M5).
 - Created 24.10.2026 09:30 UTC and modified 25.10.2026 18:45:10 UTC, in
-  local time (12:30 and 21:45:10 in Türkiye).
+  local time (12:30 and 21:45:10 in Türkiye). Excel for Mac's Statistics
+  tab shows the file's disk time as "Modified" instead, as for
+  `m1_properties`.
 - Custom: `Project` (text) `Atlas`, `Count` (number) `3`, `Ratio` (number)
   `0,5`, `Final` (yes or no) `Yes`, `Due` (date) 24.10.2026.
 
@@ -427,7 +453,10 @@ owner records them in "Results", mark both issues closed, with the date.
 - Rows 47 and 48: the diagonal borders, one going up and one going down.
 - Row 62, `wrap text`: the row grows to fit the wrapped text (the file stores
   no height for it).
-- Row 67, `reading order RTL`: the text reads right to left.
+- Row 67, `reading order RTL`: the text reads right to left. Excel for Mac
+  has no text direction setting under Format Cells > Alignment and shows the
+  cell left-aligned, so this needs Excel for Windows (see "Open issues",
+  M5).
 - `locked false` and `hidden true`: Format Cells > Protection shows Locked
   cleared for the first and Hidden ticked for the second.
 
@@ -543,7 +572,15 @@ not checked. The fix folds the Kelvin sign in `sheetNameKey`, starts with a
 failing regression test, and corrects its doc comment, which calls the case
 too rare to map.
 
-### Some M2 settings not checked in desktop Excel (open, M3)
+### Some M2 settings not checked in desktop Excel (closed, 2026-10-26)
+
+Closed on 2026-10-26 by the desktop re-checks of `m2_styles` and `m2_views`
+in Excel for Mac 16.114.1 (see "Results"). The diagonal borders, the row
+grown to fit `wrap text`, the Protection tab of `locked false` and
+`hidden true`, the 85 % zoom and the `Split` panes all show as expected.
+`reading order RTL` cannot be checked there, as Excel for Mac has no text
+direction setting; it moves to "Reading order and Status not checked in
+Excel" below.
 
 Found in the M2 check on 2026-10-25. Excel for the web does not show these,
 although each is written as the checklist expects:
@@ -560,6 +597,40 @@ M3's Excel check covers them in desktop Excel, with the document properties.
 
 The M3 section's "Desktop re-checks of M1 and M2" covers `m2_styles` and
 `m2_views`.
+
+### Data bars draw no negative fill or axis by default (open, M4)
+
+Found in the M3 check on 2026-10-26, `m3_conditional_x14`, in Excel for Mac
+16.114.1. The owner deferred the fix to M4.
+
+`_writeDataBar` in `lib/src/xlsx/conditional_format_x14.dart` writes
+`x14:negativeFillColor` and `x14:axisColor` only when the rule has them. B
+`Solid` has neither, and A `Bar` has no axis color. The `XlsxDataBar`
+dartdoc says `null` means "Excel's" color, but Excel does not fall back to
+its defaults: B's Edit Formatting Rule dialog shows the negative fill and
+the axis color as white. So B's negative bars are green outlines with no
+fill, and neither column shows an axis line, even at 200 %. A's negative
+bars are red, because its rule sets `negativeFillColor`.
+
+Excel writes both colors on every data bar it saves, its defaults being
+`FFFF0000` for the negative fill and `FF000000` for the axis. The fix
+writes those defaults when the rule has no color of its own (or changes the
+dartdoc), starts with a failing regression test, and updates
+`m3_conditional_x14`'s checklist entry if the expected look changes.
+
+### Reading order and Status not checked in Excel (open, M5)
+
+Found in the M3 check on 2026-10-26, in Excel for Mac 16.114.1, which shows
+neither:
+
+- `m2_styles` row 67, `reading order RTL` (stored
+  `<alignment readingOrder="2"/>`): Format Cells > Alignment has no text
+  direction setting, and the cell shows left-aligned.
+- `m3_properties` Status `Final` (stored `cp:contentStatus`): no tab of
+  File > Properties has a Status field.
+
+Both need Excel for Windows (Format Cells > Alignment > Text direction, and
+File > Info). The owner chose to check them before release, at M5.
 
 ## Results
 
@@ -579,3 +650,14 @@ The M3 section's "Desktop re-checks of M1 and M2" covers `m2_styles` and
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_merges_filter` | ok | No repair prompt. A1:D1 and B3:C4 merged, the title bold and centred. Filtering `Qty` works ("11 of 14 records found"). Name Manager lists nothing. `Plain` has no filter and no merges. |
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_formula_xstring` | sorun | No repair prompt. A2 and the second tab read `_x0041_`. A1 shows `A`, formula bar `="A"`: Excel decodes `_xHHHH_` in `<f>` (see "Open issues", M3). The `_x0041_` sheet's filter works and Name Manager lists nothing, but a copy saved from Excel turned the hidden filter name into an external link `[1]A!$A$1:$B$3`, so Excel decodes defined names too. |
 | 2026-10-26 | Microsoft 365, Excel for Mac, build not recorded | `m1_properties` (desktop re-check) | ok | No repair prompt. File > Properties: Summary shows Title `Quarterly report`, Subject `Sales`, Author `Ahmet Urel`, Company `Jetronik`, Category `Reports`, Keywords `sales; q3`, Comments `A test workbook`. Statistics shows Created 24.10.2026 11:30 and Last saved by `jet_office`. "Modified" shows the file's disk time (26.10.2026 04:36), not the stored 09:45:30 UTC; Excel for Mac reads it from the file system. |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_names` | ok | No repair prompt. Name Manager lists `Local` (`=Data!$B$2`, `Data`), `Print_Area` and `Print_Titles` (`O'Brien`) and `TaxRate` (`=0,18`, workbook). `Data!A1` shows `18`, formula bar `=TaxRate*100`; `Data` prints on one page. `O'Brien`'s Print Titles fields as expected; Print Preview shows 2 pages, row 1 and column A repeated on each. A first look showed `Data` on 2 pages with `O'Brien`'s print area; that was a copy left open in Excel from an earlier pass, and a clean reopen showed 1 page. |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_hyperlinks` | ok | No repair prompt. All six items as expected, the `Write to sales` tooltip included. |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_validation` | ok | No repair prompt. B2 to B10 as expected. In a first try B6 to B8 accepted bad values: the values had been pasted, which removed the cells' validation (Data Validation showed `Any value`). After a clean reopen B6 showed Date greater than 24.10.2026, B7 Time less than 12:00, B8 Text length at most 5, and typed bad values were refused. |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_conditional` | ok | No repair prompt. Checked on a screenshot against the numbers: A `Ana`, `Dana`, `Hanna`, `Rana`; B 70 or more green, below 40 bold, B21's 40 plain; C above the average 47.5 green (C13's 47 plain); D 97, 94 and 87 red; E at or below 48.5 green; F all but `Gold` red; G red to yellow to green; H gradient blue bars; I arrows up for 4 and 5, sideways for 3, down for 1 and 2. |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_conditional_x14` | sorun | No repair prompt. A: red bars left and blue bars right of the cell's middle, gradient, none at 0. Stars, triangles and boxes as expected at 200 % (half stars from -15 to 15). B: positive bars solid green with a border, but negative bars are green outlines with no fill, and no axis line shows in A or B: B's rule dialog shows the negative fill and axis color as white, because the file stores neither (see "Open issues", M4). |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_page_setup` | ok | No repair prompt. `Landscape`: landscape, fit to 1 page wide with tall empty, centred horizontally, gridlines. `Scaled`: portrait, 85 %, first page number 3, margins 0,25/0,5/0,2", over then down. Excel for Mac's Page Setup has no paper size and its Print dialog shows A4, as it does for a sheet that stores no paper size, so A4 is not told apart. |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_header_footer` | ok | No repair prompt. Both checkboxes ticked. Print Preview: page 1 header `Cover`, no footer; page 2 footer `Report`, no header. Custom Header shows `Cover` while `Different first page` is ticked; with it unticked it shows `R&&D` left and `&[Date]` right, and Custom Footer `Page &[Page] of &[Pages]`. At about 200 % (rows 1-26, 27-52, 53-60) page 3 shows `R&D`, 26.10.2026 and `Page 3 of 3`. |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_protection` | ok | No repair prompt. Review shows Unprotect Sheet and Protect Workbook; the tab shows a lock and + is greyed. Only B2 accepts input; C3 shows `2` with an empty formula bar. Format: Column Width enabled, Row Height, Rename Sheet and Move or Copy greyed. `password` unprotects the sheet and `test` the workbook. |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_properties` | ok (kısmi) | No repair prompt. Summary: all eight fields as expected. Statistics: Created 24.10.2026 12:30, Last saved by `Jet Office`; Modified shows the file's disk time (26.10.2026 04:36). Custom: `Project` Atlas (text), `Count` 3 and `Ratio` 0,5 (number), `Final` Yes (yes or no), `Due` 24.10.2026 (date). Status `Final` is not shown anywhere in Excel for Mac (see "Open issues", M5). |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m2_styles` (desktop re-check) | ok (kısmi) | No repair prompt. Rows 47 and 48 show the diagonals up and down; row 62 grows to four lines for `wrap text`; A68's Protection tab has Locked and Hidden cleared, A69's both ticked. Row 67's reading order cannot be checked: Excel for Mac has no text direction setting and shows the cell left-aligned (see "Open issues", M5). |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m2_views` (desktop re-check) | ok | No repair prompt. `View` opens at 85 % (status bar), without gridlines or headings, B1's `0` hidden. `Split` shows a real split, four panes, the dividers about 120 points from the left and 60 from the top. |
