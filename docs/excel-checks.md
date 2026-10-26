@@ -623,6 +623,8 @@ writes those defaults when the rule has no color of its own (or changes the
 dartdoc), starts with a failing regression test, and updates
 `m3_conditional_x14`'s checklist entry if the expected look changes.
 
+Fixed in 43a8471; awaiting the M4 Excel check.
+
 ### Reading order and Status not checked in Excel (open, M5)
 
 Found in the M3 check on 2026-10-26, in Excel for Mac 16.114.1, which shows
