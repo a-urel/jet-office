@@ -2353,6 +2353,63 @@ void main() {
         ),
       );
     });
+    test('an anchor without one of its children', () {
+      // Each edit drops the first match, which belongs to the one-cell
+      // anchor except for `to`, which only the two-cell anchor has.
+      final Map<String, (RegExp, String)> drops = <String, (RegExp, String)>{
+        'from': (
+          RegExp('<xdr:from>.*?</xdr:from>'),
+          '<xdr:oneCellAnchor> has no <xdr:from>',
+        ),
+        'ext': (
+          RegExp('<xdr:ext [^>]*/>'),
+          '<xdr:oneCellAnchor> has no <xdr:ext>',
+        ),
+        'to': (
+          RegExp('<xdr:to>.*?</xdr:to>'),
+          '<xdr:twoCellAnchor> has no <xdr:to>',
+        ),
+        'pic': (
+          RegExp('<xdr:pic>.*?</xdr:pic>'),
+          '<xdr:oneCellAnchor> has no <xdr:pic>',
+        ),
+        'clientData': (
+          RegExp('<xdr:clientData/>'),
+          '<xdr:oneCellAnchor> has no <xdr:clientData>',
+        ),
+      };
+      for (final MapEntry<String, (RegExp, String)> drop in drops.entries) {
+        expectViolation(
+          tamper(<String, String Function(String)>{
+            drawing1: (String x) => x.replaceFirst(drop.value.$1, ''),
+          }),
+          drop.value.$2,
+        );
+      }
+    });
+    test('a two-cell anchor without its picture or client data', () {
+      String twoCell(String x, String Function(String anchor) edit) =>
+          x.replaceFirstMapped(
+            RegExp('<xdr:twoCellAnchor[^>]*>.*?</xdr:twoCellAnchor>'),
+            (Match m) => edit(m[0]!),
+          );
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) => twoCell(
+            x,
+            (String a) => a.replaceFirst(RegExp('<xdr:pic>.*?</xdr:pic>'), ''),
+          ),
+        }),
+        '<xdr:twoCellAnchor> has no <xdr:pic>',
+      );
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) =>
+              twoCell(x, (String a) => a.replaceFirst('<xdr:clientData/>', '')),
+        }),
+        '<xdr:twoCellAnchor> has no <xdr:clientData>',
+      );
+    });
     test('a drawing r:id the sheet does not declare', () {
       expectViolation(
         tamper(<String, String Function(String)>{

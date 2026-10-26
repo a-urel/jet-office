@@ -108,10 +108,13 @@
 ///     `v:shape/@id` is unique across the workbook and, when it is
 ///     `_x0000_s{n}`, n ÷ 1024 is a block of its drawing's `o:idmap`;
 /// 30. a sheet's `drawing/@r:id` names a drawing relationship of the
-///     sheet; in every drawing part, each anchor's `from` and `to` are
-///     four integers whose cell lies inside the sheet (`col` within
-///     0..16383, `row` within 0..1048575), and its `to` is not before its
-///     `from` on either axis, by cell and then by offset; every `xdr:ext`
+///     sheet; in every drawing part, each `oneCellAnchor` has the
+///     children `from`, `ext`, `pic` and `clientData`, each
+///     `twoCellAnchor` `from`, `to`, `pic` and `clientData`; each anchor's
+///     `from` and `to` are four integers whose cell lies inside the sheet
+///     (`col` within 0..16383, `row` within 0..1048575), and its `to` is
+///     not before its `from` on either axis, by cell and then by offset;
+///     every `xdr:ext`
 ///     and `a:ext` has a positive integer `cx` and `cy`; the `cNvPr` ids
 ///     are unique in the part; and every `a:blip/@r:embed` names an image
 ///     relationship of the drawing whose target exists and whose content
@@ -1908,9 +1911,21 @@ void _checkDrawings(
   });
 }
 
-/// Rule 30 for one anchor: its `from` and `to` lie inside the sheet, and
-/// `to` is not before `from`.
+/// Rule 30 for one anchor: it has its children, its `from` and `to` lie
+/// inside the sheet, and `to` is not before `from`.
 void _checkAnchor(XmlElement anchor, String where, List<String> violations) {
+  final String kind = anchor.name.local;
+  for (final String child in <String>[
+    'from',
+    if (kind == 'oneCellAnchor') 'ext' else 'to',
+    'pic',
+    'clientData',
+  ]) {
+    final bool has = anchor.childElements.any(
+      (XmlElement e) => e.name.local == child && e.name.namespaceUri == _xdr,
+    );
+    if (!has) violations.add('$where: <xdr:$kind> has no <xdr:$child>');
+  }
   final Map<String, List<int>> markers = <String, List<int>>{};
   for (final String name in <String>['from', 'to']) {
     final XmlElement? marker = _elementsIn(anchor, _xdr, name).firstOrNull;

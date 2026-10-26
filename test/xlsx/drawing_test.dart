@@ -1141,22 +1141,21 @@ void main() {
         throwsArgumentError,
       );
       expect(sheet.holdsTrailerData, isFalse);
-      book.addSheet('T').picture(_png(0, 0));
+      // A valid picture on the same sheet is its first, with the first
+      // shape id and the first media number: the refused ones took none.
+      sheet.picture(_png(0, 0, bytes: refused));
       final Map<String, Uint8List> parts = readXlsxBytes(book.close().bytes);
-      expect(parts.keys, isNot(contains(_drawing1)));
+      expect(
+        utf8Text(parts[_drawing1]!),
+        contains('<xdr:cNvPr id="2" name="Picture 1"/>'),
+      );
       expect(
         parts.keys.where((String k) => k.startsWith('xl/media/')),
         <String>['xl/media/image1.png'],
       );
       expect(
-        utf8Text(parts['xl/drawings/_rels/drawing2.xml.rels']!),
+        utf8Text(parts['xl/drawings/_rels/drawing1.xml.rels']!),
         contains('Target="../media/image1.png"'),
-      );
-      // The second sheet's picture is its first: the refused ones took no
-      // position either.
-      expect(
-        utf8Text(parts['xl/drawings/drawing2.xml']!),
-        contains('name="Picture 1"'),
       );
     });
   });
