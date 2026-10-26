@@ -535,11 +535,11 @@ Table) appears.
 - Beside it, `Costs` over E1:F3: style Light 9 with banded columns (stripes
   down the columns, not along the rows), header `Item`, `Cost`.
 - The filter buttons of both headers work: filter `Region` to `North`.
-- Inserting a row inside `Sales` (Table Design > Resize Table, or typing under
-  the last data row with the totals row off) extends the table.
+- Inserting a row inside `Sales` (right-click a data row > Insert > Table
+  Rows Above) extends the table, and the totals formula follows.
 - `Plain` has the table `Numbers` over A1:B2 with no header row and no style:
-  the cells hold 1, 2 and 3, 4, and Table Design shows Header Row off. Excel
-  shows its own `Column1`/`Column2` names only in the table's definition.
+  the cells hold 1, 2 and 3, 4, and Table Design shows Header Row off. Its
+  stored column names, `X` and `Y`, show when Header Row is turned on.
 - Formulas > Name Manager lists `Sales`, `Costs` and `Numbers`.
 
 ### `m4_objects`
