@@ -110,8 +110,7 @@ void main() {
       'm3_protection',
       'm3_properties',
     ]);
-    // Each M4 task appends its fixtures; Task 1 only wires the list.
-    expect(m4Fixtures(), isA<List<Fixture>>());
+    expect(names(m4Fixtures()), <String>['m4_rich_text']);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
@@ -642,5 +641,51 @@ void main() {
       expect(custom, contains('<$type>'));
     }
     expect(custom, contains('<vt:filetime>2026-10-24T00:00:00Z'));
+  });
+
+  test('m4_rich_text writes its runs and shares A5 with A6', () {
+    final Map<String, String> parts = readXlsx(named('m4_rich_text').build());
+    final String sheet = parts['xl/worksheets/sheet1.xml']!;
+    final List<String> items = <String>[
+      for (final XmlElement si in XmlDocument.parse(
+        parts['xl/sharedStrings.xml']!,
+      ).findAllElements('si'))
+        si.toXmlString(),
+    ];
+    String itemOf(String ref) =>
+        items[int.parse(
+          RegExp(
+            '<c r="$ref"[^>]* t="s"><v>(\\d+)</v>',
+          ).firstMatch(sheet)!.group(1)!,
+        )];
+    expect(
+      itemOf('A1'),
+      '<si><r><rPr><b/><sz val="11"/><rFont val="Calibri"/></rPr>'
+      '<t xml:space="preserve">Total: </t></r><r><t>42</t></r></si>',
+    );
+    expect(
+      itemOf('A2'),
+      '<si><r><rPr><i/><sz val="11"/><color rgb="FFFF0000"/>'
+      '<rFont val="Calibri"/></rPr><t>Red italic</t></r>'
+      '<r><rPr><u/><sz val="11"/><rFont val="Calibri"/></rPr>'
+      '<t xml:space="preserve"> and underlined</t></r></si>',
+    );
+    expect(
+      itemOf('A3'),
+      '<si><r><t>x</t></r><r><rPr><vertAlign val="superscript"/>'
+      '<sz val="11"/><rFont val="Calibri"/></rPr><t>2</t></r></si>',
+    );
+    // Decision 3: the bold run carries the cell's Arial 14.
+    expect(
+      itemOf('A4'),
+      '<si><r><rPr><b/><sz val="14"/><rFont val="Arial"/></rPr>'
+      '<t>Bold</t></r><r><t xml:space="preserve"> in Arial 14</t></r></si>',
+    );
+    expect(sheet, contains(RegExp('<c r="A4" s="[1-9][0-9]*" t="s">')));
+    expect(itemOf('A5'), '<si><t>Same text</t></si>');
+    expect(
+      RegExp('<c r="A5" t="s"><v>(\\d+)</v>').firstMatch(sheet)!.group(1),
+      RegExp('<c r="A6" t="s"><v>(\\d+)</v>').firstMatch(sheet)!.group(1),
+    );
   });
 }

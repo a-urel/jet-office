@@ -1884,4 +1884,89 @@ void main() {
       );
     });
   });
+
+  group('rule 28: shared-string items', () {
+    Uint8List richBook() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('R').row(<Object?>[
+        'plain',
+        XlsxRichText(const <XlsxTextRun>[
+          XlsxTextRun('Total: ', font: XlsxFont(bold: true)),
+          XlsxTextRun('42'),
+        ]),
+      ]);
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      richBook(),
+      edit: <String, String? Function(String)>{'xl/sharedStrings.xml': change},
+    );
+
+    test('a workbook with rich text is clean', () {
+      expect(checkXlsx(richBook()), isEmpty);
+    });
+    test('an si with two t', () {
+      _expectRule(
+        tamper(
+          (String x) =>
+              x.replaceFirst('<t>plain</t>', '<t>plain</t><t>again</t>'),
+        ),
+        28,
+      );
+    });
+    test('an si with nothing in it', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<si><t>plain</t></si>', '<si/>')),
+        28,
+      );
+    });
+    test('an si mixing t and r', () {
+      _expectRule(
+        tamper(
+          (String x) =>
+              x.replaceFirst('<t>plain</t>', '<t>plain</t><r><t>x</t></r>'),
+        ),
+        28,
+      );
+    });
+    test('an si with a child other than t and r', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<t>plain</t>', '<x>plain</x>')),
+        28,
+      );
+    });
+    test('an r without t', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst('<r><t>42</t></r>', '<r><rPr/></r>'),
+        ),
+        28,
+      );
+    });
+    test('an r with two t', () {
+      _expectRule(
+        tamper(
+          (String x) =>
+              x.replaceFirst('<r><t>42</t></r>', '<r><t>4</t><t>2</t></r>'),
+        ),
+        28,
+      );
+    });
+    test('an r with two rPr', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<rPr><b/>', '<rPr/><rPr><b/>')),
+        28,
+      );
+    });
+    test('an r with a child other than rPr and t', () {
+      _expectRule(
+        tamper(
+          (String x) =>
+              x.replaceFirst('<r><t>42</t></r>', '<r><t>42</t><x/></r>'),
+        ),
+        28,
+      );
+    });
+  });
 }

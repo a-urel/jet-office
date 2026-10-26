@@ -326,28 +326,50 @@ void validateFont(XlsxFont font) {
 /// font must have passed [resolveFont] and [validateFont].
 void writeFontXml(XmlWriter w, XlsxFont resolved) {
   w.start('font');
-  if (resolved.bold ?? false) {
+  _writeFontChildren(w, resolved, 'name');
+  w.end();
+}
+
+/// Writes [font] as the `<rPr>` of a rich text run, `rFont` for its name.
+///
+/// `CT_RPrElt` is a choice, so the schema allows its children in any order;
+/// they are written in the order Excel writes them, that of [writeFontXml]:
+/// `b`, `i`, `strike`, `condense`, `extend`, `outline`, `shadow`, `u`,
+/// `vertAlign`, `sz`, `color`, `rFont`, `family`, `charset`, `scheme`. Only
+/// the fields [font] sets are written, and `false`, `none` and `baseline`
+/// are omitted as in [writeFontXml]. The font must have passed
+/// [validateFont].
+void writeRunPropertiesXml(XmlWriter w, XlsxFont font) {
+  w.start('rPr');
+  _writeFontChildren(w, font, 'rFont');
+  w.end();
+}
+
+/// The children of a `<font>` or `<rPr>` for [font] in `CT_Font` order, the
+/// name in an element called [nameElement].
+void _writeFontChildren(XmlWriter w, XlsxFont font, String nameElement) {
+  if (font.bold ?? false) {
     w.empty('b');
   }
-  if (resolved.italic ?? false) {
+  if (font.italic ?? false) {
     w.empty('i');
   }
-  if (resolved.strike ?? false) {
+  if (font.strike ?? false) {
     w.empty('strike');
   }
-  if (resolved.condense ?? false) {
+  if (font.condense ?? false) {
     w.empty('condense');
   }
-  if (resolved.extend ?? false) {
+  if (font.extend ?? false) {
     w.empty('extend');
   }
-  if (resolved.outline ?? false) {
+  if (font.outline ?? false) {
     w.empty('outline');
   }
-  if (resolved.shadow ?? false) {
+  if (font.shadow ?? false) {
     w.empty('shadow');
   }
-  switch (resolved.underline) {
+  switch (font.underline) {
     case null:
     case XlsxUnderline.none:
       break;
@@ -360,35 +382,34 @@ void writeFontXml(XmlWriter w, XlsxFont resolved) {
     case XlsxUnderline.doubleAccounting:
       w.empty('u', <String, String>{'val': 'doubleAccounting'});
   }
-  final XlsxFontScript? script = resolved.script;
+  final XlsxFontScript? script = font.script;
   if (script != null && script != XlsxFontScript.baseline) {
     w.empty('vertAlign', <String, String>{'val': script.name});
   }
-  final double? size = resolved.size;
+  final double? size = font.size;
   if (size != null) {
     w.empty('sz', <String, String>{'val': formatXmlDouble(size)});
   }
-  final XlsxColor? color = resolved.color;
+  final XlsxColor? color = font.color;
   if (color != null) {
     w.start('color');
     writeColorAttributes(w, color);
     w.end();
   }
-  final String? name = resolved.name;
+  final String? name = font.name;
   if (name != null) {
-    w.empty('name', <String, String>{'val': name});
+    w.empty(nameElement, <String, String>{'val': name});
   }
-  final int? family = resolved.family;
+  final int? family = font.family;
   if (family != null) {
     w.empty('family', <String, String>{'val': '$family'});
   }
-  final int? charset = resolved.charset;
+  final int? charset = font.charset;
   if (charset != null) {
     w.empty('charset', <String, String>{'val': '$charset'});
   }
-  final XlsxFontScheme? scheme = resolved.scheme;
+  final XlsxFontScheme? scheme = font.scheme;
   if (scheme != null && scheme != XlsxFontScheme.none) {
     w.empty('scheme', <String, String>{'val': scheme.name});
   }
-  w.end();
 }

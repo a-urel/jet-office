@@ -90,7 +90,10 @@
 ///     integer of at least 2, unique in the part, a `name` no earlier
 ///     property has (ignoring case), the `fmtid`
 ///     `{D5CDD505-2E9C-101B-9397-08002B2CF9AE}` and exactly one value child,
-///     which is in the `vt:` namespace.
+///     which is in the `vt:` namespace;
+/// 28. every `si` of the shared strings holds either one `t`, or one or
+///     more `r` and nothing else; and every `r` holds exactly one `t` and
+///     at most one `rPr`, and nothing else.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -174,6 +177,7 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkConditionalExtensions(docs, violations);
   _checkProtection(docs, violations);
   _checkCustomProperties(docs, violations);
+  _checkSharedStringItems(docs, violations);
   return violations;
 }
 
@@ -1474,5 +1478,58 @@ void _checkCustomProperties(
         );
       }
     }
+  }
+}
+
+/// The local names of the child elements of [e], as `<a>, <b>`, or
+/// `nothing`.
+String _describeChildren(XmlElement e) {
+  final List<String> names = <String>[
+    for (final XmlElement child in e.childElements) '<${child.name.local}>',
+  ];
+  return names.isEmpty ? 'nothing' : names.join(', ');
+}
+
+/// Rule 28.
+void _checkSharedStringItems(
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  final XmlDocument? sst = docs[_sharedStringsPart];
+  if (sst == null) return;
+  int index = 0;
+  for (final XmlElement si in sst.rootElement.findElements('si')) {
+    final List<String> children = <String>[
+      for (final XmlElement child in si.childElements) child.name.local,
+    ];
+    final bool plain = children.length == 1 && children.single == 't';
+    final bool runs =
+        children.isNotEmpty && children.every((String c) => c == 'r');
+    if (!plain && !runs) {
+      violations.add(
+        'rule 28: si $index holds ${_describeChildren(si)}; expected one '
+        '<t> or one or more <r>',
+      );
+    }
+    if (runs) {
+      int run = 0;
+      for (final XmlElement r in si.childElements) {
+        final List<String> parts = <String>[
+          for (final XmlElement child in r.childElements) child.name.local,
+        ];
+        final int texts = parts.where((String p) => p == 't').length;
+        final int properties = parts.where((String p) => p == 'rPr').length;
+        if (texts != 1 ||
+            properties > 1 ||
+            texts + properties != parts.length) {
+          violations.add(
+            'rule 28: si $index run $run holds ${_describeChildren(r)}; '
+            'expected one <t> and at most one <rPr>',
+          );
+        }
+        run++;
+      }
+    }
+    index++;
   }
 }

@@ -144,4 +144,72 @@ void main() {
       'color',
     );
   });
+
+  group('writeRunPropertiesXml', () {
+    String rPr(XlsxFont font) {
+      final StringBuffer out = StringBuffer();
+      impl.writeRunPropertiesXml(XmlWriter(out), font);
+      return out.toString();
+    }
+
+    test('writes every property in Excel\'s order, the name as rFont', () {
+      expect(
+        rPr(
+          const XlsxFont(
+            scheme: XlsxFontScheme.minor,
+            charset: 1,
+            family: 2,
+            name: 'Arial',
+            color: red,
+            size: 14,
+            script: XlsxFontScript.superscript,
+            underline: XlsxUnderline.doubleLine,
+            shadow: true,
+            outline: true,
+            extend: true,
+            condense: true,
+            strike: true,
+            italic: true,
+            bold: true,
+          ),
+        ),
+        '<rPr><b/><i/><strike/><condense/><extend/><outline/><shadow/>'
+        '<u val="double"/><vertAlign val="superscript"/><sz val="14"/>'
+        '<color rgb="FFC00000"/><rFont val="Arial"/><family val="2"/>'
+        '<charset val="1"/><scheme val="minor"/></rPr>',
+      );
+    });
+
+    test('writes only the fields the font sets', () {
+      expect(rPr(const XlsxFont(bold: true)), '<rPr><b/></rPr>');
+      expect(
+        rPr(const XlsxFont(name: 'Arial', size: 9.5)),
+        '<rPr><sz val="9.5"/><rFont val="Arial"/></rPr>',
+      );
+      expect(
+        rPr(const XlsxFont(underline: XlsxUnderline.single)),
+        '<rPr><u/></rPr>',
+      );
+    });
+
+    test('false, none and baseline are omitted', () {
+      expect(
+        rPr(
+          const XlsxFont(
+            bold: false,
+            italic: false,
+            strike: false,
+            condense: false,
+            extend: false,
+            outline: false,
+            shadow: false,
+            underline: XlsxUnderline.none,
+            script: XlsxFontScript.baseline,
+            scheme: XlsxFontScheme.none,
+          ),
+        ),
+        '<rPr/>',
+      );
+    });
+  });
 }
