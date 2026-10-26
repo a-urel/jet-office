@@ -501,14 +501,15 @@ adds a line to "Rules the writer enforces" in `docs/xlsx-writer.md`.
 
 ### Some document properties not checked in Excel (closed, 2026-10-26)
 
-Closed on 2026-10-26 by the desktop check of `m1_properties` in Excel for Mac
-(see "Results"). File > Properties showed every core and app field as
-expected: Summary had Title, Subject, Author, Company, Category `Reports`,
-Keywords and Comments, and Statistics had Created 24.10.2026 11:30 (08:30 UTC)
-and Last saved by `jet_office`. Statistics' "Modified" showed the time the
-file was written to disk (26.10.2026 04:36), not the stored
-`dcterms:modified` (09:45:30 UTC): Excel for Mac reads that field from the
-file system, so the stored value is checked by the tests, not by Excel.
+Closed on 2026-10-26 by the desktop check of `m1_properties` in Excel for
+Mac 16.114.1 (see "Results"). File > Properties showed every core and app
+field as expected: Summary had Title, Subject, Author, Company, Category
+`Reports`, Keywords and Comments, and Statistics had Created 24.10.2026
+11:30 (08:30 UTC) and Last saved by `jet_office`. Statistics' "Modified"
+showed the time the file was written to disk (26.10.2026 04:36), not the
+stored `dcterms:modified` (09:45:30 UTC): Excel for Mac reads that field
+from the file system, so the stored value is checked by the tests, not by
+Excel.
 
 Found in the M1 check on 2026-10-24, `m1_properties`. Excel for the web shows
 no document properties. GridCraft, which is not Excel, showed Title,
@@ -649,7 +650,7 @@ File > Info). The owner chose to check them before release, at M5.
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_views` | ok (kısmi) | No repair prompt. Opens on `View`, only that tab selected (no `[Group]`), tab red, no gridlines or headings, B1's `0` hidden. `Frozen`, `RTL` and `Outline` (button at row 1) as expected. Unhide lists `Hidden` only. The 85 % zoom and the `Split` panes are not shown in Excel for the web (see "Open issues", M3). |
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_merges_filter` | ok | No repair prompt. A1:D1 and B3:C4 merged, the title bold and centred. Filtering `Qty` works ("11 of 14 records found"). Name Manager lists nothing. `Plain` has no filter and no merges. |
 | 2026-10-25 | Microsoft 365, Excel for the web, build not recorded, Chrome on macOS | `m2_formula_xstring` | sorun | No repair prompt. A2 and the second tab read `_x0041_`. A1 shows `A`, formula bar `="A"`: Excel decodes `_xHHHH_` in `<f>` (see "Open issues", M3). The `_x0041_` sheet's filter works and Name Manager lists nothing, but a copy saved from Excel turned the hidden filter name into an external link `[1]A!$A$1:$B$3`, so Excel decodes defined names too. |
-| 2026-10-26 | Microsoft 365, Excel for Mac, build not recorded | `m1_properties` (desktop re-check) | ok | No repair prompt. File > Properties: Summary shows Title `Quarterly report`, Subject `Sales`, Author `Ahmet Urel`, Company `Jetronik`, Category `Reports`, Keywords `sales; q3`, Comments `A test workbook`. Statistics shows Created 24.10.2026 11:30 and Last saved by `jet_office`. "Modified" shows the file's disk time (26.10.2026 04:36), not the stored 09:45:30 UTC; Excel for Mac reads it from the file system. |
+| 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m1_properties` (desktop re-check) | ok | No repair prompt. File > Properties: Summary shows Title `Quarterly report`, Subject `Sales`, Author `Ahmet Urel`, Company `Jetronik`, Category `Reports`, Keywords `sales; q3`, Comments `A test workbook`. Statistics shows Created 24.10.2026 11:30 and Last saved by `jet_office`. "Modified" shows the file's disk time (26.10.2026 04:36), not the stored 09:45:30 UTC; Excel for Mac reads it from the file system. |
 | 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_names` | ok | No repair prompt. Name Manager lists `Local` (`=Data!$B$2`, `Data`), `Print_Area` and `Print_Titles` (`O'Brien`) and `TaxRate` (`=0,18`, workbook). `Data!A1` shows `18`, formula bar `=TaxRate*100`; `Data` prints on one page. `O'Brien`'s Print Titles fields as expected; Print Preview shows 2 pages, row 1 and column A repeated on each. A first look showed `Data` on 2 pages with `O'Brien`'s print area; that was a copy left open in Excel from an earlier pass, and a clean reopen showed 1 page. |
 | 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_hyperlinks` | ok | No repair prompt. All six items as expected, the `Write to sales` tooltip included. |
 | 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_validation` | ok | No repair prompt. B2 to B10 as expected. In a first try B6 to B8 accepted bad values: the values had been pasted, which removed the cells' validation (Data Validation showed `Any value`). After a clean reopen B6 showed Date greater than 24.10.2026, B7 Time less than 12:00, B8 Text length at most 5, and typed bad values were refused. |
