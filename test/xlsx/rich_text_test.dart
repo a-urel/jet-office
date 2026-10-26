@@ -145,19 +145,53 @@ void main() {
       expect(clean.removed, 2);
     });
 
-    test('keeps a run that only scrubbing left empty', () {
+    // An empty run would be written as `<r>...<t></t></r>`, which Excel is
+    // reported to repair, so no run is left empty.
+    test('drops a run that scrubbing left empty', () {
+      final ({XlsxRichText text, int removed, bool truncated}) clean =
+          cleanRichText(
+            _rich(const <XlsxTextRun>[
+              XlsxTextRun('\u0001', font: _bold),
+              XlsxTextRun('a'),
+            ]),
+          );
+      expect(clean.text, _rich(const <XlsxTextRun>[XlsxTextRun('a')]));
+      expect(clean.removed, 1);
+      expect(clean.truncated, isFalse);
+    });
+
+    test('drops a run given empty, which removes nothing', () {
+      final ({XlsxRichText text, int removed, bool truncated}) clean =
+          cleanRichText(
+            _rich(const <XlsxTextRun>[
+              XlsxTextRun('Label: ', font: _bold),
+              XlsxTextRun(''),
+              XlsxTextRun('', font: _bold),
+              XlsxTextRun('42'),
+            ]),
+          );
       expect(
-        cleanRichText(
-          _rich(const <XlsxTextRun>[
-            XlsxTextRun('\u0001', font: _bold),
-            XlsxTextRun('a'),
-          ]),
-        ).text,
+        clean.text,
         _rich(const <XlsxTextRun>[
-          XlsxTextRun('', font: _bold),
-          XlsxTextRun('a'),
+          XlsxTextRun('Label: ', font: _bold),
+          XlsxTextRun('42'),
         ]),
       );
+      expect(clean.removed, 0);
+      expect(clean.truncated, isFalse);
+    });
+
+    test('a rich text whose runs are all left empty has no runs', () {
+      final ({XlsxRichText text, int removed, bool truncated}) clean =
+          cleanRichText(
+            _rich(const <XlsxTextRun>[
+              XlsxTextRun('', font: _bold),
+              XlsxTextRun('\u0001'),
+            ]),
+          );
+      expect(clean.text.runs, isEmpty);
+      expect(clean.removed, 1);
+      expect(clean.truncated, isFalse);
     });
 
     test(
@@ -238,6 +272,7 @@ void main() {
     });
 
     test('32,767 units across runs are not truncated', () {
+      // The empty run at the limit is dropped as empty, not as cut.
       final ({XlsxRichText text, int removed, bool truncated}) clean =
           cleanRichText(
             _rich(<XlsxTextRun>[
@@ -246,7 +281,14 @@ void main() {
               const XlsxTextRun('', font: _bold),
             ]),
           );
-      expect(clean.text.runs, hasLength(3));
+      expect(
+        clean.text,
+        _rich(<XlsxTextRun>[
+          XlsxTextRun('a' * 32766),
+          const XlsxTextRun('b', font: _bold),
+        ]),
+      );
+      expect(clean.removed, 0);
       expect(clean.truncated, isFalse);
     });
   });
@@ -471,6 +513,53 @@ void main() {
       expect(warning.count, 1);
       expect(warning.sheet, 'S');
       expect(warning.cells, <String>['A1']);
+    });
+
+    test('a run given empty writes no <r>', () {
+      expect(
+        enc(
+          XlsxRichText(const <XlsxTextRun>[
+            XlsxTextRun('Label: ', font: _bold),
+            XlsxTextRun(''),
+          ]),
+        ),
+        '<c r="A1" t="s"><v>0</v></c>',
+      );
+      expect(items(), <String>[
+        '<si><r><rPr><b/><sz val="11"/><rFont val="Calibri"/></rPr>'
+            '<t xml:space="preserve">Label: </t></r></si>',
+      ]);
+      expect(warnings.warnings, isEmpty);
+    });
+
+    test('a run that removal empties writes no <r>', () {
+      // Left with one run without a font, it is the plain string.
+      expect(
+        enc(
+          XlsxRichText(const <XlsxTextRun>[
+            XlsxTextRun('\u0001', font: _bold),
+            XlsxTextRun('a'),
+          ]),
+        ),
+        '<c r="A1" t="s"><v>0</v></c>',
+      );
+      expect(enc('a'), '<c r="A1" t="s"><v>0</v></c>');
+      expect(items(), <String>['<si><t>a</t></si>']);
+      expect(
+        warnings.warnings.single.code,
+        XlsxWarningCode.invalidCharactersRemoved,
+      );
+    });
+
+    test('a rich text left with no runs is the plain empty string', () {
+      expect(
+        enc(XlsxRichText(const <XlsxTextRun>[XlsxTextRun('', font: _bold)])),
+        '<c r="A1" t="s"><v>0</v></c>',
+      );
+      expect(enc(''), '<c r="A1" t="s"><v>0</v></c>');
+      expect(strings.count, 2);
+      expect(items(), <String>['<si><t></t></si>']);
+      expect(warnings.warnings, isEmpty);
     });
 
     test('20,000 + 20,000 units keep the first run and cut the second', () {

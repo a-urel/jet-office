@@ -116,8 +116,10 @@ final class CellEncoder {
   /// resolved (Calibri 11 where neither sets a name or size), so a bold run
   /// in an Arial 14 cell is Arial 14 bold; a run without a font carries
   /// none and shows the cell's font. The same rich text in cells of
-  /// different fonts is therefore two shared strings. A rich text left with
-  /// one run without a font shares the `<si>` of that plain string.
+  /// different fonts is therefore two shared strings. A run left with no
+  /// text is dropped. A rich text left with one run without a font shares
+  /// the `<si>` of that plain string, and one left with no runs that of the
+  /// empty string.
   ///
   /// Data problems (characters XML forbids, text past 32,767 UTF-16 code
   /// units, integers past 2^53, dates outside 1900 to 9999, a date shown in

@@ -158,6 +158,15 @@ void main() {
       expect(xml(s), endsWith('uniqueCount="1"><si><t>abc</t></si></sst>'));
     });
 
+    test('no runs is the plain empty string', () {
+      final SharedStrings s = SharedStrings();
+      expect(s.indexOfRich(rich(const <XlsxTextRun>[])), 0);
+      expect(s.indexOf(''), 0);
+      expect(s.count, 2);
+      expect(s.uniqueCount, 1);
+      expect(xml(s), endsWith('uniqueCount="1"><si><t></t></si></sst>'));
+    });
+
     test('one run with a font is a rich entry', () {
       final SharedStrings s = SharedStrings();
       expect(s.indexOf('abc'), 0);

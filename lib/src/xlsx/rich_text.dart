@@ -52,7 +52,9 @@ final class XlsxTextRun {
 /// together. The writer refuses a rich text without runs, and it treats the
 /// text of the runs as data, like a plain string: characters XML forbids
 /// are removed and text past 32,767 UTF-16 code units is cut, with
-/// warnings.
+/// warnings. A run with no text, as given or after that, is left out
+/// without a warning, and a rich text left with no runs is written as the
+/// empty string.
 final class XlsxRichText {
   /// Creates a rich text of [runs], holding an unmodifiable copy of the
   /// list.
@@ -84,17 +86,20 @@ final class XlsxRichText {
 }
 
 /// [text] made fit for a cell: the characters XML forbids removed from each
-/// run, and the whole cut to [XlsxLimits.maxCellTextLength] UTF-16 code
-/// units.
+/// run, the whole cut to [XlsxLimits.maxCellTextLength] UTF-16 code units,
+/// and no run left empty.
 ///
 /// Each run is scrubbed on its own, because each becomes its own `<t>`: a
 /// surrogate pair split across two runs loses both halves. `removed` counts
 /// the code units removed from all runs. The limit applies to the scrubbed
 /// text. The cut falls inside the run that crosses the limit, one unit
-/// earlier when it would split a surrogate pair; the runs after it are
-/// dropped, and so is that run when the cut leaves it empty. `truncated`
-/// says whether anything was cut. A run that scrubbing alone left empty is
-/// kept. [text] itself is returned when nothing changes.
+/// earlier when it would split a surrogate pair, and the runs after it are
+/// dropped. `truncated` says whether anything was cut. A run whose text is
+/// empty, as given or once scrubbed or cut, is dropped as well, and counts
+/// in neither: an empty run is an empty `<t>`, which Excel is reported to
+/// repair (XlsxWriter, tested against Excel, refuses an empty fragment).
+/// When every run is empty the result has no runs. [text] itself is
+/// returned when nothing changes.
 ({XlsxRichText text, int removed, bool truncated}) cleanRichText(
   XlsxRichText text,
 ) {
@@ -116,15 +121,16 @@ final class XlsxRichText {
         final int last = kept.codeUnitAt(cut - 1);
         if (last >= 0xD800 && last <= 0xDBFF) cut--;
       }
-      if (cut == 0) continue;
       kept = kept.substring(0, cut);
     }
+    if (kept.isEmpty) continue;
     length += kept.length;
     runs.add(
       identical(kept, run.text) ? run : XlsxTextRun(kept, font: run.font),
     );
   }
-  if (removed == 0 && !truncated) {
+  // Without removal or a cut, a run is missing only when it was empty.
+  if (removed == 0 && !truncated && runs.length == text.runs.length) {
     return (text: text, removed: 0, truncated: false);
   }
   return (text: XlsxRichText(runs), removed: removed, truncated: truncated);

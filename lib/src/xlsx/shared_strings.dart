@@ -42,10 +42,12 @@ final class SharedStrings {
   /// counts as one reference in [count].
   ///
   /// Rich entries are deduplicated by `==`. A rich text of one run without
-  /// a font is interned as its plain string, as [indexOf] would, so it
-  /// shares the `<si>` of that string.
+  /// a font is interned as its plain string, and one without runs (all of
+  /// them left empty by [cleanRichText]) as the empty string, as [indexOf]
+  /// would, so each shares the `<si>` of that string.
   int indexOfRich(XlsxRichText text) {
     final List<XlsxTextRun> runs = text.runs;
+    if (runs.isEmpty) return indexOf('');
     if (runs.length == 1 && runs.single.font == null) {
       return indexOf(runs.single.text);
     }
