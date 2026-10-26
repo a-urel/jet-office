@@ -38,7 +38,8 @@ void _fill(XlsxSheetWriter sheet) {
     )
     ..pageSetup(const XlsxPageSetup(scale: 50))
     ..headerFooter(const XlsxHeaderFooter(oddHeader: 'H'))
-    ..protect(const XlsxSheetProtection());
+    ..protect(const XlsxSheetProtection())
+    ..note(1, 0, XlsxNote.plain('n'));
 }
 
 void main() {
@@ -76,6 +77,7 @@ void main() {
         '<pageSetup',
         '<headerFooter>',
         '<sheetProtection',
+        '<legacyDrawing',
       ]) {
         expect(sheet1, contains(element));
       }

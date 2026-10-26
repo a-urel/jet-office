@@ -23,6 +23,10 @@
 /// encoded, and the finished sheet writes its `hyperlinks` and, for the
 /// external ones, a relationships part with one relationship per address,
 /// whose ids `SheetRelationships` assigns.
+/// Notes are trailer settings too, checked when added and held until the
+/// sheet finishes, which writes them sorted by cell as a comments part and
+/// a VML drawing (see `note.dart`) with the VML id blocks the workbook
+/// hands out, after the worksheet and its relationships.
 /// The sheet reaches the workbook's encoder, styles and ZIP through a
 /// [WorkbookContext].
 library;
@@ -30,6 +34,7 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../opc/ooxml.dart';
 import '../xml/utf8_buffer.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
@@ -43,6 +48,7 @@ import 'defined_name.dart';
 import 'header_footer.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
+import 'note.dart';
 import 'page_setup.dart';
 import 'range.dart';
 import 'rich_text.dart';
@@ -50,6 +56,7 @@ import 'sheet_protection.dart';
 import 'sheet_view.dart';
 import 'style.dart';
 import 'values.dart';
+import 'warnings.dart';
 import 'workbook_context.dart';
 import 'workbook_parts.dart';
 import 'worksheet_parts.dart';
@@ -285,6 +292,31 @@ abstract final class XlsxSheetWriter {
   /// protection stays then.
   void protect(XlsxSheetProtection protection);
 
+  /// Puts [note] on the zero-based cell ([row], [column]): a yellow box
+  /// Excel shows when the cell is hovered, or all the time for a visible
+  /// note.
+  ///
+  /// A trailer setting like [merge]; the cell need not hold a value. The
+  /// notes are written sorted by row, then column, whatever order they
+  /// were added in, and their authors in the order those notes use them
+  /// first. A note's box takes about two columns right of the cell and
+  /// four rows, moved left or up at the sheet's last column or row.
+  ///
+  /// The text is data: characters XML forbids are removed and text past
+  /// [XlsxLimits.maxCellTextLength] UTF-16 code units is cut, with the
+  /// warnings `invalidCharactersRemoved` and `textTruncated` at the note's
+  /// cell, as for cell text. Its runs' fonts are written as given.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError] when [row] or
+  /// [column] lies outside the sheet (named `row` or `column`), the cell
+  /// already has a note (the message names the cell), the author holds a
+  /// character XML forbids or is longer than
+  /// [XlsxLimits.maxNoteAuthorLength] UTF-16 code units (named `author`),
+  /// the text has no runs (named `runs`) or a run's font is invalid (named
+  /// `runs[i].font.<field>`). When it throws, nothing is recorded: no note
+  /// and no warning.
+  void note(int row, int column, XlsxNote note);
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
@@ -422,15 +454,20 @@ final class WorksheetWriter implements XlsxSheetWriter {
   /// The hyperlinks written so far, with the reference of their cell.
   final List<(String, XlsxHyperlink)> _links = <(String, XlsxHyperlink)>[];
 
+  /// The notes, keyed by `row * XlsxLimits.maxColumns + column`, so the
+  /// keys sort by row, then column.
+  final Map<int, WorksheetNote> _notes = <int, WorksheetNote>{};
+
   /// The range of the auto filter, if [autoFilter] set one.
   XlsxRange? get autoFilterRange => _autoFilter;
 
-  /// Whether the sheet still holds what its part is rendered from beyond
+  /// Whether the sheet still holds what its parts are rendered from beyond
   /// what `close()` needs: links, merges, validations, conditional formats,
-  /// columns, view and page settings. False once [finish] has run; tests
-  /// use it to confirm a finished sheet lets that data go.
+  /// notes, columns, view and page settings. False once [finish] has run;
+  /// tests use it to confirm a finished sheet lets that data go.
   bool get holdsTrailerData =>
       _links.isNotEmpty ||
+      _notes.isNotEmpty ||
       _merges.isNotEmpty ||
       _validations.isNotEmpty ||
       _conditionalFormats.isNotEmpty ||
@@ -630,6 +667,45 @@ final class WorksheetWriter implements XlsxSheetWriter {
     _checkOpenSheet();
     checkProtectionPassword(protection.password);
     _protection = protection;
+  }
+
+  @override
+  void note(int row, int column, XlsxNote note) {
+    _checkOpenSheet();
+    checkNote(name, row, column, note);
+    final int key = row * XlsxLimits.maxColumns + column;
+    final String ref = cellRef(row, column);
+    if (_notes.containsKey(key)) {
+      throw ArgumentError.value(
+        note,
+        'note',
+        'Cell $ref on sheet "$name" already has a note; a cell takes one.',
+      );
+    }
+    final ({XlsxRichText text, int removed, bool truncated}) clean =
+        cleanRichText(note.text);
+    // Only after every check: a note that throws leaves no warning.
+    if (clean.removed > 0) {
+      context.warnings.add(
+        XlsxWarningCode.invalidCharactersRemoved,
+        sheet: name,
+        cell: ref,
+      );
+    }
+    if (clean.truncated) {
+      context.warnings.add(
+        XlsxWarningCode.textTruncated,
+        sheet: name,
+        cell: ref,
+      );
+    }
+    _notes[key] = (
+      row: row,
+      column: column,
+      text: clean.text,
+      author: note.author,
+      visible: note.visible,
+    );
   }
 
   @override
@@ -849,6 +925,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
   /// longer keeps its links (up to 65,530) and its other trailer data.
   void _dropTrailerData() {
     _links.clear();
+    _notes.clear();
     _merges.clear();
     _validations.clear();
     _conditionalFormats.clear();
@@ -862,8 +939,13 @@ final class WorksheetWriter implements XlsxSheetWriter {
   }
 
   /// Renders the header, the trailer and the relationships part from the
-  /// settings and hands them with [body]'s chunks to the ZIP.
+  /// settings and hands them with [body]'s chunks to the ZIP, then the
+  /// comments part and the VML drawing of the notes, if any, whose content
+  /// types it registers.
   void _writePart(Utf8Buffer body) {
+    final List<WorksheetNote> notes = <WorksheetNote>[
+      for (final int key in _notes.keys.toList()..sort()) _notes[key]!,
+    ];
     // One relationship per distinct address, in first-use order. The links
     // and the relationships part both take their ids from [rels].
     final SheetRelationships rels = SheetRelationships(
@@ -871,6 +953,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       hyperlinkTargets: <String>{
         for (final (String _, XlsxHyperlink link) in _links) ?link.address,
       },
+      notes: notes.isNotEmpty,
     );
     final List<WorksheetHyperlink> links = <WorksheetHyperlink>[
       for (final (String ref, XlsxHyperlink link) in _links)
@@ -900,6 +983,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       pageSetup: _pageSetup,
       headerFooter: _headerFooter,
       protection: _protection,
+      legacyDrawingId: rels.vmlDrawingId,
     );
     context.zip.addChunks(worksheetPartName(number), <Uint8List>[
       utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),
@@ -912,5 +996,26 @@ final class WorksheetWriter implements XlsxSheetWriter {
         utf8.encode(relsXml),
       ]);
     }
+    if (notes.isNotEmpty) _writeNotes(notes);
+  }
+
+  /// Hands the comments part and the VML drawing of [notes] to the ZIP and
+  /// registers their content types. The VML id blocks are taken here, so
+  /// they follow the order sheets finish in.
+  void _writeNotes(List<WorksheetNote> notes) {
+    final int firstBlock = context.takeVmlBlocks(vmlBlockCount(notes.length));
+    final StringBuffer comments = StringBuffer();
+    writeComments(XmlWriter(comments), notes);
+    context.zip.addChunks(commentsPartName(number), <Uint8List>[
+      utf8.encode(comments.toString()),
+    ]);
+    final StringBuffer vml = StringBuffer();
+    writeVmlDrawing(XmlWriter(vml), notes, firstBlock);
+    context.zip.addChunks(vmlDrawingPartName(number), <Uint8List>[
+      utf8.encode(vml.toString()),
+    ]);
+    context.contentTypes
+      ..addDefault('vml', ContentType.vmlDrawing)
+      ..addOverride('/${commentsPartName(number)}', ContentType.comments);
   }
 }

@@ -1969,4 +1969,276 @@ void main() {
       );
     });
   });
+
+  group('rule 29: notes', () {
+    const String comments1 = 'xl/comments1.xml';
+    const String vml1 = 'xl/drawings/vmlDrawing1.vml';
+    const String vml2 = 'xl/drawings/vmlDrawing2.vml';
+
+    /// Two sheets of notes: `N` with notes on XFD1 (shape 1025) and B2
+    /// (shape 1026) by two authors, `M` with one on A1048576 (shape 2049).
+    Uint8List notesBook() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('N')
+        ..row(<Object?>['x'])
+        ..note(1, 1, XlsxNote.plain('b2', author: 'A'))
+        ..note(0, 16383, XlsxNote.plain('xfd1', author: 'B'));
+      book.addSheet('M').note(1048575, 0, XlsxNote.plain('last'));
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(Map<String, String Function(String xml)> edits) =>
+        _rebuild(
+          notesBook(),
+          edit: <String, String? Function(String)>{
+            for (final MapEntry<String, String Function(String)> e
+                in edits.entries)
+              e.key: e.value,
+          },
+        );
+
+    /// Expects a rule 29 violation that contains [fragment].
+    void expectViolation(Uint8List bytes, String fragment) {
+      final List<String> violations = checkXlsx(bytes);
+      expect(
+        violations.where(
+          (String v) => v.startsWith('rule 29:') && v.contains(fragment),
+        ),
+        isNotEmpty,
+        reason: 'violations: $violations',
+      );
+    }
+
+    test('a workbook with notes is clean', () {
+      expect(checkXlsx(notesBook()), isEmpty);
+    });
+    test('the book has the parts the tests change', () {
+      final Map<String, String> parts = <String, String>{
+        for (final ArchiveFile f in ZipDecoder().decodeBytes(notesBook()).files)
+          f.name: utf8.decode(f.content),
+      };
+      expect(
+        parts[comments1],
+        contains(
+          '<authors><author>B</author><author>A</author></authors>'
+          '<commentList><comment ref="XFD1" authorId="0">',
+        ),
+      );
+      expect(parts[comments1], contains('<comment ref="B2" authorId="1">'));
+      expect(
+        parts[_sheet1],
+        endsWith('<legacyDrawing r:id="rId1"/></worksheet>'),
+      );
+      expect(parts[vml1], contains('data="1"'));
+      expect(parts[vml1], contains('_x0000_s1025'));
+      expect(parts[vml1], contains('_x0000_s1026'));
+      expect(
+        parts[vml1],
+        contains('<x:Anchor>16380, 15, 0, 2, 16382, 15, 4, 16</x:Anchor>'),
+      );
+      expect(
+        parts[vml1],
+        contains('<x:Anchor>2, 15, 0, 10, 4, 15, 4, 4</x:Anchor>'),
+      );
+      expect(parts[vml1], contains('<x:Row>1</x:Row><x:Column>1</x:Column>'));
+      expect(parts[vml2], contains('data="2"'));
+      expect(parts[vml2], contains('_x0000_s2049'));
+      expect(
+        parts[vml2],
+        contains('<x:Anchor>1, 15, 1048571, 10, 3, 15, 1048575, 4</x:Anchor>'),
+      );
+    });
+    test('a comment ref that is a range', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          comments1: (String x) => x.replaceFirst('ref="B2"', 'ref="B2:C3"'),
+        }),
+        'is not a single cell',
+      );
+    });
+    test('a comment ref outside the sheet', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          comments1: (String x) => x.replaceFirst('ref="XFD1"', 'ref="XFE1"'),
+        }),
+        'lies outside the sheet',
+      );
+    });
+    test('two comments on one cell', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          comments1: (String x) => x.replaceFirst('ref="XFD1"', 'ref="B2"'),
+        }),
+        'two comments share the ref "B2"',
+      );
+    });
+    test('an authorId past the authors', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          comments1: (String x) =>
+              x.replaceFirst('authorId="1"', 'authorId="2"'),
+        }),
+        'authorId "2"',
+      );
+    });
+    test('comments without a legacyDrawing', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet1: (String x) =>
+              x.replaceFirst('<legacyDrawing r:id="rId1"/>', ''),
+        }),
+        'no <legacyDrawing>',
+      );
+    });
+    test('a legacyDrawing that names the comments part', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet1: (String x) => x.replaceFirst(
+            '<legacyDrawing r:id="rId1"/>',
+            '<legacyDrawing r:id="rId2"/>',
+          ),
+        }),
+        'is not a VML drawing relationship',
+      );
+    });
+    test('a comment without its note shape', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) {
+            final int start = x.indexOf('<v:shape id="_x0000_s1026"');
+            final int end = x.indexOf('</v:shape>', start) + 10;
+            return x.substring(0, start) + x.substring(end);
+          },
+        }),
+        'has 0 note shapes',
+      );
+    });
+    test('a comment with two note shapes', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) {
+            final int start = x.indexOf('<v:shape id="_x0000_s1026"');
+            final int end = x.indexOf('</v:shape>', start) + 10;
+            final String shape = x
+                .substring(start, end)
+                .replaceFirst('_x0000_s1026', '_x0000_s1027');
+            return x.replaceFirst('</xml>', '$shape</xml>');
+          },
+        }),
+        'has 2 note shapes',
+      );
+    });
+    test('a note shape on a row without a comment', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) =>
+              x.replaceFirst('<x:Row>1</x:Row>', '<x:Row>2</x:Row>'),
+        }),
+        'row 2, column 1, which has no comment',
+      );
+    });
+    test('a note shape on a column without a comment', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) => x.replaceFirst(
+            '<x:Column>1</x:Column>',
+            '<x:Column>2</x:Column>',
+          ),
+        }),
+        'row 1, column 2, which has no comment',
+      );
+    });
+    test('an anchor without 8 integers', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) => x.replaceFirst(
+            '<x:Anchor>2, 15, 0, 10, 4, 15, 4, 4</x:Anchor>',
+            '<x:Anchor>2, 15, 0, 10, 4, 15, 4</x:Anchor>',
+          ),
+        }),
+        'is not 8 integers',
+      );
+    });
+    test('an anchor past the last column', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) => x.replaceFirst(
+            '16380, 15, 0, 2, 16382, 15, 4, 16',
+            '16382, 15, 0, 2, 16384, 15, 4, 16',
+          ),
+        }),
+        'lies outside the sheet',
+      );
+    });
+    test('an anchor past the last row', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml2: (String x) => x.replaceFirst(
+            '1, 15, 1048571, 10, 3, 15, 1048575, 4',
+            '1, 15, 1048572, 10, 3, 15, 1048576, 4',
+          ),
+        }),
+        'lies outside the sheet',
+      );
+    });
+    test('an anchor with a negative cell', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) => x.replaceFirst(
+            '2, 15, 0, 10, 4, 15, 4, 4',
+            '-1, 15, 0, 10, 4, 15, 4, 4',
+          ),
+        }),
+        'lies outside the sheet',
+      );
+    });
+    test('an anchor whose left is right of its right', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) => x.replaceFirst(
+            '2, 15, 0, 10, 4, 15, 4, 4',
+            '5, 15, 0, 10, 4, 15, 4, 4',
+          ),
+        }),
+        'ends before it starts',
+      );
+    });
+    test('an anchor whose top is below its bottom', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) => x.replaceFirst(
+            '2, 15, 0, 10, 4, 15, 4, 4',
+            '2, 15, 5, 10, 4, 15, 4, 4',
+          ),
+        }),
+        'ends before it starts',
+      );
+    });
+    test('an id block two VML drawings list', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml2: (String x) => x.replaceFirst('data="2"', 'data="1,2"'),
+        }),
+        'block 1 is listed',
+      );
+    });
+    test('a shape id two VML drawings use', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml2: (String x) => x
+              .replaceFirst('data="2"', 'data="1,2"')
+              .replaceFirst('_x0000_s2049', '_x0000_s1025'),
+        }),
+        'shape id _x0000_s1025 is used',
+      );
+    });
+    test('a shape id outside the blocks of its drawing', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          vml1: (String x) => x.replaceFirst('_x0000_s1026', '_x0000_s5000'),
+        }),
+        'outside the id blocks',
+      );
+    });
+  });
 }

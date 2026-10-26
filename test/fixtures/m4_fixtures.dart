@@ -9,7 +9,7 @@ import 'package:jet_office/jet_office.dart';
 import 'fixture.dart';
 
 /// The fixtures of milestone M4.
-List<Fixture> m4Fixtures() => <Fixture>[_richText()];
+List<Fixture> m4Fixtures() => <Fixture>[_richText(), _notes()];
 
 /// Rich text cells, one per row of the sheet `Rich`.
 ///
@@ -82,6 +82,71 @@ Fixture _richText() => Fixture(
         XlsxRichText(const <XlsxTextRun>[XlsxTextRun('Same text')]),
       ])
       ..row(<Object?>['Same text']);
+    return book.close();
+  },
+);
+
+/// Notes on two sheets.
+///
+/// `Notes` has a plain note by `Ahmet` on B2, a rich note on C3 (a bold
+/// `Ahmet:` line, then the text) and a visible note by `Ayse Yilmaz` on D4,
+/// each cell holding a value. `Edges` has notes on `XFD1` and `A1048576`,
+/// whose boxes Excel must open inside the sheet; only A1 and B1 hold
+/// values, so the stored values stay small, and the notes are added after
+/// the rows, as trailer settings. A reader shows the cell values; the notes
+/// are pinned in `fixtures_test.dart`.
+Fixture _notes() => Fixture(
+  'm4_notes',
+  <String, List<List<String>>>{
+    'Notes': <List<String>>[
+      <String>['', '', '', ''],
+      <String>['', 'Plain', '', ''],
+      <String>['', '', 'Rich', ''],
+      <String>['', '', '', 'Visible'],
+    ],
+    'Edges': <List<String>>[
+      <String>['Note on XFD1', 'Note on A1048576'],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Notes': <List<Object?>>[
+      <Object?>[],
+      <Object?>[null, 'Plain'],
+      <Object?>[null, null, 'Rich'],
+      <Object?>[null, null, null, 'Visible'],
+    ],
+    'Edges': <List<Object?>>[
+      <Object?>['Note on XFD1', 'Note on A1048576'],
+    ],
+  },
+  () {
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('Notes')
+      ..blankRow()
+      ..row(<Object?>[null, 'Plain'])
+      ..note(1, 1, XlsxNote.plain('Check this', author: 'Ahmet'))
+      ..row(<Object?>[null, null, 'Rich'])
+      ..note(
+        2,
+        2,
+        XlsxNote(
+          XlsxRichText(const <XlsxTextRun>[
+            XlsxTextRun('Ahmet:', font: XlsxFont(bold: true)),
+            XlsxTextRun('\nThe total is checked.'),
+          ]),
+          author: 'Ahmet',
+        ),
+      )
+      ..row(<Object?>[null, null, null, 'Visible'])
+      ..note(
+        3,
+        3,
+        XlsxNote.plain('Always shown', author: 'Ayse Yilmaz', visible: true),
+      );
+    book.addSheet('Edges')
+      ..row(<Object?>['Note on XFD1', 'Note on A1048576'])
+      ..note(0, 16383, XlsxNote.plain('The last column', author: 'Ahmet'))
+      ..note(1048575, 0, XlsxNote.plain('The last row', author: 'Ahmet'));
     return book.close();
   },
 );

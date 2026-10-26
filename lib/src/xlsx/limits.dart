@@ -206,6 +206,14 @@ abstract final class XlsxLimits {
   /// allow 255. A longer text throws [ArgumentError] when the header or
   /// footer is registered.
   static const int maxHeaderFooterLength = 255;
+
+  /// The longest author of a note, in UTF-16 code units.
+  ///
+  /// The M4 plan sets 255. Microsoft's "Excel specifications and limits"
+  /// page gives no figure for it, and ECMA-376 types `author` as
+  /// `ST_Xstring`, without a length. A longer author throws
+  /// [ArgumentError] when the note is added.
+  static const int maxNoteAuthorLength = 255;
 }
 
 /// Thrown when a write would exceed one of the [XlsxLimits].

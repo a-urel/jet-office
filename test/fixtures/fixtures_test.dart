@@ -110,7 +110,7 @@ void main() {
       'm3_protection',
       'm3_properties',
     ]);
-    expect(names(m4Fixtures()), <String>['m4_rich_text']);
+    expect(names(m4Fixtures()), <String>['m4_rich_text', 'm4_notes']);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
@@ -687,5 +687,76 @@ void main() {
       RegExp('<c r="A5" t="s"><v>(\\d+)</v>').firstMatch(sheet)!.group(1),
       RegExp('<c r="A6" t="s"><v>(\\d+)</v>').firstMatch(sheet)!.group(1),
     );
+  });
+
+  test('m4_notes writes its notes and their boxes', () {
+    final Map<String, String> parts = readXlsx(named('m4_notes').build());
+    final String comments1 = parts['xl/comments1.xml']!;
+    expect(
+      comments1,
+      contains(
+        '<authors><author>Ahmet</author><author>Ayse Yilmaz</author>'
+        '</authors><commentList>'
+        '<comment ref="B2" authorId="0"><text><t>Check this</t></text>'
+        '</comment>'
+        '<comment ref="C3" authorId="0"><text>'
+        '<r><rPr><b/></rPr><t>Ahmet:</t></r>'
+        '<r><t xml:space="preserve">\nThe total is checked.</t></r>'
+        '</text></comment>'
+        '<comment ref="D4" authorId="1"><text><t>Always shown</t></text>'
+        '</comment></commentList>',
+      ),
+    );
+    final String vml1 = parts['xl/drawings/vmlDrawing1.vml']!;
+    expect(vml1, contains('<o:idmap v:ext="edit" data="1"/>'));
+    for (final (int id, String anchor, int row, int column)
+        in <(int, String, int, int)>[
+          (1025, '2, 15, 0, 10, 4, 15, 4, 4', 1, 1),
+          (1026, '3, 15, 1, 10, 5, 15, 5, 4', 2, 2),
+          (1027, '4, 15, 2, 10, 6, 15, 6, 4', 3, 3),
+        ]) {
+      expect(
+        vml1,
+        matches(
+          '<v:shape id="_x0000_s$id" [^>]*>.*?<x:Anchor>$anchor</x:Anchor>'
+          '<x:AutoFill>False</x:AutoFill><x:Row>$row</x:Row>'
+          '<x:Column>$column</x:Column>',
+        ),
+      );
+    }
+    expect('visibility:visible'.allMatches(vml1), hasLength(1));
+    expect(vml1, contains('<x:Column>3</x:Column><x:Visible/>'));
+
+    final String comments2 = parts['xl/comments2.xml']!;
+    expect(
+      RegExp(
+        '<comment ref="([A-Z]+[0-9]+)"',
+      ).allMatches(comments2).map((RegExpMatch m) => m.group(1)),
+      <String>['XFD1', 'A1048576'],
+    );
+    final String vml2 = parts['xl/drawings/vmlDrawing2.vml']!;
+    expect(vml2, contains('<o:idmap v:ext="edit" data="2"/>'));
+    expect(
+      vml2,
+      contains(
+        '<x:Anchor>16380, 15, 0, 2, 16382, 15, 4, 16</x:Anchor>'
+        '<x:AutoFill>False</x:AutoFill><x:Row>0</x:Row>'
+        '<x:Column>16383</x:Column>',
+      ),
+    );
+    expect(
+      vml2,
+      contains(
+        '<x:Anchor>1, 15, 1048571, 10, 3, 15, 1048575, 4</x:Anchor>'
+        '<x:AutoFill>False</x:AutoFill><x:Row>1048575</x:Row>'
+        '<x:Column>0</x:Column>',
+      ),
+    );
+    for (final int n in <int>[1, 2]) {
+      expect(
+        parts['xl/worksheets/sheet$n.xml'],
+        endsWith('<legacyDrawing r:id="rId1"/></worksheet>'),
+      );
+    }
   });
 }

@@ -54,6 +54,25 @@ final class WorkbookContext {
     warnings: warnings,
   );
 
+  /// The first VML id block no sheet has taken yet.
+  int _nextVmlBlock = 1;
+
+  /// Takes [count] consecutive VML id blocks and returns the first.
+  ///
+  /// A sheet's VML drawing numbers its note shapes 1,024 to a block
+  /// (`_x0000_s{1024 × block + i + 1}`) and lists its blocks in
+  /// `o:idmap`; Excel needs both unique across the workbook. Blocks are
+  /// handed out from 1 in the order sheets finish, so they follow the
+  /// creation order. Throws [ArgumentError] for a [count] below 1.
+  int takeVmlBlocks(int count) {
+    if (count < 1) {
+      throw ArgumentError.value(count, 'count', 'Must be at least 1.');
+    }
+    final int first = _nextVmlBlock;
+    _nextVmlBlock += count;
+    return first;
+  }
+
   /// What the ZIP work threw, once it has failed; the writer is then dead.
   Object? _failure;
 

@@ -37,6 +37,11 @@ void main() {
     expect(XlsxLimits.maxPaperSize, 118);
   });
 
+  test('note author limit matches the plan', () {
+    // Enforced in `note_test.dart`.
+    expect(XlsxLimits.maxNoteAuthorLength, 255);
+  });
+
   test('header and footer limit matches Excel', () {
     // Enforced in `header_footer_test.dart`.
     expect(XlsxLimits.maxHeaderFooterLength, 255);
