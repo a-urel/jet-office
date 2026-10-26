@@ -345,10 +345,13 @@ These need Excel 2010 or later; check that none shows a repair prompt.
 
 - A `Bar`: blue bars to the right of a middle axis for positive values, red
   bars to its left for negative ones, drawn from the middle of the cell, with
-  a dashed axis line between them. The rule's Negative Value and Axis
-  settings show the red negative fill and the axis at the cell midpoint.
+  a black dashed axis line between them. The rule's Negative Value and Axis
+  settings show the red negative fill and a black axis at the cell midpoint.
 - B `Solid`: solid green bars (no gradient) with a border; bars for negative
-  values are filled too, in Excel's default red.
+  values are filled too, in Excel's default red, with the green border, to
+  the left of a black axis where zero falls (the cell's middle, as the
+  values run from -50 to 50). The rule's Negative Value and Axis settings
+  show the red fill and the black axis.
 - C `Stars`, D `Triangles` and E `Boxes`: three stars, three triangles and
   five boxes by value. The default thresholds of 33 % and 67 % fall at -17
   and 17: -50 to -20 show an empty star and a red down triangle, -15 to 15 a
@@ -357,8 +360,9 @@ These need Excel 2010 or later; check that none shows a repair prompt.
   to 50). Excel for the web and LibreOffice may not show these.
 
 In Excel for Mac on 2026-10-26 the axis line did not show and B's negative
-bars were green outlines with no fill: the file stores neither color, and
-Excel shows both as white (see "Open issues", M4).
+bars were green outlines with no fill: the file stored neither color, and
+Excel showed both as white (see "Open issues", M4). The file now stores
+Excel's defaults; the M4 Excel check confirms the look above.
 
 ### `m3_page_setup`
 

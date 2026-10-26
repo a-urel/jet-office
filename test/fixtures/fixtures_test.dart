@@ -494,18 +494,27 @@ void main() {
     // Two data bars keep their 2007 rules; the x14-only icon sets have none.
     expect(RegExp('<cfRule type="dataBar"').allMatches(sheet), hasLength(2));
     expect(sheet, isNot(contains('<cfRule type="iconSet"')));
+    // Both bars write a negative fill and an axis color, Excel's defaults
+    // where the rule has none (A's axis, both of B's), which the M3 Excel
+    // check found missing.
     expect(
       sheet,
       contains(
-        '<x14:dataBar minLength="0" maxLength="100" '
-        'negativeBarColorSameAsPositive="0" axisPosition="middle">',
+        '<x14:dataBar minLength="0" maxLength="100" axisPosition="middle">'
+        '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>'
+        '<x14:negativeFillColor rgb="FFFF0000"/>'
+        '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
       ),
     );
     expect(
       sheet,
       contains(
         '<x14:dataBar minLength="0" maxLength="100" border="1" '
-        'gradient="0">',
+        'gradient="0">'
+        '<x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/>'
+        '<x14:borderColor rgb="FF63C384"/>'
+        '<x14:negativeFillColor rgb="FFFF0000"/>'
+        '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
       ),
     );
     for (final String set in <String>['3Stars', '3Triangles', '5Boxes']) {

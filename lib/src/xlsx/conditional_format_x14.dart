@@ -104,6 +104,12 @@ void _writeRule(
   w.end();
 }
 
+/// The negative fill Excel writes on a data bar it creates: red.
+const XlsxColor _defaultNegativeFill = XlsxColor.argb(0xFFFF0000);
+
+/// The axis color Excel writes on a data bar it creates: black.
+const XlsxColor _defaultAxis = XlsxColor.argb(0xFF000000);
+
 /// Writes `x14:dataBar`: attributes in `CT_DataBar` order, those at the
 /// schema default left out except the lengths; then the two `x14:cfvo`,
 /// `x14:borderColor`, `x14:negativeFillColor`, `x14:negativeBorderColor`
@@ -112,21 +118,21 @@ void _writeRule(
 /// The lengths are 0 and 100 when the Excel 2007 ones are their defaults,
 /// 10 and 90, as Excel writes them. The border colors are written only
 /// with a border; a border without its own color takes the bar's.
-/// `negativeBarColorSameAsPositive="0"` comes with a negative fill color and
-/// `negativeBarBorderColorSameAsPositive="0"` with a negative border color,
-/// as Excel ignores the colors otherwise.
+/// `negativeBarBorderColorSameAsPositive="0"` comes with a negative border
+/// color, as Excel ignores the color otherwise.
+///
+/// The negative fill and the axis color are always written, Excel's
+/// defaults, red and black, when the rule has none: Excel does not fall
+/// back to them, and shows a missing color as white. The axis color is
+/// written with no axis too, as Excel does. With the fill always written,
+/// `negativeBarColorSameAsPositive` keeps its schema default, false.
 void _writeDataBar(XmlWriter w, XlsxDataBar bar) {
-  final XlsxColor? negativeFill = bar.negativeFillColor;
   final XlsxColor? negativeBorder = bar.border ? bar.negativeBorderColor : null;
-  final XlsxColor? axisColor = bar.axisColor;
   w.start('x14:dataBar');
   w.attribute('minLength', '${bar.minLength == 10 ? 0 : bar.minLength}');
   w.attribute('maxLength', '${bar.maxLength == 90 ? 100 : bar.maxLength}');
   if (bar.border) w.attribute('border', '1');
   if (!bar.gradient) w.attribute('gradient', '0');
-  if (negativeFill != null) {
-    w.attribute('negativeBarColorSameAsPositive', '0');
-  }
   if (negativeBorder != null) {
     w.attribute('negativeBarBorderColorSameAsPositive', '0');
   }
@@ -138,13 +144,15 @@ void _writeDataBar(XmlWriter w, XlsxDataBar bar) {
   if (bar.border) {
     _writeColor(w, 'x14:borderColor', bar.borderColor ?? bar.color);
   }
-  if (negativeFill != null) {
-    _writeColor(w, 'x14:negativeFillColor', negativeFill);
-  }
+  _writeColor(
+    w,
+    'x14:negativeFillColor',
+    bar.negativeFillColor ?? _defaultNegativeFill,
+  );
   if (negativeBorder != null) {
     _writeColor(w, 'x14:negativeBorderColor', negativeBorder);
   }
-  if (axisColor != null) _writeColor(w, 'x14:axisColor', axisColor);
+  _writeColor(w, 'x14:axisColor', bar.axisColor ?? _defaultAxis);
   w.end();
 }
 
