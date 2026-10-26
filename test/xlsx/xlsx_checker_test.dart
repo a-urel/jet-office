@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../fixtures/m4_fixtures.dart' show jpeg3x5, png4x2;
 import '../support/xlsx_checker.dart';
 
 /// A small valid workbook: two sheets, shared strings, styled cells (one
@@ -2241,4 +2242,289 @@ void main() {
       );
     });
   });
+
+  group('rule 30: pictures', () {
+    const String drawing1 = 'xl/drawings/drawing1.xml';
+    const String drawingRels1 = 'xl/drawings/_rels/drawing1.xml.rels';
+    const String sheetRels1 = 'xl/worksheets/_rels/sheet1.xml.rels';
+    const String types = '[Content_Types].xml';
+
+    /// Two sheets of pictures: `P` with the PNG at B2 (cNvPr 2) and the
+    /// JPEG from B6 to E11 (cNvPr 3), `Q` with the same PNG at A1.
+    Uint8List picturesBook() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('P')
+        ..row(<Object?>['x'])
+        ..picture(
+          XlsxPicture(
+            XlsxImage(png4x2),
+            const XlsxOneCellAnchor(XlsxAnchorPoint(1, 1)),
+          ),
+        )
+        ..picture(
+          XlsxPicture(
+            XlsxImage(jpeg3x5),
+            XlsxTwoCellAnchor.range(const XlsxRange(5, 1, 9, 3)),
+          ),
+        );
+      book
+          .addSheet('Q')
+          .picture(
+            XlsxPicture(
+              XlsxImage(png4x2),
+              const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
+            ),
+          );
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(Map<String, String Function(String xml)> edits) =>
+        _rebuild(
+          picturesBook(),
+          edit: <String, String? Function(String)>{
+            for (final MapEntry<String, String Function(String)> e
+                in edits.entries)
+              e.key: e.value,
+          },
+        );
+
+    /// Expects a rule 30 violation that contains [fragment].
+    void expectViolation(Uint8List bytes, String fragment) {
+      final List<String> violations = checkXlsx(bytes);
+      expect(
+        violations.where(
+          (String v) => v.startsWith('rule 30:') && v.contains(fragment),
+        ),
+        isNotEmpty,
+        reason: 'violations: $violations',
+      );
+    }
+
+    test('a workbook with pictures is clean', () {
+      expect(checkXlsx(picturesBook()), isEmpty);
+    });
+    test('the book has the parts the tests change', () {
+      final Map<String, String> parts = <String, String>{
+        for (final ArchiveFile f
+            in ZipDecoder().decodeBytes(picturesBook()).files)
+          if (!f.name.startsWith('xl/media/')) f.name: utf8.decode(f.content),
+      };
+      expect(parts[_sheet1], endsWith('<drawing r:id="rId1"/></worksheet>'));
+      expect(parts[sheetRels1], contains('Id="rId1" Type="$_drawingRelType"'));
+      final String drawing = parts[drawing1]!;
+      expect(
+        drawing,
+        contains(
+          '<xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff>'
+          '<xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
+          '<xdr:ext cx="38100" cy="19050"/>',
+        ),
+      );
+      expect(
+        drawing,
+        contains(
+          '<xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff>'
+          '<xdr:row>5</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
+          '<xdr:to><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff>'
+          '<xdr:row>10</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>',
+        ),
+      );
+      expect(drawing, contains('<a:ext cx="38100" cy="19050"/>'));
+      expect(drawing, contains('<xdr:cNvPr id="2" name="Picture 1"/>'));
+      expect(drawing, contains('<xdr:cNvPr id="3" name="Picture 2"/>'));
+      expect(drawing, contains('<a:blip r:embed="rId1"/>'));
+      expect(drawing, contains('<a:blip r:embed="rId2"/>'));
+      expect(
+        parts[drawingRels1],
+        allOf(
+          contains(
+            'Id="rId1" Type="$_imageRelType" Target="../media/image1.png"',
+          ),
+          contains(
+            'Id="rId2" Type="$_imageRelType" Target="../media/image2.jpeg"',
+          ),
+        ),
+      );
+      expect(
+        parts[types],
+        allOf(
+          contains('<Default Extension="png" ContentType="image/png"/>'),
+          contains('<Default Extension="jpeg" ContentType="image/jpeg"/>'),
+        ),
+      );
+    });
+    test('a drawing r:id the sheet does not declare', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          _sheet1: (String x) => x.replaceFirst(
+            '<drawing r:id="rId1"/>',
+            '<drawing r:id="rId9"/>',
+          ),
+        }),
+        'drawing r:id "rId9" is not a drawing relationship',
+      );
+    });
+    test('a drawing r:id of another relationship type', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          sheetRels1: (String x) =>
+              x.replaceFirst(_drawingRelType, _imageRelType),
+        }),
+        'drawing r:id "rId1" is not a drawing relationship',
+      );
+    });
+    test('a from column past the last', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) => x.replaceFirst(
+            '<xdr:col>1</xdr:col>',
+            '<xdr:col>16384</xdr:col>',
+          ),
+        }),
+        'lies outside the sheet',
+      );
+    });
+    test('a to row past the last', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) => x.replaceFirst(
+            '<xdr:row>10</xdr:row>',
+            '<xdr:row>1048576</xdr:row>',
+          ),
+        }),
+        'lies outside the sheet',
+      );
+    });
+    test('a negative cell', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) =>
+              x.replaceFirst('<xdr:row>1</xdr:row>', '<xdr:row>-1</xdr:row>'),
+        }),
+        'lies outside the sheet',
+      );
+    });
+    test('a marker that is not numbers', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) => x.replaceFirst(
+            '<xdr:colOff>0</xdr:colOff>',
+            '<xdr:colOff>x</xdr:colOff>',
+          ),
+        }),
+        'is not four integers',
+      );
+    });
+    test('a to row before its from', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) =>
+              x.replaceFirst('<xdr:row>10</xdr:row>', '<xdr:row>4</xdr:row>'),
+        }),
+        'ends before it starts',
+      );
+    });
+    test('a to column before its from', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) => x.replaceFirst(
+            '<xdr:to><xdr:col>4</xdr:col>',
+            '<xdr:to><xdr:col>0</xdr:col>',
+          ),
+        }),
+        'ends before it starts',
+      );
+    });
+    test('a to offset before its from in the same cell', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) => x
+              .replaceFirst(
+                '<xdr:row>10</xdr:row><xdr:rowOff>0</xdr:rowOff>',
+                '<xdr:row>5</xdr:row><xdr:rowOff>0</xdr:rowOff>',
+              )
+              .replaceFirst(
+                '<xdr:row>5</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>',
+                '<xdr:row>5</xdr:row><xdr:rowOff>9525</xdr:rowOff></xdr:from>',
+              ),
+        }),
+        'ends before it starts',
+      );
+    });
+    test('an anchor ext of size 0', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) =>
+              x.replaceFirst('<xdr:ext cx="38100"', '<xdr:ext cx="0"'),
+        }),
+        'cx "0"',
+      );
+    });
+    test('a negative a:ext', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) => x.replaceFirst(
+            '<a:ext cx="38100" cy="19050"/>',
+            '<a:ext cx="38100" cy="-5"/>',
+          ),
+        }),
+        'cy "-5"',
+      );
+    });
+    test('two pictures sharing a cNvPr id', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) =>
+              x.replaceFirst('cNvPr id="3"', 'cNvPr id="2"'),
+        }),
+        'cNvPr id "2" repeats',
+      );
+    });
+    test('a blip r:embed the drawing does not declare', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawing1: (String x) =>
+              x.replaceFirst('r:embed="rId2"', 'r:embed="rId7"'),
+        }),
+        'r:embed "rId7" is not an image relationship',
+      );
+    });
+    test('a blip r:embed of another relationship type', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawingRels1: (String x) =>
+              x.replaceFirst(_imageRelType, _drawingRelType),
+        }),
+        'r:embed "rId1" is not an image relationship',
+      );
+    });
+    test('a blip whose image part is missing', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          drawingRels1: (String x) =>
+              x.replaceFirst('../media/image2.jpeg', '../media/image9.jpeg'),
+        }),
+        'xl/media/image9.jpeg, which does not exist',
+      );
+    });
+    test('a blip whose image has another content type', () {
+      expectViolation(
+        tamper(<String, String Function(String)>{
+          types: (String x) => x.replaceFirst(
+            'ContentType="image/jpeg"',
+            'ContentType="image/gif"',
+          ),
+        }),
+        'content type "image/gif"',
+      );
+    });
+  });
 }
+
+const String _drawingRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'drawing';
+
+const String _imageRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'image';

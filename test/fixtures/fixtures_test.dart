@@ -110,7 +110,11 @@ void main() {
       'm3_protection',
       'm3_properties',
     ]);
-    expect(names(m4Fixtures()), <String>['m4_rich_text', 'm4_notes']);
+    expect(names(m4Fixtures()), <String>[
+      'm4_rich_text',
+      'm4_notes',
+      'm4_images',
+    ]);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
@@ -762,5 +766,78 @@ void main() {
         endsWith('<legacyDrawing r:id="rId1"/></worksheet>'),
       );
     }
+  });
+
+  test('m4_images writes its pictures and shares the PNG', () {
+    final Uint8List bytes = named('m4_images').build();
+    final Map<String, String> parts = readXlsx(bytes);
+    String marker(String name, int row, int column) =>
+        '<xdr:$name><xdr:col>$column</xdr:col><xdr:colOff>0</xdr:colOff>'
+        '<xdr:row>$row</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:$name>';
+    String pic(int id, String names, String embed) =>
+        '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="$id" $names/>'
+        '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>'
+        '</xdr:nvPicPr><xdr:blipFill><a:blip r:embed="$embed"/>'
+        '<a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr>';
+    const String rect = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
+    String xfrm(int cx, int cy) =>
+        '<a:xfrm><a:off x="0" y="0"/><a:ext cx="$cx" cy="$cy"/></a:xfrm>';
+
+    // Pictures: the PNG at B2 in its size, the JPEG at E2 60 pixels wide
+    // (100 high, its aspect kept) and the PNG over B6:D10, moving with
+    // its cells.
+    expect(
+      parts['xl/drawings/drawing1.xml'],
+      endsWith(
+        '<xdr:oneCellAnchor>${marker('from', 1, 1)}'
+        '<xdr:ext cx="38100" cy="19050"/>'
+        '${pic(2, 'name="Picture 1"', 'rId1')}${xfrm(38100, 19050)}$rect'
+        '</xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>'
+        '<xdr:oneCellAnchor>${marker('from', 1, 4)}'
+        '<xdr:ext cx="571500" cy="952500"/>'
+        '${pic(3, 'name="Picture 2"', 'rId2')}${xfrm(571500, 952500)}$rect'
+        '</xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>'
+        '<xdr:twoCellAnchor editAs="oneCell">'
+        '${marker('from', 5, 1)}${marker('to', 10, 4)}'
+        '${pic(4, 'name="Picture 3" descr="The PNG over B6:D10"', 'rId1')}'
+        '$rect</xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>'
+        '</xdr:wsDr>',
+      ),
+    );
+    expect(
+      parts['xl/drawings/_rels/drawing1.xml.rels'],
+      contains(
+        'Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/'
+        '2006/relationships/image" Target="../media/image1.png"/>'
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/'
+        'officeDocument/2006/relationships/image" '
+        'Target="../media/image2.jpeg"/></Relationships>',
+      ),
+    );
+    // Again: the same PNG list at A1, whose media part Pictures wrote.
+    expect(
+      parts['xl/drawings/drawing2.xml'],
+      contains(
+        '<xdr:oneCellAnchor>${marker('from', 0, 0)}'
+        '<xdr:ext cx="38100" cy="19050"/>',
+      ),
+    );
+    expect(
+      parts['xl/drawings/_rels/drawing2.xml.rels'],
+      contains('Target="../media/image1.png"/></Relationships>'),
+    );
+    for (final int n in <int>[1, 2]) {
+      expect(
+        parts['xl/worksheets/sheet$n.xml'],
+        endsWith('<drawing r:id="rId1"/></worksheet>'),
+      );
+    }
+    final Map<String, Uint8List> media = <String, Uint8List>{
+      for (final MapEntry<String, Uint8List> e in readXlsxBytes(bytes).entries)
+        if (e.key.startsWith('xl/media/')) e.key: e.value,
+    };
+    expect(media.keys, <String>['xl/media/image1.png', 'xl/media/image2.jpeg']);
+    expect(media['xl/media/image1.png'], png4x2);
+    expect(media['xl/media/image2.jpeg'], jpeg3x5);
   });
 }

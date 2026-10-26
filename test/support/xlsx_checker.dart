@@ -106,12 +106,22 @@
 ///     after right and top not after bottom; every `o:idmap` block is a
 ///     number listed by one drawing of the workbook only; and every
 ///     `v:shape/@id` is unique across the workbook and, when it is
-///     `_x0000_s{n}`, n ÷ 1024 is a block of its drawing's `o:idmap`.
+///     `_x0000_s{n}`, n ÷ 1024 is a block of its drawing's `o:idmap`;
+/// 30. a sheet's `drawing/@r:id` names a drawing relationship of the
+///     sheet; in every drawing part, each anchor's `from` and `to` are
+///     four integers whose cell lies inside the sheet (`col` within
+///     0..16383, `row` within 0..1048575), and its `to` is not before its
+///     `from` on either axis, by cell and then by offset; every `xdr:ext`
+///     and `a:ext` has a positive integer `cx` and `cy`; the `cNvPr` ids
+///     are unique in the part; and every `a:blip/@r:embed` names an image
+///     relationship of the drawing whose target exists and whose content
+///     type is `image/png` or `image/jpeg`.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
 /// The writer never does. Rule 25 matches the Excel 2010 elements by
-/// namespace, whatever their prefix, and so does rule 29 the VML elements.
+/// namespace, whatever their prefix, and so do rule 29 the VML elements
+/// and rule 30 the DrawingML ones.
 ///
 /// Pure Dart (no `dart:io`), so it runs in a browser too.
 library;
@@ -193,6 +203,8 @@ List<String> checkXlsx(Uint8List bytes) {
   _checkSharedStringItems(docs, violations);
   _checkNotes(docs, violations);
   _checkVmlDrawings(docs, violations);
+  _checkDrawingRefs(docs, violations);
+  _checkDrawings(raw, docs, violations);
   return violations;
 }
 
@@ -1759,4 +1771,174 @@ void _checkVmlDrawings(Map<String, XmlDocument> docs, List<String> violations) {
       }
     }
   });
+}
+
+const String _drawingRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'drawing';
+
+const String _imageRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'image';
+
+/// The DrawingML namespaces (`xdr:`, `a:`) and the relationships one
+/// (`r:`).
+const String _xdr =
+    'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing';
+const String _drawingMain =
+    'http://schemas.openxmlformats.org/drawingml/2006/main';
+const String _relNamespace =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+/// Rule 30, per sheet: the `drawing` element names a drawing relationship.
+void _checkDrawingRefs(Map<String, XmlDocument> docs, List<String> violations) {
+  for (final MapEntry<String, XmlDocument> sheet in _sheets(docs)) {
+    final XmlElement? drawing = sheet.value.rootElement.getElement('drawing');
+    if (drawing == null) continue;
+    final String id = _attr(drawing, 'r:id');
+    final XmlElement? rel = _sheetRelationships(docs, sheet.key)[id];
+    if (rel == null || _attr(rel, 'Type') != _drawingRelType) {
+      violations.add(
+        'rule 30: ${sheet.key}: drawing r:id "$id" is not a drawing '
+        'relationship',
+      );
+    }
+  }
+}
+
+/// The content type `[Content_Types].xml` gives [part]: its override, or
+/// the default of its extension, or `null`.
+String? _contentTypeOf(Map<String, XmlDocument> docs, String part) {
+  final XmlDocument? types = docs[_contentTypesPart];
+  if (types == null) return null;
+  for (final XmlElement o in _all(types, 'Override')) {
+    if (_attr(o, 'PartName') == '/$part') return _attr(o, 'ContentType');
+  }
+  final int dot = part.lastIndexOf('.');
+  final String ext = dot < 0 ? '' : part.substring(dot + 1).toLowerCase();
+  for (final XmlElement d in _all(types, 'Default')) {
+    if (_attr(d, 'Extension').toLowerCase() == ext) {
+      return _attr(d, 'ContentType');
+    }
+  }
+  return null;
+}
+
+/// Rule 30 in every drawing part: anchors, sizes, ids and images.
+void _checkDrawings(
+  Map<String, Uint8List> raw,
+  Map<String, XmlDocument> docs,
+  List<String> violations,
+) {
+  docs.forEach((String part, XmlDocument doc) {
+    final XmlElement root = doc.rootElement;
+    if (root.name.local != 'wsDr' || root.name.namespaceUri != _xdr) return;
+    final String where = 'rule 30: $part';
+    for (final String kind in <String>['oneCellAnchor', 'twoCellAnchor']) {
+      for (final XmlElement anchor in _elementsIn(doc, _xdr, kind)) {
+        _checkAnchor(anchor, where, violations);
+      }
+    }
+    for (final XmlElement ext in <XmlElement>[
+      ..._elementsIn(doc, _xdr, 'ext'),
+      ..._elementsIn(doc, _drawingMain, 'ext'),
+    ]) {
+      for (final String axis in <String>['cx', 'cy']) {
+        final String text = ext.getAttribute(axis) ?? '';
+        final int? size = int.tryParse(text);
+        if (size == null || size <= 0) {
+          violations.add(
+            '$where: <${ext.name.qualified}> $axis "$text" is not a '
+            'positive integer',
+          );
+        }
+      }
+    }
+    final Set<String> ids = <String>{};
+    for (final XmlElement c in _elementsIn(doc, _xdr, 'cNvPr')) {
+      final String id = _attr(c, 'id');
+      if (!ids.add(id)) violations.add('$where: cNvPr id "$id" repeats');
+    }
+    final String relsName =
+        '${_dirOf(part)}_rels/${part.substring(part.lastIndexOf('/') + 1)}'
+        '.rels';
+    final Map<String, XmlElement> rels = <String, XmlElement>{
+      if (docs[relsName] case final XmlDocument relsDoc)
+        for (final XmlElement rel in _all(relsDoc, 'Relationship'))
+          _attr(rel, 'Id'): rel,
+    };
+    for (final XmlElement blip in _elementsIn(doc, _drawingMain, 'blip')) {
+      final String id =
+          blip.getAttribute('embed', namespaceUri: _relNamespace) ?? '';
+      final XmlElement? rel = rels[id];
+      if (rel == null || _attr(rel, 'Type') != _imageRelType) {
+        violations.add(
+          '$where: blip r:embed "$id" is not an image relationship of '
+          '$relsName',
+        );
+        continue;
+      }
+      final String image = _resolve(_dirOf(part), _attr(rel, 'Target'));
+      if (!raw.containsKey(image)) {
+        violations.add(
+          '$where: blip r:embed "$id" points at $image, which does not exist',
+        );
+        continue;
+      }
+      final String? type = _contentTypeOf(docs, image);
+      if (type != 'image/png' && type != 'image/jpeg') {
+        violations.add(
+          '$where: blip r:embed "$id" points at $image, whose content type '
+          '"$type" is neither image/png nor image/jpeg',
+        );
+      }
+    }
+  });
+}
+
+/// Rule 30 for one anchor: its `from` and `to` lie inside the sheet, and
+/// `to` is not before `from`.
+void _checkAnchor(XmlElement anchor, String where, List<String> violations) {
+  final Map<String, List<int>> markers = <String, List<int>>{};
+  for (final String name in <String>['from', 'to']) {
+    final XmlElement? marker = _elementsIn(anchor, _xdr, name).firstOrNull;
+    if (marker == null) continue;
+    final List<int?> values = <int?>[
+      for (final String local in <String>['col', 'colOff', 'row', 'rowOff'])
+        int.tryParse(
+          _elementsIn(marker, _xdr, local).firstOrNull?.innerText.trim() ?? '',
+        ),
+    ];
+    final String text = marker.innerText;
+    if (values.contains(null)) {
+      violations.add(
+        '$where: <xdr:$name> "$text" is not four integers (col, colOff, '
+        'row, rowOff)',
+      );
+      continue;
+    }
+    final int column = values[0]!;
+    final int row = values[2]!;
+    if (column < 0 || column > 16383 || row < 0 || row > 1048575) {
+      violations.add(
+        '$where: <xdr:$name> at column $column, row $row lies outside the '
+        'sheet',
+      );
+      continue;
+    }
+    markers[name] = <int>[for (final int? v in values) v!];
+  }
+  final List<int>? from = markers['from'];
+  final List<int>? to = markers['to'];
+  if (from == null || to == null) return;
+  // Column, then its offset; row, then its offset.
+  bool before(int cell, int offset, int fromCell, int fromOffset) =>
+      cell < fromCell || (cell == fromCell && offset < fromOffset);
+  if (before(to[0], to[1], from[0], from[1]) ||
+      before(to[2], to[3], from[2], from[3])) {
+    violations.add(
+      '$where: the ${anchor.name.local} from column ${from[0]}, row '
+      '${from[2]} to column ${to[0]}, row ${to[2]} ends before it starts',
+    );
+  }
 }

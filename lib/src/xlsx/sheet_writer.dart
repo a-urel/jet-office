@@ -27,6 +27,10 @@
 /// sheet finishes, which writes them sorted by cell as a comments part and
 /// a VML drawing (see `note.dart`) with the VML id blocks the workbook
 /// hands out, after the worksheet and its relationships.
+/// Pictures are trailer settings too, checked when added and held, bytes
+/// included, until the sheet finishes, which writes them as a drawing part
+/// with its relationships (see `drawing.dart`) and each media part no
+/// earlier sheet wrote, numbered by the workbook, before the notes.
 /// The sheet reaches the workbook's encoder, styles and ZIP through a
 /// [WorkbookContext].
 library;
@@ -45,6 +49,7 @@ import 'column.dart';
 import 'conditional_format.dart';
 import 'data_validation.dart';
 import 'defined_name.dart';
+import 'drawing.dart';
 import 'header_footer.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
@@ -317,6 +322,39 @@ abstract final class XlsxSheetWriter {
   /// and no warning.
   void note(int row, int column, XlsxNote note);
 
+  /// Puts [picture] on the sheet: a PNG or JPEG at a one-cell or two-cell
+  /// anchor (see [XlsxOneCellAnchor] and [XlsxTwoCellAnchor]).
+  ///
+  /// A trailer setting like [merge]. Pictures are written in the order
+  /// added, the later ones in front; a picture without a name is named
+  /// `Picture {k}`, k being its 1-based position among the sheet's
+  /// pictures. Sizes and offsets are in pixels at 96 dpi, 9,525 EMU each,
+  /// rounded to a whole EMU; a one-cell picture without a size takes the
+  /// image's, and with one size the other follows the image's aspect
+  /// ratio. The image's bytes are held, not copied, until the sheet
+  /// finishes. Every picture of the workbook whose image holds the same
+  /// `Uint8List` shows one media part, written once; equal bytes in
+  /// another list are written again. Media parts are numbered across the
+  /// workbook in the order sheets finish and, within a sheet, in the order
+  /// its pictures were added.
+  ///
+  /// Throws [StateError] like [merge], and [ArgumentError], whose message
+  /// names the picture and the sheet: named `image` when the bytes are not
+  /// a PNG or a JPEG whose size can be read (GIF, WebP, cut short, a PNG
+  /// whose first chunk is not `IHDR`, a JPEG without a frame header, a
+  /// width or height of 0); `from` or `to` when an anchor point's cell
+  /// lies outside the sheet, as the `to` of [XlsxTwoCellAnchor.range] does
+  /// for a range on the last row or column; `from.offsetX` and the like
+  /// for an offset that is negative, NaN or infinite; `width` or `height`
+  /// for a size that is not a finite number above 0 or that, once rounded
+  /// to EMU, is 0 or above 2,147,483,647 EMU (about 225,457 pixels), and
+  /// for an offset above 27,273,042,316,900 EMU too; `to` when a
+  /// two-cell `to` is not right of and below its `from`; and `name` or
+  /// `description` for text with a character XML forbids. When it throws,
+  /// nothing is recorded: no picture, no position among the sheet's
+  /// pictures and no media number.
+  void picture(XlsxPicture picture);
+
   /// Appends a row whose cells hold [values], from column A on.
   ///
   /// A value is `null` (no cell), a `String`, `int`, `double`, `bool`,
@@ -458,16 +496,21 @@ final class WorksheetWriter implements XlsxSheetWriter {
   /// keys sort by row, then column.
   final Map<int, WorksheetNote> _notes = <int, WorksheetNote>{};
 
+  /// The pictures, checked, in the order added.
+  final List<WorksheetPicture> _pictures = <WorksheetPicture>[];
+
   /// The range of the auto filter, if [autoFilter] set one.
   XlsxRange? get autoFilterRange => _autoFilter;
 
   /// Whether the sheet still holds what its parts are rendered from beyond
   /// what `close()` needs: links, merges, validations, conditional formats,
-  /// notes, columns, view and page settings. False once [finish] has run;
-  /// tests use it to confirm a finished sheet lets that data go.
+  /// notes, pictures (their image bytes included), columns, view and page
+  /// settings. False once [finish] has run; tests use it to confirm a
+  /// finished sheet lets that data go.
   bool get holdsTrailerData =>
       _links.isNotEmpty ||
       _notes.isNotEmpty ||
+      _pictures.isNotEmpty ||
       _merges.isNotEmpty ||
       _validations.isNotEmpty ||
       _conditionalFormats.isNotEmpty ||
@@ -709,6 +752,12 @@ final class WorksheetWriter implements XlsxSheetWriter {
   }
 
   @override
+  void picture(XlsxPicture picture) {
+    _checkOpenSheet();
+    _pictures.add(checkPicture(name, _pictures.length + 1, picture));
+  }
+
+  @override
   void printArea(List<XlsxRange> ranges) {
     _checkOpenSheet();
     if (ranges.isEmpty) {
@@ -922,10 +971,12 @@ final class WorksheetWriter implements XlsxSheetWriter {
   }
 
   /// Empties everything [holdsTrailerData] reports, so a finished sheet no
-  /// longer keeps its links (up to 65,530) and its other trailer data.
+  /// longer keeps its links (up to 65,530), its pictures' bytes and its
+  /// other trailer data.
   void _dropTrailerData() {
     _links.clear();
     _notes.clear();
+    _pictures.clear();
     _merges.clear();
     _validations.clear();
     _conditionalFormats.clear();
@@ -940,6 +991,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
 
   /// Renders the header, the trailer and the relationships part from the
   /// settings and hands them with [body]'s chunks to the ZIP, then the
+  /// drawing of the pictures with its relationships and new media, and the
   /// comments part and the VML drawing of the notes, if any, whose content
   /// types it registers.
   void _writePart(Utf8Buffer body) {
@@ -953,6 +1005,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       hyperlinkTargets: <String>{
         for (final (String _, XlsxHyperlink link) in _links) ?link.address,
       },
+      drawing: _pictures.isNotEmpty,
       notes: notes.isNotEmpty,
     );
     final List<WorksheetHyperlink> links = <WorksheetHyperlink>[
@@ -983,6 +1036,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       pageSetup: _pageSetup,
       headerFooter: _headerFooter,
       protection: _protection,
+      drawingId: rels.drawingId,
       legacyDrawingId: rels.vmlDrawingId,
     );
     context.zip.addChunks(worksheetPartName(number), <Uint8List>[
@@ -996,7 +1050,50 @@ final class WorksheetWriter implements XlsxSheetWriter {
         utf8.encode(relsXml),
       ]);
     }
+    if (_pictures.isNotEmpty) _writeDrawing(_pictures);
     if (notes.isNotEmpty) _writeNotes(notes);
+  }
+
+  /// Hands the drawing of [pictures], its relationships part and each
+  /// media part new to the workbook to the ZIP, in that order, and
+  /// registers their content types: an override for the drawing and a
+  /// default for each image extension used. The media numbers are taken
+  /// here, in picture order, so they follow the order sheets finish in;
+  /// a picture that threw when added took none.
+  void _writeDrawing(List<WorksheetPicture> pictures) {
+    // Each distinct media part of the sheet gets one relationship id, in
+    // first-use order; the pictures refer to the parts by these ids.
+    final Map<String, String> mediaIds = <String, String>{};
+    final List<String> embedIds = <String>[];
+    final List<(String, Uint8List)> newMedia = <(String, Uint8List)>[];
+    for (final WorksheetPicture picture in pictures) {
+      final (String part, bool isNew) = context.mediaPartFor(picture.image);
+      if (isNew) newMedia.add((part, picture.image.bytes));
+      embedIds.add(
+        mediaIds.putIfAbsent(part, () => 'rId${mediaIds.length + 1}'),
+      );
+      context.contentTypes.addDefault(
+        picture.format.extension,
+        picture.format.contentType,
+      );
+    }
+    final StringBuffer drawing = StringBuffer();
+    writeDrawing(XmlWriter(drawing), pictures, embedIds);
+    context.zip.addChunks(drawingPartName(number), <Uint8List>[
+      utf8.encode(drawing.toString()),
+    ]);
+    final StringBuffer rels = StringBuffer();
+    writeDrawingRelationships(XmlWriter(rels), mediaIds);
+    context.zip.addChunks(drawingRelsPartName(number), <Uint8List>[
+      utf8.encode(rels.toString()),
+    ]);
+    for (final (String part, Uint8List bytes) in newMedia) {
+      context.zip.add(part, bytes);
+    }
+    context.contentTypes.addOverride(
+      '/${drawingPartName(number)}',
+      ContentType.drawing,
+    );
   }
 
   /// Hands the comments part and the VML drawing of [notes] to the ZIP and

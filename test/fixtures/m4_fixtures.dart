@@ -4,12 +4,74 @@
 /// follow the conventions documented in `m1_fixtures.dart`.
 library;
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:jet_office/jet_office.dart';
 
 import 'fixture.dart';
 
 /// The fixtures of milestone M4.
-List<Fixture> m4Fixtures() => <Fixture>[_richText(), _notes()];
+List<Fixture> m4Fixtures() => <Fixture>[_richText(), _notes(), _images()];
+
+/// A real 4 × 2 PNG, 87 bytes: 8-bit RGB, each pixel's red rising from 0
+/// to 255 across, green from 0 to 255 down, blue 128.
+///
+/// Made with Python's standard library (Python 3.9.6) by
+/// `python3 png.py 4 2 > png4x2.png`, `png.py` being:
+///
+/// ```python
+/// import struct, sys, zlib
+/// w, h = int(sys.argv[1]), int(sys.argv[2])
+/// def chunk(kind, data):
+///     body = kind + data
+///     crc = struct.pack('>I', zlib.crc32(body))
+///     return struct.pack('>I', len(data)) + body + crc
+/// rows = b''.join(
+///     b'\0' + b''.join(
+///         bytes((255 * x // (w - 1), 255 * y // (h - 1), 128))
+///         for x in range(w))
+///     for y in range(h))
+/// ihdr = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
+/// sys.stdout.buffer.write(
+///     b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr)
+///     + chunk(b'IDAT', zlib.compress(rows, 9)) + chunk(b'IEND', b''))
+/// ```
+///
+/// Checked with a decoder: `sips -g pixelWidth -g pixelHeight png4x2.png`
+/// (macOS 27.0.1, sips-316) reads 4 × 2, `sips -s format bmp` decodes it,
+/// and the CRCs of its three chunks recompute with `zlib.crc32`.
+final Uint8List png4x2 = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAHklEQVR42gXBAQEAAAiDMEra'
+  'hzwviRvg4TCEvFyWD3fSC/l5cHwkAAAAAElFTkSuQmCC',
+);
+
+/// A real 3 × 5 baseline JPEG, 852 bytes: its frame header is SOF0, after
+/// the JFIF, Exif and Photoshop segments `sips` writes.
+///
+/// Made from `python3 png.py 3 5 > png3x5.png` (see [png4x2]) with
+/// `sips -s format jpeg png3x5.png --out jpeg3x5.jpeg` (macOS 27.0.1,
+/// sips-316). Checked with decoders: `sips -g pixelWidth -g pixelHeight`
+/// reads 3 × 5 and `djpeg` (libjpeg-turbo 3.2.0) decodes it to a 3 × 5
+/// image.
+final Uint8List jpeg3x5 = base64Decode(
+  '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAA'
+  'AAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAA6ADAAQAAAABAAAABQAAAAD/7QA4UGhvdG9z'
+  'aG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgA'
+  'BQADAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIB'
+  'AwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYX'
+  'GBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeI'
+  'iYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn'
+  '6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIB'
+  'AgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDTh'
+  'JfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWG'
+  'h4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm'
+  '5+jp6vLz9PX29/j5+v/bAEMAAgICAgICAwICAwUDAwMFBgUFBQUGCAYGBgYGCAoICAgICAgK'
+  'CgoKCgoKCgwMDAwMDA4ODg4ODw8PDw8PDw8PD//bAEMBAgICBAQEBwQEBxALCQsQEBAQEBAQ'
+  'EBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEP/dAAQAAf/aAAwD'
+  'AQACEQMRAD8A+zvhn+xl8LD4D0X5P+Xcf8s19T713X/DGPws/uf+Q1/xr6C+Gf8AyIWif9e4'
+  '/ma7qv5IzbxGzz61V/2ufxS6+bPvPD3xZ4k/sDL/APbp/wAGl1/uRP/Z',
+);
 
 /// Rich text cells, one per row of the sheet `Rich`.
 ///
@@ -161,6 +223,89 @@ Fixture _notes() => Fixture(
     book.addSheet('Bottom')
       ..row(<Object?>['Note on A1048576', 'The last row'])
       ..note(1048575, 0, XlsxNote.plain('The last row', author: 'Ahmet'));
+    return book.close();
+  },
+);
+
+/// Pictures on two sheets, all showing [png4x2] and [jpeg3x5].
+///
+/// `Pictures` has the PNG at B2 in its own size (4 × 2 pixels), the JPEG at
+/// E2 60 pixels wide (100 high, its aspect kept) and the PNG stretched over
+/// B6:D10, moving with its cells but keeping its size
+/// ([XlsxPictureResize.move]), described for Alt Text. `Again` has the same
+/// PNG `Uint8List` at A1, so the file holds one PNG and one JPEG part, both
+/// drawings pointing at the PNG. Labels in column A give a reader something
+/// to show; the pictures are pinned in `fixtures_test.dart`.
+Fixture _images() => Fixture(
+  'm4_images',
+  <String, List<List<String>>>{
+    'Pictures': <List<String>>[
+      <String>[''],
+      <String>['PNG at B2, JPEG at E2'],
+      <String>[''],
+      <String>[''],
+      <String>[''],
+      <String>['PNG over B6:D10'],
+    ],
+    'Again': <List<String>>[
+      <String>[''],
+      <String>['The same PNG at A1'],
+    ],
+  },
+  <String, List<List<Object?>>>{
+    'Pictures': <List<Object?>>[
+      <Object?>[],
+      <Object?>['PNG at B2, JPEG at E2'],
+      <Object?>[],
+      <Object?>[],
+      <Object?>[],
+      <Object?>['PNG over B6:D10'],
+    ],
+    'Again': <List<Object?>>[
+      <Object?>[],
+      <Object?>['The same PNG at A1'],
+    ],
+  },
+  () {
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('Pictures')
+      ..blankRow()
+      ..row(<Object?>['PNG at B2, JPEG at E2'])
+      ..blankRow()
+      ..blankRow()
+      ..blankRow()
+      ..row(<Object?>['PNG over B6:D10'])
+      ..picture(
+        XlsxPicture(
+          XlsxImage(png4x2),
+          const XlsxOneCellAnchor(XlsxAnchorPoint(1, 1)),
+        ),
+      )
+      ..picture(
+        XlsxPicture(
+          XlsxImage(jpeg3x5),
+          const XlsxOneCellAnchor(XlsxAnchorPoint(1, 4), width: 60),
+        ),
+      )
+      ..picture(
+        XlsxPicture(
+          XlsxImage(png4x2),
+          XlsxTwoCellAnchor.range(
+            XlsxRange.parse('B6:D10'),
+            resize: XlsxPictureResize.move,
+          ),
+          description: 'The PNG over B6:D10',
+        ),
+      );
+    book.addSheet('Again')
+      ..blankRow()
+      ..row(<Object?>['The same PNG at A1'])
+      ..picture(
+        XlsxPicture(
+          XlsxImage(png4x2),
+          const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
+        ),
+      );
     return book.close();
   },
 );

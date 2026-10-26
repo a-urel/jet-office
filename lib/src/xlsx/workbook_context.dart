@@ -9,16 +9,21 @@
 /// class gives it those without exposing the workbook writer's other state.
 /// A finished sheet's parts beyond the worksheet (drawings, notes, tables)
 /// need content types, which the workbook writes only at `close()`; the
-/// sheet records them in [WorkbookContext.contentTypes].
+/// sheet records them in [WorkbookContext.contentTypes]. The media parts of
+/// pictures are shared across sheets, so the context numbers them
+/// ([WorkbookContext.mediaPartFor]).
 library;
 
 import 'dart:collection';
+import 'dart:typed_data';
 
 import '../zip/archive_adapter.dart';
 import 'cell_encoder.dart';
+import 'image.dart';
 import 'shared_strings.dart';
 import 'style_registry.dart';
 import 'warnings.dart';
+import 'worksheet_parts.dart';
 
 /// What every sheet of one workbook shares: the cell encoder with the
 /// shared strings, styles and warnings it records into, the ZIP that
@@ -71,6 +76,43 @@ final class WorkbookContext {
     final int first = _nextVmlBlock;
     _nextVmlBlock += count;
     return first;
+  }
+
+  /// The media part each image's bytes went to, keyed by the identity of
+  /// the `Uint8List` (Decision 5 of the M4 plan): nothing is hashed, and
+  /// the bytes are not kept alive by the key.
+  final Expando<String> _mediaParts = Expando<String>('media part');
+
+  /// The number of media parts handed out so far.
+  int _mediaCount = 0;
+
+  /// The media part of [image]'s bytes, `xl/media/image{k}.{extension}`,
+  /// and whether this call created it.
+  ///
+  /// The first call for a `Uint8List` takes the workbook's next media
+  /// number (from 1, in first-use order) and returns `isNew` true: the
+  /// caller writes the bytes to that part. Later calls for the same list,
+  /// through any [XlsxImage] holding it, return the same part and false.
+  /// Equal bytes in another list get a part of their own. Sheets call this
+  /// when they finish, so the numbers follow the order sheets finish in.
+  ///
+  /// Throws [ArgumentError] named `image` when the bytes of a new image
+  /// are neither a PNG nor a JPEG; no number is taken then.
+  (String partName, bool isNew) mediaPartFor(XlsxImage image) {
+    final Uint8List bytes = image.bytes;
+    final String? known = _mediaParts[bytes];
+    if (known != null) return (known, false);
+    final XlsxImageFormat? format = image.format;
+    if (format == null) {
+      throw ArgumentError.value(
+        image,
+        'image',
+        'Only a PNG or a JPEG can be a media part.',
+      );
+    }
+    final String part = mediaPartName(++_mediaCount, format.extension);
+    _mediaParts[bytes] = part;
+    return (part, true);
   }
 
   /// What the ZIP work threw, once it has failed; the writer is then dead.

@@ -40,6 +40,14 @@ export 'src/xlsx/conditional_format.dart'
 export 'src/xlsx/data_validation.dart'
     show XlsxDataValidation, XlsxValidationErrorStyle, XlsxValidationType;
 export 'src/xlsx/defined_name.dart' show XlsxDefinedName;
+export 'src/xlsx/drawing.dart'
+    show
+        XlsxAnchor,
+        XlsxAnchorPoint,
+        XlsxOneCellAnchor,
+        XlsxPicture,
+        XlsxPictureResize,
+        XlsxTwoCellAnchor;
 export 'src/xlsx/fill.dart'
     show
         XlsxFill,
@@ -51,6 +59,7 @@ export 'src/xlsx/font.dart'
     show XlsxFont, XlsxFontScheme, XlsxFontScript, XlsxUnderline;
 export 'src/xlsx/header_footer.dart' show XlsxHeaderFooter;
 export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
+export 'src/xlsx/image.dart' show XlsxImage, XlsxImageFormat;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/note.dart' show XlsxNote;
 export 'src/xlsx/number_format.dart' show XlsxNumFmt;

@@ -14,7 +14,9 @@
 /// auto filter, which Quds did not write, and the defined names, print areas
 /// and print titles (see `workbook_parts.dart`); its `[Content_Types].xml`
 /// lists the content types the sheets registered in the shared
-/// `WorkbookContext`. Charts and pictures are not ported yet.
+/// `WorkbookContext`. Pictures are written by their sheets (see
+/// `drawing.dart`), which share the workbook's media numbering through the
+/// context; charts are not ported.
 library;
 
 import 'dart:typed_data';

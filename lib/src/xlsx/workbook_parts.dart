@@ -13,11 +13,12 @@
 /// of string concatenation; a sheet with an auto filter gets the hidden
 /// `_xlnm._FilterDatabase` defined name Excel expects, and the defined
 /// names, print areas and print titles are written by one `definedNames`
-/// writer (Quds' print titles were relative and unquoted). Drawings, charts
-/// and pictures are not ported in this phase; `workbookProtection` (see
-/// `sheet_protection.dart`) comes before `bookViews`; `[Content_Types].xml`
-/// also lists the content types the sheets registered for their other
-/// parts (see `PackageContentTypes`).
+/// writer (Quds' print titles were relative and unquoted). Pictures are
+/// written by their sheets (see `drawing.dart`), not here; charts are not
+/// ported in this phase. `workbookProtection` (see `sheet_protection.dart`)
+/// comes before `bookViews`; `[Content_Types].xml` also lists the content
+/// types the sheets registered for their other parts (see
+/// `PackageContentTypes`), such as drawings, media and notes.
 library;
 
 import '../opc/content_types.dart';
