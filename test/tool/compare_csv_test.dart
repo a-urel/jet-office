@@ -101,6 +101,7 @@ void main() {
       () {
         final CsvReport report = assembleReport(
           fileNames: <String>['a.xlsx', 'a.expected.json', 'b.xlsx'],
+          expectationCount: 1,
           sheets: <SheetResult>[
             (name: 'a', sheet: 'S', note: 'renamed', messages: <String>[]),
             (name: 'a', sheet: 'T', note: null, messages: <String>['r1 c1: x']),
@@ -122,6 +123,7 @@ void main() {
     test('prints the unexpected files before the nothing-to-compare stop', () {
       final CsvReport report = assembleReport(
         fileNames: <String>['b.xlsx'],
+        expectationCount: 0,
         sheets: <SheetResult>[],
       );
       expect(report.lines, <String>['FAIL  no expectations for b.xlsx']);
@@ -129,9 +131,21 @@ void main() {
       expect(report.exitCode, 2);
     });
 
+    test('an expectation file with no sheets is not "nothing to compare"', () {
+      final CsvReport report = assembleReport(
+        fileNames: <String>['a.xlsx', 'a.expected.json'],
+        expectationCount: 1,
+        sheets: <SheetResult>[],
+      );
+      expect(report.lines, <String>['All sheets match.']);
+      expect(report.error, isNull);
+      expect(report.exitCode, 0);
+    });
+
     test('says all sheets match, with exit code 0', () {
       final CsvReport report = assembleReport(
         fileNames: <String>['a.xlsx', 'a.expected.json'],
+        expectationCount: 1,
         sheets: <SheetResult>[
           (name: 'a', sheet: 'S', note: null, messages: <String>[]),
         ],

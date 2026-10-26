@@ -106,6 +106,7 @@ void main(List<String> args) {
           in dir.existsSync() ? dir.listSync().whereType<File>() : <File>[])
         _basename(f.path),
     ],
+    expectationCount: expectations.length,
     sheets: results,
     dir: dir.path,
   );

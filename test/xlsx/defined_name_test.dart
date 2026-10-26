@@ -52,6 +52,9 @@ void main() {
         'My Name',
         'A1',
         'a1',
+        // Leading zeros still read as the cell reference A1.
+        'A01',
+        'A0001',
         'XFD1048576',
         'R1C1',
         'r2c3',

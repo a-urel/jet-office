@@ -148,13 +148,14 @@ typedef CsvReport = ({List<String> lines, String? error, int exitCode});
 /// per-sheet [sheets] already compared, in order.
 ///
 /// The order is part of the contract: a `.xlsx` with no expectations is
-/// reported first, even when no sheet can be compared and the report stops
-/// with exit code 2. Then each sheet prints its `note`, if any,
-/// and `ok    <name> / <sheet>` or `FAIL  <name> / <sheet>` followed by its
+/// reported first, even when the report stops with exit code 2 because
+/// `expectationCount`, the number of `.expected.json` files, is 0. Then each
+/// sheet prints its `note`, if any, and `ok    <name> / <sheet>` or `FAIL  <name> / <sheet>` followed by its
 /// indented messages. The last line is the verdict. `dir` only names the
 /// directory in the error text.
 CsvReport assembleReport({
   required Iterable<String> fileNames,
+  required int expectationCount,
   required List<SheetResult> sheets,
   String dir = '.',
 }) {
@@ -164,7 +165,7 @@ CsvReport assembleReport({
     lines.add('FAIL  $message');
     mismatches++;
   }
-  if (sheets.isEmpty) {
+  if (expectationCount == 0) {
     return (
       lines: lines,
       error: 'No .expected.json files in $dir.',
