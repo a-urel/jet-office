@@ -134,7 +134,7 @@ habit.
 
 ## What the writer supports
 
-Milestones M1 to M3 of phase 1. Later milestones extend this list.
+Milestones M1 to M4 of phase 1. Later milestones extend this list.
 
 **M1, foundation**
 
@@ -174,6 +174,19 @@ Milestones M1 to M3 of phase 1. Later milestones extend this list.
 - Sheet protection and workbook structure protection, with the legacy
   password hash (not security).
 - Document properties: manager, content status and custom properties.
+
+**M4, objects**
+
+- Rich text cells: runs with their own fonts, merged over the cell's font,
+  shared like plain strings.
+- Notes (comments) with an author, rich text and a visible option, boxed so
+  that a note on the last row or column still opens inside the sheet.
+- Pictures: PNG and JPEG, sized in pixels, anchored to one cell or between
+  two (moving or sizing with cells), with a name and a description; one
+  media part per distinct image across the workbook.
+- Tables: header and totals rows filled in by the writer, built-in table
+  styles, totals functions and formulas, and one name space shared with
+  defined names.
 
 ## Money
 

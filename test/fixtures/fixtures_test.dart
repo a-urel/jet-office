@@ -492,6 +492,27 @@ void main() {
     expect(sheet.indexOf('</sheetData>'), lessThan(sheet.indexOf('<condit')));
   });
 
+  test('m3_conditional column H data bar writes the default colors', () {
+    // Task 3 of M4 (Ruling R4) changed this M3 fixture: H has a data bar
+    // with no negative fill or axis color, which now gets an x14:dataBar
+    // with Excel's defaults.
+    final String sheet = readXlsx(
+      named('m3_conditional').build(),
+    )['xl/worksheets/sheet1.xml']!;
+    expect(
+      sheet,
+      matches(
+        RegExp(
+          r'<x14:dataBar [^>]*><x14:cfvo type="autoMin"/>'
+          r'<x14:cfvo type="autoMax"/>'
+          r'<x14:negativeFillColor rgb="FFFF0000"/>'
+          r'<x14:axisColor rgb="FF000000"/></x14:dataBar>',
+        ),
+      ),
+    );
+    expect(sheet, contains('<xm:sqref>H2:H21</xm:sqref>'));
+  });
+
   test('m3_conditional_x14 writes the Excel 2010 bars and icon sets', () {
     final String sheet = readXlsx(
       named('m3_conditional_x14').build(),
