@@ -86,15 +86,21 @@ Fixture _richText() => Fixture(
   },
 );
 
-/// Notes on two sheets.
+/// Notes on three sheets.
 ///
 /// `Notes` has a plain note by `Ahmet` on B2, a rich note on C3 (a bold
 /// `Ahmet:` line, then the text) and a visible note by `Ayse Yilmaz` on D4,
-/// each cell holding a value. `Edges` has notes on `XFD1` and `A1048576`,
-/// whose boxes Excel must open inside the sheet; only A1 and B1 hold
-/// values, so the stored values stay small, and the notes are added after
-/// the rows, as trailer settings. A reader shows the cell values; the notes
-/// are pinned in `fixtures_test.dart`.
+/// each cell holding a value. `Right` has a note on `XFD1` and `Bottom` one
+/// on `A1048576`, whose boxes Excel must open inside the sheet. On both,
+/// only A1 and B1 hold values, so the stored values stay small, and the
+/// note is added after the row, as a trailer setting.
+///
+/// The two edge notes are on separate sheets (Ruling R8 of the M4 plan):
+/// LibreOffice's CSV export counts notes in a sheet's area and pads every
+/// row to it, so notes on XFD1 and A1048576 on one sheet would export
+/// 1,048,576 rows of 16,384 fields, about 17 GB. Apart, `Right` exports one
+/// row of 16,384 fields and `Bottom` 1,048,576 rows of two. A reader shows
+/// the cell values; the notes are pinned in `fixtures_test.dart`.
 Fixture _notes() => Fixture(
   'm4_notes',
   <String, List<List<String>>>{
@@ -104,8 +110,11 @@ Fixture _notes() => Fixture(
       <String>['', '', 'Rich', ''],
       <String>['', '', '', 'Visible'],
     ],
-    'Edges': <List<String>>[
-      <String>['Note on XFD1', 'Note on A1048576'],
+    'Right': <List<String>>[
+      <String>['Note on XFD1', 'The last column'],
+    ],
+    'Bottom': <List<String>>[
+      <String>['Note on A1048576', 'The last row'],
     ],
   },
   <String, List<List<Object?>>>{
@@ -115,8 +124,11 @@ Fixture _notes() => Fixture(
       <Object?>[null, null, 'Rich'],
       <Object?>[null, null, null, 'Visible'],
     ],
-    'Edges': <List<Object?>>[
-      <Object?>['Note on XFD1', 'Note on A1048576'],
+    'Right': <List<Object?>>[
+      <Object?>['Note on XFD1', 'The last column'],
+    ],
+    'Bottom': <List<Object?>>[
+      <Object?>['Note on A1048576', 'The last row'],
     ],
   },
   () {
@@ -143,9 +155,11 @@ Fixture _notes() => Fixture(
         3,
         XlsxNote.plain('Always shown', author: 'Ayse Yilmaz', visible: true),
       );
-    book.addSheet('Edges')
-      ..row(<Object?>['Note on XFD1', 'Note on A1048576'])
-      ..note(0, 16383, XlsxNote.plain('The last column', author: 'Ahmet'))
+    book.addSheet('Right')
+      ..row(<Object?>['Note on XFD1', 'The last column'])
+      ..note(0, 16383, XlsxNote.plain('The last column', author: 'Ahmet'));
+    book.addSheet('Bottom')
+      ..row(<Object?>['Note on A1048576', 'The last row'])
       ..note(1048575, 0, XlsxNote.plain('The last row', author: 'Ahmet'));
     return book.close();
   },

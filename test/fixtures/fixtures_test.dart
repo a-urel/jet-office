@@ -727,32 +727,36 @@ void main() {
     expect('visibility:visible'.allMatches(vml1), hasLength(1));
     expect(vml1, contains('<x:Column>3</x:Column><x:Visible/>'));
 
-    final String comments2 = parts['xl/comments2.xml']!;
-    expect(
-      RegExp(
-        '<comment ref="([A-Z]+[0-9]+)"',
-      ).allMatches(comments2).map((RegExpMatch m) => m.group(1)),
-      <String>['XFD1', 'A1048576'],
-    );
-    final String vml2 = parts['xl/drawings/vmlDrawing2.vml']!;
-    expect(vml2, contains('<o:idmap v:ext="edit" data="2"/>'));
-    expect(
-      vml2,
-      contains(
-        '<x:Anchor>16380, 15, 0, 2, 16382, 15, 4, 16</x:Anchor>'
-        '<x:AutoFill>False</x:AutoFill><x:Row>0</x:Row>'
-        '<x:Column>16383</x:Column>',
-      ),
-    );
-    expect(
-      vml2,
-      contains(
-        '<x:Anchor>1, 15, 1048571, 10, 3, 15, 1048575, 4</x:Anchor>'
-        '<x:AutoFill>False</x:AutoFill><x:Row>1048575</x:Row>'
-        '<x:Column>0</x:Column>',
-      ),
-    );
-    for (final int n in <int>[1, 2]) {
+    // Right and Bottom each hold one edge note, in their own block.
+    for (final (int n, String ref, String anchor, int row, int column)
+        in <(int, String, String, int, int)>[
+          (2, 'XFD1', '16380, 15, 0, 2, 16382, 15, 4, 16', 0, 16383),
+          (3, 'A1048576', '1, 15, 1048571, 10, 3, 15, 1048575, 4', 1048575, 0),
+        ]) {
+      expect(
+        RegExp('<comment ref="([A-Z]+[0-9]+)"')
+            .allMatches(parts['xl/comments$n.xml']!)
+            .map((RegExpMatch m) => m.group(1)),
+        <String>[ref],
+      );
+      final String vml = parts['xl/drawings/vmlDrawing$n.vml']!;
+      expect(vml, contains('<o:idmap v:ext="edit" data="$n"/>'));
+      expect(
+        RegExp(
+          '<v:shape id="_x0000_s([0-9]+)"',
+        ).allMatches(vml).map((RegExpMatch m) => m.group(1)),
+        <String>['${1024 * n + 1}'],
+      );
+      expect(
+        vml,
+        contains(
+          '<x:Anchor>$anchor</x:Anchor>'
+          '<x:AutoFill>False</x:AutoFill><x:Row>$row</x:Row>'
+          '<x:Column>$column</x:Column>',
+        ),
+      );
+    }
+    for (final int n in <int>[1, 2, 3]) {
       expect(
         parts['xl/worksheets/sheet$n.xml'],
         endsWith('<legacyDrawing r:id="rId1"/></worksheet>'),

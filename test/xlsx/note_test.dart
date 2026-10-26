@@ -86,10 +86,15 @@ void main() {
   });
 
   group('vmlBlockCount', () {
-    test('is one block per 1,024 notes, rounded up', () {
+    // Shape ids run from 1024 × b + 1 to 1024 × b + n, so the last one
+    // lies in block b + n ~/ 1024.
+    test('covers the blocks the shape ids reach', () {
       expect(vmlBlockCount(1), 1);
-      expect(vmlBlockCount(1024), 1);
+      expect(vmlBlockCount(1023), 1);
+      expect(vmlBlockCount(1024), 2);
       expect(vmlBlockCount(1025), 2);
+      expect(vmlBlockCount(2047), 2);
+      expect(vmlBlockCount(2048), 3);
       expect(vmlBlockCount(2049), 3);
     });
   });
@@ -388,6 +393,33 @@ void main() {
       expect(parts.containsKey('xl/comments2.xml'), isFalse);
       expect(
         parts['xl/drawings/vmlDrawing3.vml'],
+        _vmlPart('3', _shape(3073, 1, '1, 15, 0, 2, 3, 15, 4, 16', 0, 0)),
+      );
+    });
+
+    test('gives 1,024 notes two blocks, as their last id lies in the '
+        'second', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter first = book.addSheet('First');
+      for (int i = 0; i < 1024; i++) {
+        first.note(i, 0, XlsxNote.plain('n$i'));
+      }
+      book.addSheet('Next').note(0, 0, XlsxNote.plain('next'));
+      final XlsxResult result = book.close();
+      expect(checkXlsx(result.bytes), isEmpty);
+      final Map<String, String> parts = readXlsx(result.bytes);
+
+      final String vml1 = parts[_vml1]!;
+      expect(vml1, contains('<o:idmap v:ext="edit" data="1,2"/>'));
+      final List<String> ids = <String>[
+        for (final RegExpMatch m in RegExp(
+          r'<v:shape id="_x0000_s(\d+)"',
+        ).allMatches(vml1))
+          m.group(1)!,
+      ];
+      expect(ids, <String>[for (int i = 1025; i <= 2048; i++) '$i']);
+      expect(
+        parts['xl/drawings/vmlDrawing2.vml'],
         _vmlPart('3', _shape(3073, 1, '1, 15, 0, 2, 3, 15, 4, 16', 0, 0)),
       );
     });

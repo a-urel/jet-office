@@ -4,7 +4,15 @@
 /// and the VML drawing (`xl/drawings/vmlDrawing{n}.vml`, the boxes Excel
 /// shows).
 ///
-/// New in jet_office; quds_office_engine has no comments writer.
+/// New in jet_office. quds_office_engine's comments writer
+/// (`_writeSheetExtras` in `lib/src/sheet/serial/sheet_serial.dart` at
+/// commit 15c5d29) is broken, so nothing of it is ported. It writes
+/// `<comments>` without the SpreadsheetML namespace, puts an `author`
+/// attribute on each `comment` instead of an `authors` list and an
+/// `authorId`, leaves out `commentList`, and writes the text straight into
+/// `<text>` with no `<t>` or `<r>` run. It registers the part with the
+/// shared strings content type, gives the sheet no relationship to it, and
+/// writes no VML drawing and no `legacyDrawing`, so Excel shows no note.
 library;
 
 import '../opc/ooxml.dart';
@@ -146,10 +154,15 @@ void checkNote(String sheet, int row, int column, XlsxNote note) {
 /// How many note shapes one VML id block numbers.
 const int vmlBlockSize = 1024;
 
-/// How many VML id blocks a sheet of [noteCount] notes takes: one per
-/// [vmlBlockSize] notes, rounded up.
-int vmlBlockCount(int noteCount) =>
-    (noteCount + vmlBlockSize - 1) ~/ vmlBlockSize;
+/// How many VML id blocks a sheet of [noteCount] notes (at least one)
+/// takes: `noteCount ~/ 1024 + 1`.
+///
+/// The shape ids of a sheet whose first block is b run from
+/// `1024 × b + 1` to `1024 × b + noteCount`, and id n lies in block
+/// `n ~/ 1024`, so the last one lies in block `b + noteCount ~/ 1024`.
+/// 1,023 notes take one block; 1,024 and 1,025 take two, as `_x0000_s2048`
+/// lies in block 2 of a sheet whose first block is 1.
+int vmlBlockCount(int noteCount) => noteCount ~/ vmlBlockSize + 1;
 
 /// The `x:Anchor` of the box of a note on the zero-based cell ([row],
 /// [column]): left column, left offset, top row, top offset, right column,
