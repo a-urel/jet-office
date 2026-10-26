@@ -581,7 +581,7 @@ void main() {
       expect(rels.drawingId, 'rId3');
       expect(rels.vmlDrawingId, 'rId4');
       expect(rels.commentsId, 'rId5');
-      expect(rels.tableIds, <String>['rId6', 'rId7']);
+      expect(rels.tableRelationshipIds, <String>['rId6', 'rId7']);
     });
 
     test('its part targets each object with its type', () {
@@ -614,7 +614,7 @@ void main() {
       expect(rels.drawingId, isNull);
       expect(rels.vmlDrawingId, isNull);
       expect(rels.commentsId, isNull);
-      expect(rels.tableIds, isEmpty);
+      expect(rels.tableRelationshipIds, isEmpty);
       expect(
         rels.toXml(),
         '$decl<Relationships xmlns="$package">'
@@ -633,7 +633,7 @@ void main() {
         tableIds: <int>[1],
       );
       expect(linksAndTable.drawingId, isNull);
-      expect(linksAndTable.tableIds, <String>['rId2']);
+      expect(linksAndTable.tableRelationshipIds, <String>['rId2']);
 
       final SheetRelationships notesOnly = SheetRelationships(
         sheetNumber: 2,
@@ -650,7 +650,7 @@ void main() {
       );
       expect(drawingAndTables.drawingId, 'rId1');
       expect(drawingAndTables.vmlDrawingId, isNull);
-      expect(drawingAndTables.tableIds, <String>['rId2', 'rId3']);
+      expect(drawingAndTables.tableRelationshipIds, <String>['rId2', 'rId3']);
     });
 
     test('a repeated link target keeps its first id', () {
@@ -669,7 +669,7 @@ void main() {
     test('a sheet without relationships has no part', () {
       final SheetRelationships rels = SheetRelationships(sheetNumber: 1);
       expect(rels.hyperlinkIds, isEmpty);
-      expect(rels.tableIds, isEmpty);
+      expect(rels.tableRelationshipIds, isEmpty);
       expect(rels.toXml(), isNull);
     });
   });

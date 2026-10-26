@@ -120,13 +120,17 @@ bool _startsWith(Uint8List bytes, List<int> prefix) {
 /// `C5`–`C7`, `C9`–`CB` or `CD`–`CF`), found by walking the segments from
 /// offset 2 by their lengths; fill bytes (`FF`) before a marker are
 /// skipped, and so are the markers that carry no length (`01`, `D0`–`D7`).
+/// Only the frame headers Excel shows are accepted: SOF0, SOF1 and SOF2
+/// (`C0`–`C2`; baseline, extended and progressive).
 ///
 /// Throws [ArgumentError] named `image` when [image] is neither a PNG nor
 /// a JPEG (see [XlsxImage.format]); when its bytes end before its size or
 /// inside a JPEG segment (`cut short`); when a PNG's first chunk is not
 /// `IHDR`; when a JPEG's segments do not start with `FF`, have a length
 /// below 2, or reach a scan (`DA`), its end (`D9`) or the end of the bytes
-/// before a frame header; and when the width or height is 0.
+/// before a frame header; when a JPEG's first frame header is another
+/// kind than SOF0, SOF1 or SOF2 (lossless, hierarchical or arithmetic
+/// coded) or has a length below 8; and when the width or height is 0.
 ({int width, int height}) checkImage(XlsxImage image) {
   final ({int width, int height}) size = switch (image.format) {
     XlsxImageFormat.png => _pngSize(image),
@@ -202,7 +206,22 @@ int _uint32(Uint8List b, int i) =>
       );
     }
     if (_isFrameHeader(marker)) {
+      if (marker > 0xC2) {
+        throw _invalid(
+          image,
+          'its frame header is SOF${marker - 0xC0} '
+          '(FF ${marker.toRadixString(16).toUpperCase()}); Excel shows only '
+          'SOF0, SOF1 and SOF2 (baseline, extended and progressive) JPEGs',
+        );
+      }
       // Length, precision, height, width.
+      if (length < 8) {
+        throw _invalid(
+          image,
+          'the frame header at byte $i of the JPEG has the length $length, '
+          'below 8',
+        );
+      }
       if (i + 8 >= b.length) cutShort();
       return (width: _uint16(b, i + 7), height: _uint16(b, i + 5));
     }

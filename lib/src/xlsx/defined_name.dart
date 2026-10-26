@@ -101,24 +101,32 @@ bool _isCellReference(String name) {
   return row >= 1 && row <= XlsxLimits.maxRows;
 }
 
-/// Checks the shape of [name], a defined name or a table name, and throws
-/// [ArgumentError] named [field] when it is wrong.
+/// Checks the shape of [name], a defined name or, when [table] is `true`,
+/// a table name, and throws [ArgumentError] named [field] when it is wrong.
 ///
 /// A name is not empty, at most [XlsxLimits.maxDefinedNameLength] UTF-16
-/// code units, starts with a letter, `_` or `\` and continues with letters,
-/// digits, `_`, `.` or `\`; it does not start with `_xlnm.`, is not one of
-/// Excel's built-in names (`Print_Area`, `Print_Titles`, `_FilterDatabase`,
-/// in any case), is not `R` or `C` and does not look like a cell reference
-/// (`A1`, `R1C1`). Whether the name is taken is checked elsewhere.
-void checkNameSyntax(String name, String field) {
+/// code units ([XlsxLimits.maxTableNameLength] for a table), starts with a
+/// letter, `_` or `\` and continues with letters, digits, `_`, `.` or `\`;
+/// it does not start with `_xlnm.`, is not one of Excel's built-in names
+/// (`Print_Area`, `Print_Titles`, `_FilterDatabase`, in any case), is not
+/// `R` or `C` and does not look like a cell reference (`A1`, `R1C1`). The
+/// message for a built-in name points a defined name at the sheet setting
+/// it stands for; a table only hears that the name is reserved. Whether
+/// the name is taken is checked elsewhere.
+void checkNameSyntax(String name, String field, {bool table = false}) {
   if (name.isEmpty) {
     throw ArgumentError.value(name, field, 'A name must not be empty.');
   }
-  if (name.length > XlsxLimits.maxDefinedNameLength) {
+  final int maxLength = table
+      ? XlsxLimits.maxTableNameLength
+      : XlsxLimits.maxDefinedNameLength;
+  if (name.length > maxLength) {
     throw ArgumentError.value(
       '${name.length} characters',
       field,
-      'A name has at most ${XlsxLimits.maxDefinedNameLength} characters.',
+      table
+          ? 'A table name has at most $maxLength characters.'
+          : 'A name has at most $maxLength characters.',
     );
   }
   if (!_nameShape.hasMatch(name)) {
@@ -141,8 +149,11 @@ void checkNameSyntax(String name, String field) {
     throw ArgumentError.value(
       name,
       field,
-      '"$name" is the name of an Excel built-in; use the sheet\'s $setting '
-      'instead.',
+      table
+          ? '"$name" is a built-in name Excel reserves; a table cannot take '
+                'it.'
+          : '"$name" is the name of an Excel built-in; use the sheet\'s '
+                '$setting instead.',
     );
   }
   if (name.length == 1 && 'RrCc'.contains(name)) {

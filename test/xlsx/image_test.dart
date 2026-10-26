@@ -168,17 +168,53 @@ void main() {
       expect(checkImage(XlsxImage(_progressive6x4)), (width: 6, height: 4));
     });
 
-    test('reads the size from every SOF marker kind', () {
+    test('reads the size from SOF0, SOF1 and SOF2', () {
       final int sof = _sof0Offset();
-      for (final int marker in <int>[
-        0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, //
-        0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
-      ]) {
+      for (final int marker in <int>[0xC0, 0xC1, 0xC2]) {
         final Uint8List bytes = _edited(
           jpeg3x5,
           (Uint8List b) => b[sof + 1] = marker,
         );
         expect(checkImage(XlsxImage(bytes)), (width: 3, height: 5));
+      }
+    });
+
+    test('refuses the frame headers Excel cannot show', () {
+      // Lossless (SOF3), hierarchical (SOF5-7) and arithmetic-coded
+      // (SOF9-11, SOF13-15) JPEGs.
+      final int sof = _sof0Offset();
+      for (final int marker in <int>[
+        0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF, //
+      ]) {
+        final Uint8List bytes = _edited(
+          jpeg3x5,
+          (Uint8List b) => b[sof + 1] = marker,
+        );
+        expect(
+          () => checkImage(XlsxImage(bytes)),
+          _imageError('SOF${marker - 0xC0}'),
+          reason: 'marker ${marker.toRadixString(16)}',
+        );
+      }
+    });
+
+    test('refuses a frame header shorter than 8 bytes', () {
+      // The length counts itself, the precision, the height and the width;
+      // 7 ends inside the width. The bytes after it still hold a width.
+      final int sof = _sof0Offset();
+      for (final int length in <int>[2, 5, 7]) {
+        final Uint8List bytes = _edited(jpeg3x5, (Uint8List b) {
+          b[sof + 2] = 0;
+          b[sof + 3] = length;
+        });
+        expect(
+          () => checkImage(XlsxImage(bytes)),
+          _imageError(
+            'frame header at byte $sof of the JPEG has the length '
+            '$length, below 8',
+          ),
+          reason: 'length $length',
+        );
       }
     });
 

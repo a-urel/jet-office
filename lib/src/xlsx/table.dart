@@ -338,10 +338,11 @@ final RegExp _styleName = RegExp(
 /// and the workbook (a name already taken, an overlap, a header row already
 /// written) the sheet writer checks.
 ///
-/// Throws [ArgumentError] named `name` for a name longer than
-/// [XlsxLimits.maxTableNameLength] or failing [checkNameSyntax]; `range`
-/// for a range outside the sheet, in reverse, or with fewer rows than the
-/// header row, one data row and the totals row need; `columns` when there
+/// Throws [ArgumentError] named `name` for a name failing
+/// [checkNameSyntax] as a table name, which holds it to
+/// [XlsxLimits.maxTableNameLength]; `range` for a range outside the sheet,
+/// in reverse, or with fewer rows than the header row, one data row and
+/// the totals row need; `columns` when there
 /// is not one column per column of the range; `columns[i].name` for an
 /// empty name, one longer than [XlsxLimits.maxTableColumnNameLength], one
 /// holding a line break, a tab or a character XML forbids, or one an
@@ -353,15 +354,7 @@ final RegExp _styleName = RegExp(
 /// built-in table style.
 void checkTable(XlsxTable table) {
   final String name = table.name;
-  if (name.length > XlsxLimits.maxTableNameLength) {
-    throw ArgumentError.value(
-      '${name.length} characters',
-      'name',
-      'A table name has at most ${XlsxLimits.maxTableNameLength} '
-          'characters.',
-    );
-  }
-  checkNameSyntax(name, 'name');
+  checkNameSyntax(name, 'name', table: true);
   final XlsxRange range = table.range;
   validateRange(range, 'range');
   final List<XlsxTableColumn> columns = table.columns;
@@ -506,13 +499,18 @@ bool isTableTotalsRow(XlsxTable table, int row) =>
 /// The value written in the header cell of [table]'s zero-based sheet
 /// [column], given [value] there (`null` when the row is shorter).
 ///
-/// `null` becomes the column's name. A `String`, or an [XlsxCell] holding
-/// one, equal to the name is kept as given, its style included. Anything
-/// else throws [ArgumentError] named `values[column]`: Excel repairs a
-/// table whose header cells differ from its column names.
+/// `null` becomes the column's name, and an [XlsxCell] holding `null`
+/// becomes an [XlsxCell] of the name with that cell's style. A `String`,
+/// or an [XlsxCell] holding one, equal to the name is kept as given, its
+/// style included. Anything else throws [ArgumentError] named
+/// `values[column]`: Excel repairs a table whose header cells differ from
+/// its column names.
 Object? tableHeaderCell(XlsxTable table, int column, Object? value) {
   final String name = table.columns[column - table.range.firstColumn].name;
   if (value == null) return name;
+  if (value is XlsxCell && value.value == null) {
+    return XlsxCell(name, style: value.style);
+  }
   final Object? text = value is XlsxCell ? value.value : value;
   if (text is String && text == name) return value;
   throw ArgumentError.value(
@@ -529,9 +527,20 @@ Object? tableHeaderCell(XlsxTable table, int column, Object? value) {
 /// A given value is kept. `null` becomes the column's label, a `SUBTOTAL`
 /// over the column's data rows for a function (`SUBTOTAL(109,B2:B4)`, an
 /// A1 range, not a structured reference), its formula for a custom total,
-/// and stays `null` for none.
+/// and stays `null` for none. An [XlsxCell] holding `null` is filled in
+/// the same way and keeps its style; for none it stays as given, a styled
+/// empty cell.
 Object? tableTotalsCell(XlsxTable table, int column, Object? value) {
-  if (value != null) return value;
+  if (value is XlsxCell && value.value == null) {
+    final Object? total = _totalOf(table, column);
+    return total == null ? value : XlsxCell(total, style: value.style);
+  }
+  return value ?? _totalOf(table, column);
+}
+
+/// The total of [table]'s zero-based sheet [column] (see
+/// [tableTotalsCell]), `null` for none.
+Object? _totalOf(XlsxTable table, int column) {
   final XlsxTableColumn c = table.columns[column - table.range.firstColumn];
   final String? label = c.totalsLabel;
   if (label != null) return label;

@@ -351,14 +351,15 @@ abstract final class XlsxSheetWriter {
   /// Throws [StateError] like [merge], and [ArgumentError], whose message
   /// names the picture and the sheet: named `image` when the bytes are not
   /// a PNG or a JPEG whose size can be read (GIF, WebP, cut short, a PNG
-  /// whose first chunk is not `IHDR`, a JPEG without a frame header, a
-  /// width or height of 0); `from` or `to` when an anchor point's cell
+  /// whose first chunk is not `IHDR`, a JPEG without a frame header or
+  /// whose frame header is short or not SOF0, SOF1 or SOF2, a width or
+  /// height of 0); `from` or `to` when an anchor point's cell
   /// lies outside the sheet, as the `to` of [XlsxTwoCellAnchor.range] does
   /// for a range on the last row or column; `from.offsetX` and the like
-  /// for an offset that is negative, NaN or infinite; `width` or `height`
-  /// for a size that is not a finite number above 0 or that, once rounded
-  /// to EMU, is 0 or above 2,147,483,647 EMU (about 225,457 pixels), and
-  /// for an offset above 27,273,042,316,900 EMU too; `to` when a
+  /// for an offset that is negative, NaN, infinite or above
+  /// 27,273,042,316,900 EMU; `width` or `height` for a size that is not a
+  /// finite number above 0 or that, once rounded to EMU, is 0 or above
+  /// 2,147,483,647 EMU (about 225,457 pixels); `to` when a
   /// two-cell `to` is not right of and below its `from`; and `name` or
   /// `description` for text with a character XML forbids. When it throws,
   /// nothing is recorded: no picture, no position among the sheet's
@@ -383,8 +384,10 @@ abstract final class XlsxSheetWriter {
   /// `null` cell of the table becomes the column's label, a `SUBTOTAL` of
   /// its function over the column's data rows (`SUBTOTAL(109,B2:B4)`), or
   /// its custom formula; a given value is written as given, and [blankRow]
-  /// fills the row in. A header or totals row the sheet has not reached
-  /// when it finishes is written then, in row order, after the last row.
+  /// fills the row in. In both rows, `XlsxCell(null, style: s)` is filled
+  /// in like `null` and written in `s`; for none it stays a styled empty
+  /// cell. A header or totals row the sheet has not reached when it
+  /// finishes is written then, in row order, after the last row.
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] naming the field
   /// when [table] is invalid (see [XlsxTable] and [XlsxTableColumn]): its
@@ -1223,7 +1226,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
       protection: _protection,
       drawingId: rels.drawingId,
       legacyDrawingId: rels.vmlDrawingId,
-      tablePartIds: rels.tableIds,
+      tablePartIds: rels.tableRelationshipIds,
     );
     context.zip.addChunks(worksheetPartName(number), <Uint8List>[
       utf8.encode(worksheetHeader(settings, hasRows: _wroteRow)),

@@ -110,7 +110,7 @@ Map<String, String> _cells(Map<String, String> parts, String sheet) {
 }
 
 /// Matches an [ArgumentError] named [name].
-Matcher _argumentError(String name) =>
+TypeMatcher<ArgumentError> _argumentError(String name) =>
     isA<ArgumentError>().having((ArgumentError e) => e.name, 'name', name);
 
 const XlsxStyle _bold = XlsxStyle(font: XlsxFont(bold: true));
@@ -341,6 +341,42 @@ void main() {
           reason: bad,
         );
       }
+    });
+
+    test('tells a table name by its own limit and advice', () {
+      expect(
+        () => checkNameSyntax('a' * 256, 'name', table: true),
+        throwsA(
+          _argumentError('name').having(
+            (ArgumentError e) => e.message,
+            'message',
+            contains('A table name has at most 255'),
+          ),
+        ),
+      );
+      checkNameSyntax('a' * 255, 'name', table: true);
+      expect(
+        () => checkNameSyntax('Print_Area', 'name', table: true),
+        throwsA(
+          _argumentError('name').having(
+            (ArgumentError e) => e.message,
+            'message',
+            '"Print_Area" is a built-in name Excel reserves; a table '
+                'cannot take it.',
+          ),
+        ),
+      );
+      // A defined name keeps the advice of the sheet setting.
+      expect(
+        () => checkNameSyntax('Print_Area', 'name'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.message,
+            'message',
+            contains('printArea'),
+          ),
+        ),
+      );
     });
   });
 
@@ -637,6 +673,43 @@ void main() {
           'name',
         );
       }
+    });
+
+    test('a built-in name, with advice for a table', () {
+      for (final String name in <String>[
+        'Print_Area',
+        'print_titles',
+        '_FilterDatabase',
+      ]) {
+        expect(
+          () => XlsxWriter().addSheet('S').table(_sales(name: name)),
+          throwsA(
+            _argumentError('name').having(
+              (ArgumentError e) => e.message,
+              'message',
+              allOf(
+                contains('is a built-in name Excel reserves'),
+                isNot(contains('instead')),
+              ),
+            ),
+          ),
+          reason: name,
+        );
+      }
+    });
+
+    test('a long name is told against the table name limit', () {
+      expect(
+        () => XlsxWriter().addSheet('S').table(_sales(name: 'a' * 256)),
+        throwsA(
+          _argumentError('name').having(
+            (ArgumentError e) => e.message,
+            'message',
+            'A table name has at most ${XlsxLimits.maxTableNameLength} '
+                'characters.',
+          ),
+        ),
+      );
     });
 
     test('a name of 255 characters is fine', () {
@@ -989,6 +1062,20 @@ void main() {
       expect(cells['A1.s'], isNull);
     });
 
+    test('fills an XlsxCell(null, style: s) with the name in s', () {
+      final Map<String, String> parts = _parts((XlsxSheetWriter s) {
+        s
+          ..table(_sales(totalsRow: false))
+          ..row(<Object?>['Region', const XlsxCell(null, style: _bold)]);
+      });
+      final Map<String, String> cells = _cells(parts, _sheet1);
+      expect(cells['B1'], 'Amount');
+      expect(cells['B1.s'], isNotNull);
+      expect(cells['A1.s'], isNull);
+      expect(cells['C1'], 'Note');
+      expect(cells['C1.s'], isNull);
+    });
+
     test('leaves cells outside the table alone', () {
       final Map<String, String> parts = _parts((XlsxSheetWriter s) {
         s
@@ -1009,7 +1096,6 @@ void main() {
         'amount',
         1,
         const XlsxFormula('"Amount"'),
-        const XlsxCell(null, style: _bold),
         const XlsxCell(1),
         XlsxRichText(const <XlsxTextRun>[XlsxTextRun('Amount')]),
       ]) {
@@ -1161,6 +1247,41 @@ void main() {
       expect(cells['A5'], 'All');
       expect(cells['B5'], '99');
       expect(cells['C5'], 'n');
+    });
+
+    test('fills an XlsxCell(null, style: s) with its total in s', () {
+      final XlsxTable table =
+          XlsxTable('T', XlsxRange.parse('A1:D3'), const <XlsxTableColumn>[
+            XlsxTableColumn('Region', totalsLabel: 'Total'),
+            XlsxTableColumn('Amount', totalsFunction: XlsxTotalsFunction.sum),
+            XlsxTableColumn(
+              'Custom',
+              totalsFunction: XlsxTotalsFunction.custom,
+              totalsFormula: 'SUM(C2)',
+            ),
+            XlsxTableColumn('Note'),
+          ], totalsRow: true);
+      final Map<String, String> parts = _parts((XlsxSheetWriter s) {
+        s
+          ..table(table)
+          ..blankRow()
+          ..blankRow()
+          ..row(<Object?>[
+            for (int i = 0; i < 4; i++) const XlsxCell(null, style: _bold),
+          ]);
+      });
+      final Map<String, String> cells = _cells(parts, _sheet1);
+      expect(cells['A3'], 'Total');
+      expect(cells['B3'], '=SUBTOTAL(109,B2)');
+      expect(cells['C3'], '=SUM(C2)');
+      // None keeps the styled empty cell.
+      expect(cells['D3'], '');
+      final String? bold = cells['A3.s'];
+      expect(bold, isNotNull);
+      expect(
+        <String?>[cells['B3.s'], cells['C3.s'], cells['D3.s']],
+        <String?>[bold, bold, bold],
+      );
     });
 
     test('blankRow() at the totals row fills it', () {

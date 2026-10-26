@@ -179,7 +179,7 @@ final class WorksheetSettings {
   final String? legacyDrawingId;
 
   /// The relationship ids of the sheet's table parts, in table order (see
-  /// [SheetRelationships.tableIds]).
+  /// [SheetRelationships.tableRelationshipIds]).
   final List<String> tablePartIds;
 }
 
@@ -370,7 +370,7 @@ final class SheetRelationships {
     this.vmlDrawingId,
     this.commentsId,
     this._tables,
-    this.tableIds,
+    this.tableRelationshipIds,
   );
 
   /// The 1-based creation order of the worksheet, which numbers its
@@ -393,11 +393,12 @@ final class SheetRelationships {
   /// no notes.
   final String? commentsId;
 
-  /// The workbook-wide ids of the sheet's tables, in [tableIds] order.
+  /// The workbook-wide ids of the sheet's tables, in the order they were
+  /// added (the factory's `tableIds`).
   final List<int> _tables;
 
   /// The relationship ids of the table parts, in the order of the tables.
-  final List<String> tableIds;
+  final List<String> tableRelationshipIds;
 
   /// Renders the worksheet's relationships part, or returns `null` when
   /// the sheet has no relationship.
@@ -412,7 +413,7 @@ final class SheetRelationships {
     if (hyperlinkIds.isEmpty &&
         drawingId == null &&
         vmlDrawingId == null &&
-        tableIds.isEmpty) {
+        tableRelationshipIds.isEmpty) {
       return null;
     }
     final Relationships rels = Relationships();
@@ -447,7 +448,7 @@ final class SheetRelationships {
       rels.add(
         RelType.table,
         _fromWorksheet(tablePartName(_tables[i])),
-        id: tableIds[i],
+        id: tableRelationshipIds[i],
       );
     }
     final StringBuffer out = StringBuffer();
