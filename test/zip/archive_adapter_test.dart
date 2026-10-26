@@ -35,7 +35,6 @@ class _ThrowingSink implements Sink<List<int>> {
   void close() => closed = true;
 }
 
-/// Bytes that deflate poorly, so the archive is large enough to span chunks.
 /// A [ZipWriter] streaming to a sink made by [make], with that sink.
 ///
 /// The writer closes the sink in `close` (or after a failure), so the
@@ -46,6 +45,7 @@ class _ThrowingSink implements Sink<List<int>> {
   return (ZipWriter(sink: sink), sink);
 }
 
+/// Bytes that deflate poorly, so the archive is large enough to span chunks.
 Uint8List _noise(int length) {
   final Random r = Random(42);
   return Uint8List.fromList(List<int>.generate(length, (_) => r.nextInt(256)));

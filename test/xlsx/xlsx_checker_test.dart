@@ -90,6 +90,30 @@ void main() {
         1,
       );
     });
+    test('a .vml part that is not well-formed', () {
+      _expectRule(
+        _rebuild(
+          _good(),
+          add: const <String, String>{
+            'xl/drawings/vmlDrawing1.vml':
+                '<xml xmlns:v="urn:schemas-microsoft-com:vml"><v:shape></xml>',
+          },
+        ),
+        1,
+      );
+    });
+    test('a well-formed .vml part is not a rule 1 violation', () {
+      final List<String> violations = checkXlsx(
+        _rebuild(
+          _good(),
+          add: const <String, String>{
+            'xl/drawings/vmlDrawing1.vml':
+                '<xml xmlns:v="urn:schemas-microsoft-com:vml"><v:shape/></xml>',
+          },
+        ),
+      );
+      expect(violations.where((String v) => v.startsWith('rule 1:')), isEmpty);
+    });
     test('a .rels part that is not well-formed', () {
       _expectRule(
         _broken('_rels/.rels', (String x) => x.substring(0, x.length - 5)),
@@ -963,6 +987,24 @@ void main() {
     test('valid names and filters have no violations', () {
       expect(checkXlsx(filtered()), isEmpty);
     });
+    test('a filter name whose sheet name has an undoubled apostrophe', () {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet("O'B")
+        ..row(<Object?>[1, 2])
+        ..autoFilter(XlsxRange.parse('A1:B2'));
+      final Uint8List good = book.close().bytes;
+      expect(checkXlsx(good), isEmpty);
+      _expectRule(
+        _rebuild(
+          good,
+          edit: <String, String? Function(String)>{
+            'xl/workbook.xml': (String x) =>
+                x.replaceFirst("'O''B'!", "'O'B'!"),
+          },
+        ),
+        21,
+      );
+    });
     test('the same name twice in one scope', () {
       _expectRule(
         tamper(
@@ -1578,6 +1620,82 @@ void main() {
         25,
       );
     });
+    test('an unnamed x14:cfRule is x14-only only for an x14-only icon set', () {
+      for (final String set in <String>[
+        '3Stars',
+        '3Triangles',
+        '5Boxes',
+        'NoIcons',
+      ]) {
+        expect(
+          checkXlsx(
+            tamper(
+              _sheet1,
+              (String x) => x.replaceFirst(
+                '<x14:iconSet iconSet="3Stars">',
+                '<x14:iconSet iconSet="$set">',
+              ),
+            ),
+          ),
+          isEmpty,
+          reason: set,
+        );
+      }
+      // A 2007 icon set always has its own cfRule, so an unnamed x14 rule of
+      // one is a stray, as is an unnamed data bar.
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            '<x14:iconSet iconSet="3Stars">',
+            '<x14:iconSet iconSet="3Arrows">',
+          ),
+        ),
+        25,
+      );
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            '<x14:cfRule type="iconSet" priority="3"',
+            '<x14:cfRule type="dataBar" priority="3"',
+          ),
+        ),
+        25,
+      );
+    });
+    test('the ext uri of a cfRule and of the worksheet are the ones '
+        'Excel writes', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            '{B025F937-C7B1-47D3-B67F-A62EFF666E3E}',
+            '{B025F937-C7B1-47D3-B67F-A62EFF666E3F}',
+          ),
+        ),
+        25,
+      );
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst(
+            '{78C0D931-6437-407d-A8EE-F0AAD7539E65}',
+            '{78C0D931-6437-407d-A8EE-F0AAD7539E66}',
+          ),
+        ),
+        25,
+      );
+      // Excel writes the lowercase d; the URI is compared exactly.
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) =>
+              x.replaceFirst('{78C0D931-6437-407d-', '{78C0D931-6437-407D-'),
+        ),
+        25,
+      );
+    });
     test('the extLst is not the last worksheet child', () {
       _expectRule(
         tamper(_sheet1, (String x) {
@@ -1625,6 +1743,25 @@ void main() {
           26,
         );
       }
+    });
+    test('a password in lowercase hex is not Excel\'s spelling', () {
+      _expectRule(
+        tamper(
+          _sheet1,
+          (String x) => x.replaceFirst('password="83AF"', 'password="83af"'),
+        ),
+        26,
+      );
+      _expectRule(
+        tamper(
+          'xl/workbook.xml',
+          (String x) => x.replaceFirst(
+            'workbookPassword="CBEB"',
+            'workbookPassword="cbeb"',
+          ),
+        ),
+        26,
+      );
     });
     test('a workbook password that is not four hex digits', () {
       _expectRule(
@@ -1684,6 +1821,46 @@ void main() {
     test('names that are equal ignoring case', () {
       _expectRule(
         tamper((String x) => x.replaceFirst('name="Count"', 'name="PROJECT"')),
+        27,
+      );
+    });
+    test('a property with another fmtid or none', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            'fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2"',
+            'fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AF}" pid="2"',
+          ),
+        ),
+        27,
+      );
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            'fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="3"',
+            'pid="3"',
+          ),
+        ),
+        27,
+      );
+    });
+    test('a value child outside the vt namespace', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            '<vt:i4>3</vt:i4>',
+            '<i4 xmlns="urn:other">3</i4>',
+          ),
+        ),
+        27,
+      );
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst(
+            '<vt:lpwstr>Atlas</vt:lpwstr>',
+            '<lpwstr>Atlas</lpwstr>',
+          ),
+        ),
         27,
       );
     });

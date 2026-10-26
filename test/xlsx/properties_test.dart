@@ -1,7 +1,9 @@
-import 'package:jet_office/jet_office.dart' show XlsxLimits;
+import 'package:jet_office/jet_office.dart' show XlsxLimits, XlsxWriter;
 import 'package:jet_office/src/xlsx/properties.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
 import 'package:test/test.dart';
+
+import '../support/read_xlsx.dart';
 
 String _core(XlsxProperties p) {
   final StringBuffer out = StringBuffer();
@@ -293,8 +295,15 @@ void main() {
       );
     });
 
-    test('an empty custom map writes nothing to compare', () {
-      expect(const XlsxProperties().custom, isEmpty);
+    test('an empty custom map writes no custom part', () {
+      final XlsxWriter book = XlsxWriter(
+        properties: const XlsxProperties(title: 't'),
+      );
+      book.addSheet('S');
+      final Map<String, String> parts = readXlsx(book.close().bytes);
+      expect(parts.keys, isNot(contains('docProps/custom.xml')));
+      expect(parts['[Content_Types].xml'], isNot(contains('custom')));
+      expect(parts['_rels/.rels'], isNot(contains('custom')));
     });
 
     test('== and hashCode compare the map entry by entry, in order', () {

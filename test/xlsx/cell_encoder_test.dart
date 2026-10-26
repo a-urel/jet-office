@@ -1,5 +1,6 @@
 import 'package:jet_office/src/xlsx/cell_encoder.dart';
 import 'package:jet_office/src/xlsx/font.dart';
+import 'package:jet_office/src/xlsx/hyperlink.dart';
 import 'package:jet_office/src/xlsx/number_format.dart';
 import 'package:jet_office/src/xlsx/shared_strings.dart';
 import 'package:jet_office/src/xlsx/style.dart';
@@ -563,6 +564,20 @@ void main() {
       }
       expect(encoder.resolveCount, 2);
       expect(formatCount(), 3);
+    });
+
+    test('many link cells in one column resolve their style once', () {
+      for (int r = 0; r < 50; r++) {
+        encoder.encode(
+          XmlWriter(StringBuffer()),
+          sheet: 'S',
+          row: r,
+          column: 0,
+          value: XlsxHyperlink.location('X$r'),
+          rowStyle: bold,
+        );
+      }
+      expect(encoder.resolveCount, 1);
     });
 
     test('a DateTime under a merged General has no s and warns', () {

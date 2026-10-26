@@ -4,7 +4,7 @@
 /// "We found a problem with some content". Every violation starts with
 /// `rule N:`, N being the rule's number below. Later milestones add rules.
 ///
-/// 1. every part and `.rels` is well-formed XML;
+/// 1. every `.xml`, `.rels` and `.vml` part is well-formed XML;
 /// 2. every relationship target exists;
 /// 3. every part has a content type, and every override names a part;
 /// 4. `sst/@count` equals the number of `t="s"` cells and
@@ -76,13 +76,21 @@
 ///     `x14:id`, except an x14-only rule (one no `x14:id` names), which
 ///     has a `priority` of 1 or more, unique among the sheet's `cfRule` and
 ///     x14-only priorities; no two `x14:cfRule` of the workbook share an
-///     `id`; and a worksheet's `extLst` is its last child;
+///     `id`; and a worksheet's `extLst` is its last child; an unnamed
+///     `x14:cfRule` counts as x14-only only when it is an icon set of an
+///     x14-only type (`3Stars`, `3Triangles`, `5Boxes` or `NoIcons`), any
+///     other is a violation; and the `ext/@uri` of a `cfRule`'s `extLst` is
+///     `{B025F937-C7B1-47D3-B67F-A62EFF666E3E}` and that of the worksheet's
+///     `extLst` is `{78C0D931-6437-407d-A8EE-F0AAD7539E65}`, compared
+///     exactly;
 /// 26. every `sheetProtection/@password` and
-///     `workbookProtection/@workbookPassword` is four hexadecimal digits,
-///     and every `sheetProtection` has `sheet="1"`;
+///     `workbookProtection/@workbookPassword` is four uppercase hexadecimal
+///     digits, and every `sheetProtection` has `sheet="1"`;
 /// 27. in `docProps/custom.xml`, every `property` has a `pid` that is an
 ///     integer of at least 2, unique in the part, a `name` no earlier
-///     property has (ignoring case) and exactly one value child.
+///     property has (ignoring case), the `fmtid`
+///     `{D5CDD505-2E9C-101B-9397-08002B2CF9AE}` and exactly one value child,
+///     which is in the `vt:` namespace.
 ///
 /// Element lookups use local names and assume the default SpreadsheetML
 /// namespace: a part that declares a prefix for it (`<x:row>`) is not found.
@@ -108,7 +116,7 @@ const String _workbookPart = 'xl/workbook.xml';
 final RegExp _sheetPart = RegExp(r'^xl/worksheets/[^/]+\.xml$');
 final RegExp _forbiddenInName = RegExp(r'[\[\]:*?/\\]');
 final RegExp _cellRef = RegExp(r'^([A-Z]+)([0-9]+)$');
-final RegExp _legacyHash = RegExp(r'^[0-9A-Fa-f]{4}$');
+final RegExp _legacyHash = RegExp(r'^[0-9A-F]{4}$');
 final RegExp _rangeRef = RegExp(r'^([A-Z]+)([0-9]+)(?::([A-Z]+)([0-9]+))?$');
 
 /// The violations found in the XLSX file [bytes]; empty means clean.
@@ -129,7 +137,11 @@ List<String> checkXlsx(Uint8List bytes) {
   // Rule 1.
   final Map<String, XmlDocument> docs = <String, XmlDocument>{};
   raw.forEach((String name, Uint8List data) {
-    if (!name.endsWith('.xml') && !name.endsWith('.rels')) return;
+    if (!name.endsWith('.xml') &&
+        !name.endsWith('.rels') &&
+        !name.endsWith('.vml')) {
+      return;
+    }
     try {
       docs[name] = XmlDocument.parse(utf8.decode(data));
     } on Object catch (e) {
@@ -1242,6 +1254,30 @@ Iterable<XmlElement> _x14Elements(XmlElement e, String local) =>
       (XmlElement d) => d.name.local == local && d.name.namespaceUri == _x14,
     );
 
+/// The `ext/@uri` of a `cfRule`'s `extLst`, as the writer's `_ruleExtUri`.
+const String _ruleExtUri = '{B025F937-C7B1-47D3-B67F-A62EFF666E3E}';
+
+/// The `ext/@uri` of the worksheet's conditional-format `extLst`, as the
+/// writer's `_sheetExtUri`. Excel writes the lowercase `d`.
+const String _sheetExtUri = '{78C0D931-6437-407d-A8EE-F0AAD7539E65}';
+
+/// The icon sets only Excel 2010 has, which have no Excel 2007 `cfRule`.
+const Set<String> _x14OnlyIconSets = <String>{
+  '3Stars',
+  '3Triangles',
+  '5Boxes',
+  'NoIcons',
+};
+
+/// Whether [rule], an `x14:cfRule` no `x14:id` names, is one an Excel 2007
+/// `cfRule` does not stand for: an icon set of an x14-only type.
+bool _isX14Only(XmlElement rule) =>
+    _attr(rule, 'type') == 'iconSet' &&
+    _x14Elements(
+      rule,
+      'iconSet',
+    ).any((XmlElement set) => _x14OnlyIconSets.contains(_attr(set, 'iconSet')));
+
 /// Rule 25.
 void _checkConditionalExtensions(
   Map<String, XmlDocument> docs,
@@ -1270,6 +1306,14 @@ void _checkConditionalExtensions(
         final int? priority = int.tryParse(_attr(rule, 'priority'));
         if (priority != null) priorities.add(priority);
         for (final XmlElement ext in rule.findElements('extLst')) {
+          for (final XmlElement e in ext.findElements('ext')) {
+            if (e.getAttribute('uri') != _ruleExtUri) {
+              violations.add(
+                '$where: a cfRule ext has uri "${_attr(e, 'uri')}", '
+                'expected $_ruleExtUri',
+              );
+            }
+          }
           for (final XmlElement id in _x14Elements(ext, 'id')) {
             named.update(id.innerText, (int n) => n + 1, ifAbsent: () => 1);
           }
@@ -1282,6 +1326,16 @@ void _checkConditionalExtensions(
       for (final XmlElement ext in root.findElements('extLst'))
         ..._x14Elements(ext, 'cfRule'),
     ];
+    for (final XmlElement ext in root.findElements('extLst')) {
+      for (final XmlElement e in ext.findElements('ext')) {
+        if (e.getAttribute('uri') != _sheetExtUri) {
+          violations.add(
+            '$where: the worksheet ext has uri "${_attr(e, 'uri')}", '
+            'expected $_sheetExtUri',
+          );
+        }
+      }
+    }
     for (final XmlElement rule in x14Rules) {
       final String id = _attr(rule, 'id');
       rules.update(id, (int n) => n + 1, ifAbsent: () => 1);
@@ -1309,6 +1363,13 @@ void _checkConditionalExtensions(
         violations.add('$where: ${rules[id]} x14:cfRule share the id "$id"');
       }
       // An x14-only rule: it has no Excel 2007 rule to hold its priority.
+      if (!_isX14Only(rule)) {
+        violations.add(
+          '$where: x14:cfRule $type "$id" is named by no x14:id and is not '
+          'an icon set only Excel 2010 has',
+        );
+        continue;
+      }
       final String text = _attr(rule, 'priority');
       final int? priority = int.tryParse(text);
       if (priority == null || priority < 1) {
@@ -1333,7 +1394,7 @@ void _checkProtection(Map<String, XmlDocument> docs, List<String> violations) {
       if (password != null && !_legacyHash.hasMatch(password)) {
         violations.add(
           'rule 26: ${sheet.key}: sheetProtection password "$password" is '
-          'not four hexadecimal digits',
+          'not four uppercase hexadecimal digits',
         );
       }
       if (p.getAttribute('sheet') != '1') {
@@ -1351,11 +1412,18 @@ void _checkProtection(Map<String, XmlDocument> docs, List<String> violations) {
     if (password != null && !_legacyHash.hasMatch(password)) {
       violations.add(
         'rule 26: workbook: workbookPassword "$password" is not four '
-        'hexadecimal digits',
+        'uppercase hexadecimal digits',
       );
     }
   }
 }
+
+/// The `fmtid` every custom property has.
+const String _customFmtid = '{D5CDD505-2E9C-101B-9397-08002B2CF9AE}';
+
+/// The namespace of the `vt:` value elements of document properties.
+const String _vtNamespace =
+    'http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes';
 
 /// Rule 27.
 void _checkCustomProperties(
@@ -1385,12 +1453,26 @@ void _checkCustomProperties(
         'ignoring case',
       );
     }
-    final int values = p.childElements.length;
-    if (values != 1) {
+    if (p.getAttribute('fmtid') != _customFmtid) {
       violations.add(
-        'rule 27: custom property "$name" has $values value children, '
-        'expected 1',
+        'rule 27: custom property "$name": fmtid "${_attr(p, 'fmtid')}" is '
+        'not $_customFmtid',
       );
+    }
+    final List<XmlElement> children = p.childElements.toList();
+    if (children.length != 1) {
+      violations.add(
+        'rule 27: custom property "$name" has ${children.length} value '
+        'children, expected 1',
+      );
+    }
+    for (final XmlElement value in children) {
+      if (value.name.namespaceUri != _vtNamespace) {
+        violations.add(
+          'rule 27: custom property "$name": value <${value.name.qualified}> '
+          'is not in the vt namespace',
+        );
+      }
     }
   }
 }

@@ -331,6 +331,17 @@ void main() {
       expect(wb, contains(">'${renamed.name}'!\$A\$1:\$B\$2</definedName>"));
     });
 
+    test('quotes a sheet name with a space or a leading digit', () {
+      final XlsxWriter book = _book();
+      book.addSheet('Q1 2026').printArea(<XlsxRange>[XlsxRange.parse('A1:C9')]);
+      book.addSheet('1Q').printArea(<XlsxRange>[XlsxRange.parse('B2')]);
+      final XlsxResult out = book.close();
+      final String wb = readXlsx(out.bytes)['xl/workbook.xml']!;
+      expect(wb, contains(r">'Q1 2026'!$A$1:$C$9</definedName>"));
+      expect(wb, contains(r">'1Q'!$B$2</definedName>"));
+      expect(checkXlsx(out.bytes), isEmpty);
+    });
+
     test('a later call replaces the earlier one', () {
       final XlsxWriter book = _book();
       book.addSheet('S')

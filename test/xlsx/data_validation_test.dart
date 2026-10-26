@@ -29,6 +29,15 @@ String _one(XlsxDataValidation v) {
   );
 }
 
+/// The checker's findings for a workbook whose sheet `S` holds [v].
+List<String> _checked(XlsxDataValidation v) {
+  final XlsxWriter book = XlsxWriter();
+  book.addSheet('S')
+    ..row(<Object?>['x'])
+    ..dataValidation(v);
+  return checkXlsx(book.close().bytes);
+}
+
 final XlsxRange _a1 = XlsxRange.parse('A1');
 final XlsxRange _b2 = XlsxRange.parse('B2:B5');
 
@@ -270,6 +279,39 @@ void main() {
       expect(xml, contains('operator="greaterThan"'));
       expect(xml, contains('<formula1>46319</formula1>'));
     });
+    test('a date with no serial throws at registration, naming formula1', () {
+      for (final XlsxDate date in const <XlsxDate>[
+        XlsxDate(1899, 12, 31),
+        XlsxDate(2026, 2, 30),
+        XlsxDate(10000, 1, 1),
+      ]) {
+        expect(
+          () => _validations(
+            (XlsxSheetWriter s) => s.dataValidation(
+              XlsxDataValidation.date(
+                <XlsxRange>[_a1],
+                XlsxComparison.equal,
+                date,
+              ),
+            ),
+          ),
+          throwsArgumentError,
+          reason: '$date',
+        );
+      }
+    });
+    test('a date validation passes the checker', () {
+      expect(
+        _checked(
+          XlsxDataValidation.date(
+            <XlsxRange>[_a1],
+            XlsxComparison.greaterThan,
+            const XlsxDate(2026, 10, 24),
+          ),
+        ),
+        isEmpty,
+      );
+    });
     test('date between writes two serials', () {
       expect(
         _one(
@@ -294,6 +336,24 @@ void main() {
       expect(xml, contains('type="time"'));
       expect(xml, contains('operator="lessThan"'));
       expect(xml, contains('<formula1>0.5</formula1>'));
+    });
+    test('time between writes two fractions and passes the checker', () {
+      final XlsxDataValidation v = XlsxDataValidation.time(
+        <XlsxRange>[_a1],
+        XlsxComparison.between,
+        const Duration(hours: 9),
+        b: const Duration(hours: 17, minutes: 30),
+      );
+      final String xml = _one(v);
+      expect(xml, contains('type="time"'));
+      expect(xml, isNot(contains('operator=')));
+      expect(
+        xml,
+        contains(
+          '<formula1>0.375</formula1><formula2>0.7291666666666666</formula2>',
+        ),
+      );
+      expect(_checked(v), isEmpty);
     });
     test('a time outside one day throws naming the operand', () {
       void rejects(Duration a, Duration? b, String field) {
@@ -461,6 +521,12 @@ void main() {
         '<dataValidation allowBlank="1" showInputMessage="1" '
         'showErrorMessage="1" promptTitle="Note" prompt="Optional" '
         'sqref="A1"/>',
+      );
+    });
+    test('the any factory passes the checker', () {
+      expect(
+        _checked(XlsxDataValidation.any(<XlsxRange>[_a1], promptTitle: 'Note')),
+        isEmpty,
       );
     });
   });

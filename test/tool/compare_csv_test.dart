@@ -95,6 +95,52 @@ void main() {
     });
   });
 
+  group('assembleReport', () {
+    test(
+      'prints unexpected files first, then each sheet, then the verdict',
+      () {
+        final CsvReport report = assembleReport(
+          fileNames: <String>['a.xlsx', 'a.expected.json', 'b.xlsx'],
+          sheets: <SheetResult>[
+            (name: 'a', sheet: 'S', note: 'renamed', messages: <String>[]),
+            (name: 'a', sheet: 'T', note: null, messages: <String>['r1 c1: x']),
+          ],
+        );
+        expect(report.lines, <String>[
+          'FAIL  no expectations for b.xlsx',
+          'note  renamed',
+          'ok    a / S',
+          'FAIL  a / T',
+          '      r1 c1: x',
+          '2 mismatch(es).',
+        ]);
+        expect(report.exitCode, 1);
+        expect(report.error, isNull);
+      },
+    );
+
+    test('prints the unexpected files before the nothing-to-compare stop', () {
+      final CsvReport report = assembleReport(
+        fileNames: <String>['b.xlsx'],
+        sheets: <SheetResult>[],
+      );
+      expect(report.lines, <String>['FAIL  no expectations for b.xlsx']);
+      expect(report.error, isNotNull);
+      expect(report.exitCode, 2);
+    });
+
+    test('says all sheets match, with exit code 0', () {
+      final CsvReport report = assembleReport(
+        fileNames: <String>['a.xlsx', 'a.expected.json'],
+        sheets: <SheetResult>[
+          (name: 'a', sheet: 'S', note: null, messages: <String>[]),
+        ],
+      );
+      expect(report.lines, <String>['ok    a / S', 'All sheets match.']);
+      expect(report.exitCode, 0);
+    });
+  });
+
   group('decodeXstring', () {
     test('decodes _xHHHH_ escapes left to right', () {
       expect(decodeXstring('_x0041_'), 'A');

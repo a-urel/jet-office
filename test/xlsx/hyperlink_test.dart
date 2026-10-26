@@ -454,17 +454,6 @@ void main() {
       expect(sheet, contains('<c r="B1" s="1" t="s">'));
       expect(sheet, contains('<c r="C1" t="s">'));
     });
-
-    test('many link cells in one column resolve their style once', () {
-      final XlsxWriter book = XlsxWriter();
-      final XlsxSheetWriter sheet = book.addSheet('S');
-      const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
-      for (int i = 0; i < 50; i++) {
-        sheet.row(<Object?>[XlsxHyperlink.location('X$i')], style: bold);
-      }
-      final String xml = readXlsx(book.close().bytes)['xl/styles.xml']!;
-      expect(xml, contains('<cellXfs count="2">'));
-    });
   });
 
   group('validation', () {
@@ -532,6 +521,11 @@ void main() {
     });
     test('an address holding U+0001 is encoded, so it is accepted', () {
       expect(XlsxHyperlink.email('a\u0001@b.com').address, 'mailto:a%01@b.com');
+    });
+    test('an email whose text holds U+0001 is rejected through row', () {
+      // The address is percent-encoded, but the default text is the raw
+      // address, which holds a character XML forbids.
+      expectRejected(XlsxHyperlink.email('a\u0001@b.com'), field: 'text');
     });
     test('a link with neither address nor location', () {
       expectRejected(const XlsxHyperlink(text: 't'), field: 'address');

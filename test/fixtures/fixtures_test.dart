@@ -11,6 +11,7 @@ import 'fixtures.dart';
 import 'm1_fixtures.dart';
 import 'm2_fixtures.dart';
 import 'm3_fixtures.dart';
+import 'm4_fixtures.dart';
 
 /// What a sheet stores: its rectangle of cell text and the cells that hold a
 /// formula, as (row, column) pairs counted from 1.
@@ -109,10 +110,13 @@ void main() {
       'm3_protection',
       'm3_properties',
     ]);
+    // Each M4 task appends its fixtures; Task 1 only wires the list.
+    expect(m4Fixtures(), isA<List<Fixture>>());
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
       ...names(m3Fixtures()),
+      ...names(m4Fixtures()),
     ]);
   });
 
