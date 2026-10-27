@@ -114,12 +114,14 @@ final class CellEncoder {
   /// A rich text is a shared string whose `<si>` holds its runs. A run with
   /// a font carries that font merged over the effective style's font and
   /// resolved (Calibri 11 where neither sets a name or size), so a bold run
-  /// in an Arial 14 cell is Arial 14 bold; a run without a font carries
-  /// none and shows the cell's font. The same rich text in cells of
-  /// different fonts is therefore two shared strings. A run left with no
-  /// text is dropped. A rich text left with one run without a font shares
-  /// the `<si>` of that plain string, and one left with no runs that of the
-  /// empty string.
+  /// in an Arial 14 cell is Arial 14 bold. A run without a font carries the
+  /// effective style's font, resolved, when that style has a font, since
+  /// Excel draws a run without one in the workbook's default font, not the
+  /// cell's; in a cell whose style has no font it carries none. The same
+  /// rich text in cells of different fonts is therefore two shared strings.
+  /// A run left with no text is dropped. A rich text left with one run
+  /// without a font shares the `<si>` of that plain string, and one left
+  /// with no runs that of the empty string.
   ///
   /// Data problems (characters XML forbids, text past 32,767 UTF-16 code
   /// units, integers past 2^53, dates outside 1900 to 9999, a date shown in
@@ -322,7 +324,8 @@ final class CellEncoder {
   }
 
   /// Writes [text] as a shared-string cell whose `<si>` holds its runs, each
-  /// run's font merged over the font of [style] (Decision 3).
+  /// run's font merged over the font of [style] (Decision 3), and each run
+  /// without a font given that font.
   void _writeRichText(
     XmlWriter out,
     String sheet,
@@ -361,7 +364,14 @@ final class CellEncoder {
   }
 
   /// [text] with the font of each run that has one merged over [cellFont],
-  /// resolved and checked; [text] itself when no run has a font.
+  /// resolved and checked, and each run without one given [cellFont]
+  /// resolved; [text] itself when no run has a font and [cellFont] is
+  /// `null`.
+  ///
+  /// A run without a font needs the cell's font written out: Excel draws a
+  /// run without `rPr` in the workbook's default font (Calibri 11), not in
+  /// the cell's. [cellFont] itself is checked when the cell's style is
+  /// resolved, so only merged fonts are checked here.
   ///
   /// Throws [ArgumentError] named `runs[i].font.<field>` for a merged font
   /// that fails `validateFont`, with the cell in the message.
@@ -371,13 +381,19 @@ final class CellEncoder {
     XlsxRichText text,
     XlsxFont? cellFont,
   ) {
-    if (text.runs.every((XlsxTextRun run) => run.font == null)) return text;
+    if (cellFont == null &&
+        text.runs.every((XlsxTextRun run) => run.font == null)) {
+      return text;
+    }
+    final XlsxFont? plainFont = cellFont == null ? null : resolveFont(cellFont);
     final List<XlsxTextRun> runs = <XlsxTextRun>[];
     for (int i = 0; i < text.runs.length; i++) {
       final XlsxTextRun run = text.runs[i];
       final XlsxFont? font = run.font;
       if (font == null) {
-        runs.add(run);
+        runs.add(
+          plainFont == null ? run : XlsxTextRun(run.text, font: plainFont),
+        );
         continue;
       }
       final XlsxFont merged = resolveFont(

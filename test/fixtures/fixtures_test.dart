@@ -702,11 +702,13 @@ void main() {
       '<si><r><t>x</t></r><r><rPr><vertAlign val="superscript"/>'
       '<sz val="11"/><rFont val="Calibri"/></rPr><t>2</t></r></si>',
     );
-    // Decision 3: the bold run carries the cell's Arial 14.
+    // Decision 3: the bold run carries the cell's Arial 14, and so does
+    // the plain run, which Excel would otherwise draw in Calibri 11.
     expect(
       itemOf('A4'),
       '<si><r><rPr><b/><sz val="14"/><rFont val="Arial"/></rPr>'
-      '<t>Bold</t></r><r><t xml:space="preserve"> in Arial 14</t></r></si>',
+      '<t>Bold</t></r><r><rPr><sz val="14"/><rFont val="Arial"/></rPr>'
+      '<t xml:space="preserve"> in Arial 14</t></r></si>',
     );
     expect(sheet, contains(RegExp('<c r="A4" s="[1-9][0-9]*" t="s">')));
     expect(itemOf('A5'), '<si><t>Same text</t></si>');
