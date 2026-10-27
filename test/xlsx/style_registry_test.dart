@@ -419,15 +419,17 @@ void main() {
     final Map<String, XlsxStyle> invalid = <String, XlsxStyle>{
       'font.size': const XlsxStyle(font: XlsxFont(size: 0)),
       'font.name': const XlsxStyle(font: XlsxFont(name: '')),
-      'foreground': const XlsxStyle(fill: XlsxFill.solid(XlsxColor.theme(12))),
-      'stops': XlsxStyle(
+      'fill.foreground': const XlsxStyle(
+        fill: XlsxFill.solid(XlsxColor.theme(12)),
+      ),
+      'fill.stops': XlsxStyle(
         fill: XlsxGradientFill.linear(
           stops: const <XlsxGradientStop>[
             XlsxGradientStop(0, XlsxColor.rgb(0)),
           ],
         ),
       ),
-      'left': const XlsxStyle(
+      'border.left': const XlsxStyle(
         border: XlsxBorder(
           left: XlsxBorderSide(
             style: XlsxBorderStyle.thin,
@@ -435,7 +437,9 @@ void main() {
           ),
         ),
       ),
-      'indent': const XlsxStyle(alignment: XlsxAlignment(indent: 251)),
+      'alignment.indent': const XlsxStyle(
+        alignment: XlsxAlignment(indent: 251),
+      ),
     };
     invalid.forEach((String field, XlsxStyle style) {
       test(field, () {
@@ -464,7 +468,9 @@ void main() {
           ),
         ),
       ),
-      throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'left')),
+      throwsA(
+        isA<ArgumentError>().having((e) => e.name, 'name', 'border.left'),
+      ),
     );
     expect(_xml(r), _emptyGolden);
   });

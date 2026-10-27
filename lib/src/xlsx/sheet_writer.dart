@@ -108,8 +108,9 @@ abstract final class XlsxSheetWriter {
   /// [XlsxLimits.maxColumns] entries; [ArgumentError] for a width outside 0
   /// to [XlsxLimits.maxColumnWidth], an outline level outside 0 to
   /// [XlsxLimits.maxOutlineLevel], or an invalid style (as [row] describes;
-  /// named `columns[i].style.<field>`, such as `columns[2].style.numFmt`,
-  /// with the value, message and stack of the style check that failed); and
+  /// named `columns[i].style.<field>`, such as `columns[2].style.numFmt` or
+  /// `columns[2].style.fill.foreground`, with the value, message and stack
+  /// of the style check that failed); and
   /// `XlsxLimitError('cell formats', ...)` like [row]. When it throws,
   /// nothing is recorded: the earlier columns, if any, stay in force and no
   /// style is registered.
@@ -449,8 +450,10 @@ abstract final class XlsxSheetWriter {
   /// [XlsxHyperlink] (see there), an [XlsxRichText] without runs (named
   /// `runs`) or with a run font that is invalid once merged over its cell's
   /// font (named `runs[i].font.<field>`), or an invalid style (a built-in
-  /// number format id outside `0..163`, or an empty custom format code or
-  /// one with characters XML forbids), and
+  /// number format id outside `0..163`, named `numFmt`, an empty custom
+  /// format code or one with characters XML forbids, or a font, fill,
+  /// border or alignment that fails its checks, named `<part>.<field>`
+  /// such as `fill.foreground`), and
   /// `XlsxLimitError('hyperlinks', ...)` for a sheet's 65,531st link. After
   /// an [ArgumentError], a cell-format [XlsxLimitError] or a hyperlinks
   /// [XlsxLimitError] in the middle of a row, the cells before the failing
