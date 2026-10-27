@@ -51,10 +51,11 @@ final class XlsxHyperlink {
 
   /// A link to a web address (or any other URL).
   ///
-  /// [url] is percent-encoded with [encodeUriText] (a space becomes `%20`,
-  /// an existing `%20` stays, a `%` that starts no escape becomes `%25`) to
-  /// make the [address]. [text], the cell's text, defaults to [url] as
-  /// given. [tooltip] is the text Excel shows on hover.
+  /// [url] is percent-encoded to make the [address]: every character but
+  /// the unreserved and reserved ones of RFC 3986 is encoded (a space
+  /// becomes `%20`), an existing escape such as `%20` stays, and a `%` that
+  /// starts no escape becomes `%25`. [text], the cell's text, defaults to
+  /// [url] as given. [tooltip] is the text Excel shows on hover.
   factory XlsxHyperlink.url(String url, {String? text, String? tooltip}) =>
       XlsxHyperlink(
         address: encodeUriText(url),
@@ -65,7 +66,8 @@ final class XlsxHyperlink {
   /// A link that starts a new e-mail to [address].
   ///
   /// The [XlsxHyperlink.address] is `mailto:<address>` with the address
-  /// percent-encoded by [encodeUriText] (which keeps the `@`), followed by
+  /// percent-encoded as [XlsxHyperlink.url] encodes a URL (which keeps the
+  /// `@`), followed by
   /// `?subject=` and the [subject] percent-encoded as a URI component when
   /// a subject is given: `&`, `=`, `?`, `#` and spaces are encoded, so
   /// `Q&A` stays one subject. [text] defaults to the bare [address].

@@ -37,6 +37,10 @@ import 'rich_text.dart';
 /// an author longer than 255 UTF-16 code units or holding a character XML
 /// forbids are refused. The `const` constructor cannot check anything; the
 /// sheet writer does when the note is added (see `XlsxSheetWriter.note`).
+///
+/// ```dart
+/// sheet.note(1, 2, XlsxNote.plain('Checked by finance.', author: 'Ayşe'));
+/// ```
 final class XlsxNote {
   /// Creates a note of [text] by [author], shown only on hover unless
   /// [visible].

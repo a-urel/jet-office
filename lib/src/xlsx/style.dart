@@ -22,7 +22,18 @@ import 'number_format.dart';
 /// `XlsxFont()` and `XlsxFont(name: 'Calibri', size: 11)`.
 ///
 /// The `const` constructor cannot check its parts. The writer checks them
-/// when the style is first used and throws [ArgumentError] naming the field.
+/// when the style is first used and throws [ArgumentError] naming the
+/// field: `numFmt`, or the part and its field, such as `font.name` or
+/// `fill.foreground` (prefixed `columns[i].style.` for a column's style).
+///
+/// ```dart
+/// const XlsxStyle money = XlsxStyle(
+///   numFmt: XlsxNumFmt.thousands2,
+///   alignment: XlsxAlignment(horizontal: XlsxHorizontalAlignment.right),
+/// );
+/// const XlsxStyle total = XlsxStyle(font: XlsxFont(bold: true));
+/// final XlsxStyle boldMoney = money.merge(total);
+/// ```
 final class XlsxStyle {
   /// Creates a style from the given parts.
   const XlsxStyle({

@@ -51,7 +51,12 @@ enum XlsxValidationType {
   /// A value for which a formula is true.
   custom;
 
-  /// Whether the type compares the cell with one or two operands.
+  /// Whether the type compares the cell with one or two operands:
+  /// [whole], [decimal], [date], [time] and [textLength].
+  ///
+  /// Public because it describes SpreadsheetML, not the writer: only these
+  /// types give `operator` and `formula2` a meaning, which a reader of a
+  /// parsed file needs as much as the writer's checks do.
   bool get compares =>
       this == whole ||
       this == decimal ||
@@ -85,6 +90,14 @@ enum XlsxValidationErrorStyle {
 /// Only the fields of the kind count: [comparison] and [formula2] belong to
 /// the kinds that compare, and [XlsxDataValidation.list], `custom` and
 /// `any` ignore the comparison.
+///
+/// ```dart
+/// sheet.dataValidation(XlsxDataValidation.list(
+///   <XlsxRange>[XlsxRange.parse('C2:C100')],
+///   <String>['Open', 'Paid', 'Void'],
+///   prompt: 'Pick a status.',
+/// ));
+/// ```
 final class XlsxDataValidation {
   /// A validation of [type] on [ranges] with every field given.
   ///

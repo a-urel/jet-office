@@ -200,6 +200,14 @@ enum XlsxPictureResize {
 /// character XML forbids is refused. The `const` constructor cannot check
 /// anything; the sheet writer does when the picture is added (see
 /// `XlsxSheetWriter.picture`).
+///
+/// ```dart
+/// sheet.picture(XlsxPicture(
+///   XlsxImage(logoPngBytes),
+///   const XlsxOneCellAnchor(XlsxAnchorPoint(0, 3), width: 120),
+///   description: 'Company logo',
+/// ));
+/// ```
 final class XlsxPicture {
   /// A picture of [image] at [anchor], named [name] and described by
   /// [description].

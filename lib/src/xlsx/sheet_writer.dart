@@ -83,7 +83,22 @@ import 'worksheet_parts.dart';
 /// [split], [tabColor] and [outlineSummary], describe the sheet as a whole
 /// and must come before the first [row] or [blankRow]; after that they throw
 /// [StateError]. Calling one again before the first row replaces
-/// what the earlier call set.
+/// what the earlier call set. The trailer settings, [merge] to [table], may
+/// come at any time until the sheet is finished (see [table] for its one
+/// exception).
+///
+/// ```dart
+/// final XlsxWriter book = XlsxWriter();
+/// final XlsxSheetWriter sheet = book.addSheet('Accounts')
+///   ..columns(const <XlsxColumn?>[XlsxColumn(width: 12)])
+///   ..freeze(rows: 1);
+/// const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+/// sheet
+///   ..row(<Object?>['Code'], style: bold)
+///   ..row(<Object?>['A-1'])
+///   ..autoFilter(XlsxRange.parse('A1:A2'));
+/// final XlsxResult out = book.close();
+/// ```
 abstract final class XlsxSheetWriter {
   /// The sheet's name in the file, after any renaming (see
   /// `XlsxWriterBase.addSheet`).
@@ -370,12 +385,12 @@ abstract final class XlsxSheetWriter {
   /// Adds [table], an Excel table over its range: a header row of column
   /// names, filter buttons, banded rows and an optional totals row.
   ///
-  /// A trailer setting like [merge], with one exception (Decision 1 of the
-  /// M4 plan): a table with a header row must be added before that row is
-  /// written, because the sheet checks and fills in its header cells as the
-  /// row goes by; the same holds for the totals row of a table. Tables are
-  /// numbered across the workbook in the order added, and each is written
-  /// as its own part when the sheet finishes.
+  /// A trailer setting like [merge], with one exception: a table with a
+  /// header row must be added before that row is written, because the
+  /// sheet checks and fills in its header cells as the row goes by; the
+  /// same holds for the totals row of a table. Tables are numbered across
+  /// the workbook in the order added, and each is written as its own part
+  /// when the sheet finishes.
   ///
   /// In the header row, a `null` cell of the table (or one a shorter row
   /// leaves out) becomes the column name, written with the row's style; a
@@ -387,12 +402,12 @@ abstract final class XlsxSheetWriter {
   /// its function over the column's data rows (`SUBTOTAL(109,B2:B4)`), or
   /// its custom formula; a given value is written as given, and [blankRow]
   /// fills the row in. In both rows, `XlsxCell(null, style: s)` is filled
-  /// in like `null` and written in `s`; for none it stays a styled empty
-  /// cell. A header or totals row the sheet has not reached when it
-  /// finishes is written then, in row order, after the last row. A header or
-  /// totals row the writer fills in when the sheet finishes has no row
-  /// style, height or outline level; write that row yourself, or with
-  /// [blankRow], to set them.
+  /// in like `null` and written in `s`; for [XlsxTotalsFunction.none]
+  /// without a label it stays a styled empty cell. A header or totals row
+  /// the sheet has not reached when it finishes is written then, in row
+  /// order, after the last row. A header or totals row the writer fills in
+  /// when the sheet finishes has no row style, height or outline level;
+  /// write that row yourself, or with [blankRow], to set them.
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] naming the field
   /// when [table] is invalid (see [XlsxTable] and [XlsxTableColumn]): its

@@ -316,7 +316,8 @@ final class XlsxWriter extends XlsxWriterBase {
   /// Finishes the open sheet and the file, and returns the file with the
   /// warnings about data that had to be changed.
   ///
-  /// Throws [StateError] when no sheet was added or when called twice.
+  /// Throws [StateError] when no sheet was added, when every sheet is
+  /// hidden, when called twice or after a failure.
   XlsxResult close() => XlsxResult._(_close()!, _context.warnings.warnings);
 }
 
@@ -331,6 +332,15 @@ final class XlsxWriter extends XlsxWriterBase {
 /// `close()`) rethrows the error, the sink is closed and the writer has
 /// failed: every later call throws a [StateError]. The file in the sink is
 /// then incomplete and should be discarded.
+///
+/// ```dart
+/// final BytesBuilder file = BytesBuilder(copy: false);
+/// final XlsxStreamWriter book = XlsxStreamWriter(
+///   ByteConversionSink.withCallback(file.add),
+/// );
+/// book.addSheet('Accounts').row(<Object?>['Code', 'Balance']);
+/// final List<XlsxWarning> warnings = book.close();
+/// ```
 final class XlsxStreamWriter extends XlsxWriterBase {
   /// Creates a writer that sends the file to [sink], with the document
   /// properties [properties].
@@ -346,8 +356,9 @@ final class XlsxStreamWriter extends XlsxWriterBase {
   /// Finishes the open sheet and the file, closes the sink and returns the
   /// warnings about data that had to be changed.
   ///
-  /// Throws [StateError] when no sheet was added (the sink then stays open),
-  /// when called twice or after a failure. Rethrows what the sink throws.
+  /// Throws [StateError] when no sheet was added or every sheet is hidden
+  /// (the sink then stays open), when called twice or after a failure.
+  /// Rethrows what the sink throws.
   List<XlsxWarning> close() {
     _close();
     return _context.warnings.warnings;

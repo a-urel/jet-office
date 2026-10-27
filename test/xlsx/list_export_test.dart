@@ -14,7 +14,11 @@ const XlsxStyle _money = XlsxStyle(numFmt: XlsxNumFmt.thousands2);
 /// `Code`, and `Amount` summed in the money style.
 const List<XlsxListColumn> _codeAmount = <XlsxListColumn>[
   XlsxListColumn('Code'),
-  XlsxListColumn('Amount', style: _money, totals: XlsxTotalsFunction.sum),
+  XlsxListColumn(
+    'Amount',
+    style: _money,
+    totalsFunction: XlsxTotalsFunction.sum,
+  ),
 ];
 
 /// The rows of the plan: `A` 1.5 and `B` 2.
@@ -204,7 +208,7 @@ void main() {
           XlsxListColumn(
             'Amount',
             style: _money,
-            totals: XlsxTotalsFunction.sum,
+            totalsFunction: XlsxTotalsFunction.sum,
           ),
         ]),
         _twoRows,
@@ -228,11 +232,11 @@ void main() {
     test('a first column with a function has no label', () {
       final Map<String, String> parts = _parts(
         XlsxListExport(const <XlsxListColumn>[
-          XlsxListColumn('Code', totals: XlsxTotalsFunction.count),
+          XlsxListColumn('Code', totalsFunction: XlsxTotalsFunction.count),
           XlsxListColumn(
             'Amount',
             style: _money,
-            totals: XlsxTotalsFunction.sum,
+            totalsFunction: XlsxTotalsFunction.sum,
           ),
         ]),
         _twoRows,
@@ -512,11 +516,15 @@ void main() {
         XlsxListColumn('Amount'),
         XlsxListColumn('amount'),
       ]),
-      'columns[0].totals': XlsxListExport(const <XlsxListColumn>[
-        XlsxListColumn('A', totals: XlsxTotalsFunction.custom),
+      'columns[0].totalsFunction': XlsxListExport(const <XlsxListColumn>[
+        XlsxListColumn('A', totalsFunction: XlsxTotalsFunction.custom),
       ]),
       'columns[0].totalsLabel': XlsxListExport(const <XlsxListColumn>[
-        XlsxListColumn('A', totals: XlsxTotalsFunction.sum, totalsLabel: 'Sum'),
+        XlsxListColumn(
+          'A',
+          totalsFunction: XlsxTotalsFunction.sum,
+          totalsLabel: 'Sum',
+        ),
       ]),
     };
     cases.forEach((String field, XlsxListExport export) {
@@ -587,13 +595,13 @@ void main() {
         'Amount',
         width: 12,
         style: _money,
-        totals: XlsxTotalsFunction.sum,
+        totalsFunction: XlsxTotalsFunction.sum,
       );
       const XlsxListColumn same = XlsxListColumn(
         'Amount',
         width: 12,
         style: _money,
-        totals: XlsxTotalsFunction.sum,
+        totalsFunction: XlsxTotalsFunction.sum,
       );
       expect(a, same);
       expect(a.hashCode, same.hashCode);
@@ -602,15 +610,19 @@ void main() {
           'Amounts',
           width: 12,
           style: _money,
-          totals: XlsxTotalsFunction.sum,
+          totalsFunction: XlsxTotalsFunction.sum,
         ),
         XlsxListColumn(
           'Amount',
           width: 13,
           style: _money,
-          totals: XlsxTotalsFunction.sum,
+          totalsFunction: XlsxTotalsFunction.sum,
         ),
-        XlsxListColumn('Amount', width: 12, totals: XlsxTotalsFunction.sum),
+        XlsxListColumn(
+          'Amount',
+          width: 12,
+          totalsFunction: XlsxTotalsFunction.sum,
+        ),
         XlsxListColumn('Amount', width: 12, style: _money),
         XlsxListColumn('Amount', width: 12, style: _money, totalsLabel: 'x'),
       ]) {
@@ -622,7 +634,7 @@ void main() {
           contains('Amount'),
           contains('width: 12'),
           contains('style: '),
-          contains('totals: sum'),
+          contains('totalsFunction: sum'),
           contains('totalsLabel: null'),
         ),
       );

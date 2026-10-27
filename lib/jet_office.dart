@@ -4,8 +4,45 @@
 /// `dart:ui`, so it runs on the web, desktop, mobile and a Dart server alike.
 /// It has no editors, no rendering and no PDF.
 ///
+/// Two writers produce XLSX files with the same calls and the same bytes:
+/// [XlsxWriter] keeps the file in memory and returns it from
+/// [XlsxWriter.close] as an [XlsxResult], and [XlsxStreamWriter] sends it
+/// to a `Sink<List<int>>` as each part finishes. Both hand out one
+/// [XlsxSheetWriter] at a time from [XlsxWriterBase.addSheet]; its rows take
+/// plain Dart values and the wrappers [XlsxCell], [XlsxDate],
+/// [XlsxDecimal], [XlsxFormula], [XlsxHyperlink] and [XlsxRichText], styled
+/// with [XlsxStyle]. [XlsxListExport] writes a whole filtered list, with an
+/// optional caption and totals row, in one call.
+///
+/// Data the writer has to change to store, such as text with characters XML
+/// forbids or a sheet name Excel refuses, is repaired and reported as an
+/// [XlsxWarning], aggregated per sheet and [XlsxWarningCode].
+/// [XlsxWarning.message] gives its text in English, German or Turkish
+/// ([XlsxLocale]). A programmer error is thrown instead: [ArgumentError]
+/// naming the field, [StateError] for a call out of order, and
+/// [XlsxLimitError] past one of the [XlsxLimits]; their messages are in
+/// English only.
+///
+/// Every call is synchronous: cells are encoded in
+/// [XlsxSheetWriter.row], and `close()` writes the workbook-level parts and
+/// finishes the ZIP. An `async` API would not move that work off the
+/// calling thread, so the library does not offer one. To keep a user
+/// interface responsive, run the writer in an isolate (`Isolate.run`) or a
+/// web worker and send the bytes of the [XlsxResult], or the chunks an
+/// [XlsxStreamWriter] sends to its sink, back to the caller.
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
+///
+/// @docImport 'src/xlsx/hyperlink.dart';
+/// @docImport 'src/xlsx/limits.dart';
+/// @docImport 'src/xlsx/list_export.dart';
+/// @docImport 'src/xlsx/rich_text.dart';
+/// @docImport 'src/xlsx/sheet_writer.dart';
+/// @docImport 'src/xlsx/style.dart';
+/// @docImport 'src/xlsx/values.dart';
+/// @docImport 'src/xlsx/warnings.dart';
+/// @docImport 'src/xlsx/xlsx_writer.dart';
 library;
 
 export 'src/xlsx/alignment.dart'

@@ -79,13 +79,13 @@ Fixture _listPlain() => Fixture(
         'Balance',
         width: 16,
         style: XlsxStyle(numFmt: XlsxNumFmt.money()),
-        totals: XlsxTotalsFunction.sum,
+        totalsFunction: XlsxTotalsFunction.sum,
       ),
       const XlsxListColumn(
         'Opened',
         width: 12,
         style: XlsxStyle(numFmt: XlsxNumFmt.localeShortDate),
-        totals: XlsxTotalsFunction.count,
+        totalsFunction: XlsxTotalsFunction.count,
       ),
     ], caption: 'Accounts');
     final XlsxWriter book = XlsxWriter();
@@ -133,13 +133,13 @@ Fixture _listTable() => Fixture(
           'Balance',
           width: 16,
           style: XlsxStyle(numFmt: XlsxNumFmt.money()),
-          totals: XlsxTotalsFunction.sum,
+          totalsFunction: XlsxTotalsFunction.sum,
         ),
         const XlsxListColumn(
           'Opened',
           width: 12,
           style: XlsxStyle(numFmt: XlsxNumFmt.localeShortDate),
-          totals: XlsxTotalsFunction.count,
+          totalsFunction: XlsxTotalsFunction.count,
         ),
       ],
       caption: 'Accounts',

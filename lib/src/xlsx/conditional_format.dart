@@ -39,6 +39,19 @@ import 'style.dart';
 /// so an earlier rule wins over a later one, and a rule with
 /// [XlsxConditionalRule.stopIfTrue] stops the rules after it. The ranges
 /// of different formats may overlap.
+///
+/// ```dart
+/// sheet.conditionalFormat(XlsxConditionalFormat(
+///   <XlsxRange>[XlsxRange.parse('B2:B100')],
+///   <XlsxConditionalRule>[
+///     const XlsxCellValueRule(
+///       XlsxComparison.lessThan,
+///       '0',
+///       style: XlsxStyle(font: XlsxFont(color: XlsxColor.rgb(0xC00000))),
+///     ),
+///   ],
+/// ));
+/// ```
 final class XlsxConditionalFormat {
   /// A format of [rules] on [ranges].
   ///
@@ -72,11 +85,15 @@ final class XlsxConditionalFormat {
 ///
 /// The subclasses are the kinds of rule. Those that format a cell take an
 /// optional style, written as a differential style: only what the style
-/// sets is applied over the cell's own formatting (see
-/// `validateDifferentialStyle` for what such a style may not set). A rule
-/// without a style changes nothing when it holds, but still counts for
-/// [stopIfTrue]. [XlsxColorScale], [XlsxDataBar] and [XlsxIconSet] draw
-/// their own formatting and take no style.
+/// sets is applied over the cell's own formatting. Such a style may not
+/// set a font name, size, family, charset or scheme, an alignment, a
+/// protection, a diagonal, vertical or horizontal border side, or a
+/// `diagonalUp` or `diagonalDown` flag, which Excel ignores in a
+/// conditional format; the sheet writer refuses them, named
+/// `rules[i].style.<field>`. A rule without a style changes nothing when it
+/// holds, but still counts for [stopIfTrue]. [XlsxColorScale],
+/// [XlsxDataBar] and [XlsxIconSet] draw their own formatting and take no
+/// style.
 sealed class XlsxConditionalRule {
   const XlsxConditionalRule({this.stopIfTrue = false});
 
@@ -392,11 +409,11 @@ final class XlsxColorScale extends XlsxConditionalRule {
 /// hides the cell's value behind the bar.
 ///
 /// Excel 2010 and later draw a bar from its Excel 2010 rule, which the
-/// writer adds to every data bar (`conditional_format_x14.dart`); Excel
-/// 2007 draws the plain rule. Only the Excel 2010 rule has [gradient],
-/// [border], the negative colors and the [axis]; it draws from 0 to 100
-/// percent when [minLength] and [maxLength] are the defaults 10 and 90,
-/// and a [min] or [max] of `min` or `max` is Excel's automatic bound.
+/// writer adds to every data bar; Excel 2007 draws the plain rule. Only
+/// the Excel 2010 rule has [gradient], [border], the negative colors and
+/// the [axis]; it draws from 0 to 100 percent when [minLength] and
+/// [maxLength] are the defaults 10 and 90, and a [min] or [max] of `min`
+/// or `max` is Excel's automatic bound.
 final class XlsxDataBar extends XlsxConditionalRule {
   /// A data bar of [color] from [min] to [max], with every field given.
   const XlsxDataBar({

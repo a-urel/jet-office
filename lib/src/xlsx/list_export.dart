@@ -29,13 +29,13 @@ import 'xlsx_writer.dart';
 /// and throws [ArgumentError] naming the field.
 final class XlsxListColumn {
   /// A column headed [header], [width] characters wide, whose cells carry
-  /// [style] and whose totals row shows [totals], or [totalsLabel] with
-  /// [XlsxTotalsFunction.none].
+  /// [style] and whose totals row shows [totalsFunction], or [totalsLabel]
+  /// with [XlsxTotalsFunction.none], as an [XlsxTableColumn] does.
   const XlsxListColumn(
     this.header, {
     this.width,
     this.style,
-    this.totals = XlsxTotalsFunction.none,
+    this.totalsFunction = XlsxTotalsFunction.none,
     this.totalsLabel,
   });
 
@@ -54,8 +54,9 @@ final class XlsxListColumn {
 
   /// What the totals row shows under the column: a `SUBTOTAL` over the
   /// column's data rows, which skips rows a filter hides, or nothing for
-  /// [XlsxTotalsFunction.none]. [XlsxTotalsFunction.custom] is refused.
-  final XlsxTotalsFunction totals;
+  /// [XlsxTotalsFunction.none]. [XlsxTotalsFunction.custom] is refused:
+  /// the helper writes no formula text of its own.
+  final XlsxTotalsFunction totalsFunction;
 
   /// The text the totals row shows under the column, only with
   /// [XlsxTotalsFunction.none]; `null` for none (see [XlsxListExport] for
@@ -68,18 +69,19 @@ final class XlsxListColumn {
       other.header == header &&
       other.width == width &&
       other.style == style &&
-      other.totals == totals &&
+      other.totalsFunction == totalsFunction &&
       other.totalsLabel == totalsLabel;
 
   @override
-  int get hashCode => Object.hash(header, width, style, totals, totalsLabel);
+  int get hashCode =>
+      Object.hash(header, width, style, totalsFunction, totalsLabel);
 
   @override
   String toString() {
     final double? w = width;
     return 'XlsxListColumn($header, '
         'width: ${w == null ? null : describeDouble(w)}, style: $style, '
-        'totals: ${totals.name}, totalsLabel: $totalsLabel)';
+        'totalsFunction: ${totalsFunction.name}, totalsLabel: $totalsLabel)';
   }
 }
 
@@ -106,6 +108,24 @@ final class XlsxListColumn {
 ///
 /// Column widths and styles come from the [columns]. The helper has no
 /// logic of its own beyond this layout.
+///
+/// ```dart
+/// final XlsxResult out = XlsxListExport(
+///   const <XlsxListColumn>[
+///     XlsxListColumn('Code', width: 12),
+///     XlsxListColumn(
+///       'Amount',
+///       width: 16,
+///       style: XlsxStyle(numFmt: XlsxNumFmt.thousands2),
+///       totalsFunction: XlsxTotalsFunction.sum,
+///     ),
+///   ],
+///   caption: 'Accounts',
+/// ).toXlsx(<List<Object?>>[
+///   <Object?>['A-1', XlsxDecimal('1234.50')],
+///   <Object?>['A-2', 99.5],
+/// ]);
+/// ```
 final class XlsxListExport {
   /// A list of [columns], with an optional [caption] above it. The styles
   /// default as their fields describe. The constructor checks nothing;
@@ -164,7 +184,7 @@ final class XlsxListExport {
   /// [XlsxTotalsFunction.none], or a label.
   bool get _hasTotals => columns.any(
     (XlsxListColumn c) =>
-        c.totals != XlsxTotalsFunction.none || c.totalsLabel != null,
+        c.totalsFunction != XlsxTotalsFunction.none || c.totalsLabel != null,
   );
 
   /// Writes the list to the empty [sheet], one data row per entry of
@@ -178,11 +198,11 @@ final class XlsxListExport {
   /// Throws [ArgumentError], before any call reaches [sheet], for no
   /// columns (named `columns`), an empty header or one that repeats an
   /// earlier header ignoring case (`columns[i].header`),
-  /// [XlsxTotalsFunction.custom] (`columns[i].totals`) and a label with a
-  /// function (`columns[i].totalsLabel`); [StateError], before any call
-  /// reaches [sheet], when [sheet] already has rows; and what the sheet's
-  /// own calls throw, such as [ArgumentError] for a width out of range
-  /// (`columns[i].width`) from `XlsxSheetWriter.columns`. A row longer
+  /// [XlsxTotalsFunction.custom] (`columns[i].totalsFunction`) and a label
+  /// with a function (`columns[i].totalsLabel`); [StateError], before any
+  /// call reaches [sheet], when [sheet] already has rows; and what the
+  /// sheet's own calls throw, such as [ArgumentError] for a width out of
+  /// range (`columns[i].width`) from `XlsxSheetWriter.columns`. A row longer
   /// than [columns] throws [ArgumentError] named `rows[i]`, `i` counting
   /// from 0, before that row is written. [rows] is read once, so the rows
   /// before it stay written, with the header settings.
@@ -301,13 +321,13 @@ final class XlsxListExport {
           for (int i = 0; i < width; i++)
             XlsxTableColumn(
               columns[i].header,
-              totalsFunction: columns[i].totals,
+              totalsFunction: columns[i].totalsFunction,
               totalsLabel:
                   columns[i].totalsLabel ??
                   (hasTotals &&
                           i == 0 &&
                           !anyLabel &&
-                          columns[i].totals == XlsxTotalsFunction.none
+                          columns[i].totalsFunction == XlsxTotalsFunction.none
                       ? 'Total'
                       : null),
             ),
@@ -350,7 +370,7 @@ final class XlsxListExport {
     );
     return <Object?>[
       for (int i = 0; i < columns.length; i++)
-        if (subtotalCode(columns[i].totals) case final int code)
+        if (subtotalCode(columns[i].totalsFunction) case final int code)
           // A range even over one row (`B2:B2`): it reads as a column total.
           XlsxFormula(
             'SUBTOTAL($code,${cellRef(first, i)}:${cellRef(last, i)})',
@@ -433,15 +453,16 @@ final class XlsxListExport {
         );
       }
       seen[key] = c.header;
-      if (c.totals == XlsxTotalsFunction.custom) {
+      if (c.totalsFunction == XlsxTotalsFunction.custom) {
         throw ArgumentError.value(
-          c.totals,
-          'columns[$i].totals',
+          c.totalsFunction,
+          'columns[$i].totalsFunction',
           'A list writes no formula of its own; custom totals are not '
               'supported.',
         );
       }
-      if (c.totalsLabel != null && c.totals != XlsxTotalsFunction.none) {
+      if (c.totalsLabel != null &&
+          c.totalsFunction != XlsxTotalsFunction.none) {
         throw ArgumentError.value(
           c.totalsLabel,
           'columns[$i].totalsLabel',
