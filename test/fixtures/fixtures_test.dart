@@ -118,7 +118,7 @@ void main() {
       'm4_tables',
       'm4_objects',
     ]);
-    expect(names(m5Fixtures()), <String>['m5_list_plain']);
+    expect(names(m5Fixtures()), <String>['m5_list_plain', 'm5_list_table']);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),

@@ -11,6 +11,7 @@ library;
 import '../xml/xml_number.dart';
 import 'cell_ref.dart';
 import 'column.dart';
+import 'defined_name.dart';
 import 'font.dart';
 import 'properties.dart';
 import 'range.dart';
@@ -93,7 +94,9 @@ final class XlsxListColumn {
 ///   repeated on every printed page (print titles);
 /// - the data rows, under an auto filter that covers the header and them.
 ///   A list without rows gets one empty data row, so the filter and every
-///   `SUBTOTAL` have a valid range;
+///   `SUBTOTAL` have a valid range. With [excelTable] the list is an Excel
+///   table over the header, data and totals rows instead, with no separate
+///   auto filter, and the writer fills in the header and totals cells;
 /// - the totals row, when a column has a function other than
 ///   [XlsxTotalsFunction.none] or a [XlsxListColumn.totalsLabel]. A column
 ///   with a function shows `SUBTOTAL(1xx, …)` over its data rows, with the
@@ -113,6 +116,9 @@ final class XlsxListExport {
     this.captionStyle,
     this.headerStyle,
     this.totalsStyle,
+    this.excelTable = false,
+    this.tableName = 'List',
+    this.tableStyle,
   }) : columns = List<XlsxListColumn>.unmodifiable(columns);
 
   /// The columns, left to right from column A; at least one. Unmodifiable.
@@ -132,6 +138,22 @@ final class XlsxListExport {
   /// The style of the totals row, merged over each column's style, or
   /// `null` for bold.
   final XlsxStyle? totalsStyle;
+
+  /// Whether the list is an Excel table instead of a filtered range: the
+  /// table has its own filter buttons and its style draws the header and
+  /// totals, so the helper adds no header or totals style of its own (a
+  /// [headerStyle] or [totalsStyle] given still applies).
+  final bool excelTable;
+
+  /// The name of the table, only with [excelTable]: it follows the table
+  /// name rules of `XlsxTable.name` and is unique in the workbook.
+  final String tableName;
+
+  /// The look of the table, only with [excelTable]; `null` for
+  /// [XlsxTableStyle.defaultStyle], Excel's own default (Medium 2). A list
+  /// has no table without a style: the table's style is what draws its
+  /// header.
+  final XlsxTableStyle? tableStyle;
 
   static const XlsxStyle _bold = XlsxStyle(font: XlsxFont(bold: true));
   static const XlsxStyle _captionDefault = XlsxStyle(
@@ -164,6 +186,13 @@ final class XlsxListExport {
   /// than [columns] throws [ArgumentError] named `rows[i]`, `i` counting
   /// from 0, before that row is written. [rows] is read once, so the rows
   /// before it stay written, with the header settings.
+  ///
+  /// With [excelTable], [tableName] is also checked up front
+  /// ([ArgumentError] named `tableName`), a name another table or defined
+  /// name of the workbook has throws the sheet's [ArgumentError] named
+  /// `name`, and the table must be registered before the header row,
+  /// whose range needs the row count: [rows] is read to the end first, so
+  /// a row longer than [columns] throws before anything is written.
   XlsxRange writeTo(XlsxSheetWriter sheet, Iterable<List<Object?>> rows) {
     _check();
     if (sheet.rowCount > 0) {
@@ -174,6 +203,10 @@ final class XlsxListExport {
     }
     final int width = columns.length;
     final int headerRow = caption == null ? 0 : 1;
+    final List<List<Object?>>? all = excelTable ? _readAll(rows) : null;
+    if (all != null) {
+      checkNameSyntax(tableName, 'tableName', table: true);
+    }
     sheet
       ..columns(<XlsxColumn?>[
         for (final XlsxListColumn c in columns)
@@ -185,6 +218,7 @@ final class XlsxListExport {
     if (caption case final String text) {
       sheet.row(<Object?>[text], style: captionStyle ?? _captionDefault);
     }
+    if (all != null) return _writeTable(sheet, all, headerRow);
     sheet.row(<Object?>[
       for (final XlsxListColumn c in columns) c.header,
     ], style: headerStyle ?? _bold);
@@ -212,6 +246,74 @@ final class XlsxListExport {
     }
     sheet.autoFilter(XlsxRange(headerRow, 0, lastData, width - 1));
     return XlsxRange(headerRow, 0, last, width - 1);
+  }
+
+  /// The entries of [rows], each no longer than the columns.
+  List<List<Object?>> _readAll(Iterable<List<Object?>> rows) {
+    final List<List<Object?>> all = <List<Object?>>[];
+    for (final List<Object?> values in rows) {
+      if (values.length > columns.length) {
+        throw ArgumentError.value(
+          values,
+          'rows[${all.length}]',
+          'The row has ${values.length} values for ${columns.length} '
+              'columns.',
+        );
+      }
+      all.add(values);
+    }
+    return all;
+  }
+
+  /// Writes the table, its data rows [all] and the filled-in header and
+  /// totals rows below the rows already written, the header being row
+  /// [headerRow] (0-based).
+  XlsxRange _writeTable(
+    XlsxSheetWriter sheet,
+    List<List<Object?>> all,
+    int headerRow,
+  ) {
+    final int width = columns.length;
+    final bool hasTotals = _hasTotals;
+    final int dataRows = all.isEmpty ? 1 : all.length;
+    final int last = headerRow + dataRows + (hasTotals ? 1 : 0);
+    final XlsxRange range = XlsxRange(headerRow, 0, last, width - 1);
+    final bool anyLabel = columns.any(
+      (XlsxListColumn c) => c.totalsLabel != null,
+    );
+    // Before the header row: a table with a header row is added first.
+    sheet.table(
+      XlsxTable(
+        tableName,
+        range,
+        <XlsxTableColumn>[
+          for (int i = 0; i < width; i++)
+            XlsxTableColumn(
+              columns[i].header,
+              totalsFunction: columns[i].totals,
+              totalsLabel:
+                  columns[i].totalsLabel ??
+                  (hasTotals &&
+                          i == 0 &&
+                          !anyLabel &&
+                          columns[i].totals == XlsxTotalsFunction.none
+                      ? 'Total'
+                      : null),
+            ),
+        ],
+        totalsRow: hasTotals,
+        style: tableStyle ?? XlsxTableStyle.defaultStyle,
+      ),
+    );
+    // Null cells: the writer fills in the header and totals rows.
+    final List<Object?> blank = List<Object?>.filled(width, null);
+    sheet.row(blank, style: headerStyle);
+    for (final List<Object?> values in all) {
+      sheet.row(values);
+    }
+    if (all.isEmpty) sheet.blankRow();
+    if (hasTotals) sheet.row(blank, style: totalsStyle);
+    return range;
   }
 
   /// A workbook of one sheet named [sheetName] holding the list, with the
@@ -258,6 +360,9 @@ final class XlsxListExport {
         other.captionStyle != captionStyle ||
         other.headerStyle != headerStyle ||
         other.totalsStyle != totalsStyle ||
+        other.excelTable != excelTable ||
+        other.tableName != tableName ||
+        other.tableStyle != tableStyle ||
         other.columns.length != columns.length) {
       return false;
     }
@@ -274,13 +379,17 @@ final class XlsxListExport {
     captionStyle,
     headerStyle,
     totalsStyle,
+    excelTable,
+    tableName,
+    tableStyle,
   );
 
   @override
   String toString() =>
       'XlsxListExport($columns, caption: $caption, '
       'captionStyle: $captionStyle, headerStyle: $headerStyle, '
-      'totalsStyle: $totalsStyle)';
+      'totalsStyle: $totalsStyle, excelTable: $excelTable, '
+      'tableName: $tableName, tableStyle: $tableStyle)';
 
   /// Throws [ArgumentError] naming the field unless the columns can make a
   /// list.

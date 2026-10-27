@@ -258,6 +258,154 @@ void main() {
     expect(range, XlsxRange.parse('A1:B3'));
   });
 
+  group('excelTable writes a table', () {
+    test('excelTable writes a table instead of a filter', () {
+      late XlsxRange range;
+      final Map<String, String> parts = _parts(
+        XlsxListExport(_codeAmount, excelTable: true),
+        _twoRows,
+        sheetName: 'List',
+        range: (XlsxRange r) => range = r,
+      );
+      expect(parts[_sheet1], isNot(contains('<autoFilter')));
+      final String table = parts['xl/tables/table1.xml']!;
+      expect(table, contains('name="List"'));
+      expect(table, contains('ref="A1:B4"'));
+      expect(table, contains('totalsRowCount="1"'));
+      expect(table, contains('name="Amount" totalsRowFunction="sum"'));
+      expect(_text(parts, 'A1'), 'Code');
+      expect(_text(parts, 'B1'), 'Amount');
+      expect(_bold(parts, 'A1'), isFalse);
+      expect(_bold(parts, 'B1'), isFalse);
+      expect(_text(parts, 'A4'), 'Total');
+      expect(_bold(parts, 'A4'), isFalse);
+      expect(_formula(parts, 'B4'), 'SUBTOTAL(109,B2:B3)');
+      expect(_frozenAt(parts), 'A2');
+      expect(range, XlsxRange.parse('A1:B4'));
+    });
+
+    test('a caller-given header style still applies', () {
+      final Map<String, String> parts = _parts(
+        XlsxListExport(
+          _codeAmount,
+          excelTable: true,
+          headerStyle: const XlsxStyle(font: XlsxFont(bold: true)),
+        ),
+        _twoRows,
+      );
+      expect(_bold(parts, 'A1'), isTrue);
+      expect(_bold(parts, 'A4'), isFalse);
+    });
+
+    test('a table below a caption starts at the header row', () {
+      final Map<String, String> parts = _parts(
+        XlsxListExport(_codeAmount, caption: 'Accounts', excelTable: true),
+        _twoRows,
+      );
+      expect(_text(parts, 'A1'), 'Accounts');
+      expect(parts['xl/tables/table1.xml'], contains('ref="A2:B5"'));
+    });
+
+    test('tableStyle and tableName are passed through', () {
+      final Map<String, String> parts = _parts(
+        XlsxListExport(
+          _codeAmount,
+          excelTable: true,
+          tableName: 'Accounts',
+          tableStyle: XlsxTableStyle.light(9),
+        ),
+        _twoRows,
+      );
+      expect(parts['xl/tables/table1.xml'], contains('name="Accounts"'));
+      expect(parts['xl/tables/table1.xml'], contains('TableStyleLight9'));
+    });
+
+    test('no tableStyle means Medium 2', () {
+      final Map<String, String> parts = _parts(
+        XlsxListExport(_codeAmount, excelTable: true),
+        _twoRows,
+      );
+      expect(parts['xl/tables/table1.xml'], contains('TableStyleMedium2'));
+    });
+
+    test('an empty table keeps one data row', () {
+      late XlsxRange range;
+      final Map<String, String> parts = _parts(
+        XlsxListExport(_codeAmount, excelTable: true),
+        const <List<Object?>>[],
+        range: (XlsxRange r) => range = r,
+      );
+      expect(parts['xl/tables/table1.xml'], contains('ref="A1:B3"'));
+      expect(_formula(parts, 'B3'), 'SUBTOTAL(109,B2)');
+      expect(range, XlsxRange.parse('A1:B3'));
+    });
+
+    test('a table without totals has no totals row', () {
+      final Map<String, String> parts = _parts(
+        XlsxListExport(const <XlsxListColumn>[
+          XlsxListColumn('Code'),
+        ], excelTable: true),
+        const <List<Object?>>[
+          <Object?>['A'],
+          <Object?>['B'],
+        ],
+      );
+      expect(parts['xl/tables/table1.xml'], contains('ref="A1:A3"'));
+      expect(parts['xl/tables/table1.xml'], isNot(contains('totalsRowCount')));
+    });
+
+    test('the same table name twice in a workbook throws the writer error', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxListExport export = XlsxListExport(
+        _codeAmount,
+        excelTable: true,
+      );
+      export.writeTo(book.addSheet('One'), _twoRows);
+      expect(
+        () => export.writeTo(book.addSheet('Two'), _twoRows),
+        _argumentError('name'),
+      );
+    });
+
+    test('a bad table name throws before the sheet is touched', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter sheet = book.addSheet('S');
+      expect(
+        () => XlsxListExport(
+          _codeAmount,
+          excelTable: true,
+          tableName: '1st',
+        ).writeTo(sheet, _twoRows),
+        _argumentError('tableName'),
+      );
+      expect(sheet.rowCount, 0);
+    });
+
+    test('a row longer than the columns throws before anything is written', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter sheet = book.addSheet('S');
+      expect(
+        () => XlsxListExport(_codeAmount, excelTable: true).writeTo(
+          sheet,
+          const <List<Object?>>[
+            <Object?>['A', 1],
+            <Object?>[1, 2, 3],
+          ],
+        ),
+        _argumentError('rows[1]'),
+      );
+      expect(sheet.rowCount, 0);
+    });
+
+    test('tableName is not checked in plain mode', () {
+      final Map<String, String> parts = _parts(
+        XlsxListExport(_codeAmount, tableName: '1st'),
+        _twoRows,
+      );
+      expect(parts.containsKey('xl/tables/table1.xml'), isFalse);
+    });
+  });
+
   group('short rows are padded, long rows throw', () {
     test('a row of one value writes A only', () {
       final Map<String, String> parts = _parts(
@@ -424,12 +572,18 @@ void main() {
         XlsxStyle? captionStyle = _money,
         XlsxStyle? headerStyle = _money,
         XlsxStyle? totalsStyle = _money,
+        bool excelTable = true,
+        String tableName = 'T',
+        XlsxTableStyle? tableStyle = const XlsxTableStyle('TableStyleDark1'),
       }) => XlsxListExport(
         <XlsxListColumn>[XlsxListColumn(header)],
         caption: caption,
         captionStyle: captionStyle,
         headerStyle: headerStyle,
         totalsStyle: totalsStyle,
+        excelTable: excelTable,
+        tableName: tableName,
+        tableStyle: tableStyle,
       );
       final XlsxListExport a = make();
       expect(a, make());
@@ -440,18 +594,24 @@ void main() {
         make(captionStyle: null),
         make(headerStyle: null),
         make(totalsStyle: null),
+        make(excelTable: false),
+        make(tableName: 'U'),
+        make(tableStyle: null),
       ]) {
         expect(a, isNot(other));
       }
       expect(
         a.toString(),
-        allOf(
+        allOf(<Matcher>[
           contains('XlsxListColumn(Code'),
           contains('caption: C'),
           contains('captionStyle: '),
           contains('headerStyle: '),
           contains('totalsStyle: '),
-        ),
+          contains('excelTable: true'),
+          contains('tableName: T'),
+          contains('tableStyle: '),
+        ]),
       );
     });
 
