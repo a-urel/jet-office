@@ -45,31 +45,34 @@ The quality gate does not run it. `dart_test.yaml` starts Chrome with
 
 | Platform | Writer | Median (ms) | File (bytes) | Peak memory (bytes) |
 |---|---|---|---|---|
-| VM | `XlsxWriter` | 1461 | 6,958,908 | 365,199,360 (RSS) |
-| VM | `XlsxStreamWriter` | 1454 | 6,958,908 | 352,321,536 (RSS) |
-| Chrome | `XlsxWriter` | 3115 | 6,981,844 | 234,896,373 (heap) |
-| Chrome | `XlsxStreamWriter` | 3151 | 6,981,844 | 197,466,174 (heap) |
+| VM | `XlsxWriter` | 1449 | 6,958,087 | 363,462,656 (RSS) |
+| VM | `XlsxStreamWriter` | 1445 | 6,958,087 | 350,224,384 (RSS) |
+| Chrome | `XlsxWriter` | 3092 | 6,981,844 | 236,559,675 (heap) |
+| Chrome | `XlsxStreamWriter` | 3119 | 6,981,844 | 199,444,733 (heap) |
 
 Peak memory is the largest figure of the four runs of a case, warm-up
-included for the VM (see above). Every run:
+included for the VM (see above). The figures were taken again on 2026-10-27
+after Task 5b (doubles spelled the same on both platforms); the VM file shrank
+from 6,958,908 to 6,958,087 bytes because whole doubles lost their `.0`, and
+the Chrome file is unchanged. Every run:
 
 ```text
-vm | XlsxStreamWriter | warm-up | 1593 ms | 6958908 bytes | peak RSS 322781184 bytes
-vm | XlsxStreamWriter | run 1 | 1474 ms | 6958908 bytes | peak RSS 325664768 bytes
-vm | XlsxStreamWriter | run 2 | 1452 ms | 6958908 bytes | peak RSS 352321536 bytes
-vm | XlsxStreamWriter | run 3 | 1454 ms | 6958908 bytes | peak RSS 352321536 bytes
-vm | XlsxWriter | warm-up | 1470 ms | 6958908 bytes | peak RSS 358416384 bytes
-vm | XlsxWriter | run 1 | 1470 ms | 6958908 bytes | peak RSS 358416384 bytes
-vm | XlsxWriter | run 2 | 1450 ms | 6958908 bytes | peak RSS 364707840 bytes
-vm | XlsxWriter | run 3 | 1461 ms | 6958908 bytes | peak RSS 365199360 bytes
-chrome | XlsxStreamWriter | warm-up | 3589 ms | 6981844 bytes | peak JS heap 131397573 bytes
-chrome | XlsxStreamWriter | run 1 | 3547 ms | 6981844 bytes | peak JS heap 197466174 bytes
-chrome | XlsxStreamWriter | run 2 | 3151 ms | 6981844 bytes | peak JS heap 113423801 bytes
-chrome | XlsxStreamWriter | run 3 | 3147 ms | 6981844 bytes | peak JS heap 97624753 bytes
-chrome | XlsxWriter | warm-up | 3130 ms | 6981844 bytes | peak JS heap 113844504 bytes
-chrome | XlsxWriter | run 1 | 3115 ms | 6981844 bytes | peak JS heap 163212349 bytes
-chrome | XlsxWriter | run 2 | 3115 ms | 6981844 bytes | peak JS heap 200964511 bytes
-chrome | XlsxWriter | run 3 | 3116 ms | 6981844 bytes | peak JS heap 234896373 bytes
+vm | XlsxStreamWriter | warm-up | 1547 ms | 6958087 bytes | peak RSS 320061440 bytes
+vm | XlsxStreamWriter | run 1 | 1451 ms | 6958087 bytes | peak RSS 324354048 bytes
+vm | XlsxStreamWriter | run 2 | 1445 ms | 6958087 bytes | peak RSS 324354048 bytes
+vm | XlsxStreamWriter | run 3 | 1442 ms | 6958087 bytes | peak RSS 350224384 bytes
+vm | XlsxWriter | warm-up | 1446 ms | 6958087 bytes | peak RSS 350224384 bytes
+vm | XlsxWriter | run 1 | 1448 ms | 6958087 bytes | peak RSS 356270080 bytes
+vm | XlsxWriter | run 2 | 1469 ms | 6958087 bytes | peak RSS 363298816 bytes
+vm | XlsxWriter | run 3 | 1449 ms | 6958087 bytes | peak RSS 363462656 bytes
+chrome | XlsxStreamWriter | warm-up | 3526 ms | 6981844 bytes | peak JS heap 131429007 bytes
+chrome | XlsxStreamWriter | run 1 | 3524 ms | 6981844 bytes | peak JS heap 199444733 bytes
+chrome | XlsxStreamWriter | run 2 | 3119 ms | 6981844 bytes | peak JS heap 113830386 bytes
+chrome | XlsxStreamWriter | run 3 | 3095 ms | 6981844 bytes | peak JS heap 113465453 bytes
+chrome | XlsxWriter | warm-up | 3099 ms | 6981844 bytes | peak JS heap 187600763 bytes
+chrome | XlsxWriter | run 1 | 3093 ms | 6981844 bytes | peak JS heap 219208270 bytes
+chrome | XlsxWriter | run 2 | 3092 ms | 6981844 bytes | peak JS heap 236559675 bytes
+chrome | XlsxWriter | run 3 | 3083 ms | 6981844 bytes | peak JS heap 236140222 bytes
 ```
 
 ## Reading the figures
@@ -77,8 +80,16 @@ chrome | XlsxWriter | run 3 | 3116 ms | 6981844 bytes | peak JS heap 234896373 b
 - The streaming writer holds the open sheet in memory until the sheet is
   finished, and this workload is one sheet, so streaming saves little here.
   It saves memory across sheets: a finished sheet goes to the sink at once.
-- The VM and Chrome files differ in size by 22,936 bytes. The compressed
-  bytes depend on the platform's number formatting and on the deflate output;
-  this was not investigated.
+- The VM and Chrome files still differ in size, by 23,757 bytes, but the
+  XML inside them does not. The first run of this benchmark also exposed a
+  real difference: the VM wrote an integer-valued `double` as `<v>5.0</v>` and
+  the web as `<v>5</v>`, because `5.0 is int` is true in dart2js. Task 5b
+  fixed it (one spelling, `formatXmlDouble`, ruling R9; test
+  `test/xlsx/cell_encoder_double_test.dart` on both platforms). Unzipping the
+  VM and Chrome files of a 3,000-row run of this workload after the fix gives
+  byte-identical parts. What remains is the deflate stream: `package:archive`
+  compresses with the native zlib on the VM and with its own pure-Dart
+  deflate in the browser, and the two give different (equally valid) bytes
+  for the same input. Equal uncompressed parts, unequal ZIP bytes.
 - The memory figures of the two platforms measure different things (process
   RSS against the used JS heap) and must not be compared with each other.

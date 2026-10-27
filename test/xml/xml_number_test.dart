@@ -18,6 +18,9 @@ void main() {
   test('whole values beyond 2^53 use the shortest round-trip text', () {
     const double big = 1e21;
     expect(double.parse(formatXmlDouble(big)), big);
+    expect(formatXmlDouble(big), '1e+21');
+    expect(formatXmlDouble(1e20), '100000000000000000000');
+    expect(formatXmlDouble(123456789012345680000.0), '123456789012345680000');
   });
 
   test('fractions round-trip', () {
