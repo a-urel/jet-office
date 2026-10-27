@@ -61,6 +61,18 @@ dart run tool/compare_csv.dart build/fixtures
 - Neither is Excel. The owner opens each milestone's fixtures in Excel and
   records the result in `docs/excel-checks.md`.
 
+## Benchmark
+
+`benchmark/` writes 100,000 rows of 12 mixed columns with `XlsxWriter` and
+`XlsxStreamWriter` and prints time, file size and peak memory per run. The
+quality gate does not run it; run it by hand on the VM and in Chrome. It
+records figures and fails on none (`docs/benchmark.md`):
+
+```bash
+dart test benchmark
+dart test -p chrome benchmark
+```
+
 ## Hard rules
 
 - **Pure Dart, web-safe.** Nothing under `lib/` imports `dart:io`, `dart:ui`,
