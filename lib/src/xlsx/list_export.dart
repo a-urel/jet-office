@@ -13,6 +13,7 @@ import 'cell_ref.dart';
 import 'column.dart';
 import 'defined_name.dart';
 import 'font.dart';
+import 'number_format.dart';
 import 'properties.dart';
 import 'range.dart';
 import 'sheet_name.dart';
@@ -343,7 +344,15 @@ final class XlsxListExport {
       sheet.row(values);
     }
     if (all.isEmpty) sheet.blankRow();
-    if (hasTotals) sheet.row(blank, style: totalsStyle);
+    if (hasTotals) {
+      // A styled null: the writer still fills in the totals formula.
+      sheet.row(<Object?>[
+        for (final XlsxListColumn c in columns)
+          _isCount(c.totalsFunction)
+              ? _plainNumber(c.totalsFunction, null)
+              : null,
+      ], style: totalsStyle);
+    }
     return range;
   }
 
@@ -362,6 +371,20 @@ final class XlsxListExport {
     return book.close();
   }
 
+  /// Whether [function] counts cells, so its total is a number of cells and
+  /// not a value in the column's format.
+  static bool _isCount(XlsxTotalsFunction function) =>
+      function == XlsxTotalsFunction.count ||
+      function == XlsxTotalsFunction.countNums;
+
+  /// [value] as the cell of a total with [function]: in the General format
+  /// over the column's style when it counts (a date column's count is 11, not
+  /// `11.01.1900`), as given otherwise.
+  static Object? _plainNumber(XlsxTotalsFunction function, Object? value) =>
+      _isCount(function)
+      ? XlsxCell(value, style: const XlsxStyle(numFmt: XlsxNumFmt.general))
+      : value;
+
   /// The cells of the totals row over the data rows [first] to [last],
   /// 0-based and inclusive.
   List<Object?> _totalsCells(int first, int last) {
@@ -372,8 +395,11 @@ final class XlsxListExport {
       for (int i = 0; i < columns.length; i++)
         if (subtotalCode(columns[i].totalsFunction) case final int code)
           // A range even over one row (`B2:B2`): it reads as a column total.
-          XlsxFormula(
-            'SUBTOTAL($code,${cellRef(first, i)}:${cellRef(last, i)})',
+          _plainNumber(
+            columns[i].totalsFunction,
+            XlsxFormula(
+              'SUBTOTAL($code,${cellRef(first, i)}:${cellRef(last, i)})',
+            ),
           )
         else if (columns[i].totalsLabel case final String label)
           label

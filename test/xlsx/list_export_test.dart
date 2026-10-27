@@ -86,6 +86,19 @@ XmlElement _font(Map<String, String> parts, String ref) {
 bool _bold(Map<String, String> parts, String ref) =>
     _font(parts, ref).getElement('b') != null;
 
+/// The `numFmtId` of the cell [ref] of sheet 1 (0 for a cell with no style).
+int _numFmtId(Map<String, String> parts, String ref) {
+  final int s = int.parse(_cell(parts, ref)!.getAttribute('s') ?? '0');
+  return int.parse(
+    XmlDocument.parse(parts['xl/styles.xml']!)
+        .findAllElements('cellXfs')
+        .single
+        .findElements('xf')
+        .elementAt(s)
+        .getAttribute('numFmtId')!,
+  );
+}
+
 /// The formula text of the cell [ref] of sheet 1.
 String? _formula(Map<String, String> parts, String ref) =>
     _cell(parts, ref)?.getElement('f')?.innerText;
@@ -701,6 +714,61 @@ void main() {
         () => export.columns.add(const XlsxListColumn('Name')),
         throwsUnsupportedError,
       );
+    });
+  });
+
+  group('a count total is a plain number (ruling R14)', () {
+    const List<XlsxListColumn> columns = <XlsxListColumn>[
+      XlsxListColumn(
+        'Opened',
+        style: XlsxStyle(numFmt: XlsxNumFmt.localeShortDate),
+        totalsFunction: XlsxTotalsFunction.count,
+      ),
+      XlsxListColumn(
+        'Numbers',
+        style: XlsxStyle(numFmt: XlsxNumFmt.localeShortDate),
+        totalsFunction: XlsxTotalsFunction.countNums,
+      ),
+      XlsxListColumn(
+        'Amount',
+        style: _money,
+        totalsFunction: XlsxTotalsFunction.sum,
+      ),
+    ];
+    const List<List<Object?>> rows = <List<Object?>>[
+      <Object?>[XlsxDate(2024, 1, 15), XlsxDate(2024, 1, 16), 1.5],
+    ];
+
+    void expectFormats(Map<String, String> parts) {
+      // The data cells keep the date format; the count totals are General.
+      expect(_numFmtId(parts, 'A2'), 14);
+      expect(_numFmtId(parts, 'B2'), 14);
+      expect(_numFmtId(parts, 'A3'), 0);
+      expect(_numFmtId(parts, 'B3'), 0);
+      expect(_formula(parts, 'A3'), 'SUBTOTAL(103,A2)');
+      expect(_formula(parts, 'B3'), 'SUBTOTAL(102,B2)');
+      // A sum keeps the column's money format.
+      expect(_numFmtId(parts, 'C3'), _numFmtId(parts, 'C2'));
+      expect(_numFmtId(parts, 'C3'), isNot(0));
+    }
+
+    test('in plain mode', () {
+      final Map<String, String> parts = _parts(XlsxListExport(columns), rows);
+      expect(_formula(parts, 'A3'), 'SUBTOTAL(103,A2:A2)');
+      expect(_numFmtId(parts, 'A2'), 14);
+      expect(_numFmtId(parts, 'A3'), 0);
+      expect(_numFmtId(parts, 'B3'), 0);
+      expect(_numFmtId(parts, 'C3'), _numFmtId(parts, 'C2'));
+      expect(_numFmtId(parts, 'C3'), isNot(0));
+      expect(_bold(parts, 'A3'), isTrue);
+    });
+
+    test('in table mode', () {
+      final Map<String, String> parts = _parts(
+        XlsxListExport(columns, excelTable: true),
+        rows,
+      );
+      expectFormats(parts);
     });
   });
 }

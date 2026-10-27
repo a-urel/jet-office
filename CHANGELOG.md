@@ -40,6 +40,7 @@ Phase 1: the XLSX writer. Not published yet.
 
 - `XlsxListExport`: a caption, a frozen header repeated on every printed
   page, an auto filter or an Excel table, and a totals row, in one call.
+  A Count total is shown as a plain number, whatever the column format.
 - A benchmark of 100,000 rows on the VM and in Chrome (`docs/benchmark.md`).
 - The README, an example and this changelog.
 - Phase 1 writes XLSX only. Reading and modifying files, and DOCX, are later

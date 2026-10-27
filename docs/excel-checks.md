@@ -609,11 +609,8 @@ totals row.
   rows. Select C15: the formula bar shows `=SUBTOTAL(109,C3:C14)`; D15 shows
   `=SUBTOTAL(103,D3:D14)`. Unfiltered, C15 is `105.436,27` and the Count in
   D15 is 11.
-- D15 stores the number format of its column, the short date format, and its
-  value is a count. Excel may therefore show the 11 as a date (`11.01.1900`)
-  instead of `11`. This is what the file stores, not a wrong value; record
-  what D15 shows. If it shows a date, the helper should give a Count total
-  the General format (a finding for the owner, not a repair issue).
+- D15 is a count, written in the General format (ruling R14) although the
+  column shows dates: it shows `11`, not a date.
 - A15 `Total` is bold, and so are C15 and D15 (the totals row style).
 - Money: `Balance` shows `1.250,50`, `-320,75` and `0,00` (format
   `#,##0.00`). `Opened` shows `15.01.2024` in D3 and is empty in D7 (A-005).
@@ -624,8 +621,7 @@ totals row.
   Manager lists `Print_Titles` for `Accounts` and `Empty`.
 - `Empty`: the same list without data. A1 `Accounts`, header in row 2, row 3
   is one empty data row, and the totals are in row 4: C4 `=SUBTOTAL(109,C3:C3)`
-  shows `0,00` and D4 `=SUBTOTAL(103,D3:D3)` shows `0` (or `00.01.1900`, see
-  the note on D15). The filter covers A2:D3, and the header is frozen the
+  shows `0,00` and D4 `=SUBTOTAL(103,D3:D3)` shows `0`. The filter covers A2:D3, and the header is frozen the
   same way.
 - No repair prompt on either sheet.
 
@@ -642,8 +638,8 @@ the header row, A2:D15.
   filter buttons, and no extra bold from the helper (the table style draws
   the header). The caption is bold 14 and not merged.
 - The totals row 15: A15 `Total`; C15 `=SUBTOTAL(109,C3:C14)` showing
-  `105.436,27`; D15 `=SUBTOTAL(103,D3:D14)` for the Count (see the note
-  on D15 above, the same cell format applies). The totals drop-down of C15
+  `105.436,27`; D15 `=SUBTOTAL(103,D3:D14)` for the Count, shown as
+  the plain number `11` (ruling R14, as in `m5_list_plain`). The totals drop-down of C15
   shows Sum and that of D15 shows Count.
 - The header is frozen under row 2 (rows 1 and 2 stay when you scroll). The
   print titles `$2:$2` are listed as `Print_Titles` in Name Manager.
@@ -659,15 +655,17 @@ built-in date-time format, not `00:00` on the 25th. With a custom format that
 shows seconds it reads `23:59:59`. When the owner records it, mark "Sub-second
 times show the wrong minute" closed, with the date.
 
-### Ruling R10, byte identity across platforms
+### Byte identity across platforms (M5 ruling R10)
 
 The ZIP bytes of a workbook differ between the VM and the web, because
 `package:archive` deflates with the native zlib on the VM and with its own
 pure-Dart deflate on the web. The contents of every part are identical (see
-the "Byte identity across platforms" row of
-[`xlsx-writer.md`](xlsx-writer.md)). Both kinds of file open the same in
-Excel. The owner either accepts this, or asks for one deflate everywhere.
-Record the decision in "Results".
+the "Byte identity across platforms (ruling R10)" row of
+[`xlsx-writer.md`](xlsx-writer.md)). To check: open `m5_list_plain` once as
+written on the VM (`dart run tool/write_fixtures.dart`) and once as written
+in Chrome, if the owner has such a file, and see that both open without a
+repair prompt and look the same. The owner either accepts the difference, or
+asks for one deflate everywhere. Record the decision in "Results".
 
 ### Excel for Windows
 
