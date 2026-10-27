@@ -138,7 +138,10 @@ final class XlsxDecimal {
 /// store meanwhile, for readers that do not calculate. It must be `null` (no
 /// result stored), a `num`, a `String` or a `bool`; any other type, a `NaN`
 /// or infinite number, or text containing characters XML forbids throws an
-/// [ArgumentError] when the cell is written.
+/// [ArgumentError] when the cell is written. So does a [text] that is empty
+/// after its leading `=`, longer than 8,192 UTF-16 code units or holding a
+/// character XML forbids (named `text`, the cell in the message). Its
+/// syntax is not checked.
 final class XlsxFormula {
   /// Creates a formula from [text] with an optional [cached] result.
   const XlsxFormula(this.text, {this.cached});

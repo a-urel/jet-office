@@ -22,7 +22,18 @@ import 'number_format.dart';
 /// `XlsxFont()` and `XlsxFont(name: 'Calibri', size: 11)`.
 ///
 /// The `const` constructor cannot check its parts. The writer checks them
-/// when the style is first used and throws [ArgumentError] naming the field.
+/// when the style is first used and throws [ArgumentError] naming the
+/// field: `numFmt`, or the part and its field, such as `font.name` or
+/// `fill.foreground` (prefixed `columns[i].style.` for a column's style).
+///
+/// ```dart
+/// const XlsxStyle money = XlsxStyle(
+///   numFmt: XlsxNumFmt.thousands2,
+///   alignment: XlsxAlignment(horizontal: XlsxHorizontalAlignment.right),
+/// );
+/// const XlsxStyle total = XlsxStyle(font: XlsxFont(bold: true));
+/// final XlsxStyle boldMoney = money.merge(total);
+/// ```
 final class XlsxStyle {
   /// Creates a style from the given parts.
   const XlsxStyle({
@@ -118,5 +129,28 @@ final class XlsxStyle {
       if (protection != null) 'protection: $protection',
     ];
     return 'XlsxStyle(${parts.join(', ')})';
+  }
+}
+
+/// Runs [check], the checks of one part of a style ([part] is `font`,
+/// `fill`, `border` or `alignment`), and rethrows an [ArgumentError] it
+/// throws named `<part>.<field>`, such as `fill.foreground`, or [part] when
+/// it names no field, with its value, message and stack kept.
+///
+/// Cell styles and differential styles name their errors this way.
+void checkStylePart(String part, void Function() check) {
+  try {
+    check();
+  } on ArgumentError catch (error, stack) {
+    // Named like numFmt: the field of the style, then the part's.
+    final String? field = error.name;
+    Error.throwWithStackTrace(
+      ArgumentError.value(
+        error.invalidValue,
+        field == null ? part : '$part.$field',
+        error.message,
+      ),
+      stack,
+    );
   }
 }

@@ -83,7 +83,22 @@ import 'worksheet_parts.dart';
 /// [split], [tabColor] and [outlineSummary], describe the sheet as a whole
 /// and must come before the first [row] or [blankRow]; after that they throw
 /// [StateError]. Calling one again before the first row replaces
-/// what the earlier call set.
+/// what the earlier call set. The trailer settings, [merge] to [table], may
+/// come at any time until the sheet is finished (see [table] for its one
+/// exception).
+///
+/// ```dart
+/// final XlsxWriter book = XlsxWriter();
+/// final XlsxSheetWriter sheet = book.addSheet('Accounts')
+///   ..columns(const <XlsxColumn?>[XlsxColumn(width: 12)])
+///   ..freeze(rows: 1);
+/// const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+/// sheet
+///   ..row(<Object?>['Code'], style: bold)
+///   ..row(<Object?>['A-1'])
+///   ..autoFilter(XlsxRange.parse('A1:A2'));
+/// final XlsxResult out = book.close();
+/// ```
 abstract final class XlsxSheetWriter {
   /// The sheet's name in the file, after any renaming (see
   /// `XlsxWriterBase.addSheet`).
@@ -108,8 +123,9 @@ abstract final class XlsxSheetWriter {
   /// [XlsxLimits.maxColumns] entries; [ArgumentError] for a width outside 0
   /// to [XlsxLimits.maxColumnWidth], an outline level outside 0 to
   /// [XlsxLimits.maxOutlineLevel], or an invalid style (as [row] describes;
-  /// named `columns[i].style.<field>`, such as `columns[2].style.numFmt`,
-  /// with the value, message and stack of the style check that failed); and
+  /// named `columns[i].style.<field>`, such as `columns[2].style.numFmt` or
+  /// `columns[2].style.fill.foreground`, with the value, message and stack
+  /// of the style check that failed); and
   /// `XlsxLimitError('cell formats', ...)` like [row]. When it throws,
   /// nothing is recorded: the earlier columns, if any, stay in force and no
   /// style is registered.
@@ -260,8 +276,9 @@ abstract final class XlsxSheetWriter {
   /// any other rule.
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] naming the field
-  /// (`ranges[i]`, `rules[i].<field>`, `rules[i].style.<field>`) when
-  /// [format] is invalid (see [XlsxConditionalFormat] and its rules); and
+  /// (`ranges[i]`, `rules[i].<field>`, `rules[i].style.numFmt`, and
+  /// `rules[i].style.<part>.<field>` such as `rules[0].style.fill.foreground`)
+  /// when [format] is invalid (see [XlsxConditionalFormat] and its rules); and
   /// `XlsxLimitError('number formats', ...)` when a style's number format
   /// does not fit. When it throws, nothing is recorded: no rule, priority
   /// or differential style.
@@ -369,11 +386,12 @@ abstract final class XlsxSheetWriter {
   /// Adds [table], an Excel table over its range: a header row of column
   /// names, filter buttons, banded rows and an optional totals row.
   ///
-  /// A trailer setting like [merge], with one exception (Decision 1 of the
-  /// M4 plan): a table with a header row must be added before that row is
-  /// written, because the sheet checks and fills in its header cells as the
-  /// row goes by. Tables are numbered across the workbook in the order
-  /// added, and each is written as its own part when the sheet finishes.
+  /// A trailer setting like [merge], with one exception: a table with a
+  /// header row must be added before that row is written, because the
+  /// sheet checks and fills in its header cells as the row goes by; the
+  /// same holds for the totals row of a table. Tables are numbered across
+  /// the workbook in the order added, and each is written as its own part
+  /// when the sheet finishes.
   ///
   /// In the header row, a `null` cell of the table (or one a shorter row
   /// leaves out) becomes the column name, written with the row's style; a
@@ -385,16 +403,20 @@ abstract final class XlsxSheetWriter {
   /// its function over the column's data rows (`SUBTOTAL(109,B2:B4)`), or
   /// its custom formula; a given value is written as given, and [blankRow]
   /// fills the row in. In both rows, `XlsxCell(null, style: s)` is filled
-  /// in like `null` and written in `s`; for none it stays a styled empty
-  /// cell. A header or totals row the sheet has not reached when it
-  /// finishes is written then, in row order, after the last row.
+  /// in like `null` and written in `s`; for [XlsxTotalsFunction.none]
+  /// without a label it stays a styled empty cell. A header or totals row
+  /// the sheet has not reached when it finishes is written then, in row
+  /// order, after the last row. A header or totals row the writer fills in
+  /// when the sheet finishes has no row style, height or outline level;
+  /// write that row yourself, or with [blankRow], to set them.
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] naming the field
   /// when [table] is invalid (see [XlsxTable] and [XlsxTableColumn]): its
   /// `name` is malformed or already names a table or a defined name of any
   /// scope, ignoring case; its `range` lies outside the sheet, has too few
   /// rows, overlaps another table of the sheet, its auto filter or a
-  /// merged range, or starts at a header row already written; and the
+  /// merged range, starts at a header row already written or ends at a
+  /// totals row already written; and the
   /// fields `columns`, `columns[i].name`, `columns[i].totalsLabel`,
   /// `columns[i].totalsFormula` and `style` as `XlsxTable` describes. When
   /// it throws, nothing is recorded: no table, table id or name.
@@ -410,7 +432,8 @@ abstract final class XlsxSheetWriter {
   /// over it and the cell's own style over that, field by field: a field a
   /// higher layer sets wins, one it leaves `null` is inherited. A rich text
   /// run's font is merged over the effective font of its cell in the same
-  /// way. Pass the same style object on every row that shares a style, a
+  /// way; run fonts are checked as given, before empty runs are dropped.
+  /// Pass the same style object on every row that shares a style, a
   /// `const` or one built once before the loop: the encoder caches the
   /// merged style per column by the identity of its layers, and a style
   /// built afresh for each row misses that cache.
@@ -443,8 +466,10 @@ abstract final class XlsxSheetWriter {
   /// [XlsxHyperlink] (see there), an [XlsxRichText] without runs (named
   /// `runs`) or with a run font that is invalid once merged over its cell's
   /// font (named `runs[i].font.<field>`), or an invalid style (a built-in
-  /// number format id outside `0..163`, or an empty custom format code or
-  /// one with characters XML forbids), and
+  /// number format id outside `0..163`, named `numFmt`, an empty custom
+  /// format code or one with characters XML forbids, or a font, fill,
+  /// border or alignment that fails its checks, named `<part>.<field>`
+  /// such as `fill.foreground`), and
   /// `XlsxLimitError('hyperlinks', ...)` for a sheet's 65,531st link. After
   /// an [ArgumentError], a cell-format [XlsxLimitError] or a hyperlinks
   /// [XlsxLimitError] in the middle of a row, the cells before the failing
@@ -868,6 +893,15 @@ final class WorksheetWriter implements XlsxSheetWriter {
         'range',
         'The header row ${range.firstRow + 1} of the table "${table.name}" on '
             'sheet "$name" is already written; add a table with a header row '
+            'before that row.',
+      );
+    }
+    if (table.totalsRow && range.lastRow < _rowCount) {
+      throw ArgumentError.value(
+        range,
+        'range',
+        'The totals row ${range.lastRow + 1} of the table "${table.name}" on '
+            'sheet "$name" is already written; add a table with a totals row '
             'before that row.',
       );
     }

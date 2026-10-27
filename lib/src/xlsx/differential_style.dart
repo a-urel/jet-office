@@ -17,7 +17,10 @@ import 'font.dart';
 import 'style.dart';
 
 /// Checks that [style] can be a differential style, throwing
-/// [ArgumentError] naming the field when it cannot.
+/// [ArgumentError] naming the field when it cannot: the part and its field,
+/// as a cell style names them (`font.name`, `fill.foreground`,
+/// `border.diagonal`), or `alignment` or `protection`, which a differential
+/// style cannot have at all.
 ///
 /// Excel ignores a font name, size, family, charset and scheme, an
 /// alignment and a protection in a conditional format, and a diagonal,
@@ -27,25 +30,29 @@ import 'style.dart';
 void validateDifferentialStyle(XlsxStyle style) {
   final XlsxFont? font = style.font;
   if (font != null) {
-    _refuse(font.name, 'name');
-    _refuse(font.size, 'size');
-    _refuse(font.family, 'family');
-    _refuse(font.charset, 'charset');
-    _refuse(font.scheme, 'scheme');
-    validateFont(font);
+    checkStylePart('font', () {
+      _refuse(font.name, 'name');
+      _refuse(font.size, 'size');
+      _refuse(font.family, 'family');
+      _refuse(font.charset, 'charset');
+      _refuse(font.scheme, 'scheme');
+      validateFont(font);
+    });
   }
   _refuse(style.alignment, 'alignment');
   _refuse(style.protection, 'protection');
   final XlsxFill? fill = style.fill;
-  if (fill != null) validateFill(fill);
+  if (fill != null) checkStylePart('fill', () => validateFill(fill));
   final XlsxBorder? border = style.border;
   if (border != null) {
-    _refuse(border.diagonal, 'diagonal');
-    _refuse(border.diagonalUp, 'diagonalUp');
-    _refuse(border.diagonalDown, 'diagonalDown');
-    _refuse(border.vertical, 'vertical');
-    _refuse(border.horizontal, 'horizontal');
-    validateBorder(border);
+    checkStylePart('border', () {
+      _refuse(border.diagonal, 'diagonal');
+      _refuse(border.diagonalUp, 'diagonalUp');
+      _refuse(border.diagonalDown, 'diagonalDown');
+      _refuse(border.vertical, 'vertical');
+      _refuse(border.horizontal, 'horizontal');
+      validateBorder(border);
+    });
   }
 }
 

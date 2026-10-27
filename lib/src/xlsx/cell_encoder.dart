@@ -13,6 +13,7 @@
 library;
 
 import '../xml/xml_escape.dart';
+import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import 'cell_ref.dart';
 import 'color.dart';
@@ -218,9 +219,10 @@ final class CellEncoder {
             cell: ref,
           );
         }
-        _write(out, ref, id, null, '<v>$v</v>');
+        // On the web a whole double is an `int` too, so `-0.0` arrives here.
+        _write(out, ref, id, null, '<v>${v == 0 ? 0 : v}</v>');
       case double():
-        _write(out, ref, _idOf(style), null, '<v>$v</v>');
+        _write(out, ref, _idOf(style), null, '<v>${formatXmlDouble(v)}</v>');
       case XlsxDecimal():
         _write(out, ref, _idOf(style), null, '<v>${v.digits}</v>');
       case DateTime():
@@ -504,7 +506,10 @@ final class CellEncoder {
         if (cached is int && _losesPrecision(cached)) {
           warning = XlsxWarningCode.intPrecisionLost;
         }
-        cachedXml = '<v>$cached</v>';
+        cachedXml = switch (cached) {
+          int() => '<v>${cached == 0 ? 0 : cached}</v>',
+          _ => '<v>${formatXmlDouble(cached.toDouble())}</v>',
+        };
       default:
         throw ArgumentError(
           'The cached result of the formula in cell $ref on sheet "$sheet" '

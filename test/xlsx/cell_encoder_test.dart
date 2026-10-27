@@ -380,6 +380,19 @@ void main() {
     expect(encoder.wroteFormula, isFalse);
   });
 
+  test('the rethrown formula error keeps the stack of the inner check', () {
+    StackTrace? stack;
+    try {
+      enc(const XlsxFormula('='));
+    } on ArgumentError catch (_, s) {
+      stack = s;
+    }
+    expect(stack, isNotNull);
+    // A fresh throw in the cell encoder would not show checkFormulaText.
+    expect(stack.toString(), contains('checkFormulaText'));
+    // dart2js inlines and renames frames, so only the VM shows the name.
+  }, testOn: 'vm');
+
   test('a cached string past the cell limit is truncated with a warning', () {
     final String out = enc(
       XlsxFormula('A2', cached: '${'x' * 32766}\u{1F600}tail'),

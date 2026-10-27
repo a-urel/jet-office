@@ -205,6 +205,26 @@ void main() {
       );
     });
 
+    test('holds several runs without fonts as <r> runs', () {
+      // Only one fontless run is a plain string.
+      final Map<String, String> parts = _parts(
+        (XlsxSheetWriter s) => s.note(
+          0,
+          0,
+          XlsxNote(
+            XlsxRichText(const <XlsxTextRun>[
+              XlsxTextRun('a'),
+              XlsxTextRun('b'),
+            ]),
+          ),
+        ),
+      );
+      expect(
+        parts[_comments1],
+        contains('<text><r><t>a</t></r><r><t>b</t></r></text>'),
+      );
+    });
+
     test('holds one run with a font as a run', () {
       final Map<String, String> parts = _parts(
         (XlsxSheetWriter s) => s.note(

@@ -74,7 +74,7 @@ enum XlsxPatternType {
 ///
 /// A fill is replaced whole, never merged. The `const` constructors cannot
 /// check their arguments; the writer does, when the fill is registered, and
-/// throws [ArgumentError].
+/// throws [ArgumentError] naming the field (`fill.foreground` in a style).
 sealed class XlsxFill {
   /// A fill of the single [color].
   const factory XlsxFill.solid(XlsxColor color) = XlsxPatternFill._solid;

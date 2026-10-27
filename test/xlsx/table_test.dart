@@ -51,12 +51,22 @@ XlsxTable _sales({
 );
 
 /// A table of the plain columns `A`, `B` and `C` over [ref].
-XlsxTable _plain(String name, String ref, {bool headerRow = true}) =>
-    XlsxTable(name, XlsxRange.parse(ref), const <XlsxTableColumn>[
-      XlsxTableColumn('A'),
-      XlsxTableColumn('B'),
-      XlsxTableColumn('C'),
-    ], headerRow: headerRow);
+XlsxTable _plain(
+  String name,
+  String ref, {
+  bool headerRow = true,
+  bool totalsRow = false,
+}) => XlsxTable(
+  name,
+  XlsxRange.parse(ref),
+  const <XlsxTableColumn>[
+    XlsxTableColumn('A'),
+    XlsxTableColumn('B'),
+    XlsxTableColumn('C'),
+  ],
+  headerRow: headerRow,
+  totalsRow: totalsRow,
+);
 
 /// The table part `xl/tables/table{id}.xml` with [attributes] after `ref`
 /// and [body] inside.
@@ -1019,6 +1029,45 @@ void main() {
           ..row(<Object?>[1, 2, 3])
           ..table(_plain('T', 'A1:C2', headerRow: false));
       });
+    });
+
+    test('a table without a header row is refused once its totals row is '
+        'written', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter sheet = book.addSheet('S')
+        ..row(<Object?>[1, 2, 3])
+        ..row(<Object?>[3, 4, 5])
+        ..row(<Object?>[5, 6, 7]);
+      expect(
+        () => sheet.table(
+          _plain('Late', 'A1:C3', headerRow: false, totalsRow: true),
+        ),
+        throwsA(
+          isA<ArgumentError>()
+              .having((ArgumentError e) => e.name, 'name', 'range')
+              .having(
+                (ArgumentError e) => e.message,
+                'message',
+                contains('totals row 3'),
+              ),
+        ),
+      );
+      // Nothing was recorded: the name is free.
+      sheet.table(_plain('Late', 'A5:C7'));
+      expect(checkXlsx(book.close().bytes), isEmpty);
+    });
+
+    test('a table without a header row is accepted before its totals row '
+        'is written', () {
+      final Map<String, String> parts = _parts((XlsxSheetWriter s) {
+        s
+          ..row(<Object?>[1, 2, 3])
+          ..row(<Object?>[3, 4, 5])
+          ..table(_plain('Late', 'A1:C3', headerRow: false, totalsRow: true))
+          ..row(<Object?>[5, 6, 7]);
+      });
+      expect(parts[_table1], contains('totalsRowCount="1"'));
+      expect(parts[_sheet1], contains('r="A3"'));
     });
 
     test('a table on a finished sheet', () {

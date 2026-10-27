@@ -46,7 +46,7 @@ enum XlsxImageFormat {
 /// `XlsxSheetWriter.picture`).
 ///
 /// The constructor checks nothing; the sheet writer checks the bytes when
-/// the picture is added (see [checkImage]).
+/// the picture is added (see `XlsxSheetWriter.picture`).
 final class XlsxImage {
   /// Creates an image of the file [bytes], a PNG or a JPEG.
   XlsxImage(this.bytes);

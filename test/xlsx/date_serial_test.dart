@@ -18,11 +18,23 @@ void main() {
     expect(dateTimeSerial(DateTime(2026, 10, 24)), 46319.0);
     expect(dateTimeSerial(DateTime(2026, 10, 24, 12)), 46319.5);
     expect(dateTimeSerial(DateTime.utc(2026, 10, 24, 12)), 46319.5);
-    expect(
-      dateTimeSerial(DateTime(2026, 10, 24, 23, 59, 59, 999)),
-      allOf(closeTo(46319.9999999884259259, 1e-9), lessThan(46320)),
-    );
     expect(dateTimeSerial(DateTime(1899, 12, 31, 23)), isNull);
+  });
+
+  test('a DateTime is cut to whole seconds', () {
+    // Excel shows a serial rounded to the second, so 23:59:59.999 would show
+    // as 00:00 on the next day. The old serial was 46319.99999998842.
+    final double whole = dateTimeSerial(DateTime(2026, 10, 24, 23, 59, 59))!;
+    expect(whole, lessThan(46320));
+    expect(dateTimeSerial(DateTime(2026, 10, 24, 23, 59, 59, 999)), whole);
+    expect(dateTimeSerial(DateTime(2026, 10, 24, 23, 59, 59, 999, 999)), whole);
+  });
+
+  test('whole seconds are unchanged', () {
+    expect(
+      dateTimeSerial(DateTime(2026, 10, 24, 12, 30, 15)),
+      46319 + (12 * 3600 + 30 * 60 + 15) / 86400,
+    );
   });
 
   test('dateSerial and dateTimeSerial return null after 9999-12-31', () {
@@ -33,16 +45,14 @@ void main() {
     expect(dateTimeSerial(DateTime(10000)), isNull);
   });
 
-  test(
-    'dateTimeSerial returns null when 9999-12-31 rounds to the next day',
-    () {
-      // The fraction is just below 1, but the double sum rounds to 2958466.
-      expect(
-        dateTimeSerial(DateTime(9999, 12, 31, 23, 59, 59, 999, 999)),
-        isNull,
-      );
-    },
-  );
+  test('the last second of 9999-12-31 keeps its serial after the cut', () {
+    // The sub-second part is dropped, so it cannot round up to 2958466.
+    final double? last = dateTimeSerial(
+      DateTime(9999, 12, 31, 23, 59, 59, 999, 999),
+    );
+    expect(last, dateTimeSerial(DateTime(9999, 12, 31, 23, 59, 59)));
+    expect(last! < 2958466, isTrue);
+  });
 
   test('invalid days are rejected and 1900 has no 29 February', () {
     expect(() => dateSerial(1900, 2, 29), throwsArgumentError);

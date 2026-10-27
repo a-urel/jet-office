@@ -43,7 +43,8 @@ void main() {
   });
 
   group('XlsxRichText', () {
-    test('== compares the runs in order', () {
+    test('== and hashCode compare the runs, their order and where they '
+        'split the text', () {
       XlsxRichText rich(List<XlsxTextRun> runs) => XlsxRichText(runs);
       const XlsxTextRun a = XlsxTextRun('a', font: _bold);
       const XlsxTextRun b = XlsxTextRun('b');

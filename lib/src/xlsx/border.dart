@@ -128,10 +128,14 @@ final class XlsxBorder {
   /// The diagonal line, drawn according to [diagonalUp] and [diagonalDown].
   final XlsxBorderSide? diagonal;
 
-  /// The line between the cells of a range, used by differential formats.
+  /// The line between the columns of a range (`CT_Border.vertical`).
+  ///
+  /// A cell style writes it as given. A conditional format's style refuses
+  /// it, because a conditional format formats cell by cell.
   final XlsxBorderSide? vertical;
 
-  /// The line between the rows of a range, used by differential formats.
+  /// The line between the rows of a range (`CT_Border.horizontal`); see
+  /// [vertical] for where it is written.
   final XlsxBorderSide? horizontal;
 
   /// Whether [diagonal] rises from the bottom left to the top right.

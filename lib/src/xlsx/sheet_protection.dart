@@ -71,8 +71,10 @@ void checkProtectionPassword(String? password) {
 /// switches it on; only cells whose `XlsxProtection.locked` is not `false`
 /// are then locked.
 ///
-/// Protection is not security (see `sheet_protection.dart`). The password is
-/// compared by `==` but never printed by [toString].
+/// Protection is not security: the legacy password hash is 16 bits wide
+/// and the workbook is not encrypted, so the password only keeps an honest
+/// user from changing what is locked by accident. The password is compared
+/// by `==` but never printed by [toString].
 final class XlsxSheetProtection {
   /// Creates a protection; the defaults are Excel's: select cells, nothing
   /// else.
@@ -207,9 +209,9 @@ final class XlsxSheetProtection {
 ///
 /// XML `workbookProtection`. [lockStructure] stops users from adding,
 /// deleting, hiding, unhiding and renaming sheets; [lockWindows] stops them
-/// from moving and resizing the workbook window. Protection is not security
-/// (see `sheet_protection.dart`). The password is compared by `==` but never
-/// printed by [toString].
+/// from moving and resizing the workbook window. Protection is not
+/// security, as [XlsxSheetProtection] explains. The password is compared by
+/// `==` but never printed by [toString].
 final class XlsxWorkbookProtection {
   /// Creates a protection; by default it locks the structure only.
   const XlsxWorkbookProtection({

@@ -37,5 +37,9 @@ enum XlsxComparison {
   lessThanOrEqual;
 
   /// Whether this comparison takes two operands: [between] and [notBetween].
+  ///
+  /// Public because it describes SpreadsheetML, not the writer: the schema
+  /// gives these two operators a `formula2` and the others none, which a
+  /// reader of a parsed file needs as much as the writer's checks do.
   bool get takesTwoOperands => this == between || this == notBetween;
 }

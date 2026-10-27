@@ -4,27 +4,29 @@
 /// `12.0` on the VM and `12` in the browser.
 library;
 
-/// The largest magnitude below which every whole `double` is exact: 2^53.
-const double _maxExactInteger = 9007199254740992;
-
-/// Formats [value] for an XML attribute (a width, height, tint or position)
-/// so that the VM and the browser give the same text.
+/// Formats [value] as the one text both platforms agree on: the shortest
+/// text that parses back to [value], with no `.0` on a whole number.
 ///
-/// A whole value within ±2^53 prints as an integer (`12`, `-3`; negative
-/// zero prints `0`). Anything else uses `double.toString`, which both
-/// platforms render as the shortest text that parses back to [value].
+/// A whole value prints as an integer (`12`, `-3`, `123456789012345680000`;
+/// negative zero prints `0`). Anything else uses `double.toString`. The VM
+/// and dart2js were checked to give the same text for the values of
+/// `test/xlsx/cell_encoder_double_test.dart` (fractions such as `0.1` and
+/// `0.30000000000000004`, and exponent forms such as `1.5e+21` and `1e-7`:
+/// lower-case `e`, a sign on a positive exponent, no padding); that test is
+/// the guarantee, not a general proof. Excel reads that form in an
+/// `xsd:double`.
+///
+/// Used for XML attributes and for the cell encoder's `<v>` (one spelling on every platform).
 ///
 /// Throws [ArgumentError] when [value] is NaN or infinite.
 String formatXmlDouble(double value) {
   if (!value.isFinite) {
     throw ArgumentError.value(value, 'value', 'Must be finite.');
   }
-  if (value == value.truncateToDouble() && value.abs() <= _maxExactInteger) {
-    // `toInt` is exact here and prints without a fraction on both platforms;
-    // the cast to int also turns -0.0 into 0.
-    return value.toInt().toString();
-  }
-  return value.toString();
+  if (value == 0) return '0'; // Also negative zero.
+  final String text = value.toString();
+  // The VM spells a whole double `5.0` below 1e21; the web spells it `5`.
+  return text.endsWith('.0') ? text.substring(0, text.length - 2) : text;
 }
 
 /// [value] as [formatXmlDouble] prints it, or as `NaN`, `Infinity` or

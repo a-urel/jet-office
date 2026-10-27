@@ -102,9 +102,10 @@ final class XlsxAlignment {
   /// The indent in character widths, within 0 to [XlsxLimits.maxIndent].
   final int? indent;
 
-  /// The rotation in degrees: `0..90` counterclockwise, `91..180` clockwise
-  /// (`90` less the value; [XlsxLimits.maxTextRotation] is the largest), or
-  /// [verticalText].
+  /// The rotation in degrees: `0..90` turn the text counterclockwise by the
+  /// value, `91..180` clockwise by the value less 90
+  /// ([XlsxLimits.maxTextRotation] is the largest), or [verticalText].
+  /// `null` inherits; Excel's default is 0.
   final int? textRotation;
 
   /// Whether the text shrinks to fit the cell.

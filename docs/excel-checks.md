@@ -108,11 +108,12 @@ One sheet, `Dates`, values in A1:F1.
 - A1 `28.02.1900` (serial 59) and B1 `01.03.1900` (serial 61): Excel's
   fictitious 29.02.1900 sits between them.
 - C1 `24.10.2026 00:00`.
-- D1 is 23:59:59.999 on 24.10.2026, stored as serial 46319.99999998842.
+- D1 is a `DateTime` of 23:59:59.999 on 24.10.2026. The writer cuts it to
+  whole seconds, so it is stored as serial 46319.99998842592 (23:59:59).
   Excel should show `24.10.2026 23:59` on the built-in date-time format (no
-  seconds): the same day, the time cut to the minute and not rounded up to
-  00:00 on the 25th. With a custom format that shows seconds it should show
-  `23:59:59`. Record what it actually shows if it differs.
+  seconds): the same day, not rounded up to 00:00 on the 25th. With a custom
+  format that shows seconds it should show `23:59:59`. Record what it
+  actually shows if it differs.
 - E1 `1850-06-15T00:00:00.000`, left-aligned text: a date before 1900 has
   no Excel serial.
 - F1 `46.319,00`: a date written with the number format `#,##0.00`, so it
@@ -362,7 +363,7 @@ These need Excel 2010 or later; check that none shows a repair prompt.
 In Excel for Mac on 2026-10-26 the axis line did not show and B's negative
 bars were green outlines with no fill: the file stored neither color, and
 Excel showed both as white (see "Open issues", M4). The file now stores
-Excel's defaults; the M4 Excel check is to confirm the look above.
+Excel's defaults; the look above was confirmed on 2026-10-27 (see Results).
 
 ### `m3_page_setup`
 
@@ -580,13 +581,162 @@ Open `m3_conditional_x14` and `m3_conditional` again:
 When the owner records it, mark "Data bars draw no negative fill or axis by
 default" closed, with the date.
 
+## M5
+
+Open the two M5 fixtures in **desktop Excel** (the owner has Excel for Mac
+16.114.1) with Turkish regional settings. As before, first check that each
+file opens without the repair prompt. Both come from `XlsxListExport`
+(`test/fixtures/m5_fixtures.dart`): the same twelve accounts with the columns
+`Code`, `Name`, `Balance` (money format, totals function Sum) and `Opened`
+(short date, totals function Count). The balances sum to 105.436,27 and eleven
+accounts have an opening date (A-005 has none). Column widths are 10, 30, 16
+and 12.
+
+### `m5_list_plain`
+
+Two sheets, `Accounts` and `Empty`. Row 1 holds the caption `Accounts` (A1
+only), row 2 the header, rows 3 to 14 the twelve accounts and row 15 the
+totals row.
+
+- A1 `Accounts` is bold 14 and is not merged: A1 is the only cell of row 1,
+  and clicking it selects A1 alone, not A1:D1.
+- The header A2:D2 is bold 11. Scroll down: rows 1 and 2 stay in place (the
+  freeze is under row 2).
+- The filter buttons sit on A2:D2, and the filter range ends at row 14, so the
+  totals row is outside it. Filter `Balance` (or `Name`) to a few rows: the
+  other rows hide, and the totals row 15 changes with them, because the
+  totals are `SUBTOTAL` formulas with the 109 and 103 codes, which skip hidden
+  rows. Select C15: the formula bar shows `=SUBTOTAL(109,C3:C14)`; D15 shows
+  `=SUBTOTAL(103,D3:D14)`. Unfiltered, C15 is `105.436,27` and the Count in
+  D15 is 11.
+- D15 is a count, written in the General format (the count-total rule of
+  the list export) although the column shows dates: it shows `11`, not a
+  date.
+- A15 `Total` is bold, and so are C15 and D15 (the totals row style).
+- Money: `Balance` shows `1.250,50`, `-320,75` and `0,00` (format
+  `#,##0.00`). `Opened` shows `15.01.2024` in D3 and is empty in D7 (A-005).
+- Page Layout > Print Titles: Rows to repeat at top reads `$2:$2`, so the
+  header row repeats at the top of every printed page. Twelve rows fit one
+  page, so to see the repeat in Print Preview, set a large zoom or a small
+  paper scale (for example Page Setup > Scaling 300 %). Formulas > Name
+  Manager lists `Print_Titles` for `Accounts` and `Empty`.
+- `Empty`: the same list without data. A1 `Accounts`, header in row 2, row 3
+  is one empty data row, and the totals are in row 4: C4 `=SUBTOTAL(109,C3:C3)`
+  shows `0,00` and D4 `=SUBTOTAL(103,D3:D3)` shows `0`. The filter covers
+  A2:D3, and the header is frozen the same way.
+- No repair prompt on either sheet.
+
+### `m5_list_table`
+
+One sheet, `Accounts`. The caption `Accounts` is in A1, and the table starts at
+the header row, A2:D15.
+
+- Click inside the table: Table Design (or Table) shows the table name
+  `Accounts` and the style Medium 2, with Header Row, Total Row and Banded
+  Rows ticked and Banded Columns off. Formulas > Name Manager lists
+  `Accounts` as a table. A1's caption is above the table, outside it.
+- The header row shows the names `Code`, `Name`, `Balance` and `Opened`, with
+  filter buttons, and no extra bold from the helper (the table style draws
+  the header). The caption is bold 14 and not merged.
+- The totals row 15: A15 `Total`; C15 `=SUBTOTAL(109,C3:C14)` showing
+  `105.436,27`; D15 `=SUBTOTAL(103,D3:D14)` for the Count, shown as
+  the plain number `11` (a count is written in the General format, as in
+  `m5_list_plain`). The totals drop-down of C15 shows Sum and that of D15
+  shows Count.
+- The header is frozen under row 2 (rows 1 and 2 stay when you scroll). The
+  print titles `$2:$2` are listed as `Print_Titles` in Name Manager.
+- Filtering a column changes the totals as in `m5_list_plain`.
+- No repair prompt.
+
+### Re-check of `m1_dates` (an M5 open issue)
+
+D1 is a `DateTime` of 23:59:59.999 on 24.10.2026. Since Task 2 of M5 the
+writer cuts it to whole seconds and stores serial `46319.99998842592`
+(23:59:59). Open `m1_dates` again: D1 shows `24.10.2026 23:59` on the
+built-in date-time format, not `00:00` on the 25th. With a custom format that
+shows seconds it reads `23:59:59`. When the owner records it, mark "Sub-second
+times show the wrong minute" closed, with the date.
+
+### Byte identity across platforms (decision 0006)
+
+The ZIP bytes of a workbook differ between the VM and the web, because
+`package:archive` deflates with the native zlib on the VM and with its own
+pure-Dart deflate on the web. The contents of every part are identical (see
+the "Byte identity across platforms" row of
+[`xlsx-writer.md`](xlsx-writer.md)). To check: open `m5_list_plain` once as
+written on the VM (`dart run tool/write_fixtures.dart`) and once as written
+in Chrome, if the owner has such a file, and see that both open without a
+repair prompt and look the same. The owner either accepts the difference, or
+asks for one deflate everywhere. Record the decision in "Results".
+
+### Excel for Windows
+
+Two checks need Excel for Windows, since Excel for Mac 16.114.1 shows
+neither (see "Open issues", "Reading order and Status not checked in Excel").
+When the owner records them, mark that issue closed, with the date.
+
+- `m2_styles` row 67, `reading order RTL`: Format Cells > Alignment > Text
+  direction reads `Right-to-Left`.
+- `m3_properties`, Status `Final`: File > Info shows `Final` as the Status
+  property.
+
+### Native-speaker check
+
+`docs/warning-messages.md` lists every warning message in English, German and
+Turkish, built for one sample warning and generated by
+`tool/warning_messages.dart`. A native speaker of each language reads the
+column of their language and notes corrections. Record the result here.
+
+| Language | Reviewer | Date | Corrections |
+|---|---|---|---|
+| de | | | |
+| tr | | | |
+
+### Final run
+
+Every fixture of `allFixtures()`, in that order, opened once more in Excel for
+Mac. Write `yes` when the file opens without a repair prompt, `no` otherwise
+(and note the prompt in "Results").
+
+| Fixture | Opens without a repair prompt (yes/no) |
+|---|---|
+| `m1_values` | |
+| `m1_dirty_text` | |
+| `m1_sheets` | |
+| `m1_formulas` | |
+| `m1_empty` | |
+| `m1_properties` | |
+| `m1_dates` | |
+| `m2_styles` | |
+| `m2_columns_rows` | |
+| `m2_style_precedence` | |
+| `m2_views` | |
+| `m2_merges_filter` | |
+| `m2_formula_xstring` | |
+| `m3_names` | |
+| `m3_hyperlinks` | |
+| `m3_validation` | |
+| `m3_conditional` | |
+| `m3_conditional_x14` | |
+| `m3_page_setup` | |
+| `m3_header_footer` | |
+| `m3_protection` | |
+| `m3_properties` | |
+| `m4_rich_text` | |
+| `m4_notes` | |
+| `m4_images` | |
+| `m4_tables` | |
+| `m4_objects` | |
+| `m5_list_plain` | |
+| `m5_list_table` | |
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
 must close it. A closed issue stays here, marked closed, with the commit that
 closed it.
 
-### Sub-second times show the wrong minute (open, M5)
+### Sub-second times show the wrong minute (fixed in M5, awaiting the owner's re-check)
 
 Found in the M1 check on 2026-10-24, `m1_dates` D1. The owner accepted M1 with
 this issue open.
@@ -601,7 +751,11 @@ with US ones, and `=DAY(D1)` gave 24 and 25 on the same file. Any time less
 than half a second before a full minute probably shows the next minute. Only
 near midnight does the date change too.
 
-Options, to be decided at M5 before release:
+Fixed in the commit "Cut DateTime serials to whole seconds": a `DateTime` is
+cut to whole seconds, with no warning, and D1 now stores `46319.99998842592`
+(23:59:59). It stays open until the owner re-checks `m1_dates` in Excel.
+
+Options that were considered at M5:
 
 - Truncate a `DateTime` to whole seconds before computing its serial. Excel
   then shows the expected minute and day. The sub-second part is lost, but

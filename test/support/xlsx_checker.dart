@@ -1568,6 +1568,32 @@ void _checkSharedStringItems(
             'rule 28: si $index run $run holds ${_describeChildren(r)}; '
             'expected one <t> and at most one <rPr>',
           );
+        } else {
+          // CT_RElt: rPr, then t.
+          if (properties == 1 && parts.first != 'rPr') {
+            violations.add(
+              'rule 28: si $index run $run holds ${_describeChildren(r)}; '
+              '<rPr> must come before <t>',
+            );
+          }
+          if (r.getElement('t')!.innerText.isEmpty) {
+            violations.add(
+              'rule 28: si $index run $run has an empty <t>; the writer '
+              'drops empty runs (M4)',
+            );
+          }
+          final XmlElement? rPr = r.getElement('rPr');
+          if (rPr != null) {
+            for (final XmlElement child in rPr.childElements) {
+              if (!_runPropertyChildren.contains(child.name.local)) {
+                violations.add(
+                  'rule 28: si $index run $run has <${child.name.local}> in '
+                  '<rPr>; CT_RPrElt allows only '
+                  '${_runPropertyChildren.join(', ')}',
+                );
+              }
+            }
+          }
         }
         run++;
       }
@@ -1575,6 +1601,26 @@ void _checkSharedStringItems(
     index++;
   }
 }
+
+/// The children `CT_RPrElt` allows in a run's `rPr` (a choice, in any
+/// order).
+const Set<String> _runPropertyChildren = <String>{
+  'rFont',
+  'charset',
+  'family',
+  'b',
+  'i',
+  'strike',
+  'outline',
+  'shadow',
+  'condense',
+  'extend',
+  'color',
+  'sz',
+  'u',
+  'vertAlign',
+  'scheme',
+};
 
 const String _commentsRelType =
     'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'

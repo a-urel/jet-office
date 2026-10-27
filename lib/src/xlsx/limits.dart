@@ -2,7 +2,8 @@
 ///
 /// The figures come from Microsoft's "Excel specifications and limits" page,
 /// except where a constant names another source: ECMA-376, another
-/// Microsoft page or an Excel dialog.
+/// Microsoft page, an Excel dialog, or jet_office's own choice where none
+/// gives a figure.
 /// This file is new in jet_office; Quds has no equivalent.
 library;
 
@@ -108,7 +109,7 @@ abstract final class XlsxLimits {
   /// The longest hyperlink address, in UTF-16 code units, counted as
   /// written (after percent-encoding).
   ///
-  /// The M3 plan sets 2,079, the length Excel's own Insert Hyperlink
+  /// jet_office sets 2,079, the length Excel's own Insert Hyperlink
   /// dialog accepts. A longer address throws [ArgumentError] when its cell
   /// is written. The value is not on Microsoft's "Excel specifications and
   /// limits" page, which counts hyperlinks but gives no address length.
@@ -116,7 +117,7 @@ abstract final class XlsxLimits {
 
   /// The longest ScreenTip (hyperlink tooltip), in UTF-16 code units.
   ///
-  /// The M3 plan sets 255, the length Excel's Set Hyperlink ScreenTip
+  /// jet_office sets 255, the length Excel's Set Hyperlink ScreenTip
   /// dialog accepts. A longer tooltip throws [ArgumentError] when its cell
   /// is written.
   static const int maxScreenTipLength = 255;
@@ -124,9 +125,9 @@ abstract final class XlsxLimits {
   /// The longest defined name, in UTF-16 code units. A longer name throws
   /// [ArgumentError] when it is registered.
   ///
-  /// Microsoft's "Names in formulas" support page: "A name can contain up
-  /// to 255 characters." Its "Excel specifications and limits" page counts
-  /// names (limited by memory) but gives no length.
+  /// Microsoft's "Names in formulas" support page gives 255 characters for
+  /// a name. Its "Excel specifications and limits" page counts names
+  /// (limited by memory) but gives no length.
   static const int maxDefinedNameLength = 255;
 
   /// The longest comment of a defined name, in UTF-16 code units.
@@ -137,7 +138,7 @@ abstract final class XlsxLimits {
 
   /// The longest name of a custom document property, in UTF-16 code units.
   ///
-  /// The M3 plan sets 255, the length of Excel's Custom Properties name box.
+  /// jet_office sets 255, the length of Excel's Custom Properties name box.
   /// The value is not on Microsoft's "Excel specifications and limits"
   /// page.
   static const int maxCustomPropertyNameLength = 255;
@@ -145,7 +146,7 @@ abstract final class XlsxLimits {
   /// The longest title of a validation's input or error message, in UTF-16
   /// code units.
   ///
-  /// The M3 plan sets 32, the length Excel's Data Validation dialog accepts
+  /// jet_office sets 32, the length Excel's Data Validation dialog accepts
   /// for its Title fields. A longer title throws [ArgumentError] when the
   /// validation is registered. The value is not on Microsoft's "Excel
   /// specifications and limits" page.
@@ -154,7 +155,7 @@ abstract final class XlsxLimits {
   /// The longest input or error message of a validation, in UTF-16 code
   /// units.
   ///
-  /// The M3 plan sets 255, the length Excel's Data Validation dialog accepts
+  /// jet_office sets 255, the length Excel's Data Validation dialog accepts
   /// for its message fields. A longer message throws [ArgumentError] when
   /// the validation is registered.
   static const int maxValidationMessageLength = 255;
@@ -209,7 +210,7 @@ abstract final class XlsxLimits {
 
   /// The longest author of a note, in UTF-16 code units.
   ///
-  /// The M4 plan sets 255. Microsoft's "Excel specifications and limits"
+  /// jet_office sets 255. Microsoft's "Excel specifications and limits"
   /// page gives no figure for it, and ECMA-376 types `author` as
   /// `ST_Xstring`, without a length. A longer author throws
   /// [ArgumentError] when the note is added.
@@ -227,7 +228,7 @@ abstract final class XlsxLimits {
 
   /// The longest table column name, in UTF-16 code units.
   ///
-  /// The M4 plan sets 255; Excel's "Excel specifications and limits" page
+  /// jet_office sets 255; Excel's "Excel specifications and limits" page
   /// gives no figure for it, and ECMA-376 types `tableColumn/@name` as
   /// `ST_Xstring`, without a length. A longer name throws [ArgumentError]
   /// when the table is added.

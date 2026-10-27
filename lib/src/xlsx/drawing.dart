@@ -200,6 +200,14 @@ enum XlsxPictureResize {
 /// character XML forbids is refused. The `const` constructor cannot check
 /// anything; the sheet writer does when the picture is added (see
 /// `XlsxSheetWriter.picture`).
+///
+/// ```dart
+/// sheet.picture(XlsxPicture(
+///   XlsxImage(logoPngBytes),
+///   const XlsxOneCellAnchor(XlsxAnchorPoint(0, 3), width: 120),
+///   description: 'Company logo',
+/// ));
+/// ```
 final class XlsxPicture {
   /// A picture of [image] at [anchor], named [name] and described by
   /// [description].
@@ -362,8 +370,11 @@ void _checkPoint(XlsxAnchorPoint point, String field, String which) {
 /// Throws unless [offset] is finite, not negative and at most
 /// [maxCoordinateEmu] once in EMU.
 void _checkOffset(double offset, String field, String which) {
+  // Pixels are compared before converting: a huge finite offset times
+  // [emuPerPixel] overflows to infinity, which cannot be rounded.
   if (!offset.isFinite ||
       offset < 0 ||
+      offset > maxCoordinateEmu ||
       pixelsToEmu(offset) > maxCoordinateEmu) {
     throw ArgumentError.value(
       offset,
@@ -376,7 +387,11 @@ void _checkOffset(double offset, String field, String which) {
 
 /// Throws unless [size], when given, is finite and above 0.
 void _checkSize(double? size, String field, String which) {
-  if (size == null || (size.isFinite && size > 0)) return;
+  // Compared in pixels, before [oneCellExtent] converts to EMU: a huge
+  // finite size would overflow to infinity there.
+  if (size == null || (size.isFinite && size > 0 && size <= maxExtentEmu)) {
+    return;
+  }
   throw ArgumentError.value(
     size,
     field,

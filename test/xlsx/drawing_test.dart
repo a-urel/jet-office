@@ -1030,6 +1030,31 @@ void main() {
       expect(drawing, contains('<xdr:rowOff>27273042313725</xdr:rowOff>'));
     });
 
+    test('a huge finite offset or size throws ArgumentError', () {
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter sheet = book.addSheet('S');
+      expect(
+        () =>
+            sheet.picture(oneCell(const XlsxAnchorPoint(0, 0, offsetX: 1e305))),
+        argumentError('from.offsetX'),
+      );
+      expect(
+        () => sheet.picture(
+          twoCell(
+            const XlsxAnchorPoint(0, 0),
+            const XlsxAnchorPoint(1, 1, offsetY: 1e305),
+          ),
+        ),
+        argumentError('to.offsetY'),
+      );
+      expect(
+        () => sheet.picture(oneCell(const XlsxAnchorPoint(0, 0), width: 1e305)),
+        argumentError('width'),
+      );
+      // Nothing was recorded.
+      expect(readXlsx(book.close().bytes).keys, isNot(contains(_drawing1)));
+    });
+
     test('an anchor point outside the sheet', () {
       final XlsxSheetWriter sheet = XlsxWriter().addSheet('S');
       for (final XlsxAnchorPoint outside in <XlsxAnchorPoint>[

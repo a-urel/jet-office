@@ -1068,6 +1068,76 @@ void main() {
         });
       }
 
+      test('a bad font name in a column style names the field', () {
+        expectRejected(
+          (XlsxSheetWriter s) => s.columns(const <XlsxColumn?>[
+            XlsxColumn(style: bold),
+            XlsxColumn(
+              style: XlsxStyle(font: XlsxFont(name: '')),
+            ),
+          ]),
+          'columns[1].style.font.name',
+        );
+      });
+
+      test('a bad fill in a column style names the fill', () {
+        expectRejected(
+          (XlsxSheetWriter s) => s.columns(const <XlsxColumn?>[
+            XlsxColumn(style: bold),
+            XlsxColumn(
+              style: XlsxStyle(fill: XlsxFill.solid(XlsxColor.theme(12))),
+            ),
+          ]),
+          'columns[1].style.fill.foreground',
+        );
+      });
+
+      test('a bad border in a column style names the border', () {
+        expectRejected(
+          (XlsxSheetWriter s) => s.columns(const <XlsxColumn?>[
+            XlsxColumn(style: bold),
+            XlsxColumn(
+              style: XlsxStyle(
+                border: XlsxBorder(
+                  left: XlsxBorderSide(
+                    style: XlsxBorderStyle.thin,
+                    color: XlsxColor.indexed(66),
+                  ),
+                ),
+              ),
+            ),
+          ]),
+          'columns[1].style.border.left',
+        );
+      });
+
+      test('a bad alignment in a column style names the alignment', () {
+        expectRejected(
+          (XlsxSheetWriter s) => s.columns(const <XlsxColumn?>[
+            XlsxColumn(style: bold),
+            XlsxColumn(style: XlsxStyle(alignment: XlsxAlignment(indent: 251))),
+          ]),
+          'columns[1].style.alignment.indent',
+        );
+      });
+
+      test('the renamed column style error keeps the failing check\'s '
+          'stack', () {
+        StackTrace? stack;
+        try {
+          XlsxWriter().addSheet('S').columns(const <XlsxColumn?>[
+            XlsxColumn(style: XlsxStyle(numFmt: XlsxNumFmt.builtin(200))),
+          ]);
+        } on ArgumentError catch (_, s) {
+          stack = s;
+        }
+        expect(stack, isNotNull);
+        // The frame of the check inside the registry, which a fresh throw
+        // in the rename would not have.
+        expect(stack.toString(), contains('idFor'));
+        // dart2js inlines and renames frames, so only the VM shows the name.
+      }, testOn: 'vm');
+
       test('an invalid column style after a valid one', () {
         expectRejected(
           (XlsxSheetWriter s) => s.columns(const <XlsxColumn?>[

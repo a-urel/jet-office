@@ -112,7 +112,8 @@ final class StyleRegistry {
   /// Throws [ArgumentError] naming the field for an invalid part: a
   /// built-in number format id outside `0..163`, a custom code that is
   /// empty or holds characters XML cannot carry, or a font, fill, border or
-  /// alignment that fails its checks. Throws [XlsxLimitError] when the
+  /// alignment that fails its checks (named `<part>.<field>`, such as
+  /// `font.name` or `border.left`). Throws [XlsxLimitError] when the
   /// workbook would hold more than [XlsxLimits.maxFonts] fonts, more than
   /// [XlsxLimits.maxNumberFormats] custom number format codes or more than
   /// [XlsxLimits.maxCellFormats] cell formats (the defaults count as one
@@ -129,10 +130,12 @@ final class StyleRegistry {
     final String? fontXml = _fontXmlOf(style.font);
     final String? fillXml = _fillXmlOf(style.fill);
     final XlsxBorder? border = style.border;
-    if (border != null) validateBorder(border);
+    if (border != null) checkStylePart('border', () => validateBorder(border));
     final String? borderXml = border == null ? null : _borderXml(border);
     final XlsxAlignment? alignment = style.alignment;
-    if (alignment != null) validateAlignment(alignment);
+    if (alignment != null) {
+      checkStylePart('alignment', () => validateAlignment(alignment));
+    }
 
     final int? fontId = fontXml == null ? 0 : _fontIds[fontXml];
     final int? fillId = fillXml == null ? 0 : _fillIds[fillXml];
@@ -339,19 +342,21 @@ final class StyleRegistry {
   }
 
   /// The checked `<font>` of [font] after [resolveFont], or null for no
-  /// font (the default font, id 0).
+  /// font (the default font, id 0). An invalid font throws [ArgumentError]
+  /// named `font.<field>`, such as `font.name`.
   static String? _fontXmlOf(XlsxFont? font) {
     if (font == null) return null;
     final XlsxFont resolved = resolveFont(font);
-    validateFont(resolved);
+    checkStylePart('font', () => validateFont(resolved));
     return _render((XmlWriter w) => writeFontXml(w, resolved));
   }
 
   /// The checked `<fill>` of [fill], or null for fill 0: no fill, or a
-  /// `none` pattern, whose colors show nowhere.
+  /// `none` pattern, whose colors show nowhere. An invalid fill throws
+  /// [ArgumentError] named `fill.<field>`, such as `fill.foreground`.
   static String? _fillXmlOf(XlsxFill? fill) {
     if (fill == null) return null;
-    validateFill(fill);
+    checkStylePart('fill', () => validateFill(fill));
     if (fill is XlsxPatternFill && fill.type == XlsxPatternType.none) {
       return null;
     }

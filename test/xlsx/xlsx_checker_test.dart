@@ -1971,6 +1971,49 @@ void main() {
     });
   });
 
+  group('rule 28: run order, rPr children and empty text', () {
+    Uint8List richBook() {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('R').row(<Object?>[
+        XlsxRichText(const <XlsxTextRun>[
+          XlsxTextRun('Total: ', font: XlsxFont(bold: true)),
+          XlsxTextRun('42'),
+        ]),
+      ]);
+      return book.close().bytes;
+    }
+
+    Uint8List tamper(String Function(String xml) change) => _rebuild(
+      richBook(),
+      edit: <String, String? Function(String)>{'xl/sharedStrings.xml': change},
+    );
+
+    test('a run whose rPr follows its t', () {
+      final Uint8List bytes = tamper(
+        (String x) => x.replaceFirstMapped(
+          RegExp('<r>(<rPr>.*?</rPr>)(<t[^>]*>[^<]*</t>)</r>'),
+          (Match m) => '<r>${m[2]}${m[1]}</r>',
+        ),
+      );
+      expect(bytes, isNot(richBook()));
+      _expectRule(bytes, 28);
+    });
+    test('an rPr child that is not in CT_RPrElt', () {
+      _expectRule(
+        tamper((String x) => x.replaceFirst('<rPr><b/>', '<rPr><b/><bogus/>')),
+        28,
+      );
+    });
+    test('an empty t in a run', () {
+      _expectRule(
+        tamper(
+          (String x) => x.replaceFirst('<r><t>42</t></r>', '<r><t></t></r>'),
+        ),
+        28,
+      );
+    });
+  });
+
   group('rule 29: notes', () {
     const String comments1 = 'xl/comments1.xml';
     const String vml1 = 'xl/drawings/vmlDrawing1.vml';
@@ -2232,6 +2275,16 @@ void main() {
         }),
         'shape id _x0000_s1025 is used',
       );
+    });
+    test('an o:idmap data that is not a block list', () {
+      for (final String bad in <String>['x', '-1', '1,,2']) {
+        expectViolation(
+          tamper(<String, String Function(String)>{
+            vml2: (String x) => x.replaceFirst('data="2"', 'data="$bad"'),
+          }),
+          'is not a block list',
+        );
+      }
     });
     test('a shape id outside the blocks of its drawing', () {
       expectViolation(

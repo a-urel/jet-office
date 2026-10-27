@@ -10,6 +10,18 @@ String _render(ContentTypes types) {
 }
 
 void main() {
+  test('the comments and VML content types are pinned as literals', () {
+    expect(
+      ContentType.comments,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.comments'
+      '+xml',
+    );
+    expect(
+      ContentType.vmlDrawing,
+      'application/vnd.openxmlformats-officedocument.vmlDrawing',
+    );
+  });
+
   test('writes defaults and overrides sorted, whatever the add order', () {
     final ContentTypes types = ContentTypes()
       ..addOverride('/xl/worksheets/sheet1.xml', ContentType.worksheet)

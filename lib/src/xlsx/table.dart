@@ -251,6 +251,22 @@ final class XlsxTableStyle {
 /// cell `null` (see `XlsxSheetWriter.table`). The constructor checks
 /// nothing; the sheet writer does when the table is added and throws
 /// [ArgumentError] naming the field.
+///
+/// ```dart
+/// sheet.table(XlsxTable(
+///   'Sales',
+///   XlsxRange.parse('A1:B4'),
+///   const <XlsxTableColumn>[
+///     XlsxTableColumn('Region', totalsLabel: 'Total'),
+///     XlsxTableColumn('Amount', totalsFunction: XlsxTotalsFunction.sum),
+///   ],
+///   totalsRow: true,
+/// ));
+/// sheet.row(<Object?>[null, null]); // the header: Region, Amount
+/// sheet.row(<Object?>['North', 120]);
+/// sheet.row(<Object?>['South', 80]);
+/// sheet.row(<Object?>[null, null]); // Total, SUBTOTAL(109,B2:B3)
+/// ```
 final class XlsxTable {
   /// A table named [name] over [range] with [columns], one per column of
   /// the range. [headerRow] makes the first row the header, [totalsRow]

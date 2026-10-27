@@ -201,32 +201,38 @@ void main() {
 
   group('invalid dxf styles throw and register nothing', () {
     final Map<String, XlsxStyle> bad = <String, XlsxStyle>{
-      'name': const XlsxStyle(font: XlsxFont(name: 'Arial')),
-      'size': const XlsxStyle(font: XlsxFont(size: 12)),
-      'family': const XlsxStyle(font: XlsxFont(family: 2)),
-      'charset': const XlsxStyle(font: XlsxFont(charset: 1)),
-      'scheme': const XlsxStyle(font: XlsxFont(scheme: XlsxFontScheme.minor)),
+      'font.name': const XlsxStyle(font: XlsxFont(name: 'Arial')),
+      'font.size': const XlsxStyle(font: XlsxFont(size: 12)),
+      'font.family': const XlsxStyle(font: XlsxFont(family: 2)),
+      'font.charset': const XlsxStyle(font: XlsxFont(charset: 1)),
+      'font.scheme': const XlsxStyle(
+        font: XlsxFont(scheme: XlsxFontScheme.minor),
+      ),
       'alignment': const XlsxStyle(
         alignment: XlsxAlignment(horizontal: XlsxHorizontalAlignment.center),
       ),
       'protection': const XlsxStyle(protection: XlsxProtection(locked: false)),
-      'diagonal': const XlsxStyle(
+      'border.diagonal': const XlsxStyle(
         border: XlsxBorder(
           diagonal: XlsxBorderSide(style: XlsxBorderStyle.thin),
         ),
       ),
-      'vertical': const XlsxStyle(
+      'border.vertical': const XlsxStyle(
         border: XlsxBorder(
           vertical: XlsxBorderSide(style: XlsxBorderStyle.thin),
         ),
       ),
-      'horizontal': const XlsxStyle(
+      'border.horizontal': const XlsxStyle(
         border: XlsxBorder(
           horizontal: XlsxBorderSide(style: XlsxBorderStyle.thin),
         ),
       ),
-      'diagonalUp': const XlsxStyle(border: XlsxBorder(diagonalUp: true)),
-      'diagonalDown': const XlsxStyle(border: XlsxBorder(diagonalDown: true)),
+      'border.diagonalUp': const XlsxStyle(
+        border: XlsxBorder(diagonalUp: true),
+      ),
+      'border.diagonalDown': const XlsxStyle(
+        border: XlsxBorder(diagonalDown: true),
+      ),
       'numFmt': const XlsxStyle(numFmt: XlsxNumFmt.builtin(30)),
     };
     for (final MapEntry<String, XlsxStyle> e in bad.entries) {
