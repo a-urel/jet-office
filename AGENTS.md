@@ -58,6 +58,11 @@ dart run tool/compare_csv.dart build/fixtures
 - `tool/compare_csv.dart` compares LibreOffice's CSV export of every sheet
   with the expected values on raw values. Its doc comment explains the filter
   options; `tool/src/csv_compare.dart` holds the comparison and its contract.
+- `docs/warning-messages.md` lists every warning message in `en`, `de` and
+  `tr`, for the native-speaker check recorded in `docs/excel-checks.md`. It is
+  generated: after a message changes, run
+  `dart run tool/warning_messages.dart > docs/warning-messages.md`.
+  `test/tool/warning_messages_test.dart` fails when the file is stale.
 - Neither is Excel. The owner opens each milestone's fixtures in Excel and
   records the result in `docs/excel-checks.md`.
 

@@ -141,7 +141,7 @@ habit.
 
 ## What the writer supports
 
-Milestones M1 to M4 of phase 1. Later milestones extend this list.
+Milestones M1 to M5 of phase 1. Later milestones extend this list.
 
 **M1, foundation**
 
@@ -194,6 +194,20 @@ Milestones M1 to M4 of phase 1. Later milestones extend this list.
 - Tables: header and totals rows filled in by the writer, built-in table
   styles, totals functions and formulas, and one name space shared with
   defined names.
+
+**M5, release**
+
+- `XlsxListExport` and `XlsxListColumn`: a list in one call, with an optional
+  caption, a frozen header repeated as print titles, an auto filter or an
+  Excel table, and a `SUBTOTAL` totals row. It is built only from public
+  `XlsxSheetWriter` calls and writes no XML of its own.
+- A `DateTime` is cut to whole seconds (no warning).
+- Doubles are written in their shortest form, the same on the VM and the web
+  (`5.0` is `5`).
+- The contents of every part are identical on the VM and the web; the ZIP
+  bytes differ between the two (ruling R10).
+- Style errors name the style part (`fill.foreground`, `border.left`).
+- A benchmark of 100,000 rows, and the README, example and changelog.
 
 ## Money
 
