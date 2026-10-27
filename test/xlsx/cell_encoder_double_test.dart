@@ -1,6 +1,6 @@
 // No @TestOn: this file runs on the VM and in Chrome, and both must give the
 // same text. On the web every whole `double` is also an `int`, so the cell
-// encoder cannot tell `5.0` from `5` and writes both as `5` (ruling R9).
+// encoder cannot tell `5.0` from `5` and writes both as `5` (one spelling on every platform).
 import 'package:jet_office/src/xlsx/cell_encoder.dart';
 import 'package:jet_office/src/xlsx/shared_strings.dart';
 import 'package:jet_office/src/xlsx/style_registry.dart';

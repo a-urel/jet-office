@@ -52,9 +52,9 @@ The quality gate does not run it. `dart_test.yaml` starts Chrome with
 
 Peak memory is the largest figure of the four runs of a case, warm-up
 included for the VM (see above). The figures were taken again on 2026-10-27
-after Task 5b (doubles spelled the same on both platforms); the VM file shrank
-from 6,958,908 to 6,958,087 bytes because whole doubles lost their `.0`, and
-the Chrome file is unchanged. Every run:
+after the change that spells doubles the same on both platforms; the VM file
+shrank from 6,958,908 to 6,958,087 bytes because whole doubles lost their
+`.0`, and the Chrome file is unchanged. Every run:
 
 ```text
 vm | XlsxStreamWriter | warm-up | 1547 ms | 6958087 bytes | peak RSS 320061440 bytes
@@ -83,15 +83,19 @@ chrome | XlsxWriter | run 3 | 3083 ms | 6981844 bytes | peak JS heap 236140222 b
 - The VM and Chrome files still differ in size, by 23,757 bytes, but the
   XML inside them does not. The first run of this benchmark also exposed a
   real difference: the VM wrote an integer-valued `double` as `<v>5.0</v>` and
-  the web as `<v>5</v>`, because `5.0 is int` is true in dart2js. Task 5b
-  fixed it (one spelling, `formatXmlDouble`, ruling R9; test
+  the web as `<v>5</v>`, because `5.0 is int` is true in dart2js. The
+  writer now has one spelling (`formatXmlDouble`; test
   `test/xlsx/cell_encoder_double_test.dart` on both platforms). Unzipping the
   VM and Chrome files of a 3,000-row run of this workload after the fix gives
   byte-identical parts. What remains is the deflate stream: `package:archive`
   compresses with the native zlib on the VM and with its own pure-Dart
   deflate in the browser, and the two give different (equally valid) bytes
-  for the same input. Equal uncompressed parts, unequal ZIP bytes: ruling R10 in
-  `docs/xlsx-writer.md` accepts this, and
-  `test/xlsx/cross_platform_parts_test.dart` proves the parts equal.
+  for the same input. Equal uncompressed parts, unequal ZIP bytes: decision
+  [`0006`](decisions/0006-zip-bytes-may-differ-by-platform.md) proposes to
+  accept this, and `test/xlsx/cross_platform_parts_test.dart` proves the
+  parts equal.
 - The memory figures of the two platforms measure different things (process
   RSS against the used JS heap) and must not be compared with each other.
+- The memory figures are lower bounds: the Chrome heap peak inside
+  `close()` is not sampled, so a higher peak may have happened between two
+  samples.

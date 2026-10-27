@@ -7,7 +7,7 @@ Phase 1: the XLSX writer. Not published yet.
 ### M1, foundation
 
 - `XlsxWriter` (in memory) and `XlsxStreamWriter` (to a sink), with the same
-  calls and the same bytes.
+  calls and the same bytes on one platform.
 - Cell values: text, numbers, booleans, `DateTime`, `XlsxDate`,
   `XlsxDecimal`, empty cells and `XlsxFormula` with a cached value.
 - Sheets with sanitized, unique names, tab order and the active sheet.
@@ -51,7 +51,8 @@ Phase 1: the XLSX writer. Not published yet.
 - Style errors: a bad fill, border or alignment in a style is now named
   `fill.<field>`, `border.<field>` or `alignment.<field>`. It was the bare
   field (`foreground`, `left`, `indent`). A bad font in a row or cell style
-  is named `font.<field>` (unchanged). Column styles name
+  is named `font.<field>` (`font.size`, `font.name`); on main it was the bare
+  field (`size`, `name`). Column styles name
   `columns[i].style.font.<field>`, `columns[i].style.fill.foreground` and so
   on (was `columns[i].style.<field>`). The name now says which part failed.
 - Conditional format style errors: `rules[i].style.<field>` is now
@@ -60,10 +61,6 @@ Phase 1: the XLSX writer. Not published yet.
   `rules[2].style.font.size` and `rules[0].style.left` became
   `rules[0].style.border.left`. `rules[i].style.numFmt`, `.alignment` and
   `.protection` are unchanged.
-- `XlsxListColumn.totals` is now `XlsxListColumn.totalsFunction`: the
-  constructor parameter, the field, the `toString` label and the error name
-  (`columns[i].totals` became `columns[i].totalsFunction`). `XlsxTableColumn`
-  already used that name for the same enum.
 - A `DateTime` is cut to whole seconds, with no warning. Excel shows a serial
   rounded to the second, so 23:59:59.999 used to show as the next day. To keep
   milliseconds, write the serial as a `double` with an `ss.000` format.

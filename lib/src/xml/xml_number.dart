@@ -16,7 +16,7 @@ library;
 /// the guarantee, not a general proof. Excel reads that form in an
 /// `xsd:double`.
 ///
-/// Used for XML attributes and for the cell encoder's `<v>` (ruling R9).
+/// Used for XML attributes and for the cell encoder's `<v>` (one spelling on every platform).
 ///
 /// Throws [ArgumentError] when [value] is NaN or infinite.
 String formatXmlDouble(double value) {

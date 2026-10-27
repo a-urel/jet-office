@@ -1579,7 +1579,7 @@ void _checkSharedStringItems(
           if (r.getElement('t')!.innerText.isEmpty) {
             violations.add(
               'rule 28: si $index run $run has an empty <t>; the writer '
-              'drops empty runs (M4 ruling R6)',
+              'drops empty runs (M4)',
             );
           }
           final XmlElement? rPr = r.getElement('rPr');

@@ -1,6 +1,6 @@
 // No @TestOn: this file runs on the VM and in Chrome against the same
 // constants. Equal constants on both legs prove that the contents of every
-// part are identical on the two platforms (decision R10). The ZIP bytes are
+// part are identical on the two platforms (decision 0006). The ZIP bytes are
 // not compared: `package:archive` deflates with the native zlib on the VM and
 // with pure Dart on the web, so they match only within one platform.
 import 'package:jet_office/jet_office.dart';

@@ -206,7 +206,7 @@ void main() {
     });
 
     test('holds several runs without fonts as <r> runs', () {
-      // Ruling R1: only one fontless run is a plain string.
+      // Only one fontless run is a plain string.
       final Map<String, String> parts = _parts(
         (XlsxSheetWriter s) => s.note(
           0,
