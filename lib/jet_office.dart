@@ -61,6 +61,7 @@ export 'src/xlsx/header_footer.dart' show XlsxHeaderFooter;
 export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
 export 'src/xlsx/image.dart' show XlsxImage, XlsxImageFormat;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
+export 'src/xlsx/list_export.dart' show XlsxListColumn, XlsxListExport;
 export 'src/xlsx/note.dart' show XlsxNote;
 export 'src/xlsx/number_format.dart' show XlsxNumFmt;
 export 'src/xlsx/page_setup.dart'

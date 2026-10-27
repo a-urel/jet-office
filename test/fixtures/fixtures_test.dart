@@ -12,6 +12,7 @@ import 'm1_fixtures.dart';
 import 'm2_fixtures.dart';
 import 'm3_fixtures.dart';
 import 'm4_fixtures.dart';
+import 'm5_fixtures.dart';
 
 /// What a sheet stores: its rectangle of cell text and the cells that hold a
 /// formula, as (row, column) pairs counted from 1.
@@ -117,11 +118,13 @@ void main() {
       'm4_tables',
       'm4_objects',
     ]);
+    expect(names(m5Fixtures()), <String>['m5_list_plain']);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
       ...names(m3Fixtures()),
       ...names(m4Fixtures()),
+      ...names(m5Fixtures()),
     ]);
   });
 
