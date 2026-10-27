@@ -441,9 +441,46 @@ void main() {
       expect(
         items()[1],
         '<si><r><rPr><b/><sz val="14"/><rFont val="Arial"/></rPr>'
-        '<t xml:space="preserve">Total: </t></r><r><t>42</t></r></si>',
+        '<t xml:space="preserve">Total: </t></r>'
+        '<r><rPr><sz val="14"/><rFont val="Arial"/></rPr><t>42</t></r></si>',
       );
       expect(strings.count, 2);
+    });
+
+    test('a run without a font carries the cell font when it has one', () {
+      // Excel draws a run without rPr in the workbook's default font, not
+      // the cell's, so every run of a cell with a font gets an rPr.
+      expect(
+        enc(
+          XlsxCell(
+            XlsxRichText(const <XlsxTextRun>[
+              XlsxTextRun('a'),
+              XlsxTextRun('b'),
+            ]),
+            style: arial14,
+          ),
+        ),
+        '<c r="A1" s="1" t="s"><v>0</v></c>',
+      );
+      expect(
+        items().single,
+        '<si><r><rPr><sz val="14"/><rFont val="Arial"/></rPr><t>a</t></r>'
+        '<r><rPr><sz val="14"/><rFont val="Arial"/></rPr><t>b</t></r></si>',
+      );
+      expect(
+        enc(
+          XlsxCell(
+            XlsxRichText(const <XlsxTextRun>[XlsxTextRun('abc')]),
+            style: const XlsxStyle(font: XlsxFont(bold: true)),
+          ),
+        ),
+        '<c r="A1" s="2" t="s"><v>1</v></c>',
+      );
+      expect(
+        items()[1],
+        '<si><r><rPr><b/><sz val="11"/><rFont val="Calibri"/></rPr>'
+        '<t>abc</t></r></si>',
+      );
     });
 
     test('the effective font merges column, row and cell under the run', () {
@@ -469,7 +506,8 @@ void main() {
       expect(
         items().single,
         '<si><r><rPr><i/><sz val="9"/><color rgb="FFFF0000"/>'
-        '<rFont val="Arial"/></rPr><t>a</t></r><r><t>b</t></r></si>',
+        '<rFont val="Arial"/></rPr><t>a</t></r><r><rPr><b/><i/>'
+        '<sz val="9"/><rFont val="Arial"/></rPr><t>b</t></r></si>',
       );
     });
 
@@ -708,7 +746,8 @@ void main() {
         '<si><r><rPr><b/><sz val="11"/><rFont val="Calibri"/></rPr>'
         '<t xml:space="preserve">Total: </t></r><r><t>42</t></r></si>'
         '<si><r><rPr><b/><sz val="14"/><rFont val="Arial"/></rPr>'
-        '<t xml:space="preserve">Total: </t></r><r><t>42</t></r></si>'
+        '<t xml:space="preserve">Total: </t></r>'
+        '<r><rPr><sz val="14"/><rFont val="Arial"/></rPr><t>42</t></r></si>'
         '</sst>',
       ),
     );

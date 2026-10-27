@@ -84,7 +84,8 @@ final Uint8List jpeg3x5 = base64Decode(
 /// A1 is a bold run and a plain run. A2 is an italic red run and an
 /// underlined one. A3 is `x²`, written as `x` and a superscript `2`. A4 is a
 /// bold run and a plain run in a cell styled Arial 14, so the bold run is
-/// Arial 14 bold (Decision 3). A5 is a rich text of one run without a font,
+/// Arial 14 bold (Decision 3) and the plain run carries Arial 14 too, which
+/// Excel would otherwise draw in its default Calibri 11. A5 is a rich text of one run without a font,
 /// which shares the shared string of A6's plain text. A file stores, and a
 /// reader shows, each cell's runs joined.
 Fixture _richText() => Fixture(
