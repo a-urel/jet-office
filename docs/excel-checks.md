@@ -488,7 +488,9 @@ One sheet, `Rich`, one cell per row in column A.
 - A3 `x2`: the `2` is a superscript, so it reads x squared.
 - A4 `Bold in Arial 14`: the cell is Arial 14, and the bold run is Arial 14
   bold too, the same size and face as ` in Arial 14` (Decision 3 of the M4
-  plan). Click into the cell: the formula bar shows the runs in Arial.
+  plan). ` in Arial 14` is Arial 14, not Calibri 11: it is as large as
+  `Bold` and larger than A5. Click into the cell: the formula bar shows the
+  runs in Arial.
 - A5 and A6 `Same text` look alike, in the same plain font.
 
 ### `m4_notes`
@@ -779,6 +781,13 @@ The fix writes an `rPr` with the cell's font for every run of a rich text
 cell whose style has a font, plain runs included (or documents the
 behaviour), starts with a failing regression test, and changes
 `m4_rich_text` and its checklist entry if the stored runs change.
+
+Fixed in 420e543; open, awaiting the owner's Excel re-check. A run without a
+font now carries the cell's effective font, resolved, when that font is set
+(` in Arial 14` is stored with `<rPr><sz val="14"/><rFont val="Arial"/></rPr>`);
+in a cell without a font it still has no `rPr`, so A1, A3 and A5 are stored
+as before and A5 still shares A6's string. Re-check `m4_rich_text` A4: ` in
+Arial 14` is Arial 14, the same size as `Bold`.
 
 ## Results
 
