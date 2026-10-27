@@ -759,7 +759,12 @@ neither:
 Both need Excel for Windows (Format Cells > Alignment > Text direction, and
 File > Info). The owner chose to check them before release, at M5.
 
-### Plain rich text runs lose the cell's font (open, M5)
+### Plain rich text runs lose the cell's font (closed, 9071bc3)
+
+Closed by 420e543 (merged at 9071bc3) and the owner's re-check on
+2026-10-27 in Excel for Mac 16.114.1 (see "Results"): A4's ` in Arial 14`
+shows in Arial 14, the same size as `Bold`. The account below is what the
+M4 check found before the fix.
 
 Found in the M4 check on 2026-10-27, `m4_rich_text` A4, in Excel for Mac
 16.114.1.
@@ -825,3 +830,4 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m4_objects` | ok | No repair prompt. `All`: the links `Site A` and `Site B`, C1's note marker, the PNG at G2 and the tables `Stock` and `Prices` show together. `More`: A1 has a note. |
 | 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_conditional_x14` (M4 re-check) | ok | No repair prompt. A and B show a black dashed axis where zero falls; B's negative bars are filled red, left of it. B's Edit Formatting Rule: negative fill red, borders solid, positive and negative border green, axis color black. So Excel draws the negative border in the positive border color when no `x14:negativeBorderColor` is stored. Closes "Data bars draw no negative fill or axis by default". |
 | 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_conditional` (M4 re-check) | ok | No repair prompt. Column H's blue gradient bars as before; its Edit Formatting Rule shows negative fill red, borders none, axis color black. |
+| 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m4_rich_text` (re-check after 420e543) | ok | No repair prompt. A4 `Bold in Arial 14`: ` in Arial 14` now shows in Arial 14, the same size as `Bold`, which stays bold; with the cursor in `Bold`, Home shows Arial 14 with Bold highlighted. A1, A2, A3, A5 and A6 as before. Closes "Plain rich text runs lose the cell's font". |
