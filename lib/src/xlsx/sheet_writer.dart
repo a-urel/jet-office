@@ -372,8 +372,9 @@ abstract final class XlsxSheetWriter {
   /// A trailer setting like [merge], with one exception (Decision 1 of the
   /// M4 plan): a table with a header row must be added before that row is
   /// written, because the sheet checks and fills in its header cells as the
-  /// row goes by. Tables are numbered across the workbook in the order
-  /// added, and each is written as its own part when the sheet finishes.
+  /// row goes by; the same holds for the totals row of a table. Tables are
+  /// numbered across the workbook in the order added, and each is written
+  /// as its own part when the sheet finishes.
   ///
   /// In the header row, a `null` cell of the table (or one a shorter row
   /// leaves out) becomes the column name, written with the row's style; a
@@ -394,7 +395,8 @@ abstract final class XlsxSheetWriter {
   /// `name` is malformed or already names a table or a defined name of any
   /// scope, ignoring case; its `range` lies outside the sheet, has too few
   /// rows, overlaps another table of the sheet, its auto filter or a
-  /// merged range, or starts at a header row already written; and the
+  /// merged range, starts at a header row already written or ends at a
+  /// totals row already written; and the
   /// fields `columns`, `columns[i].name`, `columns[i].totalsLabel`,
   /// `columns[i].totalsFormula` and `style` as `XlsxTable` describes. When
   /// it throws, nothing is recorded: no table, table id or name.
@@ -868,6 +870,15 @@ final class WorksheetWriter implements XlsxSheetWriter {
         'range',
         'The header row ${range.firstRow + 1} of the table "${table.name}" on '
             'sheet "$name" is already written; add a table with a header row '
+            'before that row.',
+      );
+    }
+    if (table.totalsRow && range.lastRow < _rowCount) {
+      throw ArgumentError.value(
+        range,
+        'range',
+        'The totals row ${range.lastRow + 1} of the table "${table.name}" on '
+            'sheet "$name" is already written; add a table with a totals row '
             'before that row.',
       );
     }
