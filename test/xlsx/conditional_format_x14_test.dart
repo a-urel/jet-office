@@ -201,10 +201,10 @@ void main() {
             gradient: false,
             border: true,
             borderColor: XlsxColor.hex('203864'),
-            negativeFillColor: XlsxColor.hex('FF0000'),
+            negativeFillColor: XlsxColor.hex('00FF00'),
             negativeBorderColor: XlsxColor.hex('C00000'),
             axis: XlsxDataBarAxis.middle,
-            axisColor: XlsxColor.hex('000000'),
+            axisColor: XlsxColor.hex('0000FF'),
           ),
         ]),
       );
@@ -217,9 +217,9 @@ void main() {
           '<x14:cfvo type="num"><xm:f>-10</xm:f></x14:cfvo>'
           r'<x14:cfvo type="formula"><xm:f>$C$1</xm:f></x14:cfvo>'
           '<x14:borderColor rgb="FF203864"/>'
-          '<x14:negativeFillColor rgb="FFFF0000"/>'
+          '<x14:negativeFillColor rgb="FF00FF00"/>'
           '<x14:negativeBorderColor rgb="FFC00000"/>'
-          '<x14:axisColor rgb="FF000000"/></x14:dataBar>',
+          '<x14:axisColor rgb="FF0000FF"/></x14:dataBar>',
         ),
       );
       // The 2007 rule keeps its own lengths.
@@ -241,6 +241,9 @@ void main() {
 
       expect(lengths(10, 90), '<x14:dataBar minLength="0" maxLength="100">');
       expect(lengths(5, 95), '<x14:dataBar minLength="5" maxLength="95">');
+      // Each length is mapped on its own.
+      expect(lengths(10, 95), '<x14:dataBar minLength="0" maxLength="95">');
+      expect(lengths(5, 90), '<x14:dataBar minLength="5" maxLength="100">');
     });
     test('percent and percentile carry xm:f; gte="0" is written', () {
       final String xml = _sheet(

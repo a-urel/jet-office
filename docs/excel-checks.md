@@ -362,7 +362,7 @@ These need Excel 2010 or later; check that none shows a repair prompt.
 In Excel for Mac on 2026-10-26 the axis line did not show and B's negative
 bars were green outlines with no fill: the file stored neither color, and
 Excel showed both as white (see "Open issues", M4). The file now stores
-Excel's defaults; the M4 Excel check is to confirm the look above.
+Excel's defaults; the look above was confirmed on 2026-10-27 (see Results).
 
 ### `m3_page_setup`
 

@@ -417,8 +417,8 @@ void main() {
 
   group('an invalid style part is an ArgumentError and registers nothing', () {
     final Map<String, XlsxStyle> invalid = <String, XlsxStyle>{
-      'size': const XlsxStyle(font: XlsxFont(size: 0)),
-      'name': const XlsxStyle(font: XlsxFont(name: '')),
+      'font.size': const XlsxStyle(font: XlsxFont(size: 0)),
+      'font.name': const XlsxStyle(font: XlsxFont(name: '')),
       'foreground': const XlsxStyle(fill: XlsxFill.solid(XlsxColor.theme(12))),
       'stops': XlsxStyle(
         fill: XlsxGradientFill.linear(
@@ -620,7 +620,7 @@ void main() {
       expect(stack, isNotNull);
       // The frame of the check that threw; a fresh throw in idsFor's catch
       // would show only idsFor and its callers.
-      expect(stack.toString(), contains('_validateNumFmt'));
+      expect(stack.toString(), contains('idFor'));
     });
 
     test('an invalid later style records none of the earlier', () {

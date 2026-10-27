@@ -339,11 +339,25 @@ final class StyleRegistry {
   }
 
   /// The checked `<font>` of [font] after [resolveFont], or null for no
-  /// font (the default font, id 0).
+  /// font (the default font, id 0). An invalid font throws [ArgumentError]
+  /// named `font.<field>`, such as `font.name`.
   static String? _fontXmlOf(XlsxFont? font) {
     if (font == null) return null;
     final XlsxFont resolved = resolveFont(font);
-    validateFont(resolved);
+    try {
+      validateFont(resolved);
+    } on ArgumentError catch (error, stack) {
+      // Named like numFmt: the field of the style, then the font's.
+      final String? field = error.name;
+      Error.throwWithStackTrace(
+        ArgumentError.value(
+          error.invalidValue,
+          field == null ? 'font' : 'font.$field',
+          error.message,
+        ),
+        stack,
+      );
+    }
     return _render((XmlWriter w) => writeFontXml(w, resolved));
   }
 

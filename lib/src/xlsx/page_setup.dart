@@ -345,12 +345,15 @@ void _checkMargin(double inches, String name) {
 /// all six attributes) and `pageSetup` for the checked [setup].
 ///
 /// `pageSetup` gets only the attributes the setup sets, in `CT_PageSetup`
-/// order: `paperSize` and `scale` when they differ from the defaults 1 and
-/// 100, `pageOrder` when `overThenDown`, `blackAndWhite` and `draft` when
-/// true; an explicit `orientation`, even `portrait`, and a
-/// `firstPageNumber`, even 1, with `useFirstPageNumber="1"`, whenever set;
-/// both fit axes when either is set, a missing one as 0. With no such
-/// attribute, no `pageSetup` is written.
+/// order: `paperSize`, `scale`, `firstPageNumber`, `fitToWidth`,
+/// `fitToHeight`, `pageOrder`, `orientation`, `blackAndWhite`, `draft`,
+/// `useFirstPageNumber`. `paperSize` and `scale` are written when they
+/// differ from the defaults 1 and 100, `pageOrder` when `overThenDown`,
+/// `blackAndWhite` and `draft` when true; an explicit `orientation`, even
+/// `portrait`, and a `firstPageNumber`, even 1, with
+/// `useFirstPageNumber="1"`, whenever set; both fit axes when either is
+/// set, a missing one as 0. With no such attribute, no `pageSetup` is
+/// written.
 void writePageSetup(XmlWriter w, XlsxPageSetup setup) {
   if (setup.centerHorizontally ||
       setup.centerVertically ||

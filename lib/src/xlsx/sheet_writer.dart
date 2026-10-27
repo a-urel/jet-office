@@ -388,7 +388,10 @@ abstract final class XlsxSheetWriter {
   /// fills the row in. In both rows, `XlsxCell(null, style: s)` is filled
   /// in like `null` and written in `s`; for none it stays a styled empty
   /// cell. A header or totals row the sheet has not reached when it
-  /// finishes is written then, in row order, after the last row.
+  /// finishes is written then, in row order, after the last row. A header or
+  /// totals row the writer fills in when the sheet finishes has no row
+  /// style, height or outline level; write that row yourself, or with
+  /// [blankRow], to set them.
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] naming the field
   /// when [table] is invalid (see [XlsxTable] and [XlsxTableColumn]): its
@@ -412,7 +415,8 @@ abstract final class XlsxSheetWriter {
   /// over it and the cell's own style over that, field by field: a field a
   /// higher layer sets wins, one it leaves `null` is inherited. A rich text
   /// run's font is merged over the effective font of its cell in the same
-  /// way. Pass the same style object on every row that shares a style, a
+  /// way; run fonts are checked as given, before empty runs are dropped.
+  /// Pass the same style object on every row that shares a style, a
   /// `const` or one built once before the loop: the encoder caches the
   /// merged style per column by the identity of its layers, and a style
   /// built afresh for each row misses that cache.

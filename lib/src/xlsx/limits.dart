@@ -124,9 +124,9 @@ abstract final class XlsxLimits {
   /// The longest defined name, in UTF-16 code units. A longer name throws
   /// [ArgumentError] when it is registered.
   ///
-  /// Microsoft's "Names in formulas" support page: "A name can contain up
-  /// to 255 characters." Its "Excel specifications and limits" page counts
-  /// names (limited by memory) but gives no length.
+  /// Microsoft's "Names in formulas" support page gives 255 characters for
+  /// a name. Its "Excel specifications and limits" page counts names
+  /// (limited by memory) but gives no length.
   static const int maxDefinedNameLength = 255;
 
   /// The longest comment of a defined name, in UTF-16 code units.

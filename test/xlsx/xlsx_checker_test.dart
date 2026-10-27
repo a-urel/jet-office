@@ -2276,6 +2276,16 @@ void main() {
         'shape id _x0000_s1025 is used',
       );
     });
+    test('an o:idmap data that is not a block list', () {
+      for (final String bad in <String>['x', '-1', '1,,2']) {
+        expectViolation(
+          tamper(<String, String Function(String)>{
+            vml2: (String x) => x.replaceFirst('data="2"', 'data="$bad"'),
+          }),
+          'is not a block list',
+        );
+      }
+    });
     test('a shape id outside the blocks of its drawing', () {
       expectViolation(
         tamper(<String, String Function(String)>{

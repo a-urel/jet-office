@@ -454,8 +454,9 @@ final class XlsxDataBar extends XlsxConditionalRule {
   /// default, red `FFFF0000`.
   final XlsxColor? negativeFillColor;
 
-  /// The border color of a bar for a negative value, or `null` for the
-  /// border's own; used only with [border].
+  /// The border color of a bar for a negative value; used only with
+  /// [border]. `null` stores none, and Excel then draws a negative bar's
+  /// border in [borderColor], the positive bar's border color.
   final XlsxColor? negativeBorderColor;
 
   /// Where the axis between negative and positive bars lies.
