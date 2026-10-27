@@ -8,11 +8,13 @@ library;
 /// text that parses back to [value], with no `.0` on a whole number.
 ///
 /// A whole value prints as an integer (`12`, `-3`, `123456789012345680000`;
-/// negative zero prints `0`). Anything else uses `double.toString`, which the
-/// VM and dart2js render identically for the shortest digits: a fraction as
-/// `0.1`, and a magnitude of 1e21 or more or below 1e-6 as one normalized
-/// exponent form, `1.5e+21` or `1e-7` (lower-case `e`, a sign on a positive
-/// exponent, no padding). Excel reads that form in an `xsd:double`.
+/// negative zero prints `0`). Anything else uses `double.toString`. The VM
+/// and dart2js were checked to give the same text for the values of
+/// `test/xlsx/cell_encoder_double_test.dart` (fractions such as `0.1` and
+/// `0.30000000000000004`, and exponent forms such as `1.5e+21` and `1e-7`:
+/// lower-case `e`, a sign on a positive exponent, no padding); that test is
+/// the guarantee, not a general proof. Excel reads that form in an
+/// `xsd:double`.
 ///
 /// Used for XML attributes and for the cell encoder's `<v>` (ruling R9).
 ///
