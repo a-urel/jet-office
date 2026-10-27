@@ -532,8 +532,9 @@ Table) appears.
   shows `=SUBTOTAL(109,B2:B4)`, and Excel accepts it without repair. The
   totals drop-down of B5 shows Sum (Decision 2 of the M4 plan: an A1 range,
   not a structured reference).
-- Beside it, `Costs` over E1:F3: style Light 9 with banded columns (stripes
-  down the columns, not along the rows), header `Item`, `Cost`.
+- Beside it, `Costs` over E1:F3: style Light 9, header `Item`, `Cost`. The
+  table has banded columns and keeps the default banded rows, so Table
+  Design shows both Banded Rows and Banded Columns ticked.
 - The filter buttons of both headers work: filter `Region` to `North`.
 - Inserting a row inside `Sales` (right-click a data row > Insert > Table
   Rows Above) extends the table, and the totals formula follows.
@@ -571,7 +572,8 @@ Open `m3_conditional_x14` and `m3_conditional` again:
 - A question for the owner: B `Solid` has a border and stores no
   `x14:negativeBorderColor`. Does Excel draw the negative bars' border red
   (its default) or not? Record what the Edit Formatting Rule dialog and the
-  bars show.
+  bars show. Answered on 2026-10-27: green, the positive border color (see
+  "Results").
 
 When the owner records it, mark "Data bars draw no negative fill or axis by
 default" closed, with the date.
@@ -709,7 +711,15 @@ M3's Excel check covers them in desktop Excel, with the document properties.
 The M3 section's "Desktop re-checks of M1 and M2" covers `m2_styles` and
 `m2_views`.
 
-### Data bars draw no negative fill or axis by default (open, M4)
+### Data bars draw no negative fill or axis by default (closed, 2026-10-27)
+
+Closed on 2026-10-27 by the M4 re-check of `m3_conditional_x14` and
+`m3_conditional` in Excel for Mac 16.114.1 (see "Results"). A and B show a
+black dashed axis where zero falls, B's negative bars are filled red, and the
+Edit Formatting Rule dialogs of B and of `m3_conditional`'s column H show a
+red negative fill and a black axis. B's negative border is green, the
+positive border color: the file stores no `x14:negativeBorderColor`, and
+`negativeBarBorderColorSameAsPositive` defaults to true.
 
 Found in the M3 check on 2026-10-26, `m3_conditional_x14`, in Excel for Mac
 16.114.1. The owner deferred the fix to M4.
@@ -747,6 +757,29 @@ neither:
 Both need Excel for Windows (Format Cells > Alignment > Text direction, and
 File > Info). The owner chose to check them before release, at M5.
 
+### Plain rich text runs lose the cell's font (open, M5)
+
+Found in the M4 check on 2026-10-27, `m4_rich_text` A4, in Excel for Mac
+16.114.1.
+
+A4 is styled Arial 14 and holds a bold run `Bold` and a plain run
+` in Arial 14`. The writer merges the cell's font into a run that has a font
+of its own (Decision 3 of the M4 plan), so `Bold` is stored with
+`<rPr><b/><sz val="14"/><rFont val="Arial"/></rPr>` and shows as Arial 14
+bold. The plain run is stored with no `rPr`, and Excel draws a run without
+`rPr` in the workbook's default font (Calibri 11, font 0), not in the cell's
+font: ` in Arial 14` shows visibly smaller than `Bold`, as small as
+A5's Calibri 11, and with the cursor in it, in edit mode, Home showed
+Calibri 11 (a first try showed Arial 14 with Bold highlighted, which is
+the bold run's font, so the ribbon did not follow the cursor then).
+A1's `42` and A3's `x` have no `rPr` either, but their cells use the
+default font, so nothing shows.
+
+The fix writes an `rPr` with the cell's font for every run of a rich text
+cell whose style has a font, plain runs included (or documents the
+behaviour), starts with a failing regression test, and changes
+`m4_rich_text` and its checklist entry if the stored runs change.
+
 ## Results
 
 | Date | Excel version and platform | Fixture | Result | Notes |
@@ -776,3 +809,10 @@ File > Info). The owner chose to check them before release, at M5.
 | 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_properties` | ok (kısmi) | No repair prompt. Summary: all eight fields as expected. Statistics: Created 24.10.2026 12:30, Last saved by `Jet Office`; Modified shows the file's disk time (26.10.2026 04:36). Custom: `Project` Atlas (text), `Count` 3 and `Ratio` 0,5 (number), `Final` Yes (yes or no), `Due` 24.10.2026 (date). Status `Final` is not shown anywhere in Excel for Mac (see "Open issues", M5). |
 | 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m2_styles` (desktop re-check) | ok (kısmi) | No repair prompt. Rows 47 and 48 show the diagonals up and down; row 62 grows to four lines for `wrap text`; A68's Protection tab has Locked and Hidden cleared, A69's both ticked. Row 67's reading order cannot be checked: Excel for Mac has no text direction setting and shows the cell left-aligned (see "Open issues", M5). |
 | 2026-10-26 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m2_views` (desktop re-check) | ok | No repair prompt. `View` opens at 85 % (status bar), without gridlines or headings, B1's `0` hidden. `Split` shows a real split, four panes, the dividers about 120 points from the left and 60 from the top. |
+| 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m4_rich_text` | sorun | No repair prompt. A1 `Total: ` bold and `42` plain; A2 `Red italic` red italic and ` and underlined` underlined; A3 `x` with a superscript `2`; A5 and A6 alike. A4: `Bold` is Arial 14 bold, but ` in Arial 14` shows in Calibri 11: it is as small as A5's Calibri 11, and Home showed Calibri 11 with the cursor in it in edit mode (a first try showed Arial 14 with Bold highlighted, so the ribbon did not follow the cursor then). A run without `rPr` takes the workbook's default font, not the cell's (see "Open issues", M5). |
+| 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m4_notes` | ok | No repair prompt. `Notes`: B2 `Check this` (status bar "commented by Ahmet"), C3 a bold `Ahmet:` line and `The total is checked.`, D4 `Always shown` shown without hovering (by `Ayse Yilmaz`); Show All Notes shows three. The notes of `XFD1` and `A1048576` open inside the window. |
+| 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m4_images` | ok | No repair prompt. Format Picture > Size: the JPEG at E2 is 0,63" × 1,04" (60 × 100 pixels), `Again`'s PNG at A1 0,04" × 0,02" (4 × 2 pixels); the PNG at B2 shows as a dot. The picture over B6:D10 fills it (2,71" × 1,1"), "Move but don't size with cells" is selected; widening C leaves its size, widening A moves it. Alt Text reads `The PNG over B6:D10`. Excel's "Original size" and Scale percentages are its own reading of the images' 72 dpi metadata (the JPEG shows 4500 % by 3750 %); the size shown is the stored one. |
+| 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m4_tables` | ok | No repair prompt. `Sales` Medium 2, banded rows, Header Row and Total Row ticked; B5 `245,5`, formula bar `=SUBTOTAL(109;B2:B4)`, its totals drop-down shows Sum (Decision 2 confirmed). `Costs` Light 9 with Banded Rows and Banded Columns ticked, as stored (the checklist said columns only; corrected). Filtering and inserting a table row worked, per the owner. `Numbers`: Header Row off, `X` and `Y` when turned on. Name Manager lists `Sales`, `Costs` and `Numbers`. |
+| 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m4_objects` | ok | No repair prompt. `All`: the links `Site A` and `Site B`, C1's note marker, the PNG at G2 and the tables `Stock` and `Prices` show together. `More`: A1 has a note. |
+| 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_conditional_x14` (M4 re-check) | ok | No repair prompt. A and B show a black dashed axis where zero falls; B's negative bars are filled red, left of it. B's Edit Formatting Rule: negative fill red, borders solid, positive and negative border green, axis color black. So Excel draws the negative border in the positive border color when no `x14:negativeBorderColor` is stored. Closes "Data bars draw no negative fill or axis by default". |
+| 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_conditional` (M4 re-check) | ok | No repair prompt. Column H's blue gradient bars as before; its Edit Formatting Rule shows negative fill red, borders none, axis color black. |
