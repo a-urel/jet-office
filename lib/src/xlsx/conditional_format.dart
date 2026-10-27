@@ -89,9 +89,11 @@ final class XlsxConditionalFormat {
 /// set a font name, size, family, charset or scheme, an alignment, a
 /// protection, a diagonal, vertical or horizontal border side, or a
 /// `diagonalUp` or `diagonalDown` flag, which Excel ignores in a
-/// conditional format; the sheet writer refuses them, named
-/// `rules[i].style.<field>`. A rule without a style changes nothing when it
-/// holds, but still counts for [stopIfTrue]. [XlsxColorScale],
+/// conditional format. The sheet writer refuses them, and names each error
+/// of the style by the part and its field, as for a cell style:
+/// `rules[i].style.font.name`, `rules[i].style.fill.foreground`,
+/// `rules[i].style.alignment`. A rule without a style changes nothing when
+/// it holds, but still counts for [stopIfTrue]. [XlsxColorScale],
 /// [XlsxDataBar] and [XlsxIconSet] draw their own formatting and take no
 /// style.
 sealed class XlsxConditionalRule {
@@ -840,7 +842,8 @@ const int _maxStandardDeviations = 3;
 /// each rule's formulas (see `checkFormulaText`) and fields as its class
 /// describes; and each style as a differential style
 /// (`validateDifferentialStyle`), whose errors are named
-/// `rules[i].style.<field>`. The number formats of the styles are checked
+/// `rules[i].style.<part>.<field>`, such as `rules[i].style.fill.foreground`.
+/// The number formats of the styles are checked
 /// when they are registered, and their errors are named
 /// `rules[i].style.numFmt` too. Nothing is recorded here.
 void checkConditionalFormat(XlsxConditionalFormat format) {

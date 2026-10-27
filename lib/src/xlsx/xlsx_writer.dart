@@ -339,7 +339,9 @@ final class XlsxWriter extends XlsxWriterBase {
 ///   ByteConversionSink.withCallback(file.add),
 /// );
 /// book.addSheet('Accounts').row(<Object?>['Code', 'Balance']);
-/// final List<XlsxWarning> warnings = book.close();
+/// for (final XlsxWarning warning in book.close()) {
+///   print(warning.message(XlsxLocale.de));
+/// }
 /// ```
 final class XlsxStreamWriter extends XlsxWriterBase {
   /// Creates a writer that sends the file to [sink], with the document

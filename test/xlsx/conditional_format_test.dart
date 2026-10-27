@@ -91,6 +91,66 @@ final XlsxStyle _green = XlsxStyle(
 );
 
 void main() {
+  group('a rule style error names the style part', () {
+    XlsxExpressionRule rule(XlsxStyle style) =>
+        XlsxExpressionRule('TRUE', style: style);
+    test('font: an invalid field', () {
+      _rejects(
+        rule(const XlsxStyle(font: XlsxFont(color: XlsxColor.theme(99)))),
+        'rules[0].style.font.color',
+      );
+    });
+    test('font: a field Excel ignores', () {
+      _rejects(
+        rule(const XlsxStyle(font: XlsxFont(name: 'Arial'))),
+        'rules[0].style.font.name',
+      );
+    });
+    test('fill', () {
+      _rejects(
+        rule(const XlsxStyle(fill: XlsxFill.solid(XlsxColor.theme(12)))),
+        'rules[0].style.fill.foreground',
+      );
+    });
+    test('border: an invalid side', () {
+      _rejects(
+        rule(
+          const XlsxStyle(
+            border: XlsxBorder(
+              left: XlsxBorderSide(
+                style: XlsxBorderStyle.thin,
+                color: XlsxColor.indexed(66),
+              ),
+            ),
+          ),
+        ),
+        'rules[0].style.border.left',
+      );
+    });
+    test('border: a side Excel ignores', () {
+      _rejects(
+        rule(const XlsxStyle(border: XlsxBorder(diagonalUp: true))),
+        'rules[0].style.border.diagonalUp',
+      );
+    });
+    test('number format: the field is the part', () {
+      _rejects(
+        rule(const XlsxStyle(numFmt: XlsxNumFmt.builtin(30))),
+        'rules[0].style.numFmt',
+      );
+    });
+    test('alignment and protection: the part is the field', () {
+      _rejects(
+        rule(const XlsxStyle(alignment: XlsxAlignment(indent: 1))),
+        'rules[0].style.alignment',
+      );
+      _rejects(
+        rule(const XlsxStyle(protection: XlsxProtection(locked: false))),
+        'rules[0].style.protection',
+      );
+    });
+  });
+
   group('cell value', () {
     test('writes dxfId and priority (Quds wrote neither)', () {
       expect(
@@ -799,7 +859,7 @@ void main() {
             isA<ArgumentError>().having(
               (ArgumentError e) => e.name,
               'name',
-              'rules[2].style.size',
+              'rules[2].style.font.size',
             ),
           ),
         );

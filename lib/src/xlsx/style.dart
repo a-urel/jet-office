@@ -131,3 +131,26 @@ final class XlsxStyle {
     return 'XlsxStyle(${parts.join(', ')})';
   }
 }
+
+/// Runs [check], the checks of one part of a style ([part] is `font`,
+/// `fill`, `border` or `alignment`), and rethrows an [ArgumentError] it
+/// throws named `<part>.<field>`, such as `fill.foreground`, or [part] when
+/// it names no field, with its value, message and stack kept.
+///
+/// Cell styles and differential styles name their errors this way.
+void checkStylePart(String part, void Function() check) {
+  try {
+    check();
+  } on ArgumentError catch (error, stack) {
+    // Named like numFmt: the field of the style, then the part's.
+    final String? field = error.name;
+    Error.throwWithStackTrace(
+      ArgumentError.value(
+        error.invalidValue,
+        field == null ? part : '$part.$field',
+        error.message,
+      ),
+      stack,
+    );
+  }
+}

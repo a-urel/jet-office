@@ -276,8 +276,9 @@ abstract final class XlsxSheetWriter {
   /// any other rule.
   ///
   /// Throws [StateError] like [merge], and [ArgumentError] naming the field
-  /// (`ranges[i]`, `rules[i].<field>`, `rules[i].style.<field>`) when
-  /// [format] is invalid (see [XlsxConditionalFormat] and its rules); and
+  /// (`ranges[i]`, `rules[i].<field>`, `rules[i].style.numFmt`, and
+  /// `rules[i].style.<part>.<field>` such as `rules[0].style.fill.foreground`)
+  /// when [format] is invalid (see [XlsxConditionalFormat] and its rules); and
   /// `XlsxLimitError('number formats', ...)` when a style's number format
   /// does not fit. When it throws, nothing is recorded: no rule, priority
   /// or differential style.
