@@ -82,8 +82,12 @@ void main() {
   test('README warnings block prints a Turkish message', () {
     final List<String> lines = <String>[];
     warnings(lines.add);
-    expect(lines, hasLength(1));
-    expect(lines.single, contains('Notes'));
+    final XlsxWriter book = XlsxWriter();
+    book.addSheet('Notes').row(<Object?>['bad\u0001text']);
+    final XlsxWarning warning = book.close().warnings.single;
+    expect(lines, <String>[warning.message(XlsxLocale.tr)]);
+    expect(lines.single, isNot(warning.message(XlsxLocale.en)));
+    expect(lines.single, contains('sayfasındaki'));
   });
 
   test('README streaming block writes a clean file', () {

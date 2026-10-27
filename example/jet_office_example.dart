@@ -64,7 +64,12 @@ XlsxResult buildExample() {
     'Total balance',
     const XlsxFormula('SUM(Accounts!C3:C5)', cached: 1814.49),
   ]);
-  summary.row(<Object?>['Written by jet_office, no Excel needed.']);
+  // A note on the total, at the zero-based cell B2.
+  summary.note(
+    1,
+    1,
+    XlsxNote.plain('Sum of the Accounts balances.', author: 'jet_office'),
+  );
   summary.row(<Object?>[
     XlsxHyperlink.url(
       'https://github.com/a-urel/jet-office',

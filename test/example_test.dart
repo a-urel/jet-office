@@ -12,6 +12,10 @@ void main() {
     final bytes = buildExampleWorkbook();
     expect(checkXlsx(bytes), isEmpty);
     final parts = readXlsx(bytes);
+    expect(
+      parts.keys.where((k) => RegExp(r'^xl/comments\d+\.xml$').hasMatch(k)),
+      hasLength(1),
+    );
     final workbook = parts['xl/workbook.xml']!;
     expect(workbook, contains('name="Accounts"'));
     expect(workbook, contains('name="Summary"'));

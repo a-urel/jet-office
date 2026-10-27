@@ -76,7 +76,8 @@ final XlsxResult out = XlsxListExport(columns, caption: 'Accounts').toXlsx(
 Pass `excelTable: true` to get an Excel table instead of a filtered range.
 To put a list on a sheet of a bigger workbook, call
 `XlsxListExport.writeTo(sheet, rows)`.
-[`example/jet_office_example.dart`](example/jet_office_example.dart) does that and adds a summary sheet written with `XlsxWriter`. Run it with
+[`example/jet_office_example.dart`](example/jet_office_example.dart) does that
+and adds a summary sheet written with `XlsxWriter`. Run it with
 `dart run example/jet_office_example.dart`.
 
 ## What it writes
@@ -121,8 +122,11 @@ synchronous, so there is no `async` API; an `async` wrapper would not move the
 work off your thread. To keep a user interface responsive, run the writer in
 an isolate (`Isolate.run`) or a web worker and send the bytes back.
 
-For a large export, `XlsxStreamWriter` sends the file to a sink as each part
-finishes, so the whole file is never in memory:
+`XlsxStreamWriter` sends the file to a sink instead of returning it. Each
+finished sheet is compressed and sent to the sink at once, but the open sheet
+is still held in memory, so the saving shows across many sheets, not within
+one large sheet (see "Reading the figures" in
+[`docs/benchmark.md`](docs/benchmark.md)):
 
 ```dart
 final BytesBuilder file = BytesBuilder(copy: false);
@@ -165,5 +169,5 @@ The figures for 100,000 rows are in [`docs/benchmark.md`](docs/benchmark.md).
 
 ## Licence
 
-MIT, see [`LICENSE`](LICENSE). Parts are ported from `quds_office_engine`
-(MIT); its licence text is kept in [`NOTICE`](NOTICE).
+Apache License 2.0, see [`LICENSE`](LICENSE). Parts are ported from
+`quds_office_engine` (MIT); its licence text is kept in [`NOTICE`](NOTICE).

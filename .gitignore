@@ -37,3 +37,6 @@ doc/api/
 
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Written by example/jet_office_example.dart.
+example.xlsx
