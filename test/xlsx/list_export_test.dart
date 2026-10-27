@@ -556,6 +556,109 @@ void main() {
     });
   });
 
+  group('a header or style the table refuses fails before the sheet', () {
+    /// Runs [export] over a counting lazy rows and checks that it throws
+    /// an [ArgumentError] named [field], reads no row and records nothing.
+    void refused(XlsxListExport export, String field) {
+      int pulled = 0;
+      Iterable<List<Object?>> lazy() sync* {
+        pulled++;
+        yield <Object?>['A', 1];
+      }
+
+      final XlsxWriter book = XlsxWriter();
+      final XlsxSheetWriter sheet = book.addSheet('S');
+      expect(() => export.writeTo(sheet, lazy()), _argumentError(field));
+      expect(pulled, 0);
+      expect(sheet.rowCount, 0);
+      sheet.columns(const <XlsxColumn?>[XlsxColumn(width: 5)]);
+      sheet.freeze(rows: 3);
+      final Map<String, String> parts = readXlsx(book.close().bytes);
+      expect(parts[_sheet1], isNot(contains('Print_Titles')));
+      expect(parts['xl/workbook.xml'], isNot(contains('Print_Titles')));
+    }
+
+    test('a header with a line break, in table mode', () {
+      refused(
+        XlsxListExport(const <XlsxListColumn>[
+          XlsxListColumn('Opening\nbalance'),
+          XlsxListColumn('Amount'),
+        ], excelTable: true),
+        'columns[0].header',
+      );
+    });
+
+    test('a header over 255 characters, in table mode', () {
+      refused(
+        XlsxListExport(<XlsxListColumn>[
+          const XlsxListColumn('Code'),
+          XlsxListColumn('x' * 256),
+        ], excelTable: true),
+        'columns[1].header',
+      );
+    });
+
+    test('the error keeps the value and the message', () {
+      expect(
+        () => XlsxListExport(const <XlsxListColumn>[
+          XlsxListColumn('Opening\nbalance'),
+        ], excelTable: true).writeTo(XlsxWriter().addSheet('S'), _twoRows),
+        throwsA(
+          isA<ArgumentError>()
+              .having(
+                (ArgumentError e) => e.invalidValue,
+                'value',
+                'Opening\nbalance',
+              )
+              .having(
+                (ArgumentError e) => e.message,
+                'message',
+                contains('line break'),
+              ),
+        ),
+      );
+    });
+
+    test('a table style the writer refuses, in table mode', () {
+      refused(
+        XlsxListExport(
+          _codeAmount,
+          excelTable: true,
+          tableStyle: const XlsxTableStyle('Fancy'),
+        ),
+        'tableStyle',
+      );
+    });
+
+    test('plain mode keeps a header with a line break', () {
+      final Map<String, String> parts = _parts(
+        XlsxListExport(const <XlsxListColumn>[
+          XlsxListColumn('Opening\nbalance'),
+          XlsxListColumn('Amount'),
+        ]),
+        _twoRows,
+      );
+      expect(parts['xl/sharedStrings.xml'], contains('Opening'));
+    });
+  });
+
+  test('a width out of range throws columns[i].width and records nothing', () {
+    final XlsxWriter book = XlsxWriter();
+    final XlsxSheetWriter sheet = book.addSheet('S');
+    expect(
+      () => XlsxListExport(const <XlsxListColumn>[
+        XlsxListColumn('Code'),
+        XlsxListColumn('Amount', width: 1000),
+      ]).writeTo(sheet, _twoRows),
+      _argumentError('columns[1].width'),
+    );
+    expect(sheet.rowCount, 0);
+    final Map<String, String> parts = readXlsx(book.close().bytes);
+    expect(parts[_sheet1], isNot(contains('Print_Titles')));
+    expect(parts[_sheet1], isNot(contains('<pane')));
+    expect(parts['xl/workbook.xml'], isNot(contains('Print_Titles')));
+  });
+
   test('writeTo needs a sheet without rows', () {
     final XlsxWriter book = XlsxWriter();
     final XlsxSheetWriter sheet = book.addSheet('S')..row(<Object?>['x']);
@@ -717,7 +820,7 @@ void main() {
     });
   });
 
-  group('a count total is a plain number (ruling R14)', () {
+  group('a count total is a plain number (General format)', () {
     const List<XlsxListColumn> columns = <XlsxListColumn>[
       XlsxListColumn(
         'Opened',

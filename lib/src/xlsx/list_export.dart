@@ -108,7 +108,10 @@ final class XlsxListColumn {
 ///   and the first column has no function, the first column shows `Total`.
 ///
 /// Column widths and styles come from the [columns]. The helper has no
-/// logic of its own beyond this layout.
+/// logic of its own beyond this layout. It sets the sheet's columns,
+/// freeze and print titles itself, replacing any the caller set before.
+/// The default totals label is `Total`; `totalsLabel` on the first column
+/// sets another, for example `Toplam`.
 ///
 /// ```dart
 /// final XlsxResult out = XlsxListExport(
@@ -208,16 +211,20 @@ final class XlsxListExport {
   /// from 0, before that row is written. [rows] is read once, so the rows
   /// before it stay written, with the header settings.
   ///
-  /// With [excelTable], [tableName] is also checked up front
-  /// ([ArgumentError] named `tableName`), a name another table or defined
+  /// With [excelTable], [tableName], the headers and [tableStyle] are also
+  /// checked up front against the table's own rules, before the sheet is
+  /// touched and before [rows] is read: [ArgumentError] named `tableName`,
+  /// `columns[i].header` (at most 255 characters, no line break, tab or
+  /// character XML forbids) and `tableStyle`. A name another table or defined
   /// name of the workbook has throws the sheet's [ArgumentError] named
   /// `name`, and the table must be registered before the header row,
   /// whose range needs the row count: [rows] is read to the end first, so
   /// a row longer than [columns] throws before anything is written. A
   /// [List] is used as it is; any other [Iterable] is read into memory
-  /// first, so pass a [List] to avoid the copy. The writer's own table
-  /// errors (a name already taken, a range clash) come after the column,
-  /// freeze, print title and caption calls, which stay written.
+  /// first, so pass a [List] to avoid the copy. The only late errors left
+  /// are the writer's own (a table name or defined name already taken, a
+  /// range clash); they come after the column, freeze, print title and
+  /// caption calls, which stay written.
   XlsxRange writeTo(XlsxSheetWriter sheet, Iterable<List<Object?>> rows) {
     _check();
     if (sheet.rowCount > 0) {
@@ -229,7 +236,10 @@ final class XlsxListExport {
     final int width = columns.length;
     final int headerRow = caption == null ? 0 : 1;
     // Every argument check comes before `rows` is read once.
-    if (excelTable) checkNameSyntax(tableName, 'tableName', table: true);
+    if (excelTable) {
+      checkNameSyntax(tableName, 'tableName', table: true);
+      _checkTable();
+    }
     final List<List<Object?>>? all = excelTable ? _readAll(rows) : null;
     sheet
       ..columns(<XlsxColumn?>[
@@ -272,11 +282,70 @@ final class XlsxListExport {
     return XlsxRange(headerRow, 0, last, width - 1);
   }
 
+  /// The table columns of [columns]: the headers as names, the totals
+  /// functions and labels, and `Total` in the first column when no column
+  /// has a label and the first has no function.
+  List<XlsxTableColumn> _tableColumns() {
+    final bool hasTotals = _hasTotals;
+    final bool anyLabel = columns.any(
+      (XlsxListColumn c) => c.totalsLabel != null,
+    );
+    return <XlsxTableColumn>[
+      for (int i = 0; i < columns.length; i++)
+        XlsxTableColumn(
+          columns[i].header,
+          totalsFunction: columns[i].totalsFunction,
+          totalsLabel:
+              columns[i].totalsLabel ??
+              (hasTotals &&
+                      i == 0 &&
+                      !anyLabel &&
+                      columns[i].totalsFunction == XlsxTotalsFunction.none
+                  ? 'Total'
+                  : null),
+        ),
+    ];
+  }
+
+  /// Runs the table's own column and style checks on a placeholder range,
+  /// so the writer's rules (header length, line breaks, a style that is
+  /// not built in) apply up front, before the sheet is touched or `rows`
+  /// is read. Their errors come back named after this helper's fields:
+  /// `columns[i].name` as `columns[i].header` and `style` as `tableStyle`.
+  void _checkTable() {
+    final bool hasTotals = _hasTotals;
+    try {
+      checkTable(
+        XlsxTable(
+          tableName,
+          XlsxRange(0, 0, hasTotals ? 2 : 1, columns.length - 1),
+          _tableColumns(),
+          totalsRow: hasTotals,
+          style: tableStyle ?? XlsxTableStyle.defaultStyle,
+        ),
+      );
+    } on ArgumentError catch (e, stack) {
+      final String? name = e.name;
+      final String? renamed = name == 'style'
+          ? 'tableStyle'
+          : name != null &&
+                name.startsWith('columns[') &&
+                name.endsWith('].name')
+          ? '${name.substring(0, name.length - 4)}header'
+          : null;
+      if (renamed == null) rethrow;
+      Error.throwWithStackTrace(
+        ArgumentError.value(e.invalidValue, renamed, e.message),
+        stack,
+      );
+    }
+  }
+
   /// The entries of [rows], each no longer than the columns.
   ///
-  /// A [List] is checked in one pass and used as it is; any other
-  /// [Iterable] is read once into a new list, because the table's range
-  /// needs the row count before the header row is written.
+  /// A [List] is used as it is, with no copy; it is only checked, in one
+  /// pass. Any other [Iterable] is read once into a new list, because the
+  /// table's range needs the row count before the header row is written.
   List<List<Object?>> _readAll(Iterable<List<Object?>> rows) {
     final List<List<Object?>> all = rows is List<List<Object?>>
         ? rows
@@ -310,29 +379,12 @@ final class XlsxListExport {
     final int dataRows = all.isEmpty ? 1 : all.length;
     final int last = headerRow + dataRows + (hasTotals ? 1 : 0);
     final XlsxRange range = XlsxRange(headerRow, 0, last, width - 1);
-    final bool anyLabel = columns.any(
-      (XlsxListColumn c) => c.totalsLabel != null,
-    );
     // Before the header row: a table with a header row is added first.
     sheet.table(
       XlsxTable(
         tableName,
         range,
-        <XlsxTableColumn>[
-          for (int i = 0; i < width; i++)
-            XlsxTableColumn(
-              columns[i].header,
-              totalsFunction: columns[i].totalsFunction,
-              totalsLabel:
-                  columns[i].totalsLabel ??
-                  (hasTotals &&
-                          i == 0 &&
-                          !anyLabel &&
-                          columns[i].totalsFunction == XlsxTotalsFunction.none
-                      ? 'Total'
-                      : null),
-            ),
-        ],
+        _tableColumns(),
         totalsRow: hasTotals,
         style: tableStyle ?? XlsxTableStyle.defaultStyle,
       ),
