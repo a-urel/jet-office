@@ -17,7 +17,7 @@ final DateTime _epoch = DateTime.utc(1899, 12, 30);
 const int _maxSerial = 2958465; // 9999-12-31
 /// Years beyond this are outside `DateTime`'s range (about 275,760).
 const int _maxDartYear = 270000;
-const int _microsPerDay = 86400 * 1000000;
+const int _secondsPerDay = 86400;
 
 /// Returns the Excel serial number of the date [year]-[month]-[day].
 ///
@@ -50,23 +50,17 @@ int? dateSerial(int year, int month, int day) {
 /// Returns the Excel serial number of [value], with the time of day as the
 /// fraction.
 ///
-/// Uses the wall-clock fields only. Returns `null` for values outside Excel's
-/// range (before 1900-01-01 or after 9999-12-31), including a time so close
-/// to midnight on 9999-12-31 that the serial rounds up to the next day. The
-/// fraction is `(h*3600 + m*60 + s + ms/1000 + us/1e6) / 86400`.
+/// Uses the wall-clock fields only. The sub-second part (milliseconds and
+/// microseconds) is dropped: Excel shows a serial rounded to the second, so
+/// 23:59:59.999 would show as 00:00 on the next day. A caller who needs
+/// milliseconds writes the serial as a `double` with a `ss.000` format.
+/// Returns `null` for values outside Excel's range (before 1900-01-01 or
+/// after 9999-12-31). The fraction is `(h*3600 + m*60 + s) / 86400`.
 double? dateTimeSerial(DateTime value) {
   final days = dateSerial(value.year, value.month, value.day);
   if (days == null) return null;
-  final micros =
-      ((value.hour * 60 + value.minute) * 60 + value.second) * 1000000 +
-      value.millisecond * 1000 +
-      value.microsecond;
-  final double serial = days + micros / _microsPerDay;
-  // Near 3e6 doubles are spaced 2^-31 of a day apart (about 40 microseconds),
-  // so on 9999-12-31 a time within about 20 microseconds of midnight, such as
-  // 23:59:59.999999, rounds up to 2958466. That serial is outside Excel's
-  // range, so the value gets none and the caller writes it as text.
-  return serial >= _maxSerial + 1 ? null : serial;
+  final seconds = (value.hour * 60 + value.minute) * 60 + value.second;
+  return days + seconds / _secondsPerDay;
 }
 
 int _daysIn(int year, int month) {

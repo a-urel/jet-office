@@ -108,11 +108,12 @@ One sheet, `Dates`, values in A1:F1.
 - A1 `28.02.1900` (serial 59) and B1 `01.03.1900` (serial 61): Excel's
   fictitious 29.02.1900 sits between them.
 - C1 `24.10.2026 00:00`.
-- D1 is 23:59:59.999 on 24.10.2026, stored as serial 46319.99999998842.
+- D1 is a `DateTime` of 23:59:59.999 on 24.10.2026. The writer cuts it to
+  whole seconds, so it is stored as serial 46319.99998842592 (23:59:59).
   Excel should show `24.10.2026 23:59` on the built-in date-time format (no
-  seconds): the same day, the time cut to the minute and not rounded up to
-  00:00 on the 25th. With a custom format that shows seconds it should show
-  `23:59:59`. Record what it actually shows if it differs.
+  seconds): the same day, not rounded up to 00:00 on the 25th. With a custom
+  format that shows seconds it should show `23:59:59`. Record what it
+  actually shows if it differs.
 - E1 `1850-06-15T00:00:00.000`, left-aligned text: a date before 1900 has
   no Excel serial.
 - F1 `46.319,00`: a date written with the number format `#,##0.00`, so it
@@ -586,7 +587,7 @@ Problems a check found that the owner deferred. Each names the milestone that
 must close it. A closed issue stays here, marked closed, with the commit that
 closed it.
 
-### Sub-second times show the wrong minute (open, M5)
+### Sub-second times show the wrong minute (fixed in M5, awaiting the owner's re-check)
 
 Found in the M1 check on 2026-10-24, `m1_dates` D1. The owner accepted M1 with
 this issue open.
@@ -601,7 +602,11 @@ with US ones, and `=DAY(D1)` gave 24 and 25 on the same file. Any time less
 than half a second before a full minute probably shows the next minute. Only
 near midnight does the date change too.
 
-Options, to be decided at M5 before release:
+Fixed in the commit "Cut DateTime serials to whole seconds": a `DateTime` is
+cut to whole seconds, with no warning, and D1 now stores `46319.99998842592`
+(23:59:59). It stays open until the owner re-checks `m1_dates` in Excel.
+
+Options that were considered at M5:
 
 - Truncate a `DateTime` to whole seconds before computing its serial. Excel
   then shows the expected minute and day. The sub-second part is lost, but
