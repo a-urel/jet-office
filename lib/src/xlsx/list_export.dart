@@ -192,7 +192,11 @@ final class XlsxListExport {
   /// name of the workbook has throws the sheet's [ArgumentError] named
   /// `name`, and the table must be registered before the header row,
   /// whose range needs the row count: [rows] is read to the end first, so
-  /// a row longer than [columns] throws before anything is written.
+  /// a row longer than [columns] throws before anything is written. A
+  /// [List] is used as it is; any other [Iterable] is read into memory
+  /// first, so pass a [List] to avoid the copy. The writer's own table
+  /// errors (a name already taken, a range clash) come after the column,
+  /// freeze, print title and caption calls, which stay written.
   XlsxRange writeTo(XlsxSheetWriter sheet, Iterable<List<Object?>> rows) {
     _check();
     if (sheet.rowCount > 0) {
@@ -203,10 +207,9 @@ final class XlsxListExport {
     }
     final int width = columns.length;
     final int headerRow = caption == null ? 0 : 1;
+    // Every argument check comes before `rows` is read once.
+    if (excelTable) checkNameSyntax(tableName, 'tableName', table: true);
     final List<List<Object?>>? all = excelTable ? _readAll(rows) : null;
-    if (all != null) {
-      checkNameSyntax(tableName, 'tableName', table: true);
-    }
     sheet
       ..columns(<XlsxColumn?>[
         for (final XlsxListColumn c in columns)
@@ -249,18 +252,26 @@ final class XlsxListExport {
   }
 
   /// The entries of [rows], each no longer than the columns.
+  ///
+  /// A [List] is checked in one pass and used as it is; any other
+  /// [Iterable] is read once into a new list, because the table's range
+  /// needs the row count before the header row is written.
   List<List<Object?>> _readAll(Iterable<List<Object?>> rows) {
-    final List<List<Object?>> all = <List<Object?>>[];
+    final List<List<Object?>> all = rows is List<List<Object?>>
+        ? rows
+        : <List<Object?>>[];
+    int index = 0;
     for (final List<Object?> values in rows) {
       if (values.length > columns.length) {
         throw ArgumentError.value(
           values,
-          'rows[${all.length}]',
+          'rows[$index]',
           'The row has ${values.length} values for ${columns.length} '
               'columns.',
         );
       }
-      all.add(values);
+      if (!identical(all, rows)) all.add(values);
+      index++;
     }
     return all;
   }

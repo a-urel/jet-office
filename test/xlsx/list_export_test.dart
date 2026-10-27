@@ -361,10 +361,73 @@ void main() {
         excelTable: true,
       );
       export.writeTo(book.addSheet('One'), _twoRows);
+      final XlsxSheetWriter two = book.addSheet('Two');
       expect(
-        () => export.writeTo(book.addSheet('Two'), _twoRows),
+        () => XlsxListExport(
+          _codeAmount,
+          caption: 'C',
+          excelTable: true,
+        ).writeTo(two, _twoRows),
         _argumentError('name'),
       );
+      // The writer's own check comes after the settings and the caption.
+      expect(two.rowCount, 1);
+    });
+
+    test('a bad table name does not read a lazy rows', () {
+      int pulled = 0;
+      Iterable<List<Object?>> lazy() sync* {
+        pulled++;
+        yield <Object?>['A', 1];
+      }
+
+      final XlsxSheetWriter sheet = XlsxWriter().addSheet('S');
+      expect(
+        () => XlsxListExport(
+          _codeAmount,
+          excelTable: true,
+          tableName: '1st',
+        ).writeTo(sheet, lazy()),
+        _argumentError('tableName'),
+      );
+      expect(pulled, 0);
+      expect(sheet.rowCount, 0);
+    });
+
+    test('a lazy rows is read once and a List works', () {
+      int pulled = 0;
+      Iterable<List<Object?>> lazy() sync* {
+        for (final List<Object?> r in _twoRows) {
+          pulled++;
+          yield r;
+        }
+      }
+
+      final XlsxListExport export = XlsxListExport(
+        _codeAmount,
+        excelTable: true,
+      );
+      final Map<String, String> fromLazy = _parts(export, lazy());
+      expect(pulled, 2);
+      expect(fromLazy['xl/tables/table1.xml'], contains('ref="A1:B4"'));
+      expect(
+        _parts(export, _twoRows)['xl/tables/table1.xml'],
+        contains('ref="A1:B4"'),
+      );
+    });
+
+    test('a caller totalsStyle applies to the totals row', () {
+      final Map<String, String> parts = _parts(
+        XlsxListExport(
+          _codeAmount,
+          excelTable: true,
+          totalsStyle: const XlsxStyle(font: XlsxFont(bold: true)),
+        ),
+        _twoRows,
+      );
+      expect(_bold(parts, 'A4'), isTrue);
+      expect(_bold(parts, 'B4'), isTrue);
+      expect(_bold(parts, 'A1'), isFalse);
     });
 
     test('a bad table name throws before the sheet is touched', () {
