@@ -175,9 +175,28 @@ void main() {
         '2026-10-28T13:45+01:60',
         '2026-10-28+01:00',
         '2026-10-28T13:45:30.',
+        '2026-10-28Z',
       ]) {
         expect(parseIsoDateTime(s), isNull, reason: s);
       }
+    });
+
+    test('a result outside 0001 to 9999 is null', () {
+      for (final String s in <String>[
+        '0001-01-01T00:00+01:00',
+        '9999-12-31T23:59:59.9995',
+        '9999-12-31T23:30-01:00',
+      ]) {
+        expect(parseIsoDateTime(s), isNull, reason: s);
+      }
+      expect(
+        parseIsoDateTime('9999-12-31T23:59:59.999'),
+        DateTime.utc(9999, 12, 31, 23, 59, 59, 999),
+      );
+      expect(
+        parseIsoDateTime('0001-01-01T00:00-01:00'),
+        DateTime.utc(1, 1, 1, 1),
+      );
     });
   });
 }

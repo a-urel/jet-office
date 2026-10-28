@@ -134,13 +134,19 @@ final RegExp _iso = RegExp(
   r'(?:(Z)|([+-])(\d{2}):?(\d{2}))?)?$',
 );
 
+/// The earliest and latest results [parseIsoDateTime] returns.
+final DateTime _isoFirst = DateTime.utc(1);
+final DateTime _isoLast = DateTime.utc(9999, 12, 31, 23, 59, 59, 999);
+
 /// Parses ISO 8601 [text] to a UTC date and time, or returns `null`.
 ///
 /// The grammar is `YYYY-MM-DD`, optionally followed by `Thh:mm[:ss[.f+]]` and
 /// then `Z` or `±hh:mm` / `±hhmm`; years 0001 to 9999. An offset is
 /// subtracted, so the result is the UTC wall clock, and an offset needs a
-/// time. The fraction of a second rounds to the millisecond. Anything else,
-/// time-only text and impossible dates included, returns `null`.
+/// time. The fraction of a second rounds to the millisecond. A result the
+/// rounding or the offset moves outside 0001-01-01T00:00:00.000Z to
+/// 9999-12-31T23:59:59.999Z returns `null`, and so does anything else,
+/// time-only text and impossible dates included.
 DateTime? parseIsoDateTime(String text) {
   final RegExpMatch? m = _iso.firstMatch(text);
   if (m == null) return null;
@@ -174,8 +180,10 @@ DateTime? parseIsoDateTime(String text) {
     offset = Duration(hours: offHours, minutes: offMinutes);
     if (m[9] == '-') offset = -offset;
   }
-  return date
+  final DateTime result = date
       .add(Duration(hours: hour, minutes: minute, seconds: second))
       .add(Duration(milliseconds: ms))
       .subtract(offset);
+  if (result.isBefore(_isoFirst) || result.isAfter(_isoLast)) return null;
+  return result;
 }

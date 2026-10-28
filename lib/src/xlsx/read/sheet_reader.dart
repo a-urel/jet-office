@@ -404,6 +404,8 @@ final class _SheetWalker {
       FormulaType.normal => (group: null, invalid: false),
       FormulaType.shared when raw.formulaRef == null => _groups.follower(
         raw.formulaSi,
+        row: row,
+        column: raw.column,
       ),
       final FormulaType type => _groups.master(
         type,

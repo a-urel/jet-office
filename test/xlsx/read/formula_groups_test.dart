@@ -4,26 +4,25 @@ import 'package:jet_office/src/xlsx/read/cell_decoder.dart';
 import 'package:jet_office/src/xlsx/read/formula_groups.dart';
 import 'package:test/test.dart';
 
-typedef _Result = FormulaGroupResult;
-
 /// A result that is the valid master group of [kind] over [ref].
-Matcher _master(XlsxFormulaGroupKind kind, String ref) => isA<_Result>()
-    .having((_Result r) => r.invalid, 'invalid', isFalse)
-    .having(
-      (_Result r) => r.group,
-      'group',
-      XlsxFormulaGroup(kind, XlsxRange.parse(ref), isMaster: true),
-    );
+Matcher _master(XlsxFormulaGroupKind kind, String ref) =>
+    isA<FormulaGroupResult>()
+        .having((FormulaGroupResult r) => r.invalid, 'invalid', isFalse)
+        .having(
+          (FormulaGroupResult r) => r.group,
+          'group',
+          XlsxFormulaGroup(kind, XlsxRange.parse(ref), isMaster: true),
+        );
 
 /// A result that is invalid and has no group.
-final Matcher _invalid = isA<_Result>()
-    .having((_Result r) => r.invalid, 'invalid', isTrue)
-    .having((_Result r) => r.group, 'group', isNull);
+final Matcher _invalid = isA<FormulaGroupResult>()
+    .having((FormulaGroupResult r) => r.invalid, 'invalid', isTrue)
+    .having((FormulaGroupResult r) => r.group, 'group', isNull);
 
 void main() {
   test('shared master and followers', () {
     final FormulaGroups groups = FormulaGroups()..startRow(1);
-    final _Result master = groups.master(
+    final FormulaGroupResult master = groups.master(
       FormulaType.shared,
       row: 1,
       column: 1,
@@ -32,9 +31,9 @@ void main() {
     );
     expect(master, _master(XlsxFormulaGroupKind.shared, 'B2:B4'));
     groups.startRow(2);
-    final _Result a = groups.follower('0');
+    final FormulaGroupResult a = groups.follower('0', row: 2, column: 1);
     groups.startRow(3);
-    final _Result b = groups.follower('00');
+    final FormulaGroupResult b = groups.follower('00', row: 3, column: 1);
     const XlsxFormulaGroup follower = XlsxFormulaGroup(
       XlsxFormulaGroupKind.shared,
       XlsxRange(1, 1, 3, 1),
@@ -122,7 +121,11 @@ void main() {
         reason: '$type $ref',
       );
       // Nothing was defined.
-      expect(groups.follower('0'), _invalid, reason: '$type $ref');
+      expect(
+        groups.follower('0', row: 2, column: 1),
+        _invalid,
+        reason: '$type $ref',
+      );
       expect(groups.coveredBy(2, 2), isNull, reason: '$type $ref');
     }
   });
@@ -158,19 +161,55 @@ void main() {
       _master(XlsxFormulaGroupKind.shared, 'A1:A2'),
     );
     groups.startRow(1);
-    expect(groups.follower(si).group!.range, XlsxRange.parse('A1:A2'));
-    expect(groups.follower('${'9' * 39}8'), _invalid);
+    expect(
+      groups.follower(si, row: 1, column: 0).group!.range,
+      XlsxRange.parse('A1:A2'),
+    );
+    expect(groups.follower('${'9' * 39}8', row: 1, column: 0), _invalid);
   });
 
   test('unknown si and follower before master', () {
     final FormulaGroups groups = FormulaGroups()..startRow(0);
-    expect(groups.follower('0'), _invalid, reason: 'before its master');
-    expect(groups.follower(null), _invalid);
-    expect(groups.follower('-1'), _invalid);
+    expect(
+      groups.follower('0', row: 0, column: 1),
+      _invalid,
+      reason: 'before its master',
+    );
+    expect(groups.follower(null, row: 0, column: 1), _invalid);
+    expect(groups.follower('-1', row: 0, column: 1), _invalid);
     groups.master(FormulaType.shared, row: 0, column: 1, ref: 'B1:B3', si: '0');
     groups.startRow(1);
-    expect(groups.follower('1'), _invalid, reason: 'unknown');
-    expect(groups.follower('0').invalid, isFalse);
+    expect(
+      groups.follower('1', row: 1, column: 1),
+      _invalid,
+      reason: 'unknown',
+    );
+    expect(groups.follower('0', row: 1, column: 1).invalid, isFalse);
+  });
+
+  test("a follower outside its master's range is invalid", () {
+    final FormulaGroups groups = FormulaGroups()..startRow(0);
+    groups.master(FormulaType.shared, row: 0, column: 1, ref: 'B1:B2', si: '0');
+    groups.startRow(1);
+    expect(groups.follower('0', row: 1, column: 1).invalid, isFalse);
+    expect(groups.follower('0', row: 1, column: 2), _invalid, reason: 'C2');
+    expect(groups.follower('0', row: 1, column: 0), _invalid, reason: 'A2');
+    groups.startRow(2);
+    expect(groups.follower('0', row: 2, column: 1), _invalid, reason: 'B3');
+  });
+
+  test('a second shared master reusing an si takes over later followers', () {
+    final FormulaGroups groups = FormulaGroups()..startRow(0);
+    groups.master(FormulaType.shared, row: 0, column: 0, ref: 'A1:A2', si: '0');
+    groups.startRow(1);
+    final FormulaGroupResult first = groups.follower('0', row: 1, column: 0);
+    expect(first.group!.range, XlsxRange.parse('A1:A2'));
+    groups.startRow(2);
+    groups.master(FormulaType.shared, row: 2, column: 0, ref: 'A3:A4', si: '0');
+    groups.startRow(3);
+    final FormulaGroupResult second = groups.follower('0', row: 3, column: 0);
+    expect(second.group!.range, XlsxRange.parse('A3:A4'));
+    expect(second.invalid, isFalse);
   });
 
   test('an array overlapping an active one is invalid', () {
@@ -215,7 +254,7 @@ void main() {
     final Stopwatch watch = Stopwatch()..start();
     final FormulaGroups groups = FormulaGroups()..startRow(0);
     for (int c = 0; c < columns; c++) {
-      final _Result result = groups.master(
+      final FormulaGroupResult result = groups.master(
         FormulaType.array,
         row: 0,
         column: c,

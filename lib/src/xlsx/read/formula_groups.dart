@@ -50,7 +50,8 @@ final class _Active {
 /// cell range or does not contain the master, when a shared master's `si`
 /// is not a non-negative integer, and when an array or data-table range
 /// overlaps an active one. A follower is invalid when no master defined its
-/// `si` earlier in the sheet. An invalid `<f>` defines nothing.
+/// `si` earlier in the sheet, or when its cell is not inside the range of
+/// the master that did. An invalid `<f>` defines nothing.
 ///
 /// Active ranges are kept with disjoint columns, in a tree ordered by first
 /// column, so finding the range of a cell is a search in O(log n): a file
@@ -130,12 +131,25 @@ final class FormulaGroups {
     return (group: master, invalid: false);
   }
 
-  /// The group of a shared follower whose `si` is [si]: the one a master
-  /// defined earlier in the sheet.
-  FormulaGroupResult follower(String? si) {
+  /// The group of a shared follower at the 0-based [row] and [column]
+  /// whose `si` is [si]: the one the latest master of that `si` defined
+  /// earlier in the sheet, if the cell is inside its range.
+  FormulaGroupResult follower(
+    String? si, {
+    required int row,
+    required int column,
+  }) {
     final String? key = _key(si);
     final XlsxFormulaGroup? group = key == null ? null : _shared[key];
-    return group == null ? _invalid : (group: group, invalid: false);
+    if (group == null) return _invalid;
+    final XlsxRange range = group.range;
+    if (row < range.firstRow ||
+        row > range.lastRow ||
+        column < range.firstColumn ||
+        column > range.lastColumn) {
+      return _invalid;
+    }
+    return (group: group, invalid: false);
   }
 
   /// The follower group of the active array or data-table range holding

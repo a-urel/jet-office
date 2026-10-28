@@ -208,7 +208,8 @@ final class XlsxReader {
   ///
   /// Throws a [RangeError] when [index] is not the index of a sheet, and an
   /// [XlsxReadException] when the part is Strict OOXML or not well-formed
-  /// XML; nothing is kept then, so a later call tries again.
+  /// XML; nothing is kept then, no warning of the failed pass is added, and
+  /// a later call tries again.
   List<XlsxRange> mergesAt(int index) {
     RangeError.checkValidIndex(index, sheets, 'index');
     final List<XlsxRange>? cached = _merges[index];
@@ -216,11 +217,20 @@ final class XlsxReader {
     final String? part = _parts[index];
     if (part == null) return _merges[index] = const <XlsxRange>[];
     final String name = sheets[index].name;
-    void warn(XlsxWarningCode code, String? cell, {String? detail}) => _warnings
-        .add(code, sheet: name, cell: cell, detail: detail, key: index);
-    return _merges[index] = List<XlsxRange>.unmodifiable(
+    // Held back until the pass succeeds, so a failed one that is retried
+    // does not count its warnings twice.
+    final List<(XlsxWarningCode, String?, String?)> pending =
+        <(XlsxWarningCode, String?, String?)>[];
+    void warn(XlsxWarningCode code, String? cell, {String? detail}) =>
+        pending.add((code, cell, detail));
+    final List<XlsxRange> merges = List<XlsxRange>.unmodifiable(
       readMerges(_package, part, warn: warn),
     );
+    for (final (XlsxWarningCode code, String? cell, String? detail)
+        in pending) {
+      _warnings.add(code, sheet: name, cell: cell, detail: detail, key: index);
+    }
+    return _merges[index] = merges;
   }
 
   /// The cell formats of the workbook's styles part; [StyleTable.empty]

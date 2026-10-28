@@ -39,6 +39,14 @@ void main() {
       '"d"0': FormatKind.number,
       r'\d0': FormatKind.number,
       'yyyy-mm-dd;-0;0;@': FormatKind.number,
+      'yyyy-mm-dd;"-"': FormatKind.date,
+      'dd.mm.yyyy;;"-"': FormatKind.date,
+      '"abc"': FormatKind.number,
+      '0;"-"': FormatKind.number,
+      '"abc': FormatKind.number,
+      '[Red': FormatKind.number,
+      'yyyy-mm-dd;-0;0;h:mm': FormatKind.number,
+      'General;yyyy': FormatKind.date,
     };
     for (final MapEntry<String, FormatKind> e in table.entries) {
       expect(classifyFormatCode(e.key), e.value, reason: e.key);

@@ -150,6 +150,45 @@ void main() {
     );
   });
 
+  test('a failed pass adds no warnings', () {
+    final XlsxReader r = _reader(
+      '<worksheet xmlns="$mainNs"><mergeCells><mergeCell ref="bad"/>'
+      '<mergeCell ref="A1:B2">',
+    );
+    expect(() => r.mergesAt(0), throwsA(isA<XlsxReadException>()));
+    expect(() => r.mergesAt(0), throwsA(isA<XlsxReadException>()));
+    expect(_count(r, XlsxWarningCode.mergeRangeInvalid), 0);
+    expect(r.warnings, isEmpty);
+  });
+
+  test('a mergeCell with child elements still reads its ref', () {
+    final XlsxReader r = _reader(
+      _sheet(
+        '<mergeCells><mergeCell ref="A1:B2"><extLst><ext uri="x"/></extLst>'
+        '</mergeCell><mergeCell ref="C1:D1"/></mergeCells>',
+      ),
+    );
+    expect(r.mergesAt(0), <XlsxRange>[
+      XlsxRange.parse('A1:B2'),
+      XlsxRange.parse('C1:D1'),
+    ]);
+    expect(r.warnings, isEmpty);
+  });
+
+  test('a second mergeCells element is also read', () {
+    final XlsxReader r = _reader(
+      _sheet(
+        '<mergeCells><mergeCell ref="A1:B2"/></mergeCells>'
+        '<phoneticPr fontId="1"/>'
+        '<mergeCells><mergeCell ref="C3:D4"/></mergeCells>',
+      ),
+    );
+    expect(r.mergesAt(0), <XlsxRange>[
+      XlsxRange.parse('A1:B2'),
+      XlsxRange.parse('C3:D4'),
+    ]);
+  });
+
   test('unknown name throws ArgumentError, bad index RangeError', () {
     final XlsxReader r = _reader(_sheet(''));
     expect(() => r.merges('Nope'), throwsArgumentError);

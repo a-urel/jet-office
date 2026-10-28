@@ -194,6 +194,19 @@ void main() {
     expect(_warnings(r), <String>['formulaGroupInvalid A1,B1,C1,A2']);
   });
 
+  test("a shared follower outside its master's ref is invalid", () {
+    final XlsxReader r = _reader(
+      '<row r="1"><c r="A1"><f t="shared" ref="A1:A2" si="0">B1</f>'
+      '<v>1</v></c></row>'
+      '<row r="2"><c r="A2"><f t="shared" si="0"/><v>2</v></c>'
+      '<c r="B2"><f t="shared" si="0">C2</f><v>3</v></c></row>',
+    );
+    final List<XlsxReadCell> cells = r.rows('S').last.cells;
+    expect(cells[0].formulaGroup!.range, XlsxRange.parse('A1:A2'));
+    expect(cells[1], XlsxReadCell(1, XlsxDecimal('3'), formula: 'C2'));
+    expect(_warnings(r), <String>['formulaGroupInvalid B2']);
+  });
+
   test('formulaGroupInvalid comes with a content warning', () {
     final XlsxReader r = _reader(
       '<row r="1"><c r="A1"><f t="shared" si="3"/><v>abc</v></c>'

@@ -22,15 +22,20 @@ enum FormatKind {
 ///
 /// Sections are separated by `;` outside quoted literals (`"..."`), the
 /// character after `\`, `_` or `*`, and `[...]` brackets. Only the first
-/// three count; the fourth is text. A section is neutral when it is empty,
-/// holds `@` outside literals, or is `General`; otherwise it is a date when
-/// it has `d`, `y` or a month, a time when it has only hours, minutes and
-/// seconds, and a number when it has none of them.
+/// three count; the fourth is text. A section is neutral when it holds `@`
+/// outside literals, or when it has no date or time token and either is
+/// `General` or has no digit placeholder (`0`, `#` or `?` outside
+/// literals), so an empty section and one of literals only (`"-"`) are
+/// neutral. Otherwise it is a date when it has `d`, `y` or a month, a time
+/// when it has only hours, minutes and seconds, and a number when it has
+/// none of them.
 ///
 /// The result is [FormatKind.date] (or [FormatKind.time]) when at least one
 /// section is not neutral and every section that is not neutral is a date
-/// (or every one is a time); otherwise [FormatKind.number]. So `yyyy-mm-dd;@`
-/// is a date, while `yyyy-mm-dd;h:mm` and `0.00;0.00;h:mm` are numbers.
+/// (or every one is a time); otherwise [FormatKind.number]. So
+/// `yyyy-mm-dd;@`, `yyyy-mm-dd;"-"` and `dd.mm.yyyy;;"-"` are dates, while
+/// `yyyy-mm-dd;h:mm`, `0.00;0.00;h:mm` and `0;"-"` are numbers, and so is a
+/// code of neutral sections only (`"abc"`).
 ///
 /// Within a section, `m` is minutes when the previous token is `h` or the
 /// next is `s` (an elapsed `[h]` or `[s]` counts), and a month otherwise; a
@@ -55,13 +60,11 @@ FormatKind classifyFormatCode(String code) {
       if (close < 0) {
         ended = true;
       } else {
-        section.hasContent = true;
         i = close + 1;
       }
     } else if (c == r'\' || c == '_' || c == '*') {
       // The next character is a literal, a width or a fill; a lone one at
       // the end is skipped harmlessly.
-      section.hasContent = true;
       i += 2;
     } else if (c == '[') {
       final int close = code.indexOf(']', i + 1);
@@ -75,10 +78,8 @@ FormatKind classifyFormatCode(String code) {
       section.hasGeneral = true;
       i += _generalWord.length;
     } else if (_isWordAt(code, i, _amPm)) {
-      section.hasContent = true;
       i += _amPm.length;
     } else if (_isWordAt(code, i, _aP)) {
-      section.hasContent = true;
       i += _aP.length;
     } else if (c == '@') {
       section.hasAt = true;
@@ -90,10 +91,9 @@ FormatKind classifyFormatCode(String code) {
         end++;
       }
       section.tokens.add(_Token(letter, end - i, elapsed: false));
-      section.hasContent = true;
       i = end;
     } else {
-      if (c.trim().isNotEmpty) section.hasContent = true;
+      if (_digitPlaceholders.contains(c)) section.hasDigit = true;
       i++;
     }
   }
@@ -105,6 +105,7 @@ const String _generalWord = 'general';
 const String _amPm = 'am/pm';
 const String _aP = 'a/p';
 const String _tokenLetters = 'dmyhsDMYHS';
+const String _digitPlaceholders = '0#?';
 
 /// Whether [code] holds the lowercase [word] at [i], in any case.
 bool _isWordAt(String code, int i, String word) =>
@@ -128,8 +129,9 @@ final class _Section {
   bool hasAt = false;
   bool hasGeneral = false;
 
-  /// Whether anything but whitespace and skipped brackets was seen.
-  bool hasContent = false;
+  /// Whether a digit placeholder (`0`, `#` or `?`) was seen outside
+  /// literals.
+  bool hasDigit = false;
 
   void addBracket(String content) {
     final String lower = content.toLowerCase();
@@ -137,11 +139,10 @@ final class _Section {
         'hms'.contains(lower[0]) &&
         lower.split('').every((String ch) => ch == lower[0])) {
       tokens.add(_Token(lower[0], lower.length, elapsed: true));
-      hasContent = true;
     }
   }
 
-  bool get isNeutral => !hasContent || hasAt || (hasGeneral && tokens.isEmpty);
+  bool get isNeutral => hasAt || (tokens.isEmpty && (hasGeneral || !hasDigit));
 
   FormatKind get kind {
     var hasDate = false;
