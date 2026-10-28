@@ -119,10 +119,15 @@ final class XlsxDecimal {
     }
   }
 
-  /// The number as written to the file.
+  /// The number as written to the file. For a cell the reader returns,
+  /// the digits the file wrote, with any exponent applied (`1.5E3` is
+  /// `1500`).
   final String digits;
 
-  /// The number as a `double`, rounded to the nearest representable value.
+  /// The number as a `double`, rounded to the nearest representable value:
+  /// `0.0` (or `-0.0`) when it is too small and `double.infinity` (or its
+  /// negative) when it is too large, which a number read from a file with
+  /// an exponent up to 400 can be.
   double toDouble() => double.parse(digits);
 
   /// The number as an `int`, or `null` when it is not a whole number or its

@@ -60,8 +60,8 @@ enum XlsxWarningCode {
   sheetPartMissing,
 
   /// Reading: a `t="s"` cell points to a shared string that does not exist
-  /// (index out of range, or the package has no shared strings). The cell's
-  /// value is `null`.
+  /// (an index that is not a non-negative integer or is out of range, or the
+  /// package has no shared strings). The cell's value is `null`.
   sharedStringInvalid,
 
   /// Reading: a numeric cell holds text that is not a finite number (for
@@ -73,21 +73,26 @@ enum XlsxWarningCode {
   /// cell's value is `null`.
   booleanInvalid,
 
-  /// Reading: a cell has a type the reader does not support (`inlineStr`,
-  /// `e`, `d` or an unknown `t`). The cell's value is `null`.
+  /// Reading: a cell has a `t` the reader does not know, and its value is
+  /// `null`; or it holds an inline string (`<is>`) although its `t` is not
+  /// `inlineStr`, and that text is not read (the value comes from the `t`
+  /// and any `<v>`).
   cellTypeUnsupported,
 
-  /// Reading: a formula cell has no saved result (`<f>` without `<v>`). The
-  /// cell's value is `null`.
+  /// Reading: a formula cell has no saved result (`<f>` without `<v>` or
+  /// `<is>`). The cell's value is `null`; its formula text is kept.
   formulaWithoutValue,
 
-  /// Reading: a cell's `r` attribute is not a valid A1 reference. The cell
-  /// is placed in the column after the previous cell of its row, and keeps
-  /// its value.
+  /// Reading: a cell's `r` attribute is not a valid A1 reference or names
+  /// another row, or a row's `r` is not a number (the warning then names
+  /// the row's first cell). A cell is placed in the column after the
+  /// previous cell of its row and keeps its value; a row follows the
+  /// previous row.
   cellReferenceInvalid,
 
-  /// Reading: two cells of one row have the same reference. The last one is
-  /// kept and replaces the first.
+  /// Reading: two cells of one row have the same column, or one cell
+  /// repeats its `<v>`, `<f>` or `<is>`. The last one is kept and replaces
+  /// the first.
   cellDuplicated,
 
   /// Reading: a row's index is not greater than the previous row's. The row
@@ -107,18 +112,21 @@ enum XlsxWarningCode {
   /// the first ten of a sheet.
   unresolvedNumberFormat,
 
-  /// Reading: a cell's style index points to a cell format that does not
-  /// exist or cannot be read. The cell reads with the General format.
+  /// Reading: a number cell's style index points to a cell format that does
+  /// not exist or cannot be read. The cell reads with the General format;
+  /// a string, boolean or error cell with such a style gets no warning, as
+  /// its value is intact.
   styleInvalid,
 
   /// Reading: a cell is formatted as a date or time but holds a number no
-  /// date or time can have (negative, or beyond the year 9999).
-  /// It reads as a number.
+  /// date or time can have: for a date, negative or beyond 9999-12-31; for
+  /// a time, 100,000 days or more either side of zero. It reads as a
+  /// number.
   serialOutOfRange,
 
-  /// Reading: a date-formatted cell holds the serial 60, 29 February 1900,
-  /// a day that did not exist (Excel counts it for compatibility). It reads
-  /// as a number.
+  /// Reading: a date-formatted cell of a 1900-based workbook holds the
+  /// serial 60, 29 February 1900, a day that did not exist (Excel counts it
+  /// for compatibility). It reads as a number.
   phantomLeapDay,
 
   /// Reading: a `t="d"` cell holds text that is not a valid ISO 8601 date.
@@ -135,7 +143,8 @@ enum XlsxWarningCode {
   formulaGroupInvalid,
 
   /// Reading: a merged range has a missing or invalid reference and was
-  /// skipped. One warning per sheet; it names no cell.
+  /// skipped. One warning per sheet, whose [XlsxWarning.count] is the
+  /// number of ranges skipped; it names no cell.
   mergeRangeInvalid,
 }
 
@@ -192,13 +201,18 @@ final class XlsxWarning {
   final List<String> _cells = <String>[];
   late final List<String> _cellsView = UnmodifiableListView<String>(_cells);
 
-  /// How many cells (or, for a sheet-name warning, sheets) are affected.
+  /// How many times the problem occurred: the affected cells of a
+  /// cell-level warning, the skipped ranges of
+  /// [XlsxWarningCode.mergeRangeInvalid], and 1 for a warning about a whole
+  /// sheet (a sheet-name warning or [XlsxWarningCode.sheetPartMissing]).
   int get count => _count;
 
-  /// A1-style references of the first ten affected cells, in write order.
+  /// A1-style references of the first ten affected cells, in the order
+  /// they were written or read.
   ///
-  /// Empty for sheet-name warnings. An unmodifiable view, the same object on
-  /// every call, that shows references added later.
+  /// Empty for a warning that names no cell, such as a sheet-name warning.
+  /// An unmodifiable view, the same object on every call, that shows
+  /// references added later.
   List<String> get cells => _cellsView;
 
   /// A human-readable description in [locale].

@@ -1,12 +1,15 @@
 /// The limits that keep a hostile XLSX upload from exhausting memory.
+///
+/// @docImport 'read_exception.dart';
 library;
 
 /// Limits applied while reading an XLSX file.
 ///
-/// The defaults suit user uploads: a 100,000 row by 12 column sheet is about
-/// 50 MB of XML, so [maxEntryBytes] leaves four times that. Exceeding a
-/// limit throws an `XlsxReadException` of reason `limitExceeded` that names
-/// the limit.
+/// The defaults suit user uploads: a 100,000 row by 12 column sheet of
+/// mixed values is about 44 MB of XML, so [maxEntryBytes] leaves about six
+/// times that. Exceeding a limit throws an [XlsxReadException] of reason
+/// [XlsxReadFailure.limitExceeded] that names the limit; [check] throws an
+/// [ArgumentError] for a limit below 1.
 final class XlsxReadLimits {
   /// Creates limits; every value must be at least 1 (see [check]).
   const XlsxReadLimits({
@@ -31,7 +34,8 @@ final class XlsxReadLimits {
   /// The most bytes all entries may declare uncompressed together.
   final int maxTotalBytes;
 
-  /// The highest uncompressed-to-compressed ratio of a large entry.
+  /// The highest uncompressed-to-compressed ratio of an entry that declares
+  /// more than 1 MiB uncompressed; smaller entries are not checked.
   final int maxCompressionRatio;
 
   /// The most items a shared strings table may hold.
@@ -40,8 +44,8 @@ final class XlsxReadLimits {
   /// The deepest element nesting an XML part may have.
   final int maxDepth;
 
-  /// The most characters one text value (a shared string, a `<v>` or an
-  /// `<f>`) may have.
+  /// The most characters one text value (a shared or inline string, a
+  /// `<v>`, an `<f>` or a number format code) may have.
   final int maxTextLength;
 
   /// The most `<sheet>` entries a workbook may list.

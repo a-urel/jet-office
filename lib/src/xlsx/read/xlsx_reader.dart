@@ -24,6 +24,9 @@ import 'workbook_reader.dart';
 /// One sheet of a workbook opened by [XlsxReader].
 final class XlsxReadSheet {
   /// A sheet called [name] at the 0-based [index], shown as [visibility].
+  ///
+  /// The reader builds these; the constructor is public so that a caller
+  /// can build expected values in its own tests.
   const XlsxReadSheet(this.name, this.index, this.visibility);
 
   /// The sheet name as written in the file.
@@ -52,7 +55,7 @@ final class XlsxReadSheet {
 /// decompressed when its [rows] are first iterated, and rows are parsed as
 /// they are taken, so stopping early does no further work. A sheet's
 /// merged ranges are read by a separate pass over its part, on the first
-/// call to [merges], and kept. Every call is synchronous.
+/// call to [merges] or [mergesAt], and kept. Every call is synchronous.
 ///
 /// ```dart
 /// final XlsxReader reader = XlsxReader(bytes);
@@ -128,9 +131,12 @@ final class XlsxReader {
   /// What could not be read exactly, aggregated per sheet and
   /// [XlsxWarningCode].
   ///
-  /// An unmodifiable live view: it grows as rows are read. Iterating a
-  /// sheet's [rows] again replaces that sheet's warnings, and an older
-  /// iteration of the same sheet adds none after the newer one starts.
+  /// An unmodifiable live view: it grows as rows are read, so a sheet's
+  /// warnings are complete once its [rows] have been iterated to the end
+  /// and, for [XlsxWarningCode.mergeRangeInvalid], its [merges] read.
+  /// Iterating a sheet's [rows] again replaces that sheet's warnings, and
+  /// an older iteration of the same sheet adds none after the newer one
+  /// starts.
   /// Sheets that share a name, which a damaged file may hold, keep separate
   /// warnings.
   List<XlsxWarning> get warnings => _warnings.warnings;
