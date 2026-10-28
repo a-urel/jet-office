@@ -81,4 +81,41 @@ void main() {
     expect(cells, <String>['A1', 'A2']);
     expect(warnings, hasLength(2));
   });
+
+  test('removeSheet drops that sheet and keeps the order of the rest', () {
+    final WarningCollector c = WarningCollector()
+      ..add(XlsxWarningCode.numberInvalid, sheet: 'A', cell: 'A1')
+      ..add(XlsxWarningCode.numberInvalid, sheet: 'B', cell: 'A1')
+      ..add(XlsxWarningCode.cellDuplicated, sheet: 'A', cell: 'A2')
+      ..add(XlsxWarningCode.cellDuplicated, sheet: 'B', cell: 'A2');
+    c.removeSheet('A');
+    expect(
+      c.warnings.map((XlsxWarning w) => (w.code, w.sheet)).toList(),
+      <(XlsxWarningCode, String)>[
+        (XlsxWarningCode.numberInvalid, 'B'),
+        (XlsxWarningCode.cellDuplicated, 'B'),
+      ],
+    );
+  });
+
+  test('a later add after removeSheet starts a fresh warning', () {
+    final WarningCollector c = WarningCollector()
+      ..add(XlsxWarningCode.numberInvalid, sheet: 'A', cell: 'A1')
+      ..add(XlsxWarningCode.numberInvalid, sheet: 'A', cell: 'A2');
+    final XlsxWarning old = c.warnings.single;
+    c.removeSheet('A');
+    expect(c.warnings, isEmpty);
+    c.add(XlsxWarningCode.numberInvalid, sheet: 'A', cell: 'C3');
+    expect(c.warnings, hasLength(1));
+    expect(identical(c.warnings.single, old), isFalse);
+    expect(c.warnings.single.count, 1);
+    expect(c.warnings.single.cells, <String>['C3']);
+  });
+
+  test('removeSheet on an unknown sheet changes nothing', () {
+    final WarningCollector c = WarningCollector()
+      ..add(XlsxWarningCode.numberInvalid, sheet: 'A', cell: 'A1');
+    c.removeSheet('Z');
+    expect(c.warnings, hasLength(1));
+  });
 }

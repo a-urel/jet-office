@@ -31,12 +31,28 @@
 /// web worker and send the bytes of the [XlsxResult], or the chunks an
 /// [XlsxStreamWriter] sends to its sink, back to the caller.
 ///
+/// [XlsxReader] reads an XLSX file from bytes, such as a user's upload for
+/// a data import. It treats the file as untrusted: opening it reads only the
+/// ZIP directory and the workbook, [XlsxReader.sheets] lists the sheets, and
+/// [XlsxReader.rows] parses a sheet lazily as its [XlsxReadRow]s are taken,
+/// each holding [XlsxReadCell]s whose values are `String`, `bool`,
+/// [XlsxDecimal] or `null`. Reading is synchronous, like writing. A file
+/// that cannot be read at all (not a ZIP, encrypted, a legacy `.xls`,
+/// malformed XML, or past one of the [XlsxReadLimits]) throws an
+/// [XlsxReadException] whose [XlsxReadFailure] says why; a cell or sheet
+/// that cannot be read exactly is kept as far as possible and reported in
+/// [XlsxReader.warnings], with the same [XlsxWarning] type the writers use.
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
 /// @docImport 'src/xlsx/hyperlink.dart';
 /// @docImport 'src/xlsx/limits.dart';
 /// @docImport 'src/xlsx/list_export.dart';
+/// @docImport 'src/xlsx/read/read_exception.dart';
+/// @docImport 'src/xlsx/read/read_limits.dart';
+/// @docImport 'src/xlsx/read/sheet_reader.dart';
+/// @docImport 'src/xlsx/read/xlsx_reader.dart';
 /// @docImport 'src/xlsx/rich_text.dart';
 /// @docImport 'src/xlsx/sheet_writer.dart';
 /// @docImport 'src/xlsx/style.dart';
@@ -110,6 +126,11 @@ export 'src/xlsx/page_setup.dart'
         XlsxPaperSize;
 export 'src/xlsx/properties.dart' show XlsxProperties;
 export 'src/xlsx/range.dart' show XlsxRange;
+export 'src/xlsx/read/read_exception.dart'
+    show XlsxReadException, XlsxReadFailure;
+export 'src/xlsx/read/read_limits.dart' show XlsxReadLimits;
+export 'src/xlsx/read/sheet_reader.dart' show XlsxReadCell, XlsxReadRow;
+export 'src/xlsx/read/xlsx_reader.dart' show XlsxReadSheet, XlsxReader;
 export 'src/xlsx/rich_text.dart' show XlsxRichText, XlsxTextRun;
 export 'src/xlsx/sheet_protection.dart'
     show XlsxSheetProtection, XlsxWorkbookProtection;

@@ -79,6 +79,122 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
     XlsxWarningCode.dateInNonDateFormat,
     XlsxLocale.tr,
   ): '“S” sayfasındaki 1 tarih, tarih göstermeyen bir sayı biçimi kullanıyor (A1).',
+  (
+    XlsxWarningCode.sheetPartMissing,
+    XlsxLocale.en,
+  ): "Sheet 'S' is listed in the workbook but its part is missing; it reads as empty.",
+  (
+    XlsxWarningCode.sheetPartMissing,
+    XlsxLocale.de,
+  ): 'Das Blatt „S“ ist in der Arbeitsmappe aufgeführt, aber sein Teil fehlt in der Datei; es wird als leer gelesen.',
+  (
+    XlsxWarningCode.sheetPartMissing,
+    XlsxLocale.tr,
+  ): '“S” sayfası çalışma kitabında listeleniyor ancak sayfa parçası dosyada yok; boş okunuyor.',
+  (
+    XlsxWarningCode.sharedStringInvalid,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' point to a shared string that does not exist; they read as empty (A1).",
+  (
+    XlsxWarningCode.sharedStringInvalid,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ verweisen auf eine gemeinsame Zeichenfolge, die nicht existiert; sie werden als leer gelesen (A1).',
+  (
+    XlsxWarningCode.sharedStringInvalid,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücre, var olmayan bir paylaşılan dizeye başvuruyor; boş okunuyor (A1).',
+  (
+    XlsxWarningCode.numberInvalid,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' hold a number that cannot be read; they read as empty (A1).",
+  (
+    XlsxWarningCode.numberInvalid,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ enthalten eine Zahl, die nicht gelesen werden kann; sie werden als leer gelesen (A1).',
+  (
+    XlsxWarningCode.numberInvalid,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücre okunamayan bir sayı içeriyor; boş okunuyor (A1).',
+  (
+    XlsxWarningCode.booleanInvalid,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' hold a boolean other than 0 or 1; they read as empty (A1).",
+  (
+    XlsxWarningCode.booleanInvalid,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ enthalten einen Wahrheitswert, der weder 0 noch 1 ist; sie werden als leer gelesen (A1).',
+  (
+    XlsxWarningCode.booleanInvalid,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücre 0 veya 1 dışında bir mantıksal değer içeriyor; boş okunuyor (A1).',
+  (
+    XlsxWarningCode.cellTypeUnsupported,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' have a type the reader does not support; they read as empty (A1).",
+  (
+    XlsxWarningCode.cellTypeUnsupported,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ haben einen Typ, den der Reader nicht unterstützt; sie werden als leer gelesen (A1).',
+  (
+    XlsxWarningCode.cellTypeUnsupported,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücre, okuyucunun desteklemediği bir türde; boş okunuyor (A1).',
+  (
+    XlsxWarningCode.formulaWithoutValue,
+    XlsxLocale.en,
+  ): "1 formula cell(s) on sheet 'S' have no saved result; they read as empty (A1).",
+  (
+    XlsxWarningCode.formulaWithoutValue,
+    XlsxLocale.de,
+  ): '1 Formelzelle(n) im Blatt „S“ haben kein gespeichertes Ergebnis; sie werden als leer gelesen (A1).',
+  (
+    XlsxWarningCode.formulaWithoutValue,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 formül hücresinin kayıtlı sonucu yok; boş okunuyor (A1).',
+  (
+    XlsxWarningCode.cellReferenceInvalid,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' have an invalid reference; they were placed after the previous cell (A1).",
+  (
+    XlsxWarningCode.cellReferenceInvalid,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ haben einen ungültigen Zellbezug; sie wurden hinter der vorherigen Zelle eingefügt (A1).',
+  (
+    XlsxWarningCode.cellReferenceInvalid,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücrenin başvurusu geçersiz; hücre, önceki hücrenin ardına yerleştirildi (A1).',
+  (
+    XlsxWarningCode.cellDuplicated,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' appear more than once; the last one was kept (A1).",
+  (
+    XlsxWarningCode.cellDuplicated,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ kommen mehrfach vor; die letzte wurde beibehalten (A1).',
+  (
+    XlsxWarningCode.cellDuplicated,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücre birden fazla kez geçiyor; sonuncusu korundu (A1).',
+  (
+    XlsxWarningCode.rowOutOfOrder,
+    XlsxLocale.en,
+  ): "1 row(s) on sheet 'S' are out of order; they were read in file order (A1).",
+  (
+    XlsxWarningCode.rowOutOfOrder,
+    XlsxLocale.de,
+  ): '1 Zeile(n) im Blatt „S“ stehen nicht in der richtigen Reihenfolge; sie wurden in der Reihenfolge der Datei gelesen (A1).',
+  (XlsxWarningCode.rowOutOfOrder, XlsxLocale.tr):
+      '“S” sayfasındaki 1 satır sırasız; dosyadaki sırayla okundu (A1).',
+  (XlsxWarningCode.cellOutsideSheet, XlsxLocale.en):
+      "1 cell(s) on sheet 'S' lie outside Excel's grid and were skipped (A1).",
+  (
+    XlsxWarningCode.cellOutsideSheet,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ liegen außerhalb des Excel-Rasters und wurden übersprungen (A1).',
+  (
+    XlsxWarningCode.cellOutsideSheet,
+    XlsxLocale.tr,
+  ): "“S” sayfasındaki 1 hücre, Excel'in ızgarasının dışında kaldığı için atlandı (A1).",
 };
 
 void main() {
@@ -160,13 +276,13 @@ void main() {
     );
   });
 
-  test('all 21 messages are worded exactly as specified', () {
+  test('all 51 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, XlsxLocale)> keys =
         <(XlsxWarningCode, XlsxLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final XlsxLocale locale in XlsxLocale.values) (code, locale),
         ];
-    expect(keys, hasLength(21));
+    expect(keys, hasLength(51));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, XlsxLocale) key in keys) {
       final XlsxWarning w =

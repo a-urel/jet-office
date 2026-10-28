@@ -107,6 +107,27 @@ void main() {
     }
   });
 
+  group('matchCellRef', () {
+    test('splits a reference without checking the sheet bounds', () {
+      expect(matchCellRef(r'$b$2'), (row: 1, column: 1));
+      expect(matchCellRef('XFE1'), (row: 0, column: 16384));
+      expect(matchCellRef('ZZZ9999999'), (row: 9999998, column: 18277));
+    });
+    test('is null for what the pattern refuses', () {
+      for (final String bad in <String>[
+        'A',
+        '1',
+        'A0',
+        'A01',
+        'AAAA1',
+        'A 1',
+      ]) {
+        expect(matchCellRef(bad), isNull, reason: bad);
+      }
+      expect(matchCellRef('A12345678'), isNull);
+    });
+  });
+
   group('parseCellRef', () {
     test('accepts dollars and either case', () {
       expect(parseCellRef('B2'), (row: 1, column: 1));

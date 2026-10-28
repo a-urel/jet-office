@@ -4,7 +4,8 @@
 DOCX files. It has no editors, no rendering and no PDF. It is ported from
 `quds_office_engine` (MIT); see `docs/decisions/0001`, `0002`, `0003`,
 `0004` (which supersedes part of `0003`), `0005` (which supersedes ruling
-R10 in `docs/xlsx-writer.md`) and `0006` (ZIP bytes may differ by platform)
+R10 in `docs/xlsx-writer.md`), `0006` (ZIP bytes may differ by platform)
+and `0007` (phase 2: a fast reader for import; files are untrusted input)
 before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
@@ -64,8 +65,10 @@ dart run tool/compare_csv.dart build/fixtures
   generated: after a message changes, run
   `dart run tool/warning_messages.dart > docs/warning-messages.md`.
   `test/tool/warning_messages_test.dart` fails when the file is stale.
-- Neither is Excel. The owner opens each milestone's fixtures in Excel and
-  records the result in `docs/excel-checks.md`.
+- Neither is Excel. The owner opens each writer milestone's fixtures in Excel
+  and records the result in `docs/excel-checks.md`. Reader milestones (phase
+  2, R1 to R4) have no such check: Excel produces their input, and the owner
+  supplies Excel and Google Sheets files instead (`0007`).
 
 ## Benchmark
 
@@ -91,6 +94,9 @@ dart test -p chrome benchmark
   `test/architecture/archive_isolation_test.dart`.
 - **One cell encoder.** Only `lib/src/xlsx/cell_encoder.dart` writes `<c ` or
   `<v>` (decision 0002). Enforced by `test/architecture/cell_encoder_test.dart`.
+- **One cell decoder.** Only `lib/src/xlsx/read/cell_decoder.dart`
+  interprets a cell's `t` attribute (decision 0007). Enforced by
+  `test/architecture/cell_decoder_test.dart`.
 - **Every warning code has a message in `en`, `de` and `tr`.** Enforced by
   `test/architecture/warning_messages_test.dart`.
 - **Tests come first.** Write the failing test, watch it fail, then implement.
@@ -109,8 +115,9 @@ dart test -p chrome benchmark
 ## Reference
 
 Quds is cloned read-only next to this repo at `../quds_office_suite`. The port
-map is in `docs/xlsx-writer.md`, "Port map". Read the Quds file before porting
-it, and never import from it.
+map for the writer is in `docs/xlsx-writer.md`, "Port map"; the reader's is in
+`docs/xlsx-reader.md`, "Port map", with the rules the reader enforces. Read
+the Quds file before porting it, and never import from it.
 
 `docs/superpowers/` is git-ignored: working designs and plans live there and
 are not repository history. Knowledge that must outlive a branch goes in a

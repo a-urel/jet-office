@@ -104,4 +104,33 @@ void main() {
     expect(escapeFormulaText('A1_x'), 'A1_x');
     expect(() => escapeFormulaText('a\u0001'), throwsArgumentError);
   });
+
+  group('decodeXstring', () {
+    test('decodes escapes', () {
+      expect(decodeXstring('a_x0009_b'), 'a\tb');
+      expect(decodeXstring('_x0041__x0042_'), 'AB');
+      expect(decodeXstring('_x004a_'), 'J');
+    });
+    test('reverses escapeXstring, overlaps included', () {
+      for (final String s in <String>[
+        '_x0041_',
+        '_x0041_x0042_',
+        '_x005F_',
+        '_x005f_',
+        'a_x00',
+        '__x0041_',
+        'plain',
+        '',
+        '_x_',
+        '_x12345_',
+      ]) {
+        expect(decodeXstring(escapeXstring(s)), s, reason: s);
+      }
+      expect(decodeXstring('_x005F_x0041_'), '_x0041_');
+    });
+    test('joins an escaped surrogate pair, keeps a lone one', () {
+      expect(decodeXstring('_xD83D__xDE00_'), '😀');
+      expect(decodeXstring('_xD83D_'), '_xD83D_');
+    });
+  });
 }

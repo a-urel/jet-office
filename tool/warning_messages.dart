@@ -9,7 +9,8 @@
 /// same `WarningCollector` path as the architecture guard
 /// `test/architecture/warning_messages_test.dart`: sheet `Daten`, cells
 /// `A1, B2`, count 2 (a sheet-name code names one sheet, asked for as
-/// `Daten:1` or `daten`, so its count is 1 and it names no cell).
+/// `Daten:1` or `daten`, so its count is 1 and it names no cell;
+/// `sheetPartMissing` is also one sheet and no cell).
 /// `test/tool/warning_messages_test.dart` compares the output with the
 /// committed `docs/warning-messages.md`, so the file cannot drift.
 library;
@@ -26,11 +27,22 @@ XlsxWarning _sample(XlsxWarningCode code) {
       collector.add(code, sheet: 'Daten', originalName: 'Daten:1');
     case XlsxWarningCode.sheetNameDuplicated:
       collector.add(code, sheet: 'Daten', originalName: 'daten');
+    case XlsxWarningCode.sheetPartMissing:
+      collector.add(code, sheet: 'Daten');
     case XlsxWarningCode.invalidCharactersRemoved:
     case XlsxWarningCode.textTruncated:
     case XlsxWarningCode.intPrecisionLost:
     case XlsxWarningCode.dateOutsideExcelRange:
     case XlsxWarningCode.dateInNonDateFormat:
+    case XlsxWarningCode.sharedStringInvalid:
+    case XlsxWarningCode.numberInvalid:
+    case XlsxWarningCode.booleanInvalid:
+    case XlsxWarningCode.cellTypeUnsupported:
+    case XlsxWarningCode.formulaWithoutValue:
+    case XlsxWarningCode.cellReferenceInvalid:
+    case XlsxWarningCode.cellDuplicated:
+    case XlsxWarningCode.rowOutOfOrder:
+    case XlsxWarningCode.cellOutsideSheet:
       collector
         ..add(code, sheet: 'Daten', cell: 'A1')
         ..add(code, sheet: 'Daten', cell: 'B2');
@@ -59,7 +71,7 @@ String warningMessagesMarkdown() {
     ..writeln('Every message is built for a sample warning: sheet `Daten`,')
     ..writeln('cells `A1, B2`, count 2. The two sheet-name codes name one')
     ..writeln('sheet instead, asked for as `Daten:1` (changed) or `daten`')
-    ..writeln('(duplicated).')
+    ..writeln('(duplicated). `sheetPartMissing` names one sheet and no cell.')
     ..writeln()
     ..writeln('The native-speaker check of the German and Turkish text is')
     ..writeln('recorded under "Native-speaker check" in')
