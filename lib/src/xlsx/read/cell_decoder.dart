@@ -20,8 +20,14 @@ const int _maxExponent = 400;
 
 /// Optional sign, mantissa, optional exponent.
 final RegExp _number = RegExp(
-  r'^([+-]?)(?:(\d+)\.?(\d*)|\.(\d+))(?:[eE]([+-]?)(\d+))?$',
+  r'^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?)(\d+))?$',
 );
+
+final RegExp _leadingZeros = RegExp('^0+');
+
+final RegExp _leadingZerosBeforeDigit = RegExp(r'^0+(?=\d)');
+
+final RegExp _nonZeroDigit = RegExp('[1-9]');
 
 final RegExp _index = RegExp(r'^\d{1,9}$');
 
@@ -144,7 +150,7 @@ String? normalizeNumber(String text) {
   String whole = intPart.isEmpty ? '0' : intPart;
   String fractional = fraction;
   if (exponentDigits != null) {
-    final String significant = exponentDigits.replaceFirst(RegExp('^0+'), '');
+    final String significant = exponentDigits.replaceFirst(_leadingZeros, '');
     if (significant.length > 3) {
       return null;
     }
@@ -165,9 +171,9 @@ String? normalizeNumber(String text) {
       whole = all.substring(0, point);
       fractional = all.substring(point);
     }
-    whole = whole.replaceFirst(RegExp('^0+(?=\\d)'), '');
+    whole = whole.replaceFirst(_leadingZerosBeforeDigit, '');
   }
   final String digits = fractional.isEmpty ? whole : '$whole.$fractional';
-  final bool isZero = !digits.contains(RegExp('[1-9]'));
+  final bool isZero = !digits.contains(_nonZeroDigit);
   return isZero ? digits : '$sign$digits';
 }

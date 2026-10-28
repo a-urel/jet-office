@@ -103,6 +103,17 @@ void main() {
       }
     });
 
+    test('a very long digit run is decided in linear time', () {
+      final String digits = '1' * 100000;
+      final Stopwatch watch = Stopwatch()..start();
+      for (final String tail in <String>['x', '.5x', 'e5x', 'e']) {
+        expect(_num('$digits$tail'), XlsxWarningCode.numberInvalid);
+      }
+      expect(_num(digits), digits);
+      watch.stop();
+      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
     test('a missing value is numberInvalid', () {
       expect(_decode().warning, XlsxWarningCode.numberInvalid);
       expect(_decode(type: 'n').warning, XlsxWarningCode.numberInvalid);
