@@ -12,8 +12,8 @@
 ///   cell. A JSON string is text, `true` and `false` are booleans.
 /// - Object cells hold exactly one of `s` (text), `n` (decimal digits as a
 ///   string, compared by value with a relative tolerance of 1e-12), `b`
-///   (boolean), `date` (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`, compared to
-///   the second), `duration` (`[-]H:MM:SS`, to the second) or `error` (the
+///   (boolean), `date` (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`, compared
+///   within one second), `duration` (`[-]H:MM:SS`, within one second) or `error` (the
 ///   code), or none (a formula without a value). `formula` (exact text, no
 ///   `=`) and `format` (the number format code, exact) are optional on any
 ///   object cell. A cell with a formula in the file needs `formula`; a
@@ -337,6 +337,13 @@ OwnerCell? _parseCell(Object? v, String path) {
       ? _string(m['format'], _at(path, 'format'))
       : null;
   if (present.isEmpty) {
+    if (formula == null) {
+      _bad(
+        path,
+        'expected one of ${_valueKeys.join(', ')}, or a formula for a '
+        'result the file does not store',
+      );
+    }
     return OwnerCell(OwnerKind.empty, null, formula: formula, format: format);
   }
   final String key = present.single;
@@ -419,24 +426,27 @@ String valueText(Object? value) => switch (value) {
   XlsxDecimal() => value.digits,
   bool() => '$value',
   DateTime() => _dateIso(value),
-  Duration() => _durationText_(value),
+  Duration() => _durationString(value),
   XlsxErrorValue() => value.code,
   _ => '$value',
 };
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-String _dateIso(DateTime d) {
+String _dateIso(DateTime value) {
+  // Excel shows whole seconds, so a fraction rounds to the nearest second.
+  final DateTime d = value.millisecond >= 500
+      ? value.add(const Duration(seconds: 1))
+      : value;
   final String day =
       '${d.year.toString().padLeft(4, '0')}-${_two(d.month)}-${_two(d.day)}';
-  final bool midnight =
-      d.hour == 0 && d.minute == 0 && d.second == 0 && d.millisecond == 0;
+  final bool midnight = d.hour == 0 && d.minute == 0 && d.second == 0;
   return midnight
       ? day
       : '${day}T${_two(d.hour)}:${_two(d.minute)}:${_two(d.second)}';
 }
 
-String _durationText_(Duration d) {
+String _durationString(Duration d) {
   final int total = (d.inMilliseconds / 1000).round().abs();
   return '${d.isNegative ? '-' : ''}${total ~/ 3600}:'
       '${_two(total % 3600 ~/ 60)}:${_two(total % 60)}';
@@ -448,7 +458,7 @@ String _describeExpected(OwnerCell c) {
     OwnerKind.number => 'number ${c.value}',
     OwnerKind.boolean => 'boolean ${c.value}',
     OwnerKind.date => 'date ${_dateIso(c.value! as DateTime)}',
-    OwnerKind.duration => 'duration ${_durationText_(c.value! as Duration)}',
+    OwnerKind.duration => 'duration ${_durationString(c.value! as Duration)}',
     OwnerKind.error => 'error ${c.value}',
     OwnerKind.empty => 'no value',
   };
@@ -670,7 +680,7 @@ Object? _cellJson(XlsxReadCell? cell) {
     if (v is XlsxDecimal) 'n': v.digits,
     if (v is bool) 'b': v,
     if (v is DateTime) 'date': _dateIso(v),
-    if (v is Duration) 'duration': _durationText_(v),
+    if (v is Duration) 'duration': _durationString(v),
     if (v is XlsxErrorValue) 'error': v.code,
     ...extra,
   };

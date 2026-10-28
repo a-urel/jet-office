@@ -35,11 +35,10 @@ void main() {
       'b/c.xml': utf8.encode('<c>${'x' * 300}</c>'),
     };
 
-    test('buildZip is deterministic', () async {
+    test('buildZip is deterministic', () {
+      // The fixed DOS stamp (next test) is what rules out a clock.
       for (final bool store in <bool>[true, false]) {
         final Uint8List first = buildZip(parts, store: store);
-        // A second apart, so a clock-based timestamp would differ.
-        await Future<void>.delayed(const Duration(milliseconds: 1100));
         expect(buildZip(parts, store: store), first, reason: 'store: $store');
       }
     });

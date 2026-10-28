@@ -224,6 +224,7 @@ void main() {
       final XlsxReadException e = caught! as XlsxReadException;
       expect(e.reason, XlsxReadFailure.limitExceeded);
       expect(e.message, contains('maxMerges'));
+      expect(e.message, contains('(5)'));
       expect(e.part, sheetEntry(1));
       expect(r.rowsAt(1).toList(), isNotEmpty);
       expect(

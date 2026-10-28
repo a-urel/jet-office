@@ -2,7 +2,7 @@
 /// quality gate's.
 ///
 /// ```bash
-/// dart run tool/fuzz_reader.dart [--seeds 1-20] [--cases 500]
+/// dart run tool/fuzz_reader.dart [--seeds 1-20] [--cases 500] [--verbose]
 /// ```
 ///
 /// For every seed of the inclusive range `--seeds` (default `1-20`, or a
@@ -13,6 +13,11 @@
 /// `seed <s> case <i> (<mutation>): <error>`, which `fuzzCases(s, i + 1)`
 /// reproduces. A summary line follows; the exit code is 1 on any failure
 /// and 64 on bad arguments.
+///
+/// A hang is measured after a case returns, so a real infinite loop is not
+/// reported by this tool; it stops only when killed. With `--verbose` each
+/// case is written to stderr as `seed <s> case <i> (<mutation>)` before it
+/// runs, so the last line names the case that never came back.
 ///
 /// The quality gate runs seeds 1 to 4 with 100 cases each
 /// (`test/xlsx/read/fuzz_test.dart`).
@@ -25,10 +30,13 @@ import 'package:jet_office/jet_office.dart';
 import '../test/xlsx/read/support/fuzz.dart';
 
 void main(List<String> args) {
-  final ({int first, int last, int cases})? options = _parse(args);
+  final ({int first, int last, int cases, bool verbose})? options = _parse(
+    args,
+  );
   if (options == null) {
     stderr.writeln(
-      'Usage: dart run tool/fuzz_reader.dart [--seeds 1-20] [--cases 500]',
+      'Usage: dart run tool/fuzz_reader.dart [--seeds 1-20] [--cases 500] '
+      '[--verbose]',
     );
     exitCode = 64;
     return;
@@ -40,6 +48,9 @@ void main(List<String> args) {
   for (int seed = options.first; seed <= options.last; seed++) {
     for (final FuzzCase c in fuzzCases(seed, options.cases)) {
       cases++;
+      if (options.verbose) {
+        stderr.writeln('seed ${c.seed} case ${c.index} (${c.mutation})');
+      }
       final Stopwatch watch = Stopwatch()..start();
       try {
         exerciseReader(c.bytes);
@@ -68,11 +79,17 @@ void main(List<String> args) {
 
 /// The seed range and case count of [args], or `null` when they are not
 /// understood.
-({int first, int last, int cases})? _parse(List<String> args) {
+({int first, int last, int cases, bool verbose})? _parse(List<String> args) {
   int first = 1;
   int last = 20;
   int cases = 500;
+  bool verbose = false;
   for (int i = 0; i < args.length; i += 2) {
+    if (args[i] == '--verbose') {
+      verbose = true;
+      i--;
+      continue;
+    }
     if (i + 1 >= args.length) return null;
     final String value = args[i + 1];
     switch (args[i]) {
@@ -92,5 +109,5 @@ void main(List<String> args) {
         return null;
     }
   }
-  return (first: first, last: last, cases: cases);
+  return (first: first, last: last, cases: cases, verbose: verbose);
 }

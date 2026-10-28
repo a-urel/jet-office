@@ -228,6 +228,7 @@ final class XlsxReader {
         _package,
         part,
         budget: _limits.maxMerges - _mergesCached,
+        limit: _limits.maxMerges,
         skipped: () => skipped++,
       ),
     );

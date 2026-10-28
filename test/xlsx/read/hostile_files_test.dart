@@ -434,6 +434,23 @@ void main() {
       expect(row.cells.single.value, XlsxDecimal('7'));
     });
 
+    test('an sst claiming 4294967295 strings reads its one string', () {
+      final Uint8List zip = buildWorkbook(
+        <String, String?>{
+          'S': worksheet('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
+        },
+        sharedStrings:
+            '<sst xmlns="$mainNs" count="4294967295" '
+            'uniqueCount="4294967295"><si><t>a</t></si></sst>',
+      );
+      final Stopwatch watch = Stopwatch()..start();
+      final XlsxReader reader = XlsxReader(zip);
+      final XlsxReadRow row = reader.rowsAt(0).single;
+      expect(row.cells.single.value, 'a');
+      expect(reader.warnings, isEmpty);
+      expect(watch.elapsedMilliseconds, lessThan(1000));
+    });
+
     test('100,000 empty rows yield no rows', () {
       final Uint8List zip = buildWorkbook(<String, String?>{
         'S': worksheet('<row/>' * 100000),

@@ -256,8 +256,11 @@ const String _loDecl =
 /// A file in the style of LibreOffice Calc, saved as "Excel 2007-365".
 ///
 /// Written from knowledge of Calc's output and checked against one file
-/// LibreOffice 26.8 saved, not copied from it (plan ruling 6). As in that
-/// file: the declaration and `standalone="yes"`, `fileVersion` with
+/// LibreOffice 26.8 saved (the controller's re-save of fixture `m1_values`),
+/// not copied from it (plan ruling 6). As in that file: the declaration of
+/// each part with `standalone="yes"` (the content-types declaration has
+/// none), the `docProps/app.xml` application and version strings,
+/// `fileVersion` with
 /// `appName="Calc" lowestEdited="4"`, the `<workbookPr>` and `<calcPr>`
 /// attributes, `General` written as `numFmtId="164"` (cell format 0 and the
 /// default cell style use it, Calc's own formats follow from 165), `t="n"`
@@ -534,9 +537,10 @@ ProducerFile libreOfficeFile() {
       '$_loDecl<Properties xmlns="http://schemas.openxmlformats.org/'
       'officeDocument/2006/extended-properties" '
       'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/'
-      'docPropsVTypes"><Template></Template><TotalTime>3</TotalTime>'
-      '<Application>LibreOffice/7.6.4.1\$Linux_X86_64 LibreOffice_project/'
-      'e19e193f88cd6c0525a17fb7a176ed8e6a3e2aa1</Application>'
+      'docPropsVTypes"><Template></Template><TotalTime>0</TotalTime>'
+      '<Application>LibreOffice/26.8.1.1\$MacOSX_AARCH64 '
+      'LibreOffice_project/bf6ef2662401c7d6dce671ab4deb26ee0af3a7c1'
+      '</Application>'
       '<AppVersion>15.0000</AppVersion></Properties>';
   const String contentTypes =
       '<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="$_ctNs">'

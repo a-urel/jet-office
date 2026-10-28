@@ -11,6 +11,11 @@
 /// bytes do not depend on the platform's deflater. Two deflated corpus
 /// entries fuzz inflation; their cases may differ by platform (decision
 /// 0006).
+///
+/// The 5 s hang bound is checked after a case returns, so a real infinite
+/// loop is not reported as a hang: the test's 4-minute timeout stops it and
+/// names no case. `tool/fuzz_reader.dart --verbose` writes each case to
+/// stderr before it runs, so the last line names it.
 library;
 
 import 'dart:convert';

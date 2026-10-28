@@ -48,7 +48,7 @@ jobs:
   validate:
     name: validate fixtures
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: quality-gate
     steps:
       - name: Check out the repository

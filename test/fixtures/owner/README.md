@@ -109,7 +109,8 @@ Sheets use File, Download, Microsoft Excel (.xlsx).
 - Any other cell is an object holding one of: `"s"` (text), `"n"` (decimal
   digits as a string, compared by value with a relative tolerance of
   1e-12), `"b"` (boolean), `"date"` (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`,
-  to the second), `"duration"` (`[-]H:MM:SS`, to the second) or `"error"`
+  within one second, because Excel rounds what it shows), `"duration"`
+  (`[-]H:MM:SS`, within one second) or `"error"`
   (the code, such as `#N/A`); or none of them, for a formula whose result
   the file does not store. `{"n": 1}` is an error: digits are a string.
 - Optional on an object cell: `"formula"` (exact text, no `=`) and

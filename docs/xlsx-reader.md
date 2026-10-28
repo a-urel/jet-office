@@ -266,7 +266,9 @@ except the last, which is still pending.
   expected one is a mismatch unless `resaveAllowedValues` names the cell. The
   one named exception is `m2_formula_xstring` `Probe!A1`: LibreOffice writes a
   `t="str"` formula result without the `_xHHHH_` escapes. The CI `validate`
-  job runs it (AGENTS.md, "Validation"); it has not run in CI yet.
+  job runs it (AGENTS.md, "Validation"); it has not run in CI yet. Locally it
+  matched on LibreOffice 26.8.1.1, 29 of 29 fixtures; the Ubuntu LibreOffice
+  CI installs (24.2.x) has not run.
 - **Owner files.** Real files saved by Excel and Google Sheets, with values the
   owner confirmed cell by cell, live in `test/fixtures/owner/` and are read by
   `test/xlsx/read/owner_files_test.dart` (VM only). The expected JSON is
@@ -283,8 +285,8 @@ The file is untrusted (decision 0007). Three tests hold that:
   through `XlsxReader` only and has one named case per `XlsxReadLimits` field
   and per other hostile class (ZIP, XML, cell and sheet shapes), with lowered
   limits where the default would need a large file.
-  `test/architecture/read_limits_coverage_test.dart` fails when a field that
-  `XlsxReadLimits.check` lists has no hostile case.
+  `test/architecture/read_limits_coverage_test.dart` fails when a
+  `this.max…` field of the `XlsxReadLimits` constructor has no hostile case.
 - **The fuzz test**, `test/xlsx/read/fuzz_test.dart` with
   `test/xlsx/read/support/fuzz.dart`, mutates a corpus of fixtures and
   producer files from a seeded PRNG of its own (xorshift32), so a seed gives
@@ -294,12 +296,18 @@ The file is untrusted (decision 0007). Three tests hold that:
   platform (decision 0006). For each file it opens the reader, iterates every
   sheet's rows, reads every sheet's merges and renders every warning in `en`,
   `de` and `tr`. Anything but an `XlsxReadException` fails, naming seed, case
-  and mutation; a case over 5 s fails as a hang. The gate runs seeds 1 to 4
+  and mutation; a case over 5 s fails as a hang. That bound is measured
+  after a case returns: a real infinite loop is stopped by the test's
+  4-minute timeout, which names no case, and `tool/fuzz_reader.dart
+  --verbose` writes each case to stderr before it runs so the last line names
+  it. The gate runs seeds 1 to 4
   with 100 cases each; `tool/fuzz_reader.dart` runs any range by hand
   (AGENTS.md, "Fuzzing"). A defect that needs more than 400 cases is found
   only by hand runs.
-- **Timing bounds** are relative to a baseline measured in the same run
-  (`test/support/timing.dart`), so a slow machine does not fail them.
+- **Timing bounds** of the row-sort and formula-group scale tests are
+  relative to a baseline measured in the same run (`test/support/timing.dart`),
+  so a slow machine does not fail them. `hostile_files_test.dart` (1 s and
+  2 s) and `cell_decoder_test.dart:133` keep absolute bounds.
 
 The spec's "a 1 KB file that claims 1 GB" is a declared size, refused before
 anything is inflated. "Inflates to 1 GB" cannot fit in 1 KB: deflate's ratio

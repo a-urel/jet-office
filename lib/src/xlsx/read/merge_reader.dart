@@ -32,11 +32,13 @@ import 'read_exception.dart';
 /// Throws an `XlsxReadException`: `unsupportedFormat` for a root in the
 /// Strict OOXML namespace, `malformedXml` for XML that cannot be read and
 /// `limitExceeded`, naming `maxMerges` and [part], when the part holds more
-/// than [budget] ranges. [part] must exist in [package].
+/// than [budget] ranges; [limit] is the configured `maxMerges`, which the
+/// message prints. [part] must exist in [package].
 List<XlsxRange> readMerges(
   PackageReader package,
   String part, {
   required int budget,
+  required int limit,
   required void Function() skipped,
 }) {
   return package.guardXml(part, () {
@@ -80,7 +82,7 @@ List<XlsxRange> readMerges(
           if (merges.length >= budget) {
             throw XlsxReadException(
               XlsxReadFailure.limitExceeded,
-              'Limit maxMerges exceeded.',
+              'Limit maxMerges ($limit) exceeded.',
               part: part,
             );
           }

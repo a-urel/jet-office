@@ -85,6 +85,28 @@ void main() {
       expect(e.warnings, isEmpty);
     });
 
+    test('parses a negative duration and the veryHidden visibility', () {
+      final OwnerExpected e = _expect(
+        '{"duration": "-1:30:00"}',
+        extra: ', "visibility": "veryHidden"',
+      );
+      expect(
+        e.sheets.single.rows.single.single!.value,
+        -const Duration(hours: 1, minutes: 30),
+      );
+      expect(e.sheets.single.visibility, XlsxSheetVisibility.veryHidden);
+    });
+
+    test('an object cell with no value key and no formula is refused', () {
+      expect(() => _expect('{}'), _failsAt('sheets[0].rows[0][0]'));
+      expect(
+        () => _expect('{"format": "0.00"}'),
+        _failsAt('sheets[0].rows[0][0]'),
+      );
+      final OwnerExpected e = _expect('{"formula": "A1+1"}');
+      expect(e.sheets.single.rows.single.single!.kind, OwnerKind.empty);
+    });
+
     test('names the path of an unknown key', () {
       expect(
         () => _expect('"a", {"s": "x", "oops": 1}'),
@@ -168,7 +190,7 @@ void main() {
       expect(_compare('{"n": "5"}', XlsxDecimal('-5')), hasLength(1));
     });
 
-    test('dates and durations compare to the second', () {
+    test('dates and durations compare within one second', () {
       final DateTime stamp = DateTime(2026, 10, 28, 13, 45, 30);
       expect(_compare('{"date": "2026-10-28T13:45:30"}', stamp), isEmpty);
       expect(_compare('{"date": "2026-10-28T13:45:31"}', stamp), hasLength(1));
@@ -377,6 +399,27 @@ void main() {
       expect(compareOwnerFile(e, r), isEmpty);
       expect(json, contains('"confirmedBy": null'));
       expect(json, contains('Ürünler'), reason: 'non-ASCII is kept');
+    });
+
+    test('a date is drafted at the nearest second', () {
+      String serial(int ms) =>
+          '${(DateTime.utc(2026, 10, 28, 13, 45, 30, ms).difference(DateTime.utc(1899, 12, 30)).inMilliseconds / 86400000)}';
+      final XlsxReader r = XlsxReader(
+        buildWorkbook(
+          <String, String?>{
+            'S': worksheet(
+              '<row r="1"><c r="A1" s="0"><v>${serial(600)}</v></c>'
+              '<c r="B1" s="0"><v>${serial(400)}</v></c></row>',
+            ),
+          },
+          styles:
+              '<styleSheet xmlns="$mainNs"><cellXfs>'
+              '<xf numFmtId="22"/></cellXfs></styleSheet>',
+        ),
+      );
+      final String json = draftOwnerExpected(r, file: 'a.xlsx');
+      expect(json, contains('"date":"2026-10-28T13:45:31"'));
+      expect(json, contains('"date":"2026-10-28T13:45:30"'));
     });
 
     test('an error cell and a formula without a value are drafted', () {
