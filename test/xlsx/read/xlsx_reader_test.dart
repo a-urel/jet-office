@@ -450,6 +450,74 @@ void main() {
     );
   });
 
+  group('XlsxReadException.part', () {
+    XlsxReadException make(String part) =>
+        XlsxReadException(XlsxReadFailure.corruptZip, 'm', part: part);
+
+    test('is at most 256 code units and one line', () {
+      final XlsxReadException e = make('x' * 70000);
+      expect(e.part!.length, 257);
+      expect(e.part, endsWith('\u2026'));
+      expect(e.part, '${'x' * 256}\u2026');
+      expect(make('a\nb\u202Ec').part, 'a\u{FFFD}b\u{FFFD}c');
+      expect(make('a\u2028b').toString(), isNot(contains('\u2028')));
+      expect(make('a\nb').toString(), isNot(contains('\n')));
+      expect(make('short.xml').part, 'short.xml');
+      expect(XlsxReadException(XlsxReadFailure.notZip, 'm').part, isNull);
+    });
+
+    test('never splits a surrogate pair', () {
+      final XlsxReadException e = make('${'a' * 255}\u{1F600}b');
+      expect(e.part, '${'a' * 255}\u2026');
+      final XlsxReadException exact = make('${'a' * 254}\u{1F600}');
+      expect(exact.part, '${'a' * 254}\u{1F600}');
+    });
+
+    test('of a hostile entry name stays short in the exception', () {
+      final String name = '${'a' * 60000}\u2028.xml';
+      final Uint8List zip = buildZip(<String, List<int>>{
+        '[Content_Types].xml': utf8.encode(
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/'
+          'content-types"><Override PartName="/xl/workbook.xml" '
+          'ContentType="application/vnd.openxmlformats-officedocument.'
+          'spreadsheetml.sheet.main+xml"/></Types>',
+        ),
+        '_rels/.rels': utf8.encode(
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/'
+          '2006/relationships"><Relationship Id="rId1" Type="http://schemas.'
+          'openxmlformats.org/officeDocument/2006/relationships/'
+          'officeDocument" Target="xl/workbook.xml"/></Relationships>',
+        ),
+        'xl/workbook.xml': utf8.encode(
+          '<workbook xmlns="$mainNs" xmlns:r="http://schemas.'
+          'openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+          '<sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>',
+        ),
+        'xl/_rels/workbook.xml.rels': utf8.encode(
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/'
+          '2006/relationships"><Relationship Id="rId1" Type="http://schemas.'
+          'openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+          'Target="$name"/></Relationships>',
+        ),
+        'xl/$name': utf8.encode(
+          worksheet('<row r="1"><c r="A1"><v>1</v></c></row>'),
+        ),
+      }, store: true);
+      final Uint8List broken = _corrupt(zip, '<row r="1"><c r="A1"><v>1');
+      final XlsxReader r = XlsxReader(broken);
+      try {
+        r.rowsAt(0).toList();
+        fail('expected an XlsxReadException');
+      } on XlsxReadException catch (e) {
+        expect(e.reason, XlsxReadFailure.corruptZip);
+        expect(e.toString().length, lessThan(600));
+        expect(e.toString(), isNot(contains('\u2028')));
+        expect(e.part, isNotNull);
+        expect(e.part!.length, lessThanOrEqualTo(257));
+      }
+    });
+  });
+
   test('an exception message never carries the input at full length', () {
     final String big = 'A' * 1000000;
     for (final String xml in <String>[

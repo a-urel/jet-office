@@ -1,8 +1,8 @@
 name: CI
 
 # Runs the quality gate from AGENTS.md, then validates the fixtures with the
-# Open XML SDK and LibreOffice (decision 0003) and proves that both checks
-# reject a corrupt file. A clean checkout must pass both jobs.
+# Open XML SDK and LibreOffice (decision 0003) and proves that all three
+# checks reject a corrupt file. A clean checkout must pass both jobs.
 on:
   push:
     branches: [main]
@@ -48,7 +48,7 @@ jobs:
   validate:
     name: validate fixtures
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: quality-gate
     steps:
       - name: Check out the repository
@@ -91,11 +91,25 @@ jobs:
       - name: Compare the CSV files with the expected values
         run: dart run tool/compare_csv.dart build/fixtures
 
-      # Negative control: both checks must reject m1_corrupt.xlsx (see
+      # LibreOffice recalculates on load and saves what it computed; the
+      # reader must find the expected values in that file.
+      - name: Re-save every fixture with LibreOffice
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          mkdir -p build/resaved
+          soffice --headless --convert-to 'xlsx:Calc MS Excel 2007 XML' \
+            --outdir build/resaved build/fixtures/*.xlsx
+          ls -1 build/resaved
+
+      - name: Read the re-saved fixtures and compare
+        run: dart run tool/compare_resaved.dart build/fixtures build/resaved
+
+      # Negative control: every check must reject m1_corrupt.xlsx (see
       # tool/write_fixtures.dart). Each tool exits with 1 when it finds a
       # problem and with 2 or 64 for a usage error, so the step requires
       # exit code 1 and the expected message, not merely a failure.
-      - name: Prove both checks reject a corrupt file
+      - name: Prove the checks reject a corrupt file
         env:
           LC_ALL: C.UTF-8
         run: |
@@ -132,4 +146,21 @@ jobs:
             echo "::error::The CSV comparison did not report the corrupt value in A2."
             exit 1
           fi
-          echo "Both checks rejected the corrupt file."
+
+          mkdir -p build/corrupt-resaved
+          soffice --headless --convert-to 'xlsx:Calc MS Excel 2007 XML' \
+            --outdir build/corrupt-resaved build/corrupt/m1_corrupt.xlsx
+          ls -1 build/corrupt-resaved
+
+          status=0
+          dart run tool/compare_resaved.dart build/corrupt build/corrupt-resaved \
+            | tee build/corrupt-resaved.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The re-save comparison exited with $status on a corrupt file; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'A2: expected 42' build/corrupt-resaved.log; then
+            echo "::error::The re-save comparison did not report the corrupt value in A2."
+            exit 1
+          fi
+          echo "All checks rejected the corrupt file."

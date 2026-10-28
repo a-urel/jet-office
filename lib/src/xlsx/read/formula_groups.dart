@@ -47,7 +47,8 @@ final class _Active {
 /// Each group has two instances: one with `isMaster` for its master, and
 /// one shared by all its followers. A master is invalid when its `ref` is
 /// missing (except an array's, which then covers the master alone), not a
-/// cell range or does not contain the master, when a shared master's `si`
+/// cell range or does not contain the master, when an array or data-table
+/// master is not the top-left cell of its range, when a shared master's `si`
 /// is not a non-negative integer, and when an array or data-table range
 /// overlaps an active one. A follower is invalid when no master defined its
 /// `si` earlier in the sheet, or when its cell is not inside the range of
@@ -108,6 +109,13 @@ final class FormulaGroups {
         row > range.lastRow ||
         column < range.firstColumn ||
         column > range.lastColumn) {
+      return _invalid;
+    }
+    // The walk has passed the cells above and to the left of an array or
+    // data-table master that is not the range's top-left cell, so its group
+    // would cover only part of the range.
+    if (type != FormulaType.shared &&
+        (row != range.firstRow || column != range.firstColumn)) {
       return _invalid;
     }
     final XlsxFormulaGroup master = XlsxFormulaGroup(

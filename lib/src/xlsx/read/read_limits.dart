@@ -19,6 +19,7 @@ final class XlsxReadLimits {
     this.maxTextLength = 1048576,
     this.maxSheets = 10000,
     this.maxCellFormats = 1000000,
+    this.maxMerges = 1000000,
   });
 
   /// The most entries the ZIP archive may hold.
@@ -56,6 +57,13 @@ final class XlsxReadLimits {
   /// otherwise list millions.
   final int maxCellFormats;
 
+  /// The most merged ranges one reader may hold in its cache, counted across
+  /// every sheet whose merges it has read.
+  ///
+  /// The cache lives as long as the reader, so a small sheet part listing
+  /// millions of `<mergeCell>`s could otherwise fill memory.
+  final int maxMerges;
+
   /// Throws an [ArgumentError] naming the first field below 1.
   void check() {
     final Map<String, int> fields = <String, int>{
@@ -68,6 +76,7 @@ final class XlsxReadLimits {
       'maxTextLength': maxTextLength,
       'maxSheets': maxSheets,
       'maxCellFormats': maxCellFormats,
+      'maxMerges': maxMerges,
     };
     for (final MapEntry<String, int> field in fields.entries) {
       if (field.value < 1) {

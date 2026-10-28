@@ -44,14 +44,18 @@ LC_ALL=C.UTF-8 soffice --headless \
   --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,false,false,false,-1' \
   --outdir build/fixtures build/fixtures/*.xlsx
 dart run tool/compare_csv.dart build/fixtures
+mkdir -p build/resaved
+LC_ALL=C.UTF-8 soffice --headless --convert-to 'xlsx:Calc MS Excel 2007 XML' \
+  --outdir build/resaved build/fixtures/*.xlsx
+dart run tool/compare_resaved.dart build/fixtures build/resaved
 ```
 
 - `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
   `<name>.xlsx` and its expected values as `<name>.expected.json`.
-  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, to prove both
-  checks still fail on a bad file. The `validate` job's last step writes it
-  to `build/corrupt` and requires both checks to reject it.
+  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, to prove every
+  check still fails on a bad file. The `validate` job's last step writes it
+  to `build/corrupt` and requires every check to reject it.
 - `tool/write_fixtures.dart` imports test helpers that use `package:archive`.
   That is allowed: the archive rule covers `lib/` only.
 - `tool/ooxml_validate` validates every `.xlsx` with the Open XML SDK against
@@ -60,6 +64,12 @@ dart run tool/compare_csv.dart build/fixtures
 - `tool/compare_csv.dart` compares LibreOffice's CSV export of every sheet
   with the expected values on raw values. Its doc comment explains the filter
   options; `tool/src/csv_compare.dart` holds the comparison and its contract.
+- `tool/compare_resaved.dart` reads LibreOffice's XLSX re-save of every
+  fixture with `XlsxReader` and compares it with the expected values; any
+  reader warning is a mismatch unless `resaveAllowedWarnings` in
+  `tool/src/read_compare.dart` names it with a reason. If a LibreOffice
+  instance is already running, add `-env:UserInstallation=file:///<dir>` to
+  the `soffice` call.
 - `docs/warning-messages.md` lists every warning message in `en`, `de` and
   `tr`, for the native-speaker check recorded in `docs/excel-checks.md`. It is
   generated: after a message changes, run
@@ -68,7 +78,11 @@ dart run tool/compare_csv.dart build/fixtures
 - Neither is Excel. The owner opens each writer milestone's fixtures in Excel
   and records the result in `docs/excel-checks.md`. Reader milestones (phase
   2, R1 to R4) have no such check: Excel produces their input, and the owner
-  supplies Excel and Google Sheets files instead (`0007`).
+  supplies Excel and Google Sheets files instead (`0007`). Those files go in
+  `test/fixtures/owner/`, listed in its `manifest.json`; the README there
+  says which workbooks to save and how the expected values are written and
+  confirmed (`tool/draft_expected.dart` drafts them). Never edit a committed
+  owner file or its expected JSON without the owner.
 
 ## Benchmark
 
@@ -81,6 +95,22 @@ records figures and fails on none (`docs/benchmark.md`):
 dart test benchmark
 dart test -p chrome benchmark
 ```
+
+## Fuzzing
+
+`test/xlsx/read/fuzz_test.dart` mutates a corpus of fixtures and producer
+files (`test/xlsx/read/support/fuzz.dart`) and requires the reader to throw
+nothing but `XlsxReadException`. The gate runs seeds 1 to 4 with 100 cases
+each, the same cases on the VM and in Chrome (except the two deflated
+corpus entries, whose cases may differ by platform, decision 0006). For longer runs, by hand:
+
+```bash
+dart run tool/fuzz_reader.dart --seeds 1-200 --cases 1000
+```
+
+It prints each failure as `seed <s> case <i> (<mutation>): <error>` and
+exits 1 on any. A failure is a reader defect: pin it as a unit test in the
+owning `*_test.dart` with the input minimized by hand, then fix it.
 
 ## Hard rules
 

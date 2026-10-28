@@ -418,6 +418,32 @@ void main() {
       expect(message, contains('x\u{FFFD}y\u{FFFD}z'));
     });
 
+    test('replaces line and bidi controls', () {
+      const List<int> controls = <int>[
+        0x2028, 0x2029, 0x061C, 0x200E, 0x200F, //
+        0x202A, 0x202B, 0x202C, 0x202D, 0x202E,
+        0x2066, 0x2067, 0x2068, 0x2069,
+      ];
+      for (final int code in controls) {
+        final String ch = String.fromCharCode(code);
+        expect(
+          inputExcerpt('a${ch}b'),
+          'a\u{FFFD}b',
+          reason: 'U+${code.toRadixString(16)}',
+        );
+      }
+      // Ordinary right-to-left letters stay.
+      expect(
+        inputExcerpt('\u05E9\u05DC\u05D5\u05DD'),
+        '\u05E9\u05DC\u05D5\u05DD',
+      );
+      final String message = messageOf(() => _drainAll('<a b></c>'));
+      expect(message, isNot(contains('\u2028')));
+      final String named = messageOf(() => _drainAll('<a>&x\u2028y;</a>'));
+      expect(named, isNot(contains('\u2028')));
+      expect(named, contains('x\u{FFFD}y'));
+    });
+
     test('inputExcerpt keeps short text and cuts long text', () {
       expect(inputExcerpt('abc'), 'abc');
       expect(inputExcerpt('a' * 32), 'a' * 32);

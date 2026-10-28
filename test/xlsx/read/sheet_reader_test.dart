@@ -2,6 +2,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/cell_ref.dart';
 import 'package:test/test.dart';
 
+import '../../support/timing.dart';
 import 'support/workbook_builder.dart';
 
 /// A reader over one sheet `S` holding [rows].
@@ -207,6 +208,16 @@ void main() {
     expect(_warnings(r), <String>['formulaGroupInvalid B2']);
   });
 
+  test('an array master off the top-left of its ref is invalid', () {
+    final XlsxReader r = _reader(
+      '<row r="2"><c r="B2"><f t="array" ref="A1:C3">1</f><v>1</v></c></row>',
+    );
+    final XlsxReadCell cell = r.rows('S').single.cells.single;
+    expect(cell.value, XlsxDecimal('1'));
+    expect(cell.formulaGroup, isNull);
+    expect(_warnings(r), <String>['formulaGroupInvalid B2']);
+  });
+
   test('formulaGroupInvalid comes with a content warning', () {
     final XlsxReader r = _reader(
       '<row r="1"><c r="A1"><f t="shared" si="3"/><v>abc</v></c>'
@@ -289,18 +300,32 @@ void main() {
   test('sorts a full row written right to left without quadratic cost', () {
     // Inserting each cell in place costs O(n²) on such a row: 16,384 cells
     // in 8 rows took seconds. Appending and sorting once takes milliseconds.
-    final StringBuffer rows = StringBuffer();
-    for (int r = 1; r <= 8; r++) {
-      rows.write('<row r="$r">');
-      for (int c = 16383; c >= 0; c--) {
-        rows.write('<c r="${cellRef(r - 1, c)}"><v>$c</v></c>');
+    // The bound is a ratio to the same sheet written left to right.
+    String sheet({required bool reversed}) {
+      final StringBuffer rows = StringBuffer();
+      for (int r = 1; r <= 8; r++) {
+        rows.write('<row r="$r">');
+        for (int i = 0; i < 16384; i++) {
+          final int c = reversed ? 16383 - i : i;
+          rows.write('<c r="${cellRef(r - 1, c)}"><v>$c</v></c>');
+        }
+        rows.write('</row>');
       }
-      rows.write('</row>');
+      return rows.toString();
     }
-    final XlsxReader r = _reader(rows.toString());
-    final Stopwatch watch = Stopwatch()..start();
-    final List<XlsxReadRow> read = r.rows('S').toList();
-    watch.stop();
+
+    List<XlsxReadRow> readAll(String xml) {
+      final XlsxReader r = _reader(xml);
+      final List<XlsxReadRow> read = r.rows('S').toList();
+      expect(r.warnings, isEmpty);
+      return read;
+    }
+
+    final String forward = sheet(reversed: false);
+    final String backward = sheet(reversed: true);
+    late List<XlsxReadRow> read;
+    final Duration baseline = bestOfThree(() => readAll(forward));
+    final Duration measured = bestOfThree(() => read = readAll(backward));
     expect(read, hasLength(8));
     for (final XlsxReadRow row in read) {
       expect(row.cells, hasLength(16384));
@@ -309,8 +334,7 @@ void main() {
       }
       expect(row.cells.last.value, XlsxDecimal('16383'));
     }
-    expect(r.warnings, isEmpty);
-    expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+    expectWithinRatio(measured, baseline);
   });
 
   test('a duplicate among out-of-order cells keeps the last and warns', () {

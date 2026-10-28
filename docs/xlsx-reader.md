@@ -5,11 +5,12 @@ rows of typed cells, lazily and synchronously. It builds no model. Decision
 [`0007`](decisions/0007-phase-2-reader-scope-and-untrusted-input.md) sets the
 scope and why the file is treated as untrusted input.
 
-This page covers milestones R1, the foundation, and R2, the types: styles and
+This page covers milestones R1, the foundation, R2, the types (styles and
 number formats, dates and durations, `inlineStr`, error values, formula groups
-and merges, with `double` and `int` access on `XlsxDecimal`. R3 (files from
-other producers, hostile files) and R4 (benchmark and release readiness) add
-their own sections as they land.
+and merges, with `double` and `int` access on `XlsxDecimal`) and R3, files
+from other producers and hostile files (the sections "Other producers" and
+"Hostile input" below). R4 (benchmark and release readiness) adds its own
+section when it lands.
 
 ```dart
 final XlsxReader reader = XlsxReader(bytes);
@@ -40,7 +41,7 @@ below 1, an unknown sheet name or index) throws `ArgumentError` or
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | A limit in `XlsxReadLimits` below 1 | `ArgumentError` naming the field, when the reader opens | a zero limit is a bug in the caller | `test/xlsx/read/read_limits_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
-| Default limits | `maxEntries` 10,000; `maxEntryBytes` 256 MiB; `maxTotalBytes` 1 GiB; `maxCompressionRatio` 1,000; `maxSharedStrings` 2,000,000; `maxDepth` 256; `maxTextLength` 1,048,576 characters; `maxSheets` 10,000; `maxCellFormats` 1,000,000 (R2) | a 100,000 by 12 sheet is about 50 MB of XML, so 256 MiB leaves four times that; Excel itself is far from 10,000 sheets or a million cell formats | `test/xlsx/read/read_limits_test.dart` |
+| Default limits | `maxEntries` 10,000; `maxEntryBytes` 256 MiB; `maxTotalBytes` 1 GiB; `maxCompressionRatio` 1,000; `maxSharedStrings` 2,000,000; `maxDepth` 256; `maxTextLength` 1,048,576 characters; `maxSheets` 10,000; `maxCellFormats` 1,000,000 (R2); `maxMerges` 1,000,000 (R3) | a 100,000 by 12 sheet is about 50 MB of XML, so 256 MiB leaves four times that; Excel itself is far from 10,000 sheets, a million cell formats or a million merges | `test/xlsx/read/read_limits_test.dart` |
 | Bytes that are not a ZIP | `notZip`; a file that starts like a ZIP but has a missing or damaged directory is `corruptZip` | tell a wrong upload from a damaged one | `test/zip/zip_reader_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
 | More entries than `maxEntries` (directories count) | `limitExceeded` naming `maxEntries`, before anything is inflated | the central directory is read first | `test/zip/zip_reader_test.dart` |
 | An entry declaring more than `maxEntryBytes`, or declared sizes adding up to more than `maxTotalBytes` | `limitExceeded` naming the limit, before anything is inflated | ZIP bomb | `test/zip/zip_reader_test.dart` |
@@ -69,7 +70,7 @@ below 1, an unknown sheet name or index) throws `ArgumentError` or
 | UTF-16, a declared encoding other than UTF-8 (any case), or invalid UTF-8 | `malformedXml`. A UTF-8 BOM is skipped, and a declaration without an encoding is UTF-8 | the writer and Excel both write UTF-8 | `test/xml/xml_pull_reader_test.dart` |
 | An unknown entity, a malformed numeric reference, `&#0;`, a surrogate or a code point above U+10FFFF | `malformedXml`, also when it surfaces late while reading a value | decoding strictly never invents text | `test/xml/xml_pull_reader_test.dart`, `test/xlsx/read/sheet_reader_test.dart` |
 | A truncated document (open tag, open attribute or open element at the end) | `malformedXml`, never a short read | a cut file must not look complete | `test/xml/xml_pull_reader_test.dart`, `test/xlsx/read/sheet_reader_test.dart` |
-| Input quoted in an exception message (an element name, an entity body, a declared encoding) | at most 32 UTF-16 code units, a surrogate pair never split, then `…`; control characters become U+FFFD. The part is in `part`, not repeated in `message` | a hostile file must not make a message as large as itself, or spread it over lines of a log | `test/xml/xml_pull_reader_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
+| Input quoted in an exception message (an element name, an entity body, a declared encoding) | at most 32 UTF-16 code units, a surrogate pair never split, then `…`; control characters, line and paragraph separators and bidi controls (U+2028, U+2029, U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069) become U+FFFD. The part is in `part`, not repeated in `message`; `part` itself is cut to 256 UTF-16 code units plus `…` and cleaned the same way, so it is for display and may differ from the ZIP entry name | a hostile file must not make a message as large as itself, or spread it over lines of a log | `test/xml/xml_pull_reader_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
 | Mutated or random documents | only `XmlParseException`, never a `RangeError` or `FormatException` | the typed exception is the contract | `test/xml/xml_pull_reader_test.dart` |
 | A literal CR or CRLF in the source | read as LF, in text, CDATA and attribute values | XML 1.0 line-end normalization | `test/xml/xml_pull_reader_test.dart` |
 | CR written as `&#13;` | kept as CR, so the writer's escaping round-trips | the writer writes CR as a reference | `test/xml/xml_pull_reader_test.dart`, `test/xml/xml_escape_test.dart` |
@@ -180,6 +181,7 @@ equal `XlsxFormulaGroup` `kind` and `range`; only `isMaster` differs. An invalid
 | An array or data-table master | covers its `ref`; a cell in the range without its own `<f>` is a follower of the group, `formulaGroup` set, `formula` `null`. An array master without `ref` covers itself | continuation cells carry values only | `test/xlsx/read/formula_groups_test.dart`, `test/xlsx/read/sheet_reader_test.dart` |
 | A data table without `ref`; a shared master whose `ref` is missing, not a cell range, or does not contain the master; an `si` that is not a non-negative integer | `formulaGroupInvalid`, no group | the file contradicts itself | `test/xlsx/read/formula_groups_test.dart`, `test/xlsx/read/sheet_reader_test.dart` |
 | A shared follower whose `si` no master defined earlier in the sheet, or whose cell is outside that master's `ref` | `formulaGroupInvalid`, no group, the value and the follower's own text kept | a follower before its master is read by no producer; one outside the range is not part of the group | `test/xlsx/read/formula_groups_test.dart`, `test/xlsx/read/sheet_reader_test.dart` |
+| An array or data-table master that is not the top-left cell of its `ref` | `formulaGroupInvalid`, no group; the value is kept. A shared master keeps the rule above (inside `ref`): its earlier followers already warn as unknown `si` | the walk has passed the cells above and to the left, so a group would cover only part of its range | `test/xlsx/read/formula_groups_test.dart`, `test/xlsx/read/sheet_reader_test.dart` |
 | A second shared master with the `si` of an earlier one | it replaces the first for the followers after it, without a warning | `si` is unique per sheet in a valid file | `test/xlsx/read/formula_groups_test.dart` |
 | An array or data-table range that overlaps an active one | `formulaGroupInvalid`, no group; with rows out of order, a new range whose columns meet an active one is refused even when the rows do not meet | the active ranges are kept disjoint by column | `test/xlsx/read/formula_groups_test.dart` |
 | A range the walk has passed | no longer conflicts | it covers no later cell | `test/xlsx/read/formula_groups_test.dart` |
@@ -200,7 +202,8 @@ a getter.
 |---|---|---|---|
 | Reading merges | the `XlsxRange` of each `<mergeCell>` under `<mergeCells>`, in file order, wherever `<mergeCells>` stands relative to `<sheetData>`; the list is unmodifiable and cached per sheet | the first call costs a pass, later calls none | `test/xlsx/read/merge_reader_test.dart` |
 | A prefixed or foreign element | prefixed ones read, foreign ones are ignored | producers choose their prefixes | `test/xlsx/read/merge_reader_test.dart` |
-| A `ref` that is missing or not a cell range | skipped, one `mergeRangeInvalid` per sheet naming no cell | do not trust the reference | `test/xlsx/read/merge_reader_test.dart` |
+| A `ref` that is missing or not a cell range | skipped and counted; after the pass succeeds the reader adds that many `mergeRangeInvalid` occurrences, one warning per sheet naming no cell | do not trust the reference; a counter keeps no list of a hostile part's skips | `test/xlsx/read/merge_reader_test.dart` |
+| More than `maxMerges` merges cached by one reader, counted across sheets | `limitExceeded` naming `maxMerges` and the sheet part; nothing is cached and no warning of that pass is added, so a retry behaves the same; rows stay readable | the cache lives as long as the reader. Cost: a workbook with over a million merges in total cannot give its merges | `test/xlsx/read/merge_reader_test.dart`, `test/xlsx/read/read_limits_test.dart` |
 | A sheet whose part is missing, a part that is not a `<worksheet>`, or an empty one | no merges, no warning of its own (a missing part is `sheetPartMissing`) | nothing to read | `test/xlsx/read/merge_reader_test.dart` |
 | A Strict worksheet, or malformed XML | `unsupportedFormat` or `malformedXml`, naming the part. Nothing is cached, so a later call tries again | a transient failure is not frozen | `test/xlsx/read/merge_reader_test.dart` |
 | A part that warns and then throws | no warning is added: the pass's warnings are added only after it succeeds, so a retry never counts them twice | a failed pass reports nothing but its exception | `test/xlsx/read/merge_reader_test.dart` |
@@ -238,6 +241,78 @@ a getter.
 | Opening | reads the ZIP directory, `[Content_Types].xml`, the root and workbook relationships, the workbook part and the styles part only | a sheet may be large and never needed; styles decide every cell's type | `test/xlsx/read/xlsx_reader_test.dart` |
 | A sheet's rows, and merges | its part is inflated when iteration starts (and again, once, for merges); shared strings are read once per reader, on first use, and a failure is retried by the next read | laziness | `test/xlsx/read/xlsx_reader_test.dart` |
 | Every phase 1 fixture | read back equals what the writer stored: same sheets, text decoded, numbers digit for digit when written without an exponent, booleans as `1` and `0`; the only warning is `formulaWithoutValue`, one per formula cell without a result; dates, merges and formula groups match what the writer stored, and a number in a date or time format never reads back as an `XlsxDecimal`. The fixtures store a rich text's runs joined, so a separate round trip writes rich text with escapes split across runs and reads it back exactly | the reader mirrors the writer | `test/xlsx/read/fixture_round_trip_test.dart` |
+
+## Other producers
+
+R1 and R2 are proven against the writer's own output. R3 adds three checks
+against files the writer did not make. None of them is Excel's own output
+except the last, which is still pending.
+
+- **Producer packages.** `test/xlsx/read/support/producers.dart` builds the
+  package of LibreOffice, Google Sheets, the .NET Open XML SDK and an
+  ERP/PHP-style export (for example LibreOffice's General format as number
+  format 164 and each producer's prefixes, element order, `mc:Ignorable` and
+  entry order); `test/xlsx/read/producers_test.dart` reads them. They are
+  hand-made from knowledge of each producer's output, not byte copies of real
+  files, except that the LibreOffice package was partly checked against a
+  LibreOffice 26.8.1.1 re-save of fixture `m1_values`. A quirk nobody knew of
+  shows up only in the two checks below.
+- **LibreOffice re-save.** `tool/compare_resaved.dart` reads the XLSX that
+  LibreOffice writes when it re-saves every fixture, and compares it with the
+  fixture's `expectedValues` (what a calculating program shows) through
+  `tool/src/read_compare.dart`, whose library comment holds the contract. A
+  reader warning on a re-saved file is a mismatch unless
+  `resaveAllowedWarnings` names the fixture and code, and a value unlike the
+  expected one is a mismatch unless `resaveAllowedValues` names the cell. The
+  one named exception is `m2_formula_xstring` `Probe!A1`: LibreOffice writes a
+  `t="str"` formula result without the `_xHHHH_` escapes. The CI `validate`
+  job runs it (AGENTS.md, "Validation"); it has not run in CI yet. Locally it
+  matched on LibreOffice 26.8.1.1, 29 of 29 fixtures; the Ubuntu LibreOffice
+  CI installs (24.2.x) has not run.
+- **Owner files.** Real files saved by Excel and Google Sheets, with values the
+  owner confirmed cell by cell, live in `test/fixtures/owner/` and are read by
+  `test/xlsx/read/owner_files_test.dart` (VM only). The expected JSON is
+  drafted by `tool/draft_expected.dart`; its format, the manifest and the two
+  workbooks to save are in `test/fixtures/owner/README.md`, not repeated here.
+  The files themselves are pending: while the manifest is empty the test
+  prints `owner files pending`.
+
+## Hostile input
+
+The file is untrusted (decision 0007). Three tests hold that:
+
+- **The hostile suite**, `test/xlsx/read/hostile_files_test.dart`, goes
+  through `XlsxReader` only and has one named case per `XlsxReadLimits` field
+  and per other hostile class (ZIP, XML, cell and sheet shapes), with lowered
+  limits where the default would need a large file.
+  `test/architecture/read_limits_coverage_test.dart` fails when a
+  `this.max…` field of the `XlsxReadLimits` constructor has no hostile case.
+- **The fuzz test**, `test/xlsx/read/fuzz_test.dart` with
+  `test/xlsx/read/support/fuzz.dart`, mutates a corpus of fixtures and
+  producer files from a seeded PRNG of its own (xorshift32), so a seed gives
+  the same mutations on the VM and in Chrome. The corpus is stored, not
+  deflated, with a fixed timestamp, so its bytes match on both platforms; two
+  deflated entries are added to fuzz inflation, whose cases may differ by
+  platform (decision 0006). For each file it opens the reader, iterates every
+  sheet's rows, reads every sheet's merges and renders every warning in `en`,
+  `de` and `tr`. Anything but an `XlsxReadException` fails, naming seed, case
+  and mutation; a case over 5 s fails as a hang. That bound is measured
+  after a case returns: a real infinite loop is stopped by the test's
+  4-minute timeout, which names no case, and `tool/fuzz_reader.dart
+  --verbose` writes each case to stderr before it runs so the last line names
+  it. The gate runs seeds 1 to 4
+  with 100 cases each; `tool/fuzz_reader.dart` runs any range by hand
+  (AGENTS.md, "Fuzzing"). A defect that needs more than 400 cases is found
+  only by hand runs.
+- **Timing bounds** of the row-sort and formula-group scale tests are
+  relative to a baseline measured in the same run (`test/support/timing.dart`),
+  so a slow machine does not fail them. `hostile_files_test.dart` (1 s and
+  2 s) and `cell_decoder_test.dart:133` keep absolute bounds.
+
+The spec's "a 1 KB file that claims 1 GB" is a declared size, refused before
+anything is inflated. "Inflates to 1 GB" cannot fit in 1 KB: deflate's ratio
+is at most 1032:1. The suite therefore proves the bound on a lying size with a
+small entry that inflates past its declaration.
 
 ## Inflation
 

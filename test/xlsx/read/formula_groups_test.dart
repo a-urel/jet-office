@@ -4,6 +4,8 @@ import 'package:jet_office/src/xlsx/read/cell_decoder.dart';
 import 'package:jet_office/src/xlsx/read/formula_groups.dart';
 import 'package:test/test.dart';
 
+import '../../support/timing.dart';
+
 /// A result that is the valid master group of [kind] over [ref].
 Matcher _master(XlsxFormulaGroupKind kind, String ref) =>
     isA<FormulaGroupResult>()
@@ -248,39 +250,155 @@ void main() {
     );
   });
 
-  test('binary search over many ranges', () {
+  test('an array master not at the top-left of its ref is invalid', () {
+    for (final FormulaType type in <FormulaType>[
+      FormulaType.array,
+      FormulaType.dataTable,
+    ]) {
+      final FormulaGroups groups = FormulaGroups()..startRow(1);
+      expect(groups.master(type, row: 1, column: 1, ref: 'A1:C3'), _invalid);
+      groups.startRow(2);
+      expect(groups.coveredBy(2, 2), isNull);
+    }
+    final FormulaGroups groups = FormulaGroups()..startRow(1);
+    expect(
+      groups.master(
+        FormulaType.shared,
+        row: 1,
+        column: 1,
+        ref: 'A1:C3',
+        si: '0',
+      ),
+      _master(XlsxFormulaGroupKind.shared, 'A1:C3'),
+    );
+  });
+
+  group('scale', () {
     const int columns = XlsxLimits.maxColumns;
     const int rows = 10;
-    final Stopwatch watch = Stopwatch()..start();
-    final FormulaGroups groups = FormulaGroups()..startRow(0);
-    for (int c = 0; c < columns; c++) {
-      final FormulaGroupResult result = groups.master(
+
+    /// Inserts one array per column on row 0, each over [rows] more rows, in
+    /// the column order [columnsInOrder], then checks every covered lookup
+    /// and that nothing is covered past the ranges. Returns the number of
+    /// wrong answers.
+    int manyRanges(Iterable<int> columnsInOrder) {
+      final FormulaGroups groups = FormulaGroups()..startRow(0);
+      for (final int c in columnsInOrder) {
+        final FormulaGroupResult result = groups.master(
+          FormulaType.array,
+          row: 0,
+          column: c,
+          ref: '${cellRef(0, c)}:${cellRef(rows, c)}',
+        );
+        if (result.invalid) fail('master ${cellRef(0, c)} is invalid');
+      }
+      int wrong = 0;
+      for (int r = 1; r <= rows; r++) {
+        groups.startRow(r);
+        for (int c = 0; c < columns; c++) {
+          final XlsxFormulaGroup? group = groups.coveredBy(r, c);
+          if (group == null ||
+              group.isMaster ||
+              group.kind != XlsxFormulaGroupKind.array ||
+              group.range != XlsxRange(0, c, rows, c)) {
+            wrong++;
+          }
+        }
+      }
+      groups.startRow(rows + 1);
+      for (int c = 0; c < columns; c++) {
+        if (groups.coveredBy(rows + 1, c) != null) wrong++;
+      }
+      return wrong;
+    }
+
+    /// The same inserts and lookups on a tree that holds a single range.
+    void singleRange() {
+      final FormulaGroups groups = FormulaGroups()..startRow(0);
+      groups.master(
         FormulaType.array,
         row: 0,
-        column: c,
-        ref: '${cellRef(0, c)}:${cellRef(rows, c)}',
+        column: 0,
+        ref: 'A1:A${rows + 1}',
       );
-      if (result.invalid) fail('master ${cellRef(0, c)} is invalid');
-    }
-    int wrong = 0;
-    for (int r = 1; r <= rows; r++) {
-      groups.startRow(r);
-      for (int c = 0; c < columns; c++) {
-        final XlsxFormulaGroup? group = groups.coveredBy(r, c);
-        if (group == null ||
-            group.isMaster ||
-            group.kind != XlsxFormulaGroupKind.array ||
-            group.range != XlsxRange(0, c, rows, c)) {
-          wrong++;
+      for (int c = 1; c < columns; c++) {
+        groups.coveredBy(0, c);
+      }
+      for (int r = 1; r <= rows + 1; r++) {
+        groups.startRow(r);
+        for (int c = 0; c < columns; c++) {
+          groups.coveredBy(r, c);
         }
       }
     }
-    groups.startRow(rows + 1);
-    for (int c = 0; c < columns; c++) {
-      if (groups.coveredBy(rows + 1, c) != null) wrong++;
-    }
-    watch.stop();
-    expect(wrong, 0);
-    expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+
+    test('binary search over many ranges', () {
+      int wrong = -1;
+      final Duration many = bestOfThree(() {
+        wrong = manyRanges(Iterable<int>.generate(columns));
+      });
+      expect(wrong, 0);
+      expectWithinRatio(many, bestOfThree(singleRange));
+    });
+
+    test('ranges inserted right to left stay a binary search', () {
+      int wrong = -1;
+      final Duration many = bestOfThree(() {
+        wrong = manyRanges(
+          Iterable<int>.generate(columns, (int i) => columns - 1 - i),
+        );
+      });
+      expect(wrong, 0);
+      expectWithinRatio(many, bestOfThree(singleRange));
+    });
+
+    test('one wide range after many ended ones', () {
+      const int ended = 10000;
+      FormulaGroupResult? wide;
+      XlsxFormulaGroup? covered;
+      final Duration many = bestOfThree(() {
+        final FormulaGroups groups = FormulaGroups();
+        for (int r = 0; r < ended; r++) {
+          groups.startRow(r);
+          final String ref = cellRef(r, r % columns);
+          final FormulaGroupResult result = groups.master(
+            FormulaType.array,
+            row: r,
+            column: r % columns,
+            ref: '$ref:$ref',
+          );
+          if (result.invalid) fail('master $ref is invalid');
+        }
+        groups.startRow(ended);
+        wide = groups.master(
+          FormulaType.array,
+          row: ended,
+          column: 0,
+          ref: 'A${ended + 1}:XFD${ended + 1}',
+        );
+        covered = groups.coveredBy(ended, columns - 1);
+      });
+      expect(
+        wide,
+        _master(XlsxFormulaGroupKind.array, 'A${ended + 1}:XFD${ended + 1}'),
+      );
+      expect(
+        covered,
+        XlsxFormulaGroup(
+          XlsxFormulaGroupKind.array,
+          XlsxRange.parse('A${ended + 1}:XFD${ended + 1}'),
+          isMaster: false,
+        ),
+      );
+      // A tree that holds one range, with as many lookups.
+      final Duration one = bestOfThree(() {
+        final FormulaGroups groups = FormulaGroups()..startRow(0);
+        groups.master(FormulaType.array, row: 0, column: 0, ref: 'A1:XFD1');
+        for (int r = 0; r < ended; r++) {
+          groups.coveredBy(0, r % columns);
+        }
+      });
+      expectWithinRatio(many, one);
+    });
   });
 }
