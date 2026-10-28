@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:jet_office/src/xml/xml_escape.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:test/test.dart';
 
@@ -107,8 +108,42 @@ void main() {
       expect(r.localName, 'a');
     });
 
-    test('normalizes line endings in text with entities', () {
+    test('normalizes literal line endings, with or without an entity', () {
+      expect(_textOf('x\r\ny'), 'x\ny');
+      expect(_textOf('x\ry'), 'x\ny');
       expect(_textOf('a\r\nb&amp;\rc'), 'a\nb&\nc');
+    });
+
+    test('keeps a CR written as a character reference', () {
+      expect(_textOf('x&#13;y'), 'x\ry');
+      expect(_textOf('a&#13;\nb'), 'a\r\nb');
+    });
+
+    test('normalizes line endings in attribute values the same way', () {
+      XmlPullReader r = XmlPullReader('<a k="x\r\ny"/>');
+      r.nextTag();
+      expect(r.getAttribute('k'), 'x\ny');
+      r = XmlPullReader('<a k="x&#13;y"/>');
+      r.nextTag();
+      expect(r.getAttribute('k'), 'x\ry');
+    });
+
+    test('normalizes CR in CDATA', () {
+      final XmlPullReader r = XmlPullReader('<a><![CDATA[x\r\ny]]></a>');
+      r.nextTag();
+      r.next();
+      expect(r.text, 'x\ny');
+    });
+
+    test('round-trips CR through the writer escaping', () {
+      for (final String v in <String>['a\r\nb', 'a\rb', '\r', 'a\nb&\r<']) {
+        expect(_textOf(escapeXmlText(v)), v);
+        final XmlPullReader r = XmlPullReader(
+          '<a k="${escapeXmlAttribute(v)}"/>',
+        );
+        r.nextTag();
+        expect(r.getAttribute('k'), v);
+      }
     });
   });
 

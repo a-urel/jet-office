@@ -227,7 +227,8 @@ final class XmlPullReader {
           offset: _textStart,
         );
       }
-      return _source.substring(_textStart, _textEnd);
+      final String raw = _source.substring(_textStart, _textEnd);
+      return _type == XmlEventType.cdata ? _normalizeEol(raw) : raw;
     }
     if (_type == XmlEventType.comment ||
         _type == XmlEventType.processingInstruction ||
@@ -515,9 +516,10 @@ final class XmlPullReader {
     }
     _pos++;
     final int vStart = _pos;
-    bool hasEntities = false;
+    bool hasEntities = false; // an `&` or a CR: needs decoding
     while (_pos < _source.length && _source.codeUnitAt(_pos) != quote) {
-      if (_source.codeUnitAt(_pos) == _amp) {
+      final int c = _source.codeUnitAt(_pos);
+      if (c == _amp || c == _cr) {
         hasEntities = true;
       }
       _pos++;
@@ -552,7 +554,8 @@ final class XmlPullReader {
     _type = XmlEventType.characters;
     _textStart = _pos;
     while (_pos < _source.length && _source.codeUnitAt(_pos) != _lt) {
-      if (_source.codeUnitAt(_pos) == _amp) {
+      final int c = _source.codeUnitAt(_pos);
+      if (c == _amp || c == _cr) {
         _textHasEntities = true;
       }
       _pos++;
@@ -687,7 +690,7 @@ final class XmlPullReader {
 String decodeXmlEntities(String raw, {int offset = 0}) {
   final int amp = raw.indexOf('&');
   if (amp < 0) {
-    return raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    return _normalizeEol(raw);
   }
 
   final StringBuffer out = StringBuffer();
@@ -695,10 +698,10 @@ String decodeXmlEntities(String raw, {int offset = 0}) {
   while (i < raw.length) {
     final int nextAmp = raw.indexOf('&', i);
     if (nextAmp < 0) {
-      out.write(raw.substring(i));
+      out.write(_normalizeEol(raw.substring(i)));
       break;
     }
-    out.write(raw.substring(i, nextAmp));
+    out.write(_normalizeEol(raw.substring(i, nextAmp)));
     final int semi = raw.indexOf(';', nextAmp + 1);
     if (semi < 0) {
       throw XmlParseException('Unterminated entity', offset + nextAmp);
@@ -707,8 +710,13 @@ String decodeXmlEntities(String raw, {int offset = 0}) {
     out.writeCharCode(_entityCodePoint(body, offset + nextAmp));
     i = semi + 1;
   }
-  return out.toString().replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  return out.toString();
 }
+
+/// Turns literal CRLF and CR into LF. Only ever applied to source text, never
+/// to decoded output, so `&#13;` keeps its CR.
+String _normalizeEol(String s) =>
+    s.contains('\r') ? s.replaceAll('\r\n', '\n').replaceAll('\r', '\n') : s;
 
 int _entityCodePoint(String body, int at) {
   switch (body) {
@@ -866,3 +874,4 @@ const int _quot = 0x22;
 const int _apos = 0x27;
 const int _amp = 0x26;
 const int _colon = 0x3A;
+const int _cr = 0x0D;
