@@ -1,7 +1,7 @@
 /// Writes the workload's file to standard output, for the read benchmark.
 ///
 /// New in jet_office. `workload_file_vm.dart` runs it as a child process:
-/// `dart run benchmark/src/write_workload.dart <rows>`.
+/// `dart <package root>/benchmark/src/write_workload.dart <rows>`.
 library;
 
 import 'dart:io' show stdout;

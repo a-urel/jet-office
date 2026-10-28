@@ -90,8 +90,8 @@ dart run tool/compare_resaved.dart build/fixtures build/resaved
 `XlsxStreamWriter` (`xlsx_benchmark_test.dart`), and reads that file back
 with `XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each
 phase and memory per byte of sheet XML). Each prints time, file size and
-peak memory per run. The quality gate does not run it; run it by hand on the
-VM and in Chrome. It records figures and fails on none
+peak memory per run. The quality gate does not run them; run them by hand
+on the VM and in Chrome. They record figures and fail on none
 (`docs/benchmark.md`):
 
 ```bash

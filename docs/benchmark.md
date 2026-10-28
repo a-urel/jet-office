@@ -128,7 +128,11 @@ every third row and so not written).
   [`0006`](decisions/0006-zip-bytes-may-differ-by-platform.md)): the ZIP
   bytes differ by platform, the parts do not. On the VM a child `dart`
   process writes it (`benchmark/src/workload_file.dart`), so the reader's
-  process has never run the writer; in Chrome it is written in the page.
+  process has never run the writer; a last test writes the workload in the
+  process and asserts the bytes equal the child's. In Chrome the file is
+  written in the page. Before the memory runs the benchmark reads only the
+  ZIP directory (with `package:archive`, for the deflated entry and its
+  size N); nothing inflates the sheet in the process until the warm-up.
 - `XlsxReader reads 100000 rows`: one warm-up run, then three timed runs. A
   run opens a fresh `XlsxReader` and takes every row of the sheet and every
   cell's `value`; it is timed from the constructor to the last row. Each run
@@ -141,23 +145,25 @@ every third row and so not written).
   peak above its baseline over the four runs. Samples are lower bounds: a
   peak between two samples is missed.
   - VM: `ProcessInfo.currentRss`. The VM also prints `ProcessInfo.maxRss`
-    after each run; after the warm-up it is the reader's true, unsampled
-    peak, because nothing in the process used more before.
+    after each run. The benchmark checks that `maxRss` rose during the
+    warm-up; then `maxRss` after it is the warm-up's own peak RSS, not
+    sampled, and "`maxRss` above the warm-up's baseline" bounds the read's
+    peak from above (it counts anything else the process allocated then).
   - Chrome: `performance.memory.usedJSHeapSize`, as for the writers.
-- `phases`, the median of three each: opening the reader; `ZipReader.read`
-  of the sheet part alone, the package's pure-Dart `Inflate.stream`;
-  `dart:io`'s `ZLibCodec(raw: true)` on the same deflated entry (VM only; its
-  output is checked equal to `ZipReader.read`'s; the browser's
-  `DecompressionStream` is asynchronous and cannot serve a synchronous
-  reader, so Chrome records `n/a`); a first full rows pass on a fresh
-  reader; a second rows pass on the same reader, with the shared strings
-  already read; and `mergesAt(0)` on a reader whose rows were read, which is
-  the second inflate and parse merges need. The phase figures import the
-  private `ZipReader` (`lib/src/zip/archive_adapter.dart`), so the benchmark
-  breaks on an internal rename.
-- The last line, `memory/N`, is the largest sampled peak above baseline
-  divided by N, the sheet XML's uncompressed bytes: the figure spec §4.4
-  budgets at about 2 to 3.
+- `phases`, the median of three each, after the memory runs: opening the
+  reader; `ZipReader.read` of the sheet part alone, the package's pure-Dart
+  `Inflate.stream`; `dart:io`'s `ZLibCodec(raw: true)` on the same deflated
+  entry (VM only; its output is checked equal to `ZipReader.read`'s; the
+  browser's `DecompressionStream` is asynchronous and cannot serve a
+  synchronous reader, so Chrome records `n/a`); a first full rows pass on a
+  fresh reader; a second rows pass on the same reader, with the shared
+  strings already read; and `mergesAt(0)` on a reader whose rows were read,
+  which is the second inflate and parse merges need. The phase figures
+  import the private `ZipReader` (`lib/src/zip/archive_adapter.dart`), so
+  the benchmark breaks on an internal rename.
+- The `memory/N` line is the largest sampled peak above baseline divided by
+  N, the sheet XML's uncompressed bytes: the figure spec §4.4 budgets at
+  about 2 to 3. The VM adds a `memory/N (peak RSS)` line from `maxRss`.
 
 ### Figures
 
@@ -169,20 +175,21 @@ every third row and so not written).
 
 | Platform | Median (ms) | File (bytes) | Sheet XML N (bytes) | Sampled peak above baseline (bytes) | memory/N |
 |---|---|---|---|---|---|
-| VM | 2739 | 6,958,087 | 43,580,479 | 47,054,848 (RSS) | 1.08 |
-| Chrome | 3358 | 6,981,844 | 43,580,479 | 125,699,799 (heap) | 2.88 |
+| VM | 2677 | 6,958,087 | 43,580,479 | 63,913,984 (RSS, warm-up) | 1.47 |
+| Chrome | 3349 | 6,981,844 | 43,580,479 | 107,275,426 (heap, warm-up) | 2.46 |
 
-On the VM, `maxRss` after the warm-up was 48,562,176 bytes above the
-warm-up's baseline, 1.11 N.
+Both memory figures come from the warm-up, the largest of the four runs.
+On the VM, `maxRss` rose during the warm-up to 105,234,432 bytes above the
+warm-up's baseline: 2.41 N.
 
 | Phase (median of 3) | VM (ms) | Chrome (ms) |
 |---|---|---|
 | Open (`XlsxReader(bytes)`) | 0.4 | 0.4 |
-| `ZipReader.read` of the sheet part (pure-Dart inflate) | 230.2 | 682.3 |
-| Platform inflate of the same entry | 41.5 | n/a |
-| First rows pass | 2729.4 | 3338.9 |
-| Second rows pass (shared strings cached) | 2627.6 | 3239.3 |
-| `mergesAt(0)` after the rows | 626.3 | 1619.2 |
+| `ZipReader.read` of the sheet part (pure-Dart inflate) | 241.3 | 685.7 |
+| Platform inflate of the same entry | 38.7 | n/a |
+| First rows pass | 2683.8 | 3338.1 |
+| Second rows pass (shared strings cached) | 2633.1 | 3291.0 |
+| `mergesAt(0)` after the rows | 656.9 | 1618.4 |
 
 The writers, run the same day on the same machine for comparison (the
 "First figures" above are from 2026-10-27):
@@ -198,32 +205,33 @@ Every read line:
 
 ```text
 vm | input | 6958087 bytes | xl/worksheets/sheet1.xml 6688565 bytes deflated, 43580479 bytes XML
-vm | XlsxReader | warm-up | 2831 ms | 6958087 bytes | RSS peak 256065536 bytes | baseline 248184832 bytes | above 7880704 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 296747008 bytes
-vm | XlsxReader | run 1 | 2746 ms | 6958087 bytes | RSS peak 303104000 bytes | baseline 256049152 bytes | above 47054848 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 303153152 bytes
-vm | XlsxReader | run 2 | 2720 ms | 6958087 bytes | RSS peak 303284224 bytes | baseline 259571712 bytes | above 43712512 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 303284224 bytes
-vm | XlsxReader | run 3 | 2739 ms | 6958087 bytes | RSS peak 303939584 bytes | baseline 259686400 bytes | above 44253184 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 303939584 bytes
-vm | XlsxReader | median 2739 ms
+vm | XlsxReader | warm-up | 2800 ms | 6958087 bytes | RSS peak 257753088 bytes | baseline 193839104 bytes | above 63913984 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 299073536 bytes
+vm | XlsxReader | run 1 | 2703 ms | 6958087 bytes | RSS peak 303955968 bytes | baseline 257720320 bytes | above 46235648 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 303955968 bytes
+vm | XlsxReader | run 2 | 2677 ms | 6958087 bytes | RSS peak 303955968 bytes | baseline 260374528 bytes | above 43581440 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 303955968 bytes
+vm | XlsxReader | run 3 | 2676 ms | 6958087 bytes | RSS peak 304480256 bytes | baseline 260358144 bytes | above 44122112 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 304480256 bytes
+vm | XlsxReader | median 2677 ms
 vm | phase | open | 0.4 ms
-vm | phase | ZipReader.read (pure-Dart inflate) | 230.2 ms | N 43580479 bytes
-vm | phase | platform inflate | 41.5 ms
-vm | phase | first rows pass | 2729.4 ms
-vm | phase | second rows pass (shared strings cached) | 2627.6 ms
-vm | phase | mergesAt(0) after rows | 626.3 ms
-vm | memory/N | 1.08 | largest sampled peak above baseline 47054848 bytes | N 43580479 bytes
-vm | memory/N (peak RSS) | 1.11 | peak RSS after the warm-up above its baseline 48562176 bytes
+vm | phase | ZipReader.read (pure-Dart inflate) | 241.3 ms | N 43580479 bytes
+vm | phase | platform inflate | 38.7 ms
+vm | phase | first rows pass | 2683.8 ms
+vm | phase | second rows pass (shared strings cached) | 2633.1 ms
+vm | phase | mergesAt(0) after rows | 656.9 ms
+vm | memory/N | 1.47 | largest sampled peak above baseline 63913984 bytes | N 43580479 bytes
+vm | memory/N (peak RSS) | 2.41 | peak RSS after the warm-up above its baseline 105234432 bytes | reached in the warm-up: yes (before: 193822720 bytes)
+vm | input | equals an in-process XlsxWriter write
 chrome | input | 6981844 bytes | xl/worksheets/sheet1.xml 6712845 bytes deflated, 43580479 bytes XML
-chrome | XlsxReader | warm-up | 3369 ms | 6981844 bytes | peak JS heap peak 322775752 bytes | baseline 197075953 bytes | above 125699799 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
-chrome | XlsxReader | run 1 | 3358 ms | 6981844 bytes | peak JS heap peak 146420412 bytes | baseline 79296784 bytes | above 67123628 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
-chrome | XlsxReader | run 2 | 3369 ms | 6981844 bytes | peak JS heap peak 145891680 bytes | baseline 146426720 bytes | above -535040 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
-chrome | XlsxReader | run 3 | 3351 ms | 6981844 bytes | peak JS heap peak 169721955 bytes | baseline 145899956 bytes | above 23821999 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
-chrome | XlsxReader | median 3358 ms
+chrome | XlsxReader | warm-up | 3380 ms | 6981844 bytes | peak JS heap peak 258163162 bytes | baseline 150887736 bytes | above 107275426 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
+chrome | XlsxReader | run 1 | 3345 ms | 6981844 bytes | peak JS heap peak 145826335 bytes | baseline 252820599 bytes | above -106994264 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
+chrome | XlsxReader | run 2 | 3356 ms | 6981844 bytes | peak JS heap peak 146353927 bytes | baseline 145832595 bytes | above 521332 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
+chrome | XlsxReader | run 3 | 3349 ms | 6981844 bytes | peak JS heap peak 169740246 bytes | baseline 146362203 bytes | above 23378043 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
+chrome | XlsxReader | median 3349 ms
 chrome | phase | open | 0.4 ms
-chrome | phase | ZipReader.read (pure-Dart inflate) | 682.3 ms | N 43580479 bytes
+chrome | phase | ZipReader.read (pure-Dart inflate) | 685.7 ms | N 43580479 bytes
 chrome | phase | platform inflate | n/a
-chrome | phase | first rows pass | 3338.9 ms
-chrome | phase | second rows pass (shared strings cached) | 3239.3 ms
-chrome | phase | mergesAt(0) after rows | 1619.2 ms
-chrome | memory/N | 2.88 | largest sampled peak above baseline 125699799 bytes | N 43580479 bytes
+chrome | phase | first rows pass | 3338.1 ms
+chrome | phase | second rows pass (shared strings cached) | 3291.0 ms
+chrome | phase | mergesAt(0) after rows | 1618.4 ms
+chrome | memory/N | 2.46 | largest sampled peak above baseline 107275426 bytes | N 43580479 bytes
 ```
 
 Every write line of the same day:
@@ -254,44 +262,49 @@ chrome | XlsxWriter | median 3143 ms
 ### Reading the figures
 
 - **Reading is slower than writing on the VM, and about as fast in
-  Chrome.** The read median is 2739 ms against the writers' 1466 ms on the
-  VM (1.9 times), and 3358 ms against 3143 ms in Chrome (1.07 times). The
+  Chrome.** The read median is 2677 ms against the writers' 1466 ms on the
+  VM (1.8 times), and 3349 ms against 3143 ms in Chrome (1.07 times). The
   spec's "reading should not be slower than writing the same file" (§4.4)
   does not hold on the VM. The benchmark records this and fails on nothing.
-- **Inflate is a small share; the pure-Dart inflate costs 189 ms on the
-  VM.** `ZipReader.read` takes 230 ms against `dart:io`'s 42 ms on the same
-  entry, 5.5 times slower, but that is 8 % of a 2739 ms read. The R1 ruling
-  (bounded pure-Dart `Inflate.stream` on every platform, for bomb safety)
-  therefore costs about 0.19 s per 43 MB of sheet XML on the VM. In Chrome
-  the inflate is 682 ms, 20 % of a read, with no platform figure to compare
-  (`DecompressionStream` is asynchronous). Note that `package:archive`
-  itself already uses the native zlib on the VM, in `ZipFile.decompress`
-  (through `ZLibDecoder`); the reader does not use that path, because it
-  inflates the whole entry before any bound applies.
-- **Parsing is the cost.** The first rows pass less the inflate is 2499 ms
-  on the VM (92 % of the pass) and 2657 ms in Chrome (80 %): UTF-8 decoding,
-  the pull parser and the cell decoder together; the benchmark does not
-  split them. The shared strings cost little here: the second pass, with
-  them cached, is only 102 ms (VM) and 100 ms (Chrome) faster. So the parse
-  share decides the deferred `_NsScope` allocation (R1 Task 2, plan ruling
-  10): parsing dominates, and a lazy namespace scope per start element is
-  the first candidate for a later speed-up. Nothing changes in R4.
+- **Inflate is a small share; the pure-Dart inflate costs about 200 ms on
+  the VM.** `ZipReader.read` takes 241 ms against `dart:io`'s 39 ms on the
+  same entry, 6.2 times slower, but that is 9 % of a 2677 ms read. The R1
+  ruling (bounded pure-Dart `Inflate.stream` on every platform, for bomb
+  safety) therefore costs about 0.2 s per 43 MB of sheet XML on the VM. In
+  Chrome the inflate is 686 ms, 20 % of a read, with no platform figure to
+  compare (`DecompressionStream` is asynchronous). `package:archive` itself
+  already uses the native zlib on the VM, in `ZipFile.decompress` (through
+  `ZLibDecoder`); the reader does not use that path, because it inflates
+  the whole entry before any bound applies.
+- **Parsing is the cost.** The first rows pass less the inflate is 2443 ms
+  on the VM (91 % of the pass) and 2652 ms in Chrome (79 %): UTF-8
+  decoding, the pull parser and the cell decoder together; the benchmark
+  does not split them. The shared strings cost little here: the second
+  pass, with them cached, is only 51 ms (VM) and 47 ms (Chrome) faster. So
+  the parse share decides the deferred `_NsScope` allocation (R1 Task 2,
+  plan ruling 10): parsing dominates, and a lazy namespace scope per start
+  element is the first candidate for a later speed-up. Nothing changes in
+  R4.
 - **Merges cost a second inflate and parse.** `mergesAt(0)` after the rows
-  takes 626 ms on the VM (23 % of a rows pass) and 1619 ms in Chrome
-  (48.5 %), for a sheet with no merges: the second inflation and scan of the
-  part that plan ruling 2 of R2 accepted. A consumer that needs merges pays
-  this once per sheet.
-- **Memory is within the budget.** The VM's sampled peak is 1.08 N (the
-  unsampled `maxRss`, 1.11 N), below the spec's "about two to three times":
-  the VM keeps an ASCII string at one byte per character, so the sheet as a
-  string costs about N, not the 2N of UTF-16, and the reader drops the
-  inflated bytes once they are decoded. Chrome's sampled peak is 2.88 N in
-  the warm-up and lower in the later runs, where the collector ran at
-  different points (one run's peak was below its baseline). It is a lower
-  bound.
+  takes 657 ms on the VM (24 % of a rows pass) and 1618 ms in Chrome
+  (48.5 %), for a sheet with no merges: the second inflation and scan of
+  the part that plan ruling 2 of R2 accepted. A consumer that needs merges
+  pays this once per sheet.
+- **Memory is within the budget.** The VM's unsampled peak, `maxRss` above
+  the warm-up's baseline, is 2.41 N, inside the spec's "about two to three
+  times": while the part is decoded the reader holds its inflated bytes (N)
+  and the decoded string at once, and the VM keeps an ASCII string at one
+  byte per character (about N, not the 2N of UTF-16). The sampled figure,
+  1.47 N, misses that moment. Chrome's sampled peak is 2.46 N in the
+  warm-up; the later runs read lower, because the collector ran at other
+  points (one run's peak was below its baseline). Both sampled figures are
+  lower bounds.
 - **Why the VM's input comes from a child process.** A first version wrote
-  the file in the benchmark's own process, as plan ruling 1 says. Its
+  the file in the benchmark's own process, as plan ruling 1 said. Its
   `currentRss` baseline was then about 280 MB, the writer's freed heap that
   the VM keeps mapped; the reader reused that heap, its RSS barely rose, and
-  `memory/N` came out as 0.05 (one run's peak was below its baseline). The
-  child process keeps the file's bytes the same and the measure honest.
+  `memory/N` came out as 0.05 (one run's peak was below its baseline). A
+  second version still inflated the sheet once in the process before the
+  warm-up, to learn N, and the warm-up reused that freed heap in turn
+  (`maxRss` showed 1.11 N). The child process writes the same bytes (the
+  last test asserts it), and N now comes from the ZIP directory.

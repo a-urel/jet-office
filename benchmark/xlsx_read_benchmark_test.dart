@@ -3,22 +3,25 @@
 /// New in jet_office. It records figures, it does not judge them
 /// (docs/benchmark.md). The file is written with `XlsxWriter` once, before
 /// anything is timed, so each platform reads its own bytes (decision 0006);
-/// on the VM a child process writes it (`src/workload_file.dart`). The phase figures use the private `ZipReader` to time the
-/// inflate alone. Run it with `dart test benchmark` and
-/// `dart test -p chrome benchmark`; the quality gate does not.
+/// on the VM a child process writes it (`src/workload_file.dart`). Nothing
+/// inflates the sheet in this process before the memory runs. The phase
+/// figures use the private `ZipReader` to time the inflate alone. Run it
+/// with `dart test benchmark` and `dart test -p chrome benchmark`; the
+/// quality gate does not.
 @Tags(<String>['benchmark'])
 @Timeout(Duration(minutes: 10))
 library;
 
 import 'dart:typed_data';
 
-import 'package:archive/archive.dart' show ZipDecoder, ZipFile;
+import 'package:archive/archive.dart' show ArchiveFile, ZipDecoder, ZipFile;
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/zip/archive_adapter.dart';
 import 'package:test/test.dart';
 
 import 'src/memory_probe.dart';
 import 'src/platform_inflate.dart';
+import 'src/workload.dart';
 import 'src/workload_file.dart';
 
 const int _rows = 100000;
@@ -118,8 +121,10 @@ const bool _isWeb = identical(0, 0.0);
 
 void main() {
   final MemoryProbe memory = currentProbe();
-  // On the VM, the process's peak RSS: the child process wrote the input, so
-  // after the warm-up it holds the reader's true peak, unsampled.
+  // On the VM, the process's peak RSS. The child process wrote the input and
+  // nothing inflated the sheet before, so after the warm-up it holds the
+  // peak of the first read, unsampled; it still includes whatever the
+  // process held before the warm-up's baseline, so it is an upper bound.
   final MemoryProbe peakProbe = probe();
   const String platform = _isWeb ? 'chrome' : 'vm';
   const XlsxReadLimits limits = XlsxReadLimits();
@@ -133,9 +138,11 @@ void main() {
   late final Uint8List rawSheet;
   late final int sheetBytes;
   int? largestAbove;
+  bool readerRan = false;
   // The VM's peak RSS after the warm-up, and the baseline of the warm-up:
   // before the timed runs and the phases can lift the peak.
   int? warmUpPeak;
+  int? peakBeforeWarmUp;
   int? warmUpBaseline;
 
   ZipReader openZip() => ZipReader(
@@ -148,12 +155,13 @@ void main() {
 
   setUpAll(() {
     file = workloadFile(_rows);
-    final ZipFile? entry =
-        ZipDecoder().decodeBytes(file).findFile(_sheetPart)?.rawContent
-            as ZipFile?;
-    expect(entry, isNotNull, reason: 'the sheet is $_sheetPart');
-    rawSheet = entry!.getRawContent();
-    sheetBytes = openZip().read(_sheetPart).length;
+    // The ZIP directory only: nothing is inflated before the memory runs.
+    final ArchiveFile? sheet = ZipDecoder()
+        .decodeBytes(file)
+        .findFile(_sheetPart);
+    expect(sheet, isNotNull, reason: 'the sheet is $_sheetPart');
+    rawSheet = (sheet!.rawContent! as ZipFile).getRawContent();
+    sheetBytes = sheet.size;
     line(
       'input | ${file.length} bytes | $_sheetPart ${rawSheet.length} '
       'bytes deflated, $sheetBytes bytes XML',
@@ -185,6 +193,7 @@ void main() {
       expect(r.pass.values, expected - _rows);
     }
 
+    peakBeforeWarmUp = peakProbe.sample();
     final _Run warmUp = _runReader(file, memory);
     warmUpBaseline = warmUp.baseline;
     warmUpPeak = peakProbe.sample();
@@ -197,6 +206,7 @@ void main() {
     }
     times.sort();
     line('XlsxReader | median ${times[times.length ~/ 2]} ms');
+    readerRan = true;
   });
 
   test('phases', () {
@@ -205,7 +215,7 @@ void main() {
 
     final int inflate = _medianMicros<ZipReader>(
       openZip,
-      (ZipReader zip) => zip.read(_sheetPart),
+      (ZipReader zip) => expect(zip.read(_sheetPart).length, sheetBytes),
     );
     line(
       'phase | ZipReader.read (pure-Dart inflate) | ${_ms(inflate)} ms | '
@@ -253,6 +263,7 @@ void main() {
   });
 
   test('memory per byte of sheet XML', () {
+    expect(readerRan, isTrue, reason: 'the reader case runs before this');
     String perN(int? bytes) =>
         bytes == null ? 'n/a' : (bytes / sheetBytes).toStringAsFixed(2);
     final int? above = largestAbove;
@@ -263,12 +274,25 @@ void main() {
     if (!_isWeb) {
       final int? peak = warmUpPeak;
       final int? base = warmUpBaseline;
+      final int? before = peakBeforeWarmUp;
       final int? peakAbove = peak == null || base == null ? null : peak - base;
+      // When the peak rose during the warm-up, it is the warm-up's own peak.
+      final bool inWarmUp = peak != null && before != null && peak > before;
       line(
         'memory/N (${peakProbe.unit}) | ${perN(peakAbove)} | '
         '${peakProbe.unit} after the warm-up above its baseline '
-        '${peakAbove == null ? 'n/a' : '$peakAbove bytes'}',
+        '${peakAbove == null ? 'n/a' : '$peakAbove bytes'} | reached in the '
+        'warm-up: ${inWarmUp ? 'yes' : 'no'} (before: $before bytes)',
       );
     }
+  });
+
+  test('the input equals an in-process write', () {
+    // In Chrome the input is the in-process write.
+    if (_isWeb) return;
+    final XlsxWriter book = XlsxWriter();
+    writeWorkload(book.addSheet('Data'), _rows, (int _) {});
+    expect(book.close().bytes, file);
+    line('input | equals an in-process XlsxWriter write');
   });
 }
