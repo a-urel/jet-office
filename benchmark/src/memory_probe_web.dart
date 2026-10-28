@@ -13,6 +13,12 @@ import 'memory_probe.dart' show MemoryProbe;
 /// Creates the probe of this platform.
 MemoryProbe probe() => _WebProbe();
 
+/// Creates the probe of this platform that reads the memory in use now.
+///
+/// The used heap already falls when the collector runs, so this is the same
+/// probe as [probe].
+MemoryProbe currentProbe() => _WebProbe();
+
 final class _WebProbe implements MemoryProbe {
   @override
   int? sample() {

@@ -1,6 +1,8 @@
 /// Memory probes of the benchmark, one per platform.
 ///
-/// New in jet_office. The VM probe imports `dart:io`, so it sits behind a
+/// New in jet_office. `probe()` reads the peak the writers report;
+/// `currentProbe()` reads the memory in use now, which the read benchmark
+/// samples against a baseline. The VM probe imports `dart:io`, so it sits behind a
 /// conditional export that the Chrome compile never follows.
 library;
 
