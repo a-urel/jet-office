@@ -266,6 +266,8 @@ final class PackageReader {
       if (_zip.contains(decoded)) return decoded;
     } on ArgumentError {
       // Not valid percent-encoding: keep the literal name.
+    } on FormatException {
+      // The escapes do not decode to UTF-8: keep the literal name.
     }
     return resolved;
   }

@@ -122,6 +122,37 @@ void main() {
       );
     });
 
+    test('keeps the literal name for an invalid percent-encoding', () {
+      for (final String bad in <String>[
+        '%FF.xml',
+        'a%C3.xml',
+        '%zz.xml',
+        '%',
+      ]) {
+        final PackageReader p = _package(<String, String>{
+          '_rels/.rels': _rels(<String, (String, String)>{
+            'rId1': ('$_rel/officeDocument', 'xl/workbook.xml'),
+            'rId2': ('$_rel/worksheet', bad),
+          }),
+          'xl/workbook.xml': '<workbook/>',
+          'xl/_rels/workbook.xml.rels': _rels(<String, (String, String)>{
+            'rId1': ('$_rel/worksheet', bad),
+          }),
+        });
+        expect(p.workbookPart, 'xl/workbook.xml', reason: bad);
+        expect(
+          p.relationshipsOf('xl/workbook.xml').single.target,
+          'xl/$bad',
+          reason: bad,
+        );
+        expect(
+          p.relationshipsOf('').map((r) => r.target),
+          contains(bad),
+          reason: bad,
+        );
+      }
+    });
+
     test('falls back to the content type override', () {
       final PackageReader p = _package(<String, String>{
         '[Content_Types].xml': _types(workbookPart: 'xl/book.xml'),
