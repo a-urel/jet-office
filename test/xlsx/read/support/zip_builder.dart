@@ -18,16 +18,36 @@ const int _endSignature = 0x06054b50;
 /// A ZIP archive holding [entries], in map order.
 ///
 /// Entries are deflated, or stored uncompressed when [store] is true (so a
-/// test can find and change an entry's bytes in the archive).
-Uint8List buildZip(Map<String, List<int>> entries, {bool store = false}) {
+/// test can find and change an entry's bytes in the archive). Every entry
+/// is stamped 1980-01-01 00:00, so equal input gives equal bytes.
+Uint8List buildZip(Map<String, List<int>> entries, {bool store = false}) =>
+    buildZipOrdered(<(String, List<int>)>[
+      for (final MapEntry<String, List<int>> entry in entries.entries)
+        (entry.key, entry.value),
+    ], store: store);
+
+/// A ZIP archive holding [entries], each a name and its bytes, in list
+/// order, as a producer that writes `[Content_Types].xml` last does.
+///
+/// Entries are deflated, or stored uncompressed when [store] is true. Every
+/// entry is stamped 1980-01-01 00:00, so equal input gives equal bytes.
+Uint8List buildZipOrdered(
+  List<(String, List<int>)> entries, {
+  bool store = false,
+}) {
   final Archive archive = Archive();
-  for (final MapEntry<String, List<int>> entry in entries.entries) {
-    final ArchiveFile file = ArchiveFile.bytes(entry.key, entry.value);
+  for (final (String name, List<int> bytes) in entries) {
+    final ArchiveFile file = ArchiveFile.bytes(name, bytes);
     if (store) file.compression = CompressionType.none;
     archive.addFile(file);
   }
-  return ZipEncoder().encodeBytes(archive);
+  return ZipEncoder().encodeBytes(archive, modified: _fixedTime);
 }
+
+/// The modification time of every entry [buildZipOrdered] writes, so equal
+/// input gives equal bytes. Local wall-clock fields are what a DOS
+/// timestamp stores, so the time zone does not matter.
+final DateTime _fixedTime = DateTime(1980);
 
 /// A copy of [zip] in which [entry] declares an uncompressed size of [size],
 /// in both its local header and its central directory header.
