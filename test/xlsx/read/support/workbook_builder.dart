@@ -31,11 +31,13 @@ String sheetEntry(int index) => 'xl/worksheets/sheet${index + 1}.xml';
 ///
 /// [sharedStrings] is the raw XML of `xl/sharedStrings.xml`; it is related
 /// from the workbook when given or when [sharedStringsRelation] is true (a
-/// relationship to a missing part). [store] stores entries uncompressed.
+/// relationship to a missing part). [styles] is the raw XML of
+/// `xl/styles.xml`, related from the workbook when given. [store] stores entries uncompressed.
 Uint8List buildWorkbook(
   Map<String, String?> sheets, {
   String? sharedStrings,
   bool sharedStringsRelation = false,
+  String? styles,
   bool store = false,
 }) {
   final StringBuffer sheetList = StringBuffer();
@@ -60,6 +62,11 @@ Uint8List buildWorkbook(
       'Target="sharedStrings.xml"/>',
     );
   }
+  if (styles != null) {
+    rels.write(
+      '<Relationship Id="rIdT" Type="$_rel/styles" Target="styles.xml"/>',
+    );
+  }
   return buildZip(<String, List<int>>{
     '[Content_Types].xml': utf8.encode(
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/'
@@ -81,6 +88,7 @@ Uint8List buildWorkbook(
     ...parts,
     if (sharedStrings != null)
       'xl/sharedStrings.xml': utf8.encode(sharedStrings),
+    if (styles != null) 'xl/styles.xml': utf8.encode(styles),
   }, store: store);
 }
 
