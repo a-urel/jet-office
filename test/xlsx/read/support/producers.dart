@@ -260,10 +260,10 @@ const String _loDecl =
 /// not copied from it (plan ruling 6). As in that file: the declaration of
 /// each part with `standalone="yes"` (the content-types declaration has
 /// none), the `docProps/app.xml` application and version strings,
-/// `fileVersion` with
-/// `appName="Calc" lowestEdited="4"`, the `<workbookPr>` and `<calcPr>`
-/// attributes, `General` written as `numFmtId="164"` (cell format 0 and the
-/// default cell style use it, Calc's own formats follow from 165), `t="n"`
+/// `fileVersion` with `appName="Calc" lowestEdited="4"`, the `<workbookPr>`
+/// and `<calcPr>` attributes, `General` written as `numFmtId="164"` (cell
+/// format 0 and the default cell style use it, Calc's own formats follow from
+/// 165), `t="n"`
 /// and `s` on every cell, the row attributes (`customFormat`, `ht`,
 /// `hidden`), `<f aca="false">`, a date-time serial rounded to 15
 /// significant digits, the page setup after `<mergeCells>`, the content
@@ -900,14 +900,15 @@ const String _sdkDecl = '\uFEFF<?xml version="1.0" encoding="utf-8"?>';
 /// (plan ruling 6): a byte order mark and `encoding="utf-8"` on every part,
 /// the `x:` prefix on every SpreadsheetML element, `" />"` on empty
 /// elements, generated relationship ids (`R` and hex digits), absolute
-/// relationship targets and none of the parts an SDK program must add
-/// itself (no styles, no shared strings, no `docProps`) are as the SDK
-/// writes them. A `[Content_Types].xml` whose default type for `xml` is
-/// generic, and entries in the order `System.IO.Packaging` writes them
-/// (parts as created, relationships and content types last), are as it
-/// writes them as far as known: the packaging layer may instead make the
-/// first part's type the default for `xml`. The workbook override written as `/XL/Workbook.xml` for
-/// the entry `xl/workbook.xml`, rows and cells without `r`, `t="n"` on
+/// relationship targets (as far as known; the SDK may write relative ones)
+/// and none of the parts an SDK program must add itself (no styles, no
+/// shared strings, no `docProps`) are as the SDK writes them. A
+/// `[Content_Types].xml` whose default type for `xml` is generic, and
+/// entries in the order `System.IO.Packaging` writes them (parts as
+/// created, relationships and content types last), are as it writes them as
+/// far as known: the packaging layer may instead make the first part's type
+/// the default for `xml`. The workbook override written as `/XL/Workbook.xml`
+/// for the entry `xl/workbook.xml`, rows and cells without `r`, `t="n"` on
 /// every number, an exponent and `t="d"` are what hand-written SDK code
 /// commonly produces, as the R3 plan sets them. The `<x:dimension>` claims
 /// `A1:Z99999` for 4 rows.

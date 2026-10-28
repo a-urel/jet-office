@@ -401,6 +401,26 @@ void main() {
       expect(json, contains('Ürünler'), reason: 'non-ASCII is kept');
     });
 
+    test('a veryHidden sheet and a negative duration round trip', () {
+      final XlsxWriter w = XlsxWriter();
+      w.addSheet('Main').row(<Object?>[
+        const XlsxCell(
+          -0.0625,
+          style: XlsxStyle(numFmt: XlsxNumFmt.elapsedTime),
+        ),
+      ]);
+      w.addSheet('Deep', visibility: XlsxSheetVisibility.veryHidden).row(
+        <Object?>[1],
+      );
+      final XlsxReader r = XlsxReader(w.close().bytes);
+      final String json = draftOwnerExpected(r, file: 'v.xlsx');
+      expect(json, contains('"duration":"-1:30:00"'));
+      expect(json, contains('veryHidden'));
+      final OwnerExpected e = parseOwnerExpected(json);
+      expect(e.sheets.last.visibility, XlsxSheetVisibility.veryHidden);
+      expect(compareOwnerFile(e, r), isEmpty);
+    });
+
     test('a date is drafted at the nearest second', () {
       String serial(int ms) =>
           '${(DateTime.utc(2026, 10, 28, 13, 45, 30, ms).difference(DateTime.utc(1899, 12, 30)).inMilliseconds / 86400000)}';

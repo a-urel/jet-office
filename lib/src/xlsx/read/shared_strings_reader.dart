@@ -31,7 +31,9 @@ import 'read_limits.dart';
 /// Throws an [XlsxReadException] of reason `limitExceeded` when the table
 /// holds more than [XlsxReadLimits.maxSharedStrings] strings, or a string is
 /// longer than [XlsxReadLimits.maxTextLength] characters after decoding, and
-/// of reason `malformedXml` when the XML cannot be read.
+/// of reason `malformedXml` when the XML cannot be read. [part] must exist in
+/// [package]: a missing part throws a [StateError], so check
+/// [PackageReader.hasPart] first.
 List<String> readSharedStrings(
   PackageReader package,
   String part,

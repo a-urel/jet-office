@@ -105,7 +105,8 @@ dart test -p chrome benchmark
 files (`test/xlsx/read/support/fuzz.dart`) and requires the reader to throw
 nothing but `XlsxReadException`. The gate runs seeds 1 to 4 with 100 cases
 each, the same cases on the VM and in Chrome (except the two deflated
-corpus entries, whose cases may differ by platform, decision 0006). For longer runs, by hand:
+corpus entries, whose cases may differ by platform, decision 0006). For
+longer runs, by hand:
 
 ```bash
 dart run tool/fuzz_reader.dart --seeds 1-200 --cases 1000

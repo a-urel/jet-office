@@ -25,9 +25,7 @@ library;
 
 import 'dart:io';
 
-import 'package:jet_office/jet_office.dart';
-
-import '../test/xlsx/read/support/fuzz.dart';
+import 'src/fuzz_run.dart';
 
 void main(List<String> args) {
   final ({int first, int last, int cases, bool verbose})? options = _parse(
@@ -42,39 +40,20 @@ void main(List<String> args) {
     return;
   }
   final Stopwatch total = Stopwatch()..start();
-  int cases = 0;
-  int refused = 0;
-  int failures = 0;
-  for (int seed = options.first; seed <= options.last; seed++) {
-    for (final FuzzCase c in fuzzCases(seed, options.cases)) {
-      cases++;
-      if (options.verbose) {
-        stderr.writeln('seed ${c.seed} case ${c.index} (${c.mutation})');
-      }
-      final Stopwatch watch = Stopwatch()..start();
-      try {
-        exerciseReader(c.bytes);
-      } on XlsxReadException {
-        refused++;
-      } on Object catch (e) {
-        failures++;
-        stdout.writeln('seed ${c.seed} case ${c.index} (${c.mutation}): $e');
-      }
-      if (watch.elapsed > const Duration(seconds: 5)) {
-        failures++;
-        stdout.writeln(
-          'seed ${c.seed} case ${c.index} (${c.mutation}): hang, '
-          '${watch.elapsedMilliseconds} ms',
-        );
-      }
-    }
-  }
+  final FuzzRunResult result = runFuzz(
+    first: options.first,
+    last: options.last,
+    cases: options.cases,
+    verbose: options.verbose,
+    out: stdout,
+    err: stderr,
+  );
   stdout.writeln(
-    'seeds ${options.first}-${options.last}: $cases cases, $refused refused '
-    'with XlsxReadException, $failures failures, '
+    'seeds ${options.first}-${options.last}: ${result.cases} cases, ${result.refused} refused '
+    'with XlsxReadException, ${result.failures} failures, '
     '${total.elapsed.inMilliseconds} ms',
   );
-  if (failures > 0) exitCode = 1;
+  if (result.failures > 0) exitCode = 1;
 }
 
 /// The seed range and case count of [args], or `null` when they are not

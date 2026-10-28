@@ -238,9 +238,9 @@ final class WarningCollector {
   /// the requested name for sheet-name codes. [detail] is the parameter of
   /// the code, if it has one; occurrences with different details are
   /// separate warnings, up to ten details per key and code, after which a
-  /// new detail is recorded as null. [key] identifies the sheet for aggregation and
-  /// [removeSheet]; it defaults to [sheet], so sheets that share a name can
-  /// pass their index to stay apart.
+  /// new detail is recorded as null. [key] identifies the sheet for
+  /// aggregation and [removeSheet]; it defaults to [sheet], so sheets that
+  /// share a name can pass their index to stay apart.
   void add(
     XlsxWarningCode code, {
     required String sheet,

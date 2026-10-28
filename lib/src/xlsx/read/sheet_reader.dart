@@ -69,10 +69,10 @@ final RegExp _outsideRef = RegExp(r'^\$?[A-Za-z]{1,4}\$?[0-9]{1,10}$');
 /// cell's contents; the cell keeps its value and formula text, without a
 /// group.
 ///
-/// The part is opened when iteration starts and read as rows are taken, so
-/// throws an [XlsxReadException] only then: `unsupportedFormat` for a root
-/// in the Strict OOXML namespace, `malformedXml` for XML that cannot be read
-/// and `limitExceeded` for a `<v>`, `<f>` or `<is>` text longer than
+/// The part is opened when iteration starts and read as rows are taken, so the
+/// method throws an [XlsxReadException] only then: `unsupportedFormat` for a
+/// root in the Strict OOXML namespace, `malformedXml` for XML that cannot be
+/// read and `limitExceeded` for a `<v>`, `<f>` or `<is>` text longer than
 /// [XlsxReadLimits.maxTextLength]. [part] must exist in [package].
 Iterable<XlsxReadRow> readSheetRows(
   PackageReader package,
