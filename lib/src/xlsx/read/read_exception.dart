@@ -47,6 +47,11 @@ final class XlsxReadException implements Exception {
 
   /// An English description for developers and logs. For
   /// [XlsxReadFailure.limitExceeded] it names the limit.
+  ///
+  /// Text taken from the file (an element name, an entity, a declared
+  /// encoding) is quoted as at most 32 characters followed by `…`, with
+  /// control characters replaced by U+FFFD, so the message stays short and
+  /// on one line whatever the file holds. [part] is not repeated in it.
   final String message;
 
   @override

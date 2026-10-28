@@ -19,6 +19,8 @@
 ///   still open at the end) throw instead of being cut short silently.
 /// * Every failure is an [XmlParseException]; no `RangeError` or
 ///   `FormatException` escapes on any input.
+/// * A message quotes input (a name, an entity body, an encoding) only
+///   through [inputExcerpt], so its length does not grow with the input.
 library;
 
 import 'dart:convert';
@@ -137,7 +139,7 @@ final class XmlPullReader {
     final String declared = _declaredEncoding(_stripBom(source));
     if (declared.isNotEmpty && declared.toUpperCase() != 'UTF-8') {
       throw XmlParseException(
-        'Unsupported encoding "$declared", only UTF-8',
+        'Unsupported encoding "${inputExcerpt(declared)}", only UTF-8',
         0,
         kind: XmlParseKind.encoding,
       );
@@ -273,7 +275,7 @@ final class XmlPullReader {
     if (_pos >= _source.length) {
       if (_elementStack.isNotEmpty) {
         throw XmlParseException(
-          'Unclosed element <${_elementStack.last}>',
+          'Unclosed element <${inputExcerpt(_elementStack.last)}>',
           _pos,
         );
       }
@@ -451,12 +453,16 @@ final class XmlPullReader {
     _skipSpaces();
     _expect(_gt, 'Expected > at end of closing tag');
     if (_elementStack.isEmpty) {
-      throw XmlParseException('Unexpected end tag </$qualifiedName>', _pos);
+      throw XmlParseException(
+        'Unexpected end tag </${inputExcerpt(qualifiedName)}>',
+        _pos,
+      );
     }
     final String open = _elementStack.removeLast();
     if (open != qualifiedName) {
       throw XmlParseException(
-        'Mismatched end tag: expected </$open> but found </$qualifiedName>',
+        'Mismatched end tag: expected </${inputExcerpt(open)}> but found '
+        '</${inputExcerpt(qualifiedName)}>',
         _pos,
       );
     }
@@ -680,6 +686,34 @@ final class XmlPullReader {
   );
 }
 
+/// The most UTF-16 code units of input an error message quotes.
+const int _excerptLength = 32;
+
+/// [text] made safe to quote in an error message: at most 32 UTF-16 code
+/// units (a surrogate pair is never split) followed by `…` when cut, with
+/// every control character (U+0000 to U+001F and U+007F to U+009F)
+/// replaced by U+FFFD.
+///
+/// Messages quote names and entity bodies from untrusted input; this keeps
+/// a message short however long the input is, and on one line.
+String inputExcerpt(String text) {
+  int end = text.length;
+  bool cut = false;
+  if (end > _excerptLength) {
+    end = _excerptLength;
+    final int last = text.codeUnitAt(end - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) end--;
+    cut = true;
+  }
+  final StringBuffer out = StringBuffer();
+  for (int i = 0; i < end; i++) {
+    final int ch = text.codeUnitAt(i);
+    out.writeCharCode(ch < 0x20 || (ch >= 0x7F && ch <= 0x9F) ? 0xFFFD : ch);
+  }
+  if (cut) out.write('…');
+  return out.toString();
+}
+
 /// Decodes XML predefined and numeric character entities, and normalizes
 /// line endings to `\n`.
 ///
@@ -737,20 +771,26 @@ int _entityCodePoint(String body, int at) {
   if (body.startsWith('#')) {
     return _numericReference(body, 1, 10, at);
   }
-  throw XmlParseException('Unknown entity &$body;', at);
+  throw XmlParseException('Unknown entity &${inputExcerpt(body)};', at);
 }
 
 /// Parses the digits of [body] from [from], accepting nothing but digits of
 /// [radix], and checks the result is a legal XML code point.
 int _numericReference(String body, int from, int radix, int at) {
   if (from >= body.length) {
-    throw XmlParseException('Empty character reference &$body;', at);
+    throw XmlParseException(
+      'Empty character reference &${inputExcerpt(body)};',
+      at,
+    );
   }
   int value = 0;
   for (int i = from; i < body.length; i++) {
     final int digit = _digitValue(body.codeUnitAt(i));
     if (digit < 0 || digit >= radix) {
-      throw XmlParseException('Malformed character reference &$body;', at);
+      throw XmlParseException(
+        'Malformed character reference &${inputExcerpt(body)};',
+        at,
+      );
     }
     value = value * radix + digit;
     if (value > 0x10FFFF) {
@@ -758,7 +798,10 @@ int _numericReference(String body, int from, int radix, int at) {
     }
   }
   if (value == 0 || (value >= 0xD800 && value <= 0xDFFF)) {
-    throw XmlParseException('Illegal character reference &$body;', at);
+    throw XmlParseException(
+      'Illegal character reference &${inputExcerpt(body)};',
+      at,
+    );
   }
   return value;
 }

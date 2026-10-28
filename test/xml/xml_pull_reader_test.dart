@@ -373,4 +373,57 @@ void main() {
       }
     });
   });
+
+  group('messages quote input only as a short excerpt', () {
+    final String big = 'A' * 100000;
+    final String zeros = '0' * 100000;
+
+    String messageOf(void Function() body) {
+      try {
+        body();
+      } on XmlParseException catch (e) {
+        return e.message;
+      }
+      fail('expected an XmlParseException');
+    }
+
+    test('for every message that names input', () {
+      final Map<String, void Function()> cases = <String, void Function()>{
+        'unknown entity': () => _drainAll('<a>&$big;</a>'),
+        'entity in an attribute': () => _drainAll('<a b="&$big;"/>'),
+        'malformed reference': () => _drainAll('<a>&#$big;</a>'),
+        'illegal reference': () => _drainAll('<a>&#$zeros;</a>'),
+        'illegal hex reference': () => _drainAll('<a>&#x$zeros;</a>'),
+        'unclosed element': () => _drainAll('<$big>'),
+        'unexpected end tag': () => _drainAll('</$big>'),
+        'mismatched end tag': () => _drainAll('<a></$big>'),
+        'mismatched open tag': () => _drainAll('<$big></b>'),
+        'declared encoding': () => XmlPullReader.fromBytes(
+          Uint8List.fromList(
+            utf8.encode('<?xml version="1.0" encoding="$big"?><a/>'),
+          ),
+        ),
+      };
+      for (final MapEntry<String, void Function()> c in cases.entries) {
+        final String message = messageOf(c.value);
+        expect(message.length, lessThan(120), reason: c.key);
+        expect(message, contains('…'), reason: c.key);
+      }
+    });
+
+    test('control characters in the excerpt are replaced', () {
+      final String message = messageOf(() => _drainAll('<a>&x\ny\tz;</a>'));
+      expect(message, isNot(contains('\n')));
+      expect(message, isNot(contains('\t')));
+      expect(message, contains('x\u{FFFD}y\u{FFFD}z'));
+    });
+
+    test('inputExcerpt keeps short text and cuts long text', () {
+      expect(inputExcerpt('abc'), 'abc');
+      expect(inputExcerpt('a' * 32), 'a' * 32);
+      expect(inputExcerpt('a' * 33), '${'a' * 32}…');
+      // A surrogate pair is never split.
+      expect(inputExcerpt('${'a' * 31}😀b'), '${'a' * 31}…');
+    });
+  });
 }

@@ -153,7 +153,7 @@ final class PackageReader {
       }
       throw XlsxReadException(
         XlsxReadFailure.malformedXml,
-        'The XML of "$part" cannot be read: ${e.message}.',
+        'The XML cannot be read: ${e.message}.',
         part: part,
       );
     } on ZipReadError catch (e) {

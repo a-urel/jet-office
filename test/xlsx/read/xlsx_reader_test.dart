@@ -227,4 +227,32 @@ void main() {
       throwsA(isA<XlsxReadException>()),
     );
   });
+
+  test('an exception message never carries the input at full length', () {
+    final String big = 'A' * 1000000;
+    for (final String xml in <String>[
+      worksheet('<row r="1"><c><v>&$big;</v></c></row>'),
+      worksheet('<row r="1"><c><v>1</v></c></row><$big></x$big>'),
+    ]) {
+      final XlsxReader reader = XlsxReader(
+        buildWorkbook(<String, String>{'S': xml}),
+      );
+      expect(
+        () => reader.rowsAt(0).toList(),
+        throwsA(
+          isA<XlsxReadException>()
+              .having(
+                (XlsxReadException e) => e.reason,
+                'reason',
+                XlsxReadFailure.malformedXml,
+              )
+              .having(
+                (XlsxReadException e) => e.message.length,
+                'message length',
+                lessThan(200),
+              ),
+        ),
+      );
+    }
+  });
 }
