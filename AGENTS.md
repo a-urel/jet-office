@@ -82,6 +82,21 @@ dart test benchmark
 dart test -p chrome benchmark
 ```
 
+## Fuzzing
+
+`test/xlsx/read/fuzz_test.dart` mutates a corpus of fixtures and producer
+files (`test/xlsx/read/support/fuzz.dart`) and requires the reader to throw
+nothing but `XlsxReadException`. The gate runs seeds 1 to 4 with 100 cases
+each, the same cases on the VM and in Chrome. For longer runs, by hand:
+
+```bash
+dart run tool/fuzz_reader.dart --seeds 1-200 --cases 1000
+```
+
+It prints each failure as `seed <s> case <i> (<mutation>): <error>` and
+exits 1 on any. A failure is a reader defect: pin it as a unit test in the
+owning `*_test.dart` with the input minimized by hand, then fix it.
+
 ## Hard rules
 
 - **Pure Dart, web-safe.** Nothing under `lib/` imports `dart:io`, `dart:ui`,
