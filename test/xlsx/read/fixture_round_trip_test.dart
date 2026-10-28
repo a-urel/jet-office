@@ -2,6 +2,8 @@
 // compared with what its file stores (`Fixture.storedValues`), not with what
 // a spreadsheet program shows (`expectedValues`, spec section 8).
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/cell_ref.dart';
+import 'package:jet_office/src/xlsx/date_serial.dart';
 import 'package:jet_office/src/xml/xml_escape.dart' show decodeXstring;
 import 'package:test/test.dart';
 
@@ -10,7 +12,25 @@ import '../../fixtures/fixtures.dart';
 /// Whether [text] is a number without an exponent.
 bool _plain(String text) => !text.contains(RegExp('[eE]'));
 
-void _compare(String where, Object? value, String stored) {
+/// Half a millisecond in days: the reader rounds a date or a time to the
+/// nearest millisecond.
+const double _halfMillisecond = 0.5 / 86400000;
+
+/// Compares the read [value] with the [stored] text of its cell.
+///
+/// [isDate] is the cell's `isDate`: a number in a date or time format must
+/// read as a `DateTime` or a `Duration`. The only warning a fixture may
+/// have is `formulaWithoutValue`, which leaves no value, so no warning can
+/// explain a date-formatted serial that fell back to a number.
+void _compare(
+  String where,
+  Object? value,
+  String stored, {
+  required bool isDate,
+}) {
+  if (value is XlsxDecimal && isDate) {
+    fail('$where: a date or time format read as the number $value.');
+  }
   if (value == null) {
     expect(stored, '', reason: '$where: no value');
   } else if (value is String) {
@@ -29,6 +49,18 @@ void _compare(String where, Object? value, String stored) {
     if (_plain(stored)) {
       expect(value.digits, stored, reason: '$where: digit for digit');
     }
+  } else if (value is DateTime) {
+    expect(
+      dateTimeSerial(value),
+      closeTo(double.parse(stored), _halfMillisecond),
+      reason: '$where: as a serial',
+    );
+  } else if (value is Duration) {
+    expect(
+      value.inMilliseconds / 86400000,
+      closeTo(double.parse(stored), _halfMillisecond),
+      reason: '$where: as days',
+    );
   } else {
     fail('$where: unexpected value type ${value.runtimeType}.');
   }
@@ -69,7 +101,10 @@ void main() {
         reader.sheets.map((XlsxReadSheet s) => s.name).toSet(),
         fixture.storedValues.keys.toSet(),
       );
-      int formulaCells = 0;
+      // Per sheet, the cells holding a formula without a value, in file
+      // order: the only cells that may have a warning.
+      final Map<String, List<String>> formulaCells = <String, List<String>>{};
+      int compared = 0;
       for (final MapEntry<String, List<List<String>>> sheet
           in fixture.storedValues.entries) {
         final List<List<String>> stored = sheet.value;
@@ -104,32 +139,36 @@ void main() {
               expect(stored[r][c], '', reason: '$where: missing cell');
               continue;
             }
-            _compare(where, cell.value, stored[r][c]);
-            if (cell.formula != null && cell.value == null) formulaCells++;
+            _compare(where, cell.value, stored[r][c], isDate: cell.isDate);
+            if (cell.value != null) compared++;
+            if (cell.formula != null && cell.value == null) {
+              (formulaCells[sheet.key] ??= <String>[]).add(cellRef(r, c));
+            }
           }
         }
       }
-      final Set<XlsxWarningCode> codes = reader.warnings
-          .map((XlsxWarning w) => w.code)
-          .toSet();
-      expect(
-        codes.difference(<XlsxWarningCode>{
+      expect(compared, greaterThan(0), reason: 'no value was compared');
+      for (final XlsxWarning w in reader.warnings) {
+        expect(
+          w.code,
           XlsxWarningCode.formulaWithoutValue,
-        }),
-        isEmpty,
-        reason: 'only formulaWithoutValue may be reported',
-      );
-      final int warned = reader.warnings.fold<int>(
-        0,
-        (int sum, XlsxWarning w) => sum + w.count,
-      );
-      expect(
-        warned,
-        formulaCells,
-        reason:
-            'one warning per formula without '
-            'a value, and no other cell has one',
-      );
+          reason: 'only formulaWithoutValue may be reported (${w.sheet})',
+        );
+      }
+      for (final XlsxReadSheet sheet in reader.sheets) {
+        final List<String> cells = formulaCells[sheet.name] ?? <String>[];
+        final List<XlsxWarning> warned = <XlsxWarning>[
+          for (final XlsxWarning w in reader.warnings)
+            if (w.sheet == sheet.name) w,
+        ];
+        if (cells.isEmpty) {
+          expect(warned, isEmpty, reason: sheet.name);
+          continue;
+        }
+        expect(warned, hasLength(1), reason: sheet.name);
+        expect(warned.single.cells, cells.take(10), reason: sheet.name);
+        expect(warned.single.count, cells.length, reason: sheet.name);
+      }
     });
   }
 }

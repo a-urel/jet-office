@@ -8,7 +8,9 @@
 /// runs stays literal, as in Excel); `<rPh>` and `<phoneticPr>` contents are
 /// skipped (Quds appended the phonetic text); only `<si>` elements that are
 /// children of the root count; elements match by local name and SpreadsheetML
-/// namespace; the table size and each string's length are limited.
+/// namespace; the table size and each string's length are limited; and
+/// `_readSi` is public as [readStringItem], which also reads the `<is>` of
+/// an inline string cell.
 library;
 
 import '../../opc/ooxml.dart';
@@ -52,7 +54,7 @@ List<String> readSharedStrings(
           part: part,
         );
       }
-      final String? text = _readSi(reader, limits.maxTextLength);
+      final String? text = readStringItem(reader, limits.maxTextLength);
       if (text == null) {
         throw XlsxReadException(
           XlsxReadFailure.limitExceeded,
@@ -67,11 +69,14 @@ List<String> readSharedStrings(
   });
 }
 
-/// The text of the `<si>` the reader is on: its `<t>` and its runs' `<t>`,
-/// each XML-string decoded on its own, then joined. Returns `null` as soon
-/// as the text passes [maxLength] characters; otherwise leaves the reader
-/// on the end of the `<si>`.
-String? _readSi(XmlPullReader reader, int maxLength) {
+/// The text of the string item the reader is on, a shared string's `<si>`
+/// or an inline string's `<is>`: its `<t>` and its runs' `<t>`, each
+/// XML-string decoded on its own, then joined; phonetic runs (`<rPh>`) and
+/// elements of other namespaces are skipped. An empty element is `''`.
+///
+/// Returns `null` as soon as the text passes [maxLength] characters;
+/// otherwise leaves the reader on the end of the item.
+String? readStringItem(XmlPullReader reader, int maxLength) {
   if (reader.isEmptyElement) return '';
   final StringBuffer buffer = StringBuffer();
   final int siDepth = reader.depth;

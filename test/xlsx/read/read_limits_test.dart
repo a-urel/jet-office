@@ -12,6 +12,7 @@ void main() {
     expect(limits.maxDepth, 256);
     expect(limits.maxTextLength, 1048576);
     expect(limits.maxSheets, 10000);
+    expect(limits.maxCellFormats, 1000000);
     limits.check();
   });
 
@@ -26,6 +27,7 @@ void main() {
       'maxDepth': const XlsxReadLimits(maxDepth: 0),
       'maxTextLength': const XlsxReadLimits(maxTextLength: 0),
       'maxSheets': const XlsxReadLimits(maxSheets: 0),
+      'maxCellFormats': const XlsxReadLimits(maxCellFormats: 0),
     };
     for (final MapEntry<String, XlsxReadLimits> e in bad.entries) {
       expect(

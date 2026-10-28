@@ -53,6 +53,28 @@ void main() {
     expect(r.warnings, isEmpty);
   });
 
+  test('reads back the dates, times and durations the writer wrote', () {
+    final XlsxWriter w = XlsxWriter();
+    w.addSheet('D').row(<Object?>[
+      DateTime(2026, 10, 28, 13, 45, 30),
+      const XlsxDate(2026, 2, 28),
+      const XlsxCell(0.5, style: XlsxStyle(numFmt: XlsxNumFmt.time)),
+      const XlsxCell(1.5, style: XlsxStyle(numFmt: XlsxNumFmt.elapsedTime)),
+    ]);
+    final XlsxReader r = XlsxReader(w.close().bytes);
+    final List<XlsxReadCell> cells = r.rows('D').single.cells;
+    expect(cells.map((XlsxReadCell c) => c.value), <Object?>[
+      DateTime.utc(2026, 10, 28, 13, 45, 30),
+      DateTime.utc(2026, 2, 28),
+      const Duration(hours: 12),
+      const Duration(hours: 36),
+    ]);
+    expect((cells[0].value! as DateTime).isUtc, isTrue);
+    expect((cells[1].value! as DateTime).isUtc, isTrue);
+    expect(cells.map((XlsxReadCell c) => c.isDate), everyElement(isTrue));
+    expect(r.warnings, isEmpty);
+  });
+
   test('reads a formula with its cached value', () {
     final XlsxWriter w = XlsxWriter();
     w.addSheet('F').row(<Object?>[1, const XlsxFormula('A1*2', cached: 2)]);
@@ -61,6 +83,35 @@ void main() {
       r.rows('F').single.cells[1],
       XlsxReadCell(1, XlsxDecimal('2'), formula: 'A1*2'),
     );
+  });
+
+  test('formula groups are per sheet and named with their sheet', () {
+    final XlsxReader r = XlsxReader(
+      buildWorkbook(<String, String?>{
+        'A': worksheet(
+          '<row r="1"><c r="A1"><f t="shared" ref="A1:A2" si="0">1</f>'
+          '<v>1</v></c></row>'
+          '<row r="2"><c r="A2"><f t="shared" si="0"/><v>1</v></c></row>',
+        ),
+        'B': worksheet(
+          '<row r="1"><c r="B1"><f t="shared" si="0"/><v>2</v></c></row>',
+        ),
+      }),
+    );
+    expect(
+      r.rowsAt(0).last.cells.single.formulaGroup,
+      const XlsxFormulaGroup(
+        XlsxFormulaGroupKind.shared,
+        XlsxRange(0, 0, 1, 0),
+        isMaster: false,
+      ),
+    );
+    // Sheet A's si 0 is not B's.
+    expect(r.rowsAt(1).single.cells.single.formulaGroup, isNull);
+    final XlsxWarning warning = r.warnings.single;
+    expect(warning.code, XlsxWarningCode.formulaGroupInvalid);
+    expect(warning.sheet, 'B');
+    expect(warning.cells, <String>['B1']);
   });
 
   test('lists sheets with index and visibility', () {
@@ -184,7 +235,7 @@ void main() {
     }
   });
 
-  test('reads shared strings once', () {
+  test('reading a sheet twice gives the same shared string', () {
     final XlsxReader r = XlsxReader(
       buildWorkbook(
         <String, String?>{
@@ -197,6 +248,176 @@ void main() {
     );
     expect(r.rows('S').single.cells.single.value, 'b');
     expect(r.rows('S').single.cells.single.value, 'b');
+  });
+
+  group('styles and the date system', () {
+    const String styles =
+        '<styleSheet xmlns="$mainNs"><numFmts count="1">'
+        '<numFmt numFmtId="164" formatCode="yyyy-mm-dd"/></numFmts>'
+        '<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/>'
+        '</cellXfs></styleSheet>';
+    final String sheet = worksheet(
+      '<row r="1"><c r="A1" s="1"><v>0</v></c></row>',
+    );
+
+    test('opening reads styles', () {
+      final Uint8List zip = _corrupt(
+        buildWorkbook(
+          <String, String?>{'S': sheet},
+          styles: styles,
+          store: true,
+        ),
+        '<styleSheet',
+      );
+      expect(
+        () => XlsxReader(zip),
+        throwsA(
+          isA<XlsxReadException>().having(
+            (XlsxReadException e) => e.reason,
+            'reason',
+            XlsxReadFailure.corruptZip,
+          ),
+        ),
+      );
+      final XlsxReader r = XlsxReader(
+        buildWorkbook(<String, String?>{'S': sheet}, styles: styles),
+      );
+      expect(r.rows('S').single.cells.single.numberFormat, 'yyyy-mm-dd');
+    });
+
+    test('date1904 is the workbook date system', () {
+      final XlsxReader r1900 = XlsxReader(
+        buildWorkbook(<String, String?>{'S': sheet}, styles: styles),
+      );
+      expect(r1900.date1904, isFalse);
+      final XlsxReader r = XlsxReader(
+        buildWorkbook(
+          <String, String?>{'S': sheet},
+          styles: styles,
+          date1904: true,
+        ),
+      );
+      expect(r.date1904, isTrue);
+      expect(r.rows('S').single.cells.single.value, DateTime.utc(1904));
+      expect(r.warnings, isEmpty);
+    });
+
+    test('a malformed styles part fails the open', () {
+      expect(
+        () => XlsxReader(
+          buildWorkbook(<String, String?>{
+            'S': sheet,
+          }, styles: '<styleSheet xmlns="$mainNs"><cellXfs>'),
+        ),
+        throwsA(
+          isA<XlsxReadException>()
+              .having(
+                (XlsxReadException e) => e.reason,
+                'reason',
+                XlsxReadFailure.malformedXml,
+              )
+              .having((XlsxReadException e) => e.part, 'part', 'xl/styles.xml'),
+        ),
+      );
+    });
+
+    test('1,000 distinct undefined format ids keep at most 11 warnings', () {
+      const int n = 1000;
+      final StringBuffer xfs = StringBuffer();
+      final StringBuffer rows = StringBuffer();
+      for (int i = 0; i < n; i++) {
+        xfs.write('<xf numFmtId="${1000 + i}"/>');
+        rows.write(
+          '<row r="${i + 1}"><c r="A${i + 1}" s="$i"><v>1</v></c></row>',
+        );
+      }
+      final XlsxReader r = XlsxReader(
+        buildWorkbook(
+          <String, String?>{'S': worksheet(rows.toString())},
+          styles:
+              '<styleSheet xmlns="$mainNs"><cellXfs count="$n">$xfs'
+              '</cellXfs></styleSheet>',
+        ),
+      );
+      expect(r.rows('S'), hasLength(n));
+      final List<XlsxWarning> unresolved = r.warnings
+          .where(
+            (XlsxWarning w) => w.code == XlsxWarningCode.unresolvedNumberFormat,
+          )
+          .toList();
+      expect(unresolved.length, lessThanOrEqualTo(11));
+      expect(
+        unresolved.fold<int>(0, (int sum, XlsxWarning w) => sum + w.count),
+        n,
+      );
+      expect(unresolved.last.detail, isNull);
+    });
+
+    test('no styles part reads General', () {
+      final XlsxReader r = XlsxReader(
+        buildWorkbook(<String, String?>{
+          'S': worksheet('<row r="1"><c r="A1" s="0"><v>5</v></c></row>'),
+        }),
+      );
+      expect(
+        r.rows('S').single.cells.single,
+        XlsxReadCell(0, XlsxDecimal('5')),
+      );
+      expect(r.warnings, isEmpty);
+    });
+  });
+
+  test('duplicate sheet names keep separate warnings', () {
+    final XlsxReader r = XlsxReader(
+      buildWorkbookList(<(String, String?)>[
+        ('A', worksheet('<row r="1"><c r="A1" t="b"><v>x</v></c></row>')),
+        ('A', worksheet('<row r="1"><c r="B1" t="b"><v>y</v></c></row>')),
+      ]),
+    );
+    r.rowsAt(0).toList();
+    r.rowsAt(1).toList();
+    expect(r.warnings.map((XlsxWarning w) => '${w.sheet} ${w.cells}'), <String>[
+      'A [A1]',
+      'A [B1]',
+    ]);
+    r.rowsAt(1).toList();
+    expect(r.warnings.map((XlsxWarning w) => '${w.sheet} ${w.cells}'), <String>[
+      'A [A1]',
+      'A [B1]',
+    ]);
+    expect(r.warnings.map((XlsxWarning w) => w.count), <int>[1, 1]);
+  });
+
+  test('an older iterator adds no warnings after a newer pass starts', () {
+    final XlsxReader r = XlsxReader(
+      buildWorkbook(<String, String?>{
+        'S': worksheet(
+          '<row r="1"><c r="A1" t="b"><v>x</v></c></row>'
+          '<row r="2"><c r="A2" t="b"><v>y</v></c></row>'
+          '<row r="3"><c r="A3" t="b"><v>z</v></c></row>',
+        ),
+      }),
+    );
+    final Iterator<XlsxReadRow> first = r.rowsAt(0).iterator;
+    expect(first.moveNext(), isTrue);
+    expect(r.rowsAt(0).toList(), hasLength(3));
+    int rows = 1;
+    while (first.moveNext()) {
+      rows++;
+    }
+    expect(rows, 3);
+    expect(_codes(r), <XlsxWarningCode>[XlsxWarningCode.booleanInvalid]);
+    expect(r.warnings.single.count, 3);
+    expect(r.warnings.single.cells, <String>['A1', 'A2', 'A3']);
+  });
+
+  test('a missing part warns under its index', () {
+    final XlsxReader r = XlsxReader(
+      buildWorkbookList(<(String, String?)>[('A', null), ('A', null)]),
+    );
+    expect(r.warnings.map((XlsxWarning w) => w.count), <int>[1, 1]);
+    r.rowsAt(1).toList();
+    expect(r.warnings.map((XlsxWarning w) => w.count), <int>[1, 1]);
   });
 
   test('the constructor checks the limits', () {

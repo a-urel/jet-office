@@ -91,6 +91,9 @@ final class XlsxDate {
 
 final RegExp _decimalDigits = RegExp(r'^-?\d+(\.\d+)?$');
 
+/// The largest integer a web `double` holds exactly, 2^53 - 1, as digits.
+const String _maxSafeInt = '9007199254740991';
+
 /// An exact decimal number, written to the file digit for digit.
 ///
 /// Use it for money and other values where a `double` would show binary
@@ -118,6 +121,41 @@ final class XlsxDecimal {
 
   /// The number as written to the file.
   final String digits;
+
+  /// The number as a `double`, rounded to the nearest representable value.
+  double toDouble() => double.parse(digits);
+
+  /// The number as an `int`, or `null` when it is not a whole number or its
+  /// magnitude exceeds 2^53 - 1 (9007199254740991).
+  ///
+  /// A fraction of zeros only (`12.000`) counts as whole. The limit is the
+  /// largest integer a web `double` holds exactly, so the result is the same
+  /// on the VM and the web. The magnitude is compared as text before parsing,
+  /// so digits of any length are safe.
+  int? toIntOrNull() {
+    final int point = digits.indexOf('.');
+    final String fraction = point < 0 ? '' : digits.substring(point + 1);
+    if (fraction.replaceAll('0', '').isNotEmpty) {
+      return null;
+    }
+    final bool negative = digits.startsWith('-');
+    final String whole = digits.substring(
+      negative ? 1 : 0,
+      point < 0 ? digits.length : point,
+    );
+    int start = 0;
+    while (start < whole.length - 1 && whole.codeUnitAt(start) == 0x30) {
+      start++;
+    }
+    final String magnitude = whole.substring(start);
+    if (magnitude.length > _maxSafeInt.length ||
+        (magnitude.length == _maxSafeInt.length &&
+            magnitude.compareTo(_maxSafeInt) > 0)) {
+      return null;
+    }
+    final int value = int.parse(magnitude);
+    return negative ? -value : value;
+  }
 
   @override
   bool operator ==(Object other) =>

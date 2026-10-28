@@ -1,4 +1,7 @@
+import 'package:jet_office/jet_office.dart' show XlsxErrorValue;
 import 'package:jet_office/src/xlsx/read/cell_decoder.dart';
+import 'package:jet_office/src/xlsx/read/format_kind.dart';
+import 'package:jet_office/src/xlsx/read/styles_reader.dart';
 import 'package:jet_office/src/xlsx/values.dart';
 import 'package:jet_office/src/xlsx/warnings.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
@@ -9,14 +12,36 @@ DecodedCell _decode({
   String? value,
   String? formula,
   bool hasFormula = false,
+  String? inlineText,
   List<String>? shared,
+  CellFormat format = CellFormat.general,
+  bool date1904 = false,
 }) => decodeCell(
   type: type,
   value: value,
   formula: formula,
   hasFormula: hasFormula || formula != null,
+  inlineText: inlineText,
   sharedStrings: shared,
+  format: format,
+  date1904: date1904,
 );
+
+const CellFormat _date = CellFormat(164, 'dd.mm.yyyy', FormatKind.date);
+
+const CellFormat _time = CellFormat(165, 'h:mm', FormatKind.time);
+
+const CellFormat _locale = CellFormat(27, null, FormatKind.number);
+
+XmlPullReader _at(String xml) {
+  final XmlPullReader r = XmlPullReader(xml);
+  while (r.next()) {
+    if (r.eventType == XmlEventType.startElement) {
+      break;
+    }
+  }
+  return r;
+}
 
 /// The digits of the decoded number, or the warning when it is not one.
 Object? _num(String text, {String? type}) {
@@ -188,12 +213,229 @@ void main() {
   });
 
   group('unsupported types', () {
-    test('inlineStr, e, d and unknown types warn and read null', () {
-      for (final String type in <String>['inlineStr', 'e', 'd', 'zz', 'N']) {
+    test('unknown types warn and read null', () {
+      for (final String type in <String>['zz', 'N', 'E', 'inlinestr']) {
         final DecodedCell cell = _decode(type: type, value: '1');
         expect(cell.warning, XlsxWarningCode.cellTypeUnsupported);
         expect(cell.value, isNull);
       }
+    });
+  });
+
+  group('error values', () {
+    test('a classic code is its constant', () {
+      final DecodedCell cell = _decode(type: 'e', value: '#N/A');
+      expect(cell.value, XlsxErrorValue.na);
+      expect(cell.warning, isNull);
+      expect(_decode(type: 'e', value: ' #DIV/0! ').value, XlsxErrorValue.div0);
+    });
+
+    test('an unknown code is kept', () {
+      final DecodedCell cell = _decode(type: 'e', value: '#SPILL!');
+      expect(cell.value, const XlsxErrorValue('#SPILL!'));
+      expect((cell.value! as XlsxErrorValue).isClassic, isFalse);
+      expect(cell.warning, isNull);
+    });
+
+    test('an empty or missing code is errorValueInvalid', () {
+      for (final String? text in <String?>['', '  ', null]) {
+        final DecodedCell cell = _decode(type: 'e', value: text);
+        expect(cell.value, isNull, reason: '$text');
+        expect(cell.warning, XlsxWarningCode.errorValueInvalid);
+      }
+    });
+
+    test('the code is XML-string decoded', () {
+      expect(_decode(type: 'e', value: '_x0023_N/A').value, XlsxErrorValue.na);
+    });
+  });
+
+  group('inline strings', () {
+    test('the inline text is the value', () {
+      final DecodedCell cell = _decode(type: 'inlineStr', inlineText: 'a');
+      expect(cell.value, 'a');
+      expect(cell.warning, isNull);
+    });
+
+    test('without inline text the <v> text is read, decoded', () {
+      final DecodedCell cell = _decode(type: 'inlineStr', value: 'b');
+      expect(cell.value, 'b');
+      expect(cell.warning, isNull);
+      expect(_decode(type: 'inlineStr', value: 'a_x0042_').value, 'aB');
+    });
+
+    test('with neither it is the empty string', () {
+      final DecodedCell cell = _decode(type: 'inlineStr');
+      expect(cell.value, '');
+      expect(cell.warning, isNull);
+    });
+
+    test('the inline text wins over <v>', () {
+      expect(
+        _decode(type: 'inlineStr', inlineText: 'a', value: 'b').value,
+        'a',
+      );
+    });
+  });
+
+  group('t="d"', () {
+    test('ISO text is a UTC date and time', () {
+      final DecodedCell cell = _decode(
+        type: 'd',
+        value: '2026-10-28T10:00:00Z',
+      );
+      expect(cell.value, DateTime.utc(2026, 10, 28, 10));
+      expect(cell.warning, isNull);
+      expect(
+        _decode(type: 'd', value: ' 2026-10-28 ').value,
+        DateTime.utc(2026, 10, 28),
+      );
+    });
+
+    test('other text is dateTextInvalid', () {
+      for (final String? text in <String?>['x', '', '10:00', null]) {
+        final DecodedCell cell = _decode(type: 'd', value: text);
+        expect(cell.value, isNull, reason: '$text');
+        expect(cell.warning, XlsxWarningCode.dateTextInvalid);
+      }
+    });
+  });
+
+  group('dates by format', () {
+    test('a serial in a date format is a DateTime', () {
+      final DecodedCell cell = _decode(value: '45000.25', format: _date);
+      expect(cell.value, DateTime.utc(2023, 3, 15, 6));
+      expect(cell.warning, isNull);
+    });
+
+    test('the 1904 system moves the date', () {
+      final DecodedCell cell = _decode(
+        value: '45000.25',
+        format: _date,
+        date1904: true,
+      );
+      expect(cell.value, DateTime.utc(2027, 3, 16, 6));
+      expect(cell.warning, isNull);
+    });
+
+    test('t="n" maps too', () {
+      expect(
+        _decode(type: 'n', value: '45000.25', format: _date).value,
+        DateTime.utc(2023, 3, 15, 6),
+      );
+    });
+
+    test('a General number stays a decimal', () {
+      expect(_decode(value: '45000.25').value, XlsxDecimal('45000.25'));
+    });
+  });
+
+  group('durations by format', () {
+    test('a serial in a time format is a Duration', () {
+      final DecodedCell cell = _decode(value: '0.5', format: _time);
+      expect(cell.value, const Duration(hours: 12));
+      expect(cell.warning, isNull);
+    });
+
+    test('a timestamp in a time-only format is a long Duration', () {
+      final DecodedCell cell = _decode(value: '45000.5', format: _time);
+      expect(cell.value, const Duration(days: 45000, hours: 12));
+      expect(cell.warning, isNull);
+    });
+  });
+
+  group('range warnings keep the decimal', () {
+    test('serial 60 is phantomLeapDay', () {
+      final DecodedCell cell = _decode(value: '60', format: _date);
+      expect(cell.value, XlsxDecimal('60'));
+      expect(cell.warning, XlsxWarningCode.phantomLeapDay);
+    });
+
+    test('a negative serial is serialOutOfRange', () {
+      final DecodedCell cell = _decode(value: '-1', format: _date);
+      expect(cell.value, XlsxDecimal('-1'));
+      expect(cell.warning, XlsxWarningCode.serialOutOfRange);
+    });
+
+    test('a duration too long is serialOutOfRange', () {
+      final DecodedCell cell = _decode(value: '100000', format: _time);
+      expect(cell.value, XlsxDecimal('100000'));
+      expect(cell.warning, XlsxWarningCode.serialOutOfRange);
+    });
+  });
+
+  group('locale ids', () {
+    test('a number in a format without a code warns and stays a decimal', () {
+      final DecodedCell cell = _decode(value: '45000', format: _locale);
+      expect(cell.value, XlsxDecimal('45000'));
+      expect(cell.warning, XlsxWarningCode.unresolvedNumberFormat);
+    });
+
+    test('a string cell in it has no warning', () {
+      final DecodedCell cell = _decode(
+        type: 's',
+        value: '0',
+        shared: <String>['a'],
+        format: _locale,
+      );
+      expect(cell.value, 'a');
+      expect(cell.warning, isNull);
+    });
+
+    test('nor do booleans, errors, dates and formula strings', () {
+      for (final (String type, String text) in <(String, String)>[
+        ('b', '1'),
+        ('e', '#N/A'),
+        ('d', '2026-10-28'),
+        ('str', 'x'),
+        ('inlineStr', 'x'),
+      ]) {
+        final DecodedCell cell = _decode(
+          type: type,
+          value: text,
+          format: _locale,
+        );
+        expect(cell.warning, isNull, reason: type);
+      }
+    });
+  });
+
+  group('a broken style', () {
+    test('keeps the decimal and warns styleInvalid', () {
+      final DecodedCell cell = _decode(
+        value: '45000',
+        format: CellFormat.broken,
+      );
+      expect(cell.value, XlsxDecimal('45000'));
+      expect(cell.warning, XlsxWarningCode.styleInvalid);
+    });
+
+    test('an invalid number wins over it', () {
+      final DecodedCell cell = _decode(value: 'x', format: CellFormat.broken);
+      expect(cell.value, isNull);
+      expect(cell.warning, XlsxWarningCode.numberInvalid);
+    });
+
+    test('wins over a missing code and a date mapping', () {
+      const CellFormat brokenLocale = CellFormat(
+        27,
+        null,
+        FormatKind.number,
+        invalid: true,
+      );
+      const CellFormat brokenDate = CellFormat(
+        14,
+        'm/d/yyyy',
+        FormatKind.date,
+        invalid: true,
+      );
+      expect(
+        _decode(value: '1', format: brokenLocale).warning,
+        XlsxWarningCode.styleInvalid,
+      );
+      final DecodedCell cell = _decode(value: '60', format: brokenDate);
+      expect(cell.value, XlsxDecimal('60'));
+      expect(cell.warning, XlsxWarningCode.styleInvalid);
     });
   });
 
@@ -206,13 +448,30 @@ void main() {
         'b',
         'str',
         'e',
+        'd',
+        'inlineStr',
         'zz',
       ]) {
-        final DecodedCell cell = _decode(type: type, formula: 'A1+1');
+        final DecodedCell cell = _decode(
+          type: type,
+          formula: 'A1+1',
+          format: CellFormat.broken,
+        );
         expect(cell.value, isNull, reason: '$type');
         expect(cell.warning, XlsxWarningCode.formulaWithoutValue);
         expect(cell.formula, 'A1+1');
       }
+    });
+
+    test('inline text counts as the value of a formula', () {
+      final DecodedCell cell = _decode(
+        type: 'inlineStr',
+        formula: '"a"',
+        inlineText: 'a',
+      );
+      expect(cell.value, 'a');
+      expect(cell.formula, '"a"');
+      expect(cell.warning, isNull);
     });
 
     test('a formula without text still warns', () {
@@ -234,17 +493,36 @@ void main() {
   });
 
   test('decodeCellType reads the t attribute without a namespace', () {
-    XmlPullReader at(String xml) {
-      final XmlPullReader r = XmlPullReader(xml);
-      while (r.next()) {
-        if (r.eventType == XmlEventType.startElement) {
-          break;
-        }
-      }
-      return r;
-    }
+    expect(decodeCellType(_at('<c r="A1" t="s"/>')), 's');
+    expect(decodeCellType(_at('<c r="A1"/>')), isNull);
+  });
 
-    expect(decodeCellType(at('<c r="A1" t="s"/>')), 's');
-    expect(decodeCellType(at('<c r="A1"/>')), isNull);
+  test('decodeCellType does not read a prefixed t', () {
+    expect(decodeCellType(_at('<c xmlns:x="urn:x" r="A1" x:t="s"/>')), isNull);
+  });
+
+  group('decodeFormulaType', () {
+    test('reads shared, array and dataTable', () {
+      expect(decodeFormulaType(_at('<f t="shared"/>')), FormulaType.shared);
+      expect(decodeFormulaType(_at('<f t="array"/>')), FormulaType.array);
+      expect(
+        decodeFormulaType(_at('<f t="dataTable"/>')),
+        FormulaType.dataTable,
+      );
+    });
+
+    test('absent or unknown is normal', () {
+      expect(decodeFormulaType(_at('<f>A1</f>')), FormulaType.normal);
+      expect(decodeFormulaType(_at('<f t="normal"/>')), FormulaType.normal);
+      expect(decodeFormulaType(_at('<f t="foo"/>')), FormulaType.normal);
+      expect(decodeFormulaType(_at('<f t="Shared"/>')), FormulaType.normal);
+    });
+
+    test('a prefixed t is not read', () {
+      expect(
+        decodeFormulaType(_at('<f xmlns:x="urn:x" x:t="shared"/>')),
+        FormulaType.normal,
+      );
+    });
   });
 }

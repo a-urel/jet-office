@@ -12,11 +12,12 @@
 /// parsed to an `int`; every `<v>` and `<f>` text is limited to
 /// `maxTextLength`; elements match by local name and SpreadsheetML namespace
 /// so prefixed producers work; a part that is not a `<worksheet>` reads as
-/// no rows, and one in the Strict namespace is refused; and cells that come
+/// no rows, and one in the Strict namespace is refused; cells that come
 /// out of column order are sorted once per row instead of inserted one by
-/// one.
-///
-/// @docImport '../values.dart';
+/// one; each cell gets the number format of its style (`s`), which makes a
+/// number a date or a duration; the `<is>` of an inline string cell is
+/// read (Quds read only its first `<t>`); and each cell says which shared,
+/// array or data-table formula group it belongs to (`FormulaGroups`).
 library;
 
 import '../../opc/ooxml.dart';
@@ -25,9 +26,14 @@ import '../cell_ref.dart';
 import '../limits.dart';
 import '../warnings.dart';
 import 'cell_decoder.dart';
+import 'format_kind.dart';
+import 'formula_groups.dart';
 import 'package_reader.dart';
+import 'read_cell.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
+import 'shared_strings_reader.dart';
+import 'styles_reader.dart';
 
 final RegExp _digits = RegExp(r'^[0-9]+$');
 
@@ -38,119 +44,56 @@ final RegExp _leadingZeros = RegExp('^0+');
 /// into a message.
 final RegExp _outsideRef = RegExp(r'^\$?[A-Za-z]{1,4}\$?[0-9]{1,10}$');
 
-/// One cell of a row read from a worksheet.
-final class XlsxReadCell {
-  /// A cell in the 0-based [column] holding [value] and, when it has one,
-  /// [formula].
-  const XlsxReadCell(this.column, this.value, {this.formula});
-
-  /// The 0-based column: 0 is `A`.
-  final int column;
-
-  /// The value: `null`, a `String`, a `bool` or an [XlsxDecimal].
-  ///
-  /// `null` when the file holds no value for the cell or the value could not
-  /// be read exactly; the second case is reported as an [XlsxWarning].
-  final Object? value;
-
-  /// The formula text as written in the file, only `_xHHHH_` decoded (a
-  /// leading `=` is not removed or added), or `null` when the cell has no
-  /// formula text. [value] is the result the file cached for the formula.
-  ///
-  /// A cell that follows a shared formula (`<f t="shared" si="0"/>`, empty)
-  /// has a formula in the file but no text of its own, so this is `null`
-  /// until formula groups are read (milestone R2); [value] still holds its
-  /// cached result.
-  final String? formula;
-
-  @override
-  bool operator ==(Object other) =>
-      other is XlsxReadCell &&
-      other.column == column &&
-      other.value == value &&
-      other.formula == formula;
-
-  @override
-  int get hashCode => Object.hash(column, value, formula);
-
-  @override
-  String toString() =>
-      'XlsxReadCell($column, $value'
-      '${formula == null ? '' : ', formula: $formula'})';
-}
-
-/// One row read from a worksheet.
-final class XlsxReadRow {
-  /// A row at the 0-based [index] holding [cells], which must be in column
-  /// order; [hidden] whether the file hides it.
-  XlsxReadRow(this.index, List<XlsxReadCell> cells, {this.hidden = false})
-    : cells = List<XlsxReadCell>.unmodifiable(cells);
-
-  /// The 0-based row index: 0 is row 1.
-  final int index;
-
-  /// Whether the row is hidden in the file.
-  final bool hidden;
-
-  /// The cells of the row that hold data, in column order. Empty only for a
-  /// hidden row without data. Unmodifiable.
-  final List<XlsxReadCell> cells;
-
-  @override
-  bool operator ==(Object other) {
-    if (other is! XlsxReadRow ||
-        other.index != index ||
-        other.hidden != hidden ||
-        other.cells.length != cells.length) {
-      return false;
-    }
-    for (int i = 0; i < cells.length; i++) {
-      if (other.cells[i] != cells[i]) return false;
-    }
-    return true;
-  }
-
-  @override
-  int get hashCode => Object.hash(index, hidden, Object.hashAll(cells));
-
-  @override
-  String toString() => 'XlsxReadRow($index${hidden ? ', hidden' : ''}, $cells)';
-}
-
 /// The rows of the worksheet part [part] of [package], in file order.
 ///
 /// Yields one [XlsxReadRow] per `<row>` of `<sheetData>` that holds at least
 /// one cell with a `<v>`, `<f>` or `<is>`, or that is hidden. Problems with
-/// single cells and rows are added to [warnings] under [sheet].
-/// A cell gets at most one warning for its contents: `cellTypeUnsupported`
-/// for an `<is>` when `t` is not `inlineStr` (its text is not read), else
-/// `cellDuplicated` for a repeated `<v>`, `<f>` or `<is>` (the last is
-/// kept), else the decoder's warning. A part whose root is not a
-/// SpreadsheetML `<worksheet>` (a chartsheet, say), or that has no
-/// `<sheetData>`, has no rows.
+/// single cells and rows are passed to [warn] with the cell's name and, for
+/// [XlsxWarningCode.unresolvedNumberFormat], the format id as detail. A
+/// cell gets at most one warning for its contents: `cellTypeUnsupported` for
+/// an `<is>` when `t` is not `inlineStr` (its text is not read), else
+/// `cellDuplicated` for a repeated `<v>`, `<f>` or `<is>` (the last is kept),
+/// else the decoder's warning. A part whose root is not a SpreadsheetML
+/// `<worksheet>` (a chartsheet, say), or that has no `<sheetData>`, has no
+/// rows.
+///
+/// A cell's style index `s` is resolved in [styles]; the cell carries the
+/// format's id and code, and [date1904] is the workbook's date system for
+/// the numbers a date format turns into a `DateTime`.
+///
+/// Formula groups are tracked over the pass: a shared or array master and
+/// its followers, and the cells without `<f>` inside an array or data-table
+/// range, carry the group and its range. A group the file does not define
+/// correctly, and a cell with its own `<f>` inside an array or data-table
+/// range, give `formulaGroupInvalid` in addition to any warning for the
+/// cell's contents; the cell keeps its value and formula text, without a
+/// group.
 ///
 /// The part is opened when iteration starts and read as rows are taken, so
 /// throws an [XlsxReadException] only then: `unsupportedFormat` for a root
 /// in the Strict OOXML namespace, `malformedXml` for XML that cannot be read
-/// and `limitExceeded` for a `<v>` or `<f>` text longer than
+/// and `limitExceeded` for a `<v>`, `<f>` or `<is>` text longer than
 /// [XlsxReadLimits.maxTextLength]. [part] must exist in [package].
 Iterable<XlsxReadRow> readSheetRows(
   PackageReader package,
   String part, {
-  required String sheet,
   required List<String>? sharedStrings,
+  required StyleTable styles,
+  required bool date1904,
   required XlsxReadLimits limits,
-  required WarningCollector warnings,
+  required void Function(XlsxWarningCode code, String? cell, {String? detail})
+  warn,
 }) sync* {
   final _SheetWalker walker = package.guardXml(
     part,
     () => _SheetWalker(
       package.openXml(part),
       part,
-      sheet,
       sharedStrings,
+      styles,
+      date1904,
       limits,
-      warnings,
+      warn,
     ),
   );
   while (true) {
@@ -171,13 +114,26 @@ final class _RawCell {
   /// The `r` attribute as written, or `null`.
   final String? ref;
 
+  /// The `s` attribute (the style index) as written, or `null`.
+  String? style;
+
   /// Whether `r` was absent, did not parse or named another row.
   bool refInvalid = false;
 
   String? value;
   String? formula;
   bool hasFormula = false;
+
+  /// The type, `ref` and `si` of the last `<f>`.
+  FormulaType formulaType = FormulaType.normal;
+  String? formulaRef;
+  String? formulaSi;
+
   bool hasInline = false;
+
+  /// The text of the last `<is>`, when the cell is an inline string inside
+  /// the sheet; otherwise `null`.
+  String? inlineText;
 
   /// Whether a `<v>`, `<f>` or `<is>` occurs more than once; the last one
   /// is kept.
@@ -235,18 +191,24 @@ final class _SheetWalker {
   _SheetWalker(
     this._reader,
     this._part,
-    this._sheet,
     this._sharedStrings,
+    this._styles,
+    this._date1904,
     this._limits,
-    this._warnings,
+    this._warn,
   );
 
   final XmlPullReader _reader;
   final String _part;
-  final String _sheet;
   final List<String>? _sharedStrings;
+  final StyleTable _styles;
+  final bool _date1904;
   final XlsxReadLimits _limits;
-  final WarningCollector _warnings;
+  final void Function(XlsxWarningCode code, String? cell, {String? detail})
+  _warn;
+
+  /// The formula groups of this pass.
+  final FormulaGroups _groups = FormulaGroups();
 
   bool _started = false;
   bool _done = false;
@@ -329,6 +291,7 @@ final class _SheetWalker {
     _previousRow = index;
     final bool inside = index < XlsxLimits.maxRows;
     bool pendingInvalid = position.invalid;
+    _groups.startRow(index);
 
     final _RowCells cells = _RowCells();
     if (!_reader.isEmptyElement) {
@@ -345,7 +308,12 @@ final class _SheetWalker {
           continue;
         }
         final String? type = decodeCellType(_reader);
-        final _RawCell raw = _readCell(index, previousColumn, inside);
+        final _RawCell raw = _readCell(
+          index,
+          previousColumn,
+          inside,
+          inline: type == 'inlineStr',
+        );
         previousColumn = raw.column;
         if (!raw.hasData) continue;
         if (!inside || raw.column >= XlsxLimits.maxColumns) {
@@ -357,12 +325,16 @@ final class _SheetWalker {
           _warn(XlsxWarningCode.cellReferenceInvalid, name);
         }
         pendingInvalid = false;
+        final CellFormat format = _styles.formatOf(raw.style);
         final DecodedCell decoded = decodeCell(
           type: type,
           value: raw.value,
           formula: raw.formula,
           hasFormula: raw.hasFormula,
+          inlineText: raw.inlineText,
           sharedStrings: _sharedStrings,
+          format: format,
+          date1904: _date1904,
         );
         // One warning per cell for its contents: an inline string the type
         // does not announce (its text is not read), then a repeated child,
@@ -373,9 +345,31 @@ final class _SheetWalker {
             : raw.repeated
             ? XlsxWarningCode.cellDuplicated
             : decoded.warning;
-        if (contentWarning != null) _warn(contentWarning, name);
+        if (contentWarning != null) {
+          _warn(
+            contentWarning,
+            name,
+            detail: contentWarning == XlsxWarningCode.unresolvedNumberFormat
+                ? '${format.id}'
+                : null,
+          );
+        }
+        final FormulaGroupResult grouped = _group(index, raw);
+        if (grouped.invalid) {
+          _warn(XlsxWarningCode.formulaGroupInvalid, name);
+        }
         if (!cells.place(
-          XlsxReadCell(raw.column, decoded.value, formula: decoded.formula),
+          XlsxReadCell(
+            raw.column,
+            decoded.value,
+            formula: decoded.formula,
+            formulaGroup: grouped.group,
+            numberFormatId: format.id,
+            numberFormat: format.code,
+            isDate:
+                format.kind == FormatKind.date ||
+                format.kind == FormatKind.time,
+          ),
         )) {
           _warn(XlsxWarningCode.cellDuplicated, name);
         }
@@ -390,6 +384,37 @@ final class _SheetWalker {
       );
     }
     return XlsxReadRow(index, ordered, hidden: hidden);
+  }
+
+  /// The formula group of [raw], a cell with data in the row at [row].
+  ///
+  /// A cell without `<f>` belongs to the array or data-table range that
+  /// covers it, if any. A cell with its own `<f>` inside such a range is
+  /// invalid and its `<f>` defines nothing; otherwise a shared `<f>`
+  /// without `ref` follows its `si`, and one with `ref`, an array or a data
+  /// table is a master. A normal `<f>` has no group.
+  FormulaGroupResult _group(int row, _RawCell raw) {
+    if (!raw.hasFormula) {
+      return (group: _groups.coveredBy(row, raw.column), invalid: false);
+    }
+    if (_groups.coveredBy(row, raw.column) != null) {
+      return (group: null, invalid: true);
+    }
+    return switch (raw.formulaType) {
+      FormulaType.normal => (group: null, invalid: false),
+      FormulaType.shared when raw.formulaRef == null => _groups.follower(
+        raw.formulaSi,
+        row: row,
+        column: raw.column,
+      ),
+      final FormulaType type => _groups.master(
+        type,
+        row: row,
+        column: raw.column,
+        ref: raw.formulaRef,
+        si: raw.formulaSi,
+      ),
+    };
   }
 
   /// The 0-based index of a row whose `r` is [r], and whether `r` was
@@ -414,17 +439,23 @@ final class _SheetWalker {
   }
 
   /// Reads the `<c>` the reader is on, in the row at [row], leaving the
-  /// reader on its end. Texts are read only when [inside] the sheet.
-  _RawCell _readCell(int row, int previousColumn, bool inside) {
+  /// reader on its end. Texts are read only when [inside] the sheet, and the
+  /// text of an `<is>` only when the cell is an [inline] string.
+  _RawCell _readCell(
+    int row,
+    int previousColumn,
+    bool inside, {
+    required bool inline,
+  }) {
     final String? ref = _reader.getAttribute('r', namespaceUri: '');
     final ({int row, int column})? parsed = ref == null
         ? null
         : matchCellRef(ref);
     final bool matches = parsed != null && parsed.row == row;
-    final _RawCell raw = _RawCell(
-      matches ? parsed.column : previousColumn + 1,
-      ref,
-    )..refInvalid = ref != null && !matches;
+    final _RawCell raw =
+        _RawCell(matches ? parsed.column : previousColumn + 1, ref)
+          ..refInvalid = ref != null && !matches
+          ..style = _reader.getAttribute('s', namespaceUri: '');
     if (_reader.isEmptyElement) return raw;
     final bool readText = inside && raw.column < XlsxLimits.maxColumns;
     while (_reader.next()) {
@@ -440,12 +471,21 @@ final class _SheetWalker {
         case 'f':
           if (raw.hasFormula) raw.repeated = true;
           raw.hasFormula = true;
+          raw
+            ..formulaType = decodeFormulaType(_reader)
+            ..formulaRef = _reader.getAttribute('ref', namespaceUri: '')
+            ..formulaSi = _reader.getAttribute('si', namespaceUri: '');
           final String formula = _readText(row, raw.column, keep: readText);
           raw.formula = formula.isEmpty ? null : formula;
         case 'is':
           if (raw.hasInline) raw.repeated = true;
           raw.hasInline = true;
-          _reader.skip();
+          if (readText && inline) {
+            raw.inlineText = readStringItem(_reader, _limits.maxTextLength);
+            if (raw.inlineText == null) throw _tooLong(row, raw.column);
+          } else {
+            _reader.skip();
+          }
         default:
           _reader.skip();
       }
@@ -472,14 +512,7 @@ final class _SheetWalker {
       if (_reader.eventType == XmlEventType.characters ||
           _reader.eventType == XmlEventType.cdata) {
         buffer.write(_reader.text);
-        if (buffer.length > _limits.maxTextLength) {
-          throw XlsxReadException(
-            XlsxReadFailure.limitExceeded,
-            'Limit maxTextLength (${_limits.maxTextLength}) exceeded by '
-            'cell ${cellRef(row, column)}.',
-            part: _part,
-          );
-        }
+        if (buffer.length > _limits.maxTextLength) throw _tooLong(row, column);
       } else if (_reader.eventType == XmlEventType.startElement) {
         _reader.skip();
       }
@@ -487,8 +520,14 @@ final class _SheetWalker {
     return buffer.toString();
   }
 
-  void _warn(XlsxWarningCode code, String? cell) =>
-      _warnings.add(code, sheet: _sheet, cell: cell);
+  /// The `limitExceeded` failure of a cell text longer than
+  /// `maxTextLength`.
+  XlsxReadException _tooLong(int row, int column) => XlsxReadException(
+    XlsxReadFailure.limitExceeded,
+    'Limit maxTextLength (${_limits.maxTextLength}) exceeded by '
+    'cell ${cellRef(row, column)}.',
+    part: _part,
+  );
 
   /// The name of a cell outside the sheet: its `r`, upper-cased without
   /// `$`, when that looks like a reference; otherwise `null`.

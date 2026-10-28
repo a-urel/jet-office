@@ -10,7 +10,9 @@
 /// `test/architecture/warning_messages_test.dart`: sheet `Daten`, cells
 /// `A1, B2`, count 2 (a sheet-name code names one sheet, asked for as
 /// `Daten:1` or `daten`, so its count is 1 and it names no cell;
-/// `sheetPartMissing` is also one sheet and no cell).
+/// `sheetPartMissing` is also one sheet and no cell). `unresolvedNumberFormat`
+/// has a second row for the warning without a format id, the one that
+/// gathers every format id after the first ten of a sheet.
 /// `test/tool/warning_messages_test.dart` compares the output with the
 /// committed `docs/warning-messages.md`, so the file cannot drift.
 library;
@@ -20,7 +22,10 @@ import 'dart:io';
 import 'package:jet_office/src/xlsx/warnings.dart';
 
 /// The sample warning of [code]: sheet `Daten`, cells `A1, B2`, count 2.
-XlsxWarning _sample(XlsxWarningCode code) {
+///
+/// [detail] is the format id of `unresolvedNumberFormat`; null gives the
+/// warning without one.
+XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
   final WarningCollector collector = WarningCollector();
   switch (code) {
     case XlsxWarningCode.sheetNameChanged:
@@ -29,6 +34,13 @@ XlsxWarning _sample(XlsxWarningCode code) {
       collector.add(code, sheet: 'Daten', originalName: 'daten');
     case XlsxWarningCode.sheetPartMissing:
       collector.add(code, sheet: 'Daten');
+    case XlsxWarningCode.mergeRangeInvalid:
+      collector.add(code, sheet: 'Daten');
+      collector.add(code, sheet: 'Daten');
+    case XlsxWarningCode.unresolvedNumberFormat:
+      collector
+        ..add(code, sheet: 'Daten', cell: 'A1', detail: detail)
+        ..add(code, sheet: 'Daten', cell: 'B2', detail: detail);
     case XlsxWarningCode.invalidCharactersRemoved:
     case XlsxWarningCode.textTruncated:
     case XlsxWarningCode.intPrecisionLost:
@@ -43,6 +55,12 @@ XlsxWarning _sample(XlsxWarningCode code) {
     case XlsxWarningCode.cellDuplicated:
     case XlsxWarningCode.rowOutOfOrder:
     case XlsxWarningCode.cellOutsideSheet:
+    case XlsxWarningCode.styleInvalid:
+    case XlsxWarningCode.serialOutOfRange:
+    case XlsxWarningCode.phantomLeapDay:
+    case XlsxWarningCode.dateTextInvalid:
+    case XlsxWarningCode.errorValueInvalid:
+    case XlsxWarningCode.formulaGroupInvalid:
       collector
         ..add(code, sheet: 'Daten', cell: 'A1')
         ..add(code, sheet: 'Daten', cell: 'B2');
@@ -71,7 +89,11 @@ String warningMessagesMarkdown() {
     ..writeln('Every message is built for a sample warning: sheet `Daten`,')
     ..writeln('cells `A1, B2`, count 2. The two sheet-name codes name one')
     ..writeln('sheet instead, asked for as `Daten:1` (changed) or `daten`')
-    ..writeln('(duplicated). `sheetPartMissing` names one sheet and no cell.')
+    ..writeln('(duplicated). `sheetPartMissing` names one sheet and no cell;')
+    ..writeln('`mergeRangeInvalid` counts 2 and names no cell, and')
+    ..writeln('`unresolvedNumberFormat` uses format 27; its second row is the')
+    ..writeln('warning without a format id, which gathers the format ids after')
+    ..writeln('the first ten of a sheet.')
     ..writeln()
     ..writeln('The native-speaker check of the German and Turkish text is')
     ..writeln('recorded under "Native-speaker check" in')
@@ -79,13 +101,16 @@ String warningMessagesMarkdown() {
     ..writeln()
     ..writeln('| Code | en | de | tr |')
     ..writeln('|---|---|---|---|');
+  void row(String name, XlsxWarning w) => out.writeln(
+    '| $name | ${_cell(w.message(XlsxLocale.en))} '
+    '| ${_cell(w.message(XlsxLocale.de))} '
+    '| ${_cell(w.message(XlsxLocale.tr))} |',
+  );
   for (final XlsxWarningCode code in XlsxWarningCode.values) {
-    final XlsxWarning w = _sample(code);
-    out.writeln(
-      '| `${code.name}` | ${_cell(w.message(XlsxLocale.en))} '
-      '| ${_cell(w.message(XlsxLocale.de))} '
-      '| ${_cell(w.message(XlsxLocale.tr))} |',
-    );
+    row('`${code.name}`', _sample(code));
+    if (code == XlsxWarningCode.unresolvedNumberFormat) {
+      row('`${code.name}` (no id)', _sample(code, detail: null));
+    }
   }
   return out.toString();
 }

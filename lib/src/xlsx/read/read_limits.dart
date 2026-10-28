@@ -18,6 +18,7 @@ final class XlsxReadLimits {
     this.maxDepth = 256,
     this.maxTextLength = 1048576,
     this.maxSheets = 10000,
+    this.maxCellFormats = 1000000,
   });
 
   /// The most entries the ZIP archive may hold.
@@ -48,6 +49,13 @@ final class XlsxReadLimits {
   /// a part, so a small workbook part could otherwise list millions.
   final int maxSheets;
 
+  /// The most `<numFmt>` entries, and the most `<xf>` entries of
+  /// `<cellXfs>`, a styles part may hold (each counted on its own).
+  ///
+  /// Every `<xf>` costs a table slot, so a small styles part could
+  /// otherwise list millions.
+  final int maxCellFormats;
+
   /// Throws an [ArgumentError] naming the first field below 1.
   void check() {
     final Map<String, int> fields = <String, int>{
@@ -59,6 +67,7 @@ final class XlsxReadLimits {
       'maxDepth': maxDepth,
       'maxTextLength': maxTextLength,
       'maxSheets': maxSheets,
+      'maxCellFormats': maxCellFormats,
     };
     for (final MapEntry<String, int> field in fields.entries) {
       if (field.value < 1) {
