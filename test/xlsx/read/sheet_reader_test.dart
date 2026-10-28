@@ -51,18 +51,173 @@ void main() {
     expect(cells[1].formula, 'SUM(A1)');
   });
 
-  test('a shared-formula follower has no formula text until R2', () {
+  test('a shared follower reads formula null with its group and value', () {
     final XlsxReader r = _reader(
-      '<row r="1"><c r="A1"><f t="shared" ref="A1:A2" si="0">B1+1</f>'
+      '<row r="1"><c r="A1"><f t="shared" ref="A1:A3" si="0">B1+1</f>'
       '<v>2</v></c></row>'
-      '<row r="2"><c r="A2"><f t="shared" si="0"/><v>3</v></c></row>',
+      '<row r="2"><c r="A2"><f t="shared" si="0"/><v>3</v></c></row>'
+      '<row r="3"><c r="A3"><f t="shared" si="0">B3+1</f><v>4</v></c></row>',
+    );
+    const XlsxRange range = XlsxRange(0, 0, 2, 0);
+    const XlsxFormulaGroup follower = XlsxFormulaGroup(
+      XlsxFormulaGroupKind.shared,
+      range,
+      isMaster: false,
     );
     expect(r.rows('S').toList(), <XlsxReadRow>[
       XlsxReadRow(0, <XlsxReadCell>[
-        XlsxReadCell(0, XlsxDecimal('2'), formula: 'B1+1'),
+        XlsxReadCell(
+          0,
+          XlsxDecimal('2'),
+          formula: 'B1+1',
+          formulaGroup: const XlsxFormulaGroup(
+            XlsxFormulaGroupKind.shared,
+            range,
+            isMaster: true,
+          ),
+        ),
       ]),
-      XlsxReadRow(1, <XlsxReadCell>[XlsxReadCell(0, XlsxDecimal('3'))]),
+      XlsxReadRow(1, <XlsxReadCell>[
+        XlsxReadCell(0, XlsxDecimal('3'), formulaGroup: follower),
+      ]),
+      XlsxReadRow(2, <XlsxReadCell>[
+        XlsxReadCell(
+          0,
+          XlsxDecimal('4'),
+          formula: 'B3+1',
+          formulaGroup: follower,
+        ),
+      ]),
     ]);
+    expect(r.warnings, isEmpty);
+  });
+
+  test('array continuation cells without <f>', () {
+    final XlsxReader r = _reader(
+      '<row r="1"><c r="A1"><v>0</v></c>'
+      '<c r="B1"><f t="array" ref="B1:C2">A1:A2*2</f><v>1</v></c>'
+      '<c r="C1"><v>2</v></c><c r="D1"><v>9</v></c></row>'
+      '<row r="2"><c r="B2"><v>3</v></c><c r="C2"/></row>'
+      '<row r="3"><c r="B3"><v>4</v></c></row>',
+    );
+    const XlsxRange range = XlsxRange(0, 1, 1, 2);
+    const XlsxFormulaGroup follower = XlsxFormulaGroup(
+      XlsxFormulaGroupKind.array,
+      range,
+      isMaster: false,
+    );
+    expect(r.rows('S').toList(), <XlsxReadRow>[
+      XlsxReadRow(0, <XlsxReadCell>[
+        XlsxReadCell(0, XlsxDecimal('0')),
+        XlsxReadCell(
+          1,
+          XlsxDecimal('1'),
+          formula: 'A1:A2*2',
+          formulaGroup: const XlsxFormulaGroup(
+            XlsxFormulaGroupKind.array,
+            range,
+            isMaster: true,
+          ),
+        ),
+        XlsxReadCell(2, XlsxDecimal('2'), formulaGroup: follower),
+        XlsxReadCell(3, XlsxDecimal('9')),
+      ]),
+      // C2 has no data, so it is not produced.
+      XlsxReadRow(1, <XlsxReadCell>[
+        XlsxReadCell(1, XlsxDecimal('3'), formulaGroup: follower),
+      ]),
+      XlsxReadRow(2, <XlsxReadCell>[XlsxReadCell(1, XlsxDecimal('4'))]),
+    ]);
+    expect(r.warnings, isEmpty);
+  });
+
+  test('a data table names its group on every cell', () {
+    final XlsxReader r = _reader(
+      '<row r="2"><c r="B2"><f t="dataTable" ref="B2:B3" dt2D="0" dtr="0" '
+      'r1="A1"/><v>5</v></c></row>'
+      '<row r="3"><c r="B3"><v>6</v></c></row>',
+    );
+    final List<XlsxReadRow> rows = r.rows('S').toList();
+    expect(rows[0].cells.single.formulaGroup!.isMaster, isTrue);
+    expect(rows[0].cells.single.formula, isNull);
+    expect(
+      rows[1].cells.single.formulaGroup,
+      const XlsxFormulaGroup(
+        XlsxFormulaGroupKind.dataTable,
+        XlsxRange(1, 1, 2, 1),
+        isMaster: false,
+      ),
+    );
+    expect(r.warnings, isEmpty);
+  });
+
+  test('a cell with its own <f> inside an array range', () {
+    final XlsxReader r = _reader(
+      '<row r="1"><c r="A1"><f t="array" ref="A1:A3">B1:B3</f><v>1</v></c>'
+      '</row>'
+      '<row r="2"><c r="A2"><f>B2</f><v>2</v></c></row>'
+      '<row r="3"><c r="A3"><f t="shared" ref="A3:A4" si="0">B3</f>'
+      '<v>3</v></c></row>'
+      '<row r="4"><c r="A4"><f t="shared" si="0"/><v>4</v></c></row>',
+    );
+    final List<XlsxReadRow> rows = r.rows('S').toList();
+    expect(
+      rows[1].cells.single,
+      XlsxReadCell(0, XlsxDecimal('2'), formula: 'B2'),
+    );
+    expect(
+      rows[2].cells.single,
+      XlsxReadCell(0, XlsxDecimal('3'), formula: 'B3'),
+    );
+    // A3's shared formula was not defined, so A4 follows nothing.
+    expect(rows[3].cells.single, XlsxReadCell(0, XlsxDecimal('4')));
+    expect(_warnings(r), <String>['formulaGroupInvalid A2,A3,A4']);
+  });
+
+  test('invalid groups keep their values and name the cells', () {
+    final XlsxReader r = _reader(
+      '<row r="1"><c r="A1"><f t="shared" si="0">1</f><v>1</v></c>'
+      '<c r="B1"><f t="shared" ref="B1:B2" si="-1">2</f><v>2</v></c>'
+      '<c r="C1"><f t="array" ref="x">3</f><v>3</v></c>'
+      '<c r="D1"><f t="unknown" ref="D1:D2">4</f><v>4</v></c></row>'
+      '<row r="2"><c r="A2"><f t="shared" si="7"/><v>5</v></c></row>',
+    );
+    final List<XlsxReadRow> rows = r.rows('S').toList();
+    expect(rows[0].cells, <XlsxReadCell>[
+      XlsxReadCell(0, XlsxDecimal('1'), formula: '1'),
+      XlsxReadCell(1, XlsxDecimal('2'), formula: '2'),
+      XlsxReadCell(2, XlsxDecimal('3'), formula: '3'),
+      XlsxReadCell(3, XlsxDecimal('4'), formula: '4'),
+    ]);
+    expect(rows[1].cells, <XlsxReadCell>[XlsxReadCell(0, XlsxDecimal('5'))]);
+    // An unknown t is a normal formula: D1 is fine.
+    expect(_warnings(r), <String>['formulaGroupInvalid A1,B1,C1,A2']);
+  });
+
+  test('formulaGroupInvalid comes with a content warning', () {
+    final XlsxReader r = _reader(
+      '<row r="1"><c r="A1"><f t="shared" si="3"/><v>abc</v></c>'
+      '<c r="B1"><f t="shared" si="3"/></c></row>',
+    );
+    expect(r.rows('S').single.cells, <XlsxReadCell>[
+      const XlsxReadCell(0, null),
+      const XlsxReadCell(1, null),
+    ]);
+    expect(_warnings(r), <String>[
+      'numberInvalid A1',
+      'formulaGroupInvalid A1,B1',
+      'formulaWithoutValue B1',
+    ]);
+  });
+
+  test('formula groups start afresh on every pass', () {
+    final XlsxReader r = _reader(
+      '<row r="1"><c r="A1"><f t="array" ref="A1:A2">1</f><v>1</v></c></row>'
+      '<row r="2"><c r="A2"><v>2</v></c></row>',
+    );
+    final List<XlsxReadRow> first = r.rows('S').toList();
+    expect(r.rows('S').toList(), first);
+    expect(first[1].cells.single.formulaGroup!.isMaster, isFalse);
     expect(r.warnings, isEmpty);
   });
 

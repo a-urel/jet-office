@@ -172,7 +172,6 @@ final class XlsxReader {
     yield* readSheetRows(
       _package,
       part,
-      sheet: name,
       sharedStrings: _loadSharedStrings(),
       styles: _styles,
       date1904: _date1904,

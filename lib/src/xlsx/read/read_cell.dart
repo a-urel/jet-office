@@ -160,9 +160,10 @@ final class XlsxReadCell {
   /// formula text. [value] is the result the file cached for the formula.
   ///
   /// A cell that follows a shared formula (`<f t="shared" si="0"/>`, empty)
-  /// has a formula in the file but no text of its own, so this is `null`
-  /// until formula groups are read (milestone R2); [value] still holds its
-  /// cached result.
+  /// has a formula in the file but no text of its own, so this is `null`;
+  /// [formulaGroup] names the shared formula, whose text is the master's,
+  /// and [value] still holds the cell's cached result. The cells of an
+  /// array or data table other than its master have no `<f>` either.
   final String? formula;
 
   /// The shared, array or data-table formula the cell belongs to, or `null`

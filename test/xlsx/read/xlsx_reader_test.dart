@@ -63,6 +63,35 @@ void main() {
     );
   });
 
+  test('formula groups are per sheet and named with their sheet', () {
+    final XlsxReader r = XlsxReader(
+      buildWorkbook(<String, String?>{
+        'A': worksheet(
+          '<row r="1"><c r="A1"><f t="shared" ref="A1:A2" si="0">1</f>'
+          '<v>1</v></c></row>'
+          '<row r="2"><c r="A2"><f t="shared" si="0"/><v>1</v></c></row>',
+        ),
+        'B': worksheet(
+          '<row r="1"><c r="B1"><f t="shared" si="0"/><v>2</v></c></row>',
+        ),
+      }),
+    );
+    expect(
+      r.rowsAt(0).last.cells.single.formulaGroup,
+      const XlsxFormulaGroup(
+        XlsxFormulaGroupKind.shared,
+        XlsxRange(0, 0, 1, 0),
+        isMaster: false,
+      ),
+    );
+    // Sheet A's si 0 is not B's.
+    expect(r.rowsAt(1).single.cells.single.formulaGroup, isNull);
+    final XlsxWarning warning = r.warnings.single;
+    expect(warning.code, XlsxWarningCode.formulaGroupInvalid);
+    expect(warning.sheet, 'B');
+    expect(warning.cells, <String>['B1']);
+  });
+
   test('lists sheets with index and visibility', () {
     final XlsxWriter w = XlsxWriter();
     w.addSheet('One').row(<Object?>[1]);
