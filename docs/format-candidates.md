@@ -139,7 +139,7 @@ IWA format since 2013. It has no published specification.
 
 | Area | State |
 |---|---|
-| Container | A ZIP or a macOS package directory, holding `Index.zip` with `.iwa` files. The ZIP adapter partly applies. |
+| Container | Two layouts. A standalone file is one ZIP with the `.iwa` files directly under `Index/` (`Index/Document.iwa` and others). A macOS package directory, or an iCloud export of one, nests them in an inner `Index.zip`. A reader must accept both and not require `Index.zip`. The ZIP adapter partly applies. |
 | Compression | An Apple variant of Snappy framing without CRCs. Needs a pure-Dart Snappy to stay web-safe. |
 | Data | Protocol Buffers messages. `package:protobuf` is pure Dart, but the `.proto` schemas are not official: the community extracts them from Apple's binaries. Their licence and provenance are unclear, which conflicts with the provenance rule in `AGENTS.md`. |
 | Model | Object graphs linked by IDs for cells, styles and formulas, undocumented. Formulas use their own binary tree form. |
