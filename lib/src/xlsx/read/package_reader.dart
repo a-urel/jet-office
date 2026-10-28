@@ -232,13 +232,13 @@ final class PackageReader {
       }
     }
     if (found == null) {
-      throw const XlsxReadException(
+      throw XlsxReadException(
         XlsxReadFailure.missingWorkbook,
         'The package has no workbook part.',
       );
     }
     if (_contentTypeFor(found) == _xlsbType) {
-      throw const XlsxReadException(
+      throw XlsxReadException(
         XlsxReadFailure.unsupportedFormat,
         'The workbook is a binary .xlsb file, which is not supported; save '
         'it as an Excel Workbook (.xlsx).',

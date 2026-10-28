@@ -1,6 +1,8 @@
 /// The exception the XLSX reader throws for a file it cannot read at all.
 library;
 
+import '../../xml/xml_pull_reader.dart' show isUnsafeInMessage;
+
 /// Why an [XlsxReadException] was thrown.
 enum XlsxReadFailure {
   /// The bytes are not a ZIP archive.
@@ -37,12 +39,21 @@ enum XlsxReadFailure {
 final class XlsxReadException implements Exception {
   /// Creates an exception of [reason], described by [message], about the
   /// package part [part] (`null` when it concerns the file as a whole).
-  const XlsxReadException(this.reason, this.message, {this.part});
+  ///
+  /// [part] is shortened and cleaned for display, see [part].
+  XlsxReadException(this.reason, this.message, {String? part})
+    : part = part == null ? null : _displayPart(part);
 
   /// The category of the failure.
   final XlsxReadFailure reason;
 
   /// The package part the failure concerns, or `null`.
+  ///
+  /// This is for display only. An entry name comes from the file, so it is
+  /// cut to 256 UTF-16 code units (a surrogate pair is never split) followed
+  /// by `…`, and control characters, line and paragraph separators and
+  /// bidirectional controls are replaced by U+FFFD. It may therefore differ
+  /// from the ZIP entry name; the reader never looks it up again.
   final String? part;
 
   /// An English description for developers and logs. For
@@ -58,4 +69,26 @@ final class XlsxReadException implements Exception {
   String toString() =>
       'XlsxReadException(${reason.name}'
       '${part == null ? '' : ', $part'}): $message';
+}
+
+/// The most UTF-16 code units of a part name an exception keeps.
+const int _partLength = 256;
+
+/// [name] cut to [_partLength] code units plus `…` and made safe to print.
+String _displayPart(String name) {
+  int end = name.length;
+  bool cut = false;
+  if (end > _partLength) {
+    end = _partLength;
+    final int last = name.codeUnitAt(end - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) end--;
+    cut = true;
+  }
+  final StringBuffer out = StringBuffer();
+  for (int i = 0; i < end; i++) {
+    final int ch = name.codeUnitAt(i);
+    out.writeCharCode(isUnsafeInMessage(ch) ? 0xFFFD : ch);
+  }
+  if (cut) out.write('…');
+  return out.toString();
 }
