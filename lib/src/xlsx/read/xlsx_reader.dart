@@ -57,7 +57,8 @@ final class XlsxReader {
   /// Opens the XLSX file [bytes] within [limits].
   ///
   /// Throws an [ArgumentError] when a limit is below 1 and an
-  /// [XlsxReadException] when the file is not a readable XLSX workbook. A
+  /// [XlsxReadException] when the file is not a readable XLSX workbook or
+  /// lists more than [XlsxReadLimits.maxSheets] sheets. A
   /// sheet the workbook lists without a part is kept, reads as no rows and
   /// gets an [XlsxWarningCode.sheetPartMissing] warning.
   XlsxReader(Uint8List bytes, {XlsxReadLimits limits = const XlsxReadLimits()})

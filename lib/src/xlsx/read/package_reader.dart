@@ -78,6 +78,9 @@ final class PackageReader {
   /// The workbook part name, normalized: no leading `/`.
   late final String workbookPart;
 
+  /// The limits the package was opened with.
+  XlsxReadLimits get limits => _limits;
+
   /// The internal relationships of [part], in file order.
   ///
   /// External targets are left out. A part without a relationships part has

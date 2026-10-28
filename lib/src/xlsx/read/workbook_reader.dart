@@ -8,8 +8,9 @@
 /// `<sheet>` has no sheets instead of an invented `Sheet1`. A sheet whose
 /// relationship or part is missing is kept with a null part instead of being
 /// dropped, so the caller can warn. Sheet names are XML-string decoded, the
-/// `state` and `date1904` attributes are read, and elements match by local
-/// name and SpreadsheetML namespace so prefixed producers work.
+/// `state` and `date1904` attributes are read, elements match by local
+/// name and SpreadsheetML namespace so prefixed producers work, and the
+/// number of sheets is limited.
 library;
 
 import '../../opc/ooxml.dart';
@@ -17,6 +18,8 @@ import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../sheet_view.dart';
 import 'package_reader.dart';
+import 'read_exception.dart';
+import 'read_limits.dart';
 
 /// One `<sheet>` entry of a workbook.
 final class WorkbookSheet {
@@ -50,7 +53,10 @@ final class WorkbookInfo {
 /// Reads the sheet list and date system from the workbook part of
 /// [package].
 ///
-/// Throws an `XlsxReadException` when the workbook XML cannot be read.
+/// Throws an [XlsxReadException] of reason `limitExceeded` when the
+/// workbook lists more than [XlsxReadLimits.maxSheets] sheets (at the first
+/// one past the limit, before it is kept), and of reason `malformedXml` when
+/// the workbook XML cannot be read.
 WorkbookInfo readWorkbook(PackageReader package) {
   final String part = package.workbookPart;
   final Map<String, String> targets = <String, String>{
@@ -70,7 +76,7 @@ WorkbookInfo readWorkbook(PackageReader package) {
         final String? value = reader.getAttribute('date1904');
         date1904 = value == '1' || value == 'true';
       } else if (reader.depth == 2 && reader.localName == 'sheets') {
-        _readSheets(reader, package, targets, sheets);
+        _readSheets(reader, package, part, targets, sheets);
       }
     }
     return WorkbookInfo(List<WorkbookSheet>.unmodifiable(sheets), date1904);
@@ -80,9 +86,11 @@ WorkbookInfo readWorkbook(PackageReader package) {
 void _readSheets(
   XmlPullReader reader,
   PackageReader package,
+  String part,
   Map<String, String> targets,
   List<WorkbookSheet> sheets,
 ) {
+  final int maxSheets = package.limits.maxSheets;
   if (reader.isEmptyElement) return;
   while (reader.next()) {
     if (reader.eventType == XmlEventType.endElement && reader.depth < 2) {
@@ -93,6 +101,13 @@ void _readSheets(
         reader.localName != 'sheet' ||
         reader.namespaceUri != Ns.main) {
       continue;
+    }
+    if (sheets.length >= maxSheets) {
+      throw XlsxReadException(
+        XlsxReadFailure.limitExceeded,
+        'Limit maxSheets ($maxSheets) exceeded.',
+        part: part,
+      );
     }
     final String name = decodeXstring(reader.getAttribute('name') ?? '');
     final String? id = reader.getAttribute('id', namespaceUri: Ns.rel);

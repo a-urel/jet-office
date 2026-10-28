@@ -33,7 +33,7 @@ below 1, an unknown sheet name or index) throws `ArgumentError` or
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | A limit in `XlsxReadLimits` below 1 | `ArgumentError` naming the field, when the reader opens | a zero limit is a bug in the caller | `test/xlsx/read/read_limits_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
-| Default limits | `maxEntries` 10,000; `maxEntryBytes` 256 MiB; `maxTotalBytes` 1 GiB; `maxCompressionRatio` 1,000; `maxSharedStrings` 2,000,000; `maxDepth` 256; `maxTextLength` 1,048,576 characters | a 100,000 by 12 sheet is about 50 MB of XML, so 256 MiB leaves four times that | `test/xlsx/read/read_limits_test.dart` |
+| Default limits | `maxEntries` 10,000; `maxEntryBytes` 256 MiB; `maxTotalBytes` 1 GiB; `maxCompressionRatio` 1,000; `maxSharedStrings` 2,000,000; `maxDepth` 256; `maxTextLength` 1,048,576 characters; `maxSheets` 10,000 | a 100,000 by 12 sheet is about 50 MB of XML, so 256 MiB leaves four times that; Excel itself is far from 10,000 sheets | `test/xlsx/read/read_limits_test.dart` |
 | Bytes that are not a ZIP | `notZip`; a file that starts like a ZIP but has a missing or damaged directory is `corruptZip` | tell a wrong upload from a damaged one | `test/zip/zip_reader_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
 | More entries than `maxEntries` (directories count) | `limitExceeded` naming `maxEntries`, before anything is inflated | the central directory is read first | `test/zip/zip_reader_test.dart` |
 | An entry declaring more than `maxEntryBytes`, or declared sizes adding up to more than `maxTotalBytes` | `limitExceeded` naming the limit, before anything is inflated | ZIP bomb | `test/zip/zip_reader_test.dart` |
@@ -74,6 +74,7 @@ below 1, an unknown sheet name or index) throws `ArgumentError` or
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | Sheet list | `sheets` in workbook order with name (`_xHHHH_` decoded), index and visibility (`hidden`, `veryHidden`, else visible) | the sheet's identity | `test/xlsx/read/workbook_reader_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
+| More `<sheet>` entries than `maxSheets` | `limitExceeded` naming `maxSheets` and the workbook part, at one more than the limit, before that sheet is kept | each listed sheet costs memory and a warning even without a part, and a few MB of workbook XML can list millions | `test/xlsx/read/workbook_reader_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
 | A workbook with no `<sheet>` | no sheets, not an invented `Sheet1` | nothing silent | `test/xlsx/read/workbook_reader_test.dart` |
 | A `<sheet>` whose relationship or part is missing | still listed; its rows are empty and `sheetPartMissing` is recorded on that sheet when the reader opens and again each time its rows are asked for | dropping it would hide a sheet | `test/xlsx/read/workbook_reader_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
 | `<phoneticPr>` and `<rPh>` in a shared string | skipped. A string is its direct `<t>` plus the `<t>` of every `<r>`, in order, each `_xHHHH_` decoded on its own before joining, so an escape split across two runs stays literal | the phonetic text is not what the cell shows; Quds appended it. The writer escapes, and Excel decodes, per run | `test/xlsx/read/shared_strings_reader_test.dart`, `test/xlsx/read/fixture_round_trip_test.dart` |

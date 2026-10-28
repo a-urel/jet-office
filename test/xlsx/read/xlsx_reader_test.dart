@@ -255,4 +255,28 @@ void main() {
       );
     }
   });
+
+  test('opening refuses more sheets than maxSheets', () {
+    final Uint8List bytes = buildWorkbook(<String, String?>{
+      'A': null,
+      'B': null,
+      'C': null,
+    });
+    expect(
+      XlsxReader(bytes, limits: const XlsxReadLimits(maxSheets: 3)).sheets,
+      hasLength(3),
+    );
+    expect(
+      () => XlsxReader(bytes, limits: const XlsxReadLimits(maxSheets: 2)),
+      throwsA(
+        isA<XlsxReadException>()
+            .having(
+              (XlsxReadException e) => e.reason,
+              'reason',
+              XlsxReadFailure.limitExceeded,
+            )
+            .having((XlsxReadException e) => e.part, 'part', 'xl/workbook.xml'),
+      ),
+    );
+  });
 }

@@ -17,6 +17,7 @@ final class XlsxReadLimits {
     this.maxSharedStrings = 2000000,
     this.maxDepth = 256,
     this.maxTextLength = 1048576,
+    this.maxSheets = 10000,
   });
 
   /// The most entries the ZIP archive may hold.
@@ -41,6 +42,12 @@ final class XlsxReadLimits {
   /// `<f>`) may have.
   final int maxTextLength;
 
+  /// The most `<sheet>` entries a workbook may list.
+  ///
+  /// Each listed sheet costs memory when the reader opens, even one without
+  /// a part, so a small workbook part could otherwise list millions.
+  final int maxSheets;
+
   /// Throws an [ArgumentError] naming the first field below 1.
   void check() {
     final Map<String, int> fields = <String, int>{
@@ -51,6 +58,7 @@ final class XlsxReadLimits {
       'maxSharedStrings': maxSharedStrings,
       'maxDepth': maxDepth,
       'maxTextLength': maxTextLength,
+      'maxSheets': maxSheets,
     };
     for (final MapEntry<String, int> field in fields.entries) {
       if (field.value < 1) {

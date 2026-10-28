@@ -11,6 +11,7 @@ void main() {
     expect(limits.maxSharedStrings, 2000000);
     expect(limits.maxDepth, 256);
     expect(limits.maxTextLength, 1048576);
+    expect(limits.maxSheets, 10000);
     limits.check();
   });
 
@@ -24,6 +25,7 @@ void main() {
       'maxSharedStrings': const XlsxReadLimits(maxSharedStrings: 0),
       'maxDepth': const XlsxReadLimits(maxDepth: 0),
       'maxTextLength': const XlsxReadLimits(maxTextLength: 0),
+      'maxSheets': const XlsxReadLimits(maxSheets: 0),
     };
     for (final MapEntry<String, XlsxReadLimits> e in bad.entries) {
       expect(

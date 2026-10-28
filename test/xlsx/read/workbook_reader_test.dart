@@ -20,6 +20,7 @@ PackageReader _package(
   String workbook, {
   Map<String, String> rels = const <String, String>{},
   Set<String> parts = const <String>{},
+  XlsxReadLimits limits = const XlsxReadLimits(),
 }) => PackageReader(
   buildZip(<String, List<int>>{
     '[Content_Types].xml': utf8.encode(
@@ -41,7 +42,7 @@ PackageReader _package(
     ),
     for (final String p in parts) p: utf8.encode('<worksheet xmlns="$_main"/>'),
   }),
-  const XlsxReadLimits(),
+  limits,
 );
 
 String _wb(String body) =>
@@ -156,6 +157,26 @@ void main() {
       fail('expected an exception');
     } on XlsxReadException catch (e) {
       expect(e.reason, XlsxReadFailure.malformedXml);
+      expect(e.part, 'xl/workbook.xml');
+    }
+  });
+
+  test('enforces maxSheets at one more than the limit', () {
+    const XlsxReadLimits limits = XlsxReadLimits(maxSheets: 2);
+    String sheets(int n) => _wb(
+      '<sheets>${List<String>.generate(n, (int i) => '<sheet name="s$i"/>').join()}'
+      '</sheets>',
+    );
+    expect(
+      readWorkbook(_package(sheets(2), limits: limits)).sheets,
+      hasLength(2),
+    );
+    try {
+      readWorkbook(_package(sheets(3), limits: limits));
+      fail('expected an exception');
+    } on XlsxReadException catch (e) {
+      expect(e.reason, XlsxReadFailure.limitExceeded);
+      expect(e.message, startsWith('Limit maxSheets (2) exceeded'));
       expect(e.part, 'xl/workbook.xml');
     }
   });
