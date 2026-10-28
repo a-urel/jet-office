@@ -17,26 +17,27 @@ library;
 import '../../opc/ooxml.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../range.dart';
-import '../warnings.dart';
 import 'package_reader.dart';
+import 'read_exception.dart';
 
 /// The merged ranges of the worksheet part [part] of [package], in file
 /// order.
 ///
 /// A `<mergeCell>` whose `ref` is missing or is not a cell range, as
-/// `XlsxRange.parse` reads it, is skipped and passed to [warn] as
-/// [XlsxWarningCode.mergeRangeInvalid], with no cell named. A single-cell
-/// merge is kept as written. A part whose root is not a SpreadsheetML
-/// `<worksheet>` has no merges.
+/// `XlsxRange.parse` reads it, is skipped and [skipped] is called once for
+/// it; the caller turns the calls into warnings. A single-cell merge is kept
+/// as written. A part whose root is not a SpreadsheetML `<worksheet>` has no
+/// merges.
 ///
 /// Throws an `XlsxReadException`: `unsupportedFormat` for a root in the
-/// Strict OOXML namespace and `malformedXml` for XML that cannot be read.
-/// [part] must exist in [package].
+/// Strict OOXML namespace, `malformedXml` for XML that cannot be read and
+/// `limitExceeded`, naming `maxMerges` and [part], when the part holds more
+/// than [budget] ranges. [part] must exist in [package].
 List<XlsxRange> readMerges(
   PackageReader package,
   String part, {
-  required void Function(XlsxWarningCode code, String? cell, {String? detail})
-  warn,
+  required int budget,
+  required void Function() skipped,
 }) {
   return package.guardXml(part, () {
     final XmlPullReader reader = package.openXml(part);
@@ -74,8 +75,15 @@ List<XlsxRange> readMerges(
         reader.skip();
         final XlsxRange? range = ref == null ? null : _parse(ref);
         if (range == null) {
-          warn(XlsxWarningCode.mergeRangeInvalid, null);
+          skipped();
         } else {
+          if (merges.length >= budget) {
+            throw XlsxReadException(
+              XlsxReadFailure.limitExceeded,
+              'Limit maxMerges exceeded.',
+              part: part,
+            );
+          }
           merges.add(range);
         }
         continue;

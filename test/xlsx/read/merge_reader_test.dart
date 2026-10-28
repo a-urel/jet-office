@@ -195,4 +195,63 @@ void main() {
     expect(() => r.mergesAt(1), throwsRangeError);
     expect(() => r.mergesAt(-1), throwsRangeError);
   });
+
+  group('maxMerges', () {
+    String three(String prefix) => _sheet(
+      '<mergeCells>'
+      '<mergeCell ref="A1:B1"/><mergeCell ref="A2:B2"/>'
+      '<mergeCell ref="A3:B3"/></mergeCells>',
+      rows: '<row r="1"><c r="A1"><v>$prefix</v></c></row>',
+    );
+
+    test('merges beyond maxMerges across sheets throw and cache nothing', () {
+      final bytes = buildWorkbook(<String, String?>{
+        'One': three('1'),
+        'Two': three('2'),
+      });
+      final XlsxReader r = XlsxReader(
+        bytes,
+        limits: const XlsxReadLimits(maxMerges: 5),
+      );
+      expect(r.mergesAt(0), hasLength(3));
+      Object? caught;
+      try {
+        r.mergesAt(1);
+      } on XlsxReadException catch (e) {
+        caught = e;
+      }
+      expect(caught, isA<XlsxReadException>());
+      final XlsxReadException e = caught! as XlsxReadException;
+      expect(e.reason, XlsxReadFailure.limitExceeded);
+      expect(e.message, contains('maxMerges'));
+      expect(e.part, sheetEntry(1));
+      expect(r.rowsAt(1).toList(), isNotEmpty);
+      expect(
+        () => r.mergesAt(1),
+        throwsA(
+          isA<XlsxReadException>().having(
+            (XlsxReadException x) => x.reason,
+            'reason',
+            XlsxReadFailure.limitExceeded,
+          ),
+        ),
+      );
+      final XlsxReader ok = XlsxReader(
+        bytes,
+        limits: const XlsxReadLimits(maxMerges: 6),
+      );
+      expect(ok.mergesAt(0), hasLength(3));
+      expect(ok.mergesAt(1), hasLength(3));
+    });
+
+    test('skipped merges are counted, not kept', () {
+      final XlsxReader r = _reader(
+        _sheet('<mergeCells>${'<mergeCell ref="x"/>' * 1000}</mergeCells>'),
+      );
+      expect(r.mergesAt(0), isEmpty);
+      final XlsxWarning w = r.warnings.single;
+      expect(w.code, XlsxWarningCode.mergeRangeInvalid);
+      expect(w.count, 1000);
+    });
+  });
 }
