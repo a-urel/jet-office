@@ -4,7 +4,8 @@
 /// 15c5d29: `XlsxGridReader._sharedStrings` and `_readSi`.
 ///
 /// What changed: a string is its direct `<t>` plus the `<t>` of every `<r>`,
-/// in order, then XML-string decoded; `<rPh>` and `<phoneticPr>` contents are
+/// in order, each XML-string decoded on its own (an escape split across two
+/// runs stays literal, as in Excel); `<rPh>` and `<phoneticPr>` contents are
 /// skipped (Quds appended the phonetic text); only `<si>` elements that are
 /// children of the root count; elements match by local name and SpreadsheetML
 /// namespace; the table size and each string's length are limited.
@@ -19,8 +20,10 @@ import 'read_limits.dart';
 
 /// Reads the shared strings of [part] in [package], in table order.
 ///
-/// A string is the text of its direct `<t>` and of every run's `<t>`, joined
-/// in order and XML-string decoded (`_x0041_` becomes `A`). Phonetic runs
+/// A string is the text of its direct `<t>` and of every run's `<t>`, each
+/// XML-string decoded on its own (`_x0041_` becomes `A`, but `_x00` in one
+/// run and `41_` in the next stay as written), joined in order. Elements of
+/// other namespaces are skipped with their contents. Phonetic runs
 /// (`<rPh>`) are not part of the string. An empty `<si/>` is `''`.
 ///
 /// Throws an [XlsxReadException] of reason `limitExceeded` when the table
@@ -49,8 +52,8 @@ List<String> readSharedStrings(
           part: part,
         );
       }
-      final String text = decodeXstring(_readSi(reader));
-      if (text.length > limits.maxTextLength) {
+      final String? text = _readSi(reader, limits.maxTextLength);
+      if (text == null) {
         throw XlsxReadException(
           XlsxReadFailure.limitExceeded,
           'Limit maxTextLength (${limits.maxTextLength}) exceeded by shared '
@@ -64,9 +67,11 @@ List<String> readSharedStrings(
   });
 }
 
-/// The raw text of the `<si>` the reader is on: its `<t>` and its runs'
-/// `<t>`, leaving the reader on the end of the `<si>`.
-String _readSi(XmlPullReader reader) {
+/// The text of the `<si>` the reader is on: its `<t>` and its runs' `<t>`,
+/// each XML-string decoded on its own, then joined. Returns `null` as soon
+/// as the text passes [maxLength] characters; otherwise leaves the reader
+/// on the end of the `<si>`.
+String? _readSi(XmlPullReader reader, int maxLength) {
   if (reader.isEmptyElement) return '';
   final StringBuffer buffer = StringBuffer();
   final int siDepth = reader.depth;
@@ -74,21 +79,23 @@ String _readSi(XmlPullReader reader) {
     if (reader.eventType == XmlEventType.endElement && reader.depth < siDepth) {
       break;
     }
-    if (reader.eventType != XmlEventType.startElement ||
-        reader.namespaceUri != Ns.main) {
-      continue;
-    }
-    if (reader.depth == siDepth + 1 && reader.localName == 't') {
-      _readT(reader, buffer);
-    } else if (reader.depth == siDepth + 1 && reader.localName == 'r') {
+    if (reader.eventType != XmlEventType.startElement) continue;
+    if (reader.depth != siDepth + 1 || reader.namespaceUri != Ns.main) {
+      reader.skip();
+    } else if (reader.localName == 't') {
+      buffer.write(_readT(reader));
+    } else if (reader.localName == 'r') {
       _readRun(reader, buffer, siDepth + 1);
     } else {
       reader.skip();
     }
+    if (buffer.length > maxLength) return null;
   }
   return buffer.toString();
 }
 
+/// Appends the decoded `<t>` of the `<r>` the reader is on to [buffer],
+/// leaving the reader on the end of the run.
 void _readRun(XmlPullReader reader, StringBuffer buffer, int runDepth) {
   if (reader.isEmptyElement) return;
   while (reader.next()) {
@@ -100,23 +107,27 @@ void _readRun(XmlPullReader reader, StringBuffer buffer, int runDepth) {
     if (reader.depth == runDepth + 1 &&
         reader.localName == 't' &&
         reader.namespaceUri == Ns.main) {
-      _readT(reader, buffer);
+      buffer.write(_readT(reader));
     } else {
       reader.skip();
     }
   }
 }
 
-void _readT(XmlPullReader reader, StringBuffer buffer) {
-  if (reader.isEmptyElement) return;
+/// The text of the `<t>` the reader is on, XML-string decoded (`_x0041_`
+/// becomes `A`), leaving the reader on its end.
+String _readT(XmlPullReader reader) {
+  if (reader.isEmptyElement) return '';
+  final StringBuffer buffer = StringBuffer();
   final int depth = reader.depth;
   while (reader.next()) {
     if (reader.eventType == XmlEventType.endElement && reader.depth < depth) {
-      return;
+      break;
     }
     if (reader.eventType == XmlEventType.characters ||
         reader.eventType == XmlEventType.cdata) {
       buffer.write(reader.text);
     }
   }
+  return decodeXstring(buffer.toString());
 }

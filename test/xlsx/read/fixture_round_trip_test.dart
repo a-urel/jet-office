@@ -14,6 +14,9 @@ void _compare(String where, Object? value, String stored) {
   if (value == null) {
     expect(stored, '', reason: '$where: no value');
   } else if (value is String) {
+    // A rich text's stored text is its runs joined; decoding the join
+    // equals decoding run by run only when no escape spans two runs, which
+    // the dedicated rich-text round trip below covers.
     expect(value, decodeXstring(stored), reason: where);
   } else if (value is bool) {
     expect(value ? '1' : '0', stored, reason: where);
@@ -33,6 +36,31 @@ void _compare(String where, Object? value, String stored) {
 
 void main() {
   test('there are fixtures to read', () => expect(allFixtures(), isNotEmpty));
+
+  // The fixtures above compare a cell with its runs joined and then
+  // decoded, which cannot tell per-run decoding from decoding the join.
+  // This round trip pins the per-run rule with escapes split across runs.
+  test('reads rich text back run by run, escapes and all', () {
+    final XlsxWriter writer = XlsxWriter();
+    writer.addSheet('S').row(<Object?>[
+      XlsxRichText(const <XlsxTextRun>[
+        XlsxTextRun('_x00'),
+        XlsxTextRun('41_'),
+      ]),
+      XlsxRichText(const <XlsxTextRun>[
+        XlsxTextRun('_x0041_', font: XlsxFont(bold: true)),
+        XlsxTextRun('_x'),
+        XlsxTextRun('0042_'),
+      ]),
+      '_x0041_',
+    ]);
+    final XlsxReader reader = XlsxReader(writer.close().bytes);
+    expect(
+      reader.rowsAt(0).single.cells.map((XlsxReadCell c) => c.value),
+      <Object?>['_x0041_', '_x0041__x0042_', '_x0041_'],
+    );
+    expect(reader.warnings, isEmpty);
+  });
 
   for (final Fixture fixture in allFixtures()) {
     test('reads ${fixture.name} back as the writer stored it', () {

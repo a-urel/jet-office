@@ -84,6 +84,18 @@ void main() {
     );
   });
 
+  test('decodes each <t> on its own, as Excel and the writer do', () {
+    // An escape split across two runs is literal text, not `A`.
+    expect(
+      _strings(
+        '<si><r><t>_x00</t></r><r><t>41_</t></r></si>'
+        '<si><t>_x00</t><r><t>41_</t></r></si>'
+        '<si><r><t>_x0041_</t></r><r><t>_x0042_</t></r></si>',
+      ),
+      <String>['_x0041_', '_x0041_', 'AB'],
+    );
+  });
+
   test('joins a direct text and runs in order', () {
     expect(
       _strings('<si><t>a</t><r><t>b</t></r><r><t/></r><r><t>c</t></r></si>'),
