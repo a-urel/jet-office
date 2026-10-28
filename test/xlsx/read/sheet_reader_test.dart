@@ -8,13 +8,26 @@ import 'support/workbook_builder.dart';
 XlsxReader _reader(
   String rows, {
   String? sharedStrings,
+  String? styles,
   XlsxReadLimits limits = const XlsxReadLimits(),
 }) => XlsxReader(
-  buildWorkbook(<String, String?>{
-    'S': worksheet(rows),
-  }, sharedStrings: sharedStrings),
+  buildWorkbook(
+    <String, String?>{'S': worksheet(rows)},
+    sharedStrings: sharedStrings,
+    styles: styles,
+  ),
   limits: limits,
 );
+
+/// A styles part with the custom [numFmts] (id to code) and one `<xf>` per
+/// id of [xfs], in order.
+String _styles(Map<int, String> numFmts, List<int> xfs) =>
+    '<styleSheet xmlns="$mainNs">'
+    '<numFmts count="${numFmts.length}">'
+    '${numFmts.entries.map((MapEntry<int, String> e) => '<numFmt numFmtId="${e.key}" formatCode="${e.value}"/>').join()}'
+    '</numFmts><cellXfs count="${xfs.length}">'
+    '${xfs.map((int id) => '<xf numFmtId="$id"/>').join()}'
+    '</cellXfs></styleSheet>';
 
 /// Each warning of [r] as its code name and cells: `cellDuplicated B1,C1`.
 List<String> _warnings(XlsxReader r) => <String>[
@@ -217,14 +230,155 @@ void main() {
     );
     expect(r.rows('S').single.cells, <XlsxReadCell>[
       const XlsxReadCell(0, null, formula: '1+1'),
-      const XlsxReadCell(1, null),
+      const XlsxReadCell(1, 'x'),
       const XlsxReadCell(2, 'ab', formula: '"a"&"b"'),
       XlsxReadCell(3, XlsxDecimal('4')),
     ]);
-    expect(_warnings(r), <String>[
-      'formulaWithoutValue A1',
-      'cellTypeUnsupported B1',
+    expect(_warnings(r), <String>['formulaWithoutValue A1']);
+  });
+
+  group('number formats', () {
+    test("a cell's number format", () {
+      final XlsxReader r = _reader(
+        '<row r="1"><c r="A1" s="1"><v>46319</v></c></row>',
+        styles: _styles(<int, String>{164: 'dd.mm.yyyy'}, <int>[0, 164]),
+      );
+      final XlsxReadCell cell = r.rows('S').single.cells.single;
+      expect(cell.value, DateTime.utc(2026, 10, 24));
+      expect(cell.numberFormatId, 164);
+      expect(cell.numberFormat, 'dd.mm.yyyy');
+      expect(cell.isDate, isTrue);
+      expect(r.warnings, isEmpty);
+    });
+
+    test('a time format gives a Duration', () {
+      final XlsxReader r = _reader(
+        '<row r="1"><c r="A1" s="1"><v>1.5</v></c></row>',
+        styles: _styles(<int, String>{165: '[h]:mm'}, <int>[0, 165]),
+      );
+      final XlsxReadCell cell = r.rows('S').single.cells.single;
+      expect(cell.value, const Duration(hours: 36));
+      expect(cell.numberFormatId, 165);
+      expect(cell.numberFormat, '[h]:mm');
+      expect(cell.isDate, isTrue);
+      expect(r.warnings, isEmpty);
+    });
+
+    test('an s past cellXfs and s="1" without styles', () {
+      for (final String? styles in <String?>[
+        _styles(const <int, String>{}, <int>[0]),
+        null,
+      ]) {
+        final XlsxReader r = _reader(
+          '<row r="1"><c r="A1"><v>1</v></c>'
+          '<c r="B1" s="1"><v>46319</v></c></row>',
+          styles: styles,
+        );
+        expect(r.rows('S').single.cells, <XlsxReadCell>[
+          XlsxReadCell(0, XlsxDecimal('1')),
+          XlsxReadCell(1, XlsxDecimal('46319')),
+        ], reason: '$styles');
+        final XlsxReadCell cell = r.rows('S').single.cells[1];
+        expect(cell.numberFormatId, 0);
+        expect(cell.numberFormat, 'General');
+        expect(cell.isDate, isFalse);
+        expect(_warnings(r), <String>['styleInvalid B1'], reason: '$styles');
+      }
+    });
+
+    test('a locale-dependent id', () {
+      final XlsxReader r = _reader(
+        '<row r="1"><c r="A1" s="1"><v>46319</v></c></row>',
+        styles: _styles(const <int, String>{}, <int>[0, 27]),
+      );
+      final XlsxReadCell cell = r.rows('S').single.cells.single;
+      expect(cell.value, XlsxDecimal('46319'));
+      expect(cell.numberFormatId, 27);
+      expect(cell.numberFormat, isNull);
+      expect(cell.isDate, isFalse);
+      expect(_warnings(r), <String>['unresolvedNumberFormat A1']);
+      expect(r.warnings.single.detail, '27');
+    });
+
+    test('a format applies to numbers only', () {
+      final XlsxReader r = _reader(
+        '<row r="1"><c r="A1" s="1" t="str"><v>46319</v></c></row>',
+        styles: _styles(<int, String>{164: 'dd.mm.yyyy'}, <int>[0, 164]),
+      );
+      final XlsxReadCell cell = r.rows('S').single.cells.single;
+      expect(cell.value, '46319');
+      expect(cell.numberFormatId, 164);
+      expect(cell.isDate, isTrue);
+      expect(r.warnings, isEmpty);
+    });
+  });
+
+  group('inline strings', () {
+    test('an <is> joins its <t> and runs, without phonetic text', () {
+      final XlsxReader r = _reader(
+        '<row r="1"><c r="A1" t="inlineStr"><is><t>a</t><r><t>b</t></r>'
+        '<rPh><t>x</t></rPh></is></c></row>',
+      );
+      expect(r.rows('S').single.cells.single.value, 'ab');
+      expect(r.warnings, isEmpty);
+    });
+
+    test('a whitespace-only <t> keeps its spaces', () {
+      final XlsxReader r = _reader(
+        '<row r="1"><c r="A1" t="inlineStr"><is>'
+        '<t xml:space="preserve">  </t></is></c></row>',
+      );
+      expect(r.rows('S').single.cells.single.value, '  ');
+    });
+
+    test('an <is> past maxTextLength is limitExceeded', () {
+      final XlsxReader r = _reader(
+        '<row r="1"><c r="B1" t="inlineStr"><is><t>abc</t><r><t>de</t></r>'
+        '</is></c></row>',
+        limits: const XlsxReadLimits(maxTextLength: 4),
+      );
+      expect(
+        () => r.rows('S').toList(),
+        throwsA(
+          isA<XlsxReadException>()
+              .having(
+                (XlsxReadException e) => e.reason,
+                'reason',
+                XlsxReadFailure.limitExceeded,
+              )
+              .having(
+                (XlsxReadException e) => e.message,
+                'message',
+                'Limit maxTextLength (4) exceeded by cell B1.',
+              )
+              .having((XlsxReadException e) => e.part, 'part', sheetEntry(0)),
+        ),
+      );
+    });
+
+    test('an inline string with a formula and no <v> is its value', () {
+      final XlsxReader r = _reader(
+        '<row r="1"><c r="A1" t="inlineStr"><f>"a"</f><is><t>a</t></is></c>'
+        '</row>',
+      );
+      expect(
+        r.rows('S').single.cells.single,
+        const XlsxReadCell(0, 'a', formula: '"a"'),
+      );
+      expect(r.warnings, isEmpty);
+    });
+  });
+
+  test('t="e" is an error value and t="d" a date', () {
+    final XlsxReader r = _reader(
+      '<row r="1"><c r="A1" t="e"><v>#N/A</v></c>'
+      '<c r="B1" t="d"><v>2026-10-24T12:30:00</v></c></row>',
+    );
+    expect(r.rows('S').single.cells.map((XlsxReadCell c) => c.value), <Object>[
+      XlsxErrorValue.na,
+      DateTime.utc(2026, 10, 24, 12, 30),
     ]);
+    expect(r.warnings, isEmpty);
   });
 
   group('conflicting children of one <c>', () {
@@ -251,10 +405,11 @@ void main() {
       expect(got.$3, <String>['cellDuplicated A1']);
     });
 
-    test('a repeated <is> warns cellDuplicated only', () {
+    test('a repeated <is> keeps the last and warns cellDuplicated', () {
       final (Object?, String?, List<String>) got = read(
         '<c r="A1" t="inlineStr"><is><t>a</t></is><is><t>b</t></is></c>',
       );
+      expect(got.$1, 'b');
       expect(got.$3, <String>['cellDuplicated A1']);
     });
 
@@ -262,6 +417,7 @@ void main() {
       final (Object?, String?, List<String>) got = read(
         '<c r="A1" t="str"><is><t>lost</t></is></c>',
       );
+      expect(got.$1, '');
       expect(got.$3, <String>['cellTypeUnsupported A1']);
     });
 

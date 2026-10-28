@@ -97,8 +97,8 @@ FormulaType decodeFormulaType(XmlPullReader r) =>
 ///
 /// The cases, first match wins; a cell gets at most one warning:
 ///
-/// * [hasFormula] and no [value]: value `null`, warning
-///   [XlsxWarningCode.formulaWithoutValue].
+/// * [hasFormula] and neither [value] nor [inlineText]: value `null`,
+///   warning [XlsxWarningCode.formulaWithoutValue].
 /// * `null` or `n`: a number, see below.
 /// * `s`: the shared string at that index
 ///   ([XlsxWarningCode.sharedStringInvalid] when the index is not a
@@ -141,7 +141,7 @@ DecodedCell decodeCell({
   DecodedCell result(Object? v, [XlsxWarningCode? warning]) =>
       DecodedCell(value: v, formula: decodedFormula, warning: warning);
 
-  if (hasFormula && value == null) {
+  if (hasFormula && value == null && inlineText == null) {
     return result(null, XlsxWarningCode.formulaWithoutValue);
   }
   switch (type) {

@@ -463,6 +463,17 @@ void main() {
       }
     });
 
+    test('inline text counts as the value of a formula', () {
+      final DecodedCell cell = _decode(
+        type: 'inlineStr',
+        formula: '"a"',
+        inlineText: 'a',
+      );
+      expect(cell.value, 'a');
+      expect(cell.formula, '"a"');
+      expect(cell.warning, isNull);
+    });
+
     test('a formula without text still warns', () {
       final DecodedCell cell = _decode(hasFormula: true);
       expect(cell.warning, XlsxWarningCode.formulaWithoutValue);

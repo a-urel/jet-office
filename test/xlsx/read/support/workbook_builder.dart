@@ -32,30 +32,51 @@ String sheetEntry(int index) => 'xl/worksheets/sheet${index + 1}.xml';
 /// [sharedStrings] is the raw XML of `xl/sharedStrings.xml`; it is related
 /// from the workbook when given or when [sharedStringsRelation] is true (a
 /// relationship to a missing part). [styles] is the raw XML of
-/// `xl/styles.xml`, related from the workbook when given. [store] stores entries
-/// uncompressed.
+/// `xl/styles.xml`, related from the workbook when given. [date1904] writes
+/// `<workbookPr date1904="1"/>`. [store] stores entries uncompressed.
 Uint8List buildWorkbook(
   Map<String, String?> sheets, {
   String? sharedStrings,
   bool sharedStringsRelation = false,
   String? styles,
+  bool date1904 = false,
+  bool store = false,
+}) => buildWorkbookList(
+  <(String, String?)>[
+    for (final MapEntry<String, String?> sheet in sheets.entries)
+      (sheet.key, sheet.value),
+  ],
+  sharedStrings: sharedStrings,
+  sharedStringsRelation: sharedStringsRelation,
+  styles: styles,
+  date1904: date1904,
+  store: store,
+);
+
+/// [buildWorkbook] with the sheets as a list of name and part XML, so two
+/// sheets can share a name, as a hostile file may.
+Uint8List buildWorkbookList(
+  List<(String, String?)> sheets, {
+  String? sharedStrings,
+  bool sharedStringsRelation = false,
+  String? styles,
+  bool date1904 = false,
   bool store = false,
 }) {
   final StringBuffer sheetList = StringBuffer();
   final StringBuffer rels = StringBuffer();
   final Map<String, List<int>> parts = <String, List<int>>{};
-  int i = 0;
-  for (final MapEntry<String, String?> sheet in sheets.entries) {
+  for (int i = 0; i < sheets.length; i++) {
+    final (String name, String? xml) = sheets[i];
     sheetList.write(
-      '<sheet name="${_escape(sheet.key)}" sheetId="${i + 1}" '
+      '<sheet name="${_escape(name)}" sheetId="${i + 1}" '
       'r:id="rId${i + 1}"/>',
     );
     rels.write(
       '<Relationship Id="rId${i + 1}" Type="$_rel/worksheet" '
       'Target="worksheets/sheet${i + 1}.xml"/>',
     );
-    if (sheet.value != null) parts[sheetEntry(i)] = utf8.encode(sheet.value!);
-    i++;
+    if (xml != null) parts[sheetEntry(i)] = utf8.encode(xml);
   }
   if (sharedStrings != null || sharedStringsRelation) {
     rels.write(
@@ -80,8 +101,9 @@ Uint8List buildWorkbook(
       '</Relationships>',
     ),
     'xl/workbook.xml': utf8.encode(
-      '<workbook xmlns="$mainNs" xmlns:r="$_rel"><sheets>$sheetList</sheets>'
-      '</workbook>',
+      '<workbook xmlns="$mainNs" xmlns:r="$_rel">'
+      '${date1904 ? '<workbookPr date1904="1"/>' : ''}'
+      '<sheets>$sheetList</sheets></workbook>',
     ),
     'xl/_rels/workbook.xml.rels': utf8.encode(
       '<Relationships xmlns="$_pkgRel">$rels</Relationships>',

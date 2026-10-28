@@ -184,7 +184,7 @@ void main() {
     }
   });
 
-  test('reads shared strings once', () {
+  test('reading a sheet twice gives the same shared string', () {
     final XlsxReader r = XlsxReader(
       buildWorkbook(
         <String, String?>{
@@ -197,6 +197,144 @@ void main() {
     );
     expect(r.rows('S').single.cells.single.value, 'b');
     expect(r.rows('S').single.cells.single.value, 'b');
+  });
+
+  group('styles and the date system', () {
+    const String styles =
+        '<styleSheet xmlns="$mainNs"><numFmts count="1">'
+        '<numFmt numFmtId="164" formatCode="yyyy-mm-dd"/></numFmts>'
+        '<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/>'
+        '</cellXfs></styleSheet>';
+    final String sheet = worksheet(
+      '<row r="1"><c r="A1" s="1"><v>0</v></c></row>',
+    );
+
+    test('opening reads styles', () {
+      final Uint8List zip = _corrupt(
+        buildWorkbook(
+          <String, String?>{'S': sheet},
+          styles: styles,
+          store: true,
+        ),
+        '<styleSheet',
+      );
+      expect(
+        () => XlsxReader(zip),
+        throwsA(
+          isA<XlsxReadException>().having(
+            (XlsxReadException e) => e.reason,
+            'reason',
+            XlsxReadFailure.corruptZip,
+          ),
+        ),
+      );
+      final XlsxReader r = XlsxReader(
+        buildWorkbook(<String, String?>{'S': sheet}, styles: styles),
+      );
+      expect(r.rows('S').single.cells.single.numberFormat, 'yyyy-mm-dd');
+    });
+
+    test('date1904 is the workbook date system', () {
+      final XlsxReader r1900 = XlsxReader(
+        buildWorkbook(<String, String?>{'S': sheet}, styles: styles),
+      );
+      expect(r1900.date1904, isFalse);
+      final XlsxReader r = XlsxReader(
+        buildWorkbook(
+          <String, String?>{'S': sheet},
+          styles: styles,
+          date1904: true,
+        ),
+      );
+      expect(r.date1904, isTrue);
+      expect(r.rows('S').single.cells.single.value, DateTime.utc(1904));
+      expect(r.warnings, isEmpty);
+    });
+
+    test('a malformed styles part fails the open', () {
+      expect(
+        () => XlsxReader(
+          buildWorkbook(<String, String?>{
+            'S': sheet,
+          }, styles: '<styleSheet xmlns="$mainNs"><cellXfs>'),
+        ),
+        throwsA(
+          isA<XlsxReadException>()
+              .having(
+                (XlsxReadException e) => e.reason,
+                'reason',
+                XlsxReadFailure.malformedXml,
+              )
+              .having((XlsxReadException e) => e.part, 'part', 'xl/styles.xml'),
+        ),
+      );
+    });
+
+    test('no styles part reads General', () {
+      final XlsxReader r = XlsxReader(
+        buildWorkbook(<String, String?>{
+          'S': worksheet('<row r="1"><c r="A1" s="0"><v>5</v></c></row>'),
+        }),
+      );
+      expect(
+        r.rows('S').single.cells.single,
+        XlsxReadCell(0, XlsxDecimal('5')),
+      );
+      expect(r.warnings, isEmpty);
+    });
+  });
+
+  test('duplicate sheet names keep separate warnings', () {
+    final XlsxReader r = XlsxReader(
+      buildWorkbookList(<(String, String?)>[
+        ('A', worksheet('<row r="1"><c r="A1" t="b"><v>x</v></c></row>')),
+        ('A', worksheet('<row r="1"><c r="B1" t="b"><v>y</v></c></row>')),
+      ]),
+    );
+    r.rowsAt(0).toList();
+    r.rowsAt(1).toList();
+    expect(r.warnings.map((XlsxWarning w) => '${w.sheet} ${w.cells}'), <String>[
+      'A [A1]',
+      'A [B1]',
+    ]);
+    r.rowsAt(1).toList();
+    expect(r.warnings.map((XlsxWarning w) => '${w.sheet} ${w.cells}'), <String>[
+      'A [A1]',
+      'A [B1]',
+    ]);
+    expect(r.warnings.map((XlsxWarning w) => w.count), <int>[1, 1]);
+  });
+
+  test('an older iterator adds no warnings after a newer pass starts', () {
+    final XlsxReader r = XlsxReader(
+      buildWorkbook(<String, String?>{
+        'S': worksheet(
+          '<row r="1"><c r="A1" t="b"><v>x</v></c></row>'
+          '<row r="2"><c r="A2" t="b"><v>y</v></c></row>'
+          '<row r="3"><c r="A3" t="b"><v>z</v></c></row>',
+        ),
+      }),
+    );
+    final Iterator<XlsxReadRow> first = r.rowsAt(0).iterator;
+    expect(first.moveNext(), isTrue);
+    expect(r.rowsAt(0).toList(), hasLength(3));
+    int rows = 1;
+    while (first.moveNext()) {
+      rows++;
+    }
+    expect(rows, 3);
+    expect(_codes(r), <XlsxWarningCode>[XlsxWarningCode.booleanInvalid]);
+    expect(r.warnings.single.count, 3);
+    expect(r.warnings.single.cells, <String>['A1', 'A2', 'A3']);
+  });
+
+  test('a missing part warns under its index', () {
+    final XlsxReader r = XlsxReader(
+      buildWorkbookList(<(String, String?)>[('A', null), ('A', null)]),
+    );
+    expect(r.warnings.map((XlsxWarning w) => w.count), <int>[1, 1]);
+    r.rowsAt(1).toList();
+    expect(r.warnings.map((XlsxWarning w) => w.count), <int>[1, 1]);
   });
 
   test('the constructor checks the limits', () {

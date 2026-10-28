@@ -12,9 +12,11 @@
 /// parsed to an `int`; every `<v>` and `<f>` text is limited to
 /// `maxTextLength`; elements match by local name and SpreadsheetML namespace
 /// so prefixed producers work; a part that is not a `<worksheet>` reads as
-/// no rows, and one in the Strict namespace is refused; and cells that come
+/// no rows, and one in the Strict namespace is refused; cells that come
 /// out of column order are sorted once per row instead of inserted one by
-/// one.
+/// one; each cell gets the number format of its style (`s`), which makes a
+/// number a date or a duration; and the `<is>` of an inline string cell is
+/// read (Quds read only its first `<t>`).
 library;
 
 import '../../opc/ooxml.dart';
@@ -23,10 +25,12 @@ import '../cell_ref.dart';
 import '../limits.dart';
 import '../warnings.dart';
 import 'cell_decoder.dart';
+import 'format_kind.dart';
 import 'package_reader.dart';
 import 'read_cell.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
+import 'shared_strings_reader.dart';
 import 'styles_reader.dart';
 
 final RegExp _digits = RegExp(r'^[0-9]+$');
@@ -42,7 +46,9 @@ final RegExp _outsideRef = RegExp(r'^\$?[A-Za-z]{1,4}\$?[0-9]{1,10}$');
 ///
 /// Yields one [XlsxReadRow] per `<row>` of `<sheetData>` that holds at least
 /// one cell with a `<v>`, `<f>` or `<is>`, or that is hidden. Problems with
-/// single cells and rows are added to [warnings] under [sheet].
+/// single cells and rows are passed to [warn] with the cell's name and, for
+/// [XlsxWarningCode.unresolvedNumberFormat], the format id as detail;
+/// [sheet] names the sheet for the caller and is not otherwise used.
 /// A cell gets at most one warning for its contents: `cellTypeUnsupported`
 /// for an `<is>` when `t` is not `inlineStr` (its text is not read), else
 /// `cellDuplicated` for a repeated `<v>`, `<f>` or `<is>` (the last is
@@ -50,28 +56,36 @@ final RegExp _outsideRef = RegExp(r'^\$?[A-Za-z]{1,4}\$?[0-9]{1,10}$');
 /// SpreadsheetML `<worksheet>` (a chartsheet, say), or that has no
 /// `<sheetData>`, has no rows.
 ///
+/// A cell's style index `s` is resolved in [styles]; the cell carries the
+/// format's id and code, and [date1904] is the workbook's date system for
+/// the numbers a date format turns into a `DateTime`.
+///
 /// The part is opened when iteration starts and read as rows are taken, so
 /// throws an [XlsxReadException] only then: `unsupportedFormat` for a root
 /// in the Strict OOXML namespace, `malformedXml` for XML that cannot be read
-/// and `limitExceeded` for a `<v>` or `<f>` text longer than
+/// and `limitExceeded` for a `<v>`, `<f>` or `<is>` text longer than
 /// [XlsxReadLimits.maxTextLength]. [part] must exist in [package].
 Iterable<XlsxReadRow> readSheetRows(
   PackageReader package,
   String part, {
   required String sheet,
   required List<String>? sharedStrings,
+  required StyleTable styles,
+  required bool date1904,
   required XlsxReadLimits limits,
-  required WarningCollector warnings,
+  required void Function(XlsxWarningCode code, String? cell, {String? detail})
+  warn,
 }) sync* {
   final _SheetWalker walker = package.guardXml(
     part,
     () => _SheetWalker(
       package.openXml(part),
       part,
-      sheet,
       sharedStrings,
+      styles,
+      date1904,
       limits,
-      warnings,
+      warn,
     ),
   );
   while (true) {
@@ -92,6 +106,9 @@ final class _RawCell {
   /// The `r` attribute as written, or `null`.
   final String? ref;
 
+  /// The `s` attribute (the style index) as written, or `null`.
+  String? style;
+
   /// Whether `r` was absent, did not parse or named another row.
   bool refInvalid = false;
 
@@ -99,6 +116,10 @@ final class _RawCell {
   String? formula;
   bool hasFormula = false;
   bool hasInline = false;
+
+  /// The text of the last `<is>`, when the cell is an inline string inside
+  /// the sheet; otherwise `null`.
+  String? inlineText;
 
   /// Whether a `<v>`, `<f>` or `<is>` occurs more than once; the last one
   /// is kept.
@@ -156,18 +177,21 @@ final class _SheetWalker {
   _SheetWalker(
     this._reader,
     this._part,
-    this._sheet,
     this._sharedStrings,
+    this._styles,
+    this._date1904,
     this._limits,
-    this._warnings,
+    this._warn,
   );
 
   final XmlPullReader _reader;
   final String _part;
-  final String _sheet;
   final List<String>? _sharedStrings;
+  final StyleTable _styles;
+  final bool _date1904;
   final XlsxReadLimits _limits;
-  final WarningCollector _warnings;
+  final void Function(XlsxWarningCode code, String? cell, {String? detail})
+  _warn;
 
   bool _started = false;
   bool _done = false;
@@ -266,7 +290,12 @@ final class _SheetWalker {
           continue;
         }
         final String? type = decodeCellType(_reader);
-        final _RawCell raw = _readCell(index, previousColumn, inside);
+        final _RawCell raw = _readCell(
+          index,
+          previousColumn,
+          inside,
+          inline: type == 'inlineStr',
+        );
         previousColumn = raw.column;
         if (!raw.hasData) continue;
         if (!inside || raw.column >= XlsxLimits.maxColumns) {
@@ -278,36 +307,45 @@ final class _SheetWalker {
           _warn(XlsxWarningCode.cellReferenceInvalid, name);
         }
         pendingInvalid = false;
+        final CellFormat format = _styles.formatOf(raw.style);
         final DecodedCell decoded = decodeCell(
           type: type,
           value: raw.value,
           formula: raw.formula,
           hasFormula: raw.hasFormula,
-          inlineText: null,
+          inlineText: raw.inlineText,
           sharedStrings: _sharedStrings,
-          format: CellFormat.general,
-          date1904: false,
+          format: format,
+          date1904: _date1904,
         );
-        // The text of an `<is>` is not read yet, so an inline string cell
-        // that has one stays unsupported, as in R1.
-        final bool inlineUnread = raw.hasInline && type == 'inlineStr';
         // One warning per cell for its contents: an inline string the type
         // does not announce (its text is not read), then a repeated child,
-        // then an unread inline string, then whatever the decoder found.
+        // then whatever the decoder found.
         final XlsxWarningCode? contentWarning =
             raw.hasInline && type != 'inlineStr'
             ? XlsxWarningCode.cellTypeUnsupported
             : raw.repeated
             ? XlsxWarningCode.cellDuplicated
-            : inlineUnread
-            ? XlsxWarningCode.cellTypeUnsupported
             : decoded.warning;
-        if (contentWarning != null) _warn(contentWarning, name);
+        if (contentWarning != null) {
+          _warn(
+            contentWarning,
+            name,
+            detail: contentWarning == XlsxWarningCode.unresolvedNumberFormat
+                ? '${format.id}'
+                : null,
+          );
+        }
         if (!cells.place(
           XlsxReadCell(
             raw.column,
-            inlineUnread ? null : decoded.value,
+            decoded.value,
             formula: decoded.formula,
+            numberFormatId: format.id,
+            numberFormat: format.code,
+            isDate:
+                format.kind == FormatKind.date ||
+                format.kind == FormatKind.time,
           ),
         )) {
           _warn(XlsxWarningCode.cellDuplicated, name);
@@ -347,17 +385,23 @@ final class _SheetWalker {
   }
 
   /// Reads the `<c>` the reader is on, in the row at [row], leaving the
-  /// reader on its end. Texts are read only when [inside] the sheet.
-  _RawCell _readCell(int row, int previousColumn, bool inside) {
+  /// reader on its end. Texts are read only when [inside] the sheet, and the
+  /// text of an `<is>` only when the cell is an [inline] string.
+  _RawCell _readCell(
+    int row,
+    int previousColumn,
+    bool inside, {
+    required bool inline,
+  }) {
     final String? ref = _reader.getAttribute('r', namespaceUri: '');
     final ({int row, int column})? parsed = ref == null
         ? null
         : matchCellRef(ref);
     final bool matches = parsed != null && parsed.row == row;
-    final _RawCell raw = _RawCell(
-      matches ? parsed.column : previousColumn + 1,
-      ref,
-    )..refInvalid = ref != null && !matches;
+    final _RawCell raw =
+        _RawCell(matches ? parsed.column : previousColumn + 1, ref)
+          ..refInvalid = ref != null && !matches
+          ..style = _reader.getAttribute('s', namespaceUri: '');
     if (_reader.isEmptyElement) return raw;
     final bool readText = inside && raw.column < XlsxLimits.maxColumns;
     while (_reader.next()) {
@@ -378,7 +422,12 @@ final class _SheetWalker {
         case 'is':
           if (raw.hasInline) raw.repeated = true;
           raw.hasInline = true;
-          _reader.skip();
+          if (readText && inline) {
+            raw.inlineText = readStringItem(_reader, _limits.maxTextLength);
+            if (raw.inlineText == null) throw _tooLong(row, raw.column);
+          } else {
+            _reader.skip();
+          }
         default:
           _reader.skip();
       }
@@ -405,14 +454,7 @@ final class _SheetWalker {
       if (_reader.eventType == XmlEventType.characters ||
           _reader.eventType == XmlEventType.cdata) {
         buffer.write(_reader.text);
-        if (buffer.length > _limits.maxTextLength) {
-          throw XlsxReadException(
-            XlsxReadFailure.limitExceeded,
-            'Limit maxTextLength (${_limits.maxTextLength}) exceeded by '
-            'cell ${cellRef(row, column)}.',
-            part: _part,
-          );
-        }
+        if (buffer.length > _limits.maxTextLength) throw _tooLong(row, column);
       } else if (_reader.eventType == XmlEventType.startElement) {
         _reader.skip();
       }
@@ -420,8 +462,14 @@ final class _SheetWalker {
     return buffer.toString();
   }
 
-  void _warn(XlsxWarningCode code, String? cell) =>
-      _warnings.add(code, sheet: _sheet, cell: cell);
+  /// The `limitExceeded` failure of a cell text longer than
+  /// `maxTextLength`.
+  XlsxReadException _tooLong(int row, int column) => XlsxReadException(
+    XlsxReadFailure.limitExceeded,
+    'Limit maxTextLength (${_limits.maxTextLength}) exceeded by '
+    'cell ${cellRef(row, column)}.',
+    part: _part,
+  );
 
   /// The name of a cell outside the sheet: its `r`, upper-cased without
   /// `$`, when that looks like a reference; otherwise `null`.
