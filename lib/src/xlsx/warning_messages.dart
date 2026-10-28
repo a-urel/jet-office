@@ -27,6 +27,7 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
   final String sheet = w.sheet;
   final String original = w.originalName ?? w.sheet;
   final String cells = _cellList(w);
+  final String id = w.detail ?? '';
   return switch ((w.code, locale)) {
     (XlsxWarningCode.invalidCharactersRemoved, XlsxLocale.en) =>
       "$count cell(s) on sheet '$sheet' had characters removed that XML does "
@@ -192,5 +193,95 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
     (XlsxWarningCode.cellOutsideSheet, XlsxLocale.tr) =>
       "“$sheet” sayfasındaki $count hücre, Excel'in ızgarasının "
           'dışında kaldığı için atlandı$cells.',
+    (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.en) =>
+      "$count number cell(s) on sheet '$sheet' use built-in number "
+          'format $id, whose code depends on the locale and is not in the '
+          'file; they read as plain numbers, even if they show '
+          'dates$cells.',
+    (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.de) =>
+      '$count Zahlenzelle(n) im Blatt „$sheet“ verwenden das '
+          'integrierte Zahlenformat $id, dessen Code vom Gebietsschema '
+          'abhängt und nicht in der Datei steht; sie werden als einfache '
+          'Zahlen gelesen, auch wenn sie ein Datum anzeigen$cells.',
+    (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count sayı hücresi, kodu yerel ayara '
+          'bağlı olan ve dosyada bulunmayan $id numaralı yerleşik sayı '
+          'biçimini kullanıyor; tarih gösterseler bile düz sayı olarak '
+          'okunuyor$cells.',
+    (XlsxWarningCode.styleInvalid, XlsxLocale.en) =>
+      "$count cell(s) on sheet '$sheet' point to a cell format that "
+          'does not exist or cannot be read; they read with the General '
+          'format$cells.',
+    (XlsxWarningCode.styleInvalid, XlsxLocale.de) =>
+      '$count Zelle(n) im Blatt „$sheet“ verweisen auf ein Zellformat, '
+          'das nicht existiert oder nicht gelesen werden kann; sie werden '
+          'mit dem Format „Standard“ gelesen$cells.',
+    (XlsxWarningCode.styleInvalid, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count hücre, var olmayan veya okunamayan '
+          'bir hücre biçimine başvuruyor; Genel biçimle okunuyor$cells.',
+    (XlsxWarningCode.serialOutOfRange, XlsxLocale.en) =>
+      "$count cell(s) on sheet '$sheet' are formatted as a date or "
+          'time but hold a number no date or time can have; they read as '
+          'numbers$cells.',
+    (XlsxWarningCode.serialOutOfRange, XlsxLocale.de) =>
+      '$count Zelle(n) im Blatt „$sheet“ sind als Datum oder Uhrzeit '
+          'formatiert, enthalten aber eine Zahl, die kein Datum und keine '
+          'Uhrzeit sein kann; sie werden als Zahlen gelesen$cells.',
+    (XlsxWarningCode.serialOutOfRange, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count hücre tarih veya saat olarak '
+          'biçimlendirilmiş, ancak hiçbir tarih ya da saatin alamayacağı '
+          'bir sayı içeriyor; sayı olarak okunuyor$cells.',
+    (XlsxWarningCode.phantomLeapDay, XlsxLocale.en) =>
+      "$count cell(s) on sheet '$sheet' hold 29 February 1900, a day "
+          'that did not exist (Excel counts it for compatibility); they '
+          'read as numbers$cells.',
+    (XlsxWarningCode.phantomLeapDay, XlsxLocale.de) =>
+      '$count Zelle(n) im Blatt „$sheet“ enthalten den 29. Februar '
+          '1900, einen Tag, den es nicht gab (Excel zählt ihn aus '
+          'Kompatibilitätsgründen); sie werden als Zahlen gelesen$cells.',
+    (XlsxWarningCode.phantomLeapDay, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count hücre, hiç var olmamış bir gün '
+          "olan 29 Şubat 1900'ü içeriyor (Excel bu günü uyumluluk için "
+          'sayar); sayı olarak okunuyor$cells.',
+    (XlsxWarningCode.dateTextInvalid, XlsxLocale.en) =>
+      "$count date cell(s) on sheet '$sheet' hold text that is not a "
+          'valid date; they read as empty$cells.',
+    (XlsxWarningCode.dateTextInvalid, XlsxLocale.de) =>
+      '$count Datumszelle(n) im Blatt „$sheet“ enthalten Text, der '
+          'kein gültiges Datum ist; sie werden als leer gelesen$cells.',
+    (XlsxWarningCode.dateTextInvalid, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count tarih hücresi geçerli bir tarih '
+          'olmayan metin içeriyor; boş okunuyor$cells.',
+    (XlsxWarningCode.errorValueInvalid, XlsxLocale.en) =>
+      "$count error cell(s) on sheet '$sheet' hold no error code; they "
+          'read as empty$cells.',
+    (XlsxWarningCode.errorValueInvalid, XlsxLocale.de) =>
+      '$count Fehlerzelle(n) im Blatt „$sheet“ enthalten keinen '
+          'Fehlercode; sie werden als leer gelesen$cells.',
+    (XlsxWarningCode.errorValueInvalid, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count hata hücresi hata kodu içermiyor; '
+          'boş okunuyor$cells.',
+    (XlsxWarningCode.formulaGroupInvalid, XlsxLocale.en) =>
+      "$count formula cell(s) on sheet '$sheet' belong to a shared, "
+          'array or data-table formula the file does not define correctly; '
+          'their values were kept without the formula group$cells.',
+    (XlsxWarningCode.formulaGroupInvalid, XlsxLocale.de) =>
+      '$count Formelzelle(n) im Blatt „$sheet“ gehören zu einer '
+          'gemeinsamen, Matrix- oder Datentabellenformel, die die Datei '
+          'nicht korrekt definiert; ihre Werte wurden ohne die '
+          'Formelgruppe beibehalten$cells.',
+    (XlsxWarningCode.formulaGroupInvalid, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count formül hücresi, dosyada doğru '
+          'tanımlanmamış bir paylaşılan, dizi veya veri tablosu formülüne '
+          'ait; değerleri formül grubu olmadan korundu$cells.',
+    (XlsxWarningCode.mergeRangeInvalid, XlsxLocale.en) =>
+      "$count merged range(s) on sheet '$sheet' have an invalid "
+          'reference and were skipped$cells.',
+    (XlsxWarningCode.mergeRangeInvalid, XlsxLocale.de) =>
+      '$count verbundene(r) Bereich(e) im Blatt „$sheet“ haben einen '
+          'ungültigen Bezug und wurden übersprungen$cells.',
+    (XlsxWarningCode.mergeRangeInvalid, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count birleştirilmiş aralığın başvurusu '
+          'geçersiz; atlandı$cells.',
   };
 }

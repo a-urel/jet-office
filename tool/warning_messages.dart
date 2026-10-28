@@ -29,6 +29,13 @@ XlsxWarning _sample(XlsxWarningCode code) {
       collector.add(code, sheet: 'Daten', originalName: 'daten');
     case XlsxWarningCode.sheetPartMissing:
       collector.add(code, sheet: 'Daten');
+    case XlsxWarningCode.mergeRangeInvalid:
+      collector.add(code, sheet: 'Daten');
+      collector.add(code, sheet: 'Daten');
+    case XlsxWarningCode.unresolvedNumberFormat:
+      collector
+        ..add(code, sheet: 'Daten', cell: 'A1', detail: '27')
+        ..add(code, sheet: 'Daten', cell: 'B2', detail: '27');
     case XlsxWarningCode.invalidCharactersRemoved:
     case XlsxWarningCode.textTruncated:
     case XlsxWarningCode.intPrecisionLost:
@@ -43,6 +50,12 @@ XlsxWarning _sample(XlsxWarningCode code) {
     case XlsxWarningCode.cellDuplicated:
     case XlsxWarningCode.rowOutOfOrder:
     case XlsxWarningCode.cellOutsideSheet:
+    case XlsxWarningCode.styleInvalid:
+    case XlsxWarningCode.serialOutOfRange:
+    case XlsxWarningCode.phantomLeapDay:
+    case XlsxWarningCode.dateTextInvalid:
+    case XlsxWarningCode.errorValueInvalid:
+    case XlsxWarningCode.formulaGroupInvalid:
       collector
         ..add(code, sheet: 'Daten', cell: 'A1')
         ..add(code, sheet: 'Daten', cell: 'B2');
@@ -71,7 +84,9 @@ String warningMessagesMarkdown() {
     ..writeln('Every message is built for a sample warning: sheet `Daten`,')
     ..writeln('cells `A1, B2`, count 2. The two sheet-name codes name one')
     ..writeln('sheet instead, asked for as `Daten:1` (changed) or `daten`')
-    ..writeln('(duplicated). `sheetPartMissing` names one sheet and no cell.')
+    ..writeln('(duplicated). `sheetPartMissing` names one sheet and no cell;')
+    ..writeln('`mergeRangeInvalid` counts 2 and names no cell, and')
+    ..writeln('`unresolvedNumberFormat` uses format 27.')
     ..writeln()
     ..writeln('The native-speaker check of the German and Turkish text is')
     ..writeln('recorded under "Native-speaker check" in')

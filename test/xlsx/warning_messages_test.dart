@@ -195,6 +195,100 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
     XlsxWarningCode.cellOutsideSheet,
     XlsxLocale.tr,
   ): "“S” sayfasındaki 1 hücre, Excel'in ızgarasının dışında kaldığı için atlandı (A1).",
+  (
+    XlsxWarningCode.unresolvedNumberFormat,
+    XlsxLocale.en,
+  ): "1 number cell(s) on sheet 'S' use built-in number format 27, whose code depends on the locale and is not in the file; they read as plain numbers, even if they show dates (A1).",
+  (
+    XlsxWarningCode.unresolvedNumberFormat,
+    XlsxLocale.de,
+  ): '1 Zahlenzelle(n) im Blatt „S“ verwenden das integrierte Zahlenformat 27, dessen Code vom Gebietsschema abhängt und nicht in der Datei steht; sie werden als einfache Zahlen gelesen, auch wenn sie ein Datum anzeigen (A1).',
+  (
+    XlsxWarningCode.unresolvedNumberFormat,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 sayı hücresi, kodu yerel ayara bağlı olan ve dosyada bulunmayan 27 numaralı yerleşik sayı biçimini kullanıyor; tarih gösterseler bile düz sayı olarak okunuyor (A1).',
+  (
+    XlsxWarningCode.styleInvalid,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' point to a cell format that does not exist or cannot be read; they read with the General format (A1).",
+  (
+    XlsxWarningCode.styleInvalid,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ verweisen auf ein Zellformat, das nicht existiert oder nicht gelesen werden kann; sie werden mit dem Format „Standard“ gelesen (A1).',
+  (
+    XlsxWarningCode.styleInvalid,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücre, var olmayan veya okunamayan bir hücre biçimine başvuruyor; Genel biçimle okunuyor (A1).',
+  (
+    XlsxWarningCode.serialOutOfRange,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' are formatted as a date or time but hold a number no date or time can have; they read as numbers (A1).",
+  (
+    XlsxWarningCode.serialOutOfRange,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ sind als Datum oder Uhrzeit formatiert, enthalten aber eine Zahl, die kein Datum und keine Uhrzeit sein kann; sie werden als Zahlen gelesen (A1).',
+  (
+    XlsxWarningCode.serialOutOfRange,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücre tarih veya saat olarak biçimlendirilmiş, ancak hiçbir tarih ya da saatin alamayacağı bir sayı içeriyor; sayı olarak okunuyor (A1).',
+  (
+    XlsxWarningCode.phantomLeapDay,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' hold 29 February 1900, a day that did not exist (Excel counts it for compatibility); they read as numbers (A1).",
+  (
+    XlsxWarningCode.phantomLeapDay,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ enthalten den 29. Februar 1900, einen Tag, den es nicht gab (Excel zählt ihn aus Kompatibilitätsgründen); sie werden als Zahlen gelesen (A1).',
+  (
+    XlsxWarningCode.phantomLeapDay,
+    XlsxLocale.tr,
+  ): "“S” sayfasındaki 1 hücre, hiç var olmamış bir gün olan 29 Şubat 1900'ü içeriyor (Excel bu günü uyumluluk için sayar); sayı olarak okunuyor (A1).",
+  (
+    XlsxWarningCode.dateTextInvalid,
+    XlsxLocale.en,
+  ): "1 date cell(s) on sheet 'S' hold text that is not a valid date; they read as empty (A1).",
+  (
+    XlsxWarningCode.dateTextInvalid,
+    XlsxLocale.de,
+  ): '1 Datumszelle(n) im Blatt „S“ enthalten Text, der kein gültiges Datum ist; sie werden als leer gelesen (A1).',
+  (
+    XlsxWarningCode.dateTextInvalid,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 tarih hücresi geçerli bir tarih olmayan metin içeriyor; boş okunuyor (A1).',
+  (
+    XlsxWarningCode.errorValueInvalid,
+    XlsxLocale.en,
+  ): "1 error cell(s) on sheet 'S' hold no error code; they read as empty (A1).",
+  (
+    XlsxWarningCode.errorValueInvalid,
+    XlsxLocale.de,
+  ): '1 Fehlerzelle(n) im Blatt „S“ enthalten keinen Fehlercode; sie werden als leer gelesen (A1).',
+  (XlsxWarningCode.errorValueInvalid, XlsxLocale.tr):
+      '“S” sayfasındaki 1 hata hücresi hata kodu içermiyor; boş okunuyor (A1).',
+  (
+    XlsxWarningCode.formulaGroupInvalid,
+    XlsxLocale.en,
+  ): "1 formula cell(s) on sheet 'S' belong to a shared, array or data-table formula the file does not define correctly; their values were kept without the formula group (A1).",
+  (
+    XlsxWarningCode.formulaGroupInvalid,
+    XlsxLocale.de,
+  ): '1 Formelzelle(n) im Blatt „S“ gehören zu einer gemeinsamen, Matrix- oder Datentabellenformel, die die Datei nicht korrekt definiert; ihre Werte wurden ohne die Formelgruppe beibehalten (A1).',
+  (
+    XlsxWarningCode.formulaGroupInvalid,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 formül hücresi, dosyada doğru tanımlanmamış bir paylaşılan, dizi veya veri tablosu formülüne ait; değerleri formül grubu olmadan korundu (A1).',
+  (
+    XlsxWarningCode.mergeRangeInvalid,
+    XlsxLocale.en,
+  ): "1 merged range(s) on sheet 'S' have an invalid reference and were skipped (A1).",
+  (
+    XlsxWarningCode.mergeRangeInvalid,
+    XlsxLocale.de,
+  ): '1 verbundene(r) Bereich(e) im Blatt „S“ haben einen ungültigen Bezug und wurden übersprungen (A1).',
+  (
+    XlsxWarningCode.mergeRangeInvalid,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 birleştirilmiş aralığın başvurusu geçersiz; atlandı (A1).',
 };
 
 void main() {
@@ -276,18 +370,23 @@ void main() {
     );
   });
 
-  test('all 51 messages are worded exactly as specified', () {
+  test('all 75 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, XlsxLocale)> keys =
         <(XlsxWarningCode, XlsxLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final XlsxLocale locale in XlsxLocale.values) (code, locale),
         ];
-    expect(keys, hasLength(51));
+    expect(keys, hasLength(75));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, XlsxLocale) key in keys) {
       final XlsxWarning w =
-          (WarningCollector()
-                ..add(key.$1, sheet: 'S', cell: 'A1', originalName: 'O'))
+          (WarningCollector()..add(
+                key.$1,
+                sheet: 'S',
+                cell: 'A1',
+                originalName: 'O',
+                detail: '27',
+              ))
               .warnings
               .single;
       expect(w.message(key.$2), _expected[key], reason: '${key.$1}/${key.$2}');
@@ -348,6 +447,38 @@ void main() {
     expect(
       w.message(),
       "Sheet name 'Final' is not allowed in Excel and was changed to 'Final'.",
+    );
+  });
+
+  test('unresolvedNumberFormat names the id', () {
+    final XlsxWarning w =
+        (WarningCollector()..add(
+              XlsxWarningCode.unresolvedNumberFormat,
+              sheet: 'S',
+              cell: 'A1',
+              detail: '27',
+            ))
+            .warnings
+            .single;
+    expect(w.message(XlsxLocale.en), contains('format 27'));
+    expect(w.message(XlsxLocale.de), contains('Zahlenformat 27'));
+    expect(w.message(XlsxLocale.tr), contains('27 numaralı'));
+  });
+
+  test('the R2 messages are exact', () {
+    XlsxWarning one(XlsxWarningCode code, {String? detail}) =>
+        (WarningCollector()..add(code, sheet: 'S', cell: 'A1', detail: detail))
+            .warnings
+            .single;
+    expect(
+      one(XlsxWarningCode.mergeRangeInvalid).message(XlsxLocale.tr),
+      '“S” sayfasındaki 1 birleştirilmiş aralığın başvurusu geçersiz; '
+      'atlandı (A1).',
+    );
+    expect(
+      one(XlsxWarningCode.phantomLeapDay).message(XlsxLocale.en),
+      "1 cell(s) on sheet 'S' hold 29 February 1900, a day that did not "
+      'exist (Excel counts it for compatibility); they read as numbers (A1).',
     );
   });
 }

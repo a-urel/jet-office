@@ -118,4 +118,60 @@ void main() {
     c.removeSheet('Z');
     expect(c.warnings, hasLength(1));
   });
+
+  test('aggregates by detail', () {
+    final WarningCollector c = WarningCollector()
+      ..add(
+        XlsxWarningCode.unresolvedNumberFormat,
+        sheet: 'A',
+        cell: 'A1',
+        detail: '27',
+      )
+      ..add(
+        XlsxWarningCode.unresolvedNumberFormat,
+        sheet: 'A',
+        cell: 'A2',
+        detail: '30',
+      )
+      ..add(
+        XlsxWarningCode.unresolvedNumberFormat,
+        sheet: 'A',
+        cell: 'A3',
+        detail: '27',
+      );
+    expect(c.warnings, hasLength(2));
+    expect(c.warnings.map((XlsxWarning w) => w.detail), <String?>['27', '30']);
+    expect(c.warnings.map((XlsxWarning w) => w.count), <int>[2, 1]);
+  });
+
+  test('keys by key, not by sheet name', () {
+    final WarningCollector c = WarningCollector()
+      ..add(XlsxWarningCode.numberInvalid, sheet: 'A', cell: 'A1', key: 0)
+      ..add(XlsxWarningCode.numberInvalid, sheet: 'A', cell: 'A2', key: 1);
+    expect(c.warnings, hasLength(2));
+    c.removeSheet(0);
+    expect(c.warnings, hasLength(1));
+    expect(c.warnings.single.cells, <String>['A2']);
+  });
+
+  test('removeSheet keeps the codes in keep', () {
+    final WarningCollector c = WarningCollector()
+      ..add(XlsxWarningCode.numberInvalid, sheet: 'A', cell: 'A1', key: 0)
+      ..add(XlsxWarningCode.mergeRangeInvalid, sheet: 'A', key: 0);
+    c.removeSheet(
+      0,
+      keep: <XlsxWarningCode>{XlsxWarningCode.mergeRangeInvalid},
+    );
+    expect(c.warnings.map((XlsxWarning w) => w.code), <XlsxWarningCode>[
+      XlsxWarningCode.mergeRangeInvalid,
+    ]);
+    c.add(XlsxWarningCode.mergeRangeInvalid, sheet: 'A', key: 0);
+    expect(c.warnings.single.count, 2);
+  });
+
+  test('detail is null when none is given', () {
+    final WarningCollector c = WarningCollector()
+      ..add(XlsxWarningCode.numberInvalid, sheet: 'A', cell: 'A1');
+    expect(c.warnings.single.detail, isNull);
+  });
 }
