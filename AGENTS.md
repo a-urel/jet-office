@@ -95,7 +95,7 @@ dart test -p chrome benchmark
 - **One cell encoder.** Only `lib/src/xlsx/cell_encoder.dart` writes `<c ` or
   `<v>` (decision 0002). Enforced by `test/architecture/cell_encoder_test.dart`.
 - **One cell decoder.** Only `lib/src/xlsx/read/cell_decoder.dart`
-  interprets a cell's `t` attribute (decision 0007). Enforced by
+  interprets a cell's or a formula's `t` attribute (decision 0007). Enforced by
   `test/architecture/cell_decoder_test.dart`.
 - **Every warning code has a message in `en`, `de` and `tr`.** Enforced by
   `test/architecture/warning_messages_test.dart`.

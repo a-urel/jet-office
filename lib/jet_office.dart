@@ -36,7 +36,8 @@
 /// ZIP directory and the workbook, [XlsxReader.sheets] lists the sheets, and
 /// [XlsxReader.rows] parses a sheet lazily as its [XlsxReadRow]s are taken,
 /// each holding [XlsxReadCell]s whose values are `String`, `bool`,
-/// [XlsxDecimal], `DateTime`, `Duration`, [XlsxErrorValue] or `null`.
+/// [XlsxDecimal], `DateTime`, `Duration`, [XlsxErrorValue] or `null`;
+/// [XlsxReader.merges] lists a sheet's merged ranges.
 /// Reading is synchronous, like writing. A file that cannot be read at all
 /// (not a ZIP, encrypted, a legacy `.xls`, malformed XML, or past one of
 /// the [XlsxReadLimits]) throws an [XlsxReadException] whose

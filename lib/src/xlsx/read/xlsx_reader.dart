@@ -67,8 +67,8 @@ final class XlsxReader {
   /// [XlsxReadException] when the file is not a readable XLSX workbook,
   /// lists more than [XlsxReadLimits.maxSheets] sheets or has a styles part
   /// that cannot be read. A workbook without a styles part reads every cell
-  /// as `General`. A sheet the workbook lists without a part is kept, reads as no rows and
-  /// gets an [XlsxWarningCode.sheetPartMissing] warning.
+  /// as `General`. A sheet the workbook lists without a part is kept, reads
+  /// as no rows and gets an [XlsxWarningCode.sheetPartMissing] warning.
   XlsxReader(Uint8List bytes, {XlsxReadLimits limits = const XlsxReadLimits()})
     : _limits = limits {
     limits.check();
