@@ -114,7 +114,11 @@ final class XlsxReadRow {
 ///
 /// Yields one [XlsxReadRow] per `<row>` of `<sheetData>` that holds at least
 /// one cell with a `<v>`, `<f>` or `<is>`, or that is hidden. Problems with
-/// single cells and rows are added to [warnings] under [sheet]. A part whose
+/// single cells and rows are added to [warnings] under [sheet].
+/// A cell gets at most one warning for its contents: `cellTypeUnsupported`
+/// for an `<is>` when `t` is not `inlineStr` (its text is not read), else
+/// `cellDuplicated` for a repeated `<v>`, `<f>` or `<is>` (the last is
+/// kept), else the decoder's warning. A part whose
 /// root is not a SpreadsheetML `<worksheet>`, or that has no `<sheetData>`,
 /// has no rows.
 ///
@@ -166,6 +170,10 @@ final class _RawCell {
   String? formula;
   bool hasFormula = false;
   bool hasInline = false;
+
+  /// Whether a `<v>`, `<f>` or `<is>` occurs more than once; the last one
+  /// is kept.
+  bool repeated = false;
 
   bool get hasData => value != null || hasFormula || hasInline;
 }
@@ -300,7 +308,16 @@ final class _SheetWalker {
           hasFormula: raw.hasFormula,
           sharedStrings: _sharedStrings,
         );
-        if (decoded.warning != null) _warn(decoded.warning!, name);
+        // One warning per cell for its contents: an inline string the type
+        // does not announce (its text is not read), then a repeated child,
+        // then whatever the decoder found.
+        final XlsxWarningCode? contentWarning =
+            raw.hasInline && type != 'inlineStr'
+            ? XlsxWarningCode.cellTypeUnsupported
+            : raw.repeated
+            ? XlsxWarningCode.cellDuplicated
+            : decoded.warning;
+        if (contentWarning != null) _warn(contentWarning, name);
         _place(
           cells,
           XlsxReadCell(raw.column, decoded.value, formula: decoded.formula),
@@ -361,12 +378,15 @@ final class _SheetWalker {
       final bool child = _reader.depth == 5 && _reader.namespaceUri == Ns.main;
       switch (child ? _reader.localName : null) {
         case 'v':
+          if (raw.value != null) raw.repeated = true;
           raw.value = _readText(row, raw.column, keep: readText);
         case 'f':
+          if (raw.hasFormula) raw.repeated = true;
           raw.hasFormula = true;
           final String formula = _readText(row, raw.column, keep: readText);
           raw.formula = formula.isEmpty ? null : formula;
         case 'is':
+          if (raw.hasInline) raw.repeated = true;
           raw.hasInline = true;
           _reader.skip();
         default:

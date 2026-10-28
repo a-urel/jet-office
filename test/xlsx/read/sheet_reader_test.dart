@@ -157,6 +157,68 @@ void main() {
     ]);
   });
 
+  group('conflicting children of one <c>', () {
+    /// The value and formula of the single cell of [cell], and the warnings.
+    (Object?, String?, List<String>) read(String cell) {
+      final XlsxReader r = _reader('<row r="1">$cell</row>');
+      final XlsxReadCell c = r.rows('S').single.cells.single;
+      return (c.value, c.formula, _warnings(r));
+    }
+
+    test('a repeated <v> keeps the last and warns cellDuplicated', () {
+      final (Object?, String?, List<String>) got = read(
+        '<c r="A1" t="str"><v>first</v><v>second</v></c>',
+      );
+      expect(got.$1, 'second');
+      expect(got.$3, <String>['cellDuplicated A1']);
+    });
+
+    test('a repeated <f> keeps the last and warns cellDuplicated', () {
+      final (Object?, String?, List<String>) got = read(
+        '<c r="A1"><f>A2</f><f>A3</f><v>1</v></c>',
+      );
+      expect(got.$2, 'A3');
+      expect(got.$3, <String>['cellDuplicated A1']);
+    });
+
+    test('a repeated <is> warns cellDuplicated only', () {
+      final (Object?, String?, List<String>) got = read(
+        '<c r="A1" t="inlineStr"><is><t>a</t></is><is><t>b</t></is></c>',
+      );
+      expect(got.$3, <String>['cellDuplicated A1']);
+    });
+
+    test('an <is> under t="str" warns cellTypeUnsupported', () {
+      final (Object?, String?, List<String>) got = read(
+        '<c r="A1" t="str"><is><t>lost</t></is></c>',
+      );
+      expect(got.$3, <String>['cellTypeUnsupported A1']);
+    });
+
+    test('an <is> next to a <v> warns cellTypeUnsupported', () {
+      final (Object?, String?, List<String>) got = read(
+        '<c r="A1"><v>1</v><is><t>lost</t></is></c>',
+      );
+      expect(got.$1, XlsxDecimal('1'));
+      expect(got.$3, <String>['cellTypeUnsupported A1']);
+    });
+
+    test('both conditions give one cellTypeUnsupported', () {
+      final (Object?, String?, List<String>) got = read(
+        '<c r="A1" t="b"><v>1</v><v>x</v><is><t>lost</t></is></c>',
+      );
+      expect(got.$3, <String>['cellTypeUnsupported A1']);
+    });
+
+    test('a duplicate hides the decoder warning', () {
+      final (Object?, String?, List<String>) got = read(
+        '<c r="A1" t="b"><v>x</v><v>y</v></c>',
+      );
+      expect(got.$1, isNull);
+      expect(got.$3, <String>['cellDuplicated A1']);
+    });
+  });
+
   test('reads prefixed SpreadsheetML elements', () {
     final XlsxReader r = XlsxReader(
       buildWorkbook(<String, String?>{
