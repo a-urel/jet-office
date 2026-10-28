@@ -737,6 +737,86 @@ Mac. Write `yes` when the file opens without a repair prompt, `no` otherwise
 | `m5_list_plain` | yes |
 | `m5_list_table` | yes |
 
+## Phase 2 reader
+
+The reader's warnings (R1 to R3) have no Excel check: Excel produces the
+input, not the output (decision 0007). Their messages still need a native
+reader per language.
+
+### Phase 2 reader: native-speaker check
+
+Read these rows of `docs/warning-messages.md`, in the `de` or `tr` column of
+your language. They are the reader's codes, in the order of
+`XlsxWarningCode`; the writer's codes (up to `dateInNonDateFormat`) were
+checked in phase 1 (see "Native-speaker check"):
+
+- `sheetPartMissing`
+- `sharedStringInvalid`
+- `numberInvalid`
+- `booleanInvalid`
+- `cellTypeUnsupported`
+- `formulaWithoutValue`
+- `cellReferenceInvalid`
+- `cellDuplicated`
+- `rowOutOfOrder`
+- `cellOutsideSheet`
+- `unresolvedNumberFormat`, both rows (the one with format id 27 and the
+  one marked "(no id)")
+- `styleInvalid`
+- `serialOutOfRange`
+- `phantomLeapDay`
+- `dateTextInvalid`
+- `errorValueInvalid`
+- `formulaGroupInvalid`
+- `mergeRangeInvalid`
+
+| Language | Reviewer | Date | Corrections |
+|---|---|---|---|
+| de | not checked yet | | |
+| tr | not checked yet | | |
+
+No message text was changed in R4 (plan ruling 8). The candidates below are
+what the milestone ledgers flagged. Each has a suggested alternative; the
+reviewer decides, and may find more.
+
+- [ ] `rowOutOfOrder`, tr: "sırasız" is informal. Suggested: "sıra dışı" or
+  "sırası bozuk" (for example "2 satır sıra dışı; dosyadaki sırayla
+  okundu").
+- [ ] `cellTypeUnsupported`, de: "der Reader" is an anglicism. Suggested:
+  "das Leseprogramm", or the passive: "…einen Typ, der nicht unterstützt
+  wird…".
+- [ ] `unresolvedNumberFormat` without a format id (the "(no id)" row), in de
+  and tr: the wording "number formats whose code depends on the locale or is
+  missing from the file" is the long, double-condition variant. Check that
+  both read naturally and that the "or" is clear.
+- [ ] `cellTypeUnsupported`, all three languages: the message says the cells
+  "read as empty" (de "werden als leer gelesen", tr "boş okunuyor"). That is
+  wrong for an inline string (`<is>`) on a cell whose `t` is not `inlineStr`:
+  the text is not read, but the value still comes from `t` and any `<v>`.
+  Suggested wording, short and in the messages' style:
+  - en: "…have a type or content the reader does not support; their value
+    may be empty or read from the stored value (A1, B2)."
+  - de: "…haben einen Typ oder Inhalt, den das Leseprogramm nicht
+    unterstützt; ihr Wert ist möglicherweise leer oder stammt aus dem
+    gespeicherten Wert (A1, B2)."
+  - tr: "…okuyucunun desteklemediği bir tür veya içeriğe sahip; değerleri
+    boş olabilir veya kayıtlı değerden okunur (A1, B2)."
+
+  en, de and tr change together, so the three columns stay in step. The
+  de reviewer's "Leseprogramm" choice above applies here too.
+
+To apply a correction: edit the message in `lib/src/xlsx/warnings.dart` (all
+three languages of a code in one change when the meaning changes), run
+`dart run tool/warning_messages.dart > docs/warning-messages.md`, then run
+the quality gate (`test/tool/warning_messages_test.dart` fails while the
+file is stale). Record the result in the table above.
+
+### Phase 2 owner files
+
+Pending (R3 Task 12, not in R4): the Excel and Google Sheets workbooks the
+owner supplies as reader input. See `test/fixtures/owner/README.md` for which
+workbooks to save and how their expected values are confirmed.
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
