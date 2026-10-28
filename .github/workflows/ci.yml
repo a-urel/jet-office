@@ -1,8 +1,8 @@
 name: CI
 
 # Runs the quality gate from AGENTS.md, then validates the fixtures with the
-# Open XML SDK and LibreOffice (decision 0003) and proves that both checks
-# reject a corrupt file. A clean checkout must pass both jobs.
+# Open XML SDK and LibreOffice (decision 0003) and proves that all three
+# checks reject a corrupt file. A clean checkout must pass both jobs.
 on:
   push:
     branches: [main]

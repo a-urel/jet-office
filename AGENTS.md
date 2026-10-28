@@ -78,7 +78,11 @@ dart run tool/compare_resaved.dart build/fixtures build/resaved
 - Neither is Excel. The owner opens each writer milestone's fixtures in Excel
   and records the result in `docs/excel-checks.md`. Reader milestones (phase
   2, R1 to R4) have no such check: Excel produces their input, and the owner
-  supplies Excel and Google Sheets files instead (`0007`).
+  supplies Excel and Google Sheets files instead (`0007`). Those files go in
+  `test/fixtures/owner/`, listed in its `manifest.json`; the README there
+  says which workbooks to save and how the expected values are written and
+  confirmed (`tool/draft_expected.dart` drafts them). Never edit a committed
+  owner file or its expected JSON without the owner.
 
 ## Benchmark
 

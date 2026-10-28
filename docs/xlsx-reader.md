@@ -5,11 +5,12 @@ rows of typed cells, lazily and synchronously. It builds no model. Decision
 [`0007`](decisions/0007-phase-2-reader-scope-and-untrusted-input.md) sets the
 scope and why the file is treated as untrusted input.
 
-This page covers milestones R1, the foundation, and R2, the types: styles and
+This page covers milestones R1, the foundation, R2, the types (styles and
 number formats, dates and durations, `inlineStr`, error values, formula groups
-and merges, with `double` and `int` access on `XlsxDecimal`. R3 (files from
-other producers, hostile files) and R4 (benchmark and release readiness) add
-their own sections as they land.
+and merges, with `double` and `int` access on `XlsxDecimal`) and R3, files
+from other producers and hostile files (the sections "Other producers" and
+"Hostile input" below). R4 (benchmark and release readiness) adds its own
+section when it lands.
 
 ```dart
 final XlsxReader reader = XlsxReader(bytes);
@@ -240,6 +241,70 @@ a getter.
 | Opening | reads the ZIP directory, `[Content_Types].xml`, the root and workbook relationships, the workbook part and the styles part only | a sheet may be large and never needed; styles decide every cell's type | `test/xlsx/read/xlsx_reader_test.dart` |
 | A sheet's rows, and merges | its part is inflated when iteration starts (and again, once, for merges); shared strings are read once per reader, on first use, and a failure is retried by the next read | laziness | `test/xlsx/read/xlsx_reader_test.dart` |
 | Every phase 1 fixture | read back equals what the writer stored: same sheets, text decoded, numbers digit for digit when written without an exponent, booleans as `1` and `0`; the only warning is `formulaWithoutValue`, one per formula cell without a result; dates, merges and formula groups match what the writer stored, and a number in a date or time format never reads back as an `XlsxDecimal`. The fixtures store a rich text's runs joined, so a separate round trip writes rich text with escapes split across runs and reads it back exactly | the reader mirrors the writer | `test/xlsx/read/fixture_round_trip_test.dart` |
+
+## Other producers
+
+R1 and R2 are proven against the writer's own output. R3 adds three checks
+against files the writer did not make. None of them is Excel's own output
+except the last, which is still pending.
+
+- **Producer packages.** `test/xlsx/read/support/producers.dart` builds the
+  package of LibreOffice, Google Sheets, the .NET Open XML SDK and an
+  ERP/PHP-style export (for example LibreOffice's General format as number
+  format 164 and each producer's prefixes, element order, `mc:Ignorable` and
+  entry order); `test/xlsx/read/producers_test.dart` reads them. They are
+  hand-made from knowledge of each producer's output, not byte copies of real
+  files, except that the LibreOffice package was partly checked against a
+  LibreOffice 26.8.1.1 re-save of fixture `m1_values`. A quirk nobody knew of
+  shows up only in the two checks below.
+- **LibreOffice re-save.** `tool/compare_resaved.dart` reads the XLSX that
+  LibreOffice writes when it re-saves every fixture, and compares it with the
+  fixture's `expectedValues` (what a calculating program shows) through
+  `tool/src/read_compare.dart`, whose library comment holds the contract. A
+  reader warning on a re-saved file is a mismatch unless
+  `resaveAllowedWarnings` names the fixture and code, and a value unlike the
+  expected one is a mismatch unless `resaveAllowedValues` names the cell. The
+  one named exception is `m2_formula_xstring` `Probe!A1`: LibreOffice writes a
+  `t="str"` formula result without the `_xHHHH_` escapes. The CI `validate`
+  job runs it (AGENTS.md, "Validation"); it has not run in CI yet.
+- **Owner files.** Real files saved by Excel and Google Sheets, with values the
+  owner confirmed cell by cell, live in `test/fixtures/owner/` and are read by
+  `test/xlsx/read/owner_files_test.dart` (VM only). The expected JSON is
+  drafted by `tool/draft_expected.dart`; its format, the manifest and the two
+  workbooks to save are in `test/fixtures/owner/README.md`, not repeated here.
+  The files themselves are pending: while the manifest is empty the test
+  prints `owner files pending`.
+
+## Hostile input
+
+The file is untrusted (decision 0007). Three tests hold that:
+
+- **The hostile suite**, `test/xlsx/read/hostile_files_test.dart`, goes
+  through `XlsxReader` only and has one named case per `XlsxReadLimits` field
+  and per other hostile class (ZIP, XML, cell and sheet shapes), with lowered
+  limits where the default would need a large file.
+  `test/architecture/read_limits_coverage_test.dart` fails when a field that
+  `XlsxReadLimits.check` lists has no hostile case.
+- **The fuzz test**, `test/xlsx/read/fuzz_test.dart` with
+  `test/xlsx/read/support/fuzz.dart`, mutates a corpus of fixtures and
+  producer files from a seeded PRNG of its own (xorshift32), so a seed gives
+  the same mutations on the VM and in Chrome. The corpus is stored, not
+  deflated, with a fixed timestamp, so its bytes match on both platforms; two
+  deflated entries are added to fuzz inflation, whose cases may differ by
+  platform (decision 0006). For each file it opens the reader, iterates every
+  sheet's rows, reads every sheet's merges and renders every warning in `en`,
+  `de` and `tr`. Anything but an `XlsxReadException` fails, naming seed, case
+  and mutation; a case over 5 s fails as a hang. The gate runs seeds 1 to 4
+  with 100 cases each; `tool/fuzz_reader.dart` runs any range by hand
+  (AGENTS.md, "Fuzzing"). A defect that needs more than 400 cases is found
+  only by hand runs.
+- **Timing bounds** are relative to a baseline measured in the same run
+  (`test/support/timing.dart`), so a slow machine does not fail them.
+
+The spec's "a 1 KB file that claims 1 GB" is a declared size, refused before
+anything is inflated. "Inflates to 1 GB" cannot fit in 1 KB: deflate's ratio
+is at most 1032:1. The suite therefore proves the bound on a lying size with a
+small entry that inflates past its declaration.
 
 ## Inflation
 

@@ -91,8 +91,8 @@ Map<String, String> allowedValuesFor(
 /// (`XlsxReader.date1904`). Returns one message per mismatching cell, such
 /// as `B2: expected 42, got 41` or `C4: expected nothing, got 5`, in row
 /// then column order; a cell of [allowedValues] (reference to value) also
-/// matches that exact read string; an empty list means the sheet matches. Throws an
-/// [ArgumentError] for an expected cell of any other type.
+/// matches that exact read string; an empty list means the sheet matches.
+/// Throws an [ArgumentError] for an expected cell of any other type.
 List<String> compareReadSheet(
   List<List<Object?>> expected,
   Iterable<XlsxReadRow> read, {
