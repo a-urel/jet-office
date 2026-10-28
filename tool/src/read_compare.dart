@@ -16,16 +16,14 @@
 ///   re-saved number in a date or time format reads as one of those;
 /// * a `bool` matches a `bool` only;
 /// * a string matches a string exactly, and an `XlsxErrorValue` when it is
-///   the error's code (`#DIV/0!`). One LibreOffice rule: a formula cell's
-///   string also matches when it equals the `_xHHHH_`-decoded expected text.
-///   LibreOffice writes a formula's string result (`t="str"`) without
-///   escaping a `_xHHHH_` look-alike, which ST_Xstring (ECMA-376 Part 1,
-///   22.9.2.19) requires and the reader decodes, so the fixture whose
-///   formula yields `_x005F_x0041_` reads back as `_x0041_`. Shared strings
-///   are escaped by LibreOffice and get no such rule;
+///   the error's code (`#DIV/0!`);
 /// * `null` matches a missing cell, a cell without a value and an empty
 ///   string;
 /// * trailing empty cells and trailing empty rows are ignored on both sides.
+///
+/// A value LibreOffice is known to write differently is allowed by name
+/// only: `resaveAllowedValues` names the fixture, the cell and the one read
+/// value, each with its reason, and nothing else at that cell passes.
 ///
 /// Reader warnings are not compared here: `resaveAllowedWarnings` lists the
 /// ones a re-save may legitimately cause, and `tool/compare_resaved.dart`
@@ -35,8 +33,6 @@ library;
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/cell_ref.dart';
 import 'package:jet_office/src/xlsx/date_serial.dart';
-
-import 'csv_compare.dart' show decodeXstring;
 
 export 'csv_compare.dart' show decodeXstring;
 
@@ -50,6 +46,42 @@ export 'csv_compare.dart' show decodeXstring;
 const Map<String, Map<XlsxWarningCode, String>> resaveAllowedWarnings =
     <String, Map<XlsxWarningCode, String>>{};
 
+/// Known LibreOffice value differences: fixture name to `Sheet!A1` to the
+/// one value the reader may read there and the reason.
+///
+/// `m2_formula_xstring` `Probe!A1`: the formula is `"_x005F_x0041_"`.
+/// LibreOffice does not decode `_xHHHH_` in `<f>` (decision 0005), so its
+/// result is `_x005F_x0041_`, which the expected value records; Excel
+/// shows `_x0041_`. LibreOffice then writes that result in the `t="str"`
+/// `<v>` without escaping it, where ST_Xstring (ECMA-376 Part 1, 22.9.2.19)
+/// makes `_x005F_` an escape for `_`; the reader decodes it, correctly, to
+/// `_x0041_`. Its shared strings are escaped and need no line.
+const Map<String, Map<String, (String, String)>> resaveAllowedValues =
+    <String, Map<String, (String, String)>>{
+      'm2_formula_xstring': <String, (String, String)>{
+        'Probe!A1': (
+          '_x0041_',
+          'LibreOffice does not decode _xHHHH_ in <f> (decision 0005) and '
+              'writes the resulting _x005F_x0041_ in a t="str" <v> without '
+              'escaping it, so the reader decodes it to _x0041_ as '
+              'ST_Xstring requires.',
+        ),
+      },
+    };
+
+/// The values allowed on [sheet] of [fixture]: cell reference to the one
+/// value, from [allowed] (default `resaveAllowedValues`).
+Map<String, String> allowedValuesFor(
+  String fixture,
+  String sheet, {
+  Map<String, Map<String, (String, String)>> allowed = resaveAllowedValues,
+}) => <String, String>{
+  for (final MapEntry<String, (String, String)> e
+      in (allowed[fixture] ?? const <String, (String, String)>{}).entries)
+    if (e.key.startsWith('$sheet!'))
+      e.key.substring(sheet.length + 1): e.value.$1,
+};
+
 /// The mismatches of the [read] rows of one sheet against the [expected]
 /// rows, under the contract in the library comment.
 ///
@@ -58,12 +90,14 @@ const Map<String, Map<XlsxWarningCode, String>> resaveAllowedWarnings =
 /// file leaves out count as empty. [date1904] is the workbook's date system
 /// (`XlsxReader.date1904`). Returns one message per mismatching cell, such
 /// as `B2: expected 42, got 41` or `C4: expected nothing, got 5`, in row
-/// then column order; an empty list means the sheet matches. Throws an
+/// then column order; a cell of [allowedValues] (reference to value) also
+/// matches that exact read string; an empty list means the sheet matches. Throws an
 /// [ArgumentError] for an expected cell of any other type.
 List<String> compareReadSheet(
   List<List<Object?>> expected,
   Iterable<XlsxReadRow> read, {
   required bool date1904,
+  Map<String, String> allowedValues = const <String, String>{},
 }) {
   final Map<int, Map<int, Object?>> want = <int, Map<int, Object?>>{};
   for (int r = 0; r < expected.length; r++) {
@@ -81,13 +115,11 @@ List<String> compareReadSheet(
     }
   }
   final Map<int, Map<int, Object?>> got = <int, Map<int, Object?>>{};
-  final Set<(int, int)> formulas = <(int, int)>{};
   for (final XlsxReadRow row in read) {
     for (final XlsxReadCell cell in row.cells) {
       final Object? value = cell.value;
       if (value != null && value != '') {
         (got[row.index] ??= <int, Object?>{})[cell.column] = value;
-        if (cell.formula != null) formulas.add((row.index, cell.column));
       }
     }
   }
@@ -100,12 +132,12 @@ List<String> compareReadSheet(
     for (final int c in columns.toList()..sort()) {
       final Object? w = wantRow[c];
       final Object? g = gotRow[c];
-      final bool decodedMatch =
-          w is String &&
-          g is String &&
-          formulas.contains((r, c)) &&
-          g == decodeXstring(w);
-      if (!decodedMatch && !_matches(w, g, date1904: date1904)) {
+      if (g is String &&
+          allowedValues[cellRef(r, c)] == g &&
+          !_matches(w, g, date1904: date1904)) {
+        continue;
+      }
+      if (!_matches(w, g, date1904: date1904)) {
         messages.add(
           '${cellRef(r, c)}: expected ${_describe(w, 'nothing')}, '
           'got ${_describe(g, 'nothing')}',

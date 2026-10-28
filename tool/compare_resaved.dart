@@ -13,7 +13,8 @@
 /// A sheet in the re-save that no expected sheet names is a mismatch, as is
 /// a missing or unreadable re-saved file. Every reader warning on a re-save
 /// is a mismatch unless `resaveAllowedWarnings` names the fixture and the
-/// code. It prints every mismatch and exits with 1 on any, with 2 when
+/// code, and a value differs only where `resaveAllowedValues` names it. It
+/// prints every mismatch and exits with 1 on any, with 2 when
 /// there is nothing to compare, or with 64 on a usage error.
 ///
 /// The CI job re-saves the fixtures with LibreOffice headless:
@@ -65,11 +66,16 @@ void main(List<String> args) {
     final String name = _basename(
       file.path,
     ).replaceFirst(RegExp(r'\.expected\.json$'), '');
-    final List<String> messages = _compareFixture(
-      name,
-      _readExpected(file),
-      File('$resaved/$name.xlsx'),
-    );
+    List<String> messages;
+    try {
+      messages = _compareFixture(
+        name,
+        _readExpected(file),
+        File('$resaved/$name.xlsx'),
+      );
+    } on Exception catch (e) {
+      messages = <String>['could not compare $name: $e'];
+    }
     if (messages.isEmpty) {
       stdout.writeln('ok    $name');
     } else {
@@ -99,6 +105,8 @@ List<String> _compareFixture(
     reader = XlsxReader(file.readAsBytesSync());
   } on XlsxReadException catch (e) {
     return <String>['the reader refused ${file.path}: $e'];
+  } on Exception catch (e) {
+    return <String>['could not read ${file.path}: $e'];
   }
   final List<String> messages = <String>[];
   final Set<int> matched = <int>{};
@@ -125,6 +133,7 @@ List<String> _compareFixture(
         rows,
         reader.rowsAt(found),
         date1904: reader.date1904,
+        allowedValues: allowedValuesFor(name, sheet),
       ))
         '$sheet!$m',
     ]);

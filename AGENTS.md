@@ -53,9 +53,9 @@ dart run tool/compare_resaved.dart build/fixtures build/resaved
 - `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
   `<name>.xlsx` and its expected values as `<name>.expected.json`.
-  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, to prove both
-  checks still fail on a bad file. The `validate` job's last step writes it
-  to `build/corrupt` and requires both checks to reject it.
+  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, to prove every
+  check still fails on a bad file. The `validate` job's last step writes it
+  to `build/corrupt` and requires every check to reject it.
 - `tool/write_fixtures.dart` imports test helpers that use `package:archive`.
   That is allowed: the archive rule covers `lib/` only.
 - `tool/ooxml_validate` validates every `.xlsx` with the Open XML SDK against

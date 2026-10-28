@@ -1,5 +1,7 @@
 // Tests the comparison behind tool/compare_resaved.dart on rows built by
-// hand and by XlsxReader.
+// hand and by XlsxReader. Most tests build XlsxReadRow directly because the
+// writer cannot emit a Duration or an error value, which the comparison
+// must handle; one test goes through XlsxReader on writer-made bytes.
 //
 // They read no files, so they run on the web as well as the VM.
 import 'package:jet_office/jet_office.dart';
@@ -209,31 +211,64 @@ void main() {
       );
     });
 
-    test(
-      'a formula string matches its _xHHHH_-decoded form, a plain one does not',
-      () {
-        // LibreOffice writes a formula's string result in t="str" without
-        // escaping it, so the reader's decoding changes a result that looks
-        // like an escape. The rule covers formula cells only.
-        final List<List<Object?>> expected = <List<Object?>>[
-          <Object?>['_x005F_x0041_'],
-        ];
-        expect(
-          _compare(expected, <XlsxReadRow>[
-            XlsxReadRow(0, const <XlsxReadCell>[
-              XlsxReadCell(0, '_x0041_', formula: '"_x005F_x0041_"'),
-            ]),
-          ]),
-          isEmpty,
+    group('named value exceptions', () {
+      final List<List<Object?>> expected = <List<Object?>>[
+        <Object?>['_x005F_x0041_'],
+      ];
+      final Map<String, String> allowed = allowedValuesFor(
+        'm2_formula_xstring',
+        'Probe',
+      );
+
+      List<String> compareRead(Object? value, Map<String, String> allow) =>
+          compareReadSheet(
+            expected,
+            <XlsxReadRow>[
+              _row(0, <Object?>[value]),
+            ],
+            date1904: false,
+            allowedValues: allow,
+          );
+
+      test('the known fixture and cell allow exactly the decoded value', () {
+        expect(allowed, <String, String>{'A1': '_x0041_'});
+        expect(compareRead('_x0041_', allowed), isEmpty);
+      });
+
+      test('the same cell in another fixture fails', () {
+        final Map<String, String> other = allowedValuesFor(
+          'm1_values',
+          'Probe',
         );
+        expect(other, isEmpty);
+        expect(compareRead('_x0041_', other), hasLength(1));
+        expect(allowedValuesFor('m2_formula_xstring', 'Other'), isEmpty);
+      });
+
+      test('an undecoded or different value at that cell fails', () {
+        // The undecoded text is the expected value: it passes by the
+        // ordinary rule, so only other values prove the exception is exact.
+        expect(compareRead('_x0042_', allowed), hasLength(1));
+        expect(compareRead('_x005F_x005F_x0041_', allowed), hasLength(1));
+        expect(compareRead(XlsxDecimal('1'), allowed), hasLength(1));
+      });
+
+      test('a plain mismatch elsewhere is not excused', () {
         expect(
-          _compare(expected, <XlsxReadRow>[
-            _row(0, <Object?>['_x0041_']),
-          ]),
-          <String>['A1: expected "_x005F_x0041_", got "_x0041_"'],
+          compareReadSheet(
+            <List<Object?>>[
+              <Object?>['x', 'y'],
+            ],
+            <XlsxReadRow>[
+              _row(0, <Object?>['x', '_x0041_']),
+            ],
+            date1904: false,
+            allowedValues: allowed,
+          ),
+          <String>['B1: expected "y", got "_x0041_"'],
         );
-      },
-    );
+      });
+    });
 
     test('an error value matches its code as a string', () {
       expect(
@@ -399,6 +434,21 @@ void main() {
         ),
         isEmpty,
       );
+    });
+  });
+
+  group('resaveAllowedValues', () {
+    test('every line has a value and a reason', () {
+      resaveAllowedValues.forEach((
+        String fixture,
+        Map<String, (String, String)> cells,
+      ) {
+        expect(cells, isNotEmpty, reason: fixture);
+        cells.forEach((String cell, (String, String) line) {
+          expect(cell, contains('!'), reason: '$fixture $cell');
+          expect(line.$2.trim(), isNotEmpty, reason: '$fixture $cell');
+        });
+      });
     });
   });
 
