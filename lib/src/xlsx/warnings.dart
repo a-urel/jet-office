@@ -99,10 +99,12 @@ enum XlsxWarningCode {
   /// beyond 1,048,576). The cell is skipped.
   cellOutsideSheet,
 
-  /// Reading: number cells use a built-in number format (id 5 to 8, 23 to 36
-  /// or 41 to 44, and others) whose code depends on the locale and is not in
-  /// the file. They read as plain numbers, even if they show dates.
-  /// [XlsxWarning.detail] is the format id in decimal.
+  /// Reading: number cells use a number format whose code the file does not
+  /// define and the reader cannot know: a built-in id whose code depends on
+  /// the locale (23 to 36 or 50 to 163) or an id of 164 and up. They read as
+  /// plain numbers, even if they show dates. [XlsxWarning.detail] is the
+  /// format id in decimal, or null for the warning that gathers the ids after
+  /// the first ten of a sheet.
   unresolvedNumberFormat,
 
   /// Reading: a cell's style index points to a cell format that does not
@@ -110,7 +112,7 @@ enum XlsxWarningCode {
   styleInvalid,
 
   /// Reading: a cell is formatted as a date or time but holds a number no
-  /// date or time can have (negative, not finite, or beyond the year 9999).
+  /// date or time can have (negative, or beyond the year 9999).
   /// It reads as a number.
   serialOutOfRange,
 

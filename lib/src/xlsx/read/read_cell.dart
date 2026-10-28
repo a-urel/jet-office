@@ -180,6 +180,10 @@ final class XlsxReadCell {
 
   /// Whether [numberFormat] shows a date or a time. [value] tells which: a
   /// `DateTime` or a `Duration`, unless the number could not be mapped.
+  ///
+  /// It describes the format, not the value: a string cell in a date format
+  /// has `isDate` true, and a `t="d"` cell in `General` has `isDate` false
+  /// with a `DateTime` value.
   final bool isDate;
 
   @override

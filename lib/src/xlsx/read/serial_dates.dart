@@ -4,11 +4,11 @@
 /// A serial arrives as the digit string of an `XlsxDecimal` (`-?\d+(\.\d+)?`),
 /// never as a `double`, so the milliseconds are exact: the integer part times
 /// 86,400,000 plus the fraction times 86,400,000 computed with `BigInt` on the
-/// fraction's first 30 digits, rounded half up; later digits cannot change the
-/// result except on an exact half, which already rounds up. The integer part is
-/// checked against the range before any arithmetic, so a hostile file cannot
-/// make it large; every `int` here stays below 2^53, which keeps the result
-/// identical on the VM and on the web.
+/// fraction's first 30 digits, rounded half up. That is exact to within
+/// 1e-22 ms; later digits are ignored. The integer part is checked against
+/// the range before any arithmetic, so a hostile file cannot make it large;
+/// every `int` here stays below 2^53, which keeps the result identical on the
+/// VM and on the web.
 ///
 /// Dates are `DateTime.utc` values built from the wall-clock fields. Durations
 /// are `Duration`s. A value no date or duration can have yields a warning code
@@ -96,7 +96,7 @@ typedef _Parts = ({bool negative, int whole, int fractionMs});
 ///
 /// Returns `null` when the integer part exceeds [maxWhole] (checked by length
 /// first, before parsing). The fraction may be thousands of digits long; only
-/// only its first 30 are used.
+/// its first 30 are used.
 _Parts? _split(String digits, int maxWhole) {
   final bool negative = digits.startsWith('-');
   final int start = negative ? 1 : 0;
@@ -119,9 +119,8 @@ _Parts? _split(String digits, int maxWhole) {
     final BigInt product = BigInt.parse(head) * _msPerDayBig;
     final BigInt quotient = product ~/ _scale;
     final BigInt remainder = product - quotient * _scale;
-    // Half up. A non-zero tail past the 30th digit makes an exact half
-    // "above half", which rounds up like the half itself, so it needs no
-    // separate bit.
+    // Half up, on the first 30 digits: exact to within 1e-22 ms; later
+    // digits are ignored.
     final bool up = remainder * BigInt.two >= _scale;
     fractionMs = quotient.toInt() + (up ? 1 : 0);
   }
