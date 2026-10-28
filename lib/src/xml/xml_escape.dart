@@ -131,6 +131,44 @@ final RegExp _xstringStart = RegExp(r'_(?=x[0-9A-Fa-f]{4}_)');
 String escapeXstring(String text) =>
     text.contains('_x') ? text.replaceAll(_xstringStart, '_x005F_') : text;
 
+/// An escaped surrogate pair (`_xD83D__xDE00_`) or a single `_xHHHH_`.
+final RegExp _xstringEscape = RegExp(
+  r'_x([Dd][89ABab][0-9A-Fa-f]{2})__x([Dd][C-Fc-f][0-9A-Fa-f]{2})_'
+  r'|_x([0-9A-Fa-f]{4})_',
+);
+
+/// Reverses [escapeXstring]: reads every `_xHHHH_` in [text] as U+HHHH.
+///
+/// Excel and LibreOffice decode ST_Xstring this way in shared strings,
+/// cached formula text, formulas and sheet names (decision 0005), so a reader
+/// applies it to get the text the user sees. The hex digits may be either
+/// case. [text] is scanned left to right once, and produced characters are
+/// never read again: `_x005F_x0041_` decodes to `_x0041_`, not `A`. Two
+/// escapes that spell a surrogate pair (`_xD83D__xDE00_`) join into one
+/// character; a lone surrogate escape is left as written, because a lone
+/// surrogate cannot be written back as XML text.
+///
+/// Returns [text] itself when it holds no `_x`.
+String decodeXstring(String text) {
+  if (!text.contains('_x')) {
+    return text;
+  }
+  return text.replaceAllMapped(_xstringEscape, (Match m) {
+    final String? high = m[1];
+    if (high != null) {
+      return String.fromCharCodes(<int>[
+        int.parse(high, radix: 16),
+        int.parse(m[2]!, radix: 16),
+      ]);
+    }
+    final int unit = int.parse(m[3]!, radix: 16);
+    if (unit >= 0xD800 && unit <= 0xDFFF) {
+      return m[0]!;
+    }
+    return String.fromCharCode(unit);
+  });
+}
+
 /// Escapes formula text (ST_Formula) for XML character data: a cell's `<f>`
 /// and a `definedName`'s text.
 ///
