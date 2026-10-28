@@ -81,6 +81,8 @@ final class ProducerSheet {
 List<ProducerFile> producerFiles() => <ProducerFile>[
   libreOfficeFile(),
   googleSheetsFile(),
+  dotNetSdkFile(),
+  erpExportFile(),
 ];
 
 /// Reads [f] and fails with a [TestFailure] listing every difference from
@@ -870,4 +872,216 @@ ProducerFile googleSheetsFile() {
       ],
     ]),
   ]);
+}
+
+/// The UTF-8 byte order mark and declaration the Open XML SDK writes
+/// before every part (`encoding` in lower case).
+const String _sdkDecl = '﻿<?xml version="1.0" encoding="utf-8"?>';
+
+/// A file in the style of an exporter built on the Open XML SDK for .NET.
+///
+/// Written from knowledge of the SDK's output, not copied from a file
+/// (plan ruling 6): a byte order mark and `encoding="utf-8"` on every part,
+/// the `x:` prefix on every SpreadsheetML element, `" />"` on empty
+/// elements, generated relationship ids (`R` and hex digits), absolute
+/// relationship targets, a `[Content_Types].xml` whose default type for
+/// `xml` is generic, entries in the order `System.IO.Packaging` writes them
+/// (parts as created, relationships and content types last), and none of
+/// the parts an SDK program must add itself: no styles, no shared strings,
+/// no `docProps`. The workbook override written as `/XL/Workbook.xml` for
+/// the entry `xl/workbook.xml`, rows and cells without `r`, `t="n"` on
+/// every number, an exponent and `t="d"` are what hand-written SDK code
+/// commonly produces, as the R3 plan sets them. The `<x:dimension>` claims
+/// `A1:Z99999` for 4 rows.
+///
+/// Expected: `1.5E-05` is `XlsxDecimal('0.000015')`, the ISO text is a UTC
+/// `DateTime`, and no warning.
+ProducerFile dotNetSdkFile() {
+  const String x = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  String inline(String text) =>
+      '<x:c t="inlineStr"><x:is><x:t>$text</x:t></x:is></x:c>';
+  String number(String digits) => '<x:c t="n"><x:v>$digits</x:v></x:c>';
+  final String sheet =
+      '$_sdkDecl<x:worksheet xmlns:x="$x">'
+      '<x:dimension ref="A1:Z99999" />'
+      '<x:sheetData>'
+      '<x:row>${inline('Kod')}${inline('Miktar')}${inline('Oran')}'
+      '${inline('Aktif')}${inline('Tarih')}</x:row>'
+      '<x:row>${inline('A-001')}${number('12')}${number('1.5E-05')}'
+      '<x:c t="b"><x:v>1</x:v></x:c>'
+      '<x:c t="d"><x:v>2026-10-28T13:45:00</x:v></x:c></x:row>'
+      '<x:row>${inline('A-002')}${number('-3')}${number('0.25')}'
+      '<x:c t="b"><x:v>0</x:v></x:c>'
+      '<x:c t="d"><x:v>2026-10-29T00:00:00</x:v></x:c></x:row>'
+      '<x:row>${inline('Toplam &amp; KDV')}${number('9')}</x:row>'
+      '</x:sheetData>'
+      '</x:worksheet>';
+  const String workbook =
+      '$_sdkDecl<x:workbook xmlns:r="$_relNs" xmlns:x="$x">'
+      '<x:sheets><x:sheet name="Stok Hareketleri" sheetId="1" '
+      'r:id="R3f2a9c1e" /></x:sheets>'
+      '</x:workbook>';
+  const String workbookRels =
+      '$_sdkDecl<Relationships xmlns="$_pkgRelNs">'
+      '<Relationship Type="$_relNs/worksheet" '
+      'Target="/xl/worksheets/sheet1.xml" Id="R3f2a9c1e" />'
+      '</Relationships>';
+  const String rootRels =
+      '$_sdkDecl<Relationships xmlns="$_pkgRelNs">'
+      '<Relationship Type="$_relNs/officeDocument" '
+      'Target="/xl/workbook.xml" Id="Rd4a7e2b90c5f4e18" />'
+      '</Relationships>';
+  const String contentTypes =
+      '$_sdkDecl<Types xmlns="$_ctNs">'
+      '<Default Extension="xml" ContentType="application/xml" />'
+      '<Default Extension="rels" ContentType="$_ctRels" />'
+      '<Override PartName="/XL/Workbook.xml" '
+      'ContentType="$_ctSheet.sheet.main+xml" />'
+      '<Override PartName="/xl/worksheets/sheet1.xml" '
+      'ContentType="$_ctSheet.worksheet+xml" />'
+      '</Types>';
+  final Uint8List bytes = buildZipOrdered(<(String, List<int>)>[
+    ('xl/workbook.xml', utf8.encode(workbook)),
+    ('xl/worksheets/sheet1.xml', utf8.encode(sheet)),
+    ('xl/_rels/workbook.xml.rels', utf8.encode(workbookRels)),
+    ('_rels/.rels', utf8.encode(rootRels)),
+    ('[Content_Types].xml', utf8.encode(contentTypes)),
+  ]);
+  return ProducerFile('dotnet_sdk', bytes, <ProducerSheet>[
+    ProducerSheet('Stok Hareketleri', <List<Object?>>[
+      <Object?>['Kod', 'Miktar', 'Oran', 'Aktif', 'Tarih'],
+      <Object?>[
+        'A-001',
+        XlsxDecimal('12'),
+        XlsxDecimal('0.000015'),
+        true,
+        DateTime.utc(2026, 10, 28, 13, 45),
+      ],
+      <Object?>[
+        'A-002',
+        XlsxDecimal('-3'),
+        XlsxDecimal('0.25'),
+        false,
+        DateTime.utc(2026, 10, 29),
+      ],
+      <Object?>['Toplam & KDV', XlsxDecimal('9')],
+    ]),
+  ]);
+}
+
+/// The declaration SheetJS writes, ended by CRLF.
+const String _jsDecl =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
+
+/// A file in the style of a minimal ERP export (a PHP library or SheetJS
+/// with shared strings off).
+///
+/// Written from knowledge, not copied from a file (plan ruling 6): the
+/// declaration ended by CRLF and text as `t="str"` without a formula are
+/// how SheetJS writes; the 1904 date system, the sheet part outside `xl/`
+/// reached through a relationship target with backslashes, no
+/// `<dimension>`, a styles part of two `cellXfs` whose second is the
+/// built-in date format 14, a number with trailing zeros (`4500.00`, as a
+/// PHP exporter formats it) and a repeated `A3` are the cases the R3 plan
+/// sets for exporters of this kind.
+///
+/// Expected: `date1904` true, serial 44861 is 2026-10-28, the later `A3`
+/// wins, and one `cellDuplicated`.
+ProducerFile erpExportFile() {
+  String text(String ref, String value) =>
+      '<c r="$ref" t="str"><v>$value</v></c>';
+  final String sheet =
+      '$_jsDecl<worksheet xmlns="$_main" xmlns:r="$_relNs">'
+      '<sheetData>'
+      '<row r="1">${text('A1', 'Fatura No')}${text('B1', 'Tarih')}'
+      '${text('C1', 'Tutar')}${text('D1', 'Açıklama')}</row>'
+      '<row r="2">${text('A2', 'FT-2026-0001')}'
+      '<c r="B2" s="1"><v>44861</v></c><c r="C2"><v>4500.00</v></c>'
+      '${text('D2', 'Ofis kirası &amp; aidat')}</row>'
+      '<row r="3">${text('A3', 'FT-2026-0002')}'
+      '${text('A3', 'FT-2026-0002/R')}'
+      '<c r="B3" s="1"><v>44862</v></c><c r="C3"><v>-120.5</v></c>'
+      '${text('D3', 'İade &lt;kısmi&gt;')}</row>'
+      '</sheetData>'
+      '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" '
+      'header="0.3" footer="0.3"/>'
+      '</worksheet>';
+  const String styles =
+      '$_jsDecl<styleSheet xmlns="$_main">'
+      '<numFmts count="0"/>'
+      '<fonts count="1"><font><sz val="12"/><color theme="1"/>'
+      '<name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'
+      '</fonts>'
+      '<fills count="2"><fill><patternFill patternType="none"/></fill>'
+      '<fill><patternFill patternType="gray125"/></fill></fills>'
+      '<borders count="1"><border><left/><right/><top/><bottom/>'
+      '<diagonal/></border></borders>'
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" '
+      'borderId="0"/></cellStyleXfs>'
+      '<cellXfs count="2">'
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+      '<xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" '
+      'applyNumberFormat="1"/>'
+      '</cellXfs>'
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" '
+      'builtinId="0"/></cellStyles>'
+      '</styleSheet>';
+  const String workbook =
+      '$_jsDecl<workbook xmlns="$_main" xmlns:r="$_relNs">'
+      '<workbookPr date1904="true"/>'
+      '<sheets><sheet name="Faturalar" sheetId="1" r:id="rId1"/></sheets>'
+      '</workbook>';
+  const String workbookRels =
+      '$_jsDecl<Relationships xmlns="$_pkgRelNs">'
+      '<Relationship Id="rId1" Type="$_relNs/worksheet" '
+      r'Target="..\worksheets\data.xml"/>'
+      '<Relationship Id="rId2" Type="$_relNs/styles" Target="styles.xml"/>'
+      '</Relationships>';
+  const String rootRels =
+      '$_jsDecl<Relationships xmlns="$_pkgRelNs">'
+      '<Relationship Id="rId1" Type="$_relNs/officeDocument" '
+      'Target="xl/workbook.xml"/>'
+      '</Relationships>';
+  const String contentTypes =
+      '$_jsDecl<Types xmlns="$_ctNs">'
+      '<Default Extension="xml" ContentType="application/xml"/>'
+      '<Default Extension="rels" ContentType="$_ctRels"/>'
+      '<Override PartName="/xl/workbook.xml" '
+      'ContentType="$_ctSheet.sheet.main+xml"/>'
+      '<Override PartName="/worksheets/data.xml" '
+      'ContentType="$_ctSheet.worksheet+xml"/>'
+      '<Override PartName="/xl/styles.xml" '
+      'ContentType="$_ctSheet.styles+xml"/>'
+      '</Types>';
+  final Uint8List bytes = buildZipOrdered(<(String, List<int>)>[
+    ('[Content_Types].xml', utf8.encode(contentTypes)),
+    ('_rels/.rels', utf8.encode(rootRels)),
+    ('xl/workbook.xml', utf8.encode(workbook)),
+    ('xl/_rels/workbook.xml.rels', utf8.encode(workbookRels)),
+    ('xl/styles.xml', utf8.encode(styles)),
+    ('worksheets/data.xml', utf8.encode(sheet)),
+  ]);
+  return ProducerFile(
+    'erp_export',
+    bytes,
+    <ProducerSheet>[
+      ProducerSheet('Faturalar', <List<Object?>>[
+        <Object?>['Fatura No', 'Tarih', 'Tutar', 'Açıklama'],
+        <Object?>[
+          'FT-2026-0001',
+          DateTime.utc(2026, 10, 28),
+          XlsxDecimal('4500.00'),
+          'Ofis kirası & aidat',
+        ],
+        <Object?>[
+          'FT-2026-0002/R',
+          DateTime.utc(2026, 10, 29),
+          XlsxDecimal('-120.5'),
+          'İade <kısmi>',
+        ],
+      ]),
+    ],
+    warnings: const <XlsxWarningCode, int>{XlsxWarningCode.cellDuplicated: 1},
+    date1904: true,
+  );
 }
