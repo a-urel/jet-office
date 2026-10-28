@@ -28,6 +28,39 @@ void main() {
     });
   });
 
+  group('XlsxDecimal numbers', () {
+    test('toDouble parses the digits', () {
+      expect(XlsxDecimal('-1234.50').toDouble(), -1234.5);
+    });
+
+    test('toIntOrNull returns whole values', () {
+      expect(XlsxDecimal('007').toIntOrNull(), 7);
+      expect(XlsxDecimal('12.000').toIntOrNull(), 12);
+      expect(XlsxDecimal('-0').toIntOrNull(), 0);
+    });
+
+    test('toIntOrNull returns null for a fraction', () {
+      expect(XlsxDecimal('12.5').toIntOrNull(), isNull);
+      expect(XlsxDecimal('12.0001').toIntOrNull(), isNull);
+    });
+
+    test('toIntOrNull stops at 2^53 - 1', () {
+      expect(XlsxDecimal('9007199254740991').toIntOrNull(), 9007199254740991);
+      expect(XlsxDecimal('9007199254740992').toIntOrNull(), isNull);
+      expect(XlsxDecimal('-9007199254740991').toIntOrNull(), -9007199254740991);
+      expect(XlsxDecimal('-9007199254740992').toIntOrNull(), isNull);
+      expect(
+        XlsxDecimal('0009007199254740991').toIntOrNull(),
+        9007199254740991,
+      );
+    });
+
+    test('toIntOrNull gives null for huge digits without throwing', () {
+      expect(XlsxDecimal('9' * 400).toIntOrNull(), isNull);
+      expect(XlsxDecimal('-${'9' * 400}').toIntOrNull(), isNull);
+    });
+  });
+
   group('value equality', () {
     test('XlsxDate', () {
       expect(const XlsxDate(2026, 10, 24), const XlsxDate(2026, 10, 24));
