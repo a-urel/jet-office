@@ -33,7 +33,8 @@
 ///
 /// [XlsxReader] reads an XLSX file from bytes, such as a user's upload for
 /// a data import. It treats the file as untrusted: opening it reads only the
-/// ZIP directory, the workbook and its styles, [XlsxReader.sheets] lists
+/// ZIP directory, the content types, the package and workbook
+/// relationships, the workbook and its styles. [XlsxReader.sheets] lists
 /// each [XlsxReadSheet], and [XlsxReader.date1904] gives the date system.
 /// [XlsxReader.rows] (by name) and [XlsxReader.rowsAt] (by index) parse a
 /// sheet lazily as its [XlsxReadRow]s are taken, each holding
@@ -50,7 +51,9 @@
 /// that cannot be read exactly is kept as far as possible and reported in
 /// [XlsxReader.warnings], with the same [XlsxWarning] type the writers use.
 /// A sheet's warnings are complete once its rows have been iterated to the
-/// end. Reading is synchronous, like writing: for a responsive user
+/// end, except [XlsxWarningCode.mergeRangeInvalid], which appears only once
+/// its merges are read ([XlsxReader.merges] or [XlsxReader.mergesAt]).
+/// Reading is synchronous, like writing: for a responsive user
 /// interface, run the reader in an isolate or a web worker too, and send
 /// the values it reads back to the caller.
 ///

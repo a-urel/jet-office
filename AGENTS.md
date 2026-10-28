@@ -89,10 +89,12 @@ dart run tool/compare_resaved.dart build/fixtures build/resaved
 `benchmark/` writes 100,000 rows of 12 mixed columns with `XlsxWriter` and
 `XlsxStreamWriter` (`xlsx_benchmark_test.dart`), and reads that file back
 with `XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each
-phase and memory per byte of sheet XML). Each prints time, file size and
-peak memory per run. The quality gate does not run them; run them by hand
-on the VM and in Chrome. They record figures and fail on none
-(`docs/benchmark.md`):
+phase and memory per byte of sheet XML). `xlsx_read_worst_case_test.dart`
+reads the largest single sheet the default limits accept (about 250 MiB of
+XML; about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file
+size and peak memory per run. The quality gate does not run them; run them
+by hand on the VM and in Chrome (`dart test benchmark` runs all three). They
+record figures and fail on none (`docs/benchmark.md`):
 
 ```bash
 dart test benchmark

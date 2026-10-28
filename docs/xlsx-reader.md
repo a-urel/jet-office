@@ -268,8 +268,9 @@ except the last, which is still pending.
   one named exception is `m2_formula_xstring` `Probe!A1`: LibreOffice writes a
   `t="str"` formula result without the `_xHHHH_` escapes. The CI `validate`
   job runs it (AGENTS.md, "Validation"). It ran and passed in CI on pull
-  request a-urel/jet-office#2, with the LibreOffice CI installs on Ubuntu
-  (24.2.x), and locally matched on LibreOffice 26.8.1.1, 29 of 29 fixtures.
+  request a-urel/jet-office#2, with the LibreOffice that CI installs from
+  Ubuntu 24.04's packages, and locally matched on LibreOffice 26.8.1.1, 29
+  of 29 fixtures.
 - **Owner files.** Real files saved by Excel and Google Sheets, with values the
   owner confirmed cell by cell, live in `test/fixtures/owner/` and are read by
   `test/xlsx/read/owner_files_test.dart` (VM only). The expected JSON is
@@ -346,17 +347,22 @@ R4's figures, on one machine and recorded rather than enforced
   VM and 79 % in Chrome; inflation is the rest. `mergesAt` costs a second
   inflate and parse of the part.
 - **Memory** is the peak above a baseline divided by N. The VM's sampled
-  peak is 1.47 N and its unsampled `maxRss` peak 2.41 N; Chrome's sampled
-  heap peak is 2.46 N. All three are within the spec's budget of about two
-  to three times N.
-- **The worst case under the default limits** is a file of about 2 MB that
-  inflates to about 250 MiB of sheet XML, under `maxEntryBytes` and
-  `maxCompressionRatio`. Reading it took about 19 s on either platform,
-  532 MB above the baseline on the VM and about 1 GB in Chrome (2.33 GB of
-  heap in all). The defaults are unchanged. A consumer that reads uploads
+  peak is 1.47 N and its unsampled `maxRss` peak at most 2.41 N; Chrome's
+  sampled heap peak is 2.46 N. Only the unsampled figure checks the spec's
+  budget of about two to three times N, and it is within it; the sampled
+  figures are lower bounds.
+- **The largest single sheet under the default limits** is a file of
+  about 2 MB that inflates to about 250 MiB of sheet XML, under
+  `maxEntryBytes` and `maxCompressionRatio`. Reading it took about 19 s on
+  either platform, 531 MB above the baseline on the VM and about 1 GB in
+  Chrome (2.33 GB of heap in all). That bounds one sheet, not a workbook:
+  the shared strings part can be as large and is held while a sheet is
+  read, and a workbook of several such sheets passes every limit, so
+  reading every sheet costs up to `maxTotalBytes` (1 GiB) of XML. Neither
+  was measured. The defaults are unchanged. A consumer that reads uploads
   should run the reader off the UI thread (an isolate or a web worker) and,
-  for small uploads, pass a lower `maxEntryBytes`: time and memory follow
-  N, not the file size.
+  for small uploads, pass a lower `maxEntryBytes` and `maxTotalBytes`: time
+  and memory follow the XML read, not the file size.
 
 ## Port map
 

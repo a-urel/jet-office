@@ -84,10 +84,11 @@ enum XlsxWarningCode {
   formulaWithoutValue,
 
   /// Reading: a cell's `r` attribute is not a valid A1 reference or names
-  /// another row, or a row's `r` is not a number (the warning then names
-  /// the row's first cell). A cell is placed in the column after the
-  /// previous cell of its row and keeps its value; a row follows the
-  /// previous row.
+  /// another row, or a row's `r` is not a row number from 1 up (`r="x"`,
+  /// and `r="0"` too). For a row the warning names the row's first cell
+  /// that holds data; a row without data gets none. A cell is placed in the
+  /// column after the previous cell of its row and keeps its value; a row
+  /// follows the previous row.
   cellReferenceInvalid,
 
   /// Reading: two cells of one row have the same column, or one cell

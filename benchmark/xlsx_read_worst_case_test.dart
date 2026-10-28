@@ -1,6 +1,6 @@
-/// The XLSX reader's worst case under its default limits: one sheet of about
-/// 250 MiB of XML, under `maxEntryBytes` (256 MiB) and under
-/// `maxCompressionRatio` (1,000).
+/// The XLSX reader's worst case under its default limits for one sheet: the
+/// largest single sheet they accept, about 250 MiB of XML, under
+/// `maxEntryBytes` (256 MiB) and under `maxCompressionRatio` (1,000).
 ///
 /// New in jet_office. It records figures, it does not judge them
 /// (docs/benchmark.md, "Worst case"). It runs in its own file so that a
@@ -143,5 +143,15 @@ void main() {
     expect(rows, yielded);
     expect(cells, yielded * 12);
     expect(ones, cells);
+    // The one warning gathers every cell of those rows.
+    final int outside = (sheetRows - yielded) * 12;
+    expect(
+      warnings.map((XlsxWarning w) => (code: w.code, count: w.count)).toList(),
+      outside == 0
+          ? isEmpty
+          : <({XlsxWarningCode code, int count})>[
+              (code: XlsxWarningCode.cellOutsideSheet, count: outside),
+            ],
+    );
   });
 }

@@ -118,9 +118,9 @@ void main() {
     expect(rows[3].cells[1].value, XlsxDecimal('1334'));
     expect(lines, contains('1:1 XlsxDecimal(1234.50)'));
     expect(lines, contains('3:1 XlsxDecimal(1334) = SUM(B2:B3)'));
-    for (final XlsxWarning warning in reader.warnings) {
-      expect(warning.code, XlsxWarningCode.formulaWithoutValue);
-    }
+    // The total's formula has a cached result, so nothing is warned about
+    // and the block's warnings loop prints nothing.
+    expect(reader.warnings, isEmpty);
   });
 
   test('README streaming block writes a clean file', () {

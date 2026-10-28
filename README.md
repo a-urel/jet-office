@@ -51,9 +51,9 @@ to `XlsxDecimal` if you hold amounts as `Decimal`.
 ## Reading
 
 `XlsxReader` reads an XLSX file from bytes, such as a user's upload for a
-data import. Opening it reads only the ZIP directory, the workbook and its
-styles; a sheet is parsed lazily as its rows are taken. Reading the quick
-start's workbook back:
+data import. Opening it reads only the ZIP directory, the content types, the
+package and workbook relationships, the workbook and its styles; a sheet is
+parsed lazily as its rows are taken. Reading the quick start's workbook back:
 
 ```dart
 final XlsxReader reader = XlsxReader(out.bytes);
@@ -194,12 +194,15 @@ them took about 1.5 s on the VM and 3.1 s in Chrome, and reading them back
 VM, and parsing the sheet XML, not unzipping it, takes most of that time.
 
 A small upload can still cost a lot to read. The reader's default limits let
-a file of about 2 MB expand to 256 MiB of sheet XML; reading such a file took
-about 19 s and lifted the browser's heap by about 1 GB ("Worst case" in
-[`docs/benchmark.md`](docs/benchmark.md)). If you read uploads in a browser,
-run the reader in a web worker, and if your uploads are small, pass
-`XlsxReadLimits(maxEntryBytes: ...)` with a lower bound: time and memory
-follow the size of the sheet XML.
+a file of about 2 MB expand to 256 MiB of XML in its largest single sheet;
+reading such a sheet took about 19 s and lifted the browser's heap by about
+1 GB ("Worst case" in [`docs/benchmark.md`](docs/benchmark.md)). That is one
+sheet: the shared strings part may be as large and is held while a sheet is
+read, and a workbook may hold several such sheets, up to `maxTotalBytes`
+(1 GiB) of XML in all, each costing as much to read again. If you read
+uploads in a browser, run the reader in a web worker, and if your uploads
+are small, pass `XlsxReadLimits(maxEntryBytes: ..., maxTotalBytes: ...)`
+with lower bounds: time and memory follow the size of the XML.
 
 ## How files are verified
 

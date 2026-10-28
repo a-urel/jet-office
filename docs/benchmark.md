@@ -149,8 +149,8 @@ every third row and so not written).
   peak above its baseline over the four runs. Samples are lower bounds: a
   peak between two samples is missed.
   - VM: `ProcessInfo.currentRss`. The VM also prints `ProcessInfo.maxRss`
-    after each run. The benchmark checks that `maxRss` rose during the
-    warm-up; then `maxRss` after it is the warm-up's own peak RSS, not
+    after each run. The benchmark reports whether `maxRss` rose during the
+    warm-up; if it did, `maxRss` after it is the warm-up's own peak RSS, not
     sampled, and "`maxRss` above the warm-up's baseline" bounds the read's
     peak from above (it counts anything else the process allocated then).
   - Chrome: `performance.memory.usedJSHeapSize`, as for the writers.
@@ -295,14 +295,14 @@ chrome | XlsxWriter | median 3143 ms
   the part that plan ruling 2 of R2 accepted. A consumer that needs merges
   pays this once per sheet.
 - **Memory is within the budget.** The VM's unsampled peak, `maxRss` above
-  the warm-up's baseline, is 2.41 N, inside the spec's "about two to three
-  times": while the part is decoded the reader holds its inflated bytes (N)
-  and the decoded string at once, and the VM keeps an ASCII string at one
-  byte per character (about N, not the 2N of UTF-16). The sampled figure,
-  1.47 N, misses that moment. Chrome's sampled peak is 2.46 N in the
-  warm-up; the later runs read lower, because the collector ran at other
-  points (one run's peak was below its baseline). Both sampled figures are
-  lower bounds.
+  the warm-up's baseline, is at most 2.41 N, inside the spec's "about two
+  to three times": while the part is decoded the reader holds its inflated
+  bytes (N) and the decoded string at once, and the VM keeps an ASCII
+  string at one byte per character (about N, not the 2N of UTF-16). The
+  sampled figure, 1.47 N, misses that moment. Chrome's sampled peak is
+  2.46 N in the warm-up; the later runs read lower, because the collector
+  ran at other points (one run's peak was below its baseline). Both sampled
+  figures are lower bounds.
 - **Why the VM's input comes from a child process.** A first version wrote
   the file in the benchmark's own process, as plan ruling 1 said. Its
   `currentRss` baseline was then about 280 MB, the writer's freed heap that
@@ -315,12 +315,13 @@ chrome | XlsxWriter | median 3143 ms
 
 ## Worst case
 
-`benchmark/xlsx_read_worst_case_test.dart` reads the largest sheet the
-default `XlsxReadLimits` accept: one part of about 250 MiB of XML, under
+`benchmark/xlsx_read_worst_case_test.dart` reads the largest single sheet
+the default `XlsxReadLimits` accept: one part of about 250 MiB of XML, under
 `maxEntryBytes` (256 MiB), whose deflated entry stays under
-`maxCompressionRatio` (1,000). It runs in its own file, so that a browser
-tab running out of memory cannot hide the other read figures (plan ruling 5
-of R4); a crash would be a recorded figure, not a failure.
+`maxCompressionRatio` (1,000). It is a bound for one sheet, not for a
+workbook ("What it means for an upload" below). It runs in its own file, so
+that a browser tab running out of memory cannot hide the other read figures
+(plan ruling 5 of R4); a crash would be a recorded figure, not a failure.
 
 ### Method
 
@@ -334,6 +335,9 @@ of R4); a crash would be a recorded figure, not a failure.
   not: the ratio is 127.8 (VM, `dart:io` zlib) and 133.5 (Chrome, the
   pure-Dart deflate), so no row is varied and k is `n/a`. Even at level 9 a
   32 MiB sample of the same rows deflates only 257.7 to 1 (both deflates).
+  That figure comes from a one-off calibration script, not committed: the
+  sample (33,554,498 bytes) zipped with `package:archive`'s
+  `ZipEncoder(level: 9)`, on the VM and in the pure-Dart deflate.
   Deflate's best case is about 1,032 to 1, a 258-byte match per two bits;
   these rows repeat every 191 bytes, a distance whose code carries six extra
   bits, which caps the ratio near 258. So for row-shaped XML
@@ -350,25 +354,30 @@ of R4); a crash would be a recorded figure, not a failure.
   row and every cell's `value`; memory is sampled after the first row (the
   part has just been inflated and decoded), every 100,000 rows and after
   the last. The VM also reads `maxRss` before and after. The run asserts
-  1,048,576 rows, 12 cells each, every one `XlsxDecimal('1')`.
+  1,048,576 rows, 12 cells each, every one `XlsxDecimal('1')`, and the one
+  warning below with its count.
 - Rows past 1,048,576 follow the existing rule: the row is not yielded and
   each of its cells adds to one aggregated `cellOutsideSheet` warning.
 
 ### Figures
 
 Same machine, SDK and Chrome as "Read figures", 2026-10-29. Two runs per
-platform; the table gives the first.
+platform. The table gives the second VM run, from the committed code: the
+first failed its value assertion before a fix in the test (its figures did
+not depend on the fix and are within 0.4 % of the second's). For Chrome it
+gives the first run.
 
 | Platform | File (bytes) | Ratio | Read (ms) | Peak above baseline (bytes) | Per N | Absolute peak (bytes) |
 |---|---|---|---|---|---|---|
-| VM | 2,052,039 | 127.8 | 18,476 | 532,545,536 (RSS) | 2.03 | 716,029,952 (RSS) |
+| VM | 2,052,039 | 127.8 | 18,460 | 531,300,352 (RSS) | 2.03 | 713,736,192 (RSS) |
 | Chrome | 1,965,092 | 133.5 | 19,269 | 994,413,675 (heap) | 3.79 | 2,328,197,079 (heap) |
 
 Both platforms passed: 1,048,576 rows, 12,582,912 cells, one warning,
 `cellOutsideSheet` with a count of 3,886,860 (the 323,905 rows past the
-last, twelve cells each). On the VM the sampled peak equals the unsampled
-`maxRss` (it rose during the read) and was already reached after the first
-row: the inflated bytes and the decoded string held at once.
+last, twelve cells each). On the VM the unsampled `maxRss` rose during the
+read to 532,873,216 bytes above the baseline, also 2.03 N; the sampled peak
+is about 1.6 MB below it and was already reached after the first row: the
+inflated bytes and the decoded string held at once.
 
 Every line:
 
@@ -388,18 +397,28 @@ chrome | XlsxReader | 19582 ms | 1965092 bytes | peak JS heap peak 2331909207 by
 ### What it means for an upload
 
 - **A 2 MB upload can hold a browser tab for about 20 seconds and add about
-  1 GB to its heap.** The default limits let a file of under 2 MB expand to
-  250 MiB of sheet XML; reading it took 19.3 s in Chrome, synchronously, on
-  the thread that called the reader, and lifted the used JS heap by about
-  1 GB (3.8 N) to 2.3 GB in all (with the page's garbage). The tab did not
-  crash on this machine; a device with less memory, or a tab already
-  holding more, may. On the VM the same read took 18.5 s and 532 MB above
-  its baseline (2.03 N).
+  1 GB to its heap, for one sheet.** The default limits let a file of under
+  2 MB expand to 250 MiB of XML in its largest single sheet; reading it
+  took 19.3 s in Chrome, synchronously, on the thread that called the
+  reader, and lifted the used JS heap by about 1 GB (3.8 N) to 2.3 GB in
+  all (with the page's garbage). The tab did not crash on this machine; a
+  device with less memory, or a tab already holding more, may. On the VM
+  the same read took 18.5 s and 531 MB above its baseline (2.03 N).
+- **A workbook can cost more than its largest sheet.** Under the default
+  limits the shared strings part may also inflate to 256 MiB, and the
+  reader holds its strings (a `List<String>`) while a sheet is read, so a
+  sheet read can hold both at once. And a workbook of four sheets of about
+  250 MiB each passes every limit, `maxTotalBytes` (1 GiB) included:
+  reading every sheet then costs up to `maxTotalBytes` of XML, each sheet
+  about as much as the one measured. Neither case was measured; the figures
+  above are for one sheet without shared strings.
 - **The size on the wire says little.** A file of 2 MB passes every limit;
-  the bound that holds is `maxEntryBytes` on the inflated part. A consumer
+  the bounds that hold are `maxEntryBytes` on each inflated part and
+  `maxTotalBytes` on all of them. A consumer
   that accepts uploads in a browser should run the reader off the UI thread
   (a web worker) and, if it wants a smaller worst case, pass a lower
-  `maxEntryBytes`: memory and time scale with N.
+  `maxEntryBytes` and a lower `maxTotalBytes`: memory and time scale with
+  the XML read.
 - **A smaller file is possible.** Rows of this shape cap the ratio near
   258 (above), about 1 MB on the wire. Content with a shorter period (long
   runs of whitespace between elements, for instance) can approach the

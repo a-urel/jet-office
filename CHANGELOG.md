@@ -47,12 +47,14 @@ Phase 1, the XLSX writer, and phase 2, the XLSX reader. Not published yet.
   test that requires the reader to throw nothing but `XlsxReadException`.
 - A harness for files saved by Excel and Google Sheets, with values the
   owner confirms; the files themselves are still pending.
+- `XlsxReadException`'s constructor is no longer `const` (it was in R1):
+  its `part` is shortened and cleaned for display.
 
 #### R4, release
 
-- A read benchmark of the 100,000-row workload and a worst case under the
-  default limits (`docs/benchmark.md`). Reading is slower than writing on
-  the VM (2.7 s against 1.5 s on the machine measured).
+- A read benchmark of the 100,000-row workload and of the largest single
+  sheet the default limits accept (`docs/benchmark.md`). Reading is slower
+  than writing on the VM (2.7 s against 1.5 s on the machine measured).
 - The public API review, the README's "Reading" section, the example's read
   back and this changelog.
 
@@ -66,8 +68,6 @@ Phase 1, the XLSX writer, and phase 2, the XLSX reader. Not published yet.
 - A warning may name no cell: `sheetPartMissing` concerns a whole sheet and
   `mergeRangeInvalid` counts skipped ranges, not cells.
 - `XlsxDecimal` gains `toDouble()` and `toIntOrNull()`.
-- `XlsxReadException`'s constructor is no longer `const` (R3; it was in R1):
-  its `part` is shortened and cleaned for display.
 
 ### Phase 1: the XLSX writer
 
@@ -110,7 +110,7 @@ Phase 1, the XLSX writer, and phase 2, the XLSX reader. Not published yet.
   A Count total is shown as a plain number, whatever the column format.
 - A benchmark of 100,000 rows on the VM and in Chrome (`docs/benchmark.md`).
 - The README, an example and this changelog.
-- Phase 1 writes XLSX only; phase 2 below adds the reader. Modifying files,
+- Phase 1 writes XLSX only; phase 2 above adds the reader. Modifying files,
   and DOCX, are later phases.
 
 #### Changed since the M4 merge
