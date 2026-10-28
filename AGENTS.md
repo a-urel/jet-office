@@ -44,6 +44,10 @@ LC_ALL=C.UTF-8 soffice --headless \
   --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,false,false,false,-1' \
   --outdir build/fixtures build/fixtures/*.xlsx
 dart run tool/compare_csv.dart build/fixtures
+mkdir -p build/resaved
+LC_ALL=C.UTF-8 soffice --headless --convert-to 'xlsx:Calc MS Excel 2007 XML' \
+  --outdir build/resaved build/fixtures/*.xlsx
+dart run tool/compare_resaved.dart build/fixtures build/resaved
 ```
 
 - `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
@@ -60,6 +64,12 @@ dart run tool/compare_csv.dart build/fixtures
 - `tool/compare_csv.dart` compares LibreOffice's CSV export of every sheet
   with the expected values on raw values. Its doc comment explains the filter
   options; `tool/src/csv_compare.dart` holds the comparison and its contract.
+- `tool/compare_resaved.dart` reads LibreOffice's XLSX re-save of every
+  fixture with `XlsxReader` and compares it with the expected values; any
+  reader warning is a mismatch unless `resaveAllowedWarnings` in
+  `tool/src/read_compare.dart` names it with a reason. If a LibreOffice
+  instance is already running, add `-env:UserInstallation=file:///<dir>` to
+  the `soffice` call.
 - `docs/warning-messages.md` lists every warning message in `en`, `de` and
   `tr`, for the native-speaker check recorded in `docs/excel-checks.md`. It is
   generated: after a message changes, run
