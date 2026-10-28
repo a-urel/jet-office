@@ -1,4 +1,5 @@
-// Writes `example.xlsx`: an accounts list and a summary sheet.
+// Writes `example.xlsx`, an accounts list and a summary sheet, then reads
+// it back with `XlsxReader` and prints the first rows of the list.
 //
 // Run it from the repository root:
 //
@@ -83,11 +84,51 @@ XlsxResult buildExample() {
 /// The example workbook as bytes.
 Uint8List buildExampleWorkbook() => buildExample().bytes;
 
+/// What [readExample] reads: the sheet names, the cell values of the first
+/// rows of the `Accounts` sheet and the reader's warnings.
+typedef ExampleReadBack = ({
+  List<String> sheets,
+  List<List<Object?>> rows,
+  List<XlsxWarning> warnings,
+});
+
+/// Reads [bytes] with [XlsxReader] and returns the sheet names, the values
+/// of the first [count] rows of `Accounts` and the warnings.
+///
+/// Every row is read, not only the first [count]: a sheet's warnings are
+/// complete once its rows have been iterated to the end.
+ExampleReadBack readExample(Uint8List bytes, {int count = 4}) {
+  final XlsxReader reader = XlsxReader(bytes);
+  final List<List<Object?>> rows = <List<Object?>>[];
+  for (final XlsxReadRow row in reader.rows('Accounts')) {
+    if (rows.length == count) continue;
+    rows.add(<Object?>[for (final XlsxReadCell cell in row.cells) cell.value]);
+  }
+  return (
+    sheets: <String>[
+      for (final XlsxReadSheet sheet in reader.sheets) sheet.name,
+    ],
+    rows: rows,
+    warnings: reader.warnings,
+  );
+}
+
 void main() {
   final XlsxResult result = buildExample();
   File('example.xlsx').writeAsBytesSync(result.bytes);
   stdout.writeln('example.xlsx: ${result.bytes.length} bytes');
   for (final XlsxWarning warning in result.warnings) {
     stdout.writeln(warning.message(XlsxLocale.tr));
+  }
+
+  // Read the file back. The totals row's SUBTOTAL formula has no cached
+  // result, so the reader reports it as formulaWithoutValue.
+  final ExampleReadBack read = readExample(result.bytes);
+  stdout.writeln('sheets: ${read.sheets.join(', ')}');
+  for (final List<Object?> row in read.rows) {
+    stdout.writeln(row.join(' | '));
+  }
+  for (final XlsxWarning warning in read.warnings) {
+    stdout.writeln(warning.message());
   }
 }
