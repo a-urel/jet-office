@@ -236,4 +236,52 @@ void main() {
     expect(t.formatOf('0'), same(t.formatOf('1')));
     expect(t.formatOf('0'), isNot(same(t.formatOf('2'))));
   });
+
+  test('only the first cellXfs and numFmts are read', () {
+    const XlsxReadLimits limits = XlsxReadLimits(maxCellFormats: 2);
+    final StyleTable xfs = _read(
+      _sheet('${_xfs(<int?>[14, 49])}${_xfs(<int?>[22, 22])}'),
+      limits: limits,
+    );
+    expect(xfs.formatOf('1').id, 49);
+    expect(xfs.formatOf('2'), same(CellFormat.broken));
+    final StyleTable fmts = _read(
+      _sheet(
+        '<numFmts><numFmt numFmtId="164" formatCode="yyyy"/>'
+        '<numFmt numFmtId="165" formatCode="yyyy"/></numFmts>'
+        '<numFmts><numFmt numFmtId="166" formatCode="yyyy"/>'
+        '<numFmt numFmtId="167" formatCode="yyyy"/></numFmts>'
+        '${_xfs(<int?>[164, 166])}',
+      ),
+      limits: limits,
+    );
+    expect(fmts.formatOf('0').code, 'yyyy');
+    expect(fmts.formatOf('1').code, isNull);
+  });
+
+  test('ids of more than 9 digits are invalid on every platform', () {
+    final StyleTable t = _read(
+      _sheet(
+        '<numFmts><numFmt numFmtId="99999999999999999999" '
+        'formatCode="yyyy"/><numFmt numFmtId="0000000164" '
+        'formatCode="yyyy"/></numFmts>'
+        '<cellXfs><xf numFmtId="99999999999999999999"/>'
+        '<xf numFmtId="0000000164"/><xf numFmtId="1234567890"/></cellXfs>',
+      ),
+    );
+    expect(t.formatOf('0'), same(CellFormat.broken));
+    expect(t.formatOf('1').id, 164);
+    expect(t.formatOf('1').code, 'yyyy');
+    expect(t.formatOf('2'), same(CellFormat.broken));
+  });
+
+  test('cellXfs before numFmts still resolves codes', () {
+    final StyleTable t = _read(
+      _sheet(
+        '${_xfs(<int?>[164])}'
+        '<numFmts><numFmt numFmtId="164" formatCode="yyyy"/></numFmts>',
+      ),
+    );
+    expect(t.formatOf('0').kind, FormatKind.date);
+  });
 }

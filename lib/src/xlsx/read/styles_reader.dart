@@ -98,7 +98,12 @@ final RegExp _digits = RegExp(r'^[0-9]+$');
 /// with the same id the later wins. An `<xf>` without `numFmtId` has id 0;
 /// with an unreadable one it is [CellFormat.broken]. The code of an id is
 /// the file's `<numFmt>`, else the built-in's, else `null`. Every `<xf>`
-/// with the same id shares one [CellFormat]. A root that is not a
+/// with the same id shares one [CellFormat]. Only the first `<numFmts>` and
+/// the first `<cellXfs>` of the part are read, so the limit holds for the
+/// whole part and style indexes cannot shift; a repeated group is skipped
+/// unread, and cells pointing past the first table are
+/// [CellFormat.broken]. An id of more than 9 digits (after leading zeros)
+/// is not an id, whatever the platform. A root that is not a
 /// `<styleSheet>` gives [StyleTable.empty].
 ///
 /// Throws an [XlsxReadException] of reason `unsupportedFormat` for a root in
@@ -126,16 +131,20 @@ StyleTable readStyles(
     }
     final Map<int, String> codes = <int, String>{};
     final List<int?> xfIds = <int?>[];
+    var sawNumFmts = false;
+    var sawCellXfs = false;
     while (reader.next()) {
       if (reader.eventType != XmlEventType.startElement) continue;
       if (reader.depth != 2 || reader.namespaceUri != Ns.main) {
         reader.skip();
-      } else if (reader.localName == 'numFmts') {
-        _readGroup(reader, part, limits, 'numFmt', (int count) {
+      } else if (reader.localName == 'numFmts' && !sawNumFmts) {
+        sawNumFmts = true;
+        _readGroup(reader, part, limits, 'numFmt', () {
           _readNumFmt(reader, part, limits, codes);
         });
-      } else if (reader.localName == 'cellXfs') {
-        _readGroup(reader, part, limits, 'xf', (int count) {
+      } else if (reader.localName == 'cellXfs' && !sawCellXfs) {
+        sawCellXfs = true;
+        _readGroup(reader, part, limits, 'xf', () {
           xfIds.add(_readId(reader.getAttribute('numFmtId'), orElse: 0));
           reader.skip();
         });
@@ -164,14 +173,14 @@ StyleTable readStyles(
 
 /// Calls [onItem] for each [name] child of the group element the reader is
 /// on, counting them against [XlsxReadLimits.maxCellFormats], and leaves the
-/// reader on the group's end. [onItem] gets the number of items before this
-/// one and must leave the reader on its element's start or end.
+/// reader on the group's end. [onItem] must leave the reader on its
+/// element's start or end.
 void _readGroup(
   XmlPullReader reader,
   String part,
   XlsxReadLimits limits,
   String name,
-  void Function(int count) onItem,
+  void Function() onItem,
 ) {
   if (reader.isEmptyElement) return;
   final int groupDepth = reader.depth;
@@ -192,7 +201,7 @@ void _readGroup(
           part: part,
         );
       }
-      onItem(count);
+      onItem();
       count++;
     } else {
       reader.skip();
@@ -229,5 +238,6 @@ void _readNumFmt(
 int? _readId(String? value, {int? orElse}) {
   if (value == null) return orElse;
   if (!_digits.hasMatch(value)) return null;
-  return int.tryParse(value);
+  final String significant = value.replaceFirst(RegExp('^0+'), '');
+  return significant.length > 9 ? null : int.parse('0$significant');
 }
