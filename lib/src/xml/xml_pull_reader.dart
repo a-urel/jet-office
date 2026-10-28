@@ -689,13 +689,32 @@ final class XmlPullReader {
 /// The most UTF-16 code units of input an error message quotes.
 const int _excerptLength = 32;
 
+/// Whether the UTF-16 code unit [codeUnit] must not appear in a message
+/// that quotes untrusted input.
+///
+/// True for the control characters (U+0000 to U+001F and U+007F to U+009F),
+/// the line and paragraph separators (U+2028, U+2029) and the bidirectional
+/// controls (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069),
+/// which would break a message over lines or reorder the text around them.
+/// Ordinary right-to-left letters are safe.
+bool isUnsafeInMessage(int codeUnit) =>
+    codeUnit < 0x20 ||
+    (codeUnit >= 0x7F && codeUnit <= 0x9F) ||
+    codeUnit == 0x2028 ||
+    codeUnit == 0x2029 ||
+    codeUnit == 0x061C ||
+    codeUnit == 0x200E ||
+    codeUnit == 0x200F ||
+    (codeUnit >= 0x202A && codeUnit <= 0x202E) ||
+    (codeUnit >= 0x2066 && codeUnit <= 0x2069);
+
 /// [text] made safe to quote in an error message: at most 32 UTF-16 code
 /// units (a surrogate pair is never split) followed by `…` when cut, with
-/// every control character (U+0000 to U+001F and U+007F to U+009F)
-/// replaced by U+FFFD.
+/// every character [isUnsafeInMessage] names replaced by U+FFFD.
 ///
 /// Messages quote names and entity bodies from untrusted input; this keeps
-/// a message short however long the input is, and on one line.
+/// a message short however long the input is, on one line, and in the
+/// reading order of its own text.
 String inputExcerpt(String text) {
   int end = text.length;
   bool cut = false;
@@ -708,7 +727,7 @@ String inputExcerpt(String text) {
   final StringBuffer out = StringBuffer();
   for (int i = 0; i < end; i++) {
     final int ch = text.codeUnitAt(i);
-    out.writeCharCode(ch < 0x20 || (ch >= 0x7F && ch <= 0x9F) ? 0xFFFD : ch);
+    out.writeCharCode(isUnsafeInMessage(ch) ? 0xFFFD : ch);
   }
   if (cut) out.write('…');
   return out.toString();
