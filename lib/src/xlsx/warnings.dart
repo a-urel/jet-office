@@ -178,7 +178,9 @@ final class XlsxWarning {
   ///
   /// [XlsxWarningCode.unresolvedNumberFormat] carries the number format id
   /// in decimal. Cell-level warnings of one code on one sheet are separate
-  /// warnings for each distinct detail.
+  /// warnings for each distinct detail, for the first ten details; every
+  /// later new detail joins one warning of that code whose detail is null,
+  /// so a hostile file cannot make a warning per format id.
   final String? detail;
 
   /// What the collector aggregates and removes this warning under.
@@ -211,7 +213,9 @@ final class XlsxWarning {
 /// Cell-level codes aggregate by `(key, code, detail)`, where the key is the
 /// one given to [add] or else the sheet name; sheet-name codes give one
 /// warning per [add] call. Memory stays bounded: a warning keeps at most
-/// ten references however often it recurs.
+/// ten references however often it recurs, and a key and code keep at most
+/// ten distinct non-null details. An [add] with an eleventh or later new
+/// detail aggregates into the one warning for `(key, code, null)`.
 final class WarningCollector {
   final List<XlsxWarning> _warnings = <XlsxWarning>[];
   late final List<XlsxWarning> _warningsView =
@@ -219,12 +223,20 @@ final class WarningCollector {
   final Map<(Object, XlsxWarningCode, String?), XlsxWarning> _aggregated =
       <(Object, XlsxWarningCode, String?), XlsxWarning>{};
 
+  /// How many distinct non-null details each `(key, code)` has a warning for.
+  final Map<(Object, XlsxWarningCode), int> _details =
+      <(Object, XlsxWarningCode), int>{};
+
+  /// How many distinct non-null details a key and code keep.
+  static const int _maxDetails = 10;
+
   /// Records one occurrence of [code] on [sheet].
   ///
   /// [cell] is the A1-style reference for cell-level codes. [originalName] is
   /// the requested name for sheet-name codes. [detail] is the parameter of
   /// the code, if it has one; occurrences with different details are
-  /// separate warnings. [key] identifies the sheet for aggregation and
+  /// separate warnings, up to ten details per key and code, after which a
+  /// new detail is recorded as null. [key] identifies the sheet for aggregation and
   /// [removeSheet]; it defaults to [sheet], so sheets that share a name can
   /// pass their index to stay apart.
   void add(
@@ -244,12 +256,21 @@ final class WarningCollector {
       warning = XlsxWarning._(code, sheet, originalName, detail, owner);
       _warnings.add(warning);
     } else {
-      warning = _aggregated.putIfAbsent((owner, code, detail), () {
+      String? kept = detail;
+      if (kept != null && !_aggregated.containsKey((owner, code, kept))) {
+        final int named = _details[(owner, code)] ?? 0;
+        if (named < _maxDetails) {
+          _details[(owner, code)] = named + 1;
+        } else {
+          kept = null;
+        }
+      }
+      warning = _aggregated.putIfAbsent((owner, code, kept), () {
         final XlsxWarning created = XlsxWarning._(
           code,
           sheet,
           null,
-          detail,
+          kept,
           owner,
         );
         _warnings.add(created);
@@ -280,6 +301,10 @@ final class WarningCollector {
     _warnings.removeWhere(drop);
     _aggregated.removeWhere(
       ((Object, XlsxWarningCode, String?) k, XlsxWarning w) => drop(w),
+    );
+    _details.removeWhere(
+      ((Object, XlsxWarningCode) k, int n) =>
+          k.$1 == key && !keep.contains(k.$2),
     );
   }
 }

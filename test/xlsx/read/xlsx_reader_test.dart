@@ -299,6 +299,38 @@ void main() {
       );
     });
 
+    test('1,000 distinct undefined format ids keep at most 11 warnings', () {
+      const int n = 1000;
+      final StringBuffer xfs = StringBuffer();
+      final StringBuffer rows = StringBuffer();
+      for (int i = 0; i < n; i++) {
+        xfs.write('<xf numFmtId="${1000 + i}"/>');
+        rows.write(
+          '<row r="${i + 1}"><c r="A${i + 1}" s="$i"><v>1</v></c></row>',
+        );
+      }
+      final XlsxReader r = XlsxReader(
+        buildWorkbook(
+          <String, String?>{'S': worksheet(rows.toString())},
+          styles:
+              '<styleSheet xmlns="$mainNs"><cellXfs count="$n">$xfs'
+              '</cellXfs></styleSheet>',
+        ),
+      );
+      expect(r.rows('S'), hasLength(n));
+      final List<XlsxWarning> unresolved = r.warnings
+          .where(
+            (XlsxWarning w) => w.code == XlsxWarningCode.unresolvedNumberFormat,
+          )
+          .toList();
+      expect(unresolved.length, lessThanOrEqualTo(11));
+      expect(
+        unresolved.fold<int>(0, (int sum, XlsxWarning w) => sum + w.count),
+        n,
+      );
+      expect(unresolved.last.detail, isNull);
+    });
+
     test('no styles part reads General', () {
       final XlsxReader r = XlsxReader(
         buildWorkbook(<String, String?>{

@@ -193,6 +193,22 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
     (XlsxWarningCode.cellOutsideSheet, XlsxLocale.tr) =>
       "“$sheet” sayfasındaki $count hücre, Excel'in ızgarasının "
           'dışında kaldığı için atlandı$cells.',
+    (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.en)
+        when w.detail == null =>
+      "$count number cell(s) on sheet '$sheet' use number formats whose code "
+          'depends on the locale or is missing from the file; they read as '
+          'plain numbers, even if they show dates$cells.',
+    (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.de)
+        when w.detail == null =>
+      '$count Zahlenzelle(n) im Blatt „$sheet“ verwenden Zahlenformate, '
+          'deren Code vom Gebietsschema abhängt oder in der Datei fehlt; sie '
+          'werden als einfache Zahlen gelesen, auch wenn sie ein Datum '
+          'anzeigen$cells.',
+    (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.tr)
+        when w.detail == null =>
+      '“$sheet” sayfasındaki $count sayı hücresi, kodu yerel ayara bağlı '
+          'olan veya dosyada bulunmayan sayı biçimleri kullanıyor; tarih '
+          'gösterseler bile düz sayı olarak okunuyor$cells.',
     (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.en) =>
       "$count number cell(s) on sheet '$sheet' use built-in number "
           'format $id, whose code depends on the locale and is not in the '

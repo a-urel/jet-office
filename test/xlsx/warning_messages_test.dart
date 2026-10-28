@@ -465,6 +465,35 @@ void main() {
     expect(w.message(XlsxLocale.tr), contains('27 numaralı'));
   });
 
+  test('unresolvedNumberFormat without an id is worded exactly', () {
+    final XlsxWarning w =
+        (WarningCollector()..add(
+              XlsxWarningCode.unresolvedNumberFormat,
+              sheet: 'S',
+              cell: 'A1',
+            ))
+            .warnings
+            .single;
+    expect(
+      w.message(XlsxLocale.en),
+      "1 number cell(s) on sheet 'S' use number formats whose code depends "
+      'on the locale or is missing from the file; they read as plain '
+      'numbers, even if they show dates (A1).',
+    );
+    expect(
+      w.message(XlsxLocale.de),
+      '1 Zahlenzelle(n) im Blatt „S“ verwenden Zahlenformate, deren Code '
+      'vom Gebietsschema abhängt oder in der Datei fehlt; sie werden als '
+      'einfache Zahlen gelesen, auch wenn sie ein Datum anzeigen (A1).',
+    );
+    expect(
+      w.message(XlsxLocale.tr),
+      '“S” sayfasındaki 1 sayı hücresi, kodu yerel ayara bağlı olan veya '
+      'dosyada bulunmayan sayı biçimleri kullanıyor; tarih gösterseler bile '
+      'düz sayı olarak okunuyor (A1).',
+    );
+  });
+
   test('the R2 messages are exact', () {
     XlsxWarning one(XlsxWarningCode code, {String? detail}) =>
         (WarningCollector()..add(code, sheet: 'S', cell: 'A1', detail: detail))
