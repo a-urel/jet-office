@@ -16,7 +16,21 @@ bool _plain(String text) => !text.contains(RegExp('[eE]'));
 /// nearest millisecond.
 const double _halfMillisecond = 0.5 / 86400000;
 
-void _compare(String where, Object? value, String stored) {
+/// Compares the read [value] with the [stored] text of its cell.
+///
+/// [isDate] is the cell's `isDate`: a number in a date or time format must
+/// read as a `DateTime` or a `Duration`. The only warning a fixture may
+/// have is `formulaWithoutValue`, which leaves no value, so no warning can
+/// explain a date-formatted serial that fell back to a number.
+void _compare(
+  String where,
+  Object? value,
+  String stored, {
+  required bool isDate,
+}) {
+  if (value is XlsxDecimal && isDate) {
+    fail('$where: a date or time format read as the number $value.');
+  }
   if (value == null) {
     expect(stored, '', reason: '$where: no value');
   } else if (value is String) {
@@ -125,7 +139,7 @@ void main() {
               expect(stored[r][c], '', reason: '$where: missing cell');
               continue;
             }
-            _compare(where, cell.value, stored[r][c]);
+            _compare(where, cell.value, stored[r][c], isDate: cell.isDate);
             if (cell.value != null) compared++;
             if (cell.formula != null && cell.value == null) {
               (formulaCells[sheet.key] ??= <String>[]).add(cellRef(r, c));

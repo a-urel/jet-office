@@ -53,6 +53,28 @@ void main() {
     expect(r.warnings, isEmpty);
   });
 
+  test('reads back the dates, times and durations the writer wrote', () {
+    final XlsxWriter w = XlsxWriter();
+    w.addSheet('D').row(<Object?>[
+      DateTime(2026, 10, 28, 13, 45, 30),
+      const XlsxDate(2026, 2, 28),
+      const XlsxCell(0.5, style: XlsxStyle(numFmt: XlsxNumFmt.time)),
+      const XlsxCell(1.5, style: XlsxStyle(numFmt: XlsxNumFmt.elapsedTime)),
+    ]);
+    final XlsxReader r = XlsxReader(w.close().bytes);
+    final List<XlsxReadCell> cells = r.rows('D').single.cells;
+    expect(cells.map((XlsxReadCell c) => c.value), <Object?>[
+      DateTime.utc(2026, 10, 28, 13, 45, 30),
+      DateTime.utc(2026, 2, 28),
+      const Duration(hours: 12),
+      const Duration(hours: 36),
+    ]);
+    expect((cells[0].value! as DateTime).isUtc, isTrue);
+    expect((cells[1].value! as DateTime).isUtc, isTrue);
+    expect(cells.map((XlsxReadCell c) => c.isDate), everyElement(isTrue));
+    expect(r.warnings, isEmpty);
+  });
+
   test('reads a formula with its cached value', () {
     final XlsxWriter w = XlsxWriter();
     w.addSheet('F').row(<Object?>[1, const XlsxFormula('A1*2', cached: 2)]);
