@@ -94,6 +94,9 @@ dart test -p chrome benchmark
   `test/architecture/archive_isolation_test.dart`.
 - **One cell encoder.** Only `lib/src/xlsx/cell_encoder.dart` writes `<c ` or
   `<v>` (decision 0002). Enforced by `test/architecture/cell_encoder_test.dart`.
+- **One cell decoder.** Only `lib/src/xlsx/read/cell_decoder.dart`
+  interprets a cell's `t` attribute (decision 0007). Enforced by
+  `test/architecture/cell_decoder_test.dart`.
 - **Every warning code has a message in `en`, `de` and `tr`.** Enforced by
   `test/architecture/warning_messages_test.dart`.
 - **Tests come first.** Write the failing test, watch it fail, then implement.
@@ -112,8 +115,9 @@ dart test -p chrome benchmark
 ## Reference
 
 Quds is cloned read-only next to this repo at `../quds_office_suite`. The port
-map is in `docs/xlsx-writer.md`, "Port map". Read the Quds file before porting
-it, and never import from it.
+map for the writer is in `docs/xlsx-writer.md`, "Port map"; the reader's is in
+`docs/xlsx-reader.md`, "Port map", with the rules the reader enforces. Read
+the Quds file before porting it, and never import from it.
 
 `docs/superpowers/` is git-ignored: working designs and plans live there and
 are not repository history. Knowledge that must outlive a branch goes in a
