@@ -163,10 +163,14 @@ void main() {
 
   test('enforces maxSheets at one more than the limit', () {
     const XlsxReadLimits limits = XlsxReadLimits(maxSheets: 2);
-    String sheets(int n) => _wb(
-      '<sheets>${List<String>.generate(n, (int i) => '<sheet name="s$i"/>').join()}'
-      '</sheets>',
-    );
+    String sheets(int n) {
+      final StringBuffer list = StringBuffer();
+      for (int i = 0; i < n; i++) {
+        list.write('<sheet name="s$i"/>');
+      }
+      return _wb('<sheets>$list</sheets>');
+    }
+
     expect(
       readWorkbook(_package(sheets(2), limits: limits)).sheets,
       hasLength(2),
