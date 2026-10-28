@@ -6,7 +6,9 @@ booleans, formulas, empty cells and a styled cell), with column widths and
 money and date formats. The workload is `benchmark/src/workload.dart`.
 Two benchmarks use it: `benchmark/xlsx_benchmark_test.dart` times the two
 writers, and `benchmark/xlsx_read_benchmark_test.dart` times `XlsxReader`
-reading the file the workload makes ("Read figures" below).
+reading the file the workload makes ("Read figures" below). A third,
+`benchmark/xlsx_read_worst_case_test.dart`, reads the largest sheet the
+reader's default limits let through ("Worst case" below).
 
 The figures below are records, not thresholds (spec section 5): nothing fails
 when a later run is slower, and they are not a promise.
@@ -25,6 +27,8 @@ dart test benchmark/xlsx_benchmark_test.dart
 dart test -p chrome benchmark/xlsx_benchmark_test.dart
 dart test benchmark/xlsx_read_benchmark_test.dart
 dart test -p chrome benchmark/xlsx_read_benchmark_test.dart
+dart test benchmark/xlsx_read_worst_case_test.dart
+dart test -p chrome benchmark/xlsx_read_worst_case_test.dart
 ```
 
 The quality gate does not run it. `dart_test.yaml` starts Chrome with
@@ -308,3 +312,99 @@ chrome | XlsxWriter | median 3143 ms
   warm-up, to learn N, and the warm-up reused that freed heap in turn
   (`maxRss` showed 1.11 N). The child process writes the same bytes (the
   last test asserts it), and N now comes from the ZIP directory.
+
+## Worst case
+
+`benchmark/xlsx_read_worst_case_test.dart` reads the largest sheet the
+default `XlsxReadLimits` accept: one part of about 250 MiB of XML, under
+`maxEntryBytes` (256 MiB), whose deflated entry stays under
+`maxCompressionRatio` (1,000). It runs in its own file, so that a browser
+tab running out of memory cannot hide the other read figures (plan ruling 5
+of R4); a crash would be a recorded figure, not a failure.
+
+### Method
+
+- The sheet (`benchmark/src/worst_case.dart`) is 1,372,481 rows of twelve
+  `<c><v>1</v></c>` cells without `r`, as many as fit in 250 MiB with the
+  worksheet's own elements: N = 262,143,983 bytes. The package around it is
+  the minimal one the reader tests build
+  (`test/xlsx/read/support/workbook_builder.dart`), deflated by
+  `package:archive` at its default level (1, best speed).
+- The plan said to vary every k-th row if the ratio reached 1,000. It does
+  not: the ratio is 127.8 (VM, `dart:io` zlib) and 133.5 (Chrome, the
+  pure-Dart deflate), so no row is varied and k is `n/a`. Even at level 9 a
+  32 MiB sample of the same rows deflates only 257.7 to 1 (both deflates).
+  Deflate's best case is about 1,032 to 1, a 258-byte match per two bits;
+  these rows repeat every 191 bytes, a distance whose code carries six extra
+  bits, which caps the ratio near 258. So for row-shaped XML
+  `maxEntryBytes`, not the ratio, bounds the read.
+- On the VM a child `dart` process builds the package
+  (`benchmark/src/write_worst_case.dart`, through `worstCaseFile()` in
+  `benchmark/src/workload_file.dart`), so the reader's process never held
+  the XML. In Chrome the package is built in the page and the sheet's XML is
+  dropped before the baseline; it is garbage the collector had not yet
+  freed, so **Chrome's baseline includes that garbage** (about 1.3 GB), and
+  its "above baseline" figure is only an estimate: a collection during the
+  read could hide part of the reader's own heap.
+- One run: a baseline, `XlsxReader(bytes)` with the default limits, every
+  row and every cell's `value`; memory is sampled after the first row (the
+  part has just been inflated and decoded), every 100,000 rows and after
+  the last. The VM also reads `maxRss` before and after. The run asserts
+  1,048,576 rows, 12 cells each, every one `XlsxDecimal('1')`.
+- Rows past 1,048,576 follow the existing rule: the row is not yielded and
+  each of its cells adds to one aggregated `cellOutsideSheet` warning.
+
+### Figures
+
+Same machine, SDK and Chrome as "Read figures", 2026-10-29. Two runs per
+platform; the table gives the first.
+
+| Platform | File (bytes) | Ratio | Read (ms) | Peak above baseline (bytes) | Per N | Absolute peak (bytes) |
+|---|---|---|---|---|---|---|
+| VM | 2,052,039 | 127.8 | 18,476 | 532,545,536 (RSS) | 2.03 | 716,029,952 (RSS) |
+| Chrome | 1,965,092 | 133.5 | 19,269 | 994,413,675 (heap) | 3.79 | 2,328,197,079 (heap) |
+
+Both platforms passed: 1,048,576 rows, 12,582,912 cells, one warning,
+`cellOutsideSheet` with a count of 3,886,860 (the 323,905 rows past the
+last, twelve cells each). On the VM the sampled peak equals the unsampled
+`maxRss` (it rose during the read) and was already reached after the first
+row: the inflated bytes and the decoded string held at once.
+
+Every line:
+
+```text
+vm | input | built in 2130 ms | 2052039 bytes | xl/worksheets/sheet1.xml 2050864 bytes deflated, 262143983 bytes XML | ratio 127.8 | k n/a (no row varied) | rows 1372481
+vm | XlsxReader | 18476 ms | 2052039 bytes | RSS peak 716029952 bytes | baseline 183484416 bytes | above 532545536 bytes (2.03 N) | after the first row above 532545536 bytes (2.03 N) | rows 1048576 | cells 12582912 | warnings 1 (cellOutsideSheet ×3886860)
+vm | peak RSS | before 183484416 bytes | after 716029952 bytes | above the baseline 532545536 bytes (2.03 N) | rose during the read: yes
+vm | input | built in 2199 ms | 2052039 bytes | xl/worksheets/sheet1.xml 2050864 bytes deflated, 262143983 bytes XML | ratio 127.8 | k n/a (no row varied) | rows 1372481
+vm | XlsxReader | 18460 ms | 2052039 bytes | RSS peak 713736192 bytes | baseline 182435840 bytes | above 531300352 bytes (2.03 N) | after the first row above 531300352 bytes (2.03 N) | rows 1048576 | cells 12582912 | warnings 1 (cellOutsideSheet ×3886860)
+vm | peak RSS | before 182435840 bytes | after 715309056 bytes | above the baseline 532873216 bytes (2.03 N) | rose during the read: yes
+chrome | input | built in 2529 ms | 1965092 bytes | xl/worksheets/sheet1.xml 1963917 bytes deflated, 262143983 bytes XML | ratio 133.5 | k n/a (no row varied) | rows 1372481
+chrome | XlsxReader | 19269 ms | 1965092 bytes | peak JS heap peak 2328197079 bytes | baseline 1333783404 bytes | above 994413675 bytes (3.79 N) | after the first row above 987389113 bytes (3.77 N) | rows 1048576 | cells 12582912 | warnings 1 (cellOutsideSheet ×3886860)
+chrome | input | built in 2530 ms | 1965092 bytes | xl/worksheets/sheet1.xml 1963917 bytes deflated, 262143983 bytes XML | ratio 133.5 | k n/a (no row varied) | rows 1372481
+chrome | XlsxReader | 19582 ms | 1965092 bytes | peak JS heap peak 2331909207 bytes | baseline 1334044348 bytes | above 997864859 bytes (3.81 N) | after the first row above 986942313 bytes (3.76 N) | rows 1048576 | cells 12582912 | warnings 1 (cellOutsideSheet ×3886860)
+```
+
+### What it means for an upload
+
+- **A 2 MB upload can hold a browser tab for about 20 seconds and add about
+  1 GB to its heap.** The default limits let a file of under 2 MB expand to
+  250 MiB of sheet XML; reading it took 19.3 s in Chrome, synchronously, on
+  the thread that called the reader, and lifted the used JS heap by about
+  1 GB (3.8 N) to 2.3 GB in all (with the page's garbage). The tab did not
+  crash on this machine; a device with less memory, or a tab already
+  holding more, may. On the VM the same read took 18.5 s and 532 MB above
+  its baseline (2.03 N).
+- **The size on the wire says little.** A file of 2 MB passes every limit;
+  the bound that holds is `maxEntryBytes` on the inflated part. A consumer
+  that accepts uploads in a browser should run the reader off the UI thread
+  (a web worker) and, if it wants a smaller worst case, pass a lower
+  `maxEntryBytes`: memory and time scale with N.
+- **A smaller file is possible.** Rows of this shape cap the ratio near
+  258 (above), about 1 MB on the wire. Content with a shorter period (long
+  runs of whitespace between elements, for instance) can approach the
+  1,000 limit, about 256 KB for the same entry; memory follows N, not the
+  file size, so the peak would be about the same.
+- The default limits stay as they are (plan ruling 6); any proposal to
+  change them is the owner's to rule on, with the measured 100,000 × 12
+  sheet's N (43,580,479 bytes) times four, 174,321,916 bytes, as the floor.
