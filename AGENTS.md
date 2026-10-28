@@ -4,7 +4,8 @@
 DOCX files. It has no editors, no rendering and no PDF. It is ported from
 `quds_office_engine` (MIT); see `docs/decisions/0001`, `0002`, `0003`,
 `0004` (which supersedes part of `0003`), `0005` (which supersedes ruling
-R10 in `docs/xlsx-writer.md`) and `0006` (ZIP bytes may differ by platform)
+R10 in `docs/xlsx-writer.md`), `0006` (ZIP bytes may differ by platform)
+and `0007` (phase 2: a fast reader for import; files are untrusted input)
 before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
@@ -64,8 +65,10 @@ dart run tool/compare_csv.dart build/fixtures
   generated: after a message changes, run
   `dart run tool/warning_messages.dart > docs/warning-messages.md`.
   `test/tool/warning_messages_test.dart` fails when the file is stale.
-- Neither is Excel. The owner opens each milestone's fixtures in Excel and
-  records the result in `docs/excel-checks.md`.
+- Neither is Excel. The owner opens each writer milestone's fixtures in Excel
+  and records the result in `docs/excel-checks.md`. Reader milestones (phase
+  2, R1 to R4) have no such check: Excel produces their input, and the owner
+  supplies Excel and Google Sheets files instead (`0007`).
 
 ## Benchmark
 
