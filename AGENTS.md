@@ -4,8 +4,8 @@
 DOCX files. It has no editors, no rendering and no PDF. It is ported from
 `quds_office_engine` (MIT); see `docs/decisions/0001`, `0002`, `0003`,
 `0004` (which supersedes part of `0003`), `0005` (which supersedes ruling
-R10 in `docs/xlsx-writer.md`) and `0006` (proposed: ZIP bytes may differ by
-platform) before any design change.
+R10 in `docs/xlsx-writer.md`) and `0006` (ZIP bytes may differ by platform)
+before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`

@@ -1,6 +1,6 @@
 # 0006 — ZIP bytes may differ by platform; part contents may not
 
-**Status:** Proposed — awaiting the owner (2026-10-27)
+**Status:** Accepted — 2026-10-28
 
 ## Context
 
