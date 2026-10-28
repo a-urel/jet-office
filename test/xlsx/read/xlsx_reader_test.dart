@@ -466,6 +466,17 @@ void main() {
       expect(XlsxReadException(XlsxReadFailure.notZip, 'm').part, isNull);
     });
 
+    test('keeps an empty part as an empty string', () {
+      expect(make('').part, '');
+    });
+
+    test('toString names the reason, the part and the message', () {
+      final String s = make('xl/workbook.xml').toString();
+      expect(s, contains('corruptZip'));
+      expect(s, contains('xl/workbook.xml'));
+      expect(s, contains(': m'));
+    });
+
     test('never splits a surrogate pair', () {
       final XlsxReadException e = make('${'a' * 255}\u{1F600}b');
       expect(e.part, '${'a' * 255}\u2026');

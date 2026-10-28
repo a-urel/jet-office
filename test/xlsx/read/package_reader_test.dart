@@ -364,6 +364,18 @@ void main() {
       expect(e.message, contains('maxEntries'));
     });
 
+    test('a ratio refusal is limitExceeded naming maxCompressionRatio', () {
+      final Uint8List zip = buildZip(<String, List<int>>{
+        'wb.xml': List<int>.filled(2 * 1024 * 1024, 65),
+      });
+      final XlsxReadException e = _failure(
+        () =>
+            PackageReader(zip, const XlsxReadLimits(maxCompressionRatio: 100)),
+      );
+      expect(e.reason, XlsxReadFailure.limitExceeded);
+      expect(e.message, contains('maxCompressionRatio'));
+    });
+
     test('a corrupt entry read through openXml is corruptZip', () {
       final Uint8List zip = buildZip(<String, List<int>>{
         '_rels/.rels': _utf8(

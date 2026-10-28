@@ -37,6 +37,7 @@ void main() {
       expect(XlsxDecimal('007').toIntOrNull(), 7);
       expect(XlsxDecimal('12.000').toIntOrNull(), 12);
       expect(XlsxDecimal('-0').toIntOrNull(), 0);
+      expect(XlsxDecimal('-12.000').toIntOrNull(), -12);
     });
 
     test('toIntOrNull returns null for a fraction', () {
