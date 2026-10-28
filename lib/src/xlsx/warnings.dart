@@ -132,8 +132,8 @@ enum XlsxWarningCode {
   /// a missing attribute). The value is kept, without the formula group.
   formulaGroupInvalid,
 
-  /// Reading: a merged range has an invalid reference and was skipped. One
-  /// warning per sheet; it names no cell unless the reference is known.
+  /// Reading: a merged range has a missing or invalid reference and was
+  /// skipped. One warning per sheet; it names no cell.
   mergeRangeInvalid,
 }
 

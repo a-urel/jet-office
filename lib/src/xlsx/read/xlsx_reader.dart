@@ -8,8 +8,10 @@ library;
 import 'dart:typed_data';
 
 import '../../opc/ooxml.dart';
+import '../range.dart';
 import '../sheet_view.dart';
 import '../warnings.dart';
+import 'merge_reader.dart';
 import 'package_reader.dart';
 import 'read_cell.dart';
 import 'read_exception.dart';
@@ -46,10 +48,11 @@ final class XlsxReadSheet {
 ///
 /// Opening reads the ZIP directory, `[Content_Types].xml`, the root and
 /// workbook relationships, the workbook part and the styles part, nothing
-/// else. A sheet's
-/// part (and the shared strings, once per reader) is decompressed when its
-/// [rows] are first iterated, and rows are parsed as they are taken, so
-/// stopping early does no further work. Every call is synchronous.
+/// else. A sheet's part (and the shared strings, once per reader) is
+/// decompressed when its [rows] are first iterated, and rows are parsed as
+/// they are taken, so stopping early does no further work. A sheet's
+/// merged ranges are read by a separate pass over its part, on the first
+/// call to [merges], and kept. Every call is synchronous.
 ///
 /// ```dart
 /// final XlsxReader reader = XlsxReader(bytes);
@@ -64,8 +67,7 @@ final class XlsxReader {
   /// [XlsxReadException] when the file is not a readable XLSX workbook,
   /// lists more than [XlsxReadLimits.maxSheets] sheets or has a styles part
   /// that cannot be read. A workbook without a styles part reads every cell
-  /// as `General`. A
-  /// sheet the workbook lists without a part is kept, reads as no rows and
+  /// as `General`. A sheet the workbook lists without a part is kept, reads as no rows and
   /// gets an [XlsxWarningCode.sheetPartMissing] warning.
   XlsxReader(Uint8List bytes, {XlsxReadLimits limits = const XlsxReadLimits()})
     : _limits = limits {
@@ -86,6 +88,7 @@ final class XlsxReader {
         ),
     ]);
     _generations = List<int>.filled(_sheets.length, 0);
+    _merges = List<List<XlsxRange>?>.filled(_sheets.length, null);
     for (int i = 0; i < sheets.length; i++) {
       if (_parts[i] == null) _warnMissing(i);
     }
@@ -103,6 +106,9 @@ final class XlsxReader {
   /// Per sheet, the number of the latest pass over its rows; a pass adds
   /// warnings only while its number is the latest.
   late final List<int> _generations;
+
+  /// Per sheet, the merged ranges once read; `null` before.
+  late final List<List<XlsxRange>?> _merges;
 
   late final List<XlsxReadSheet> _sheets;
 
@@ -142,9 +148,10 @@ final class XlsxReader {
   ///
   /// A row is yielded when it holds a cell with data or is hidden. The sheet
   /// is read lazily: each iteration starts again from the top of the part,
-  /// first clearing the sheet's [warnings]; from then on an earlier
-  /// iteration of the sheet still yields its rows but reports nothing. An [XlsxReadException] for the
-  /// sheet or the shared strings is thrown out of the iteration.
+  /// first clearing the sheet's [warnings] (those of [merges] stay); from
+  /// then on an earlier iteration of the sheet still yields its rows but
+  /// reports nothing. An [XlsxReadException] for the sheet or the shared
+  /// strings is thrown out of the iteration.
   ///
   /// Throws a [RangeError] when [index] is not the index of a sheet.
   Iterable<XlsxReadRow> rowsAt(int index) {
@@ -177,6 +184,42 @@ final class XlsxReader {
       date1904: _date1904,
       limits: _limits,
       warn: warn,
+    );
+  }
+
+  /// The merged ranges of the first sheet called [sheetName]; see
+  /// [mergesAt].
+  ///
+  /// Throws an [ArgumentError] when no sheet has that name.
+  List<XlsxRange> merges(String sheetName) {
+    for (final XlsxReadSheet sheet in sheets) {
+      if (sheet.name == sheetName) return mergesAt(sheet.index);
+    }
+    throw ArgumentError.value(sheetName, 'sheetName', 'No such sheet.');
+  }
+
+  /// The merged ranges of the sheet at the 0-based [index], in file order.
+  ///
+  /// Unmodifiable. Read from the sheet's part on the first call, by a pass
+  /// of its own that skips the cells, and kept: later calls return the same
+  /// list. A merge whose reference cannot be read is left out and reported
+  /// once as [XlsxWarningCode.mergeRangeInvalid] in [warnings]; reading
+  /// [rows] does not clear it. A sheet without a part has none.
+  ///
+  /// Throws a [RangeError] when [index] is not the index of a sheet, and an
+  /// [XlsxReadException] when the part is Strict OOXML or not well-formed
+  /// XML; nothing is kept then, so a later call tries again.
+  List<XlsxRange> mergesAt(int index) {
+    RangeError.checkValidIndex(index, sheets, 'index');
+    final List<XlsxRange>? cached = _merges[index];
+    if (cached != null) return cached;
+    final String? part = _parts[index];
+    if (part == null) return _merges[index] = const <XlsxRange>[];
+    final String name = sheets[index].name;
+    void warn(XlsxWarningCode code, String? cell, {String? detail}) => _warnings
+        .add(code, sheet: name, cell: cell, detail: detail, key: index);
+    return _merges[index] = List<XlsxRange>.unmodifiable(
+      readMerges(_package, part, warn: warn),
     );
   }
 
