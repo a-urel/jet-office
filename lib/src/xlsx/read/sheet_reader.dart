@@ -15,8 +15,6 @@
 /// no rows, and one in the Strict namespace is refused; and cells that come
 /// out of column order are sorted once per row instead of inserted one by
 /// one.
-///
-/// @docImport '../values.dart';
 library;
 
 import '../../opc/ooxml.dart';
@@ -26,8 +24,10 @@ import '../limits.dart';
 import '../warnings.dart';
 import 'cell_decoder.dart';
 import 'package_reader.dart';
+import 'read_cell.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
+import 'styles_reader.dart';
 
 final RegExp _digits = RegExp(r'^[0-9]+$');
 
@@ -37,85 +37,6 @@ final RegExp _leadingZeros = RegExp('^0+');
 /// warning: letters and digits only, so the file cannot put arbitrary text
 /// into a message.
 final RegExp _outsideRef = RegExp(r'^\$?[A-Za-z]{1,4}\$?[0-9]{1,10}$');
-
-/// One cell of a row read from a worksheet.
-final class XlsxReadCell {
-  /// A cell in the 0-based [column] holding [value] and, when it has one,
-  /// [formula].
-  const XlsxReadCell(this.column, this.value, {this.formula});
-
-  /// The 0-based column: 0 is `A`.
-  final int column;
-
-  /// The value: `null`, a `String`, a `bool` or an [XlsxDecimal].
-  ///
-  /// `null` when the file holds no value for the cell or the value could not
-  /// be read exactly; the second case is reported as an [XlsxWarning].
-  final Object? value;
-
-  /// The formula text as written in the file, only `_xHHHH_` decoded (a
-  /// leading `=` is not removed or added), or `null` when the cell has no
-  /// formula text. [value] is the result the file cached for the formula.
-  ///
-  /// A cell that follows a shared formula (`<f t="shared" si="0"/>`, empty)
-  /// has a formula in the file but no text of its own, so this is `null`
-  /// until formula groups are read (milestone R2); [value] still holds its
-  /// cached result.
-  final String? formula;
-
-  @override
-  bool operator ==(Object other) =>
-      other is XlsxReadCell &&
-      other.column == column &&
-      other.value == value &&
-      other.formula == formula;
-
-  @override
-  int get hashCode => Object.hash(column, value, formula);
-
-  @override
-  String toString() =>
-      'XlsxReadCell($column, $value'
-      '${formula == null ? '' : ', formula: $formula'})';
-}
-
-/// One row read from a worksheet.
-final class XlsxReadRow {
-  /// A row at the 0-based [index] holding [cells], which must be in column
-  /// order; [hidden] whether the file hides it.
-  XlsxReadRow(this.index, List<XlsxReadCell> cells, {this.hidden = false})
-    : cells = List<XlsxReadCell>.unmodifiable(cells);
-
-  /// The 0-based row index: 0 is row 1.
-  final int index;
-
-  /// Whether the row is hidden in the file.
-  final bool hidden;
-
-  /// The cells of the row that hold data, in column order. Empty only for a
-  /// hidden row without data. Unmodifiable.
-  final List<XlsxReadCell> cells;
-
-  @override
-  bool operator ==(Object other) {
-    if (other is! XlsxReadRow ||
-        other.index != index ||
-        other.hidden != hidden ||
-        other.cells.length != cells.length) {
-      return false;
-    }
-    for (int i = 0; i < cells.length; i++) {
-      if (other.cells[i] != cells[i]) return false;
-    }
-    return true;
-  }
-
-  @override
-  int get hashCode => Object.hash(index, hidden, Object.hashAll(cells));
-
-  @override
-  String toString() => 'XlsxReadRow($index${hidden ? ', hidden' : ''}, $cells)';
-}
 
 /// The rows of the worksheet part [part] of [package], in file order.
 ///
@@ -362,20 +283,32 @@ final class _SheetWalker {
           value: raw.value,
           formula: raw.formula,
           hasFormula: raw.hasFormula,
+          inlineText: null,
           sharedStrings: _sharedStrings,
+          format: CellFormat.general,
+          date1904: false,
         );
+        // The text of an `<is>` is not read yet, so an inline string cell
+        // that has one stays unsupported, as in R1.
+        final bool inlineUnread = raw.hasInline && type == 'inlineStr';
         // One warning per cell for its contents: an inline string the type
         // does not announce (its text is not read), then a repeated child,
-        // then whatever the decoder found.
+        // then an unread inline string, then whatever the decoder found.
         final XlsxWarningCode? contentWarning =
             raw.hasInline && type != 'inlineStr'
             ? XlsxWarningCode.cellTypeUnsupported
             : raw.repeated
             ? XlsxWarningCode.cellDuplicated
+            : inlineUnread
+            ? XlsxWarningCode.cellTypeUnsupported
             : decoded.warning;
         if (contentWarning != null) _warn(contentWarning, name);
         if (!cells.place(
-          XlsxReadCell(raw.column, decoded.value, formula: decoded.formula),
+          XlsxReadCell(
+            raw.column,
+            inlineUnread ? null : decoded.value,
+            formula: decoded.formula,
+          ),
         )) {
           _warn(XlsxWarningCode.cellDuplicated, name);
         }

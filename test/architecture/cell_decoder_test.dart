@@ -12,8 +12,11 @@ import 'support/lib_sources.dart';
 
 const String _decoder = 'lib/src/xlsx/read/cell_decoder.dart';
 
-/// A `t` attribute read: `getAttribute('t'`, `Attribute("t"` and the like.
-final RegExp _typeRead = RegExp(r"""Attribute\(\s*['"]t['"]""");
+/// A `t` attribute read: `getAttribute('t'`, `Attribute("t"`, a map lookup
+/// such as `attributesAsMap()['t']` or `attrs["t"]`, and the like.
+final RegExp _typeRead = RegExp(
+  r"""Attribute\(\s*['"]t['"]|\[\s*['"]t['"]\s*\]""",
+);
 
 List<String> _offenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
@@ -37,16 +40,24 @@ void main() {
         '''final t = r.getAttribute( "t", namespaceUri: '');''',
       ),
       LibSource(
+        'lib/src/xlsx/read/as_map.dart',
+        '''final t = r.attributesAsMap()['t'];''',
+      ),
+      LibSource('lib/src/xlsx/read/attrs.dart', '''final t = attrs[ "t" ];'''),
+      LibSource(
         'lib/src/xlsx/read/fine.dart',
         '''final s = r.getAttribute('s');\n'''
             '''final r2 = r.getAttribute('r');\n'''
             '''final tt = r.getAttribute('tt');\n'''
+            '''final tt2 = attrs['tt'];\n'''
             '''// reads r.getAttribute('t') through decodeCellType''',
       ),
     ];
     expect(_offenders(fixtures), <String>[
       'lib/src/xlsx/read/row_walker.dart',
       'lib/src/xlsx/read/other.dart',
+      'lib/src/xlsx/read/as_map.dart',
+      'lib/src/xlsx/read/attrs.dart',
     ]);
   });
 }
