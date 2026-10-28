@@ -91,8 +91,8 @@ chrome | XlsxWriter | run 3 | 3083 ms | 6981844 bytes | peak JS heap 236140222 b
   compresses with the native zlib on the VM and with its own pure-Dart
   deflate in the browser, and the two give different (equally valid) bytes
   for the same input. Equal uncompressed parts, unequal ZIP bytes: decision
-  [`0006`](decisions/0006-zip-bytes-may-differ-by-platform.md) proposes to
-  accept this, and `test/xlsx/cross_platform_parts_test.dart` proves the
+  [`0006`](decisions/0006-zip-bytes-may-differ-by-platform.md) accepts
+  this, and `test/xlsx/cross_platform_parts_test.dart` proves the
   parts equal.
 - The memory figures of the two platforms measure different things (process
   RSS against the used JS heap) and must not be compared with each other.

@@ -669,6 +669,10 @@ in Chrome, if the owner has such a file, and see that both open without a
 repair prompt and look the same. The owner either accepts the difference, or
 asks for one deflate everywhere. Record the decision in "Results".
 
+Answered on 2026-10-28: the owner accepted the difference, and decision 0006
+is accepted (see "Results"). Only the VM-written file was opened; the owner
+had no file written in Chrome.
+
 ### Excel for Windows
 
 Two checks need Excel for Windows, since Excel for Mac 16.114.1 shows
@@ -680,6 +684,9 @@ When the owner records them, mark that issue closed, with the date.
 - `m3_properties`, Status `Final`: File > Info shows `Final` as the Status
   property.
 
+Not checked at M5: on 2026-10-28 the owner had no Excel for Windows, so the
+issue stays open (see "Results").
+
 ### Native-speaker check
 
 `docs/warning-messages.md` lists every warning message in English, German and
@@ -689,8 +696,8 @@ column of their language and notes corrections. Record the result here.
 
 | Language | Reviewer | Date | Corrections |
 |---|---|---|---|
-| de | | | |
-| tr | | | |
+| de | not checked | 2026-10-28 | No native German reader was available. |
+| tr | Ahmet Urel (owner) | 2026-10-28 | None. |
 
 ### Final run
 
@@ -700,35 +707,35 @@ Mac. Write `yes` when the file opens without a repair prompt, `no` otherwise
 
 | Fixture | Opens without a repair prompt (yes/no) |
 |---|---|
-| `m1_values` | |
-| `m1_dirty_text` | |
-| `m1_sheets` | |
-| `m1_formulas` | |
-| `m1_empty` | |
-| `m1_properties` | |
-| `m1_dates` | |
-| `m2_styles` | |
-| `m2_columns_rows` | |
-| `m2_style_precedence` | |
-| `m2_views` | |
-| `m2_merges_filter` | |
-| `m2_formula_xstring` | |
-| `m3_names` | |
-| `m3_hyperlinks` | |
-| `m3_validation` | |
-| `m3_conditional` | |
-| `m3_conditional_x14` | |
-| `m3_page_setup` | |
-| `m3_header_footer` | |
-| `m3_protection` | |
-| `m3_properties` | |
-| `m4_rich_text` | |
-| `m4_notes` | |
-| `m4_images` | |
-| `m4_tables` | |
-| `m4_objects` | |
-| `m5_list_plain` | |
-| `m5_list_table` | |
+| `m1_values` | yes |
+| `m1_dirty_text` | yes |
+| `m1_sheets` | yes |
+| `m1_formulas` | yes |
+| `m1_empty` | yes |
+| `m1_properties` | yes |
+| `m1_dates` | yes |
+| `m2_styles` | yes |
+| `m2_columns_rows` | yes |
+| `m2_style_precedence` | yes |
+| `m2_views` | yes |
+| `m2_merges_filter` | yes |
+| `m2_formula_xstring` | yes |
+| `m3_names` | yes |
+| `m3_hyperlinks` | yes |
+| `m3_validation` | yes |
+| `m3_conditional` | yes |
+| `m3_conditional_x14` | yes |
+| `m3_page_setup` | yes |
+| `m3_header_footer` | yes |
+| `m3_protection` | yes |
+| `m3_properties` | yes |
+| `m4_rich_text` | yes |
+| `m4_notes` | yes |
+| `m4_images` | yes |
+| `m4_tables` | yes |
+| `m4_objects` | yes |
+| `m5_list_plain` | yes |
+| `m5_list_table` | yes |
 
 ## Open issues
 
@@ -736,7 +743,12 @@ Problems a check found that the owner deferred. Each names the milestone that
 must close it. A closed issue stays here, marked closed, with the commit that
 closed it.
 
-### Sub-second times show the wrong minute (fixed in M5, awaiting the owner's re-check)
+### Sub-second times show the wrong minute (closed, 2026-10-28)
+
+Closed on 2026-10-28 by the M5 re-check of `m1_dates` in Excel for Mac
+16.114.1 (see "Results"): D1 shows `24.10.2026 23:59`, `23:59:59` with a
+format that shows seconds, and `=DAY(D1)` gives 24. The account below is what
+the M1 check found before the fix.
 
 Found in the M1 check on 2026-10-24, `m1_dates` D1. The owner accepted M1 with
 this issue open.
@@ -899,7 +911,11 @@ Fixed in 43a8471; open, awaiting the owner's M4 Excel check. M4 also changed
 `m3_conditional`, whose column H data bar had no colors and now gets the same
 defaults; the M4 check re-checks it.
 
-### Reading order and Status not checked in Excel (open, M5)
+### Reading order and Status not checked in Excel (open)
+
+Not closed at M5: on 2026-10-28 the owner had no Excel for Windows, so
+neither check was made (see "Results"). The issue stays open until someone
+checks both in Excel for Windows.
 
 Found in the M3 check on 2026-10-26, in Excel for Mac 16.114.1, which shows
 neither:
@@ -985,3 +1001,9 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_conditional_x14` (M4 re-check) | ok | No repair prompt. A and B show a black dashed axis where zero falls; B's negative bars are filled red, left of it. B's Edit Formatting Rule: negative fill red, borders solid, positive and negative border green, axis color black. So Excel draws the negative border in the positive border color when no `x14:negativeBorderColor` is stored. Closes "Data bars draw no negative fill or axis by default". |
 | 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m3_conditional` (M4 re-check) | ok | No repair prompt. Column H's blue gradient bars as before; its Edit Formatting Rule shows negative fill red, borders none, axis color black. |
 | 2026-10-27 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m4_rich_text` (re-check after 420e543) | ok | No repair prompt. A4 `Bold in Arial 14`: ` in Arial 14` now shows in Arial 14, the same size as `Bold`, which stays bold; with the cursor in `Bold`, Home shows Arial 14 with Bold highlighted. A1, A2, A3, A5 and A6 as before. Closes "Plain rich text runs lose the cell's font". |
+| 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m5_list_plain` | ok | No repair prompt. `Accounts`: A1 `Accounts` bold 14 and not merged; header A2:D2 bold 11, frozen under row 2; filter buttons on A2:D2, the filter ending at row 14. Filtering changes the totals: C15 `=SUBTOTAL(109;C3:C14)` and D15 `=SUBTOTAL(103;D3:D14)`, unfiltered `105.436,27` and a plain `11`. A15, C15 and D15 bold. `1.250,50`, `-320,75`, `0,00`; D3 `15.01.2024`, D7 empty. Print Titles `$2:$2`; Name Manager lists `Print_Titles` for `Accounts` and `Empty`. `Empty`: header in row 2, empty row 3, C4 `0,00`, D4 `0`, filter A2:D3, header frozen. |
+| 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m5_list_table` | ok | No repair prompt. Table `Accounts`, Medium 2, Header Row, Total Row and Banded Rows ticked, Banded Columns off; Name Manager lists it as a table, with `Print_Titles` (`$2:$2`). Caption A1 outside the table, bold 14, not merged. Header `Code`, `Name`, `Balance`, `Opened` with filter buttons. A15 `Total`, C15 `=SUBTOTAL(109;C3:C14)` `105.436,27` (Sum), D15 `=SUBTOTAL(103;D3:D14)` a plain `11` (Count). Frozen under row 2; filtering changes the totals. |
+| 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | `m1_dates` (M5 re-check) | ok | No repair prompt. D1 shows `24.10.2026 23:59`, `23:59:59` with a custom format that shows seconds, and `=DAY(D1)` gives 24. A1, B1, C1, E1 and F1 as before. Closes "Sub-second times show the wrong minute". |
+| 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | all 29 fixtures (M5 final run) | ok | Every fixture of `allFixtures()` opened once more, in order: no repair prompt on any (see "Final run"). |
+| 2026-10-28 | not checked (no Excel for Windows) | `m2_styles` row 67, `m3_properties` Status | not checked | The owner has no Excel for Windows, so reading order RTL and Status `Final` stay unchecked; "Reading order and Status not checked in Excel" stays open. |
+| 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | decision 0006 (ZIP bytes by platform) | accepted | The owner accepted that the ZIP bytes differ between the VM and the web while every part's contents are identical; decision 0006 is accepted. `m5_list_plain` as written on the VM opens without a repair prompt; no Chrome-written file was opened. |
