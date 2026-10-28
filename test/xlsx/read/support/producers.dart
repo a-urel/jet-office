@@ -253,25 +253,31 @@ const String _ctRels =
 const String _loDecl =
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
-/// A file in the style of LibreOffice Calc (7.x), saved as "Excel 2007-365".
+/// A file in the style of LibreOffice Calc, saved as "Excel 2007-365".
 ///
-/// Written from knowledge of Calc's output, not copied from a saved file
-/// (plan ruling 6): the root attributes and child order of each part, the
-/// `<fileVersion appName="Calc"/>`, `<workbookPr>` and `<calcPr>` attributes,
-/// `mc:Ignorable="x14ac"` and `x14ac:dyDescent`, the row attributes
-/// (`customFormat`, `ht`, `hidden="true"`), `t="n"` and `s` on every cell,
-/// `<f aca="false">`, the page setup after `<mergeCells>` and the entry
-/// order (`[Content_Types].xml` last) are as Calc writes them as far as
-/// known. Two details follow the R3 plan rather than Calc: Calc writes its
-/// own `General` as `numFmtId="164"` and numbers its formats after it,
-/// where this file uses the plan's ids 164 to 166 and the built-in 0 for
-/// `General`; and the theme-free styles part is shorter than Calc's.
+/// Written from knowledge of Calc's output and checked against one file
+/// LibreOffice 26.8 saved, not copied from it (plan ruling 6). As in that
+/// file: the declaration and `standalone="yes"`, `fileVersion` with
+/// `appName="Calc" lowestEdited="4"`, the `<workbookPr>` and `<calcPr>`
+/// attributes, `General` written as `numFmtId="164"` (cell format 0 and the
+/// default cell style use it, Calc's own formats follow from 165), `t="n"`
+/// and `s` on every cell, the row attributes (`customFormat`, `ht`,
+/// `hidden`), `<f aca="false">`, a date-time serial rounded to 15
+/// significant digits, the page setup after `<mergeCells>`, the content
+/// types (`Default` for `fntdata`, `jpeg`, `png`, `rels`, `xml`, then an
+/// `Override` per part) and the entry order (relationships, workbook,
+/// shared strings, styles, sheets, `docProps`, `[Content_Types].xml`
+/// last). From knowledge only, and not in what 26.8 writes: `spans` on
+/// rows, `mc:Ignorable="x14ac"` and `x14ac:dyDescent` (older Calc versions
+/// wrote them; the R3 plan asks for them), the rich-text run properties,
+/// `hidden="true"` on a hidden row and the second, hidden sheet. The styles
+/// part is shorter than Calc's, and there is no theme part.
 ///
 /// Sheet `Ürünler` holds codes with leading zeros (text), a 13-digit
-/// barcode (number in format `0`), prices in a lira format, dates, times,
-/// booleans, number, text and error formula results, a rich-text shared
-/// string, the merge `F2:F3` and a hidden empty row 4. Sheet `Notlar` is
-/// hidden and holds one cell. No warning is expected.
+/// barcode (number in format `0`), prices in a lira format, dates, times, a
+/// date-time, booleans, number, text and error formula results, a
+/// rich-text shared string, the merge `F2:F3` and a hidden empty row 4.
+/// Sheet `Notlar` is hidden and holds one cell. No warning is expected.
 ProducerFile libreOfficeFile() {
   const String sst =
       '<sst xmlns="$_main" count="14" uniqueCount="14">'
@@ -353,6 +359,7 @@ ProducerFile libreOfficeFile() {
       '<c r="D3" s="3" t="n"><v>46324</v></c>'
       '<c r="F3" s="6"/>'
       '<c r="G3" s="2" t="n"><f aca="false">C3*1.2</f><v>120</v></c>'
+      '<c r="I3" s="7" t="n"><v>46319.5729166667</v></c>'
       '</row>'
       '<row r="4" spans="1:9" $rowAttrs hidden="true"/>'
       '<row r="5" spans="1:9" $rowAttrs hidden="false">'
@@ -425,10 +432,12 @@ ProducerFile libreOfficeFile() {
       '<protection locked="true" hidden="false"/></xf>';
   const String styles =
       '$_loDecl<styleSheet xmlns="$_main">'
-      '<numFmts count="3">'
-      r'<numFmt numFmtId="164" formatCode="#,##0.00\ &quot;₺&quot;"/>'
-      '<numFmt numFmtId="165" formatCode="DD.MM.YYYY"/>'
-      '<numFmt numFmtId="166" formatCode="HH:MM"/>'
+      '<numFmts count="5">'
+      '<numFmt numFmtId="164" formatCode="General"/>'
+      r'<numFmt numFmtId="165" formatCode="#,##0.00\ &quot;₺&quot;"/>'
+      '<numFmt numFmtId="166" formatCode="DD.MM.YYYY"/>'
+      '<numFmt numFmtId="167" formatCode="HH:MM"/>'
+      r'<numFmt numFmtId="168" formatCode="DD.MM.YYYY\ HH:MM"/>'
       '</numFmts>'
       '<fonts count="2">'
       '<font><sz val="10"/><name val="Arial"/><family val="2"/>'
@@ -440,28 +449,29 @@ ProducerFile libreOfficeFile() {
       '<fill><patternFill patternType="gray125"/></fill></fills>'
       '<borders count="1"><border diagonalUp="false" diagonalDown="false">'
       '<left/><right/><top/><bottom/><diagonal/></border></borders>'
-      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" '
+      '<cellStyleXfs count="1"><xf numFmtId="164" fontId="0" fillId="0" '
       'borderId="0" applyFont="true" applyBorder="true" '
       'applyAlignment="true" applyProtection="true">'
       '<alignment horizontal="general" vertical="bottom" textRotation="0" '
       'wrapText="false" indent="0" shrinkToFit="false"/>'
       '<protection locked="true" hidden="false"/></xf></cellStyleXfs>'
-      '<cellXfs count="7">'
-      '<xf numFmtId="0" $xfTail'
-      '<xf numFmtId="1" $xfTail'
+      '<cellXfs count="8">'
       '<xf numFmtId="164" $xfTail'
+      '<xf numFmtId="1" $xfTail'
       '<xf numFmtId="165" $xfTail'
       '<xf numFmtId="166" $xfTail'
-      '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" '
+      '<xf numFmtId="167" $xfTail'
+      '<xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" '
       'applyFont="true" applyBorder="false" applyAlignment="false" '
       'applyProtection="false"><alignment horizontal="general" '
       'vertical="bottom" textRotation="0" wrapText="false" indent="0" '
       'shrinkToFit="false"/><protection locked="true" hidden="false"/></xf>'
-      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" '
+      '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" '
       'applyFont="false" applyBorder="false" applyAlignment="true" '
       'applyProtection="false"><alignment horizontal="center" '
       'vertical="center" textRotation="0" wrapText="false" indent="0" '
       'shrinkToFit="false"/><protection locked="true" hidden="false"/></xf>'
+      '<xf numFmtId="168" $xfTail'
       '</cellXfs>'
       '<cellStyles count="1"><cellStyle name="Normal" xfId="0" '
       'builtinId="0"/></cellStyles>'
@@ -470,7 +480,7 @@ ProducerFile libreOfficeFile() {
       '</styleSheet>';
   const String workbook =
       '$_loDecl<workbook xmlns="$_main" xmlns:r="$_relNs">'
-      '<fileVersion appName="Calc"/>'
+      '<fileVersion appName="Calc" lowestEdited="4"/>'
       '<workbookPr backupFile="false" showObjects="all" date1904="false"/>'
       '<workbookProtection/>'
       '<bookViews><workbookView showHorizontalScroll="true" '
@@ -529,39 +539,37 @@ ProducerFile libreOfficeFile() {
       'e19e193f88cd6c0525a17fb7a176ed8e6a3e2aa1</Application>'
       '<AppVersion>15.0000</AppVersion></Properties>';
   const String contentTypes =
-      '$_loDecl<Types xmlns="$_ctNs">'
-      '<Default Extension="xml" ContentType="application/xml"/>'
-      '<Default Extension="rels" ContentType="$_ctRels"/>'
-      '<Default Extension="png" ContentType="image/png"/>'
+      '<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="$_ctNs">'
+      '<Default Extension="fntdata" ContentType="application/x-fontdata"/>'
       '<Default Extension="jpeg" ContentType="image/jpeg"/>'
-      '<Override PartName="/_rels/.rels" ContentType="$_ctRels"/>'
-      '<Override PartName="/docProps/core.xml" ContentType="application/'
-      'vnd.openxmlformats-package.core-properties+xml"/>'
-      '<Override PartName="/docProps/app.xml" ContentType="application/'
-      'vnd.openxmlformats-officedocument.extended-properties+xml"/>'
-      '<Override PartName="/xl/_rels/workbook.xml.rels" '
-      'ContentType="$_ctRels"/>'
+      '<Default Extension="png" ContentType="image/png"/>'
+      '<Default Extension="rels" ContentType="$_ctRels"/>'
+      '<Default Extension="xml" ContentType="application/xml"/>'
       '<Override PartName="/xl/workbook.xml" '
       'ContentType="$_ctSheet.sheet.main+xml"/>'
+      '<Override PartName="/xl/sharedStrings.xml" '
+      'ContentType="$_ctSheet.sharedStrings+xml"/>'
       '<Override PartName="/xl/styles.xml" '
       'ContentType="$_ctSheet.styles+xml"/>'
       '<Override PartName="/xl/worksheets/sheet1.xml" '
       'ContentType="$_ctSheet.worksheet+xml"/>'
       '<Override PartName="/xl/worksheets/sheet2.xml" '
       'ContentType="$_ctSheet.worksheet+xml"/>'
-      '<Override PartName="/xl/sharedStrings.xml" '
-      'ContentType="$_ctSheet.sharedStrings+xml"/>'
-      '</Types>';
+      '<Override PartName="/docProps/core.xml" ContentType="application/'
+      'vnd.openxmlformats-package.core-properties+xml"/>'
+      '<Override PartName="/docProps/app.xml" ContentType="application/'
+      'vnd.openxmlformats-officedocument.extended-properties+xml"/>'
+      '\n</Types>';
   final Uint8List bytes = buildZipOrdered(<(String, List<int>)>[
     ('_rels/.rels', utf8.encode(rootRels)),
-    ('docProps/core.xml', utf8.encode(core)),
-    ('docProps/app.xml', utf8.encode(app)),
     ('xl/_rels/workbook.xml.rels', utf8.encode(workbookRels)),
+    ('xl/workbook.xml', utf8.encode(workbook)),
     ('xl/sharedStrings.xml', utf8.encode('$_loDecl$sst')),
+    ('xl/styles.xml', utf8.encode(styles)),
     ('xl/worksheets/sheet1.xml', utf8.encode(sheet1)),
     ('xl/worksheets/sheet2.xml', utf8.encode(sheet2)),
-    ('xl/styles.xml', utf8.encode(styles)),
-    ('xl/workbook.xml', utf8.encode(workbook)),
+    ('docProps/core.xml', utf8.encode(core)),
+    ('docProps/app.xml', utf8.encode(app)),
     ('[Content_Types].xml', utf8.encode(contentTypes)),
   ]);
   return ProducerFile('libreoffice', bytes, <ProducerSheet>[
@@ -598,6 +606,9 @@ ProducerFile libreOfficeFile() {
           null,
           null,
           XlsxDecimal('120'),
+          null,
+          // 46319.5729166667: 13:45 plus 0.00288 ms, to the millisecond.
+          DateTime.utc(2026, 10, 24, 13, 45),
         ],
         <Object?>[],
         <Object?>[
@@ -665,6 +676,7 @@ String _gsItem(String text) => '<si><t xml:space="preserve">$text</t></si>';
 /// note, a text formula and a styled blank between two values. No warning
 /// is expected.
 ProducerFile googleSheetsFile() {
+  assert(_longNote.length == 300, 'the note must be 300 characters');
   final List<String> strings = <String>[
     'Müşteri',
     'Telefon',
@@ -876,7 +888,7 @@ ProducerFile googleSheetsFile() {
 
 /// The UTF-8 byte order mark and declaration the Open XML SDK writes
 /// before every part (`encoding` in lower case).
-const String _sdkDecl = '﻿<?xml version="1.0" encoding="utf-8"?>';
+const String _sdkDecl = '\uFEFF<?xml version="1.0" encoding="utf-8"?>';
 
 /// A file in the style of an exporter built on the Open XML SDK for .NET.
 ///
@@ -884,11 +896,13 @@ const String _sdkDecl = '﻿<?xml version="1.0" encoding="utf-8"?>';
 /// (plan ruling 6): a byte order mark and `encoding="utf-8"` on every part,
 /// the `x:` prefix on every SpreadsheetML element, `" />"` on empty
 /// elements, generated relationship ids (`R` and hex digits), absolute
-/// relationship targets, a `[Content_Types].xml` whose default type for
-/// `xml` is generic, entries in the order `System.IO.Packaging` writes them
-/// (parts as created, relationships and content types last), and none of
-/// the parts an SDK program must add itself: no styles, no shared strings,
-/// no `docProps`. The workbook override written as `/XL/Workbook.xml` for
+/// relationship targets and none of the parts an SDK program must add
+/// itself (no styles, no shared strings, no `docProps`) are as the SDK
+/// writes them. A `[Content_Types].xml` whose default type for `xml` is
+/// generic, and entries in the order `System.IO.Packaging` writes them
+/// (parts as created, relationships and content types last), are as it
+/// writes them as far as known: the packaging layer may instead make the
+/// first part's type the default for `xml`. The workbook override written as `/XL/Workbook.xml` for
 /// the entry `xl/workbook.xml`, rows and cells without `r`, `t="n"` on
 /// every number, an exponent and `t="d"` are what hand-written SDK code
 /// commonly produces, as the R3 plan sets them. The `<x:dimension>` claims
