@@ -180,4 +180,40 @@ void main() {
       expect(e.part, 'xl/workbook.xml');
     }
   });
+
+  group('the root element', () {
+    const String strict = 'http://purl.oclc.org/ooxml/spreadsheetml/main';
+
+    XlsxReadException failure(String workbook) {
+      try {
+        readWorkbook(_package(workbook));
+      } on XlsxReadException catch (e) {
+        return e;
+      }
+      fail('expected an XlsxReadException for $workbook');
+    }
+
+    test('in the Strict namespace is unsupportedFormat', () {
+      final XlsxReadException e = failure(
+        '<workbook xmlns="$strict"><sheets><sheet name="A"/></sheets>'
+        '</workbook>',
+      );
+      expect(e.reason, XlsxReadFailure.unsupportedFormat);
+      expect(e.message, contains('Strict'));
+      expect(e.part, 'xl/workbook.xml');
+    });
+
+    test('that is not a SpreadsheetML workbook is missingWorkbook', () {
+      for (final String xml in <String>[
+        '<foo/>',
+        '<foo xmlns="$_main"><sheets><sheet name="A"/></sheets></foo>',
+        '<workbook xmlns="urn:other"><sheets><sheet name="A"/></sheets>'
+            '</workbook>',
+      ]) {
+        final XlsxReadException e = failure(xml);
+        expect(e.reason, XlsxReadFailure.missingWorkbook, reason: xml);
+        expect(e.part, 'xl/workbook.xml', reason: xml);
+      }
+    });
+  });
 }

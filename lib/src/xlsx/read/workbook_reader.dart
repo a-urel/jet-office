@@ -10,7 +10,9 @@
 /// dropped, so the caller can warn. Sheet names are XML-string decoded, the
 /// `state` and `date1904` attributes are read, elements match by local
 /// name and SpreadsheetML namespace so prefixed producers work, and the
-/// number of sheets is limited.
+/// number of sheets is limited. The root must be a SpreadsheetML
+/// `<workbook>` (Quds read any root), and elements of other namespaces are
+/// skipped with their contents.
 library;
 
 import '../../opc/ooxml.dart';
@@ -53,7 +55,9 @@ final class WorkbookInfo {
 /// Reads the sheet list and date system from the workbook part of
 /// [package].
 ///
-/// Throws an [XlsxReadException] of reason `limitExceeded` when the
+/// Throws an [XlsxReadException] of reason `unsupportedFormat` when the
+/// root element is in the Strict OOXML namespace, `missingWorkbook` when it
+/// is not a SpreadsheetML `<workbook>`, `limitExceeded` when the
 /// workbook lists more than [XlsxReadLimits.maxSheets] sheets (at the first
 /// one past the limit, before it is kept), and of reason `malformedXml` when
 /// the workbook XML cannot be read.
@@ -65,18 +69,21 @@ WorkbookInfo readWorkbook(PackageReader package) {
   };
   return package.guardXml(part, () {
     final XmlPullReader reader = package.openXml(part);
+    _checkRoot(reader, part);
     final List<WorkbookSheet> sheets = <WorkbookSheet>[];
     bool date1904 = false;
     while (reader.next()) {
-      if (reader.eventType != XmlEventType.startElement ||
-          reader.namespaceUri != Ns.main) {
-        continue;
-      }
-      if (reader.depth == 2 && reader.localName == 'workbookPr') {
+      if (reader.eventType != XmlEventType.startElement) continue;
+      if (reader.namespaceUri != Ns.main) {
+        reader.skip();
+      } else if (reader.localName == 'workbookPr') {
         final String? value = reader.getAttribute('date1904');
         date1904 = value == '1' || value == 'true';
-      } else if (reader.depth == 2 && reader.localName == 'sheets') {
+        reader.skip();
+      } else if (reader.localName == 'sheets') {
         _readSheets(reader, package, part, targets, sheets);
+      } else {
+        reader.skip();
       }
     }
     return WorkbookInfo(List<WorkbookSheet>.unmodifiable(sheets), date1904);
@@ -96,10 +103,9 @@ void _readSheets(
     if (reader.eventType == XmlEventType.endElement && reader.depth < 2) {
       return;
     }
-    if (reader.eventType != XmlEventType.startElement ||
-        reader.depth != 3 ||
-        reader.localName != 'sheet' ||
-        reader.namespaceUri != Ns.main) {
+    if (reader.eventType != XmlEventType.startElement) continue;
+    if (reader.localName != 'sheet' || reader.namespaceUri != Ns.main) {
+      reader.skip();
       continue;
     }
     if (sheets.length >= maxSheets) {
@@ -118,6 +124,31 @@ void _readSheets(
         'veryHidden' => XlsxSheetVisibility.veryHidden,
         _ => XlsxSheetVisibility.visible,
       }, target != null && package.hasPart(target) ? target : null),
+    );
+    reader.skip();
+  }
+}
+
+/// Moves [reader] onto the root element of the workbook [part] and checks
+/// it is a SpreadsheetML `<workbook>`.
+///
+/// Throws an [XlsxReadException] of reason `unsupportedFormat` for a root
+/// in the Strict namespace and `missingWorkbook` for any other root.
+void _checkRoot(XmlPullReader reader, String part) {
+  while (reader.next()) {
+    if (reader.eventType == XmlEventType.startElement) break;
+  }
+  final bool found = reader.eventType == XmlEventType.startElement;
+  if (found && reader.namespaceUri == strictSpreadsheetNs) {
+    throw strictUnsupported(part: part);
+  }
+  if (!found ||
+      reader.localName != 'workbook' ||
+      reader.namespaceUri != Ns.main) {
+    throw XlsxReadException(
+      XlsxReadFailure.missingWorkbook,
+      'The workbook part is not a SpreadsheetML workbook.',
+      part: part,
     );
   }
 }

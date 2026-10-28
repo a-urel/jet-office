@@ -4,9 +4,10 @@
 /// New in jet_office. A warning describes a data problem the writer repaired
 /// instead of failing on (decision 0003): a cell lost characters, a sheet was
 /// renamed. The reader reports the mirror problems the same way: a cell it
-/// could not read exactly reads as empty and a warning says so. Cell-level warnings are aggregated per sheet and code, so a column
-/// of 100,000 dirty cells yields one warning with a count and the first ten
-/// references, not 100,000 objects.
+/// could not read exactly reads as empty and a warning says so. Cell-level
+/// warnings are aggregated per sheet and code, so a column of 100,000 dirty
+/// cells yields one warning with a count and the first ten references, not
+/// 100,000 objects.
 library;
 
 import 'dart:collection';
@@ -90,8 +91,8 @@ enum XlsxWarningCode {
   cellDuplicated,
 
   /// Reading: a row's index is not greater than the previous row's. The row
-  /// is still read, in file order; the warning names the row's first cell,
-  /// `A<row>`.
+  /// is still read, in file order; the warning names the row's first cell
+  /// that holds data (`A<row>` for a hidden row without data).
   rowOutOfOrder,
 
   /// Reading: a cell lies outside Excel's grid (column beyond XFD or row

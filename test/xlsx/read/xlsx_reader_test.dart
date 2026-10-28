@@ -5,6 +5,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import 'support/workbook_builder.dart';
+import 'support/zip_builder.dart';
 
 List<XlsxWarningCode> _codes(XlsxReader r) =>
     r.warnings.map((XlsxWarning w) => w.code).toList();
@@ -277,6 +278,45 @@ void main() {
             )
             .having((XlsxReadException e) => e.part, 'part', 'xl/workbook.xml'),
       ),
+    );
+  });
+
+  test('a Strict workbook found by its content type is refused', () {
+    // No _rels/.rels: the workbook is found through the content type.
+    final Uint8List bytes = buildZip(<String, List<int>>{
+      '[Content_Types].xml': utf8.encode(
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/'
+        'content-types"><Override PartName="/xl/workbook.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.'
+        'spreadsheetml.sheet.main+xml"/></Types>',
+      ),
+      'xl/workbook.xml': utf8.encode(
+        '<workbook xmlns="http://purl.oclc.org/ooxml/spreadsheetml/main">'
+        '<sheets><sheet name="A"/></sheets></workbook>',
+      ),
+    });
+    expect(
+      () => XlsxReader(bytes),
+      throwsA(
+        isA<XlsxReadException>().having(
+          (XlsxReadException e) => e.reason,
+          'reason',
+          XlsxReadFailure.unsupportedFormat,
+        ),
+      ),
+    );
+  });
+
+  test('sheets has no setter', () {
+    final dynamic reader = XlsxReader(
+      buildWorkbook(<String, String?>{'A': null}),
+    );
+    expect(
+      // A dynamic call is the only way to reach a setter that must not
+      // exist: with a static type this would not compile.
+      // ignore: avoid_dynamic_calls
+      () => reader.sheets = <XlsxReadSheet>[],
+      throwsA(isA<NoSuchMethodError>()),
     );
   });
 }

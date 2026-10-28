@@ -42,7 +42,8 @@ final class XlsxReadSheet {
 /// sheet that cannot be read exactly is reported in [warnings] and never
 /// dropped silently.
 ///
-/// Opening reads the ZIP directory and the workbook part only. A sheet's
+/// Opening reads the ZIP directory, `[Content_Types].xml`, the root and
+/// workbook relationships and the workbook part, nothing else. A sheet's
 /// part (and the shared strings, once per reader) is decompressed when its
 /// [rows] are first iterated, and rows are parsed as they are taken, so
 /// stopping early does no further work. Every call is synchronous.
@@ -69,7 +70,7 @@ final class XlsxReader {
     _parts = <String?>[
       for (final WorkbookSheet sheet in workbook.sheets) sheet.part,
     ];
-    sheets = List<XlsxReadSheet>.unmodifiable(<XlsxReadSheet>[
+    _sheets = List<XlsxReadSheet>.unmodifiable(<XlsxReadSheet>[
       for (int i = 0; i < workbook.sheets.length; i++)
         XlsxReadSheet(
           workbook.sheets[i].name,
@@ -89,8 +90,10 @@ final class XlsxReader {
   bool _sharedStringsRead = false;
   List<String>? _sharedStrings;
 
+  late final List<XlsxReadSheet> _sheets;
+
   /// The sheets of the workbook, in workbook order. Unmodifiable.
-  late final List<XlsxReadSheet> sheets;
+  List<XlsxReadSheet> get sheets => _sheets;
 
   /// What could not be read exactly, aggregated per sheet and
   /// [XlsxWarningCode].

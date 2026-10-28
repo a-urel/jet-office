@@ -36,6 +36,18 @@ const List<String> _workbookTypes = <String>[
 ];
 const String _contentTypesPart = '[Content_Types].xml';
 
+/// The SpreadsheetML main namespace of Strict OOXML, which is not read.
+const String strictSpreadsheetNs =
+    'http://purl.oclc.org/ooxml/spreadsheetml/main';
+
+/// The failure for a Strict OOXML package, or for its part [part].
+XlsxReadException strictUnsupported({String? part}) => XlsxReadException(
+  XlsxReadFailure.unsupportedFormat,
+  'The workbook is Strict OOXML, which is not supported; save it as an '
+  'Excel Workbook (.xlsx).',
+  part: part,
+);
+
 /// One internal relationship of a package part.
 final class PartRelationship {
   /// Creates a relationship [id] of [type] to the part named [target].
@@ -203,11 +215,7 @@ final class PackageReader {
       // The root relationships belong to the package itself: part ''.
       for (final PartRelationship rel in relationshipsOf('')) {
         if (rel.type == _strictOfficeDocumentType) {
-          throw const XlsxReadException(
-            XlsxReadFailure.unsupportedFormat,
-            'The workbook is Strict OOXML, which is not supported; save it '
-            'as an Excel Workbook (.xlsx).',
-          );
+          throw strictUnsupported();
         }
         if (rel.type == _officeDocumentType && hasPart(rel.target)) {
           found = rel.target;

@@ -11,8 +11,10 @@
 /// reported as warnings instead of being trusted; huge `r` values are never
 /// parsed to an `int`; every `<v>` and `<f>` text is limited to
 /// `maxTextLength`; elements match by local name and SpreadsheetML namespace
-/// so prefixed producers work; and a part that is not a `<worksheet>` reads
-/// as no rows.
+/// so prefixed producers work; a part that is not a `<worksheet>` reads as
+/// no rows, and one in the Strict namespace is refused; and cells that come
+/// out of column order are sorted once per row instead of inserted one by
+/// one.
 ///
 /// @docImport '../values.dart';
 library;
@@ -53,7 +55,12 @@ final class XlsxReadCell {
 
   /// The formula text as written in the file, only `_xHHHH_` decoded (a
   /// leading `=` is not removed or added), or `null` when the cell has no
-  /// formula. [value] is then the result the file cached for it.
+  /// formula text. [value] is the result the file cached for the formula.
+  ///
+  /// A cell that follows a shared formula (`<f t="shared" si="0"/>`, empty)
+  /// has a formula in the file but no text of its own, so this is `null`
+  /// until formula groups are read (milestone R2); [value] still holds its
+  /// cached result.
   final String? formula;
 
   @override
@@ -118,13 +125,14 @@ final class XlsxReadRow {
 /// A cell gets at most one warning for its contents: `cellTypeUnsupported`
 /// for an `<is>` when `t` is not `inlineStr` (its text is not read), else
 /// `cellDuplicated` for a repeated `<v>`, `<f>` or `<is>` (the last is
-/// kept), else the decoder's warning. A part whose
-/// root is not a SpreadsheetML `<worksheet>`, or that has no `<sheetData>`,
-/// has no rows.
+/// kept), else the decoder's warning. A part whose root is not a
+/// SpreadsheetML `<worksheet>` (a chartsheet, say), or that has no
+/// `<sheetData>`, has no rows.
 ///
 /// The part is opened when iteration starts and read as rows are taken, so
-/// throws an [XlsxReadException] only then: `malformedXml` for XML that
-/// cannot be read and `limitExceeded` for a `<v>` or `<f>` text longer than
+/// throws an [XlsxReadException] only then: `unsupportedFormat` for a root
+/// in the Strict OOXML namespace, `malformedXml` for XML that cannot be read
+/// and `limitExceeded` for a `<v>` or `<f>` text longer than
 /// [XlsxReadLimits.maxTextLength]. [part] must exist in [package].
 Iterable<XlsxReadRow> readSheetRows(
   PackageReader package,
@@ -176,6 +184,50 @@ final class _RawCell {
   bool repeated = false;
 
   bool get hasData => value != null || hasFormula || hasInline;
+}
+
+/// The cells of one row as they are read, put in column order at the end.
+///
+/// Cells usually come in column order and are appended. The first one that
+/// does not starts a column-to-position map, so a duplicate is still found
+/// in constant time, and the row is sorted once when it ends: a row written
+/// right to left costs O(n log n), not O(n²).
+final class _RowCells {
+  final List<XlsxReadCell> _cells = <XlsxReadCell>[];
+
+  /// Column to position in [_cells], built at the first cell out of order.
+  Map<int, int>? _positions;
+
+  /// Adds [cell]; returns `false` when it replaced a cell already at its
+  /// column (the last one wins).
+  bool place(XlsxReadCell cell) {
+    Map<int, int>? positions = _positions;
+    if (positions == null) {
+      if (_cells.isEmpty || _cells.last.column < cell.column) {
+        _cells.add(cell);
+        return true;
+      }
+      positions = _positions = <int, int>{
+        for (int i = 0; i < _cells.length; i++) _cells[i].column: i,
+      };
+    }
+    final int? at = positions[cell.column];
+    if (at != null) {
+      _cells[at] = cell;
+      return false;
+    }
+    positions[cell.column] = _cells.length;
+    _cells.add(cell);
+    return true;
+  }
+
+  /// The cells in column order, one per column.
+  List<XlsxReadCell> inColumnOrder() {
+    if (_positions != null) {
+      _cells.sort((XlsxReadCell a, XlsxReadCell b) => a.column - b.column);
+    }
+    return _cells;
+  }
 }
 
 /// The state of one pass over a worksheet part.
@@ -237,6 +289,10 @@ final class _SheetWalker {
     while (_reader.next()) {
       if (_reader.eventType == XmlEventType.startElement) break;
     }
+    if (_reader.eventType == XmlEventType.startElement &&
+        _reader.namespaceUri == strictSpreadsheetNs) {
+      throw strictUnsupported(part: _part);
+    }
     if (_reader.eventType != XmlEventType.startElement ||
         _reader.localName != 'worksheet' ||
         _reader.namespaceUri != Ns.main ||
@@ -274,7 +330,7 @@ final class _SheetWalker {
     final bool inside = index < XlsxLimits.maxRows;
     bool pendingInvalid = position.invalid;
 
-    final List<XlsxReadCell> cells = <XlsxReadCell>[];
+    final _RowCells cells = _RowCells();
     if (!_reader.isEmptyElement) {
       int previousColumn = -1;
       while (_reader.next()) {
@@ -318,21 +374,22 @@ final class _SheetWalker {
             ? XlsxWarningCode.cellDuplicated
             : decoded.warning;
         if (contentWarning != null) _warn(contentWarning, name);
-        _place(
-          cells,
+        if (!cells.place(
           XlsxReadCell(raw.column, decoded.value, formula: decoded.formula),
-          name,
-        );
+        )) {
+          _warn(XlsxWarningCode.cellDuplicated, name);
+        }
       }
     }
-    if (!inside || (cells.isEmpty && !hidden)) return null;
+    final List<XlsxReadCell> ordered = cells.inColumnOrder();
+    if (!inside || (ordered.isEmpty && !hidden)) return null;
     if (outOfOrder) {
       _warn(
         XlsxWarningCode.rowOutOfOrder,
-        cellRef(index, cells.isEmpty ? 0 : cells.first.column),
+        cellRef(index, ordered.isEmpty ? 0 : ordered.first.column),
       );
     }
-    return XlsxReadRow(index, cells, hidden: hidden);
+    return XlsxReadRow(index, ordered, hidden: hidden);
   }
 
   /// The 0-based index of a row whose `r` is [r], and whether `r` was
@@ -428,31 +485,6 @@ final class _SheetWalker {
       }
     }
     return buffer.toString();
-  }
-
-  /// Adds [cell] to [cells], kept in column order; a cell already at its
-  /// column is replaced and reported under [name].
-  void _place(List<XlsxReadCell> cells, XlsxReadCell cell, String name) {
-    if (cells.isEmpty || cells.last.column < cell.column) {
-      cells.add(cell);
-      return;
-    }
-    int low = 0;
-    int high = cells.length;
-    while (low < high) {
-      final int mid = (low + high) >> 1;
-      if (cells[mid].column < cell.column) {
-        low = mid + 1;
-      } else {
-        high = mid;
-      }
-    }
-    if (cells[low].column == cell.column) {
-      cells[low] = cell;
-      _warn(XlsxWarningCode.cellDuplicated, name);
-    } else {
-      cells.insert(low, cell);
-    }
   }
 
   void _warn(XlsxWarningCode code, String? cell) =>

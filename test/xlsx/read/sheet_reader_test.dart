@@ -1,4 +1,5 @@
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/cell_ref.dart';
 import 'package:test/test.dart';
 
 import 'support/workbook_builder.dart';
@@ -35,6 +36,21 @@ void main() {
     final List<XlsxReadCell> cells = r.rows('S').single.cells;
     expect(cells[0].formula, '=SUM(A1)');
     expect(cells[1].formula, 'SUM(A1)');
+  });
+
+  test('a shared-formula follower has no formula text until R2', () {
+    final XlsxReader r = _reader(
+      '<row r="1"><c r="A1"><f t="shared" ref="A1:A2" si="0">B1+1</f>'
+      '<v>2</v></c></row>'
+      '<row r="2"><c r="A2"><f t="shared" si="0"/><v>3</v></c></row>',
+    );
+    expect(r.rows('S').toList(), <XlsxReadRow>[
+      XlsxReadRow(0, <XlsxReadCell>[
+        XlsxReadCell(0, XlsxDecimal('2'), formula: 'B1+1'),
+      ]),
+      XlsxReadRow(1, <XlsxReadCell>[XlsxReadCell(0, XlsxDecimal('3'))]),
+    ]);
+    expect(r.warnings, isEmpty);
   });
 
   test('places cells and rows without r', () {
@@ -87,6 +103,50 @@ void main() {
       XlsxReadCell(1, XlsxDecimal('3')),
     ]);
     expect(_warnings(r), <String>['cellDuplicated B1']);
+  });
+
+  test('sorts a full row written right to left without quadratic cost', () {
+    // Inserting each cell in place costs O(n²) on such a row: 16,384 cells
+    // in 8 rows took seconds. Appending and sorting once takes milliseconds.
+    final StringBuffer rows = StringBuffer();
+    for (int r = 1; r <= 8; r++) {
+      rows.write('<row r="$r">');
+      for (int c = 16383; c >= 0; c--) {
+        rows.write('<c r="${cellRef(r - 1, c)}"><v>$c</v></c>');
+      }
+      rows.write('</row>');
+    }
+    final XlsxReader r = _reader(rows.toString());
+    final Stopwatch watch = Stopwatch()..start();
+    final List<XlsxReadRow> read = r.rows('S').toList();
+    watch.stop();
+    expect(read, hasLength(8));
+    for (final XlsxReadRow row in read) {
+      expect(row.cells, hasLength(16384));
+      for (int c = 0; c < 16384; c++) {
+        expect(row.cells[c].column, c);
+      }
+      expect(row.cells.last.value, XlsxDecimal('16383'));
+    }
+    expect(r.warnings, isEmpty);
+    expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+  });
+
+  test('a duplicate among out-of-order cells keeps the last and warns', () {
+    final XlsxReader r = _reader(
+      '<row r="1"><c r="C1"><v>1</v></c><c r="A1"><v>2</v></c>'
+      '<c r="B1" t="b"><v>x</v></c><c r="A1"><v>3</v></c>'
+      '<c r="C1"><v>4</v></c><c r="B1"><v>5</v></c></row>',
+    );
+    expect(r.rows('S').single.cells, <XlsxReadCell>[
+      XlsxReadCell(0, XlsxDecimal('3')),
+      XlsxReadCell(1, XlsxDecimal('5')),
+      XlsxReadCell(2, XlsxDecimal('4')),
+    ]);
+    expect(_warnings(r), <String>[
+      'booleanInvalid B1',
+      'cellDuplicated A1,C1,B1',
+    ]);
   });
 
   test('returns cells in column order whatever the file order', () {
@@ -273,6 +333,29 @@ void main() {
       expect(r.rows('S'), isEmpty, reason: xml);
       expect(r.warnings, isEmpty, reason: xml);
     }
+  });
+
+  test('a worksheet in the Strict namespace is unsupportedFormat', () {
+    final XlsxReader r = XlsxReader(
+      buildWorkbook(<String, String?>{
+        'S':
+            '<worksheet xmlns="http://purl.oclc.org/ooxml/spreadsheetml/main">'
+            '<sheetData><row r="1"><c><v>1</v></c></row></sheetData>'
+            '</worksheet>',
+      }),
+    );
+    expect(
+      () => r.rows('S').toList(),
+      throwsA(
+        isA<XlsxReadException>()
+            .having(
+              (XlsxReadException e) => e.reason,
+              'reason',
+              XlsxReadFailure.unsupportedFormat,
+            )
+            .having((XlsxReadException e) => e.part, 'part', sheetEntry(0)),
+      ),
+    );
   });
 
   test('a bad entity in a value throws malformedXml naming the part', () {
