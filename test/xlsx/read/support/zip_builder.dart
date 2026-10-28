@@ -12,6 +12,9 @@ const int _localSignature = 0x04034b50;
 /// The central directory file header signature, `PK\x01\x02`.
 const int _centralSignature = 0x02014b50;
 
+/// The end of central directory record signature, `PK\x05\x06`.
+const int _endSignature = 0x06054b50;
+
 /// A ZIP archive holding [entries], in map order.
 ///
 /// Entries are deflated, or stored uncompressed when [store] is true (so a
@@ -65,6 +68,59 @@ Uint8List patchFlags(Uint8List zip, String entry, int flags) {
   }
   if (patched == 0) throw StateError('No entry "$entry" in the archive.');
   return out;
+}
+
+/// A copy of [zip] in which the central directory header of [entry] takes
+/// its uncompressed size from a Zip64 extended information field.
+///
+/// The 32-bit size becomes `0xFFFFFFFF` and a Zip64 field (id 1) holding
+/// the 64-bit size `high << 32 | low` is appended to the header's extra
+/// field. [low] and [high] are unsigned 32-bit halves, so the helper stays
+/// exact on the web; a [high] of `0x80000000` or more is what a reader
+/// building a 64-bit int sees as negative. Throws a [StateError] when
+/// [entry] is not in [zip].
+Uint8List patchZip64Size(
+  Uint8List zip,
+  String entry, {
+  required int low,
+  required int high,
+}) {
+  final ({int offset, bool central}) header = _headersOf(zip, entry).firstWhere(
+    (({int offset, bool central}) h) => h.central,
+    orElse: () => throw StateError('No entry "$entry" in the archive.'),
+  );
+  final ByteData data = ByteData.sublistView(zip);
+  final int nameLength = data.getUint16(header.offset + 28, Endian.little);
+  final int extraLength = data.getUint16(header.offset + 30, Endian.little);
+  final int insertAt = header.offset + 46 + nameLength + extraLength;
+  final Uint8List field = Uint8List(12);
+  final ByteData fieldData = ByteData.sublistView(field)
+    ..setUint16(0, 1, Endian.little)
+    ..setUint16(2, 8, Endian.little)
+    ..setUint32(4, low, Endian.little)
+    ..setUint32(8, high, Endian.little);
+  assert(fieldData.lengthInBytes == 12);
+  final Uint8List out = Uint8List(zip.length + field.length)
+    ..setRange(0, insertAt, zip)
+    ..setRange(insertAt, insertAt + field.length, field)
+    ..setRange(
+      insertAt + field.length,
+      zip.length + field.length,
+      zip,
+      insertAt,
+    );
+  final ByteData outData = ByteData.sublistView(out)
+    ..setUint32(header.offset + 24, 0xFFFFFFFF, Endian.little)
+    ..setUint16(header.offset + 30, extraLength + field.length, Endian.little);
+  // The end of central directory record: its directory size grows too.
+  for (int i = out.length - 22; i >= 0; i--) {
+    if (outData.getUint32(i, Endian.little) == _endSignature) {
+      final int size = outData.getUint32(i + 12, Endian.little);
+      outData.setUint32(i + 12, size + field.length, Endian.little);
+      return out;
+    }
+  }
+  throw StateError('The archive has no end of central directory record.');
 }
 
 /// The local and central directory headers of [zip] that name [entry].

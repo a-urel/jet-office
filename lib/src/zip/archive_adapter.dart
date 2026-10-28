@@ -404,12 +404,10 @@ final class ZipReader {
     }
     final String entry = header.filename;
     final int size = header.uncompressedSize;
-    final _BoundedOutputStream output = _BoundedOutputStream(
-      size,
-      header.compressedSize,
-      entry,
-    );
+    final _BoundedOutputStream output;
     try {
+      // Inside the try: whatever the sizes, only a ZipReadError escapes.
+      output = _BoundedOutputStream(size, header.compressedSize, entry);
       final Uint8List raw = header.file?.getRawContent() ?? Uint8List(0);
       switch (header.compressionMethod) {
         case _methodStore:
@@ -472,7 +470,8 @@ final class ZipReader {
   ///
   /// Throws [ZipReadErrorKind.notZip] when [bytes] neither start like a ZIP
   /// nor end with a directory, and [ZipReadErrorKind.corrupt] when they
-  /// start like one but the directory is missing, truncated or inconsistent.
+  /// start like one but the directory is missing, truncated or inconsistent,
+  /// or an entry declares a size that does not fit a 64-bit signed int.
   static List<ZipFileHeader> _readDirectory(Uint8List bytes) {
     final bool looksLikeZip = _startsWith(bytes, _zipSignature);
     final ZipDirectory directory = ZipDirectory();
@@ -491,6 +490,17 @@ final class ZipReader {
         'The central directory is truncated: it lists fewer entries than '
         'it declares.',
       );
+    }
+    for (final ZipFileHeader header in headers) {
+      // archive reads a Zip64 size with the top bit set as a negative int,
+      // which would pass every limit and lower the declared total.
+      if (header.uncompressedSize < 0 || header.compressedSize < 0) {
+        throw ZipReadError(
+          ZipReadErrorKind.corrupt,
+          'The entry declares a size beyond 2^63 bytes.',
+          entry: header.filename,
+        );
+      }
     }
     return headers;
   }

@@ -34,6 +34,10 @@ Matcher _throwsKind(ZipReadErrorKind kind, {String? entry}) => throwsA(
       .having((ZipReadError e) => e.message, 'message', isNotEmpty),
 );
 
+/// Whether the tests run compiled to JavaScript, where archive reads a
+/// 64-bit size with 32-bit bit operations.
+const bool _isWeb = identical(0, 0.0);
+
 /// The OLE compound file signature.
 const List<int> _ole = <int>[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
@@ -182,6 +186,57 @@ void main() {
         () => _open(zip),
         _throwsKind(ZipReadErrorKind.encrypted, entry: 'a.xml'),
       );
+    });
+  });
+
+  group('Zip64 sizes', () {
+    // high 0x90000000: a negative 64-bit int on the VM. On the web archive
+    // keeps only the low 32 bits, here about 4 GiB, which is too large.
+    const int low = 0xFFFFFFF0;
+    const int high = 0x90000000;
+    const ZipReadErrorKind kind = _isWeb
+        ? ZipReadErrorKind.entryTooLarge
+        : ZipReadErrorKind.corrupt;
+
+    test('refuses a declared size that reads as negative', () {
+      final Uint8List zip = patchZip64Size(
+        buildZip(<String, List<int>>{
+          'a.xml': <int>[1, 2, 3],
+        }),
+        'a.xml',
+        low: low,
+        high: high,
+      );
+      expect(() => _open(zip), _throwsKind(kind, entry: 'a.xml'));
+    });
+
+    test('a negative size cannot lower the declared total', () {
+      final Uint8List zip = patchZip64Size(
+        buildZip(<String, List<int>>{
+          'a.xml': List<int>.filled(600, 32),
+          'b.xml': List<int>.filled(600, 32),
+          'c.xml': <int>[1],
+        }),
+        'c.xml',
+        low: low,
+        high: high,
+      );
+      expect(
+        () => _open(zip, maxTotalBytes: 1199),
+        _throwsKind(kind, entry: 'c.xml'),
+      );
+    });
+
+    test('a well-formed Zip64 size is read', () {
+      final Uint8List zip = patchZip64Size(
+        buildZip(<String, List<int>>{
+          'a.xml': <int>[1, 2, 3],
+        }),
+        'a.xml',
+        low: 3,
+        high: 0,
+      );
+      expect(_open(zip).read('a.xml'), <int>[1, 2, 3]);
     });
   });
 
