@@ -27,6 +27,16 @@ List<String> _layout(List<XlsxReadRow> rows) => <String>[
 ];
 
 void main() {
+  test('formula text is returned as written, never stripped of "="', () {
+    final XlsxReader r = _reader(
+      '<row><c r="A1"><f>=SUM(A1)</f><v>1</v></c>'
+      '<c r="B1"><f>SUM(A1)</f><v>1</v></c></row>',
+    );
+    final List<XlsxReadCell> cells = r.rows('S').single.cells;
+    expect(cells[0].formula, '=SUM(A1)');
+    expect(cells[1].formula, 'SUM(A1)');
+  });
+
   test('places cells and rows without r', () {
     final XlsxReader r = _reader(
       '<row><c><v>1</v></c><c><v>2</v></c></row>'

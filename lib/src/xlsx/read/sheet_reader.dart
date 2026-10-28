@@ -51,9 +51,9 @@ final class XlsxReadCell {
   /// be read exactly; the second case is reported as an [XlsxWarning].
   final Object? value;
 
-  /// The formula text as written in the file, without a leading `=`, or
-  /// `null` when the cell has no formula. [value] is then the result the
-  /// file cached for it.
+  /// The formula text as written in the file, only `_xHHHH_` decoded (a
+  /// leading `=` is not removed or added), or `null` when the cell has no
+  /// formula. [value] is then the result the file cached for it.
   final String? formula;
 
   @override

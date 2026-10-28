@@ -32,6 +32,8 @@ void _compare(String where, Object? value, String stored) {
 }
 
 void main() {
+  test('there are fixtures to read', () => expect(allFixtures(), isNotEmpty));
+
   for (final Fixture fixture in allFixtures()) {
     test('reads ${fixture.name} back as the writer stored it', () {
       final XlsxReader reader = XlsxReader(fixture.build());

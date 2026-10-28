@@ -90,7 +90,7 @@ reads a cell's `t` attribute (decision 0007, enforced by
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | `<f>` without `<v>` | value `null`, `formulaWithoutValue`; the formula text is still returned | the file saved no result; the formula is data | `test/xlsx/read/cell_decoder_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
-| A formula with a value | both are returned; the formula is `_xHHHH_` decoded, without a leading `=` | the cached result is what the file shows | `test/xlsx/read/cell_decoder_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
+| A formula with a value | both are returned; the formula is as written in the file, only `_xHHHH_` decoded (SpreadsheetML stores no leading `=`, and the reader neither strips nor adds one) | the cached result is what the file shows | `test/xlsx/read/cell_decoder_test.dart`, `test/xlsx/read/xlsx_reader_test.dart`, `test/xlsx/read/sheet_reader_test.dart` |
 | `t` absent or `n` | an `XlsxDecimal`; text that is not a number is `numberInvalid` | numbers keep the file's digits, never a `double` | `test/xlsx/read/cell_decoder_test.dart` |
 | A number without an exponent | the digits as written (`1234.50` and `007` stay); a leading `+` and a trailing `.` are dropped and `.5` becomes `0.5` | exact digits | `test/xlsx/read/cell_decoder_test.dart` |
 | A number with an exponent | the point moves; the written significant digits stay (`1.50E1` is `15.0`); the integer part loses leading zeros | `XlsxDecimal` has no exponent | `test/xlsx/read/cell_decoder_test.dart` |
@@ -116,8 +116,8 @@ reads a cell's `t` attribute (decision 0007, enforced by
 | A cell `r` that does not parse or names another row | placed after the previous cell, keeps its value, `cellReferenceInvalid` | do not trust the reference | `test/xlsx/read/sheet_reader_test.dart` |
 | A row `r` that is not a number | the row follows the previous one; `cellReferenceInvalid` on its first cell | same | `test/xlsx/read/sheet_reader_test.dart` |
 | A row `r` with leading zeros | that row | it is a number | `test/xlsx/read/sheet_reader_test.dart` |
-| Huge `r` values | never parsed to an `int`: more than 7 significant digits is past the last row | no overflow, no allocation | `test/xlsx/read/sheet_reader_test.dart` |
-| A cell past column XFD, or in a row past 1,048,575 | skipped, `cellOutsideSheet` naming the `r` when it is letters and digits only | reported, not silent | `test/xlsx/read/sheet_reader_test.dart` |
+| A huge row `r` | never parsed to an `int`: more than 7 significant digits is past the last row (a cell `r` with more than 7 row digits is `cellReferenceInvalid`) | no overflow, no allocation | `test/xlsx/read/sheet_reader_test.dart` |
+| A cell past column XFD, or in a row past 1,048,575 | skipped, `cellOutsideSheet` naming the `r` when it is 1 to 4 letters and 1 to 10 digits with optional `$` (upper-cased, `$` removed); otherwise the warning names no cell | reported, not silent | `test/xlsx/read/sheet_reader_test.dart` |
 | A row whose index is not greater than the previous row's | still yielded, in file order; `rowOutOfOrder` naming its first cell | file order is the file's | `test/xlsx/read/sheet_reader_test.dart` |
 | A second cell at the same column | replaces the first, `cellDuplicated` | the last wins | `test/xlsx/read/sheet_reader_test.dart` |
 | A part that is not a `<worksheet>` in the SpreadsheetML namespace, or has no `<sheetData>` | no rows | nothing to read | `test/xlsx/read/sheet_reader_test.dart` |
