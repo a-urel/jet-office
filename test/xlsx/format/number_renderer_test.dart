@@ -147,6 +147,43 @@ void main() {
     });
   });
 
+  group('scientific', () {
+    test('a mantissa and an exponent', () {
+      expect(t('0.00E+00', 12345), '1.23E+04');
+      expect(t('0.00E+00', 0), '0.00E+00');
+      expect(t('0.00E+00', -12345), '-1.23E+04');
+      expect(t('0.00E+00', 0.00012), '1.20E-04');
+      expect(t('0.00E+00', 99999), '1.00E+05');
+    });
+
+    test('E- shows only a minus, and more digits than placeholders', () {
+      expect(t('0E-0', 0.001), '1E-3');
+      expect(t('0E-0', 1000), '1E3');
+      expect(t('0.0E+0', 1.5e100), '1.5E+100');
+    });
+
+    test('engineering: the exponent is a multiple of the integer digits', () {
+      expect(t('##0.0E+0', 12200000), '12.2E+6');
+      expect(t('##0.0E+0', 0.000123), '123.0E-6');
+      expect(t('##0.0E+0', 1234), '1.2E+3');
+      expect(t('##0.0E+0', 0), '0.0E+0');
+    });
+
+    test('the letter is printed as written', () {
+      expect(t('0.0e+00', 12345), '1.2e+04');
+    });
+
+    test('literals, and the locale decimal separator', () {
+      expect(t(r'0.00E+00" m"', 12345), '1.23E+04 m');
+      expect(t('"x "0.00E+00', 12345), 'x 1.23E+04');
+      expect(t('0.00E+00', 12345, locale: commaLocale), '1,23E+04');
+    });
+
+    test('a value that rounds to zero shows no minus', () {
+      expect(t('0.00E+00', -0.0), '0.00E+00');
+    });
+  });
+
   group('parts', () {
     test('_x is padding', () {
       expect(parts('_(#,##0_)', 1234), <XlsxFormatPart>[

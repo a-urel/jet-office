@@ -33,10 +33,10 @@ List<XlsxFormatPart> renderNumber(
   required XlsxFormatLocale locale,
   required int generalWidth,
 }) => switch (_layoutOf(section)) {
-  // Scientific, fraction and General sections are laid out as fixed
-  // point, their own tokens left out, until their renderers exist.
+  _Layout.scientific => _renderScientific(section, value, showMinus, locale),
+  // Fraction and General sections are laid out as fixed point, their own
+  // tokens left out, until their renderers exist.
   _Layout.fixed ||
-  _Layout.scientific ||
   _Layout.fraction ||
   _Layout.general => _renderFixed(section, value, showMinus, locale),
 };
@@ -200,6 +200,150 @@ List<XlsxFormatPart> _renderFixed(
   return out.result;
 }
 
+/// Lays [value] out as a mantissa and an exponent: `0.00E+00`.
+///
+/// The mantissa has as many significant digits as the placeholders before
+/// the exponent marker; the digit placeholders after it set the least
+/// number of exponent digits. When the integer part has more than one
+/// placeholder and starts with `#`, the exponent is a multiple of the
+/// number of integer placeholders (`##0.0E+0`). Zero has exponent 0.
+List<XlsxFormatPart> _renderScientific(
+  FormatSection section,
+  ExcelNumber value,
+  bool showMinus,
+  XlsxFormatLocale locale,
+) {
+  final List<FormatToken> tokens = section.tokens;
+  final int marker = tokens.indexWhere((FormatToken t) => t is ExponentToken);
+  final ExponentToken exponentToken = tokens[marker] as ExponentToken;
+  final int point = _min(_pointIndex(tokens), marker);
+
+  final List<String> integerPlaceholders = <String>[];
+  final List<String> fractionPlaceholders = <String>[];
+  for (var k = 0; k < marker; k++) {
+    final FormatToken token = tokens[k];
+    if (token is DigitToken) {
+      (k < point ? integerPlaceholders : fractionPlaceholders).add(token.char);
+    }
+  }
+  var exponentPlaceholders = 0;
+  for (var k = marker + 1; k < tokens.length; k++) {
+    if (tokens[k] is DigitToken) exponentPlaceholders++;
+  }
+
+  final int integerColumns = integerPlaceholders.length;
+  final int fractionColumns = fractionPlaceholders.length;
+  final bool engineering = integerColumns > 1 && integerPlaceholders[0] == '#';
+  final ExcelNumber magnitude = value.abs();
+
+  // The digits and the exponent. The integer part has [integerDigits]
+  // digits; a carry in the rounding can move the exponent, so the layout
+  // is settled again until it holds.
+  var integerDigits = integerColumns;
+  var digits = '';
+  var exponent = 0;
+  for (var attempt = 0; attempt < 4; attempt++) {
+    final int count = _max(integerDigits + fractionColumns, 1);
+    final ({String digits, int exponent}) significant = magnitude.toSignificant(
+      count,
+    );
+    final int first = significant.exponent;
+    final int newExponent;
+    final int newIntegerDigits;
+    if (magnitude.isZero) {
+      newExponent = 0;
+      newIntegerDigits = integerColumns;
+    } else if (engineering) {
+      newExponent = _floorDiv(first, integerColumns) * integerColumns;
+      newIntegerDigits = first - newExponent + 1;
+    } else {
+      newExponent = first - integerColumns + 1;
+      newIntegerDigits = integerColumns;
+    }
+    digits = significant.digits;
+    exponent = newExponent;
+    if (newIntegerDigits == integerDigits) break;
+    integerDigits = newIntegerDigits;
+    digits = '';
+  }
+  if (digits.isEmpty) {
+    digits = magnitude
+        .toSignificant(_max(integerDigits + fractionColumns, 1))
+        .digits;
+  }
+
+  final String integerPart = magnitude.isZero
+      ? ''
+      : digits.substring(0, _min(integerDigits, digits.length));
+  final String fractionPart = digits.length > integerPart.length
+      ? digits.substring(integerPart.length)
+      : '';
+  final int lastShownFraction = _max(
+    _lastNonZero(fractionPart),
+    fractionPlaceholders.lastIndexOf('0'),
+  );
+
+  String exponentText = exponent.abs().toString();
+  if (exponentText.length < exponentPlaceholders) {
+    exponentText = exponentText.padLeft(exponentPlaceholders, '0');
+  }
+  final String exponentSign = exponent < 0
+      ? '-'
+      : (exponentToken.plus ? '+' : '');
+
+  final _Parts out = _Parts();
+  if (showMinus && !magnitude.isZero) out.text('-');
+
+  var integerSeen = 0;
+  var fractionSeen = 0;
+  for (var k = 0; k < tokens.length; k++) {
+    final FormatToken token = tokens[k];
+    switch (token) {
+      case DigitToken(:final String char) when k < marker && k < point:
+        final int column = integerColumns - 1 - integerSeen;
+        out.text(
+          column < integerPart.length
+              ? integerPart[integerPart.length - 1 - column]
+              : _blank(char),
+        );
+        integerSeen++;
+      case DigitToken(:final String char) when k < marker:
+        final int index = fractionSeen;
+        out.text(
+          index <= lastShownFraction && index < fractionPart.length
+              ? fractionPart[index]
+              : _blank(char),
+        );
+        fractionSeen++;
+      case DigitToken():
+        // An exponent placeholder: the exponent is written at the marker.
+        break;
+      case DecimalPointToken():
+        out.text(locale.decimalSeparator);
+      case ExponentToken():
+        out.text('${exponentToken.letter}$exponentSign$exponentText');
+      case PercentToken():
+        out.text('%');
+      case LiteralToken(:final String text):
+        out.text(text);
+      case LocaleTagToken(:final String currency):
+        out.text(currency);
+      case PaddingToken(:final String char):
+        out.add(XlsxFormatPadding(char));
+      case FillToken(:final String char):
+        out.add(XlsxFormatFill(char));
+      case CommaToken() ||
+          TextToken() ||
+          GeneralToken() ||
+          FractionSlashToken() ||
+          DateToken() ||
+          AmPmToken():
+        break;
+    }
+  }
+  return out.result;
+}
+
 /// The index of the decimal point in [tokens], or their length.
 int _pointIndex(List<FormatToken> tokens) {
   final int point = tokens.indexWhere(
@@ -264,6 +408,11 @@ int _lastNonZero(String digits) {
 }
 
 int _max(int a, int b) => a > b ? a : b;
+
+int _min(int a, int b) => a < b ? a : b;
+
+/// [a] divided by the positive [b], rounded toward minus infinity.
+int _floorDiv(int a, int b) => a >= 0 ? a ~/ b : -((-a + b - 1) ~/ b);
 
 /// The parts of a result, with adjacent text merged.
 final class _Parts {
