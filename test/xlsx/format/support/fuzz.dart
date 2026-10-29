@@ -7,8 +7,9 @@
 ///
 /// A seed gives the same cases on the VM and in a browser: the generator is
 /// [Xorshift32] (32-bit arithmetic only), the corpus is built from tables and
-/// fixtures that do not depend on the platform, and every value is built from
-/// digit strings.
+/// fixtures that do not depend on the platform, every number is built from
+/// digit strings and every `DateTime` and `Duration` from integer fields
+/// below 2^32. The locale and the date system come from the generator too.
 library;
 
 import 'package:jet_office/jet_office.dart';
@@ -25,7 +26,31 @@ typedef FormatFuzzCase = ({
   String code,
   Object? value,
   int generalWidth,
+  XlsxFormatLocale locale,
+  bool date1904,
 });
+
+/// The locales a case picks from: the three the library ships.
+const List<XlsxFormatLocale> formatFuzzLocales = <XlsxFormatLocale>[
+  XlsxFormatLocale.enUS,
+  XlsxFormatLocale.deDE,
+  XlsxFormatLocale.trTR,
+];
+
+const List<String> _localeNames = <String>['enUS', 'deDE', 'trTR'];
+
+/// One [XlsxNumberFormatter] for each locale of [formatFuzzLocales] and
+/// each date system, so a run reuses their caches.
+final class FormatFuzzFormatters {
+  final Map<(XlsxFormatLocale, bool), XlsxNumberFormatter> _formatters =
+      <(XlsxFormatLocale, bool), XlsxNumberFormatter>{};
+
+  /// The formatter for the locale and date system of [c].
+  XlsxNumberFormatter of(FormatFuzzCase c) => _formatters.putIfAbsent((
+    c.locale,
+    c.date1904,
+  ), () => XlsxNumberFormatter(locale: c.locale, date1904: c.date1904));
+}
 
 /// The characters mutations insert, besides letters.
 const String _special = '0#?.,%E+-/@"\\_*[];\$()<>=';
@@ -36,10 +61,11 @@ List<String>? _corpus;
 
 /// The format codes the fuzzer starts from, in a fixed order.
 ///
-/// Every built-in code (ids 0 to 49), every code of the enUS locale's
-/// table, every number format a fixture of `allFixtures()` stores and the
-/// literals of the formatter tests. The owner manifest lists no file yet, so
-/// it adds none.
+/// Every built-in code (ids 0 to 49), every built-in, long date and long
+/// time code of the three shipped locales, every number format a fixture of
+/// `allFixtures()` stores, the literals of the formatter tests, the codes of
+/// the owner checklist and a 240-character `dddd` repetition. The owner
+/// manifest lists no file yet, so it adds none.
 List<String> formatFuzzCorpus() {
   final List<String> codes = _corpus ??= () {
     final Set<String> set = <String>{};
@@ -47,7 +73,12 @@ List<String> formatFuzzCorpus() {
       final String? code = builtinNumberFormatCode(id);
       if (code != null) set.add(code);
     }
-    set.addAll(XlsxFormatLocale.enUS.builtinCodes.values);
+    for (final XlsxFormatLocale locale in formatFuzzLocales) {
+      set
+        ..addAll(locale.builtinCodes.values)
+        ..add(locale.longDateCode)
+        ..add(locale.longTimeCode);
+    }
     for (final Fixture fixture in allFixtures()) {
       final XlsxReader reader = XlsxReader(fixture.build());
       for (final XlsxReadSheet sheet in reader.sheets) {
@@ -59,7 +90,10 @@ List<String> formatFuzzCorpus() {
         }
       }
     }
-    set.addAll(testFormatCodes);
+    set
+      ..addAll(testFormatCodes)
+      ..addAll(ownerCheckFormatCodes)
+      ..add('dddd' * 60);
     return List<String>.unmodifiable(set);
   }();
   return codes;
@@ -77,6 +111,8 @@ List<FormatFuzzCase> formatFuzzCases(int seed, int count) {
         code: _code(random, corpus),
         value: _value(random),
         generalWidth: random.nextInt(8) == 0 ? 1 + random.nextInt(30) : 11,
+        locale: formatFuzzLocales[random.nextInt(formatFuzzLocales.length)],
+        date1904: random.nextInt(4) == 0,
       ),
   ];
 }
@@ -126,7 +162,7 @@ String _char(Xorshift32 r) => r.nextInt(3) == 0
     : _special[r.nextInt(_special.length)];
 
 Object? _value(Xorshift32 r) {
-  switch (r.nextInt(14)) {
+  switch (r.nextInt(16)) {
     case 0:
       return null;
     case 1:
@@ -160,9 +196,48 @@ Object? _value(Xorshift32 r) {
     case 9:
     case 10:
       return double.parse(_digits(r));
+    case 11:
+    case 12:
+      final String serial = _serial(r);
+      return r.nextInt(2) == 0 ? XlsxDecimal(serial) : double.parse(serial);
+    case 13:
+      return DateTime.utc(
+        1 + r.nextInt(10000),
+        1 + r.nextInt(12),
+        1 + r.nextInt(31),
+        r.nextInt(24),
+        r.nextInt(60),
+        r.nextInt(60),
+        r.nextInt(1000),
+      );
+    case 14:
+      final Duration duration = Duration(
+        days: r.nextInt(100000001),
+        hours: r.nextInt(24),
+        microseconds: r.nextInt(3600000000),
+      );
+      return r.nextInt(2) == 0 ? duration : -duration;
     default:
       return XlsxDecimal(_digits(r));
   }
+}
+
+/// A date serial: a whole part from 0 to 3,000,000 (past 9999-12-31), often
+/// below 100 (serial 0 and the phantom leap day), and a fraction of up to 15
+/// digits, often all nines (a time that rounds up); now and then negative.
+String _serial(Xorshift32 r) {
+  final StringBuffer out = StringBuffer();
+  if (r.nextInt(8) == 0) out.write('-');
+  out.write(r.nextInt(4) == 0 ? r.nextInt(100) : r.nextInt(3000001));
+  final int digits = r.nextInt(16);
+  if (digits > 0) {
+    out.write('.');
+    final bool nines = r.nextInt(4) == 0;
+    for (int i = 0; i < digits; i++) {
+      out.write(nines ? 9 : r.nextInt(10));
+    }
+  }
+  return out.toString();
 }
 
 String _string(Xorshift32 r) {
@@ -213,19 +288,18 @@ String describeFuzzValue(Object? value) => switch (value) {
 String _quote(String s) =>
     '"${s.length > 80 ? '${s.substring(0, 80)}...' : s}"';
 
-/// Formats [c] with [formatter]; null when every property holds, else a
+/// Formats [c] with the formatter of its locale and date system in
+/// [formatters]; null when every property holds, else a
 /// description of the first one broken.
 ///
 /// The properties: nothing is thrown, `text` has at most 1,000 characters
 /// more than a text value it may show unchanged, and the parts joined
 /// (each padding as one space, each fill left out) equal `text`.
-String? checkFormatCase(XlsxNumberFormatter formatter, FormatFuzzCase c) {
+String? checkFormatCase(FormatFuzzFormatters formatters, FormatFuzzCase c) {
   try {
-    final XlsxFormattedValue result = formatter.format(
-      c.value,
-      numberFormat: c.code,
-      generalWidth: c.generalWidth,
-    );
+    final XlsxFormattedValue result = formatters
+        .of(c)
+        .format(c.value, numberFormat: c.code, generalWidth: c.generalWidth);
     final Object? value = c.value;
     final int shown = value is String ? value.length : 0;
     if (result.text.length > 1000 + shown) {
@@ -254,4 +328,10 @@ String? checkFormatCase(XlsxNumberFormatter formatter, FormatFuzzCase c) {
 /// The failure line of [c] with [problem], as the test and the tool print it.
 String describeFormatFailure(FormatFuzzCase c, String problem) =>
     'seed ${c.seed} case ${c.index}: ${_quote(c.code)} '
-    '${describeFuzzValue(c.value)} width ${c.generalWidth}: $problem';
+    '${describeFuzzValue(c.value)} width ${c.generalWidth} '
+    '${describeFuzzSettings(c)}: $problem';
+
+/// The locale and date system of [c], such as `deDE 1904`.
+String describeFuzzSettings(FormatFuzzCase c) =>
+    '${_localeNames[formatFuzzLocales.indexOf(c.locale)]} '
+    '${c.date1904 ? '1904' : '1900'}';

@@ -27,6 +27,12 @@ import 'section_choice.dart';
 /// from [locale]; quoted literals are shown as written. [generalWidth] is
 /// the width a `General` section fits its number into.
 ///
+/// A locale tag shows its currency; its language and calendar do not
+/// matter in a number section. Calendar tags (`B1`, `B2`) and brackets the
+/// engine does not render (`[DBNum1]`, `[NatNum1]`) show nothing, so the
+/// digits stay Western; `sectionWarning` (in `date_renderer.dart`) reports
+/// them with `numberFormatUnsupported`.
+///
 /// Adjacent text is merged into one [XlsxFormatText], and empty text is
 /// left out.
 List<XlsxFormatPart> renderNumber(
@@ -136,7 +142,7 @@ List<XlsxFormatPart> _renderFixed(
     fractionPlaceholders.lastIndexOf('0'),
   );
 
-  final _Parts out = _Parts();
+  final FormatPartsBuilder out = FormatPartsBuilder();
   if (showMinus && !allZero) out.text('-');
 
   void writeColumn(int c, String placeholder) => _writeColumn(
@@ -198,7 +204,11 @@ List<XlsxFormatPart> _renderFixed(
           ExponentToken() ||
           FixedDenominatorToken() ||
           DateToken() ||
-          AmPmToken():
+          AmPmToken() ||
+          FractionalSecondsToken() ||
+          CalendarToken() ||
+          SystemFormatToken() ||
+          UnsupportedToken():
         // Not part of a fixed-point layout.
         break;
     }
@@ -218,7 +228,7 @@ List<XlsxFormatPart> _renderGeneral(
   XlsxFormatLocale locale,
   int width,
 ) {
-  final _Parts out = _Parts();
+  final FormatPartsBuilder out = FormatPartsBuilder();
   if (showMinus && !value.isZero) out.text('-');
   for (final FormatToken token in section.tokens) {
     switch (token) {
@@ -241,7 +251,11 @@ List<XlsxFormatPart> _renderGeneral(
           FractionSlashToken() ||
           FixedDenominatorToken() ||
           DateToken() ||
-          AmPmToken():
+          AmPmToken() ||
+          FractionalSecondsToken() ||
+          CalendarToken() ||
+          SystemFormatToken() ||
+          UnsupportedToken():
         // Not part of a General layout.
         break;
     }
@@ -340,7 +354,7 @@ List<XlsxFormatPart> _renderScientific(
       ? '-'
       : (exponentToken.plus ? '+' : '');
 
-  final _Parts out = _Parts();
+  final FormatPartsBuilder out = FormatPartsBuilder();
   if (showMinus && !magnitude.isZero) out.text('-');
 
   var integerSeen = 0;
@@ -387,7 +401,11 @@ List<XlsxFormatPart> _renderScientific(
           FractionSlashToken() ||
           FixedDenominatorToken() ||
           DateToken() ||
-          AmPmToken():
+          AmPmToken() ||
+          FractionalSecondsToken() ||
+          CalendarToken() ||
+          SystemFormatToken() ||
+          UnsupportedToken():
         break;
     }
   }
@@ -535,7 +553,7 @@ List<XlsxFormatPart> _renderFraction(
   final int integerColumns = integerPlaceholders.length;
   final int numeratorColumns = numeratorPlaceholders.length;
 
-  final _Parts out = _Parts();
+  final FormatPartsBuilder out = FormatPartsBuilder();
   if (showMinus && !allZero) out.text('-');
 
   void writeColumn(int c, String placeholder) => _writeColumn(
@@ -622,7 +640,11 @@ List<XlsxFormatPart> _renderFraction(
           GeneralToken() ||
           ExponentToken() ||
           DateToken() ||
-          AmPmToken():
+          AmPmToken() ||
+          FractionalSecondsToken() ||
+          CalendarToken() ||
+          SystemFormatToken() ||
+          UnsupportedToken():
         break;
     }
   }
@@ -724,7 +746,7 @@ List<_Comma?> _classifyCommas(List<FormatToken> tokens, int point) {
 /// [groupSeparator] after it when grouping is on (non-null) and the
 /// column starts a group of three.
 void _writeColumn(
-  _Parts out,
+  FormatPartsBuilder out,
   String digits,
   int c,
   String placeholder,
@@ -770,30 +792,3 @@ int _min(int a, int b) => a < b ? a : b;
 
 /// [a] divided by the positive [b], rounded toward minus infinity.
 int _floorDiv(int a, int b) => a >= 0 ? a ~/ b : -((-a + b - 1) ~/ b);
-
-/// The parts of a result, with adjacent text merged.
-final class _Parts {
-  final List<XlsxFormatPart> _parts = <XlsxFormatPart>[];
-  final StringBuffer _text = StringBuffer();
-
-  /// Appends [text] to the current text part.
-  void text(String text) => _text.write(text);
-
-  /// Appends [part] after the current text.
-  void add(XlsxFormatPart part) {
-    _flush();
-    _parts.add(part);
-  }
-
-  void _flush() {
-    if (_text.isEmpty) return;
-    _parts.add(XlsxFormatText(_text.toString()));
-    _text.clear();
-  }
-
-  /// The parts, the last text included.
-  List<XlsxFormatPart> get result {
-    _flush();
-    return _parts;
-  }
-}

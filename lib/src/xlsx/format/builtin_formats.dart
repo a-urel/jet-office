@@ -48,8 +48,8 @@ const Map<int, String> _builtinCodes = <int, String>{
 /// The en-US format code of the built-in number format [id], or `null` for
 /// an id this table does not hold.
 ///
-/// The table is ECMA-376 Part 1 §18.8.30: ids 0–22 and 37–49. Ids 23–36 and
-/// 50 and above are locale dependent, so they have no code here. A
+/// The table is ECMA-376 Part 1 §18.8.30: ids 0–22 and 37–49. Ids 23–36
+/// and 50 and above are locale dependent, so they have no code here. A
 /// differential style writes the code next to the id, because Excel does
 /// not look the id up there.
 String? builtinNumberFormatCode(int id) => _builtinCodes[id];

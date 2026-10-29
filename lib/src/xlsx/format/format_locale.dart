@@ -84,9 +84,15 @@ final class XlsxFormatLocale {
   final Map<int, String> builtinCodes;
 
   /// The region's long date, which `[$-F800]` shows.
+  ///
+  /// It must be a valid format code. Its first section is used; tags and
+  /// brackets in it are neither applied nor reported.
   final String longDateCode;
 
   /// The region's long time, which `[$-F400]` shows.
+  ///
+  /// It must be a valid format code. Its first section is used; tags and
+  /// brackets in it are neither applied nor reported.
   final String longTimeCode;
 
   /// The language of warning messages that matches this region.
@@ -94,11 +100,15 @@ final class XlsxFormatLocale {
 
   /// Whether the owner checked this locale's output against Excel for Mac.
   ///
-  /// An unchecked locale is built from macOS's region data and
+  /// An unchecked locale is built from CLDR's region data and
   /// LibreOffice's import tables and may differ from Excel in details.
   final bool verified;
 
   /// United States English.
+  ///
+  /// Names and AM/PM are Excel's English ones; the built-in codes come from
+  /// LibreOffice's import table for en-US. Not yet checked against Excel
+  /// for Mac ([verified] is false).
   static const XlsxFormatLocale enUS = XlsxFormatLocale(
     decimalSeparator: '.',
     groupSeparator: ',',
@@ -182,4 +192,201 @@ final class XlsxFormatLocale {
     messageLocale: XlsxLocale.en,
     verified: false,
   );
+
+  /// German (Germany).
+  ///
+  /// Month and day names come from CLDR, the abbreviations from CLDR's
+  /// stand-alone abbreviated forms without dots; the built-in codes come
+  /// from LibreOffice's import table for de-DE. Not yet checked against
+  /// Excel for Mac ([verified] is false).
+  static const XlsxFormatLocale deDE = XlsxFormatLocale(
+    decimalSeparator: ',',
+    groupSeparator: '.',
+    monthNames: <String>[
+      'Januar',
+      'Februar',
+      'März',
+      'April',
+      'Mai',
+      'Juni',
+      'Juli',
+      'August',
+      'September',
+      'Oktober',
+      'November',
+      'Dezember',
+    ],
+    monthAbbreviations: <String>[
+      'Jan',
+      'Feb',
+      'Mär',
+      'Apr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Dez',
+    ],
+    dayNames: <String>[
+      'Sonntag',
+      'Montag',
+      'Dienstag',
+      'Mittwoch',
+      'Donnerstag',
+      'Freitag',
+      'Samstag',
+    ],
+    dayAbbreviations: <String>['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'],
+    am: 'AM',
+    pm: 'PM',
+    trueText: 'WAHR',
+    falseText: 'FALSCH',
+    errorNames: <String, String>{
+      '#NULL!': '#NULL!',
+      '#DIV/0!': '#DIV/0!',
+      '#VALUE!': '#WERT!',
+      '#REF!': '#BEZUG!',
+      '#NAME?': '#NAME?',
+      '#NUM!': '#ZAHL!',
+      '#N/A': '#NV',
+    },
+    lcid: 0x407,
+    builtinCodes: <int, String>{
+      5: '#,##0 "€";-#,##0 "€"',
+      6: '#,##0 "€";[Red]-#,##0 "€"',
+      7: '#,##0.00 "€";-#,##0.00 "€"',
+      8: '#,##0.00 "€";[Red]-#,##0.00 "€"',
+      14: 'dd.mm.yyyy',
+      15: 'dd. mmm yy',
+      16: 'dd. mmm',
+      17: 'mmm yy',
+      18: 'h:mm AM/PM',
+      19: 'h:mm:ss AM/PM',
+      20: 'hh:mm',
+      21: 'hh:mm:ss',
+      22: 'dd.mm.yyyy hh:mm',
+      37: '#,##0 ;-#,##0 ',
+      38: '#,##0 ;[Red]-#,##0 ',
+      39: '#,##0.00 ;-#,##0.00 ',
+      40: '#,##0.00 ;[Red]-#,##0.00 ',
+      41: '_-* #,##0 _€_-;-* #,##0 _€_-;_-* "-" _€_-;_-@_-',
+      42: '_-* #,##0 "€"_-;-* #,##0 "€"_-;_-* "-" "€"_-;_-@_-',
+      43: '_-* #,##0.00 _€_-;-* #,##0.00 _€_-;_-* "-"?? _€_-;_-@_-',
+      44: '_-* #,##0.00 "€"_-;-* #,##0.00 "€"_-;_-* "-"?? "€"_-;_-@_-',
+    },
+    longDateCode: 'dddd, d. mmmm yyyy',
+    longTimeCode: 'hh:mm:ss',
+    messageLocale: XlsxLocale.de,
+    verified: false,
+  );
+
+  /// Turkish (Turkey).
+  ///
+  /// Month and day names come from CLDR, the abbreviations from CLDR's
+  /// stand-alone abbreviated forms without dots; the built-in codes come
+  /// from LibreOffice's import table for tr-TR. Not yet checked against
+  /// Excel for Mac ([verified] is false).
+  static const XlsxFormatLocale trTR = XlsxFormatLocale(
+    decimalSeparator: ',',
+    groupSeparator: '.',
+    monthNames: <String>[
+      'Ocak',
+      'Şubat',
+      'Mart',
+      'Nisan',
+      'Mayıs',
+      'Haziran',
+      'Temmuz',
+      'Ağustos',
+      'Eylül',
+      'Ekim',
+      'Kasım',
+      'Aralık',
+    ],
+    monthAbbreviations: <String>[
+      'Oca',
+      'Şub',
+      'Mar',
+      'Nis',
+      'May',
+      'Haz',
+      'Tem',
+      'Ağu',
+      'Eyl',
+      'Eki',
+      'Kas',
+      'Ara',
+    ],
+    dayNames: <String>[
+      'Pazar',
+      'Pazartesi',
+      'Salı',
+      'Çarşamba',
+      'Perşembe',
+      'Cuma',
+      'Cumartesi',
+    ],
+    dayAbbreviations: <String>['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'],
+    am: 'ÖÖ',
+    pm: 'ÖS',
+    trueText: 'DOĞRU',
+    falseText: 'YANLIŞ',
+    errorNames: <String, String>{
+      '#NULL!': '#BOŞ!',
+      '#DIV/0!': '#SAYI/0!',
+      '#VALUE!': '#DEĞER!',
+      '#REF!': '#BAŞV!',
+      '#NAME?': '#AD?',
+      '#NUM!': '#SAYI!',
+      '#N/A': '#YOK',
+    },
+    lcid: 0x41F,
+    builtinCodes: <int, String>{
+      5: '#,##0 "₺";-#,##0 "₺"',
+      6: '#,##0 "₺";[Red]-#,##0 "₺"',
+      7: '#,##0.00 "₺";-#,##0.00 "₺"',
+      8: '#,##0.00 "₺";[Red]-#,##0.00 "₺"',
+      14: 'dd.mm.yyyy',
+      15: 'dd.mmm.yy',
+      16: 'dd.mmm',
+      17: 'mmm.yy',
+      18: 'h:mm AM/PM',
+      19: 'h:mm:ss AM/PM',
+      20: 'hh:mm',
+      21: 'hh:mm:ss',
+      22: 'dd.mm.yyyy hh:mm',
+      37: '#,##0 ;-#,##0 ',
+      38: '#,##0 ;[Red]-#,##0 ',
+      39: '#,##0.00 ;-#,##0.00 ',
+      40: '#,##0.00 ;[Red]-#,##0.00 ',
+      41: '_-* #,##0 _₺_-;-* #,##0 _₺_-;_-* "-" _₺_-;_-@_-',
+      42: '_-* #,##0 "₺"_-;-* #,##0 "₺"_-;_-* "-" "₺"_-;_-@_-',
+      43: '_-* #,##0.00 _₺_-;-* #,##0.00 _₺_-;_-* "-"?? _₺_-;_-@_-',
+      44: '_-* #,##0.00 "₺"_-;-* #,##0.00 "₺"_-;_-* "-"?? "₺"_-;_-@_-',
+    },
+    longDateCode: 'd mmmm yyyy dddd',
+    longTimeCode: 'hh:mm:ss',
+    messageLocale: XlsxLocale.tr,
+    verified: false,
+  );
 }
+
+/// The shipped locale whose [XlsxFormatLocale.lcid] equals [language], or
+/// null when the library ships none for it.
+XlsxFormatLocale? shippedFormatLocale(int language) {
+  for (final XlsxFormatLocale locale in _shipped) {
+    if (locale.lcid == language) {
+      return locale;
+    }
+  }
+  return null;
+}
+
+const List<XlsxFormatLocale> _shipped = <XlsxFormatLocale>[
+  XlsxFormatLocale.enUS,
+  XlsxFormatLocale.deDE,
+  XlsxFormatLocale.trTR,
+];

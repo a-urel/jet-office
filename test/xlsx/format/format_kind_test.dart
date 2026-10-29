@@ -47,6 +47,10 @@ void main() {
       '[Red': FormatKind.number,
       'yyyy-mm-dd;-0;0;h:mm': FormatKind.number,
       'General;yyyy': FormatKind.date,
+      'B2yyyy-mm-dd': FormatKind.date,
+      '[\$-F800]dddd': FormatKind.date,
+      'h:mm:ss.00': FormatKind.time,
+      '[DBNum1]0': FormatKind.number,
     };
     for (final MapEntry<String, FormatKind> e in table.entries) {
       expect(classifyFormatCode(e.key), e.value, reason: e.key);

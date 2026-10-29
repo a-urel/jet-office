@@ -7,20 +7,19 @@
 ///
 /// For every seed of the inclusive range `--seeds` (default `1-20`, or a
 /// single seed such as `7`) it formats `--cases` (default 500) cases as
-/// `test/xlsx/format/support/fuzz.dart` describes. A case breaks a rule when
-/// the formatter throws, the code adds more than 1,000 characters or the
-/// parts joined differ from the text; it is printed as
-/// `seed <s> case <i>: <code> <value> width <w>: <problem>`, which
-/// `formatFuzzCases(s, i + 1)` reproduces. A summary line follows; the exit
-/// code is 1 on any failure and 64 on bad arguments.
+/// `test/xlsx/format/support/fuzz.dart` describes, each in one of the three
+/// shipped locales and either date system. A case breaks a rule when the
+/// formatter throws, the code adds more than 1,000 characters or the parts
+/// joined differ from the text; it is printed as
+/// `seed <s> case <i>: <code> <value> width <w> <locale> <system>: <problem>`,
+/// which `formatFuzzCases(s, i + 1)` reproduces. A summary line follows; the
+/// exit code is 1 on any failure and 64 on bad arguments.
 ///
 /// The quality gate runs seeds 1 to 4 with 200 cases each
 /// (`test/xlsx/format/fuzz_test.dart`).
 library;
 
 import 'dart:io';
-
-import 'package:jet_office/jet_office.dart';
 
 import '../test/xlsx/format/support/fuzz.dart';
 
@@ -37,10 +36,10 @@ void main(List<String> args) {
   int count = 0;
   int failures = 0;
   for (int seed = options.first; seed <= options.last; seed++) {
-    final XlsxNumberFormatter formatter = XlsxNumberFormatter();
+    final FormatFuzzFormatters formatters = FormatFuzzFormatters();
     for (final FormatFuzzCase c in formatFuzzCases(seed, options.cases)) {
       count++;
-      final String? problem = checkFormatCase(formatter, c);
+      final String? problem = checkFormatCase(formatters, c);
       if (problem != null) {
         failures++;
         stdout.writeln(describeFormatFailure(c, problem));
