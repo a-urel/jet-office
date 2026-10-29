@@ -35,7 +35,7 @@ print(shown.text); // (1,234.50)
   out), `parts` (`XlsxFormatText`, `XlsxFormatPadding`, `XlsxFormatFill`, for
   a viewer that lays the cell out), `color`, `overflow` (Excel shows `#`
   whatever the width) and `warning`.
-- `XlsxFormatLocale`: separators and words. Only `enUS` ships in N1; a
+- `XlsxFormatLocale`: separators and words. `enUS`, `deDE` and `trTR` ship; a
   caller can build another with the public constructor.
 
 `format` never throws for any code and any supported value. A value of
