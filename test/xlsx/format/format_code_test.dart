@@ -298,6 +298,11 @@ void main() {
         const DigitToken('0'),
       ]);
     });
+
+    test('a bare [] is one empty unsupported token', () {
+      expect(tokensOf('[]').single, const UnsupportedToken(''));
+      expect(parseFormatCode('[]').invalidReason, isNull);
+    });
   });
 
   group('number tokens', () {
@@ -547,6 +552,15 @@ void main() {
       ]);
       expect(parse('h:mm:ss.00').invalidReason, isNull);
       expect(parse('[ss].000').invalidReason, isNull);
+    });
+
+    test('ss.0.0 is two fractional-seconds tokens', () {
+      expect(tokensOf('ss.0.0'), <FormatToken>[
+        const DateToken('s', 2),
+        const FractionalSecondsToken(1),
+        const FractionalSecondsToken(1),
+      ]);
+      expect(parse('ss.0.0').invalidReason, isNull);
     });
 
     test('dots between date tokens stay literal', () {

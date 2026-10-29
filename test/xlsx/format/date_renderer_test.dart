@@ -256,6 +256,11 @@ void main() {
       expect(t('h:mm a/p', 0.0625), '1:30 a');
     });
 
+    test('mixed-case A/p shows the letter as written', () {
+      expect(t('h:mm A/p', 0.5625), '1:30 p');
+      expect(t('h:mm a/P', 0.5625), '1:30 P');
+    });
+
     test('minutes are truncated', () {
       expect(t('h:mm', 0.437268518518519), '10:29');
     }, skip: 'Owner Excel check C9');
@@ -269,6 +274,19 @@ void main() {
       expect(t('h:mm:ss.0', 0.437495370370370), '10:29:59.6');
       expect(t('h:mm:ss.00', 0.437495370370370), '10:29:59.60');
       expect(t('h:mm:ss.000', 0.5), '12:00:00.000');
+    });
+
+    test('fractional seconds carry into the next day', () {
+      expect(t('h:mm:ss.00', 0.99999999999), '0:00:00.00');
+      expect(t('h:mm:ss.000', 0.9999999999), '0:00:00.000');
+    });
+
+    test('fractional seconds carry into the minutes', () {
+      expect(t('mm:ss.00', 0.000694444), '01:00.00');
+    });
+
+    test('ss.0.0 shows the tenths twice', () {
+      expect(t('ss.0.0', 0.000688078703704), '59.5.5');
     });
 
     test('built-in 47', () {
@@ -366,6 +384,11 @@ void main() {
 
     test('1904: the minus goes before a leading literal', () {
       expect(t('"t "h:mm', -0.25, date1904: true), '-t 6:00');
+    });
+
+    test('1904: the minus goes before a leading fill or padding', () {
+      expect(t('* h:mm', -0.25, date1904: true), '-6:00');
+      expect(t('_(h:mm', -0.25, date1904: true), '- 6:00');
     });
 
     test('1904: a date token makes it null', () {

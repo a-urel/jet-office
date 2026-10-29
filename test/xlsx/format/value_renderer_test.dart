@@ -160,6 +160,14 @@ void main() {
       expect(r.parts, <XlsxFormatPart>[const XlsxFormatText('#')]);
       expect(r.section, isNull);
     });
+
+    test('no matching section overflows without a color or warning', () {
+      final RenderedValue r = render(50, '[>100]0;[<-100]0');
+      expect(r.overflow, isTrue);
+      expect(r.parts, <XlsxFormatPart>[const XlsxFormatText('#')]);
+      expect(r.section, isNull);
+      expect(r.warning, isNull);
+    });
   });
 
   group('dates', () {
@@ -200,6 +208,13 @@ void main() {
     test('an unsupported bracket in a number section', () {
       final RenderedValue r = render(5, '[DBNum1]0');
       expect(textOf(5, '[DBNum1]0'), '5');
+      expect(r.warning, XlsxWarningCode.numberFormatUnsupported);
+    });
+
+    test('an empty bracket shows the number and warns', () {
+      final RenderedValue r = render(5, '[]0');
+      expect(textOf(5, '[]0'), '5');
+      expect(r.overflow, isFalse);
       expect(r.warning, XlsxWarningCode.numberFormatUnsupported);
     });
 
@@ -269,6 +284,58 @@ void main() {
     test('a DateTime past the last serial', () {
       expect(render(DateTime.utc(275000), 'yyyy').overflow, isTrue);
       expect(textOf(DateTime.utc(275000), 'yyyy'), '#');
+    });
+
+    test('DateTime extremes before the first serial overflow', () {
+      for (final DateTime value in <DateTime>[
+        DateTime.utc(-271820, 1, 1),
+        DateTime(1, 1, 1),
+        DateTime(1899, 12, 30),
+      ]) {
+        final RenderedValue r = render(value, 'yyyy-mm-dd');
+        expect(r.overflow, isTrue, reason: '$value');
+        expect(r.parts, <XlsxFormatPart>[
+          const XlsxFormatText('#'),
+        ], reason: '$value');
+        expect(r.warning, isNull, reason: '$value');
+      }
+    });
+
+    test('the last millisecond of 9999 keeps its milliseconds', () {
+      final RenderedValue r = render(
+        DateTime(9999, 12, 31, 23, 59, 59, 999),
+        'yyyy-mm-dd hh:mm:ss.000',
+      );
+      expect(r.overflow, isFalse);
+      expect(
+        textOf(
+          DateTime(9999, 12, 31, 23, 59, 59, 999),
+          'yyyy-mm-dd hh:mm:ss.000',
+        ),
+        '9999-12-31 23:59:59.999',
+      );
+    });
+
+    test('1904: values before the epoch overflow in a date section', () {
+      for (final Object value in <Object>[
+        XlsxDecimal('-1'),
+        DateTime(1903, 12, 31),
+      ]) {
+        final RenderedValue r = render(value, 'yyyy-mm-dd', date1904: true);
+        expect(r.overflow, isTrue, reason: '$value');
+        expect(r.parts, <XlsxFormatPart>[
+          const XlsxFormatText('#'),
+        ], reason: '$value');
+      }
+    });
+
+    test('a negative Duration of 100,000 days or more overflows', () {
+      final RenderedValue r = render(
+        const Duration(days: -100001, hours: 3),
+        '[h]:mm',
+      );
+      expect(r.overflow, isTrue);
+      expect(r.parts, <XlsxFormatPart>[const XlsxFormatText('#')]);
     });
 
     test('a Duration is its serial', () {
