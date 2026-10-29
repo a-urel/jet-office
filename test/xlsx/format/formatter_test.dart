@@ -126,6 +126,13 @@ void main() {
       expect(formatter.format(50, numberFormat: '[>100]0').overflow, isFalse);
     });
 
+    // Excel for Mac in all three regions (u03-01, u03-04, u03-05).
+    test('the second section shows no minus after a condition', () {
+      expect(text(-5, '[>0]0;0'), '5');
+      expect(text(-5, '0;0'), '5');
+      expect(text(-5, '[<0]"neg "0;"other "0'), 'neg 5');
+    });
+
     test('a named color is rgb', () {
       final XlsxFormattedValue result = formatter.format(
         5,

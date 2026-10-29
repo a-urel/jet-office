@@ -22,10 +22,12 @@ import 'format_code.dart';
 ///
 /// The result's `value` is the absolute value of [value], and `showMinus`
 /// says whether the renderer prints a `-` before it: true for a negative
-/// number the section does not write a sign for. A section chosen for a
-/// negative number by its position (the second of a code without
-/// conditions) or by a condition that only negatives meet writes its own
-/// sign, so `showMinus` is false there.
+/// number the section does not write a sign for. The second section never
+/// shows the minus, with or without conditions (`[>0]0;0` shows -5 as `5`,
+/// as Excel for Mac does), and neither does a first section whose condition
+/// only negatives meet (`[<0]"neg "0;0` shows -5 as `neg 5`). The `General`
+/// a lone conditional section gets after it keeps its minus (`[>100]0`
+/// shows -50.5 as `-50.5`).
 ///
 /// The text section ([chooseTextSection]) never takes a number: `0;@`
 /// shows -5 as `-5` with its one number section, and `0;-0;@` shows 0 with
@@ -68,10 +70,7 @@ chooseNumberSection(ParsedFormat format, ExcelNumber value) {
   if (sections.length > 1) {
     final FormatSection second = sections[1];
     if (_holds(second.condition, value)) {
-      final bool minus = second.condition == null && sections.length == 2
-          ? _autoMinusAfter(first.condition!)
-          : !_onlyNegatives(second.condition);
-      return pick(second, sign < 0 && minus);
+      return pick(second, sign < 0 && identical(second, _general));
     }
   }
   if (sections.length > 2) return pick(sections[2], sign < 0);
@@ -126,14 +125,4 @@ bool _onlyNegatives(FormatCondition? condition) {
     '<=' || '=' => isNegative,
     _ => false,
   };
-}
-
-/// Whether the unconditioned second section of a two-section code prints the
-/// automatic minus, given the first section's [condition]: only for `=`, `>`
-/// or `>=` against a value of zero or more.
-bool _autoMinusAfter(FormatCondition condition) {
-  final ExcelNumber v = condition.value;
-  final bool nonNegative = v.isZero || !v.negative;
-  return nonNegative &&
-      (condition.op == '=' || condition.op == '>' || condition.op == '>=');
 }
