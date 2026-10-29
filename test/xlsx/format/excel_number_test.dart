@@ -72,6 +72,17 @@ void main() {
       expect(fixed(n, 2), (whole: '0', fraction: '00'));
     });
 
+    test('a subnormal double is zero, as Excel has no denormals', () {
+      for (final num v in <num>[1e-320, -1e-320, 5e-324, -5e-324]) {
+        final ExcelNumber n = ExcelNumber.from(v)!;
+        expect(n.isZero, isTrue, reason: '$v');
+        expect(n.negative, isFalse, reason: '$v');
+      }
+      expect(excel('0.${'0' * 309}2').isZero, isTrue);
+      expect(ExcelNumber.from(2.2250738585072014e-308)!.isZero, isFalse);
+      expect(ExcelNumber.from(-2.2250738585072014e-308)!.isZero, isFalse);
+    });
+
     test('another type is a programmer error', () {
       expect(() => ExcelNumber.from('1'), throwsArgumentError);
       expect(() => ExcelNumber.from(Object()), throwsArgumentError);

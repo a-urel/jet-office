@@ -68,6 +68,7 @@ another type, or a `generalWidth` below 1, is a programmer error and throws
 | Rule | Behaviour | Why | Test |
 |---|---|---|---|
 | Excel's number | a value is parsed with `double.parse` and written with 15 significant digits; the only `double` use besides the fraction approximation | Excel stores a double and shows 15 digits, so `0.30000000000000004` shows `0.3` | `test/xlsx/format/excel_number_test.dart` |
+| Subnormal numbers | a `double` below 2.2250738585072014E-308 in magnitude is zero (`1E-320` shows `0` in `General`, `-1E-320` shows `0.00E+00`) | Excel has no denormals | `test/xlsx/format/excel_number_test.dart`, `test/xlsx/format/formatter_test.dart` |
 | Rounding | scaling and rounding happen on that digit string, half away from zero, never with `toStringAsFixed` | `2.675` with `0.00` shows `2.68` as in Excel, on the VM and in JavaScript alike | `test/xlsx/format/excel_number_test.dart`, `test/xlsx/format/number_renderer_test.dart` |
 | Digit placeholders | `0` pads with a zero, `#` shows nothing, `?` a space; the first `.` is the decimal point | ECMA-376 | `test/xlsx/format/number_renderer_test.dart` |
 | Grouping and scaling | `,` between placeholders groups, after the last placeholder it divides by 1000 each; `%` multiplies by 100 each; separators come from the locale | ECMA-376, MS | `test/xlsx/format/number_renderer_test.dart` |
@@ -139,7 +140,6 @@ Further own rules the oracle should check, found while building N1:
 - `General`: a number with an exponent of -5 or less is always scientific
   (`0.00001` shows `1E-05`); widths other than 11 are unchecked, and a tiny
   width returns the shortest scientific form where Excel shows `#`.
-- A subnormal `double` is rendered as is; Excel has no denormals.
 
 ## Fuzzing
 

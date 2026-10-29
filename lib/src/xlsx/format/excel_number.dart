@@ -15,6 +15,10 @@ import '../values.dart';
 /// and converts the same; the cap keeps every exponent a small `int`.
 const int _maxExponent = 1000000000;
 
+/// The smallest positive normal `double`; anything nearer zero is
+/// subnormal, and Excel has no subnormal numbers.
+const double _minNormal = 2.2250738585072014e-308;
+
 /// A decimal number: a sign, significant digits and a decimal exponent.
 ///
 /// The digits have no leading or trailing zeros, and the exponent is that
@@ -30,7 +34,9 @@ final class ExcelNumber implements Comparable<ExcelNumber> {
   /// significant digits, as Excel does when it loads a file: so
   /// `0.30000000000000004` is `0.3` and `9007199254740993` is
   /// `9007199254740990`. Digits too large for a `double` are infinity and
-  /// give null. Any other type of [value] throws an [ArgumentError].
+  /// give null; a subnormal `double` (below 2.2250738585072014E-308 in
+  /// magnitude) is zero, as Excel has no denormals. Any other type of
+  /// [value] throws an [ArgumentError].
   static ExcelNumber? from(Object value) {
     final double number = switch (value) {
       XlsxDecimal() => value.toDouble(),
@@ -42,6 +48,8 @@ final class ExcelNumber implements Comparable<ExcelNumber> {
       ),
     };
     if (number.isNaN || number.isInfinite) return null;
+    // Excel has no denormals: a subnormal double is zero.
+    if (number.abs() < _minNormal) return parse('0');
     // Fixed (`2.67500000000000`) or exponential (`1.00000000000000e-7`),
     // depending on the magnitude; parse reads both.
     return parse(number.toStringAsPrecision(15));

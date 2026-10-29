@@ -1,4 +1,6 @@
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/format/formatter.dart'
+    show formatterCacheSize;
 import 'package:test/test.dart';
 
 final XlsxNumberFormatter formatter = XlsxNumberFormatter();
@@ -26,6 +28,12 @@ void main() {
 
     test('General', () {
       expect(text(123456789012, 'General'), '1.23457E+11');
+    });
+
+    test('a subnormal double shows as zero', () {
+      expect(text(1e-320, 'General'), '0');
+      expect(text(-1e-320, '0.00E+00'), '0.00E+00');
+      expect(text(5e-324, 'General'), '0');
     });
 
     test('text', () {
@@ -160,7 +168,7 @@ void main() {
       );
       expect(result.text, '1234.5');
       expect(result.warning, XlsxWarningCode.numberFormatInvalid);
-      expect(own.cacheSize, 0);
+      expect(formatterCacheSize(own), 0);
     });
 
     test('@ repeated on long text is refused before it is built', () {
@@ -243,7 +251,8 @@ void main() {
     for (int i = 0; i < 300000; i++) {
       final String shown = own.format(1, numberFormat: '0"$i"').text;
       if (shown != '1$i') fail('code $i shows $shown');
-      if (own.cacheSize > largest) largest = own.cacheSize;
+      final int size = formatterCacheSize(own);
+      if (size > largest) largest = size;
     }
     expect(largest, 1024);
   });

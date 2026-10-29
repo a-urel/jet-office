@@ -47,9 +47,6 @@ final class XlsxNumberFormatter {
 
   final Map<String, ParsedFormat> _cache = <String, ParsedFormat>{};
 
-  /// How many compiled codes the cache holds, at most 1,024.
-  int get cacheSize => _cache.length;
-
   /// Formats [value] with the number format [numberFormatId] and
   /// [numberFormat], as the reader gives them.
   ///
@@ -171,3 +168,10 @@ final class XlsxNumberFormatter {
     );
   }
 }
+
+/// How many compiled codes [formatter]'s cache holds, at most 1,024.
+///
+/// For tests: `lib/jet_office.dart` exports only [XlsxNumberFormatter], so
+/// this is not public API.
+int formatterCacheSize(XlsxNumberFormatter formatter) =>
+    formatter._cache.length;
