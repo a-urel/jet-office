@@ -113,9 +113,12 @@ final class XlsxFormatLocale {
 
   /// United States English.
   ///
-  /// Names and AM/PM are Excel's English ones; the built-in codes come from
-  /// LibreOffice's import table for en-US. Not yet checked against Excel
-  /// for Mac ([verified] is false).
+  /// Names and AM/PM are Excel's English ones. The built-in codes 14 and
+  /// 22 (a two-digit year) follow what Excel for Mac 16.114 shows in
+  /// en-US, and its text of 5–8 and 37–44 on -1234.5 and 1234.5 matches
+  /// these codes; the other codes come from LibreOffice's import table for
+  /// en-US. Not yet fully checked against Excel for Mac ([verified] is
+  /// false).
   static const XlsxFormatLocale enUS = XlsxFormatLocale(
     decimalSeparator: '.',
     groupSeparator: ',',
@@ -177,7 +180,7 @@ final class XlsxFormatLocale {
       6: r'$#,##0_);[Red]($#,##0)',
       7: r'$#,##0.00_);($#,##0.00)',
       8: r'$#,##0.00_);[Red]($#,##0.00)',
-      14: 'm/d/yyyy',
+      14: 'm/d/yy',
       15: 'd-mmm-yy',
       16: 'd-mmm',
       17: 'mmm-yy',
@@ -185,7 +188,7 @@ final class XlsxFormatLocale {
       19: 'h:mm:ss AM/PM',
       20: 'h:mm',
       21: 'h:mm:ss',
-      22: 'm/d/yyyy h:mm',
+      22: 'm/d/yy h:mm',
       37: '#,##0_);(#,##0)',
       38: '#,##0_);[Red](#,##0)',
       39: '#,##0.00_);(#,##0.00)',
@@ -204,9 +207,19 @@ final class XlsxFormatLocale {
   /// German (Germany).
   ///
   /// Month and day names come from CLDR, the abbreviations from CLDR's
-  /// stand-alone abbreviated forms without dots; the built-in codes come
-  /// from LibreOffice's import table for de-DE. Not yet checked against
-  /// Excel for Mac ([verified] is false).
+  /// stand-alone abbreviated forms without dots. The built-in codes 14 and
+  /// 22 (a two-digit year), 37–41 and 43, and the error names follow what
+  /// Excel for Mac 16.114 shows in de-DE; its text of 5–8, 42 and 44 on
+  /// -1234.5 and 1234.5 matches these codes; the other codes come from
+  /// LibreOffice's import table for de-DE.
+  ///
+  /// Excel's text of 37–41 and 43 on -1234.5 and 1234.5 is matched
+  /// exactly; the rest of those codes is assumed: the colour of 38 and 40
+  /// (`[Red]`, which a CSV cannot show), the fill of 41 and 43 (a fill is
+  /// not in Excel's CSV text), and their zero (`"-"`) and text sections,
+  /// written in Excel's accounting style. German Excel leaves `#CALC!`
+  /// untranslated. Not yet fully checked against Excel for Mac ([verified]
+  /// is false).
   static const XlsxFormatLocale deDE = XlsxFormatLocale(
     decimalSeparator: ',',
     groupSeparator: '.',
@@ -261,6 +274,8 @@ final class XlsxFormatLocale {
       '#NAME?': '#NAME?',
       '#NUM!': '#ZAHL!',
       '#N/A': '#NV',
+      '#SPILL!': '#ÜBERLAUF!',
+      '#CALC!': '#CALC!',
     },
     lcid: 0x407,
     builtinCodes: <int, String>{
@@ -268,7 +283,7 @@ final class XlsxFormatLocale {
       6: '#,##0 "€";[Red]-#,##0 "€"',
       7: '#,##0.00 "€";-#,##0.00 "€"',
       8: '#,##0.00 "€";[Red]-#,##0.00 "€"',
-      14: 'dd.mm.yyyy',
+      14: 'dd.mm.yy',
       15: 'dd. mmm yy',
       16: 'dd. mmm',
       17: 'mmm yy',
@@ -276,14 +291,14 @@ final class XlsxFormatLocale {
       19: 'h:mm:ss AM/PM',
       20: 'hh:mm',
       21: 'hh:mm:ss',
-      22: 'dd.mm.yyyy hh:mm',
-      37: '#,##0 ;-#,##0 ',
-      38: '#,##0 ;[Red]-#,##0 ',
-      39: '#,##0.00 ;-#,##0.00 ',
-      40: '#,##0.00 ;[Red]-#,##0.00 ',
-      41: '_-* #,##0 _€_-;-* #,##0 _€_-;_-* "-" _€_-;_-@_-',
+      22: 'dd.mm.yy hh:mm',
+      37: '#,##0;-#,##0',
+      38: '#,##0;[Red]-#,##0',
+      39: '#,##0.00;-#,##0.00',
+      40: '#,##0.00;[Red]-#,##0.00',
+      41: '_-* #,##0_-;-* #,##0_-;_-* "-"_-;_-@_-',
       42: '_-* #,##0 "€"_-;-* #,##0 "€"_-;_-* "-" "€"_-;_-@_-',
-      43: '_-* #,##0.00 _€_-;-* #,##0.00 _€_-;_-* "-"?? _€_-;_-@_-',
+      43: '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-',
       44: '_-* #,##0.00 "€"_-;-* #,##0.00 "€"_-;_-* "-"?? "€"_-;_-@_-',
     },
     longDateCode: 'dddd, d. mmmm yyyy',

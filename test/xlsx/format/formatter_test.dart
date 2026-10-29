@@ -188,17 +188,18 @@ void main() {
   });
 
   group('built-in ids by locale', () {
+    // Excel for Mac (c6): en-US and de-DE show a two-digit year, tr-TR four.
     test('id 14 without a code is the locale\'s short date', () {
-      expect(formatter.format(46323, numberFormatId: 14).text, '10/28/2026');
-      expect(de.format(46323, numberFormatId: 14).text, '28.10.2026');
+      expect(formatter.format(46323, numberFormatId: 14).text, '10/28/26');
+      expect(de.format(46323, numberFormatId: 14).text, '28.10.26');
       expect(tr.format(46323, numberFormatId: 14).text, '28.10.2026');
     });
 
     test('id 14 with the invariant code is the locale\'s short date', () {
       for (final (XlsxNumberFormatter f, String shown)
           in <(XlsxNumberFormatter, String)>[
-            (formatter, '10/28/2026'),
-            (de, '28.10.2026'),
+            (formatter, '10/28/26'),
+            (de, '28.10.26'),
             (tr, '28.10.2026'),
           ]) {
         final XlsxFormattedValue result = f.format(
@@ -211,11 +212,12 @@ void main() {
       }
     });
 
-    test('id 22 en', () {
+    test('id 22 en and de, as Excel for Mac shows them (c6)', () {
       expect(
         formatter.format(46323.5625, numberFormatId: 22).text,
-        '10/28/2026 13:30',
+        '10/28/26 13:30',
       );
+      expect(de.format(46323.5625, numberFormatId: 22).text, '28.10.26 13:30');
     });
 
     test('id 20 de', () {
@@ -228,7 +230,30 @@ void main() {
 
     test('id 7 de', () {
       expect(de.format(-1234.5, numberFormatId: 7).text, '-1.234,50 €');
-    }, skip: 'Owner Excel check C7');
+    });
+
+    test('ids 37-41 and 43 de, as Excel for Mac shows them (c7)', () {
+      const Map<int, (String, String)> shown = <int, (String, String)>{
+        37: ('-1.235', '1.235'),
+        38: ('-1.235', '1.235'),
+        39: ('-1.234,50', '1.234,50'),
+        40: ('-1.234,50', '1.234,50'),
+        41: ('-1.235 ', ' 1.235 '),
+        43: ('-1.234,50 ', ' 1.234,50 '),
+      };
+      for (final MapEntry<int, (String, String)> e in shown.entries) {
+        expect(
+          de.format(-1234.5, numberFormatId: e.key).text,
+          e.value.$1,
+          reason: 'id ${e.key} on -1234.5',
+        );
+        expect(
+          de.format(1234.5, numberFormatId: e.key).text,
+          e.value.$2,
+          reason: 'id ${e.key} on 1234.5',
+        );
+      }
+    });
 
     test('ids 5-8 and 37-44 tr, as Excel for Mac shows them (c7)', () {
       const Map<int, (String, String)> shown = <int, (String, String)>{
@@ -264,9 +289,9 @@ void main() {
       expect(tr.format(0.0625, numberFormatId: 19).text, '1:30:00 ÖÖ');
     });
 
-    test('id 15 de', () {
+    test('id 15 de, as Excel for Mac shows it (c6)', () {
       expect(de.format(46323, numberFormatId: 15).text, '28. Okt 26');
-    }, skip: 'Owner Excel check C6');
+    });
 
     test('id 14 with a different code uses the code as written', () {
       expect(
@@ -282,14 +307,14 @@ void main() {
         46323,
         numberFormatId: 27,
       );
-      expect(result.text, '10/28/2026');
+      expect(result.text, '10/28/26');
       expect(result.warning, XlsxWarningCode.numberFormatLocaleDependent);
     });
 
     test('ids 27-31, 36 and 50-58 show as id 14', () {
       for (final int id in <int>[27, 28, 29, 30, 31, 36, 50, 54, 58]) {
         final XlsxFormattedValue result = de.format(46323, numberFormatId: id);
-        expect(result.text, '28.10.2026', reason: 'id $id');
+        expect(result.text, '28.10.26', reason: 'id $id');
         expect(
           result.warning,
           XlsxWarningCode.numberFormatLocaleDependent,
@@ -440,7 +465,7 @@ void main() {
   test('the 1904 date system', () {
     expect(
       XlsxNumberFormatter(date1904: true).format(0, numberFormatId: 14).text,
-      '1/1/1904',
+      '1/1/04',
     );
   });
 
@@ -452,8 +477,8 @@ void main() {
       numberFormat: 'mm-dd-yy',
       isDate: true,
     );
-    expect(formatter.formatCell(cell).text, '10/28/2026');
-    expect(de.formatCell(cell).text, '28.10.2026');
+    expect(formatter.formatCell(cell).text, '10/28/26');
+    expect(de.formatCell(cell).text, '28.10.26');
   });
 
   group('invalid codes show General with numberFormatInvalid', () {

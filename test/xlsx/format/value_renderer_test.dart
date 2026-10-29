@@ -274,6 +274,25 @@ void main() {
         '#HESAPLA!',
       );
     });
+
+    test('#SPILL! is #ÜBERLAUF! in de-DE, #CALC! stays as written (c17)', () {
+      expect(
+        textOf(
+          const XlsxErrorValue('#SPILL!'),
+          'yyyy',
+          locale: XlsxFormatLocale.deDE,
+        ),
+        '#ÜBERLAUF!',
+      );
+      expect(
+        textOf(
+          const XlsxErrorValue('#CALC!'),
+          'yyyy',
+          locale: XlsxFormatLocale.deDE,
+        ),
+        '#CALC!',
+      );
+    });
   });
 
   group('other types', () {
