@@ -6,6 +6,7 @@
 library;
 
 import '../xml/xml_escape.dart';
+import 'format/format_kind.dart';
 
 /// A number format: either one of Excel's built-in formats, identified by
 /// id, or a custom format code.
@@ -163,104 +164,15 @@ XlsxNumFmt? _builtinFor(String code) => switch (code) {
 
 /// Whether [format] shows dates or times.
 ///
-/// Built-in ids 14 to 22 and 45 to 47 are date formats. A custom code is one
-/// when a single left-to-right scan finds any of `d m y h s` outside quoted
-/// literals (`"..."`), backslash escapes, the character after `_` (a space
-/// as wide as it) or `*` (it repeated to fill the cell), `[...]` sections,
-/// the word `General` and the markers `AM/PM` and `A/P` (each in any case).
-/// An unterminated quote or bracket ends the scan. So `AM/PM` alone, `0_d`
-/// and `0*d` are not dates, while `h AM/PM` is.
+/// Built-in ids 14 to 22 and 45 to 47 are date formats. A custom code is
+/// one when [classifyFormatCode] finds a date or a time in it, section by
+/// section (decision 0008). So `AM/PM` alone, `0_d` and `0*d` are not
+/// dates, nor is a code that mixes a date section with a time or number
+/// section (`yyyy-mm-dd;h:mm`), while `h AM/PM` and an elapsed `[h]` are.
 bool isDateFormat(XlsxNumFmt format) {
   final int? id = format.builtinId;
   if (id != null) {
     return (id >= 14 && id <= 22) || (id >= 45 && id <= 47);
   }
-  final String code = format.code!;
-  var i = 0;
-  while (i < code.length) {
-    final String c = code[i];
-    if (c == '"') {
-      final int close = code.indexOf('"', i + 1);
-      if (close < 0) return false;
-      i = close + 1;
-    } else if (c == r'\' || c == '_' || c == '*') {
-      // The next character is a literal, a width or a fill; a lone one at
-      // the end is skipped harmlessly.
-      i += 2;
-    } else if (c == '[') {
-      final int close = code.indexOf(']', i + 1);
-      if (close < 0) return false;
-      i = close + 1;
-    } else if (_isWordAt(code, i, _generalWord)) {
-      i += _generalWord.length;
-    } else if (_isWordAt(code, i, _amPm)) {
-      i += _amPm.length;
-    } else if (_isWordAt(code, i, _aP)) {
-      i += _aP.length;
-    } else if ('dmyhsDMYHS'.contains(c)) {
-      return true;
-    } else {
-      i++;
-    }
-  }
-  return false;
+  return classifyFormatCode(format.code!) != FormatKind.number;
 }
-
-const String _generalWord = 'general';
-const String _amPm = 'am/pm';
-const String _aP = 'a/p';
-
-/// Whether [code] holds the lowercase [word] at [i], in any case.
-bool _isWordAt(String code, int i, String word) =>
-    i + word.length <= code.length &&
-    code.substring(i, i + word.length).toLowerCase() == word;
-
-const Map<int, String> _builtinCodes = <int, String>{
-  0: 'General',
-  1: '0',
-  2: '0.00',
-  3: '#,##0',
-  4: '#,##0.00',
-  5: r'"$"#,##0_);("$"#,##0)',
-  6: r'"$"#,##0_);[Red]("$"#,##0)',
-  7: r'"$"#,##0.00_);("$"#,##0.00)',
-  8: r'"$"#,##0.00_);[Red]("$"#,##0.00)',
-  9: '0%',
-  10: '0.00%',
-  11: '0.00E+00',
-  12: '# ?/?',
-  13: '# ??/??',
-  14: 'mm-dd-yy',
-  15: 'd-mmm-yy',
-  16: 'd-mmm',
-  17: 'mmm-yy',
-  18: 'h:mm AM/PM',
-  19: 'h:mm:ss AM/PM',
-  20: 'h:mm',
-  21: 'h:mm:ss',
-  22: 'm/d/yy h:mm',
-  37: '#,##0 ;(#,##0)',
-  38: '#,##0 ;[Red](#,##0)',
-  39: '#,##0.00;(#,##0.00)',
-  40: '#,##0.00;[Red](#,##0.00)',
-  41: r'_(* #,##0_);_(* \(#,##0\);_(* "-"_);_(@_)',
-  42: r'_("$"* #,##0_);_("$"* \(#,##0\);_("$"* "-"_);_(@_)',
-  43: r'_(* #,##0.00_);_(* \(#,##0.00\);_(* "-"??_);_(@_)',
-  44:
-      r'_("$"* #,##0.00_);_("$"* \(#,##0.00\);'
-      r'_("$"* "-"??_);_(@_)',
-  45: 'mm:ss',
-  46: '[h]:mm:ss',
-  47: 'mmss.0',
-  48: '##0.0E+0',
-  49: '@',
-};
-
-/// The en-US format code of the built-in number format [id], or `null` for
-/// an id this table does not hold.
-///
-/// The table is ECMA-376 Part 1 §18.8.30: ids 0–22 and 37–49. Ids 23–36 and
-/// 50 and above are locale dependent, so they have no code here. A
-/// differential style writes the code next to the id, because Excel does
-/// not look the id up there.
-String? builtinNumberFormatCode(int id) => _builtinCodes[id];

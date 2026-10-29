@@ -19,6 +19,7 @@ import 'border.dart';
 import 'differential_style.dart';
 import 'fill.dart';
 import 'font.dart';
+import 'format/builtin_formats.dart';
 import 'limits.dart';
 import 'number_format.dart';
 import 'style.dart';

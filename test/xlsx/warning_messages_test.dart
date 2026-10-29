@@ -289,6 +289,18 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
     XlsxWarningCode.mergeRangeInvalid,
     XlsxLocale.tr,
   ): '“S” sayfasındaki 1 birleştirilmiş aralığın başvurusu geçersiz; atlandı (A1).',
+  (
+    XlsxWarningCode.numberFormatInvalid,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' have a number format code that cannot be read; they show with the General format (A1).",
+  (
+    XlsxWarningCode.numberFormatInvalid,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ haben einen Zahlenformatcode, der nicht gelesen werden kann; sie werden mit dem Format „Standard“ angezeigt (A1).',
+  (
+    XlsxWarningCode.numberFormatInvalid,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücrenin sayı biçimi kodu okunamıyor; Genel biçimle gösteriliyor (A1).',
 };
 
 void main() {
@@ -370,13 +382,13 @@ void main() {
     );
   });
 
-  test('all 75 messages are worded exactly as specified', () {
+  test('all 78 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, XlsxLocale)> keys =
         <(XlsxWarningCode, XlsxLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final XlsxLocale locale in XlsxLocale.values) (code, locale),
         ];
-    expect(keys, hasLength(75));
+    expect(keys, hasLength(78));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, XlsxLocale) key in keys) {
       final XlsxWarning w =

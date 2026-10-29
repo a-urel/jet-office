@@ -57,9 +57,20 @@
 /// interface, run the reader in an isolate or a web worker too, and send
 /// the values it reads back to the caller.
 ///
+/// [XlsxNumberFormatter] shows a cell value as Excel for Mac does: it
+/// applies the cell's number format code with the separators and words of
+/// an [XlsxFormatLocale] and returns an [XlsxFormattedValue], whose text is
+/// what the cell shows and whose parts mark the padding and fill a viewer
+/// lays out. [XlsxNumberFormatter.formatCell] takes an [XlsxReadCell]
+/// directly. A code it cannot read shows as `General`, and the result's
+/// [XlsxFormattedValue.warning] says so.
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
+/// @docImport 'src/xlsx/format/format_locale.dart';
+/// @docImport 'src/xlsx/format/formatted_value.dart';
+/// @docImport 'src/xlsx/format/formatter.dart';
 /// @docImport 'src/xlsx/hyperlink.dart';
 /// @docImport 'src/xlsx/limits.dart';
 /// @docImport 'src/xlsx/list_export.dart';
@@ -124,6 +135,15 @@ export 'src/xlsx/fill.dart'
         XlsxPatternType;
 export 'src/xlsx/font.dart'
     show XlsxFont, XlsxFontScheme, XlsxFontScript, XlsxUnderline;
+export 'src/xlsx/format/format_locale.dart' show XlsxFormatLocale;
+export 'src/xlsx/format/formatted_value.dart'
+    show
+        XlsxFormatFill,
+        XlsxFormatPadding,
+        XlsxFormatPart,
+        XlsxFormatText,
+        XlsxFormattedValue;
+export 'src/xlsx/format/formatter.dart' show XlsxNumberFormatter;
 export 'src/xlsx/header_footer.dart' show XlsxHeaderFooter;
 export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
 export 'src/xlsx/image.dart' show XlsxImage, XlsxImageFormat;

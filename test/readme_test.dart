@@ -72,6 +72,15 @@ XlsxReader reading(XlsxResult out, void Function(String) print) {
   return reader;
 }
 
+void showing(void Function(String) print) {
+  final XlsxNumberFormatter formatter = XlsxNumberFormatter();
+  final XlsxFormattedValue shown = formatter.format(
+    XlsxDecimal('-1234.5'),
+    numberFormat: '#,##0.00;(#,##0.00)',
+  );
+  print(shown.text); // (1,234.50)
+}
+
 ({Uint8List bytes, List<XlsxWarning> warnings}) streaming() {
   final BytesBuilder file = BytesBuilder(copy: false);
   final XlsxStreamWriter book = XlsxStreamWriter(
@@ -121,6 +130,12 @@ void main() {
     // The total's formula has a cached result, so nothing is warned about
     // and the block's warnings loop prints nothing.
     expect(reader.warnings, isEmpty);
+  });
+
+  test('README showing block formats with the code', () {
+    final List<String> lines = <String>[];
+    showing(lines.add);
+    expect(lines, <String>['(1,234.50)']);
   });
 
   test('README streaming block writes a clean file', () {

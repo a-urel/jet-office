@@ -14,9 +14,9 @@ library;
 
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
+import '../format/format_kind.dart';
 import '../values.dart';
 import '../warnings.dart';
-import 'format_kind.dart';
 import 'read_cell.dart';
 import 'serial_dates.dart';
 import 'styles_reader.dart';

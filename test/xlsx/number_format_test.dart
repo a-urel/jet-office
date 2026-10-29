@@ -161,7 +161,18 @@ void main() {
       expect(d('General dd'), isTrue);
       expect(d('General'), isFalse);
       expect(d('0.00E+00'), isFalse);
-      expect(d('[h]'), isFalse);
+    });
+    // Decision 0008: a custom code is a date format when the reader's
+    // classifier, which looks at each section on its own, finds a date or a
+    // time, so an elapsed time alone is one and a code mixing a date section
+    // with a time or number section is not.
+    test('the per-section rule of decision 0008', () {
+      expect(d('[h]'), isTrue);
+      expect(d('[ss]'), isTrue);
+      expect(d('[m]'), isTrue);
+      expect(d('0;0;0;d'), isFalse); // only the first three sections count
+      expect(d('yyyy-mm-dd;h:mm'), isFalse);
+      expect(d('0.00;0.00;h:mm'), isFalse);
     });
   });
 }

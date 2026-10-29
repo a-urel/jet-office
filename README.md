@@ -94,6 +94,26 @@ the writers use: a formula without a cached result, for example, reads as
 [`docs/xlsx-reader.md`](docs/xlsx-reader.md) has the rules the reader
 enforces.
 
+## Showing values
+
+`XlsxNumberFormatter` shows a cell value as Excel for Mac does, with the
+cell's number format code: grouping, rounding, percent, scientific, fractions,
+`General` and text sections. It does not throw for a code it cannot read; it
+shows `General` and says so in the result's `warning`. Dates and times, and
+the German and Turkish regions, are still to come.
+
+```dart
+final XlsxNumberFormatter formatter = XlsxNumberFormatter();
+final XlsxFormattedValue shown = formatter.format(
+  XlsxDecimal('-1234.5'),
+  numberFormat: '#,##0.00;(#,##0.00)',
+);
+print(shown.text); // (1,234.50)
+```
+
+`formatCell` takes an `XlsxReadCell`. [`docs/number-format.md`](docs/number-format.md)
+has the rules and what is not yet confirmed against Excel.
+
 ## List export
 
 `XlsxListExport` writes a whole list in one call: an optional caption, a

@@ -299,5 +299,15 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
     (XlsxWarningCode.mergeRangeInvalid, XlsxLocale.tr) =>
       '“$sheet” sayfasındaki $count birleştirilmiş aralığın başvurusu '
           'geçersiz; atlandı$cells.',
+    (XlsxWarningCode.numberFormatInvalid, XlsxLocale.en) =>
+      "$count cell(s) on sheet '$sheet' have a number format code that "
+          'cannot be read; they show with the General format$cells.',
+    (XlsxWarningCode.numberFormatInvalid, XlsxLocale.de) =>
+      '$count Zelle(n) im Blatt „$sheet“ haben einen Zahlenformatcode, '
+          'der nicht gelesen werden kann; sie werden mit dem Format '
+          '„Standard“ angezeigt$cells.',
+    (XlsxWarningCode.numberFormatInvalid, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count hücrenin sayı biçimi kodu '
+          'okunamıyor; Genel biçimle gösteriliyor$cells.',
   };
 }
