@@ -6,9 +6,9 @@
 /// padding and fill (spec §5.2). Scaling and rounding work on the
 /// number's decimal digits ([ExcelNumber.shift], [ExcelNumber.toFixed]),
 /// never on a `double`, so the result is exact and the same on the VM and
-/// in JavaScript. The one exception is a fraction's best approximation,
-/// which runs on the fractional part as a `double`; IEEE arithmetic gives
-/// the same result on both.
+/// in JavaScript. The one exception is a fraction's continued-fraction
+/// approximation, which runs on the fractional part as a `double`; IEEE
+/// arithmetic gives the same result on both.
 library;
 
 import 'excel_number.dart';
@@ -268,8 +268,11 @@ List<XlsxFormatPart> _renderGeneral(
 /// The mantissa has as many significant digits as the placeholders before
 /// the exponent marker; the digit placeholders after it set the least
 /// number of exponent digits. When the integer part has more than one
-/// placeholder and starts with `#`, the exponent is a multiple of the
-/// number of integer placeholders (`##0.0E+0`). Zero has exponent 0.
+/// placeholder, of any kind, the exponent is a multiple of the number of
+/// integer placeholders (engineering: `##0.0E+0`, and `000.0E+0` shows
+/// 12345 as `012.3E+3`, Excel for Mac); the integer part pads per its
+/// placeholders. Zero has exponent 0 and shows one `0` in the last integer
+/// column (`#.##E+0` shows `0.E+0`, Excel for Mac).
 List<XlsxFormatPart> _renderScientific(
   FormatSection section,
   ExcelNumber value,
@@ -296,7 +299,7 @@ List<XlsxFormatPart> _renderScientific(
 
   final int integerColumns = integerPlaceholders.length;
   final int fractionColumns = fractionPlaceholders.length;
-  final bool engineering = integerColumns > 1 && integerPlaceholders[0] == '#';
+  final bool engineering = integerColumns > 1;
   final ExcelNumber magnitude = value.abs();
 
   // The digits and the exponent. The integer part has [integerDigits]
@@ -336,7 +339,7 @@ List<XlsxFormatPart> _renderScientific(
   }
 
   final String integerPart = magnitude.isZero
-      ? ''
+      ? (integerColumns > 0 ? '0' : '')
       : digits.substring(0, _min(integerDigits, digits.length));
   final String fractionPart = digits.length > integerPart.length
       ? digits.substring(integerPart.length)
@@ -430,16 +433,30 @@ const int _maxDenominatorDigits = maxFixedDenominatorDigits;
 /// improper fraction (`?/?` shows 1.5 as `3/2`).
 ///
 /// A fixed denominator rounds the numerator half away from zero, exactly.
-/// Otherwise the fraction is the best rational approximation with a
+/// Otherwise the fraction is the last continued-fraction convergent with a
 /// denominator below 10^d, d the denominator placeholders (at most 9
-/// counted). A fraction that rounds to one carries into the whole part.
-/// The numerator pads on the left, each placeholder as in fixed point;
-/// the denominator pads on the right with spaces under every placeholder,
-/// as a `0` there would change the value shown (`# 00/00` shows 1.5 as
-/// `1 01/2 `). A mixed section whose fraction is zero
-/// shows it blank: spaces under `?`, nothing under `#`, the slash and a
-/// fixed denominator too; a `0` placeholder in the fraction shows it in
-/// full instead.
+/// counted): `# ??/??` shows 3.14159 as `3  1/7 `, not the closer
+/// `3 14/99` (Excel for Mac). A fraction that rounds to one carries into
+/// the whole part.
+///
+/// The numerator pads on the left, each placeholder as in fixed point.
+/// The denominator pads on the right with spaces under every placeholder
+/// (`# ??/??` shows 0.75 as `  3/4 `); with a `0` among its placeholders
+/// it pads on the left instead, each placeholder as in fixed point
+/// (`# 00/00` shows 1.5 as `1 01/02`, Excel for Mac).
+///
+/// A mixed section whose fraction is zero shows it blank: spaces under
+/// `?`, the slash and a fixed denominator too; a `0` placeholder in the
+/// fraction shows it in full instead. Two narrow rules follow Excel for
+/// Mac where its data stops; neither is known to reach further:
+///
+/// * a blank fraction with no `?` and no fixed denominator is left out
+///   with the literals between the whole part and it (`# #/#` shows 2 as
+///   `2`); `# #/8` keeps its literal (`2 `), unconfirmed;
+/// * a zero shown in full (the fraction has a `0`) drops a whole part of
+///   `#` placeholders only, with the literals and commas between it and
+///   the numerator (`# 0/0` shows 0 as `0/1`); a blank zero shows the whole
+///   part as `0` (`# ?/?` shows 0 as `0    `).
 List<XlsxFormatPart> _renderFraction(
   FormatSection section,
   ExcelNumber value,
@@ -518,7 +535,7 @@ List<XlsxFormatPart> _renderFraction(
       denominatorPlaceholders.length,
       _maxDenominatorDigits,
     );
-    final ({int numerator, int denominator}) best = _bestFraction(
+    final ({int numerator, int denominator}) best = _lastConvergent(
       double.parse('0.${fixed.fraction}'),
       _pow10(digits) - 1,
     );
@@ -543,6 +560,25 @@ List<XlsxFormatPart> _renderFraction(
   final bool blankAsSpace =
       numeratorPlaceholders.contains('?') ||
       denominatorPlaceholders.contains('?');
+  // The tokens from the whole part's first placeholder to the numerator.
+  var wholeStart = numeratorStart;
+  var wholeEnd = numeratorStart;
+  for (var k = 0; k < numeratorStart; k++) {
+    if (tokens[k] is DigitToken) {
+      if (wholeStart == numeratorStart) wholeStart = k;
+      wholeEnd = k + 1;
+    }
+  }
+  // A blank fraction under `#` goes with the literals before it.
+  final bool dropFraction =
+      blankFraction && !blankAsSpace && fixedDenominator == null;
+  // A zero shown in full drops a whole part of `#` placeholders.
+  final bool dropWhole =
+      allZero &&
+      mixed &&
+      !blankFraction &&
+      integerPlaceholders.every((String c) => c == '#');
+  final bool denominatorRightAligned = denominatorPlaceholders.contains('0');
 
   // A mixed zero shows its whole part as `0`.
   final String integerDigits = !mixed
@@ -567,6 +603,18 @@ List<XlsxFormatPart> _renderFraction(
   var integerSeen = 0;
   for (var k = 0; k < tokens.length; k++) {
     final FormatToken token = tokens[k];
+    if (dropWhole &&
+        k >= wholeStart &&
+        k < numeratorStart &&
+        (token is DigitToken || token is LiteralToken || token is CommaToken)) {
+      continue;
+    }
+    if (dropFraction &&
+        k >= wholeEnd &&
+        k < numeratorStart &&
+        token is LiteralToken) {
+      continue;
+    }
     switch (token) {
       case DigitToken(:final String char) when k < numeratorStart:
         final int column = integerColumns - 1 - integerSeen;
@@ -602,15 +650,33 @@ List<XlsxFormatPart> _renderFraction(
         );
       case DigitToken(:final String char) when k < denominatorEnd:
         final int index = k - slash - 1;
-        // The denominator pads on the right with spaces under every
-        // placeholder: a `0` there would change the value shown.
-        out.text(
-          blankFraction
-              ? _blank(char)
-              : (index < denominatorDigits.length
-                    ? denominatorDigits[index]
-                    : ' '),
-        );
+        if (blankFraction) {
+          out.text(_blank(char));
+        } else if (denominatorRightAligned) {
+          if (index == 0 &&
+              denominatorDigits.length > denominatorPlaceholders.length) {
+            // Digits beyond the placeholders go before the first one.
+            out.text(
+              denominatorDigits.substring(
+                0,
+                denominatorDigits.length - denominatorPlaceholders.length,
+              ),
+            );
+          }
+          // Columns counted from the right.
+          final int column = denominatorPlaceholders.length - 1 - index;
+          out.text(
+            column < denominatorDigits.length
+                ? denominatorDigits[denominatorDigits.length - 1 - column]
+                : _blank(char),
+          );
+        } else {
+          // Left-aligned: spaces after the digits under every
+          // placeholder.
+          out.text(
+            index < denominatorDigits.length ? denominatorDigits[index] : ' ',
+          );
+        }
       case DigitToken():
         // A placeholder after the fraction: not part of the layout.
         break;
@@ -660,16 +726,19 @@ int _pow10(int n) {
   return result;
 }
 
-/// The fraction closest to [x], `0 <= x < 1`, with a denominator from 1
-/// to [maxDenominator]; of two equally close, the one with the smaller
-/// denominator.
+/// The last convergent of the continued fraction of [x], `0 <= x < 1`,
+/// whose denominator is at most [maxDenominator] (Excel for Mac: `0.14159`
+/// with denominators to 99 is `1/7`, not the closer semiconvergent
+/// `14/99`).
 ///
-/// It walks the continued fraction of [x] to the last convergent whose
-/// denominator fits, then checks the largest semiconvergent that fits
-/// too (`0.14159` with denominators to 99 is `14/99`, not the convergent
-/// `1/7`). Every numerator and denominator stays below [maxDenominator],
-/// so they are exact `int`s on the VM and in JavaScript.
-({int numerator, int denominator}) _bestFraction(double x, int maxDenominator) {
+/// At most 64 terms are taken, and a term that would pass
+/// [maxDenominator] (an infinite one included) stops the walk, so any
+/// [x] ends quickly. Every numerator and denominator stays at most
+/// [maxDenominator], so they are exact `int`s on the VM and in JavaScript.
+({int numerator, int denominator}) _lastConvergent(
+  double x,
+  int maxDenominator,
+) {
   // The convergents before the last and the last: p/q.
   var previousP = 0;
   var previousQ = 1;
@@ -679,16 +748,7 @@ int _pow10(int n) {
   for (var step = 0; step < 64; step++) {
     final double term = rest.floorToDouble();
     final double nextQ = term * q + previousQ;
-    if (nextQ > maxDenominator) {
-      final int k = (maxDenominator - previousQ) ~/ q;
-      final int semiP = previousP + k * p;
-      final int semiQ = previousQ + k * q;
-      final double convergentError = (x - p / q).abs();
-      final double semiError = (x - semiP / semiQ).abs();
-      return semiError < convergentError
-          ? (numerator: semiP, denominator: semiQ)
-          : (numerator: p, denominator: q);
-    }
+    if (!(nextQ <= maxDenominator)) break;
     final int a = term.toInt();
     final int nextP = a * p + previousP;
     previousP = p;
