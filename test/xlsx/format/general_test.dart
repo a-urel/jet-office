@@ -1,8 +1,6 @@
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/format/excel_number.dart';
 import 'package:jet_office/src/xlsx/format/format_code.dart';
-import 'package:jet_office/src/xlsx/format/format_locale.dart';
-import 'package:jet_office/src/xlsx/format/formatted_value.dart';
 import 'package:jet_office/src/xlsx/format/general.dart';
 import 'package:jet_office/src/xlsx/format/number_renderer.dart';
 import 'package:jet_office/src/xlsx/format/section_choice.dart';

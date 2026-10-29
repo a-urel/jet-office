@@ -147,6 +147,12 @@ enum XlsxWarningCode {
   /// skipped. One warning per sheet, whose [XlsxWarning.count] is the
   /// number of ranges skipped; it names no cell.
   mergeRangeInvalid,
+
+  /// Formatting: `XlsxNumberFormatter` cannot read a cell's number format
+  /// code (an unterminated quote or bracket, more than four sections, more
+  /// than two conditions, more than 255 characters) or the code would show
+  /// more than 1,000 characters. The cell shows with the General format.
+  numberFormatInvalid,
 }
 
 /// Something the writer changed or could not store exactly, or the reader
