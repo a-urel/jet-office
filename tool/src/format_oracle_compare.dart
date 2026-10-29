@@ -188,12 +188,13 @@ XlsxFormatLocale oracleLocale(String region) => switch (region) {
 ///   `#` matches: Excel writes `#` as many times as the column is wide.
 /// - When [ours] has an [XlsxFormatFill], [excel] may hold zero or more of
 ///   the fill character where the fill stands, and the other parts exactly
-///   (padding as one space).
+///   (padding as one space). Not for a fill character that could be part
+///   of a number (a digit, `.`, `,`, `#`, `-` or `+`) or that the text
+///   next to the fill holds: repeating it would hide a different number
+///   (`0*0` on 5 would accept `50000`), so such a result compares exactly.
 bool oracleTextMatches(String excel, XlsxFormattedValue ours) {
   if (ours.overflow) return _allHashes.hasMatch(excel);
-  if (!ours.parts.any((XlsxFormatPart p) => p is XlsxFormatFill)) {
-    return excel == ours.text;
-  }
+  if (!_fillTolerated(ours.parts)) return excel == ours.text;
   final StringBuffer pattern = StringBuffer('^');
   for (final XlsxFormatPart part in ours.parts) {
     pattern.write(switch (part) {
@@ -208,12 +209,26 @@ bool oracleTextMatches(String excel, XlsxFormattedValue ours) {
 
 final RegExp _allHashes = RegExp(r'^#+$');
 
-/// The error each manual formula of the case list shows, by its formula
-/// as the case writes it: the case list says it only in its note.
-const Map<String, String> _manualErrors = <String, String>{
-  '=SEQUENCE(1,2)': '#SPILL!',
-  '=FILTER(1,FALSE)': '#CALC!',
-};
+final RegExp _numberChar = RegExp(r'[0-9.,#+\-]');
+
+/// Whether [parts] hold a fill whose character can be repeated without
+/// hiding a different text.
+bool _fillTolerated(List<XlsxFormatPart> parts) {
+  bool any = false;
+  for (int i = 0; i < parts.length; i++) {
+    final XlsxFormatPart part = parts[i];
+    if (part is! XlsxFormatFill) continue;
+    any = true;
+    final String char = part.char;
+    if (_numberChar.hasMatch(char)) return false;
+    for (final int j in <int>[i - 1, i + 1]) {
+      if (j < 0 || j >= parts.length) continue;
+      final XlsxFormatPart next = parts[j];
+      if (next is XlsxFormatText && next.text.contains(char)) return false;
+    }
+  }
+  return any;
+}
 
 /// What [compareOracle] found for one [OracleCase].
 sealed class OracleOutcome {
@@ -251,8 +266,8 @@ final class OracleMismatch extends OracleOutcome {
       'OracleMismatch(${kase.id}, excel=«$expected», ours=«$actual»)';
 }
 
-/// An eye-only case with no eye text, or a manual formula whose error is
-/// not known: not compared; [OracleCase.note] says what to look at.
+/// An eye-only case with no eye text: not compared; [OracleCase.note] says
+/// what to look at.
 final class OracleByEye extends OracleOutcome {
   /// Creates a by-eye outcome of [kase].
   const OracleByEye(super.kase);
@@ -278,13 +293,12 @@ final class OracleMissingRow extends OracleOutcome {
 /// Each case is formatted by an `XlsxNumberFormatter` of [locale] in the
 /// case's date system: a code as `numberFormat`; a built-in id as
 /// `numberFormatId`, with the workbook's [OracleWorkbook.numFmts] code for
-/// it as `numberFormat`, as the reader passes them; a manual formula as the
-/// error it shows; `General` at the default width of 11. The texts match by
+/// it as `numberFormat`, as the reader passes them; a manual formula as its
+/// [OracleManual.error], in [locale]'s name for it; `General` at the default width of 11. The texts match by
 /// [oracleTextMatches].
 ///
 /// A case whose id [csv] lacks is [OracleMissingRow]. An eye-only case
-/// without [eye] text, or a manual formula of no known error, is
-/// [OracleByEye]. Throws [ArgumentError] when [workbook] is not a key of
+/// without [eye] text is [OracleByEye]. Throws [ArgumentError] when [workbook] is not a key of
 /// [cases].
 List<OracleOutcome> compareOracle(
   OracleCases cases,
@@ -330,9 +344,7 @@ OracleOutcome _compareCase(
       value = b;
     case OracleText(:final String text):
       value = text;
-    case OracleManual(:final String formula):
-      final String? error = _manualErrors[formula];
-      if (error == null) return OracleByEye(kase);
+    case OracleManual(:final String error):
       value = XlsxErrorValue(error);
   }
   final int? id = kase.builtinId;
@@ -529,3 +541,85 @@ Map<String, String> _stringMap(Object? raw, String path) {
 
 Never _fail(String path, String message) =>
     throw FormatException('$path: $message');
+
+/// What is wrong with [entry] for [cases], one line each, each starting
+/// with the region: a CSV of no workbook of [cases]; the main and 1904
+/// workbooks (keys `main` and `date1904`), and in en-US the `invalid` one,
+/// not run; an eye-only case of a run workbook without eye text; an eye
+/// text for no eye-only case of a run workbook. Whether the CSV files
+/// exist is for the caller, which reads them.
+List<String> oracleManifestProblems(
+  OracleManifestEntry entry,
+  OracleCases cases,
+) {
+  final String region = entry.region;
+  final List<String> problems = <String>[];
+  final Set<String> files = <String>{
+    for (final OracleWorkbook book in cases.workbooks.values) book.file,
+  };
+  for (final String file in entry.csv.keys) {
+    if (!files.contains(file)) {
+      problems.add('$region: $file is no workbook of the case list');
+    }
+  }
+  for (final String key in <String>[
+    'main',
+    'date1904',
+    if (region == 'en-US') 'invalid',
+  ]) {
+    final OracleWorkbook? book = cases.workbooks[key];
+    if (book == null) {
+      problems.add('$region: the case list has no workbook $key');
+    } else if (!entry.csv.containsKey(book.file)) {
+      problems.add('$region: ${book.file} not run');
+    }
+  }
+  final List<String> eyeIds = <String>[
+    for (final OracleCase kase in cases.cases)
+      if (kase.eyeOnly &&
+          entry.csv.containsKey(cases.workbooks[kase.workbook]?.file))
+        kase.id,
+  ];
+  final List<String> missing = <String>[
+    for (final String id in eyeIds)
+      if (!entry.eye.containsKey(id)) id,
+  ];
+  if (missing.isNotEmpty) {
+    problems.add('$region: no eye text for ${missing.join(', ')}');
+  }
+  final List<String> extra = <String>[
+    for (final String id in entry.eye.keys)
+      if (!eyeIds.contains(id)) id,
+  ];
+  if (extra.isNotEmpty) {
+    problems.add('$region: eye text for no eye-only case: ${extra.join(', ')}');
+  }
+  return problems;
+}
+
+/// What is wrong with a known-differences map [known] (case id, a space
+/// and the region, such as `c4-01 de-DE`, to the reason) for [cases], one
+/// line per bad key, in key order: a key not of that form, a case id not in [cases], a region not
+/// in [oracleRegions], or an empty reason.
+List<String> knownDifferenceProblems(
+  Map<String, String> known,
+  OracleCases cases,
+) {
+  final Set<String> ids = <String>{
+    for (final OracleCase kase in cases.cases) kase.id,
+  };
+  final List<String> problems = <String>[];
+  for (final MapEntry<String, String> e in known.entries) {
+    final List<String> words = e.key.split(' ');
+    if (words.length != 2 || words.any((String w) => w.isEmpty)) {
+      problems.add('${e.key}: expected <case id> <region>');
+    } else if (!ids.contains(words[0])) {
+      problems.add('${e.key}: no such case');
+    } else if (!oracleRegions.contains(words[1])) {
+      problems.add('${e.key}: no such region');
+    } else if (e.value.isEmpty) {
+      problems.add('${e.key}: no reason');
+    }
+  }
+  return problems;
+}

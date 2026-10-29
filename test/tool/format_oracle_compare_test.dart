@@ -326,12 +326,12 @@ void main() {
     });
 
     test('a fill matches zero or more of its character', () {
-      final XlsxFormattedValue filled = fmt('"a"*-0', '5');
+      final XlsxFormattedValue filled = fmt('"a"*~0', '5');
       expect(filled.parts.whereType<XlsxFormatFill>(), hasLength(1));
-      for (final String text in <String>['a5', 'a-5', 'a-----5']) {
+      for (final String text in <String>['a5', 'a~5', 'a~~~~~5']) {
         expect(oracleTextMatches(text, filled), isTrue, reason: text);
       }
-      for (final String text in <String>['a 5', 'a+5', 'a5-', '-a5', 'a-5 ']) {
+      for (final String text in <String>['a 5', 'a+5', 'a5~', '~a5', 'a~5 ']) {
         expect(oracleTextMatches(text, filled), isFalse, reason: text);
       }
     });
@@ -348,11 +348,41 @@ void main() {
       expect(oracleTextMatches(r' $1,234.50', accounting), isFalse);
     });
 
+    test('a fill char that can be part of a number is exact', () {
+      // 0*0 on 5: a 0 fill would hide 50000.
+      final XlsxFormattedValue zeros = fmt('0*0', '5');
+      expect(oracleTextMatches('5', zeros), isTrue);
+      expect(oracleTextMatches('50000', zeros), isFalse);
+      // 0*- on 5: a - fill would hide a sign.
+      final XlsxFormattedValue dashes = fmt('0*-', '5');
+      expect(oracleTextMatches('5', dashes), isTrue);
+      expect(oracleTextMatches('5-----', dashes), isFalse);
+      for (final String code in <String>['0*.', '#,##0*,', '0*#', '0*9']) {
+        final XlsxFormattedValue value = fmt(code, '5');
+        expect(oracleTextMatches('5', value), isTrue, reason: code);
+        expect(
+          oracleTextMatches('5${code[code.length - 1]}', value),
+          isFalse,
+          reason: code,
+        );
+      }
+    });
+
+    test('a fill char in an adjacent text is exact', () {
+      final XlsxFormattedValue value = fmt('"ax"*x0', '5');
+      expect(value.text, 'ax5');
+      expect(oracleTextMatches('ax5', value), isTrue);
+      expect(oracleTextMatches('axx5', value), isFalse);
+      final XlsxFormattedValue after = fmt('0*x"xb"', '5');
+      expect(oracleTextMatches('5xb', after), isTrue);
+      expect(oracleTextMatches('5xxb', after), isFalse);
+    });
+
     test('characters special to a regular expression are literal', () {
-      final XlsxFormattedValue filled = fmt(r'"(.)"*.0', '5');
-      expect(oracleTextMatches('(.)...5', filled), isTrue);
+      final XlsxFormattedValue filled = fmt(r'"(.)"*?0', '5');
+      expect(oracleTextMatches('(.)???5', filled), isTrue);
       expect(oracleTextMatches('(x)5', filled), isFalse);
-      expect(oracleTextMatches('(.)xx5', filled), isFalse);
+      expect(oracleTextMatches('(.)..5', filled), isFalse);
     });
   });
 
@@ -506,9 +536,9 @@ void main() {
       final List<OracleOutcome> outcomes = _compare(
         <OracleCase>[
           _case('over', code: '[>10]0', value: const OracleNumber('5')),
-          _case('fill', code: '"a"*-0', value: const OracleNumber('5')),
+          _case('fill', code: '"a"*~0', value: const OracleNumber('5')),
         ],
-        <String, String>{'over': '#####', 'fill': 'a---5'},
+        <String, String>{'over': '#####', 'fill': 'a~~~5'},
       );
       expect(outcomes, everyElement(isA<OracleMatch>()));
       expect((outcomes[0] as OracleMatch).text, '#####');
@@ -525,14 +555,14 @@ void main() {
       final OracleCase spill = _case(
         'c17-01',
         code: 'General',
-        value: const OracleManual('=SEQUENCE(1,2)'),
+        value: const OracleManual('=SEQUENCE(1,2)', '#SPILL!'),
         eyeOnly: true,
         note: 'spill error',
       );
       final OracleCase calc = _case(
         'c17-02',
         code: 'General',
-        value: const OracleManual('=FILTER(1,FALSE)'),
+        value: const OracleManual('=FILTER(1,FALSE)', '#CALC!'),
         eyeOnly: true,
         note: 'calc error',
       );
@@ -581,20 +611,21 @@ void main() {
         expect(outcomes, everyElement(isA<OracleByEye>()));
       });
 
-      test('a manual formula with no known error is by eye', () {
+      test('a manual case shows its error in the locale', () {
         final OracleOutcome outcome = _compare(
           <OracleCase>[
             _case(
               'x',
               code: 'General',
-              value: const OracleManual('=NOW()'),
+              value: const OracleManual('=NA()', '#N/A'),
               eyeOnly: true,
             ),
           ],
           const <String, String>{},
-          eye: <String, String>{'x': '1'},
+          locale: XlsxFormatLocale.deDE,
+          eye: <String, String>{'x': '#NV'},
         ).single;
-        expect(outcome, isA<OracleByEye>());
+        expect(outcome, isA<OracleMatch>());
       });
     });
   });
@@ -608,7 +639,7 @@ void main() {
           _case(
             'eye',
             code: 'General',
-            value: const OracleManual('=SEQUENCE(1,2)'),
+            value: const OracleManual('=SEQUENCE(1,2)', '#SPILL!'),
             eyeOnly: true,
             note: 'spill error',
           ),
@@ -748,6 +779,182 @@ void main() {
 
     test('a region is run at most once', () {
       rejects(<Object?>[_entry(), _entry()], '[1].region');
+    });
+  });
+
+  group('oracleManifestProblems', () {
+    const OracleWorkbook invalid = OracleWorkbook(
+      'invalid',
+      'format_oracle_invalid.xlsx',
+      false,
+      <int, String>{},
+    );
+    final OracleCases cases = OracleCases(
+      const <String, OracleWorkbook>{
+        'main': _main,
+        'date1904': _date1904,
+        'invalid': invalid,
+      },
+      <OracleCase>[
+        _case('m-1'),
+        _case('e-1', eyeOnly: true),
+        _case('e-2', eyeOnly: true),
+        _case('e-3', eyeOnly: true, workbook: 'date1904'),
+        _case('i-1', workbook: 'invalid'),
+      ],
+    );
+
+    OracleManifestEntry entry({
+      String region = 'de-DE',
+      List<String> files = const <String>[
+        'format_oracle.xlsx',
+        'format_oracle_1904.xlsx',
+      ],
+      Map<String, String> eye = const <String, String>{
+        'e-1': 'a',
+        'e-2': 'b',
+        'e-3': 'c',
+      },
+    }) => OracleManifestEntry(
+      region: region,
+      appleLocale: 'x',
+      excelLanguage: 'x',
+      excel: 'x',
+      macos: 'x',
+      confirmedBy: 'owner',
+      csv: <String, String>{
+        for (final String f in files)
+          f: '${f.substring(0, f.length - 5)}.$region.csv',
+      },
+      eye: eye,
+      notes: '',
+    );
+
+    test('a complete entry has none', () {
+      expect(oracleManifestProblems(entry(), cases), isEmpty);
+      expect(
+        oracleManifestProblems(
+          entry(
+            region: 'en-US',
+            files: <String>[
+              'format_oracle.xlsx',
+              'format_oracle_1904.xlsx',
+              'format_oracle_invalid.xlsx',
+            ],
+          ),
+          cases,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('every region runs the main and the 1904 workbook', () {
+      expect(
+        oracleManifestProblems(
+          entry(
+            files: <String>['format_oracle.xlsx'],
+            eye: const <String, String>{'e-1': 'a', 'e-2': 'b'},
+          ),
+          cases,
+        ),
+        <String>['de-DE: format_oracle_1904.xlsx not run'],
+      );
+      expect(
+        oracleManifestProblems(
+          entry(
+            files: <String>['format_oracle_1904.xlsx'],
+            eye: const <String, String>{'e-3': 'c'},
+          ),
+          cases,
+        ),
+        <String>['de-DE: format_oracle.xlsx not run'],
+      );
+    });
+
+    test('en-US runs the invalid workbook too', () {
+      expect(oracleManifestProblems(entry(region: 'en-US'), cases), <String>[
+        'en-US: format_oracle_invalid.xlsx not run',
+      ]);
+    });
+
+    test('a CSV of no workbook is a problem', () {
+      expect(
+        oracleManifestProblems(
+          entry(
+            files: <String>[
+              'format_oracle.xlsx',
+              'format_oracle_1904.xlsx',
+              'other.xlsx',
+            ],
+          ),
+          cases,
+        ),
+        <String>['de-DE: other.xlsx is no workbook of the case list'],
+      );
+    });
+
+    test('every eye-only case of a run workbook needs an eye text', () {
+      expect(
+        oracleManifestProblems(
+          entry(eye: const <String, String>{'e-2': 'b'}),
+          cases,
+        ),
+        <String>['de-DE: no eye text for e-1, e-3'],
+      );
+    });
+
+    test('an eye text needs an eye-only case', () {
+      expect(
+        oracleManifestProblems(
+          entry(
+            eye: const <String, String>{
+              'e-1': 'a',
+              'e-2': 'b',
+              'e-3': 'c',
+              'm-1': 'd',
+              'zz': 'e',
+            },
+          ),
+          cases,
+        ),
+        <String>['de-DE: eye text for no eye-only case: m-1, zz'],
+      );
+    });
+  });
+
+  group('knownDifferenceProblems', () {
+    final OracleCases cases = _cases(<OracleCase>[_case('c4-01')]);
+
+    test('a key names a case id and a region', () {
+      expect(
+        knownDifferenceProblems(const <String, String>{
+          'c4-01 de-DE': 'ruling 3',
+        }, cases),
+        isEmpty,
+      );
+      expect(
+        knownDifferenceProblems(const <String, String>{
+          'c4-02 de-DE': 'r',
+          'c4-01 fr-FR': 'r',
+          'c4-01': 'r',
+          'c4-01  de-DE': 'r',
+        }, cases),
+        <String>[
+          'c4-02 de-DE: no such case',
+          'c4-01 fr-FR: no such region',
+          'c4-01: expected <case id> <region>',
+          'c4-01  de-DE: expected <case id> <region>',
+        ],
+      );
+    });
+
+    test('a known difference needs a reason', () {
+      expect(
+        knownDifferenceProblems(const <String, String>{
+          'c4-01 de-DE': '',
+        }, cases),
+        <String>['c4-01 de-DE: no reason'],
+      );
     });
   });
 }

@@ -7,7 +7,8 @@
 /// with one gets a test per case of each workbook it ran (`<id> <region>`)
 /// that requires a match ([compareOracle]); an eye-only case without eye
 /// text, a case of a workbook not run in the region and a case in
-/// [knownDifferences] are skipped with their reason. Excel wins (decision
+/// [knownDifferences] are skipped with their reason; a known difference
+/// that now matches fails, so the map does not go stale. Excel wins (decision
 /// 0008): a mismatch is fixed in the formatter with a test, or recorded in
 /// [knownDifferences] with the ruling's reason. VM only: it reads files
 /// from disk.
@@ -40,6 +41,9 @@ void defineOracleTests(
   final List<OracleManifestEntry> manifest = parseOracleManifest(
     File('$folder/manifest.json').readAsStringSync(),
   );
+  test('knownDifferences name real cases and regions', () {
+    expect(knownDifferenceProblems(known, cases), isEmpty);
+  });
   for (final String region in oracleRegions) {
     final OracleManifestEntry? entry = manifest
         .where((OracleManifestEntry e) => e.region == region)
@@ -63,35 +67,12 @@ void _defineRegion(
 ) {
   final String region = entry.region;
   final XlsxFormatLocale locale = oracleLocale(region);
-  final Map<String, OracleWorkbook> byFile = <String, OracleWorkbook>{
-    for (final OracleWorkbook book in cases.workbooks.values) book.file: book,
-  };
 
-  test('$region manifest entry names real workbooks, CSVs and cases', () {
-    for (final MapEntry<String, String> e in entry.csv.entries) {
-      expect(byFile, contains(e.key), reason: 'workbook ${e.key}');
-      expect(
-        File('$folder/${e.value}').existsSync(),
-        isTrue,
-        reason: 'CSV ${e.value}',
-      );
+  test('$region manifest entry is complete and its CSVs exist', () {
+    expect(oracleManifestProblems(entry, cases), isEmpty);
+    for (final String csv in entry.csv.values) {
+      expect(File('$folder/$csv').existsSync(), isTrue, reason: 'CSV $csv');
     }
-    if (region == 'en-US') {
-      expect(
-        entry.csv,
-        contains(cases.workbooks['invalid']!.file),
-        reason: 'en-US runs the invalid workbook',
-      );
-    }
-    final Set<String> eyeIds = <String>{
-      for (final OracleCase kase in cases.cases)
-        if (kase.eyeOnly && entry.csv.containsKey(_file(cases, kase))) kase.id,
-    };
-    expect(
-      entry.eye.keys.where((String id) => !eyeIds.contains(id)),
-      isEmpty,
-      reason: 'eye texts for no eye-only case of a workbook run',
-    );
   });
 
   for (final OracleWorkbook book in cases.workbooks.values) {
@@ -137,16 +118,18 @@ void _defineRegion(
 
     for (final OracleOutcome outcome in outcomes) {
       final String name = '${outcome.kase.id} $region';
+      final String? reason = known[name];
+      if (reason != null && outcome is OracleMatch) {
+        test(name, () => fail('known difference now matches: remove it'));
+        continue;
+      }
       test(
         name,
         () => expect(outcome, isA<OracleMatch>(), reason: '$outcome'),
         skip:
-            known[name] ??
+            reason ??
             (outcome is OracleByEye ? 'by eye: ${outcome.kase.note}' : null),
       );
     }
   }
 }
-
-String _file(OracleCases cases, OracleCase kase) =>
-    cases.workbooks[kase.workbook]!.file;
