@@ -7,6 +7,8 @@
 /// else in the library interprets a format code.
 library;
 
+import 'excel_number.dart';
+
 /// Parses the number format [code] into its sections and tokens.
 ///
 /// Sections are separated by `;` outside quoted literals (`"..."`), the
@@ -96,8 +98,9 @@ final class FormatCondition {
   /// The operator: `=`, `<`, `>`, `<=`, `>=` or `<>`.
   final String op;
 
-  /// The number compared with, as written and trimmed, such as `-1.5`.
-  final String value;
+  /// The number compared with, exactly as written (`[<=-1.5]` holds
+  /// `-1.5`, `[>=1E3]` holds 1000), with no rounding to 15 digits.
+  final ExcelNumber value;
 
   @override
   bool operator ==(Object other) =>
@@ -629,7 +632,7 @@ final class _Parser {
     if (_condition != null) {
       _invalid ??= 'two conditions in one section';
     } else {
-      _condition = FormatCondition(op, value);
+      _condition = FormatCondition(op, ExcelNumber.parse(value));
     }
   }
 

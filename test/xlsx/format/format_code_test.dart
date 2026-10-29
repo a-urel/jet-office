@@ -1,3 +1,4 @@
+import 'package:jet_office/src/xlsx/format/excel_number.dart';
 import 'package:jet_office/src/xlsx/format/format_code.dart';
 import 'package:test/test.dart';
 
@@ -112,7 +113,7 @@ void main() {
       final ParsedFormat parsed = parseFormatCode('[Red][>100]0');
       final FormatSection section = parsed.sections.single;
       expect(section.color, const FormatColor(rgb: 0xFF0000));
-      expect(section.condition, const FormatCondition('>', '100'));
+      expect(section.condition, FormatCondition('>', ExcelNumber.parse('100')));
       expect(section.tokens, <FormatToken>[const DigitToken('0')]);
       expect(parsed.invalidReason, isNull);
     });
@@ -129,7 +130,7 @@ void main() {
       ops.forEach((String code, String op) {
         expect(
           parseFormatCode(code).sections.single.condition,
-          FormatCondition(op, '1'),
+          FormatCondition(op, ExcelNumber.parse('1')),
           reason: code,
         );
       });
@@ -139,15 +140,40 @@ void main() {
       final ParsedFormat parsed = parseFormatCode('[<=-1.5]0');
       expect(
         parsed.sections.single.condition,
-        const FormatCondition('<=', '-1.5'),
+        FormatCondition('<=', ExcelNumber.parse('-1.5')),
       );
       expect(parsed.invalidReason, isNull);
     });
 
-    test('a condition value is trimmed', () {
+    test('a condition value is trimmed and read as a number', () {
       expect(
         parseFormatCode('[>= 1E3 ]0').sections.single.condition,
-        const FormatCondition('>=', '1E3'),
+        FormatCondition('>=', ExcelNumber.parse('1000')),
+      );
+    });
+
+    test('every number the condition accepts is read as one', () {
+      const Map<String, String> values = <String, String>{
+        '[>.5]0': '0.5',
+        '[>5.]0': '5',
+        '[>+1e+2]0': '100',
+        '[<-0]0': '0',
+        '[>1.5e-3]0': '0.0015',
+      };
+      values.forEach((String code, String value) {
+        final ParsedFormat parsed = parseFormatCode(code);
+        expect(parsed.invalidReason, isNull, reason: code);
+        expect(
+          parsed.sections.single.condition!.value,
+          ExcelNumber.parse(value),
+          reason: code,
+        );
+      });
+      expect(
+        parseFormatCode(
+          '[>1e99999999999999999999]0',
+        ).sections.single.condition!.value.toDouble(),
+        double.infinity,
       );
     });
 
@@ -161,7 +187,10 @@ void main() {
       final ParsedFormat parsed = parseFormatCode('[>1]0;[>2]0;[>3]0');
       expect(parsed.invalidReason, isNotNull);
       expect(parsed.sections, hasLength(3));
-      expect(parsed.sections[2].condition, const FormatCondition('>', '3'));
+      expect(
+        parsed.sections[2].condition,
+        FormatCondition('>', ExcelNumber.parse('3')),
+      );
     });
 
     test('two conditions are valid', () {
