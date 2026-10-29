@@ -169,6 +169,8 @@ void main() {
     test('the per-section rule of decision 0008', () {
       expect(d('[h]'), isTrue);
       expect(d('[ss]'), isTrue);
+      expect(d('[m]'), isTrue);
+      expect(d('0;0;0;d'), isFalse); // only the first three sections count
       expect(d('yyyy-mm-dd;h:mm'), isFalse);
       expect(d('0.00;0.00;h:mm'), isFalse);
     });
