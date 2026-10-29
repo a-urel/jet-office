@@ -230,6 +230,19 @@
       "note": "own condition on the first section: minus in the second?"
     },
     {
+      "id": "u03-06",
+      "checks": [],
+      "unknown": 3,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "50"
+      },
+      "code": "[>100]0;[<-100]0",
+      "eyeOnly": false,
+      "note": "no condition matches: # (no colour)?"
+    },
+    {
       "id": "c4-01",
       "checks": [
         "C4a",
@@ -958,6 +971,21 @@
       "note": "own rule: A/P in mixed case is unchecked"
     },
     {
+      "id": "c5-08",
+      "checks": [
+        "C5"
+      ],
+      "unknown": 5,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5625"
+      },
+      "code": "h:mm a/P",
+      "eyeOnly": false,
+      "note": "own rule: a/P in mixed case is unchecked"
+    },
+    {
       "id": "c6-01",
       "checks": [
         "C6"
@@ -1674,6 +1702,32 @@
       "note": "carry with a date and no time"
     },
     {
+      "id": "c9-11",
+      "checks": [],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.99999999999"
+      },
+      "code": "h:mm:ss.00",
+      "eyeOnly": false,
+      "note": "carry of fractional seconds into the next day"
+    },
+    {
+      "id": "c9-12",
+      "checks": [],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.99999999999"
+      },
+      "code": "h:mm:ss.000",
+      "eyeOnly": false,
+      "note": "carry of fractional seconds into the next day"
+    },
+    {
       "id": "c10-01",
       "checks": [
         "C10"
@@ -1747,6 +1801,36 @@
       "code": "h:mm:ss",
       "eyeOnly": false,
       "note": "1904 workbook: minus or #"
+    },
+    {
+      "id": "c10-06",
+      "checks": [
+        "C10"
+      ],
+      "unknown": 10,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "-0.25"
+      },
+      "code": "* h:mm",
+      "eyeOnly": false,
+      "note": "1904: minus before the fill or padding?"
+    },
+    {
+      "id": "c10-07",
+      "checks": [
+        "C10"
+      ],
+      "unknown": 10,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "-0.25"
+      },
+      "code": "_(h:mm",
+      "eyeOnly": false,
+      "note": "1904: minus before the fill or padding?"
     },
     {
       "id": "c10b-01",
@@ -2329,6 +2413,19 @@
       "code": "ss.0.0",
       "eyeOnly": false,
       "note": "own rule: ss.0.0"
+    },
+    {
+      "id": "c15-03",
+      "checks": [],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.000688078703704"
+      },
+      "code": "ss.0.0",
+      "eyeOnly": false,
+      "note": "own rule: ss.0.0 on 59.45 s"
     },
     {
       "id": "c16-01",
