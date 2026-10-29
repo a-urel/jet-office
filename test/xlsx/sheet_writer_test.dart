@@ -102,4 +102,31 @@ void main() {
       );
     });
   });
+
+  // Decision 0008: the per-section rule decides whether a custom code shows
+  // a date.
+  group('a DateTime in a custom format', () {
+    List<XlsxWarningCode> codesFor(String code) {
+      final XlsxWriter book = XlsxWriter();
+      book.addSheet('S1').row(<Object?>[
+        XlsxCell(
+          DateTime(2026, 1, 1),
+          style: XlsxStyle(numFmt: XlsxNumFmt.custom(code)),
+        ),
+      ]);
+      return <XlsxWarningCode>[
+        for (final XlsxWarning w in book.close().warnings) w.code,
+      ];
+    }
+
+    test('warns when a date section is mixed with a time section', () {
+      expect(codesFor('yyyy-mm-dd;h:mm'), <XlsxWarningCode>[
+        XlsxWarningCode.dateInNonDateFormat,
+      ]);
+    });
+
+    test('does not warn for an elapsed time', () {
+      expect(codesFor('[h]'), isEmpty);
+    });
+  });
 }
