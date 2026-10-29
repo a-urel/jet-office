@@ -46,5 +46,29 @@
       "c17-02": "#CALC!"
     },
     "notes": "Region United States, Excel's own language English. Excel titled format_oracle.xlsx and format_oracle_invalid.xlsx 'Repaired' (no dialog); format_oracle_1904.xlsx opened without repair. In the repaired main workbook the same cells as in the tr-TR run had another number format than column B: u03-03 [>100]0 -> [>100]0;General; c8b-01, u12-01, u12-03, u13-07, c19-01 -> General; c15a-01 y -> yy; c15a-02 yyy and c15a-03 yyyyy -> yyyy; c15a-07 mmmmmm -> mmmm; own-01 0,.0 -> 0.0,. Column A of the eye sheet has width 10. The c17 formulas were entered as =SEQUENCE(1,2) (as a dynamic array) and =FILTER(1,FALSE). Excel saved the CSVs as UTF-8 with a BOM and CRLF line ends (the tr-TR run had CR alone), names as committed."
+  },
+  {
+    "region": "de-DE",
+    "appleLocale": "de_DE",
+    "excelLanguage": "Deutsch",
+    "excel": "Microsoft Excel for Mac 16.114.1 (1020)",
+    "macos": "27.2",
+    "confirmedBy": "owner",
+    "csv": {
+      "format_oracle.xlsx": "format_oracle.de-DE.csv",
+      "format_oracle_1904.xlsx": "format_oracle_1904.de-DE.csv",
+      "format_oracle_invalid.xlsx": "format_oracle_invalid.de-DE.csv"
+    },
+    "eye": {
+      "u14-01": "1,2346E+11",
+      "u14-02": "0,33333333",
+      "u14-03": "-0,3333333",
+      "u14-04": "1,2346E-05",
+      "u14-05": "12345,6789",
+      "u14-06": "0,00001",
+      "c17-01": "#ÜBERLAUF!",
+      "c17-02": "#CALC!"
+    },
+    "notes": "Region Germany, Excel's own language Deutsch. Excel titled format_oracle.xlsx and format_oracle_invalid.xlsx 'Repariert' (no dialog); format_oracle_1904.xlsx opened without repair. In the repaired main workbook the same cells as in the tr-TR and en-US runs had another number format than column B: u03-03 [>100]0 -> [>100]0;General; c8b-01, u12-01, u12-03, u13-07, c19-01 -> General; c15a-01 y -> yy; c15a-02 yyy and c15a-03 yyyyy -> yyyy; c15a-07 mmmmmm -> mmmm; own-01 0,.0 -> 0.0,. Column A of the eye sheet has width 10. The c17 formulas were entered as =SEQUENCE(1,2) (as a dynamic array) and =FILTER(1,FALSE); Excel shows them as =SEQUENZ(1;2) and =FILTER(1;FALSCH), and German Excel leaves #CALC! untranslated. The owner may have seen a macOS notice about incomplete German support; Excel's menus and formulas were German. Excel saved the CSVs as UTF-8 with a BOM and CRLF line ends, names as committed."
   }
 ]
