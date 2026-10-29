@@ -49,13 +49,18 @@ mkdir -p build/resaved
 LC_ALL=C.UTF-8 soffice --headless --convert-to 'xlsx:Calc MS Excel 2007 XML' \
   --outdir build/resaved build/fixtures/*.xlsx
 dart run tool/compare_resaved.dart build/fixtures build/resaved
+dart run tool/write_format_oracle.dart build/format_oracle
+LC_ALL=C.UTF-8 soffice --headless \
+  --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,true,false,false,1' \
+  --outdir build/format_oracle build/format_oracle/*.xlsx
+dart run tool/compare_format_libreoffice.dart build/format_oracle
 ```
 
 - `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
   `<name>.xlsx` and its expected values as `<name>.expected.json`.
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, to prove every
-  check still fails on a bad file. The `validate` job's last step writes it
+  check still fails on a bad file. The `validate` job's negative-control step writes it
   to `build/corrupt` and requires every check to reject it.
 - `tool/write_fixtures.dart` imports test helpers that use `package:archive`.
   That is allowed: the archive rule covers `lib/` only.
@@ -71,6 +76,13 @@ dart run tool/compare_resaved.dart build/fixtures build/resaved
   `tool/src/read_compare.dart` names it with a reason. If a LibreOffice
   instance is already running, add `-env:UserInstallation=file:///<dir>` to
   the `soffice` call.
+- `tool/compare_format_libreoffice.dart` compares the number formatter with
+  LibreOffice's text "as shown" of the oracle cases
+  (`test/fixtures/owner/number_format/`), exported from the workbooks
+  `tool/write_format_oracle.dart` writes, and lists every difference. It
+  reports and never fails: LibreOffice is a second opinion, not Excel, so
+  it exits 0 with differences (2 only on unusable input) and its CI steps
+  have `continue-on-error`. Its doc comment explains the filter options.
 - `docs/warning-messages.md` lists every warning message in `en`, `de` and
   `tr`, for the native-speaker check recorded in `docs/excel-checks.md`. It is
   generated: after a message changes, run

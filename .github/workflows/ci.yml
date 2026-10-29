@@ -165,3 +165,21 @@ jobs:
             exit 1
           fi
           echo "All checks rejected the corrupt file."
+
+      # A second opinion on the number formatter, not Excel: LibreOffice's
+      # text "as shown" for each oracle case. The tool lists differences
+      # and exits 0 with any; these steps never fail the job.
+      - name: Export the number format oracle as shown with LibreOffice
+        continue-on-error: true
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          dart run tool/write_format_oracle.dart build/format_oracle
+          soffice --headless \
+            --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,true,false,false,1' \
+            --outdir build/format_oracle build/format_oracle/*.xlsx
+          ls -1 build/format_oracle
+
+      - name: List LibreOffice's differences from the formatter
+        continue-on-error: true
+        run: dart run tool/compare_format_libreoffice.dart build/format_oracle
