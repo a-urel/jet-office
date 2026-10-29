@@ -206,6 +206,19 @@ void main() {
     test('a plain date code warns nothing', () {
       expect(render(46323, 'yyyy').warning, isNull);
     });
+
+    test('an overflowing date section keeps its section and warning', () {
+      final RenderedValue r = render(-1, '[Red]B2yyyy');
+      expect(r.overflow, isTrue);
+      expect(r.section, isNotNull);
+      expect(r.section!.color, isNotNull);
+      expect(r.warning, XlsxWarningCode.numberFormatUnsupported);
+    });
+
+    test('a text section never warns', () {
+      expect(textOf('abc', '[DBNum1]@'), 'abc');
+      expect(render('abc', '[DBNum1]@').warning, isNull);
+    });
   });
 
   group('non-numbers with a date code', () {

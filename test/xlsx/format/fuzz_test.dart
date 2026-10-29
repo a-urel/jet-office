@@ -12,7 +12,17 @@ const int _cases = 200;
 void main() {
   test('the corpus holds the built-in, fixture and test codes', () {
     final List<String> corpus = formatFuzzCorpus();
-    expect(corpus, containsAll(<String>['General', '0.00', 'm/d/yyyy']));
+    expect(
+      corpus,
+      containsAll(<String>[
+        'General',
+        '0.00',
+        'm/d/yyyy',
+        XlsxFormatLocale.deDE.builtinCodes[14]!,
+        XlsxFormatLocale.trTR.longDateCode,
+        '[\$-F800]dddd, mmmm dd, yyyy',
+      ]),
+    );
     expect(corpus.length, greaterThan(200));
   });
 
@@ -25,10 +35,10 @@ void main() {
 
   for (final int seed in _seeds) {
     test('seed $seed: $_cases cases format without breaking a rule', () {
-      final XlsxNumberFormatter formatter = XlsxNumberFormatter();
+      final FormatFuzzFormatters formatters = FormatFuzzFormatters();
       final List<String> failures = <String>[];
       for (final FormatFuzzCase c in formatFuzzCases(seed, _cases)) {
-        final String? problem = checkFormatCase(formatter, c);
+        final String? problem = checkFormatCase(formatters, c);
         if (problem != null) failures.add(describeFormatFailure(c, problem));
       }
       expect(failures, isEmpty, reason: failures.join('\n'));
@@ -37,4 +47,5 @@ void main() {
 }
 
 String describeCase(FormatFuzzCase c) =>
-    '${c.code}|${describeFuzzValue(c.value)}|${c.generalWidth}';
+    '${c.code}|${describeFuzzValue(c.value)}|${c.generalWidth}|'
+    '${describeFuzzSettings(c)}';

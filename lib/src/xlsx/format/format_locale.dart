@@ -94,11 +94,15 @@ final class XlsxFormatLocale {
 
   /// Whether the owner checked this locale's output against Excel for Mac.
   ///
-  /// An unchecked locale is built from macOS's region data and
+  /// An unchecked locale is built from CLDR's region data and
   /// LibreOffice's import tables and may differ from Excel in details.
   final bool verified;
 
   /// United States English.
+  ///
+  /// Names and AM/PM are Excel's English ones; the built-in codes come from
+  /// LibreOffice's import table for en-US. Not yet checked against Excel
+  /// for Mac ([verified] is false).
   static const XlsxFormatLocale enUS = XlsxFormatLocale(
     decimalSeparator: '.',
     groupSeparator: ',',
@@ -184,6 +188,11 @@ final class XlsxFormatLocale {
   );
 
   /// German (Germany).
+  ///
+  /// Month and day names come from CLDR, the abbreviations from CLDR's
+  /// stand-alone abbreviated forms without dots; the built-in codes come
+  /// from LibreOffice's import table for de-DE. Not yet checked against
+  /// Excel for Mac ([verified] is false).
   static const XlsxFormatLocale deDE = XlsxFormatLocale(
     decimalSeparator: ',',
     groupSeparator: '.',
@@ -269,6 +278,11 @@ final class XlsxFormatLocale {
   );
 
   /// Turkish (Turkey).
+  ///
+  /// Month and day names come from CLDR, the abbreviations from CLDR's
+  /// stand-alone abbreviated forms without dots; the built-in codes come
+  /// from LibreOffice's import table for tr-TR. Not yet checked against
+  /// Excel for Mac ([verified] is false).
   static const XlsxFormatLocale trTR = XlsxFormatLocale(
     decimalSeparator: ',',
     groupSeparator: '.',
