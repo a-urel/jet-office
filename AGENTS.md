@@ -83,6 +83,15 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
   reports and never fails: LibreOffice is a second opinion, not Excel, so
   it exits 0 with differences (2 only on unusable input) and its CI steps
   have `continue-on-error`. Its doc comment explains the filter options.
+- The number formatter's oracle is Excel for Mac, not LibreOffice.
+  `test/xlsx/format/oracle_test.dart` (in the gate, VM only) compares it
+  with the owner's Excel CSVs of the oracle workbooks, per region; a region
+  without CSVs prints `unverified` and passes. The README under
+  `test/fixtures/owner/number_format/` says how the owner runs them.
+  Excel wins: a mismatch is fixed with a test, or recorded in the test's
+  `knownDifferences` with a reason. Never edit a committed CSV or manifest
+  entry there without the owner (`docs/number-format.md`, "Excel as the
+  oracle").
 - `docs/warning-messages.md` lists every warning message in `en`, `de` and
   `tr`, for the native-speaker check recorded in `docs/excel-checks.md`. It is
   generated: after a message changes, run

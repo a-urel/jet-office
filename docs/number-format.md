@@ -9,14 +9,18 @@ scope; the design is
 [`superpowers/specs/2026-10-29-number-format-engine-design.md`](superpowers/specs/2026-10-29-number-format-engine-design.md)
 (git-ignored, so not repository history).
 
-This page covers milestones N1 and N2. N1 is numbers: sections and
+This page covers milestones N1 to N3. N1 is numbers: sections and
 conditions, fixed point, grouping and scaling, scientific, fractions,
 `General`, text, and the limits that make a hostile code harmless. N2 is
 dates, times and locales: date and time tokens, elapsed time, AM/PM, the
 1900 and 1904 date systems, `DateTime` and `Duration` values, locale tags
 and system formats, and the `de-DE` and `tr-TR` locales with their built-in
-codes. N3 is the oracle: a file the owner checks in Excel for Mac, which
-settles the Unknowns and the owner checklist below.
+codes. N3 is the oracle and release readiness: workbooks the owner opens in
+Excel for Mac, a test that compares the formatter with Excel's CSVs of
+them ("Excel as the oracle"), a LibreOffice second opinion, the N2
+deferred minors settled ("Recorded, not changed") and a benchmark
+("Speed"). The owner's run settles the Unknowns and the owner checklist
+below.
 
 ## API
 
@@ -48,6 +52,14 @@ print(shown.text); // (1,234.50)
 `format` never throws for any code and any supported value. A value of
 another type, or a `generalWidth` below 1, is a programmer error and throws
 `ArgumentError`.
+
+### Speed
+
+On an Apple M3 Pro, `formatCell` costs about 1.4 µs a cell on the VM and
+2.3 µs in Chrome: a serial date about 2.2 and 1.6 times a number, a
+`DateTime` about 3.8 and 3.7 times. The method and every figure are in
+[`benchmark.md`, "Format figures"](benchmark.md#format-figures); they are
+records, not thresholds.
 
 ## Rules the engine enforces
 
@@ -132,7 +144,10 @@ The three shipped locales, in short. All three have `verified` false: none
 is checked against Excel for Mac yet. Full month and day names come from
 CLDR; abbreviations are CLDR's stand-alone abbreviated forms without dots;
 the built-in codes come from LibreOffice's import tables. `deDE` and `trTR`
-are the least certain.
+are the least certain: their ids 18 and 19 keep `AM/PM`, which a German or
+Turkish user may not see (oracle cases `c6-05` and `c6-06` settle it). The
+table lists each `builtinCodes` entry in full, as
+`test/xlsx/format/format_locale_test.dart` asserts it.
 
 | | `enUS` | `deDE` | `trTR` |
 |---|---|---|---|
@@ -143,8 +158,20 @@ are the least certain.
 | Month, day abbreviations | `Jan` `Sun` | `Jan Feb Mär` …, `So Mo Di` … | `Oca Şub Mar` …, `Paz Pzt Sal` … |
 | Id 14, id 22 | `m/d/yyyy`, `m/d/yyyy h:mm` | `dd.mm.yyyy`, `dd.mm.yyyy hh:mm` | `dd.mm.yyyy`, `dd.mm.yyyy hh:mm` |
 | Id 15 to 17 | `d-mmm-yy`, `d-mmm`, `mmm-yy` | `dd. mmm yy`, `dd. mmm`, `mmm yy` | `dd.mmm.yy`, `dd.mmm`, `mmm.yy` |
+| Id 18, 19 | `h:mm AM/PM`, `h:mm:ss AM/PM` | `h:mm AM/PM`, `h:mm:ss AM/PM` | `h:mm AM/PM`, `h:mm:ss AM/PM` |
 | Id 20, 21 | `h:mm`, `h:mm:ss` | `hh:mm`, `hh:mm:ss` | `hh:mm`, `hh:mm:ss` |
-| Currency ids 5 to 8 | `$#,##0_);($#,##0)` … | `#,##0 "€";-#,##0 "€"` … | `#,##0 "₺";-#,##0 "₺"` … |
+| Id 5 | `$#,##0_);($#,##0)` | `#,##0 "€";-#,##0 "€"` | `#,##0 "₺";-#,##0 "₺"` |
+| Id 6 | `$#,##0_);[Red]($#,##0)` | `#,##0 "€";[Red]-#,##0 "€"` | `#,##0 "₺";[Red]-#,##0 "₺"` |
+| Id 7 | `$#,##0.00_);($#,##0.00)` | `#,##0.00 "€";-#,##0.00 "€"` | `#,##0.00 "₺";-#,##0.00 "₺"` |
+| Id 8 | `$#,##0.00_);[Red]($#,##0.00)` | `#,##0.00 "€";[Red]-#,##0.00 "€"` | `#,##0.00 "₺";[Red]-#,##0.00 "₺"` |
+| Id 37 | `#,##0_);(#,##0)` | `#,##0 ;-#,##0 ` | `#,##0 ;-#,##0 ` |
+| Id 38 | `#,##0_);[Red](#,##0)` | `#,##0 ;[Red]-#,##0 ` | `#,##0 ;[Red]-#,##0 ` |
+| Id 39 | `#,##0.00_);(#,##0.00)` | `#,##0.00 ;-#,##0.00 ` | `#,##0.00 ;-#,##0.00 ` |
+| Id 40 | `#,##0.00_);[Red](#,##0.00)` | `#,##0.00 ;[Red]-#,##0.00 ` | `#,##0.00 ;[Red]-#,##0.00 ` |
+| Id 41 | `_(* #,##0_);_(* (#,##0);_(* "-"_);_(@_)` | `_-* #,##0 _€_-;-* #,##0 _€_-;_-* "-" _€_-;_-@_-` | `_-* #,##0 _₺_-;-* #,##0 _₺_-;_-* "-" _₺_-;_-@_-` |
+| Id 42 | `_($* #,##0_);_($* (#,##0);_($* "-"_);_(@_)` | `_-* #,##0 "€"_-;-* #,##0 "€"_-;_-* "-" "€"_-;_-@_-` | `_-* #,##0 "₺"_-;-* #,##0 "₺"_-;_-* "-" "₺"_-;_-@_-` |
+| Id 43 | `_(* #,##0.00_);_(* (#,##0.00);_(* "-"??_);_(@_)` | `_-* #,##0.00 _€_-;-* #,##0.00 _€_-;_-* "-"?? _€_-;_-@_-` | `_-* #,##0.00 _₺_-;-* #,##0.00 _₺_-;_-* "-"?? _₺_-;_-@_-` |
+| Id 44 | `_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)` | `_-* #,##0.00 "€"_-;-* #,##0.00 "€"_-;_-* "-"?? "€"_-;_-@_-` | `_-* #,##0.00 "₺"_-;-* #,##0.00 "₺"_-;_-* "-"?? "₺"_-;_-@_-` |
 | Long date (`[$-F800]`) | `dddd, mmmm d, yyyy` | `dddd, d. mmmm yyyy` | `d mmmm yyyy dddd` |
 | Long time (`[$-F400]`) | `h:mm:ss AM/PM` | `hh:mm:ss` | `hh:mm:ss` |
 | `lcid` | `0x409` | `0x407` | `0x41F` |
@@ -245,40 +272,138 @@ Further own rules the oracle should check, found while building N2:
   one section is unchecked.
 - `A/p` in mixed case is unchecked.
 
+## Recorded, not changed
+
+The minors N2's review deferred, settled in N3. None changed the library.
+
+- The long date and long time codes of system formats are parsed into a
+  cache of their own, bounded by count: at most 16 codes, cleared when
+  full. Its bytes are bounded too: each code is a locale's own
+  `longDateCode` or `longTimeCode`, trusted data, never a file's.
+- A formatter knows the date system only from its constructor. Built
+  without the reader's `date1904`, it reads every serial of a 1904 workbook
+  in the 1900 system, and each date shows four years and a day early with
+  no warning. The constructor's doc says to pass `XlsxReader.date1904`.
+- These rows are now pinned by tests, with the behaviour of today
+  (`test/xlsx/format/date_renderer_test.dart`,
+  `test/xlsx/format/value_renderer_test.dart`,
+  `test/xlsx/format/format_code_test.dart`):
+  - `DateTime` extremes: year -271820, year 1 and 1899-12-30 overflow in
+    `yyyy-mm-dd`; the last millisecond of 9999 shows `.999`.
+  - 1904 before the epoch: `-1` and `DateTime(1903, 12, 31)` overflow in
+    `yyyy-mm-dd`.
+  - Fractional-second carry: `0.99999999999` with `h:mm:ss.00` shows
+    `0:00:00.00`; `0.000694444` with `mm:ss.00` shows `01:00.00`.
+  - A negative `Duration` of 100,000 days or more overflows in `[h]:mm`.
+  - 1904 minus before a fill or padding: `-0.25` with `* h:mm` shows
+    `-6:00`, with `_(h:mm` `- 6:00`.
+  - `ss.0.0` is two fractional-second tokens (`59.5.5`).
+  - Mixed-case `A/p` shows the letter as written (`1:30 p`).
+  - No section matching (`[>100]0;[<-100]0` on 50) overflows without a
+    color or a warning.
+  - A bare `[]` shows the number and warns `numberFormatUnsupported`.
+- Each shipped locale's `builtinCodes` is asserted as a whole map
+  (`test/xlsx/format/format_locale_test.dart`), so the "Locales" table
+  above and the code cannot drift apart unseen.
+
+Excel has the last word on the pinned rows: `ss.0.0` (`c15-02`,
+`c15-03`), mixed-case `A/p` (`c5-07`, `c5-08`), no-section overflow
+(`u03-06`) and the 1904 minus before fill or padding (`c10-06`, `c10-07`)
+are oracle cases too.
+
 ## Owner checklist (Excel for Mac)
 
 How: in a new workbook, set macOS region (System Settings → General →
 Language & Region) to the locale named, restart Excel, type the value into
 A1 (as a plain number, so it is a serial), then Format Cells → Custom →
-type the code. Report the text the cell shows (widen the column first). N3's
-oracle file will carry every case too; this list is what N2's pending tests
-assume.
+type the code. Report the text the cell shows (widen the column first). This
+list is what N2's pending tests assume. The oracle workbooks carry every
+item as the cases its Status names ("Excel as the oracle"); an item stays
+open until each region it names has matched or recorded those cases.
 
-| # | Locale | Code | Value | Look at | N2 assumes |
-|---|---|---|---|---|---|
-| C4a | de-DE | `mmm` / `ddd` | 46083 (Mon 2 Mar 2026) | abbreviation, dot or not | `Mär` / `Mo` |
-| C4b | tr-TR | `mmm` / `ddd` | 46083 | abbreviation | `Mar` / `Pzt` |
-| C4c | de-DE, tr-TR | `mmmmm` | 46083 | one letter | `M` |
-| C5 | de-DE, tr-TR | `h:mm AM/PM` and `h:mm A/P` | 0.5625 | the marker | de `1:30 PM` / `1:30 P`; tr `1:30 ÖS` / `1:30 P` |
-| C6 | de-DE, tr-TR | built-in ids 14–22 (Format Cells → Date/Time entries) | 46323.5625 | text | the locale tables above |
-| C7 | de-DE, tr-TR | built-in ids 5–8, 37–44 (Currency/Accounting entries) | -1234.5 | symbol, place | the locale tables above (`€`, `₺`) |
-| C8 | en-US, de-DE, tr-TR | `[$-F800]dddd, mmmm dd, yyyy` and `[$-F400]h:mm:ss AM/PM` | 46323.5625 | long date, long time | locale's `longDateCode` / `longTimeCode` |
-| C8b | en-US | `[$-407][$-F800]` | 46323 | long date | the en-US long date code with German names |
-| C9 | en-US | `h:mm` / `h:mm:ss` | 0.437268518518519 (10:29:40) and 0.99999999 | truncation, carry | `10:29`; `0:00` / `0:00:00` |
-| C9b | en-US | `yyyy-mm-dd h:mm:ss` | 46323.99999999 | carry into the date | `2026-10-29 0:00:00` |
-| C10 | en-US, 1904 workbook (Excel → Preferences → Calculation → Use 1904 date system) | `h:mm`, `[h]:mm`, `yyyy-mm-dd` | -0.25, -1.5, -1 | minus or `#` | `-6:00`, `-36:00`, `#` |
-| C10b | en-US, 1900 | `0;h:mm` | -0.5 | `#` or `12:00` | `#` |
-| C11 | en-US | `dddd yyyy-mm-dd` | 0, 1, 59, 60, 61 | weekday, day | `Saturday 1900-01-00`, `Sunday 1900-01-01`, `Tuesday 1900-02-28`, `Wednesday 1900-02-29`, `Thursday 1900-03-01` |
-| C15a | en-US | `y`, `yyy`, `yyyyy`, `e`, `bb`, `bbbb`, `mmmmmm` | 46323 | year digits, month | `26`, `2026`, `2026`, `2026`, `69`, `2569`, `October` |
-| C15b | de-DE | `dd/mm/yyyy` and `hh:mm:ss.00` | 46323.437505787 | `/` kept or `.`; decimal comma | `28/10/2026`; `10:30:00,50` |
-| C15c | en-US | `h:mm:ss.0000` | 0.5 | accepted? | invalid → `General` |
-| C15d | en-US | `h:mm.0` | 0.5 | fraction after minutes, not seconds | `12:00.0` |
-| C15e | en-US | `ss.0 ss.00` | 0.000688078703704 (59.45 s) | rounding with several fraction tokens | `59.4 59.45` |
-| C16 | de-DE | TRUE typed in a cell formatted `0.00` | TRUE | word | `WAHR` |
-| C17 | de-DE, tr-TR | `=SEQUENCE(2)` blocked by a value below it; a `#CALC!` from `=FILTER(A1:A2;A1:A2>9)` | — | error name | as written: `#SPILL!`, `#CALC!` |
-| C18 | en-US | `[$-407]mmmm dddd` and `[$-40C]mmmm` | 46323 | German names? French names? | `Oktober Mittwoch`; `October` + warning |
-| C19 | en-US | `@;@` | 5 | empty or `5` (parked from N1) | empty |
-| C20 | de-DE | file with `<numFmt numFmtId="14" formatCode="yyyy-mm-dd"/>` (N3 writes it) | 46323 | file code or locale built-in | `2026-10-28` |
+| # | Locale | Code | Value | Look at | N2 assumes | Status |
+|---|---|---|---|---|---|---|
+| C4a | de-DE | `mmm` / `ddd` | 46083 (Mon 2 Mar 2026) | abbreviation, dot or not | `Mär` / `Mo` | open (oracle cases `c4-01` to `c4-38`) |
+| C4b | tr-TR | `mmm` / `ddd` | 46083 | abbreviation | `Mar` / `Pzt` | open (oracle cases `c4-01` to `c4-38`) |
+| C4c | de-DE, tr-TR | `mmmmm` | 46083 | one letter | `M` | open (oracle case `c4c-01`) |
+| C5 | de-DE, tr-TR | `h:mm AM/PM` and `h:mm A/P` | 0.5625 | the marker | de `1:30 PM` / `1:30 P`; tr `1:30 ÖS` / `1:30 P` | open (oracle cases `c5-01` to `c5-08`) |
+| C6 | de-DE, tr-TR | built-in ids 14–22 (Format Cells → Date/Time entries) | 46323.5625 | text | the locale tables above | open (oracle cases `c6-01` to `c6-09`) |
+| C7 | de-DE, tr-TR | built-in ids 5–8, 37–44 (Currency/Accounting entries) | -1234.5 | symbol, place | the locale tables above (`€`, `₺`) | open (oracle cases `c7-01` to `c7-24`) |
+| C8 | en-US, de-DE, tr-TR | `[$-F800]dddd, mmmm dd, yyyy` and `[$-F400]h:mm:ss AM/PM` | 46323.5625 | long date, long time | locale's `longDateCode` / `longTimeCode` | open (oracle cases `c8-01`, `c8-02`) |
+| C8b | en-US | `[$-407][$-F800]` | 46323 | long date | the en-US long date code with German names | open (oracle case `c8b-01`) |
+| C9 | en-US | `h:mm` / `h:mm:ss` | 0.437268518518519 (10:29:40) and 0.99999999 | truncation, carry | `10:29`; `0:00` / `0:00:00` | open (oracle cases `c9-01` to `c9-09`) |
+| C9b | en-US | `yyyy-mm-dd h:mm:ss` | 46323.99999999 | carry into the date | `2026-10-29 0:00:00` | open (oracle case `c9b-01`) |
+| C10 | en-US, 1904 workbook (Excel → Preferences → Calculation → Use 1904 date system) | `h:mm`, `[h]:mm`, `yyyy-mm-dd` | -0.25, -1.5, -1 | minus or `#` | `-6:00`, `-36:00`, `#` | open (oracle cases `c10-01` to `c10-07`) |
+| C10b | en-US, 1900 | `0;h:mm` | -0.5 | `#` or `12:00` | `#` | open (oracle case `c10b-01`) |
+| C11 | en-US | `dddd yyyy-mm-dd` | 0, 1, 59, 60, 61 | weekday, day | `Saturday 1900-01-00`, `Sunday 1900-01-01`, `Tuesday 1900-02-28`, `Wednesday 1900-02-29`, `Thursday 1900-03-01` | open (oracle cases `c11-01` to `c11-05`) |
+| C15a | en-US | `y`, `yyy`, `yyyyy`, `e`, `bb`, `bbbb`, `mmmmmm` | 46323 | year digits, month | `26`, `2026`, `2026`, `2026`, `69`, `2569`, `October` | open (oracle cases `c15a-01` to `c15a-07`) |
+| C15b | de-DE | `dd/mm/yyyy` and `hh:mm:ss.00` | 46323.437505787 | `/` kept or `.`; decimal comma | `28/10/2026`; `10:30:00,50` | open (oracle cases `c15b-01`, `c15b-02`) |
+| C15c | en-US | `h:mm:ss.0000` | 0.5 | accepted? | invalid → `General` | open (oracle case `c15c-01`) |
+| C15d | en-US | `h:mm.0` | 0.5 | fraction after minutes, not seconds | `12:00.0` | open (oracle case `c15d-01`) |
+| C15e | en-US | `ss.0 ss.00` | 0.000688078703704 (59.45 s) | rounding with several fraction tokens | `59.4 59.45` | open (oracle case `c15e-01`) |
+| C16 | de-DE | TRUE typed in a cell formatted `0.00` | TRUE | word | `WAHR` | open (oracle cases `c16-01` to `c16-06`) |
+| C17 | de-DE, tr-TR | `=SEQUENCE(2)` blocked by a value below it; a `#CALC!` from `=FILTER(A1:A2;A1:A2>9)` | — | error name | as written: `#SPILL!`, `#CALC!` | open (oracle cases `c17-01`, `c17-02`) |
+| C18 | en-US | `[$-407]mmmm dddd` and `[$-40C]mmmm` | 46323 | German names? French names? | `Oktober Mittwoch`; `October` + warning | open (oracle cases `c18-01` to `c18-04`) |
+| C19 | en-US | `@;@` | 5 | empty or `5` (parked from N1) | empty | open (oracle case `c19-01`) |
+| C20 | de-DE | file with `<numFmt numFmtId="14" formatCode="yyyy-mm-dd"/>` (N3 writes it) | 46323 | file code or locale built-in | `2026-10-28` | open (oracle case `c20-01`) |
+
+## Excel as the oracle
+
+Excel for Mac decides what a code shows; the engine follows it.
+The owner opens the oracle workbooks in Excel for Mac in each region and
+saves what Excel shows as CSV. The case list, the workbooks and the owner's
+run belong to the owner's process, described in
+[`test/fixtures/owner/number_format/README.md`](../test/fixtures/owner/number_format/README.md):
+
+- `cases.json`: every case, with its id, the checklist items and Unknown it
+  settles, its workbook and date system, its value and its code or built-in
+  id.
+- `tool/write_format_oracle.dart` writes the workbooks from it:
+  `format_oracle.xlsx` (1900), `format_oracle_1904.xlsx` (1904) and
+  `format_oracle_invalid.xlsx` (codes Excel may refuse; `en-US` at least).
+- `manifest.json`: one entry per region run, naming its CSVs and the eye
+  texts. `[]` until the first run.
+- `<workbook stem>.<region>.csv`: Excel's CSV, committed as Excel saved it.
+  A committed CSV or manifest entry is never edited without the owner.
+
+`test/xlsx/format/oracle_test.dart` (VM only: it reads files) compares
+them, region by region (`en-US`, `de-DE`, `tr-TR`):
+
+| Rule | Behaviour |
+|---|---|
+| No run | a region without a manifest entry is one passing test that prints `number format oracle: <region> unverified`; the gate stays green, and the locale stays `verified: false` |
+| Manifest | the entry must name CSVs of real workbooks that exist, run the 1900 and 1904 workbooks (and `invalid` in `en-US`) and give eye text for exactly the eye-only cases of the workbooks it ran |
+| Rows | a CSV row is matched to its case by the case id in column C, never by position; the CSV may hold no other case; a case with no row fails |
+| Separator | read from the header row, `value`, `code`, `case`, `note`, which holds no code: `,` in `en-US`, `;` where the decimal separator is a comma. A leading BOM and CRLF are accepted |
+| Formatting | each case with `XlsxNumberFormatter(locale:, date1904:)` of its region and date system; a built-in id as `numberFormatId`, with the workbook's own code for it as `numberFormat`, as the reader passes them; `General` at width 11 |
+| Texts | exact, never trimmed (the trailing space of `_)` is part of what Excel shows), with two tolerances for what a CSV cannot show as the cell does: when ours overflows, any run of `#` matches; when ours has a fill, any count of the fill character stands for it, unless that character could be part of a number or is in the text next to it |
+| Eye only | a case the CSV cannot show (`General` at the default column width, the newer error names) is compared with the manifest's eye text; a manual formula is formatted as its error, in the region's name for it. Without eye text it is skipped as by eye |
+| Known differences | `knownDifferences` in the test maps `<case id> <region>` to the reason Excel and the engine differ (the ruling); such a case is skipped with that reason. A key that names no case or region, or a reason left empty, fails, so the map cannot go stale. It is empty today |
+
+Excel wins. A mismatch changes the rule: the unit test in the owning
+`test/xlsx/format/*_test.dart` gets Excel's text first (for a checklist
+item, its skipped `Owner Excel check C<n>` test is turned on), then the
+engine is fixed. Only a difference that cannot be fixed now goes in
+`knownDifferences`. When every case of a region matches or is recorded,
+its locale is set `verified: true`, with a test.
+
+### LibreOffice, a second opinion
+
+```bash
+dart run tool/write_format_oracle.dart build/format_oracle
+LC_ALL=C.UTF-8 soffice --headless \
+  --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,true,false,false,1' \
+  --outdir build/format_oracle build/format_oracle/*.xlsx
+dart run tool/compare_format_libreoffice.dart build/format_oracle
+```
+
+`tool/compare_format_libreoffice.dart` compares the same cases with
+LibreOffice's text "as shown" (filter token 9 `true`; its doc comment
+explains the options) and prints each difference. `--locale` picks the
+region (`en-US` by default). It reports and never fails: it exits 0 with
+any number of differences, 2 only on unusable input, and CI runs it with
+`continue-on-error`. LibreOffice is not Excel: a difference is a question
+for the owner's run, never a reason to change a rule.
 
 ## Fuzzing
 
