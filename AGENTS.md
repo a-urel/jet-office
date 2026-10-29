@@ -4,8 +4,9 @@
 DOCX files. It has no editors, no rendering and no PDF. It is ported from
 `quds_office_engine` (MIT); see `docs/decisions/0001`, `0002`, `0003`,
 `0004` (which supersedes part of `0003`), `0005` (which supersedes ruling
-R10 in `docs/xlsx-writer.md`), `0006` (ZIP bytes may differ by platform)
-and `0007` (phase 2: a fast reader for import; files are untrusted input)
+R10 in `docs/xlsx-writer.md`), `0006` (ZIP bytes may differ by platform),
+`0007` (phase 2: a fast reader for import; files are untrusted input) and
+`0008` (a number format engine that shows values as Excel for Mac does)
 before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
