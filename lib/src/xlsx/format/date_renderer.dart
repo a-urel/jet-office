@@ -19,20 +19,26 @@ import 'format_locale.dart';
 import 'formatted_value.dart';
 
 /// Renders [serial] with the date or time [section]; null when Excel
-/// shows `#` (negative, out of range). In the 1904 system a negative
-/// serial in a section with no date token (`d`, `y`, month `m`, `e`, `b`)
-/// shows its absolute value with a `-` first. The result's `warning` is
+/// shows `#` (out of range, or negative in the 1900 system). In the 1904
+/// system a negative serial shows `-` and then the text of its absolute
+/// value, in any date or time section and also when that text is all
+/// zeros (`h:mm:ss` on -0.000001 shows `-0:00:00`). The result's `warning` is
 /// [sectionWarning] of [section]: `numberFormatUnsupported` when the
 /// section asks for a calendar, numeral system or language the engine does
 /// not render, which it renders as Gregorian dates with the names of
 /// [locale]; else null.
 ///
-/// Names (`mmm`, `mmmm`, `ddd`, `dddd`) and the `AM/PM` words come from
-/// the section's name locale: the section's first locale tag with a
-/// language other than 0 selects [locale] when the language equals its
+/// Names (`mmm`, `mmmm`, `ddd`, `dddd`) come from the section's name
+/// locale: the section's first locale tag with a language other than 0
+/// selects [locale] when the language equals its
 /// [XlsxFormatLocale.lcid], else the shipped locale with that id, else
-/// [locale]. Without such a tag they come from [locale]. Separators always
-/// come from [locale].
+/// [locale]. Without such a tag they come from [locale]. The `AM/PM`
+/// words come from the name locale only when the section has such a tag
+/// or a system tag; else they are `AM` and `PM` in every locale (Excel
+/// for Mac shows `h:mm AM/PM` as `1:30 PM` in tr-TR, and
+/// `[$-41F]h:mm AM/PM` as `1:30 ÖS`). Separators always come from
+/// [locale]: a bare `/` ([DateSeparatorToken]) shows its
+/// [XlsxFormatLocale.dateSeparator], an escaped or quoted `/` shows `/`.
 ///
 /// A system date or time tag (`[$-F800]`, `[$-F400]`) replaces the whole
 /// section with the first section of [locale]'s
@@ -49,14 +55,15 @@ import 'formatted_value.dart';
 /// longer four; `mmmmm` shows the first letter of the month name and six or
 /// more `m` the full name; `dddd` and longer the full day name; `h`, `m`
 /// and `s` longer than two show two digits; `e` the four-digit year; `b`
-/// and `bb` two digits of the Buddhist year, `bbb` and longer four; `g`
-/// nothing.
+/// and `bb` two digits of the year, `bbb` and longer four; `g`
+/// nothing. `b` shows the Gregorian year, not the Buddhist one: Excel for
+/// Mac shows `bbbb` as `2026` on a date in 2026.
 ///
 /// The time is rounded to the second, or to the most fractional-second
 /// digits the section shows, and then truncated to the units shown
 /// (`h:mm` on 10:29:40 shows `10:29`). An `AM/PM` or `A/P` marker switches
-/// `h` to the 12-hour clock: `AM/PM` in any case shows the locale's `am`
-/// or `pm`, `A/P` its letters in the case written. Fractional seconds show
+/// `h` to the 12-hour clock: `AM/PM` in any case shows the words above,
+/// `A/P` its letters in the case written. Fractional seconds show
 /// the locale's decimal separator. Elapsed `[h]`, `[m]` and `[s]` count
 /// from serial 0, padded to their length; plain minutes and seconds next
 /// to them are taken modulo 60.
@@ -69,19 +76,25 @@ import 'formatted_value.dart';
   required XlsxFormatLocale locale,
   required bool date1904,
 }) {
-  final XlsxFormatLocale names = _nameLocale(section, locale) ?? locale;
+  final ({bool tagged, XlsxFormatLocale? locale}) tag = _nameLocale(
+    section,
+    locale,
+  );
+  final XlsxFormatLocale names = tag.locale ?? locale;
   final List<FormatToken> tokens = _systemTokens(section, locale);
+  // The AM/PM words need a language tag or a system tag (ruling R13).
+  final XlsxFormatLocale? amPm =
+      tag.tagged || !identical(tokens, section.tokens) ? names : null;
   final List<DateToken> counted = <DateToken>[
     for (final FormatToken token in tokens)
       if (token is DateToken && countedDateLetters.contains(token.letter))
         token,
   ];
 
-  // Ruling 4: in the 1904 system a negative value in a section without a
-  // date token shows its absolute value with a leading minus; anywhere
-  // else a negative value is `#`.
-  final bool negativeTime =
-      date1904 && serial.negative && !_hasDateToken(tokens, counted);
+  // Ruling R15 (replaces the 1904 half of N2 ruling 4): in the 1904
+  // system a negative value shows a minus and its absolute value in any
+  // date or time section; in the 1900 system it is `#`.
+  final bool negativeTime = date1904 && serial.negative;
   var fractionDigits = 0;
   var twelveHour = false;
   for (final FormatToken token in tokens) {
@@ -99,11 +112,9 @@ import 'formatted_value.dart';
   if (fields == null) return null;
 
   final FormatPartsBuilder out = FormatPartsBuilder();
-  // Like the number renderer's minus: first, and not on a value that
-  // rounds to zero.
-  if (negativeTime && (fields.totalSeconds > 0 || fields.fraction > 0)) {
-    out.text('-');
-  }
+  // First, before a literal, fill or padding, and also on a value that
+  // rounds to zero (`-0:00:00`).
+  if (negativeTime) out.text('-');
   var k = 0;
   for (final FormatToken token in tokens) {
     switch (token) {
@@ -123,6 +134,8 @@ import 'formatted_value.dart';
         } else {
           out.text(_eraText(token, fields));
         }
+      case DateSeparatorToken():
+        out.text(locale.dateSeparator);
       case LiteralToken(:final String text):
         out.text(text);
       case CommaToken():
@@ -136,7 +149,7 @@ import 'formatted_value.dart';
       case FillToken(:final String char):
         out.add(XlsxFormatFill(char));
       case AmPmToken(:final String text):
-        out.text(_amPmText(text, fields.hour < 12, names));
+        out.text(_amPmText(text, fields.hour < 12, amPm));
       case FractionalSecondsToken(:final int digits):
         out.text(
           locale.decimalSeparator +
@@ -211,16 +224,19 @@ XlsxWarningCode? sectionWarning(
   return null;
 }
 
-/// The locale that the first tag of [section] with a language other than
-/// 0 selects, or null when there is no such tag or no locale serves its
-/// language.
-XlsxFormatLocale? _nameLocale(FormatSection section, XlsxFormatLocale locale) {
+/// Whether [section] has a locale tag with a language other than 0
+/// (`tagged`), and the locale the first such tag selects, or null when
+/// there is no such tag or no locale serves its language.
+({bool tagged, XlsxFormatLocale? locale}) _nameLocale(
+  FormatSection section,
+  XlsxFormatLocale locale,
+) {
   for (final FormatToken token in section.tokens) {
     if (token is LocaleTagToken && token.language != 0) {
-      return _tagLocale(token.language, locale);
+      return (tagged: true, locale: _tagLocale(token.language, locale));
     }
   }
-  return null;
+  return (tagged: false, locale: null);
 }
 
 /// [locale] when [language] is its id, else the shipped locale of
@@ -301,28 +317,15 @@ String _dateText(
   }
 }
 
-/// Whether [tokens] show a date: a `d`, `y`, month `m`, `e` or `b`
-/// token. [counted] is their counted [DateToken]s.
-bool _hasDateToken(List<FormatToken> tokens, List<DateToken> counted) {
-  for (var k = 0; k < counted.length; k++) {
-    switch (counted[k].letter) {
-      case 'd' || 'y':
-        return true;
-      case 'm' when !isMinuteToken(counted, k):
-        return true;
-    }
+/// The text of an AM/PM marker written as [written]: for `AM/PM` in any
+/// case the `am` or `pm` of [locale], or `AM` or `PM` when [locale] is
+/// null; else the letter before or after the slash of `A/P` in the case
+/// written.
+String _amPmText(String written, bool am, XlsxFormatLocale? locale) {
+  if (written.length == 5) {
+    if (locale == null) return am ? 'AM' : 'PM';
+    return am ? locale.am : locale.pm;
   }
-  return tokens.any(
-    (FormatToken token) =>
-        token is DateToken && (token.letter == 'e' || token.letter == 'b'),
-  );
-}
-
-/// The text of an AM/PM marker written as [written]: the locale's `am` or
-/// `pm` for `AM/PM` in any case, else the letter before or after the
-/// slash of `A/P` in the case written.
-String _amPmText(String written, bool am, XlsxFormatLocale locale) {
-  if (written.length == 5) return am ? locale.am : locale.pm;
   return am ? written[0] : written[written.length - 1];
 }
 
@@ -340,8 +343,10 @@ String _eraText(DateToken token, ExcelDateFields fields) {
     case 'e':
       return _pad(fields.year, 4);
     case 'b':
-      final int year = fields.year + 543;
-      return token.length <= 2 ? _pad(year % 100, 2) : _pad(year, 4);
+      // Ruling R14: the Gregorian year, as Excel for Mac shows it.
+      return token.length <= 2
+          ? _pad(fields.year % 100, 2)
+          : _pad(fields.year, 4);
     default: // 'g'
       return '';
   }

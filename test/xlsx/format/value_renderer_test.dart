@@ -186,11 +186,16 @@ void main() {
     });
 
     test('an explicit negative date section does not hide the sign', () {
-      // Ruling 4: the date renderer gets the signed serial.
+      // Ruling 4, Owner Excel check C10b: the date renderer gets the
+      // signed serial, so 1900 shows `#`.
       final RenderedValue r = render(-0.5, '0;h:mm');
       expect(r.overflow, isTrue);
       expect(textOf(-0.5, '0;h:mm'), '#');
-    }, skip: 'Owner Excel check C10b');
+    });
+
+    test('1904: an explicit negative date section shows a minus', () {
+      expect(textOf(-0.5, '0;h:mm', date1904: true), '-12:00');
+    });
 
     test('a conditional date section', () {
       expect(textOf(2.5, '[<1]h:mm;d "days"'), '2 days');
@@ -343,15 +348,16 @@ void main() {
       );
     });
 
-    test('1904: values before the epoch overflow in a date section', () {
+    test('1904: values before the epoch show a minus in a date section', () {
+      // Owner Excel check C10: c10-03.
       for (final Object value in <Object>[
         XlsxDecimal('-1'),
         DateTime(1903, 12, 31),
       ]) {
         final RenderedValue r = render(value, 'yyyy-mm-dd', date1904: true);
-        expect(r.overflow, isTrue, reason: '$value');
+        expect(r.overflow, isFalse, reason: '$value');
         expect(r.parts, <XlsxFormatPart>[
-          const XlsxFormatText('#'),
+          const XlsxFormatText('-1904-01-02'),
         ], reason: '$value');
       }
     });
@@ -379,7 +385,7 @@ void main() {
         textOf(const Duration(hours: -1), '[h]:mm', date1904: true),
         '-1:00',
       );
-    }, skip: 'Owner Excel check C10');
+    });
 
     test('anything else is a programmer error', () {
       expect(() => render(Object(), '0'), throwsArgumentError);

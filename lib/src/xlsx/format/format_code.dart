@@ -167,13 +167,30 @@ final class LiteralToken extends FormatToken {
   final String text;
 
   @override
-  bool operator ==(Object other) => other is LiteralToken && other.text == text;
+  bool operator ==(Object other) =>
+      other is LiteralToken &&
+      other.runtimeType == runtimeType &&
+      other.text == text;
 
   @override
-  int get hashCode => Object.hash(LiteralToken, text);
+  int get hashCode => Object.hash(runtimeType, text);
 
   @override
   String toString() => 'LiteralToken("$text")';
+}
+
+/// A bare `/` that is not a fraction slash.
+///
+/// A date or time section shows it as the locale's
+/// `XlsxFormatLocale.dateSeparator`; anywhere else it is the literal `/`
+/// it extends. An escaped `\/` or a quoted `"/"` is a plain
+/// [LiteralToken] and always shows `/`.
+final class DateSeparatorToken extends LiteralToken {
+  /// Creates the separator.
+  const DateSeparatorToken() : super('/');
+
+  @override
+  String toString() => 'DateSeparatorToken()';
 }
 
 /// A digit placeholder: `0`, `#` or `?`.
@@ -702,6 +719,9 @@ final class _Parser {
       } else if (c == '/' && _isFractionSlashAt(i)) {
         _tokens.add(const FractionSlashToken());
         i = _fixedDenominator(i + 1);
+      } else if (c == '/') {
+        _tokens.add(const DateSeparatorToken());
+        i++;
       } else {
         final String char = _charAt(i);
         _tokens.add(LiteralToken(char));

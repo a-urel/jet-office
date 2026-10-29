@@ -45,8 +45,8 @@ typedef RenderedValue = ({
 /// serial in the date system of [date1904], a [Duration] its length in
 /// days; both then render as that number. A date or time section gets the
 /// signed serial, so a negative value shows `#` there even in an explicit
-/// negative section (in the 1904 system a time-only section shows it with
-/// a minus). Never throws for any code.
+/// negative section (in the 1904 system any date or time section shows
+/// it with a minus). Never throws for any code.
 RenderedValue renderValue(
   Object? value,
   ParsedFormat format, {

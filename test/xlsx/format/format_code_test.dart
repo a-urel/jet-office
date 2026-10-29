@@ -74,7 +74,8 @@ void main() {
     test('the characters Excel shows unquoted are each a literal', () {
       const String chars = r"$-+/():!^&'~{}<>= ";
       expect(tokensOf(chars), <FormatToken>[
-        for (var i = 0; i < chars.length; i++) LiteralToken(chars[i]),
+        for (var i = 0; i < chars.length; i++)
+          chars[i] == '/' ? const DateSeparatorToken() : LiteralToken(chars[i]),
       ]);
     });
 
@@ -431,15 +432,33 @@ void main() {
       ]);
     });
 
-    test('a / not between placeholders is a literal', () {
+    test('a / not between placeholders is a date separator', () {
       expect(tokensOf('0/'), <FormatToken>[
         const DigitToken('0'),
-        const LiteralToken('/'),
+        const DateSeparatorToken(),
       ]);
       expect(tokensOf('/0'), <FormatToken>[
-        const LiteralToken('/'),
+        const DateSeparatorToken(),
         const DigitToken('0'),
       ]);
+    });
+
+    test('an escaped or quoted / is a literal', () {
+      expect(tokensOf(r'd\/m"/"'), <FormatToken>[
+        const DateToken('d', 1),
+        const LiteralToken('/'),
+        const DateToken('m', 1),
+        const LiteralToken('/'),
+      ]);
+    });
+
+    test('a date separator is a literal / that is not equal to one', () {
+      const FormatToken separator = DateSeparatorToken();
+      expect(separator, isA<LiteralToken>());
+      expect((separator as LiteralToken).text, '/');
+      expect(separator == const LiteralToken('/'), isFalse);
+      expect(const LiteralToken('/') == separator, isFalse);
+      expect(separator, const DateSeparatorToken());
     });
 
     test('padding', () {

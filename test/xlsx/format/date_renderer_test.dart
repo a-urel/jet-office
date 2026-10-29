@@ -53,11 +53,14 @@ XlsxWarningCode? w(
   )!.warning;
 }
 
-/// en-US with [lcid], [monthNames] and [longDateCode] replaced.
+/// en-US with [lcid], [monthNames], [longDateCode], [am] and [pm]
+/// replaced.
 XlsxFormatLocale custom({
   int lcid = 0x409,
   List<String>? monthNames,
   String? longDateCode,
+  String? am,
+  String? pm,
 }) {
   const XlsxFormatLocale en = XlsxFormatLocale.enUS;
   return XlsxFormatLocale(
@@ -67,8 +70,8 @@ XlsxFormatLocale custom({
     monthAbbreviations: en.monthAbbreviations,
     dayNames: en.dayNames,
     dayAbbreviations: en.dayAbbreviations,
-    am: en.am,
-    pm: en.pm,
+    am: am ?? en.am,
+    pm: pm ?? en.pm,
     trueText: en.trueText,
     falseText: en.falseText,
     errorNames: en.errorNames,
@@ -152,11 +155,11 @@ void main() {
 
     test('de-DE abbreviations', () {
       expect(t('mmm ddd', mar2, locale: XlsxFormatLocale.deDE), 'Mär Mo');
-    }, skip: 'Owner Excel check C4a');
+    }); // Owner Excel check C4a
 
     test('tr-TR abbreviations', () {
       expect(t('mmm ddd', mar2, locale: XlsxFormatLocale.trTR), 'Mar Pzt');
-    }, skip: 'Owner Excel check C4b');
+    }); // Owner Excel check C4b
   });
 
   group('literals and layout', () {
@@ -195,7 +198,7 @@ void main() {
       expect(t('dddd yyyy-mm-dd', 0), 'Saturday 1900-01-00');
       expect(t('dddd yyyy-mm-dd', 60), 'Wednesday 1900-02-29');
       expect(t('dddd yyyy-mm-dd', 61), 'Thursday 1900-03-01');
-    }, skip: 'Owner Excel check C11');
+    }); // Owner Excel check C11
 
     test('60 is 1900-02-29', () {
       expect(t('yyyy-mm-dd', 60), '1900-02-29');
@@ -222,10 +225,14 @@ void main() {
     });
 
     test('lengths Excel shows', () {
-      expect(t('bb', oct28), '69');
-      expect(t('bbbb', oct28), '2569');
+      // Owner Excel check C15a: b shows the Gregorian year, not +543.
+      expect(t('bb', oct28), '26');
+      expect(t('bbbb', oct28), '2026');
+      expect(t('b', oct28), '26');
+      expect(t('bbb', oct28), '2026');
       expect(t('mmmmmm', oct28), 'October');
-    }, skip: 'Owner Excel check C15a');
+      expect(t('mmmmmm', oct28, locale: XlsxFormatLocale.trTR), 'Ekim');
+    });
 
     test('yy and yyyy', () {
       expect(t('yy', oct28), '26');
@@ -263,7 +270,7 @@ void main() {
 
     test('minutes are truncated', () {
       expect(t('h:mm', 0.437268518518519), '10:29');
-    }, skip: 'Owner Excel check C9');
+    }); // Owner Excel check C9
 
     test('seconds round and carry into minutes', () {
       expect(t('h:mm', 0.437495370370370), '10:30');
@@ -295,11 +302,11 @@ void main() {
 
     test('the carry runs through the hours', () {
       expect(t('h:mm:ss', 0.99999999), '0:00:00');
-    }, skip: 'Owner Excel check C9');
+    }); // Owner Excel check C9
 
     test('the carry runs into the date', () {
       expect(t('yyyy-mm-dd h:mm:ss', 46323.99999999), '2026-10-29 0:00:00');
-    }, skip: 'Owner Excel check C9b');
+    }); // Owner Excel check C9b
 
     test('h and s longer than two show two digits', () {
       expect(t('hhh', 0.0625), '01');
@@ -342,26 +349,89 @@ void main() {
   });
 
   group('AM/PM by locale', () {
-    test('tr-TR', () {
-      expect(t('h:mm AM/PM', 0.5625, locale: XlsxFormatLocale.trTR), '1:30 ÖS');
-      expect(t('h:mm A/P', 0.5625, locale: XlsxFormatLocale.trTR), '1:30 P');
-    }, skip: 'Owner Excel check C5');
+    test('tr-TR without a tag shows AM and PM', () {
+      // Owner Excel check C5: the words need the locale's tag.
+      const XlsxFormatLocale tr = XlsxFormatLocale.trTR;
+      expect(t('h:mm AM/PM', 0.5625, locale: tr), '1:30 PM');
+      expect(t('h:mm A/P', 0.5625, locale: tr), '1:30 P');
+      expect(t('h:mm AM/PM', 0.0625, locale: tr), '1:30 AM');
+      expect(t('h:mm A/P', 0.0625, locale: tr), '1:30 A');
+      expect(t('h:mm AM/PM', 0, locale: tr), '12:00 AM');
+      expect(t('h:mm A/P', 0, locale: tr), '12:00 A');
+      expect(t('h:mm am/pm', 0.5625, locale: tr), '1:30 PM');
+    });
+
+    test('tr-TR with its tag shows its words', () {
+      const XlsxFormatLocale tr = XlsxFormatLocale.trTR;
+      expect(t('[\$-41F]h:mm AM/PM', 0.5625, locale: tr), '1:30 ÖS');
+      expect(t('[\$-41F]h:mm AM/PM', 0.0625, locale: tr), '1:30 ÖÖ');
+      expect(t('[\$-409]h:mm AM/PM', 0.5625, locale: tr), '1:30 PM');
+      expect(t('[\$-41F]h:mm A/P', 0.5625, locale: tr), '1:30 P');
+    });
+
+    test('names stay the renderer locale\'s without a tag', () {
+      expect(
+        t('mmm dddd', oct28, locale: XlsxFormatLocale.trTR),
+        'Eki Çarşamba',
+      );
+    });
+
+    test('a locale\'s own words without a tag are not used', () {
+      final XlsxFormatLocale mine = custom(lcid: 0x41F, am: 'x', pm: 'y');
+      expect(t('h:mm AM/PM', 0.5625, locale: mine), '1:30 PM');
+      expect(t('[\$-41F]h:mm AM/PM', 0.5625, locale: mine), '1:30 y');
+    });
 
     test('de-DE', () {
       expect(t('h:mm AM/PM', 0.5625, locale: XlsxFormatLocale.deDE), '1:30 PM');
-    }, skip: 'Owner Excel check C5');
+    }); // Owner Excel check C5
   });
 
   group('decimal separator', () {
+    test('tr-TR fractional seconds', () {
+      // Owner Excel check C15b.
+      expect(
+        t('hh:mm:ss.00', 0.437505787037037, locale: XlsxFormatLocale.trTR),
+        '10:30:00,50',
+      );
+    });
+
     test('de-DE fractional seconds', () {
       expect(
         t('hh:mm:ss.00', 0.437505787037037, locale: XlsxFormatLocale.deDE),
         '10:30:00,50',
       );
-    }, skip: 'Owner Excel check C15b');
+    }); // Owner Excel check C15b
 
     test('the separator comes from the locale', () {
       expect(t('ss.0', 0.5, locale: XlsxFormatLocale.deDE), '00,0');
+    });
+  });
+
+  group('date separator', () {
+    const num oct28Time = 46323.437505787;
+
+    test('a bare / shows the locale\'s date separator', () {
+      // Owner Excel check C15b.
+      expect(
+        t('dd/mm/yyyy', oct28Time, locale: XlsxFormatLocale.trTR),
+        '28.10.2026',
+      );
+      expect(
+        t('dd/mm/yyyy', oct28Time, locale: XlsxFormatLocale.deDE),
+        '28.10.2026',
+      );
+      expect(t('dd/mm/yyyy', oct28Time), '28/10/2026');
+    });
+
+    test('an escaped or quoted / stays /', () {
+      const XlsxFormatLocale tr = XlsxFormatLocale.trTR;
+      expect(t(r'dd\/mm\/yyyy', oct28Time, locale: tr), '28/10/2026');
+      expect(t('dd"/"mm"/"yyyy', oct28Time, locale: tr), '28/10/2026');
+    });
+
+    test('a / in a time section is the date separator too', () {
+      expect(t('h/mm', 0.5625, locale: XlsxFormatLocale.trTR), '13.30');
     });
   });
 
@@ -374,12 +444,11 @@ void main() {
     test('1904: a negative time shows a minus', () {
       expect(t('h:mm', -0.25, date1904: true), '-6:00');
       expect(t('[h]:mm', -1.5, date1904: true), '-36:00');
-    }, skip: 'Owner Excel check C10');
+    });
 
-    test('1904: a negative date is null', () {
-      // Ruling 4: a section with a date token shows `#` on a negative
-      // value in either system.
-      expect(t('yyyy-mm-dd', -1, date1904: true), isNull);
+    test('1904: a negative date shows a minus and the absolute value', () {
+      // Owner Excel check C10: c10-03.
+      expect(t('yyyy-mm-dd', -1, date1904: true), '-1904-01-02');
     });
 
     test('1904: the minus goes before a leading literal', () {
@@ -391,19 +460,26 @@ void main() {
       expect(t('_(h:mm', -0.25, date1904: true), '- 6:00');
     });
 
-    test('1904: a date token makes it null', () {
-      expect(t('d h:mm', -0.25, date1904: true), isNull);
-      expect(t('m h', -0.25, date1904: true), isNull);
-      expect(t('yy h', -0.25, date1904: true), isNull);
-      expect(t('e h', -0.25, date1904: true), isNull);
+    test('1904: a date token shows a minus too', () {
+      // Owner Excel check C10: c10-04 is `e h`.
+      expect(t('e h', -0.25, date1904: true), '-1904 6');
+      expect(t('d h:mm', -0.25, date1904: true), '-1 6:00');
+      expect(t('m h', -0.25, date1904: true), '-1 6');
+      expect(t('yy h', -0.25, date1904: true), '-04 6');
     });
 
     test('1904: minutes and seconds only are a time', () {
       expect(t('mm:ss', -0.0006944444444444, date1904: true), '-01:00');
     });
 
-    test('1904: a negative that rounds to zero shows no minus', () {
-      expect(t('h:mm:ss', -1e-9, date1904: true), '0:00:00');
+    test('1904: a negative that rounds to zero shows a minus', () {
+      // Owner Excel check C10: c10-05.
+      expect(t('h:mm:ss', -0.000001, date1904: true), '-0:00:00');
+      expect(t('h:mm:ss', -1e-9, date1904: true), '-0:00:00');
+    });
+
+    test('1904: past the largest serial is null', () {
+      expect(t('yyyy', -2957004, date1904: true), isNull);
     });
   });
 
@@ -420,7 +496,7 @@ void main() {
   group('tags', () {
     test('a language tag picks a shipped locale for names', () {
       expect(t('[\$-407]mmmm dddd', oct28), 'Oktober Mittwoch');
-    }, skip: 'Owner Excel check C18');
+    }); // Owner Excel check C18
 
     test('a shipped locale gives the names and no warning', () {
       expect(t('[\$-41F]dddd', oct28), 'Çarşamba');
@@ -484,7 +560,7 @@ void main() {
         t('[\$-F400]h:mm:ss AM/PM', 46323.5625, locale: XlsxFormatLocale.deDE),
         '13:30:00',
       );
-    }, skip: 'Owner Excel check C8');
+    }); // Owner Excel check C8
 
     test('tr-TR long date and long time', () {
       expect(
@@ -499,7 +575,7 @@ void main() {
         t('[\$-F400]h:mm:ss AM/PM', 46323.5625, locale: XlsxFormatLocale.trTR),
         '13:30:00',
       );
-    }, skip: 'Owner Excel check C8');
+    }); // Owner Excel check C8
 
     test('upper bits of the tag do not matter', () {
       expect(t('[\$-10F800]', oct28), 'Wednesday, October 28, 2026');
