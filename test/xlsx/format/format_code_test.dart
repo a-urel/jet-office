@@ -361,7 +361,58 @@ void main() {
       expect(tokensOf('?/8'), <FormatToken>[
         const DigitToken('?'),
         const FractionSlashToken(),
-        const LiteralToken('8'),
+        const FixedDenominatorToken(8),
+      ]);
+    });
+
+    test('the digits after a fraction slash are one fixed denominator', () {
+      expect(tokensOf('# ?/16'), <FormatToken>[
+        const DigitToken('#'),
+        const LiteralToken(' '),
+        const DigitToken('?'),
+        const FractionSlashToken(),
+        const FixedDenominatorToken(16),
+      ]);
+      expect(tokensOf('0/100'), <FormatToken>[
+        const DigitToken('0'),
+        const FractionSlashToken(),
+        const FixedDenominatorToken(100),
+      ]);
+    });
+
+    test('a quoted digit ends a fixed denominator', () {
+      expect(tokensOf('?/1"5"'), <FormatToken>[
+        const DigitToken('?'),
+        const FractionSlashToken(),
+        const FixedDenominatorToken(1),
+        const LiteralToken('5'),
+      ]);
+      expect(tokensOf(r'?/1\5'), <FormatToken>[
+        const DigitToken('?'),
+        const FractionSlashToken(),
+        const FixedDenominatorToken(1),
+        const LiteralToken('5'),
+      ]);
+    });
+
+    test('a 0 after the slash is a placeholder, not a denominator', () {
+      expect(tokensOf('?/05'), <FormatToken>[
+        const DigitToken('?'),
+        const FractionSlashToken(),
+        const DigitToken('0'),
+        const LiteralToken('5'),
+      ]);
+    });
+
+    test('a fixed denominator has at most nine digits', () {
+      expect(
+        tokensOf('?/999999999').last,
+        const FixedDenominatorToken(999999999),
+      );
+      expect(tokensOf('?/1234567890'), <FormatToken>[
+        const DigitToken('?'),
+        const FractionSlashToken(),
+        for (final String digit in '1234567890'.split('')) LiteralToken(digit),
       ]);
     });
 

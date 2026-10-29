@@ -6,7 +6,9 @@
 /// padding and fill (spec §5.2). Scaling and rounding work on the
 /// number's decimal digits ([ExcelNumber.shift], [ExcelNumber.toFixed]),
 /// never on a `double`, so the result is exact and the same on the VM and
-/// in JavaScript.
+/// in JavaScript. The one exception is a fraction's best approximation,
+/// which runs on the fractional part as a `double`; IEEE arithmetic gives
+/// the same result on both.
 library;
 
 import 'excel_number.dart';
@@ -34,10 +36,10 @@ List<XlsxFormatPart> renderNumber(
   required int generalWidth,
 }) => switch (_layoutOf(section)) {
   _Layout.scientific => _renderScientific(section, value, showMinus, locale),
-  // Fraction and General sections are laid out as fixed point, their own
-  // tokens left out, until their renderers exist.
+  _Layout.fraction => _renderFraction(section, value, showMinus, locale),
+  // General sections are laid out as fixed point, their own token left
+  // out, until their renderer exists.
   _Layout.fixed ||
-  _Layout.fraction ||
   _Layout.general => _renderFixed(section, value, showMinus, locale),
 };
 
@@ -191,6 +193,7 @@ List<XlsxFormatPart> _renderFixed(
           GeneralToken() ||
           ExponentToken() ||
           FractionSlashToken() ||
+          FixedDenominatorToken() ||
           DateToken() ||
           AmPmToken():
         // Not part of a fixed-point layout.
@@ -336,12 +339,299 @@ List<XlsxFormatPart> _renderScientific(
           TextToken() ||
           GeneralToken() ||
           FractionSlashToken() ||
+          FixedDenominatorToken() ||
           DateToken() ||
           AmPmToken():
         break;
     }
   }
   return out.result;
+}
+
+/// The decimal places a fraction's value is taken to: exact for any
+/// number of 15 significant digits down to 10^-25, and far below what a
+/// denominator under 10^9 can tell apart.
+const int _fractionPlaces = 40;
+
+/// The most denominator digits the approximation uses; more placeholders
+/// only pad.
+const int _maxDenominatorDigits = maxFixedDenominatorDigits;
+
+/// Lays [value] out as a whole part and a fraction: `# ?/?`, `?/8`.
+///
+/// The numerator is the run of placeholders right before the slash; the
+/// denominator is the run right after it, or a fixed denominator. Any
+/// placeholder before the numerator makes the section mixed (`# ?/?`, a
+/// whole part and a proper fraction); without one the whole value is an
+/// improper fraction (`?/?` shows 1.5 as `3/2`).
+///
+/// A fixed denominator rounds the numerator half away from zero, exactly.
+/// Otherwise the fraction is the best rational approximation with a
+/// denominator below 10^d, d the denominator placeholders (at most 9
+/// counted). A fraction that rounds to one carries into the whole part.
+/// The numerator pads on the left and the denominator on the right, each
+/// placeholder as in fixed point. A mixed section whose fraction is zero
+/// shows it blank: spaces under `?`, nothing under `#`, the slash and a
+/// fixed denominator too; a `0` placeholder in the fraction shows it in
+/// full instead.
+List<XlsxFormatPart> _renderFraction(
+  FormatSection section,
+  ExcelNumber value,
+  bool showMinus,
+  XlsxFormatLocale locale,
+) {
+  final List<FormatToken> tokens = section.tokens;
+  final int slash = tokens.indexWhere(
+    (FormatToken t) => t is FractionSlashToken,
+  );
+  var numeratorStart = slash;
+  while (numeratorStart > 0 && tokens[numeratorStart - 1] is DigitToken) {
+    numeratorStart--;
+  }
+  var denominatorEnd = slash + 1;
+  int? fixedDenominator;
+  if (denominatorEnd < tokens.length &&
+      tokens[denominatorEnd] is FixedDenominatorToken) {
+    fixedDenominator = (tokens[denominatorEnd] as FixedDenominatorToken).value;
+    denominatorEnd++;
+  } else {
+    while (denominatorEnd < tokens.length &&
+        tokens[denominatorEnd] is DigitToken) {
+      denominatorEnd++;
+    }
+  }
+  if (fixedDenominator == null && denominatorEnd == slash + 1) {
+    // A slash before a denominator too long to be one: no fraction.
+    return _renderFixed(section, value, showMinus, locale);
+  }
+
+  final List<String> integerPlaceholders = <String>[
+    for (var k = 0; k < numeratorStart; k++)
+      if (tokens[k] case DigitToken(:final String char)) char,
+  ];
+  final List<String> numeratorPlaceholders = <String>[
+    for (var k = numeratorStart; k < slash; k++) (tokens[k] as DigitToken).char,
+  ];
+  final List<String> denominatorPlaceholders = <String>[
+    if (fixedDenominator == null)
+      for (var k = slash + 1; k < denominatorEnd; k++)
+        (tokens[k] as DigitToken).char,
+  ];
+  final bool mixed = integerPlaceholders.isNotEmpty;
+
+  // Commas count in the whole part only, as in fixed point.
+  final List<_Comma?> commas = _classifyCommas(
+    tokens.sublist(0, numeratorStart),
+    numeratorStart,
+  );
+  final bool grouping = commas.contains(_Comma.group);
+  var powerOfTen = 0;
+  for (var k = 0; k < tokens.length; k++) {
+    if (tokens[k] is PercentToken) powerOfTen += 2;
+    if (k < numeratorStart && commas[k] == _Comma.scale) powerOfTen -= 3;
+  }
+
+  final ({String whole, String fraction}) fixed = value
+      .abs()
+      .shift(powerOfTen)
+      .toFixed(_fractionPlaces);
+  BigInt whole = BigInt.parse(fixed.whole);
+  int numerator;
+  final int denominator;
+  if (fixedDenominator != null) {
+    // round(f * D) = floor((2 * digits * D + scale) / (2 * scale)).
+    final BigInt scale = BigInt.from(10).pow(_fractionPlaces);
+    final BigInt twice =
+        BigInt.parse(fixed.fraction) *
+        BigInt.from(fixedDenominator) *
+        BigInt.two;
+    numerator = ((twice + scale) ~/ (scale * BigInt.two)).toInt();
+    denominator = fixedDenominator;
+  } else {
+    final int digits = _min(
+      denominatorPlaceholders.length,
+      _maxDenominatorDigits,
+    );
+    final ({int numerator, int denominator}) best = _bestFraction(
+      double.parse('0.${fixed.fraction}'),
+      _pow10(digits) - 1,
+    );
+    numerator = best.numerator;
+    denominator = best.denominator;
+  }
+  if (mixed && numerator == denominator) {
+    whole += BigInt.one;
+    numerator = 0;
+  }
+  final BigInt shownNumerator = mixed
+      ? BigInt.from(numerator)
+      : whole * BigInt.from(denominator) + BigInt.from(numerator);
+  final bool fractionZero = shownNumerator == BigInt.zero;
+  final bool allZero = fractionZero && (!mixed || whole == BigInt.zero);
+  final bool blankFraction =
+      mixed &&
+      fractionZero &&
+      !numeratorPlaceholders.contains('0') &&
+      !denominatorPlaceholders.contains('0');
+  // Spaces stand for a blank fraction only under `?`.
+  final bool blankAsSpace =
+      numeratorPlaceholders.contains('?') ||
+      denominatorPlaceholders.contains('?');
+
+  // A mixed zero shows its whole part as `0`.
+  final String integerDigits = !mixed
+      ? ''
+      : (whole == BigInt.zero ? (allZero ? '0' : '') : whole.toString());
+  final String numeratorDigits = shownNumerator.toString();
+  final String denominatorDigits = denominator.toString();
+  final int integerColumns = integerPlaceholders.length;
+  final int numeratorColumns = numeratorPlaceholders.length;
+
+  final _Parts out = _Parts();
+  if (showMinus && !allZero) out.text('-');
+
+  /// Writes integer column [c] (shown as [placeholder]) and the group
+  /// separator after it.
+  void writeColumn(int c, String placeholder) {
+    final String shown = c < integerDigits.length
+        ? integerDigits[integerDigits.length - 1 - c]
+        : _blank(placeholder);
+    out.text(shown);
+    if (grouping && c > 0 && c % 3 == 0 && shown.isNotEmpty) {
+      out.text(shown == ' ' ? ' ' : locale.groupSeparator);
+    }
+  }
+
+  var integerSeen = 0;
+  for (var k = 0; k < tokens.length; k++) {
+    final FormatToken token = tokens[k];
+    switch (token) {
+      case DigitToken(:final String char) when k < numeratorStart:
+        final int column = integerColumns - 1 - integerSeen;
+        if (integerSeen == 0) {
+          // Digits beyond the placeholders go before the first one.
+          for (var c = integerDigits.length - 1; c >= integerColumns; c--) {
+            writeColumn(c, '0');
+          }
+        }
+        writeColumn(column, char);
+        integerSeen++;
+      case DigitToken(:final String char) when k < slash:
+        final int index = k - numeratorStart;
+        if (blankFraction) {
+          out.text(_blank(char));
+          break;
+        }
+        if (index == 0 && numeratorDigits.length > numeratorColumns) {
+          // Digits beyond the placeholders go before the first one.
+          out.text(
+            numeratorDigits.substring(
+              0,
+              numeratorDigits.length - numeratorColumns,
+            ),
+          );
+        }
+        // Columns counted from the right.
+        final int column = numeratorColumns - 1 - index;
+        out.text(
+          column < numeratorDigits.length
+              ? numeratorDigits[numeratorDigits.length - 1 - column]
+              : _blank(char),
+        );
+      case DigitToken(:final String char) when k < denominatorEnd:
+        final int index = k - slash - 1;
+        out.text(
+          blankFraction
+              ? _blank(char)
+              : (index < denominatorDigits.length
+                    ? denominatorDigits[index]
+                    : _blank(char)),
+        );
+      case DigitToken():
+        // A placeholder after the fraction: not part of the layout.
+        break;
+      case FractionSlashToken():
+        out.text(blankFraction ? (blankAsSpace ? ' ' : '') : '/');
+      case FixedDenominatorToken():
+        out.text(
+          blankFraction
+              ? (blankAsSpace ? ' ' * denominatorDigits.length : '')
+              : denominatorDigits,
+        );
+      case DecimalPointToken():
+        out.text(locale.decimalSeparator);
+      case CommaToken():
+        if (k < numeratorStart && commas[k] == _Comma.literal) out.text(',');
+      case PercentToken():
+        out.text('%');
+      case LiteralToken(:final String text):
+        out.text(text);
+      case LocaleTagToken(:final String currency):
+        out.text(currency);
+      case PaddingToken(:final String char):
+        out.add(XlsxFormatPadding(char));
+      case FillToken(:final String char):
+        out.add(XlsxFormatFill(char));
+      case TextToken() ||
+          GeneralToken() ||
+          ExponentToken() ||
+          DateToken() ||
+          AmPmToken():
+        break;
+    }
+  }
+  return out.result;
+}
+
+/// 10^[n] for `0 <= n <= 9`.
+int _pow10(int n) {
+  var result = 1;
+  for (var k = 0; k < n; k++) {
+    result *= 10;
+  }
+  return result;
+}
+
+/// The fraction closest to [x], `0 <= x < 1`, with a denominator from 1
+/// to [maxDenominator]; of two equally close, the one with the smaller
+/// denominator.
+///
+/// It walks the continued fraction of [x] to the last convergent whose
+/// denominator fits, then checks the largest semiconvergent that fits
+/// too (`0.14159` with denominators to 99 is `14/99`, not the convergent
+/// `1/7`). Every numerator and denominator stays below [maxDenominator],
+/// so they are exact `int`s on the VM and in JavaScript.
+({int numerator, int denominator}) _bestFraction(double x, int maxDenominator) {
+  // The convergents before the last and the last: p/q.
+  var previousP = 0;
+  var previousQ = 1;
+  var p = 1;
+  var q = 0;
+  var rest = x;
+  for (var step = 0; step < 64; step++) {
+    final double term = rest.floorToDouble();
+    final double nextQ = term * q + previousQ;
+    if (nextQ > maxDenominator) {
+      final int k = (maxDenominator - previousQ) ~/ q;
+      final int semiP = previousP + k * p;
+      final int semiQ = previousQ + k * q;
+      final double convergentError = (x - p / q).abs();
+      final double semiError = (x - semiP / semiQ).abs();
+      return semiError < convergentError
+          ? (numerator: semiP, denominator: semiQ)
+          : (numerator: p, denominator: q);
+    }
+    final int a = term.toInt();
+    final int nextP = a * p + previousP;
+    previousP = p;
+    previousQ = q;
+    p = nextP;
+    q = nextQ.toInt();
+    final double remainder = rest - term;
+    if (remainder == 0) break;
+    rest = 1 / remainder;
+  }
+  return (numerator: p, denominator: q);
 }
 
 /// The index of the decimal point in [tokens], or their length.

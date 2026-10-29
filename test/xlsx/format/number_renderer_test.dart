@@ -184,6 +184,64 @@ void main() {
     });
   });
 
+  group('fractions', () {
+    test('a whole part and the best fraction', () {
+      expect(t('# ?/?', 2.5), '2 1/2');
+      expect(t('# ??/??', 3.14159), '3 14/99');
+      expect(t('# ???/???', 3.14159265358979), '3  16/113');
+      expect(t('# ?/?', -2.5), '-2 1/2');
+    });
+
+    test('without a whole part the fraction is improper', () {
+      expect(t('?/?', 1.5), '3/2');
+      expect(t('?/?', 2), '2/1');
+      expect(t('?/?', -0.25), '-1/4');
+    });
+
+    test('a fixed denominator rounds the numerator half away from zero', () {
+      expect(t('# ?/8', 0.5), ' 4/8');
+      expect(t('# ?/8', 2.3), '2 2/8');
+      expect(t('# ?/8', 0.0625), ' 1/8');
+      expect(t('0/100', 0.25), '25/100');
+      expect(t('?/15', 0.5), '8/15');
+      expect(t('?/1"5"', 0.5), '1/15');
+    });
+
+    test('a zero fraction is blank under ? and left out under #', () {
+      expect(t('# ?/?', 2), '2    ');
+      expect(t('# #/#', 2), '2 ');
+      expect(t('# ?/?', 0), '0    ');
+      expect(t('# ?/?', -0.01), '0    ');
+    });
+
+    test('a fraction that rounds to one carries into the whole part', () {
+      expect(t('# ?/?', 0.9999), '1    ');
+      expect(t('# ?/?', -1.9999), '-2    ');
+    });
+
+    test('the numerator pads on the left, the denominator on the right', () {
+      expect(t('# ??/??', 0.75), '  3/4 ');
+      expect(t('# 00/00', 1.5), '1 01/20');
+      expect(t('# ?/?', 0.5), ' 1/2');
+      expect(t('0 ?/?', 0.5), '0 1/2');
+    });
+
+    test('a numerator wider than its placeholders is shown in full', () {
+      expect(t('?/?', 12.5), '25/2');
+    });
+
+    test('a whole part beyond double precision comes from the digits', () {
+      expect(t('# ?/?', 1e300), '1${'0' * 300}    ');
+      expect(t('?/?', 1e20), '1${'0' * 20}/1');
+    });
+
+    test('literals, grouping and the minus at the very start', () {
+      expect(t('"x"# ?/?', -2.5), '-x2 1/2');
+      expect(t('#,##0 ?/?', 1234.5), '1,234 1/2');
+      expect(t(r'# ?/?" kg"', 2.5), '2 1/2 kg');
+    });
+  });
+
   group('parts', () {
     test('_x is padding', () {
       expect(parts('_(#,##0_)', 1234), <XlsxFormatPart>[

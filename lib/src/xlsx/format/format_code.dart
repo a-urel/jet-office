@@ -273,6 +273,36 @@ final class FractionSlashToken extends FormatToken {
   String toString() => 'FractionSlashToken';
 }
 
+/// The fixed denominator of a fraction, such as the `16` of `# ?/16`.
+///
+/// It is the run of unquoted digits right after a [FractionSlashToken]
+/// when that run starts with `1` to `9` and has at most
+/// [maxFixedDenominatorDigits] digits; a longer run is one [LiteralToken]
+/// per digit. A run that starts with `0` is a placeholder instead
+/// (`?/0`). A quote or `\` ends the run, so `?/1"5"` has the denominator
+/// 1 and the literal `5`.
+final class FixedDenominatorToken extends FormatToken {
+  /// Creates a fixed denominator of [value].
+  const FixedDenominatorToken(this.value);
+
+  /// The denominator, 1 to 999,999,999.
+  final int value;
+
+  @override
+  bool operator ==(Object other) =>
+      other is FixedDenominatorToken && other.value == value;
+
+  @override
+  int get hashCode => Object.hash(FixedDenominatorToken, value);
+
+  @override
+  String toString() => 'FixedDenominatorToken($value)';
+}
+
+/// The most digits a [FixedDenominatorToken] holds, which keeps every
+/// numerator and denominator well below 2^53.
+const int maxFixedDenominatorDigits = 9;
+
 /// The text placeholder `@`.
 final class TextToken extends FormatToken {
   /// Creates a text placeholder.
@@ -542,7 +572,7 @@ final class _Parser {
         i++;
       } else if (c == '/' && _isFractionSlashAt(i)) {
         _tokens.add(const FractionSlashToken());
-        i++;
+        i = _fixedDenominator(i + 1);
       } else {
         final String char = _charAt(i);
         _tokens.add(LiteralToken(char));
@@ -582,6 +612,29 @@ final class _Parser {
       _tokens.last is DigitToken &&
       i + 1 < code.length &&
       _afterSlash.contains(code[i + 1]);
+
+  /// Reads the fixed denominator that may start at [i], right after a
+  /// fraction slash, and returns the index after it.
+  int _fixedDenominator(int i) {
+    if (i >= code.length) return i;
+    final int first = code.codeUnitAt(i);
+    // `0` is a placeholder; a denominator starts with `1` to `9`.
+    if (first < 0x31 || first > 0x39) return i;
+    var end = i;
+    while (end < code.length &&
+        code.codeUnitAt(end) >= 0x30 &&
+        code.codeUnitAt(end) <= 0x39) {
+      end++;
+    }
+    if (end - i > maxFixedDenominatorDigits) {
+      for (var k = i; k < end; k++) {
+        _tokens.add(LiteralToken(code[k]));
+      }
+    } else {
+      _tokens.add(FixedDenominatorToken(int.parse(code.substring(i, end))));
+    }
+    return end;
+  }
 
   /// Reads the bracket [content] by its first character.
   void _bracket(String content) {
