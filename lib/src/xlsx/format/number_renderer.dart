@@ -15,6 +15,7 @@ import 'excel_number.dart';
 import 'format_code.dart';
 import 'format_locale.dart';
 import 'formatted_value.dart';
+import 'general.dart';
 import 'section_choice.dart';
 
 /// Renders [value] (already chosen and signed by [chooseNumberSection])
@@ -37,10 +38,14 @@ List<XlsxFormatPart> renderNumber(
 }) => switch (_layoutOf(section)) {
   _Layout.scientific => _renderScientific(section, value, showMinus, locale),
   _Layout.fraction => _renderFraction(section, value, showMinus, locale),
-  // General sections are laid out as fixed point, their own token left
-  // out, until their renderer exists.
-  _Layout.fixed ||
-  _Layout.general => _renderFixed(section, value, showMinus, locale),
+  _Layout.general => _renderGeneral(
+    section,
+    value,
+    showMinus,
+    locale,
+    generalWidth,
+  ),
+  _Layout.fixed => _renderFixed(section, value, showMinus, locale),
 };
 
 /// How a number section lays its number out.
@@ -192,6 +197,49 @@ List<XlsxFormatPart> _renderFixed(
           DateToken() ||
           AmPmToken():
         // Not part of a fixed-point layout.
+        break;
+    }
+  }
+  return out.result;
+}
+
+/// Lays [value] out in `General` notation fitted into [width], with the
+/// literals, padding and fill of [section] around it: `General" kg"`.
+///
+/// [showMinus] puts a `-` at the very start, before any literal, unless
+/// [value] is zero.
+List<XlsxFormatPart> _renderGeneral(
+  FormatSection section,
+  ExcelNumber value,
+  bool showMinus,
+  XlsxFormatLocale locale,
+  int width,
+) {
+  final _Parts out = _Parts();
+  if (showMinus && !value.isZero) out.text('-');
+  for (final FormatToken token in section.tokens) {
+    switch (token) {
+      case GeneralToken():
+        out.text(renderGeneral(value, width: width, locale: locale));
+      case LiteralToken(:final String text):
+        out.text(text);
+      case LocaleTagToken(:final String currency):
+        out.text(currency);
+      case PaddingToken(:final String char):
+        out.add(XlsxFormatPadding(char));
+      case FillToken(:final String char):
+        out.add(XlsxFormatFill(char));
+      case DigitToken() ||
+          DecimalPointToken() ||
+          CommaToken() ||
+          PercentToken() ||
+          TextToken() ||
+          ExponentToken() ||
+          FractionSlashToken() ||
+          FixedDenominatorToken() ||
+          DateToken() ||
+          AmPmToken():
+        // Not part of a General layout.
         break;
     }
   }
