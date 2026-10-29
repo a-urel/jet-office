@@ -169,6 +169,31 @@ void main() {
       expect(t('##0.0E+0', 0), '0.0E+0');
     });
 
+    test('engineering: a carry moves to the next multiple', () {
+      expect(t('##0.0E+0', 999.96), '1.0E+3');
+    });
+
+    test('engineering: a negative exponent', () {
+      expect(t('##0.0E+0', 0.0012), '1.2E-3');
+      expect(t('##0.0E+0', 0.012), '12.0E-3');
+      expect(t('##0.0E+0', -0.0012), '-1.2E-3');
+    });
+
+    test('# in the mantissa drops trailing zeros', () {
+      expect(t('0.0#E+0', 12345), '1.23E+4');
+      expect(t('0.0#E+0', 12000), '1.2E+4');
+      expect(t('0.0#E+0', 10000), '1.0E+4');
+    });
+
+    test('E-00 pads the exponent and shows only a minus', () {
+      expect(t('0.00E-00', 12345), '1.23E04');
+      expect(t('0.00E-00', 0.000123), '1.23E-04');
+    });
+
+    test('a literal after the exponent with a negative value', () {
+      expect(t('0.0E+0" m"', -12345), '-1.2E+4 m');
+    });
+
     test('the letter is printed as written', () {
       expect(t('0.0e+00', 12345), '1.2e+04');
     });
@@ -230,6 +255,10 @@ void main() {
       expect(t('# ?/##', 0.5), ' 1/2 ');
       expect(t('# ?/?', 0.5), ' 1/2');
       expect(t('0 ?/?', 0.5), '0 1/2');
+    });
+
+    test('a slash before a denominator too long to be one is kept', () {
+      expect(t('?/9999999999', 2), '2/9999999999');
     });
 
     test('a numerator wider than its placeholders is shown in full', () {

@@ -189,10 +189,13 @@ List<XlsxFormatPart> _renderFixed(
         out.add(XlsxFormatPadding(char));
       case FillToken(:final String char):
         out.add(XlsxFormatFill(char));
+      case FractionSlashToken():
+        // Only a slash with no denominator after it reaches fixed point
+        // (`?/9999999999`); it is printed as written.
+        out.text('/');
       case TextToken() ||
           GeneralToken() ||
           ExponentToken() ||
-          FractionSlashToken() ||
           FixedDenominatorToken() ||
           DateToken() ||
           AmPmToken():

@@ -49,7 +49,7 @@ another type, or a `generalWidth` below 1, is a programmer error and throws
 | Rule | Behaviour | Why | Test |
 |---|---|---|---|
 | Code resolution | `numberFormat` wins over the id; id 0 is `General`; a built-in id uses the built-in table; any other id without a code is `General` with `unresolvedNumberFormat` | the reader gives a code only for custom ids | `test/xlsx/format/formatter_test.dart` |
-| Invalid code | an unterminated quote or bracket, more than four sections, more than two conditions or a code over 255 UTF-16 units shows the value as `General` with `numberFormatInvalid` | Excel refuses such a code; the parser still returns what it scanned, so the reader's classifier works on any code | `test/xlsx/format/formatter_test.dart`, `test/xlsx/format/format_code_test.dart` |
+| Invalid code | an unterminated quote or bracket (the parse is `truncated`), more than four sections, more than two conditions, two conditions in one section, a condition without a number, `[ColorN]` with N outside 1 to 56, or a code over 255 UTF-16 units shows the value as `General` with `numberFormatInvalid` | Excel refuses such a code; the parser still returns what it scanned, so the reader's classifier works on any code | `test/xlsx/format/formatter_test.dart`, `test/xlsx/format/format_code_test.dart` |
 | Output bound | a result to which the code adds over 1,000 characters is replaced by `General` with `numberFormatInvalid`. For a number that is the whole result; for text it is the literals and each `@` after the first, checked before the text is built. A text shown unchanged (no text section, `General` or `@` alone) is never over the bound, however long | `0` followed by 254 `%` on `1E+308` would otherwise be thousands of characters, and `@` 255 times on a 1 MiB text 255 MiB | `test/xlsx/format/formatter_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
 | Code length | a code over 255 characters is `General` with `numberFormatInvalid` at once, neither parsed nor cached | a 1 MiB code would otherwise cost a token per character in the cache | `test/xlsx/format/formatter_test.dart` |
 | Bounded cache | at most 1,024 parsed codes, cleared when full | a file with 300,000 codes costs time, not memory | `test/xlsx/format/formatter_test.dart` |
@@ -78,7 +78,7 @@ another type, or a `generalWidth` below 1, is a programmer error and throws
 | Fractions | `# ?/?`, `# ??/??`, fixed denominators such as `?/8`; best approximation by continued fractions within the denominator's digits; denominators are right-padded with spaces | MS-OI29500, SSF | `test/xlsx/format/number_renderer_test.dart` |
 | `General` | integers below 10^11 in full; otherwise fixed with the most digits that fit `generalWidth` (11), trailing zeros dropped; otherwise scientific. A section holding `General` and literals adds the literals | ECMA-376 §18.8.30; the algorithm is SSF's and numfmt's | `test/xlsx/format/general_test.dart` |
 | Locale separators | the decimal point and the group separator come from `XlsxFormatLocale`, not from the code | the code in a file is invariant | `test/xlsx/format/format_locale_test.dart`, `test/xlsx/format/number_renderer_test.dart`, `test/xlsx/format/general_test.dart` |
-| Built-in table | ids 0 to 49 map to the ECMA-376 codes; the `enUS` locale's table for ids 5 to 8, 14 to 22 and 37 to 44 comes from LibreOffice's import table | the reader passes the invariant code | `test/xlsx/format/format_locale_test.dart`, `test/xlsx/format/formatter_test.dart` |
+| Built-in table | ids 0 to 49 map to the ECMA-376 codes, which the formatter uses; the `enUS` locale's table for ids 5 to 8, 14 to 22 and 37 to 44 comes from LibreOffice's import table (used from N2) | the reader passes the invariant code | `test/xlsx/format/format_locale_test.dart`, `test/xlsx/format/formatter_test.dart` |
 | Color | `[Red]` and the other names are `XlsxColor.rgb`; `[ColorN]` is the indexed color N + 7 | the viewer resolves indexed colors with the workbook's palette | `test/xlsx/format/formatter_test.dart` |
 
 ### Interim rules, until N2
@@ -133,10 +133,14 @@ Further own rules the oracle should check, found while building N1:
   rules; only the whole part groups in a fraction. A literal `,` prints `,`,
   not the locale's group separator.
 - Scientific: `.00E+00` keeps a mantissa below 1; `000.0E+0` is not
-  engineering.
+  engineering; `#.##E+0` on 0 shows `.E+0`.
 - Fractions: `?/?` on 2 shows `2/1`; `# ?/?` on 0 shows `0` and blanks; `# #/#`
   on 2 shows `2 `; a `0` placeholder stops the blanking of a zero fraction;
-  `# 00/00` padding and the carry of a fixed denominator.
+  `# 00/00` padding and the carry of a fixed denominator; a slash before ten
+  or more digits is no fraction, so `?/9999999999` on 2 shows
+  `2/9999999999`.
+- The empty code `''` on a number shows nothing (`-` for a negative one), as
+  an empty section does.
 - `General`: a number with an exponent of -5 or less is always scientific
   (`0.00001` shows `1E-05`); widths other than 11 are unchecked, and a tiny
   width returns the shortest scientific form where Excel shows `#`.

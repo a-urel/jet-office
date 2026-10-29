@@ -10,9 +10,10 @@
 /// dropped, so an id without a `<numFmt>` has a code only when it is a
 /// built-in of `builtinNumberFormatCode` (`format/builtin_formats.dart`);
 /// locale-dependent ids are left unresolved; each format has a kind
-/// (`classifyFormatCode`) and one shared [CellFormat] per id; `<numFmt>` and `<xf>` are matched by depth, local
-/// name and SpreadsheetML namespace under `<numFmts>` and `<cellXfs>`
-/// (Quds also counted `<xf>` of other parents); the root must be a
+/// (`classifyFormatCode`) and one shared [CellFormat] per id; `<numFmt>`
+/// and `<xf>` are matched by depth, local name and SpreadsheetML namespace
+/// under `<numFmts>` and `<cellXfs>` (Quds also counted `<xf>` of other
+/// parents); the root must be a
 /// `<styleSheet>`; and the number of formats and the length of a code are
 /// limited.
 library;
