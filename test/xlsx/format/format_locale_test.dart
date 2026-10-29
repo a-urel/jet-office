@@ -16,7 +16,7 @@ void main() {
       expect((l.trueText, l.falseText), ('TRUE', 'FALSE'));
       expect(l.lcid, 0x409);
       expect(l.messageLocale, XlsxLocale.en);
-      expect(l.verified, isFalse);
+      expect(l.verified, isTrue);
     });
 
     test('names: 12 months, 7 days from Sunday', () {
@@ -100,7 +100,7 @@ void main() {
       expect((l.trueText, l.falseText), ('WAHR', 'FALSCH'));
       expect(l.lcid, 0x407);
       expect(l.messageLocale, XlsxLocale.de);
-      expect(l.verified, isFalse);
+      expect(l.verified, isTrue);
     });
 
     test('names', () {
@@ -171,7 +171,7 @@ void main() {
       expect((l.trueText, l.falseText), ('DOĞRU', 'YANLIŞ'));
       expect(l.lcid, 0x41F);
       expect(l.messageLocale, XlsxLocale.tr);
-      expect(l.verified, isFalse);
+      expect(l.verified, isTrue);
     });
 
     test('names', () {

@@ -27,7 +27,8 @@ import 'package:jet_office/src/zip/archive_adapter.dart';
 /// Where the committed case list lives, relative to the repository root.
 const String oracleCasesPath = 'test/fixtures/owner/number_format/cases.json';
 
-/// The highest number of the Unknowns list in `docs/number-format.md`.
+/// The highest number of the "Settled by Excel" list (the Unknowns) in
+/// `docs/number-format.md`.
 const int _maxUnknown = 21;
 
 final RegExp _idPattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
@@ -133,7 +134,8 @@ final class OracleCase {
   /// The owner checklist items it settles (`C4a`), possibly none.
   final List<String> checks;
 
-  /// The number in the Unknowns list of `docs/number-format.md`, or `null`.
+  /// The number in the "Settled by Excel" list (the Unknowns) of
+  /// `docs/number-format.md`, or `null`.
   final int? unknown;
 
   /// The key of its workbook.

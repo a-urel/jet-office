@@ -246,9 +246,20 @@ void main() {
       expect(textOf('abc', 'yyyy-mm-dd'), 'abc');
     });
 
-    test('a boolean in de-DE', () {
-      expect(textOf(true, '0.00', locale: XlsxFormatLocale.deDE), 'WAHR');
-    }, skip: 'Owner Excel check C16');
+    test('a boolean shows the region\'s word in any code (c16)', () {
+      const String text = '"yes";"no";"zero";@';
+      for (final (XlsxFormatLocale locale, String yes, String no)
+          in <(XlsxFormatLocale, String, String)>[
+            (XlsxFormatLocale.enUS, 'TRUE', 'FALSE'),
+            (XlsxFormatLocale.deDE, 'WAHR', 'FALSCH'),
+            (XlsxFormatLocale.trTR, 'DOĞRU', 'YANLIŞ'),
+          ]) {
+        for (final String code in <String>['0.00', 'General', text]) {
+          expect(textOf(true, code, locale: locale), yes, reason: code);
+          expect(textOf(false, code, locale: locale), no, reason: code);
+        }
+      }
+    }); // Owner Excel check C16
 
     test('errors in de-DE and tr-TR', () {
       expect(

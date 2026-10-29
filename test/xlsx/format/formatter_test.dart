@@ -133,6 +133,13 @@ void main() {
       expect(text(-5, '[<0]"neg "0;"other "0'), 'neg 5');
     });
 
+    // Excel for Mac in all three regions (u02-01 to u02-03).
+    test('a negative that rounds to zero keeps its section, not its minus', () {
+      expect(text(-0.4, '0'), '0');
+      expect(text(-0.001, '0.00'), '0.00');
+      expect(text(-0.4, '#,##0;(#,##0)'), '(0)');
+    });
+
     test('a named color is rgb', () {
       final XlsxFormattedValue result = formatter.format(
         5,
@@ -293,12 +300,26 @@ void main() {
       expect(de.format(46323, numberFormatId: 15).text, '28. Okt 26');
     });
 
-    test('id 14 with a different code uses the code as written', () {
+    test('a built-in id with a different code uses the code (c20)', () {
       expect(
         de.format(46323, numberFormatId: 14, numberFormat: 'yyyy-mm-dd').text,
         '2026-10-28',
       );
-    }, skip: 'Owner Excel check C20');
+      final XlsxNumberFormatter de1904 = XlsxNumberFormatter(
+        locale: XlsxFormatLocale.deDE,
+        date1904: true,
+      );
+      expect(
+        de1904
+            .format(46323, numberFormatId: 14, numberFormat: 'yyyy-mm-dd')
+            .text,
+        '2030-10-29',
+      );
+      expect(
+        de1904.format(1234.5, numberFormatId: 4, numberFormat: '0.000').text,
+        '1234,500',
+      );
+    }); // Owner Excel check C20
   });
 
   group('locale-dependent ids without a code', () {

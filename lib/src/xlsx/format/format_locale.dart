@@ -107,18 +107,24 @@ final class XlsxFormatLocale {
 
   /// Whether the owner checked this locale's output against Excel for Mac.
   ///
+  /// The three shipped locales are checked (`docs/number-format.md`,
+  /// "Excel as the oracle"); each one's dartdoc lists what the check could
+  /// not show. A language tag no shipped locale serves (`[$-40C]`, French)
+  /// shows the renderer locale's names, where Excel shows that language's.
   /// An unchecked locale is built from CLDR's region data and
   /// LibreOffice's import tables and may differ from Excel in details.
   final bool verified;
 
   /// United States English.
   ///
-  /// Names and AM/PM are Excel's English ones. The built-in codes 14 and
-  /// 22 (a two-digit year) follow what Excel for Mac 16.114 shows in
-  /// en-US, and its text of 5–8 and 37–44 on -1234.5 and 1234.5 matches
-  /// these codes; the other codes come from LibreOffice's import table for
-  /// en-US. Not yet fully checked against Excel for Mac ([verified] is
-  /// false).
+  /// Names and AM/PM are Excel's English ones. Checked against Excel for
+  /// Mac 16.114.1, oracle run 2026-10-30: names, booleans, built-in codes
+  /// 5–8, 14–22 and 37–44 (14 and 22 have a two-digit year), the long date
+  /// and time, `#SPILL!` and `#CALC!` show as Excel shows them.
+  ///
+  /// Assumptions that remain, which a CSV cannot show: the `[Red]` of 6,
+  /// 8, 38 and 40; the fill, zero and text sections of 41–44; the error
+  /// names other than `#SPILL!` and `#CALC!`, never shown by the run.
   static const XlsxFormatLocale enUS = XlsxFormatLocale(
     decimalSeparator: '.',
     groupSeparator: ',',
@@ -201,25 +207,24 @@ final class XlsxFormatLocale {
     longDateCode: 'dddd, mmmm d, yyyy',
     longTimeCode: 'h:mm:ss AM/PM',
     messageLocale: XlsxLocale.en,
-    verified: false,
+    verified: true,
   );
 
   /// German (Germany).
   ///
   /// Month and day names come from CLDR, the abbreviations from CLDR's
-  /// stand-alone abbreviated forms without dots. The built-in codes 14 and
-  /// 22 (a two-digit year), 37–41 and 43, and the error names follow what
-  /// Excel for Mac 16.114 shows in de-DE; its text of 5–8, 42 and 44 on
-  /// -1234.5 and 1234.5 matches these codes; the other codes come from
-  /// LibreOffice's import table for de-DE.
+  /// stand-alone abbreviated forms without dots. Checked against Excel for
+  /// Mac 16.114.1, oracle run 2026-10-30: names, booleans, built-in codes
+  /// 5–8, 14–22 and 37–44 (14 and 22 have a two-digit year, 37–40 no
+  /// padding, 41 and 43 Excel's accounting style), [dateSeparator], the
+  /// long date and time, `#SPILL!` (`#ÜBERLAUF!`) and `#CALC!` (German
+  /// Excel leaves it untranslated) show as Excel shows them.
   ///
-  /// Excel's text of 37–41 and 43 on -1234.5 and 1234.5 is matched
-  /// exactly; the rest of those codes is assumed: the colour of 38 and 40
-  /// (`[Red]`, which a CSV cannot show), the fill of 41 and 43 (a fill is
-  /// not in Excel's CSV text), and their zero (`"-"`) and text sections,
-  /// written in Excel's accounting style. German Excel leaves `#CALC!`
-  /// untranslated. Not yet fully checked against Excel for Mac ([verified]
-  /// is false).
+  /// Assumptions that remain, which a CSV cannot show: the `[Red]` of 6,
+  /// 8, 38 and 40; the fill, zero (`"-"`) and text sections of 41–44;
+  /// whether 18 and 19 show `AM`/`PM` as German words by a tag or as the
+  /// English words of an untagged `AM/PM` (both are `AM`/`PM`); the error
+  /// names other than `#SPILL!` and `#CALC!`, never shown by the run.
   static const XlsxFormatLocale deDE = XlsxFormatLocale(
     decimalSeparator: ',',
     groupSeparator: '.',
@@ -304,25 +309,23 @@ final class XlsxFormatLocale {
     longDateCode: 'dddd, d. mmmm yyyy',
     longTimeCode: 'hh:mm:ss',
     messageLocale: XlsxLocale.de,
-    verified: false,
+    verified: true,
   );
 
   /// Turkish (Turkey).
   ///
   /// Month and day names come from CLDR, the abbreviations from CLDR's
-  /// stand-alone abbreviated forms without dots. The built-in codes 5–8,
-  /// 37–44, 18 and 19, the error names and [dateSeparator] follow what
-  /// Excel for Mac 16.114 shows in tr-TR; the other codes come from
-  /// LibreOffice's import table for tr-TR.
+  /// stand-alone abbreviated forms without dots. Checked against Excel for
+  /// Mac 16.114.1, oracle run 2026-10-30: names, booleans, built-in codes
+  /// 5–8 (`₺` first, minus first), 14–22 and 37–44 (37–40 no symbol and
+  /// no padding), [dateSeparator], the long date and time, `#SPILL!`
+  /// (`#TAŞMA!`) and `#CALC!` (`#HESAPLA!`) show as Excel shows them. Ids
+  /// 18 and 19 carry the tr-TR tag `[$-41F]` because Excel shows `ÖÖ`/`ÖS`
+  /// for them but English words for an untagged `AM/PM`.
   ///
-  /// Excel's text of 5–8 and 37–44 on -1234.5 and 1234.5 is matched
-  /// exactly; the rest of those codes is assumed: the colour of 6, 8, 38
-  /// and 40 (`[Red]`, which a CSV cannot show), the fill of 41–44 (a fill
-  /// is not in Excel's CSV text), and their zero (`"-"`) and text sections,
-  /// written in Excel's accounting style. Ids 18 and 19 carry the tr-TR tag
-  /// `[$-41F]` because Excel shows `ÖÖ`/`ÖS` for them but English words for
-  /// an untagged `AM/PM`. Not yet fully checked against Excel for Mac
-  /// ([verified] is false).
+  /// Assumptions that remain, which a CSV cannot show: the `[Red]` of 6,
+  /// 8, 38 and 40; the fill, zero (`"-"`) and text sections of 41–44; the
+  /// error names other than `#SPILL!` and `#CALC!`, never shown by the run.
   static const XlsxFormatLocale trTR = XlsxFormatLocale(
     decimalSeparator: ',',
     groupSeparator: '.',
@@ -407,7 +410,7 @@ final class XlsxFormatLocale {
     longDateCode: 'd mmmm yyyy dddd',
     longTimeCode: 'hh:mm:ss',
     messageLocale: XlsxLocale.tr,
-    verified: false,
+    verified: true,
   );
 }
 
