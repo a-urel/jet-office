@@ -54,7 +54,10 @@ chooseNumberSection(ParsedFormat format, ExcelNumber value) {
   if (sections.length > 1) {
     final FormatSection second = sections[1];
     if (_holds(second.condition, value)) {
-      return pick(second, sign < 0 && !_onlyNegatives(second.condition));
+      final bool minus = second.condition == null && sections.length == 2
+          ? _autoMinusAfter(first.condition!)
+          : !_onlyNegatives(second.condition);
+      return pick(second, sign < 0 && minus);
     }
   }
   if (sections.length > 2) return pick(sections[2], sign < 0);
@@ -101,4 +104,14 @@ bool _onlyNegatives(FormatCondition? condition) {
     '<=' || '=' => isNegative,
     _ => false,
   };
+}
+
+/// Whether the unconditioned second section of a two-section code prints the
+/// automatic minus, given the first section's [condition]: only for `=`, `>`
+/// or `>=` against a value of zero or more.
+bool _autoMinusAfter(FormatCondition condition) {
+  final ExcelNumber v = condition.value;
+  final bool nonNegative = v.isZero || !v.negative;
+  return nonNegative &&
+      (condition.op == '=' || condition.op == '>' || condition.op == '>=');
 }

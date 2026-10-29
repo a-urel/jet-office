@@ -66,6 +66,23 @@ void main() {
       expect(choose('[<>3]0;0', '-2'), (0, true, '2'));
     });
 
+    test('an unconditioned second section of two shows the minus by rule', () {
+      expect(choose('[<-5]0;0', '-2'), (1, false, '2'));
+      expect(choose('[<>-3]0;0', '-3'), (1, false, '3'));
+      expect(choose('[>-10]0;0', '-20'), (1, false, '20'));
+      expect(choose('[>=0]0;0', '-2'), (1, true, '2'));
+      expect(choose('[>0]0;0', '-2'), (1, true, '2'));
+      expect(choose('[=0]0;0', '-2'), (1, true, '2'));
+    });
+
+    test('an unconditioned first section takes every value', () {
+      expect(choose('0;[<0]0', '-3'), (0, true, '3'));
+    });
+
+    test('a conditioned third section is still the else', () {
+      expect(choose('[>10]0;[<-10]0;[=5]0', '1'), (2, false, '1'));
+    });
+
     test('no match and no else section gives null', () {
       expect(choose('[>100]0;[<-100]0', '50'), isNull);
       expect(choose('[>100]0', '50'), isNull);
@@ -84,11 +101,8 @@ void main() {
   });
 
   group('chooseTextSection', () {
-    FormatSection? text(String code) {
-      final ParsedFormat format = parseFormatCode(code);
-      final FormatSection? s = chooseTextSection(format);
-      return s == null ? null : format.sections[format.sections.indexOf(s)];
-    }
+    FormatSection? text(String code) =>
+        chooseTextSection(parseFormatCode(code));
 
     int? index(String code) {
       final ParsedFormat format = parseFormatCode(code);
