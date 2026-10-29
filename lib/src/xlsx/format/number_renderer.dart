@@ -198,7 +198,11 @@ List<XlsxFormatPart> _renderFixed(
           ExponentToken() ||
           FixedDenominatorToken() ||
           DateToken() ||
-          AmPmToken():
+          AmPmToken() ||
+          FractionalSecondsToken() ||
+          CalendarToken() ||
+          SystemFormatToken() ||
+          UnsupportedToken():
         // Not part of a fixed-point layout.
         break;
     }
@@ -241,7 +245,11 @@ List<XlsxFormatPart> _renderGeneral(
           FractionSlashToken() ||
           FixedDenominatorToken() ||
           DateToken() ||
-          AmPmToken():
+          AmPmToken() ||
+          FractionalSecondsToken() ||
+          CalendarToken() ||
+          SystemFormatToken() ||
+          UnsupportedToken():
         // Not part of a General layout.
         break;
     }
@@ -387,7 +395,11 @@ List<XlsxFormatPart> _renderScientific(
           FractionSlashToken() ||
           FixedDenominatorToken() ||
           DateToken() ||
-          AmPmToken():
+          AmPmToken() ||
+          FractionalSecondsToken() ||
+          CalendarToken() ||
+          SystemFormatToken() ||
+          UnsupportedToken():
         break;
     }
   }
@@ -622,7 +634,11 @@ List<XlsxFormatPart> _renderFraction(
           GeneralToken() ||
           ExponentToken() ||
           DateToken() ||
-          AmPmToken():
+          AmPmToken() ||
+          FractionalSecondsToken() ||
+          CalendarToken() ||
+          SystemFormatToken() ||
+          UnsupportedToken():
         break;
     }
   }

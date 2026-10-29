@@ -264,7 +264,7 @@ void main() {
     });
 
     test('a locale tag whose LCID is not hexadecimal keeps no LCID', () {
-      final ParsedFormat parsed = parseFormatCode(r'[$-x-sysdate]dddd');
+      final ParsedFormat parsed = parseFormatCode(r'[$-x-foo]dddd');
       expect(
         parsed.sections.single.tokens.first,
         const LocaleTagToken('', null),
@@ -282,14 +282,21 @@ void main() {
       expect(tokensOf('[sss]').single, const DateToken('s', 3, elapsed: true));
     });
 
-    test('any other bracket is an empty literal placeholder', () {
+    test('any other bracket is an unsupported token', () {
       expect(tokensOf('[DBNum1]0'), <FormatToken>[
-        const LiteralToken(''),
+        const UnsupportedToken('DBNum1'),
         const DigitToken('0'),
       ]);
-      expect(tokensOf('[B2]').single, const LiteralToken(''));
-      expect(tokensOf('[h:mm]').single, const LiteralToken(''));
-      expect(tokensOf('[]').single, const LiteralToken(''));
+      expect(tokensOf('[B2]').single, const CalendarToken(2));
+      expect(tokensOf('[h:mm]').single, const UnsupportedToken('h:mm'));
+      expect(tokensOf('[foo]0'), <FormatToken>[
+        const UnsupportedToken('foo'),
+        const DigitToken('0'),
+      ]);
+      expect(tokensOf('[]0'), <FormatToken>[
+        const UnsupportedToken(''),
+        const DigitToken('0'),
+      ]);
     });
   });
 
@@ -476,11 +483,11 @@ void main() {
     });
 
     test('a . in a date section is a literal, even before the date', () {
-      expect(tokensOf('ss.00'), <FormatToken>[
+      expect(tokensOf('ss.##'), <FormatToken>[
         const DateToken('s', 2),
         const LiteralToken('.'),
-        const DigitToken('0'),
-        const DigitToken('0'),
+        const DigitToken('#'),
+        const DigitToken('#'),
       ]);
       expect(tokensOf('0.d'), <FormatToken>[
         const DigitToken('0'),
@@ -517,6 +524,179 @@ void main() {
       expect(sections[4].hasGeneral, isTrue);
       expect(sections[3].hasGeneral, isFalse);
       expect(parseFormatCode('AM/PM').sections.single.hasDateTime, isTrue);
+    });
+  });
+
+  group('date sections', () {
+    ParsedFormat parse(String code) => parseFormatCode(code);
+
+    test('.0 to .000 after a time token are fractional seconds', () {
+      final List<FormatToken> tokens = tokensOf('h:mm:ss.00');
+      expect(tokens.sublist(tokens.length - 2), <FormatToken>[
+        const DateToken('s', 2),
+        const FractionalSecondsToken(2),
+      ]);
+      expect(tokensOf('mmss.0'), <FormatToken>[
+        const DateToken('m', 2),
+        const DateToken('s', 2),
+        const FractionalSecondsToken(1),
+      ]);
+      expect(tokensOf('[ss].000'), <FormatToken>[
+        const DateToken('s', 2, elapsed: true),
+        const FractionalSecondsToken(3),
+      ]);
+      expect(parse('h:mm:ss.00').invalidReason, isNull);
+      expect(parse('[ss].000').invalidReason, isNull);
+    });
+
+    test('dots between date tokens stay literal', () {
+      expect(tokensOf('dd.mm.yyyy'), <FormatToken>[
+        const DateToken('d', 2),
+        const LiteralToken('.'),
+        const DateToken('m', 2),
+        const LiteralToken('.'),
+        const DateToken('y', 4),
+      ]);
+      expect(parse('dd.mm.yyyy').invalidReason, isNull);
+    });
+
+    test('a quoted or escaped dot does not start fractional seconds', () {
+      expect(parse('ss"."00').invalidReason, isNotNull);
+      expect(parse(r'ss\.0').invalidReason, isNotNull);
+    });
+
+    test('a date section mixed with a number token is invalid', () {
+      for (final String code in <String>[
+        'h:mm:ss.0000',
+        'h:mm:ss.##',
+        'General dd',
+        'yyyy 0',
+        'd 0.00E+00',
+        'dd # ?/?',
+        'AM/PM.00',
+        'yyyy.00',
+      ]) {
+        final ParsedFormat parsed = parse(code);
+        expect(parsed.invalidReason, isNotNull, reason: code);
+        expect(parsed.sections, hasLength(1), reason: code);
+        expect(parsed.sections.single.tokens, isNotEmpty, reason: code);
+      }
+    });
+
+    test('a comma in a date section and a mix across sections are fine', () {
+      expect(tokensOf('mmmm d, yyyy'), <FormatToken>[
+        const DateToken('m', 4),
+        const LiteralToken(' '),
+        const DateToken('d', 1),
+        const CommaToken(),
+        const LiteralToken(' '),
+        const DateToken('y', 4),
+      ]);
+      expect(parse('mmmm d, yyyy').invalidReason, isNull);
+      expect(parse('0;yyyy').invalidReason, isNull);
+    });
+
+    test('B1 and B2 are calendar tokens', () {
+      expect(tokensOf('B2yyyy'), <FormatToken>[
+        const CalendarToken(2),
+        const DateToken('y', 4),
+      ]);
+      expect(tokensOf('B1dd'), <FormatToken>[
+        const CalendarToken(1),
+        const DateToken('d', 2),
+      ]);
+      expect(tokensOf('b2').single, const CalendarToken(2));
+      expect(tokensOf('[B2]yyyy'), <FormatToken>[
+        const CalendarToken(2),
+        const DateToken('y', 4),
+      ]);
+      expect(tokensOf('[b1]').single, const CalendarToken(1));
+      expect(tokensOf('bb'), <FormatToken>[const DateToken('b', 2)]);
+      expect(tokensOf('B3'), <FormatToken>[
+        const DateToken('b', 1),
+        const LiteralToken('3'),
+      ]);
+    });
+
+    test('system date and time tags', () {
+      expect(tokensOf(r'[$-F800]dddd'), <FormatToken>[
+        const SystemFormatToken(longDate: true),
+        const DateToken('d', 4),
+      ]);
+      expect(
+        tokensOf(r'[$-F400]h').first,
+        const SystemFormatToken(longDate: false),
+      );
+      expect(
+        tokensOf(r'[$-x-systime]h').first,
+        const SystemFormatToken(longDate: false),
+      );
+      expect(
+        tokensOf(r'[$-X-SYSTIME]h').first,
+        const SystemFormatToken(longDate: false),
+      );
+      expect(
+        tokensOf(r'[$-x-sysdate]').single,
+        const SystemFormatToken(longDate: true),
+      );
+      expect(
+        tokensOf(r'[$-10F800]').single,
+        const SystemFormatToken(longDate: true),
+      );
+      expect(parse(r'[$-F800]dddd').sections.single.hasDateTime, isTrue);
+      expect(parse('h:mm:ss.0').sections.single.hasDateTime, isTrue);
+    });
+
+    test('the parts of a locale tag', () {
+      final LocaleTagToken tag =
+          tokensOf(r'[$-1060409]').single as LocaleTagToken;
+      expect(tag.language, 0x409);
+      expect(tag.calendar, 6);
+      expect(tag.numerals, 1);
+      final LocaleTagToken euro =
+          tokensOf(r'[$€-407]').single as LocaleTagToken;
+      expect(euro.language, 0x407);
+      expect(euro.calendar, 0);
+      expect(euro.numerals, 0);
+      const LocaleTagToken none = LocaleTagToken('€', null);
+      expect(none.language, 0);
+      expect(none.calendar, 0);
+      expect(none.numerals, 0);
+    });
+
+    test('the new tokens have value equality and a toString', () {
+      expect(const FractionalSecondsToken(2), const FractionalSecondsToken(2));
+      expect(
+        const FractionalSecondsToken(2).hashCode,
+        const FractionalSecondsToken(2).hashCode,
+      );
+      expect(
+        const FractionalSecondsToken(2),
+        isNot(const FractionalSecondsToken(3)),
+      );
+      expect(const CalendarToken(1), isNot(const CalendarToken(2)));
+      expect(
+        const SystemFormatToken(longDate: true),
+        isNot(const SystemFormatToken(longDate: false)),
+      );
+      expect(const UnsupportedToken('a'), isNot(const UnsupportedToken('b')));
+      expect(
+        const UnsupportedToken('a').hashCode,
+        const UnsupportedToken('a').hashCode,
+      );
+      expect(
+        const FractionalSecondsToken(2).toString(),
+        'FractionalSecondsToken(2)',
+      );
+      expect(const CalendarToken(2).toString(), 'CalendarToken(2)');
+      expect(
+        const SystemFormatToken(longDate: true).toString(),
+        'SystemFormatToken(longDate: true)',
+      );
+      expect(
+        const UnsupportedToken('DBNum1').toString(),
+        'UnsupportedToken("DBNum1")',
+      );
     });
   });
 

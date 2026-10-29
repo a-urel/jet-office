@@ -80,10 +80,15 @@ final class FormatSection {
   /// Whether the section holds a digit placeholder `0`, `#` or `?`.
   bool get hasDigits => tokens.any((FormatToken t) => t is DigitToken);
 
-  /// Whether the section holds a date or time token, elapsed or not, or an
-  /// AM/PM marker.
-  bool get hasDateTime =>
-      tokens.any((FormatToken t) => t is DateToken || t is AmPmToken);
+  /// Whether the section holds a date or time token, elapsed or not, an
+  /// AM/PM marker, fractional seconds or a system date or time tag.
+  bool get hasDateTime => tokens.any(
+    (FormatToken t) =>
+        t is DateToken ||
+        t is AmPmToken ||
+        t is FractionalSecondsToken ||
+        t is SystemFormatToken,
+  );
 
   @override
   String toString() =>
@@ -148,8 +153,8 @@ sealed class FormatToken {
 /// Text shown as written: a quoted literal, the character after `\`, or a
 /// character with no meaning in a format code.
 ///
-/// A bracket the parser does not interpret, such as `[DBNum1]` or `[B2]`,
-/// is an empty literal that holds its place.
+/// A bracket the parser does not interpret, such as `[DBNum1]`, is an
+/// [UnsupportedToken] instead.
 final class LiteralToken extends FormatToken {
   /// Creates a literal of [text].
   const LiteralToken(this.text);
@@ -381,7 +386,8 @@ final class LocaleTagToken extends FormatToken {
   final String currency;
 
   /// The hexadecimal locale id after the `-`, or null when there is none or
-  /// it is not one to eight hexadecimal digits (`[$-x-sysdate]`).
+  /// it is not one to eight hexadecimal digits. A system date or time tag
+  /// (`[$-F800]`, `[$-x-sysdate]`) is a [SystemFormatToken] instead.
   final int? lcid;
 
   @override
@@ -393,9 +399,23 @@ final class LocaleTagToken extends FormatToken {
   @override
   int get hashCode => Object.hash(LocaleTagToken, currency, lcid);
 
+  /// The language of [lcid]: its bits 0 to 15, such as `0x407` for
+  /// German (Germany), or 0 when [lcid] is null.
+  int get language => (lcid ?? 0) & 0xFFFF;
+
+  /// The calendar of [lcid]: its bits 16 to 23, or 0 when [lcid] is null.
+  /// 0 and 1 are Gregorian.
+  int get calendar => ((lcid ?? 0) >> 16) & 0xFF;
+
+  /// The numeral system of [lcid]: its bits 24 to 31, or 0 when [lcid] is
+  /// null. 0 and 1 are Western digits.
+  int get numerals => ((lcid ?? 0) >> 24) & 0xFF;
+
   @override
-  String toString() =>
-      'LocaleTagToken("$currency", ${lcid == null ? null : '0x${lcid!.toRadixString(16)}'})';
+  String toString() {
+    final String id = lcid == null ? 'null' : '0x${lcid!.toRadixString(16)}';
+    return 'LocaleTagToken("$currency", $id)';
+  }
 }
 
 /// A run of one date or time letter, such as `yyyy` or the elapsed `[h]`.
@@ -448,6 +468,95 @@ final class AmPmToken extends FormatToken {
   @override
   String toString() => 'AmPmToken($text)';
 }
+
+/// `.0` to `.000` after a time token: [digits] decimals of a second.
+///
+/// It is a `.` followed directly by one to three `0` in a date or time
+/// section that has an `h`, `m` or `s` token (elapsed or not) before it.
+/// Four or more `0` make the code invalid.
+final class FractionalSecondsToken extends FormatToken {
+  /// Creates fractional seconds of [digits] decimals.
+  const FractionalSecondsToken(this.digits);
+
+  /// How many decimals of a second are shown: 1 to 3.
+  final int digits;
+
+  @override
+  bool operator ==(Object other) =>
+      other is FractionalSecondsToken && other.digits == digits;
+
+  @override
+  int get hashCode => Object.hash(FractionalSecondsToken, digits);
+
+  @override
+  String toString() => 'FractionalSecondsToken($digits)';
+}
+
+/// `B1` or `B2`, bracketed or not and in any case: the calendar of the
+/// section's dates.
+final class CalendarToken extends FormatToken {
+  /// Creates a calendar token for [calendar].
+  const CalendarToken(this.calendar);
+
+  /// The calendar: 1 Gregorian, 2 Hijri.
+  final int calendar;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CalendarToken && other.calendar == calendar;
+
+  @override
+  int get hashCode => Object.hash(CalendarToken, calendar);
+
+  @override
+  String toString() => 'CalendarToken($calendar)';
+}
+
+/// A system date or time tag: `[$-F800]` or `[$-x-sysdate]` for the long
+/// date, `[$-F400]` or `[$-x-systime]` for the long time.
+///
+/// The upper bits of the locale id do not matter: `[$-10F800]` is the long
+/// date too.
+final class SystemFormatToken extends FormatToken {
+  /// Creates a system tag for the long date or the long time.
+  const SystemFormatToken({required this.longDate});
+
+  /// Whether the tag stands for the long date; false for the long time.
+  final bool longDate;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemFormatToken && other.longDate == longDate;
+
+  @override
+  int get hashCode => Object.hash(SystemFormatToken, longDate);
+
+  @override
+  String toString() => 'SystemFormatToken(longDate: $longDate)';
+}
+
+/// A bracket the engine does not render, such as `[DBNum1]`, `[NatNum1]`
+/// or `[foo]`: it holds its place and shows nothing.
+final class UnsupportedToken extends FormatToken {
+  /// Creates an unsupported bracket of [content].
+  const UnsupportedToken(this.content);
+
+  /// The text between the brackets, without them; empty for `[]`.
+  final String content;
+
+  @override
+  bool operator ==(Object other) =>
+      other is UnsupportedToken && other.content == content;
+
+  @override
+  int get hashCode => Object.hash(UnsupportedToken, content);
+
+  @override
+  String toString() => 'UnsupportedToken("$content")';
+}
+
+/// The most decimals of a second a section may show.
+const int _maxSecondDecimals = 3;
 
 const String _generalWord = 'general';
 const String _amPm = 'am/pm';
@@ -546,6 +655,11 @@ final class _Parser {
           (code[i + 1] == '+' || code[i + 1] == '-')) {
         _tokens.add(ExponentToken(plus: code[i + 1] == '+', letter: c));
         i += 2;
+      } else if ((c == 'b' || c == 'B') &&
+          i + 1 < code.length &&
+          (code[i + 1] == '1' || code[i + 1] == '2')) {
+        _tokens.add(CalendarToken(code.codeUnitAt(i + 1) - 0x30));
+        i += 2;
       } else if (_dateLetters.contains(c.toLowerCase())) {
         final String letter = c.toLowerCase();
         var end = i + 1;
@@ -639,13 +753,15 @@ final class _Parser {
   /// Reads the bracket [content] by its first character.
   void _bracket(String content) {
     if (content.isEmpty) {
-      _tokens.add(const LiteralToken(''));
+      _tokens.add(const UnsupportedToken(''));
       return;
     }
     final String first = content[0];
     final String lower = content.toLowerCase();
     if (first == r'$') {
-      _tokens.add(_localeTag(content.substring(1)));
+      _tokens.add(_dollarTag(content.substring(1)));
+    } else if (lower == 'b1' || lower == 'b2') {
+      _tokens.add(CalendarToken(lower == 'b1' ? 1 : 2));
     } else if (first == '<' || first == '>' || first == '=') {
       _addCondition(content);
     } else if ('hms'.contains(lower[0]) && _isRunOf(lower, lower[0])) {
@@ -660,8 +776,8 @@ final class _Parser {
         _color ??= FormatColor(index: n + 7);
       }
     } else {
-      // [DBNum1], [B2] and the like: kept in place for the renderers.
-      _tokens.add(const LiteralToken(''));
+      // [DBNum1], [NatNum1] and the like: kept in place for the renderers.
+      _tokens.add(UnsupportedToken(content));
     }
   }
 
@@ -698,9 +814,19 @@ final class _Parser {
       (FormatToken t) => t is FillToken,
     );
     final List<FormatToken> tokens = <FormatToken>[];
+    var timeSeen = false;
     for (var k = 0; k < _tokens.length; k++) {
       final FormatToken token = _tokens[k];
+      if (token is DateToken && 'hms'.contains(token.letter)) timeSeen = true;
       if (token is DecimalPointToken) {
+        final int run = isDate && timeSeen ? _zeroRunAt(k + 1) : 0;
+        if (run > _maxSecondDecimals) {
+          _invalid ??= 'more than $_maxSecondDecimals decimals of a second';
+        } else if (run > 0) {
+          tokens.add(FractionalSecondsToken(run));
+          k += run;
+          continue;
+        }
         tokens.add(pointSeen ? const LiteralToken('.') : token);
         pointSeen = true;
       } else if (token is FillToken && k != lastFill) {
@@ -709,10 +835,32 @@ final class _Parser {
         tokens.add(token);
       }
     }
+    if (isDate) {
+      for (final FormatToken token in tokens) {
+        if (token is DigitToken ||
+            token is GeneralToken ||
+            token is ExponentToken ||
+            token is FractionSlashToken ||
+            token is FixedDenominatorToken) {
+          _invalid ??= 'a date or time section mixed with $token';
+          break;
+        }
+      }
+    }
     _sections.add(FormatSection(tokens, condition: _condition, color: _color));
     _tokens = <FormatToken>[];
     _condition = null;
     _color = null;
+  }
+
+  /// How many `0` placeholders of the current section follow each other
+  /// from [k].
+  int _zeroRunAt(int k) {
+    var end = k;
+    while (end < _tokens.length && _tokens[end] == const DigitToken('0')) {
+      end++;
+    }
+    return end - k;
   }
 }
 
@@ -736,14 +884,23 @@ int? _decimal(String text) {
   return n;
 }
 
-/// The tag after `[$`: the currency, then `-` and a hexadecimal LCID.
-LocaleTagToken _localeTag(String text) {
+/// The tag after `[$`: the currency, then `-` and a hexadecimal LCID, or a
+/// system date or time tag.
+FormatToken _dollarTag(String text) {
   final int dash = text.indexOf('-');
   if (dash < 0) return LocaleTagToken(text, null);
-  return LocaleTagToken(
-    text.substring(0, dash),
-    _hex(text.substring(dash + 1)),
-  );
+  final String after = text.substring(dash + 1);
+  final String lower = after.toLowerCase();
+  if (lower == 'x-sysdate') return const SystemFormatToken(longDate: true);
+  if (lower == 'x-systime') return const SystemFormatToken(longDate: false);
+  final int? lcid = _hex(after);
+  if (lcid != null && lcid & 0xFFFF == 0xF800) {
+    return const SystemFormatToken(longDate: true);
+  }
+  if (lcid != null && lcid & 0xFFFF == 0xF400) {
+    return const SystemFormatToken(longDate: false);
+  }
+  return LocaleTagToken(text.substring(0, dash), lcid);
 }
 
 /// [text] as one to eight hexadecimal digits, or null.

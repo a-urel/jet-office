@@ -5,9 +5,10 @@
 /// The text section is always the last: the fourth, or with fewer the last
 /// one when it holds `@` and has no condition (SheetJS SSF's rule; Microsoft
 /// puts text last). Numbers then choose among the sections before it, by
-/// the rules for that many sections. With `[...]` conditions on the first two sections the implied rules are
-/// replaced: the first section whose condition holds wins, then the second
-/// if it holds or has none, then the third. The rules follow Excel for Mac
+/// the rules for that many sections. With `[...]` conditions on the first
+/// two sections the implied rules are replaced: the first section whose
+/// condition holds wins, then the second if it holds or has none, then the
+/// third. The rules follow Excel for Mac
 /// as described in `docs/decisions/0008`.
 library;
 
