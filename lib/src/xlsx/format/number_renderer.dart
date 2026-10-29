@@ -134,18 +134,13 @@ List<XlsxFormatPart> _renderFixed(
   final _Parts out = _Parts();
   if (showMinus && !allZero) out.text('-');
 
-  /// Writes integer column [c] (shown as [placeholder]) and the group
-  /// separator after it.
-  void writeColumn(int c, String placeholder) {
-    final String shown = c < integerDigits.length
-        ? integerDigits[integerDigits.length - 1 - c]
-        : _blank(placeholder);
-    out.text(shown);
-    if (grouping && c > 0 && c % 3 == 0 && shown.isNotEmpty) {
-      // A `?` column's separator is a space too.
-      out.text(shown == ' ' ? ' ' : locale.groupSeparator);
-    }
-  }
+  void writeColumn(int c, String placeholder) => _writeColumn(
+    out,
+    integerDigits,
+    c,
+    placeholder,
+    grouping ? locale.groupSeparator : null,
+  );
 
   var integerSeen = 0;
   var fractionSeen = 0;
@@ -369,8 +364,10 @@ const int _maxDenominatorDigits = maxFixedDenominatorDigits;
 /// Otherwise the fraction is the best rational approximation with a
 /// denominator below 10^d, d the denominator placeholders (at most 9
 /// counted). A fraction that rounds to one carries into the whole part.
-/// The numerator pads on the left and the denominator on the right, each
-/// placeholder as in fixed point. A mixed section whose fraction is zero
+/// The numerator pads on the left, each placeholder as in fixed point;
+/// the denominator pads on the right with spaces under every placeholder,
+/// as a `0` there would change the value shown (`# 00/00` shows 1.5 as
+/// `1 01/2 `). A mixed section whose fraction is zero
 /// shows it blank: spaces under `?`, nothing under `#`, the slash and a
 /// fixed denominator too; a `0` placeholder in the fraction shows it in
 /// full instead.
@@ -490,17 +487,13 @@ List<XlsxFormatPart> _renderFraction(
   final _Parts out = _Parts();
   if (showMinus && !allZero) out.text('-');
 
-  /// Writes integer column [c] (shown as [placeholder]) and the group
-  /// separator after it.
-  void writeColumn(int c, String placeholder) {
-    final String shown = c < integerDigits.length
-        ? integerDigits[integerDigits.length - 1 - c]
-        : _blank(placeholder);
-    out.text(shown);
-    if (grouping && c > 0 && c % 3 == 0 && shown.isNotEmpty) {
-      out.text(shown == ' ' ? ' ' : locale.groupSeparator);
-    }
-  }
+  void writeColumn(int c, String placeholder) => _writeColumn(
+    out,
+    integerDigits,
+    c,
+    placeholder,
+    grouping ? locale.groupSeparator : null,
+  );
 
   var integerSeen = 0;
   for (var k = 0; k < tokens.length; k++) {
@@ -540,12 +533,14 @@ List<XlsxFormatPart> _renderFraction(
         );
       case DigitToken(:final String char) when k < denominatorEnd:
         final int index = k - slash - 1;
+        // The denominator pads on the right with spaces under every
+        // placeholder: a `0` there would change the value shown.
         out.text(
           blankFraction
               ? _blank(char)
               : (index < denominatorDigits.length
                     ? denominatorDigits[index]
-                    : _blank(char)),
+                    : ' '),
         );
       case DigitToken():
         // A placeholder after the fraction: not part of the layout.
@@ -671,6 +666,27 @@ List<_Comma?> _classifyCommas(List<FormatToken> tokens, int point) {
     }
   }
   return roles;
+}
+
+/// Writes integer column [c] of [digits] (columns counted from the right,
+/// from 0), shown as [placeholder] where [digits] has none, and the
+/// [groupSeparator] after it when grouping is on (non-null) and the
+/// column starts a group of three.
+void _writeColumn(
+  _Parts out,
+  String digits,
+  int c,
+  String placeholder,
+  String? groupSeparator,
+) {
+  final String shown = c < digits.length
+      ? digits[digits.length - 1 - c]
+      : _blank(placeholder);
+  out.text(shown);
+  if (groupSeparator != null && c > 0 && c % 3 == 0 && shown.isNotEmpty) {
+    // A `?` column's separator is a space too.
+    out.text(shown == ' ' ? ' ' : groupSeparator);
+  }
 }
 
 /// What [placeholder] shows where there is no significant digit.

@@ -210,6 +210,10 @@ void main() {
     test('a zero fraction is blank under ? and left out under #', () {
       expect(t('# ?/?', 2), '2    ');
       expect(t('# #/#', 2), '2 ');
+      expect(t('# ##/##', 2), '2 ');
+      expect(t('# #/8', 2), '2 ');
+      // A blank fixed denominator: unconfirmed in Excel (oracle list).
+      expect(t('# ?/8', 2), '2    ');
       expect(t('# ?/?', 0), '0    ');
       expect(t('# ?/?', -0.01), '0    ');
     });
@@ -217,11 +221,13 @@ void main() {
     test('a fraction that rounds to one carries into the whole part', () {
       expect(t('# ?/?', 0.9999), '1    ');
       expect(t('# ?/?', -1.9999), '-2    ');
+      expect(t('# ?/8', 0.9375), '1    ');
     });
 
     test('the numerator pads on the left, the denominator on the right', () {
       expect(t('# ??/??', 0.75), '  3/4 ');
-      expect(t('# 00/00', 1.5), '1 01/20');
+      expect(t('# 00/00', 1.5), '1 01/2 ');
+      expect(t('# ?/##', 0.5), ' 1/2 ');
       expect(t('# ?/?', 0.5), ' 1/2');
       expect(t('0 ?/?', 0.5), '0 1/2');
     });
