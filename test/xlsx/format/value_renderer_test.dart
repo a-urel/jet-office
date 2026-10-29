@@ -126,6 +126,19 @@ void main() {
       expect(textOf(-12.5, '@'), '-12.5');
     });
 
+    test('0;@ keeps its last section for text', () {
+      expect(textOf(-5, '0;@'), '-5');
+      expect(textOf(5, '0;@'), '5');
+      expect(textOf('a', '0;@'), 'a');
+      expect(textOf(0, '0;-0;@'), '0');
+      expect(textOf(-5, '0;"neg "0;"t "@'), 'neg 5');
+      expect(textOf('a', '0;"neg "0;"t "@'), 't a');
+    });
+
+    test('text skips a section holding @ that is not the last', () {
+      expect(textOf('a', '"x"@;0'), 'a');
+    });
+
     test('a negative number takes the second section', () {
       expect(textOf(-3, '0;(0)'), '(3)');
     });

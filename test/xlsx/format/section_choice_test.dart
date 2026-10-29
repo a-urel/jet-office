@@ -41,6 +41,20 @@ void main() {
       },
     );
 
+    test('a last section holding @ is for text; numbers use the others', () {
+      expect(choose('0;@', '-5'), (0, true, '5'));
+      expect(choose('0;@', '5'), (0, false, '5'));
+      expect(choose('0;@', '0'), (0, false, '0'));
+      expect(choose('0;-0;@', '0'), (0, false, '0'));
+      expect(choose('0;-0;@', '-3'), (1, false, '3'));
+      expect(choose('0;-0;@', '3'), (0, false, '3'));
+    });
+
+    test('a single section holding @ is returned for the renderer', () {
+      expect(choose('@', '-5'), (0, true, '5'));
+      expect(choose('"Name: "@', '5'), (0, false, '5'));
+    });
+
     test('an invalid code does not throw', () {
       expect(choose('0;0;0;0;0', '1'), isNotNull);
     });
@@ -115,9 +129,19 @@ void main() {
       expect(index('0;0;0;"x"'), 3);
     });
 
-    test('the section holding @ when there are fewer than four', () {
+    test('the last section when it holds @ and there are fewer than four', () {
       expect(index('"Name: "@'), 0);
       expect(index('0;@'), 1);
+      expect(index('0;-0;@'), 2);
+    });
+
+    test('never an earlier section', () {
+      expect(text('"x"@;0'), isNull);
+      expect(text('@;0;0'), isNull);
+    });
+
+    test('not a last section with a condition', () {
+      expect(text('0;[>1]@'), isNull);
     });
 
     test('null when no section holds @', () {

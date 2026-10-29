@@ -58,7 +58,8 @@ another type, or a `generalWidth` below 1, is a programmer error and throws
 | Conditions | `[=n] [<n] [<=n] [>n] [>=n] [<>n]` replace the implied rules; a value takes the first section whose condition holds; no section matching is `overflow` with text `#` | ECMA-376 | `test/xlsx/format/section_choice_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
 | Minus sign in sections | a value in an explicit negative section is shown as its absolute value; a two-section code with an unconditioned second section keeps the automatic minus only when the first condition is `=`, `>` or `>=` with a value of 0 or more | observed rule of numfmt and the research notes; unconfirmed, see Unknowns | `test/xlsx/format/section_choice_test.dart` |
 | `@` as the only section | a number shows as `General` (a text-only single section) | SSF; unconfirmed | `test/xlsx/format/value_renderer_test.dart` |
-| Text | a text value takes the fourth section or the section holding `@`, otherwise it is unchanged; text never takes a conditional section; `@` twice repeats the text | ECMA-376 | `test/xlsx/format/value_renderer_test.dart`, `test/xlsx/format/section_choice_test.dart` |
+| Text | the text section is the last: the fourth, or with fewer sections the last one when it holds `@` and has no condition, never an earlier one (`"x"@;0` leaves text unchanged); without one text is unchanged; `@` twice repeats the text | ECMA-376; Microsoft puts text last; the rule for fewer sections is SSF's, unconfirmed | `test/xlsx/format/value_renderer_test.dart`, `test/xlsx/format/section_choice_test.dart` |
+| Numbers beside a text section | a text section of a two- or three-section code takes no number; numbers choose among the sections before it by the rules for that many: `0;@` shows -5 as `-5`, `0;-0;@` shows 0 with the first section, as `0;-0` would | follows from the text section being the last; unconfirmed, see Unknowns | `test/xlsx/format/section_choice_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
 | Booleans, errors, empty | a boolean shows `TRUE`/`FALSE` and an error value its code, whatever the code; `null` is empty | Excel ignores the code for them | `test/xlsx/format/value_renderer_test.dart` |
 | NaN and infinity | `#NUM!` | only a `num` can hold them | `test/xlsx/format/value_renderer_test.dart` |
 
@@ -118,7 +119,9 @@ design, with what the code does today.
 17. `#SPILL!` and `#CALC!` in `de` and `tr` (N2).
 18. More than four sections or three conditions in a file.
 19. `@` alone on a number (shows `General` today; `"Name: "@` on a number
-    shows `General` without the literal).
+    shows `General` without the literal). `0;@` on -5 (`-5` today), on 5
+    (`5`) and on text (unchanged); `0;-0;@` on 0 (`0` today, the first
+    section).
 20. A file's own `<numFmt>` for a built-in id (N2).
 
 Further own rules the oracle should check, found while building N1:

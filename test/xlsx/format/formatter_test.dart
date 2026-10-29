@@ -32,6 +32,12 @@ void main() {
       expect(text('abc', '"Name: "@'), 'Name: abc');
     });
 
+    test('a last text section leaves numbers to the others', () {
+      expect(text(-5, '0;@'), '-5');
+      expect(text(5, '0;@'), '5');
+      expect(text('a', '0;@'), 'a');
+    });
+
     test('a boolean, an error and null', () {
       expect(text(true, '0.00'), 'TRUE');
       expect(text(const XlsxErrorValue('#DIV/0!'), '0.00'), '#DIV/0!');

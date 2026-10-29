@@ -2,7 +2,10 @@
 ///
 /// New in jet_office; Quds has no number format engine. A code holds up to
 /// four sections, for positive numbers, negative numbers, zero and text.
-/// With `[...]` conditions on the first two sections the implied rules are
+/// The text section is always the last: the fourth, or with fewer the last
+/// one when it holds `@` and has no condition (SheetJS SSF's rule; Microsoft
+/// puts text last). Numbers then choose among the sections before it, by
+/// the rules for that many sections. With `[...]` conditions on the first two sections the implied rules are
 /// replaced: the first section whose condition holds wins, then the second
 /// if it holds or has none, then the third. The rules follow Excel for Mac
 /// as described in `docs/decisions/0008`.
@@ -21,13 +24,19 @@ import 'format_code.dart';
 /// conditions) or by a condition that only negatives meet writes its own
 /// sign, so `showMinus` is false there.
 ///
-/// A code whose only section holds `@` is how a number is shown as
-/// `General`; this returns that section and the renderer decides. The
-/// fourth section is for text and never takes a number. An invalid
-/// [format] is not special-cased: callers render it as `General` first.
+/// The text section ([chooseTextSection]) never takes a number: `0;@`
+/// shows -5 as `-5` with its one number section, and `0;-0;@` shows 0 with
+/// the first section, as a two-section code would. A code whose only
+/// section holds `@` is how a number is shown as `General`; this returns
+/// that section and the renderer decides. An invalid [format] is not
+/// special-cased: callers render it as `General` first.
 ({FormatSection section, bool showMinus, ExcelNumber value})?
 chooseNumberSection(ParsedFormat format, ExcelNumber value) {
-  final List<FormatSection> sections = format.sections;
+  final List<FormatSection> all = format.sections;
+  final List<FormatSection> sections =
+      all.length > 1 && all.length < 4 && _isText(all.last)
+      ? all.sublist(0, all.length - 1)
+      : all;
   final int sign = value.isZero ? 0 : (value.negative ? -1 : 1);
   final ExcelNumber magnitude = value.abs();
 
@@ -66,17 +75,19 @@ chooseNumberSection(ParsedFormat format, ExcelNumber value) {
 
 /// The section text takes in [format], or null to show the text unchanged.
 ///
-/// That is the fourth section when there is one; otherwise the first
-/// section that holds an `@`, if it has no condition. A conditional section
-/// never takes text.
+/// That is the fourth section when there is one; otherwise the last
+/// section if it holds an `@` and has no condition, never an earlier one
+/// (`"x"@;0` shows text unchanged). A conditional section never takes
+/// text.
 FormatSection? chooseTextSection(ParsedFormat format) {
   final List<FormatSection> sections = format.sections;
   if (sections.length >= 4) return sections[3];
-  for (final FormatSection section in sections) {
-    if (section.hasText && section.condition == null) return section;
-  }
-  return null;
+  return _isText(sections.last) ? sections.last : null;
 }
+
+/// Whether [section], the last of fewer than four, is the text section.
+bool _isText(FormatSection section) =>
+    section.hasText && section.condition == null;
 
 /// Whether [condition] holds for [value]; no condition always holds.
 bool _holds(FormatCondition? condition, ExcelNumber value) {
