@@ -98,9 +98,11 @@ enforces.
 
 `XlsxNumberFormatter` shows a cell value as Excel for Mac does, with the
 cell's number format code: grouping, rounding, percent, scientific, fractions,
-`General` and text sections. It does not throw for a code it cannot read; it
-shows `General` and says so in the result's `warning`. Dates and times, and
-the German and Turkish regions, are still to come.
+`General`, text sections, dates and times in both date systems, and the
+`en-US`, `de-DE` and `tr-TR` regions (`XlsxFormatLocale`), compared with
+Excel for Mac's output (the assumptions left are in
+[`docs/number-format.md`](docs/number-format.md)). It does not throw for a code it cannot read; it shows
+`General` and says so in the result's `warning`.
 
 ```dart
 final XlsxNumberFormatter formatter = XlsxNumberFormatter();
@@ -255,8 +257,9 @@ with lower bounds: time and memory follow the size of the XML.
   formulas. It refuses Strict OOXML, `.xlsb`, legacy `.xls` and encrypted
   files with an `XlsxReadException`.
 - The reader gives a cell's value and its number format code, not the text
-  Excel shows (`00123`, `28.10.2026`): a number format engine is planned
-  after phase 2.
+  Excel shows (`00123`, `28.10.2026`); `XlsxNumberFormatter` turns the two
+  into that text. It ships three regions; a language tag it does not
+  ship (French `[$-40C]`) shows the region's names, with a warning.
 - Uploads are untrusted: the reader stops at the `XlsxReadLimits` it is given
   (by default, for example, 256 MiB per inflated part and a compression ratio
   of 1,000). Lower them for small uploads (see above).

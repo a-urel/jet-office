@@ -14,16 +14,18 @@ import '../warnings.dart';
 /// errors.
 ///
 /// It is not [XlsxLocale], which names the language of warning messages;
-/// [messageLocale] gives the matching one. Every field is required, so a
-/// caller can define a region the library does not ship.
+/// [messageLocale] gives the matching one. Every field but [dateSeparator]
+/// is required, so a caller can define a region the library does not ship.
 final class XlsxFormatLocale {
   /// Creates a locale from every field.
   ///
   /// [monthNames] and [monthAbbreviations] hold 12 entries from January;
-  /// [dayNames] and [dayAbbreviations] hold 7 from Sunday.
+  /// [dayNames] and [dayAbbreviations] hold 7 from Sunday. [dateSeparator]
+  /// defaults to `/`, which shows a code's `/` as written.
   const XlsxFormatLocale({
     required this.decimalSeparator,
     required this.groupSeparator,
+    this.dateSeparator = '/',
     required this.monthNames,
     required this.monthAbbreviations,
     required this.dayNames,
@@ -46,6 +48,11 @@ final class XlsxFormatLocale {
 
   /// What a grouping `,` of a format code shows as, such as `,` or `.`.
   final String groupSeparator;
+
+  /// What a `/` in a date or time section shows as, such as `/` or `.`.
+  ///
+  /// Excel for Mac in tr-TR shows `dd/mm/yyyy` as `28.10.2026`.
+  final String dateSeparator;
 
   /// The month names, January first: what `mmmm` shows.
   final List<String> monthNames;
@@ -100,18 +107,28 @@ final class XlsxFormatLocale {
 
   /// Whether the owner checked this locale's output against Excel for Mac.
   ///
+  /// The three shipped locales are checked (`docs/number-format.md`,
+  /// "Excel as the oracle"); each one's dartdoc lists what the check could
+  /// not show. A language tag no shipped locale serves (`[$-40C]`, French)
+  /// shows the renderer locale's names, where Excel shows that language's.
   /// An unchecked locale is built from CLDR's region data and
   /// LibreOffice's import tables and may differ from Excel in details.
   final bool verified;
 
   /// United States English.
   ///
-  /// Names and AM/PM are Excel's English ones; the built-in codes come from
-  /// LibreOffice's import table for en-US. Not yet checked against Excel
-  /// for Mac ([verified] is false).
+  /// Names and AM/PM are Excel's English ones. Checked against Excel for
+  /// Mac 16.114.1, oracle run 2026-10-30: names, booleans, built-in codes
+  /// 5–8, 14–22 and 37–44 (14 and 22 have a two-digit year), the long date
+  /// and time, `#SPILL!` and `#CALC!` show as Excel shows them.
+  ///
+  /// Assumptions that remain, which a CSV cannot show: the `[Red]` of 6,
+  /// 8, 38 and 40; the fill, zero and text sections of 41–44; the error
+  /// names other than `#SPILL!` and `#CALC!`, never shown by the run.
   static const XlsxFormatLocale enUS = XlsxFormatLocale(
     decimalSeparator: '.',
     groupSeparator: ',',
+    dateSeparator: '/',
     monthNames: <String>[
       'January',
       'February',
@@ -169,7 +186,7 @@ final class XlsxFormatLocale {
       6: r'$#,##0_);[Red]($#,##0)',
       7: r'$#,##0.00_);($#,##0.00)',
       8: r'$#,##0.00_);[Red]($#,##0.00)',
-      14: 'm/d/yyyy',
+      14: 'm/d/yy',
       15: 'd-mmm-yy',
       16: 'd-mmm',
       17: 'mmm-yy',
@@ -177,7 +194,7 @@ final class XlsxFormatLocale {
       19: 'h:mm:ss AM/PM',
       20: 'h:mm',
       21: 'h:mm:ss',
-      22: 'm/d/yyyy h:mm',
+      22: 'm/d/yy h:mm',
       37: '#,##0_);(#,##0)',
       38: '#,##0_);[Red](#,##0)',
       39: '#,##0.00_);(#,##0.00)',
@@ -190,18 +207,28 @@ final class XlsxFormatLocale {
     longDateCode: 'dddd, mmmm d, yyyy',
     longTimeCode: 'h:mm:ss AM/PM',
     messageLocale: XlsxLocale.en,
-    verified: false,
+    verified: true,
   );
 
   /// German (Germany).
   ///
   /// Month and day names come from CLDR, the abbreviations from CLDR's
-  /// stand-alone abbreviated forms without dots; the built-in codes come
-  /// from LibreOffice's import table for de-DE. Not yet checked against
-  /// Excel for Mac ([verified] is false).
+  /// stand-alone abbreviated forms without dots. Checked against Excel for
+  /// Mac 16.114.1, oracle run 2026-10-30: names, booleans, built-in codes
+  /// 5–8, 14–22 and 37–44 (14 and 22 have a two-digit year, 37–40 no
+  /// padding, 41 and 43 Excel's accounting style), [dateSeparator], the
+  /// long date and time, `#SPILL!` (`#ÜBERLAUF!`) and `#CALC!` (German
+  /// Excel leaves it untranslated) show as Excel shows them.
+  ///
+  /// Assumptions that remain, which a CSV cannot show: the `[Red]` of 6,
+  /// 8, 38 and 40; the fill, zero (`"-"`) and text sections of 41–44;
+  /// whether 18 and 19 show `AM`/`PM` as German words by a tag or as the
+  /// English words of an untagged `AM/PM` (both are `AM`/`PM`); the error
+  /// names other than `#SPILL!` and `#CALC!`, never shown by the run.
   static const XlsxFormatLocale deDE = XlsxFormatLocale(
     decimalSeparator: ',',
     groupSeparator: '.',
+    dateSeparator: '.',
     monthNames: <String>[
       'Januar',
       'Februar',
@@ -252,6 +279,8 @@ final class XlsxFormatLocale {
       '#NAME?': '#NAME?',
       '#NUM!': '#ZAHL!',
       '#N/A': '#NV',
+      '#SPILL!': '#ÜBERLAUF!',
+      '#CALC!': '#CALC!',
     },
     lcid: 0x407,
     builtinCodes: <int, String>{
@@ -259,7 +288,7 @@ final class XlsxFormatLocale {
       6: '#,##0 "€";[Red]-#,##0 "€"',
       7: '#,##0.00 "€";-#,##0.00 "€"',
       8: '#,##0.00 "€";[Red]-#,##0.00 "€"',
-      14: 'dd.mm.yyyy',
+      14: 'dd.mm.yy',
       15: 'dd. mmm yy',
       16: 'dd. mmm',
       17: 'mmm yy',
@@ -267,31 +296,40 @@ final class XlsxFormatLocale {
       19: 'h:mm:ss AM/PM',
       20: 'hh:mm',
       21: 'hh:mm:ss',
-      22: 'dd.mm.yyyy hh:mm',
-      37: '#,##0 ;-#,##0 ',
-      38: '#,##0 ;[Red]-#,##0 ',
-      39: '#,##0.00 ;-#,##0.00 ',
-      40: '#,##0.00 ;[Red]-#,##0.00 ',
-      41: '_-* #,##0 _€_-;-* #,##0 _€_-;_-* "-" _€_-;_-@_-',
+      22: 'dd.mm.yy hh:mm',
+      37: '#,##0;-#,##0',
+      38: '#,##0;[Red]-#,##0',
+      39: '#,##0.00;-#,##0.00',
+      40: '#,##0.00;[Red]-#,##0.00',
+      41: '_-* #,##0_-;-* #,##0_-;_-* "-"_-;_-@_-',
       42: '_-* #,##0 "€"_-;-* #,##0 "€"_-;_-* "-" "€"_-;_-@_-',
-      43: '_-* #,##0.00 _€_-;-* #,##0.00 _€_-;_-* "-"?? _€_-;_-@_-',
+      43: '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-',
       44: '_-* #,##0.00 "€"_-;-* #,##0.00 "€"_-;_-* "-"?? "€"_-;_-@_-',
     },
     longDateCode: 'dddd, d. mmmm yyyy',
     longTimeCode: 'hh:mm:ss',
     messageLocale: XlsxLocale.de,
-    verified: false,
+    verified: true,
   );
 
   /// Turkish (Turkey).
   ///
   /// Month and day names come from CLDR, the abbreviations from CLDR's
-  /// stand-alone abbreviated forms without dots; the built-in codes come
-  /// from LibreOffice's import table for tr-TR. Not yet checked against
-  /// Excel for Mac ([verified] is false).
+  /// stand-alone abbreviated forms without dots. Checked against Excel for
+  /// Mac 16.114.1, oracle run 2026-10-30: names, booleans, built-in codes
+  /// 5–8 (`₺` first, minus first), 14–22 and 37–44 (37–40 no symbol and
+  /// no padding), [dateSeparator], the long date and time, `#SPILL!`
+  /// (`#TAŞMA!`) and `#CALC!` (`#HESAPLA!`) show as Excel shows them. Ids
+  /// 18 and 19 carry the tr-TR tag `[$-41F]` because Excel shows `ÖÖ`/`ÖS`
+  /// for them but English words for an untagged `AM/PM`.
+  ///
+  /// Assumptions that remain, which a CSV cannot show: the `[Red]` of 6,
+  /// 8, 38 and 40; the fill, zero (`"-"`) and text sections of 41–44; the
+  /// error names other than `#SPILL!` and `#CALC!`, never shown by the run.
   static const XlsxFormatLocale trTR = XlsxFormatLocale(
     decimalSeparator: ',',
     groupSeparator: '.',
+    dateSeparator: '.',
     monthNames: <String>[
       'Ocak',
       'Şubat',
@@ -342,35 +380,37 @@ final class XlsxFormatLocale {
       '#NAME?': '#AD?',
       '#NUM!': '#SAYI!',
       '#N/A': '#YOK',
+      '#SPILL!': '#TAŞMA!',
+      '#CALC!': '#HESAPLA!',
     },
     lcid: 0x41F,
     builtinCodes: <int, String>{
-      5: '#,##0 "₺";-#,##0 "₺"',
-      6: '#,##0 "₺";[Red]-#,##0 "₺"',
-      7: '#,##0.00 "₺";-#,##0.00 "₺"',
-      8: '#,##0.00 "₺";[Red]-#,##0.00 "₺"',
+      5: '"₺"#,##0;-"₺"#,##0',
+      6: '"₺"#,##0;[Red]-"₺"#,##0',
+      7: '"₺"#,##0.00;-"₺"#,##0.00',
+      8: '"₺"#,##0.00;[Red]-"₺"#,##0.00',
       14: 'dd.mm.yyyy',
       15: 'dd.mmm.yy',
       16: 'dd.mmm',
       17: 'mmm.yy',
-      18: 'h:mm AM/PM',
-      19: 'h:mm:ss AM/PM',
+      18: r'[$-41F]h:mm AM/PM',
+      19: r'[$-41F]h:mm:ss AM/PM',
       20: 'hh:mm',
       21: 'hh:mm:ss',
       22: 'dd.mm.yyyy hh:mm',
-      37: '#,##0 ;-#,##0 ',
-      38: '#,##0 ;[Red]-#,##0 ',
-      39: '#,##0.00 ;-#,##0.00 ',
-      40: '#,##0.00 ;[Red]-#,##0.00 ',
-      41: '_-* #,##0 _₺_-;-* #,##0 _₺_-;_-* "-" _₺_-;_-@_-',
-      42: '_-* #,##0 "₺"_-;-* #,##0 "₺"_-;_-* "-" "₺"_-;_-@_-',
-      43: '_-* #,##0.00 _₺_-;-* #,##0.00 _₺_-;_-* "-"?? _₺_-;_-@_-',
-      44: '_-* #,##0.00 "₺"_-;-* #,##0.00 "₺"_-;_-* "-"?? "₺"_-;_-@_-',
+      37: '#,##0;-#,##0',
+      38: '#,##0;[Red]-#,##0',
+      39: '#,##0.00;-#,##0.00',
+      40: '#,##0.00;[Red]-#,##0.00',
+      41: '_-* #,##0_-;-* #,##0_-;_-* "-"_-;_-@_-',
+      42: '_-"₺"* #,##0_-;-"₺"* #,##0_-;_-"₺"* "-"_-;_-@_-',
+      43: '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-',
+      44: '_-"₺"* #,##0.00_-;-"₺"* #,##0.00_-;_-"₺"* "-"??_-;_-@_-',
     },
     longDateCode: 'd mmmm yyyy dddd',
     longTimeCode: 'hh:mm:ss',
     messageLocale: XlsxLocale.tr,
-    verified: false,
+    verified: true,
   );
 }
 

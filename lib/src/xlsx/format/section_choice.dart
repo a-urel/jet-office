@@ -8,7 +8,9 @@
 /// the rules for that many sections. With `[...]` conditions on the first
 /// two sections the implied rules are replaced: the first section whose
 /// condition holds wins, then the second if it holds or has none, then the
-/// third. The rules follow Excel for Mac
+/// third. A code whose only section has a condition is read as that
+/// section followed by `General`, as Excel repairs `[>100]0` to
+/// `[>100]0;General`. The rules follow Excel for Mac
 /// as described in `docs/decisions/0008`.
 library;
 
@@ -20,10 +22,14 @@ import 'format_code.dart';
 ///
 /// The result's `value` is the absolute value of [value], and `showMinus`
 /// says whether the renderer prints a `-` before it: true for a negative
-/// number the section does not write a sign for. A section chosen for a
-/// negative number by its position (the second of a code without
-/// conditions) or by a condition that only negatives meet writes its own
-/// sign, so `showMinus` is false there.
+/// number the section does not write a sign for. An unconditioned second
+/// section never shows the minus (`[>0]0;0` shows -5 as `5`, as Excel for
+/// Mac does), and neither does a first section whose condition only
+/// negatives meet (`[<0]"neg "0;0` shows -5 as `neg 5`). A conditioned
+/// second section follows the first section's rule (`[>10]0;[<5]0` shows
+/// -2 as `-2`, `[>10]0;[<0]0` as `2`); Excel has not confirmed that. The
+/// `General` a lone conditional section gets after it keeps its minus
+/// (`[>100]0` shows -50.5 as `-50.5`).
 ///
 /// The text section ([chooseTextSection]) never takes a number: `0;@`
 /// shows -5 as `-5` with its one number section, and `0;-0;@` shows 0 with
@@ -35,7 +41,9 @@ import 'format_code.dart';
 chooseNumberSection(ParsedFormat format, ExcelNumber value) {
   final List<FormatSection> all = format.sections;
   final List<FormatSection> sections =
-      all.length > 1 && all.length < 4 && _isText(all.last)
+      all.length == 1 && all[0].condition != null
+      ? <FormatSection>[all[0], _general]
+      : all.length > 1 && all.length < 4 && _isText(all.last)
       ? all.sublist(0, all.length - 1)
       : all;
   final int sign = value.isZero ? 0 : (value.negative ? -1 : 1);
@@ -64,8 +72,8 @@ chooseNumberSection(ParsedFormat format, ExcelNumber value) {
   if (sections.length > 1) {
     final FormatSection second = sections[1];
     if (_holds(second.condition, value)) {
-      final bool minus = second.condition == null && sections.length == 2
-          ? _autoMinusAfter(first.condition!)
+      final bool minus = second.condition == null
+          ? identical(second, _general)
           : !_onlyNegatives(second.condition);
       return pick(second, sign < 0 && minus);
     }
@@ -73,6 +81,12 @@ chooseNumberSection(ParsedFormat format, ExcelNumber value) {
   if (sections.length > 2) return pick(sections[2], sign < 0);
   return null;
 }
+
+/// The `General` section Excel appends to a code whose only section has a
+/// condition.
+final FormatSection _general = FormatSection(const <FormatToken>[
+  GeneralToken(),
+]);
 
 /// The section text takes in [format], or null to show the text unchanged.
 ///
@@ -116,14 +130,4 @@ bool _onlyNegatives(FormatCondition? condition) {
     '<=' || '=' => isNegative,
     _ => false,
   };
-}
-
-/// Whether the unconditioned second section of a two-section code prints the
-/// automatic minus, given the first section's [condition]: only for `=`, `>`
-/// or `>=` against a value of zero or more.
-bool _autoMinusAfter(FormatCondition condition) {
-  final ExcelNumber v = condition.value;
-  final bool nonNegative = v.isZero || !v.negative;
-  return nonNegative &&
-      (condition.op == '=' || condition.op == '>' || condition.op == '>=');
 }

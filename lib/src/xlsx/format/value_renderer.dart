@@ -45,8 +45,8 @@ typedef RenderedValue = ({
 /// serial in the date system of [date1904], a [Duration] its length in
 /// days; both then render as that number. A date or time section gets the
 /// signed serial, so a negative value shows `#` there even in an explicit
-/// negative section (in the 1904 system a time-only section shows it with
-/// a minus). Never throws for any code.
+/// negative section (in the 1904 system any date or time section shows
+/// it with a minus). Never throws for any code.
 RenderedValue renderValue(
   Object? value,
   ParsedFormat format, {
@@ -159,12 +159,13 @@ RenderedValue _renderNumberValue(
       !section.hasDigits &&
       !section.hasGeneral;
   if (textOnly) {
+    final bool minus = chosen.showMinus && !chosen.value.isZero;
     final String text = renderGeneral(
       chosen.value,
       width: generalWidth,
       locale: locale,
+      minus: minus,
     );
-    final bool minus = chosen.showMinus && !chosen.value.isZero;
     return (
       parts: <XlsxFormatPart>[XlsxFormatText(minus ? '-$text' : text)],
       section: section,

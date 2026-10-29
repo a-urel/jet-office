@@ -64,7 +64,7 @@ void main() {
     test('[>100]"big";"small"', () {
       expect(choose('[>100]"big";"small"', '150'), (0, false, '150'));
       expect(choose('[>100]"big";"small"', '50'), (1, false, '50'));
-      expect(choose('[>100]"big";"small"', '-5'), (1, true, '5'));
+      expect(choose('[>100]"big";"small"', '-5'), (1, false, '5'));
     });
 
     test('a condition that matches only negatives drops the minus', () {
@@ -80,13 +80,24 @@ void main() {
       expect(choose('[<>3]0;0', '-2'), (0, true, '2'));
     });
 
-    test('an unconditioned second section of two shows the minus by rule', () {
+    // Excel for Mac (u03-05, all three regions): `[>0]0;0` shows -5 as `5`.
+    test('an unconditioned second section never shows the minus', () {
       expect(choose('[<-5]0;0', '-2'), (1, false, '2'));
       expect(choose('[<>-3]0;0', '-3'), (1, false, '3'));
       expect(choose('[>-10]0;0', '-20'), (1, false, '20'));
-      expect(choose('[>=0]0;0', '-2'), (1, true, '2'));
-      expect(choose('[>0]0;0', '-2'), (1, true, '2'));
-      expect(choose('[=0]0;0', '-2'), (1, true, '2'));
+      expect(choose('[>=0]0;0', '-2'), (1, false, '2'));
+      expect(choose('[>0]0;0', '-5'), (1, false, '5'));
+      expect(choose('[=0]0;0', '-2'), (1, false, '2'));
+      expect(choose('[>10]0;0;0', '-2'), (1, false, '2'));
+    });
+
+    // Not confirmed by Excel: the rule of a conditioned first section.
+    test('a conditioned second section keeps the minus unless only '
+        'negatives meet its condition', () {
+      expect(choose('[>10]0;[<5]0;0', '-2'), (1, true, '2'));
+      expect(choose('[>10]0;[<=0]0', '-2'), (1, true, '2'));
+      expect(choose('[>10]0;[<0]0;0', '-2'), (1, false, '2'));
+      expect(choose('[>10]0;[=-2]0', '-2'), (1, false, '2'));
     });
 
     test('an unconditioned first section takes every value', () {
@@ -99,7 +110,23 @@ void main() {
 
     test('no match and no else section gives null', () {
       expect(choose('[>100]0;[<-100]0', '50'), isNull);
-      expect(choose('[>100]0', '50'), isNull);
+    });
+
+    // Excel repairs `[>100]0` to `[>100]0;General` (tr-TR run, u03-03).
+    test('a code whose only section has a condition gets General after it', () {
+      final ParsedFormat format = parseFormatCode('[>100]0');
+      final ({FormatSection section, bool showMinus, ExcelNumber value})? r =
+          chooseNumberSection(format, ExcelNumber.parse('50'));
+      expect(r, isNotNull);
+      expect(r!.section.hasGeneral, isTrue);
+      expect(r.section.condition, isNull);
+      expect((r.showMinus, r.value.toString()), (false, '50'));
+      // As the second section of `[>100]0;General`: the automatic minus.
+      final ({FormatSection section, bool showMinus, ExcelNumber value})? n =
+          chooseNumberSection(format, ExcelNumber.parse('-50'));
+      expect(n!.section.hasGeneral, isTrue);
+      expect((n.showMinus, n.value.toString()), (true, '50'));
+      expect(choose('[>100]0', '150'), (0, false, '150'));
     });
 
     test('the third section is the else', () {

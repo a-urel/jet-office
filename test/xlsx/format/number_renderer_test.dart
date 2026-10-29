@@ -170,6 +170,28 @@ void main() {
       expect(t('##0.0E+0', 0), '0.0E+0');
     });
 
+    test('engineering also with 0 placeholders, padded by them', () {
+      // Excel for Mac (u12-05): the exponent is a multiple of the integer
+      // placeholder count whatever the placeholders are.
+      expect(t('000.0E+0', 12345), '012.3E+3');
+      expect(t('000.0E+0', 12345, locale: commaLocale), '012,3E+3');
+      expect(t('000.0E+0', 0.5), '500.0E-3');
+      expect(t('00.0E+0', 12345), '01.2E+4');
+    });
+
+    test('no integer placeholder keeps the mantissa below 1', () {
+      expect(t('.00E+00', 0.5), '.50E+00');
+      expect(t('.00E+00', 0.5, locale: commaLocale), ',50E+00');
+    });
+
+    test('zero shows one 0 in the integer part', () {
+      // Excel for Mac (u12-06).
+      expect(t('#.##E+0', 0), '0.E+0');
+      expect(t('#.##E+0', 0, locale: commaLocale), '0,E+0');
+      expect(t('##0.0E+0', 0), '0.0E+0');
+      expect(t('.00E+00', 0), '.00E+00');
+    });
+
     test('engineering: a carry moves to the next multiple', () {
       expect(t('##0.0E+0', 999.96), '1.0E+3');
     });
@@ -211,9 +233,12 @@ void main() {
   });
 
   group('fractions', () {
-    test('a whole part and the best fraction', () {
+    test('a whole part and the last convergent that fits', () {
       expect(t('# ?/?', 2.5), '2 1/2');
-      expect(t('# ??/??', 3.14159), '3 14/99');
+      // Excel for Mac (u13-02): 1/7, not the closer 14/99.
+      expect(t('# ??/??', 3.14159), '3  1/7 ');
+      expect(t('# ?/?', 0.333), ' 1/3');
+      expect(t('# ?/?', -1.25), '-1 1/4');
       expect(t('# ???/???', 3.14159265358979), '3  16/113');
       expect(t('# ?/?', -2.5), '-2 1/2');
     });
@@ -235,8 +260,12 @@ void main() {
 
     test('a zero fraction is blank under ? and left out under #', () {
       expect(t('# ?/?', 2), '2    ');
-      expect(t('# #/#', 2), '2 ');
-      expect(t('# ##/##', 2), '2 ');
+      // Excel for Mac (u13-05): under # the literal before it goes too.
+      expect(t('# #/#', 2), '2');
+      expect(t('# ##/##', 2), '2');
+      expect(t('# #/#" kg"', 2), '2 kg');
+      expect(t('# #/#', 0), '0');
+      // A fixed denominator keeps the literal: unconfirmed in Excel.
       expect(t('# #/8', 2), '2 ');
       // A blank fixed denominator: unconfirmed in Excel (oracle list).
       expect(t('# ?/8', 2), '2    ');
@@ -252,10 +281,27 @@ void main() {
 
     test('the numerator pads on the left, the denominator on the right', () {
       expect(t('# ??/??', 0.75), '  3/4 ');
-      expect(t('# 00/00', 1.5), '1 01/2 ');
+      expect(t('# 00/00', 1.5), '1 01/02');
+      expect(t('# 0/00', 0.5), ' 1/02');
       expect(t('# ?/##', 0.5), ' 1/2 ');
       expect(t('# ?/?', 0.5), ' 1/2');
       expect(t('0 ?/?', 0.5), '0 1/2');
+    });
+
+    test('a zero shown with 0 drops a # whole part and its literal', () {
+      // Excel for Mac (u13-08).
+      expect(t('# 0/0', 0), '0/1');
+      expect(t('# 0/0', -0.01), '0/1');
+      expect(t('"x"# 0/0', 0), 'x0/1');
+      expect(t('0 0/0', 0), '0 0/1');
+      expect(t('# 0/0', 0.5), ' 1/2');
+      expect(t('# 0/0', 2), '2 0/1');
+    });
+
+    test('a hostile fraction stays bounded', () {
+      expect(t('# ?????????/?????????', 0.1 + 1e-15), isNotEmpty);
+      expect(t('# ?/?????????', 1 / 3), ' 1/3        ');
+      expect(t('# ?/?', 4.9e-324), '0    ');
     });
 
     test('a slash before a denominator too long to be one is kept', () {

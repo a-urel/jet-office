@@ -49,13 +49,18 @@ mkdir -p build/resaved
 LC_ALL=C.UTF-8 soffice --headless --convert-to 'xlsx:Calc MS Excel 2007 XML' \
   --outdir build/resaved build/fixtures/*.xlsx
 dart run tool/compare_resaved.dart build/fixtures build/resaved
+dart run tool/write_format_oracle.dart build/format_oracle
+LC_ALL=C.UTF-8 soffice --headless \
+  --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,true,false,false,1' \
+  --outdir build/format_oracle build/format_oracle/*.xlsx
+dart run tool/compare_format_libreoffice.dart build/format_oracle
 ```
 
 - `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
   `<name>.xlsx` and its expected values as `<name>.expected.json`.
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, to prove every
-  check still fails on a bad file. The `validate` job's last step writes it
+  check still fails on a bad file. The `validate` job's negative-control step writes it
   to `build/corrupt` and requires every check to reject it.
 - `tool/write_fixtures.dart` imports test helpers that use `package:archive`.
   That is allowed: the archive rule covers `lib/` only.
@@ -71,6 +76,22 @@ dart run tool/compare_resaved.dart build/fixtures build/resaved
   `tool/src/read_compare.dart` names it with a reason. If a LibreOffice
   instance is already running, add `-env:UserInstallation=file:///<dir>` to
   the `soffice` call.
+- `tool/compare_format_libreoffice.dart` compares the number formatter with
+  LibreOffice's text "as shown" of the oracle cases
+  (`test/fixtures/owner/number_format/`), exported from the workbooks
+  `tool/write_format_oracle.dart` writes, and lists every difference. It
+  reports and never fails: LibreOffice is a second opinion, not Excel, so
+  it exits 0 with differences (2 only on unusable input) and its CI steps
+  have `continue-on-error`. Its doc comment explains the filter options.
+- The number formatter's oracle is Excel for Mac, not LibreOffice.
+  `test/xlsx/format/oracle_test.dart` (in the gate, VM only) compares it
+  with the owner's Excel CSVs of the oracle workbooks, per region; a region
+  without a manifest entry prints `unverified` and passes. The README under
+  `test/fixtures/owner/number_format/` says how the owner runs them.
+  Excel wins: a mismatch is fixed with a test, or recorded in the test's
+  `knownDifferences` with a reason. Never edit a committed CSV or manifest
+  entry there without the owner (`docs/number-format.md`, "Excel as the
+  oracle").
 - `docs/warning-messages.md` lists every warning message in `en`, `de` and
   `tr`, for the native-speaker check recorded in `docs/excel-checks.md`. It is
   generated: after a message changes, run
@@ -93,9 +114,11 @@ with `XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each
 phase and memory per byte of sheet XML). `xlsx_read_worst_case_test.dart`
 reads the largest single sheet the default limits accept (about 250 MiB of
 XML; about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file
-size and peak memory per run. The quality gate does not run them; run them
-by hand on the VM and in Chrome (`dart test benchmark` runs all three). They
-record figures and fail on none (`docs/benchmark.md`):
+size and peak memory per run. `xlsx_format_benchmark_test.dart` times
+`XlsxNumberFormatter` on every cell of the read file and on 100,000
+numbers, serial dates and `DateTime`s. The quality gate does not run them;
+run them by hand on the VM and in Chrome (`dart test benchmark` runs all
+four). They record figures and fail on none (`docs/benchmark.md`):
 
 ```bash
 dart test benchmark

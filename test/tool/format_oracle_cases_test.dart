@@ -1,6 +1,6 @@
 // Checks the committed oracle case list, test/fixtures/owner/number_format/
-// cases.json, against the owner checklist and the Unknowns of
-// docs/number-format.md and the skipped `Owner Excel check` tests.
+// cases.json, against the owner checklist and the "Settled by Excel" list
+// of docs/number-format.md and the `Owner Excel check` tests.
 @TestOn('vm')
 library;
 
@@ -37,28 +37,28 @@ void main() {
     expect(named.difference(listed), isEmpty, reason: 'not on the checklist');
   });
 
-  test('every skipped Owner Excel check test has a case', () {
-    final Set<String> skipped = <String>{
+  test('every Owner Excel check test has a case', () {
+    final Set<String> checked = <String>{
       for (final FileSystemEntity f in Directory(
         'test',
       ).listSync(recursive: true))
         if (f is File && f.path.endsWith('_test.dart'))
           for (final RegExpMatch m in RegExp(
-            r"skip: 'Owner Excel check (C\d+[a-z]?)'",
+            r'Owner Excel check (C\d+[a-z]?)',
           ).allMatches(f.readAsStringSync()))
             m[1]!,
     };
-    expect(skipped, isNotEmpty);
+    expect(checked, isNotEmpty);
     final Set<String> named = <String>{
       for (final OracleCase c in cases.cases) ...c.checks,
     };
-    expect(skipped.difference(named), isEmpty);
+    expect(checked.difference(named), isEmpty);
   });
 
-  test('every Unknown of docs/number-format.md has a case', () {
+  test('every Unknown settled in docs/number-format.md has a case', () {
     final String unknowns = doc.substring(
-      doc.indexOf('## Unknowns'),
-      doc.indexOf('Further own rules'),
+      doc.indexOf('## Settled by Excel'),
+      doc.indexOf('Own rules of N1 and N2'),
     );
     final Set<int> listed = <int>{
       for (final RegExpMatch m in RegExp(
