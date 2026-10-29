@@ -323,5 +323,18 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
       '“$sheet” sayfasındaki $count hücrenin sayı biçimi bu kitaplığın '
           'göstermediği bir takvim, rakam sistemi veya dil kullanıyor; '
           'Miladi tarih ve varsayılan dille gösteriliyor$cells.',
+    (XlsxWarningCode.numberFormatLocaleDependent, XlsxLocale.en) =>
+      "$count cell(s) on sheet '$sheet' use a built-in number format whose "
+          'code depends on the locale and is not in the file; they show with '
+          'the closest built-in format$cells.',
+    (XlsxWarningCode.numberFormatLocaleDependent, XlsxLocale.de) =>
+      '$count Zelle(n) im Blatt „$sheet“ verwenden ein integriertes '
+          'Zahlenformat, dessen Code vom Gebietsschema abhängt und in der '
+          'Datei fehlt; sie werden mit dem nächstliegenden integrierten '
+          'Format angezeigt$cells.',
+    (XlsxWarningCode.numberFormatLocaleDependent, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count hücre, kodu yerel ayara bağlı olan ve '
+          'dosyada bulunmayan yerleşik bir sayı biçimi kullanıyor; en yakın '
+          'yerleşik biçimle gösteriliyor$cells.',
   };
 }

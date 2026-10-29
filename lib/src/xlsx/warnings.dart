@@ -163,6 +163,13 @@ enum XlsxWarningCode {
   /// `XlsxNumberFormatter` does not render. The cell shows with Gregorian
   /// dates, Western digits and the default language.
   numberFormatUnsupported,
+
+  /// Formatting: a cell uses a built-in number format whose code depends on
+  /// the locale (ids 23 to 36 and 50 to 163) and the file does not hold its
+  /// code. The cell shows with the closest built-in format: the format
+  /// locale's short date (id 14) for ids 27 to 31, 36 and 50 to 58, its
+  /// time (id 21) for ids 32 to 35, and the General format for the others.
+  numberFormatLocaleDependent,
 }
 
 /// Something the writer changed or could not store exactly, or the reader

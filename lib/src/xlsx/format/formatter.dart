@@ -1,10 +1,11 @@
 /// The number format engine's entry point: [XlsxNumberFormatter].
 ///
 /// New in jet_office; Quds has no number format engine. The formatter
-/// resolves a cell's number format code from its id and code, parses it
-/// once into a bounded cache, renders the value with [renderValue] and
-/// falls back to `General` with [XlsxWarningCode.numberFormatInvalid] when
-/// the code cannot be read or would show too much.
+/// resolves a cell's number format code from its id, its code and the
+/// format locale, parses it once into a bounded cache, renders the value
+/// with [renderValue] and falls back to `General` with
+/// [XlsxWarningCode.numberFormatInvalid] when the code cannot be read or
+/// would show too much.
 ///
 /// @docImport '../read/xlsx_reader.dart';
 /// @docImport '../values.dart';
@@ -51,11 +52,27 @@ final class XlsxNumberFormatter {
   /// [numberFormat], as the reader gives them.
   ///
   /// [value] is an [XlsxDecimal], a [num], a [DateTime], a [Duration], a
-  /// [String], a [bool], an [XlsxErrorValue] or `null`. [numberFormat]
-  /// wins over [numberFormatId]; without it, id 0 and the built-in ids use
-  /// their built-in code, and any other id shows `General` with
-  /// [XlsxWarningCode.unresolvedNumberFormat]. [generalWidth] is the number
-  /// of characters `General` may use (11, Excel's default column width).
+  /// [String], a [bool], an [XlsxErrorValue] or `null`.
+  ///
+  /// The code is resolved as Excel does in [locale]:
+  ///
+  /// - Ids 5–8, 14–22 and 37–44 differ by locale. Without [numberFormat],
+  ///   or with the en-US code of ECMA-376 (`mm-dd-yy` for id 14, as the
+  ///   reader gives it), they use [XlsxFormatLocale.builtinCodes]; another
+  ///   code is used as written.
+  /// - Otherwise [numberFormat] wins over [numberFormatId]. Without it,
+  ///   id 0 is `General` and ids 1–4, 9–13 and 45–49 use the ECMA-376 code.
+  /// - Ids 27–31, 36 and 50–58 without a code show as the locale's id 14,
+  ///   ids 32–35 as its id 21, and ids 23–26 and 59–163 as `General`, each
+  ///   with [XlsxWarningCode.numberFormatLocaleDependent].
+  /// - Any other id without a code shows `General` with
+  ///   [XlsxWarningCode.unresolvedNumberFormat].
+  ///
+  /// A result carries one warning: [XlsxWarningCode.numberFormatInvalid]
+  /// first, then the resolution warning above, then
+  /// [XlsxWarningCode.numberFormatUnsupported] from rendering.
+  /// [generalWidth] is the number of characters `General` may use (11,
+  /// Excel's default column width).
   ///
   /// Never throws for any code. A value of another type, or a
   /// [generalWidth] below 1, is a programmer error and throws
@@ -73,17 +90,13 @@ final class XlsxNumberFormatter {
         'Must be at least 1',
       );
     }
-    XlsxWarningCode? warning;
-    String? code = numberFormat;
-    if (code == null) {
-      code = numberFormatId == 0
-          ? 'General'
-          : builtinNumberFormatCode(numberFormatId);
-      if (code == null) {
-        code = 'General';
-        warning = XlsxWarningCode.unresolvedNumberFormat;
-      }
-    }
+    final (String code, XlsxWarningCode? resolved) = _resolve(
+      numberFormatId,
+      numberFormat,
+    );
+    // One warning per result: numberFormatInvalid, set below, beats the
+    // resolution warning, which beats the render warning (see [_build]).
+    XlsxWarningCode? warning = resolved;
     // A code over Excel's 255 characters is invalid whatever it holds, so
     // it is neither parsed nor cached: a 1 MiB code costs no memory.
     ParsedFormat parsed = code.length > _codeLimit ? _general : _parse(code);
@@ -144,6 +157,39 @@ final class XlsxNumberFormatter {
         numberFormat: cell.numberFormat,
         generalWidth: generalWidth,
       );
+
+  /// The code that the number format [id] and [numberFormat] stand for in
+  /// [locale], with the resolution warning.
+  (String, XlsxWarningCode?) _resolve(int id, String? numberFormat) {
+    if (_isLocaleBuiltin(id) &&
+        (numberFormat == null || numberFormat == builtinNumberFormatCode(id))) {
+      return (_localeCode(id), null);
+    }
+    if (numberFormat != null) return (numberFormat, null);
+    if (id == 0) return ('General', null);
+    final String? builtin = builtinNumberFormatCode(id);
+    if (builtin != null) return (builtin, null);
+    if ((id >= 27 && id <= 31) || id == 36 || (id >= 50 && id <= 58)) {
+      return (_localeCode(14), XlsxWarningCode.numberFormatLocaleDependent);
+    }
+    if (id >= 32 && id <= 35) {
+      return (_localeCode(21), XlsxWarningCode.numberFormatLocaleDependent);
+    }
+    if (id >= 23 && id <= 163) {
+      return ('General', XlsxWarningCode.numberFormatLocaleDependent);
+    }
+    return ('General', XlsxWarningCode.unresolvedNumberFormat);
+  }
+
+  /// Whether the code of the built-in id [id] differs by locale: ids 5–8,
+  /// 14–22 and 37–44.
+  static bool _isLocaleBuiltin(int id) =>
+      (id >= 5 && id <= 8) || (id >= 14 && id <= 22) || (id >= 37 && id <= 44);
+
+  /// [locale]'s code for the built-in id [id], or the invariant one when a
+  /// caller's locale leaves it out.
+  String _localeCode(int id) =>
+      locale.builtinCodes[id] ?? builtinNumberFormatCode(id)!;
 
   ParsedFormat _parse(String code) {
     final ParsedFormat? cached = _cache[code];
