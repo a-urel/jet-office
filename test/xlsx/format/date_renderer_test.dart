@@ -353,7 +353,6 @@ void main() {
     test('1904: a negative time shows a minus', () {
       expect(t('h:mm', -0.25, date1904: true), '-6:00');
       expect(t('[h]:mm', -1.5, date1904: true), '-36:00');
-      expect(t('yyyy-mm-dd', -1, date1904: true), isNull);
     }, skip: 'Owner Excel check C10');
 
     test('1904: a negative date is null', () {
@@ -413,7 +412,7 @@ void main() {
     });
 
     test('AM/PM comes from the tag locale', () {
-      expect(t('[\$-407]h:mm AM/PM', 0.5625), '1:30 PM');
+      expect(t('[\$-41F]h:mm AM/PM', 0.5625), '1:30 ÖS');
     });
 
     test('the first non-zero language decides', () {

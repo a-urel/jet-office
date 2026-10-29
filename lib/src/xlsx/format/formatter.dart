@@ -107,17 +107,18 @@ final class XlsxNumberFormatter {
             _general,
             locale: locale,
             generalWidth: generalWidth,
+            date1904: date1904,
           ),
           XlsxWarningCode.numberFormatInvalid,
         );
       }
     }
-    ({List<XlsxFormatPart> parts, FormatSection? section, bool overflow})
-    result = renderValue(
+    RenderedValue result = renderValue(
       value,
       parsed,
       locale: locale,
       generalWidth: generalWidth,
+      date1904: date1904,
     );
     XlsxFormattedValue formatted = _build(result, warning);
     if (value is! String && formatted.text.length > _outputLimit) {
@@ -126,6 +127,7 @@ final class XlsxNumberFormatter {
         _general,
         locale: locale,
         generalWidth: generalWidth,
+        date1904: date1904,
       );
       formatted = _build(result, XlsxWarningCode.numberFormatInvalid);
     }
@@ -150,9 +152,10 @@ final class XlsxNumberFormatter {
     return _cache[code] = parseFormatCode(code);
   }
 
+  /// Builds the result of [result]; the render warning counts only when
+  /// [warning] (the formatter's own) is null.
   static XlsxFormattedValue _build(
-    ({List<XlsxFormatPart> parts, FormatSection? section, bool overflow})
-    result,
+    RenderedValue result,
     XlsxWarningCode? warning,
   ) {
     final FormatColor? color = result.section?.color;
@@ -164,7 +167,7 @@ final class XlsxNumberFormatter {
           ? XlsxColor.rgb(color.rgb!)
           : XlsxColor.indexed(color.index!),
       overflow: result.overflow,
-      warning: warning,
+      warning: warning ?? result.warning,
     );
   }
 }

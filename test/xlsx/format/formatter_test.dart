@@ -52,8 +52,8 @@ void main() {
       expect(text(null, '0.00'), '');
     });
 
-    test('a date code shows the number as General (until N2)', () {
-      expect(text(46000, 'dd.mm.yyyy'), '46000');
+    test('a date code shows the date', () {
+      expect(text(46323, 'dd.mm.yyyy'), '28.10.2026');
     });
   });
 

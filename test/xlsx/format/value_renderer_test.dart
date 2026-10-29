@@ -4,22 +4,33 @@ import 'package:jet_office/src/xlsx/format/formatted_value.dart';
 import 'package:jet_office/src/xlsx/format/value_renderer.dart';
 import 'package:jet_office/src/xlsx/read/read_cell.dart';
 import 'package:jet_office/src/xlsx/values.dart';
+import 'package:jet_office/src/xlsx/warnings.dart';
 import 'package:test/test.dart';
 
-({List<XlsxFormatPart> parts, FormatSection? section, bool overflow}) render(
+RenderedValue render(
   Object? value,
-  String code,
-) => renderValue(
+  String code, {
+  XlsxFormatLocale locale = XlsxFormatLocale.enUS,
+  bool date1904 = false,
+}) => renderValue(
   value,
   parseFormatCode(code),
-  locale: XlsxFormatLocale.enUS,
+  locale: locale,
   generalWidth: 11,
+  date1904: date1904,
 );
 
-String textOf(Object? value, String code) =>
-    render(value, code).parts.map((XlsxFormatPart p) {
-      return p is XlsxFormatText ? p.text : '';
-    }).join();
+String textOf(
+  Object? value,
+  String code, {
+  XlsxFormatLocale locale = XlsxFormatLocale.enUS,
+  bool date1904 = false,
+}) => render(
+  value,
+  code,
+  locale: locale,
+  date1904: date1904,
+).parts.map((XlsxFormatPart p) => p is XlsxFormatText ? p.text : '').join();
 
 void main() {
   group('text', () {
@@ -149,24 +160,119 @@ void main() {
       expect(r.parts, <XlsxFormatPart>[const XlsxFormatText('#')]);
       expect(r.section, isNull);
     });
+  });
 
-    test('a date section shows General (until N2)', () {
-      expect(textOf(45000, 'yyyy-mm-dd'), '45000');
-      expect(textOf(-1.5, 'yyyy-mm-dd'), '-1.5');
+  group('dates', () {
+    test('a date section renders the serial', () {
+      expect(textOf(46323, 'yyyy-mm-dd'), '2026-10-28');
+    });
+
+    test('a negative serial in a date section overflows', () {
+      final RenderedValue r = render(-1.5, 'yyyy-mm-dd');
+      expect(r.overflow, isTrue);
+      expect(r.parts, <XlsxFormatPart>[const XlsxFormatText('#')]);
+    });
+
+    test('a negative section without date tokens takes the number', () {
+      expect(textOf(-1, 'yyyy-mm-dd;"neg"'), 'neg');
+    });
+
+    test('an explicit negative date section does not hide the sign', () {
+      // Ruling 4: the date renderer gets the signed serial.
+      final RenderedValue r = render(-0.5, '0;h:mm');
+      expect(r.overflow, isTrue);
+      expect(textOf(-0.5, '0;h:mm'), '#');
+    }, skip: 'Owner Excel check C10b');
+
+    test('a conditional date section', () {
+      expect(textOf(2.5, '[<1]h:mm;d "days"'), '2 days');
     });
   });
 
-  group('other types', () {
-    test('DateTime (until N2)', () {
+  group('warnings', () {
+    test('an unsupported calendar in a date section', () {
       expect(
-        textOf(DateTime.utc(2026, 10, 28), '0'),
-        '2026-10-28T00:00:00.000Z',
+        render(46323, 'B2yyyy').warning,
+        XlsxWarningCode.numberFormatUnsupported,
       );
     });
 
-    test('Duration (until N2)', () {
-      expect(textOf(const Duration(hours: 1), '0'), '1:00:00.000000');
+    test('an unsupported bracket in a number section', () {
+      final RenderedValue r = render(5, '[DBNum1]0');
+      expect(textOf(5, '[DBNum1]0'), '5');
+      expect(r.warning, XlsxWarningCode.numberFormatUnsupported);
     });
+
+    test('a plain date code warns nothing', () {
+      expect(render(46323, 'yyyy').warning, isNull);
+    });
+  });
+
+  group('non-numbers with a date code', () {
+    test('text is unchanged', () {
+      expect(textOf('abc', 'yyyy-mm-dd'), 'abc');
+    });
+
+    test('a boolean in de-DE', () {
+      expect(textOf(true, '0.00', locale: XlsxFormatLocale.deDE), 'WAHR');
+    }, skip: 'Owner Excel check C16');
+
+    test('errors in de-DE and tr-TR', () {
+      expect(
+        textOf(XlsxErrorValue.value, 'yyyy', locale: XlsxFormatLocale.deDE),
+        '#WERT!',
+      );
+      expect(
+        textOf(XlsxErrorValue.div0, 'yyyy', locale: XlsxFormatLocale.trTR),
+        '#SAYI/0!',
+      );
+    });
+
+    test('#SPILL! shows as written in tr-TR', () {
+      expect(
+        textOf(
+          const XlsxErrorValue('#SPILL!'),
+          'yyyy',
+          locale: XlsxFormatLocale.trTR,
+        ),
+        '#SPILL!',
+      );
+    }, skip: 'Owner Excel check C17');
+  });
+
+  group('other types', () {
+    test('a DateTime is its serial', () {
+      final DateTime value = DateTime.utc(2026, 10, 28, 13, 30);
+      expect(textOf(value, 'dd.mm.yyyy hh:mm'), '28.10.2026 13:30');
+      expect(textOf(value, '0.00'), '46323.56');
+      expect(textOf(value, 'General'), '46323.5625');
+    });
+
+    test('a DateTime before the first serial', () {
+      expect(textOf(DateTime.utc(1899, 12, 30), 'yyyy'), '#');
+      expect(textOf(DateTime.utc(1899, 12, 30), '0'), '-1');
+    });
+
+    test('a DateTime past the last serial', () {
+      expect(render(DateTime.utc(275000), 'yyyy').overflow, isTrue);
+      expect(textOf(DateTime.utc(275000), 'yyyy'), '#');
+    });
+
+    test('a Duration is its serial', () {
+      expect(textOf(const Duration(hours: 36), '[h]:mm'), '36:00');
+      expect(textOf(const Duration(hours: 36), '0.0'), '1.5');
+    });
+
+    test('a negative Duration overflows in the 1900 system', () {
+      expect(textOf(const Duration(hours: -1), '[h]:mm'), '#');
+    });
+
+    test('a negative Duration shows a minus in the 1904 system', () {
+      expect(
+        textOf(const Duration(hours: -1), '[h]:mm', date1904: true),
+        '-1:00',
+      );
+    }, skip: 'Owner Excel check C10');
 
     test('anything else is a programmer error', () {
       expect(() => render(Object(), '0'), throwsArgumentError);
