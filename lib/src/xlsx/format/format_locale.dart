@@ -14,16 +14,18 @@ import '../warnings.dart';
 /// errors.
 ///
 /// It is not [XlsxLocale], which names the language of warning messages;
-/// [messageLocale] gives the matching one. Every field is required, so a
-/// caller can define a region the library does not ship.
+/// [messageLocale] gives the matching one. Every field but [dateSeparator]
+/// is required, so a caller can define a region the library does not ship.
 final class XlsxFormatLocale {
   /// Creates a locale from every field.
   ///
   /// [monthNames] and [monthAbbreviations] hold 12 entries from January;
-  /// [dayNames] and [dayAbbreviations] hold 7 from Sunday.
+  /// [dayNames] and [dayAbbreviations] hold 7 from Sunday. [dateSeparator]
+  /// defaults to `/`, which shows a code's `/` as written.
   const XlsxFormatLocale({
     required this.decimalSeparator,
     required this.groupSeparator,
+    this.dateSeparator = '/',
     required this.monthNames,
     required this.monthAbbreviations,
     required this.dayNames,
@@ -46,6 +48,11 @@ final class XlsxFormatLocale {
 
   /// What a grouping `,` of a format code shows as, such as `,` or `.`.
   final String groupSeparator;
+
+  /// What a `/` in a date or time section shows as, such as `/` or `.`.
+  ///
+  /// Excel for Mac in tr-TR shows `dd/mm/yyyy` as `28.10.2026`.
+  final String dateSeparator;
 
   /// The month names, January first: what `mmmm` shows.
   final List<String> monthNames;
@@ -112,6 +119,7 @@ final class XlsxFormatLocale {
   static const XlsxFormatLocale enUS = XlsxFormatLocale(
     decimalSeparator: '.',
     groupSeparator: ',',
+    dateSeparator: '/',
     monthNames: <String>[
       'January',
       'February',
@@ -202,6 +210,7 @@ final class XlsxFormatLocale {
   static const XlsxFormatLocale deDE = XlsxFormatLocale(
     decimalSeparator: ',',
     groupSeparator: '.',
+    dateSeparator: '.',
     monthNames: <String>[
       'Januar',
       'Februar',
@@ -286,12 +295,23 @@ final class XlsxFormatLocale {
   /// Turkish (Turkey).
   ///
   /// Month and day names come from CLDR, the abbreviations from CLDR's
-  /// stand-alone abbreviated forms without dots; the built-in codes come
-  /// from LibreOffice's import table for tr-TR. Not yet checked against
-  /// Excel for Mac ([verified] is false).
+  /// stand-alone abbreviated forms without dots. The built-in codes 5–8,
+  /// 37–44, 18 and 19, the error names and [dateSeparator] follow what
+  /// Excel for Mac 16.114 shows in tr-TR; the other codes come from
+  /// LibreOffice's import table for tr-TR.
+  ///
+  /// Excel's text of 5–8 and 37–44 on -1234.5 and 1234.5 is matched
+  /// exactly; the rest of those codes is assumed: the colour of 6, 8, 38
+  /// and 40 (`[Red]`, which a CSV cannot show), the fill of 41–44 (a fill
+  /// is not in Excel's CSV text), and their zero (`"-"`) and text sections,
+  /// written in Excel's accounting style. Ids 18 and 19 carry the tr-TR tag
+  /// `[$-41F]` because Excel shows `ÖÖ`/`ÖS` for them but English words for
+  /// an untagged `AM/PM`. Not yet fully checked against Excel for Mac
+  /// ([verified] is false).
   static const XlsxFormatLocale trTR = XlsxFormatLocale(
     decimalSeparator: ',',
     groupSeparator: '.',
+    dateSeparator: '.',
     monthNames: <String>[
       'Ocak',
       'Şubat',
@@ -342,30 +362,32 @@ final class XlsxFormatLocale {
       '#NAME?': '#AD?',
       '#NUM!': '#SAYI!',
       '#N/A': '#YOK',
+      '#SPILL!': '#TAŞMA!',
+      '#CALC!': '#HESAPLA!',
     },
     lcid: 0x41F,
     builtinCodes: <int, String>{
-      5: '#,##0 "₺";-#,##0 "₺"',
-      6: '#,##0 "₺";[Red]-#,##0 "₺"',
-      7: '#,##0.00 "₺";-#,##0.00 "₺"',
-      8: '#,##0.00 "₺";[Red]-#,##0.00 "₺"',
+      5: '"₺"#,##0;-"₺"#,##0',
+      6: '"₺"#,##0;[Red]-"₺"#,##0',
+      7: '"₺"#,##0.00;-"₺"#,##0.00',
+      8: '"₺"#,##0.00;[Red]-"₺"#,##0.00',
       14: 'dd.mm.yyyy',
       15: 'dd.mmm.yy',
       16: 'dd.mmm',
       17: 'mmm.yy',
-      18: 'h:mm AM/PM',
-      19: 'h:mm:ss AM/PM',
+      18: r'[$-41F]h:mm AM/PM',
+      19: r'[$-41F]h:mm:ss AM/PM',
       20: 'hh:mm',
       21: 'hh:mm:ss',
       22: 'dd.mm.yyyy hh:mm',
-      37: '#,##0 ;-#,##0 ',
-      38: '#,##0 ;[Red]-#,##0 ',
-      39: '#,##0.00 ;-#,##0.00 ',
-      40: '#,##0.00 ;[Red]-#,##0.00 ',
-      41: '_-* #,##0 _₺_-;-* #,##0 _₺_-;_-* "-" _₺_-;_-@_-',
-      42: '_-* #,##0 "₺"_-;-* #,##0 "₺"_-;_-* "-" "₺"_-;_-@_-',
-      43: '_-* #,##0.00 _₺_-;-* #,##0.00 _₺_-;_-* "-"?? _₺_-;_-@_-',
-      44: '_-* #,##0.00 "₺"_-;-* #,##0.00 "₺"_-;_-* "-"?? "₺"_-;_-@_-',
+      37: '#,##0;-#,##0',
+      38: '#,##0;[Red]-#,##0',
+      39: '#,##0.00;-#,##0.00',
+      40: '#,##0.00;[Red]-#,##0.00',
+      41: '_-* #,##0_-;-* #,##0_-;_-* "-"_-;_-@_-',
+      42: '_-"₺"* #,##0_-;-"₺"* #,##0_-;_-"₺"* "-"_-;_-@_-',
+      43: '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-',
+      44: '_-"₺"* #,##0.00_-;-"₺"* #,##0.00_-;_-"₺"* "-"??_-;_-@_-',
     },
     longDateCode: 'd mmmm yyyy dddd',
     longTimeCode: 'hh:mm:ss',

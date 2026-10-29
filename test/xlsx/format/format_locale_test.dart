@@ -11,6 +11,7 @@ void main() {
     test('separators, markers and words', () {
       expect(l.decimalSeparator, '.');
       expect(l.groupSeparator, ',');
+      expect(l.dateSeparator, '/');
       expect((l.am, l.pm), ('AM', 'PM'));
       expect((l.trueText, l.falseText), ('TRUE', 'FALSE'));
       expect(l.lcid, 0x409);
@@ -94,6 +95,7 @@ void main() {
     test('separators, markers and words', () {
       expect(l.decimalSeparator, ',');
       expect(l.groupSeparator, '.');
+      expect(l.dateSeparator, '.');
       expect((l.am, l.pm), ('AM', 'PM'));
       expect((l.trueText, l.falseText), ('WAHR', 'FALSCH'));
       expect(l.lcid, 0x407);
@@ -162,6 +164,7 @@ void main() {
     test('separators, markers and words', () {
       expect(l.decimalSeparator, ',');
       expect(l.groupSeparator, '.');
+      expect(l.dateSeparator, '.');
       expect((l.am, l.pm), ('ÖÖ', 'ÖS'));
       expect((l.trueText, l.falseText), ('DOĞRU', 'YANLIŞ'));
       expect(l.lcid, 0x41F);
@@ -187,39 +190,40 @@ void main() {
         '#NAME?': '#AD?',
         '#NUM!': '#SAYI!',
         '#N/A': '#YOK',
+        '#SPILL!': '#TAŞMA!',
+        '#CALC!': '#HESAPLA!',
       });
     });
 
     test('builtinCodes, the whole map', () {
       expect(l.builtinCodes, <int, String>{
-        5: '#,##0 "₺";-#,##0 "₺"',
-        6: '#,##0 "₺";[Red]-#,##0 "₺"',
-        7: '#,##0.00 "₺";-#,##0.00 "₺"',
-        8: '#,##0.00 "₺";[Red]-#,##0.00 "₺"',
+        5: '"₺"#,##0;-"₺"#,##0',
+        6: '"₺"#,##0;[Red]-"₺"#,##0',
+        7: '"₺"#,##0.00;-"₺"#,##0.00',
+        8: '"₺"#,##0.00;[Red]-"₺"#,##0.00',
         14: 'dd.mm.yyyy',
         15: 'dd.mmm.yy',
         16: 'dd.mmm',
         17: 'mmm.yy',
-        18: 'h:mm AM/PM',
-        19: 'h:mm:ss AM/PM',
+        18: r'[$-41F]h:mm AM/PM',
+        19: r'[$-41F]h:mm:ss AM/PM',
         20: 'hh:mm',
         21: 'hh:mm:ss',
         22: 'dd.mm.yyyy hh:mm',
-        37: '#,##0 ;-#,##0 ',
-        38: '#,##0 ;[Red]-#,##0 ',
-        39: '#,##0.00 ;-#,##0.00 ',
-        40: '#,##0.00 ;[Red]-#,##0.00 ',
-        41: '_-* #,##0 _₺_-;-* #,##0 _₺_-;_-* "-" _₺_-;_-@_-',
-        42: '_-* #,##0 "₺"_-;-* #,##0 "₺"_-;_-* "-" "₺"_-;_-@_-',
-        43: '_-* #,##0.00 _₺_-;-* #,##0.00 _₺_-;_-* "-"?? _₺_-;_-@_-',
-        44: '_-* #,##0.00 "₺"_-;-* #,##0.00 "₺"_-;_-* "-"?? "₺"_-;_-@_-',
+        37: '#,##0;-#,##0',
+        38: '#,##0;[Red]-#,##0',
+        39: '#,##0.00;-#,##0.00',
+        40: '#,##0.00;[Red]-#,##0.00',
+        41: '_-* #,##0_-;-* #,##0_-;_-* "-"_-;_-@_-',
+        42: '_-"₺"* #,##0_-;-"₺"* #,##0_-;_-"₺"* "-"_-;_-@_-',
+        43: '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-',
+        44: '_-"₺"* #,##0.00_-;-"₺"* #,##0.00_-;_-"₺"* "-"??_-;_-@_-',
       });
     });
 
     test('built-in codes', () {
       expect(l.builtinCodes[15], 'dd.mmm.yy');
-      expect(l.builtinCodes[7], '#,##0.00 "₺";-#,##0.00 "₺"');
-      expect(l.builtinCodes[41], contains('_₺'));
+      expect(l.builtinCodes[7], '"₺"#,##0.00;-"₺"#,##0.00');
       expect(l.longDateCode, 'd mmmm yyyy dddd');
       expect(l.longTimeCode, 'hh:mm:ss');
     });

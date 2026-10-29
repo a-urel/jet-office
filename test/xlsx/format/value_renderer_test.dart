@@ -256,16 +256,24 @@ void main() {
       );
     });
 
-    test('#SPILL! shows as written in tr-TR', () {
+    test('#SPILL! and #CALC! have Turkish names in tr-TR (c17)', () {
       expect(
         textOf(
           const XlsxErrorValue('#SPILL!'),
           'yyyy',
           locale: XlsxFormatLocale.trTR,
         ),
-        '#SPILL!',
+        '#TAŞMA!',
       );
-    }, skip: 'Owner Excel check C17');
+      expect(
+        textOf(
+          const XlsxErrorValue('#CALC!'),
+          'yyyy',
+          locale: XlsxFormatLocale.trTR,
+        ),
+        '#HESAPLA!',
+      );
+    });
   });
 
   group('other types', () {

@@ -216,9 +216,39 @@ void main() {
       expect(de.format(-1234.5, numberFormatId: 7).text, '-1.234,50 €');
     }, skip: 'Owner Excel check C7');
 
-    test('id 5 tr', () {
-      expect(tr.format(1234, numberFormatId: 5).text, '1.234 ₺');
-    }, skip: 'Owner Excel check C7');
+    test('ids 5-8 and 37-44 tr, as Excel for Mac shows them (c7)', () {
+      const Map<int, (String, String)> shown = <int, (String, String)>{
+        5: ('-₺1.235', '₺1.235'),
+        6: ('-₺1.235', '₺1.235'),
+        7: ('-₺1.234,50', '₺1.234,50'),
+        8: ('-₺1.234,50', '₺1.234,50'),
+        37: ('-1.235', '1.235'),
+        38: ('-1.235', '1.235'),
+        39: ('-1.234,50', '1.234,50'),
+        40: ('-1.234,50', '1.234,50'),
+        41: ('-1.235 ', ' 1.235 '),
+        42: ('-₺1.235 ', ' ₺1.235 '),
+        43: ('-1.234,50 ', ' 1.234,50 '),
+        44: ('-₺1.234,50 ', ' ₺1.234,50 '),
+      };
+      for (final MapEntry<int, (String, String)> e in shown.entries) {
+        expect(
+          tr.format(-1234.5, numberFormatId: e.key).text,
+          e.value.$1,
+          reason: 'id ${e.key} on -1234.5',
+        );
+        expect(
+          tr.format(1234.5, numberFormatId: e.key).text,
+          e.value.$2,
+          reason: 'id ${e.key} on 1234.5',
+        );
+      }
+    });
+
+    test('id 18 tr shows the Turkish words, by its locale tag', () {
+      expect(tr.format(0.5625, numberFormatId: 18).text, '1:30 ÖS');
+      expect(tr.format(0.0625, numberFormatId: 19).text, '1:30:00 ÖÖ');
+    });
 
     test('id 15 de', () {
       expect(de.format(46323, numberFormatId: 15).text, '28. Okt 26');
