@@ -8,7 +8,9 @@ Two benchmarks use it: `benchmark/xlsx_benchmark_test.dart` times the two
 writers, and `benchmark/xlsx_read_benchmark_test.dart` times `XlsxReader`
 reading the file the workload makes ("Read figures" below). A third,
 `benchmark/xlsx_read_worst_case_test.dart`, reads the largest sheet the
-reader's default limits let through ("Worst case" below).
+reader's default limits let through ("Worst case" below). A fourth,
+`benchmark/xlsx_format_benchmark_test.dart`, times `XlsxNumberFormatter` on
+every cell of the read workload ("Format figures" below).
 
 The figures below are records, not thresholds (spec section 5): nothing fails
 when a later run is slower, and they are not a promise.
@@ -29,6 +31,8 @@ dart test benchmark/xlsx_read_benchmark_test.dart
 dart test -p chrome benchmark/xlsx_read_benchmark_test.dart
 dart test benchmark/xlsx_read_worst_case_test.dart
 dart test -p chrome benchmark/xlsx_read_worst_case_test.dart
+dart test benchmark/xlsx_format_benchmark_test.dart
+dart test -p chrome benchmark/xlsx_format_benchmark_test.dart
 ```
 
 The quality gate does not run it. `dart_test.yaml` starts Chrome with
@@ -427,3 +431,88 @@ chrome | XlsxReader | 19582 ms | 1965092 bytes | peak JS heap peak 2331909207 by
 - The default limits stay as they are (plan ruling 6); any proposal to
   change them is the owner's to rule on, with the measured 100,000 × 12
   sheet's N (43,580,479 bytes) times four, 174,321,916 bytes, as the floor.
+
+## Format figures
+
+The format benchmark (`benchmark/xlsx_format_benchmark_test.dart`) times
+`XlsxNumberFormatter` (en-US, 1900 date system) on the read workload's
+values, and on three kinds of value alone.
+
+### Method
+
+- Untimed: the workload file is made as for the read benchmark
+  (`benchmark/src/workload_file.dart`), read with `XlsxReader`, and every
+  `XlsxReadCell` of the sheet is collected into a list; the count is
+  asserted (1,166,679).
+- `formatCell on every cell of the workload`: one formatter calls
+  `formatCell` on every cell. The cells are text, `General` numbers,
+  `#,##0.00`, `yyyy-mm-dd hh:mm`, `yyyy-mm-dd`, booleans and the formulas'
+  `null` values. The test asserts that no result carries a warning.
+- `per kind`: 100,000 values each, made before the timing, formatted with
+  `format(value, numberFormat: code)`:
+  - number: `XlsxDecimal('$r.25')` with `#,##0.00`;
+  - serial date: `XlsxDecimal('${46000 + r % 3000}.${r % 86400}')` with
+    `yyyy-mm-dd hh:mm:ss`, which takes the `BigInt` serial rounding of
+    `lib/src/xlsx/format/excel_date.dart`;
+  - `DateTime(2026, 1, 1).add(Duration(seconds: r * 37))` with
+    `yyyy-mm-dd hh:mm:ss`.
+
+  One sample text per kind is asserted (`1,000.25`, `2025-12-10 02:24:00`,
+  `2026-01-01 01:01:40`).
+- Every case runs once as a warm-up (which also fills the formatter's code
+  cache), then three timed runs (`Stopwatch`); the median is given. Each
+  run sums the lengths of the texts it made, and the sum must equal the
+  warm-up's, so the work is used. The ratio is a kind's median over the
+  number run's.
+
+### Figures
+
+- Date: 2026-10-30.
+- Machine: Mac15,7, Apple M3 Pro, 36 GiB RAM (38,654,705,664 bytes).
+- OS: macOS 27.2 (26B123).
+- Dart SDK 3.13.7 (stable); the VM runs the JIT, Chrome runs dart2js output.
+- Chrome 156.0.8078.74.
+
+| Case (median of 3) | VM (ms) | VM (ns each) | Chrome (ms) | Chrome (ns each) |
+|---|---|---|---|---|
+| `formatCell`, every cell (1,166,679) | 1599.0 | 1371 | 2726.9 | 2337 |
+| Number, `XlsxDecimal`, `#,##0.00` (100,000) | 145.4 | 1454 | 245.0 | 2450 |
+| Serial date, `XlsxDecimal`, `yyyy-mm-dd hh:mm:ss` (100,000) | 312.5 | 3125 | 384.1 | 3841 |
+| `DateTime`, `yyyy-mm-dd hh:mm:ss` (100,000) | 546.9 | 5469 | 901.9 | 9019 |
+
+| Ratio to the number run | VM | Chrome |
+|---|---|---|
+| Serial date | 2.15 | 1.57 |
+| `DateTime` | 3.76 | 3.68 |
+
+Every line:
+
+```text
+vm | input | 6958087 bytes | 1166679 cells
+vm | formatCell | median 1599.0 ms | 1166679 cells | 1371 ns/cell | warnings 0
+vm | number | XlsxDecimal #,##0.00 | median 145.4 ms | 1454 ns/value | ratio 1.00
+vm | serial date | XlsxDecimal yyyy-mm-dd hh:mm:ss | median 312.5 ms | 3125 ns/value | ratio 2.15
+vm | DateTime | yyyy-mm-dd hh:mm:ss | median 546.9 ms | 5469 ns/value | ratio 3.76
+chrome | input | 6981844 bytes | 1166679 cells
+chrome | formatCell | median 2726.9 ms | 1166679 cells | 2337 ns/cell | warnings 0
+chrome | number | XlsxDecimal #,##0.00 | median 245.0 ms | 2450 ns/value | ratio 1.00
+chrome | serial date | XlsxDecimal yyyy-mm-dd hh:mm:ss | median 384.1 ms | 3841 ns/value | ratio 1.57
+chrome | DateTime | yyyy-mm-dd hh:mm:ss | median 901.9 ms | 9019 ns/value | ratio 3.68
+```
+
+### Reading the figures
+
+- **Formatting a sheet costs about as much as reading it on the VM, and
+  less in Chrome.** Formatting the 1,166,679 cells takes 1.6 s on the VM
+  (1.4 µs a cell) and 2.7 s in Chrome (2.3 µs a cell), against a read of
+  2.7 s and 3.3 s ("Read figures"). A consumer that shows every cell of a
+  read pays roughly 1.6 times the read on the VM and 1.8 times in Chrome.
+- **The `BigInt` serial rounding is cheap in Chrome.** A serial date given
+  as an `XlsxDecimal` costs 2.15 times a number on the VM and 1.57 times
+  in Chrome, well under the 5 times the plan set as the point to report.
+  Nothing is recommended.
+- **A `DateTime` costs more than a serial.** The same code on a `DateTime`
+  costs 3.76 times a number on the VM and 3.68 times in Chrome, about 1.75
+  and 2.35 times the serial date. The benchmark does not say why. It is
+  the path a read takes: the reader gives a date-formatted cell as a
+  `DateTime`, so the workload's two date columns are formatted this way.

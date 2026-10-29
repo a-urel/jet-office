@@ -93,8 +93,11 @@ with `XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each
 phase and memory per byte of sheet XML). `xlsx_read_worst_case_test.dart`
 reads the largest single sheet the default limits accept (about 250 MiB of
 XML; about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file
-size and peak memory per run. The quality gate does not run them; run them
-by hand on the VM and in Chrome (`dart test benchmark` runs all three). They
+size and peak memory per run. `xlsx_format_benchmark_test.dart` times
+`XlsxNumberFormatter` on every cell of the read file and on 100,000
+numbers, serial dates and `DateTime`s. The quality gate does not run them;
+run them by hand on the VM and in Chrome (`dart test benchmark` runs all
+four). They
 record figures and fail on none (`docs/benchmark.md`):
 
 ```bash
