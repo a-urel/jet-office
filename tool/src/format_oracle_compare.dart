@@ -295,7 +295,8 @@ final class OracleMissingRow extends OracleOutcome {
 /// `numberFormatId`, with the workbook's [OracleWorkbook.numFmts] code for
 /// it as `numberFormat`, as the reader passes them; a manual formula as its
 /// [OracleManual.error], in [locale]'s name for it; `General` at the
-/// default width of 11. The texts match by [oracleTextMatches].
+/// default width of 11, or [oracleEyeGeneralWidth] in an eye-only case.
+/// The texts match by [oracleTextMatches].
 ///
 /// A case whose id [csv] lacks is [OracleMissingRow]. An eye-only case
 /// without [eye] text is [OracleByEye]. Throws [ArgumentError] when
@@ -352,12 +353,17 @@ OracleOutcome _compareCase(
     value,
     numberFormatId: id ?? 0,
     numberFormat: id == null ? kase.code : book.numFmts[id],
-    generalWidth: 11,
+    generalWidth: kase.eyeOnly ? oracleEyeGeneralWidth : 11,
   );
   return oracleTextMatches(expected, ours)
       ? OracleMatch(kase, expected)
       : OracleMismatch(kase, expected, ours.text);
 }
+
+/// The width `General` has in an eye-only case: the oracle writer gives
+/// the eye sheet's column A a width of 10 (its default), not Excel's 8.43,
+/// and the owner read the texts at that width (manifest notes).
+const int oracleEyeGeneralWidth = 10;
 
 /// One line per mismatch, by-eye case and missing row
 /// (`id  code  value  excel=«..»  ours=«..»`), then the counts per outcome

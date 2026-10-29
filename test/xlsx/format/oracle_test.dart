@@ -25,7 +25,14 @@ import '../../../tool/src/format_oracle_compare.dart';
 
 /// Cases where the formatter knowingly differs from Excel, by
 /// `<case id> <region>`, with the reason (the ruling in the N3 ledger).
-const Map<String, String> knownDifferences = <String, String>{};
+const Map<String, String> knownDifferences = <String, String>{
+  'c18-02 en-US':
+      'R18: `[\$-40C]mmmm` is `octobre` in Excel; no French month names ship',
+  'c18-02 de-DE':
+      'R18: `[\$-40C]mmmm` is `octobre` in Excel; no French month names ship',
+  'c18-02 tr-TR':
+      'R18: `[\$-40C]mmmm` is `octobre` in Excel; no French month names ship',
+};
 
 void main() => defineOracleTests('test/fixtures/owner/number_format');
 

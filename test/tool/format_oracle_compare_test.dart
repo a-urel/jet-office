@@ -308,7 +308,7 @@ void main() {
     });
 
     test('an all-# text of any length matches an overflow', () {
-      final XlsxFormattedValue overflow = fmt('[>10]0', '5');
+      final XlsxFormattedValue overflow = fmt('[>10]0;[<-10]0', '5');
       expect(overflow.overflow, isTrue);
       for (final String text in <String>['#', '##', '###########']) {
         expect(oracleTextMatches(text, overflow), isTrue, reason: text);
@@ -510,11 +510,15 @@ void main() {
     });
 
     test('a builtinId case without a file code uses the locale', () {
+      String id14(XlsxFormatLocale locale) => XlsxNumberFormatter(
+        locale: locale,
+      ).format(46000, numberFormatId: 14).text;
+      expect(id14(XlsxFormatLocale.deDE), isNot(id14(XlsxFormatLocale.enUS)));
       final OracleOutcome outcome = _compare(
         <OracleCase>[
           _case('id14', builtinId: 14, value: const OracleNumber('46000')),
         ],
-        <String, String>{'id14': '09.12.2025'},
+        <String, String>{'id14': id14(XlsxFormatLocale.deDE)},
         locale: XlsxFormatLocale.deDE,
       ).single;
       expect(outcome, isA<OracleMatch>());
@@ -535,7 +539,7 @@ void main() {
     test('an overflow and a fill match by their tolerances', () {
       final List<OracleOutcome> outcomes = _compare(
         <OracleCase>[
-          _case('over', code: '[>10]0', value: const OracleNumber('5')),
+          _case('over', code: '[>10]0;[<-10]0', value: const OracleNumber('5')),
           _case('fill', code: '"a"*~0', value: const OracleNumber('5')),
         ],
         <String, String>{'over': '#####', 'fill': 'a~~~5'},
@@ -571,9 +575,8 @@ void main() {
         final List<OracleOutcome> outcomes = _compare(
           <OracleCase>[general, spill, calc],
           <String, String>{'u14-01': 'wrong', 'c17-01': 'wrong'},
-          locale: XlsxFormatLocale.deDE,
           eye: <String, String>{
-            'u14-01': '1,23457E+11',
+            'u14-01': '1.2346E+11',
             'c17-01': '#SPILL!',
             'c17-02': '#CALC!',
           },
@@ -581,13 +584,27 @@ void main() {
         expect(outcomes, everyElement(isA<OracleMatch>()));
       });
 
-      test('General uses the default width of 11', () {
+      test('General uses the eye column width of 10', () {
         final OracleOutcome outcome = _compare(
           <OracleCase>[general],
           const <String, String>{},
           eye: <String, String>{'u14-01': '123456789012'},
         ).single;
         expect(outcome, isA<OracleMismatch>());
+        expect((outcome as OracleMismatch).actual, '1.2346E+11');
+      });
+
+      test('a CSV-compared General case keeps the width of 11', () {
+        final OracleOutcome outcome = _compare(
+          <OracleCase>[
+            _case(
+              'g',
+              code: 'General',
+              value: const OracleNumber('123456789012'),
+            ),
+          ],
+          const <String, String>{'g': 'x'},
+        ).single;
         expect((outcome as OracleMismatch).actual, '1.23457E+11');
       });
 
@@ -595,7 +612,6 @@ void main() {
         final OracleOutcome outcome = _compare(
           <OracleCase>[spill],
           const <String, String>{},
-          locale: XlsxFormatLocale.deDE,
           eye: <String, String>{'c17-01': '#ÜBERLAUF!'},
         ).single;
         expect(outcome, isA<OracleMismatch>());

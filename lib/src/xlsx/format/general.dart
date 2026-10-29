@@ -3,9 +3,8 @@
 /// New in jet_office; Quds has no number format engine. [renderGeneral]
 /// shows a number in at most `width` characters, the sign not counted
 /// (ECMA-376 §18.8.30, spec §5.3): an integer that fits in full, else
-/// fixed notation with the most significant digits that fit, else
-/// scientific notation. At Excel's default width of 11 it agrees with
-/// SheetJS SSF and numfmt. Rounding works on the number's decimal digits
+/// fixed or scientific notation, whichever shows more significant digits
+/// (a tie is fixed), as Excel for Mac does. Rounding works on the number's decimal digits
 /// ([ExcelNumber.toFixed], [ExcelNumber.toSignificant]), never on a
 /// `double`.
 library;
@@ -21,11 +20,14 @@ const int _maxDigits = 15;
 ///
 /// [value]'s sign is ignored; callers put a `-` in front. The decimal
 /// separator is [locale]'s, and the separator and any leading `0.` and
-/// zeros count toward [width]. Fixed notation is used when the first
-/// significant digit has an exponent from -4 to `width - 1` and at least
-/// one significant digit fits; otherwise the result is scientific,
-/// `1.23457E+11`, with at least two exponent digits. Digits are rounded
-/// half away from zero and trailing zeros are dropped.
+/// zeros count toward [width]. Of fixed and scientific notation
+/// (`1.23457E+11`, at least two exponent digits) the one that shows more
+/// of the significant digits in [width] is used; a tie is fixed, so
+/// `0.00001` stays fixed and `0.000012345678` is `1.23457E-05` at width
+/// 11 (Excel for Mac, oracle cases u14). Fixed needs the first digit's
+/// exponent below [width] and at least one significant digit to fit.
+/// Digits are rounded half away from zero and trailing zeros are
+/// dropped.
 ///
 /// [width] is at least 1. When even one significant digit does not fit,
 /// the result is the shortest scientific form, `5E-01`, longer than
@@ -48,17 +50,38 @@ String renderGeneral(
     return digits + '0' * (exponent + 1 - digits.length);
   }
 
-  if (exponent > -5 && exponent < width) {
+  // The form that shows more significant digits wins; a tie is decimal.
+  if (exponent < width &&
+      _fixedDigits(digits.length, exponent, width) >=
+          _scientificDigits(digits.length, exponent, width)) {
     final String? fixed = _fixed(value, digits, exponent, width, separator);
     if (fixed != null) return fixed;
   }
   return _scientific(value, digits.length, exponent, width, separator);
 }
 
+/// How many of [length] significant digits, the first with [exponent],
+/// fixed notation shows in [width]: `0.` and `-exponent - 1` zeros come
+/// first when [exponent] is negative.
+int _fixedDigits(int length, int exponent, int width) => exponent < 0
+    ? _min(length, width - 1 + exponent)
+    : _max(exponent + 1, _min(length, width - 1));
+
+/// How many of [length] significant digits, the first with [exponent],
+/// scientific notation shows in [width]: the mantissa takes what `E+XX`
+/// leaves, one digit at least.
+int _scientificDigits(int length, int exponent, int width) {
+  final int room = width - _exponentLength(exponent);
+  return room >= 3 ? _min(length, room - 1) : 1;
+}
+
+/// `E+XX`: the letter, the sign and at least two digits.
+int _exponentLength(int exponent) => 2 + _max(2, '${exponent.abs()}'.length);
+
 /// [value] in fixed notation with the most of its [digits] that fit in
 /// [width], or null when not one significant digit fits.
 ///
-/// [exponent] is that of the first digit, `-5 < exponent < width`.
+/// [exponent] is that of the first digit, below [width].
 String? _fixed(
   ExcelNumber value,
   String digits,
@@ -70,9 +93,7 @@ String? _fixed(
   // and k digits when the exponent is negative (1 - exponent + k
   // characters), else the whole digits, the separator and the rest
   // (k + 1 characters, or exponent + 1 with no fraction).
-  final int shown = exponent < 0
-      ? _min(digits.length, width - 1 + exponent)
-      : _max(exponent + 1, _min(digits.length, width - 1));
+  final int shown = _fixedDigits(digits.length, exponent, width);
   if (shown < 1) return null;
   final ({String whole, String fraction}) parts = value.abs().toFixed(
     shown - exponent - 1,
@@ -94,11 +115,8 @@ String _scientific(
   int width,
   String separator,
 ) {
-  // `E+XX`: the letter, the sign and at least two digits.
-  final int exponentLength = 2 + _max(2, '${exponent.abs()}'.length);
   // The mantissa is one digit, or `d.ddd` with the separator.
-  final int room = width - exponentLength;
-  final int shown = room >= 3 ? _min(length, room - 1) : 1;
+  final int shown = _scientificDigits(length, exponent, width);
   final ({String digits, int exponent}) rounded = value.abs().toSignificant(
     shown,
   );

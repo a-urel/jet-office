@@ -67,9 +67,17 @@ void main() {
       expect(g(0.0001234567891), '0.000123457');
     });
 
-    test('an exponent of -5 or below is scientific', () {
+    test('scientific when it shows more significant digits', () {
       expect(g(0.000012345678), '1.23457E-05');
       expect(g(1E-10), '1E-10');
+    });
+
+    test('decimal when it shows as many significant digits', () {
+      // Excel for Mac (tr-TR, width 10) shows 0.00001 as `0,00001`: an
+      // exponent of -5 is not always scientific.
+      expect(g(0.00001), '0.00001');
+      expect(g(0.000012), '0.000012');
+      expect(g(0.0000123456), '1.23456E-05');
     });
 
     test('rounding that carries is shown correctly', () {
@@ -81,6 +89,23 @@ void main() {
     test('a three-digit exponent shortens the mantissa', () {
       expect(g(1.23456789E+100), '1.2346E+100');
       expect(g(1.5E-300), '1.5E-300');
+    });
+  });
+
+  group('General at width 10, as Excel for Mac shows it (tr-TR)', () {
+    String g10(Object value) => g(value, width: 10, locale: commaLocale);
+
+    test('the six eye cases of the oracle', () {
+      expect(g10(123456789012), '1,2346E+11');
+      expect(g10(XlsxDecimal('0.333333333333333')), '0,33333333');
+      expect(g10(XlsxDecimal('0.000012345678')), '1,2346E-05');
+      expect(g10(XlsxDecimal('12345.6789012')), '12345,6789');
+      expect(g10(XlsxDecimal('0.00001')), '0,00001');
+      // `-0,3333333`: the sign takes a character, so the number has 9.
+      expect(
+        g(XlsxDecimal('0.333333333333333'), width: 9, locale: commaLocale),
+        '0,3333333',
+      );
     });
   });
 
