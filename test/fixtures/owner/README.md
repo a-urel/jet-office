@@ -10,6 +10,8 @@ ruling 12.
 Every `*.xlsx` and `*.expected.json` here must be listed in
 `manifest.json` (by `.xlsx` name) and have its partner, or the test fails.
 `README.md` and `manifest.json` are the only other files that belong here.
+The number format engine's Excel oracle has its own directory,
+`number_format/`, with its own README.
 
 ## The files
 
