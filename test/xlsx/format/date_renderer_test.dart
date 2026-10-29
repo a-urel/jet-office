@@ -186,6 +186,152 @@ void main() {
     });
   });
 
+  group('time', () {
+    test('hours, minutes and seconds', () {
+      expect(t('h:mm:ss', 0.4375), '10:30:00');
+      expect(t('hh:mm', 0.0625), '01:30');
+    });
+
+    test('without AM/PM the clock has 24 hours', () {
+      expect(t('h:mm', 0.5625), '13:30');
+    });
+
+    test('AM/PM uses the 12-hour clock', () {
+      expect(t('h:mm AM/PM', 0.5625), '1:30 PM');
+      expect(t('h:mm AM/PM', 0), '12:00 AM');
+      expect(t('h:mm AM/PM', 0.5), '12:00 PM');
+      expect(t('hh:mm am/pm', 0.0625), '01:30 AM');
+    });
+
+    test('A/P shows the letters in the case written', () {
+      expect(t('h:mm A/P', 0.5625), '1:30 P');
+      expect(t('h:mm a/p', 0.5625), '1:30 p');
+      expect(t('h:mm a/p', 0.0625), '1:30 a');
+    });
+
+    test('minutes are truncated', () {
+      expect(t('h:mm', 0.437268518518519), '10:29');
+    }, skip: 'Owner Excel check C9');
+
+    test('seconds round and carry into minutes', () {
+      expect(t('h:mm', 0.437495370370370), '10:30');
+      expect(t('h:mm:ss', 0.437495370370370), '10:30:00');
+    });
+
+    test('fractional seconds round to the digits shown', () {
+      expect(t('h:mm:ss.0', 0.437495370370370), '10:29:59.6');
+      expect(t('h:mm:ss.00', 0.437495370370370), '10:29:59.60');
+      expect(t('h:mm:ss.000', 0.5), '12:00:00.000');
+    });
+
+    test('built-in 47', () {
+      expect(t('mmss.0', 0.000712962962963), '0101.6');
+    });
+
+    test('the carry runs through the hours', () {
+      expect(t('h:mm:ss', 0.99999999), '0:00:00');
+    }, skip: 'Owner Excel check C9');
+
+    test('the carry runs into the date', () {
+      expect(t('yyyy-mm-dd h:mm:ss', 46323.99999999), '2026-10-29 0:00:00');
+    }, skip: 'Owner Excel check C9b');
+
+    test('h and s longer than two show two digits', () {
+      expect(t('hhh', 0.0625), '01');
+      expect(t('sss', 0.0006944444444444), '00');
+      expect(t('sss', 0.0000694444444444), '06');
+    });
+
+    test('mmm after h is the month abbreviation, not minutes', () {
+      // isMinuteToken treats a run of three or more as a month, after h
+      // too, so the shared rule shows the month.
+      expect(t('h:mmm', 46323.5625), '13:Oct');
+    });
+  });
+
+  group('elapsed', () {
+    test('hours, minutes and seconds from serial 0', () {
+      expect(t('[h]:mm:ss', 1.5), '36:00:00');
+      expect(t('[mm]:ss', 0.0625), '90:00');
+      expect(t('[ss]', 0.000694444444444444), '60');
+      expect(t('[hh]', 0.0416666666666667), '01');
+    });
+
+    test('[hhh] pads to three digits', () {
+      expect(t('[hhh]', 0.0416666666666667), '001');
+      expect(t('[hhh]', 1.5), '036');
+    });
+
+    test('minutes and seconds after an elapsed token are modulo 60', () {
+      expect(t('[h]:mm:ss', 1.0423611111111111), '25:01:00');
+      expect(t('[m]:ss', 0.000706018518518519), '1:01');
+    });
+
+    test('the largest serial', () {
+      expect(t('[h]:mm', 2958465), '71003160:00');
+    });
+
+    test('past the largest serial is null', () {
+      expect(t('[h]', 2958466), isNull);
+    });
+  });
+
+  group('AM/PM by locale', () {
+    test('tr-TR', () {
+      expect(t('h:mm AM/PM', 0.5625, locale: XlsxFormatLocale.trTR), '1:30 ÖS');
+      expect(t('h:mm A/P', 0.5625, locale: XlsxFormatLocale.trTR), '1:30 P');
+    }, skip: 'Owner Excel check C5');
+
+    test('de-DE', () {
+      expect(t('h:mm AM/PM', 0.5625, locale: XlsxFormatLocale.deDE), '1:30 PM');
+    }, skip: 'Owner Excel check C5');
+  });
+
+  group('decimal separator', () {
+    test('de-DE fractional seconds', () {
+      expect(
+        t('hh:mm:ss.00', 0.437505787037037, locale: XlsxFormatLocale.deDE),
+        '10:30:00,50',
+      );
+    }, skip: 'Owner Excel check C15b');
+
+    test('the separator comes from the locale', () {
+      expect(t('ss.0', 0.5, locale: XlsxFormatLocale.deDE), '00,0');
+    });
+  });
+
+  group('1904 negative', () {
+    test('1900: a negative time is null', () {
+      expect(t('h:mm', -0.25), isNull);
+      expect(t('[h]:mm', -1.5), isNull);
+    });
+
+    test('1904: a negative time shows a minus', () {
+      expect(t('h:mm', -0.25, date1904: true), '-6:00');
+      expect(t('[h]:mm', -1.5, date1904: true), '-36:00');
+      expect(t('yyyy-mm-dd', -1, date1904: true), isNull);
+    }, skip: 'Owner Excel check C10');
+
+    test('1904: the minus goes before a leading literal', () {
+      expect(t('"t "h:mm', -0.25, date1904: true), '-t 6:00');
+    });
+
+    test('1904: a date token makes it null', () {
+      expect(t('d h:mm', -0.25, date1904: true), isNull);
+      expect(t('m h', -0.25, date1904: true), isNull);
+      expect(t('yy h', -0.25, date1904: true), isNull);
+      expect(t('e h', -0.25, date1904: true), isNull);
+    });
+
+    test('1904: minutes and seconds only are a time', () {
+      expect(t('mm:ss', -0.0006944444444444, date1904: true), '-01:00');
+    });
+
+    test('1904: a negative that rounds to zero shows no minus', () {
+      expect(t('h:mm:ss', -1e-9, date1904: true), '0:00:00');
+    });
+  });
+
   group('overflow', () {
     test('a negative serial is null', () {
       expect(t('yyyy', -1), isNull);

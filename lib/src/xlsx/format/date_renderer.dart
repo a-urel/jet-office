@@ -17,7 +17,9 @@ import 'format_locale.dart';
 import 'formatted_value.dart';
 
 /// Renders [serial] with the date or time [section]; null when Excel
-/// shows `#` (negative, out of range). The result's `warning` is
+/// shows `#` (negative, out of range). In the 1904 system a negative
+/// serial in a section with no date token (`d`, `y`, month `m`, `e`, `b`)
+/// shows its absolute value with a `-` first. The result's `warning` is
 /// `numberFormatUnsupported` when the section asks for what the engine
 /// does not render; null for now.
 ///
@@ -30,6 +32,15 @@ import 'formatted_value.dart';
 /// show two digits; `e` the four-digit year; `b` and `bb` two digits of the
 /// Buddhist year, `bbb` and longer four; `g` nothing.
 ///
+/// The time is rounded to the second, or to the most fractional-second
+/// digits the section shows, and then truncated to the units shown
+/// (`h:mm` on 10:29:40 shows `10:29`). An `AM/PM` or `A/P` marker switches
+/// `h` to the 12-hour clock: `AM/PM` in any case shows the locale's `am`
+/// or `pm`, `A/P` its letters in the case written. Fractional seconds show
+/// the locale's decimal separator. Elapsed `[h]`, `[m]` and `[s]` count
+/// from serial 0, padded to their length; plain minutes and seconds next
+/// to them are taken modulo 60.
+///
 /// Adjacent text is merged into one [XlsxFormatText], and empty text is
 /// left out.
 ({List<XlsxFormatPart> parts, XlsxWarningCode? warning})? renderDate(
@@ -38,30 +49,54 @@ import 'formatted_value.dart';
   required XlsxFormatLocale locale,
   required bool date1904,
 }) {
-  // Seam for the 12-hour clock, fractional seconds and negative 1904
-  // times: the fields are read to the whole second, and a negative serial
-  // is `#` in both systems.
-  final ExcelDateFields? fields = serialToFields(
-    serial,
-    date1904: date1904,
-    fractionDigits: 0,
-  );
-  if (fields == null) return null;
-
   final List<DateToken> counted = <DateToken>[
     for (final FormatToken token in section.tokens)
       if (token is DateToken && countedDateLetters.contains(token.letter))
         token,
   ];
 
+  // Ruling 4: in the 1904 system a negative value in a section without a
+  // date token shows its absolute value with a leading minus; anywhere
+  // else a negative value is `#`.
+  final bool negativeTime =
+      date1904 && serial.negative && !_hasDateToken(section, counted);
+  var fractionDigits = 0;
+  var twelveHour = false;
+  for (final FormatToken token in section.tokens) {
+    if (token is FractionalSecondsToken && token.digits > fractionDigits) {
+      fractionDigits = token.digits;
+    } else if (token is AmPmToken) {
+      twelveHour = true;
+    }
+  }
+  final ExcelDateFields? fields = serialToFields(
+    negativeTime ? serial.abs() : serial,
+    date1904: date1904,
+    fractionDigits: fractionDigits,
+  );
+  if (fields == null) return null;
+
   final FormatPartsBuilder out = FormatPartsBuilder();
+  // Like the number renderer's minus: first, and not on a value that
+  // rounds to zero.
+  if (negativeTime && (fields.totalSeconds > 0 || fields.fraction > 0)) {
+    out.text('-');
+  }
   var k = 0;
   for (final FormatToken token in section.tokens) {
     switch (token) {
       case DateToken(:final String letter):
         if (countedDateLetters.contains(letter)) {
           final bool minutes = letter == 'm' && isMinuteToken(counted, k);
-          out.text(_dateText(token, fields, locale, minutes: minutes));
+          out.text(
+            _dateText(
+              token,
+              fields,
+              locale,
+              minutes: minutes,
+              twelveHour: twelveHour,
+            ),
+          );
           k++;
         } else {
           out.text(_eraText(token, fields));
@@ -78,9 +113,14 @@ import 'formatted_value.dart';
         out.add(XlsxFormatPadding(char));
       case FillToken(:final String char):
         out.add(XlsxFormatFill(char));
-      case AmPmToken() ||
-          FractionalSecondsToken() ||
-          CalendarToken() ||
+      case AmPmToken(:final String text):
+        out.text(_amPmText(text, fields.hour < 12, locale));
+      case FractionalSecondsToken(:final int digits):
+        out.text(
+          locale.decimalSeparator +
+              _pad(fields.fraction, fractionDigits).substring(0, digits),
+        );
+      case CalendarToken() ||
           SystemFormatToken() ||
           UnsupportedToken() ||
           TextToken() ||
@@ -90,11 +130,10 @@ import 'formatted_value.dart';
           ExponentToken() ||
           FractionSlashToken() ||
           FixedDenominatorToken():
-        // AM/PM and fractional seconds come with the 12-hour clock and the
-        // rounding to a fraction of a second; system, calendar and
-        // unsupported tokens with locale tags. `@` and a decimal point
-        // show nothing in a date section, and the number tokens make the
-        // code invalid, so they never reach a rendered section.
+        // System, calendar and unsupported tokens come with locale tags.
+        // `@` and a decimal point show nothing in a date section, and the
+        // number tokens make the code invalid, so they never reach a
+        // rendered section.
         break;
     }
   }
@@ -108,6 +147,7 @@ String _dateText(
   ExcelDateFields fields,
   XlsxFormatLocale locale, {
   required bool minutes,
+  required bool twelveHour,
 }) {
   final int length = token.length;
   switch (token.letter) {
@@ -129,12 +169,40 @@ String _dateText(
         _ => locale.monthNames[fields.month - 1],
       };
     case 'h':
-      return _timeText(token, fields.hour, fields.totalSeconds ~/ 3600);
+      final int hour = twelveHour
+          ? (fields.hour % 12 == 0 ? 12 : fields.hour % 12)
+          : fields.hour;
+      return _timeText(token, hour, fields.totalSeconds ~/ 3600);
     case 'm':
       return _timeText(token, fields.minute, fields.totalSeconds ~/ 60);
     default: // 's'
       return _timeText(token, fields.second, fields.totalSeconds);
   }
+}
+
+/// Whether [section] shows a date: a `d`, `y`, month `m`, `e` or `b`
+/// token. [counted] is its counted [DateToken]s.
+bool _hasDateToken(FormatSection section, List<DateToken> counted) {
+  for (var k = 0; k < counted.length; k++) {
+    switch (counted[k].letter) {
+      case 'd' || 'y':
+        return true;
+      case 'm' when !isMinuteToken(counted, k):
+        return true;
+    }
+  }
+  return section.tokens.any(
+    (FormatToken token) =>
+        token is DateToken && (token.letter == 'e' || token.letter == 'b'),
+  );
+}
+
+/// The text of an AM/PM marker written as [written]: the locale's `am` or
+/// `pm` for `AM/PM` in any case, else the letter before or after the
+/// slash of `A/P` in the case written.
+String _amPmText(String written, bool am, XlsxFormatLocale locale) {
+  if (written.length == 5) return am ? locale.am : locale.pm;
+  return am ? written[0] : written[written.length - 1];
 }
 
 /// The text of an hour, minute or second [token]: [value] padded to two
