@@ -126,9 +126,11 @@ void _defineRegion(
       test(
         name,
         () => expect(outcome, isA<OracleMatch>(), reason: '$outcome'),
-        skip:
-            reason ??
-            (outcome is OracleByEye ? 'by eye: ${outcome.kase.note}' : null),
+        // A known difference excuses a mismatch only: a missing row still
+        // fails, so a stale entry cannot hide it.
+        skip: reason != null && outcome is OracleMismatch
+            ? reason
+            : (outcome is OracleByEye ? 'by eye: ${outcome.kase.note}' : null),
       );
     }
   }

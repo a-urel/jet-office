@@ -294,12 +294,12 @@ final class OracleMissingRow extends OracleOutcome {
 /// case's date system: a code as `numberFormat`; a built-in id as
 /// `numberFormatId`, with the workbook's [OracleWorkbook.numFmts] code for
 /// it as `numberFormat`, as the reader passes them; a manual formula as its
-/// [OracleManual.error], in [locale]'s name for it; `General` at the default width of 11. The texts match by
-/// [oracleTextMatches].
+/// [OracleManual.error], in [locale]'s name for it; `General` at the
+/// default width of 11. The texts match by [oracleTextMatches].
 ///
 /// A case whose id [csv] lacks is [OracleMissingRow]. An eye-only case
-/// without [eye] text is [OracleByEye]. Throws [ArgumentError] when [workbook] is not a key of
-/// [cases].
+/// without [eye] text is [OracleByEye]. Throws [ArgumentError] when
+/// [workbook] is not a key of [cases].
 List<OracleOutcome> compareOracle(
   OracleCases cases,
   String workbook,
@@ -599,8 +599,8 @@ List<String> oracleManifestProblems(
 
 /// What is wrong with a known-differences map [known] (case id, a space
 /// and the region, such as `c4-01 de-DE`, to the reason) for [cases], one
-/// line per bad key, in key order: a key not of that form, a case id not in [cases], a region not
-/// in [oracleRegions], or an empty reason.
+/// line per bad key, in key order: a key not of that form, a case id not in
+/// [cases], a region not in [oracleRegions], or an empty reason.
 List<String> knownDifferenceProblems(
   Map<String, String> known,
   OracleCases cases,

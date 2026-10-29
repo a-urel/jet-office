@@ -74,6 +74,12 @@ void main(List<String> args) {
     stderr.writeln('$oracleCasesPath: ${e.message}');
     exitCode = 2;
     return;
+  } on FileSystemException catch (e) {
+    stderr.writeln(
+      '$oracleCasesPath: ${e.message} (run from the repository root)',
+    );
+    exitCode = 2;
+    return;
   }
   final Set<String> names = <String>{
     for (final File f in dir.listSync().whereType<File>())

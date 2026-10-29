@@ -502,14 +502,14 @@ chrome | DateTime | yyyy-mm-dd hh:mm:ss | median 901.9 ms | 9019 ns/value | rati
 
 ### Reading the figures
 
-- **Formatting a sheet costs about as much as reading it on the VM, and
-  less in Chrome.** Formatting the 1,166,679 cells takes 1.6 s on the VM
+- **Formatting a sheet costs about 0.6 of reading it on the VM and 0.8
+  in Chrome.** Formatting the 1,166,679 cells takes 1.6 s on the VM
   (1.4 µs a cell) and 2.7 s in Chrome (2.3 µs a cell), against a read of
   2.7 s and 3.3 s ("Read figures"). A consumer that shows every cell of a
   read pays roughly 1.6 times the read on the VM and 1.8 times in Chrome.
 - **The `BigInt` serial rounding is cheap in Chrome.** A serial date given
   as an `XlsxDecimal` costs 2.15 times a number on the VM and 1.57 times
-  in Chrome, well under the 5 times the plan set as the point to report.
+  in Chrome, well under 5 times, the point at which this page would report it.
   Nothing is recommended.
 - **A `DateTime` costs more than a serial.** The same code on a `DateTime`
   costs 3.76 times a number on the VM and 3.68 times in Chrome, about 1.75

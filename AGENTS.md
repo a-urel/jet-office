@@ -86,7 +86,7 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
 - The number formatter's oracle is Excel for Mac, not LibreOffice.
   `test/xlsx/format/oracle_test.dart` (in the gate, VM only) compares it
   with the owner's Excel CSVs of the oracle workbooks, per region; a region
-  without CSVs prints `unverified` and passes. The README under
+  without a manifest entry prints `unverified` and passes. The README under
   `test/fixtures/owner/number_format/` says how the owner runs them.
   Excel wins: a mismatch is fixed with a test, or recorded in the test's
   `knownDifferences` with a reason. Never edit a committed CSV or manifest
@@ -118,8 +118,7 @@ size and peak memory per run. `xlsx_format_benchmark_test.dart` times
 `XlsxNumberFormatter` on every cell of the read file and on 100,000
 numbers, serial dates and `DateTime`s. The quality gate does not run them;
 run them by hand on the VM and in Chrome (`dart test benchmark` runs all
-four). They
-record figures and fail on none (`docs/benchmark.md`):
+four). They record figures and fail on none (`docs/benchmark.md`):
 
 ```bash
 dart test benchmark
