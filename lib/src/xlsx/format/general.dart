@@ -1,7 +1,7 @@
 /// Excel's `General` format: a number fitted into a width.
 ///
 /// New in jet_office; Quds has no number format engine. [renderGeneral]
-/// shows a number in at most `width` characters, the sign not counted
+/// shows a number in at most `width` characters, a minus included
 /// (ECMA-376 §18.8.30, spec §5.3): an integer that fits in full, else
 /// fixed or scientific notation, whichever shows more significant digits
 /// (a tie is fixed), as Excel for Mac does. Rounding works on the number's decimal digits
@@ -18,7 +18,10 @@ const int _maxDigits = 15;
 /// [value] in `General` notation, in at most [width] characters where
 /// that is possible, without a sign.
 ///
-/// [value]'s sign is ignored; callers put a `-` in front. The decimal
+/// [value]'s sign is ignored; callers put a `-` in front and pass
+/// [minus] when they do: the minus then takes one of [width]'s
+/// characters, as in Excel (`-0.3333333` beside `0.33333333` at width
+/// 10), leaving at least one. The decimal
 /// separator is [locale]'s, and the separator and any leading `0.` and
 /// zeros count toward [width]. Of fixed and scientific notation
 /// (`1.23457E+11`, at least two exponent digits) the one that shows more
@@ -36,8 +39,11 @@ String renderGeneral(
   ExcelNumber value, {
   required int width,
   required XlsxFormatLocale locale,
+  bool minus = false,
 }) {
   if (value.isZero) return '0';
+  // Excel counts a minus shown before the number in the width (u14-03).
+  if (minus && width > 1) width--;
   final ({String digits, int exponent}) significant = value.abs().toSignificant(
     _maxDigits,
   );

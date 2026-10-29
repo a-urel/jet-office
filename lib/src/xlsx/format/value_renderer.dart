@@ -159,12 +159,13 @@ RenderedValue _renderNumberValue(
       !section.hasDigits &&
       !section.hasGeneral;
   if (textOnly) {
+    final bool minus = chosen.showMinus && !chosen.value.isZero;
     final String text = renderGeneral(
       chosen.value,
       width: generalWidth,
       locale: locale,
+      minus: minus,
     );
-    final bool minus = chosen.showMinus && !chosen.value.isZero;
     return (
       parts: <XlsxFormatPart>[XlsxFormatText(minus ? '-$text' : text)],
       section: section,

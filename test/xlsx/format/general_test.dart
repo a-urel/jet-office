@@ -4,6 +4,7 @@ import 'package:jet_office/src/xlsx/format/format_code.dart';
 import 'package:jet_office/src/xlsx/format/general.dart';
 import 'package:jet_office/src/xlsx/format/number_renderer.dart';
 import 'package:jet_office/src/xlsx/format/section_choice.dart';
+import 'package:jet_office/src/xlsx/format/value_renderer.dart';
 import 'package:test/test.dart';
 
 import 'number_renderer_test.dart' show commaLocale;
@@ -17,7 +18,11 @@ String g(
     renderGeneral(ExcelNumber.from(value)!.abs(), width: width, locale: locale);
 
 /// [value] in [code], with the section chosen as Task 5 does.
-({String text, FormatColor? color}) section(String code, num value) {
+({String text, FormatColor? color}) section(
+  String code,
+  num value, {
+  int width = 11,
+}) {
   final ({FormatSection section, bool showMinus, ExcelNumber value}) choice =
       chooseNumberSection(parseFormatCode(code), ExcelNumber.from(value)!)!;
   final List<XlsxFormatPart> parts = renderNumber(
@@ -25,7 +30,7 @@ String g(
     choice.value,
     showMinus: choice.showMinus,
     locale: XlsxFormatLocale.enUS,
-    generalWidth: 11,
+    generalWidth: width,
   );
   return (
     text: parts
@@ -150,6 +155,49 @@ void main() {
 
     test('the minus comes before literals', () {
       expect(section('"x"General', -1.5).text, '-x1.5');
+    });
+  });
+
+  group('the minus counts toward the width', () {
+    // Excel for Mac at width 10 (u14-03): -0.333333333333333 shows
+    // `-0.3333333`, one digit fewer than 0.333333333333333.
+    test('in a General section', () {
+      expect(
+        section('General', -0.333333333333333, width: 10).text,
+        '-0.3333333',
+      );
+      expect(
+        section('General', 0.333333333333333, width: 10).text,
+        '0.33333333',
+      );
+      expect(section('General', -123456789012, width: 10).text, '-1.235E+11');
+    });
+
+    test('but leaves at least one character', () {
+      expect(section('General', -1.5, width: 1).text, '-2');
+    });
+
+    test('not when the section shows no minus', () {
+      expect(
+        section('General;General', -0.333333333333333, width: 10).text,
+        '0.33333333',
+      );
+    });
+
+    test('in a number shown by a text-only format', () {
+      final RenderedValue rendered = renderValue(
+        -0.333333333333333,
+        parseFormatCode('@'),
+        locale: XlsxFormatLocale.enUS,
+        generalWidth: 10,
+        date1904: false,
+      );
+      expect(
+        rendered.parts
+            .map((XlsxFormatPart p) => p is XlsxFormatText ? p.text : '')
+            .join(),
+        '-0.3333333',
+      );
     });
   });
 

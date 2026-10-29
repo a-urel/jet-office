@@ -220,7 +220,7 @@ List<XlsxFormatPart> _renderFixed(
 /// literals, padding and fill of [section] around it: `General" kg"`.
 ///
 /// [showMinus] puts a `-` at the very start, before any literal, unless
-/// [value] is zero.
+/// [value] is zero; that minus counts toward [width].
 List<XlsxFormatPart> _renderGeneral(
   FormatSection section,
   ExcelNumber value,
@@ -229,11 +229,14 @@ List<XlsxFormatPart> _renderGeneral(
   int width,
 ) {
   final FormatPartsBuilder out = FormatPartsBuilder();
-  if (showMinus && !value.isZero) out.text('-');
+  final bool minus = showMinus && !value.isZero;
+  if (minus) out.text('-');
   for (final FormatToken token in section.tokens) {
     switch (token) {
       case GeneralToken():
-        out.text(renderGeneral(value, width: width, locale: locale));
+        out.text(
+          renderGeneral(value, width: width, locale: locale, minus: minus),
+        );
       case LiteralToken(:final String text):
         out.text(text);
       case LocaleTagToken(:final String currency):
