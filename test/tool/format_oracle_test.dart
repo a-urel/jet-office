@@ -134,14 +134,19 @@ void main() {
             'value': <String, Object?>{'s': 'abc'},
           }),
           _case('a-03', <String, Object?>{
-            'value': <String, Object?>{'manual': '=SEQUENCE(1,2)'},
+            'value': <String, Object?>{
+              'manual': '=SEQUENCE(1,2)',
+              'error': '#SPILL!',
+            },
             'eyeOnly': true,
           }),
         ]),
       );
       expect((parsed.cases[0].value as OracleBool).value, isTrue);
       expect((parsed.cases[1].value as OracleText).text, 'abc');
-      expect((parsed.cases[2].value as OracleManual).formula, '=SEQUENCE(1,2)');
+      final OracleManual manual = parsed.cases[2].value as OracleManual;
+      expect(manual.formula, '=SEQUENCE(1,2)');
+      expect(manual.error, '#SPILL!');
     });
 
     test('a case without checks or unknown is allowed (an own rule)', () {
@@ -284,6 +289,9 @@ void main() {
         <String, Object?>{'n': '1,5'},
         <String, Object?>{'b': 'true'},
         <String, Object?>{'n': '1', 's': 'a'},
+        <String, Object?>{'n': '1', 'error': '#N/A'},
+        <String, Object?>{'manual': '=NA()'},
+        <String, Object?>{'manual': '=NA()', 'error': 'N/A'},
         <String, Object?>{},
         'x',
       ]) {
@@ -304,7 +312,7 @@ void main() {
         () => parseOracleCases(
           _doc(<Map<String, Object?>>[
             _case('a-01', <String, Object?>{
-              'value': <String, Object?>{'manual': '=NA()'},
+              'value': <String, Object?>{'manual': '=NA()', 'error': '#N/A'},
             }),
           ]),
         ),
@@ -379,7 +387,10 @@ void main() {
         _case('c17-01', <String, Object?>{
           'checks': <String>['C17'],
           'unknown': 17,
-          'value': <String, Object?>{'manual': '=SEQUENCE(1,2)'},
+          'value': <String, Object?>{
+            'manual': '=SEQUENCE(1,2)',
+            'error': '#SPILL!',
+          },
           'code': 'General',
           'eyeOnly': true,
           'note': 'spill',

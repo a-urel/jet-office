@@ -2526,7 +2526,8 @@
       "workbook": "main",
       "dateSystem": "1900",
       "value": {
-        "manual": "=SEQUENCE(1,2)"
+        "manual": "=SEQUENCE(1,2)",
+        "error": "#SPILL!"
       },
       "code": "General",
       "eyeOnly": true,
@@ -2541,7 +2542,8 @@
       "workbook": "main",
       "dateSystem": "1900",
       "value": {
-        "manual": "=FILTER(1,FALSE)"
+        "manual": "=FILTER(1,FALSE)",
+        "error": "#CALC!"
       },
       "code": "General",
       "eyeOnly": true,

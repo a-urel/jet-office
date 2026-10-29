@@ -97,14 +97,18 @@ final class OracleText extends OracleValue {
   final String text;
 }
 
-/// A formula the owner types into column A by hand (`{"manual": "=..."}`),
-/// for a value the writer cannot produce, such as a spill error.
+/// A formula the owner types into column A by hand, for a value the writer
+/// cannot produce, such as a spill error
+/// (`{"manual": "=SEQUENCE(1,2)", "error": "#SPILL!"}`).
 final class OracleManual extends OracleValue {
   /// Creates a manual value.
-  const OracleManual(this.formula);
+  const OracleManual(this.formula, this.error);
 
-  /// The formula in English, as the owner types it.
+  /// The formula in English; the owner types it in Excel's language.
   final String formula;
+
+  /// The error the formula results in, as its English code (`#SPILL!`).
+  final String error;
 }
 
 /// One case: a value, a format and what it settles.
@@ -305,24 +309,34 @@ OracleCase _case(
 }
 
 OracleValue _value(Object? raw, String path) {
-  if (raw is! Map<String, Object?> || raw.length != 1) {
+  if (raw is! Map<String, Object?>) {
     _fail(path, 'expected an object with one of n, b, s, manual');
   }
+  if (raw.length == 2 && raw.containsKey('manual')) {
+    final Object? formula = raw['manual'];
+    final Object? error = raw['error'];
+    if (formula is String &&
+        formula.startsWith('=') &&
+        error is String &&
+        error.startsWith('#')) {
+      return OracleManual(formula, error);
+    }
+  }
+  if (raw.length != 1) _fail(path, _valueProblem);
   final MapEntry<String, Object?> e = raw.entries.single;
   return switch (e) {
     MapEntry(key: 'n', value: final String d) when _digitsPattern.hasMatch(d) =>
       OracleNumber(d),
     MapEntry(key: 'b', value: final bool b) => OracleBool(b),
     MapEntry(key: 's', value: final String s) => OracleText(s),
-    MapEntry(key: 'manual', value: final String f) when f.startsWith('=') =>
-      OracleManual(f),
-    _ => _fail(
-      path,
-      'expected n (decimal digits as a string), b (a boolean), s (a '
-      'string) or manual (a formula starting with =)',
-    ),
+    _ => _fail(path, _valueProblem),
   };
 }
+
+const String _valueProblem =
+    'expected n (decimal digits as a string), b (a boolean), s (a string), '
+    'or manual (a formula starting with =) with error (an error code '
+    'starting with #)';
 
 bool _dateSystem(Object? raw, String path) => switch (raw) {
   '1900' => false,

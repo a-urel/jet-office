@@ -126,6 +126,7 @@ A list, one object per region run:
 - `macos`: Apple menu → About This Mac.
 - `confirmedBy`: exactly `"owner"`.
 - `csv`: workbook file to CSV file, for each workbook run in that region.
+  The CSV is always named `<workbook stem>.<region>.csv`.
 - `eye`: case id to the text column A shows, for every eye-only case of the
   workbooks run.
 - `notes`: anything Excel said or did, or `""`.
@@ -169,8 +170,11 @@ A list, one object per region run:
   so a case says its date system by itself.
 - `value`: exactly one of `{"n": "<digits>"}` (a number as decimal digits,
   `XlsxDecimal`'s form, a string), `{"b": true}`, `{"s": "text"}` or
-  `{"manual": "=FORMULA()"}` (nothing is written; the owner types the
-  formula; only for an eye-only case).
+  `{"manual": "=FORMULA()", "error": "#CODE!"}` (only for an eye-only
+  case: nothing is written; `manual` is the formula in English, which the
+  owner types in Excel's language, and `error` the English code of the
+  error it results in, which the manifest's `eye` shows as Excel names
+  it).
 - `code` (a format code; `General` is built-in id 0) or `builtinId` (0 to
   163, no code): exactly one.
 - `eyeOnly`: the case goes on the `eye` sheet and is checked by the
