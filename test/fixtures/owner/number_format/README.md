@@ -63,6 +63,12 @@ For each region you can produce (`en-US`, `de-DE`, `tr-TR`):
    name `format_oracle.<region>.csv` (`format_oracle.de-DE.csv`), save to
    `build/format_oracle/`. Excel says only the active sheet is saved: OK.
    In `de-DE` and `tr-TR` Excel separates fields with `;`; keep it.
+   The format is the one named CSV UTF-8: the file starts with a BOM
+   (`EF BB BF`). The plain CSV formats lose characters such as `₺`.
+   Excel for Mac 16.114 ends lines with CR alone; keep that too. Excel
+   saves outside hidden folders only, so save to a folder such as
+   `~/Documents/jet_office_oracle/` and copy the CSVs here; a file saved
+   as `tr_TR` is renamed to `tr-TR`, bytes unchanged.
 5. Do the eye checks (below) on the `eye` sheet, then close the workbook
    **without saving**.
 6. Do the same for `format_oracle_1904.xlsx` (`format_oracle_1904.<region>.csv`)
