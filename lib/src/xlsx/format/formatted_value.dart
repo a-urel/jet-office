@@ -172,3 +172,33 @@ final class XlsxFormatFill extends XlsxFormatPart {
   @override
   String toString() => 'XlsxFormatFill("$char")';
 }
+
+/// The parts of a result as a renderer builds them, with adjacent text
+/// merged and empty text left out.
+///
+/// Internal to the renderers; not exported.
+final class FormatPartsBuilder {
+  final List<XlsxFormatPart> _parts = <XlsxFormatPart>[];
+  final StringBuffer _text = StringBuffer();
+
+  /// Appends [text] to the current text part.
+  void text(String text) => _text.write(text);
+
+  /// Appends [part] after the current text.
+  void add(XlsxFormatPart part) {
+    _flush();
+    _parts.add(part);
+  }
+
+  void _flush() {
+    if (_text.isEmpty) return;
+    _parts.add(XlsxFormatText(_text.toString()));
+    _text.clear();
+  }
+
+  /// The parts, the last text included.
+  List<XlsxFormatPart> get result {
+    _flush();
+    return _parts;
+  }
+}

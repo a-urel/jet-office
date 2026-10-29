@@ -56,7 +56,8 @@ FormatKind classifyFormatCode(String code) {
     final FormatSection section = sections[k];
     final List<DateToken> tokens = <DateToken>[
       for (final FormatToken token in section.tokens)
-        if (token is DateToken && _counted.contains(token.letter)) token,
+        if (token is DateToken && countedDateLetters.contains(token.letter))
+          token,
     ];
     final bool neutral =
         section.hasText ||
@@ -70,8 +71,10 @@ FormatKind classifyFormatCode(String code) {
   return result ?? FormatKind.number;
 }
 
-/// The date and time letters that decide a section's kind.
-const String _counted = 'dmyhs';
+/// The date and time letters that decide a section's kind and whether an
+/// `m` is a month or minutes; the era and calendar letters `e`, `g` and
+/// `b` are not among them.
+const String countedDateLetters = 'dmyhs';
 
 /// The kind of a section whose date and time tokens are [tokens].
 FormatKind _kind(List<DateToken> tokens) {
@@ -84,7 +87,7 @@ FormatKind _kind(List<DateToken> tokens) {
       case 'h' || 's':
         hasTime = true;
       default:
-        if (_isMinutes(tokens, k)) {
+        if (isMinuteToken(tokens, k)) {
           hasTime = true;
         } else {
           hasDate = true;
@@ -95,11 +98,18 @@ FormatKind _kind(List<DateToken> tokens) {
   return hasTime ? FormatKind.time : FormatKind.number;
 }
 
-/// Whether the `m` token at [k] of [tokens] is minutes rather than a month.
-bool _isMinutes(List<DateToken> tokens, int k) {
-  final DateToken token = tokens[k];
+/// Whether the `m` token at [k] of [counted] is minutes rather than a
+/// month.
+///
+/// [counted] is a section's [DateToken]s whose letters are in
+/// [countedDateLetters], in order. An elapsed `[m]` is minutes; a run of
+/// three or more is a month; otherwise the `m` is minutes when the token
+/// before it is an `h` or the token after it an `s` (elapsed or not).
+/// The classifier and the date renderer share the rule.
+bool isMinuteToken(List<DateToken> counted, int k) {
+  final DateToken token = counted[k];
   if (token.elapsed) return true;
   if (token.length > 2) return false;
-  return (k > 0 && tokens[k - 1].letter == 'h') ||
-      (k + 1 < tokens.length && tokens[k + 1].letter == 's');
+  return (k > 0 && counted[k - 1].letter == 'h') ||
+      (k + 1 < counted.length && counted[k + 1].letter == 's');
 }
