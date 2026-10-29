@@ -81,14 +81,23 @@ void main() {
     });
 
     // Excel for Mac (u03-05, all three regions): `[>0]0;0` shows -5 as `5`.
-    test('the second section never shows the minus', () {
+    test('an unconditioned second section never shows the minus', () {
       expect(choose('[<-5]0;0', '-2'), (1, false, '2'));
       expect(choose('[<>-3]0;0', '-3'), (1, false, '3'));
       expect(choose('[>-10]0;0', '-20'), (1, false, '20'));
       expect(choose('[>=0]0;0', '-2'), (1, false, '2'));
       expect(choose('[>0]0;0', '-5'), (1, false, '5'));
       expect(choose('[=0]0;0', '-2'), (1, false, '2'));
-      expect(choose('[>10]0;[<5]0;0', '-2'), (1, false, '2'));
+      expect(choose('[>10]0;0;0', '-2'), (1, false, '2'));
+    });
+
+    // Not confirmed by Excel: the rule of a conditioned first section.
+    test('a conditioned second section keeps the minus unless only '
+        'negatives meet its condition', () {
+      expect(choose('[>10]0;[<5]0;0', '-2'), (1, true, '2'));
+      expect(choose('[>10]0;[<=0]0', '-2'), (1, true, '2'));
+      expect(choose('[>10]0;[<0]0;0', '-2'), (1, false, '2'));
+      expect(choose('[>10]0;[=-2]0', '-2'), (1, false, '2'));
     });
 
     test('an unconditioned first section takes every value', () {

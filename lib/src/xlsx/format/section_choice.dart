@@ -22,12 +22,14 @@ import 'format_code.dart';
 ///
 /// The result's `value` is the absolute value of [value], and `showMinus`
 /// says whether the renderer prints a `-` before it: true for a negative
-/// number the section does not write a sign for. The second section never
-/// shows the minus, with or without conditions (`[>0]0;0` shows -5 as `5`,
-/// as Excel for Mac does), and neither does a first section whose condition
-/// only negatives meet (`[<0]"neg "0;0` shows -5 as `neg 5`). The `General`
-/// a lone conditional section gets after it keeps its minus (`[>100]0`
-/// shows -50.5 as `-50.5`).
+/// number the section does not write a sign for. An unconditioned second
+/// section never shows the minus (`[>0]0;0` shows -5 as `5`, as Excel for
+/// Mac does), and neither does a first section whose condition only
+/// negatives meet (`[<0]"neg "0;0` shows -5 as `neg 5`). A conditioned
+/// second section follows the first section's rule (`[>10]0;[<5]0` shows
+/// -2 as `-2`, `[>10]0;[<0]0` as `2`); Excel has not confirmed that. The
+/// `General` a lone conditional section gets after it keeps its minus
+/// (`[>100]0` shows -50.5 as `-50.5`).
 ///
 /// The text section ([chooseTextSection]) never takes a number: `0;@`
 /// shows -5 as `-5` with its one number section, and `0;-0;@` shows 0 with
@@ -70,7 +72,10 @@ chooseNumberSection(ParsedFormat format, ExcelNumber value) {
   if (sections.length > 1) {
     final FormatSection second = sections[1];
     if (_holds(second.condition, value)) {
-      return pick(second, sign < 0 && identical(second, _general));
+      final bool minus = second.condition == null
+          ? identical(second, _general)
+          : !_onlyNegatives(second.condition);
+      return pick(second, sign < 0 && minus);
     }
   }
   if (sections.length > 2) return pick(sections[2], sign < 0);
