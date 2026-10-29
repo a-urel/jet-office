@@ -119,6 +119,12 @@ It prints each failure as `seed <s> case <i> (<mutation>): <error>` and
 exits 1 on any. A failure is a reader defect: pin it as a unit test in the
 owning `*_test.dart` with the input minimized by hand, then fix it.
 
+`test/xlsx/format/fuzz_test.dart` does the same for `XlsxNumberFormatter`
+(seeds 1 to 4, 200 cases each: mutated format codes and random values; no
+throw, `text` of at most 1,000 characters, `parts` joined equal `text`);
+longer runs with `dart run tool/fuzz_formatter.dart --seeds 1-200 --cases 1000`.
+The rules are in `docs/number-format.md`.
+
 ## Hard rules
 
 - **Pure Dart, web-safe.** Nothing under `lib/` imports `dart:io`, `dart:ui`,
