@@ -130,15 +130,15 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
   (
     XlsxWarningCode.cellTypeUnsupported,
     XlsxLocale.en,
-  ): "1 cell(s) on sheet 'S' have a type the reader does not support; they read as empty (A1).",
+  ): "1 cell(s) on sheet 'S' have a type or content the reader does not support; their value may be empty or read from the stored value (A1).",
   (
     XlsxWarningCode.cellTypeUnsupported,
     XlsxLocale.de,
-  ): '1 Zelle(n) im Blatt „S“ haben einen Typ, den der Reader nicht unterstützt; sie werden als leer gelesen (A1).',
+  ): '1 Zelle(n) im Blatt „S“ haben einen Typ oder Inhalt, den der Reader nicht unterstützt; ihr Wert ist möglicherweise leer oder stammt aus dem gespeicherten Wert (A1).',
   (
     XlsxWarningCode.cellTypeUnsupported,
     XlsxLocale.tr,
-  ): '“S” sayfasındaki 1 hücre, okuyucunun desteklemediği bir türde; boş okunuyor (A1).',
+  ): '“S” sayfasındaki 1 hücre, okuyucunun desteklemediği bir tür veya içerik taşıyor; değeri boş olabilir ya da kayıtlı değerden okunur (A1).',
   (
     XlsxWarningCode.formulaWithoutValue,
     XlsxLocale.en,
@@ -184,7 +184,7 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
     XlsxLocale.de,
   ): '1 Zeile(n) im Blatt „S“ stehen nicht in der richtigen Reihenfolge; sie wurden in der Reihenfolge der Datei gelesen (A1).',
   (XlsxWarningCode.rowOutOfOrder, XlsxLocale.tr):
-      '“S” sayfasındaki 1 satır sırasız; dosyadaki sırayla okundu (A1).',
+      '“S” sayfasındaki 1 satır sıralı değil; dosyadaki sırayla okundu (A1).',
   (XlsxWarningCode.cellOutsideSheet, XlsxLocale.en):
       "1 cell(s) on sheet 'S' lie outside Excel's grid and were skipped (A1).",
   (
@@ -194,7 +194,7 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
   (
     XlsxWarningCode.cellOutsideSheet,
     XlsxLocale.tr,
-  ): "“S” sayfasındaki 1 hücre, Excel'in ızgarasının dışında kaldığı için atlandı (A1).",
+  ): "“S” sayfasındaki 1 hücre, Excel'in sayfa sınırları dışında kaldığı için atlandı (A1).",
   (
     XlsxWarningCode.unresolvedNumberFormat,
     XlsxLocale.en,
@@ -276,7 +276,7 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
   (
     XlsxWarningCode.formulaGroupInvalid,
     XlsxLocale.tr,
-  ): '“S” sayfasındaki 1 formül hücresi, dosyada doğru tanımlanmamış bir paylaşılan, dizi veya veri tablosu formülüne ait; değerleri formül grubu olmadan korundu (A1).',
+  ): '“S” sayfasındaki 1 formül hücresi, dosyada doğru tanımlanmamış bir paylaşılan, dizi veya veri tablosu formülüne ait; kayıtlı değerleri korundu, formül grubu yok sayıldı (A1).',
   (
     XlsxWarningCode.mergeRangeInvalid,
     XlsxLocale.en,
@@ -524,7 +524,7 @@ void main() {
     );
     expect(
       w.message(XlsxLocale.tr),
-      '“S” sayfasındaki 1 sayı hücresi, kodu yerel ayara bağlı olan veya '
+      '“S” sayfasındaki 1 sayı hücresi, kodu yerel ayara bağlı olan ya da '
       'dosyada bulunmayan sayı biçimleri kullanıyor; tarih gösterseler bile '
       'düz sayı olarak okunuyor (A1).',
     );

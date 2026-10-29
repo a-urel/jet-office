@@ -769,27 +769,30 @@ checked in phase 1 (see "Native-speaker check"):
 - `errorValueInvalid`
 - `formulaGroupInvalid`
 - `mergeRangeInvalid`
+- `numberFormatInvalid`, `numberFormatUnsupported` and
+  `numberFormatLocaleDependent` (the number format engine's codes, N2)
 
 | Language | Reviewer | Date | Corrections |
 |---|---|---|---|
 | de | not checked yet | | |
-| tr | not checked yet | | |
+| tr | Ahmet Urel (owner) | 2026-10-30 | `cellTypeUnsupported` reworded (see below). `rowOutOfOrder` "sırasız" → "sıralı değil". `cellOutsideSheet` "Excel'in ızgarasının dışında" → "Excel'in sayfa sınırları dışında". `unresolvedNumberFormat` (no id) "veya" → "ya da". `formulaGroupInvalid` "değerleri formül grubu olmadan korundu" → "kayıtlı değerleri korundu, formül grubu yok sayıldı". `numberFormatUnsupported` keeps "kitaplık". The rest unchanged. |
 
 No message text was changed in R4 (plan ruling 8). The candidates below are
 what the milestone ledgers flagged. Each has a suggested alternative; the
 reviewer decides, and may find more.
 
-- [ ] `rowOutOfOrder`, tr: "sırasız" is informal. Suggested: "sıra dışı" or
+- [x] `rowOutOfOrder`, tr: "sırasız" is informal. Suggested: "sıra dışı" or
   "sırası bozuk" (for example "2 satır sıra dışı; dosyadaki sırayla
-  okundu").
+  okundu"). The owner chose "sıralı değil".
 - [ ] `cellTypeUnsupported`, de: "der Reader" is an anglicism. Suggested:
   "das Leseprogramm", or the passive: "…einen Typ, der nicht unterstützt
   wird…".
 - [ ] `unresolvedNumberFormat` without a format id (the "(no id)" row), in de
   and tr: the wording "number formats whose code depends on the locale or is
   missing from the file" is the long, double-condition variant. Check that
-  both read naturally and that the "or" is clear.
-- [ ] `cellTypeUnsupported`, all three languages: the message says the cells
+  both read naturally and that the "or" is clear. tr done: "veya" became
+  "ya da"; de open.
+- [x] `cellTypeUnsupported`, all three languages: the message says the cells
   "read as empty" (de "werden als leer gelesen", tr "boş okunuyor"). That is
   wrong for an inline string (`<is>`) on a cell whose `t` is not `inlineStr`:
   the text is not read, but the value still comes from `t` and any `<v>`.
@@ -805,7 +808,12 @@ reviewer decides, and may find more.
   en, de and tr change together, so the three columns stay in step. The
   de reviewer's "Leseprogramm" choice above applies here too.
 
-To apply a correction: edit the message in `lib/src/xlsx/warnings.dart` (all
+  Applied on 2026-10-30. en as suggested. tr as the owner approved:
+  "…okuyucunun desteklemediği bir tür veya içerik taşıyor; değeri boş
+  olabilir ya da kayıtlı değerden okunur". de takes the suggested meaning
+  but keeps "der Reader" until the de reviewer decides.
+
+To apply a correction: edit the message in `lib/src/xlsx/warning_messages.dart` (all
 three languages of a code in one change when the meaning changes), run
 `dart run tool/warning_messages.dart > docs/warning-messages.md`, then run
 the quality gate (`test/tool/warning_messages_test.dart` fails while the

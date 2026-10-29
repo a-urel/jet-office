@@ -134,15 +134,17 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
       '“$sheet” sayfasındaki $count hücre 0 veya 1 dışında bir '
           'mantıksal değer içeriyor; boş okunuyor$cells.',
     (XlsxWarningCode.cellTypeUnsupported, XlsxLocale.en) =>
-      "$count cell(s) on sheet '$sheet' have a type the reader "
-          'does not support; they read as empty$cells.',
+      "$count cell(s) on sheet '$sheet' have a type or content the "
+          'reader does not support; their value may be empty or read from '
+          'the stored value$cells.',
     (XlsxWarningCode.cellTypeUnsupported, XlsxLocale.de) =>
-      '$count Zelle(n) im Blatt „$sheet“ haben einen Typ, den '
-          'der Reader nicht unterstützt; sie werden als leer '
-          'gelesen$cells.',
+      '$count Zelle(n) im Blatt „$sheet“ haben einen Typ oder Inhalt, '
+          'den der Reader nicht unterstützt; ihr Wert ist möglicherweise '
+          'leer oder stammt aus dem gespeicherten Wert$cells.',
     (XlsxWarningCode.cellTypeUnsupported, XlsxLocale.tr) =>
       '“$sheet” sayfasındaki $count hücre, okuyucunun '
-          'desteklemediği bir türde; boş okunuyor$cells.',
+          'desteklemediği bir tür veya içerik taşıyor; değeri boş olabilir '
+          'ya da kayıtlı değerden okunur$cells.',
     (XlsxWarningCode.formulaWithoutValue, XlsxLocale.en) =>
       "$count formula cell(s) on sheet '$sheet' have no saved "
           'result; they read as empty$cells.',
@@ -182,7 +184,7 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
           'richtigen Reihenfolge; sie wurden in der Reihenfolge der '
           'Datei gelesen$cells.',
     (XlsxWarningCode.rowOutOfOrder, XlsxLocale.tr) =>
-      '“$sheet” sayfasındaki $count satır sırasız; dosyadaki '
+      '“$sheet” sayfasındaki $count satır sıralı değil; dosyadaki '
           'sırayla okundu$cells.',
     (XlsxWarningCode.cellOutsideSheet, XlsxLocale.en) =>
       "$count cell(s) on sheet '$sheet' lie outside Excel's "
@@ -191,7 +193,7 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
       '$count Zelle(n) im Blatt „$sheet“ liegen außerhalb des '
           'Excel-Rasters und wurden übersprungen$cells.',
     (XlsxWarningCode.cellOutsideSheet, XlsxLocale.tr) =>
-      "“$sheet” sayfasındaki $count hücre, Excel'in ızgarasının "
+      "“$sheet” sayfasındaki $count hücre, Excel'in sayfa sınırları "
           'dışında kaldığı için atlandı$cells.',
     (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.en)
         when w.detail == null =>
@@ -207,7 +209,7 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
     (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.tr)
         when w.detail == null =>
       '“$sheet” sayfasındaki $count sayı hücresi, kodu yerel ayara bağlı '
-          'olan veya dosyada bulunmayan sayı biçimleri kullanıyor; tarih '
+          'olan ya da dosyada bulunmayan sayı biçimleri kullanıyor; tarih '
           'gösterseler bile düz sayı olarak okunuyor$cells.',
     (XlsxWarningCode.unresolvedNumberFormat, XlsxLocale.en) =>
       "$count number cell(s) on sheet '$sheet' use built-in number "
@@ -289,7 +291,7 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
     (XlsxWarningCode.formulaGroupInvalid, XlsxLocale.tr) =>
       '“$sheet” sayfasındaki $count formül hücresi, dosyada doğru '
           'tanımlanmamış bir paylaşılan, dizi veya veri tablosu formülüne '
-          'ait; değerleri formül grubu olmadan korundu$cells.',
+          'ait; kayıtlı değerleri korundu, formül grubu yok sayıldı$cells.',
     (XlsxWarningCode.mergeRangeInvalid, XlsxLocale.en) =>
       "$count merged range(s) on sheet '$sheet' have an invalid "
           'reference and were skipped$cells.',
