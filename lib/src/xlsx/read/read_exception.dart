@@ -1,4 +1,6 @@
 /// The exception the XLSX reader throws for a file it cannot read at all.
+///
+/// @docImport 'read_limits.dart';
 library;
 
 import '../../xml/xml_pull_reader.dart' show isUnsafeInMessage;
@@ -28,7 +30,7 @@ enum XlsxReadFailure {
   /// An XML part is not well-formed, has a `DOCTYPE` or is not UTF-8.
   malformedXml,
 
-  /// A limit of `XlsxReadLimits` was exceeded.
+  /// A limit of [XlsxReadLimits] was exceeded.
   limitExceeded,
 }
 

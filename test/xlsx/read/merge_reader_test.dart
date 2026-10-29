@@ -245,6 +245,31 @@ void main() {
       expect(ok.mergesAt(1), hasLength(3));
     });
 
+    test('a pass that overflows adds no warning, a retry adds one', () {
+      final bytes = buildWorkbook(<String, String?>{
+        'S': _sheet(
+          '<mergeCells><mergeCell ref="x"/><mergeCell ref="A1:B1"/>'
+          '<mergeCell ref="A2:B2"/><mergeCell ref="A3:B3"/></mergeCells>',
+        ),
+      });
+      final XlsxReader r = XlsxReader(
+        bytes,
+        limits: const XlsxReadLimits(maxMerges: 2),
+      );
+      for (int attempt = 0; attempt < 2; attempt++) {
+        expect(() => r.mergesAt(0), throwsA(isA<XlsxReadException>()));
+        expect(_count(r, XlsxWarningCode.mergeRangeInvalid), 0);
+      }
+      final XlsxReader ok = XlsxReader(
+        bytes,
+        limits: const XlsxReadLimits(maxMerges: 3),
+      );
+      expect(ok.mergesAt(0), hasLength(3));
+      expect(_count(ok, XlsxWarningCode.mergeRangeInvalid), 1);
+      expect(ok.mergesAt(0), hasLength(3));
+      expect(_count(ok, XlsxWarningCode.mergeRangeInvalid), 1);
+    });
+
     test('skipped merges are counted, not kept', () {
       final XlsxReader r = _reader(
         _sheet('<mergeCells>${'<mergeCell ref="x"/>' * 1000}</mergeCells>'),

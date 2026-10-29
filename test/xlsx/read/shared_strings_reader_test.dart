@@ -64,6 +64,10 @@ void main() {
     );
   });
 
+  test('keeps a whitespace-only <t> as written', () {
+    expect(_strings('<si><t xml:space="preserve">  </t></si>'), <String>['  ']);
+  });
+
   test('skips phonetic text between runs', () {
     expect(
       _strings(

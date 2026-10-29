@@ -119,10 +119,18 @@ final class XlsxDecimal {
     }
   }
 
-  /// The number as written to the file.
+  /// The number as written to the file. For a cell the reader returns,
+  /// the file's number normalized to this form: a leading `+` and a
+  /// trailing `.` are dropped, `.5` becomes `0.5`, a zero loses its sign
+  /// (`-0` is `0`) and an exponent is applied (`1.5E3` is `1500`, with no
+  /// leading zeros); without one the digits are kept as written (`1234.50`
+  /// and `007` stay).
   final String digits;
 
-  /// The number as a `double`, rounded to the nearest representable value.
+  /// The number as a `double`, rounded to the nearest representable value:
+  /// `0.0` (or `-0.0`) when it is too small and `double.infinity` (or its
+  /// negative) when it is too large, which any long number read from a
+  /// file can be, not only one written with an exponent (up to 400).
   double toDouble() => double.parse(digits);
 
   /// The number as an `int`, or `null` when it is not a whole number or its

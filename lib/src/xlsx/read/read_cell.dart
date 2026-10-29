@@ -19,6 +19,9 @@ import '../range.dart';
 /// such as `#SPILL!` or `#CALC!`, is kept as written and is not [isClassic].
 final class XlsxErrorValue {
   /// The error value written as [code], such as `#N/A`.
+  ///
+  /// The reader builds these; the constructor is public so that a caller
+  /// can build expected values in its own tests.
   const XlsxErrorValue(this.code);
 
   /// `#NULL!`: two ranges that do not intersect.
@@ -97,6 +100,9 @@ enum XlsxFormulaGroupKind {
 final class XlsxFormulaGroup {
   /// A group of [kind] covering [range]; [isMaster] whether the cell that
   /// holds it is the master.
+  ///
+  /// The reader builds these; the constructor is public so that a caller
+  /// can build expected values in its own tests.
   const XlsxFormulaGroup(this.kind, this.range, {required this.isMaster});
 
   /// Whether the group is a shared formula, an array formula or a data
@@ -131,6 +137,9 @@ final class XlsxReadCell {
   /// [formula] and [formulaGroup], shown with the number format
   /// [numberFormatId] whose code is [numberFormat]; [isDate] whether that
   /// format shows a date or a time.
+  ///
+  /// The reader builds these; the constructor is public so that a caller
+  /// can build expected values in its own tests.
   const XlsxReadCell(
     this.column,
     this.value, {
@@ -174,8 +183,9 @@ final class XlsxReadCell {
   final int numberFormatId;
 
   /// The format code of [numberFormatId], such as `dd.mm.yyyy`, or `null`
-  /// for a built-in id whose code depends on the locale and that the file
-  /// does not define.
+  /// when the file does not define that id and it is not a built-in with a
+  /// fixed code: a built-in whose code depends on the locale, or an id of
+  /// 164 and up the file leaves out.
   final String? numberFormat;
 
   /// Whether [numberFormat] shows a date or a time. [value] tells which: a
@@ -224,7 +234,10 @@ final class XlsxReadCell {
 /// One row read from a worksheet.
 final class XlsxReadRow {
   /// A row at the 0-based [index] holding [cells], which must be in column
-  /// order; [hidden] whether the file hides it.
+  /// order; [hidden] whether the file hides it. The list is copied.
+  ///
+  /// The reader builds these; the constructor is public so that a caller
+  /// can build expected values in its own tests.
   XlsxReadRow(this.index, List<XlsxReadCell> cells, {this.hidden = false})
     : cells = List<XlsxReadCell>.unmodifiable(cells);
 
@@ -234,8 +247,9 @@ final class XlsxReadRow {
   /// Whether the row is hidden in the file.
   final bool hidden;
 
-  /// The cells of the row that hold data, in column order. Empty only for a
-  /// hidden row without data. Unmodifiable.
+  /// The cells of the row that hold data, in column order. In a row the
+  /// reader returns it is empty only for a hidden row without data.
+  /// Unmodifiable.
   final List<XlsxReadCell> cells;
 
   @override

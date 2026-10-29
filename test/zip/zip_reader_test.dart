@@ -278,6 +278,22 @@ void main() {
       );
     });
 
+    test(
+      'maps a compression method other than store or deflate to corrupt',
+      () {
+        final Uint8List zip = _patchMethod(
+          buildZip(<String, List<int>>{
+            'a.xml': utf8.encode('<a>hello</a>'),
+          }, store: true),
+          12,
+        );
+        expect(
+          () => _open(zip).read('a.xml'),
+          _throwsKind(ZipReadErrorKind.corrupt, entry: 'a.xml'),
+        );
+      },
+    );
+
     test('maps broken deflate data to corrupt', () {
       final Uint8List zip = buildZip(<String, List<int>>{
         'a.xml': List<int>.generate(5000, (int i) => i * 31 % 256),
@@ -330,6 +346,28 @@ void main() {
       }
     });
   });
+}
+
+/// A copy of [zip] in which every local and central header declares the
+/// compression [method]. The headers are found by their signatures, not by
+/// fixed offsets.
+Uint8List _patchMethod(Uint8List zip, int method) {
+  final Uint8List out = Uint8List.fromList(zip);
+  final ByteData data = ByteData.sublistView(out);
+  int patched = 0;
+  for (int i = 0; i + 46 <= out.length; i++) {
+    final int signature = data.getUint32(i, Endian.little);
+    // Local header: method at 8. Central header: method at 10.
+    if (signature == 0x04034b50) {
+      data.setUint16(i + 8, method, Endian.little);
+      patched++;
+    } else if (signature == 0x02014b50) {
+      data.setUint16(i + 10, method, Endian.little);
+      patched++;
+    }
+  }
+  expect(patched, 2, reason: 'one local and one central header');
+  return out;
 }
 
 /// The first index of [pattern] in [bytes].

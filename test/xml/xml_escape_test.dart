@@ -132,5 +132,19 @@ void main() {
       expect(decodeXstring('_xD83D__xDE00_'), '😀');
       expect(decodeXstring('_xD83D_'), '_xD83D_');
     });
+    test('keeps a lone low surrogate escape as written', () {
+      expect(decodeXstring('_xDC00_'), '_xDC00_');
+      expect(decodeXstring('a_xdc00_b'), 'a_xdc00_b');
+    });
+    test('does not join a reversed pair', () {
+      expect(decodeXstring('_xDC00__xD800_'), '_xDC00__xD800_');
+    });
+    test('accepts either case of hex digits', () {
+      expect(decodeXstring('_x00e9_'), 'é');
+      expect(decodeXstring('_x00E9_'), 'é');
+    });
+    test('an uppercase X is not an escape', () {
+      expect(decodeXstring('_X0041_'), '_X0041_');
+    });
   });
 }

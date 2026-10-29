@@ -377,6 +377,10 @@ void main() {
           ref: 'A${ended + 1}:XFD${ended + 1}',
         );
         covered = groups.coveredBy(ended, columns - 1);
+        // A column in the middle of the range.
+        if (groups.coveredBy(ended, 9999) == null) {
+          fail('column 9999 is not covered');
+        }
       });
       expect(
         wide,

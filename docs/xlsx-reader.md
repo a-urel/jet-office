@@ -7,10 +7,11 @@ scope and why the file is treated as untrusted input.
 
 This page covers milestones R1, the foundation, R2, the types (styles and
 number formats, dates and durations, `inlineStr`, error values, formula groups
-and merges, with `double` and `int` access on `XlsxDecimal`) and R3, files
-from other producers and hostile files (the sections "Other producers" and
-"Hostile input" below). R4 (benchmark and release readiness) adds its own
-section when it lands.
+and merges, with `double` and `int` access on `XlsxDecimal`), R3, files from
+other producers and hostile files (the sections "Other producers" and
+"Hostile input" below) and R4, the benchmark and release readiness (the
+section "Performance" below, with the figures in
+[`benchmark.md`](benchmark.md)).
 
 ```dart
 final XlsxReader reader = XlsxReader(bytes);
@@ -41,11 +42,11 @@ below 1, an unknown sheet name or index) throws `ArgumentError` or
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | A limit in `XlsxReadLimits` below 1 | `ArgumentError` naming the field, when the reader opens | a zero limit is a bug in the caller | `test/xlsx/read/read_limits_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
-| Default limits | `maxEntries` 10,000; `maxEntryBytes` 256 MiB; `maxTotalBytes` 1 GiB; `maxCompressionRatio` 1,000; `maxSharedStrings` 2,000,000; `maxDepth` 256; `maxTextLength` 1,048,576 characters; `maxSheets` 10,000; `maxCellFormats` 1,000,000 (R2); `maxMerges` 1,000,000 (R3) | a 100,000 by 12 sheet is about 50 MB of XML, so 256 MiB leaves four times that; Excel itself is far from 10,000 sheets, a million cell formats or a million merges | `test/xlsx/read/read_limits_test.dart` |
+| Default limits | `maxEntries` 10,000; `maxEntryBytes` 256 MiB; `maxTotalBytes` 1 GiB; `maxCompressionRatio` 1,000; `maxSharedStrings` 2,000,000; `maxDepth` 256; `maxTextLength` 1,048,576 characters; `maxSheets` 10,000; `maxCellFormats` 1,000,000 (R2); `maxMerges` 1,000,000 (R3) | a 100,000 by 12 sheet of mixed values is about 44 MB of XML (measured, [`benchmark.md`](benchmark.md)), so 256 MiB leaves about six times that; Excel itself is far from 10,000 sheets, a million cell formats or a million merges | `test/xlsx/read/read_limits_test.dart` |
 | Bytes that are not a ZIP | `notZip`; a file that starts like a ZIP but has a missing or damaged directory is `corruptZip` | tell a wrong upload from a damaged one | `test/zip/zip_reader_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
 | More entries than `maxEntries` (directories count) | `limitExceeded` naming `maxEntries`, before anything is inflated | the central directory is read first | `test/zip/zip_reader_test.dart` |
 | An entry declaring more than `maxEntryBytes`, or declared sizes adding up to more than `maxTotalBytes` | `limitExceeded` naming the limit, before anything is inflated | ZIP bomb | `test/zip/zip_reader_test.dart` |
-| An entry declaring more than 1 MiB at a ratio above `maxCompressionRatio` | `limitExceeded` naming `maxCompressionRatio`. Smaller entries skip the check | a small part may compress very well without being a threat | `test/zip/zip_reader_test.dart` |
+| An entry declaring more than 1 MiB at a ratio above `maxCompressionRatio` | `limitExceeded` naming `maxCompressionRatio`. Smaller entries skip the check | a small part may compress very well without being a threat | `test/zip/zip_reader_test.dart`, `test/xlsx/read/package_reader_test.dart` |
 | A declared size beyond 2^63 (Zip64, read as negative) | `corruptZip` | a negative size would pass every limit and lower the total | `test/zip/zip_reader_test.dart` |
 | An entry inflating past its declared size, or to fewer bytes | `corruptZip`; inflation stops as soon as the declared size is passed | a lying declaration cannot inflate past a size that was checked | `test/zip/zip_reader_test.dart` |
 | An entry whose CRC-32 does not match | `corruptZip` | `package:archive` 4.5.2 does not check it | `test/zip/zip_reader_test.dart`, `test/xlsx/read/xlsx_reader_test.dart` |
@@ -266,9 +267,10 @@ except the last, which is still pending.
   expected one is a mismatch unless `resaveAllowedValues` names the cell. The
   one named exception is `m2_formula_xstring` `Probe!A1`: LibreOffice writes a
   `t="str"` formula result without the `_xHHHH_` escapes. The CI `validate`
-  job runs it (AGENTS.md, "Validation"); it has not run in CI yet. Locally it
-  matched on LibreOffice 26.8.1.1, 29 of 29 fixtures; the Ubuntu LibreOffice
-  CI installs (24.2.x) has not run.
+  job runs it (AGENTS.md, "Validation"). It ran and passed in CI on pull
+  request a-urel/jet-office#2, with the LibreOffice that CI installs from
+  Ubuntu 24.04's packages, and locally matched on LibreOffice 26.8.1.1, 29
+  of 29 fixtures.
 - **Owner files.** Real files saved by Excel and Google Sheets, with values the
   owner confirmed cell by cell, live in `test/fixtures/owner/` and are read by
   `test/xlsx/read/owner_files_test.dart` (VM only). The expected JSON is
@@ -323,8 +325,44 @@ bound, and `decodeLimited` does not exist in the `archive` version the package
 still supports (`^4.0.9`). The buffer starts at four times the compressed size
 (at least 64 KiB) and doubles up to the declared size, so an entry that
 declares much more than it holds does not reserve it all. A platform inflate
-(`dart:io` or the browser's `DecompressionStream`) is a speed question for
-R4's benchmark, not a correctness one.
+(`dart:io` or the browser's `DecompressionStream`) is a speed question, not a
+correctness one, and R4 measured it ("Read figures" in
+[`benchmark.md`](benchmark.md)): on the VM the pure-Dart inflate of the
+100,000 by 12 sheet takes 241 ms against `dart:io`'s 39 ms, about 9 % of a
+2677 ms read; in Chrome it takes 686 ms, about 20 % of a read, with no
+synchronous platform inflate to compare. The bounded pure-Dart inflate
+stays.
+
+## Performance
+
+R4's figures, on one machine and recorded rather than enforced
+([`benchmark.md`](benchmark.md), "Read figures" and "Worst case"):
+
+- **100,000 rows of 12 columns** (N = 43,580,479 bytes of sheet XML): the
+  median read takes 2677 ms on the VM and 3349 ms in Chrome, against
+  1466 ms and 3143 ms to write the same file. Reading is 1.8 times slower
+  than writing on the VM, so the spec's "not slower than writing" (§4.4)
+  does not hold there; in Chrome it is 1.07 times. Parsing (UTF-8 decoding,
+  the pull parser and the cell decoder) is about 91 % of a rows pass on the
+  VM and 79 % in Chrome; inflation is the rest. `mergesAt` costs a second
+  inflate and parse of the part.
+- **Memory** is the peak above a baseline divided by N. The VM's sampled
+  peak is 1.47 N and its unsampled `maxRss` peak at most 2.41 N; Chrome's
+  sampled heap peak is 2.46 N. Only the unsampled figure checks the spec's
+  budget of about two to three times N, and it is within it; the sampled
+  figures are lower bounds.
+- **The largest single sheet under the default limits** is a file of
+  about 2 MB that inflates to about 250 MiB of sheet XML, under
+  `maxEntryBytes` and `maxCompressionRatio`. Reading it took about 19 s on
+  either platform, 531 MB above the baseline on the VM and about 1 GB in
+  Chrome (2.33 GB of heap in all). That bounds one sheet, not a workbook:
+  the shared strings part can be as large and is held while a sheet is
+  read, and a workbook of several such sheets passes every limit, so
+  reading every sheet costs up to `maxTotalBytes` (1 GiB) of XML. Neither
+  was measured. The defaults are unchanged. A consumer that reads uploads
+  should run the reader off the UI thread (an isolate or a web worker) and,
+  for small uploads, pass a lower `maxEntryBytes` and `maxTotalBytes`: time
+  and memory follow the XML read, not the file size.
 
 ## Port map
 

@@ -55,6 +55,23 @@ List<String> warnings(void Function(String) print) {
   return <String>[];
 }
 
+XlsxReader reading(XlsxResult out, void Function(String) print) {
+  final XlsxReader reader = XlsxReader(out.bytes);
+  print(reader.sheets.first.name); // Accounts
+  for (final XlsxReadRow row in reader.rows('Accounts')) {
+    // row.index and cell.column are 0-based: row 0, column 0 is A1.
+    for (final XlsxReadCell cell in row.cells) {
+      final String formula = cell.formula == null ? '' : ' = ${cell.formula}';
+      print('${row.index}:${cell.column} ${cell.value}$formula');
+    }
+  }
+  // A sheet's warnings are complete once its rows have been read.
+  for (final XlsxWarning warning in reader.warnings) {
+    print(warning.message());
+  }
+  return reader;
+}
+
 ({Uint8List bytes, List<XlsxWarning> warnings}) streaming() {
   final BytesBuilder file = BytesBuilder(copy: false);
   final XlsxStreamWriter book = XlsxStreamWriter(
@@ -88,6 +105,22 @@ void main() {
     expect(lines, <String>[warning.message(XlsxLocale.tr)]);
     expect(lines.single, isNot(warning.message(XlsxLocale.en)));
     expect(lines.single, contains('sayfasındaki'));
+  });
+
+  test('README reading block reads the quick start back', () {
+    final List<String> lines = <String>[];
+    final XlsxReader reader = reading(quickStart(), lines.add);
+    expect(lines.first, 'Accounts');
+    final List<XlsxReadRow> rows = reader.rows('Accounts').toList();
+    expect(rows, hasLength(4));
+    expect(rows[1].cells[1].value, XlsxDecimal('1234.50'));
+    expect(rows[3].cells[1].formula, 'SUM(B2:B3)');
+    expect(rows[3].cells[1].value, XlsxDecimal('1334'));
+    expect(lines, contains('1:1 XlsxDecimal(1234.50)'));
+    expect(lines, contains('3:1 XlsxDecimal(1334) = SUM(B2:B3)'));
+    // The total's formula has a cached result, so nothing is warned about
+    // and the block's warnings loop prints nothing.
+    expect(reader.warnings, isEmpty);
   });
 
   test('README streaming block writes a clean file', () {

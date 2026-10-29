@@ -1,6 +1,7 @@
 @TestOn('vm')
 library;
 
+import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import '../example/jet_office_example.dart';
@@ -23,5 +24,29 @@ void main() {
       workbook.indexOf('name="Summary"'),
       lessThan(workbook.indexOf('name="Accounts"')),
     );
+  });
+
+  test('the example reads its workbook back', () {
+    final ExampleReadBack read = readExample(buildExampleWorkbook());
+    expect(read.sheets, <String>['Summary', 'Accounts']);
+    expect(read.rows, hasLength(4));
+    expect(read.rows[0], <Object?>['Accounts']);
+    expect(read.rows[1], <Object?>['Code', 'Customer', 'Balance', 'Opened']);
+    expect(read.rows[2], <Object?>[
+      'A-1',
+      'Acme Ltd',
+      XlsxDecimal('1234.50'),
+      DateTime.utc(2026, 1, 5),
+    ]);
+    expect(read.rows[3], <Object?>[
+      'A-2',
+      'Birch & Co',
+      XlsxDecimal('99.99'),
+      DateTime.utc(2026, 3, 17),
+    ]);
+    expect(read.warnings.map((XlsxWarning w) => w.code), <XlsxWarningCode>[
+      XlsxWarningCode.formulaWithoutValue,
+    ]);
+    expect(read.warnings.single.cells, <String>['C6']);
   });
 }
