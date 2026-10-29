@@ -145,6 +145,61 @@ void main() {
       expect(result.text, '1E+308');
       expect(result.warning, XlsxWarningCode.numberFormatInvalid);
     });
+
+    test('a 1 MiB code is General and is not cached', () {
+      final XlsxNumberFormatter own = XlsxNumberFormatter();
+      final XlsxFormattedValue result = own.format(
+        1234.5,
+        numberFormat: '0' * (1 << 20),
+      );
+      expect(result.text, '1234.5');
+      expect(result.warning, XlsxWarningCode.numberFormatInvalid);
+      expect(own.cacheSize, 0);
+    });
+
+    test('@ repeated on long text is refused before it is built', () {
+      final String long = 'x' * 100000;
+      final Stopwatch watch = Stopwatch()..start();
+      final XlsxFormattedValue result = formatter.format(
+        long,
+        numberFormat: '@' * 255,
+      );
+      expect(watch.elapsedMilliseconds, lessThan(1000));
+      expect(result.text, long);
+      expect(result.warning, XlsxWarningCode.numberFormatInvalid);
+    });
+
+    test('literals and a second @ count toward the bound', () {
+      final String text = 'x' * 600;
+      expect(formatter.format(text, numberFormat: '@@').warning, isNull);
+      expect(
+        formatter.format(text, numberFormat: '@"${'y' * 401}"@').warning,
+        XlsxWarningCode.numberFormatInvalid,
+      );
+    });
+  });
+
+  group('a value shown unchanged is never over the bound', () {
+    final String long = 'x' * 1500;
+    for (final String code in <String>['General', '@', '0.00']) {
+      test('1,500 characters of text with $code', () {
+        final XlsxFormattedValue result = formatter.format(
+          long,
+          numberFormat: code,
+        );
+        expect(result.text, long);
+        expect(result.warning, isNull);
+      });
+    }
+
+    test('1,500 characters of text with a literal', () {
+      final XlsxFormattedValue result = formatter.format(
+        long,
+        numberFormat: '"Name: "@',
+      );
+      expect(result.text, 'Name: $long');
+      expect(result.warning, isNull);
+    });
   });
 
   test('formatCell formats the cell\'s value with its format', () {

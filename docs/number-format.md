@@ -50,9 +50,10 @@ another type, or a `generalWidth` below 1, is a programmer error and throws
 |---|---|---|---|
 | Code resolution | `numberFormat` wins over the id; id 0 is `General`; a built-in id uses the built-in table; any other id without a code is `General` with `unresolvedNumberFormat` | the reader gives a code only for custom ids | `test/xlsx/format/formatter_test.dart` |
 | Invalid code | an unterminated quote or bracket, more than four sections, more than two conditions or a code over 255 UTF-16 units shows the value as `General` with `numberFormatInvalid` | Excel refuses such a code; the parser still returns what it scanned, so the reader's classifier works on any code | `test/xlsx/format/formatter_test.dart`, `test/xlsx/format/format_code_test.dart` |
-| Output bound | a result over 1,000 characters is replaced by `General` with `numberFormatInvalid` | `0` followed by 254 `%` on `1E+308` would otherwise be thousands of characters | `test/xlsx/format/formatter_test.dart` |
+| Output bound | a result to which the code adds over 1,000 characters is replaced by `General` with `numberFormatInvalid`. For a number that is the whole result; for text it is the literals and each `@` after the first, checked before the text is built. A text shown unchanged (no text section, `General` or `@` alone) is never over the bound, however long | `0` followed by 254 `%` on `1E+308` would otherwise be thousands of characters, and `@` 255 times on a 1 MiB text 255 MiB | `test/xlsx/format/formatter_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
+| Code length | a code over 255 characters is `General` with `numberFormatInvalid` at once, neither parsed nor cached | a 1 MiB code would otherwise cost a token per character in the cache | `test/xlsx/format/formatter_test.dart` |
 | Bounded cache | at most 1,024 parsed codes, cleared when full | a file with 300,000 codes costs time, not memory | `test/xlsx/format/formatter_test.dart` |
-| Any code, any value | `format` throws nothing; `text` is at most 1,000 characters; `parts` joined equal `text`. Seeds 1 to 4 (200 cases each) run in the gate, on the VM and in Chrome | a file's code is untrusted | `test/xlsx/format/fuzz_test.dart`, `tool/fuzz_formatter.dart` |
+| Any code, any value | `format` throws nothing; `text` is at most 1,000 characters longer than a text value; `parts` joined equal `text`. Seeds 1 to 4 (200 cases each) run in the gate, on the VM and in Chrome | a file's code is untrusted | `test/xlsx/format/fuzz_test.dart`, `tool/fuzz_formatter.dart` |
 | Sections | `positive;negative;zero;text`; one section takes all numbers, two give positive and zero then negative, three give positive, negative, zero; an empty section shows nothing | ECMA-376, MS-OI29500 | `test/xlsx/format/section_choice_test.dart` |
 | Conditions | `[=n] [<n] [<=n] [>n] [>=n] [<>n]` replace the implied rules; a value takes the first section whose condition holds; no section matching is `overflow` with text `#` | ECMA-376 | `test/xlsx/format/section_choice_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
 | Minus sign in sections | a value in an explicit negative section is shown as its absolute value; a two-section code with an unconditioned second section keeps the automatic minus only when the first condition is `=`, `>` or `>=` with a value of 0 or more | observed rule of numfmt and the research notes; unconfirmed, see Unknowns | `test/xlsx/format/section_choice_test.dart` |
@@ -140,7 +141,8 @@ Further own rules the oracle should check, found while building N1:
 ## Fuzzing
 
 `test/xlsx/format/fuzz_test.dart` formats seeded cases and requires no throw, a
-`text` of at most 1,000 characters and `parts` that join to `text`. A case is
+`text` at most 1,000 characters longer than a text value and `parts` that join
+to `text`. A case is
 a corpus code (every built-in code, the `enUS` table, the number formats of
 `allFixtures()` and the codes of the format tests) with up to three mutations
 (insert, delete or duplicate a character of `0#?.,%E+-/@"\_*[];$` or a letter,

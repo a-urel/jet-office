@@ -8,7 +8,7 @@
 /// For every seed of the inclusive range `--seeds` (default `1-20`, or a
 /// single seed such as `7`) it formats `--cases` (default 500) cases as
 /// `test/xlsx/format/support/fuzz.dart` describes. A case breaks a rule when
-/// the formatter throws, the text is longer than 1,000 characters or the
+/// the formatter throws, the code adds more than 1,000 characters or the
 /// parts joined differ from the text; it is printed as
 /// `seed <s> case <i>: <code> <value> width <w>: <problem>`, which
 /// `formatFuzzCases(s, i + 1)` reproduces. A summary line follows; the exit

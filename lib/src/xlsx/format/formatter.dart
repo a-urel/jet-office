@@ -17,6 +17,7 @@ import 'builtin_formats.dart';
 import 'format_code.dart';
 import 'format_locale.dart';
 import 'formatted_value.dart';
+import 'section_choice.dart';
 import 'value_renderer.dart';
 
 /// Renders cell values the way Excel for Mac shows them.
@@ -40,6 +41,7 @@ final class XlsxNumberFormatter {
   final bool date1904;
 
   static const int _cacheLimit = 1024;
+  static const int _codeLimit = 255;
   static const int _outputLimit = 1000;
   static final ParsedFormat _general = parseFormatCode('General');
 
@@ -85,12 +87,33 @@ final class XlsxNumberFormatter {
         warning = XlsxWarningCode.unresolvedNumberFormat;
       }
     }
-    ParsedFormat parsed = _parse(code);
+    // A code over Excel's 255 characters is invalid whatever it holds, so
+    // it is neither parsed nor cached: a 1 MiB code costs no memory.
+    ParsedFormat parsed = code.length > _codeLimit ? _general : _parse(code);
     // An unterminated quote or bracket leaves the code unreadable too
     // (spec §6.4), though the parser keeps what it scanned.
-    if (parsed.invalidReason != null || parsed.truncated) {
+    if (code.length > _codeLimit ||
+        parsed.invalidReason != null ||
+        parsed.truncated) {
       parsed = _general;
       warning = XlsxWarningCode.numberFormatInvalid;
+    }
+    // The bound is on what the code adds; a text shown unchanged is never
+    // over it. Text is checked before it is built.
+    if (value is String) {
+      final FormatSection? section = chooseTextSection(parsed);
+      if (section != null &&
+          addedTextLength(section, value.length) > _outputLimit) {
+        return _build(
+          renderValue(
+            value,
+            _general,
+            locale: locale,
+            generalWidth: generalWidth,
+          ),
+          XlsxWarningCode.numberFormatInvalid,
+        );
+      }
     }
     ({List<XlsxFormatPart> parts, FormatSection? section, bool overflow})
     result = renderValue(
@@ -100,7 +123,7 @@ final class XlsxNumberFormatter {
       generalWidth: generalWidth,
     );
     XlsxFormattedValue formatted = _build(result, warning);
-    if (formatted.text.length > _outputLimit) {
+    if (value is! String && formatted.text.length > _outputLimit) {
       result = renderValue(
         value,
         _general,

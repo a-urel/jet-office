@@ -62,6 +62,25 @@ void main() {
     });
   });
 
+  group('addedTextLength', () {
+    int added(String code, int length) =>
+        addedTextLength(parseFormatCode(code).sections.last, length);
+
+    test('the first @ shows the value and adds nothing', () {
+      expect(added('@', 1500), 0);
+      expect(added('"Name: "@', 1500), 6);
+    });
+
+    test('each further @ adds the text again', () {
+      expect(added('@' * 255, 1 << 20), 254 * (1 << 20));
+    });
+
+    test('padding counts one, fill none, and no @ adds only literals', () {
+      expect(added('_(@_)*-', 3), 2);
+      expect(added('0;0;0;"x"', 3), 1);
+    });
+  });
+
   group('booleans, errors and empty cells', () {
     test('a boolean ignores the code', () {
       final r = render(true, '0.00');

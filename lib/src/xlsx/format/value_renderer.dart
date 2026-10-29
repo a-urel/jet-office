@@ -140,6 +140,34 @@ _renderNumberValue(
   );
 }
 
+/// How many characters the text [section] adds to a text of [length]
+/// characters: its literals (a padding counts one, a fill none) and each
+/// `@` after the first. The first `@` shows the value itself, so it adds
+/// nothing; a section without `@` shows only its literals.
+///
+/// The formatter checks this against its output bound before
+/// [renderValue] builds the text, so `@` repeated on a long text costs no
+/// memory.
+int addedTextLength(FormatSection section, int length) {
+  var added = 0;
+  var ats = 0;
+  for (final FormatToken token in section.tokens) {
+    switch (token) {
+      case TextToken():
+        ats++;
+      case LiteralToken(text: final String literal):
+        added += literal.length;
+      case LocaleTagToken(:final String currency):
+        added += currency.length;
+      case PaddingToken():
+        added++;
+      default:
+        break;
+    }
+  }
+  return ats > 1 ? added + (ats - 1) * length : added;
+}
+
 /// Lays [text] out in the text [section]: `@` shows [text], literals,
 /// padding and fill are kept, and adjacent text is merged.
 List<XlsxFormatPart> _renderText(FormatSection section, String text) {

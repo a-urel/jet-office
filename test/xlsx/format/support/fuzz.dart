@@ -217,8 +217,8 @@ String _quote(String s) =>
 /// description of the first one broken.
 ///
 /// The properties: nothing is thrown, `text` has at most 1,000 characters
-/// and the parts joined (each padding as one space, each fill left out)
-/// equal `text`.
+/// more than a text value it may show unchanged, and the parts joined
+/// (each padding as one space, each fill left out) equal `text`.
 String? checkFormatCase(XlsxNumberFormatter formatter, FormatFuzzCase c) {
   try {
     final XlsxFormattedValue result = formatter.format(
@@ -226,7 +226,9 @@ String? checkFormatCase(XlsxNumberFormatter formatter, FormatFuzzCase c) {
       numberFormat: c.code,
       generalWidth: c.generalWidth,
     );
-    if (result.text.length > 1000) {
+    final Object? value = c.value;
+    final int shown = value is String ? value.length : 0;
+    if (result.text.length > 1000 + shown) {
       return 'text has ${result.text.length} characters';
     }
     final StringBuffer joined = StringBuffer();
