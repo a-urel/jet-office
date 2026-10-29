@@ -3,7 +3,9 @@
 ///
 /// New in jet_office. Shared by the oracle test, which reads the owner's
 /// Excel for Mac CSVs, and the LibreOffice tool, which reads LibreOffice's
-/// CSV exported "as shown". [parseCsv] reads either CSV, [compareOracle]
+/// CSV exported "as shown". [parseCsv] reads either CSV with the
+/// separator the caller names ([defaultCsvSeparator] when the file set
+/// says none), [compareOracle]
 /// formats each [OracleCase] and compares it with its row, and
 /// [oracleReport] prints the outcomes.
 ///
@@ -25,11 +27,13 @@ const String _bom = '﻿';
 ///
 /// A field that starts with `"` is quoted: it runs to the next lone `"`,
 /// `""` inside it is one quote, and a [separator] or line break inside it is
-/// kept. A `"` inside an unquoted field is kept as it is. Rows end at CRLF,
+/// kept; the closing quote must end the field. A `"` inside an unquoted
+/// field is kept as it is. Rows end at CRLF,
 /// LF or CR; a line break at the end of [text] adds no empty row, and empty
 /// [text] has no rows. Fields are never trimmed.
 ///
-/// Throws [FormatException] on a quoted field with no closing quote, and
+/// Throws [FormatException] on a quoted field with no closing quote or
+/// with text after its closing quote (`"a"b`), and
 /// [ArgumentError] when [separator] is not one character other than `"`,
 /// CR or LF.
 List<List<String>> parseCsv(String text, {required String separator}) {
@@ -71,6 +75,12 @@ List<List<String>> parseCsv(String text, {required String separator}) {
         field.write(char);
         i++;
       }
+      if (i < source.length &&
+          source[i] != separator &&
+          source[i] != '\r' &&
+          source[i] != '\n') {
+        throw FormatException('Text after a closing quote', source, i);
+      }
     }
     // The unquoted rest of the field, up to a separator or a line break.
     while (i < source.length &&
@@ -99,32 +109,33 @@ List<List<String>> parseCsv(String text, {required String separator}) {
   }
 }
 
-/// `;` if the first line has more `;` than `,` outside quotes, else `,`.
+/// The field separator assumed for [locale]'s CSV when the file set
+/// names none: `,` for en-US, `;` for de-DE and tr-TR, chosen by
+/// [XlsxFormatLocale.lcid].
 ///
-/// A leading UTF-8 BOM is ignored; the first line ends at the first line
-/// break outside quotes.
-String sniffSeparator(String text) {
-  int semicolons = 0;
-  int commas = 0;
-  bool quoted = false;
-  for (int i = text.startsWith(_bom) ? 1 : 0; i < text.length; i++) {
-    final String char = text[i];
-    if (char == '"') {
-      quoted = !quoted;
-    } else if (!quoted) {
-      if (char == '\r' || char == '\n') break;
-      if (char == ';') semicolons++;
-      if (char == ',') commas++;
-    }
-  }
-  return semicolons > commas ? ';' : ',';
-}
+/// An assumption, to be confirmed by the owner's files: Excel for Mac
+/// takes the separator from the system's list separator, which is `;`
+/// where the decimal separator is a comma. The separator is never guessed
+/// from the text, since an unquoted code such as `0;-0;;@` or a decimal
+/// comma would mislead any guess. Throws [ArgumentError] for a locale
+/// other than these three.
+String defaultCsvSeparator(XlsxFormatLocale locale) => switch (locale.lcid) {
+  0x409 => ',',
+  0x407 || 0x41F => ';',
+  _ => throw ArgumentError.value(
+    locale.lcid,
+    'locale.lcid',
+    'No CSV separator is known for this locale',
+  ),
+};
 
 /// One value formatted with one number format, and the CSV row that holds
 /// what the application showed for it.
 final class OracleCase {
   /// Creates a case; [code] or [builtinId] (or both) names the format.
-  const OracleCase({
+  ///
+  /// Throws [ArgumentError] when both are null.
+  OracleCase({
     required this.id,
     required this.row,
     required this.value,
@@ -132,12 +143,18 @@ final class OracleCase {
     this.builtinId,
     this.date1904 = false,
     this.byEye,
-  }) : assert(code != null || builtinId != null, 'code or builtinId');
+  }) {
+    if (code == null && builtinId == null) {
+      throw ArgumentError('Case $id needs a code or a builtinId');
+    }
+  }
 
   /// The stable case id from the case file.
   final String id;
 
-  /// The 0-based CSV row holding this case.
+  /// The 0-based index of the CSV record holding this case, as [parseCsv]
+  /// returns the records: a line break inside a quoted field does not
+  /// start a new record, so this can differ from the file's line number.
   final int row;
 
   /// The number format code as written, or null for [builtinId] alone.
@@ -262,12 +279,14 @@ OracleOutcome _compare(OracleCase kase, String expected, String actual) =>
     ? OracleMatch(kase, actual)
     : OracleMismatch(kase, expected, actual);
 
-/// One line per mismatch and missing row (`id  code  value  excel=«..»  ours=«..»`),
-/// then the counts per outcome kind.
+/// One line per mismatch, by-eye case and missing row
+/// (`id  code  value  excel=«..»  ours=«..»`), then the counts per outcome
+/// kind.
 ///
 /// The first line names [label] (the locale or the CSV), and the last is
 /// `match <n>, mismatch <n>, by eye <n>, missing row <n>`. A missing row
-/// ends in `missing row` instead of the two texts. A case with no code
+/// ends in `missing row` and a by-eye case in `by eye: <reason>` instead
+/// of the two texts. A case with no code
 /// shows `builtin <id>` for it.
 String oracleReport(String label, List<OracleOutcome> outcomes) {
   final StringBuffer out = StringBuffer('number format oracle: $label\n');
@@ -287,6 +306,7 @@ String oracleReport(String label, List<OracleOutcome> outcomes) {
         out.writeln('$head  excel=«$expected»  ours=«$actual»');
       case OracleByEye():
         byEye++;
+        out.writeln('$head  by eye: ${kase.byEye}');
       case OracleMissingRow():
         missing++;
         out.writeln('$head  missing row');

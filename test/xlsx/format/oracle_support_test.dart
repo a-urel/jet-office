@@ -79,6 +79,39 @@ void main() {
       expect(parseCsv('﻿', separator: ','), isEmpty);
     });
 
+    test('ends a row at a lone CR, but keeps a CR inside quotes', () {
+      expect(parseCsv('a\rb', separator: ','), <List<String>>[
+        <String>['a'],
+        <String>['b'],
+      ]);
+      expect(parseCsv('"a\rb",c', separator: ','), <List<String>>[
+        <String>['a\rb', 'c'],
+      ]);
+    });
+
+    test('a blank line before the trailing newline is a blank row', () {
+      expect(parseCsv('a\n\n', separator: ','), <List<String>>[
+        <String>['a'],
+        <String>[''],
+      ]);
+    });
+
+    test('reads a quoted field at the end of text with no newline', () {
+      expect(parseCsv('x,"a"', separator: ','), <List<String>>[
+        <String>['x', 'a'],
+      ]);
+      expect(parseCsv('"a"', separator: ','), <List<String>>[
+        <String>['a'],
+      ]);
+    });
+
+    test('throws FormatException on text after a closing quote', () {
+      expect(
+        () => parseCsv('"a"b,c', separator: ','),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('throws FormatException on an unterminated quote', () {
       expect(
         () => parseCsv('a,"b\n', separator: ','),
@@ -93,22 +126,11 @@ void main() {
     });
   });
 
-  group('sniffSeparator', () {
-    test('picks ; for a BOM and ; file (Excel for Mac, de-DE)', () {
-      expect(sniffSeparator('﻿1.234,50;x;y\r\n2;3;4\r\n'), ';');
-    });
-
-    test('picks , when the commas are inside quotes on a , file', () {
-      expect(sniffSeparator('"#,##0;(#,##0)",1\n"0;0;0",2\n'), ',');
-    });
-
-    test('looks at the first line only', () {
-      expect(sniffSeparator('a,b\nc;d;e;f\n'), ',');
-    });
-
-    test('picks , on a tie and on empty text', () {
-      expect(sniffSeparator('a;b,c'), ',');
-      expect(sniffSeparator(''), ',');
+  group('defaultCsvSeparator', () {
+    test('is , for en-US and ; for de-DE and tr-TR', () {
+      expect(defaultCsvSeparator(XlsxFormatLocale.enUS), ',');
+      expect(defaultCsvSeparator(XlsxFormatLocale.deDE), ';');
+      expect(defaultCsvSeparator(XlsxFormatLocale.trTR), ';');
     });
   });
 
@@ -290,22 +312,47 @@ void main() {
       final List<OracleOutcome> outcomes = compareOracle(
         <OracleCase>[
           OracleCase(
+            id: 'one1904',
+            row: 0,
+            code: 'yyyy-mm-dd',
+            value: XlsxDecimal('1'),
+            date1904: true,
+          ),
+          OracleCase(
+            id: 'one1900',
+            row: 0,
+            code: 'yyyy-mm-dd',
+            value: XlsxDecimal('1'),
+          ),
+          OracleCase(
             id: 'neg1904',
             row: 0,
             code: 'h:mm',
             value: XlsxDecimal('-0.25'),
             date1904: true,
           ),
+          OracleCase(
+            id: 'datetime1904',
+            row: 0,
+            code: 'yyyy-mm-dd',
+            value: DateTime(2026, 3, 4),
+            date1904: true,
+          ),
         ],
         <List<String>>[
-          <String>['-6:00'],
+          <String>['1904-01-02'],
         ],
         XlsxFormatLocale.enUS,
       );
-      expect(outcomes.single, isA<OracleMatch>());
+      expect(outcomes[0], isA<OracleMatch>());
+      expect((outcomes[0] as OracleMatch).text, '1904-01-02');
+      expect(outcomes[1], isA<OracleMismatch>());
+      expect((outcomes[1] as OracleMismatch).actual, '1900-01-01');
+      expect((outcomes[2] as OracleMismatch).actual, '-6:00');
+      expect((outcomes[3] as OracleMismatch).actual, '2026-03-04');
     });
 
-    test('a 1900 case of the same value does not match -6:00', () {
+    test('a 1900 case of a negative time shows # where 1904 shows -6:00', () {
       final OracleOutcome outcome = compareOracle(
         <OracleCase>[
           OracleCase(
@@ -321,6 +368,22 @@ void main() {
         XlsxFormatLocale.enUS,
       ).single;
       expect(outcome, isA<OracleMismatch>());
+      expect((outcome as OracleMismatch).actual, '#');
+    });
+
+    test('a negative row is a missing row', () {
+      expect(
+        compareOracle(
+          <OracleCase>[
+            OracleCase(id: 'neg', row: -1, code: '0', value: XlsxDecimal('1')),
+          ],
+          <List<String>>[
+            <String>['1'],
+          ],
+          XlsxFormatLocale.enUS,
+        ).single,
+        isA<OracleMissingRow>(),
+      );
     });
 
     test('a builtinId case formats with numberFormatId', () {
@@ -351,9 +414,9 @@ void main() {
     test('formats non-number values', () {
       final List<OracleOutcome> outcomes = compareOracle(
         <OracleCase>[
-          const OracleCase(id: 'bool', row: 0, code: 'General', value: true),
-          const OracleCase(id: 'text', row: 1, code: '"Name: "@', value: 'Ada'),
-          const OracleCase(
+          OracleCase(id: 'bool', row: 0, code: 'General', value: true),
+          OracleCase(id: 'text', row: 1, code: '"Name: "@', value: 'Ada'),
+          OracleCase(
             id: 'error',
             row: 2,
             code: '0.00',
@@ -368,6 +431,13 @@ void main() {
         XlsxFormatLocale.enUS,
       );
       expect(outcomes, everyElement(isA<OracleMatch>()));
+    });
+
+    test('a case with neither code nor builtinId throws ArgumentError', () {
+      expect(
+        () => OracleCase(id: 'none', row: 0, value: XlsxDecimal('1')),
+        throwsArgumentError,
+      );
     });
 
     test('returns one outcome per case, in case order', () {
@@ -388,40 +458,46 @@ void main() {
   });
 
   group('oracleReport', () {
-    test('lists mismatches and missing rows, then the counts', () {
-      final List<OracleOutcome> outcomes = compareOracle(
-        <OracleCase>[
-          OracleCase(id: 'ok', row: 0, code: '0', value: XlsxDecimal('1')),
-          OracleCase(id: 'pad', row: 1, code: '0_)', value: XlsxDecimal('2')),
-          OracleCase(
-            id: 'red',
-            row: 2,
-            code: '[Red]0',
-            value: XlsxDecimal('3'),
-            byEye: 'colour',
-          ),
-          const OracleCase(id: 'gone', row: 9, builtinId: 14, value: true),
-        ],
-        <List<String>>[
-          <String>['1'],
-          <String>['2'],
-          <String>['3'],
-        ],
-        XlsxFormatLocale.enUS,
-      );
-      final String report = oracleReport('en-US', outcomes);
-      final List<String> lines = report.split('\n');
-      expect(lines.first, contains('en-US'));
-      expect(report, contains('pad  0_)  2  excel=«2»  ours=«2 »'));
-      expect(report, contains('gone  builtin 14  true  missing row'));
-      expect(report, isNot(contains('ok  ')));
-      expect(report, isNot(contains('red  ')));
-      expect(report, contains('match 1, mismatch 1, by eye 1, missing row 1'));
-      expect(
-        lines.indexWhere((String l) => l.startsWith('pad  ')),
-        lessThan(lines.indexWhere((String l) => l.startsWith('gone  '))),
-      );
-    });
+    test(
+      'lists mismatches, by-eye cases and missing rows, then the counts',
+      () {
+        final List<OracleOutcome> outcomes = compareOracle(
+          <OracleCase>[
+            OracleCase(id: 'ok', row: 0, code: '0', value: XlsxDecimal('1')),
+            OracleCase(id: 'pad', row: 1, code: '0_)', value: XlsxDecimal('2')),
+            OracleCase(
+              id: 'red',
+              row: 2,
+              code: '[Red]0',
+              value: XlsxDecimal('3'),
+              byEye: 'colour',
+            ),
+            OracleCase(id: 'gone', row: 9, builtinId: 14, value: true),
+          ],
+          <List<String>>[
+            <String>['1'],
+            <String>['2'],
+            <String>['3'],
+          ],
+          XlsxFormatLocale.enUS,
+        );
+        final String report = oracleReport('en-US', outcomes);
+        final List<String> lines = report.split('\n');
+        expect(lines.first, contains('en-US'));
+        expect(report, contains('pad  0_)  2  excel=«2»  ours=«2 »'));
+        expect(report, contains('gone  builtin 14  true  missing row'));
+        expect(report, isNot(contains('ok  ')));
+        expect(report, contains('red  [Red]0  3  by eye: colour'));
+        expect(
+          report,
+          contains('match 1, mismatch 1, by eye 1, missing row 1'),
+        );
+        expect(
+          lines.indexWhere((String l) => l.startsWith('pad  ')),
+          lessThan(lines.indexWhere((String l) => l.startsWith('gone  '))),
+        );
+      },
+    );
 
     test('says so when nothing differs', () {
       final String report = oracleReport(
