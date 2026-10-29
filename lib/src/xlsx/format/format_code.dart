@@ -18,7 +18,11 @@ import 'excel_number.dart';
 ///
 /// The result always holds every section and token the scan saw, even when
 /// [ParsedFormat.invalidReason] is set (more than four sections, a third
-/// condition, an unknown `[ColorN]`, a code longer than 255 characters).
+/// condition, an unknown `[ColorN]`, a code longer than 255 characters, or
+/// one of the codes Excel for Mac repairs to `General` on opening: a
+/// lowercase `e+` or `e-` exponent, a fixed denominator of ten or more
+/// digits, `@` in more than one section, or two `[$…-…]` locale tags in one
+/// section).
 /// Only an unterminated quote or bracket ends the scan early, which sets
 /// [ParsedFormat.truncated]. This never throws, and its time is linear in
 /// the length of [code].
@@ -239,6 +243,9 @@ final class PercentToken extends FormatToken {
 }
 
 /// A scientific exponent marker: `E+`, `E-`, `e+` or `e-`.
+///
+/// The lowercase `e+` and `e-` make the code invalid, as Excel repairs
+/// them to `General`; the token is kept for the classifier.
 final class ExponentToken extends FormatToken {
   /// Creates an exponent marker.
   const ExponentToken({required this.plus, required this.letter});
@@ -283,9 +290,10 @@ final class FractionSlashToken extends FormatToken {
 /// It is the run of unquoted digits right after a [FractionSlashToken]
 /// when that run starts with `1` to `9` and has at most
 /// [maxFixedDenominatorDigits] digits; a longer run is one [LiteralToken]
-/// per digit. A run that starts with `0` is a placeholder instead
-/// (`?/0`). A quote or `\` ends the run, so `?/1"5"` has the denominator
-/// 1 and the literal `5`.
+/// per digit and makes the code invalid (Excel repairs it to `General`).
+/// A run that starts with `0` is a placeholder instead (`?/0`). A quote
+/// or `\` ends the run, so `?/1"5"` has the denominator 1 and the literal
+/// `5`.
 final class FixedDenominatorToken extends FormatToken {
   /// Creates a fixed denominator of [value].
   const FixedDenominatorToken(this.value);
@@ -378,6 +386,10 @@ final class FillToken extends FormatToken {
 }
 
 /// A locale and currency tag such as `[$€-407]`, `[$-41F]` or `[$€]`.
+///
+/// Two tags with a `-` in one section, system tags ([SystemFormatToken])
+/// included, make the code invalid, as Excel repairs `[$-407][$-F800]` to
+/// `General`; a currency-only tag such as `[$€]` does not count.
 final class LocaleTagToken extends FormatToken {
   /// Creates a tag of [currency] and [lcid].
   const LocaleTagToken(this.currency, this.lcid);
@@ -594,6 +606,8 @@ final class _Parser {
   FormatCondition? _condition;
   FormatColor? _color;
   int _conditions = 0;
+  int _textSections = 0;
+  int _localeTags = 0;
   String? _invalid;
 
   ParsedFormat parse() {
@@ -653,6 +667,7 @@ final class _Parser {
       } else if ((c == 'E' || c == 'e') &&
           i + 1 < code.length &&
           (code[i + 1] == '+' || code[i + 1] == '-')) {
+        if (c == 'e') _invalid ??= 'a lowercase exponent e${code[i + 1]}';
         _tokens.add(ExponentToken(plus: code[i + 1] == '+', letter: c));
         i += 2;
       } else if ((c == 'b' || c == 'B') &&
@@ -741,6 +756,8 @@ final class _Parser {
       end++;
     }
     if (end - i > maxFixedDenominatorDigits) {
+      _invalid ??=
+          'a fixed denominator of more than $maxFixedDenominatorDigits digits';
       for (var k = i; k < end; k++) {
         _tokens.add(LiteralToken(code[k]));
       }
@@ -759,6 +776,9 @@ final class _Parser {
     final String first = content[0];
     final String lower = content.toLowerCase();
     if (first == r'$') {
+      if (content.contains('-') && ++_localeTags > 1) {
+        _invalid ??= 'two locale tags in one section';
+      }
       _tokens.add(_dollarTag(content.substring(1)));
     } else if (lower == 'b1' || lower == 'b2') {
       _tokens.add(CalendarToken(lower == 'b1' ? 1 : 2));
@@ -847,10 +867,19 @@ final class _Parser {
         }
       }
     }
-    _sections.add(FormatSection(tokens, condition: _condition, color: _color));
+    final FormatSection section = FormatSection(
+      tokens,
+      condition: _condition,
+      color: _color,
+    );
+    if (section.hasText && ++_textSections > 1) {
+      _invalid ??= '@ in more than one section';
+    }
+    _sections.add(section);
     _tokens = <FormatToken>[];
     _condition = null;
     _color = null;
+    _localeTags = 0;
   }
 
   /// How many `0` placeholders of the current section follow each other

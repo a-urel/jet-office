@@ -119,6 +119,13 @@ void main() {
       expect(result.warning, isNull);
     });
 
+    test('a lone conditional section falls back to General', () {
+      expect(text(50, '[>100]0'), '50');
+      expect(text(-50.5, '[>100]0'), '-50.5');
+      expect(text(150, '[>100]0.0'), '150.0');
+      expect(formatter.format(50, numberFormat: '[>100]0').overflow, isFalse);
+    });
+
     test('a named color is rgb', () {
       final XlsxFormattedValue result = formatter.format(
         5,
@@ -445,6 +452,24 @@ void main() {
   group('invalid codes show General with numberFormatInvalid', () {
     for (final String code in <String>['0"abc', '0' * 256, '0;0;0;0;0']) {
       test(code.length > 20 ? 'a ${code.length}-character code' : code, () {
+        final XlsxFormattedValue result = formatter.format(
+          1234.5,
+          numberFormat: code,
+        );
+        expect(result.text, '1234.5');
+        expect(result.warning, XlsxWarningCode.numberFormatInvalid);
+      });
+    }
+
+    // Codes Excel for Mac (tr-TR) repaired to General on opening.
+    for (final String code in <String>[
+      '0.00e+00',
+      '0.00e-00',
+      '?/9999999999',
+      '@;@',
+      r'[$-407][$-F800]dddd, mmmm dd, yyyy',
+    ]) {
+      test('$code, which Excel repairs', () {
         final XlsxFormattedValue result = formatter.format(
           1234.5,
           numberFormat: code,

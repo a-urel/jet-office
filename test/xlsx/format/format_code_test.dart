@@ -421,6 +421,9 @@ void main() {
         tokensOf('?/999999999').last,
         const FixedDenominatorToken(999999999),
       );
+      // Ten or more digits make the code invalid (Excel repairs it to
+      // General); the scan keeps them as literals.
+      expect(parseFormatCode('?/1234567890').invalidReason, isNotNull);
       expect(tokensOf('?/1234567890'), <FormatToken>[
         const DigitToken('?'),
         const FractionSlashToken(),
@@ -743,6 +746,69 @@ void main() {
       final ParsedFormat parsed = parseFormatCode('0;[Red');
       expect(parsed.truncated, isTrue);
       expect(parsed.sections, hasLength(2));
+    });
+  });
+
+  // Excel for Mac (tr-TR) repaired these codes to General when it opened
+  // the oracle workbook (manifest note of the tr-TR run): R1 to R4.
+  group('codes Excel repairs to General', () {
+    test('a lowercase e+ or e- exponent is invalid, tokens kept', () {
+      for (final String code in <String>['0.00e+00', '0.00e-00', '0e-0']) {
+        final ParsedFormat parsed = parseFormatCode(code);
+        expect(parsed.invalidReason, isNotNull, reason: code);
+        expect(
+          parsed.sections.single.tokens.whereType<ExponentToken>().single,
+          isA<ExponentToken>().having((t) => t.letter, 'letter', 'e'),
+          reason: code,
+        );
+      }
+      expect(parseFormatCode('0.00E+00').invalidReason, isNull);
+      expect(parseFormatCode('0.00E-00').invalidReason, isNull);
+      // A quoted or escaped e is a literal, not an exponent.
+      expect(parseFormatCode(r'0"e+"0').invalidReason, isNull);
+      expect(parseFormatCode(r'0\e+0').invalidReason, isNull);
+    });
+
+    test('a fixed denominator of ten or more digits is invalid', () {
+      for (final String code in <String>['?/9999999999', '# ?/1234567890']) {
+        expect(parseFormatCode(code).invalidReason, isNotNull, reason: code);
+      }
+      expect(parseFormatCode('?/999999999').invalidReason, isNull);
+    });
+
+    test('@ in two or more sections is invalid', () {
+      for (final String code in <String>['@;@', '0;@;@', '@;0;@', '0;0;@;@']) {
+        expect(parseFormatCode(code).invalidReason, isNotNull, reason: code);
+      }
+      for (final String code in <String>['@', '@@', '0;@', '0;-0;0;@', '@;0']) {
+        expect(parseFormatCode(code).invalidReason, isNull, reason: code);
+      }
+      // A quoted @ is a literal.
+      expect(parseFormatCode('"@";@').invalidReason, isNull);
+    });
+
+    test('two [\$-…] locale tags in one section are invalid', () {
+      for (final String code in <String>[
+        r'[$-407][$-F800]dddd, mmmm dd, yyyy',
+        r'[$€-407][$-F800]dddd',
+        r'[$-407][$-41F]0',
+        r'[$€-40C][$$-409]#,##0.00',
+        r'[$-x-sysdate][$-F400]dddd',
+      ]) {
+        expect(parseFormatCode(code).invalidReason, isNotNull, reason: code);
+      }
+      for (final String code in <String>[
+        r'[$€-40C]#,##0.00',
+        r'[$-F800]dddd, mmmm dd, yyyy',
+        r'[$-x-sysdate]dddd',
+        r'[$-41F]h:mm AM/PM',
+        r'[$€-407] #,##0.00;[$€-407] -#,##0.00',
+        r'[$-407]0;[$-41F]0',
+        r'[$€][$-407]0',
+        r'[$USD] 0 [$USD]',
+      ]) {
+        expect(parseFormatCode(code).invalidReason, isNull, reason: code);
+      }
     });
   });
 

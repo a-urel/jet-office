@@ -8,7 +8,9 @@
 /// the rules for that many sections. With `[...]` conditions on the first
 /// two sections the implied rules are replaced: the first section whose
 /// condition holds wins, then the second if it holds or has none, then the
-/// third. The rules follow Excel for Mac
+/// third. A code whose only section has a condition is read as that
+/// section followed by `General`, as Excel repairs `[>100]0` to
+/// `[>100]0;General`. The rules follow Excel for Mac
 /// as described in `docs/decisions/0008`.
 library;
 
@@ -35,7 +37,9 @@ import 'format_code.dart';
 chooseNumberSection(ParsedFormat format, ExcelNumber value) {
   final List<FormatSection> all = format.sections;
   final List<FormatSection> sections =
-      all.length > 1 && all.length < 4 && _isText(all.last)
+      all.length == 1 && all[0].condition != null
+      ? <FormatSection>[all[0], _general]
+      : all.length > 1 && all.length < 4 && _isText(all.last)
       ? all.sublist(0, all.length - 1)
       : all;
   final int sign = value.isZero ? 0 : (value.negative ? -1 : 1);
@@ -73,6 +77,12 @@ chooseNumberSection(ParsedFormat format, ExcelNumber value) {
   if (sections.length > 2) return pick(sections[2], sign < 0);
   return null;
 }
+
+/// The `General` section Excel appends to a code whose only section has a
+/// condition.
+final FormatSection _general = FormatSection(const <FormatToken>[
+  GeneralToken(),
+]);
 
 /// The section text takes in [format], or null to show the text unchanged.
 ///

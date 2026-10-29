@@ -99,7 +99,23 @@ void main() {
 
     test('no match and no else section gives null', () {
       expect(choose('[>100]0;[<-100]0', '50'), isNull);
-      expect(choose('[>100]0', '50'), isNull);
+    });
+
+    // Excel repairs `[>100]0` to `[>100]0;General` (tr-TR run, u03-03).
+    test('a code whose only section has a condition gets General after it', () {
+      final ParsedFormat format = parseFormatCode('[>100]0');
+      final ({FormatSection section, bool showMinus, ExcelNumber value})? r =
+          chooseNumberSection(format, ExcelNumber.parse('50'));
+      expect(r, isNotNull);
+      expect(r!.section.hasGeneral, isTrue);
+      expect(r.section.condition, isNull);
+      expect((r.showMinus, r.value.toString()), (false, '50'));
+      // As the second section of `[>100]0;General`: the automatic minus.
+      final ({FormatSection section, bool showMinus, ExcelNumber value})? n =
+          chooseNumberSection(format, ExcelNumber.parse('-50'));
+      expect(n!.section.hasGeneral, isTrue);
+      expect((n.showMinus, n.value.toString()), (true, '50'));
+      expect(choose('[>100]0', '150'), (0, false, '150'));
     });
 
     test('the third section is the else', () {

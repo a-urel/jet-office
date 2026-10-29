@@ -154,11 +154,11 @@ void main() {
       expect(textOf(-3, '0;(0)'), '(3)');
     });
 
-    test('no matching section overflows', () {
+    test('a lone conditional section falls back to General', () {
+      // Excel repairs `[<1]0` to `[<1]0;General`.
       final r = render(5, '[<1]0');
-      expect(r.overflow, isTrue);
-      expect(r.parts, <XlsxFormatPart>[const XlsxFormatText('#')]);
-      expect(r.section, isNull);
+      expect(r.overflow, isFalse);
+      expect(r.parts, <XlsxFormatPart>[const XlsxFormatText('5')]);
     });
 
     test('no matching section overflows without a color or warning', () {
