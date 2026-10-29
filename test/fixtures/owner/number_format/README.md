@@ -65,7 +65,8 @@ For each region you can produce (`en-US`, `de-DE`, `tr-TR`):
    In `de-DE` and `tr-TR` Excel separates fields with `;`; keep it.
    The format is the one named CSV UTF-8: the file starts with a BOM
    (`EF BB BF`). The plain CSV formats lose characters such as `₺`.
-   Excel for Mac 16.114 ends lines with CR alone; keep that too. Excel
+   Excel for Mac 16.114 ended lines with CR alone in one run and CRLF in
+   another; keep what it writes. Excel
    saves outside hidden folders only, so save to a folder such as
    `~/Documents/jet_office_oracle/` and copy the CSVs here; a file saved
    as `tr_TR` is renamed to `tr-TR`, bytes unchanged.
