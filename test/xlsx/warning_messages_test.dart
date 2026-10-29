@@ -301,6 +301,18 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
     XlsxWarningCode.numberFormatInvalid,
     XlsxLocale.tr,
   ): '“S” sayfasındaki 1 hücrenin sayı biçimi kodu okunamıyor; Genel biçimle gösteriliyor (A1).',
+  (
+    XlsxWarningCode.numberFormatUnsupported,
+    XlsxLocale.en,
+  ): "1 cell(s) on sheet 'S' have a number format that uses a calendar, numeral system or language this library does not render; they show with Gregorian dates and the default language (A1).",
+  (
+    XlsxWarningCode.numberFormatUnsupported,
+    XlsxLocale.de,
+  ): '1 Zelle(n) im Blatt „S“ haben ein Zahlenformat mit einem Kalender, Zahlensystem oder einer Sprache, die diese Bibliothek nicht darstellt; sie werden mit gregorianischem Datum und der Standardsprache angezeigt (A1).',
+  (
+    XlsxWarningCode.numberFormatUnsupported,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 hücrenin sayı biçimi bu kitaplığın göstermediği bir takvim, rakam sistemi veya dil kullanıyor; Miladi tarih ve varsayılan dille gösteriliyor (A1).',
 };
 
 void main() {
@@ -382,13 +394,13 @@ void main() {
     );
   });
 
-  test('all 78 messages are worded exactly as specified', () {
+  test('all 81 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, XlsxLocale)> keys =
         <(XlsxWarningCode, XlsxLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final XlsxLocale locale in XlsxLocale.values) (code, locale),
         ];
-    expect(keys, hasLength(78));
+    expect(keys, hasLength(81));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, XlsxLocale) key in keys) {
       final XlsxWarning w =

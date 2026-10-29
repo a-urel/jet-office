@@ -3,9 +3,11 @@
 /// New in jet_office; Quds has no number format engine. [renderDate] lays
 /// a serial out in a section that has date or time tokens (spec §5.4): it
 /// reads the serial's calendar fields with [serialToFields] and shows each
-/// token from them, with month and day names from the renderer's locale.
-/// Literals, `,`, `%`, a locale tag's currency, padding and fill show as
-/// the number renderer shows them.
+/// token from them, with month and day names from the renderer's locale
+/// or the one a locale tag selects. Literals, `,`, `%`, a locale tag's
+/// currency, padding and fill show as the number renderer shows them.
+/// [sectionWarning] tells which sections ask for a calendar, numeral
+/// system or language the engine does not render.
 library;
 
 import '../warnings.dart';
@@ -20,11 +22,27 @@ import 'formatted_value.dart';
 /// shows `#` (negative, out of range). In the 1904 system a negative
 /// serial in a section with no date token (`d`, `y`, month `m`, `e`, `b`)
 /// shows its absolute value with a `-` first. The result's `warning` is
-/// `numberFormatUnsupported` when the section asks for what the engine
-/// does not render; null for now.
+/// [sectionWarning] of [section]: `numberFormatUnsupported` when the
+/// section asks for a calendar, numeral system or language the engine does
+/// not render, which it renders as Gregorian dates with the names of
+/// [locale]; else null.
 ///
-/// Names (`mmm`, `mmmm`, `ddd`, `dddd`) come from [locale]. [date1904]
-/// selects the 1904 date system. An `m` is a month or minutes by
+/// Names (`mmm`, `mmmm`, `ddd`, `dddd`) and the `AM/PM` words come from
+/// the section's name locale: the section's first locale tag with a
+/// language other than 0 selects [locale] when the language equals its
+/// [XlsxFormatLocale.lcid], else the shipped locale with that id, else
+/// [locale]. Without such a tag they come from [locale]. Separators always
+/// come from [locale].
+///
+/// A system date or time tag (`[$-F800]`, `[$-F400]`) replaces the whole
+/// section with the first section of [locale]'s
+/// [XlsxFormatLocale.longDateCode] or [XlsxFormatLocale.longTimeCode]; the
+/// first such tag wins, and the caller keeps the section's color and
+/// condition. The replacement renders with the outer section's name
+/// locale; a system tag, locale tag or bracket inside it does not change
+/// the names and is not reported.
+///
+/// [date1904] selects the 1904 date system. An `m` is a month or minutes by
 /// [isMinuteToken]. Token lengths: `y` and
 /// `yy` show two digits of the year, `yyy` and longer four; `mmmmm` shows
 /// the first letter of the month name and six or more `m` the full name;
@@ -49,8 +67,10 @@ import 'formatted_value.dart';
   required XlsxFormatLocale locale,
   required bool date1904,
 }) {
+  final XlsxFormatLocale names = _nameLocale(section, locale) ?? locale;
+  final List<FormatToken> tokens = _systemTokens(section, locale);
   final List<DateToken> counted = <DateToken>[
-    for (final FormatToken token in section.tokens)
+    for (final FormatToken token in tokens)
       if (token is DateToken && countedDateLetters.contains(token.letter))
         token,
   ];
@@ -59,10 +79,10 @@ import 'formatted_value.dart';
   // date token shows its absolute value with a leading minus; anywhere
   // else a negative value is `#`.
   final bool negativeTime =
-      date1904 && serial.negative && !_hasDateToken(section, counted);
+      date1904 && serial.negative && !_hasDateToken(tokens, counted);
   var fractionDigits = 0;
   var twelveHour = false;
-  for (final FormatToken token in section.tokens) {
+  for (final FormatToken token in tokens) {
     if (token is FractionalSecondsToken && token.digits > fractionDigits) {
       fractionDigits = token.digits;
     } else if (token is AmPmToken) {
@@ -83,7 +103,7 @@ import 'formatted_value.dart';
     out.text('-');
   }
   var k = 0;
-  for (final FormatToken token in section.tokens) {
+  for (final FormatToken token in tokens) {
     switch (token) {
       case DateToken(:final String letter):
         if (countedDateLetters.contains(letter)) {
@@ -92,7 +112,7 @@ import 'formatted_value.dart';
             _dateText(
               token,
               fields,
-              locale,
+              names,
               minutes: minutes,
               twelveHour: twelveHour,
             ),
@@ -114,7 +134,7 @@ import 'formatted_value.dart';
       case FillToken(:final String char):
         out.add(XlsxFormatFill(char));
       case AmPmToken(:final String text):
-        out.text(_amPmText(text, fields.hour < 12, locale));
+        out.text(_amPmText(text, fields.hour < 12, names));
       case FractionalSecondsToken(:final int digits):
         out.text(
           locale.decimalSeparator +
@@ -130,15 +150,114 @@ import 'formatted_value.dart';
           ExponentToken() ||
           FractionSlashToken() ||
           FixedDenominatorToken():
-        // System, calendar and unsupported tokens come with locale tags.
-        // `@` and a decimal point show nothing in a date section, and the
-        // number tokens make the code invalid, so they never reach a
-        // rendered section.
+        // A system tag was replaced above (one inside the replacement is
+        // not followed); calendar and unsupported tokens show nothing and
+        // are reported by sectionWarning. `@` and a decimal point show
+        // nothing in a date section, and the number tokens make the code
+        // invalid, or are dropped with the section a system tag replaces.
         break;
     }
   }
-  return (parts: out.result, warning: null);
+  return (
+    parts: out.result,
+    warning: sectionWarning(section, date: true, locale: locale),
+  );
 }
+
+/// What [section] asks for that the engine does not render, rendered
+/// with [locale]: `numberFormatUnsupported`, or null.
+///
+/// It is `numberFormatUnsupported` for a bracket the parser does not
+/// interpret (`[DBNum1]`, `[NatNum1]`, `[foo]`), the Hijri calendar
+/// (`B2`, `[B2]`) and a locale tag whose numeral system (bits 24 to 31)
+/// is other than 0 or 1. When [date] is true it is also
+/// `numberFormatUnsupported` for a locale tag whose calendar (bits 16 to
+/// 23) is other than 0 or 1, and when the section's first tag with a
+/// language other than 0 names a language neither [locale] nor a shipped
+/// locale serves. A number section has no names, so its tags' language
+/// and calendar do not matter: `[$€-40C]#,##0` is supported.
+XlsxWarningCode? sectionWarning(
+  FormatSection section, {
+  required bool date,
+  required XlsxFormatLocale locale,
+}) {
+  var named = false;
+  for (final FormatToken token in section.tokens) {
+    switch (token) {
+      case UnsupportedToken():
+        return XlsxWarningCode.numberFormatUnsupported;
+      case CalendarToken(:final int calendar) when calendar != 1:
+        return XlsxWarningCode.numberFormatUnsupported;
+      case LocaleTagToken():
+        if (token.numerals > 1) {
+          return XlsxWarningCode.numberFormatUnsupported;
+        }
+        if (!date) break;
+        if (token.calendar > 1) {
+          return XlsxWarningCode.numberFormatUnsupported;
+        }
+        if (!named && token.language != 0) {
+          named = true;
+          if (_tagLocale(token.language, locale) == null) {
+            return XlsxWarningCode.numberFormatUnsupported;
+          }
+        }
+      default:
+        break;
+    }
+  }
+  return null;
+}
+
+/// The locale that the first tag of [section] with a language other than
+/// 0 selects, or null when there is no such tag or no locale serves its
+/// language.
+XlsxFormatLocale? _nameLocale(FormatSection section, XlsxFormatLocale locale) {
+  for (final FormatToken token in section.tokens) {
+    if (token is LocaleTagToken && token.language != 0) {
+      return _tagLocale(token.language, locale);
+    }
+  }
+  return null;
+}
+
+/// [locale] when [language] is its id, else the shipped locale of
+/// [language], else null.
+XlsxFormatLocale? _tagLocale(int language, XlsxFormatLocale locale) =>
+    language == locale.lcid ? locale : shippedFormatLocale(language);
+
+/// The tokens [section] renders: its own, or, when it holds a system tag,
+/// the first section of [locale]'s long date or long time code.
+List<FormatToken> _systemTokens(
+  FormatSection section,
+  XlsxFormatLocale locale,
+) {
+  for (final FormatToken token in section.tokens) {
+    if (token is SystemFormatToken) {
+      return _parsedSystemCode(
+        token.longDate ? locale.longDateCode : locale.longTimeCode,
+      ).tokens;
+    }
+  }
+  return section.tokens;
+}
+
+/// The first section of [code], parsed once and kept in [_systemCodes].
+FormatSection _parsedSystemCode(String code) {
+  final FormatSection? cached = _systemCodes[code];
+  if (cached != null) return cached;
+  if (_systemCodes.length >= _systemCodeCacheSize) _systemCodes.clear();
+  final FormatSection section = parseFormatCode(code).sections.first;
+  _systemCodes[code] = section;
+  return section;
+}
+
+/// The most long date and long time codes [_systemCodes] holds before it
+/// is cleared.
+const int _systemCodeCacheSize = 16;
+
+/// The parsed long date and long time codes, by code.
+final Map<String, FormatSection> _systemCodes = <String, FormatSection>{};
 
 /// The text of a `d`, `m`, `y`, `h` or `s` [token]; [minutes] tells an
 /// `m` that is minutes from a month.
@@ -180,9 +299,9 @@ String _dateText(
   }
 }
 
-/// Whether [section] shows a date: a `d`, `y`, month `m`, `e` or `b`
-/// token. [counted] is its counted [DateToken]s.
-bool _hasDateToken(FormatSection section, List<DateToken> counted) {
+/// Whether [tokens] show a date: a `d`, `y`, month `m`, `e` or `b`
+/// token. [counted] is their counted [DateToken]s.
+bool _hasDateToken(List<FormatToken> tokens, List<DateToken> counted) {
   for (var k = 0; k < counted.length; k++) {
     switch (counted[k].letter) {
       case 'd' || 'y':
@@ -191,7 +310,7 @@ bool _hasDateToken(FormatSection section, List<DateToken> counted) {
         return true;
     }
   }
-  return section.tokens.any(
+  return tokens.any(
     (FormatToken token) =>
         token is DateToken && (token.letter == 'e' || token.letter == 'b'),
   );

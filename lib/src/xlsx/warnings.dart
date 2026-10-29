@@ -155,6 +155,14 @@ enum XlsxWarningCode {
   /// characters) or the code would add more than 1,000 characters to the
   /// value. The cell shows with the General format.
   numberFormatInvalid,
+
+  /// Formatting: a cell's number format code asks for a calendar other than
+  /// the Gregorian (`B2`, a locale tag's calendar), a numeral system
+  /// (`[DBNum1]`, `[NatNum1]`, a locale tag's numeral system), a language
+  /// no format locale serves (`[$-40C]` in a date) or another bracket
+  /// `XlsxNumberFormatter` does not render. The cell shows with Gregorian
+  /// dates, Western digits and the default language.
+  numberFormatUnsupported,
 }
 
 /// Something the writer changed or could not store exactly, or the reader

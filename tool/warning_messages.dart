@@ -62,6 +62,7 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
     case XlsxWarningCode.errorValueInvalid:
     case XlsxWarningCode.formulaGroupInvalid:
     case XlsxWarningCode.numberFormatInvalid:
+    case XlsxWarningCode.numberFormatUnsupported:
       collector
         ..add(code, sheet: 'Daten', cell: 'A1')
         ..add(code, sheet: 'Daten', cell: 'B2');

@@ -27,6 +27,12 @@ import 'section_choice.dart';
 /// from [locale]; quoted literals are shown as written. [generalWidth] is
 /// the width a `General` section fits its number into.
 ///
+/// A locale tag shows its currency; its language and calendar do not
+/// matter in a number section. Calendar tags (`B1`, `B2`) and brackets the
+/// engine does not render (`[DBNum1]`, `[NatNum1]`) show nothing, so the
+/// digits stay Western; `sectionWarning` (in `date_renderer.dart`) reports
+/// them with `numberFormatUnsupported`.
+///
 /// Adjacent text is merged into one [XlsxFormatText], and empty text is
 /// left out.
 List<XlsxFormatPart> renderNumber(

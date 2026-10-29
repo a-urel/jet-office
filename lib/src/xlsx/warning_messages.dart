@@ -309,5 +309,19 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
     (XlsxWarningCode.numberFormatInvalid, XlsxLocale.tr) =>
       '“$sheet” sayfasındaki $count hücrenin sayı biçimi kodu '
           'okunamıyor; Genel biçimle gösteriliyor$cells.',
+    (XlsxWarningCode.numberFormatUnsupported, XlsxLocale.en) =>
+      "$count cell(s) on sheet '$sheet' have a number format that uses a "
+          'calendar, numeral system or language this library does not '
+          'render; they show with Gregorian dates and the default '
+          'language$cells.',
+    (XlsxWarningCode.numberFormatUnsupported, XlsxLocale.de) =>
+      '$count Zelle(n) im Blatt „$sheet“ haben ein Zahlenformat mit einem '
+          'Kalender, Zahlensystem oder einer Sprache, die diese Bibliothek '
+          'nicht darstellt; sie werden mit gregorianischem Datum und der '
+          'Standardsprache angezeigt$cells.',
+    (XlsxWarningCode.numberFormatUnsupported, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count hücrenin sayı biçimi bu kitaplığın '
+          'göstermediği bir takvim, rakam sistemi veya dil kullanıyor; '
+          'Miladi tarih ve varsayılan dille gösteriliyor$cells.',
   };
 }

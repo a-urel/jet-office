@@ -1,3 +1,4 @@
+import 'package:jet_office/src/xlsx/format/date_renderer.dart';
 import 'package:jet_office/src/xlsx/format/excel_number.dart';
 import 'package:jet_office/src/xlsx/format/format_code.dart';
 import 'package:jet_office/src/xlsx/format/format_locale.dart';
@@ -306,6 +307,39 @@ void main() {
 
     test('quoted text is untouched', () {
       expect(t('"1,5"0', 2, locale: commaLocale), '1,52');
+    });
+  });
+
+  group('sectionWarning', () {
+    XlsxWarningCode? warn(String code) => sectionWarning(
+      parseFormatCode(code).sections.first,
+      date: false,
+      locale: XlsxFormatLocale.enUS,
+    );
+
+    test('an unsupported bracket warns', () {
+      expect(warn('[DBNum1]0'), XlsxWarningCode.numberFormatUnsupported);
+      expect(warn('[NatNum1]0'), XlsxWarningCode.numberFormatUnsupported);
+    });
+
+    test('a numeral system other than 0 or 1 warns', () {
+      expect(warn('[\$-D000409]0'), XlsxWarningCode.numberFormatUnsupported);
+    });
+
+    test('the language is ignored in a number section', () {
+      expect(warn('[\$€-40C]#,##0'), isNull);
+    });
+
+    test('the calendar is ignored in a number section', () {
+      expect(warn('[\$-1060409]0'), isNull);
+    });
+
+    test('B2 warns', () {
+      expect(warn('B2 0'), XlsxWarningCode.numberFormatUnsupported);
+    });
+
+    test('a plain number section does not warn', () {
+      expect(warn('#,##0.00'), isNull);
     });
   });
 }

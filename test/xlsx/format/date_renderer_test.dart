@@ -3,6 +3,7 @@ import 'package:jet_office/src/xlsx/format/excel_number.dart';
 import 'package:jet_office/src/xlsx/format/format_code.dart';
 import 'package:jet_office/src/xlsx/format/format_locale.dart';
 import 'package:jet_office/src/xlsx/format/formatted_value.dart';
+import 'package:jet_office/src/xlsx/warnings.dart';
 import 'package:test/test.dart';
 
 /// The parts of [serial] in the first section of [code], or null for `#`.
@@ -35,6 +36,49 @@ String? t(
     date1904: date1904,
   );
   return result == null ? null : XlsxFormattedValue(result).text;
+}
+
+/// The warning of rendering [serial] with the first section of [code].
+XlsxWarningCode? w(
+  String code,
+  num serial, {
+  XlsxFormatLocale locale = XlsxFormatLocale.enUS,
+}) {
+  final FormatSection section = parseFormatCode(code).sections.first;
+  return renderDate(
+    section,
+    ExcelNumber.from(serial)!,
+    locale: locale,
+    date1904: false,
+  )!.warning;
+}
+
+/// en-US with [lcid], [monthNames] and [longDateCode] replaced.
+XlsxFormatLocale custom({
+  int lcid = 0x409,
+  List<String>? monthNames,
+  String? longDateCode,
+}) {
+  const XlsxFormatLocale en = XlsxFormatLocale.enUS;
+  return XlsxFormatLocale(
+    decimalSeparator: en.decimalSeparator,
+    groupSeparator: en.groupSeparator,
+    monthNames: monthNames ?? en.monthNames,
+    monthAbbreviations: en.monthAbbreviations,
+    dayNames: en.dayNames,
+    dayAbbreviations: en.dayAbbreviations,
+    am: en.am,
+    pm: en.pm,
+    trueText: en.trueText,
+    falseText: en.falseText,
+    errorNames: en.errorNames,
+    lcid: lcid,
+    builtinCodes: en.builtinCodes,
+    longDateCode: longDateCode ?? en.longDateCode,
+    longTimeCode: en.longTimeCode,
+    messageLocale: en.messageLocale,
+    verified: false,
+  );
 }
 
 /// Wed 28 Oct 2026.
@@ -312,6 +356,12 @@ void main() {
       expect(t('yyyy-mm-dd', -1, date1904: true), isNull);
     }, skip: 'Owner Excel check C10');
 
+    test('1904: a negative date is null', () {
+      // Ruling 4: a section with a date token shows `#` on a negative
+      // value in either system.
+      expect(t('yyyy-mm-dd', -1, date1904: true), isNull);
+    });
+
     test('1904: the minus goes before a leading literal', () {
       expect(t('"t "h:mm', -0.25, date1904: true), '-t 6:00');
     });
@@ -339,6 +389,163 @@ void main() {
 
     test('a serial past 9999-12-31 is null', () {
       expect(t('yyyy', 2958466), isNull);
+    });
+  });
+
+  group('tags', () {
+    test('a language tag picks a shipped locale for names', () {
+      expect(t('[\$-407]mmmm dddd', oct28), 'Oktober Mittwoch');
+    }, skip: 'Owner Excel check C18');
+
+    test('a shipped locale gives the names and no warning', () {
+      expect(t('[\$-41F]dddd', oct28), 'Çarşamba');
+      expect(w('[\$-41F]dddd', oct28), isNull);
+    });
+
+    test('a language no locale serves keeps the names and warns', () {
+      expect(t('[\$-40C]mmmm', oct28), 'October');
+      expect(w('[\$-40C]mmmm', oct28), XlsxWarningCode.numberFormatUnsupported);
+    });
+
+    test('language 0 selects nothing and warns nothing', () {
+      expect(t('[\$-0]mmmm', oct28), 'October');
+      expect(w('[\$-0]mmmm', oct28), isNull);
+    });
+
+    test('AM/PM comes from the tag locale', () {
+      expect(t('[\$-407]h:mm AM/PM', 0.5625), '1:30 PM');
+    });
+
+    test('the first non-zero language decides', () {
+      expect(t('[\$-0][\$-41F]dddd[\$-407]', oct28), 'Çarşamba');
+    });
+
+    test('the renderer locale wins over a shipped one with its lcid', () {
+      final XlsxFormatLocale mine = custom(
+        lcid: 0x407,
+        monthNames: List<String>.filled(12, 'X'),
+      );
+      expect(t('[\$-407]mmmm', oct28, locale: mine), 'X');
+      expect(w('[\$-407]mmmm', oct28, locale: mine), isNull);
+    });
+
+    test('separators come from the renderer locale', () {
+      expect(t('[\$-407]ss.0', 0.5), '00.0');
+    });
+  });
+
+  group('system formats', () {
+    test('en-US long date and long time', () {
+      expect(
+        t('[\$-F800]dddd, mmmm dd, yyyy', 46323.5625),
+        'Wednesday, October 28, 2026',
+      );
+      expect(t('[\$-F400]h:mm:ss AM/PM', 46323.5625), '1:30:00 PM');
+      expect(t('[\$-x-sysdate]', 46323.5625), 'Wednesday, October 28, 2026');
+      expect(t('[\$-x-systime]', 46323.5625), '1:30:00 PM');
+      expect(w('[\$-F800]dddd, mmmm dd, yyyy', 46323.5625), isNull);
+    });
+
+    test('de-DE long date and long time', () {
+      expect(
+        t(
+          '[\$-F800]dddd, mmmm dd, yyyy',
+          46323.5625,
+          locale: XlsxFormatLocale.deDE,
+        ),
+        'Mittwoch, 28. Oktober 2026',
+      );
+      expect(
+        t('[\$-F400]h:mm:ss AM/PM', 46323.5625, locale: XlsxFormatLocale.deDE),
+        '13:30:00',
+      );
+    }, skip: 'Owner Excel check C8');
+
+    test('tr-TR long date and long time', () {
+      expect(
+        t(
+          '[\$-F800]dddd, mmmm dd, yyyy',
+          46323.5625,
+          locale: XlsxFormatLocale.trTR,
+        ),
+        '28 Ekim 2026 Çarşamba',
+      );
+      expect(
+        t('[\$-F400]h:mm:ss AM/PM', 46323.5625, locale: XlsxFormatLocale.trTR),
+        '13:30:00',
+      );
+    }, skip: 'Owner Excel check C8');
+
+    test('upper bits of the tag do not matter', () {
+      expect(t('[\$-10F800]', oct28), 'Wednesday, October 28, 2026');
+    });
+
+    test('the system format replaces the whole section', () {
+      expect(t('[\$-F800]0', oct28), 'Wednesday, October 28, 2026');
+      expect(t('"x"[\$-F800]"y"', oct28), 'Wednesday, October 28, 2026');
+    });
+
+    test('a currency on a system tag is dropped', () {
+      expect(t('[\$USD-F800]', oct28), 'Wednesday, October 28, 2026');
+    });
+
+    test('the first system token wins', () {
+      expect(
+        t('[\$-F800][\$-F400]', 46323.5625),
+        'Wednesday, October 28, 2026',
+      );
+      expect(t('[\$-F400][\$-F800]', 46323.5625), '1:30:00 PM');
+    });
+
+    test('a color stays on the section', () {
+      final FormatSection section = parseFormatCode(
+        '[Red][\$-F800]dddd',
+      ).sections.first;
+      expect(section.color, isNotNull);
+      expect(t('[Red][\$-F800]dddd', oct28), 'Wednesday, October 28, 2026');
+    });
+
+    test('a long caller code renders in full', () {
+      final XlsxFormatLocale long = custom(longDateCode: '"${'x' * 1000}"');
+      final String? text = t('[\$-F800]', oct28, locale: long);
+      expect(text, 'x' * 1000);
+    });
+
+    test('a system tag in the caller code is not followed', () {
+      final XlsxFormatLocale loop = custom(longDateCode: '[\$-F800]yyyy');
+      expect(t('[\$-F800]', oct28, locale: loop), '2026');
+    });
+
+    test('a 1904 negative in a long time shows a minus', () {
+      expect(t('[\$-F400]', -0.25, date1904: true), '-6:00:00 AM');
+    });
+  });
+
+  group('calendars', () {
+    test('B1 is Gregorian and shows nothing', () {
+      expect(t('B1yyyy', oct28), '2026');
+      expect(t('[B1]yyyy', oct28), '2026');
+      expect(w('B1yyyy', oct28), isNull);
+    });
+
+    test('B2 shows the Gregorian year and warns', () {
+      expect(t('B2yyyy', oct28), '2026');
+      expect(w('B2yyyy', oct28), XlsxWarningCode.numberFormatUnsupported);
+      expect(w('[B2]yyyy', oct28), XlsxWarningCode.numberFormatUnsupported);
+    });
+
+    test('a tag calendar other than 0 or 1 warns', () {
+      expect(t('[\$-1060409]yyyy', oct28), '2026');
+      expect(
+        w('[\$-1060409]yyyy', oct28),
+        XlsxWarningCode.numberFormatUnsupported,
+      );
+      expect(w('[\$-1010409]yyyy', oct28), isNull);
+    });
+
+    test('an unsupported bracket shows nothing and warns', () {
+      expect(t('[DBNum1]yyyy', oct28), '2026');
+      expect(w('[DBNum1]yyyy', oct28), XlsxWarningCode.numberFormatUnsupported);
     });
   });
 }
