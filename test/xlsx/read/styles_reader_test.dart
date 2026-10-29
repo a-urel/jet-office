@@ -1,4 +1,4 @@
-import 'package:jet_office/src/xlsx/read/format_kind.dart';
+import 'package:jet_office/src/xlsx/format/format_kind.dart';
 import 'package:jet_office/src/xlsx/read/package_reader.dart';
 import 'package:jet_office/src/xlsx/read/read_exception.dart';
 import 'package:jet_office/src/xlsx/read/read_limits.dart';

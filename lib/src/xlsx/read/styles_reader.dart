@@ -8,9 +8,9 @@
 /// by checks (a bad `<numFmt>` is ignored, a bad `<xf>` is a broken format);
 /// the hard-coded built-in `164` (a currency code that Excel never fixes) is
 /// dropped, so an id without a `<numFmt>` has a code only when it is a
-/// built-in of `builtinNumberFormatCode`; locale-dependent ids are left
-/// unresolved; each format has a kind (`classifyFormatCode`) and one shared
-/// [CellFormat] per id; `<numFmt>` and `<xf>` are matched by depth, local
+/// built-in of `builtinNumberFormatCode` (`format/builtin_formats.dart`);
+/// locale-dependent ids are left unresolved; each format has a kind
+/// (`classifyFormatCode`) and one shared [CellFormat] per id; `<numFmt>` and `<xf>` are matched by depth, local
 /// name and SpreadsheetML namespace under `<numFmts>` and `<cellXfs>`
 /// (Quds also counted `<xf>` of other parents); the root must be a
 /// `<styleSheet>`; and the number of formats and the length of a code are
@@ -20,8 +20,8 @@ library;
 import '../../opc/ooxml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
-import '../number_format.dart';
-import 'format_kind.dart';
+import '../format/builtin_formats.dart';
+import '../format/format_kind.dart';
 import 'package_reader.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';

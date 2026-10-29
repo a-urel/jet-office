@@ -1,5 +1,5 @@
-import 'package:jet_office/src/xlsx/number_format.dart';
-import 'package:jet_office/src/xlsx/read/format_kind.dart';
+import 'package:jet_office/src/xlsx/format/builtin_formats.dart';
+import 'package:jet_office/src/xlsx/format/format_kind.dart';
 import 'package:test/test.dart';
 
 void main() {
