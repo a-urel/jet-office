@@ -304,15 +304,15 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
   (
     XlsxWarningCode.numberFormatUnsupported,
     XlsxLocale.en,
-  ): "1 cell(s) on sheet 'S' have a number format that uses a calendar, numeral system or language this library does not render; they show with Gregorian dates and the default language (A1).",
+  ): "1 cell(s) on sheet 'S' have a number format that uses a calendar, numeral system or language this library does not render; they show with Gregorian dates, Western digits and the default language (A1).",
   (
     XlsxWarningCode.numberFormatUnsupported,
     XlsxLocale.de,
-  ): '1 Zelle(n) im Blatt „S“ haben ein Zahlenformat mit einem Kalender, Zahlensystem oder einer Sprache, die diese Bibliothek nicht darstellt; sie werden mit gregorianischem Datum und der Standardsprache angezeigt (A1).',
+  ): '1 Zelle(n) im Blatt „S“ haben ein Zahlenformat mit einem Kalender, Zahlensystem oder einer Sprache, die diese Bibliothek nicht darstellt; sie werden mit gregorianischem Datum, westlichen Ziffern und der Standardsprache angezeigt (A1).',
   (
     XlsxWarningCode.numberFormatUnsupported,
     XlsxLocale.tr,
-  ): '“S” sayfasındaki 1 hücrenin sayı biçimi bu kitaplığın göstermediği bir takvim, rakam sistemi veya dil kullanıyor; Miladi tarih ve varsayılan dille gösteriliyor (A1).',
+  ): '“S” sayfasındaki 1 hücrenin sayı biçimi bu kitaplığın göstermediği bir takvim, rakam sistemi veya dil kullanıyor; Miladi tarih, Batı rakamları ve varsayılan dille gösteriliyor (A1).',
   (
     XlsxWarningCode.numberFormatLocaleDependent,
     XlsxLocale.en,

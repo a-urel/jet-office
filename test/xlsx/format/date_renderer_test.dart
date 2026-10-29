@@ -213,15 +213,18 @@ void main() {
   });
 
   group('years', () {
-    test('lengths Excel shows', () {
+    test('lengths the spec states', () {
       expect(t('y', oct28), '26');
       expect(t('yyy', oct28), '2026');
       expect(t('yyyyy', oct28), '2026');
       expect(t('e', oct28), '2026');
+      expect(t('g', oct28), '');
+    });
+
+    test('lengths Excel shows', () {
       expect(t('bb', oct28), '69');
       expect(t('bbbb', oct28), '2569');
       expect(t('mmmmmm', oct28), 'October');
-      expect(t('g', oct28), '');
     }, skip: 'Owner Excel check C15a');
 
     test('yy and yyyy', () {

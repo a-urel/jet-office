@@ -43,12 +43,14 @@ import 'formatted_value.dart';
 /// the names and is not reported.
 ///
 /// [date1904] selects the 1904 date system. An `m` is a month or minutes by
-/// [isMinuteToken]. Token lengths: `y` and
-/// `yy` show two digits of the year, `yyy` and longer four; `mmmmm` shows
-/// the first letter of the month name and six or more `m` the full name;
-/// `dddd` and longer the full day name; `h`, `m` and `s` longer than two
-/// show two digits; `e` the four-digit year; `b` and `bb` two digits of the
-/// Buddhist year, `bbb` and longer four; `g` nothing.
+/// [isMinuteToken].
+///
+/// Token lengths: `y` and `yy` show two digits of the year, `yyy` and
+/// longer four; `mmmmm` shows the first letter of the month name and six or
+/// more `m` the full name; `dddd` and longer the full day name; `h`, `m`
+/// and `s` longer than two show two digits; `e` the four-digit year; `b`
+/// and `bb` two digits of the Buddhist year, `bbb` and longer four; `g`
+/// nothing.
 ///
 /// The time is rounded to the second, or to the most fractional-second
 /// digits the section shows, and then truncated to the units shown

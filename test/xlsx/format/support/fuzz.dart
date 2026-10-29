@@ -162,7 +162,7 @@ String _char(Xorshift32 r) => r.nextInt(3) == 0
     : _special[r.nextInt(_special.length)];
 
 Object? _value(Xorshift32 r) {
-  switch (r.nextInt(18)) {
+  switch (r.nextInt(16)) {
     case 0:
       return null;
     case 1:
@@ -208,7 +208,6 @@ Object? _value(Xorshift32 r) {
         r.nextInt(24),
         r.nextInt(60),
         r.nextInt(60),
-        r.nextInt(1000),
         r.nextInt(1000),
       );
     case 14:

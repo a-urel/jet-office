@@ -84,9 +84,15 @@ final class XlsxFormatLocale {
   final Map<int, String> builtinCodes;
 
   /// The region's long date, which `[$-F800]` shows.
+  ///
+  /// It must be a valid format code. Its first section is used; tags and
+  /// brackets in it are neither applied nor reported.
   final String longDateCode;
 
   /// The region's long time, which `[$-F400]` shows.
+  ///
+  /// It must be a valid format code. Its first section is used; tags and
+  /// brackets in it are neither applied nor reported.
   final String longTimeCode;
 
   /// The language of warning messages that matches this region.

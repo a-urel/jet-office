@@ -169,7 +169,8 @@ ExcelDateFields? serialToFields(
 /// serial; dates before 1900-03-01 skip the phantom 1900-02-29, as the
 /// writer does. A year above 9999 gives the system's last serial plus one
 /// and a year below 1 gives -1, without any day arithmetic: both are
-/// outside the range and show `#` in a date section. Never null and never
+/// stand-in serials outside the range, so a date section shows `#` and a
+/// number section shows the stand-in, not the real serial. Never null and never
 /// throws.
 ExcelNumber dateTimeToSerial(DateTime value, {required bool date1904}) {
   final int max = date1904 ? _maxSerial1904 : _maxSerial1900;
