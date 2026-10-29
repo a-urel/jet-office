@@ -99,8 +99,9 @@ enforces.
 `XlsxNumberFormatter` shows a cell value as Excel for Mac does, with the
 cell's number format code: grouping, rounding, percent, scientific, fractions,
 `General`, text sections, dates and times in both date systems, and the
-`en-US`, `de-DE` and `tr-TR` regions (`XlsxFormatLocale`), each checked
-against Excel for Mac. It does not throw for a code it cannot read; it shows
+`en-US`, `de-DE` and `tr-TR` regions (`XlsxFormatLocale`), compared with
+Excel for Mac's output (the assumptions left are in
+[`docs/number-format.md`](docs/number-format.md)). It does not throw for a code it cannot read; it shows
 `General` and says so in the result's `warning`.
 
 ```dart
