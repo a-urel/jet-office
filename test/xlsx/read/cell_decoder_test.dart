@@ -210,6 +210,34 @@ void main() {
       expect(cell.value, '');
       expect(cell.warning, isNull);
     });
+
+    test('a formula str whose text is a classic error code is that error', () {
+      // Google Sheets writes =NA() as t="str" with <v>#N/A</v>; Excel
+      // writes t="e". Both show an error.
+      for (final XlsxErrorValue error in XlsxErrorValue.classic) {
+        final DecodedCell cell = _decode(
+          type: 'str',
+          value: error.code,
+          formula: 'NA()',
+        );
+        expect(cell.value, error);
+        expect(cell.formula, 'NA()');
+        expect(cell.warning, isNull);
+      }
+    });
+
+    test('a str error code without a formula, or not exact, stays text', () {
+      expect(_decode(type: 'str', value: '#N/A').value, '#N/A');
+      expect(_decode(type: 'str', value: '#n/a', formula: 'A1').value, '#n/a');
+      expect(
+        _decode(type: 'str', value: ' #N/A', formula: 'A1').value,
+        ' #N/A',
+      );
+      expect(
+        _decode(type: 'str', value: '#ERROR!', formula: 'A1').value,
+        '#ERROR!',
+      );
+    });
   });
 
   group('unsupported types', () {
