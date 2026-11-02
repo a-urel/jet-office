@@ -6,8 +6,11 @@
 /// makes it (`src/workload_file.dart`), so each platform reads its own bytes
 /// (decision 0006). `XlsxWorkbook.open` inflates every entry once to check it,
 /// and a part the model did not load is inflated again when saving, so the
-/// phases are timed apart: open, loading the sheet, setting a cell, saving
-/// with the sheet loaded and edited, and saving without loading it. Run it
+/// phases are timed apart: open, loading the sheet, reading every row,
+/// setting a cell, saving with the sheet loaded and edited, and saving
+/// without loading it. A second sheet, 50,000 × 12 formulas (half of them
+/// followers of shared formulas, half normal formulas each with its own
+/// text), measures the store of a formula-dense sheet. Run it
 /// with `dart test benchmark` and `dart test -p chrome benchmark`; the quality
 /// gate does not.
 @Tags(<String>['benchmark'])
@@ -61,6 +64,49 @@ int _medianMicros<T>(T Function() setUp, void Function(T value) body) {
 }
 
 String _ms(int micros) => (micros / 1000).toStringAsFixed(1);
+
+const String _mainNamespace =
+    'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+
+/// The rows of the formula-dense sheet, and its columns.
+const int _formulaRows = 50000;
+const int _formulaColumns = 12;
+
+/// The XML of a formula-dense worksheet: [_formulaRows] rows of
+/// [_formulaColumns] formula cells with cached values. Columns `A` to `F`
+/// are shared formulas, one group per column whose master is in row 1 and
+/// whose followers fill the column; columns `G` to `L` are normal formulas,
+/// each with its own text (`A7*6+B7`).
+String _formulaSheetXml() {
+  final StringBuffer b = StringBuffer(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    '<worksheet xmlns="$_mainNamespace"><sheetData>',
+  );
+  for (int r = 1; r <= _formulaRows; r++) {
+    b.write('<row r="$r">');
+    for (int c = 0; c < _formulaColumns; c++) {
+      final String column = String.fromCharCode(0x41 + c);
+      if (c < _formulaColumns ~/ 2) {
+        if (r == 1) {
+          b.write(
+            '<c r="$column$r"><f t="shared" ref="$column$r:$column'
+            '$_formulaRows" si="$c">ROW()*${c + 1}</f><v>${c + 1}</v></c>',
+          );
+        } else {
+          b.write(
+            '<c r="$column$r"><f t="shared" si="$c"/><v>${r * (c + 1)}</v>'
+            '</c>',
+          );
+        }
+      } else {
+        b.write('<c r="$column$r"><f>A$r*$c+B$r</f><v>${r * c + r}</v></c>');
+      }
+    }
+    b.write('</row>');
+  }
+  b.write('</sheetData></worksheet>');
+  return b.toString();
+}
 
 // A double 0.0 is the integer 0 on JavaScript only.
 const bool _isWeb = identical(0, 0.0);
@@ -124,6 +170,28 @@ void main() {
     );
   });
 
+  test('retained store bytes, formula-dense sheet', () {
+    // The XML is ASCII, so its length is its size in bytes.
+    final String xml = _formulaSheetXml();
+    final WorksheetPart part = WorksheetPart.read(
+      XmlPullReader(xml),
+      part: _sheetPart,
+      limits: const XlsxReadLimits(),
+      warn: (XlsxWarningCode code, String? cell, {String? detail}) {},
+    );
+    final CellStore store = part.cells;
+    const int formulaCells = _formulaRows * _formulaColumns;
+    expect(store.cellCount, formulaCells);
+    expect(store.hasFormulas, isTrue);
+    final int bytes = store.retainedBytesEstimate;
+    line(
+      'retained store, formulas | $_formulaRows x $_formulaColumns | '
+      '$bytes bytes | ${(bytes / formulaCells).toStringAsFixed(1)} '
+      'bytes/cell | store/N ${(bytes / xml.length).toStringAsFixed(3)} | '
+      'N ${xml.length} bytes',
+    );
+  });
+
   test('memory of the loaded sheet', () {
     // A secondary figure: the loaded workbook's process memory above the
     // memory before it opened. It folds in the sheet's XML and decoded text,
@@ -171,8 +239,8 @@ void main() {
     if (!_isWeb && peakAbove.isNotEmpty) {
       final int peakMost = peakAbove.reduce((int a, int b) => a > b ? a : b);
       line(
-        'process peak | ${peakProbe.unit} above baseline $peakMost bytes | memory/N '
-        '${(peakMost / sheetBytes).toStringAsFixed(2)}',
+        'process peak | ${peakProbe.unit} above baseline $peakMost bytes | '
+        'memory/N ${(peakMost / sheetBytes).toStringAsFixed(2)}',
       );
     }
   });
@@ -188,6 +256,23 @@ void main() {
       (XlsxWorkbook book) => book.sheets[0].cellAt(0, 0),
     );
     line('phase | load the sheet (cellAt) | ${_ms(load)} ms');
+
+    int read = 0;
+    final int rows = _medianMicros<XlsxSheet>(
+      () {
+        final XlsxSheet sheet = XlsxWorkbook.open(file).sheets[0];
+        sheet.cellAt(0, 0);
+        return sheet;
+      },
+      (XlsxSheet sheet) {
+        read = 0;
+        for (final XlsxReadRow row in sheet.rows) {
+          read += row.cells.length;
+        }
+      },
+    );
+    expect(read, cells);
+    line('phase | read every row (rows, sheet loaded) | ${_ms(rows)} ms');
 
     final int set = _medianMicros<XlsxSheet>(() {
       final XlsxSheet sheet = XlsxWorkbook.open(file).sheets[0];

@@ -283,6 +283,7 @@ final class WorksheetPart implements PartContent {
         cells.setRowChildren(row.index, row.extraChildren);
       }
     }
+    cells.trim();
     _sheetData!.extraChildren = rows.extraChildren;
   }
 

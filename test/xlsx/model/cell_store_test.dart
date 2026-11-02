@@ -422,6 +422,139 @@ void main() {
     });
   });
 
+  group('formula storage', () {
+    const KeptAttribute ca = (
+      qualifiedName: 'ca',
+      namespaceUri: '',
+      value: '1',
+    );
+    // Every shape of formula: interned templates with and without text,
+    // attributes and group refs.
+    final List<RawFormula> shapes = <RawFormula>[
+      const RawFormula(type: FormulaType.shared, si: '0'),
+      const RawFormula(type: FormulaType.shared, si: '1'),
+      const RawFormula(type: FormulaType.normal, text: 'SUM(A:A)'),
+      const RawFormula(
+        type: FormulaType.normal,
+        text: 'NOW()',
+        attributes: <KeptAttribute>[ca],
+      ),
+      const RawFormula(
+        type: FormulaType.shared,
+        text: 'B1*2',
+        ref: 'C1:C9',
+        si: '2',
+      ),
+      const RawFormula(type: FormulaType.array, text: 'A1:A2', ref: 'D1:D2'),
+      const RawFormula(type: FormulaType.normal),
+      const RawFormula(type: FormulaType.normal, text: ''),
+    ];
+
+    test('scrambled puts and removals keep every formula field', () {
+      final CellStore store = CellStore();
+      final Map<int, RawCell> expected = <int, RawCell>{};
+      int seed = 777;
+      int next() => seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
+      for (int i = 0; i < 30000; i++) {
+        final int row = next() % 2000;
+        final int column = next() % 30;
+        final int pick = next() % (shapes.length + 3);
+        final RawCell cell = switch (pick) {
+          _ when pick < shapes.length => RawCell(
+            kind: RawCellKind.number,
+            value: '${next() % 100}',
+            formula: shapes[pick],
+          ),
+          _ when pick == shapes.length => RawCell(
+            kind: RawCellKind.number,
+            formula: RawFormula(type: FormulaType.normal, text: 'A$i+1'),
+            attributes: const <KeptAttribute>[
+              (qualifiedName: 'cm', namespaceUri: '', value: '1'),
+            ],
+          ),
+          _ when pick == shapes.length + 1 => RawCell(
+            kind: RawCellKind.string,
+            value: 'text $i',
+          ),
+          _ => const RawCell(kind: RawCellKind.number, value: '1.5'),
+        };
+        store.put(row, column, cell);
+        expected[row * 30 + column] = cell;
+        if (next() % 4 == 0) {
+          final int r = next() % 2000;
+          final int c = next() % 30;
+          expect(store.remove(r, c), expected.remove(r * 30 + c) != null);
+        }
+      }
+      expect(store.cellCount, expected.length);
+      expect(
+        store.hasFormulas,
+        expected.values.any((RawCell c) => c.formula != null),
+      );
+      for (final MapEntry<int, RawCell> e in expected.entries) {
+        _expectSameCell(store.cellAt(e.key ~/ 30, e.key % 30), e.value);
+      }
+      // Removing every formula cell leaves none.
+      for (final MapEntry<int, RawCell> e in expected.entries) {
+        if (e.value.formula != null) store.remove(e.key ~/ 30, e.key % 30);
+      }
+      expect(store.hasFormulas, isFalse);
+    });
+
+    test('a shared follower costs no more than 32 bytes', () {
+      final CellStore store = CellStore();
+      for (int row = 1; row <= 10000; row++) {
+        for (int column = 0; column < 12; column++) {
+          store.put(
+            row,
+            column,
+            RawCell(
+              kind: RawCellKind.number,
+              value: '$row',
+              formula: RawFormula(type: FormulaType.shared, si: '$column'),
+            ),
+          );
+        }
+      }
+      expect(store.hasFormulas, isTrue);
+      expect(store.retainedBytesEstimate, lessThan(120000 * 32));
+    });
+
+    test('formula text is counted and stored compactly', () {
+      final CellStore store = CellStore();
+      for (int row = 0; row < 10000; row++) {
+        store.put(
+          row,
+          0,
+          RawCell(
+            kind: RawCellKind.number,
+            value: '1',
+            formula: RawFormula(type: FormulaType.normal, text: 'B$row+1'),
+          ),
+        );
+      }
+      // Per row (one cell each): a 16-byte cell, 8 bytes of row lists, two
+      // 4-byte formula references, a 4-byte text start and the text's
+      // code units (at most 7), once the spare capacity is dropped; plus
+      // one template.
+      store.trim();
+      expect(
+        store.retainedBytesEstimate,
+        lessThanOrEqualTo(10000 * (16 + 8 + 8 + 4 + 2 * 7) + 200),
+      );
+      final int before = store.retainedBytesEstimate;
+      store.put(
+        0,
+        1,
+        RawCell(
+          kind: RawCellKind.number,
+          formula: RawFormula(type: FormulaType.normal, text: 'A' * 1000),
+        ),
+      );
+      expect(store.retainedBytesEstimate, greaterThanOrEqualTo(before + 2000));
+    });
+  });
+
   test('retainedBytesEstimate grows with cells and counts the pool', () {
     final CellStore store = CellStore();
     expect(store.retainedBytesEstimate, 0);
