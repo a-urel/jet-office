@@ -929,13 +929,32 @@ Open `build/edited.xlsx` in Excel. Check:
 The same two files edited in Excel itself (one cell, saved) give the
 comparison when something looks different.
 
-Result: pending.
+Result: one problem, 2026-11-03 (see "Results" and "Open issues"). The
+round-tripped fixtures, `w1_generated`, a 1904-system workbook and an
+unchanged round trip of a workbook Excel made all open without the repair
+prompt. Setting the text of a table's header cell does not rename the
+table's column, so Excel repairs the table.
 
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
 must close it. A closed issue stays here, marked closed, with the commit that
 closed it.
+
+### Setting a table header cell leaves the column name (W1, open)
+
+Found in the W1 check on 2026-11-03. `w1_test.xlsx`, made in Excel for Mac
+16.114.1 with a table `A1:D6` (header `Ürün`, `Adet`, `Fiyat`, `Tutar`),
+formulas, conditional formatting, a note, a hyperlink, a merged range and a
+second sheet. Setting A1 to `edited by jet_office` with
+`XlsxSheet.setCell` and saving gives a file Excel opens with the repair
+prompt; its recovery log names `/xl/tables/table1.xml`: "Tablo". The sheet
+holds the new text, but `table1.xml` still says `tableColumn name="Ürün"`,
+and Excel requires a header cell's text to equal its column's name.
+
+The unchanged round trip of the same file and an edit of H5, outside the
+table, open without the prompt. Decision 0009 does not allow content the
+model does not type to be left wrong silently, so W1 must close this.
 
 ### Sub-second times show the wrong minute (closed, 2026-10-28)
 
@@ -1201,4 +1220,8 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | all 29 fixtures (M5 final run) | ok | Every fixture of `allFixtures()` opened once more, in order: no repair prompt on any (see "Final run"). |
 | 2026-10-28 | not checked (no Excel for Windows) | `m2_styles` row 67, `m3_properties` Status | not checked | The owner has no Excel for Windows, so reading order RTL and Status `Final` stay unchecked; "Reading order and Status not checked in Excel" stays open. |
 | 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | decision 0006 (ZIP bytes by platform) | accepted | The owner accepted that the ZIP bytes differ between the VM and the web while every part's contents are identical; decision 0006 is accepted. `m5_list_plain` as written on the VM opens without a repair prompt; no Chrome-written file was opened. |
-| not yet | not yet checked | W1: `build/model/*.xlsx`, `w1_generated`, two owner files | pending | See "W1". |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: all 29 `build/model/*.xlsx` | ok | No repair prompt on any; each as its fixture's checklist says. `tool/round_trip_model.dart` reported no difference. |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_generated` | ok | No repair prompt. `Values` and `Second`; rows 1 and 2 and `Second` A1 as the checklist says, H2 `8`. |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `format_oracle_1904.xlsx`, A1 edited | ok | No repair prompt. A1 `edited by jet_office`; still the 1904 system: row 9 `Cuma 1904-01-01`, row 10 `2030-10-29`, negative times shown. Widths and formats as before. Written by `tool/write_format_oracle.dart`, not by Excel. |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_test.xlsx` (made in Excel), unchanged round trip and H5 edited | ok | No repair prompt on either. Table, filter buttons, conditional formatting, note, hyperlink, merged A10:D10, column width and `Özet` kept; D8 `526,55`. The edit changed only H5, `spans`, the appended shared string, the dropped `calcChain` and `fullCalcOnLoad`. |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_test.xlsx`, A1 (a table header) edited | sorun | Repair prompt; the recovery log names `/xl/tables/table1.xml`. The column name stays `Ürün` (see "Open issues", W1). |
