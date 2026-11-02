@@ -170,4 +170,25 @@ void main() {
     expect(e.reason, XlsxReadFailure.limitExceeded);
     expect(e.message, startsWith('Limit maxTextLength'));
   });
+
+  test('raw keeps a rich si and a phonetic si exactly', () {
+    const String rich =
+        '<si><r><rPr><b/></rPr><t>a</t></r><r><t xml:space="preserve"> b</t></r></si>';
+    const String phonetic =
+        '<si><t>東京</t><rPh sb="0" eb="2"><t>トウキョウ</t></rPh>'
+        '<phoneticPr fontId="1"/></si>';
+    final PackageReader p = _package(
+      '<sst xmlns="$_main">$rich<si><t>plain</t></si>$phonetic</sst>',
+      const XlsxReadLimits(),
+    );
+    final SharedStringsRead read = readSharedStringsRaw(
+      p,
+      'xl/sharedStrings.xml',
+      const XlsxReadLimits(),
+    );
+    expect(read.texts, <String>['a b', 'plain', '東京']);
+    expect(read.raw.keys, <int>[0, 2]);
+    expect(read.raw[0]!.xml, rich);
+    expect(read.raw[2]!.xml, phonetic);
+  });
 }

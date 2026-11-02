@@ -14,6 +14,7 @@
 library;
 
 import '../../opc/ooxml.dart';
+import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import 'package_reader.dart';
@@ -39,36 +40,94 @@ List<String> readSharedStrings(
   String part,
   XlsxReadLimits limits,
 ) {
+  return package.guardXml(part, () => _walk(package, part, limits).texts);
+}
+
+/// The shared strings of a table and the entries that are more than text.
+///
+/// `texts` is as [readSharedStrings] returns it. `raw` holds, by index, each
+/// `<si>` that has runs (`<r>`), phonetic runs (`<rPh>`) or phonetic
+/// properties (`<phoneticPr>`), as written.
+typedef SharedStringsRead = ({List<String> texts, Map<int, OpaqueXml> raw});
+
+/// Reads the shared strings of [part] in [package] like [readSharedStrings],
+/// and keeps each rich or phonetic `<si>` as written (see
+/// [SharedStringsRead]). The limits and failures are those of
+/// [readSharedStrings].
+SharedStringsRead readSharedStringsRaw(
+  PackageReader package,
+  String part,
+  XlsxReadLimits limits,
+) {
   return package.guardXml(part, () {
-    final XmlPullReader reader = package.openXml(part);
-    final List<String> strings = <String>[];
-    while (reader.next()) {
-      if (reader.eventType != XmlEventType.startElement ||
-          reader.depth != 2 ||
-          reader.localName != 'si' ||
-          reader.namespaceUri != Ns.main) {
-        continue;
+    final ({List<String> texts, Set<int> rich}) walked = _walk(
+      package,
+      part,
+      limits,
+    );
+    final Map<int, OpaqueXml> raw = <int, OpaqueXml>{};
+    if (walked.rich.isNotEmpty) {
+      // A second pass captures the kept items: whether an item is rich is
+      // known only after it has been read.
+      final XmlPullReader reader = package.openXml(part);
+      int index = 0;
+      while (reader.next()) {
+        if (!_isSi(reader)) continue;
+        if (walked.rich.contains(index)) {
+          raw[index] = OpaqueXml.capture(reader);
+        } else {
+          reader.skip();
+        }
+        index++;
       }
-      if (strings.length >= limits.maxSharedStrings) {
-        throw XlsxReadException(
-          XlsxReadFailure.limitExceeded,
-          'Limit maxSharedStrings (${limits.maxSharedStrings}) exceeded.',
-          part: part,
-        );
-      }
-      final String? text = readStringItem(reader, limits.maxTextLength);
-      if (text == null) {
-        throw XlsxReadException(
-          XlsxReadFailure.limitExceeded,
-          'Limit maxTextLength (${limits.maxTextLength}) exceeded by shared '
-          'string ${strings.length}.',
-          part: part,
-        );
-      }
-      strings.add(text);
     }
-    return strings;
+    return (texts: walked.texts, raw: raw);
   });
+}
+
+bool _isSi(XmlPullReader reader) =>
+    reader.eventType == XmlEventType.startElement &&
+    reader.depth == 2 &&
+    reader.localName == 'si' &&
+    reader.namespaceUri == Ns.main;
+
+/// The texts of the table and the indexes of its rich items, read once.
+({List<String> texts, Set<int> rich}) _walk(
+  PackageReader package,
+  String part,
+  XlsxReadLimits limits,
+) {
+  final XmlPullReader reader = package.openXml(part);
+  final List<String> strings = <String>[];
+  final Set<int> rich = <int>{};
+  while (reader.next()) {
+    if (!_isSi(reader)) continue;
+    if (strings.length >= limits.maxSharedStrings) {
+      throw XlsxReadException(
+        XlsxReadFailure.limitExceeded,
+        'Limit maxSharedStrings (${limits.maxSharedStrings}) exceeded.',
+        part: part,
+      );
+    }
+    final _Rich flag = _Rich();
+    final String? text = _readItem(reader, limits.maxTextLength, flag);
+    if (text == null) {
+      throw XlsxReadException(
+        XlsxReadFailure.limitExceeded,
+        'Limit maxTextLength (${limits.maxTextLength}) exceeded by shared '
+        'string ${strings.length}.',
+        part: part,
+      );
+    }
+    if (flag.seen) rich.add(strings.length);
+    strings.add(text);
+  }
+  return (texts: strings, rich: rich);
+}
+
+/// Set when an item has runs or phonetic elements.
+final class _Rich {
+  bool seen = false;
 }
 
 /// The text of the string item the reader is on, a shared string's `<si>`
@@ -78,7 +137,10 @@ List<String> readSharedStrings(
 ///
 /// Returns `null` as soon as the text passes [maxLength] characters;
 /// otherwise leaves the reader on the end of the item.
-String? readStringItem(XmlPullReader reader, int maxLength) {
+String? readStringItem(XmlPullReader reader, int maxLength) =>
+    _readItem(reader, maxLength, null);
+
+String? _readItem(XmlPullReader reader, int maxLength, _Rich? rich) {
   if (reader.isEmptyElement) return '';
   final StringBuffer buffer = StringBuffer();
   final int siDepth = reader.depth;
@@ -92,8 +154,12 @@ String? readStringItem(XmlPullReader reader, int maxLength) {
     } else if (reader.localName == 't') {
       buffer.write(_readT(reader));
     } else if (reader.localName == 'r') {
+      rich?.seen = true;
       _readRun(reader, buffer, siDepth + 1);
     } else {
+      if (reader.localName == 'rPh' || reader.localName == 'phoneticPr') {
+        rich?.seen = true;
+      }
       reader.skip();
     }
     if (buffer.length > maxLength) return null;

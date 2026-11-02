@@ -1,8 +1,11 @@
+import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xlsx/font.dart';
 import 'package:jet_office/src/xlsx/rich_text.dart';
 import 'package:jet_office/src/xlsx/shared_strings.dart';
+import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
 import 'package:test/test.dart';
+import 'package:xml/xml.dart' hide XmlWriter;
 
 void main() {
   test('count counts references, uniqueCount counts strings', () {
@@ -212,5 +215,59 @@ void main() {
         );
       expect(s.values, <String>['a', 'bc']);
     });
+  });
+
+  group('seeded', () {
+    const String ns =
+        'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    const String richSi =
+        '<si><r><rPr><b/></rPr><t>x</t></r><r><t>y</t></r></si>';
+
+    OpaqueXml capture(String si) {
+      final XmlPullReader r = XmlPullReader('<sst xmlns="$ns">$si</sst>');
+      while (r.next()) {
+        if (r.eventType == XmlEventType.startElement && r.localName == 'si') {
+          return OpaqueXml.capture(r);
+        }
+      }
+      throw StateError('no si');
+    }
+
+    test('seeded keeps duplicate entries and their indexes', () {
+      final SharedStrings s = SharedStrings.seeded(<String>['a', 'b', 'a']);
+      expect(s.indexOf('a'), 0);
+      expect(s.length, 3);
+      expect(s.textAt(2), 'a');
+      expect(s.indexOf('c'), 3);
+      expect(s.length, 4);
+    });
+
+    test('seeded writes raw entries verbatim and recounts', () {
+      final SharedStrings s = SharedStrings.seeded(
+        <String>['a', 'xy', 'b'],
+        raw: <int, OpaqueXml>{1: capture(richSi)},
+      )..indexOf('c');
+      final StringBuffer out = StringBuffer();
+      s.writeXml(XmlWriter(out));
+      final String xml = out.toString();
+      expect(xml, contains(richSi));
+      final XmlElement root = XmlDocument.parse(xml).rootElement;
+      expect(root.findElements('si'), hasLength(4));
+      expect(root.getAttribute('uniqueCount'), '4');
+      expect(s.uniqueCount, 4);
+    });
+
+    test(
+      'a rich entry is not reused for plain text of the same characters',
+      () {
+        final SharedStrings s = SharedStrings.seeded(
+          <String>['xy'],
+          raw: <int, OpaqueXml>{0: capture(richSi)},
+        );
+        expect(s.indexOf('xy'), 1);
+        expect(s.length, 2);
+        expect(s.indexOf('xy'), 1);
+      },
+    );
   });
 }
