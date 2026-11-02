@@ -1,0 +1,460 @@
+/// Compares two XLSX packages part by part, by meaning and not by bytes.
+///
+/// Not ported from Quds; written for jet_office. This is the yardstick the
+/// phase 3 round-trip tests use to prove that opening and saving a file
+/// keeps every part (spec 4.2). It is test-side tooling: it uses
+/// `package:archive` and `package:xml`, never `dart:io`, so it runs on the
+/// VM and in a browser.
+///
+/// [comparePackages] returns one line per difference, `'<part>: <what>'`,
+/// and nothing when the packages are equal. A part is XML or binary by its
+/// content type (from `[Content_Types].xml`: a `Default` by extension, an
+/// `Override` by part name); a type ending in `+xml` or `/xml` is XML, any
+/// other is compared byte for byte.
+///
+/// XML compares as follows:
+///
+/// * elements by namespace URI and local name, so prefixes do not matter;
+/// * attributes as a map keyed by namespace URI and local name, so their
+///   order does not matter; `xmlns` declarations are left out;
+/// * text trimmed, except under `xml:space="preserve"` and inside `t`, `v`,
+///   `f` and `formula*` elements, where it compares exactly;
+/// * relationship ids by what they resolve to: a `.rels` part compares as
+///   the set of `(type, target, mode)`, and an attribute in the
+///   relationships namespace (`r:id`, `r:embed`) in the part the rels
+///   belong to compares by the relationship it names;
+/// * a shared string cell (`t="s"`) by the `si` it names, not by its
+///   index; `sharedStrings.xml` itself as the set of strings the cells
+///   reference, without its counts;
+/// * the children of `[Content_Types].xml` as a set.
+library;
+
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:archive/archive.dart';
+import 'package:xml/xml.dart';
+
+/// The relationships namespace, home of `r:id` and `r:embed`.
+const String _relNs =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+/// The XML namespace, home of `xml:space`.
+const String _xmlNs = 'http://www.w3.org/XML/1998/namespace';
+
+/// The differences between the packages [expected] and [actual], one line
+/// per difference, `'<part>: <what>'`; empty when they are equal.
+///
+/// A part named in [ignoreParts] is skipped on both sides. A part only in
+/// [actual] is a difference unless it is named in [allowAdded].
+List<String> comparePackages(
+  Uint8List expected,
+  Uint8List actual, {
+  Set<String> ignoreParts = const <String>{},
+  Set<String> allowAdded = const <String>{},
+}) {
+  final _Package e = _Package(expected, 'expected');
+  final _Package a = _Package(actual, 'actual');
+  final List<String> out = <String>[];
+  final Set<String> names = <String>{...e.parts.keys, ...a.parts.keys}
+    ..removeAll(ignoreParts);
+  for (final String name in names) {
+    final Uint8List? eb = e.parts[name];
+    final Uint8List? ab = a.parts[name];
+    if (ab == null) {
+      out.add('$name: missing from the actual package');
+    } else if (eb == null) {
+      if (!allowAdded.contains(name)) {
+        out.add('$name: added to the actual package');
+      }
+    } else if (e.isXml(name) != a.isXml(name)) {
+      out.add(
+        '$name: content type differs '
+        '(${e.typeOf(name)} vs ${a.typeOf(name)})',
+      );
+    } else if (!e.isXml(name)) {
+      if (!_sameBytes(eb, ab)) out.add('$name: bytes differ');
+    } else {
+      _comparePart(name, e, a, out);
+    }
+  }
+  return out;
+}
+
+/// The differences between the XML texts [expected] and [actual] of the
+/// part [part], by the rules of [comparePackages] that need no other part:
+/// no relationship ids or shared string indexes are resolved.
+List<String> compareXml(String part, String expected, String actual) {
+  final List<String> out = <String>[];
+  final _Node? e = _canonicalText(part, expected, 'expected', out);
+  final _Node? a = _canonicalText(part, actual, 'actual', out);
+  if (e != null && a != null) _diff(part, e, a, '', out);
+  return out;
+}
+
+_Node? _canonicalText(String part, String text, String side, List<String> out) {
+  try {
+    return _Canon(null, null).node(XmlDocument.parse(text).rootElement, false);
+  } on XmlException catch (error) {
+    out.add('$part: the $side part is not well-formed XML (${error.message})');
+    return null;
+  }
+}
+
+bool _sameBytes(Uint8List a, Uint8List b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+void _comparePart(String name, _Package e, _Package a, List<String> out) {
+  final XmlDocument? ed = e.document(name);
+  final XmlDocument? ad = a.document(name);
+  if (ed == null || ad == null) {
+    if (ed == null) out.add('$name: the expected part is not well-formed XML');
+    if (ad == null) out.add('$name: the actual part is not well-formed XML');
+    return;
+  }
+  if (e.isSharedStrings(name) && a.isSharedStrings(name)) {
+    final Set<String> es = e.referencedStrings();
+    final Set<String> as = a.referencedStrings();
+    for (final String s in (es.toList()..sort())) {
+      if (!as.contains(s)) {
+        out.add('$name: string only in expected: ${_show(s)}');
+      }
+    }
+    for (final String s in (as.toList()..sort())) {
+      if (!es.contains(s)) out.add('$name: string only in actual: ${_show(s)}');
+    }
+    return;
+  }
+  _diff(
+    name,
+    _Canon(e, name).node(ed.rootElement, false),
+    _Canon(a, name).node(ad.rootElement, false),
+    '',
+    out,
+  );
+}
+
+/// A canonical element: its `uri|local` name, attributes by `uri|local`,
+/// and children that are [_Node]s or text [String]s.
+class _Node {
+  _Node(this.name, this.attrs, this.children);
+
+  final String name;
+  final Map<String, String> attrs;
+  final List<Object> children;
+
+  String get local => name.substring(name.indexOf('|') + 1);
+
+  String get text => children.whereType<String>().join();
+
+  /// A single string standing for the whole subtree, to sort and compare
+  /// by.
+  String serialize() {
+    final StringBuffer b = StringBuffer('<$name');
+    for (final String k in (attrs.keys.toList()..sort())) {
+      b.write(' $k=${jsonEncode(attrs[k])}');
+    }
+    b.write('>');
+    for (final Object c in children) {
+      b.write(c is _Node ? c.serialize() : jsonEncode(c));
+    }
+    b.write('</>');
+    return b.toString();
+  }
+}
+
+/// Compares [e] and [a], at the location [loc], and adds a line per
+/// difference to [out].
+void _diff(String part, _Node e, _Node a, String loc, List<String> out) {
+  final String here = '$loc/${e.local}';
+  final String at = e.local == 'c' && e.attrs.containsKey('|r')
+      ? e.attrs['|r']!
+      : here;
+  if (e.name != a.name) {
+    out.add('$part: $at: element ${e.name} vs ${a.name}');
+    return;
+  }
+  for (final String k in <String>{...e.attrs.keys, ...a.attrs.keys}) {
+    final String? ev = e.attrs[k];
+    final String? av = a.attrs[k];
+    if (ev != av) {
+      final String attr = k.substring(k.indexOf('|') + 1);
+      out.add(
+        '$part: $at: attribute $attr '
+        '${ev == null ? 'missing' : jsonEncode(ev)} vs '
+        '${av == null ? 'missing' : jsonEncode(av)}',
+      );
+    }
+  }
+  if (e.children.length != a.children.length) {
+    out.add(
+      '$part: $at: ${e.children.length} children vs ${a.children.length}',
+    );
+    return;
+  }
+  // Inside a cell, name the cell and not the cell's child.
+  final String childLoc = e.local == 'c' && e.attrs.containsKey('|r')
+      ? at
+      : here;
+  for (int i = 0; i < e.children.length; i++) {
+    final Object ec = e.children[i];
+    final Object ac = a.children[i];
+    if (ec is _Node && ac is _Node) {
+      _diff(part, ec, ac, childLoc, out);
+    } else if (ec is String && ac is String) {
+      if (ec != ac) {
+        out.add(
+          '$part: $at: text ${jsonEncode(_show(ec))} vs ${jsonEncode(_show(ac))}',
+        );
+      }
+    } else {
+      out.add(
+        '$part: $at: child $i is an element in one and text in the other',
+      );
+    }
+  }
+}
+
+/// Turns elements of one part into [_Node]s, resolving relationship ids and
+/// shared string indexes through [_package] when there is one.
+class _Canon {
+  _Canon(this._package, this._part);
+
+  final _Package? _package;
+  final String? _part;
+
+  late final Map<String, String> _rels =
+      _package?.relationshipsOf(_part!) ?? const <String, String>{};
+
+  _Node node(XmlElement element, bool inheritedExact) {
+    final String name = _key(element.name);
+    if (_part == '[Content_Types].xml' && _isRoot(element)) {
+      return _sorted(element, name);
+    }
+    if (_part != null && _part.endsWith('.rels') && _isRoot(element)) {
+      return _relationships(element, name);
+    }
+    final Map<String, String> attrs = <String, String>{};
+    for (final XmlAttribute attr in element.attributes) {
+      if (_isXmlns(attr)) continue;
+      String value = attr.value;
+      if (attr.name.prefix != null && attr.name.namespaceUri == _relNs) {
+        value = _rels[value] ?? value;
+      }
+      attrs[_attrKey(attr.name)] = value;
+    }
+    final bool preserve = element.attributes.any(
+      (XmlAttribute a) =>
+          _attrKey(a.name) == '$_xmlNs|space' && a.value == 'preserve',
+    );
+    final String local = element.name.local;
+    final bool exact =
+        inheritedExact ||
+        preserve ||
+        local == 't' ||
+        local == 'v' ||
+        local == 'f' ||
+        local.startsWith('formula');
+    final List<Object> children = <Object>[];
+    final StringBuffer run = StringBuffer();
+    void flush() {
+      if (run.isEmpty) return;
+      final String text = exact ? run.toString() : run.toString().trim();
+      if (text.isNotEmpty) children.add(text);
+      run.clear();
+    }
+
+    for (final XmlNode child in element.children) {
+      if (child is XmlText || child is XmlCDATA) {
+        run.write(child.value);
+      } else if (child is XmlElement) {
+        flush();
+        children.add(node(child, exact && inheritedExact));
+      }
+    }
+    flush();
+    final _Node result = _Node(name, attrs, children);
+    final _Package? package = _package;
+    if (package != null &&
+        local == 'c' &&
+        attrs['|t'] == 's' &&
+        children.length == 1 &&
+        children.single is _Node &&
+        (children.single as _Node).local == 'v') {
+      final _Node v = children.single as _Node;
+      final int? index = int.tryParse(v.text.trim());
+      final String? si = index == null ? null : package.sharedString(index);
+      return _Node(name, attrs, <Object>[
+        _Node(v.name, v.attrs, <Object>[si ?? 'unresolved:${v.text}']),
+      ]);
+    }
+    return result;
+  }
+
+  bool _isRoot(XmlElement e) => e.parent is XmlDocument;
+
+  /// An element whose children compare as a set.
+  _Node _sorted(XmlElement element, String name) {
+    final List<_Node> kids = <_Node>[
+      for (final XmlElement c in element.childElements)
+        _Canon(null, null).node(c, false),
+    ]..sort((_Node a, _Node b) => a.serialize().compareTo(b.serialize()));
+    return _Node(name, <String, String>{}, kids);
+  }
+
+  /// A relationships part: the set of `(type, target, mode)`, without ids.
+  _Node _relationships(XmlElement element, String name) {
+    final List<_Node> kids = <_Node>[
+      for (final XmlElement r in element.childElements)
+        _Node(_key(r.name), <String, String>{
+          'Type': r.getAttribute('Type') ?? '',
+          'Target': r.getAttribute('Target') ?? '',
+          'TargetMode': r.getAttribute('TargetMode') ?? 'Internal',
+        }, const <Object>[]),
+    ]..sort((_Node a, _Node b) => a.serialize().compareTo(b.serialize()));
+    return _Node(name, <String, String>{}, kids);
+  }
+}
+
+/// [text] without the namespace URIs of a serialized subtree, to read.
+String _show(String text) => text.replaceAll(RegExp(r'<[^>|"]*\|'), '<');
+
+String _key(XmlName name) => '${name.namespaceUri ?? ''}|${name.local}';
+
+String _attrKey(XmlName name) {
+  if (name.prefix == 'xml') return '$_xmlNs|${name.local}';
+  // An unprefixed attribute has no namespace, whatever the default is.
+  if (name.prefix == null) return '|${name.local}';
+  return _key(name);
+}
+
+bool _isXmlns(XmlAttribute a) =>
+    a.name.prefix == 'xmlns' ||
+    (a.name.prefix == null && a.name.local == 'xmlns');
+
+/// The parts of one package, with the lookups the comparison needs.
+class _Package {
+  _Package(Uint8List bytes, this.side) {
+    for (final ArchiveFile file in ZipDecoder().decodeBytes(bytes).files) {
+      if (file.isFile) parts[file.name] = Uint8List.fromList(file.content);
+    }
+    final Uint8List? types = parts['[Content_Types].xml'];
+    if (types != null) {
+      try {
+        for (final XmlElement e in XmlDocument.parse(
+          utf8.decode(types),
+        ).rootElement.childElements) {
+          final String? type = e.getAttribute('ContentType');
+          if (type == null) continue;
+          if (e.name.local == 'Default') {
+            final String? ext = e.getAttribute('Extension');
+            if (ext != null) _defaults[ext.toLowerCase()] = type;
+          } else if (e.name.local == 'Override') {
+            final String? partName = e.getAttribute('PartName');
+            if (partName != null) {
+              _overrides[partName.replaceFirst('/', '')] = type;
+            }
+          }
+        }
+      } on XmlException {
+        // The part itself is reported as not well-formed.
+      }
+    }
+  }
+
+  final String side;
+  final Map<String, Uint8List> parts = <String, Uint8List>{};
+  final Map<String, String> _defaults = <String, String>{};
+  final Map<String, String> _overrides = <String, String>{};
+  final Map<String, XmlDocument?> _documents = <String, XmlDocument?>{};
+
+  String typeOf(String part) {
+    final String? override = _overrides[part];
+    if (override != null) return override;
+    final int dot = part.lastIndexOf('.');
+    final String ext = dot < 0 ? '' : part.substring(dot + 1).toLowerCase();
+    final String? type = _defaults[ext];
+    if (type != null) return type;
+    // No declared type: an XML extension still reads as XML.
+    return ext == 'xml' || ext == 'rels' ? 'application/xml' : '';
+  }
+
+  bool isXml(String part) {
+    final String type = typeOf(part);
+    return type.endsWith('+xml') || type.endsWith('/xml');
+  }
+
+  bool isSharedStrings(String part) =>
+      typeOf(part).endsWith('spreadsheetml.sharedStrings+xml');
+
+  /// The parsed [part], or null when it is not well-formed.
+  XmlDocument? document(String part) => _documents.putIfAbsent(part, () {
+    try {
+      return XmlDocument.parse(utf8.decode(parts[part]!));
+    } on Object {
+      return null;
+    }
+  });
+
+  /// The relationships of [part]: id to `type|target|mode`.
+  Map<String, String> relationshipsOf(String part) {
+    final int slash = part.lastIndexOf('/');
+    final String dir = slash < 0 ? '' : part.substring(0, slash + 1);
+    final String file = part.substring(slash + 1);
+    final String rels = '${dir}_rels/$file.rels';
+    if (!parts.containsKey(rels)) return const <String, String>{};
+    final XmlDocument? doc = document(rels);
+    if (doc == null) return const <String, String>{};
+    return <String, String>{
+      for (final XmlElement r in doc.rootElement.childElements)
+        r.getAttribute('Id') ?? '':
+            '${r.getAttribute('Type')}|${r.getAttribute('Target')}|'
+            '${r.getAttribute('TargetMode') ?? 'Internal'}',
+    };
+  }
+
+  late final List<String> _strings = _loadStrings();
+
+  List<String> _loadStrings() {
+    final List<String> out = <String>[];
+    for (final String part in parts.keys) {
+      if (!isSharedStrings(part)) continue;
+      final XmlDocument? doc = document(part);
+      if (doc == null) continue;
+      for (final XmlElement si in doc.rootElement.childElements) {
+        out.add(_Canon(null, null).node(si, false).serialize());
+      }
+      break;
+    }
+    return out;
+  }
+
+  /// The canonical form of the shared string [index], or null if none.
+  String? sharedString(int index) =>
+      index >= 0 && index < _strings.length ? _strings[index] : null;
+
+  /// The shared strings that some cell of the package references.
+  Set<String> referencedStrings() {
+    final Set<String> out = <String>{};
+    for (final String part in parts.keys) {
+      if (!isXml(part) || isSharedStrings(part)) continue;
+      final XmlDocument? doc = document(part);
+      if (doc == null) continue;
+      for (final XmlElement c in doc.descendantElements) {
+        if (c.name.local != 'c' || c.getAttribute('t') != 's') continue;
+        for (final XmlElement v in c.childElements) {
+          if (v.name.local != 'v') continue;
+          final int? index = int.tryParse(v.innerText.trim());
+          final String? s = index == null ? null : sharedString(index);
+          if (s != null) out.add(s);
+        }
+      }
+    }
+    return out;
+  }
+}
