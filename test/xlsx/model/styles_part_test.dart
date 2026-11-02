@@ -254,6 +254,63 @@ void main() {
     });
   });
 
+  group('an untyped part', () {
+    const Map<String, String> inputs = <String, String>{
+      'foreign root':
+          '<other xmlns="$_main"><cellXfs><xf numFmtId="14"/>'
+          '</cellXfs></other>',
+      'root in another namespace':
+          '<styleSheet xmlns="urn:other"><cellXfs><xf numFmtId="14"/>'
+          '</cellXfs></styleSheet>',
+      'no root element': '<?xml version="1.0"?><!-- nothing -->',
+      'empty': '',
+    };
+    for (final MapEntry<String, String> e in inputs.entries) {
+      test('${e.key} loads like readStyles', () {
+        final PackageReader p = PackageReader(
+          _packageWithStyles(e.value),
+          _limits,
+        );
+        final StyleTable expected = readStyles(p, 'xl/styles.xml', _limits);
+        final StylesPart part = _read(e.value);
+        for (final String? s in <String?>[null, '0', '1', '3', 'x', '99']) {
+          final CellFormat a = part.table.formatOf(s);
+          final CellFormat x = expected.formatOf(s);
+          expect(a.id, x.id, reason: 's=$s');
+          expect(a.code, x.code, reason: 's=$s');
+          expect(a.invalid, x.invalid, reason: 's=$s');
+        }
+        expect(_encode(part), e.value);
+        expect(part.withNumberFormat(3, 22), 3);
+        expect(part.withNumberFormat(null, 22), 0);
+        expect(_encode(part), e.value);
+      });
+    }
+  });
+
+  group('kept attributes', () {
+    test('survive on numFmt, numFmts and cellXfs', () {
+      final String xml = _sheet(
+        '<numFmts count="1" foo="a" xmlns:q="urn:q" q:bar="b">'
+        '<numFmt numFmtId="164" formatCode="0.0" baz="c" q:qux="d"/>'
+        '</numFmts>'
+        '<cellXfs count="1" foo="e" q:bar="f"><xf numFmtId="164"/></cellXfs>',
+      );
+      final String out = _encode(_read(xml));
+      expect(compareXml('s', xml, out), isEmpty);
+      for (final String a in <String>[
+        'foo="a"',
+        'q:bar="b"',
+        'baz="c"',
+        'q:qux="d"',
+        'foo="e"',
+        'q:bar="f"',
+      ]) {
+        expect(out, contains(a));
+      }
+    });
+  });
+
   group('limits and failures', () {
     test('more xfs than maxCellFormats is a limit error', () {
       final String xml = _sheet('<cellXfs count="3"><xf/><xf/><xf/></cellXfs>');

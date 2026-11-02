@@ -258,6 +258,10 @@ final class XmlPullReader {
   /// `0 <= start <= end <= source length`.
   String sourceText(int start, int end) => _source.substring(start, end);
 
+  /// The length of the source text (after a BOM is skipped), the largest
+  /// `end` [sourceText] accepts.
+  int get sourceLength => _source.length;
+
   /// The namespace declarations written on the current start element, prefix
   /// to URI, with `''` for the default namespace. Empty on any other event.
   Map<String, String> get declaredNamespaces {

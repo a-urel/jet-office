@@ -168,14 +168,17 @@ final class StylesPart implements PartContent {
     this._numFmts,
     this._cellXfs,
     this._xfs,
-  );
+  ) : _untypedText = null;
 
   /// Reads a styles part from [r], which must not have been advanced.
   ///
+  /// A part with no root element, or whose root is not a SpreadsheetML
+  /// `<styleSheet>`, is *untyped*, as `readStyles` treats it: [table] is
+  /// `StyleTable.empty`, [encode] writes the part's text unchanged and
+  /// [withNumberFormat] adds nothing.
+  ///
   /// Throws an [XlsxReadException] of reason `unsupportedFormat` for a Strict
-  /// root, `malformedXml` for a root that is not a SpreadsheetML
-  /// `<styleSheet>` (a part written from the model could not keep it), and
-  /// `limitExceeded` when a group lists more than
+  /// root and `limitExceeded` when a group lists more than
   /// [XlsxReadLimits.maxCellFormats] `<numFmt>` or `<xf>` entries or a
   /// `formatCode` is longer than [XlsxReadLimits.maxTextLength] characters
   /// after decoding. An `XmlParseException` for XML that cannot be read
@@ -189,17 +192,11 @@ final class StylesPart implements PartContent {
       if (r.eventType == XmlEventType.startElement) break;
     }
     if (r.eventType != XmlEventType.startElement) {
-      throw XlsxReadException(
-        XlsxReadFailure.malformedXml,
-        'The styles part has no root element.',
-      );
+      return StylesPart._untyped(r.sourceText(0, r.sourceLength));
     }
     if (r.namespaceUri == strictSpreadsheetNs) throw strictUnsupported();
     if (r.localName != 'styleSheet' || r.namespaceUri != Ns.main) {
-      throw XlsxReadException(
-        XlsxReadFailure.malformedXml,
-        'The root of the styles part is not a styleSheet.',
-      );
+      return StylesPart._untyped(r.sourceText(0, r.sourceLength));
     }
     final XmlRoot root = XmlRoot.capture(r);
     final List<Object> children = <Object>[];
@@ -228,7 +225,17 @@ final class StylesPart implements PartContent {
     return StylesPart._(root, children, numFmts, cellXfs, xfs);
   }
 
-  final XmlRoot _root;
+  StylesPart._untyped(this._untypedText)
+    : _root = null,
+      _children = <Object>[],
+      _numFmts = null,
+      _cellXfs = null,
+      _xfs = <_Xf>[];
+
+  /// The text of a part that is not a SpreadsheetML `<styleSheet>`, written
+  /// back unchanged; `null` for a typed part.
+  final String? _untypedText;
+  final XmlRoot? _root;
   final List<Object> _children;
   final _Group? _numFmts;
   _Group? _cellXfs;
@@ -236,8 +243,9 @@ final class StylesPart implements PartContent {
   StyleTable? _table;
 
   /// The cell formats by style index, as `readStyles` gives them for the same
-  /// part. It reflects every `<xf>` [withNumberFormat] appended.
-  StyleTable get table => _table ??= _buildTable();
+  /// part ([StyleTable.empty] for an untyped one). It reflects every `<xf>` [withNumberFormat] appended.
+  StyleTable get table =>
+      _table ??= _untypedText != null ? StyleTable.empty : _buildTable();
 
   StyleTable _buildTable() {
     final Map<int, String> codes = <int, String>{};
@@ -266,14 +274,15 @@ final class StylesPart implements PartContent {
   /// A [style] that is `null` or not an index of `<cellXfs>` stands for the
   /// first `<xf>`, as a broken style counts as General. An `<xf>` that
   /// already is the result is reused; otherwise one is appended, so no
-  /// existing index moves. A part without any `<xf>` (or without
+  /// existing index moves; an untyped part returns `style ?? 0` unchanged. A part without any `<xf>` (or without
   /// `<cellXfs>`) gets a plain one first to copy from. Throws a
   /// [RangeError] for a negative [numFmtId].
   int withNumberFormat(int? style, int numFmtId) {
     RangeError.checkNotNegative(numFmtId, 'numFmtId');
+    if (_untypedText != null) return style ?? 0;
     final _Group group = _cellXfs ??= _createCellXfs();
     final Map<String, String> above = _merge(
-      _root.namespaces,
+      _root!.namespaces,
       group.namespaces,
     );
     final String baseText = style != null && style >= 0 && style < _xfs.length
@@ -296,7 +305,7 @@ final class StylesPart implements PartContent {
   }
 
   _Group _createCellXfs() {
-    final String qn = _root.qualifiedName;
+    final String qn = _root!.qualifiedName;
     final int colon = qn.indexOf(':');
     final String prefix = colon < 0 ? '' : qn.substring(0, colon + 1);
     final _Group group = _Group(
@@ -331,16 +340,19 @@ final class StylesPart implements PartContent {
   @override
   List<Uint8List> encode() {
     final Utf8Buffer buffer = Utf8Buffer();
+    final String? untyped = _untypedText;
+    if (untyped != null) return (buffer..write(untyped)).takeChunks();
     final XmlWriter w = XmlWriter(buffer)..declaration();
-    w.start(_root.qualifiedName);
-    _writeDeclarations(w, _root.namespaces);
-    writeKeptAttributes(w, _root.attributes, declaredAbove: _root.namespaces);
+    final XmlRoot root = _root!;
+    w.start(root.qualifiedName);
+    _writeDeclarations(w, root.namespaces);
+    writeKeptAttributes(w, root.attributes, declaredAbove: root.namespaces);
     for (final Object c in _children) {
       switch (c) {
         case _Group():
-          c.writeTo(w, _root.namespaces);
+          c.writeTo(w, root.namespaces);
         case OpaqueXml():
-          c.writeTo(w, declaredAbove: _root.namespaces);
+          c.writeTo(w, declaredAbove: root.namespaces);
       }
     }
     w.end();
