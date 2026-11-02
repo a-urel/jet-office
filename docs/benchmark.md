@@ -10,7 +10,10 @@ reading the file the workload makes ("Read figures" below). A third,
 `benchmark/xlsx_read_worst_case_test.dart`, reads the largest sheet the
 reader's default limits let through ("Worst case" below). A fourth,
 `benchmark/xlsx_format_benchmark_test.dart`, times `XlsxNumberFormatter` on
-every cell of the read workload ("Format figures" below).
+every cell of the read workload ("Format figures" below). A fifth,
+`benchmark/xlsx_model_benchmark_test.dart`, opens that file with
+`XlsxWorkbook`, loads the sheet, sets one cell and saves ("Model figures"
+below).
 
 The figures below are records, not thresholds (spec section 5): nothing fails
 when a later run is slower, and they are not a promise.
@@ -33,6 +36,8 @@ dart test benchmark/xlsx_read_worst_case_test.dart
 dart test -p chrome benchmark/xlsx_read_worst_case_test.dart
 dart test benchmark/xlsx_format_benchmark_test.dart
 dart test -p chrome benchmark/xlsx_format_benchmark_test.dart
+dart test benchmark/xlsx_model_benchmark_test.dart
+dart test -p chrome benchmark/xlsx_model_benchmark_test.dart
 ```
 
 The quality gate does not run it. `dart_test.yaml` starts Chrome with
@@ -516,3 +521,132 @@ chrome | DateTime | yyyy-mm-dd hh:mm:ss | median 901.9 ms | 9019 ns/value | rati
   and 2.35 times the serial date. The benchmark does not say why. It is
   the path a read takes: the reader gives a date-formatted cell as a
   `DateTime`, so the workload's two date columns are formatted this way.
+
+## Model figures
+
+The model benchmark (`benchmark/xlsx_model_benchmark_test.dart`) opens the
+read workload's file (100,000 data rows and a header, 12 columns, 1,166,679
+cells, 43,580,479 bytes of sheet XML, N below) with `XlsxWorkbook.open`, loads
+its sheet, sets one cell and saves.
+
+### Method
+
+- Untimed: the workload file is made as for the read benchmark
+  (`benchmark/src/workload_file.dart`), so each platform opens its own bytes.
+- Phases, each the median of three runs timed alone, the set-up of a run not
+  timed:
+  - `open`: `XlsxWorkbook.open(bytes)`. It reads the skeleton and inflates
+    every entry once to check its size and CRC-32, then drops the bytes.
+  - `load the sheet`: `cellAt(0, 0)` on a freshly opened workbook, which
+    inflates and parses the whole sheet part into the store.
+  - `set one cell`: `setCell(50000, 3, 'edited')` on a loaded sheet.
+  - `save (sheet loaded and edited)`: `save()` after that edit; the sheet is
+    serialized from the store, and every unloaded part is inflated again and
+    written.
+  - `save (sheet never loaded)`: `save()` right after `open`; the sheet part
+    is inflated again and copied.
+  - `open, set one cell, save`: all of it in one run, the number a caller
+    waits for.
+  - The saved file is read back with `XlsxReader`; the edited cell must hold
+    `edited`.
+- Memory of the loaded store, in four runs (a warm-up and three), each taking
+  a reading before `open`, after `open` and after the load, with the loaded
+  workbook still referenced. VM: `ProcessInfo.currentRss`; Chrome:
+  `performance.memory.usedJSHeapSize`. The store's memory is the reading after
+  the load minus the reading before `open`, and the largest of the runs is
+  given. It is an upper bound: it includes the sheet part's XML and decoded
+  text, which are garbage once the load ends, and whatever the collector has
+  not yet freed. The VM's RSS never falls, so later runs reuse heap the
+  warm-up grew and read lower (55 to 66 MB against the warm-up's 139 MB); a
+  later run is the better estimate of what the store keeps. Chrome's heap
+  moves with the collector, so its runs range from a negative reading to 129
+  MB. No run measures the store alone, and the figures are not exact. On the
+  VM the process's peak RSS (`maxRss`) above the warm-up's baseline is also
+  given. memory/N is that figure over N.
+- A sheet with many formulas costs more per cell: each formula cell keeps one
+  side entry for its formula. This is a known case, not measured here.
+
+### Figures
+
+- Date: 2026-11-02.
+- Machine: Mac15,7, Apple M3 Pro, 36 GiB RAM (38,654,705,664 bytes).
+- OS: macOS 27.2.
+- Dart SDK 3.13.7 (stable); the VM runs the JIT, Chrome runs dart2js output.
+- Chrome 156.0.8078.79.
+
+| Phase (median of 3) | VM (ms) | Chrome (ms) |
+|---|---|---|
+| `open` (verifies every entry) | 124.5 | 491.9 |
+| Load the sheet | 1791.4 | 2424.7 |
+| Set one cell | 0.1 | 0.1 |
+| Save, sheet loaded and edited | 1328.7 | 2628.2 |
+| Save, sheet never loaded | 527.5 | 2280.4 |
+| Open, set one cell, save | 3270.9 | 5531.0 |
+
+| Memory of the loaded store | VM (RSS) | Chrome (heap) |
+|---|---|---|
+| Largest of the four runs (bytes) | 139,165,696 (warm-up) | 129,064,479 (run 1) |
+| Per cell (bytes) | 119.3 | 110.6 |
+| memory/N | 3.19 | 2.96 |
+| Later VM runs (bytes) | 64,323,584, 55,181,312, 66,420,736 | |
+| Later VM runs, memory/N | 1.48, 1.27, 1.52 | |
+| Chrome runs 2 and 3 (bytes) | | 54,813,452, -20,002,243 |
+
+The saved file is 6,995,589 bytes on the VM and 7,018,358 in Chrome; the input
+is 6,958,168 and 6,981,925. For comparison, `XlsxReader` reading the same sheet
+costs 1.47 N above its baseline on the VM and 2.46 N in Chrome ("Read
+figures"), and it keeps no cells.
+
+Every line:
+
+```text
+vm | input | 6958168 bytes | xl/worksheets/sheet1.xml 43580479 bytes XML | 1166679 cells
+vm | model | warm-up | RSS baseline 197574656 | after open 210747392 | after load 336740352 | above baseline 139165696 bytes | peak RSS 336740352 (was 197574656)
+vm | model | run 1 | RSS baseline 336740352 | after open 362348544 | after load 401063936 | above baseline 64323584 bytes | peak RSS 408846336 (was 336740352)
+vm | model | run 2 | RSS baseline 401063936 | after open 450953216 | after load 456245248 | above baseline 55181312 bytes | peak RSS 466370560 (was 408846336)
+vm | model | run 3 | RSS baseline 456245248 | after open 481771520 | after load 522665984 | above baseline 66420736 bytes | peak RSS 526270464 (was 466370560)
+vm | store | 139165696 bytes above baseline (largest of 4) | 119.3 bytes/cell | memory/N 3.19 | N 43580479 bytes
+vm | peak | peak RSS above baseline 139165696 bytes | memory/N 3.19
+vm | phase | open (verifies every entry) | 124.5 ms
+vm | phase | load the sheet (cellAt) | 1791.4 ms
+vm | phase | set one cell (sheet loaded) | 0.1 ms
+vm | phase | save (sheet loaded and edited) | 1328.7 ms | 6995589 bytes
+vm | phase | save (sheet never loaded) | 527.5 ms
+vm | phase | open, set one cell, save | 3270.9 ms
+chrome | input | 6981925 bytes | xl/worksheets/sheet1.xml 43580479 bytes XML | 1166679 cells
+chrome | model | warm-up | peak JS heap baseline 136496960 | after open 225549147 | after load 204826353 | above baseline 68329393 bytes
+chrome | model | run 1 | peak JS heap baseline 204830729 | after open 250386786 | after load 333895208 | above baseline 129064479 bytes
+chrome | model | run 2 | peak JS heap baseline 333905452 | after open 305282138 | after load 388718904 | above baseline 54813452 bytes
+chrome | model | run 3 | peak JS heap baseline 388722688 | after open 496451146 | after load 368720445 | above baseline -20002243 bytes
+chrome | store | 129064479 bytes above baseline (largest of 4) | 110.6 bytes/cell | memory/N 2.96 | N 43580479 bytes
+chrome | phase | open (verifies every entry) | 491.9 ms
+chrome | phase | load the sheet (cellAt) | 2424.7 ms
+chrome | phase | set one cell (sheet loaded) | 0.1 ms
+chrome | phase | save (sheet loaded and edited) | 2628.2 ms | 7018358 bytes
+chrome | phase | save (sheet never loaded) | 2280.4 ms
+chrome | phase | open, set one cell, save | 5531.0 ms
+```
+
+### Reading the figures
+
+- **Setting a cell costs nothing; loading and saving cost the sheet.** The
+  edit is 0.1 ms. The whole open, edit and save takes 3.3 s on the VM and 5.5 s
+  in Chrome, against 2.7 s and 3.3 s for one read of the sheet and 1.5 s and
+  3.1 s to write it ("Read figures"): the model reads the sheet, then writes
+  it.
+- **`open` is not free.** It takes 0.12 s on the VM and 0.49 s in Chrome
+  because it inflates every entry to verify it, which `XlsxReader`'s open (0.4
+  ms) does not. The cost grows with the file, not with what the caller uses.
+- **A part that was not loaded is inflated twice.** A workbook that is opened
+  and saved without loading the sheet takes 0.53 s on the VM and 2.3 s in
+  Chrome: the verification at `open` and the copy at `save` each inflate the
+  sheet part, with the pure-Dart inflate in Chrome (0.69 s a time, "Read
+  figures"). Saving does not use a compressed entry as it is.
+- **The loaded store is not smaller than the sheet's XML.** Spec section 4.5
+  set the target that a loaded sheet's store takes less memory than its XML
+  did, and section 4.9 asked for a cell limit if it does not. The largest
+  reading is 3.2 N on the VM and 3.0 N in Chrome, and the later VM runs, which
+  are the better estimate, read 1.3 to 1.5 N: over 1 N in all of them. The
+  readings include garbage (see "Method"), so the store itself may be well
+  below them, but this benchmark cannot show that it is below N. Taking the
+  question to the owner; no cell limit is added in W1.

@@ -80,7 +80,7 @@ void main() {
     expect(File('${output.path}/m1_corrupt.xlsx').existsSync(), isTrue);
   });
 
-  test('a difference is printed as <file>: <line>', () {
+  test('an unreadable file is printed as <file>: <error>', () {
     // A workbook the model does not reproduce is hard to build from the
     // writer, so an unreadable file stands in: the tool names it.
     File('${input.path}/broken.xlsx').writeAsBytesSync(<int>[1, 2, 3]);

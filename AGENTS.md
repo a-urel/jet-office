@@ -65,8 +65,12 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
   `<name>.xlsx` and its expected values as `<name>.expected.json`.
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, to prove every
-  check still fails on a bad file. The `validate` job's negative-control step writes it
-  to `build/corrupt` and requires every check to reject it.
+  check still fails on a bad file. The `validate` job's negative-control step
+  writes it to `build/corrupt` and requires every check to reject it, except
+  the model round trip (`tool/round_trip_model.dart`), which passes on it:
+  the model keeps the file's stray content faithfully, so the Open XML SDK
+  must reject the model's output instead, and the round trip must reject a
+  truncated copy.
 - `tool/write_fixtures.dart` imports test helpers that use `package:archive`.
   That is allowed: the archive rule covers `lib/` only.
 - `tool/ooxml_validate` validates every `.xlsx` with the Open XML SDK against
@@ -113,7 +117,9 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
   `dart run tool/warning_messages.dart > docs/warning-messages.md`.
   `test/tool/warning_messages_test.dart` fails when the file is stale.
 - Neither is Excel. The owner opens each writer milestone's fixtures in Excel
-  and records the result in `docs/excel-checks.md`. Reader milestones (phase
+  and records the result in `docs/excel-checks.md`; so does each model
+  milestone (W1 to W6, decision 0009): its round-tripped and generated
+  workbooks, and the owner's own files opened, edited and saved. Reader milestones (phase
   2, R1 to R4) have no such check: Excel produces their input, and the owner
   supplies Excel and Google Sheets files instead (`0007`). Those files go in
   `test/fixtures/owner/`, listed in its `manifest.json`; the README there
@@ -126,14 +132,16 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
 `benchmark/` writes 100,000 rows of 12 mixed columns with `XlsxWriter` and
 `XlsxStreamWriter` (`xlsx_benchmark_test.dart`), and reads that file back
 with `XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each
-phase and memory per byte of sheet XML). `xlsx_read_worst_case_test.dart`
+phase and memory per byte of sheet XML). `xlsx_model_benchmark_test.dart` opens that file with `XlsxWorkbook`,
+loads the sheet, sets a cell and saves, timing each phase and recording the
+loaded sheet's memory. `xlsx_read_worst_case_test.dart`
 reads the largest single sheet the default limits accept (about 250 MiB of
 XML; about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file
 size and peak memory per run. `xlsx_format_benchmark_test.dart` times
 `XlsxNumberFormatter` on every cell of the read file and on 100,000
 numbers, serial dates and `DateTime`s. The quality gate does not run them;
 run them by hand on the VM and in Chrome (`dart test benchmark` runs all
-four). They record figures and fail on none (`docs/benchmark.md`):
+five). They record figures and fail on none (`docs/benchmark.md`):
 
 ```bash
 dart test benchmark
@@ -174,6 +182,9 @@ The rules are in `docs/number-format.md`.
 - **`package:archive` is reachable only from
   `lib/src/zip/archive_adapter.dart`.** Enforced by
   `test/architecture/archive_isolation_test.dart`.
+- **The OPC layer does not know XLSX.** Nothing under `lib/src/opc` imports
+  anything under `lib/src/xlsx`, so DOCX can share it (decision 0009).
+  Enforced by `test/architecture/opc_isolation_test.dart`.
 - **One cell encoder.** Only `lib/src/xlsx/cell_encoder.dart` writes `<c ` or
   `<v>` (decision 0002). Enforced by `test/architecture/cell_encoder_test.dart`.
 - **One cell decoder.** Only `lib/src/xlsx/read/cell_decoder.dart`

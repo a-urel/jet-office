@@ -858,6 +858,79 @@ Left to do, in order:
 3. Optional: `erp_export.xlsx`.
 4. Add the files to `manifest.json`, run the quality gate, commit.
 
+## W1
+
+W1 is the first milestone of the workbook model (`XlsxWorkbook`, decision
+[`0009`](decisions/0009-phase-3-workbook-model.md)). The model writes files, so
+the owner opens its output in Excel as for a writer milestone. Three things to
+open.
+
+### The round-tripped fixtures
+
+Each writer fixture, opened and saved by the model with no change:
+
+```bash
+dart run tool/write_fixtures.dart build/fixtures
+dart run tool/round_trip_model.dart build/fixtures build/model
+```
+
+Open every `build/model/<name>.xlsx`. For each, check that Excel opens it
+without the repair prompt, and that it shows what the checklist above says
+for the fixture of that name (same values, formats, sheets and tab order).
+Nothing else differs from the writer's file.
+
+### A generated workbook
+
+```bash
+dart run tool/write_model_sample.dart build/model_generated
+```
+
+Open `build/model_generated/w1_generated.xlsx`. No repair prompt. Two sheets,
+`Values` and `Second`.
+
+- Row 1 of `Values`: `jet_office`, `42`, `3,14159`, `1234,5`, `DOĞRU`
+  (`TRUE`), `24.10.2026`, `24.10.2026 13:45` and `45,14159` (H1, the formula
+  `=SUM(B1:C1)`; the formula bar shows it).
+- Row 2: `jet_office`, then `replaced` (text, set over `42`), `8` (set three
+  times, the last one wins), D2 empty (cleared) and the rest as in row 1. H2
+  is the same formula: it shows the stored `45,14159`, or `8` if Excel
+  recalculates on open; either is right.
+- `Second` A1 is `second sheet`.
+
+### Two of the owner's own files
+
+Take two Excel files the owner made (a list with a table or filters, and a
+workbook with formulas, say), different from each other. For each: open it in
+Excel, check it is as it was, then edit one cell with the model. Save this
+as `tool/edit_one_cell.dart` (do not commit it) and run
+`dart run tool/edit_one_cell.dart my.xlsx build/edited.xlsx`:
+
+```dart
+import 'dart:io';
+
+import 'package:jet_office/jet_office.dart';
+
+void main(List<String> args) {
+  final XlsxWorkbook book = XlsxWorkbook.open(File(args[0]).readAsBytesSync());
+  book.sheets.first.setCell(0, 0, 'edited by jet_office');
+  File(args[1]).writeAsBytesSync(book.save().bytes);
+}
+```
+
+Open `build/edited.xlsx` in Excel. Check:
+
+- no repair prompt;
+- the edited cell shows the new text, and nothing else changed (values,
+  formats, widths, tables, filters, validation, conditional formatting,
+  hyperlinks, notes, images);
+- a workbook with formulas recalculates on open (Excel may ask to save on
+  close; that is expected).
+
+The same two files edited in Excel itself (one cell, saved) give the
+comparison when something looks different.
+
+Result: pending.
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
@@ -1128,3 +1201,4 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | all 29 fixtures (M5 final run) | ok | Every fixture of `allFixtures()` opened once more, in order: no repair prompt on any (see "Final run"). |
 | 2026-10-28 | not checked (no Excel for Windows) | `m2_styles` row 67, `m3_properties` Status | not checked | The owner has no Excel for Windows, so reading order RTL and Status `Final` stay unchecked; "Reading order and Status not checked in Excel" stays open. |
 | 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | decision 0006 (ZIP bytes by platform) | accepted | The owner accepted that the ZIP bytes differ between the VM and the web while every part's contents are identical; decision 0006 is accepted. `m5_list_plain` as written on the VM opens without a repair prompt; no Chrome-written file was opened. |
+| not yet | not yet checked | W1: `build/model/*.xlsx`, `w1_generated`, two owner files | pending | See "W1". |
