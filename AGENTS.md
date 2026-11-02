@@ -144,8 +144,9 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
 `XlsxStreamWriter` (`xlsx_benchmark_test.dart`), and reads that file back with
 `XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each phase and
 memory per byte of sheet XML). `xlsx_model_benchmark_test.dart` opens that file
-with `XlsxWorkbook`, loads the sheet, sets a cell and saves, timing each phase
-and recording what the loaded store retains. `xlsx_read_worst_case_test.dart`
+with `XlsxWorkbook`, loads the sheet, reads every row, sets a cell and saves,
+timing each phase and recording what the loaded store retains, for that sheet
+and for a formula-dense one. `xlsx_read_worst_case_test.dart`
 reads the largest single sheet the default limits accept (about 250 MiB of XML;
 about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file size and
 peak memory per run. `xlsx_format_benchmark_test.dart` times

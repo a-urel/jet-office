@@ -58,12 +58,20 @@ written back, with the namespace declarations it needs.
   the model did not change are kept. Excel recomputes on open; `XlsxReader`
   and the model's own `cellAt` read the stale values.
 - **Memory.** A loaded sheet's store takes less memory than its sheet XML
-  in the 100,000 by 12 benchmark: an estimate of 35.5 MB of store (30 bytes
-  a cell) against 43.6 MB of XML, 0.81 times, the same on the VM and in
+  in the 100,000 by 12 benchmark: an estimate of 33.9 MB of store (29 bytes
+  a cell) against 43.6 MB of XML, 0.78 times, the same on the VM and in
   Chrome (see [`benchmark.md`](benchmark.md), "Model figures"; process memory
-  is higher but includes the XML and garbage). A sheet with many formulas
-  costs more per cell: each formula cell keeps one side entry for its
-  formula (not measured).
+  is higher but includes the XML and garbage). A formula-dense sheet (50,000
+  by 12 formulas, half shared-formula followers, half normal formulas each
+  with its own text) takes 23.7 MB against 32.4 MB of XML, 0.73 times:
+  formulas are kept as interned templates and pooled text, with a 4-byte
+  reference per cell. Reading every row leaves nothing per cell behind; only
+  a cell with a reading problem is remembered, to report it once.
+- **`addSheet` is not yet a change.** It does not go through the change log
+  until W5, so a workbook opened, given a sheet with `addSheet` and saved
+  without a `setCell` keeps its `calcChain` and gets no `fullCalcOnLoad`.
+- **Nothing is compacted.** Shared strings and cell formats that no cell
+  uses any more stay in their parts; W1 appends and never removes.
 
 ## Rules the model enforces
 
@@ -107,7 +115,7 @@ Nothing is dropped silently.
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | A value the encoder repairs (forbidden XML characters, text over 32,767 characters) | repaired when set, with the writer's warning; a `NaN` throws then | saving cannot fail on data | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("text escaping"), `test/xlsx/cell_encoder_model_test.dart` |
-| Setting a cell | replaces its content and the attributes that described the old value (`cm`, `vm`, `ph`, children); a valid style stays | the old metadata described the old value | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("replaces the value-tied attributes") |
+| Setting a cell | replaces its content and the attributes that described the old value (`cm`, `vm`, `ph`, children); a valid style stays | the old metadata described the old value | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("replaces the value-tied attributes"), `test/xlsx/model/xlsx_workbook_bookkeeping_test.dart` ("setting one cell changes only that cell") |
 | `null` | a styled cell stays as an empty styled cell; an unstyled one is removed | clearing keeps the format | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("clearing keeps the style") |
 | A date in a General cell | takes the writer's date format, appended to `numFmts` and `cellXfs`; a date format stays; another format stays with the writer's date warning; a broken style counts as General | spec 4.12: dates behave as the writer does | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("a date on a General cell", "a broken style"), `test/xlsx/model/styles_part_test.dart` ("withNumberFormat") |
 | A cell inside an array or data-table formula, its master included | `StateError`, permanent | Excel refuses it too | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups"), `test/xlsx/model/primitives_test.dart` |
@@ -126,10 +134,11 @@ Nothing is dropped silently.
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | `cellAt` and `rows` | show what `XlsxReader` shows for the saved file | one decoder | `test/xlsx/model/xlsx_workbook_reading_test.dart` |
-| A value that cannot be read exactly | a warning, once per cell however often it is read, again after it is set | as the reader | `test/xlsx/model/xlsx_workbook_reading_test.dart` |
+| A value that cannot be read exactly | a warning, once per cell however often it is read, again after it is set; only such a cell is remembered, so reading clean cells costs nothing per cell | as the reader | `test/xlsx/model/xlsx_workbook_reading_test.dart` ("reading clean cells remembers nothing per cell") |
+| A formula cell's group from `cellAt` | found from the sheet's group masters; on malformed groups (overlaps, a follower outside its master's range) it may differ from the group `rows` gives, which follows the reader's pass | a lookup must not scan the sheet | `test/xlsx/model/xlsx_workbook_reading_test.dart` |
 | A sheet the workbook lists without a part | kept, reads as empty, `sheetPartMissing` | the model must open what the reader opens | `test/xlsx/model/xlsx_workbook_open_save_test.dart` |
 | A sheet broken on first access, or a broken styles part | `XlsxReadException` from the first call that loads it, not from `open`; a broken sheet nobody loads is saved from its bytes | spec 4.12: laziness moves the failure to first use | `test/xlsx/model/xlsx_workbook_open_save_test.dart` ("a broken sheet throws on first access") |
-| A styles part whose root is not `<styleSheet>` | loads as untyped: General formats, written back unchanged; a date set there keeps its style | the model opens what the reader opens | `test/xlsx/model/styles_part_test.dart` ("an untyped part") |
+| A styles part whose root is not `<styleSheet>` | loads as untyped: General formats, written back unchanged; a date set there keeps its style and warns `dateInNonDateFormat` | the model opens what the reader opens; data problems warn | `test/xlsx/model/styles_part_test.dart` ("an untyped part"), `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("a date where no date style can be added warns") |
 
 ### Untrusted input
 
@@ -138,7 +147,7 @@ Nothing is dropped silently.
 | Every limit of `XlsxReadLimits` but `maxMerges` | applied as the reader applies it, by `open` or on first use of a sheet | the file is untrusted input (decision 0007) | `test/xlsx/read/hostile_files_test.dart` |
 | A damaged, truncated or CRC-mismatching entry, even one no sheet reads | `XlsxReadException` (`corruptZip`) from `open` | the model verifies every entry up front | `test/xlsx/model/xlsx_workbook_open_save_test.dart` ("open checks every entry"), `test/xlsx/read/hostile_files_test.dart` |
 | Not a ZIP, encrypted, Strict, `.xlsb`, no workbook, a DOCTYPE | `XlsxReadException` as in the reader; a relationship or override pointing at `[Content_Types].xml` or a `.rels` part is never the workbook | metadata is never a document part | `test/xlsx/read/hostile_files_test.dart`, `test/xlsx/read/package_reader_test.dart` ("metadata parts are not workbooks") |
-| Mutated files | `open` throws only `XlsxReadException`, and whatever opens reads, sets a cell and saves without throwing | spec 4.9 | `test/xlsx/read/fuzz_test.dart` ("mutated files raise only XlsxReadException") |
+| Mutated files | `open` throws only `XlsxReadException`, and whatever opens reads, sets a cell and saves without throwing; the saved bytes open again and every sheet reads unless the input's same sheet could not | spec 4.9: the model makes nothing worse | `test/xlsx/read/fuzz_test.dart` ("mutated files raise only XlsxReadException") |
 | `m1_corrupt.xlsx` (schema-invalid but readable) | the model keeps the stray content faithfully; the Open XML SDK rejects the model's output | preserving is the model's job, validating the validator's | `test/tool/round_trip_model_test.dart` ("the --corrupt workbook keeps its fault"), CI's `validate` job |
 
 ## Checking the round trip
@@ -150,6 +159,14 @@ compares the saved package with the input by `comparePackages`
 fixtures and on LibreOffice's re-save of them, then validates the output with
 the Open XML SDK. Every normalization the comparer makes is pinned in
 `test/tool/part_compare_test.dart`.
+
+`dart run tool/edit_model.dart <inDir> <outDir>` checks what the model saves
+after a change: in every `.xlsx` of a directory it sets a `DateTime`, an
+`XlsxDate`, a formula and a string in the row after the first sheet's last
+row, adds a sheet, saves to `<outDir>` and reads the edits back; it also
+writes the generated workbook of `tool/write_model_sample.dart` there. CI runs
+it on the writer fixtures and validates the output with the Open XML SDK
+(spec section 9).
 
 ## Port map
 
