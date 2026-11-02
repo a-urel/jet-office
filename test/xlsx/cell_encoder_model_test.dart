@@ -13,6 +13,7 @@ import 'package:jet_office/src/xlsx/warnings.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
 import 'package:test/test.dart';
+import 'package:xml/xml.dart' show XmlDocument, XmlElement;
 
 const String _main =
     'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
@@ -475,6 +476,38 @@ void main() {
         '<c r="A1"><v>1</v>'
         '<extLst xmlns:x14="$x14"><ext uri="{X}"><x14:a/></ext></extLst></c>',
       );
+    });
+
+    test('writeRaw declares the prefix of a kept attribute that is not '
+        'declared above', () {
+      const String x14 =
+          'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
+      final String xml = write(
+        const RawCell(
+          kind: RawCellKind.number,
+          value: '1',
+          attributes: <KeptAttribute>[
+            (qualifiedName: 'x14:z', namespaceUri: x14, value: '1'),
+          ],
+          formula: RawFormula(
+            type: FormulaType.normal,
+            text: 'A1',
+            attributes: <KeptAttribute>[
+              (qualifiedName: 'x14:y', namespaceUri: x14, value: '2'),
+            ],
+          ),
+        ),
+        declaredAbove: const <String, String>{'': _main},
+      );
+      expect(
+        xml,
+        '<c r="A1" xmlns:x14="$x14" x14:z="1">'
+        '<f x14:y="2">A1</f><v>1</v></c>',
+      );
+      final XmlElement c = XmlDocument.parse(
+        '<sheetData xmlns="$_main">$xml</sheetData>',
+      ).rootElement.childElements.single;
+      expect(c.getAttribute('z', namespaceUri: x14), '1');
     });
 
     test('writeRaw writes a kept attribute of an empty unstyled cell', () {

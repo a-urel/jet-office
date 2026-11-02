@@ -50,11 +50,17 @@ const XlsxFont _hyperlinkFont = XlsxFont(
   underline: XlsxUnderline.single,
 );
 
-/// Whether Excel, which stores every number as a double, may round [v].
+/// `intPrecisionLost` when Excel, which stores every number as a double,
+/// may round [v]; otherwise `null`.
 ///
 /// Not `v.abs()`: the absolute value of the 64-bit minimum overflows to
 /// itself, a negative number.
-bool _losesPrecision(int v) => v > _maxExactInt || v < -_maxExactInt;
+XlsxWarningCode? _intWarning(int v) => v > _maxExactInt || v < -_maxExactInt
+    ? XlsxWarningCode.intPrecisionLost
+    : null;
+
+/// The `<v>` text of [v].
+String _boolText(bool v) => v ? '1' : '0';
 
 /// Encodes cell values as `<c>` elements.
 ///
@@ -219,16 +225,10 @@ final class CellEncoder {
         // `is int`.
         throw _nonFinite(v, sheet, ref);
       case bool():
-        _write(out, ref, _idOf(style), 'b', '<v>${v ? 1 : 0}</v>');
+        _write(out, ref, _idOf(style), 'b', '<v>${_boolText(v)}</v>');
       case int():
         final int id = _idOf(style);
-        if (_losesPrecision(v)) {
-          _warnings.add(
-            XlsxWarningCode.intPrecisionLost,
-            sheet: sheet,
-            cell: ref,
-          );
-        }
+        _report(_intWarning(v), sheet, ref);
         _write(out, ref, id, null, '<v>${_intText(v)}</v>');
       case double():
         _write(out, ref, _idOf(style), null, '<v>${formatXmlDouble(v)}</v>');
@@ -332,16 +332,10 @@ final class CellEncoder {
         return RawCell(
           kind: RawCellKind.boolean,
           style: style,
-          value: value ? '1' : '0',
+          value: _boolText(value),
         );
       case int():
-        if (_losesPrecision(value)) {
-          _warnings.add(
-            XlsxWarningCode.intPrecisionLost,
-            sheet: sheet,
-            cell: ref,
-          );
-        }
+        _report(_intWarning(value), sheet, ref);
         return RawCell(
           kind: RawCellKind.number,
           style: style,
@@ -404,8 +398,7 @@ final class CellEncoder {
         );
       case XlsxFormula():
         final _CheckedFormula checked = _checkFormula(value, sheet, ref);
-        final XlsxWarningCode? warning = checked.warning;
-        if (warning != null) _warnings.add(warning, sheet: sheet, cell: ref);
+        _report(checked.warning, sheet, ref);
         return RawCell(
           kind: checked.kind,
           style: style,
@@ -471,12 +464,15 @@ final class CellEncoder {
   /// `<f>` with its type, `ref`, `si` and kept attributes, the `<v>`, the
   /// inline `<is>` and the other kept children. [declaredAbove] holds the
   /// namespace bindings in scope at the cell (the worksheet root's); a kept
-  /// element that uses one it lacks declares it.
+  /// attribute or element whose prefix it lacks declares it (see
+  /// `writeKeptAttributes`).
   ///
   /// The formula text is escaped as [encode] escapes it (ST_Xstring, then
   /// XML); the `<v>` text and attribute values are escaped as XML only. A
-  /// character XML forbids, which only a character reference in the source
-  /// can have put there, is dropped. An empty cell with a style or kept
+  /// character XML forbids in them, which only a character reference in the
+  /// source (`&#1;`) can have put there, is dropped without a warning:
+  /// writing has no sheet to report it against, and dropping it is what
+  /// keeps the saved part well-formed. An empty cell with a style or kept
   /// attributes writes `<c r="C5" s="7"/>`; an empty cell with neither
   /// writes nothing.
   void writeRaw(
@@ -488,60 +484,73 @@ final class CellEncoder {
   }) {
     final int? style = cell.style;
     if (cell.isEmpty && style == null && cell.attributes.isEmpty) return;
-    final StringBuffer b = StringBuffer('<c r="${cellRef(row, column)}"');
-    if (style != null) b.write(' s="$style"');
+    out
+      ..start('c')
+      ..attribute('r', cellRef(row, column));
+    if (style != null) out.attribute('s', '$style');
     final String? type = encodeRawKind(cell);
-    if (type != null) b.write(' t="${_attribute(type)}"');
-    _writeKept(b, cell.attributes);
+    if (type != null) out.attribute('t', _clean(type));
+    writeKeptAttributes(out, cell.attributes, declaredAbove: declaredAbove);
     if (cell.isEmpty) {
-      b.write('/>');
-      out.raw(b.toString());
+      out.end();
       return;
     }
-    b.write('>');
+    // The bindings inside the <c>, with those its kept attributes declared.
+    final Map<String, String> inside = _withKept(
+      declaredAbove,
+      cell.attributes,
+    );
     final RawFormula? formula = cell.formula;
     if (formula != null) {
-      b.write('<f');
+      out.start('f');
       final String? formulaType = encodeFormulaType(formula.type);
-      if (formulaType != null) b.write(' t="$formulaType"');
+      if (formulaType != null) out.attribute('t', formulaType);
       final String? range = formula.ref;
-      if (range != null) b.write(' ref="${_attribute(range)}"');
+      if (range != null) out.attribute('ref', _clean(range));
       final String? si = formula.si;
-      if (si != null) b.write(' si="${_attribute(si)}"');
-      _writeKept(b, formula.attributes);
+      if (si != null) out.attribute('si', _clean(si));
+      writeKeptAttributes(out, formula.attributes, declaredAbove: inside);
       final String? text = formula.text;
-      if (text == null || text.isEmpty) {
-        b.write('/>');
-      } else {
-        b
-          ..write('>')
-          ..write(escapeFormulaText(scrubXmlText(text).text))
-          ..write('</f>');
+      if (text != null && text.isNotEmpty) {
+        out.text(escapeXstring(_clean(text)));
       }
+      out.end();
       _wroteFormula = true;
     }
     final String? value = cell.value;
     if (value != null) {
-      b.write('<v>${escapeXmlText(scrubXmlText(value).text)}</v>');
+      out
+        ..start('v')
+        ..text(_clean(value))
+        ..end();
     }
-    out.raw(b.toString());
-    cell.inline?.writeTo(out, declaredAbove: declaredAbove);
+    cell.inline?.writeTo(out, declaredAbove: inside);
     for (final OpaqueXml child in cell.extraChildren) {
-      child.writeTo(out, declaredAbove: declaredAbove);
+      child.writeTo(out, declaredAbove: inside);
     }
-    out.raw('</c>');
+    out.end();
   }
 
-  /// Writes each of [attributes] to [b] as ` name="value"`.
-  static void _writeKept(StringBuffer b, List<KeptAttribute> attributes) {
+  /// [declaredAbove] with the bindings of the prefixed [attributes] added,
+  /// as `writeKeptAttributes` declares them; [declaredAbove] itself when
+  /// none is new.
+  static Map<String, String> _withKept(
+    Map<String, String> declaredAbove,
+    List<KeptAttribute> attributes,
+  ) {
+    Map<String, String>? merged;
     for (final KeptAttribute a in attributes) {
-      b.write(' ${a.qualifiedName}="${_attribute(a.value)}"');
+      final int colon = a.qualifiedName.indexOf(':');
+      if (colon <= 0) continue;
+      final String prefix = a.qualifiedName.substring(0, colon);
+      if (prefix == 'xml' || declaredAbove[prefix] == a.namespaceUri) continue;
+      (merged ??= <String, String>{...declaredAbove})[prefix] = a.namespaceUri;
     }
+    return merged ?? declaredAbove;
   }
 
-  /// [text] escaped for an attribute, without the characters XML forbids.
-  static String _attribute(String text) =>
-      escapeXmlAttribute(scrubXmlText(text).text);
+  /// [text] without the characters XML forbids.
+  static String _clean(String text) => scrubXmlText(text).text;
 
   /// Writes [text] as a shared-string cell. With [outsideDateRange], the
   /// text stands for a date Excel cannot store, which is reported too.
@@ -739,8 +748,7 @@ final class CellEncoder {
     final _CheckedFormula checked = _checkFormula(formula, sheet, ref);
     // The style can throw; resolve it before the warning is recorded.
     final int id = _idOf(style);
-    final XlsxWarningCode? warning = checked.warning;
-    if (warning != null) _warnings.add(warning, sheet: sheet, cell: ref);
+    _report(checked.warning, sheet, ref);
     final String? cached = checked.value;
     _write(
       out,
@@ -805,7 +813,7 @@ final class CellEncoder {
         return (
           text: text,
           kind: RawCellKind.boolean,
-          value: cached ? '1' : '0',
+          value: _boolText(cached),
           warning: null,
         );
       case num() when !cached.isFinite:
@@ -818,9 +826,7 @@ final class CellEncoder {
             int() => _intText(cached),
             _ => formatXmlDouble(cached.toDouble()),
           },
-          warning: cached is int && _losesPrecision(cached)
-              ? XlsxWarningCode.intPrecisionLost
-              : null,
+          warning: cached is int ? _intWarning(cached) : null,
         );
       default:
         throw ArgumentError(
@@ -864,6 +870,11 @@ final class CellEncoder {
   /// merged style has none.
   int _dateIdOf(_Resolved r, XlsxNumFmt format) => r.dateIds[format] ??= _styles
       .idFor((r.style ?? const XlsxStyle()).copyWith(numFmt: format));
+
+  /// Reports [warning] for the cell [ref] of [sheet], when there is one.
+  void _report(XlsxWarningCode? warning, String sheet, String ref) {
+    if (warning != null) _warnings.add(warning, sheet: sheet, cell: ref);
+  }
 
   /// The `<v>` text of [v]. On the web a whole double is an `int` too, so
   /// `-0.0` arrives here and is written `0`.

@@ -51,6 +51,35 @@ List<KeptAttribute> keepAttributes(
   return kept;
 }
 
+/// Writes [attributes] on the start tag open on [w], in order.
+///
+/// [declaredAbove] holds the bindings in scope where the element goes,
+/// prefix to URI. A prefixed attribute whose prefix it lacks (or binds to
+/// another URI) gets `xmlns:prefix="uri"` written before it, once per
+/// prefix, since [keepAttributes] does not keep declarations. An attribute
+/// without a prefix needs none, and the `xml` prefix is never declared. A
+/// character XML forbids in a value, which only a character reference in
+/// the source can have put there, is dropped.
+void writeKeptAttributes(
+  XmlWriter w,
+  List<KeptAttribute> attributes, {
+  Map<String, String> declaredAbove = const {},
+}) {
+  Set<String>? declared;
+  for (final KeptAttribute a in attributes) {
+    final int colon = a.qualifiedName.indexOf(':');
+    if (colon > 0) {
+      final String prefix = a.qualifiedName.substring(0, colon);
+      if (prefix != 'xml' &&
+          declaredAbove[prefix] != a.namespaceUri &&
+          (declared ??= <String>{}).add(prefix)) {
+        w.attribute('xmlns:$prefix', scrubXmlText(a.namespaceUri).text);
+      }
+    }
+    w.attribute(a.qualifiedName, scrubXmlText(a.value).text);
+  }
+}
+
 /// An element and everything inside it, kept as written.
 final class OpaqueXml {
   const OpaqueXml._(

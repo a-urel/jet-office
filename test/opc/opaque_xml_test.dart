@@ -162,6 +162,76 @@ void main() {
       expect(r.localName, 'r');
     });
   });
+
+  group('writeKeptAttributes', () {
+    String write(
+      List<KeptAttribute> attributes, [
+      Map<String, String> above = const {},
+    ]) {
+      final StringBuffer sb = StringBuffer();
+      final XmlWriter w = XmlWriter(sb)..start('e');
+      writeKeptAttributes(w, attributes, declaredAbove: above);
+      w.end();
+      return sb.toString();
+    }
+
+    test('declares a prefix the parent does not bind, once', () {
+      expect(
+        write(<KeptAttribute>[
+          (qualifiedName: 'a', namespaceUri: '', value: '1'),
+          (qualifiedName: 'x:b', namespaceUri: 'u', value: '2'),
+          (qualifiedName: 'x:c', namespaceUri: 'u', value: '3'),
+        ]),
+        '<e a="1" xmlns:x="u" x:b="2" x:c="3"/>',
+      );
+    });
+
+    test('does not redeclare a prefix bound to the same URI', () {
+      expect(
+        write(
+          <KeptAttribute>[
+            (qualifiedName: 'x:b', namespaceUri: 'u', value: '2'),
+          ],
+          <String, String>{'x': 'u'},
+        ),
+        '<e x:b="2"/>',
+      );
+    });
+
+    test('redeclares a prefix bound to another URI', () {
+      expect(
+        write(
+          <KeptAttribute>[
+            (qualifiedName: 'x:b', namespaceUri: 'u', value: '2'),
+          ],
+          <String, String>{'x': 'other'},
+        ),
+        '<e xmlns:x="u" x:b="2"/>',
+      );
+    });
+
+    test('never declares the xml prefix', () {
+      expect(
+        write(<KeptAttribute>[
+          (
+            qualifiedName: 'xml:space',
+            namespaceUri: 'http://www.w3.org/XML/1998/namespace',
+            value: 'preserve',
+          ),
+        ]),
+        '<e xml:space="preserve"/>',
+      );
+    });
+
+    test('escapes values and drops characters XML forbids', () {
+      expect(
+        write(<KeptAttribute>[
+          (qualifiedName: 'a', namespaceUri: '', value: 'x"<\u0001'),
+        ]),
+        '<e a="x&quot;&lt;"/>',
+      );
+    });
+  });
 }
 
 void _siblingScopes() {
