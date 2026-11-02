@@ -1,5 +1,5 @@
-/// The set-cell primitive of the workbook model and the formula-group role of
-/// a stored cell.
+/// The set-cell and rename-table-column primitives of the workbook model and
+/// the formula-group role of a stored cell.
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -7,13 +7,15 @@
 /// applies the change, then records a [SetCellChange] so the edit can be
 /// reverted and reapplied. [groupRoleAt] says whether a cell belongs to a
 /// shared, array or data-table formula group, which the editing methods use to
-/// refuse an edit that would break a group.
+/// refuse an edit that would break a group. [renameTableColumn] gives a table
+/// column a new name, recording a [TableColumnNameChange] the same way.
 library;
 
 import '../../opc/change_log.dart';
 import '../range.dart';
 import '../raw_cell.dart';
 import 'cell_store.dart';
+import 'table_part.dart';
 
 /// The change of one cell: its content before and after.
 ///
@@ -73,6 +75,51 @@ void setStoredCell(
     column,
     store.cellAt(row, column),
     cell,
+  );
+  change.reapply();
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+}
+
+/// The change of one table column's name: before and after.
+final class TableColumnNameChange implements Change {
+  /// A change of column [index] of [table] from [oldName] to [newName].
+  TableColumnNameChange(this.table, this.index, this.oldName, this.newName);
+
+  /// The table part the column belongs to.
+  final TablePart table;
+
+  /// The column's index in the table, 0 for its first column.
+  final int index;
+
+  /// The name before the change.
+  final String oldName;
+
+  /// The name after the change.
+  final String newName;
+
+  @override
+  void revert() => table.setColumnName(index, oldName);
+
+  @override
+  void reapply() => table.setColumnName(index, newName);
+}
+
+/// Gives column [index] of [table] the name [name] and records the change in
+/// [log].
+///
+/// Must run inside `log.transaction`. If recording throws, the old name is
+/// put back before the error leaves.
+void renameTableColumn(ChangeLog log, TablePart table, int index, String name) {
+  final TableColumnNameChange change = TableColumnNameChange(
+    table,
+    index,
+    table.columnName(index),
+    name,
   );
   change.reapply();
   try {

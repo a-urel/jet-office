@@ -80,6 +80,30 @@ _expected = <(XlsxWarningCode, XlsxLocale), String>{
     XlsxLocale.tr,
   ): '“S” sayfasındaki 1 tarih, tarih göstermeyen bir sayı biçimi kullanıyor (A1).',
   (
+    XlsxWarningCode.tableColumnRenamed,
+    XlsxLocale.en,
+  ): "1 table header cell(s) on sheet 'S' were set, so their columns were renamed to match; formulas that refer to a column by its old name are not updated (A1).",
+  (
+    XlsxWarningCode.tableColumnRenamed,
+    XlsxLocale.de,
+  ): '1 Tabellenkopfzelle(n) im Blatt „S“ wurden gesetzt, daher wurden ihre Spalten passend umbenannt; Formeln, die eine Spalte mit ihrem alten Namen ansprechen, werden nicht angepasst (A1).',
+  (
+    XlsxWarningCode.tableColumnRenamed,
+    XlsxLocale.tr,
+  ): '“S” sayfasında 1 tablo başlık hücresi değiştirildi; sütunları da bu metinle yeniden adlandırıldı. Bir sütuna eski adıyla başvuran formüller güncellenmedi (A1).',
+  (
+    XlsxWarningCode.tableHeaderAdjusted,
+    XlsxLocale.en,
+  ): "1 table header cell(s) on sheet 'S' were given a different text, because a table's column names must be unique and not empty (A1).",
+  (
+    XlsxWarningCode.tableHeaderAdjusted,
+    XlsxLocale.de,
+  ): '1 Tabellenkopfzelle(n) im Blatt „S“ erhielten einen anderen Text, weil die Spaltennamen einer Tabelle eindeutig und nicht leer sein müssen (A1).',
+  (
+    XlsxWarningCode.tableHeaderAdjusted,
+    XlsxLocale.tr,
+  ): '“S” sayfasındaki 1 tablo başlık hücresine farklı bir metin yazıldı, çünkü bir tablonun sütun adları benzersiz olmalı ve boş olamaz (A1).',
+  (
     XlsxWarningCode.sheetPartMissing,
     XlsxLocale.en,
   ): "Sheet 'S' is listed in the workbook but its part is missing; it reads as empty.",
@@ -406,13 +430,13 @@ void main() {
     );
   });
 
-  test('all 84 messages are worded exactly as specified', () {
+  test('all 90 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, XlsxLocale)> keys =
         <(XlsxWarningCode, XlsxLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final XlsxLocale locale in XlsxLocale.values) (code, locale),
         ];
-    expect(keys, hasLength(84));
+    expect(keys, hasLength(90));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, XlsxLocale) key in keys) {
       final XlsxWarning w =

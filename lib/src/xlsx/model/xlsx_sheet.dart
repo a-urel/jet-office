@@ -23,7 +23,9 @@
 library;
 
 import '../../opc/change_log.dart';
+import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
+import '../../xml/xml_escape.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
 import '../format/format_kind.dart';
@@ -43,6 +45,7 @@ import '../values.dart';
 import '../warnings.dart';
 import 'cell_store.dart';
 import 'primitives.dart';
+import 'table_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
 
@@ -120,6 +123,10 @@ final class XlsxSheet {
   /// without a problem is not added, so reading costs no entry per cell.
   final Set<int> _reported = <int>{};
 
+  /// The tables of the sheet the model can type, read on the first
+  /// [setCell]; `null` until then.
+  List<({String partName, TablePart table})>? _tables;
+
   /// The sheet's name, as the workbook lists it.
   String get name => _entry.name;
 
@@ -171,6 +178,15 @@ final class XlsxSheet {
   /// format (appended to the styles), and its other attributes, which
   /// described the old value, are dropped. `null` clears the value: a styled
   /// cell stays as an empty styled cell, an unstyled one is removed.
+  ///
+  /// A table's header cell holds its column's name, which Excel requires to
+  /// equal the cell's text, so setting it renames the column too
+  /// (`tableColumnRenamed`; formulas that use the old name are not
+  /// updated). It takes only text: an empty text or `null` becomes
+  /// `ColumnN` (N the column's place in the table), and a name another
+  /// column has, ignoring case, gets a number appended, as Excel does
+  /// (`tableHeaderAdjusted`). Any other value throws a [StateError], and
+  /// text of more than 255 characters an [ArgumentError].
   ///
   /// A shared formula's follower may be set and leaves its group. Throws a
   /// [StateError] for a cell inside an array or data-table formula (Excel
@@ -231,13 +247,51 @@ final class XlsxSheet {
       case GroupRole.sharedChild || GroupRole.none:
         break;
     }
+    Object? stored = value;
+    final ({String partName, TablePart table, int index})? header = _headerAt(
+      row,
+      column,
+    );
+    String? rename;
+    bool adjusted = false;
+    if (header != null) {
+      final String text = switch (value) {
+        null => '',
+        final String text => scrubXmlText(text).text,
+        _ => throw StateError(
+          'Cell ${cellRef(row, column)} on sheet "$name" is a header cell of '
+          'the table "${header.table.displayName}"; it holds the column name '
+          'and takes only text.',
+        ),
+      };
+      // Excel's limit for a table column name.
+      if (text.length > 255) {
+        throw ArgumentError(
+          'Cell ${cellRef(row, column)} on sheet "$name" is a header cell of '
+          'the table "${header.table.displayName}"; a column name has at most '
+          '255 characters.',
+        );
+      }
+      final String unique = _uniqueColumnName(
+        header.table,
+        header.index,
+        text.isEmpty ? 'Column${header.index + 1}' : text,
+      );
+      adjusted = unique != text;
+      stored = unique;
+      if (unique != header.table.columnName(header.index)) rename = unique;
+    }
     final RawCell? current = store.cellAt(row, column);
-    if (value == null && current == null) return;
+    if (stored == null && current == null) return;
     final CellEncoder encoder = _host.loadTables();
     final ChangeLog log = _host.log;
     log.transaction(() {
+      if (header != null && rename != null) {
+        renameTableColumn(log, header.table, header.index, rename);
+        _host.reader.package.setContent(header.partName, header.table);
+      }
       final RawCell prepared = encoder.prepare(
-        value,
+        stored,
         sheet: name,
         row: row,
         column: column,
@@ -246,10 +300,69 @@ final class XlsxSheet {
         date1904: _host.date1904,
         dateStyle: _host.dateStyle,
       );
-      final bool remove = value == null && prepared.style == null;
+      final bool remove = stored == null && prepared.style == null;
       setStoredCell(log, store, row, column, remove ? null : prepared);
     });
     _reported.remove(row * XlsxLimits.maxColumns + column);
+    if (rename != null) {
+      _warn(XlsxWarningCode.tableColumnRenamed, cellRef(row, column));
+    }
+    if (adjusted) {
+      _warn(XlsxWarningCode.tableHeaderAdjusted, cellRef(row, column));
+    }
+  }
+
+  /// The table whose header row holds the cell at [row] and [column], with
+  /// the column's index in it, or `null`.
+  ({String partName, TablePart table, int index})? _headerAt(
+    int row,
+    int column,
+  ) {
+    for (final ({String partName, TablePart table}) t in _sheetTables()) {
+      final XlsxRange range = t.table.range;
+      if (t.table.hasHeader &&
+          row == range.firstRow &&
+          column >= range.firstColumn &&
+          column <= range.lastColumn) {
+        return (
+          partName: t.partName,
+          table: t.table,
+          index: column - range.firstColumn,
+        );
+      }
+    }
+    return null;
+  }
+
+  /// The sheet's tables, read once. A table part that cannot be read or
+  /// typed is left out, and so kept as written.
+  List<({String partName, TablePart table})> _sheetTables() {
+    final List<({String partName, TablePart table})>? cached = _tables;
+    if (cached != null) return cached;
+    final List<({String partName, TablePart table})> found =
+        <({String partName, TablePart table})>[];
+    final PackageReader reader = _host.reader;
+    try {
+      for (final PartRelationship rel in reader.relationshipsOf(
+        _partName!.substring(1),
+      )) {
+        if (rel.type != RelType.table || !reader.hasPart(rel.target)) {
+          continue;
+        }
+        try {
+          final TablePart? table = reader.guardXml(
+            rel.target,
+            () => TablePart.read(reader.openXml(rel.target)),
+          );
+          if (table != null) found.add((partName: rel.target, table: table));
+        } on XlsxReadException {
+          // Kept as written.
+        }
+      }
+    } on XlsxReadException {
+      // The sheet's relationships cannot be read: no table is typed.
+    }
+    return _tables = found;
   }
 
   /// The loaded part, loading it on first use; `null` for a sheet without
@@ -496,4 +609,18 @@ final class XlsxSheet {
       'column',
     );
   }
+}
+
+/// [name], or [name] with the smallest number from 2 up appended, so that no
+/// other column of [table] than [index] has it, ignoring case.
+String _uniqueColumnName(TablePart table, int index, String name) {
+  final Set<String> taken = <String>{
+    for (int i = 0; i < table.columnCount; i++)
+      if (i != index) table.columnName(i).toLowerCase(),
+  };
+  String candidate = name;
+  for (int n = 2; taken.contains(candidate.toLowerCase()); n++) {
+    candidate = '$name$n';
+  }
+  return candidate;
 }

@@ -46,6 +46,8 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
     case XlsxWarningCode.intPrecisionLost:
     case XlsxWarningCode.dateOutsideExcelRange:
     case XlsxWarningCode.dateInNonDateFormat:
+    case XlsxWarningCode.tableColumnRenamed:
+    case XlsxWarningCode.tableHeaderAdjusted:
     case XlsxWarningCode.sharedStringInvalid:
     case XlsxWarningCode.numberInvalid:
     case XlsxWarningCode.booleanInvalid:

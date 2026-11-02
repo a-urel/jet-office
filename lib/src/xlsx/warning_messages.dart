@@ -93,6 +93,30 @@ String formatWarning(XlsxWarning w, XlsxLocale locale) {
     (XlsxWarningCode.dateInNonDateFormat, XlsxLocale.tr) =>
       '“$sheet” sayfasındaki $count tarih, tarih göstermeyen bir sayı biçimi '
           'kullanıyor$cells.',
+    (XlsxWarningCode.tableColumnRenamed, XlsxLocale.en) =>
+      "$count table header cell(s) on sheet '$sheet' were set, so their "
+          'columns were renamed to match; formulas that refer to a column by '
+          'its old name are not updated$cells.',
+    (XlsxWarningCode.tableColumnRenamed, XlsxLocale.de) =>
+      '$count Tabellenkopfzelle(n) im Blatt „$sheet“ wurden gesetzt, daher '
+          'wurden ihre Spalten passend umbenannt; Formeln, die eine Spalte '
+          'mit ihrem alten Namen ansprechen, werden nicht angepasst$cells.',
+    (XlsxWarningCode.tableColumnRenamed, XlsxLocale.tr) =>
+      '“$sheet” sayfasında $count tablo başlık hücresi değiştirildi; '
+          'sütunları da bu metinle yeniden adlandırıldı. Bir sütuna eski '
+          'adıyla başvuran formüller güncellenmedi$cells.',
+    (XlsxWarningCode.tableHeaderAdjusted, XlsxLocale.en) =>
+      "$count table header cell(s) on sheet '$sheet' were given a different "
+          "text, because a table's column names must be unique and not "
+          'empty$cells.',
+    (XlsxWarningCode.tableHeaderAdjusted, XlsxLocale.de) =>
+      '$count Tabellenkopfzelle(n) im Blatt „$sheet“ erhielten einen '
+          'anderen Text, weil die Spaltennamen einer Tabelle eindeutig und '
+          'nicht leer sein müssen$cells.',
+    (XlsxWarningCode.tableHeaderAdjusted, XlsxLocale.tr) =>
+      '“$sheet” sayfasındaki $count tablo başlık hücresine farklı bir metin '
+          'yazıldı, çünkü bir tablonun sütun adları benzersiz olmalı ve boş '
+          'olamaz$cells.',
     (XlsxWarningCode.sheetPartMissing, XlsxLocale.en) =>
       "Sheet '$sheet' is listed in the workbook but its part is "
           'missing; it reads as empty.',
