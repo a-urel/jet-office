@@ -64,7 +64,7 @@ const List<String> workbookChildOrder = <String>[
 final class SheetEntry {
   SheetEntry._(
     this.name,
-    this.sheetId,
+    this.rawSheetId,
     this.visibility,
     this.relationshipId,
     this.attributes, {
@@ -72,13 +72,21 @@ final class SheetEntry {
     required this.namespaces,
     required this.relPrefix,
     this.explicitVisible = false,
-  });
+  }) : sheetId = parseSheetId(rawSheetId);
 
   /// The sheet name, `_xHHHH_` decoded.
   String name;
 
-  /// The sheet's id in the workbook, unique and never reused by [WorkbookPart].
-  final int sheetId;
+  /// The sheet's id in the workbook: the value of `sheetId` when its text is
+  /// an `xsd:unsignedInt` (`0` included), else `null` (the attribute is
+  /// missing or not a number).
+  ///
+  /// The text read is written back exactly as it was, so a load and save
+  /// never changes it; only [WorkbookPart.addSheet] makes an id.
+  final int? sheetId;
+
+  /// The `sheetId` text as written, or `null` when the attribute is absent.
+  final String? rawSheetId;
 
   /// Whether the sheet is visible, hidden or very hidden.
   XlsxSheetVisibility visibility;
@@ -107,7 +115,7 @@ final class SheetEntry {
     writeNamespaceDeclarations(w, namespaces);
     final Map<String, String> inner = mergeNamespaces(above, namespaces);
     w.attribute('name', escapeXstring(name));
-    w.attribute('sheetId', '$sheetId');
+    if (rawSheetId != null) w.attribute('sheetId', rawSheetId!);
     if (visibility != XlsxSheetVisibility.visible || explicitVisible) {
       w.attribute('state', visibility.name);
     }
@@ -221,9 +229,10 @@ final class WorkbookPart implements PartContent {
   /// [XlsxReadLimits.maxSheets] sheets. An `XmlParseException` passes
   /// through.
   ///
-  /// A `<sheet>` without a usable `sheetId` gets the next free one, as the
-  /// schema requires one; the children of `<sheet>` and `<calcPr>` (the
-  /// schema has none) are not kept.
+  /// A `<sheet>`'s `sheetId` is written back exactly as read: absent stays
+  /// absent and text that is not an unsigned int (`abc`, `-1`) is kept
+  /// verbatim, with [SheetEntry.sheetId] `null`. The children of `<sheet>`
+  /// and `<calcPr>` (the schema has none) are not kept.
   factory WorkbookPart.read(XmlPullReader r, XlsxReadLimits limits) {
     while (r.next()) {
       if (r.eventType == XmlEventType.startElement) break;
@@ -262,7 +271,6 @@ final class WorkbookPart implements PartContent {
         children.add(OpaqueXml.capture(r));
       }
     }
-    if (sheets != null) _assignMissingIds(sheets);
     return WorkbookPart._typed(root, children, sheets, calcPr, date1904);
   }
 
@@ -284,7 +292,7 @@ final class WorkbookPart implements PartContent {
 
   /// Appends a visible sheet named [name] whose worksheet is the part that
   /// the relationship [relationshipId] targets, with the next free `sheetId`
-  /// (one more than the largest in use, or 1).
+  /// (one more than the largest parsable one in use, or 1).
   ///
   /// Creates `<sheets>` in its schema position when the part has none.
   /// Throws a [StateError] for an untyped part.
@@ -293,7 +301,7 @@ final class WorkbookPart implements PartContent {
     final _Sheets group = _sheets ??= _createSheets(root);
     final SheetEntry entry = SheetEntry._(
       name,
-      _nextSheetId(group),
+      '${_nextSheetId(group)}',
       XlsxSheetVisibility.visible,
       relationshipId,
       <KeptAttribute>[],
@@ -384,6 +392,13 @@ final class WorkbookPart implements PartContent {
   }
 }
 
+/// The value of a `sheetId` text, or `null` unless it is an `xsd:unsignedInt`.
+int? parseSheetId(String? text) {
+  if (text == null || !RegExp(r'^[0-9]+$').hasMatch(text)) return null;
+  final int? v = int.tryParse(text);
+  return v != null && v <= 4294967295 ? v : null;
+}
+
 String _prefixOf(String qualifiedName) {
   final int colon = qualifiedName.indexOf(':');
   return colon < 0 ? '' : qualifiedName.substring(0, colon + 1);
@@ -406,30 +421,10 @@ String _relPrefix(XmlRoot root, _Sheets group) {
 int _nextSheetId(_Sheets group) {
   var max = 0;
   for (final SheetEntry s in group.entries) {
-    if (s.sheetId > max) max = s.sheetId;
+    final int? id = s.sheetId;
+    if (id != null && id > max) max = id;
   }
   return max + 1;
-}
-
-/// Replaces the placeholder id (0) of each entry read without a usable
-/// `sheetId` by the next free one.
-void _assignMissingIds(_Sheets group) {
-  for (var i = 0; i < group.items.length; i++) {
-    final Object item = group.items[i];
-    if (item is SheetEntry && item.sheetId <= 0) {
-      group.items[i] = SheetEntry._(
-        item.name,
-        _nextSheetId(group),
-        item.visibility,
-        item.relationshipId,
-        item.attributes,
-        qualifiedName: item.qualifiedName,
-        namespaces: item.namespaces,
-        relPrefix: item.relPrefix,
-        explicitVisible: item.explicitVisible,
-      );
-    }
-  }
 }
 
 _Sheets _readSheets(XmlPullReader r, XlsxReadLimits limits) {
@@ -466,7 +461,7 @@ _Sheets _readSheets(XmlPullReader r, XlsxReadLimits limits) {
 /// A `<sheet>`, leaving [r] on its end.
 SheetEntry _readSheet(XmlPullReader r) {
   final String name = decodeXstring(r.getAttribute('name') ?? '');
-  final int id = int.tryParse(r.getAttribute('sheetId') ?? '') ?? 0;
+  final String? rawId = r.getAttribute('sheetId');
   final XlsxSheetVisibility visibility = sheetVisibilityOf(
     r.getAttribute('state'),
   );
@@ -489,7 +484,7 @@ SheetEntry _readSheet(XmlPullReader r) {
   }
   final SheetEntry entry = SheetEntry._(
     name,
-    id,
+    rawId,
     visibility,
     relationshipId,
     kept,

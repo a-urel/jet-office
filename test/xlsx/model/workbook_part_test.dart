@@ -114,6 +114,52 @@ void main() {
       expect(back.sheets[2].relationshipId, 'rId9');
     });
 
+    group('a sheetId that is not an unsigned int', () {
+      for (final (String label, String attr, int? id)
+          in <(String, String, int?)>[
+            ('missing', '', null),
+            ('abc', ' sheetId="abc"', null),
+            ('-1', ' sheetId="-1"', null),
+            ('0', ' sheetId="0"', 0),
+          ]) {
+        test('$label round-trips unchanged', () {
+          final String xml = _book(
+            '<sheets><sheet name="A"$attr r:id="rId1"/></sheets>',
+          );
+          final WorkbookPart p = _read(xml);
+          expect(p.sheets.single.sheetId, id);
+          final String out = _encode(p);
+          expect(compareXml('xl/workbook.xml', xml, out), isEmpty);
+          if (attr.isEmpty) {
+            expect(out, isNot(contains('sheetId')));
+          } else {
+            expect(out, contains(attr.trim()));
+          }
+        });
+      }
+
+      test('addSheet next to them picks max parsable + 1', () {
+        final WorkbookPart p = _read(
+          _book(
+            '<sheets><sheet name="A" sheetId="abc" r:id="rId1"/>'
+            '<sheet name="B" sheetId="7" r:id="rId2"/>'
+            '<sheet name="C" sheetId="-1" r:id="rId3"/></sheets>',
+          ),
+        );
+        expect(p.addSheet('D', 'rId4').sheetId, 8);
+        final String out = _encode(p);
+        expect(out, contains('sheetId="abc"'));
+        expect(out, contains('sheetId="-1"'));
+      });
+
+      test('addSheet with none parsable gives 1', () {
+        final WorkbookPart p = _read(
+          _book('<sheets><sheet name="A" r:id="rId1"/></sheets>'),
+        );
+        expect(p.addSheet('B', 'rId2').sheetId, 1);
+      });
+    });
+
     test('addSheet creates sheets in schema position', () {
       final WorkbookPart p = _read(
         _book(

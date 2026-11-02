@@ -261,9 +261,7 @@ final class XmlRoot {
   /// The caller writes the content and ends the element.
   void writeStart(XmlWriter w) {
     w.start(qualifiedName);
-    namespaces.forEach((String prefix, String uri) {
-      w.attribute(prefix.isEmpty ? 'xmlns' : 'xmlns:$prefix', uri);
-    });
+    writeNamespaceDeclarations(w, namespaces);
     for (final KeptAttribute a in attributes) {
       w.attribute(a.qualifiedName, a.value);
     }
