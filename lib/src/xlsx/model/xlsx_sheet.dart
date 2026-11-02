@@ -97,6 +97,10 @@ bool sheetHasPart(XlsxSheet sheet) => sheet._partName != null;
 /// The cells of [sheet], or `null` while its part is not loaded.
 CellStore? cellStoreOf(XlsxSheet sheet) => sheet._part?.cells;
 
+/// The number of cells of [sheet] whose reading problem was reported, for
+/// tests: a cell read without a problem is not remembered.
+int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
+
 /// One sheet of a workbook, opened or created.
 ///
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
@@ -110,8 +114,9 @@ final class XlsxSheet {
   WorksheetPart? _part;
 
   /// The positions (`row * XlsxLimits.maxColumns + column`) of the cells
-  /// whose reading was reported, so a value is reported once however often
-  /// [rows] runs; a set cell is read afresh.
+  /// whose reading problem was reported, so a problem is reported once
+  /// however often [rows] runs; a set cell is read afresh. A cell read
+  /// without a problem is not added, so reading costs no entry per cell.
   final Set<int> _reported = <int>{};
 
   /// The sheet's name, as the workbook lists it.
@@ -125,22 +130,20 @@ final class XlsxSheet {
   /// styled cell included).
   ///
   /// A formula cell carries its [XlsxFormulaGroup], found from the sheet's
-  /// group masters. A value that cannot be read exactly is reported in the
-  /// workbook's warnings once, shared with [rows]. Loads the sheet. Throws a [RangeError] outside Excel's
-  /// grid and an [XlsxReadException] when the sheet cannot be read.
+  /// group masters; on a sheet whose formula groups are malformed (an
+  /// overlap, a follower outside its master's range) it may differ from the
+  /// group [rows] gives, which follows the reader's pass over the rows. A
+  /// value that cannot be read exactly is reported in the workbook's
+  /// warnings once, shared with [rows]. Loads the sheet. Throws a
+  /// [RangeError] outside Excel's grid and an [XlsxReadException] when the
+  /// sheet cannot be read.
   XlsxReadCell? cellAt(int row, int column) {
     _checkCell(row, column);
     final CellStore? store = _load()?.cells;
     if (store == null) return null;
     final RawCell? cell = store.cellAt(row, column);
     if (cell == null || !_hasData(cell)) return null;
-    final bool report = _reported.add(row * XlsxLimits.maxColumns + column);
-    return _view(
-      column,
-      cell,
-      _indexedGroup(store, row, column, cell),
-      row: report ? row : null,
-    );
+    return _view(row, column, cell, _indexedGroup(store, row, column, cell));
   }
 
   /// The rows that hold a cell with data or are hidden, in row order, as
@@ -291,17 +294,14 @@ final class XlsxSheet {
       final List<XlsxReadCell> cells = <XlsxReadCell>[];
       store.forEachInRow(row, (int column, RawCell cell) {
         if (!_hasData(cell)) return;
-        final bool report = _reported.add(row * XlsxLimits.maxColumns + column);
+        final FormulaGroupResult group = _passGroup(groups, row, column, cell);
         final XlsxReadCell view = _view(
+          row,
           column,
           cell,
           null,
-          row: report ? row : null,
+          groupInvalid: group.invalid,
         );
-        final FormulaGroupResult group = _passGroup(groups, row, column, cell);
-        if (group.invalid && report) {
-          _warn(XlsxWarningCode.formulaGroupInvalid, cellRef(row, column));
-        }
         cells.add(
           group.group == null
               ? view
@@ -323,14 +323,18 @@ final class XlsxSheet {
     }
   }
 
-  /// The typed view of [cell] in [column] with [group]; the decoder's
-  /// warning is reported against the cell at [row] when given (each cell
-  /// once, by whichever of [cellAt] and [rows] reads it first).
+  /// The typed view of [cell] at [row] and [column] with [group].
+  ///
+  /// The decoder's warning, and `formulaGroupInvalid` when [groupInvalid],
+  /// are reported against the cell once, by whichever of [cellAt] and
+  /// [rows] reads it first; only a cell with something to report is
+  /// remembered.
   XlsxReadCell _view(
+    int row,
     int column,
     RawCell cell,
     XlsxFormulaGroup? group, {
-    int? row,
+    bool groupInvalid = false,
   }) {
     final CellFormat format = _host.styleTable.formatOf(_styleText(cell));
     final DecodedCell decoded = decodeRawCell(
@@ -340,14 +344,20 @@ final class XlsxSheet {
       date1904: _host.date1904,
     );
     final XlsxWarningCode? warning = decoded.warning;
-    if (warning != null && row != null) {
-      _warn(
-        warning,
-        cellRef(row, column),
-        detail: warning == XlsxWarningCode.unresolvedNumberFormat
-            ? '${format.id}'
-            : null,
-      );
+    if ((warning != null || groupInvalid) &&
+        _reported.add(row * XlsxLimits.maxColumns + column)) {
+      if (warning != null) {
+        _warn(
+          warning,
+          cellRef(row, column),
+          detail: warning == XlsxWarningCode.unresolvedNumberFormat
+              ? '${format.id}'
+              : null,
+        );
+      }
+      if (groupInvalid) {
+        _warn(XlsxWarningCode.formulaGroupInvalid, cellRef(row, column));
+      }
     }
     return XlsxReadCell(
       column,

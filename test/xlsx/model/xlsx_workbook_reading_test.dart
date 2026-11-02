@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/model/xlsx_sheet.dart';
 import 'package:test/test.dart';
 import '../read/support/workbook_builder.dart';
 import 'support/workbook_support.dart';
@@ -77,5 +78,24 @@ void main() {
     sheet.cellAt(0, 0);
     sheet.rows.toList();
     expect(seen(), once);
+  });
+
+  test('reading clean cells remembers nothing per cell', () {
+    // Only a cell with a reading problem is remembered, so reading a large
+    // clean sheet costs no entry per cell.
+    final StringBuffer rows = StringBuffer();
+    for (int r = 1; r <= 200; r++) {
+      rows.write('<row r="$r"><c r="A$r"><v>$r</v></c><c r="B$r"><v>1</v></c>');
+      rows.write('</row>');
+    }
+    rows.write('<row r="201"><c r="A201" t="s"><v>7</v></c></row>');
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      buildWorkbook(<String, String>{'S': worksheet('$rows')}),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    sheet.rows.toList();
+    sheet.cellAt(0, 0);
+    expect(reportedCellCount(sheet), 1);
+    expect(book.warnings.single.code, XlsxWarningCode.sharedStringInvalid);
   });
 }
