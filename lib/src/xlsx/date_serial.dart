@@ -1,4 +1,5 @@
-/// Conversion of calendar dates to Excel's 1900 date-system serial numbers.
+/// Conversion of calendar dates to Excel serial numbers, in the 1900 date
+/// system or, for a workbook that sets `date1904`, the 1904 one.
 ///
 /// Excel counts days from 1899-12-31 (serial 0). It wrongly treats 1900 as a
 /// leap year, so serial 60 is the phantom 1900-02-29. This library never
@@ -7,6 +8,10 @@
 ///
 /// Excel stores dates from 1900-01-01 to 9999-12-31 only. Both functions
 /// return `null` outside that range; the caller writes such values as text.
+///
+/// The 1904 system counts from 1904-01-01 (serial 0) and has no phantom
+/// day, so its serial is the 1900 serial minus 1,462. Dates before
+/// 1904-01-01 have no 1904 serial and return `null` too.
 ///
 /// Only the wall-clock fields of a [DateTime] are used; `isUtc` and the time
 /// zone offset are ignored. This file is new in jet_office; Quds wrote
@@ -19,13 +24,18 @@ const int _maxSerial = 2958465; // 9999-12-31
 const int _maxDartYear = 270000;
 const int _secondsPerDay = 86400;
 
+/// The 1900 serial of 1904-01-01, serial 0 of the 1904 system.
+const int _offset1904 = 1462;
+
 /// Returns the Excel serial number of the date [year]-[month]-[day].
 ///
 /// Returns `null` for dates outside Excel's range (before 1900-01-01 or after
 /// 9999-12-31), which have no serial; the caller writes those as text.
+/// With [date1904] the serial is of the 1904 system, and dates before
+/// 1904-01-01 return `null` as well.
 /// Throws an [ArgumentError] if the date does not exist, for example month
 /// 13 or 30 February.
-int? dateSerial(int year, int month, int day) {
+int? dateSerial(int year, int month, int day, {bool date1904 = false}) {
   if (year > _maxDartYear || year < -_maxDartYear) {
     // Beyond what DateTime holds, so DateTime.utc cannot check the date.
     if (month < 1 || month > 12 || day < 1 || day > _daysIn(year, month)) {
@@ -43,6 +53,10 @@ int? dateSerial(int year, int month, int day) {
   final days = date.difference(_epoch).inDays;
   if (days < 2) return null; // before 1900-01-01
   if (days > _maxSerial) return null; // after 9999-12-31
+  if (date1904) {
+    // From 1904 on the phantom day is behind, so days is the 1900 serial.
+    return days < _offset1904 ? null : days - _offset1904;
+  }
   // Days before 1900-03-01 skip Excel's phantom 29 February 1900.
   return days < 61 ? days - 1 : days;
 }
@@ -55,9 +69,16 @@ int? dateSerial(int year, int month, int day) {
 /// 23:59:59.999 would show as 00:00 on the next day. A caller who needs
 /// milliseconds writes the serial as a `double` with a `ss.000` format.
 /// Returns `null` for values outside Excel's range (before 1900-01-01 or
-/// after 9999-12-31). The fraction is `(h*3600 + m*60 + s) / 86400`.
-double? dateTimeSerial(DateTime value) {
-  final days = dateSerial(value.year, value.month, value.day);
+/// after 9999-12-31), and with [date1904] for values before 1904-01-01; with
+/// [date1904] the serial is of the 1904 system. The fraction is
+/// `(h*3600 + m*60 + s) / 86400`.
+double? dateTimeSerial(DateTime value, {bool date1904 = false}) {
+  final days = dateSerial(
+    value.year,
+    value.month,
+    value.day,
+    date1904: date1904,
+  );
   if (days == null) return null;
   final seconds = (value.hour * 60 + value.minute) * 60 + value.second;
   return days + seconds / _secondsPerDay;

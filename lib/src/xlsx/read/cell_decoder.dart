@@ -90,6 +90,16 @@ bool formulaTypeKnown(XmlPullReader r) =>
       _ => false,
     };
 
+/// The `t` text to write on the `<f>` of a formula of [type], or `null` for
+/// none: the inverse of [decodeFormulaType]. An unknown `t` the reader kept
+/// is in [RawFormula.attributes] and written from there.
+String? encodeFormulaType(FormulaType type) => switch (type) {
+  FormulaType.normal => null,
+  FormulaType.shared => 'shared',
+  FormulaType.array => 'array',
+  FormulaType.dataTable => 'dataTable',
+};
+
 /// The [RawCellKind] of a cell whose `t` attribute is [type]; `null` and
 /// `n` are [RawCellKind.number], a value the format does not define
 /// (matched exactly, so `S` too) is [RawCellKind.unknown].
