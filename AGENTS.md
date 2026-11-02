@@ -50,6 +50,10 @@ mkdir -p build/resaved
 LC_ALL=C.UTF-8 soffice --headless --convert-to 'xlsx:Calc MS Excel 2007 XML' \
   --outdir build/resaved build/fixtures/*.xlsx
 dart run tool/compare_resaved.dart build/fixtures build/resaved
+dart run tool/round_trip_model.dart build/fixtures build/model
+dart run tool/round_trip_model.dart build/resaved build/model-resaved
+dotnet run --project tool/ooxml_validate -- build/model
+dotnet run --project tool/ooxml_validate -- build/model-resaved
 dart run tool/write_format_oracle.dart build/format_oracle
 LC_ALL=C.UTF-8 soffice --headless \
   --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,true,false,false,1' \
@@ -77,6 +81,16 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
   `tool/src/read_compare.dart` names it with a reason. If a LibreOffice
   instance is already running, add `-env:UserInstallation=file:///<dir>` to
   the `soffice` call.
+- `tool/round_trip_model.dart` opens every `.xlsx` of a directory with
+  `XlsxWorkbook`, loads all sheets, saves to the second directory and
+  prints each `comparePackages` difference (with `ignoreBookkeeping`:
+  the model recomputes `dimension` and `spans`) as `<file>: <line>`; it
+  exits 1 on any difference or error, 2 on unusable arguments. CI runs it
+  on the fixtures and on LibreOffice's re-save, then validates both
+  outputs with the Open XML SDK. The model keeps what it does not
+  understand, so the `--corrupt` workbook round-trips (exit 0) and the
+  SDK rejects the output; a truncated copy is the round trip's own
+  negative control.
 - `tool/compare_format_libreoffice.dart` compares the number formatter with
   LibreOffice's text "as shown" of the oracle cases
   (`test/fixtures/owner/number_format/`), exported from the workbooks

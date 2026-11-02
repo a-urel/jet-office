@@ -106,6 +106,21 @@ jobs:
       - name: Read the re-saved fixtures and compare
         run: dart run tool/compare_resaved.dart build/fixtures build/resaved
 
+      # The model must reproduce a workbook it changes nothing in, and
+      # what it saves must be valid: on the writer fixtures and on
+      # LibreOffice's re-save of them.
+      - name: Round-trip the fixtures through the model
+        run: dart run tool/round_trip_model.dart build/fixtures build/model
+
+      - name: Round-trip the re-saved fixtures through the model
+        run: dart run tool/round_trip_model.dart build/resaved build/model-resaved
+
+      - name: Validate the model's output with the Open XML SDK
+        run: dotnet run --project tool/ooxml_validate -- build/model
+
+      - name: Validate the model's output for the re-saved fixtures
+        run: dotnet run --project tool/ooxml_validate -- build/model-resaved
+
       # Negative control: every check must reject m1_corrupt.xlsx (see
       # tool/write_fixtures.dart). Each tool exits with 1 when it finds a
       # problem and with 2 or 64 for a usage error, so the step requires
@@ -162,6 +177,44 @@ jobs:
           fi
           if ! grep -q 'A2: expected 42' build/corrupt-resaved.log; then
             echo "::error::The re-save comparison did not report the corrupt value in A2."
+            exit 1
+          fi
+
+          # The model keeps what it does not understand, so the corrupt
+          # workbook round-trips unchanged (exit 0) and the Open XML SDK
+          # must reject the model's output; a truncated copy is refused
+          # by the model itself (exit 1).
+          status=0
+          dart run tool/round_trip_model.dart build/corrupt build/corrupt-model \
+            || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The model round trip exited with $status on the corrupt file; expected 0."
+            exit 1
+          fi
+          status=0
+          dotnet run --project tool/ooxml_validate -- build/corrupt-model \
+            | tee build/corrupt-model-validate.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The Open XML SDK validator exited with $status on the model's output for a corrupt file; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'FAIL  m1_corrupt.xlsx' build/corrupt-model-validate.log; then
+            echo "::error::The Open XML SDK validator did not report the model's output for m1_corrupt.xlsx."
+            exit 1
+          fi
+
+          mkdir -p build/truncated
+          size=$(wc -c < build/corrupt/m1_corrupt.xlsx)
+          head -c $((size / 2)) build/corrupt/m1_corrupt.xlsx > build/truncated/m1_truncated.xlsx
+          status=0
+          dart run tool/round_trip_model.dart build/truncated build/truncated-model \
+            | tee build/truncated-model.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The model round trip exited with $status on a truncated file; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'm1_truncated.xlsx: ' build/truncated-model.log; then
+            echo "::error::The model round trip did not report m1_truncated.xlsx."
             exit 1
           fi
           echo "All checks rejected the corrupt file."
