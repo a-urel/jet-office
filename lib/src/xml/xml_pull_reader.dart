@@ -150,6 +150,7 @@ final class XmlPullReader {
   final String _source;
   final int _maxDepth;
   int _pos = 0;
+  int _eventStart = 0;
 
   XmlEventType _type = XmlEventType.none;
   int _depth = 0;
@@ -240,6 +241,51 @@ final class XmlPullReader {
     return '';
   }
 
+  /// The UTF-16 offset of the current event's first character.
+  ///
+  /// Offsets index the decoded source string (after a leading BOM is
+  /// dropped). For the end event of an empty element `<x/>` the range is the
+  /// `/>` alone.
+  int get eventStart => _eventStart;
+
+  /// The offset after the current event's last character.
+  ///
+  /// For a start element written `<x/>` the `/>` is included.
+  int get eventEnd => _pos;
+
+  /// The source text from [start] to [end], which must be offsets of this
+  /// reader (for example [eventStart] and [eventEnd]) with
+  /// `0 <= start <= end <= source length`.
+  String sourceText(int start, int end) => _source.substring(start, end);
+
+  /// The namespace declarations written on the current start element, prefix
+  /// to URI, with `''` for the default namespace. Empty on any other event.
+  Map<String, String> get declaredNamespaces {
+    if (_type != XmlEventType.startElement) {
+      return const <String, String>{};
+    }
+    return Map<String, String>.of(_nsStack.last._map);
+  }
+
+  /// Every namespace binding in scope at the current element, its own
+  /// declarations included, prefix to URI, with `''` for the default
+  /// namespace. A default namespace that is not set (or set to `''`) is not
+  /// listed. On a non-element event the bindings of the enclosing element.
+  Map<String, String> get namespacesInScope {
+    final List<_NsScope> chain = <_NsScope>[];
+    for (_NsScope? s = _nsStack.last; s != null; s = s.parent) {
+      chain.add(s);
+    }
+    final Map<String, String> result = <String, String>{};
+    for (int i = chain.length - 1; i >= 0; i--) {
+      result.addAll(chain[i]._map);
+    }
+    if (result[''] == '') {
+      result.remove('');
+    }
+    return result;
+  }
+
   /// The number of attributes of the current start element.
   int get attributeCount => _attrs.length;
 
@@ -255,6 +301,7 @@ final class XmlPullReader {
     if (_emptyElement) {
       _emptyElement = false;
       _type = XmlEventType.endElement;
+      _eventStart = _pos - 2; // the `/>`
       if (_elementStack.isNotEmpty) {
         _elementStack.removeLast();
       }
@@ -271,6 +318,7 @@ final class XmlPullReader {
     _nameStart = _nameEnd = _localStart = _localEnd = 0;
     _prefixStart = _prefixEnd = 0;
     _textStart = _textEnd = 0;
+    _eventStart = _pos;
 
     if (_pos >= _source.length) {
       if (_elementStack.isNotEmpty) {
