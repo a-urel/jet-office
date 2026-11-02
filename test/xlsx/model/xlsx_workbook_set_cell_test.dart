@@ -120,6 +120,29 @@ void main() {
     expect(result.warnings.single.code, XlsxWarningCode.dateInNonDateFormat);
   });
 
+  test('a date where no date style can be added warns', () {
+    // A styles part that is not a SpreadsheetML styleSheet loads untyped:
+    // the model cannot append a date style to it, so the date keeps the
+    // cell's style and says so.
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      buildWorkbook(<String, String>{
+        'S': worksheet('<row r="1"><c r="A1"><v>1</v></c></row>'),
+      }, styles: '<other xmlns="$mainNs"/>'),
+    );
+    book.sheets.single
+      ..setCell(0, 0, DateTime.utc(2026, 11, 2))
+      ..setCell(0, 1, const XlsxDate(2026, 11, 2));
+    final XlsxResult result = book.save();
+    expect(
+      result.warnings.map((XlsxWarning w) => (w.code, w.count)).toList(),
+      <(XlsxWarningCode, int)>[(XlsxWarningCode.dateInNonDateFormat, 2)],
+    );
+    final List<XlsxReadCell> cells = XlsxReader(
+      result.bytes,
+    ).rowsAt(0).single.cells;
+    expect(cells.map((XlsxReadCell c) => c.numberFormatId), <int>[0, 0]);
+  });
+
   test('editing formula groups follows the rules', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
       buildWorkbook(<String, String>{

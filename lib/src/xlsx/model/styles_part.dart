@@ -242,8 +242,13 @@ final class StylesPart implements PartContent {
   final List<_Xf> _xfs;
   StyleTable? _table;
 
-  /// The cell formats by style index, as `readStyles` gives them for the same
-  /// part ([StyleTable.empty] for an untyped one). It reflects every `<xf>` [withNumberFormat] appended.
+  /// Whether the part is a SpreadsheetML `<styleSheet>`; an untyped part
+  /// cannot take a new `<xf>` ([withNumberFormat] adds nothing to it).
+  bool get isTyped => _untypedText == null;
+
+  /// The cell formats by style index, as `readStyles` gives them for the
+  /// same part ([StyleTable.empty] for an untyped one). It reflects every
+  /// `<xf>` [withNumberFormat] appended.
   StyleTable get table =>
       _table ??= _untypedText != null ? StyleTable.empty : _buildTable();
 
@@ -274,8 +279,9 @@ final class StylesPart implements PartContent {
   /// A [style] that is `null` or not an index of `<cellXfs>` stands for the
   /// first `<xf>`, as a broken style counts as General. An `<xf>` that
   /// already is the result is reused; otherwise one is appended, so no
-  /// existing index moves; an untyped part returns `style ?? 0` unchanged. A part without any `<xf>` (or without
-  /// `<cellXfs>`) gets a plain one first to copy from. Throws a
+  /// existing index moves; an untyped part returns `style ?? 0` unchanged
+  /// (see [isTyped]). A part without any `<xf>` (or without `<cellXfs>`)
+  /// gets a plain one first to copy from. Throws a
   /// [RangeError] for a negative [numFmtId].
   int withNumberFormat(int? style, int numFmtId) {
     RangeError.checkNotNegative(numFmtId, 'numFmtId');

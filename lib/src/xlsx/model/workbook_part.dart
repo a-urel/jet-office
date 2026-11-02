@@ -5,10 +5,10 @@
 ///
 /// A loaded part is always written from this model (spec §4.3). What the
 /// model types is the `<sheets>` group, each `<sheet>` as a [SheetEntry], and
-/// the attributes of `<calcPr>`. Every other child of `<workbook>` (`workbookPr`
-/// with its `date1904`, `bookViews`, `definedNames`, `extLst`, ...) is an
-/// [OpaqueXml] at its original position, and the root keeps its namespace
-/// declarations and `mc:Ignorable`.
+/// the attributes of `<calcPr>`. Every other child of `<workbook>`
+/// (`workbookPr` with its `date1904`, `bookViews`, `definedNames`,
+/// `extLst`, ...) is an [OpaqueXml] at its original position, and the root
+/// keeps its namespace declarations and `mc:Ignorable`.
 ///
 /// Sheet names are `ST_Xstring`: `_xHHHH_` is decoded on read and escaped on
 /// write, as the writer does. A `<sheet>`'s `r:id` is written with the prefix

@@ -74,8 +74,9 @@ abstract interface class SheetHost {
 
   /// The style index for a date set on a cell of [style] in General: the
   /// writer's date-time format (id 22) with [withTime], else its short-date
-  /// format (id 14).
-  int dateStyle(int? style, {required bool withTime});
+  /// format (id 14); `null` when the styles part cannot take one (it is
+  /// untyped).
+  int? dateStyle(int? style, {required bool withTime});
 }
 
 /// A sheet of [host] listed as [entry], whose worksheet part is [partName]

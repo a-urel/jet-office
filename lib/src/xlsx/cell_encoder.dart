@@ -300,7 +300,9 @@ final class CellEncoder {
   /// (id 0) takes the style [dateStyle] returns for [current]'s style,
   /// with `withTime` true for a [DateTime] (the writer gives every
   /// [DateTime] its date-time format and an [XlsxDate] its short-date one);
-  /// any other format keeps the style and warns `dateInNonDateFormat`.
+  /// any other format keeps the style and warns `dateInNonDateFormat`, and
+  /// so does General when [dateStyle] returns `null` (no date style can be
+  /// added).
   /// Dates are serials of the 1904 system when [date1904] is true, and a
   /// date that has no serial there (before 1904-01-01) is written as text
   /// with `dateOutsideExcelRange`, like one before 1900.
@@ -315,7 +317,7 @@ final class CellEncoder {
     required RawCell? current,
     required CellFormat currentFormat,
     required bool date1904,
-    required int Function(int? style, {required bool withTime}) dateStyle,
+    required int? Function(int? style, {required bool withTime}) dateStyle,
   }) {
     final String ref = cellRef(row, column);
     final int? style = current?.style;
@@ -430,20 +432,22 @@ final class CellEncoder {
 
   /// The date [serial] as a stored number cell, styled by the date rule:
   /// [style] kept when [format] shows a date or a time, [dateStyle]'s style
-  /// when [format] is General, and otherwise [style] kept with a warning.
+  /// when [format] is General and it gives one, and otherwise [style] kept
+  /// with a warning.
   RawCell _preparedDate(
     String sheet,
     String ref,
     String serial,
     int? style,
     CellFormat format,
-    int Function() dateStyle,
+    int? Function() dateStyle,
   ) {
     final int? id;
+    final int? general = format.id == 0 ? dateStyle() : null;
     if (format.kind == FormatKind.date || format.kind == FormatKind.time) {
       id = style;
-    } else if (format.id == 0) {
-      id = dateStyle();
+    } else if (general != null) {
+      id = general;
     } else {
       _warnings.add(
         XlsxWarningCode.dateInNonDateFormat,

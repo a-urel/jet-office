@@ -404,11 +404,13 @@ final class _Book implements SheetHost {
   }
 
   @override
-  int dateStyle(int? style, {required bool withTime}) {
+  int? dateStyle(int? style, {required bool withTime}) {
     final XlsxNumFmt format = withTime
         ? XlsxNumFmt.localeDateTime
         : XlsxNumFmt.localeShortDate;
-    return _stylesForEdit().withNumberFormat(style, format.builtinId!);
+    final StylesPart styles = _stylesForEdit();
+    if (!styles.isTyped) return null;
+    return styles.withNumberFormat(style, format.builtinId!);
   }
 
   /// The styles part, added to the package from the writer's empty styles
