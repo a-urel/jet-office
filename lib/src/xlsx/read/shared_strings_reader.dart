@@ -48,8 +48,16 @@ List<String> readSharedStrings(
 /// `texts` is as [readSharedStrings] returns it. `raw` holds, by index, each
 /// `<si>` that has a child other than its `<t>`, as written: runs (`<r>`),
 /// phonetic runs (`<rPh>`), phonetic properties (`<phoneticPr>`), an
-/// `<extLst>` or an element of another namespace.
-typedef SharedStringsRead = ({List<String> texts, Map<int, OpaqueXml> raw});
+/// `<extLst>` or an element of another namespace. `root` is the `<sst>`
+/// start tag (`null` when the part has no root element) and `trailing` the
+/// root's children other than `<si>`, as written and in order, so the
+/// model can write the part back with nothing lost.
+typedef SharedStringsRead = ({
+  List<String> texts,
+  Map<int, OpaqueXml> raw,
+  XmlRoot? root,
+  List<OpaqueXml> trailing,
+});
 
 /// Reads the shared strings of [part] in [package] like [readSharedStrings],
 /// and keeps each `<si>` that is more than text as written (see
@@ -61,11 +69,7 @@ SharedStringsRead readSharedStringsRaw(
   XlsxReadLimits limits,
 ) {
   return package.guardXml(part, () {
-    final ({List<String> texts, Set<int> rich}) walked = _walk(
-      package,
-      part,
-      limits,
-    );
+    final _Walked walked = _walk(package, part, limits, keep: true);
     final Map<int, OpaqueXml> raw = <int, OpaqueXml>{};
     if (walked.rich.isNotEmpty) {
       // A second pass captures the kept items: whether an item is rich is
@@ -82,7 +86,12 @@ SharedStringsRead readSharedStringsRaw(
         index++;
       }
     }
-    return (texts: walked.texts, raw: raw);
+    return (
+      texts: walked.texts,
+      raw: raw,
+      root: walked.root,
+      trailing: walked.trailing,
+    );
   });
 }
 
@@ -92,16 +101,39 @@ bool _isSi(XmlPullReader reader) =>
     reader.localName == 'si' &&
     reader.namespaceUri == Ns.main;
 
-/// The texts of the table and the indexes of its rich items, read once.
-({List<String> texts, Set<int> rich}) _walk(
+/// What one pass over the table gives.
+typedef _Walked = ({
+  List<String> texts,
+  Set<int> rich,
+  XmlRoot? root,
+  List<OpaqueXml> trailing,
+});
+
+/// The texts of the table and the indexes of its rich items, read once;
+/// with [keep], also the root's start tag and its children other than
+/// `<si>`.
+_Walked _walk(
   PackageReader package,
   String part,
-  XlsxReadLimits limits,
-) {
+  XlsxReadLimits limits, {
+  bool keep = false,
+}) {
   final XmlPullReader reader = package.openXml(part);
   final List<String> strings = <String>[];
   final Set<int> rich = <int>{};
+  XmlRoot? root;
+  final List<OpaqueXml> trailing = <OpaqueXml>[];
   while (reader.next()) {
+    if (keep && reader.eventType == XmlEventType.startElement) {
+      if (reader.depth == 1) {
+        root = XmlRoot.capture(reader);
+        continue;
+      }
+      if (reader.depth == 2 && !_isSi(reader)) {
+        trailing.add(OpaqueXml.capture(reader));
+        continue;
+      }
+    }
     if (!_isSi(reader)) continue;
     if (strings.length >= limits.maxSharedStrings) {
       throw XlsxReadException(
@@ -123,7 +155,7 @@ bool _isSi(XmlPullReader reader) =>
     if (flag.seen) rich.add(strings.length);
     strings.add(text);
   }
-  return (texts: strings, rich: rich);
+  return (texts: strings, rich: rich, root: root, trailing: trailing);
 }
 
 /// Set when an item has a child other than its `<t>`.

@@ -439,6 +439,31 @@ void main() {
       expect(open(write(p)).contains('_rels/a.xml.rels'), isFalse);
     });
 
+    test('removePart with sources reads only their relationships', () {
+      const String bad = '<Relationships><Relationship';
+      final OpcPackage p = _package(<(String, String)>[
+        ('xl/workbook.xml', '<w/>'),
+        ('xl/calcChain.xml', '<c/>'),
+        ('xl/sheet.xml', '<s/>'),
+        (
+          'xl/_rels/workbook.xml.rels',
+          _rels(<String>[
+            _item('rId1', '$_rel/calcChain', 'calcChain.xml'),
+            _item('rId2', '$_rel/other', 'sheet.xml'),
+          ]),
+        ),
+        ('xl/_rels/sheet.xml.rels', bad),
+      ]);
+      p.removePart('/xl/calcChain.xml', sources: <String>['/xl/workbook.xml']);
+      expect(p.hasPart('/xl/calcChain.xml'), isFalse);
+      expect(p.relationshipsOf('/xl/workbook.xml').map((r) => r.id), <String>[
+        'rId2',
+      ]);
+      final ZipReader z = open(write(p));
+      expect(utf8.decode(z.read('xl/_rels/sheet.xml.rels')), bad);
+      expect(z.contains('xl/calcChain.xml'), isFalse);
+    });
+
     test('an entry stored with a leading slash has one slash', () {
       final OpcPackage p = _package(<(String, String)>[('/xl/a.xml', '<a/>')]);
       expect(p.partNames.toList(), <String>['/xl/a.xml']);

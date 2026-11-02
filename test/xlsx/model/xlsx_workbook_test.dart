@@ -659,6 +659,12 @@ void main() {
       throwsA(isA<XlsxReadException>()),
     );
     expect(() => book.sheets[1].rows, throwsA(isA<XlsxReadException>()));
+    // A programmer error is one whatever the sheet holds.
+    expect(() => book.sheets[1].setCell(0, 0, Object()), throwsArgumentError);
+    expect(
+      () => book.sheets[1].setCell(0, 0, const XlsxCell(1)),
+      throwsUnsupportedError,
+    );
     book.sheets[0].setCell(1, 0, 2);
     final Uint8List output = book.save().bytes;
     expect(
@@ -684,7 +690,10 @@ void main() {
     final String styles = utf8.decode(<int>[
       for (final Uint8List c in stylesPartOf(book)!.encode()) ...c,
     ]);
-    final int warnings = book.warnings.length;
+    List<(XlsxWarningCode, int)> seen() => <(XlsxWarningCode, int)>[
+      for (final XlsxWarning w in book.warnings) (w.code, w.count),
+    ];
+    final List<(XlsxWarningCode, int)> warnings = seen();
     for (final Object? bad in <Object?>[double.nan, double.infinity]) {
       expect(() => sheet.setCell(0, 0, bad), throwsArgumentError);
     }
@@ -696,7 +705,7 @@ void main() {
       ]),
       styles,
     );
-    expect(book.warnings.length, warnings);
+    expect(seen(), warnings);
     expect(changeLogOf(book).hasChanges, isFalse);
   });
 
@@ -793,8 +802,74 @@ void main() {
     );
   });
 
-  test('the public API exports the model', () {
-    expect(XlsxWorkbook.new, isNotNull);
-    expect(XlsxSheet, isNotNull);
+  test('loading the shared strings keeps the sst root and its extras', () {
+    const String x14ac =
+        'http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac';
+    const String mc =
+        'http://schemas.openxmlformats.org/markup-compatibility/2006';
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      buildWorkbook(
+        <String, String>{
+          'S': worksheet('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
+        },
+        sharedStrings:
+            '<sst xmlns="$mainNs" xmlns:mc="$mc" xmlns:x14ac="$x14ac" '
+            'mc:Ignorable="x14ac" count="1" uniqueCount="1" x14ac:k="v">'
+            '<si><t>a</t></si>'
+            '<extLst><ext uri="u"><x14ac:z/></ext></extLst></sst>',
+      ),
+    );
+    book.sheets.single.setCell(1, 0, 'b');
+    final String sst = _part(book.save().bytes, 'xl/sharedStrings.xml');
+    expect(sst, contains('xmlns:x14ac="$x14ac"'));
+    expect(sst, contains('xmlns:mc="$mc"'));
+    expect(sst, contains('mc:Ignorable="x14ac"'));
+    expect(sst, contains('x14ac:k="v"'));
+    expect(sst, contains('count="2"'));
+    expect(sst, contains('uniqueCount="2"'));
+    expect(
+      sst,
+      contains('<si><t>b</t></si><extLst><ext uri="u"><x14ac:z/></ext>'),
+    );
+    expect(RegExp(' count=').allMatches(sst), hasLength(1));
+    expect(RegExp('uniqueCount=').allMatches(sst), hasLength(1));
+  });
+
+  test('cellAt reports a reading problem once, shared with rows', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      buildWorkbook(<String, String>{
+        'S': worksheet('<row r="1"><c r="A1" t="s"><v>7</v></c></row>'),
+      }, sharedStrings: '<sst xmlns="$mainNs"><si><t>a</t></si></sst>'),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    List<(XlsxWarningCode, int)> seen() => <(XlsxWarningCode, int)>[
+      for (final XlsxWarning w in book.warnings) (w.code, w.count),
+    ];
+    const List<(XlsxWarningCode, int)> once = <(XlsxWarningCode, int)>[
+      (XlsxWarningCode.sharedStringInvalid, 1),
+    ];
+    expect(sheet.cellAt(0, 0)?.value, isNull);
+    expect(seen(), once);
+    sheet.cellAt(0, 0);
+    sheet.rows.toList();
+    expect(seen(), once);
+  });
+
+  test('calcChain removal touches only the workbook relationships', () {
+    const String bad = '<Relationships><Relationship';
+    final Uint8List input = buildZip(<String, List<int>>{
+      ...readXlsxBytes(
+        _packageWith(
+          rows: '<row r="1"><c r="A1"><f>1+1</f><v>2</v></c></row>',
+          calcChain: true,
+        ),
+      ),
+      'xl/worksheets/_rels/sheet1.xml.rels': utf8.encode(bad),
+    });
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    book.sheets.single.setCell(1, 0, 5);
+    final Map<String, Uint8List> parts = readXlsxBytes(book.save().bytes);
+    expect(parts.containsKey('xl/calcChain.xml'), isFalse);
+    expect(parts['xl/worksheets/_rels/sheet1.xml.rels'], utf8.encode(bad));
   });
 }

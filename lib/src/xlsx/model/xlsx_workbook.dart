@@ -32,6 +32,7 @@ import 'dart:typed_data';
 
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
+import '../../opc/opaque_xml.dart';
 import '../../opc/package.dart';
 import '../../xml/utf8_buffer.dart';
 import '../../xml/xml_pull_reader.dart';
@@ -219,15 +220,25 @@ Uint8List _emptyPackage() {
 }
 
 /// The shared strings as a part's content.
+///
+/// [_root] and [_trailing] are the opened part's `<sst>` start tag and its
+/// children other than `<si>`, written back so nothing of the part is lost.
 final class _SharedStringsContent implements PartContent {
-  _SharedStringsContent(this._strings);
+  _SharedStringsContent(
+    this._strings, {
+    XmlRoot? root,
+    List<OpaqueXml> trailing = const <OpaqueXml>[],
+  }) : _root = root,
+       _trailing = trailing;
 
   final SharedStrings _strings;
+  final XmlRoot? _root;
+  final List<OpaqueXml> _trailing;
 
   @override
   List<Uint8List> encode() {
     final Utf8Buffer out = Utf8Buffer();
-    _strings.writeXml(XmlWriter(out));
+    _strings.writeXml(XmlWriter(out), root: _root, trailing: _trailing);
     return out.takeChunks();
   }
 }
@@ -346,14 +357,11 @@ final class _Book implements SheetHost {
           );
     final String? stringsTarget = _target(RelType.sharedStrings);
     final SharedStrings strings;
+    SharedStringsRead? read;
     if (stringsTarget == null) {
       strings = SharedStrings();
     } else {
-      final SharedStringsRead read = readSharedStringsRaw(
-        reader,
-        stringsTarget,
-        limits,
-      );
+      read = readSharedStringsRaw(reader, stringsTarget, limits);
       strings = SharedStrings.seeded(read.texts, raw: read.raw);
     }
     // Both read: only now is anything kept.
@@ -363,7 +371,14 @@ final class _Book implements SheetHost {
     }
     if (stringsTarget != null) {
       _stringsName = _package.canonicalPartName(stringsTarget);
-      _package.setContent(stringsTarget, _SharedStringsContent(strings));
+      _package.setContent(
+        stringsTarget,
+        _SharedStringsContent(
+          strings,
+          root: read!.root,
+          trailing: read.trailing,
+        ),
+      );
     }
     _strings = strings;
     return _encoder = CellEncoder(
@@ -483,7 +498,12 @@ final class _Book implements SheetHost {
     if (log.hasChanges) {
       final String? chain = _target(RelType.calcChain);
       if (chain != null) {
-        reader.guardXml(chain, () => _package.removePart(chain));
+        // Only the workbook refers to the calculation chain, so no other
+        // relationships part is read or rewritten.
+        reader.guardXml(
+          chain,
+          () => _package.removePart(chain, sources: <String>[workbookName]),
+        );
       }
       final bool formulas =
           !allLoaded ||

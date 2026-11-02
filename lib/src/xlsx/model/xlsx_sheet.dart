@@ -125,7 +125,8 @@ final class XlsxSheet {
   /// styled cell included).
   ///
   /// A formula cell carries its [XlsxFormulaGroup], found from the sheet's
-  /// group masters. Loads the sheet. Throws a [RangeError] outside Excel's
+  /// group masters. A value that cannot be read exactly is reported in the
+  /// workbook's warnings once, shared with [rows]. Loads the sheet. Throws a [RangeError] outside Excel's
   /// grid and an [XlsxReadException] when the sheet cannot be read.
   XlsxReadCell? cellAt(int row, int column) {
     _checkCell(row, column);
@@ -133,7 +134,13 @@ final class XlsxSheet {
     if (store == null) return null;
     final RawCell? cell = store.cellAt(row, column);
     if (cell == null || !_hasData(cell)) return null;
-    return _view(column, cell, _indexedGroup(store, row, column, cell));
+    final bool report = _reported.add(row * XlsxLimits.maxColumns + column);
+    return _view(
+      column,
+      cell,
+      _indexedGroup(store, row, column, cell),
+      row: report ? row : null,
+    );
   }
 
   /// The rows that hold a cell with data or are hidden, in row order, as
@@ -171,6 +178,7 @@ final class XlsxSheet {
   /// the sheet cannot be read. Whatever it throws, nothing has changed.
   void setCell(int row, int column, Object? value) {
     _checkCell(row, column);
+    // Programmer errors first, so they throw whatever the sheet holds.
     switch (value) {
       case XlsxHyperlink():
         throw UnsupportedError('XlsxHyperlink cells arrive in W3.');
@@ -178,6 +186,20 @@ final class XlsxSheet {
         throw UnsupportedError('XlsxRichText cells arrive in W4.');
       case XlsxCell():
         throw UnsupportedError('XlsxCell (styled) cells arrive in W2.');
+      case null ||
+          String() ||
+          num() ||
+          bool() ||
+          DateTime() ||
+          XlsxDate() ||
+          XlsxDecimal() ||
+          XlsxFormula():
+        break;
+      default:
+        throw ArgumentError(
+          'Cell ${cellRef(row, column)} on sheet "$name" holds a '
+          '${value.runtimeType}, which is not a supported cell value.',
+        );
     }
     final WorksheetPart? part = _load();
     if (part == null) {
@@ -302,8 +324,8 @@ final class XlsxSheet {
   }
 
   /// The typed view of [cell] in [column] with [group]; the decoder's
-  /// warning is reported against the cell at [row] when given ([cellAt]
-  /// reports none, [rows] each cell once).
+  /// warning is reported against the cell at [row] when given (each cell
+  /// once, by whichever of [cellAt] and [rows] reads it first).
   XlsxReadCell _view(
     int column,
     RawCell cell,

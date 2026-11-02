@@ -126,20 +126,39 @@ final class SharedStrings {
   ]);
 
   /// Writes the whole part, XML declaration included, to [w].
-  void writeXml(XmlWriter w) {
+  ///
+  /// [root], the `<sst>` start tag of an opened file, is written back with
+  /// its name, namespace declarations and attributes (`mc:Ignorable`, say);
+  /// only `count` and `uniqueCount` are written afresh. [trailing] holds the
+  /// root's children other than `<si>` (an `<extLst>`, say), written after
+  /// the items in their order. Without [root], a plain `<sst>` is written.
+  void writeXml(
+    XmlWriter w, {
+    XmlRoot? root,
+    List<OpaqueXml> trailing = const <OpaqueXml>[],
+  }) {
     w.declaration();
-    w.start('sst');
-    w.attribute('xmlns', _mainNamespace);
+    final Map<String, String> declared = <String, String>{...?root?.namespaces};
+    // Items are written without a prefix, so the main namespace must be
+    // the default inside the root.
+    if (declared[''] != _mainNamespace) declared[''] = _mainNamespace;
+    w.start(root?.qualifiedName ?? 'sst');
+    writeNamespaceDeclarations(w, declared);
     final int? count = _count;
     if (count != null) w.attribute('count', '$count');
     w.attribute('uniqueCount', '${_entries.length}');
+    if (root != null) {
+      writeKeptAttributes(w, <KeptAttribute>[
+        for (final KeptAttribute a in root.attributes)
+          if (a.namespaceUri.isNotEmpty ||
+              (a.qualifiedName != 'count' && a.qualifiedName != 'uniqueCount'))
+            a,
+      ], declaredAbove: declared);
+    }
     for (int i = 0; i < _entries.length; i++) {
       final OpaqueXml? kept = _raw[i];
       if (kept != null) {
-        kept.writeTo(
-          w,
-          declaredAbove: const <String, String>{'': _mainNamespace},
-        );
+        kept.writeTo(w, declaredAbove: declared);
         continue;
       }
       final Object entry = _entries[i];
@@ -150,6 +169,9 @@ final class SharedStrings {
         writeTextElement(w, entry as String);
       }
       w.end();
+    }
+    for (final OpaqueXml child in trailing) {
+      child.writeTo(w, declaredAbove: declared);
     }
     w.end();
   }

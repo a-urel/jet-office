@@ -333,17 +333,25 @@ final class OpcPackage {
   /// relationships and every relationship that targets it. An unknown name
   /// does nothing.
   ///
-  /// Reads every relationships part of the package, so it throws an
-  /// [OpcFormatException] when one cannot be read.
-  void removePart(String name) {
+  /// Without [sources] it reads every relationships part of the package, so
+  /// it throws an [OpcFormatException] when one cannot be read. With
+  /// [sources] (part names, `''` for the package root) only the
+  /// relationships of those sources are read and searched; the caller
+  /// vouches that no other part refers to [name], and every other
+  /// relationships part stays as it was, an unread one byte for byte.
+  void removePart(String name, {Iterable<String>? sources}) {
     final String key = _key(name);
     final _Part? part = _parts[key];
     if (part == null) return;
-    final List<String> sources = <String>{
-      ..._relsEntries.keys,
-      ..._rels.keys,
-    }.toList();
-    for (final String sourceKey in sources) {
+    final List<String> sourceKeys = sources == null
+        ? <String>{..._relsEntries.keys, ..._rels.keys}.toList()
+        : <String>[
+            for (final String source in sources)
+              if (_relsEntries.containsKey(_key(source)) ||
+                  _rels.containsKey(_key(source)))
+                _key(source),
+          ];
+    for (final String sourceKey in sourceKeys) {
       // The part's own relationships go with it; never parse them.
       if (sourceKey == key) continue;
       final String source = _sourceName(sourceKey);
