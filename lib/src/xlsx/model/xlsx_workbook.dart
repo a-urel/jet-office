@@ -1,0 +1,516 @@
+/// The workbook model: open an XLSX file or start an empty one, read and set
+/// cell values, and save with nothing lost.
+///
+/// Not ported from Quds; written for jet_office.
+///
+/// One model, two births (spec §4.1): [XlsxWorkbook.open] reads a file and
+/// [XlsxWorkbook.new] starts from the parts the writer writes for an empty
+/// workbook (`workbook_parts.dart`, `StyleRegistry`, `properties.dart`), read
+/// back the same way, so both save through one code path.
+///
+/// `open` reads the package skeleton only: the content types, the package
+/// and workbook relationships and the workbook part (spec §4.5). The shared
+/// strings and styles load when the first sheet loads; a sheet loads on first
+/// use. Saving writes every part of the package in its order: a loaded part
+/// from the model, any other from its original bytes (spec §4.3), so a part
+/// the model never loaded cannot change.
+///
+/// Bookkeeping on save (spec §4.4): when a cell changed, `calcChain.xml` is
+/// removed (part, relationship and content type) and `calcPr` asks Excel to
+/// recalculate, unless every sheet is loaded and none has a formula. The
+/// shared strings are append-only, so an unloaded sheet's indexes stay
+/// valid; their `count` is written only once every sheet is loaded and the
+/// references can be counted. Part names and relationship ids of the file
+/// are kept; a new part takes a free name and id. A macro-enabled workbook
+/// keeps its `vbaProject.bin` like any part the model does not understand.
+///
+/// @docImport '../read/xlsx_reader.dart';
+library;
+
+import 'dart:collection';
+import 'dart:typed_data';
+
+import '../../opc/change_log.dart';
+import '../../opc/ooxml.dart';
+import '../../opc/package.dart';
+import '../../xml/utf8_buffer.dart';
+import '../../xml/xml_pull_reader.dart';
+import '../../xml/xml_writer.dart';
+import '../../zip/archive_adapter.dart';
+import '../cell_encoder.dart';
+import '../number_format.dart';
+import '../properties.dart';
+import '../raw_cell.dart';
+import '../read/package_reader.dart';
+import '../read/read_exception.dart';
+import '../read/read_limits.dart';
+import '../read/shared_strings_reader.dart';
+import '../read/styles_reader.dart';
+import '../shared_strings.dart';
+import '../sheet_name.dart';
+import '../sheet_view.dart';
+import '../style_registry.dart';
+import '../warnings.dart';
+import '../workbook_parts.dart';
+import '../worksheet_parts.dart';
+import '../xlsx_writer.dart';
+import 'cell_store.dart';
+import 'styles_part.dart';
+import 'workbook_part.dart';
+import 'worksheet_part.dart';
+import 'xlsx_sheet.dart';
+
+/// The package of [book], for tests.
+OpcPackage packageOf(XlsxWorkbook book) => book._book.reader.package;
+
+/// The change log of [book], for tests.
+ChangeLog changeLogOf(XlsxWorkbook book) => book._book.log;
+
+/// The shared strings of [book], or `null` before they load, for tests.
+SharedStrings? sharedStringsOf(XlsxWorkbook book) => book._book._strings;
+
+/// The styles part of [book], or `null` before it loads or when the file
+/// has none, for tests.
+StylesPart? stylesPartOf(XlsxWorkbook book) => book._book._styles;
+
+/// An XLSX workbook held in memory: opened from a file or started empty,
+/// read and changed cell by cell, and saved.
+///
+/// ```dart
+/// final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+/// final XlsxSheet prices = book.sheet('Fiyatlar');
+/// prices.setCell(4, 1, XlsxDecimal('12.50'));
+/// final XlsxResult result = book.save();
+/// ```
+///
+/// Opening then saving with no change gives a file whose every part means
+/// what the input's did; a change touches only what it changes, plus the
+/// bookkeeping Excel needs (a dropped `calcChain.xml`, `fullCalcOnLoad`).
+/// Formula results are not computed: the cached results of formulas the
+/// model did not change are kept, so a reader that does not calculate (this
+/// library's included) sees them as they were until Excel recalculates.
+final class XlsxWorkbook {
+  /// An empty workbook, with no sheets yet; add one with [addSheet].
+  XlsxWorkbook() : _book = _Book(_emptyPackage(), const XlsxReadLimits());
+
+  /// Opens the XLSX file [bytes] within [limits].
+  ///
+  /// Reads only the package skeleton and the workbook part; sheets load on
+  /// first use. Throws an [ArgumentError] when a limit is below 1 and an
+  /// [XlsxReadException] when the file is not a readable XLSX workbook, as
+  /// [XlsxReader] does. A sheet the workbook lists without a part is kept,
+  /// reads as empty and gets an [XlsxWarningCode.sheetPartMissing] warning.
+  factory XlsxWorkbook.open(
+    Uint8List bytes, {
+    XlsxReadLimits limits = const XlsxReadLimits(),
+  }) {
+    limits.check();
+    return XlsxWorkbook._(_Book(bytes, limits));
+  }
+
+  XlsxWorkbook._(this._book);
+
+  final _Book _book;
+
+  /// The sheets in tab order. Unmodifiable.
+  List<XlsxSheet> get sheets => _book.sheetsView;
+
+  /// The first sheet named [name], compared ignoring case as Excel compares
+  /// sheet names.
+  ///
+  /// Throws an [ArgumentError] when no sheet has that name.
+  XlsxSheet sheet(String name) {
+    final String key = sheetNameKey(name);
+    for (final XlsxSheet s in sheets) {
+      if (sheetNameKey(s.name) == key) return s;
+    }
+    throw ArgumentError.value(name, 'name', 'No such sheet.');
+  }
+
+  /// Adds a visible sheet named [name] after the last tab and returns it.
+  ///
+  /// The name is made valid and unique as `XlsxWriter.addSheet` makes it,
+  /// against the sheets the workbook already has, and a changed name is
+  /// reported as a warning. The sheet's part and relationship take a name
+  /// and an id the package does not use yet. Loads the shared strings and
+  /// styles, so it throws an [XlsxReadException] when they cannot be read.
+  XlsxSheet addSheet(String name) => _book.addSheet(name);
+
+  /// Whether the workbook counts dates from 1904, as files from old Mac
+  /// versions of Excel do; dates are set and read in its system.
+  bool get date1904 => _book.workbook.date1904;
+
+  /// What was repaired or could not be read exactly while opening, editing
+  /// and saving, aggregated per sheet and [XlsxWarningCode]. An unmodifiable
+  /// live view.
+  List<XlsxWarning> get warnings => _book.warnings.warnings;
+
+  /// Saves the workbook and returns the file with the warnings so far.
+  ///
+  /// Throws a [StateError] when the workbook has no sheet or no visible
+  /// sheet, with the writer's messages, and an [XlsxReadException] when a
+  /// part the model did not load cannot be copied from the file.
+  XlsxResult save() {
+    _book.checkSavable();
+    final ZipWriter zip = ZipWriter();
+    _book.writeTo(zip);
+    return xlsxResultOf(
+      zip.close()!,
+      List<XlsxWarning>.unmodifiable(_book.warnings.warnings),
+    );
+  }
+
+  /// Saves the workbook to [sink], as [XlsxStreamWriter] sends a file, and
+  /// closes it.
+  ///
+  /// Throws as [save] does; for a workbook without a (visible) sheet nothing
+  /// is sent and the sink stays open. Rethrows what the sink throws.
+  void saveTo(Sink<List<int>> sink) {
+    _book.checkSavable();
+    final ZipWriter zip = ZipWriter(sink: sink);
+    _book.writeTo(zip);
+    zip.close();
+  }
+}
+
+/// The package of an empty workbook, written by the writer's own part
+/// writers: a workbook without sheets, its relationships, empty styles and
+/// shared strings, and the default document properties.
+Uint8List _emptyPackage() {
+  Uint8List render(void Function(XmlWriter w) write) {
+    final Utf8Buffer out = Utf8Buffer();
+    write(XmlWriter(out));
+    return out.takeBytes();
+  }
+
+  const XlsxProperties properties = XlsxProperties();
+  final ZipWriter zip = ZipWriter()
+    ..add(
+      'xl/workbook.xml',
+      render(
+        (XmlWriter w) => writeWorkbook(
+          w,
+          tabs: const <WorkbookSheet>[],
+          activeTab: 0,
+          fullCalcOnLoad: false,
+        ),
+      ),
+    )
+    ..add('xl/styles.xml', render(StyleRegistry().writeStylesXml))
+    ..add('xl/sharedStrings.xml', render(SharedStrings().writeXml))
+    ..add(
+      'xl/_rels/workbook.xml.rels',
+      render((XmlWriter w) => writeWorkbookRelationships(w, 0)),
+    )
+    ..add(
+      'docProps/core.xml',
+      render((XmlWriter w) => writeCoreProperties(w, properties)),
+    )
+    ..add(
+      'docProps/app.xml',
+      render((XmlWriter w) => writeAppProperties(w, properties)),
+    )
+    ..add('_rels/.rels', render(writeRootRelationships))
+    ..add(
+      '[Content_Types].xml',
+      render((XmlWriter w) => writeContentTypes(w, 0)),
+    );
+  return zip.close()!;
+}
+
+/// The shared strings as a part's content.
+final class _SharedStringsContent implements PartContent {
+  _SharedStringsContent(this._strings);
+
+  final SharedStrings _strings;
+
+  @override
+  List<Uint8List> encode() {
+    final Utf8Buffer out = Utf8Buffer();
+    _strings.writeXml(XmlWriter(out));
+    return out.takeChunks();
+  }
+}
+
+/// The shared strings' texts by index as a list, without copying them.
+final class _Texts extends ListBase<String> {
+  _Texts(this._strings);
+
+  final SharedStrings _strings;
+
+  @override
+  int get length => _strings.length;
+
+  @override
+  set length(int value) => throw UnsupportedError('Read-only.');
+
+  @override
+  String operator [](int index) => _strings.textAt(index);
+
+  @override
+  void operator []=(int index, String value) =>
+      throw UnsupportedError('Read-only.');
+}
+
+/// The state behind an [XlsxWorkbook], which its sheets share.
+final class _Book implements SheetHost {
+  _Book(Uint8List bytes, XlsxReadLimits limits)
+    : reader = PackageReader(bytes, limits) {
+    final String plain = reader.workbookPart;
+    workbookName = reader.package.canonicalPartName(plain)!;
+    final WorkbookPart part = reader.guardXml(
+      plain,
+      () => WorkbookPart.read(reader.openXml(plain), limits),
+    );
+    if (!part.isTyped) {
+      throw XlsxReadException(
+        XlsxReadFailure.missingWorkbook,
+        'The workbook part is not a SpreadsheetML workbook.',
+        part: plain,
+      );
+    }
+    workbook = part;
+    reader.package.setContent(workbookName, part);
+    final Map<String, String> targets = <String, String>{
+      for (final PartRelationship r in reader.relationshipsOf(plain))
+        r.id: r.target,
+    };
+    for (final SheetEntry entry in part.sheets) {
+      _namer.reserve(entry.name);
+      final String? target = targets[entry.relationshipId];
+      final String? partName = target == null
+          ? null
+          : reader.package.canonicalPartName(target);
+      final XlsxSheet sheet = newSheet(this, entry, partName);
+      _sheets.add(sheet);
+      if (partName == null) {
+        warnings.add(
+          XlsxWarningCode.sheetPartMissing,
+          sheet: entry.name,
+          key: sheet,
+        );
+      }
+    }
+  }
+
+  @override
+  final PackageReader reader;
+
+  @override
+  final ChangeLog log = ChangeLog();
+
+  @override
+  final WarningCollector warnings = WarningCollector();
+
+  /// The workbook part's name, absolute, as stored.
+  late final String workbookName;
+  late final WorkbookPart workbook;
+
+  final List<XlsxSheet> _sheets = <XlsxSheet>[];
+  late final List<XlsxSheet> sheetsView = UnmodifiableListView<XlsxSheet>(
+    _sheets,
+  );
+  late final SheetNamer _namer = SheetNamer(warnings);
+
+  CellEncoder? _encoder;
+  SharedStrings? _strings;
+  late final _Texts _texts = _Texts(_strings!);
+
+  /// The shared strings part's name; `null` while the package has none.
+  String? _stringsName;
+  StylesPart? _styles;
+
+  OpcPackage get _package => reader.package;
+
+  @override
+  bool get date1904 => workbook.date1904;
+
+  @override
+  StyleTable get styleTable => _styles?.table ?? StyleTable.empty;
+
+  @override
+  List<String>? get sharedStringTexts =>
+      _stringsName != null || _strings!.length > 0 ? _texts : null;
+
+  @override
+  CellEncoder loadTables() {
+    final CellEncoder? loaded = _encoder;
+    if (loaded != null) return loaded;
+    final XlsxReadLimits limits = reader.limits;
+    final String? stylesTarget = _target(RelType.styles);
+    final StylesPart? styles = stylesTarget == null
+        ? null
+        : reader.guardXml(
+            stylesTarget,
+            () => StylesPart.read(reader.openXml(stylesTarget), limits),
+          );
+    final String? stringsTarget = _target(RelType.sharedStrings);
+    final SharedStrings strings;
+    if (stringsTarget == null) {
+      strings = SharedStrings();
+    } else {
+      final SharedStringsRead read = readSharedStringsRaw(
+        reader,
+        stringsTarget,
+        limits,
+      );
+      strings = SharedStrings.seeded(read.texts, raw: read.raw);
+    }
+    // Both read: only now is anything kept.
+    if (stylesTarget != null) {
+      _package.setContent(stylesTarget, styles!);
+      _styles = styles;
+    }
+    if (stringsTarget != null) {
+      _stringsName = _package.canonicalPartName(stringsTarget);
+      _package.setContent(stringsTarget, _SharedStringsContent(strings));
+    }
+    _strings = strings;
+    return _encoder = CellEncoder(
+      strings: strings,
+      // Unused: the model's styles are raw indexes into its styles part.
+      styles: StyleRegistry(),
+      warnings: warnings,
+    );
+  }
+
+  @override
+  int dateStyle(int? style, {required bool withTime}) {
+    final XlsxNumFmt format = withTime
+        ? XlsxNumFmt.localeDateTime
+        : XlsxNumFmt.localeShortDate;
+    return _stylesForEdit().withNumberFormat(style, format.builtinId!);
+  }
+
+  /// The styles part, added to the package from the writer's empty styles
+  /// when the file has none.
+  StylesPart _stylesForEdit() {
+    final StylesPart? loaded = _styles;
+    if (loaded != null) return loaded;
+    final Utf8Buffer out = Utf8Buffer();
+    StyleRegistry().writeStylesXml(XmlWriter(out));
+    final StylesPart part = StylesPart.read(
+      XmlPullReader.fromBytes(out.takeBytes()),
+      reader.limits,
+    );
+    _addWorkbookPart('styles.xml', ContentType.styles, RelType.styles, part);
+    return _styles = part;
+  }
+
+  XlsxSheet addSheet(String requested) {
+    final CellEncoder encoder = loadTables();
+    final String name = _namer.assign(requested);
+    final int number = _sheets.length + 1;
+    final WorksheetSettings settings = WorksheetSettings(sheetNumber: number);
+    final WorksheetPart part = WorksheetPart.read(
+      XmlPullReader(
+        worksheetHeader(settings, hasRows: false) +
+            worksheetTrailer(settings, hasRows: false),
+      ),
+      part: 'worksheets/sheet$number.xml',
+      limits: reader.limits,
+      warn: (XlsxWarningCode code, String? cell, {String? detail}) {},
+    )..bindEncoder(encoder);
+    final (String partName, String id) = _addWorkbookPart(
+      'worksheets/sheet$number.xml',
+      ContentType.worksheet,
+      RelType.worksheet,
+      part,
+    );
+    final XlsxSheet sheet = newSheet(
+      this,
+      workbook.addSheet(name, id),
+      partName,
+      part: part,
+    );
+    _sheets.add(sheet);
+    return sheet;
+  }
+
+  /// Adds [content] as a part of [contentType] named [name] in the
+  /// workbook's folder (or the next free name) with a workbook relationship
+  /// of [relType]; returns the part's name and the relationship's id.
+  (String, String) _addWorkbookPart(
+    String name,
+    String contentType,
+    String relType,
+    PartContent content,
+  ) {
+    final String folder = workbookName.substring(
+      0,
+      workbookName.lastIndexOf('/') + 1,
+    );
+    final String partName = _package.addPart(
+      '$folder$name',
+      contentType,
+      content,
+    );
+    final String id = _package.addRelationship(
+      workbookName,
+      type: relType,
+      target: partName.startsWith(folder)
+          ? partName.substring(folder.length)
+          : partName,
+    );
+    return (partName, id);
+  }
+
+  /// The target of the workbook's first relationship of [type] whose part
+  /// exists (normalized, no leading `/`), or `null`.
+  String? _target(String type) {
+    for (final PartRelationship r in reader.relationshipsOf(
+      reader.workbookPart,
+    )) {
+      if (r.type == type && reader.hasPart(r.target)) return r.target;
+    }
+    return null;
+  }
+
+  void checkSavable() {
+    if (_sheets.isEmpty) throw StateError(noSheetMessage);
+    if (!_sheets.any(
+      (XlsxSheet s) => s.visibility == XlsxSheetVisibility.visible,
+    )) {
+      throw StateError(noVisibleSheetMessage);
+    }
+  }
+
+  /// Applies the save bookkeeping and writes the package to [zip].
+  void writeTo(ZipWriter zip) {
+    final bool allLoaded = _sheets.every(
+      (XlsxSheet s) => isLoadedSheet(s) || !sheetHasPart(s),
+    );
+    if (log.hasChanges) {
+      final String? chain = _target(RelType.calcChain);
+      if (chain != null) {
+        reader.guardXml(chain, () => _package.removePart(chain));
+      }
+      final bool formulas =
+          !allLoaded ||
+          _sheets.any((XlsxSheet s) => cellStoreOf(s)?.hasFormulas ?? false);
+      if (formulas) workbook.requestFullCalculation();
+    }
+    final SharedStrings? strings = _strings;
+    if (strings != null) {
+      if (allLoaded) {
+        var references = 0;
+        for (final XlsxSheet s in _sheets) {
+          final CellStore? store = cellStoreOf(s);
+          if (store != null) {
+            references += store.countOf(RawCellKind.sharedString);
+          }
+        }
+        strings.setCount(references);
+      }
+      if (_stringsName == null && strings.length > 0) {
+        _stringsName = _addWorkbookPart(
+          'sharedStrings.xml',
+          ContentType.sharedStrings,
+          RelType.sharedStrings,
+          _SharedStringsContent(strings),
+        ).$1;
+      }
+    }
+    reader.guardXml(reader.workbookPart, () => _package.writeTo(zip));
+  }
+}
