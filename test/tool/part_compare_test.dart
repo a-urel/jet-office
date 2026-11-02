@@ -61,7 +61,10 @@ void main() {
     final Uint8List a = _zip(<String, Object>{'xl/a.xml': '<a x="2"/>'});
     final List<String> diff = comparePackages(e, a);
     expect(diff, hasLength(1));
-    expect(diff.single, allOf(contains('xl/a.xml'), contains('x')));
+    expect(
+      diff.single,
+      allOf(contains('xl/a.xml'), contains('attribute x'), contains('"2"')),
+    );
   });
 
   test('a missing part is reported', () {
@@ -163,5 +166,46 @@ void main() {
       '<t xml:space="preserve">a</t>',
     );
     expect(diff, hasLength(1));
+  });
+
+  test('preserved whitespace reaches the descendants', () {
+    final List<String> diff = compareXml(
+      'xl/a.xml',
+      '<a xml:space="preserve"><b> x</b></a>',
+      '<a xml:space="preserve"><b>x</b></a>',
+    );
+    expect(diff, hasLength(1));
+  });
+
+  test('the spaces around a leaf text are kept', () {
+    expect(
+      compareXml(
+        'xl/workbook.xml',
+        '<definedName> A</definedName>',
+        '<definedName>A</definedName>',
+      ),
+      hasLength(1),
+    );
+    expect(
+      compareXml('xl/a.xml', '<r>\n  <b> </b>\n</r>', '<r><b> </b></r>'),
+      isEmpty,
+    );
+  });
+
+  test('bytes that are not a ZIP are reported, not thrown', () {
+    final Uint8List good = _zip(<String, Object>{'xl/a.xml': '<a/>'});
+    final Uint8List bad = Uint8List.fromList(utf8.encode('not a zip at all'));
+    expect(comparePackages(good, bad), hasLength(1));
+    expect(comparePackages(bad, good), hasLength(1));
+  });
+
+  test('an undecodable part is reported, not thrown', () {
+    final Uint8List good = _zip(<String, Object>{'xl/a.xml': '<a/>'});
+    final Uint8List bad = _zip(<String, Object>{
+      'xl/a.xml': <int>[0x3c, 0x61, 0x3e, 0xff, 0xfe, 0x3c, 0x2f, 0x61, 0x3e],
+    });
+    final List<String> diff = comparePackages(good, bad);
+    expect(diff, hasLength(1));
+    expect(diff.single, contains('xl/a.xml'));
   });
 }

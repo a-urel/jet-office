@@ -17,8 +17,9 @@
 /// * elements by namespace URI and local name, so prefixes do not matter;
 /// * attributes as a map keyed by namespace URI and local name, so their
 ///   order does not matter; `xmlns` declarations are left out;
-/// * text trimmed, except under `xml:space="preserve"` and inside `t`, `v`,
-///   `f` and `formula*` elements, where it compares exactly;
+/// * text exactly, leading and trailing spaces included; only a text node
+///   of whitespace between elements (indentation) is ignored, and not
+///   under `xml:space="preserve"`;
 /// * relationship ids by what they resolve to: a `.rels` part compares as
 ///   the set of `(type, target, mode)`, and an attribute in the
 ///   relationships namespace (`r:id`, `r:embed`) in the part the rels
@@ -55,7 +56,13 @@ List<String> comparePackages(
 }) {
   final _Package e = _Package(expected, 'expected');
   final _Package a = _Package(actual, 'actual');
-  final List<String> out = <String>[];
+  final List<String> out = <String>[
+    if (e.error != null)
+      'package: the expected package is unreadable: ${e.error}',
+    if (a.error != null)
+      'package: the actual package is unreadable: ${a.error}',
+  ];
+  if (out.isNotEmpty) return out;
   final Set<String> names = <String>{...e.parts.keys, ...a.parts.keys}
     ..removeAll(ignoreParts);
   for (final String name in names) {
@@ -113,8 +120,12 @@ void _comparePart(String name, _Package e, _Package a, List<String> out) {
   final XmlDocument? ed = e.document(name);
   final XmlDocument? ad = a.document(name);
   if (ed == null || ad == null) {
-    if (ed == null) out.add('$name: the expected part is not well-formed XML');
-    if (ad == null) out.add('$name: the actual part is not well-formed XML');
+    if (ed == null) {
+      out.add('$name: the expected part is not well-formed XML or not UTF-8');
+    }
+    if (ad == null) {
+      out.add('$name: the actual part is not well-formed XML or not UTF-8');
+    }
     return;
   }
   if (e.isSharedStrings(name) && a.isSharedStrings(name)) {
@@ -253,19 +264,16 @@ class _Canon {
           _attrKey(a.name) == '$_xmlNs|space' && a.value == 'preserve',
     );
     final String local = element.name.local;
-    final bool exact =
-        inheritedExact ||
-        preserve ||
-        local == 't' ||
-        local == 'v' ||
-        local == 'f' ||
-        local.startsWith('formula');
+    final bool exact = inheritedExact || preserve;
+    final bool hasElements = element.childElements.isNotEmpty;
     final List<Object> children = <Object>[];
     final StringBuffer run = StringBuffer();
     void flush() {
       if (run.isEmpty) return;
-      final String text = exact ? run.toString() : run.toString().trim();
-      if (text.isNotEmpty) children.add(text);
+      final String text = run.toString();
+      // Whitespace between elements is layout; in a leaf it is content.
+      final bool layout = hasElements && !exact && text.trim().isEmpty;
+      if (text.isNotEmpty && !layout) children.add(text);
       run.clear();
     }
 
@@ -274,7 +282,7 @@ class _Canon {
         run.write(child.value);
       } else if (child is XmlElement) {
         flush();
-        children.add(node(child, exact && inheritedExact));
+        children.add(node(child, exact));
       }
     }
     flush();
@@ -340,8 +348,20 @@ bool _isXmlns(XmlAttribute a) =>
 /// The parts of one package, with the lookups the comparison needs.
 class _Package {
   _Package(Uint8List bytes, this.side) {
-    for (final ArchiveFile file in ZipDecoder().decodeBytes(bytes).files) {
-      if (file.isFile) parts[file.name] = Uint8List.fromList(file.content);
+    try {
+      for (final ArchiveFile file in ZipDecoder().decodeBytes(bytes).files) {
+        if (file.isFile) parts[file.name] = Uint8List.fromList(file.content);
+      }
+      if (parts.isEmpty) {
+        error_ = 'not a readable ZIP (it holds no parts)';
+        return;
+      }
+    } on ArchiveException catch (error) {
+      error_ = 'not a readable ZIP (${error.message})';
+      return;
+    } on FormatException catch (error) {
+      error_ = 'not a readable ZIP (${error.message})';
+      return;
     }
     final Uint8List? types = parts['[Content_Types].xml'];
     if (types != null) {
@@ -363,11 +383,17 @@ class _Package {
         }
       } on XmlException {
         // The part itself is reported as not well-formed.
+      } on FormatException {
+        // The part itself is reported as not valid UTF-8.
       }
     }
   }
 
   final String side;
+  String? error_;
+
+  /// Why the package could not be opened, or null.
+  String? get error => error_;
   final Map<String, Uint8List> parts = <String, Uint8List>{};
   final Map<String, String> _defaults = <String, String>{};
   final Map<String, String> _overrides = <String, String>{};
@@ -396,7 +422,9 @@ class _Package {
   XmlDocument? document(String part) => _documents.putIfAbsent(part, () {
     try {
       return XmlDocument.parse(utf8.decode(parts[part]!));
-    } on Object {
+    } on XmlException {
+      return null;
+    } on FormatException {
       return null;
     }
   });
