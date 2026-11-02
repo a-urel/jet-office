@@ -48,7 +48,7 @@ void main() {
     expect(log, <String>['r2', 'r1']);
   });
 
-  test('a revert that throws does not stop the rollback or hide the error', () {
+  test('a revert that throws does not stop the rollback and is reported', () {
     final List<String> log = <String>[];
     final ChangeLog changes = ChangeLog();
     final StateError error = StateError('boom');
@@ -59,7 +59,23 @@ void main() {
         changes.record(_Fake('3', log));
         throw error;
       }),
-      throwsA(same(error)),
+      throwsA(
+        isA<StateError>()
+            .having(
+              (StateError e) => e,
+              'is not the original',
+              isNot(same(error)),
+            )
+            .having(
+              (StateError e) => e.message,
+              'message',
+              allOf(
+                contains('boom'),
+                contains('revert 2 failed'),
+                contains('inconsistent'),
+              ),
+            ),
+      ),
     );
     expect(log, <String>['r3', 'r2', 'r1']);
   });
@@ -112,19 +128,20 @@ void main() {
     expect(log, <String>['r2', 'r1', 'a1', 'a2']);
   });
 
-  test('record outside a transaction is its own one-change set', () {
-    final List<String> log = <String>[];
+  test('record outside a transaction throws and leaves hasChanges false', () {
+    final ChangeLog changes = ChangeLog();
+    expect(() => changes.record(_Fake('1', <String>[])), throwsStateError);
+    expect(changes.hasChanges, isFalse);
+  });
+
+  test('hasChanges is true after a transaction that recorded', () {
     final ChangeLog changes = ChangeLog();
     expect(changes.hasChanges, isFalse);
-    changes.record(_Fake('1', log));
-    expect(changes.hasChanges, isTrue);
-    final _Fake c2 = _Fake('2', log);
-    final ChangeSet set = changes.transaction(() => changes.record(c2));
-    expect(set.changes, <Change>[c2]);
+    changes.transaction(() => changes.record(_Fake('1', <String>[])));
     expect(changes.hasChanges, isTrue);
   });
 
-  test('hasChanges stays true after a rolled back transaction', () {
+  test('a rollback from a clean log leaves hasChanges false', () {
     final ChangeLog changes = ChangeLog();
     expect(
       () => changes.transaction(() {
@@ -133,6 +150,56 @@ void main() {
       }),
       throwsStateError,
     );
+    expect(changes.hasChanges, isFalse);
+  });
+
+  test('a rollback keeps hasChanges true when it was already true', () {
+    final ChangeLog changes = ChangeLog();
+    changes.transaction(() => changes.record(_Fake('1', <String>[])));
+    expect(
+      () => changes.transaction(() {
+        changes.record(_Fake('2', <String>[]));
+        throw StateError('boom');
+      }),
+      throwsStateError,
+    );
+    expect(changes.hasChanges, isTrue);
+  });
+
+  test('a failed inner transaction restores hasChanges from its own start', () {
+    final ChangeLog changes = ChangeLog();
+    changes.transaction(() {
+      changes.record(_Fake('1', <String>[]));
+      try {
+        changes.transaction(() {
+          changes.record(_Fake('2', <String>[]));
+          throw StateError('inner');
+        });
+      } on StateError {
+        // handled
+      }
+      expect(changes.hasChanges, isTrue);
+    });
+    final ChangeLog clean = ChangeLog();
+    clean.transaction(() {
+      try {
+        clean.transaction(() {
+          clean.record(_Fake('1', <String>[]));
+          throw StateError('inner');
+        });
+      } on StateError {
+        // handled
+      }
+      expect(clean.hasChanges, isFalse);
+    });
+  });
+
+  test('revertSet does not reset hasChanges', () {
+    final ChangeLog changes = ChangeLog();
+    final ChangeSet set = changes.transaction(
+      () => changes.record(_Fake('1', <String>[])),
+    );
+    changes.revertSet(set);
     expect(changes.hasChanges, isTrue);
   });
 
