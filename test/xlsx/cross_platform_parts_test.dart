@@ -7,19 +7,8 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import '../../benchmark/src/workload.dart';
+import '../support/fnv1a.dart';
 import '../support/read_xlsx.dart';
-
-/// FNV-1a (32 bit) over [bytes].
-int _fnv1a(List<int> bytes) {
-  int hash = 0x811c9dc5;
-  for (final int b in bytes) {
-    // hash * 0x01000193 = hash * 0x193 + (hash << 24), kept below 2^53 so the
-    // web computes it exactly.
-    final int x = hash ^ b;
-    hash = (x * 0x193 + ((x << 24) & 0xffffffff)) & 0xffffffff;
-  }
-  return hash;
-}
 
 void main() {
   test('every part has the same contents on the VM and the web', () {
@@ -29,7 +18,7 @@ void main() {
       for (final MapEntry<String, List<int>> e in readXlsxBytes(
         book.close().bytes,
       ).entries)
-        e.key: _fnv1a(e.value),
+        e.key: fnv1a(e.value),
     };
     expect(sums, <String, int>{
       'xl/worksheets/sheet1.xml': 2754264325,
