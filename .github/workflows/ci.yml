@@ -123,6 +123,15 @@ jobs:
       - name: Validate the model's output for the re-saved fixtures
         run: dotnet run --project tool/ooxml_validate -- build/model-resaved
 
+      # What the model saves after a change must be valid too: every
+      # fixture with a date, a date-time, a formula and a string set and a
+      # sheet added, plus a workbook generated from nothing.
+      - name: Edit the fixtures through the model
+        run: dart run tool/edit_model.dart build/fixtures build/model-edited
+
+      - name: Validate the model's edited and generated output
+        run: dotnet run --project tool/ooxml_validate -- build/model-edited
+
       # Negative control: every check must reject m1_corrupt.xlsx (see
       # tool/write_fixtures.dart), except the model round trip, which passes
       # on it: the model keeps the corrupt file's stray content faithfully, so
