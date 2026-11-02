@@ -104,7 +104,7 @@ final class OpcPackage {
           _relsEntries[_key(source)] = name;
           continue;
         }
-        _parts[key] = _Part('/$name', name);
+        _parts[key] = _Part('/${_plain(name)}', name);
       }
     }
   }
@@ -137,8 +137,8 @@ final class OpcPackage {
   // entry of its relationships, for entries not parsed yet.
   final Map<String, String> _relsEntries = <String, String>{};
   // Parsed or created relationships by the same key, in first-use order.
-  final Map<String, ({String source, Relationships rels})> _rels =
-      <String, ({String source, Relationships rels})>{};
+  final Map<String, ({String source, Relationships rels, bool fromInput})>
+  _rels = <String, ({String source, Relationships rels, bool fromInput})>{};
 
   /// The names of the parts, in original ZIP order, then added parts in the
   /// order they were added. Absolute, as stored.
@@ -344,6 +344,8 @@ final class OpcPackage {
       ..._rels.keys,
     }.toList();
     for (final String sourceKey in sources) {
+      // The part's own relationships go with it; never parse them.
+      if (sourceKey == key) continue;
       final String source = _sourceName(sourceKey);
       _relsOf(source, create: false)!.removeWhere(
         (OpcRelationship r) =>
@@ -357,27 +359,34 @@ final class OpcPackage {
   }
 
   /// Writes the package to [zip]: `[Content_Types].xml`, the relationships
-  /// parts that have relationships, then every part in [partNames] order,
+  /// parts, then every part in [partNames] order,
   /// from its content when a model set it, else from its original bytes.
   ///
-  /// Throws an [OpcFormatException] when an entry or a relationships part
-  /// cannot be read. The archive is incomplete then; abandon it.
+  /// A relationships part of the input that was never parsed is copied from
+  /// its original bytes, so a malformed one does not stop the write. Throws
+  /// an [OpcFormatException] when an entry cannot be read. The archive is
+  /// incomplete then; abandon it.
   void writeTo(ZipWriter zip) {
     final Utf8Buffer types = Utf8Buffer();
     _contentTypes.write(XmlWriter(types));
     zip.addChunks(_contentTypesPart, types.takeChunks());
 
-    for (final String key in _relsEntries.keys.toList()) {
-      _relsOf(_sourceName(key), create: false);
-    }
-    final List<({String source, Relationships rels})> all =
-        <({String source, Relationships rels})>[
-          // The package relationships first, then the rest in first-use order.
-          ..._rels.values.where((e) => e.source.isEmpty),
-          ..._rels.values.where((e) => e.source.isNotEmpty),
-        ];
-    for (final ({String source, Relationships rels}) entry in all) {
-      if (entry.rels.items.isEmpty) continue;
+    // Package relationships first, then the rest. An input part never
+    // parsed is copied from its bytes; a parsed or new one is written from
+    // the model (an input one even when empty, a new empty one not at all).
+    final List<String> all = <String>[..._relsEntries.keys, ..._rels.keys];
+    final List<String> keys = <String>[
+      ...all.where((String k) => k.isEmpty),
+      ...all.where((String k) => k.isNotEmpty),
+    ];
+    for (final String key in keys) {
+      final String? pending = _relsEntries[key];
+      if (pending != null) {
+        zip.add(pending, _readEntry(_zip!, pending));
+        continue;
+      }
+      final entry = _rels[key]!;
+      if (entry.rels.items.isEmpty && !entry.fromInput) continue;
       final Utf8Buffer out = Utf8Buffer();
       entry.rels.write(XmlWriter(out));
       zip.addChunks(_relsName(entry.source), out.takeChunks());
@@ -412,7 +421,9 @@ final class OpcPackage {
     } else if (create) {
       rels = Relationships();
     }
-    if (rels != null) _rels[key] = (source: plain, rels: rels);
+    if (rels != null) {
+      _rels[key] = (source: plain, rels: rels, fromInput: entry != null);
+    }
     return rels;
   }
 

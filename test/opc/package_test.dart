@@ -366,6 +366,87 @@ void main() {
     });
   });
 
+  group('input relationships parts', () {
+    Uint8List write(OpcPackage p) {
+      final ZipWriter w = ZipWriter();
+      p.writeTo(w);
+      return w.close()!;
+    }
+
+    ZipReader open(Uint8List b) => ZipReader(
+      b,
+      maxEntries: 1000,
+      maxEntryBytes: 1 << 24,
+      maxTotalBytes: 1 << 26,
+      maxCompressionRatio: 1000,
+    );
+
+    test('empty ones are still written', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('_rels/.rels', '<Relationships/>'),
+        ('xl/workbook.xml', '<w/>'),
+        ('xl/_rels/workbook.xml.rels', '<Relationships/>'),
+      ]);
+      // Parse one, leave the other untouched.
+      expect(p.relationshipsOf(''), isEmpty);
+      final ZipReader z = open(write(p));
+      expect(z.contains('_rels/.rels'), isTrue);
+      expect(z.contains('xl/_rels/workbook.xml.rels'), isTrue);
+    });
+
+    test('an untouched one comes back byte-identical', () {
+      const String raw =
+          '<Relationships xmlns="$_relNs">'
+          '<Relationship Id="rId1" Type="t" Target="http://x" '
+          'TargetMode="external" extra="1"/></Relationships>';
+      final OpcPackage p = _package(<(String, String)>[
+        ('xl/workbook.xml', '<w/>'),
+        ('xl/_rels/workbook.xml.rels', raw),
+      ]);
+      final ZipReader z = open(write(p));
+      expect(utf8.decode(z.read('xl/_rels/workbook.xml.rels')), raw);
+    });
+
+    test('a malformed untouched one does not stop writeTo', () {
+      const String bad = '<Relationships><Relationship';
+      final OpcPackage p = _package(<(String, String)>[
+        ('xl/workbook.xml', '<w/>'),
+        ('xl/_rels/workbook.xml.rels', bad),
+      ]);
+      final ZipReader z = open(write(p));
+      expect(utf8.decode(z.read('xl/_rels/workbook.xml.rels')), bad);
+    });
+
+    test('a new empty one is skipped and a removed part loses its own', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('a.xml', '<a/>'),
+        ('b.xml', '<b/>'),
+        ('_rels/a.xml.rels', '<Relationships/>'),
+      ]);
+      p.removePart('/a.xml');
+      final ZipReader z = open(write(p));
+      expect(z.contains('_rels/a.xml.rels'), isFalse);
+      expect(z.contains('_rels/b.xml.rels'), isFalse);
+    });
+
+    test('removePart does not parse the removed part\'s own relationships', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('a.xml', '<a/>'),
+        ('_rels/a.xml.rels', '<Relationships><Relationship'),
+      ]);
+      p.removePart('/a.xml');
+      expect(p.hasPart('/a.xml'), isFalse);
+      expect(open(write(p)).contains('_rels/a.xml.rels'), isFalse);
+    });
+
+    test('an entry stored with a leading slash has one slash', () {
+      final OpcPackage p = _package(<(String, String)>[('/xl/a.xml', '<a/>')]);
+      expect(p.partNames.toList(), <String>['/xl/a.xml']);
+      expect(p.hasPart('/xl/a.xml'), isTrue);
+      expect(_text(p, '/xl/a.xml'), '<a/>');
+    });
+  });
+
   group('resolve', () {
     test('targets resolve relative, absolute, percent-encoded and with '
         'backslashes', () {
