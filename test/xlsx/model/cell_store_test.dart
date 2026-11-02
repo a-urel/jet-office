@@ -421,4 +421,25 @@ void main() {
       });
     });
   });
+
+  test('retainedBytesEstimate grows with cells and counts the pool', () {
+    final CellStore store = CellStore();
+    expect(store.retainedBytesEstimate, 0);
+    for (int r = 0; r < 100; r++) {
+      store.put(r, 0, RawCell(kind: RawCellKind.number, value: '$r'));
+    }
+    final int hundred = store.retainedBytesEstimate;
+    expect(hundred, greaterThan(100 * (4 + 4 + 8)));
+    for (int r = 100; r < 10000; r++) {
+      store.put(r, 0, RawCell(kind: RawCellKind.number, value: '$r'));
+    }
+    // Fixed per cell: a 4-byte word and style and an 8-byte value, plus the
+    // row lists; capacity slack is bounded, so the figure is near linear.
+    final int many = store.retainedBytesEstimate;
+    expect(many, greaterThan(hundred * 50));
+    expect(many, lessThan(10000 * 64));
+    final int before = store.retainedBytesEstimate;
+    store.put(0, 1, RawCell(kind: RawCellKind.string, value: 'x' * 1000));
+    expect(store.retainedBytesEstimate, greaterThanOrEqualTo(before + 2000));
+  });
 }

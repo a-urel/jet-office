@@ -23,6 +23,10 @@ void main() {
     ]);
     final List<XlsxReadRow> rows = reader.rows('Values').toList();
     expect(rows.first.cells.first.value, 'jet_office');
+    expect(rows[1].cells.first.value, 'jet_office');
+    // Each row's formula sums its own row.
+    expect(rows[0].cells.last.formula, 'SUM(B1:C1)');
+    expect(rows[1].cells.last.formula, 'SUM(B2:C2)');
     expect(reader.warnings, isEmpty);
   });
 }

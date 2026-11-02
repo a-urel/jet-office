@@ -117,31 +117,31 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
   `dart run tool/warning_messages.dart > docs/warning-messages.md`.
   `test/tool/warning_messages_test.dart` fails when the file is stale.
 - Neither is Excel. The owner opens each writer milestone's fixtures in Excel
-  and records the result in `docs/excel-checks.md`; so does each model
-  milestone (W1 to W6, decision 0009): its round-tripped and generated
-  workbooks, and the owner's own files opened, edited and saved. Reader milestones (phase
-  2, R1 to R4) have no such check: Excel produces their input, and the owner
-  supplies Excel and Google Sheets files instead (`0007`). Those files go in
-  `test/fixtures/owner/`, listed in its `manifest.json`; the README there
-  says which workbooks to save and how the expected values are written and
-  confirmed (`tool/draft_expected.dart` drafts them). Never edit a committed
-  owner file or its expected JSON without the owner.
+  and records the result in `docs/excel-checks.md`; so does each model milestone
+  (W1 to W6, decision 0009): its round-tripped and generated workbooks, and the
+  owner's own files opened, edited and saved. Reader milestones (phase 2, R1 to
+  R4) have no such check: Excel produces their input, and the owner supplies
+  Excel and Google Sheets files instead (`0007`). Those files go in
+  `test/fixtures/owner/`, listed in its `manifest.json`; the README there says
+  which workbooks to save and how the expected values are written and confirmed
+  (`tool/draft_expected.dart` drafts them). Never edit a committed owner file or
+  its expected JSON without the owner.
 
 ## Benchmark
 
 `benchmark/` writes 100,000 rows of 12 mixed columns with `XlsxWriter` and
-`XlsxStreamWriter` (`xlsx_benchmark_test.dart`), and reads that file back
-with `XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each
-phase and memory per byte of sheet XML). `xlsx_model_benchmark_test.dart` opens that file with `XlsxWorkbook`,
-loads the sheet, sets a cell and saves, timing each phase and recording the
-loaded sheet's memory. `xlsx_read_worst_case_test.dart`
-reads the largest single sheet the default limits accept (about 250 MiB of
-XML; about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file
-size and peak memory per run. `xlsx_format_benchmark_test.dart` times
-`XlsxNumberFormatter` on every cell of the read file and on 100,000
-numbers, serial dates and `DateTime`s. The quality gate does not run them;
-run them by hand on the VM and in Chrome (`dart test benchmark` runs all
-five). They record figures and fail on none (`docs/benchmark.md`):
+`XlsxStreamWriter` (`xlsx_benchmark_test.dart`), and reads that file back with
+`XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each phase and
+memory per byte of sheet XML). `xlsx_model_benchmark_test.dart` opens that file
+with `XlsxWorkbook`, loads the sheet, sets a cell and saves, timing each phase
+and recording what the loaded store retains. `xlsx_read_worst_case_test.dart`
+reads the largest single sheet the default limits accept (about 250 MiB of XML;
+about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file size and
+peak memory per run. `xlsx_format_benchmark_test.dart` times
+`XlsxNumberFormatter` on every cell of the read file and on 100,000 numbers,
+serial dates and `DateTime`s. The quality gate does not run them; run them by
+hand on the VM and in Chrome (`dart test benchmark` runs all five). They record
+figures and fail on none (`docs/benchmark.md`):
 
 ```bash
 dart test benchmark

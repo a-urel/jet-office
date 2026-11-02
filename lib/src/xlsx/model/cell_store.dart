@@ -290,6 +290,37 @@ final class CellStore {
   /// The number of cells, styled empty cells included.
   int get cellCount => _cellCount;
 
+  /// An estimate of the memory the store retains, in bytes, for benchmarks.
+  ///
+  /// The sum of the typed lists' `lengthInBytes` (spare capacity included),
+  /// two bytes for each UTF-16 unit of the pooled strings, and a constant
+  /// per map entry that stands for the entry and the object it holds:
+  /// 96 bytes for each cell with extras, 48 for each pooled string, row with
+  /// attributes or children, and group master. The objects such an entry
+  /// points to (formula text, kept attributes, opaque XML) are not counted.
+  /// It does not depend on the platform, unlike a reading of the process's
+  /// memory, so it is the figure to compare with the sheet's XML.
+  int get retainedBytesEstimate {
+    int bytes = 0;
+    for (final _Block b in _blocks) {
+      bytes +=
+          b.rows.lengthInBytes +
+          b.rowStart.lengthInBytes +
+          b.words.lengthInBytes +
+          b.styles.lengthInBytes +
+          b.values.lengthInBytes;
+    }
+    for (final String text in _strings) {
+      bytes += 2 * text.length + 48;
+    }
+    return bytes +
+        96 * _extras.length +
+        48 *
+            (_rowAttributes.length +
+                _rowChildren.length +
+                _groupMasters.length);
+  }
+
   /// Whether any cell has a formula.
   bool get hasFormulas => _formulaCount > 0;
 

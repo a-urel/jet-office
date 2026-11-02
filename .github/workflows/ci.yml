@@ -4,7 +4,8 @@ name: CI
 # job then checks the fixtures with the Open XML SDK and LibreOffice
 # (decision 0003), compares LibreOffice's re-save with the reader, and proves
 # that each check rejects a corrupt file (the model round trip excepted: the
-# validator rejects the model's output of it). A clean checkout must pass both jobs.
+# validator rejects the model's output of it). A clean checkout must pass both
+# jobs.
 on:
   push:
     branches: [main]
@@ -126,9 +127,9 @@ jobs:
       # tool/write_fixtures.dart), except the model round trip, which passes
       # on it: the model keeps the corrupt file's stray content faithfully, so
       # the Open XML SDK must reject the model's output instead (and the
-      # round trip must reject a truncated copy). Each tool exits with 1 when it finds a
-      # problem and with 2 or 64 for a usage error, so the step requires
-      # exit code 1 and the expected message, not merely a failure.
+      # round trip must reject a truncated copy). Each tool exits with 1 when
+      # it finds a problem and with 2 or 64 for a usage error, so the step
+      # requires exit code 1 and the expected message, not merely a failure.
       - name: Prove the checks reject a corrupt file
         env:
           LC_ALL: C.UTF-8

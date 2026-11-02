@@ -7,9 +7,10 @@
 ///
 /// The file is `<dir>/w1_generated.xlsx` (the directory is created). Its
 /// sheet `Values` holds, in row 1, text, an integer, a double, an
-/// `XlsxDecimal`, a boolean, a date, a date and time and a formula with a
-/// cached result, and in row 2 the same values after a cell was set twice and
-/// another cleared, so the file shows what `setCell` leaves. A second sheet
+/// `XlsxDecimal`, a boolean, a date, a date and time and a formula that sums
+/// its own row's B and C, with its result, and in row 2 the same values
+/// after a cell was set twice and another cleared, so the file shows what
+/// `setCell` leaves. A second sheet
 /// holds one text. `docs/excel-checks.md`, "W1", says what Excel shows.
 ///
 /// Not ported from Quds; written for jet_office.
@@ -41,7 +42,11 @@ String writeModelSample(String dir) {
       ..setCell(r, 4, true)
       ..setCell(r, 5, const XlsxDate(2026, 10, 24))
       ..setCell(r, 6, DateTime.utc(2026, 10, 24, 13, 45))
-      ..setCell(r, 7, const XlsxFormula('SUM(B1:C1)', cached: 45.14159));
+      ..setCell(
+        r,
+        7,
+        XlsxFormula('SUM(B${r + 1}:C${r + 1})', cached: r == 0 ? 45.14159 : 8),
+      );
   }
 
   row(0);

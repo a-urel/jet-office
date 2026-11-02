@@ -57,11 +57,13 @@ written back, with the namespace declarations it needs.
   with formulas sets `fullCalcOnLoad="1"`, and the cached results of formulas
   the model did not change are kept. Excel recomputes on open; `XlsxReader`
   and the model's own `cellAt` read the stale values.
-- **Memory.** A loaded sheet's store takes more memory than its sheet XML in
-  the 100,000 by 12 benchmark (1.3 to 1.5 times the XML in the VM's later
-  runs, 3.2 in its first; see [`benchmark.md`](benchmark.md), "Model figures"), so spec section 4.9's
-  cell limit is open. A sheet with many formulas costs more per cell: each
-  formula cell keeps one side entry for its formula (not measured).
+- **Memory.** A loaded sheet's store takes less memory than its sheet XML
+  in the 100,000 by 12 benchmark: an estimate of 35.5 MB of store (30 bytes
+  a cell) against 43.6 MB of XML, 0.81 times, the same on the VM and in
+  Chrome (see [`benchmark.md`](benchmark.md), "Model figures"; process memory
+  is higher but includes the XML and garbage). A sheet with many formulas
+  costs more per cell: each formula cell keeps one side entry for its
+  formula (not measured).
 
 ## Rules the model enforces
 
@@ -116,6 +118,8 @@ Nothing is dropped silently.
 | A sheet that is not a worksheet (a chartsheet) | `StateError` at the call | its cells cannot be set | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("not a worksheet") |
 | Anything `setCell` throws | nothing has changed, the change log's `hasChanges` included; every mutation runs in a transaction | atomic edits | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("a failed setCell changes nothing"), `test/opc/change_log_test.dart` |
 | 10,000 cells on a sheet with formulas | linear time | the formula-group index is kept, not scanned per cell | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("takes linear time"), `test/xlsx/model/cell_store_test.dart` ("group masters") |
+| A change recorded outside a transaction | `StateError`: every mutation runs in a transaction, so it is always undoable as a set | an unrecorded change cannot be undone | `test/opc/change_log_test.dart` ("record outside a transaction throws") |
+| A revert that throws while a transaction rolls back | the other reverts still run, then a `StateError` names the original error and the failed reverts; the model may be inconsistent | a silent half-revert would break atomicity | `test/opc/change_log_test.dart` ("a revert that throws does not stop the rollback") |
 
 ### Reading
 

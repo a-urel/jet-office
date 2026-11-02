@@ -891,10 +891,10 @@ Open `build/model_generated/w1_generated.xlsx`. No repair prompt. Two sheets,
 - Row 1 of `Values`: `jet_office`, `42`, `3,14159`, `1234,5`, `DOĞRU`
   (`TRUE`), `24.10.2026`, `24.10.2026 13:45` and `45,14159` (H1, the formula
   `=SUM(B1:C1)`; the formula bar shows it).
-- Row 2: `jet_office`, then `replaced` (text, set over `42`), `8` (set three
-  times, the last one wins), D2 empty (cleared) and the rest as in row 1. H2
-  is the same formula: it shows the stored `45,14159`, or `8` if Excel
-  recalculates on open; either is right.
+- Row 2: `jet_office`, then `replaced` (text, set over `42`), `8` (C2, set
+  three times, the last one wins), D2 empty (cleared), and E2 to G2 as in
+  row 1. H2 is `=SUM(B2:C2)` and shows `8`: the text in B2 is ignored by
+  `SUM`, whether Excel shows the stored result or recalculates.
 - `Second` A1 is `second sheet`.
 
 ### Two of the owner's own files

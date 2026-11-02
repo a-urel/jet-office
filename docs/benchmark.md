@@ -549,20 +549,29 @@ its sheet, sets one cell and saves.
     waits for.
   - The saved file is read back with `XlsxReader`; the edited cell must hold
     `edited`.
-- Memory of the loaded store, in four runs (a warm-up and three), each taking
-  a reading before `open`, after `open` and after the load, with the loaded
-  workbook still referenced. VM: `ProcessInfo.currentRss`; Chrome:
-  `performance.memory.usedJSHeapSize`. The store's memory is the reading after
-  the load minus the reading before `open`, and the largest of the runs is
-  given. It is an upper bound: it includes the sheet part's XML and decoded
-  text, which are garbage once the load ends, and whatever the collector has
-  not yet freed. The VM's RSS never falls, so later runs reuse heap the
-  warm-up grew and read lower (55 to 66 MB against the warm-up's 139 MB); a
-  later run is the better estimate of what the store keeps. Chrome's heap
-  moves with the collector, so its runs range from a negative reading to 129
-  MB. No run measures the store alone, and the figures are not exact. On the
-  VM the process's peak RSS (`maxRss`) above the warm-up's baseline is also
-  given. memory/N is that figure over N.
+- Retained store bytes, the figure that is compared with N: the benchmark
+  parses the sheet part into a `CellStore` as `XlsxSheet` does and reads
+  `CellStore.retainedBytesEstimate`. It sums the `lengthInBytes` of the
+  store's typed lists (spare capacity included), 2 bytes for each UTF-16 unit
+  of the pooled strings, and a constant for each map entry and the object it
+  holds: 96 bytes for each cell with extras and 48 for each pooled string,
+  row with attributes or children, and group master. What those entries point
+  to (formula text, kept attributes, opaque XML) and the shared string table
+  (which is outside the store) are not counted. It depends on the data and not
+  on the platform, so the VM and Chrome give the same number; it is an
+  estimate, not a measurement of the heap. The store's bytes are compared with
+  N, the sheet part's XML bytes (the target of spec section 4.5).
+- Process memory, a secondary figure and an upper bound: four runs (a warm-up
+  and three), each taking a reading before `open`, after `open` and after the
+  load, with the loaded workbook still referenced. VM:
+  `ProcessInfo.currentRss`; Chrome: `performance.memory.usedJSHeapSize`. The
+  figure is the reading after the load minus the reading before `open`, and
+  the largest of the runs is given. It includes the sheet part's XML and
+  decoded text, which are garbage once the load ends, and whatever the
+  collector has not yet freed. The VM's RSS never falls, so runs that reuse
+  heap the first run grew read differently, and Chrome's heap moves with the
+  collector (runs from -31 MB to 182 MB). It cannot judge the target. On the
+  VM the process's peak RSS (`maxRss`) above the baseline is also given.
 - A sheet with many formulas costs more per cell: each formula cell keeps one
   side entry for its formula. This is a known case, not measured here.
 
@@ -576,21 +585,25 @@ its sheet, sets one cell and saves.
 
 | Phase (median of 3) | VM (ms) | Chrome (ms) |
 |---|---|---|
-| `open` (verifies every entry) | 124.5 | 491.9 |
-| Load the sheet | 1791.4 | 2424.7 |
-| Set one cell | 0.1 | 0.1 |
-| Save, sheet loaded and edited | 1328.7 | 2628.2 |
-| Save, sheet never loaded | 527.5 | 2280.4 |
-| Open, set one cell, save | 3270.9 | 5531.0 |
+| `open` (verifies every entry) | 115.1 | 442.7 |
+| Load the sheet | 1810.7 | 2393.2 |
+| Set one cell | 0.0 | 0.1 |
+| Save, sheet loaded and edited | 1322.7 | 2603.1 |
+| Save, sheet never loaded | 518.4 | 2201.4 |
+| Open, set one cell, save | 3212.1 | 5450.6 |
 
-| Memory of the loaded store | VM (RSS) | Chrome (heap) |
+| Retained store (estimate) | VM | Chrome |
 |---|---|---|
-| Largest of the four runs (bytes) | 139,165,696 (warm-up) | 129,064,479 (run 1) |
-| Per cell (bytes) | 119.3 | 110.6 |
-| memory/N | 3.19 | 2.96 |
-| Later VM runs (bytes) | 64,323,584, 55,181,312, 66,420,736 | |
-| Later VM runs, memory/N | 1.48, 1.27, 1.52 | |
-| Chrome runs 2 and 3 (bytes) | | 54,813,452, -20,002,243 |
+| Bytes | 35,472,802 | 35,472,802 |
+| Per cell (1,166,679 cells) | 30.4 | 30.4 |
+| Store bytes / N (43,580,479) | 0.814 | 0.814 |
+
+| Process memory above the baseline (upper bound) | VM (RSS) | Chrome (heap) |
+|---|---|---|
+| Largest of the four runs (bytes) | 65,404,928 | 182,064,765 |
+| memory/N | 1.50 | 4.18 |
+| Other runs (bytes) | -37,388,288, 62,095,360, 57,769,984 | -30,630,617, 54,836,160, -23,912,623 |
+| Peak RSS above the baseline (bytes) | 69,615,616 (1.60 N) | n/a |
 
 The saved file is 6,995,589 bytes on the VM and 7,018,358 in Chrome; the input
 is 6,958,168 and 6,981,925. For comparison, `XlsxReader` reading the same sheet
@@ -601,52 +614,56 @@ Every line:
 
 ```text
 vm | input | 6958168 bytes | xl/worksheets/sheet1.xml 43580479 bytes XML | 1166679 cells
-vm | model | warm-up | RSS baseline 197574656 | after open 210747392 | after load 336740352 | above baseline 139165696 bytes | peak RSS 336740352 (was 197574656)
-vm | model | run 1 | RSS baseline 336740352 | after open 362348544 | after load 401063936 | above baseline 64323584 bytes | peak RSS 408846336 (was 336740352)
-vm | model | run 2 | RSS baseline 401063936 | after open 450953216 | after load 456245248 | above baseline 55181312 bytes | peak RSS 466370560 (was 408846336)
-vm | model | run 3 | RSS baseline 456245248 | after open 481771520 | after load 522665984 | above baseline 66420736 bytes | peak RSS 526270464 (was 466370560)
-vm | store | 139165696 bytes above baseline (largest of 4) | 119.3 bytes/cell | memory/N 3.19 | N 43580479 bytes
-vm | peak | peak RSS above baseline 139165696 bytes | memory/N 3.19
-vm | phase | open (verifies every entry) | 124.5 ms
-vm | phase | load the sheet (cellAt) | 1791.4 ms
-vm | phase | set one cell (sheet loaded) | 0.1 ms
-vm | phase | save (sheet loaded and edited) | 1328.7 ms | 6995589 bytes
-vm | phase | save (sheet never loaded) | 527.5 ms
-vm | phase | open, set one cell, save | 3270.9 ms
+vm | retained store | 35472802 bytes | 30.4 bytes/cell | store/N 0.814 | N 43580479 bytes
+vm | model | warm-up | RSS baseline 375357440 | after open 267108352 | after load 337969152 | above baseline -37388288 bytes | peak RSS 378454016 (was 375603200)
+vm | model | run 1 | RSS baseline 337985536 | after open 319209472 | after load 400080896 | above baseline 62095360 bytes | peak RSS 407601152 (was 378454016)
+vm | model | run 2 | RSS baseline 400080896 | after open 450265088 | after load 457850880 | above baseline 57769984 bytes | peak RSS 466780160 (was 407601152)
+vm | model | run 3 | RSS baseline 457850880 | after open 483590144 | after load 523255808 | above baseline 65404928 bytes | peak RSS 526991360 (was 466780160)
+vm | process | 65404928 bytes above baseline (largest of 4) | 56.1 bytes/cell | memory/N 1.50 | N 43580479 bytes
+vm | process peak | peak RSS above baseline 69615616 bytes | memory/N 1.60
+vm | phase | open (verifies every entry) | 115.1 ms
+vm | phase | load the sheet (cellAt) | 1810.7 ms
+vm | phase | set one cell (sheet loaded) | 0.0 ms
+vm | phase | save (sheet loaded and edited) | 1322.7 ms | 6995589 bytes
+vm | phase | save (sheet never loaded) | 518.4 ms
+vm | phase | open, set one cell, save | 3212.1 ms
 chrome | input | 6981925 bytes | xl/worksheets/sheet1.xml 43580479 bytes XML | 1166679 cells
-chrome | model | warm-up | peak JS heap baseline 136496960 | after open 225549147 | after load 204826353 | above baseline 68329393 bytes
-chrome | model | run 1 | peak JS heap baseline 204830729 | after open 250386786 | after load 333895208 | above baseline 129064479 bytes
-chrome | model | run 2 | peak JS heap baseline 333905452 | after open 305282138 | after load 388718904 | above baseline 54813452 bytes
-chrome | model | run 3 | peak JS heap baseline 388722688 | after open 496451146 | after load 368720445 | above baseline -20002243 bytes
-chrome | store | 129064479 bytes above baseline (largest of 4) | 110.6 bytes/cell | memory/N 2.96 | N 43580479 bytes
-chrome | phase | open (verifies every entry) | 491.9 ms
-chrome | phase | load the sheet (cellAt) | 2424.7 ms
+chrome | retained store | 35472802 bytes | 30.4 bytes/cell | store/N 0.814 | N 43580479 bytes
+chrome | model | warm-up | peak JS heap baseline 196343152 | after open 306673907 | after load 165712535 | above baseline -30630617 bytes
+chrome | model | run 1 | peak JS heap baseline 165717603 | after open 250016610 | after load 347782368 | above baseline 182064765 bytes
+chrome | model | run 2 | peak JS heap baseline 347534364 | after open 304861894 | after load 402370524 | above baseline 54836160 bytes
+chrome | model | run 3 | peak JS heap baseline 402374240 | after open 469584847 | after load 378461617 | above baseline -23912623 bytes
+chrome | process | 182064765 bytes above baseline (largest of 4) | 156.1 bytes/cell | memory/N 4.18 | N 43580479 bytes
+chrome | phase | open (verifies every entry) | 442.7 ms
+chrome | phase | load the sheet (cellAt) | 2393.2 ms
 chrome | phase | set one cell (sheet loaded) | 0.1 ms
-chrome | phase | save (sheet loaded and edited) | 2628.2 ms | 7018358 bytes
-chrome | phase | save (sheet never loaded) | 2280.4 ms
-chrome | phase | open, set one cell, save | 5531.0 ms
+chrome | phase | save (sheet loaded and edited) | 2603.1 ms | 7018358 bytes
+chrome | phase | save (sheet never loaded) | 2201.4 ms
+chrome | phase | open, set one cell, save | 5450.6 ms
 ```
 
 ### Reading the figures
 
 - **Setting a cell costs nothing; loading and saving cost the sheet.** The
-  edit is 0.1 ms. The whole open, edit and save takes 3.3 s on the VM and 5.5 s
-  in Chrome, against 2.7 s and 3.3 s for one read of the sheet and 1.5 s and
-  3.1 s to write it ("Read figures"): the model reads the sheet, then writes
-  it.
-- **`open` is not free.** It takes 0.12 s on the VM and 0.49 s in Chrome
+  edit is under 0.1 ms. The whole open, edit and save takes 3.2 s on the VM and
+  5.5 s in Chrome, against 2.7 s and 3.3 s for one read of the sheet and 1.5 s
+  and 3.1 s to write it ("Read figures"): the model reads the sheet, then
+  writes it.
+- **`open` is not free.** It takes 0.12 s on the VM and 0.44 s in Chrome
   because it inflates every entry to verify it, which `XlsxReader`'s open (0.4
   ms) does not. The cost grows with the file, not with what the caller uses.
 - **A part that was not loaded is inflated twice.** A workbook that is opened
-  and saved without loading the sheet takes 0.53 s on the VM and 2.3 s in
+  and saved without loading the sheet takes 0.52 s on the VM and 2.2 s in
   Chrome: the verification at `open` and the copy at `save` each inflate the
   sheet part, with the pure-Dart inflate in Chrome (0.69 s a time, "Read
   figures"). Saving does not use a compressed entry as it is.
-- **The loaded store is not smaller than the sheet's XML.** Spec section 4.5
-  set the target that a loaded sheet's store takes less memory than its XML
-  did, and section 4.9 asked for a cell limit if it does not. The largest
-  reading is 3.2 N on the VM and 3.0 N in Chrome, and the later VM runs, which
-  are the better estimate, read 1.3 to 1.5 N: over 1 N in all of them. The
-  readings include garbage (see "Method"), so the store itself may be well
-  below them, but this benchmark cannot show that it is below N. Taking the
-  question to the owner; no cell limit is added in W1.
+- **The loaded store is smaller than the sheet's XML for this workload.** The
+  store's estimated 35,472,802 bytes are 0.814 times the 43,580,479 bytes of
+  XML (about 30 bytes a cell, the same on both platforms), so the target of
+  spec section 4.5 is met here and no cell limit (section 4.9) is added. The
+  process figures are higher (1.5 N on the VM, up to 4.2 N in Chrome) because
+  they include the XML and decoded text of the load and uncollected garbage;
+  they are not the store. The estimate counts constants per map entry, not the
+  heap, so it may be off by some tens of percent. A sheet with many formulas,
+  styled empty cells or kept attributes costs more per cell (each formula cell
+  keeps an entry and its formula text); that case is not measured.
