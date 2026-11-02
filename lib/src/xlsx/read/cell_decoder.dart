@@ -105,7 +105,10 @@ FormulaType decodeFormulaType(XmlPullReader r) =>
 ///   non-negative integer inside the table, or there is no table).
 /// * `b`: `0` is `false`, `1` is `true` ([XlsxWarningCode.booleanInvalid]
 ///   otherwise).
-/// * `str`: the [value] XML-string decoded, `''` when absent.
+/// * `str`: the [value] XML-string decoded, `''` when absent. With
+///   [hasFormula], a text that is exactly one of
+///   [XlsxErrorValue.classic] is that error: Google Sheets writes a
+///   formula's error result this way, Excel as `e`.
 /// * `e`: the [XlsxErrorValue] of the [value], XML-string decoded and
 ///   trimmed ([XlsxWarningCode.errorValueInvalid] when that is empty).
 /// * `inlineStr`: [inlineText]; without it the [value] XML-string decoded;
@@ -182,7 +185,12 @@ DecodedCell decodeCell({
         _ => result(null, XlsxWarningCode.booleanInvalid),
       };
     case 'str':
-      return result(value == null ? '' : decodeXstring(value));
+      final String text = value == null ? '' : decodeXstring(value);
+      if (hasFormula) {
+        final XlsxErrorValue error = XlsxErrorValue(text);
+        if (error.isClassic) return result(error);
+      }
+      return result(text);
     case 'e':
       final String code = value == null ? '' : decodeXstring(value).trim();
       return code.isEmpty

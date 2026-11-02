@@ -825,6 +825,39 @@ Pending (R3 Task 12, not in R4): the Excel and Google Sheets workbooks the
 owner supplies as reader input. See `test/fixtures/owner/README.md` for which
 workbooks to save and how their expected values are confirmed.
 
+On 2026-11-02 the owner saved all four workbooks (Excel for Mac and Google
+Sheets) and the reader drafted their expected values. The owner set the
+review aside as later work, so nothing was committed: an unconfirmed file
+in `test/fixtures/owner/` fails `owner_files_test.dart`, by design. The
+files and their review tables were kept outside the repository, in the
+git-ignored `build/owner-pending/` of the owner's checkout. The owner's
+originals are the only lasting copy, so they must not be deleted.
+
+The drafts already found one reader defect, fixed in 8bfb640: Google Sheets
+writes a formula's error result as `t="str"` (`=NA()` as `<v>#N/A</v>`),
+and the reader read it as text (`gsheets_products` L4).
+
+Left to do, in order:
+
+1. `gsheets_customers.xlsx` is unusable and must be saved again. The paste
+   went into a sheet whose locale was not Turkey:
+   - 18 phone numbers became formulas (`#ERROR!`);
+   - `Bakiye` and the dates stayed text;
+   - `Süre` has `h:mm`, not `[h]:mm`.
+
+   To fix: File > Settings > Locale Türkiye, then set C and D to plain text
+   before pasting.
+2. The owner ticks every line of the three other review tables against the
+   program, then sets `producer` and `confirmedBy`. Points to check:
+   - `excel_products` K2 reads `TRUE`, where the pasted data had `FALSE`.
+   - The hidden sheet of `excel_products` is `Sayfa2`, where the README
+     says `Gizli`.
+   - `gsheets_products` J has `dd"-"mm"-"yyyyhhmm`.
+   - `gsheets_products` F3:F31 show no formula. This is correct: they are
+     followers of the shared formula in F2.
+3. Optional: `erp_export.xlsx`.
+4. Add the files to `manifest.json`, run the quality gate, commit.
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
