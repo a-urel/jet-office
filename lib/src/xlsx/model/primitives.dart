@@ -1,0 +1,165 @@
+/// The set-cell primitive of the workbook model and the formula-group role of
+/// a stored cell.
+///
+/// Not ported from Quds; written for jet_office.
+///
+/// [setStoredCell] is the one way a model edit changes a [CellStore]: it
+/// applies the change, then records a [SetCellChange] so the edit can be
+/// reverted and reapplied. [groupRoleAt] says whether a cell belongs to a
+/// shared, array or data-table formula group, which the editing methods use to
+/// refuse an edit that would break a group.
+library;
+
+import '../../opc/change_log.dart';
+import '../range.dart';
+import '../raw_cell.dart';
+import 'cell_store.dart';
+
+/// The change of one cell: its content before and after.
+///
+/// A `null` cell is an absent cell. The change is applied by
+/// [setStoredCell]; [revert] and [reapply] write the old and the new content
+/// back to the same position.
+final class SetCellChange implements Change {
+  /// A change of the cell at [row], [column] of [store] from [oldCell] to
+  /// [newCell].
+  SetCellChange(this.store, this.row, this.column, this.oldCell, this.newCell);
+
+  /// The store the cell lives in.
+  final CellStore store;
+
+  /// The zero-based row.
+  final int row;
+
+  /// The zero-based column.
+  final int column;
+
+  /// The content before the change, or `null` when there was no cell.
+  final RawCell? oldCell;
+
+  /// The content after the change, or `null` when the cell was removed.
+  final RawCell? newCell;
+
+  @override
+  void revert() => _write(oldCell);
+
+  @override
+  void reapply() => _write(newCell);
+
+  void _write(RawCell? cell) {
+    if (cell == null) {
+      store.remove(row, column);
+    } else {
+      store.put(row, column, cell);
+    }
+  }
+}
+
+/// Sets the cell at [row], [column] of [store] to [cell] (`null` removes it)
+/// and records the change in [log].
+///
+/// Must run inside `log.transaction`, which [ChangeLog.record] requires. If
+/// recording throws, the store is put back as it was before the error leaves.
+void setStoredCell(
+  ChangeLog log,
+  CellStore store,
+  int row,
+  int column,
+  RawCell? cell,
+) {
+  final SetCellChange change = SetCellChange(
+    store,
+    row,
+    column,
+    store.cellAt(row, column),
+    cell,
+  );
+  change.reapply();
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+}
+
+/// How a cell takes part in a formula group.
+enum GroupRole {
+  /// Not part of any group.
+  none,
+
+  /// The cell carrying a shared formula's text and `ref`.
+  sharedMaster,
+
+  /// A shared-formula cell with an `si` and no `ref`, whose master exists.
+  sharedChild,
+
+  /// A cell inside an array or data-table master's `ref`, the master
+  /// included: setting it alone would break the array or table.
+  arrayOrTableMember,
+}
+
+/// The [GroupRole] of the cell at [row], [column], computed from the formulas
+/// stored in [store].
+///
+/// A cell with its own array or data-table formula, or one inside such a
+/// formula's `ref`, is [GroupRole.arrayOrTableMember]; a shared formula with a
+/// `ref` is [GroupRole.sharedMaster]; one with an `si`, no `ref` and a master
+/// of the same `si` somewhere in the store is [GroupRole.sharedChild].
+/// Anything else is [GroupRole.none].
+///
+/// Complexity: a store without formulas answers at once; otherwise this scans
+/// every formula cell of the store (linear in the cell count), which is
+/// acceptable for single edits and not for a loop over a large sheet.
+GroupRole groupRoleAt(CellStore store, int row, int column) {
+  if (!store.hasFormulas) return GroupRole.none;
+  final RawFormula? own = store.cellAt(row, column)?.formula;
+  if (own != null) {
+    switch (own.type) {
+      case FormulaType.array || FormulaType.dataTable:
+        return GroupRole.arrayOrTableMember;
+      case FormulaType.shared when own.ref != null:
+        return GroupRole.sharedMaster;
+      case FormulaType.shared || FormulaType.normal:
+        break;
+    }
+  }
+  final String? childSi = own != null && own.type == FormulaType.shared
+      ? own.si
+      : null;
+  bool inArray = false;
+  bool masterFound = false;
+  for (final int r in store.rowIndexes) {
+    store.forEachInRow(r, (int c, RawCell cell) {
+      final RawFormula? f = cell.formula;
+      if (f == null || inArray) return;
+      final String? ref = f.ref;
+      if (ref == null) return;
+      switch (f.type) {
+        case FormulaType.array || FormulaType.dataTable:
+          final XlsxRange? range = _range(ref);
+          if (range != null &&
+              row >= range.firstRow &&
+              row <= range.lastRow &&
+              column >= range.firstColumn &&
+              column <= range.lastColumn) {
+            inArray = true;
+          }
+        case FormulaType.shared:
+          if (childSi != null && f.si == childSi) masterFound = true;
+        case FormulaType.normal:
+          break;
+      }
+    });
+    if (inArray) return GroupRole.arrayOrTableMember;
+  }
+  return masterFound ? GroupRole.sharedChild : GroupRole.none;
+}
+
+XlsxRange? _range(String ref) {
+  try {
+    return XlsxRange.parse(ref);
+  } on ArgumentError {
+    return null;
+  }
+}
