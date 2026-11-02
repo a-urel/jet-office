@@ -205,6 +205,56 @@ void main() {
     );
   });
 
+  test('other children of a cell are kept as opaque XML, in order', () {
+    const String ext1 = '<extLst><ext uri="{1}"><x/></ext></extLst>';
+    const String ext2 = '<foo:bar xmlns:foo="urn:foo"/>';
+    final RawCell cell = _rows(
+      '<row r="1"><c r="A1">$ext1<v>1</v>$ext2</c><c r="B1" s="2">$ext1</c>'
+      '</row>',
+    ).single.cells.first;
+    expect(cell.value, '1');
+    expect(cell.extraChildren.map((OpaqueXml x) => x.xml), <String>[
+      ext1,
+      ext2,
+    ]);
+  });
+
+  test('a cell with only other children is not empty', () {
+    final RawCell cell = _rows(
+      '<row r="1"><c r="A1"><extLst/></c></row>',
+    ).single.cells.single;
+    expect(cell.isEmpty, isFalse);
+    expect(cell.extraChildren.single.xml, '<extLst/>');
+  });
+
+  test('keepExtras false skips other children', () {
+    final RawCell cell = _rows(
+      '<row r="1"><c r="A1"><extLst/><v>1</v></c></row>',
+      keepExtras: false,
+    ).single.cells.single;
+    expect(cell.extraChildren, isEmpty);
+    expect(
+      _rows('<row r="1"><c r="A1"><extLst/></c></row>', keepExtras: false),
+      isEmpty,
+    );
+  });
+
+  test('an unknown formula t is kept as an attribute, a known one is not', () {
+    final List<RawCell> cells = _rows(
+      '<row r="1"><c r="A1"><f t="future" ca="1">A2</f><v>1</v></c>'
+      '<c r="B1"><f t="normal">A2</f><v>1</v></c>'
+      '<c r="C1"><f t="array" ref="C1">A2</f><v>1</v></c></row>',
+    ).single.cells;
+    expect(cells[0].formula!.type, FormulaType.normal);
+    expect(_attributes(cells[0].formula!.attributes), <String, String>{
+      't': 'future',
+      'ca': '1',
+    });
+    expect(cells[1].formula!.attributes, isEmpty);
+    expect(cells[2].formula!.type, FormulaType.array);
+    expect(cells[2].formula!.attributes, isEmpty);
+  });
+
   test('an empty sheetData has no rows', () {
     final XmlPullReader r = XmlPullReader(
       '<worksheet xmlns="$_main"><sheetData/></worksheet>',

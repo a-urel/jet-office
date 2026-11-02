@@ -157,10 +157,12 @@ final class RawRow {
 ///
 /// A row is yielded when it holds a cell with a `<v>`, `<f>` or `<is>`, or is
 /// hidden. With `keepExtras` it keeps more, for the workbook model: a row with
-/// any attribute but `r` and `spans`, a cell without data that has a style or
-/// another attribute, the attributes of rows, cells and formulas
-/// ([RawRow.attributes], [RawCell.attributes], [RawFormula.attributes]) and
-/// the `<is>` element ([RawCell.inline]). Without it none of that is
+/// any attribute but `r` and `spans`, a cell without data that has a style,
+/// another attribute or another child, the attributes of rows, cells and
+/// formulas ([RawRow.attributes], [RawCell.attributes],
+/// [RawFormula.attributes], an unknown formula `t` included), the `<is>`
+/// element ([RawCell.inline]) and the other children of a cell
+/// ([RawCell.extraChildren]). Without it none of that is
 /// captured, so the import path pays nothing for it, and an `<is>` is read
 /// for its text only.
 ///
@@ -254,6 +256,10 @@ final class _CellScratch {
 
   List<KeptAttribute> attributes = const <KeptAttribute>[];
 
+  /// The children other than `<v>`, `<f>` and `<is>`, when extras are kept
+  /// and the cell is inside the sheet.
+  List<OpaqueXml> extraChildren = const <OpaqueXml>[];
+
   bool get hasData => value != null || hasFormula || hasInline;
 
   /// Starts a new cell at [column].
@@ -276,6 +282,7 @@ final class _CellScratch {
     inlineText = null;
     repeated = false;
     attributes = const <KeptAttribute>[];
+    extraChildren = const <OpaqueXml>[];
   }
 
   /// The cell as stored.
@@ -297,6 +304,7 @@ final class _CellScratch {
       inline: inline,
       typeText: kind == RawCellKind.unknown ? type : null,
       attributes: attributes,
+      extraChildren: extraChildren,
     );
   }
 
@@ -495,7 +503,10 @@ final class _RowWalk<C, R> {
         _readCell(index, previousColumn, inside);
         previousColumn = c.column;
         if (!c.hasData &&
-            !(_keepExtras && (c.style != null || c.attributes.isNotEmpty))) {
+            !(_keepExtras &&
+                (c.style != null ||
+                    c.attributes.isNotEmpty ||
+                    c.extraChildren.isNotEmpty))) {
           continue;
         }
         if (!inside || c.column >= XlsxLimits.maxColumns) {
@@ -611,7 +622,9 @@ final class _RowWalk<C, R> {
           if (_keepExtras) {
             c.formulaAttributes = keepAttributes(
               _reader,
-              except: const <String>{'t', 'ref', 'si'},
+              except: formulaTypeKnown(_reader)
+                  ? const <String>{'t', 'ref', 'si'}
+                  : const <String>{'ref', 'si'},
             );
           }
           final String formula = _readText(row, c.column, keep: readText);
@@ -635,7 +648,12 @@ final class _RowWalk<C, R> {
             _reader.skip();
           }
         default:
-          _reader.skip();
+          if (readText && _keepExtras) {
+            if (c.extraChildren.isEmpty) c.extraChildren = <OpaqueXml>[];
+            c.extraChildren.add(OpaqueXml.capture(_reader));
+          } else {
+            _reader.skip();
+          }
       }
     }
   }

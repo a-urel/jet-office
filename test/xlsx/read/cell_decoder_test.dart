@@ -10,21 +10,75 @@ import 'package:jet_office/src/xml/xml_escape.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:test/test.dart';
 
-/// The arguments of every [_decode] call, replayed through [decodeRawCell].
-final List<
-  ({
-    String? type,
-    String? value,
-    String? formula,
-    bool hasFormula,
-    String? inlineText,
-    List<String>? shared,
-    CellFormat format,
-    bool date1904,
-  })
->
-_cases = [];
+/// The arguments of one decoder call.
+typedef _Case = ({
+  String? type,
+  String? value,
+  String? formula,
+  bool hasFormula,
+  String? inlineText,
+  List<String>? shared,
+  CellFormat format,
+  bool date1904,
+});
 
+_Case _case({
+  String? type,
+  String? value,
+  String? formula,
+  bool hasFormula = false,
+  String? inlineText,
+  List<String>? shared,
+  CellFormat format = CellFormat.general,
+  bool date1904 = false,
+}) => (
+  type: type,
+  value: value,
+  formula: formula,
+  hasFormula: hasFormula || formula != null,
+  inlineText: inlineText,
+  shared: shared,
+  format: format,
+  date1904: date1904,
+);
+
+DecodedCell _decodeCase(_Case c) => decodeCell(
+  type: c.type,
+  value: c.value,
+  formula: c.formula,
+  hasFormula: c.hasFormula,
+  inlineText: c.inlineText,
+  sharedStrings: c.shared,
+  format: c.format,
+  date1904: c.date1904,
+);
+
+/// [c] through the raw step: the [RawCell] the row walk would store, decoded
+/// by [decodeRawCell].
+DecodedCell _decodeRawCase(_Case c) {
+  final RawCellKind kind = decodeRawKind(c.type);
+  final RawCell raw = RawCell(
+    kind: kind,
+    value: c.value,
+    typeText: kind == RawCellKind.unknown ? c.type : null,
+    formula: c.hasFormula
+        ? RawFormula(
+            type: FormulaType.normal,
+            text: c.formula == null ? null : decodeXstring(c.formula!),
+          )
+        : null,
+    // The reader reads an inline text only for an inline string cell.
+    inline: c.inlineText == null ? null : _inline(c.inlineText!),
+  );
+  return decodeRawCell(
+    raw,
+    sharedStrings: c.shared,
+    format: c.format,
+    date1904: c.date1904,
+  );
+}
+
+/// Decodes one case; each call also checks that the raw step agrees.
 DecodedCell _decode({
   String? type,
   String? value,
@@ -35,27 +89,239 @@ DecodedCell _decode({
   CellFormat format = CellFormat.general,
   bool date1904 = false,
 }) {
-  _cases.add((
+  final _Case c = _case(
     type: type,
     value: value,
     formula: formula,
-    hasFormula: hasFormula || formula != null,
+    hasFormula: hasFormula,
     inlineText: inlineText,
     shared: shared,
     format: format,
     date1904: date1904,
-  ));
-  return decodeCell(
-    type: type,
-    value: value,
-    formula: formula,
-    hasFormula: hasFormula || formula != null,
-    inlineText: inlineText,
-    sharedStrings: shared,
-    format: format,
-    date1904: date1904,
   );
+  final DecodedCell decoded = _decodeCase(c);
+  expect(_same(decoded, _decodeRawCase(c)), isTrue, reason: '$c');
+  return decoded;
 }
+
+final String _longDigits = '1' * 100000;
+
+const CellFormat _brokenLocale = CellFormat(
+  27,
+  null,
+  FormatKind.number,
+  invalid: true,
+);
+
+const CellFormat _brokenDate = CellFormat(
+  14,
+  'm/d/yyyy',
+  FormatKind.date,
+  invalid: true,
+);
+
+/// Every case the tests below decode, for the replay through
+/// [decodeRawCell].
+final List<_Case> _table = <_Case>[
+  _case(value: '1234.50'),
+  _case(value: '42'),
+  _case(value: '007'),
+  _case(value: '  12.5 '),
+  _case(value: '-3.25'),
+  _case(type: 'n', value: '1'),
+  _case(value: '+5'),
+  _case(value: '5.'),
+  _case(value: '.5'),
+  _case(value: '+.5'),
+  _case(value: '-.5'),
+  _case(value: '-0'),
+  _case(value: '-0.0'),
+  _case(value: '-0.00e5'),
+  _case(value: '-0.5'),
+  _case(value: '1.2E-5'),
+  _case(value: '1E+3'),
+  _case(value: '1.50E1'),
+  _case(value: '12E-1'),
+  _case(value: '1e0'),
+  _case(value: '-2.5e2'),
+  _case(value: '.5e1'),
+  _case(value: '0.001E3'),
+  _case(value: '100e-2'),
+  _case(value: '007E0'),
+  _case(value: '0012E1'),
+  _case(value: '1E999999999'),
+  _case(value: '1E-999999999'),
+  _case(value: '1E401'),
+  _case(value: '1E-401'),
+  _case(value: '0E0000000000000000000009'),
+  _case(value: '1E400'),
+  _case(value: ''),
+  _case(value: ' '),
+  _case(value: 'abc'),
+  _case(value: '1,5'),
+  _case(value: '1e'),
+  _case(value: 'e5'),
+  _case(value: '.'),
+  _case(value: '+'),
+  _case(value: '--1'),
+  _case(value: '1.2.3'),
+  _case(value: 'NaN'),
+  _case(value: 'INF'),
+  _case(value: '0x10'),
+  _case(value: '1 2'),
+  _case(value: null),
+  _case(type: 'n', value: null),
+  _case(type: 's', value: '1', shared: <String>['a', 'b']),
+  _case(type: 's', value: '3', shared: <String>['a', 'b']),
+  _case(type: 's', value: '2', shared: <String>['a', 'b']),
+  _case(type: 's', value: '-1', shared: <String>['a', 'b']),
+  _case(type: 's', value: 'x', shared: <String>['a', 'b']),
+  _case(type: 's', value: '1.5', shared: <String>['a', 'b']),
+  _case(type: 's', value: '', shared: <String>['a', 'b']),
+  _case(type: 's', value: null, shared: <String>['a', 'b']),
+  _case(type: 's', value: '99999999999999999999', shared: <String>['a', 'b']),
+  _case(type: 's', value: '0'),
+  _case(type: 'b', value: '0'),
+  _case(type: 'b', value: '1'),
+  _case(type: 'b', value: '2'),
+  _case(type: 'b', value: 'true'),
+  _case(type: 'b', value: ''),
+  _case(type: 'b', value: null),
+  _case(type: 'str', value: 'a_x0042_c'),
+  _case(type: 'str', value: 'plain'),
+  _case(type: 'str', value: null),
+  _case(type: 'str', value: '#NULL!', formula: 'NA()', hasFormula: true),
+  _case(type: 'str', value: '#DIV/0!', formula: 'NA()', hasFormula: true),
+  _case(type: 'str', value: '#VALUE!', formula: 'NA()', hasFormula: true),
+  _case(type: 'str', value: '#REF!', formula: 'NA()', hasFormula: true),
+  _case(type: 'str', value: '#NAME?', formula: 'NA()', hasFormula: true),
+  _case(type: 'str', value: '#NUM!', formula: 'NA()', hasFormula: true),
+  _case(type: 'str', value: '#N/A', formula: 'NA()', hasFormula: true),
+  _case(type: 'str', value: '#N/A'),
+  _case(type: 'str', value: '#n/a', formula: 'A1', hasFormula: true),
+  _case(type: 'str', value: ' #N/A', formula: 'A1', hasFormula: true),
+  _case(type: 'str', value: '#ERROR!', formula: 'A1', hasFormula: true),
+  _case(type: 'zz', value: '1'),
+  _case(type: 'N', value: '1'),
+  _case(type: 'E', value: '1'),
+  _case(type: 'inlinestr', value: '1'),
+  _case(type: 'e', value: '#N/A'),
+  _case(type: 'e', value: ' #DIV/0! '),
+  _case(type: 'e', value: '#SPILL!'),
+  _case(type: 'e', value: ''),
+  _case(type: 'e', value: '  '),
+  _case(type: 'e', value: null),
+  _case(type: 'e', value: '_x0023_N/A'),
+  _case(type: 'inlineStr', value: null, inlineText: 'a'),
+  _case(type: 'inlineStr', value: 'b'),
+  _case(type: 'inlineStr', value: 'a_x0042_'),
+  _case(type: 'inlineStr', value: null),
+  _case(type: 'inlineStr', value: 'b', inlineText: 'a'),
+  _case(type: 'd', value: '2026-10-28T10:00:00Z'),
+  _case(type: 'd', value: ' 2026-10-28 '),
+  _case(type: 'd', value: 'x'),
+  _case(type: 'd', value: ''),
+  _case(type: 'd', value: '10:00'),
+  _case(type: 'd', value: null),
+  _case(value: '45000.25', format: _date),
+  _case(value: '45000.25', format: _date, date1904: true),
+  _case(type: 'n', value: '45000.25', format: _date),
+  _case(value: '45000.25'),
+  _case(value: '0.5', format: _time),
+  _case(value: '45000.5', format: _time),
+  _case(value: '60', format: _date),
+  _case(value: '-1', format: _date),
+  _case(value: '100000', format: _time),
+  _case(value: '45000', format: _locale),
+  _case(type: 's', value: '0', shared: <String>['a'], format: _locale),
+  _case(type: 'b', value: '1', format: _locale),
+  _case(type: 'e', value: '#N/A', format: _locale),
+  _case(type: 'd', value: '2026-10-28', format: _locale),
+  _case(type: 'str', value: 'x', format: _locale),
+  _case(type: 'inlineStr', value: 'x', format: _locale),
+  _case(value: '45000', format: CellFormat.broken),
+  _case(value: 'x', format: CellFormat.broken),
+  _case(value: '1', format: _brokenLocale),
+  _case(value: '60', format: _brokenDate),
+  _case(
+    type: null,
+    value: null,
+    formula: 'A1+1',
+    hasFormula: true,
+    format: CellFormat.broken,
+  ),
+  _case(
+    type: 'n',
+    value: null,
+    formula: 'A1+1',
+    hasFormula: true,
+    format: CellFormat.broken,
+  ),
+  _case(
+    type: 's',
+    value: null,
+    formula: 'A1+1',
+    hasFormula: true,
+    format: CellFormat.broken,
+  ),
+  _case(
+    type: 'b',
+    value: null,
+    formula: 'A1+1',
+    hasFormula: true,
+    format: CellFormat.broken,
+  ),
+  _case(
+    type: 'str',
+    value: null,
+    formula: 'A1+1',
+    hasFormula: true,
+    format: CellFormat.broken,
+  ),
+  _case(
+    type: 'e',
+    value: null,
+    formula: 'A1+1',
+    hasFormula: true,
+    format: CellFormat.broken,
+  ),
+  _case(
+    type: 'd',
+    value: null,
+    formula: 'A1+1',
+    hasFormula: true,
+    format: CellFormat.broken,
+  ),
+  _case(
+    type: 'inlineStr',
+    value: null,
+    formula: 'A1+1',
+    hasFormula: true,
+    format: CellFormat.broken,
+  ),
+  _case(
+    type: 'zz',
+    value: null,
+    formula: 'A1+1',
+    hasFormula: true,
+    format: CellFormat.broken,
+  ),
+  _case(
+    type: 'inlineStr',
+    value: null,
+    formula: '"a"',
+    hasFormula: true,
+    inlineText: 'a',
+  ),
+  _case(value: null, hasFormula: true),
+  _case(value: '2', formula: 'A_x0031_+1', hasFormula: true),
+  _case(value: '2'),
+  _case(value: '${_longDigits}x'),
+  _case(value: '$_longDigits.5x'),
+  _case(value: '${_longDigits}e5x'),
+  _case(value: '${_longDigits}e'),
+  _case(value: _longDigits),
+];
 
 /// An `<is>` element holding [text] in one `<t>`, captured as opaque XML.
 OpaqueXml _inline(String text) {
@@ -703,56 +969,13 @@ void main() {
     });
   });
 
-  // Runs last: it replays every case the tests above decoded.
   test('decodeRawCell equals decodeCell for every case of the existing '
       'table', () {
-    expect(
-      _cases.length,
-      greaterThan(100),
-      reason: 'run the whole file: the cases come from the tests above',
-    );
-    final List<String> differ = <String>[];
-    for (final c in _cases) {
-      final DecodedCell expected = decodeCell(
-        type: c.type,
-        value: c.value,
-        formula: c.formula,
-        hasFormula: c.hasFormula,
-        inlineText: c.inlineText,
-        sharedStrings: c.shared,
-        format: c.format,
-        date1904: c.date1904,
-      );
-      final RawCellKind kind = decodeRawKind(c.type);
-      // The decoder reads an inline text only for an inline string cell.
-      final OpaqueXml? inline = c.inlineText == null
-          ? null
-          : _inline(c.inlineText!);
-      final RawCell raw = RawCell(
-        kind: kind,
-        value: c.value,
-        typeText: kind == RawCellKind.unknown ? c.type : null,
-        formula: c.hasFormula
-            ? RawFormula(
-                type: FormulaType.normal,
-                text: c.formula == null ? null : decodeXstring(c.formula!),
-              )
-            : null,
-        inline: inline,
-      );
-      final DecodedCell actual = decodeRawCell(
-        raw,
-        sharedStrings: c.shared,
-        format: c.format,
-        date1904: c.date1904,
-      );
-      if (!_same(expected, actual)) {
-        differ.add(
-          '$c: ${expected.value}/${expected.warning} vs '
-          '${actual.value}/${actual.warning}',
-        );
-      }
-    }
+    final List<String> differ = <String>[
+      for (final _Case c in _table)
+        if (!_same(_decodeCase(c), _decodeRawCase(c))) '$c',
+    ];
+    expect(_table, hasLength(greaterThan(100)));
     expect(differ, isEmpty);
   });
 }

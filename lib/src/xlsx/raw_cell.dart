@@ -86,7 +86,9 @@ final class RawFormula {
   final String? si;
 
   /// The `<f>`'s other attributes (`ca`, `aca`, `dt2D` and the like), in
-  /// source order. Empty unless the row walk kept extras.
+  /// source order, and its `t` when that is not one [type] names (absent,
+  /// `normal`, `shared`, `array` or `dataTable`), so it can be written back.
+  /// Empty unless the row walk kept extras.
   final List<KeptAttribute> attributes;
 }
 
@@ -101,6 +103,7 @@ final class RawCell {
     this.inline,
     this.typeText,
     this.attributes = const <KeptAttribute>[],
+    this.extraChildren = const <OpaqueXml>[],
   });
 
   /// What the cell's `t` says its value is.
@@ -130,7 +133,16 @@ final class RawCell {
   /// unless the row walk kept extras.
   final List<KeptAttribute> attributes;
 
-  /// Whether the cell has no value, formula or inline string. Such a cell
-  /// may still carry a [style] or [attributes].
-  bool get isEmpty => value == null && formula == null && inline == null;
+  /// The children of the `<c>` other than `<v>`, `<f>` and `<is>` (an
+  /// `<extLst>`, say), as written and in source order. Empty unless the row
+  /// walk kept extras.
+  final List<OpaqueXml> extraChildren;
+
+  /// Whether the cell has no value, formula, inline string or other child.
+  /// Such a cell may still carry a [style] or [attributes].
+  bool get isEmpty =>
+      value == null &&
+      formula == null &&
+      inline == null &&
+      extraChildren.isEmpty;
 }

@@ -82,6 +82,14 @@ FormulaType decodeFormulaType(XmlPullReader r) =>
       _ => FormulaType.normal,
     };
 
+/// Whether the `t` of the `<f>` element [r] is on (no namespace) is absent
+/// or a value [FormulaType] names; an unknown one is kept as an attribute.
+bool formulaTypeKnown(XmlPullReader r) =>
+    switch (r.getAttribute('t', namespaceUri: '')) {
+      null || 'normal' || 'shared' || 'array' || 'dataTable' => true,
+      _ => false,
+    };
+
 /// The [RawCellKind] of a cell whose `t` attribute is [type]; `null` and
 /// `n` are [RawCellKind.number], a value the format does not define
 /// (matched exactly, so `S` too) is [RawCellKind.unknown].
