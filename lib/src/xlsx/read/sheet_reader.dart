@@ -18,13 +18,21 @@
 /// number a date or a duration; the `<is>` of an inline string cell is
 /// read (Quds read only its first `<t>`); and each cell says which shared,
 /// array or data-table formula group it belongs to (`FormulaGroups`).
+///
+/// The row and cell loop is [RawRowReader], shared with the workbook model:
+/// it reads each `<c>` as a [RawCell] (what the file stores) and owns the
+/// position checks, duplicates and their warnings; [readSheetRows] decodes
+/// its cells with `decodeRawCell` and tracks the formula groups.
 library;
 
 import '../../opc/ooxml.dart';
+import '../../opc/opaque_xml.dart';
+import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../cell_ref.dart';
 import '../format/format_kind.dart';
 import '../limits.dart';
+import '../raw_cell.dart';
 import '../warnings.dart';
 import 'cell_decoder.dart';
 import 'formula_groups.dart';
@@ -104,32 +112,137 @@ Iterable<XlsxReadRow> readSheetRows(
   }
 }
 
-/// The position and data of one `<c>`, before it is decoded.
-final class _RawCell {
-  _RawCell(this.column, this.ref);
+/// One `<row>` of `<sheetData>` as the file stores it.
+final class RawRow {
+  /// A row at [index] holding [cells] at [columns].
+  const RawRow({
+    required this.index,
+    required this.hidden,
+    required this.columns,
+    required this.cells,
+    this.attributes = const <KeptAttribute>[],
+  });
 
+  /// The 0-based row index.
+  final int index;
+
+  /// Whether the row is hidden (`hidden` is `1` or `true`).
+  final bool hidden;
+
+  /// The 0-based column of each of [cells], ascending.
+  final List<int> columns;
+
+  /// The cells, in column order, one per column.
+  final List<RawCell> cells;
+
+  /// Every attribute of the `<row>` but `r` and `spans`, in source order
+  /// (`hidden` included); empty unless the reader keeps extras.
+  final List<KeptAttribute> attributes;
+}
+
+/// Reads the rows of a `<sheetData>` as [RawRow]s, one at a time.
+///
+/// The reader owns where rows and cells go, as `readSheetRows` documents:
+/// rows and cells without `r` follow the previous one, a cell `r` that does
+/// not parse or names another row is positional
+/// ([XlsxWarningCode.cellReferenceInvalid], also on the first cell of a row
+/// whose `r` is invalid), a cell beyond the last row or column is dropped
+/// ([XlsxWarningCode.cellOutsideSheet]), a second cell at one column replaces
+/// the first ([XlsxWarningCode.cellDuplicated]) and a row at or before the
+/// previous one is yielded with [XlsxWarningCode.rowOutOfOrder]. A cell with
+/// a repeated `<v>`, `<f>` or `<is>` keeps the last one with
+/// [XlsxWarningCode.cellDuplicated], and an `<is>` in a cell that is not an
+/// inline string gives [XlsxWarningCode.cellTypeUnsupported] (the first of
+/// the two wins).
+///
+/// A row is yielded when it holds a cell with a `<v>`, `<f>` or `<is>`, or is
+/// hidden. With `keepExtras` it keeps more, for the workbook model: a row with
+/// any attribute but `r` and `spans`, a cell without data that has a style or
+/// another attribute, the attributes of rows, cells and formulas
+/// ([RawRow.attributes], [RawCell.attributes], [RawFormula.attributes]) and
+/// the `<is>` element ([RawCell.inline]). Without it none of that is
+/// captured, so the import path pays nothing for it, and an `<is>` is read
+/// for its text only.
+///
+/// [next] throws an [XlsxReadException] of `limitExceeded` for a `<v>`,
+/// `<f>` or inline text longer than [XlsxReadLimits.maxTextLength], naming
+/// the part; XML errors come from the [XmlPullReader].
+final class RawRowReader {
+  /// A reader of the `<sheetData>` whose start [reader] is on.
+  ///
+  /// Throws a [StateError] when [reader] is not on a start element.
+  RawRowReader(
+    XmlPullReader reader, {
+    required String part,
+    required bool keepExtras,
+    required XlsxReadLimits limits,
+    required void Function(XlsxWarningCode code, String? cell, {String? detail})
+    warn,
+  }) : _walk = _RowWalk<RawCell, RawRow>(
+         reader,
+         part: part,
+         keepExtras: keepExtras,
+         limits: limits,
+         warn: warn,
+         cell: (_CellScratch c, int row, String name, bool warned) => c.toRaw(),
+         row: _rawRow,
+       );
+
+  final _RowWalk<RawCell, RawRow> _walk;
+
+  /// The next row, or `null` after the last one.
+  RawRow? next() => _walk.next();
+
+  static RawRow _rawRow(
+    int index,
+    bool hidden,
+    List<int> columns,
+    List<RawCell> cells,
+    List<KeptAttribute> attributes,
+  ) => RawRow(
+    index: index,
+    hidden: hidden,
+    columns: columns,
+    cells: cells,
+    attributes: attributes,
+  );
+}
+
+/// One `<c>` as it is read: reused for every cell of a walk.
+final class _CellScratch {
   /// The 0-based column; may be past the last column.
-  final int column;
+  int column = 0;
 
   /// The `r` attribute as written, or `null`.
-  final String? ref;
+  String? ref;
+
+  /// Whether `r` was present but did not parse or named another row.
+  bool refInvalid = false;
 
   /// The `s` attribute (the style index) as written, or `null`.
   String? style;
 
-  /// Whether `r` was absent, did not parse or named another row.
-  bool refInvalid = false;
+  /// The `t` attribute and its kind.
+  String? type;
+  RawCellKind kind = RawCellKind.number;
 
   String? value;
-  String? formula;
+
   bool hasFormula = false;
 
-  /// The type, `ref` and `si` of the last `<f>`.
+  /// The text of the last `<f>` as written, `null` when it is empty.
+  String? formula;
+
+  /// The type, `ref`, `si` and other attributes of the last `<f>`.
   FormulaType formulaType = FormulaType.normal;
   String? formulaRef;
   String? formulaSi;
+  List<KeptAttribute> formulaAttributes = const <KeptAttribute>[];
 
   bool hasInline = false;
+
+  /// The last `<is>`, when extras are kept and the cell is inside the sheet.
+  OpaqueXml? inline;
 
   /// The text of the last `<is>`, when the cell is an inline string inside
   /// the sheet; otherwise `null`.
@@ -139,7 +252,66 @@ final class _RawCell {
   /// is kept.
   bool repeated = false;
 
+  List<KeptAttribute> attributes = const <KeptAttribute>[];
+
   bool get hasData => value != null || hasFormula || hasInline;
+
+  /// Starts a new cell at [column].
+  void reset(int column, String? ref, {required bool refInvalid}) {
+    this.column = column;
+    this.ref = ref;
+    this.refInvalid = refInvalid;
+    style = null;
+    type = null;
+    kind = RawCellKind.number;
+    value = null;
+    hasFormula = false;
+    formula = null;
+    formulaType = FormulaType.normal;
+    formulaRef = null;
+    formulaSi = null;
+    formulaAttributes = const <KeptAttribute>[];
+    hasInline = false;
+    inline = null;
+    inlineText = null;
+    repeated = false;
+    attributes = const <KeptAttribute>[];
+  }
+
+  /// The cell as stored.
+  RawCell toRaw() {
+    final String? text = formula;
+    return RawCell(
+      kind: kind,
+      style: styleIndex(style),
+      value: value,
+      formula: hasFormula
+          ? RawFormula(
+              type: formulaType,
+              text: text == null ? null : decodeXstring(text),
+              ref: formulaRef,
+              si: formulaSi,
+              attributes: formulaAttributes,
+            )
+          : null,
+      inline: inline,
+      typeText: kind == RawCellKind.unknown ? type : null,
+      attributes: attributes,
+    );
+  }
+
+  /// The style index [s] names: a non-negative integer of at most 9 digits,
+  /// else `null`.
+  static int? styleIndex(String? s) {
+    if (s == null || s.isEmpty || s.length > 9) return null;
+    int index = 0;
+    for (int i = 0; i < s.length; i++) {
+      final int digit = s.codeUnitAt(i) - 0x30;
+      if (digit < 0 || digit > 9) return null;
+      index = index * 10 + digit;
+    }
+    return index;
+  }
 }
 
 /// The cells of one row as they are read, put in column order at the end.
@@ -148,94 +320,132 @@ final class _RawCell {
 /// does not starts a column-to-position map, so a duplicate is still found
 /// in constant time, and the row is sorted once when it ends: a row written
 /// right to left costs O(n log n), not O(n²).
-final class _RowCells {
-  final List<XlsxReadCell> _cells = <XlsxReadCell>[];
+final class _RowCells<C> {
+  final List<int> columns = <int>[];
+  final List<C> cells = <C>[];
 
-  /// Column to position in [_cells], built at the first cell out of order.
+  /// Column to position in [cells], built at the first cell out of order.
   Map<int, int>? _positions;
 
-  /// Adds [cell]; returns `false` when it replaced a cell already at its
-  /// column (the last one wins).
-  bool place(XlsxReadCell cell) {
+  /// Adds [cell] at [column]; returns `false` when it replaced a cell
+  /// already there (the last one wins).
+  bool place(int column, C cell) {
     Map<int, int>? positions = _positions;
     if (positions == null) {
-      if (_cells.isEmpty || _cells.last.column < cell.column) {
-        _cells.add(cell);
+      if (columns.isEmpty || columns.last < column) {
+        columns.add(column);
+        cells.add(cell);
         return true;
       }
       positions = _positions = <int, int>{
-        for (int i = 0; i < _cells.length; i++) _cells[i].column: i,
+        for (int i = 0; i < columns.length; i++) columns[i]: i,
       };
     }
-    final int? at = positions[cell.column];
+    final int? at = positions[column];
     if (at != null) {
-      _cells[at] = cell;
+      cells[at] = cell;
       return false;
     }
-    positions[cell.column] = _cells.length;
-    _cells.add(cell);
+    positions[column] = columns.length;
+    columns.add(column);
+    cells.add(cell);
     return true;
   }
 
-  /// The cells in column order, one per column.
-  List<XlsxReadCell> inColumnOrder() {
-    if (_positions != null) {
-      _cells.sort((XlsxReadCell a, XlsxReadCell b) => a.column - b.column);
-    }
-    return _cells;
+  /// Puts [columns] and [cells] in column order.
+  void sort() {
+    if (_positions == null) return;
+    final List<int> order = List<int>.generate(columns.length, (int i) => i)
+      ..sort((int a, int b) => columns[a] - columns[b]);
+    final List<int> sortedColumns = <int>[
+      for (final int i in order) columns[i],
+    ];
+    final List<C> sortedCells = <C>[for (final int i in order) cells[i]];
+    columns.setAll(0, sortedColumns);
+    cells.setAll(0, sortedCells);
   }
 }
 
-/// The state of one pass over a worksheet part.
-final class _SheetWalker {
-  _SheetWalker(
-    this._reader,
-    this._part,
-    this._sharedStrings,
-    this._styles,
-    this._date1904,
-    this._limits,
-    this._warn,
-  );
+/// The row walk of a `<sheetData>`: rows of [R] holding cells of [C].
+///
+/// [RawRowReader] makes [RawCell]s of the cells; `readSheetRows` decodes
+/// them as they are read, so its warnings keep their order cell by cell.
+/// [_cell] gets the cell, its row, its name and whether the walk already
+/// warned about its contents.
+final class _RowWalk<C, R> {
+  _RowWalk(
+    this._reader, {
+    required String part,
+    required bool keepExtras,
+    required XlsxReadLimits limits,
+    required void Function(XlsxWarningCode code, String? cell, {String? detail})
+    warn,
+    required C Function(_CellScratch c, int row, String name, bool warned) cell,
+    required R Function(
+      int index,
+      bool hidden,
+      List<int> columns,
+      List<C> cells,
+      List<KeptAttribute> attributes,
+    )
+    row,
+    void Function(int row)? onRow,
+  }) : _part = part,
+       _keepExtras = keepExtras,
+       _limits = limits,
+       _warn = warn,
+       _cell = cell,
+       _row = row,
+       _onRow = onRow {
+    if (_reader.eventType != XmlEventType.startElement) {
+      throw StateError('RawRowReader needs the start of <sheetData>.');
+    }
+    _base = _reader.depth;
+    _done = _reader.isEmptyElement;
+  }
 
   final XmlPullReader _reader;
   final String _part;
-  final List<String>? _sharedStrings;
-  final StyleTable _styles;
-  final bool _date1904;
+  final bool _keepExtras;
   final XlsxReadLimits _limits;
   final void Function(XlsxWarningCode code, String? cell, {String? detail})
   _warn;
+  final C Function(_CellScratch c, int row, String name, bool warned) _cell;
+  final R Function(
+    int index,
+    bool hidden,
+    List<int> columns,
+    List<C> cells,
+    List<KeptAttribute> attributes,
+  )
+  _row;
+  final void Function(int row)? _onRow;
 
-  /// The formula groups of this pass.
-  final FormulaGroups _groups = FormulaGroups();
+  final _CellScratch _scratch = _CellScratch();
 
-  bool _started = false;
+  /// The depth of `<sheetData>`; rows are one deeper, cells two, their
+  /// children three.
+  late final int _base;
+
   bool _done = false;
 
   /// The 0-based index of the previous `<row>`, capped at
   /// [XlsxLimits.maxRows] for a row past the last.
   int _previousRow = -1;
 
-  /// The next row to yield, or `null` when the sheet has no more.
-  XlsxReadRow? nextRow() {
+  /// The next row, or `null` when the sheet data has no more.
+  R? next() {
     if (_done) return null;
-    if (!_started) {
-      _started = true;
-      if (!_enterSheetData()) {
-        _done = true;
-        return null;
-      }
-    }
     while (_reader.next()) {
-      if (_reader.eventType == XmlEventType.endElement && _reader.depth < 2) {
+      if (_reader.eventType == XmlEventType.endElement &&
+          _reader.depth < _base) {
         break;
       }
       if (_reader.eventType != XmlEventType.startElement) continue;
-      if (_reader.depth == 3 &&
+      if (_reader.depth == _base + 1 &&
           _reader.localName == 'row' &&
           _reader.namespaceUri == Ns.main) {
-        final XlsxReadRow? row = _readRow();
+        final R? row = _readRow();
         if (row != null) return row;
       } else {
         _reader.skip();
@@ -245,44 +455,17 @@ final class _SheetWalker {
     return null;
   }
 
-  /// Moves the reader onto the start of a non-empty `<sheetData>` of a
-  /// `<worksheet>` root; `false` when there is none.
-  bool _enterSheetData() {
-    while (_reader.next()) {
-      if (_reader.eventType == XmlEventType.startElement) break;
-    }
-    if (_reader.eventType == XmlEventType.startElement &&
-        _reader.namespaceUri == strictSpreadsheetNs) {
-      throw strictUnsupported(part: _part);
-    }
-    if (_reader.eventType != XmlEventType.startElement ||
-        _reader.localName != 'worksheet' ||
-        _reader.namespaceUri != Ns.main ||
-        _reader.isEmptyElement) {
-      return false;
-    }
-    while (_reader.next()) {
-      if (_reader.eventType == XmlEventType.endElement && _reader.depth < 1) {
-        return false;
-      }
-      if (_reader.eventType != XmlEventType.startElement) continue;
-      if (_reader.depth == 2 &&
-          _reader.localName == 'sheetData' &&
-          _reader.namespaceUri == Ns.main) {
-        return !_reader.isEmptyElement;
-      }
-      _reader.skip();
-    }
-    return false;
-  }
-
   /// Reads the `<row>` the reader is on, leaving it on the row's end.
   ///
   /// Returns `null` for a row that is not yielded: one without data that is
-  /// not hidden, or one past the last row (its cells are reported).
-  XlsxReadRow? _readRow() {
+  /// not hidden (nor kept for its attributes), or one past the last row (its
+  /// cells are reported).
+  R? _readRow() {
     final String? hiddenText = _reader.getAttribute('hidden', namespaceUri: '');
     final bool hidden = hiddenText == '1' || hiddenText == 'true';
+    final List<KeptAttribute> rowAttributes = _keepExtras
+        ? keepAttributes(_reader, except: const <String>{'r', 'spans'})
+        : const <KeptAttribute>[];
     final ({int index, bool invalid}) position = _rowPosition(
       _reader.getAttribute('r', namespaceUri: ''),
     );
@@ -291,130 +474,67 @@ final class _SheetWalker {
     _previousRow = index;
     final bool inside = index < XlsxLimits.maxRows;
     bool pendingInvalid = position.invalid;
-    _groups.startRow(index);
+    _onRow?.call(index);
 
-    final _RowCells cells = _RowCells();
+    final _RowCells<C> cells = _RowCells<C>();
     if (!_reader.isEmptyElement) {
+      final _CellScratch c = _scratch;
       int previousColumn = -1;
       while (_reader.next()) {
-        if (_reader.eventType == XmlEventType.endElement && _reader.depth < 3) {
+        if (_reader.eventType == XmlEventType.endElement &&
+            _reader.depth < _base + 1) {
           break;
         }
         if (_reader.eventType != XmlEventType.startElement) continue;
-        if (_reader.depth != 4 ||
+        if (_reader.depth != _base + 2 ||
             _reader.localName != 'c' ||
             _reader.namespaceUri != Ns.main) {
           _reader.skip();
           continue;
         }
-        final String? type = decodeCellType(_reader);
-        final _RawCell raw = _readCell(
-          index,
-          previousColumn,
-          inside,
-          inline: type == 'inlineStr',
-        );
-        previousColumn = raw.column;
-        if (!raw.hasData) continue;
-        if (!inside || raw.column >= XlsxLimits.maxColumns) {
-          _warn(XlsxWarningCode.cellOutsideSheet, _outsideName(raw.ref));
+        _readCell(index, previousColumn, inside);
+        previousColumn = c.column;
+        if (!c.hasData &&
+            !(_keepExtras && (c.style != null || c.attributes.isNotEmpty))) {
           continue;
         }
-        final String name = cellRef(index, raw.column);
-        if (raw.refInvalid || pendingInvalid) {
+        if (!inside || c.column >= XlsxLimits.maxColumns) {
+          _warn(XlsxWarningCode.cellOutsideSheet, _outsideName(c.ref));
+          continue;
+        }
+        final String name = cellRef(index, c.column);
+        if (c.refInvalid || pendingInvalid) {
           _warn(XlsxWarningCode.cellReferenceInvalid, name);
         }
         pendingInvalid = false;
-        final CellFormat format = _styles.formatOf(raw.style);
-        final DecodedCell decoded = decodeCell(
-          type: type,
-          value: raw.value,
-          formula: raw.formula,
-          hasFormula: raw.hasFormula,
-          inlineText: raw.inlineText,
-          sharedStrings: _sharedStrings,
-          format: format,
-          date1904: _date1904,
-        );
         // One warning per cell for its contents: an inline string the type
-        // does not announce (its text is not read), then a repeated child,
-        // then whatever the decoder found.
+        // does not announce (its text is not read), then a repeated child;
+        // the decoder's warning comes only without either.
         final XlsxWarningCode? contentWarning =
-            raw.hasInline && type != 'inlineStr'
+            c.hasInline && c.kind != RawCellKind.inlineString
             ? XlsxWarningCode.cellTypeUnsupported
-            : raw.repeated
+            : c.repeated
             ? XlsxWarningCode.cellDuplicated
-            : decoded.warning;
-        if (contentWarning != null) {
-          _warn(
-            contentWarning,
-            name,
-            detail: contentWarning == XlsxWarningCode.unresolvedNumberFormat
-                ? '${format.id}'
-                : null,
-          );
-        }
-        final FormulaGroupResult grouped = _group(index, raw);
-        if (grouped.invalid) {
-          _warn(XlsxWarningCode.formulaGroupInvalid, name);
-        }
+            : null;
+        if (contentWarning != null) _warn(contentWarning, name);
         if (!cells.place(
-          XlsxReadCell(
-            raw.column,
-            decoded.value,
-            formula: decoded.formula,
-            formulaGroup: grouped.group,
-            numberFormatId: format.id,
-            numberFormat: format.code,
-            isDate:
-                format.kind == FormatKind.date ||
-                format.kind == FormatKind.time,
-          ),
+          c.column,
+          _cell(c, index, name, contentWarning != null),
         )) {
           _warn(XlsxWarningCode.cellDuplicated, name);
         }
       }
     }
-    final List<XlsxReadCell> ordered = cells.inColumnOrder();
-    if (!inside || (ordered.isEmpty && !hidden)) return null;
+    cells.sort();
+    if (!inside) return null;
+    if (cells.cells.isEmpty && !hidden && rowAttributes.isEmpty) return null;
     if (outOfOrder) {
       _warn(
         XlsxWarningCode.rowOutOfOrder,
-        cellRef(index, ordered.isEmpty ? 0 : ordered.first.column),
+        cellRef(index, cells.columns.isEmpty ? 0 : cells.columns.first),
       );
     }
-    return XlsxReadRow(index, ordered, hidden: hidden);
-  }
-
-  /// The formula group of [raw], a cell with data in the row at [row].
-  ///
-  /// A cell without `<f>` belongs to the array or data-table range that
-  /// covers it, if any. A cell with its own `<f>` inside such a range is
-  /// invalid and its `<f>` defines nothing; otherwise a shared `<f>`
-  /// without `ref` follows its `si`, and one with `ref`, an array or a data
-  /// table is a master. A normal `<f>` has no group.
-  FormulaGroupResult _group(int row, _RawCell raw) {
-    if (!raw.hasFormula) {
-      return (group: _groups.coveredBy(row, raw.column), invalid: false);
-    }
-    if (_groups.coveredBy(row, raw.column) != null) {
-      return (group: null, invalid: true);
-    }
-    return switch (raw.formulaType) {
-      FormulaType.normal => (group: null, invalid: false),
-      FormulaType.shared when raw.formulaRef == null => _groups.follower(
-        raw.formulaSi,
-        row: row,
-        column: raw.column,
-      ),
-      final FormulaType type => _groups.master(
-        type,
-        row: row,
-        column: raw.column,
-        ref: raw.formulaRef,
-        si: raw.formulaSi,
-      ),
-    };
+    return _row(index, hidden, cells.columns, cells.cells, rowAttributes);
   }
 
   /// The 0-based index of a row whose `r` is [r], and whether `r` was
@@ -438,51 +558,79 @@ final class _SheetWalker {
     );
   }
 
-  /// Reads the `<c>` the reader is on, in the row at [row], leaving the
-  /// reader on its end. Texts are read only when [inside] the sheet, and the
-  /// text of an `<is>` only when the cell is an [inline] string.
-  _RawCell _readCell(
-    int row,
-    int previousColumn,
-    bool inside, {
-    required bool inline,
-  }) {
+  /// Reads the `<c>` the reader is on, in the row at [row], into the
+  /// scratch cell, leaving the reader on its end. Texts are read only when
+  /// [inside] the sheet, and the text of an `<is>` only when the cell is an
+  /// inline string.
+  void _readCell(int row, int previousColumn, bool inside) {
     final String? ref = _reader.getAttribute('r', namespaceUri: '');
     final ({int row, int column})? parsed = ref == null
         ? null
         : matchCellRef(ref);
     final bool matches = parsed != null && parsed.row == row;
-    final _RawCell raw =
-        _RawCell(matches ? parsed.column : previousColumn + 1, ref)
-          ..refInvalid = ref != null && !matches
-          ..style = _reader.getAttribute('s', namespaceUri: '');
-    if (_reader.isEmptyElement) return raw;
-    final bool readText = inside && raw.column < XlsxLimits.maxColumns;
+    final _CellScratch c = _scratch
+      ..reset(
+        matches ? parsed.column : previousColumn + 1,
+        ref,
+        refInvalid: ref != null && !matches,
+      );
+    c
+      ..style = _reader.getAttribute('s', namespaceUri: '')
+      ..type = decodeCellType(_reader);
+    c.kind = decodeRawKind(c.type);
+    if (_keepExtras) {
+      c.attributes = keepAttributes(
+        _reader,
+        except: c.style == null || _CellScratch.styleIndex(c.style) != null
+            ? const <String>{'r', 's', 't'}
+            : const <String>{'r', 't'},
+      );
+    }
+    if (_reader.isEmptyElement) return;
+    final bool readText = inside && c.column < XlsxLimits.maxColumns;
+    final bool inline = c.kind == RawCellKind.inlineString;
     while (_reader.next()) {
-      if (_reader.eventType == XmlEventType.endElement && _reader.depth < 4) {
+      if (_reader.eventType == XmlEventType.endElement &&
+          _reader.depth < _base + 2) {
         break;
       }
       if (_reader.eventType != XmlEventType.startElement) continue;
-      final bool child = _reader.depth == 5 && _reader.namespaceUri == Ns.main;
+      final bool child =
+          _reader.depth == _base + 3 && _reader.namespaceUri == Ns.main;
       switch (child ? _reader.localName : null) {
         case 'v':
-          if (raw.value != null) raw.repeated = true;
-          raw.value = _readText(row, raw.column, keep: readText);
+          if (c.value != null) c.repeated = true;
+          c.value = _readText(row, c.column, keep: readText);
         case 'f':
-          if (raw.hasFormula) raw.repeated = true;
-          raw.hasFormula = true;
-          raw
+          if (c.hasFormula) c.repeated = true;
+          c
+            ..hasFormula = true
             ..formulaType = decodeFormulaType(_reader)
             ..formulaRef = _reader.getAttribute('ref', namespaceUri: '')
             ..formulaSi = _reader.getAttribute('si', namespaceUri: '');
-          final String formula = _readText(row, raw.column, keep: readText);
-          raw.formula = formula.isEmpty ? null : formula;
+          if (_keepExtras) {
+            c.formulaAttributes = keepAttributes(
+              _reader,
+              except: const <String>{'t', 'ref', 'si'},
+            );
+          }
+          final String formula = _readText(row, c.column, keep: readText);
+          c.formula = formula.isEmpty ? null : formula;
         case 'is':
-          if (raw.hasInline) raw.repeated = true;
-          raw.hasInline = true;
-          if (readText && inline) {
-            raw.inlineText = readStringItem(_reader, _limits.maxTextLength);
-            if (raw.inlineText == null) throw _tooLong(row, raw.column);
+          if (c.hasInline) c.repeated = true;
+          c.hasInline = true;
+          if (readText && _keepExtras) {
+            final OpaqueXml captured = c.inline = OpaqueXml.capture(_reader);
+            if (inline) {
+              c.inlineText = inlineTextOf(
+                captured,
+                maxLength: _limits.maxTextLength,
+              );
+              if (c.inlineText == null) throw _tooLong(row, c.column);
+            }
+          } else if (readText && inline) {
+            c.inlineText = readStringItem(_reader, _limits.maxTextLength);
+            if (c.inlineText == null) throw _tooLong(row, c.column);
           } else {
             _reader.skip();
           }
@@ -490,7 +638,6 @@ final class _SheetWalker {
           _reader.skip();
       }
     }
-    return raw;
   }
 
   /// The character data of the element the reader is on, leaving the
@@ -534,5 +681,162 @@ final class _SheetWalker {
   static String? _outsideName(String? ref) {
     if (ref == null || !_outsideRef.hasMatch(ref)) return null;
     return ref.replaceAll(r'$', '').toUpperCase();
+  }
+}
+
+/// The state of one pass over a worksheet part.
+final class _SheetWalker {
+  _SheetWalker(
+    this._reader,
+    this._part,
+    this._sharedStrings,
+    this._styles,
+    this._date1904,
+    this._limits,
+    this._warn,
+  );
+
+  final XmlPullReader _reader;
+  final String _part;
+  final List<String>? _sharedStrings;
+  final StyleTable _styles;
+  final bool _date1904;
+  final XlsxReadLimits _limits;
+  final void Function(XlsxWarningCode code, String? cell, {String? detail})
+  _warn;
+
+  /// The formula groups of this pass.
+  final FormulaGroups _groups = FormulaGroups();
+
+  /// The rows of `<sheetData>`, once the reader is on it.
+  _RowWalk<XlsxReadCell, XlsxReadRow>? _rows;
+
+  bool _started = false;
+
+  /// The next row to yield, or `null` when the sheet has no more.
+  XlsxReadRow? nextRow() {
+    if (!_started) {
+      _started = true;
+      if (_enterSheetData()) {
+        _rows = _RowWalk<XlsxReadCell, XlsxReadRow>(
+          _reader,
+          part: _part,
+          keepExtras: false,
+          limits: _limits,
+          warn: _warn,
+          cell: _decode,
+          row: _row,
+          onRow: _groups.startRow,
+        );
+      }
+    }
+    return _rows?.next();
+  }
+
+  /// Moves the reader onto the start of a non-empty `<sheetData>` of a
+  /// `<worksheet>` root; `false` when there is none.
+  bool _enterSheetData() {
+    while (_reader.next()) {
+      if (_reader.eventType == XmlEventType.startElement) break;
+    }
+    if (_reader.eventType == XmlEventType.startElement &&
+        _reader.namespaceUri == strictSpreadsheetNs) {
+      throw strictUnsupported(part: _part);
+    }
+    if (_reader.eventType != XmlEventType.startElement ||
+        _reader.localName != 'worksheet' ||
+        _reader.namespaceUri != Ns.main ||
+        _reader.isEmptyElement) {
+      return false;
+    }
+    while (_reader.next()) {
+      if (_reader.eventType == XmlEventType.endElement && _reader.depth < 1) {
+        return false;
+      }
+      if (_reader.eventType != XmlEventType.startElement) continue;
+      if (_reader.depth == 2 &&
+          _reader.localName == 'sheetData' &&
+          _reader.namespaceUri == Ns.main) {
+        return !_reader.isEmptyElement;
+      }
+      _reader.skip();
+    }
+    return false;
+  }
+
+  /// Decodes the cell [c] named [name] in the row at [row]; [warned] says
+  /// the walk already reported its contents, so the decoder's warning is
+  /// not.
+  XlsxReadCell _decode(_CellScratch c, int row, String name, bool warned) {
+    final CellFormat format = _styles.formatOf(c.style);
+    final DecodedCell decoded = decodeRawCell(
+      c.toRaw(),
+      sharedStrings: _sharedStrings,
+      format: format,
+      date1904: _date1904,
+      inlineText: c.inlineText,
+    );
+    final XlsxWarningCode? warning = decoded.warning;
+    if (!warned && warning != null) {
+      _warn(
+        warning,
+        name,
+        detail: warning == XlsxWarningCode.unresolvedNumberFormat
+            ? '${format.id}'
+            : null,
+      );
+    }
+    final FormulaGroupResult grouped = _group(row, c);
+    if (grouped.invalid) {
+      _warn(XlsxWarningCode.formulaGroupInvalid, name);
+    }
+    return XlsxReadCell(
+      c.column,
+      decoded.value,
+      formula: decoded.formula,
+      formulaGroup: grouped.group,
+      numberFormatId: format.id,
+      numberFormat: format.code,
+      isDate: format.kind == FormatKind.date || format.kind == FormatKind.time,
+    );
+  }
+
+  static XlsxReadRow _row(
+    int index,
+    bool hidden,
+    List<int> columns,
+    List<XlsxReadCell> cells,
+    List<KeptAttribute> attributes,
+  ) => XlsxReadRow(index, cells, hidden: hidden);
+
+  /// The formula group of [c], a cell with data in the row at [row].
+  ///
+  /// A cell without `<f>` belongs to the array or data-table range that
+  /// covers it, if any. A cell with its own `<f>` inside such a range is
+  /// invalid and its `<f>` defines nothing; otherwise a shared `<f>`
+  /// without `ref` follows its `si`, and one with `ref`, an array or a data
+  /// table is a master. A normal `<f>` has no group.
+  FormulaGroupResult _group(int row, _CellScratch c) {
+    if (!c.hasFormula) {
+      return (group: _groups.coveredBy(row, c.column), invalid: false);
+    }
+    if (_groups.coveredBy(row, c.column) != null) {
+      return (group: null, invalid: true);
+    }
+    return switch (c.formulaType) {
+      FormulaType.normal => (group: null, invalid: false),
+      FormulaType.shared when c.formulaRef == null => _groups.follower(
+        c.formulaSi,
+        row: row,
+        column: c.column,
+      ),
+      final FormulaType type => _groups.master(
+        type,
+        row: row,
+        column: c.column,
+        ref: c.formulaRef,
+        si: c.formulaSi,
+      ),
+    };
   }
 }

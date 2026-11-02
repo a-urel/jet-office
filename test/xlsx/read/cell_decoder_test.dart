@@ -1,11 +1,29 @@
 import 'package:jet_office/jet_office.dart' show XlsxErrorValue;
+import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xlsx/format/format_kind.dart';
+import 'package:jet_office/src/xlsx/raw_cell.dart';
 import 'package:jet_office/src/xlsx/read/cell_decoder.dart';
 import 'package:jet_office/src/xlsx/read/styles_reader.dart';
 import 'package:jet_office/src/xlsx/values.dart';
 import 'package:jet_office/src/xlsx/warnings.dart';
+import 'package:jet_office/src/xml/xml_escape.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:test/test.dart';
+
+/// The arguments of every [_decode] call, replayed through [decodeRawCell].
+final List<
+  ({
+    String? type,
+    String? value,
+    String? formula,
+    bool hasFormula,
+    String? inlineText,
+    List<String>? shared,
+    CellFormat format,
+    bool date1904,
+  })
+>
+_cases = [];
 
 DecodedCell _decode({
   String? type,
@@ -16,16 +34,43 @@ DecodedCell _decode({
   List<String>? shared,
   CellFormat format = CellFormat.general,
   bool date1904 = false,
-}) => decodeCell(
-  type: type,
-  value: value,
-  formula: formula,
-  hasFormula: hasFormula || formula != null,
-  inlineText: inlineText,
-  sharedStrings: shared,
-  format: format,
-  date1904: date1904,
-);
+}) {
+  _cases.add((
+    type: type,
+    value: value,
+    formula: formula,
+    hasFormula: hasFormula || formula != null,
+    inlineText: inlineText,
+    shared: shared,
+    format: format,
+    date1904: date1904,
+  ));
+  return decodeCell(
+    type: type,
+    value: value,
+    formula: formula,
+    hasFormula: hasFormula || formula != null,
+    inlineText: inlineText,
+    sharedStrings: shared,
+    format: format,
+    date1904: date1904,
+  );
+}
+
+/// An `<is>` element holding [text] in one `<t>`, captured as opaque XML.
+OpaqueXml _inline(String text) {
+  final XmlPullReader r = _at(
+    '<is xmlns="$_main"><t xml:space="preserve">${escapeXmlText(text)}</t></is>',
+  );
+  return OpaqueXml.capture(r);
+}
+
+const String _main =
+    'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+
+/// Whether [a] and [b] decoded alike.
+bool _same(DecodedCell a, DecodedCell b) =>
+    a.value == b.value && a.formula == b.formula && a.warning == b.warning;
 
 const CellFormat _date = CellFormat(164, 'dd.mm.yyyy', FormatKind.date);
 
@@ -552,5 +597,162 @@ void main() {
         FormulaType.normal,
       );
     });
+  });
+
+  group('raw kinds', () {
+    const Map<String?, RawCellKind> kinds = <String?, RawCellKind>{
+      null: RawCellKind.number,
+      'n': RawCellKind.number,
+      's': RawCellKind.sharedString,
+      'b': RawCellKind.boolean,
+      'e': RawCellKind.error,
+      'str': RawCellKind.string,
+      'inlineStr': RawCellKind.inlineString,
+      'd': RawCellKind.isoDate,
+      'x': RawCellKind.unknown,
+      '': RawCellKind.unknown,
+      'S': RawCellKind.unknown,
+    };
+
+    test('decodeRawKind maps every t', () {
+      kinds.forEach((String? type, RawCellKind kind) {
+        expect(decodeRawKind(type), kind, reason: '$type');
+      });
+    });
+
+    test('encodeRawKind is its inverse', () {
+      for (final String? type in <String?>[
+        null,
+        's',
+        'b',
+        'e',
+        'str',
+        'inlineStr',
+        'd',
+      ]) {
+        expect(
+          encodeRawKind(RawCell(kind: decodeRawKind(type))),
+          type,
+          reason: '$type',
+        );
+      }
+      expect(encodeRawKind(RawCell(kind: decodeRawKind('n'))), isNull);
+      expect(
+        encodeRawKind(const RawCell(kind: RawCellKind.unknown, typeText: 'x')),
+        'x',
+      );
+      expect(
+        encodeRawKind(const RawCell(kind: RawCellKind.unknown, typeText: '')),
+        '',
+      );
+    });
+  });
+
+  group('raw cells', () {
+    test('isEmpty means no value, formula or inline', () {
+      expect(const RawCell(kind: RawCellKind.number, style: 3).isEmpty, isTrue);
+      expect(
+        const RawCell(kind: RawCellKind.number, value: '').isEmpty,
+        isFalse,
+      );
+      expect(
+        const RawCell(
+          kind: RawCellKind.number,
+          formula: RawFormula(type: FormulaType.normal),
+        ).isEmpty,
+        isFalse,
+      );
+      expect(
+        RawCell(kind: RawCellKind.inlineString, inline: _inline('a')).isEmpty,
+        isFalse,
+      );
+    });
+
+    test('decodeRawCell reads the inline text from the <is>', () {
+      final DecodedCell cell = decodeRawCell(
+        RawCell(kind: RawCellKind.inlineString, inline: _inline('a & b')),
+        sharedStrings: null,
+        format: CellFormat.general,
+        date1904: false,
+      );
+      expect(cell.value, 'a & b');
+    });
+
+    test('decodeRawCell does not decode a formula text twice', () {
+      final DecodedCell cell = decodeRawCell(
+        const RawCell(
+          kind: RawCellKind.number,
+          value: '1',
+          formula: RawFormula(type: FormulaType.normal, text: '_x0041_'),
+        ),
+        sharedStrings: null,
+        format: CellFormat.general,
+        date1904: false,
+      );
+      expect(cell.formula, '_x0041_');
+    });
+
+    test('an unknown kind without its t text is unsupported', () {
+      final DecodedCell cell = decodeRawCell(
+        const RawCell(kind: RawCellKind.unknown, value: '1'),
+        sharedStrings: null,
+        format: CellFormat.general,
+        date1904: false,
+      );
+      expect(cell.warning, XlsxWarningCode.cellTypeUnsupported);
+    });
+  });
+
+  // Runs last: it replays every case the tests above decoded.
+  test('decodeRawCell equals decodeCell for every case of the existing '
+      'table', () {
+    expect(
+      _cases.length,
+      greaterThan(100),
+      reason: 'run the whole file: the cases come from the tests above',
+    );
+    final List<String> differ = <String>[];
+    for (final c in _cases) {
+      final DecodedCell expected = decodeCell(
+        type: c.type,
+        value: c.value,
+        formula: c.formula,
+        hasFormula: c.hasFormula,
+        inlineText: c.inlineText,
+        sharedStrings: c.shared,
+        format: c.format,
+        date1904: c.date1904,
+      );
+      final RawCellKind kind = decodeRawKind(c.type);
+      // The decoder reads an inline text only for an inline string cell.
+      final OpaqueXml? inline = c.inlineText == null
+          ? null
+          : _inline(c.inlineText!);
+      final RawCell raw = RawCell(
+        kind: kind,
+        value: c.value,
+        typeText: kind == RawCellKind.unknown ? c.type : null,
+        formula: c.hasFormula
+            ? RawFormula(
+                type: FormulaType.normal,
+                text: c.formula == null ? null : decodeXstring(c.formula!),
+              )
+            : null,
+        inline: inline,
+      );
+      final DecodedCell actual = decodeRawCell(
+        raw,
+        sharedStrings: c.shared,
+        format: c.format,
+        date1904: c.date1904,
+      );
+      if (!_same(expected, actual)) {
+        differ.add(
+          '$c: ${expected.value}/${expected.warning} vs '
+          '${actual.value}/${actual.warning}',
+        );
+      }
+    }
+    expect(differ, isEmpty);
   });
 }

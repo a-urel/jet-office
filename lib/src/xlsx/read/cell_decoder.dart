@@ -8,18 +8,29 @@
 /// element texts, resolves the cell's style to a [CellFormat], then calls
 /// [decodeCell].
 ///
+/// It also holds the two steps of the workbook model (decision 0009): the
+/// raw step maps a `t` to a [RawCellKind] ([decodeRawKind]) and back
+/// ([encodeRawKind]), and the typed step turns a stored [RawCell] into a
+/// value ([decodeRawCell], which is [decodeCell]).
+///
 /// Not ported from Quds, whose reader decoded cells inline in
 /// `XlsxGridReader`; written for jet_office.
 library;
 
+import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
+import '../../xml/xml_writer.dart';
 import '../format/format_kind.dart';
+import '../raw_cell.dart';
 import '../values.dart';
 import '../warnings.dart';
 import 'read_cell.dart';
 import 'serial_dates.dart';
+import 'shared_strings_reader.dart';
 import 'styles_reader.dart';
+
+export '../raw_cell.dart' show FormulaType;
 
 /// The largest exponent (in magnitude) a number may carry.
 const int _maxExponent = 400;
@@ -61,21 +72,6 @@ final class DecodedCell {
 String? decodeCellType(XmlPullReader r) =>
     r.getAttribute('t', namespaceUri: '');
 
-/// The type of a formula, the `t` attribute of its `<f>`.
-enum FormulaType {
-  /// A formula of its own cell (`t` absent, `normal` or unknown).
-  normal,
-
-  /// `t="shared"`: a master (with `ref`) or a follower of a shared formula.
-  shared,
-
-  /// `t="array"`: the master of an array formula.
-  array,
-
-  /// `t="dataTable"`: the master of a data table.
-  dataTable,
-}
-
 /// The type of the `<f>` element [r] is on, from its `t` attribute (no
 /// namespace); an absent or unknown value is [FormulaType.normal].
 FormulaType decodeFormulaType(XmlPullReader r) =>
@@ -85,6 +81,93 @@ FormulaType decodeFormulaType(XmlPullReader r) =>
       'dataTable' => FormulaType.dataTable,
       _ => FormulaType.normal,
     };
+
+/// The [RawCellKind] of a cell whose `t` attribute is [type]; `null` and
+/// `n` are [RawCellKind.number], a value the format does not define
+/// (matched exactly, so `S` too) is [RawCellKind.unknown].
+RawCellKind decodeRawKind(String? type) => switch (type) {
+  null || 'n' => RawCellKind.number,
+  's' => RawCellKind.sharedString,
+  'b' => RawCellKind.boolean,
+  'e' => RawCellKind.error,
+  'str' => RawCellKind.string,
+  'inlineStr' => RawCellKind.inlineString,
+  'd' => RawCellKind.isoDate,
+  _ => RawCellKind.unknown,
+};
+
+/// The `t` text to write for [cell], or `null` for none: the inverse of
+/// [decodeRawKind]. A number has no `t`; an unknown kind writes its
+/// [RawCell.typeText] (`null` when it has none).
+String? encodeRawKind(RawCell cell) => switch (cell.kind) {
+  RawCellKind.number => null,
+  RawCellKind.sharedString => 's',
+  RawCellKind.boolean => 'b',
+  RawCellKind.error => 'e',
+  RawCellKind.string => 'str',
+  RawCellKind.inlineString => 'inlineStr',
+  RawCellKind.isoDate => 'd',
+  RawCellKind.unknown => cell.typeText,
+};
+
+/// The typed value of the stored [cell]: [decodeCell] with the cell's parts.
+///
+/// [sharedStrings], [format] and [date1904] are as for [decodeCell]. The
+/// text of [RawCell.inline] is the inline text, and only for a
+/// [RawCellKind.inlineString], as the reader reads it; [inlineText] gives
+/// it instead when the caller already read it (the reader does, without
+/// keeping the element). An unknown kind without a [RawCell.typeText] is
+/// unsupported, like any unknown `t`. The formula text is returned as
+/// stored: [RawFormula.text] is already XML-string decoded.
+DecodedCell decodeRawCell(
+  RawCell cell, {
+  required List<String>? sharedStrings,
+  required CellFormat format,
+  required bool date1904,
+  String? inlineText,
+}) {
+  final RawFormula? formula = cell.formula;
+  final OpaqueXml? inline = cell.inline;
+  final DecodedCell decoded = decodeCell(
+    type: cell.kind == RawCellKind.unknown
+        ? (cell.typeText ?? '')
+        : encodeRawKind(cell),
+    value: cell.value,
+    formula: null,
+    hasFormula: formula != null,
+    inlineText:
+        inlineText ??
+        (inline != null && cell.kind == RawCellKind.inlineString
+            ? inlineTextOf(inline)
+            : null),
+    sharedStrings: sharedStrings,
+    format: format,
+    date1904: date1904,
+  );
+  final String? text = formula?.text;
+  return text == null
+      ? decoded
+      : DecodedCell(
+          value: decoded.value,
+          formula: text,
+          warning: decoded.warning,
+        );
+}
+
+/// The text of the inline string element [inline] (an `<is>`), read as the
+/// reader reads one: its `<t>` and the `<t>` of each run, decoded. `null`
+/// when it is longer than [maxLength].
+String? inlineTextOf(OpaqueXml inline, {int maxLength = 0x7fffffff}) {
+  final StringBuffer standalone = StringBuffer();
+  inline.writeTo(XmlWriter(standalone));
+  final XmlPullReader r = XmlPullReader(standalone.toString());
+  while (r.next()) {
+    if (r.eventType == XmlEventType.startElement) {
+      return readStringItem(r, maxLength);
+    }
+  }
+  return '';
+}
 
 /// Decodes one cell.
 ///
