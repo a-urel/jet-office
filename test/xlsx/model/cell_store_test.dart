@@ -501,7 +501,7 @@ void main() {
       expect(store.hasFormulas, isFalse);
     });
 
-    test('a shared follower costs no more than 32 bytes', () {
+    test('a shared follower costs no more than 24 bytes', () {
       final CellStore store = CellStore();
       for (int row = 1; row <= 10000; row++) {
         for (int column = 0; column < 12; column++) {
@@ -517,7 +517,7 @@ void main() {
         }
       }
       expect(store.hasFormulas, isTrue);
-      expect(store.retainedBytesEstimate, lessThan(120000 * 32));
+      expect(store.retainedBytesEstimate, lessThan(120000 * 24));
     });
 
     test('formula text is counted and stored compactly', () {
@@ -533,10 +533,10 @@ void main() {
           ),
         );
       }
-      // Per row (one cell each): a 16-byte cell, 8 bytes of row lists, two
-      // 4-byte formula references, a 4-byte text start and the text's
-      // code units (at most 7), once the spare capacity is dropped; plus
-      // one template.
+      // Per row (one cell each): a 16-byte cell, 8 bytes of row lists, a
+      // 4-byte formula reference, an 8-byte formula entry (template and
+      // text start) and the text's code units (at most 7), once the spare
+      // capacity is dropped; plus one template.
       store.trim();
       expect(
         store.retainedBytesEstimate,

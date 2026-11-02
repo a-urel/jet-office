@@ -26,12 +26,14 @@
 ///
 /// Formulas can be on every cell, so they cost no object per cell either. A
 /// formula is split into its template (type, `ref`, `si` and attributes:
-/// everything but the text), interned, so that the followers of a shared
-/// formula all point at one template, and its text, appended to one
-/// code-unit buffer. A block that holds a formula gets two more `Int32List`
-/// entries per cell, the template and the text (8 bytes); a block without
-/// formulas has none. A text equal to the one appended last is not appended
-/// again.
+/// everything but the text), interned, and its text. The store keeps a
+/// table of formula entries, each a template and a text range in one
+/// code-unit buffer (8 bytes plus the text). A formula without text (a
+/// shared formula's follower) uses its template's one textless entry, so
+/// every follower of a group shares one entry; a formula equal to the entry
+/// added last reuses it too. A block that holds a formula gets one more
+/// `Int32List` entry per cell, the formula entry (4 bytes); a block without
+/// formulas has none.
 ///
 /// The inline string, unknown `t` text, kept attributes and other children
 /// are rare: they live in a map keyed by position, and a flag in the packed
@@ -89,10 +91,9 @@ final class _Extras {
 /// The lists may be longer than [rowCount] and [cellCount]; the rest is
 /// spare capacity.
 ///
-/// [templates] and [texts] are `null` until the block holds a formula; then
-/// they are as long as [words]. A cell's entry in [templates] is its
-/// formula template's index plus one, `0` without a formula; its entry in
-/// [texts] its text's index plus one, `0` without text.
+/// [formulas] is `null` until the block holds a formula; then it is as long
+/// as [words], and a cell's entry is the index of its formula entry plus
+/// one, `0` without a formula.
 final class _Block {
   _Block(int rowCapacity, int cellCapacity)
     : rows = Int32List(rowCapacity),
@@ -106,8 +107,7 @@ final class _Block {
   Int32List words;
   Int32List styles;
   Float64List values;
-  Int32List? templates;
-  Int32List? texts;
+  Int32List? formulas;
   int rowCount = 0;
   int cellCount = 0;
 
@@ -165,23 +165,16 @@ final class _Block {
     _resizeCells(_grown(words.length, cellsNeeded));
   }
 
-  /// Gives the block formula lists, when it has none.
-  void ensureFormulas() {
-    if (templates != null) return;
-    templates = Int32List(words.length);
-    texts = Int32List(words.length);
-  }
+  /// Gives the block its formula list, when it has none, and returns it.
+  Int32List ensureFormulas() => formulas ??= Int32List(words.length);
 
   /// Reallocates the cell lists to [capacity], keeping the cells.
   void _resizeCells(int capacity) {
     words = Int32List(capacity)..setRange(0, cellCount, words);
     styles = Int32List(capacity)..setRange(0, cellCount, styles);
     values = Float64List(capacity)..setRange(0, cellCount, values);
-    final Int32List? t = templates;
-    if (t != null) {
-      templates = Int32List(capacity)..setRange(0, cellCount, t);
-      texts = Int32List(capacity)..setRange(0, cellCount, texts!);
-    }
+    final Int32List? f = formulas;
+    if (f != null) formulas = Int32List(capacity)..setRange(0, cellCount, f);
   }
 
   /// Drops the spare capacity.
@@ -219,13 +212,10 @@ final class _Block {
     words[at] = word;
     styles[at] = style;
     values[at] = value;
-    final Int32List? t = templates;
-    if (t != null) {
-      final Int32List x = texts!;
-      t.setRange(at + 1, cellCount + 1, t, at);
-      x.setRange(at + 1, cellCount + 1, x, at);
-      t[at] = 0;
-      x[at] = 0;
+    final Int32List? f = formulas;
+    if (f != null) {
+      f.setRange(at + 1, cellCount + 1, f, at);
+      f[at] = 0;
     }
     cellCount++;
     for (int i = r + 1; i <= rowCount; i++) {
@@ -238,13 +228,10 @@ final class _Block {
     words.setRange(at, cellCount - 1, words, at + 1);
     styles.setRange(at, cellCount - 1, styles, at + 1);
     values.setRange(at, cellCount - 1, values, at + 1);
-    final Int32List? t = templates;
-    if (t != null) {
-      final Int32List x = texts!;
-      t.setRange(at, cellCount - 1, t, at + 1);
-      x.setRange(at, cellCount - 1, x, at + 1);
-      t[cellCount - 1] = 0;
-      x[cellCount - 1] = 0;
+    final Int32List? f = formulas;
+    if (f != null) {
+      f.setRange(at, cellCount - 1, f, at + 1);
+      f[cellCount - 1] = 0;
     }
     cellCount--;
     for (int i = r + 1; i <= rowCount; i++) {
@@ -265,12 +252,9 @@ final class _Block {
       ..values.setRange(0, movedCells, values, firstCell)
       ..rowCount = movedRows
       ..cellCount = movedCells;
-    final Int32List? t = templates;
-    if (t != null) {
-      tail
-        ..ensureFormulas()
-        ..templates!.setRange(0, movedCells, t, firstCell)
-        ..texts!.setRange(0, movedCells, texts!, firstCell);
+    final Int32List? f = formulas;
+    if (f != null) {
+      tail.ensureFormulas().setRange(0, movedCells, f, firstCell);
     }
     for (int i = 0; i <= movedRows; i++) {
       tail.rowStart[i] = rowStart[r + i] - firstCell;
@@ -318,12 +302,18 @@ final class CellStore {
   final List<RawFormula> _templates = <RawFormula>[];
   final Map<Object, int> _templateIndexes = <Object, int>{};
 
-  /// The formula texts, back to back as UTF-16 code units: text `i` is
-  /// `_textUnits[_textStarts[i]]` up to `_textUnits[_textStarts[i + 1]]`.
+  /// The formula entries. Entry `i` has the template
+  /// `_entryTemplates[i] >> 1`, and text when bit 0 is set: the UTF-16
+  /// code units `_textUnits[_entryStarts[i]]` up to
+  /// `_textUnits[_entryStarts[i + 1]]`.
+  Int32List _entryTemplates = Int32List(0);
+  Int32List _entryStarts = Int32List(0);
+  int _entryCount = 0;
   Uint16List _textUnits = Uint16List(0);
   int _textUnitCount = 0;
-  Int32List _textStarts = Int32List(0);
-  int _textCount = 0;
+
+  /// The textless entry of each template that has one, by template index.
+  final Map<int, int> _textlessEntries = <int, int>{};
 
   final Map<int, List<KeptAttribute>> _rowAttributes =
       <int, List<KeptAttribute>>{};
@@ -351,11 +341,12 @@ final class CellStore {
   /// An estimate of the memory the store retains, in bytes, for benchmarks.
   ///
   /// The sum of the typed lists' `lengthInBytes` (spare capacity included:
-  /// the cells, their formula references and the formula text buffer), two
-  /// bytes for each UTF-16 unit of the pooled strings, and a constant per
-  /// map entry that stands for the entry and the object it holds: 96 bytes
-  /// for each cell with extras, 48 for each pooled string, row with
-  /// attributes or children, and group master. A formula template counts
+  /// the cells, their formula references, the formula entries and the
+  /// formula text buffer), two bytes for each UTF-16 unit of the pooled
+  /// strings, and a constant per map entry that stands for the entry and
+  /// the object it holds: 96 bytes for each cell with extras, 48 for each
+  /// pooled string, row with attributes or children, group master and
+  /// template's textless formula entry. A formula template counts
   /// 96 bytes (its object and its interning entry) plus 48 per attribute
   /// and two per UTF-16 unit of its `ref`, `si` and attributes; a group
   /// master's formula text counts two bytes per unit. The objects the other
@@ -363,7 +354,11 @@ final class CellStore {
   /// does not depend on the platform, unlike a reading of the process's
   /// memory, so it is the figure to compare with the sheet's XML.
   int get retainedBytesEstimate {
-    int bytes = _textUnits.lengthInBytes + _textStarts.lengthInBytes;
+    int bytes =
+        _textUnits.lengthInBytes +
+        _entryTemplates.lengthInBytes +
+        _entryStarts.lengthInBytes +
+        48 * _textlessEntries.length;
     for (final _Block b in _blocks) {
       bytes +=
           b.rows.lengthInBytes +
@@ -371,8 +366,7 @@ final class CellStore {
           b.words.lengthInBytes +
           b.styles.lengthInBytes +
           b.values.lengthInBytes +
-          (b.templates?.lengthInBytes ?? 0) +
-          (b.texts?.lengthInBytes ?? 0);
+          (b.formulas?.lengthInBytes ?? 0);
     }
     for (final String text in _strings) {
       bytes += 2 * text.length + 48;
@@ -402,9 +396,11 @@ final class CellStore {
       _textUnits = Uint16List(_textUnitCount)
         ..setRange(0, _textUnitCount, _textUnits);
     }
-    if (_textCount > 0 && _textStarts.length != _textCount + 1) {
-      _textStarts = Int32List(_textCount + 1)
-        ..setRange(0, _textCount + 1, _textStarts);
+    if (_entryCount > 0 && _entryTemplates.length != _entryCount) {
+      _entryTemplates = Int32List(_entryCount)
+        ..setRange(0, _entryCount, _entryTemplates);
+      _entryStarts = Int32List(_entryCount + 1)
+        ..setRange(0, _entryCount + 1, _entryStarts);
     }
   }
 
@@ -555,10 +551,7 @@ final class CellStore {
     }
     final RawFormula? formula = cell.formula;
     if (formula != null) {
-      b.ensureFormulas();
-      b.templates![at] = _intern(formula) + 1;
-      final String? text = formula.text;
-      b.texts![at] = text == null ? 0 : _appendText(text) + 1;
+      b.ensureFormulas()[at] = _entryFor(formula) + 1;
       _formulaCount++;
       if (_definesGroup(formula)) {
         _groupMasters[_key(row, column)] = formula;
@@ -704,24 +697,75 @@ final class CellStore {
 
   /// The formula of the cell at position [at] of [b], or `null`.
   RawFormula? _formulaAt(_Block b, int at) {
-    final Int32List? templates = b.templates;
-    if (templates == null) return null;
-    final int t = templates[at];
-    if (t == 0) return null;
-    final RawFormula template = _templates[t - 1];
-    final int x = b.texts![at];
-    if (x == 0) return template;
+    final Int32List? formulas = b.formulas;
+    if (formulas == null) return null;
+    final int e = formulas[at] - 1;
+    if (e < 0) return null;
+    final int t = _entryTemplates[e];
+    final RawFormula template = _templates[t >> 1];
+    if (t & 1 == 0) return template;
     return RawFormula(
       type: template.type,
       text: String.fromCharCodes(
         _textUnits,
-        _textStarts[x - 1],
-        _textStarts[x],
+        _entryStarts[e],
+        _entryStarts[e + 1],
       ),
       ref: template.ref,
       si: template.si,
       attributes: template.attributes,
     );
+  }
+
+  /// The index of the formula entry for [formula], added when needed.
+  int _entryFor(RawFormula formula) {
+    final int template = _intern(formula);
+    final String? text = formula.text;
+    if (text == null) {
+      return _textlessEntries[template] ??= _addEntry(template << 1, '');
+    }
+    final int tagged = (template << 1) | 1;
+    if (_entryCount > 0 && _entryTemplates[_entryCount - 1] == tagged) {
+      final int start = _entryStarts[_entryCount - 1];
+      final int n = text.length;
+      if (_entryStarts[_entryCount] - start == n) {
+        int i = 0;
+        while (i < n && _textUnits[start + i] == text.codeUnitAt(i)) {
+          i++;
+        }
+        if (i == n) return _entryCount - 1;
+      }
+    }
+    return _addEntry(tagged, text);
+  }
+
+  /// Appends an entry of [tagged] template with [text], and returns its
+  /// index.
+  int _addEntry(int tagged, String text) {
+    final int n = text.length;
+    if (_textUnitCount + n > _textUnits.length) {
+      final int capacity = _Block._grown(_textUnits.length, _textUnitCount + n);
+      _textUnits = Uint16List(capacity)
+        ..setRange(0, _textUnitCount, _textUnits);
+    }
+    for (int i = 0; i < n; i++) {
+      _textUnits[_textUnitCount + i] = text.codeUnitAt(i);
+    }
+    _textUnitCount += n;
+    if (_entryCount + 1 > _entryTemplates.length) {
+      final int capacity = _Block._grown(
+        _entryTemplates.length,
+        _entryCount + 1,
+      );
+      _entryTemplates = Int32List(capacity)
+        ..setRange(0, _entryCount, _entryTemplates);
+      _entryStarts = Int32List(capacity + 1)
+        ..setRange(0, _entryStarts.length, _entryStarts);
+    }
+    _entryTemplates[_entryCount] = tagged;
+    _entryCount++;
+    _entryStarts[_entryCount] = _textUnitCount;
+    return _entryCount - 1;
   }
 
   /// The index of [formula]'s template, interned on first use.
@@ -760,46 +804,12 @@ final class CellStore {
     return (f.type, f.ref, f.si, b.toString());
   }
 
-  /// Appends [text] to the text buffer, unless it equals the text appended
-  /// last, and returns its index.
-  int _appendText(String text) {
-    final int n = text.length;
-    if (_textCount > 0) {
-      final int start = _textStarts[_textCount - 1];
-      if (_textUnitCount - start == n) {
-        int i = 0;
-        while (i < n && _textUnits[start + i] == text.codeUnitAt(i)) {
-          i++;
-        }
-        if (i == n) return _textCount - 1;
-      }
-    }
-    if (_textUnitCount + n > _textUnits.length) {
-      final int capacity = _Block._grown(_textUnits.length, _textUnitCount + n);
-      _textUnits = Uint16List(capacity)
-        ..setRange(0, _textUnitCount, _textUnits);
-    }
-    for (int i = 0; i < n; i++) {
-      _textUnits[_textUnitCount + i] = text.codeUnitAt(i);
-    }
-    _textUnitCount += n;
-    if (_textCount + 2 > _textStarts.length) {
-      final int capacity = _Block._grown(_textStarts.length, _textCount + 2);
-      _textStarts = Int32List(capacity)
-        ..setRange(0, _textStarts.length, _textStarts);
-    }
-    _textCount++;
-    _textStarts[_textCount] = _textUnitCount;
-    return _textCount - 1;
-  }
-
   /// Forgets the extras and formula of the cell at position [at] of [b].
   void _dropCellData(_Block b, int at, int row, int column) {
     if (b.words[at] & _extrasFlag != 0) _extras.remove(_key(row, column));
-    final Int32List? templates = b.templates;
-    if (templates != null && templates[at] != 0) {
-      templates[at] = 0;
-      b.texts![at] = 0;
+    final Int32List? formulas = b.formulas;
+    if (formulas != null && formulas[at] != 0) {
+      formulas[at] = 0;
       _formulaCount--;
       _groupMasters.remove(_key(row, column));
     }
