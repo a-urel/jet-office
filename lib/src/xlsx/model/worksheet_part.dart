@@ -6,7 +6,11 @@
 /// A loaded part is always written from this model (spec §4.3). The rows of
 /// the first `<sheetData>` are read by [RawRowReader] with extras kept, so
 /// the store holds what the file stores: values, styles, formulas, inline
-/// strings, styled empty cells, and the attributes of rows and cells. Every
+/// strings, styled empty cells, the attributes of rows and cells, and the
+/// children of a row other than its cells (an `extLst`, written after the
+/// cells). Children of `<sheetData>` other than rows, which the schema does
+/// not allow, are kept too but written after the last row, so their position
+/// among the rows is not kept. Every
 /// other child of `<worksheet>` (`sheetPr`, `sheetViews`, `cols`,
 /// `mergeCells`, `hyperlinks`, `pageMargins`, `extLst`, ...) is an
 /// [OpaqueXml] at its original position, and the root keeps its namespace
@@ -121,6 +125,10 @@ final class _SheetData {
   final String qualifiedName;
   final Map<String, String> namespaces;
   final List<KeptAttribute> attributes;
+
+  /// The children other than rows, in source order. The schema allows
+  /// none; they are kept so nothing is lost, and written after the rows.
+  List<OpaqueXml> extraChildren = const <OpaqueXml>[];
 }
 
 /// A worksheet part: its cells in a [CellStore], the rest kept as written.
@@ -267,7 +275,11 @@ final class WorksheetPart implements PartContent {
       if (row.attributes.isNotEmpty) {
         cells.setRowAttributes(row.index, row.attributes);
       }
+      if (row.extraChildren.isNotEmpty) {
+        cells.setRowChildren(row.index, row.extraChildren);
+      }
     }
+    _sheetData!.extraChildren = rows.extraChildren;
   }
 
   void _insertSheetData() {
@@ -389,7 +401,13 @@ final class WorksheetPart implements PartContent {
           declaredAbove: inner,
         );
       }
+      for (final OpaqueXml child in cells.rowChildren(row)) {
+        child.writeTo(w, declaredAbove: inner);
+      }
       w.end();
+    }
+    for (final OpaqueXml child in data.extraChildren) {
+      child.writeTo(w, declaredAbove: inner);
     }
     w.end();
   }

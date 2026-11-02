@@ -27,7 +27,15 @@
 /// * a shared string cell (`t="s"`) by the `si` it names, not by its
 ///   index; `sharedStrings.xml` itself as the set of strings the cells
 ///   reference, without its counts;
-/// * the children of `[Content_Types].xml` as a set.
+/// * the children of `[Content_Types].xml` as a set;
+/// * in SpreadsheetML, a cell's `t="n"` as no `t` (both mean a number), and
+///   a `<row>` or cell without `r` as if it had its position: a row follows
+///   the previous row (the first is 1), a cell the previous cell of its row
+///   (the first is in column A). A position that differs is reported.
+///
+/// With `ignoreBookkeeping`, a worksheet's `<dimension ref>` and each row's
+/// `spans` are left out: they summarize the cells and a saving model
+/// recomputes them (spec 4.4).
 library;
 
 import 'dart:convert';
@@ -40,6 +48,10 @@ import 'package:xml/xml.dart';
 const String _relNs =
     'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
+/// The SpreadsheetML namespace.
+const String _mainNs =
+    'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+
 /// The XML namespace, home of `xml:space`.
 const String _xmlNs = 'http://www.w3.org/XML/1998/namespace';
 
@@ -48,11 +60,13 @@ const String _xmlNs = 'http://www.w3.org/XML/1998/namespace';
 ///
 /// A part named in [ignoreParts] is skipped on both sides. A part only in
 /// [actual] is a difference unless it is named in [allowAdded].
+/// [ignoreBookkeeping] leaves out `dimension/@ref` and `row/@spans`.
 List<String> comparePackages(
   Uint8List expected,
   Uint8List actual, {
   Set<String> ignoreParts = const <String>{},
   Set<String> allowAdded = const <String>{},
+  bool ignoreBookkeeping = false,
 }) {
   final _Package e = _Package(expected, 'expected');
   final _Package a = _Package(actual, 'actual');
@@ -82,7 +96,7 @@ List<String> comparePackages(
     } else if (!e.isXml(name)) {
       if (!_sameBytes(eb, ab)) out.add('$name: bytes differ');
     } else {
-      _comparePart(name, e, a, out);
+      _comparePart(name, e, a, out, ignoreBookkeeping);
     }
   }
   return out;
@@ -91,17 +105,45 @@ List<String> comparePackages(
 /// The differences between the XML texts [expected] and [actual] of the
 /// part [part], by the rules of [comparePackages] that need no other part:
 /// no relationship ids or shared string indexes are resolved.
-List<String> compareXml(String part, String expected, String actual) {
+/// [ignoreBookkeeping] leaves out `dimension/@ref` and `row/@spans`.
+List<String> compareXml(
+  String part,
+  String expected,
+  String actual, {
+  bool ignoreBookkeeping = false,
+}) {
   final List<String> out = <String>[];
-  final _Node? e = _canonicalText(part, expected, 'expected', out);
-  final _Node? a = _canonicalText(part, actual, 'actual', out);
+  final _Node? e = _canonicalText(
+    part,
+    expected,
+    'expected',
+    out,
+    ignoreBookkeeping,
+  );
+  final _Node? a = _canonicalText(
+    part,
+    actual,
+    'actual',
+    out,
+    ignoreBookkeeping,
+  );
   if (e != null && a != null) _diff(part, e, a, '', out);
   return out;
 }
 
-_Node? _canonicalText(String part, String text, String side, List<String> out) {
+_Node? _canonicalText(
+  String part,
+  String text,
+  String side,
+  List<String> out,
+  bool ignoreBookkeeping,
+) {
   try {
-    return _Canon(null, null).node(XmlDocument.parse(text).rootElement, false);
+    return _Canon(
+      null,
+      null,
+      ignoreBookkeeping: ignoreBookkeeping,
+    ).node(XmlDocument.parse(text).rootElement, false);
   } on XmlException catch (error) {
     out.add('$part: the $side part is not well-formed XML (${error.message})');
     return null;
@@ -116,7 +158,13 @@ bool _sameBytes(Uint8List a, Uint8List b) {
   return true;
 }
 
-void _comparePart(String name, _Package e, _Package a, List<String> out) {
+void _comparePart(
+  String name,
+  _Package e,
+  _Package a,
+  List<String> out,
+  bool ignoreBookkeeping,
+) {
   final XmlDocument? ed = e.document(name);
   final XmlDocument? ad = a.document(name);
   if (ed == null || ad == null) {
@@ -143,8 +191,16 @@ void _comparePart(String name, _Package e, _Package a, List<String> out) {
   }
   _diff(
     name,
-    _Canon(e, name).node(ed.rootElement, false),
-    _Canon(a, name).node(ad.rootElement, false),
+    _Canon(
+      e,
+      name,
+      ignoreBookkeeping: ignoreBookkeeping,
+    ).node(ed.rootElement, false),
+    _Canon(
+      a,
+      name,
+      ignoreBookkeeping: ignoreBookkeeping,
+    ).node(ad.rootElement, false),
     '',
     out,
   );
@@ -234,10 +290,11 @@ void _diff(String part, _Node e, _Node a, String loc, List<String> out) {
 /// Turns elements of one part into [_Node]s, resolving relationship ids and
 /// shared string indexes through [_package] when there is one.
 class _Canon {
-  _Canon(this._package, this._part);
+  _Canon(this._package, this._part, {this.ignoreBookkeeping = false});
 
   final _Package? _package;
   final String? _part;
+  final bool ignoreBookkeeping;
 
   late final Map<String, String> _rels =
       _package?.relationshipsOf(_part!) ?? const <String, String>{};
@@ -286,6 +343,12 @@ class _Canon {
       }
     }
     flush();
+    if (name == '$_mainNs|c' && attrs['|t'] == 'n') attrs.remove('|t');
+    if (ignoreBookkeeping) {
+      if (name == '$_mainNs|dimension') attrs.remove('|ref');
+      if (name == '$_mainNs|row') attrs.remove('|spans');
+    }
+    if (name == '$_mainNs|sheetData') _fillPositions(children);
     final _Node result = _Node(name, attrs, children);
     final _Package? package = _package;
     if (package != null &&
@@ -305,6 +368,53 @@ class _Canon {
   }
 
   bool _isRoot(XmlElement e) => e.parent is XmlDocument;
+
+  /// Gives each `<row>` of a `<sheetData>`'s [children], and each cell of a
+  /// row, that has no `r` the position a reader gives it: the row after the
+  /// previous row, the column after the previous cell.
+  static void _fillPositions(List<Object> children) {
+    var previousRow = 0;
+    for (final Object row in children) {
+      if (row is! _Node || row.name != '$_mainNs|row') continue;
+      final String? r = row.attrs['|r'];
+      final int index = r == null
+          ? previousRow + 1
+          : int.tryParse(r) ?? previousRow + 1;
+      row.attrs['|r'] ??= '$index';
+      previousRow = index;
+      var previousColumn = 0;
+      for (final Object cell in row.children) {
+        if (cell is! _Node || cell.name != '$_mainNs|c') continue;
+        final String? ref = cell.attrs['|r'];
+        final int column = ref == null
+            ? previousColumn + 1
+            : _columnOf(ref) ?? previousColumn + 1;
+        cell.attrs['|r'] ??= '${_columnName(column)}$index';
+        previousColumn = column;
+      }
+    }
+  }
+
+  /// The 1-based column of the reference [ref], or `null` without letters.
+  static int? _columnOf(String ref) {
+    var column = 0;
+    var i = 0;
+    for (; i < ref.length; i++) {
+      final int c = ref.codeUnitAt(i);
+      if (c < 0x41 || c > 0x5A) break;
+      column = column * 26 + (c - 0x40);
+    }
+    return i == 0 ? null : column;
+  }
+
+  /// The letters of the 1-based [column].
+  static String _columnName(int column) {
+    var name = '';
+    for (var c = column; c > 0; c = (c - 1) ~/ 26) {
+      name = String.fromCharCode(0x41 + (c - 1) % 26) + name;
+    }
+    return name;
+  }
 
   /// An element whose children compare as a set.
   _Node _sorted(XmlElement element, String name) {

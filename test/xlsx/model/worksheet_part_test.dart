@@ -30,16 +30,6 @@ const XlsxReadLimits _limits = XlsxReadLimits();
 /// A worksheet part name, as producers name them.
 final RegExp _worksheetName = RegExp(r'(^|/)worksheets/[^/]+\.xml$');
 
-/// The differences a load and save makes on purpose, each pinned by a test
-/// below: `dimension` and `spans` are recomputed, every row and cell gets
-/// its `r` (where the file left it out, the reader placed it), and a number
-/// cell's `t="n"` is written as no `t`, which means the same.
-final RegExp _normalized = RegExp(
-  r'/dimension: attribute ref |/row: attribute spans '
-  r'|: attribute r missing vs "[A-Z]*[0-9]+"$'
-  r'|: attribute t "n" vs missing$',
-);
-
 /// Repairs the reader makes, applied to the expected part: the producer file
 /// repeats a cell on purpose, and the later one wins with
 /// `cellDuplicated`, so the saved part has only the later one.
@@ -131,11 +121,11 @@ void main() {
                 ),
             ]);
           }
-          final List<String> differences = <String>[
-            for (final String d in comparePackages(expected, replaced))
-              if (!_normalized.hasMatch(d)) d,
-          ];
-          expect(differences, isEmpty);
+          // dimension and spans are recomputed; the tests below pin them.
+          expect(
+            comparePackages(expected, replaced, ignoreBookkeeping: true),
+            isEmpty,
+          );
         });
       }
     }
@@ -199,6 +189,28 @@ void main() {
         'extLst',
       ]);
       expect(compareXml('s', xml, out), isEmpty);
+    });
+
+    test('a row extLst survives, after the cells', () {
+      final String xml = _sheet(
+        '<dimension ref="A1"/><sheetData>'
+        '<row r="1" spans="1:1"><c r="A1"><v>1</v></c>'
+        '<extLst><ext uri="{X}"><y/></ext></extLst></row>'
+        '<row r="2"><extLst/></row></sheetData>',
+      );
+      final String out = _encode(_read(xml));
+      expect(out, contains('<v>1</v></c><extLst><ext uri="{X}"><y/></ext>'));
+      expect(compareXml('s', xml, out), isEmpty);
+    });
+
+    test('a foreign element inside sheetData survives at its end', () {
+      final String xml = _sheet(
+        '<dimension ref="A1"/><sheetData><foo a="1"/>'
+        '<row r="1" spans="1:1"><c r="A1"><v>1</v></c></row>'
+        '</sheetData>',
+      );
+      final String out = _encode(_read(xml));
+      expect(out, contains('</row><foo a="1"/></sheetData>'));
     });
 
     test('mc:Ignorable and x14ac:dyDescent survive', () {

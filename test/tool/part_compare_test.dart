@@ -208,4 +208,104 @@ void main() {
     expect(diff, hasLength(1));
     expect(diff.single, contains('xl/a.xml'));
   });
+
+  group('worksheets', () {
+    const String main =
+        'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    String ws(String sheetData, {String before = ''}) =>
+        '<worksheet xmlns="$main">$before<sheetData>$sheetData</sheetData>'
+        '</worksheet>';
+
+    test('t="n" on a cell equals no t', () {
+      expect(
+        compareXml(
+          's',
+          ws('<row r="1"><c r="A1" t="n"><v>1</v></c></row>'),
+          ws('<row r="1"><c r="A1"><v>1</v></c></row>'),
+        ),
+        isEmpty,
+      );
+      expect(
+        compareXml(
+          's',
+          ws('<row r="1"><c r="A1" t="b"><v>1</v></c></row>'),
+          ws('<row r="1"><c r="A1"><v>1</v></c></row>'),
+        ),
+        hasLength(1),
+      );
+    });
+
+    test('an omitted r is filled with its position', () {
+      expect(
+        compareXml(
+          's',
+          ws(
+            '<row><c><v>1</v></c><c><v>2</v></c></row>'
+            '<row r="4"><c r="C4"><v>3</v></c><c><v>4</v></c></row>'
+            '<row><c><v>5</v></c></row>',
+          ),
+          ws(
+            '<row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c></row>'
+            '<row r="4"><c r="C4"><v>3</v></c><c r="D4"><v>4</v></c></row>'
+            '<row r="5"><c r="A5"><v>5</v></c></row>',
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('an r-less cell placed at the wrong column is reported', () {
+      final Uint8List e = _zip(<String, Object>{
+        'xl/worksheets/sheet1.xml': ws(
+          '<row r="1"><c r="B1"><v>1</v></c><c><v>2</v></c></row>',
+        ),
+      });
+      final Uint8List a = _zip(<String, Object>{
+        'xl/worksheets/sheet1.xml': ws(
+          '<row r="1"><c r="B1"><v>1</v></c><c r="D1"><v>2</v></c></row>',
+        ),
+      });
+      final List<String> diff = comparePackages(e, a);
+      expect(diff, hasLength(1));
+      expect(diff.single, contains('attribute r "C1" vs "D1"'));
+    });
+
+    test('an r-less row placed at the wrong index is reported', () {
+      final List<String> diff = compareXml(
+        's',
+        ws('<row r="2"/><row/>'),
+        ws('<row r="2"/><row r="4"/>'),
+      );
+      expect(diff.single, contains('attribute r "3" vs "4"'));
+    });
+
+    test('ignoreBookkeeping ignores dimension ref and row spans', () {
+      final String e = ws(
+        '<row r="1" spans="1:9"><c r="A1"><v>1</v></c></row>',
+        before: '<dimension ref="A1:Z9"/>',
+      );
+      final String a = ws(
+        '<row r="1" spans="1:1"><c r="A1"><v>1</v></c></row>',
+        before: '<dimension ref="A1"/>',
+      );
+      expect(compareXml('s', e, a), hasLength(2));
+      expect(compareXml('s', e, a, ignoreBookkeeping: true), isEmpty);
+      final Uint8List ez = _zip(<String, Object>{'xl/worksheets/s.xml': e});
+      final Uint8List az = _zip(<String, Object>{'xl/worksheets/s.xml': a});
+      expect(comparePackages(ez, az), hasLength(2));
+      expect(comparePackages(ez, az, ignoreBookkeeping: true), isEmpty);
+    });
+
+    test('ignoreBookkeeping keeps other differences', () {
+      expect(
+        compareXml(
+          's',
+          ws('<row r="1" ht="9"/>', before: '<dimension ref="A1"/>'),
+          ws('<row r="1" ht="8"/>', before: '<dimension ref="A1"/>'),
+          ignoreBookkeeping: true,
+        ),
+        hasLength(1),
+      );
+    });
+  });
 }

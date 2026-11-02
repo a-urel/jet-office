@@ -270,6 +270,9 @@ final class CellStore {
   final Map<int, List<KeptAttribute>> _rowAttributes =
       <int, List<KeptAttribute>>{};
 
+  /// The children of rows other than cells (an `extLst`, say), by row.
+  final Map<int, List<OpaqueXml>> _rowChildren = <int, List<OpaqueXml>>{};
+
   /// The last row attributes stored; an equal list is stored as this one,
   /// so a file that gives every row the same attributes keeps one list.
   List<KeptAttribute>? _lastRowAttributes;
@@ -286,7 +289,8 @@ final class CellStore {
   /// Whether any cell has a formula.
   bool get hasFormulas => _formulaCount > 0;
 
-  /// The present rows, ascending: every row with a cell or row attributes.
+  /// The present rows, ascending: every row with a cell, row attributes or
+  /// row children.
   Iterable<int> get rowIndexes sync* {
     for (final _Block b in _blocks) {
       for (int i = 0; i < b.rowCount; i++) {
@@ -405,7 +409,8 @@ final class CellStore {
   /// Removes the cell at [row] and [column], and returns whether there was
   /// one.
   ///
-  /// A row left without cells stays while it has row attributes.
+  /// A row left without cells stays while it has row attributes or row
+  /// children.
   bool remove(int row, int column) {
     _checkCell(row, column);
     final int bi = _blockFor(row);
@@ -418,8 +423,7 @@ final class CellStore {
     _dropExtras(b.words[at], row, column);
     b.removeCell(r, at);
     _cellCount--;
-    if (b.rowStart[r] == b.rowStart[r + 1] &&
-        !_rowAttributes.containsKey(row)) {
+    if (b.rowStart[r] == b.rowStart[r + 1] && !_hasRowExtras(row)) {
       _removeRow(bi, r);
     }
     return true;
@@ -439,12 +443,7 @@ final class CellStore {
   void setRowAttributes(int row, List<KeptAttribute> attributes) {
     _checkRow(row);
     if (attributes.isEmpty) {
-      if (_rowAttributes.remove(row) == null) return;
-      final int bi = _blockFor(row);
-      if (bi < 0) return;
-      final _Block b = _blocks[bi];
-      final int r = b.findRow(row);
-      if (r >= 0 && b.rowStart[r] == b.rowStart[r + 1]) _removeRow(bi, r);
+      if (_rowAttributes.remove(row) != null) _dropBareRow(row);
       return;
     }
     final List<KeptAttribute>? last = _lastRowAttributes;
@@ -457,6 +456,41 @@ final class CellStore {
     }
     _rowAttributes[row] = kept;
     _ensureRow(row);
+  }
+
+  /// The children of [row]'s `<row>` other than cells, in source order;
+  /// empty when it has none.
+  List<OpaqueXml> rowChildren(int row) {
+    _checkRow(row);
+    return _rowChildren[row] ?? const <OpaqueXml>[];
+  }
+
+  /// Sets the children of [row]'s `<row>` other than cells, written after
+  /// its cells.
+  ///
+  /// A row with children is present even without cells. Setting none
+  /// removes a row that has no cells and no attributes.
+  void setRowChildren(int row, List<OpaqueXml> children) {
+    _checkRow(row);
+    if (children.isEmpty) {
+      if (_rowChildren.remove(row) != null) _dropBareRow(row);
+      return;
+    }
+    _rowChildren[row] = List<OpaqueXml>.unmodifiable(children);
+    _ensureRow(row);
+  }
+
+  bool _hasRowExtras(int row) =>
+      _rowAttributes.containsKey(row) || _rowChildren.containsKey(row);
+
+  /// Removes [row] when it has no cells, attributes or children.
+  void _dropBareRow(int row) {
+    if (_hasRowExtras(row)) return;
+    final int bi = _blockFor(row);
+    if (bi < 0) return;
+    final _Block b = _blocks[bi];
+    final int r = b.findRow(row);
+    if (r >= 0 && b.rowStart[r] == b.rowStart[r + 1]) _removeRow(bi, r);
   }
 
   // ---------------------------------------------------------------------

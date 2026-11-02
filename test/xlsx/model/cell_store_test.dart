@@ -312,6 +312,40 @@ void main() {
       expect(store.rowIndexes.toList(), <int>[5]);
     });
 
+    test('row children keep a row without cells, as attributes do', () {
+      final OpaqueXml ext = _capture(
+        '<row xmlns="$_main"><extLst/></row>',
+        'extLst',
+      );
+      final CellStore store = CellStore()
+        ..put(1, 0, const RawCell(kind: RawCellKind.number, value: '1'))
+        ..setRowChildren(3, <OpaqueXml>[ext]);
+      expect(store.rowIndexes.toList(), <int>[1, 3]);
+      expect(store.rowChildren(3).single.xml, '<extLst/>');
+      expect(store.rowChildren(1), isEmpty);
+      expect(store.bounds!.lastRow, 1);
+
+      // A row whose last cell goes keeps its children and its place.
+      store
+        ..setRowChildren(1, <OpaqueXml>[ext])
+        ..remove(1, 0);
+      expect(store.rowIndexes.toList(), <int>[1, 3]);
+
+      // With attributes too, clearing one keeps the row.
+      store
+        ..setRowAttributes(3, const <KeptAttribute>[
+          (qualifiedName: 'ht', namespaceUri: '', value: '9'),
+        ])
+        ..setRowChildren(3, const <OpaqueXml>[]);
+      expect(store.rowIndexes.toList(), <int>[1, 3]);
+      store.setRowAttributes(3, const <KeptAttribute>[]);
+      expect(store.rowIndexes.toList(), <int>[1]);
+
+      // Clearing the children of a row without cells drops the row.
+      store.setRowChildren(1, const <OpaqueXml>[]);
+      expect(store.rowIndexes.toList(), isEmpty);
+    });
+
     test('100,000 × 12 numbers load in order', () {
       final CellStore store = CellStore();
       for (int row = 0; row < 100000; row++) {

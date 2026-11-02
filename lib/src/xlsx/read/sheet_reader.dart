@@ -121,6 +121,7 @@ final class RawRow {
     required this.columns,
     required this.cells,
     this.attributes = const <KeptAttribute>[],
+    this.extraChildren = const <OpaqueXml>[],
   });
 
   /// The 0-based row index.
@@ -138,6 +139,10 @@ final class RawRow {
   /// Every attribute of the `<row>` but `r` and `spans`, in source order
   /// (`hidden` included); empty unless the reader keeps extras.
   final List<KeptAttribute> attributes;
+
+  /// The children of the `<row>` other than its cells (an `extLst`, say),
+  /// in source order; empty unless the reader keeps extras.
+  final List<OpaqueXml> extraChildren;
 }
 
 /// Reads the rows of a `<sheetData>` as [RawRow]s, one at a time.
@@ -157,7 +162,9 @@ final class RawRow {
 ///
 /// A row is yielded when it holds a cell with a `<v>`, `<f>` or `<is>`, or is
 /// hidden. With `keepExtras` it keeps more, for the workbook model: a row with
-/// any attribute but `r` and `spans`, a cell without data that has a style,
+/// any attribute but `r` and `spans` or any child but a cell (its
+/// [RawRow.extraChildren], an `extLst` say), the children of `<sheetData>`
+/// other than rows ([extraChildren]), a cell without data that has a style,
 /// another attribute or another child, the attributes of rows, cells and
 /// formulas ([RawRow.attributes], [RawCell.attributes],
 /// [RawFormula.attributes], an unknown formula `t` included), the `<is>`
@@ -195,18 +202,26 @@ final class RawRowReader {
   /// The next row, or `null` after the last one.
   RawRow? next() => _walk.next();
 
+  /// The children of `<sheetData>` other than `<row>` read so far, in source
+  /// order, when extras are kept (the schema allows none, so a file that
+  /// has them is invalid); otherwise always empty. Complete once [next]
+  /// returned `null`.
+  List<OpaqueXml> get extraChildren => _walk.extraChildren;
+
   static RawRow _rawRow(
     int index,
     bool hidden,
     List<int> columns,
     List<RawCell> cells,
     List<KeptAttribute> attributes,
+    List<OpaqueXml> extraChildren,
   ) => RawRow(
     index: index,
     hidden: hidden,
     columns: columns,
     cells: cells,
     attributes: attributes,
+    extraChildren: extraChildren,
   );
 }
 
@@ -395,6 +410,7 @@ final class _RowWalk<C, R> {
       List<int> columns,
       List<C> cells,
       List<KeptAttribute> attributes,
+      List<OpaqueXml> extraChildren,
     )
     row,
     void Function(int row)? onRow,
@@ -425,6 +441,7 @@ final class _RowWalk<C, R> {
     List<int> columns,
     List<C> cells,
     List<KeptAttribute> attributes,
+    List<OpaqueXml> extraChildren,
   )
   _row;
   final void Function(int row)? _onRow;
@@ -436,6 +453,10 @@ final class _RowWalk<C, R> {
   late final int _base;
 
   bool _done = false;
+
+  /// The children of `<sheetData>` other than rows, in source order, when
+  /// extras are kept.
+  List<OpaqueXml> extraChildren = const <OpaqueXml>[];
 
   /// The 0-based index of the previous `<row>`, capped at
   /// [XlsxLimits.maxRows] for a row past the last.
@@ -455,6 +476,9 @@ final class _RowWalk<C, R> {
           _reader.namespaceUri == Ns.main) {
         final R? row = _readRow();
         if (row != null) return row;
+      } else if (_keepExtras && _reader.depth == _base + 1) {
+        if (extraChildren.isEmpty) extraChildren = <OpaqueXml>[];
+        extraChildren.add(OpaqueXml.capture(_reader));
       } else {
         _reader.skip();
       }
@@ -485,6 +509,7 @@ final class _RowWalk<C, R> {
     _onRow?.call(index);
 
     final _RowCells<C> cells = _RowCells<C>();
+    List<OpaqueXml> rowChildren = const <OpaqueXml>[];
     if (!_reader.isEmptyElement) {
       final _CellScratch c = _scratch;
       int previousColumn = -1;
@@ -497,7 +522,12 @@ final class _RowWalk<C, R> {
         if (_reader.depth != _base + 2 ||
             _reader.localName != 'c' ||
             _reader.namespaceUri != Ns.main) {
-          _reader.skip();
+          if (_keepExtras && _reader.depth == _base + 2) {
+            if (rowChildren.isEmpty) rowChildren = <OpaqueXml>[];
+            rowChildren.add(OpaqueXml.capture(_reader));
+          } else {
+            _reader.skip();
+          }
           continue;
         }
         _readCell(index, previousColumn, inside);
@@ -538,14 +568,26 @@ final class _RowWalk<C, R> {
     }
     cells.sort();
     if (!inside) return null;
-    if (cells.cells.isEmpty && !hidden && rowAttributes.isEmpty) return null;
+    if (cells.cells.isEmpty &&
+        !hidden &&
+        rowAttributes.isEmpty &&
+        rowChildren.isEmpty) {
+      return null;
+    }
     if (outOfOrder) {
       _warn(
         XlsxWarningCode.rowOutOfOrder,
         cellRef(index, cells.columns.isEmpty ? 0 : cells.columns.first),
       );
     }
-    return _row(index, hidden, cells.columns, cells.cells, rowAttributes);
+    return _row(
+      index,
+      hidden,
+      cells.columns,
+      cells.cells,
+      rowAttributes,
+      rowChildren,
+    );
   }
 
   /// The 0-based index of a row whose `r` is [r], and whether `r` was
@@ -825,6 +867,7 @@ final class _SheetWalker {
     List<int> columns,
     List<XlsxReadCell> cells,
     List<KeptAttribute> attributes,
+    List<OpaqueXml> extraChildren,
   ) => XlsxReadRow(index, cells, hidden: hidden);
 
   /// The formula group of [c], a cell with data in the row at [row].

@@ -47,6 +47,58 @@ Map<String, String> _attributes(List<KeptAttribute> kept) => <String, String>{
 };
 
 void main() {
+  test('RawRowReader keeps row children other than cells', () {
+    final List<RawRow> rows = _rows(
+      '<row r="1"><c r="A1"><v>1</v></c><extLst><ext uri="{X}"/></extLst>'
+      '<foo/></row><row r="2"><extLst/></row><row r="3"><bar/></row>',
+    );
+    expect(rows.map((RawRow r) => r.index), <int>[0, 1, 2]);
+    expect(rows[0].extraChildren.map((OpaqueXml x) => x.xml), <String>[
+      '<extLst><ext uri="{X}"/></extLst>',
+      '<foo/>',
+    ]);
+    expect(rows[0].cells, hasLength(1));
+    expect(rows[1].extraChildren.single.xml, '<extLst/>');
+    expect(rows[1].cells, isEmpty);
+  });
+
+  test('RawRowReader keeps sheetData children other than rows', () {
+    final XmlPullReader r = XmlPullReader(
+      '<worksheet xmlns="$_main"><sheetData><foo a="1"/>'
+      '<row r="1"><c r="A1"><v>1</v></c></row><bar><baz/></bar>'
+      '</sheetData></worksheet>',
+    );
+    while (r.next()) {
+      if (r.eventType == XmlEventType.startElement &&
+          r.localName == 'sheetData') {
+        break;
+      }
+    }
+    final RawRowReader reader = RawRowReader(
+      r,
+      part: 'p',
+      keepExtras: true,
+      limits: const XlsxReadLimits(),
+      warn: (XlsxWarningCode code, String? cell, {String? detail}) {},
+    );
+    expect(reader.next()!.index, 0);
+    expect(reader.next(), isNull);
+    expect(reader.extraChildren.map((OpaqueXml x) => x.xml), <String>[
+      '<foo a="1"/>',
+      '<bar><baz/></bar>',
+    ]);
+  });
+
+  test('without keepExtras other children are skipped', () {
+    final List<RawRow> rows = _rows(
+      '<foo/><row r="1"><c r="A1"><v>1</v></c><extLst/></row>'
+      '<row r="2"><extLst/></row>',
+      keepExtras: false,
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single.extraChildren, isEmpty);
+  });
+
   test('RawRowReader keeps row and cell extras', () {
     final List<RawRow> rows = _rows(
       '<row r="2" spans="1:2" x14ac:dyDescent="0.25" customHeight="1" '
