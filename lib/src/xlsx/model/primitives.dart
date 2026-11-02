@@ -108,9 +108,10 @@ enum GroupRole {
 /// of the same `si` somewhere in the store is [GroupRole.sharedChild].
 /// Anything else is [GroupRole.none].
 ///
-/// Complexity: a store without formulas answers at once; otherwise this scans
-/// every formula cell of the store (linear in the cell count), which is
-/// acceptable for single edits and not for a loop over a large sheet.
+/// Complexity: a store without formulas answers at once; otherwise this
+/// looks at the store's group masters ([CellStore.groupMasters]), so it
+/// costs time in proportion to the number of groups, not of cells, and a
+/// loop that sets every cell of a large sheet stays linear.
 GroupRole groupRoleAt(CellStore store, int row, int column) {
   if (!store.hasFormulas) return GroupRole.none;
   final RawFormula? own = store.cellAt(row, column)?.formula;
@@ -127,36 +128,31 @@ GroupRole groupRoleAt(CellStore store, int row, int column) {
   final String? childSi = own != null && own.type == FormulaType.shared
       ? own.si
       : null;
-  bool inArray = false;
   bool masterFound = false;
-  for (final int r in store.rowIndexes) {
-    store.forEachInRow(r, (int c, RawCell cell) {
-      final RawFormula? f = cell.formula;
-      if (f == null || inArray) return;
-      final String? ref = f.ref;
-      if (ref == null) return;
-      switch (f.type) {
-        case FormulaType.array || FormulaType.dataTable:
-          final XlsxRange? range = _range(ref);
-          if (range != null &&
-              row >= range.firstRow &&
-              row <= range.lastRow &&
-              column >= range.firstColumn &&
-              column <= range.lastColumn) {
-            inArray = true;
-          }
-        case FormulaType.shared:
-          if (childSi != null && f.si == childSi) masterFound = true;
-        case FormulaType.normal:
-          break;
-      }
-    });
-    if (inArray) return GroupRole.arrayOrTableMember;
+  for (final ({int row, int column, RawFormula formula}) m
+      in store.groupMasters) {
+    final RawFormula f = m.formula;
+    switch (f.type) {
+      case FormulaType.array || FormulaType.dataTable:
+        final XlsxRange? range = _range(f.ref);
+        if (range != null &&
+            row >= range.firstRow &&
+            row <= range.lastRow &&
+            column >= range.firstColumn &&
+            column <= range.lastColumn) {
+          return GroupRole.arrayOrTableMember;
+        }
+      case FormulaType.shared:
+        if (childSi != null && f.si == childSi) masterFound = true;
+      case FormulaType.normal:
+        break;
+    }
   }
   return masterFound ? GroupRole.sharedChild : GroupRole.none;
 }
 
-XlsxRange? _range(String ref) {
+XlsxRange? _range(String? ref) {
+  if (ref == null) return null;
   try {
     return XlsxRange.parse(ref);
   } on ArgumentError {

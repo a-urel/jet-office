@@ -250,6 +250,10 @@ final class WorksheetPart implements PartContent {
   /// write it to.
   final CellStore cells = CellStore();
 
+  /// Whether the part is a SpreadsheetML worksheet; `false` for an untyped
+  /// part (a chartsheet, say), whose [cells] must stay empty.
+  bool get isTyped => _untypedText == null;
+
   /// Sets the encoder that writes the cells; [encode] needs one.
   void bindEncoder(CellEncoder encoder) {
     _encoder = encoder;

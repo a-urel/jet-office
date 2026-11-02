@@ -307,5 +307,30 @@ void main() {
         hasLength(1),
       );
     });
+
+    test('xml:space="preserve" on a SpreadsheetML t matters only around its '
+        'text', () {
+      String sst(String t) => '<sst xmlns="$main"><si>$t</si></sst>';
+      expect(
+        compareXml(
+          's',
+          sst('<t xml:space="preserve">a  b</t>'),
+          sst('<t>a  b</t>'),
+        ),
+        isEmpty,
+      );
+      expect(
+        compareXml(
+          's',
+          sst('<t xml:space="preserve">a </t>'),
+          sst('<t>a </t>'),
+        ),
+        hasLength(1),
+      );
+      expect(
+        compareXml('s', '<r xml:space="preserve">a</r>', '<r>a</r>'),
+        hasLength(1),
+      );
+    });
   });
 }

@@ -269,5 +269,24 @@ void main() {
         expect(s.indexOf('xy'), 1);
       },
     );
+
+    test('a seeded table leaves count out until it is set', () {
+      final SharedStrings s = SharedStrings.seeded(<String>['a', 'b'])
+        ..indexOf('c');
+      String xml() {
+        final StringBuffer out = StringBuffer();
+        s.writeXml(XmlWriter(out));
+        return out.toString();
+      }
+
+      expect(s.count, isNull);
+      expect(xml(), isNot(contains(' count=')));
+      expect(xml(), contains('uniqueCount="3"'));
+      s.setCount(5);
+      expect(s.count, 5);
+      expect(xml(), contains('count="5"'));
+      s.indexOf('a');
+      expect(s.count, 6);
+    });
   });
 }

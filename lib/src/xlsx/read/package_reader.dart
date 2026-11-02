@@ -91,6 +91,11 @@ final class PackageReader {
   /// The limits the package was opened with.
   XlsxReadLimits get limits => _limits;
 
+  /// The package underneath, for the workbook model, which edits and writes
+  /// it. Its methods throw `OpcFormatException`; wrap calls that read in
+  /// [guardXml].
+  OpcPackage get package => _package;
+
   /// The internal relationships of [part], in file order.
   ///
   /// External targets are left out. A part without a relationships part has

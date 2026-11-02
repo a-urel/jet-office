@@ -273,6 +273,10 @@ final class CellStore {
   /// The children of rows other than cells (an `extLst`, say), by row.
   final Map<int, List<OpaqueXml>> _rowChildren = <int, List<OpaqueXml>>{};
 
+  /// The formulas that define a group (array, data table, shared with a
+  /// `ref`), keyed like [_extras].
+  final Map<int, RawFormula> _groupMasters = <int, RawFormula>{};
+
   /// The last row attributes stored; an equal list is stored as this one,
   /// so a file that gives every row the same attributes keeps one list.
   List<KeptAttribute>? _lastRowAttributes;
@@ -288,6 +292,33 @@ final class CellStore {
 
   /// Whether any cell has a formula.
   bool get hasFormulas => _formulaCount > 0;
+
+  /// The cells whose formula defines a group: an array or data-table
+  /// formula, or a shared formula with a `ref` (a shared master), in no
+  /// particular order.
+  ///
+  /// Kept up to date by [put] and [remove], so finding a cell's group costs
+  /// time in proportion to the number of groups, not of cells.
+  Iterable<({int row, int column, RawFormula formula})> get groupMasters =>
+      _groupMasters.entries.map(
+        (MapEntry<int, RawFormula> e) => (
+          row: e.key ~/ XlsxLimits.maxColumns,
+          column: e.key % XlsxLimits.maxColumns,
+          formula: e.value,
+        ),
+      );
+
+  /// The number of cells of [kind]. Takes time in proportion to the number
+  /// of cells.
+  int countOf(RawCellKind kind) {
+    int n = 0;
+    for (final _Block b in _blocks) {
+      for (int at = 0; at < b.cellCount; at++) {
+        if (b.words[at] & _kindMask == kind.index) n++;
+      }
+    }
+    return n;
+  }
 
   /// The present rows, ascending: every row with a cell, row attributes or
   /// row children.
@@ -402,9 +433,21 @@ final class CellStore {
         cell.attributes,
         cell.extraChildren,
       );
-      if (cell.formula != null) _formulaCount++;
+      final RawFormula? formula = cell.formula;
+      if (formula != null) {
+        _formulaCount++;
+        if (_definesGroup(formula)) {
+          _groupMasters[_key(row, column)] = formula;
+        }
+      }
     }
   }
+
+  static bool _definesGroup(RawFormula f) => switch (f.type) {
+    FormulaType.array || FormulaType.dataTable => true,
+    FormulaType.shared => f.ref != null,
+    FormulaType.normal => false,
+  };
 
   /// Removes the cell at [row] and [column], and returns whether there was
   /// one.
@@ -533,7 +576,10 @@ final class CellStore {
   void _dropExtras(int word, int row, int column) {
     if (word & _extrasFlag == 0) return;
     final _Extras? old = _extras.remove(_key(row, column));
-    if (old?.formula != null) _formulaCount--;
+    if (old?.formula != null) {
+      _formulaCount--;
+      _groupMasters.remove(_key(row, column));
+    }
   }
 
   // ---------------------------------------------------------------------

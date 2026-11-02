@@ -286,6 +286,10 @@ final class WorkbookPart implements PartContent {
   /// stays opaque; `false` for an untyped part.
   final bool date1904;
 
+  /// Whether the part is a SpreadsheetML workbook; `false` for an untyped
+  /// part, which has no sheets.
+  bool get isTyped => _untypedText == null;
+
   /// The sheets in tab order.
   List<SheetEntry> get sheets =>
       List<SheetEntry>.unmodifiable(_sheets?.entries ?? const <SheetEntry>[]);

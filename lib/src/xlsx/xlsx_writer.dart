@@ -36,6 +36,17 @@ import 'warnings.dart';
 import 'workbook_context.dart';
 import 'workbook_parts.dart';
 
+/// The [StateError] message of a save or `close()` without a sheet, shared
+/// by the writers and the workbook model.
+const String noSheetMessage =
+    'A workbook needs at least one sheet; add one first.';
+
+/// The [StateError] message of a save or `close()` when every sheet is
+/// hidden, shared by the writers and the workbook model.
+const String noVisibleSheetMessage =
+    'A workbook needs at least one visible sheet; every sheet is hidden. '
+    'Add a visible sheet first.';
+
 /// Writes a part with [write] and returns its UTF-8 bytes.
 Uint8List _render(void Function(XmlWriter w) write) {
   final Utf8Buffer buffer = Utf8Buffer();
@@ -209,15 +220,8 @@ sealed class XlsxWriterBase {
   /// the ZIP, returning its bytes in memory mode.
   Uint8List? _close() {
     _checkOpen();
-    if (_tabs.isEmpty) {
-      throw StateError('A workbook needs at least one sheet; add one first.');
-    }
-    if (_activeTab() < 0) {
-      throw StateError(
-        'A workbook needs at least one visible sheet; every sheet is hidden. '
-        'Add a visible sheet first.',
-      );
-    }
+    if (_tabs.isEmpty) throw StateError(noSheetMessage);
+    if (_activeTab() < 0) throw StateError(noVisibleSheetMessage);
     return _zipWork(() {
       _open?.finish();
       _open = null;
@@ -379,3 +383,9 @@ final class XlsxResult {
   /// `close()` has returned.
   final List<XlsxWarning> warnings;
 }
+
+/// An [XlsxResult] of [bytes] and [warnings], for the workbook model, which
+/// returns its saved file in the same type as the writer. Not exported: the
+/// result's public API stays as it is.
+XlsxResult xlsxResultOf(Uint8List bytes, List<XlsxWarning> warnings) =>
+    XlsxResult._(bytes, warnings);

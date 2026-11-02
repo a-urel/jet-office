@@ -28,6 +28,9 @@
 ///   index; `sharedStrings.xml` itself as the set of strings the cells
 ///   reference, without its counts;
 /// * the children of `[Content_Types].xml` as a set;
+/// * in SpreadsheetML, a `<t>` whose text neither starts nor ends with
+///   whitespace as if it had no `xml:space="preserve"`, which only keeps
+///   those spaces;
 /// * in SpreadsheetML, a cell's `t="n"` as no `t` (both mean a number), and
 ///   a `<row>` or cell without `r` as if it had its position: a row follows
 ///   the previous row (the first is 1), a cell the previous cell of its row
@@ -344,6 +347,17 @@ class _Canon {
     }
     flush();
     if (name == '$_mainNs|c' && attrs['|t'] == 'n') attrs.remove('|t');
+    // A SpreadsheetML text's xml:space="preserve" only keeps the spaces
+    // around it (the writer's rule, `writeTextElement`); without any it
+    // changes nothing Excel shows.
+    if (name == '$_mainNs|t' && !hasElements) {
+      final String text = children.whereType<String>().join();
+      if (text.isEmpty ||
+          !_xmlSpace(text.codeUnitAt(0)) &&
+              !_xmlSpace(text.codeUnitAt(text.length - 1))) {
+        if (attrs['$_xmlNs|space'] == 'preserve') attrs.remove('$_xmlNs|space');
+      }
+    }
     if (ignoreBookkeeping) {
       if (name == '$_mainNs|dimension') attrs.remove('|ref');
       if (name == '$_mainNs|row') attrs.remove('|spans');
@@ -450,6 +464,11 @@ String _attrKey(XmlName name) {
   if (name.prefix == null) return '|${name.local}';
   return _key(name);
 }
+
+/// Whether [unit] is XML whitespace: space, tab, line feed or carriage
+/// return.
+bool _xmlSpace(int unit) =>
+    unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D;
 
 bool _isXmlns(XmlAttribute a) =>
     a.name.prefix == 'xmlns' ||

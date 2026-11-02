@@ -141,6 +141,17 @@ final class SheetNamer {
     return unique;
   }
 
+  /// Records [name], a sheet the workbook already has, as taken without
+  /// changing it or warning, so later [assign] calls avoid it. It counts as
+  /// a named sheet for the `Sheet{n}` of an empty name.
+  ///
+  /// The workbook model calls it for each sheet of an opened file, whose
+  /// names it keeps as they are, even when Excel would refuse them.
+  void reserve(String name) {
+    _taken.add(sheetNameKey(name));
+    _assigned++;
+  }
+
   bool _isTaken(String name) {
     final String key = sheetNameKey(name);
     return _taken.contains(key) || _reservedKeys.contains(key);

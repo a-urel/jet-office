@@ -33,10 +33,12 @@ final class SharedStrings {
   ///
   /// Every index is kept, duplicates included, so cells that point into the
   /// table stay valid. [raw] holds by index the `<si>` items that are more
-  /// than text (runs, phonetic runs); [writeXml] writes them as given, and
-  /// [indexOf] never returns them. [indexOf] returns the first plain entry
-  /// with a text, and appends one when there is none. [count] starts at the
-  /// number of entries, as the references of the opened cells are unknown.
+  /// than text (runs, phonetic runs, extensions); [writeXml] writes them as
+  /// given, and [indexOf] never returns them. [indexOf] returns the first
+  /// plain entry with a text, and appends one when there is none. [count]
+  /// starts unknown (`null`), as the references of cells not loaded are
+  /// unknown, and [writeXml] leaves the optional `count` attribute out
+  /// until [setCount] gives it.
   SharedStrings.seeded(
     List<String> texts, {
     Map<int, OpaqueXml> raw = const <int, OpaqueXml>{},
@@ -46,7 +48,7 @@ final class SharedStrings {
       if (!raw.containsKey(i)) _ids.putIfAbsent(texts[i], () => i);
     }
     _raw.addAll(raw);
-    _count = texts.length;
+    _count = null;
   }
 
   final Map<int, OpaqueXml> _raw = <int, OpaqueXml>{};
@@ -55,12 +57,12 @@ final class SharedStrings {
   final List<Object> _entries = <Object>[];
   final Map<String, int> _ids = <String, int>{};
   final Map<XlsxRichText, int> _richIds = <XlsxRichText, int>{};
-  int _count = 0;
+  int? _count = 0;
 
   /// The index of [text], adding it on first use. Every call counts as one
   /// reference in [count].
   int indexOf(String text) {
-    _count++;
+    _count = _count == null ? null : _count! + 1;
     return _ids[text] ??= _add(text);
   }
 
@@ -77,7 +79,7 @@ final class SharedStrings {
     if (runs.length == 1 && runs.single.font == null) {
       return indexOf(runs.single.text);
     }
-    _count++;
+    _count = _count == null ? null : _count! + 1;
     return _richIds[text] ??= _add(text);
   }
 
@@ -98,8 +100,19 @@ final class SharedStrings {
     return entry is XlsxRichText ? entry.text : entry as String;
   }
 
-  /// The number of references so far, that is, of `t="s"` cells.
-  int get count => _count;
+  /// The number of references so far, that is, of `t="s"` cells: every
+  /// [indexOf] and [indexOfRich] call counts one. `null` for a
+  /// [SharedStrings.seeded] table until [setCount] is called, as the
+  /// references in the cells of an opened file are not counted.
+  int? get count => _count;
+
+  /// Sets [count] to [references], the `t="s"` cells the workbook model
+  /// counted once every sheet is loaded. Later [indexOf] calls count on
+  /// from there.
+  void setCount(int references) {
+    RangeError.checkNotNegative(references, 'references');
+    _count = references;
+  }
 
   /// The number of distinct entries, that is, of `<si>` items.
   int get uniqueCount => _entries.length;
@@ -117,7 +130,8 @@ final class SharedStrings {
     w.declaration();
     w.start('sst');
     w.attribute('xmlns', _mainNamespace);
-    w.attribute('count', '$_count');
+    final int? count = _count;
+    if (count != null) w.attribute('count', '$count');
     w.attribute('uniqueCount', '${_entries.length}');
     for (int i = 0; i < _entries.length; i++) {
       final OpaqueXml? kept = _raw[i];

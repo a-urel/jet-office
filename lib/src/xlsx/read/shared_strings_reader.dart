@@ -46,12 +46,13 @@ List<String> readSharedStrings(
 /// The shared strings of a table and the entries that are more than text.
 ///
 /// `texts` is as [readSharedStrings] returns it. `raw` holds, by index, each
-/// `<si>` that has runs (`<r>`), phonetic runs (`<rPh>`) or phonetic
-/// properties (`<phoneticPr>`), as written.
+/// `<si>` that has a child other than its `<t>`, as written: runs (`<r>`),
+/// phonetic runs (`<rPh>`), phonetic properties (`<phoneticPr>`), an
+/// `<extLst>` or an element of another namespace.
 typedef SharedStringsRead = ({List<String> texts, Map<int, OpaqueXml> raw});
 
 /// Reads the shared strings of [part] in [package] like [readSharedStrings],
-/// and keeps each rich or phonetic `<si>` as written (see
+/// and keeps each `<si>` that is more than text as written (see
 /// [SharedStringsRead]). The limits and failures are those of
 /// [readSharedStrings].
 SharedStringsRead readSharedStringsRaw(
@@ -125,7 +126,7 @@ bool _isSi(XmlPullReader reader) =>
   return (texts: strings, rich: rich);
 }
 
-/// Set when an item has runs or phonetic elements.
+/// Set when an item has a child other than its `<t>`.
 final class _Rich {
   bool seen = false;
 }
@@ -150,6 +151,9 @@ String? _readItem(XmlPullReader reader, int maxLength, _Rich? rich) {
     }
     if (reader.eventType != XmlEventType.startElement) continue;
     if (reader.depth != siDepth + 1 || reader.namespaceUri != Ns.main) {
+      // A child the text model does not know (another namespace's element)
+      // makes the item more than text, so the model keeps it as written.
+      if (reader.depth == siDepth + 1) rich?.seen = true;
       reader.skip();
     } else if (reader.localName == 't') {
       buffer.write(_readT(reader));
@@ -157,9 +161,9 @@ String? _readItem(XmlPullReader reader, int maxLength, _Rich? rich) {
       rich?.seen = true;
       _readRun(reader, buffer, siDepth + 1);
     } else {
-      if (reader.localName == 'rPh' || reader.localName == 'phoneticPr') {
-        rich?.seen = true;
-      }
+      // Phonetic runs and properties, or any other child (an `extLst`):
+      // not part of the text, kept by the model with the item.
+      rich?.seen = true;
       reader.skip();
     }
     if (buffer.length > maxLength) return null;

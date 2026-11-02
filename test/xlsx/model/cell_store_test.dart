@@ -368,5 +368,57 @@ void main() {
         lastColumn: 11,
       ));
     });
+
+    group('group masters', () {
+      const RawFormula array = RawFormula(
+        type: FormulaType.array,
+        text: 'A1:A2',
+        ref: 'B1:B2',
+      );
+      const RawFormula master = RawFormula(
+        type: FormulaType.shared,
+        text: 'A1',
+        ref: 'C1:C3',
+        si: '0',
+      );
+      const RawFormula child = RawFormula(type: FormulaType.shared, si: '0');
+      const RawFormula normal = RawFormula(type: FormulaType.normal, text: '1');
+
+      List<(int, int, FormulaType)> masters(CellStore s) =>
+          <(int, int, FormulaType)>[
+            for (final m in s.groupMasters) (m.row, m.column, m.formula.type),
+          ];
+
+      test('track puts, replacements and removals', () {
+        final CellStore s = CellStore()
+          ..put(0, 1, const RawCell(kind: RawCellKind.number, formula: array))
+          ..put(0, 2, const RawCell(kind: RawCellKind.number, formula: master))
+          ..put(1, 2, const RawCell(kind: RawCellKind.number, formula: child))
+          ..put(5, 0, const RawCell(kind: RawCellKind.number, formula: normal));
+        expect(
+          masters(s),
+          unorderedEquals(<(int, int, FormulaType)>[
+            (0, 1, FormulaType.array),
+            (0, 2, FormulaType.shared),
+          ]),
+        );
+        s.put(0, 1, const RawCell(kind: RawCellKind.number, value: '1'));
+        expect(masters(s), <(int, int, FormulaType)>[
+          (0, 2, FormulaType.shared),
+        ]);
+        s.remove(0, 2);
+        expect(masters(s), isEmpty);
+      });
+
+      test('count cells of a kind', () {
+        final CellStore s = CellStore()
+          ..put(0, 0, const RawCell(kind: RawCellKind.sharedString, value: '0'))
+          ..put(0, 1, const RawCell(kind: RawCellKind.sharedString, value: '1'))
+          ..put(3, 1, const RawCell(kind: RawCellKind.number, value: '1'));
+        expect(s.countOf(RawCellKind.sharedString), 2);
+        expect(s.countOf(RawCellKind.number), 1);
+        expect(s.countOf(RawCellKind.boolean), 0);
+      });
+    });
   });
 }

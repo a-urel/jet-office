@@ -191,4 +191,22 @@ void main() {
     expect(read.raw[0]!.xml, rich);
     expect(read.raw[2]!.xml, phonetic);
   });
+
+  test('raw keeps an si with any other child, such as an extLst', () {
+    const String ext =
+        '<si><t>a</t><extLst><ext uri="u"><x/></ext></extLst></si>';
+    const String foreign = '<si xmlns:q="urn:q"><t>b</t><q:note/></si>';
+    final PackageReader p = _package(
+      '<sst xmlns="$_main">$ext<si><t>plain</t></si>$foreign</sst>',
+      const XlsxReadLimits(),
+    );
+    final SharedStringsRead read = readSharedStringsRaw(
+      p,
+      'xl/sharedStrings.xml',
+      const XlsxReadLimits(),
+    );
+    expect(read.texts, <String>['a', 'plain', 'b']);
+    expect(read.raw.keys, <int>[0, 2]);
+    expect(read.raw[0]!.xml, ext);
+  });
 }
