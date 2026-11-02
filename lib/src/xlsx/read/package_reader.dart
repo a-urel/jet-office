@@ -135,6 +135,21 @@ final class PackageReader {
     return guardXml(part, () => _package.openXml(part));
   }
 
+  /// Checks that every entry of the file can be read, as `ZipReader.read`
+  /// checks one: the declared size and the CRC-32. Nothing is parsed or
+  /// kept. The workbook model calls it from `open`, so saving cannot meet a
+  /// damaged part it never loaded.
+  ///
+  /// Throws an [XlsxReadException] of [XlsxReadFailure.corruptZip] naming
+  /// the first damaged entry.
+  void verifyEntries() {
+    try {
+      _package.verifyEntries();
+    } on OpcFormatException catch (e) {
+      throw _mapFormat(e, _limits);
+    }
+  }
+
   /// Runs [body], mapping an [XmlParseException] or [ZipReadError] to an
   /// [XlsxReadException] that names [part].
   ///

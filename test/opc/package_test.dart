@@ -113,6 +113,44 @@ void main() {
       );
     });
 
+    test('verifyEntries reports a damaged entry as a zip failure', () {
+      final Uint8List zip = buildZipOrdered(<(String, List<int>)>[
+        ('a.xml', _utf8('<a/>')),
+        ('_rels/.rels', _utf8(_rels(<String>[]))),
+        ('b.xml', _utf8('<b>hello</b>')),
+      ], store: true);
+      ZipReader open() => ZipReader(
+        zip,
+        maxEntries: 1000,
+        maxEntryBytes: 1 << 24,
+        maxTotalBytes: 1 << 26,
+        maxCompressionRatio: 1000,
+      );
+      final OpcPackage intact = OpcPackage.read(open(), maxDepth: 64)
+        ..verifyEntries();
+      expect(intact.partNames.where(intact.isLoaded), isEmpty);
+      final int at = String.fromCharCodes(zip).indexOf('hello');
+      zip[at] ^= 0x01;
+      expect(
+        () => OpcPackage.read(open(), maxDepth: 64).verifyEntries(),
+        throwsA(
+          isA<OpcFormatException>()
+              .having(
+                (OpcFormatException e) => e.kind,
+                'kind',
+                OpcFormatKind.zip,
+              )
+              .having((OpcFormatException e) => e.part, 'part', 'b.xml')
+              .having(
+                (OpcFormatException e) => e.cause,
+                'cause',
+                isA<ZipReadError>(),
+              ),
+        ),
+      );
+      expect(OpcPackage.empty().verifyEntries, returnsNormally);
+    });
+
     test('openXml reads a part and a loaded part', () {
       final OpcPackage p = _package(<(String, String)>[('a.xml', '<a/>')]);
       final XmlPullReader r = p.openXml('/a.xml');

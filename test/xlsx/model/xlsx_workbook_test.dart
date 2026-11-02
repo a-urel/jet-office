@@ -155,7 +155,7 @@ void main() {
     );
   });
 
-  test('save with only hidden sheets throws StateError', () {
+  test('an opened workbook with only hidden sheets saves as it came', () {
     final Uint8List bytes = buildZip(<String, List<int>>{
       ...readXlsxBytes(buildWorkbook(<String, String>{'S': worksheet('')})),
       'xl/workbook.xml': utf8.encode(
@@ -166,16 +166,76 @@ void main() {
     });
     final XlsxWorkbook book = XlsxWorkbook.open(bytes);
     expect(book.sheets.single.visibility, XlsxSheetVisibility.hidden);
+    final Uint8List output = book.save().bytes;
+    expect(comparePackages(bytes, output), isEmpty);
+    final BytesBuilder sink = BytesBuilder();
+    book.saveTo(ByteConversionSink.withCallback(sink.add));
+    expect(sink.takeBytes(), output);
     expect(
-      book.save,
-      throwsA(
-        isA<StateError>().having(
-          (StateError e) => e.message,
-          'message',
-          contains('every sheet is hidden'),
+      XlsxWorkbook.open(output).sheets.single.visibility,
+      XlsxSheetVisibility.hidden,
+    );
+  });
+
+  test('an opened workbook without sheets saves as it came', () {
+    final Uint8List bytes = buildWorkbook(<String, String>{});
+    final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+    expect(book.sheets, isEmpty);
+    final Uint8List output = book.save().bytes;
+    expect(comparePackages(bytes, output), isEmpty);
+    expect(XlsxWorkbook.open(output).sheets, isEmpty);
+  });
+
+  test('open checks every entry: a damaged part nothing reads is '
+      'corruptZip at open', () {
+    Uint8List package({required bool damaged}) {
+      final Uint8List zip = buildZip(<String, List<int>>{
+        ...readXlsxBytes(
+          buildWorkbook(<String, String>{
+            'S': worksheet('<row r="1"><c r="A1"><v>1</v></c></row>'),
+          }),
         ),
+        'docProps/custom.xml': utf8.encode('<Properties>hello</Properties>'),
+      }, store: true);
+      if (!damaged) return zip;
+      final List<int> needle = utf8.encode('hello');
+      for (int i = 0; i + needle.length <= zip.length; i++) {
+        int k = 0;
+        while (k < needle.length && zip[i + k] == needle[k]) {
+          k++;
+        }
+        if (k == needle.length) return Uint8List.fromList(zip)..[i] ^= 0x20;
+      }
+      throw StateError('No "hello" in the package.');
+    }
+
+    expect(
+      () => XlsxWorkbook.open(package(damaged: true)),
+      throwsA(
+        isA<XlsxReadException>()
+            .having(
+              (XlsxReadException e) => e.reason,
+              'reason',
+              XlsxReadFailure.corruptZip,
+            )
+            .having(
+              (XlsxReadException e) => e.part,
+              'part',
+              'docProps/custom.xml',
+            ),
       ),
     );
+    // An intact file opens with nothing loaded but the workbook part.
+    final XlsxWorkbook book = XlsxWorkbook.open(package(damaged: false));
+    final OpcPackage opc = packageOf(book);
+    expect(
+      <String>[
+        for (final String name in opc.partNames)
+          if (opc.isLoaded(name)) name,
+      ],
+      <String>['/xl/workbook.xml'],
+    );
+    expect(isLoadedSheet(book.sheets.single), isFalse);
   });
 
   test('saveTo writes the bytes save returns', () {
@@ -671,6 +731,30 @@ void main() {
       readXlsxBytes(output)['xl/worksheets/sheet2.xml'],
       utf8.encode(broken),
     );
+  });
+
+  test('text escaping a character XML forbids saves as written', () {
+    final Uint8List input = buildWorkbook(<String, String>{
+      'S': worksheet(
+        '<row r="1"><c r="A1" t="s"><v>0</v></c>'
+        '<c r="B1" t="inlineStr"><is><t>c_x0001_d</t></is></c>'
+        '<c r="C1" t="str"><v>e_x0002_</v></c></row>',
+      ),
+    }, sharedStrings: '<sst xmlns="$mainNs"><si><t>a_x0000_b</t></si></sst>');
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    final XlsxSheet sheet = book.sheets.single;
+    sheet.rows.toList();
+    sheet.setCell(1, 0, 'x');
+    final Uint8List output = book.save().bytes;
+    expect(
+      _part(output, 'xl/sharedStrings.xml'),
+      contains('<si><t>a_x0000_b</t></si>'),
+    );
+    List<Object?> firstRow(Uint8List bytes) => <Object?>[
+      for (final XlsxReadCell c in XlsxReader(bytes).rowsAt(0).first.cells)
+        c.value,
+    ];
+    expect(firstRow(output), firstRow(input));
   });
 
   test('a failed setCell changes nothing', () {

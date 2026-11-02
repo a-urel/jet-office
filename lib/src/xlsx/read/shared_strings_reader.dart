@@ -48,10 +48,12 @@ List<String> readSharedStrings(
 /// `texts` is as [readSharedStrings] returns it. `raw` holds, by index, each
 /// `<si>` that has a child other than its `<t>`, as written: runs (`<r>`),
 /// phonetic runs (`<rPh>`), phonetic properties (`<phoneticPr>`), an
-/// `<extLst>` or an element of another namespace. `root` is the `<sst>`
-/// start tag (`null` when the part has no root element) and `trailing` the
-/// root's children other than `<si>`, as written and in order, so the
-/// model can write the part back with nothing lost.
+/// `<extLst>` or an element of another namespace; and each whose text
+/// decodes to a character XML forbids (`_x0000_`), which could not be
+/// written back as text. `root` is the `<sst>` start tag (`null` when the
+/// part has no root element) and `trailing` the root's children other than
+/// `<si>`, as written and in order, so the model can write the part back
+/// with nothing lost.
 typedef SharedStringsRead = ({
   List<String> texts,
   Map<int, OpaqueXml> raw,
@@ -111,7 +113,8 @@ typedef _Walked = ({
 
 /// The texts of the table and the indexes of its rich items, read once;
 /// with [keep], also the root's start tag and its children other than
-/// `<si>`.
+/// `<si>`, and items whose text holds a character XML forbids count as
+/// rich.
 _Walked _walk(
   PackageReader package,
   String part,
@@ -152,7 +155,11 @@ _Walked _walk(
         part: part,
       );
     }
-    if (flag.seen) rich.add(strings.length);
+    // Text that decodes to a character XML forbids (`_x0000_`) cannot be
+    // written as text again, so the model keeps that item as written too.
+    if (flag.seen || (keep && scrubXmlText(text).removed > 0)) {
+      rich.add(strings.length);
+    }
     strings.add(text);
   }
   return (texts: strings, rich: rich, root: root, trailing: trailing);

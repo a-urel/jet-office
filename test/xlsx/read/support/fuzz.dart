@@ -2,7 +2,8 @@
 ///
 /// [fuzzCorpus] is the set of valid packages the fuzzer starts from,
 /// [fuzzCases] derives mutated copies of them from a seed, and
-/// [exerciseReader] drives the whole public reader surface over one file.
+/// [exerciseReader] drives the whole public reader surface over one file,
+/// then the workbook model's with [exerciseModel].
 /// `test/xlsx/read/fuzz_test.dart` runs a fixed range of seeds in the
 /// quality gate; `tool/fuzz_reader.dart` runs any range by hand.
 ///
@@ -296,17 +297,99 @@ Iterable<FuzzCase> fuzzCases(int seed, int count) sync* {
 /// Opens [bytes], reads every sheet's rows and merges, and renders every
 /// row, every warning in English, German and Turkish, and the exception.
 ///
+/// Then runs [exerciseModel] over the same bytes, whatever the reader did.
+///
 /// Returns normally or throws [XlsxReadException]. A sheet whose rows or
 /// merges throw one does not stop the others: the first exception is
-/// rethrown after every sheet has been read and every warning rendered.
-/// Anything else thrown is a reader defect and propagates at once.
+/// rethrown after every sheet has been read, every warning rendered and the
+/// model exercised; the reader's comes before the model's. Anything else
+/// thrown is a reader or model defect and propagates at once.
 void exerciseReader(Uint8List bytes) {
+  XlsxReadException? first;
   try {
     _exercise(bytes);
   } on XlsxReadException catch (e) {
     e.toString();
-    rethrow;
+    first = e;
   }
+  try {
+    exerciseModel(bytes);
+  } on XlsxReadException catch (e) {
+    first ??= e;
+  }
+  if (first != null) throw first;
+}
+
+/// Opens [bytes] with [XlsxWorkbook.open], reads every sheet's rows, sets a
+/// cell of the first sheet to `'x'`, renders every warning in English,
+/// German and Turkish, and saves.
+///
+/// The cell set is column 0 of the row after the last row the sheet's
+/// `rows` yields (row 0 when it yields none, the grid's last row when the
+/// last row is already the grid's), so the edit does not depend on what
+/// the file holds there. It is skipped when the first sheet could not be
+/// read.
+///
+/// Returns normally or throws [XlsxReadException], and only from `open` or
+/// a sheet's first read: a sheet that throws one does not stop the others,
+/// and the first is rethrown after the workbook has been saved. Whatever
+/// opens saves: an opened workbook with no sheet or only hidden ones saves
+/// as it came, and `open` has checked every entry's size and CRC-32.
+/// `setCell` may refuse the edit as a programmer error, a [StateError] for an
+/// untyped sheet part (a chartsheet, say) or a cell inside an array or
+/// data-table formula and an [UnsupportedError] for a shared formula's
+/// master; those are caught and ignored, which keeps this helper on the
+/// public API instead of predicting the refusal from the model's
+/// internals. Any other throw from `setCell`, and anything at all from
+/// `save()`, is a model defect: it is rethrown as a [StateError] naming
+/// the step, so an [XlsxReadException] from a later step cannot pass for a
+/// refused file.
+void exerciseModel(Uint8List bytes) {
+  final XlsxWorkbook workbook = XlsxWorkbook.open(bytes);
+  XlsxReadException? first;
+  int? nextRow;
+  for (final XlsxSheet sheet in workbook.sheets) {
+    sheet.name;
+    sheet.visibility;
+    try {
+      int last = -1;
+      for (final XlsxReadRow row in sheet.rows) {
+        row.toString();
+        last = row.index;
+      }
+      if (identical(sheet, workbook.sheets.first)) {
+        nextRow = last + 1 < XlsxLimits.maxRows ? last + 1 : last;
+      }
+    } on XlsxReadException catch (e) {
+      e.toString();
+      first ??= e;
+    }
+  }
+  final int? row = nextRow;
+  if (row != null) {
+    final XlsxSheet sheet = workbook.sheets.first;
+    try {
+      sheet.setCell(row, 0, 'x');
+      sheet.cellAt(row, 0).toString();
+    } on StateError {
+      // An untyped part or an array member: refused by design.
+    } on UnsupportedError {
+      // A shared formula's master: refused by design until W5.
+    } on Object catch (e) {
+      throw StateError('setCell($row, 0) threw: $e');
+    }
+  }
+  for (final XlsxWarning warning in workbook.warnings) {
+    for (final XlsxLocale locale in XlsxLocale.values) {
+      warning.message(locale);
+    }
+  }
+  try {
+    workbook.save();
+  } on Object catch (e) {
+    throw StateError('save() threw: $e');
+  }
+  if (first != null) throw first;
 }
 
 void _exercise(Uint8List bytes) {

@@ -192,6 +192,22 @@ void main() {
     expect(read.raw[2]!.xml, phonetic);
   });
 
+  test('raw keeps an si whose text decodes to a character XML forbids', () {
+    const String nul = '<si><t>a_x0000_b</t></si>';
+    final PackageReader p = _package(
+      '<sst xmlns="$_main">$nul<si><t>plain_x0041_</t></si></sst>',
+      const XlsxReadLimits(),
+    );
+    final SharedStringsRead read = readSharedStringsRaw(
+      p,
+      'xl/sharedStrings.xml',
+      const XlsxReadLimits(),
+    );
+    expect(read.texts, <String>['a\u0000b', 'plainA']);
+    expect(read.raw.keys, <int>[0]);
+    expect(read.raw[0]!.xml, nul);
+  });
+
   test('raw keeps an si with any other child, such as an extLst', () {
     const String ext =
         '<si><t>a</t><extLst><ext uri="u"><x/></ext></extLst></si>';

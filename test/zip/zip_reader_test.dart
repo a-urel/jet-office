@@ -278,6 +278,19 @@ void main() {
       );
     });
 
+    test('verifyEntries checks every entry and reads nothing twice', () {
+      final Uint8List zip = buildZipOrdered(<(String, List<int>)>[
+        ('a.xml', utf8.encode('<a>fine</a>')),
+        ('b.bin', utf8.encode('hello')),
+      ], store: true);
+      _open(zip).verifyEntries();
+      zip[_indexOf(zip, utf8.encode('hello'))] ^= 0x01;
+      expect(
+        () => _open(zip).verifyEntries(),
+        _throwsKind(ZipReadErrorKind.corrupt, entry: 'b.bin'),
+      );
+    });
+
     test(
       'maps a compression method other than store or deflate to corrupt',
       () {

@@ -9,11 +9,13 @@
 /// back the same way, so both save through one code path.
 ///
 /// `open` reads the package skeleton only: the content types, the package
-/// and workbook relationships and the workbook part (spec §4.5). The shared
-/// strings and styles load when the first sheet loads; a sheet loads on first
-/// use. Saving writes every part of the package in its order: a loaded part
-/// from the model, any other from its original bytes (spec §4.3), so a part
-/// the model never loaded cannot change.
+/// and workbook relationships and the workbook part (spec §4.5). It checks
+/// every other entry's size and CRC-32 without keeping or parsing it, so a
+/// damaged entry is refused at `open` (`corruptZip`) instead of at save.
+/// The shared strings and styles load when the first sheet loads; a sheet
+/// loads on first use. Saving writes every part of the package in its
+/// order: a loaded part from the model, any other from its original bytes
+/// (spec §4.3), so a part the model never loaded cannot change.
 ///
 /// Bookkeeping on save (spec §4.4): when a cell changed, `calcChain.xml` is
 /// removed (part, relationship and content type) and `calcPr` asks Excel to
@@ -92,12 +94,15 @@ StylesPart? stylesPartOf(XlsxWorkbook book) => book._book._styles;
 /// library's included) sees them as they were until Excel recalculates.
 final class XlsxWorkbook {
   /// An empty workbook, with no sheets yet; add one with [addSheet].
-  XlsxWorkbook() : _book = _Book(_emptyPackage(), const XlsxReadLimits());
+  XlsxWorkbook()
+    : _book = _Book(_emptyPackage(), const XlsxReadLimits(), created: true);
 
   /// Opens the XLSX file [bytes] within [limits].
   ///
   /// Reads only the package skeleton and the workbook part; sheets load on
-  /// first use. Throws an [ArgumentError] when a limit is below 1 and an
+  /// first use. Every other entry is inflated once and checked against its
+  /// declared size and CRC-32, then dropped, so that saving cannot meet a
+  /// damaged part. Throws an [ArgumentError] when a limit is below 1 and an
   /// [XlsxReadException] when the file is not a readable XLSX workbook, as
   /// [XlsxReader] does. A sheet the workbook lists without a part is kept,
   /// reads as empty and gets an [XlsxWarningCode.sheetPartMissing] warning.
@@ -106,7 +111,7 @@ final class XlsxWorkbook {
     XlsxReadLimits limits = const XlsxReadLimits(),
   }) {
     limits.check();
-    return XlsxWorkbook._(_Book(bytes, limits));
+    return XlsxWorkbook._(_Book(bytes, limits, created: false));
   }
 
   XlsxWorkbook._(this._book);
@@ -148,9 +153,11 @@ final class XlsxWorkbook {
 
   /// Saves the workbook and returns the file with the warnings so far.
   ///
-  /// Throws a [StateError] when the workbook has no sheet or no visible
-  /// sheet, with the writer's messages, and an [XlsxReadException] when a
-  /// part the model did not load cannot be copied from the file.
+  /// Throws a [StateError] when a workbook started with [XlsxWorkbook.new]
+  /// has no sheet or no visible sheet, with the writer's messages. An opened
+  /// workbook saves the sheets it came with, as it came, even none or only
+  /// hidden ones. [XlsxWorkbook.open] has checked every entry of the file,
+  /// so a part the model did not load is copied from intact bytes.
   XlsxResult save() {
     _book.checkSavable();
     final ZipWriter zip = ZipWriter();
@@ -265,7 +272,7 @@ final class _Texts extends ListBase<String> {
 
 /// The state behind an [XlsxWorkbook], which its sheets share.
 final class _Book implements SheetHost {
-  _Book(Uint8List bytes, XlsxReadLimits limits)
+  _Book(Uint8List bytes, XlsxReadLimits limits, {required this.created})
     : reader = PackageReader(bytes, limits) {
     final String plain = reader.workbookPart;
     workbookName = reader.package.canonicalPartName(plain)!;
@@ -302,10 +309,17 @@ final class _Book implements SheetHost {
         );
       }
     }
+    // Last, so a broken skeleton is reported as the reader reports it.
+    reader.verifyEntries();
   }
 
   @override
   final PackageReader reader;
+
+  /// Whether the workbook was started with `XlsxWorkbook()`, so that saving
+  /// it without a (visible) sheet is a programmer error; an opened workbook
+  /// saves the sheets it came with, none or all hidden included.
+  final bool created;
 
   @override
   final ChangeLog log = ChangeLog();
@@ -482,6 +496,7 @@ final class _Book implements SheetHost {
   }
 
   void checkSavable() {
+    if (!created) return;
     if (_sheets.isEmpty) throw StateError(noSheetMessage);
     if (!_sheets.any(
       (XlsxSheet s) => s.visibility == XlsxSheetVisibility.visible,

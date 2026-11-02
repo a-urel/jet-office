@@ -366,6 +366,23 @@ final class OpcPackage {
     _relsEntries.remove(key);
   }
 
+  /// Checks that every entry of the input archive can be read (declared
+  /// size and CRC-32), parsing and keeping nothing, so that [writeTo] cannot
+  /// fail on a part never loaded. A package without input has nothing to
+  /// check.
+  ///
+  /// Throws an [OpcFormatException] of kind [OpcFormatKind.zip] naming the
+  /// first damaged entry.
+  void verifyEntries() {
+    final ZipReader? zip = _zip;
+    if (zip == null) return;
+    try {
+      zip.verifyEntries();
+    } on ZipReadError catch (e) {
+      throw OpcFormatException(OpcFormatKind.zip, part: e.entry, cause: e);
+    }
+  }
+
   /// Writes the package to [zip]: `[Content_Types].xml`, the relationships
   /// parts, then every part in [partNames] order,
   /// from its content when a model set it, else from its original bytes.
