@@ -52,6 +52,18 @@ final class WorkbookInfo {
   final bool date1904;
 }
 
+/// Whether a `workbookPr` `date1904` attribute [value] turns the 1904 date
+/// system on: `1` or `true`.
+bool isDate1904(String? value) => value == '1' || value == 'true';
+
+/// The visibility a `<sheet>` `state` attribute [value] stands for; a missing
+/// or unknown value is visible.
+XlsxSheetVisibility sheetVisibilityOf(String? value) => switch (value) {
+  'hidden' => XlsxSheetVisibility.hidden,
+  'veryHidden' => XlsxSheetVisibility.veryHidden,
+  _ => XlsxSheetVisibility.visible,
+};
+
 /// Reads the sheet list and date system from the workbook part of
 /// [package].
 ///
@@ -77,8 +89,7 @@ WorkbookInfo readWorkbook(PackageReader package) {
       if (reader.namespaceUri != Ns.main) {
         reader.skip();
       } else if (reader.localName == 'workbookPr') {
-        final String? value = reader.getAttribute('date1904');
-        date1904 = value == '1' || value == 'true';
+        date1904 = isDate1904(reader.getAttribute('date1904'));
         reader.skip();
       } else if (reader.localName == 'sheets') {
         _readSheets(reader, package, part, targets, sheets);
@@ -119,11 +130,11 @@ void _readSheets(
     final String? id = reader.getAttribute('id', namespaceUri: Ns.rel);
     final String? target = id == null ? null : targets[id];
     sheets.add(
-      WorkbookSheet(name, switch (reader.getAttribute('state')) {
-        'hidden' => XlsxSheetVisibility.hidden,
-        'veryHidden' => XlsxSheetVisibility.veryHidden,
-        _ => XlsxSheetVisibility.visible,
-      }, target != null && package.hasPart(target) ? target : null),
+      WorkbookSheet(
+        name,
+        sheetVisibilityOf(reader.getAttribute('state')),
+        target != null && package.hasPart(target) ? target : null,
+      ),
     );
     reader.skip();
   }

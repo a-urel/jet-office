@@ -65,13 +65,13 @@ final class _NumFmt {
 
   void writeTo(XmlWriter w, Map<String, String> above) {
     w.start(qualifiedName);
-    _writeDeclarations(w, namespaces);
+    writeNamespaceDeclarations(w, namespaces);
     w.attribute('numFmtId', '$id');
     w.attribute('formatCode', scrubXmlText(rawCode).text);
     writeKeptAttributes(
       w,
       attributes,
-      declaredAbove: _merge(above, namespaces),
+      declaredAbove: mergeNamespaces(above, namespaces),
     );
     w.end();
   }
@@ -129,8 +129,8 @@ final class _Group {
 
   void writeTo(XmlWriter w, Map<String, String> above) {
     w.start(qualifiedName);
-    _writeDeclarations(w, namespaces);
-    final Map<String, String> inner = _merge(above, namespaces);
+    writeNamespaceDeclarations(w, namespaces);
+    final Map<String, String> inner = mergeNamespaces(above, namespaces);
     if (hasCount) {
       var n = 0;
       for (final Object item in items) {
@@ -281,7 +281,7 @@ final class StylesPart implements PartContent {
     RangeError.checkNotNegative(numFmtId, 'numFmtId');
     if (_untypedText != null) return style ?? 0;
     final _Group group = _cellXfs ??= _createCellXfs();
-    final Map<String, String> above = _merge(
+    final Map<String, String> above = mergeNamespaces(
       _root!.namespaces,
       group.namespaces,
     );
@@ -345,7 +345,7 @@ final class StylesPart implements PartContent {
     final XmlWriter w = XmlWriter(buffer)..declaration();
     final XmlRoot root = _root!;
     w.start(root.qualifiedName);
-    _writeDeclarations(w, root.namespaces);
+    writeNamespaceDeclarations(w, root.namespaces);
     writeKeptAttributes(w, root.attributes, declaredAbove: root.namespaces);
     for (final Object c in _children) {
       switch (c) {
@@ -359,15 +359,6 @@ final class StylesPart implements PartContent {
     return buffer.takeChunks();
   }
 }
-
-void _writeDeclarations(XmlWriter w, Map<String, String> namespaces) {
-  namespaces.forEach((String prefix, String uri) {
-    w.attribute(prefix.isEmpty ? 'xmlns' : 'xmlns:$prefix', uri);
-  });
-}
-
-Map<String, String> _merge(Map<String, String> a, Map<String, String> b) =>
-    b.isEmpty ? a : <String, String>{...a, ...b};
 
 /// Reads the group the reader is on, calling [readItem] for each [name]
 /// child (which returns the typed item and leaves the reader on its end) and

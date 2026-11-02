@@ -269,3 +269,18 @@ final class XmlRoot {
     }
   }
 }
+
+/// Writes `xmlns` declarations for [namespaces], prefix to URI (`''` for the
+/// default namespace), on the start tag open on [w].
+void writeNamespaceDeclarations(XmlWriter w, Map<String, String> namespaces) {
+  namespaces.forEach((String prefix, String uri) {
+    w.attribute(prefix.isEmpty ? 'xmlns' : 'xmlns:$prefix', uri);
+  });
+}
+
+/// The bindings of [a] with those of [b] on top, as in scope inside an
+/// element that declares [b] under a parent where [a] is in scope.
+Map<String, String> mergeNamespaces(
+  Map<String, String> a,
+  Map<String, String> b,
+) => b.isEmpty ? a : <String, String>{...a, ...b};
