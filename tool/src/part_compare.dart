@@ -26,7 +26,9 @@
 ///   belong to compares by the relationship it names;
 /// * a shared string cell (`t="s"`) by the `si` it names, not by its
 ///   index; `sharedStrings.xml` itself as the set of strings the cells
-///   reference, without its counts;
+///   reference, plus its root's attributes (but `count` and `uniqueCount`)
+///   and its children other than `<si>` (an `extLst`), which are not
+///   items and do not shift their indexes;
 /// * the children of `[Content_Types].xml` as a set;
 /// * in SpreadsheetML, a `<t>` whose text neither starts nor ends with
 ///   whitespace as if it had no `xml:space="preserve"`, which only keeps
@@ -190,6 +192,13 @@ void _comparePart(
     for (final String s in (as.toList()..sort())) {
       if (!es.contains(s)) out.add('$name: string only in actual: ${_show(s)}');
     }
+    _diff(
+      name,
+      _sstFrame(_Canon(e, name).node(ed.rootElement, false)),
+      _sstFrame(_Canon(a, name).node(ad.rootElement, false)),
+      '',
+      out,
+    );
     return;
   }
   _diff(
@@ -208,6 +217,22 @@ void _comparePart(
     out,
   );
 }
+
+/// The shared string table [root] without its items and counts: its other
+/// attributes and its children other than `<si>`.
+_Node _sstFrame(_Node root) => _Node(
+  root.name,
+  <String, String>{
+    for (final MapEntry<String, String> a in root.attrs.entries)
+      if (a.key != '|count' && a.key != '|uniqueCount') a.key: a.value,
+  },
+  <Object>[
+    for (final Object c in root.children)
+      if (c is! _Node || !_isSi(c.name)) c,
+  ],
+);
+
+bool _isSi(String name) => name == '$_mainNs|si';
 
 /// A canonical element: its `uri|local` name, attributes by `uri|local`,
 /// and children that are [_Node]s or text [String]s.
@@ -584,6 +609,7 @@ class _Package {
       final XmlDocument? doc = document(part);
       if (doc == null) continue;
       for (final XmlElement si in doc.rootElement.childElements) {
+        if (si.name.local != 'si' || si.name.namespaceUri != _mainNs) continue;
         out.add(_Canon(null, null).node(si, false).serialize());
       }
       break;

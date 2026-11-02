@@ -107,6 +107,73 @@ void main() {
       expect(comparePackages(e, a), isEmpty);
     });
 
+    Uint8List raw(String sst) => _zip(<String, Object>{
+      'xl/sharedStrings.xml': sst,
+      'xl/worksheets/sheet1.xml': _sheet(<String>[
+        '<c r="A2" t="s"><v>0</v></c>',
+        '<c r="B2" t="s"><v>1</v></c>',
+      ]),
+    });
+    const String ns =
+        'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    const String items = '<si><t>x</t></si><si><t>y</t></si>';
+
+    test('the sst root\'s attributes count, but for count and '
+        'uniqueCount', () {
+      expect(
+        comparePackages(
+          raw(
+            '<sst xmlns="$ns" count="2" uniqueCount="2" foo="1">$items</sst>',
+          ),
+          raw('<sst xmlns="$ns" count="7" foo="1">$items</sst>'),
+        ),
+        isEmpty,
+      );
+      final List<String> diff = comparePackages(
+        raw('<sst xmlns="$ns" foo="1">$items</sst>'),
+        raw('<sst xmlns="$ns" foo="2">$items</sst>'),
+      );
+      expect(diff, hasLength(1));
+      expect(diff.single, allOf(contains('sharedStrings'), contains('foo')));
+    });
+
+    test('children of the sst other than si count', () {
+      final List<String> diff = comparePackages(
+        raw('<sst xmlns="$ns">$items<extLst><ext uri="u"/></extLst></sst>'),
+        raw('<sst xmlns="$ns">$items</sst>'),
+      );
+      expect(diff, hasLength(1));
+      expect(diff.single, allOf(contains('sharedStrings'), contains('/sst')));
+    });
+
+    test('children of the sst other than si are not items', () {
+      // An extLst before the items does not shift their indexes.
+      expect(
+        comparePackages(
+          raw('<sst xmlns="$ns"><extLst/>$items</sst>'),
+          raw('<sst xmlns="$ns"><extLst/>$items</sst>'),
+        ),
+        isEmpty,
+      );
+      final List<String> diff = comparePackages(
+        raw('<sst xmlns="$ns"><extLst/>$items</sst>'),
+        raw(
+          '<sst xmlns="$ns"><extLst/><si><t>x</t></si><si><t>z</t></si>'
+          '</sst>',
+        ),
+      );
+      expect(
+        diff.where((String l) => l.contains('xl/worksheets/sheet1.xml: B2')),
+        hasLength(1),
+        reason: '$diff',
+      );
+      expect(
+        diff.where((String l) => l.contains('xl/worksheets/sheet1.xml: A2')),
+        isEmpty,
+        reason: '$diff',
+      );
+    });
+
     test('a changed cell text is reported at the cell', () {
       final Uint8List e = pkg(<String>['x', 'y'], <int>[0, 1]);
       final Uint8List a = pkg(<String>['x', 'z'], <int>[0, 1]);
