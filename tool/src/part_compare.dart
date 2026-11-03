@@ -1,8 +1,9 @@
-/// Compares two XLSX packages part by part, by meaning and not by bytes.
+/// Compares two XLSX or DOCX packages part by part, by meaning and not by
+/// bytes.
 ///
 /// Not ported from Quds; written for jet_office. This is the yardstick the
-/// phase 3 round-trip tests use to prove that opening and saving a file
-/// keeps every part (spec 4.2). It is test-side tooling: it uses
+/// phase 3 and phase 4 round-trip tests use to prove that opening and
+/// saving a file keeps every part (spec 4.2 of each phase). It is test-side tooling: it uses
 /// `package:archive` and `package:xml`, never `dart:io`, so it runs on the
 /// VM and in a browser.
 ///
@@ -41,6 +42,21 @@
 /// With `ignoreBookkeeping`, a worksheet's `<dimension ref>` and each row's
 /// `spans` are left out: they summarize the cells and a saving model
 /// recomputes them (spec 4.4).
+///
+/// A package is a DOCX when the part its root `officeDocument` relationship
+/// names has a WordprocessingML content type (by `[Content_Types].xml`, not
+/// by the file's extension). A DOCX compares by the rules above with these
+/// changes:
+///
+/// * no SpreadsheetML rule applies (shared strings, `t="n"`, the `xml:space`
+///   of `<t>`, filled positions, `ignoreBookkeeping`), even to elements in
+///   the SpreadsheetML namespace;
+/// * the text of `w:t`, `w:instrText` and `w:delText` (by namespace URI)
+///   compares exactly, whitespace included, and their `xml:space` compares
+///   as written.
+///
+/// [compareXmlParts] compares one WordprocessingML part by the same DOCX
+/// rules, with relationship ids compared literally.
 library;
 
 import 'dart:convert';
@@ -60,12 +76,27 @@ const String _mainNs =
 /// The XML namespace, home of `xml:space`.
 const String _xmlNs = 'http://www.w3.org/XML/1998/namespace';
 
+/// The WordprocessingML namespace.
+const String _wNs =
+    'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/// The WordprocessingML elements whose text is content to its last space:
+/// `w:t`, `w:instrText` and `w:delText`, as `uri|local`.
+const Set<String> _wordText = <String>{
+  '$_wNs|t',
+  '$_wNs|instrText',
+  '$_wNs|delText',
+};
+
 /// The differences between the packages [expected] and [actual], one line
 /// per difference, `'<part>: <what>'`; empty when they are equal.
 ///
 /// A part named in [ignoreParts] is skipped on both sides. A part only in
 /// [actual] is a difference unless it is named in [allowAdded].
-/// [ignoreBookkeeping] leaves out `dimension/@ref` and `row/@spans`.
+/// [ignoreBookkeeping] leaves out `dimension/@ref` and `row/@spans`; it
+/// has no effect on a DOCX. Whether the packages are DOCX is read from
+/// [expected]; a package whose main part is WordprocessingML on one side
+/// only is a difference.
 List<String> comparePackages(
   Uint8List expected,
   Uint8List actual, {
@@ -82,6 +113,13 @@ List<String> comparePackages(
       'package: the actual package is unreadable: ${a.error}',
   ];
   if (out.isNotEmpty) return out;
+  final bool docx = e.isWordprocessing;
+  if (docx != a.isWordprocessing) {
+    out.add(
+      'package: the main part is WordprocessingML in the '
+      '${docx ? 'expected' : 'actual'} package only',
+    );
+  }
   final Set<String> names = <String>{...e.parts.keys, ...a.parts.keys}
     ..removeAll(ignoreParts);
   for (final String name in names) {
@@ -101,7 +139,7 @@ List<String> comparePackages(
     } else if (!e.isXml(name)) {
       if (!_sameBytes(eb, ab)) out.add('$name: bytes differ');
     } else {
-      _comparePart(name, e, a, out, ignoreBookkeeping);
+      _comparePart(name, e, a, out, ignoreBookkeeping, docx);
     }
   }
   return out;
@@ -124,6 +162,7 @@ List<String> compareXml(
     'expected',
     out,
     ignoreBookkeeping,
+    false,
   );
   final _Node? a = _canonicalText(
     part,
@@ -131,8 +170,41 @@ List<String> compareXml(
     'actual',
     out,
     ignoreBookkeeping,
+    false,
   );
   if (e != null && a != null) _diff(part, e, a, '', out);
+  return out;
+}
+
+/// The differences between the UTF-8 XML bytes [expected] and [actual] of
+/// the WordprocessingML part [partName], one line per difference,
+/// `'<part>: <what>'`; empty when they are equal.
+///
+/// The rules are those [comparePackages] applies to a part of a DOCX,
+/// except that an attribute in the relationships namespace (`r:id`,
+/// `r:embed`) compares literally: one part has no relationships to resolve
+/// it through. Bytes that are not UTF-8 or not well-formed XML are a
+/// difference, not an exception.
+List<String> compareXmlParts(
+  String partName,
+  Uint8List expected,
+  Uint8List actual,
+) {
+  final List<String> out = <String>[];
+  _Node? canonical(Uint8List bytes, String side) {
+    final String text;
+    try {
+      text = utf8.decode(bytes);
+    } on FormatException {
+      out.add('$partName: the $side part is not UTF-8');
+      return null;
+    }
+    return _canonicalText(partName, text, side, out, false, true);
+  }
+
+  final _Node? e = canonical(expected, 'expected');
+  final _Node? a = canonical(actual, 'actual');
+  if (e != null && a != null) _diff(partName, e, a, '', out);
   return out;
 }
 
@@ -142,12 +214,14 @@ _Node? _canonicalText(
   String side,
   List<String> out,
   bool ignoreBookkeeping,
+  bool wordprocessing,
 ) {
   try {
     return _Canon(
       null,
       null,
       ignoreBookkeeping: ignoreBookkeeping,
+      wordprocessing: wordprocessing,
     ).node(XmlDocument.parse(text).rootElement, false);
   } on XmlException catch (error) {
     out.add('$part: the $side part is not well-formed XML (${error.message})');
@@ -169,6 +243,7 @@ void _comparePart(
   _Package a,
   List<String> out,
   bool ignoreBookkeeping,
+  bool docx,
 ) {
   final XmlDocument? ed = e.document(name);
   final XmlDocument? ad = a.document(name);
@@ -181,7 +256,7 @@ void _comparePart(
     }
     return;
   }
-  if (e.isSharedStrings(name) && a.isSharedStrings(name)) {
+  if (!docx && e.isSharedStrings(name) && a.isSharedStrings(name)) {
     final Set<String> es = e.referencedStrings();
     final Set<String> as = a.referencedStrings();
     for (final String s in (es.toList()..sort())) {
@@ -207,11 +282,13 @@ void _comparePart(
       e,
       name,
       ignoreBookkeeping: ignoreBookkeeping,
+      wordprocessing: docx,
     ).node(ed.rootElement, false),
     _Canon(
       a,
       name,
       ignoreBookkeeping: ignoreBookkeeping,
+      wordprocessing: docx,
     ).node(ad.rootElement, false),
     '',
     out,
@@ -317,12 +394,24 @@ void _diff(String part, _Node e, _Node a, String loc, List<String> out) {
 
 /// Turns elements of one part into [_Node]s, resolving relationship ids and
 /// shared string indexes through [_package] when there is one.
+///
+/// With [wordprocessing], the part belongs to a DOCX: no SpreadsheetML rule
+/// applies, and the text of `w:t`, `w:instrText` and `w:delText` is exact.
 class _Canon {
-  _Canon(this._package, this._part, {this.ignoreBookkeeping = false});
+  _Canon(
+    this._package,
+    this._part, {
+    bool ignoreBookkeeping = false,
+    this.wordprocessing = false,
+  }) : ignoreBookkeeping = ignoreBookkeeping && !wordprocessing;
 
   final _Package? _package;
   final String? _part;
   final bool ignoreBookkeeping;
+  final bool wordprocessing;
+
+  /// Whether the SpreadsheetML rules apply.
+  bool get _spreadsheet => !wordprocessing;
 
   late final Map<String, String> _rels =
       _package?.relationshipsOf(_part!) ?? const <String, String>{};
@@ -349,7 +438,10 @@ class _Canon {
           _attrKey(a.name) == '$_xmlNs|space' && a.value == 'preserve',
     );
     final String local = element.name.local;
-    final bool exact = inheritedExact || preserve;
+    final bool exact =
+        inheritedExact ||
+        preserve ||
+        wordprocessing && _wordText.contains(name);
     final bool hasElements = element.childElements.isNotEmpty;
     final List<Object> children = <Object>[];
     final StringBuffer run = StringBuffer();
@@ -371,11 +463,13 @@ class _Canon {
       }
     }
     flush();
-    if (name == '$_mainNs|c' && attrs['|t'] == 'n') attrs.remove('|t');
+    if (_spreadsheet && name == '$_mainNs|c' && attrs['|t'] == 'n') {
+      attrs.remove('|t');
+    }
     // A SpreadsheetML text's xml:space="preserve" only keeps the spaces
     // around it (the writer's rule, `writeTextElement`); without any it
     // changes nothing Excel shows.
-    if (name == '$_mainNs|t' && !hasElements) {
+    if (_spreadsheet && name == '$_mainNs|t' && !hasElements) {
       final String text = children.whereType<String>().join();
       if (text.isEmpty ||
           !_xmlSpace(text.codeUnitAt(0)) &&
@@ -387,10 +481,13 @@ class _Canon {
       if (name == '$_mainNs|dimension') attrs.remove('|ref');
       if (name == '$_mainNs|row') attrs.remove('|spans');
     }
-    if (name == '$_mainNs|sheetData') _fillPositions(children);
+    if (_spreadsheet && name == '$_mainNs|sheetData') {
+      _fillPositions(children);
+    }
     final _Node result = _Node(name, attrs, children);
     final _Package? package = _package;
-    if (package != null &&
+    if (_spreadsheet &&
+        package != null &&
         local == 'c' &&
         attrs['|t'] == 's' &&
         children.length == 1 &&
@@ -567,6 +664,31 @@ class _Package {
   bool isXml(String part) {
     final String type = typeOf(part);
     return type.endsWith('+xml') || type.endsWith('/xml');
+  }
+
+  /// Whether the part the root `officeDocument` relationship names has a
+  /// WordprocessingML content type: a document, a template, or either with
+  /// macros.
+  late final bool isWordprocessing = _isWordprocessing();
+
+  bool _isWordprocessing() {
+    if (!parts.containsKey('_rels/.rels')) return false;
+    final XmlDocument? rels = document('_rels/.rels');
+    if (rels == null) return false;
+    for (final XmlElement r in rels.rootElement.childElements) {
+      final String type = r.getAttribute('Type') ?? '';
+      if (!type.endsWith('/officeDocument')) continue;
+      final String target = (r.getAttribute('Target') ?? '').replaceFirst(
+        RegExp('^/'),
+        '',
+      );
+      final String contentType = typeOf(target);
+      if (contentType.contains('.wordprocessingml.') ||
+          contentType.startsWith('application/vnd.ms-word.')) {
+        return true;
+      }
+    }
+    return false;
   }
 
   bool isSharedStrings(String part) =>
