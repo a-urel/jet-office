@@ -41,13 +41,44 @@ Uint8List buildZipOrdered(
     if (store) file.compression = CompressionType.none;
     archive.addFile(file);
   }
-  return ZipEncoder().encodeBytes(archive, modified: _fixedTime);
+  return _fixUnixTimes(ZipEncoder().encodeBytes(archive, modified: _fixedTime));
 }
 
 /// The modification time of every entry [buildZipOrdered] writes, so equal
 /// input gives equal bytes. Local wall-clock fields are what a DOS
-/// timestamp stores, so the time zone does not matter.
+/// timestamp stores, so its fields do not depend on the time zone.
 final DateTime _fixedTime = DateTime(1980);
+
+/// [zip] with the Unix time of every extended timestamp field (`0x5455`) in
+/// its central directory set to 1980-01-01 00:00 UTC.
+///
+/// archive 4.6 adds that field to each central header, from the same local
+/// `DateTime` as the DOS fields, so its seconds depend on the time zone.
+/// Fixed, the bytes are equal on every machine, which the fuzz corpus's
+/// pinned checksums need.
+Uint8List _fixUnixTimes(Uint8List zip) {
+  final ByteData d = ByteData.sublistView(zip);
+  for (int i = 0; i + 46 <= zip.length; i++) {
+    if (d.getUint32(i, Endian.little) != _centralSignature) continue;
+    final int nameLength = d.getUint16(i + 28, Endian.little);
+    final int extraLength = d.getUint16(i + 30, Endian.little);
+    int at = i + 46 + nameLength;
+    final int end = at + extraLength;
+    while (at + 4 <= end) {
+      final int id = d.getUint16(at, Endian.little);
+      final int size = d.getUint16(at + 2, Endian.little);
+      // Flags byte, then the modification time.
+      if (id == 0x5455 && size >= 5 && d.getUint8(at + 4) & 1 != 0) {
+        d.setUint32(at + 5, _unix1980, Endian.little);
+      }
+      at += 4 + size;
+    }
+  }
+  return zip;
+}
+
+/// 1980-01-01 00:00 UTC in Unix seconds.
+const int _unix1980 = 315532800;
 
 /// A copy of [zip] in which [entry] declares an uncompressed size of [size],
 /// in both its local header and its central directory header.
