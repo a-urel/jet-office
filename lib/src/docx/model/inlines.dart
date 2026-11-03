@@ -1,0 +1,377 @@
+/// The inlines of a paragraph, the children of `w:p`: runs, and opaque
+/// inlines for everything else.
+///
+/// Not ported from Quds; written for jet_office.
+///
+/// A [DocxRun] holds its content ([DocxRunContent]) and its properties
+/// (`w:rPr`), of which D1 types only the style. Setting its text splits the
+/// string into text, tabs and breaks and removes the characters XML forbids;
+/// the run records how many it removed, and the save reports them.
+///
+/// A [DocxOpaqueInline] keeps an element the model does not type, such as a
+/// tracked change (`w:ins`, `w:del`), a content control or a hyperlink until
+/// D5, and carries its visible text ([visibleText]), computed once when it
+/// is built.
+///
+/// The top-level functions are the model's internal surface for the reader,
+/// the writer and the document; none of them is exported.
+library;
+
+import 'dart:collection';
+
+import '../../opc/ooxml.dart' show Ns;
+import '../../opc/opaque_xml.dart';
+import '../../xml/xml_escape.dart';
+import '../../xml/xml_pull_reader.dart';
+import '../properties.dart';
+import 'blocks.dart';
+import 'edit_sink.dart';
+import 'run_content.dart';
+
+/// One child of a paragraph.
+sealed class DocxInline {
+  DocxInline._();
+
+  /// The paragraph the inline is in, or `null` while it is in none.
+  DocxParagraph? _paragraph;
+
+  /// The text the inline shows: the run's text, or the visible text inside
+  /// an opaque inline.
+  String get text;
+}
+
+/// A run's content and the number of characters removed from the text that
+/// produced it, as `runTextOf` returns and `restoreRunText` takes.
+typedef DocxRunText = ({List<DocxRunContent> content, int removed});
+
+/// A run of text with one set of properties, `w:r`.
+final class DocxRun extends DocxInline {
+  /// A new run that holds [text], split and scrubbed as [text] is when set.
+  ///
+  /// It belongs to no paragraph until it is inserted into one.
+  DocxRun([String text = ''])
+    : _properties = const PropertyContainer.empty(),
+      _attributes = const <KeptAttribute>[],
+      super._() {
+    _setText(text);
+  }
+
+  DocxRun._read(
+    this._properties,
+    this._style,
+    this._attributes,
+    List<DocxRunContent> content,
+  ) : super._() {
+    _content.addAll(content);
+  }
+
+  /// The run's `w:rPr`, without the typed style.
+  final PropertyContainer _properties;
+
+  /// The attributes of `w:r` the reader kept, such as `w:rsidR`.
+  final List<KeptAttribute> _attributes;
+
+  final List<DocxRunContent> _content = <DocxRunContent>[];
+
+  late final List<DocxRunContent> _contentView =
+      UnmodifiableListView<DocxRunContent>(_content);
+
+  String? _style;
+
+  /// How many characters XML forbids were removed when the text was set.
+  int _removed = 0;
+
+  DocxEditSink get _sink {
+    final DocxParagraph? paragraph = _paragraph;
+    return paragraph == null ? DocxEditSink.none : editSinkOf(paragraph);
+  }
+
+  /// The id of the run's character style (`w:rStyle`), or `null` for none.
+  ///
+  /// Setting the empty string throws [ArgumentError]; set `null` to remove
+  /// the style.
+  String? get style => _style;
+
+  set style(String? value) {
+    if (value != null && value.isEmpty) {
+      throw ArgumentError.value(value, 'style', 'Must not be empty');
+    }
+    final String? previous = _style;
+    if (value == previous) {
+      return;
+    }
+    _style = value;
+    _sink.runStyleSet(this, previous);
+  }
+
+  /// The run's content, in order. The list cannot be modified; set [text]
+  /// to change it.
+  List<DocxRunContent> get content => _contentView;
+
+  /// The run's text: each [DocxText] as it is, `\t` for a [DocxTab], `\n`
+  /// for a [DocxBreak] of any type and for a [DocxCarriageReturn], and
+  /// nothing for opaque content.
+  ///
+  /// Setting it replaces the whole content: `\t` becomes a [DocxTab], and
+  /// `\n`, `\r\n` and a lone `\r` each become one line [DocxBreak]. Characters
+  /// XML forbids (control characters other than tab, LF and CR, U+FFFE,
+  /// U+FFFF and lone surrogates) are removed; the save reports how many with
+  /// `DocxWarningCode.invalidCharactersRemoved` at the run's location.
+  @override
+  String get text {
+    final StringBuffer out = StringBuffer();
+    for (final DocxRunContent c in _content) {
+      out.write(_textOf(c));
+    }
+    return out.toString();
+  }
+
+  set text(String value) {
+    final DocxRunText previous = runTextOf(this);
+    _setText(value);
+    _sink.runTextSet(this, previous);
+  }
+
+  void _setText(String value) {
+    final ScrubResult scrubbed = scrubXmlText(value);
+    _removed = scrubbed.removed;
+    _content
+      ..clear()
+      ..addAll(_split(scrubbed.text));
+  }
+}
+
+/// An inline the model does not type, kept as written.
+final class DocxOpaqueInline extends DocxInline {
+  DocxOpaqueInline._(this._xml, this.text) : super._();
+
+  final OpaqueXml _xml;
+
+  /// The element's local name, such as `ins` or `proofErr`.
+  String get localName => _xml.localName;
+
+  /// The element's namespace URI, or the empty string.
+  String get namespaceUri => _xml.namespaceUri;
+
+  /// The visible text inside the element: inserted and moved-in text counts,
+  /// deleted and moved-away text does not ([visibleText] has the rule).
+  @override
+  final String text;
+
+  @override
+  String toString() => 'DocxOpaqueInline($localName)';
+}
+
+/// The text of one piece of run content.
+String _textOf(DocxRunContent content) => switch (content) {
+  DocxText(:final String text) => text,
+  DocxTab() => '\t',
+  DocxBreak() || DocxCarriageReturn() => '\n',
+  DocxOpaqueRunContent() => '',
+};
+
+/// Splits [text] into text, tabs and line breaks; `\r\n` is one break.
+List<DocxRunContent> _split(String text) {
+  final List<DocxRunContent> out = <DocxRunContent>[];
+  int start = 0;
+  void flush(int end) {
+    if (end > start) {
+      out.add(DocxText(text.substring(start, end)));
+    }
+  }
+
+  for (int i = 0; i < text.length; i++) {
+    final int c = text.codeUnitAt(i);
+    if (c == 0x09) {
+      flush(i);
+      out.add(const DocxTab());
+      start = i + 1;
+    } else if (c == 0x0A || c == 0x0D) {
+      flush(i);
+      out.add(const DocxBreak());
+      if (c == 0x0D && i + 1 < text.length && text.codeUnitAt(i + 1) == 0x0A) {
+        i++;
+      }
+      start = i + 1;
+    }
+  }
+  flush(text.length);
+  return out;
+}
+
+/// A run as the reader builds it: its `w:rPr` without the typed style, the
+/// style id, the kept attributes of `w:r`, and its content as read.
+DocxRun readRun({
+  required PropertyContainer properties,
+  String? style,
+  required List<KeptAttribute> attributes,
+  required List<DocxRunContent> content,
+}) => DocxRun._read(properties, style, attributes, content);
+
+/// The `w:rPr` of [run] without the typed style.
+PropertyContainer runPropertiesOf(DocxRun run) => run._properties;
+
+/// The attributes of `w:r` the reader kept on [run], in source order.
+List<KeptAttribute> runAttributesOf(DocxRun run) => run._attributes;
+
+/// How many characters XML forbids were removed when [run]'s text was last
+/// set; 0 for a run whose text was never set.
+int removedCharactersOf(DocxRun run) => run._removed;
+
+/// A copy of [run]'s content with its removed count, for `restoreRunText`.
+DocxRunText runTextOf(DocxRun run) => (
+  content: List<DocxRunContent>.unmodifiable(run._content),
+  removed: run._removed,
+);
+
+/// Puts [state] back as [run]'s content and removed count, without calling
+/// any sink: how a recorded text edit is undone or redone.
+void restoreRunText(DocxRun run, DocxRunText state) {
+  run._content
+    ..clear()
+    ..addAll(state.content);
+  run._removed = state.removed;
+}
+
+/// The paragraph [inline] is in, or `null`.
+DocxParagraph? paragraphOf(DocxInline inline) => inline._paragraph;
+
+/// Records that [inline] is now in [paragraph] (`null`: in none). Only the
+/// paragraph's own edits call it.
+void setParagraphOf(DocxInline inline, DocxParagraph? paragraph) {
+  inline._paragraph = paragraph;
+}
+
+/// An opaque inline for the element [xml] captured.
+///
+/// [text] is its visible text, when the reader computed it while capturing;
+/// without it, [visibleText] computes it from [xml].
+DocxOpaqueInline opaqueInline(OpaqueXml xml, {String? text}) =>
+    DocxOpaqueInline._(xml, text ?? visibleText(xml));
+
+/// The element [inline] keeps, for the writer.
+OpaqueXml opaqueInlineXml(DocxOpaqueInline inline) => inline._xml;
+
+/// The local names, in WordprocessingML, of the containers whose runs are
+/// visible text.
+const Set<String> _visibleContainers = <String>{
+  'ins',
+  'moveTo',
+  'hyperlink',
+  'smartTag',
+  'customXml',
+  'fldSimple',
+  'dir',
+  'bdo',
+  'sdtContent',
+};
+
+/// The text the inline element [node] shows, as a paragraph's text counts
+/// it.
+///
+/// Runs (`w:r`) give their `w:t` text, `\t` for `w:tab`, and `\n` for
+/// `w:br` and `w:cr`; nothing else in a run is text (`w:delText`,
+/// `w:delInstrText`, `w:instrText`, drawings and other content give `''`).
+/// Inserted and moved-in text counts: `w:ins`, `w:moveTo`, `w:hyperlink`,
+/// `w:smartTag`, `w:customXml`, `w:fldSimple`, `w:dir` and `w:bdo` give the
+/// text of their children in order, recursively, and `w:sdt` gives that of
+/// its `w:sdtContent` only, never the placeholders of `w:sdtPr`. Deleted and
+/// moved-away text does not: `w:del` and `w:moveFrom` give `''` wherever
+/// they are nested, so a `w:del` inside a `w:ins` is deleted. Any other
+/// element, or one in another namespace, gives `''`. Elements are matched by
+/// namespace and local name, never by prefix.
+String visibleText(OpaqueXml node) {
+  // A root that declares the bindings the slice inherited, so its prefixes
+  // resolve as they did in the document.
+  final StringBuffer source = StringBuffer('<r');
+  node.inheritedNamespaces.forEach((String prefix, String uri) {
+    source
+      ..write(prefix.isEmpty ? ' xmlns="' : ' xmlns:$prefix="')
+      ..write(escapeXmlAttribute(scrubXmlText(uri).text))
+      ..write('"');
+  });
+  source
+    ..write('>')
+    ..write(node.xml)
+    ..write('</r>');
+  final XmlPullReader r = XmlPullReader(source.toString());
+  r.nextTag();
+  r.nextTag();
+  final StringBuffer out = StringBuffer();
+  _visible(r, out);
+  return out.toString();
+}
+
+/// Writes the visible text of the element [r] is on to [out], and leaves
+/// [r] on the element's end event.
+void _visible(XmlPullReader r, StringBuffer out) {
+  if (r.namespaceUri != Ns.w) {
+    r.skip();
+    return;
+  }
+  final String name = r.localName;
+  if (name == 'r') {
+    _children(r, () => _runChild(r, out));
+  } else if (name == 'sdt') {
+    _children(r, () {
+      if (r.namespaceUri == Ns.w && r.localName == 'sdtContent') {
+        _visible(r, out);
+      } else {
+        r.skip();
+      }
+    });
+  } else if (_visibleContainers.contains(name)) {
+    _children(r, () => _visible(r, out));
+  } else {
+    r.skip();
+  }
+}
+
+/// Writes the text of the run child [r] is on to [out], and leaves [r] on
+/// its end event.
+void _runChild(XmlPullReader r, StringBuffer out) {
+  if (r.namespaceUri != Ns.w) {
+    r.skip();
+    return;
+  }
+  switch (r.localName) {
+    case 't':
+      _children(r, r.skip, out.write);
+    case 'tab':
+      out.write('\t');
+      r.skip();
+    case 'br' || 'cr':
+      out.write('\n');
+      r.skip();
+    default:
+      r.skip();
+  }
+}
+
+/// Visits the children of the element [r] is on: [onChild] with [r] on each
+/// child's start (it must leave [r] on that child's end event), and
+/// [onText] with each run of character data or CDATA. Leaves [r] on the
+/// element's end event.
+void _children(
+  XmlPullReader r,
+  void Function() onChild, [
+  void Function(String text)? onText,
+]) {
+  if (r.isEmptyElement) {
+    r.next();
+    return;
+  }
+  final int depth = r.depth;
+  while (r.next()) {
+    final XmlEventType type = r.eventType;
+    if (type == XmlEventType.endElement && r.depth < depth) {
+      return;
+    }
+    if (type == XmlEventType.startElement) {
+      onChild();
+    } else if (onText != null &&
+        (type == XmlEventType.characters || type == XmlEventType.cdata)) {
+      onText(r.text);
+    }
+  }
+}

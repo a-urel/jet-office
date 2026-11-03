@@ -1,0 +1,209 @@
+/// The blocks of a body, the children of `w:body`: paragraphs, and opaque
+/// blocks for everything else.
+///
+/// Not ported from Quds; written for jet_office.
+///
+/// A [DocxParagraph] holds its inlines and its properties (`w:pPr`), of
+/// which D1 types only the style. A [DocxOpaqueBlock] keeps an element the
+/// model does not type, such as a table until D3 or a content control, as
+/// written.
+///
+/// The top-level functions are the model's internal surface for the reader,
+/// the writer and the document; none of them is exported.
+library;
+
+import 'dart:collection';
+
+import '../../opc/opaque_xml.dart';
+import '../properties.dart';
+import 'edit_sink.dart';
+import 'inlines.dart';
+
+/// One child of a body.
+sealed class DocxBlock {
+  DocxBlock._();
+}
+
+/// A paragraph, `w:p`.
+final class DocxParagraph extends DocxBlock {
+  /// An empty paragraph: no inlines, no style and no other properties.
+  ///
+  /// It belongs to no document until it is inserted into one.
+  DocxParagraph()
+    : _properties = const PropertyContainer.empty(),
+      _attributes = const <KeptAttribute>[],
+      super._();
+
+  /// A paragraph with one run that holds [text], or none when [text] is
+  /// empty. The text is split and scrubbed as [DocxRun.text] is when set.
+  DocxParagraph.text(String text)
+    : _properties = const PropertyContainer.empty(),
+      _attributes = const <KeptAttribute>[],
+      super._() {
+    if (text.isNotEmpty) {
+      addRun(text);
+    }
+  }
+
+  DocxParagraph._read(this._properties, this._style, this._attributes)
+    : super._();
+
+  /// The paragraph's `w:pPr`, without the typed style.
+  final PropertyContainer _properties;
+
+  /// The attributes of `w:p` the reader kept, such as `w14:paraId`.
+  final List<KeptAttribute> _attributes;
+
+  final List<DocxInline> _inlines = <DocxInline>[];
+
+  late final List<DocxInline> _inlinesView = UnmodifiableListView<DocxInline>(
+    _inlines,
+  );
+
+  String? _style;
+
+  DocxEditSink _sink = DocxEditSink.none;
+
+  /// The id of the paragraph's style (`w:pStyle`), or `null` for none.
+  ///
+  /// Setting the empty string throws [ArgumentError]; set `null` to remove
+  /// the style.
+  String? get style => _style;
+
+  set style(String? value) {
+    if (value != null && value.isEmpty) {
+      throw ArgumentError.value(value, 'style', 'Must not be empty');
+    }
+    final String? previous = _style;
+    if (value == previous) {
+      return;
+    }
+    _style = value;
+    _sink.paragraphStyleSet(this, previous);
+  }
+
+  /// The paragraph's inlines, in order. The list cannot be modified; use
+  /// [addRun], [insertInline] and [removeInlineAt].
+  List<DocxInline> get inlines => _inlinesView;
+
+  /// The paragraph's visible text: the [DocxInline.text] of each inline, in
+  /// order. A run gives its text and an opaque inline the visible text
+  /// inside it, so inserted text counts and deleted text does not.
+  String get text {
+    final StringBuffer out = StringBuffer();
+    for (final DocxInline inline in _inlines) {
+      out.write(inline.text);
+    }
+    return out.toString();
+  }
+
+  /// Appends a new run that holds [text] and returns it. The text is split
+  /// and scrubbed as [DocxRun.text] is when set.
+  DocxRun addRun([String text = '']) {
+    final DocxRun run = DocxRun(text);
+    insertInline(_inlines.length, run);
+    return run;
+  }
+
+  /// Inserts [inline] at [index], from 0 to the number of inlines.
+  ///
+  /// An [index] out of that range throws [RangeError]. An [inline] that is
+  /// already in a paragraph, this one or another, throws [StateError]:
+  /// remove it there first.
+  void insertInline(int index, DocxInline inline) {
+    RangeError.checkValueInInterval(index, 0, _inlines.length, 'index');
+    _checkDetached(inline);
+    _inlines.insert(index, inline);
+    setParagraphOf(inline, this);
+    _sink.inlineInserted(this, index, inline);
+  }
+
+  /// Removes the inline at [index].
+  ///
+  /// An [index] that is not one of an inline throws [RangeError].
+  void removeInlineAt(int index) {
+    RangeError.checkValidIndex(index, _inlines, 'index');
+    final DocxInline removed = _inlines.removeAt(index);
+    setParagraphOf(removed, null);
+    _sink.inlineRemoved(this, index, removed);
+  }
+
+  static void _checkDetached(DocxInline inline) {
+    if (paragraphOf(inline) != null) {
+      throw StateError('The inline is already in a paragraph.');
+    }
+  }
+}
+
+/// A block the model does not type, kept as written.
+final class DocxOpaqueBlock extends DocxBlock {
+  DocxOpaqueBlock._(this._xml) : super._();
+
+  final OpaqueXml _xml;
+
+  /// The element's local name, such as `tbl` or `sdt`.
+  String get localName => _xml.localName;
+
+  /// The element's namespace URI, or the empty string.
+  String get namespaceUri => _xml.namespaceUri;
+
+  @override
+  String toString() => 'DocxOpaqueBlock($localName)';
+}
+
+/// A paragraph as the reader builds it: its `w:pPr` without the typed
+/// style, the style id, the kept attributes of `w:p`, and its inlines as
+/// read. Each inline must be in no paragraph, or [StateError] is thrown.
+DocxParagraph readParagraph({
+  required PropertyContainer properties,
+  String? style,
+  required List<KeptAttribute> attributes,
+  required List<DocxInline> inlines,
+}) {
+  final DocxParagraph p = DocxParagraph._read(properties, style, attributes);
+  for (final DocxInline inline in inlines) {
+    DocxParagraph._checkDetached(inline);
+    p._inlines.add(inline);
+    setParagraphOf(inline, p);
+  }
+  return p;
+}
+
+/// The `w:pPr` of [paragraph] without the typed style.
+PropertyContainer paragraphPropertiesOf(DocxParagraph paragraph) =>
+    paragraph._properties;
+
+/// The attributes of `w:p` the reader kept on [paragraph], in source order.
+List<KeptAttribute> paragraphAttributesOf(DocxParagraph paragraph) =>
+    paragraph._attributes;
+
+/// The sink [paragraph] and its runs report their edits to.
+DocxEditSink editSinkOf(DocxParagraph paragraph) => paragraph._sink;
+
+/// Makes [sink] receive the edits of [paragraph] and its runs from now on;
+/// [DocxEditSink.none] detaches it.
+void attachEditSink(DocxParagraph paragraph, DocxEditSink sink) {
+  paragraph._sink = sink;
+}
+
+/// Puts [inline] in place of the inline at [index] of [paragraph], and
+/// reports it to the paragraph's sink.
+///
+/// An [index] that is not one of an inline throws [RangeError], and an
+/// [inline] already in a paragraph throws [StateError].
+void replaceInlineAt(DocxParagraph paragraph, int index, DocxInline inline) {
+  final List<DocxInline> inlines = paragraph._inlines;
+  RangeError.checkValidIndex(index, inlines, 'index');
+  DocxParagraph._checkDetached(inline);
+  final DocxInline previous = inlines[index];
+  inlines[index] = inline;
+  setParagraphOf(previous, null);
+  setParagraphOf(inline, paragraph);
+  paragraph._sink.inlineReplaced(paragraph, index, previous, inline);
+}
+
+/// An opaque block for the element [xml] captured.
+DocxOpaqueBlock opaqueBlock(OpaqueXml xml) => DocxOpaqueBlock._(xml);
+
+/// The element [block] keeps, for the writer.
+OpaqueXml opaqueBlockXml(DocxOpaqueBlock block) => block._xml;

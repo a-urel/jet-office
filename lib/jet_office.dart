@@ -106,6 +106,18 @@ library;
 
 export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
+export 'src/docx/model/blocks.dart'
+    show DocxBlock, DocxOpaqueBlock, DocxParagraph;
+export 'src/docx/model/inlines.dart' show DocxInline, DocxOpaqueInline, DocxRun;
+export 'src/docx/model/run_content.dart'
+    show
+        DocxBreak,
+        DocxBreakType,
+        DocxCarriageReturn,
+        DocxOpaqueRunContent,
+        DocxRunContent,
+        DocxTab,
+        DocxText;
 export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
 export 'src/docx/read_limits.dart' show DocxReadLimits;
 export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;
