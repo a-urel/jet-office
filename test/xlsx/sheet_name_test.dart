@@ -173,4 +173,13 @@ void main() {
     expect(n.assign(name), name);
     expect(n.assign(name), '${'b' * 26} (2)');
   });
+
+  test('reserved names clash and count toward Sheet{n}', () {
+    n
+      ..reserve('Liste')
+      ..reserve('Liste');
+    expect(w.warnings, isEmpty);
+    expect(n.assign('LİSTE'), 'LİSTE (2)');
+    expect(n.assign(''), 'Sheet4');
+  });
 }

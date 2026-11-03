@@ -65,6 +65,20 @@
 /// directly. A code it cannot read shows as `General`, and the result's
 /// [XlsxFormattedValue.warning] says so.
 ///
+/// [XlsxWorkbook] is the workbook model: [XlsxWorkbook.open] reads a file,
+/// within the same [XlsxReadLimits] and with the same [XlsxReadException]s
+/// as the reader, and [XlsxWorkbook.new] starts an empty one. Its
+/// [XlsxSheet]s load on first use; [XlsxSheet.cellAt] and [XlsxSheet.rows]
+/// return the reader's [XlsxReadCell]s and [XlsxReadRow]s, and
+/// [XlsxSheet.setCell] takes the writer's values (strings, numbers, `bool`,
+/// `DateTime`, [XlsxDate], [XlsxDecimal], [XlsxFormula] and `null`), checked
+/// and repaired as the writer does. [XlsxWorkbook.save] returns an
+/// [XlsxResult] and [XlsxWorkbook.saveTo] streams to a sink. Saving keeps
+/// every part the model did not change: what it never loaded is copied from
+/// the file, and what it does not understand inside a part it loaded is kept
+/// as written, so an opened file comes back with only the cells that were
+/// set changed.
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
@@ -74,6 +88,8 @@
 /// @docImport 'src/xlsx/hyperlink.dart';
 /// @docImport 'src/xlsx/limits.dart';
 /// @docImport 'src/xlsx/list_export.dart';
+/// @docImport 'src/xlsx/model/xlsx_sheet.dart';
+/// @docImport 'src/xlsx/model/xlsx_workbook.dart';
 /// @docImport 'src/xlsx/read/read_cell.dart';
 /// @docImport 'src/xlsx/read/read_exception.dart';
 /// @docImport 'src/xlsx/read/read_limits.dart';
@@ -149,6 +165,8 @@ export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
 export 'src/xlsx/image.dart' show XlsxImage, XlsxImageFormat;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/list_export.dart' show XlsxListColumn, XlsxListExport;
+export 'src/xlsx/model/xlsx_sheet.dart' show XlsxSheet;
+export 'src/xlsx/model/xlsx_workbook.dart' show XlsxWorkbook;
 export 'src/xlsx/note.dart' show XlsxNote;
 export 'src/xlsx/number_format.dart' show XlsxNumFmt;
 export 'src/xlsx/page_setup.dart'

@@ -14,6 +14,7 @@
 library;
 
 import '../../opc/ooxml.dart';
+import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import 'package_reader.dart';
@@ -39,36 +40,135 @@ List<String> readSharedStrings(
   String part,
   XlsxReadLimits limits,
 ) {
+  return package.guardXml(part, () => _walk(package, part, limits).texts);
+}
+
+/// The shared strings of a table and the entries that are more than text.
+///
+/// `texts` is as [readSharedStrings] returns it. `raw` holds, by index, each
+/// `<si>` that has a child other than its `<t>`, as written: runs (`<r>`),
+/// phonetic runs (`<rPh>`), phonetic properties (`<phoneticPr>`), an
+/// `<extLst>` or an element of another namespace; and each whose text
+/// decodes to a character XML forbids (`_x0000_`), which could not be
+/// written back as text. `root` is the `<sst>` start tag (`null` when the
+/// part has no root element) and `trailing` the root's children other than
+/// `<si>`, as written and in order, so the model can write the part back
+/// with nothing lost.
+typedef SharedStringsRead = ({
+  List<String> texts,
+  Map<int, OpaqueXml> raw,
+  XmlRoot? root,
+  List<OpaqueXml> trailing,
+});
+
+/// Reads the shared strings of [part] in [package] like [readSharedStrings],
+/// and keeps each `<si>` that is more than text as written (see
+/// [SharedStringsRead]). The limits and failures are those of
+/// [readSharedStrings].
+SharedStringsRead readSharedStringsRaw(
+  PackageReader package,
+  String part,
+  XlsxReadLimits limits,
+) {
   return package.guardXml(part, () {
-    final XmlPullReader reader = package.openXml(part);
-    final List<String> strings = <String>[];
-    while (reader.next()) {
-      if (reader.eventType != XmlEventType.startElement ||
-          reader.depth != 2 ||
-          reader.localName != 'si' ||
-          reader.namespaceUri != Ns.main) {
+    final _Walked walked = _walk(package, part, limits, keep: true);
+    final Map<int, OpaqueXml> raw = <int, OpaqueXml>{};
+    if (walked.rich.isNotEmpty) {
+      // A second pass captures the kept items: whether an item is rich is
+      // known only after it has been read.
+      final XmlPullReader reader = package.openXml(part);
+      int index = 0;
+      while (reader.next()) {
+        if (!_isSi(reader)) continue;
+        if (walked.rich.contains(index)) {
+          raw[index] = OpaqueXml.capture(reader);
+        } else {
+          reader.skip();
+        }
+        index++;
+      }
+    }
+    return (
+      texts: walked.texts,
+      raw: raw,
+      root: walked.root,
+      trailing: walked.trailing,
+    );
+  });
+}
+
+bool _isSi(XmlPullReader reader) =>
+    reader.eventType == XmlEventType.startElement &&
+    reader.depth == 2 &&
+    reader.localName == 'si' &&
+    reader.namespaceUri == Ns.main;
+
+/// What one pass over the table gives.
+typedef _Walked = ({
+  List<String> texts,
+  Set<int> rich,
+  XmlRoot? root,
+  List<OpaqueXml> trailing,
+});
+
+/// The texts of the table and the indexes of its rich items, read once;
+/// with [keep], also the root's start tag and its children other than
+/// `<si>`, and items whose text holds a character XML forbids count as
+/// rich.
+_Walked _walk(
+  PackageReader package,
+  String part,
+  XlsxReadLimits limits, {
+  bool keep = false,
+}) {
+  final XmlPullReader reader = package.openXml(part);
+  final List<String> strings = <String>[];
+  final Set<int> rich = <int>{};
+  XmlRoot? root;
+  final List<OpaqueXml> trailing = <OpaqueXml>[];
+  while (reader.next()) {
+    if (keep && reader.eventType == XmlEventType.startElement) {
+      if (reader.depth == 1) {
+        root = XmlRoot.capture(reader);
         continue;
       }
-      if (strings.length >= limits.maxSharedStrings) {
-        throw XlsxReadException(
-          XlsxReadFailure.limitExceeded,
-          'Limit maxSharedStrings (${limits.maxSharedStrings}) exceeded.',
-          part: part,
-        );
+      if (reader.depth == 2 && !_isSi(reader)) {
+        trailing.add(OpaqueXml.capture(reader));
+        continue;
       }
-      final String? text = readStringItem(reader, limits.maxTextLength);
-      if (text == null) {
-        throw XlsxReadException(
-          XlsxReadFailure.limitExceeded,
-          'Limit maxTextLength (${limits.maxTextLength}) exceeded by shared '
-          'string ${strings.length}.',
-          part: part,
-        );
-      }
-      strings.add(text);
     }
-    return strings;
-  });
+    if (!_isSi(reader)) continue;
+    if (strings.length >= limits.maxSharedStrings) {
+      throw XlsxReadException(
+        XlsxReadFailure.limitExceeded,
+        'Limit maxSharedStrings (${limits.maxSharedStrings}) exceeded.',
+        part: part,
+      );
+    }
+    final _Rich flag = _Rich();
+    final String? text = _readItem(reader, limits.maxTextLength, flag);
+    if (text == null) {
+      throw XlsxReadException(
+        XlsxReadFailure.limitExceeded,
+        'Limit maxTextLength (${limits.maxTextLength}) exceeded by shared '
+        'string ${strings.length}.',
+        part: part,
+      );
+    }
+    // Text that decodes to a character XML forbids (`_x0000_`) cannot be
+    // written as text again, so the model keeps that item as written too.
+    if (flag.seen || (keep && scrubXmlText(text).removed > 0)) {
+      rich.add(strings.length);
+    }
+    strings.add(text);
+  }
+  return (texts: strings, rich: rich, root: root, trailing: trailing);
+}
+
+/// Set when an item has a child other than its `<t>`, or an attribute the
+/// model would not write back.
+final class _Rich {
+  bool seen = false;
 }
 
 /// The text of the string item the reader is on, a shared string's `<si>`
@@ -78,7 +178,12 @@ List<String> readSharedStrings(
 ///
 /// Returns `null` as soon as the text passes [maxLength] characters;
 /// otherwise leaves the reader on the end of the item.
-String? readStringItem(XmlPullReader reader, int maxLength) {
+String? readStringItem(XmlPullReader reader, int maxLength) =>
+    _readItem(reader, maxLength, null);
+
+String? _readItem(XmlPullReader reader, int maxLength, _Rich? rich) {
+  // An attribute on the item makes it more than text too.
+  if (rich != null && _hasAttributes(reader)) rich.seen = true;
   if (reader.isEmptyElement) return '';
   final StringBuffer buffer = StringBuffer();
   final int siDepth = reader.depth;
@@ -88,17 +193,41 @@ String? readStringItem(XmlPullReader reader, int maxLength) {
     }
     if (reader.eventType != XmlEventType.startElement) continue;
     if (reader.depth != siDepth + 1 || reader.namespaceUri != Ns.main) {
+      // A child the text model does not know (another namespace's element)
+      // makes the item more than text, so the model keeps it as written.
+      if (reader.depth == siDepth + 1) rich?.seen = true;
       reader.skip();
     } else if (reader.localName == 't') {
+      // The model writes `xml:space` itself; any other attribute is kept.
+      if (rich != null && _hasAttributes(reader, except: 'xml:space')) {
+        rich.seen = true;
+      }
       buffer.write(_readT(reader));
     } else if (reader.localName == 'r') {
+      rich?.seen = true;
       _readRun(reader, buffer, siDepth + 1);
     } else {
+      // Phonetic runs and properties, or any other child (an `extLst`):
+      // not part of the text, kept by the model with the item.
+      rich?.seen = true;
       reader.skip();
     }
     if (buffer.length > maxLength) return null;
   }
   return buffer.toString();
+}
+
+/// Whether the start element [reader] is on has an attribute other than a
+/// namespace declaration and [except] (a qualified name).
+bool _hasAttributes(XmlPullReader reader, {String? except}) {
+  for (int i = 0; i < reader.attributeCount; i++) {
+    final String name = reader.attributeQualifiedName(i);
+    if (name == 'xmlns' || name.startsWith('xmlns:') || name == except) {
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
 
 /// Appends the decoded `<t>` of the `<r>` the reader is on to [buffer],

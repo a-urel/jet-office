@@ -70,4 +70,29 @@ void main() {
     expect(() => dateSerial(300000, 1, 0), throwsArgumentError);
     expect(() => dateSerial(300000, 4, 31), throwsArgumentError);
   });
+
+  test('1904 serials', () {
+    // The 1904 system counts from 1904-01-01 (serial 0), 1,462 days after
+    // the 1900 system's origin.
+    expect(dateTimeSerial(DateTime.utc(1904, 1, 2), date1904: true), 1);
+    expect(dateTimeSerial(DateTime.utc(1904), date1904: true), 0);
+    final double serial1900 = dateTimeSerial(DateTime.utc(2026, 11, 2))!;
+    expect(
+      dateTimeSerial(DateTime.utc(2026, 11, 2), date1904: true),
+      serial1900 - 1462,
+    );
+    expect(
+      dateTimeSerial(DateTime.utc(2026, 11, 2, 12), date1904: true),
+      serial1900 - 1462 + 0.5,
+    );
+    expect(
+      dateSerial(2026, 11, 2, date1904: true),
+      dateSerial(2026, 11, 2)! - 1462,
+    );
+    expect(dateSerial(9999, 12, 31, date1904: true), 2958465 - 1462);
+    expect(dateTimeSerial(DateTime.utc(1903, 12, 31), date1904: true), isNull);
+    expect(dateSerial(1903, 12, 31, date1904: true), isNull);
+    expect(dateSerial(1900, 3, 1, date1904: true), isNull);
+    expect(() => dateSerial(1903, 2, 29, date1904: true), throwsArgumentError);
+  });
 }

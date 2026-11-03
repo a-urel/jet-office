@@ -1,21 +1,79 @@
 /// A relationships part (`.rels`).
 ///
 /// Ported from quds_office_engine `lib/src/opc/relationships.dart` at commit 15c5d29.
-/// Ported: `RelationshipCollection` and its `toXml`, as the write side only (no
-/// parsing, no lookup). What changed: ids are assigned by [Relationships.add]
-/// as `rId1`, `rId2`, ... in call order unless the caller gives one, a
-/// relationship can be external (a hyperlink), and the part is written to an
-/// `XmlWriter`.
+/// Ported: `RelationshipCollection` and its `toXml`. What changed: ids are
+/// assigned by [Relationships.add] as `rId1`, `rId2`, ... in call order unless
+/// the caller gives one, a relationship can be external (a hyperlink), and the
+/// part is written to an `XmlWriter`. New, not from Quds: the read side
+/// ([Relationships.parse], [Relationships.items],
+/// [Relationships.removeWhere]), which keeps every
+/// relationship of a file, whatever its type.
 library;
 
+import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'ooxml.dart';
 
+/// One relationship of a source part, as the file states it.
+///
+/// `target` is not resolved: it is relative to the source part (or absolute
+/// when it starts with `/`), or an outside address when `external`.
+typedef OpcRelationship = ({
+  String id,
+  String type,
+  String target,
+  bool external,
+});
+
 /// Collects the relationships of one source part and writes its `.rels` part.
 final class Relationships {
-  final List<({String id, String type, String target, bool external})> _items =
-      <({String id, String type, String target, bool external})>[];
+  /// An empty collection, for writing a new part.
+  Relationships();
+
+  /// Reads a `.rels` part from [reader], keeping every relationship.
+  ///
+  /// A relationship without `Id`, `Type` or `Target` is skipped. The mode
+  /// `External` (in any case) makes it external. Ids are kept as read, even
+  /// when a file repeats one. Throws what [reader] throws.
+  factory Relationships.parse(XmlPullReader reader) {
+    final Relationships rels = Relationships();
+    while (reader.next()) {
+      if (reader.eventType != XmlEventType.startElement ||
+          reader.localName != 'Relationship') {
+        continue;
+      }
+      final String? id = reader.getAttribute('Id');
+      final String? type = reader.getAttribute('Type');
+      final String? target = reader.getAttribute('Target');
+      if (id == null || type == null || target == null) continue;
+      final String? mode = reader.getAttribute('TargetMode');
+      rels._ids.add(id);
+      rels._items.add((
+        id: id,
+        type: type,
+        target: target,
+        external: mode != null && mode.toLowerCase() == 'external',
+      ));
+    }
+    return rels;
+  }
+
+  final List<OpcRelationship> _items = <OpcRelationship>[];
   final Set<String> _ids = <String>{};
+
+  /// The relationships, in the order they were read or added.
+  List<OpcRelationship> get items => List<OpcRelationship>.unmodifiable(_items);
+
+  /// Whether a relationship uses [id].
+  bool hasId(String id) => _ids.contains(id);
+
+  /// Removes every relationship for which [test] is true.
+  void removeWhere(bool Function(OpcRelationship) test) {
+    _items.removeWhere(test);
+    _ids
+      ..clear()
+      ..addAll(_items.map((OpcRelationship r) => r.id));
+  }
 
   /// Adds a relationship of [type] to [target] and returns its id.
   ///
