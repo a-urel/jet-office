@@ -25,6 +25,7 @@ import 'dart:typed_data';
 
 import '../../common/read_guard.dart';
 import '../../common/zip_limits.dart';
+import '../../opc/ooxml.dart' show RelType;
 import '../../opc/package.dart';
 import '../../xml/xml_pull_reader.dart';
 import 'read_exception.dart';
@@ -33,8 +34,6 @@ import 'read_limits.dart';
 const String _officeDocumentType =
     'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
     'officeDocument';
-const String _strictOfficeDocumentType =
-    'http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument';
 const String _xlsbType =
     'application/vnd.ms-excel.sheet.binary.macroEnabled.main';
 const List<String> _workbookTypes = <String>[
@@ -161,7 +160,7 @@ final class PackageReader {
   String _findWorkbook() {
     String? found;
     for (final PartRelationship rel in relationshipsOf('')) {
-      if (rel.type == _strictOfficeDocumentType) {
+      if (rel.type == RelType.officeDocumentStrict) {
         throw strictUnsupported();
       }
       if (rel.type == _officeDocumentType && hasPart(rel.target)) {
