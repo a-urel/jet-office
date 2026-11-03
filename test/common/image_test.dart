@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/common/image.dart' show checkImage;
 import 'package:jet_office/src/opc/ooxml.dart';
-import 'package:jet_office/src/xlsx/image.dart' show checkImage;
 import 'package:test/test.dart';
 
 import '../fixtures/m4_fixtures.dart' show jpeg3x5, png4x2;
@@ -77,28 +77,28 @@ Matcher _imageError(String message) => throwsA(
 );
 
 void main() {
-  group('XlsxImageFormat', () {
+  group('OfficeImageFormat', () {
     test('names the file extension and the content type', () {
-      expect(XlsxImageFormat.png.extension, 'png');
-      expect(XlsxImageFormat.png.contentType, ContentType.png);
-      expect(XlsxImageFormat.jpeg.extension, 'jpeg');
-      expect(XlsxImageFormat.jpeg.contentType, ContentType.jpeg);
+      expect(OfficeImageFormat.png.extension, 'png');
+      expect(OfficeImageFormat.png.contentType, ContentType.png);
+      expect(OfficeImageFormat.jpeg.extension, 'jpeg');
+      expect(OfficeImageFormat.jpeg.contentType, ContentType.jpeg);
       expect(ContentType.png, 'image/png');
       expect(ContentType.jpeg, 'image/jpeg');
     });
   });
 
-  group('XlsxImage', () {
+  group('OfficeImage', () {
     test('holds the bytes as given, not a copy', () {
-      expect(identical(XlsxImage(png4x2).bytes, png4x2), isTrue);
+      expect(identical(OfficeImage(png4x2).bytes, png4x2), isTrue);
     });
 
     test('sniffs PNG and JPEG from the signature', () {
-      expect(XlsxImage(png4x2).format, XlsxImageFormat.png);
-      expect(XlsxImage(jpeg3x5).format, XlsxImageFormat.jpeg);
-      expect(XlsxImage(_progressive6x4).format, XlsxImageFormat.jpeg);
+      expect(OfficeImage(png4x2).format, OfficeImageFormat.png);
+      expect(OfficeImage(jpeg3x5).format, OfficeImageFormat.jpeg);
+      expect(OfficeImage(_progressive6x4).format, OfficeImageFormat.jpeg);
       expect(
-        XlsxImage(
+        OfficeImage(
           Uint8List.fromList(<int>[
             0x89,
             0x50,
@@ -110,11 +110,11 @@ void main() {
             0x0A,
           ]),
         ).format,
-        XlsxImageFormat.png,
+        OfficeImageFormat.png,
       );
       expect(
-        XlsxImage(Uint8List.fromList(<int>[0xFF, 0xD8, 0xFF])).format,
-        XlsxImageFormat.jpeg,
+        OfficeImage(Uint8List.fromList(<int>[0xFF, 0xD8, 0xFF])).format,
+        OfficeImageFormat.jpeg,
       );
     });
 
@@ -129,43 +129,43 @@ void main() {
         <int>[...ascii.encode('RIFF'), 0, 0, 0, 0, ...ascii.encode('WEBP')],
       ];
       for (final List<int> bytes in others) {
-        expect(XlsxImage(Uint8List.fromList(bytes)).format, isNull);
+        expect(OfficeImage(Uint8List.fromList(bytes)).format, isNull);
       }
     });
 
     test('== compares the bytes', () {
-      final XlsxImage image = XlsxImage(png4x2);
-      expect(image, XlsxImage(Uint8List.fromList(png4x2)));
-      expect(image.hashCode, XlsxImage(Uint8List.fromList(png4x2)).hashCode);
-      expect(image, isNot(XlsxImage(jpeg3x5)));
+      final OfficeImage image = OfficeImage(png4x2);
+      expect(image, OfficeImage(Uint8List.fromList(png4x2)));
+      expect(image.hashCode, OfficeImage(Uint8List.fromList(png4x2)).hashCode);
+      expect(image, isNot(OfficeImage(jpeg3x5)));
       expect(
         image,
-        isNot(XlsxImage(_edited(png4x2, (Uint8List b) => b[80] ^= 1))),
+        isNot(OfficeImage(_edited(png4x2, (Uint8List b) => b[80] ^= 1))),
       );
-      expect(image, isNot(XlsxImage(Uint8List.sublistView(png4x2, 0, 86))));
+      expect(image, isNot(OfficeImage(Uint8List.sublistView(png4x2, 0, 86))));
     });
 
     test('toString shows the format and the length, not the bytes', () {
-      expect(XlsxImage(png4x2).toString(), 'XlsxImage(png, 87 bytes)');
-      expect(XlsxImage(jpeg3x5).toString(), 'XlsxImage(jpeg, 852 bytes)');
+      expect(OfficeImage(png4x2).toString(), 'OfficeImage(png, 87 bytes)');
+      expect(OfficeImage(jpeg3x5).toString(), 'OfficeImage(jpeg, 852 bytes)');
       expect(
-        XlsxImage(Uint8List.fromList(ascii.encode('GIF89a'))).toString(),
-        'XlsxImage(unknown, 6 bytes)',
+        OfficeImage(Uint8List.fromList(ascii.encode('GIF89a'))).toString(),
+        'OfficeImage(unknown, 6 bytes)',
       );
     });
   });
 
   group('checkImage', () {
     test('reads the size of a PNG from its IHDR', () {
-      expect(checkImage(XlsxImage(png4x2)), (width: 4, height: 2));
+      expect(checkImage(OfficeImage(png4x2)), (width: 4, height: 2));
     });
 
     test('reads the size of a baseline JPEG from its SOF0', () {
-      expect(checkImage(XlsxImage(jpeg3x5)), (width: 3, height: 5));
+      expect(checkImage(OfficeImage(jpeg3x5)), (width: 3, height: 5));
     });
 
     test('reads the size of a progressive JPEG from its SOF2', () {
-      expect(checkImage(XlsxImage(_progressive6x4)), (width: 6, height: 4));
+      expect(checkImage(OfficeImage(_progressive6x4)), (width: 6, height: 4));
     });
 
     test('reads the size from SOF0, SOF1 and SOF2', () {
@@ -175,7 +175,7 @@ void main() {
           jpeg3x5,
           (Uint8List b) => b[sof + 1] = marker,
         );
-        expect(checkImage(XlsxImage(bytes)), (width: 3, height: 5));
+        expect(checkImage(OfficeImage(bytes)), (width: 3, height: 5));
       }
     });
 
@@ -191,7 +191,7 @@ void main() {
           (Uint8List b) => b[sof + 1] = marker,
         );
         expect(
-          () => checkImage(XlsxImage(bytes)),
+          () => checkImage(OfficeImage(bytes)),
           _imageError('SOF${marker - 0xC0}'),
           reason: 'marker ${marker.toRadixString(16)}',
         );
@@ -208,7 +208,7 @@ void main() {
           b[sof + 3] = length;
         });
         expect(
-          () => checkImage(XlsxImage(bytes)),
+          () => checkImage(OfficeImage(bytes)),
           _imageError(
             'frame header at byte $sof of the JPEG has the length '
             '$length, below 8',
@@ -225,7 +225,7 @@ void main() {
         0xFF, 0xD8, 0xFF, 0x01, 0xFF, 0xD0, 0xFF, 0xFF, //
         ...Uint8List.sublistView(jpeg3x5, 2),
       ]);
-      expect(checkImage(XlsxImage(bytes)), (width: 3, height: 5));
+      expect(checkImage(OfficeImage(bytes)), (width: 3, height: 5));
     });
 
     test('skips the segments that are not frame headers', () {
@@ -238,7 +238,7 @@ void main() {
           (Uint8List b) => b[sof + 1] = marker,
         );
         expect(
-          () => checkImage(XlsxImage(bytes)),
+          () => checkImage(OfficeImage(bytes)),
           _imageError('no frame header'),
           reason: 'marker ${marker.toRadixString(16)}',
         );
@@ -247,12 +247,13 @@ void main() {
 
     test('refuses a GIF and a WebP', () {
       expect(
-        () => checkImage(XlsxImage(Uint8List.fromList(ascii.encode('GIF89a')))),
+        () =>
+            checkImage(OfficeImage(Uint8List.fromList(ascii.encode('GIF89a')))),
         _imageError('neither a PNG nor a JPEG'),
       );
       expect(
         () => checkImage(
-          XlsxImage(
+          OfficeImage(
             Uint8List.fromList(<int>[
               ...ascii.encode('RIFF'),
               0x24,
@@ -269,14 +270,14 @@ void main() {
 
     test('refuses a PNG cut short before its size', () {
       expect(
-        () => checkImage(XlsxImage(Uint8List.sublistView(png4x2, 0, 20))),
+        () => checkImage(OfficeImage(Uint8List.sublistView(png4x2, 0, 20))),
         _imageError('cut short'),
       );
       expect(
-        () => checkImage(XlsxImage(Uint8List.sublistView(png4x2, 0, 23))),
+        () => checkImage(OfficeImage(Uint8List.sublistView(png4x2, 0, 23))),
         _imageError('cut short'),
       );
-      expect(checkImage(XlsxImage(Uint8List.sublistView(png4x2, 0, 24))), (
+      expect(checkImage(OfficeImage(Uint8List.sublistView(png4x2, 0, 24))), (
         width: 4,
         height: 2,
       ));
@@ -285,7 +286,7 @@ void main() {
     test('refuses a PNG whose first chunk is not IHDR', () {
       expect(
         () => checkImage(
-          XlsxImage(_edited(png4x2, (Uint8List b) => b[15] = 0x58)),
+          OfficeImage(_edited(png4x2, (Uint8List b) => b[15] = 0x58)),
         ),
         _imageError('IHDR'),
       );
@@ -293,13 +294,15 @@ void main() {
 
     test('refuses a PNG of width or height 0', () {
       expect(
-        () =>
-            checkImage(XlsxImage(_edited(png4x2, (Uint8List b) => b[19] = 0))),
+        () => checkImage(
+          OfficeImage(_edited(png4x2, (Uint8List b) => b[19] = 0)),
+        ),
         _imageError('0 × 2'),
       );
       expect(
-        () =>
-            checkImage(XlsxImage(_edited(png4x2, (Uint8List b) => b[23] = 0))),
+        () => checkImage(
+          OfficeImage(_edited(png4x2, (Uint8List b) => b[23] = 0)),
+        ),
         _imageError('4 × 0'),
       );
     });
@@ -310,13 +313,13 @@ void main() {
         0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xD9, //
       ]);
       expect(
-        () => checkImage(XlsxImage(noFrame)),
+        () => checkImage(OfficeImage(noFrame)),
         _imageError('no frame header'),
       );
       // The baseline JPEG cut right before its SOF0.
       expect(
         () => checkImage(
-          XlsxImage(Uint8List.sublistView(jpeg3x5, 0, _sof0Offset())),
+          OfficeImage(Uint8List.sublistView(jpeg3x5, 0, _sof0Offset())),
         ),
         _imageError('no frame header'),
       );
@@ -325,7 +328,7 @@ void main() {
         0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x02, 0x00, 0x00, //
       ]);
       expect(
-        () => checkImage(XlsxImage(scanFirst)),
+        () => checkImage(OfficeImage(scanFirst)),
         _imageError('no frame header'),
       );
     });
@@ -334,13 +337,13 @@ void main() {
       final int sof = _sof0Offset();
       for (final int end in <int>[3, 5, 30, sof + 1, sof + 3, sof + 8]) {
         expect(
-          () => checkImage(XlsxImage(Uint8List.sublistView(jpeg3x5, 0, end))),
+          () => checkImage(OfficeImage(Uint8List.sublistView(jpeg3x5, 0, end))),
           _imageError('cut short'),
           reason: 'cut at $end',
         );
       }
       expect(
-        checkImage(XlsxImage(Uint8List.sublistView(jpeg3x5, 0, sof + 9))),
+        checkImage(OfficeImage(Uint8List.sublistView(jpeg3x5, 0, sof + 9))),
         (width: 3, height: 5),
       );
     });
@@ -348,7 +351,7 @@ void main() {
     test('refuses a JPEG whose segments do not start with FF', () {
       // Byte 20 starts the second segment (FF E1), after the 16-byte APP0.
       final Uint8List bytes = _edited(jpeg3x5, (Uint8List b) => b[20] = 0x00);
-      expect(() => checkImage(XlsxImage(bytes)), _imageError('marker'));
+      expect(() => checkImage(OfficeImage(bytes)), _imageError('marker'));
     });
 
     test('refuses a JPEG segment length below 2', () {
@@ -356,20 +359,20 @@ void main() {
         b[4] = 0;
         b[5] = 1;
       });
-      expect(() => checkImage(XlsxImage(bytes)), _imageError('length'));
+      expect(() => checkImage(OfficeImage(bytes)), _imageError('length'));
     });
 
     test('refuses a JPEG of width or height 0', () {
       final int sof = _sof0Offset();
       expect(
         () => checkImage(
-          XlsxImage(_edited(jpeg3x5, (Uint8List b) => b[sof + 6] = 0)),
+          OfficeImage(_edited(jpeg3x5, (Uint8List b) => b[sof + 6] = 0)),
         ),
         _imageError('3 × 0'),
       );
       expect(
         () => checkImage(
-          XlsxImage(_edited(jpeg3x5, (Uint8List b) => b[sof + 8] = 0)),
+          OfficeImage(_edited(jpeg3x5, (Uint8List b) => b[sof + 8] = 0)),
         ),
         _imageError('0 × 5'),
       );

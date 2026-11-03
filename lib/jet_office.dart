@@ -103,6 +103,7 @@
 /// @docImport 'src/xlsx/xlsx_writer.dart';
 library;
 
+export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
 export 'src/xlsx/alignment.dart'
     show
@@ -164,7 +165,6 @@ export 'src/xlsx/format/formatted_value.dart'
 export 'src/xlsx/format/formatter.dart' show XlsxNumberFormatter;
 export 'src/xlsx/header_footer.dart' show XlsxHeaderFooter;
 export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
-export 'src/xlsx/image.dart' show XlsxImage, XlsxImageFormat;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/list_export.dart' show XlsxListColumn, XlsxListExport;
 export 'src/xlsx/model/xlsx_sheet.dart' show XlsxSheet;

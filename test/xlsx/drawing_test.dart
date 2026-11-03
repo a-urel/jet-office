@@ -20,7 +20,7 @@ const String _sheetRels1 = 'xl/worksheets/_rels/sheet1.xml.rels';
 
 /// The PNG at [row], [column] in its own size.
 XlsxPicture _png(int row, int column, {Uint8List? bytes}) => XlsxPicture(
-  XlsxImage(bytes ?? png4x2),
+  OfficeImage(bytes ?? png4x2),
   XlsxOneCellAnchor(XlsxAnchorPoint(row, column)),
 );
 
@@ -248,7 +248,7 @@ void main() {
     const XlsxAnchor anchor = XlsxOneCellAnchor(XlsxAnchorPoint(1, 1));
 
     test('takes an image, an anchor, a name and a description', () {
-      final XlsxImage image = XlsxImage(png4x2);
+      final OfficeImage image = OfficeImage(png4x2);
       final XlsxPicture picture = XlsxPicture(
         image,
         anchor,
@@ -266,13 +266,13 @@ void main() {
 
     test('== compares every field, the image by its bytes', () {
       final XlsxPicture picture = XlsxPicture(
-        XlsxImage(png4x2),
+        OfficeImage(png4x2),
         anchor,
         name: 'n',
         description: 'd',
       );
       final XlsxPicture copy = XlsxPicture(
-        XlsxImage(Uint8List.fromList(png4x2)),
+        OfficeImage(Uint8List.fromList(png4x2)),
         anchor,
         name: 'n',
         description: 'd',
@@ -282,14 +282,19 @@ void main() {
       expect(
         picture,
         isNot(
-          XlsxPicture(XlsxImage(jpeg3x5), anchor, name: 'n', description: 'd'),
+          XlsxPicture(
+            OfficeImage(jpeg3x5),
+            anchor,
+            name: 'n',
+            description: 'd',
+          ),
         ),
       );
       expect(
         picture,
         isNot(
           XlsxPicture(
-            XlsxImage(png4x2),
+            OfficeImage(png4x2),
             const XlsxOneCellAnchor(XlsxAnchorPoint(1, 2)),
             name: 'n',
             description: 'd',
@@ -298,20 +303,23 @@ void main() {
       );
       expect(
         picture,
-        isNot(XlsxPicture(XlsxImage(png4x2), anchor, description: 'd')),
+        isNot(XlsxPicture(OfficeImage(png4x2), anchor, description: 'd')),
       );
-      expect(picture, isNot(XlsxPicture(XlsxImage(png4x2), anchor, name: 'n')));
+      expect(
+        picture,
+        isNot(XlsxPicture(OfficeImage(png4x2), anchor, name: 'n')),
+      );
     });
 
     test('toString names every field', () {
       expect(
         XlsxPicture(
-          XlsxImage(png4x2),
+          OfficeImage(png4x2),
           anchor,
           name: 'Logo',
           description: 'd',
         ).toString(),
-        'XlsxPicture(XlsxImage(png, 87 bytes), XlsxOneCellAnchor('
+        'XlsxPicture(OfficeImage(png, 87 bytes), XlsxOneCellAnchor('
         'XlsxAnchorPoint(row: 1, column: 1, offsetX: 0, offsetY: 0), '
         'width: null, height: null), name: Logo, description: d)',
       );
@@ -321,23 +329,23 @@ void main() {
   group('WorkbookContext.mediaPartFor', () {
     test('numbers media in first-use order, by the identity of the bytes', () {
       final WorkbookContext context = WorkbookContext(ZipWriter());
-      expect(context.mediaPartFor(XlsxImage(png4x2)), (
+      expect(context.mediaPartFor(OfficeImage(png4x2)), (
         'xl/media/image1.png',
         true,
       ));
-      expect(context.mediaPartFor(XlsxImage(png4x2)), (
+      expect(context.mediaPartFor(OfficeImage(png4x2)), (
         'xl/media/image1.png',
         false,
       ));
-      expect(context.mediaPartFor(XlsxImage(jpeg3x5)), (
+      expect(context.mediaPartFor(OfficeImage(jpeg3x5)), (
         'xl/media/image2.jpeg',
         true,
       ));
-      expect(context.mediaPartFor(XlsxImage(Uint8List.fromList(png4x2))), (
+      expect(context.mediaPartFor(OfficeImage(Uint8List.fromList(png4x2))), (
         'xl/media/image3.png',
         true,
       ));
-      expect(context.mediaPartFor(XlsxImage(jpeg3x5)), (
+      expect(context.mediaPartFor(OfficeImage(jpeg3x5)), (
         'xl/media/image2.jpeg',
         false,
       ));
@@ -346,12 +354,12 @@ void main() {
     test('numbers each workbook on its own', () {
       final WorkbookContext first = WorkbookContext(ZipWriter());
       final WorkbookContext second = WorkbookContext(ZipWriter());
-      first.mediaPartFor(XlsxImage(jpeg3x5));
-      expect(second.mediaPartFor(XlsxImage(png4x2)), (
+      first.mediaPartFor(OfficeImage(jpeg3x5));
+      expect(second.mediaPartFor(OfficeImage(png4x2)), (
         'xl/media/image1.png',
         true,
       ));
-      expect(first.mediaPartFor(XlsxImage(png4x2)), (
+      expect(first.mediaPartFor(OfficeImage(png4x2)), (
         'xl/media/image2.png',
         true,
       ));
@@ -360,7 +368,7 @@ void main() {
     test('refuses bytes that are neither PNG nor JPEG, taking no number', () {
       final WorkbookContext context = WorkbookContext(ZipWriter());
       expect(
-        () => context.mediaPartFor(XlsxImage(Uint8List.fromList(<int>[1]))),
+        () => context.mediaPartFor(OfficeImage(Uint8List.fromList(<int>[1]))),
         throwsA(
           isA<ArgumentError>().having(
             (ArgumentError e) => e.name,
@@ -369,7 +377,10 @@ void main() {
           ),
         ),
       );
-      expect(context.mediaPartFor(XlsxImage(png4x2)).$1, 'xl/media/image1.png');
+      expect(
+        context.mediaPartFor(OfficeImage(png4x2)).$1,
+        'xl/media/image1.png',
+      );
     });
   });
 
@@ -418,7 +429,7 @@ void main() {
       final Map<String, String> parts = _parts(
         (XlsxSheetWriter s) => s.picture(
           XlsxPicture(
-            XlsxImage(png4x2),
+            OfficeImage(png4x2),
             const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
             name: 'Logo',
             description: 'The logo',
@@ -435,7 +446,7 @@ void main() {
       final Map<String, String> parts = _parts(
         (XlsxSheetWriter s) => s.picture(
           XlsxPicture(
-            XlsxImage(png4x2),
+            OfficeImage(png4x2),
             const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
             name: 'a & <b> "c"',
             description: '_x0041_\ttab',
@@ -455,7 +466,7 @@ void main() {
       final Map<String, String> parts = _parts(
         (XlsxSheetWriter s) => s.picture(
           XlsxPicture(
-            XlsxImage(png4x2),
+            OfficeImage(png4x2),
             const XlsxOneCellAnchor(XlsxAnchorPoint(1, 1), width: 8),
           ),
         ),
@@ -470,7 +481,7 @@ void main() {
           _parts(
             (XlsxSheetWriter s) => s.picture(
               XlsxPicture(
-                XlsxImage(jpeg3x5),
+                OfficeImage(jpeg3x5),
                 const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0), height: 10),
               ),
             ),
@@ -487,7 +498,7 @@ void main() {
           _parts(
             (XlsxSheetWriter s) => s.picture(
               XlsxPicture(
-                XlsxImage(jpeg3x5),
+                OfficeImage(jpeg3x5),
                 const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0), width: 60.5),
               ),
             ),
@@ -505,7 +516,7 @@ void main() {
           _parts(
             (XlsxSheetWriter s) => s.picture(
               XlsxPicture(
-                XlsxImage(png4x2),
+                OfficeImage(png4x2),
                 const XlsxOneCellAnchor(
                   XlsxAnchorPoint(0, 0),
                   width: 8,
@@ -523,7 +534,7 @@ void main() {
       final Map<String, String> parts = _parts(
         (XlsxSheetWriter s) => s.picture(
           XlsxPicture(
-            XlsxImage(png4x2),
+            OfficeImage(png4x2),
             const XlsxOneCellAnchor(
               XlsxAnchorPoint(3, 2, offsetX: 2, offsetY: 0.5),
             ),
@@ -540,7 +551,7 @@ void main() {
       final Map<String, String> parts = _parts(
         (XlsxSheetWriter s) => s.picture(
           XlsxPicture(
-            XlsxImage(png4x2),
+            OfficeImage(png4x2),
             XlsxTwoCellAnchor.range(
               const XlsxRange(1, 1, 4, 3),
               resize: XlsxPictureResize.move,
@@ -569,7 +580,7 @@ void main() {
         final Map<String, String> parts = _parts(
           (XlsxSheetWriter s) => s.picture(
             XlsxPicture(
-              XlsxImage(png4x2),
+              OfficeImage(png4x2),
               XlsxTwoCellAnchor(
                 const XlsxAnchorPoint(0, 0, offsetX: 1, offsetY: 2),
                 const XlsxAnchorPoint(0, 1, offsetX: 3, offsetY: 4),
@@ -594,7 +605,7 @@ void main() {
           ..picture(_png(0, 0))
           ..picture(
             XlsxPicture(
-              XlsxImage(png4x2),
+              OfficeImage(png4x2),
               const XlsxOneCellAnchor(XlsxAnchorPoint(0, 1)),
               name: 'Logo',
             ),
@@ -616,7 +627,7 @@ void main() {
           ..picture(_png(0, 0))
           ..picture(
             XlsxPicture(
-              XlsxImage(jpeg3x5),
+              OfficeImage(jpeg3x5),
               const XlsxOneCellAnchor(XlsxAnchorPoint(0, 1)),
             ),
           )
@@ -727,7 +738,7 @@ void main() {
             ..picture(_png(0, 1))
             ..picture(
               XlsxPicture(
-                XlsxImage(jpeg3x5),
+                OfficeImage(jpeg3x5),
                 const XlsxOneCellAnchor(XlsxAnchorPoint(0, 2)),
               ),
             )
@@ -758,7 +769,7 @@ void main() {
           .addSheet('C')
           .picture(
             XlsxPicture(
-              XlsxImage(jpeg3x5),
+              OfficeImage(jpeg3x5),
               const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
             ),
           );
@@ -879,12 +890,12 @@ void main() {
       double? height,
       Uint8List? bytes,
     }) => XlsxPicture(
-      XlsxImage(bytes ?? png4x2),
+      OfficeImage(bytes ?? png4x2),
       XlsxOneCellAnchor(from, width: width, height: height),
     );
 
     XlsxPicture twoCell(XlsxAnchorPoint from, XlsxAnchorPoint to) =>
-        XlsxPicture(XlsxImage(png4x2), XlsxTwoCellAnchor(from, to));
+        XlsxPicture(OfficeImage(png4x2), XlsxTwoCellAnchor(from, to));
 
     const List<double> notFinite = <double>[
       double.nan,
@@ -1110,14 +1121,14 @@ void main() {
       ]) {
         expect(
           () => sheet.picture(
-            XlsxPicture(XlsxImage(png4x2), XlsxTwoCellAnchor.range(range)),
+            XlsxPicture(OfficeImage(png4x2), XlsxTwoCellAnchor.range(range)),
           ),
           argumentError('to'),
         );
       }
       sheet.picture(
         XlsxPicture(
-          XlsxImage(png4x2),
+          OfficeImage(png4x2),
           XlsxTwoCellAnchor.range(const XlsxRange(1048574, 16382)),
         ),
       );
@@ -1132,13 +1143,14 @@ void main() {
       const XlsxAnchor anchor = XlsxOneCellAnchor(XlsxAnchorPoint(0, 0));
       for (final String bad in <String>['a\u0001', 'b￾', 'c\uD800']) {
         expect(
-          () =>
-              sheet.picture(XlsxPicture(XlsxImage(png4x2), anchor, name: bad)),
+          () => sheet.picture(
+            XlsxPicture(OfficeImage(png4x2), anchor, name: bad),
+          ),
           argumentError('name'),
         );
         expect(
           () => sheet.picture(
-            XlsxPicture(XlsxImage(png4x2), anchor, description: bad),
+            XlsxPicture(OfficeImage(png4x2), anchor, description: bad),
           ),
           argumentError('description'),
         );
@@ -1158,7 +1170,7 @@ void main() {
       expect(
         () => sheet.picture(
           XlsxPicture(
-            XlsxImage(refused),
+            OfficeImage(refused),
             const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
             description: '\u0001',
           ),

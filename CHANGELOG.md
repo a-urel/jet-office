@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Renamed the format-neutral public types, with no aliases: `XlsxLocale` is
+  now `OfficeLocale`, `XlsxImage` is now `OfficeImage` and `XlsxImageFormat`
+  is now `OfficeImageFormat`. Update imports and uses; nothing else changed.
+
 ## 0.1.0-dev.1 (unreleased)
 
 Phase 1, the XLSX writer, and phase 2, the XLSX reader. Not published yet.

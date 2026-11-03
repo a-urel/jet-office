@@ -10,8 +10,8 @@
 /// behind `XlsxSheetBuilder.addPicture`. What changed: pictures are value
 /// types checked when added (the cell inside the sheet, offsets and sizes
 /// finite and positive, the bytes a PNG or a JPEG whose size can be read,
-/// see `image.dart`); a picture is anchored to one cell or, new, to two
-/// (`twoCellAnchor` with `editAs`); the markup goes through `XmlWriter`
+/// see `../common/image.dart`); a picture is anchored to one cell or, new,
+/// to two (`twoCellAnchor` with `editAs`); the markup goes through `XmlWriter`
 /// (the builder concatenated strings), with the name and description as
 /// given; `cNvPr` ids count 2, 3, … per drawing; and a media part is shared
 /// by every picture of the workbook that uses the same bytes. Quds defects
@@ -24,12 +24,12 @@
 /// or description, so its pictures carried no `descr`.
 library;
 
+import '../common/image.dart';
 import '../opc/ooxml.dart';
 import '../opc/relationships.dart';
 import '../xml/xml_escape.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
-import 'image.dart';
 import 'limits.dart';
 import 'range.dart';
 
@@ -203,7 +203,7 @@ enum XlsxPictureResize {
 ///
 /// ```dart
 /// sheet.picture(XlsxPicture(
-///   XlsxImage(logoPngBytes),
+///   OfficeImage(logoPngBytes),
 ///   const XlsxOneCellAnchor(XlsxAnchorPoint(0, 3), width: 120),
 ///   description: 'Company logo',
 /// ));
@@ -214,7 +214,7 @@ final class XlsxPicture {
   const XlsxPicture(this.image, this.anchor, {this.name, this.description});
 
   /// The PNG or JPEG the picture shows.
-  final XlsxImage image;
+  final OfficeImage image;
 
   /// Where the picture sits and how large it is.
   final XlsxAnchor anchor;
@@ -257,8 +257,8 @@ int pixelsToEmu(double pixels) => (pixels * emuPerPixel).round();
 /// the format of its bytes, its anchor, the image's own size in pixels,
 /// its name (the default filled in) and its description.
 typedef WorksheetPicture = ({
-  XlsxImage image,
-  XlsxImageFormat format,
+  OfficeImage image,
+  OfficeImageFormat format,
   XlsxAnchor anchor,
   ({int width, int height}) size,
   String name,
@@ -297,7 +297,7 @@ const int maxExtentEmu = 2147483647;
 ///   forbids.
 WorksheetPicture checkPicture(String sheet, int index, XlsxPicture picture) {
   final String which = 'Picture $index on sheet "$sheet"';
-  final XlsxImage image = picture.image;
+  final OfficeImage image = picture.image;
   final ({int width, int height}) size;
   try {
     size = checkImage(image);

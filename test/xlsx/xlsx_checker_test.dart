@@ -2310,13 +2310,13 @@ void main() {
         ..row(<Object?>['x'])
         ..picture(
           XlsxPicture(
-            XlsxImage(png4x2),
+            OfficeImage(png4x2),
             const XlsxOneCellAnchor(XlsxAnchorPoint(1, 1)),
           ),
         )
         ..picture(
           XlsxPicture(
-            XlsxImage(jpeg3x5),
+            OfficeImage(jpeg3x5),
             XlsxTwoCellAnchor.range(const XlsxRange(5, 1, 9, 3)),
           ),
         );
@@ -2324,7 +2324,7 @@ void main() {
           .addSheet('Q')
           .picture(
             XlsxPicture(
-              XlsxImage(png4x2),
+              OfficeImage(png4x2),
               const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
             ),
           );

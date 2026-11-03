@@ -284,19 +284,19 @@ Fixture _images() => Fixture(
       ..row(<Object?>['PNG over B6:D10'])
       ..picture(
         XlsxPicture(
-          XlsxImage(png4x2),
+          OfficeImage(png4x2),
           const XlsxOneCellAnchor(XlsxAnchorPoint(1, 1)),
         ),
       )
       ..picture(
         XlsxPicture(
-          XlsxImage(jpeg3x5),
+          OfficeImage(jpeg3x5),
           const XlsxOneCellAnchor(XlsxAnchorPoint(1, 4), width: 60),
         ),
       )
       ..picture(
         XlsxPicture(
-          XlsxImage(png4x2),
+          OfficeImage(png4x2),
           XlsxTwoCellAnchor.range(
             XlsxRange.parse('B6:D10'),
             resize: XlsxPictureResize.move,
@@ -309,7 +309,7 @@ Fixture _images() => Fixture(
       ..row(<Object?>['The same PNG at A1'])
       ..picture(
         XlsxPicture(
-          XlsxImage(png4x2),
+          OfficeImage(png4x2),
           const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
         ),
       );
@@ -456,7 +456,7 @@ Fixture _objects() => Fixture(
       ..row(<Object?>['Nut', 25, null, 'N-1', 0.1])
       ..picture(
         XlsxPicture(
-          XlsxImage(png4x2),
+          OfficeImage(png4x2),
           const XlsxOneCellAnchor(XlsxAnchorPoint(1, 6)),
         ),
       );
