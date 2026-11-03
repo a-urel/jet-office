@@ -20,8 +20,15 @@ import 'edit_sink.dart';
 import 'inlines.dart';
 
 /// One child of a body.
+///
+/// A block is in at most one container at a time: inserting one that is
+/// already in a body throws [StateError]; remove it there first.
 sealed class DocxBlock {
   DocxBlock._();
+
+  /// The container the block is in, such as a document's body, or `null`
+  /// while it is in none.
+  Object? _container;
 }
 
 /// A paragraph, `w:p`.
@@ -66,14 +73,12 @@ final class DocxParagraph extends DocxBlock {
 
   /// The id of the paragraph's style (`w:pStyle`), or `null` for none.
   ///
-  /// Setting the empty string throws [ArgumentError]; set `null` to remove
-  /// the style.
+  /// Setting the empty string, or an id holding a character XML forbids,
+  /// throws [ArgumentError]; set `null` to remove the style.
   String? get style => _style;
 
   set style(String? value) {
-    if (value != null && value.isEmpty) {
-      throw ArgumentError.value(value, 'style', 'Must not be empty');
-    }
+    checkStyleId(value);
     final String? previous = _style;
     if (value == previous) {
       return;
@@ -200,6 +205,15 @@ void replaceInlineAt(DocxParagraph paragraph, int index, DocxInline inline) {
   setParagraphOf(previous, null);
   setParagraphOf(inline, paragraph);
   paragraph._sink.inlineReplaced(paragraph, index, previous, inline);
+}
+
+/// The container [block] is in, such as a document's body, or `null`.
+Object? blockContainerOf(DocxBlock block) => block._container;
+
+/// Records that [block] is now in [container] (`null`: in none). Only the
+/// block primitives call it.
+void setBlockContainerOf(DocxBlock block, Object? container) {
+  block._container = container;
 }
 
 /// An opaque block for the element [xml] captured.

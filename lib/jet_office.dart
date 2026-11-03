@@ -79,10 +79,34 @@
 /// as written, so an opened file comes back with only the cells that were
 /// set changed.
 ///
+/// [DocxDocument] is the Word document model. [DocxDocument.open] reads a
+/// DOCX file within [DocxReadLimits]; a file it cannot read throws a
+/// [DocxReadException] whose [DocxReadFailure] says why, and so does a part
+/// that turns out broken when it first loads. Its [DocxBody] loads on first
+/// access and holds the [DocxBlock]s of the document: each [DocxParagraph]
+/// holds [DocxInline]s, and each [DocxRun] holds [DocxRunContent] (text,
+/// tabs, breaks), with the paragraph and run style typed. What the model does
+/// not type yet, such as tables, content controls, tracked changes, drawings
+/// and fields, is kept as written in a [DocxOpaqueBlock], a
+/// [DocxOpaqueInline] or a [DocxOpaqueRunContent], which can be removed but
+/// not changed. Blocks and inlines are added, removed and replaced, and a
+/// run's text and the styles are set; each edit is atomic. [DocxDocument.save]
+/// returns a [DocxResult] and [DocxDocument.saveTo] streams to a sink. As for
+/// a workbook, saving keeps every part the model did not change: a body never
+/// accessed is copied from the file, and what a loaded body does not type is
+/// written back as it was. Characters XML forbids are removed from text when
+/// it is set and reported at save as a [DocxWarning].
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
 /// @docImport 'src/common/locale.dart';
+/// @docImport 'src/docx/docx_document.dart';
+/// @docImport 'src/docx/model/blocks.dart';
+/// @docImport 'src/docx/model/inlines.dart';
+/// @docImport 'src/docx/model/run_content.dart';
+/// @docImport 'src/docx/read_exception.dart';
+/// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
 /// @docImport 'src/xlsx/format/format_locale.dart';
 /// @docImport 'src/xlsx/format/formatted_value.dart';
@@ -106,6 +130,7 @@ library;
 
 export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
+export 'src/docx/docx_document.dart' show DocxBody, DocxDocument, DocxResult;
 export 'src/docx/model/blocks.dart'
     show DocxBlock, DocxOpaqueBlock, DocxParagraph;
 export 'src/docx/model/inlines.dart' show DocxInline, DocxOpaqueInline, DocxRun;

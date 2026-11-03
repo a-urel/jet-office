@@ -120,10 +120,34 @@ void main() {
     });
 
     test('forbidden characters are removed when set and counted', () {
-      final DocxRun run = DocxParagraph().addRun('a\u0001b￿');
+      final DocxRun run = DocxParagraph().addRun('a\u0001b\uFFFF');
       expect(run.text, 'ab');
       expect(removedCharactersOf(run), 2);
       run.text = 'clean';
+      expect(removedCharactersOf(run), 0);
+    });
+
+    test('U+FFFE is removed when set and counted', () {
+      final DocxRun run = DocxRun('a\uFFFEb');
+      expect(run.text, 'ab');
+      expect(removedCharactersOf(run), 1);
+    });
+
+    test('a lone high surrogate is removed when set and counted', () {
+      final DocxRun run = DocxRun('a\uD800b');
+      expect(run.text, 'ab');
+      expect(removedCharactersOf(run), 1);
+    });
+
+    test('a lone low surrogate is removed when set and counted', () {
+      final DocxRun run = DocxRun('a\uDC00b');
+      expect(run.text, 'ab');
+      expect(removedCharactersOf(run), 1);
+    });
+
+    test('a supplementary character is kept, nothing removed', () {
+      final DocxRun run = DocxRun('a\u{1F600}b');
+      expect(run.text, 'a\u{1F600}b');
       expect(removedCharactersOf(run), 0);
     });
 
@@ -429,6 +453,16 @@ void main() {
       expect(() => DocxRun().style = '', throwsArgumentError);
     });
 
+    test('a style id with characters XML forbids throws ArgumentError', () {
+      final DocxParagraph p = DocxParagraph()..style = 'Body';
+      final DocxRun r = p.addRun('a')..style = 'Strong';
+      expect(() => p.style = 'Bad\u0001', throwsArgumentError);
+      expect(() => r.style = 'Bad\uFFFF', throwsArgumentError);
+      expect(() => r.style = 'Bad\uD800', throwsArgumentError);
+      expect(p.style, 'Body');
+      expect(r.style, 'Strong');
+    });
+
     test('a read run keeps its style and rPr', () {
       final DocxRun r = readRun(
         properties: const PropertyContainer.empty(),
@@ -487,6 +521,44 @@ void main() {
       expect(run.text, 'a');
       expect(removedCharactersOf(run), 1);
       expect(sink.calls, <String>['text 1 1']);
+    });
+
+    test('a text set that changes nothing is not reported', () {
+      final DocxParagraph p = DocxParagraph();
+      final DocxRun run = p.addRun('a\tb\u0001');
+      final _RecordingSink sink = _RecordingSink();
+      attachEditSink(p, sink);
+      final List<DocxRunContent> before = run.content.toList();
+      run.text = 'a\tb\u0002';
+      expect(sink.calls, isEmpty);
+      expect(run.content, before);
+      run.text = 'a\tb';
+      expect(sink.calls, <String>['text 3 1']);
+    });
+
+    test('setting a read run its own text keeps the read content', () {
+      final DocxParagraph p = readParagraph(
+        properties: const PropertyContainer.empty(),
+        attributes: const <KeptAttribute>[],
+        inlines: <DocxInline>[
+          _runOf(<DocxRunContent>[
+            readText(' a', const <KeptAttribute>[
+              (
+                qualifiedName: 'xml:space',
+                namespaceUri: 'http://www.w3.org/XML/1998/namespace',
+                value: 'preserve',
+              ),
+            ]),
+          ]),
+        ],
+      );
+      final DocxRun run = p.inlines.single as DocxRun;
+      final DocxRunContent read = run.content.single;
+      final _RecordingSink sink = _RecordingSink();
+      attachEditSink(p, sink);
+      run.text = ' a';
+      expect(sink.calls, isEmpty);
+      expect(run.content.single, same(read));
     });
 
     test('the default sink accepts every call', () {

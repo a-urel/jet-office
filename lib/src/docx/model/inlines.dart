@@ -88,14 +88,12 @@ final class DocxRun extends DocxInline {
 
   /// The id of the run's character style (`w:rStyle`), or `null` for none.
   ///
-  /// Setting the empty string throws [ArgumentError]; set `null` to remove
-  /// the style.
+  /// Setting the empty string, or an id holding a character XML forbids,
+  /// throws [ArgumentError]; set `null` to remove the style.
   String? get style => _style;
 
   set style(String? value) {
-    if (value != null && value.isEmpty) {
-      throw ArgumentError.value(value, 'style', 'Must not be empty');
-    }
+    checkStyleId(value);
     final String? previous = _style;
     if (value == previous) {
       return;
@@ -113,10 +111,18 @@ final class DocxRun extends DocxInline {
   /// nothing for opaque content.
   ///
   /// Setting it replaces the whole content: `\t` becomes a [DocxTab], and
-  /// `\n`, `\r\n` and a lone `\r` each become one line [DocxBreak]. Characters
-  /// XML forbids (control characters other than tab, LF and CR, U+FFFE,
-  /// U+FFFF and lone surrogates) are removed; the save reports how many with
-  /// `DocxWarningCode.invalidCharactersRemoved` at the run's location.
+  /// `\n`, `\r\n` and a lone `\r` each become one line [DocxBreak]. Whatever
+  /// else the run held is removed with it: opaque content (drawings, fields,
+  /// note and comment references, `mc:AlternateContent`) and carriage returns
+  /// ([DocxCarriageReturn]) are gone, so set the text of a run that holds
+  /// only text. Characters XML forbids (control characters other than tab,
+  /// LF and CR, U+FFFE, U+FFFF and lone surrogates) are removed; the save
+  /// reports how many with `DocxWarningCode.invalidCharactersRemoved` at the
+  /// run's location.
+  ///
+  /// Setting a text that gives the content the run already has, with the
+  /// same number of removed characters, changes nothing: the content as
+  /// read is kept, and no edit is recorded.
   @override
   String get text {
     final StringBuffer out = StringBuffer();
@@ -127,17 +133,41 @@ final class DocxRun extends DocxInline {
   }
 
   set text(String value) {
+    final ScrubResult scrubbed = scrubXmlText(value);
+    final List<DocxRunContent> next = _split(scrubbed.text);
+    if (scrubbed.removed == _removed && _sameContent(next)) {
+      return;
+    }
     final DocxRunText previous = runTextOf(this);
-    _setText(value);
+    _apply(next, scrubbed.removed);
     _sink.runTextSet(this, previous);
   }
 
   void _setText(String value) {
     final ScrubResult scrubbed = scrubXmlText(value);
-    _removed = scrubbed.removed;
+    _apply(_split(scrubbed.text), scrubbed.removed);
+  }
+
+  void _apply(List<DocxRunContent> content, int removed) {
+    _removed = removed;
     _content
       ..clear()
-      ..addAll(_split(scrubbed.text));
+      ..addAll(content);
+  }
+
+  /// Whether [other] equals the run's content, kind by kind. Opaque content
+  /// is equal only to itself, so a run holding any is never the same as
+  /// split text.
+  bool _sameContent(List<DocxRunContent> other) {
+    if (other.length != _content.length) {
+      return false;
+    }
+    for (int i = 0; i < other.length; i++) {
+      if (other[i] != _content[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 }
 
@@ -198,6 +228,24 @@ List<DocxRunContent> _split(String text) {
   }
   flush(text.length);
   return out;
+}
+
+/// Throws [ArgumentError] when [value], a style id to set, is empty or holds
+/// a character XML forbids; `null` (no style) passes.
+void checkStyleId(String? value) {
+  if (value == null) {
+    return;
+  }
+  if (value.isEmpty) {
+    throw ArgumentError.value(value, 'style', 'Must not be empty');
+  }
+  if (scrubXmlText(value).removed > 0) {
+    throw ArgumentError.value(
+      value,
+      'style',
+      'Must not hold a character XML forbids',
+    );
+  }
 }
 
 /// A run as the reader builds it: its `w:rPr` without the typed style, the
