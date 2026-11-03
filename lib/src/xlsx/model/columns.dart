@@ -107,6 +107,17 @@ final class ColRun {
       sameAttributes(attributes, other.attributes);
 }
 
+/// Whether [a] and [b] write the same `<col>` elements.
+bool sameRuns(List<ColRun> a, List<ColRun> b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i].min != b[i].min || a[i].max != b[i].max || !a[i].sameAs(b[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /// [value] as an outline level from 0 to 7, or `null`.
 int? parseOutlineLevel(String? value) {
   if (value == null || value.isEmpty || value.length > 3) return null;

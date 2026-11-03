@@ -10,11 +10,13 @@
 /// `XlsxWorkbook.open` and, on the first sheet, sets four cells of the row
 /// after its last row (the first free row when the last row is the grid's):
 /// a `DateTime`, an `XlsxDate`, a formula (`SUM(1,2)`, cached 3) and a
-/// string. On the same sheet it gives those cells a bold style with a red
-/// fill over the style they have, so the dates keep their format, sets
-/// column B's width to 30 and the new row's height to 24, merges the two
-/// cells right of the new values, freezes the first row and sets a tab
-/// colour. It then adds a sheet `Model edit` (`Model edit 2` and so on when
+/// string. The cells take the style of their row or column, and a date in
+/// a column of a number format that shows no date keeps that format and so
+/// reads back as a number. On the same sheet it gives those cells a bold
+/// style with a red fill over the style they have, so the dates keep their
+/// format, sets column B's width to 30 and the new row's height to 24,
+/// merges the two cells right of the new values, freezes the first row and
+/// sets a tab colour. It then adds a sheet `Model edit` (`Model edit 2` and so on when
 /// the name is taken) holding one string, saves, and writes the bytes to
 /// `<outDir>/<name>.xlsx`. The saved file is read back with `XlsxReader`
 /// (values, number formats, merges) and with `XlsxWorkbook` (styles, width,
@@ -126,11 +128,16 @@ int editModel(
 List<String> _edit(File file, Directory output, String name) {
   final Uint8List saved;
   final int row;
+  final Set<int> formatted;
   final String added;
   try {
     final XlsxWorkbook book = XlsxWorkbook.open(file.readAsBytesSync());
     final XlsxSheet sheet = book.sheets.first;
     row = _freeRow(sheet);
+    formatted = <int>{
+      for (final int column in <int>[0, 1])
+        if (_hasNumberFormat(sheet.styleAt(row, column))) column,
+    };
     sheet
       ..setCell(row, 0, DateTime.utc(2026, 11, 2, 13, 45))
       ..setCell(row, 1, const XlsxDate(2026, 11, 2))
@@ -144,7 +151,14 @@ List<String> _edit(File file, Directory output, String name) {
     return <String>['the edit failed: $e'];
   }
   File('${output.path}/$name').writeAsBytesSync(saved);
-  return _check(saved, row, added);
+  return _check(saved, row, added, formatted);
+}
+
+/// Whether [style] sets a number format other than General, which a date
+/// set in the cell keeps.
+bool _hasNumberFormat(XlsxStyle? style) {
+  final XlsxNumFmt? format = style?.numFmt;
+  return format != null && format != XlsxNumFmt.general;
 }
 
 /// Sets the style of the new cells of [row] and the layout edits on [sheet].
@@ -198,8 +212,14 @@ String _freeName(XlsxWorkbook book, String base) {
   return name;
 }
 
-/// The edits [saved] lacks when read back with `XlsxReader`.
-List<String> _check(Uint8List saved, int row, String added) {
+/// The edits [saved] lacks when read back with `XlsxReader`. A date in one
+/// of the columns [formatted] may read as the number its format shows.
+List<String> _check(
+  Uint8List saved,
+  int row,
+  String added,
+  Set<int> formatted,
+) {
   final List<String> problems = <String>[];
   try {
     final XlsxReader reader = XlsxReader(saved);
@@ -214,8 +234,15 @@ List<String> _check(Uint8List saved, int row, String added) {
       return null;
     }
 
-    if (valueAt(0) is! DateTime) problems.add('the DateTime is missing');
-    if (valueAt(1) is! DateTime) problems.add('the XlsxDate is missing');
+    bool holdsDate(int column) {
+      final Object? value = valueAt(column);
+      return value is DateTime ||
+          (formatted.contains(column) &&
+              (value is num || value is XlsxDecimal));
+    }
+
+    if (!holdsDate(0)) problems.add('the DateTime is missing');
+    if (!holdsDate(1)) problems.add('the XlsxDate is missing');
     if (!cells.any((XlsxReadCell c) => c.column == 2 && c.formula != null)) {
       problems.add('the formula is missing');
     }
@@ -226,6 +253,7 @@ List<String> _check(Uint8List saved, int row, String added) {
       problems.add('the added sheet is missing');
     }
     bool isDate(int column) =>
+        formatted.contains(column) ||
         cells.any((XlsxReadCell c) => c.column == column && c.isDate);
     if (!isDate(0) || !isDate(1)) problems.add('a date lost its format');
     if (!reader.mergesAt(0).contains(_mergedIn(row))) {

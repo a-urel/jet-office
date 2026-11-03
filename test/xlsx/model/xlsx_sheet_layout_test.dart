@@ -422,6 +422,34 @@ void main() {
       expect(_sheetXml(book), contains('outlineLevelRow="3"'));
     });
 
+    test('an unchanged file with outlined rows gets no sheetFormatPr', () {
+      final XlsxWorkbook book = _open(
+        '<row r="1" outlineLevel="2"><c r="A1"><v>1</v></c></row>',
+      );
+      book.sheets.single.rows.toList();
+      expect(_sheetXml(book), isNot(contains('sheetFormatPr')));
+    });
+
+    test('sheetFormatPr is made only when an edit goes deeper', () {
+      final XlsxWorkbook book = _open('<row r="1" outlineLevel="2"/>');
+      final XlsxSheet sheet = book.sheets.single;
+      // A level the file has, and a lower one: nothing is needed.
+      sheet.setRowFormat(1, const XlsxRowFormat(outlineLevel: 2));
+      sheet.setRowFormat(2, const XlsxRowFormat(outlineLevel: 1));
+      expect(_sheetXml(book), isNot(contains('sheetFormatPr')));
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet deeper = log.transaction(() {
+        sheet.setRowFormat(3, const XlsxRowFormat(outlineLevel: 3));
+      });
+      expect(
+        _sheetXml(book),
+        contains('<sheetFormatPr defaultRowHeight="15" outlineLevelRow="3"/>'),
+      );
+      // Undone, the sheet is back at the file's level.
+      log.revertSet(deeper);
+      expect(_sheetXml(book), isNot(contains('sheetFormatPr')));
+    });
+
     test('no sheetFormatPr is made while no row is outlined', () {
       final XlsxWorkbook book = _open('<row r="1"/>');
       book.sheets.single.setRowFormat(0, const XlsxRowFormat(height: 20));
@@ -756,15 +784,45 @@ void main() {
       );
       kept.sheets.single.setColumn(1, const XlsxColumn(outlineLevel: 2));
       expect(_sheetXml(kept), contains('outlineLevelCol="5"'));
-      // A loaded sheet whose column is outlined gets the element it needs,
-      // as one with outlined rows does.
+      // A loaded sheet whose column is outlined stays without the element
+      // until an edit goes deeper than the file did.
       final XlsxWorkbook loaded = openColumns(
         '<cols><col min="1" max="1" width="9" outlineLevel="1"/></cols>',
       )..sheets.single.column(0);
+      expect(formatOf(_sheetXml(loaded)), isEmpty);
+      loaded.sheets.single.setColumn(1, const XlsxColumn(outlineLevel: 1));
+      expect(formatOf(_sheetXml(loaded)), isEmpty);
+      loaded.sheets.single.setColumn(1, const XlsxColumn(outlineLevel: 2));
       expect(
         formatOf(_sheetXml(loaded)),
-        '<sheetFormatPr defaultRowHeight="15" outlineLevelCol="1"/>',
+        '<sheetFormatPr defaultRowHeight="15" outlineLevelCol="2"/>',
       );
+    });
+
+    test('an equal setColumn records no change', () {
+      final XlsxWorkbook book = openColumns('');
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.setColumn(2, const XlsxColumn(hidden: true));
+      final String before = _sheetXml(book);
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(() {
+        sheet.setColumn(2, const XlsxColumn(hidden: true));
+      });
+      expect(set.isEmpty, isTrue);
+      expect(_sheetXml(book), before);
+      // The middle of a run writes the same <col>s too.
+      final XlsxWorkbook run = openColumns(
+        '<cols><col min="2" max="4" width="20" customWidth="1"/></cols>',
+      );
+      final ChangeSet middle = changeLogOf(run).transaction(() {
+        run.sheets.single.setColumn(2, const XlsxColumn(width: 20));
+      });
+      expect(middle.isEmpty, isTrue);
+      // A different column still is a change.
+      final ChangeSet other = log.transaction(() {
+        sheet.setColumn(2, const XlsxColumn(width: 30));
+      });
+      expect(other.isEmpty, isFalse);
     });
 
     test('a cols that is not plain is kept and cannot be edited', () {
@@ -1043,6 +1101,7 @@ void main() {
     test('a plain value set keeps the cell style, not the column layers', () {
       final XlsxSheet sheet = openColumns(
         '<cols><col min="1" max="1" width="9" style="2"/></cols>',
+        rows: '<row r="1"><c r="A1"><v>1</v></c></row>',
       ).sheets.single..setCell(0, 0, 4);
       expect(sheet.styleAt(0, 0), isNull);
     });
@@ -1255,5 +1314,274 @@ void main() {
         throwsStateError,
       );
     });
+  });
+
+  group('a plain value in a cell the file lacks', () {
+    // _columnStyles, then a bold date (4) and a bold 0.00 (5).
+    final String styles = _columnStyles.replaceFirst(
+      '</cellXfs>',
+      '<xf numFmtId="14" fontId="1" fillId="0" borderId="0" applyFont="1" '
+          'applyNumberFormat="1"/>'
+          '<xf numFmtId="2" fontId="1" fillId="0" borderId="0" applyFont="1" '
+          'applyNumberFormat="1"/></cellXfs>',
+    );
+    const String boldRow = '<row r="1" s="1" customFormat="1"/>';
+    const String italicRow = '<row r="1" s="2" customFormat="1"/>';
+    const String boldColumn =
+        '<cols><col min="1" max="3" width="9" style="1"/></cols>';
+    final DateTime date = DateTime.utc(2026, 11, 4, 12);
+
+    XlsxWorkbook open({String rows = '', String cols = ''}) =>
+        _open(rows, cols: cols, styles: styles);
+
+    String stylesXml(XlsxWorkbook book) =>
+        partText(book.save().bytes, 'xl/styles.xml');
+
+    for (final (String label, String rows, String cols, XlsxFont font)
+        in <(String, String, String, XlsxFont)>[
+          ('a formatted row', boldRow, '', const XlsxFont(bold: true)),
+          ('a styled column', '', boldColumn, const XlsxFont(bold: true)),
+          ('a row over a column', italicRow, boldColumn, _italic.font!),
+        ]) {
+      test('keeps the style of $label: text, number and formula', () {
+        final XlsxWorkbook book = open(rows: rows, cols: cols);
+        final XlsxSheet sheet = book.sheets.single;
+        final List<Object> values = <Object>[
+          'x',
+          1.5,
+          const XlsxFormula('1+1'),
+        ];
+        final XlsxStyle? style = sheet.styleAt(0, 0);
+        final String before = stylesXml(book);
+        expect(style?.font?.bold, font.bold);
+        expect(style?.font?.italic, font.italic);
+        for (int i = 0; i < 3; i++) {
+          expect(sheet.styleAt(0, i), style);
+          sheet.setCell(0, i, values[i]);
+          expect(sheet.styleAt(0, i), style, reason: '${values[i]}');
+        }
+        final XlsxSheet reopened = XlsxWorkbook.open(
+          book.save().bytes,
+        ).sheets.single;
+        for (int i = 0; i < 3; i++) {
+          expect(reopened.styleAt(0, i), style);
+        }
+        // The cells took an index the file has: nothing was appended.
+        expect(stylesXml(book), before);
+      });
+
+      test('keeps the style of $label under a date', () {
+        final XlsxWorkbook book = open(rows: rows, cols: cols);
+        final XlsxSheet sheet = book.sheets.single;
+        final XlsxStyle style = sheet.styleAt(0, 0)!;
+        sheet.setCell(0, 0, date);
+        sheet.setCell(0, 1, const XlsxDate(2026, 11, 4));
+        // A date needs a date format: all else of the style stays.
+        expect(
+          sheet.styleAt(0, 0),
+          style.copyWith(numFmt: XlsxNumFmt.localeDateTime),
+        );
+        expect(
+          sheet.styleAt(0, 1),
+          style.copyWith(numFmt: XlsxNumFmt.localeShortDate),
+        );
+        final XlsxReadRow row = XlsxReader(book.save().bytes).rows('S').single;
+        expect(row.cells[0].isDate, isTrue);
+        expect(row.cells[1].isDate, isTrue);
+      });
+    }
+
+    test('a date in a row with a date format equals the row exactly', () {
+      final XlsxWorkbook book = open(
+        rows: '<row r="1" s="4" customFormat="1"/>',
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      final XlsxStyle? before = sheet.styleAt(0, 0);
+      expect(before?.font?.bold, isTrue);
+      final String xml = stylesXml(book);
+      sheet.setCell(0, 0, const XlsxDate(2026, 11, 4));
+      expect(sheet.styleAt(0, 0), before);
+      expect(_sheetXml(book), contains('<c r="A1" s="4">'));
+      expect(stylesXml(book), xml);
+    });
+
+    test('a date in a row of a number format keeps it and warns', () {
+      final XlsxWorkbook book = open(
+        rows: '<row r="1" s="5" customFormat="1"/>',
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      final XlsxStyle? before = sheet.styleAt(0, 0);
+      sheet.setCell(0, 0, date);
+      expect(sheet.styleAt(0, 0), before);
+      expect(
+        book.warnings.map((XlsxWarning w) => w.code),
+        contains(XlsxWarningCode.dateInNonDateFormat),
+      );
+    });
+
+    test('a date takes the style setRowFormat appended', () {
+      final XlsxWorkbook book = open();
+      final XlsxSheet sheet = book.sheets.single;
+      const XlsxStyle style = XlsxStyle(
+        font: XlsxFont(bold: true, italic: true),
+      );
+      sheet.setRowFormat(0, const XlsxRowFormat(style: style));
+      sheet.setCell(0, 0, 'x');
+      sheet.setCell(0, 1, date);
+      expect(sheet.styleAt(0, 0), sheet.styleAt(0, 5));
+      expect(sheet.styleAt(0, 1)?.font, sheet.styleAt(0, 5)?.font);
+      expect(sheet.styleAt(0, 1)?.numFmt, XlsxNumFmt.localeDateTime);
+    });
+
+    test('an undone value leaves the row\'s empty cell', () {
+      final XlsxWorkbook book = open(rows: boldRow);
+      final XlsxSheet sheet = book.sheets.single;
+      final XlsxStyle? style = sheet.styleAt(0, 0);
+      final String before = stylesXml(book);
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(() => sheet.setCell(0, 0, date));
+      log.revertSet(set);
+      expect(sheet.styleAt(0, 0), style);
+      expect(_sheetXml(book), isNot(contains('<c ')));
+      expect(stylesXml(book), before);
+    });
+
+    test('null on an empty cell stays a no-op', () {
+      for (final (String rows, String cols) in <(String, String)>[
+        (boldRow, ''),
+        ('', boldColumn),
+      ]) {
+        final XlsxWorkbook book = open(rows: rows, cols: cols);
+        book.sheets.single.rows.toList();
+        final String before = _sheetXml(book);
+        final ChangeSet set = changeLogOf(book).transaction(() {
+          book.sheets.single.setCell(0, 0, null);
+        });
+        expect(set.isEmpty, isTrue);
+        expect(_sheetXml(book), before);
+      }
+    });
+
+    test('a cell the file has keeps its own style', () {
+      final XlsxWorkbook book = open(
+        rows: '<row r="1" s="1" customFormat="1"><c r="A1"><v>1</v></c></row>',
+      );
+      book.sheets.single.setCell(0, 0, 'x');
+      expect(book.sheets.single.styleAt(0, 0), isNull);
+      expect(_sheetXml(book), contains('<c r="A1" t="s">'));
+    });
+
+    test('takes nothing styleAt does not show', () {
+      for (final (String label, String rows, String cols)
+          in <(String, String, String)>[
+            ('dangling row', '<row r="1" s="99" customFormat="1"/>', ''),
+            (
+              'dangling row over a column',
+              '<row r="1" s="99" customFormat="1"/>',
+              boldColumn,
+            ),
+            (
+              'dangling column',
+              '',
+              '<cols><col min="1" max="3" width="9" style="99"/></cols>',
+            ),
+            (
+              'row of style 0 over a column',
+              '<row r="1" s="0" customFormat="1"/>',
+              boldColumn,
+            ),
+            ('row without customFormat', '<row r="1" s="1"/>', ''),
+          ]) {
+        final XlsxWorkbook book = open(rows: rows, cols: cols);
+        final XlsxSheet sheet = book.sheets.single;
+        expect(sheet.styleAt(0, 0), isNull, reason: label);
+        sheet.setCell(0, 0, 'x');
+        expect(_sheetXml(book), contains('<c r="A1" t="s">'), reason: label);
+        expect(sheet.styleAt(0, 0), isNull, reason: label);
+        // A date copies the first cell format, as in a default cell.
+        sheet.setCell(0, 1, date);
+        expect(sheet.styleAt(0, 1)?.font?.bold, isNot(isTrue), reason: label);
+      }
+    });
+
+    test('a broken or absent styles part behaves as for any cell', () {
+      final List<String?> parts = <String?>[
+        null,
+        '<other xmlns="urn:x"/>',
+        '<styleSheet xmlns="$mainNs"/>',
+      ];
+      for (final String? part in parts) {
+        final XlsxWorkbook book = XlsxWorkbook.open(
+          buildWorkbook(<String, String>{
+            'S': _worksheet(boldRow, cols: boldColumn),
+          }, styles: part),
+        );
+        final XlsxSheet sheet = book.sheets.single;
+        sheet.setCell(0, 0, 'x');
+        sheet.setCell(1, 0, 1.5);
+        sheet.setCell(0, 1, date);
+        final String xml = _sheetXml(book);
+        expect(xml, contains('<c r="A1" t="s">'), reason: part);
+        expect(xml, contains('<c r="A2">'), reason: part);
+      }
+    });
+
+    test('plain values match the writer in a row and a column', () {
+      final List<Object> values = <Object>[
+        'x',
+        1.5,
+        DateTime.utc(2026, 11, 4),
+        const XlsxDate(2026, 11, 4),
+      ];
+      final XlsxWriter writer = XlsxWriter();
+      writer.addSheet('Row').row(values, style: _bold);
+      writer.addSheet('Column')
+        ..columns(<XlsxColumn?>[
+          for (int i = 0; i < 4; i++) const XlsxColumn(style: _bold),
+        ])
+        ..row(values);
+      final XlsxWorkbook written = XlsxWorkbook.open(writer.close().bytes);
+
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet row = book.addSheet('Row');
+      row.setRowFormat(0, const XlsxRowFormat(style: _bold));
+      final XlsxSheet column = book.addSheet('Column');
+      for (int i = 0; i < 4; i++) {
+        column.setColumn(i, const XlsxColumn(style: _bold));
+      }
+      for (int i = 0; i < 4; i++) {
+        row.setCell(0, i, values[i]);
+        column.setCell(0, i, values[i]);
+      }
+      final XlsxWorkbook saved = XlsxWorkbook.open(book.save().bytes);
+      for (final String name in <String>['Row', 'Column']) {
+        final XlsxSheet a = saved.sheets.firstWhere(
+          (XlsxSheet s) => s.name == name,
+        );
+        final XlsxSheet b = written.sheets.firstWhere(
+          (XlsxSheet s) => s.name == name,
+        );
+        for (int i = 0; i < 4; i++) {
+          expect(a.styleAt(0, i), b.styleAt(0, i), reason: '$name $i');
+        }
+      }
+    });
+  });
+
+  test('an XlsxCell ignores a dangling row style, as styleAt does', () {
+    // Two cell formats and a row pointing past them.
+    final XlsxWorkbook book = _open(
+      '<row r="1" s="99" customFormat="1"/>',
+      styles: _styles.replaceFirst(
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>',
+        '<xf numFmtId="0" fontId="1" fillId="0" borderId="0"/>',
+      ),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    expect(sheet.styleAt(0, 0), isNull);
+    sheet.setCell(0, 0, const XlsxCell('x', style: _italic));
+    // xf 0's bold font does not join the layers.
+    expect(sheet.styleAt(0, 0)?.font?.italic, isTrue);
+    expect(sheet.styleAt(0, 0)?.font?.bold, isNot(isTrue));
   });
 }

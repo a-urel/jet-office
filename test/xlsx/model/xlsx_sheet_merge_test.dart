@@ -36,7 +36,7 @@ List<XlsxWarning> _invalid(XlsxWorkbook book) => <XlsxWarning>[
 ];
 
 void main() {
-  test('merges read like XlsxReader.merges', () {
+  test('merges read like XlsxReader.mergesAt', () {
     final List<(String, Uint8List)> files = <(String, Uint8List)>[
       for (final Fixture f in allFixtures()) (f.name, f.build()),
       for (final ProducerFile p in producerFiles()) (p.name, p.bytes),

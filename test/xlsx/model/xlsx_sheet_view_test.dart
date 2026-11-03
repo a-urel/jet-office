@@ -526,4 +526,25 @@ void main() {
     );
     expect(sheetTabSelected(none), isTrue);
   });
+
+  test('tabColor = null removes a colour that cannot be read', () {
+    final XlsxWorkbook book = _open(
+      '<sheetPr codeName="A"><tabColor theme="99"/></sheetPr>',
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    expect(sheet.tabColor, isNull);
+    sheet.tabColor = null;
+    expect(_element(_xml(book), 'sheetPr'), '<sheetPr codeName="A"/>');
+    // With nothing left the sheetPr goes too, and no colour stays a no-op.
+    final XlsxWorkbook only = _open(
+      '<sheetPr><tabColor theme="99"/></sheetPr>',
+    );
+    only.sheets.single.tabColor = null;
+    expect(_xml(only), isNot(contains('sheetPr')));
+    final XlsxWorkbook none = _open('<sheetPr codeName="A"/>');
+    final ChangeSet set = changeLogOf(none).transaction(() {
+      none.sheets.single.tabColor = null;
+    });
+    expect(set.isEmpty, isTrue);
+  });
 }

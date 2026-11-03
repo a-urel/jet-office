@@ -236,8 +236,13 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
   /// `NaN` throws now, so saving cannot fail on data. The cell keeps its
   /// style, except that a date in a General cell takes the writer's date
   /// format (appended to the styles), and its other attributes, which
-  /// described the old value, are dropped. `null` clears the value: a styled
-  /// cell stays as an empty styled cell, an unstyled one is removed.
+  /// described the old value, are dropped. A cell the file lacks takes the
+  /// style [styleAt] reports there, as a value typed in Excel does: the
+  /// row's, else the column's; an index with no cell format gives it none,
+  /// and a date in a General row or column takes a copy of that style with
+  /// the date format. `null` clears the value: a styled cell stays as an
+  /// empty styled cell, an unstyled one is removed, and nothing is made for
+  /// a cell the file lacks.
   ///
   /// A table's header cell holds its column's name, which Excel requires to
   /// equal the cell's text, so setting it renames the column too
@@ -377,7 +382,7 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
         renameTableColumn(log, header.table, header.index, rename);
         _host.reader.package.setContent(header.partName, header.table);
       }
-      RawCell? base = current;
+      RawCell? base = current ?? _cellOfInheritedStyle(store, row, column);
       int? Function(int? style, {required bool withTime}) dateStyle =
           _host.dateStyle;
       if (styled) {
@@ -441,23 +446,39 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
     if (store == null) return null;
     final RawCell? cell = store.cellAt(row, column);
     if (cell != null) return _styleOfIndex(cell.style);
-    final int? rowIndex = _rowStyleIndex(store, row);
-    return _styleOfIndex(rowIndex ?? _columnStyleIndex(column));
+    return _styleOfIndex(_inheritedIndex(store, row, column));
+  }
+
+  /// The style index a cell the file lacks shows at [row] and [column]: the
+  /// row's, else the column's, or `null` when neither has one.
+  int? _inheritedIndex(CellStore store, int row, int column) =>
+      _rowStyleIndex(store, row) ?? _columnStyleIndex(column);
+
+  /// An empty cell of the style a cell the file lacks shows at [row] and
+  /// [column], for a plain value to keep; `null` when that is the default
+  /// or an index with no cell format, and when the styles part is missing
+  /// or untyped (no index has a cell format then).
+  RawCell? _cellOfInheritedStyle(CellStore store, int row, int column) {
+    final int? index = _inheritedIndex(store, row, column);
+    return _hasCellFormat(index)
+        ? RawCell(kind: RawCellKind.number, style: index)
+        : null;
+  }
+
+  /// Whether [index] is a style index above 0 with a cell format.
+  bool _hasCellFormat(int? index) {
+    final StylesPart? styles = _host.styles;
+    return index != null &&
+        index > 0 &&
+        styles != null &&
+        index < styles.cellFormatCount;
   }
 
   /// The style at cell format [index], or `null` for no index, index 0 and
   /// an index with no cell format (which Excel shows as the default).
   @override
-  XlsxStyle? _styleOfIndex(int? index) {
-    final StylesPart? styles = _host.styles;
-    if (index == null ||
-        index == 0 ||
-        styles == null ||
-        index >= styles.cellFormatCount) {
-      return null;
-    }
-    return styles.styleOf(index);
-  }
+  XlsxStyle? _styleOfIndex(int? index) =>
+      _hasCellFormat(index) ? _host.styles!.styleOf(index!) : null;
 
   /// Sets the style of the cell at [row] and [column] to exactly [style]:
   /// the row's style is not layered under it.
@@ -586,13 +607,9 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
   }
 
   /// The style of [row] for layering, or `null` when the row has none (or
-  /// index 0).
-  XlsxStyle? _rowStyle(CellStore store, int row) {
-    final int? index = _rowStyleIndex(store, row);
-    final StylesPart? styles = _host.styles;
-    if (index == null || index <= 0 || styles == null) return null;
-    return styles.styleOf(index);
-  }
+  /// index 0, or an index with no cell format).
+  XlsxStyle? _rowStyle(CellStore store, int row) =>
+      _styleOfIndex(_rowStyleIndex(store, row));
 
   /// The column's style under a cell of [row] and [column] that is being
   /// set, or `null`: a row that is formatted by an explicit style 0

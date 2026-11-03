@@ -363,6 +363,36 @@ void main() {
     expect(_workbookXml(bare), contains('tabRatio="5" activeTab="2"'));
   });
 
+  test('setting the active sheet again is a no-op', () {
+    // A file with neither bookViews nor tabSelected.
+    final XlsxWorkbook bare = XlsxWorkbook.open(
+      _book(head: '', sheets: <String?>[_sheet(''), _sheet(''), _sheet('')]),
+    );
+    final String workbook = _workbookXml(bare);
+    final String sheet = _sheetXml(bare, 0);
+    final ChangeSet set = changeLogOf(bare).transaction(() {
+      bare.activeSheet = bare.activeSheet;
+    });
+    expect(set.isEmpty, isTrue);
+    expect(_workbookXml(bare), workbook);
+    expect(_sheetXml(bare, 0), sheet);
+    // So is a sheet the writer made active by default.
+    final XlsxWorkbook made = XlsxWorkbook()
+      ..addSheet('A')
+      ..addSheet('B');
+    final String before = partText(made.save().bytes, 'xl/workbook.xml');
+    made.activeSheet = made.sheets[0];
+    expect(partText(made.save().bytes, 'xl/workbook.xml'), before);
+    // The checks still come first.
+    final XlsxWorkbook hidden = XlsxWorkbook.open(
+      _book(
+        states: const <String>['hidden', ''],
+        head: '<bookViews><workbookView activeTab="0"/></bookViews>',
+      ),
+    );
+    expect(() => hidden.activeSheet = hidden.sheets[0], throwsStateError);
+  });
+
   test('a sheet without a worksheet part only changes activeTab', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
       _book(sheets: <String?>[_sheet(_selected), null]),

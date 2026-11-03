@@ -12,6 +12,7 @@ import '../../../tool/src/part_compare.dart';
 import '../../fixtures/fixtures.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/producers.dart';
+import '../read/support/workbook_builder.dart';
 import '../read/support/zip_builder.dart';
 
 /// Repairs the model makes on load, applied to the expected package: the
@@ -149,6 +150,25 @@ void main() {
     for (final ProducerFile p in producerFiles()) {
       test(p.name, () => expect(_resetDifferences(p.bytes), isEmpty));
     }
+  });
+
+  test('outline levels without a sheetFormatPr round-trip', () {
+    final Map<String, String> sheets = <String, String>{
+      'rows':
+          '<worksheet xmlns="$mainNs"><sheetData><row r="1" outlineLevel="1">'
+          '<c r="A1"><v>1</v></c></row></sheetData></worksheet>',
+      'columns':
+          '<worksheet xmlns="$mainNs"><cols><col min="1" max="1" width="9" '
+          'outlineLevel="1"/></cols><sheetData/></worksheet>',
+    };
+    sheets.forEach((String name, String xml) {
+      final Uint8List input = buildWorkbook(<String, String>{'S': xml});
+      expect(
+        comparePackages(input, _roundTrip(input), ignoreBookkeeping: true),
+        isEmpty,
+        reason: name,
+      );
+    });
   });
 
   test('an unloaded workbook round-trips too', () {

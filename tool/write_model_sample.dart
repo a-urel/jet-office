@@ -8,12 +8,12 @@
 /// The files are `<dir>/w1_generated.xlsx` and `<dir>/w2_generated.xlsx` (the
 /// directory is created).
 ///
-/// The sheet `Values` of `w1_generated.xlsx` holds, in row 1, text, an integer, a double, an
-/// `XlsxDecimal`, a boolean, a date, a date and time and a formula that sums
-/// its own row's B and C, with its result, and in row 2 the same values
-/// after a cell was set twice and another cleared, so the file shows what
-/// `setCell` leaves. A second sheet
-/// holds one text. `docs/excel-checks.md`, "W1", says what Excel shows.
+/// The sheet `Values` of `w1_generated.xlsx` holds, in row 1, text, an
+/// integer, a double, an `XlsxDecimal`, a boolean, a date, a date and time
+/// and a formula that sums its own row's B and C, with its result, and in
+/// row 2 the same values after a cell was set twice and another cleared, so
+/// the file shows what `setCell` leaves. A second sheet holds one text.
+/// `docs/excel-checks.md`, "W1", says what Excel shows.
 ///
 /// The sheet `Report` of `w2_generated.xlsx` has a merged title, a frozen
 /// header of bold, a fill and a bottom border, date and money columns with

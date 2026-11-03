@@ -98,21 +98,21 @@ mixin _SheetLayout {
 
   /// How column [index] (0 for A) looks: its width, style, visibility,
   /// outline level and collapsed mark, read from the `<col>` holding it
-  /// (`width` with `customWidth`, `style`, `hidden`, `outlineLevel`,
-  /// `collapsed`), or `null` for a default column.
+  /// (`width`, `style`, `hidden`, `outlineLevel`, `collapsed`), or `null`
+  /// for a default column.
   ///
   /// A column no `<col>` holds, and one whose `<col>` sets nothing the
   /// model reads, is a default column. The `width` is read whenever it is a
   /// width, with or without `customWidth="1"` (which only says whether the
   /// width was set by hand), so the columns the writer wrote without a width
-  /// read the default width, 9.140625. The style is read as [XlsxSheet.styleAt]
-  /// reads a row's. An
-  /// attribute that cannot be read (a `width` of `abc`, an outline level of
-  /// 9) reads as its default and is reported once (`layoutInvalid`); it is
-  /// saved as written until [setColumn] sets that field. A `<cols>` that
-  /// is not plain (see [setColumn]) reads as no columns. Loads the sheet.
-  /// Throws a [RangeError] outside Excel's columns and an
-  /// [XlsxReadException] when the sheet cannot be read.
+  /// read the default width, 9.140625. The style is read as
+  /// [XlsxSheet.styleAt] reads a row's. An attribute that cannot be read (a
+  /// `width` of `abc`, an outline level of 9) reads as its default and is
+  /// reported once (`layoutInvalid`); it is saved as written until
+  /// [setColumn] sets that field. A `<cols>` that is not plain (see
+  /// [setColumn]) reads as no columns. Loads the sheet. Throws a
+  /// [RangeError] outside Excel's columns and an [XlsxReadException] when
+  /// the sheet cannot be read.
   XlsxColumn? column(int index) {
     RangeError.checkValueInInterval(
       index,
@@ -218,22 +218,22 @@ mixin _SheetLayout {
         }
       }
       editLayout(log, part, 'cols', () {
-        part.setColumnRuns(
-          setColumnInRuns(
-            part.columnRuns,
-            index + 1,
-            '${part.elementPrefix}col',
-            (List<KeptAttribute>? old) => next == const XlsxColumn()
-                ? null
-                : _columnAttributesFor(
-                    old,
-                    current,
-                    next,
-                    styleId: styleChanged ? id : null,
-                    defaultWidth: defaultWidth,
-                  ),
-          ),
+        final List<ColRun> runs = setColumnInRuns(
+          part.columnRuns,
+          index + 1,
+          '${part.elementPrefix}col',
+          (List<KeptAttribute>? old) => next == const XlsxColumn()
+              ? null
+              : _columnAttributesFor(
+                  old,
+                  current,
+                  next,
+                  styleId: styleChanged ? id : null,
+                  defaultWidth: defaultWidth,
+                ),
         );
+        // A column that reads differently can still write the same <col>.
+        if (!sameRuns(part.columnRuns, runs)) part.setColumnRuns(runs);
       });
     });
   }

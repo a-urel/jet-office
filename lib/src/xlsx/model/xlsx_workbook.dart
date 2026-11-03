@@ -156,7 +156,9 @@ final class XlsxWorkbook {
   /// Makes [sheet] the sheet Excel opens on: sets `activeTab`, `tabSelected`
   /// on its view, and clears `tabSelected` on the sheet that was active
   /// (loading both sheets). A chartsheet or a sheet without a part has no
-  /// view to select; only `activeTab` changes for it.
+  /// view to select; only `activeTab` changes for it. The sheet that is
+  /// active already changes nothing, so a file without `activeTab` or
+  /// `tabSelected` stays without them.
   ///
   /// Throws an [ArgumentError] for a sheet of another workbook and a
   /// [StateError] for a sheet that is not visible; nothing changes then.
@@ -560,6 +562,7 @@ final class _Book implements SheetHost {
         'active sheet.',
       );
     }
+    if (identical(sheet, activeSheet)) return;
     log.transaction(() => _activate(sheet));
   }
 

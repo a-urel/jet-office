@@ -425,6 +425,10 @@ final class WorksheetPart implements PartContent {
       }
     }
     if (sheet._sheetData == null) sheet._insertSheetData();
+    if (!sheet._formatPresent) {
+      sheet._fileRowLevel = sheet._deepestRowLevel();
+      sheet._fileColumnLevel = sheet._deepestColumnLevel();
+    }
     return sheet;
   }
 
@@ -463,6 +467,14 @@ final class WorksheetPart implements PartContent {
 
   /// The attributes of a `<sheetFormatPr>` kept opaque, for reading only.
   _SheetFormat? _formatOpaque;
+
+  /// The deepest row outline level of a file without `<sheetFormatPr>`: the
+  /// element is made on save only for a level deeper than this, which only
+  /// an edit gives.
+  int _fileRowLevel = 0;
+
+  /// As [_fileRowLevel], for the columns.
+  int _fileColumnLevel = 0;
 
   /// Whether the part read a `<cols>`, typed or kept opaque; a second one
   /// is not typed.
@@ -643,7 +655,8 @@ final class WorksheetPart implements PartContent {
     root.writeStart(w);
     final int rowLevel = _deepestRowLevel();
     final int colLevel = _deepestColumnLevel();
-    final int madeAt = !_formatPresent && (rowLevel > 0 || colLevel > 0)
+    final bool deeper = rowLevel > _fileRowLevel || colLevel > _fileColumnLevel;
+    final int madeAt = !_formatPresent && deeper
         ? _positionFor('sheetFormatPr')
         : -1;
     for (int i = 0; i <= _children.length; i++) {

@@ -122,8 +122,9 @@ mixin _SheetViews {
     return part == null ? null : _readTabColor(part);
   }
 
-  /// Sets the tab colour; `null` removes `sheetPr/tabColor`, and the
-  /// `<sheetPr>` with it when nothing else is left in it.
+  /// Sets the tab colour; `null` removes `sheetPr/tabColor`, one that
+  /// cannot be read included, and the `<sheetPr>` with it when nothing else
+  /// is left in it.
   ///
   /// A colour equal to the current one leaves the element as written. A
   /// sheet without `<sheetPr>` gets it in schema position; one that has it
@@ -137,7 +138,10 @@ mixin _SheetViews {
   set tabColor(XlsxColor? value) {
     if (value != null) validateColor(value, 'tabColor');
     final WorksheetPart part = _editablePart('tab colour');
-    if (_readTabColor(part) == value) return;
+    // A colour that cannot be read reads null, and null still removes it.
+    final bool unreadable =
+        value == null && part.sheetPr?.child('tabColor') != null;
+    if (_readTabColor(part) == value && !unreadable) return;
     final XmlNode? tab = value == null
         ? null
         : XmlNode.made(
@@ -449,7 +453,7 @@ mixin _SheetViews {
   /// The attributes the writer writes for [color], by name.
   static Map<String, String> _colorAttributes(XlsxColor color) {
     final StringBuffer out = StringBuffer();
-    final XmlWriter w = XmlWriter(out)..start('c');
+    final XmlWriter w = XmlWriter(out)..start('color');
     writeColorAttributes(w, color);
     w.end();
     final XmlPullReader r = XmlPullReader(out.toString())..next();
