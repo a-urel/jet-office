@@ -27,8 +27,11 @@ import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_number.dart';
+import '../../xml/xml_pull_reader.dart';
+import '../../xml/xml_writer.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
+import '../color.dart';
 import '../column.dart';
 import '../date_serial.dart';
 import '../format/format_kind.dart';
@@ -55,11 +58,15 @@ import '../worksheet_parts.dart'
         checkColumnWidth,
         checkOutlineLevel,
         checkRowHeight,
+        paneAttributes,
+        sheetViewAttributes,
         standardColumnWidth,
         standardRowHeight;
 import 'cell_store.dart';
 import 'columns.dart';
+import 'element_node.dart';
 import 'primitives.dart';
+import 'style_elements.dart' show ReadStyleValue, readColor;
 import 'styles_part.dart';
 import 'table_part.dart';
 import 'workbook_part.dart';
@@ -67,6 +74,7 @@ import 'worksheet_part.dart';
 
 part 'xlsx_sheet_layout.dart';
 part 'xlsx_sheet_merges.dart';
+part 'xlsx_sheet_views.dart';
 
 /// What a sheet needs from its workbook.
 abstract interface class SheetHost {
@@ -137,7 +145,7 @@ int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
 ///
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
 /// `A`.
-final class XlsxSheet with _SheetLayout, _SheetMerges {
+final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
   XlsxSheet._(this._host, this._entry, this._partName, this._part);
 
   @override

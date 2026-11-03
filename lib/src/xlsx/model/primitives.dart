@@ -11,7 +11,8 @@
 /// column a new name, recording a [TableColumnNameChange] the same way, and
 /// [setStoredRowAttributes] sets a row's attributes, recording a
 /// [SetRowAttributesChange]; [editLayout] edits a part's `cols`,
-/// `sheetFormatPr` and `mergeCells`, recording a [SetLayoutChange].
+/// `sheetFormatPr`, `mergeCells`, `sheetPr` and `sheetViews`, recording a
+/// [SetLayoutChange].
 /// [appendStyle] and [appendNumberFormat] give a cell format index,
 /// recording a [StylesAppendChange] when that appended to the styles part,
 /// so a transaction that fails later, or an undo, removes what it appended.
@@ -155,7 +156,8 @@ void setStoredRowAttributes(
 }
 
 /// The change of one layout element of a worksheet part (`cols`,
-/// `sheetFormatPr` or `mergeCells`): the element before and after.
+/// `sheetFormatPr`, `mergeCells`, `sheetPr` or `sheetViews`): the element
+/// before and after.
 ///
 /// Only that element's slot is swapped, so a change to the other element is
 /// independent of this one.
@@ -167,7 +169,7 @@ final class SetLayoutChange implements Change {
   /// The worksheet part.
   final WorksheetPart part;
 
-  /// `cols`, `sheetFormatPr` or `mergeCells`.
+  /// `cols`, `sheetFormatPr`, `mergeCells`, `sheetPr` or `sheetViews`.
   final String slot;
 
   /// The element before the change.

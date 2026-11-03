@@ -16,7 +16,9 @@
 /// original position, except the first `<sheetFormatPr>` and the first
 /// `<cols>`, which are typed when plain (`columns.dart`), and the first
 /// `<mergeCells>` ([MergeGroup]); all three are edited as immutable values,
-/// so `swapLayout` undoes an edit of one without touching the others.
+/// so `swapLayout` undoes an edit of one without touching the others. The
+/// first `<sheetPr>` and the first `<sheetViews>` are typed too, as
+/// [XmlNode]s (`element_node.dart`), and swap the same way.
 /// The root keeps its namespace declarations and `mc:Ignorable`.
 ///
 /// Saving recomputes the bookkeeping (spec §4.4): `<dimension ref>` from the
@@ -55,6 +57,7 @@ import '../read/sheet_reader.dart' show RawRow, RawRowReader;
 import '../warnings.dart';
 import 'cell_store.dart';
 import 'columns.dart';
+import 'element_node.dart';
 
 /// The children of `<worksheet>` in the order of the schema's
 /// `CT_Worksheet` sequence.
@@ -99,6 +102,13 @@ const List<String> worksheetChildOrder = <String>[
   'tableParts',
   'extLst',
 ];
+
+/// What is typed inside `<sheetPr>` and `<sheetViews>`.
+const NodeShape worksheetNodeShape = <String, Set<String>>{
+  'sheetPr': <String>{'tabColor', 'outlinePr', 'pageSetUpPr'},
+  'sheetViews': <String>{'sheetView'},
+  'sheetView': <String>{'pane', 'selection'},
+};
 
 /// The typed `<dimension>`: its `ref` is recomputed on save.
 final class _Dimension {
@@ -390,6 +400,12 @@ final class WorksheetPart implements PartContent {
         } else {
           children.add(typed);
         }
+      } else if (main && r.localName == 'sheetPr' && !sheet._hasSheetPr) {
+        sheet._hasSheetPr = true;
+        children.add(XmlNode.read(r, worksheetNodeShape));
+      } else if (main && r.localName == 'sheetViews' && !sheet._hasSheetViews) {
+        sheet._hasSheetViews = true;
+        children.add(XmlNode.read(r, worksheetNodeShape));
       } else if (main && r.localName == 'mergeCells' && !sheet._hasMergeCells) {
         sheet._hasMergeCells = true;
         children.add(_readMergeCells(r, part, limits, warn));
@@ -459,6 +475,14 @@ final class WorksheetPart implements PartContent {
   /// Whether the part read a SpreadsheetML `<mergeCells>`; a second one is
   /// kept opaque and its merges are not read.
   bool _hasMergeCells = false;
+
+  /// Whether the part read a SpreadsheetML `<sheetPr>`; a second one is
+  /// kept opaque.
+  bool _hasSheetPr = false;
+
+  /// Whether the part read a SpreadsheetML `<sheetViews>`; a second one is
+  /// kept opaque.
+  bool _hasSheetViews = false;
   _SheetData? _sheetData;
   CellEncoder? _encoder;
 
@@ -582,6 +606,7 @@ final class WorksheetPart implements PartContent {
           c is _SheetFormat && after.contains('sheetFormatPr') ||
           c is ColsGroup && after.contains('cols') ||
           c is MergeGroup && after.contains('mergeCells') ||
+          c is XmlNode && after.contains(c.localName) ||
           c is _SheetData && after.contains('sheetData') ||
           c is OpaqueXml &&
               c.namespaceUri == Ns.main &&
@@ -633,6 +658,8 @@ final class WorksheetPart implements PartContent {
         case ColsGroup():
           c.writeTo(w, root.namespaces);
         case MergeGroup():
+          c.writeTo(w, root.namespaces);
+        case XmlNode():
           c.writeTo(w, root.namespaces);
         case _SheetData():
           _writeSheetData(w, c, root.namespaces, encoder);
@@ -838,14 +865,47 @@ final class WorksheetPart implements PartContent {
     }
   }
 
-  /// The typed first element of [slot] (`cols`, `sheetFormatPr` or
-  /// `mergeCells`), or `null` when the part has none typed. Elements are
-  /// immutable, so an edit replaces the element, and [swapLayout] undoes
-  /// it.
+  // -- Sheet properties and views --------------------------------------------
+
+  /// The typed first element of [slot], `sheetPr` or `sheetViews`, or
+  /// `null`.
+  XmlNode? _topNode(String slot) {
+    for (final Object c in _children) {
+      if (c is XmlNode && c.localName == slot) return c;
+    }
+    return null;
+  }
+
+  /// The typed first `<sheetPr>`, or `null`.
+  XmlNode? get sheetPr => _topNode('sheetPr');
+
+  /// The typed first `<sheetViews>`, or `null`.
+  XmlNode? get sheetViews => _topNode('sheetViews');
+
+  /// Makes [node] the first element of [slot] (`sheetPr` or `sheetViews`):
+  /// in place, or in schema position when the part has none; `null`
+  /// removes it. Must run inside `editLayout` of that slot.
+  void setNode(String slot, XmlNode? node) {
+    final XmlNode? old = _topNode(slot);
+    if (old == null) {
+      if (node != null) _children.insert(_positionFor(slot), node);
+    } else if (node == null) {
+      _children.remove(old);
+    } else {
+      _children[_children.indexOf(old)] = node;
+    }
+  }
+
+  /// The typed first element of [slot] (`cols`, `sheetFormatPr`,
+  /// `mergeCells`, `sheetPr` or `sheetViews`), or `null` when the part has
+  /// none typed. Elements are immutable, so an edit replaces the element,
+  /// and [swapLayout] undoes it.
   Object? layoutElement(String slot) => switch (slot) {
     'cols' => _cols,
     'sheetFormatPr' => _format,
     'mergeCells' => _mergeGroup,
+    'sheetPr' => sheetPr,
+    'sheetViews' => sheetViews,
     _ => throw ArgumentError.value(slot, 'slot', 'Not a layout slot.'),
   };
 

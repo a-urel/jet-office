@@ -486,6 +486,21 @@ void _writeSheetPr(XmlWriter w, WorksheetSettings settings) {
   w.end();
 }
 
+/// The attributes of the `sheetView` the writer writes for [view], in
+/// `CT_SheetView` order: those that differ from Excel's default only, then
+/// `workbookViewId`. The pane is not among them (see [paneAttributes]).
+///
+/// The model edits an existing `sheetView` with the same values.
+Map<String, String> sheetViewAttributes(XlsxSheetView view) => <String, String>{
+  if (view.showFormulas) 'showFormulas': '1',
+  if (!view.showGridLines) 'showGridLines': '0',
+  if (!view.showHeadings) 'showRowColHeaders': '0',
+  if (!view.showZeros) 'showZeros': '0',
+  if (view.rightToLeft) 'rightToLeft': '1',
+  if (view.zoom != 100) 'zoomScale': '${view.zoom}',
+  'workbookViewId': '0',
+};
+
 /// Writes `sheetViews` with the one view of [view].
 ///
 /// Attributes in `CT_SheetView` order, those that differ from Excel's
@@ -493,13 +508,7 @@ void _writeSheetPr(XmlWriter w, WorksheetSettings settings) {
 void _writeSheetViews(XmlWriter w, XlsxSheetView view) {
   w.start('sheetViews');
   w.start('sheetView');
-  if (view.showFormulas) w.attribute('showFormulas', '1');
-  if (!view.showGridLines) w.attribute('showGridLines', '0');
-  if (!view.showHeadings) w.attribute('showRowColHeaders', '0');
-  if (!view.showZeros) w.attribute('showZeros', '0');
-  if (view.rightToLeft) w.attribute('rightToLeft', '1');
-  if (view.zoom != 100) w.attribute('zoomScale', '${view.zoom}');
-  w.attribute('workbookViewId', '0');
+  sheetViewAttributes(view).forEach(w.attribute);
   final XlsxPane? pane = view.pane;
   if (pane != null) _writePane(w, pane);
   w.end();
@@ -509,34 +518,50 @@ void _writeSheetViews(XmlWriter w, XlsxSheetView view) {
 /// The twips in a point: split offsets are stored in twentieths of a point.
 const int _twipsPerPoint = 20;
 
-/// Writes `pane` and `selection` for [pane], or nothing when it splits
-/// nothing.
+/// What the writer writes for [pane]: the attributes of its `pane` element,
+/// in order, and the part that is active (`topRight`, `bottomLeft` or
+/// `bottomRight`, also the `pane` of the `selection` the writer adds), or
+/// `null` when the pane splits nothing.
 ///
 /// A split offset is rounded to whole twips; an axis that rounds to 0 does
 /// not split. The active part is the one the splits leave: `topRight` when
 /// only the columns split, `bottomLeft` when only the rows do, `bottomRight`
 /// when both do. A frozen pane also gives the top-left cell of that part.
-void _writePane(XmlWriter w, XlsxPane pane) {
+({Map<String, String> attributes, String active})? paneAttributes(
+  XlsxPane pane,
+) {
   final int x = pane.isFrozen
       ? pane.columns
       : (pane.x * _twipsPerPoint).round();
   final int y = pane.isFrozen ? pane.rows : (pane.y * _twipsPerPoint).round();
-  if (x == 0 && y == 0) return;
+  if (x == 0 && y == 0) return null;
   final String active = x == 0
       ? 'bottomLeft'
       : y == 0
       ? 'topRight'
       : 'bottomRight';
+  return (
+    attributes: <String, String>{
+      if (x != 0) 'xSplit': '$x',
+      if (y != 0) 'ySplit': '$y',
+      if (pane.isFrozen) 'topLeftCell': cellRef(pane.rows, pane.columns),
+      'activePane': active,
+      if (pane.isFrozen) 'state': 'frozen',
+    },
+    active: active,
+  );
+}
+
+/// Writes `pane` and `selection` for [pane], or nothing when it splits
+/// nothing (see [paneAttributes]).
+void _writePane(XmlWriter w, XlsxPane pane) {
+  final ({Map<String, String> attributes, String active})? written =
+      paneAttributes(pane);
+  if (written == null) return;
   w.start('pane');
-  if (x != 0) w.attribute('xSplit', '$x');
-  if (y != 0) w.attribute('ySplit', '$y');
-  if (pane.isFrozen) {
-    w.attribute('topLeftCell', cellRef(pane.rows, pane.columns));
-  }
-  w.attribute('activePane', active);
-  if (pane.isFrozen) w.attribute('state', 'frozen');
+  written.attributes.forEach(w.attribute);
   w.end();
-  w.empty('selection', <String, String>{'pane': active});
+  w.empty('selection', <String, String>{'pane': written.active});
 }
 
 /// Adjacent columns that write the same `<col>`, from `min` to `max`
