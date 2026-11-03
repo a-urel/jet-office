@@ -11,9 +11,11 @@
 /// `w:themeFontLang` and every `w:lang` are `en-US` (with `w:eastAsia`
 /// `en-US` and `w:bidi` `ar-SA`), and `w:decimalSymbol` and
 /// `w:listSeparator` are left out so that Word uses the reader's system
-/// values. The style ids and the names of the linked
-/// character styles (`Balk1` and `Başlık 1 Char`, say) and the theme's name
-/// are Word's en-US ones (`Heading1`, `Heading 1 Char`, `Office Theme`). `w:compatSetting compatibilityMode` 15 is kept, so Word does not
+/// values. The file was saved on a Turkish system, so its style ids, the
+/// names of its linked character styles and its theme's name were Turkish
+/// (`Balk1`, `Başlık 1 Char`, `Office Teması`); they are written as Word's
+/// en-US ones (`Heading1`, `Heading 1 Char`, `Office Theme`).
+/// `w:compatSetting compatibilityMode` 15 is kept, so Word does not
 /// open the file in compatibility mode.
 ///
 /// The section is A4 portrait (`w:pgSz` 11906 by 16838 twips) with the
