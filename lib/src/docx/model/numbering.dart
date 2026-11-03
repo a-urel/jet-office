@@ -54,13 +54,48 @@ import 'numbering_formats.dart';
 import 'primitives.dart';
 import 'property_set.dart';
 
+/// A property of a numbering level, to name it for
+/// [DocxNumberingLevel.clear].
+enum DocxNumberingLevelProperty {
+  /// The number format, [DocxNumberingLevel.format] (`w:numFmt`).
+  format('numFmt'),
+
+  /// The level text, [DocxNumberingLevel.text] (`w:lvlText`).
+  text('lvlText'),
+
+  /// The start, [DocxNumberingLevel.start] (`w:start`).
+  start('start'),
+
+  /// The alignment, [DocxNumberingLevel.alignment] (`w:lvlJc`).
+  alignment('lvlJc'),
+
+  /// The indentation, [DocxNumberingLevel.indentation] (`w:pPr/w:ind`).
+  indentation('ind', inParagraph: true),
+
+  /// The bullet font, [DocxNumberingLevel.bulletFont]
+  /// (`w:rPr/w:rFonts`).
+  bulletFont('rFonts', inRun: true);
+
+  const DocxNumberingLevelProperty(
+    this._element, {
+    bool inParagraph = false,
+    bool inRun = false,
+  }) : _inParagraph = inParagraph,
+       _inRun = inRun;
+
+  final String _element;
+  final bool _inParagraph;
+  final bool _inRun;
+}
+
 /// One level of a list definition (`w:lvl`): how the number of a paragraph
 /// at that level looks and where it sits.
 ///
 /// Every member is nullable, `null` meaning "not set here", and reads
 /// `null` too when the file holds a value the model cannot type (plan
 /// Ruling 2); such a child is written back as read. Setting a member to
-/// the value it reads is a no-op, and each set of a level in a document is
+/// the value it reads is a no-op, so `null` does not remove a child the
+/// model cannot type; [clear] does. Each set of a level in a document is
 /// one change of its change log. `w:tplc`, `w:tentative` and every child
 /// the model does not type stay as read.
 final class DocxNumberingLevel {
@@ -161,11 +196,27 @@ final class DocxNumberingLevel {
   /// bullet such as U+F0B7 needs its symbol font (`Symbol`).
   ///
   /// A set writes the slots the value names, normally `w:ascii` and
-  /// `w:hAnsi`, with `w:hint="default"` as Word writes it, and keeps every
-  /// other attribute of the element (`w:cs`) as read.
+  /// `w:hAnsi`, and keeps every other attribute of the element (`w:cs`,
+  /// `w:hint`) as read; without a `w:hint` read, it writes
+  /// `w:hint="default"`, as Word does.
   DocxFonts? get bulletFont => _rPr.valueOf('rFonts') as DocxFonts?;
 
   set bulletFont(DocxFonts? value) => _rPr.setValue('rFonts', value);
+
+  /// Removes [property] from the level, whatever the model reads of it: a
+  /// child it does not type (`w:start w:val="1in"`, `w:numFmt
+  /// w:val="chicago"`, `w:lvlText w:val="%0"`) goes too. Clearing
+  /// [DocxNumberingLevelProperty.bulletFont] removes the `w:rFonts` of the
+  /// level's `w:rPr` and leaves the rest of it. Nothing is recorded when
+  /// the level has no such child.
+  void clear(DocxNumberingLevelProperty property) {
+    final PropertySet set = property._inParagraph
+        ? _pPr
+        : property._inRun
+        ? _rPr
+        : _set;
+    set.clearChild(property._element);
+  }
 
   @override
   String toString() => 'DocxNumberingLevel($level, ${format?.name}, $text)';
@@ -236,6 +287,11 @@ final class DocxLevelOverride {
     }
     _set.setValue('startOverride', value);
   }
+
+  /// Removes the `w:startOverride`, whatever the model reads of it (a
+  /// value out of range, say), which setting `null` does not when it reads
+  /// `null`. Nothing is recorded when there is none.
+  void clearStartOverride() => _set.clearChild('startOverride');
 
   @override
   String toString() => 'DocxLevelOverride($level, $startOverride)';
@@ -710,7 +766,8 @@ DocxNumbering newNumbering(
 /// The definition's own `w:abstractNumId`, if any, is dropped. It goes
 /// after the last abstract definition, or after the picture bullets when
 /// there is none. How the list helpers add Word's toolbar lists (plan
-/// Ruling 9). [xml] that is not one well-formed `w:abstractNum` throws
+/// Ruling 9). [xml] that is not one well-formed `w:abstractNum`, with
+/// nothing after it and no entity XML does not define, throws
 /// [ArgumentError]. The add is one transaction.
 DocxAbstractNumbering addAbstractNumbering(
   DocxNumbering numbering,
@@ -720,13 +777,21 @@ DocxAbstractNumbering addAbstractNumbering(
     for (final DocxAbstractNumbering a in numbering._abstracts) a.id,
   }, 0);
   final Object read;
+  final String source = '<w:numbering xmlns:w="${Ns.w}">$xml</w:numbering>';
   try {
-    final XmlPullReader r = XmlPullReader(
-      '<w:numbering xmlns:w="${Ns.w}">$xml</w:numbering>',
-    );
+    _checkDecodes(source);
+    final XmlPullReader r = XmlPullReader(source);
     Object? found;
+    int roots = 0;
     while (r.next()) {
-      if (r.eventType != XmlEventType.startElement || r.depth != 2) {
+      if (r.eventType != XmlEventType.startElement) {
+        continue;
+      }
+      // The input closed the wrapper and opened another root.
+      if (r.depth == 1 && ++roots > 1) {
+        throw ArgumentError.value(xml, 'xml', 'Not one w:abstractNum');
+      }
+      if (r.depth != 2) {
         continue;
       }
       if (found != null ||
@@ -762,6 +827,25 @@ DocxAbstractNumbering addAbstractNumbering(
     ),
   );
   return abstract;
+}
+
+/// Decodes every attribute value and every text of the document [source],
+/// so an entity XML does not define throws [XmlParseException] (the kept
+/// slices are not decoded when read).
+void _checkDecodes(String source) {
+  final XmlPullReader r = XmlPullReader(source);
+  while (r.next()) {
+    switch (r.eventType) {
+      case XmlEventType.startElement:
+        for (int i = 0; i < r.attributeCount; i++) {
+          r.attributeValue(i);
+        }
+      case XmlEventType.characters:
+        r.text;
+      default:
+        break;
+    }
+  }
 }
 
 /// The root start tag of [numbering], as read.

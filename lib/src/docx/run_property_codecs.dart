@@ -384,29 +384,43 @@ final class FontsCodec extends PropertyCodec<DocxFonts> {
     String prefix,
     DocxFonts value,
     PropertyElement? asRead,
-  ) {
-    w.start('$prefix:$localName');
-    void slot(String name, String? v) {
-      if (v != null) w.attribute('$prefix:$name', scrubXmlText(v).text);
-    }
+  ) => _writeFonts(w, '$prefix:$localName', prefix, value, asRead);
+}
 
-    slot('ascii', value.ascii);
-    slot('hAnsi', value.hAnsi);
-    slot('eastAsia', value.eastAsia);
-    slot('asciiTheme', value.asciiTheme);
-    slot('hAnsiTheme', value.hAnsiTheme);
-    slot('eastAsiaTheme', value.eastAsiaTheme);
-    _writeKept(w, prefix, asRead, _fontSlots);
-    w.end();
+/// Writes the `w:rFonts` [qualifiedName] of [value]: its six slots, then
+/// [extra] (attribute local name to value, written with [prefix]), then
+/// every other attribute of [asRead] as read.
+void _writeFonts(
+  XmlWriter w,
+  String qualifiedName,
+  String prefix,
+  DocxFonts value,
+  PropertyElement? asRead, {
+  Map<String, String> extra = const <String, String>{},
+}) {
+  w.start(qualifiedName);
+  void slot(String name, String? v) {
+    if (v != null) w.attribute('$prefix:$name', scrubXmlText(v).text);
   }
+
+  slot('ascii', value.ascii);
+  slot('hAnsi', value.hAnsi);
+  slot('eastAsia', value.eastAsia);
+  slot('asciiTheme', value.asciiTheme);
+  slot('hAnsiTheme', value.hAnsiTheme);
+  slot('eastAsiaTheme', value.eastAsiaTheme);
+  extra.forEach(slot);
+  _writeKept(w, prefix, asRead, <String>{..._fontSlots, ...extra.keys});
+  w.end();
 }
 
 /// The codec of the `w:rFonts` of a numbering level's `w:rPr`: the font of
 /// a bullet.
 ///
 /// It reads as [FontsCodec] does. A set writes the slots the value names
-/// and `w:hint="default"`, as Word writes a bullet's font, and keeps every
-/// other attribute as read (`w:cs`, say).
+/// and keeps every other attribute as read (`w:cs`, `w:hint`, say), as
+/// [FontsCodec] does (plan Ruling 3); a `w:rFonts` without `w:hint` gets
+/// `w:hint="default"`, as Word writes a bullet's font.
 final class BulletFontsCodec extends PropertyCodec<DocxFonts> {
   /// The codec of a level's `w:rFonts`.
   const BulletFontsCodec() : super('rFonts');
@@ -424,20 +438,16 @@ final class BulletFontsCodec extends PropertyCodec<DocxFonts> {
     DocxFonts value,
     PropertyElement? asRead,
   ) {
-    w.start('$prefix:$localName');
-    void slot(String name, String? v) {
-      if (v != null) w.attribute('$prefix:$name', scrubXmlText(v).text);
-    }
-
-    slot('ascii', value.ascii);
-    slot('hAnsi', value.hAnsi);
-    slot('eastAsia', value.eastAsia);
-    slot('asciiTheme', value.asciiTheme);
-    slot('hAnsiTheme', value.hAnsiTheme);
-    slot('eastAsiaTheme', value.eastAsiaTheme);
-    w.attribute('$prefix:hint', 'default');
-    _writeKept(w, prefix, asRead, const <String>{..._fontSlots, 'hint'});
-    w.end();
+    _writeFonts(
+      w,
+      '$prefix:$localName',
+      prefix,
+      value,
+      asRead,
+      extra: asRead?.w('hint') == null
+          ? const <String, String>{'hint': 'default'}
+          : const <String, String>{},
+    );
   }
 }
 

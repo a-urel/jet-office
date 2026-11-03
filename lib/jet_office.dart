@@ -190,7 +190,8 @@ export 'src/docx/model/numbering.dart'
         DocxLevelOverride,
         DocxNumbering,
         DocxNumberingInstance,
-        DocxNumberingLevel;
+        DocxNumberingLevel,
+        DocxNumberingLevelProperty;
 export 'src/docx/model/numbering_formats.dart'
     show DocxLevelAlignment, DocxNumberFormat;
 export 'src/docx/model/paragraph_properties.dart'

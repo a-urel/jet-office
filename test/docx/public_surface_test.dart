@@ -89,6 +89,17 @@ void main() {
       expect(c, throwsA(isA<NoSuchMethodError>()), reason: n);
     });
     expect((o as DocxLevelOverride).startOverride, 5);
+    for (final MapEntry<String, void Function()> e in <String, void Function()>{
+      'level clearChild': () => (level as dynamic).clearChild('start'),
+      'level clear by name': () => (level as dynamic).clear('start'),
+      'override clear': () => (o as dynamic).clear('startOverride'),
+    }.entries) {
+      expect(
+        e.value,
+        throwsA(anyOf(isA<NoSuchMethodError>(), isA<TypeError>())),
+        reason: e.key,
+      );
+    }
   });
 
   test('the numbering, its definitions and instances expose no internals', () {

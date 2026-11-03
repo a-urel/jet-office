@@ -267,10 +267,97 @@ void main() {
     expect(
       _numberingOf(doc),
       contains(
-        '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default" '
-        'w:cs="Courier New"/>',
+        '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Courier New" '
+        'w:hint="default"/>',
       ),
     );
+  });
+
+  test('clear removes a child the model does not type', () {
+    final DocxDocument doc = _open(
+      '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0" w:tplc="7">'
+      '<w:start w:val="1in"/><w:numFmt w:val="chicago"/>'
+      '<w:lvlText w:val="%0"/><w:lvlJc w:val="both"/>'
+      '<w:pPr><w:keepNext/><w:ind w:start="720"/></w:pPr>'
+      '<w:rPr><w:rFonts w:ascii=""/><w:b/></w:rPr></w:lvl></w:abstractNum>'
+      '<w:num w:numId="1"><w:abstractNumId w:val="0"/>'
+      '<w:lvlOverride w:ilvl="0"><w:startOverride w:val="-4"/>'
+      '</w:lvlOverride></w:num>',
+    );
+    final DocxNumbering numbering = doc.numbering;
+    final DocxNumberingLevel level =
+        numbering.abstractNumberings.single.levels.single;
+    final DocxLevelOverride o = numbering.instances.single.overrides.single;
+    expect(level.start, isNull);
+    level.start = null;
+    o.startOverride = null;
+    expect(changeLogOf(doc).hasChanges, isFalse);
+    for (final DocxNumberingLevelProperty p
+        in DocxNumberingLevelProperty.values) {
+      level.clear(p);
+    }
+    o.clearStartOverride();
+    expect(changeLogOf(doc).hasChanges, isTrue);
+    final String xml = _numberingOf(doc);
+    expect(
+      xml,
+      contains(
+        '<w:lvl w:ilvl="0" w:tplc="7"><w:pPr><w:keepNext/></w:pPr>'
+        '<w:rPr><w:b/></w:rPr></w:lvl>',
+      ),
+    );
+    expect(xml, contains('<w:lvlOverride w:ilvl="0"/></w:num>'));
+  });
+
+  test('clearing what is not there records nothing', () {
+    final DocxDocument doc = _open(
+      '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"/>'
+      '</w:abstractNum>',
+    );
+    final DocxNumberingLevel level =
+        doc.numbering.abstractNumberings.single.levels.single;
+    for (final DocxNumberingLevelProperty p
+        in DocxNumberingLevelProperty.values) {
+      level.clear(p);
+    }
+    expect(changeLogOf(doc).hasChanges, isFalse);
+  });
+
+  test('a bullet font set keeps a read w:hint', () {
+    final DocxDocument doc = _open(
+      '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:rPr>'
+      '<w:rFonts w:ascii="A" w:hAnsi="A" w:hint="eastAsia"/></w:rPr>'
+      '</w:lvl></w:abstractNum>',
+    );
+    doc.numbering.abstractNumberings.single.levels.single.bulletFont =
+        DocxFonts(ascii: 'Symbol', hAnsi: 'Symbol');
+    expect(
+      _numberingOf(doc),
+      contains(
+        '<w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="eastAsia"/>',
+      ),
+    );
+  });
+
+  test('addAbstractNumbering refuses trailing input and undefined '
+      'entities', () {
+    final DocxNumbering numbering = _open('').numbering;
+    for (final String bad in <String>[
+      '<w:abstractNum/></w:numbering><w:numbering>',
+      '<w:abstractNum><w:lvl w:ilvl="0"><w:lvlText w:val="&bogus;"/>'
+          '</w:lvl></w:abstractNum>',
+      '<w:abstractNum><w:name w:val="x"/>&bogus;</w:abstractNum>',
+      '<w:abstractNum/><w:abstractNum/>',
+      '<w:num/>',
+      '',
+    ]) {
+      expect(
+        () => addAbstractNumbering(numbering, bad),
+        throwsArgumentError,
+        reason: bad,
+      );
+    }
+    expect(numbering.abstractNumberings, isEmpty);
   });
 
   test('a level edit and a start override edit are changes that revert', () {
