@@ -264,6 +264,29 @@ void main() {
     expect(w.detail, 'application/xml');
   });
 
+  test('mainPartContentTypeUnexpected cuts and cleans the type and the '
+      'part', () {
+    final DocxWarningCollector warnings = DocxWarningCollector();
+    final String type = 'application/\u202Ex\u0085y\u2028${'z' * 10000}';
+    _open(
+      buildDocx(mainPath: 'word/doc\u202Eument.xml', contentType: type),
+      warnings: warnings,
+    );
+    final DocxWarning w = warnings.warnings.single;
+    expect(w.code, DocxWarningCode.mainPartContentTypeUnexpected);
+    expect(w.detail, hasLength(257));
+    expect(w.detail, startsWith('application/\uFFFDx\uFFFDy\uFFFDzzz'));
+    expect(w.detail, endsWith('z…'));
+    expect(w.part, '/word/doc\uFFFDument.xml');
+    for (final OfficeLocale locale in OfficeLocale.values) {
+      final String m = w.message(locale);
+      expect(m, isNot(contains('\u202E')), reason: '$locale');
+      expect(m, isNot(contains('\u0085')), reason: '$locale');
+      expect(m, isNot(contains('\u2028')), reason: '$locale');
+      expect(m.length, lessThan(600), reason: '$locale');
+    }
+  });
+
   test('openXml of a part the package lacks is a StateError', () {
     final DocxPackage package = _open(buildDocx());
     expect(() => package.openXml('/word/nothing.xml'), throwsStateError);

@@ -575,7 +575,16 @@ void main() {
       );
       expect(e.reason, DocxReadFailure.limitExceeded);
       expect(e.part, '/word/document.xml');
-      expect(e.message, 'Limit maxTextLength (4) exceeded by body/p[2].');
+      // Paragraphs only, as in a warning's location: the table does not
+      // count.
+      expect(e.message, 'Limit maxTextLength (4) exceeded by body/p[1].');
+    });
+
+    test('a content control and a mid-body w:sectPr do not count', () {
+      final DocxReadException e = refused(
+        '<w:sdt/><w:sectPr/><w:p/><w:p><w:r><w:t>abcde</w:t></w:r></w:p>',
+      );
+      expect(e.message, 'Limit maxTextLength (4) exceeded by body/p[1].');
     });
 
     test('the visible text of an opaque inline counts too', () {

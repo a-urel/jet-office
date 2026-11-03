@@ -1,4 +1,5 @@
-/// XML namespaces, relationship types and content types of XLSX and DOCX packages.
+/// XML namespaces, relationship types and content types of XLSX and DOCX
+/// packages.
 ///
 /// Ported from quds_office_engine `lib/src/xml/namespaces.dart` at commit 15c5d29.
 /// Ported from quds_office_engine `lib/src/opc/content_types.dart` at commit 15c5d29.
@@ -61,7 +62,8 @@ abstract final class Ns {
 
   /// Extended (application) properties, `docProps/app.xml`.
   static const String extendedProperties =
-      'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties';
+      'http://schemas.openxmlformats.org/officeDocument/2006/'
+      'extended-properties';
 
   /// Custom properties, `docProps/custom.xml`.
   static const String customProperties =
@@ -124,7 +126,8 @@ abstract final class Ns {
 
 /// Relationship type URIs.
 abstract final class RelType {
-  /// The main document part of the package, the workbook.
+  /// The main part of the package: the workbook of an XLSX, the document of
+  /// a DOCX.
   static const String officeDocument =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
 

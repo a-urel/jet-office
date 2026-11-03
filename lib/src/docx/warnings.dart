@@ -15,6 +15,7 @@ import 'dart:collection';
 
 import '../common/locale.dart';
 import '../common/warning_aggregator.dart';
+import 'read_exception.dart' show displayPart, displayText;
 import 'warning_messages.dart';
 
 /// What kind of data problem a [DocxWarning] reports.
@@ -98,7 +99,9 @@ final class DocxWarningCollector {
   /// Records [count] occurrences of [code] in [part], the absolute part name.
   ///
   /// [location] is the path of the occurrence, for codes that have one.
-  /// [detail] is the parameter of the code, if it has one.
+  /// [detail] is the parameter of the code, if it has one. Both [part] and
+  /// [detail] may come from the file, so they are cut and cleaned for
+  /// display as `DocxReadException.part` is.
   void add(
     DocxWarningCode code, {
     required String part,
@@ -109,9 +112,9 @@ final class DocxWarningCollector {
     final int before = _aggregator.all.length;
     final AggregatedWarning<DocxWarningCode> entry = _aggregator.add(
       code,
-      scope: part,
+      scope: displayPart(part),
       location: location,
-      detail: detail,
+      detail: detail == null ? null : displayText(detail),
       count: count,
     );
     // A new entry is appended; an aggregated one is already wrapped.

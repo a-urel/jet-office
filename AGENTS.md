@@ -203,10 +203,11 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   is a model or writer bug, as in Excel's case.
 - Word files go in `test/fixtures/owner/docx/`, listed in its
   `manifest.json`, each with `<name>.expected.txt`, the text of the body's
-  paragraphs (the README there says how). `tool/draft_expected_docx.dart`
-  drafts it from the model's reading; the owner confirms every line against
-  Word and sets `confirmedBy`. Never edit a committed Word file, its expected
-  text or its manifest entry without the owner.
+  paragraphs (`test/fixtures/owner/README.md`, section "Word files", says
+  how). `tool/draft_expected_docx.dart` drafts it from the model's reading;
+  the owner confirms every line against Word and sets `confirmedBy`. Never
+  edit a committed Word file, its expected text or its manifest entry
+  without the owner.
 
 ## Benchmark
 

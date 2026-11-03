@@ -360,8 +360,10 @@ final class _PartReader {
   final String _partName;
   final int _maxTextLength;
 
-  /// The index in the body of the block being read, for errors.
-  int _blockIndex = 0;
+  /// The index among the body's paragraphs of the paragraph being read,
+  /// for errors: the index of a warning's location (`body/p[i]`), which
+  /// other blocks do not shift.
+  int _paragraphIndex = 0;
 
   DocumentPart read() {
     final XmlPullReader r = _r;
@@ -414,9 +416,9 @@ final class _PartReader {
         blocks.add(opaqueBlock(sectPr!));
         sectPr = null;
       }
-      _blockIndex = blocks.length;
       if (_isW(r, 'p')) {
         blocks.add(_readParagraph());
+        _paragraphIndex++;
       } else if (_isW(r, 'sectPr')) {
         sectPr = OpaqueXml.capture(r);
       } else {
@@ -571,10 +573,11 @@ final class _PartReader {
     return buffer.toString();
   }
 
-  /// The `limitExceeded` failure of a text in the block being read.
+  /// The `limitExceeded` failure of a text in the paragraph being read.
   DocxReadException _tooLong() => DocxReadException(
     DocxReadFailure.limitExceeded,
-    'Limit maxTextLength ($_maxTextLength) exceeded by body/p[$_blockIndex].',
+    'Limit maxTextLength ($_maxTextLength) exceeded by '
+    'body/p[$_paragraphIndex].',
     part: _partName,
   );
 }

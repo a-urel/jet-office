@@ -54,7 +54,7 @@ final class DocxReadException implements Exception {
   /// [part] is made absolute, shortened and cleaned for display, see
   /// [part].
   DocxReadException(this.reason, this.message, {String? part})
-    : part = part == null ? null : _displayPart(part);
+    : part = part == null ? null : displayPart(part);
 
   /// The category of the failure.
   final DocxReadFailure reason;
@@ -188,25 +188,34 @@ bool _samePart(String? a, String b) {
   return key(a) == key(b);
 }
 
-/// The most UTF-16 code units of a part name an exception keeps, its
-/// leading `/` included.
-const int _partLength = 256;
+/// The most UTF-16 code units of a part name or a quoted value a message
+/// keeps, a part name's leading `/` included.
+const int _displayLength = 256;
 
-/// [name] with a leading `/`, cut to [_partLength] code units plus `…` and
-/// made safe to print.
-String _displayPart(String name) {
-  final String absolute = name.startsWith('/') ? name : '/$name';
-  int end = absolute.length;
+/// [name] with a leading `/`, cut and made safe to print by [displayText].
+///
+/// The [DocxReadException.part] of every exception, and the part of every
+/// warning.
+String displayPart(String name) =>
+    displayText(name.startsWith('/') ? name : '/$name');
+
+/// [text] from a file, cut to 256 UTF-16 code units (a surrogate pair is
+/// never split) followed by `…`, with control characters, line and
+/// paragraph separators and bidirectional controls replaced by U+FFFD.
+///
+/// For a value that a message quotes, such as a warning's detail.
+String displayText(String text) {
+  int end = text.length;
   bool cut = false;
-  if (end > _partLength) {
-    end = _partLength;
-    final int last = absolute.codeUnitAt(end - 1);
+  if (end > _displayLength) {
+    end = _displayLength;
+    final int last = text.codeUnitAt(end - 1);
     if (last >= 0xD800 && last <= 0xDBFF) end--;
     cut = true;
   }
   final StringBuffer out = StringBuffer();
   for (int i = 0; i < end; i++) {
-    final int ch = absolute.codeUnitAt(i);
+    final int ch = text.codeUnitAt(i);
     out.writeCharCode(isUnsafeInMessage(ch) ? 0xFFFD : ch);
   }
   if (cut) out.write('…');

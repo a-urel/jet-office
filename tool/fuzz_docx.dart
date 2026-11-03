@@ -56,7 +56,8 @@ void main(List<String> args) {
   );
   stdout.writeln(
     'seeds ${options.first}-${options.last}: ${result.cases} cases, '
-    '${result.refused} refused with DocxReadException, ${result.failures} failures, '
+    '${result.refused} refused with DocxReadException, '
+    '${result.failures} failures, '
     '${total.elapsed.inMilliseconds} ms',
   );
   if (result.failures > 0) exitCode = 1;

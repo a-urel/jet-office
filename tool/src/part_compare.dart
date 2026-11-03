@@ -3,9 +3,9 @@
 ///
 /// Not ported from Quds; written for jet_office. This is the yardstick the
 /// phase 3 and phase 4 round-trip tests use to prove that opening and
-/// saving a file keeps every part (spec 4.2 of each phase). It is test-side tooling: it uses
-/// `package:archive` and `package:xml`, never `dart:io`, so it runs on the
-/// VM and in a browser.
+/// saving a file keeps every part (spec 4.2 of each phase). It is test-side
+/// tooling: it uses `package:archive` and `package:xml`, never `dart:io`, so
+/// it runs on the VM and in a browser.
 ///
 /// [comparePackages] returns one line per difference, `'<part>: <what>'`,
 /// and nothing when the packages are equal. A part is XML or binary by its

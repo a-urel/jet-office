@@ -31,9 +31,6 @@ import '../../xml/xml_pull_reader.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
 
-const String _officeDocumentType =
-    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
-    'officeDocument';
 const String _xlsbType =
     'application/vnd.ms-excel.sheet.binary.macroEnabled.main';
 const List<String> _workbookTypes = <String>[
@@ -163,7 +160,7 @@ final class PackageReader {
       if (rel.type == RelType.officeDocumentStrict) {
         throw strictUnsupported();
       }
-      if (rel.type == _officeDocumentType && hasPart(rel.target)) {
+      if (rel.type == RelType.officeDocument && hasPart(rel.target)) {
         found = rel.target;
         break;
       }

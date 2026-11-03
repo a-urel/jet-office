@@ -199,6 +199,27 @@ void main() {
         expect(_roundTrip(xml), isEmpty);
       });
     }
+
+    test('a style with child elements is typed and its children are '
+        'dropped', () {
+      // The schema gives pStyle and rStyle no children, so a file that has
+      // them is invalid; the model types the style and drops them (a
+      // fidelity exception, docs/docx-model.md).
+      final DocumentPart part = _read(
+        _doc(
+          '<w:p><w:pPr><w:pStyle w:val="Title"><w:x/></w:pStyle></w:pPr>'
+          '<w:r><w:rPr><w:rStyle w:val="Strong"><w:y/></w:rStyle></w:rPr>'
+          '<w:t>a</w:t></w:r></w:p>',
+        ),
+      );
+      expect(_p(part).style, 'Title');
+      expect(_r(_p(part)).style, 'Strong');
+      final String out = _encode(part);
+      expect(out, contains('<w:pStyle w:val="Title"/>'));
+      expect(out, contains('<w:rStyle w:val="Strong"/>'));
+      expect(out, isNot(contains('<w:x')));
+      expect(out, isNot(contains('<w:y')));
+    });
   });
 
   test('mc:AlternateContent and w14 attributes keep their declarations', () {
