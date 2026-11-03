@@ -392,7 +392,7 @@ void exerciseModel(Uint8List bytes) {
     }
   }
   for (final XlsxWarning warning in workbook.warnings) {
-    for (final XlsxLocale locale in XlsxLocale.values) {
+    for (final OfficeLocale locale in OfficeLocale.values) {
       warning.message(locale);
     }
   }
@@ -450,7 +450,7 @@ void _exercise(Uint8List bytes) {
     }
   }
   for (final XlsxWarning warning in reader.warnings) {
-    for (final XlsxLocale locale in XlsxLocale.values) {
+    for (final OfficeLocale locale in OfficeLocale.values) {
       warning.message(locale);
     }
   }

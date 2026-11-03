@@ -1,7 +1,7 @@
+import 'package:jet_office/src/common/locale.dart';
 import 'package:jet_office/src/xlsx/format/format_code.dart';
 import 'package:jet_office/src/xlsx/format/format_kind.dart';
 import 'package:jet_office/src/xlsx/format/format_locale.dart';
-import 'package:jet_office/src/xlsx/warnings.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -15,7 +15,7 @@ void main() {
       expect((l.am, l.pm), ('AM', 'PM'));
       expect((l.trueText, l.falseText), ('TRUE', 'FALSE'));
       expect(l.lcid, 0x409);
-      expect(l.messageLocale, XlsxLocale.en);
+      expect(l.messageLocale, OfficeLocale.en);
       expect(l.verified, isTrue);
     });
 
@@ -99,7 +99,7 @@ void main() {
       expect((l.am, l.pm), ('AM', 'PM'));
       expect((l.trueText, l.falseText), ('WAHR', 'FALSCH'));
       expect(l.lcid, 0x407);
-      expect(l.messageLocale, XlsxLocale.de);
+      expect(l.messageLocale, OfficeLocale.de);
       expect(l.verified, isTrue);
     });
 
@@ -170,7 +170,7 @@ void main() {
       expect((l.am, l.pm), ('ÖÖ', 'ÖS'));
       expect((l.trueText, l.falseText), ('DOĞRU', 'YANLIŞ'));
       expect(l.lcid, 0x41F);
-      expect(l.messageLocale, XlsxLocale.tr);
+      expect(l.messageLocale, OfficeLocale.tr);
       expect(l.verified, isTrue);
     });
 

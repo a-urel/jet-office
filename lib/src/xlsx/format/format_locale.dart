@@ -7,13 +7,13 @@
 /// separators, names and built-in codes (spec §5.5, §6.1).
 library;
 
-import '../warnings.dart';
+import '../../common/locale.dart';
 
 /// Formatting data for one region: separators, month and day names, the
 /// built-in codes that follow the region, and the words for booleans and
 /// errors.
 ///
-/// It is not [XlsxLocale], which names the language of warning messages;
+/// It is not [OfficeLocale], which names the language of warning messages;
 /// [messageLocale] gives the matching one. Every field but [dateSeparator]
 /// is required, so a caller can define a region the library does not ship.
 final class XlsxFormatLocale {
@@ -103,7 +103,7 @@ final class XlsxFormatLocale {
   final String longTimeCode;
 
   /// The language of warning messages that matches this region.
-  final XlsxLocale messageLocale;
+  final OfficeLocale messageLocale;
 
   /// Whether the owner checked this locale's output against Excel for Mac.
   ///
@@ -206,7 +206,7 @@ final class XlsxFormatLocale {
     },
     longDateCode: 'dddd, mmmm d, yyyy',
     longTimeCode: 'h:mm:ss AM/PM',
-    messageLocale: XlsxLocale.en,
+    messageLocale: OfficeLocale.en,
     verified: true,
   );
 
@@ -308,7 +308,7 @@ final class XlsxFormatLocale {
     },
     longDateCode: 'dddd, d. mmmm yyyy',
     longTimeCode: 'hh:mm:ss',
-    messageLocale: XlsxLocale.de,
+    messageLocale: OfficeLocale.de,
     verified: true,
   );
 
@@ -409,7 +409,7 @@ final class XlsxFormatLocale {
     },
     longDateCode: 'd mmmm yyyy dddd',
     longTimeCode: 'hh:mm:ss',
-    messageLocale: XlsxLocale.tr,
+    messageLocale: OfficeLocale.tr,
     verified: true,
   );
 }

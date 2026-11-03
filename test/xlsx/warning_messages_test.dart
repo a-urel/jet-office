@@ -1,353 +1,354 @@
+import 'package:jet_office/src/common/locale.dart';
 import 'package:jet_office/src/xlsx/warnings.dart';
 import 'package:test/test.dart';
 
 /// Every message of every code and locale, verbatim, for a warning on sheet
 /// `S`, cell `A1`, requested name `O`.
-const Map<(XlsxWarningCode, XlsxLocale), String>
-_expected = <(XlsxWarningCode, XlsxLocale), String>{
+const Map<(XlsxWarningCode, OfficeLocale), String>
+_expected = <(XlsxWarningCode, OfficeLocale), String>{
   (
     XlsxWarningCode.invalidCharactersRemoved,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' had characters removed that XML does not allow (A1).",
   (
     XlsxWarningCode.invalidCharactersRemoved,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ enthielten Zeichen, die XML nicht erlaubt; sie wurden entfernt (A1).',
   (
     XlsxWarningCode.invalidCharactersRemoved,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): "“S” sayfasındaki 1 hücreden XML'in izin vermediği karakterler çıkarıldı (A1).",
   (
     XlsxWarningCode.textTruncated,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' were cut to 32,767 characters, Excel's limit (A1).",
   (
     XlsxWarningCode.textTruncated,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ wurden auf 32.767 Zeichen gekürzt, die Obergrenze von Excel (A1).',
   (
     XlsxWarningCode.textTruncated,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre, Excel sınırı olan 32.767 karaktere kısaltıldı (A1).',
-  (XlsxWarningCode.sheetNameChanged, XlsxLocale.en):
+  (XlsxWarningCode.sheetNameChanged, OfficeLocale.en):
       "Sheet name 'O' is not allowed in Excel and was changed to 'S'.",
   (
     XlsxWarningCode.sheetNameChanged,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): 'Der Blattname „O“ ist in Excel nicht zulässig und wurde in „S“ geändert.',
-  (XlsxWarningCode.sheetNameChanged, XlsxLocale.tr):
+  (XlsxWarningCode.sheetNameChanged, OfficeLocale.tr):
       "“O” sayfa adına Excel'de izin verilmiyor; ad “S” olarak değiştirildi.",
-  (XlsxWarningCode.sheetNameDuplicated, XlsxLocale.en):
+  (XlsxWarningCode.sheetNameDuplicated, OfficeLocale.en):
       "Sheet name 'O' was already used and was changed to 'S'.",
-  (XlsxWarningCode.sheetNameDuplicated, XlsxLocale.de):
+  (XlsxWarningCode.sheetNameDuplicated, OfficeLocale.de):
       'Der Blattname „O“ war bereits vergeben und wurde in „S“ geändert.',
-  (XlsxWarningCode.sheetNameDuplicated, XlsxLocale.tr):
+  (XlsxWarningCode.sheetNameDuplicated, OfficeLocale.tr):
       '“O” sayfa adı zaten kullanılıyordu; ad “S” olarak değiştirildi.',
   (
     XlsxWarningCode.intPrecisionLost,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 whole number(s) on sheet 'S' are larger than Excel can store exactly and may be rounded (A1).",
   (
     XlsxWarningCode.intPrecisionLost,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 ganze Zahl(en) im Blatt „S“ sind größer, als Excel exakt speichern kann, und werden möglicherweise gerundet (A1).',
   (
     XlsxWarningCode.intPrecisionLost,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): "“S” sayfasındaki 1 tam sayı, Excel'in tam olarak saklayabileceğinden büyük; yuvarlanabilir (A1).",
   (
     XlsxWarningCode.dateOutsideExcelRange,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 date(s) on sheet 'S' are outside the range Excel can store as dates (1900–9999) and were written as text (A1).",
   (
     XlsxWarningCode.dateOutsideExcelRange,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Datumswert(e) im Blatt „S“ liegen außerhalb des Bereichs, den Excel als Datum speichern kann (1900–9999); sie wurden als Text geschrieben (A1).',
   (
     XlsxWarningCode.dateOutsideExcelRange,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): "“S” sayfasındaki 1 tarih, Excel'in tarih olarak saklayabildiği aralığın (1900–9999) dışında olduğu için metin olarak yazıldı (A1).",
   (
     XlsxWarningCode.dateInNonDateFormat,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 date(s) on sheet 'S' use a number format that does not show dates (A1).",
   (
     XlsxWarningCode.dateInNonDateFormat,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Datumswert(e) im Blatt „S“ haben ein Zahlenformat, das kein Datum anzeigt (A1).',
   (
     XlsxWarningCode.dateInNonDateFormat,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 tarih, tarih göstermeyen bir sayı biçimi kullanıyor (A1).',
   (
     XlsxWarningCode.tableColumnRenamed,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 table header cell(s) on sheet 'S' were set, so their columns were renamed to match; formulas that refer to a column by its old name are not updated (A1).",
   (
     XlsxWarningCode.tableColumnRenamed,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Tabellenkopfzelle(n) im Blatt „S“ wurden gesetzt, daher wurden ihre Spalten passend umbenannt; Formeln, die eine Spalte mit ihrem alten Namen ansprechen, werden nicht angepasst (A1).',
   (
     XlsxWarningCode.tableColumnRenamed,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasında 1 tablo başlık hücresi değiştirildi; sütunları da bu metinle yeniden adlandırıldı. Bir sütuna eski adıyla başvuran formüller güncellenmedi (A1).',
   (
     XlsxWarningCode.tableHeaderAdjusted,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 table header cell(s) on sheet 'S' were given a different text, because a table's column names must be unique and not empty (A1).",
   (
     XlsxWarningCode.tableHeaderAdjusted,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Tabellenkopfzelle(n) im Blatt „S“ erhielten einen anderen Text, weil die Spaltennamen einer Tabelle eindeutig und nicht leer sein müssen (A1).',
   (
     XlsxWarningCode.tableHeaderAdjusted,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 tablo başlık hücresine farklı bir metin yazıldı, çünkü bir tablonun sütun adları benzersiz olmalı ve boş olamaz (A1).',
   (
     XlsxWarningCode.sheetPartMissing,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "Sheet 'S' is listed in the workbook but its part is missing; it reads as empty.",
   (
     XlsxWarningCode.sheetPartMissing,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): 'Das Blatt „S“ ist in der Arbeitsmappe aufgeführt, aber sein Teil fehlt in der Datei; es wird als leer gelesen.',
   (
     XlsxWarningCode.sheetPartMissing,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfası çalışma kitabında listeleniyor ancak sayfa parçası dosyada yok; boş okunuyor.',
   (
     XlsxWarningCode.sharedStringInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' point to a shared string that does not exist; they read as empty (A1).",
   (
     XlsxWarningCode.sharedStringInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ verweisen auf eine gemeinsame Zeichenfolge, die nicht existiert; sie werden als leer gelesen (A1).',
   (
     XlsxWarningCode.sharedStringInvalid,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre, var olmayan bir paylaşılan dizeye başvuruyor; boş okunuyor (A1).',
   (
     XlsxWarningCode.numberInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' hold a number that cannot be read; they read as empty (A1).",
   (
     XlsxWarningCode.numberInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ enthalten eine Zahl, die nicht gelesen werden kann; sie werden als leer gelesen (A1).',
   (
     XlsxWarningCode.numberInvalid,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre okunamayan bir sayı içeriyor; boş okunuyor (A1).',
   (
     XlsxWarningCode.booleanInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' hold a boolean other than 0 or 1; they read as empty (A1).",
   (
     XlsxWarningCode.booleanInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ enthalten einen Wahrheitswert, der weder 0 noch 1 ist; sie werden als leer gelesen (A1).',
   (
     XlsxWarningCode.booleanInvalid,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre 0 veya 1 dışında bir mantıksal değer içeriyor; boş okunuyor (A1).',
   (
     XlsxWarningCode.cellTypeUnsupported,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' have a type or content the reader does not support; their value may be empty or read from the stored value (A1).",
   (
     XlsxWarningCode.cellTypeUnsupported,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ haben einen Typ oder Inhalt, den der Reader nicht unterstützt; ihr Wert ist möglicherweise leer oder stammt aus dem gespeicherten Wert (A1).',
   (
     XlsxWarningCode.cellTypeUnsupported,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre, okuyucunun desteklemediği bir tür veya içerik taşıyor; değeri boş olabilir ya da kayıtlı değerden okunur (A1).',
   (
     XlsxWarningCode.formulaWithoutValue,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 formula cell(s) on sheet 'S' have no saved result; they read as empty (A1).",
   (
     XlsxWarningCode.formulaWithoutValue,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Formelzelle(n) im Blatt „S“ haben kein gespeichertes Ergebnis; sie werden als leer gelesen (A1).',
   (
     XlsxWarningCode.formulaWithoutValue,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 formül hücresinin kayıtlı sonucu yok; boş okunuyor (A1).',
   (
     XlsxWarningCode.cellReferenceInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' have an invalid reference; they were placed after the previous cell (A1).",
   (
     XlsxWarningCode.cellReferenceInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ haben einen ungültigen Zellbezug; sie wurden hinter der vorherigen Zelle eingefügt (A1).',
   (
     XlsxWarningCode.cellReferenceInvalid,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücrenin başvurusu geçersiz; hücre, önceki hücrenin ardına yerleştirildi (A1).',
   (
     XlsxWarningCode.cellDuplicated,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' appear more than once; the last one was kept (A1).",
   (
     XlsxWarningCode.cellDuplicated,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ kommen mehrfach vor; die letzte wurde beibehalten (A1).',
   (
     XlsxWarningCode.cellDuplicated,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre birden fazla kez geçiyor; sonuncusu korundu (A1).',
   (
     XlsxWarningCode.rowOutOfOrder,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 row(s) on sheet 'S' are out of order; they were read in file order (A1).",
   (
     XlsxWarningCode.rowOutOfOrder,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zeile(n) im Blatt „S“ stehen nicht in der richtigen Reihenfolge; sie wurden in der Reihenfolge der Datei gelesen (A1).',
-  (XlsxWarningCode.rowOutOfOrder, XlsxLocale.tr):
+  (XlsxWarningCode.rowOutOfOrder, OfficeLocale.tr):
       '“S” sayfasındaki 1 satır sıralı değil; dosyadaki sırayla okundu (A1).',
-  (XlsxWarningCode.cellOutsideSheet, XlsxLocale.en):
+  (XlsxWarningCode.cellOutsideSheet, OfficeLocale.en):
       "1 cell(s) on sheet 'S' lie outside Excel's grid and were skipped (A1).",
   (
     XlsxWarningCode.cellOutsideSheet,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ liegen außerhalb des Excel-Rasters und wurden übersprungen (A1).',
   (
     XlsxWarningCode.cellOutsideSheet,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): "“S” sayfasındaki 1 hücre, Excel'in sayfa sınırları dışında kaldığı için atlandı (A1).",
   (
     XlsxWarningCode.unresolvedNumberFormat,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 number cell(s) on sheet 'S' use built-in number format 27, whose code depends on the locale and is not in the file; they read as plain numbers, even if they show dates (A1).",
   (
     XlsxWarningCode.unresolvedNumberFormat,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zahlenzelle(n) im Blatt „S“ verwenden das integrierte Zahlenformat 27, dessen Code vom Gebietsschema abhängt und nicht in der Datei steht; sie werden als einfache Zahlen gelesen, auch wenn sie ein Datum anzeigen (A1).',
   (
     XlsxWarningCode.unresolvedNumberFormat,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 sayı hücresi, kodu yerel ayara bağlı olan ve dosyada bulunmayan 27 numaralı yerleşik sayı biçimini kullanıyor; tarih gösterseler bile düz sayı olarak okunuyor (A1).',
   (
     XlsxWarningCode.styleInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' point to a cell format that does not exist or cannot be read; they read with the General format (A1).",
   (
     XlsxWarningCode.styleInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ verweisen auf ein Zellformat, das nicht existiert oder nicht gelesen werden kann; sie werden mit dem Format „Standard“ gelesen (A1).',
   (
     XlsxWarningCode.styleInvalid,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre, var olmayan veya okunamayan bir hücre biçimine başvuruyor; Genel biçimle okunuyor (A1).',
   (
     XlsxWarningCode.serialOutOfRange,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' are formatted as a date or time but hold a number no date or time can have; they read as numbers (A1).",
   (
     XlsxWarningCode.serialOutOfRange,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ sind als Datum oder Uhrzeit formatiert, enthalten aber eine Zahl, die kein Datum und keine Uhrzeit sein kann; sie werden als Zahlen gelesen (A1).',
   (
     XlsxWarningCode.serialOutOfRange,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre tarih veya saat olarak biçimlendirilmiş, ancak hiçbir tarih ya da saatin alamayacağı bir sayı içeriyor; sayı olarak okunuyor (A1).',
   (
     XlsxWarningCode.phantomLeapDay,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' hold 29 February 1900, a day that did not exist (Excel counts it for compatibility); they read as numbers (A1).",
   (
     XlsxWarningCode.phantomLeapDay,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ enthalten den 29. Februar 1900, einen Tag, den es nicht gab (Excel zählt ihn aus Kompatibilitätsgründen); sie werden als Zahlen gelesen (A1).',
   (
     XlsxWarningCode.phantomLeapDay,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): "“S” sayfasındaki 1 hücre, hiç var olmamış bir gün olan 29 Şubat 1900'ü içeriyor (Excel bu günü uyumluluk için sayar); sayı olarak okunuyor (A1).",
   (
     XlsxWarningCode.dateTextInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 date cell(s) on sheet 'S' hold text that is not a valid date; they read as empty (A1).",
   (
     XlsxWarningCode.dateTextInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Datumszelle(n) im Blatt „S“ enthalten Text, der kein gültiges Datum ist; sie werden als leer gelesen (A1).',
   (
     XlsxWarningCode.dateTextInvalid,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 tarih hücresi geçerli bir tarih olmayan metin içeriyor; boş okunuyor (A1).',
   (
     XlsxWarningCode.errorValueInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 error cell(s) on sheet 'S' hold no error code; they read as empty (A1).",
   (
     XlsxWarningCode.errorValueInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Fehlerzelle(n) im Blatt „S“ enthalten keinen Fehlercode; sie werden als leer gelesen (A1).',
-  (XlsxWarningCode.errorValueInvalid, XlsxLocale.tr):
+  (XlsxWarningCode.errorValueInvalid, OfficeLocale.tr):
       '“S” sayfasındaki 1 hata hücresi hata kodu içermiyor; boş okunuyor (A1).',
   (
     XlsxWarningCode.formulaGroupInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 formula cell(s) on sheet 'S' belong to a shared, array or data-table formula the file does not define correctly; their values were kept without the formula group (A1).",
   (
     XlsxWarningCode.formulaGroupInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Formelzelle(n) im Blatt „S“ gehören zu einer gemeinsamen, Matrix- oder Datentabellenformel, die die Datei nicht korrekt definiert; ihre Werte wurden ohne die Formelgruppe beibehalten (A1).',
   (
     XlsxWarningCode.formulaGroupInvalid,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 formül hücresi, dosyada doğru tanımlanmamış bir paylaşılan, dizi veya veri tablosu formülüne ait; kayıtlı değerleri korundu, formül grubu yok sayıldı (A1).',
   (
     XlsxWarningCode.mergeRangeInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 merged range(s) on sheet 'S' have an invalid reference and were skipped (A1).",
   (
     XlsxWarningCode.mergeRangeInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 verbundene(r) Bereich(e) im Blatt „S“ haben einen ungültigen Bezug und wurden übersprungen (A1).',
   (
     XlsxWarningCode.mergeRangeInvalid,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 birleştirilmiş aralığın başvurusu geçersiz; atlandı (A1).',
   (
     XlsxWarningCode.numberFormatInvalid,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' have a number format code that cannot be read; they show with the General format (A1).",
   (
     XlsxWarningCode.numberFormatInvalid,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ haben einen Zahlenformatcode, der nicht gelesen werden kann; sie werden mit dem Format „Standard“ angezeigt (A1).',
   (
     XlsxWarningCode.numberFormatInvalid,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücrenin sayı biçimi kodu okunamıyor; Genel biçimle gösteriliyor (A1).',
   (
     XlsxWarningCode.numberFormatUnsupported,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' have a number format that uses a calendar, numeral system or language this library does not render; they show with Gregorian dates, Western digits and the default language (A1).",
   (
     XlsxWarningCode.numberFormatUnsupported,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ haben ein Zahlenformat mit einem Kalender, Zahlensystem oder einer Sprache, die diese Bibliothek nicht darstellt; sie werden mit gregorianischem Datum, westlichen Ziffern und der Standardsprache angezeigt (A1).',
   (
     XlsxWarningCode.numberFormatUnsupported,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücrenin sayı biçimi bu kitaplığın göstermediği bir takvim, rakam sistemi veya dil kullanıyor; Miladi tarih, Batı rakamları ve varsayılan dille gösteriliyor (A1).',
   (
     XlsxWarningCode.numberFormatLocaleDependent,
-    XlsxLocale.en,
+    OfficeLocale.en,
   ): "1 cell(s) on sheet 'S' use a built-in number format whose code depends on the locale and is not in the file; they show with the closest built-in format (A1).",
   (
     XlsxWarningCode.numberFormatLocaleDependent,
-    XlsxLocale.de,
+    OfficeLocale.de,
   ): '1 Zelle(n) im Blatt „S“ verwenden ein integriertes Zahlenformat, dessen Code vom Gebietsschema abhängt und in der Datei fehlt; sie werden mit dem nächstliegenden integrierten Format angezeigt (A1).',
   (
     XlsxWarningCode.numberFormatLocaleDependent,
-    XlsxLocale.tr,
+    OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre, kodu yerel ayara bağlı olan ve dosyada bulunmayan yerleşik bir sayı biçimi kullanıyor; en yakın yerleşik biçimle gösteriliyor (A1).',
 };
 
@@ -376,12 +377,12 @@ void main() {
             .warnings
             .single;
     expect(
-      w.message(XlsxLocale.tr),
+      w.message(OfficeLocale.tr),
       '“Şube” sayfasındaki 1 hücre, Excel sınırı olan 32.767 karaktere '
       'kısaltıldı (C3).',
     );
     expect(
-      w.message(XlsxLocale.de),
+      w.message(OfficeLocale.de),
       '1 Zelle(n) im Blatt „Şube“ wurden auf 32.767 Zeichen gekürzt, die '
       'Obergrenze von Excel (C3).',
     );
@@ -417,13 +418,13 @@ void main() {
       '(1900\u20139999) and were written as text (A1).',
     );
     expect(
-      w.message(XlsxLocale.de),
+      w.message(OfficeLocale.de),
       '1 Datumswert(e) im Blatt \u201eS\u201c liegen au\u00dferhalb des '
       'Bereichs, den Excel als Datum speichern kann (1900\u20139999); sie '
       'wurden als Text geschrieben (A1).',
     );
     expect(
-      w.message(XlsxLocale.tr),
+      w.message(OfficeLocale.tr),
       '\u201cS\u201d sayfas\u0131ndaki 1 tarih, Excel\'in tarih olarak '
       'saklayabildi\u011fi aral\u0131\u011f\u0131n (1900\u20139999) '
       'd\u0131\u015f\u0131nda oldu\u011fu i\u00e7in metin olarak yaz\u0131ld\u0131 (A1).',
@@ -431,14 +432,15 @@ void main() {
   });
 
   test('all 90 messages are worded exactly as specified', () {
-    final List<(XlsxWarningCode, XlsxLocale)> keys =
-        <(XlsxWarningCode, XlsxLocale)>[
+    final List<(XlsxWarningCode, OfficeLocale)> keys =
+        <(XlsxWarningCode, OfficeLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
-            for (final XlsxLocale locale in XlsxLocale.values) (code, locale),
+            for (final OfficeLocale locale in OfficeLocale.values)
+              (code, locale),
         ];
     expect(keys, hasLength(90));
     expect(_expected.keys, unorderedEquals(keys));
-    for (final (XlsxWarningCode, XlsxLocale) key in keys) {
+    for (final (XlsxWarningCode, OfficeLocale) key in keys) {
       final XlsxWarning w =
           (WarningCollector()..add(
                 key.$1,
@@ -474,15 +476,15 @@ void main() {
     final XlsxWarning w = c.warnings.single;
     expect(w.cells, hasLength(10));
     expect(w.count, 11);
-    for (final XlsxLocale locale in XlsxLocale.values) {
+    for (final OfficeLocale locale in OfficeLocale.values) {
       expect(
         w.message(locale),
         contains('(A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, …)'),
         reason: '$locale',
       );
     }
-    expect(w.message(XlsxLocale.de), startsWith('11 Zelle(n)'));
-    expect(w.message(XlsxLocale.tr), contains('11 hücre'));
+    expect(w.message(OfficeLocale.de), startsWith('11 Zelle(n)'));
+    expect(w.message(OfficeLocale.tr), contains('11 hücre'));
   });
 
   test('a cell-level warning without a cell has no cell list', () {
@@ -520,9 +522,9 @@ void main() {
             ))
             .warnings
             .single;
-    expect(w.message(XlsxLocale.en), contains('format 27'));
-    expect(w.message(XlsxLocale.de), contains('Zahlenformat 27'));
-    expect(w.message(XlsxLocale.tr), contains('27 numaralı'));
+    expect(w.message(OfficeLocale.en), contains('format 27'));
+    expect(w.message(OfficeLocale.de), contains('Zahlenformat 27'));
+    expect(w.message(OfficeLocale.tr), contains('27 numaralı'));
   });
 
   test('unresolvedNumberFormat without an id is worded exactly', () {
@@ -535,19 +537,19 @@ void main() {
             .warnings
             .single;
     expect(
-      w.message(XlsxLocale.en),
+      w.message(OfficeLocale.en),
       "1 number cell(s) on sheet 'S' use number formats whose code depends "
       'on the locale or is missing from the file; they read as plain '
       'numbers, even if they show dates (A1).',
     );
     expect(
-      w.message(XlsxLocale.de),
+      w.message(OfficeLocale.de),
       '1 Zahlenzelle(n) im Blatt „S“ verwenden Zahlenformate, deren Code '
       'vom Gebietsschema abhängt oder in der Datei fehlt; sie werden als '
       'einfache Zahlen gelesen, auch wenn sie ein Datum anzeigen (A1).',
     );
     expect(
-      w.message(XlsxLocale.tr),
+      w.message(OfficeLocale.tr),
       '“S” sayfasındaki 1 sayı hücresi, kodu yerel ayara bağlı olan ya da '
       'dosyada bulunmayan sayı biçimleri kullanıyor; tarih gösterseler bile '
       'düz sayı olarak okunuyor (A1).',
@@ -560,12 +562,12 @@ void main() {
             .warnings
             .single;
     expect(
-      one(XlsxWarningCode.mergeRangeInvalid).message(XlsxLocale.tr),
+      one(XlsxWarningCode.mergeRangeInvalid).message(OfficeLocale.tr),
       '“S” sayfasındaki 1 birleştirilmiş aralığın başvurusu geçersiz; '
       'atlandı (A1).',
     );
     expect(
-      one(XlsxWarningCode.phantomLeapDay).message(XlsxLocale.en),
+      one(XlsxWarningCode.phantomLeapDay).message(OfficeLocale.en),
       "1 cell(s) on sheet 'S' hold 29 February 1900, a day that did not "
       'exist (Excel counts it for compatibility); they read as numbers (A1).',
     );

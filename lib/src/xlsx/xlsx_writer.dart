@@ -344,7 +344,7 @@ final class XlsxWriter extends XlsxWriterBase {
 /// );
 /// book.addSheet('Accounts').row(<Object?>['Code', 'Balance']);
 /// for (final XlsxWarning warning in book.close()) {
-///   print(warning.message(XlsxLocale.de));
+///   print(warning.message(OfficeLocale.de));
 /// }
 /// ```
 final class XlsxStreamWriter extends XlsxWriterBase {

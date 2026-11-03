@@ -18,7 +18,7 @@
 /// forbids or a sheet name Excel refuses, is repaired and reported as an
 /// [XlsxWarning], aggregated per sheet and [XlsxWarningCode].
 /// [XlsxWarning.message] gives its text in English, German or Turkish
-/// ([XlsxLocale]). A programmer error is thrown instead: [ArgumentError]
+/// ([OfficeLocale]). A programmer error is thrown instead: [ArgumentError]
 /// naming the field, [StateError] for a call out of order, and
 /// [XlsxLimitError] past one of the [XlsxLimits]; their messages are in
 /// English only.
@@ -82,6 +82,7 @@
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
+/// @docImport 'src/common/locale.dart';
 /// @docImport 'src/xlsx/format/format_locale.dart';
 /// @docImport 'src/xlsx/format/formatted_value.dart';
 /// @docImport 'src/xlsx/format/formatter.dart';
@@ -102,6 +103,7 @@
 /// @docImport 'src/xlsx/xlsx_writer.dart';
 library;
 
+export 'src/common/locale.dart' show OfficeLocale;
 export 'src/xlsx/alignment.dart'
     show
         XlsxAlignment,
@@ -199,6 +201,6 @@ export 'src/xlsx/style.dart' show XlsxStyle;
 export 'src/xlsx/table.dart'
     show XlsxTable, XlsxTableColumn, XlsxTableStyle, XlsxTotalsFunction;
 export 'src/xlsx/values.dart' show XlsxCell, XlsxDate, XlsxDecimal, XlsxFormula;
-export 'src/xlsx/warnings.dart' show XlsxLocale, XlsxWarning, XlsxWarningCode;
+export 'src/xlsx/warnings.dart' show XlsxWarning, XlsxWarningCode;
 export 'src/xlsx/xlsx_writer.dart'
     show XlsxResult, XlsxStreamWriter, XlsxWriter, XlsxWriterBase;

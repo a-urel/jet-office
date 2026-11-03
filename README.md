@@ -175,7 +175,7 @@ with the first cells affected. A message comes in English, German or Turkish.
 final XlsxWriter book = XlsxWriter();
 book.addSheet('Notes').row(<Object?>['bad\u0001text']);
 for (final XlsxWarning warning in book.close().warnings) {
-  print(warning.message(XlsxLocale.tr));
+  print(warning.message(OfficeLocale.tr));
 }
 ```
 

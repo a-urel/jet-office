@@ -50,7 +50,7 @@ List<String> warnings(void Function(String) print) {
   final XlsxWriter book = XlsxWriter();
   book.addSheet('Notes').row(<Object?>['bad\u0001text']);
   for (final XlsxWarning warning in book.close().warnings) {
-    print(warning.message(XlsxLocale.tr));
+    print(warning.message(OfficeLocale.tr));
   }
   return <String>[];
 }
@@ -111,8 +111,8 @@ void main() {
     final XlsxWriter book = XlsxWriter();
     book.addSheet('Notes').row(<Object?>['bad\u0001text']);
     final XlsxWarning warning = book.close().warnings.single;
-    expect(lines, <String>[warning.message(XlsxLocale.tr)]);
-    expect(lines.single, isNot(warning.message(XlsxLocale.en)));
+    expect(lines, <String>[warning.message(OfficeLocale.tr)]);
+    expect(lines.single, isNot(warning.message(OfficeLocale.en)));
     expect(lines.single, contains('sayfasındaki'));
   });
 

@@ -19,6 +19,7 @@ library;
 
 import 'dart:io';
 
+import 'package:jet_office/src/common/locale.dart';
 import 'package:jet_office/src/xlsx/warnings.dart';
 
 /// The sample warning of [code]: sheet `Daten`, cells `A1, B2`, count 2.
@@ -107,9 +108,9 @@ String warningMessagesMarkdown() {
     ..writeln('| Code | en | de | tr |')
     ..writeln('|---|---|---|---|');
   void row(String name, XlsxWarning w) => out.writeln(
-    '| $name | ${_cell(w.message(XlsxLocale.en))} '
-    '| ${_cell(w.message(XlsxLocale.de))} '
-    '| ${_cell(w.message(XlsxLocale.tr))} |',
+    '| $name | ${_cell(w.message(OfficeLocale.en))} '
+    '| ${_cell(w.message(OfficeLocale.de))} '
+    '| ${_cell(w.message(OfficeLocale.tr))} |',
   );
   for (final XlsxWarningCode code in XlsxWarningCode.values) {
     row('`${code.name}`', _sample(code));

@@ -118,7 +118,7 @@ void main() {
   File('example.xlsx').writeAsBytesSync(result.bytes);
   stdout.writeln('example.xlsx: ${result.bytes.length} bytes');
   for (final XlsxWarning warning in result.warnings) {
-    stdout.writeln(warning.message(XlsxLocale.tr));
+    stdout.writeln(warning.message(OfficeLocale.tr));
   }
 
   // Read the file back. The totals row's SUBTOTAL formula has no cached
