@@ -165,7 +165,8 @@ _Walked _walk(
   return (texts: strings, rich: rich, root: root, trailing: trailing);
 }
 
-/// Set when an item has a child other than its `<t>`.
+/// Set when an item has a child other than its `<t>`, or an attribute the
+/// model would not write back.
 final class _Rich {
   bool seen = false;
 }
@@ -181,6 +182,8 @@ String? readStringItem(XmlPullReader reader, int maxLength) =>
     _readItem(reader, maxLength, null);
 
 String? _readItem(XmlPullReader reader, int maxLength, _Rich? rich) {
+  // An attribute on the item makes it more than text too.
+  if (rich != null && _hasAttributes(reader)) rich.seen = true;
   if (reader.isEmptyElement) return '';
   final StringBuffer buffer = StringBuffer();
   final int siDepth = reader.depth;
@@ -195,6 +198,10 @@ String? _readItem(XmlPullReader reader, int maxLength, _Rich? rich) {
       if (reader.depth == siDepth + 1) rich?.seen = true;
       reader.skip();
     } else if (reader.localName == 't') {
+      // The model writes `xml:space` itself; any other attribute is kept.
+      if (rich != null && _hasAttributes(reader, except: 'xml:space')) {
+        rich.seen = true;
+      }
       buffer.write(_readT(reader));
     } else if (reader.localName == 'r') {
       rich?.seen = true;
@@ -208,6 +215,19 @@ String? _readItem(XmlPullReader reader, int maxLength, _Rich? rich) {
     if (buffer.length > maxLength) return null;
   }
   return buffer.toString();
+}
+
+/// Whether the start element [reader] is on has an attribute other than a
+/// namespace declaration and [except] (a qualified name).
+bool _hasAttributes(XmlPullReader reader, {String? except}) {
+  for (int i = 0; i < reader.attributeCount; i++) {
+    final String name = reader.attributeQualifiedName(i);
+    if (name == 'xmlns' || name.startsWith('xmlns:') || name == except) {
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
 
 /// Appends the decoded `<t>` of the `<r>` the reader is on to [buffer],

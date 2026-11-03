@@ -275,6 +275,44 @@ void main() {
     expect(book.save().bytes, isNotEmpty);
   });
 
+  test('an inline string deeper than 256 reads under a raised maxDepth', () {
+    final String deep = '${'<x>' * 300}${'</x>' * 300}';
+    final Uint8List input = buildWorkbook(<String, String>{
+      'S': worksheet(
+        '<row r="1"><c r="A1" t="inlineStr"><is><t>deep</t>$deep</is></c>'
+        '</row>',
+      ),
+    });
+    const XlsxReadLimits limits = XlsxReadLimits(maxDepth: 512);
+    final XlsxWorkbook book = XlsxWorkbook.open(input, limits: limits);
+    expect(book.sheets.single.cellAt(0, 0)?.value, 'deep');
+    expect(
+      XlsxReader(input, limits: limits).rowsAt(0).first.cells[0].value,
+      'deep',
+    );
+  });
+
+  test('a shared string with attributes saves as written', () {
+    const String items =
+        '<si xmlns:x="urn:x" x:meta="payload"><t>a</t></si>'
+        '<si><t xmlns:x="urn:x" x:id="7">b</t></si>'
+        '<si><t xml:space="preserve"> c </t></si>';
+    final Uint8List input = buildWorkbook(<String, String>{
+      'S': worksheet(
+        '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c>'
+        '<c r="C1" t="s"><v>2</v></c></row>',
+      ),
+    }, sharedStrings: '<sst xmlns="$mainNs">$items</sst>');
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    final XlsxSheet sheet = book.sheets.single;
+    expect(sheet.cellAt(0, 0)?.value, 'a');
+    sheet.setCell(1, 0, 'x');
+    final String sst = partText(book.save().bytes, 'xl/sharedStrings.xml');
+    expect(sst, contains('<si xmlns:x="urn:x" x:meta="payload"><t>a</t></si>'));
+    expect(sst, contains('<si><t xmlns:x="urn:x" x:id="7">b</t></si>'));
+    expect(sst, contains('<si><t xml:space="preserve"> c </t></si>'));
+  });
+
   test('text escaping a character XML forbids saves as written', () {
     final Uint8List input = buildWorkbook(<String, String>{
       'S': worksheet(
