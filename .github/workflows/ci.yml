@@ -1,11 +1,11 @@
 name: CI
 
 # The `quality-gate` job runs the quality gate from AGENTS.md. The `validate`
-# job then checks the fixtures with the Open XML SDK and LibreOffice
-# (decision 0003), compares LibreOffice's re-save with the reader, and proves
-# that each check rejects a corrupt file (the model round trip excepted: the
-# validator rejects the model's output of it). A clean checkout must pass both
-# jobs.
+# job then checks the XLSX and DOCX fixtures with the Open XML SDK and
+# LibreOffice (decision 0003), compares LibreOffice's re-save with the reader
+# and the models, and proves that each check rejects a corrupt file (the model
+# round trips excepted: the validator rejects the models' output of it). A
+# clean checkout must pass both jobs.
 on:
   push:
     branches: [main]
@@ -79,7 +79,7 @@ jobs:
       - name: Install LibreOffice
         run: |
           sudo apt-get update
-          sudo apt-get install -y libreoffice-calc
+          sudo apt-get install -y libreoffice-calc libreoffice-writer
 
       # Filter options: tool/compare_csv.dart explains each token.
       - name: Export every sheet to CSV with LibreOffice
@@ -131,6 +131,64 @@ jobs:
 
       - name: Validate the model's edited and generated output
         run: dotnet run --project tool/ooxml_validate -- build/model-edited
+
+      # DOCX (phase 4). tool/write_fixtures.dart wrote the D1 documents
+      # beside the workbooks, and the Open XML SDK step above validated them.
+      # LibreOffice's text export must hold each document's expected text.
+      - name: Export every document to text with LibreOffice
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          soffice --headless --convert-to 'txt:Text (encoded):UTF8' \
+            --outdir build/fixtures build/fixtures/*.docx
+          ls -1 build/fixtures/*.txt
+
+      - name: Compare the text exports with the expected texts
+        run: dart run tool/compare_text.dart build/fixtures
+
+      # LibreOffice's re-save is another producer's file: the model must
+      # read the expected text from it, with no warning, and reproduce it.
+      - name: Re-save every document with LibreOffice
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          mkdir -p build/resaved-docx
+          soffice --headless --convert-to 'docx:MS Word 2007 XML' \
+            --outdir build/resaved-docx build/fixtures/*.docx
+          ls -1 build/resaved-docx
+
+      - name: Read the re-saved documents and compare
+        run: dart run tool/compare_resaved_docx.dart build/fixtures build/resaved-docx
+
+      - name: Round-trip the documents through the model
+        run: dart run tool/round_trip_docx.dart build/fixtures build/model-docx-fixtures
+
+      - name: Round-trip the re-saved documents through the model
+        run: dart run tool/round_trip_docx.dart build/resaved-docx build/model-docx
+
+      - name: Round-trip the owner's Word files through the model
+        run: dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/model-docx-owner
+
+      - name: Validate the model's output for the documents
+        run: |
+          dotnet run --project tool/ooxml_validate -- build/model-docx-fixtures
+          dotnet run --project tool/ooxml_validate -- build/model-docx
+          dotnet run --project tool/ooxml_validate -- build/model-docx-owner
+
+      # What the model saves after an edit must be valid too: every
+      # document with a run's text set, a paragraph replaced and a heading
+      # added. Only document.xml may differ from the input.
+      - name: Edit the documents through the model
+        run: |
+          dart run tool/edit_docx.dart build/fixtures build/edited-docx-fixtures
+          dart run tool/edit_docx.dart build/resaved-docx build/edited-docx
+          dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
+
+      - name: Validate the model's edited documents
+        run: |
+          dotnet run --project tool/ooxml_validate -- build/edited-docx-fixtures
+          dotnet run --project tool/ooxml_validate -- build/edited-docx
+          dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 
       # Negative control: every check must reject m1_corrupt.xlsx (see
       # tool/write_fixtures.dart), except the model round trip, which passes
@@ -232,6 +290,103 @@ jobs:
             exit 1
           fi
           echo "All checks rejected the corrupt file."
+
+      # Negative control for DOCX: d1_corrupt.docx (see
+      # tool/write_fixtures.dart) has a w:r directly under w:body, which the
+      # Open XML SDK must reject, and "first" spelled "firzt", which the
+      # text export and the re-save comparison must reject. The model keeps
+      # the stray run as written, so its round trip passes (exit 0) and the
+      # Open XML SDK must reject its output; a truncated copy is refused by
+      # the model itself (exit 1). As above, each check must exit with 1 and
+      # name the file or the line, not merely fail.
+      - name: Prove the DOCX checks reject a corrupt document
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          dart run tool/write_fixtures.dart build/corrupt-docx --corrupt
+          # Keep only the corrupt document, so nothing else can fail.
+          find build/corrupt-docx -type f ! -name 'd1_corrupt.*' -delete
+          ls -1 build/corrupt-docx
+
+          status=0
+          dotnet run --project tool/ooxml_validate -- build/corrupt-docx \
+            | tee build/corrupt-docx-validate.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The Open XML SDK validator exited with $status on a corrupt document; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'FAIL  d1_corrupt.docx' build/corrupt-docx-validate.log; then
+            echo "::error::The Open XML SDK validator did not report d1_corrupt.docx."
+            exit 1
+          fi
+
+          soffice --headless --convert-to 'txt:Text (encoded):UTF8' \
+            --outdir build/corrupt-docx build/corrupt-docx/d1_corrupt.docx
+          ls -1 build/corrupt-docx
+
+          status=0
+          dart run tool/compare_text.dart build/corrupt-docx \
+            | tee build/corrupt-docx-text.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The text comparison exited with $status on a corrupt document; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'd1_corrupt: line 1: expected "The first paragraph.", got "The firzt paragraph."' build/corrupt-docx-text.log; then
+            echo "::error::The text comparison did not report the changed letter."
+            exit 1
+          fi
+
+          mkdir -p build/corrupt-docx-resaved
+          soffice --headless --convert-to 'docx:MS Word 2007 XML' \
+            --outdir build/corrupt-docx-resaved build/corrupt-docx/d1_corrupt.docx
+          ls -1 build/corrupt-docx-resaved
+
+          status=0
+          dart run tool/compare_resaved_docx.dart build/corrupt-docx build/corrupt-docx-resaved \
+            | tee build/corrupt-docx-resaved.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The re-save comparison exited with $status on a corrupt document; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'd1_corrupt: line 1: expected "The first paragraph."' build/corrupt-docx-resaved.log; then
+            echo "::error::The re-save comparison did not report the changed letter."
+            exit 1
+          fi
+
+          status=0
+          dart run tool/round_trip_docx.dart build/corrupt-docx build/corrupt-docx-model \
+            || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The model round trip exited with $status on the corrupt document; expected 0."
+            exit 1
+          fi
+          status=0
+          dotnet run --project tool/ooxml_validate -- build/corrupt-docx-model \
+            | tee build/corrupt-docx-model-validate.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The Open XML SDK validator exited with $status on the model's output for a corrupt document; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'FAIL  d1_corrupt.docx' build/corrupt-docx-model-validate.log; then
+            echo "::error::The Open XML SDK validator did not report the model's output for d1_corrupt.docx."
+            exit 1
+          fi
+
+          mkdir -p build/truncated-docx
+          size=$(wc -c < build/corrupt-docx/d1_corrupt.docx)
+          head -c $((size / 2)) build/corrupt-docx/d1_corrupt.docx > build/truncated-docx/d1_truncated.docx
+          status=0
+          dart run tool/round_trip_docx.dart build/truncated-docx build/truncated-docx-model \
+            | tee build/truncated-docx-model.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The model round trip exited with $status on a truncated document; expected 1."
+            exit 1
+          fi
+          if ! grep -q 'd1_truncated.docx: ' build/truncated-docx-model.log; then
+            echo "::error::The model round trip did not report d1_truncated.docx."
+            exit 1
+          fi
+          echo "All checks rejected the corrupt document."
 
       # A second opinion on the number formatter, not Excel: LibreOffice's
       # text "as shown" for each oracle case. The tool lists differences

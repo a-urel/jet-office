@@ -1,5 +1,6 @@
-/// Images a picture shows: [XlsxImage], its [XlsxImageFormat] sniffed from
-/// the bytes, and [checkImage], which reads its size in pixels.
+/// Images a picture shows in either format: [OfficeImage], its
+/// [OfficeImageFormat] sniffed from the bytes, and [checkImage], which reads
+/// its size in pixels.
 ///
 /// New in jet_office. quds_office_engine's picture writer
 /// (`XlsxWorkbookBuilder.build` in `lib/src/builders/xlsx_io.dart` at
@@ -16,7 +17,7 @@ import 'dart:typed_data';
 import '../opc/ooxml.dart';
 
 /// The image formats a picture can hold.
-enum XlsxImageFormat {
+enum OfficeImageFormat {
   /// Portable Network Graphics, signature `89 50 4E 47 0D 0A 1A 0A`.
   png,
 
@@ -47,9 +48,9 @@ enum XlsxImageFormat {
 ///
 /// The constructor checks nothing; the sheet writer checks the bytes when
 /// the picture is added (see `XlsxSheetWriter.picture`).
-final class XlsxImage {
+final class OfficeImage {
   /// Creates an image of the file [bytes], a PNG or a JPEG.
-  XlsxImage(this.bytes);
+  OfficeImage(this.bytes);
 
   /// The bytes of the image file, as given.
   final Uint8List bytes;
@@ -57,15 +58,15 @@ final class XlsxImage {
   /// The format the signature at the start of [bytes] names: `png` for
   /// `89 50 4E 47 0D 0A 1A 0A`, `jpeg` for `FF D8 FF`, and `null` for
   /// anything else.
-  XlsxImageFormat? get format {
-    if (_startsWith(bytes, _pngSignature)) return XlsxImageFormat.png;
-    if (_startsWith(bytes, _jpegSignature)) return XlsxImageFormat.jpeg;
+  OfficeImageFormat? get format {
+    if (_startsWith(bytes, _pngSignature)) return OfficeImageFormat.png;
+    if (_startsWith(bytes, _jpegSignature)) return OfficeImageFormat.jpeg;
     return null;
   }
 
   @override
   bool operator ==(Object other) {
-    if (other is! XlsxImage) return false;
+    if (other is! OfficeImage) return false;
     if (identical(other.bytes, bytes)) return true;
     if (other.bytes.length != bytes.length) return false;
     for (int i = 0; i < bytes.length; i++) {
@@ -84,11 +85,11 @@ final class XlsxImage {
     ),
   );
 
-  /// The format and the length, such as `XlsxImage(png, 87 bytes)`; never
+  /// The format and the length, such as `OfficeImage(png, 87 bytes)`; never
   /// the bytes.
   @override
   String toString() =>
-      'XlsxImage(${format?.name ?? 'unknown'}, ${bytes.length} bytes)';
+      'OfficeImage(${format?.name ?? 'unknown'}, ${bytes.length} bytes)';
 }
 
 const List<int> _pngSignature = <int>[
@@ -124,17 +125,17 @@ bool _startsWith(Uint8List bytes, List<int> prefix) {
 /// (`C0`–`C2`; baseline, extended and progressive).
 ///
 /// Throws [ArgumentError] named `image` when [image] is neither a PNG nor
-/// a JPEG (see [XlsxImage.format]); when its bytes end before its size or
+/// a JPEG (see [OfficeImage.format]); when its bytes end before its size or
 /// inside a JPEG segment (`cut short`); when a PNG's first chunk is not
 /// `IHDR`; when a JPEG's segments do not start with `FF`, have a length
 /// below 2, or reach a scan (`DA`), its end (`D9`) or the end of the bytes
 /// before a frame header; when a JPEG's first frame header is another
 /// kind than SOF0, SOF1 or SOF2 (lossless, hierarchical or arithmetic
 /// coded) or has a length below 8; and when the width or height is 0.
-({int width, int height}) checkImage(XlsxImage image) {
+({int width, int height}) checkImage(OfficeImage image) {
   final ({int width, int height}) size = switch (image.format) {
-    XlsxImageFormat.png => _pngSize(image),
-    XlsxImageFormat.jpeg => _jpegSize(image),
+    OfficeImageFormat.png => _pngSize(image),
+    OfficeImageFormat.jpeg => _jpegSize(image),
     null => throw _invalid(image, 'it is neither a PNG nor a JPEG'),
   };
   if (size.width == 0 || size.height == 0) {
@@ -147,7 +148,7 @@ bool _startsWith(Uint8List bytes, List<int> prefix) {
   return size;
 }
 
-ArgumentError _invalid(XlsxImage image, String problem) =>
+ArgumentError _invalid(OfficeImage image, String problem) =>
     ArgumentError.value(image, 'image', 'The image cannot be used: $problem.');
 
 int _uint16(Uint8List b, int i) => b[i] << 8 | b[i + 1];
@@ -155,7 +156,7 @@ int _uint16(Uint8List b, int i) => b[i] << 8 | b[i + 1];
 int _uint32(Uint8List b, int i) =>
     b[i] * 0x1000000 + (b[i + 1] << 16 | b[i + 2] << 8 | b[i + 3]);
 
-({int width, int height}) _pngSize(XlsxImage image) {
+({int width, int height}) _pngSize(OfficeImage image) {
   final Uint8List b = image.bytes;
   const int sizeEnd = 24;
   if (b.length < sizeEnd) {
@@ -171,7 +172,7 @@ int _uint32(Uint8List b, int i) =>
   return (width: _uint32(b, 16), height: _uint32(b, 20));
 }
 
-({int width, int height}) _jpegSize(XlsxImage image) {
+({int width, int height}) _jpegSize(OfficeImage image) {
   final Uint8List b = image.bytes;
   Never cutShort() => throw _invalid(
     image,

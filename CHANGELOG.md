@@ -1,5 +1,49 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+#### Phase 4, DOCX, D1 (foundation; the API may change before D6)
+
+- `DocxDocument` opens a DOCX file from bytes (`DocxDocument.open`, within
+  `DocxReadLimits`), reads and edits the paragraphs of its body, and saves
+  (`save`, `saveTo`) with nothing lost: a body never accessed is copied byte
+  for byte, a loaded one is written from the model, and what the model does
+  not type (tables, content controls, tracked changes, hyperlinks, drawings,
+  fields, the final section) is kept as written in `DocxOpaqueBlock`,
+  `DocxOpaqueInline` and `DocxOpaqueRunContent`.
+- Typed: `DocxBody`, `DocxParagraph`, `DocxRun` and `DocxRunContent`
+  (`DocxText`, `DocxTab`, `DocxBreak`, `DocxCarriageReturn`), with the
+  paragraph and run style. Edits are atomic.
+- Text rules: `\t` and `\n` become a tab and a break, characters XML forbids
+  are removed with a `DocxWarning` (`invalidCharactersRemoved`),
+  `xml:space` is set only for text set through the API.
+- `DocxDocument()` starts a document like Word for Mac's blank one: A4
+  portrait, Aptos 12 through the theme, Word's en-US style ids, no locale and
+  no document properties yet.
+- The file is untrusted input: `DocxReadException` with a `DocxReadFailure`
+  (`notZip`, `corruptZip`, `encrypted`, `legacyDoc`, `unsupportedFormat` for
+  Strict OOXML, XLSX and PPTX, `missingDocument`, `malformedXml`,
+  `limitExceeded`). Warnings come in English, German and Turkish.
+- `pPr` and `rPr` children are written in schema order.
+- Known gaps: the visible text of an opaque inline holding
+  `mc:AlternateContent` or a text box is empty; tables are opaque until D3;
+  the final section is opaque until D4; new documents have no `docProps`
+  until D5. Whether the Word XML in a new document may ship under the
+  package's licence is an open question (`NOTICE`).
+- Verification: round trips of generated files, LibreOffice's re-save,
+  packaging variants of other producers and the owner's Word for Mac files;
+  Open XML SDK validation and LibreOffice's text export in CI; a seeded fuzz
+  test in the gate. The owner's Word check is recorded in
+  `docs/word-checks.md`; the rules are in `docs/docx-model.md`.
+
+### Changed
+
+- Renamed the format-neutral public types, with no aliases: `XlsxLocale` is
+  now `OfficeLocale`, `XlsxImage` is now `OfficeImage` and `XlsxImageFormat`
+  is now `OfficeImageFormat`. Update imports and uses; nothing else changed.
+
 ## 0.1.0-dev.1 (unreleased)
 
 Phase 1, the XLSX writer, and phase 2, the XLSX reader. Not published yet.

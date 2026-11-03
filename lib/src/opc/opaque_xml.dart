@@ -93,8 +93,16 @@ final class OpaqueXml {
   /// afterwards [r] is on the element's end event, so the next event is what
   /// follows it.
   ///
+  /// [onEvent], when given, sees every event of the element in order with
+  /// [r] on it: the start element first and its end event last. A reader
+  /// that needs something from inside the slice, such as its text, takes it
+  /// there instead of parsing [xml] again. It must not move [r].
+  ///
   /// [r] must be on a start element; anything else throws [StateError].
-  factory OpaqueXml.capture(XmlPullReader r) {
+  factory OpaqueXml.capture(
+    XmlPullReader r, {
+    void Function(XmlPullReader r)? onEvent,
+  }) {
     if (r.eventType != XmlEventType.startElement) {
       throw StateError('OpaqueXml.capture needs a start element.');
     }
@@ -122,15 +130,18 @@ final class OpaqueXml {
     }
 
     visit();
+    onEvent?.call(r);
     int end;
     if (r.isEmptyElement) {
       end = r.eventEnd;
       r.next();
+      onEvent?.call(r);
     } else {
       while (true) {
         if (!r.next()) {
           throw StateError('The document ended inside the element.');
         }
+        onEvent?.call(r);
         if (r.eventType == XmlEventType.startElement) {
           visit();
         } else if (r.eventType == XmlEventType.endElement) {
@@ -241,6 +252,11 @@ void _inherit(
 /// and other attributes.
 final class XmlRoot {
   const XmlRoot._(this.qualifiedName, this.namespaces, this.attributes);
+
+  /// The start tag of a root written from scratch: [qualifiedName] with the
+  /// declarations [namespaces], prefix to URI, and no other attributes.
+  const XmlRoot.of(this.qualifiedName, this.namespaces)
+    : attributes = const <KeptAttribute>[];
 
   /// Captures the root element's start tag the current event of [r] is on.
   /// [r] stays on it; nothing is consumed.

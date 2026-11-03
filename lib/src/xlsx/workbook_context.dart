@@ -19,9 +19,9 @@ library;
 import 'dart:collection';
 import 'dart:typed_data';
 
+import '../common/image.dart';
 import '../zip/archive_adapter.dart';
 import 'cell_encoder.dart';
-import 'image.dart';
 import 'shared_strings.dart';
 import 'sheet_name.dart';
 import 'style_registry.dart';
@@ -95,17 +95,17 @@ final class WorkbookContext {
   /// The first call for a `Uint8List` takes the workbook's next media
   /// number (from 1, in first-use order) and returns `isNew` true: the
   /// caller writes the bytes to that part. Later calls for the same list,
-  /// through any [XlsxImage] holding it, return the same part and false.
+  /// through any [OfficeImage] holding it, return the same part and false.
   /// Equal bytes in another list get a part of their own. Sheets call this
   /// when they finish, so the numbers follow the order sheets finish in.
   ///
   /// Throws [ArgumentError] named `image` when the bytes of a new image
   /// are neither a PNG nor a JPEG; no number is taken then.
-  (String partName, bool isNew) mediaPartFor(XlsxImage image) {
+  (String partName, bool isNew) mediaPartFor(OfficeImage image) {
     final Uint8List bytes = image.bytes;
     final String? known = _mediaParts[bytes];
     if (known != null) return (known, false);
-    final XlsxImageFormat? format = image.format;
+    final OfficeImageFormat? format = image.format;
     if (format == null) {
       throw ArgumentError.value(
         image,

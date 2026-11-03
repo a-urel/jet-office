@@ -19,6 +19,8 @@ library;
 
 import 'dart:io';
 
+import 'package:jet_office/src/common/locale.dart';
+import 'package:jet_office/src/docx/warnings.dart';
 import 'package:jet_office/src/xlsx/warnings.dart';
 
 /// The sample warning of [code]: sheet `Daten`, cells `A1, B2`, count 2.
@@ -73,6 +75,30 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
   return collector.warnings.single;
 }
 
+/// The sample DOCX warning of [code]: part `/word/document.xml`, locations
+/// `body/p[0]` and `body/p[1]`, count 2, and for the two content type codes
+/// the detail they name. With [one], `invalidCharactersRemoved` counts 1
+/// at `body/p[0]`, for its singular text.
+DocxWarning _docxSample(DocxWarningCode code, {bool one = false}) {
+  final DocxWarningCollector collector = DocxWarningCollector();
+  switch (code) {
+    case DocxWarningCode.invalidCharactersRemoved:
+      collector.add(code, part: '/word/document.xml', location: 'body/p[0]');
+      if (!one) {
+        collector.add(code, part: '/word/document.xml', location: 'body/p[1]');
+      }
+    case DocxWarningCode.contentTypeMissing:
+      collector.add(
+        code,
+        part: '/word/document.xml',
+        detail: 'application/xml',
+      );
+    case DocxWarningCode.mainPartContentTypeUnexpected:
+      collector.add(code, part: '/word/document.xml', detail: 'text/plain');
+  }
+  return collector.warnings.single;
+}
+
 /// A table cell: [text] with `|` escaped so it cannot end the cell.
 String _cell(String text) => text.replaceAll('|', r'\|');
 
@@ -107,14 +133,38 @@ String warningMessagesMarkdown() {
     ..writeln('| Code | en | de | tr |')
     ..writeln('|---|---|---|---|');
   void row(String name, XlsxWarning w) => out.writeln(
-    '| $name | ${_cell(w.message(XlsxLocale.en))} '
-    '| ${_cell(w.message(XlsxLocale.de))} '
-    '| ${_cell(w.message(XlsxLocale.tr))} |',
+    '| $name | ${_cell(w.message(OfficeLocale.en))} '
+    '| ${_cell(w.message(OfficeLocale.de))} '
+    '| ${_cell(w.message(OfficeLocale.tr))} |',
   );
   for (final XlsxWarningCode code in XlsxWarningCode.values) {
     row('`${code.name}`', _sample(code));
     if (code == XlsxWarningCode.unresolvedNumberFormat) {
       row('`${code.name}` (no id)', _sample(code, detail: null));
+    }
+  }
+  out
+    ..writeln()
+    ..writeln('## DOCX')
+    ..writeln()
+    ..writeln('Every DOCX message is built for a sample warning: part')
+    ..writeln('`/word/document.xml`. `invalidCharactersRemoved` counts 2 and')
+    ..writeln('names `body/p[0]` and `body/p[1]`; `contentTypeMissing` names')
+    ..writeln('`application/xml` and `mainPartContentTypeUnexpected` names')
+    ..writeln('`text/plain`. The second `invalidCharactersRemoved` row counts')
+    ..writeln('1 and names `body/p[0]`, for the singular.')
+    ..writeln()
+    ..writeln('| Code | en | de | tr |')
+    ..writeln('|---|---|---|---|');
+  void docxRow(String name, DocxWarning w) => out.writeln(
+    '| $name | ${_cell(w.message(OfficeLocale.en))} '
+    '| ${_cell(w.message(OfficeLocale.de))} '
+    '| ${_cell(w.message(OfficeLocale.tr))} |',
+  );
+  for (final DocxWarningCode code in DocxWarningCode.values) {
+    docxRow('`docx: ${code.name}`', _docxSample(code));
+    if (code == DocxWarningCode.invalidCharactersRemoved) {
+      docxRow('`docx: ${code.name}` (one)', _docxSample(code, one: true));
     }
   }
   return out.toString();

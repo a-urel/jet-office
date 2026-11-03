@@ -400,4 +400,16 @@ void main() {
       );
     });
   });
+  test('markup-compatibility prefixes compare by namespace URI', () {
+    const String mc =
+        'http://schemas.openxmlformats.org/markup-compatibility/2006';
+    String ws(String p, String uri) =>
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:mc="$mc" xmlns:$p="$uri" mc:Ignorable="$p"/>';
+    expect(compareXml('s', ws('x14ac', 'urn:a'), ws('y', 'urn:a')), isEmpty);
+    expect(
+      compareXml('s', ws('x14ac', 'urn:a'), ws('x14ac', 'urn:b')),
+      hasLength(1),
+    );
+  });
 }

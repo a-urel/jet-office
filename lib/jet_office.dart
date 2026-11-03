@@ -18,7 +18,7 @@
 /// forbids or a sheet name Excel refuses, is repaired and reported as an
 /// [XlsxWarning], aggregated per sheet and [XlsxWarningCode].
 /// [XlsxWarning.message] gives its text in English, German or Turkish
-/// ([XlsxLocale]). A programmer error is thrown instead: [ArgumentError]
+/// ([OfficeLocale]). A programmer error is thrown instead: [ArgumentError]
 /// naming the field, [StateError] for a call out of order, and
 /// [XlsxLimitError] past one of the [XlsxLimits]; their messages are in
 /// English only.
@@ -79,9 +79,40 @@
 /// as written, so an opened file comes back with only the cells that were
 /// set changed.
 ///
+/// [DocxDocument] is the Word document model, in progress (milestone D1; the
+/// API may change before D6). [DocxDocument.new] starts a document like Word
+/// for Mac's blank one: A4 portrait, Aptos 12, no document properties.
+/// [DocxDocument.open] reads a DOCX file within [DocxReadLimits]; a file it
+/// cannot read throws a [DocxReadException] whose [DocxReadFailure] says why,
+/// and so does a part that turns out broken when it first loads. Its
+/// [DocxBody] loads on first access and holds the [DocxBlock]s of the
+/// document: each [DocxParagraph] holds [DocxInline]s, and each [DocxRun]
+/// holds [DocxRunContent] (text, tabs, breaks), with the paragraph and run
+/// style typed. What the model does not type yet, such as tables, content
+/// controls, tracked changes, hyperlinks, drawings and fields, is kept as
+/// written in a [DocxOpaqueBlock], a [DocxOpaqueInline] or a
+/// [DocxOpaqueRunContent], which can be removed but not changed; the final
+/// section and the parts other than the body are kept as written too. Blocks
+/// and inlines are added, removed and replaced, and a run's text and the
+/// styles are set; each edit is atomic. [DocxDocument.save] returns a
+/// [DocxResult] and [DocxDocument.saveTo] streams to a sink. As for a
+/// workbook, saving keeps every part the model did not change: a body never
+/// accessed is copied from the file, and what a loaded body does not type is
+/// written back as it was. Characters XML forbids are removed from text when
+/// it is set and reported at save as a [DocxWarning]. The visible text of an
+/// opaque inline holding `mc:AlternateContent` or a text box is empty.
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
+/// @docImport 'src/common/locale.dart';
+/// @docImport 'src/docx/docx_document.dart';
+/// @docImport 'src/docx/model/blocks.dart';
+/// @docImport 'src/docx/model/inlines.dart';
+/// @docImport 'src/docx/model/run_content.dart';
+/// @docImport 'src/docx/read_exception.dart';
+/// @docImport 'src/docx/read_limits.dart';
+/// @docImport 'src/docx/warnings.dart';
 /// @docImport 'src/xlsx/format/format_locale.dart';
 /// @docImport 'src/xlsx/format/formatted_value.dart';
 /// @docImport 'src/xlsx/format/formatter.dart';
@@ -102,6 +133,24 @@
 /// @docImport 'src/xlsx/xlsx_writer.dart';
 library;
 
+export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
+export 'src/common/locale.dart' show OfficeLocale;
+export 'src/docx/docx_document.dart' show DocxBody, DocxDocument, DocxResult;
+export 'src/docx/model/blocks.dart'
+    show DocxBlock, DocxOpaqueBlock, DocxParagraph;
+export 'src/docx/model/inlines.dart' show DocxInline, DocxOpaqueInline, DocxRun;
+export 'src/docx/model/run_content.dart'
+    show
+        DocxBreak,
+        DocxBreakType,
+        DocxCarriageReturn,
+        DocxOpaqueRunContent,
+        DocxRunContent,
+        DocxTab,
+        DocxText;
+export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
+export 'src/docx/read_limits.dart' show DocxReadLimits;
+export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;
 export 'src/xlsx/alignment.dart'
     show
         XlsxAlignment,
@@ -162,7 +211,6 @@ export 'src/xlsx/format/formatted_value.dart'
 export 'src/xlsx/format/formatter.dart' show XlsxNumberFormatter;
 export 'src/xlsx/header_footer.dart' show XlsxHeaderFooter;
 export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
-export 'src/xlsx/image.dart' show XlsxImage, XlsxImageFormat;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/list_export.dart' show XlsxListColumn, XlsxListExport;
 export 'src/xlsx/model/xlsx_sheet.dart' show XlsxSheet;
@@ -199,6 +247,6 @@ export 'src/xlsx/style.dart' show XlsxStyle;
 export 'src/xlsx/table.dart'
     show XlsxTable, XlsxTableColumn, XlsxTableStyle, XlsxTotalsFunction;
 export 'src/xlsx/values.dart' show XlsxCell, XlsxDate, XlsxDecimal, XlsxFormula;
-export 'src/xlsx/warnings.dart' show XlsxLocale, XlsxWarning, XlsxWarningCode;
+export 'src/xlsx/warnings.dart' show XlsxWarning, XlsxWarningCode;
 export 'src/xlsx/xlsx_writer.dart'
     show XlsxResult, XlsxStreamWriter, XlsxWriter, XlsxWriterBase;

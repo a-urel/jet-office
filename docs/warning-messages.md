@@ -56,3 +56,19 @@ recorded under "Native-speaker check" in
 | `numberFormatInvalid` | 2 cell(s) on sheet 'Daten' have a number format code that cannot be read; they show with the General format (A1, B2). | 2 Zelle(n) im Blatt „Daten“ haben einen Zahlenformatcode, der nicht gelesen werden kann; sie werden mit dem Format „Standard“ angezeigt (A1, B2). | “Daten” sayfasındaki 2 hücrenin sayı biçimi kodu okunamıyor; Genel biçimle gösteriliyor (A1, B2). |
 | `numberFormatUnsupported` | 2 cell(s) on sheet 'Daten' have a number format that uses a calendar, numeral system or language this library does not render; they show with Gregorian dates, Western digits and the default language (A1, B2). | 2 Zelle(n) im Blatt „Daten“ haben ein Zahlenformat mit einem Kalender, Zahlensystem oder einer Sprache, die diese Bibliothek nicht darstellt; sie werden mit gregorianischem Datum, westlichen Ziffern und der Standardsprache angezeigt (A1, B2). | “Daten” sayfasındaki 2 hücrenin sayı biçimi bu kitaplığın göstermediği bir takvim, rakam sistemi veya dil kullanıyor; Miladi tarih, Batı rakamları ve varsayılan dille gösteriliyor (A1, B2). |
 | `numberFormatLocaleDependent` | 2 cell(s) on sheet 'Daten' use a built-in number format whose code depends on the locale and is not in the file; they show with the closest built-in format (A1, B2). | 2 Zelle(n) im Blatt „Daten“ verwenden ein integriertes Zahlenformat, dessen Code vom Gebietsschema abhängt und in der Datei fehlt; sie werden mit dem nächstliegenden integrierten Format angezeigt (A1, B2). | “Daten” sayfasındaki 2 hücre, kodu yerel ayara bağlı olan ve dosyada bulunmayan yerleşik bir sayı biçimi kullanıyor; en yakın yerleşik biçimle gösteriliyor (A1, B2). |
+
+## DOCX
+
+Every DOCX message is built for a sample warning: part
+`/word/document.xml`. `invalidCharactersRemoved` counts 2 and
+names `body/p[0]` and `body/p[1]`; `contentTypeMissing` names
+`application/xml` and `mainPartContentTypeUnexpected` names
+`text/plain`. The second `invalidCharactersRemoved` row counts
+1 and names `body/p[0]`, for the singular.
+
+| Code | en | de | tr |
+|---|---|---|---|
+| `docx: invalidCharactersRemoved` | 2 characters that XML does not allow were removed from text in /word/document.xml (body/p[0], body/p[1]). | 2 Zeichen, die XML nicht erlaubt, wurden aus dem Text in /word/document.xml entfernt (body/p[0], body/p[1]). | /word/document.xml içindeki metinden XML'in izin vermediği 2 karakter çıkarıldı (body/p[0], body/p[1]). |
+| `docx: invalidCharactersRemoved` (one) | 1 character that XML does not allow was removed from text in /word/document.xml (body/p[0]). | 1 Zeichen, das XML nicht erlaubt, wurde aus dem Text in /word/document.xml entfernt (body/p[0]). | /word/document.xml içindeki metinden XML'in izin vermediği 1 karakter çıkarıldı (body/p[0]). |
+| `docx: contentTypeMissing` | /word/document.xml had no content type; it was read as application/xml. | Für /word/document.xml fehlte der Inhaltstyp; der Teil wurde als application/xml gelesen. | /word/document.xml için içerik türü yoktu; application/xml olarak okundu. |
+| `docx: mainPartContentTypeUnexpected` | The main document /word/document.xml has the content type text/plain, which is not a Word document type; it was read as one. | Das Hauptdokument /word/document.xml hat den Inhaltstyp text/plain, der kein Word-Dokumenttyp ist; es wurde als Word-Dokument gelesen. | Ana belge /word/document.xml, Word belge türü olmayan text/plain içerik türüne sahip; Word belgesi olarak okundu. |

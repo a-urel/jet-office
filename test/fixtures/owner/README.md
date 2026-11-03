@@ -11,7 +11,8 @@ Every `*.xlsx` and `*.expected.json` here must be listed in
 `manifest.json` (by `.xlsx` name) and have its partner, or the test fails.
 `README.md` and `manifest.json` are the only other files that belong here.
 The number format engine's Excel oracle has its own directory,
-`number_format/`, with its own README.
+`number_format/`, with its own README, and the Word files have theirs,
+`docx/`, described under "Word files" below.
 
 ## The files
 
@@ -126,3 +127,80 @@ Sheets use File, Download, Microsoft Excel (.xlsx).
   `[]`, means the file reads with no warning at all.
 - Any other key is an error that names its path, such as
   `sheets[0].rows[3][2].n`.
+
+## Word files
+
+`docx/` holds real `.docx` files saved by Word, each with the text the
+owner confirmed. They are DOCX milestone D1's fidelity input (phase 4
+spec, section 9): they carry what a file the library writes does not, such
+as rsids, `w14:paraId`, fields, bookmarks, content controls and
+compatibility settings. `test/docx/owner_files_test.dart` (VM only) checks
+every file listed in `docx/manifest.json`:
+
+- it round-trips through `DocxDocument` (open, read the body, save) with
+  no warning and no difference by `tool/src/part_compare.dart`;
+- once confirmed, it reads its confirmed text; a draft prints `pending`
+  and must still match what the model reads.
+
+The files now: `blank.docx` (Word's blank document, also the model of
+`DocxDocument()`), `features.docx` (a heading, a bullet list, a table, a
+header, a footer and a comment) and `long.docx` (15 pages of fictional
+Turkish text with a table of contents, two tables and lists), all saved by
+Word for Mac 16.114.1 in Turkish. Save each file as Word writes it and
+commit it unmodified. Word leaves a lock file, `~$name.docx`, beside an
+open document; `.gitignore` keeps it out and the tests ignore it.
+
+Every `*.docx` and `*.expected.txt` in `docx/` must be listed in
+`docx/manifest.json` (by `.docx` name) and have its partner, or the test
+fails; `manifest.json` is the only other file that belongs there.
+
+### The text
+
+`<name>.expected.txt` is UTF-8: the text of each paragraph of the body,
+joined by a line feed, then one final line feed. A paragraph's text is
+what `DocxParagraph.text` returns: a tab is a tab, a line or page break a
+line feed, and text inside an inserted revision, a hyperlink or a field
+result counts. Tables are left out: D1 keeps them as opaque blocks, so
+their cells are not part of the text until D3 types them. Headers,
+footers and comments are not part of the body.
+
+### Draft, confirm, add
+
+1. Put the file in `docx/` and run
+
+   ```bash
+   dart run tool/draft_expected_docx.dart test/fixtures/owner/docx/features.docx
+   ```
+
+   It writes `features.expected.txt` beside the file (it refuses to
+   overwrite one) and prints one numbered line per block of the body: a
+   paragraph's text with tabs (`\t`), breaks (`\n`) and invisible
+   characters such as a zero-width space (`\u{200b}`) shown escaped, or
+   `[tbl: not in the text]` for a table.
+2. Add an entry for the file to `docx/manifest.json` with
+   `"confirmedBy": null`.
+3. Open the file in Word and tick **every** line against what Word shows,
+   in order. The draft is the model's own answer; a draft confirmed
+   without looking encodes the model's mistakes. Where Word disagrees,
+   that is a model defect: report it, do not hide it by editing the text.
+4. Set `"producer"` (program, version and platform) and `"confirmedBy":
+   "owner"`, run the quality gate, commit.
+
+### `docx/manifest.json`
+
+```json
+[
+  {
+    "file": "features.docx",
+    "producer": "Microsoft Word for Mac 16.114.1",
+    "confirmedBy": "owner"
+  }
+]
+```
+
+- Each entry has exactly `file` (a `.docx` name in `docx/`), `producer`
+  and `confirmedBy`.
+- `confirmedBy` is `null` for a draft and exactly `"owner"` once the owner
+  has confirmed the text; anything else is an error, and so is an empty
+  `producer` on a confirmed entry. The parser is
+  `test/support/owner_docx.dart`.

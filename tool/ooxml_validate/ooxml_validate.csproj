@@ -1,5 +1,6 @@
 <!--
-  Validates XLSX fixtures with the Open XML SDK; usage is in Program.cs.
+  Validates XLSX and DOCX fixtures with the Open XML SDK; usage is in
+  Program.cs.
   It targets net8.0 (CI installs 8.0.x); RollForward lets a newer installed
   runtime run it locally.
 -->

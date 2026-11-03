@@ -1,10 +1,11 @@
-/// Compares two XLSX packages part by part, by meaning and not by bytes.
+/// Compares two XLSX or DOCX packages part by part, by meaning and not by
+/// bytes.
 ///
 /// Not ported from Quds; written for jet_office. This is the yardstick the
-/// phase 3 round-trip tests use to prove that opening and saving a file
-/// keeps every part (spec 4.2). It is test-side tooling: it uses
-/// `package:archive` and `package:xml`, never `dart:io`, so it runs on the
-/// VM and in a browser.
+/// phase 3 and phase 4 round-trip tests use to prove that opening and
+/// saving a file keeps every part (spec 4.2 of each phase). It is test-side
+/// tooling: it uses `package:archive` and `package:xml`, never `dart:io`, so
+/// it runs on the VM and in a browser.
 ///
 /// [comparePackages] returns one line per difference, `'<part>: <what>'`,
 /// and nothing when the packages are equal. A part is XML or binary by its
@@ -29,6 +30,13 @@
 ///   reference, plus its root's attributes (but `count` and `uniqueCount`)
 ///   and its children other than `<si>` (an `extLst`), which are not
 ///   items and do not shift their indexes;
+/// * an attribute of the markup-compatibility namespace that names
+///   namespaces by prefix (`mc:Ignorable`, `mc:MustUnderstand`,
+///   `mc:ProcessContent`, `mc:PreserveElements`, `mc:PreserveAttributes`,
+///   and `Requires` on `mc:Choice`) as the set of what its tokens name: a
+///   prefix by its in-scope namespace URI, a qualified name by that URI and
+///   its local name, a prefix with no declaration in scope as
+///   `unresolved:<prefix>`;
 /// * the children of `[Content_Types].xml` as a set;
 /// * in SpreadsheetML, a `<t>` whose text neither starts nor ends with
 ///   whitespace as if it had no `xml:space="preserve"`, which only keeps
@@ -41,6 +49,22 @@
 /// With `ignoreBookkeeping`, a worksheet's `<dimension ref>` and each row's
 /// `spans` are left out: they summarize the cells and a saving model
 /// recomputes them (spec 4.4).
+///
+/// A package is a DOCX when the part its root `officeDocument` relationship
+/// names has a WordprocessingML content type (by `[Content_Types].xml`, not
+/// by the file's extension). A DOCX compares by the rules above with these
+/// changes:
+///
+/// * no SpreadsheetML rule applies (shared strings, `t="n"`, the `xml:space`
+///   of `<t>`, filled positions, `ignoreBookkeeping`), even to elements in
+///   the SpreadsheetML namespace;
+/// * the text of `w:t`, `w:instrText`, `w:delText` and `w:delInstrText`
+///   (by namespace URI)
+///   compares exactly, whitespace included, and their `xml:space` compares
+///   as written.
+///
+/// [compareXmlParts] compares one WordprocessingML part by the same DOCX
+/// rules, with relationship ids compared literally.
 library;
 
 import 'dart:convert';
@@ -60,12 +84,44 @@ const String _mainNs =
 /// The XML namespace, home of `xml:space`.
 const String _xmlNs = 'http://www.w3.org/XML/1998/namespace';
 
+/// The WordprocessingML namespace.
+const String _wNs =
+    'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/// The WordprocessingML elements whose text is content to its last space:
+/// `w:t`, `w:instrText`, `w:delText` and `w:delInstrText`, as
+/// `uri|local`.
+const Set<String> _wordText = <String>{
+  '$_wNs|t',
+  '$_wNs|instrText',
+  '$_wNs|delText',
+  '$_wNs|delInstrText',
+};
+
+/// The markup-compatibility namespace, home of `mc:Ignorable`.
+const String _mcNs =
+    'http://schemas.openxmlformats.org/markup-compatibility/2006';
+
+/// The markup-compatibility attributes whose value is a list of prefixes.
+const Set<String> _mcPrefixLists = <String>{'Ignorable', 'MustUnderstand'};
+
+/// The markup-compatibility attributes whose value is a list of qualified
+/// names (`p:local` or `p:*`).
+const Set<String> _mcNameLists = <String>{
+  'ProcessContent',
+  'PreserveElements',
+  'PreserveAttributes',
+};
+
 /// The differences between the packages [expected] and [actual], one line
 /// per difference, `'<part>: <what>'`; empty when they are equal.
 ///
 /// A part named in [ignoreParts] is skipped on both sides. A part only in
 /// [actual] is a difference unless it is named in [allowAdded].
-/// [ignoreBookkeeping] leaves out `dimension/@ref` and `row/@spans`.
+/// [ignoreBookkeeping] leaves out `dimension/@ref` and `row/@spans`; it
+/// has no effect on a DOCX. Whether the packages are DOCX is read from
+/// [expected]; a package whose main part is WordprocessingML on one side
+/// only is a difference.
 List<String> comparePackages(
   Uint8List expected,
   Uint8List actual, {
@@ -82,6 +138,13 @@ List<String> comparePackages(
       'package: the actual package is unreadable: ${a.error}',
   ];
   if (out.isNotEmpty) return out;
+  final bool docx = e.isWordprocessing;
+  if (docx != a.isWordprocessing) {
+    out.add(
+      'package: the main part is WordprocessingML in the '
+      '${docx ? 'expected' : 'actual'} package only',
+    );
+  }
   final Set<String> names = <String>{...e.parts.keys, ...a.parts.keys}
     ..removeAll(ignoreParts);
   for (final String name in names) {
@@ -101,7 +164,7 @@ List<String> comparePackages(
     } else if (!e.isXml(name)) {
       if (!_sameBytes(eb, ab)) out.add('$name: bytes differ');
     } else {
-      _comparePart(name, e, a, out, ignoreBookkeeping);
+      _comparePart(name, e, a, out, ignoreBookkeeping, docx);
     }
   }
   return out;
@@ -124,6 +187,7 @@ List<String> compareXml(
     'expected',
     out,
     ignoreBookkeeping,
+    false,
   );
   final _Node? a = _canonicalText(
     part,
@@ -131,8 +195,41 @@ List<String> compareXml(
     'actual',
     out,
     ignoreBookkeeping,
+    false,
   );
   if (e != null && a != null) _diff(part, e, a, '', out);
+  return out;
+}
+
+/// The differences between the UTF-8 XML bytes [expected] and [actual] of
+/// the WordprocessingML part [partName], one line per difference,
+/// `'<part>: <what>'`; empty when they are equal.
+///
+/// The rules are those [comparePackages] applies to a part of a DOCX,
+/// except that an attribute in the relationships namespace (`r:id`,
+/// `r:embed`) compares literally: one part has no relationships to resolve
+/// it through. Bytes that are not UTF-8 or not well-formed XML are a
+/// difference, not an exception.
+List<String> compareXmlParts(
+  String partName,
+  Uint8List expected,
+  Uint8List actual,
+) {
+  final List<String> out = <String>[];
+  _Node? canonical(Uint8List bytes, String side) {
+    final String text;
+    try {
+      text = utf8.decode(bytes);
+    } on FormatException {
+      out.add('$partName: the $side part is not UTF-8');
+      return null;
+    }
+    return _canonicalText(partName, text, side, out, false, true);
+  }
+
+  final _Node? e = canonical(expected, 'expected');
+  final _Node? a = canonical(actual, 'actual');
+  if (e != null && a != null) _diff(partName, e, a, '', out);
   return out;
 }
 
@@ -142,12 +239,14 @@ _Node? _canonicalText(
   String side,
   List<String> out,
   bool ignoreBookkeeping,
+  bool wordprocessing,
 ) {
   try {
     return _Canon(
       null,
       null,
       ignoreBookkeeping: ignoreBookkeeping,
+      wordprocessing: wordprocessing,
     ).node(XmlDocument.parse(text).rootElement, false);
   } on XmlException catch (error) {
     out.add('$part: the $side part is not well-formed XML (${error.message})');
@@ -169,6 +268,7 @@ void _comparePart(
   _Package a,
   List<String> out,
   bool ignoreBookkeeping,
+  bool docx,
 ) {
   final XmlDocument? ed = e.document(name);
   final XmlDocument? ad = a.document(name);
@@ -181,7 +281,7 @@ void _comparePart(
     }
     return;
   }
-  if (e.isSharedStrings(name) && a.isSharedStrings(name)) {
+  if (!docx && e.isSharedStrings(name) && a.isSharedStrings(name)) {
     final Set<String> es = e.referencedStrings();
     final Set<String> as = a.referencedStrings();
     for (final String s in (es.toList()..sort())) {
@@ -207,11 +307,13 @@ void _comparePart(
       e,
       name,
       ignoreBookkeeping: ignoreBookkeeping,
+      wordprocessing: docx,
     ).node(ed.rootElement, false),
     _Canon(
       a,
       name,
       ignoreBookkeeping: ignoreBookkeeping,
+      wordprocessing: docx,
     ).node(ad.rootElement, false),
     '',
     out,
@@ -317,12 +419,25 @@ void _diff(String part, _Node e, _Node a, String loc, List<String> out) {
 
 /// Turns elements of one part into [_Node]s, resolving relationship ids and
 /// shared string indexes through [_package] when there is one.
+///
+/// With [wordprocessing], the part belongs to a DOCX: no SpreadsheetML rule
+/// applies, and the text of `w:t`, `w:instrText`, `w:delText` and
+/// `w:delInstrText` is exact.
 class _Canon {
-  _Canon(this._package, this._part, {this.ignoreBookkeeping = false});
+  _Canon(
+    this._package,
+    this._part, {
+    bool ignoreBookkeeping = false,
+    this.wordprocessing = false,
+  }) : ignoreBookkeeping = ignoreBookkeeping && !wordprocessing;
 
   final _Package? _package;
   final String? _part;
   final bool ignoreBookkeeping;
+  final bool wordprocessing;
+
+  /// Whether the SpreadsheetML rules apply.
+  bool get _spreadsheet => !wordprocessing;
 
   late final Map<String, String> _rels =
       _package?.relationshipsOf(_part!) ?? const <String, String>{};
@@ -342,6 +457,17 @@ class _Canon {
       if (attr.name.prefix != null && attr.name.namespaceUri == _relNs) {
         value = _rels[value] ?? value;
       }
+      if (attr.name.prefix != null && attr.name.namespaceUri == _mcNs) {
+        if (_mcPrefixLists.contains(attr.name.local)) {
+          value = _prefixes(element, value, qualified: false);
+        } else if (_mcNameLists.contains(attr.name.local)) {
+          value = _prefixes(element, value, qualified: true);
+        }
+      } else if (attr.name.prefix == null &&
+          attr.name.local == 'Requires' &&
+          name == '$_mcNs|Choice') {
+        value = _prefixes(element, value, qualified: false);
+      }
       attrs[_attrKey(attr.name)] = value;
     }
     final bool preserve = element.attributes.any(
@@ -349,7 +475,10 @@ class _Canon {
           _attrKey(a.name) == '$_xmlNs|space' && a.value == 'preserve',
     );
     final String local = element.name.local;
-    final bool exact = inheritedExact || preserve;
+    final bool exact =
+        inheritedExact ||
+        preserve ||
+        wordprocessing && _wordText.contains(name);
     final bool hasElements = element.childElements.isNotEmpty;
     final List<Object> children = <Object>[];
     final StringBuffer run = StringBuffer();
@@ -371,11 +500,13 @@ class _Canon {
       }
     }
     flush();
-    if (name == '$_mainNs|c' && attrs['|t'] == 'n') attrs.remove('|t');
+    if (_spreadsheet && name == '$_mainNs|c' && attrs['|t'] == 'n') {
+      attrs.remove('|t');
+    }
     // A SpreadsheetML text's xml:space="preserve" only keeps the spaces
     // around it (the writer's rule, `writeTextElement`); without any it
     // changes nothing Excel shows.
-    if (name == '$_mainNs|t' && !hasElements) {
+    if (_spreadsheet && name == '$_mainNs|t' && !hasElements) {
       final String text = children.whereType<String>().join();
       if (text.isEmpty ||
           !_xmlSpace(text.codeUnitAt(0)) &&
@@ -387,10 +518,13 @@ class _Canon {
       if (name == '$_mainNs|dimension') attrs.remove('|ref');
       if (name == '$_mainNs|row') attrs.remove('|spans');
     }
-    if (name == '$_mainNs|sheetData') _fillPositions(children);
+    if (_spreadsheet && name == '$_mainNs|sheetData') {
+      _fillPositions(children);
+    }
     final _Node result = _Node(name, attrs, children);
     final _Package? package = _package;
-    if (package != null &&
+    if (_spreadsheet &&
+        package != null &&
         local == 'c' &&
         attrs['|t'] == 's' &&
         children.length == 1 &&
@@ -407,6 +541,48 @@ class _Canon {
   }
 
   bool _isRoot(XmlElement e) => e.parent is XmlDocument;
+
+  /// The whitespace-separated prefixes of [value] (or, when [qualified],
+  /// its `prefix:local` names) by the namespace each prefix is bound to at
+  /// [element], as a sorted set joined by spaces.
+  ///
+  /// A prefix bound nowhere in scope stands as `unresolved:<prefix>`, so a
+  /// dropped or rebound declaration is a difference and a renamed prefix
+  /// is not.
+  static String _prefixes(
+    XmlElement element,
+    String value, {
+    required bool qualified,
+  }) {
+    final Set<String> out = <String>{};
+    for (final String token in value.split(RegExp(r'\s+'))) {
+      if (token.isEmpty) continue;
+      final int colon = qualified ? token.indexOf(':') : -1;
+      if (qualified && colon < 0) {
+        out.add('unqualified:$token');
+        continue;
+      }
+      final String prefix = qualified ? token.substring(0, colon) : token;
+      final String? uri = _namespaceOf(element, prefix);
+      final String ns = uri ?? 'unresolved:$prefix';
+      out.add(qualified ? '$ns|${token.substring(colon + 1)}' : ns);
+    }
+    return (out.toList()..sort()).join(' ');
+  }
+
+  /// The namespace URI [prefix] is bound to at [element], or null.
+  static String? _namespaceOf(XmlElement element, String prefix) {
+    if (prefix == 'xml') return _xmlNs;
+    for (XmlNode? n = element; n is XmlElement; n = n.parent) {
+      for (final XmlAttribute a in n.attributes) {
+        if (a.name.prefix == 'xmlns' && a.name.local == prefix) {
+          // An empty value undeclares the prefix (XML 1.1).
+          return a.value.isEmpty ? null : a.value;
+        }
+      }
+    }
+    return null;
+  }
 
   /// Gives each `<row>` of a `<sheetData>`'s [children], and each cell of a
   /// row, that has no `r` the position a reader gives it: the row after the
@@ -567,6 +743,67 @@ class _Package {
   bool isXml(String part) {
     final String type = typeOf(part);
     return type.endsWith('+xml') || type.endsWith('/xml');
+  }
+
+  /// Whether the part the root `officeDocument` relationship names has a
+  /// WordprocessingML content type: a document, a template, or either with
+  /// macros.
+  late final bool isWordprocessing = _isWordprocessing();
+
+  bool _isWordprocessing() {
+    if (!parts.containsKey('_rels/.rels')) return false;
+    final XmlDocument? rels = document('_rels/.rels');
+    if (rels == null) return false;
+    for (final XmlElement r in rels.rootElement.childElements) {
+      final String type = r.getAttribute('Type') ?? '';
+      if (!type.endsWith('/officeDocument')) continue;
+      final String? target = _partAt(r.getAttribute('Target') ?? '');
+      if (target == null) continue;
+      final String contentType = typeOf(target);
+      if (contentType.contains('.wordprocessingml.') ||
+          contentType.startsWith('application/vnd.ms-word.')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// The part a root relationship's [target] names, resolved as
+  /// `OpcPackage.resolve` does: `\` read as `/`, `.` and `..` applied,
+  /// matched without regard to case, and retried percent-decoded; null when
+  /// it names no part.
+  String? _partAt(String target) {
+    final String joined = target.replaceAll(r'\', '/');
+    String segments(String path) {
+      final List<String> out = <String>[];
+      for (final String segment in path.split('/')) {
+        if (segment.isEmpty || segment == '.') continue;
+        if (segment == '..') {
+          if (out.isNotEmpty) out.removeLast();
+          continue;
+        }
+        out.add(segment);
+      }
+      return out.join('/');
+    }
+
+    String? existing(String name) {
+      final String key = name.toLowerCase();
+      for (final String part in parts.keys) {
+        if (part.toLowerCase() == key) return part;
+      }
+      return null;
+    }
+
+    final String? literal = existing(segments(joined));
+    if (literal != null) return literal;
+    try {
+      return existing(segments(Uri.decodeFull(joined)));
+    } on ArgumentError {
+      return null;
+    } on FormatException {
+      return null;
+    }
   }
 
   bool isSharedStrings(String part) =>

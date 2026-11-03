@@ -1,4 +1,5 @@
-/// XML namespaces, relationship types and content types of an XLSX package.
+/// XML namespaces, relationship types and content types of XLSX and DOCX
+/// packages.
 ///
 /// Ported from quds_office_engine `lib/src/xml/namespaces.dart` at commit 15c5d29.
 /// Ported from quds_office_engine `lib/src/opc/content_types.dart` at commit 15c5d29.
@@ -15,7 +16,13 @@
 /// for the Excel 2010 conditional formats; [Ns.vmlExcel], the Excel VML
 /// namespace of notes, which Quds lacks; the `vmlDrawing` and `table`
 /// relationship types; and the comments, VML drawing and table content
-/// types.
+/// types. The WordprocessingML names ([Ns.w], [Ns.w14], [Ns.wp], [Ns.mc],
+/// [Ns.wStrict], the settings, web settings, font table, theme, numbering,
+/// header and footer relationship types, and the `wml…` and theme content
+/// types) are new too, with the ECMA-376 transitional values. So are the
+/// other main part types of SpreadsheetML (`sml…`: macro-enabled, template
+/// and binary) and PresentationML (`pml…`), by which the DOCX reader
+/// recognises and refuses a workbook or a presentation.
 library;
 
 /// XML namespace URIs.
@@ -55,7 +62,8 @@ abstract final class Ns {
 
   /// Extended (application) properties, `docProps/app.xml`.
   static const String extendedProperties =
-      'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties';
+      'http://schemas.openxmlformats.org/officeDocument/2006/'
+      'extended-properties';
 
   /// Custom properties, `docProps/custom.xml`.
   static const String customProperties =
@@ -92,11 +100,34 @@ abstract final class Ns {
   /// Excel VML (`x:`), the `x:ClientData` that ties a VML shape to a note's
   /// cell.
   static const String vmlExcel = 'urn:schemas-microsoft-com:office:excel';
+
+  /// WordprocessingML main (`w:`), the namespace of document, styles,
+  /// settings and numbering parts.
+  static const String w =
+      'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+  /// Word 2010 extensions (`w14:`, MS-DOCX).
+  static const String w14 =
+      'http://schemas.microsoft.com/office/word/2010/wordml';
+
+  /// WordprocessingML drawing (`wp:`), the inline and anchored pictures of a
+  /// document.
+  static const String wp =
+      'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
+
+  /// Markup compatibility (`mc:`), `mc:Ignorable` and `mc:AlternateContent`.
+  static const String mc =
+      'http://schemas.openxmlformats.org/markup-compatibility/2006';
+
+  /// WordprocessingML main in Strict OOXML, which is not read.
+  static const String wStrict =
+      'http://purl.oclc.org/ooxml/wordprocessingml/main';
 }
 
 /// Relationship type URIs.
 abstract final class RelType {
-  /// The main document part of the package, the workbook.
+  /// The main part of the package: the workbook of an XLSX, the document of
+  /// a DOCX.
   static const String officeDocument =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
 
@@ -152,6 +183,39 @@ abstract final class RelType {
   /// formula cells.
   static const String calcChain =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain';
+
+  /// The document settings part (`word/settings.xml`).
+  static const String settings =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings';
+
+  /// The web settings part (`word/webSettings.xml`).
+  static const String webSettings =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings';
+
+  /// The font table part (`word/fontTable.xml`).
+  static const String fontTable =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable';
+
+  /// A theme part (`word/theme/theme1.xml`).
+  static const String theme =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme';
+
+  /// The numbering definitions part (`word/numbering.xml`).
+  static const String numbering =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering';
+
+  /// A header part of a document.
+  static const String header =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
+
+  /// A footer part of a document.
+  static const String footer =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
+
+  /// The main document part in a Strict OOXML package. A Strict file is
+  /// recognised by this type and refused; it is not read.
+  static const String officeDocumentStrict =
+      'http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument';
 }
 
 /// Content types (MIME types) of package parts.
@@ -212,4 +276,80 @@ abstract final class ContentType {
 
   /// A JPEG image.
   static const String jpeg = 'image/jpeg';
+
+  /// The main part of a Word document.
+  static const String wmlDocument =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml';
+
+  /// The main part of a Word template.
+  static const String wmlTemplate =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml';
+
+  /// The main part of a macro-enabled Word document.
+  static const String wmlMacroDocument =
+      'application/vnd.ms-word.document.macroEnabled.main+xml';
+
+  /// The main part of a macro-enabled Word template.
+  static const String wmlMacroTemplate =
+      'application/vnd.ms-word.template.macroEnabledTemplate.main+xml';
+
+  /// The styles part of a Word document.
+  static const String wmlStyles =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml';
+
+  /// The settings part of a Word document.
+  static const String wmlSettings =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml';
+
+  /// The font table part of a Word document.
+  static const String wmlFontTable =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml';
+
+  /// The web settings part of a Word document.
+  static const String wmlWebSettings =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.webSettings+xml';
+
+  /// A theme part.
+  static const String theme =
+      'application/vnd.openxmlformats-officedocument.theme+xml';
+
+  /// The main part of a macro-enabled workbook (`.xlsm`).
+  static const String smlMacroWorkbook =
+      'application/vnd.ms-excel.sheet.macroEnabled.main+xml';
+
+  /// The main part of a workbook template (`.xltx`).
+  static const String smlTemplate =
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml';
+
+  /// The main part of a macro-enabled workbook template (`.xltm`).
+  static const String smlMacroTemplate =
+      'application/vnd.ms-excel.template.macroEnabled.main+xml';
+
+  /// The main part of a binary workbook (`.xlsb`), which is not XML.
+  static const String smlBinaryWorkbook =
+      'application/vnd.ms-excel.sheet.binary.macroEnabled.main';
+
+  /// The main part of a presentation (`.pptx`).
+  static const String pmlPresentation =
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml';
+
+  /// The main part of a presentation template (`.potx`).
+  static const String pmlTemplate =
+      'application/vnd.openxmlformats-officedocument.presentationml.template.main+xml';
+
+  /// The main part of a slide show (`.ppsx`).
+  static const String pmlSlideshow =
+      'application/vnd.openxmlformats-officedocument.presentationml.slideshow.main+xml';
+
+  /// The main part of a macro-enabled presentation (`.pptm`).
+  static const String pmlMacroPresentation =
+      'application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml';
+
+  /// The main part of a macro-enabled presentation template (`.potm`).
+  static const String pmlMacroTemplate =
+      'application/vnd.ms-powerpoint.template.macroEnabled.main+xml';
+
+  /// The main part of a macro-enabled slide show (`.ppsm`).
+  static const String pmlMacroSlideshow =
+      'application/vnd.ms-powerpoint.slideshow.macroEnabled.main+xml';
 }

@@ -12,19 +12,9 @@ library;
 
 import 'dart:collection';
 
+import '../common/locale.dart';
+import '../common/warning_aggregator.dart';
 import 'warning_messages.dart';
-
-/// The language of a warning message.
-enum XlsxLocale {
-  /// English.
-  en,
-
-  /// German.
-  de,
-
-  /// Turkish.
-  tr,
-}
 
 /// What kind of data problem an [XlsxWarning] reports.
 enum XlsxWarningCode {
@@ -199,19 +189,13 @@ enum XlsxWarningCode {
 /// Library users never construct warnings; the writer and the reader return
 /// them.
 final class XlsxWarning {
-  XlsxWarning._(
-    this.code,
-    this.sheet,
-    this.originalName,
-    this.detail,
-    this._key,
-  );
+  XlsxWarning._(this.sheet, this.originalName, this._entry);
 
-  /// How many cell references a warning keeps.
-  static const int _maxCells = 10;
+  /// The aggregated entry that holds the code, detail, count and cells.
+  final AggregatedWarning<XlsxWarningCode> _entry;
 
   /// The kind of problem.
-  final XlsxWarningCode code;
+  XlsxWarningCode get code => _entry.code;
 
   /// The sheet the problem is on. For sheet-name warnings this is the name
   /// the sheet has in the file.
@@ -227,20 +211,13 @@ final class XlsxWarning {
   /// warnings for each distinct detail, for the first ten details; every
   /// later new detail joins one warning of that code whose detail is null,
   /// so a hostile file cannot make a warning per format id.
-  final String? detail;
-
-  /// What the collector aggregates and removes this warning under.
-  final Object _key;
-
-  int _count = 0;
-  final List<String> _cells = <String>[];
-  late final List<String> _cellsView = UnmodifiableListView<String>(_cells);
+  String? get detail => _entry.detail;
 
   /// How many times the problem occurred: the affected cells of a
   /// cell-level warning, the skipped ranges of
   /// [XlsxWarningCode.mergeRangeInvalid], and 1 for a warning about a whole
   /// sheet (a sheet-name warning or [XlsxWarningCode.sheetPartMissing]).
-  int get count => _count;
+  int get count => _entry.count;
 
   /// A1-style references of the first ten affected cells, in the order
   /// they were written or read.
@@ -248,10 +225,10 @@ final class XlsxWarning {
   /// Empty for a warning that names no cell, such as a sheet-name warning.
   /// An unmodifiable view, the same object on every call, that shows
   /// references added later.
-  List<String> get cells => _cellsView;
+  List<String> get cells => _entry.locations;
 
   /// A human-readable description in [locale].
-  String message([XlsxLocale locale = XlsxLocale.en]) =>
+  String message([OfficeLocale locale = OfficeLocale.en]) =>
       formatWarning(this, locale);
 
   /// The English [message].
@@ -268,18 +245,11 @@ final class XlsxWarning {
 /// ten distinct non-null details. An [add] with an eleventh or later new
 /// detail aggregates into the one warning for `(key, code, null)`.
 final class WarningCollector {
+  final WarningAggregator<XlsxWarningCode> _aggregator =
+      WarningAggregator<XlsxWarningCode>();
   final List<XlsxWarning> _warnings = <XlsxWarning>[];
   late final List<XlsxWarning> _warningsView =
       UnmodifiableListView<XlsxWarning>(_warnings);
-  final Map<(Object, XlsxWarningCode, String?), XlsxWarning> _aggregated =
-      <(Object, XlsxWarningCode, String?), XlsxWarning>{};
-
-  /// How many distinct non-null details each `(key, code)` has a warning for.
-  final Map<(Object, XlsxWarningCode), int> _details =
-      <(Object, XlsxWarningCode), int>{};
-
-  /// How many distinct non-null details a key and code keep.
-  static const int _maxDetails = 10;
 
   /// Records one occurrence of [code] on [sheet].
   ///
@@ -302,35 +272,18 @@ final class WarningCollector {
     final bool perCall =
         code == XlsxWarningCode.sheetNameChanged ||
         code == XlsxWarningCode.sheetNameDuplicated;
-    final XlsxWarning warning;
-    if (perCall) {
-      warning = XlsxWarning._(code, sheet, originalName, detail, owner);
-      _warnings.add(warning);
-    } else {
-      String? kept = detail;
-      if (kept != null && !_aggregated.containsKey((owner, code, kept))) {
-        final int named = _details[(owner, code)] ?? 0;
-        if (named < _maxDetails) {
-          _details[(owner, code)] = named + 1;
-        } else {
-          kept = null;
-        }
-      }
-      warning = _aggregated.putIfAbsent((owner, code, kept), () {
-        final XlsxWarning created = XlsxWarning._(
-          code,
-          sheet,
-          null,
-          kept,
-          owner,
-        );
-        _warnings.add(created);
-        return created;
-      });
-    }
-    warning._count++;
-    if (cell != null && warning._cells.length < XlsxWarning._maxCells) {
-      warning._cells.add(cell);
+    final int before = _aggregator.all.length;
+    final AggregatedWarning<XlsxWarningCode> entry = perCall
+        ? _aggregator.addUnaggregated(
+            code,
+            scope: owner,
+            location: cell,
+            detail: detail,
+          )
+        : _aggregator.add(code, scope: owner, location: cell, detail: detail);
+    // A new entry is appended; an aggregated one is already wrapped.
+    if (_aggregator.all.length > before) {
+      _warnings.add(XlsxWarning._(sheet, perCall ? originalName : null, entry));
     }
   }
 
@@ -348,14 +301,9 @@ final class WarningCollector {
     Object key, {
     Set<XlsxWarningCode> keep = const <XlsxWarningCode>{},
   }) {
-    bool drop(XlsxWarning w) => w._key == key && !keep.contains(w.code);
-    _warnings.removeWhere(drop);
-    _aggregated.removeWhere(
-      ((Object, XlsxWarningCode, String?) k, XlsxWarning w) => drop(w),
-    );
-    _details.removeWhere(
-      ((Object, XlsxWarningCode) k, int n) =>
-          k.$1 == key && !keep.contains(k.$2),
+    _aggregator.removeScope(key, keep: keep);
+    _warnings.removeWhere(
+      (XlsxWarning w) => w._entry.scope == key && !keep.contains(w.code),
     );
   }
 }

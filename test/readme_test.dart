@@ -50,7 +50,7 @@ List<String> warnings(void Function(String) print) {
   final XlsxWriter book = XlsxWriter();
   book.addSheet('Notes').row(<Object?>['bad\u0001text']);
   for (final XlsxWarning warning in book.close().warnings) {
-    print(warning.message(XlsxLocale.tr));
+    print(warning.message(OfficeLocale.tr));
   }
   return <String>[];
 }
@@ -94,7 +94,36 @@ void showing(void Function(String) print) {
   return (bytes: file.takeBytes(), warnings: warnings);
 }
 
+DocxResult docxCreate() {
+  final DocxDocument created = DocxDocument();
+  created.body.addParagraph('Quarterly report');
+  final DocxResult first = created.save();
+  return first;
+}
+
+DocxResult docxEdit(DocxResult first) {
+  final DocxDocument doc = DocxDocument.open(first.bytes);
+  final DocxParagraph report = doc.body.blocks.whereType<DocxParagraph>().last;
+  report.inlines.whereType<DocxRun>().single.text = 'Annual report';
+  final DocxResult saved = doc.save();
+  // saved.bytes is the .docx file; saved.warnings lists what was repaired.
+  return saved;
+}
+
 void main() {
+  test('README DOCX blocks create, edit and save a document', () {
+    final DocxResult first = docxCreate();
+    expect(first.warnings, isEmpty);
+    final DocxResult saved = docxEdit(first);
+    expect(saved.warnings, isEmpty);
+    final DocxDocument reopened = DocxDocument.open(saved.bytes);
+    final List<String> texts = <String>[
+      for (final DocxBlock b in reopened.body.blocks)
+        if (b is DocxParagraph) b.text,
+    ];
+    expect(texts, <String>['', 'Annual report']);
+  });
+
   test('README quick start block is clean', () {
     final XlsxResult out = quickStart();
     expect(checkXlsx(out.bytes), isEmpty);
@@ -111,8 +140,8 @@ void main() {
     final XlsxWriter book = XlsxWriter();
     book.addSheet('Notes').row(<Object?>['bad\u0001text']);
     final XlsxWarning warning = book.close().warnings.single;
-    expect(lines, <String>[warning.message(XlsxLocale.tr)]);
-    expect(lines.single, isNot(warning.message(XlsxLocale.en)));
+    expect(lines, <String>[warning.message(OfficeLocale.tr)]);
+    expect(lines.single, isNot(warning.message(OfficeLocale.en)));
     expect(lines.single, contains('sayfasındaki'));
   });
 

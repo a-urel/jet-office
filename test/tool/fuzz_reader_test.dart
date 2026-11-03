@@ -9,6 +9,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import '../../tool/src/fuzz_run.dart';
+import '../docx/support/docx_fuzz.dart';
 
 void main() {
   group('runFuzz', () {
@@ -67,6 +68,31 @@ void main() {
       expect(r.refused, 1);
       expect(r.failures, 1);
       expect(out.toString(), matches(RegExp(r'^seed 1 case 1 \(.+\): .*boom')));
+    });
+
+    test('the DOCX cases and refusal are used when given', () {
+      int n = 0;
+      final StringBuffer out = StringBuffer();
+      final FuzzRunResult r = runFuzz(
+        first: 1,
+        last: 1,
+        cases: 2,
+        verbose: false,
+        out: out,
+        err: StringBuffer(),
+        generate: docxFuzzCases,
+        isRefusal: (Object e) => e is DocxReadException,
+        exercise: (Uint8List bytes) {
+          n++;
+          if (n == 1) {
+            throw DocxReadException(DocxReadFailure.notZip, 'no');
+          }
+          throw XlsxReadException(XlsxReadFailure.notZip, 'not a refusal');
+        },
+      );
+      expect(r.refused, 1);
+      expect(r.failures, 1);
+      expect(out.toString(), contains('not a refusal'));
     });
   });
 }

@@ -13,21 +13,24 @@
 /// targets are resolved against the source part with `.` and `..` applied,
 /// retried percent-decoded, and part names are matched without regard to
 /// case or slash direction.
+///
+/// The ZIP, XML and package failures are mapped to a format-neutral
+/// `ReadProblem` by `lib/src/common/read_guard.dart`; this file turns it
+/// into an [XlsxReadException] with the XLSX messages.
+///
+/// @docImport '../../zip/archive_adapter.dart';
 library;
 
 import 'dart:typed_data';
 
+import '../../common/read_guard.dart';
+import '../../common/zip_limits.dart';
+import '../../opc/ooxml.dart' show RelType;
 import '../../opc/package.dart';
 import '../../xml/xml_pull_reader.dart';
-import '../../zip/archive_adapter.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
 
-const String _officeDocumentType =
-    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
-    'officeDocument';
-const String _strictOfficeDocumentType =
-    'http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument';
 const String _xlsbType =
     'application/vnd.ms-excel.sheet.binary.macroEnabled.main';
 const List<String> _workbookTypes = <String>[
@@ -102,12 +105,10 @@ final class PackageReader {
   /// none. Throws an [XlsxReadException] when the relationships part is not
   /// readable XML.
   List<PartRelationship> relationshipsOf(String part) {
-    final List<OpcRelationship> all;
-    try {
-      all = _package.relationshipsOf(part);
-    } on OpcFormatException catch (e) {
-      throw _mapFormat(e, _limits);
-    }
+    final List<OpcRelationship> all = _guard(
+      null,
+      () => _package.relationshipsOf(part),
+    );
     return <PartRelationship>[
       for (final OpcRelationship r in all)
         if (!r.external)
@@ -142,37 +143,24 @@ final class PackageReader {
   ///
   /// Throws an [XlsxReadException] of [XlsxReadFailure.corruptZip] naming
   /// the first damaged entry.
-  void verifyEntries() {
-    try {
-      _package.verifyEntries();
-    } on OpcFormatException catch (e) {
-      throw _mapFormat(e, _limits);
-    }
-  }
+  void verifyEntries() => _guard(null, _package.verifyEntries);
 
   /// Runs [body], mapping an [XmlParseException] or [ZipReadError] to an
   /// [XlsxReadException] that names [part].
   ///
   /// Use it around reading from the reader [openXml] returns.
-  T guardXml<T>(String part, T Function() body) {
-    try {
-      return body();
-    } on XmlParseException catch (e) {
-      throw _mapXml(e, part, _limits);
-    } on ZipReadError catch (e) {
-      throw _mapZipError(e);
-    } on OpcFormatException catch (e) {
-      throw _mapFormat(e, _limits, xmlPart: part);
-    }
-  }
+  T guardXml<T>(String part, T Function() body) => _guard(part, body);
+
+  T _guard<T>(String? part, T Function() body) =>
+      guardRead(part, body, (ReadProblem p) => _exception(p, _limits));
 
   String _findWorkbook() {
     String? found;
     for (final PartRelationship rel in relationshipsOf('')) {
-      if (rel.type == _strictOfficeDocumentType) {
+      if (rel.type == RelType.officeDocumentStrict) {
         throw strictUnsupported();
       }
-      if (rel.type == _officeDocumentType && hasPart(rel.target)) {
+      if (rel.type == RelType.officeDocument && hasPart(rel.target)) {
         found = rel.target;
         break;
       }
@@ -208,104 +196,47 @@ final class PackageReader {
   static String _strip(String name) =>
       name.startsWith('/') ? name.substring(1) : name;
 
-  static OpcPackage _open(Uint8List bytes, XlsxReadLimits limits) {
-    try {
-      return OpcPackage.read(
-        ZipReader(
-          bytes,
-          maxEntries: limits.maxEntries,
-          maxEntryBytes: limits.maxEntryBytes,
-          maxTotalBytes: limits.maxTotalBytes,
-          maxCompressionRatio: limits.maxCompressionRatio,
-        ),
-        maxDepth: limits.maxDepth,
-      );
-    } on ZipReadError catch (e) {
-      throw _mapZipError(e);
-    } on OpcFormatException catch (e) {
-      throw _mapFormat(e, limits);
-    }
-  }
+  static OpcPackage _open(Uint8List bytes, XlsxReadLimits limits) => guardRead(
+    null,
+    () => OpcPackage.read(
+      openZip(bytes, (
+        maxEntries: limits.maxEntries,
+        maxEntryBytes: limits.maxEntryBytes,
+        maxTotalBytes: limits.maxTotalBytes,
+        maxCompressionRatio: limits.maxCompressionRatio,
+      )),
+      maxDepth: limits.maxDepth,
+    ),
+    (ReadProblem p) => _exception(p, limits),
+  );
 
-  /// Maps a package failure. [xmlPart] names the part in an XML failure
-  /// instead of the part the package reports, as the caller spelled it.
-  static XlsxReadException _mapFormat(
-    OpcFormatException e,
-    XlsxReadLimits limits, {
-    String? xmlPart,
-  }) {
-    final Object? cause = e.cause;
-    if (cause is ZipReadError) return _mapZipError(cause, part: e.part);
-    if (cause is XmlParseException) {
-      return _mapXml(cause, xmlPart ?? e.part, limits);
-    }
-    return XlsxReadException(
-      XlsxReadFailure.malformedXml,
-      'The package has no such part.',
-      part: e.part,
-    );
-  }
-
-  static XlsxReadException _mapXml(
-    XmlParseException e,
-    String? part,
-    XlsxReadLimits limits,
-  ) {
-    if (e.kind == XmlParseKind.tooDeep) {
-      return XlsxReadException(
+  /// The [XlsxReadException] for [p]: its messages name the XLSX limits
+  /// and are exactly those the reader gave before the mapping moved to
+  /// `lib/src/common`.
+  static XlsxReadException _exception(ReadProblem p, XlsxReadLimits limits) {
+    XlsxReadException fail(XlsxReadFailure reason, String message) =>
+        XlsxReadException(reason, message, part: p.part);
+    return switch (p.kind) {
+      ReadProblemKind.notZip => fail(XlsxReadFailure.notZip, p.detail),
+      ReadProblemKind.corruptZip => fail(XlsxReadFailure.corruptZip, p.detail),
+      ReadProblemKind.encrypted => fail(XlsxReadFailure.encrypted, p.detail),
+      ReadProblemKind.legacyBinary => fail(XlsxReadFailure.legacyXls, p.detail),
+      ReadProblemKind.limitExceeded when p.limit == ReadLimit.maxDepth => fail(
         XlsxReadFailure.limitExceeded,
-        'Limit maxDepth (${limits.maxDepth}) exceeded: ${e.message}.',
-        part: part,
-      );
-    }
-    return XlsxReadException(
-      XlsxReadFailure.malformedXml,
-      'The XML cannot be read: ${e.message}.',
-      part: part,
-    );
-  }
-
-  static XlsxReadException _mapZipError(ZipReadError e, {String? part}) {
-    final String? entry = e.entry ?? part;
-    XlsxReadException limit(String name) => XlsxReadException(
-      XlsxReadFailure.limitExceeded,
-      'Limit $name exceeded: ${e.message}',
-      part: entry,
-    );
-    switch (e.kind) {
-      case ZipReadErrorKind.notZip:
-        return XlsxReadException(
-          XlsxReadFailure.notZip,
-          e.message,
-          part: entry,
-        );
-      case ZipReadErrorKind.corrupt:
-      case ZipReadErrorKind.duplicateEntry:
-        return XlsxReadException(
-          XlsxReadFailure.corruptZip,
-          e.message,
-          part: entry,
-        );
-      case ZipReadErrorKind.encrypted:
-        return XlsxReadException(
-          XlsxReadFailure.encrypted,
-          e.message,
-          part: entry,
-        );
-      case ZipReadErrorKind.legacyXls:
-        return XlsxReadException(
-          XlsxReadFailure.legacyXls,
-          e.message,
-          part: entry,
-        );
-      case ZipReadErrorKind.tooManyEntries:
-        return limit('maxEntries');
-      case ZipReadErrorKind.entryTooLarge:
-        return limit('maxEntryBytes');
-      case ZipReadErrorKind.totalTooLarge:
-        return limit('maxTotalBytes');
-      case ZipReadErrorKind.ratioTooHigh:
-        return limit('maxCompressionRatio');
-    }
+        'Limit maxDepth (${limits.maxDepth}) exceeded: ${p.detail}.',
+      ),
+      ReadProblemKind.limitExceeded => fail(
+        XlsxReadFailure.limitExceeded,
+        'Limit ${p.limit?.name} exceeded: ${p.detail}',
+      ),
+      ReadProblemKind.malformedXml => fail(
+        XlsxReadFailure.malformedXml,
+        'The XML cannot be read: ${p.detail}.',
+      ),
+      ReadProblemKind.missingPart => fail(
+        XlsxReadFailure.malformedXml,
+        'The package has no such part.',
+      ),
+    };
   }
 }

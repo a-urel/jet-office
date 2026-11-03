@@ -1,3 +1,4 @@
+import 'package:jet_office/src/common/locale.dart';
 import 'package:jet_office/src/xlsx/format/date_renderer.dart';
 import 'package:jet_office/src/xlsx/format/excel_number.dart';
 import 'package:jet_office/src/xlsx/format/format_code.dart';
@@ -25,7 +26,7 @@ final XlsxFormatLocale commaLocale = XlsxFormatLocale(
   builtinCodes: XlsxFormatLocale.enUS.builtinCodes,
   longDateCode: XlsxFormatLocale.enUS.longDateCode,
   longTimeCode: XlsxFormatLocale.enUS.longTimeCode,
-  messageLocale: XlsxLocale.de,
+  messageLocale: OfficeLocale.de,
   verified: false,
 );
 
