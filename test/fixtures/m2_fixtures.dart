@@ -23,7 +23,7 @@ const String _sample = 'Sample 123';
 
 /// One row of `m2_styles`: the value in column A, its style and the label in
 /// column B.
-typedef _StyleRow = (Object value, XlsxStyle style, String label);
+typedef M2StyleRow = (Object value, XlsxStyle style, String label);
 
 const XlsxColor _blue = XlsxColor.rgb(0x4472C4);
 const XlsxColor _yellow = XlsxColor.rgb(0xFFFF00);
@@ -52,7 +52,7 @@ final List<(XlsxNumFmt, String)> _numberFormats = <(XlsxNumFmt, String)>[
 ];
 
 /// The rows of `m2_styles`, top to bottom.
-List<_StyleRow> _styleRows() => <_StyleRow>[
+List<M2StyleRow> m2StyleRows() => <M2StyleRow>[
   // Fonts.
   (_sample, const XlsxStyle(font: XlsxFont(bold: true)), 'font bold'),
   (_sample, const XlsxStyle(font: XlsxFont(italic: true)), 'font italic'),
@@ -210,7 +210,8 @@ List<_StyleRow> _styleRows() => <_StyleRow>[
     'hidden true',
   ),
   // Number formats, each on a number and on a date.
-  for (final (XlsxNumFmt format, String name) in _numberFormats) ...<_StyleRow>[
+  for (final (XlsxNumFmt format, String name)
+      in _numberFormats) ...<M2StyleRow>[
     (1234.5, XlsxStyle(numFmt: format), 'numFmt $name on 1234.5'),
     (
       const XlsxDate(2026, 10, 24),
@@ -223,7 +224,7 @@ List<_StyleRow> _styleRows() => <_StyleRow>[
 /// The style of every row of `m2_styles`, top to bottom, as the writer
 /// registers them.
 List<XlsxStyle> m2StyleRowStyles() => <XlsxStyle>[
-  for (final (_, XlsxStyle style, _) in _styleRows()) style,
+  for (final (_, XlsxStyle style, _) in m2StyleRows()) style,
 ];
 
 /// The text `<v>` stores for [value]: a date as its serial.
@@ -233,7 +234,7 @@ String _stored(Object value) => value is XlsxDate ? '46319' : '$value';
 Object _expected(Object value) => value is XlsxDate ? 46319 : value;
 
 Fixture _styles() {
-  final List<_StyleRow> rows = _styleRows();
+  final List<M2StyleRow> rows = m2StyleRows();
   return Fixture(
     'm2_styles',
     <String, List<List<String>>>{
@@ -266,7 +267,7 @@ Fixture _styles() {
 
 /// A sheet written by the layout fixtures: its rows, each with the values
 /// from column A on and the options of `XlsxSheetWriter.row`.
-typedef _LayoutRow = ({
+typedef M2LayoutRow = ({
   List<Object?> values,
   XlsxStyle? style,
   double? height,
@@ -275,7 +276,7 @@ typedef _LayoutRow = ({
   bool collapsed,
 });
 
-_LayoutRow _row(
+M2LayoutRow _row(
   List<Object?> values, {
   XlsxStyle? style,
   double? height,
@@ -292,8 +293,8 @@ _LayoutRow _row(
 );
 
 /// Writes [rows] to [sheet].
-void _writeRows(XlsxSheetWriter sheet, List<_LayoutRow> rows) {
-  for (final _LayoutRow r in rows) {
+void _writeRows(XlsxSheetWriter sheet, List<M2LayoutRow> rows) {
+  for (final M2LayoutRow r in rows) {
     sheet.row(
       r.values,
       style: r.style,
@@ -305,32 +306,58 @@ void _writeRows(XlsxSheetWriter sheet, List<_LayoutRow> rows) {
   }
 }
 
+/// The rows of every M2 fixture written from [M2LayoutRow] lists, by fixture
+/// name, then by sheet in tab order.
+Map<String, Map<String, List<M2LayoutRow>>> m2SheetRows() =>
+    <String, Map<String, List<M2LayoutRow>>>{
+      'm2_columns_rows': <String, List<M2LayoutRow>>{
+        'Layout': _layoutRows,
+        'Defaults': _defaultSizeRows,
+      },
+      'm2_style_precedence': <String, List<M2LayoutRow>>{
+        'Precedence': _precedenceRows,
+      },
+      'm2_views': <String, List<M2LayoutRow>>{
+        'Frozen': _frozenRows,
+        'Split': _splitRows,
+        'View': _viewRows,
+        'RTL': _rtlRows,
+        'Outline': _outlineRows,
+        'Hidden': _hiddenRows,
+        'VeryHidden': _veryHiddenRows,
+      },
+      'm2_merges_filter': <String, List<M2LayoutRow>>{
+        "Bob's Data": _filterRows,
+        'Plain': _plainRows,
+      },
+    };
+
 /// The value inside [cell], unwrapping an [XlsxCell].
 Object? _unwrap(Object? cell) => cell is XlsxCell ? cell.value : cell;
 
 /// The stored text of every sheet in [sheets], padded to a rectangle.
 Map<String, List<List<String>>> _storedOf(
-  Map<String, List<_LayoutRow>> sheets,
+  Map<String, List<M2LayoutRow>> sheets,
 ) => <String, List<List<String>>>{
-  for (final MapEntry<String, List<_LayoutRow>> e in sheets.entries)
+  for (final MapEntry<String, List<M2LayoutRow>> e in sheets.entries)
     e.key: _rectangle(e.value, (Object? v) => v == null ? '' : _stored(v)),
 };
 
 /// The expected values of every sheet in [sheets], padded to a rectangle.
 Map<String, List<List<Object?>>> _expectedOf(
-  Map<String, List<_LayoutRow>> sheets,
+  Map<String, List<M2LayoutRow>> sheets,
 ) => <String, List<List<Object?>>>{
-  for (final MapEntry<String, List<_LayoutRow>> e in sheets.entries)
+  for (final MapEntry<String, List<M2LayoutRow>> e in sheets.entries)
     e.key: _rectangle(e.value, (Object? v) => v == null ? null : _expected(v)),
 };
 
-List<List<T>> _rectangle<T>(List<_LayoutRow> rows, T Function(Object?) f) {
+List<List<T>> _rectangle<T>(List<M2LayoutRow> rows, T Function(Object?) f) {
   int width = 0;
-  for (final _LayoutRow r in rows) {
+  for (final M2LayoutRow r in rows) {
     if (r.values.length > width) width = r.values.length;
   }
   return <List<T>>[
-    for (final _LayoutRow r in rows)
+    for (final M2LayoutRow r in rows)
       <T>[
         for (int c = 0; c < width; c++)
           f(c < r.values.length ? _unwrap(r.values[c]) : null),
@@ -341,7 +368,7 @@ List<List<T>> _rectangle<T>(List<_LayoutRow> rows, T Function(Object?) f) {
 /// The rows of `m2_columns_rows`' first sheet: row heights, a hidden row,
 /// and a collapsed outer group (rows 5 to 7, summary row 8) holding an
 /// expanded inner group (rows 5 and 6, summary row 7).
-final List<_LayoutRow> _layoutRows = <_LayoutRow>[
+final List<M2LayoutRow> _layoutRows = <M2LayoutRow>[
   _row(<Object?>[
     'width 5',
     'width 12',
@@ -361,29 +388,32 @@ final List<_LayoutRow> _layoutRows = <_LayoutRow>[
   _row(<Object?>['total (collapsed)', 30], collapsed: true),
 ];
 
-final List<_LayoutRow> _defaultSizeRows = <_LayoutRow>[
+final List<M2LayoutRow> _defaultSizeRows = <M2LayoutRow>[
   _row(<Object?>['default row height 18', 'default column width 11']),
   _row(<Object?>[1, 2]),
 ];
 
+/// The columns of `m2_columns_rows`' first sheet.
+const List<XlsxColumn?> m2LayoutColumns = <XlsxColumn?>[
+  XlsxColumn(width: 5),
+  XlsxColumn(width: 12),
+  XlsxColumn(width: 40),
+  XlsxColumn(width: 255),
+  XlsxColumn(hidden: true),
+  XlsxColumn(outlineLevel: 1),
+  XlsxColumn(outlineLevel: 2),
+  XlsxColumn(outlineLevel: 2),
+];
+
 Fixture _columnsRows() {
-  final Map<String, List<_LayoutRow>> sheets = <String, List<_LayoutRow>>{
+  final Map<String, List<M2LayoutRow>> sheets = <String, List<M2LayoutRow>>{
     'Layout': _layoutRows,
     'Defaults': _defaultSizeRows,
   };
   return Fixture('m2_columns_rows', _storedOf(sheets), _expectedOf(sheets), () {
     final XlsxWriter book = XlsxWriter();
     final XlsxSheetWriter layout = book.addSheet('Layout')
-      ..columns(const <XlsxColumn?>[
-        XlsxColumn(width: 5),
-        XlsxColumn(width: 12),
-        XlsxColumn(width: 40),
-        XlsxColumn(width: 255),
-        XlsxColumn(hidden: true),
-        XlsxColumn(outlineLevel: 1),
-        XlsxColumn(outlineLevel: 2),
-        XlsxColumn(outlineLevel: 2),
-      ]);
+      ..columns(m2LayoutColumns);
     _writeRows(layout, _layoutRows);
     final XlsxSheetWriter defaults = book.addSheet('Defaults')
       ..defaultSizes(rowHeight: 18, columnWidth: 11);
@@ -403,7 +433,7 @@ const XlsxDate _day = XlsxDate(2026, 10, 24);
 /// column C, a bold header row, a date in the money column, and a totals
 /// row with a top border whose amount is also italic. The totals row's C5
 /// is a styled empty cell, so the border spans A5:C5.
-final List<_LayoutRow> _precedenceRows = <_LayoutRow>[
+final List<M2LayoutRow> _precedenceRows = <M2LayoutRow>[
   _row(<Object?>['Item', 'Amount', 'Date'], style: _bold),
   _row(<Object?>['Rent', 1200.5, _day]),
   _row(<Object?>['Fee', 45.25, _day]),
@@ -415,8 +445,22 @@ final List<_LayoutRow> _precedenceRows = <_LayoutRow>[
   ], style: _topBorder),
 ];
 
+/// The columns of `m2_style_precedence`: a money column B and a date column
+/// C.
+List<XlsxColumn?> m2PrecedenceColumns() => <XlsxColumn?>[
+  null,
+  XlsxColumn(
+    width: 14,
+    style: XlsxStyle(numFmt: XlsxNumFmt.money(symbol: '€')),
+  ),
+  const XlsxColumn(
+    width: 12,
+    style: XlsxStyle(numFmt: XlsxNumFmt.custom('yyyy-mm-dd')),
+  ),
+];
+
 Fixture _stylePrecedence() {
-  final Map<String, List<_LayoutRow>> sheets = <String, List<_LayoutRow>>{
+  final Map<String, List<M2LayoutRow>> sheets = <String, List<M2LayoutRow>>{
     'Precedence': _precedenceRows,
   };
   return Fixture(
@@ -426,17 +470,7 @@ Fixture _stylePrecedence() {
     () {
       final XlsxWriter book = XlsxWriter();
       final XlsxSheetWriter sheet = book.addSheet('Precedence')
-        ..columns(<XlsxColumn?>[
-          null,
-          XlsxColumn(
-            width: 14,
-            style: XlsxStyle(numFmt: XlsxNumFmt.money(symbol: '€')),
-          ),
-          const XlsxColumn(
-            width: 12,
-            style: XlsxStyle(numFmt: XlsxNumFmt.custom('yyyy-mm-dd')),
-          ),
-        ]);
+        ..columns(m2PrecedenceColumns());
       _writeRows(sheet, _precedenceRows);
       return book.close();
     },
@@ -447,42 +481,42 @@ Fixture _stylePrecedence() {
 }
 
 /// The rows of `m2_views`' `Frozen` sheet: a header and 40 data rows.
-final List<_LayoutRow> _frozenRows = <_LayoutRow>[
+final List<M2LayoutRow> _frozenRows = <M2LayoutRow>[
   _row(<Object?>['Row', 'Square', 'Label'], style: _bold),
   for (int i = 1; i <= 40; i++) _row(<Object?>[i, i * i, 'Item $i']),
 ];
 
-final List<_LayoutRow> _splitRows = <_LayoutRow>[
+final List<M2LayoutRow> _splitRows = <M2LayoutRow>[
   for (int i = 1; i <= 30; i++) _row(<Object?>['Split $i', i, i * 2]),
 ];
 
 /// A `0` cell, which the `View` sheet hides, between two others.
-final List<_LayoutRow> _viewRows = <_LayoutRow>[
+final List<M2LayoutRow> _viewRows = <M2LayoutRow>[
   _row(<Object?>['zoom 85, no gridlines, no headings', 0, 7]),
 ];
 
 /// Arabic and Hebrew text, written as is.
-final List<_LayoutRow> _rtlRows = <_LayoutRow>[
+final List<M2LayoutRow> _rtlRows = <M2LayoutRow>[
   _row(<Object?>['مرحبا بالعالم', 'שלום עולם', 1]),
 ];
 
 /// Rows 2 and 3 group under the summary row 1, which sits above them.
-final List<_LayoutRow> _outlineRows = <_LayoutRow>[
+final List<M2LayoutRow> _outlineRows = <M2LayoutRow>[
   _row(<Object?>['summary (above)', 6]),
   _row(<Object?>['detail a', 1], outlineLevel: 1),
   _row(<Object?>['detail b', 5], outlineLevel: 1),
 ];
 
-final List<_LayoutRow> _hiddenRows = <_LayoutRow>[
+final List<M2LayoutRow> _hiddenRows = <M2LayoutRow>[
   _row(<Object?>['a hidden sheet', 1]),
 ];
 
-final List<_LayoutRow> _veryHiddenRows = <_LayoutRow>[
+final List<M2LayoutRow> _veryHiddenRows = <M2LayoutRow>[
   _row(<Object?>['a very hidden sheet', 2]),
 ];
 
 Fixture _views() {
-  final Map<String, List<_LayoutRow>> sheets = <String, List<_LayoutRow>>{
+  final Map<String, List<M2LayoutRow>> sheets = <String, List<M2LayoutRow>>{
     'Frozen': _frozenRows,
     'Split': _splitRows,
     'View': _viewRows,
@@ -532,7 +566,7 @@ Fixture _views() {
 
 /// The rows of `m2_merges_filter`'s `Bob's Data` sheet: a title over A1:D1,
 /// a text block over B3:C4, a header at row 6 and 14 data rows under it.
-final List<_LayoutRow> _filterRows = <_LayoutRow>[
+final List<M2LayoutRow> _filterRows = <M2LayoutRow>[
   _row(
     <Object?>['Quarterly report'],
     style: const XlsxStyle(
@@ -549,7 +583,7 @@ final List<_LayoutRow> _filterRows = <_LayoutRow>[
     _row(<Object?>[i, 'Item $i', i * 3, i * 2 + 0.5]),
 ];
 
-final List<_LayoutRow> _plainRows = <_LayoutRow>[
+final List<M2LayoutRow> _plainRows = <M2LayoutRow>[
   _row(<Object?>['no filter here', 1]),
   _row(<Object?>['nor here', 2]),
 ];
@@ -558,7 +592,7 @@ final List<_LayoutRow> _plainRows = <_LayoutRow>[
 /// a second sheet with neither, so the filter's defined name must point at
 /// tab 0 only.
 Fixture _mergesFilter() {
-  final Map<String, List<_LayoutRow>> sheets = <String, List<_LayoutRow>>{
+  final Map<String, List<M2LayoutRow>> sheets = <String, List<M2LayoutRow>>{
     "Bob's Data": _filterRows,
     'Plain': _plainRows,
   };

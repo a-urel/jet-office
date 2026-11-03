@@ -135,6 +135,23 @@ void main() {
     expect(part, isNot(contains('r="C1"')));
   });
 
+  test('setStyle(null) on a cell at index 0 changes nothing', () {
+    // LibreOffice writes s="0" on plain cells.
+    final XlsxWorkbook book = _open(
+      '<row r="1"><c r="A1" s="0"><v>1</v></c><c r="B1" s="0"/>'
+      '<c r="C1"><v>2</v></c></row>',
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    sheet
+      ..setStyle(0, 0, null)
+      ..setStyle(0, 1, null)
+      ..setStyle(0, 2, null);
+    expect(changeLogOf(book).hasChanges, isFalse);
+    final String part = partText(book.save().bytes, 'xl/worksheets/sheet1.xml');
+    expect(part, contains('<c r="A1" s="0"><v>1</v></c>'));
+    expect(part, contains('<c r="B1" s="0"/>'));
+  });
+
   test('XlsxCell layers like the writer', () {
     // Row 1 is formatted 0.00 with customFormat; row 2 is not formatted.
     final XlsxWorkbook book = _open(

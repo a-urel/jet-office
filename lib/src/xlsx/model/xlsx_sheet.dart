@@ -470,7 +470,8 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
   /// the styles when no cell format of the file or appended before matches
   /// it, so no existing index moves. `null` gives index 0 (also dropping
   /// an invalid `s`), and a cell left with no value and no other attribute
-  /// is removed.
+  /// is removed; a cell already at index 0 stays as written, `s="0"`
+  /// included.
   ///
   /// Throws a [StateError] for a sheet that is not a worksheet or has no
   /// part and when the workbook's styles part is not a SpreadsheetML
@@ -488,6 +489,7 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
     final StylesPart? loaded = _host.styles;
     if (loaded != null && !loaded.isTyped) throw _untypedStyles();
     final int? index = _hasInvalidStyle(current) ? null : current?.style ?? 0;
+    if (style == null && index == 0) return;
     if (style != null &&
         loaded != null &&
         index != null &&
