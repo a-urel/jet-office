@@ -164,7 +164,9 @@ final class OpaqueXml {
 
   /// The bindings, prefix to URI (`''` for the default namespace), that the
   /// element's ancestors declared and that the slice uses in an element or
-  /// attribute name without declaring them itself.
+  /// attribute name without declaring them itself. An unprefixed element
+  /// with no default namespace in scope records `'' -> ''`, so it stays in
+  /// no namespace under a parent that has a default one.
   final Map<String, String> inheritedNamespaces;
 
   /// Writes the element to [w].
@@ -176,7 +178,10 @@ final class OpaqueXml {
   void writeTo(XmlWriter w, {Map<String, String> declaredAbove = const {}}) {
     final StringBuffer missing = StringBuffer();
     inheritedNamespaces.forEach((String prefix, String uri) {
-      if (declaredAbove[prefix] == uri) {
+      // No default namespace above is the same as `xmlns=""`.
+      final String? above =
+          declaredAbove[prefix] ?? (prefix.isEmpty ? '' : null);
+      if (above == uri) {
         return;
       }
       missing
@@ -222,7 +227,11 @@ void _inherit(
       return;
     }
   }
-  final String? uri = r.namespacesInScope[prefix];
+  // An unprefixed name with no default namespace in scope is in no
+  // namespace, which is recorded as the binding `'' -> ''`: a parent that
+  // has a default namespace must undeclare it (`xmlns=""`).
+  final String? uri =
+      r.namespacesInScope[prefix] ?? (prefix.isEmpty ? '' : null);
   if (uri != null) {
     inherited[prefix] = uri;
   }

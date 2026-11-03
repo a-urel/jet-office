@@ -77,24 +77,38 @@ void main() {
       final OpaqueXml o = OpaqueXml.capture(
         _at('<r xmlns:x="1"><e xmlns:x="2"><x:a/></e></r>', 'e'),
       );
-      expect(o.inheritedNamespaces, isEmpty);
+      expect(o.inheritedNamespaces, <String, String>{'': ''});
       final OpaqueXml p = OpaqueXml.capture(
         _at('<r xmlns:x="1"><e><i xmlns:x="2"><x:a/></i><x:b/></e></r>', 'e'),
       );
-      expect(p.inheritedNamespaces, <String, String>{'x': '1'});
+      expect(p.inheritedNamespaces, <String, String>{'': '', 'x': '1'});
     });
 
     test('an attribute prefix is inherited, an xml: attribute is not', () {
       final OpaqueXml o = OpaqueXml.capture(
         _at('<r xmlns:m="um"><e m:a="1" xml:space="preserve"/></r>', 'e'),
       );
-      expect(o.inheritedNamespaces, <String, String>{'m': 'um'});
+      expect(o.inheritedNamespaces, <String, String>{'': '', 'm': 'um'});
     });
 
     test('a slice without namespaces writes unchanged', () {
       final OpaqueXml o = OpaqueXml.capture(_at('<r><e a="1"/></r>', 'e'));
-      expect(o.inheritedNamespaces, isEmpty);
+      expect(o.inheritedNamespaces, <String, String>{'': ''});
       expect(_write(o), '<e a="1"/>');
+      expect(_write(o, {'': ''}), '<e a="1"/>');
+    });
+
+    test('an unqualified slice undeclares a default namespace above', () {
+      final OpaqueXml o = OpaqueXml.capture(
+        _at('<x:r xmlns:x="m"><e><f/></e></x:r>', 'e'),
+      );
+      expect(o.inheritedNamespaces, <String, String>{'': ''});
+      expect(_write(o, {'': 'm'}), '<e xmlns=""><f/></e>');
+      final OpaqueXml undeclared = OpaqueXml.capture(
+        _at('<r xmlns="m"><e xmlns=""><f/></e></r>', 'e'),
+      );
+      expect(undeclared.inheritedNamespaces, isEmpty);
+      expect(_write(undeclared, {'': 'm'}), undeclared.xml);
     });
 
     test('an empty element gets the declarations after its name', () {
@@ -239,6 +253,6 @@ void _siblingScopes() {
     final OpaqueXml o = OpaqueXml.capture(
       _at('<r xmlns:x="1"><e><i xmlns:x="2"/><x:b/></e></r>', 'e'),
     );
-    expect(o.inheritedNamespaces, <String, String>{'x': '1'});
+    expect(o.inheritedNamespaces, <String, String>{'': '', 'x': '1'});
   });
 }

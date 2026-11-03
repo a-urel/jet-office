@@ -272,6 +272,19 @@ void main() {
       final String out = _encode(_read(xml));
       expect(compareXml('s', xml, out), isEmpty);
     });
+
+    test('a kept element in no namespace keeps none in a prefixed sheet', () {
+      // The model declares the main namespace as the default on
+      // <sheetData>, so an unqualified kept element must undeclare it.
+      const String xml =
+          '<x:worksheet xmlns:x="$_main"><x:sheetData><x:row r="1" spans="1:1">'
+          '<x:c r="A1"><x:v>5</x:v><foo a="1"/></x:c><bar/></x:row>'
+          '</x:sheetData></x:worksheet>';
+      final String out = _encode(_read(xml));
+      expect(out, contains('<foo xmlns="" a="1"/>'));
+      expect(out, contains('<bar xmlns=""/>'));
+      expect(compareXml('s', xml, out), isEmpty);
+    });
   });
 
   group('dimension and spans', () {
