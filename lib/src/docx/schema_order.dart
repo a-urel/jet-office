@@ -3,9 +3,10 @@
 /// Not ported from Quds; written for jet_office.
 ///
 /// Word repairs a document whose children are out of the order the schema
-/// gives, so a writer puts them in that order. Each list holds local names in the WordprocessingML main namespace (`w:`), from
-/// ECMA-376 Part 1, transitional `wml.xsd`; each was checked against the
-/// member order of the Open XML SDK (3.5.1), which is generated from it.
+/// gives, so a writer puts them in that order. Each list holds local names
+/// in the WordprocessingML main namespace (`w:`), from ECMA-376 Part 1,
+/// transitional `wml.xsd`; each was checked against the member order of the
+/// Open XML SDK (3.5.1), which is generated from it.
 library;
 
 /// The children of a paragraph's `w:pPr` (`CT_PPr`, §17.3.1.26), in order:

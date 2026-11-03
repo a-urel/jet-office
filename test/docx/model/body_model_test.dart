@@ -2,6 +2,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/model/blocks.dart';
 import 'package:jet_office/src/docx/model/edit_sink.dart';
 import 'package:jet_office/src/docx/model/inlines.dart';
+import 'package:jet_office/src/docx/model/property_set.dart';
 import 'package:jet_office/src/docx/model/run_content.dart';
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/opc/ooxml.dart' show Ns;
@@ -55,12 +56,11 @@ final class _RecordingSink implements DocxEditSink {
       calls.add('text ${previous.content.length} ${previous.removed}');
 
   @override
-  void paragraphStyleSet(DocxParagraph paragraph, String? previous) =>
-      calls.add('pStyle $previous');
-
-  @override
-  void runStyleSet(DocxRun run, String? previous) =>
-      calls.add('rStyle $previous');
+  void propertySet(
+    PropertySet properties,
+    String localName,
+    PropertyState previous,
+  ) => calls.add('$localName ${previous.value}');
 }
 
 void main() {
@@ -464,15 +464,18 @@ void main() {
     });
 
     test('a read run keeps its style and rPr', () {
+      final XmlPullReader reader = XmlPullReader(
+        '<w:rPr xmlns:w="${Ns.w}"><w:rStyle w:val="Strong"/></w:rPr>',
+      );
+      reader.nextTag();
       final DocxRun r = readRun(
-        properties: const PropertyContainer.empty(),
-        style: 'Strong',
+        properties: PropertyContainer.read(reader, runPropertiesSchema),
         attributes: const <KeptAttribute>[],
         content: const <DocxRunContent>[DocxText('a')],
       );
       expect(r.style, 'Strong');
       expect(r.text, 'a');
-      expect(runPropertiesOf(r).isEmpty, isTrue);
+      expect(runPropertiesOf(r).kept, isEmpty);
     });
   });
 

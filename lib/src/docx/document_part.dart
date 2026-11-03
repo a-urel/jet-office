@@ -38,18 +38,12 @@ import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'model/blocks.dart';
 import 'model/inlines.dart';
+import 'model/property_set.dart';
 import 'model/run_content.dart';
 import 'properties.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
-import 'schema_order.dart';
 import 'warnings.dart';
-
-/// The paragraph properties the reader types: the style.
-const Set<String> _pPrTyped = <String>{'pStyle'};
-
-/// The run properties the reader types: the style.
-const Set<String> _rPrTyped = <String>{'rStyle'};
 
 /// The main document part: the root's start tag, what surrounds the body,
 /// and the body's blocks.
@@ -250,14 +244,9 @@ final class _Writer {
     final XmlWriter w = _w;
     w.start('${_p}p');
     writeKeptAttributes(w, paragraphAttributesOf(p), declaredAbove: _scope);
-    final PropertyContainer pPr = paragraphPropertiesOf(p);
-    final String? style = p.style;
-    if (style != null || pPr.isRead || !pPr.isEmpty) {
-      pPr.writeTo(w, '${_p}pPr', pPrOrder, <String, void Function(XmlWriter)>{
-        if (style != null)
-          'pStyle': (XmlWriter w) =>
-              writeValElement(w, '${_p}pStyle', style, prefix: _prefix),
-      }, declaredAbove: _scope);
+    final PropertySet pPr = paragraphPropertySetOf(p);
+    if (!pPr.writesNothing) {
+      pPr.writeTo(w, '${_p}pPr', prefix: _prefix, declaredAbove: _scope);
     }
     int runs = 0;
     for (final DocxInline inline in p.inlines) {
@@ -286,14 +275,9 @@ final class _Writer {
     final XmlWriter w = _w;
     w.start('${_p}r');
     writeKeptAttributes(w, runAttributesOf(r), declaredAbove: _scope);
-    final PropertyContainer rPr = runPropertiesOf(r);
-    final String? style = r.style;
-    if (style != null || rPr.isRead || !rPr.isEmpty) {
-      rPr.writeTo(w, '${_p}rPr', rPrOrder, <String, void Function(XmlWriter)>{
-        if (style != null)
-          'rStyle': (XmlWriter w) =>
-              writeValElement(w, '${_p}rStyle', style, prefix: _prefix),
-      }, declaredAbove: _scope);
+    final PropertySet rPr = runPropertySetOf(r);
+    if (!rPr.writesNothing) {
+      rPr.writeTo(w, '${_p}rPr', prefix: _prefix, declaredAbove: _scope);
     }
     for (final DocxRunContent c in r.content) {
       _content(c);
@@ -435,19 +419,10 @@ final class _PartReader {
       keepAttributes(r),
     );
     PropertyContainer? properties;
-    String? style;
     final List<DocxInline> inlines = <DocxInline>[];
     _children(r, () {
       if (properties == null && _isW(r, 'pPr')) {
-        properties = PropertyContainer.read(
-          r,
-          typed: _pPrTyped,
-          accepts: _isPlainStyle,
-          onTyped: (String _, XmlPullReader r) {
-            style = _styleValue(r);
-            r.skip();
-          },
-        );
+        properties = PropertyContainer.read(r, paragraphPropertiesSchema);
       } else if (_isW(r, 'r')) {
         inlines.add(_readRun());
       } else {
@@ -456,7 +431,6 @@ final class _PartReader {
     });
     return readParagraph(
       properties: properties ?? const PropertyContainer.empty(),
-      style: style,
       attributes: attributes,
       inlines: inlines,
     );
@@ -483,7 +457,6 @@ final class _PartReader {
       keepAttributes(r),
     );
     PropertyContainer? properties;
-    String? style;
     final List<DocxRunContent> content = <DocxRunContent>[];
     _children(r, () {
       if (r.namespaceUri != Ns.w) {
@@ -492,15 +465,7 @@ final class _PartReader {
       }
       switch (r.localName) {
         case 'rPr' when properties == null:
-          properties = PropertyContainer.read(
-            r,
-            typed: _rPrTyped,
-            accepts: _isPlainStyle,
-            onTyped: (String _, XmlPullReader r) {
-              style = _styleValue(r);
-              r.skip();
-            },
-          );
+          properties = PropertyContainer.read(r, runPropertiesSchema);
         case 't':
           final List<KeptAttribute> kept = keepAttributes(r);
           content.add(readText(_readText(), kept));
@@ -519,7 +484,6 @@ final class _PartReader {
     });
     return readRun(
       properties: properties ?? const PropertyContainer.empty(),
-      style: style,
       attributes: attributes,
       content: content,
     );
@@ -585,20 +549,6 @@ final class _PartReader {
 /// Whether the element [r] is on is `w:<localName>`.
 bool _isW(XmlPullReader r, String localName) =>
     r.namespaceUri == Ns.w && r.localName == localName;
-
-/// The `w:val` of the style element [r] is on, which [_isPlainStyle]
-/// accepted.
-String _styleValue(XmlPullReader r) =>
-    r.getAttribute('val', namespaceUri: Ns.w)!;
-
-/// Whether the `w:pStyle` or `w:rStyle` [r] is on is typed: it has a
-/// non-empty `w:val` and no other attribute. Any other one (no `w:val`, an
-/// empty one, or more attributes) stays kept, so the style reads null and
-/// the element is written back as read.
-bool _isPlainStyle(String _, XmlPullReader r) {
-  final String? value = r.getAttribute('val', namespaceUri: Ns.w);
-  return value != null && value.isNotEmpty && keepAttributes(r).length == 1;
-}
 
 /// Calls [onChild] with [r] on the start of each child element of the
 /// element [r] is on; [onChild] must leave [r] on that child's end event.

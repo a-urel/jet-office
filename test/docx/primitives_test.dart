@@ -13,6 +13,7 @@ import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:test/test.dart';
 
+import '../support/read_xlsx.dart';
 import 'support/docx_builder.dart';
 
 /// A container the block primitives can put blocks in.
@@ -191,6 +192,108 @@ void main() {
       edits.log.revertSet(set);
       edits.log.reapplySet(set);
       expect(records, 2);
+    });
+  });
+
+  group('property sets', () {
+    /// A document whose one paragraph has the style `Title`, written with a
+    /// w14 attribute, and whose run has the style `Strong`.
+    DocxDocument styled() => DocxDocument.open(
+      buildDocx(
+        document:
+            '<w:document xmlns:w="${Ns.w}" xmlns:w14="${Ns.w14}"><w:body>'
+            '<w:p><w:pPr><w:pStyle w:val="Title" w14:x="1"/></w:pPr>'
+            '<w:r><w:rPr><w:rStyle w:val="Strong"/></w:rPr><w:t>a</w:t></w:r>'
+            '</w:p></w:body></w:document>',
+      ),
+    );
+
+    String documentXml(DocxDocument doc) =>
+        readXlsx(doc.save().bytes)['word/document.xml']!;
+
+    test('a property set is one change that reverts and reapplies', () {
+      final DocxDocument doc = styled();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      final DocxRun run = p.inlines.single as DocxRun;
+      expect(p.style, 'Title');
+      final ChangeSet set = changeLogOf(doc).transaction(() {
+        p.style = 'Heading1';
+        run.style = null;
+      });
+      expect(set.changes, hasLength(2));
+      expect(p.style, 'Heading1');
+      expect(run.style, isNull);
+
+      changeLogOf(doc).revertSet(set);
+      expect(p.style, 'Title');
+      expect(run.style, 'Strong');
+
+      changeLogOf(doc).reapplySet(set);
+      expect(p.style, 'Heading1');
+      expect(run.style, isNull);
+    });
+
+    test('a failing property set rolls back', () {
+      final DocxDocument doc = styled();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      final DocxRun run = p.inlines.single as DocxRun;
+      int records = 0;
+      editsOf(doc).afterRecord = () {
+        records++;
+        throw StateError('test hook');
+      };
+      expect(() => p.style = 'Heading1', throwsStateError);
+      expect(() => run.style = 'Emphasis', throwsStateError);
+      expect(records, 2);
+      expect(p.style, 'Title');
+      expect(run.style, 'Strong');
+      expect(changeLogOf(doc).hasChanges, isFalse);
+      editsOf(doc).afterRecord = null;
+      expect(documentXml(doc), contains('<w:pStyle w:val="Title" w14:x="1"/>'));
+    });
+
+    test('reverting a set on a read child restores the child as read', () {
+      final DocxDocument doc = styled();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      final ChangeSet set = changeLogOf(
+        doc,
+      ).transaction(() => p.style = 'Heading1');
+      expect(documentXml(doc), contains('<w:pStyle w:val="Heading1"/>'));
+      changeLogOf(doc).revertSet(set);
+      expect(documentXml(doc), contains('<w:pStyle w:val="Title" w14:x="1"/>'));
+    });
+
+    test('an edit after save is in the next save', () {
+      final DocxDocument doc = styled();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      final DocxRun run = p.inlines.single as DocxRun;
+      doc.save();
+      p.style = 'Heading1';
+      run.style = null;
+      final DocxDocument reopened = DocxDocument.open(doc.save().bytes);
+      final DocxParagraph q = reopened.body.blocks.single as DocxParagraph;
+      expect(q.style, 'Heading1');
+      expect((q.inlines.single as DocxRun).style, isNull);
+    });
+
+    test('a run detached after the edit reverts and reapplies', () {
+      final DocxDocument doc = styled();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      final DocxRun run = p.inlines.single as DocxRun;
+      final ChangeSet set = changeLogOf(
+        doc,
+      ).transaction(() => run.style = 'Emphasis');
+      p.removeInlineAt(0);
+      expect(paragraphOf(run), isNull);
+      changeLogOf(doc).revertSet(set);
+      expect(run.style, 'Strong');
+      changeLogOf(doc).reapplySet(set);
+      expect(run.style, 'Emphasis');
+      // The detached run reports to no document.
+      final ChangeSet after = changeLogOf(
+        doc,
+      ).transaction(() => run.style = 'Other');
+      expect(after.isEmpty, isTrue);
     });
   });
 

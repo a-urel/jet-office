@@ -98,9 +98,10 @@ dropped silently.
 | The final `w:sectPr` of the body | held by the body; a `w:sectPr` in a paragraph's `w:pPr` stays there; one that is not the last child of the body is a block | the last section belongs to the body (typed in D4) | `test/docx/document_part_read_test.dart` |
 | Any other child of a paragraph (tracked change, hyperlink, content control, smart tag, proofing mark) | an opaque inline, in place, with its visible text computed once | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
 | Any other child of a run (drawing, field, `mc:AlternateContent`) | opaque run content, in place; it adds nothing to the run's text | kept as written | `test/docx/document_part_read_test.dart` |
-| `pStyle` or `rStyle` that is not exactly one non-empty `w:val` | not typed (the style reads as `null`); kept opaque and written back as it was | a style with `w:val=""` or an extra attribute is not a style id the model can set | `test/docx/document_part_write_test.dart` ("kept styles") |
-| A paragraph or run whose style element is kept as written (an extra attribute, or no single non-empty `w:val`) | its `style` reads `null`, although the file names a style element; setting `style` drops the kept element and writes a typed one | the model reports only a style id it could write back | `test/docx/document_part_write_test.dart` ("kept styles"), `test/docx/properties_test.dart` |
-| `pStyle` or `rStyle` with one non-empty `w:val` and child elements | still typed; its children are dropped at save (a fidelity exception) | the schema allows no children, so the file is invalid; the style id is what it means | `test/docx/document_part_write_test.dart` ("kept styles") |
+| Every child of `w:pPr` and `w:rPr` | kept as written; a typed one (in D1 the style) also gives a view, its value, and is written as read until it is set | a read file saves as it was (plan Ruling 2) | `test/docx/properties_test.dart` |
+| `pStyle` or `rStyle` that is not one non-empty `w:val` with no other `w:` attribute, no child element and no text, or that occurs twice | not typed (the style reads as `null`); written back as it was | not a style id the model can set without losing something | `test/docx/document_part_write_test.dart` ("kept styles"), `test/docx/property_codec_test.dart` |
+| A paragraph or run whose style element is not typed | its `style` reads `null`, although the file names a style element; setting `style` (or `null`) replaces every `pStyle` or `rStyle` of the container | one style per container | `test/docx/document_part_write_test.dart` ("kept styles"), `test/docx/properties_test.dart` |
+| `pStyle` or `rStyle` with an attribute in another namespace (`w14:`) | typed; written as read, attribute included, until the style is set | attributes in other namespaces are ignored for typing (plan Ruling 2) | `test/docx/document_part_write_test.dart` ("kept styles") |
 | Unknown attributes on `w:body`, `w:p`, `w:r`, `w:t`, `w:tab`, `w:br`, `w:cr` (`w14:paraId`, rsids) | kept | Word's identifiers survive a save | `test/docx/document_part_read_test.dart` |
 | A `w:t` whose text is split by entities or CDATA | one text | the XML parser's job, not the file's | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
 | A whitespace-only `w:t` with `xml:space="preserve"` | kept | the space is text | `test/docx/document_part_read_test.dart` |
@@ -139,9 +140,11 @@ opaque inlines, in order.
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | The order of `w:pPr` and `w:rPr` children | the schema's (ECMA-376 transitional `wml.xsd`), with no name twice | Word repairs a document whose property children are out of order | `test/docx/schema_order_test.dart` |
-| A typed child (the style) | written first among the children it precedes; a kept child out of order is written in schema order | one writer per container | `test/docx/properties_test.dart` |
+| A typed child that is set (the style) | written at its slot in schema order, in place of every child of its name; a kept child out of order is written in schema order | one writer per container | `test/docx/properties_test.dart`, `test/docx/container_order_test.dart` |
 | A kept child (`w14:`, `w15:` and others) | stays after its predecessor in the file; with no typed predecessor it follows the one before it, and with none it is written first | its place survives an edit | `test/docx/properties_test.dart` |
-| Replacing a style | the old kept `pStyle` or `rStyle` is dropped | one style per container | `test/docx/properties_test.dart` |
+| Replacing a style | the old `pStyle` or `rStyle` is dropped, every one of them | one style per container | `test/docx/properties_test.dart` |
+| A `w:pPr` or `w:rPr` holding only whitespace or comments | written back as it was, until a child is set | a read file saves as it was | `test/docx/properties_test.dart` |
+| A `w:pPr` or `w:rPr` that rebinds the `w` prefix | children set are written with a prefix bound to WordprocessingML (one the container has, or a new `w1`) | the output means what was set | `test/docx/properties_test.dart` |
 | A kept child, matched | by namespace URI, not by prefix | a producer may choose any prefix | `test/docx/properties_test.dart` |
 | A kept child that needs a namespace the new parent lacks | the declaration is written on it | the output is well-formed | `test/docx/properties_test.dart` |
 | A container's own attributes; an empty container | kept; written back empty | nothing is lost | `test/docx/properties_test.dart` |

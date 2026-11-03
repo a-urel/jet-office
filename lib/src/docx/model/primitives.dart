@@ -19,7 +19,9 @@
 /// is that sink: it records each report, in a transaction of its own unless
 /// one is open. To undo, it replays the opposite edit through the same
 /// public members (or `replaceInlineAt` and `restoreRunText`) while it
-/// ignores the reports they make, so nothing is recorded twice.
+/// ignores the reports they make, so nothing is recorded twice. A property
+/// set (a style) is undone with `PropertySet.restore`, which reports
+/// nothing.
 ///
 /// @docImport 'edit_sink.dart';
 library;
@@ -28,6 +30,7 @@ import '../../opc/change_log.dart';
 import 'blocks.dart';
 import 'edit_sink.dart';
 import 'inlines.dart';
+import 'property_set.dart';
 
 /// The edits of one document: its [ChangeLog], and the sink its body's
 /// paragraphs report to.
@@ -96,12 +99,18 @@ final class DocxEdits implements DocxEditSink {
       _reported(_RunTextSet(run, previous, runTextOf(run)));
 
   @override
-  void paragraphStyleSet(DocxParagraph paragraph, String? previous) =>
-      _reported(_ParagraphStyleSet(this, paragraph, previous, paragraph.style));
-
-  @override
-  void runStyleSet(DocxRun run, String? previous) =>
-      _reported(_RunStyleSet(this, run, previous, run.style));
+  void propertySet(
+    PropertySet properties,
+    String localName,
+    PropertyState previous,
+  ) => _reported(
+    _PropertySet(
+      properties,
+      localName,
+      previous,
+      properties.stateOf(localName),
+    ),
+  );
 }
 
 /// Inserts [block] at [index] of [blocks], the blocks of [container], and
@@ -366,34 +375,20 @@ final class _RunTextSet implements Change {
   void reapply() => restoreRunText(_run, _next);
 }
 
-/// A paragraph's style set.
-final class _ParagraphStyleSet implements Change {
-  _ParagraphStyleSet(this._edits, this._paragraph, this._previous, this._next);
+/// A typed property of a paragraph, a run or a style set: its state before
+/// and after. Undoing and redoing restore the state silently, so it works on
+/// properties no longer in the document as well.
+final class _PropertySet implements Change {
+  _PropertySet(this._properties, this._localName, this._previous, this._next);
 
-  final DocxEdits _edits;
-  final DocxParagraph _paragraph;
-  final String? _previous;
-  final String? _next;
-
-  @override
-  void revert() => _edits._replay(() => _paragraph.style = _previous);
-
-  @override
-  void reapply() => _edits._replay(() => _paragraph.style = _next);
-}
-
-/// A run's style set.
-final class _RunStyleSet implements Change {
-  _RunStyleSet(this._edits, this._run, this._previous, this._next);
-
-  final DocxEdits _edits;
-  final DocxRun _run;
-  final String? _previous;
-  final String? _next;
+  final PropertySet _properties;
+  final String _localName;
+  final PropertyState _previous;
+  final PropertyState _next;
 
   @override
-  void revert() => _edits._replay(() => _run.style = _previous);
+  void revert() => _properties.restore(_localName, _previous);
 
   @override
-  void reapply() => _edits._replay(() => _run.style = _next);
+  void reapply() => _properties.restore(_localName, _next);
 }

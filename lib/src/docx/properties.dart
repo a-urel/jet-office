@@ -1,98 +1,150 @@
-/// Property containers, `w:pPr` and `w:rPr`, that keep what they do not
-/// type and write their children in schema order.
+/// Property containers, such as `w:pPr` and `w:rPr`, that keep every child
+/// as read, type a view of some, and write their children in schema order.
 ///
 /// Not ported from Quds; written for jet_office.
 ///
-/// A reader types a few children of a container (in D1, `w:pStyle` of a
-/// paragraph and `w:rStyle` of a run, each with its `w:val`) and keeps the
-/// rest as [OpaqueXml], with the container's own attributes. A writer then
-/// merges its typed children with the kept ones in the order the schema
-/// gives (`pPrOrder` and `rPrOrder`), because Word repairs a document whose
-/// property children are out of that order.
+/// A [ContainerSchema] gives a container's children in schema order, the
+/// [PropertyCodec] of each child the model types, and the children that are
+/// containers of their own (`w:pPr` in a `w:style`). [PropertyContainer.read]
+/// keeps every child as [OpaqueXml], with the container's own attributes;
+/// a typed child also gets a *view*, its value, when it is in `w:`, occurs
+/// once, has no `w:` attribute its codec does not understand, and parses
+/// (plan Ruling 2). A child with no view is still written exactly as read,
+/// so `<w:b w:val="on"/>` stays `w:val="on"` until bold is set.
+///
+/// [PropertyContainer.writeTo] merges the kept children with the values set
+/// (`overrides`) in the schema's order, because Word repairs a document
+/// whose property children are out of that order. A value set replaces
+/// every child of its name at its slot; `null` removes them.
 ///
 /// Children are matched by namespace URI and local name, never by prefix:
 /// a `w14:shadow` is not the schema's `w:shadow`.
+///
+/// The schemas of the D1 containers, [paragraphPropertiesSchema] and
+/// [runPropertiesSchema], type only the style.
 library;
 
 import '../opc/ooxml.dart' show Ns;
 import '../opc/opaque_xml.dart';
-import '../xml/xml_escape.dart';
 import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
+import 'property_codec.dart';
+import 'schema_order.dart';
 
-/// Writes `<qualifiedName w:val="value"/>`, the shape of `w:pStyle`,
-/// `w:rStyle` and other single-value properties.
-///
-/// The attribute is written as `[prefix]:val`, so [prefix] (`w` by
-/// default) must be bound to the WordprocessingML namespace where the
-/// element goes. A character XML forbids is removed from [value].
-void writeValElement(
-  XmlWriter w,
-  String qualifiedName,
-  String value, {
-  String prefix = 'w',
-}) {
-  w.start(qualifiedName);
-  w.attribute('$prefix:val', scrubXmlText(value).text);
-  w.end();
+/// The children of a container in schema order, the codecs of the typed
+/// ones and the schemas of the nested containers.
+final class ContainerSchema {
+  /// A schema of the children [order] (a list of `schema_order.dart`),
+  /// typing the children [codecs] names and reading those [nested] names
+  /// as containers of their own.
+  ///
+  /// Every name in [codecs] and [nested] must be in [order], and none in
+  /// both; `test/docx/container_order_test.dart` checks every schema the
+  /// library defines.
+  const ContainerSchema(
+    this.order, {
+    this.codecs = const <String, PropertyCodec<Object>>{},
+    this.nested = const <String, ContainerSchema>{},
+  });
+
+  /// The local names of the children, in `w:`, in schema order.
+  final List<String> order;
+
+  /// The codec of each typed child, by local name.
+  final Map<String, PropertyCodec<Object>> codecs;
+
+  /// The schema of each child read as a container of its own, by local
+  /// name, such as `pPr` and `rPr` in a `w:style`.
+  final Map<String, ContainerSchema> nested;
 }
 
-/// The default of `PropertyContainer.read`'s `accepts`: every typed child
-/// is typed.
-bool _acceptAll(String localName, XmlPullReader r) => true;
+/// A container written in place of a nested child of another, such as the
+/// `w:pPr` of a style with the values set on it. The property sets
+/// (`PropertySet`) implement it.
+abstract interface class NestedProperties {
+  /// Whether writing would write nothing: a container built from scratch
+  /// with no value set. A container read from a file is always written.
+  bool get writesNothing;
 
-/// One child of a container as it was read: typed (only its local name is
-/// recorded, for the position of the kept children after it) or kept.
+  /// Writes the container as [qualifiedName], where [prefix] is bound to
+  /// WordprocessingML and [declaredAbove] holds the bindings in scope.
+  void writeTo(
+    XmlWriter w,
+    String qualifiedName, {
+    String prefix = 'w',
+    Map<String, String> declaredAbove = const <String, String>{},
+  });
+}
+
+/// One child of a container as read.
 final class _Slot {
-  const _Slot.typed(String this.typedName) : kept = null;
+  _Slot.kept(OpaqueXml this.kept, this.element)
+    : container = null,
+      localName = null;
 
-  const _Slot.kept(OpaqueXml this.kept) : typedName = null;
+  _Slot.nested(String this.localName, PropertyContainer this.container)
+    : kept = null,
+      element = null;
 
-  /// The local name of a typed child, in `w:`; `null` for a kept one.
-  final String? typedName;
-
-  /// The kept child; `null` for a typed one.
+  /// The child kept as read; `null` for a nested container.
   final OpaqueXml? kept;
+
+  /// What the codec of the child sees, when its name has a codec.
+  final PropertyElement? element;
+
+  /// The child read as a container of its own; `null` for a kept one.
+  final PropertyContainer? container;
+
+  /// The local name of a nested container; `null` for a kept one.
+  final String? localName;
+
+  /// The child's local name.
+  String get name => kept?.localName ?? localName!;
+
+  /// Whether the child is in WordprocessingML.
+  bool get isW => kept == null || kept!.namespaceUri == Ns.w;
 }
 
-/// The children and attributes of a `w:pPr` or `w:rPr` that a model does not
-/// type, ready to be written back with the typed ones in schema order.
+/// The children and attributes of a property container as read, with the
+/// view of each typed child.
+///
+/// A container is immutable: values set through the model are kept apart
+/// (a `PropertySet`) and passed to [writeTo] as `overrides`.
 final class PropertyContainer {
   /// A container that keeps nothing, for properties written from scratch.
   const PropertyContainer.empty()
     : isRead = false,
       namespaces = const <String, String>{},
       attributes = const <KeptAttribute>[],
-      kept = const <OpaqueXml>[],
-      _slots = const <_Slot>[];
+      _slots = const <_Slot>[],
+      _views = const <String, Object>{},
+      _innerText = null;
 
-  PropertyContainer._(this.namespaces, this.attributes, this._slots)
-    : isRead = true,
-      kept = List<OpaqueXml>.unmodifiable(<OpaqueXml>[
-        for (final _Slot s in _slots)
-          if (s.kept != null) s.kept!,
-      ]);
+  PropertyContainer._(
+    this.namespaces,
+    this.attributes,
+    this._slots,
+    this._views,
+    this._innerText,
+  ) : isRead = true;
 
   /// Reads the container whose start element the current event of [r] is,
-  /// and consumes it: afterwards [r] is on the container's end event.
+  /// by [schema], and consumes it: afterwards [r] is on the container's end
+  /// event.
   ///
-  /// A child in the WordprocessingML namespace whose local name is in
-  /// [typed], and that [accepts] (with [r] on its start element; by default
-  /// every one), is handed to [onTyped] with [r] on its start element;
-  /// [onTyped] must leave [r] on that child's end event (`r.skip()` does).
-  /// Every other child is kept as [OpaqueXml], a typed name that [accepts]
-  /// refuses among them, so a child the model cannot type without losing
-  /// something is written back as read. The container's attributes are
-  /// kept as well. Character data and comments between the children are
-  /// dropped.
+  /// Every child is kept as [OpaqueXml], except the first child in `w:` of
+  /// each name in [ContainerSchema.nested], which is read as a container of
+  /// its own ([nestedOf]); a second one of that name is kept. A child in
+  /// `w:` whose name has a codec gets a view ([viewOf]) when it is the only
+  /// child of that name, has no `w:` attribute outside the codec's
+  /// [PropertyCodec.attributes], and the codec parses it. The container's
+  /// attributes are kept. Character data, comments and processing
+  /// instructions between children are dropped, but a container without
+  /// child elements keeps them, so `<w:pPr> </w:pPr>` is written back as
+  /// it was.
   ///
   /// [r] must be on a start element; anything else throws [StateError].
-  factory PropertyContainer.read(
-    XmlPullReader r, {
-    required Set<String> typed,
-    required void Function(String localName, XmlPullReader r) onTyped,
-    bool Function(String localName, XmlPullReader r) accepts = _acceptAll,
-  }) {
+  factory PropertyContainer.read(XmlPullReader r, ContainerSchema schema) {
     if (r.eventType != XmlEventType.startElement) {
       throw StateError('PropertyContainer.read needs a start element.');
     }
@@ -105,28 +157,78 @@ final class PropertyContainer {
     final List<_Slot> slots = <_Slot>[];
     if (r.isEmptyElement) {
       r.next();
-      return PropertyContainer._(namespaces, attributes, slots);
+      return PropertyContainer._(
+        namespaces,
+        attributes,
+        slots,
+        const <String, Object>{},
+        null,
+      );
     }
     final int depth = r.depth;
+    final int innerStart = r.eventEnd;
+    int innerEnd = innerStart;
+    final Set<String> nestedRead = <String>{};
     while (r.next()) {
       final XmlEventType type = r.eventType;
       if (type == XmlEventType.endElement && r.depth < depth) {
+        innerEnd = r.eventStart;
         break;
       }
       if (type != XmlEventType.startElement || r.depth != depth + 1) {
         continue;
       }
       final String localName = r.localName;
-      if (r.namespaceUri == Ns.w &&
-          typed.contains(localName) &&
-          accepts(localName, r)) {
-        slots.add(_Slot.typed(localName));
-        onTyped(localName, r);
+      if (r.namespaceUri != Ns.w) {
+        slots.add(_Slot.kept(OpaqueXml.capture(r), null));
+        continue;
+      }
+      final ContainerSchema? nested = schema.nested[localName];
+      if (nested != null && nestedRead.add(localName)) {
+        slots.add(_Slot.nested(localName, PropertyContainer.read(r, nested)));
+        continue;
+      }
+      if (schema.codecs.containsKey(localName)) {
+        final PropertyElementBuilder element = PropertyElementBuilder();
+        final OpaqueXml xml = OpaqueXml.capture(r, onEvent: element.add);
+        slots.add(_Slot.kept(xml, element.element));
       } else {
-        slots.add(_Slot.kept(OpaqueXml.capture(r)));
+        slots.add(_Slot.kept(OpaqueXml.capture(r), null));
       }
     }
-    return PropertyContainer._(namespaces, attributes, slots);
+    final String? innerText = slots.isEmpty && innerEnd > innerStart
+        ? r.sourceText(innerStart, innerEnd)
+        : null;
+    return PropertyContainer._(
+      namespaces,
+      attributes,
+      slots,
+      _viewsOf(slots, schema),
+      innerText,
+    );
+  }
+
+  /// The view of each typed child, by local name.
+  static Map<String, Object> _viewsOf(
+    List<_Slot> slots,
+    ContainerSchema schema,
+  ) {
+    final Map<String, Object> views = <String, Object>{};
+    schema.codecs.forEach((String name, PropertyCodec<Object> codec) {
+      PropertyElement? only;
+      int count = 0;
+      for (final _Slot s in slots) {
+        if (s.isW && s.name == name) {
+          count++;
+          only = s.element;
+        }
+      }
+      if (count != 1 || only == null) return;
+      if (!codec.attributes.containsAll(only.wAttributeNames)) return;
+      final Object? view = codec.parse(only);
+      if (view != null) views[name] = view;
+    });
+    return Map<String, Object>.unmodifiable(views);
   }
 
   /// Whether the container was read from a file. A read container is
@@ -140,132 +242,297 @@ final class PropertyContainer {
   /// The container element's attributes, in source order.
   final List<KeptAttribute> attributes;
 
-  /// The children kept untyped, in input order.
-  final List<OpaqueXml> kept;
-
-  /// Every child in input order, typed ones by name.
+  /// Every child in input order.
   final List<_Slot> _slots;
 
-  /// Whether the container keeps no attribute and no child.
-  bool get isEmpty => attributes.isEmpty && kept.isEmpty;
+  final Map<String, Object> _views;
 
-  /// Writes the container as [qualifiedName], with [typed] and the kept
-  /// children merged in [order] (`pPrOrder` or `rPrOrder`).
+  /// What a container without child elements held between its tags
+  /// (whitespace, comments), as written; `null` when it held nothing or
+  /// had children.
+  final String? _innerText;
+
+  /// The children kept untyped, in input order: every child but the typed
+  /// ones (those with a view) and the nested containers.
+  List<OpaqueXml> get kept => <OpaqueXml>[
+    for (final _Slot s in _slots)
+      if (s.kept != null && !(s.isW && _views.containsKey(s.name))) s.kept!,
+  ];
+
+  /// Whether the container keeps no attribute and no child.
+  bool get isEmpty => attributes.isEmpty && _slots.isEmpty;
+
+  /// The view of the typed child [localName]: its value, or `null` when
+  /// there is no such child or it is not typed (plan Ruling 2).
+  Object? viewOf(String localName) => _views[localName];
+
+  /// The nested container [localName] read, or `null` when the container
+  /// has none.
+  PropertyContainer? nestedOf(String localName) {
+    for (final _Slot s in _slots) {
+      if (s.container != null && s.localName == localName) return s.container;
+    }
+    return null;
+  }
+
+  /// Whether the container holds a child `w:<localName>`, typed or not.
+  bool holds(String localName) {
+    for (final _Slot s in _slots) {
+      if (s.isW && s.name == localName) return true;
+    }
+    return false;
+  }
+
+  /// The first child `w:<localName>` as its codec saw it, or `null`.
+  PropertyElement? _elementOf(String localName) {
+    for (final _Slot s in _slots) {
+      if (s.isW && s.name == localName && s.element != null) return s.element;
+    }
+    return null;
+  }
+
+  /// Writes the container as [qualifiedName] by [schema], the one it was
+  /// read by, with the values [overrides] gives.
   ///
-  /// [typed] maps a local name in [order] to the function that writes that
-  /// child; a name outside [order] throws [ArgumentError]. The merge:
+  /// [overrides] maps the local name of a typed child to its value: a value
+  /// replaces every kept child `w:` of that name with the one its codec
+  /// writes, at its slot in the schema order; `null` removes them. A name
+  /// without a codec in [schema], or a value the codec does not accept,
+  /// throws [ArgumentError] before anything is written. [nested] maps the
+  /// name of a nested container to the one written in its place (the first
+  /// read of that name; nothing when it [NestedProperties.writesNothing]).
+  /// The merge of the rest:
   ///
-  /// * A kept child in the WordprocessingML namespace whose local name is in
-  ///   [order] is written at its slot in [order]; several of one name keep
-  ///   their input order. One whose name is in [typed] is dropped: the typed
-  ///   child replaces it.
+  /// * A kept child in `w:` whose name is in the schema order is written at
+  ///   its slot; several of one name keep their input order.
   /// * Any other kept child (another namespace, such as `w14:`, or a name
-  ///   the schema lacks) follows the child that preceded it in the input:
-  ///   kept, typed, or the typed child that replaced it. When that child is
-  ///   a typed one no longer written, the one before it counts; with none,
-  ///   the kept child is written first.
+  ///   the schema lacks) follows the child that preceded it in the input,
+  ///   or the one written in its place. When that child is removed, the one
+  ///   before it counts; with none, the kept child is written first.
   ///
-  /// [declaredAbove] holds the bindings in scope where the container goes;
-  /// a kept child or attribute declares the ones it needs and lacks.
+  /// [prefix] must be bound to WordprocessingML in [declaredAbove], the
+  /// bindings in scope where the container goes; the container and the
+  /// children set are written with it. When the container rebinds
+  /// [prefix] to another namespace, another prefix bound to
+  /// WordprocessingML is used, or `w1` (`w2`, …) is declared on the
+  /// container. A kept child or attribute declares the bindings it needs
+  /// and lacks.
   void writeTo(
     XmlWriter w,
     String qualifiedName,
-    List<String> order,
-    Map<String, void Function(XmlWriter)> typed, {
+    ContainerSchema schema, {
+    Map<String, Object?> overrides = const <String, Object?>{},
+    Map<String, NestedProperties> nested = const <String, NestedProperties>{},
+    String prefix = 'w',
     Map<String, String> declaredAbove = const <String, String>{},
   }) {
-    for (final String name in typed.keys) {
-      if (!order.contains(name)) {
+    overrides.forEach((String name, Object? value) {
+      checkSettable(schema, name, value, qualifiedName);
+    });
+    for (final String name in nested.keys) {
+      if (!schema.nested.containsKey(name)) {
         throw ArgumentError.value(
           name,
-          'typed',
-          'Not a child of $qualifiedName in schema order',
+          'nested',
+          'Not a nested container of $qualifiedName',
         );
       }
     }
-    final Set<String> inOrder = order.toSet();
-    bool inSchema(OpaqueXml k) =>
-        k.namespaceUri == Ns.w && inOrder.contains(k.localName);
+    final Set<String> inOrder = schema.order.toSet();
+    bool inSchema(_Slot s) => s.isW && inOrder.contains(s.name);
+    // Whether the slot is not written because a value or a nested
+    // container takes its place (or removes it).
+    bool replaced(_Slot s) =>
+        s.isW &&
+        (overrides.containsKey(s.name) ||
+            (s.container != null && nested.containsKey(s.name)));
+    // Whether what takes the place of the name is written.
+    bool replacementWritten(String name) => overrides.containsKey(name)
+        ? overrides[name] != null
+        : !nested[name]!.writesNothing;
 
     // Kept schema children by local name, and the kept children that follow
-    // each anchor: null for the start, a slot index or a typed name.
+    // each anchor: null for the start, a slot index or a replaced name.
     final Map<String, List<int>> byName = <String, List<int>>{};
     final Map<Object?, List<int>> followers = <Object?, List<int>>{};
     for (int i = 0; i < _slots.length; i++) {
-      final OpaqueXml? k = _slots[i].kept;
-      if (k == null) {
-        continue;
-      }
-      if (inSchema(k)) {
-        byName.putIfAbsent(k.localName, () => <int>[]).add(i);
-      } else {
+      final _Slot s = _slots[i];
+      if (!inSchema(s)) {
         followers
-            .putIfAbsent(_anchorOf(i, typed, inSchema), () => <int>[])
+            .putIfAbsent(
+              _anchorOf(i, inSchema, replaced, replacementWritten),
+              () => <int>[],
+            )
             .add(i);
+      } else if (!replaced(s)) {
+        byName.putIfAbsent(s.name, () => <int>[]).add(i);
       }
     }
 
+    final (String p, String name, String? declare) = _boundPrefix(
+      qualifiedName,
+      prefix,
+      declaredAbove,
+    );
     final Map<String, String> inner = mergeNamespaces(
       declaredAbove,
-      namespaces,
+      declare == null
+          ? namespaces
+          : <String, String>{...namespaces, declare: Ns.w},
     );
+    void writeSlot(int i) {
+      final _Slot s = _slots[i];
+      final PropertyContainer? container = s.container;
+      if (container != null) {
+        container.writeTo(
+          w,
+          '$p:${s.name}',
+          schema.nested[s.name]!,
+          prefix: p,
+          declaredAbove: inner,
+        );
+      } else {
+        s.kept!.writeTo(w, declaredAbove: inner);
+      }
+    }
+
     void writeFollowers(Object? anchor) {
       final List<int>? after = followers[anchor];
       if (after == null) {
         return;
       }
       for (final int i in after) {
-        _slots[i].kept!.writeTo(w, declaredAbove: inner);
+        writeSlot(i);
         writeFollowers(i);
       }
     }
 
-    w.start(qualifiedName);
+    w.start(name);
     writeNamespaceDeclarations(w, namespaces);
+    if (declare != null) w.attribute('xmlns:$declare', Ns.w);
     writeKeptAttributes(w, attributes, declaredAbove: inner);
+    bool wrote = false;
     writeFollowers(null);
-    for (final String name in order) {
-      final void Function(XmlWriter)? writeTyped = typed[name];
-      if (writeTyped != null) {
-        writeTyped(w);
-        writeFollowers(name);
-        continue;
+    for (final String child in schema.order) {
+      final Object? value = overrides[child];
+      if (value != null) {
+        schema.codecs[child]!.write(w, p, value, _elementOf(child));
+        wrote = true;
+        writeFollowers(child);
+      } else if (nested[child] case final NestedProperties n
+          when !n.writesNothing) {
+        n.writeTo(w, '$p:$child', prefix: p, declaredAbove: inner);
+        wrote = true;
+        writeFollowers(child);
       }
-      final List<int>? slots = byName[name];
+      final List<int>? slots = byName[child];
       if (slots == null) {
         continue;
       }
       for (final int i in slots) {
-        _slots[i].kept!.writeTo(w, declaredAbove: inner);
+        writeSlot(i);
         writeFollowers(i);
       }
+    }
+    final String? innerText = _innerText;
+    if (innerText != null && !wrote) {
+      w.raw(innerText);
     }
     w.end();
   }
 
-  /// The anchor of the kept child at [index] that is not in the schema: the
-  /// nearest child before it that is written, as a slot index (a kept child)
-  /// or a typed name (a typed child, or the one replacing a kept child), or
-  /// `null` when none is.
+  /// The prefix to write WordprocessingML with inside the container, the
+  /// container's qualified name with it, and a prefix to declare on the
+  /// container for it (or `null`).
+  ///
+  /// It is [prefix] unless the container rebinds [prefix]: then a prefix
+  /// bound to WordprocessingML inside the container, or a new `w1`, `w2`, …
+  (String, String, String?) _boundPrefix(
+    String qualifiedName,
+    String prefix,
+    Map<String, String> declaredAbove,
+  ) {
+    final String? rebound = namespaces[prefix];
+    if (rebound == null || rebound == Ns.w) {
+      return (prefix, qualifiedName, null);
+    }
+    final String local = qualifiedName.startsWith('$prefix:')
+        ? qualifiedName.substring(prefix.length + 1)
+        : qualifiedName;
+    final Map<String, String> inner = mergeNamespaces(
+      declaredAbove,
+      namespaces,
+    );
+    for (final MapEntry<String, String> e in inner.entries) {
+      if (e.key.isNotEmpty && e.value == Ns.w) {
+        return (e.key, '${e.key}:$local', null);
+      }
+    }
+    String fresh = 'w1';
+    for (int i = 2; inner.containsKey(fresh); i++) {
+      fresh = 'w$i';
+    }
+    return (fresh, '$fresh:$local', fresh);
+  }
+
+  /// The anchor of the slot at [index], which is not in the schema: the
+  /// nearest child before it that is written, as a slot index, or the name
+  /// of a replaced child whose replacement is written, or `null` when none
+  /// is.
   Object? _anchorOf(
     int index,
-    Map<String, void Function(XmlWriter)> typed,
-    bool Function(OpaqueXml) inSchema,
+    bool Function(_Slot) inSchema,
+    bool Function(_Slot) replaced,
+    bool Function(String) replacementWritten,
   ) {
     for (int j = index - 1; j >= 0; j--) {
       final _Slot s = _slots[j];
-      final OpaqueXml? k = s.kept;
-      if (k == null) {
-        if (typed.containsKey(s.typedName)) {
-          return s.typedName;
+      if (inSchema(s) && replaced(s)) {
+        if (replacementWritten(s.name)) {
+          return s.name;
         }
         continue;
-      }
-      if (inSchema(k) && typed.containsKey(k.localName)) {
-        return k.localName;
       }
       return j;
     }
     return null;
   }
 }
+
+/// Throws [ArgumentError] unless [name] is a typed child of [schema] (in its
+/// order, with a codec) and [value] is `null` or accepted by its codec.
+/// [container] names the container in the message.
+void checkSettable(
+  ContainerSchema schema,
+  String name,
+  Object? value,
+  String container,
+) {
+  final PropertyCodec<Object>? codec = schema.codecs[name];
+  if (codec == null || !schema.order.contains(name)) {
+    throw ArgumentError.value(
+      name,
+      'name',
+      'Not a typed child of $container in schema order',
+    );
+  }
+  if (value != null && !codec.accepts(value)) {
+    throw ArgumentError.value(
+      value,
+      name,
+      'Not a value of the ${codec.localName} property',
+    );
+  }
+}
+
+/// The schema of a paragraph's `w:pPr`: [pPrOrder], typing `w:pStyle`.
+const ContainerSchema paragraphPropertiesSchema = ContainerSchema(
+  pPrOrder,
+  codecs: <String, PropertyCodec<Object>>{'pStyle': StyleIdCodec('pStyle')},
+);
+
+/// The schema of a run's `w:rPr`: [rPrOrder], typing `w:rStyle`.
+const ContainerSchema runPropertiesSchema = ContainerSchema(
+  rPrOrder,
+  codecs: <String, PropertyCodec<Object>>{'rStyle': StyleIdCodec('rStyle')},
+);

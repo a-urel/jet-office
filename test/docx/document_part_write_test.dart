@@ -181,12 +181,13 @@ void main() {
   });
 
   group('kept styles', () {
-    // A pStyle or rStyle that is not exactly one non-empty w:val is not
-    // typed, so it round-trips as written.
+    // A pStyle or rStyle that is not exactly one non-empty w:val, with no
+    // other w attribute and no content, is not typed, so it round-trips as
+    // written.
     for (final String style in <String>[
       'w:val=""',
       '',
-      'w:val="Title" w14:x="1"',
+      'w:val="Title" w:x="1"',
     ]) {
       test('<pStyle $style/> and <rStyle $style/> round-trip', () {
         final String xml = _doc(
@@ -200,25 +201,39 @@ void main() {
       });
     }
 
-    test('a style with child elements is typed and its children are '
-        'dropped', () {
-      // The schema gives pStyle and rStyle no children, so a file that has
-      // them is invalid; the model types the style and drops them (a
-      // fidelity exception, docs/docx-model.md).
-      final DocumentPart part = _read(
-        _doc(
-          '<w:p><w:pPr><w:pStyle w:val="Title"><w:x/></w:pStyle></w:pPr>'
-          '<w:r><w:rPr><w:rStyle w:val="Strong"><w:y/></w:rStyle></w:rPr>'
-          '<w:t>a</w:t></w:r></w:p>',
-        ),
+    test('a style with a w14 attribute is typed and round-trips', () {
+      // Attributes in other namespaces are ignored for typing (plan Ruling
+      // 2); the element is written as read until the style is set.
+      final String xml = _doc(
+        '<w:p><w:pPr><w:pStyle w:val="Title" w14:x="1"/></w:pPr>'
+        '<w:r><w:rPr><w:rStyle w:val="Strong" w14:x="1"/></w:rPr>'
+        '<w:t>a</w:t></w:r></w:p>',
       );
+      final DocumentPart part = _read(xml);
       expect(_p(part).style, 'Title');
       expect(_r(_p(part)).style, 'Strong');
+      expect(_roundTrip(xml), isEmpty);
+    });
+
+    test('a style with child elements is not typed and round-trips as '
+        'read', () {
+      // The schema gives pStyle and rStyle no children, so the model cannot
+      // type one that has them without dropping them.
+      final String xml = _doc(
+        '<w:p><w:pPr><w:pStyle w:val="Title"><w:x/></w:pStyle></w:pPr>'
+        '<w:r><w:rPr><w:rStyle w:val="Strong"><w:y/></w:rStyle></w:rPr>'
+        '<w:t>a</w:t></w:r></w:p>',
+      );
+      final DocumentPart part = _read(xml);
+      expect(_p(part).style, isNull);
+      expect(_r(_p(part)).style, isNull);
+      expect(_roundTrip(xml), isEmpty);
+      // Setting the style replaces the element and its children.
+      _p(part).style = 'Heading1';
       final String out = _encode(part);
-      expect(out, contains('<w:pStyle w:val="Title"/>'));
-      expect(out, contains('<w:rStyle w:val="Strong"/>'));
+      expect(out, contains('<w:pStyle w:val="Heading1"/>'));
       expect(out, isNot(contains('<w:x')));
-      expect(out, isNot(contains('<w:y')));
+      expect(out, contains('<w:y/>'));
     });
   });
 

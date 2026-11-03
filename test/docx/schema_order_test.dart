@@ -25,7 +25,7 @@ void main() {
     ]);
   });
 
-  test('neither list names an element twice', () {
+  test('pPrOrder and rPrOrder name no element twice', () {
     expect(pPrOrder.toSet(), hasLength(pPrOrder.length));
     expect(rPrOrder.toSet(), hasLength(rPrOrder.length));
   });

@@ -11,6 +11,10 @@
 /// members while it ignores its own calls, `restoreRunText` for a run's
 /// text), so the public signatures never change.
 ///
+/// A property set ([PropertySet], such as a paragraph's style) reports its
+/// own edits, with the state from before; it undoes one with
+/// `PropertySet.restore`, which reports nothing.
+///
 /// An edit that changes nothing (a style set to the value it has) is not
 /// reported.
 ///
@@ -19,6 +23,7 @@ library;
 
 import 'blocks.dart';
 import 'inlines.dart';
+import 'property_set.dart';
 
 /// Receives each edit of the body model after it was applied.
 abstract interface class DocxEditSink {
@@ -44,11 +49,13 @@ abstract interface class DocxEditSink {
   /// from before, for `restoreRunText`.
   void runTextSet(DocxRun run, DocxRunText previous);
 
-  /// The style of [paragraph] was set; [previous] is the style id it had.
-  void paragraphStyleSet(DocxParagraph paragraph, String? previous);
-
-  /// The style of [run] was set; [previous] is the style id it had.
-  void runStyleSet(DocxRun run, String? previous);
+  /// The typed child [localName] of [properties] was set; [previous] is
+  /// its state from before, for `PropertySet.restore`.
+  void propertySet(
+    PropertySet properties,
+    String localName,
+    PropertyState previous,
+  );
 }
 
 /// The sink that ignores every call.
@@ -73,8 +80,9 @@ final class _NoEdits implements DocxEditSink {
   void runTextSet(DocxRun run, DocxRunText previous) {}
 
   @override
-  void paragraphStyleSet(DocxParagraph paragraph, String? previous) {}
-
-  @override
-  void runStyleSet(DocxRun run, String? previous) {}
+  void propertySet(
+    PropertySet properties,
+    String localName,
+    PropertyState previous,
+  ) {}
 }
