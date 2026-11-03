@@ -170,4 +170,59 @@ void main() {
     expect(e.reason, XlsxReadFailure.limitExceeded);
     expect(e.message, startsWith('Limit maxTextLength'));
   });
+
+  test('raw keeps a rich si and a phonetic si exactly', () {
+    const String rich =
+        '<si><r><rPr><b/></rPr><t>a</t></r><r><t xml:space="preserve"> b</t></r></si>';
+    const String phonetic =
+        '<si><t>東京</t><rPh sb="0" eb="2"><t>トウキョウ</t></rPh>'
+        '<phoneticPr fontId="1"/></si>';
+    final PackageReader p = _package(
+      '<sst xmlns="$_main">$rich<si><t>plain</t></si>$phonetic</sst>',
+      const XlsxReadLimits(),
+    );
+    final SharedStringsRead read = readSharedStringsRaw(
+      p,
+      'xl/sharedStrings.xml',
+      const XlsxReadLimits(),
+    );
+    expect(read.texts, <String>['a b', 'plain', '東京']);
+    expect(read.raw.keys, <int>[0, 2]);
+    expect(read.raw[0]!.xml, rich);
+    expect(read.raw[2]!.xml, phonetic);
+  });
+
+  test('raw keeps an si whose text decodes to a character XML forbids', () {
+    const String nul = '<si><t>a_x0000_b</t></si>';
+    final PackageReader p = _package(
+      '<sst xmlns="$_main">$nul<si><t>plain_x0041_</t></si></sst>',
+      const XlsxReadLimits(),
+    );
+    final SharedStringsRead read = readSharedStringsRaw(
+      p,
+      'xl/sharedStrings.xml',
+      const XlsxReadLimits(),
+    );
+    expect(read.texts, <String>['a\u0000b', 'plainA']);
+    expect(read.raw.keys, <int>[0]);
+    expect(read.raw[0]!.xml, nul);
+  });
+
+  test('raw keeps an si with any other child, such as an extLst', () {
+    const String ext =
+        '<si><t>a</t><extLst><ext uri="u"><x/></ext></extLst></si>';
+    const String foreign = '<si xmlns:q="urn:q"><t>b</t><q:note/></si>';
+    final PackageReader p = _package(
+      '<sst xmlns="$_main">$ext<si><t>plain</t></si>$foreign</sst>',
+      const XlsxReadLimits(),
+    );
+    final SharedStringsRead read = readSharedStringsRaw(
+      p,
+      'xl/sharedStrings.xml',
+      const XlsxReadLimits(),
+    );
+    expect(read.texts, <String>['a', 'plain', 'b']);
+    expect(read.raw.keys, <int>[0, 2]);
+    expect(read.raw[0]!.xml, ext);
+  });
 }

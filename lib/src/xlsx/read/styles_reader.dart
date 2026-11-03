@@ -63,6 +63,11 @@ final class CellFormat {
 final class StyleTable {
   StyleTable._(this._formats);
 
+  /// The table whose style index `i` has the format `formats[i]`, as a
+  /// model builds it from the `<xf>` entries it holds. The list is copied.
+  factory StyleTable.fromFormats(List<CellFormat> formats) =>
+      StyleTable._(List<CellFormat>.unmodifiable(formats));
+
   /// The table of a workbook without a styles part.
   static final StyleTable empty = StyleTable._(const <CellFormat>[]);
 
@@ -146,7 +151,7 @@ StyleTable readStyles(
       } else if (reader.localName == 'cellXfs' && !sawCellXfs) {
         sawCellXfs = true;
         _readGroup(reader, part, limits, 'xf', () {
-          xfIds.add(_readId(reader.getAttribute('numFmtId'), orElse: 0));
+          xfIds.add(readStyleId(reader.getAttribute('numFmtId'), orElse: 0));
           reader.skip();
         });
       } else {
@@ -159,17 +164,26 @@ StyleTable readStyles(
         if (id == null)
           CellFormat.broken
         else
-          shared.putIfAbsent(id, () {
-            final String? code = codes[id] ?? builtinNumberFormatCode(id);
-            return CellFormat(
-              id,
-              code,
-              code == null ? FormatKind.number : classifyFormatCode(code),
-            );
-          }),
+          shared.putIfAbsent(id, () => cellFormatFor(id, codes)),
     ];
-    return StyleTable._(List<CellFormat>.unmodifiable(formats));
+    return StyleTable.fromFormats(formats);
   });
+}
+
+/// The format of an `<xf>` whose `numFmtId` is [numFmtId], given the codes
+/// [codes] of the file's `<numFmt>` entries.
+///
+/// `null` (an unreadable id) is [CellFormat.broken]. Otherwise the code is
+/// the file's, else the built-in's, else `null`, and the kind is that of the
+/// code. The reader and the workbook model both apply this rule.
+CellFormat cellFormatFor(int? numFmtId, Map<int, String> codes) {
+  if (numFmtId == null) return CellFormat.broken;
+  final String? code = codes[numFmtId] ?? builtinNumberFormatCode(numFmtId);
+  return CellFormat(
+    numFmtId,
+    code,
+    code == null ? FormatKind.number : classifyFormatCode(code),
+  );
 }
 
 /// Calls [onItem] for each [name] child of the group element the reader is
@@ -218,7 +232,7 @@ void _readNumFmt(
   XlsxReadLimits limits,
   Map<int, String> codes,
 ) {
-  final int? id = _readId(reader.getAttribute('numFmtId'));
+  final int? id = readStyleId(reader.getAttribute('numFmtId'));
   final String? raw = reader.getAttribute('formatCode');
   reader.skip();
   if (id == null || raw == null) return;
@@ -234,9 +248,9 @@ void _readNumFmt(
   codes[id] = code;
 }
 
-/// [value] as a non-negative integer; [orElse] when it is absent, `null`
-/// when it is present and not one.
-int? _readId(String? value, {int? orElse}) {
+/// [value] as a non-negative integer of at most 9 significant digits;
+/// [orElse] when it is absent, `null` when it is present and not one.
+int? readStyleId(String? value, {int? orElse}) {
   if (value == null) return orElse;
   if (!_digits.hasMatch(value)) return null;
   final String significant = value.replaceFirst(RegExp('^0+'), '');

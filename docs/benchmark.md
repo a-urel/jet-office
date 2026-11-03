@@ -10,7 +10,10 @@ reading the file the workload makes ("Read figures" below). A third,
 `benchmark/xlsx_read_worst_case_test.dart`, reads the largest sheet the
 reader's default limits let through ("Worst case" below). A fourth,
 `benchmark/xlsx_format_benchmark_test.dart`, times `XlsxNumberFormatter` on
-every cell of the read workload ("Format figures" below).
+every cell of the read workload ("Format figures" below). A fifth,
+`benchmark/xlsx_model_benchmark_test.dart`, opens that file with
+`XlsxWorkbook`, loads the sheet, reads every row, sets one cell and saves,
+and measures the store of a formula-dense sheet ("Model figures" below).
 
 The figures below are records, not thresholds (spec section 5): nothing fails
 when a later run is slower, and they are not a promise.
@@ -33,6 +36,8 @@ dart test benchmark/xlsx_read_worst_case_test.dart
 dart test -p chrome benchmark/xlsx_read_worst_case_test.dart
 dart test benchmark/xlsx_format_benchmark_test.dart
 dart test -p chrome benchmark/xlsx_format_benchmark_test.dart
+dart test benchmark/xlsx_model_benchmark_test.dart
+dart test -p chrome benchmark/xlsx_model_benchmark_test.dart
 ```
 
 The quality gate does not run it. `dart_test.yaml` starts Chrome with
@@ -516,3 +521,181 @@ chrome | DateTime | yyyy-mm-dd hh:mm:ss | median 901.9 ms | 9019 ns/value | rati
   and 2.35 times the serial date. The benchmark does not say why. It is
   the path a read takes: the reader gives a date-formatted cell as a
   `DateTime`, so the workload's two date columns are formatted this way.
+
+## Model figures
+
+The model benchmark (`benchmark/xlsx_model_benchmark_test.dart`) opens the
+read workload's file (100,000 data rows and a header, 12 columns, 1,166,679
+cells, 43,580,479 bytes of sheet XML, N below) with `XlsxWorkbook.open`, loads
+its sheet, reads every row, sets one cell and saves. It also measures the store
+of a formula-dense sheet.
+
+### Method
+
+- Untimed: the workload file is made as for the read benchmark
+  (`benchmark/src/workload_file.dart`), so each platform opens its own bytes.
+- Phases, each the median of three runs timed alone, the set-up of a run not
+  timed:
+  - `open`: `XlsxWorkbook.open(bytes)`. It reads the skeleton and inflates
+    every entry once to check its size and CRC-32, then drops the bytes.
+  - `load the sheet`: `cellAt(0, 0)` on a freshly opened workbook, which
+    inflates and parses the whole sheet part into the store.
+  - `read every row`: one pass of `rows` over the loaded sheet, every cell
+    built as `XlsxReader` builds it.
+  - `set one cell`: `setCell(50000, 3, 'edited')` on a loaded sheet.
+  - `save (sheet loaded and edited)`: `save()` after that edit; the sheet is
+    serialized from the store, and every unloaded part is inflated again and
+    written.
+  - `save (sheet never loaded)`: `save()` right after `open`; the sheet part
+    is inflated again and copied.
+  - `open, set one cell, save`: all of it in one run, the number a caller
+    waits for.
+  - The saved file is read back with `XlsxReader`; the edited cell must hold
+    `edited`.
+- Retained store bytes, the figure that is compared with N: the benchmark
+  parses the sheet part into a `CellStore` as `XlsxSheet` does and reads
+  `CellStore.retainedBytesEstimate`. It sums the `lengthInBytes` of the
+  store's typed lists (spare capacity included: cells, formula references,
+  formula entries and the formula text buffer), 2 bytes for each UTF-16 unit
+  of the pooled strings, and a constant for each map entry and the object it
+  holds: 96 bytes for each cell with extras and 48 for each pooled string,
+  row with attributes or children, group master and textless formula entry;
+  each formula template counts 96 bytes plus its `ref`, `si` and
+  attributes. What the other entries point to (kept attributes, opaque XML)
+  and the shared string table (which is outside the store) are not
+  counted. It depends on the data and not
+  on the platform, so the VM and Chrome give the same number; it is an
+  estimate, not a measurement of the heap. The store's bytes are compared with
+  N, the sheet part's XML bytes (the target of spec section 4.5).
+- Process memory, a secondary figure and an upper bound: four runs (a warm-up
+  and three), each taking a reading before `open`, after `open` and after the
+  load, with the loaded workbook still referenced. VM:
+  `ProcessInfo.currentRss`; Chrome: `performance.memory.usedJSHeapSize`. The
+  figure is the reading after the load minus the reading before `open`, and
+  the largest of the runs is given. It includes the sheet part's XML and
+  decoded text, which are garbage once the load ends, and whatever the
+  collector has not yet freed. The VM's RSS never falls, so runs that reuse
+  heap the first run grew read differently, and Chrome's heap moves with the
+  collector (runs from -31 MB to 182 MB). It cannot judge the target. On the
+  VM the process's peak RSS (`maxRss`) above the baseline is also given.
+- The formula-dense sheet: 50,000 rows of 12 formula cells with cached
+  values, built as XML in the benchmark (32,377,917 bytes, its N). Columns A
+  to F are shared formulas, one group per column with its master in row 1
+  and followers below (`<f t="shared" si="0"/>`); columns G to L are normal
+  formulas, each with its own text (`A7*6+B7`). It is parsed into a store as
+  above and its `retainedBytesEstimate` read.
+
+### Figures
+
+- Date: 2026-11-02.
+- Machine: Mac15,7, Apple M3 Pro, 36 GiB RAM (38,654,705,664 bytes).
+- OS: macOS 27.2.
+- Dart SDK 3.13.7 (stable); the VM runs the JIT, Chrome runs dart2js output.
+- Chrome 156.0.8078.79.
+
+| Phase (median of 3) | VM (ms) | Chrome (ms) |
+|---|---|---|
+| `open` (verifies every entry) | 115.2 | 463.1 |
+| Load the sheet | 1523.9 | 2333.0 |
+| Read every row (`rows`) | 1069.4 | 841.1 |
+| Set one cell | 0.1 | 0.1 |
+| Save, sheet loaded and edited | 1285.4 | 2708.7 |
+| Save, sheet never loaded | 502.1 | 2216.9 |
+| Open, set one cell, save | 2915.5 | 5558.9 |
+
+| Retained store (estimate) | VM | Chrome |
+|---|---|---|
+| Bytes | 33,868,294 | 33,868,294 |
+| Per cell (1,166,679 cells) | 29.0 | 29.0 |
+| Store bytes / N (43,580,479) | 0.777 | 0.777 |
+
+| Retained store, formula-dense sheet (estimate) | VM | Chrome |
+|---|---|---|
+| Bytes | 23,736,316 | 23,736,316 |
+| Per cell (600,000 formula cells) | 39.6 | 39.6 |
+| Store bytes / N (32,377,917) | 0.733 | 0.733 |
+
+| Process memory above the baseline (upper bound) | VM (RSS) | Chrome (heap) |
+|---|---|---|
+| Largest of the four runs (bytes) | 54,870,016 | 123,724,098 |
+| memory/N | 1.26 | 2.84 |
+| Other runs (bytes) | -55,558,144, 45,400,064, 40,976,384 | 12,873,206, 16,771,020, 40,633,500 |
+| Peak RSS above the baseline (bytes) | 67,715,072 (1.55 N) | n/a |
+
+The saved file is 6,995,589 bytes on the VM and 7,018,358 in Chrome; the input
+is 6,958,168 and 6,981,925. For comparison, `XlsxReader` reading the same sheet
+costs 1.47 N above its baseline on the VM and 2.46 N in Chrome ("Read
+figures"), and it keeps no cells.
+
+Every line:
+
+```text
+vm | input | 6958168 bytes | xl/worksheets/sheet1.xml 43580479 bytes XML | 1166679 cells
+vm | retained store | 33868294 bytes | 29.0 bytes/cell | store/N 0.777 | N 43580479 bytes
+vm | retained store, formulas | 50000 x 12 | 23736316 bytes | 39.6 bytes/cell | store/N 0.733 | N 32377917 bytes
+vm | model | warm-up | RSS baseline 383631360 | after open 259801088 | after load 328073216 | above baseline -55558144 bytes | peak RSS 389758976 (was 383664128)
+vm | model | run 1 | RSS baseline 328073216 | after open 289013760 | after load 373473280 | above baseline 45400064 bytes | peak RSS 393838592 (was 389758976)
+vm | model | run 2 | RSS baseline 373473280 | after open 394051584 | after load 414449664 | above baseline 40976384 bytes | peak RSS 437190656 (was 393838592)
+vm | model | run 3 | RSS baseline 414449664 | after open 438517760 | after load 469319680 | above baseline 54870016 bytes | peak RSS 482164736 (was 437190656)
+vm | process | 54870016 bytes above baseline (largest of 4) | 47.0 bytes/cell | memory/N 1.26 | N 43580479 bytes
+vm | process peak | peak RSS above baseline 67715072 bytes | memory/N 1.55
+vm | phase | open (verifies every entry) | 115.2 ms
+vm | phase | load the sheet (cellAt) | 1523.9 ms
+vm | phase | read every row (rows, sheet loaded) | 1069.4 ms
+vm | phase | set one cell (sheet loaded) | 0.1 ms
+vm | phase | save (sheet loaded and edited) | 1285.4 ms | 6995589 bytes
+vm | phase | save (sheet never loaded) | 502.1 ms
+vm | phase | open, set one cell, save | 2915.5 ms
+chrome | input | 6981925 bytes | xl/worksheets/sheet1.xml 43580479 bytes XML | 1166679 cells
+chrome | retained store | 33868294 bytes | 29.0 bytes/cell | store/N 0.777 | N 43580479 bytes
+chrome | retained store, formulas | 50000 x 12 | 23736316 bytes | 39.6 bytes/cell | store/N 0.733 | N 32377917 bytes
+chrome | model | warm-up | peak JS heap baseline 141026243 | after open 203711291 | after load 153899449 | above baseline 12873206 bytes
+chrome | model | run 1 | peak JS heap baseline 153900361 | after open 264338490 | after load 170671381 | above baseline 16771020 bytes
+chrome | model | run 2 | peak JS heap baseline 170632613 | after open 268077164 | after load 294356711 | above baseline 123724098 bytes
+chrome | model | run 3 | peak JS heap baseline 294360343 | after open 404759420 | after load 334993843 | above baseline 40633500 bytes
+chrome | process | 123724098 bytes above baseline (largest of 4) | 106.0 bytes/cell | memory/N 2.84 | N 43580479 bytes
+chrome | phase | open (verifies every entry) | 463.1 ms
+chrome | phase | load the sheet (cellAt) | 2333.0 ms
+chrome | phase | read every row (rows, sheet loaded) | 841.1 ms
+chrome | phase | set one cell (sheet loaded) | 0.1 ms
+chrome | phase | save (sheet loaded and edited) | 2708.7 ms | 7018358 bytes
+chrome | phase | save (sheet never loaded) | 2216.9 ms
+chrome | phase | open, set one cell, save | 5558.9 ms
+```
+
+### Reading the figures
+
+- **Setting a cell costs nothing; loading and saving cost the sheet.** The
+  edit is 0.1 ms. The whole open, edit and save takes 2.9 s on the VM and
+  5.6 s in Chrome, against 2.7 s and 3.3 s for one read of the sheet and 1.5 s
+  and 3.1 s to write it ("Read figures"): the model reads the sheet, then
+  writes it.
+- **`open` is not free.** It takes 0.12 s on the VM and 0.44 s in Chrome
+  because it inflates every entry to verify it, which `XlsxReader`'s open (0.4
+  ms) does not. The cost grows with the file, not with what the caller uses.
+- **A part that was not loaded is inflated twice.** A workbook that is opened
+  and saved without loading the sheet takes 0.52 s on the VM and 2.2 s in
+  Chrome: the verification at `open` and the copy at `save` each inflate the
+  sheet part, with the pure-Dart inflate in Chrome (0.69 s a time, "Read
+  figures"). Saving does not use a compressed entry as it is.
+- **Reading every row costs about a load.** One pass of `rows` over the
+  loaded sheet takes 1.1 s on the VM and 0.84 s in Chrome: each cell is built
+  and decoded as the reader does. A cell read without a problem leaves
+  nothing behind; only a cell with a warning is remembered, so it is
+  reported once.
+- **The loaded store is smaller than the sheet's XML, with or without
+  formulas.** The workload's store is an estimated 33,868,294 bytes, 0.777
+  times its 43,580,479 bytes of XML (29 bytes a cell, the same on both
+  platforms); its formula column is counted, text included. The
+  formula-dense sheet's store is 23,736,316 bytes, 0.733 times its XML (39.6
+  bytes a cell): a formula is an interned template plus its text in one
+  buffer, a shared formula's followers share one entry, and a cell pays a
+  4-byte reference. Before formulas were stored this way the same sheet's
+  store was 67,603,932 bytes (2.09 N, formula objects and text not even
+  counted). So the target of spec section 4.5 is met for both, and no cell
+  limit (section 4.9) is added. The process figures are higher (1.3 N on
+  the VM, up to 2.8 N in Chrome) because they include the XML and decoded
+  text of the load and uncollected garbage; they are not the store. The
+  estimate counts constants per map entry, not the heap, so it may be off
+  by some tens of percent. Styled empty cells or kept attributes still cost
+  an entry each; that case is not measured.

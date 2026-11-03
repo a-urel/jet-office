@@ -15,16 +15,18 @@ const int _cases = 100;
 /// once on the VM. The Chrome leg compares them, which proves the corpus
 /// (and so every seed's cases) is the same bytes in a browser. The two
 /// `_deflated` entries are left out: their bytes depend on the platform's
-/// deflater (decision 0006).
+/// deflater (decision 0006). The bytes are those of the `package:archive`
+/// version resolved (4.6 added an extended timestamp to each central header),
+/// so a release that changes its ZIP layout changes them.
 const Map<String, ({int length, int adler32})> _storedCorpus =
     <String, ({int length, int adler32})>{
-      'm1_values': (length: 6623, adler32: 3114941371),
-      'm1_formulas': (length: 5518, adler32: 3179478856),
-      'm1_dates': (length: 5882, adler32: 3031000406),
-      'libreoffice': (length: 17668, adler32: 1967630285),
-      'google_sheets': (length: 10545, adler32: 1552321606),
-      'dotnet_sdk': (length: 3027, adler32: 608156867),
-      'erp_export': (length: 4133, adler32: 2066814957),
+      'm1_values': (length: 6704, adler32: 3853013050),
+      'm1_formulas': (length: 5599, adler32: 2780369878),
+      'm1_dates': (length: 5963, adler32: 3931601365),
+      'libreoffice': (length: 17758, adler32: 3013262995),
+      'google_sheets': (length: 10635, adler32: 3903365900),
+      'dotnet_sdk': (length: 3072, adler32: 1661782054),
+      'erp_export': (length: 4187, adler32: 3525780887),
     };
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.

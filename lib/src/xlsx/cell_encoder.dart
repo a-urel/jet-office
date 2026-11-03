@@ -9,9 +9,15 @@
 /// and warnings for lossy conversions.
 ///
 /// Both the streaming writer and the workbook model call [CellEncoder]; no
-/// other file under `lib/` writes a cell element.
+/// other file under `lib/` writes a cell element. The writer calls
+/// [CellEncoder.encode]; the model calls [CellEncoder.prepare] to turn a
+/// value into the stored form it keeps (a `RawCell`) and
+/// [CellEncoder.writeRaw] to write a stored cell back. Added for the model:
+/// `prepare`, `writeRaw` and 1904 date serials; `encode` is unchanged, and
+/// both paths share the checks, repairs and warnings.
 library;
 
+import '../opc/opaque_xml.dart';
 import '../xml/xml_escape.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
@@ -19,10 +25,14 @@ import 'cell_ref.dart';
 import 'color.dart';
 import 'date_serial.dart';
 import 'font.dart';
+import 'format/format_kind.dart';
 import 'formula_text.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
 import 'number_format.dart';
+import 'raw_cell.dart';
+import 'read/cell_decoder.dart' show encodeFormulaType, encodeRawKind;
+import 'read/styles_reader.dart' show CellFormat;
 import 'rich_text.dart';
 import 'shared_strings.dart';
 import 'style.dart';
@@ -40,11 +50,17 @@ const XlsxFont _hyperlinkFont = XlsxFont(
   underline: XlsxUnderline.single,
 );
 
-/// Whether Excel, which stores every number as a double, may round [v].
+/// `intPrecisionLost` when Excel, which stores every number as a double,
+/// may round [v]; otherwise `null`.
 ///
 /// Not `v.abs()`: the absolute value of the 64-bit minimum overflows to
 /// itself, a negative number.
-bool _losesPrecision(int v) => v > _maxExactInt || v < -_maxExactInt;
+XlsxWarningCode? _intWarning(int v) => v > _maxExactInt || v < -_maxExactInt
+    ? XlsxWarningCode.intPrecisionLost
+    : null;
+
+/// The `<v>` text of [v].
+String _boolText(bool v) => v ? '1' : '0';
 
 /// Encodes cell values as `<c>` elements.
 ///
@@ -209,24 +225,17 @@ final class CellEncoder {
         // `is int`.
         throw _nonFinite(v, sheet, ref);
       case bool():
-        _write(out, ref, _idOf(style), 'b', '<v>${v ? 1 : 0}</v>');
+        _write(out, ref, _idOf(style), 'b', '<v>${_boolText(v)}</v>');
       case int():
         final int id = _idOf(style);
-        if (_losesPrecision(v)) {
-          _warnings.add(
-            XlsxWarningCode.intPrecisionLost,
-            sheet: sheet,
-            cell: ref,
-          );
-        }
-        // On the web a whole double is an `int` too, so `-0.0` arrives here.
-        _write(out, ref, id, null, '<v>${v == 0 ? 0 : v}</v>');
+        _report(_intWarning(v), sheet, ref);
+        _write(out, ref, id, null, '<v>${_intText(v)}</v>');
       case double():
         _write(out, ref, _idOf(style), null, '<v>${formatXmlDouble(v)}</v>');
       case XlsxDecimal():
         _write(out, ref, _idOf(style), null, '<v>${v.digits}</v>');
       case DateTime():
-        final double? serial = dateTimeSerial(v);
+        final String? serial = _dateTimeSerialText(v, date1904: false);
         if (serial == null) {
           _writeString(
             out,
@@ -237,27 +246,10 @@ final class CellEncoder {
             outsideDateRange: true,
           );
         } else {
-          _writeDate(
-            out,
-            sheet,
-            ref,
-            serial == serial.truncateToDouble()
-                ? '${serial.toInt()}'
-                : '$serial',
-            style,
-            XlsxNumFmt.localeDateTime,
-          );
+          _writeDate(out, sheet, ref, serial, style, XlsxNumFmt.localeDateTime);
         }
       case XlsxDate():
-        final int? serial;
-        try {
-          serial = dateSerial(v.year, v.month, v.day);
-        } on ArgumentError {
-          throw ArgumentError(
-            'Cell $ref on sheet "$sheet" holds the date '
-            '${v.year}-${v.month}-${v.day}, which does not exist.',
-          );
-        }
+        final int? serial = _dateSerialOf(v, sheet, ref, date1904: false);
         if (serial == null) {
           _writeString(
             out,
@@ -284,12 +276,285 @@ final class CellEncoder {
       case XlsxRichText():
         _writeRichText(out, sheet, ref, v, style);
       default:
-        throw ArgumentError(
-          'Cell $ref on sheet "$sheet" holds a ${v.runtimeType}, which is not '
-          'a supported cell value.',
-        );
+        throw _unsupported(v, sheet, ref);
     }
   }
+
+  /// The stored form of [value] for the cell at zero-based [row] and
+  /// [column] of [sheet], for the workbook model, which keeps it in place of
+  /// [current] (`null` when the cell does not exist yet).
+  ///
+  /// [value] is a `String`, `int`, `double`, `bool`, [DateTime],
+  /// [XlsxDate], [XlsxDecimal], [XlsxFormula] or `null`. The checks,
+  /// repairs and warnings are those of [encode], and it throws as [encode]
+  /// does, with nothing recorded: the string table and the warnings are as
+  /// they were. A string is interned into the shared-string table and
+  /// stored as its index. A formula is stored as a normal formula with its
+  /// text as written (one leading `=` removed) and its cached result as the
+  /// `<v>` text [encode] writes. `null` gives an empty cell carrying
+  /// [current]'s style; whether the store keeps it is the caller's rule.
+  ///
+  /// The result keeps [current]'s style, except for a date: the date rule
+  /// of [encode] applied to [currentFormat], the format of [current]'s
+  /// style. A format that shows a date or a time keeps the style; General
+  /// (id 0) takes the style [dateStyle] returns for [current]'s style,
+  /// with `withTime` true for a [DateTime] (the writer gives every
+  /// [DateTime] its date-time format and an [XlsxDate] its short-date one);
+  /// any other format keeps the style and warns `dateInNonDateFormat`, and
+  /// so does General when [dateStyle] returns `null` (no date style can be
+  /// added).
+  /// Dates are serials of the 1904 system when [date1904] is true, and a
+  /// date that has no serial there (before 1904-01-01) is written as text
+  /// with `dateOutsideExcelRange`, like one before 1900.
+  ///
+  /// An [XlsxHyperlink], [XlsxRichText], [XlsxCell] or any other type
+  /// throws [ArgumentError]; the model does not take them yet.
+  RawCell prepare(
+    Object? value, {
+    required String sheet,
+    required int row,
+    required int column,
+    required RawCell? current,
+    required CellFormat currentFormat,
+    required bool date1904,
+    required int? Function(int? style, {required bool withTime}) dateStyle,
+  }) {
+    final String ref = cellRef(row, column);
+    final int? style = current?.style;
+    switch (value) {
+      case null:
+        return RawCell(kind: RawCellKind.number, style: style);
+      case String():
+        return _preparedString(sheet, ref, value, style);
+      case num() when !value.isFinite:
+        // Before the int case: on the web NaN and infinity also satisfy
+        // `is int`.
+        throw _nonFinite(value, sheet, ref);
+      case bool():
+        return RawCell(
+          kind: RawCellKind.boolean,
+          style: style,
+          value: _boolText(value),
+        );
+      case int():
+        _report(_intWarning(value), sheet, ref);
+        return RawCell(
+          kind: RawCellKind.number,
+          style: style,
+          value: _intText(value),
+        );
+      case double():
+        return RawCell(
+          kind: RawCellKind.number,
+          style: style,
+          value: formatXmlDouble(value),
+        );
+      case XlsxDecimal():
+        return RawCell(
+          kind: RawCellKind.number,
+          style: style,
+          value: value.digits,
+        );
+      case DateTime():
+        final String? serial = _dateTimeSerialText(value, date1904: date1904);
+        if (serial == null) {
+          return _preparedString(
+            sheet,
+            ref,
+            value.toIso8601String(),
+            style,
+            outsideDateRange: true,
+          );
+        }
+        return _preparedDate(
+          sheet,
+          ref,
+          serial,
+          style,
+          currentFormat,
+          () => dateStyle(style, withTime: true),
+        );
+      case XlsxDate():
+        final int? serial = _dateSerialOf(
+          value,
+          sheet,
+          ref,
+          date1904: date1904,
+        );
+        if (serial == null) {
+          return _preparedString(
+            sheet,
+            ref,
+            _isoDate(value),
+            style,
+            outsideDateRange: true,
+          );
+        }
+        return _preparedDate(
+          sheet,
+          ref,
+          '$serial',
+          style,
+          currentFormat,
+          () => dateStyle(style, withTime: false),
+        );
+      case XlsxFormula():
+        final _CheckedFormula checked = _checkFormula(value, sheet, ref);
+        _report(checked.warning, sheet, ref);
+        return RawCell(
+          kind: checked.kind,
+          style: style,
+          value: checked.value,
+          formula: RawFormula(type: FormulaType.normal, text: checked.text),
+        );
+      default:
+        throw _unsupported(value, sheet, ref);
+    }
+  }
+
+  /// [text] as a stored shared-string cell with [style], repaired and
+  /// reported as [_writeString] does.
+  RawCell _preparedString(
+    String sheet,
+    String ref,
+    String text,
+    int? style, {
+    bool outsideDateRange = false,
+  }) {
+    final _CleanText clean = _cleanText(text);
+    _reportText(sheet, ref, clean, outsideDateRange: outsideDateRange);
+    return RawCell(
+      kind: RawCellKind.sharedString,
+      style: style,
+      value: '${_strings.indexOf(clean.text)}',
+    );
+  }
+
+  /// The date [serial] as a stored number cell, styled by the date rule:
+  /// [style] kept when [format] shows a date or a time, [dateStyle]'s style
+  /// when [format] is General and it gives one, and otherwise [style] kept
+  /// with a warning.
+  RawCell _preparedDate(
+    String sheet,
+    String ref,
+    String serial,
+    int? style,
+    CellFormat format,
+    int? Function() dateStyle,
+  ) {
+    final int? id;
+    final int? general = format.id == 0 ? dateStyle() : null;
+    if (format.kind == FormatKind.date || format.kind == FormatKind.time) {
+      id = style;
+    } else if (general != null) {
+      id = general;
+    } else {
+      _warnings.add(
+        XlsxWarningCode.dateInNonDateFormat,
+        sheet: sheet,
+        cell: ref,
+      );
+      id = style;
+    }
+    return RawCell(kind: RawCellKind.number, style: id, value: serial);
+  }
+
+  /// Writes the stored [cell] at zero-based [row] and [column] to [out], for
+  /// the workbook model.
+  ///
+  /// The `<c>` carries `r`, the style as `s` (whenever there is one, `0`
+  /// included, as the file wrote it), the kind's `t` and the kept
+  /// attributes, in that order. Its children follow the schema's order: the
+  /// `<f>` with its type, `ref`, `si` and kept attributes, the `<v>`, the
+  /// inline `<is>` and the other kept children. [declaredAbove] holds the
+  /// namespace bindings in scope at the cell (the worksheet root's); a kept
+  /// attribute or element whose prefix it lacks declares it (see
+  /// `writeKeptAttributes`).
+  ///
+  /// The formula text is escaped as [encode] escapes it (ST_Xstring, then
+  /// XML); the `<v>` text and attribute values are escaped as XML only. A
+  /// character XML forbids in them, which only a character reference in the
+  /// source (`&#1;`) can have put there, is dropped without a warning:
+  /// writing has no sheet to report it against, and dropping it is what
+  /// keeps the saved part well-formed. An empty cell with a style or kept
+  /// attributes writes `<c r="C5" s="7"/>`; an empty cell with neither
+  /// writes nothing.
+  void writeRaw(
+    XmlWriter out, {
+    required int row,
+    required int column,
+    required RawCell cell,
+    Map<String, String> declaredAbove = const <String, String>{},
+  }) {
+    final int? style = cell.style;
+    if (cell.isEmpty && style == null && cell.attributes.isEmpty) return;
+    out
+      ..start('c')
+      ..attribute('r', cellRef(row, column));
+    if (style != null) out.attribute('s', '$style');
+    final String? type = encodeRawKind(cell);
+    if (type != null) out.attribute('t', _clean(type));
+    writeKeptAttributes(out, cell.attributes, declaredAbove: declaredAbove);
+    if (cell.isEmpty) {
+      out.end();
+      return;
+    }
+    // The bindings inside the <c>, with those its kept attributes declared.
+    final Map<String, String> inside = _withKept(
+      declaredAbove,
+      cell.attributes,
+    );
+    final RawFormula? formula = cell.formula;
+    if (formula != null) {
+      out.start('f');
+      final String? formulaType = encodeFormulaType(formula.type);
+      if (formulaType != null) out.attribute('t', formulaType);
+      final String? range = formula.ref;
+      if (range != null) out.attribute('ref', _clean(range));
+      final String? si = formula.si;
+      if (si != null) out.attribute('si', _clean(si));
+      writeKeptAttributes(out, formula.attributes, declaredAbove: inside);
+      final String? text = formula.text;
+      if (text != null && text.isNotEmpty) {
+        out.text(escapeXstring(_clean(text)));
+      }
+      out.end();
+      _wroteFormula = true;
+    }
+    final String? value = cell.value;
+    if (value != null) {
+      out
+        ..start('v')
+        ..text(_clean(value))
+        ..end();
+    }
+    cell.inline?.writeTo(out, declaredAbove: inside);
+    for (final OpaqueXml child in cell.extraChildren) {
+      child.writeTo(out, declaredAbove: inside);
+    }
+    out.end();
+  }
+
+  /// [declaredAbove] with the bindings of the prefixed [attributes] added,
+  /// as `writeKeptAttributes` declares them; [declaredAbove] itself when
+  /// none is new.
+  static Map<String, String> _withKept(
+    Map<String, String> declaredAbove,
+    List<KeptAttribute> attributes,
+  ) {
+    Map<String, String>? merged;
+    for (final KeptAttribute a in attributes) {
+      final int colon = a.qualifiedName.indexOf(':');
+      if (colon <= 0) continue;
+      final String prefix = a.qualifiedName.substring(0, colon);
+      if (prefix == 'xml' || declaredAbove[prefix] == a.namespaceUri) continue;
+      (merged ??= <String, String>{...declaredAbove})[prefix] = a.namespaceUri;
+    }
+    return merged ?? declaredAbove;
+  }
+
+  /// [text] without the characters XML forbids.
+  static String _clean(String text) => scrubXmlText(text).text;
 
   /// Writes [text] as a shared-string cell. With [outsideDateRange], the
   /// text stands for a date Excel cannot store, which is reported too.
@@ -301,18 +566,41 @@ final class CellEncoder {
     _Resolved style, {
     bool outsideDateRange = false,
   }) {
-    final ScrubResult scrubbed = scrubXmlText(text);
-    final String result = truncateCellText(scrubbed.text);
+    final _CleanText clean = _cleanText(text);
     // The style can throw; resolve it before anything is recorded.
     final int id = _idOf(style);
-    if (scrubbed.removed > 0) {
+    _reportText(sheet, ref, clean, outsideDateRange: outsideDateRange);
+    _write(out, ref, id, 's', '<v>${_strings.indexOf(clean.text)}</v>');
+  }
+
+  /// [text] scrubbed of the characters XML forbids and cut to Excel's cell
+  /// limit, with what was repaired. Records nothing.
+  static _CleanText _cleanText(String text) {
+    final ScrubResult scrubbed = scrubXmlText(text);
+    final String result = truncateCellText(scrubbed.text);
+    return (
+      text: result,
+      removed: scrubbed.removed > 0,
+      truncated: result.length < scrubbed.text.length,
+    );
+  }
+
+  /// Reports the repairs of [clean] for the cell [ref], and with
+  /// [outsideDateRange] that the text stands for a date Excel cannot store.
+  void _reportText(
+    String sheet,
+    String ref,
+    _CleanText clean, {
+    required bool outsideDateRange,
+  }) {
+    if (clean.removed) {
       _warnings.add(
         XlsxWarningCode.invalidCharactersRemoved,
         sheet: sheet,
         cell: ref,
       );
     }
-    if (result.length < scrubbed.text.length) {
+    if (clean.truncated) {
       _warnings.add(XlsxWarningCode.textTruncated, sheet: sheet, cell: ref);
     }
     if (outsideDateRange) {
@@ -322,7 +610,6 @@ final class CellEncoder {
         cell: ref,
       );
     }
-    _write(out, ref, id, 's', '<v>${_strings.indexOf(result)}</v>');
   }
 
   /// Writes [text] as a shared-string cell whose `<si>` holds its runs, each
@@ -462,6 +749,30 @@ final class CellEncoder {
     XlsxFormula formula,
     _Resolved style,
   ) {
+    final _CheckedFormula checked = _checkFormula(formula, sheet, ref);
+    // The style can throw; resolve it before the warning is recorded.
+    final int id = _idOf(style);
+    _report(checked.warning, sheet, ref);
+    final String? cached = checked.value;
+    _write(
+      out,
+      ref,
+      id,
+      encodeRawKind(RawCell(kind: checked.kind)),
+      '<f>${escapeFormulaText(checked.text)}</f>'
+      '${cached == null ? '' : '<v>${escapeXmlText(cached)}</v>'}',
+    );
+    _wroteFormula = true;
+  }
+
+  /// Checks [formula], in cell [ref] of [sheet], without recording
+  /// anything: its text as written (one leading `=` removed), the kind and
+  /// `<v>` text of its cached result (a string escaped against ST_Xstring
+  /// decoding and cut to Excel's cell limit), and the warning to report.
+  ///
+  /// Throws [ArgumentError] for invalid text (the checks of
+  /// `checkFormulaText`, told at the cell) or an invalid cached value.
+  _CheckedFormula _checkFormula(XlsxFormula formula, String sheet, String ref) {
     final String text;
     try {
       text = checkFormulaText(formula.text, 'text');
@@ -478,12 +789,14 @@ final class CellEncoder {
       );
     }
     final Object? cached = formula.cached;
-    String? type;
-    String? cachedXml;
-    XlsxWarningCode? warning;
     switch (cached) {
       case null:
-        break;
+        return (
+          text: text,
+          kind: RawCellKind.number,
+          value: null,
+          warning: null,
+        );
       case String():
         if (scrubXmlText(cached).removed > 0) {
           throw ArgumentError(
@@ -492,41 +805,39 @@ final class CellEncoder {
           );
         }
         final String kept = truncateCellText(cached);
-        if (kept.length < cached.length) {
-          warning = XlsxWarningCode.textTruncated;
-        }
-        type = 'str';
-        cachedXml = '<v>${escapeXmlText(escapeXstring(kept))}</v>';
+        return (
+          text: text,
+          kind: RawCellKind.string,
+          value: escapeXstring(kept),
+          warning: kept.length < cached.length
+              ? XlsxWarningCode.textTruncated
+              : null,
+        );
       case bool():
-        type = 'b';
-        cachedXml = '<v>${cached ? 1 : 0}</v>';
+        return (
+          text: text,
+          kind: RawCellKind.boolean,
+          value: _boolText(cached),
+          warning: null,
+        );
       case num() when !cached.isFinite:
         throw _nonFinite(cached, sheet, ref);
       case num():
-        if (cached is int && _losesPrecision(cached)) {
-          warning = XlsxWarningCode.intPrecisionLost;
-        }
-        cachedXml = switch (cached) {
-          int() => '<v>${cached == 0 ? 0 : cached}</v>',
-          _ => '<v>${formatXmlDouble(cached.toDouble())}</v>',
-        };
+        return (
+          text: text,
+          kind: RawCellKind.number,
+          value: switch (cached) {
+            int() => _intText(cached),
+            _ => formatXmlDouble(cached.toDouble()),
+          },
+          warning: cached is int ? _intWarning(cached) : null,
+        );
       default:
         throw ArgumentError(
           'The cached result of the formula in cell $ref on sheet "$sheet" '
           'is a ${cached.runtimeType}; expected null, num, String or bool.',
         );
     }
-    // The style can throw; resolve it before the warning is recorded.
-    final int id = _idOf(style);
-    if (warning != null) _warnings.add(warning, sheet: sheet, cell: ref);
-    _write(
-      out,
-      ref,
-      id,
-      type,
-      '<f>${escapeFormulaText(text)}</f>${cachedXml ?? ''}',
-    );
-    _wroteFormula = true;
   }
 
   /// The layers merged, cell over row over column, reusing the result last
@@ -563,6 +874,49 @@ final class CellEncoder {
   /// merged style has none.
   int _dateIdOf(_Resolved r, XlsxNumFmt format) => r.dateIds[format] ??= _styles
       .idFor((r.style ?? const XlsxStyle()).copyWith(numFmt: format));
+
+  /// Reports [warning] for the cell [ref] of [sheet], when there is one.
+  void _report(XlsxWarningCode? warning, String sheet, String ref) {
+    if (warning != null) _warnings.add(warning, sheet: sheet, cell: ref);
+  }
+
+  /// The `<v>` text of [v]. On the web a whole double is an `int` too, so
+  /// `-0.0` arrives here and is written `0`.
+  static String _intText(int v) => '${v == 0 ? 0 : v}';
+
+  /// The serial of [v] as `<v>` text, whole days without a fraction, or
+  /// `null` outside Excel's range.
+  static String? _dateTimeSerialText(DateTime v, {required bool date1904}) {
+    final double? serial = dateTimeSerial(v, date1904: date1904);
+    if (serial == null) return null;
+    return serial == serial.truncateToDouble()
+        ? '${serial.toInt()}'
+        : '$serial';
+  }
+
+  /// The serial of [v], or `null` outside Excel's range. Throws
+  /// [ArgumentError] naming the cell when the date does not exist.
+  static int? _dateSerialOf(
+    XlsxDate v,
+    String sheet,
+    String ref, {
+    required bool date1904,
+  }) {
+    try {
+      return dateSerial(v.year, v.month, v.day, date1904: date1904);
+    } on ArgumentError {
+      throw ArgumentError(
+        'Cell $ref on sheet "$sheet" holds the date '
+        '${v.year}-${v.month}-${v.day}, which does not exist.',
+      );
+    }
+  }
+
+  ArgumentError _unsupported(Object v, String sheet, String ref) =>
+      ArgumentError(
+        'Cell $ref on sheet "$sheet" holds a ${v.runtimeType}, which is not '
+        'a supported cell value.',
+      );
 
   ArgumentError _nonFinite(num value, String sheet, String ref) =>
       ArgumentError(
@@ -626,3 +980,15 @@ final class _Resolved {
   /// The ids of [style] with a date format added, by that format.
   final Map<XlsxNumFmt, int> dateIds = <XlsxNumFmt, int>{};
 }
+
+/// Cell text after repair, and which repairs it needed.
+typedef _CleanText = ({String text, bool removed, bool truncated});
+
+/// A checked formula: its text as written, the kind and `<v>` text of its
+/// cached result, and the warning the cell reports.
+typedef _CheckedFormula = ({
+  String text,
+  RawCellKind kind,
+  String? value,
+  XlsxWarningCode? warning,
+});

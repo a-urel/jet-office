@@ -7,12 +7,39 @@ import 'package:test/test.dart';
 import 'support/workbook_builder.dart';
 import 'support/zip_builder.dart';
 
+/// Where [XlsxWorkbook] meets a hostile file that [XlsxReader] refuses.
+enum _Model {
+  /// [XlsxWorkbook.open] throws: the package skeleton or the workbook part
+  /// is hostile, a limit read from the central directory is exceeded, or an
+  /// entry does not inflate to its declared size and CRC-32 (`open` checks
+  /// every entry, where the reader checks a part when it reads it).
+  open,
+
+  /// `open` succeeds and the first sheet access throws: the hostility is in
+  /// the XML of a part the model, like the reader, parses only then (a
+  /// worksheet, the shared strings or the styles). Saving still works: the
+  /// part is copied from its bytes.
+  sheet,
+
+  /// The model opens, reads and saves the file: the hostility is in
+  /// something the model keeps opaque in W1. Only `maxMerges`: the merges
+  /// stay opaque until W2, so the model does not apply that limit; their XML
+  /// stays bounded by the size, depth and text limits.
+  accepts,
+}
+
 /// Drives the whole public surface over [bytes] (open, every sheet's rows
 /// and merges) and requires an [XlsxReadException] of [reason], whose
 /// message names [limit] when given.
+///
+/// Then opens [bytes] with [XlsxWorkbook] and requires what [model] says:
+/// an [XlsxReadException] of the same [reason] (naming [limit]) from `open`
+/// or from the first sheet's rows, or no exception; either way past `open`,
+/// the workbook saves.
 void _expectRefused(
   Uint8List bytes,
   XlsxReadFailure reason, {
+  required _Model model,
   String? limit,
   XlsxReadLimits limits = const XlsxReadLimits(),
 }) {
@@ -30,6 +57,47 @@ void _expectRefused(
   final XlsxReadException e = caught! as XlsxReadException;
   expect(e.reason, reason, reason: e.message);
   if (limit != null) expect(e.message, contains(limit));
+  _expectModel(bytes, reason, model, limit, limits);
+}
+
+void _expectModel(
+  Uint8List bytes,
+  XlsxReadFailure reason,
+  _Model model,
+  String? limit,
+  XlsxReadLimits limits,
+) {
+  void expectReason(Object? error, String where) {
+    expect(error, isA<XlsxReadException>(), reason: '$where threw $error');
+    final XlsxReadException e = error! as XlsxReadException;
+    expect(e.reason, reason, reason: '$where: ${e.message}');
+    if (limit != null) expect(e.message, contains(limit));
+  }
+
+  final XlsxWorkbook workbook;
+  try {
+    workbook = XlsxWorkbook.open(bytes, limits: limits);
+  } on Object catch (error) {
+    expect(model, _Model.open, reason: 'open threw $error');
+    expectReason(error, 'open');
+    return;
+  }
+  expect(model, isNot(_Model.open), reason: 'open did not throw');
+  Object? caught;
+  try {
+    workbook.sheets.first.rows.toList();
+  } on Object catch (error) {
+    caught = error;
+  }
+  if (model == _Model.sheet) {
+    expectReason(caught, 'the first sheet');
+  } else {
+    expect(caught, isNull, reason: 'the first sheet threw $caught');
+    for (final XlsxSheet sheet in workbook.sheets) {
+      sheet.rows.toList();
+    }
+  }
+  expect(workbook.save().bytes, isNotEmpty);
 }
 
 const String _rel =
@@ -87,6 +155,7 @@ void main() {
       _expectRefused(
         zip,
         XlsxReadFailure.limitExceeded,
+        model: _Model.open,
         limit: 'maxEntries',
         limits: const XlsxReadLimits(maxEntries: 10),
       );
@@ -101,6 +170,7 @@ void main() {
       _expectRefused(
         zip,
         XlsxReadFailure.limitExceeded,
+        model: _Model.open,
         limit: 'maxEntryBytes',
       );
     });
@@ -120,6 +190,7 @@ void main() {
       _expectRefused(
         zip,
         XlsxReadFailure.limitExceeded,
+        model: _Model.open,
         limit: 'maxTotalBytes',
         limits: const XlsxReadLimits(maxTotalBytes: 2500),
       );
@@ -136,6 +207,7 @@ void main() {
       _expectRefused(
         zip,
         XlsxReadFailure.limitExceeded,
+        model: _Model.open,
         limit: 'maxCompressionRatio',
         limits: const XlsxReadLimits(maxCompressionRatio: 100),
       );
@@ -148,6 +220,7 @@ void main() {
       _expectRefused(
         zip,
         XlsxReadFailure.limitExceeded,
+        model: _Model.sheet,
         limit: 'maxSharedStrings',
         limits: const XlsxReadLimits(maxSharedStrings: 5),
       );
@@ -164,7 +237,12 @@ void main() {
           },
         ),
       );
-      _expectRefused(zip, XlsxReadFailure.limitExceeded, limit: 'maxDepth');
+      _expectRefused(
+        zip,
+        XlsxReadFailure.limitExceeded,
+        model: _Model.sheet,
+        limit: 'maxDepth',
+      );
     });
 
     test('maxTextLength', () {
@@ -176,6 +254,7 @@ void main() {
           'S': worksheet('<row r="1"><c r="A1" t="str"><v>$long</v></c></row>'),
         }),
         XlsxReadFailure.limitExceeded,
+        model: _Model.sheet,
         limit: 'maxTextLength',
         limits: limits,
       );
@@ -185,6 +264,7 @@ void main() {
           'S': worksheet('<row r="1"><c r="A1"><f>$long</f><v>1</v></c></row>'),
         }),
         XlsxReadFailure.limitExceeded,
+        model: _Model.sheet,
         limit: 'maxTextLength',
         limits: limits,
       );
@@ -194,6 +274,7 @@ void main() {
           'S': worksheet('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
         }, sharedStrings: '<sst xmlns="$mainNs"><si><t>$long</t></si></sst>'),
         XlsxReadFailure.limitExceeded,
+        model: _Model.sheet,
         limit: 'maxTextLength',
         limits: limits,
       );
@@ -210,6 +291,7 @@ void main() {
           ),
         ),
         XlsxReadFailure.limitExceeded,
+        model: _Model.sheet,
         limit: 'maxTextLength',
         limits: limits,
       );
@@ -222,6 +304,7 @@ void main() {
       _expectRefused(
         zip,
         XlsxReadFailure.limitExceeded,
+        model: _Model.open,
         limit: 'maxSheets',
         limits: const XlsxReadLimits(maxSheets: 5),
       );
@@ -234,12 +317,16 @@ void main() {
       _expectRefused(
         zip,
         XlsxReadFailure.limitExceeded,
+        model: _Model.sheet,
         limit: 'maxCellFormats',
         limits: const XlsxReadLimits(maxCellFormats: 5),
       );
     });
 
     test('maxMerges', () {
+      // The reader refuses it; the workbook model in W1 keeps the merges
+      // opaque and so does not apply maxMerges (W2 types them): it opens,
+      // reads and saves the file (_Model.accepts).
       final Uint8List zip = buildWorkbook(<String, String?>{
         'S':
             '<worksheet xmlns="$mainNs"><sheetData/><mergeCells>'
@@ -248,6 +335,7 @@ void main() {
       _expectRefused(
         zip,
         XlsxReadFailure.limitExceeded,
+        model: _Model.accepts,
         limit: 'maxMerges',
         limits: const XlsxReadLimits(maxMerges: 5),
       );
@@ -262,7 +350,7 @@ void main() {
         1000,
       );
       final Stopwatch watch = Stopwatch()..start();
-      _expectRefused(zip, XlsxReadFailure.corruptZip);
+      _expectRefused(zip, XlsxReadFailure.corruptZip, model: _Model.open);
       expect(watch.elapsedMilliseconds, lessThan(2000));
     });
 
@@ -284,6 +372,7 @@ void main() {
       _expectRefused(
         Uint8List.fromList(zip)..[at + 1] = 0x5A,
         XlsxReadFailure.corruptZip,
+        model: _Model.open,
       );
     });
 
@@ -293,7 +382,11 @@ void main() {
           'xl/Workbook.xml': utf8.encode('<workbook/>'),
         },
       );
-      _expectRefused(buildZip(entries), XlsxReadFailure.corruptZip);
+      _expectRefused(
+        buildZip(entries),
+        XlsxReadFailure.corruptZip,
+        model: _Model.open,
+      );
     });
 
     test('a billion-laughs DOCTYPE in the shared strings is malformedXml', () {
@@ -307,7 +400,7 @@ void main() {
             '<!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">]>'
             '<sst xmlns="$mainNs"><si><t>&c;</t></si></sst>',
       );
-      _expectRefused(zip, XlsxReadFailure.malformedXml);
+      _expectRefused(zip, XlsxReadFailure.malformedXml, model: _Model.sheet);
     });
 
     test('a UTF-16 workbook part is malformedXml', () {
@@ -320,15 +413,15 @@ void main() {
           },
         ),
       );
-      _expectRefused(zip, XlsxReadFailure.malformedXml);
+      _expectRefused(zip, XlsxReadFailure.malformedXml, model: _Model.open);
     });
 
     test('empty and random bytes are notZip', () {
-      _expectRefused(Uint8List(0), XlsxReadFailure.notZip);
+      _expectRefused(Uint8List(0), XlsxReadFailure.notZip, model: _Model.open);
       final Uint8List random = Uint8List.fromList(
         List<int>.generate(4096, (int i) => (i * 2654435761 >> 7) & 0xFF),
       );
-      _expectRefused(random, XlsxReadFailure.notZip);
+      _expectRefused(random, XlsxReadFailure.notZip, model: _Model.open);
     });
 
     test('a truncated ZIP is corruptZip', () {
@@ -336,6 +429,7 @@ void main() {
       _expectRefused(
         Uint8List.sublistView(zip, 0, zip.length ~/ 2),
         XlsxReadFailure.corruptZip,
+        model: _Model.open,
       );
     });
 
@@ -348,6 +442,7 @@ void main() {
           ...List<int>.filled(100, 0),
         ]),
         XlsxReadFailure.encrypted,
+        model: _Model.open,
       );
     });
 
@@ -359,6 +454,7 @@ void main() {
           ...utf8.encode('Workbook'),
         ]),
         XlsxReadFailure.legacyXls,
+        model: _Model.open,
       );
     });
 
@@ -374,7 +470,11 @@ void main() {
           },
         ),
       );
-      _expectRefused(zip, XlsxReadFailure.unsupportedFormat);
+      _expectRefused(
+        zip,
+        XlsxReadFailure.unsupportedFormat,
+        model: _Model.open,
+      );
     });
 
     test('an .xlsb content type is unsupportedFormat', () {
@@ -390,7 +490,11 @@ void main() {
           },
         ),
       );
-      _expectRefused(zip, XlsxReadFailure.unsupportedFormat);
+      _expectRefused(
+        zip,
+        XlsxReadFailure.unsupportedFormat,
+        model: _Model.open,
+      );
     });
 
     test('a package without a workbook is missingWorkbook', () {
@@ -403,6 +507,7 @@ void main() {
           'docs/readme.txt': utf8.encode('hi'),
         }),
         XlsxReadFailure.missingWorkbook,
+        model: _Model.open,
       );
     });
   });

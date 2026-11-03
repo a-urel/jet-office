@@ -1,12 +1,16 @@
 /// The `[Content_Types].xml` part of a package.
 ///
 /// Ported from quds_office_engine `lib/src/opc/content_types.dart` at commit 15c5d29.
-/// Ported: `ContentTypes.setDefault`, `setOverride` and `toXml`, as the write
-/// side only (no parsing, no lookup). What changed: the methods are named
-/// [ContentTypes.addDefault] and [ContentTypes.addOverride], and the part is
-/// written to an `XmlWriter`.
+/// Ported: `ContentTypes.setDefault`, `setOverride` and `toXml`. What
+/// changed: the methods are named [ContentTypes.addDefault] and
+/// [ContentTypes.addOverride], and the part is written to an `XmlWriter`.
+/// New, not from Quds: the read side ([ContentTypes.parse], [ContentTypes.typeOf],
+/// [ContentTypes.overrideNames], [ContentTypes.removeOverride],
+/// [ContentTypes.replaceOverride]), which keeps every
+/// default and override of a file, known or not.
 library;
 
+import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'ooxml.dart';
 
@@ -19,6 +23,75 @@ import 'ooxml.dart';
 /// Output is deterministic: defaults are sorted by extension and overrides by
 /// part name (plain string order), whatever the order they were added in.
 final class ContentTypes {
+  /// An empty collection, for writing a new package.
+  ContentTypes();
+
+  /// Reads a `[Content_Types].xml` part from [reader], keeping every default
+  /// and override.
+  ///
+  /// Entries without their name or type attribute are skipped. Part names
+  /// are normalized to an absolute name with `/` separators. When a file
+  /// repeats an extension or a part name, the last entry wins, as it did in
+  /// the reader this replaces. Throws what [reader] throws.
+  factory ContentTypes.parse(XmlPullReader reader) {
+    final ContentTypes types = ContentTypes();
+    while (reader.next()) {
+      if (reader.eventType != XmlEventType.startElement) continue;
+      final String? type = reader.getAttribute('ContentType');
+      if (type == null) continue;
+      if (reader.localName == 'Default') {
+        final String? ext = reader.getAttribute('Extension');
+        if (ext != null) {
+          types._defaults[ext.toLowerCase()] = (key: ext, type: type);
+        }
+      } else if (reader.localName == 'Override') {
+        final String? part = reader.getAttribute('PartName');
+        if (part != null) {
+          final String name = absolutePartName(part);
+          types._overrides[name.toLowerCase()] = (key: name, type: type);
+        }
+      }
+    }
+    return types;
+  }
+
+  /// [name] as an absolute part name: `\` read as `/`, exactly one leading
+  /// `/`.
+  static String absolutePartName(String name) =>
+      '/${name.replaceAll(r'\', '/').replaceFirst(RegExp('^/+'), '')}';
+
+  /// The content type of the part named [partName] (matched without regard
+  /// to case or slash direction): its override, else the default for its
+  /// extension, else `null`.
+  String? typeOf(String partName) {
+    final String key = absolutePartName(partName).toLowerCase();
+    final override = _overrides[key];
+    if (override != null) return override.type;
+    final int dot = key.lastIndexOf('.');
+    if (dot < 0 || dot == key.length - 1) return null;
+    return _defaults[key.substring(dot + 1)]?.type;
+  }
+
+  /// The lower-cased absolute part names that have an override, in the order
+  /// they were added or read.
+  Iterable<String> get overrideNames => _overrides.keys;
+
+  /// Removes the override of [partName], if it has one.
+  void removeOverride(String partName) {
+    _overrides.remove(absolutePartName(partName).toLowerCase());
+  }
+
+  /// Sets the override of [partName] to [type], replacing any other.
+  ///
+  /// Throws [ArgumentError] when [partName] is empty.
+  void replaceOverride(String partName, String type) {
+    if (partName.isEmpty) {
+      throw ArgumentError.value(partName, 'partName', 'Must not be empty.');
+    }
+    final String name = absolutePartName(partName);
+    _overrides[name.toLowerCase()] = (key: name, type: type);
+  }
+
   // Lower-cased key to the first-given spelling and its type.
   final Map<String, ({String key, String type})> _defaults =
       <String, ({String key, String type})>{};

@@ -54,6 +54,17 @@ enum XlsxWarningCode {
   /// A date was written with a number format that does not display dates.
   dateInNonDateFormat,
 
+  /// Editing: a table's header cell was set, so its column was renamed to
+  /// the new text, as Excel requires. Formulas that refer to the column by
+  /// its old name are not updated.
+  tableColumnRenamed,
+
+  /// Editing: the text set on a table's header cell was changed, because a
+  /// table's column names must be unique (ignoring case) and not empty:
+  /// a number was appended, or an empty header became `ColumnN`, as Excel
+  /// does.
+  tableHeaderAdjusted,
+
   /// Reading: a sheet is listed in the workbook but its part is missing from
   /// the package. The sheet is still listed; its rows are empty. One warning
   /// per sheet, no cell.

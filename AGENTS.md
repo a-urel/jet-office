@@ -5,9 +5,10 @@ DOCX files. It has no editors, no rendering and no PDF. It is ported from
 `quds_office_engine` (MIT); see `docs/decisions/0001`, `0002`, `0003`,
 `0004` (which supersedes part of `0003`), `0005` (which supersedes ruling
 R10 in `docs/xlsx-writer.md`), `0006` (ZIP bytes may differ by platform),
-`0007` (phase 2: a fast reader for import; files are untrusted input) and
-`0008` (a number format engine that shows values as Excel for Mac does)
-before any design change.
+`0007` (phase 2: a fast reader for import; files are untrusted input),
+`0008` (a number format engine that shows values as Excel for Mac does) and
+`0009` (phase 3: a workbook model that opens, generates, edits and saves
+without loss; supersedes part of `0002`) before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -49,6 +50,12 @@ mkdir -p build/resaved
 LC_ALL=C.UTF-8 soffice --headless --convert-to 'xlsx:Calc MS Excel 2007 XML' \
   --outdir build/resaved build/fixtures/*.xlsx
 dart run tool/compare_resaved.dart build/fixtures build/resaved
+dart run tool/round_trip_model.dart build/fixtures build/model
+dart run tool/round_trip_model.dart build/resaved build/model-resaved
+dotnet run --project tool/ooxml_validate -- build/model
+dotnet run --project tool/ooxml_validate -- build/model-resaved
+dart run tool/edit_model.dart build/fixtures build/model-edited
+dotnet run --project tool/ooxml_validate -- build/model-edited
 dart run tool/write_format_oracle.dart build/format_oracle
 LC_ALL=C.UTF-8 soffice --headless \
   --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,true,false,false,1' \
@@ -60,8 +67,12 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
   `<name>.xlsx` and its expected values as `<name>.expected.json`.
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, to prove every
-  check still fails on a bad file. The `validate` job's negative-control step writes it
-  to `build/corrupt` and requires every check to reject it.
+  check still fails on a bad file. The `validate` job's negative-control step
+  writes it to `build/corrupt` and requires every check to reject it, except
+  the model round trip (`tool/round_trip_model.dart`), which passes on it:
+  the model keeps the file's stray content faithfully, so the Open XML SDK
+  must reject the model's output instead, and the round trip must reject a
+  truncated copy.
 - `tool/write_fixtures.dart` imports test helpers that use `package:archive`.
   That is allowed: the archive rule covers `lib/` only.
 - `tool/ooxml_validate` validates every `.xlsx` with the Open XML SDK against
@@ -76,6 +87,25 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
   `tool/src/read_compare.dart` names it with a reason. If a LibreOffice
   instance is already running, add `-env:UserInstallation=file:///<dir>` to
   the `soffice` call.
+- `tool/round_trip_model.dart` opens every `.xlsx` of a directory with
+  `XlsxWorkbook`, loads all sheets, saves to the second directory and
+  prints each `comparePackages` difference (with `ignoreBookkeeping`:
+  the model recomputes `dimension` and `spans`) as `<file>: <line>`; it
+  exits 1 on any difference or error, 2 on unusable arguments. CI runs it
+  on the fixtures and on LibreOffice's re-save, then validates both
+  outputs with the Open XML SDK. The model keeps what it does not
+  understand, so the `--corrupt` workbook round-trips (exit 0) and the
+  SDK rejects the output; a truncated copy is the round trip's own
+  negative control.
+- `tool/edit_model.dart` opens every `.xlsx` of a directory with
+  `XlsxWorkbook`, sets a `DateTime`, an `XlsxDate`, a formula and a string
+  in the row after the first sheet's last row, adds a sheet, saves to the
+  second directory, and checks the edits read back with `XlsxReader`; it
+  also writes the generated workbook of `tool/write_model_sample.dart`
+  there. It prints each problem as `<file>: <problem>` and exits 1 on any,
+  2 on unusable arguments. CI runs it on the fixtures and validates the
+  output with the Open XML SDK, so the model's edited and generated files
+  are validated, not only its unchanged round trips.
 - `tool/compare_format_libreoffice.dart` compares the number formatter with
   LibreOffice's text "as shown" of the oracle cases
   (`test/fixtures/owner/number_format/`), exported from the workbooks
@@ -98,27 +128,32 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
   `dart run tool/warning_messages.dart > docs/warning-messages.md`.
   `test/tool/warning_messages_test.dart` fails when the file is stale.
 - Neither is Excel. The owner opens each writer milestone's fixtures in Excel
-  and records the result in `docs/excel-checks.md`. Reader milestones (phase
-  2, R1 to R4) have no such check: Excel produces their input, and the owner
-  supplies Excel and Google Sheets files instead (`0007`). Those files go in
-  `test/fixtures/owner/`, listed in its `manifest.json`; the README there
-  says which workbooks to save and how the expected values are written and
-  confirmed (`tool/draft_expected.dart` drafts them). Never edit a committed
-  owner file or its expected JSON without the owner.
+  and records the result in `docs/excel-checks.md`; so does each model milestone
+  (W1 to W6, decision 0009): its round-tripped and generated workbooks, and the
+  owner's own files opened, edited and saved. Reader milestones (phase 2, R1 to
+  R4) have no such check: Excel produces their input, and the owner supplies
+  Excel and Google Sheets files instead (`0007`). Those files go in
+  `test/fixtures/owner/`, listed in its `manifest.json`; the README there says
+  which workbooks to save and how the expected values are written and confirmed
+  (`tool/draft_expected.dart` drafts them). Never edit a committed owner file or
+  its expected JSON without the owner.
 
 ## Benchmark
 
 `benchmark/` writes 100,000 rows of 12 mixed columns with `XlsxWriter` and
-`XlsxStreamWriter` (`xlsx_benchmark_test.dart`), and reads that file back
-with `XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each
-phase and memory per byte of sheet XML). `xlsx_read_worst_case_test.dart`
-reads the largest single sheet the default limits accept (about 250 MiB of
-XML; about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file
-size and peak memory per run. `xlsx_format_benchmark_test.dart` times
-`XlsxNumberFormatter` on every cell of the read file and on 100,000
-numbers, serial dates and `DateTime`s. The quality gate does not run them;
-run them by hand on the VM and in Chrome (`dart test benchmark` runs all
-four). They record figures and fail on none (`docs/benchmark.md`):
+`XlsxStreamWriter` (`xlsx_benchmark_test.dart`), and reads that file back with
+`XlsxReader` (`xlsx_read_benchmark_test.dart`, with the time of each phase and
+memory per byte of sheet XML). `xlsx_model_benchmark_test.dart` opens that file
+with `XlsxWorkbook`, loads the sheet, reads every row, sets a cell and saves,
+timing each phase and recording what the loaded store retains, for that sheet
+and for a formula-dense one. `xlsx_read_worst_case_test.dart`
+reads the largest single sheet the default limits accept (about 250 MiB of XML;
+about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file size and
+peak memory per run. `xlsx_format_benchmark_test.dart` times
+`XlsxNumberFormatter` on every cell of the read file and on 100,000 numbers,
+serial dates and `DateTime`s. The quality gate does not run them; run them by
+hand on the VM and in Chrome (`dart test benchmark` runs all five). They record
+figures and fail on none (`docs/benchmark.md`):
 
 ```bash
 dart test benchmark
@@ -159,6 +194,9 @@ The rules are in `docs/number-format.md`.
 - **`package:archive` is reachable only from
   `lib/src/zip/archive_adapter.dart`.** Enforced by
   `test/architecture/archive_isolation_test.dart`.
+- **The OPC layer does not know XLSX.** Nothing under `lib/src/opc` imports
+  anything under `lib/src/xlsx`, so DOCX can share it (decision 0009).
+  Enforced by `test/architecture/opc_isolation_test.dart`.
 - **One cell encoder.** Only `lib/src/xlsx/cell_encoder.dart` writes `<c ` or
   `<v>` (decision 0002). Enforced by `test/architecture/cell_encoder_test.dart`.
 - **One cell decoder.** Only `lib/src/xlsx/read/cell_decoder.dart`

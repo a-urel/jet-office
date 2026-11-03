@@ -43,6 +43,7 @@ String _textOf(String body) {
 }
 
 void main() {
+  _sourcePositionTests();
   group('reading', () {
     test('reads elements, attributes and text with namespaces', () {
       final XmlPullReader r = XmlPullReader(
@@ -450,6 +451,67 @@ void main() {
       expect(inputExcerpt('a' * 33), '${'a' * 32}…');
       // A surrogate pair is never split.
       expect(inputExcerpt('${'a' * 31}😀b'), '${'a' * 31}…');
+    });
+  });
+}
+
+void _sourcePositionTests() {
+  group('source positions', () {
+    test('eventStart/eventEnd cover a start tag, an empty element and an '
+        'end tag', () {
+      const String xml = '<a><b x="1"/></a>';
+      final XmlPullReader r = XmlPullReader(xml);
+      expect(r.next(), isTrue); // <a>
+      expect((r.eventStart, r.eventEnd), (0, 3));
+      expect(r.next(), isTrue); // <b x="1"/>
+      expect(r.localName, 'b');
+      final int bStart = r.eventStart;
+      final int bEnd = r.eventEnd;
+      expect((bStart, bEnd), (3, 13));
+      expect(r.sourceText(bStart, bEnd), '<b x="1"/>');
+      expect(r.next(), isTrue); // the end of <b/>
+      expect(r.eventType, XmlEventType.endElement);
+      expect(r.sourceText(r.eventStart, r.eventEnd), '/>');
+      expect(r.next(), isTrue); // </a>
+      expect(r.sourceText(r.eventStart, r.eventEnd), '</a>');
+    });
+
+    test('positions of text, comments and a leading BOM', () {
+      final XmlPullReader r = XmlPullReader('﻿<a>hi<!--c--></a>');
+      r.next();
+      expect(r.sourceText(r.eventStart, r.eventEnd), '<a>');
+      r.next();
+      expect(r.sourceText(r.eventStart, r.eventEnd), 'hi');
+      r.next();
+      expect(r.sourceText(r.eventStart, r.eventEnd), '<!--c-->');
+    });
+
+    test('declaredNamespaces lists xmlns on the element only', () {
+      final XmlPullReader r = XmlPullReader(
+        '<r xmlns="m" xmlns:x="ux"><e xmlns:y="uy" a="1"/></r>',
+      );
+      r.next();
+      expect(r.declaredNamespaces, <String, String>{'': 'm', 'x': 'ux'});
+      r.next();
+      expect(r.declaredNamespaces, <String, String>{'y': 'uy'});
+      expect(r.namespacesInScope, <String, String>{
+        '': 'm',
+        'x': 'ux',
+        'y': 'uy',
+      });
+      r.next(); // the end of <e/>
+      expect(r.declaredNamespaces, isEmpty);
+    });
+
+    test('namespacesInScope sees an override and drops an undeclared '
+        'default', () {
+      final XmlPullReader r = XmlPullReader(
+        '<r xmlns:x="1"><e xmlns:x="2" xmlns=""/></r>',
+      );
+      r.next();
+      expect(r.namespacesInScope, <String, String>{'x': '1'});
+      r.next();
+      expect(r.namespacesInScope, <String, String>{'x': '2'});
     });
   });
 }

@@ -858,11 +858,112 @@ Left to do, in order:
 3. Optional: `erp_export.xlsx`.
 4. Add the files to `manifest.json`, run the quality gate, commit.
 
+## W1
+
+W1 is the first milestone of the workbook model (`XlsxWorkbook`, decision
+[`0009`](decisions/0009-phase-3-workbook-model.md)). The model writes files, so
+the owner opens its output in Excel as for a writer milestone. Three things to
+open.
+
+### The round-tripped fixtures
+
+Each writer fixture, opened and saved by the model with no change:
+
+```bash
+dart run tool/write_fixtures.dart build/fixtures
+dart run tool/round_trip_model.dart build/fixtures build/model
+```
+
+Open every `build/model/<name>.xlsx`. For each, check that Excel opens it
+without the repair prompt, and that it shows what the checklist above says
+for the fixture of that name (same values, formats, sheets and tab order).
+Nothing else differs from the writer's file.
+
+### A generated workbook
+
+```bash
+dart run tool/write_model_sample.dart build/model_generated
+```
+
+Open `build/model_generated/w1_generated.xlsx`. No repair prompt. Two sheets,
+`Values` and `Second`.
+
+- Row 1 of `Values`: `jet_office`, `42`, `3,14159`, `1234,5`, `DOĞRU`
+  (`TRUE`), `24.10.2026`, `24.10.2026 13:45` and `45,14159` (H1, the formula
+  `=SUM(B1:C1)`; the formula bar shows it).
+- Row 2: `jet_office`, then `replaced` (text, set over `42`), `8` (C2, set
+  three times, the last one wins), D2 empty (cleared), and E2 to G2 as in
+  row 1. H2 is `=SUM(B2:C2)` and shows `8`: the text in B2 is ignored by
+  `SUM`, whether Excel shows the stored result or recalculates.
+- `Second` A1 is `second sheet`.
+
+### Two of the owner's own files
+
+Take two Excel files the owner made (a list with a table or filters, and a
+workbook with formulas, say), different from each other. For each: open it in
+Excel, check it is as it was, then edit one cell with the model. Save this
+as `tool/edit_one_cell.dart` (do not commit it) and run
+`dart run tool/edit_one_cell.dart my.xlsx build/edited.xlsx`:
+
+```dart
+import 'dart:io';
+
+import 'package:jet_office/jet_office.dart';
+
+void main(List<String> args) {
+  final XlsxWorkbook book = XlsxWorkbook.open(File(args[0]).readAsBytesSync());
+  book.sheets.first.setCell(0, 0, 'edited by jet_office');
+  File(args[1]).writeAsBytesSync(book.save().bytes);
+}
+```
+
+Open `build/edited.xlsx` in Excel. Check:
+
+- no repair prompt;
+- the edited cell shows the new text, and nothing else changed (values,
+  formats, widths, tables, filters, validation, conditional formatting,
+  hyperlinks, notes, images);
+- a workbook with formulas recalculates on open (Excel may ask to save on
+  close; that is expected).
+
+The same two files edited in Excel itself (one cell, saved) give the
+comparison when something looks different.
+
+Result: ok, 2026-11-03 (see "Results"). The round-tripped fixtures,
+`w1_generated`, a 1904-system workbook and an unchanged round trip of a
+workbook Excel made all open without the repair prompt. The first check found
+that setting a table's header cell left the column's name, so Excel repaired
+the table; b1fa49d renames the column, and the re-check opens clean (see
+"Open issues", W1).
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
 must close it. A closed issue stays here, marked closed, with the commit that
 closed it.
+
+### Setting a table header cell leaves the column name (closed, 2026-11-03)
+
+Closed on 2026-11-03 by b1fa49d and the re-check in Excel for Mac 16.114.1
+(see "Results"): setting a header cell now renames the table's column to the
+cell's text, so `table1.xml` says `name="edited by jet_office"`, and Excel
+opens the file without the repair prompt, A1 still the header with its filter
+button. Formulas that name the column by its old name are not rewritten; that
+waits for the formula lexer of W5, and the model warns. The account below is
+what the first check found.
+
+Found in the W1 check on 2026-11-03. `w1_test.xlsx`, made in Excel for Mac
+16.114.1 with a table `A1:D6` (header `Ürün`, `Adet`, `Fiyat`, `Tutar`),
+formulas, conditional formatting, a note, a hyperlink, a merged range and a
+second sheet. Setting A1 to `edited by jet_office` with
+`XlsxSheet.setCell` and saving gives a file Excel opens with the repair
+prompt; its recovery log names `/xl/tables/table1.xml`: "Tablo". The sheet
+holds the new text, but `table1.xml` still says `tableColumn name="Ürün"`,
+and Excel requires a header cell's text to equal its column's name.
+
+The unchanged round trip of the same file and an edit of H5, outside the
+table, open without the prompt. Decision 0009 does not allow content the
+model does not type to be left wrong silently, so W1 must close this.
 
 ### Sub-second times show the wrong minute (closed, 2026-10-28)
 
@@ -1128,3 +1229,9 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | all 29 fixtures (M5 final run) | ok | Every fixture of `allFixtures()` opened once more, in order: no repair prompt on any (see "Final run"). |
 | 2026-10-28 | not checked (no Excel for Windows) | `m2_styles` row 67, `m3_properties` Status | not checked | The owner has no Excel for Windows, so reading order RTL and Status `Final` stay unchecked; "Reading order and Status not checked in Excel" stays open. |
 | 2026-10-28 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | decision 0006 (ZIP bytes by platform) | accepted | The owner accepted that the ZIP bytes differ between the VM and the web while every part's contents are identical; decision 0006 is accepted. `m5_list_plain` as written on the VM opens without a repair prompt; no Chrome-written file was opened. |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: all 29 `build/model/*.xlsx` | ok | No repair prompt on any; each as its fixture's checklist says. `tool/round_trip_model.dart` reported no difference. |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_generated` | ok | No repair prompt. `Values` and `Second`; rows 1 and 2 and `Second` A1 as the checklist says, H2 `8`. |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `format_oracle_1904.xlsx`, A1 edited | ok | No repair prompt. A1 `edited by jet_office`; still the 1904 system: row 9 `Cuma 1904-01-01`, row 10 `2030-10-29`, negative times shown. Widths and formats as before. Written by `tool/write_format_oracle.dart`, not by Excel. |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_test.xlsx` (made in Excel), unchanged round trip and H5 edited | ok | No repair prompt on either. Table, filter buttons, conditional formatting, note, hyperlink, merged A10:D10, column width and `Özet` kept; D8 `526,55`. The edit changed only H5, `spans`, the appended shared string, the dropped `calcChain` and `fullCalcOnLoad`. |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_test.xlsx`, A1 (a table header) edited | sorun | Repair prompt; the recovery log names `/xl/tables/table1.xml`. The column name stays `Ürün` (see "Open issues", W1). |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1 re-check after b1fa49d: `w1_test.xlsx`, A1 (a table header) edited | ok | No repair prompt. A1 `edited by jet_office` with its filter button; the table, conditional formatting, hyperlink, merged A10:D10 and `Özet` as before. `table1.xml` differs from the original only in `name="Ürün"`, now `name="edited by jet_office"`. |

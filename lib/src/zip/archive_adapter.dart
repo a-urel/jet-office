@@ -456,6 +456,17 @@ final class ZipReader {
     return bytes;
   }
 
+  /// Checks that every file entry inflates to its declared size with its
+  /// CRC-32, one entry at a time, keeping none of the bytes.
+  ///
+  /// Throws the [ZipReadError] that [read] throws for the first damaged
+  /// entry, in archive order.
+  void verifyEntries() {
+    for (final ZipFileHeader header in _entries.values) {
+      read(header.filename);
+    }
+  }
+
   /// [name] normalized for lookup: `\` read as `/`, no leading `/`, lower
   /// case.
   static String _key(String name) {

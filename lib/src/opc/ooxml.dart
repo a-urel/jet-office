@@ -147,6 +147,11 @@ abstract final class RelType {
   /// A table part of a worksheet.
   static const String table =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/table';
+
+  /// The calculation chain, the order in which Excel last calculated the
+  /// formula cells.
+  static const String calcChain =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain';
 }
 
 /// Content types (MIME types) of package parts.

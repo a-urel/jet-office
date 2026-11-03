@@ -225,6 +225,25 @@ void main() {
       expect(xlsb.reason, XlsxReadFailure.unsupportedFormat);
       expect(xlsb.message, contains('.xlsb'));
     });
+
+    test('metadata parts are not workbooks: missingWorkbook', () {
+      final XlsxReadException viaRel = _failure(
+        () => _package(<String, String>{
+          '_rels/.rels': _rels(<String, (String, String)>{
+            'rId1': ('$_rel/officeDocument', '[Content_Types].xml'),
+          }),
+          '[Content_Types].xml': _types(),
+        }),
+      );
+      expect(viaRel.reason, XlsxReadFailure.missingWorkbook);
+      final XlsxReadException viaOverride = _failure(
+        () => _package(<String, String>{
+          '[Content_Types].xml': _types(workbookPart: '_rels/.rels'),
+          '_rels/.rels': _rels(<String, (String, String)>{}),
+        }),
+      );
+      expect(viaOverride.reason, XlsxReadFailure.missingWorkbook);
+    });
   });
 
   group('errors', () {
