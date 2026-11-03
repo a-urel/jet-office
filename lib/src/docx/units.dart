@@ -11,6 +11,13 @@
 /// conversion are in the file's unit.
 library;
 
+/// The largest magnitude of a length in twips: 1584 points (plan Ruling 4).
+const int maxTwips = 31680;
+
+/// The largest list number (`w:numId`): nine digits, which every platform
+/// reads exactly.
+const int maxNumId = 999999999;
+
 /// The largest magnitude a conversion rounds, so a huge but finite value
 /// is a range error and not a platform-dependent rounding.
 const double _roundable = 1e12;

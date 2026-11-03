@@ -49,6 +49,8 @@ void main() {
 
   test('docDefaultsOrder matches the transitional schema', () {
     expect(docDefaultsOrder, <String>['rPrDefault', 'pPrDefault']);
+    expect(rPrDefaultOrder, <String>['rPr']);
+    expect(pPrDefaultOrder, <String>['pPr']);
   });
 
   test('lvlOrder matches the transitional schema', () {

@@ -431,11 +431,6 @@ void main() {
         _pPr(doc),
         '<w:keepLines/><w:rPr><w:b/><w:sz w:val="40"/></w:rPr>',
       );
-      // No member of the class exposes the paragraph mark's rPr.
-      expect(
-        DocxParagraphProperty.values.map((DocxParagraphProperty v) => v.name),
-        isNot(contains('rPr')),
-      );
     });
 
     test('w14 and kept children stay in place when one is set', () {
@@ -448,6 +443,28 @@ void main() {
         '<w:keepNext/><w:suppressAutoHyphens/><w14:x w14:val="1"/>'
         '<w:contextualSpacing/>',
       );
+    });
+
+    test('typed tabs and pBdr a neighbour set leaves stay byte for byte', () {
+      const String tabs =
+          '<w:tabs w14:x="1"><w:tab w:val="clear" w:pos="720"/>'
+          '<w:tab w:val="right" w:leader="dot" w:pos="9062" w14:y="2"/>'
+          '</w:tabs>';
+      const String pBdr =
+          '<w:pBdr><w:top w:val="single" w:sz="4" w:space="1" '
+          'w:color="auto" w14:z="3"/>'
+          '<w:between w:val="single" w:sz="4" w:space="1" w:color="auto"/>'
+          '<w:bar w:val="single" w:sz="4" w:space="1" w:color="auto"/>'
+          '</w:pBdr>';
+      final DocxDocument doc = _open('$pBdr$tabs');
+      final DocxParagraphProperties p = _paragraph(doc).properties;
+      expect(p.tabs, hasLength(2));
+      expect(p.tabs!.first.alignment, DocxTabAlignment.clear);
+      expect(p.borders!.between, isNotNull);
+      expect(p.borders!.bar, isNotNull);
+      p.keepWithNext = true;
+      p.shading = const DocxShading(pattern: DocxShadingPattern.clear);
+      expect(_pPr(doc), '<w:keepNext/>$pBdr<w:shd w:val="clear"/>$tabs');
     });
 
     test('jc start reads start, jc lowKashida reads null and saves '

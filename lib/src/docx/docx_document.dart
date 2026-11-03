@@ -30,6 +30,8 @@ import 'dart:collection';
 import 'dart:typed_data';
 
 import '../opc/change_log.dart';
+import '../opc/ooxml.dart' show ContentType, RelType;
+import '../xml/xml_pull_reader.dart';
 import '../zip/archive_adapter.dart';
 import 'blank_document.dart';
 import 'document_part.dart';
@@ -37,8 +39,11 @@ import 'docx_package.dart';
 import 'model/blocks.dart';
 import 'model/primitives.dart' as primitives;
 import 'model/primitives.dart' show DocxEdits;
+import 'model/styles.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
+import 'related_part.dart';
+import 'styles_part.dart';
 import 'warnings.dart';
 
 /// The edits of [document]: its change log and the sink of its body's
@@ -51,6 +56,9 @@ ChangeLog changeLogOf(DocxDocument document) => document._edits.log;
 
 /// Whether the body of [document] has been loaded, for tests.
 bool isBodyLoaded(DocxDocument document) => document._body != null;
+
+/// Whether the styles of [document] have been loaded, for tests.
+bool isStylesLoaded(DocxDocument document) => document._styles != null;
 
 /// A Word document held in memory: opened from a DOCX file, read and
 /// changed block by block, and saved.
@@ -108,6 +116,11 @@ final class DocxDocument {
   DocumentPart? _part;
   DocxBody? _body;
 
+  /// The styles part and where it is, once the styles are loaded.
+  StylesPart? _stylesPart;
+  RelatedPart? _stylesSlot;
+  DocxStyles? _styles;
+
   List<DocxWarning> _warnings;
 
   /// The document's body, the content of `w:body`.
@@ -118,6 +131,18 @@ final class DocxDocument {
   /// [DocxReadLimits.maxTextLength]); nothing is loaded then, so the next
   /// access throws again and a save copies the part as it was.
   DocxBody get body => _body ?? _loadBody();
+
+  /// The document's styles and document defaults, from the styles part.
+  ///
+  /// The part, found through the main part's relationship wherever it
+  /// lives, loads on the first access; until then a save copies it byte for
+  /// byte. A document without one has empty styles, and gains the part at
+  /// save once a style or a default is set in it. Throws a
+  /// [DocxReadException] naming the part when it cannot be read (malformed
+  /// XML, a root that is not `w:styles`, or a damaged relationships part of
+  /// the main part); nothing is loaded then, so the next access throws
+  /// again and a save copies the part as it was.
+  DocxStyles get styles => _styles ?? _loadStyles();
 
   /// What was repaired while opening and loading the document, followed by
   /// what the last [save] or [saveTo] repaired, in first-occurrence order.
@@ -157,7 +182,7 @@ final class DocxDocument {
     // reported as the body's failure; a relationship whose target is
     // missing (a header, say) is kept as written.
     package.guard(
-      _relationshipsPartOf(main),
+      relationshipsPartOf(main),
       () => package.package.relationshipsOf(main),
     );
     final DocumentPart part = package.guard(
@@ -176,22 +201,36 @@ final class DocxDocument {
     return _body = body;
   }
 
+  DocxStyles _loadStyles() {
+    final RelatedPart slot = RelatedPart.find(
+      _package,
+      source: _package.mainPart,
+      relationshipType: RelType.styles,
+      defaultName: '/word/styles.xml',
+      contentType: ContentType.wmlStyles,
+    );
+    final StylesPart part = slot.exists
+        ? slot.load((XmlPullReader r) => StylesPart.read(r, slot.name, _edits))
+        : StylesPart.empty(_edits);
+    _stylesSlot = slot;
+    _stylesPart = part;
+    return _styles = part.styles;
+  }
+
   void _write(ZipWriter zip) {
     final DocxPackage package = _package;
+    // A styles part the document lacked is added once it holds something
+    // (plan Ruling 7); after that it is a part like the others.
+    final StylesPart? styles = _stylesPart;
+    if (styles != null && styles.holdsSomething) {
+      _stylesSlot!.create(styles);
+    }
     package.guard(package.mainPart, () => package.package.writeTo(zip));
     final DocumentPart? part = _part;
     _warnings = List<DocxWarning>.unmodifiable(<DocxWarning>[
       ..._loadWarnings.warnings,
       if (part != null) ...part.encodeWarnings.warnings,
     ]);
-  }
-
-  /// The name of the relationships part of [part], such as
-  /// `/word/_rels/document.xml.rels`.
-  static String _relationshipsPartOf(String part) {
-    final int slash = part.lastIndexOf('/');
-    return '${part.substring(0, slash + 1)}_rels/'
-        '${part.substring(slash + 1)}.rels';
   }
 }
 

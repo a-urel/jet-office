@@ -4,17 +4,21 @@
 /// A task that adds a `ContainerSchema` adds one entry to
 /// [containerSchemaCases]: the container's local name, the schema, and one
 /// sample value for each of its codecs (any value the codec accepts and
-/// writes). Nested schemas are entries of their own as well.
+/// writes). Nested schemas are entries of their own as well; a schema with
+/// nested containers is also checked with replacements written in their
+/// place.
 library;
 
 import 'package:jet_office/src/docx/model/formatting.dart';
 import 'package:jet_office/src/docx/paragraph_property_codecs.dart';
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/run_property_codecs.dart';
+import 'package:jet_office/src/docx/style_schemas.dart';
 
 /// One container schema under test.
 typedef ContainerSchemaCase = ({
-  /// The container's local name, such as `pPr`.
+  /// The container's local name, such as `pPr`, followed by a note in
+  /// parentheses when two schemas share it (`pPr (general)`).
   String name,
 
   /// The schema.
@@ -79,4 +83,38 @@ final List<ContainerSchemaCase> containerSchemaCases = <ContainerSchemaCase>[
       'lang': 'tr-TR',
     },
   ),
+  (
+    name: 'pPr (general)',
+    schema: paragraphPropertiesGeneralSchema,
+    samples: <String, Object>{
+      'pStyle': 'Title',
+      'keepNext': true,
+      'keepLines': true,
+      'pageBreakBefore': true,
+      'widowControl': true,
+      'numPr': DocxNumberingRef(1, level: 1),
+      'pBdr': const DocxParagraphBorders(),
+      'shd': const DocxShading(pattern: DocxShadingPattern.clear),
+      'tabs': <DocxTabStop>[DocxTabStop(10)],
+      'spacing': DocxSpacing(afterPt: 8),
+      'ind': DocxIndentation(leftPt: 36),
+      'jc': DocxAlignment.center,
+      'outlineLvl': 1,
+    },
+  ),
+  (
+    name: 'style',
+    schema: styleSchema,
+    samples: <String, Object>{
+      'name': 'Note',
+      'basedOn': 'Normal',
+      'next': 'Normal',
+      'link': 'NoteChar',
+      'uiPriority': 5,
+      'qFormat': true,
+    },
+  ),
+  (name: 'docDefaults', schema: docDefaultsSchema, samples: <String, Object>{}),
+  (name: 'rPrDefault', schema: rPrDefaultSchema, samples: <String, Object>{}),
+  (name: 'pPrDefault', schema: pPrDefaultSchema, samples: <String, Object>{}),
 ];

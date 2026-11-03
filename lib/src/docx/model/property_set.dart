@@ -16,6 +16,7 @@
 /// property a typed getter and setter that checks the value.
 library;
 
+import '../../opc/opaque_xml.dart' show KeptAttribute;
 import '../../xml/xml_writer.dart';
 import '../properties.dart';
 import 'edit_sink.dart';
@@ -122,13 +123,15 @@ abstract base class PropertySet implements NestedProperties {
 
   /// Writes the properties as [qualifiedName]: [source]'s children merged
   /// with the values set, in [schema]'s order ([PropertyContainer.writeTo]
-  /// has the rules).
+  /// has the rules). [attributes], when given, are written in place of
+  /// [source]'s own.
   @override
   void writeTo(
     XmlWriter w,
     String qualifiedName, {
     String prefix = 'w',
     Map<String, String> declaredAbove = const <String, String>{},
+    List<KeptAttribute>? attributes,
   }) => source.writeTo(
     w,
     qualifiedName,
@@ -137,6 +140,7 @@ abstract base class PropertySet implements NestedProperties {
     nested: nested,
     prefix: prefix,
     declaredAbove: declaredAbove,
+    attributes: attributes,
   );
 
   /// Whether [writeTo] would write an empty element the file need not

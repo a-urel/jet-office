@@ -167,6 +167,14 @@ const List<String> styleOrder = <String>[
 /// The children of `w:docDefaults` (`CT_DocDefaults`, §17.7.5.1), in order.
 const List<String> docDefaultsOrder = <String>['rPrDefault', 'pPrDefault'];
 
+/// The children of `w:rPrDefault` (`CT_RPrDefault`, §17.7.5.3): the run
+/// properties default.
+const List<String> rPrDefaultOrder = <String>['rPr'];
+
+/// The children of `w:pPrDefault` (`CT_PPrDefault`, §17.7.5.2): the
+/// paragraph properties default.
+const List<String> pPrDefaultOrder = <String>['pPr'];
+
 /// The children of a `w:lvl` (`CT_Lvl`, §17.9.6), in order.
 const List<String> lvlOrder = <String>[
   'start',

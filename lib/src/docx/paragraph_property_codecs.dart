@@ -28,12 +28,6 @@ import 'value_codecs.dart';
 
 bool _plain(PropertyElement e) => e.children.isEmpty && !e.hasText;
 
-/// The largest magnitude of a length in twips: 1584 points.
-const int _maxTwips = 31680;
-
-/// The largest `w:numId`, nine digits.
-const int _maxNumId = 999999999;
-
 final Map<String, DocxAlignment> _alignments = <String, DocxAlignment>{
   for (final DocxAlignment a in DocxAlignment.values)
     if (a != DocxAlignment.justify) a.name: a,
@@ -117,7 +111,7 @@ final class IndentationCodec extends PropertyCodec<DocxIndentation> {
       if (raw == null) {
         return null;
       }
-      final int? n = parseDecimal(raw, min: min, max: _maxTwips);
+      final int? n = parseDecimal(raw, min: min, max: maxTwips);
       if (n == null) {
         bad = true;
         return null;
@@ -125,8 +119,8 @@ final class IndentationCodec extends PropertyCodec<DocxIndentation> {
       return ptOfTwips(n);
     }
 
-    final double? left = twips('left', -_maxTwips);
-    final double? right = twips('right', -_maxTwips);
+    final double? left = twips('left', -maxTwips);
+    final double? right = twips('right', -maxTwips);
     final double? firstLine = twips('firstLine', 0);
     final double? hanging = twips('hanging', 0);
     if (bad || (firstLine != null && hanging != null)) {
@@ -152,7 +146,7 @@ final class IndentationCodec extends PropertyCodec<DocxIndentation> {
       if (pt != null) {
         w.attribute(
           '$prefix:$name',
-          '${twipsOf(pt, name, min: -_maxTwips, max: _maxTwips)}',
+          '${twipsOf(pt, name, min: -maxTwips, max: maxTwips)}',
         );
       }
     }
@@ -196,7 +190,7 @@ final class SpacingCodec extends PropertyCodec<DocxSpacing> {
       if (raw == null) {
         return null;
       }
-      final int? n = parseDecimal(raw, min: 0, max: _maxTwips);
+      final int? n = parseDecimal(raw, min: 0, max: maxTwips);
       if (n == null) {
         bad = true;
         return null;
@@ -222,7 +216,7 @@ final class SpacingCodec extends PropertyCodec<DocxSpacing> {
     if (lineRaw == null) {
       bad = bad || rule != null;
     } else {
-      final int? n = parseDecimal(lineRaw, min: 0, max: _maxTwips);
+      final int? n = parseDecimal(lineRaw, min: 0, max: maxTwips);
       if (n == null) {
         bad = true;
       } else {
@@ -262,7 +256,7 @@ final class SpacingCodec extends PropertyCodec<DocxSpacing> {
     PropertyElement? asRead,
   ) {
     w.start('$prefix:$localName');
-    String twips(double pt) => '${twipsOf(pt, 'pt', min: 0, max: _maxTwips)}';
+    String twips(double pt) => '${twipsOf(pt, 'pt', min: 0, max: maxTwips)}';
     final double? before = value.beforePt;
     if (before != null) {
       w.attribute('$prefix:before', twips(before));
@@ -283,7 +277,7 @@ final class SpacingCodec extends PropertyCodec<DocxSpacing> {
         case DocxLineRule.auto:
           w.attribute(
             '$prefix:line',
-            '${lineUnitsOf(line.value, 'lines', min: 1, max: _maxTwips)}',
+            '${lineUnitsOf(line.value, 'lines', min: 1, max: maxTwips)}',
           );
           w.attribute('$prefix:lineRule', 'auto');
         case DocxLineRule.exact:
@@ -428,8 +422,8 @@ final class TabsCodec extends PropertyCodec<List<DocxTabStop>> {
           : parseEnum(leaderRaw, _tabLeaders);
       final int? pos = parseDecimal(
         child.w('pos'),
-        min: -_maxTwips,
-        max: _maxTwips,
+        min: -maxTwips,
+        max: maxTwips,
       );
       if (alignment == null || leader == null || pos == null) {
         return null;
@@ -455,10 +449,13 @@ final class TabsCodec extends PropertyCodec<List<DocxTabStop>> {
       if (stop.leader != DocxTabLeader.none) {
         w.attribute('$prefix:leader', stop.leader.name);
       }
-      w.attribute(
-        '$prefix:pos',
-        '${twipsOf(stop.positionPt, 'positionPt', min: -_maxTwips, max: _maxTwips)}',
+      final int pos = twipsOf(
+        stop.positionPt,
+        'positionPt',
+        min: -maxTwips,
+        max: maxTwips,
       );
+      w.attribute('$prefix:pos', '$pos');
       w.end();
     }
     w.end();
@@ -504,7 +501,7 @@ final class NumberingCodec extends PropertyCodec<DocxNumberingRef> {
           if (numId != null) {
             return null;
           }
-          numId = parseDecimal(child.w('val'), min: 0, max: _maxNumId);
+          numId = parseDecimal(child.w('val'), min: 0, max: maxNumId);
           if (numId == null) {
             return null;
           }
@@ -534,23 +531,37 @@ final class NumberingCodec extends PropertyCodec<DocxNumberingRef> {
   }
 }
 
+/// The codecs of the thirteen properties of `DocxParagraphProperties`, by
+/// local name; every name is in [pPrOrder] and [pPrGeneralOrder].
+const Map<String, PropertyCodec<Object>> _paragraphCodecs =
+    <String, PropertyCodec<Object>>{
+      'pStyle': StyleIdCodec('pStyle'),
+      'keepNext': OnOffCodec('keepNext'),
+      'keepLines': OnOffCodec('keepLines'),
+      'pageBreakBefore': OnOffCodec('pageBreakBefore'),
+      'widowControl': OnOffCodec('widowControl'),
+      'numPr': NumberingCodec(),
+      'pBdr': ParagraphBordersCodec(),
+      'shd': ShadingCodec(),
+      'tabs': TabsCodec(),
+      'spacing': SpacingCodec(),
+      'ind': IndentationCodec(),
+      'jc': AlignmentCodec(),
+      'outlineLvl': IntValCodec('outlineLvl', 0, 9),
+    };
+
 /// The schema of a paragraph's `w:pPr`: [pPrOrder], typing the thirteen
 /// properties of `DocxParagraphProperties`.
 const ContainerSchema paragraphPropertiesSchema = ContainerSchema(
   pPrOrder,
-  codecs: <String, PropertyCodec<Object>>{
-    'pStyle': StyleIdCodec('pStyle'),
-    'keepNext': OnOffCodec('keepNext'),
-    'keepLines': OnOffCodec('keepLines'),
-    'pageBreakBefore': OnOffCodec('pageBreakBefore'),
-    'widowControl': OnOffCodec('widowControl'),
-    'numPr': NumberingCodec(),
-    'pBdr': ParagraphBordersCodec(),
-    'shd': ShadingCodec(),
-    'tabs': TabsCodec(),
-    'spacing': SpacingCodec(),
-    'ind': IndentationCodec(),
-    'jc': AlignmentCodec(),
-    'outlineLvl': IntValCodec('outlineLvl', 0, 9),
-  },
+  codecs: _paragraphCodecs,
+);
+
+/// The schema of the `w:pPr` of a style, a numbering level or the
+/// paragraph-properties default (`CT_PPrGeneral`): [pPrGeneralOrder], typing
+/// the same properties as [paragraphPropertiesSchema]. It has no paragraph
+/// mark `w:rPr` and no `w:sectPr`.
+const ContainerSchema paragraphPropertiesGeneralSchema = ContainerSchema(
+  pPrGeneralOrder,
+  codecs: _paragraphCodecs,
 );

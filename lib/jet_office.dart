@@ -102,6 +102,13 @@
 /// it is set and reported at save as a [DocxWarning]. The visible text of an
 /// opaque inline holding `mc:AlternateContent` or a text box is empty.
 ///
+/// [DocxDocument.styles] gives the document's [DocxStyles] (milestone D2):
+/// the [DocxDocumentDefaults] and each [DocxStyle] of the styles part, by
+/// id or by name, whose name, links and [DocxParagraphProperties] and
+/// [DocxRunProperties] are set like a paragraph's; [DocxStyles.add] adds a
+/// custom style. The styles part loads on first access, and a document
+/// without one gains it at save once it holds something.
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
@@ -112,6 +119,7 @@
 /// @docImport 'src/docx/model/paragraph_properties.dart';
 /// @docImport 'src/docx/model/run_content.dart';
 /// @docImport 'src/docx/model/run_properties.dart';
+/// @docImport 'src/docx/model/styles.dart';
 /// @docImport 'src/docx/read_exception.dart';
 /// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
@@ -177,6 +185,8 @@ export 'src/docx/model/run_content.dart'
         DocxText;
 export 'src/docx/model/run_properties.dart'
     show DocxRunProperties, DocxRunProperty;
+export 'src/docx/model/styles.dart'
+    show DocxDocumentDefaults, DocxStyle, DocxStyleType, DocxStyles;
 export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
 export 'src/docx/read_limits.dart' show DocxReadLimits;
 export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;

@@ -54,6 +54,21 @@ void main() {
     }
   });
 
+  test('every owner file round-trips with its styles loaded', () {
+    for (final OwnerDocx entry in manifest) {
+      final Uint8List input = File('$_dir/${entry.file}').readAsBytesSync();
+      final DocxDocument doc = DocxDocument.open(input);
+      expect(doc.styles.styles, isNotEmpty, reason: entry.file);
+      expect(doc.styles.byName('Normal'), isNotNull, reason: entry.file);
+      final List<String> differences = comparePackages(input, doc.save().bytes);
+      expect(
+        differences,
+        isEmpty,
+        reason: '${entry.file}\n${differences.join('\n')}',
+      );
+    }
+  });
+
   test('every owner file reads its confirmed text', () {
     for (final OwnerDocx entry in manifest) {
       final String stem = entry.file.substring(0, entry.file.length - 5);

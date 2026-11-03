@@ -86,8 +86,9 @@ enum DocxRunProperty {
 
 /// The properties of a run (`w:rPr`).
 ///
-/// Get one from `DocxRun.properties`; it is the same object every time. Each
-/// set is one change of the document's change log.
+/// Get one from `DocxRun.properties`, `DocxStyle.runProperties` or
+/// `DocxDocumentDefaults.runProperties`; it is the same object every time.
+/// Each set is one change of the document's change log.
 final class DocxRunProperties {
   DocxRunProperties._(PropertyContainer source, DocxEditSink Function() sink)
     : _set = _RunSet(source, sink);

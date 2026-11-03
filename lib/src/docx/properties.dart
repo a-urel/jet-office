@@ -317,6 +317,10 @@ final class PropertyContainer {
   /// WordprocessingML is used, or `w1` (`w2`, …) is declared on the
   /// container. A kept child or attribute declares the bindings it needs
   /// and lacks.
+  ///
+  /// [attributes], when given, are written in place of the container's own
+  /// [PropertyContainer.attributes]: how a new `w:style` gets its
+  /// `w:type` and `w:styleId` with the prefix in use.
   void writeTo(
     XmlWriter w,
     String qualifiedName,
@@ -325,6 +329,7 @@ final class PropertyContainer {
     Map<String, NestedProperties> nested = const <String, NestedProperties>{},
     String prefix = 'w',
     Map<String, String> declaredAbove = const <String, String>{},
+    List<KeptAttribute>? attributes,
   }) {
     overrides.forEach((String name, Object? value) {
       checkSettable(schema, name, value, qualifiedName);
@@ -410,7 +415,7 @@ final class PropertyContainer {
     w.start(name);
     writeNamespaceDeclarations(w, namespaces);
     if (declare != null) w.attribute('xmlns:$declare', Ns.w);
-    writeKeptAttributes(w, attributes, declaredAbove: inner);
+    writeKeptAttributes(w, attributes ?? this.attributes, declaredAbove: inner);
     bool wrote = false;
     writeFollowers(null);
     for (final String child in schema.order) {

@@ -798,10 +798,10 @@ final class DocxIndentation {
       );
     }
     int? twips(double? v, String name, int min) =>
-        v == null ? null : twipsOf(v, name, min: min, max: _maxTwips);
+        v == null ? null : twipsOf(v, name, min: min, max: maxTwips);
     return DocxIndentation._(
-      twips(leftPt, 'leftPt', -_maxTwips),
-      twips(rightPt, 'rightPt', -_maxTwips),
+      twips(leftPt, 'leftPt', -maxTwips),
+      twips(rightPt, 'rightPt', -maxTwips),
       twips(firstLinePt, 'firstLinePt', 0),
       twips(hangingPt, 'hangingPt', 0),
     );
@@ -848,9 +848,6 @@ final class DocxIndentation {
       'firstLine: $firstLinePt, hanging: $hangingPt)';
 }
 
-/// The largest magnitude of a length in twips: 1584 points.
-const int _maxTwips = 31680;
-
 /// How a line's height is read (`w:lineRule`).
 enum DocxLineRule {
   /// A multiple of the font's line height; [DocxLineSpacing.value] is in
@@ -876,21 +873,21 @@ final class DocxLineSpacing {
   /// is not finite and [RangeError] outside that range once rounded.
   factory DocxLineSpacing.multiple(double lines) => DocxLineSpacing._(
     DocxLineRule.auto,
-    lineUnitsOf(lines, 'lines', min: 1, max: _maxTwips),
+    lineUnitsOf(lines, 'lines', min: 1, max: maxTwips),
   );
 
   /// A line of exactly [pt] points, from 0 to 1584; throws as
   /// [DocxLineSpacing.multiple] does.
   factory DocxLineSpacing.exactly(double pt) => DocxLineSpacing._(
     DocxLineRule.exact,
-    twipsOf(pt, 'pt', min: 0, max: _maxTwips),
+    twipsOf(pt, 'pt', min: 0, max: maxTwips),
   );
 
   /// A line of at least [pt] points, from 0 to 1584; throws as
   /// [DocxLineSpacing.multiple] does.
   factory DocxLineSpacing.atLeast(double pt) => DocxLineSpacing._(
     DocxLineRule.atLeast,
-    twipsOf(pt, 'pt', min: 0, max: _maxTwips),
+    twipsOf(pt, 'pt', min: 0, max: maxTwips),
   );
 
   const DocxLineSpacing._(this.rule, this._stored);
@@ -924,7 +921,9 @@ final class DocxLineSpacing {
 /// Each member is `null` (or false) when the file has none. The space is in
 /// points, stored in twips, from 0 to 1584. [beforeAuto] and [afterAuto]
 /// let the application choose the space (Word uses it for HTML paragraphs).
-/// A `w:spacing` with a `…Lines` attribute has no view.
+/// A `w:spacing` with a `…Lines` attribute, a `w:lineRule` without
+/// `w:line`, or a `w:line` of 0 under the `auto` rule (or no rule) has no
+/// view.
 final class DocxSpacing {
   /// A spacing of the given parts. Throws [ArgumentError] for a value that
   /// is not finite and [RangeError] for one outside 0 to 1584 points once
@@ -938,10 +937,8 @@ final class DocxSpacing {
   }) => DocxSpacing._(
     beforePt == null
         ? null
-        : twipsOf(beforePt, 'beforePt', min: 0, max: _maxTwips),
-    afterPt == null
-        ? null
-        : twipsOf(afterPt, 'afterPt', min: 0, max: _maxTwips),
+        : twipsOf(beforePt, 'beforePt', min: 0, max: maxTwips),
+    afterPt == null ? null : twipsOf(afterPt, 'afterPt', min: 0, max: maxTwips),
     beforeAuto,
     afterAuto,
     line,
@@ -1112,8 +1109,8 @@ final class DocxTabStop {
   }) : _position = twipsOf(
          positionPt,
          'positionPt',
-         min: -_maxTwips,
-         max: _maxTwips,
+         min: -maxTwips,
+         max: maxTwips,
        );
 
   final int _position;
@@ -1142,10 +1139,6 @@ final class DocxTabStop {
       'DocxTabStop($positionPt, ${alignment.name}, ${leader.name})';
 }
 
-/// The largest list number a reference holds: nine digits, which every
-/// platform reads exactly.
-const int _maxNumId = 999999999;
-
 /// The list a paragraph belongs to (`w:numPr`): the number of a list
 /// instance (`w:numId`) and the level in it.
 final class DocxNumberingRef {
@@ -1155,7 +1148,7 @@ final class DocxNumberingRef {
   /// paragraph from the list its style gives) and [level] from 0 to 8;
   /// anything else throws [RangeError].
   DocxNumberingRef(this.numId, {this.level = 0}) {
-    RangeError.checkValueInInterval(numId, 0, _maxNumId, 'numId');
+    RangeError.checkValueInInterval(numId, 0, maxNumId, 'numId');
     RangeError.checkValueInInterval(level, 0, 8, 'level');
   }
 

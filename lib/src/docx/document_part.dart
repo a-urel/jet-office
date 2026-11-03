@@ -41,6 +41,7 @@ import 'model/inlines.dart';
 import 'model/property_set.dart';
 import 'model/run_content.dart';
 import 'paragraph_property_codecs.dart' show paragraphPropertiesSchema;
+import 'part_root.dart';
 import 'properties.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
@@ -149,45 +150,12 @@ final class DocumentPart implements PartContent {
     final DocxWarningCollector warnings = DocxWarningCollector();
     final Utf8Buffer buffer = Utf8Buffer();
     final XmlWriter w = XmlWriter(buffer)..declaration();
-    final XmlRoot root = this.root;
-    final String rootPrefix = _prefixOf(root.qualifiedName);
-    // The prefix typed elements use: one bound to WordprocessingML on the
-    // root, `w` first. Attributes need one, so a root that binds the
-    // namespace only as the default gets one declared.
-    String? prefix = root.namespaces['w'] == Ns.w
-        ? 'w'
-        : rootPrefix.isNotEmpty
-        ? rootPrefix
-        : _boundPrefix(root.namespaces);
-    final Map<String, String> scope = <String, String>{...root.namespaces};
-    root.writeStart(w);
-    if (prefix == null) {
-      prefix = 'w';
-      for (int i = 1; scope.containsKey(prefix); i++) {
-        prefix = 'w$i';
-      }
-      scope[prefix!] = Ns.w;
-      w.attribute('xmlns:$prefix', Ns.w);
-    }
+    final (:String prefix, :Map<String, String> scope) = openWordRoot(w, root);
     _Writer(w, '$prefix:', prefix, scope, partName, warnings).write(this);
     w.end();
     _encodeWarnings = warnings;
     return buffer.takeChunks();
   }
-}
-
-/// The prefix of the qualified name [name], or `''` for none.
-String _prefixOf(String name) {
-  final int colon = name.indexOf(':');
-  return colon < 0 ? '' : name.substring(0, colon);
-}
-
-/// A non-empty prefix [namespaces] binds to WordprocessingML, or null.
-String? _boundPrefix(Map<String, String> namespaces) {
-  for (final MapEntry<String, String> e in namespaces.entries) {
-    if (e.key.isNotEmpty && e.value == Ns.w) return e.key;
-  }
-  return null;
 }
 
 /// One write of a document part's content, inside the open root.

@@ -78,8 +78,8 @@ void writeColorAttributes(
   }
 }
 
-/// What [readColorAttributes] found: whether the element has the colour at all, and
-/// its value, which is `null` when it has one that cannot be typed.
+/// What [readColorAttributes] found: whether the element has the colour at
+/// all, and its value, which is `null` when it has one that cannot be typed.
 typedef ColorRead = ({bool present, DocxColor? color});
 
 /// Reads the colour of [e] from `colorAttribute` and the theme attributes

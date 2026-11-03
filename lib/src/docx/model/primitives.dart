@@ -23,6 +23,11 @@
 /// set (a style) is undone with `PropertySet.restore`, which reports
 /// nothing.
 ///
+/// The styles part records its own edits the same way: a style added is a
+/// change applied with [applyChange], and a style's property sets report to
+/// the same [DocxEdits], so they are recorded and reverted like a
+/// paragraph's.
+///
 /// @docImport 'edit_sink.dart';
 library;
 
@@ -130,7 +135,7 @@ void insertBlock(
 ) {
   RangeError.checkValueInInterval(index, 0, blocks.length, 'index');
   _checkDetached(block);
-  _apply(edits, _BlockInserted(edits, container, blocks, index, block));
+  applyChange(edits, _BlockInserted(edits, container, blocks, index, block));
 }
 
 /// Removes the block at [index] of [blocks], the blocks of [container], and
@@ -145,7 +150,10 @@ void removeBlock(
   int index,
 ) {
   RangeError.checkValidIndex(index, blocks, 'index');
-  _apply(edits, _BlockRemoved(edits, container, blocks, index, blocks[index]));
+  applyChange(
+    edits,
+    _BlockRemoved(edits, container, blocks, index, blocks[index]),
+  );
 }
 
 /// Puts [block] in place of the block at [index] of [blocks], the blocks of
@@ -164,7 +172,7 @@ void replaceBlock(
 ) {
   RangeError.checkValidIndex(index, blocks, 'index');
   _checkDetached(block);
-  _apply(
+  applyChange(
     edits,
     _BlockReplaced(edits, container, blocks, index, blocks[index], block),
   );
@@ -188,8 +196,12 @@ void _checkDetached(DocxBlock block) {
   }
 }
 
-/// Applies [change] and records it; if recording throws, reverts it first.
-void _apply(DocxEdits edits, Change change) {
+/// Applies [change] and records it in [edits]; if recording throws, reverts
+/// it first. Must run inside `edits.transaction`.
+///
+/// It is how a primitive of another library records its edit, such as a
+/// style added to the styles part (`model/styles.dart`).
+void applyChange(DocxEdits edits, Change change) {
   change.reapply();
   try {
     edits.log.record(change);

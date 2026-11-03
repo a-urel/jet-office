@@ -80,15 +80,18 @@ enum DocxParagraphProperty {
   final String _element;
 }
 
-/// The properties of a paragraph (`w:pPr`).
+/// The properties of a paragraph (`w:pPr`), also as a style or the
+/// document defaults give them.
 ///
-/// Get one from `DocxParagraph.properties`; it is the same object every
-/// time. Each set is one change of the document's change log.
+/// Get one from `DocxParagraph.properties`, `DocxStyle.paragraphProperties`
+/// or `DocxDocumentDefaults.paragraphProperties`; it is the same object
+/// every time. Each set is one change of the document's change log.
 final class DocxParagraphProperties {
   DocxParagraphProperties._(
     PropertyContainer source,
+    ContainerSchema schema,
     DocxEditSink Function() sink,
-  ) : _set = _ParagraphSet(source, sink);
+  ) : _set = _ParagraphSet(source, schema, sink);
 
   /// The set behind the members; private so a caller cannot reach its
   /// untyped surface.
@@ -126,8 +129,10 @@ final class DocxParagraphProperties {
 
   /// The spacing before, after and between lines (`w:spacing`), or `null`.
   ///
-  /// A `w:spacing` with a `…Lines` attribute, or a line rule the model
-  /// does not know, reads `null` and is written back as read.
+  /// A `w:spacing` with a `…Lines` attribute, a line rule the model does
+  /// not know, a `w:lineRule` without `w:line`, or a `w:line` of 0 under
+  /// the `auto` rule (or no rule) reads `null` and is written back as
+  /// read.
   DocxSpacing? get spacing => _set.valueOf('spacing') as DocxSpacing?;
 
   set spacing(DocxSpacing? value) => _set.setValue('spacing', value);
@@ -240,12 +245,15 @@ bool _sameStops(List<DocxTabStop> a, List<DocxTabStop> b) {
   return true;
 }
 
-/// The paragraph properties over [source], as `DocxParagraph` holds them;
-/// edits go to the sink [sink] gives.
+/// The paragraph properties over [source], read by [schema]: a paragraph's
+/// `w:pPr` (`paragraphPropertiesSchema`, as `DocxParagraph` holds them) or
+/// the `w:pPr` of a style or a default (`paragraphPropertiesGeneralSchema`).
+/// Edits go to the sink [sink] gives.
 DocxParagraphProperties newParagraphProperties(
   PropertyContainer source,
-  DocxEditSink Function() sink,
-) => DocxParagraphProperties._(source, sink);
+  DocxEditSink Function() sink, {
+  ContainerSchema schema = paragraphPropertiesSchema,
+}) => DocxParagraphProperties._(source, schema, sink);
 
 /// The property set behind [properties], for the writer and the edit
 /// primitives. Not exported.
@@ -253,8 +261,7 @@ PropertySet propertySetOfParagraphProperties(
   DocxParagraphProperties properties,
 ) => properties._set;
 
-/// The property set of a paragraph's `w:pPr`.
+/// The property set of a `w:pPr`.
 final class _ParagraphSet extends PropertySet {
-  _ParagraphSet(PropertyContainer source, DocxEditSink Function() sink)
-    : super(source, paragraphPropertiesSchema, sink);
+  _ParagraphSet(super.source, super.schema, super.sink);
 }
