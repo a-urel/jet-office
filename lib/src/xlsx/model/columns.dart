@@ -117,6 +117,18 @@ int? parseOutlineLevel(String? value) {
       : null;
 }
 
+/// [value] as a cell format index (whole, at most nine digits), or `null`
+/// when it is absent or not one.
+int? parseStyleIndex(String? value) {
+  if (value == null ||
+      value.isEmpty ||
+      value.length > 9 ||
+      !_signedDigits.hasMatch(value)) {
+    return null;
+  }
+  return int.tryParse(value);
+}
+
 final RegExp _signedDigits = RegExp(r'^[+-]?[0-9]+$');
 
 final RegExp _digits = RegExp(r'^[0-9]+$');

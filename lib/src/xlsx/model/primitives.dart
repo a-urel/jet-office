@@ -154,54 +154,58 @@ void setStoredRowAttributes(
   }
 }
 
-/// The change of a worksheet part's layout elements (`cols`,
-/// `sheetFormatPr`): the part's children before and after.
+/// The change of one layout element of a worksheet part (`cols` or
+/// `sheetFormatPr`): the element before and after.
+///
+/// Only that element's slot is swapped, so a change to the other element is
+/// independent of this one.
 final class SetLayoutChange implements Change {
-  /// A change of [part] from the children [before] to [after], both from
-  /// [WorksheetPart.layoutSnapshot].
-  SetLayoutChange(this.part, this.before, this.after);
+  /// A change of the element of [slot] in [part] from [before] to [after]
+  /// (either `null` for none), both from [WorksheetPart.layoutElement].
+  SetLayoutChange(this.part, this.slot, this.before, this.after);
 
   /// The worksheet part.
   final WorksheetPart part;
 
-  /// The children before the change.
-  final List<Object> before;
+  /// `cols` or `sheetFormatPr`.
+  final String slot;
 
-  /// The children after the change.
-  final List<Object> after;
+  /// The element before the change.
+  final Object? before;
+
+  /// The element after the change.
+  final Object? after;
 
   @override
-  void revert() => part.restoreLayout(before);
+  void revert() => part.swapLayout(slot, after, before);
 
   @override
-  void reapply() => part.restoreLayout(after);
+  void reapply() => part.swapLayout(slot, before, after);
 }
 
-/// Runs [edit], which changes the layout elements of [part] through
-/// [WorksheetPart.setColumnRuns] and [WorksheetPart.changeSheetFormat], and
-/// records the change in [log] unless it changed nothing.
+/// Runs [edit], which changes the element of [slot] (`cols` or
+/// `sheetFormatPr`) of [part] through [WorksheetPart.setColumnRuns] or
+/// [WorksheetPart.changeSheetFormat], and records the change in [log]
+/// unless it changed nothing.
 ///
 /// Must run inside `log.transaction`. If [edit] or recording throws, the
-/// part is put back as it was before the error leaves.
-void editLayout(ChangeLog log, WorksheetPart part, void Function() edit) {
-  final List<Object> before = part.layoutSnapshot();
+/// element is put back as it was before the error leaves.
+void editLayout(
+  ChangeLog log,
+  WorksheetPart part,
+  String slot,
+  void Function() edit,
+) {
+  final Object? before = part.layoutElement(slot);
   try {
     edit();
-    final List<Object> after = part.layoutSnapshot();
-    if (_sameChildren(before, after)) return;
-    log.record(SetLayoutChange(part, before, after));
+    final Object? after = part.layoutElement(slot);
+    if (identical(before, after)) return;
+    log.record(SetLayoutChange(part, slot, before, after));
   } catch (_) {
-    part.restoreLayout(before);
+    part.swapLayout(slot, part.layoutElement(slot), before);
     rethrow;
   }
-}
-
-bool _sameChildren(List<Object> a, List<Object> b) {
-  if (a.length != b.length) return false;
-  for (int i = 0; i < a.length; i++) {
-    if (!identical(a[i], b[i])) return false;
-  }
-  return true;
 }
 
 /// The change of one table column's name: before and after.

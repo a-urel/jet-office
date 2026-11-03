@@ -527,11 +527,21 @@ void main() {
       expect(sheet.column(1), const XlsxColumn(width: 12));
       expect(sheet.column(2), const XlsxColumn(width: 40));
       expect(sheet.column(3), const XlsxColumn(width: 255));
-      // A width without customWidth is the automatic width.
-      expect(sheet.column(4), const XlsxColumn(hidden: true));
-      expect(sheet.column(5), const XlsxColumn(outlineLevel: 1));
-      expect(sheet.column(6), const XlsxColumn(outlineLevel: 2));
-      expect(sheet.column(7), const XlsxColumn(outlineLevel: 2));
+      // The width is read whenever it parses, customWidth or not: the
+      // writer writes the default width for a column without its own.
+      expect(sheet.column(4), const XlsxColumn(width: 9.140625, hidden: true));
+      expect(
+        sheet.column(5),
+        const XlsxColumn(width: 9.140625, outlineLevel: 1),
+      );
+      expect(
+        sheet.column(6),
+        const XlsxColumn(width: 9.140625, outlineLevel: 2),
+      );
+      expect(
+        sheet.column(7),
+        const XlsxColumn(width: 9.140625, outlineLevel: 2),
+      );
       expect(sheet.column(8), isNull);
       expect(() => sheet.column(-1), throwsRangeError);
       expect(() => sheet.column(16384), throwsRangeError);
@@ -559,9 +569,8 @@ void main() {
         ),
       );
       expect(read?.style?.font?.bold, isTrue);
-      // A style index with no cell format reads as no style, so the column
-      // sets nothing and is the default.
-      expect(book2.sheets.single.column(2), isNull);
+      // A style index with no cell format reads as no style.
+      expect(book2.sheets.single.column(2), const XlsxColumn(width: 9.140625));
     });
 
     test('an unreadable column attribute reads as default and warns once', () {
@@ -607,6 +616,21 @@ void main() {
         colsOf(_sheetXml(book)),
         '<cols><col min="2" max="10" width="20" customWidth="1" '
         'bestFit="1"/></cols>',
+      );
+    });
+
+    test('the second column of a range splits off a single column', () {
+      final XlsxWorkbook book = openColumns(
+        '<cols><col min="2" max="10" width="20" customWidth="1" '
+        'bestFit="1"/></cols>',
+      );
+      book.sheets.single.setColumn(2, const XlsxColumn(width: 21));
+      expect(
+        colsOf(_sheetXml(book)),
+        '<cols><col min="2" max="2" width="20" customWidth="1" bestFit="1"/>'
+        '<col min="3" max="3" width="21" customWidth="1" bestFit="1"/>'
+        '<col min="4" max="10" width="20" customWidth="1" bestFit="1"/>'
+        '</cols>',
       );
     });
 
@@ -834,7 +858,7 @@ void main() {
         final XlsxSheet sheet = book.sheets.single..column(0);
         final StylesPart styles = stylesPartOf(book)!;
         final StylesMark before = styles.mark();
-        sheet.setColumn(0, XlsxColumn(style: sheet.column(0)!.style));
+        sheet.setColumn(0, sheet.column(0));
         expect(styles.mark(), before);
         sheet.setColumn(1, const XlsxColumn(style: _italic));
         expect(styles.mark(), before, reason: 'italic is cell format 2');
@@ -855,7 +879,7 @@ void main() {
         sheet.setColumn(0, const XlsxColumn(width: 9, style: XlsxStyle()));
         expect(
           colsOf(_sheetXml(book)),
-          startsWith('<cols><col min="1" max="1" width="9" customWidth="1"/>'),
+          startsWith('<cols><col min="1" max="1" width="9"/>'),
         );
       },
     );
@@ -1023,6 +1047,29 @@ void main() {
       expect(sheet.styleAt(0, 0), isNull);
     });
 
+    test('layout edits of different elements revert independently', () {
+      final XlsxWorkbook book = openColumns(
+        '<cols><col min="1" max="3" width="9" customWidth="1"/></cols>',
+      );
+      final XlsxSheet sheet = book.sheets.single..column(0);
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet first = log.transaction(
+        () => sheet.setColumn(1, const XlsxColumn(hidden: true)),
+      );
+      final ChangeSet second = log.transaction(
+        () => sheet.setDefaultSizes(rowHeight: 20),
+      );
+      log.revertSet(first);
+      expect(sheet.column(1), const XlsxColumn(width: 9));
+      expect(sheet.defaultSizes.rowHeight, 20);
+      expect(formatOf(_sheetXml(book)), contains('customHeight="1"'));
+      log.reapplySet(first);
+      log.revertSet(second);
+      expect(sheet.defaultSizes.rowHeight, isNull);
+      expect(sheet.column(1)?.hidden, isTrue);
+      expect(_sheetXml(book), isNot(contains('sheetFormatPr')));
+    });
+
     test('setColumn is undone and redone with the change log', () {
       final XlsxWorkbook book = openColumns(
         '<cols><col min="1" max="3" width="9" customWidth="1"/></cols>',
@@ -1087,7 +1134,7 @@ void main() {
       sheet.setDefaultSizes(columnWidth: 12.5);
       expect(
         formatOf(_sheetXml(made)),
-        '<sheetFormatPr defaultColWidth="12.5" defaultRowHeight="18"/>',
+        '<sheetFormatPr defaultColWidth="12.5" defaultRowHeight="15"/>',
       );
     });
 
@@ -1106,10 +1153,11 @@ void main() {
         '<sheetFormatPr baseColWidth="10" defaultRowHeight="20" '
         'x14ac:dyDescent="0.25" defaultColWidth="11" customHeight="1"/>',
       );
+      // Reset as the writer writes no custom height: 15, no customHeight.
       sheet.setDefaultSizes();
       expect(
         formatOf(_sheetXml(book)),
-        '<sheetFormatPr baseColWidth="10" defaultRowHeight="20" '
+        '<sheetFormatPr baseColWidth="10" defaultRowHeight="15" '
         'x14ac:dyDescent="0.25"/>',
       );
       expect(sheet.defaultSizes, (rowHeight: null, columnWidth: null));

@@ -403,4 +403,20 @@ void main() {
   test('a part is a PartContent', () {
     expect(WorksheetPart.empty(), isA<PartContent>());
   });
+
+  test('changeSheetFormat keeps the element when nothing changes', () {
+    final WorksheetPart part = _read(
+      '<worksheet xmlns="$_main"><sheetFormatPr defaultRowHeight="15"/>'
+      '<sheetData/></worksheet>',
+    );
+    final Object? before = part.layoutElement('sheetFormatPr');
+    expect(before, isNotNull);
+    part.changeSheetFormat(<String, String?>{
+      'defaultRowHeight': '15',
+      'customHeight': null,
+    });
+    expect(part.layoutElement('sheetFormatPr'), same(before));
+    part.changeSheetFormat(<String, String?>{'defaultRowHeight': '16'});
+    expect(part.layoutElement('sheetFormatPr'), isNot(same(before)));
+  });
 }

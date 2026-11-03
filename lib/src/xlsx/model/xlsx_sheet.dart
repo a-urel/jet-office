@@ -64,6 +64,8 @@ import 'table_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
 
+part 'xlsx_sheet_layout.dart';
+
 /// What a sheet needs from its workbook.
 abstract interface class SheetHost {
   /// The change log every edit records in.
@@ -133,9 +135,10 @@ int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
 ///
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
 /// `A`.
-final class XlsxSheet {
+final class XlsxSheet with _SheetLayout {
   XlsxSheet._(this._host, this._entry, this._partName, this._part);
 
+  @override
   final SheetHost _host;
   final SheetEntry _entry;
   final String? _partName;
@@ -149,6 +152,7 @@ final class XlsxSheet {
 
   /// The layout problems reported (`layoutInvalid`), by detail, so a
   /// problem is reported once however often its element is read.
+  @override
   final Set<String> _layoutReported = <String>{};
 
   /// The tables of the sheet the model can type, read on the first
@@ -156,6 +160,7 @@ final class XlsxSheet {
   List<({String partName, TablePart table})>? _tables;
 
   /// The sheet's name, as the workbook lists it.
+  @override
   String get name => _entry.name;
 
   /// Whether the sheet is visible, hidden or very hidden.
@@ -395,8 +400,9 @@ final class XlsxSheet {
   ///
   /// It is the cell's own style when the cell exists (even without a
   /// value), else the row's style when the row has `customFormat="1"`, else
-  /// the style of the `<col>` holding the column; style index 0, and an index with no cell format in the styles part
-  /// (which Excel shows as the default), give `null` in both. Read with
+  /// the style of the `<col>` holding the column; style index 0, and an
+  /// index with no cell format in the styles part (which Excel shows as the
+  /// default), give `null` in both. Read with
   /// [StylesPart.styleOf], so a part of the cell format the value types
   /// cannot hold is left out. A style entry read for the first time that
   /// cannot be read exactly is reported then (`styleEntryInvalid`).
@@ -414,6 +420,7 @@ final class XlsxSheet {
 
   /// The style at cell format [index], or `null` for no index, index 0 and
   /// an index with no cell format (which Excel shows as the default).
+  @override
   XlsxStyle? _styleOfIndex(int? index) {
     final StylesPart? styles = _host.styles;
     if (index == null ||
@@ -486,578 +493,14 @@ final class XlsxSheet {
     _reported.remove(row * XlsxLimits.maxColumns + column);
   }
 
-  /// How [row] looks: its height, visibility, outline level, collapsed mark
-  /// and style, read from the row's `ht` (with `customHeight`), `hidden`,
-  /// `outlineLevel`, `collapsed` and `s` (with `customFormat`).
-  ///
-  /// A row the file lacks has the default format. An `ht` without
-  /// `customHeight="1"` is Excel's automatic height, so `height` is `null`;
-  /// the style is read as [styleAt] reads a row's. An attribute that cannot
-  /// be read (an `ht` of `abc`, an outline level of 9) reads as its default
-  /// and is reported once (`layoutInvalid`); it is saved as written until
-  /// [setRowFormat] sets that field. Loads the sheet. Throws a
-  /// [RangeError] outside Excel's rows and an [XlsxReadException] when the
-  /// sheet cannot be read.
-  XlsxRowFormat rowFormat(int row) {
-    RangeError.checkValueInInterval(row, 0, XlsxLimits.maxRows - 1, 'row');
-    final CellStore? store = _load()?.cells;
-    if (store == null) return const XlsxRowFormat();
-    return _readRowFormat(store, row);
-  }
-
-  /// Sets how [row] looks to exactly [format].
-  ///
-  /// The row keeps its cells and every attribute the format does not cover
-  /// (`x14ac:dyDescent`, `thickBot`, ...); a field equal to the row's
-  /// current one is left as written, even when it cannot be read. A new
-  /// attribute is written as the writer writes a row (`ht` with
-  /// `customHeight="1"`, `hidden="1"`, `outlineLevel`, `collapsed="1"`, and
-  /// the style as `s` with `customFormat="1"`); a changed one is replaced
-  /// where it stood. A style is appended to the styles when no cell format
-  /// matches it, so no existing index moves, and a style that is the default
-  /// writes no `s`. A row left with no cells, no attributes and no other
-  /// content is removed. On save, `sheetFormatPr/@outlineLevelRow` is the
-  /// larger of the kept value and the deepest row outline level.
-  ///
-  /// Throws an [ArgumentError] named `height` for a height outside 0 to
-  /// 409.5 (or not finite) or `outlineLevel` for a level outside 0 to 7, an
-  /// [ArgumentError] naming the field of an invalid style and an
-  /// `XlsxLimitError` past the writer's limits, a [StateError] for a sheet
-  /// that is not a worksheet or has no part and, when [XlsxRowFormat.style]
-  /// changes, when the styles part is not a SpreadsheetML `styleSheet`, a
-  /// [RangeError] outside Excel's rows, and an [XlsxReadException] when the
-  /// sheet cannot be read. Whatever it throws, nothing has changed, except
-  /// that reading warnings are reported on first read.
-  void setRowFormat(int row, XlsxRowFormat format) {
-    RangeError.checkValueInInterval(row, 0, XlsxLimits.maxRows - 1, 'row');
-    final double? height = format.height;
-    if (height != null) checkRowHeight(height, 'height');
-    checkOutlineLevel(format.outlineLevel, 'outlineLevel');
-    final CellStore store = _editableCells('row formats');
-    final StylesPart? loaded = _host.styles;
-    if (loaded != null && !loaded.isTyped && format.style != null) {
-      throw _untypedStyles();
-    }
-    final XlsxRowFormat current = _readRowFormat(store, row);
-    if (current == format) return;
-    final bool styleChanged = format.style != current.style;
-    final StylesPart? styles = styleChanged && format.style != null
-        ? _stylesFor()
-        : null;
-    final List<KeptAttribute> old = store.rowAttributes(row);
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      final int id = styles == null
-          ? 0
-          : appendStyle(log, styles, format.style);
-      final List<KeptAttribute> next = _rowAttributesFor(
-        old,
-        current,
-        format,
-        styleId: styleChanged ? id : null,
-      );
-      if (sameAttributes(old, next)) return;
-      setStoredRowAttributes(log, store, row, next);
-    });
-  }
-
-  /// How column [index] (0 for A) looks: its width, style, visibility,
-  /// outline level and collapsed mark, read from the `<col>` holding it
-  /// (`width` with `customWidth`, `style`, `hidden`, `outlineLevel`,
-  /// `collapsed`), or `null` for a default column.
-  ///
-  /// A column no `<col>` holds, and one whose `<col>` sets nothing the
-  /// model reads, is a default column. A `width` without `customWidth="1"`
-  /// is Excel's automatic width (the default or best fit), so `width` is
-  /// `null` then. The style is read as [styleAt] reads a row's. An
-  /// attribute that cannot be read (a `width` of `abc`, an outline level of
-  /// 9) reads as its default and is reported once (`layoutInvalid`); it is
-  /// saved as written until [setColumn] sets that field. A `<cols>` that
-  /// is not plain (see [setColumn]) reads as no columns. Loads the sheet.
-  /// Throws a [RangeError] outside Excel's columns and an
-  /// [XlsxReadException] when the sheet cannot be read.
-  XlsxColumn? column(int index) {
-    RangeError.checkValueInInterval(
-      index,
-      0,
-      XlsxLimits.maxColumns - 1,
-      'index',
-    );
-    final ColRun? run = _load()?.columnRunAt(index + 1);
-    if (run == null) return null;
-    final XlsxColumn column = _readColumn(run);
-    return column == const XlsxColumn() ? null : column;
-  }
-
-  /// Sets how column [index] (0 for A) looks to exactly [column]; `null`,
-  /// like an [XlsxColumn] that sets nothing, resets it to the default.
-  ///
-  /// The `<col>` holding the column is split into up to three, the columns
-  /// before it, the column itself and the columns after it, and the outer
-  /// runs keep every attribute (`bestFit`, ...); a column of the same
-  /// `<col>` as a neighbour joins it again. The column keeps every attribute
-  /// the column does not cover; a field equal to the current one is left as
-  /// written, even when it cannot be read, and setting a column to what
-  /// [column] reads changes nothing. A new attribute is written as the
-  /// writer writes a `<col>` (`width` always, then `style`, `hidden`,
-  /// `customWidth="1"`, `outlineLevel`, `collapsed="1"`); a changed one is
-  /// replaced where it stood. A width reset to the default writes the
-  /// sheet's default column width without `customWidth`. A style is
-  /// appended to the styles when no cell format matches it, so no existing
-  /// index moves. A `<cols>` left with no `<col>` is removed, and a sheet
-  /// without one gets it in schema position. On save,
-  /// `sheetFormatPr/@outlineLevelCol` is the larger of the kept value and
-  /// the deepest column outline level, made when needed.
-  ///
-  /// Only the first `<cols>` is edited, and only when it is plain: its
-  /// `<col>` elements have no children or declarations of their own, whole
-  /// `min` and `max` inside the grid, and are sorted and do not overlap.
-  /// Any other `<cols>` is kept as written, and [setColumn] throws a
-  /// [StateError].
-  ///
-  /// Throws an [ArgumentError] named `column.width` for a width outside 0
-  /// to 255 (or not finite) or `column.outlineLevel` for a level outside 0
-  /// to 7, an [ArgumentError] naming the field of an invalid style
-  /// (`column.style.font.name`, ...) and an `XlsxLimitError` past the
-  /// writer's limits, a [StateError] for a sheet that is not a worksheet or
-  /// has no part, for a `<cols>` that is not plain and, when
-  /// [XlsxColumn.style] changes, when the styles part is not a
-  /// SpreadsheetML `styleSheet`, a [RangeError] outside Excel's columns, and
-  /// an [XlsxReadException] when the sheet cannot be read. Whatever it
-  /// throws, nothing has changed, except that reading warnings are reported
-  /// on first read.
-  void setColumn(int index, XlsxColumn? column) {
-    RangeError.checkValueInInterval(
-      index,
-      0,
-      XlsxLimits.maxColumns - 1,
-      'index',
-    );
-    if (column != null) {
-      final double? width = column.width;
-      if (width != null) checkColumnWidth(width, 'column.width');
-      checkOutlineLevel(column.outlineLevel, 'column.outlineLevel');
-    }
-    final WorksheetPart part = _editablePart('columns');
-    if (!part.columnsEditable) {
-      throw StateError(
-        'The sheet "$name" has a <cols> that is not plain (a <col> with '
-        'children, an invalid or overlapping range, ...); its columns '
-        'cannot be set.',
-      );
-    }
-    final StylesPart? loaded = _host.styles;
-    if (loaded != null && !loaded.isTyped && column?.style != null) {
-      throw _untypedStyles();
-    }
-    final ColRun? run = part.columnRunAt(index + 1);
-    final XlsxColumn current = run == null
-        ? const XlsxColumn()
-        : _readColumn(run);
-    final XlsxColumn next = column ?? const XlsxColumn();
-    if (current == next) return;
-    final bool styleChanged = next.style != current.style;
-    final StylesPart? styles = styleChanged && next.style != null
-        ? _stylesFor()
-        : null;
-    final String defaultWidth = formatXmlDouble(_defaultColumnWidth(part));
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      int id = 0;
-      if (styles != null) {
-        try {
-          id = appendStyle(log, styles, next.style);
-        } on ArgumentError catch (error, stack) {
-          final String? field = error.name;
-          Error.throwWithStackTrace(
-            ArgumentError.value(
-              error.invalidValue,
-              field == null ? 'column.style' : 'column.style.$field',
-              error.message,
-            ),
-            stack,
-          );
-        }
-      }
-      editLayout(log, part, () {
-        part.setColumnRuns(
-          setColumnInRuns(
-            part.columnRuns,
-            index + 1,
-            '${part.elementPrefix}col',
-            (List<KeptAttribute>? old) => next == const XlsxColumn()
-                ? null
-                : _columnAttributesFor(
-                    old,
-                    current,
-                    next,
-                    styleId: styleChanged ? id : null,
-                    defaultWidth: defaultWidth,
-                  ),
-          ),
-        );
-      });
-    });
-  }
-
-  /// The column a `<col>` describes, reporting what cannot be read.
-  XlsxColumn _readColumn(ColRun run) {
-    final String element = run.min == run.max
-        ? 'column ${columnName(run.min - 1)}'
-        : 'columns ${columnName(run.min - 1)}:${columnName(run.max - 1)}';
-    String? width;
-    bool customWidth = false;
-    bool hidden = false;
-    bool collapsed = false;
-    int outlineLevel = 0;
-    int? styleIndex;
-    for (final KeptAttribute a in run.attributes) {
-      if (a.namespaceUri.isNotEmpty) continue;
-      final String v = a.value;
-      switch (a.qualifiedName) {
-        case 'width':
-          width = v;
-        case 'customWidth':
-          customWidth = _layoutBool(element, 'customWidth', v) ?? false;
-        case 'hidden':
-          hidden = _layoutBool(element, 'hidden', v) ?? false;
-        case 'collapsed':
-          collapsed = _layoutBool(element, 'collapsed', v) ?? false;
-        case 'outlineLevel':
-          final int? level = parseOutlineLevel(v);
-          outlineLevel = level ?? 0;
-          if (level == null) {
-            _layoutProblem(
-              element,
-              'outlineLevel "$v" is not an outline level from 0 to '
-              '${XlsxLimits.maxOutlineLevel}.',
-            );
-          }
-        case 'style':
-          if (v.isNotEmpty && v.length <= 9 && _plainInt.hasMatch(v)) {
-            styleIndex = int.tryParse(v);
-          } else {
-            styleIndex = null;
-            _layoutProblem(element, 'style "$v" is not a cell format index.');
-          }
-      }
-    }
-    double? custom;
-    if (width != null) {
-      final double? w = _plainNumber.hasMatch(width)
-          ? double.tryParse(width)
-          : null;
-      if (w == null || !w.isFinite || w < 0 || w > XlsxLimits.maxColumnWidth) {
-        _layoutProblem(element, 'width "$width" is not a column width.');
-      } else if (customWidth) {
-        custom = w;
-      }
-    }
-    return XlsxColumn(
-      width: custom,
-      style: _styleOfIndex(styleIndex),
-      hidden: hidden,
-      outlineLevel: outlineLevel,
-      collapsed: collapsed,
-    );
-  }
-
-  /// The attributes [next] gives a `<col>` whose attributes were [old]
-  /// (`null` for a new one) and whose column was [current]: each changed
-  /// field replaced where it stood, or added in the writer's order after
-  /// the others, and `width` (which the schema requires) always.
-  ///
-  /// [styleId] is the cell format index of a changed style (0 for none);
-  /// `null` leaves the style attribute as it is.
-  static List<KeptAttribute> _columnAttributesFor(
-    List<KeptAttribute>? old,
-    XlsxColumn current,
-    XlsxColumn next, {
-    required int? styleId,
-    required String defaultWidth,
-  }) {
-    final bool created = old == null;
-    final bool widthChanged = created || next.width != current.width;
-    final Map<String, String?> changed = <String, String?>{};
-    if (widthChanged) {
-      final double? w = next.width;
-      changed['width'] = w == null ? defaultWidth : formatXmlDouble(w);
-    }
-    if (styleId != null) {
-      changed['style'] = styleId == 0 ? null : '$styleId';
-    }
-    if (next.hidden != current.hidden) {
-      changed['hidden'] = next.hidden ? '1' : null;
-    }
-    if (widthChanged) {
-      changed['customWidth'] = next.width == null ? null : '1';
-    }
-    if (next.outlineLevel != current.outlineLevel) {
-      changed['outlineLevel'] = next.outlineLevel == 0
-          ? null
-          : '${next.outlineLevel}';
-    }
-    if (next.collapsed != current.collapsed) {
-      changed['collapsed'] = next.collapsed ? '1' : null;
-    }
-    final List<KeptAttribute> attributes = replaceAttributes(
-      old ?? const <KeptAttribute>[],
-      changed,
-    );
-    if (attributes.any(
-      (KeptAttribute a) => a.namespaceUri.isEmpty && a.qualifiedName == 'width',
-    )) {
-      return attributes;
-    }
-    return <KeptAttribute>[
-      (qualifiedName: 'width', namespaceUri: '', value: defaultWidth),
-      ...attributes,
-    ];
-  }
-
-  /// The sheet's default column width: its `defaultColWidth` when that is a
-  /// column width, else Excel's standard one, as the writer writes it.
-  static double _defaultColumnWidth(WorksheetPart part) {
-    final String? text = part.sheetFormatAttribute('defaultColWidth');
-    final double? width = text != null && _plainNumber.hasMatch(text)
-        ? double.tryParse(text)
-        : null;
-    return width != null && width.isFinite && _isColumnWidth(width)
-        ? width
-        : standardColumnWidth;
-  }
-
-  static bool _isColumnWidth(double width) =>
-      width >= 0 && width <= XlsxLimits.maxColumnWidth;
-
-  /// The sheet's default row height in points and default column width in
-  /// characters, or `null` for each that the sheet leaves to Excel.
-  ///
-  /// They are read from `sheetFormatPr`: the row height is `defaultRowHeight`
-  /// when `customHeight="1"` (Excel's own default is not a setting), the
-  /// column width is `defaultColWidth`; `baseColWidth` is not read. An
-  /// attribute that cannot be read reads as `null` and is reported once
-  /// (`layoutInvalid`). Loads the sheet. Throws an [XlsxReadException] when
-  /// the sheet cannot be read.
-  ({double? rowHeight, double? columnWidth}) get defaultSizes {
-    final WorksheetPart? part = _load();
-    if (part == null) return (rowHeight: null, columnWidth: null);
-    return _readDefaultSizes(part);
-  }
-
-  ({double? rowHeight, double? columnWidth}) _readDefaultSizes(
-    WorksheetPart part,
-  ) {
-    const String element = 'sheetFormatPr';
-    double? number(String name, num max) {
-      final String? text = part.sheetFormatAttribute(name);
-      if (text == null) return null;
-      final double? v = _plainNumber.hasMatch(text)
-          ? double.tryParse(text)
-          : null;
-      if (v == null || !v.isFinite || v < 0 || v > max) {
-        _layoutProblem(element, '$name "$text" is not a size.');
-        return null;
-      }
-      return v;
-    }
-
-    final double? height = number('defaultRowHeight', XlsxLimits.maxRowHeight);
-    final String? custom = part.sheetFormatAttribute('customHeight');
-    final bool customHeight = custom == null
-        ? false
-        : _layoutBool(element, 'customHeight', custom) ?? false;
-    return (
-      rowHeight: customHeight ? height : null,
-      columnWidth: number('defaultColWidth', XlsxLimits.maxColumnWidth),
-    );
-  }
-
-  /// Sets the sheet's default row height and default column width to
-  /// exactly [rowHeight] and [columnWidth]; `null` is Excel's own.
-  ///
-  /// They are written as the writer's `defaultSizes` writes them:
-  /// `defaultRowHeight` with `customHeight="1"` and `defaultColWidth`. A
-  /// size equal to the current one is left as written; the rest of
-  /// `sheetFormatPr` (`baseColWidth`, ...) is kept, and a sheet without the
-  /// element gets it in schema position. A `sheetFormatPr` with element
-  /// children is kept as written and cannot be edited.
-  ///
-  /// Throws an [ArgumentError] named `rowHeight` for a height outside 0 to
-  /// 409.5 or `columnWidth` for a width outside 0 to 255 (or not finite), a
-  /// [StateError] for a sheet that is not a worksheet or has no part and for
-  /// a `sheetFormatPr` with element children, and an [XlsxReadException]
-  /// when the sheet cannot be read. Whatever it throws, nothing has
-  /// changed, except that reading warnings are reported on first read.
-  void setDefaultSizes({double? rowHeight, double? columnWidth}) {
-    if (rowHeight != null) checkRowHeight(rowHeight, 'rowHeight');
-    if (columnWidth != null) checkColumnWidth(columnWidth, 'columnWidth');
-    final WorksheetPart part = _editablePart('default sizes');
-    final ({double? rowHeight, double? columnWidth}) current =
-        _readDefaultSizes(part);
-    if (current.rowHeight == rowHeight && current.columnWidth == columnWidth) {
-      return;
-    }
-    if (!part.sheetFormatEditable) {
-      throw StateError(
-        'The sheet "$name" has a sheetFormatPr with element children; its '
-        'default sizes cannot be set.',
-      );
-    }
-    final Map<String, String?> changes = <String, String?>{};
-    if (columnWidth != current.columnWidth) {
-      changes['defaultColWidth'] = columnWidth == null
-          ? null
-          : formatXmlDouble(columnWidth);
-    }
-    if (rowHeight != current.rowHeight || !part.hasSheetFormat) {
-      if (rowHeight != null) {
-        changes['defaultRowHeight'] = formatXmlDouble(rowHeight);
-        changes['customHeight'] = '1';
-      } else {
-        // The schema requires defaultRowHeight, which stays when it is there.
-        if (part.sheetFormatAttribute('defaultRowHeight') == null) {
-          changes['defaultRowHeight'] = formatXmlDouble(standardRowHeight);
-        }
-        changes['customHeight'] = null;
-      }
-    }
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      editLayout(log, part, () => part.changeSheetFormat(changes));
-    });
-  }
-
-  /// The format of [row] from its attributes, reporting what cannot be
-  /// read.
-  XlsxRowFormat _readRowFormat(CellStore store, int row) {
-    final List<KeptAttribute> attributes = store.rowAttributes(row);
-    if (attributes.isEmpty) return const XlsxRowFormat();
-    final String element = 'row ${row + 1}';
-    String? ht;
-    bool customHeight = false;
-    bool hidden = false;
-    bool collapsed = false;
-    int outlineLevel = 0;
-    for (final KeptAttribute a in attributes) {
-      if (a.namespaceUri.isNotEmpty) continue;
-      final String v = a.value;
-      switch (a.qualifiedName) {
-        case 'ht':
-          ht = v;
-        case 'customHeight':
-          customHeight = _layoutBool(element, 'customHeight', v) ?? false;
-        case 'hidden':
-          hidden = _layoutBool(element, 'hidden', v) ?? false;
-        case 'collapsed':
-          collapsed = _layoutBool(element, 'collapsed', v) ?? false;
-        case 'outlineLevel':
-          final int? level = _plainInt.hasMatch(v) ? int.tryParse(v) : null;
-          if (level != null &&
-              level >= 0 &&
-              level <= XlsxLimits.maxOutlineLevel) {
-            outlineLevel = level;
-          } else {
-            outlineLevel = 0;
-            _layoutProblem(
-              element,
-              'outlineLevel "$v" is not an outline level from 0 to '
-              '${XlsxLimits.maxOutlineLevel}.',
-            );
-          }
-      }
-    }
-    double? height;
-    if (ht != null) {
-      final double? h = _plainNumber.hasMatch(ht) ? double.tryParse(ht) : null;
-      if (h == null || !h.isFinite || h < 0 || h > XlsxLimits.maxRowHeight) {
-        _layoutProblem(element, 'ht "$ht" is not a row height.');
-      } else if (customHeight) {
-        height = h;
-      }
-    }
-    return XlsxRowFormat(
-      height: height,
-      hidden: hidden,
-      outlineLevel: outlineLevel,
-      collapsed: collapsed,
-      style: _styleOfIndex(_rowStyleIndex(store, row)),
-    );
-  }
-
-  /// The attributes [format] gives a row whose attributes were [old] and
-  /// whose format was [current]: each changed field replaced where it
-  /// stood, or added in the writer's order after the others.
-  ///
-  /// [styleId] is the cell format index of a changed style (0 for none);
-  /// `null` leaves the style attributes as they are.
-  static List<KeptAttribute> _rowAttributesFor(
-    List<KeptAttribute> old,
-    XlsxRowFormat current,
-    XlsxRowFormat format, {
-    required int? styleId,
-  }) {
-    // The attributes that change, in the order the writer writes them
-    // (`CT_Row`): an absent name is removed.
-    final Map<String, String?> changed = <String, String?>{};
-    if (styleId != null) {
-      changed['s'] = styleId == 0 ? null : '$styleId';
-      changed['customFormat'] = styleId == 0 ? null : '1';
-    }
-    if (format.height != current.height) {
-      final double? h = format.height;
-      changed['ht'] = h == null ? null : formatXmlDouble(h);
-    }
-    if (format.hidden != current.hidden) {
-      changed['hidden'] = format.hidden ? '1' : null;
-    }
-    if (format.height != current.height) {
-      changed['customHeight'] = format.height == null ? null : '1';
-    }
-    if (format.outlineLevel != current.outlineLevel) {
-      changed['outlineLevel'] = format.outlineLevel == 0
-          ? null
-          : '${format.outlineLevel}';
-    }
-    if (format.collapsed != current.collapsed) {
-      changed['collapsed'] = format.collapsed ? '1' : null;
-    }
-    return replaceAttributes(old, changed);
-  }
-
-  /// Reads a boolean attribute of [element]: `1` or `true`, `0` or
-  /// `false`; anything else is reported and reads as `null`.
-  bool? _layoutBool(String element, String name, String value) {
-    switch (value) {
-      case '1' || 'true':
-        return true;
-      case '0' || 'false':
-        return false;
-    }
-    _layoutProblem(element, '$name "$value" is not a boolean.');
-    return null;
-  }
-
-  /// Reports that an attribute of [element] (`row 3`, ...) cannot be read,
-  /// once however often it is read.
-  void _layoutProblem(String element, String problem) {
-    final String detail = '$element: $problem';
-    if (_layoutReported.add(detail)) {
-      _warn(XlsxWarningCode.layoutInvalid, null, detail: detail);
-    }
-  }
-
-  static final RegExp _plainInt = RegExp(r'^[+-]?\d+$');
-  static final RegExp _plainNumber = RegExp(
-    r'^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$',
-  );
-
   /// The cells of the loaded worksheet part, to set their [what]. Throws a
   /// [StateError] for a sheet without a part or that is not a worksheet.
+  @override
   CellStore _editableCells(String what) => _editablePart(what).cells;
 
   /// The loaded worksheet part, to set its [what]. Throws a [StateError]
   /// for a sheet without a part or that is not a worksheet.
+  @override
   WorksheetPart _editablePart(String what) {
     final WorksheetPart? part = _load();
     if (part == null) {
@@ -1076,6 +519,7 @@ final class XlsxSheet {
 
   /// The styles part to append to; throws a [StateError] for an untyped
   /// part.
+  @override
   StylesPart _stylesFor() {
     final StylesPart styles = _host.stylesForEdit();
     if (!styles.isTyped) throw _untypedStyles();
@@ -1090,6 +534,7 @@ final class XlsxSheet {
         (KeptAttribute a) => a.qualifiedName == 's' && a.namespaceUri.isEmpty,
       );
 
+  @override
   StateError _untypedStyles() => StateError(
     'The styles part of the workbook is not a SpreadsheetML styleSheet; '
     'cell styles cannot be set.',
@@ -1131,13 +576,8 @@ final class XlsxSheet {
 
   /// The `style` of the `<col>` holding [column], or `null` when none does
   /// or it is not a cell format index.
-  int? _columnStyleIndex(int column) {
-    final String? s = _part?.columnRunAt(column + 1)?.attribute('style');
-    if (s == null || s.isEmpty || s.length > 9 || !_plainInt.hasMatch(s)) {
-      return null;
-    }
-    return int.tryParse(s);
-  }
+  int? _columnStyleIndex(int column) =>
+      parseStyleIndex(_part?.columnRunAt(column + 1)?.attribute('style'));
 
   /// [column], [row] and [cell] laid over each other with
   /// [XlsxStyle.merge], bottom first, as the writer's encoder layers them.
@@ -1235,6 +675,7 @@ final class XlsxSheet {
 
   /// The loaded part, loading it on first use; `null` for a sheet without
   /// a part.
+  @override
   WorksheetPart? _load() {
     final WorksheetPart? loaded = _part;
     if (loaded != null) return loaded;
@@ -1265,6 +706,7 @@ final class XlsxSheet {
     return _part = part;
   }
 
+  @override
   void _warn(XlsxWarningCode code, String? cell, {String? detail}) => _host
       .warnings
       .add(code, sheet: name, cell: cell, detail: detail, key: this);

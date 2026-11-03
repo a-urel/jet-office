@@ -612,21 +612,38 @@ final class WorksheetPart implements PartContent {
       );
       return;
     }
-    _children[_children.indexOf(format)] = format.withAttributes(
-      replaceAttributes(format.attributes, changes),
+    final List<KeptAttribute> next = replaceAttributes(
+      format.attributes,
+      changes,
     );
+    if (sameAttributes(format.attributes, next)) return;
+    _children[_children.indexOf(format)] = format.withAttributes(next);
   }
 
-  /// A snapshot of the part's layout elements (`cols`, `sheetFormatPr`),
-  /// for [restoreLayout]. The elements are immutable, so the snapshot is
-  /// the list of the children as it is now.
-  List<Object> layoutSnapshot() => List<Object>.of(_children);
+  /// The typed first element of [slot] (`cols` or `sheetFormatPr`), or
+  /// `null` when the part has none typed. Elements are immutable, so an
+  /// edit replaces the element, and [swapLayout] undoes it.
+  Object? layoutElement(String slot) => switch (slot) {
+    'cols' => _cols,
+    'sheetFormatPr' => _format,
+    _ => throw ArgumentError.value(slot, 'slot', 'Not a layout slot.'),
+  };
 
-  /// Puts back the layout elements [snapshot] (from [layoutSnapshot]) held.
-  void restoreLayout(List<Object> snapshot) {
-    _children
-      ..clear()
-      ..addAll(snapshot);
+  /// Replaces the layout element [from] of [slot] by [to]: in place, or
+  /// where the schema puts it when [from] is `null` (inserted) or no longer
+  /// there; `null` for [to] removes [from]. Only that slot's element is
+  /// touched, so edits of different elements swap independently.
+  void swapLayout(String slot, Object? from, Object? to) {
+    final int at = from == null
+        ? -1
+        : _children.indexWhere((Object c) => identical(c, from));
+    if (to == null) {
+      if (at >= 0) _children.removeAt(at);
+    } else if (at >= 0) {
+      _children[at] = to;
+    } else {
+      _children.insert(_positionFor(slot), to);
+    }
   }
 
   String _dimensionRef() {

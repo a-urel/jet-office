@@ -71,6 +71,31 @@ void main() {
       expect(runs.last.attributes, same(whole.attributes));
     });
 
+    test('the second column of a range splits off a single column', () {
+      expect(
+        _show(
+          setColumnInRuns(
+            <ColRun>[_run(2, 10)],
+            3,
+            'col',
+            (List<KeptAttribute>? old) => replaceWith('99', old),
+          ),
+        ),
+        '2-2[width=10] 3-3[width=99] 4-10[width=10]',
+      );
+      expect(
+        _show(
+          setColumnInRuns(
+            <ColRun>[_run(1, 3)],
+            2,
+            'col',
+            (List<KeptAttribute>? old) => replaceWith('99', old),
+          ),
+        ),
+        '1-1[width=10] 2-2[width=99] 3-3[width=10]',
+      );
+    });
+
     test('an edge column leaves two runs, a single column one', () {
       expect(
         _show(
