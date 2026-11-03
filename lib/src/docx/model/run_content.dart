@@ -27,9 +27,13 @@ final class DocxText extends DocxRunContent {
   ///
   /// A run builds its own content when its text is set; this constructor is
   /// for comparing a run's content.
-  const DocxText(this.text) : super(const <KeptAttribute>[]);
+  const DocxText(this.text) : _wasRead = false, super(const <KeptAttribute>[]);
 
-  const DocxText._read(this.text, super._attributes);
+  const DocxText._read(this.text, super._attributes) : _wasRead = true;
+
+  /// Whether the text was read from a `w:t`, whose `xml:space` is then
+  /// kept as read; text built by the API gets the writer's rule.
+  final bool _wasRead;
 
   /// The text, without the tabs and breaks that are content of their own.
   final String text;
@@ -154,6 +158,11 @@ DocxCarriageReturn readCarriageReturn(List<KeptAttribute> attributes) =>
 /// own.
 List<KeptAttribute> contentAttributesOf(DocxRunContent content) =>
     content._attributes;
+
+/// Whether [text] was read from a file (its kept attributes, `xml:space`
+/// among them, are then written as read) rather than built when a run's
+/// text was set.
+bool textWasRead(DocxText text) => text._wasRead;
 
 /// Opaque run content for the element [xml] captured.
 DocxOpaqueRunContent opaqueRunContent(OpaqueXml xml) =>

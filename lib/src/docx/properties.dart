@@ -23,14 +23,23 @@ import '../xml/xml_writer.dart';
 /// Writes `<qualifiedName w:val="value"/>`, the shape of `w:pStyle`,
 /// `w:rStyle` and other single-value properties.
 ///
-/// The attribute is written as `w:val`, so `w` must be bound to the
-/// WordprocessingML namespace where the element goes. A character XML
-/// forbids is removed from [value].
-void writeValElement(XmlWriter w, String qualifiedName, String value) {
+/// The attribute is written as `[prefix]:val`, so [prefix] (`w` by
+/// default) must be bound to the WordprocessingML namespace where the
+/// element goes. A character XML forbids is removed from [value].
+void writeValElement(
+  XmlWriter w,
+  String qualifiedName,
+  String value, {
+  String prefix = 'w',
+}) {
   w.start(qualifiedName);
-  w.attribute('w:val', scrubXmlText(value).text);
+  w.attribute('$prefix:val', scrubXmlText(value).text);
   w.end();
 }
+
+/// The default of `PropertyContainer.read`'s `accepts`: every typed child
+/// is typed.
+bool _acceptAll(String localName, XmlPullReader r) => true;
 
 /// One child of a container as it was read: typed (only its local name is
 /// recorded, for the position of the kept children after it) or kept.
@@ -51,13 +60,15 @@ final class _Slot {
 final class PropertyContainer {
   /// A container that keeps nothing, for properties written from scratch.
   const PropertyContainer.empty()
-    : namespaces = const <String, String>{},
+    : isRead = false,
+      namespaces = const <String, String>{},
       attributes = const <KeptAttribute>[],
       kept = const <OpaqueXml>[],
       _slots = const <_Slot>[];
 
   PropertyContainer._(this.namespaces, this.attributes, this._slots)
-    : kept = List<OpaqueXml>.unmodifiable(<OpaqueXml>[
+    : isRead = true,
+      kept = List<OpaqueXml>.unmodifiable(<OpaqueXml>[
         for (final _Slot s in _slots)
           if (s.kept != null) s.kept!,
       ]);
@@ -66,17 +77,21 @@ final class PropertyContainer {
   /// and consumes it: afterwards [r] is on the container's end event.
   ///
   /// A child in the WordprocessingML namespace whose local name is in
-  /// [typed] is handed to [onTyped] with [r] on its start element;
+  /// [typed], and that [accepts] (with [r] on its start element; by default
+  /// every one), is handed to [onTyped] with [r] on its start element;
   /// [onTyped] must leave [r] on that child's end event (`r.skip()` does).
-  /// Every other child is kept as [OpaqueXml], and the container's
-  /// attributes are kept as well. Character data and comments between the
-  /// children are dropped.
+  /// Every other child is kept as [OpaqueXml], a typed name that [accepts]
+  /// refuses among them, so a child the model cannot type without losing
+  /// something is written back as read. The container's attributes are
+  /// kept as well. Character data and comments between the children are
+  /// dropped.
   ///
   /// [r] must be on a start element; anything else throws [StateError].
   factory PropertyContainer.read(
     XmlPullReader r, {
     required Set<String> typed,
     required void Function(String localName, XmlPullReader r) onTyped,
+    bool Function(String localName, XmlPullReader r) accepts = _acceptAll,
   }) {
     if (r.eventType != XmlEventType.startElement) {
       throw StateError('PropertyContainer.read needs a start element.');
@@ -102,7 +117,9 @@ final class PropertyContainer {
         continue;
       }
       final String localName = r.localName;
-      if (r.namespaceUri == Ns.w && typed.contains(localName)) {
+      if (r.namespaceUri == Ns.w &&
+          typed.contains(localName) &&
+          accepts(localName, r)) {
         slots.add(_Slot.typed(localName));
         onTyped(localName, r);
       } else {
@@ -111,6 +128,11 @@ final class PropertyContainer {
     }
     return PropertyContainer._(namespaces, attributes, slots);
   }
+
+  /// Whether the container was read from a file. A read container is
+  /// written back even when it holds nothing, as it was; an empty one built
+  /// from scratch need not be.
+  final bool isRead;
 
   /// The namespaces the container element declared, prefix to URI.
   final Map<String, String> namespaces;

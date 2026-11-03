@@ -17,17 +17,32 @@
 /// Elements match by namespace URI and local name, never by prefix: a
 /// document written with `ns0:` or a default namespace reads the same.
 /// Strict WordprocessingML never gets here; the package refuses it.
+///
+/// [DocumentPart.encode] writes the part back from the model. The root is
+/// written as read, with every namespace declaration and `mc:Ignorable`, and
+/// every kept element and attribute is written with the root's bindings as
+/// the ones in scope, so it declares only what it needs and never redeclares
+/// `w`. Typed elements use the root's own prefix for WordprocessingML. An
+/// unchanged read writes the same document (by meaning; see
+/// `tool/src/part_compare.dart`).
 library;
+
+import 'dart:typed_data';
 
 import '../opc/ooxml.dart' show Ns;
 import '../opc/opaque_xml.dart';
+import '../opc/package.dart' show PartContent;
+import '../xml/utf8_buffer.dart';
+import '../xml/xml_escape.dart';
 import '../xml/xml_pull_reader.dart';
+import '../xml/xml_writer.dart';
 import 'model/blocks.dart';
 import 'model/inlines.dart';
 import 'model/run_content.dart';
 import 'properties.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
+import 'schema_order.dart';
 import 'warnings.dart';
 
 /// The paragraph properties the reader types: the style.
@@ -38,15 +53,31 @@ const Set<String> _rPrTyped = <String>{'rStyle'};
 
 /// The main document part: the root's start tag, what surrounds the body,
 /// and the body's blocks.
-final class DocumentPart {
+final class DocumentPart implements PartContent {
   DocumentPart._(
+    this.partName,
     this.root,
     this.beforeBody,
     this.bodyAttributes,
     this.blocks,
     this.finalSectPr,
-    this.afterBody,
-  );
+    this.afterBody, {
+    required bool hasBody,
+  }) : _hasBody = hasBody;
+
+  /// The main document part of a new document: a `w:document` that declares
+  /// only `w`, with an empty body. Add paragraphs to [blocks].
+  DocumentPart.create({String partName = '/word/document.xml'})
+    : this._(
+        partName,
+        const XmlRoot.of('w:document', <String, String>{'w': Ns.w}),
+        const <OpaqueXml>[],
+        const <KeptAttribute>[],
+        <DocxBlock>[],
+        null,
+        const <OpaqueXml>[],
+        hasBody: true,
+      );
 
   /// Reads the part from [r], which must not have been advanced, and
   /// consumes it to the end of the root element.
@@ -68,6 +99,27 @@ final class DocumentPart {
     String partName, {
     required DocxReadLimits limits,
   }) => _PartReader(r, partName, limits.maxTextLength).read();
+
+  /// The part's absolute name, such as `/word/document.xml`: the part of
+  /// the warnings [encode] raises.
+  final String partName;
+
+  /// Whether the part has a `w:body`. A document read without one is
+  /// written without one, unless blocks were added.
+  final bool _hasBody;
+
+  DocxWarningCollector _encodeWarnings = DocxWarningCollector();
+
+  /// The warnings the last [encode] raised; empty before the first.
+  ///
+  /// Each [encode] starts a new collector, so encoding twice reports each
+  /// problem once: the save reads this after it encoded the part. The
+  /// characters a run lost when its text was set are reported here, with
+  /// [DocxWarningCode.invalidCharactersRemoved] at the run's location at
+  /// that time, `body/p[i]/r[j]`, where `i` counts only the paragraphs of
+  /// the body and `j` only the runs of the paragraph. A run that is no
+  /// longer in the body is not reported.
+  DocxWarningCollector get encodeWarnings => _encodeWarnings;
 
   /// The root element's start tag: its name, namespace declarations and
   /// attributes (`mc:Ignorable` among them), so the part is written back
@@ -93,7 +145,212 @@ final class DocumentPart {
   /// The children of `w:document` after `w:body`, in order. A second
   /// `w:body` is one of them.
   final List<OpaqueXml> afterBody;
+
+  /// Writes the part, and replaces [encodeWarnings] with the warnings of
+  /// this write.
+  @override
+  List<Uint8List> encode() {
+    final DocxWarningCollector warnings = DocxWarningCollector();
+    final Utf8Buffer buffer = Utf8Buffer();
+    final XmlWriter w = XmlWriter(buffer)..declaration();
+    final XmlRoot root = this.root;
+    final String rootPrefix = _prefixOf(root.qualifiedName);
+    // The prefix typed elements use: one bound to WordprocessingML on the
+    // root, `w` first. Attributes need one, so a root that binds the
+    // namespace only as the default gets one declared.
+    String? prefix = root.namespaces['w'] == Ns.w
+        ? 'w'
+        : rootPrefix.isNotEmpty
+        ? rootPrefix
+        : _boundPrefix(root.namespaces);
+    final Map<String, String> scope = <String, String>{...root.namespaces};
+    root.writeStart(w);
+    if (prefix == null) {
+      prefix = 'w';
+      for (int i = 1; scope.containsKey(prefix); i++) {
+        prefix = 'w$i';
+      }
+      scope[prefix!] = Ns.w;
+      w.attribute('xmlns:$prefix', Ns.w);
+    }
+    _Writer(w, '$prefix:', prefix, scope, partName, warnings).write(this);
+    w.end();
+    _encodeWarnings = warnings;
+    return buffer.takeChunks();
+  }
 }
+
+/// The prefix of the qualified name [name], or `''` for none.
+String _prefixOf(String name) {
+  final int colon = name.indexOf(':');
+  return colon < 0 ? '' : name.substring(0, colon);
+}
+
+/// A non-empty prefix [namespaces] binds to WordprocessingML, or null.
+String? _boundPrefix(Map<String, String> namespaces) {
+  for (final MapEntry<String, String> e in namespaces.entries) {
+    if (e.key.isNotEmpty && e.value == Ns.w) return e.key;
+  }
+  return null;
+}
+
+/// One write of a document part's content, inside the open root.
+final class _Writer {
+  _Writer(
+    this._w,
+    this._p,
+    this._prefix,
+    this._scope,
+    this._partName,
+    this._warnings,
+  );
+
+  final XmlWriter _w;
+
+  /// The WordprocessingML prefix with its colon, such as `w:`.
+  final String _p;
+
+  /// The WordprocessingML prefix, such as `w`.
+  final String _prefix;
+
+  /// The bindings in scope inside the root.
+  final Map<String, String> _scope;
+
+  final String _partName;
+  final DocxWarningCollector _warnings;
+
+  void write(DocumentPart part) {
+    for (final OpaqueXml x in part.beforeBody) {
+      x.writeTo(_w, declaredAbove: _scope);
+    }
+    if (part._hasBody ||
+        part.blocks.isNotEmpty ||
+        part.bodyAttributes.isNotEmpty) {
+      _w.start('${_p}body');
+      writeKeptAttributes(_w, part.bodyAttributes, declaredAbove: _scope);
+      int paragraphs = 0;
+      for (final DocxBlock block in part.blocks) {
+        switch (block) {
+          case DocxParagraph():
+            _paragraph(block, 'body/p[${paragraphs++}]');
+          case DocxOpaqueBlock():
+            opaqueBlockXml(block).writeTo(_w, declaredAbove: _scope);
+        }
+      }
+      part.finalSectPr?.writeTo(_w, declaredAbove: _scope);
+      _w.end();
+    }
+    for (final OpaqueXml x in part.afterBody) {
+      x.writeTo(_w, declaredAbove: _scope);
+    }
+  }
+
+  /// Writes the paragraph [p] at the location [path].
+  void _paragraph(DocxParagraph p, String path) {
+    final XmlWriter w = _w;
+    w.start('${_p}p');
+    writeKeptAttributes(w, paragraphAttributesOf(p), declaredAbove: _scope);
+    final PropertyContainer pPr = paragraphPropertiesOf(p);
+    final String? style = p.style;
+    if (style != null || pPr.isRead || !pPr.isEmpty) {
+      pPr.writeTo(w, '${_p}pPr', pPrOrder, <String, void Function(XmlWriter)>{
+        if (style != null)
+          'pStyle': (XmlWriter w) =>
+              writeValElement(w, '${_p}pStyle', style, prefix: _prefix),
+      }, declaredAbove: _scope);
+    }
+    int runs = 0;
+    for (final DocxInline inline in p.inlines) {
+      switch (inline) {
+        case DocxRun():
+          _run(inline, '$path/r[${runs++}]');
+        case DocxOpaqueInline():
+          opaqueInlineXml(inline).writeTo(w, declaredAbove: _scope);
+      }
+    }
+    w.end();
+  }
+
+  /// Writes the run [r] at the location [path], and reports the characters
+  /// removed from its text there.
+  void _run(DocxRun r, String path) {
+    final int removed = removedCharactersOf(r);
+    if (removed > 0) {
+      _warnings.add(
+        DocxWarningCode.invalidCharactersRemoved,
+        part: _partName,
+        location: path,
+        count: removed,
+      );
+    }
+    final XmlWriter w = _w;
+    w.start('${_p}r');
+    writeKeptAttributes(w, runAttributesOf(r), declaredAbove: _scope);
+    final PropertyContainer rPr = runPropertiesOf(r);
+    final String? style = r.style;
+    if (style != null || rPr.isRead || !rPr.isEmpty) {
+      rPr.writeTo(w, '${_p}rPr', rPrOrder, <String, void Function(XmlWriter)>{
+        if (style != null)
+          'rStyle': (XmlWriter w) =>
+              writeValElement(w, '${_p}rStyle', style, prefix: _prefix),
+      }, declaredAbove: _scope);
+    }
+    for (final DocxRunContent c in r.content) {
+      _content(c);
+    }
+    w.end();
+  }
+
+  /// Writes one piece of run content.
+  void _content(DocxRunContent c) {
+    final XmlWriter w = _w;
+    switch (c) {
+      case DocxText(:final String text):
+        w.start('${_p}t');
+        if (textWasRead(c)) {
+          writeKeptAttributes(w, contentAttributesOf(c), declaredAbove: _scope);
+        } else if (_needsPreserve(text)) {
+          w.attribute('xml:space', 'preserve');
+        }
+        w.text(scrubXmlText(text).text);
+        w.end();
+      case DocxTab():
+        _empty('tab', c);
+      case DocxBreak(:final DocxBreakType type):
+        w.start('${_p}br');
+        if (type != DocxBreakType.line) {
+          w.attribute('${_p}type', type.name);
+        }
+        writeKeptAttributes(w, contentAttributesOf(c), declaredAbove: _scope);
+        w.end();
+      case DocxCarriageReturn():
+        _empty('cr', c);
+      case DocxOpaqueRunContent():
+        opaqueRunContentXml(c).writeTo(w, declaredAbove: _scope);
+    }
+  }
+
+  /// Writes `w:<localName>` with the attributes [c] kept and no content.
+  void _empty(String localName, DocxRunContent c) {
+    _w.start('$_p$localName');
+    writeKeptAttributes(_w, contentAttributesOf(c), declaredAbove: _scope);
+    _w.end();
+  }
+}
+
+/// Whether text set through the API needs `xml:space="preserve"`: it starts
+/// or ends with whitespace, or holds two spaces in a row, which a reader
+/// would otherwise be free to collapse.
+bool _needsPreserve(String text) {
+  if (text.isEmpty) return false;
+  return _isSpace(text.codeUnitAt(0)) ||
+      _isSpace(text.codeUnitAt(text.length - 1)) ||
+      text.contains('  ');
+}
+
+/// Whether [unit] is XML whitespace.
+bool _isSpace(int unit) =>
+    unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D;
 
 /// One read of a document part.
 final class _PartReader {
@@ -135,12 +392,14 @@ final class _PartReader {
       }
     });
     return DocumentPart._(
+      _partName,
       root,
       List<OpaqueXml>.unmodifiable(before),
       bodyAttributes,
       blocks,
       finalSectPr,
       List<OpaqueXml>.unmodifiable(after),
+      hasBody: bodySeen,
     );
   }
 
@@ -181,6 +440,7 @@ final class _PartReader {
         properties = PropertyContainer.read(
           r,
           typed: _pPrTyped,
+          accepts: _isPlainStyle,
           onTyped: (String _, XmlPullReader r) {
             style = _styleValue(r);
             r.skip();
@@ -233,6 +493,7 @@ final class _PartReader {
           properties = PropertyContainer.read(
             r,
             typed: _rPrTyped,
+            accepts: _isPlainStyle,
             onTyped: (String _, XmlPullReader r) {
               style = _styleValue(r);
               r.skip();
@@ -322,11 +583,18 @@ final class _PartReader {
 bool _isW(XmlPullReader r, String localName) =>
     r.namespaceUri == Ns.w && r.localName == localName;
 
-/// The `w:val` of the style element [r] is on, or `null` when it has none
-/// or an empty one.
-String? _styleValue(XmlPullReader r) {
+/// The `w:val` of the style element [r] is on, which [_isPlainStyle]
+/// accepted.
+String _styleValue(XmlPullReader r) =>
+    r.getAttribute('val', namespaceUri: Ns.w)!;
+
+/// Whether the `w:pStyle` or `w:rStyle` [r] is on is typed: it has a
+/// non-empty `w:val` and no other attribute. Any other one (no `w:val`, an
+/// empty one, or more attributes) stays kept, so the style reads null and
+/// the element is written back as read.
+bool _isPlainStyle(String _, XmlPullReader r) {
   final String? value = r.getAttribute('val', namespaceUri: Ns.w);
-  return value == null || value.isEmpty ? null : value;
+  return value != null && value.isNotEmpty && keepAttributes(r).length == 1;
 }
 
 /// Calls [onChild] with [r] on the start of each child element of the

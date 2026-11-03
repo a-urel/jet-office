@@ -233,9 +233,12 @@ void main() {
       '<ns0:document xmlns:ns0="${Ns.w}"><ns0:body>${prefixed('ns0')}'
       '</ns0:body></ns0:document>',
     );
+    final String plainBody = body.replaceAllMapped(
+      RegExp(r'\s(val|type|id)='),
+      (Match m) => ' w:${m.group(1)}=',
+    );
     final DocumentPart plain = _readXml(
-      '<document xmlns="${Ns.w}" xmlns:w="${Ns.w}"><body>'
-      '${body.replaceAllMapped(RegExp(r'\s(val|type|id)='), (Match m) => ' w:${m.group(1)}=')}'
+      '<document xmlns="${Ns.w}" xmlns:w="${Ns.w}"><body>$plainBody'
       '</body></document>',
     );
     final String expected = _dump(w);

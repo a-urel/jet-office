@@ -253,6 +253,11 @@ void _inherit(
 final class XmlRoot {
   const XmlRoot._(this.qualifiedName, this.namespaces, this.attributes);
 
+  /// The start tag of a root written from scratch: [qualifiedName] with the
+  /// declarations [namespaces], prefix to URI, and no other attributes.
+  const XmlRoot.of(this.qualifiedName, this.namespaces)
+    : attributes = const <KeptAttribute>[];
+
   /// Captures the root element's start tag the current event of [r] is on.
   /// [r] stays on it; nothing is consumed.
   ///
