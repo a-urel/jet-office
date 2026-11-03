@@ -929,11 +929,12 @@ Open `build/edited.xlsx` in Excel. Check:
 The same two files edited in Excel itself (one cell, saved) give the
 comparison when something looks different.
 
-Result: one problem, 2026-11-03 (see "Results" and "Open issues"). The
-round-tripped fixtures, `w1_generated`, a 1904-system workbook and an
-unchanged round trip of a workbook Excel made all open without the repair
-prompt. Setting the text of a table's header cell does not rename the
-table's column, so Excel repairs the table.
+Result: ok, 2026-11-03 (see "Results"). The round-tripped fixtures,
+`w1_generated`, a 1904-system workbook and an unchanged round trip of a
+workbook Excel made all open without the repair prompt. The first check found
+that setting a table's header cell left the column's name, so Excel repaired
+the table; b1fa49d renames the column, and the re-check opens clean (see
+"Open issues", W1).
 
 ## Open issues
 
@@ -941,7 +942,15 @@ Problems a check found that the owner deferred. Each names the milestone that
 must close it. A closed issue stays here, marked closed, with the commit that
 closed it.
 
-### Setting a table header cell leaves the column name (W1, open)
+### Setting a table header cell leaves the column name (closed, 2026-11-03)
+
+Closed on 2026-11-03 by b1fa49d and the re-check in Excel for Mac 16.114.1
+(see "Results"): setting a header cell now renames the table's column to the
+cell's text, so `table1.xml` says `name="edited by jet_office"`, and Excel
+opens the file without the repair prompt, A1 still the header with its filter
+button. Formulas that name the column by its old name are not rewritten; that
+waits for the formula lexer of W5, and the model warns. The account below is
+what the first check found.
 
 Found in the W1 check on 2026-11-03. `w1_test.xlsx`, made in Excel for Mac
 16.114.1 with a table `A1:D6` (header `Ürün`, `Adet`, `Fiyat`, `Tutar`),
@@ -1225,3 +1234,4 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `format_oracle_1904.xlsx`, A1 edited | ok | No repair prompt. A1 `edited by jet_office`; still the 1904 system: row 9 `Cuma 1904-01-01`, row 10 `2030-10-29`, negative times shown. Widths and formats as before. Written by `tool/write_format_oracle.dart`, not by Excel. |
 | 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_test.xlsx` (made in Excel), unchanged round trip and H5 edited | ok | No repair prompt on either. Table, filter buttons, conditional formatting, note, hyperlink, merged A10:D10, column width and `Özet` kept; D8 `526,55`. The edit changed only H5, `spans`, the appended shared string, the dropped `calcChain` and `fullCalcOnLoad`. |
 | 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_test.xlsx`, A1 (a table header) edited | sorun | Repair prompt; the recovery log names `/xl/tables/table1.xml`. The column name stays `Ürün` (see "Open issues", W1). |
+| 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1 re-check after b1fa49d: `w1_test.xlsx`, A1 (a table header) edited | ok | No repair prompt. A1 `edited by jet_office` with its filter button; the table, conditional formatting, hyperlink, merged A10:D10 and `Özet` as before. `table1.xml` differs from the original only in `name="Ürün"`, now `name="edited by jet_office"`. |
