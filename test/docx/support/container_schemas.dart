@@ -10,6 +10,8 @@
 library;
 
 import 'package:jet_office/src/docx/model/formatting.dart';
+import 'package:jet_office/src/docx/model/numbering_formats.dart';
+import 'package:jet_office/src/docx/numbering_schemas.dart';
 import 'package:jet_office/src/docx/paragraph_property_codecs.dart';
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/run_property_codecs.dart';
@@ -117,4 +119,26 @@ final List<ContainerSchemaCase> containerSchemaCases = <ContainerSchemaCase>[
   (name: 'docDefaults', schema: docDefaultsSchema, samples: <String, Object>{}),
   (name: 'rPrDefault', schema: rPrDefaultSchema, samples: <String, Object>{}),
   (name: 'pPrDefault', schema: pPrDefaultSchema, samples: <String, Object>{}),
+  (
+    name: 'lvl',
+    schema: levelSchema,
+    samples: <String, Object>{
+      'start': 1,
+      'numFmt': DocxNumberFormat.decimal,
+      'lvlText': '%1.',
+      'lvlJc': DocxLevelAlignment.left,
+    },
+  ),
+  (
+    name: 'rPr (level)',
+    schema: levelRunPropertiesSchema,
+    samples: <String, Object>{
+      'rFonts': DocxFonts(ascii: 'Symbol', hAnsi: 'Symbol'),
+    },
+  ),
+  (
+    name: 'lvlOverride',
+    schema: levelOverrideSchema,
+    samples: <String, Object>{'startOverride': 3},
+  ),
 ];

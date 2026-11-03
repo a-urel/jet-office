@@ -401,6 +401,46 @@ final class FontsCodec extends PropertyCodec<DocxFonts> {
   }
 }
 
+/// The codec of the `w:rFonts` of a numbering level's `w:rPr`: the font of
+/// a bullet.
+///
+/// It reads as [FontsCodec] does. A set writes the slots the value names
+/// and `w:hint="default"`, as Word writes a bullet's font, and keeps every
+/// other attribute as read (`w:cs`, say).
+final class BulletFontsCodec extends PropertyCodec<DocxFonts> {
+  /// The codec of a level's `w:rFonts`.
+  const BulletFontsCodec() : super('rFonts');
+
+  @override
+  Set<String> get attributes => const FontsCodec().attributes;
+
+  @override
+  DocxFonts? parse(PropertyElement e) => const FontsCodec().parse(e);
+
+  @override
+  void write(
+    XmlWriter w,
+    String prefix,
+    DocxFonts value,
+    PropertyElement? asRead,
+  ) {
+    w.start('$prefix:$localName');
+    void slot(String name, String? v) {
+      if (v != null) w.attribute('$prefix:$name', scrubXmlText(v).text);
+    }
+
+    slot('ascii', value.ascii);
+    slot('hAnsi', value.hAnsi);
+    slot('eastAsia', value.eastAsia);
+    slot('asciiTheme', value.asciiTheme);
+    slot('hAnsiTheme', value.hAnsiTheme);
+    slot('eastAsiaTheme', value.eastAsiaTheme);
+    w.attribute('$prefix:hint', 'default');
+    _writeKept(w, prefix, asRead, const <String>{..._fontSlots, 'hint'});
+    w.end();
+  }
+}
+
 /// The codec of `w:lang`: the language of Latin text (`w:val`).
 ///
 /// `w:eastAsia` and `w:bidi` are understood and kept as read when the

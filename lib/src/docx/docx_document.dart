@@ -37,9 +37,11 @@ import 'blank_document.dart';
 import 'document_part.dart';
 import 'docx_package.dart';
 import 'model/blocks.dart';
+import 'model/numbering.dart';
 import 'model/primitives.dart' as primitives;
 import 'model/primitives.dart' show DocxEdits;
 import 'model/styles.dart';
+import 'numbering_part.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
 import 'related_part.dart';
@@ -59,6 +61,9 @@ bool isBodyLoaded(DocxDocument document) => document._body != null;
 
 /// Whether the styles of [document] have been loaded, for tests.
 bool isStylesLoaded(DocxDocument document) => document._styles != null;
+
+/// Whether the numbering of [document] has been loaded, for tests.
+bool isNumberingLoaded(DocxDocument document) => document._numbering != null;
 
 /// A Word document held in memory: opened from a DOCX file, read and
 /// changed block by block, and saved.
@@ -121,6 +126,11 @@ final class DocxDocument {
   RelatedPart? _stylesSlot;
   DocxStyles? _styles;
 
+  /// The numbering part and where it is, once the numbering is loaded.
+  NumberingPart? _numberingPart;
+  RelatedPart? _numberingSlot;
+  DocxNumbering? _numbering;
+
   List<DocxWarning> _warnings;
 
   /// The document's body, the content of `w:body`.
@@ -143,6 +153,20 @@ final class DocxDocument {
   /// the main part); nothing is loaded then, so the next access throws
   /// again and a save copies the part as it was.
   DocxStyles get styles => _styles ?? _loadStyles();
+
+  /// The document's lists, from the numbering part: the abstract
+  /// definitions and the instances paragraphs name.
+  ///
+  /// The part, found through the main part's relationship wherever it
+  /// lives, loads on the first access, or at save when a paragraph's
+  /// numbering was set (to report a list the document lacks); until then a
+  /// save copies it byte for byte. A document without one has an empty
+  /// numbering, and gains the part at save once it holds a definition.
+  /// Throws a [DocxReadException] naming the part when it cannot be read
+  /// (malformed XML, a root that is not `w:numbering`, or a damaged
+  /// relationships part of the main part); nothing is loaded then, so the
+  /// next access throws again and a save copies the part as it was.
+  DocxNumbering get numbering => _numbering ?? _loadNumbering();
 
   /// What was repaired while opening and loading the document, followed by
   /// what the last [save] or [saveTo] repaired, in first-occurrence order.
@@ -217,13 +241,61 @@ final class DocxDocument {
     return _styles = part.styles;
   }
 
+  DocxNumbering _loadNumbering() {
+    final RelatedPart slot = RelatedPart.find(
+      _package,
+      source: _package.mainPart,
+      relationshipType: RelType.numbering,
+      defaultName: '/word/numbering.xml',
+      contentType: ContentType.wmlNumbering,
+    );
+    final NumberingPart part = slot.exists
+        ? slot.load(
+            (XmlPullReader r) => NumberingPart.read(r, slot.name, _edits),
+          )
+        : NumberingPart.empty(_edits);
+    _numberingSlot = slot;
+    _numberingPart = part;
+    return _numbering = part.numbering;
+  }
+
+  /// Whether the document defines a list instance, for the check of the
+  /// lists paragraphs were put in through the API (plan Ruling 8); `null`
+  /// when no paragraph of the body was, or the numbering part cannot be
+  /// read (nothing is reported then).
+  bool Function(int numId)? _listCheck() {
+    final DocxBody? body = _body;
+    if (body == null ||
+        !body._blocks.any(
+          (DocxBlock b) => b is DocxParagraph && listSetOf(b) != null,
+        )) {
+      return null;
+    }
+    final DocxNumbering numbering;
+    try {
+      numbering = this.numbering;
+    } on DocxReadException {
+      // A broken part is copied as it was, and its lists are unknown.
+      return null;
+    }
+    return numberingInstanceIds(numbering).contains;
+  }
+
   void _write(ZipWriter zip) {
     final DocxPackage package = _package;
+    final DocumentPart? main = _part;
+    if (main != null) {
+      main.listDefined = _listCheck();
+    }
     // A styles part the document lacked is added once it holds something
     // (plan Ruling 7); after that it is a part like the others.
     final StylesPart? styles = _stylesPart;
     if (styles != null && styles.holdsSomething) {
       _stylesSlot!.create(styles);
+    }
+    final NumberingPart? numbering = _numberingPart;
+    if (numbering != null && numbering.holdsSomething) {
+      _numberingSlot!.create(numbering);
     }
     package.guard(package.mainPart, () => package.package.writeTo(zip));
     final DocumentPart? part = _part;

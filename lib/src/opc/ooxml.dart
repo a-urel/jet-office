@@ -297,6 +297,10 @@ abstract final class ContentType {
   static const String wmlStyles =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml';
 
+  /// The numbering part of a Word document (`word/numbering.xml`).
+  static const String wmlNumbering =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml';
+
   /// The settings part of a Word document.
   static const String wmlSettings =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml';

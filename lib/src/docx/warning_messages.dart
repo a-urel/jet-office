@@ -60,5 +60,27 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
     (DocxWarningCode.mainPartContentTypeUnexpected, OfficeLocale.tr) =>
       'Ana belge $part, Word belge türü olmayan $detail içerik türüne '
           'sahip; Word belgesi olarak okundu.',
+    (DocxWarningCode.numberingNotFound, OfficeLocale.en) =>
+      count == 1
+          ? '1 paragraph in $part$locations belongs to the list $detail, '
+                'which the document does not define; Word shows it without a '
+                'number.'
+          : '$count paragraphs in $part$locations belong to the list '
+                '$detail, which the document does not define; Word shows them '
+                'without a number.',
+    (DocxWarningCode.numberingNotFound, OfficeLocale.de) =>
+      count == 1
+          ? '1 Absatz in $part$locations gehört zur Liste $detail, die das '
+                'Dokument nicht definiert; Word zeigt ihn ohne Nummer.'
+          : '$count Absätze in $part$locations gehören zur Liste $detail, '
+                'die das Dokument nicht definiert; Word zeigt sie ohne Nummer.',
+    // Turkish keeps the noun singular after a numeral: "2 paragraf".
+    (DocxWarningCode.numberingNotFound, OfficeLocale.tr) =>
+      count == 1
+          ? '$part$locations içindeki 1 paragraf, belgenin tanımlamadığı '
+                '$detail listesine ait; Word onu numarasız gösterir.'
+          : '$part$locations içindeki $count paragraf, belgenin '
+                'tanımlamadığı $detail listesine ait; Word bunları numarasız '
+                'gösterir.',
   };
 }

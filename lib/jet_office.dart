@@ -109,6 +109,16 @@
 /// custom style. The styles part loads on first access, and a document
 /// without one gains it at save once it holds something.
 ///
+/// [DocxDocument.numbering] gives the document's lists, a [DocxNumbering]:
+/// each [DocxAbstractNumbering] holds the [DocxNumberingLevel]s that say
+/// how a level is numbered ([DocxNumberFormat], [DocxLevelAlignment]),
+/// and each [DocxNumberingInstance], which a paragraph names through
+/// [DocxNumberingInstance.ref], uses one of them, with a
+/// [DocxLevelOverride] per level whose start it changes.
+/// [DocxNumbering.addInstance] starts a new list of a definition. A
+/// paragraph put in a list the document does not define is reported at
+/// save ([DocxWarningCode.numberingNotFound]).
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
@@ -116,6 +126,8 @@
 /// @docImport 'src/docx/docx_document.dart';
 /// @docImport 'src/docx/model/blocks.dart';
 /// @docImport 'src/docx/model/inlines.dart';
+/// @docImport 'src/docx/model/numbering.dart';
+/// @docImport 'src/docx/model/numbering_formats.dart';
 /// @docImport 'src/docx/model/paragraph_properties.dart';
 /// @docImport 'src/docx/model/run_content.dart';
 /// @docImport 'src/docx/model/run_properties.dart';
@@ -172,6 +184,15 @@ export 'src/docx/model/formatting.dart'
         DocxUnderlineStyle,
         DocxVerticalAlign;
 export 'src/docx/model/inlines.dart' show DocxInline, DocxOpaqueInline, DocxRun;
+export 'src/docx/model/numbering.dart'
+    show
+        DocxAbstractNumbering,
+        DocxLevelOverride,
+        DocxNumbering,
+        DocxNumberingInstance,
+        DocxNumberingLevel;
+export 'src/docx/model/numbering_formats.dart'
+    show DocxLevelAlignment, DocxNumberFormat;
 export 'src/docx/model/paragraph_properties.dart'
     show DocxParagraphProperties, DocxParagraphProperty;
 export 'src/docx/model/run_content.dart'

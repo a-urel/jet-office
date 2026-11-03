@@ -31,6 +31,13 @@ enum DocxWarningCode {
   /// The main document part has a content type that is not a Word document
   /// type, given in [DocxWarning.detail]. It was read as a Word document.
   mainPartContentTypeUnexpected,
+
+  /// A paragraph was put in a list through the API (its numbering set) that
+  /// the document does not define; [DocxWarning.detail] is the list's id
+  /// (`w:numId`). The reference is written as set, and Word shows the
+  /// paragraph without a number. A reference read from the file is kept
+  /// and never reported.
+  numberingNotFound,
 }
 
 /// One data problem found while reading or writing a DOCX file, possibly
@@ -53,7 +60,8 @@ final class DocxWarning {
   ///
   /// [DocxWarningCode.contentTypeMissing] carries the content type the part
   /// was read as; [DocxWarningCode.mainPartContentTypeUnexpected] carries the
-  /// content type the package declared.
+  /// content type the package declared; [DocxWarningCode.numberingNotFound]
+  /// carries the id of the list.
   String? get detail => _entry.detail;
 
   /// How many times the problem occurred in [part].

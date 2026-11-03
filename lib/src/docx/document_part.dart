@@ -37,6 +37,7 @@ import '../xml/xml_escape.dart';
 import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'model/blocks.dart';
+import 'model/formatting.dart' show DocxNumberingRef;
 import 'model/inlines.dart';
 import 'model/property_set.dart';
 import 'model/run_content.dart';
@@ -47,6 +48,18 @@ import 'read_exception.dart';
 import 'read_limits.dart';
 import 'run_property_codecs.dart' show runPropertiesSchema;
 import 'warnings.dart';
+
+/// The list [paragraph] was put in through the API: the value of a
+/// `w:numPr` set on it that names a list other than 0, or `null` (nothing
+/// set, removed, or read from the file).
+DocxNumberingRef? listSetOf(DocxParagraph paragraph) {
+  final PropertySet pPr = paragraphPropertySetOf(paragraph);
+  if (!pPr.isSet('numPr')) {
+    return null;
+  }
+  final Object? value = pPr.valueOf('numPr');
+  return value is DocxNumberingRef && value.numId != 0 ? value : null;
+}
 
 /// The main document part: the root's start tag, what surrounds the body,
 /// and the body's blocks.
@@ -107,6 +120,12 @@ final class DocumentPart implements PartContent {
 
   DocxWarningCollector _encodeWarnings = DocxWarningCollector();
 
+  /// Whether the document defines the list instance a numId names, so a
+  /// `w:numPr` set through the API that names another is reported at
+  /// [encode] (plan Ruling 8); `null` reports none. The save sets it
+  /// before it writes the part.
+  bool Function(int numId)? listDefined;
+
   /// The warnings the last [encode] raised; empty before the first.
   ///
   /// Each [encode] starts a new collector, so encoding twice reports each
@@ -115,7 +134,10 @@ final class DocumentPart implements PartContent {
   /// [DocxWarningCode.invalidCharactersRemoved] at the run's location at
   /// that time, `body/p[i]/r[j]`, where `i` counts only the paragraphs of
   /// the body and `j` only the runs of the paragraph. A run that is no
-  /// longer in the body is not reported.
+  /// longer in the body is not reported. A paragraph whose `w:numPr` was
+  /// set through the API to a list other than 0 that [listDefined] denies
+  /// is reported with [DocxWarningCode.numberingNotFound] at `body/p[i]`,
+  /// with the list's id as the detail.
   DocxWarningCollector get encodeWarnings => _encodeWarnings;
 
   /// The root element's start tag: its name, namespace declarations and
@@ -151,7 +173,15 @@ final class DocumentPart implements PartContent {
     final Utf8Buffer buffer = Utf8Buffer();
     final XmlWriter w = XmlWriter(buffer)..declaration();
     final (:String prefix, :Map<String, String> scope) = openWordRoot(w, root);
-    _Writer(w, '$prefix:', prefix, scope, partName, warnings).write(this);
+    _Writer(
+      w,
+      '$prefix:',
+      prefix,
+      scope,
+      partName,
+      warnings,
+      listDefined,
+    ).write(this);
     w.end();
     _encodeWarnings = warnings;
     return buffer.takeChunks();
@@ -167,6 +197,7 @@ final class _Writer {
     this._scope,
     this._partName,
     this._warnings,
+    this._listDefined,
   );
 
   final XmlWriter _w;
@@ -182,6 +213,7 @@ final class _Writer {
 
   final String _partName;
   final DocxWarningCollector _warnings;
+  final bool Function(int numId)? _listDefined;
 
   void write(DocumentPart part) {
     for (final OpaqueXml x in part.beforeBody) {
@@ -215,6 +247,16 @@ final class _Writer {
     w.start('${_p}p');
     writeKeptAttributes(w, paragraphAttributesOf(p), declaredAbove: _scope);
     final PropertySet pPr = paragraphPropertySetOf(p);
+    final bool Function(int)? listDefined = _listDefined;
+    final DocxNumberingRef? list = listDefined == null ? null : listSetOf(p);
+    if (list != null && !listDefined!(list.numId)) {
+      _warnings.add(
+        DocxWarningCode.numberingNotFound,
+        part: _partName,
+        location: path,
+        detail: '${list.numId}',
+      );
+    }
     if (!pPr.writesNothing) {
       pPr.writeTo(w, '${_p}pPr', prefix: _prefix, declaredAbove: _scope);
     }
