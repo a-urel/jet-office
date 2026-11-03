@@ -125,36 +125,41 @@ Uint8List docxWithStyles({
   String stylesPath = 'word/styles.xml',
   String? stylesContentType = ContentType.wmlStyles,
   String? relationships,
-}) => buildZip(<String, List<int>>{
-  '[Content_Types].xml': utf8.encode(
-    '<Types xmlns="$contentTypesNs">'
-    '<Default Extension="rels" ContentType="${ContentType.relationships}"/>'
-    '<Default Extension="xml" ContentType="application/xml"/>'
-    '<Default Extension="png" ContentType="image/png"/>'
-    '<Override PartName="/word/document.xml" '
-    'ContentType="${ContentType.wmlDocument}"/>'
-    '${styles == null || stylesContentType == null ? '' : '<Override PartName="/$stylesPath" '
-              'ContentType="$stylesContentType"/>'}'
-    '</Types>',
-  ),
-  '_rels/.rels': utf8.encode(rootRels('word/document.xml')),
-  'word/document.xml': utf8.encode(wordDocumentXml),
-  'word/_rels/document.xml.rels': utf8.encode(
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
-    '<Relationships xmlns="$packageRelsNs">'
-    '<Relationship Id="rId4" Type="${RelType.image}" '
-    'Target="media/image1.png"/>'
-    '<Relationship Id="rId5" Type="${RelType.settings}" '
-    'Target="settings.xml"/>'
-    '${relationships ?? stylesRelationship('styles.xml')}'
-    '</Relationships>',
-  ),
-  'word/media/image1.png': <int>[0x89, 0x50, 0x4E, 0x47, 0, 1, 2, 3],
-  'word/settings.xml': utf8.encode(
-    '<w:settings xmlns:w="${Ns.w}"><w:zoom w:percent="100"/></w:settings>',
-  ),
-  if (styles != null) stylesPath: utf8.encode(styles),
-});
+}) {
+  final String override = styles == null || stylesContentType == null
+      ? ''
+      : '<Override PartName="/$stylesPath" '
+            'ContentType="$stylesContentType"/>';
+  return buildZip(<String, List<int>>{
+    '[Content_Types].xml': utf8.encode(
+      '<Types xmlns="$contentTypesNs">'
+      '<Default Extension="rels" ContentType="${ContentType.relationships}"/>'
+      '<Default Extension="xml" ContentType="application/xml"/>'
+      '<Default Extension="png" ContentType="image/png"/>'
+      '<Override PartName="/word/document.xml" '
+      'ContentType="${ContentType.wmlDocument}"/>'
+      '$override'
+      '</Types>',
+    ),
+    '_rels/.rels': utf8.encode(rootRels('word/document.xml')),
+    'word/document.xml': utf8.encode(wordDocumentXml),
+    'word/_rels/document.xml.rels': utf8.encode(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
+      '<Relationships xmlns="$packageRelsNs">'
+      '<Relationship Id="rId4" Type="${RelType.image}" '
+      'Target="media/image1.png"/>'
+      '<Relationship Id="rId5" Type="${RelType.settings}" '
+      'Target="settings.xml"/>'
+      '${relationships ?? stylesRelationship('styles.xml')}'
+      '</Relationships>',
+    ),
+    'word/media/image1.png': <int>[0x89, 0x50, 0x4E, 0x47, 0, 1, 2, 3],
+    'word/settings.xml': utf8.encode(
+      '<w:settings xmlns:w="${Ns.w}"><w:zoom w:percent="100"/></w:settings>',
+    ),
+    if (styles != null) stylesPath: utf8.encode(styles),
+  });
+}
 
 /// The text parts of the DOCX file [bytes] by entry name, decoded as UTF-8;
 /// the media parts (`word/media/`) are left out.
