@@ -317,6 +317,8 @@ void main() {
         () => h.uiPriority = 3,
         () => h.name = 'My heading',
         () => h.basedOn = null,
+        () => h.next = 'Balk1',
+        () => h.link = null,
         () => h.quickFormat = false,
         () => h.runProperties.bold = true,
         () => h.paragraphProperties.alignment = DocxAlignment.right,
@@ -331,6 +333,8 @@ void main() {
       expect(h.uiPriority, 9);
       expect(h.name, 'heading 1');
       expect(h.basedOn, 'Normal');
+      expect(h.next, 'Normal');
+      expect(h.link, 'Balk1Char');
       expect(h.quickFormat, isTrue);
     });
 

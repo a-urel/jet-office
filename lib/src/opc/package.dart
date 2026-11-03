@@ -253,6 +253,39 @@ final class OpcPackage {
     part.content = content;
   }
 
+  /// Whether [name] can name a new part as given: it names no part yet, is
+  /// not a folder (empty, or ending with `/`), is neither
+  /// `[Content_Types].xml` nor a relationships part (`_rels/….rels`), no
+  /// part lives under it (`/word` while `/word/document.xml` exists), and it
+  /// does not live under a part. Names are compared without regard to case
+  /// or slash direction.
+  ///
+  /// A relationship target read from a file is untrusted: check it with
+  /// this before [addPart] creates a part at it, since [addPart] throws on
+  /// package metadata and a name that is a prefix of another part's makes
+  /// an invalid package.
+  bool isNewPartName(String name) {
+    final String slashed = name.replaceAll(r'\', '/');
+    final String plain = _plain(slashed);
+    if (plain.isEmpty ||
+        slashed.endsWith('/') ||
+        plain.toLowerCase() == _contentTypesPart.toLowerCase() ||
+        _sourceOfRels(plain) != null) {
+      return false;
+    }
+    final String key = plain.toLowerCase();
+    if (_parts.containsKey(key)) {
+      return false;
+    }
+    final String below = '$key/';
+    for (final String other in _parts.keys) {
+      if (other.startsWith(below) || key.startsWith('$other/')) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Adds a part of [contentType] with [content] and returns its name.
   ///
   /// When [preferredName] is taken, its number is raised until the name is

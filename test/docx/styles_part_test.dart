@@ -138,6 +138,36 @@ void main() {
       expect(DocxDocument.open(output).styles.byId('Note'), isNotNull);
     });
 
+    for (final String target in <String>[
+      '_rels/x.xml.rels',
+      '../[Content_Types].xml',
+      'media/',
+      '',
+    ]) {
+      test('a missing target "$target" that is no legal part name is kept '
+          'and the part goes to /word/styles.xml', () {
+        final Uint8List input = docxWithStyles(
+          styles: null,
+          relationships: stylesRelationship(target),
+        );
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(doc.styles.styles, isEmpty);
+        doc.styles.add(_style('Note'));
+        final Uint8List output = doc.save().bytes;
+        final List<String> names = readXlsxBytes(output).keys.toList();
+        for (final String a in names) {
+          for (final String b in names) {
+            expect(b.startsWith('$a/'), isFalse, reason: '$a and $b');
+          }
+        }
+        expect(readDocxText(output)['word/styles.xml'], contains('"Note"'));
+        expect(_stylesTargets(output), <String>[target, 'styles.xml']);
+        final DocxDocument back = DocxDocument.open(output);
+        expect(back.styles.byId('Note'), isNotNull);
+        expect(back.body.blocks, isNotEmpty);
+      });
+    }
+
     test('an external styles relationship is ignored', () {
       final Uint8List input = docxWithStyles(
         relationships: stylesRelationship(

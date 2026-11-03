@@ -285,6 +285,35 @@ void main() {
       );
     });
 
+    test('isNewPartName accepts only a free name that is no folder, no '
+        'package metadata and no prefix of a part', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('[Content_Types].xml', '<Types xmlns="$_typesNs"/>'),
+        ('word/document.xml', '<w/>'),
+        ('word/media/image1.png', 'x'),
+      ]);
+      expect(p.isNewPartName('/word/styles.xml'), isTrue);
+      expect(p.isNewPartName('word\\styles/s.xml'), isTrue);
+      for (final String bad in <String>[
+        '',
+        '/',
+        '/word/',
+        '/word',
+        '/word/media',
+        '/WORD/MEDIA',
+        '/word/document.xml',
+        '/word/document.xml/inner.xml',
+        '/[Content_Types].xml',
+        '/word/_rels/x.xml.rels',
+        '/_rels/.rels',
+      ]) {
+        expect(p.isNewPartName(bad), isFalse, reason: bad);
+      }
+      p.addPart('/word/new.xml', 'x/new', _Text('<n/>'));
+      expect(p.isNewPartName('/word/new.xml'), isFalse);
+      expect(p.isNewPartName('/word/new.xml/a'), isFalse);
+    });
+
     test('free names', () {
       final OpcPackage p = _package(<(String, String)>[
         ('[Content_Types].xml', '<Types xmlns="$_typesNs"/>'),

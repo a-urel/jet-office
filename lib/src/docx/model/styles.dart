@@ -117,26 +117,68 @@ final class DocxStyle {
 
   DocxStyle._(
     PropertyContainer source, {
+    required DocxStyleType? type,
+    required String? id,
+    required bool isDefault,
+    required bool isCustom,
+    required bool isNew,
+  }) : this._attached(
+         _Attachment(),
+         source,
+         type: type,
+         id: id,
+         isDefault: isDefault,
+         isCustom: isCustom,
+         isNew: isNew,
+       );
+
+  DocxStyle._attached(
+    _Attachment attachment,
+    PropertyContainer source, {
+    required DocxStyleType? type,
+    required String? id,
+    required bool isDefault,
+    required bool isCustom,
+    required bool isNew,
+  }) : this._built(
+         attachment,
+         source,
+         newParagraphProperties(
+           source.nestedOf('pPr') ?? const PropertyContainer.empty(),
+           attachment.sink,
+           schema: paragraphPropertiesGeneralSchema,
+         ),
+         newRunProperties(
+           source.nestedOf('rPr') ?? const PropertyContainer.empty(),
+           attachment.sink,
+         ),
+         type: type,
+         id: id,
+         isDefault: isDefault,
+         isCustom: isCustom,
+         isNew: isNew,
+       );
+
+  DocxStyle._built(
+    this._attachment,
+    PropertyContainer source,
+    this.paragraphProperties,
+    this.runProperties, {
     required this.type,
     required this.id,
     required this.isDefault,
     required this.isCustom,
     required bool isNew,
-  }) : _isNew = isNew {
-    paragraphProperties = newParagraphProperties(
-      source.nestedOf('pPr') ?? const PropertyContainer.empty(),
-      _sink,
-      schema: paragraphPropertiesGeneralSchema,
-    );
-    runProperties = newRunProperties(
-      source.nestedOf('rPr') ?? const PropertyContainer.empty(),
-      _sink,
-    );
-    _set = _NestingSet(source, styleSchema, _sink, <String, NestedProperties>{
-      'pPr': propertySetOfParagraphProperties(paragraphProperties),
-      'rPr': propertySetOfRunProperties(runProperties),
-    });
-  }
+  }) : _isNew = isNew,
+       _set = _NestingSet(
+         source,
+         styleSchema,
+         _attachment.sink,
+         <String, NestedProperties>{
+           'pPr': propertySetOfParagraphProperties(paragraphProperties),
+           'rPr': propertySetOfRunProperties(runProperties),
+         },
+       );
 
   /// The kind of style (`w:type`): [DocxStyleType.paragraph] when the file
   /// has no `w:type`, and `null` when it has one the model does not know.
@@ -158,20 +200,24 @@ final class DocxStyle {
   /// written from [type] and [id].
   final bool _isNew;
 
+  /// The document the style is in, shared with the sink of its property
+  /// sets.
+  final _Attachment _attachment;
+
   /// The styles the style is in, or `null`.
-  DocxStyles? _owner;
+  DocxStyles? get _owner => _attachment.owner;
+
+  set _owner(DocxStyles? value) => _attachment.owner = value;
 
   /// The paragraph properties the style gives (`w:pPr`), created when one
   /// is first set.
-  late final DocxParagraphProperties paragraphProperties;
+  final DocxParagraphProperties paragraphProperties;
 
   /// The run properties the style gives (`w:rPr`), created when one is
   /// first set.
-  late final DocxRunProperties runProperties;
+  final DocxRunProperties runProperties;
 
-  late final PropertySet _set;
-
-  DocxEditSink _sink() => _owner?._edits ?? DocxEditSink.none;
+  final PropertySet _set;
 
   /// The name shown to the user (`w:name`), or `null` when the file gives
   /// none the model can read. A built-in style's name is English, such as
@@ -272,7 +318,7 @@ final class DocxStyle {
 /// Both are created in the file when a property of them is first set; a
 /// set is one change of the document's change log.
 final class DocxDocumentDefaults {
-  DocxDocumentDefaults._(
+  factory DocxDocumentDefaults._read(
     PropertyContainer source,
     DocxEditSink Function() sink,
   ) {
@@ -280,20 +326,19 @@ final class DocxDocumentDefaults {
         source.nestedOf('rPrDefault') ?? const PropertyContainer.empty();
     final PropertyContainer pPrDefault =
         source.nestedOf('pPrDefault') ?? const PropertyContainer.empty();
-    runProperties = newRunProperties(
+    final DocxRunProperties runProperties = newRunProperties(
       rPrDefault.nestedOf('rPr') ?? const PropertyContainer.empty(),
       sink,
     );
-    paragraphProperties = newParagraphProperties(
+    final DocxParagraphProperties paragraphProperties = newParagraphProperties(
       pPrDefault.nestedOf('pPr') ?? const PropertyContainer.empty(),
       sink,
       schema: paragraphPropertiesGeneralSchema,
     );
-    _set = _NestingSet(
-      source,
-      docDefaultsSchema,
-      sink,
-      <String, NestedProperties>{
+    return DocxDocumentDefaults._(
+      runProperties,
+      paragraphProperties,
+      _NestingSet(source, docDefaultsSchema, sink, <String, NestedProperties>{
         'rPrDefault': _NestingSet(
           rPrDefault,
           rPrDefaultSchema,
@@ -310,17 +355,23 @@ final class DocxDocumentDefaults {
             'pPr': propertySetOfParagraphProperties(paragraphProperties),
           },
         ),
-      },
+      }),
     );
   }
 
+  DocxDocumentDefaults._(
+    this.runProperties,
+    this.paragraphProperties,
+    this._set,
+  );
+
   /// The default run properties (`w:rPrDefault/w:rPr`).
-  late final DocxRunProperties runProperties;
+  final DocxRunProperties runProperties;
 
   /// The default paragraph properties (`w:pPrDefault/w:pPr`).
-  late final DocxParagraphProperties paragraphProperties;
+  final DocxParagraphProperties paragraphProperties;
 
-  late final PropertySet _set;
+  final PropertySet _set;
 }
 
 /// The styles of a document (`word/styles.xml`): the document defaults and
@@ -348,7 +399,7 @@ final class DocxStyles {
       }
     }
     _defaultsRead = defaults != null;
-    _defaults = DocxDocumentDefaults._(
+    _defaults = DocxDocumentDefaults._read(
       defaults ?? const PropertyContainer.empty(),
       () => _edits,
     );
@@ -526,6 +577,13 @@ final class DocxStyles {
     }
     return false;
   }
+}
+
+/// The document a style is in, which its property sets report to.
+final class _Attachment {
+  DocxStyles? owner;
+
+  DocxEditSink sink() => owner?._edits ?? DocxEditSink.none;
 }
 
 /// Marks where the document defaults were read among the root's children.

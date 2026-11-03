@@ -71,4 +71,23 @@ void main() {
     }
     expect(styles.byId('Normal'), isNotNull);
   });
+
+  test('the properties of a style and of the defaults have no setter', () {
+    final dynamic style = DocxStyle(
+      type: DocxStyleType.paragraph,
+      id: 'Note',
+      name: 'Note',
+    );
+    final dynamic defaults = DocxDocument().styles.defaults;
+    for (final dynamic o in <dynamic>[style, defaults]) {
+      expect(
+        () => o.runProperties = DocxRun('a').properties,
+        throwsA(isA<NoSuchMethodError>()),
+      );
+      expect(
+        () => o.paragraphProperties = DocxParagraph().properties,
+        throwsA(isA<NoSuchMethodError>()),
+      );
+    }
+  });
 }

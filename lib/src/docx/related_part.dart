@@ -9,7 +9,8 @@
 /// package is the part, and otherwise the first internal one names where
 /// the part goes. A document without the part reads it as empty, and
 /// [RelatedPart.create] adds it at save, only once it holds something
-/// (plan Ruling 7): at the target of a relationship whose part is missing,
+/// (plan Ruling 7): at the target of a relationship whose part is missing
+/// when that target is a legal new part name (`OpcPackage.isNewPartName`),
 /// else at the default name with a new relationship, and in both cases with
 /// a content type override. Creating at save keeps package edits out of the
 /// change log, so an edit rolled back never leaves a part behind.
@@ -81,7 +82,14 @@ final class RelatedPart {
           related: true,
         );
       }
-      missing ??= target;
+      // A target read from the file is reused only when a part can be
+      // created there; otherwise the relationship stays as read and the
+      // part goes to the default name with a new relationship.
+      // The target as written may name a folder that resolving hides.
+      final String written = rel.target.replaceAll(r'\', '/');
+      if (!written.endsWith('/') && opc.isNewPartName(target)) {
+        missing ??= target;
+      }
     }
     return RelatedPart._(
       package,
