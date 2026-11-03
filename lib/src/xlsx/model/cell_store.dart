@@ -293,6 +293,13 @@ final class CellStore {
 
   final List<_Block> _blocks = <_Block>[];
 
+  /// The number of recorded edits that changed a cell's value or formula
+  /// and are applied now: `SetCellChange` adds one when it is applied and
+  /// takes it back when it is reverted (a rolled-back transaction, an
+  /// undo). A style-only edit does not count. A save recalculates when any
+  /// sheet's count is above 0.
+  int valueEdits = 0;
+
   /// The rare parts of cells, keyed by `row * XlsxLimits.maxColumns +
   /// column`.
   final Map<int, _Extras> _extras = <int, _Extras>{};

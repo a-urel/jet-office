@@ -459,14 +459,14 @@ final class WorkbookPart implements PartContent {
         .toSet();
     for (var i = 0; i < _children.length; i++) {
       final Object c = _children[i];
-      final String? name = switch (c) {
+      final String? childName = switch (c) {
         OpaqueXml() when c.namespaceUri == Ns.main => c.localName,
         _Sheets() => 'sheets',
         _CalcPr() => 'calcPr',
         XmlNode() => c.localName,
         _ => null,
       };
-      if (name != null && after.contains(name)) return i;
+      if (childName != null && after.contains(childName)) return i;
     }
     return _children.length;
   }

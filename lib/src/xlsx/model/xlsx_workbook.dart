@@ -577,10 +577,13 @@ final class _Book implements SheetHost {
   @override
   void setVisibility(SheetEntry entry, XlsxSheetVisibility value) {
     if (entry.visibility == value) return;
+    final bool hiding =
+        entry.visibility == XlsxSheetVisibility.visible &&
+        value != XlsxSheetVisibility.visible;
     final int index = _sheets.indexWhere(
       (XlsxSheet s) => identical(entryOf(s), entry),
     );
-    if (value != XlsxSheetVisibility.visible &&
+    if (hiding &&
         !_sheets.any(
           (XlsxSheet s) =>
               !identical(entryOf(s), entry) &&
@@ -594,7 +597,7 @@ final class _Book implements SheetHost {
     log.transaction(() {
       final bool wasActive = identical(activeSheet, _sheets[index]);
       setEntryVisibility(log, entry, value);
-      if (wasActive && value != XlsxSheetVisibility.visible) {
+      if (wasActive && hiding) {
         _activate(
           _sheets.firstWhere(
             (XlsxSheet s) => s.visibility == XlsxSheetVisibility.visible,
@@ -688,7 +691,9 @@ final class _Book implements SheetHost {
     final bool allLoaded = _sheets.every(
       (XlsxSheet s) => isLoadedSheet(s) || !sheetHasPart(s),
     );
-    if (log.hasChanges) {
+    // Only a changed cell value or formula (spec section 4.4) makes the
+    // calculation chain and cached results stale.
+    if (_sheets.any((XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0)) {
       final String? chain = _target(RelType.calcChain);
       if (chain != null) {
         // Only the workbook refers to the calculation chain, so no other

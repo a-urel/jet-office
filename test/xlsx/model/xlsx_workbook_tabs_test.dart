@@ -7,6 +7,7 @@ import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 import 'package:test/test.dart';
 
 import '../../fixtures/fixtures.dart';
+import '../../support/read_xlsx.dart';
 import '../read/support/workbook_builder.dart';
 import '../read/support/zip_builder.dart';
 import 'support/workbook_support.dart';
@@ -26,6 +27,7 @@ Uint8List _book({
   List<String> states = const <String>['', '', ''],
   List<String?>? sheets,
   String head = '<bookViews><workbookView activeTab="0"/></bookViews>',
+  bool calcChain = false,
 }) {
   final List<String?> xml =
       sheets ??
@@ -47,10 +49,21 @@ Uint8List _book({
     );
     if (xml[i] != null) parts[sheetEntry(i)] = utf8.encode(xml[i]!);
   }
+  if (calcChain) {
+    rels.write(
+      '<Relationship Id="rIdC" Type="$relNs/calcChain" Target="calcChain.xml"/>',
+    );
+    parts['xl/calcChain.xml'] = utf8.encode(
+      '<calcChain xmlns="$mainNs"><c r="A1" i="1"/></calcChain>',
+    );
+  }
   return buildZip(<String, List<int>>{
     '[Content_Types].xml': utf8.encode(
       '<Types xmlns="$ctNs"><Override PartName="/xl/workbook.xml" '
-      'ContentType="$wbType"/></Types>',
+      'ContentType="$wbType"/>'
+      '${calcChain ? '<Override PartName="/xl/calcChain.xml" ContentType="'
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.'
+                'calcChain+xml"/>' : ''}</Types>',
     ),
     '_rels/.rels': utf8.encode(
       '<Relationships xmlns="$pkgRelNs"><Relationship Id="rId1" '
@@ -128,6 +141,116 @@ void main() {
     book.sheets[2].visibility = XlsxSheetVisibility.visible;
     book.sheets[0].visibility = XlsxSheetVisibility.hidden;
     expect(book.activeSheet.name, 'S3');
+  });
+
+  test('the last-visible guard itself: the last visible sheet is not '
+      'the active tab', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _book(
+        states: <String>['hidden', '', 'hidden'],
+        head: '<bookViews><workbookView activeTab="0"/></bookViews>',
+      ),
+    );
+    final Matcher guard = throwsA(
+      isA<StateError>().having(
+        (StateError e) => e.message,
+        'message',
+        contains('last visible sheet'),
+      ),
+    );
+    expect(() => book.sheets[1].visibility = XlsxSheetVisibility.hidden, guard);
+    expect(
+      () => book.sheets[1].visibility = XlsxSheetVisibility.veryHidden,
+      guard,
+    );
+    expect(book.sheets[1].visibility, XlsxSheetVisibility.visible);
+    expect(book.activeSheet.name, 'S1');
+    expect(changeLogOf(book).hasChanges, isFalse);
+  });
+
+  test('the guard only applies to hiding a visible sheet', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _book(states: <String>['hidden', 'hidden']),
+    );
+    book.sheets[0].visibility = XlsxSheetVisibility.veryHidden;
+    book.sheets[1].visibility = XlsxSheetVisibility.veryHidden;
+    book.sheets[0].visibility = XlsxSheetVisibility.hidden;
+    expect(_states(book.save().bytes), <XlsxSheetVisibility>[
+      XlsxSheetVisibility.hidden,
+      XlsxSheetVisibility.veryHidden,
+    ]);
+  });
+
+  group('calcChain and fullCalcOnLoad follow cell changes only', () {
+    const String formulaSheet =
+        '<worksheet xmlns="$mainNs">$_selected<sheetData><row r="1">'
+        '<c r="A1"><f>1+1</f><v>2</v></c></row></sheetData></worksheet>';
+    final Map<String, void Function(XlsxWorkbook)> edits =
+        <String, void Function(XlsxWorkbook)>{
+          'setStyle': (XlsxWorkbook b) => b.sheets[0].setStyle(
+            0,
+            0,
+            const XlsxStyle(font: XlsxFont(bold: true)),
+          ),
+          'setRowFormat': (XlsxWorkbook b) =>
+              b.sheets[0].setRowFormat(0, const XlsxRowFormat(height: 30)),
+          'setColumn': (XlsxWorkbook b) =>
+              b.sheets[0].setColumn(0, const XlsxColumn(width: 20)),
+          'merge': (XlsxWorkbook b) =>
+              b.sheets[0].merge(XlsxRange.parse('B1:C2')),
+          'view': (XlsxWorkbook b) =>
+              b.sheets[0].view = const XlsxSheetView(zoom: 150),
+          'tabColor': (XlsxWorkbook b) =>
+              b.sheets[0].tabColor = const XlsxColor.rgb(0x1F4E79),
+          'visibility': (XlsxWorkbook b) =>
+              b.sheets[1].visibility = XlsxSheetVisibility.hidden,
+          'activeSheet': (XlsxWorkbook b) => b.activeSheet = b.sheets[1],
+        };
+
+    Uint8List input() =>
+        _book(sheets: <String?>[formulaSheet, _sheet(_plain)], calcChain: true);
+
+    for (final MapEntry<String, void Function(XlsxWorkbook)> e
+        in edits.entries) {
+      test('${e.key} keeps calcChain and sets no fullCalcOnLoad', () {
+        final XlsxWorkbook book = XlsxWorkbook.open(input());
+        e.value(book);
+        final Map<String, String> parts = readXlsx(book.save().bytes);
+        expect(parts, contains('xl/calcChain.xml'));
+        expect(parts['xl/_rels/workbook.xml.rels'], contains('calcChain'));
+        expect(parts['xl/workbook.xml'], isNot(contains('fullCalcOnLoad')));
+      });
+    }
+
+    test('setCell still drops calcChain and sets fullCalcOnLoad', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(input());
+      book.sheets[0].setCell(5, 0, 1);
+      final Map<String, String> parts = readXlsx(book.save().bytes);
+      expect(parts, isNot(contains('xl/calcChain.xml')));
+      expect(parts['xl/workbook.xml'], contains('fullCalcOnLoad="1"'));
+    });
+
+    test('a failed setCell leaves calcChain', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(input());
+      expect(() => book.sheets[0].setCell(0, 0, Object()), throwsA(anything));
+      final Map<String, String> parts = readXlsx(book.save().bytes);
+      expect(parts, contains('xl/calcChain.xml'));
+      expect(parts['xl/workbook.xml'], isNot(contains('fullCalcOnLoad')));
+    });
+
+    test('a transaction rolled back after a setCell leaves calcChain', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(input());
+      expect(
+        () => changeLogOf(book).transaction(() {
+          book.sheets[0].setCell(5, 0, 1);
+          throw StateError('later failure');
+        }),
+        throwsStateError,
+      );
+      final Map<String, String> parts = readXlsx(book.save().bytes);
+      expect(parts, contains('xl/calcChain.xml'));
+      expect(parts['xl/workbook.xml'], isNot(contains('fullCalcOnLoad')));
+    });
   });
 
   test('activeSheet matches the writer\'s active tab', () {

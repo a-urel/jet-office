@@ -60,10 +60,18 @@ final class SetCellChange implements Change {
   final RawCell? newCell;
 
   @override
-  void revert() => _write(oldCell);
+  void revert() {
+    _write(oldCell);
+    if (_changesContent) store.valueEdits--;
+  }
 
   @override
-  void reapply() => _write(newCell);
+  void reapply() {
+    _write(newCell);
+    if (_changesContent) store.valueEdits++;
+  }
+
+  late final bool _changesContent = _contentDiffers(oldCell, newCell);
 
   void _write(RawCell? cell) {
     if (cell == null) {
@@ -72,6 +80,37 @@ final class SetCellChange implements Change {
       store.put(row, column, cell);
     }
   }
+}
+
+bool _sameFormula(RawFormula? a, RawFormula? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null) return false;
+  if (a.type != b.type ||
+      a.text != b.text ||
+      a.ref != b.ref ||
+      a.si != b.si ||
+      a.attributes.length != b.attributes.length) {
+    return false;
+  }
+  for (int i = 0; i < a.attributes.length; i++) {
+    if (a.attributes[i] != b.attributes[i]) return false;
+  }
+  return true;
+}
+
+/// Whether the value or the formula of a cell differs between [a] and [b]
+/// (`null` is an absent cell); the style, attributes and other children do
+/// not count.
+bool _contentDiffers(RawCell? a, RawCell? b) {
+  bool empty(RawCell? c) =>
+      c == null || (c.value == null && c.formula == null && c.inline == null);
+  if (empty(a) && empty(b)) return false;
+  if (a == null || b == null) return true;
+  return a.kind != b.kind ||
+      a.value != b.value ||
+      a.typeText != b.typeText ||
+      !_sameFormula(a.formula, b.formula) ||
+      a.inline?.xml != b.inline?.xml;
 }
 
 /// Sets the cell at [row], [column] of [store] to [cell] (`null` removes it)
