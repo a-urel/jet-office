@@ -109,6 +109,7 @@
 /// @docImport 'src/docx/docx_document.dart';
 /// @docImport 'src/docx/model/blocks.dart';
 /// @docImport 'src/docx/model/inlines.dart';
+/// @docImport 'src/docx/model/paragraph_properties.dart';
 /// @docImport 'src/docx/model/run_content.dart';
 /// @docImport 'src/docx/model/run_properties.dart';
 /// @docImport 'src/docx/read_exception.dart';
@@ -141,18 +142,30 @@ export 'src/docx/model/blocks.dart'
     show DocxBlock, DocxOpaqueBlock, DocxParagraph;
 export 'src/docx/model/formatting.dart'
     show
+        DocxAlignment,
         DocxBorder,
         DocxBorderStyle,
         DocxColor,
         DocxFonts,
         DocxHighlight,
+        DocxIndentation,
+        DocxLineRule,
+        DocxLineSpacing,
+        DocxNumberingRef,
+        DocxParagraphBorders,
         DocxShading,
         DocxShadingPattern,
+        DocxSpacing,
+        DocxTabAlignment,
+        DocxTabLeader,
+        DocxTabStop,
         DocxThemeColor,
         DocxUnderline,
         DocxUnderlineStyle,
         DocxVerticalAlign;
 export 'src/docx/model/inlines.dart' show DocxInline, DocxOpaqueInline, DocxRun;
+export 'src/docx/model/paragraph_properties.dart'
+    show DocxParagraphProperties, DocxParagraphProperty;
 export 'src/docx/model/run_content.dart'
     show
         DocxBreak,

@@ -4,7 +4,7 @@
 /// Not ported from Quds; written for jet_office.
 ///
 /// A [DocxParagraph] holds its inlines and its properties (`w:pPr`, a
-/// [PropertySet]), of which D1 types only the style. A [DocxOpaqueBlock]
+/// [DocxParagraphProperties]). A [DocxOpaqueBlock]
 /// keeps an element the model does not type, such as a table until D3 or a
 /// content control, as written.
 ///
@@ -16,9 +16,9 @@ import 'dart:collection';
 
 import '../../opc/opaque_xml.dart';
 import '../properties.dart';
-import '../property_codec.dart' show checkStyleId;
 import 'edit_sink.dart';
 import 'inlines.dart';
+import 'paragraph_properties.dart';
 import 'property_set.dart';
 
 /// One child of a body.
@@ -60,7 +60,7 @@ final class DocxParagraph extends DocxBlock {
   final PropertyContainer _source;
 
   /// The paragraph's properties: [_source] with the values set.
-  late final _ParagraphProperties _properties = _ParagraphProperties(
+  late final DocxParagraphProperties _properties = newParagraphProperties(
     _source,
     () => _sink,
   );
@@ -76,7 +76,13 @@ final class DocxParagraph extends DocxBlock {
 
   DocxEditSink _sink = DocxEditSink.none;
 
-  /// The id of the paragraph's style (`w:pStyle`), or `null` for none.
+  /// The formatting of the paragraph: its `w:pPr`.
+  ///
+  /// It is the same object every time.
+  DocxParagraphProperties get properties => _properties;
+
+  /// The id of the paragraph's style (`w:pStyle`), or `null` for none; a
+  /// shortcut for [DocxParagraphProperties.style].
   ///
   /// A `w:pStyle` read from a file that the model does not type (no
   /// `w:val`, an empty one, another `w:` attribute, child elements) reads
@@ -84,12 +90,9 @@ final class DocxParagraph extends DocxBlock {
   ///
   /// Setting the empty string, or an id holding a character XML forbids,
   /// throws [ArgumentError]; set `null` to remove the style.
-  String? get style => _properties.valueOf('pStyle') as String?;
+  String? get style => _properties.style;
 
-  set style(String? value) {
-    checkStyleId(value);
-    _properties.setValue('pStyle', value);
-  }
+  set style(String? value) => _properties.style = value;
 
   /// The paragraph's inlines, in order. The list cannot be modified; use
   /// [addRun], [insertInline] and [removeInlineAt].
@@ -161,7 +164,7 @@ final class DocxOpaqueBlock extends DocxBlock {
 }
 
 /// A paragraph as the reader builds it: its `w:pPr` as read (by
-/// [paragraphPropertiesSchema]), the kept attributes of `w:p`, and its
+/// `paragraphPropertiesSchema`), the kept attributes of `w:p`, and its
 /// inlines as read. Each inline must be in no paragraph, or [StateError] is
 /// thrown.
 DocxParagraph readParagraph({
@@ -184,14 +187,7 @@ PropertyContainer paragraphPropertiesOf(DocxParagraph paragraph) =>
 
 /// The properties of [paragraph], for the writer.
 PropertySet paragraphPropertySetOf(DocxParagraph paragraph) =>
-    paragraph._properties;
-
-/// The properties of a paragraph until `DocxParagraphProperties` (D2 Task
-/// 5) types more than the style.
-final class _ParagraphProperties extends PropertySet {
-  _ParagraphProperties(PropertyContainer source, DocxEditSink Function() sink)
-    : super(source, paragraphPropertiesSchema, sink);
-}
+    propertySetOfParagraphProperties(paragraph._properties);
 
 /// The attributes of `w:p` the reader kept on [paragraph], in source order.
 List<KeptAttribute> paragraphAttributesOf(DocxParagraph paragraph) =>

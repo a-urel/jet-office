@@ -101,8 +101,9 @@ void main() {
   test('reads paragraphs, runs, text, tabs and breaks', () {
     final DocumentPart part = _read(
       '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:jc w:val="center"/>'
-      '</w:pPr><w:r><w:rPr><w:rStyle w:val="Strong"/><w:b/>'
-      '<w:kern w:val="2"/></w:rPr><w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/><w:br w:type="page"/>'
+      '<w:contextualSpacing/></w:pPr><w:r><w:rPr><w:rStyle w:val="Strong"/><w:b/>'
+      '<w:kern w:val="2"/></w:rPr><w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/>'
+      '<w:br w:type="page"/>'
       '<w:br w:type="column"/><w:cr/><w:t>c</w:t></w:r></w:p>'
       '<w:p/>'
       '<w:p><w:r><w:t>second</w:t></w:r></w:p>',
@@ -110,9 +111,10 @@ void main() {
     expect(part.blocks, hasLength(3));
     final DocxParagraph first = _p(part);
     expect(first.style, 'Heading1');
+    expect(first.properties.alignment, DocxAlignment.center);
     expect(
       paragraphPropertiesOf(first).kept.map((OpaqueXml k) => k.localName),
-      <String>['jc'],
+      <String>['contextualSpacing'],
     );
     final DocxRun run = first.inlines.single as DocxRun;
     expect(run.style, 'Strong');

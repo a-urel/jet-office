@@ -4,8 +4,9 @@
 /// Not ported from Quds; written for jet_office.
 ///
 /// [DocxRunProperties] is a view over the `w:rPr` of a run as read (a
-/// private [PropertySet]). Each member is a nullable getter and setter, `null` meaning "not
-/// set here" (the style or the document default decides). Reading gives
+/// private [PropertySet]). Each member is a nullable getter and setter,
+/// `null` meaning "not set here" (the style or the document default
+/// decides). Reading gives
 /// what the file holds when the model can type it, else `null`: a
 /// `w:sz w:val="1in"` reads `null` and stays in the file (plan Ruling 2).
 /// Setting writes one element, replacing the old one; it never touches the

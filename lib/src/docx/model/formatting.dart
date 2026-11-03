@@ -1,6 +1,8 @@
 /// The values shared by run, paragraph, style and numbering formatting:
-/// colours, shading and borders, and the values of run properties (fonts,
-/// underline, highlight, vertical alignment).
+/// colours, shading and borders, the values of run properties (fonts,
+/// underline, highlight, vertical alignment) and those of paragraph
+/// properties (alignment, indentation, spacing, borders, tab stops, list
+/// reference).
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -732,4 +734,444 @@ enum DocxVerticalAlign {
 
   /// Lowered and smaller.
   subscript,
+}
+
+/// The alignment of a paragraph (`w:jc`, without the kashida values). The
+/// Dart name of each value is its spelling in the file, except [justify],
+/// which is `both`.
+///
+/// A `w:jc` of `lowKashida`, `mediumKashida`, `highKashida`, `numTab` or
+/// `thaiDistribute` reads as `null`: the model does not type it, and the
+/// file keeps it as written.
+enum DocxAlignment {
+  /// Aligned to the left (`left`).
+  left,
+
+  /// Centered.
+  center,
+
+  /// Aligned to the right (`right`).
+  right,
+
+  /// Both edges straight (`both`).
+  justify,
+
+  /// Both edges straight, with the space spread between characters too.
+  distribute,
+
+  /// Aligned to the start of the line: the left edge, or the right one in
+  /// a right-to-left paragraph.
+  start,
+
+  /// Aligned to the end of the line: the right edge, or the left one in a
+  /// right-to-left paragraph.
+  end,
+}
+
+/// The indentation of a paragraph (`w:ind`): the distance from the margins,
+/// in points.
+///
+/// Each member is `null` when the file has none, and the style or the
+/// document default decides. At most one of [firstLinePt] and [hangingPt]
+/// is set. A value is stored in twips and reads back rounded to a
+/// twentieth of a point; two values are equal when their twips are (plan
+/// Ruling 4). A `w:ind` with `w:start`, `w:end` or a `…Chars` attribute has
+/// no view.
+final class DocxIndentation {
+  /// An indentation of the given distances. [leftPt] and [rightPt] go from
+  /// -1584 to 1584 points (negative moves into the margin), [firstLinePt]
+  /// and [hangingPt] from 0 to 1584.
+  ///
+  /// Throws [ArgumentError] when [firstLinePt] and [hangingPt] are both
+  /// given or a value is not finite, and [RangeError] for a value out of
+  /// range once rounded.
+  factory DocxIndentation({
+    double? leftPt,
+    double? rightPt,
+    double? firstLinePt,
+    double? hangingPt,
+  }) {
+    if (firstLinePt != null && hangingPt != null) {
+      throw ArgumentError(
+        'firstLinePt and hangingPt cannot both be set: an indentation is '
+        'either a first line or a hanging one',
+      );
+    }
+    int? twips(double? v, String name, int min) =>
+        v == null ? null : twipsOf(v, name, min: min, max: _maxTwips);
+    return DocxIndentation._(
+      twips(leftPt, 'leftPt', -_maxTwips),
+      twips(rightPt, 'rightPt', -_maxTwips),
+      twips(firstLinePt, 'firstLinePt', 0),
+      twips(hangingPt, 'hangingPt', 0),
+    );
+  }
+
+  const DocxIndentation._(
+    this._left,
+    this._right,
+    this._firstLine,
+    this._hanging,
+  );
+
+  final int? _left;
+  final int? _right;
+  final int? _firstLine;
+  final int? _hanging;
+
+  /// The distance from the left margin (the start side), or `null`.
+  double? get leftPt => _left == null ? null : ptOfTwips(_left);
+
+  /// The distance from the right margin (the end side), or `null`.
+  double? get rightPt => _right == null ? null : ptOfTwips(_right);
+
+  /// How far the first line goes in beyond [leftPt], or `null`.
+  double? get firstLinePt => _firstLine == null ? null : ptOfTwips(_firstLine);
+
+  /// How far the first line goes out before [leftPt], or `null`.
+  double? get hangingPt => _hanging == null ? null : ptOfTwips(_hanging);
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxIndentation &&
+      other._left == _left &&
+      other._right == _right &&
+      other._firstLine == _firstLine &&
+      other._hanging == _hanging;
+
+  @override
+  int get hashCode => Object.hash(_left, _right, _firstLine, _hanging);
+
+  @override
+  String toString() =>
+      'DocxIndentation(left: $leftPt, right: $rightPt, '
+      'firstLine: $firstLinePt, hanging: $hangingPt)';
+}
+
+/// The largest magnitude of a length in twips: 1584 points.
+const int _maxTwips = 31680;
+
+/// How a line's height is read (`w:lineRule`).
+enum DocxLineRule {
+  /// A multiple of the font's line height; [DocxLineSpacing.value] is in
+  /// lines.
+  auto,
+
+  /// Exactly that height; [DocxLineSpacing.value] is in points.
+  exact,
+
+  /// At least that height; [DocxLineSpacing.value] is in points.
+  atLeast,
+}
+
+/// The line spacing of a paragraph (`w:spacing/@w:line` with
+/// `w:lineRule`): a multiple of the line height, or a height in points.
+///
+/// A multiple is stored in 240ths of a line and a height in twips, so a
+/// value reads back rounded to them and two values are equal when their
+/// stored numbers are (plan Ruling 4).
+final class DocxLineSpacing {
+  /// A multiple of the line height: 1 is single spacing, 1.5 one and a
+  /// half. From 1/240 to 132 lines; throws [ArgumentError] for a value that
+  /// is not finite and [RangeError] outside that range once rounded.
+  factory DocxLineSpacing.multiple(double lines) => DocxLineSpacing._(
+    DocxLineRule.auto,
+    lineUnitsOf(lines, 'lines', min: 1, max: _maxTwips),
+  );
+
+  /// A line of exactly [pt] points, from 0 to 1584; throws as
+  /// [DocxLineSpacing.multiple] does.
+  factory DocxLineSpacing.exactly(double pt) => DocxLineSpacing._(
+    DocxLineRule.exact,
+    twipsOf(pt, 'pt', min: 0, max: _maxTwips),
+  );
+
+  /// A line of at least [pt] points, from 0 to 1584; throws as
+  /// [DocxLineSpacing.multiple] does.
+  factory DocxLineSpacing.atLeast(double pt) => DocxLineSpacing._(
+    DocxLineRule.atLeast,
+    twipsOf(pt, 'pt', min: 0, max: _maxTwips),
+  );
+
+  const DocxLineSpacing._(this.rule, this._stored);
+
+  /// How [value] is read.
+  final DocxLineRule rule;
+
+  final int _stored;
+
+  /// The spacing: lines for [DocxLineRule.auto], points otherwise.
+  double get value => rule == DocxLineRule.auto
+      ? linesOfLineUnits(_stored)
+      : ptOfTwips(_stored);
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxLineSpacing &&
+      other.rule == rule &&
+      other._stored == _stored;
+
+  @override
+  int get hashCode => Object.hash(rule, _stored);
+
+  @override
+  String toString() => 'DocxLineSpacing(${rule.name}, $value)';
+}
+
+/// The spacing of a paragraph (`w:spacing`): the space before and after it,
+/// and the line spacing inside it.
+///
+/// Each member is `null` (or false) when the file has none. The space is in
+/// points, stored in twips, from 0 to 1584. [beforeAuto] and [afterAuto]
+/// let the application choose the space (Word uses it for HTML paragraphs).
+/// A `w:spacing` with a `…Lines` attribute has no view.
+final class DocxSpacing {
+  /// A spacing of the given parts. Throws [ArgumentError] for a value that
+  /// is not finite and [RangeError] for one outside 0 to 1584 points once
+  /// rounded.
+  factory DocxSpacing({
+    double? beforePt,
+    double? afterPt,
+    bool beforeAuto = false,
+    bool afterAuto = false,
+    DocxLineSpacing? line,
+  }) => DocxSpacing._(
+    beforePt == null
+        ? null
+        : twipsOf(beforePt, 'beforePt', min: 0, max: _maxTwips),
+    afterPt == null
+        ? null
+        : twipsOf(afterPt, 'afterPt', min: 0, max: _maxTwips),
+    beforeAuto,
+    afterAuto,
+    line,
+  );
+
+  const DocxSpacing._(
+    this._before,
+    this._after,
+    this.beforeAuto,
+    this.afterAuto,
+    this.line,
+  );
+
+  final int? _before;
+  final int? _after;
+
+  /// Whether the application chooses the space before.
+  final bool beforeAuto;
+
+  /// Whether the application chooses the space after.
+  final bool afterAuto;
+
+  /// The line spacing, or `null`.
+  final DocxLineSpacing? line;
+
+  /// The space before the paragraph, or `null`.
+  double? get beforePt => _before == null ? null : ptOfTwips(_before);
+
+  /// The space after the paragraph, or `null`.
+  double? get afterPt => _after == null ? null : ptOfTwips(_after);
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxSpacing &&
+      other._before == _before &&
+      other._after == _after &&
+      other.beforeAuto == beforeAuto &&
+      other.afterAuto == afterAuto &&
+      other.line == line;
+
+  @override
+  int get hashCode => Object.hash(_before, _after, beforeAuto, afterAuto, line);
+
+  @override
+  String toString() =>
+      'DocxSpacing(before: $beforePt, after: $afterPt, '
+      'beforeAuto: $beforeAuto, afterAuto: $afterAuto, line: $line)';
+}
+
+/// The borders of a paragraph (`w:pBdr`): each side, and the line between
+/// paragraphs with the same borders and the bar beside them.
+///
+/// A side that is `null` has none in the file. A `w:pBdr` with a border
+/// the model cannot type (an art border), a side twice or any other child
+/// has no view.
+final class DocxParagraphBorders {
+  /// The borders of the given sides.
+  const DocxParagraphBorders({
+    this.top,
+    this.left,
+    this.bottom,
+    this.right,
+    this.between,
+    this.bar,
+  });
+
+  /// The border above the paragraph.
+  final DocxBorder? top;
+
+  /// The border at the left.
+  final DocxBorder? left;
+
+  /// The border below the paragraph.
+  final DocxBorder? bottom;
+
+  /// The border at the right.
+  final DocxBorder? right;
+
+  /// The border between this paragraph and the next with the same borders.
+  final DocxBorder? between;
+
+  /// The bar border beside the paragraph.
+  final DocxBorder? bar;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxParagraphBorders &&
+      other.top == top &&
+      other.left == left &&
+      other.bottom == bottom &&
+      other.right == right &&
+      other.between == between &&
+      other.bar == bar;
+
+  @override
+  int get hashCode => Object.hash(top, left, bottom, right, between, bar);
+
+  @override
+  String toString() =>
+      'DocxParagraphBorders(top: $top, left: $left, bottom: $bottom, '
+      'right: $right, between: $between, bar: $bar)';
+}
+
+/// How text lines up at a tab stop (`ST_TabJc`). The Dart name of each
+/// value is its spelling in the file.
+enum DocxTabAlignment {
+  /// The text starts at the stop.
+  left,
+
+  /// The text is centered on the stop.
+  center,
+
+  /// The text ends at the stop.
+  right,
+
+  /// The decimal separator is at the stop.
+  decimal,
+
+  /// A vertical bar is drawn at the stop.
+  bar,
+
+  /// Removes a stop of the style at that position.
+  clear,
+
+  /// Like [left] in a left-to-right paragraph.
+  start,
+
+  /// Like [right] in a left-to-right paragraph.
+  end,
+
+  /// A list tab (`num`), for old files.
+  num,
+}
+
+/// The leader drawn up to a tab stop (`ST_TabTlc`). The Dart name of each
+/// value is its spelling in the file.
+enum DocxTabLeader {
+  /// No leader.
+  none,
+
+  /// A row of dots.
+  dot,
+
+  /// A row of hyphens.
+  hyphen,
+
+  /// A line.
+  underscore,
+
+  /// A thick line.
+  heavy,
+
+  /// A row of middle dots.
+  middleDot,
+}
+
+/// A tab stop of a paragraph (`w:tab` in `w:tabs`).
+///
+/// The position is in points from the left margin, from -1584 to 1584,
+/// stored in twips, so it reads back rounded to a twentieth of a point.
+final class DocxTabStop {
+  /// A tab stop at [positionPt]. Throws [ArgumentError] for a position that
+  /// is not finite and [RangeError] for one out of range once rounded.
+  DocxTabStop(
+    double positionPt, {
+    this.alignment = DocxTabAlignment.left,
+    this.leader = DocxTabLeader.none,
+  }) : _position = twipsOf(
+         positionPt,
+         'positionPt',
+         min: -_maxTwips,
+         max: _maxTwips,
+       );
+
+  final int _position;
+
+  /// How text lines up at the stop.
+  final DocxTabAlignment alignment;
+
+  /// The leader up to the stop.
+  final DocxTabLeader leader;
+
+  /// The position in points from the left margin.
+  double get positionPt => ptOfTwips(_position);
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxTabStop &&
+      other._position == _position &&
+      other.alignment == alignment &&
+      other.leader == leader;
+
+  @override
+  int get hashCode => Object.hash(_position, alignment, leader);
+
+  @override
+  String toString() =>
+      'DocxTabStop($positionPt, ${alignment.name}, ${leader.name})';
+}
+
+/// The largest list number a reference holds: nine digits, which every
+/// platform reads exactly.
+const int _maxNumId = 999999999;
+
+/// The list a paragraph belongs to (`w:numPr`): the number of a list
+/// instance (`w:numId`) and the level in it.
+final class DocxNumberingRef {
+  /// A reference to the list instance [numId] at [level].
+  ///
+  /// [numId] is from 0 to 999999999 (0 means "no list" and removes the
+  /// paragraph from the list its style gives) and [level] from 0 to 8;
+  /// anything else throws [RangeError].
+  DocxNumberingRef(this.numId, {this.level = 0}) {
+    RangeError.checkValueInInterval(numId, 0, _maxNumId, 'numId');
+    RangeError.checkValueInInterval(level, 0, 8, 'level');
+  }
+
+  /// The number of the list instance in the numbering part.
+  final int numId;
+
+  /// The level in the list, from 0.
+  final int level;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxNumberingRef && other.numId == numId && other.level == level;
+
+  @override
+  int get hashCode => Object.hash(numId, level);
+
+  @override
+  String toString() => 'DocxNumberingRef($numId, level: $level)';
 }

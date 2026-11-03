@@ -61,6 +61,14 @@ int eighthsOf(double pt, String name, {required int min, required int max}) =>
 int pointsOf(double pt, String name, {required int min, required int max}) =>
     _stored(pt, 1, name, min: min, max: max);
 
+/// [lines] lines of spacing in 240ths of a line, from [min] to [max].
+int lineUnitsOf(
+  double lines,
+  String name, {
+  required int min,
+  required int max,
+}) => _stored(lines, 240, name, min: min, max: max);
+
 /// [twips] in points.
 double ptOfTwips(int twips) => twips / 20;
 
@@ -69,3 +77,6 @@ double ptOfHalfPoints(int halfPoints) => halfPoints / 2;
 
 /// [eighths] in points.
 double ptOfEighths(int eighths) => eighths / 8;
+
+/// [units] 240ths of a line in lines.
+double linesOfLineUnits(int units) => units / 240;

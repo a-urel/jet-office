@@ -40,6 +40,7 @@ import 'model/blocks.dart';
 import 'model/inlines.dart';
 import 'model/property_set.dart';
 import 'model/run_content.dart';
+import 'paragraph_property_codecs.dart' show paragraphPropertiesSchema;
 import 'properties.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';

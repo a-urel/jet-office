@@ -20,8 +20,8 @@
 /// Children are matched by namespace URI and local name, never by prefix:
 /// a `w14:shadow` is not the schema's `w:shadow`.
 ///
-/// The schema of a paragraph's `w:pPr`, [paragraphPropertiesSchema], types
-/// only the style until D2 Task 5; the run's, `runPropertiesSchema`, is in
+/// The schema of a paragraph's `w:pPr`, `paragraphPropertiesSchema`, is in
+/// `paragraph_property_codecs.dart`; the run's, `runPropertiesSchema`, is in
 /// `run_property_codecs.dart`.
 library;
 
@@ -30,7 +30,6 @@ import '../opc/opaque_xml.dart';
 import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'property_codec.dart';
-import 'schema_order.dart';
 
 /// The children of a container in schema order, the codecs of the typed
 /// ones and the schemas of the nested containers.
@@ -525,9 +524,3 @@ void checkSettable(
     );
   }
 }
-
-/// The schema of a paragraph's `w:pPr`: [pPrOrder], typing `w:pStyle`.
-const ContainerSchema paragraphPropertiesSchema = ContainerSchema(
-  pPrOrder,
-  codecs: <String, PropertyCodec<Object>>{'pStyle': StyleIdCodec('pStyle')},
-);

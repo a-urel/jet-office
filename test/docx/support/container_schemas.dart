@@ -8,6 +8,7 @@
 library;
 
 import 'package:jet_office/src/docx/model/formatting.dart';
+import 'package:jet_office/src/docx/paragraph_property_codecs.dart';
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/run_property_codecs.dart';
 
@@ -28,7 +29,33 @@ final List<ContainerSchemaCase> containerSchemaCases = <ContainerSchemaCase>[
   (
     name: 'pPr',
     schema: paragraphPropertiesSchema,
-    samples: <String, Object>{'pStyle': 'Title'},
+    samples: <String, Object>{
+      'pStyle': 'Title',
+      'keepNext': true,
+      'keepLines': true,
+      'pageBreakBefore': true,
+      'widowControl': true,
+      'numPr': DocxNumberingRef(1, level: 1),
+      'pBdr': const DocxParagraphBorders(),
+      'shd': const DocxShading(pattern: DocxShadingPattern.clear),
+      'tabs': <DocxTabStop>[DocxTabStop(10)],
+      'spacing': DocxSpacing(afterPt: 8),
+      'ind': DocxIndentation(leftPt: 36),
+      'jc': DocxAlignment.center,
+      'outlineLvl': 1,
+    },
+  ),
+  (
+    name: 'pBdr',
+    schema: paragraphBordersSchema,
+    samples: <String, Object>{
+      'top': DocxBorder(),
+      'left': DocxBorder(),
+      'bottom': DocxBorder(),
+      'right': DocxBorder(),
+      'between': DocxBorder(),
+      'bar': DocxBorder(),
+    },
   ),
   (
     name: 'rPr',
