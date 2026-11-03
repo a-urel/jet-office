@@ -67,8 +67,11 @@ const _Xf _defaultXf = (
 /// and `protection` (see `alignmentXml` and `protectionXml`) or `null` for
 /// Excel's defaults. An xf whose `exact` is false is kept and counted but
 /// never matches a new style. [customCodes] maps each `numFmt` id of the
-/// file to its code; the registry numbers new codes from
-/// `max(164, highest id + 1)`.
+/// file to its code; [usedNumFmtIds] lists the number format ids the file
+/// refers to elsewhere (its cell formats, cell style formats and
+/// differential formats), defined or not. The registry numbers new codes
+/// from `max(164, highest id of either + 1)`, so a new code never takes an
+/// id the file already uses.
 final class StyleSeed {
   /// Creates a seed. [fonts], [fills], [borders] and [xfs] must not be
   /// empty: id 0 of each must exist.
@@ -78,6 +81,7 @@ final class StyleSeed {
     required this.borders,
     required this.xfs,
     this.customCodes = const <int, String>{},
+    this.usedNumFmtIds = const <int>[],
   });
 
   /// The file's fonts, in order; see the class comment for `key`.
@@ -91,6 +95,9 @@ final class StyleSeed {
 
   /// The file's `numFmt` ids and codes.
   final Map<int, String> customCodes;
+
+  /// The number format ids the file refers to, defined or not.
+  final Iterable<int> usedNumFmtIds;
 
   /// The file's cell formats, in order.
   final List<
@@ -141,12 +148,18 @@ final class StyleRegistry {
   /// Creates a registry that holds [seed]'s entries at their indexes.
   ///
   /// New styles reuse a seeded entry whose key or parts they match and
-  /// otherwise append after it. The limits count the seed's entries.
+  /// otherwise append after it. The limits count the seed's entries, but a
+  /// seed may already be past them (a file Excel wrote with more fonts than
+  /// the writer allows): seeding never throws on counts, a style that
+  /// reuses entries still gets its id, and [idFor] throws [XlsxLimitError]
+  /// only when it would append to a table at or past its limit.
   /// Throws [ArgumentError] when a list of [seed] other than its custom
-  /// codes is empty, and [XlsxLimitError] when it holds more fonts, custom
-  /// codes or cell formats than the limits allow.
+  /// codes is empty.
   StyleRegistry.seeded(StyleSeed seed)
-    : _seedNextId = _nextIdAfter(seed.customCodes) {
+    : _seedNextId = _nextIdAfter(<int>[
+        ...seed.customCodes.keys,
+        ...seed.usedNumFmtIds,
+      ]) {
     for (final (String name, int length) in <(String, int)>[
       ('fonts', seed.fonts.length),
       ('fills', seed.fills.length),
@@ -156,15 +169,6 @@ final class StyleRegistry {
       if (length == 0) {
         throw ArgumentError.value(length, name, 'A seed needs an entry 0.');
       }
-    }
-    if (seed.fonts.length > XlsxLimits.maxFonts) {
-      throw XlsxLimitError('fonts', XlsxLimits.maxFonts);
-    }
-    if (seed.customCodes.length > XlsxLimits.maxNumberFormats) {
-      throw XlsxLimitError('number formats', XlsxLimits.maxNumberFormats);
-    }
-    if (seed.xfs.length > XlsxLimits.maxCellFormats) {
-      throw XlsxLimitError('cell formats', XlsxLimits.maxCellFormats);
     }
     void seedParts(
       List<String> parts,
@@ -205,9 +209,9 @@ final class StyleRegistry {
 
   static const int _firstCustomId = 164;
 
-  static int _nextIdAfter(Map<int, String> codes) {
+  static int _nextIdAfter(Iterable<int> ids) {
     int next = _firstCustomId;
-    for (final int id in codes.keys) {
+    for (final int id in ids) {
       if (id >= next) next = id + 1;
     }
     return next;
@@ -261,6 +265,31 @@ final class StyleRegistry {
     for (final _Xf xf in _xfs.sublist(start))
       _render((XmlWriter w) => _writeXf(w, xf)),
   ];
+
+  /// The `numFmtId` of every cell format from index [start] on.
+  List<int> xfNumFmtIdsFrom(int start) => <int>[
+    for (final _Xf xf in _xfs.sublist(start)) xf.numFmtId,
+  ];
+
+  /// Appends a cell format that is already in the file, made there by other
+  /// means (such as a copy of another cell format's element), and returns
+  /// its index. It holds its index and counts toward the limits, but it
+  /// never matches a new style. Not checked against the limits: the caller
+  /// has already added it.
+  int addXf(
+    ({
+      int numFmtId,
+      int fontId,
+      int fillId,
+      int borderId,
+      String? alignment,
+      String? protection,
+    })
+    xf,
+  ) {
+    _xfs.add(xf);
+    return _xfs.length - 1;
+  }
 
   /// The custom number formats from index [start] of the code list on (the
   /// seed's codes come first, in the order of its map).

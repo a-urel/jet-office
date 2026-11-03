@@ -720,6 +720,104 @@ void _typedTests() {
       ]);
     });
 
+    test('a new code never takes a numFmt id the file uses', () {
+      final String xml = _sheet(
+        '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.0"/>'
+        '</numFmts>'
+        '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font>'
+        '</fonts><fills count="1"><fill><patternFill/></fill></fills>'
+        '<borders count="1"><border/></borders>'
+        '<cellStyleXfs count="1"><xf numFmtId="168"/></cellStyleXfs>'
+        '<cellXfs count="2"><xf/><xf numFmtId="166"/></cellXfs>'
+        '<dxfs count="1"><dxf><numFmt numFmtId="170" formatCode="0"/></dxf>'
+        '</dxfs>',
+      );
+      final StylesPart part = _read(xml);
+      part.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.00')));
+      part.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.000')));
+      final String out = _encode(part);
+      final String numFmts = RegExp(
+        '<numFmts.*</numFmts>',
+      ).firstMatch(out)!.group(0)!;
+      for (final int id in <int>[165, 166, 167, 168, 169, 170]) {
+        expect(
+          numFmts,
+          isNot(contains('numFmtId="$id" formatCode')),
+          reason: '$id',
+        );
+      }
+      expect(out, contains('<numFmt numFmtId="171" formatCode="0.00"/>'));
+      expect(out, contains('<numFmt numFmtId="172" formatCode="0.000"/>'));
+      expect(part.table.formatOf('1').code, isNull);
+    });
+
+    test('a file past the font limit reuses fonts and throws to add one', () {
+      final StringBuffer fonts = StringBuffer(
+        '<fonts count="${XlsxLimits.maxFonts + 1}">'
+        '<font><sz val="11"/><name val="Calibri"/></font>'
+        '<font><b/><sz val="11"/><name val="Calibri"/></font>',
+      );
+      for (var i = 2; i <= XlsxLimits.maxFonts; i++) {
+        fonts.write('<font><sz val="$i"/><name val="Arial"/></font>');
+      }
+      fonts.write('</fonts>');
+      final StylesPart part = _read(
+        _sheet(
+          '$fonts<fills count="2"><fill><patternFill patternType="none"/>'
+          '</fill><fill><patternFill patternType="gray125"/></fill></fills>'
+          '<borders count="1"><border><left/><right/><top/><bottom/>'
+          '<diagonal/></border></borders><cellXfs count="1"><xf numFmtId="0" '
+          'fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>',
+        ),
+      );
+      expect(part.idFor(const XlsxStyle(font: XlsxFont(bold: true))), 1);
+      final String before = _encode(part);
+      final StylesMark mark = part.mark();
+      expect(
+        () => part.idFor(const XlsxStyle(font: XlsxFont(italic: true))),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      expect(_encode(part), before);
+      expect(part.mark(), mark);
+      expect(part.idFor(const XlsxStyle(font: XlsxFont(bold: true))), 1);
+    });
+
+    test('an idFor that throws changes nothing', () {
+      final StylesPart part = _read(_sheet(''));
+      final String before = _encode(part);
+      final StylesMark mark = part.mark();
+      expect(
+        () => part.idFor(const XlsxStyle(font: XlsxFont(name: ''))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.name,
+            'name',
+            'font.name',
+          ),
+        ),
+      );
+      expect(_encode(part), before);
+      expect(part.mark(), mark);
+      expect(part.idFor(_boldRed), 1);
+    });
+
+    test('idFor after a rollBack to a mark taken before seeding', () {
+      final String xml = _sheet(
+        '<fills count="1"><fill><patternFill patternType="none"/></fill>'
+        '</fills><cellXfs count="1"><xf/></cellXfs>',
+      );
+      final StylesPart fresh = _read(xml);
+      expect(fresh.idFor(_boldRed), 1);
+      final StylesPart part = _read(xml);
+      final StylesMark mark = part.mark();
+      expect(part.idFor(const XlsxStyle(font: XlsxFont(italic: true))), 1);
+      expect(part.idFor(_boldRed), 2);
+      part.rollBack(mark);
+      expect(_encode(part), _encode(_read(xml)));
+      expect(part.idFor(_boldRed), 1);
+      expect(_encode(part), _encode(fresh));
+    });
+
     test('indexedColors reads a custom palette', () {
       final StringBuffer colors = StringBuffer('<colors><indexedColors>');
       for (var i = 0; i < 64; i++) {

@@ -583,6 +583,11 @@ final class StylesPart implements PartContent {
   /// Reading a font, fill, border or cell format for the first time reports
   /// any value in it that cannot be read (see [StylesPart.read]); such a
   /// value takes its default, or `null`.
+  ///
+  /// A cell format of the file is read against the part as the file had it:
+  /// a font, fill or border id it points at that the file lacks stays
+  /// `null` (and the format inexact) even after [idFor] has appended an
+  /// entry at that position.
   XlsxStyle styleOf(int index) {
     if (!isTyped || _xfs.isEmpty) return const XlsxStyle();
     return _xfInfo(index >= 0 && index < _xfs.length ? index : 0).style;
@@ -735,6 +740,7 @@ final class StylesPart implements PartContent {
           <String>[StyleRegistry.borderKey(const XlsxBorder())],
         ),
         customCodes: Map<int, String>.of(_codeMap),
+        usedNumFmtIds: _usedNumFmtIds(),
         xfs:
             <
               ({
@@ -809,9 +815,9 @@ final class StylesPart implements PartContent {
     final List<String> xfs = registry.xfsFrom(written.xfs);
     if (xfs.isNotEmpty) {
       final _Group group = _cellXfs ??= _createGroup('cellXfs', 'xf');
-      for (final String xml in xfs) {
-        final int id = int.parse(_numFmtIdOf.firstMatch(xml)!.group(1)!);
-        final _Xf xf = _Xf.made(id, _inMain(xml, group));
+      final List<int> ids = registry.xfNumFmtIdsFrom(written.xfs);
+      for (var i = 0; i < xfs.length; i++) {
+        final _Xf xf = _Xf.made(ids[i], _inMain(xfs[i], group));
         group.items.add(xf);
         _xfs.add(xf);
       }
@@ -826,7 +832,22 @@ final class StylesPart implements PartContent {
     _table = null;
   }
 
-  static final RegExp _numFmtIdOf = RegExp('numFmtId="([0-9]+)"');
+  static final RegExp _numFmtIdAttribute = RegExp(
+    r'''numFmtId\s*=\s*["']([0-9]{1,9})["']''',
+  );
+
+  /// The number format ids the part refers to: those of its cell formats,
+  /// and those written in its cell style formats and differential formats
+  /// (kept opaque, so read from their text).
+  List<int> _usedNumFmtIds() => <int>[
+    for (var i = 0; i < _xfs.length; i++) _xfInfo(i).seed.numFmtId,
+    for (final Object c in _children)
+      if (c is OpaqueXml &&
+          c.namespaceUri == Ns.main &&
+          (c.localName == 'cellStyleXfs' || c.localName == 'dxfs'))
+        for (final RegExpMatch m in _numFmtIdAttribute.allMatches(c.xml))
+          int.parse(m.group(1)!),
+  ];
 
   /// [xml], an element the registry rendered without a prefix, as it goes
   /// in [group]: with the SpreadsheetML namespace declared on it when the
@@ -936,10 +957,13 @@ final class StylesPart implements PartContent {
     if (_untypedText != null) return style ?? 0;
     final _Group group = _cellXfs ??= _createGroup('cellXfs', 'xf');
     final Map<String, String> above = _above(group);
-    final String baseText = style != null && style >= 0 && style < _xfs.length
-        ? _xfs[style].render(above)
+    final int? base = style != null && style >= 0 && style < _xfs.length
+        ? style
         : _xfs.isNotEmpty
-        ? _xfs[0].render(above)
+        ? 0
+        : null;
+    final String baseText = base != null
+        ? _xfs[base].render(above)
         : _plainXf(group.qualifiedName);
     final String made = _withNumFmt(baseText, numFmtId);
     for (var i = 0; i < _xfs.length; i++) {
@@ -948,11 +972,36 @@ final class StylesPart implements PartContent {
         return i;
       }
     }
+    final StyleRegistry? registry = _registry;
+    if (registry != null && registry.xfCount == _xfs.length) {
+      // The registry learns the copy, never to be matched (it may hold what
+      // the value types cannot), so the next idFor numbers after it.
+      final from = base == null ? null : _xfInfo(base).seed;
+      registry.addXf((
+        numFmtId: numFmtId,
+        fontId: from?.fontId ?? 0,
+        fillId: from?.fillId ?? 0,
+        borderId: from?.borderId ?? 0,
+        alignment: from?.alignment,
+        protection: from?.protection,
+      ));
+      final StylesMark w = _written!;
+      _written = (
+        fonts: w.fonts,
+        fills: w.fills,
+        borders: w.borders,
+        codes: w.codes,
+        xfs: w.xfs + 1,
+      );
+    } else {
+      // No registry yet, or one whose default xf 0 the part does not hold:
+      // the next idFor seeds a new one from the part.
+      _dropRegistry();
+    }
     final _Xf xf = _Xf.made(numFmtId, made);
     group.items.add(xf);
     _xfs.add(xf);
-    // The registry does not know this xf: the next idFor seeds a new one.
-    _dropRegistry();
+    _table = null;
     return _xfs.length - 1;
   }
 
