@@ -106,6 +106,8 @@ library;
 
 export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
+export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
+export 'src/docx/read_limits.dart' show DocxReadLimits;
 export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;
 export 'src/xlsx/alignment.dart'
     show

@@ -55,4 +55,42 @@ void main() {
       'application/vnd.openxmlformats-officedocument.theme+xml',
     );
   });
+
+  test('the main types of XLSX and PPTX packages are named', () {
+    const String sml =
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.';
+    expect(ContentType.workbook, '${sml}sheet.main+xml');
+    expect(ContentType.smlTemplate, '${sml}template.main+xml');
+    expect(
+      ContentType.smlMacroWorkbook,
+      'application/vnd.ms-excel.sheet.macroEnabled.main+xml',
+    );
+    expect(
+      ContentType.smlMacroTemplate,
+      'application/vnd.ms-excel.template.macroEnabled.main+xml',
+    );
+    expect(
+      ContentType.smlBinaryWorkbook,
+      'application/vnd.ms-excel.sheet.binary.macroEnabled.main',
+    );
+
+    const String pml =
+        'application/vnd.openxmlformats-officedocument.presentationml.';
+    expect(ContentType.pmlPresentation, '${pml}presentation.main+xml');
+    expect(ContentType.pmlTemplate, '${pml}template.main+xml');
+    expect(ContentType.pmlSlideshow, '${pml}slideshow.main+xml');
+    const String pptm = 'application/vnd.ms-powerpoint.';
+    expect(
+      ContentType.pmlMacroPresentation,
+      '${pptm}presentation.macroEnabled.main+xml',
+    );
+    expect(
+      ContentType.pmlMacroTemplate,
+      '${pptm}template.macroEnabled.main+xml',
+    );
+    expect(
+      ContentType.pmlMacroSlideshow,
+      '${pptm}slideshow.macroEnabled.main+xml',
+    );
+  });
 }

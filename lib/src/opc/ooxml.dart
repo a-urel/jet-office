@@ -18,7 +18,10 @@
 /// types. The WordprocessingML names ([Ns.w], [Ns.w14], [Ns.wp], [Ns.mc],
 /// [Ns.wStrict], the settings, web settings, font table, theme, numbering,
 /// header and footer relationship types, and the `wml…` and theme content
-/// types) are new too, with the ECMA-376 transitional values.
+/// types) are new too, with the ECMA-376 transitional values. So are the
+/// other main part types of SpreadsheetML (`sml…`: macro-enabled, template
+/// and binary) and PresentationML (`pml…`), by which the DOCX reader
+/// recognises and refuses a workbook or a presentation.
 library;
 
 /// XML namespace URIs.
@@ -306,4 +309,44 @@ abstract final class ContentType {
   /// A theme part.
   static const String theme =
       'application/vnd.openxmlformats-officedocument.theme+xml';
+
+  /// The main part of a macro-enabled workbook (`.xlsm`).
+  static const String smlMacroWorkbook =
+      'application/vnd.ms-excel.sheet.macroEnabled.main+xml';
+
+  /// The main part of a workbook template (`.xltx`).
+  static const String smlTemplate =
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml';
+
+  /// The main part of a macro-enabled workbook template (`.xltm`).
+  static const String smlMacroTemplate =
+      'application/vnd.ms-excel.template.macroEnabled.main+xml';
+
+  /// The main part of a binary workbook (`.xlsb`), which is not XML.
+  static const String smlBinaryWorkbook =
+      'application/vnd.ms-excel.sheet.binary.macroEnabled.main';
+
+  /// The main part of a presentation (`.pptx`).
+  static const String pmlPresentation =
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml';
+
+  /// The main part of a presentation template (`.potx`).
+  static const String pmlTemplate =
+      'application/vnd.openxmlformats-officedocument.presentationml.template.main+xml';
+
+  /// The main part of a slide show (`.ppsx`).
+  static const String pmlSlideshow =
+      'application/vnd.openxmlformats-officedocument.presentationml.slideshow.main+xml';
+
+  /// The main part of a macro-enabled presentation (`.pptm`).
+  static const String pmlMacroPresentation =
+      'application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml';
+
+  /// The main part of a macro-enabled presentation template (`.potm`).
+  static const String pmlMacroTemplate =
+      'application/vnd.ms-powerpoint.template.macroEnabled.main+xml';
+
+  /// The main part of a macro-enabled slide show (`.ppsm`).
+  static const String pmlMacroSlideshow =
+      'application/vnd.ms-powerpoint.slideshow.macroEnabled.main+xml';
 }
