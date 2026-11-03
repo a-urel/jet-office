@@ -6,7 +6,8 @@
 ///
 /// [RelatedPart.find] looks at the main part's relationships of one type:
 /// external ones are ignored, the first internal one whose target is in the
-/// package is the part, and otherwise the first internal one names where
+/// package with the expected content type (and is not the main part
+/// itself) is the part, and otherwise the first internal one names where
 /// the part goes. A document without the part reads it as empty, and
 /// [RelatedPart.create] adds it at save, only once it holds something
 /// (plan Ruling 7): at the target of a relationship whose part is missing
@@ -72,6 +73,13 @@ final class RelatedPart {
       final String target = opc.resolve(source, rel.target);
       final String? actual = opc.canonicalPartName(target);
       if (actual != null) {
+        // A part of another type, or the source itself, is not this part:
+        // the relationship stays as read and is otherwise ignored.
+        if (opc.contentTypeOf(actual) != contentType ||
+            actual.toLowerCase() ==
+                (opc.canonicalPartName(source) ?? source).toLowerCase()) {
+          continue;
+        }
         return RelatedPart._(
           package,
           source,

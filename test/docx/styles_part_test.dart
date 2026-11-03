@@ -168,6 +168,29 @@ void main() {
       });
     }
 
+    for (final String target in <String>['document.xml', 'settings.xml']) {
+      test('a styles relationship to $target, which holds no styles, is '
+          'kept and a new styles part is created', () {
+        final Uint8List input = docxWithStyles(
+          styles: null,
+          relationships: stylesRelationship(target),
+        );
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(doc.styles.styles, isEmpty);
+        doc.styles.add(_style('Note'));
+        final Uint8List output = doc.save().bytes;
+        final Map<String, Uint8List> before = readXlsxBytes(input);
+        final Map<String, Uint8List> after = readXlsxBytes(output);
+        expect(after['word/document.xml'], before['word/document.xml']);
+        expect(after['word/settings.xml'], before['word/settings.xml']);
+        expect(readDocxText(output)['word/styles.xml'], contains('"Note"'));
+        expect(_stylesTargets(output), <String>[target, 'styles.xml']);
+        final DocxDocument back = DocxDocument.open(output);
+        expect(back.body.blocks, hasLength(doc.body.blocks.length));
+        expect(back.styles.byId('Note'), isNotNull);
+      });
+    }
+
     test('an external styles relationship is ignored', () {
       final Uint8List input = docxWithStyles(
         relationships: stylesRelationship(

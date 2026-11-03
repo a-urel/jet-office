@@ -306,6 +306,8 @@ void main() {
         '/[Content_Types].xml',
         '/word/_rels/x.xml.rels',
         '/_rels/.rels',
+        '/%5BContent_Types%5D.xml',
+        '/word/st%79les.xml',
       ]) {
         expect(p.isNewPartName(bad), isFalse, reason: bad);
       }

@@ -258,7 +258,8 @@ final class OpcPackage {
   /// `[Content_Types].xml` nor a relationships part (`_rels/….rels`), no
   /// part lives under it (`/word` while `/word/document.xml` exists), and it
   /// does not live under a part. Names are compared without regard to case
-  /// or slash direction.
+  /// or slash direction. A name holding `%` is refused, since it may be
+  /// percent-encoded (`%5BContent_Types%5D.xml`).
   ///
   /// A relationship target read from a file is untrusted: check it with
   /// this before [addPart] creates a part at it, since [addPart] throws on
@@ -269,6 +270,7 @@ final class OpcPackage {
     final String plain = _plain(slashed);
     if (plain.isEmpty ||
         slashed.endsWith('/') ||
+        plain.contains('%') ||
         plain.toLowerCase() == _contentTypesPart.toLowerCase() ||
         _sourceOfRels(plain) != null) {
       return false;
