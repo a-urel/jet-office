@@ -1,9 +1,11 @@
-/// The case loop of `tool/fuzz_reader.dart`, apart from its arguments and
-/// process exit code so a test can run it.
+/// The case loop of `tool/fuzz_reader.dart` and `tool/fuzz_docx.dart`, apart
+/// from their arguments and process exit code so a test can run it.
 ///
-/// New in jet_office (phase 2, R4). It mutates and reads as
-/// `tool/fuzz_reader.dart` documents: `XlsxReadException` is a refusal,
-/// anything else thrown and any case taking more than 5 s is a failure.
+/// New in jet_office (phase 2, R4); generalised in phase 4 (D1) for the DOCX
+/// fuzzer. By default it mutates and reads as `tool/fuzz_reader.dart`
+/// documents: `XlsxReadException` is a refusal, anything else thrown and any
+/// case taking more than 5 s is a failure. `tool/fuzz_docx.dart` passes the
+/// DOCX cases, exercise and refusal.
 library;
 
 import 'dart:typed_data';
@@ -24,7 +26,7 @@ final class FuzzRunResult {
   /// How many cases ran.
   final int cases;
 
-  /// How many cases the reader refused with an `XlsxReadException`.
+  /// How many cases the reader refused with its read exception.
   final int refused;
 
   /// How many cases threw anything else or took longer than 5 s.
@@ -33,6 +35,10 @@ final class FuzzRunResult {
 
 /// Runs `cases` mutated files for each seed from [first] to [last] through
 /// [exercise] (default [exerciseReader]) and returns the totals.
+///
+/// [generate] makes the cases of a seed (default [fuzzCases]). A thrown
+/// object for which [isRefusal] is true (default: an `XlsxReadException`) is
+/// a refusal; any other is a failure.
 ///
 /// Each failure is written to [out] as
 /// `seed <s> case <i> (<mutation>): <error>`. With [verbose], the line
@@ -46,12 +52,14 @@ FuzzRunResult runFuzz({
   required StringSink out,
   required StringSink err,
   void Function(Uint8List bytes) exercise = exerciseReader,
+  Iterable<FuzzCase> Function(int seed, int count) generate = fuzzCases,
+  bool Function(Object error) isRefusal = _isXlsxRefusal,
 }) {
   int count = 0;
   int refused = 0;
   int failures = 0;
   for (int seed = first; seed <= last; seed++) {
-    for (final FuzzCase c in fuzzCases(seed, cases)) {
+    for (final FuzzCase c in generate(seed, cases)) {
       count++;
       if (verbose) {
         err.writeln('seed ${c.seed} case ${c.index} (${c.mutation})');
@@ -59,11 +67,13 @@ FuzzRunResult runFuzz({
       final Stopwatch watch = Stopwatch()..start();
       try {
         exercise(c.bytes);
-      } on XlsxReadException {
-        refused++;
       } on Object catch (e) {
-        failures++;
-        out.writeln('seed ${c.seed} case ${c.index} (${c.mutation}): $e');
+        if (isRefusal(e)) {
+          refused++;
+        } else {
+          failures++;
+          out.writeln('seed ${c.seed} case ${c.index} (${c.mutation}): $e');
+        }
       }
       if (watch.elapsed > const Duration(seconds: 5)) {
         failures++;
@@ -76,3 +86,5 @@ FuzzRunResult runFuzz({
   }
   return FuzzRunResult(cases: count, refused: refused, failures: failures);
 }
+
+bool _isXlsxRefusal(Object error) => error is XlsxReadException;
