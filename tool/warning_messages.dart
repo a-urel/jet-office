@@ -13,6 +13,9 @@
 /// `sheetPartMissing` is also one sheet and no cell). `unresolvedNumberFormat`
 /// has a second row for the warning without a format id, the one that
 /// gathers every format id after the first ten of a sheet.
+/// `styleEntryInvalid` names no cell: its sample is one entry with a
+/// detail, and its second row the warning without one, which counts the
+/// entries after the first ten (2 here).
 /// `test/tool/warning_messages_test.dart` compares the output with the
 /// committed `docs/warning-messages.md`, so the file cannot drift.
 library;
@@ -28,6 +31,7 @@ import 'package:jet_office/src/xlsx/warnings.dart';
 /// [detail] is the format id of `unresolvedNumberFormat`; null gives the
 /// warning without one.
 XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
+  const String entry = 'font 3: The font size "abc" is not a finite number.';
   final WarningCollector collector = WarningCollector();
   switch (code) {
     case XlsxWarningCode.sheetNameChanged:
@@ -39,6 +43,14 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
     case XlsxWarningCode.mergeRangeInvalid:
       collector.add(code, sheet: 'Daten');
       collector.add(code, sheet: 'Daten');
+    case XlsxWarningCode.styleEntryInvalid:
+      if (detail == null) {
+        for (var i = 0; i < 12; i++) {
+          collector.add(code, sheet: 'Daten', detail: 'font $i');
+        }
+        return collector.warnings.last;
+      }
+      collector.add(code, sheet: 'Daten', detail: entry);
     case XlsxWarningCode.unresolvedNumberFormat:
       collector
         ..add(code, sheet: 'Daten', cell: 'A1', detail: detail)
@@ -124,7 +136,10 @@ String warningMessagesMarkdown() {
     ..writeln('`mergeRangeInvalid` counts 2 and names no cell, and')
     ..writeln('`unresolvedNumberFormat` uses format 27; its second row is the')
     ..writeln('warning without a format id, which gathers the format ids after')
-    ..writeln('the first ten of a sheet.')
+    ..writeln('the first ten of a sheet. `styleEntryInvalid` names no')
+    ..writeln('cell: its first row is one entry, its second the warning')
+    ..writeln('without a detail, which counts the entries after the first')
+    ..writeln('ten.')
     ..writeln()
     ..writeln('The native-speaker check of the German and Turkish text is')
     ..writeln('recorded under "Native-speaker check" in')
@@ -141,6 +156,9 @@ String warningMessagesMarkdown() {
     row('`${code.name}`', _sample(code));
     if (code == XlsxWarningCode.unresolvedNumberFormat) {
       row('`${code.name}` (no id)', _sample(code, detail: null));
+    }
+    if (code == XlsxWarningCode.styleEntryInvalid) {
+      row('`${code.name}` (no detail)', _sample(code, detail: null));
     }
   }
   out

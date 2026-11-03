@@ -363,5 +363,32 @@ String formatWarning(XlsxWarning w, OfficeLocale locale) {
       '“$sheet” sayfasındaki $count hücre, kodu yerel ayara bağlı olan ve '
           'dosyada bulunmayan yerleşik bir sayı biçimi kullanıyor; en yakın '
           'yerleşik biçimle gösteriliyor$cells.',
+    (XlsxWarningCode.styleEntryInvalid, OfficeLocale.en)
+        when w.detail == null =>
+      '$count style entries of the workbook cannot be read exactly; what '
+          'cannot be read takes its default, and the entries are saved as '
+          'written.',
+    (XlsxWarningCode.styleEntryInvalid, OfficeLocale.de)
+        when w.detail == null =>
+      '$count Formatierungseinträge der Arbeitsmappe können nicht exakt '
+          'gelesen werden; was nicht gelesen werden kann, erhält den '
+          'Standardwert, und die Einträge werden unverändert gespeichert.',
+    (XlsxWarningCode.styleEntryInvalid, OfficeLocale.tr)
+        when w.detail == null =>
+      'Çalışma kitabındaki $count biçim girdisi tam olarak okunamıyor; '
+          'okunamayan kısımlar varsayılan değeri alıyor ve girdiler olduğu '
+          'gibi kaydediliyor.',
+    (XlsxWarningCode.styleEntryInvalid, OfficeLocale.en) =>
+      'A style entry of the workbook cannot be read exactly ($id); what '
+          'cannot be read takes its default, and the entry is saved as '
+          'written.',
+    (XlsxWarningCode.styleEntryInvalid, OfficeLocale.de) =>
+      'Ein Formatierungseintrag der Arbeitsmappe kann nicht exakt gelesen '
+          'werden ($id); was nicht gelesen werden kann, erhält den '
+          'Standardwert, und der Eintrag wird unverändert gespeichert.',
+    (XlsxWarningCode.styleEntryInvalid, OfficeLocale.tr) =>
+      'Çalışma kitabındaki bir biçim girdisi tam olarak okunamıyor ($id); '
+          'okunamayan kısımlar varsayılan değeri alıyor ve girdi olduğu gibi '
+          'kaydediliyor.',
   };
 }

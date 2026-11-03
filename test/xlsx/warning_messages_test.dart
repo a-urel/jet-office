@@ -350,6 +350,18 @@ _expected = <(XlsxWarningCode, OfficeLocale), String>{
     XlsxWarningCode.numberFormatLocaleDependent,
     OfficeLocale.tr,
   ): '“S” sayfasındaki 1 hücre, kodu yerel ayara bağlı olan ve dosyada bulunmayan yerleşik bir sayı biçimi kullanıyor; en yakın yerleşik biçimle gösteriliyor (A1).',
+  (
+    XlsxWarningCode.styleEntryInvalid,
+    OfficeLocale.en,
+  ): 'A style entry of the workbook cannot be read exactly (27); what cannot be read takes its default, and the entry is saved as written.',
+  (
+    XlsxWarningCode.styleEntryInvalid,
+    OfficeLocale.de,
+  ): 'Ein Formatierungseintrag der Arbeitsmappe kann nicht exakt gelesen werden (27); was nicht gelesen werden kann, erhält den Standardwert, und der Eintrag wird unverändert gespeichert.',
+  (
+    XlsxWarningCode.styleEntryInvalid,
+    OfficeLocale.tr,
+  ): 'Çalışma kitabındaki bir biçim girdisi tam olarak okunamıyor (27); okunamayan kısımlar varsayılan değeri alıyor ve girdi olduğu gibi kaydediliyor.',
 };
 
 void main() {
@@ -431,14 +443,14 @@ void main() {
     );
   });
 
-  test('all 90 messages are worded exactly as specified', () {
+  test('all 93 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, OfficeLocale)> keys =
         <(XlsxWarningCode, OfficeLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final OfficeLocale locale in OfficeLocale.values)
               (code, locale),
         ];
-    expect(keys, hasLength(90));
+    expect(keys, hasLength(93));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, OfficeLocale) key in keys) {
       final XlsxWarning w =
@@ -453,6 +465,34 @@ void main() {
               .single;
       expect(w.message(key.$2), _expected[key], reason: '${key.$1}/${key.$2}');
     }
+  });
+
+  test('styleEntryInvalid without a detail counts the entries', () {
+    final WarningCollector c = WarningCollector();
+    for (var i = 0; i < 12; i++) {
+      c.add(XlsxWarningCode.styleEntryInvalid, sheet: '', detail: 'font $i');
+    }
+    expect(c.warnings, hasLength(11));
+    final XlsxWarning rest = c.warnings.last;
+    expect(rest.detail, isNull);
+    expect(
+      rest.message(),
+      '2 style entries of the workbook cannot be read exactly; what cannot '
+      'be read takes its default, and the entries are saved as written.',
+    );
+    expect(
+      rest.message(OfficeLocale.de),
+      '2 Formatierungseinträge der Arbeitsmappe können nicht exakt gelesen '
+      'werden; was nicht gelesen werden kann, erhält den Standardwert, und '
+      'die Einträge werden unverändert gespeichert.',
+    );
+    expect(
+      rest.message(OfficeLocale.tr),
+      'Çalışma kitabındaki 2 biçim girdisi tam olarak okunamıyor; okunamayan '
+      'kısımlar varsayılan değeri alıyor ve girdiler olduğu gibi '
+      'kaydediliyor.',
+    );
+    expect(c.warnings.first.message(), contains('(font 0)'));
   });
 
   test('exactly ten cells are listed without an ellipsis', () {

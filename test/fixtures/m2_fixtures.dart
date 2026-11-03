@@ -220,6 +220,12 @@ List<_StyleRow> _styleRows() => <_StyleRow>[
   ],
 ];
 
+/// The style of every row of `m2_styles`, top to bottom, as the writer
+/// registers them.
+List<XlsxStyle> m2StyleRowStyles() => <XlsxStyle>[
+  for (final (_, XlsxStyle style, _) in _styleRows()) style,
+];
+
 /// The text `<v>` stores for [value]: a date as its serial.
 String _stored(Object value) => value is XlsxDate ? '46319' : '$value';
 

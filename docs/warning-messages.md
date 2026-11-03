@@ -17,7 +17,10 @@ sheet instead, asked for as `Daten:1` (changed) or `daten`
 `mergeRangeInvalid` counts 2 and names no cell, and
 `unresolvedNumberFormat` uses format 27; its second row is the
 warning without a format id, which gathers the format ids after
-the first ten of a sheet.
+the first ten of a sheet. `styleEntryInvalid` names no
+cell: its first row is one entry, its second the warning
+without a detail, which counts the entries after the first
+ten.
 
 The native-speaker check of the German and Turkish text is
 recorded under "Native-speaker check" in
@@ -56,6 +59,8 @@ recorded under "Native-speaker check" in
 | `numberFormatInvalid` | 2 cell(s) on sheet 'Daten' have a number format code that cannot be read; they show with the General format (A1, B2). | 2 Zelle(n) im Blatt „Daten“ haben einen Zahlenformatcode, der nicht gelesen werden kann; sie werden mit dem Format „Standard“ angezeigt (A1, B2). | “Daten” sayfasındaki 2 hücrenin sayı biçimi kodu okunamıyor; Genel biçimle gösteriliyor (A1, B2). |
 | `numberFormatUnsupported` | 2 cell(s) on sheet 'Daten' have a number format that uses a calendar, numeral system or language this library does not render; they show with Gregorian dates, Western digits and the default language (A1, B2). | 2 Zelle(n) im Blatt „Daten“ haben ein Zahlenformat mit einem Kalender, Zahlensystem oder einer Sprache, die diese Bibliothek nicht darstellt; sie werden mit gregorianischem Datum, westlichen Ziffern und der Standardsprache angezeigt (A1, B2). | “Daten” sayfasındaki 2 hücrenin sayı biçimi bu kitaplığın göstermediği bir takvim, rakam sistemi veya dil kullanıyor; Miladi tarih, Batı rakamları ve varsayılan dille gösteriliyor (A1, B2). |
 | `numberFormatLocaleDependent` | 2 cell(s) on sheet 'Daten' use a built-in number format whose code depends on the locale and is not in the file; they show with the closest built-in format (A1, B2). | 2 Zelle(n) im Blatt „Daten“ verwenden ein integriertes Zahlenformat, dessen Code vom Gebietsschema abhängt und in der Datei fehlt; sie werden mit dem nächstliegenden integrierten Format angezeigt (A1, B2). | “Daten” sayfasındaki 2 hücre, kodu yerel ayara bağlı olan ve dosyada bulunmayan yerleşik bir sayı biçimi kullanıyor; en yakın yerleşik biçimle gösteriliyor (A1, B2). |
+| `styleEntryInvalid` | A style entry of the workbook cannot be read exactly (font 3: The font size "abc" is not a finite number.); what cannot be read takes its default, and the entry is saved as written. | Ein Formatierungseintrag der Arbeitsmappe kann nicht exakt gelesen werden (font 3: The font size "abc" is not a finite number.); was nicht gelesen werden kann, erhält den Standardwert, und der Eintrag wird unverändert gespeichert. | Çalışma kitabındaki bir biçim girdisi tam olarak okunamıyor (font 3: The font size "abc" is not a finite number.); okunamayan kısımlar varsayılan değeri alıyor ve girdi olduğu gibi kaydediliyor. |
+| `styleEntryInvalid` (no detail) | 2 style entries of the workbook cannot be read exactly; what cannot be read takes its default, and the entries are saved as written. | 2 Formatierungseinträge der Arbeitsmappe können nicht exakt gelesen werden; was nicht gelesen werden kann, erhält den Standardwert, und die Einträge werden unverändert gespeichert. | Çalışma kitabındaki 2 biçim girdisi tam olarak okunamıyor; okunamayan kısımlar varsayılan değeri alıyor ve girdiler olduğu gibi kaydediliyor. |
 
 ## DOCX
 
