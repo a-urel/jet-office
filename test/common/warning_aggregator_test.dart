@@ -126,4 +126,17 @@ void main() {
     expect(identical(w.all, w.all), isTrue);
     expect(() => w.all.add(entry), throwsUnsupportedError);
   });
+
+  test('locationsOffered counts every call with a location, kept or not', () {
+    final WarningAggregator<_Code> w = WarningAggregator<_Code>()
+      ..add(_Code.a, scope: 'S', location: 'A1', count: 5)
+      ..add(_Code.a, scope: 'S');
+    expect(w.all.single.count, 6);
+    expect(w.all.single.locationsOffered, 1);
+    for (int i = 2; i <= 12; i++) {
+      w.add(_Code.a, scope: 'S', location: 'A$i');
+    }
+    expect(w.all.single.locations, hasLength(10));
+    expect(w.all.single.locationsOffered, 12);
+  });
 }

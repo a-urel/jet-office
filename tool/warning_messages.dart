@@ -77,14 +77,16 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
 
 /// The sample DOCX warning of [code]: part `/word/document.xml`, locations
 /// `body/p[0]` and `body/p[1]`, count 2, and for the two content type codes
-/// the detail they name.
-DocxWarning _docxSample(DocxWarningCode code) {
+/// the detail they name. With [one], `invalidCharactersRemoved` counts 1
+/// at `body/p[0]`, for its singular text.
+DocxWarning _docxSample(DocxWarningCode code, {bool one = false}) {
   final DocxWarningCollector collector = DocxWarningCollector();
   switch (code) {
     case DocxWarningCode.invalidCharactersRemoved:
-      collector
-        ..add(code, part: '/word/document.xml', location: 'body/p[0]')
-        ..add(code, part: '/word/document.xml', location: 'body/p[1]');
+      collector.add(code, part: '/word/document.xml', location: 'body/p[0]');
+      if (!one) {
+        collector.add(code, part: '/word/document.xml', location: 'body/p[1]');
+      }
     case DocxWarningCode.contentTypeMissing:
       collector.add(
         code,
@@ -149,17 +151,21 @@ String warningMessagesMarkdown() {
     ..writeln('`/word/document.xml`. `invalidCharactersRemoved` counts 2 and')
     ..writeln('names `body/p[0]` and `body/p[1]`; `contentTypeMissing` names')
     ..writeln('`application/xml` and `mainPartContentTypeUnexpected` names')
-    ..writeln('`text/plain`.')
+    ..writeln('`text/plain`. The second `invalidCharactersRemoved` row counts')
+    ..writeln('1 and names `body/p[0]`, for the singular.')
     ..writeln()
     ..writeln('| Code | en | de | tr |')
     ..writeln('|---|---|---|---|');
+  void docxRow(String name, DocxWarning w) => out.writeln(
+    '| $name | ${_cell(w.message(OfficeLocale.en))} '
+    '| ${_cell(w.message(OfficeLocale.de))} '
+    '| ${_cell(w.message(OfficeLocale.tr))} |',
+  );
   for (final DocxWarningCode code in DocxWarningCode.values) {
-    final DocxWarning w = _docxSample(code);
-    out.writeln(
-      '| `docx: ${code.name}` | ${_cell(w.message(OfficeLocale.en))} '
-      '| ${_cell(w.message(OfficeLocale.de))} '
-      '| ${_cell(w.message(OfficeLocale.tr))} |',
-    );
+    docxRow('`docx: ${code.name}`', _docxSample(code));
+    if (code == DocxWarningCode.invalidCharactersRemoved) {
+      docxRow('`docx: ${code.name}` (one)', _docxSample(code, one: true));
+    }
   }
   return out.toString();
 }

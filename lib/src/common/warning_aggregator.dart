@@ -28,6 +28,7 @@ final class AggregatedWarning<C extends Enum> {
   final String? detail;
 
   int _count = 0;
+  int _locationsOffered = 0;
   final List<String> _locations = <String>[];
   late final List<String> _locationsView = UnmodifiableListView<String>(
     _locations,
@@ -35,6 +36,13 @@ final class AggregatedWarning<C extends Enum> {
 
   /// How many occurrences the entry stands for.
   int get count => _count;
+
+  /// How many locations were given, kept or not.
+  ///
+  /// More than [locations] holds when some were dropped past the first
+  /// ten. It counts calls that named a location, not occurrences: one call
+  /// may stand for several occurrences at one location.
+  int get locationsOffered => _locationsOffered;
 
   /// The first ten locations given, in the order they were added.
   ///
@@ -150,8 +158,9 @@ final class WarningAggregator<C extends Enum> {
 
   static void _record(AggregatedWarning<Enum> entry, String? location, int n) {
     entry._count += n;
-    if (location != null &&
-        entry._locations.length < AggregatedWarning.maxLocations) {
+    if (location == null) return;
+    entry._locationsOffered++;
+    if (entry._locations.length < AggregatedWarning.maxLocations) {
       entry._locations.add(location);
     }
   }

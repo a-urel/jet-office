@@ -53,4 +53,14 @@ void main() {
       expect(rows.single.split(' | '), hasLength(4), reason: code.name);
     }
   });
+
+  test('has a singular row for invalidCharactersRemoved', () {
+    expect(
+      markdown,
+      contains(
+        '| `docx: invalidCharactersRemoved` (one) | 1 character that XML '
+        'does not allow was removed',
+      ),
+    );
+  });
 }

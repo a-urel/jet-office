@@ -74,6 +74,14 @@ final class DocxWarning {
   String toString() => message();
 }
 
+/// Whether [w] was given more locations than it keeps, so that its message
+/// ends its location list with `…`.
+///
+/// Not [DocxWarning.count]: one run can lose several characters at one
+/// location.
+bool locationsTruncated(DocxWarning w) =>
+    w._entry.locationsOffered > w._entry.locations.length;
+
 /// Collects warnings while a DOCX file is read or written.
 ///
 /// Warnings aggregate by `(part, code, detail)`. Memory stays bounded: a

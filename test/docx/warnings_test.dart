@@ -62,6 +62,116 @@ void main() {
     expect(m, isNot(contains('body/p[10]')));
   });
 
+  group('location list ellipsis', () {
+    test('one run with two removed characters has no ellipsis', () {
+      final DocxWarning w =
+          (DocxWarningCollector()..add(
+                DocxWarningCode.invalidCharactersRemoved,
+                part: '/word/document.xml',
+                location: 'body/p[0]/r[0]',
+                count: 2,
+              ))
+              .warnings
+              .single;
+      expect(w.count, 2);
+      for (final OfficeLocale locale in OfficeLocale.values) {
+        expect(w.message(locale), contains('(body/p[0]/r[0])'));
+        expect(w.message(locale), isNot(contains('…')), reason: '$locale');
+      }
+    });
+
+    test('a saved paragraph with two bad characters has no ellipsis', () {
+      final DocxDocument document = DocxDocument();
+      document.body.addParagraph('a\u0001\u0002b');
+      final DocxWarning w = document.save().warnings.single;
+      expect(w.count, 2);
+      expect(w.locations, hasLength(1));
+      expect(w.message(), isNot(contains('…')));
+    });
+
+    test('eleven runs with removed characters end with an ellipsis', () {
+      final DocxWarningCollector collector = DocxWarningCollector();
+      for (int i = 0; i < 11; i++) {
+        collector.add(
+          DocxWarningCode.invalidCharactersRemoved,
+          part: '/word/document.xml',
+          location: 'body/p[0]/r[$i]',
+          count: 2,
+        );
+      }
+      final DocxWarning w = collector.warnings.single;
+      expect(w.count, 22);
+      for (final OfficeLocale locale in OfficeLocale.values) {
+        expect(w.message(locale), contains('body/p[0]/r[9], …)'));
+      }
+    });
+
+    test('ten runs name every location without an ellipsis', () {
+      final DocxWarningCollector collector = DocxWarningCollector();
+      for (int i = 0; i < 10; i++) {
+        collector.add(
+          DocxWarningCode.invalidCharactersRemoved,
+          part: '/word/document.xml',
+          location: 'body/p[0]/r[$i]',
+          count: 3,
+        );
+      }
+      expect(collector.warnings.single.message(), isNot(contains('…')));
+    });
+  });
+
+  group('one removed character is singular', () {
+    DocxWarning warning(int count) =>
+        (DocxWarningCollector()..add(
+              DocxWarningCode.invalidCharactersRemoved,
+              part: '/word/document.xml',
+              location: 'body/p[0]/r[0]',
+              count: count,
+            ))
+            .warnings
+            .single;
+
+    test('en', () {
+      expect(
+        warning(1).message(),
+        startsWith(
+          '1 character that XML does '
+          'not allow was removed',
+        ),
+      );
+      expect(
+        warning(2).message(),
+        startsWith(
+          '2 characters that XML does '
+          'not allow were removed',
+        ),
+      );
+    });
+
+    test('de', () {
+      expect(
+        warning(1).message(OfficeLocale.de),
+        startsWith('1 Zeichen, das XML nicht erlaubt, wurde'),
+      );
+      expect(
+        warning(2).message(OfficeLocale.de),
+        startsWith('2 Zeichen, die XML nicht erlaubt, wurden'),
+      );
+    });
+
+    test('tr', () {
+      // Turkish keeps the noun singular after a numeral.
+      expect(
+        warning(1).message(OfficeLocale.tr),
+        contains("XML'in izin vermediği 1 karakter çıkarıldı"),
+      );
+      expect(
+        warning(2).message(OfficeLocale.tr),
+        contains("XML'in izin vermediği 2 karakter çıkarıldı"),
+      );
+    });
+  });
+
   test('detail codes name the detail in every locale', () {
     final DocxWarningCollector collector = DocxWarningCollector()
       ..add(
@@ -93,6 +203,6 @@ void main() {
             .warnings
             .single;
     expect(w.toString(), w.message(OfficeLocale.en));
-    expect(w.toString(), contains('characters'));
+    expect(w.toString(), contains('character'));
   });
 }

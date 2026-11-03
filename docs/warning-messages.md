@@ -63,10 +63,12 @@ Every DOCX message is built for a sample warning: part
 `/word/document.xml`. `invalidCharactersRemoved` counts 2 and
 names `body/p[0]` and `body/p[1]`; `contentTypeMissing` names
 `application/xml` and `mainPartContentTypeUnexpected` names
-`text/plain`.
+`text/plain`. The second `invalidCharactersRemoved` row counts
+1 and names `body/p[0]`, for the singular.
 
 | Code | en | de | tr |
 |---|---|---|---|
 | `docx: invalidCharactersRemoved` | 2 characters that XML does not allow were removed from text in /word/document.xml (body/p[0], body/p[1]). | 2 Zeichen, die XML nicht erlaubt, wurden aus dem Text in /word/document.xml entfernt (body/p[0], body/p[1]). | /word/document.xml içindeki metinden XML'in izin vermediği 2 karakter çıkarıldı (body/p[0], body/p[1]). |
+| `docx: invalidCharactersRemoved` (one) | 1 character that XML does not allow was removed from text in /word/document.xml (body/p[0]). | 1 Zeichen, das XML nicht erlaubt, wurde aus dem Text in /word/document.xml entfernt (body/p[0]). | /word/document.xml içindeki metinden XML'in izin vermediği 1 karakter çıkarıldı (body/p[0]). |
 | `docx: contentTypeMissing` | /word/document.xml had no content type; it was read as application/xml. | Für /word/document.xml fehlte der Inhaltstyp; der Teil wurde als application/xml gelesen. | /word/document.xml için içerik türü yoktu; application/xml olarak okundu. |
 | `docx: mainPartContentTypeUnexpected` | The main document /word/document.xml has the content type text/plain, which is not a Word document type; it was read as one. | Das Hauptdokument /word/document.xml hat den Inhaltstyp text/plain, der kein Word-Dokumenttyp ist; es wurde als Word-Dokument gelesen. | Ana belge /word/document.xml, Word belge türü olmayan text/plain içerik türüne sahip; Word belgesi olarak okundu. |

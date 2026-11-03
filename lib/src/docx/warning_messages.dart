@@ -9,12 +9,12 @@ import '../common/locale.dart';
 import 'warnings.dart';
 
 /// The location list of [w] as a message suffix: its paths joined with `, `
-/// in parentheses, with a leading space, followed by `, …` when [w] affects
-/// more places than it names. Empty when [w] names no location.
+/// in parentheses, with a leading space, followed by `, …` when [w] was
+/// given more locations than it keeps. Empty when [w] names no location.
 String _locationList(DocxWarning w) {
   if (w.locations.isEmpty) return '';
   final String joined = w.locations.join(', ');
-  return w.count > w.locations.length ? ' ($joined, …)' : ' ($joined)';
+  return locationsTruncated(w) ? ' ($joined, …)' : ' ($joined)';
 }
 
 /// The message for [w] in [locale].
@@ -29,11 +29,19 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
   final String detail = w.detail ?? '';
   return switch ((w.code, locale)) {
     (DocxWarningCode.invalidCharactersRemoved, OfficeLocale.en) =>
-      '$count characters that XML does not allow were removed from text in '
-          '$part$locations.',
+      count == 1
+          ? '1 character that XML does not allow was removed from text in '
+                '$part$locations.'
+          : '$count characters that XML does not allow were removed from '
+                'text in $part$locations.',
     (DocxWarningCode.invalidCharactersRemoved, OfficeLocale.de) =>
-      '$count Zeichen, die XML nicht erlaubt, wurden aus dem Text in $part '
-          'entfernt$locations.',
+      count == 1
+          ? '1 Zeichen, das XML nicht erlaubt, wurde aus dem Text in $part '
+                'entfernt$locations.'
+          : '$count Zeichen, die XML nicht erlaubt, wurden aus dem Text in '
+                '$part entfernt$locations.',
+    // Turkish keeps the noun singular after a numeral: "1 karakter",
+    // "2 karakter".
     (DocxWarningCode.invalidCharactersRemoved, OfficeLocale.tr) =>
       "$part içindeki metinden XML'in izin vermediği $count karakter "
           'çıkarıldı$locations.',
