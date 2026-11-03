@@ -16,7 +16,7 @@ import 'package:test/test.dart';
 import '../../tool/src/part_compare.dart';
 import '../support/read_xlsx.dart';
 import 'support/numbering_documents.dart';
-import 'support/styles_documents.dart' show readDocxText;
+import 'support/styles_documents.dart' show readDocxText, stylesRelationship;
 
 /// The targets of the main part's relationships of the numbering type.
 List<String> _numberingTargets(Uint8List docx) {
@@ -34,6 +34,35 @@ int _overridesOf(Uint8List docx, String part) => RegExp(
   '<Override PartName="${RegExp.escape(part)}" '
   'ContentType="${RegExp.escape(ContentType.wmlNumbering)}"/>',
 ).allMatches(readDocxText(docx)['[Content_Types].xml']!).length;
+
+/// What [numbering] lists: each abstract definition's id with its number
+/// of levels, each instance's id with its overrides (level and start), and
+/// how many members of the levels read a value (all but `level`).
+String _summary(DocxNumbering numbering) {
+  int values = 0;
+  for (final DocxAbstractNumbering a in numbering.abstractNumberings) {
+    for (final DocxNumberingLevel l in a.levels) {
+      values += <Object?>[
+        l.format,
+        l.text,
+        l.start,
+        l.alignment,
+        l.indentation,
+        l.bulletFont,
+      ].where((Object? v) => v != null).length;
+    }
+  }
+  final String abstracts = numbering.abstractNumberings
+      .map((DocxAbstractNumbering a) => '${a.id}(${a.levels.length})')
+      .join(' ');
+  final String instances = numbering.instances
+      .map(
+        (DocxNumberingInstance n) =>
+            '${n.id}[${n.overrides.map((DocxLevelOverride o) => '${o.level}:${o.startOverride}').join(' ')}]',
+      )
+      .join(' ');
+  return 'abstracts $abstracts; instances $instances; values $values';
+}
 
 /// A document without a numbering part.
 Uint8List _withoutNumbering() =>
@@ -184,6 +213,66 @@ void main() {
     });
   });
 
+  group('hostile relationship targets', () {
+    test('styles and numbering relationships to the same missing target '
+        'both survive a save and reopen', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithNumbering(
+          numbering: null,
+          relationships:
+              '${numberingRelationship('x.xml')}'
+              '${stylesRelationship('x.xml')}',
+        ),
+      );
+      doc.styles.add(
+        DocxStyle(type: DocxStyleType.paragraph, id: 'Note', name: 'Note'),
+      );
+      _addList(doc);
+      final Uint8List output = doc.save().bytes;
+      final DocxDocument back = DocxDocument.open(output);
+      expect(back.styles.byId('Note'), isNotNull);
+      expect(back.numbering.instances, hasLength(1));
+      expect(back.numbering.abstractNumberings.single.id, 0);
+      expect(_numberingTargets(output), <String>['x.xml', 'x2.xml']);
+    });
+
+    for (final String target in <String>[
+      'lists/',
+      '',
+      '../[Content_Types].xml',
+      '_rels/document.xml.rels',
+      'document.xml',
+      'settings.xml',
+      'media/image1.png',
+    ]) {
+      test('a numbering relationship to "$target" is kept and a new '
+          '/word/numbering.xml gets its own relationship', () {
+        final Uint8List input = docxWithNumbering(
+          numbering: null,
+          relationships: numberingRelationship(target),
+        );
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(doc.numbering.instances, isEmpty);
+        final int blocks = doc.body.blocks.length;
+        _addList(doc);
+        final Uint8List output = doc.save().bytes;
+        final Map<String, Uint8List> before = readXlsxBytes(input);
+        final Map<String, Uint8List> after = readXlsxBytes(output);
+        for (final String part in <String>[
+          'word/settings.xml',
+          'word/media/image1.png',
+        ]) {
+          expect(after[part], before[part], reason: part);
+        }
+        expect(readDocxText(output)['word/numbering.xml'], contains('w:numId'));
+        expect(_numberingTargets(output), <String>[target, 'numbering.xml']);
+        final DocxDocument back = DocxDocument.open(output);
+        expect(back.body.blocks, hasLength(blocks));
+        expect(back.numbering.instances, hasLength(1));
+      });
+    }
+  });
+
   group('a broken numbering part', () {
     for (final (String name, String xml) in <(String, String)>[
       ('malformed XML', '<w:numbering xmlns:w="${Ns.w}"><w:num'),
@@ -253,30 +342,24 @@ void main() {
           '<w:pPr><w:ind w:left="1in"/></w:pPr>'
           '<w:rPr><w:rFonts w:ascii=""/></w:rPr></w:lvl></w:abstractNum>',
     };
+    // What each case lists: the abstract ids with their level count, the
+    // instance ids with their overrides, and how many level members read
+    // a value.
+    final Map<String, String> expected = <String, String>{
+      'duplicate ids': 'abstracts 0(1) 0(1); instances 1[] 1[]; values 6',
+      'a num of a missing abstractNum': 'abstracts ; instances 1[]; values 0',
+      'huge and negative ids': 'abstracts ; instances ; values 0',
+      'more than 9 levels':
+          'abstracts 0(9); instances 1[] 2[0:null]; values 18',
+      'odd values': 'abstracts 0(1); instances ; values 0',
+    };
     cases.forEach((String name, String children) {
-      test('$name: read, edit and save without throwing', () {
+      test('$name: lists what it types, adds a list and saves', () {
         final DocxDocument doc = DocxDocument.open(
           docxWithNumbering(numbering: numberingXml(children)),
         );
         final DocxNumbering numbering = doc.numbering;
-        final List<Object?> read = <Object?>[
-          for (final DocxNumberingInstance n
-              in numbering.instances) ...<Object?>[
-            n.abstractNumbering,
-            for (final DocxLevelOverride o in n.overrides) o.startOverride,
-          ],
-          for (final DocxAbstractNumbering a in numbering.abstractNumberings)
-            for (final DocxNumberingLevel l in a.levels) ...<Object?>[
-              l.level,
-              l.format,
-              l.text,
-              l.start,
-              l.alignment,
-              l.indentation,
-              l.bulletFont,
-            ],
-        ];
-        expect(read, isA<List<Object?>>());
+        expect(_summary(numbering), expected[name], reason: name);
         final DocxNumberingInstance added = _addList(doc);
         final Uint8List output = doc.save().bytes;
         final DocxDocument back = DocxDocument.open(output);

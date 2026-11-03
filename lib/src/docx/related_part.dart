@@ -154,14 +154,20 @@ final class RelatedPart {
   /// [exists].
   ///
   /// When [name] is taken by a part no relationship of this type names,
-  /// the part gets the next free name (`styles2.xml`).
+  /// or by another part created at the same missing target, the part gets
+  /// the next free name (`styles2.xml`) and a relationship of its own; a
+  /// relationship read keeps its target.
   void create(PartContent content) {
     if (_exists) {
       return;
     }
     final OpcPackage opc = _package.package;
     final String added = opc.addPart(_name, _contentType, content);
-    if (!_related) {
+    // A relationship names the part only where it was created: when the
+    // name was taken meanwhile (another part reused the same missing
+    // target), the part got the next free name, and the relationship read
+    // stays as it was beside a new one.
+    if (!_related || added.toLowerCase() != _name.toLowerCase()) {
       opc.addRelationship(
         _source,
         type: _relationshipType,
