@@ -18,13 +18,16 @@ Write the documents with:
 dart run tool/write_fixtures.dart build/fixtures
 dart run tool/round_trip_docx.dart build/fixtures build/model-docx
 dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/model-docx-owner
+dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 ```
 
 `build/fixtures` also holds the workbooks of the Excel checks; open the
 `d1_*.docx` files. `tool/round_trip_docx.dart` prints each difference between
 an input and the model's output and exits 1 on any, so run it first and
-expect none. (CI uses other folder names: its `build/model-docx` is the round
-trip of LibreOffice's re-save of the fixtures.)
+expect none; `tool/edit_docx.dart` likewise prints each problem with an
+edited document and exits 1 on any. (CI uses other folder names: its
+`build/model-docx` is the round trip of LibreOffice's re-save of the
+fixtures, and its `build/edited-docx` the edit of that re-save.)
 
 For every file, first check that Word opens it without a repair prompt ("Word
 found unreadable content", "Word experienced an error trying to open the
@@ -73,6 +76,30 @@ the file it came from:
   owner's originals: `features.docx` keeps its heading, bullet list, table,
   header, footer and comment; `long.docx` keeps its table of contents, two
   tables and lists, and its 15 pages.
+
+### Edited owner files: `build/edited-docx-owner/*.docx`
+
+The model opened each of the owner's Word files, set the text of the first
+run that has text to `Edited by the model`, replaced the last paragraph that
+holds runs only (no bookmark, field, hyperlink or drawing) with
+`Replaced by the model`, and added `Added by the model` at the end of the
+body. The owner's files define their heading style as `Balk1` (Turkish
+Word), not `Heading1`, so the added paragraph has the style `Normal`. Open
+`blank.docx`, `features.docx` and `long.docx`. No repair prompt, the edits
+visible, and everything else as in the original:
+
+- `blank.docx`: it has no text, so no run is edited; its one empty
+  paragraph reads `Replaced by the model`, and `Added by the model` follows.
+- `features.docx`: the heading `Quarterly report` reads `Edited by the
+  model` and is still a Heading 1 (`Başlık 1`); `End of report.` reads
+  `Replaced by the model`; `Added by the model` is the last paragraph, in
+  the Normal style. The bullet list, table, header, footer and comment are
+  as in the original.
+- `long.docx`: the title `DENEME BELGESİ` reads `Edited by the model` in
+  its Title style; the empty last paragraph reads `Replaced by the model`;
+  `Added by the model` follows it. The table of contents, the two tables,
+  the lists and the 15 pages are as in the original (the added line may
+  start a sixteenth page).
 
 ### Save in Word
 

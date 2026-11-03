@@ -75,6 +75,12 @@ dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/model-docx-own
 dotnet run --project tool/ooxml_validate -- build/model-docx-fixtures
 dotnet run --project tool/ooxml_validate -- build/model-docx
 dotnet run --project tool/ooxml_validate -- build/model-docx-owner
+dart run tool/edit_docx.dart build/fixtures build/edited-docx-fixtures
+dart run tool/edit_docx.dart build/resaved-docx build/edited-docx
+dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
+dotnet run --project tool/ooxml_validate -- build/edited-docx-fixtures
+dotnet run --project tool/ooxml_validate -- build/edited-docx
+dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 ```
 
 - `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
@@ -144,6 +150,17 @@ dotnet run --project tool/ooxml_validate -- build/model-docx-owner
   SDK. As for workbooks, the `d1_corrupt.docx` document round-trips (exit 0)
   and the SDK must reject the output; a truncated copy is the round trip's
   own negative control.
+- `tool/edit_docx.dart` opens every `.docx` of a directory with
+  `DocxDocument`, sets the text of the first run with text, replaces the
+  last paragraph of runs only with a new one, adds a paragraph of style
+  `Heading1` (`Normal` when `word/styles.xml` defines no `Heading1`), saves
+  to the second directory, and checks the edits read back and that
+  `comparePackages` finds differences in `word/document.xml` only. It
+  prints each problem as `<file>: <problem>` and exits 1 on any, 2 on
+  unusable arguments. CI runs it on the fixtures, on LibreOffice's re-save
+  and on the owner's Word files, and validates the three outputs with the
+  Open XML SDK; the owner opens the edited owner files in Word
+  (`docs/word-checks.md`).
 - `tool/draft_expected_docx.dart` drafts the `<name>.expected.txt` of an owner
   file from the model's own reading and prints a review list; it never
   overwrites an existing text.
@@ -179,8 +196,9 @@ dotnet run --project tool/ooxml_validate -- build/model-docx-owner
   (`tool/draft_expected.dart` drafts them). Never edit a committed owner file or
   its expected JSON without the owner.
 - Neither is Word. The owner opens each D milestone's fixtures
-  (`build/fixtures/d1_*.docx`) and the model's round trips of them and of the
-  owner's Word files in Word for Mac, and records the result in
+  (`build/fixtures/d1_*.docx`), the model's round trips of them and of the
+  owner's Word files, and the model's edits of the owner's Word files in
+  Word for Mac, and records the result in
   `docs/word-checks.md`, which says how to write them. A repair prompt there
   is a model or writer bug, as in Excel's case.
 - Word files go in `test/fixtures/owner/docx/`, listed in its

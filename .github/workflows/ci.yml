@@ -175,6 +175,21 @@ jobs:
           dotnet run --project tool/ooxml_validate -- build/model-docx
           dotnet run --project tool/ooxml_validate -- build/model-docx-owner
 
+      # What the model saves after an edit must be valid too: every
+      # document with a run's text set, a paragraph replaced and a heading
+      # added. Only document.xml may differ from the input.
+      - name: Edit the documents through the model
+        run: |
+          dart run tool/edit_docx.dart build/fixtures build/edited-docx-fixtures
+          dart run tool/edit_docx.dart build/resaved-docx build/edited-docx
+          dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
+
+      - name: Validate the model's edited documents
+        run: |
+          dotnet run --project tool/ooxml_validate -- build/edited-docx-fixtures
+          dotnet run --project tool/ooxml_validate -- build/edited-docx
+          dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
+
       # Negative control: every check must reject m1_corrupt.xlsx (see
       # tool/write_fixtures.dart), except the model round trip, which passes
       # on it: the model keeps the corrupt file's stray content faithfully, so
