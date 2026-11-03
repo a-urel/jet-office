@@ -79,23 +79,28 @@
 /// as written, so an opened file comes back with only the cells that were
 /// set changed.
 ///
-/// [DocxDocument] is the Word document model. [DocxDocument.open] reads a
-/// DOCX file within [DocxReadLimits]; a file it cannot read throws a
-/// [DocxReadException] whose [DocxReadFailure] says why, and so does a part
-/// that turns out broken when it first loads. Its [DocxBody] loads on first
-/// access and holds the [DocxBlock]s of the document: each [DocxParagraph]
-/// holds [DocxInline]s, and each [DocxRun] holds [DocxRunContent] (text,
-/// tabs, breaks), with the paragraph and run style typed. What the model does
-/// not type yet, such as tables, content controls, tracked changes, drawings
-/// and fields, is kept as written in a [DocxOpaqueBlock], a
-/// [DocxOpaqueInline] or a [DocxOpaqueRunContent], which can be removed but
-/// not changed. Blocks and inlines are added, removed and replaced, and a
-/// run's text and the styles are set; each edit is atomic. [DocxDocument.save]
-/// returns a [DocxResult] and [DocxDocument.saveTo] streams to a sink. As for
-/// a workbook, saving keeps every part the model did not change: a body never
+/// [DocxDocument] is the Word document model, in progress (milestone D1; the
+/// API may change before D6). [DocxDocument.new] starts a document like Word
+/// for Mac's blank one: A4 portrait, Aptos 12, no document properties.
+/// [DocxDocument.open] reads a DOCX file within [DocxReadLimits]; a file it
+/// cannot read throws a [DocxReadException] whose [DocxReadFailure] says why,
+/// and so does a part that turns out broken when it first loads. Its
+/// [DocxBody] loads on first access and holds the [DocxBlock]s of the
+/// document: each [DocxParagraph] holds [DocxInline]s, and each [DocxRun]
+/// holds [DocxRunContent] (text, tabs, breaks), with the paragraph and run
+/// style typed. What the model does not type yet, such as tables, content
+/// controls, tracked changes, hyperlinks, drawings and fields, is kept as
+/// written in a [DocxOpaqueBlock], a [DocxOpaqueInline] or a
+/// [DocxOpaqueRunContent], which can be removed but not changed; the final
+/// section and the parts other than the body are kept as written too. Blocks
+/// and inlines are added, removed and replaced, and a run's text and the
+/// styles are set; each edit is atomic. [DocxDocument.save] returns a
+/// [DocxResult] and [DocxDocument.saveTo] streams to a sink. As for a
+/// workbook, saving keeps every part the model did not change: a body never
 /// accessed is copied from the file, and what a loaded body does not type is
 /// written back as it was. Characters XML forbids are removed from text when
-/// it is set and reported at save as a [DocxWarning].
+/// it is set and reported at save as a [DocxWarning]. The visible text of an
+/// opaque inline holding `mc:AlternateContent` or a text box is empty.
 ///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.

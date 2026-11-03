@@ -1,6 +1,7 @@
 # jet_office
 
-A pure-Dart library that writes and reads XLSX files. Bytes in, bytes out: it
+A pure-Dart library that writes and reads XLSX files and, in progress, opens,
+edits and saves DOCX files. Bytes in, bytes out: it
 imports no Flutter, no `dart:io` and no `dart:ui`, so the same code runs on the
 web, on desktop and mobile, and on a Dart server. It has no editors, no
 rendering and no PDF.
@@ -9,7 +10,9 @@ rendering and no PDF.
 
 Pre-release (`0.1.0-dev.1`). The package is not published to pub.dev
 (`publish_to: none`) until the owner decides. Phase 1 writes XLSX files and
-phase 2 reads them. Modifying files, and DOCX, are later phases.
+phase 2 reads them, and phase 3 opens, edits and saves them. Phase 4, DOCX,
+is in progress (milestone D1 of D1 to D6 is built, pending the owner's Word
+check; see "DOCX" below).
 
 ## Installing
 
@@ -148,6 +151,38 @@ To put a list on a sheet of a bigger workbook, call
 adds a summary sheet written with `XlsxWriter`, and reads the file back with
 `XlsxReader`. Run it with `dart run example/jet_office_example.dart`.
 
+## DOCX
+
+**In progress; the API may change before D6.** `DocxDocument` is a model of a
+Word document: it starts a new one, or opens a file from bytes, lets you read
+and change the paragraphs of its body and saves it, keeping what you did not
+change. A new document looks like Word's blank one (A4, Aptos 12).
+
+```dart
+final DocxDocument created = DocxDocument();
+created.body.addParagraph('Quarterly report');
+final DocxResult first = created.save();
+```
+
+Opening a file and changing a paragraph's text:
+
+```dart
+final DocxDocument doc = DocxDocument.open(first.bytes);
+final DocxParagraph report = doc.body.blocks.whereType<DocxParagraph>().last;
+report.inlines.whereType<DocxRun>().single.text = 'Annual report';
+final DocxResult saved = doc.save();
+// saved.bytes is the .docx file; saved.warnings lists what was repaired.
+```
+
+Only paragraphs, runs and their text, tabs and breaks are typed so far.
+Everything else in the file (tables, content controls, tracked changes,
+drawings, fields, headers, footers, the page setup) is kept as written, so
+the file comes back with only your changes. The file is untrusted input, as
+for XLSX: `DocxReadLimits`, and a file that cannot be read throws a
+`DocxReadException`. [`docs/docx-model.md`](docs/docx-model.md) has the rules
+the model enforces and the known gaps; the owner's check in Word for Mac is
+recorded in [`docs/word-checks.md`](docs/word-checks.md).
+
 ## What it writes
 
 The writer supports, by milestone:
@@ -243,6 +278,11 @@ with lower bounds: time and memory follow the size of the XML.
 - Hostile files are tested per limit and per kind of damage, and a seeded
   fuzz test mutates the fixtures and producer packages and requires the
   reader to throw nothing but `XlsxReadException`.
+- DOCX is held to the same bar: CI validates the documents with the Open XML
+  SDK, compares LibreOffice's text export and re-save with the expected text,
+  and round-trips them (and the owner's Word for Mac files) through the model;
+  the owner opens them in Word
+  ([`docs/word-checks.md`](docs/word-checks.md)).
 - Files saved by Excel and Google Sheets themselves, with values the owner
   confirms, are still pending.
 - Part contents are byte-identical on every platform. The ZIP bytes are
@@ -250,7 +290,8 @@ with lower bounds: time and memory follow the size of the XML.
 
 ## Limits
 
-- XLSX only. No modifying files, no DOCX. The writer writes no charts,
+- XLSX is complete; DOCX is in progress (paragraphs and their text only; no
+  formatting, tables, headers or pictures yet). The writer writes no charts,
   pivot tables, macros or encryption.
 - The reader reads values, formulas, number formats and merged ranges; it
   reads no other styles, notes, pictures or tables, and does not calculate
