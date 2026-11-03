@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/package.dart';
 import 'package:jet_office/src/xlsx/model/cell_store.dart';
 import 'package:jet_office/src/xlsx/model/styles_part.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_sheet.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 import 'package:test/test.dart';
+import '../../support/read_xlsx.dart';
 import '../read/support/workbook_builder.dart';
 import 'support/workbook_support.dart';
 
@@ -300,24 +302,141 @@ void main() {
     expect(changeLogOf(book).hasChanges, isFalse);
   });
 
-  test('setStyle on a workbook without styles adds the part', () {
+  group('a workbook without styles', () {
+    Uint8List input() => buildWorkbook(<String, String>{
+      'S': worksheet('<row r="1"><c r="A1"><v>1</v></c></row>'),
+    });
+
+    bool hasStyles(Uint8List bytes) =>
+        readXlsxBytes(bytes).containsKey('xl/styles.xml');
+
+    test('gets the part on save once a style is appended', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(input());
+      final XlsxSheet sheet = book.sheets.single;
+      expect(
+        () => sheet.setStyle(0, 0, const XlsxStyle(font: XlsxFont(name: ''))),
+        throwsArgumentError,
+      );
+      expect(hasStyles(book.save().bytes), isFalse);
+      sheet.setStyle(0, 0, _bold);
+      expect(sheet.styleAt(0, 0)?.font?.bold, isTrue);
+      final Uint8List output = book.save().bytes;
+      expect(hasStyles(output), isTrue);
+      final XlsxReadCell cell = XlsxReader(
+        output,
+      ).rowsAt(0).single.cells.single;
+      expect(cell.value, XlsxDecimal('1'));
+    });
+
+    test('a failed XlsxCell adds no part', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(input());
+      final XlsxSheet sheet = book.sheets.single;
+      expect(
+        () => sheet.setCell(0, 1, const XlsxCell(double.nan, style: _bold)),
+        throwsArgumentError,
+      );
+      expect(packageOf(book).partNames, isNot(contains('/xl/styles.xml')));
+      expect(changeLogOf(book).hasChanges, isFalse);
+      expect(hasStyles(book.save().bytes), isFalse);
+    });
+
+    test('an undone setStyle leaves no part', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(input());
+      final XlsxSheet sheet = book.sheets.single;
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(() => sheet.setStyle(0, 0, _bold));
+      log.revertSet(set);
+      expect(sheet.styleAt(0, 0), isNull);
+      expect(hasStyles(book.save().bytes), isFalse);
+    });
+
+    test('an undone date leaves no part', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(input());
+      final XlsxSheet sheet = book.sheets.single;
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(
+        () => sheet.setCell(0, 1, const XlsxDate(2026, 11, 3)),
+      );
+      log.revertSet(set);
+      expect(sheet.cellAt(0, 1), isNull);
+      expect(hasStyles(book.save().bytes), isFalse);
+    });
+  });
+
+  test('setStyle undoes and redoes through the change log', () {
+    final XlsxWorkbook book = _open(
+      '<row r="1"><c r="A1" s="1"><v>1</v></c></row>',
+    );
+    final XlsxSheet sheet = book.sheets.single..cellAt(0, 0);
+    final StylesPart styles = stylesPartOf(book) ?? _fail();
+    final StylesMark before = styles.mark();
+    final ChangeLog log = changeLogOf(book);
+    final ChangeSet set = log.transaction(() => sheet.setStyle(0, 0, _bold));
+    final XlsxStyle? set1 = sheet.styleAt(0, 0);
+    final StylesMark after = styles.mark();
+    log.revertSet(set);
+    expect(sheet.styleAt(0, 0), styles.styleOf(1));
+    expect(styles.mark(), before);
+    log.reapplySet(set);
+    expect(sheet.styleAt(0, 0), set1);
+    expect(styles.mark(), after);
+  });
+
+  test('an index outside cellXfs reads and is replaced as no style', () {
+    final XlsxWorkbook book = _open(
+      '<row r="1"><c r="A1" s="9"><v>1</v></c></row>'
+      '<row r="2" s="9" customFormat="1"/>',
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    expect(sheet.styleAt(0, 0), isNull);
+    expect(sheet.styleAt(1, 0), isNull);
+    // styleOf(9) gives index 0's style, but 9 is not kept.
+    final StylesPart styles = stylesPartOf(book) ?? _fail();
+    sheet.setStyle(0, 0, styles.styleOf(0));
+    expect(changeLogOf(book).hasChanges, isTrue);
+    expect(cellStoreOf(sheet)!.cellAt(0, 0)?.style, isNull);
+    expect(sheet.cellAt(0, 0)?.value, XlsxDecimal('1'));
+  });
+
+  test('XlsxCell without a style needs no styles part', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
       buildWorkbook(<String, String>{
         'S': worksheet('<row r="1"><c r="A1"><v>1</v></c></row>'),
-      }),
+      }, styles: '<other xmlns="urn:x"/>'),
     );
     final XlsxSheet sheet = book.sheets.single;
-    expect(
-      () => sheet.setStyle(0, 0, const XlsxStyle(font: XlsxFont(name: ''))),
-      throwsArgumentError,
+    sheet
+      ..setCell(0, 0, const XlsxCell(2))
+      ..setCell(0, 1, const XlsxCell(null));
+    expect(sheet.cellAt(0, 0)?.value, XlsxDecimal('2'));
+    expect(cellStoreOf(sheet)!.cellAt(0, 1), isNull);
+  });
+
+  test('XlsxCell of null in a formatted row writes what the writer writes', () {
+    final XlsxWorkbook book = _open(
+      '<row r="1" s="1" customFormat="1"><c r="A1" s="3"><v>1</v></c>'
+      '<c r="B1" s="3"/></row>',
     );
-    expect(stylesPartOf(book), isNull);
-    sheet.setStyle(0, 0, _bold);
-    expect(sheet.styleAt(0, 0)?.font?.bold, isTrue);
-    final XlsxReadCell cell = XlsxReader(
-      book.save().bytes,
-    ).rowsAt(0).single.cells.single;
-    expect(cell.value, XlsxDecimal('1'));
+    final XlsxSheet sheet = book.sheets.single..cellAt(0, 0);
+    final XlsxStyle row = (stylesPartOf(book) ?? _fail()).styleOf(1);
+    sheet
+      ..setCell(0, 0, const XlsxCell(null))
+      ..setCell(0, 1, const XlsxCell(null, style: _bold));
+    final XlsxWriter writer = XlsxWriter();
+    writer.addSheet('S').row(<Object?>[
+      const XlsxCell(null),
+      const XlsxCell(null, style: _bold),
+    ], style: row);
+    final XlsxWorkbook written = XlsxWorkbook.open(writer.close().bytes);
+    final CellStore ours = cellStoreOf(sheet)!;
+    final XlsxSheet other = written.sheets.single..cellAt(0, 0);
+    final CellStore theirs = cellStoreOf(other)!;
+    expect(ours.cellAt(0, 0), isNull);
+    expect(theirs.cellAt(0, 0), isNull);
+    expect(sheet.styleAt(0, 1), row.merge(_bold));
+    expect(sheet.styleAt(0, 1), other.styleAt(0, 1));
+    expect(ours.cellAt(0, 1)?.isEmpty, isTrue);
+    expect(theirs.cellAt(0, 1)?.isEmpty, isTrue);
   });
 
   test('setStyle throws StateError on an untyped styles part', () {

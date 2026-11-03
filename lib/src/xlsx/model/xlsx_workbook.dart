@@ -54,7 +54,6 @@ import '../read/styles_reader.dart';
 import '../shared_strings.dart';
 import '../sheet_name.dart';
 import '../sheet_view.dart';
-import '../style.dart';
 import '../style_registry.dart';
 import '../warnings.dart';
 import '../workbook_parts.dart';
@@ -62,6 +61,7 @@ import '../worksheet_parts.dart';
 import '../xlsx_writer.dart';
 import 'cell_store.dart';
 import 'palette.dart';
+import 'primitives.dart';
 import 'styles_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
@@ -489,14 +489,7 @@ final class _Book implements SheetHost {
   StylesPart? get styles => _styles;
 
   @override
-  StylesPart stylesForEdit(XlsxStyle? style) {
-    if (_styles == null) {
-      // The part to add is the empty registry's, so an empty registry
-      // throws for [style] exactly as the part would: check before adding.
-      StyleRegistry().idFor(style);
-    }
-    return _stylesForEdit();
-  }
+  StylesPart stylesForEdit() => _stylesForEdit();
 
   @override
   int? dateStyle(int? style, {required bool withTime}) {
@@ -505,11 +498,13 @@ final class _Book implements SheetHost {
         : XlsxNumFmt.localeShortDate;
     final StylesPart styles = _stylesForEdit();
     if (!styles.isTyped) return null;
-    return styles.withNumberFormat(style, format.builtinId!);
+    return appendNumberFormat(log, styles, style, format.builtinId!);
   }
 
-  /// The styles part, added to the package from the writer's empty styles
-  /// when the file has none.
+  /// The styles part; for a file without one, a part of the writer's empty
+  /// styles that is held in memory only and joins the package on save once
+  /// it holds an appended entry (see [writeTo]), so an edit that fails or is
+  /// undone leaves the package as it was.
   StylesPart _stylesForEdit() {
     final StylesPart? loaded = _styles;
     if (loaded != null) return loaded;
@@ -520,9 +515,13 @@ final class _Book implements SheetHost {
       reader.limits,
       warn: _styleWarning,
     );
-    _addWorkbookPart('styles.xml', ContentType.styles, RelType.styles, part);
+    _createdStyles = part.mark();
     return _styles = part;
   }
+
+  /// The counts of the styles part the model made for a file without one,
+  /// while it is not in the package yet; `null` otherwise.
+  StylesMark? _createdStyles;
 
   XlsxSheet addSheet(String requested) {
     final CellEncoder encoder = loadTables();
@@ -622,6 +621,17 @@ final class _Book implements SheetHost {
           !allLoaded ||
           _sheets.any((XlsxSheet s) => cellStoreOf(s)?.hasFormulas ?? false);
       if (formulas) workbook.requestFullCalculation();
+    }
+    final StylesMark? created = _createdStyles;
+    final StylesPart? styles = _styles;
+    if (created != null && styles != null && styles.mark() != created) {
+      _addWorkbookPart(
+        'styles.xml',
+        ContentType.styles,
+        RelType.styles,
+        styles,
+      );
+      _createdStyles = null;
     }
     final SharedStrings? strings = _strings;
     if (strings != null) {

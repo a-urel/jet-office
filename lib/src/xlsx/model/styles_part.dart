@@ -593,6 +593,10 @@ final class StylesPart implements PartContent {
     return _xfInfo(index >= 0 && index < _xfs.length ? index : 0).style;
   }
 
+  /// The number of cell formats (`<xf>`s of `<cellXfs>`), the appended ones
+  /// included; 0 on an untyped part. An index below it has a cell format.
+  int get cellFormatCount => _xfs.length;
+
   /// Whether [styleOf] gives everything the cell format at [index] holds:
   /// the `<xf>`, its font, its fill and its border are read exactly, with
   /// nothing the value types cannot hold (such as a named cell style's

@@ -9,9 +9,9 @@
 /// shared, array or data-table formula group, which the editing methods use to
 /// refuse an edit that would break a group. [renameTableColumn] gives a table
 /// column a new name, recording a [TableColumnNameChange] the same way.
-/// [appendStyle] gives a style its cell format index, recording a
-/// [StylesAppendChange] when that appended to the styles part, so a
-/// transaction that fails later removes what it appended.
+/// [appendStyle] and [appendNumberFormat] give a cell format index,
+/// recording a [StylesAppendChange] when that appended to the styles part,
+/// so a transaction that fails later, or an undo, removes what it appended.
 library;
 
 import '../../opc/change_log.dart';
@@ -135,14 +135,15 @@ void renameTableColumn(ChangeLog log, TablePart table, int index, String name) {
   }
 }
 
-/// The entries [StylesPart.idFor] appended for one style.
+/// The entries one call appended to a styles part: [StylesPart.idFor] for
+/// a style, or [StylesPart.withNumberFormat].
 ///
 /// The styles part is append-only, so [revert] rolls it back to the mark
-/// taken before, and [reapply] asks for the same style again, which appends
+/// taken before, and [reapply] makes the same call again, which appends
 /// the same entries at the same positions.
 final class StylesAppendChange implements Change {
-  /// A change that appended to [styles], from [before], for [style].
-  StylesAppendChange(this.styles, this.before, this.style);
+  /// A change that appended to [styles], from [before], by `append`.
+  StylesAppendChange(this.styles, this.before, this._append);
 
   /// The styles part the entries were appended to.
   final StylesPart styles;
@@ -150,14 +151,13 @@ final class StylesAppendChange implements Change {
   /// The part's counts before the entries were appended.
   final StylesMark before;
 
-  /// The style that was asked for.
-  final XlsxStyle? style;
+  final void Function() _append;
 
   @override
   void revert() => styles.rollBack(before);
 
   @override
-  void reapply() => styles.idFor(style);
+  void reapply() => _append();
 }
 
 /// The cell format index of [style] in [styles] ([StylesPart.idFor]), and a
@@ -166,12 +166,24 @@ final class StylesAppendChange implements Change {
 /// Must run inside `log.transaction`. Throws as [StylesPart.idFor] does,
 /// with nothing changed; if recording throws, the appended entries are
 /// removed before the error leaves.
-int appendStyle(ChangeLog log, StylesPart styles, XlsxStyle? style) {
+int appendStyle(ChangeLog log, StylesPart styles, XlsxStyle? style) =>
+    _appending(log, styles, () => styles.idFor(style));
+
+/// The cell format index [StylesPart.withNumberFormat] gives for [style]
+/// and [numFmtId], recorded in [log] as [appendStyle] records.
+int appendNumberFormat(
+  ChangeLog log,
+  StylesPart styles,
+  int? style,
+  int numFmtId,
+) => _appending(log, styles, () => styles.withNumberFormat(style, numFmtId));
+
+int _appending(ChangeLog log, StylesPart styles, int Function() append) {
   final StylesMark before = styles.mark();
-  final int id = styles.idFor(style);
+  final int id = append();
   if (styles.mark() == before) return id;
   try {
-    log.record(StylesAppendChange(styles, before, style));
+    log.record(StylesAppendChange(styles, before, append));
   } catch (_) {
     styles.rollBack(before);
     rethrow;

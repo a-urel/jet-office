@@ -79,11 +79,10 @@ abstract interface class SheetHost {
   /// must have run.
   StylesPart? get styles;
 
-  /// The styles part to append [style] to, added to the package from the
-  /// writer's empty styles when the workbook has none. When it would be
-  /// added, [style] is checked first and throws as [StylesPart.idFor] would,
-  /// with nothing added.
-  StylesPart stylesForEdit(XlsxStyle? style);
+  /// The styles part to append to: the workbook's, or, when it has none,
+  /// the writer's empty styles, which join the package on save only once
+  /// something was appended to them.
+  StylesPart stylesForEdit();
 
   /// The shared strings by index, for decoding, or `null` when the workbook
   /// has none; [loadTables] must have run.
@@ -222,7 +221,9 @@ final class XlsxSheet {
   /// [XlsxCell], a value the encoder refuses or an invalid style (named by
   /// its field; an `XlsxLimitError` past the writer's limits), a
   /// [RangeError] outside Excel's grid, and an [XlsxReadException] when the
-  /// sheet cannot be read. Whatever it throws, nothing has changed.
+  /// sheet cannot be read. Whatever it throws, nothing has changed, except
+  /// that reading warnings (such as `styleEntryInvalid` for a style entry
+  /// read for the first time) are reported on first read.
   void setCell(int row, int column, Object? value) {
     _checkCell(row, column);
     // Programmer errors first, so they throw whatever the sheet holds.
@@ -305,12 +306,19 @@ final class XlsxSheet {
     final RawCell? current = store.cellAt(row, column);
     if (stored == null && current == null && cellStyle == null) return;
     final CellEncoder encoder = _host.loadTables();
-    // The writer's layers, row under cell; checked and added before the
-    // transaction, so a style that throws has changed nothing.
+    // The writer's layers, row under cell, and the style the cell takes:
+    // none for an XlsxCell of null without a style, as the writer; the
+    // date format for a date that sets none. Without a style the styles
+    // part is not needed.
     final XlsxStyle? layered = styled
         ? _layer(_rowStyle(store, row), cellStyle)
         : null;
-    final StylesPart? styles = styled ? _stylesFor(layered) : null;
+    final XlsxStyle? target = !styled
+        ? null
+        : stored == null
+        ? (cellStyle == null ? null : layered)
+        : _withDateFormat(layered, stored);
+    final StylesPart? styles = target == null ? null : _stylesFor();
     final ChangeLog log = _host.log;
     log.transaction(() {
       if (header != null && rename != null) {
@@ -320,14 +328,12 @@ final class XlsxSheet {
       RawCell? base = current;
       int? Function(int? style, {required bool withTime}) dateStyle =
           _host.dateStyle;
-      if (styles != null) {
+      if (styled) {
+        final int id = styles == null ? 0 : appendStyle(log, styles, target);
         if (stored == null) {
           // As the writer: an XlsxCell of null writes an empty cell of the
           // layered style, or nothing when that is the default or the
           // XlsxCell has no style.
-          final int id = cellStyle == null
-              ? 0
-              : appendStyle(log, styles, layered);
           setStoredCell(
             log,
             store,
@@ -337,11 +343,6 @@ final class XlsxSheet {
           );
           return;
         }
-        final int id = appendStyle(
-          log,
-          styles,
-          _withDateFormat(layered, stored),
-        );
         base = RawCell(kind: RawCellKind.number, style: id == 0 ? null : id);
         // The date format is in the style already, or the layers set a
         // format, which a date keeps as in the writer.
@@ -374,8 +375,11 @@ final class XlsxSheet {
   ///
   /// It is the cell's own style when the cell exists (even without a
   /// value), else the row's style when the row has `customFormat="1"`;
-  /// style index 0 gives `null` in both. Read with [StylesPart.styleOf], so
-  /// a part of the cell format the value types cannot hold is left out.
+  /// style index 0, and an index with no cell format in the styles part
+  /// (which Excel shows as the default), give `null` in both. Read with
+  /// [StylesPart.styleOf], so a part of the cell format the value types
+  /// cannot hold is left out. A style entry read for the first time that
+  /// cannot be read exactly is reported then (`styleEntryInvalid`).
   /// Loads the sheet. Throws a [RangeError] outside Excel's grid and an
   /// [XlsxReadException] when the sheet cannot be read.
   XlsxStyle? styleAt(int row, int column) {
@@ -385,7 +389,12 @@ final class XlsxSheet {
     final RawCell? cell = store.cellAt(row, column);
     final int? index = cell != null ? cell.style : _rowStyleIndex(store, row);
     final StylesPart? styles = _host.styles;
-    if (index == null || index == 0 || styles == null) return null;
+    if (index == null ||
+        index == 0 ||
+        styles == null ||
+        index >= styles.cellFormatCount) {
+      return null;
+    }
     return styles.styleOf(index);
   }
 
@@ -394,7 +403,8 @@ final class XlsxSheet {
   ///
   /// The cell keeps its value; a cell that does not exist becomes an empty
   /// styled cell. A [style] equal to the cell's current style (by
-  /// [StylesPart.styleOf]) keeps its index, so a cell format the value
+  /// [StylesPart.styleOf]; an index with no cell format, or an invalid
+  /// `s`, is never kept) keeps its index, so a cell format the value
   /// types cannot hold in full is not replaced; any other is appended to
   /// the styles when no cell format of the file or appended before matches
   /// it, so no existing index moves. `null` gives index 0 (also dropping
@@ -407,19 +417,24 @@ final class XlsxSheet {
   /// and an `XlsxLimitError` past the writer's limits (as
   /// `XlsxWriter` does), a [RangeError] outside Excel's grid, and an
   /// [XlsxReadException] when the sheet cannot be read. Whatever it throws,
-  /// nothing has changed.
+  /// nothing has changed, except that a style entry read for the first
+  /// time that cannot be read exactly has been reported
+  /// (`styleEntryInvalid`): reading warnings are reported on first read.
   void setStyle(int row, int column, XlsxStyle? style) {
     _checkCell(row, column);
     final CellStore store = _editableCells('styles');
     final RawCell? current = store.cellAt(row, column);
     final StylesPart? loaded = _host.styles;
     if (loaded != null && !loaded.isTyped) throw _untypedStyles();
+    final int? index = _hasInvalidStyle(current) ? null : current?.style ?? 0;
     if (style != null &&
         loaded != null &&
-        loaded.styleOf(current?.style ?? 0) == style) {
+        index != null &&
+        index < loaded.cellFormatCount &&
+        loaded.styleOf(index) == style) {
       return;
     }
-    final StylesPart? styles = style == null ? null : _stylesFor(style);
+    final StylesPart? styles = style == null ? null : _stylesFor();
     final ChangeLog log = _host.log;
     log.transaction(() {
       final int id = styles == null ? 0 : appendStyle(log, styles, style);
@@ -462,13 +477,21 @@ final class XlsxSheet {
     return part.cells;
   }
 
-  /// The styles part to append [style] to; checks [style] when the part
-  /// would be added, and throws a [StateError] for an untyped part.
-  StylesPart _stylesFor(XlsxStyle? style) {
-    final StylesPart styles = _host.stylesForEdit(style);
+  /// The styles part to append to; throws a [StateError] for an untyped
+  /// part.
+  StylesPart _stylesFor() {
+    final StylesPart styles = _host.stylesForEdit();
     if (!styles.isTyped) throw _untypedStyles();
     return styles;
   }
+
+  /// Whether [cell] keeps an `s` that is not a style index among its
+  /// attributes.
+  static bool _hasInvalidStyle(RawCell? cell) =>
+      cell != null &&
+      cell.attributes.any(
+        (KeptAttribute a) => a.qualifiedName == 's' && a.namespaceUri.isEmpty,
+      );
 
   StateError _untypedStyles() => StateError(
     'The styles part of the workbook is not a SpreadsheetML styleSheet; '
