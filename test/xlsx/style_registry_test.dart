@@ -696,6 +696,192 @@ void main() {
     final String xml = _xml(r);
     expect(xml, contains('<cellXfs count="65490">'));
   });
+
+  group('seeded', () {
+    ({String? key}) key(String? k) => (key: k);
+    ({
+      int numFmtId,
+      int fontId,
+      int fillId,
+      int borderId,
+      String? alignment,
+      String? protection,
+      bool exact,
+    })
+    xf({
+      int numFmtId = 0,
+      int fontId = 0,
+      int fillId = 0,
+      int borderId = 0,
+      bool exact = true,
+    }) => (
+      numFmtId: numFmtId,
+      fontId: fontId,
+      fillId: fillId,
+      borderId: borderId,
+      alignment: null,
+      protection: null,
+      exact: exact,
+    );
+    const XlsxFont bold = XlsxFont(bold: true);
+    const XlsxFont italic = XlsxFont(italic: true);
+    final String boldKey = StyleRegistry.fontKey(bold);
+    final String italicKey = StyleRegistry.fontKey(italic);
+    final String plainKey = StyleRegistry.fontKey(null);
+    final String noneFill = StyleRegistry.fillKey(
+      const XlsxFill.pattern(XlsxPatternType.none),
+    );
+    final String noBorder = StyleRegistry.borderKey(const XlsxBorder());
+
+    StyleSeed seed({
+      List<({String? key})>? fonts,
+      Map<int, String> codes = const <int, String>{},
+      List<
+        ({
+          int numFmtId,
+          int fontId,
+          int fillId,
+          int borderId,
+          String? alignment,
+          String? protection,
+          bool exact,
+        })
+      >?
+      xfs,
+    }) => StyleSeed(
+      fonts: fonts ?? <({String? key})>[key(plainKey)],
+      fills: <({String? key})>[key(noneFill)],
+      borders: <({String? key})>[key(noBorder)],
+      customCodes: codes,
+      xfs: xfs ?? [xf()],
+    );
+
+    test('seeded ids are the file\'s indexes', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(
+          fonts: <({String? key})>[key(plainKey), key(boldKey), key(italicKey)],
+          xfs: [xf(), xf(fontId: 2)],
+        ),
+      );
+      expect(r.fontCount, 3);
+      expect(r.idFor(const XlsxStyle(font: italic)), 1);
+      expect(r.xfCount, 2);
+      final int id = r.idFor(const XlsxStyle(font: bold));
+      expect(id, 2);
+      expect(r.fontCount, 3);
+      final int other = r.idFor(
+        const XlsxStyle(font: XlsxFont(bold: true, italic: true)),
+      );
+      expect(other, 3);
+      expect(r.fontCount, 4);
+      expect(r.fontsFrom(3), hasLength(1));
+      expect(r.xfsFrom(2).last, contains('fontId="3"'));
+      expect(r.xfsFrom(2), hasLength(2));
+    });
+
+    test('an inexact entry is never reused', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(
+          fonts: <({String? key})>[key(plainKey), key(null)],
+          xfs: [xf(), xf(fontId: 1, exact: false), xf(numFmtId: 1)],
+        ),
+      );
+      // The xf is inexact: same parts as xf 1 still appends.
+      expect(r.idFor(const XlsxStyle(font: bold)), 3);
+      // The inexact font 1 matches nothing: a new font is appended.
+      expect(r.fontCount, 3);
+      expect(r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.integer)), 2);
+    });
+
+    test('custom codes continue after the file\'s', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(codes: const <int, String>{164: '0.0', 170: '#,##0.000'}),
+      );
+      expect(r.customCodesFrom(0), hasLength(2));
+      r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.0%')));
+      expect(r.customCodesFrom(2), <({int id, String code})>[
+        (id: 171, code: '0.0%'),
+      ]);
+      final int before = r.xfCount;
+      expect(
+        r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('#,##0.000'))),
+        before,
+      );
+      expect(r.xfsFrom(before).last, contains('numFmtId="170"'));
+      expect(r.customCodesFrom(2), hasLength(1));
+    });
+
+    test('custom codes start at 164 when the file\'s ids are lower', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(codes: const <int, String>{100: 'x'}),
+      );
+      r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.0')));
+      expect(r.customCodesFrom(1).single.id, 164);
+    });
+
+    test('limits count file entries', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(
+          xfs:
+              <
+                ({
+                  int numFmtId,
+                  int fontId,
+                  int fillId,
+                  int borderId,
+                  String? alignment,
+                  String? protection,
+                  bool exact,
+                })
+              >[for (int i = 0; i < XlsxLimits.maxCellFormats; i++) xf()],
+        ),
+      );
+      expect(
+        () => r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.integer)),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      expect(r.xfCount, XlsxLimits.maxCellFormats);
+    });
+
+    test('truncate rolls back', () {
+      final StyleRegistry r = StyleRegistry.seeded(seed());
+      final int fonts = r.fontCount;
+      final int xfs = r.xfCount;
+      final int a = r.idFor(
+        const XlsxStyle(font: bold, numFmt: XlsxNumFmt.custom('0.0')),
+      );
+      final int b = r.idFor(const XlsxStyle(font: italic));
+      r.truncate(
+        fonts: fonts,
+        fills: r.fillCount,
+        borders: r.borderCount,
+        codes: 0,
+        xfs: xfs,
+      );
+      expect(r.xfCount, xfs);
+      expect(r.fontCount, fonts);
+      expect(r.customCodesFrom(0), isEmpty);
+      expect(
+        r.idFor(const XlsxStyle(font: bold, numFmt: XlsxNumFmt.custom('0.0'))),
+        a,
+      );
+      expect(r.idFor(const XlsxStyle(font: italic)), b);
+    });
+
+    test('an empty list is refused', () {
+      expect(
+        () => StyleRegistry.seeded(
+          StyleSeed(
+            fonts: const <({String? key})>[],
+            fills: <({String? key})>[key(noneFill)],
+            borders: <({String? key})>[key(noBorder)],
+            xfs: [xf()],
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
 }
 
 /// The `styles.xml` for one custom format (`0.000`) and one built-in date

@@ -48,6 +48,65 @@ const _Xf _defaultXf = (
   protection: null,
 );
 
+/// What a file's `styles.xml` already holds, for [StyleRegistry.seeded].
+///
+/// The registry keeps the file's entries at their indexes, so a new style
+/// that looks like one of them reuses its id, and the entries it appends
+/// come after them (read them back with the registry's `…From` methods).
+///
+/// An entry of [fonts], [fills] or [borders] is identified by its `key`: the
+/// XML the registry itself renders for the value read from the file, which
+/// is what the registry dedupes by. Build one with [StyleRegistry.fontKey],
+/// [StyleRegistry.fillKey] or [StyleRegistry.borderKey] from the value that
+/// was read, and only when that value is exact (nothing of the entry was
+/// lost reading it); otherwise the key is `null`. A `null` key keeps the
+/// entry's index and its place toward the limits, but it never matches a
+/// new style.
+///
+/// [xfs] are the file's `cellXfs`, with the already rendered `alignment`
+/// and `protection` (see `alignmentXml` and `protectionXml`) or `null` for
+/// Excel's defaults. An xf whose `exact` is false is kept and counted but
+/// never matches a new style. [customCodes] maps each `numFmt` id of the
+/// file to its code; the registry numbers new codes from
+/// `max(164, highest id + 1)`.
+final class StyleSeed {
+  /// Creates a seed. [fonts], [fills], [borders] and [xfs] must not be
+  /// empty: id 0 of each must exist.
+  const StyleSeed({
+    required this.fonts,
+    required this.fills,
+    required this.borders,
+    required this.xfs,
+    this.customCodes = const <int, String>{},
+  });
+
+  /// The file's fonts, in order; see the class comment for `key`.
+  final List<({String? key})> fonts;
+
+  /// The file's fills, in order.
+  final List<({String? key})> fills;
+
+  /// The file's borders, in order.
+  final List<({String? key})> borders;
+
+  /// The file's `numFmt` ids and codes.
+  final Map<int, String> customCodes;
+
+  /// The file's cell formats, in order.
+  final List<
+    ({
+      int numFmtId,
+      int fontId,
+      int fillId,
+      int borderId,
+      String? alignment,
+      String? protection,
+      bool exact,
+    })
+  >
+  xfs;
+}
+
 String _render(void Function(XmlWriter w) write) {
   final StringBuffer out = StringBuffer();
   write(XmlWriter(out));
@@ -66,7 +125,7 @@ String _render(void Function(XmlWriter w) write) {
 /// by their rendered XML and share the number format table.
 final class StyleRegistry {
   /// Creates a registry holding only the default style.
-  StyleRegistry() {
+  StyleRegistry() : _seedNextId = _firstCustomId {
     _addPart(
       _fonts,
       _fontIds,
@@ -77,6 +136,158 @@ final class StyleRegistry {
     _addPart(_fills, _fillIds, _fillXml(_noFill));
     _addPart(_fills, _fillIds, _fillXml(_gray125));
     _addPart(_borders, _borderIds, _borderXml(const XlsxBorder()));
+  }
+
+  /// Creates a registry that holds [seed]'s entries at their indexes.
+  ///
+  /// New styles reuse a seeded entry whose key or parts they match and
+  /// otherwise append after it. The limits count the seed's entries.
+  /// Throws [ArgumentError] when a list of [seed] other than its custom
+  /// codes is empty, and [XlsxLimitError] when it holds more fonts, custom
+  /// codes or cell formats than the limits allow.
+  StyleRegistry.seeded(StyleSeed seed)
+    : _seedNextId = _nextIdAfter(seed.customCodes) {
+    for (final (String name, int length) in <(String, int)>[
+      ('fonts', seed.fonts.length),
+      ('fills', seed.fills.length),
+      ('borders', seed.borders.length),
+      ('xfs', seed.xfs.length),
+    ]) {
+      if (length == 0) {
+        throw ArgumentError.value(length, name, 'A seed needs an entry 0.');
+      }
+    }
+    if (seed.fonts.length > XlsxLimits.maxFonts) {
+      throw XlsxLimitError('fonts', XlsxLimits.maxFonts);
+    }
+    if (seed.customCodes.length > XlsxLimits.maxNumberFormats) {
+      throw XlsxLimitError('number formats', XlsxLimits.maxNumberFormats);
+    }
+    if (seed.xfs.length > XlsxLimits.maxCellFormats) {
+      throw XlsxLimitError('cell formats', XlsxLimits.maxCellFormats);
+    }
+    void seedParts(
+      List<String> parts,
+      Map<String, int> ids,
+      List<({String? key})> entries,
+    ) {
+      for (final ({String? key}) entry in entries) {
+        final String? key = entry.key;
+        // An inexact entry holds a placeholder and no key to match.
+        if (key != null) ids.putIfAbsent(key, () => parts.length);
+        parts.add(key ?? '');
+      }
+    }
+
+    seedParts(_fonts, _fontIds, seed.fonts);
+    seedParts(_fills, _fillIds, seed.fills);
+    seedParts(_borders, _borderIds, seed.borders);
+    seed.customCodes.forEach((int id, String code) {
+      _customCodes.add((id: id, code: code));
+      _customIds.putIfAbsent(code, () => id);
+    });
+    _xfs.clear();
+    _xfIds.clear();
+    for (final xf in seed.xfs) {
+      final _Xf value = (
+        numFmtId: xf.numFmtId,
+        fontId: xf.fontId,
+        fillId: xf.fillId,
+        borderId: xf.borderId,
+        alignment: xf.alignment,
+        protection: xf.protection,
+      );
+      if (xf.exact) _xfIds.putIfAbsent(value, () => _xfs.length);
+      _xfs.add(value);
+    }
+    _seedCodeCount = _customCodes.length;
+  }
+
+  static const int _firstCustomId = 164;
+
+  static int _nextIdAfter(Map<int, String> codes) {
+    int next = _firstCustomId;
+    for (final int id in codes.keys) {
+      if (id >= next) next = id + 1;
+    }
+    return next;
+  }
+
+  /// The key of [font] as the registry dedupes fonts: the `<font>` XML of
+  /// [resolveFont] of it. Use it for a [StyleSeed] font read exactly.
+  static String fontKey(XlsxFont? font) =>
+      _render((XmlWriter w) => writeFontXml(w, resolveFont(font)));
+
+  /// The key of [fill] as the registry dedupes fills: its `<fill>` XML.
+  static String fillKey(XlsxFill fill) => _fillXml(fill);
+
+  /// The key of [border] as the registry dedupes borders: its `<border>`
+  /// XML.
+  static String borderKey(XlsxBorder border) => _borderXml(border);
+
+  /// The first id a new custom number format takes.
+  final int _seedNextId;
+
+  /// How many of [_customCodes] came from a seed.
+  int _seedCodeCount = 0;
+
+  int get _nextCodeId => _seedNextId + (_customCodes.length - _seedCodeCount);
+
+  /// The number of fonts, the seed's included.
+  int get fontCount => _fonts.length;
+
+  /// The number of fills, the seed's included.
+  int get fillCount => _fills.length;
+
+  /// The number of borders, the seed's included.
+  int get borderCount => _borders.length;
+
+  /// The number of cell formats, the seed's included.
+  int get xfCount => _xfs.length;
+
+  /// The rendered `<font>` of every font from index [start] on.
+  List<String> fontsFrom(int start) => _fonts.sublist(start);
+
+  /// The rendered `<fill>` of every fill from index [start] on.
+  List<String> fillsFrom(int start) => _fills.sublist(start);
+
+  /// The rendered `<border>` of every border from index [start] on.
+  List<String> bordersFrom(int start) => _borders.sublist(start);
+
+  /// The rendered `<xf>` of every cell format from index [start] on.
+  List<String> xfsFrom(int start) => <String>[
+    for (final _Xf xf in _xfs.sublist(start))
+      _render((XmlWriter w) => _writeXf(w, xf)),
+  ];
+
+  /// The custom number formats from index [start] of the code list on (the
+  /// seed's codes come first, in the order of its map).
+  List<({int id, String code})> customCodesFrom(int start) =>
+      _customCodes.sublist(start);
+
+  /// Drops everything registered after the given counts (each a value read
+  /// from the matching getter earlier), and the styles that mapped to it.
+  /// A caller rolls back a failed edit this way.
+  void truncate({
+    required int fonts,
+    required int fills,
+    required int borders,
+    required int codes,
+    required int xfs,
+  }) {
+    _truncate(_fonts, _fontIds, fonts);
+    _truncate(_fills, _fillIds, fills);
+    _truncate(_borders, _borderIds, borders);
+    _truncateCodes(codes);
+    _truncate(_xfs, _xfIds, xfs);
+    _ids.removeWhere((XlsxStyle _, int id) => id >= xfs);
+  }
+
+  void _truncateCodes(int length) {
+    for (final ({int id, String code}) entry in _customCodes.sublist(length)) {
+      if (_customIds[entry.code] == entry.id) _customIds.remove(entry.code);
+    }
+    _customCodes.removeRange(length, _customCodes.length);
   }
 
   static const XlsxFill _noFill = XlsxFill.pattern(XlsxPatternType.none);
@@ -91,7 +302,8 @@ final class StyleRegistry {
   final Map<String, int> _fillIds = <String, int>{};
   final List<String> _borders = <String>[];
   final Map<String, int> _borderIds = <String, int>{};
-  final List<String> _customCodes = <String>[];
+  final List<({int id, String code})> _customCodes =
+      <({int id, String code})>[];
   final Map<String, int> _customIds = <String, int>{};
   final List<String> _dxfs = <String>[];
   final Map<String, int> _dxfIds = <String, int>{};
@@ -146,7 +358,7 @@ final class StyleRegistry {
     final _Xf xf = (
       numFmtId: fmt == null
           ? 0
-          : fmt.builtinId ?? _customIds[code] ?? 164 + _customCodes.length,
+          : fmt.builtinId ?? _customIds[code] ?? _nextCodeId,
       fontId: fontId ?? _fonts.length,
       fillId: fillId ?? _fills.length,
       borderId: borderId ?? _borders.length,
@@ -174,8 +386,8 @@ final class StyleRegistry {
     if (fillId == null) _addPart(_fills, _fillIds, fillXml!);
     if (borderId == null) _addPart(_borders, _borderIds, borderXml!);
     if (newCode) {
-      _customIds[code] = 164 + _customCodes.length;
-      _customCodes.add(code);
+      _customIds[code] = _nextCodeId;
+      _customCodes.add((id: _nextCodeId, code: code));
     }
     final int id = _xfs.length;
     _xfs.add(xf);
@@ -204,20 +416,19 @@ final class StyleRegistry {
     final int borders = _borders.length;
     final int codes = _customCodes.length;
     final int xfs = _xfs.length;
-    final List<XlsxStyle> added = <XlsxStyle>[];
     final List<int> ids = <int>[];
     try {
       for (final XlsxStyle? style in styles) {
-        if (style != null && !_ids.containsKey(style)) added.add(style);
         ids.add(idFor(style));
       }
     } on Object catch (error, stack) {
-      added.forEach(_ids.remove);
-      _truncate(_fonts, _fontIds, fonts);
-      _truncate(_fills, _fillIds, fills);
-      _truncate(_borders, _borderIds, borders);
-      _truncate(_customCodes, _customIds, codes);
-      _truncate(_xfs, _xfIds, xfs);
+      truncate(
+        fonts: fonts,
+        fills: fills,
+        borders: borders,
+        codes: codes,
+        xfs: xfs,
+      );
       if (fieldName != null && error is ArgumentError) {
         // ids holds one entry per style before the failing one.
         final String entry = fieldName(ids.length);
@@ -275,7 +486,7 @@ final class StyleRegistry {
         // the dxf is rendered with its id, and the rendered XML is the
         // dedupe key. Nothing is recorded until that check passes, so a
         // full table throws without taking the id.
-        numFmt = (id: known ?? 164 + _customCodes.length, code: code);
+        numFmt = (id: known ?? _nextCodeId, code: code);
       }
     }
     final String xml = _render(
@@ -289,8 +500,8 @@ final class StyleRegistry {
 
     // Nothing below throws.
     if (newCode != null) {
-      _customIds[newCode] = 164 + _customCodes.length;
-      _customCodes.add(newCode);
+      _customIds[newCode] = _nextCodeId;
+      _customCodes.add((id: _nextCodeId, code: newCode));
     }
     _addPart(_dxfs, _dxfIds, xml);
     return _dxfs.length - 1;
@@ -321,7 +532,7 @@ final class StyleRegistry {
       return ids;
     } on Object catch (e, stack) {
       _truncate(_dxfs, _dxfIds, dxfs);
-      _truncate(_customCodes, _customIds, codes);
+      _truncateCodes(codes);
       if (e is ArgumentError && fields != null) {
         Error.throwWithStackTrace(
           ArgumentError.value(
@@ -352,14 +563,15 @@ final class StyleRegistry {
     return _render((XmlWriter w) => writeFontXml(w, resolved));
   }
 
-  /// The checked `<fill>` of [fill], or null for fill 0: no fill, or a
-  /// `none` pattern, whose colors show nowhere. An invalid fill throws
-  /// [ArgumentError] named `fill.<field>`, such as `fill.foreground`.
+  /// The checked `<fill>` of [fill], or null for fill 0: no fill. A `none`
+  /// pattern, whose colors show nowhere, renders as the `none` fill. An
+  /// invalid fill throws [ArgumentError] named `fill.<field>`, such as
+  /// `fill.foreground`.
   static String? _fillXmlOf(XlsxFill? fill) {
     if (fill == null) return null;
     checkStylePart('fill', () => validateFill(fill));
     if (fill is XlsxPatternFill && fill.type == XlsxPatternType.none) {
-      return null;
+      return _fillXml(_noFill);
     }
     return _fillXml(fill);
   }
@@ -398,10 +610,10 @@ final class StyleRegistry {
     if (_customCodes.isNotEmpty) {
       w.start('numFmts');
       w.attribute('count', '${_customCodes.length}');
-      for (var i = 0; i < _customCodes.length; i++) {
+      for (final ({int id, String code}) entry in _customCodes) {
         w.empty('numFmt', <String, String>{
-          'numFmtId': '${164 + i}',
-          'formatCode': _customCodes[i],
+          'numFmtId': '${entry.id}',
+          'formatCode': entry.code,
         });
       }
       w.end();
