@@ -24,26 +24,58 @@ Map<String, Uint8List> _parts(Uint8List bytes) => <String, Uint8List>{
     if (file.isFile) file.name: Uint8List.fromList(file.content),
 };
 
+/// Turkish style ids and names of `blank.docx` and the English ones a new
+/// document uses in their place.
+final Map<String, String> _english = <String, String>{
+  'VarsaylanParagrafYazTipi': 'DefaultParagraphFont',
+  'NormalTablo': 'TableNormal',
+  'ListeYok': 'NoList',
+  'KonuBal': 'Title',
+  'KonuBalChar': 'TitleChar',
+  'Altyaz': 'Subtitle',
+  'AltyazChar': 'SubtitleChar',
+  'Alnt': 'Quote',
+  'AlntChar': 'QuoteChar',
+  'ListeParagraf': 'ListParagraph',
+  'GlVurgulama': 'IntenseEmphasis',
+  'GlAlnt': 'IntenseQuote',
+  'GlAlntChar': 'IntenseQuoteChar',
+  'GlBavuru': 'IntenseReference',
+  for (int i = 1; i <= 9; i++) ...<String, String>{
+    'Balk$i': 'Heading$i',
+    'Balk${i}Char': 'Heading${i}Char',
+    'Başlık $i Char': 'Heading $i Char',
+  },
+  'Konu Başlığı Char': 'Title Char',
+  'Altyazı Char': 'Subtitle Char',
+  'Alıntı Char': 'Quote Char',
+  'Güçlü Alıntı Char': 'Intense Quote Char',
+  'Office Teması': 'Office Theme',
+};
+
 /// [part] without what a new document leaves out: revision identifiers,
 /// document ids, proof state, attached template, the decimal symbol and the
 /// list separator; the language settings become Word's US defaults.
 Uint8List _cleaned(Uint8List part) {
   String xml = utf8.decode(part);
+  _english.forEach((String from, String to) {
+    xml = xml.replaceAll('"$from"', '"$to"');
+  });
   xml = xml
-      .replaceAll(RegExp(r'<w:rsids>.*?</w:rsids>'), '')
-      .replaceAll(RegExp(r'<w:rsid(Root)? [^>]*/>'), '')
-      .replaceAll(RegExp(r' w:rsid\w*="[^"]*"'), '')
-      .replaceAll(RegExp(r'<w1[45]:docId [^>]*/>'), '')
-      .replaceAll(RegExp(r'<w:proofState [^>]*/>'), '')
-      .replaceAll(RegExp(r'<w:attachedTemplate [^>]*/>'), '')
-      .replaceAll(RegExp(r'<w:decimalSymbol [^>]*/>'), '')
-      .replaceAll(RegExp(r'<w:listSeparator [^>]*/>'), '')
+      .replaceAll(RegExp(r'<w:rsids>.*?</w:rsids>', dotAll: true), '')
+      .replaceAll(RegExp(r'<w:rsid(Root)? [^>]*/>', dotAll: true), '')
+      .replaceAll(RegExp(r' w:rsid\w*="[^"]*"', dotAll: true), '')
+      .replaceAll(RegExp(r'<w1[45]:docId [^>]*/>', dotAll: true), '')
+      .replaceAll(RegExp(r'<w:proofState [^>]*/>', dotAll: true), '')
+      .replaceAll(RegExp(r'<w:attachedTemplate [^>]*/>', dotAll: true), '')
+      .replaceAll(RegExp(r'<w:decimalSymbol [^>]*/>', dotAll: true), '')
+      .replaceAll(RegExp(r'<w:listSeparator [^>]*/>', dotAll: true), '')
       .replaceAll(
-        RegExp(r'<w:themeFontLang [^>]*/>'),
+        RegExp(r'<w:themeFontLang [^>]*/>', dotAll: true),
         '<w:themeFontLang w:val="en-US"/>',
       )
       .replaceAll(
-        RegExp(r'<w:lang [^>]*/>'),
+        RegExp(r'<w:lang [^>]*/>', dotAll: true),
         '<w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/>',
       );
   return Uint8List.fromList(utf8.encode(xml));

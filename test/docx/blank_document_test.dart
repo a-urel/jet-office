@@ -130,6 +130,36 @@ void main() {
         RegExp(r'<w:lang ').allMatches(parts['word/styles.xml']!),
         isNotEmpty,
       );
+      final String styles = parts['word/styles.xml']!;
+      final RegExp nonAscii = RegExp(r'[^\x00-\x7F]');
+      for (final RegExpMatch m in RegExp(
+        r'w:styleId="([^"]*)"|<w:name w:val="([^"]*)"',
+      ).allMatches(styles)) {
+        expect(nonAscii.hasMatch(m.group(0)!), isFalse, reason: m.group(0));
+      }
+      for (final String id in <String>[
+        'Normal',
+        'Heading1',
+        'Heading9',
+        'Heading1Char',
+        'TableNormal',
+        'ListParagraph',
+        'DefaultParagraphFont',
+        'NoList',
+        'Title',
+        'TitleChar',
+      ]) {
+        expect(styles, contains('w:styleId="$id"'));
+      }
+      for (final String id in <String>[
+        'Balk1',
+        'NormalTablo',
+        'ListeParagraf',
+        'KonuBal',
+      ]) {
+        expect(styles, isNot(contains('"$id"')));
+      }
+      expect(parts['word/theme/theme1.xml'], contains('name="Office Theme"'));
     });
 
     test('carries no revision identifier, document id or proof state', () {

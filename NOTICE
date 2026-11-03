@@ -38,6 +38,7 @@ Word blank document
 The theme, styles, font table, settings and web settings XML in
 lib/src/docx/blank_document.dart are taken from a blank document saved by
 Microsoft Word for Mac 16.114.1 (test/fixtures/owner/docx/blank.docx), with
-the revision identifiers, document ids and the regional settings removed.
+the revision identifiers and document ids removed, and the regional
+settings, style ids and style names normalised to Word's en-US defaults.
 Whether that XML may ship under this package's licence is an open question
 for the owner, not settled here.
