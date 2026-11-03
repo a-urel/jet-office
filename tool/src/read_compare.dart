@@ -46,6 +46,17 @@ export 'csv_compare.dart' show decodeXstring;
 const Map<String, Map<XlsxWarningCode, String>> resaveAllowedWarnings =
     <String, Map<XlsxWarningCode, String>>{};
 
+/// Known LibreOffice differences on a DOCX re-save: fixture name to the
+/// warning codes `DocxDocument` may report on opening and reading the body
+/// of that fixture's re-save, each with its reason.
+///
+/// Empty: no re-save is known to warn. `tool/compare_resaved_docx.dart`
+/// reports every other warning as a mismatch. A line is added only with a
+/// reason a reader of this file can check against the spec of the format,
+/// saying why the warning is LibreOffice's doing and not a model defect.
+const Map<String, Map<DocxWarningCode, String>> docxResaveAllowedWarnings =
+    <String, Map<DocxWarningCode, String>>{};
+
 /// Known LibreOffice value differences: fixture name to `Sheet!A1` to the
 /// one value the reader may read there and the reason.
 ///

@@ -1,0 +1,7 @@
+Quarterly report
+This document has a heading, a bullet list, a table, a header, a footer and a comment.
+First item
+Second item
+Third item
+Totals by region:
+End of report.

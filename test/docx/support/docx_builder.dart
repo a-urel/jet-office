@@ -8,6 +8,7 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:jet_office/src/opc/ooxml.dart';
 
 import '../../xlsx/read/support/zip_builder.dart';
@@ -124,4 +125,29 @@ int indexOfBytes(List<int> bytes, List<int> needle) {
     if (same) return i;
   }
   return -1;
+}
+
+/// [docx] with its entry [part] (a ZIP entry name, no leading `/`) replaced
+/// by what [change] makes of its text, every other entry kept as it was.
+///
+/// Throws a [StateError] when the package has no such entry, or when
+/// [change] leaves the text as it was, so a rewrite that misses its target
+/// cannot pass unnoticed.
+Uint8List rewriteDocxPart(
+  Uint8List docx,
+  String part,
+  String Function(String xml) change,
+) {
+  final Archive archive = ZipDecoder().decodeBytes(docx);
+  final Map<String, List<int>> entries = <String, List<int>>{
+    for (final ArchiveFile file in archive.files)
+      if (file.isFile) file.name: file.content,
+  };
+  final List<int>? bytes = entries[part];
+  if (bytes == null) throw StateError('The package has no entry "$part".');
+  final String before = utf8.decode(bytes);
+  final String after = change(before);
+  if (after == before) throw StateError('The change left "$part" as it was.');
+  entries[part] = utf8.encode(after);
+  return buildZip(entries);
 }

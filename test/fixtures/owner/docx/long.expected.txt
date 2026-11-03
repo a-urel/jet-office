@@ -1,0 +1,193 @@
+DENEME BELGESİ
+Placeholder içerik ve biçimlendirme örnekleri
+Sürüm 1.0 • Kasım 2026
+
+Bu belge; sayfa düzeni, başlık hiyerarşisi, otomatik içindekiler, listeler, tablolar ve yazı biçimleri için hazırlanmış bir test metnidir. Tüm adlar, kodlar, miktarlar ve anlatılar kurgusaldır. Gerçek bir proje, kişi veya kurum hakkında bilgi içermez.
+
+Örnek kullanım: düzen kontrolü, baskı önizleme ve belge şablonu denemeleri.
+
+
+İçindekiler
+​
+​
+1. Genel Bakış	4
+2. Amaç ve Kapsam	5
+3. Başlık Hiyerarşisi	6
+4. Yazı Biçimleri	7
+5. Madde İşaretli Listeler	8
+6. Numaralı Akış Örneği	9
+7. Örnek Kayıt Tablosu	10
+8. Karşılaştırma Matrisi	11
+9. Vurgulu Notlar	12
+10. Uzun Metin Örneği	13
+11. Hizalama ve Girinti	14
+12. Tipografi ve Örnek İfadeler	15
+13. Kapanış ve Deneme Alanı	16
+
+​
+
+​
+
+
+1. Genel Bakış
+Bu deneme metni, sayfa üzerindeki görsel ağırlığı ve okuma akışını değerlendirmek için oluşturulmuştur. İçerikte geçen Meridyen Atölyesi, yalnızca örnek bir çalışma alanının adıdır. Atölyenin defterlerinde renkli kartlar, kısa notlar ve birbirinden bağımsız taslaklar bulunur. Her taslak, başka bir belge parçasının yerini tutar; hiçbirinin gerçek bir teslim tarihi veya operasyonel karşılığı yoktur.
+
+İlk sayfalarda sade bir anlatım tercih edilir. Sonraki bölümlerde aynı deneme amacı farklı biçimlerle sürdürülür. Başlıklar gezinmeyi, paragraflar uzun metin görünümünü, tablolar ise hücre düzenini sınamak için kullanılır. Böylece belge, içeriğinden çok yapısıyla değerlendirilir. Bir cümlenin anlamından ziyade satırın nerede bittiği veya bir başlığın sayfada nasıl durduğu önem kazanır.
+
+Kalın yazı örneği: Bu cümle, vurgulu bir açıklamanın metin içindeki görünümünü gösterir. İtalik yazı örneği: Bu kısa ifade, ek bir notun ana anlatımdan ayrılmasını sağlar.
+
+Örnek metnin herhangi bir bölümünü inceleyen okuyucu, burada sunulan ayrıntıları kurgu olarak ele almalıdır. Kayıtlar, isimler ve sınıflamalar yalnızca boş alanları doldurmak için seçilmiştir. Belgenin amacı karar vermek değil, düzen seçeneklerini görünür kılmaktır. Aynı içerik farklı bir şablona aktarıldığında satır sonları ve sayfa dağılımı değişebilir.
+
+
+2. Amaç ve Kapsam
+Belgenin kapsamı, farklı metin türlerini bir araya getirerek tutarlı bir test yüzeyi oluşturmaktır. Buradaki anlatımlar gerçek bir yöntemi tarif etmez. Bir sayfada kısa notların, başka bir sayfada daha uzun açıklamaların bulunması özellikle tercih edilmiştir. Bu çeşitlilik, uzunlukları farklı içeriklerin aynı belge içinde nasıl göründüğünü gözlemlemeyi sağlar.
+
+Kurgusal çalışma alanında her dosya için bir renk, her not için bir küçük başlık seçildiği varsayılır. Mavi kartlar genel açıklamaları, yeşil kartlar örnek kayıtları, turuncu kartlar ise bekleyen taslakları temsil eder. Renklerin anlamı bu metne özgüdür; başka bir sistemin işleyişiyle ilişkili değildir. Okuyucu, bu sınıflamayı yalnızca yer tutucu bir anlatı olarak değerlendirebilir.
+
+Kapsam dışında kalan konular da vardır. Gerçek müşteri bilgileri, mali hesaplar, kişisel veriler ve uygulama talimatları bu belgede yer almaz. Örnek sayılar yalnızca tabloların görünümünü göstermek için kullanılır. Herhangi bir değer, doğrulanmış ölçüm veya tahmin olarak yorumlanmamalıdır.
+
+Bu sayfadaki metin özellikle düz paragraflardan oluşur. Sonraki sayfalarda listeler, alt başlıklar ve renkli notlar devreye girer. Böylece sade anlatımla daha yoğun biçimlendirme arasında karşılaştırma yapılabilir. Deneme tamamlandığında içerik değiştirilse bile başlık yapısı, içindekiler ve sayfa numaraları şablonun temel parçaları olarak kullanılabilir.
+
+
+3. Başlık Hiyerarşisi
+3.1. Ana açıklama
+Başlık hiyerarşisi, örnek metnin parçalarını görünür bir sıraya yerleştirir. Bu bölümde ikinci ve üçüncü düzey başlıklar kullanılır. Ana bölüm başlığı genel konuyu, alt başlık ise daha dar bir metin alanını belirtir. Başlıkların ardından gelen açıklamalar birbirini tamamlayan kurgusal ayrıntılardan oluşur.
+
+Pencere kenarındaki boş raf, taslak kutularının yerleştirildiği örnek bir alan olarak düşünülmüştür. Her kutunun üzerinde kısa bir etiket bulunur. Etiketler, içeriklerin önemini değil, yalnızca yerleştirme sırasını gösterir. Aynı düzen başka bir sayfada farklı adlarla tekrar edilebilir.
+3.1.1. Ayrıntı düzeyi
+Üçüncü düzey başlık, küçük bir açıklamayı ana metinden ayırır. Bu açıklamanın tek görevi başlık boyutları arasındaki farkı göstermektir. Metnin kısa tutulması, alt başlığın çevresindeki boşlukların daha kolay fark edilmesini sağlar.
+3.2. Tamamlayıcı not
+Başlıkların numaraları bu deneme için metin olarak yazılmıştır. İçindekiler yalnızca ana bölüm başlıklarını listeler; alt düzeyler ise belgenin içinde hiyerarşi örneği olarak kalır. Böylece içindekiler kısa tutulurken sayfanın kendi düzeni daha ayrıntılı görünür.
+
+
+4. Yazı Biçimleri
+Bu sayfa, aynı belge içinde farklı yazı biçimlerinin birlikte kullanılmasını gösterir. Biçimler, gerçek bir önem sırası veya uyarı seviyesi ifade etmez. Aşağıdaki örneklerin her biri yalnızca görsel karşılaştırma amacı taşır.
+
+Kalın örnek: Kutunun kapağında geniş harflerle yazılmış bir açıklama bulunur. Bu açıklama, okuyucunun dikkatini kısa süreliğine belirli bir noktaya yönlendirir.
+
+İtalik örnek: Kenar notunda daha yumuşak bir vurgu kullanılır. Bu satır, genel anlatıya eşlik eden küçük bir düşünce gibi görünür.
+
+Altı çizili örnek: Bu satır, bağlantı olmayan bir metin vurgusudur.
+
+Sarı vurgulu örnek: Deneme metnindeki bu ifade özellikle işaretlenmiştir.
+
+Renkli örnek: Turkuaz tonundaki yazı, alternatif bir metin rengini gösterir.
+
+Üstü çizili örnek: Önceki taslak için ayrılmış kısa ifade.
+
+Bazı biçimler tek kelimede, bazıları ise cümlenin tamamında uygulanır. Bu fark, metin yoğunluğunu ve sayfa görünümünü değiştirir. Çok sayıda vurgu bir arada kullanıldığında sayfa daha hareketli görünür; sade metinde ise görsel ritim daha düzenlidir. Buradaki çeşitlilik, her iki görünümü de aynı dosyada denemek içindir.
+
+
+5. Madde İşaretli Listeler
+Örnek atölyenin hayali envanteri aşağıdaki listede özetlenmiştir. Nesnelerin adları, metin uzunluklarının liste içinde nasıl göründüğünü sınamak için çeşitlendirilmiştir. Kısa ve uzun maddeler aynı listede birlikte bulunur.
+Mavi kapaklı deneme defteri.
+Üzerinde herhangi bir gerçek kayıt bulunmayan boş etiket kartları.
+Kısa açıklamalar ve geçici taslaklar için ayrılmış kurgusal dosyalar.
+Birinci alt madde: Açık renkli karton bölme.
+İkinci alt madde: Örnek metin parçalarını tutan küçük zarf.
+Sayfa düzenini sınamak amacıyla hazırlanmış uzun bir madde: Bu açıklama, metnin ikinci satıra geçtiğinde madde işaretiyle nasıl hizalandığını gözlemlemek için kullanılır.
+Turuncu ayraç ve yeşil not kâğıdı.
+Sonradan doldurulmak üzere bırakılmış örnek kayıt alanı.
+Listeler, birbirinden bağımsız unsurları tek bir metin akışında toplar. İç içe yerleştirilen maddeler ise bir ana unsurun ayrıntılarını gösterir. Bu belge için seçilen nesneler arasında zorunlu bir ilişki yoktur. Aynı listeye farklı yer tutucu maddeler eklenerek görünüm yeniden sınanabilir.
+
+Liste bittikten sonra normal paragraf akışına dönülür. Bu geçiş, girinti ve metin başlangıçlarının karşılaştırılmasını kolaylaştırır. Alt maddeler ile ana maddeler arasındaki görsel fark, belge şablonunun farklı içerik düzeylerine nasıl tepki verdiğini gösterir.
+
+
+6. Numaralı Akış Örneği
+Aşağıdaki sıralama, kurgusal bir kart düzenleme akışını anlatır. Gerçek bir işlem talimatı değildir. Numaralı liste, adımların birbirini izlediği bir metin türünün görünümünü göstermek için kullanılır.
+Boş bir kart için hayali bir başlık seçilir.
+Başlığın altına iki cümlelik örnek açıklama yazıldığı varsayılır.
+Kart, aynı renkteki diğer deneme kartlarının yanına yerleştirilir.
+Uzun açıklamalar için ayrı bir taslak sayfası ayrılır; bu sayfa gerçek bilgi yerine yer tutucu metin içerir.
+Kartların sırası yalnızca görsel çeşitlilik sağlayacak şekilde yeniden düşünülür.
+Son satıra, denemenin tamamlandığını belirten kurgusal bir kapanış notu eklenir.
+Bu anlatımda başlangıç, gelişme ve kapanış bölümleri kısa bir sıra içinde gösterilmiştir. Her madde benzer bir dil yapısına sahiptir; ancak uzunlukları tamamen eşit değildir. Bu değişkenlik, numara ile metin arasındaki hizalamanın farklı satır sayılarında incelenmesini sağlar.
+
+Numaralı listenin ardından gelen açıklama, liste kapsamında değildir. Normal paragraf stiline dönen metin, aynı sayfa üzerinde iki yapı arasında geçiş oluşturur. Deneme dosyalarında bu tür geçişler, sadece tek biçim kullanılan sayfalara göre daha fazla görsel karşılaştırma olanağı sunar.
+
+Ek not: Burada anlatılan kartların hiçbirinin gerçek bir sahibi, sorumlusu veya teslim hedefi bulunmaz. Sıralama, yalnızca yazı düzenini göstermek için oluşturulmuştur.
+
+
+7. Örnek Kayıt Tablosu
+Bu tablo, tamamen uydurulmuş kayıtların farklı sütunlarda gösterilmesini sağlar. Kodlar ve adetler herhangi bir gerçek envantere ait değildir. Başlık satırında kalın yazı, son sütunda sağ hizalama kullanılmıştır.
+
+Tablo hücrelerindeki metinler kısa tutulmuştur. Bu seçim, sütun sınırlarını ve satırların birbirinden ayrılmasını daha belirgin hâle getirir. Son sütundaki sayılar yalnızca hücre içinde rakamların görünümünü göstermek içindir; finansal veya operasyonel bir anlam taşımaz.
+
+Uzun kayıt adları kullanıldığında hücrelerin satır sayısı artabilir. Benzer şekilde farklı bir yazı tipi seçimi, tablonun genişlik algısını değiştirebilir. Bu sayfa, bu tür denemeler için başlangıç niteliğinde bir yer tutucu düzen sunar.
+
+
+8. Karşılaştırma Matrisi
+Aşağıdaki matris, üç hayali taslağın biçimsel özelliklerini yan yana gösterir. Karşılaştırma, insanlar veya gerçek ürünler hakkında bir değerlendirme değildir. Tablodaki ifadeler yalnızca belge düzeni çeşitlerini temsil eder.
+
+Bir matris, aynı türden açıklamaların düzenli sütunlarda izlenmesini sağlar. Bu örnekte tüm hücreler metin içerir. Hücrelerdeki ifadeler kısa olduğu için tablo görece kompakt görünür. Daha uzun açıklamalar eklenirse satırlar genişler ve sayfa üzerindeki dağılım değişir.
+
+Tablo stilleri, düz metne göre daha belirgin bir görsel alan oluşturur. Bu sayfa ile bir önceki sayfa arasındaki fark, iki ayrı tablo stilinin aynı belge içindeki görünümünü sınamak için seçilmiştir. Stil çeşitliliği, örnek dosyanın tek bir görsel düzene bağlı kalmamasını sağlar.
+
+
+9. Vurgulu Notlar
+Bu bölümde arka plan rengi ve metin vurgusu birlikte kullanılır. Notlar, örnek belge içinde küçük odak alanları oluşturur. Her biri gerçek bir uyarı yerine görsel deneme metni içerir.
+Bilgi notu
+Bu alan, kısa bir açıklamanın ana metinden farklı bir arka planla ayrılmasını gösterir. İçerik tamamen kurgusaldır ve yalnızca sayfa düzenini sınamak amacıyla yazılmıştır.
+Yer tutucu hatırlatma
+Bu satırın ardından gerçek bilgi ekleneceği varsayılabilir. Şimdilik metnin görevi, boş bırakılabilecek bir alanın belgede nasıl göründüğünü göstermektir.
+Tamamlayıcı açıklama
+Yeşil arka plan, üçüncü bir not görünümü sunar. Renk seçimi, bu örnek için herhangi bir doğruluk veya onay anlamı taşımaz.
+Vurgulu alanların arasında normal paragraflar bulunduğunda sayfa ritmi değişir. Geniş renk blokları dikkat çekerken düz metin, anlatının sürekliliğini sağlar. Bu denemede notların uzunluğu sınırlıdır; böylece her renk alanı ayrı bir öğe olarak algılanabilir.
+
+Aynı notlar farklı bir belgeye taşındığında arka planlar, yazı boyutları ve satır genişlikleri değişik görünebilir. Bu nedenle burada sunulan düzen, son kullanım için kesin bir tasarım değil, çeşitli görünümleri bir arada deneyen örnek bir içeriktir.
+
+
+10. Uzun Metin Örneği
+Kurgusal atölyenin ortasında geniş bir masa bulunur. Masanın üzerinde farklı renklerde kâğıtlar, kapaksız bir defter ve boş etiketler yer alır. Pencereden gelen ışık, kâğıtların tonlarını gün boyunca değiştirir. Bu betimleme, gerçek bir mekânı anlatmak için değil, kesintisiz bir metin bloğu oluşturmak için yazılmıştır. Cümleler birbirine bağlanır ve okuyucunun gözünü satırdan satıra taşır.
+
+Defterin ilk sayfasında tamamlanmamış bir başlık vardır. Başlığın altında, henüz bir konuya dönüşmemiş kısa ifadeler sıralanır. İkinci sayfada ise daha uzun bir taslak yer alır. Taslak, hayali bir serginin düzenlenişini anlatır; ancak serginin tarihi, yeri ve katılımcıları yoktur. Bütün ayrıntılar, sadece metne hacim kazandıran yer tutuculardır. Anlatının gerçek dünyada bir karşılığı olması beklenmez.
+
+Masanın sol tarafındaki kartlar küçük kümeler hâlinde durur. Bir kümeye yuvarlak nesnelerin adları, diğerine renkli yüzeylerin betimleri yazılmıştır. Kartların arasındaki düzen zaman zaman değiştirilir. Bu değişiklik bir ilerleme göstergesi değildir; aynı sözcüklerin başka bir sırada görünmesiyle sınırlıdır. Kurgusal anlatı, böylece küçük ayrıntılar üzerinden devam eder.
+
+Uzun paragraf örneğinde iki yana yaslı hizalama kullanılmıştır. Satırların sağ ve sol kenarlarının görünümü, önceki sayfalardaki sola hizalı metinden farklıdır. Kelimeler arasındaki boşluklar satıra göre değişebilir. Bu özellik, belgeyi görsel açıdan incelerken dikkat edilebilecek bir karşılaştırma noktasıdır.
+
+Sayfanın sonuna yaklaşırken anlatı yine boş deftere döner. Son yaprakta küçük bir çizgi ve tamamlanmamış bir cümle olduğu varsayılır. Bu cümlenin devamı gerekli değildir; deneme metni, kendi işlevini uzun bir blok olarak yerine getirmiştir. Bir sonraki bölüm, metnin sesinden çok yerleşimine odaklanır.
+
+
+11. Hizalama ve Girinti
+Sola hizalı paragraf
+Bu örnekte tüm satırlar sol kenardan başlar. Sağ tarafta satır uzunluğuna bağlı olarak farklı boşluklar oluşur. Kısa açıklamalarla uzun cümleler aynı paragraf içinde bir araya getirildiğinde bu fark daha belirgin görünür.
+Ortalanmış paragraf
+Bu satırlar sayfanın ortasında yer alır.
+Kısa bir açıklama, simetrik görünümü göstermek için kullanılmıştır.
+Her satır kendi uzunluğuna göre merkezlenir.
+Sağa hizalı paragraf
+Bu örnek, kısa bir kapanış notunun sağ kenarda nasıl göründüğünü gösterir. Metin satırlarının başlangıç noktası değişirken bitişleri aynı kenara yaklaşır.
+İlk satır girintisi örneği. Bu paragrafın ilk satırı içerden başlar. Devamındaki satırlar normal metin kenarını izler. Kurgusal anlatı, bir rafın üzerindeki boş kutuların sıraya dizildiğini varsayar. Kutuların her birinde başka bir deneme metni bulunur ve bu metinler yalnızca yerleşim karşılaştırması için kullanılır.
+Farklı hizalamaların bir sayfada birlikte bulunması, belge yapısının görsel çeşitliliğini artırır. Bu sayfanın amacı hangi seçeneğin daha iyi olduğunu belirlemek değil, seçenekleri karşılaştırılabilir biçimde göstermektir. Sonraki bölümde yazı tipi değişimi ve kısa örnek ifadeler kullanılır.
+
+
+12. Tipografi ve Örnek İfadeler
+Bu sayfada üç yazı tipi ve farklı punto örnekleri yer alır. Amaç, aynı dosyada birden fazla tipografik görünüm oluşturmaktır. Kısa ifadeler, harf şekillerinin karşılaştırılmasını kolaylaştırır.
+Georgia örneği: Sessiz bir odada duran boş defter, henüz yazılmamış bir anlatının yerini tutar. Kâğıtların arasında kısa bir not ve renkli bir ayraç bulunur. Bu cümleler yalnızca örnek metindir.
+Arial örneği: Düz çizgili harfler, kısa açıklamalar için farklı bir görünüm sunar. Bu paragrafın içeriği, herhangi bir kayıt veya bilgi aktarmaz; yalnızca yazı biçiminin sayfadaki etkisini gösterir.
+Sabit aralıklı yazı örneği:
+KAYIT: DENEME-001
+TÜR: YER TUTUCU
+DURUM: KURGUSAL
+NOT: GERÇEK VERİ İÇERMEZ
+Büyük punto örneği: Renkli başlık denemesi.
+Küçük punto örneği: Bu satır, yardımcı açıklamanın ana metinden daha küçük bir yazıyla gösterilmesini sınar. Metin gerçek bir dipnot veya kaynak belirtimi değildir.
+Türkçe karakter örneği: Çç, Ğğ, Iı, İi, Öö, Şş, Üü.
+Noktalama örneği: “Deneme metni”, kısa not; açıklama: örnek ifade.
+Sayı ve tarih görünümü: 001, 125, 2.048; 3 Kasım 2026.
+
+Bu örnekler, yazı tipi ve karakter görünümünü incelemek için bir araya getirilmiştir. Metnin okunabilirliği, seçilen yazı tipine ve gösterim ortamına göre farklılaşabilir.
+
+
+13. Kapanış ve Deneme Alanı
+Bu son bölüm, deneme belgesinin farklı yapılarını bir araya getirir. Kapak, otomatik içindekiler, ana başlıklar, alt başlıklar, listeler, tablolar ve vurgulu notlar aynı dosyada kullanılmıştır. Metinlerin tamamı örnek amaçlıdır; gerçek bir raporun bulguları veya sonuçları olarak yorumlanmamalıdır.
+
+Kurgusal atölyenin defteri kapanırken masada birkaç boş kart kaldığı varsayılır. Bu kartlar, daha sonra eklenecek yeni içeriklerin yerini tutar. Anlatı burada sona erer; ancak sayfa düzeni denemesi başka metinlerle sürdürülebilir. Boş alanların ve kısa açıklamaların bir arada bulunması, farklı içerik uzunluklarını karşılaştırmaya olanak verir.
+
+Belge içeriği hakkında not: Sayfa başındaki metin, bütün dosyanın deneme amacı taşıdığını hatırlatır. Altbilgideki numaralar ise sayfaların sırasını ve toplamını gösterir. Bu parçalar ana içerikten ayrı görünürken belge boyunca ortak bir düzen sağlar.
+
+Son yer tutucu paragraf: Açık renkli bir yaprağın üzerinde kısa bir başlık, altında ise tamamlanmamış birkaç cümle bulunur. Bu cümleler herhangi bir bilgi aktarmak zorunda değildir. Onların görevi, sayfanın metinle dolduğunda nasıl göründüğünü göstermektir.
+DENEME METNİNİN SONU
+Tüm içerik kurgusaldır.
+
