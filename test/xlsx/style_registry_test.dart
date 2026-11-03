@@ -866,6 +866,91 @@ void main() {
         a,
       );
       expect(r.idFor(const XlsxStyle(font: italic)), b);
+      // The cache was cleaned: both styles were registered again.
+      expect(r.xfCount, xfs + 2);
+      expect(r.fontCount, fonts + 2);
+      expect(r.customCodesFrom(0), hasLength(1));
+    });
+
+    test('a failing idsFor leaves the seeded registry as it was', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(codes: const <int, String>{164: '0.0'}),
+      );
+      expect(
+        () => r.idsFor(<XlsxStyle?>[
+          const XlsxStyle(font: bold, numFmt: XlsxNumFmt.custom('0.00')),
+          const XlsxStyle(numFmt: XlsxNumFmt.builtin(200)),
+        ]),
+        throwsArgumentError,
+      );
+      expect(r.xfCount, 1);
+      expect(r.fontCount, 1);
+      expect(r.customCodesFrom(0), <({int id, String code})>[
+        (id: 164, code: '0.0'),
+      ]);
+      // And the style registers afresh, with the next id.
+      expect(
+        r.idFor(const XlsxStyle(font: bold, numFmt: XlsxNumFmt.custom('0.00'))),
+        1,
+      );
+      expect(r.customCodesFrom(1).single.id, 165);
+    });
+
+    test('a none fill never uses a seeded fill 0 that is not none', () {
+      final String solid = StyleRegistry.fillKey(
+        const XlsxFill.solid(XlsxColor.rgb(0xFF0000)),
+      );
+      const XlsxStyle none = XlsxStyle(
+        fill: XlsxFill.pattern(XlsxPatternType.none),
+      );
+      final StyleRegistry appended = StyleRegistry.seeded(
+        StyleSeed(
+          fonts: <({String? key})>[key(plainKey)],
+          fills: <({String? key})>[key(solid)],
+          borders: <({String? key})>[key(noBorder)],
+          xfs: [xf()],
+        ),
+      );
+      expect(appended.idFor(none), 1);
+      expect(appended.fillCount, 2);
+      expect(appended.fillsFrom(1).single, noneFill);
+      expect(appended.xfsFrom(1).single, contains('fillId="1"'));
+
+      final StyleRegistry reused = StyleRegistry.seeded(
+        StyleSeed(
+          fonts: <({String? key})>[key(plainKey)],
+          fills: <({String? key})>[key(solid), key(noneFill)],
+          borders: <({String? key})>[key(noBorder)],
+          xfs: [xf()],
+        ),
+      );
+      reused.idFor(none);
+      expect(reused.fillCount, 2);
+      expect(reused.xfsFrom(1).single, contains('fillId="1"'));
+    });
+
+    test('a seed over the font or number format limit throws', () {
+      expect(
+        () => StyleRegistry.seeded(
+          seed(
+            fonts: <({String? key})>[
+              for (int i = 0; i <= XlsxLimits.maxFonts; i++) key(null),
+            ],
+          ),
+        ),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      expect(
+        () => StyleRegistry.seeded(
+          seed(
+            codes: <int, String>{
+              for (int i = 0; i <= XlsxLimits.maxNumberFormats; i++)
+                164 + i: 'c$i',
+            },
+          ),
+        ),
+        throwsA(isA<XlsxLimitError>()),
+      );
     });
 
     test('an empty list is refused', () {

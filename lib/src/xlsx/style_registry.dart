@@ -246,6 +246,8 @@ final class StyleRegistry {
   int get xfCount => _xfs.length;
 
   /// The rendered `<font>` of every font from index [start] on.
+  /// A seeded inexact entry renders as an empty string: it was never
+  /// rendered, and a caller appends only what comes after the seed.
   List<String> fontsFrom(int start) => _fonts.sublist(start);
 
   /// The rendered `<fill>` of every fill from index [start] on.
