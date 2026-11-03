@@ -751,6 +751,24 @@ void _typedTests() {
       expect(part.table.formatOf('1').code, isNull);
     });
 
+    test('withNumberFormat at the cell format limit reuses or throws', () {
+      final StylesPart part = _read(
+        _sheet(
+          '<cellXfs><xf numFmtId="14"/>'
+          '${'<xf numFmtId="0"/>' * (XlsxLimits.maxCellFormats - 1)}'
+          '</cellXfs>',
+        ),
+      );
+      expect(part.withNumberFormat(1, 14), 0);
+      final StylesMark mark = part.mark();
+      expect(
+        () => part.withNumberFormat(1, 22),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      expect(part.mark(), mark);
+      expect(part.cellFormatCount, XlsxLimits.maxCellFormats);
+    });
+
     test('a file past the font limit reuses fonts and throws to add one', () {
       final StringBuffer fonts = StringBuffer(
         '<fonts count="${XlsxLimits.maxFonts + 1}">'

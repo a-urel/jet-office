@@ -16,12 +16,12 @@
 /// style with a red fill over the style they have, so the dates keep their
 /// format, sets column B's width to 30 and the new row's height to 24,
 /// merges the two cells right of the new values, freezes the first row and
-/// sets a tab colour. It then adds a sheet `Model edit` (`Model edit 2` and so on when
-/// the name is taken) holding one string, saves, and writes the bytes to
-/// `<outDir>/<name>.xlsx`. The saved file is read back with `XlsxReader`
-/// (values, number formats, merges) and with `XlsxWorkbook` (styles, width,
-/// height, merges, pane, tab colour), and the edits must be there. Last it
-/// writes the workbooks `tool/write_model_sample.dart` makes,
+/// sets a tab colour. It then adds a sheet `Model edit` (`Model edit 2` and
+/// so on when the name is taken) holding one string, saves, and writes the
+/// bytes to `<outDir>/<name>.xlsx`. The saved file is read back with
+/// `XlsxReader` (values, number formats, merges) and with `XlsxWorkbook`
+/// (styles, width, height, merges, pane, tab colour), and the edits must be
+/// there. Last it writes the workbooks `tool/write_model_sample.dart` makes,
 /// `w1_generated.xlsx` and `w2_generated.xlsx`, to the same directory.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
@@ -40,6 +40,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/number_format.dart' show isDateFormat;
 
 import 'write_model_sample.dart' as sample;
 
@@ -136,7 +137,7 @@ List<String> _edit(File file, Directory output, String name) {
     row = _freeRow(sheet);
     formatted = <int>{
       for (final int column in <int>[0, 1])
-        if (_hasNumberFormat(sheet.styleAt(row, column))) column,
+        if (showsNoDate(sheet.styleAt(row, column))) column,
     };
     sheet
       ..setCell(row, 0, DateTime.utc(2026, 11, 2, 13, 45))
@@ -154,11 +155,14 @@ List<String> _edit(File file, Directory output, String name) {
   return _check(saved, row, added, formatted);
 }
 
-/// Whether [style] sets a number format other than General, which a date
-/// set in the cell keeps.
-bool _hasNumberFormat(XlsxStyle? style) {
+/// Whether [style] sets a number format that shows no date: not General,
+/// which a date replaces, and not a date format. A date set in such a cell
+/// keeps the format and reads back as a number.
+bool showsNoDate(XlsxStyle? style) {
   final XlsxNumFmt? format = style?.numFmt;
-  return format != null && format != XlsxNumFmt.general;
+  return format != null &&
+      format != XlsxNumFmt.general &&
+      !isDateFormat(format);
 }
 
 /// Sets the style of the new cells of [row] and the layout edits on [sheet].

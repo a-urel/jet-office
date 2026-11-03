@@ -153,13 +153,28 @@ void main() {
   });
 
   test('outline levels without a sheetFormatPr round-trip', () {
+    const String rows =
+        '<sheetData><row r="1" outlineLevel="2"><c r="A1"><v>1</v></c></row>'
+        '</sheetData>';
+    const String cols =
+        '<cols><col min="1" max="1" width="9" outlineLevel="2"/></cols>'
+        '<sheetData/>';
+    String sheet(String body) => '<worksheet xmlns="$mainNs">$body</worksheet>';
     final Map<String, String> sheets = <String, String>{
-      'rows':
-          '<worksheet xmlns="$mainNs"><sheetData><row r="1" outlineLevel="1">'
-          '<c r="A1"><v>1</v></c></row></sheetData></worksheet>',
-      'columns':
-          '<worksheet xmlns="$mainNs"><cols><col min="1" max="1" width="9" '
-          'outlineLevel="1"/></cols><sheetData/></worksheet>',
+      'rows': sheet(rows),
+      'columns': sheet(cols),
+      'rows, attribute missing': sheet(
+        '<sheetFormatPr defaultRowHeight="15"/>$rows',
+      ),
+      'columns, attribute missing': sheet(
+        '<sheetFormatPr defaultRowHeight="15"/>$cols',
+      ),
+      'rows, attribute lower': sheet(
+        '<sheetFormatPr defaultRowHeight="15" outlineLevelRow="1"/>$rows',
+      ),
+      'columns, attribute lower': sheet(
+        '<sheetFormatPr defaultRowHeight="15" outlineLevelCol="1"/>$cols',
+      ),
     };
     sheets.forEach((String name, String xml) {
       final Uint8List input = buildWorkbook(<String, String>{'S': xml});

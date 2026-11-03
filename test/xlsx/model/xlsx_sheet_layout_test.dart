@@ -494,13 +494,51 @@ void main() {
           reason: format,
         );
       }
-      // An end-tag element without children is typed and bookkept.
+      // An end-tag element without children is typed: unchanged it stays
+      // as it was, and an edit that goes deeper is bookkept.
       final XlsxWorkbook book = _open(
         '<row r="1" outlineLevel="2"/>',
         sheetFormat: '<sheetFormatPr defaultRowHeight="15"></sheetFormatPr>',
       );
       book.sheets.single.rowFormat(0);
-      expect(_sheetXml(book), contains('outlineLevelRow="2"'));
+      expect(_sheetXml(book), isNot(contains('outlineLevelRow')));
+      book.sheets.single.setRowFormat(1, const XlsxRowFormat(outlineLevel: 3));
+      expect(_sheetXml(book), contains('outlineLevelRow="3"'));
+    });
+
+    test('a kept value below the rows stays until an edit goes deeper', () {
+      final XlsxWorkbook book = _open(
+        '<row r="1" outlineLevel="3"/>',
+        sheetFormat:
+            '<sheetFormatPr defaultRowHeight="15" outlineLevelRow="1"/>',
+      );
+      final XlsxSheet sheet = book.sheets.single..rowFormat(0);
+      expect(_sheetXml(book), contains('outlineLevelRow="1"'));
+      // No deeper than the file's rows: the value stays.
+      sheet.setRowFormat(1, const XlsxRowFormat(outlineLevel: 3));
+      expect(_sheetXml(book), contains('outlineLevelRow="1"'));
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet deeper = log.transaction(() {
+        sheet.setRowFormat(2, const XlsxRowFormat(outlineLevel: 4));
+      });
+      expect(_sheetXml(book), contains('outlineLevelRow="4"'));
+      log.revertSet(deeper);
+      expect(_sheetXml(book), contains('outlineLevelRow="1"'));
+    });
+
+    test('a kept column value below the columns stays likewise', () {
+      final XlsxWorkbook book = _open(
+        '',
+        sheetFormat:
+            '<sheetFormatPr defaultRowHeight="15" outlineLevelCol="1"/>',
+        cols: '<cols><col min="1" max="1" width="9" outlineLevel="3"/></cols>',
+      );
+      final XlsxSheet sheet = book.sheets.single..column(0);
+      expect(_sheetXml(book), contains('outlineLevelCol="1"'));
+      sheet.setColumn(1, const XlsxColumn(outlineLevel: 3));
+      expect(_sheetXml(book), contains('outlineLevelCol="1"'));
+      sheet.setColumn(1, const XlsxColumn(outlineLevel: 4));
+      expect(_sheetXml(book), contains('outlineLevelCol="4"'));
     });
 
     test('an unchanged sheetFormatPr is saved exactly', () {
@@ -1565,6 +1603,46 @@ void main() {
           expect(a.styleAt(0, i), b.styleAt(0, i), reason: '$name $i');
         }
       }
+    });
+  });
+
+  group('at the cell format limit', () {
+    // Exactly the writer's limit: plain, bold, a bold date (22), then plain.
+    final String filler =
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>' *
+        (XlsxLimits.maxCellFormats - 3);
+    final String styles = _styles.replaceFirst(
+      '</cellXfs>',
+      '<xf numFmtId="22" fontId="1" fillId="0" borderId="0" applyFont="1" '
+          'applyNumberFormat="1"/>$filler</cellXfs>',
+    );
+    final DateTime date = DateTime.utc(2026, 11, 4, 12);
+
+    test('a plain date on a bold row throws to append', () {
+      // No bold short date among the cell formats.
+      final XlsxWorkbook book = _open(
+        '<row r="1" s="1" customFormat="1"/>',
+        styles: styles,
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      final XlsxStyle? before = sheet.styleAt(0, 0);
+      expect(
+        () => sheet.setCell(0, 0, const XlsxDate(2026, 11, 4)),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      expect(sheet.styleAt(0, 0), before);
+      expect(changeLogOf(book).hasChanges, isFalse);
+      expect(_sheetXml(book), isNot(contains('<c ')));
+    });
+
+    test('a plain date that reuses a cell format still works', () {
+      final XlsxWorkbook book = _open(
+        '<row r="1" s="1" customFormat="1"/>',
+        styles: styles,
+      );
+      final XlsxSheet sheet = book.sheets.single..setCell(0, 0, date);
+      expect(_sheetXml(book), contains('<c r="A1" s="2">'));
+      expect(sheet.styleAt(0, 0)?.font?.bold, isTrue);
     });
   });
 

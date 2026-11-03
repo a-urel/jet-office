@@ -174,6 +174,17 @@ void main() {
     expect(after?.outlineLevel, before?.outlineLevel ?? 0);
   });
 
+  test('showsNoDate is true only for a number format without a date', () {
+    bool shows(XlsxNumFmt format) => showsNoDate(XlsxStyle(numFmt: format));
+    expect(showsNoDate(null), isFalse);
+    expect(showsNoDate(const XlsxStyle()), isFalse);
+    expect(shows(XlsxNumFmt.general), isFalse);
+    expect(shows(XlsxNumFmt.localeShortDate), isFalse);
+    expect(shows(const XlsxNumFmt.custom('yyyy-mm-dd')), isFalse);
+    expect(shows(const XlsxNumFmt.custom('#,##0.00')), isTrue);
+    expect(shows(XlsxNumFmt.money(symbol: '€')), isTrue);
+  });
+
   test('every fixture takes every edit: exit 0', () {
     write_fixtures.main(<String>[input.path]);
     final StringBuffer out = StringBuffer();

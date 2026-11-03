@@ -134,8 +134,8 @@ final class _Dimension {
 }
 
 /// The typed `<sheetFormatPr>`: its attributes as written, with
-/// `outlineLevelRow` and `outlineLevelCol` raised on save to the deepest row
-/// and column outline level.
+/// `outlineLevelRow` and `outlineLevelCol` raised on save when an edit went
+/// deeper than the element and the file's rows or columns did.
 ///
 /// Only an element without element children is typed (an end tag with
 /// nothing between is the same as an empty element). One with children stays
@@ -171,7 +171,7 @@ final class _SheetFormat {
 
   /// Writes the element with `outlineLevelRow` of [rowLevel] and
   /// `outlineLevelCol` of [colLevel] when those are deeper than the kept
-  /// values, else as it was.
+  /// values, else as it was. A level no edit raised is passed as 0.
   void writeTo(
     XmlWriter w,
     Map<String, String> above, {
@@ -425,10 +425,8 @@ final class WorksheetPart implements PartContent {
       }
     }
     if (sheet._sheetData == null) sheet._insertSheetData();
-    if (!sheet._formatPresent) {
-      sheet._fileRowLevel = sheet._deepestRowLevel();
-      sheet._fileColumnLevel = sheet._deepestColumnLevel();
-    }
+    sheet._fileRowLevel = sheet._deepestRowLevel();
+    sheet._fileColumnLevel = sheet._deepestColumnLevel();
     return sheet;
   }
 
@@ -468,9 +466,10 @@ final class WorksheetPart implements PartContent {
   /// The attributes of a `<sheetFormatPr>` kept opaque, for reading only.
   _SheetFormat? _formatOpaque;
 
-  /// The deepest row outline level of a file without `<sheetFormatPr>`: the
-  /// element is made on save only for a level deeper than this, which only
-  /// an edit gives.
+  /// The deepest row outline level the file has: `<sheetFormatPr>` is made
+  /// or raised on save only for a level deeper than this, which only an
+  /// edit gives, so an unchanged file keeps what it says, even when that is
+  /// less than its rows need.
   int _fileRowLevel = 0;
 
   /// As [_fileRowLevel], for the columns.
@@ -655,7 +654,9 @@ final class WorksheetPart implements PartContent {
     root.writeStart(w);
     final int rowLevel = _deepestRowLevel();
     final int colLevel = _deepestColumnLevel();
-    final bool deeper = rowLevel > _fileRowLevel || colLevel > _fileColumnLevel;
+    final int raisedRow = rowLevel > _fileRowLevel ? rowLevel : 0;
+    final int raisedCol = colLevel > _fileColumnLevel ? colLevel : 0;
+    final bool deeper = raisedRow > 0 || raisedCol > 0;
     final int madeAt = !_formatPresent && deeper
         ? _positionFor('sheetFormatPr')
         : -1;
@@ -667,7 +668,12 @@ final class WorksheetPart implements PartContent {
         case _Dimension():
           c.writeTo(w, root.namespaces, _dimensionRef());
         case _SheetFormat():
-          c.writeTo(w, root.namespaces, rowLevel: rowLevel, colLevel: colLevel);
+          c.writeTo(
+            w,
+            root.namespaces,
+            rowLevel: raisedRow,
+            colLevel: raisedCol,
+          );
         case ColsGroup():
           c.writeTo(w, root.namespaces);
         case MergeGroup():

@@ -38,6 +38,7 @@ import '../alignment.dart';
 import '../border.dart';
 import '../fill.dart';
 import '../font.dart';
+import '../limits.dart';
 import '../number_format.dart';
 import '../read/package_reader.dart'
     show strictSpreadsheetNs, strictUnsupported;
@@ -950,8 +951,10 @@ final class StylesPart implements PartContent {
   /// already is the result is reused; otherwise one is appended, so no
   /// existing index moves; an untyped part returns `style ?? 0` unchanged
   /// (see [isTyped]). A part without any `<xf>` (or without `<cellXfs>`)
-  /// gets a plain one first to copy from. Throws a
-  /// [RangeError] for a negative [numFmtId].
+  /// gets a plain one first to copy from. Throws a [RangeError] for a
+  /// negative [numFmtId] and, as [idFor] does, an `XlsxLimitError` when an
+  /// `<xf>` must be appended at or past [XlsxLimits.maxCellFormats]; reuse
+  /// works past it, and a throw changes nothing.
   ///
   /// The `<xf>` is a copy of the element's text, so it keeps what the value
   /// types cannot hold. An appended one takes the next cell format index,
@@ -975,6 +978,9 @@ final class StylesPart implements PartContent {
           _withNumFmt(_xfs[i].render(above), numFmtId) == made) {
         return i;
       }
+    }
+    if (_xfs.length >= XlsxLimits.maxCellFormats) {
+      throw XlsxLimitError('cell formats', XlsxLimits.maxCellFormats);
     }
     final StyleRegistry? registry = _registry;
     if (registry != null && registry.xfCount == _xfs.length) {
