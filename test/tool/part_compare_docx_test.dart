@@ -303,4 +303,143 @@ void main() {
       ),
     );
   });
+  group('structure', () {
+    List<String> diff(String e, String a) => compareXmlParts(
+      'word/document.xml',
+      _bytes(_document(e)),
+      _bytes(_document(a)),
+    );
+
+    test('a dropped element is reported', () {
+      expect(diff('<w:p/><w:p/>', '<w:p/>'), hasLength(1));
+    });
+
+    test('an added element is reported', () {
+      expect(diff('<w:p/>', '<w:p/><w:tbl/>'), hasLength(1));
+    });
+
+    test('a changed namespace URI with the same local name is reported', () {
+      expect(diff('<w:p/>', '<x:p xmlns:x="urn:other"/>'), hasLength(1));
+    });
+
+    test('a change of element order is reported', () {
+      expect(diff('<w:p/><w:tbl/>', '<w:tbl/><w:p/>'), hasLength(2));
+    });
+  });
+
+  group('markup compatibility', () {
+    const String mc =
+        'http://schemas.openxmlformats.org/markup-compatibility/2006';
+    const String w14 = 'http://schemas.microsoft.com/office/word/2010/wordml';
+    String doc(String declarations, String attributes, {String body = ''}) =>
+        '<w:document xmlns:w="$_w" xmlns:mc="$mc" $declarations '
+        '$attributes><w:body>$body</w:body></w:document>';
+    List<String> diff(String e, String a) =>
+        compareXmlParts('word/document.xml', _bytes(e), _bytes(a));
+    final String expected = doc(
+      'xmlns:w14="$w14" xmlns:wp14="urn:wp14"',
+      'mc:Ignorable="w14 wp14"',
+    );
+
+    test('a dropped declaration of an ignorable prefix is reported', () {
+      final List<String> d = diff(
+        expected,
+        doc('xmlns:wp14="urn:wp14"', 'mc:Ignorable="w14 wp14"'),
+      );
+      expect(d, hasLength(1));
+      expect(
+        d.single,
+        allOf(contains('Ignorable'), contains('unresolved:w14')),
+      );
+    });
+
+    test('a rebound ignorable prefix is reported', () {
+      expect(
+        diff(
+          expected,
+          doc(
+            'xmlns:w14="urn:other" xmlns:wp14="urn:wp14"',
+            'mc:Ignorable="w14 wp14"',
+          ),
+        ),
+        hasLength(1),
+      );
+    });
+
+    test('a renamed or reordered ignorable prefix is equal', () {
+      expect(
+        diff(
+          expected,
+          doc('xmlns:x="$w14" xmlns:wp14="urn:wp14"', 'mc:Ignorable="wp14  x"'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('qualified names and Requires resolve their prefixes', () {
+      String withContent(String p) => doc(
+        'xmlns:$p="$w14"',
+        'mc:Ignorable="$p" mc:ProcessContent="$p:sdt" '
+            'mc:PreserveAttributes="$p:*"',
+        body:
+            '<mc:AlternateContent><mc:Choice Requires="$p"/>'
+            '</mc:AlternateContent>',
+      );
+      expect(diff(withContent('w14'), withContent('y')), isEmpty);
+      final String unbound = withContent(
+        'w14',
+      ).replaceFirst('Requires="w14"', 'Requires="zz"');
+      final List<String> d = diff(withContent('w14'), unbound);
+      expect(d, hasLength(1));
+      expect(d.single, allOf(contains('Requires'), contains('unresolved:zz')));
+    });
+  });
+
+  test('w:delInstrText keeps its whitespace', () {
+    expect(
+      compareXmlParts(
+        'word/document.xml',
+        _bytes(
+          _document(
+            '<w:p><w:r><w:delInstrText> </w:delInstrText></w:r>'
+            '</w:p>',
+          ),
+        ),
+        _bytes(
+          _document(
+            '<w:p><w:r><w:delInstrText></w:delInstrText></w:r>'
+            '</w:p>',
+          ),
+        ),
+      ),
+      hasLength(1),
+    );
+  });
+
+  test('the main part is found through a ./ or percent-encoded target', () {
+    for (final String target in <String>[
+      './main%20part.xml',
+      'main%20part.xml',
+      '/./main part.xml',
+    ]) {
+      Uint8List pkg(String t) => buildZip(<String, List<int>>{
+        '[Content_Types].xml': utf8.encode(
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+          '<Default Extension="xml" ContentType="application/xml"/>'
+          '<Override PartName="/main part.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+          '</Types>',
+        ),
+        '_rels/.rels': utf8.encode(
+          _rootRels.replaceFirst('word/document.xml', target),
+        ),
+        'main part.xml': utf8.encode(_document('')),
+        'custom.xml': utf8.encode('<x xmlns="$_sml">$t</x>'),
+      });
+      expect(
+        comparePackages(pkg('<t xml:space="preserve">a</t>'), pkg('<t>a</t>')),
+        hasLength(1),
+        reason: target,
+      );
+    }
+  });
 }
