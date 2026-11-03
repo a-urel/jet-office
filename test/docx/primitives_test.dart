@@ -276,6 +276,65 @@ void main() {
       expect((q.inlines.single as DocxRun).style, isNull);
     });
 
+    DocxDocument twoStyles() => DocxDocument.open(
+      buildDocx(
+        document:
+            '<w:document xmlns:w="${Ns.w}"><w:body>'
+            '<w:p><w:pPr><w:pStyle w:val="A"/><w:pStyle w:val="B"/></w:pPr>'
+            '<w:r><w:t>a</w:t></w:r></w:p></w:body></w:document>',
+      ),
+    );
+
+    test('setting the view back changes nothing and keeps the child', () {
+      final DocxDocument doc = styled();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      p.style = 'Title';
+      p.style = p.style;
+      expect(changeLogOf(doc).hasChanges, isFalse);
+      expect(documentXml(doc), contains('<w:pStyle w:val="Title" w14:x="1"/>'));
+    });
+
+    test('setting null on an untyped child records nothing', () {
+      final DocxDocument doc = twoStyles();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      expect(p.style, isNull);
+      p.style = null;
+      p.style = p.style;
+      expect(changeLogOf(doc).hasChanges, isFalse);
+      expect(documentXml(doc), contains('<w:pStyle w:val="A"/>'));
+      expect(documentXml(doc), contains('<w:pStyle w:val="B"/>'));
+    });
+
+    test('clear removes untyped children in one change that reverts', () {
+      final DocxDocument doc = twoStyles();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      final ChangeSet set = changeLogOf(
+        doc,
+      ).transaction(() => paragraphPropertySetOf(p).clear('pStyle'));
+      expect(set.changes, hasLength(1));
+      expect(documentXml(doc), isNot(contains('pStyle')));
+      paragraphPropertySetOf(p).clear('pStyle');
+      expect(changeLogOf(doc).transaction(() {}).isEmpty, isTrue);
+      changeLogOf(doc).revertSet(set);
+      expect(documentXml(doc), contains('<w:pStyle w:val="A"/>'));
+      expect(documentXml(doc), contains('<w:pStyle w:val="B"/>'));
+      changeLogOf(doc).reapplySet(set);
+      expect(documentXml(doc), isNot(contains('pStyle')));
+    });
+
+    test('setting null twice on a typed child is one change', () {
+      final DocxDocument doc = styled();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      final ChangeSet set = changeLogOf(doc).transaction(() {
+        p.style = null;
+        p.style = null;
+      });
+      expect(set.changes, hasLength(1));
+      expect(p.style, isNull);
+      changeLogOf(doc).revertSet(set);
+      expect(p.style, 'Title');
+    });
+
     test('a run detached after the edit reverts and reapplies', () {
       final DocxDocument doc = styled();
       final DocxParagraph p = doc.body.blocks.single as DocxParagraph;

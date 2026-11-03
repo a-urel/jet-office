@@ -71,20 +71,40 @@ abstract base class PropertySet implements NestedProperties {
   /// Sets the typed child [localName] to [value]; `null` removes it.
   ///
   /// Nothing changes and nothing is reported when [value] equals the
-  /// current value ([valueOf]), unless it is `null` and [source] holds a
-  /// child of that name the model does not type, which a `null` removes.
-  /// Otherwise the value is set and the sink is told, with the state from
-  /// before.
+  /// current value ([valueOf]), `null` included: setting a property to what
+  /// it reads never touches the child, so `x.style = x.style` keeps a child
+  /// the model does not type (two `w:pStyle`, a `w:sz` of `1in`) and a
+  /// typed one with its extra attributes. To remove a child whatever it
+  /// reads, use [clear]. Otherwise the value is set and the sink is told,
+  /// with the state from before.
   ///
   /// A name that is not a typed child of [schema], or a value its codec
   /// does not accept, throws [ArgumentError] before anything changes. The
   /// subclass checks the value itself (range, form) before.
   void setValue(String localName, Object? value) {
     _check(localName, value);
-    if (value == valueOf(localName) &&
-        (value != null || isSet(localName) || !source.holds(localName))) {
+    if (value == valueOf(localName)) {
       return;
     }
+    _record(localName, value);
+  }
+
+  /// Removes every child [localName] from the written properties, whatever
+  /// the model reads of it, so a child it does not type goes too.
+  ///
+  /// Nothing changes and nothing is reported when the child is already
+  /// removed (set to `null`) or [source] has none and nothing was set.
+  /// A name that is not a typed child of [schema] throws [ArgumentError].
+  void clear(String localName) {
+    _check(localName, null);
+    final bool removed = isSet(localName) && _overrides[localName] == null;
+    if (removed || (!isSet(localName) && !source.holds(localName))) {
+      return;
+    }
+    _record(localName, null);
+  }
+
+  void _record(String localName, Object? value) {
     final PropertyState previous = stateOf(localName);
     _overrides[localName] = value;
     _sink().propertySet(this, localName, previous);

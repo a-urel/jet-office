@@ -493,10 +493,12 @@ void main() {
       expect(s.valueOf('rStyle'), 'S');
     });
 
-    test('setting null where an untyped child is removes it', () {
+    test('setting null keeps an untyped child; clear removes it', () {
       final _Set s = _Set(_read('<w:rPr><w:b/><w:b/></w:rPr>'), _rPr);
       expect(s.valueOf('b'), isNull);
       s.setValue('b', null);
+      expect(s.isSet('b'), isFalse);
+      s.clear('b');
       expect(s.isSet('b'), isTrue);
       final StringBuffer b = StringBuffer();
       s.writeTo(XmlWriter(b), 'w:rPr', declaredAbove: _above);
