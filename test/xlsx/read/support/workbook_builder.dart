@@ -32,13 +32,15 @@ String sheetEntry(int index) => 'xl/worksheets/sheet${index + 1}.xml';
 /// [sharedStrings] is the raw XML of `xl/sharedStrings.xml`; it is related
 /// from the workbook when given or when [sharedStringsRelation] is true (a
 /// relationship to a missing part). [styles] is the raw XML of
-/// `xl/styles.xml`, related from the workbook when given. [date1904] writes
+/// `xl/styles.xml`, related from the workbook when given; [theme] is the
+/// raw XML of `xl/theme/theme1.xml`, likewise. [date1904] writes
 /// `<workbookPr date1904="1"/>`. [store] stores entries uncompressed.
 Uint8List buildWorkbook(
   Map<String, String?> sheets, {
   String? sharedStrings,
   bool sharedStringsRelation = false,
   String? styles,
+  String? theme,
   bool date1904 = false,
   bool store = false,
 }) => buildWorkbookList(
@@ -49,6 +51,7 @@ Uint8List buildWorkbook(
   sharedStrings: sharedStrings,
   sharedStringsRelation: sharedStringsRelation,
   styles: styles,
+  theme: theme,
   date1904: date1904,
   store: store,
 );
@@ -60,6 +63,7 @@ Uint8List buildWorkbookList(
   String? sharedStrings,
   bool sharedStringsRelation = false,
   String? styles,
+  String? theme,
   bool date1904 = false,
   bool store = false,
 }) {
@@ -89,6 +93,11 @@ Uint8List buildWorkbookList(
       '<Relationship Id="rIdT" Type="$_rel/styles" Target="styles.xml"/>',
     );
   }
+  if (theme != null) {
+    rels.write(
+      '<Relationship Id="rIdH" Type="$_rel/theme" Target="theme/theme1.xml"/>',
+    );
+  }
   return buildZip(<String, List<int>>{
     '[Content_Types].xml': utf8.encode(
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/'
@@ -112,6 +121,7 @@ Uint8List buildWorkbookList(
     if (sharedStrings != null)
       'xl/sharedStrings.xml': utf8.encode(sharedStrings),
     if (styles != null) 'xl/styles.xml': utf8.encode(styles),
+    if (theme != null) 'xl/theme/theme1.xml': utf8.encode(theme),
   }, store: store);
 }
 

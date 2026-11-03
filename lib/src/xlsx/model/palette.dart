@@ -1,4 +1,5 @@
-/// The default indexed colour palette of SpreadsheetML.
+/// The default indexed colour palette of SpreadsheetML and the order of the
+/// theme slots in `<color theme="N"/>`.
 ///
 /// Not ported from Quds; written for jet_office.
 library;
@@ -26,4 +27,14 @@ const List<int> defaultIndexedColors = <int>[
   0xFFFF9900, 0xFFFF6600, 0xFF666699, 0xFF969696, // 52-55
   0xFF003366, 0xFF339966, 0xFF003300, 0xFF333300, // 56-59
   0xFF993300, 0xFF993366, 0xFF333399, 0xFF333333, // 60-63
+];
+
+/// The slot names of `a:clrScheme` in the order SpreadsheetML numbers them
+/// in `<color theme="N"/>`: `0 lt1, 1 dk1, 2 lt2, 3 dk2, 4-9 accent1-6,
+/// 10 hlink, 11 folHlink`. The first four are swapped against the scheme's
+/// own order (`dk1, lt1, dk2, lt2`).
+const List<String> themeSlotNames = <String>[
+  'lt1', 'dk1', 'lt2', 'dk2', //
+  'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6',
+  'hlink', 'folHlink',
 ];

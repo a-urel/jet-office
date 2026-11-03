@@ -32,6 +32,7 @@ library;
 import 'dart:collection';
 import 'dart:typed_data';
 
+import '../../common/theme_colors.dart';
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
@@ -41,6 +42,7 @@ import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../../zip/archive_adapter.dart';
 import '../cell_encoder.dart';
+import '../color.dart';
 import '../number_format.dart';
 import '../properties.dart';
 import '../raw_cell.dart';
@@ -58,6 +60,7 @@ import '../workbook_parts.dart';
 import '../worksheet_parts.dart';
 import '../xlsx_writer.dart';
 import 'cell_store.dart';
+import 'palette.dart';
 import 'styles_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
@@ -145,6 +148,30 @@ final class XlsxWorkbook {
   /// Whether the workbook counts dates from 1904, as files from old Mac
   /// versions of Excel do; dates are set and read in its system.
   bool get date1904 => _book.workbook.date1904;
+
+  /// The 64 colours `<color indexed="N"/>` shows: the file's `<indexedColors>`
+  /// or the default palette (ECMA-376 Part 1, section 18.8.27), unmodifiable.
+  ///
+  /// A `[ColorN]` of a number format result is `XlsxColor.indexed(N + 7)`
+  /// and its value is `indexedColors[N + 7]`. Loads the shared strings and
+  /// styles, so it throws an [XlsxReadException] when they cannot be read.
+  List<int> get indexedColors => _book.indexedColors;
+
+  /// The colour [color] shows, as `0xAARRGGBB`, or `null` when it has none.
+  ///
+  /// An `rgb` colour is itself. An `indexed` colour 0 to 63 is
+  /// [indexedColors]'s entry; 64 and 65 (the system colours) and anything
+  /// else give `null`. A `theme` colour is the slot of the theme part the
+  /// workbook relates to, in SpreadsheetML's order (0 lt1, 1 dk1, 2 lt2,
+  /// 3 dk2, 4 to 9 accent1 to 6, 10 hlink, 11 folHlink), with its tint
+  /// applied; a tint that is not finite or not within -1 to 1 is ignored, so
+  /// the slot's own colour results. `auto`, a missing or unreadable theme
+  /// and a missing slot give `null`.
+  ///
+  /// The theme part is read once, from its bytes, and stays unloaded: saving
+  /// copies it unchanged. Only an `indexed` colour loads the styles (see
+  /// [indexedColors]); no colour makes this method throw on a theme.
+  int? resolveColor(XlsxColor color) => _book.resolveColor(color);
 
   /// What was repaired or could not be read exactly while opening, editing
   /// and saving, aggregated per sheet and [XlsxWarningCode]. An unmodifiable
@@ -344,6 +371,51 @@ final class _Book implements SheetHost {
   /// The shared strings part's name; `null` while the package has none.
   String? _stringsName;
   StylesPart? _styles;
+
+  /// The theme's colours, read once; `null` for no theme or an unreadable one.
+  ThemeColors? _theme;
+  bool _themeRead = false;
+
+  List<int> get indexedColors {
+    loadTables();
+    return _styles?.indexedColors ?? defaultIndexedColors;
+  }
+
+  int? resolveColor(XlsxColor color) {
+    switch (color.kind) {
+      case XlsxColorKind.rgb:
+        return color.argb;
+      case XlsxColorKind.auto:
+        return null;
+      case XlsxColorKind.indexed:
+        final int i = color.paletteIndex!;
+        return i >= 0 && i < 64 ? indexedColors[i] : null;
+      case XlsxColorKind.theme:
+        final int i = color.themeIndex!;
+        if (i < 0 || i >= themeSlotNames.length) return null;
+        final int? base = _themeColors()?.argbOf(themeSlotNames[i]);
+        if (base == null) return null;
+        final double tint = color.tint;
+        return tint.isFinite && tint >= -1 && tint <= 1
+            ? applyTint(base, tint)
+            : base;
+    }
+  }
+
+  ThemeColors? _themeColors() {
+    if (_themeRead) return _theme;
+    _themeRead = true;
+    final String? target = _target(RelType.theme);
+    if (target == null) return null;
+    try {
+      return _theme = reader.guardXml(
+        target,
+        () => ThemeColors.read(reader.openXml(target)),
+      );
+    } on XlsxReadException {
+      return null;
+    }
+  }
 
   OpcPackage get _package => reader.package;
 
