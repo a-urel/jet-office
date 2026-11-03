@@ -175,10 +175,17 @@ DecodedCell decodeRawCell(
 /// The text of the inline string element [inline] (an `<is>`), read as the
 /// reader reads one: its `<t>` and the `<t>` of each run, decoded. `null`
 /// when it is longer than [maxLength].
+///
+/// [inline] was captured from a part the reader parsed under its
+/// `maxDepth`, so it is parsed again with no depth limit of its own: the
+/// pull reader's default would refuse what a raised limit accepted.
 String? inlineTextOf(OpaqueXml inline, {int maxLength = 0x7fffffff}) {
   final StringBuffer standalone = StringBuffer();
   inline.writeTo(XmlWriter(standalone));
-  final XmlPullReader r = XmlPullReader(standalone.toString());
+  final XmlPullReader r = XmlPullReader(
+    standalone.toString(),
+    maxDepth: 0x7fffffff,
+  );
   while (r.next()) {
     if (r.eventType == XmlEventType.startElement) {
       return readStringItem(r, maxLength);
