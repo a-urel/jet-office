@@ -27,19 +27,23 @@ import '../../support/fuzz_mutations.dart';
 import '../../support/read_xlsx.dart';
 import '../../xlsx/read/support/zip_builder.dart';
 import 'producer_variants.dart';
+import 'word_document.dart';
 
 export '../../support/fuzz_mutations.dart'
     show FuzzCase, Xorshift32, mutatedPart;
 
-/// The valid packages the fuzzer mutates, in a fixed order: every fixture of
-/// `docxFixtures()` and every `producerVariants()` entry, each rebuilt with
-/// stored entries and a fixed timestamp, so the bytes are equal on every
-/// platform.
+/// The valid packages the fuzzer mutates, in a fixed order: `word_like`,
+/// the Word-like document of `richWordDocx()` (tracked changes, a
+/// hyperlink, content controls, a table, markup compatibility content,
+/// fields and a bookmark), then every fixture of `docxFixtures()` and every
+/// `producerVariants()` entry, each rebuilt with stored entries and a fixed
+/// timestamp, so the bytes are equal on every platform.
 ///
 /// Nothing is deflated, so inflation is fuzzed only by the archive
 /// mutations, which damage the stored headers and sizes.
 List<({String name, Uint8List bytes})> docxFuzzCorpus() =>
     <({String name, Uint8List bytes})>[
+      (name: 'word_like', bytes: _rebuild(richWordDocx())),
       for (final DocxFixture f in docxFixtures())
         (name: f.name, bytes: _rebuild(f.build().bytes)),
       for (final ProducerVariant v in producerVariants())

@@ -19,6 +19,7 @@ const int _cases = 100;
 /// a release that changes its ZIP layout changes them.
 const Map<String, ({int length, int adler32})> _corpus =
     <String, ({int length, int adler32})>{
+      'word_like': (length: 8453, adler32: 2713099753),
       'd1_blank': (length: 62564, adler32: 126055035),
       'd1_paragraphs': (length: 62853, adler32: 3979269737),
       'd1_text_rules': (length: 63248, adler32: 3935131841),

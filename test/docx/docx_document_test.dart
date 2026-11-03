@@ -16,132 +16,7 @@ import 'package:test/test.dart';
 import '../../tool/src/part_compare.dart';
 import '../support/read_xlsx.dart';
 import 'support/docx_builder.dart';
-
-const String _a = 'http://schemas.openxmlformats.org/drawingml/2006/main';
-const String _pic = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
-const String _wp14 =
-    'http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing';
-const String _wps =
-    'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
-
-/// A `document.xml` as Word writes it: the root declares every namespace
-/// and `mc:Ignorable`, paragraphs carry w14 ids and rsids, and the body
-/// holds a block-level and an inline content control, a picture whose
-/// `a:` namespace is declared on `a:graphic` itself, and markup
-/// compatibility content.
-const String _wordDocument =
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
-    '<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/'
-    'wordprocessingCanvas" xmlns:mc="${Ns.mc}" '
-    'xmlns:o="urn:schemas-microsoft-com:office:office" '
-    'xmlns:r="${Ns.rel}" '
-    'xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="$_wp14" '
-    'xmlns:wp="${Ns.wp}" xmlns:w10="urn:schemas-microsoft-com:office:word" '
-    'xmlns:w="${Ns.w}" xmlns:w14="${Ns.w14}" xmlns:wps="$_wps" '
-    'mc:Ignorable="w14 wp14">'
-    '<w:body>'
-    '<w:p w14:paraId="1A2B3C4D" w14:textId="77777777" w:rsidR="00A13F2E" '
-    'w:rsidRDefault="00A13F2E" w:rsidP="00B21C11">'
-    '<w:pPr><w:pStyle w:val="Title"/><w:rPr><w:lang w:val="tr-TR"/></w:rPr>'
-    '</w:pPr>'
-    '<w:r w:rsidRPr="00C3D4E5"><w:rPr><w:lang w:val="tr-TR"/></w:rPr>'
-    '<w:t>Fiyat listesi</w:t></w:r>'
-    '<w:proofErr w:type="spellStart"/>'
-    '<w:r><w:t xml:space="preserve">Ürün </w:t></w:r>'
-    '<w:proofErr w:type="spellEnd"/>'
-    '</w:p>'
-    '<w:sdt><w:sdtPr><w:id w:val="-1523981"/><w:docPartObj>'
-    '<w:docPartGallery w:val="Table of Contents"/><w:docPartUnique/>'
-    '</w:docPartObj></w:sdtPr><w:sdtEndPr/><w:sdtContent>'
-    '<w:p w14:paraId="2B3C4D5E" w14:textId="2B3C4D5E" w:rsidR="00A13F2E">'
-    '<w:r><w:t>İçindekiler</w:t></w:r></w:p>'
-    '</w:sdtContent></w:sdt>'
-    '<w:p w14:paraId="3C4D5E6F" w14:textId="3C4D5E6F" w:rsidR="00A13F2E" '
-    'w:rsidRDefault="00D4E5F6">'
-    '<w:r><w:t xml:space="preserve">Kalem: </w:t></w:r>'
-    '<w:sdt><w:sdtPr><w:alias w:val="Ad"/><w:tag w:val="name"/>'
-    '<w:id w:val="88"/></w:sdtPr><w:sdtContent>'
-    '<w:r w:rsidR="00D4E5F6"><w:t>Defter</w:t></w:r>'
-    '</w:sdtContent></w:sdt>'
-    '<w:r><w:tab/><w:t>12</w:t><w:br/><w:t>adet</w:t></w:r>'
-    '</w:p>'
-    '<w:p w14:paraId="4D5E6F70" w14:textId="4D5E6F70" w:rsidR="00A13F2E">'
-    '<w:r><w:rPr><w:noProof/></w:rPr><w:drawing>'
-    '<wp:inline distT="0" distB="0" distL="0" distR="0" '
-    'wp14:anchorId="5E6F7081" wp14:editId="5E6F7081">'
-    '<wp:extent cx="914400" cy="457200"/>'
-    '<wp:effectExtent l="0" t="0" r="0" b="0"/>'
-    '<wp:docPr id="1" name="Picture 1"/>'
-    '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="$_a" '
-    'noChangeAspect="1"/></wp:cNvGraphicFramePr>'
-    '<a:graphic xmlns:a="$_a">'
-    '<a:graphicData uri="$_pic">'
-    '<pic:pic xmlns:pic="$_pic"><pic:nvPicPr>'
-    '<pic:cNvPr id="1" name="logo.png"/><pic:cNvPicPr/></pic:nvPicPr>'
-    '<pic:blipFill><a:blip r:embed="rId4"/><a:stretch><a:fillRect/>'
-    '</a:stretch></pic:blipFill>'
-    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/>'
-    '</a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
-    '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>'
-    '</w:p>'
-    '<w:p w14:paraId="5E6F7081" w14:textId="5E6F7081" w:rsidR="00A13F2E">'
-    '<w:r><mc:AlternateContent><mc:Choice Requires="wps">'
-    '<w:drawing><wp:anchor distT="0" distB="0" distL="114300" '
-    'distR="114300" simplePos="0" relativeHeight="251659264" behindDoc="0" '
-    'locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/>'
-    '<wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset>'
-    '</wp:positionH><wp:positionV relativeFrom="paragraph">'
-    '<wp:posOffset>0</wp:posOffset></wp:positionV>'
-    '<wp:extent cx="914400" cy="457200"/><wp:wrapNone/>'
-    '<wp:docPr id="2" name="Text Box 2"/><a:graphic xmlns:a="$_a">'
-    '<a:graphicData uri="$_wps"><wps:wsp><wps:bodyPr/></wps:wsp>'
-    '</a:graphicData></a:graphic></wp:anchor></w:drawing>'
-    '</mc:Choice><mc:Fallback><w:pict><v:rect style="width:72pt"/></w:pict>'
-    '</mc:Fallback></mc:AlternateContent></w:r>'
-    '<w:r><w:t>Son</w:t></w:r>'
-    '</w:p>'
-    '<w:sectPr w:rsidR="00A13F2E"><w:pgSz w:w="11906" w:h="16838"/>'
-    '<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" '
-    'w:header="708" w:footer="708" w:gutter="0"/><w:cols w:space="708"/>'
-    '<w:docGrid w:linePitch="360"/></w:sectPr>'
-    '</w:body></w:document>';
-
-/// The relationships of [_wordDocument]: its picture.
-const String _wordDocumentRels =
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
-    '<Relationships xmlns="$packageRelsNs">'
-    '<Relationship Id="rId4" Type="${RelType.image}" '
-    'Target="media/image1.png"/>'
-    '</Relationships>';
-
-/// A small binary stand-in for a PNG.
-final List<int> _png = <int>[0x89, 0x50, 0x4E, 0x47, 0, 1, 2, 3, 255];
-
-/// A DOCX holding [document], with [documentRels] as its relationships
-/// when given, a picture, and a settings part the model never loads.
-Uint8List _docx({
-  String document = _wordDocument,
-  String? documentRels = _wordDocumentRels,
-  bool store = false,
-}) => buildZip(<String, List<int>>{
-  '[Content_Types].xml': utf8.encode(
-    '<Types xmlns="$contentTypesNs">'
-    '<Default Extension="rels" ContentType="${ContentType.relationships}"/>'
-    '<Default Extension="xml" ContentType="application/xml"/>'
-    '<Default Extension="png" ContentType="image/png"/>'
-    '<Override PartName="/word/document.xml" '
-    'ContentType="${ContentType.wmlDocument}"/>'
-    '</Types>',
-  ),
-  '_rels/.rels': utf8.encode(rootRels('word/document.xml')),
-  'word/document.xml': utf8.encode(document),
-  if (documentRels != null)
-    'word/_rels/document.xml.rels': utf8.encode(documentRels),
-  'word/media/image1.png': _png,
-  'word/settings.xml': utf8.encode(
-    '<w:settings xmlns:w="${Ns.w}"><w:zoom w:percent="100"/></w:settings>',
-  ),
-}, store: store);
+import 'support/word_document.dart';
 
 /// The document's paragraph texts and opaque block names, in order.
 List<String> _outline(DocxDocument doc) => <String>[
@@ -178,7 +53,7 @@ final class _Collect implements Sink<List<int>> {
 void main() {
   group('open and save', () {
     test('open then save without access keeps document.xml bytes', () {
-      final Uint8List input = _docx();
+      final Uint8List input = wordDocx();
       final DocxDocument doc = DocxDocument.open(input);
       final Uint8List output = doc.save().bytes;
       expect(isBodyLoaded(doc), isFalse);
@@ -191,7 +66,7 @@ void main() {
     });
 
     test('open, read body, save is semantically equal', () {
-      final Uint8List input = _docx();
+      final Uint8List input = wordDocx();
       final DocxDocument doc = DocxDocument.open(input);
       expect(_outline(doc), <String>[
         'p:Fiyat listesiÜrün ',
@@ -223,7 +98,7 @@ void main() {
     });
 
     test('open, set one run text, save differs only in that w:t', () {
-      final Uint8List input = _docx();
+      final Uint8List input = wordDocx();
       final DocxDocument doc = DocxDocument.open(input);
       final DocxParagraph p = doc.body.blocks[2] as DocxParagraph;
       final DocxRun run = p.inlines.first as DocxRun;
@@ -242,8 +117,82 @@ void main() {
       expect(xml, contains('<w:t xml:space="preserve">Kalem adı: </w:t>'));
     });
 
+    group('a Word-like document with tracked changes, fields and a table', () {
+      test('declares w15 and adds its blocks', () {
+        expect(richWordDocumentXml, contains('mc:Ignorable="w14 w15 wp14"'));
+        expect(richWordDocumentXml, contains('xmlns:w15='));
+        expect(richWordDocumentXml, contains('<w:tbl>'));
+        expect(
+          richWordDocumentXml.indexOf('<w:tbl>'),
+          lessThan(richWordDocumentXml.indexOf('<w:sectPr')),
+        );
+      });
+
+      test('opens with its paragraphs typed and its table opaque', () {
+        final DocxDocument doc = DocxDocument.open(richWordDocx());
+        expect(_outline(doc), <String>[
+          'p:Fiyat listesiÜrün ',
+          'opaque:sdt',
+          'p:Kalem: Defter\t12\nadet',
+          'p:',
+          'p:Son',
+          'p:Değişiklikler',
+          'p:Eski tutar, bkz. site',
+          'p:Sayfa 1 / 2',
+          'p:Gizli',
+          'opaque:tbl',
+          'p:',
+        ]);
+      });
+
+      test('open, read body, save is semantically equal', () {
+        final Uint8List input = richWordDocx();
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(doc.body.blocks, hasLength(11));
+        final Uint8List output = doc.save().bytes;
+        expect(comparePackages(input, output), isEmpty);
+        expect(doc.warnings, isEmpty);
+      });
+
+      test('open, edit one paragraph, save differs only in it', () {
+        final Uint8List input = richWordDocx();
+        final DocxDocument doc = DocxDocument.open(input);
+        final DocxParagraph p = doc.body.blocks[5] as DocxParagraph;
+        (p.inlines[1] as DocxRun).text = 'Yenilikler';
+        final List<String> differences = comparePackages(
+          input,
+          doc.save().bytes,
+        );
+        expect(differences, hasLength(1), reason: differences.join('\n'));
+        expect(differences.single, startsWith('word/document.xml: '));
+        expect(differences.single, contains('Değişiklikler'));
+        expect(differences.single, contains('Yenilikler'));
+      });
+
+      test('replacing a paragraph block changes only that block', () {
+        final Uint8List input = richWordDocx();
+        final DocxDocument doc = DocxDocument.open(input);
+        doc.body.replaceBlockAt(7, DocxParagraph.text('Sayfa yok'));
+        final Uint8List output = doc.save().bytes;
+        final List<String> differences = comparePackages(input, output);
+        expect(differences, isNotEmpty);
+        expect(
+          differences.every((String d) => d.startsWith('word/document.xml: ')),
+          isTrue,
+          reason: differences.join('\n'),
+        );
+        final DocxDocument again = DocxDocument.open(output);
+        final List<String> outline = _outline(again);
+        expect(outline[7], 'p:Sayfa yok');
+        expect(
+          <String>[...outline]..removeAt(7),
+          <String>[..._outline(DocxDocument.open(input))]..removeAt(7),
+        );
+      });
+    });
+
     test('saveTo streams the same bytes as save', () {
-      final DocxDocument doc = DocxDocument.open(_docx());
+      final DocxDocument doc = DocxDocument.open(wordDocx());
       (doc.body.blocks.first as DocxParagraph).addRun(' 2026');
       final Uint8List saved = doc.save().bytes;
       final _Collect sink = _Collect();
@@ -254,7 +203,7 @@ void main() {
 
     test('a save returns the warnings of that save, and warnings keeps '
         'them', () {
-      final DocxDocument doc = DocxDocument.open(_docx());
+      final DocxDocument doc = DocxDocument.open(wordDocx());
       expect(doc.warnings, isEmpty);
       final DocxRun run =
           (doc.body.blocks.first as DocxParagraph).inlines.first as DocxRun;
@@ -291,7 +240,7 @@ void main() {
     });
 
     test('an edited body saves and reopens with the edits', () {
-      final DocxDocument doc = DocxDocument.open(_docx());
+      final DocxDocument doc = DocxDocument.open(wordDocx());
       final DocxBody body = doc.body;
       body.addParagraph('Toplam: 1.234,50 ₺').style = 'Total';
       body.removeBlockAt(3);
@@ -318,7 +267,7 @@ void main() {
     test('a limit below 1 throws ArgumentError', () {
       expect(
         () => DocxDocument.open(
-          _docx(),
+          wordDocx(),
           limits: const DocxReadLimits(maxDepth: 0),
         ),
         throwsArgumentError,
@@ -328,7 +277,7 @@ void main() {
 
   group('body edits', () {
     test('inserting a block twice throws StateError and changes nothing', () {
-      final DocxDocument doc = DocxDocument.open(_docx());
+      final DocxDocument doc = DocxDocument.open(wordDocx());
       final DocxBody body = doc.body;
       final DocxParagraph p = DocxParagraph.text('yeni');
       body.insertBlock(1, p);
@@ -349,14 +298,14 @@ void main() {
     });
 
     test('a block of another document throws StateError', () {
-      final DocxBody one = DocxDocument.open(_docx()).body;
-      final DocxBody two = DocxDocument.open(_docx()).body;
+      final DocxBody one = DocxDocument.open(wordDocx()).body;
+      final DocxBody two = DocxDocument.open(wordDocx()).body;
       expect(() => two.insertBlock(0, one.blocks.first), throwsStateError);
       expect(two.blocks, hasLength(5));
     });
 
     test('addParagraph appends a paragraph with the text', () {
-      final DocxBody body = DocxDocument.open(_docx()).body;
+      final DocxBody body = DocxDocument.open(wordDocx()).body;
       final DocxParagraph p = body.addParagraph('a\tb');
       expect(body.blocks.last, same(p));
       expect(p.text, 'a\tb');
@@ -364,7 +313,7 @@ void main() {
     });
 
     test('a bad index throws RangeError and changes nothing', () {
-      final DocxDocument doc = DocxDocument.open(_docx());
+      final DocxDocument doc = DocxDocument.open(wordDocx());
       final DocxBody body = doc.body;
       expect(() => body.insertBlock(-1, DocxParagraph()), throwsRangeError);
       expect(() => body.insertBlock(6, DocxParagraph()), throwsRangeError);
@@ -375,7 +324,7 @@ void main() {
     });
 
     test('the blocks view is unmodifiable and shows later edits', () {
-      final DocxBody body = DocxDocument.open(_docx()).body;
+      final DocxBody body = DocxDocument.open(wordDocx()).body;
       final List<DocxBlock> blocks = body.blocks;
       expect(() => blocks.add(DocxParagraph()), throwsUnsupportedError);
       expect(blocks.removeLast, throwsUnsupportedError);
@@ -384,14 +333,14 @@ void main() {
     });
 
     test('the body is loaded once', () {
-      final DocxDocument doc = DocxDocument.open(_docx());
+      final DocxDocument doc = DocxDocument.open(wordDocx());
       expect(isBodyLoaded(doc), isFalse);
       expect(doc.body, same(doc.body));
       expect(isBodyLoaded(doc), isTrue);
     });
 
     test('a paragraph edit is recorded as a change', () {
-      final DocxDocument doc = DocxDocument.open(_docx());
+      final DocxDocument doc = DocxDocument.open(wordDocx());
       final DocxParagraph p = doc.body.blocks.first as DocxParagraph;
       expect(changeLogOf(doc).hasChanges, isFalse);
       p.style = 'Heading1';
@@ -405,7 +354,7 @@ void main() {
       const String broken =
           '<w:document xmlns:w="${Ns.w}"><w:body><w:p></w:body>'
           '</w:document>';
-      final Uint8List input = _docx(document: broken);
+      final Uint8List input = wordDocx(document: broken);
       final DocxDocument doc = DocxDocument.open(input);
       final DocxReadException e = _refused(
         () => doc.body,
@@ -422,7 +371,7 @@ void main() {
     test('a bad entity surfacing while reading the body is '
         'DocxReadException', () {
       final DocxDocument doc = DocxDocument.open(
-        _docx(
+        wordDocx(
           document:
               '<w:document xmlns:w="${Ns.w}"><w:body><w:p><w:r>'
               '<w:t>a &bogus; b</w:t></w:r></w:p></w:body></w:document>',
@@ -433,7 +382,7 @@ void main() {
 
     test('a body past maxTextLength is limitExceeded on first access', () {
       final DocxDocument doc = DocxDocument.open(
-        _docx(),
+        wordDocx(),
         limits: const DocxReadLimits(maxTextLength: 5),
       );
       _refused(() => doc.body, DocxReadFailure.limitExceeded);
@@ -452,7 +401,7 @@ void main() {
 
     test('a document.xml.rels that is malformed throws DocxReadException, '
         'not OpcFormatException, on first body access', () {
-      final Uint8List input = _docx(documentRels: '<Relationships');
+      final Uint8List input = wordDocx(documentRels: '<Relationships');
       final DocxDocument doc = DocxDocument.open(input);
       final DocxReadException e = _refused(
         () => doc.body,
@@ -475,7 +424,7 @@ void main() {
           '<Relationship Id="rId9" Type="${RelType.header}" '
           'Target="header1.xml"/>'
           '</Relationships>';
-      final Uint8List input = _docx(documentRels: rels);
+      final Uint8List input = wordDocx(documentRels: rels);
       final DocxDocument doc = DocxDocument.open(input);
       expect(doc.body.blocks, hasLength(5));
       final Uint8List output = doc.save().bytes;
@@ -489,7 +438,7 @@ void main() {
     });
 
     test('a damaged entry of a part never loaded is refused at open', () {
-      final Uint8List zip = _docx(store: true);
+      final Uint8List zip = wordDocx(store: true);
       final int at = indexOfBytes(zip, utf8.encode('<w:zoom'));
       expect(at, greaterThan(0));
       final DocxReadException e = _refused(
