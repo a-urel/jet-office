@@ -116,6 +116,11 @@ abstract interface class SheetHost {
   /// format (id 14); `null` when the styles part cannot take one (it is
   /// untyped).
   int? dateStyle(int? style, {required bool withTime});
+
+  /// Sets the visibility of the sheet listed as [entry], with the
+  /// workbook-wide rules (a visible sheet stays, the active sheet is
+  /// visible).
+  void setVisibility(SheetEntry entry, XlsxSheetVisibility value);
 }
 
 /// A sheet of [host] listed as [entry], whose worksheet part is [partName]
@@ -127,6 +132,9 @@ XlsxSheet newSheet(
   String? partName, {
   WorksheetPart? part,
 }) => XlsxSheet._(host, entry, partName, part);
+
+/// The workbook part's entry of [sheet].
+SheetEntry entryOf(XlsxSheet sheet) => sheet._entry;
 
 /// Whether [sheet]'s worksheet part is loaded.
 bool isLoadedSheet(XlsxSheet sheet) => sheet._part != null;
@@ -175,6 +183,15 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
 
   /// Whether the sheet is visible, hidden or very hidden.
   XlsxSheetVisibility get visibility => _entry.visibility;
+
+  /// Shows or hides the sheet: [XlsxSheetVisibility.visible] removes the
+  /// `state` attribute of its tab. An equal value changes nothing.
+  ///
+  /// Hiding the active sheet makes the first visible sheet active, as Excel
+  /// does. Throws a [StateError] when this is the last visible sheet and
+  /// [value] is not visible; nothing changes then.
+  set visibility(XlsxSheetVisibility value) =>
+      _host.setVisibility(_entry, value);
 
   /// The cell at [row] and [column] as [XlsxReader] reads it, or `null`
   /// when the cell holds no value, formula or inline string (an empty

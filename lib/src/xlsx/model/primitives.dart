@@ -13,6 +13,9 @@
 /// [SetRowAttributesChange]; [editLayout] edits a part's `cols`,
 /// `sheetFormatPr`, `mergeCells`, `sheetPr` and `sheetViews`, recording a
 /// [SetLayoutChange].
+/// [setEntryVisibility] and [setActiveTab] change the workbook part's sheet
+/// state and active tab, recording a [SetVisibilityChange] and a
+/// [SetBookViewsChange].
 /// [appendStyle] and [appendNumberFormat] give a cell format index,
 /// recording a [StylesAppendChange] when that appended to the styles part,
 /// so a transaction that fails later, or an undo, removes what it appended.
@@ -22,10 +25,13 @@ import '../../opc/change_log.dart';
 import '../../opc/opaque_xml.dart';
 import '../range.dart';
 import '../raw_cell.dart';
+import '../sheet_view.dart';
 import '../style.dart';
 import 'cell_store.dart';
+import 'element_node.dart';
 import 'styles_part.dart';
 import 'table_part.dart';
+import 'workbook_part.dart';
 import 'worksheet_part.dart';
 
 /// The change of one cell: its content before and after.
@@ -386,5 +392,108 @@ XlsxRange? _range(String? ref) {
     return XlsxRange.parse(ref);
   } on ArgumentError {
     return null;
+  }
+}
+
+/// The change of one sheet's visibility: before and after.
+final class SetVisibilityChange implements Change {
+  /// A change of [entry] from [oldVisibility] (written with `state="visible"`
+  /// when [oldExplicit]) to [newVisibility].
+  SetVisibilityChange(
+    this.entry,
+    this.oldVisibility,
+    this.oldExplicit,
+    this.newVisibility,
+  );
+
+  /// The sheet entry that changed.
+  final SheetEntry entry;
+
+  /// The visibility before the change.
+  final XlsxSheetVisibility oldVisibility;
+
+  /// Whether the source said `state="visible"` before the change.
+  final bool oldExplicit;
+
+  /// The visibility after the change.
+  final XlsxSheetVisibility newVisibility;
+
+  @override
+  void revert() {
+    entry.visibility = oldVisibility;
+    entry.explicitVisible = oldExplicit;
+  }
+
+  @override
+  void reapply() {
+    entry.visibility = newVisibility;
+    entry.explicitVisible = false;
+  }
+}
+
+/// Sets the visibility of [entry] to [visibility] and records the change in
+/// [log]; an equal visibility changes nothing. A visible sheet has no
+/// `state` attribute afterwards.
+///
+/// Must run inside `log.transaction`. If recording throws, the entry is put
+/// back as it was before the error leaves.
+void setEntryVisibility(
+  ChangeLog log,
+  SheetEntry entry,
+  XlsxSheetVisibility visibility,
+) {
+  if (entry.visibility == visibility) return;
+  final SetVisibilityChange change = SetVisibilityChange(
+    entry,
+    entry.visibility,
+    entry.explicitVisible,
+    visibility,
+  );
+  change.reapply();
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+}
+
+/// The change of the workbook's `<bookViews>` element: before and after.
+final class SetBookViewsChange implements Change {
+  /// A change of [part]'s `<bookViews>` from [before] to [after]; `null` is
+  /// an absent element.
+  SetBookViewsChange(this.part, this.before, this.after);
+
+  /// The workbook part.
+  final WorkbookPart part;
+
+  /// The element before the change.
+  final XmlNode? before;
+
+  /// The element after the change.
+  final XmlNode? after;
+
+  @override
+  void revert() => part.swapBookViews(after, before);
+
+  @override
+  void reapply() => part.swapBookViews(before, after);
+}
+
+/// Sets the active tab of [part] to [index] and records the change in [log];
+/// an equal index changes nothing.
+///
+/// Must run inside `log.transaction`. If recording throws, the element is
+/// put back as it was before the error leaves.
+void setActiveTab(ChangeLog log, WorkbookPart part, int index) {
+  final XmlNode? before = part.bookViews;
+  part.setActiveTabIndex(index);
+  final XmlNode? after = part.bookViews;
+  if (identical(before, after)) return;
+  try {
+    log.record(SetBookViewsChange(part, before, after));
+  } catch (_) {
+    part.swapBookViews(after, before);
+    rethrow;
   }
 }

@@ -146,6 +146,23 @@ final class XlsxWorkbook {
   /// styles, so it throws an [XlsxReadException] when they cannot be read.
   XlsxSheet addSheet(String name) => _book.addSheet(name);
 
+  /// The sheet Excel opens on: the one at the first `workbookView`'s
+  /// `activeTab`, or the first sheet when there is no such attribute or it
+  /// is past the last tab.
+  ///
+  /// Throws a [StateError] for a workbook with no sheet.
+  XlsxSheet get activeSheet => _book.activeSheet;
+
+  /// Makes [sheet] the sheet Excel opens on: sets `activeTab`, `tabSelected`
+  /// on its view, and clears `tabSelected` on the sheet that was active
+  /// (loading both sheets). A chartsheet or a sheet without a part has no
+  /// view to select; only `activeTab` changes for it.
+  ///
+  /// Throws an [ArgumentError] for a sheet of another workbook and a
+  /// [StateError] for a sheet that is not visible; nothing changes then.
+  /// Throws an [XlsxReadException] when a sheet to load cannot be read.
+  set activeSheet(XlsxSheet sheet) => _book.setActiveSheet(sheet);
+
   /// Whether the workbook counts dates from 1904, as files from old Mac
   /// versions of Excel do; dates are set and read in its system.
   bool get date1904 => _book.workbook.date1904;
@@ -522,6 +539,70 @@ final class _Book implements SheetHost {
   /// The counts of the styles part the model made for a file without one,
   /// while it is not in the package yet; `null` otherwise.
   StylesMark? _createdStyles;
+
+  XlsxSheet get activeSheet {
+    if (_sheets.isEmpty) throw StateError('The workbook has no sheet.');
+    final int i = workbook.activeTab;
+    return _sheets[i < _sheets.length ? i : 0];
+  }
+
+  void setActiveSheet(XlsxSheet sheet) {
+    if (!_sheets.any((XlsxSheet s) => identical(s, sheet))) {
+      throw ArgumentError.value(
+        sheet.name,
+        'sheet',
+        'The sheet belongs to another workbook.',
+      );
+    }
+    if (sheet.visibility != XlsxSheetVisibility.visible) {
+      throw StateError(
+        'The ${sheet.visibility.name} sheet "${sheet.name}" cannot be the '
+        'active sheet.',
+      );
+    }
+    log.transaction(() => _activate(sheet));
+  }
+
+  /// Makes [target] active inside a transaction: `tabSelected` moves from
+  /// the sheet that was active, and `activeTab` is set.
+  void _activate(XlsxSheet target) {
+    final XlsxSheet old = activeSheet;
+    if (!identical(old, target) && sheetIsWorksheet(old)) {
+      setSheetTabSelected(old, false);
+    }
+    if (sheetIsWorksheet(target)) setSheetTabSelected(target, true);
+    setActiveTab(log, workbook, _sheets.indexOf(target));
+  }
+
+  @override
+  void setVisibility(SheetEntry entry, XlsxSheetVisibility value) {
+    if (entry.visibility == value) return;
+    final int index = _sheets.indexWhere(
+      (XlsxSheet s) => identical(entryOf(s), entry),
+    );
+    if (value != XlsxSheetVisibility.visible &&
+        !_sheets.any(
+          (XlsxSheet s) =>
+              !identical(entryOf(s), entry) &&
+              s.visibility == XlsxSheetVisibility.visible,
+        )) {
+      throw StateError(
+        'The sheet "${entry.name}" is the last visible sheet and cannot be '
+        'hidden.',
+      );
+    }
+    log.transaction(() {
+      final bool wasActive = identical(activeSheet, _sheets[index]);
+      setEntryVisibility(log, entry, value);
+      if (wasActive && value != XlsxSheetVisibility.visible) {
+        _activate(
+          _sheets.firstWhere(
+            (XlsxSheet s) => s.visibility == XlsxSheetVisibility.visible,
+          ),
+        );
+      }
+    });
+  }
 
   XlsxSheet addSheet(String requested) {
     final CellEncoder encoder = loadTables();

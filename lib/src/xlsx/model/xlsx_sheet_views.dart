@@ -49,6 +49,11 @@ bool sheetTabSelected(XlsxSheet sheet) => sheet._tabSelected;
 void setSheetTabSelected(XlsxSheet sheet, bool selected) =>
     sheet._setTabSelected(selected);
 
+/// Whether [sheet] is a typed worksheet, so [setSheetTabSelected] can set
+/// its tab: `false` for a chartsheet or a sheet without a part. Loads the
+/// sheet.
+bool sheetIsWorksheet(XlsxSheet sheet) => sheet._load()?.isTyped ?? false;
+
 /// The view half of [XlsxSheet].
 mixin _SheetViews {
   // What the sheet gives its view half.
