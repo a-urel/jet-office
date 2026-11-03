@@ -131,10 +131,11 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   colour, adds a sheet, saves to the second directory, and checks the
   edits read back with `XlsxReader` and the model; it also writes the
   generated workbooks of `tool/write_model_sample.dart`,
-  `w1_generated.xlsx` and `w2_generated.xlsx`, there. It prints each problem as `<file>: <problem>` and exits 1 on any,
-  2 on unusable arguments. CI runs it on the fixtures and validates the
-  output with the Open XML SDK, so the model's edited and generated files
-  are validated, not only its unchanged round trips.
+  `w1_generated.xlsx` and `w2_generated.xlsx`, there. It prints each
+  problem as `<file>: <problem>` and exits 1 on any, 2 on unusable
+  arguments. CI runs it on the fixtures and validates the output with the
+  Open XML SDK, so the model's edited and generated files are validated,
+  not only its unchanged round trips.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX
   fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, by
   `textDifferences` in `tool/src/text_compare.dart`: a leading BOM and one

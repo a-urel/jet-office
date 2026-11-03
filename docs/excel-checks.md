@@ -938,8 +938,8 @@ the table; b1fa49d renames the column, and the re-check opens clean (see
 
 ## W2
 
-Styles and layout in the model. Open each file in Excel for Mac and record the result under "Results". A repair
-prompt is a model bug. Run this first:
+Styles and layout in the model. Open each file in Excel for Mac and record
+the result under "Results". A repair prompt is a model bug. Run this first:
 
 ```bash
 dart run tool/write_fixtures.dart build/fixtures
@@ -953,7 +953,9 @@ Open every `build/model-edited/*.xlsx`. No repair prompt. On the first sheet,
 in the row after the last one:
 
 - A to D show the date and time, the date, `3` and `edited by the model`, each
-  bold on a red fill; the dates still show as dates;
+  bold on a red fill; the dates still show as dates, except in a column whose
+  own number format shows none: in `m2_style_precedence` B is a money column,
+  and its date shows as a money amount;
 - E and F of that row are merged;
 - the row is 24 points high, and column B is 30 wide;
 - the first row stays in view when scrolling;
@@ -972,8 +974,10 @@ the sheet `Report`, whose tab is green.
   fill, with a medium bottom border.
 - Rows 1 and 2 stay in view when scrolling.
 - Column A is 24 wide, B 14, C 16.
-- Column B shows dates as `15.01.2026`; column C shows amounts as `1.234,50`
-  (`1,234.50` in an English locale).
+- Column B shows dates as `15.01.2026`. Column C shows amounts with the
+  separators of the Mac's region (System Settings > General > Language &
+  Region): `1.234,50` with the region set to Türkiye, `1,234.50` with it set
+  to the United States.
 - Row 4 (`Pears`) is hidden; the row numbers jump from 3 to 5.
 - Row 5 (`Plums`) is grouped: the outline bar shows a level 2 beside it.
 - Rows 3 and 6 are plain data rows.
