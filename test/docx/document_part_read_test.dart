@@ -101,8 +101,8 @@ void main() {
   test('reads paragraphs, runs, text, tabs and breaks', () {
     final DocumentPart part = _read(
       '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:jc w:val="center"/>'
-      '</w:pPr><w:r><w:rPr><w:rStyle w:val="Strong"/><w:b/><w:kern w:val="2"/></w:rPr>'
-      '<w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/><w:br w:type="page"/>'
+      '</w:pPr><w:r><w:rPr><w:rStyle w:val="Strong"/><w:b/>'
+      '<w:kern w:val="2"/></w:rPr><w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/><w:br w:type="page"/>'
       '<w:br w:type="column"/><w:cr/><w:t>c</w:t></w:r></w:p>'
       '<w:p/>'
       '<w:p><w:r><w:t>second</w:t></w:r></w:p>',

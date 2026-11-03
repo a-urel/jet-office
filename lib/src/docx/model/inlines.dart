@@ -241,7 +241,8 @@ DocxRun readRun({
 PropertyContainer runPropertiesOf(DocxRun run) => run._source;
 
 /// The properties of [run], for the writer.
-PropertySet runPropertySetOf(DocxRun run) => run._properties;
+PropertySet runPropertySetOf(DocxRun run) =>
+    propertySetOfRunProperties(run._properties);
 
 /// The attributes of `w:r` the reader kept on [run], in source order.
 List<KeptAttribute> runAttributesOf(DocxRun run) => run._attributes;

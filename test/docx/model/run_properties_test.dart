@@ -90,17 +90,28 @@ void main() {
     });
 
     test('italic, caps, smallCaps, strike and doubleStrike write', () {
-      expect(_written((DocxRunProperties p) => p.italic = true), '<w:i/>');
-      expect(_written((DocxRunProperties p) => p.caps = true), '<w:caps/>');
+      final DocxDocument doc = _open();
+      final DocxRunProperties p = _run(doc).properties;
+      p
+        ..italic = true
+        ..caps = true
+        ..smallCaps = false
+        ..strike = true
+        ..doubleStrike = true;
+      expect(p.italic, isTrue);
+      expect(p.caps, isTrue);
+      expect(p.smallCaps, isFalse);
+      expect(p.strike, isTrue);
+      expect(p.doubleStrike, isTrue);
       expect(
-        _written((DocxRunProperties p) => p.smallCaps = false),
-        '<w:smallCaps w:val="0"/>',
+        _rPr(doc),
+        '<w:i/><w:caps/><w:smallCaps w:val="0"/><w:strike/><w:dstrike/>',
       );
-      expect(_written((DocxRunProperties p) => p.strike = true), '<w:strike/>');
-      expect(
-        _written((DocxRunProperties p) => p.doubleStrike = true),
-        '<w:dstrike/>',
-      );
+      final DocxRunProperties q = _run(
+        DocxDocument.open(doc.save().bytes),
+      ).properties;
+      expect(q.smallCaps, isFalse);
+      expect(q.doubleStrike, isTrue);
     });
 
     test('color sets and reads back', () {

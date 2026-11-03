@@ -3,8 +3,8 @@
 ///
 /// Not ported from Quds; written for jet_office.
 ///
-/// [DocxRunProperties] is a [PropertySet] over the `w:rPr` of a run as
-/// read. Each member is a nullable getter and setter, `null` meaning "not
+/// [DocxRunProperties] is a view over the `w:rPr` of a run as read (a
+/// private [PropertySet]). Each member is a nullable getter and setter, `null` meaning "not
 /// set here" (the style or the document default decides). Reading gives
 /// what the file holds when the model can type it, else `null`: a
 /// `w:sz w:val="1in"` reads `null` and stays in the file (plan Ruling 2).
@@ -87,9 +87,13 @@ enum DocxRunProperty {
 ///
 /// Get one from `DocxRun.properties`; it is the same object every time. Each
 /// set is one change of the document's change log.
-final class DocxRunProperties extends PropertySet {
+final class DocxRunProperties {
   DocxRunProperties._(PropertyContainer source, DocxEditSink Function() sink)
-    : super(source, runPropertiesSchema, sink);
+    : _set = _RunSet(source, sink);
+
+  /// The set behind the members; private so a caller cannot reach its
+  /// untyped surface.
+  final PropertySet _set;
 
   /// The id of the run's character style (`w:rStyle`), or `null`.
   ///
@@ -97,11 +101,11 @@ final class DocxRunProperties extends PropertySet {
   /// attributes, child elements) reads `null` and is written back as read.
   /// Setting the empty string, or an id holding a character XML forbids,
   /// throws [ArgumentError]; `null` removes the style.
-  String? get style => valueOf('rStyle') as String?;
+  String? get style => _set.valueOf('rStyle') as String?;
 
   set style(String? value) {
     checkStyleId(value);
-    setValue('rStyle', value);
+    _set.setValue('rStyle', value);
   }
 
   /// The fonts (`w:rFonts`), or `null`.
@@ -109,49 +113,49 @@ final class DocxRunProperties extends PropertySet {
   /// Setting replaces the ASCII, high ANSI and East Asian slots and their
   /// theme fonts, and keeps `w:cs`, `w:cstheme`, `w:hint` and the other
   /// attributes of the file.
-  DocxFonts? get fonts => valueOf('rFonts') as DocxFonts?;
+  DocxFonts? get fonts => _set.valueOf('rFonts') as DocxFonts?;
 
-  set fonts(DocxFonts? value) => setValue('rFonts', value);
+  set fonts(DocxFonts? value) => _set.setValue('rFonts', value);
 
   /// Whether the text is bold (`w:b`), or `null`. `false` is written as
   /// `w:val="0"`, which turns off bold a style turned on.
   ///
   /// Setting does not change `w:bCs`, the complex-script bold.
-  bool? get bold => valueOf('b') as bool?;
+  bool? get bold => _set.valueOf('b') as bool?;
 
-  set bold(bool? value) => setValue('b', value);
+  set bold(bool? value) => _set.setValue('b', value);
 
   /// Whether the text is italic (`w:i`), or `null`. Setting does not change
   /// `w:iCs`.
-  bool? get italic => valueOf('i') as bool?;
+  bool? get italic => _set.valueOf('i') as bool?;
 
-  set italic(bool? value) => setValue('i', value);
+  set italic(bool? value) => _set.setValue('i', value);
 
   /// Whether the text is in capital letters (`w:caps`), or `null`.
-  bool? get caps => valueOf('caps') as bool?;
+  bool? get caps => _set.valueOf('caps') as bool?;
 
-  set caps(bool? value) => setValue('caps', value);
+  set caps(bool? value) => _set.setValue('caps', value);
 
   /// Whether the text is in small capitals (`w:smallCaps`), or `null`.
-  bool? get smallCaps => valueOf('smallCaps') as bool?;
+  bool? get smallCaps => _set.valueOf('smallCaps') as bool?;
 
-  set smallCaps(bool? value) => setValue('smallCaps', value);
+  set smallCaps(bool? value) => _set.setValue('smallCaps', value);
 
   /// Whether the text has a line through it (`w:strike`), or `null`.
-  bool? get strike => valueOf('strike') as bool?;
+  bool? get strike => _set.valueOf('strike') as bool?;
 
-  set strike(bool? value) => setValue('strike', value);
+  set strike(bool? value) => _set.setValue('strike', value);
 
   /// Whether the text has a double line through it (`w:dstrike`), or
   /// `null`.
-  bool? get doubleStrike => valueOf('dstrike') as bool?;
+  bool? get doubleStrike => _set.valueOf('dstrike') as bool?;
 
-  set doubleStrike(bool? value) => setValue('dstrike', value);
+  set doubleStrike(bool? value) => _set.setValue('dstrike', value);
 
   /// The text colour (`w:color`), or `null`.
-  DocxColor? get color => valueOf('color') as DocxColor?;
+  DocxColor? get color => _set.valueOf('color') as DocxColor?;
 
-  set color(DocxColor? value) => setValue('color', value);
+  set color(DocxColor? value) => _set.setValue('color', value);
 
   /// The space added after each character, in points (`w:spacing`, stored
   /// in twips), or `null`. Negative condenses.
@@ -159,9 +163,9 @@ final class DocxRunProperties extends PropertySet {
   /// A value is rounded to a twentieth of a point and reads back rounded.
   /// A value that is not finite throws [ArgumentError]; one outside -1584
   /// to 1584 points throws [RangeError].
-  double? get characterSpacingPt => valueOf('spacing') as double?;
+  double? get characterSpacingPt => _set.valueOf('spacing') as double?;
 
-  set characterSpacingPt(double? value) => setValue(
+  set characterSpacingPt(double? value) => _set.setValue(
     'spacing',
     value == null ? null : roundedCharacterSpacingPt(value),
   );
@@ -172,31 +176,32 @@ final class DocxRunProperties extends PropertySet {
   /// 11.5). A value that is not finite throws [ArgumentError]; one outside
   /// 1 to 1638 points throws [RangeError]. Setting does not change
   /// `w:szCs`, the complex-script size.
-  double? get sizePt => valueOf('sz') as double?;
+  double? get sizePt => _set.valueOf('sz') as double?;
 
   set sizePt(double? value) =>
-      setValue('sz', value == null ? null : roundedSizePt(value));
+      _set.setValue('sz', value == null ? null : roundedSizePt(value));
 
   /// The highlight colour (`w:highlight`), or `null`.
-  DocxHighlight? get highlight => valueOf('highlight') as DocxHighlight?;
+  DocxHighlight? get highlight => _set.valueOf('highlight') as DocxHighlight?;
 
-  set highlight(DocxHighlight? value) => setValue('highlight', value);
+  set highlight(DocxHighlight? value) => _set.setValue('highlight', value);
 
   /// The underline (`w:u`), or `null`.
-  DocxUnderline? get underline => valueOf('u') as DocxUnderline?;
+  DocxUnderline? get underline => _set.valueOf('u') as DocxUnderline?;
 
-  set underline(DocxUnderline? value) => setValue('u', value);
+  set underline(DocxUnderline? value) => _set.setValue('u', value);
 
   /// The shading behind the text (`w:shd`), or `null`.
-  DocxShading? get shading => valueOf('shd') as DocxShading?;
+  DocxShading? get shading => _set.valueOf('shd') as DocxShading?;
 
-  set shading(DocxShading? value) => setValue('shd', value);
+  set shading(DocxShading? value) => _set.setValue('shd', value);
 
   /// Whether the text is raised or lowered (`w:vertAlign`), or `null`.
   DocxVerticalAlign? get verticalAlign =>
-      valueOf('vertAlign') as DocxVerticalAlign?;
+      _set.valueOf('vertAlign') as DocxVerticalAlign?;
 
-  set verticalAlign(DocxVerticalAlign? value) => setValue('vertAlign', value);
+  set verticalAlign(DocxVerticalAlign? value) =>
+      _set.setValue('vertAlign', value);
 
   /// The language of the text (`w:lang/@w:val`), such as `tr-TR`, or
   /// `null`.
@@ -205,13 +210,13 @@ final class DocxRunProperties extends PropertySet {
   /// `null`. Setting keeps `w:eastAsia` and `w:bidi`. A value that is not
   /// a language tag (letters of two to eight, then groups of letters and
   /// digits joined by hyphens) throws [ArgumentError].
-  String? get language => valueOf('lang') as String?;
+  String? get language => _set.valueOf('lang') as String?;
 
   set language(String? value) {
     if (value != null && !isLanguageTag(value)) {
       throw ArgumentError.value(value, 'language', 'must be a language tag');
     }
-    setValue('lang', value);
+    _set.setValue('lang', value);
   }
 
   /// Removes [property] from the run, whatever the getter reads of it.
@@ -222,7 +227,7 @@ final class DocxRunProperties extends PropertySet {
   /// [property] only: clearing [DocxRunProperty.bold] leaves `w:bCs`, and
   /// clearing [DocxRunProperty.sizePt] leaves `w:szCs`. Nothing is recorded
   /// when the run has no such child.
-  void clear(DocxRunProperty property) => clearChild(property._element);
+  void clear(DocxRunProperty property) => _set.clearChild(property._element);
 }
 
 /// The run properties over [source], as `DocxRun` holds them; edits go to
@@ -231,3 +236,14 @@ DocxRunProperties newRunProperties(
   PropertyContainer source,
   DocxEditSink Function() sink,
 ) => DocxRunProperties._(source, sink);
+
+/// The property set behind [properties], for the writer and the edit
+/// primitives. Not exported.
+PropertySet propertySetOfRunProperties(DocxRunProperties properties) =>
+    properties._set;
+
+/// The property set of a run's `w:rPr`.
+final class _RunSet extends PropertySet {
+  _RunSet(PropertyContainer source, DocxEditSink Function() sink)
+    : super(source, runPropertiesSchema, sink);
+}
