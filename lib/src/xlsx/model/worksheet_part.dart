@@ -121,8 +121,10 @@ final class _Dimension {
 /// The typed `<sheetFormatPr>`: its attributes as written, with
 /// `outlineLevelRow` raised on save to the deepest row outline level.
 ///
-/// Only an element without children is typed; one with children stays an
-/// [OpaqueXml].
+/// Only an element without element children is typed (an end tag with
+/// nothing between is the same as an empty element). One with children stays
+/// an [OpaqueXml], is written as it was, and its `outlineLevelRow` is not
+/// bookkept; no second element is made beside it.
 final class _SheetFormat {
   _SheetFormat(this.qualifiedName, this.namespaces, this.attributes);
 
@@ -268,16 +270,28 @@ final class WorksheetPart implements PartContent {
         children.add(d);
       } else if (main &&
           r.localName == 'sheetFormatPr' &&
-          sheet._sheetFormat == null &&
-          r.isEmptyElement) {
+          !sheet._hasSheetFormat) {
+        sheet._hasSheetFormat = true;
         final _SheetFormat f = _SheetFormat(
           r.qualifiedName,
           Map<String, String>.of(r.declaredNamespaces),
           keepAttributes(r),
         );
-        r.skip();
-        sheet._sheetFormat = f;
-        children.add(f);
+        final int depth = r.depth;
+        bool hasChildren = false;
+        final OpaqueXml whole = OpaqueXml.capture(
+          r,
+          onEvent: (XmlPullReader e) {
+            if (e.eventType == XmlEventType.startElement && e.depth > depth) {
+              hasChildren = true;
+            }
+          },
+        );
+        if (hasChildren) {
+          children.add(whole);
+        } else {
+          children.add(f);
+        }
       } else if (main &&
           r.localName == 'sheetData' &&
           sheet._sheetData == null) {
@@ -325,7 +339,10 @@ final class WorksheetPart implements PartContent {
   /// order.
   final List<Object> _children;
   _Dimension? _dimension;
-  _SheetFormat? _sheetFormat;
+
+  /// Whether the part has a `<sheetFormatPr>`, typed or kept opaque (one
+  /// with element children): none is made then.
+  bool _hasSheetFormat = false;
   _SheetData? _sheetData;
   CellEncoder? _encoder;
 
@@ -428,7 +445,7 @@ final class WorksheetPart implements PartContent {
     final XmlRoot root = _root!;
     root.writeStart(w);
     final int rowLevel = _deepestRowLevel();
-    final int madeAt = _sheetFormat == null && rowLevel > 0
+    final int madeAt = !_hasSheetFormat && rowLevel > 0
         ? _positionFor('sheetFormatPr')
         : -1;
     for (int i = 0; i <= _children.length; i++) {

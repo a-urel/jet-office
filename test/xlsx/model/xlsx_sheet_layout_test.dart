@@ -414,5 +414,69 @@ void main() {
       expect(xml, contains('baseColWidth="10"'));
       expect(xml, contains('outlineLevelRow="1"'));
     });
+    test('a sheetFormatPr with end tag or children is never duplicated', () {
+      for (final String format in <String>[
+        '<sheetFormatPr defaultRowHeight="15"></sheetFormatPr>',
+        '<sheetFormatPr defaultRowHeight="15"><extLst/></sheetFormatPr>',
+      ]) {
+        final XlsxWorkbook book = _open(
+          '<row r="1" outlineLevel="2"/>',
+          sheetFormat: format,
+        );
+        book.sheets.single.rowFormat(0); // load: a loaded part is rewritten
+        final String xml = _sheetXml(book);
+        expect(
+          RegExp('<sheetFormatPr').allMatches(xml),
+          hasLength(1),
+          reason: format,
+        );
+        book.sheets.single.setRowFormat(
+          0,
+          const XlsxRowFormat(outlineLevel: 3),
+        );
+        expect(
+          RegExp('<sheetFormatPr').allMatches(_sheetXml(book)),
+          hasLength(1),
+          reason: format,
+        );
+      }
+      // An end-tag element without children is typed and bookkept.
+      final XlsxWorkbook book = _open(
+        '<row r="1" outlineLevel="2"/>',
+        sheetFormat: '<sheetFormatPr defaultRowHeight="15"></sheetFormatPr>',
+      );
+      book.sheets.single.rowFormat(0);
+      expect(_sheetXml(book), contains('outlineLevelRow="2"'));
+    });
+
+    test('an unchanged sheetFormatPr is saved exactly', () {
+      const String format =
+          '<sheetFormatPr baseColWidth="10" defaultRowHeight="15" '
+          'thickBottom="1" x14ac:dyDescent="0.25"/>';
+      final XlsxWorkbook book = _open('<row r="1"/>', sheetFormat: format);
+      book.sheets.single.rowFormat(0);
+      expect(_sheetXml(book), contains(format));
+    });
+  });
+
+  test('setting every row to the format it reads changes nothing', () {
+    final XlsxWorkbook layout = XlsxWorkbook.open(
+      allFixtures()
+          .firstWhere((Fixture f) => f.name == 'm2_columns_rows')
+          .build(),
+    );
+    final XlsxWorkbook bad = _open(
+      '<row r="1" ht="abc" customHeight="1" hidden="2" outlineLevel="9" '
+      'collapsed="x"><c r="A1"><v>1</v></c></row>',
+    );
+    for (final XlsxWorkbook book in <XlsxWorkbook>[layout, bad]) {
+      final XlsxSheet sheet = book.sheets.first..rowFormat(0);
+      final String before = _sheetXml(book);
+      for (int r = 0; r < 10; r++) {
+        sheet.setRowFormat(r, sheet.rowFormat(r));
+      }
+      expect(changeLogOf(book).hasChanges, isFalse);
+      expect(_sheetXml(book), before);
+    }
   });
 }

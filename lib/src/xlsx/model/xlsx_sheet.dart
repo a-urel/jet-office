@@ -394,7 +394,14 @@ final class XlsxSheet {
     final CellStore? store = _load()?.cells;
     if (store == null) return null;
     final RawCell? cell = store.cellAt(row, column);
-    final int? index = cell != null ? cell.style : _rowStyleIndex(store, row);
+    return _styleOfIndex(
+      cell != null ? cell.style : _rowStyleIndex(store, row),
+    );
+  }
+
+  /// The style at cell format [index], or `null` for no index, index 0 and
+  /// an index with no cell format (which Excel shows as the default).
+  XlsxStyle? _styleOfIndex(int? index) {
     final StylesPart? styles = _host.styles;
     if (index == null ||
         index == 0 ||
@@ -594,22 +601,8 @@ final class XlsxSheet {
       hidden: hidden,
       outlineLevel: outlineLevel,
       collapsed: collapsed,
-      style: _rowStyleOf(store, row),
+      style: _styleOfIndex(_rowStyleIndex(store, row)),
     );
-  }
-
-  /// The style of [row] as [styleAt] shows it for a cell the row does not
-  /// have, or `null`.
-  XlsxStyle? _rowStyleOf(CellStore store, int row) {
-    final int? index = _rowStyleIndex(store, row);
-    final StylesPart? styles = _host.styles;
-    if (index == null ||
-        index == 0 ||
-        styles == null ||
-        index >= styles.cellFormatCount) {
-      return null;
-    }
-    return styles.styleOf(index);
   }
 
   /// The attributes [format] gives a row whose attributes were [old] and
