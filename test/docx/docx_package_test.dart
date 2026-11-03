@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/docx/document_part.dart';
 import 'package:jet_office/src/docx/docx_package.dart';
 import 'package:jet_office/src/docx/warnings.dart' show DocxWarningCollector;
 import 'package:jet_office/src/opc/ooxml.dart';
@@ -411,6 +412,47 @@ void main() {
       );
       expect(e.message, contains('maxDepth (10)'));
       expect(e.part, '/word/document.xml');
+    });
+
+    test('refuses a w:t past maxTextLength when document.xml is read', () {
+      final DocxPackage package = _open(
+        buildDocx(
+          document:
+              '<w:document xmlns:w="${Ns.w}"><w:body><w:p><w:r>'
+              '<w:t>abcde</w:t></w:r></w:p></w:body></w:document>',
+        ),
+        limits: const DocxReadLimits(maxTextLength: 4),
+      );
+      DocumentPart read() => package.guard(
+        package.mainPart,
+        () => DocumentPart.read(
+          package.openXml(package.mainPart),
+          DocxWarningCollector(),
+          package.mainPart,
+          limits: package.limits,
+        ),
+      );
+      expect(
+        read,
+        throwsA(
+          isA<DocxReadException>()
+              .having(
+                (DocxReadException e) => e.reason,
+                'reason',
+                DocxReadFailure.limitExceeded,
+              )
+              .having(
+                (DocxReadException e) => e.message,
+                'message',
+                contains('maxTextLength (4)'),
+              )
+              .having(
+                (DocxReadException e) => e.part,
+                'part',
+                '/word/document.xml',
+              ),
+        ),
+      );
     });
   });
 

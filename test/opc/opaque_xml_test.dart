@@ -32,6 +32,28 @@ void main() {
       expect(o.namespaceUri, '');
     });
 
+    test('capture shows onEvent every event of the element in order', () {
+      String events(String xml) {
+        final List<String> seen = <String>[];
+        OpaqueXml.capture(
+          _at(xml, 'e'),
+          onEvent: (XmlPullReader r) => seen.add(switch (r.eventType) {
+            XmlEventType.startElement => '<${r.localName}',
+            XmlEventType.endElement => '>',
+            XmlEventType.characters || XmlEventType.cdata => '"${r.text}"',
+            _ => r.eventType.name,
+          }),
+        );
+        return seen.join(' ');
+      }
+
+      expect(
+        events('<r><e>a&amp;<f/><!--c--><![CDATA[b]]></e><s/></r>'),
+        '<e "a&" <f > comment "b" >',
+      );
+      expect(events('<r><e/><s/></r>'), '<e >');
+    });
+
     test('capture leaves the reader after the element', () {
       final XmlPullReader r = _at('<r><e><g/></e><s/></r>', 'e');
       OpaqueXml.capture(r);

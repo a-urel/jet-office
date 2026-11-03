@@ -168,6 +168,21 @@ void main() {
   });
 
   group('visible text of an opaque inline', () {
+    test('visibleText parses the slice within maxDepth', () {
+      final String deep =
+          '<w:ins>${'<w:smartTag>' * 300}<w:r><w:t>x</w:t></w:r>'
+          '${'</w:smartTag>' * 300}</w:ins>';
+      final XmlPullReader r = XmlPullReader(
+        '<w:p xmlns:w="${Ns.w}">$deep</w:p>',
+        maxDepth: 1000,
+      );
+      r.nextTag();
+      r.nextTag();
+      final OpaqueXml node = OpaqueXml.capture(r);
+      expect(visibleText(node, maxDepth: 400), 'x');
+      expect(() => visibleText(node), throwsA(isA<XmlParseException>()));
+    });
+
     test('ins contributes its runs', () {
       expect(_visible('<w:ins><w:r><w:t>a</w:t></w:r></w:ins>'), 'a');
     });

@@ -17,9 +17,7 @@ Set<String> _limitFields(String path) => <String>{
 /// The `DocxReadLimits` fields no DOCX code enforces yet, each with the
 /// task that will. The test fails once one of them is covered, so the entry
 /// is removed with the code that enforces it.
-const Map<String, String> _docxPending = <String, String>{
-  'maxTextLength': 'enforced when document.xml is read (phase 4 D1, Task 8)',
-};
+const Map<String, String> _docxPending = <String, String>{};
 
 void main() {
   test('every XlsxReadLimits field has a hostile limits case', () {

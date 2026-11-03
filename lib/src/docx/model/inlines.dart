@@ -10,8 +10,8 @@
 ///
 /// A [DocxOpaqueInline] keeps an element the model does not type, such as a
 /// tracked change (`w:ins`, `w:del`), a content control or a hyperlink until
-/// D5, and carries its visible text ([visibleText]), computed once when it
-/// is built.
+/// D5, and carries its visible text ([VisibleTextCollector]), computed once
+/// when it is built.
 ///
 /// The top-level functions are the model's internal surface for the reader,
 /// the writer and the document; none of them is exported.
@@ -154,7 +154,8 @@ final class DocxOpaqueInline extends DocxInline {
   String get namespaceUri => _xml.namespaceUri;
 
   /// The visible text inside the element: inserted and moved-in text counts,
-  /// deleted and moved-away text does not ([visibleText] has the rule).
+  /// deleted and moved-away text does not ([VisibleTextCollector] has the
+  /// rule).
   @override
   final String text;
 
@@ -267,20 +268,12 @@ const Set<String> _visibleContainers = <String>{
 };
 
 /// The text the inline element [node] shows, as a paragraph's text counts
-/// it.
+/// it ([VisibleTextCollector] has the rule).
 ///
-/// Runs (`w:r`) give their `w:t` text, `\t` for `w:tab`, and `\n` for
-/// `w:br` and `w:cr`; nothing else in a run is text (`w:delText`,
-/// `w:delInstrText`, `w:instrText`, drawings and other content give `''`).
-/// Inserted and moved-in text counts: `w:ins`, `w:moveTo`, `w:hyperlink`,
-/// `w:smartTag`, `w:customXml`, `w:fldSimple`, `w:dir` and `w:bdo` give the
-/// text of their children in order, recursively, and `w:sdt` gives that of
-/// its `w:sdtContent` only, never the placeholders of `w:sdtPr`. Deleted and
-/// moved-away text does not: `w:del` and `w:moveFrom` give `''` wherever
-/// they are nested, so a `w:del` inside a `w:ins` is deleted. Any other
-/// element, or one in another namespace, gives `''`. Elements are matched by
-/// namespace and local name, never by prefix.
-String visibleText(OpaqueXml node) {
+/// It parses [node]'s slice again, nested at most [maxDepth] deep; the
+/// reader instead collects the text while it captures the element. Throws
+/// an [XmlParseException] for an entity in a `w:t` that cannot be decoded.
+String visibleText(OpaqueXml node, {int maxDepth = 256}) {
   // A root that declares the bindings the slice inherited, so its prefixes
   // resolve as they did in the document.
   final StringBuffer source = StringBuffer('<r');
@@ -294,84 +287,109 @@ String visibleText(OpaqueXml node) {
     ..write('>')
     ..write(node.xml)
     ..write('</r>');
-  final XmlPullReader r = XmlPullReader(source.toString());
+  final XmlPullReader r = XmlPullReader(
+    source.toString(),
+    maxDepth: maxDepth + 1,
+  );
   r.nextTag();
   r.nextTag();
-  final StringBuffer out = StringBuffer();
-  _visible(r, out);
-  return out.toString();
+  final VisibleTextCollector collector = VisibleTextCollector();
+  OpaqueXml.capture(r, onEvent: collector.add);
+  return collector.text;
 }
 
-/// Writes the visible text of the element [r] is on to [out], and leaves
-/// [r] on the element's end event.
-void _visible(XmlPullReader r, StringBuffer out) {
-  if (r.namespaceUri != Ns.w) {
-    r.skip();
-    return;
-  }
-  final String name = r.localName;
-  if (name == 'r') {
-    _children(r, () => _runChild(r, out));
-  } else if (name == 'sdt') {
-    _children(r, () {
-      if (r.namespaceUri == Ns.w && r.localName == 'sdtContent') {
-        _visible(r, out);
-      } else {
-        r.skip();
-      }
-    });
-  } else if (_visibleContainers.contains(name)) {
-    _children(r, () => _visible(r, out));
-  } else {
-    r.skip();
-  }
+/// What an open element of a slice contributes to its visible text.
+enum _Visible {
+  /// A container whose runs are visible: `w:ins`, `w:hyperlink` and the
+  /// others of [_visibleContainers], or the slice itself.
+  container,
+
+  /// A `w:sdt`: only its `w:sdtContent` is visible.
+  sdt,
+
+  /// A `w:r`.
+  run,
+
+  /// A `w:t` in a run: its character data is the text.
+  text,
+
+  /// Anything else: nothing inside it is visible.
+  hidden,
 }
 
-/// Writes the text of the run child [r] is on to [out], and leaves [r] on
-/// its end event.
-void _runChild(XmlPullReader r, StringBuffer out) {
-  if (r.namespaceUri != Ns.w) {
-    r.skip();
-    return;
-  }
-  switch (r.localName) {
-    case 't':
-      _children(r, r.skip, out.write);
-    case 'tab':
-      out.write('\t');
-      r.skip();
-    case 'br' || 'cr':
-      out.write('\n');
-      r.skip();
-    default:
-      r.skip();
-  }
-}
+/// Collects the visible text of an inline element from the events of its
+/// capture: pass [add] as `onEvent` to `OpaqueXml.capture`.
+///
+/// Runs (`w:r`) give their `w:t` text, `\t` for `w:tab`, and `\n` for
+/// `w:br` and `w:cr`; nothing else in a run is text (`w:delText`,
+/// `w:delInstrText`, `w:instrText`, drawings and other content give `''`).
+/// Inserted and moved-in text counts: `w:ins`, `w:moveTo`, `w:hyperlink`,
+/// `w:smartTag`, `w:customXml`, `w:fldSimple`, `w:dir` and `w:bdo` give the
+/// text of their children in order, recursively, and `w:sdt` gives that of
+/// its `w:sdtContent` only, never the placeholders of `w:sdtPr`. Deleted and
+/// moved-away text does not: `w:del` and `w:moveFrom` give `''` wherever
+/// they are nested, so a `w:del` inside a `w:ins` is deleted. Any other
+/// element, or one in another namespace, gives `''`. Elements are matched by
+/// namespace and local name, never by prefix.
+final class VisibleTextCollector {
+  final StringBuffer _out = StringBuffer();
 
-/// Visits the children of the element [r] is on: [onChild] with [r] on each
-/// child's start (it must leave [r] on that child's end event), and
-/// [onText] with each run of character data or CDATA. Leaves [r] on the
-/// element's end event.
-void _children(
-  XmlPullReader r,
-  void Function() onChild, [
-  void Function(String text)? onText,
-]) {
-  if (r.isEmptyElement) {
-    r.next();
-    return;
-  }
-  final int depth = r.depth;
-  while (r.next()) {
-    final XmlEventType type = r.eventType;
-    if (type == XmlEventType.endElement && r.depth < depth) {
-      return;
+  /// What each open element contributes, innermost last.
+  final List<_Visible> _open = <_Visible>[];
+
+  /// The visible text collected so far.
+  String get text => _out.toString();
+
+  /// The length of [text], without building it.
+  int get length => _out.length;
+
+  /// Takes the event [r] is on. Throws an [XmlParseException] for character
+  /// data in a `w:t` holding an entity that cannot be decoded.
+  void add(XmlPullReader r) {
+    switch (r.eventType) {
+      case XmlEventType.startElement:
+        _open.add(_kindOf(r, _open.isEmpty ? _Visible.container : _open.last));
+      case XmlEventType.endElement:
+        if (_open.isNotEmpty) _open.removeLast();
+      case XmlEventType.characters || XmlEventType.cdata:
+        if (_open.isNotEmpty && _open.last == _Visible.text) {
+          _out.write(r.text);
+        }
+      default:
+        break;
     }
-    if (type == XmlEventType.startElement) {
-      onChild();
-    } else if (onText != null &&
-        (type == XmlEventType.characters || type == XmlEventType.cdata)) {
-      onText(r.text);
+  }
+
+  /// What the element [r] starts contributes inside a [parent], writing
+  /// the text of a tab or break at once.
+  _Visible _kindOf(XmlPullReader r, _Visible parent) {
+    if (parent == _Visible.hidden ||
+        parent == _Visible.text ||
+        r.namespaceUri != Ns.w) {
+      return _Visible.hidden;
+    }
+    final String name = r.localName;
+    switch (parent) {
+      case _Visible.container:
+        if (name == 'r') return _Visible.run;
+        if (name == 'sdt') return _Visible.sdt;
+        return _visibleContainers.contains(name)
+            ? _Visible.container
+            : _Visible.hidden;
+      case _Visible.sdt:
+        return name == 'sdtContent' ? _Visible.container : _Visible.hidden;
+      case _Visible.run:
+        switch (name) {
+          case 't':
+            return _Visible.text;
+          case 'tab':
+            _out.write('\t');
+          case 'br' || 'cr':
+            _out.write('\n');
+        }
+        return _Visible.hidden;
+      case _Visible.text || _Visible.hidden:
+        return _Visible.hidden;
     }
   }
 }
