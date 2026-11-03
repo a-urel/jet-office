@@ -124,8 +124,9 @@ jobs:
         run: dotnet run --project tool/ooxml_validate -- build/model-resaved
 
       # What the model saves after a change must be valid too: every
-      # fixture with a date, a date-time, a formula and a string set and a
-      # sheet added, plus a workbook generated from nothing.
+      # fixture with a date, a date-time, a formula and a string set, styled
+      # and laid out, and a sheet added, plus workbooks generated from
+      # nothing.
       - name: Edit the fixtures through the model
         run: dart run tool/edit_model.dart build/fixtures build/model-edited
 

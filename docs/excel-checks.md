@@ -936,6 +936,89 @@ that setting a table's header cell left the column's name, so Excel repaired
 the table; b1fa49d renames the column, and the re-check opens clean (see
 "Open issues", W1).
 
+## W2
+
+Styles and layout in the model. Open each file in Excel for Mac and record the result under "Results". A repair
+prompt is a model bug. Run this first:
+
+```bash
+dart run tool/write_fixtures.dart build/fixtures
+dart run tool/edit_model.dart build/fixtures build/model-edited
+dart run tool/write_model_sample.dart build/model_generated
+```
+
+### The edited fixtures
+
+Open every `build/model-edited/*.xlsx`. No repair prompt. On the first sheet,
+in the row after the last one:
+
+- A to D show the date and time, the date, `3` and `edited by the model`, each
+  bold on a red fill; the dates still show as dates;
+- E and F of that row are merged;
+- the row is 24 points high, and column B is 30 wide;
+- the first row stays in view when scrolling;
+- the tab is green.
+
+A sheet `Model edit` holds `added sheet`. Everything else looks as the fixture
+of that name does.
+
+### The generated workbook
+
+Open `build/model_generated/w2_generated.xlsx`. No repair prompt. It opens on
+the sheet `Report`, whose tab is green.
+
+- A1:D1 is merged and shows `Sales report`, bold, 14 points, centred.
+- Row 2 holds `Product`, `Date`, `Amount` and `Note`: bold, on a light blue
+  fill, with a medium bottom border.
+- Rows 1 and 2 stay in view when scrolling.
+- Column A is 24 wide, B 14, C 16.
+- Column B shows dates as `15.01.2026`; column C shows amounts as `1.234,50`
+  (`1,234.50` in an English locale).
+- Row 4 (`Pears`) is hidden; the row numbers jump from 3 to 5.
+- Row 5 (`Plums`) is grouped: the outline bar shows a level 2 beside it.
+- Rows 3 and 6 are plain data rows.
+- The sheet `Hidden` is not shown; Unhide lists it, and its A1 is
+  `hidden sheet`.
+
+### Two of the owner's own styled files
+
+Take two Excel files the owner made, with named cell styles and conditional
+formats, different from each other. For each: open it in Excel, check it is as
+it was, then edit it with the model. Save this as `tool/restyle_one_cell.dart`
+(do not commit it) and run
+`dart run tool/restyle_one_cell.dart my.xlsx build/restyled.xlsx`:
+
+```dart
+import 'dart:io';
+
+import 'package:jet_office/jet_office.dart';
+
+void main(List<String> args) {
+  final XlsxWorkbook book = XlsxWorkbook.open(File(args[0]).readAsBytesSync());
+  final XlsxSheet sheet = book.sheets.first;
+  final XlsxStyle own = sheet.styleAt(0, 0) ?? const XlsxStyle();
+  const XlsxStyle yellow = XlsxStyle(
+    fill: XlsxFill.solid(XlsxColor.rgb(0xFFFF00)),
+  );
+  sheet
+    ..setStyle(0, 0, own.merge(yellow))
+    ..setColumn(0, XlsxColumn(width: 40, style: sheet.column(0)?.style))
+    // Choose an empty range of the file that nothing overlaps.
+    ..merge(XlsxRange.parse('H1:I1'));
+  File(args[1]).writeAsBytesSync(book.save().bytes);
+}
+```
+
+Open `build/restyled.xlsx` in Excel. Check:
+
+- no repair prompt;
+- A1 has the yellow fill and keeps its value and format, column A is wider and
+  H1:I1 is merged;
+- everything else looks as before, including named cell styles (the Cell Styles
+  gallery lists them) and conditional formats.
+
+Result: pending.
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that

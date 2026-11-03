@@ -55,6 +55,7 @@ void main() {
         'm1_values.xlsx',
         'm1_sheets.xlsx',
         'w1_generated.xlsx',
+        'w2_generated.xlsx',
       ]),
     );
     expect(out.toString(), contains('All 2 workbooks edited'));
@@ -95,6 +96,93 @@ void main() {
       edited.rowsAt(edited.sheets.length - 1).single.cells.single.value,
       'added sheet',
     );
+  });
+
+  test('an edited workbook holds the style and layout edits', () {
+    writeOnly(input, <String>{'m1_values.xlsx', 'm2_columns_rows.xlsx'});
+    final Map<String, int> lastRows = <String, int>{
+      for (final String name in <String>[
+        'm1_values.xlsx',
+        'm2_columns_rows.xlsx',
+      ])
+        name: XlsxReader(
+          File('${input.path}/$name').readAsBytesSync(),
+        ).rowsAt(0).last.index,
+    };
+    expect(
+      editModel(
+        <String>[input.path, output.path],
+        out: StringBuffer(),
+        err: StringBuffer(),
+      ),
+      0,
+    );
+    for (final MapEntry<String, int> file in lastRows.entries) {
+      final Uint8List bytes = File(
+        '${output.path}/${file.key}',
+      ).readAsBytesSync();
+      final int row = file.value + 1;
+      final XlsxSheet sheet = XlsxWorkbook.open(bytes).sheets.first;
+      for (int column = 0; column < 4; column++) {
+        final XlsxStyle? style = sheet.styleAt(row, column);
+        expect(style?.font?.bold, isTrue, reason: file.key);
+        expect(
+          style?.fill,
+          const XlsxFill.solid(XlsxColor.rgb(0xFF0000)),
+          reason: file.key,
+        );
+      }
+      expect(sheet.column(1)?.width, 30, reason: file.key);
+      expect(sheet.rowFormat(row).height, 24, reason: file.key);
+      final XlsxRange merged = XlsxRange(row, 4, row, 5);
+      expect(sheet.merges, contains(merged), reason: file.key);
+      expect(sheet.view.pane, const XlsxPane.frozen(rows: 1), reason: file.key);
+      expect(sheet.tabColor, isNotNull, reason: file.key);
+
+      final XlsxReader reader = XlsxReader(bytes);
+      expect(reader.mergesAt(0), contains(merged), reason: file.key);
+      final XlsxReadRow read = reader
+          .rowsAt(0)
+          .firstWhere((XlsxReadRow r) => r.index == row);
+      // The dates keep their number format under the new style.
+      expect(read.cells[0].isDate, isTrue, reason: file.key);
+      expect(read.cells[1].isDate, isTrue, reason: file.key);
+      expect(read.cells[3].numberFormatId, 0, reason: file.key);
+    }
+  });
+
+  test('setting a width keeps what the column already had', () {
+    writeOnly(input, <String>{'m2_columns_rows.xlsx'});
+    final File file = File('${input.path}/m2_columns_rows.xlsx');
+    final XlsxColumn? before = XlsxWorkbook.open(
+      file.readAsBytesSync(),
+    ).sheets.first.column(1);
+    expect(
+      editModel(
+        <String>[input.path, output.path],
+        out: StringBuffer(),
+        err: StringBuffer(),
+      ),
+      0,
+    );
+    final XlsxColumn? after = XlsxWorkbook.open(
+      File('${output.path}/m2_columns_rows.xlsx').readAsBytesSync(),
+    ).sheets.first.column(1);
+    expect(after?.width, 30);
+    expect(after?.style, before?.style);
+    expect(after?.hidden, before?.hidden ?? false);
+    expect(after?.outlineLevel, before?.outlineLevel ?? 0);
+  });
+
+  test('every fixture takes every edit: exit 0', () {
+    write_fixtures.main(<String>[input.path]);
+    final StringBuffer out = StringBuffer();
+    final int code = editModel(
+      <String>[input.path, output.path],
+      out: out,
+      err: StringBuffer(),
+    );
+    expect(code, 0, reason: '$out');
   });
 
   test('a truncated workbook is reported: exit 1', () {

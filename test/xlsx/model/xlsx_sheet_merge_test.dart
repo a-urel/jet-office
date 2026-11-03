@@ -330,6 +330,52 @@ void main() {
     expect(() => sheet.merge(_r('A1:B1')), throwsStateError);
   });
 
+  test('only the first mergeCells is typed; a second is kept as written', () {
+    const String second =
+        '<mergeCells count="1"><mergeCell ref="C3:D4"/></mergeCells>';
+    final XlsxWorkbook book = _open(
+      '<mergeCells count="1"><mergeCell ref="A1:B2"/></mergeCells>$second',
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    expect(sheet.merges, <XlsxRange>[_r('A1:B2')]);
+    sheet.merge(_r('E5:F6'));
+    expect(sheet.merges, <XlsxRange>[_r('A1:B2'), _r('E5:F6')]);
+    final String xml = _xml(book);
+    expect(
+      xml,
+      contains(
+        '<mergeCells count="2"><mergeCell ref="A1:B2"/>'
+        '<mergeCell ref="E5:F6"/></mergeCells>$second',
+      ),
+    );
+  });
+
+  test('maxMerges counts per sheet, where the reader counts across', () {
+    final String five = _sheet(
+      '<mergeCells>${'<mergeCell ref="A1:B2"/>' * 5}</mergeCells>',
+    );
+    final Uint8List bytes = buildWorkbook(<String, String>{
+      'One': five,
+      'Two': five,
+    });
+    const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 5);
+    final XlsxWorkbook book = XlsxWorkbook.open(bytes, limits: limits);
+    expect(book.sheets[0].merges, hasLength(5));
+    expect(book.sheets[1].merges, hasLength(5));
+    final XlsxReader reader = XlsxReader(bytes, limits: limits);
+    expect(reader.mergesAt(0), hasLength(5));
+    expect(
+      () => reader.mergesAt(1),
+      throwsA(
+        isA<XlsxReadException>().having(
+          (XlsxReadException e) => e.reason,
+          'reason',
+          XlsxReadFailure.limitExceeded,
+        ),
+      ),
+    );
+  });
+
   test('maxMerges applies on load', () {
     final String many =
         '<mergeCells>${'<mergeCell ref="A1:B2"/>' * 6}</mergeCells>';

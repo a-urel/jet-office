@@ -10,12 +10,17 @@
 /// `XlsxWorkbook.open` and, on the first sheet, sets four cells of the row
 /// after its last row (the first free row when the last row is the grid's):
 /// a `DateTime`, an `XlsxDate`, a formula (`SUM(1,2)`, cached 3) and a
-/// string. It then adds a sheet `Model edit` (`Model edit 2` and so on when
+/// string. On the same sheet it gives those cells a bold style with a red
+/// fill over the style they have, so the dates keep their format, sets
+/// column B's width to 30 and the new row's height to 24, merges the two
+/// cells right of the new values, freezes the first row and sets a tab
+/// colour. It then adds a sheet `Model edit` (`Model edit 2` and so on when
 /// the name is taken) holding one string, saves, and writes the bytes to
-/// `<outDir>/<name>.xlsx`. The saved file is read back with `XlsxReader`,
-/// and the edits must be there. Last it writes the workbook
-/// `tool/write_model_sample.dart` makes, `w1_generated.xlsx`, to the same
-/// directory.
+/// `<outDir>/<name>.xlsx`. The saved file is read back with `XlsxReader`
+/// (values, number formats, merges) and with `XlsxWorkbook` (styles, width,
+/// height, merges, pane, tab colour), and the edits must be there. Last it
+/// writes the workbooks `tool/write_model_sample.dart` makes,
+/// `w1_generated.xlsx` and `w2_generated.xlsx`, to the same directory.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
 /// problem, 2 when the arguments are unusable or the input directory holds
@@ -43,6 +48,27 @@ void main(List<String> args) {
 /// The string the tool sets, and the one on the added sheet.
 const String _text = 'edited by the model';
 const String _addedText = 'added sheet';
+
+/// The style the tool sets on the new row's cells, over the style they have.
+const XlsxStyle _style = XlsxStyle(
+  font: XlsxFont(bold: true),
+  fill: XlsxFill.solid(_red),
+);
+const XlsxColor _red = XlsxColor.rgb(0xFF0000);
+
+/// The number of cells the tool sets in the new row.
+const int _cells = 4;
+
+/// The width of column B, the height of the new row, and the tab colour.
+const double _width = 30;
+const double _height = 24;
+const XlsxColor _tabColor = XlsxColor.rgb(0x00B050);
+
+/// The pane that freezes the first row.
+const XlsxPane _frozen = XlsxPane.frozen(rows: 1);
+
+/// The two cells right of the new values in [row].
+XlsxRange _mergedIn(int row) => XlsxRange(row, _cells, row, _cells + 1);
 
 /// Runs the tool on [args] (`<inDir> <outDir>`), writing problems to [out]
 /// and usage problems to [err], and returns the exit code.
@@ -84,13 +110,13 @@ int editModel(
   try {
     sample.writeModelSample(output.path);
   } on Object catch (e) {
-    out.writeln('w1_generated.xlsx: generating failed: $e');
+    out.writeln('generated workbooks: generating failed: $e');
     failed++;
   }
   out.writeln(
     failed == 0
-        ? 'All ${files.length} workbooks edited, and w1_generated.xlsx '
-              'written.'
+        ? 'All ${files.length} workbooks edited, and w1_generated.xlsx and '
+              'w2_generated.xlsx written.'
         : '$failed failed.',
   );
   return failed == 0 ? 0 : 1;
@@ -110,6 +136,7 @@ List<String> _edit(File file, Directory output, String name) {
       ..setCell(row, 1, const XlsxDate(2026, 11, 2))
       ..setCell(row, 2, const XlsxFormula('SUM(1,2)', cached: 3))
       ..setCell(row, 3, _text);
+    _styleAndLayOut(sheet, row);
     added = _freeName(book, 'Model edit');
     book.addSheet(added).setCell(0, 0, _addedText);
     saved = book.save().bytes;
@@ -118,6 +145,30 @@ List<String> _edit(File file, Directory output, String name) {
   }
   File('${output.path}/$name').writeAsBytesSync(saved);
   return _check(saved, row, added);
+}
+
+/// Sets the style of the new cells of [row] and the layout edits on [sheet].
+void _styleAndLayOut(XlsxSheet sheet, int row) {
+  for (int column = 0; column < _cells; column++) {
+    final XlsxStyle own = sheet.styleAt(row, column) ?? const XlsxStyle();
+    sheet.setStyle(row, column, own.merge(_style));
+  }
+  final XlsxColumn? b = sheet.column(1);
+  sheet
+    ..setColumn(
+      1,
+      XlsxColumn(
+        width: _width,
+        style: b?.style,
+        hidden: b?.hidden ?? false,
+        outlineLevel: b?.outlineLevel ?? 0,
+        collapsed: b?.collapsed ?? false,
+      ),
+    )
+    ..setRowFormat(row, const XlsxRowFormat(height: _height))
+    ..merge(_mergedIn(row))
+    ..view = sheet.view.copyWith(pane: _frozen)
+    ..tabColor = _tabColor;
 }
 
 /// The row after the last row [sheet] lists, or the first row it does not
@@ -174,8 +225,28 @@ List<String> _check(Uint8List saved, int row, String added) {
         reader.rowsAt(last).first.cells.first.value != _addedText) {
       problems.add('the added sheet is missing');
     }
+    bool isDate(int column) =>
+        cells.any((XlsxReadCell c) => c.column == column && c.isDate);
+    if (!isDate(0) || !isDate(1)) problems.add('a date lost its format');
+    if (!reader.mergesAt(0).contains(_mergedIn(row))) {
+      problems.add('the merge is missing from the reader');
+    }
+    problems.addAll(_checkModel(XlsxWorkbook.open(saved).sheets.first, row));
   } on Object catch (e) {
     problems.add('reading the saved workbook failed: $e');
   }
   return problems;
 }
+
+/// The style and layout edits [sheet] lacks.
+List<String> _checkModel(XlsxSheet sheet, int row) => <String>[
+  for (int column = 0; column < _cells; column++)
+    if (sheet.styleAt(row, column)?.font?.bold != true ||
+        sheet.styleAt(row, column)?.fill != _style.fill)
+      'the style of column $column is missing',
+  if (sheet.column(1)?.width != _width) 'the width is missing',
+  if (sheet.rowFormat(row).height != _height) 'the height is missing',
+  if (!sheet.merges.contains(_mergedIn(row))) 'the merge is missing',
+  if (sheet.view.pane != _frozen) 'the frozen row is missing',
+  if (sheet.tabColor != _tabColor) 'the tab colour is missing',
+];

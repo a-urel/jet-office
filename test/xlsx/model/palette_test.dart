@@ -97,6 +97,14 @@ void main() {
     }
   });
 
+  test('a broken styles part throws from the palette, not from rgb', () {
+    final XlsxWorkbook book = _open(styles: '<styleSheet xmlns="$mainNs">');
+    final Matcher broken = throwsA(isA<XlsxReadException>());
+    expect(() => book.indexedColors, broken);
+    expect(() => book.resolveColor(const XlsxColor.indexed(8)), broken);
+    expect(book.resolveColor(const XlsxColor.rgb(0x112233)), 0xFF112233);
+  });
+
   test('rgb and auto', () {
     final XlsxWorkbook book = _open();
     expect(book.resolveColor(const XlsxColor.rgb(0x123456)), 0xFF123456);

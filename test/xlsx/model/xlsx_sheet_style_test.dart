@@ -415,6 +415,21 @@ void main() {
     expect(sheet.cellAt(0, 0)?.value, XlsxDecimal('1'));
   });
 
+  test('re-setting a dangling or invalid s drops it', () {
+    final XlsxWorkbook book = _open(
+      '<row r="1"><c r="A1" s="9"><v>1</v></c><c r="B1" s="x"><v>2</v></c>'
+      '</row>',
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    sheet
+      ..setStyle(0, 0, sheet.styleAt(0, 0))
+      ..setStyle(0, 1, sheet.styleAt(0, 1));
+    expect(changeLogOf(book).hasChanges, isTrue);
+    final String part = partText(book.save().bytes, 'xl/worksheets/sheet1.xml');
+    expect(part, contains('<c r="A1"><v>1</v></c>'));
+    expect(part, contains('<c r="B1"><v>2</v></c>'));
+  });
+
   test('XlsxCell without a style needs no styles part', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
       buildWorkbook(<String, String>{
