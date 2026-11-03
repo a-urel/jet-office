@@ -75,7 +75,7 @@ List<XlsxRange> readMerges(
           reader.namespaceUri == Ns.main) {
         final String? ref = reader.getAttribute('ref', namespaceUri: '');
         reader.skip();
-        final XlsxRange? range = ref == null ? null : _parse(ref);
+        final XlsxRange? range = ref == null ? null : parseMergeRange(ref);
         if (range == null) {
           skipped();
         } else {
@@ -96,7 +96,10 @@ List<XlsxRange> readMerges(
   });
 }
 
-XlsxRange? _parse(String ref) {
+/// The range a `<mergeCell ref>` of [ref] names, or `null` when
+/// `XlsxRange.parse` refuses it. The one reading of a merge reference, shared
+/// by [readMerges] and the workbook model.
+XlsxRange? parseMergeRange(String ref) {
   try {
     return XlsxRange.parse(ref);
   } on ArgumentError {

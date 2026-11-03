@@ -14,8 +14,9 @@
 /// other child of `<worksheet>` (`sheetPr`, `sheetViews`, `mergeCells`,
 /// `hyperlinks`, `pageMargins`, `extLst`, ...) is an [OpaqueXml] at its
 /// original position, except the first `<sheetFormatPr>` and the first
-/// `<cols>`, which are typed when plain (`columns.dart`) and edited as
-/// immutable values, so `layoutSnapshot` and `restoreLayout` undo an edit.
+/// `<cols>`, which are typed when plain (`columns.dart`), and the first
+/// `<mergeCells>` ([MergeGroup]); all three are edited as immutable values,
+/// so `swapLayout` undoes an edit of one without touching the others.
 /// The root keeps its namespace declarations and `mc:Ignorable`.
 ///
 /// Saving recomputes the bookkeeping (spec §4.4): `<dimension ref>` from the
@@ -43,7 +44,9 @@ import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
+import '../range.dart';
 import '../raw_cell.dart';
+import '../read/merge_reader.dart' show parseMergeRange;
 import '../read/package_reader.dart'
     show strictSpreadsheetNs, strictUnsupported;
 import '../read/read_exception.dart';
@@ -181,6 +184,100 @@ final class _SheetFormat {
   }
 }
 
+/// One child of a `<mergeCells>`: a merged range, or an element kept as
+/// written (an unreadable `<mergeCell>`, or a foreign element).
+final class MergeItem {
+  const MergeItem._(this.range, this.source, this.counted);
+
+  /// A merge made by the model, written as `<mergeCell ref="..."/>`.
+  const MergeItem.made(XlsxRange this.range) : source = null, counted = true;
+
+  /// The merged range, or `null` for an element that is not a readable
+  /// `<mergeCell>`.
+  final XlsxRange? range;
+
+  /// The element as read; `null` for a merge made by the model.
+  final OpaqueXml? source;
+
+  /// Whether the element is a `<mergeCell>` (readable or not), which
+  /// `count` counts.
+  final bool counted;
+}
+
+/// The typed first `<mergeCells>`: its name, declarations and attributes as
+/// written, and its [items] in file order.
+///
+/// An untouched group is written as it was (a wrong `count` included); once
+/// [withItems] edits it, `count` is the number of its `<mergeCell>` items.
+final class MergeGroup {
+  /// A `<mergeCells>` named [qualifiedName] holding [items].
+  MergeGroup(
+    this.qualifiedName,
+    this.namespaces,
+    this.attributes,
+    this.items, {
+    this.edited = false,
+  });
+
+  /// The element's name with its prefix.
+  final String qualifiedName;
+
+  /// The namespace declarations of the start tag.
+  final Map<String, String> namespaces;
+
+  /// The attributes, `count` included, as written.
+  final List<KeptAttribute> attributes;
+
+  /// The children, in source order.
+  final List<MergeItem> items;
+
+  /// Whether `count` is recomputed on save.
+  final bool edited;
+
+  /// The readable merged ranges, in file order.
+  List<XlsxRange> get ranges => <XlsxRange>[
+    for (final MergeItem i in items)
+      if (i.range != null) i.range!,
+  ];
+
+  /// This group holding [next], with `count` recomputed on save.
+  MergeGroup withItems(List<MergeItem> next) =>
+      MergeGroup(qualifiedName, namespaces, attributes, next, edited: true);
+
+  /// Writes the element. [above] holds the bindings in scope at the
+  /// worksheet's root.
+  void writeTo(XmlWriter w, Map<String, String> above) {
+    w.start(qualifiedName);
+    writeNamespaceDeclarations(w, namespaces);
+    final Map<String, String> inner = mergeNamespaces(above, namespaces);
+    writeKeptAttributes(
+      w,
+      edited
+          ? replaceAttributes(attributes, <String, String?>{
+              'count': '${items.where((MergeItem i) => i.counted).length}',
+            })
+          : attributes,
+      declaredAbove: inner,
+    );
+    final int colon = qualifiedName.indexOf(':');
+    final String prefix = colon < 0
+        ? ''
+        : qualifiedName.substring(0, colon + 1);
+    for (final MergeItem item in items) {
+      final OpaqueXml? source = item.source;
+      if (source != null) {
+        source.writeTo(w, declaredAbove: inner);
+      } else {
+        w
+          ..start('${prefix}mergeCell')
+          ..attribute('ref', item.range!.ref)
+          ..end();
+      }
+    }
+    w.end();
+  }
+}
+
 /// The typed `<sheetData>`: its element name, declarations and attributes;
 /// the rows live in the part's [CellStore].
 final class _SheetData {
@@ -293,6 +390,9 @@ final class WorksheetPart implements PartContent {
         } else {
           children.add(typed);
         }
+      } else if (main && r.localName == 'mergeCells' && !sheet._hasMergeCells) {
+        sheet._hasMergeCells = true;
+        children.add(_readMergeCells(r, part, limits, warn));
       } else if (main &&
           r.localName == 'sheetData' &&
           sheet._sheetData == null) {
@@ -355,6 +455,10 @@ final class WorksheetPart implements PartContent {
   /// Whether the first `<cols>` is kept opaque (it is not plain, see
   /// `columns.dart`): columns are not edited then.
   bool _colsOpaque = false;
+
+  /// Whether the part read a SpreadsheetML `<mergeCells>`; a second one is
+  /// kept opaque and its merges are not read.
+  bool _hasMergeCells = false;
   _SheetData? _sheetData;
   CellEncoder? _encoder;
 
@@ -372,6 +476,60 @@ final class WorksheetPart implements PartContent {
   /// Sets the encoder that writes the cells; [encode] needs one.
   void bindEncoder(CellEncoder encoder) {
     _encoder = encoder;
+  }
+
+  /// Reads the `<mergeCells>` the current event of [r] starts and consumes
+  /// it. A `<mergeCell>` is read as `readMerges` reads it (same namespace,
+  /// same `ref` parse); one it would skip is kept as written and reported
+  /// to [warn] as `mergeRangeInvalid`. Throws a `limitExceeded`
+  /// [XlsxReadException] naming `maxMerges` and [part] when the group holds
+  /// more readable merges than [limits] allows.
+  static MergeGroup _readMergeCells(
+    XmlPullReader r,
+    String part,
+    XlsxReadLimits limits,
+    void Function(XlsxWarningCode code, String? cell, {String? detail}) warn,
+  ) {
+    final String qualifiedName = r.qualifiedName;
+    final Map<String, String> namespaces = Map<String, String>.of(
+      r.declaredNamespaces,
+    );
+    final List<KeptAttribute> attributes = keepAttributes(r);
+    final int depth = r.depth;
+    final List<MergeItem> items = <MergeItem>[];
+    int readable = 0;
+    if (r.isEmptyElement) {
+      r.skip();
+    } else {
+      while (r.next()) {
+        if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+        if (r.eventType != XmlEventType.startElement) continue;
+        final bool mergeCell =
+            r.depth == depth + 1 &&
+            r.namespaceUri == Ns.main &&
+            r.localName == 'mergeCell';
+        final String? ref = mergeCell
+            ? r.getAttribute('ref', namespaceUri: '')
+            : null;
+        final XlsxRange? range = ref == null ? null : parseMergeRange(ref);
+        final OpaqueXml source = OpaqueXml.capture(r);
+        if (mergeCell && range == null) {
+          warn(XlsxWarningCode.mergeRangeInvalid, null);
+        }
+        if (range != null) {
+          if (readable >= limits.maxMerges) {
+            throw XlsxReadException(
+              XlsxReadFailure.limitExceeded,
+              'Limit maxMerges (${limits.maxMerges}) exceeded.',
+              part: part,
+            );
+          }
+          readable++;
+        }
+        items.add(MergeItem._(range, source, mergeCell));
+      }
+    }
+    return MergeGroup(qualifiedName, namespaces, attributes, items);
   }
 
   void _readRows(
@@ -423,6 +581,7 @@ final class WorksheetPart implements PartContent {
       if (c is _Dimension && after.contains('dimension') ||
           c is _SheetFormat && after.contains('sheetFormatPr') ||
           c is ColsGroup && after.contains('cols') ||
+          c is MergeGroup && after.contains('mergeCells') ||
           c is _SheetData && after.contains('sheetData') ||
           c is OpaqueXml &&
               c.namespaceUri == Ns.main &&
@@ -472,6 +631,8 @@ final class WorksheetPart implements PartContent {
         case _SheetFormat():
           c.writeTo(w, root.namespaces, rowLevel: rowLevel, colLevel: colLevel);
         case ColsGroup():
+          c.writeTo(w, root.namespaces);
+        case MergeGroup():
           c.writeTo(w, root.namespaces);
         case _SheetData():
           _writeSheetData(w, c, root.namespaces, encoder);
@@ -620,12 +781,71 @@ final class WorksheetPart implements PartContent {
     _children[_children.indexOf(format)] = format.withAttributes(next);
   }
 
-  /// The typed first element of [slot] (`cols` or `sheetFormatPr`), or
-  /// `null` when the part has none typed. Elements are immutable, so an
-  /// edit replaces the element, and [swapLayout] undoes it.
+  // -- Merged ranges ---------------------------------------------------------
+
+  MergeGroup? get _mergeGroup {
+    for (final Object c in _children) {
+      if (c is MergeGroup) return c;
+    }
+    return null;
+  }
+
+  /// The readable merged ranges of the first `<mergeCells>`, in file order;
+  /// none for an untyped part.
+  List<XlsxRange> get merges => _mergeGroup?.ranges ?? const <XlsxRange>[];
+
+  /// Adds the merge [range] after the others, making the `<mergeCells>` in
+  /// schema position when the part has none. Must run inside `editLayout`
+  /// of slot `mergeCells`; the caller has checked [range].
+  void addMerge(XlsxRange range) {
+    final MergeGroup? group = _mergeGroup;
+    if (group == null) {
+      _children.insert(
+        _positionFor('mergeCells'),
+        MergeGroup(
+          '${_prefixOf(_root!.qualifiedName)}mergeCells',
+          const <String, String>{},
+          const <KeptAttribute>[],
+          <MergeItem>[MergeItem.made(range)],
+          edited: true,
+        ),
+      );
+      return;
+    }
+    _children[_children.indexOf(group)] = group.withItems(<MergeItem>[
+      ...group.items,
+      MergeItem.made(range),
+    ]);
+  }
+
+  /// Removes the first merge equal to [range]; the `<mergeCells>` goes with
+  /// its last child. Must run inside `editLayout` of slot `mergeCells`.
+  /// Throws a [StateError] when [range] is not merged.
+  void removeMerge(XlsxRange range) {
+    final MergeGroup? group = _mergeGroup;
+    final int at = group == null
+        ? -1
+        : group.items.indexWhere((MergeItem i) => i.range == range);
+    if (group == null || at < 0) {
+      throw StateError('The range ${range.ref} is not merged.');
+    }
+    final List<MergeItem> next = <MergeItem>[...group.items]..removeAt(at);
+    final int index = _children.indexOf(group);
+    if (next.isEmpty) {
+      _children.removeAt(index);
+    } else {
+      _children[index] = group.withItems(next);
+    }
+  }
+
+  /// The typed first element of [slot] (`cols`, `sheetFormatPr` or
+  /// `mergeCells`), or `null` when the part has none typed. Elements are
+  /// immutable, so an edit replaces the element, and [swapLayout] undoes
+  /// it.
   Object? layoutElement(String slot) => switch (slot) {
     'cols' => _cols,
     'sheetFormatPr' => _format,
+    'mergeCells' => _mergeGroup,
     _ => throw ArgumentError.value(slot, 'slot', 'Not a layout slot.'),
   };
 

@@ -34,6 +34,7 @@ import '../date_serial.dart';
 import '../format/format_kind.dart';
 import '../hyperlink.dart';
 import '../limits.dart';
+import '../merge_check.dart';
 import '../number_format.dart';
 import '../range.dart';
 import '../raw_cell.dart';
@@ -65,6 +66,7 @@ import 'workbook_part.dart';
 import 'worksheet_part.dart';
 
 part 'xlsx_sheet_layout.dart';
+part 'xlsx_sheet_merges.dart';
 
 /// What a sheet needs from its workbook.
 abstract interface class SheetHost {
@@ -135,7 +137,7 @@ int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
 ///
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
 /// `A`.
-final class XlsxSheet with _SheetLayout {
+final class XlsxSheet with _SheetLayout, _SheetMerges {
   XlsxSheet._(this._host, this._entry, this._partName, this._part);
 
   @override
@@ -644,6 +646,7 @@ final class XlsxSheet with _SheetLayout {
 
   /// The sheet's tables, read once. A table part that cannot be read or
   /// typed is left out, and so kept as written.
+  @override
   List<({String partName, TablePart table})> _sheetTables() {
     final List<({String partName, TablePart table})>? cached = _tables;
     if (cached != null) return cached;

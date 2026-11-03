@@ -10,8 +10,8 @@
 /// refuse an edit that would break a group. [renameTableColumn] gives a table
 /// column a new name, recording a [TableColumnNameChange] the same way, and
 /// [setStoredRowAttributes] sets a row's attributes, recording a
-/// [SetRowAttributesChange]; [editLayout] edits a part's `cols` and
-/// `sheetFormatPr`, recording a [SetLayoutChange].
+/// [SetRowAttributesChange]; [editLayout] edits a part's `cols`,
+/// `sheetFormatPr` and `mergeCells`, recording a [SetLayoutChange].
 /// [appendStyle] and [appendNumberFormat] give a cell format index,
 /// recording a [StylesAppendChange] when that appended to the styles part,
 /// so a transaction that fails later, or an undo, removes what it appended.
@@ -154,8 +154,8 @@ void setStoredRowAttributes(
   }
 }
 
-/// The change of one layout element of a worksheet part (`cols` or
-/// `sheetFormatPr`): the element before and after.
+/// The change of one layout element of a worksheet part (`cols`,
+/// `sheetFormatPr` or `mergeCells`): the element before and after.
 ///
 /// Only that element's slot is swapped, so a change to the other element is
 /// independent of this one.
@@ -167,7 +167,7 @@ final class SetLayoutChange implements Change {
   /// The worksheet part.
   final WorksheetPart part;
 
-  /// `cols` or `sheetFormatPr`.
+  /// `cols`, `sheetFormatPr` or `mergeCells`.
   final String slot;
 
   /// The element before the change.
@@ -183,9 +183,10 @@ final class SetLayoutChange implements Change {
   void reapply() => part.swapLayout(slot, before, after);
 }
 
-/// Runs [edit], which changes the element of [slot] (`cols` or
-/// `sheetFormatPr`) of [part] through [WorksheetPart.setColumnRuns] or
-/// [WorksheetPart.changeSheetFormat], and records the change in [log]
+/// Runs [edit], which changes the element of [slot] (`cols`,
+/// `sheetFormatPr` or `mergeCells`) of [part] through
+/// [WorksheetPart.setColumnRuns], [WorksheetPart.changeSheetFormat],
+/// [WorksheetPart.addMerge] or [WorksheetPart.removeMerge], and records the change in [log]
 /// unless it changed nothing.
 ///
 /// Must run inside `log.transaction`. If [edit] or recording throws, the
