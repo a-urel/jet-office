@@ -30,3 +30,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+Word blank document
+-------------------
+
+The theme, styles, font table, settings and web settings XML in
+lib/src/docx/blank_document.dart are taken from a blank document saved by
+Microsoft Word for Mac 16.114.1 (test/fixtures/owner/docx/blank.docx), with
+the revision identifiers, document ids and the regional settings removed.
+Whether that XML may ship under this package's licence is an open question
+for the owner, not settled here.

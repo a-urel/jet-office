@@ -31,6 +31,7 @@ import 'dart:typed_data';
 
 import '../opc/change_log.dart';
 import '../zip/archive_adapter.dart';
+import 'blank_document.dart';
 import 'document_part.dart';
 import 'docx_package.dart';
 import 'model/blocks.dart';
@@ -64,12 +65,14 @@ bool isBodyLoaded(DocxDocument document) => document._body != null;
 /// what the input's did; a change touches only what it changes. Every call
 /// is synchronous.
 final class DocxDocument {
-  /// An empty document.
+  /// A new document like Word for Mac's blank one: one empty paragraph, an
+  /// A4 portrait section, Aptos at 12 pt through the theme, and Word's
+  /// default styles (spec 4.5).
   ///
-  /// Not available yet: it throws [UnimplementedError]. Open a file with
-  /// [DocxDocument.open].
-  factory DocxDocument() =>
-      throw UnimplementedError('An empty DocxDocument cannot be created yet.');
+  /// It carries no locale: the theme font language and every default
+  /// language are `en-US`, and the decimal symbol and list separator are
+  /// left to the reader's system. It has no document properties.
+  factory DocxDocument() => DocxDocument.open(blankDocumentBytes());
 
   /// Opens the DOCX file [bytes] within [limits].
   ///

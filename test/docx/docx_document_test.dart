@@ -309,10 +309,11 @@ void main() {
       expect((reopened.body.blocks.last as DocxParagraph).style, 'Total');
     });
 
-    test('DocxDocument() starts an empty document', () {
+    test('DocxDocument() starts a document of one empty paragraph', () {
       final DocxDocument doc = DocxDocument();
-      expect(doc.body.blocks, isEmpty);
-    }, skip: 'Task 11 fills in DocxDocument()');
+      expect(doc.body.blocks, hasLength(1));
+      expect((doc.body.blocks.single as DocxParagraph).inlines, isEmpty);
+    });
 
     test('a limit below 1 throws ArgumentError', () {
       expect(
