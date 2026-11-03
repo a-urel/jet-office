@@ -138,6 +138,14 @@ export 'src/common/locale.dart' show OfficeLocale;
 export 'src/docx/docx_document.dart' show DocxBody, DocxDocument, DocxResult;
 export 'src/docx/model/blocks.dart'
     show DocxBlock, DocxOpaqueBlock, DocxParagraph;
+export 'src/docx/model/formatting.dart'
+    show
+        DocxBorder,
+        DocxBorderStyle,
+        DocxColor,
+        DocxShading,
+        DocxShadingPattern,
+        DocxThemeColor;
 export 'src/docx/model/inlines.dart' show DocxInline, DocxOpaqueInline, DocxRun;
 export 'src/docx/model/run_content.dart'
     show
