@@ -83,6 +83,7 @@
 /// and a type is public only once it is exported here.
 ///
 /// @docImport 'src/common/locale.dart';
+/// @docImport 'src/docx/warnings.dart';
 /// @docImport 'src/xlsx/format/format_locale.dart';
 /// @docImport 'src/xlsx/format/formatted_value.dart';
 /// @docImport 'src/xlsx/format/formatter.dart';
@@ -105,6 +106,7 @@ library;
 
 export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
+export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;
 export 'src/xlsx/alignment.dart'
     show
         XlsxAlignment,

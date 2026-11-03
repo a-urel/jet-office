@@ -41,4 +41,16 @@ void main() {
     expect(markdown, contains('native-speaker'));
     expect(markdown, contains('dart run tool/warning_messages.dart'));
   });
+
+  test('has a DOCX row for every DOCX warning code', () {
+    expect(markdown, contains('## DOCX'));
+    for (final DocxWarningCode code in DocxWarningCode.values) {
+      final List<String> rows = markdown
+          .split('\n')
+          .where((String l) => l.startsWith('| `docx: ${code.name}` |'))
+          .toList();
+      expect(rows, hasLength(1), reason: code.name);
+      expect(rows.single.split(' | '), hasLength(4), reason: code.name);
+    }
+  });
 }
