@@ -10,7 +10,8 @@
 /// refuse an edit that would break a group. [renameTableColumn] gives a table
 /// column a new name, recording a [TableColumnNameChange] the same way, and
 /// [setStoredRowAttributes] sets a row's attributes, recording a
-/// [SetRowAttributesChange].
+/// [SetRowAttributesChange]; [editLayout] edits a part's `cols` and
+/// `sheetFormatPr`, recording a [SetLayoutChange].
 /// [appendStyle] and [appendNumberFormat] give a cell format index,
 /// recording a [StylesAppendChange] when that appended to the styles part,
 /// so a transaction that fails later, or an undo, removes what it appended.
@@ -24,6 +25,7 @@ import '../style.dart';
 import 'cell_store.dart';
 import 'styles_part.dart';
 import 'table_part.dart';
+import 'worksheet_part.dart';
 
 /// The change of one cell: its content before and after.
 ///
@@ -150,6 +152,56 @@ void setStoredRowAttributes(
     change.revert();
     rethrow;
   }
+}
+
+/// The change of a worksheet part's layout elements (`cols`,
+/// `sheetFormatPr`): the part's children before and after.
+final class SetLayoutChange implements Change {
+  /// A change of [part] from the children [before] to [after], both from
+  /// [WorksheetPart.layoutSnapshot].
+  SetLayoutChange(this.part, this.before, this.after);
+
+  /// The worksheet part.
+  final WorksheetPart part;
+
+  /// The children before the change.
+  final List<Object> before;
+
+  /// The children after the change.
+  final List<Object> after;
+
+  @override
+  void revert() => part.restoreLayout(before);
+
+  @override
+  void reapply() => part.restoreLayout(after);
+}
+
+/// Runs [edit], which changes the layout elements of [part] through
+/// [WorksheetPart.setColumnRuns] and [WorksheetPart.changeSheetFormat], and
+/// records the change in [log] unless it changed nothing.
+///
+/// Must run inside `log.transaction`. If [edit] or recording throws, the
+/// part is put back as it was before the error leaves.
+void editLayout(ChangeLog log, WorksheetPart part, void Function() edit) {
+  final List<Object> before = part.layoutSnapshot();
+  try {
+    edit();
+    final List<Object> after = part.layoutSnapshot();
+    if (_sameChildren(before, after)) return;
+    log.record(SetLayoutChange(part, before, after));
+  } catch (_) {
+    part.restoreLayout(before);
+    rethrow;
+  }
+}
+
+bool _sameChildren(List<Object> a, List<Object> b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (!identical(a[i], b[i])) return false;
+  }
+  return true;
 }
 
 /// The change of one table column's name: before and after.

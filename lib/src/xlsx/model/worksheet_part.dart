@@ -11,10 +11,12 @@
 /// cells). Children of `<sheetData>` other than rows, which the schema does
 /// not allow, are kept too but written after the last row, so their position
 /// among the rows is not kept. Every
-/// other child of `<worksheet>` (`sheetPr`, `sheetViews`, `cols`,
-/// `mergeCells`, `hyperlinks`, `pageMargins`, `extLst`, ...) is an
-/// [OpaqueXml] at its original position, and the root keeps its namespace
-/// declarations and `mc:Ignorable`.
+/// other child of `<worksheet>` (`sheetPr`, `sheetViews`, `mergeCells`,
+/// `hyperlinks`, `pageMargins`, `extLst`, ...) is an [OpaqueXml] at its
+/// original position, except the first `<sheetFormatPr>` and the first
+/// `<cols>`, which are typed when plain (`columns.dart`) and edited as
+/// immutable values, so `layoutSnapshot` and `restoreLayout` undo an edit.
+/// The root keeps its namespace declarations and `mc:Ignorable`.
 ///
 /// Saving recomputes the bookkeeping (spec §4.4): `<dimension ref>` from the
 /// store's bounds (`A1` without cells), and each row's `spans` as the first
@@ -41,7 +43,6 @@ import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
-import '../limits.dart';
 import '../raw_cell.dart';
 import '../read/package_reader.dart'
     show strictSpreadsheetNs, strictUnsupported;
@@ -50,6 +51,7 @@ import '../read/read_limits.dart';
 import '../read/sheet_reader.dart' show RawRow, RawRowReader;
 import '../warnings.dart';
 import 'cell_store.dart';
+import 'columns.dart';
 
 /// The children of `<worksheet>` in the order of the schema's
 /// `CT_Worksheet` sequence.
@@ -119,12 +121,14 @@ final class _Dimension {
 }
 
 /// The typed `<sheetFormatPr>`: its attributes as written, with
-/// `outlineLevelRow` raised on save to the deepest row outline level.
+/// `outlineLevelRow` and `outlineLevelCol` raised on save to the deepest row
+/// and column outline level.
 ///
 /// Only an element without element children is typed (an end tag with
 /// nothing between is the same as an empty element). One with children stays
-/// an [OpaqueXml], is written as it was, and its `outlineLevelRow` is not
-/// bookkept; no second element is made beside it.
+/// an [OpaqueXml], is written as it was, and its outline levels are not
+/// bookkept; no second element is made beside it, and it is read through an
+/// untyped view of the same class.
 final class _SheetFormat {
   _SheetFormat(this.qualifiedName, this.namespaces, this.attributes);
 
@@ -132,47 +136,42 @@ final class _SheetFormat {
   final Map<String, String> namespaces;
   final List<KeptAttribute> attributes;
 
-  /// The kept `outlineLevelRow`, or 0 when it is absent or not a level.
-  int get outlineLevelRow {
+  /// The value of the first attribute without a namespace named [name].
+  String? attribute(String name) {
     for (final KeptAttribute a in attributes) {
-      if (a.namespaceUri.isEmpty && a.qualifiedName == 'outlineLevelRow') {
-        return _level(a.value) ?? 0;
-      }
+      if (a.namespaceUri.isEmpty && a.qualifiedName == name) return a.value;
     }
-    return 0;
+    return null;
   }
 
-  /// Writes the element with `outlineLevelRow` of [level] when that is
-  /// deeper than the kept value, else as it was.
-  void writeTo(XmlWriter w, Map<String, String> above, int level) {
+  /// The kept `outlineLevelRow`, or 0 when it is absent or not a level.
+  int get outlineLevelRow =>
+      parseOutlineLevel(attribute('outlineLevelRow')) ?? 0;
+
+  /// The kept `outlineLevelCol`, or 0 when it is absent or not a level.
+  int get outlineLevelCol =>
+      parseOutlineLevel(attribute('outlineLevelCol')) ?? 0;
+
+  /// This element with [next] as its attributes.
+  _SheetFormat withAttributes(List<KeptAttribute> next) =>
+      _SheetFormat(qualifiedName, namespaces, next);
+
+  /// Writes the element with `outlineLevelRow` of [rowLevel] and
+  /// `outlineLevelCol` of [colLevel] when those are deeper than the kept
+  /// values, else as it was.
+  void writeTo(
+    XmlWriter w,
+    Map<String, String> above, {
+    required int rowLevel,
+    required int colLevel,
+  }) {
     w.start(qualifiedName);
     writeNamespaceDeclarations(w, namespaces);
-    final bool raise = level > outlineLevelRow;
-    bool written = false;
-    final List<KeptAttribute> out = <KeptAttribute>[];
-    for (final KeptAttribute a in attributes) {
-      if (raise &&
-          a.namespaceUri.isEmpty &&
-          a.qualifiedName == 'outlineLevelRow') {
-        if (!written) {
-          out.add((
-            qualifiedName: a.qualifiedName,
-            namespaceUri: '',
-            value: '$level',
-          ));
-          written = true;
-        }
-      } else {
-        out.add(a);
-      }
-    }
-    if (raise && !written) {
-      out.add((
-        qualifiedName: 'outlineLevelRow',
-        namespaceUri: '',
-        value: '$level',
-      ));
-    }
+    final List<KeptAttribute> out =
+        replaceAttributes(attributes, <String, String?>{
+          if (rowLevel > outlineLevelRow) 'outlineLevelRow': '$rowLevel',
+          if (colLevel > outlineLevelCol) 'outlineLevelCol': '$colLevel',
+        });
     writeKeptAttributes(
       w,
       out,
@@ -180,15 +179,6 @@ final class _SheetFormat {
     );
     w.end();
   }
-}
-
-/// [value] as an outline level from 0 to 7, or `null`.
-int? _level(String value) {
-  if (value.isEmpty || value.length > 3) return null;
-  final int? level = int.tryParse(value);
-  return level != null && level >= 0 && level <= XlsxLimits.maxOutlineLevel
-      ? level
-      : null;
 }
 
 /// The typed `<sheetData>`: its element name, declarations and attributes;
@@ -288,9 +278,20 @@ final class WorksheetPart implements PartContent {
           },
         );
         if (hasChildren) {
+          sheet._formatOpaque = f;
           children.add(whole);
         } else {
           children.add(f);
+        }
+      } else if (main && r.localName == 'cols' && !sheet._hasCols) {
+        sheet._hasCols = true;
+        final CapturedCols cols = captureCols(r);
+        final ColsGroup? typed = cols.typed;
+        if (typed == null) {
+          sheet._colsOpaque = true;
+          children.add(cols.whole);
+        } else {
+          children.add(typed);
         }
       } else if (main &&
           r.localName == 'sheetData' &&
@@ -340,9 +341,20 @@ final class WorksheetPart implements PartContent {
   final List<Object> _children;
   _Dimension? _dimension;
 
-  /// Whether the part has a `<sheetFormatPr>`, typed or kept opaque (one
-  /// with element children): none is made then.
+  /// Whether the part read a `<sheetFormatPr>`, typed or kept opaque (one
+  /// with element children): a second one is not typed.
   bool _hasSheetFormat = false;
+
+  /// The attributes of a `<sheetFormatPr>` kept opaque, for reading only.
+  _SheetFormat? _formatOpaque;
+
+  /// Whether the part read a `<cols>`, typed or kept opaque; a second one
+  /// is not typed.
+  bool _hasCols = false;
+
+  /// Whether the first `<cols>` is kept opaque (it is not plain, see
+  /// `columns.dart`): columns are not edited then.
+  bool _colsOpaque = false;
   _SheetData? _sheetData;
   CellEncoder? _encoder;
 
@@ -410,6 +422,7 @@ final class WorksheetPart implements PartContent {
       final Object c = _children[i];
       if (c is _Dimension && after.contains('dimension') ||
           c is _SheetFormat && after.contains('sheetFormatPr') ||
+          c is ColsGroup && after.contains('cols') ||
           c is _SheetData && after.contains('sheetData') ||
           c is OpaqueXml &&
               c.namespaceUri == Ns.main &&
@@ -445,18 +458,21 @@ final class WorksheetPart implements PartContent {
     final XmlRoot root = _root!;
     root.writeStart(w);
     final int rowLevel = _deepestRowLevel();
-    final int madeAt = !_hasSheetFormat && rowLevel > 0
+    final int colLevel = _deepestColumnLevel();
+    final int madeAt = !_formatPresent && (rowLevel > 0 || colLevel > 0)
         ? _positionFor('sheetFormatPr')
         : -1;
     for (int i = 0; i <= _children.length; i++) {
-      if (i == madeAt) _writeMadeSheetFormat(w, rowLevel);
+      if (i == madeAt) _writeMadeSheetFormat(w, rowLevel, colLevel);
       if (i == _children.length) break;
       final Object c = _children[i];
       switch (c) {
         case _Dimension():
           c.writeTo(w, root.namespaces, _dimensionRef());
         case _SheetFormat():
-          c.writeTo(w, root.namespaces, rowLevel);
+          c.writeTo(w, root.namespaces, rowLevel: rowLevel, colLevel: colLevel);
+        case ColsGroup():
+          c.writeTo(w, root.namespaces);
         case _SheetData():
           _writeSheetData(w, c, root.namespaces, encoder);
         case OpaqueXml():
@@ -475,22 +491,142 @@ final class WorksheetPart implements PartContent {
         if (a.namespaceUri.isNotEmpty || a.qualifiedName != 'outlineLevel') {
           continue;
         }
-        final int level = _level(a.value) ?? 0;
+        final int level = parseOutlineLevel(a.value) ?? 0;
         if (level > deepest) deepest = level;
       }
     }
     return deepest;
   }
 
+  /// The deepest outline level of the typed `<cols>`, 0 when none.
+  int _deepestColumnLevel() => _cols?.deepestOutline ?? 0;
+
   /// Writes the `<sheetFormatPr>` of a part that had none, as the writer
-  /// does for an outline: `defaultRowHeight` (required) and
-  /// `outlineLevelRow`.
-  void _writeMadeSheetFormat(XmlWriter w, int level) {
+  /// does for an outline: `defaultRowHeight` (required), then
+  /// `outlineLevelRow` and `outlineLevelCol` when they are deeper than 0.
+  void _writeMadeSheetFormat(XmlWriter w, int rowLevel, int colLevel) {
     w
       ..start('${_prefixOf(_root!.qualifiedName)}sheetFormatPr')
-      ..attribute('defaultRowHeight', '15')
-      ..attribute('outlineLevelRow', '$level')
-      ..end();
+      ..attribute('defaultRowHeight', '15');
+    if (rowLevel > 0) w.attribute('outlineLevelRow', '$rowLevel');
+    if (colLevel > 0) w.attribute('outlineLevelCol', '$colLevel');
+    w.end();
+  }
+
+  // -- Columns and default sizes ---------------------------------------------
+
+  /// The typed first `<cols>`, or `null` when there is none (or it is kept
+  /// opaque).
+  ColsGroup? get _cols {
+    for (final Object c in _children) {
+      if (c is ColsGroup) return c;
+    }
+    return null;
+  }
+
+  /// The typed first `<sheetFormatPr>`, or `null`.
+  _SheetFormat? get _format {
+    for (final Object c in _children) {
+      if (c is _SheetFormat) return c;
+    }
+    return null;
+  }
+
+  /// Whether the part has a `<sheetFormatPr>`, typed or kept opaque.
+  bool get _formatPresent => _formatOpaque != null || _format != null;
+
+  /// Whether the columns can be edited: the part is a worksheet and its
+  /// first `<cols>`, if any, is typed.
+  bool get columnsEditable => isTyped && !_colsOpaque;
+
+  /// The run of the first `<cols>` holding [column] (1-based), or `null`.
+  ColRun? columnRunAt(int column) => _cols?.runAt(column);
+
+  /// The runs of the first `<cols>`: none when the part has none or it is
+  /// kept opaque (see [columnsEditable]).
+  List<ColRun> get columnRuns => _cols?.runs ?? const <ColRun>[];
+
+  /// Makes [runs] the `<col>` elements of the first `<cols>`: an empty list
+  /// removes it, and a part without one gets it in schema position. Must
+  /// run inside `editLayout`; throws a [StateError] when [columnsEditable]
+  /// is false.
+  void setColumnRuns(List<ColRun> runs) {
+    if (!columnsEditable) {
+      throw StateError('The sheet\'s <cols> cannot be edited.');
+    }
+    final ColsGroup? group = _cols;
+    if (group == null) {
+      if (runs.isEmpty) return;
+      _children.insert(
+        _positionFor('cols'),
+        ColsGroup(
+          '${_prefixOf(_root!.qualifiedName)}cols',
+          const <String, String>{},
+          const <KeptAttribute>[],
+          runs,
+        ),
+      );
+      return;
+    }
+    final int at = _children.indexOf(group);
+    if (runs.isEmpty) {
+      _children.removeAt(at);
+    } else {
+      _children[at] = group.withRuns(runs);
+    }
+  }
+
+  /// The element name prefix (with the colon, or empty) the part's own
+  /// elements take.
+  String get elementPrefix => _prefixOf(_root!.qualifiedName);
+
+  /// Whether the `<sheetFormatPr>` can be edited: the part is a worksheet
+  /// and its first one, if any, has no element children.
+  bool get sheetFormatEditable => isTyped && _formatOpaque == null;
+
+  /// The value of the attribute without a namespace named [name] on the
+  /// first `<sheetFormatPr>`, whether typed or opaque, or `null`.
+  String? sheetFormatAttribute(String name) =>
+      (_format ?? _formatOpaque)?.attribute(name);
+
+  /// Whether the part has a `<sheetFormatPr>`.
+  bool get hasSheetFormat => _formatPresent;
+
+  /// Applies [changes] to the attributes of the `<sheetFormatPr>`, as
+  /// [replaceAttributes] does, making the element in schema position when
+  /// the part has none. Must run inside `editLayout`; throws a [StateError]
+  /// when [sheetFormatEditable] is false.
+  void changeSheetFormat(Map<String, String?> changes) {
+    if (!sheetFormatEditable) {
+      throw StateError('The sheet\'s <sheetFormatPr> cannot be edited.');
+    }
+    final _SheetFormat? format = _format;
+    if (format == null) {
+      _children.insert(
+        _positionFor('sheetFormatPr'),
+        _SheetFormat(
+          '${_prefixOf(_root!.qualifiedName)}sheetFormatPr',
+          const <String, String>{},
+          replaceAttributes(const <KeptAttribute>[], changes),
+        ),
+      );
+      return;
+    }
+    _children[_children.indexOf(format)] = format.withAttributes(
+      replaceAttributes(format.attributes, changes),
+    );
+  }
+
+  /// A snapshot of the part's layout elements (`cols`, `sheetFormatPr`),
+  /// for [restoreLayout]. The elements are immutable, so the snapshot is
+  /// the list of the children as it is now.
+  List<Object> layoutSnapshot() => List<Object>.of(_children);
+
+  /// Puts back the layout elements [snapshot] (from [layoutSnapshot]) held.
+  void restoreLayout(List<Object> snapshot) {
+    _children
+      ..clear()
+      ..addAll(snapshot);
   }
 
   String _dimensionRef() {
