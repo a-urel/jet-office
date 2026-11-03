@@ -349,8 +349,8 @@ void main() {
     // A programmer error is one whatever the sheet holds.
     expect(() => book.sheets[1].setCell(0, 0, Object()), throwsArgumentError);
     expect(
-      () => book.sheets[1].setCell(0, 0, const XlsxCell(1)),
-      throwsUnsupportedError,
+      () => book.sheets[1].setCell(0, 0, const XlsxCell(XlsxCell(1))),
+      throwsArgumentError,
     );
     book.sheets[0].setCell(1, 0, 2);
     final Uint8List output = book.save().bytes;

@@ -28,8 +28,9 @@ written back, with the namespace declarations it needs.
 
 - **Edits.** `setCell` takes a `String`, `num`, `bool`, `DateTime`,
   `XlsxDate`, `XlsxDecimal`, an `XlsxFormula` without a group, or `null`.
-  Styled cells, hyperlinks and rich text throw `UnsupportedError` until W2,
-  W3 and W4. Editing a shared formula's master throws until W5.
+  Hyperlinks and rich text throw `UnsupportedError` until W3 and W4; styled
+  cells (`XlsxCell`) arrive with W2. Editing a shared formula's master throws
+  until W5.
 - **Fidelity.** An opened workbook saved without a change is semantically
   equal to the input, part by part, as the test-side comparer
   (`tool/src/part_compare.dart`) defines it. Byte identity is not a goal.
@@ -122,7 +123,12 @@ Nothing is dropped silently.
 | A cell inside an array or data-table formula, its master included | `StateError`, permanent | Excel refuses it too | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups"), `test/xlsx/model/primitives_test.dart` |
 | A shared formula's child | leaves the group; the others stay | the child's formula stays correct | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
 | A shared formula's master | `UnsupportedError` until W5 | the children need reference shifting | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
-| `XlsxHyperlink`, `XlsxRichText`, `XlsxCell` | `UnsupportedError` naming the milestone (W3, W4, W2) | not typed yet | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("unsupported value types") |
+| `XlsxHyperlink`, `XlsxRichText` (also inside an `XlsxCell`) | `UnsupportedError` naming the milestone (W3, W4) | not typed yet | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("unsupported value types") |
+| `XlsxCell(value, style: s)` | the value is set as a bare one; the style is the writer's layering, the row's style (with `customFormat="1"`) merged with `s`, appended when no cell format matches; a date takes the writer's date format only when that style sets none; an `XlsxCell` of `null` leaves an empty cell of that style, or none when it has no style or the default | the model and the writer give the same cell format | `test/xlsx/model/xlsx_sheet_style_test.dart` ("XlsxCell layers like the writer", "XlsxCell dates take the writer format rule", "an XlsxCell of null") |
+| `styleAt` | the cell's own style when the cell exists, else the row's with `customFormat="1"`; index 0 is `null` | what Excel shows there | `test/xlsx/model/xlsx_sheet_style_test.dart` ("styleAt reads cell and row styles") |
+| `setStyle` | sets exactly the style, no layering; an equal style keeps its index; a new one is appended, so no index moves and an unloaded sheet's styles stay; `null` gives index 0 and removes a cell left with nothing | appending keeps every other cell's format | `test/xlsx/model/xlsx_sheet_style_test.dart` |
+| A style edit that throws (an invalid field, the writer's limits, an untyped styles part) | the registry's `ArgumentError` or `XlsxLimitError`, or a `StateError`; the styles a failed transaction appended are rolled back (`StylesAppendChange`) | atomic edits | `test/xlsx/model/xlsx_sheet_style_test.dart` ("a failed setStyle changes nothing", "rolls back the styles"), `test/xlsx/model/primitives_test.dart` ("appendStyle") |
+| A style entry that cannot be read exactly | `styleEntryInvalid` in `XlsxWorkbook.warnings`, a workbook warning (sheet `''`), when the entry is first read | data problems warn | `test/xlsx/model/xlsx_sheet_style_test.dart` ("warns on the workbook") |
 | Any other type, or a position outside the grid | `ArgumentError`, `RangeError` | programmer errors | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` |
 | A sheet that is not a worksheet (a chartsheet) | `StateError` at the call | its cells cannot be set | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("not a worksheet") |
 | Anything `setCell` throws | nothing has changed, the change log's `hasChanges` included; every mutation runs in a transaction | atomic edits | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("a failed setCell changes nothing"), `test/opc/change_log_test.dart` |

@@ -9,12 +9,17 @@
 /// shared, array or data-table formula group, which the editing methods use to
 /// refuse an edit that would break a group. [renameTableColumn] gives a table
 /// column a new name, recording a [TableColumnNameChange] the same way.
+/// [appendStyle] gives a style its cell format index, recording a
+/// [StylesAppendChange] when that appended to the styles part, so a
+/// transaction that fails later removes what it appended.
 library;
 
 import '../../opc/change_log.dart';
 import '../range.dart';
 import '../raw_cell.dart';
+import '../style.dart';
 import 'cell_store.dart';
+import 'styles_part.dart';
 import 'table_part.dart';
 
 /// The change of one cell: its content before and after.
@@ -128,6 +133,50 @@ void renameTableColumn(ChangeLog log, TablePart table, int index, String name) {
     change.revert();
     rethrow;
   }
+}
+
+/// The entries [StylesPart.idFor] appended for one style.
+///
+/// The styles part is append-only, so [revert] rolls it back to the mark
+/// taken before, and [reapply] asks for the same style again, which appends
+/// the same entries at the same positions.
+final class StylesAppendChange implements Change {
+  /// A change that appended to [styles], from [before], for [style].
+  StylesAppendChange(this.styles, this.before, this.style);
+
+  /// The styles part the entries were appended to.
+  final StylesPart styles;
+
+  /// The part's counts before the entries were appended.
+  final StylesMark before;
+
+  /// The style that was asked for.
+  final XlsxStyle? style;
+
+  @override
+  void revert() => styles.rollBack(before);
+
+  @override
+  void reapply() => styles.idFor(style);
+}
+
+/// The cell format index of [style] in [styles] ([StylesPart.idFor]), and a
+/// [StylesAppendChange] recorded in [log] when that appended entries.
+///
+/// Must run inside `log.transaction`. Throws as [StylesPart.idFor] does,
+/// with nothing changed; if recording throws, the appended entries are
+/// removed before the error leaves.
+int appendStyle(ChangeLog log, StylesPart styles, XlsxStyle? style) {
+  final StylesMark before = styles.mark();
+  final int id = styles.idFor(style);
+  if (styles.mark() == before) return id;
+  try {
+    log.record(StylesAppendChange(styles, before, style));
+  } catch (_) {
+    styles.rollBack(before);
+    rethrow;
+  }
+  return id;
 }
 
 /// How a cell takes part in a formula group.

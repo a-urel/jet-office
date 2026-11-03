@@ -54,6 +54,7 @@ import '../read/styles_reader.dart';
 import '../shared_strings.dart';
 import '../sheet_name.dart';
 import '../sheet_view.dart';
+import '../style.dart';
 import '../style_registry.dart';
 import '../warnings.dart';
 import '../workbook_parts.dart';
@@ -439,7 +440,11 @@ final class _Book implements SheetHost {
         ? null
         : reader.guardXml(
             stylesTarget,
-            () => StylesPart.read(reader.openXml(stylesTarget), limits),
+            () => StylesPart.read(
+              reader.openXml(stylesTarget),
+              limits,
+              warn: _styleWarning,
+            ),
           );
     final String? stringsTarget = _target(RelType.sharedStrings);
     final SharedStrings strings;
@@ -475,6 +480,24 @@ final class _Book implements SheetHost {
     );
   }
 
+  /// Reports a style entry that cannot be read exactly: a warning about
+  /// the workbook, so it names no sheet.
+  void _styleWarning(XlsxWarningCode code, String detail) =>
+      warnings.add(code, sheet: '', detail: detail);
+
+  @override
+  StylesPart? get styles => _styles;
+
+  @override
+  StylesPart stylesForEdit(XlsxStyle? style) {
+    if (_styles == null) {
+      // The part to add is the empty registry's, so an empty registry
+      // throws for [style] exactly as the part would: check before adding.
+      StyleRegistry().idFor(style);
+    }
+    return _stylesForEdit();
+  }
+
   @override
   int? dateStyle(int? style, {required bool withTime}) {
     final XlsxNumFmt format = withTime
@@ -495,6 +518,7 @@ final class _Book implements SheetHost {
     final StylesPart part = StylesPart.read(
       XmlPullReader.fromBytes(out.takeBytes()),
       reader.limits,
+      warn: _styleWarning,
     );
     _addWorkbookPart('styles.xml', ContentType.styles, RelType.styles, part);
     return _styles = part;

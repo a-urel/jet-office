@@ -28,9 +28,11 @@ import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
+import '../date_serial.dart';
 import '../format/format_kind.dart';
 import '../hyperlink.dart';
 import '../limits.dart';
+import '../number_format.dart';
 import '../range.dart';
 import '../raw_cell.dart';
 import '../read/cell_decoder.dart';
@@ -41,10 +43,12 @@ import '../read/read_exception.dart';
 import '../read/styles_reader.dart';
 import '../rich_text.dart';
 import '../sheet_view.dart';
+import '../style.dart';
 import '../values.dart';
 import '../warnings.dart';
 import 'cell_store.dart';
 import 'primitives.dart';
+import 'styles_part.dart';
 import 'table_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
@@ -70,6 +74,16 @@ abstract interface class SheetHost {
 
   /// The cell formats by style index; [loadTables] must have run.
   StyleTable get styleTable;
+
+  /// The styles part, or `null` when the workbook has none; [loadTables]
+  /// must have run.
+  StylesPart? get styles;
+
+  /// The styles part to append [style] to, added to the package from the
+  /// writer's empty styles when the workbook has none. When it would be
+  /// added, [style] is checked first and throws as [StylesPart.idFor] would,
+  /// with nothing added.
+  StylesPart stylesForEdit(XlsxStyle? style);
 
   /// The shared strings by index, for decoding, or `null` when the workbook
   /// has none; [loadTables] must have run.
@@ -188,24 +202,43 @@ final class XlsxSheet {
   /// (`tableHeaderAdjusted`). Any other value throws a [StateError], and
   /// text of more than 255 characters an [ArgumentError].
   ///
+  /// An [XlsxCell] sets its value as above and gives the cell the style the
+  /// writer gives it: the row's style (when the row has
+  /// `customFormat="1"`) with the [XlsxCell]'s style laid over it by
+  /// [XlsxStyle.merge], appended to the styles when no cell format matches
+  /// it; the cell's old style is not kept. A date takes the writer's date
+  /// format when that style sets no number format, and keeps any format it
+  /// sets (warning `dateInNonDateFormat` when it shows no date). An
+  /// [XlsxCell] of `null` leaves an empty cell of that style, or no cell
+  /// when it has no style or its style is the default, as the writer does.
+  ///
   /// A shared formula's follower may be set and leaves its group. Throws a
   /// [StateError] for a cell inside an array or data-table formula (Excel
-  /// refuses that too) and for a sheet that is not a worksheet or has no
-  /// part, an [UnsupportedError] for a shared formula's master (W5) and for
-  /// [XlsxHyperlink] (W3), [XlsxRichText] (W4) and [XlsxCell] (W2) values,
-  /// an [ArgumentError] for any other type or a value the encoder refuses,
-  /// a [RangeError] outside Excel's grid, and an [XlsxReadException] when
-  /// the sheet cannot be read. Whatever it throws, nothing has changed.
+  /// refuses that too), for a sheet that is not a worksheet or has no part,
+  /// and for an [XlsxCell] when the styles part is not a SpreadsheetML
+  /// `styleSheet`, an [UnsupportedError] for a shared formula's master (W5)
+  /// and for [XlsxHyperlink] (W3) and [XlsxRichText] (W4) values, also
+  /// inside an [XlsxCell], an [ArgumentError] for any other type, a nested
+  /// [XlsxCell], a value the encoder refuses or an invalid style (named by
+  /// its field; an `XlsxLimitError` past the writer's limits), a
+  /// [RangeError] outside Excel's grid, and an [XlsxReadException] when the
+  /// sheet cannot be read. Whatever it throws, nothing has changed.
   void setCell(int row, int column, Object? value) {
     _checkCell(row, column);
     // Programmer errors first, so they throw whatever the sheet holds.
-    switch (value) {
+    final bool styled = value is XlsxCell;
+    final XlsxStyle? cellStyle = value is XlsxCell ? value.style : null;
+    final Object? plain = value is XlsxCell ? value.value : value;
+    switch (plain) {
       case XlsxHyperlink():
         throw UnsupportedError('XlsxHyperlink cells arrive in W3.');
       case XlsxRichText():
         throw UnsupportedError('XlsxRichText cells arrive in W4.');
       case XlsxCell():
-        throw UnsupportedError('XlsxCell (styled) cells arrive in W2.');
+        throw ArgumentError(
+          'Cell ${cellRef(row, column)} on sheet "$name" nests an XlsxCell '
+          'inside an XlsxCell.',
+        );
       case null ||
           String() ||
           num() ||
@@ -218,22 +251,10 @@ final class XlsxSheet {
       default:
         throw ArgumentError(
           'Cell ${cellRef(row, column)} on sheet "$name" holds a '
-          '${value.runtimeType}, which is not a supported cell value.',
+          '${plain.runtimeType}, which is not a supported cell value.',
         );
     }
-    final WorksheetPart? part = _load();
-    if (part == null) {
-      throw StateError(
-        'The sheet "$name" has no worksheet part; its cells cannot be set.',
-      );
-    }
-    if (!part.isTyped) {
-      throw StateError(
-        'The sheet "$name" is not a worksheet (a chartsheet, say); its '
-        'cells cannot be set.',
-      );
-    }
-    final CellStore store = part.cells;
+    final CellStore store = _editableCells('cells');
     switch (groupRoleAt(store, row, column)) {
       case GroupRole.arrayOrTableMember:
         throw StateError(
@@ -247,7 +268,7 @@ final class XlsxSheet {
       case GroupRole.sharedChild || GroupRole.none:
         break;
     }
-    Object? stored = value;
+    Object? stored = plain;
     final ({String partName, TablePart table, int index})? header = _headerAt(
       row,
       column,
@@ -255,7 +276,7 @@ final class XlsxSheet {
     String? rename;
     bool adjusted = false;
     if (header != null) {
-      final String text = switch (value) {
+      final String text = switch (plain) {
         null => '',
         final String text => scrubXmlText(text).text,
         _ => throw StateError(
@@ -282,23 +303,59 @@ final class XlsxSheet {
       if (unique != header.table.columnName(header.index)) rename = unique;
     }
     final RawCell? current = store.cellAt(row, column);
-    if (stored == null && current == null) return;
+    if (stored == null && current == null && cellStyle == null) return;
     final CellEncoder encoder = _host.loadTables();
+    // The writer's layers, row under cell; checked and added before the
+    // transaction, so a style that throws has changed nothing.
+    final XlsxStyle? layered = styled
+        ? _layer(_rowStyle(store, row), cellStyle)
+        : null;
+    final StylesPart? styles = styled ? _stylesFor(layered) : null;
     final ChangeLog log = _host.log;
     log.transaction(() {
       if (header != null && rename != null) {
         renameTableColumn(log, header.table, header.index, rename);
         _host.reader.package.setContent(header.partName, header.table);
       }
+      RawCell? base = current;
+      int? Function(int? style, {required bool withTime}) dateStyle =
+          _host.dateStyle;
+      if (styles != null) {
+        if (stored == null) {
+          // As the writer: an XlsxCell of null writes an empty cell of the
+          // layered style, or nothing when that is the default or the
+          // XlsxCell has no style.
+          final int id = cellStyle == null
+              ? 0
+              : appendStyle(log, styles, layered);
+          setStoredCell(
+            log,
+            store,
+            row,
+            column,
+            id == 0 ? null : RawCell(kind: RawCellKind.number, style: id),
+          );
+          return;
+        }
+        final int id = appendStyle(
+          log,
+          styles,
+          _withDateFormat(layered, stored),
+        );
+        base = RawCell(kind: RawCellKind.number, style: id == 0 ? null : id);
+        // The date format is in the style already, or the layers set a
+        // format, which a date keeps as in the writer.
+        dateStyle = (int? style, {required bool withTime}) => null;
+      }
       final RawCell prepared = encoder.prepare(
         stored,
         sheet: name,
         row: row,
         column: column,
-        current: current,
-        currentFormat: _host.styleTable.formatOf(_styleText(current)),
+        current: base,
+        currentFormat: _host.styleTable.formatOf(_styleText(base)),
         date1904: _host.date1904,
-        dateStyle: _host.dateStyle,
+        dateStyle: dateStyle,
       );
       final bool remove = stored == null && prepared.style == null;
       setStoredCell(log, store, row, column, remove ? null : prepared);
@@ -309,6 +366,175 @@ final class XlsxSheet {
     }
     if (adjusted) {
       _warn(XlsxWarningCode.tableHeaderAdjusted, cellRef(row, column));
+    }
+  }
+
+  /// The style Excel shows at [row] and [column], or `null` for the
+  /// default.
+  ///
+  /// It is the cell's own style when the cell exists (even without a
+  /// value), else the row's style when the row has `customFormat="1"`;
+  /// style index 0 gives `null` in both. Read with [StylesPart.styleOf], so
+  /// a part of the cell format the value types cannot hold is left out.
+  /// Loads the sheet. Throws a [RangeError] outside Excel's grid and an
+  /// [XlsxReadException] when the sheet cannot be read.
+  XlsxStyle? styleAt(int row, int column) {
+    _checkCell(row, column);
+    final CellStore? store = _load()?.cells;
+    if (store == null) return null;
+    final RawCell? cell = store.cellAt(row, column);
+    final int? index = cell != null ? cell.style : _rowStyleIndex(store, row);
+    final StylesPart? styles = _host.styles;
+    if (index == null || index == 0 || styles == null) return null;
+    return styles.styleOf(index);
+  }
+
+  /// Sets the style of the cell at [row] and [column] to exactly [style]:
+  /// the row's style is not layered under it.
+  ///
+  /// The cell keeps its value; a cell that does not exist becomes an empty
+  /// styled cell. A [style] equal to the cell's current style (by
+  /// [StylesPart.styleOf]) keeps its index, so a cell format the value
+  /// types cannot hold in full is not replaced; any other is appended to
+  /// the styles when no cell format of the file or appended before matches
+  /// it, so no existing index moves. `null` gives index 0 (also dropping
+  /// an invalid `s`), and a cell left with no value and no other attribute
+  /// is removed.
+  ///
+  /// Throws a [StateError] for a sheet that is not a worksheet or has no
+  /// part and when the workbook's styles part is not a SpreadsheetML
+  /// `styleSheet`, an [ArgumentError] naming the field of an invalid style
+  /// and an `XlsxLimitError` past the writer's limits (as
+  /// `XlsxWriter` does), a [RangeError] outside Excel's grid, and an
+  /// [XlsxReadException] when the sheet cannot be read. Whatever it throws,
+  /// nothing has changed.
+  void setStyle(int row, int column, XlsxStyle? style) {
+    _checkCell(row, column);
+    final CellStore store = _editableCells('styles');
+    final RawCell? current = store.cellAt(row, column);
+    final StylesPart? loaded = _host.styles;
+    if (loaded != null && !loaded.isTyped) throw _untypedStyles();
+    if (style != null &&
+        loaded != null &&
+        loaded.styleOf(current?.style ?? 0) == style) {
+      return;
+    }
+    final StylesPart? styles = style == null ? null : _stylesFor(style);
+    final ChangeLog log = _host.log;
+    log.transaction(() {
+      final int id = styles == null ? 0 : appendStyle(log, styles, style);
+      final RawCell base = current ?? const RawCell(kind: RawCellKind.number);
+      final RawCell cell = RawCell(
+        kind: base.kind,
+        style: id == 0 ? null : id,
+        value: base.value,
+        formula: base.formula,
+        inline: base.inline,
+        typeText: base.typeText,
+        attributes: <KeptAttribute>[
+          for (final KeptAttribute a in base.attributes)
+            if (a.qualifiedName != 's' || a.namespaceUri.isNotEmpty) a,
+        ],
+        extraChildren: base.extraChildren,
+      );
+      final bool remove = id == 0 && cell.isEmpty && cell.attributes.isEmpty;
+      if (remove && current == null) return;
+      setStoredCell(log, store, row, column, remove ? null : cell);
+    });
+    _reported.remove(row * XlsxLimits.maxColumns + column);
+  }
+
+  /// The cells of the loaded worksheet part, to set their [what]. Throws a
+  /// [StateError] for a sheet without a part or that is not a worksheet.
+  CellStore _editableCells(String what) {
+    final WorksheetPart? part = _load();
+    if (part == null) {
+      throw StateError(
+        'The sheet "$name" has no worksheet part; its $what cannot be set.',
+      );
+    }
+    if (!part.isTyped) {
+      throw StateError(
+        'The sheet "$name" is not a worksheet (a chartsheet, say); its '
+        '$what cannot be set.',
+      );
+    }
+    return part.cells;
+  }
+
+  /// The styles part to append [style] to; checks [style] when the part
+  /// would be added, and throws a [StateError] for an untyped part.
+  StylesPart _stylesFor(XlsxStyle? style) {
+    final StylesPart styles = _host.stylesForEdit(style);
+    if (!styles.isTyped) throw _untypedStyles();
+    return styles;
+  }
+
+  StateError _untypedStyles() => StateError(
+    'The styles part of the workbook is not a SpreadsheetML styleSheet; '
+    'cell styles cannot be set.',
+  );
+
+  /// The style index of [row] when the row has `customFormat="1"`: its
+  /// `s`, or `null` when it has none that is a style index.
+  static int? _rowStyleIndex(CellStore store, int row) {
+    String? s;
+    bool custom = false;
+    for (final KeptAttribute a in store.rowAttributes(row)) {
+      if (a.namespaceUri.isNotEmpty) continue;
+      if (a.qualifiedName == 's') s = a.value;
+      if (a.qualifiedName == 'customFormat') {
+        custom = a.value == '1' || a.value == 'true';
+      }
+    }
+    if (!custom || s == null || s.isEmpty || s.length > 9) return null;
+    return int.tryParse(s);
+  }
+
+  /// The style of [row] for layering, or `null` when the row has none (or
+  /// index 0).
+  XlsxStyle? _rowStyle(CellStore store, int row) {
+    final int? index = _rowStyleIndex(store, row);
+    final StylesPart? styles = _host.styles;
+    if (index == null || index <= 0 || styles == null) return null;
+    return styles.styleOf(index);
+  }
+
+  /// [cell] laid over [row] with [XlsxStyle.merge], as the writer's
+  /// encoder layers them; the column layer goes under [row].
+  static XlsxStyle? _layer(XlsxStyle? row, XlsxStyle? cell) {
+    if (row == null) return cell;
+    return row.merge(cell);
+  }
+
+  /// [style] with the writer's date format when [value] is a date Excel can
+  /// store and [style] sets no number format: the date-time format for a
+  /// `DateTime`, the short-date one for an [XlsxDate].
+  XlsxStyle? _withDateFormat(XlsxStyle? style, Object value) {
+    if (style?.numFmt != null) return style;
+    final XlsxNumFmt? format = switch (value) {
+      DateTime() when dateTimeSerial(value, date1904: _host.date1904) != null =>
+        XlsxNumFmt.localeDateTime,
+      XlsxDate() when _hasSerial(value) => XlsxNumFmt.localeShortDate,
+      _ => null,
+    };
+    if (format == null) return style;
+    return (style ?? const XlsxStyle()).copyWith(numFmt: format);
+  }
+
+  /// Whether [date] has a serial in the workbook's date system; an
+  /// impossible date counts as having one, since setting it throws.
+  bool _hasSerial(XlsxDate date) {
+    try {
+      return dateSerial(
+            date.year,
+            date.month,
+            date.day,
+            date1904: _host.date1904,
+          ) !=
+          null;
+    } on ArgumentError {
+      return true;
     }
   }
 
