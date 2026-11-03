@@ -22,8 +22,8 @@ ReadProblem _caught(String? part, void Function() body) {
 
 void main() {
   group('mapZipError', () {
-    const Map<ZipReadErrorKind, (ReadProblemKind, String?)> expected =
-        <ZipReadErrorKind, (ReadProblemKind, String?)>{
+    const Map<ZipReadErrorKind, (ReadProblemKind, ReadLimit?)> expected =
+        <ZipReadErrorKind, (ReadProblemKind, ReadLimit?)>{
           ZipReadErrorKind.notZip: (ReadProblemKind.notZip, null),
           ZipReadErrorKind.corrupt: (ReadProblemKind.corruptZip, null),
           ZipReadErrorKind.duplicateEntry: (ReadProblemKind.corruptZip, null),
@@ -31,27 +31,37 @@ void main() {
           ZipReadErrorKind.legacyXls: (ReadProblemKind.legacyBinary, null),
           ZipReadErrorKind.tooManyEntries: (
             ReadProblemKind.limitExceeded,
-            'maxEntries',
+            ReadLimit.maxEntries,
           ),
           ZipReadErrorKind.entryTooLarge: (
             ReadProblemKind.limitExceeded,
-            'maxEntryBytes',
+            ReadLimit.maxEntryBytes,
           ),
           ZipReadErrorKind.totalTooLarge: (
             ReadProblemKind.limitExceeded,
-            'maxTotalBytes',
+            ReadLimit.maxTotalBytes,
           ),
           ZipReadErrorKind.ratioTooHigh: (
             ReadProblemKind.limitExceeded,
-            'maxCompressionRatio',
+            ReadLimit.maxCompressionRatio,
           ),
         };
+
+    test('the limit names are those the XlsxReadException messages use', () {
+      expect(ReadLimit.values.map((ReadLimit l) => l.name), <String>[
+        'maxEntries',
+        'maxEntryBytes',
+        'maxTotalBytes',
+        'maxCompressionRatio',
+        'maxDepth',
+      ]);
+    });
 
     test('covers every ZipReadErrorKind', () {
       expect(expected.keys.toSet(), ZipReadErrorKind.values.toSet());
     });
 
-    for (final MapEntry<ZipReadErrorKind, (ReadProblemKind, String?)> e
+    for (final MapEntry<ZipReadErrorKind, (ReadProblemKind, ReadLimit?)> e
         in expected.entries) {
       test('${e.key.name} maps to ${e.value.$1.name}', () {
         final ReadProblem p = mapZipError(
@@ -96,7 +106,7 @@ void main() {
         kind: ReadProblemKind.limitExceeded,
         part: 'word/document.xml',
         detail: 'too deep',
-        limit: 'maxDepth',
+        limit: ReadLimit.maxDepth,
       ));
     });
 

@@ -3,7 +3,8 @@
 // lib/src/common holds what XLSX and DOCX share: the warning aggregator, the
 // read guard, the ZIP limits and the message locale. It must import neither
 // lib/src/xlsx nor lib/src/docx. lib/src/docx may use the number formatter
-// under lib/src/xlsx/format, and nothing else of lib/src/xlsx.
+// under lib/src/xlsx/format, and nothing else of lib/src/xlsx. Neither layer
+// may import the public barrel, lib/jet_office.dart, which exports xlsx.
 @TestOn('vm')
 library;
 
@@ -27,6 +28,12 @@ bool _names(String uri, String layer) =>
     uri.contains('../$layer/') ||
     uri.startsWith('$layer/');
 
+/// Whether [uri] names the public barrel, `lib/jet_office.dart`, which
+/// exports the xlsx layer.
+bool _namesBarrel(String uri) =>
+    uri == 'package:jet_office/jet_office.dart' ||
+    (!uri.startsWith('package:') && uri.endsWith('jet_office.dart'));
+
 /// Whether [uri] names the number formatter under `lib/src/xlsx/format`.
 bool _namesFormat(String uri) => uri.contains('xlsx/format/');
 
@@ -36,18 +43,20 @@ Iterable<String> _uris(LibSource source) =>
 List<String> _commonOffenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
     if (source.path.startsWith(_common) &&
-        _uris(
-          source,
-        ).any((String uri) => _names(uri, 'xlsx') || _names(uri, 'docx')))
+        _uris(source).any(
+          (String uri) =>
+              _names(uri, 'xlsx') || _names(uri, 'docx') || _namesBarrel(uri),
+        ))
       source.path,
 ];
 
 List<String> _docxOffenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
     if (source.path.startsWith(_docx) &&
-        _uris(
-          source,
-        ).any((String uri) => _names(uri, 'xlsx') && !_namesFormat(uri)))
+        _uris(source).any(
+          (String uri) =>
+              (_names(uri, 'xlsx') && !_namesFormat(uri)) || _namesBarrel(uri),
+        ))
       source.path,
 ];
 
@@ -92,15 +101,27 @@ void main() {
         "import '../../xlsx/read/read_limits.dart';",
       ),
       LibSource('lib/src/docx/i.dart', "import '../common/locale.dart';"),
+      LibSource(
+        'lib/src/common/j.dart',
+        "import 'package:jet_office/jet_office.dart';",
+      ),
+      LibSource('lib/src/docx/k.dart', "import '../../jet_office.dart';"),
+      LibSource(
+        'lib/src/docx/l.dart',
+        "import 'package:jet_office/jet_office.dart' show OfficeLocale;",
+      ),
     ];
     expect(_commonOffenders(fixtures), <String>[
       'lib/src/common/a.dart',
       'lib/src/common/b.dart',
       'lib/src/common/c.dart',
+      'lib/src/common/j.dart',
     ]);
     expect(_docxOffenders(fixtures), <String>[
       'lib/src/docx/f.dart',
       'lib/src/docx/read/h.dart',
+      'lib/src/docx/k.dart',
+      'lib/src/docx/l.dart',
     ]);
   });
 }

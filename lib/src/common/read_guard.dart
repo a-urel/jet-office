@@ -37,26 +37,46 @@ enum ReadProblemKind {
   missingPart,
 }
 
+/// The read limits a [ReadProblem] can name.
+///
+/// The [name] of each is the limit's name in the `XlsxReadException`
+/// messages, so it must not change.
+enum ReadLimit {
+  /// The number of ZIP entries.
+  maxEntries,
+
+  /// The inflated size of one ZIP entry.
+  maxEntryBytes,
+
+  /// The inflated size of all entries together.
+  maxTotalBytes,
+
+  /// The ratio of an entry's inflated to its stored size.
+  maxCompressionRatio,
+
+  /// The nesting depth of an XML part.
+  maxDepth,
+}
+
 /// A failure to read a file, before a format turns it into its exception.
 ///
 /// `kind` is the category. `part` is the ZIP entry or part concerned, or
 /// null when it is the file as a whole. `detail` is the technical cause
 /// (the `ZipReadError` or `XmlParseException` message), never advice for
-/// the user. `limit` is the name of the limit exceeded (`maxEntries`,
-/// `maxEntryBytes`, `maxTotalBytes`, `maxCompressionRatio` or `maxDepth`)
+/// the user. `limit` is the [ReadLimit] exceeded
 /// for [ReadProblemKind.limitExceeded], and null otherwise.
 typedef ReadProblem = ({
   ReadProblemKind kind,
   String? part,
   String detail,
-  String? limit,
+  ReadLimit? limit,
 });
 
 /// The problem [e] reports. Its entry names the part; [part] is the
 /// fallback when it names none.
 ReadProblem mapZipError(ZipReadError e, {String? part}) {
   final String? entry = e.entry ?? part;
-  ReadProblem problem(ReadProblemKind kind, [String? limit]) =>
+  ReadProblem problem(ReadProblemKind kind, [ReadLimit? limit]) =>
       (kind: kind, part: entry, detail: e.message, limit: limit);
   switch (e.kind) {
     case ZipReadErrorKind.notZip:
@@ -69,13 +89,16 @@ ReadProblem mapZipError(ZipReadError e, {String? part}) {
     case ZipReadErrorKind.legacyXls:
       return problem(ReadProblemKind.legacyBinary);
     case ZipReadErrorKind.tooManyEntries:
-      return problem(ReadProblemKind.limitExceeded, 'maxEntries');
+      return problem(ReadProblemKind.limitExceeded, ReadLimit.maxEntries);
     case ZipReadErrorKind.entryTooLarge:
-      return problem(ReadProblemKind.limitExceeded, 'maxEntryBytes');
+      return problem(ReadProblemKind.limitExceeded, ReadLimit.maxEntryBytes);
     case ZipReadErrorKind.totalTooLarge:
-      return problem(ReadProblemKind.limitExceeded, 'maxTotalBytes');
+      return problem(ReadProblemKind.limitExceeded, ReadLimit.maxTotalBytes);
     case ZipReadErrorKind.ratioTooHigh:
-      return problem(ReadProblemKind.limitExceeded, 'maxCompressionRatio');
+      return problem(
+        ReadProblemKind.limitExceeded,
+        ReadLimit.maxCompressionRatio,
+      );
   }
 }
 
@@ -87,7 +110,7 @@ ReadProblem mapXmlError(XmlParseException e, String? part) =>
         kind: ReadProblemKind.limitExceeded,
         part: part,
         detail: e.message,
-        limit: 'maxDepth',
+        limit: ReadLimit.maxDepth,
       )
     : (
         kind: ReadProblemKind.malformedXml,

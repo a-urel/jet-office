@@ -224,13 +224,13 @@ final class PackageReader {
       ReadProblemKind.corruptZip => fail(XlsxReadFailure.corruptZip, p.detail),
       ReadProblemKind.encrypted => fail(XlsxReadFailure.encrypted, p.detail),
       ReadProblemKind.legacyBinary => fail(XlsxReadFailure.legacyXls, p.detail),
-      ReadProblemKind.limitExceeded when p.limit == 'maxDepth' => fail(
+      ReadProblemKind.limitExceeded when p.limit == ReadLimit.maxDepth => fail(
         XlsxReadFailure.limitExceeded,
         'Limit maxDepth (${limits.maxDepth}) exceeded: ${p.detail}.',
       ),
       ReadProblemKind.limitExceeded => fail(
         XlsxReadFailure.limitExceeded,
-        'Limit ${p.limit} exceeded: ${p.detail}',
+        'Limit ${p.limit?.name} exceeded: ${p.detail}',
       ),
       ReadProblemKind.malformedXml => fail(
         XlsxReadFailure.malformedXml,
