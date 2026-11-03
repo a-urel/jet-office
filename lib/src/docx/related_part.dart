@@ -7,7 +7,9 @@
 /// [RelatedPart.find] looks at the main part's relationships of one type:
 /// external ones are ignored, the first internal one whose target is in the
 /// package with the expected content type (and is not the main part
-/// itself) is the part, and otherwise the first internal one names where
+/// itself) is the part, as is one of the generic XML type
+/// (`application/xml`, `text/xml`) that no other relationship of the main
+/// part targets, and otherwise the first internal one names where
 /// the part goes. A document without the part reads it as empty, and
 /// [RelatedPart.create] adds it at save, only once it holds something
 /// (plan Ruling 7): at the target of a relationship whose part is missing
@@ -19,6 +21,7 @@
 /// @docImport 'read_exception.dart';
 library;
 
+import '../opc/ooxml.dart' show ContentType;
 import '../opc/package.dart';
 import '../xml/xml_pull_reader.dart';
 import 'docx_package.dart';
@@ -65,6 +68,8 @@ final class RelatedPart {
       relationshipsPartOf(source),
       () => opc.relationshipsOf(source),
     );
+    final String sourceKey = (opc.canonicalPartName(source) ?? source)
+        .toLowerCase();
     String? missing;
     for (final OpcRelationship rel in relationships) {
       if (rel.external || rel.type != relationshipType) {
@@ -74,10 +79,15 @@ final class RelatedPart {
       final String? actual = opc.canonicalPartName(target);
       if (actual != null) {
         // A part of another type, or the source itself, is not this part:
-        // the relationship stays as read and is otherwise ignored.
-        if (opc.contentTypeOf(actual) != contentType ||
-            actual.toLowerCase() ==
-                (opc.canonicalPartName(source) ?? source).toLowerCase()) {
+        // the relationship stays as read and is otherwise ignored. A part
+        // of the generic XML type (a producer that wrote no override) is
+        // taken when no other relationship of the source targets it.
+        final String? type = opc.contentTypeOf(actual);
+        final bool generic = type == ContentType.xml || type == 'text/xml';
+        if (actual.toLowerCase() == sourceKey ||
+            (type != contentType &&
+                !(generic &&
+                    _onlyTarget(opc, source, relationships, rel, actual)))) {
           continue;
         }
         return RelatedPart._(
@@ -161,6 +171,30 @@ final class RelatedPart {
     _name = added;
     _exists = true;
     _related = true;
+  }
+
+  /// Whether [part] is targeted by no internal relationship of [source]
+  /// in [relationships] other than [rel].
+  static bool _onlyTarget(
+    OpcPackage opc,
+    String source,
+    List<OpcRelationship> relationships,
+    OpcRelationship rel,
+    String part,
+  ) {
+    final String key = part.toLowerCase();
+    for (final OpcRelationship other in relationships) {
+      if (identical(other, rel) || other.external) {
+        continue;
+      }
+      final String? target = opc.canonicalPartName(
+        opc.resolve(source, other.target),
+      );
+      if (target != null && target.toLowerCase() == key) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// The relationship target of [part] from [source]: relative when [part]

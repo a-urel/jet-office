@@ -191,6 +191,43 @@ void main() {
       });
     }
 
+    for (final String? type in <String?>[null, 'text/xml']) {
+      test('a styles part with the generic XML type ${type ?? '(default)'} '
+          'is read and written into', () {
+        final Uint8List input = docxWithStyles(stylesContentType: type);
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(doc.styles.byId('Balk1')?.name, 'heading 1');
+        doc.styles.add(_style('Note'));
+        final Uint8List output = doc.save().bytes;
+        final Map<String, String> parts = readDocxText(output);
+        expect(parts['word/styles.xml'], contains('"Note"'));
+        expect(parts['word/styles.xml'], contains('"Balk1"'));
+        expect(parts.containsKey('word/styles2.xml'), isFalse);
+        expect(_stylesTargets(output), <String>['styles.xml']);
+      });
+    }
+
+    test('a generic XML part another relationship targets is not the styles '
+        'part', () {
+      final Uint8List input = docxWithStyles(
+        stylesContentType: null,
+        relationships:
+            '${stylesRelationship('styles.xml')}'
+            '<Relationship Id="rId8" Type="${RelType.settings}" '
+            'Target="styles.xml"/>',
+      );
+      final DocxDocument doc = DocxDocument.open(input);
+      expect(doc.styles.styles, isEmpty);
+    });
+
+    test('a malformed styles part of the generic XML type throws '
+        'DocxReadException', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithStyles(styles: '<w:styles', stylesContentType: null),
+      );
+      expect(() => doc.styles, throwsA(isA<DocxReadException>()));
+    });
+
     test('an external styles relationship is ignored', () {
       final Uint8List input = docxWithStyles(
         relationships: stylesRelationship(

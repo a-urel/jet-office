@@ -116,12 +116,14 @@ String stylesRelationship(
 
 /// A Word-like DOCX: [wordDocumentXml] with its picture and settings part,
 /// and [styles] at [stylesPath] (a ZIP entry name, no leading `/`) when it
-/// is not null, with a content type override. The main part's
-/// relationships hold the picture's and [relationships] (by default one
-/// to `styles.xml`; empty for none).
+/// is not null, with a content type override of [stylesContentType] (none
+/// when it is null, so the part has the `xml` default, `application/xml`).
+/// The main part's relationships hold the picture's, the settings part's
+/// and [relationships] (by default one to `styles.xml`; empty for none).
 Uint8List docxWithStyles({
   String? styles = wordStylesXml,
   String stylesPath = 'word/styles.xml',
+  String? stylesContentType = ContentType.wmlStyles,
   String? relationships,
 }) => buildZip(<String, List<int>>{
   '[Content_Types].xml': utf8.encode(
@@ -131,8 +133,8 @@ Uint8List docxWithStyles({
     '<Default Extension="png" ContentType="image/png"/>'
     '<Override PartName="/word/document.xml" '
     'ContentType="${ContentType.wmlDocument}"/>'
-    '${styles == null ? '' : '<Override PartName="/$stylesPath" '
-              'ContentType="${ContentType.wmlStyles}"/>'}'
+    '${styles == null || stylesContentType == null ? '' : '<Override PartName="/$stylesPath" '
+              'ContentType="$stylesContentType"/>'}'
     '</Types>',
   ),
   '_rels/.rels': utf8.encode(rootRels('word/document.xml')),
@@ -142,6 +144,8 @@ Uint8List docxWithStyles({
     '<Relationships xmlns="$packageRelsNs">'
     '<Relationship Id="rId4" Type="${RelType.image}" '
     'Target="media/image1.png"/>'
+    '<Relationship Id="rId5" Type="${RelType.settings}" '
+    'Target="settings.xml"/>'
     '${relationships ?? stylesRelationship('styles.xml')}'
     '</Relationships>',
   ),
