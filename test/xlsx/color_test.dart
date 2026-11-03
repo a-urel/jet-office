@@ -12,6 +12,41 @@ String attrs(XlsxColor color) {
 }
 
 void main() {
+  group('accessors', () {
+    test('an rgb color', () {
+      const XlsxColor c = XlsxColor.rgb(0x1F4E79);
+      expect(c.kind, XlsxColorKind.rgb);
+      expect(c.argb, 0xFF1F4E79);
+      expect(c.themeIndex, isNull);
+      expect(c.paletteIndex, isNull);
+      expect(const XlsxColor.argb(0x801F4E79).argb, 0x801F4E79);
+    });
+
+    test('a theme color', () {
+      const XlsxColor c = XlsxColor.theme(4, tint: 0.4);
+      expect(c.kind, XlsxColorKind.theme);
+      expect(c.themeIndex, 4);
+      expect(c.tint, 0.4);
+      expect(c.argb, isNull);
+      expect(c.paletteIndex, isNull);
+    });
+
+    test('an indexed color', () {
+      const XlsxColor c = XlsxColor.indexed(10);
+      expect(c.kind, XlsxColorKind.indexed);
+      expect(c.paletteIndex, 10);
+      expect(c.argb, isNull);
+      expect(c.themeIndex, isNull);
+    });
+
+    test('the automatic color', () {
+      expect(XlsxColor.auto.kind, XlsxColorKind.auto);
+      expect(XlsxColor.auto.argb, isNull);
+      expect(XlsxColor.auto.themeIndex, isNull);
+      expect(XlsxColor.auto.paletteIndex, isNull);
+    });
+  });
+
   test('equality is by meaning', () {
     const XlsxColor a = XlsxColor.rgb(0x1F4E79);
     const XlsxColor b = XlsxColor.argb(0xFF1F4E79);

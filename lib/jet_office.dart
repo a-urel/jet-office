@@ -159,7 +159,7 @@ export 'src/xlsx/alignment.dart'
         XlsxReadingOrder,
         XlsxVerticalAlignment;
 export 'src/xlsx/border.dart' show XlsxBorder, XlsxBorderSide, XlsxBorderStyle;
-export 'src/xlsx/color.dart' show XlsxColor;
+export 'src/xlsx/color.dart' show XlsxColor, XlsxColorKind;
 export 'src/xlsx/column.dart' show XlsxColumn;
 export 'src/xlsx/comparison.dart' show XlsxComparison;
 export 'src/xlsx/conditional_format.dart'
