@@ -5,6 +5,7 @@ import 'package:jet_office/src/docx/model/inlines.dart';
 import 'package:jet_office/src/docx/model/property_set.dart';
 import 'package:jet_office/src/docx/model/run_content.dart';
 import 'package:jet_office/src/docx/properties.dart';
+import 'package:jet_office/src/docx/run_property_codecs.dart';
 import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';

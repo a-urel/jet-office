@@ -29,6 +29,7 @@ import 'blocks.dart';
 import 'edit_sink.dart';
 import 'property_set.dart';
 import 'run_content.dart';
+import 'run_properties.dart';
 
 /// One child of a paragraph.
 sealed class DocxInline {
@@ -67,7 +68,10 @@ final class DocxRun extends DocxInline {
   final PropertyContainer _source;
 
   /// The run's properties: [_source] with the values set.
-  late final _RunProperties _properties = _RunProperties(_source, () => _sink);
+  late final DocxRunProperties _properties = newRunProperties(
+    _source,
+    () => _sink,
+  );
 
   /// The attributes of `w:r` the reader kept, such as `w:rsidR`.
   final List<KeptAttribute> _attributes;
@@ -85,20 +89,16 @@ final class DocxRun extends DocxInline {
     return paragraph == null ? DocxEditSink.none : editSinkOf(paragraph);
   }
 
-  /// The id of the run's character style (`w:rStyle`), or `null` for none.
-  ///
-  /// A `w:rStyle` read from a file that the model does not type (no
-  /// `w:val`, an empty one, another `w:` attribute, child elements) reads
-  /// `null` and is written back as read until a style is set.
-  ///
-  /// Setting the empty string, or an id holding a character XML forbids,
-  /// throws [ArgumentError]; set `null` to remove the style.
-  String? get style => _properties.valueOf('rStyle') as String?;
+  /// The run's formatting (`w:rPr`). It is the same object every time; a
+  /// new run has none set.
+  DocxRunProperties get properties => _properties;
 
-  set style(String? value) {
-    checkStyleId(value);
-    _properties.setValue('rStyle', value);
-  }
+  /// The id of the run's character style (`w:rStyle`), or `null` for none.
+  /// A shortcut for [DocxRunProperties.style] of [properties], which has
+  /// the rules.
+  String? get style => _properties.style;
+
+  set style(String? value) => _properties.style = value;
 
   /// The run's content, in order. The list cannot be modified; set [text]
   /// to change it.
@@ -228,26 +228,8 @@ List<DocxRunContent> _split(String text) {
   return out;
 }
 
-/// Throws [ArgumentError] when [value], a style id to set, is empty or holds
-/// a character XML forbids; `null` (no style) passes.
-void checkStyleId(String? value) {
-  if (value == null) {
-    return;
-  }
-  if (value.isEmpty) {
-    throw ArgumentError.value(value, 'style', 'Must not be empty');
-  }
-  if (scrubXmlText(value).removed > 0) {
-    throw ArgumentError.value(
-      value,
-      'style',
-      'Must not hold a character XML forbids',
-    );
-  }
-}
-
 /// A run as the reader builds it: its `w:rPr` as read (by
-/// [runPropertiesSchema]), the kept attributes of `w:r`, and its content as
+/// `runPropertiesSchema`), the kept attributes of `w:r`, and its content as
 /// read.
 DocxRun readRun({
   required PropertyContainer properties,
@@ -260,13 +242,6 @@ PropertyContainer runPropertiesOf(DocxRun run) => run._source;
 
 /// The properties of [run], for the writer.
 PropertySet runPropertySetOf(DocxRun run) => run._properties;
-
-/// The properties of a run until `DocxRunProperties` (D2 Task 4) types more
-/// than the style.
-final class _RunProperties extends PropertySet {
-  _RunProperties(PropertyContainer source, DocxEditSink Function() sink)
-    : super(source, runPropertiesSchema, sink);
-}
 
 /// The attributes of `w:r` the reader kept on [run], in source order.
 List<KeptAttribute> runAttributesOf(DocxRun run) => run._attributes;

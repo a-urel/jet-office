@@ -184,6 +184,24 @@ final class StyleIdCodec extends PropertyCodec<String> {
   ) => writeValElement(w, '$prefix:$localName', value, prefix: prefix);
 }
 
+/// Throws [ArgumentError] when [value], a style id to set, is empty or holds
+/// a character XML forbids; `null` (no style) passes.
+void checkStyleId(String? value) {
+  if (value == null) {
+    return;
+  }
+  if (value.isEmpty) {
+    throw ArgumentError.value(value, 'style', 'Must not be empty');
+  }
+  if (scrubXmlText(value).removed > 0) {
+    throw ArgumentError.value(
+      value,
+      'style',
+      'Must not hold a character XML forbids',
+    );
+  }
+}
+
 /// Writes `<qualifiedName w:val="value"/>`, the shape of `w:pStyle`,
 /// `w:rStyle` and other single-value properties.
 ///

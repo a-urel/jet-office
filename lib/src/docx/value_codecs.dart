@@ -256,9 +256,10 @@ final class ShadingCodec extends PropertyCodec<DocxShading> {
 /// (`w:space`, points), colour, shadow and frame.
 ///
 /// A line the model has no name for (an art border) gives no view. A
-/// missing or out-of-range width reads as 0.5 pt, since Word writes
-/// `w:sz="0"` for lines that are not drawn; a width out of range on a drawn
-/// line, or a space out of range, gives no view.
+/// missing width reads as 0.5 pt, and so does `w:sz="0"` on a line that is
+/// not drawn (`nil` or `none`), since Word writes it for those; any other
+/// width out of range or malformed, on a drawn line or not, and a space out
+/// of range, give no view.
 final class BorderCodec extends PropertyCodec<DocxBorder> {
   /// The codec of the border element `w:<localName>`.
   const BorderCodec(super.localName);
@@ -286,7 +287,7 @@ final class BorderCodec extends PropertyCodec<DocxBorder> {
         style != DocxBorderStyle.nil && style != DocxBorderStyle.none;
     final String? szRaw = e.w('sz');
     int? eighths = parseDecimal(szRaw, min: 2, max: 96);
-    if (szRaw == null || (eighths == null && !drawn)) {
+    if (szRaw == null || (!drawn && szRaw == '0')) {
       eighths = 4;
     }
     final String? spaceRaw = e.w('space');

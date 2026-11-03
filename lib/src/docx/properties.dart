@@ -20,8 +20,9 @@
 /// Children are matched by namespace URI and local name, never by prefix:
 /// a `w14:shadow` is not the schema's `w:shadow`.
 ///
-/// The schemas of the D1 containers, [paragraphPropertiesSchema] and
-/// [runPropertiesSchema], type only the style.
+/// The schema of a paragraph's `w:pPr`, [paragraphPropertiesSchema], types
+/// only the style until D2 Task 5; the run's, `runPropertiesSchema`, is in
+/// `run_property_codecs.dart`.
 library;
 
 import '../opc/ooxml.dart' show Ns;
@@ -529,10 +530,4 @@ void checkSettable(
 const ContainerSchema paragraphPropertiesSchema = ContainerSchema(
   pPrOrder,
   codecs: <String, PropertyCodec<Object>>{'pStyle': StyleIdCodec('pStyle')},
-);
-
-/// The schema of a run's `w:rPr`: [rPrOrder], typing `w:rStyle`.
-const ContainerSchema runPropertiesSchema = ContainerSchema(
-  rPrOrder,
-  codecs: <String, PropertyCodec<Object>>{'rStyle': StyleIdCodec('rStyle')},
 );

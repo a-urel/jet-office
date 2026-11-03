@@ -310,10 +310,10 @@ void main() {
       final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
       final ChangeSet set = changeLogOf(
         doc,
-      ).transaction(() => paragraphPropertySetOf(p).clear('pStyle'));
+      ).transaction(() => paragraphPropertySetOf(p).clearChild('pStyle'));
       expect(set.changes, hasLength(1));
       expect(documentXml(doc), isNot(contains('pStyle')));
-      paragraphPropertySetOf(p).clear('pStyle');
+      paragraphPropertySetOf(p).clearChild('pStyle');
       expect(changeLogOf(doc).transaction(() {}).isEmpty, isTrue);
       changeLogOf(doc).revertSet(set);
       expect(documentXml(doc), contains('<w:pStyle w:val="A"/>'));

@@ -43,6 +43,7 @@ import 'model/run_content.dart';
 import 'properties.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
+import 'run_property_codecs.dart' show runPropertiesSchema;
 import 'warnings.dart';
 
 /// The main document part: the root's start tag, what surrounds the body,

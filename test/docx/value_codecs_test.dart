@@ -186,13 +186,30 @@ void main() {
       expect(top.parse(_element('<w:top w:val="single"/>')), DocxBorder());
     });
 
-    test('a border that is not drawn reads with sz 0', () {
+    test('a border that is not drawn reads with the default width only '
+        'when sz is absent or 0', () {
       expect(
         top.parse(
           _element('<w:top w:val="nil" w:sz="0" w:space="0" w:color="auto"/>'),
         ),
         DocxBorder(style: DocxBorderStyle.nil, color: DocxColor.auto),
       );
+      expect(
+        top.parse(_element('<w:top w:val="none"/>')),
+        DocxBorder(style: DocxBorderStyle.none),
+      );
+    });
+
+    test('a border that is not drawn with another sz has no view', () {
+      for (final String bad in <String>[
+        '<w:top w:val="nil" w:sz="x"/>',
+        '<w:top w:val="none" w:sz="97"/>',
+        '<w:top w:val="nil" w:sz="1"/>',
+        '<w:top w:val="nil" w:sz="-4"/>',
+        '<w:top w:val="nil" w:sz=""/>',
+      ]) {
+        expect(top.parse(_element(bad)), isNull, reason: bad);
+      }
     });
 
     test('an art border has no view', () {

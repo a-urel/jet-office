@@ -110,6 +110,7 @@
 /// @docImport 'src/docx/model/blocks.dart';
 /// @docImport 'src/docx/model/inlines.dart';
 /// @docImport 'src/docx/model/run_content.dart';
+/// @docImport 'src/docx/model/run_properties.dart';
 /// @docImport 'src/docx/read_exception.dart';
 /// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
@@ -143,9 +144,14 @@ export 'src/docx/model/formatting.dart'
         DocxBorder,
         DocxBorderStyle,
         DocxColor,
+        DocxFonts,
+        DocxHighlight,
         DocxShading,
         DocxShadingPattern,
-        DocxThemeColor;
+        DocxThemeColor,
+        DocxUnderline,
+        DocxUnderlineStyle,
+        DocxVerticalAlign;
 export 'src/docx/model/inlines.dart' show DocxInline, DocxOpaqueInline, DocxRun;
 export 'src/docx/model/run_content.dart'
     show
@@ -156,6 +162,8 @@ export 'src/docx/model/run_content.dart'
         DocxRunContent,
         DocxTab,
         DocxText;
+export 'src/docx/model/run_properties.dart'
+    show DocxRunProperties, DocxRunProperty;
 export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
 export 'src/docx/read_limits.dart' show DocxReadLimits;
 export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;

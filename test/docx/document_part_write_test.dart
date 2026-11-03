@@ -423,4 +423,64 @@ void main() {
       ),
     );
   });
+
+  group('run properties', () {
+    const String rPr =
+        '<w:rPr><w:rStyle w:val="Strong"/>'
+        '<w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" '
+        'w:cs="Arial" w:cstheme="minorBidi" w:hint="eastAsia"/>'
+        '<w:b w:val="on"/><w:bCs/><w:i w:val="1"/><w:color w:val="4472C4" '
+        'w:themeColor="accent1" w:themeTint="BF"/><w:spacing w:val="024"/>'
+        '<w:kern w:val="2"/><w:sz w:val="1in"/><w:szCs w:val="22"/>'
+        '<w:highlight w:val="orange"/><w:u w:val="single" w:color="FF0000"/>'
+        '<w:shd w:val="clear" w:color="auto" w:fill="FFFF00"/>'
+        '<w:vertAlign w:val="superscript"/>'
+        '<w:lang w:val="tr-TR" w:eastAsia="ja-JP" w:bidi="ar-SA"/>'
+        '<w14:ligatures w14:val="standard"/></w:rPr>';
+
+    test('a Word run round-trips and reads its typed properties', () {
+      final String xml = _doc('<w:p><w:r>$rPr<w:t>a</w:t></w:r></w:p>');
+      expect(_roundTrip(xml), isEmpty);
+      final DocxRunProperties p = _r(_p(_read(xml))).properties;
+      expect(p.style, 'Strong');
+      expect(p.fonts?.asciiTheme, 'minorHAnsi');
+      expect(p.bold, isTrue);
+      expect(p.italic, isTrue);
+      expect(p.color, DocxColor.theme(DocxThemeColor.accent1, tint: 0xBF));
+      expect(p.characterSpacingPt, 1.2);
+      expect(p.sizePt, isNull);
+      expect(p.highlight, isNull);
+      expect(p.underline?.color, DocxColor.rgb('FF0000'));
+      expect(p.shading?.fill, DocxColor.rgb('FFFF00'));
+      expect(p.verticalAlign, DocxVerticalAlign.superscript);
+      expect(p.language, 'tr-TR');
+    });
+
+    test('a run with nothing set writes no rPr', () {
+      final DocumentPart part = _read(
+        _doc('<w:p><w:r><w:t>a</w:t></w:r></w:p>'),
+      );
+      _r(_p(part)).properties.bold = null;
+      expect(_encode(part), isNot(contains('rPr')));
+      _r(_p(part)).properties.bold = true;
+      expect(_encode(part), contains('<w:rPr><w:b/></w:rPr>'));
+    });
+
+    test('a prefix other than w is used for the properties set', () {
+      final DocumentPart part = _read(
+        '<?xml version="1.0"?><x:document xmlns:x="${Ns.w}"><x:body><x:p>'
+        '<x:r><x:t>a</x:t></x:r></x:p></x:body></x:document>',
+      );
+      _r(_p(part)).properties
+        ..bold = true
+        ..fonts = DocxFonts.all('Arial');
+      expect(
+        _encode(part),
+        contains(
+          '<x:rPr><x:rFonts x:ascii="Arial" x:hAnsi="Arial" '
+          'x:eastAsia="Arial"/><x:b/></x:rPr>',
+        ),
+      );
+    });
+  });
 }

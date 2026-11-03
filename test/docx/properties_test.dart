@@ -498,7 +498,7 @@ void main() {
       expect(s.valueOf('b'), isNull);
       s.setValue('b', null);
       expect(s.isSet('b'), isFalse);
-      s.clear('b');
+      s.clearChild('b');
       expect(s.isSet('b'), isTrue);
       final StringBuffer b = StringBuffer();
       s.writeTo(XmlWriter(b), 'w:rPr', declaredAbove: _above);

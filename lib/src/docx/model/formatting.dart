@@ -1,5 +1,6 @@
 /// The values shared by run, paragraph, style and numbering formatting:
-/// colours, shading and borders.
+/// colours, shading and borders, and the values of run properties (fonts,
+/// underline, highlight, vertical alignment).
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -10,6 +11,7 @@
 /// enums are their Dart names.
 library;
 
+import '../../xml/xml_escape.dart';
 import '../units.dart';
 
 /// A theme colour of a document (`ST_ThemeColor`): the slot of the theme
@@ -70,6 +72,10 @@ enum DocxThemeColor {
 
 /// A colour: automatic, six hex digits, or a theme colour with an optional
 /// tint or shade.
+///
+/// A theme colour read from a file has no fallback hex in its view: the
+/// colour attribute beside the theme attributes (`w:val="4472C4"`) is
+/// dropped from the view, but stays in the file until the colour is set.
 final class DocxColor {
   /// A colour of six hex digits, such as `FF8800`, stored in upper case.
   ///
@@ -464,4 +470,266 @@ final class DocxBorder {
   String toString() =>
       'DocxBorder(${style.name}, $widthPt pt, space: $spacePt pt, '
       'color: $color)';
+}
+
+/// The font names of a run (`w:rFonts`): one name for each script slot the
+/// model types.
+///
+/// A value the caller makes names fonts; one read from a file may also
+/// carry theme fonts ([asciiTheme], [hAnsiTheme], [eastAsiaTheme], such as
+/// `minorHAnsi`), which a caller cannot make. Setting fonts replaces these
+/// slots and the theme attributes, and keeps the complex-script font and
+/// the other attributes of the file (plan Ruling 3).
+final class DocxFonts {
+  /// Fonts named for the slots given; a slot left out is not set.
+  ///
+  /// A name that is empty or holds a character XML forbids throws
+  /// [ArgumentError].
+  DocxFonts({String? ascii, String? hAnsi, String? eastAsia})
+    : ascii = _checkName(ascii, 'ascii'),
+      hAnsi = _checkName(hAnsi, 'hAnsi'),
+      eastAsia = _checkName(eastAsia, 'eastAsia'),
+      asciiTheme = null,
+      hAnsiTheme = null,
+      eastAsiaTheme = null;
+
+  /// The same font [name] in the ASCII, high ANSI and East Asian slots.
+  ///
+  /// A name that is empty or holds a character XML forbids throws
+  /// [ArgumentError].
+  DocxFonts.all(String name) : this(ascii: name, hAnsi: name, eastAsia: name);
+
+  DocxFonts._read({
+    this.ascii,
+    this.hAnsi,
+    this.eastAsia,
+    this.asciiTheme,
+    this.hAnsiTheme,
+    this.eastAsiaTheme,
+  });
+
+  /// The font for ASCII characters (`w:ascii`), or `null`.
+  final String? ascii;
+
+  /// The font for high ANSI characters (`w:hAnsi`), or `null`.
+  final String? hAnsi;
+
+  /// The font for East Asian characters (`w:eastAsia`), or `null`.
+  final String? eastAsia;
+
+  /// The theme font of the ASCII slot (`w:asciiTheme`), such as
+  /// `minorHAnsi`; `null` in a value the caller made.
+  final String? asciiTheme;
+
+  /// The theme font of the high ANSI slot (`w:hAnsiTheme`); `null` in a
+  /// value the caller made.
+  final String? hAnsiTheme;
+
+  /// The theme font of the East Asian slot (`w:eastAsiaTheme`); `null` in a
+  /// value the caller made.
+  final String? eastAsiaTheme;
+
+  static String? _checkName(String? name, String parameter) {
+    if (name != null && (name.isEmpty || scrubXmlText(name).removed > 0)) {
+      throw ArgumentError.value(
+        name,
+        parameter,
+        'must not be empty or hold a character XML forbids',
+      );
+    }
+    return name;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxFonts &&
+      other.ascii == ascii &&
+      other.hAnsi == hAnsi &&
+      other.eastAsia == eastAsia &&
+      other.asciiTheme == asciiTheme &&
+      other.hAnsiTheme == hAnsiTheme &&
+      other.eastAsiaTheme == eastAsiaTheme;
+
+  @override
+  int get hashCode => Object.hash(
+    ascii,
+    hAnsi,
+    eastAsia,
+    asciiTheme,
+    hAnsiTheme,
+    eastAsiaTheme,
+  );
+
+  @override
+  String toString() =>
+      'DocxFonts(ascii: $ascii, hAnsi: $hAnsi, eastAsia: $eastAsia)';
+}
+
+/// Fonts as the reader builds them: the names are checked by the caller,
+/// and themes are allowed.
+DocxFonts readFonts({
+  String? ascii,
+  String? hAnsi,
+  String? eastAsia,
+  String? asciiTheme,
+  String? hAnsiTheme,
+  String? eastAsiaTheme,
+}) => DocxFonts._read(
+  ascii: ascii,
+  hAnsi: hAnsi,
+  eastAsia: eastAsia,
+  asciiTheme: asciiTheme,
+  hAnsiTheme: hAnsiTheme,
+  eastAsiaTheme: eastAsiaTheme,
+);
+
+/// An underline line style (`ST_Underline`). The Dart name of each value is
+/// its spelling in the file.
+enum DocxUnderlineStyle {
+  /// A single line.
+  single,
+
+  /// A single line under words only, not under spaces.
+  words,
+
+  /// A double line.
+  double,
+
+  /// A thick line.
+  thick,
+
+  /// A dotted line.
+  dotted,
+
+  /// A thick dotted line.
+  dottedHeavy,
+
+  /// A dashed line.
+  dash,
+
+  /// A thick dashed line.
+  dashedHeavy,
+
+  /// A line of long dashes.
+  dashLong,
+
+  /// A thick line of long dashes.
+  dashLongHeavy,
+
+  /// A dot-dash line.
+  dotDash,
+
+  /// A thick dot-dash line.
+  dashDotHeavy,
+
+  /// A dot-dot-dash line.
+  dotDotDash,
+
+  /// A thick dot-dot-dash line.
+  dashDotDotHeavy,
+
+  /// A wavy line.
+  wave,
+
+  /// A thick wavy line.
+  wavyHeavy,
+
+  /// A double wavy line.
+  wavyDouble,
+
+  /// No underline; written explicitly it removes an inherited underline.
+  none,
+}
+
+/// The underline of a run (`w:u`): its line style and, optionally, a colour
+/// of its own.
+final class DocxUnderline {
+  /// An underline of [style], drawn in [color] when given and in the text
+  /// colour otherwise.
+  const DocxUnderline(this.style, {this.color});
+
+  /// The line style.
+  final DocxUnderlineStyle style;
+
+  /// The underline's colour, or `null` for the text colour.
+  final DocxColor? color;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxUnderline && other.style == style && other.color == color;
+
+  @override
+  int get hashCode => Object.hash(style, color);
+
+  @override
+  String toString() => 'DocxUnderline(${style.name}, color: $color)';
+}
+
+/// A highlight colour (`ST_HighlightColor`), one of the 16 colours of
+/// Word's highlighter and none. The Dart name of each value is its spelling
+/// in the file.
+enum DocxHighlight {
+  /// Black.
+  black,
+
+  /// Blue.
+  blue,
+
+  /// Cyan.
+  cyan,
+
+  /// Green.
+  green,
+
+  /// Magenta.
+  magenta,
+
+  /// Red.
+  red,
+
+  /// Yellow.
+  yellow,
+
+  /// White.
+  white,
+
+  /// Dark blue.
+  darkBlue,
+
+  /// Dark cyan.
+  darkCyan,
+
+  /// Dark green.
+  darkGreen,
+
+  /// Dark magenta.
+  darkMagenta,
+
+  /// Dark red.
+  darkRed,
+
+  /// Dark yellow.
+  darkYellow,
+
+  /// Dark gray.
+  darkGray,
+
+  /// Light gray.
+  lightGray,
+
+  /// No highlight; written explicitly it removes an inherited highlight.
+  none,
+}
+
+/// Whether a run is raised or lowered (`ST_VerticalAlignRun`). The Dart
+/// name of each value is its spelling in the file.
+enum DocxVerticalAlign {
+  /// On the baseline, at the normal size.
+  baseline,
+
+  /// Raised and smaller.
+  superscript,
+
+  /// Lowered and smaller.
+  subscript,
 }

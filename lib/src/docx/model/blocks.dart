@@ -16,6 +16,7 @@ import 'dart:collection';
 
 import '../../opc/opaque_xml.dart';
 import '../properties.dart';
+import '../property_codec.dart' show checkStyleId;
 import 'edit_sink.dart';
 import 'inlines.dart';
 import 'property_set.dart';

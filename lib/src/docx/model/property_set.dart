@@ -75,7 +75,7 @@ abstract base class PropertySet implements NestedProperties {
   /// it reads never touches the child, so `x.style = x.style` keeps a child
   /// the model does not type (two `w:pStyle`, a `w:sz` of `1in`) and a
   /// typed one with its extra attributes. To remove a child whatever it
-  /// reads, use [clear]. Otherwise the value is set and the sink is told,
+  /// reads, use [clearChild]. Otherwise the value is set and the sink is told,
   /// with the state from before.
   ///
   /// A name that is not a typed child of [schema], or a value its codec
@@ -95,7 +95,7 @@ abstract base class PropertySet implements NestedProperties {
   /// Nothing changes and nothing is reported when the child is already
   /// removed (set to `null`) or [source] has none and nothing was set.
   /// A name that is not a typed child of [schema] throws [ArgumentError].
-  void clear(String localName) {
+  void clearChild(String localName) {
     _check(localName, null);
     final bool removed = isSet(localName) && _overrides[localName] == null;
     if (removed || (!isSet(localName) && !source.holds(localName))) {
