@@ -15,7 +15,8 @@
 /// gathers every format id after the first ten of a sheet.
 /// `styleEntryInvalid` names no cell: its sample is one entry with a
 /// detail, and its second row the warning without one, which counts the
-/// entries after the first ten (2 here).
+/// entries after the first ten (2 here). `layoutInvalid` is likewise one
+/// setting of sheet `Daten` with a detail, and a second row without one.
 /// `test/tool/warning_messages_test.dart` compares the output with the
 /// committed `docs/warning-messages.md`, so the file cannot drift.
 library;
@@ -32,6 +33,7 @@ import 'package:jet_office/src/xlsx/warnings.dart';
 /// warning without one.
 XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
   const String entry = 'font 3: The font size "abc" is not a finite number.';
+  const String layoutEntry = 'row 3: ht "abc" is not a row height.';
   final WarningCollector collector = WarningCollector();
   switch (code) {
     case XlsxWarningCode.sheetNameChanged:
@@ -43,6 +45,14 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
     case XlsxWarningCode.mergeRangeInvalid:
       collector.add(code, sheet: 'Daten');
       collector.add(code, sheet: 'Daten');
+    case XlsxWarningCode.layoutInvalid:
+      if (detail == null) {
+        for (var i = 0; i < 12; i++) {
+          collector.add(code, sheet: 'Daten', detail: 'row $i');
+        }
+        return collector.warnings.last;
+      }
+      collector.add(code, sheet: 'Daten', detail: layoutEntry);
     case XlsxWarningCode.styleEntryInvalid:
       if (detail == null) {
         for (var i = 0; i < 12; i++) {
@@ -139,7 +149,9 @@ String warningMessagesMarkdown() {
     ..writeln('the first ten of a sheet. `styleEntryInvalid` names no')
     ..writeln('cell: its first row is one entry, its second the warning')
     ..writeln('without a detail, which counts the entries after the first')
-    ..writeln('ten.')
+    ..writeln('ten. `layoutInvalid` names no cell either: its first row is one')
+    ..writeln('setting of sheet `Daten`, its second the warning without a')
+    ..writeln('detail, which counts the settings after the first ten.')
     ..writeln()
     ..writeln('The native-speaker check of the German and Turkish text is')
     ..writeln('recorded under "Native-speaker check" in')
@@ -157,7 +169,8 @@ String warningMessagesMarkdown() {
     if (code == XlsxWarningCode.unresolvedNumberFormat) {
       row('`${code.name}` (no id)', _sample(code, detail: null));
     }
-    if (code == XlsxWarningCode.styleEntryInvalid) {
+    if (code == XlsxWarningCode.styleEntryInvalid ||
+        code == XlsxWarningCode.layoutInvalid) {
       row('`${code.name}` (no detail)', _sample(code, detail: null));
     }
   }

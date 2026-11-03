@@ -41,6 +41,7 @@ import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
+import '../limits.dart';
 import '../raw_cell.dart';
 import '../read/package_reader.dart'
     show strictSpreadsheetNs, strictUnsupported;
@@ -115,6 +116,77 @@ final class _Dimension {
     );
     w.end();
   }
+}
+
+/// The typed `<sheetFormatPr>`: its attributes as written, with
+/// `outlineLevelRow` raised on save to the deepest row outline level.
+///
+/// Only an element without children is typed; one with children stays an
+/// [OpaqueXml].
+final class _SheetFormat {
+  _SheetFormat(this.qualifiedName, this.namespaces, this.attributes);
+
+  final String qualifiedName;
+  final Map<String, String> namespaces;
+  final List<KeptAttribute> attributes;
+
+  /// The kept `outlineLevelRow`, or 0 when it is absent or not a level.
+  int get outlineLevelRow {
+    for (final KeptAttribute a in attributes) {
+      if (a.namespaceUri.isEmpty && a.qualifiedName == 'outlineLevelRow') {
+        return _level(a.value) ?? 0;
+      }
+    }
+    return 0;
+  }
+
+  /// Writes the element with `outlineLevelRow` of [level] when that is
+  /// deeper than the kept value, else as it was.
+  void writeTo(XmlWriter w, Map<String, String> above, int level) {
+    w.start(qualifiedName);
+    writeNamespaceDeclarations(w, namespaces);
+    final bool raise = level > outlineLevelRow;
+    bool written = false;
+    final List<KeptAttribute> out = <KeptAttribute>[];
+    for (final KeptAttribute a in attributes) {
+      if (raise &&
+          a.namespaceUri.isEmpty &&
+          a.qualifiedName == 'outlineLevelRow') {
+        if (!written) {
+          out.add((
+            qualifiedName: a.qualifiedName,
+            namespaceUri: '',
+            value: '$level',
+          ));
+          written = true;
+        }
+      } else {
+        out.add(a);
+      }
+    }
+    if (raise && !written) {
+      out.add((
+        qualifiedName: 'outlineLevelRow',
+        namespaceUri: '',
+        value: '$level',
+      ));
+    }
+    writeKeptAttributes(
+      w,
+      out,
+      declaredAbove: mergeNamespaces(above, namespaces),
+    );
+    w.end();
+  }
+}
+
+/// [value] as an outline level from 0 to 7, or `null`.
+int? _level(String value) {
+  if (value.isEmpty || value.length > 3) return null;
+  final int? level = int.tryParse(value);
+  return level != null && level >= 0 && level <= XlsxLimits.maxOutlineLevel
+      ? level
+      : null;
 }
 
 /// The typed `<sheetData>`: its element name, declarations and attributes;
@@ -195,6 +267,18 @@ final class WorksheetPart implements PartContent {
         sheet._dimension = d;
         children.add(d);
       } else if (main &&
+          r.localName == 'sheetFormatPr' &&
+          sheet._sheetFormat == null &&
+          r.isEmptyElement) {
+        final _SheetFormat f = _SheetFormat(
+          r.qualifiedName,
+          Map<String, String>.of(r.declaredNamespaces),
+          keepAttributes(r),
+        );
+        r.skip();
+        sheet._sheetFormat = f;
+        children.add(f);
+      } else if (main &&
           r.localName == 'sheetData' &&
           sheet._sheetData == null) {
         final _SheetData data = _SheetData(
@@ -237,9 +321,11 @@ final class WorksheetPart implements PartContent {
   final String? _untypedText;
   final XmlRoot? _root;
 
-  /// [_Dimension], [_SheetData] and [OpaqueXml] children, in order.
+  /// [_Dimension], [_SheetFormat], [_SheetData] and [OpaqueXml] children, in
+  /// order.
   final List<Object> _children;
   _Dimension? _dimension;
+  _SheetFormat? _sheetFormat;
   _SheetData? _sheetData;
   CellEncoder? _encoder;
 
@@ -306,6 +392,8 @@ final class WorksheetPart implements PartContent {
     for (var i = 0; i < _children.length; i++) {
       final Object c = _children[i];
       if (c is _Dimension && after.contains('dimension') ||
+          c is _SheetFormat && after.contains('sheetFormatPr') ||
+          c is _SheetData && after.contains('sheetData') ||
           c is OpaqueXml &&
               c.namespaceUri == Ns.main &&
               after.contains(c.localName)) {
@@ -339,10 +427,19 @@ final class WorksheetPart implements PartContent {
     final XmlWriter w = XmlWriter(buffer)..declaration();
     final XmlRoot root = _root!;
     root.writeStart(w);
-    for (final Object c in _children) {
+    final int rowLevel = _deepestRowLevel();
+    final int madeAt = _sheetFormat == null && rowLevel > 0
+        ? _positionFor('sheetFormatPr')
+        : -1;
+    for (int i = 0; i <= _children.length; i++) {
+      if (i == madeAt) _writeMadeSheetFormat(w, rowLevel);
+      if (i == _children.length) break;
+      final Object c = _children[i];
       switch (c) {
         case _Dimension():
           c.writeTo(w, root.namespaces, _dimensionRef());
+        case _SheetFormat():
+          c.writeTo(w, root.namespaces, rowLevel);
         case _SheetData():
           _writeSheetData(w, c, root.namespaces, encoder);
         case OpaqueXml():
@@ -351,6 +448,32 @@ final class WorksheetPart implements PartContent {
     }
     w.end();
     return buffer.takeChunks();
+  }
+
+  /// The deepest `outlineLevel` of the rows' attributes, 0 when none.
+  int _deepestRowLevel() {
+    int deepest = 0;
+    for (final int row in cells.rowIndexes) {
+      for (final KeptAttribute a in cells.rowAttributes(row)) {
+        if (a.namespaceUri.isNotEmpty || a.qualifiedName != 'outlineLevel') {
+          continue;
+        }
+        final int level = _level(a.value) ?? 0;
+        if (level > deepest) deepest = level;
+      }
+    }
+    return deepest;
+  }
+
+  /// Writes the `<sheetFormatPr>` of a part that had none, as the writer
+  /// does for an outline: `defaultRowHeight` (required) and
+  /// `outlineLevelRow`.
+  void _writeMadeSheetFormat(XmlWriter w, int level) {
+    w
+      ..start('${_prefixOf(_root!.qualifiedName)}sheetFormatPr')
+      ..attribute('defaultRowHeight', '15')
+      ..attribute('outlineLevelRow', '$level')
+      ..end();
   }
 
   String _dimensionRef() {

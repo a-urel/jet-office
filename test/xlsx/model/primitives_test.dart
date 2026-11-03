@@ -1,5 +1,6 @@
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/change_log.dart';
+import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xlsx/model/cell_store.dart';
 import 'package:jet_office/src/xlsx/model/primitives.dart';
 import 'package:jet_office/src/xlsx/model/styles_part.dart';
@@ -53,6 +54,39 @@ void main() {
         throwsStateError,
       );
       expect(store.cellAt(0, 0), isNull);
+    });
+  });
+
+  group('setStoredRowAttributes', () {
+    const KeptAttribute ht = (
+      qualifiedName: 'ht',
+      namespaceUri: '',
+      value: '9',
+    );
+
+    test('records old and new; revert restores, and a bare row goes', () {
+      final CellStore store = CellStore();
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(
+        () => setStoredRowAttributes(log, store, 3, <KeptAttribute>[ht]),
+      );
+      expect(store.rowAttributes(3), <KeptAttribute>[ht]);
+      expect(store.rowIndexes, <int>[3]);
+      log.revertSet(set);
+      expect(store.rowAttributes(3), isEmpty);
+      expect(store.rowIndexes, isEmpty);
+      log.reapplySet(set);
+      expect(store.rowAttributes(3), <KeptAttribute>[ht]);
+    });
+
+    test('outside a transaction it throws and leaves the store unchanged', () {
+      final CellStore store = CellStore();
+      expect(
+        () =>
+            setStoredRowAttributes(ChangeLog(), store, 0, <KeptAttribute>[ht]),
+        throwsStateError,
+      );
+      expect(store.rowAttributes(0), isEmpty);
     });
   });
 

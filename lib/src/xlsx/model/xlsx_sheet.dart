@@ -26,6 +26,7 @@ import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
+import '../../xml/xml_number.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
 import '../date_serial.dart';
@@ -42,10 +43,12 @@ import '../read/read_cell.dart';
 import '../read/read_exception.dart';
 import '../read/styles_reader.dart';
 import '../rich_text.dart';
+import '../row_format.dart';
 import '../sheet_view.dart';
 import '../style.dart';
 import '../values.dart';
 import '../warnings.dart';
+import '../worksheet_parts.dart' show checkOutlineLevel, checkRowHeight;
 import 'cell_store.dart';
 import 'primitives.dart';
 import 'styles_part.dart';
@@ -135,6 +138,10 @@ final class XlsxSheet {
   /// however often [rows] runs; a set cell is read afresh. A cell read
   /// without a problem is not added, so reading costs no entry per cell.
   final Set<int> _reported = <int>{};
+
+  /// The layout problems reported (`layoutInvalid`), by detail, so a
+  /// problem is reported once however often its element is read.
+  final Set<String> _layoutReported = <String>{};
 
   /// The tables of the sheet the model can type, read on the first
   /// [setCell]; `null` until then.
@@ -458,6 +465,245 @@ final class XlsxSheet {
     });
     _reported.remove(row * XlsxLimits.maxColumns + column);
   }
+
+  /// How [row] looks: its height, visibility, outline level, collapsed mark
+  /// and style, read from the row's `ht` (with `customHeight`), `hidden`,
+  /// `outlineLevel`, `collapsed` and `s` (with `customFormat`).
+  ///
+  /// A row the file lacks has the default format. An `ht` without
+  /// `customHeight="1"` is Excel's automatic height, so `height` is `null`;
+  /// the style is read as [styleAt] reads a row's. An attribute that cannot
+  /// be read (an `ht` of `abc`, an outline level of 9) reads as its default
+  /// and is reported once (`layoutInvalid`); it is saved as written until
+  /// [setRowFormat] sets that field. Loads the sheet. Throws a
+  /// [RangeError] outside Excel's rows and an [XlsxReadException] when the
+  /// sheet cannot be read.
+  XlsxRowFormat rowFormat(int row) {
+    RangeError.checkValueInInterval(row, 0, XlsxLimits.maxRows - 1, 'row');
+    final CellStore? store = _load()?.cells;
+    if (store == null) return const XlsxRowFormat();
+    return _readRowFormat(store, row);
+  }
+
+  /// Sets how [row] looks to exactly [format].
+  ///
+  /// The row keeps its cells and every attribute the format does not cover
+  /// (`x14ac:dyDescent`, `thickBot`, ...); a field equal to the row's
+  /// current one is left as written, even when it cannot be read. A new
+  /// attribute is written as the writer writes a row (`ht` with
+  /// `customHeight="1"`, `hidden="1"`, `outlineLevel`, `collapsed="1"`, and
+  /// the style as `s` with `customFormat="1"`); a changed one is replaced
+  /// where it stood. A style is appended to the styles when no cell format
+  /// matches it, so no existing index moves, and a style that is the default
+  /// writes no `s`. A row left with no cells, no attributes and no other
+  /// content is removed. On save, `sheetFormatPr/@outlineLevelRow` is the
+  /// larger of the kept value and the deepest row outline level.
+  ///
+  /// Throws an [ArgumentError] named `height` for a height outside 0 to
+  /// 409.5 (or not finite) or `outlineLevel` for a level outside 0 to 7, an
+  /// [ArgumentError] naming the field of an invalid style and an
+  /// `XlsxLimitError` past the writer's limits, a [StateError] for a sheet
+  /// that is not a worksheet or has no part and, when [XlsxRowFormat.style]
+  /// changes, when the styles part is not a SpreadsheetML `styleSheet`, a
+  /// [RangeError] outside Excel's rows, and an [XlsxReadException] when the
+  /// sheet cannot be read. Whatever it throws, nothing has changed, except
+  /// that reading warnings are reported on first read.
+  void setRowFormat(int row, XlsxRowFormat format) {
+    RangeError.checkValueInInterval(row, 0, XlsxLimits.maxRows - 1, 'row');
+    final double? height = format.height;
+    if (height != null) checkRowHeight(height, 'height');
+    checkOutlineLevel(format.outlineLevel, 'outlineLevel');
+    final CellStore store = _editableCells('row formats');
+    final StylesPart? loaded = _host.styles;
+    if (loaded != null && !loaded.isTyped && format.style != null) {
+      throw _untypedStyles();
+    }
+    final XlsxRowFormat current = _readRowFormat(store, row);
+    if (current == format) return;
+    final bool styleChanged = format.style != current.style;
+    final StylesPart? styles = styleChanged && format.style != null
+        ? _stylesFor()
+        : null;
+    final List<KeptAttribute> old = store.rowAttributes(row);
+    final ChangeLog log = _host.log;
+    log.transaction(() {
+      final int id = styles == null
+          ? 0
+          : appendStyle(log, styles, format.style);
+      final List<KeptAttribute> next = _rowAttributesFor(
+        old,
+        current,
+        format,
+        styleId: styleChanged ? id : null,
+      );
+      if (_sameAttributes(old, next)) return;
+      setStoredRowAttributes(log, store, row, next);
+    });
+  }
+
+  /// The format of [row] from its attributes, reporting what cannot be
+  /// read.
+  XlsxRowFormat _readRowFormat(CellStore store, int row) {
+    final List<KeptAttribute> attributes = store.rowAttributes(row);
+    if (attributes.isEmpty) return const XlsxRowFormat();
+    final String element = 'row ${row + 1}';
+    String? ht;
+    bool customHeight = false;
+    bool hidden = false;
+    bool collapsed = false;
+    int outlineLevel = 0;
+    for (final KeptAttribute a in attributes) {
+      if (a.namespaceUri.isNotEmpty) continue;
+      final String v = a.value;
+      switch (a.qualifiedName) {
+        case 'ht':
+          ht = v;
+        case 'customHeight':
+          customHeight = _layoutBool(element, 'customHeight', v) ?? false;
+        case 'hidden':
+          hidden = _layoutBool(element, 'hidden', v) ?? false;
+        case 'collapsed':
+          collapsed = _layoutBool(element, 'collapsed', v) ?? false;
+        case 'outlineLevel':
+          final int? level = _plainInt.hasMatch(v) ? int.tryParse(v) : null;
+          if (level != null &&
+              level >= 0 &&
+              level <= XlsxLimits.maxOutlineLevel) {
+            outlineLevel = level;
+          } else {
+            outlineLevel = 0;
+            _layoutProblem(
+              element,
+              'outlineLevel "$v" is not an outline level from 0 to '
+              '${XlsxLimits.maxOutlineLevel}.',
+            );
+          }
+      }
+    }
+    double? height;
+    if (ht != null) {
+      final double? h = _plainNumber.hasMatch(ht) ? double.tryParse(ht) : null;
+      if (h == null || !h.isFinite || h < 0 || h > XlsxLimits.maxRowHeight) {
+        _layoutProblem(element, 'ht "$ht" is not a row height.');
+      } else if (customHeight) {
+        height = h;
+      }
+    }
+    return XlsxRowFormat(
+      height: height,
+      hidden: hidden,
+      outlineLevel: outlineLevel,
+      collapsed: collapsed,
+      style: _rowStyleOf(store, row),
+    );
+  }
+
+  /// The style of [row] as [styleAt] shows it for a cell the row does not
+  /// have, or `null`.
+  XlsxStyle? _rowStyleOf(CellStore store, int row) {
+    final int? index = _rowStyleIndex(store, row);
+    final StylesPart? styles = _host.styles;
+    if (index == null ||
+        index == 0 ||
+        styles == null ||
+        index >= styles.cellFormatCount) {
+      return null;
+    }
+    return styles.styleOf(index);
+  }
+
+  /// The attributes [format] gives a row whose attributes were [old] and
+  /// whose format was [current]: each changed field replaced where it
+  /// stood, or added in the writer's order after the others.
+  ///
+  /// [styleId] is the cell format index of a changed style (0 for none);
+  /// `null` leaves the style attributes as they are.
+  static List<KeptAttribute> _rowAttributesFor(
+    List<KeptAttribute> old,
+    XlsxRowFormat current,
+    XlsxRowFormat format, {
+    required int? styleId,
+  }) {
+    // The attributes that change, in the order the writer writes them
+    // (`CT_Row`): an absent name is removed.
+    final Map<String, String?> changed = <String, String?>{};
+    if (styleId != null) {
+      changed['s'] = styleId == 0 ? null : '$styleId';
+      changed['customFormat'] = styleId == 0 ? null : '1';
+    }
+    if (format.height != current.height) {
+      final double? h = format.height;
+      changed['ht'] = h == null ? null : formatXmlDouble(h);
+    }
+    if (format.hidden != current.hidden) {
+      changed['hidden'] = format.hidden ? '1' : null;
+    }
+    if (format.height != current.height) {
+      changed['customHeight'] = format.height == null ? null : '1';
+    }
+    if (format.outlineLevel != current.outlineLevel) {
+      changed['outlineLevel'] = format.outlineLevel == 0
+          ? null
+          : '${format.outlineLevel}';
+    }
+    if (format.collapsed != current.collapsed) {
+      changed['collapsed'] = format.collapsed ? '1' : null;
+    }
+    final List<KeptAttribute> next = <KeptAttribute>[];
+    final Set<String> written = <String>{};
+    for (final KeptAttribute a in old) {
+      final String name = a.qualifiedName;
+      if (a.namespaceUri.isNotEmpty || !changed.containsKey(name)) {
+        next.add(a);
+        continue;
+      }
+      final String? value = changed[name];
+      if (value != null && written.add(name)) {
+        next.add((qualifiedName: name, namespaceUri: '', value: value));
+      }
+    }
+    changed.forEach((String name, String? value) {
+      if (value != null && written.add(name)) {
+        next.add((qualifiedName: name, namespaceUri: '', value: value));
+      }
+    });
+    return next;
+  }
+
+  static bool _sameAttributes(List<KeptAttribute> a, List<KeptAttribute> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// Reads a boolean attribute of [element]: `1` or `true`, `0` or
+  /// `false`; anything else is reported and reads as `null`.
+  bool? _layoutBool(String element, String name, String value) {
+    switch (value) {
+      case '1' || 'true':
+        return true;
+      case '0' || 'false':
+        return false;
+    }
+    _layoutProblem(element, '$name "$value" is not a boolean.');
+    return null;
+  }
+
+  /// Reports that an attribute of [element] (`row 3`, ...) cannot be read,
+  /// once however often it is read.
+  void _layoutProblem(String element, String problem) {
+    final String detail = '$element: $problem';
+    if (_layoutReported.add(detail)) {
+      _warn(XlsxWarningCode.layoutInvalid, null, detail: detail);
+    }
+  }
+
+  static final RegExp _plainInt = RegExp(r'^[+-]?\d+$');
+  static final RegExp _plainNumber = RegExp(
+    r'^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$',
+  );
 
   /// The cells of the loaded worksheet part, to set their [what]. Throws a
   /// [StateError] for a sheet without a part or that is not a worksheet.

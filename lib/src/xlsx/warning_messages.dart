@@ -390,5 +390,30 @@ String formatWarning(XlsxWarning w, OfficeLocale locale) {
       'Çalışma kitabındaki bir biçim girdisi tam olarak okunamıyor ($id); '
           'okunamayan kısımlar varsayılan değeri alıyor ve girdi olduğu gibi '
           'kaydediliyor.',
+    (XlsxWarningCode.layoutInvalid, OfficeLocale.en) when w.detail == null =>
+      "$count layout settings of sheet '$sheet' cannot be read exactly; "
+          'what cannot be read takes its default, and the settings are saved '
+          'as written.',
+    (XlsxWarningCode.layoutInvalid, OfficeLocale.de) when w.detail == null =>
+      '$count Layouteinstellungen im Blatt „$sheet“ können nicht exakt '
+          'gelesen werden; was nicht gelesen werden kann, erhält den '
+          'Standardwert, und die Einstellungen werden unverändert '
+          'gespeichert.',
+    (XlsxWarningCode.layoutInvalid, OfficeLocale.tr) when w.detail == null =>
+      '“$sheet” sayfasındaki $count düzen ayarı tam olarak okunamıyor; '
+          'okunamayan kısımlar varsayılan değeri alıyor ve ayarlar olduğu '
+          'gibi kaydediliyor.',
+    (XlsxWarningCode.layoutInvalid, OfficeLocale.en) =>
+      "A layout setting of sheet '$sheet' cannot be read exactly ($id); what "
+          'cannot be read takes its default, and the setting is saved as '
+          'written.',
+    (XlsxWarningCode.layoutInvalid, OfficeLocale.de) =>
+      'Eine Layouteinstellung im Blatt „$sheet“ kann nicht exakt gelesen '
+          'werden ($id); was nicht gelesen werden kann, erhält den '
+          'Standardwert, und die Einstellung wird unverändert gespeichert.',
+    (XlsxWarningCode.layoutInvalid, OfficeLocale.tr) =>
+      '“$sheet” sayfasındaki bir düzen ayarı tam olarak okunamıyor ($id); '
+          'okunamayan kısımlar varsayılan değeri alıyor ve ayar olduğu gibi '
+          'kaydediliyor.',
   };
 }

@@ -238,6 +238,7 @@ export 'src/xlsx/read/read_exception.dart'
 export 'src/xlsx/read/read_limits.dart' show XlsxReadLimits;
 export 'src/xlsx/read/xlsx_reader.dart' show XlsxReadSheet, XlsxReader;
 export 'src/xlsx/rich_text.dart' show XlsxRichText, XlsxTextRun;
+export 'src/xlsx/row_format.dart' show XlsxRowFormat;
 export 'src/xlsx/sheet_protection.dart'
     show XlsxSheetProtection, XlsxWorkbookProtection;
 export 'src/xlsx/sheet_view.dart'

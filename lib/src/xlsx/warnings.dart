@@ -183,6 +183,16 @@ enum XlsxWarningCode {
   /// entries, one warning without a detail counts the rest. It names no
   /// cell.
   styleEntryInvalid,
+
+  /// Editing an opened workbook: a row, column, sheet view, pane or merged
+  /// range of a sheet has an attribute the model cannot read (a row height
+  /// of `abc`, an outline level of 9). The typed value is the default, and
+  /// the attribute is saved as written until it is set. Reported once per
+  /// element and attribute, when it is first read. [XlsxWarning.detail]
+  /// names the element and the problem, in English, such as
+  /// `row 3: ht "abc" is not a row height.`; after ten, one warning without
+  /// a detail counts the rest. It names no cell.
+  layoutInvalid,
 }
 
 /// Something the writer changed or could not store exactly, or the reader

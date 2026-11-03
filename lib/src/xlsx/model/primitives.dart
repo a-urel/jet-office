@@ -8,13 +8,16 @@
 /// reverted and reapplied. [groupRoleAt] says whether a cell belongs to a
 /// shared, array or data-table formula group, which the editing methods use to
 /// refuse an edit that would break a group. [renameTableColumn] gives a table
-/// column a new name, recording a [TableColumnNameChange] the same way.
+/// column a new name, recording a [TableColumnNameChange] the same way, and
+/// [setStoredRowAttributes] sets a row's attributes, recording a
+/// [SetRowAttributesChange].
 /// [appendStyle] and [appendNumberFormat] give a cell format index,
 /// recording a [StylesAppendChange] when that appended to the styles part,
 /// so a transaction that fails later, or an undo, removes what it appended.
 library;
 
 import '../../opc/change_log.dart';
+import '../../opc/opaque_xml.dart';
 import '../range.dart';
 import '../raw_cell.dart';
 import '../style.dart';
@@ -80,6 +83,65 @@ void setStoredCell(
     column,
     store.cellAt(row, column),
     cell,
+  );
+  change.reapply();
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+}
+
+/// The change of one row's `<row>` attributes: before and after.
+///
+/// An empty list is a row without attributes, which the store drops when it
+/// also has no cells and no children.
+final class SetRowAttributesChange implements Change {
+  /// A change of the attributes of [row] of [store] from [oldAttributes] to
+  /// [newAttributes].
+  SetRowAttributesChange(
+    this.store,
+    this.row,
+    this.oldAttributes,
+    this.newAttributes,
+  );
+
+  /// The store the row lives in.
+  final CellStore store;
+
+  /// The zero-based row.
+  final int row;
+
+  /// The attributes before the change.
+  final List<KeptAttribute> oldAttributes;
+
+  /// The attributes after the change.
+  final List<KeptAttribute> newAttributes;
+
+  @override
+  void revert() => store.setRowAttributes(row, oldAttributes);
+
+  @override
+  void reapply() => store.setRowAttributes(row, newAttributes);
+}
+
+/// Sets the `<row>` attributes of [row] of [store] to [attributes] and
+/// records the change in [log].
+///
+/// Must run inside `log.transaction`. If recording throws, the store is put
+/// back as it was before the error leaves.
+void setStoredRowAttributes(
+  ChangeLog log,
+  CellStore store,
+  int row,
+  List<KeptAttribute> attributes,
+) {
+  final SetRowAttributesChange change = SetRowAttributesChange(
+    store,
+    row,
+    store.rowAttributes(row),
+    attributes,
   );
   change.reapply();
   try {
