@@ -269,8 +269,10 @@ The rules are in `docs/number-format.md`.
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
 150 cases each, over the fixtures and producer variants of
 `test/docx/support/docx_fuzz.dart`: whole mutated files, with every part name
-mutated somewhere; open, read the body and save throw nothing but
-`DocxReadException`), the same cases on the VM and in Chrome; longer runs
+mutated somewhere, and attribute values replaced by `abc`, twenty digits,
+`-` or `1in`; open, read the body, styles and numbering with every typed
+property, `styles.ensure` and `numbering.addBulletList` on what loaded, and
+save throw nothing but `DocxReadException`), the same cases on the VM and in Chrome; longer runs
 by hand:
 
 ```bash

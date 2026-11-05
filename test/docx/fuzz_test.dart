@@ -20,6 +20,7 @@ const int _cases = 150;
 const Map<String, ({int length, int adler32})> _corpus =
     <String, ({int length, int adler32})>{
       'word_like': (length: 8453, adler32: 2713099753),
+      'localized_word': (length: 8747, adler32: 3839375278),
       'd1_blank': (length: 62564, adler32: 126055035),
       'd1_paragraphs': (length: 62853, adler32: 3979269737),
       'd1_text_rules': (length: 63248, adler32: 3935131841),
@@ -76,6 +77,38 @@ void main() {
   test('every corpus entry opens and saves unmutated', () {
     for (final ({String name, Uint8List bytes}) entry in docxFuzzCorpus()) {
       exerciseDocx(entry.bytes);
+    }
+  });
+
+  test('attribute values are replaced in styles and numbering parts', () {
+    final List<FuzzCase> cases = <FuzzCase>[
+      for (final int seed in _seeds) ...docxFuzzCases(seed, _cases),
+    ];
+    for (final String part in <String>[
+      'word/styles.xml',
+      'word/numbering.xml',
+    ]) {
+      expect(
+        cases.where(
+          (FuzzCase c) =>
+              mutatedPart(c.mutation) == part &&
+              c.mutation.contains('replace attribute value'),
+        ),
+        isNotEmpty,
+        reason: part,
+      );
+    }
+    for (final String value in <String>[
+      'abc',
+      '99999999999999999999',
+      '-',
+      '1in',
+    ]) {
+      expect(
+        cases.where((FuzzCase c) => c.mutation.endsWith('with "$value"')),
+        isNotEmpty,
+        reason: value,
+      );
     }
   });
 
