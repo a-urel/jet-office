@@ -412,6 +412,29 @@ void main() {
       expect(_rPr(doc), '<w:b w:val="0"/>');
     });
 
+    test('w:u without w:val reads null, saves unchanged and is replaced by '
+        'setting underline', () {
+      final DocxDocument doc = _open('<w:u w:color="FF0000"/>');
+      final DocxRunProperties p = _run(doc).properties;
+      expect(p.underline, isNull);
+      expect(_rPr(doc), '<w:u w:color="FF0000"/>');
+      p.underline = const DocxUnderline(DocxUnderlineStyle.single);
+      expect(_rPr(doc), '<w:u w:val="single"/>');
+      expect(p.underline, const DocxUnderline(DocxUnderlineStyle.single));
+    });
+
+    test('a comment between the children of a w:rPr is dropped once the '
+        'body is loaded and saved', () {
+      String document(DocxDocument doc) =>
+          readXlsx(doc.save().bytes)['word/document.xml']!;
+      final DocxDocument doc = _open('<w:b/><!-- kept? --><w:i/>');
+      expect(_run(doc).properties.bold, isTrue);
+      expect(document(doc), isNot(contains('kept?')));
+      expect(_rPr(doc), '<w:b/><w:i/>');
+      _run(doc).properties.sizePt = 12;
+      expect(_rPr(doc), '<w:b/><w:i/><w:sz w:val="24"/>');
+    });
+
     test('clear removes an untyped child that setting null keeps', () {
       final DocxDocument doc = _open('<w:sz w:val="1in"/><w:i/>');
       final DocxRunProperties p = _run(doc).properties;

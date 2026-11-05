@@ -132,8 +132,8 @@ Sheets use File, Download, Microsoft Excel (.xlsx).
 
 `docx/` holds real `.docx` files saved by Word, each with the text the
 owner confirmed. They are the fidelity input of DOCX milestones D1 and D2
-(phase 4 spec, section 9): they carry what a file the library writes does not, such
-as rsids, `w14:paraId`, fields, bookmarks, content controls and
+(phase 4 spec, section 9): they carry what a file the library writes does
+not, such as rsids, `w14:paraId`, fields, bookmarks, content controls and
 compatibility settings. `test/docx/owner_files_test.dart` (VM only) checks
 every file listed in `docx/manifest.json`, and
 `test/docx/style_resolution_owner_test.dart` and

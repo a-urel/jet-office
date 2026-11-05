@@ -157,21 +157,26 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   and the SDK must reject the output; a truncated copy is the round trip's
   own negative control.
 - `tool/edit_docx.dart` opens every `.docx` of a directory with
-  `DocxDocument`, sets the text of the first run with text and makes it bold
-  and accent 1, replaces the last paragraph of plain runs (no field,
-  drawing or `sectPr`) with a new one, adds a paragraph styled
-  `styles.ensure(DocxBuiltInStyle.heading1)` (`Balk1` in a Turkish Word
-  file), adds a two-item bullet list (the second item at level 1), saves to
-  the second directory, and checks the edits read back (bold, style, list
-  number) and that `comparePackages` finds differences only in the main part
-  (named by the root relationship), the numbering part, the styles part when
-  `ensure` added a style, and `[Content_Types].xml` with the main part's
-  relationships when a part was created. It prints each problem as
-  `<file>: <problem>` and exits 1 on any, 2 on
-  unusable arguments. CI runs it on the fixtures, on LibreOffice's re-save
-  and on the owner's Word files, and validates the three outputs with the
-  Open XML SDK; the owner opens the edited owner files in Word
-  (`docs/word-checks.md`).
+  `DocxDocument` and edits the body: it sets the text of the first run with
+  text to `Edited by the model` and makes it bold in the theme colour accent
+  1; it replaces the last paragraph of plain runs (or `w:proofErr` marks;
+  no field, drawing or `w:sectPr`), other than the edited one, with
+  `Replaced by the model`; it appends a paragraph `Added by the model` of
+  the style `styles.ensure(DocxBuiltInStyle.heading1)` (`Balk1` in a
+  Turkish Word file; Word's definition when the file has none); and it adds
+  a bullet list (`numbering.addBulletList`) of two items, `First item` and
+  `Second item` at level 1 (`addListItem`). It saves to the second
+  directory, reads the saved file back and checks the text, bold and
+  accent of the run, the replacing paragraph, the heading's style, and each
+  item's text, list number and level, and that the body has three blocks
+  more. `comparePackages` must find differences only in the main part
+  (named by the root relationship), the numbering part, the styles part
+  when `ensure` added a style, and `[Content_Types].xml` with the main
+  part's relationships when a part was created. It prints each problem as
+  `<file>: <problem>` and exits 1 on any, 2 on unusable arguments. CI runs
+  it on the fixtures, on LibreOffice's re-save and on the owner's Word
+  files, and validates the three outputs with the Open XML SDK; the owner
+  opens the edited owner files in Word (`docs/word-checks.md`).
 - `tool/draft_expected_docx.dart` drafts the `<name>.expected.txt` of an owner
   file from the model's own reading and prints a review list; it never
   overwrites an existing text.

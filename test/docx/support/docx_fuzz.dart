@@ -43,8 +43,9 @@ export '../../support/fuzz_mutations.dart'
 /// fields and a bookmark), `localized_word`, the document of
 /// `localizedWordDocx()` with Word's styles part (Turkish ids, `w14` and
 /// `w15` content) and numbering part, then every fixture of
-/// `docxFixtures()` and every `producerVariants()` entry, each rebuilt with stored entries and a fixed
-/// timestamp, so the bytes are equal on every platform.
+/// `docxFixtures()` and every `producerVariants()` entry, each rebuilt with
+/// stored entries and a fixed timestamp, so the bytes are equal on every
+/// platform.
 ///
 /// Nothing is deflated, so inflation is fuzzed only by the archive
 /// mutations, which damage the stored headers and sizes.

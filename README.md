@@ -308,8 +308,8 @@ with lower bounds: time and memory follow the size of the XML.
 ## Limits
 
 - XLSX is complete; DOCX is in progress (paragraphs, text, formatting,
-  styles and lists; no tables, headers or pictures yet). The writer writes no charts,
-  pivot tables, macros or encryption.
+  styles and lists; no tables, headers or pictures yet). The writer writes
+  no charts, pivot tables, macros or encryption.
 - The reader reads values, formulas, number formats and merged ranges; it
   reads no other styles, notes, pictures or tables, and does not calculate
   formulas. It refuses Strict OOXML, `.xlsb`, legacy `.xls` and encrypted

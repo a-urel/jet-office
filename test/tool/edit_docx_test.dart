@@ -219,6 +219,93 @@ void main() {
     expect(after[2], '-:Break');
   });
 
+  test('a paragraph with proof marks is replaced like a plain one', () {
+    final Uint8List doc = docxWithStyles(
+      document:
+          '<w:document xmlns:w="${Ns.w}"><w:body>'
+          '<w:p><w:r><w:t>First</w:t></w:r></w:p>'
+          '<w:p><w:proofErr w:type="spellStart"/><w:r><w:t>Plian</w:t></w:r>'
+          '<w:proofErr w:type="spellEnd"/></w:p>'
+          '</w:body></w:document>',
+      styles: stylesXmlOf(<String>[]),
+    );
+    File('${input.path}/proof.docx').writeAsBytesSync(doc);
+    final StringBuffer out = StringBuffer();
+    expect(run(out: out), 0, reason: '$out');
+    final List<String> after = outline(
+      File('${output.path}/proof.docx').readAsBytesSync(),
+    );
+    expect(after[1], '-:$replacedText');
+  });
+
+  group('a document that has its styles and numbering', () {
+    Uint8List both() {
+      final DocxDocument doc = DocxDocument();
+      doc.body.addParagraph('Start');
+      doc.styles.ensure(DocxBuiltInStyle.heading1);
+      doc.styles.ensure(DocxBuiltInStyle.listParagraph);
+      doc.numbering.addBulletList();
+      return doc.save().bytes;
+    }
+
+    String editWith(Uint8List Function(Uint8List) corrupt) {
+      File('${input.path}/both.docx').writeAsBytesSync(both());
+      final StringBuffer out = StringBuffer();
+      final int code = editDocx(
+        <String>[input.path, output.path],
+        out: out,
+        err: StringBuffer(),
+        corruptForTest: corrupt,
+      );
+      expect(code, 1, reason: '$out');
+      return out.toString();
+    }
+
+    test('is reported when a relationship of the main part changes', () {
+      final String out = editWith(
+        (Uint8List saved) => rewriteDocxPart(
+          saved,
+          'word/_rels/document.xml.rels',
+          (String x) => x.replaceFirst(
+            '</Relationships>',
+            '<Relationship Id="rId99" Type="http://example.com/x" '
+                'Target="x.xml"/></Relationships>',
+          ),
+        ),
+      );
+      expect(out, contains('a part outside the allowed set'));
+      expect(out, contains('word/_rels/document.xml.rels'));
+    });
+
+    for (final (String name, String from, String to, String message)
+        in <(String, String, String, String)>[
+          ('removes the bold', '<w:b/>', '', 'the edited run is not bold'),
+          (
+            'changes the paragraph style',
+            '<w:pStyle w:val="Heading1"/>',
+            '<w:pStyle w:val="Normal"/>',
+            'the added Heading1 paragraph is missing',
+          ),
+          (
+            'changes the list number',
+            '<w:numId w:val="2"/>',
+            '<w:numId w:val="3"/>',
+            'the list item "$firstItemText" is missing',
+          ),
+        ]) {
+      test('is reported when the hook $name', () {
+        final String out = editWith(
+          (Uint8List saved) =>
+              rewriteDocxPart(saved, 'word/document.xml', (String x) {
+                expect(x, contains(from), reason: 'the hook finds $from');
+                return x.replaceFirst(from, to);
+              }),
+        );
+        expect(out, contains(message));
+      });
+    }
+  });
+
   test('a truncated document is reported: exit 1', () {
     writeOnly(input, <String>{'d1_paragraphs.docx'});
     final File file = File('${input.path}/d1_paragraphs.docx');

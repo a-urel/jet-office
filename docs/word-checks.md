@@ -25,10 +25,11 @@ dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 documents as well.)
 
 `build/fixtures` also holds the workbooks of the Excel checks; open the
-`d1_*.docx` files (D1) and the `d2_*.docx` files (D2). `tool/round_trip_docx.dart` prints each difference between
-an input and the model's output and exits 1 on any, so run it first and
-expect none; `tool/edit_docx.dart` likewise prints each problem with an
-edited document and exits 1 on any. (CI uses other folder names: its
+`d1_*.docx` files (D1) and the `d2_*.docx` files (D2).
+`tool/round_trip_docx.dart` prints each difference between an input and the
+model's output and exits 1 on any, so run it first and expect none;
+`tool/edit_docx.dart` likewise prints each problem with an edited document
+and exits 1 on any. (CI uses other folder names: its
 `build/model-docx` is the round trip of LibreOffice's re-save of the
 fixtures, and its `build/edited-docx` the edit of that re-save.)
 
@@ -77,9 +78,10 @@ the file it came from:
 
 - `build/model-docx/d1_*.docx` as the list above.
 - `build/model-docx-owner/blank.docx`, `features.docx` and `long.docx` as the
-  owner's originals (`builtins.docx` is checked in D2): `features.docx` keeps its heading, bullet list, table,
-  header, footer and comment; `long.docx` keeps its table of contents, two
-  tables and lists, and its 15 pages.
+  owner's originals (`builtins.docx` is checked in D2): `features.docx`
+  keeps its heading, bullet list, table, header, footer and comment;
+  `long.docx` keeps its table of contents, two tables and lists, and its 15
+  pages.
 
 ### Edited owner files: `build/edited-docx-owner/*.docx`
 
@@ -113,9 +115,10 @@ prompt, the edits visible, and everything else as in the original:
   of contents, the two tables, the lists and the 15 pages are as in the
   original (the added lines may start a sixteenth page).
 - `builtins.docx`: `Bulleted one` reads `Edited by the model`, bold and in
-  accent 1, still the first item of its list. The tool skips the
-  replacement for this file, so no paragraph reads `Replaced by the model`;
-  the added heading and the list follow `Example link`.
+  accent 1, still the first item of its list. `No spacing text` reads
+  `Replaced by the model` (in the Normal style; `Example link` holds a
+  hyperlink, so it is left alone); the table and `Example link` are as they
+  were, and the added heading and the list follow.
 
 ### Save in Word
 
@@ -152,14 +155,16 @@ looked.
   (before 12 and after 6 at 1.5 lines, exactly 20, at least 16); `Keep with
   next`, `Keep lines together` and `Widow control off` (Paragraph > Line and
   Page Breaks show each box ticked or cleared); `Outline level 2` (Outline
-  view shows it at level 2); `Borders: a red box and a rule between` (a red
-  box, its bottom line double, and a dashed line between); `Shading: a pale
+  view shows it at level 2); `Borders: a red box and a rule between` (red
+  top, left and right lines, a double bottom line in the automatic colour,
+  and a dashed line between paragraphs); `Shading: a pale
   yellow fill`; and `Tab stops:` with a left stop at 1 in, a centre stop at
   3 in and a right stop at 6 in with a dot leader, so that `left`, `center`
   and `right` sit on them with dots before `right`.
 - `d2_styles`: the Styles pane (Home > Styles Pane, "All styles") shows each
-  built-in style once, in English, and `Note` and `Code` besides them, with
-  no style listed twice. The paragraphs read as their text says: `A title`
+  built-in style once, under its Turkish name (`Başlık 1`, `Liste
+  Paragrafı` and so on), and `Note` and `Code` besides them, with no style
+  listed twice. The paragraphs read as their text says: `A title`
   in Title, `A subtitle` in Subtitle, three headings in Heading 1 to 3,
   `A quotation` in Quote, `A note in the custom style` in `Note` (indented,
   italic, grey, with a left border), `Code` in `Code` (Courier New 10 on grey)
@@ -170,7 +175,7 @@ looked.
   numbered list: `1.`, `a.` at level 2, `2.`; `Restarted numbers:` and a list
   that starts at `1.` again, not at 3.
 
-### Round trips: `build/model-docx/d2_*.docx`, `build/model-docx-owner/builtins.docx`
+### Round trips of the D2 documents
 
 The model opened each document, read the body, loaded the styles and the
 numbering and saved it, changing nothing. Open every file of both folders. No
@@ -184,12 +189,13 @@ header and footer, the link).
 As under D1, "Edited owner files" (the edited run bold in accent 1, the added
 heading, the two-item bullet list). Two more things to look at:
 
-- the added heading shows as `Başlık 1` in the Styles pane, and the Styles pane of `features.docx` lists no second Heading 1 (the
-  model reused `Balk1` and added no `Heading1`);
+- the added heading shows as `Başlık 1` in the Styles pane, and the Styles
+  pane of `features.docx` lists no second Heading 1 (the model reused
+  `Balk1` and added no `Heading1`);
 - the bullet list at the end uses the document's List Paragraph style
-  (under its localized name in Turkish Word), bullets at level 1 and 2, and does not join an earlier
-  list: Word may show them as the same list when two lists were pasted
-  together; if it does, say so under Notes.
+  (`Liste Paragrafı` in Turkish Word), bullets at level 1 and 2, and does
+  not join an earlier list: Word may show them as the same list when two
+  lists were pasted together; if it does, say so under Notes.
 
 ### Save in Word
 

@@ -400,6 +400,28 @@ void main() {
       );
     });
 
+    test('a character style named heading 1 is the id of the built-in, and '
+        'a paragraph given it warns styleNotFound', () {
+      final DocxDocument doc = _withoutStyles();
+      doc.styles.add(
+        DocxStyle(
+          type: DocxStyleType.character,
+          id: 'CharH',
+          name: 'heading 1',
+        ),
+      );
+      expect(doc.styles.idOf(DocxBuiltInStyle.heading1), 'CharH');
+      expect(doc.styles.ensure(DocxBuiltInStyle.heading1), 'CharH');
+      final DocxParagraph p = doc.body.addParagraph('x')..style = 'CharH';
+      expect(p.style, 'CharH');
+      final List<DocxWarning> found = _warnings(
+        doc,
+        DocxWarningCode.styleNotFound,
+      );
+      expect(found.single.detail, 'CharH');
+      expect(found.single.locations, <String>['body/p[1]']);
+    });
+
     test('a read dangling pStyle does not warn', () {
       final DocxDocument doc = _localized();
       doc.body;

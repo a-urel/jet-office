@@ -12,10 +12,11 @@
 /// * it sets the text of the first run, in a body paragraph, that has text
 ///   to `Edited by the model`, and makes that run bold and
 ///   `DocxColor.theme(DocxThemeColor.accent1)`;
-/// * it replaces the last paragraph whose inlines are all plain runs, other
-///   than the one just edited, with a new paragraph holding
-///   `Replaced by the model`. A paragraph is left alone when it has an
-///   inline that is not a run (a bookmark, hyperlink or the like), a run
+/// * it replaces the last paragraph whose inlines are all plain runs or
+///   proofing marks (`w:proofErr`), other than the one just edited, with a
+///   new paragraph holding `Replaced by the model`. A paragraph is left
+///   alone when it has another inline that is not a run (a bookmark,
+///   hyperlink or the like), a run
 ///   that holds a field or a drawing (`fldChar`, `instrText`, `drawing`,
 ///   `pict`, `object`) or a `w:pPr` with a `w:sectPr`, whose loss could
 ///   unpair markup or drop a section;
@@ -277,14 +278,15 @@ final class _Layout {
 
   bool has(String part) => _archive.findFile(part) != null;
 
+  /// The bytes of [part], or null when the package has no such entry.
+  List<int>? read(String part) => _archive.findFile(part)?.content;
+
   String _type(XmlElement r) => r.getAttribute('Type') ?? '';
 
   List<XmlElement> _relationships(String part) {
-    final ArchiveFile? file = _archive.findFile(part);
+    final List<int>? file = read(part);
     if (file == null) return const <XmlElement>[];
-    return XmlDocument.parse(utf8.decode(file.content))
-        .rootElement
-        .childElements
+    return XmlDocument.parse(utf8.decode(file)).rootElement.childElements
         .where((XmlElement e) => e.namespaceUri == _relsNs)
         .toList();
   }
@@ -315,9 +317,9 @@ List<bool> _mustKeep(Uint8List docx, DocxBody body) {
   final List<bool> all = List<bool>.filled(body.blocks.length, true);
   try {
     final _Layout layout = _Layout(docx);
-    final ArchiveFile? main = layout._archive.findFile(layout.mainPart);
+    final List<int>? main = layout.read(layout.mainPart);
     if (main == null) return all;
-    final XmlElement? bodyXml = XmlDocument.parse(utf8.decode(main.content))
+    final XmlElement? bodyXml = XmlDocument.parse(utf8.decode(main))
         .rootElement
         .childElements
         .where((XmlElement e) {
@@ -378,13 +380,16 @@ int? _paragraphToReplace(DocxBody body, int? edited, List<bool> keep) {
   return null;
 }
 
-/// Whether [inline] is a run that holds no field and no drawing.
-bool _isPlainRun(DocxInline inline) =>
-    inline is DocxRun &&
-    !inline.content.any(
-      (DocxRunContent c) =>
-          c is DocxOpaqueRunContent && _fieldOrDrawing.contains(c.localName),
-    );
+/// Whether [inline] is a run that holds no field and no drawing, or a
+/// proofing mark (`w:proofErr`), which pairs with nothing outside its
+/// paragraph and is lost with it.
+bool _isPlainRun(DocxInline inline) => switch (inline) {
+  DocxRun() => !inline.content.any(
+    (DocxRunContent c) =>
+        c is DocxOpaqueRunContent && _fieldOrDrawing.contains(c.localName),
+  ),
+  DocxOpaqueInline() => inline.localName == 'proofErr',
+};
 
 /// The edits [saved] lacks when read back with `DocxDocument`.
 List<String> _check(Uint8List saved, _Edits edits) {

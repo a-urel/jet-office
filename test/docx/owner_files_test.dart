@@ -33,7 +33,7 @@ void main() {
     expect(ownerDocxDirectoryProblems(names, manifest), isEmpty);
   });
 
-  test('the manifest lists the three Word for Mac files', () {
+  test('the manifest lists the four Word for Mac files', () {
     expect(<String>[
       for (final OwnerDocx e in manifest) e.file,
     ], containsAll(<String>['blank.docx', 'features.docx', 'long.docx']));
