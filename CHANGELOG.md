@@ -38,6 +38,45 @@
   test in the gate. The owner's Word check is recorded in
   `docs/word-checks.md`; the rules are in `docs/docx-model.md`.
 
+#### Phase 4, DOCX, D2 (formatting, styles and lists; the API may change before D6)
+
+- Run and paragraph properties are typed: `DocxRun.properties`
+  (`DocxRunProperties`: fonts, bold, italic, caps, small caps, strike,
+  underline, colour, highlight, shading, size, vertical alignment, character
+  spacing, language) and `DocxParagraph.properties`
+  (`DocxParagraphProperties`: alignment, indentation, spacing, keep options,
+  outline level, borders, shading, tab stops, numbering), with the values
+  `DocxColor`, `DocxFonts`, `DocxUnderline`, `DocxShading`, `DocxBorder`,
+  `DocxIndentation`, `DocxSpacing`, `DocxTabStop` and their enumerations.
+  Lengths are points at the API; a value out of range throws before
+  anything changes. A property the model does not understand, or a value it
+  cannot read, is kept as written and reads `null`.
+- `DocxDocument.styles` (`DocxStyles`): the document defaults and every
+  style by id or name, `add` for a custom style, and Word's built-in styles
+  (`DocxBuiltInStyle`, `idOf`, `ensure`) added on demand with Word's own
+  definitions. Built-ins are recognized by their English name, so
+  `style = 'Heading1'` lands on `Balk1` or `berschrift1` in a Turkish or
+  German document and adds no second heading.
+- `DocxDocument.numbering` (`DocxNumbering`): definitions and instances,
+  `addBulletList`, `addNumberedList` and `addInstance` (with start
+  overrides) with the lists Word's toolbar writes, and `DocxBody.addListItem`.
+- Two warnings, for references set through the API: `styleNotFound` and
+  `numberingNotFound`, in English, German and Turkish.
+- A styles or numbering part that was loaded and not changed is saved with
+  its original bytes; a part with a change is written from the model, which
+  drops comments directly under its root and its definitions. A theme colour
+  is written with `w:val="auto"` beside its theme attributes (the Open XML
+  SDK accepts it; a reader that ignores `themeColor` shows automatic).
+- Known gaps: the paragraph mark's `rPr`, table style parts, `...Chars` and
+  universal measures (read as `null`), complex-script formatting and art
+  borders are not typed; a dangling reference read from a file is not
+  reported; `numberingNotFound` does not check a style's `numPr`.
+- Verification: four D2 fixtures validated by the Open XML SDK and compared
+  with LibreOffice's text export and re-save, the owner's `builtins.docx`,
+  edited owner files validated in CI, and a fuzz test aimed at typed
+  attributes. The owner's Word check is in `docs/word-checks.md`; the rules,
+  each with its test, are in `docs/docx-model.md`.
+
 ### Changed
 
 - Renamed the format-neutral public types, with no aliases: `XlsxLocale` is

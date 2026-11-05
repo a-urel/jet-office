@@ -131,11 +131,14 @@ Sheets use File, Download, Microsoft Excel (.xlsx).
 ## Word files
 
 `docx/` holds real `.docx` files saved by Word, each with the text the
-owner confirmed. They are DOCX milestone D1's fidelity input (phase 4
-spec, section 9): they carry what a file the library writes does not, such
+owner confirmed. They are the fidelity input of DOCX milestones D1 and D2
+(phase 4 spec, section 9): they carry what a file the library writes does not, such
 as rsids, `w14:paraId`, fields, bookmarks, content controls and
 compatibility settings. `test/docx/owner_files_test.dart` (VM only) checks
-every file listed in `docx/manifest.json`:
+every file listed in `docx/manifest.json`, and
+`test/docx/style_resolution_owner_test.dart` and
+`test/docx/builtin_styles_oracle_test.dart` use them as the oracle of the
+style catalog and the list definitions:
 
 - it round-trips through `DocxDocument` (open, read the body, save) with
   no warning and no difference by `tool/src/part_compare.dart`;
@@ -144,11 +147,46 @@ every file listed in `docx/manifest.json`:
 
 The files now: `blank.docx` (Word's blank document, also the model of
 `DocxDocument()`), `features.docx` (a heading, a bullet list, a table, a
-header, a footer and a comment) and `long.docx` (15 pages of fictional
-Turkish text with a table of contents, two tables and lists), all saved by
-Word for Mac 16.114.1 in Turkish. Save each file as Word writes it and
-commit it unmodified. Word leaves a lock file, `~$name.docx`, beside an
-open document; `.gitignore` keeps it out and the tests ignore it.
+header, a footer and a comment), `long.docx` (15 pages of fictional
+Turkish text with a table of contents, two tables and lists) and
+`builtins.docx` (below), all saved by Word for Mac 16.114 or 16.114.1 in
+Turkish. Save each file as Word writes it and commit it unmodified. Word
+leaves a lock file, `~$name.docx`, beside an open document; `.gitignore`
+keeps it out and the tests ignore it.
+
+### How `builtins.docx` was made
+
+`builtins.docx` holds what D2's built-in style catalog and list definitions
+are copied from: the styles and the lists Word writes for its own buttons. It
+was made in Word for Mac 16.114 through the window, with the buttons
+named here and no other (no style, font or list definition changed), on the
+same system as `blank.docx`. To make it again:
+
+1. File > New Document (a blank document, not a template). Do not change any
+   style, font or list definition; use only the buttons named here.
+2. Type `Bulleted one`, click Home > **Bullets** (the button itself, not its
+   library arrow), Enter, `Bulleted two`, Enter, Tab, `Bulleted second
+   level`, Enter twice to end the list.
+3. Type `Numbered one`, click Home > **Numbering** (the button), Enter,
+   `Numbered two`, Enter, Tab, `Numbered second level`, Enter twice.
+4. Three paragraphs `Strong text`, `Emphasis text`, `No spacing text`, each
+   given the style of that name from the Styles pane (Home > Styles Pane).
+5. Insert > Table, 2 x 2, type `A`, `B`, `C`, `D` (Word gives it Table Grid).
+6. Double-click the top margin, type `Header text`; double-click the bottom
+   margin, type `Footer text`; close header and footer.
+7. A paragraph `Example link`, select it, Insert > Link,
+   `https://example.com`.
+8. Word > Preferences > Security & Privacy: "Remove personal information
+   from this file on save" on (as for `features.docx`). File > Save As,
+   format Word Document (.docx), name `builtins.docx`.
+
+The file carries Turkish style ids (`stBilgi`, `TabloKlavuzu`, `Kpr`, ...)
+and Turkish template codes (`041F...`): the catalog maps ids and names to
+Word's English ones, as it does for `blank.docx`, and the list definitions
+are copied without the template codes
+(`docs/docx-model.md`, "Numbering"). Personal information is removed from the
+file, as for the other files. Its text is the ten paragraphs of the body
+outside the table (`builtins.expected.txt`).
 
 Every `*.docx` and `*.expected.txt` in `docx/` must be listed in
 `docx/manifest.json` (by `.docx` name) and have its partner, or the test

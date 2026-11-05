@@ -215,7 +215,10 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 - Word files go in `test/fixtures/owner/docx/`, listed in its
   `manifest.json`, each with `<name>.expected.txt`, the text of the body's
   paragraphs (`test/fixtures/owner/README.md`, section "Word files", says
-  how). `tool/draft_expected_docx.dart` drafts it from the model's reading;
+  how). They are `blank.docx`, `features.docx`, `long.docx` and, for D2's
+  built-in styles and lists, `builtins.docx` (the README says how it was
+  made). `tool/draft_expected_docx.dart` drafts each text from the model's
+  reading;
   the owner confirms every line against Word and sets `confirmedBy`. Never
   edit a committed Word file, its expected text or its manifest entry
   without the owner.
