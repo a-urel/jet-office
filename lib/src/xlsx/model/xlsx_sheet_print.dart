@@ -125,6 +125,132 @@ mixin _SheetPrint {
     );
   }
 
+  // -- Page setup, headers and footers -----------------------------------
+
+  /// How the sheet prints, read from its `printOptions`, `pageMargins`,
+  /// `pageSetup` and `sheetPr/pageSetUpPr`, or `null` when it has none of
+  /// the first three.
+  ///
+  /// `fitToWidth` and `fitToHeight` are read only when the sheet is fitted
+  /// to pages (`fitToPage`; an axis that is absent counts as 1 and `0`
+  /// reads `null`, automatic), a `firstPageNumber` only with
+  /// `useFirstPageNumber`, and `scale` only when the sheet is not fitted.
+  /// A field with a bad value reads as its default, is reported once per
+  /// element as `featureEntryInvalid` and stays in the file. Only the
+  /// first element of each kind is read. Loads the sheet. Throws an
+  /// [XlsxReadException] when the sheet cannot be read.
+  XlsxPageSetup? get pageSetup {
+    final WorksheetPart? part = _load();
+    return part == null
+        ? null
+        : readPageSetup(_pageNodes(part), _reportInvalid);
+  }
+
+  /// Sets how the sheet prints, or removes `printOptions`, `pageMargins`,
+  /// `pageSetup` and `fitToPage` with `null`.
+  ///
+  /// A new element is the text the writer writes for the same setup, in
+  /// schema position. An existing element keeps its other attributes
+  /// (`r:id` of the printer settings, `horizontalDpi`, `copies`, ...) and
+  /// changes an attribute only when its meaning changes; an element the
+  /// setup does not need goes when nothing is left in it. `fitToPage` joins
+  /// `sheetPr` as `pageSetUpPr` and leaves it with `sheetPr`, which goes
+  /// when it is empty. A setup equal to [pageSetup] changes nothing.
+  ///
+  /// Throws an [ArgumentError] named after the field for a value the
+  /// writer refuses (a `scale` outside 10 to 400 or beside a fit axis, a
+  /// negative margin, ...), a [StateError] for a sheet that is not a
+  /// worksheet or has no part and an [XlsxReadException] when the sheet
+  /// cannot be read. Whatever it throws, nothing has changed.
+  set pageSetup(XlsxPageSetup? value) {
+    if (value != null) checkPageSetup(value);
+    final WorksheetPart part = _editablePart('page setup');
+    final PageSetupNodes old = _pageNodes(part);
+    if (value == readPageSetup(old, _reportInvalid)) return;
+    final String prefix = part.elementPrefix;
+    final PageSetupNodes applied = value == null
+        ? removePageSetup(old)
+        : applyPageSetup(old, value, prefix);
+    final XmlNode? sheetPr = sheetPrFit(
+      old.sheetPr,
+      value != null && pageSetupFitsToPage(value),
+      prefix,
+      _sheetPrOrder,
+    );
+    final ChangeLog log = _host.log;
+    log.transaction(() {
+      _swapNode(part, 'sheetPr', old.sheetPr, sheetPr);
+      _swapNode(part, 'printOptions', old.options, applied.options);
+      _swapNode(part, 'pageMargins', old.margins, applied.margins);
+      _swapNode(part, 'pageSetup', old.setup, applied.setup);
+    });
+  }
+
+  /// The headers and footers of the sheet, from its `headerFooter`, or
+  /// `null` when it has none.
+  ///
+  /// `_xHHHH_` in a text is decoded. `differentOddEven` and `differentFirst`
+  /// read `null` when the writer derives the same value from the texts. A
+  /// text the writer would refuse, or a flag that is not a boolean, reads
+  /// as its default, is reported once as `featureEntryInvalid` and stays in
+  /// the file. Only the first `headerFooter` is read. Loads the sheet.
+  /// Throws an [XlsxReadException] when the sheet cannot be read.
+  XlsxHeaderFooter? get headerFooter {
+    final Object? node = _load()?.layoutElement('headerFooter');
+    return node is XmlNode ? readHeaderFooter(node, _reportInvalid) : null;
+  }
+
+  /// Sets the headers and footers, or removes the `headerFooter` with
+  /// `null`.
+  ///
+  /// A new element is the text the writer writes, and none for a value
+  /// that has no text and only defaults. An existing one has its text
+  /// children replaced and its flags changed where their meaning does; its
+  /// other attributes and children stay, and the element goes when nothing
+  /// is left in it. `legacyDrawingHF` is not touched. A value equal to
+  /// [headerFooter] changes nothing.
+  ///
+  /// Throws an [ArgumentError] named after the text for a value the writer
+  /// refuses, a [StateError] for a sheet that is not a worksheet or has no
+  /// part and an [XlsxReadException] when the sheet cannot be read.
+  /// Whatever it throws, nothing has changed.
+  set headerFooter(XlsxHeaderFooter? value) {
+    if (value != null) checkHeaderFooter(value);
+    final WorksheetPart part = _editablePart('header and footer');
+    final XmlNode? old = part.layoutElement('headerFooter') as XmlNode?;
+    final XlsxHeaderFooter? current = old == null
+        ? null
+        : readHeaderFooter(old, _reportInvalid);
+    if (value == current) return;
+    final XmlNode? next = value == null
+        ? null
+        : applyHeaderFooter(old, value, part.elementPrefix);
+    final ChangeLog log = _host.log;
+    log.transaction(() => _swapNode(part, 'headerFooter', old, next));
+  }
+
+  /// The typed first element of each slot of the page setup.
+  PageSetupNodes _pageNodes(WorksheetPart part) {
+    XmlNode? node(String slot) {
+      final Object? e = part.layoutElement(slot);
+      return e is XmlNode ? e : null;
+    }
+
+    return (
+      options: node('printOptions'),
+      margins: node('pageMargins'),
+      setup: node('pageSetup'),
+      sheetPr: node('sheetPr'),
+    );
+  }
+
+  /// Makes [next] the element of [slot] unless it is [old] already. Must
+  /// run inside a transaction.
+  void _swapNode(WorksheetPart part, String slot, XmlNode? old, XmlNode? next) {
+    if (identical(old, next)) return;
+    editLayout(_host.log, part, slot, () => part.setNode(slot, next));
+  }
+
   /// The range of the sheet's `<autoFilter>`, or `null` when it has none.
   ///
   /// An element without a readable `ref` reads as `null`, is reported once
@@ -273,12 +399,14 @@ mixin _SheetPrint {
     });
   }
 
+  /// Reports `featureEntryInvalid` once for [what], a built-in name or the
+  /// name of an element.
   void _reportInvalid(String what) {
     if (_featureReported.add(what)) {
       _warn(
         XlsxWarningCode.featureEntryInvalid,
         null,
-        detail: what == 'autoFilter' ? what : 'definedName',
+        detail: what.startsWith('_xlnm.') ? 'definedName' : what,
       );
     }
   }
