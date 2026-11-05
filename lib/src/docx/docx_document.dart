@@ -152,8 +152,9 @@ final class DocxDocument {
   /// lives, loads on the first access, or when a style is set on content of
   /// the document (the id set is resolved against it, and such a set or
   /// insertion throws what this does); until then, and for as long as
-  /// nothing in it changed, a save copies it byte for byte. A document without one has empty styles, and gains the part at
-  /// save once a style or a default is set in it. Throws a
+  /// nothing in it changed, a save copies it byte for byte. A document
+  /// without one has empty styles, and gains the part at save once a style
+  /// or a default is set in it. Throws a
   /// [DocxReadException] naming the part when it cannot be read (malformed
   /// XML, a root that is not `w:styles`, or a damaged relationships part of
   /// the main part); nothing is loaded then, so the next access throws
