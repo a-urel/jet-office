@@ -81,24 +81,18 @@ void main() {
     expect(rels.add(RelType.styles, 'styles.xml'), 'rId2');
   });
 
-  test(
-    'a forbidden character read from a file is not written',
-    () {
-      final Relationships rels = Relationships.parse(
-        XmlPullReader(
-          '<Relationships><Relationship Id="r&#1;" Type="t&#1;" '
-          'Target="a&#1;"/></Relationships>',
-        ),
-      );
-      final StringBuffer out = StringBuffer();
-      rels.write(XmlWriter(out));
-      expect(
-        out.toString(),
-        contains('<Relationship Id="r" Type="t" Target="a"/>'),
-      );
-    },
-    skip:
-        'Relationships.write in lib/src/opc writes the three unscrubbed: a '
-        'change there waits for a ruling (W3 Task 12).',
-  );
+  test('a forbidden character read from a file is not written', () {
+    final Relationships rels = Relationships.parse(
+      XmlPullReader(
+        '<Relationships><Relationship Id="r&#1;" Type="t&#1;" '
+        'Target="a&#1;"/></Relationships>',
+      ),
+    );
+    final StringBuffer out = StringBuffer();
+    rels.write(XmlWriter(out));
+    expect(
+      out.toString(),
+      contains('<Relationship Id="r" Type="t" Target="a"/>'),
+    );
+  });
 }

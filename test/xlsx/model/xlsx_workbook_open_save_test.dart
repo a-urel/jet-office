@@ -490,30 +490,20 @@ void main() {
       });
     }
 
-    test(
-      'on the root of the shared strings',
-      () {
-        final Map<String, Uint8List> parts = readXlsxBytes(
-          allFixtures()
-              .firstWhere((Fixture f) => f.name == 'm1_values')
-              .build(),
-        );
-        final String text = utf8.decode(parts['xl/sharedStrings.xml']!);
-        parts['xl/sharedStrings.xml'] = Uint8List.fromList(
-          utf8.encode(
-            text.replaceFirst(RegExp('xmlns="[^"]*"'), 'xmlns="&#1;"'),
-          ),
-        );
-        final XlsxWorkbook book = XlsxWorkbook.open(
-          buildZip(<String, List<int>>{...parts}),
-        );
-        book.sheets.first.rows.toList();
-        book.sheets.first.setCell(50, 0, 'x');
-        expect(book.save, returnsNormally);
-      },
-      skip:
-          'OpaqueXml.writeTo in lib/src/opc writes an inherited URI '
-          'unscrubbed: a change there waits for a ruling (W3 Task 12).',
-    );
+    test('on the root of the shared strings', () {
+      final Map<String, Uint8List> parts = readXlsxBytes(
+        allFixtures().firstWhere((Fixture f) => f.name == 'm1_values').build(),
+      );
+      final String text = utf8.decode(parts['xl/sharedStrings.xml']!);
+      parts['xl/sharedStrings.xml'] = Uint8List.fromList(
+        utf8.encode(text.replaceFirst(RegExp('xmlns="[^"]*"'), 'xmlns="&#1;"')),
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        buildZip(<String, List<int>>{...parts}),
+      );
+      book.sheets.first.rows.toList();
+      book.sheets.first.setCell(50, 0, 'x');
+      expect(book.save, returnsNormally);
+    });
   });
 }

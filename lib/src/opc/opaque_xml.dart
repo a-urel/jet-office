@@ -197,7 +197,7 @@ final class OpaqueXml {
       }
       missing
         ..write(prefix.isEmpty ? ' xmlns="' : ' xmlns:$prefix="')
-        ..write(escapeXmlAttribute(uri))
+        ..write(escapeXmlAttribute(scrubXmlText(uri).text))
         ..write('"');
     });
     if (missing.isEmpty) {
