@@ -155,7 +155,8 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   last paragraph of runs only with a new one, adds a paragraph of style
   `Heading1` (`Normal` when `word/styles.xml` defines no `Heading1`), saves
   to the second directory, and checks the edits read back and that
-  `comparePackages` finds differences in `word/document.xml` only. It
+  `comparePackages` finds differences in `word/document.xml` only (and in
+  the styles part with what names it, when the style had to be added). It
   prints each problem as `<file>: <problem>` and exits 1 on any, 2 on
   unusable arguments. CI runs it on the fixtures, on LibreOffice's re-save
   and on the owner's Word files, and validates the three outputs with the

@@ -19,15 +19,17 @@
 ///   or `Normal` when the file defines no style of id `Heading1`. The rule
 ///   is a simple one: `word/styles.xml` holds `w:styleId="Heading1"`. A file
 ///   whose styles part is elsewhere, or whose heading style has a localized
-///   id, gets `Normal`, which may be undefined too: a paragraph naming a
-///   style the file lacks is still valid and shows as the default.
+///   id, gets `Normal`. The model resolves that id: a file that lacks the
+///   style gains Word's definition of it.
 ///
 /// A document without such a run or such a paragraph skips that edit. It
 /// saves and writes the bytes to `<outDir>/<name>.docx`, then reads the
 /// saved file back with `DocxDocument`: the edits must be there and the
 /// body must have one block more than the input's. Last, `comparePackages`
 /// from `tool/src/part_compare.dart` must find differences in
-/// `word/document.xml` only: an edit of the body touches no other part.
+/// `word/document.xml` only: an edit of the body touches no other part,
+/// except the styles part, and the content types and relationships that
+/// name it, when the style had to be added.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
 /// problem, 2 when the arguments are unusable or the input directory holds
@@ -66,6 +68,13 @@ const String addedText = 'Added by the model';
 
 /// The main part, the only one an edit of the body may change.
 const String _mainPart = 'word/document.xml';
+
+/// The parts that change when the edit adds a style.
+const List<String> _styleParts = <String>[
+  'word/styles.xml',
+  '[Content_Types].xml',
+  'word/_rels/document.xml.rels',
+];
 
 /// Runs the tool on [args] (`<inDir> <outDir>`), writing problems to [out]
 /// and usage problems to [err], and returns the exit code.
@@ -115,6 +124,7 @@ typedef _Edits = ({
   ({int block, int inline})? run,
   int? replaced,
   String style,
+  bool stylesAdded,
 });
 
 /// Edits [file], writes the result to [output], and returns the problems.
@@ -134,10 +144,17 @@ List<String> _edit(File file, Directory output, String name) {
     if (replaced != null) {
       body.replaceBlockAt(replaced, DocxParagraph.text(replacedText));
     }
-    final String style = _hasHeading1(input) ? 'Heading1' : 'Normal';
     final int blocks = body.blocks.length;
-    body.addParagraph(addedText).style = style;
-    edits = (blocks: blocks, run: run, replaced: replaced, style: style);
+    final int styles = doc.styles.styles.length;
+    final DocxParagraph added = body.addParagraph(addedText)
+      ..style = _hasHeading1(input) ? 'Heading1' : 'Normal';
+    edits = (
+      blocks: blocks,
+      run: run,
+      replaced: replaced,
+      style: added.style!,
+      stylesAdded: doc.styles.styles.length != styles,
+    );
     saved = doc.save().bytes;
   } on Object catch (e) {
     return <String>['the edit failed: $e'];
@@ -146,7 +163,10 @@ List<String> _edit(File file, Directory output, String name) {
   return <String>[
     ..._check(saved, edits),
     for (final String d in comparePackages(input, saved))
-      if (!d.startsWith('$_mainPart: ')) 'a part other than $_mainPart: $d',
+      if (!d.startsWith('$_mainPart: ') &&
+          !(edits.stylesAdded &&
+              _styleParts.any((String part) => d.startsWith('$part: '))))
+        'a part other than $_mainPart: $d',
   ];
 }
 

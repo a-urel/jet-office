@@ -62,6 +62,12 @@ final class _RecordingSink implements DocxEditSink {
     String localName,
     PropertyState previous,
   ) => calls.add('$localName ${previous.value}');
+
+  @override
+  void atomically(void Function() body) => body();
+
+  @override
+  String resolveStyleId(String id, DocxStyleType type) => id;
 }
 
 void main() {

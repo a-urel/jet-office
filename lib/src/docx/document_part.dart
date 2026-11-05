@@ -41,6 +41,7 @@ import 'model/formatting.dart' show DocxNumberingRef;
 import 'model/inlines.dart';
 import 'model/property_set.dart';
 import 'model/run_content.dart';
+import 'model/styles.dart' show DocxStyleType;
 import 'paragraph_property_codecs.dart' show paragraphPropertiesSchema;
 import 'part_root.dart';
 import 'properties.dart';
@@ -126,6 +127,12 @@ final class DocumentPart implements PartContent {
   /// before it writes the part.
   bool Function(int numId)? listDefined;
 
+  /// Whether the document defines a style of that id and type, so a
+  /// `w:pStyle` or `w:rStyle` set through the API that names another is
+  /// reported at [encode] (plan Ruling 8); `null` reports none. The save
+  /// sets it before it writes the part.
+  bool Function(String id, DocxStyleType type)? styleDefined;
+
   /// The warnings the last [encode] raised; empty before the first.
   ///
   /// Each [encode] starts a new collector, so encoding twice reports each
@@ -137,7 +144,10 @@ final class DocumentPart implements PartContent {
   /// longer in the body is not reported. A paragraph whose `w:numPr` was
   /// set through the API to a list other than 0 that [listDefined] denies
   /// is reported with [DocxWarningCode.numberingNotFound] at `body/p[i]`,
-  /// with the list's id as the detail.
+  /// with the list's id as the detail. A style set through the API that
+  /// [styleDefined] denies is reported with
+  /// [DocxWarningCode.styleNotFound] at `body/p[i]` or `body/p[i]/r[j]`,
+  /// with the style's id as the detail.
   DocxWarningCollector get encodeWarnings => _encodeWarnings;
 
   /// The root element's start tag: its name, namespace declarations and
@@ -181,6 +191,7 @@ final class DocumentPart implements PartContent {
       partName,
       warnings,
       listDefined,
+      styleDefined,
     ).write(this);
     w.end();
     _encodeWarnings = warnings;
@@ -198,6 +209,7 @@ final class _Writer {
     this._partName,
     this._warnings,
     this._listDefined,
+    this._styleDefined,
   );
 
   final XmlWriter _w;
@@ -214,6 +226,7 @@ final class _Writer {
   final String _partName;
   final DocxWarningCollector _warnings;
   final bool Function(int numId)? _listDefined;
+  final bool Function(String id, DocxStyleType type)? _styleDefined;
 
   void write(DocumentPart part) {
     for (final OpaqueXml x in part.beforeBody) {
@@ -257,6 +270,7 @@ final class _Writer {
         detail: '${list.numId}',
       );
     }
+    _checkStyle(pPr, 'pStyle', DocxStyleType.paragraph, path);
     if (!pPr.writesNothing) {
       pPr.writeTo(w, '${_p}pPr', prefix: _prefix, declaredAbove: _scope);
     }
@@ -270,6 +284,29 @@ final class _Writer {
       }
     }
     w.end();
+  }
+
+  /// Reports the style reference [localName] of [properties] at [path] if
+  /// it was set through the API and names no style of [type].
+  void _checkStyle(
+    PropertySet properties,
+    String localName,
+    DocxStyleType type,
+    String path,
+  ) {
+    final bool Function(String, DocxStyleType)? defined = _styleDefined;
+    if (defined == null || !properties.isSet(localName)) {
+      return;
+    }
+    final Object? id = properties.valueOf(localName);
+    if (id is String && !defined(id, type)) {
+      _warnings.add(
+        DocxWarningCode.styleNotFound,
+        part: _partName,
+        location: path,
+        detail: id,
+      );
+    }
   }
 
   /// Writes the run [r] at the location [path], and reports the characters
@@ -288,6 +325,7 @@ final class _Writer {
     w.start('${_p}r');
     writeKeptAttributes(w, runAttributesOf(r), declaredAbove: _scope);
     final PropertySet rPr = runPropertySetOf(r);
+    _checkStyle(rPr, 'rStyle', DocxStyleType.character, path);
     if (!rPr.writesNothing) {
       rPr.writeTo(w, '${_p}rPr', prefix: _prefix, declaredAbove: _scope);
     }

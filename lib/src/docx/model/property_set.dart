@@ -20,6 +20,7 @@ import '../../opc/opaque_xml.dart' show KeptAttribute;
 import '../../xml/xml_writer.dart';
 import '../properties.dart';
 import 'edit_sink.dart';
+import 'styles.dart' show DocxStyleType;
 
 /// Whether a property was set on a [PropertySet], and to what: what
 /// [PropertySet.stateOf] gives and [PropertySet.restore] takes.
@@ -88,6 +89,35 @@ abstract base class PropertySet implements NestedProperties {
       return;
     }
     _record(localName, value);
+  }
+
+  /// Sets the style reference [localName] (`w:pStyle`, `w:rStyle`) to the
+  /// style [id] of [type], as the document resolves it
+  /// ([DocxEditSink.resolveStyleId]), in one edit with whatever that adds;
+  /// `null` removes it.
+  ///
+  /// The no-op rule of [setValue] holds for [id] as given, which resolves
+  /// nothing and loads nothing, so setting back a read reference the
+  /// document lacks adds no style; and for the resolved id, so `Heading1`
+  /// on what reads `Balk1` records nothing.
+  void setStyleId(String localName, String? id, DocxStyleType type) {
+    _check(localName, id);
+    if (id == null || id == valueOf(localName)) {
+      setValue(localName, id);
+      return;
+    }
+    final DocxEditSink sink = _sink();
+    sink.atomically(() => setValue(localName, sink.resolveStyleId(id, type)));
+  }
+
+  /// Resolves the style reference [localName] if one was set through the
+  /// API, now that the properties belong to a document; a reference read
+  /// from the file stays as it is (plan Ruling 5).
+  void resolveStyleIdSet(String localName, DocxStyleType type) {
+    final Object? id = _overrides[localName];
+    if (id is String) {
+      setValue(localName, _sink().resolveStyleId(id, type));
+    }
   }
 
   /// Removes every child [localName] from the written properties, whatever

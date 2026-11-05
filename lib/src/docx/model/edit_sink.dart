@@ -18,12 +18,18 @@
 /// An edit that changes nothing (a style set to the value it has) is not
 /// reported.
 ///
+/// A style id set through the API asks the sink which id to store
+/// ([DocxEditSink.resolveStyleId]): the document's own for a built-in style
+/// under a localized id (plan Ruling 5). A paragraph that belongs to no
+/// document stores what it was given, and is asked again when it goes in.
+///
 /// @docImport 'blocks.dart';
 library;
 
 import 'blocks.dart';
 import 'inlines.dart';
 import 'property_set.dart';
+import 'styles.dart' show DocxStyleType;
 
 /// Receives each edit of the body model after it was applied.
 abstract interface class DocxEditSink {
@@ -56,6 +62,16 @@ abstract interface class DocxEditSink {
     String localName,
     PropertyState previous,
   );
+
+  /// Runs [body] as one edit: if it throws, everything it reported is
+  /// undone before the error leaves.
+  void atomically(void Function() body);
+
+  /// The id to store for the style [id] of [type], set through the API
+  /// (plan Ruling 5): [id] itself when the document defines it or no
+  /// built-in style has it, otherwise the id of that built-in in the
+  /// document, added if it lacks it. Call it inside [atomically].
+  String resolveStyleId(String id, DocxStyleType type);
 }
 
 /// The sink that ignores every call.
@@ -85,4 +101,10 @@ final class _NoEdits implements DocxEditSink {
     String localName,
     PropertyState previous,
   ) {}
+
+  @override
+  void atomically(void Function() body) => body();
+
+  @override
+  String resolveStyleId(String id, DocxStyleType type) => id;
 }

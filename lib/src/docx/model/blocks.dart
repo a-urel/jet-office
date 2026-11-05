@@ -20,6 +20,7 @@ import 'edit_sink.dart';
 import 'inlines.dart';
 import 'paragraph_properties.dart';
 import 'property_set.dart';
+import 'styles.dart' show DocxStyleType;
 
 /// One child of a body.
 ///
@@ -89,7 +90,9 @@ final class DocxParagraph extends DocxBlock {
   /// `null` and is written back as read until a style is set.
   ///
   /// Setting the empty string, or an id holding a character XML forbids,
-  /// throws [ArgumentError]; set `null` to remove the style.
+  /// throws [ArgumentError]; set `null` to remove the style. The id set may
+  /// read back as the document's own id for that style
+  /// ([DocxParagraphProperties.style] has the rules).
   String? get style => _properties.style;
 
   set style(String? value) => _properties.style = value;
@@ -121,13 +124,20 @@ final class DocxParagraph extends DocxBlock {
   ///
   /// An [index] out of that range throws [RangeError]. An [inline] that is
   /// already in a paragraph, this one or another, throws [StateError]:
-  /// remove it there first.
+  /// remove it there first. In a paragraph of a document, the style set on
+  /// a run is resolved against the document's styles (`DocxRun.style` has
+  /// the rules), in the same edit.
   void insertInline(int index, DocxInline inline) {
     RangeError.checkValueInInterval(index, 0, _inlines.length, 'index');
     _checkDetached(inline);
-    _inlines.insert(index, inline);
-    setParagraphOf(inline, this);
-    _sink.inlineInserted(this, index, inline);
+    _sink.atomically(() {
+      _inlines.insert(index, inline);
+      setParagraphOf(inline, this);
+      _sink.inlineInserted(this, index, inline);
+      if (inline is DocxRun) {
+        _resolveRunStyle(inline);
+      }
+    });
   }
 
   /// Removes the inline at [index].
@@ -179,6 +189,25 @@ DocxParagraph readParagraph({
     setParagraphOf(inline, p);
   }
   return p;
+}
+
+/// Resolves the style set through the API on [run], which is in a paragraph
+/// of a document now.
+void _resolveRunStyle(DocxRun run) =>
+    runPropertySetOf(run).resolveStyleIdSet('rStyle', DocxStyleType.character);
+
+/// Resolves the styles set through the API on [paragraph] and its runs,
+/// which are in a document now; what was read from a file stays (plan
+/// Ruling 5).
+void resolveStylesSet(DocxParagraph paragraph) {
+  paragraphPropertySetOf(
+    paragraph,
+  ).resolveStyleIdSet('pStyle', DocxStyleType.paragraph);
+  for (final DocxInline inline in paragraph._inlines) {
+    if (inline is DocxRun) {
+      _resolveRunStyle(inline);
+    }
+  }
 }
 
 /// The `w:pPr` of [paragraph] as read, without the values set since.

@@ -252,6 +252,17 @@ final class PropertyContainer {
   /// had children.
   final String? _innerText;
 
+  /// This container without the namespaces its element declared: a
+  /// definition parsed on its own, once it goes in a part whose root binds
+  /// them. A kept child declares what it needs and lacks.
+  PropertyContainer withoutDeclarations() => PropertyContainer._(
+    const <String, String>{},
+    attributes,
+    _slots,
+    _views,
+    _innerText,
+  );
+
   /// The children kept untyped, in input order: every child but the typed
   /// ones (those with a view) and the nested containers.
   List<OpaqueXml> get kept => <OpaqueXml>[

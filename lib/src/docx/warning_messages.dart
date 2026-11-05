@@ -82,5 +82,30 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
           : '$part$locations içindeki $count paragraf, belgenin '
                 'tanımlamadığı $detail listesine ait; Word bunları numarasız '
                 'gösterir.',
+    (DocxWarningCode.styleNotFound, OfficeLocale.en) =>
+      count == 1
+          ? '1 reference in $part$locations names the style $detail, which '
+                'the document does not define; Word shows it in the default '
+                'style.'
+          : '$count references in $part$locations name the style $detail, '
+                'which the document does not define; Word shows them in the '
+                'default style.',
+    (DocxWarningCode.styleNotFound, OfficeLocale.de) =>
+      count == 1
+          ? '1 Verweis in $part$locations nennt die Formatvorlage $detail, '
+                'die das Dokument nicht definiert; Word zeigt ihn in der '
+                'Standardformatvorlage.'
+          : '$count Verweise in $part$locations nennen die Formatvorlage '
+                '$detail, die das Dokument nicht definiert; Word zeigt sie in '
+                'der Standardformatvorlage.',
+    // Turkish keeps the noun singular after a numeral: "2 başvuru".
+    (DocxWarningCode.styleNotFound, OfficeLocale.tr) =>
+      count == 1
+          ? '$part$locations içindeki 1 başvuru, belgenin tanımlamadığı '
+                '$detail stilini adlandırıyor; Word onu varsayılan stilde '
+                'gösterir.'
+          : '$part$locations içindeki $count başvuru, belgenin '
+                'tanımlamadığı $detail stilini adlandırıyor; Word bunları '
+                'varsayılan stilde gösterir.',
   };
 }

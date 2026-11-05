@@ -26,6 +26,7 @@ import '../run_property_codecs.dart';
 import 'edit_sink.dart';
 import 'formatting.dart';
 import 'property_set.dart';
+import 'styles.dart' show DocxStyleType;
 
 /// A property of a run, to name it for [DocxRunProperties.clear].
 enum DocxRunProperty {
@@ -103,11 +104,20 @@ final class DocxRunProperties {
   /// attributes, child elements) reads `null` and is written back as read.
   /// Setting the empty string, or an id holding a character XML forbids,
   /// throws [ArgumentError]; `null` removes the style.
+  ///
+  /// On a run in a document, the id set is resolved against the document's
+  /// styles, which loads them: an id the document defines is kept; the
+  /// English id of a built-in character style (`Hyperlink`) becomes the id
+  /// the document has for it, whatever its language, so this reads back
+  /// that id, and the built-in is added when the document lacks it. Any
+  /// other id is kept and reported at save
+  /// (`DocxWarningCode.styleNotFound`). A run in no document is resolved
+  /// when it is inserted into one.
   String? get style => _set.valueOf('rStyle') as String?;
 
   set style(String? value) {
     checkStyleId(value);
-    _set.setValue('rStyle', value);
+    _set.setStyleId('rStyle', value, DocxStyleType.character);
   }
 
   /// The fonts (`w:rFonts`), or `null`.

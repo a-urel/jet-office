@@ -26,6 +26,7 @@ import '../property_codec.dart';
 import 'edit_sink.dart';
 import 'formatting.dart';
 import 'property_set.dart';
+import 'styles.dart' show DocxStyleType;
 
 /// A property of a paragraph, to name it for
 /// [DocxParagraphProperties.clear].
@@ -103,11 +104,20 @@ final class DocxParagraphProperties {
   /// attributes, child elements) reads `null` and is written back as read.
   /// Setting the empty string, or an id holding a character XML forbids,
   /// throws [ArgumentError]; `null` removes the style.
+  ///
+  /// On a paragraph in a document, the id set is resolved against the
+  /// document's styles, which loads them: an id the document defines is
+  /// kept; the English id of a built-in paragraph style (`Heading1`) becomes
+  /// the id the document has for it, whatever its language, so `Heading1`
+  /// reads back as `Balk1` in a Turkish document, and the built-in is added
+  /// when the document lacks it. Any other id is kept and reported at save
+  /// (`DocxWarningCode.styleNotFound`). A paragraph in no document is
+  /// resolved when it is inserted into one.
   String? get style => _set.valueOf('pStyle') as String?;
 
   set style(String? value) {
     checkStyleId(value);
-    _set.setValue('pStyle', value);
+    _set.setStyleId('pStyle', value, DocxStyleType.paragraph);
   }
 
   /// The alignment (`w:jc`), or `null`.

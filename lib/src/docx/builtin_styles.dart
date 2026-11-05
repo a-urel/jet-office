@@ -137,6 +137,13 @@ enum DocxBuiltInStyle {
   final DocxStyleType type;
 }
 
+/// The built-in style whose English id is [id], compared exactly, or `null`.
+DocxBuiltInStyle? builtInStyleOfId(String id) => _byEnglishId[id];
+
+final Map<String, DocxBuiltInStyle> _byEnglishId = <String, DocxBuiltInStyle>{
+  for (final DocxBuiltInStyle style in DocxBuiltInStyle.values) style.id: style,
+};
+
 /// Word's definition of the built-in or linked style [englishId], as a
 /// `w:style` element that declares the `w` namespace itself.
 ///

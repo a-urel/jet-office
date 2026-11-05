@@ -28,6 +28,11 @@
 /// the same [DocxEdits], so they are recorded and reverted like a
 /// paragraph's.
 ///
+/// A style id set through the API is resolved against the document's styles
+/// ([DocxEdits.resolveStyleId]) as it is set, or as the content that holds
+/// it goes in ([insertBlock], [replaceBlock]), so the styles it adds are
+/// changes of the same transaction. A replay resolves nothing.
+///
 /// @docImport 'edit_sink.dart';
 library;
 
@@ -36,6 +41,7 @@ import 'blocks.dart';
 import 'edit_sink.dart';
 import 'inlines.dart';
 import 'property_set.dart';
+import 'styles.dart' show DocxStyleType;
 
 /// The edits of one document: its [ChangeLog], and the sink its body's
 /// paragraphs report to.
@@ -48,6 +54,10 @@ final class DocxEdits implements DocxEditSink {
   /// applied and recorded, so a test can watch the transaction roll it
   /// back. `null` in normal use.
   void Function()? afterRecord;
+
+  /// What resolves a style id set through the API, which the document
+  /// provides (it loads the styles); `null` keeps every id as given.
+  String Function(String id, DocxStyleType type)? styleResolver;
 
   /// True while a change is reverted or reapplied: the reports the model
   /// makes then are the replay, not new edits.
@@ -116,6 +126,21 @@ final class DocxEdits implements DocxEditSink {
       properties.stateOf(localName),
     ),
   );
+
+  @override
+  void atomically(void Function() body) {
+    if (_replaying) {
+      body();
+    } else {
+      transaction(body);
+    }
+  }
+
+  @override
+  String resolveStyleId(String id, DocxStyleType type) {
+    final String Function(String, DocxStyleType)? resolver = styleResolver;
+    return _replaying || resolver == null ? id : resolver(id, type);
+  }
 }
 
 /// Inserts [block] at [index] of [blocks], the blocks of [container], and
@@ -125,7 +150,8 @@ final class DocxEdits implements DocxEditSink {
 /// [block] already in a container (this one or another) throws
 /// [StateError]; both before anything changes. Must run inside
 /// `edits.transaction`. If recording throws, the block is taken out again
-/// before the error leaves.
+/// before the error leaves. The styles set on a paragraph are resolved
+/// against the document's ([resolveStylesSet]).
 void insertBlock(
   DocxEdits edits,
   Object container,
@@ -136,6 +162,7 @@ void insertBlock(
   RangeError.checkValueInInterval(index, 0, blocks.length, 'index');
   _checkDetached(block);
   applyChange(edits, _BlockInserted(edits, container, blocks, index, block));
+  _resolveStyles(block);
 }
 
 /// Removes the block at [index] of [blocks], the blocks of [container], and
@@ -162,7 +189,8 @@ void removeBlock(
 ///
 /// An [index] that is not one of a block throws [RangeError], and a [block]
 /// already in a container throws [StateError]; both before anything
-/// changes. Must run inside `edits.transaction`.
+/// changes. Must run inside `edits.transaction`. The styles set on a
+/// paragraph are resolved against the document's ([resolveStylesSet]).
 void replaceBlock(
   DocxEdits edits,
   Object container,
@@ -176,6 +204,14 @@ void replaceBlock(
     edits,
     _BlockReplaced(edits, container, blocks, index, blocks[index], block),
   );
+  _resolveStyles(block);
+}
+
+/// Resolves what was set on [block], now in a document.
+void _resolveStyles(DocxBlock block) {
+  if (block is DocxParagraph) {
+    resolveStylesSet(block);
+  }
 }
 
 /// Puts every block of [blocks] in [container] and makes its paragraphs

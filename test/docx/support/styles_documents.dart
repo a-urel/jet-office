@@ -120,7 +120,9 @@ String stylesRelationship(
 /// when it is null, so the part has the `xml` default, `application/xml`).
 /// The main part's relationships hold the picture's, the settings part's
 /// and [relationships] (by default one to `styles.xml`; empty for none).
+/// [document] replaces the main part.
 Uint8List docxWithStyles({
+  String document = wordDocumentXml,
   String? styles = wordStylesXml,
   String stylesPath = 'word/styles.xml',
   String? stylesContentType = ContentType.wmlStyles,
@@ -142,7 +144,7 @@ Uint8List docxWithStyles({
       '</Types>',
     ),
     '_rels/.rels': utf8.encode(rootRels('word/document.xml')),
-    'word/document.xml': utf8.encode(wordDocumentXml),
+    'word/document.xml': utf8.encode(document),
     'word/_rels/document.xml.rels': utf8.encode(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
       '<Relationships xmlns="$packageRelsNs">'

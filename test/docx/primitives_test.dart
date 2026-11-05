@@ -217,11 +217,11 @@ void main() {
       final DocxRun run = p.inlines.single as DocxRun;
       expect(p.style, 'Title');
       final ChangeSet set = changeLogOf(doc).transaction(() {
-        p.style = 'Heading1';
+        p.style = 'Chapter';
         run.style = null;
       });
       expect(set.changes, hasLength(2));
-      expect(p.style, 'Heading1');
+      expect(p.style, 'Chapter');
       expect(run.style, isNull);
 
       changeLogOf(doc).revertSet(set);
@@ -229,7 +229,7 @@ void main() {
       expect(run.style, 'Strong');
 
       changeLogOf(doc).reapplySet(set);
-      expect(p.style, 'Heading1');
+      expect(p.style, 'Chapter');
       expect(run.style, isNull);
     });
 

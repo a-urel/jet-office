@@ -68,8 +68,8 @@ void main() {
     expect(out.toString(), contains('All 2 documents edited.'));
   });
 
-  test('a Word-like document gets the three edits, and only document.xml '
-      'changes', () {
+  test('a Word-like document gets the three edits, and only document.xml and '
+      'the style it lacked change', () {
     File('${input.path}/word.docx').writeAsBytesSync(richWordDocx());
     final StringBuffer out = StringBuffer();
     expect(run(out: out), 0, reason: '$out');
@@ -84,7 +84,7 @@ void main() {
     // The last all-runs paragraph is the empty one after the table.
     expect(before[10], '-:');
     expect(after[10], '-:$replacedText');
-    // No styles part, so the added paragraph is Normal.
+    // No styles part, so the added paragraph is Normal, which is added.
     expect(after.last, 'Normal:$addedText');
     expect(after.sublist(1, 10), before.sublist(1, 10));
   });

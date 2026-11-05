@@ -108,7 +108,10 @@ final class DocxDocument {
   }
 
   DocxDocument._(this._package, this._loadWarnings)
-    : _warnings = _loadWarnings.warnings;
+    : _warnings = _loadWarnings.warnings {
+    _edits.styleResolver = (String id, DocxStyleType type) =>
+        resolveStyleId(styles, id, type);
+  }
 
   final DocxPackage _package;
 
@@ -145,7 +148,9 @@ final class DocxDocument {
   /// The document's styles and document defaults, from the styles part.
   ///
   /// The part, found through the main part's relationship wherever it
-  /// lives, loads on the first access; until then a save copies it byte for
+  /// lives, loads on the first access, or when a style is set on content of
+  /// the document (the id set is resolved against it, and such a set or
+  /// insertion throws what this does); until then a save copies it byte for
   /// byte. A document without one has empty styles, and gains the part at
   /// save once a style or a default is set in it. Throws a
   /// [DocxReadException] naming the part when it cannot be read (malformed
@@ -286,12 +291,18 @@ final class DocxDocument {
     final DocumentPart? main = _part;
     if (main != null) {
       main.listDefined = _listCheck();
+      // Only a style set through the API is reported, and setting one
+      // loaded the styles.
+      final DocxStyles? styles = _styles;
+      main.styleDefined = styles == null
+          ? null
+          : (String id, DocxStyleType type) => definesStyle(styles, id, type);
     }
     // A styles part the document lacked is added once it holds something
     // (plan Ruling 7); after that it is a part like the others.
-    final StylesPart? styles = _stylesPart;
-    if (styles != null && styles.holdsSomething) {
-      _stylesSlot!.create(styles);
+    final StylesPart? stylesPart = _stylesPart;
+    if (stylesPart != null && stylesPart.holdsSomething) {
+      _stylesSlot!.create(stylesPart);
     }
     final NumberingPart? numbering = _numberingPart;
     if (numbering != null && numbering.holdsSomething) {

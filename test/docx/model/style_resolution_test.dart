@@ -1,0 +1,780 @@
+// Tests how a style id set through the API finds its style: by the id the
+// document defines, by the name of a built-in style under a localized id, or
+// by adding Word's definition (plan Rulings 5, 6 and 8). The documents are
+// built in memory, so these tests run on the web as well.
+import 'dart:typed_data';
+
+import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/docx/docx_document.dart';
+import 'package:jet_office/src/docx/model/primitives.dart' show DocxEdits;
+import 'package:jet_office/src/opc/change_log.dart' show ChangeSet;
+import 'package:jet_office/src/opc/ooxml.dart' show Ns;
+import 'package:test/test.dart';
+
+import '../support/docx_builder.dart';
+import '../support/localized_document.dart';
+import '../support/styles_documents.dart';
+
+DocxDocument _localized() => DocxDocument.open(localizedWordDocx());
+
+DocxDocument _german() => DocxDocument.open(germanStyleDocx());
+
+/// A document without a styles part.
+DocxDocument _withoutStyles() => DocxDocument.open(buildDocx());
+
+/// Every style id of [doc], in document order.
+List<String?> _ids(DocxDocument doc) => <String?>[
+  for (final DocxStyle s in doc.styles.styles) s.id,
+];
+
+/// The `styles.xml` [doc] saves.
+String _savedStyles(DocxDocument doc) =>
+    readDocxText(doc.save().bytes)['word/styles.xml']!;
+
+/// The warnings of [code] that saving [doc] gives.
+List<DocxWarning> _warnings(DocxDocument doc, DocxWarningCode code) =>
+    <DocxWarning>[
+      for (final DocxWarning w in doc.save().warnings)
+        if (w.code == code) w,
+    ];
+
+void _expectNamesUnique(DocxDocument doc) {
+  final List<String> names = <String>[
+    for (final DocxStyle s in doc.styles.styles) s.name!.toLowerCase(),
+  ];
+  expect(names.toSet(), hasLength(names.length));
+  final List<String> ids = <String>[
+    for (final DocxStyle s in doc.styles.styles) s.id!.toLowerCase(),
+  ];
+  expect(ids.toSet(), hasLength(ids.length));
+}
+
+void main() {
+  group('a Turkish document', () {
+    test('idOf finds Balk1 by its name heading 1', () {
+      expect(_localized().styles.idOf(DocxBuiltInStyle.heading1), 'Balk1');
+    });
+
+    test('idOf gives null for a built-in the document lacks', () {
+      final DocxDocument doc = _localized();
+      final List<String?> before = _ids(doc);
+      expect(doc.styles.idOf(DocxBuiltInStyle.header), isNull);
+      expect(_ids(doc), before);
+    });
+
+    test('ensure(heading1) returns Balk1 and adds nothing', () {
+      final DocxDocument doc = _localized();
+      final List<String?> before = _ids(doc);
+      expect(doc.styles.ensure(DocxBuiltInStyle.heading1), 'Balk1');
+      expect(_ids(doc), before);
+    });
+
+    test('p.style = Heading1 on an attached paragraph stores and reads '
+        'Balk1', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.addParagraph('x');
+      p.style = 'Heading1';
+      expect(p.style, 'Balk1');
+      expect(p.properties.style, 'Balk1');
+      expect(doc.styles.byId('Heading1'), isNull);
+      expect(
+        readDocxText(doc.save().bytes)['word/document.xml'],
+        contains('w:pStyle w:val="Balk1"'),
+      );
+    });
+
+    test('a detached paragraph with style Title inserted gets KonuBal', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = DocxParagraph.text('x')..style = 'Title';
+      expect(p.style, 'Title');
+      doc.body.insertBlock(0, p);
+      expect(p.style, 'KonuBal');
+    });
+
+    test('a paragraph put in with replaceBlockAt is resolved', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = DocxParagraph()..style = 'Title';
+      doc.body.replaceBlockAt(0, p);
+      expect(p.style, 'KonuBal');
+    });
+
+    test('a run with rStyle Hyperlink inserted adds Hyperlink basedOn '
+        'VarsaylanParagrafYazTipi', () {
+      final DocxDocument doc = _localized();
+      final DocxRun run = DocxRun('x')..style = 'Hyperlink';
+      doc.body.addParagraph().insertInline(0, run);
+      expect(run.style, 'Hyperlink');
+      expect(doc.styles.byId('Hyperlink')?.basedOn, 'VarsaylanParagrafYazTipi');
+    });
+
+    test('a run of a detached paragraph is resolved when it goes in', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = DocxParagraph();
+      final DocxRun run = p.addRun('x')..style = 'Strong';
+      doc.body.insertBlock(0, p);
+      expect(run.style, 'Strong');
+      expect(doc.styles.byId('Strong')?.name, 'Strong');
+    });
+
+    test('run.style on an attached run adds the built-in', () {
+      final DocxDocument doc = _localized();
+      final DocxRun run = doc.body.addParagraph().addRun('x');
+      run.properties.style = 'Emphasis';
+      expect(doc.styles.byId('Emphasis')?.type, DocxStyleType.character);
+    });
+
+    test('ensure(header) adds Header basedOn Normal and HeaderChar linked '
+        'both ways, and no name twice', () {
+      final DocxDocument doc = _localized();
+      expect(doc.styles.ensure(DocxBuiltInStyle.header), 'Header');
+      final DocxStyle header = doc.styles.byId('Header')!;
+      final DocxStyle char = doc.styles.byId('HeaderChar')!;
+      expect(header.basedOn, 'Normal');
+      expect(header.link, 'HeaderChar');
+      expect(char.link, 'Header');
+      expect(char.basedOn, 'VarsaylanParagrafYazTipi');
+      expect(header.isCustom, isFalse);
+      expect(char.isCustom, isTrue);
+      _expectNamesUnique(doc);
+      final String saved = _savedStyles(doc);
+      expect(saved, contains('w:styleId="Header"'));
+      expect(saved, contains('<w:name w:val="header"/>'));
+      expect(saved, contains('w:pos="9072"'));
+      expect(saved, contains('<w:basedOn w:val="VarsaylanParagrafYazTipi"/>'));
+      expect(saved, isNot(contains('DefaultParagraphFont')));
+    });
+
+    test('ensure(tableGrid) is basedOn NormalTablo', () {
+      final DocxDocument doc = _localized();
+      expect(doc.styles.ensure(DocxBuiltInStyle.tableGrid), 'TableGrid');
+      expect(doc.styles.byId('TableGrid')?.basedOn, 'NormalTablo');
+      expect(doc.styles.byId('TableNormal'), isNull);
+    });
+
+    test('ensure(heading2) adds Heading2_1 named heading 2 beside My '
+        'heading', () {
+      final DocxDocument doc = _localized();
+      expect(doc.styles.ensure(DocxBuiltInStyle.heading2), 'Heading2_1');
+      final DocxStyle added = doc.styles.byId('Heading2_1')!;
+      expect(added.name, 'heading 2');
+      expect(added.link, 'Heading2Char');
+      expect(doc.styles.byId('Heading2Char')?.link, 'Heading2_1');
+      expect(doc.styles.byId('Heading2')?.name, 'My heading');
+      expect(doc.styles.idOf(DocxBuiltInStyle.heading2), 'Heading2_1');
+      _expectNamesUnique(doc);
+    });
+
+    test('the suffix is the smallest one free', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithStyles(
+          styles: stylesXmlOf(<String>[
+            styleXml('paragraph', 'Normal', 'Normal'),
+            styleXml('paragraph', 'Title', 'Mine'),
+            styleXml('paragraph', 'Title_1', 'Mine too'),
+            styleXml('paragraph', 'TITLE_2', 'Mine as well'),
+          ]),
+        ),
+      );
+      expect(doc.styles.ensure(DocxBuiltInStyle.title), 'Title_3');
+    });
+
+    test('p.style = Heading2 keeps the defined custom Heading2', () {
+      final DocxDocument doc = _localized();
+      final List<String?> before = _ids(doc);
+      final DocxParagraph p = doc.body.addParagraph('x')..style = 'Heading2';
+      expect(p.style, 'Heading2');
+      expect(_ids(doc), before);
+    });
+
+    test('a read pStyle Heading3 is not resolved', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.blocks.first as DocxParagraph;
+      expect(p.style, 'Heading3');
+      final DocxParagraph moved = p;
+      doc.body.removeBlockAt(0);
+      doc.body.insertBlock(0, moved);
+      expect(moved.style, 'Heading3');
+      expect(doc.styles.byName('heading 3'), isNull);
+      expect(isStylesLoaded(doc), isTrue);
+    });
+
+    test('a read document that sets nothing does not load styles', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.blocks.first as DocxParagraph;
+      doc.body.removeBlockAt(0);
+      doc.body.insertBlock(0, p);
+      doc.body.addParagraph('x');
+      expect(isStylesLoaded(doc), isFalse);
+    });
+
+    test('setting the id a paragraph reads records nothing', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.addParagraph('x')..style = 'Balk1';
+      final int before = _changes(doc, () => p.style = 'Heading1');
+      expect(before, 0);
+      expect(p.style, 'Balk1');
+    });
+
+    test('setting back a read id the document lacks adds nothing', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.blocks.first as DocxParagraph;
+      p.style = p.style;
+      p.style = 'Heading3';
+      expect(p.style, 'Heading3');
+      expect(isStylesLoaded(doc), isFalse);
+      expect(doc.styles.byName('heading 3'), isNull);
+    });
+
+    test('setting null neither resolves nor loads the styles', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.blocks.first as DocxParagraph;
+      p.style = null;
+      expect(p.style, isNull);
+      expect(isStylesLoaded(doc), isFalse);
+    });
+
+    test('an id of the wrong type is not a built-in', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.addParagraph('x')..style = 'Hyperlink';
+      expect(p.style, 'Hyperlink');
+      expect(doc.styles.byId('Hyperlink'), isNull);
+    });
+
+    test('a paragraph resolved and rolled back is as it was', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = DocxParagraph()..style = 'Header';
+      final List<String?> before = _ids(doc);
+      int calls = 0;
+      editsOf(doc).afterRecord = () {
+        if (++calls == 3) throw StateError('stop');
+      };
+      expect(() => doc.body.insertBlock(0, p), throwsStateError);
+      editsOf(doc).afterRecord = null;
+      expect(_ids(doc), before);
+      expect(p.style, 'Header');
+      expect(doc.body.blocks, isNot(contains(p)));
+    });
+
+    test('a run inserted and rolled back leaves no style', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.addParagraph();
+      final DocxRun run = DocxRun('x')..style = 'Hyperlink';
+      final List<String?> before = _ids(doc);
+      int calls = 0;
+      editsOf(doc).afterRecord = () {
+        if (++calls == 2) throw StateError('stop');
+      };
+      expect(() => p.insertInline(0, run), throwsStateError);
+      editsOf(doc).afterRecord = null;
+      expect(_ids(doc), before);
+      expect(p.inlines, isEmpty);
+    });
+
+    test('a set that fails takes the style it added with it', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.addParagraph('x');
+      final List<String?> before = _ids(doc);
+      int calls = 0;
+      editsOf(doc).afterRecord = () {
+        if (++calls == 2) throw StateError('stop');
+      };
+      expect(() => p.style = 'NoSpacing', throwsStateError);
+      editsOf(doc).afterRecord = null;
+      expect(_ids(doc), before);
+      expect(p.style, isNull);
+    });
+
+    test('a failing ensure rolls back every style it added', () {
+      final DocxDocument doc = _localized();
+      final List<String?> before = _ids(doc);
+      int calls = 0;
+      editsOf(doc).afterRecord = () {
+        if (++calls == 2) throw StateError('stop');
+      };
+      expect(
+        () => doc.styles.ensure(DocxBuiltInStyle.header),
+        throwsStateError,
+      );
+      editsOf(doc).afterRecord = null;
+      expect(calls, 2);
+      expect(_ids(doc), before);
+      expect(doc.styles.byId('Header'), isNull);
+      expect(doc.styles.byId('HeaderChar'), isNull);
+      expect(doc.styles.ensure(DocxBuiltInStyle.header), 'Header');
+    });
+
+    test('ensure is one transaction: revert and reapply it whole', () {
+      final DocxDocument doc = _localized();
+      final List<String?> before = _ids(doc);
+      final DocxEdits edits = editsOf(doc);
+      final ChangeSet set = edits.transaction(
+        () => doc.styles.ensure(DocxBuiltInStyle.header),
+      );
+      expect(set.changes, hasLength(2));
+      final List<String?> after = _ids(doc);
+      edits.log.revertSet(set);
+      expect(_ids(doc), before);
+      expect(doc.styles.byId('Header'), isNull);
+      edits.log.reapplySet(set);
+      expect(_ids(doc), after);
+      expect(doc.styles.byId('Header')?.link, 'HeaderChar');
+    });
+  });
+
+  group('styleNotFound (Ruling 8)', () {
+    test('an unknown id is kept and warns styleNotFound at its path on '
+        'save', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = doc.body.addParagraph('x')..style = 'Bilinmez';
+      final DocxRun run = doc.body.addParagraph().addRun('y')
+        ..style = 'Bilinmez';
+      expect(p.style, 'Bilinmez');
+      expect(run.style, 'Bilinmez');
+      final List<DocxWarning> found = _warnings(
+        doc,
+        DocxWarningCode.styleNotFound,
+      );
+      expect(found, hasLength(1));
+      expect(found.single.detail, 'Bilinmez');
+      expect(found.single.count, 2);
+      expect(found.single.part, '/word/document.xml');
+      expect(found.single.locations, <String>['body/p[3]', 'body/p[4]/r[0]']);
+    });
+
+    test('a character style set as a paragraph style warns styleNotFound', () {
+      final DocxDocument doc = _localized();
+      doc.body.addParagraph('x').style = 'VarsaylanParagrafYazTipi';
+      expect(
+        _warnings(doc, DocxWarningCode.styleNotFound).single.detail,
+        'VarsaylanParagrafYazTipi',
+      );
+    });
+
+    test('a paragraph style set as a character style warns styleNotFound', () {
+      final DocxDocument doc = _localized();
+      doc.body.addParagraph().addRun('x').style = 'Balk1';
+      expect(
+        _warnings(doc, DocxWarningCode.styleNotFound).single.locations,
+        <String>['body/p[3]/r[0]'],
+      );
+    });
+
+    test('a read dangling pStyle does not warn', () {
+      final DocxDocument doc = _localized();
+      doc.body;
+      doc.styles;
+      expect(_warnings(doc, DocxWarningCode.styleNotFound), isEmpty);
+    });
+
+    test('a style that resolves does not warn', () {
+      final DocxDocument doc = _localized();
+      doc.body.addParagraph('x').style = 'Heading1';
+      doc.body.addParagraph().addRun('y').style = 'Hyperlink';
+      expect(_warnings(doc, DocxWarningCode.styleNotFound), isEmpty);
+    });
+
+    test('a block taken out is not reported', () {
+      final DocxDocument doc = _localized();
+      doc.body.addParagraph('x').style = 'Bilinmez';
+      doc.body.removeBlockAt(doc.body.blocks.length - 1);
+      expect(_warnings(doc, DocxWarningCode.styleNotFound), isEmpty);
+    });
+  });
+
+  group('style links', () {
+    test('basedOn, next and link take a built-in by its name', () {
+      final DocxDocument doc = _localized();
+      final DocxStyle s = doc.styles.add(
+        DocxStyle(type: DocxStyleType.paragraph, id: 'Not', name: 'Not'),
+      );
+      s.basedOn = 'Heading1';
+      s.next = 'Title';
+      expect(s.basedOn, 'Balk1');
+      expect(s.next, 'KonuBal');
+      expect(doc.styles.byId('Heading1'), isNull);
+    });
+
+    test('add applies the same rules, and adds what is missing', () {
+      final DocxDocument doc = _localized();
+      final DocxStyle s = doc.styles.add(
+        DocxStyle(
+          type: DocxStyleType.paragraph,
+          id: 'Not',
+          name: 'Not',
+          basedOn: 'Heading1',
+          next: 'NoSpacing',
+        ),
+      );
+      expect(s.basedOn, 'Balk1');
+      expect(s.next, 'NoSpacing');
+      expect(doc.styles.byId('NoSpacing')?.name, 'No Spacing');
+    });
+
+    test('a link takes a built-in of the other type', () {
+      final DocxDocument doc = _localized();
+      final DocxStyle s = doc.styles.add(
+        DocxStyle(type: DocxStyleType.paragraph, id: 'Not', name: 'Not'),
+      );
+      s.link = 'Strong';
+      expect(doc.styles.byId('Strong')?.type, DocxStyleType.character);
+      expect(() => s.link = 'Title', throwsArgumentError);
+      expect(s.link, 'Strong');
+    });
+
+    test('a link to a style of the same type throws', () {
+      final DocxDocument doc = _localized();
+      expect(
+        () => doc.styles.add(
+          DocxStyle(
+            type: DocxStyleType.paragraph,
+            id: 'Not',
+            name: 'Not',
+            link: 'Normal',
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('an unknown link throws, and add rolls back what it added', () {
+      final DocxDocument doc = _localized();
+      final List<String?> before = _ids(doc);
+      expect(
+        () => doc.styles.add(
+          DocxStyle(
+            type: DocxStyleType.paragraph,
+            id: 'Not',
+            name: 'Not',
+            basedOn: 'NoSpacing',
+            next: 'Bilinmez',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(_ids(doc), before);
+      final DocxStyle s = doc.styles.byId('Normal')!;
+      expect(() => s.next = 'Bilinmez', throwsArgumentError);
+    });
+
+    test('a new style cannot take an id its links add', () {
+      final DocxDocument doc = _localized();
+      final List<String?> before = _ids(doc);
+      expect(
+        () => doc.styles.add(
+          DocxStyle(
+            type: DocxStyleType.character,
+            id: 'HeaderChar',
+            name: 'Mine',
+            link: 'Header',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(_ids(doc), before);
+    });
+
+    test('a built-in cannot be based on itself through a new style', () {
+      final DocxDocument doc = _localized();
+      expect(
+        () => doc.styles.add(
+          DocxStyle(
+            type: DocxStyleType.paragraph,
+            id: 'NoSpacing',
+            name: 'Mine',
+            basedOn: 'NoSpacing',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(doc.styles.byId('NoSpacing'), isNull);
+    });
+
+    test('setting the link a style reads is a no-op', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithStyles(
+          styles: stylesXmlOf(<String>[
+            styleXml(
+              'paragraph',
+              'Normal',
+              'Normal',
+              children: '<w:basedOn w:val="Yok"/>',
+            ),
+          ]),
+        ),
+      );
+      final DocxStyle s = doc.styles.byId('Normal')!;
+      s.basedOn = s.basedOn;
+      expect(s.basedOn, 'Yok');
+    });
+  });
+
+  group('a new document', () {
+    test('in a new document ensure(listParagraph) returns ListParagraph and '
+        'leaves styles unchanged', () {
+      final DocxDocument doc = DocxDocument();
+      final List<String?> before = _ids(doc);
+      expect(
+        doc.styles.ensure(DocxBuiltInStyle.listParagraph),
+        'ListParagraph',
+      );
+      expect(_ids(doc), before);
+    });
+
+    test('p.style = Heading1 stays Heading1', () {
+      final DocxDocument doc = DocxDocument();
+      expect(
+        (doc.body.addParagraph('x')..style = 'Heading1').style,
+        'Heading1',
+      );
+    });
+
+    test('every built-in resolves to itself or is added by its English id', () {
+      for (final DocxBuiltInStyle b in DocxBuiltInStyle.values) {
+        final DocxDocument doc = DocxDocument();
+        expect(doc.styles.ensure(b), b.id);
+        expect(doc.styles.byId(b.id)?.type, b.type);
+        expect(doc.styles.byId(b.id)?.name, b.name);
+        _expectNamesUnique(doc);
+      }
+    });
+  });
+
+  group('a document without styles', () {
+    test('ensure in a document without styles.xml adds Normal, '
+        'DefaultParagraphFont and the style', () {
+      final DocxDocument doc = _withoutStyles();
+      expect(
+        doc.styles.ensure(DocxBuiltInStyle.listParagraph),
+        'ListParagraph',
+      );
+      expect(_ids(doc), <String>[
+        'Normal',
+        'DefaultParagraphFont',
+        'ListParagraph',
+      ]);
+      expect(doc.styles.byId('Normal')?.isDefault, isTrue);
+      expect(doc.styles.byId('DefaultParagraphFont')?.isDefault, isTrue);
+      final Map<String, String> saved = readDocxText(doc.save().bytes);
+      expect(saved['word/styles.xml'], contains('w:default="1"'));
+      expect(saved['[Content_Types].xml'], contains('/word/styles.xml'));
+    });
+
+    test('ensure(normal) adds Normal once', () {
+      final DocxDocument doc = _withoutStyles();
+      expect(doc.styles.ensure(DocxBuiltInStyle.normal), 'Normal');
+      expect(_ids(doc), <String>['Normal', 'DefaultParagraphFont']);
+    });
+
+    test('p.style = Heading1 adds the part at save, and a second save adds '
+        'nothing', () {
+      final DocxDocument doc = _withoutStyles();
+      doc.body.addParagraph('x').style = 'Heading1';
+      final Uint8List first = doc.save().bytes;
+      final Map<String, String> saved = readDocxText(first);
+      expect(saved['word/styles.xml'], contains('w:styleId="Heading1"'));
+      expect(saved['word/styles.xml'], contains('w:styleId="Heading1Char"'));
+      expect(doc.warnings, isEmpty);
+      expect(readDocxText(doc.save().bytes), saved);
+    });
+
+    test('a style set and rolled back leaves no part', () {
+      final DocxDocument doc = _withoutStyles();
+      final DocxParagraph p = doc.body.addParagraph('x');
+      editsOf(doc).afterRecord = () => throw StateError('stop');
+      expect(() => p.style = 'Heading1', throwsStateError);
+      editsOf(doc).afterRecord = null;
+      expect(
+        readDocxText(doc.save().bytes),
+        isNot(contains('word/styles.xml')),
+      );
+    });
+  });
+
+  group('a styles part that cannot be read', () {
+    test('a set or an insertion throws, changes nothing, and the part is '
+        'copied', () {
+      const String broken = '<w:styles xmlns:w="${Ns.w}"><w:style>';
+      final DocxDocument doc = DocxDocument.open(
+        docxWithStyles(styles: broken),
+      );
+      final DocxParagraph p = doc.body.blocks.whereType<DocxParagraph>().first;
+      final String? before = p.style;
+      final int blocks = doc.body.blocks.length;
+      final Matcher fails = throwsA(isA<DocxReadException>());
+      expect(() => p.style = 'Heading1', fails);
+      expect(p.style, before);
+      final DocxParagraph q = DocxParagraph()..style = 'Heading1';
+      expect(() => doc.body.insertBlock(0, q), fails);
+      expect(doc.body.blocks, hasLength(blocks));
+      expect(readDocxText(doc.save().bytes)['word/styles.xml'], broken);
+    });
+  });
+
+  group('the default of a type', () {
+    test('adding a built-in keeps the default of the file', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithStyles(
+          styles: stylesXmlOf(<String>[
+            styleXml(
+              'paragraph',
+              'Govde',
+              'Body',
+              attributes: ' w:default="1"',
+            ),
+            styleXml(
+              'table',
+              'Duz',
+              'Plain table',
+              attributes: ' w:default="1"',
+            ),
+            styleXml(
+              'numbering',
+              'Yok',
+              'Nothing',
+              attributes: ' w:default="1"',
+            ),
+          ]),
+        ),
+      );
+      expect(doc.styles.ensure(DocxBuiltInStyle.normal), 'Normal');
+      expect(doc.styles.ensure(DocxBuiltInStyle.tableNormal), 'TableNormal');
+      expect(doc.styles.ensure(DocxBuiltInStyle.noList), 'NoList');
+      for (final DocxStyleType type in <DocxStyleType>[
+        DocxStyleType.paragraph,
+        DocxStyleType.table,
+        DocxStyleType.numbering,
+      ]) {
+        expect(
+          doc.styles.styles.where(
+            (DocxStyle s) => s.type == type && s.isDefault,
+          ),
+          hasLength(1),
+          reason: type.name,
+        );
+      }
+      expect(doc.styles.byId('Normal')?.isDefault, isFalse);
+      final String saved = _savedStyles(doc);
+      expect(RegExp('w:default=').allMatches(saved), hasLength(3));
+      final DocxDocument again = DocxDocument.open(doc.save().bytes);
+      expect(again.styles.byId('Normal')?.isDefault, isFalse);
+      expect(again.styles.byId('Govde')?.isDefault, isTrue);
+    });
+
+    test('a dependency on Normal takes the default of the file', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithStyles(
+          styles: stylesXmlOf(<String>[
+            styleXml(
+              'paragraph',
+              'Govde',
+              'Body',
+              attributes: ' w:default="1"',
+            ),
+          ]),
+        ),
+      );
+      doc.styles.ensure(DocxBuiltInStyle.heading1);
+      expect(doc.styles.byId('Heading1')?.basedOn, 'Govde');
+      expect(doc.styles.byId('Heading1')?.next, 'Govde');
+      expect(doc.styles.byId('Normal'), isNull);
+    });
+
+    test('without a default, a dependency finds Normal by its name', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithStyles(
+          styles: stylesXmlOf(<String>[
+            styleXml('paragraph', 'Temel', 'normal'),
+          ]),
+        ),
+      );
+      doc.styles.ensure(DocxBuiltInStyle.quote);
+      expect(doc.styles.byId('Quote')?.basedOn, 'Temel');
+      expect(doc.styles.byId('Normal'), isNull);
+    });
+  });
+
+  group('the prefix of the part', () {
+    test('a style added to a part with another prefix is well formed', () {
+      const String ns0 = 'ns0';
+      final DocxDocument doc = DocxDocument.open(
+        docxWithStyles(
+          styles:
+              '<$ns0:styles xmlns:$ns0="${Ns.w}">'
+              '<$ns0:style $ns0:type="paragraph" $ns0:default="1" '
+              '$ns0:styleId="Temel"><$ns0:name $ns0:val="Normal"/>'
+              '</$ns0:style></$ns0:styles>',
+        ),
+      );
+      doc.styles.ensure(DocxBuiltInStyle.listParagraph);
+      final DocxDocument again = DocxDocument.open(doc.save().bytes);
+      final DocxStyle added = again.styles.byId('ListParagraph')!;
+      expect(added.name, 'List Paragraph');
+      expect(added.basedOn, 'Temel');
+      expect(added.uiPriority, 34);
+      expect(added.type, DocxStyleType.paragraph);
+    });
+
+    test('the definition is written without a declaration of its own', () {
+      final DocxDocument doc = _localized();
+      doc.styles.ensure(DocxBuiltInStyle.noSpacing);
+      expect(
+        _savedStyles(doc),
+        contains(
+          '<w:style w:type="paragraph" w:styleId="NoSpacing">'
+          '<w:name w:val="No Spacing"/>',
+        ),
+      );
+    });
+  });
+
+  group('a German document', () {
+    test('idOf heading1 and heading2 are berschrift1 and berschrift2', () {
+      final DocxStyles styles = _german().styles;
+      expect(styles.idOf(DocxBuiltInStyle.heading1), 'berschrift1');
+      expect(styles.idOf(DocxBuiltInStyle.heading2), 'berschrift2');
+    });
+
+    test('p.style = Heading1 stores berschrift1 and adds no Heading1', () {
+      final DocxDocument doc = _german();
+      final List<String?> before = _ids(doc);
+      final DocxParagraph p = doc.body.addParagraph('x')..style = 'Heading1';
+      expect(p.style, 'berschrift1');
+      expect(_ids(doc), before);
+    });
+
+    test('the style with outlineLvl 0 named Chapter is not heading 1', () {
+      final DocxDocument doc = _german();
+      expect(doc.styles.byId('Gliederung')?.name, 'Chapter');
+      expect(doc.styles.idOf(DocxBuiltInStyle.heading1), isNot('Gliederung'));
+    });
+
+    test('ensure(header) is basedOn Standard and its char style basedOn '
+        'Absatz-Standardschriftart', () {
+      final DocxDocument doc = _german();
+      doc.styles.ensure(DocxBuiltInStyle.header);
+      expect(doc.styles.byId('Header')?.basedOn, 'Standard');
+      expect(
+        doc.styles.byId('HeaderChar')?.basedOn,
+        'Absatz-Standardschriftart',
+      );
+      expect(doc.styles.byId('Normal'), isNull);
+      expect(doc.styles.byId('DefaultParagraphFont'), isNull);
+    });
+
+    test('idOf never matches by id', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithStyles(
+          styles: stylesXmlOf(<String>[
+            styleXml('paragraph', 'Heading1', 'Foo'),
+            styleXml('paragraph', 'Balk1', 'heading 1'),
+          ]),
+        ),
+      );
+      expect(doc.styles.idOf(DocxBuiltInStyle.heading1), 'Balk1');
+    });
+  });
+}
+
+/// How many changes [body] records in [doc].
+int _changes(DocxDocument doc, void Function() body) =>
+    editsOf(doc).transaction(body).changes.length;
