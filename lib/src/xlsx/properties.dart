@@ -164,6 +164,31 @@ final class XlsxProperties {
       'modified: $modified, custom: $custom)';
 }
 
+/// Throws what the writer constructors throw for a bad [p]: an
+/// [ArgumentError] naming the field when a text field holds characters XML
+/// forbids, naming `custom` or `custom["<name>"]` for a bad custom entry.
+///
+/// It runs the checks of [writeCoreProperties], [writeAppProperties] and
+/// [writeCustomProperties] without writing anything, so a setter can refuse
+/// a value before it changes the model.
+void checkProperties(XlsxProperties p) {
+  _checkText('dc:title', p.title);
+  _checkText('dc:subject', p.subject);
+  _checkText('dc:creator', p.creator);
+  _checkText('cp:keywords', p.keywords);
+  _checkText('dc:description', p.description);
+  _checkText('cp:lastModifiedBy', p.lastModifiedBy);
+  _checkText('cp:category', p.category);
+  _checkText('cp:contentStatus', p.contentStatus);
+  _checkText('Company', p.company);
+  _checkText('Manager', p.manager);
+  final Set<String> seen = <String>{};
+  for (final MapEntry<String, Object> e in p.custom.entries) {
+    _checkCustomName(e.key, seen);
+    _checkCustomValue(e.key, e.value);
+  }
+}
+
 /// Writes `docProps/core.xml`, with only the fields set in [p].
 ///
 /// Throws [ArgumentError] when a text field holds forbidden characters.
@@ -255,7 +280,7 @@ void writeCustomProperties(XmlWriter w, XlsxProperties p) {
         w.text(v ? 'true' : 'false');
       case DateTime():
         w.start('vt:filetime');
-        w.text(_w3cdtf(v));
+        w.text(w3cdtf(v));
       default:
         throw StateError('unreachable: checked above');
     }
@@ -331,10 +356,9 @@ void _checkCustomValue(String name, Object value) {
   }
 }
 
-void _text(XmlWriter w, String name, String? value) {
+void _checkText(String name, String? value) {
   if (value == null) return;
-  final ScrubResult scrubbed = scrubXmlText(value);
-  if (scrubbed.removed != 0) {
+  if (scrubXmlText(value).removed != 0) {
     throw ArgumentError.value(
       value,
       name,
@@ -342,6 +366,11 @@ void _text(XmlWriter w, String name, String? value) {
       'surrogates).',
     );
   }
+}
+
+void _text(XmlWriter w, String name, String? value) {
+  if (value == null) return;
+  _checkText(name, value);
   w.start(name);
   w.text(value);
   w.end();
@@ -351,11 +380,13 @@ void _date(XmlWriter w, String name, DateTime? value) {
   if (value == null) return;
   w.start(name);
   w.attribute('xsi:type', 'dcterms:W3CDTF');
-  w.text(_w3cdtf(value));
+  w.text(w3cdtf(value));
   w.end();
 }
 
-String _w3cdtf(DateTime value) {
+/// [value] as the W3CDTF text of a core date or a custom `vt:filetime`: UTC,
+/// whole seconds, `2026-10-24T09:30:00Z`.
+String w3cdtf(DateTime value) {
   final DateTime u = value.toUtc();
   String two(int n) => n.toString().padLeft(2, '0');
   final String year = u.year.toString().padLeft(4, '0');

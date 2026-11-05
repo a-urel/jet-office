@@ -66,6 +66,7 @@ import 'defined_names.dart';
 import 'element_node.dart';
 import 'palette.dart';
 import 'primitives.dart';
+import 'properties_parts.dart';
 import 'protection_elements.dart';
 import 'styles_part.dart';
 import 'workbook_part.dart';
@@ -128,6 +129,45 @@ final class XlsxWorkbook {
   }
 
   XlsxWorkbook._(this._book);
+
+  /// The document properties: core (`docProps/core.xml`), extended
+  /// (`docProps/app.xml`) and custom (`docProps/custom.xml`) merged into
+  /// the writer's [XlsxProperties].
+  ///
+  /// The parts load on first use, each found by its relationship in the
+  /// package root. A part the file lacks, or whose root is not the expected
+  /// element, reads as no values. A value that cannot be read (a date that
+  /// is not W3CDTF, a custom number that is not one, a name that is empty
+  /// or longer than `XlsxLimits.maxCustomPropertyNameLength`) stays as
+  /// written, reads as no value and is reported once as
+  /// [XlsxWarningCode.featureEntryInvalid] with the element's name. A
+  /// custom property of another type than text, number, yes/no or date
+  /// stays and is not listed, with no warning; of equal names the first is
+  /// listed. Throws an [XlsxReadException] when a part is not readable XML
+  /// or exceeds a limit; the workbook still saves, with the part as it was.
+  XlsxProperties get properties => _book.propertiesState().parts.merged;
+
+  /// Sets the document properties to [value].
+  ///
+  /// Only the fields that differ from [properties] change, each in its own
+  /// element, which is replaced where it is, appended when new, or removed
+  /// for a `null`; every other element of the parts (`dc:language`,
+  /// `cp:revision`, `TitlesOfParts`, a property of a type that is not
+  /// listed) stays. A custom property of an equal name and value stays as
+  /// written; a new one takes the lowest free `pid`. A custom part joins
+  /// the package when it first has a property and leaves when none is left
+  /// and the part held no other, at the next save. The file's `modified` and
+  /// `lastModifiedBy` change only when set here. A [value] equal to
+  /// [properties] changes nothing.
+  ///
+  /// Throws an [ArgumentError] naming the field, as the writer's
+  /// constructors do, for text XML cannot hold or a bad custom entry, and a
+  /// [StateError] for a part that is not a properties part and would have
+  /// to change; nothing has changed then.
+  set properties(XlsxProperties value) {
+    final PropertiesState state = _book.propertiesState();
+    _book.log.transaction(() => setProperties(_book.log, state, value));
+  }
 
   final _Book _book;
 
@@ -661,6 +701,19 @@ final class _Book implements SheetHost {
     return _styles = part;
   }
 
+  PropertiesState? _properties;
+
+  /// The document properties, loaded on first use; a part that cannot be
+  /// read throws and nothing is kept.
+  PropertiesState propertiesState() => _properties ??= PropertiesState.load(
+    reader,
+    (String element) => warnings.add(
+      XlsxWarningCode.featureEntryInvalid,
+      sheet: '',
+      detail: element,
+    ),
+  );
+
   /// The counts of the styles part the model made for a file without one,
   /// while it is not in the package yet; `null` otherwise.
   StylesMark? _createdStyles;
@@ -870,6 +923,10 @@ final class _Book implements SheetHost {
           _SharedStringsContent(strings),
         ).$1;
       }
+    }
+    final PropertiesState? properties = _properties;
+    if (properties != null) {
+      reader.guardXml(reader.workbookPart, properties.sync);
     }
     reader.guardXml(reader.workbookPart, () => _package.writeTo(zip));
   }
