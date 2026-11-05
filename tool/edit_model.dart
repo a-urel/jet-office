@@ -21,8 +21,16 @@
 /// bytes to `<outDir>/<name>.xlsx`. The saved file is read back with
 /// `XlsxReader` (values, number formats, merges) and with `XlsxWorkbook`
 /// (styles, width, height, merges, pane, tab colour), and the edits must be
-/// there. Last it writes the workbooks `tool/write_model_sample.dart` makes,
-/// `w1_generated.xlsx` and `w2_generated.xlsx`, to the same directory.
+/// there. The features come next, on the same sheet: the workbook name
+/// `Model_edit` (`Model_edit2` and so on when the name is taken), a link on
+/// the new string cell, a list validation on column G of the new row, a
+/// cell-value rule with a fill on column H and a data bar on column I, a
+/// landscape A4 page setup that fits one page wide, a footer, an auto filter
+/// over the new row (left out when the sheet has a filter or a table in the
+/// way) and the workbook's title. Each is read back through the model. No
+/// protection is set, as it would lock the owner's review. Last it writes the
+/// workbooks `tool/write_model_sample.dart` makes, `w1_generated.xlsx`,
+/// `w2_generated.xlsx` and `w3_generated.xlsx`, to the same directory.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
 /// problem, 2 when the arguments are unusable or the input directory holds
@@ -58,6 +66,24 @@ const XlsxStyle _style = XlsxStyle(
   fill: XlsxFill.solid(_red),
 );
 const XlsxColor _red = XlsxColor.rgb(0xFF0000);
+
+/// The link the tool sets on the string cell of the new row: its text is the
+/// string.
+const XlsxHyperlink _link = XlsxHyperlink(
+  address: 'https://example.com/jet-office',
+  text: _text,
+  tooltip: 'set by the model',
+);
+
+/// The workbook name's base, the title and the footer the tool sets, and the
+/// first free columns of the new row, for the validation, the rule and the
+/// data bar.
+const String _nameBase = 'Model_edit';
+const String _title = 'Edited by jet_office';
+const String _footer = '&CPage &P of &N';
+const int _validationColumn = 6;
+const int _ruleColumn = 7;
+const int _barColumn = 8;
 
 /// The number of cells the tool sets in the new row.
 const int _cells = 4;
@@ -118,8 +144,8 @@ int editModel(
   }
   out.writeln(
     failed == 0
-        ? 'All ${files.length} workbooks edited, and w1_generated.xlsx and '
-              'w2_generated.xlsx written.'
+        ? 'All ${files.length} workbooks edited, and w1_generated.xlsx, '
+              'w2_generated.xlsx and w3_generated.xlsx written.'
         : '$failed failed.',
   );
   return failed == 0 ? 0 : 1;
@@ -131,6 +157,7 @@ List<String> _edit(File file, Directory output, String name) {
   final int row;
   final Set<int> formatted;
   final String added;
+  final _Features features;
   try {
     final XlsxWorkbook book = XlsxWorkbook.open(file.readAsBytesSync());
     final XlsxSheet sheet = book.sheets.first;
@@ -143,8 +170,9 @@ List<String> _edit(File file, Directory output, String name) {
       ..setCell(row, 0, DateTime.utc(2026, 11, 2, 13, 45))
       ..setCell(row, 1, const XlsxDate(2026, 11, 2))
       ..setCell(row, 2, const XlsxFormula('SUM(1,2)', cached: 3))
-      ..setCell(row, 3, _text);
+      ..setCell(row, 3, _link);
     _styleAndLayOut(sheet, row);
+    features = _addFeatures(book, sheet, row);
     added = _freeName(book, 'Model edit');
     book.addSheet(added).setCell(0, 0, _addedText);
     saved = book.save().bytes;
@@ -152,7 +180,7 @@ List<String> _edit(File file, Directory output, String name) {
     return <String>['the edit failed: $e'];
   }
   File('${output.path}/$name').writeAsBytesSync(saved);
-  return _check(saved, row, added, formatted);
+  return _check(saved, row, added, formatted, features);
 }
 
 /// Whether [style] sets a number format that shows no date: not General,
@@ -223,6 +251,7 @@ List<String> _check(
   int row,
   String added,
   Set<int> formatted,
+  _Features features,
 ) {
   final List<String> problems = <String>[];
   try {
@@ -263,7 +292,10 @@ List<String> _check(
     if (!reader.mergesAt(0).contains(_mergedIn(row))) {
       problems.add('the merge is missing from the reader');
     }
-    problems.addAll(_checkModel(XlsxWorkbook.open(saved).sheets.first, row));
+    final XlsxWorkbook model = XlsxWorkbook.open(saved);
+    problems
+      ..addAll(_checkModel(model.sheets.first, row))
+      ..addAll(_checkFeatures(model, row, features));
   } on Object catch (e) {
     problems.add('reading the saved workbook failed: $e');
   }
@@ -282,3 +314,150 @@ List<String> _checkModel(XlsxSheet sheet, int row) => <String>[
   if (sheet.view.pane != _frozen) 'the frozen row is missing',
   if (sheet.tabColor != _tabColor) 'the tab colour is missing',
 ];
+
+/// What [_addFeatures] set, for [_checkFeatures] to look for.
+typedef _Features = ({String name, bool filtered});
+
+/// Sets the features on [sheet] and the workbook: the name, a validation, two
+/// conditional formats, the page setup, a footer, an auto filter over [row]
+/// when none is in the way, and the title.
+_Features _addFeatures(XlsxWorkbook book, XlsxSheet sheet, int row) {
+  final Set<String> taken = <String>{
+    for (final XlsxDefinedName n in book.definedNames) n.name.toLowerCase(),
+  };
+  String name = _nameBase;
+  for (int n = 2; taken.contains(name.toLowerCase()); n++) {
+    name = '$_nameBase$n';
+  }
+  final String quoted = sheet.name.replaceAll("'", "''");
+  book.defineName(XlsxDefinedName(name, "'$quoted'!\$A\$1"));
+  sheet
+    ..addDataValidation(
+      XlsxDataValidation(
+        <XlsxRange>[XlsxRange(row, _validationColumn)],
+        XlsxValidationType.list,
+        formula1: '"yes,no"',
+      ),
+    )
+    ..addConditionalFormat(
+      XlsxConditionalFormat(
+        <XlsxRange>[XlsxRange(row, _ruleColumn)],
+        <XlsxConditionalRule>[
+          const XlsxCellValueRule(
+            XlsxComparison.greaterThan,
+            '0',
+            style: XlsxStyle(fill: XlsxFill.solid(XlsxColor.rgb(0xFFFF00))),
+          ),
+        ],
+      ),
+    )
+    ..addConditionalFormat(
+      XlsxConditionalFormat(
+        <XlsxRange>[XlsxRange(row, _barColumn)],
+        <XlsxConditionalRule>[
+          const XlsxDataBar(color: XlsxColor.rgb(0x638EC6)),
+        ],
+      ),
+    );
+  final XlsxPageSetup? setup = sheet.pageSetup;
+  sheet.pageSetup = XlsxPageSetup(
+    orientation: XlsxOrientation.landscape,
+    paperSize: XlsxPaperSize.a4,
+    fitToWidth: 1,
+    firstPageNumber: setup?.firstPageNumber,
+    pageOrder: setup?.pageOrder,
+    blackAndWhite: setup?.blackAndWhite ?? false,
+    draft: setup?.draft ?? false,
+    margins: setup?.margins ?? const XlsxPageMargins(),
+    centerHorizontally: setup?.centerHorizontally ?? false,
+    centerVertically: setup?.centerVertically ?? false,
+    printGridLines: setup?.printGridLines ?? false,
+    printHeadings: setup?.printHeadings ?? false,
+  );
+  final XlsxHeaderFooter? own = sheet.headerFooter;
+  sheet.headerFooter = XlsxHeaderFooter(
+    oddHeader: own?.oddHeader,
+    oddFooter: _footer,
+    evenHeader: own?.evenHeader,
+    evenFooter: own?.evenFooter,
+    firstHeader: own?.firstHeader,
+    firstFooter: own?.firstFooter,
+    differentOddEven: own?.differentOddEven,
+    differentFirst: own?.differentFirst,
+    scaleWithDocument: own?.scaleWithDocument ?? true,
+    alignWithMargins: own?.alignWithMargins ?? true,
+  );
+  final bool filtered = _filter(sheet, row);
+  final XlsxProperties props = book.properties;
+  book.properties = XlsxProperties(
+    title: _title,
+    subject: props.subject,
+    creator: props.creator,
+    keywords: props.keywords,
+    description: props.description,
+    lastModifiedBy: props.lastModifiedBy,
+    category: props.category,
+    company: props.company,
+    manager: props.manager,
+    contentStatus: props.contentStatus,
+    created: props.created,
+    modified: props.modified,
+    custom: props.custom,
+  );
+  return (name: name, filtered: filtered);
+}
+
+/// Sets an auto filter over [row] when [sheet] has none, and returns whether
+/// it did. A table in the way (the setter refuses with an [ArgumentError],
+/// changing nothing) leaves the sheet as it is.
+bool _filter(XlsxSheet sheet, int row) {
+  if (sheet.autoFilter != null) return false;
+  try {
+    sheet.autoFilter = XlsxRange(row, 0, row, _cells - 1);
+    return true;
+  } on ArgumentError {
+    return false;
+  }
+}
+
+/// The features [model] lacks, read back through the model.
+List<String> _checkFeatures(XlsxWorkbook model, int row, _Features features) {
+  final XlsxSheet sheet = model.sheets.first;
+  final List<XlsxConditionalFormat> formats = sheet.conditionalFormats;
+  XlsxConditionalFormat? formatAt(int column) {
+    for (final XlsxConditionalFormat f in formats) {
+      if (f.ranges.contains(XlsxRange(row, column))) return f;
+    }
+    return null;
+  }
+
+  final XlsxHyperlink? link = sheet.hyperlinkAt(row, 3);
+  final XlsxPageSetup? setup = sheet.pageSetup;
+  return <String>[
+    if (!model.definedNames.any((XlsxDefinedName n) => n.name == features.name))
+      'the defined name is missing',
+    if (link?.address != _link.address ||
+        link?.text != _text ||
+        sheet.cellAt(row, 3)?.value != _text)
+      'the link is missing',
+    if (!sheet.dataValidations.any(
+      (XlsxDataValidation v) =>
+          v.type == XlsxValidationType.list &&
+          v.ranges.contains(XlsxRange(row, _validationColumn)),
+    ))
+      'the list validation is missing',
+    if (formatAt(_ruleColumn)?.rules.single is! XlsxCellValueRule)
+      'the cell-value rule is missing',
+    if (formatAt(_barColumn)?.rules.single is! XlsxDataBar)
+      'the data bar is missing',
+    if (setup?.orientation != XlsxOrientation.landscape ||
+        setup?.paperSize != XlsxPaperSize.a4 ||
+        setup?.fitToWidth != 1 ||
+        setup?.fitToHeight != null)
+      'the page setup is missing',
+    if (sheet.headerFooter?.oddFooter != _footer) 'the footer is missing',
+    if (features.filtered && sheet.autoFilter != XlsxRange(row, 0, row, 3))
+      'the auto filter is missing',
+    if (model.properties.title != _title) 'the title is missing',
+  ];
+}

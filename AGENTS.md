@@ -128,10 +128,19 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   in the row after the first sheet's last row, gives those cells a bold
   style with a red fill, sets column B's width, the new row's height, a
   merge of the two cells right of them, a frozen first row and a tab
-  colour, adds a sheet, saves to the second directory, and checks the
-  edits read back with `XlsxReader` and the model; it also writes the
-  generated workbooks of `tool/write_model_sample.dart`,
-  `w1_generated.xlsx` and `w2_generated.xlsx`, there. It prints each
+  colour, defines the workbook name `Model_edit` (a number added when
+  taken), links the new string cell, adds a list validation, a cell-value
+  rule and a data bar on free cells of the new row, sets a landscape A4 page
+  setup that fits one page wide, a footer, an auto filter over the new row
+  (when no filter or table is in the way) and the workbook's title (no
+  protection: it would lock the owner's review), adds a sheet, saves to the
+  second directory, and checks the edits read back with `XlsxReader` and the
+  model; it also writes the generated workbooks of
+  `tool/write_model_sample.dart`, `w1_generated.xlsx`, `w2_generated.xlsx`
+  and `w3_generated.xlsx` (a `Report` sheet with a filter, a validation, the
+  four conditional rule kinds, two links, print settings, header and footer,
+  and a formula using a workbook name; a protected `Locked` sheet; workbook
+  properties), there. It prints each
   problem as `<file>: <problem>` and exits 1 on any, 2 on unusable
   arguments. CI runs it on the fixtures and validates the output with the
   Open XML SDK, so the model's edited and generated files are validated,
@@ -258,6 +267,21 @@ three locales and both date systems; no throw, `text` of at most 1,000
 characters, `parts` joined equal `text`);
 longer runs with `dart run tool/fuzz_formatter.dart --seeds 1-200 --cases 1000`.
 The rules are in `docs/number-format.md`.
+
+`test/xlsx/model/feature_fuzz_test.dart` fuzzes the model's sheet and
+workbook features (seeds 1 to 4, 100 cases each, over the `m3_*` fixtures and
+a sheet as Excel writes it: whole mutated files, many of them well formed so
+they reach the features' own parsers; open, then reading, setting, undoing and
+saving every W3 member throw nothing but `XlsxReadException`, and undoing the
+edits of a corpus file restores it), the same cases on the VM and in Chrome;
+longer runs by hand:
+
+```bash
+dart run tool/fuzz_reader.dart --features --seeds 1-200 --cases 1000
+```
+
+It prints failures as the reader's run does. Pin a failure as a unit test in
+the owning `*_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
 100 cases each, over the fixtures and producer variants of

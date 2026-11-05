@@ -7,8 +7,10 @@ Decision [`0009`](decisions/0009-phase-3-workbook-model.md) sets the scope
 and the fidelity standard.
 
 This page covers milestone W1, the foundation: open and save with no loss, and
-generate values; and milestone W2, styles and layout typed. Sheet and workbook
-features, objects and structural editing arrive in W3 to W5.
+generate values; milestone W2, styles and layout typed; and milestone W3,
+sheet and workbook features typed (defined names, print settings, filters,
+protection, hyperlinks, data validations, conditional formats and document
+properties). Objects (W4) and structural editing (W5) remain.
 
 ```dart
 final XlsxWorkbook book = XlsxWorkbook.open(bytes);
@@ -22,16 +24,18 @@ cell) and saved through the one cell encoder (`cell_encoder.dart`), so it
 writes values as the writers do. What the model does not type (W1 types only
 cells, the workbook's sheet list and `date1904`, the shared strings and the
 number formats of the styles; W2 adds the rest of the styles, rows, columns,
-merges, views and tab colours) is kept as opaque XML at its position and
+merges, views and tab colours; W3 adds the features listed under "What W3
+adds") is kept as opaque XML at its position and
 written back, with the namespace declarations it needs.
 
 ## What W1 does and does not do
 
 - **Edits.** `setCell` takes a `String`, `num`, `bool`, `DateTime`,
   `XlsxDate`, `XlsxDecimal`, an `XlsxFormula` without a group, or `null`.
-  Hyperlinks and rich text throw `UnsupportedError` until W3 and W4. Editing
-  a shared formula's master throws until W5. Since W2 `setCell` also takes an
-  `XlsxCell`, layered as the writer layers it (see "What W2 adds").
+  Rich text throws `UnsupportedError` until W4; hyperlinks are typed since W3
+  (see "What W3 adds"). Editing a shared formula's master throws until W5.
+  Since W2 `setCell` also takes an `XlsxCell`, layered as the writer layers it
+  (see "What W2 adds").
 - **Fidelity.** An opened workbook saved without a change is semantically
   equal to the input, part by part, as the test-side comparer
   (`tool/src/part_compare.dart`) defines it. Byte identity is not a goal.
@@ -121,6 +125,77 @@ book.activeSheet = sheet;
 - **Recalculation.** Only a cell value or formula change touches `calcChain`
   and `fullCalcOnLoad`. A style or layout edit does not.
 
+## What W3 adds
+
+`XlsxSheet` and `XlsxWorkbook` read and set the features of a sheet and of the
+workbook. Decision [`0009`](decisions/0009-phase-3-workbook-model.md) lists
+them; the values are the writer's types, checked by the writer's checks.
+
+```dart
+final XlsxSheet sheet = book.sheet('Prices');
+book.defineName(const XlsxDefinedName('TaxRate', '0.18'));
+sheet
+  ..setCell(0, 0, XlsxHyperlink.url('https://example.com', text: 'Home'))
+  ..autoFilter = XlsxRange.parse('A2:D20')
+  ..printArea = <XlsxRange>[XlsxRange.parse('A1:D20')]
+  ..pageSetup = const XlsxPageSetup(orientation: XlsxOrientation.landscape)
+  ..headerFooter = const XlsxHeaderFooter(oddFooter: '&CPage &P of &N')
+  ..addDataValidation(
+    XlsxDataValidation(<XlsxRange>[XlsxRange.parse('B3:B20')],
+        XlsxValidationType.list, formula1: '"yes,no"'),
+  )
+  ..addConditionalFormat(conditionalFormat)
+  ..protection = const XlsxSheetProtection(password: 'secret');
+book.properties = const XlsxProperties(title: 'Prices');
+```
+
+- **Reading and setting.** On a sheet: `definedNames`, `defineName`,
+  `removeName`, `printArea`, `setPrintTitles`, `autoFilter`, `pageSetup`,
+  `headerFooter`, `protection`, `hasStoredPassword`, `hyperlinks`,
+  `hyperlinkAt`, `removeHyperlink` (and `setCell` with an `XlsxHyperlink`),
+  `dataValidations`, `addDataValidation`, `removeDataValidation`,
+  `conditionalFormats`, `addConditionalFormat`, `removeConditionalFormat`.
+  On the workbook: `definedNames`, `defineName`, `removeName`, `protection`
+  and `properties`.
+- **Entries are kept.** A feature that holds a list (names, links,
+  validations, conditional formats) keeps every entry of the file in order.
+  An entry the types can hold is read as a value; one they cannot (a bad
+  `ref`, a dangling `dxfId`, an unknown rule type) stays as written, is left
+  out of the getter and is reported once as `featureEntryInvalid`. An edit
+  writes only what changed; a new entry is written as the writer writes it.
+- **An equal set is no edit.** Setting what a getter returns changes nothing,
+  records nothing and leaves the file's own spelling.
+- **Added entries read back as the file says them.** A conditional format
+  added is stored as the file would say it (leading `=` removed, default
+  thresholds collapsed, the fields Excel 2010 repeats read from the Excel 2010
+  rule), so the getter
+  after an add equals the getter after a reopen, and `removeConditionalFormat`
+  takes either the value that was added or the one that was read.
+- **Recalculation.** A change of a user-defined name asks Excel to recalculate
+  (R1); no other W3 edit does.
+- **One warning code.** `featureEntryInvalid`, with the feature in its detail;
+  its messages are in `en`, `de` and `tr`.
+- **Undo.** Every edit is one change of the log; undoing it puts the element
+  and the relationship back where they were.
+
+Four rulings fill a silence of the spec (plan R1 to R5):
+
+- **R1 Names and recalculation.** `defineName` and `removeName` of a user name
+  make the save set `fullCalcOnLoad` (when the workbook has formulas);
+  `calcChain` stays. Print and filter names do not count.
+- **R2 Stored passwords.** A protection read from a file gives `password:
+  null` whatever hash it stores. Setting a protection with `password: null`
+  keeps the stored hash; `protection = null` removes the element with it; a
+  new password replaces every hash attribute.
+- **R3 Built-in names.** `definedNames` lists no `_xlnm.` name; they stay as
+  written. The three with typed members (print area, print titles, filter)
+  are read and set through those members.
+- **R4 Other Excel rule types.** `timePeriod`, `containsBlanks`,
+  `notContainsBlanks`, `containsErrors` and `notContainsErrors` carry a
+  formula: they read as `XlsxExpressionRule`, kept as written.
+- **R5 Excel 2010 data validation.** `x14:dataValidations` stays opaque: the
+  spec names only conditional formats' `extLst` forms.
+
 ## Rules the model enforces
 
 A file the model cannot open throws `XlsxReadException` with the reader's
@@ -172,7 +247,7 @@ Nothing is dropped silently.
 | A cell inside an array or data-table formula, its master included | `StateError`, permanent | Excel refuses it too | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups"), `test/xlsx/model/primitives_test.dart` |
 | A shared formula's child | leaves the group; the others stay | the child's formula stays correct | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
 | A shared formula's master | `UnsupportedError` until W5 | the children need reference shifting | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
-| `XlsxHyperlink`, `XlsxRichText` (also inside an `XlsxCell`) | `UnsupportedError` naming the milestone (W3, W4) | not typed yet | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("unsupported value types") |
+| `XlsxRichText` (also inside an `XlsxCell`) | `UnsupportedError` naming the milestone (W4) | not typed yet | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("unsupported value types") |
 | `XlsxCell(value, style: s)` | the value is set as a bare one; the style is the writer's layering, the row's style (with `customFormat="1"`) merged with `s`, appended when no cell format matches; a date takes the writer's date format only when that style sets none; an `XlsxCell` of `null` leaves an empty cell of that style, or none when it has no style or the default | the model and the writer give the same cell format | `test/xlsx/model/xlsx_sheet_style_test.dart` ("XlsxCell layers like the writer", "XlsxCell dates take the writer format rule", "an XlsxCell of null") |
 | `styleAt` | the cell's own style when the cell exists, else the row's with `customFormat="1"`; index 0 is `null` | what Excel shows there | `test/xlsx/model/xlsx_sheet_style_test.dart` ("styleAt reads cell and row styles") |
 | `setStyle` | sets exactly the style, no layering; an equal style keeps its index; a new one is appended, so no index moves and an unloaded sheet's styles stay; `null` gives index 0 and removes a cell left with nothing | appending keeps every other cell's format | `test/xlsx/model/xlsx_sheet_style_test.dart` |
@@ -237,15 +312,58 @@ Nothing is dropped silently.
 | `indexedColors` | the file's `<indexedColors>`, missing entries filled from the default palette (ECMA-376 Part 1, 18.8.27); indexed 64 and 65 and anything past them resolve as `null` | the palette `<color indexed>` shows | `test/xlsx/model/palette_test.dart` ("a custom palette wins", "indexed colours outside the palette resolve as null"), `test/xlsx/model/styles_part_test.dart` ("indexedColors fills missing entries from the default palette") |
 | `indexedColors` or an indexed `resolveColor` on a broken styles part | `XlsxReadException`, like any call that first loads a part; an `rgb` colour loads nothing | spec 4.12: laziness moves the failure to first use | `test/xlsx/model/palette_test.dart` ("a broken styles part throws from the palette") |
 
+### Sheet and workbook features (W3)
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| An entry the types can hold | read as a value, written back as the file wrote it unless edited; the group's `count` is recomputed when the group is edited | nothing lost | `test/xlsx/model/item_group_test.dart`, `test/xlsx/model/worksheet_part_test.dart` ("feature slots") |
+| An entry that cannot be read exactly (a bad `ref` or `sqref`, a dangling `dxfId` or `r:id`, an out-of-range value) | kept as written, out of the getter, `featureEntryInvalid` once per feature and sheet; the getter never throws on it, save never throws | data problems warn, and save must not throw on a file that opened | `test/xlsx/model/item_group_test.dart` ("an entry with a problem is kept, counted and reported"), the "bad values are kept and reported" test of each feature |
+| An equal set (`autoFilter`, `printArea`, `pageSetup`, `headerFooter`, `protection`, `properties`, ...) | no edit, no change recorded, the element's own spelling stays | typing must not alter output | `test/xlsx/model/xlsx_sheet_print_test.dart` ("an equal set records nothing"), `test/xlsx/model/page_setup_test.dart` ("an equal set is no edit"), `test/xlsx/model/round_trip_test.dart` ("re-setting what was read changes nothing") |
+| R1: a name edit | `fullCalcOnLoad` when the workbook has formulas; `calcChain` stays; a print or filter name asks nothing; undoing the edit asks nothing | a name changes results as a cell does | `test/xlsx/model/defined_names_test.dart` ("recalculation"), `test/xlsx/model/xlsx_sheet_print_test.dart` ("print and filter names do not ask for recalculation") |
+| R2: a stored password hash | `password` reads `null`; a flag change keeps every hash attribute; `password: null` keeps them; a new password replaces them; `protection = null` removes the element | the model never sees a password, and must not weaken one | `test/xlsx/model/protection_test.dart` ("a stored hash survives a flag change", "a new password replaces the hash attributes") |
+| R3: built-in names | `definedNames` lists none; `printArea`, `setPrintTitles` and `autoFilter` read and write them; `removeName` of one is an `ArgumentError` | one typed way to each | `test/xlsx/model/defined_names_test.dart` ("reads m3_names"), `test/xlsx/model/xlsx_sheet_print_test.dart` |
+| R4: other Excel rule types | read as `XlsxExpressionRule`, kept as written | they carry a formula | `test/xlsx/model/conditional_format_test.dart` ("other rule types read as expressions, kept as written") |
+| R5: `x14:dataValidations` | stays opaque in its `ext` | spec names only conditional formats' `extLst` forms | `test/xlsx/model/conditional_x14_test.dart` ("other exts survive") |
+| Names and the parts that hold them | a sheet's print area, titles and filter are names of `workbook.xml` and elements of the sheet part, changed in one transaction: a failure in the second part leaves the first as it was, and undo puts both back | one feature, two parts | `test/xlsx/model/xlsx_sheet_print_test.dart` ("a failure in the second part leaves the first as it was", "undo puts the element and the name back") |
+| A filter set on a narrower or wider range | the `filterColumn`s whose `colId` lies inside the new width stay when the first column is the same; every other child goes, all of them when the first column moves; the buttons' choices are not applied | a filter keeps its choices while its columns stay | `test/xlsx/model/xlsx_sheet_print_test.dart` ("narrowing a filter") |
+| Rows a filter hid | stay hidden when the filter changes or goes; the model never rewrites rows for a filter | the choices are not applied or removed | `test/xlsx/model/xlsx_sheet_print_test.dart` ("narrowing a filter") |
+| Links with the same address | share one relationship; replacing or removing a link drops its relationship when no other link uses it; undo restores the id | one target, one relationship | `test/xlsx/model/xlsx_sheet_links_test.dart` ("a repeated address shares one relationship", "replacing and removing drop an unused relationship", "undo restores the link, the id and the cell") |
+| A plain value set in a cell with a link | the cell keeps its link; `removeHyperlink` removes it | Excel keeps the link under a typed value | `test/xlsx/model/xlsx_sheet_links_test.dart` ("a plain value keeps the link") |
+| A link over several cells | read as one link covering them; `removeHyperlink` on any of its cells removes it whole; a link set on a cell inside it throws | a partial change would split a link the file wrote as one | `test/xlsx/model/xlsx_sheet_links_test.dart` ("A1:B2 reads as one link covering four cells", "removing a multi-cell link removes it whole", "a multi-cell link throws and nothing changes") |
+| A style of a conditional format | reuses a `dxf` that says exactly the same, else is appended; nothing is renumbered | indexes the file's cells name must not move | `test/xlsx/model/conditional_format_test.dart` ("a style the file has is reused, a new one appended"), `test/xlsx/model/styles_part_test.dart` ("differential styles") |
+| Priorities of added rules | continue past the file's highest, counting rules the model does not list (Excel 2010 ones included); a priority past the schema's `int` throws | priorities are unique per sheet | `test/xlsx/model/conditional_format_test.dart` ("priorities continue the file's", "priorities count what is not listed"), `test/xlsx/model/conditional_x14_test.dart` ("priorities continue past the Excel 2010 rules") |
+| A data bar | its two halves, the 2007 `dataBar` and the Excel 2010 `x14:dataBar` linked by an id, are added and removed together, undo restores both; an id collides with no other | one rule in the file, two elements | `test/xlsx/model/conditional_x14_test.dart` ("a data bar's halves leave together; undo restores both", "ids do not collide") |
+| Other `ext`s of `extLst` | stay, and so do other children of the conditional format `ext`; the ext and `extLst` go only when nothing else is in them | one `extLst` holds many features | `test/xlsx/model/conditional_x14_test.dart` ("other exts survive", "other children of the ext survive", "the last format takes the element, the ext and extLst with it") |
+| An Excel 2010 rule the types cannot hold (a custom icon set, another kind of rule) | stays kept, unlisted and unreported | the getter lists only what it can hold | `test/xlsx/model/conditional_x14_test.dart` ("a custom icon set stays kept and unlisted", "another kind of rule stays kept and unlisted, unreported") |
+| Properties | `custom.xml` joins when a custom property is set (part, relationship, content type) and leaves when no property is left in it; a part that holds a kept property stays; other elements and variants stay | the part follows the content | `test/xlsx/model/properties_test.dart` ("custom part joins and leaves", "a custom part leaves when no property is left", "a custom part holding a kept property stays") |
+| `modified` and `lastModifiedBy` | a save never touches them; only a set changes them | the model does not invent a time | `test/xlsx/model/properties_test.dart` ("modified and lastModifiedBy are not touched by a save") |
+| Fuzzing and undo | the feature corpus, mutated, opens, then reads, sets, undoes and saves every W3 member with nothing thrown but `XlsxReadException`; undoing every edit of a corpus file restores it | the file is untrusted input | `test/xlsx/model/feature_fuzz_test.dart` |
+
+### What W3 reads and edits less than it might
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| A name read from a file that `defineName` would refuse (an empty formula, say) | stays listed by `definedNames`; once removed, `defineName` refuses it, so it cannot be added back | the file holds it, and listing it is the truth | `test/xlsx/model/defined_names_test.dart` ("a hidden name and a comment read" lists `e` with an empty formula, "a name as Excel writes it goes back when removed") |
+| A print name or filter `ref` that cannot be read | reads empty (`printArea` empty, `autoFilter` `null`), is reported, stays in the file; setting empty or `null` is an equal set, so only a non-empty set replaces it | an equal set is no edit | `test/xlsx/model/xlsx_sheet_print_test.dart` ("bad values", "setting replaces them") |
+| A whole-column print area (`$A:$A`) or whole-row one | reads empty and is reported (`featureEntryInvalid`), stays in the file. `XlsxRange` can hold a whole column as rows 0 to `XlsxLimits.maxRows - 1`, but `XlsxRange.parse` takes only cell references and writing that range back would give `$A$1:$A$1048576`, a different formula; so the print area reads only plain cell ranges, and a whole-column area is replaced only by a non-empty set | what is read must write back as it was | `test/xlsx/model/xlsx_sheet_print_test.dart` ("bad values", "plain references of this sheet read, in any form Excel writes") |
+| `protection = null` on `<sheetProtection sheet="0">` | an equal set (it reads `null`); the element and its hash stay | `sheet="0"` protects nothing, and the hash is the owner's | `test/xlsx/model/protection_test.dart` (group `sheet="0"`) |
+| `pageSetup = null` when only `fitToPage` is left | an equal set: it reads `null` and nothing changes | a lone `fitToPage` says nothing without a fit axis | `test/xlsx/model/page_setup_test.dart` ("null removes", "fit and first page number are read only when they apply") |
+| A header or footer edit | drops a text child that read as bad (not XML text); the kept flags stay | the edit replaces the texts | `test/xlsx/model/page_setup_test.dart` ("a header or footer", "setting replaces the texts and keeps the rest") |
+| An Excel 2010-only format added on an existing `sqref` | reads merged into the format that has that `sqref`, so it is removed only with the merged value | the getter after an add equals the getter after a reopen | `test/xlsx/model/conditional_x14_test.dart` ("an unlinked rule joins the format with an equal sqref") |
+| The data bar colours the writer fills (negative fill, axis, borders) | read `null` | the file cannot tell a default from an explicit colour; `normalizedConditionalFormat` says it | `test/xlsx/model/conditional_x14_test.dart` ("what the writer fills reads as none") |
+| An undo after a save | leaves the new `xl/sharedStrings.xml` the save made; its entries are unused, not wrong | a save is not part of the change log | `test/xlsx/model/feature_fuzz_test.dart` ("undo restores every corpus entry") |
+| An undo of a file that is not schema-valid (a rels part that does not parse, stray text between elements) | the part is normalized on re-encode, so it differs from the input | the model keeps what it reads; invalid input is outside the guarantee | `test/xlsx/model/feature_fuzz_test.dart` |
+| Comments and stray text inside an element the model types and writes new (`pageMargins`, `sheetProtection`, `printOptions`, ...) | not kept when the element is typed; a schema-valid file has none | a typed element is written from its values | `test/xlsx/model/page_setup_test.dart`, `test/xlsx/model/protection_test.dart` |
+| The number of custom properties | bounded by `XlsxReadLimits.maxSheets` (no new public limit) | one limit for the many small parts | `test/xlsx/model/properties_test.dart` ("a huge custom part is bounded by the limits") |
+
 ### Parity with the writer
 
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
-| A fixture rebuilt with the model | semantically equal to the writer's: `m1_values`, `m1_dates`, `m1_sheets`, `m2_styles`, `m2_columns_rows`, `m2_style_precedence`, `m2_views`, `m2_merges_filter`, `m2_formula_xstring` | one way to write a value | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
-| `tabSelected` (named difference) | setting the model's `activeSheet` to another sheet writes `tabSelected="1"`, the writer never does; Excel selects the active tab either way | an opened file's old `tabSelected` must move, and the writer's output is pinned | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
+| A fixture rebuilt with the model | semantically equal to the writer's: `m1_values`, `m1_dates`, `m1_sheets`, `m1_properties`, `m2_styles`, `m2_columns_rows`, `m2_style_precedence`, `m2_views`, `m2_merges_filter`, `m2_formula_xstring`, `m3_names`, `m3_hyperlinks`, `m3_validation`, `m3_conditional`, `m3_conditional_x14`, `m3_page_setup`, `m3_header_footer`, `m3_protection` and `m3_properties`, apart from the two named differences below | one way to write a value | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
+| `tabSelected` (named difference) | setting the model's `activeSheet` to another sheet writes `tabSelected="1"`, the writer never does; Excel selects the active tab either way (`m1_sheets` and `m2_views`) | an opened file's old `tabSelected` must move, and the writer's output is pinned | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
 | The tab position of `m1_sheets` (named difference) | the writer's `addSheet(position: 0)` has no model equivalent until W5, so the expected `workbook.xml` moves the first tab last and lowers `activeTab` | structural editing is W5 | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
-| Auto filters (named difference) | `m2_merges_filter` and `m2_formula_xstring` are compared without `<autoFilter>` and the defined names that hold it | auto filters are W3 | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
-| Re-setting what was read | every style, row format, column, default size, view, tab colour, outline summary and merge set back to what it reads changes nothing, on every writer fixture and producer file; a dangling or invalid `s` is the exception (see "Setting cells") | typing must not alter output | `test/xlsx/model/round_trip_test.dart` ("re-setting what was read changes nothing") |
+| Re-setting what was read | every style, row format, column, default size, view, tab colour, outline summary, merge and W3 feature (names, print settings, filter, protection, links, validations, conditional formats, properties) set back to what it reads changes nothing, on every writer fixture and producer file; a dangling or invalid `s` is the exception (see "Setting cells") | typing must not alter output | `test/xlsx/model/round_trip_test.dart` ("re-setting what was read changes nothing") |
 
 ### Reading
 
@@ -282,15 +400,19 @@ the Open XML SDK. Every normalization the comparer makes is pinned in
 after a change: in every `.xlsx` of a directory it sets a `DateTime`, an
 `XlsxDate`, a formula and a string in the row after the first sheet's last
 row, gives those cells a bold style with a red fill, sets column B's width,
-the new row's height, a merge, a frozen first row and a tab colour, adds a
-sheet, saves to `<outDir>` and reads the edits back with `XlsxReader` and the
-model; it also writes the generated workbooks of
-`tool/write_model_sample.dart`, `w1_generated.xlsx` and `w2_generated.xlsx`,
-there. CI runs it on the writer fixtures and validates the output with the
+the new row's height, a merge, a frozen first row and a tab colour, defines
+the workbook name `Model_edit`, links the new string cell, adds a list
+validation, a cell-value rule and a data bar on free cells of the new row,
+sets a landscape A4 page setup that fits one page wide, a footer, an auto
+filter over the new row (when no filter or table is in the way) and the
+workbook's title, adds a sheet, saves to `<outDir>` and reads the edits back
+with `XlsxReader` and the model; it also writes the generated workbooks of
+`tool/write_model_sample.dart`, `w1_generated.xlsx`, `w2_generated.xlsx` and
+`w3_generated.xlsx`, there. CI runs it on the writer fixtures and validates the output with the
 Open XML SDK (spec section 9).
 
 ## Port map
 
-W1 and W2 port nothing from Quds (spec section 8): every file is new and
+W1 to W3 port nothing from Quds (spec section 8): every file is new and
 says "Not ported from Quds; written for jet_office." Ports start in W5
 (formula reference shifting) and are listed here when they land.
