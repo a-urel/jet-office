@@ -196,10 +196,7 @@ void _writeDefinedNames(
         w,
         '_xlnm.Print_Area',
         index,
-        <String>[
-          for (final XlsxRange r in names.printArea)
-            quotedSheetRef(sheet, r.absoluteRef),
-        ].join(','),
+        printAreaFormula(sheet, names.printArea),
       );
     }
     final (int, int)? rows = names.printTitleRows;
@@ -209,15 +206,7 @@ void _writeDefinedNames(
         w,
         '_xlnm.Print_Titles',
         index,
-        <String>[
-          if (columns != null)
-            quotedSheetRef(
-              sheet,
-              '\$${columnName(columns.$1)}:\$${columnName(columns.$2)}',
-            ),
-          if (rows != null)
-            quotedSheetRef(sheet, '\$${rows.$1 + 1}:\$${rows.$2 + 1}'),
-        ].join(','),
+        printTitlesFormula(sheet, rows: rows, columns: columns),
       );
     }
     for (final XlsxDefinedName name in names.defined) {
@@ -233,6 +222,32 @@ void _writeDefinedNames(
   }
   w.end();
 }
+
+/// The text of `_xlnm.Print_Area` for [ranges] on the sheet [sheet]: each
+/// range quoted and absolute, joined by commas, as the writer writes it.
+///
+/// The workbook model writes a print area with this too.
+String printAreaFormula(String sheet, List<XlsxRange> ranges) => <String>[
+  for (final XlsxRange r in ranges) quotedSheetRef(sheet, r.absoluteRef),
+].join(',');
+
+/// The text of `_xlnm.Print_Titles` for [rows] and [columns] (0-based,
+/// inclusive spans) on the sheet [sheet]: the columns first, as Excel writes
+/// them, each quoted and absolute.
+///
+/// The workbook model writes print titles with this too.
+String printTitlesFormula(
+  String sheet, {
+  (int, int)? rows,
+  (int, int)? columns,
+}) => <String>[
+  if (columns != null)
+    quotedSheetRef(
+      sheet,
+      '\$${columnName(columns.$1)}:\$${columnName(columns.$2)}',
+    ),
+  if (rows != null) quotedSheetRef(sheet, '\$${rows.$1 + 1}:\$${rows.$2 + 1}'),
+].join(',');
 
 /// Writes one `definedName`: its [name], the scope [localSheetId] (the tab
 /// index, or `null` for the workbook), the [text] as a formula, and its

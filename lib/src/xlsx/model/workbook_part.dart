@@ -20,9 +20,10 @@
 /// it had, declared where the part does not bind it already.
 ///
 /// Only the first `<sheets>`, `<calcPr>`, `<bookViews>`,
-/// `<workbookProtection>` and `<definedNames>` are typed; a repeated one is kept opaque. A part
-/// with no root element, or whose root is not a SpreadsheetML `<workbook>`,
-/// is *untyped*: it has no sheets and is written back unchanged.
+/// `<workbookProtection>` and `<definedNames>` are typed; a repeated one is
+/// kept opaque. A part with no root element, or whose root is not a
+/// SpreadsheetML `<workbook>`, is *untyped*: it has no sheets and is written
+/// back unchanged.
 library;
 
 import 'dart:typed_data';
@@ -515,6 +516,30 @@ final class WorkbookPart implements PartContent {
       current,
       rest.isEmpty ? null : current.withItems(rest),
     );
+  }
+
+  /// Replaces [old], as [names] returned it, by [entry], in the same place;
+  /// [entry] is rendered as the writer writes a name. Not recorded or
+  /// counted, as [addName].
+  ///
+  /// Throws an [ArgumentError] named `old` when it is not a name of the part
+  /// and a [StateError] for an untyped part.
+  void replaceName(NameEntry old, NameEntry entry) {
+    _requireTyped();
+    final Object? current = element('definedNames');
+    final int at = current is ItemGroup<NameEntry>
+        ? current.items.indexWhere(
+            (GroupItem<NameEntry> i) => identical(i.value, old),
+          )
+        : -1;
+    if (current is! ItemGroup<NameEntry> || at < 0) {
+      throw ArgumentError.value(old.name, 'old', 'Not a name of the part.');
+    }
+    final List<GroupItem<NameEntry>> next = <GroupItem<NameEntry>>[
+      ...current.items,
+    ];
+    next[at] = GroupItem<NameEntry>(entry, renderNameEntry(entry));
+    swapElement('definedNames', current, current.withItems(next));
   }
 
   /// The index of the tab Excel opens on: the `activeTab` of the first

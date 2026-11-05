@@ -36,6 +36,7 @@ import '../column.dart';
 import '../date_serial.dart';
 import '../defined_name.dart';
 import '../format/format_kind.dart';
+import '../formula_text.dart' show quotedSheetRef;
 import '../hyperlink.dart';
 import '../limits.dart';
 import '../merge_check.dart';
@@ -50,10 +51,13 @@ import '../read/read_exception.dart';
 import '../read/styles_reader.dart';
 import '../rich_text.dart';
 import '../row_format.dart';
+import '../sheet_name.dart' show sheetNameKey;
 import '../sheet_view.dart';
+import '../sheet_writer.dart' show checkPrintAreaRanges, checkPrintTitles;
 import '../style.dart';
 import '../values.dart';
 import '../warnings.dart';
+import '../workbook_parts.dart' show printAreaFormula, printTitlesFormula;
 import '../worksheet_parts.dart'
     show
         checkColumnWidth,
@@ -67,6 +71,7 @@ import 'cell_store.dart';
 import 'columns.dart';
 import 'defined_names.dart';
 import 'element_node.dart';
+import 'item_group.dart' show readerOf;
 import 'primitives.dart';
 import 'style_elements.dart' show ReadStyleValue, readColor;
 import 'styles_part.dart';
@@ -77,6 +82,7 @@ import 'worksheet_part.dart';
 part 'xlsx_sheet_layout.dart';
 part 'xlsx_sheet_merges.dart';
 part 'xlsx_sheet_names.dart';
+part 'xlsx_sheet_print.dart';
 part 'xlsx_sheet_views.dart';
 
 /// What a sheet needs from its workbook.
@@ -177,7 +183,7 @@ int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
 /// `A`.
 final class XlsxSheet
-    with _SheetLayout, _SheetMerges, _SheetNames, _SheetViews {
+    with _SheetLayout, _SheetMerges, _SheetNames, _SheetPrint, _SheetViews {
   XlsxSheet._(this._host, this._entry, this._partName, this._part);
 
   @override
@@ -196,6 +202,11 @@ final class XlsxSheet
   /// problem is reported once however often its element is read.
   @override
   final Set<String> _layoutReported = <String>{};
+
+  /// The print and filter problems reported (`featureEntryInvalid`), by
+  /// name, so a problem is reported once however often it is read.
+  @override
+  final Set<String> _featureReported = <String>{};
 
   /// The tables of the sheet the model can type, read on the first
   /// [setCell]; `null` until then.

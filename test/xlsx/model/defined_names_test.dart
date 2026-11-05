@@ -180,6 +180,24 @@ void main() {
     expect(_workbookXml(book), before);
   });
 
+  test('a name that a table has throws; nothing changes', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      allFixtures().firstWhere((Fixture f) => f.name == 'm4_tables').build(),
+    );
+    final String before = _workbookXml(book);
+    final ChangeLog log = changeLogOf(book);
+    expect(
+      () => book.defineName(const XlsxDefinedName('Sales', '1')),
+      throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'name')),
+    );
+    expect(
+      () => book.sheet('Plain').defineName(const XlsxDefinedName('COSTS', '1')),
+      throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'name')),
+    );
+    expect(log.hasChanges, isFalse);
+    expect(_workbookXml(book), before);
+  });
+
   test('a removed name\'s group goes with its last child', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
       _package(
