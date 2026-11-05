@@ -19,8 +19,9 @@
 /// therefore also reads each of the two parts into its model, encodes it and
 /// compares that with the part in the input by `encodedPartDifferences` from
 /// `tool/src/docx_serialize.dart`, so CI's round trips serialize both parts
-/// on every fixture, every LibreOffice re-save and every owner file. A Word lock file (`~$name.docx`, which Word
-/// leaves beside an open document) is skipped.
+/// on every fixture, every LibreOffice re-save and every owner file. A Word
+/// lock file (`~$name.docx`, which Word leaves beside an open document) is
+/// skipped.
 ///
 /// Each difference is printed as `<file>: <line>`, one per line, and a file
 /// that cannot be opened or saved as `<file>: <error>`. The exit code is 1

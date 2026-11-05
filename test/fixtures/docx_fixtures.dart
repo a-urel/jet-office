@@ -338,17 +338,8 @@ void _fillStyles(DocxDocument doc) {
       ..runProperties.sizePt = 10
       ..runProperties.shading = DocxShading(fill: DocxColor.rgb('EEEEEE')),
   );
-  for (final DocxBuiltInStyle style in <DocxBuiltInStyle>[
-    DocxBuiltInStyle.tableGrid,
-    DocxBuiltInStyle.header,
-    DocxBuiltInStyle.footer,
-    DocxBuiltInStyle.hyperlink,
-    DocxBuiltInStyle.strong,
-    DocxBuiltInStyle.emphasis,
-    DocxBuiltInStyle.noSpacing,
-  ]) {
-    styles.ensure(style);
-  }
+  // Every entry of the catalog, so that the SDK and Word see each.
+  DocxBuiltInStyle.values.forEach(styles.ensure);
   void paragraph(String text, String style) {
     doc.body.addParagraph(text).style = style;
   }

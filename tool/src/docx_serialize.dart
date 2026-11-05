@@ -42,28 +42,24 @@ const String _numberingName = 'word/numbering.xml';
 /// A part that cannot be read throws, as the model would.
 Map<String, Uint8List> encodedParts(Uint8List docx) {
   final Map<String, Uint8List> entries = _entries(docx);
-  final Map<String, Uint8List> out = <String, Uint8List>{};
-  final Uint8List? styles = entries[_stylesName];
-  if (styles != null) {
-    out[_stylesName] = _join(
-      StylesPart.read(
-        XmlPullReader(utf8.decode(styles)),
-        '/$_stylesName',
-        DocxEdits(),
-      ).encode(),
-    );
-  }
-  final Uint8List? numbering = entries[_numberingName];
-  if (numbering != null) {
-    out[_numberingName] = _join(
-      NumberingPart.read(
-        XmlPullReader(utf8.decode(numbering)),
-        '/$_numberingName',
-        DocxEdits(),
-      ).encode(),
-    );
-  }
-  return out;
+  return <String, Uint8List>{
+    for (final String name in _partNames)
+      if (entries[name] case final Uint8List original)
+        name: _encode(name, original),
+  };
+}
+
+const List<String> _partNames = <String>[_stylesName, _numberingName];
+
+/// [original], the bytes of the part [name], read into its model and encoded.
+Uint8List _encode(String name, Uint8List original) {
+  final XmlPullReader reader = XmlPullReader(utf8.decode(original));
+  final DocxEdits edits = DocxEdits();
+  return _join(
+    (name == _stylesName
+        ? StylesPart.read(reader, '/$name', edits).encode()
+        : NumberingPart.read(reader, '/$name', edits).encode()),
+  );
 }
 
 /// The differences between the styles and numbering parts of [docx] and the
@@ -74,12 +70,12 @@ Map<String, Uint8List> encodedParts(Uint8List docx) {
 List<String> encodedPartDifferences(Uint8List docx) {
   final Map<String, Uint8List> entries = _entries(docx);
   final List<String> out = <String>[];
-  for (final String name in <String>[_stylesName, _numberingName]) {
+  for (final String name in _partNames) {
     final Uint8List? original = entries[name];
     if (original == null) continue;
     final Uint8List encoded;
     try {
-      encoded = encodedParts(docx)[name]!;
+      encoded = _encode(name, original);
     } on Object catch (e) {
       out.add('$name: the model cannot read the part: $e');
       continue;

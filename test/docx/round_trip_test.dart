@@ -196,6 +196,58 @@ void main() {
       },
     );
 
+    test('d2_paragraph_formatting reads back its properties', () {
+      final DocxFixture f = d2.singleWhere(
+        (DocxFixture f) => f.name == 'd2_paragraph_formatting',
+      );
+      final DocxDocument doc = DocxDocument.open(f.build().bytes);
+      final List<DocxParagraph> p = <DocxParagraph>[
+        for (final DocxBlock b in doc.body.blocks) b as DocxParagraph,
+      ];
+      DocxParagraphProperties of(String text) =>
+          p.singleWhere((DocxParagraph x) => x.text == text).properties;
+      expect(p.first.properties.pageBreakBefore, isTrue);
+      expect(of('Alignment center').alignment, DocxAlignment.center);
+      expect(of('Keep with next').keepWithNext, isTrue);
+      expect(of('Widow control off').widowControl, isFalse);
+      expect(of('Outline level 2').outlineLevel, 1);
+      expect(
+        of('Indentation left 54, hanging 27').indentation,
+        DocxIndentation(leftPt: 54, hangingPt: 27),
+      );
+      expect(of('Tab stops:\tleft\tcenter\tright').tabs, hasLength(3));
+      expect(
+        of('Borders: a red box and a rule between').borders!.top,
+        isNotNull,
+      );
+    });
+
+    test('d2_run_formatting reads back its properties', () {
+      final DocxFixture f = d2.singleWhere(
+        (DocxFixture f) => f.name == 'd2_run_formatting',
+      );
+      final DocxDocument doc = DocxDocument.open(f.build().bytes);
+      DocxRunProperties of(String text) => <DocxRun>[
+        for (final DocxBlock b in doc.body.blocks)
+          ...(b as DocxParagraph).inlines.whereType<DocxRun>(),
+      ].singleWhere((DocxRun r) => r.text == text).properties;
+      expect(of('Bold').bold, isTrue);
+      expect(of('Size 9.5').sizePt, 9.5);
+      expect(of('Language de-DE').language, 'de-DE');
+      expect(
+        of('Underline double red').underline,
+        DocxUnderline(
+          DocxUnderlineStyle.double,
+          color: DocxColor.rgb('FF0000'),
+        ),
+      );
+      expect(
+        of('Color theme accent1 shade').color,
+        DocxColor.theme(DocxThemeColor.accent1, shade: 191),
+      );
+      expect(of('Superscript').verticalAlign, DocxVerticalAlign.superscript);
+    });
+
     test('d2_lists restarts a numbered list with a start override', () {
       final DocxFixture f = d2.singleWhere(
         (DocxFixture f) => f.name == 'd2_lists',

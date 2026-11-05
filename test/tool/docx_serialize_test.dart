@@ -56,6 +56,36 @@ void main() {
   });
 
   group('encodedPartDifferences', () {
+    test('a broken numbering part is one line, naming only that part', () {
+      final Uint8List docx = rewriteDocxPart(
+        docxWithNumbering(),
+        'word/numbering.xml',
+        (String xml) => '<w:numbering',
+      );
+      final List<String> differences = encodedPartDifferences(docx);
+      expect(differences, hasLength(1));
+      expect(differences.single, startsWith('word/numbering.xml: '));
+    });
+
+    test('negative control: a part the model writes differently is found', () {
+      // The model writes a style's children in schema order, so a file with
+      // w:basedOn before w:name means the same but not the same element
+      // sequence: the comparison must say so.
+      final Uint8List docx = docxWithStyles(
+        styles:
+            '<w:styles xmlns:w="http://schemas.openxmlformats.org/'
+            'wordprocessingml/2006/main">'
+            '<w:style w:type="paragraph" w:default="1" w:styleId="Normal">'
+            '<w:name w:val="Normal"/></w:style>'
+            '<w:style w:type="paragraph" w:styleId="Note">'
+            '<w:basedOn w:val="Normal"/><w:name w:val="Note"/></w:style>'
+            '</w:styles>',
+      );
+      final List<String> differences = encodedPartDifferences(docx);
+      expect(differences, isNotEmpty);
+      expect(differences.first, startsWith('word/styles.xml: '));
+    });
+
     test('finds none in what Word writes', () {
       expect(encodedPartDifferences(docxWithStyles()), isEmpty);
       expect(encodedPartDifferences(docxWithNumbering()), isEmpty);

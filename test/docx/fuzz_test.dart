@@ -27,7 +27,7 @@ const Map<String, ({int length, int adler32})> _corpus =
       'd1_large': (length: 263451, adler32: 1522611747),
       'd2_run_formatting': (length: 64345, adler32: 4272339350),
       'd2_paragraph_formatting': (length: 64651, adler32: 475797816),
-      'd2_styles': (length: 66654, adler32: 2863778854),
+      'd2_styles': (length: 66654, adler32: 190303206),
       'd2_lists': (length: 69004, adler32: 3869031974),
       'ns0_prefix': (length: 1407, adler32: 3668097186),
       'default_namespace': (length: 1344, adler32: 3335628311),

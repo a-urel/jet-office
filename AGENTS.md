@@ -152,7 +152,8 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   read, so it also encodes both parts from the model and compares them with
   the input (`encodedPartDifferences`, `tool/src/docx_serialize.dart`). CI
   runs it on the fixtures, on LibreOffice's re-save and on the owner's Word
-  files, then validates all three outputs with the Open XML SDK. As for workbooks, the `d1_corrupt.docx` document round-trips (exit 0)
+  files, then validates all three outputs with the Open XML SDK. As for
+  workbooks, the `d1_corrupt.docx` document round-trips (exit 0)
   and the SDK must reject the output; a truncated copy is the round trip's
   own negative control.
 - `tool/edit_docx.dart` opens every `.docx` of a directory with
