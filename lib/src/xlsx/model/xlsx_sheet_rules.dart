@@ -105,9 +105,10 @@ mixin _SheetRules {
   /// [validation], the group going with its last entry. The other entries,
   /// readable or not, stay as written and `count` is recomputed.
   ///
-  /// [validation] is compared as the writer writes it, so one built by hand
-  /// matches the entry it was added as (a leading `=` of a formula and the
-  /// fields its type ignores do not count). Throws an [ArgumentError] when
+  /// Both are compared as the writer writes them, so a value the getter gave
+  /// and one built by hand match the entry (a leading `=` of a formula,
+  /// which a file may have, and the fields its type ignores do not count).
+  /// Throws an [ArgumentError] when
   /// none is equal, a [StateError] for a sheet that is not a worksheet or
   /// has no part and an [XlsxReadException] when the sheet cannot be read.
   /// Whatever it throws, nothing has changed.
@@ -118,7 +119,8 @@ mixin _SheetRules {
     int at = -1;
     if (group != null) {
       for (int i = 0; i < group.items.length; i++) {
-        if (group.items[i].value == wanted) {
+        final XlsxDataValidation? listed = group.items[i].value;
+        if (listed != null && normalizedValidation(listed) == wanted) {
           at = i;
           break;
         }

@@ -38,6 +38,7 @@ import '../read/package_reader.dart';
 import '../read/read_exception.dart';
 import '../read/read_limits.dart';
 import '../sheet_name.dart';
+import 'element_node.dart';
 
 /// Reports a value that cannot be read: the element's name.
 typedef PropertyWarn = void Function(String element);
@@ -107,9 +108,7 @@ abstract base class _PropertiesPart implements PartContent {
     final Utf8Buffer out = Utf8Buffer();
     final XmlWriter w = XmlWriter(out);
     w.declaration();
-    w.start(root.qualifiedName);
-    writeNamespaceDeclarations(w, root.namespaces);
-    writeKeptAttributes(w, root.attributes);
+    writeRootStart(w, root);
     for (final PropertyChild child in children) {
       child.xml.writeTo(w, declaredAbove: root.namespaces);
     }

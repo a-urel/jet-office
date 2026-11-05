@@ -435,7 +435,8 @@ void main() {
   });
 
   group('a declaration with a forbidden character saves', () {
-    /// [bytes] with a hostile declaration on the first [element] of [part].
+    /// [bytes] with a hostile declaration and attribute on the first [element]
+    /// of [part].
     Uint8List declaredOn(Uint8List bytes, String part, String element) =>
         buildZipOrdered(<(String, List<int>)>[
           for (final MapEntry<String, Uint8List> p in readXlsxBytes(
@@ -450,7 +451,7 @@ void main() {
                           .decode(p.value)
                           .replaceFirst(
                             RegExp('<$element(?=[ />])'),
-                            '<$element xmlns:o="urn:&#1;o"',
+                            '<$element xmlns:o="urn:&#1;o" o:k="&#1;"',
                           ),
                     ),
             ),
@@ -488,5 +489,31 @@ void main() {
         });
       });
     }
+
+    test(
+      'on the root of the shared strings',
+      () {
+        final Map<String, Uint8List> parts = readXlsxBytes(
+          allFixtures()
+              .firstWhere((Fixture f) => f.name == 'm1_values')
+              .build(),
+        );
+        final String text = utf8.decode(parts['xl/sharedStrings.xml']!);
+        parts['xl/sharedStrings.xml'] = Uint8List.fromList(
+          utf8.encode(
+            text.replaceFirst(RegExp('xmlns="[^"]*"'), 'xmlns="&#1;"'),
+          ),
+        );
+        final XlsxWorkbook book = XlsxWorkbook.open(
+          buildZip(<String, List<int>>{...parts}),
+        );
+        book.sheets.first.rows.toList();
+        book.sheets.first.setCell(50, 0, 'x');
+        expect(book.save, returnsNormally);
+      },
+      skip:
+          'OpaqueXml.writeTo in lib/src/opc writes an inherited URI '
+          'unscrubbed: a change there waits for a ruling (W3 Task 12).',
+    );
   });
 }

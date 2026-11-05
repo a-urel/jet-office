@@ -264,7 +264,9 @@ final class _Group {
       }
       w.attribute(
         'count',
-        rawCount != null && items.length == fileItems ? rawCount! : '$n',
+        rawCount != null && items.length == fileItems
+            ? scrubXmlText(rawCount!).text
+            : '$n',
       );
     }
     writeKeptAttributes(w, attributes, declaredAbove: inner);
@@ -1036,8 +1038,8 @@ final class StylesPart implements PartContent {
   );
 
   /// Removes every entry appended since [mark] was taken, by [idFor],
-  /// [differentialIdFor] or [withNumberFormat], and a group made for them, so the part encodes as
-  /// it did then.
+  /// [differentialIdFor] or [withNumberFormat], and a group made for them,
+  /// so the part encodes as it did then.
   ///
   /// Throws [ArgumentError] for a mark that is not an earlier [StylesPart.mark]
   /// of this part: a count above the current one or below the file's.

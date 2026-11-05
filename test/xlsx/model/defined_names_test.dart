@@ -298,6 +298,25 @@ void main() {
     expect(xml, contains('<definedName name="late">5</definedName>'));
   });
 
+  test('a name as Excel writes it goes back when removed', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(
+        '<definedNames><definedName name="a.b_c" comment="c">Sheet!\$A\$1'
+        '</definedName><definedName name="Ünal">#REF!</definedName>'
+        '<definedName name="_hidden" hidden="1">1</definedName>'
+        '</definedNames>',
+      ),
+    );
+    final List<XlsxDefinedName> names = book.definedNames.toList();
+    expect(names, hasLength(3));
+    for (final XlsxDefinedName name in names) {
+      book
+        ..removeName(name.name)
+        ..defineName(name);
+    }
+    expect(book.definedNames, names);
+  });
+
   test('a prefixed workbook keeps its namespace', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
       buildZip(<String, List<int>>{

@@ -468,6 +468,19 @@ void main() {
       );
     });
   });
+
+  test('a forbidden character in a sheet entry is not written', () {
+    final WorkbookPart part = _read(
+      _book(
+        '<sheets><sheet name="a&#1;b" sheetId="1&#xFFFE;" r:id="rId1"/>'
+        '</sheets>',
+      ),
+    );
+    expect(
+      _encode(part),
+      contains('<sheet name="ab" sheetId="1" r:id="rId1"/>'),
+    );
+  });
 }
 
 /// The local names of the root's child elements, in order.

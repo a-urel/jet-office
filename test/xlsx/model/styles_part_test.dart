@@ -326,6 +326,13 @@ void main() {
     });
   });
 
+  test('a forbidden character in a kept count is not written', () {
+    final StylesPart part = _read(
+      _sheet('<cellXfs count="1&#1;"><xf numFmtId="0"/></cellXfs>'),
+    );
+    expect(_encode(part), contains('<cellXfs count="1">'));
+  });
+
   group('limits and failures', () {
     test('more xfs than maxCellFormats is a limit error', () {
       final String xml = _sheet('<cellXfs count="3"><xf/><xf/><xf/></cellXfs>');

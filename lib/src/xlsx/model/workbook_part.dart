@@ -137,8 +137,10 @@ final class SheetEntry {
     w.start(qualifiedName);
     writeNamespaceDeclarations(w, namespaces);
     final Map<String, String> inner = mergeNamespaces(above, namespaces);
-    w.attribute('name', escapeXstring(name));
-    if (rawSheetId != null) w.attribute('sheetId', rawSheetId!);
+    w.attribute('name', scrubXmlText(escapeXstring(name)).text);
+    if (rawSheetId != null) {
+      w.attribute('sheetId', scrubXmlText(rawSheetId!).text);
+    }
     if (visibility != XlsxSheetVisibility.visible || explicitVisible) {
       w.attribute('state', visibility.name);
     }
@@ -676,7 +678,7 @@ final class WorkbookPart implements PartContent {
     if (untyped != null) return (buffer..write(untyped)).takeChunks();
     final XmlWriter w = XmlWriter(buffer)..declaration();
     final XmlRoot root = _root!;
-    root.writeStart(w);
+    writeRootStart(w, root);
     for (final Object c in _children) {
       switch (c) {
         case _Sheets():

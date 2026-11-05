@@ -3,6 +3,7 @@
 ///
 /// ```bash
 /// dart run tool/fuzz_reader.dart [--seeds 1-20] [--cases 500] [--verbose]
+///   [--features]
 /// ```
 ///
 /// For every seed of the inclusive range `--seeds` (default `1-20`, or a
@@ -19,22 +20,30 @@
 /// case is written to stderr as `seed <s> case <i> (<mutation>)` before it
 /// runs, so the last line names the case that never came back.
 ///
+/// With `--features` it fuzzes the workbook model's sheet and workbook
+/// features instead: the corpus and cases of
+/// `test/xlsx/model/support/feature_fuzz.dart`, each run by
+/// `exerciseFeatures`, which `featureFuzzCases(s, i + 1)` reproduces.
+///
 /// The quality gate runs seeds 1 to 4 with 100 cases each
-/// (`test/xlsx/read/fuzz_test.dart`).
+/// (`test/xlsx/read/fuzz_test.dart`, `test/xlsx/model/feature_fuzz_test.dart`).
 library;
 
 import 'dart:io';
 
+import '../test/xlsx/model/support/feature_fuzz.dart';
+import '../test/xlsx/read/support/fuzz.dart' show exerciseReader, fuzzCases;
 import 'src/fuzz_run.dart';
 
 void main(List<String> args) {
+  final bool features = args.contains('--features');
   final ({int first, int last, int cases, bool verbose})? options = _parse(
-    args,
+    args.where((String a) => a != '--features').toList(),
   );
   if (options == null) {
     stderr.writeln(
       'Usage: dart run tool/fuzz_reader.dart [--seeds 1-20] [--cases 500] '
-      '[--verbose]',
+      '[--verbose] [--features]',
     );
     exitCode = 64;
     return;
@@ -45,6 +54,8 @@ void main(List<String> args) {
     last: options.last,
     cases: options.cases,
     verbose: options.verbose,
+    exercise: features ? exerciseFeatures : exerciseReader,
+    generate: features ? featureFuzzCases : fuzzCases,
     out: stdout,
     err: stderr,
   );

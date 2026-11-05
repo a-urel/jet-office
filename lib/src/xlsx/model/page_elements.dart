@@ -270,11 +270,12 @@ XmlNode? _applyOptions(
   Map<String, String>? written,
   String prefix,
 ) {
-  if (written == null) return null;
   if (node == null) {
-    return XmlNode.made(prefix, 'printOptions', attributes: written);
+    return written == null
+        ? null
+        : XmlNode.made(prefix, 'printOptions', attributes: written);
   }
-  return node.withChanges(<String, String?>{
+  final XmlNode next = node.withChanges(<String, String?>{
     for (final MapEntry<String, bool> f in <String, bool>{
       'horizontalCentered': value.centerHorizontally,
       'verticalCentered': value.centerVertically,
@@ -283,6 +284,7 @@ XmlNode? _applyOptions(
     }.entries)
       if (_flag(node, f.key) != f.value) f.key: f.value ? '1' : null,
   });
+  return !identical(next, node) && next.isBare ? null : next;
 }
 
 XmlNode _applyMargins(
@@ -474,14 +476,16 @@ String _rawText(OpaqueXml element) {
 String? _textOf(XmlNode node, String name, ProblemReporter? bad) {
   for (final Object c in node.children) {
     if (c is OpaqueXml && c.namespaceUri == Ns.main && c.localName == name) {
-      final String text = decodeXstring(_rawText(c));
       try {
+        final String text = decodeXstring(_rawText(c));
         checkHeaderFooter(XlsxHeaderFooter(oddHeader: text));
+        return text;
       } on ArgumentError {
         bad?.call('headerFooter');
-        return null;
+      } on XmlParseException {
+        bad?.call('headerFooter');
       }
-      return text;
+      return null;
     }
   }
   return null;

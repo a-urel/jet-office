@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/xlsx/model/validation_elements.dart';
@@ -249,6 +251,85 @@ void main() {
     expect(_xml(book), isNot(contains('dataValidations')));
     expect(sheet.dataValidations, isEmpty);
     expect(added, contains('<formula1>ISEVEN(A1)</formula1>'));
+  });
+
+  test('a value read from a formula with a leading = removes', () {
+    final XlsxWorkbook book = _open(
+      '<dataValidations count="2">'
+      '<dataValidation type="custom" sqref="A1"><formula1>=A1&gt;0</formula1>'
+      '</dataValidation>'
+      '<dataValidation type="whole" operator="greaterThan" sqref="A2">'
+      '<formula1>=B1</formula1></dataValidation></dataValidations>',
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    for (final XlsxDataValidation read in sheet.dataValidations.toList()) {
+      sheet.removeDataValidation(read);
+    }
+    expect(sheet.dataValidations, isEmpty);
+    expect(_xml(book), isNot(contains('dataValidation')));
+  });
+
+  test('a hand-built value removes an entry that has a leading =', () {
+    final XlsxWorkbook book = _open(
+      '<dataValidations count="1">'
+      '<dataValidation type="custom" allowBlank="1" showInputMessage="1" '
+      'showErrorMessage="1" sqref="A1"><formula1>=A1&gt;0</formula1>'
+      '</dataValidation></dataValidations>',
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    sheet.removeDataValidation(
+      XlsxDataValidation.custom(<XlsxRange>[_r('A1')], 'A1>0'),
+    );
+    expect(sheet.dataValidations, isEmpty);
+  });
+
+  test('a validation added under a prefixed worksheet stays '
+      'SpreadsheetML', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      buildWorkbook(<String, String>{
+        'S': '<x:worksheet xmlns:x="$mainNs"><x:sheetData/></x:worksheet>',
+      }),
+    );
+    final XlsxDataValidation validation = XlsxDataValidation.custom(<XlsxRange>[
+      _r('A1'),
+    ], 'A1>0');
+    book.sheets.single.addDataValidation(validation);
+    final Uint8List saved = book.save().bytes;
+    final String xml = partText(saved, 'xl/worksheets/sheet1.xml');
+    expect(xml, contains('<x:dataValidations count="1">'));
+    expect(xml, contains(' xmlns="$mainNs"'));
+    expect(xml, isNot(contains('xmlns=""')));
+    expect(
+      XlsxWorkbook.open(saved).sheets.single.dataValidations,
+      <XlsxDataValidation>[normalizedValidation(validation)],
+    );
+  });
+
+  test('type="none" reads as any, and an equal add is refused', () {
+    final XlsxWorkbook book = _open(
+      '<dataValidations count="2">'
+      '<dataValidation type="none" allowBlank="1" showInputMessage="1" '
+      'promptTitle="T" prompt="P" sqref="A1"/>'
+      '<dataValidation allowBlank="1" sqref="A2"/></dataValidations>',
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    expect(_invalid(book), 0);
+    final List<XlsxDataValidation> read = sheet.dataValidations.toList();
+    expect(read, hasLength(2));
+    expect(read.first.type, XlsxValidationType.any);
+    expect(read.first.prompt, 'P');
+    expect(read.last.type, XlsxValidationType.any);
+    expect(
+      () => sheet.addDataValidation(read.first),
+      throwsArgumentError,
+      reason: 'it overlaps itself',
+    );
+    sheet.removeDataValidation(read.first);
+    final String group = _group(_xml(book));
+    expect(group, isNot(contains('type="none"')));
+    expect(group, contains('sqref="A2"'));
+    sheet.addDataValidation(read.first);
+    expect(sheet.dataValidations.last, read.first);
   });
 
   test('kept attributes stay', () {

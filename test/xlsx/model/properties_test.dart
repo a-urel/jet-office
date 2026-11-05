@@ -444,6 +444,31 @@ void main() {
       expect(_part(book, 'docProps/app.xml'), contains('TitlesOfParts'));
     });
 
+    test('a root attribute keeps its one declaration', () {
+      const String mc =
+          'http://schemas.openxmlformats.org/markup-compatibility/2006';
+      final Map<String, Uint8List> parts = readXlsxBytes(
+        _fixture('m3_properties'),
+      );
+      parts['docProps/core.xml'] = Uint8List.fromList(
+        utf8.encode(
+          _core('<dc:title>t</dc:title>').replaceFirst(
+            '<cp:coreProperties ',
+            '<cp:coreProperties xmlns:mc="$mc" mc:Ignorable="dc" ',
+          ),
+        ),
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        buildZip(<String, List<int>>{...parts}),
+      );
+      book.properties = const XlsxProperties(title: 'New');
+      final Uint8List saved = book.save().bytes;
+      final String core = readXlsx(saved)['docProps/core.xml']!;
+      expect(RegExp('xmlns:mc=').allMatches(core), hasLength(1));
+      expect(core, contains('mc:Ignorable="dc"'));
+      expect(XlsxWorkbook.open(saved).properties.title, 'New');
+    });
+
     test('modified and lastModifiedBy are not touched by a save', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m3_properties'));
       book.sheets.first.setCell(5, 1, 'x');

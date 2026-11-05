@@ -781,7 +781,7 @@ final class WorksheetPart implements PartContent {
     }
     final XmlWriter w = XmlWriter(buffer)..declaration();
     final XmlRoot root = _root!;
-    root.writeStart(w);
+    writeRootStart(w, root);
     final int rowLevel = _deepestRowLevel();
     final int colLevel = _deepestColumnLevel();
     final int raisedRow = rowLevel > _fileRowLevel ? rowLevel : 0;

@@ -363,12 +363,39 @@ void main() {
       expect(setup, contains('orientation="landscape"'));
     });
 
-    test('printOptions of all defaults goes with its kept attribute', () {
+    test('printOptions of all defaults keeps a kept attribute', () {
       final XlsxWorkbook book = _open(
         '<printOptions gridLinesSet="0" headings="1"/>',
       );
       book.sheets.single.pageSetup = const XlsxPageSetup();
+      final String options = _element(_sheetXml(book), 'printOptions');
+      expect(options, contains('gridLinesSet="0"'));
+      expect(options, isNot(contains('headings')));
+    });
+
+    test('printOptions of all defaults keeps a bad attribute', () {
+      final XlsxWorkbook book = _open(
+        '<printOptions gridLines="yes" headings="1"/>',
+      );
+      book.sheets.single.pageSetup = const XlsxPageSetup();
+      final String options = _element(_sheetXml(book), 'printOptions');
+      expect(options, contains('gridLines="yes"'));
+      expect(options, isNot(contains('headings')));
+    });
+
+    test('printOptions goes when the edit leaves it bare', () {
+      final XlsxWorkbook book = _open('<printOptions headings="1"/>');
+      book.sheets.single.pageSetup = const XlsxPageSetup();
       expect(_sheetXml(book), isNot(contains('printOptions')));
+    });
+
+    test('a bare printOptions no edit touches stays', () {
+      final XlsxWorkbook book = _open(
+        '<printOptions/><pageMargins left="1" right="1" top="1" bottom="1" '
+        'header="0.3" footer="0.3"/>',
+      );
+      book.sheets.single.pageSetup = const XlsxPageSetup();
+      expect(_sheetXml(book), contains('<printOptions/>'));
     });
 
     test('margins change only what differs', () {
@@ -642,6 +669,22 @@ void main() {
       final String xml = _sheetXml(book);
       expect(xml, contains('orientation="sideways"'));
       expect(xml, contains('left="abc"'));
+    });
+
+    test('a header that is not XML text reads as none and stays', () {
+      for (final String text in <String>['&bad;', '&am', '&']) {
+        final XlsxWorkbook book = _open(
+          '<headerFooter><oddHeader>$text</oddHeader>'
+          '<oddFooter>Page</oddFooter></headerFooter>',
+        );
+        final XlsxSheet sheet = book.sheets.single;
+        final XlsxHeaderFooter? read = sheet.headerFooter;
+        expect(read?.oddHeader, isNull, reason: text);
+        expect(read?.oddFooter, 'Page', reason: text);
+        expect(_details(book), <String>['headerFooter'], reason: text);
+        sheet.headerFooter = read;
+        expect(_sheetXml(book), contains('<oddHeader>$text</oddHeader>'));
+      }
     });
 
     test('flags, numbers and names of every element', () {
