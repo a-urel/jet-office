@@ -1021,7 +1021,10 @@ Open `build/restyled.xlsx` in Excel. Check:
 - everything else looks as before, including named cell styles (the Cell Styles
   gallery lists them) and conditional formats.
 
-Result: pending.
+Result: ok, 2026-11-05 (see "Results"). The edited fixtures,
+`w2_generated.xlsx` and two of the owner's files opened with no repair prompt.
+Only `w1_test.xlsx` holds a named style and a conditional format;
+`excel_products.xlsx`, the second file, has neither.
 
 ## Open issues
 
@@ -1322,3 +1325,7 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_test.xlsx` (made in Excel), unchanged round trip and H5 edited | ok | No repair prompt on either. Table, filter buttons, conditional formatting, note, hyperlink, merged A10:D10, column width and `Özet` kept; D8 `526,55`. The edit changed only H5, `spans`, the appended shared string, the dropped `calcChain` and `fullCalcOnLoad`. |
 | 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1: `w1_test.xlsx`, A1 (a table header) edited | sorun | Repair prompt; the recovery log names `/xl/tables/table1.xml`. The column name stays `Ürün` (see "Open issues", W1). |
 | 2026-11-03 | Microsoft 365, Excel for Mac 16.114.1 | W1 re-check after b1fa49d: `w1_test.xlsx`, A1 (a table header) edited | ok | No repair prompt. A1 `edited by jet_office` with its filter button; the table, conditional formatting, hyperlink, merged A10:D10 and `Özet` as before. `table1.xml` differs from the original only in `name="Ürün"`, now `name="edited by jet_office"`. |
+| 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: all 29 `build/model-edited/*.xlsx` | ok | No repair prompt on any; each as the W2 list says. `m3_page_setup`'s `Scaled` stays at 100 % on screen: its 85 % is the print scale, kept as the fixture has it. |
+| 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: `w2_generated` | ok | No repair prompt. Opens on `Report`, green tab; title, header row, frozen rows, dates, `1.234,50`, hidden row 4, grouped row 5 and the hidden sheet as the list says. Widths read from a screenshot: 192, 112 and 129 pixels, the ratio of 24, 14 and 16. The bottom border's `medium` read from the file, not told apart on screen. |
+| 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: `w1_test.xlsx`, A1 restyled, column A widened, H1:I1 merged | ok | No repair prompt. Compared with the original; looks the same apart from the edits. |
+| 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: `excel_products.xlsx`, A1 restyled, column A widened, N1:O1 merged | ok | No repair prompt. Compared with the original; looks the same apart from the edits. This file has no named cell style beyond `Normal` and no conditional format, the owner's choice as the second file. |
