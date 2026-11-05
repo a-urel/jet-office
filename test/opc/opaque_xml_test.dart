@@ -191,6 +191,19 @@ void main() {
       expect(sb.toString(), '${root.substring(0, root.length - 1)}/>');
     });
 
+    test('a forbidden character in a kept declaration is not written', () {
+      final XmlRoot x = XmlRoot.capture(
+        _at('<r xmlns="m" xmlns:o="urn:&#1;o"><o:a/></r>', 'r'),
+      );
+      // The binding stays as read: a kept child compares its URI with it.
+      expect(x.namespaces['o'], 'urn:\u0001o');
+      final StringBuffer sb = StringBuffer();
+      final XmlWriter w = XmlWriter(sb);
+      x.writeStart(w);
+      w.end();
+      expect(sb.toString(), '<r xmlns="m" xmlns:o="urn:o"/>');
+    });
+
     test('capture leaves the reader on the start element', () {
       final XmlPullReader r = _at('<r xmlns="m"><a/></r>', 'r');
       XmlRoot.capture(r);

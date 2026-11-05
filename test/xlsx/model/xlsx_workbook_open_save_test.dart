@@ -7,6 +7,7 @@ import 'package:jet_office/src/xlsx/model/xlsx_sheet.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 import 'package:test/test.dart';
 import '../../../tool/src/part_compare.dart';
+import '../../fixtures/fixtures.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/workbook_builder.dart';
 import '../read/support/zip_builder.dart';
@@ -431,5 +432,61 @@ void main() {
     );
     expect(RegExp(' count=').allMatches(sst), hasLength(1));
     expect(RegExp('uniqueCount=').allMatches(sst), hasLength(1));
+  });
+
+  group('a declaration with a forbidden character saves', () {
+    /// [bytes] with a hostile declaration on the first [element] of [part].
+    Uint8List declaredOn(Uint8List bytes, String part, String element) =>
+        buildZipOrdered(<(String, List<int>)>[
+          for (final MapEntry<String, Uint8List> p in readXlsxBytes(
+            bytes,
+          ).entries)
+            (
+              p.key,
+              p.key != part
+                  ? p.value
+                  : utf8.encode(
+                      utf8
+                          .decode(p.value)
+                          .replaceFirst(
+                            RegExp('<$element(?=[ />])'),
+                            '<$element xmlns:o="urn:&#1;o"',
+                          ),
+                    ),
+            ),
+        ]);
+
+    for (final String name in <String>[
+      'm2_merges_filter',
+      'm2_columns_rows',
+      'm3_conditional_x14',
+      'm3_properties',
+    ]) {
+      test('on every element of $name, edited or not', () {
+        final Uint8List input = allFixtures()
+            .firstWhere((Fixture f) => f.name == name)
+            .build();
+        final RegExp tag = RegExp(r'<([A-Za-z][\w:.]*)');
+        readXlsx(input).forEach((String part, String text) {
+          if (part.endsWith('.rels') || part.startsWith('[')) return;
+          for (final String element
+              in tag.allMatches(text).map((Match m) => m.group(1)!).toSet()) {
+            final Uint8List hostile = declaredOn(input, part, element);
+            final String where = '$element in $part';
+            expect(
+              () => XlsxWorkbook.open(hostile).save(),
+              returnsNormally,
+              reason: where,
+            );
+            final XlsxWorkbook book = XlsxWorkbook.open(hostile);
+            for (final XlsxSheet sheet in book.sheets) {
+              sheet.rows.toList();
+              sheet.setCell(0, 0, 'x');
+            }
+            expect(book.save, returnsNormally, reason: where);
+          }
+        });
+      });
+    }
   });
 }

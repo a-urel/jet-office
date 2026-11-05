@@ -18,7 +18,6 @@ library;
 
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
-import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import 'columns.dart';
@@ -27,22 +26,6 @@ import 'columns.dart';
 /// children that are read as [XmlNode]s. An element the shape does not list
 /// has only opaque children.
 typedef NodeShape = Map<String, Set<String>>;
-
-/// Writes `xmlns` declarations for [namespaces], as
-/// [writeNamespaceDeclarations] does, without a character XML forbids in a
-/// URI, which only a character reference in the source can have put there.
-///
-/// Only what is written is scrubbed. The bindings handed to the element's
-/// children stay as read, since a kept child compares the URI it inherited
-/// with them and would otherwise declare it again.
-void writeScrubbedNamespaces(XmlWriter w, Map<String, String> namespaces) {
-  namespaces.forEach((String prefix, String uri) {
-    w.attribute(
-      prefix.isEmpty ? 'xmlns' : 'xmlns:$prefix',
-      scrubXmlText(uri).text,
-    );
-  });
-}
 
 /// One typed element: see the library comment.
 final class XmlNode {
@@ -215,7 +198,7 @@ final class XmlNode {
   /// Writes the element. [above] holds the bindings in scope where it goes.
   void writeTo(XmlWriter w, Map<String, String> above) {
     w.start(qualifiedName);
-    writeScrubbedNamespaces(w, namespaces);
+    writeNamespaceDeclarations(w, namespaces);
     final Map<String, String> inner = mergeNamespaces(above, namespaces);
     writeKeptAttributes(w, attributes, declaredAbove: inner);
     for (final Object c in children) {

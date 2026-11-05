@@ -444,9 +444,9 @@ OpaqueXml _rewritten(
 ) {
   final StringBuffer out = StringBuffer();
   final XmlWriter w = XmlWriter(out)..start('wrapper');
-  writeScrubbedNamespaces(w, old.inheritedNamespaces);
+  writeNamespaceDeclarations(w, old.inheritedNamespaces);
   w.start(qualifiedName);
-  writeScrubbedNamespaces(w, namespaces);
+  writeNamespaceDeclarations(w, namespaces);
   final Map<String, String> inner = mergeNamespaces(
     old.inheritedNamespaces,
     namespaces,
