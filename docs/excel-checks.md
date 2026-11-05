@@ -1077,13 +1077,19 @@ Open `build/model_generated/w3_generated.xlsx`. No repair prompt. Two sheets:
 On `Report`:
 
 - Row 1 is bold: `Product`, `Region`, `Amount`, `Score`, `Stock`, `Rating`,
-  `With tax`. A filter button sits on each of A1 to G1, and filtering works.
+  `With tax`, `Bar only`. A filter button sits on each of A1 to G1, and
+  filtering works.
 - B2 to B7 have a drop-down list with `North`, `South`, `East` and `West`;
   typing another value is refused.
 - C (`Amount`): the amounts 3400, 4100 and 5200 (`Pears`, `Cherries`,
   `Grapes`) have a light red fill, the others none.
 - D (`Score`): a colour scale from red (10) through yellow to green (100).
 - E (`Stock`): blue data bars, longest at 90, shortest at 10.
+- H (`Bar only`, outside the filter and the print area): green data bars set
+  to show the bar only. The writer leaves `showValue` out of the Excel 2010
+  half of the rule (`x14:dataBar`), so record what Excel does: whether it hides
+  the numbers (Home > Conditional Formatting > Manage Rules shows the "Show Bar
+  Only" box). Numbers still showing are not a repair prompt, but note them.
 - F (`Rating`): arrows, pointing down for 1 and 2, sideways for 3, up for 4
   and 5.
 - G (`With tax`) shows 1416, 4012, 2950, 4838, 1062 and 6136; the formula bar

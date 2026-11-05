@@ -133,7 +133,7 @@ void main() {
     });
 
     test(
-      'has a cell-value rule, a colour scale, a data bar and an icon set',
+      'has a cell-value rule, a colour scale, two data bars and an icon set',
       () {
         final List<XlsxConditionalRule> rules = <XlsxConditionalRule>[
           for (final XlsxConditionalFormat f in report.conditionalFormats)
@@ -143,8 +143,16 @@ void main() {
           XlsxCellValueRule,
           XlsxColorScale,
           XlsxDataBar,
+          XlsxDataBar,
           XlsxIconSet,
         ]);
+        expect(
+          <bool>[
+            for (final XlsxDataBar bar in rules.whereType<XlsxDataBar>())
+              bar.showValue,
+          ],
+          <bool>[true, false],
+        );
       },
     );
 

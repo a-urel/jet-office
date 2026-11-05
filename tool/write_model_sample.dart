@@ -23,7 +23,7 @@
 ///
 /// The sheet `Report` of `w3_generated.xlsx` has a header, a filter, a list
 /// validation, a cell-value rule, a colour scale, a data bar and an icon set,
-/// a link to a web page and one to the sheet `Locked`, a print area and
+/// a data bar with `showValue` off in a column of its own, a link to a web page and one to the sheet `Locked`, a print area and
 /// print titles, a landscape fit-to-width page setup, a header and a footer,
 /// and a formula that uses the workbook name `TaxRate`. `Locked` is protected
 /// with the password `secret`. The workbook has properties, one of them
@@ -155,6 +155,7 @@ XlsxWorkbook _featuresBook() {
     'Stock',
     'Rating',
     'With tax',
+    'Bar only',
   ];
   const List<(String, String, int, int, int, int)> rows =
       <(String, String, int, int, int, int)>[
@@ -192,7 +193,8 @@ XlsxWorkbook _featuresBook() {
         i + 1,
         6,
         XlsxFormula('C${i + 2}*(1+TaxRate)', cached: amount * 118 / 100),
-      );
+      )
+      ..setCell(i + 1, 7, stock);
   }
   report
     ..setCell(
@@ -249,6 +251,14 @@ XlsxWorkbook _featuresBook() {
         <XlsxRange>[XlsxRange.parse('E2:E7')],
         <XlsxConditionalRule>[
           const XlsxDataBar(color: XlsxColor.rgb(0x638EC6)),
+        ],
+      ),
+    )
+    ..addConditionalFormat(
+      XlsxConditionalFormat(
+        <XlsxRange>[XlsxRange.parse('H2:H7')],
+        <XlsxConditionalRule>[
+          const XlsxDataBar(color: XlsxColor.rgb(0x63C384), showValue: false),
         ],
       ),
     )
