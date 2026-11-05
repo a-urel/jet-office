@@ -137,7 +137,9 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   Open XML SDK, so the model's edited and generated files are validated,
   not only its unchanged round trips.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX
-  fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, by
+  fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, or its
+  `<name>.libreoffice.txt` (`DocxFixture.libreOfficeText`: list labels such as
+  `    • Bullet one` that the model's text lacks), by
   `textDifferences` in `tool/src/text_compare.dart`: a leading BOM and one
   trailing newline are ignored, everything else must be equal. It prints
   each difference as `<name>: <line>`, exits 1 on any, 2 on unusable input.
@@ -146,25 +148,41 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   text; any warning is a mismatch unless `docxResaveAllowedWarnings` in
   `tool/src/read_compare.dart` names it with a reason. Exit codes as above.
 - `tool/round_trip_docx.dart` opens every `.docx` of a directory with
-  `DocxDocument`, reads the body, saves to the second directory and prints
+  `DocxDocument`, reads the body and every typed property (which loads
+  `styles` and `numbering`), saves to the second directory and prints
   each `comparePackages` difference (`tool/src/part_compare.dart`) as
   `<file>: <line>`; it exits 1 on any difference or error, 2 on unusable
-  arguments. CI runs it on the fixtures, on LibreOffice's re-save and on the
-  owner's Word files, then validates all three outputs with the Open XML
-  SDK. As for workbooks, the `d1_corrupt.docx` document round-trips (exit 0)
+  arguments. A loaded part nothing changed is saved as read, so it also
+  encodes the main, styles and numbering parts from the model and compares
+  them with the input (`encodedPartDifferences`, `encodedMainDifferences`,
+  `tool/src/docx_serialize.dart`; the second takes the children of `w:pPr`
+  and `w:rPr` in any order, as the model writes them in schema order). CI
+  runs it on the fixtures, on LibreOffice's re-save and on the owner's Word
+  files, then validates all three outputs with the Open XML SDK. As for
+  workbooks, the `d1_corrupt.docx` document round-trips (exit 0)
   and the SDK must reject the output; a truncated copy is the round trip's
   own negative control.
 - `tool/edit_docx.dart` opens every `.docx` of a directory with
-  `DocxDocument`, sets the text of the first run with text, replaces the
-  last paragraph of runs only with a new one, adds a paragraph of style
-  `Heading1` (`Normal` when `word/styles.xml` defines no `Heading1`), saves
-  to the second directory, and checks the edits read back and that
-  `comparePackages` finds differences in `word/document.xml` only. It
-  prints each problem as `<file>: <problem>` and exits 1 on any, 2 on
-  unusable arguments. CI runs it on the fixtures, on LibreOffice's re-save
-  and on the owner's Word files, and validates the three outputs with the
-  Open XML SDK; the owner opens the edited owner files in Word
-  (`docs/word-checks.md`).
+  `DocxDocument` and edits the body: it sets the text of the first run with
+  text to `Edited by the model` and makes it bold in the theme colour accent
+  1; it replaces the last paragraph of plain runs (or `w:proofErr` marks;
+  no field, drawing or `w:sectPr`), other than the edited one, with
+  `Replaced by the model`; it appends a paragraph `Added by the model` of
+  the style `styles.ensure(DocxBuiltInStyle.heading1)` (`Balk1` in a
+  Turkish Word file; Word's definition when the file has none); and it adds
+  a bullet list (`numbering.addBulletList`) of two items, `First item` and
+  `Second item` at level 1 (`addListItem`). It saves to the second
+  directory, reads the saved file back and checks the text, bold and
+  accent of the run, the replacing paragraph, the heading's style, and each
+  item's text, list number and level, and that the body has three blocks
+  more. `comparePackages` must find differences only in the main part
+  (named by the root relationship), the numbering part, the styles part
+  when `ensure` added a style, and `[Content_Types].xml` with the main
+  part's relationships when a part was created. It prints each problem as
+  `<file>: <problem>` and exits 1 on any, 2 on unusable arguments. CI runs
+  it on the fixtures, on LibreOffice's re-save and on the owner's Word
+  files, and validates the three outputs with the Open XML SDK; the owner
+  opens the edited owner files in Word (`docs/word-checks.md`).
 - `tool/draft_expected_docx.dart` drafts the `<name>.expected.txt` of an owner
   file from the model's own reading and prints a review list; it never
   overwrites an existing text.
@@ -208,7 +226,10 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 - Word files go in `test/fixtures/owner/docx/`, listed in its
   `manifest.json`, each with `<name>.expected.txt`, the text of the body's
   paragraphs (`test/fixtures/owner/README.md`, section "Word files", says
-  how). `tool/draft_expected_docx.dart` drafts it from the model's reading;
+  how). They are `blank.docx`, `features.docx`, `long.docx` and, for D2's
+  built-in styles and lists, `builtins.docx` (the README says how it was
+  made). `tool/draft_expected_docx.dart` drafts each text from the model's
+  reading;
   the owner confirms every line against Word and sets `confirmedBy`. Never
   edit a committed Word file, its expected text or its manifest entry
   without the owner.
@@ -260,11 +281,16 @@ longer runs with `dart run tool/fuzz_formatter.dart --seeds 1-200 --cases 1000`.
 The rules are in `docs/number-format.md`.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
-100 cases each, over the fixtures and producer variants of
+150 cases each, over the fixtures and producer variants of
 `test/docx/support/docx_fuzz.dart`: whole mutated files, with every part name
-mutated somewhere; open, read the body and save throw nothing but
-`DocxReadException`), the same cases on the VM and in Chrome; longer runs
-by hand:
+mutated somewhere, and about a third of the cases replacing the value of a
+`w:` attribute (`w:val`, `w:w`, `w:left` and the like) of the main, styles or
+numbering part by `abc`, twenty digits, `-` or `1in`; open, load the body,
+styles and numbering, then read every typed property (a throw there is a
+failure, even a `DocxReadException`), call `styles.ensure` and
+`numbering.addBulletList` on what loaded, and save throw nothing but
+`DocxReadException` from a load), the same cases on the VM and in Chrome;
+longer runs by hand:
 
 ```bash
 dart run tool/fuzz_docx.dart --seeds 1-200 --cases 1000

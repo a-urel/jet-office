@@ -193,6 +193,74 @@ void main() {
     }
   });
 
+  test('styleNotFound has en, de and tr text naming count, part and id', () {
+    final DocxWarningCollector many = DocxWarningCollector();
+    for (int i = 0; i < 2; i++) {
+      many.add(
+        DocxWarningCode.styleNotFound,
+        part: '/word/document.xml',
+        location: 'body/p[$i]',
+        detail: 'Bilinmez',
+      );
+    }
+    final DocxWarningCollector one = DocxWarningCollector()
+      ..add(
+        DocxWarningCode.styleNotFound,
+        part: '/word/document.xml',
+        location: 'body/p[0]',
+        detail: 'Bilinmez',
+      );
+    final DocxWarning plural = many.warnings.single;
+    final DocxWarning singular = one.warnings.single;
+    expect(
+      plural.message(),
+      '2 references in /word/document.xml (body/p[0], body/p[1]) name the '
+      'style Bilinmez, which the document does not define; Word shows them '
+      'in the default style.',
+    );
+    expect(
+      singular.message(),
+      '1 reference in /word/document.xml (body/p[0]) names the style '
+      'Bilinmez, which the document does not define; Word shows it in the '
+      'default style.',
+    );
+    for (final OfficeLocale locale in OfficeLocale.values) {
+      for (final DocxWarning w in <DocxWarning>[plural, singular]) {
+        expect(w.message(locale), contains('${w.count}'));
+        expect(w.message(locale), contains('/word/document.xml'));
+        expect(w.message(locale), contains('body/p[0]'));
+        expect(w.message(locale), contains('Bilinmez'));
+      }
+    }
+    expect(
+      plural.message(OfficeLocale.de),
+      isNot(singular.message(OfficeLocale.de)),
+    );
+  });
+
+  test('locations and warnings are the same objects on each call', () {
+    final DocxWarningCollector collector = DocxWarningCollector();
+    final List<DocxWarning> warnings = collector.warnings;
+    collector.add(
+      DocxWarningCode.styleNotFound,
+      part: '/word/document.xml',
+      location: 'body/p[0]',
+      detail: 'Bilinmez',
+    );
+    expect(identical(collector.warnings, warnings), isTrue);
+    expect(warnings, hasLength(1));
+    final DocxWarning w = warnings.single;
+    final List<String> locations = w.locations;
+    collector.add(
+      DocxWarningCode.styleNotFound,
+      part: '/word/document.xml',
+      location: 'body/p[1]',
+      detail: 'Bilinmez',
+    );
+    expect(identical(w.locations, locations), isTrue);
+    expect(locations, hasLength(2));
+  });
+
   test('toString is English', () {
     final DocxWarning w =
         (DocxWarningCollector()..add(

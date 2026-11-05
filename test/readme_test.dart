@@ -110,7 +110,41 @@ DocxResult docxEdit(DocxResult first) {
   return saved;
 }
 
+DocxResult docxFormat() {
+  final DocxDocument report = DocxDocument();
+  report.body.addParagraph('Quarterly report').style = 'Heading1';
+  final DocxRun total = report.body.addParagraph().addRun('Total: ');
+  total.properties.bold = true;
+  final DocxNumberingInstance list = report.numbering.addBulletList();
+  report.body.addListItem(list, 'First item');
+  report.body.addListItem(list, 'A nested item', level: 1);
+  final DocxResult formatted = report.save();
+  return formatted;
+}
+
 void main() {
+  test('README DOCX formatting block saves a styled document with a list', () {
+    final DocxResult formatted = docxFormat();
+    expect(formatted.warnings, isEmpty);
+    final DocxDocument reopened = DocxDocument.open(formatted.bytes);
+    final List<DocxParagraph> paragraphs = reopened.body.blocks
+        .whereType<DocxParagraph>()
+        .toList();
+    expect(paragraphs.map((DocxParagraph p) => p.text), <String>[
+      '',
+      'Quarterly report',
+      'Total: ',
+      'First item',
+      'A nested item',
+    ]);
+    expect(paragraphs[1].style, 'Heading1');
+    expect(
+      paragraphs[2].inlines.whereType<DocxRun>().single.properties.bold,
+      isTrue,
+    );
+    expect(paragraphs[4].properties.numbering!.level, 1);
+  });
+
   test('README DOCX blocks create, edit and save a document', () {
     final DocxResult first = docxCreate();
     expect(first.warnings, isEmpty);

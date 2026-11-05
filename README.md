@@ -174,10 +174,27 @@ final DocxResult saved = doc.save();
 // saved.bytes is the .docx file; saved.warnings lists what was repaired.
 ```
 
-Only paragraphs, runs and their text, tabs and breaks are typed so far.
-Everything else in the file (tables, content controls, tracked changes,
-drawings, fields, headers, footers, the page setup) is kept as written, so
-the file comes back with only your changes. The file is untrusted input, as
+Formatting, styles and lists are typed too: the properties of a run and of a
+paragraph, the document's styles (Word's built-in ones are added on demand,
+also to a document whose style names are localized) and its numbered and
+bulleted lists:
+
+```dart
+final DocxDocument report = DocxDocument();
+report.body.addParagraph('Quarterly report').style = 'Heading1';
+final DocxRun total = report.body.addParagraph().addRun('Total: ');
+total.properties.bold = true;
+final DocxNumberingInstance list = report.numbering.addBulletList();
+report.body.addListItem(list, 'First item');
+report.body.addListItem(list, 'A nested item', level: 1);
+final DocxResult formatted = report.save();
+```
+
+Paragraphs, runs and their text, tabs and breaks, their formatting, the
+styles and the numbering are typed so far. Everything else in the file
+(tables, content controls, tracked changes, drawings, fields, headers,
+footers, the page setup) is kept as written, so the file comes back with only
+your changes. The file is untrusted input, as
 for XLSX: `DocxReadLimits`, and a file that cannot be read throws a
 `DocxReadException`. [`docs/docx-model.md`](docs/docx-model.md) has the rules
 the model enforces and the known gaps; the owner's check in Word for Mac is
@@ -290,9 +307,9 @@ with lower bounds: time and memory follow the size of the XML.
 
 ## Limits
 
-- XLSX is complete; DOCX is in progress (paragraphs and their text only; no
-  formatting, tables, headers or pictures yet). The writer writes no charts,
-  pivot tables, macros or encryption.
+- XLSX is complete; DOCX is in progress (paragraphs, text, formatting,
+  styles and lists; no tables, headers or pictures yet). The writer writes
+  no charts, pivot tables, macros or encryption.
 - The reader reads values, formulas, number formats and merged ranges; it
   reads no other styles, notes, pictures or tables, and does not calculate
   formulas. It refuses Strict OOXML, `.xlsb`, legacy `.xls` and encrypted

@@ -42,3 +42,15 @@ the revision identifiers and document ids removed, and the regional
 settings, style ids and style names normalised to Word's en-US defaults.
 Whether that XML may ship under this package's licence is an open question
 for the owner, not settled here.
+
+Word built-in styles
+--------------------
+
+The style definitions in lib/src/docx/builtin_styles.dart that a new
+document does not hold (No Spacing, Strong, Emphasis, Table Grid,
+Hyperlink, Header, Footer and their linked styles) are taken from
+test/fixtures/owner/docx/builtins.docx, saved by Microsoft Word for Mac
+16.114, with the revision identifiers removed and the style ids and names
+normalised to Word's en-US ones. The others come from the blank document
+above. Whether that XML may ship under this package's licence is an open
+question for the owner, not settled here.

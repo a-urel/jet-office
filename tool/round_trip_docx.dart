@@ -6,13 +6,24 @@
 /// ```
 ///
 /// For every `*.docx` in the first directory it opens the document with
-/// `DocxDocument.open`, reads the body (so the main part goes through the
-/// model, not only the copy of an unloaded part), saves it and writes the
-/// bytes to `<outDir>/<name>.docx`. It then compares the saved package with
-/// the input by `comparePackages` from `tool/src/part_compare.dart`. A
-/// model that changes nothing must leave nothing different, so every
-/// difference is a defect. A Word lock file (`~$name.docx`, which Word
-/// leaves beside an open document) is skipped.
+/// `DocxDocument.open`, reads the body, reads every typed property
+/// of every paragraph, run, style and list level, which loads the styles and
+/// numbering parts, saves it and writes the bytes to `<outDir>/<name>.docx`.
+/// It then compares the saved package with the input by `comparePackages`
+/// from `tool/src/part_compare.dart`. A model that changes nothing must
+/// leave nothing different, so every difference is a defect.
+///
+/// A main, styles or numbering part that is loaded and not changed is saved
+/// as it was read, byte for byte, so loading it does not run the encoder. The
+/// tool therefore also reads each of the three parts into its model, encodes
+/// it and compares that with the part in the input by
+/// `encodedPartDifferences` and `encodedMainDifferences` from
+/// `tool/src/docx_serialize.dart`, so CI's round trips serialize them on
+/// every fixture, every LibreOffice re-save and every owner file. The model
+/// writes the properties of a main part in schema order; that comparison
+/// takes them in any order. A Word
+/// lock file (`~$name.docx`, which Word leaves beside an open document) is
+/// skipped.
 ///
 /// Each difference is printed as `<file>: <line>`, one per line, and a file
 /// that cannot be opened or saved as `<file>: <error>`. The exit code is 1
@@ -20,8 +31,9 @@
 /// input directory holds no `.docx`, and 0 otherwise, as
 /// `tool/round_trip_model.dart` does for workbooks.
 ///
-/// CI runs it on the DOCX fixtures and on LibreOffice's re-save of them,
-/// then validates the output with `tool/ooxml_validate`.
+/// CI runs it on the DOCX fixtures, on LibreOffice's re-save of them and on
+/// the owner's Word files, then validates the output with
+/// `tool/ooxml_validate`.
 library;
 
 import 'dart:io';
@@ -29,6 +41,7 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 
+import 'src/docx_serialize.dart';
 import 'src/part_compare.dart';
 
 void main(List<String> args) {
@@ -85,6 +98,7 @@ List<String> _roundTrip(File file, Directory output, String name) {
   try {
     final DocxDocument doc = DocxDocument.open(input);
     doc.body.blocks.length;
+    readTypedProperties(doc);
     saved = doc.save().bytes;
   } on DocxReadException catch (e) {
     return <String>['the model refused the document: $e'];
@@ -92,5 +106,15 @@ List<String> _roundTrip(File file, Directory output, String name) {
     return <String>['the round trip failed: $e'];
   }
   File('${output.path}/$name').writeAsBytesSync(saved);
-  return comparePackages(input, saved);
+  // Encoding the parts of the input is what the unchanged copy of a loaded
+  // part does not do (see the library comment).
+  try {
+    return <String>[
+      ...comparePackages(input, saved),
+      ...encodedPartDifferences(input),
+      ...encodedMainDifferences(input),
+    ];
+  } on Object catch (e) {
+    return <String>['the encoded parts failed: $e'];
+  }
 }

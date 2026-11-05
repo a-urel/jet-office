@@ -4,9 +4,10 @@
 /// Not ported from Quds; written for jet_office.
 ///
 /// A [DocxRun] holds its content ([DocxRunContent]) and its properties
-/// (`w:rPr`), of which D1 types only the style. Setting its text splits the
-/// string into text, tabs and breaks and removes the characters XML forbids;
-/// the run records how many it removed, and the save reports them.
+/// (`w:rPr`, a [PropertySet]), of which D1 types only the style. Setting
+/// its text splits the string into text, tabs and breaks and removes the
+/// characters XML forbids; the run records how many it removed, and the
+/// save reports them.
 ///
 /// A [DocxOpaqueInline] keeps an element the model does not type, such as a
 /// tracked change (`w:ins`, `w:del`), a content control or a hyperlink until
@@ -26,7 +27,9 @@ import '../../xml/xml_pull_reader.dart';
 import '../properties.dart';
 import 'blocks.dart';
 import 'edit_sink.dart';
+import 'property_set.dart';
 import 'run_content.dart';
+import 'run_properties.dart';
 
 /// One child of a paragraph.
 sealed class DocxInline {
@@ -50,23 +53,25 @@ final class DocxRun extends DocxInline {
   ///
   /// It belongs to no paragraph until it is inserted into one.
   DocxRun([String text = ''])
-    : _properties = const PropertyContainer.empty(),
+    : _source = const PropertyContainer.empty(),
       _attributes = const <KeptAttribute>[],
       super._() {
     _setText(text);
   }
 
-  DocxRun._read(
-    this._properties,
-    this._style,
-    this._attributes,
-    List<DocxRunContent> content,
-  ) : super._() {
+  DocxRun._read(this._source, this._attributes, List<DocxRunContent> content)
+    : super._() {
     _content.addAll(content);
   }
 
-  /// The run's `w:rPr`, without the typed style.
-  final PropertyContainer _properties;
+  /// The run's `w:rPr` as read.
+  final PropertyContainer _source;
+
+  /// The run's properties: [_source] with the values set.
+  late final DocxRunProperties _properties = newRunProperties(
+    _source,
+    () => _sink,
+  );
 
   /// The attributes of `w:r` the reader kept, such as `w:rsidR`.
   final List<KeptAttribute> _attributes;
@@ -76,31 +81,29 @@ final class DocxRun extends DocxInline {
   late final List<DocxRunContent> _contentView =
       UnmodifiableListView<DocxRunContent>(_content);
 
-  String? _style;
-
   /// How many characters XML forbids were removed when the text was set.
   int _removed = 0;
+
+  /// The sink of the document the run was read in; `null` for a new run.
+  DocxEditSink? _readIn;
 
   DocxEditSink get _sink {
     final DocxParagraph? paragraph = _paragraph;
     return paragraph == null ? DocxEditSink.none : editSinkOf(paragraph);
   }
 
-  /// The id of the run's character style (`w:rStyle`), or `null` for none.
-  ///
-  /// Setting the empty string, or an id holding a character XML forbids,
-  /// throws [ArgumentError]; set `null` to remove the style.
-  String? get style => _style;
+  /// The run's formatting (`w:rPr`). It is the same object every time; a
+  /// new run has none set.
+  DocxRunProperties get properties => _properties;
 
-  set style(String? value) {
-    checkStyleId(value);
-    final String? previous = _style;
-    if (value == previous) {
-      return;
-    }
-    _style = value;
-    _sink.runStyleSet(this, previous);
-  }
+  /// The id of the run's character style (`w:rStyle`), or `null` for none.
+  /// A shortcut for [DocxRunProperties.style] of [properties], which has
+  /// the rules: the id set may read back as the document's own, and a set
+  /// on a run of a document throws a `DocxReadException` when its styles
+  /// part cannot be read.
+  String? get style => _properties.style;
+
+  set style(String? value) => _properties.style = value;
 
   /// The run's content, in order. The list cannot be modified; set [text]
   /// to change it.
@@ -230,35 +233,29 @@ List<DocxRunContent> _split(String text) {
   return out;
 }
 
-/// Throws [ArgumentError] when [value], a style id to set, is empty or holds
-/// a character XML forbids; `null` (no style) passes.
-void checkStyleId(String? value) {
-  if (value == null) {
-    return;
-  }
-  if (value.isEmpty) {
-    throw ArgumentError.value(value, 'style', 'Must not be empty');
-  }
-  if (scrubXmlText(value).removed > 0) {
-    throw ArgumentError.value(
-      value,
-      'style',
-      'Must not hold a character XML forbids',
-    );
-  }
-}
-
-/// A run as the reader builds it: its `w:rPr` without the typed style, the
-/// style id, the kept attributes of `w:r`, and its content as read.
+/// A run as the reader builds it: its `w:rPr` as read (by
+/// `runPropertiesSchema`), the kept attributes of `w:r`, and its content as
+/// read.
 DocxRun readRun({
   required PropertyContainer properties,
-  String? style,
   required List<KeptAttribute> attributes,
   required List<DocxRunContent> content,
-}) => DocxRun._read(properties, style, attributes, content);
+}) => DocxRun._read(properties, attributes, content);
 
-/// The `w:rPr` of [run] without the typed style.
-PropertyContainer runPropertiesOf(DocxRun run) => run._properties;
+/// The `w:rPr` of [run] as read, without the values set since.
+PropertyContainer runPropertiesOf(DocxRun run) => run._source;
+
+/// The properties of [run], for the writer.
+PropertySet runPropertySetOf(DocxRun run) =>
+    propertySetOfRunProperties(run._properties);
+
+/// The sink of the document [run] was read in, or `null` for a new run.
+DocxEditSink? runReadInOf(DocxRun run) => run._readIn;
+
+/// Records that [run] was read in the document of [sink].
+void setRunReadIn(DocxRun run, DocxEditSink sink) {
+  run._readIn = sink;
+}
 
 /// The attributes of `w:r` the reader kept on [run], in source order.
 List<KeptAttribute> runAttributesOf(DocxRun run) => run._attributes;

@@ -11,14 +11,29 @@
 /// members while it ignores its own calls, `restoreRunText` for a run's
 /// text), so the public signatures never change.
 ///
+/// A property set ([PropertySet], such as a paragraph's style) reports its
+/// own edits, with the state from before; it undoes one with
+/// `PropertySet.restore`, which reports nothing.
+///
 /// An edit that changes nothing (a style set to the value it has) is not
 /// reported.
+///
+/// A style id set through the API asks the sink which id to store
+/// ([DocxEditSink.resolveStyleId]): the document's own for a built-in style
+/// under a localized id (plan Ruling 5). A paragraph that belongs to no
+/// document stores what it was given, and is asked again when it goes in.
+///
+/// What was read from a file stays as it is in that document, but counts as
+/// set once it goes in another ([DocxEditSink.isForeign]), since the ids it
+/// names were the other document's.
 ///
 /// @docImport 'blocks.dart';
 library;
 
 import 'blocks.dart';
 import 'inlines.dart';
+import 'property_set.dart';
+import 'styles.dart' show DocxStyleType;
 
 /// Receives each edit of the body model after it was applied.
 abstract interface class DocxEditSink {
@@ -44,11 +59,28 @@ abstract interface class DocxEditSink {
   /// from before, for `restoreRunText`.
   void runTextSet(DocxRun run, DocxRunText previous);
 
-  /// The style of [paragraph] was set; [previous] is the style id it had.
-  void paragraphStyleSet(DocxParagraph paragraph, String? previous);
+  /// The typed child [localName] of [properties] was set; [previous] is
+  /// its state from before, for `PropertySet.restore`.
+  void propertySet(
+    PropertySet properties,
+    String localName,
+    PropertyState previous,
+  );
 
-  /// The style of [run] was set; [previous] is the style id it had.
-  void runStyleSet(DocxRun run, String? previous);
+  /// Runs [body] as one edit: if it throws, everything it reported is
+  /// undone before the error leaves.
+  void atomically(void Function() body);
+
+  /// The id to store for the style [id] of [type], set through the API
+  /// (plan Ruling 5): [id] itself when the document defines it or no
+  /// built-in style has it, otherwise the id of that built-in in the
+  /// document, added if it lacks it. Call it inside [atomically].
+  String resolveStyleId(String id, DocxStyleType type);
+
+  /// Whether content read in the document of [readIn] (`null`: not read
+  /// from a file) now belongs to another document, this one: never in a
+  /// replay, nor for the sink of no document.
+  bool isForeign(DocxEditSink? readIn);
 }
 
 /// The sink that ignores every call.
@@ -73,8 +105,18 @@ final class _NoEdits implements DocxEditSink {
   void runTextSet(DocxRun run, DocxRunText previous) {}
 
   @override
-  void paragraphStyleSet(DocxParagraph paragraph, String? previous) {}
+  void propertySet(
+    PropertySet properties,
+    String localName,
+    PropertyState previous,
+  ) {}
 
   @override
-  void runStyleSet(DocxRun run, String? previous) {}
+  void atomically(void Function() body) => body();
+
+  @override
+  String resolveStyleId(String id, DocxStyleType type) => id;
+
+  @override
+  bool isForeign(DocxEditSink? readIn) => false;
 }
