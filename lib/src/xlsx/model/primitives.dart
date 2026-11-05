@@ -387,9 +387,10 @@ String addStoredRelationship(
 }
 
 /// Removes the relationship [id] of [source] and records the change in
-/// [log]. An id [source] does not have changes nothing, and neither does an
-/// id a file repeats: its relationships stay as written, since a package
-/// cannot take a used id again, so the change could not be undone.
+/// [log]. An id [source] does not have changes nothing. Neither does an id
+/// a file repeats, nor a relationship with an empty id, type or target: they
+/// stay as written, since [OpcPackage.addRelationship] refuses a used id and
+/// those empty values, so the change could not be undone.
 ///
 /// Must run inside `log.transaction`. Throws an [OpcFormatException] when
 /// the relationships cannot be read; if recording throws, the relationship
@@ -405,10 +406,16 @@ void removeStoredRelationship(
       if (r.id == id) r,
   ];
   if (found.length != 1) return;
+  final OpcRelationship relationship = found.single;
+  if (relationship.id.isEmpty ||
+      relationship.type.isEmpty ||
+      relationship.target.isEmpty) {
+    return;
+  }
   final SetRelationshipChange change = SetRelationshipChange(
     package,
     source,
-    found.single,
+    relationship,
     null,
   );
   change.reapply();

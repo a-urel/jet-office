@@ -520,6 +520,45 @@ void main() {
       expect(_encode(part), contains(body));
     });
 
+    group('a declaration with a forbidden character saves', () {
+      /// The namespace of the element named [name] in [xml].
+      String namespaceOf(String xml, String name) {
+        final XmlPullReader r = XmlPullReader(xml);
+        while (r.next()) {
+          if (r.eventType == XmlEventType.startElement && r.localName == name) {
+            return r.namespaceUri;
+          }
+        }
+        fail('No $name in $xml');
+      }
+
+      test('on pageMargins, with a child that uses the prefix', () {
+        final WorksheetPart part = _read(
+          _sheet(
+            '<sheetData/><pageMargins xmlns:o="urn:&#1;o" o:a="1" left="1">'
+            '<o:x/></pageMargins>',
+          ),
+        );
+        expect(part.layoutElement('pageMargins'), isA<XmlNode>());
+        final String out = _encode(part);
+        expect(out, contains('<pageMargins xmlns:o="urn:o" o:a="1" left="1">'));
+        expect(out, contains('<o:x/></pageMargins>'));
+        expect(namespaceOf(out, 'x'), 'urn:o');
+      });
+
+      test('on an ext, with a child that uses the prefix', () {
+        final WorksheetPart part = _read(
+          _sheet(
+            '<sheetData/><extLst><ext xmlns:o="urn:&#1;o" uri="{A}"><o:x/>'
+            '</ext></extLst>',
+          ),
+        );
+        final String out = _encode(part);
+        expect(out, contains('<ext xmlns:o="urn:o" uri="{A}"><o:x/></ext>'));
+        expect(namespaceOf(out, 'x'), 'urn:o');
+      });
+    });
+
     test('an unknown slot throws', () {
       expect(
         () => WorksheetPart.empty().layoutElement('sheetData'),
@@ -549,7 +588,7 @@ void main() {
         'printOptions',
         'drawing',
       ]);
-      log.revertSet(ChangeSet(set.changes));
+      log.revertSet(set);
       expect(part.layoutElement('pageMargins'), same(margins));
       expect(_encode(part), before);
       log.reapplySet(set);
@@ -726,10 +765,30 @@ void main() {
               ..end();
           }).single,
         );
-        part.swapLayout('hyperlinks', null, validations(''));
+        part.swapLayout(
+          'hyperlinks',
+          null,
+          ItemGroup<String>(
+            'hyperlinks',
+            'hyperlinks',
+            const <String, String>{},
+            const <KeptAttribute>[],
+            <GroupItem<String>>[
+              GroupItem<String>(
+                'A1',
+                renderElements((XmlWriter w) {
+                  w
+                    ..start('hyperlink')
+                    ..attribute('ref', 'A1')
+                    ..end();
+                }).single,
+              ),
+            ],
+          ),
+        );
         final String out = _encode(part);
         expect(out, contains('<dataValidations count="0"/>'));
-        expect(out, contains('<dataValidation sqref="A1"/>'));
+        expect(out, contains('<hyperlink ref="A1"/>'));
         expect('xmlns='.allMatches(out).length, 1);
       });
     });

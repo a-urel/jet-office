@@ -27,6 +27,7 @@ import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import 'columns.dart';
+import 'element_node.dart';
 
 /// One child of an [ItemGroup].
 final class GroupItem<T> {
@@ -106,7 +107,7 @@ final class ItemGroup<T> {
     String? countAttribute,
   }) {
     w.start(qualifiedName);
-    writeNamespaceDeclarations(w, namespaces);
+    writeScrubbedNamespaces(w, namespaces);
     final Map<String, String> inner = mergeNamespaces(above, namespaces);
     writeKeptAttributes(
       w,

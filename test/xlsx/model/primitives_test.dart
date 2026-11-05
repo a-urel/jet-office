@@ -294,6 +294,24 @@ void main() {
         external: true,
       );
 
+    /// A package whose part `/a.xml` has the relationships [elements].
+    OpcPackage withRels(String elements) => OpcPackage.read(
+      ZipReader(
+        buildZipOrdered(<(String, List<int>)>[
+          ('a.xml', '<a/>'.codeUnits),
+          (
+            '_rels/a.xml.rels',
+            '<Relationships>$elements</Relationships>'.codeUnits,
+          ),
+        ]),
+        maxEntries: 10,
+        maxEntryBytes: 1 << 20,
+        maxTotalBytes: 1 << 20,
+        maxCompressionRatio: 1000,
+      ),
+      maxDepth: 64,
+    );
+
     List<String> ids(OpcPackage p) => <String>[
       for (final OpcRelationship r in p.relationshipsOf('/a.xml')) r.id,
     ];
@@ -342,24 +360,9 @@ void main() {
     });
 
     test('an id a file repeats stays, as it could not be put back', () {
-      final OpcPackage p = OpcPackage.read(
-        ZipReader(
-          buildZipOrdered(<(String, List<int>)>[
-            ('a.xml', '<a/>'.codeUnits),
-            (
-              '_rels/a.xml.rels',
-              ('<Relationships><Relationship Id="rId1" Type="t" Target="x"/>'
-                      '<Relationship Id="rId1" Type="t" Target="y"/>'
-                      '</Relationships>')
-                  .codeUnits,
-            ),
-          ]),
-          maxEntries: 10,
-          maxEntryBytes: 1 << 20,
-          maxTotalBytes: 1 << 20,
-          maxCompressionRatio: 1000,
-        ),
-        maxDepth: 64,
+      final OpcPackage p = withRels(
+        '<Relationship Id="rId1" Type="t" Target="x"/>'
+        '<Relationship Id="rId1" Type="t" Target="y"/>',
       );
       final ChangeLog log = ChangeLog();
       final ChangeSet set = log.transaction(() {
@@ -367,6 +370,33 @@ void main() {
       });
       expect(set.isEmpty, isTrue);
       expect(p.relationshipsOf('/a.xml').length, 2);
+    });
+
+    for (final (String what, String element) in <(String, String)>[
+      ('target', '<Relationship Id="rId1" Type="t" Target=""/>'),
+      ('type', '<Relationship Id="rId1" Type="" Target="x"/>'),
+    ]) {
+      test('a relationship with an empty $what stays', () {
+        final OpcPackage p = withRels(element);
+        final ChangeLog log = ChangeLog();
+        final ChangeSet set = log.transaction(() {
+          removeStoredRelationship(log, p, '/a.xml', 'rId1');
+        });
+        expect(set.isEmpty, isTrue);
+        expect(p.relationshipsOf('/a.xml').length, 1);
+      });
+    }
+
+    test('a relationship with an empty id stays', () {
+      final OpcPackage p = withRels(
+        '<Relationship Id="" Type="t" Target="x"/>',
+      );
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        removeStoredRelationship(log, p, '/a.xml', '');
+      });
+      expect(set.isEmpty, isTrue);
+      expect(p.relationshipsOf('/a.xml').length, 1);
     });
 
     test('a failed transaction undoes both kinds', () {

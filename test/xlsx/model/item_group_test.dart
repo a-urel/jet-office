@@ -172,6 +172,19 @@ void main() {
       );
     });
 
+    test('a declaration with a forbidden character is written scrubbed', () {
+      final ItemGroup<String> group = _read(
+        '<root xmlns="${Ns.main}"><group xmlns:o="urn:&#1;o" o:a="1">'
+        '<item v="x" o:b="2"/><o:c/></group></root>',
+      );
+      // Kept as read, so a child's inherited binding still matches it.
+      expect(group.namespaces['o'], 'urn:\u0001o');
+      expect(
+        _written(group),
+        '<group xmlns:o="urn:o" o:a="1"><item v="x" o:b="2"/><o:c/></group>',
+      );
+    });
+
     test('a group keeps its declarations for its children', () {
       final ItemGroup<String> group = _read(
         '<root xmlns="${Ns.main}"><group xmlns:o="urn:o" o:a="1">'
