@@ -66,13 +66,23 @@ void main() {
     }
   });
 
+  test('undo restores every corpus entry', () {
+    for (final ({String name, Uint8List bytes}) entry in featureCorpus()) {
+      expect(
+        () => exerciseFeatures(entry.bytes, proveUndo: true),
+        returnsNormally,
+        reason: entry.name,
+      );
+    }
+  });
+
   test('mutated files raise only XlsxReadException', () {
     final List<String> failures = <String>[];
     for (final int seed in _seeds) {
       for (final FuzzCase c in featureFuzzCases(seed, _cases)) {
         final Stopwatch watch = Stopwatch()..start();
         try {
-          exerciseFeatures(c.bytes);
+          exerciseFeatures(c.bytes, proveUndo: true);
         } on XlsxReadException {
           // A file problem, reported as the model promises.
         } on Object catch (e) {

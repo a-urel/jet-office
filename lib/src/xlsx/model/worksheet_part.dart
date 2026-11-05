@@ -1179,7 +1179,11 @@ final class WorksheetPart implements PartContent {
   /// where the schema puts it when [from] is `null` (inserted) or no longer
   /// there; `null` for [to] removes [from]. Only that slot's element is
   /// touched, so edits of different elements swap independently.
-  void swapLayout(String slot, Object? from, Object? to) {
+  ///
+  /// [position], from [layoutPosition], puts an inserted element back where
+  /// it was, which a file out of schema order needs; -1 asks for the schema's
+  /// place.
+  void swapLayout(String slot, Object? from, Object? to, {int position = -1}) {
     final int at = from == null
         ? -1
         : _children.indexWhere((Object c) => identical(c, from));
@@ -1187,10 +1191,17 @@ final class WorksheetPart implements PartContent {
       if (at >= 0) _children.removeAt(at);
     } else if (at >= 0) {
       _children[at] = to;
+    } else if (position >= 0 && position <= _children.length) {
+      _children.insert(position, to);
     } else {
       _children.insert(_positionFor(slot), to);
     }
   }
+
+  /// Where [element] is among the part's children, or -1 when it is not
+  /// there, for [swapLayout].
+  int layoutPosition(Object? element) =>
+      _children.indexWhere((Object c) => identical(c, element));
 
   String _dimensionRef() {
     final ({int firstRow, int lastRow, int firstColumn, int lastColumn})? b =

@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 import 'package:test/test.dart';
 import '../../../tool/src/part_compare.dart';
 import '../../fixtures/fixtures.dart';
 import '../../support/read_xlsx.dart';
+import '../read/support/workbook_builder.dart';
 import '../read/support/zip_builder.dart';
 import 'support/workbook_support.dart';
 
@@ -119,5 +121,77 @@ void main() {
       checked++;
     }
     expect(checked, greaterThan(3));
+  });
+
+  test('a string set and undone leaves no shared strings part', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      buildWorkbook(<String, String>{
+        'S': worksheet('<row r="1"><c r="A1"><v>1</v></c></row>'),
+      }),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    final ChangeLog log = changeLogOf(book);
+    sheet.rows.toList();
+    final ChangeSet set = log.transaction(() => sheet.setCell(1, 0, 'x'));
+    log.revertSet(set);
+    expect(
+      readXlsx(book.save().bytes),
+      isNot(contains('xl/sharedStrings.xml')),
+    );
+  });
+
+  group('undo puts an element back where the file had it', () {
+    test('out of schema order, in a sheet', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        buildWorkbook(<String, String>{
+          'S':
+              '<worksheet xmlns="$mainNs"><sheetData/><pageMargins left="1" '
+              'right="1" top="1" bottom="1" header="0" footer="0"/>'
+              '<sheetProtection sheet="1"/></worksheet>',
+        }),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(() => sheet.protection = null);
+      log.revertSet(set);
+      final String xml = partText(book.save().bytes, sheetEntry(0));
+      expect(
+        xml.indexOf('<pageMargins'),
+        lessThan(xml.indexOf('<sheetProtection')),
+      );
+    });
+
+    test('out of schema order, in the workbook', () {
+      final Map<String, Uint8List> parts = readXlsxBytes(
+        buildWorkbook(<String, String>{'S': worksheet('')}),
+      );
+      parts['xl/workbook.xml'] = Uint8List.fromList(
+        utf8.encode(
+          utf8
+              .decode(parts['xl/workbook.xml']!)
+              .replaceFirst(
+                '</sheets>',
+                '</sheets><calcPr calcId="1"/>'
+                    '<workbookProtection lockStructure="1"/>'
+                    '<definedNames><definedName name="n">1</definedName>'
+                    '</definedNames>',
+              ),
+        ),
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        buildZip(<String, List<int>>{...parts}),
+      );
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(() {
+        book.protection = null;
+        book.removeName('n');
+      });
+      log.revertSet(set);
+      final String xml = partText(book.save().bytes, 'xl/workbook.xml');
+      final int calc = xml.indexOf('<calcPr');
+      final int protection = xml.indexOf('<workbookProtection');
+      expect(calc, lessThan(protection));
+      expect(protection, lessThan(xml.indexOf('<definedNames')));
+    });
   });
 }

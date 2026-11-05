@@ -128,7 +128,7 @@ OpaqueXml renderNameEntry(NameEntry entry) => renderElements(
 final class SetNamesChange implements Change {
   /// A change of the group of [part] from [before] to [after], both from
   /// [WorkbookPart.element] (`null` for none).
-  SetNamesChange(this.part, this.before, this.after);
+  SetNamesChange(this.part, this.before, this.after, {this.position = -1});
 
   /// The workbook part.
   final WorkbookPart part;
@@ -139,9 +139,12 @@ final class SetNamesChange implements Change {
   /// The group after the change.
   final Object? after;
 
+  /// Where [before] was among the part's children, or -1 for none.
+  final int position;
+
   @override
   void revert() {
-    part.swapElement('definedNames', after, before);
+    part.swapElement('definedNames', after, before, position: position);
     part.nameEdits--;
   }
 
@@ -161,14 +164,20 @@ final class SetNamesChange implements Change {
 /// names are put back as they were before the error leaves.
 void editNames(ChangeLog log, WorkbookPart part, void Function() edit) {
   final Object? before = part.element('definedNames');
+  final int position = part.elementPosition(before);
   try {
     edit();
     final Object? after = part.element('definedNames');
     if (identical(before, after)) return;
-    log.record(SetNamesChange(part, before, after));
+    log.record(SetNamesChange(part, before, after, position: position));
     part.nameEdits++;
   } catch (_) {
-    part.swapElement('definedNames', part.element('definedNames'), before);
+    part.swapElement(
+      'definedNames',
+      part.element('definedNames'),
+      before,
+      position: position,
+    );
     rethrow;
   }
 }

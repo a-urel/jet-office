@@ -24,6 +24,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 
+import '../../../../tool/src/part_compare.dart';
 import '../../../fixtures/fixture.dart';
 import '../../../fixtures/m3_fixtures.dart';
 import '../../../support/fuzz_mutations.dart';
@@ -449,16 +450,19 @@ int _elementEnd(String text, RegExpMatch tag) {
 /// or format added back: `definedNames` lists a name as the file has it,
 /// whatever the writer's rules, and a twin of what was removed may remain.
 /// It renders the warnings, saves,
-/// reopens and reads the saved file, undoes every edit in reverse order,
-/// saves, redoes them and saves.
+/// undoes every edit in reverse order, saves, redoes them, saves, reopens and
+/// reads the saved file, undoes them again and saves. With [proveUndo], the
+/// first save after undo must equal a save before the edits by
+/// [undoDifferences].
 ///
 /// Returns normally or throws [XlsxReadException]: from `open`, or after the
 /// rest has run, the first a sheet's or part's read threw. Anything else,
 /// and any refusal outside those above, is a defect, and is rethrown as a
 /// [StateError] naming the step. `save()` must never throw.
-void exerciseFeatures(Uint8List bytes) {
+void exerciseFeatures(Uint8List bytes, {bool proveUndo = false}) {
   final XlsxWorkbook book = XlsxWorkbook.open(bytes);
   final _Run run = _Run(book);
+  if (proveUndo) run.before = _save(book, 'save() before the edits');
   run.read('workbook', () => _readWorkbook(book));
   final Set<int> unreadable = <int>{};
   for (int i = 0; i < book.sheets.length; i++) {
@@ -474,12 +478,75 @@ void exerciseFeatures(Uint8List bytes) {
       warning.message(locale);
     }
   }
-  final Uint8List saved = _save(book, 'save()');
-  run.reopen(saved, unreadable);
-  run.undoAndRedo();
+  run.undo();
+  final Uint8List undone = _save(book, 'save() after undo');
+  final Uint8List? before = run.before;
+  if (before != null) {
+    final List<String> differences = undoDifferences(before, undone);
+    if (differences.isNotEmpty) {
+      throw StateError('undo left: ${differences.join('; ')}');
+    }
+  }
+  run.redo();
+  run.reopen(_save(book, 'save()'), unreadable);
+  run.undo();
+  _save(book, 'save() after a save and undo');
   final XlsxReadException? first = run.first;
   if (first != null) throw first;
 }
+
+/// What differs by meaning between the save [before] the edits and the save
+/// [after] undoing them.
+///
+/// Left out, as a part a save writes afresh is not the bytes it read: what
+/// asks Excel to recalculate (`fullCalcOnLoad`, which an undone edit keeps,
+/// the log saying a change still counts), a character reference XML forbids,
+/// which such a part scrubs, a styles group's `count`, which it recomputes,
+/// and the namespace of a `.rels` root, which it states. A part a strict
+/// parser refuses cannot be compared by meaning: it is left out when the
+/// lenient reader wrote it well formed or when both are the same text, and
+/// the shared strings with it, whose comparison counts the cells it holds.
+List<String> undoDifferences(Uint8List before, Uint8List after) {
+  final Map<String, Uint8List> a = _normalized(before);
+  final Map<String, Uint8List> b = _normalized(after);
+  Uint8List zip(Map<String, Uint8List> parts) =>
+      buildZipOrdered(<(String, List<int>)>[
+        for (final MapEntry<String, Uint8List> e in parts.entries)
+          (e.key, e.value),
+      ], store: true);
+  final List<String> lines = comparePackages(
+    zip(a),
+    zip(b),
+    ignoreBookkeeping: true,
+  );
+  final Set<String> blind = <String>{
+    for (final String line in lines)
+      if (line.contains('the expected part is not well-formed'))
+        line.substring(0, line.indexOf(':')),
+  };
+  return <String>[
+    for (final String line in lines)
+      if (!blind.contains(line.substring(0, line.indexOf(':'))) &&
+          !(blind.isNotEmpty && line.startsWith('xl/sharedStrings.xml:')) &&
+          !RegExp(r'^xl/styles\.xml: .*: attribute count ').hasMatch(line) &&
+          !RegExp(r'\.rels: /Relationships: element ').hasMatch(line))
+        line,
+  ];
+}
+
+/// The parts of [zip] without what [undoDifferences] leaves out of its text.
+Map<String, Uint8List> _normalized(Uint8List zip) => <String, Uint8List>{
+  for (final MapEntry<String, Uint8List> e in readXlsxBytes(zip).entries)
+    e.key: Uint8List.fromList(
+      utf8.encode(
+        utf8
+            .decode(e.value, allowMalformed: true)
+            .replaceAll(RegExp('&#1;|&#xFFFE;'), '')
+            .replaceAll(RegExp(r'<(\w+:)?calcPr fullCalcOnLoad="1"/>'), '')
+            .replaceAll(' fullCalcOnLoad="1"', ''),
+      ),
+    ),
+};
 
 Uint8List _save(XlsxWorkbook book, String step) {
   try {
@@ -522,6 +589,9 @@ final class _Run {
   final XlsxWorkbook book;
   final ChangeLog log;
   final List<ChangeSet> sets = <ChangeSet>[];
+
+  /// The save before the edits, which a save after undo must equal.
+  Uint8List? before;
   XlsxReadException? first;
 
   /// Runs [body], which may throw only an [XlsxReadException], and says
@@ -736,20 +806,22 @@ final class _Run {
     }
   }
 
-  /// Undoes every edit in reverse order and saves, then redoes them and
-  /// saves: a change whose revert throws is a defect.
-  void undoAndRedo() {
+  /// Undoes every edit in reverse order: a change whose revert throws is a
+  /// defect.
+  void undo() {
     try {
       sets.reversed.forEach(log.revertSet);
     } on Object catch (e) {
       throw StateError('undo threw: $e');
     }
-    _save(book, 'save() after undo');
+  }
+
+  /// Redoes every edit in order.
+  void redo() {
     try {
       sets.forEach(log.reapplySet);
     } on Object catch (e) {
       throw StateError('redo threw: $e');
     }
-    _save(book, 'save() after redo');
   }
 }

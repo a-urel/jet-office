@@ -905,17 +905,16 @@ final class _Book implements SheetHost {
     }
     final SharedStrings? strings = _strings;
     if (strings != null) {
-      if (allLoaded) {
-        var references = 0;
-        for (final XlsxSheet s in _sheets) {
-          final CellStore? store = cellStoreOf(s);
-          if (store != null) {
-            references += store.countOf(RawCellKind.sharedString);
-          }
+      var references = 0;
+      for (final XlsxSheet s in _sheets) {
+        final CellStore? store = cellStoreOf(s);
+        if (store != null) {
+          references += store.countOf(RawCellKind.sharedString);
         }
-        strings.setCount(references);
       }
-      if (_stringsName == null && strings.length > 0) {
+      if (allLoaded) strings.setCount(references);
+      // An undone edit leaves its string in the table, used by no cell.
+      if (_stringsName == null && references > 0) {
         _stringsName = _addWorkbookPart(
           'sharedStrings.xml',
           ContentType.sharedStrings,

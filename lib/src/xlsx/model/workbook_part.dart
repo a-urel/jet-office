@@ -420,7 +420,11 @@ final class WorkbookPart implements PartContent {
   ///
   /// Throws an [ArgumentError] named `slot` for a name [element] does not
   /// take, and a [StateError] for an untyped part.
-  void swapElement(String slot, Object? from, Object? to) {
+  ///
+  /// [position], from [elementPosition], puts an inserted element back where
+  /// it was, which a file out of schema order needs; -1 asks for the schema's
+  /// place.
+  void swapElement(String slot, Object? from, Object? to, {int position = -1}) {
     _checkSlot(slot);
     _requireTyped();
     final int at = from == null
@@ -430,10 +434,17 @@ final class WorkbookPart implements PartContent {
       if (at >= 0) _children.removeAt(at);
     } else if (at >= 0) {
       _children[at] = to;
+    } else if (position >= 0 && position <= _children.length) {
+      _children.insert(position, to);
     } else {
       _children.insert(_positionFor(slot), to);
     }
   }
+
+  /// Where [element] is among the part's children, or -1 when it is not
+  /// there, for [swapElement].
+  int elementPosition(Object? element) =>
+      _children.indexWhere((Object c) => identical(c, element));
 
   /// The element name prefix (with the colon, or empty) the part's own
   /// elements take. Throws a [StateError] for an untyped part.

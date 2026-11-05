@@ -216,7 +216,13 @@ void setStoredRowAttributes(
 final class SetLayoutChange implements Change {
   /// A change of the element of [slot] in [part] from [before] to [after]
   /// (either `null` for none), both from [WorksheetPart.layoutElement].
-  SetLayoutChange(this.part, this.slot, this.before, this.after);
+  SetLayoutChange(
+    this.part,
+    this.slot,
+    this.before,
+    this.after, {
+    this.position = -1,
+  });
 
   /// The worksheet part.
   final WorksheetPart part;
@@ -230,8 +236,11 @@ final class SetLayoutChange implements Change {
   /// The element after the change.
   final Object? after;
 
+  /// Where [before] was among the part's children, or -1 for none.
+  final int position;
+
   @override
-  void revert() => part.swapLayout(slot, after, before);
+  void revert() => part.swapLayout(slot, after, before, position: position);
 
   @override
   void reapply() => part.swapLayout(slot, before, after);
@@ -253,13 +262,14 @@ void editLayout(
   void Function() edit,
 ) {
   final Object? before = part.layoutElement(slot);
+  final int position = part.layoutPosition(before);
   try {
     edit();
     final Object? after = part.layoutElement(slot);
     if (identical(before, after)) return;
-    log.record(SetLayoutChange(part, slot, before, after));
+    log.record(SetLayoutChange(part, slot, before, after, position: position));
   } catch (_) {
-    part.swapLayout(slot, part.layoutElement(slot), before);
+    part.swapLayout(slot, part.layoutElement(slot), before, position: position);
     rethrow;
   }
 }
@@ -269,7 +279,13 @@ void editLayout(
 final class SetWorkbookElementChange implements Change {
   /// A change of the element of [slot] in [part] from [before] to [after]
   /// (either `null` for none), both from [WorkbookPart.element].
-  SetWorkbookElementChange(this.part, this.slot, this.before, this.after);
+  SetWorkbookElementChange(
+    this.part,
+    this.slot,
+    this.before,
+    this.after, {
+    this.position = -1,
+  });
 
   /// The workbook part.
   final WorkbookPart part;
@@ -283,8 +299,11 @@ final class SetWorkbookElementChange implements Change {
   /// The element after the change.
   final Object? after;
 
+  /// Where [before] was among the part's children, or -1 for none.
+  final int position;
+
   @override
-  void revert() => part.swapElement(slot, after, before);
+  void revert() => part.swapElement(slot, after, before, position: position);
 
   @override
   void reapply() => part.swapElement(slot, before, after);
@@ -303,13 +322,16 @@ void editWorkbook(
   void Function() edit,
 ) {
   final Object? before = part.element(slot);
+  final int position = part.elementPosition(before);
   try {
     edit();
     final Object? after = part.element(slot);
     if (identical(before, after)) return;
-    log.record(SetWorkbookElementChange(part, slot, before, after));
+    log.record(
+      SetWorkbookElementChange(part, slot, before, after, position: position),
+    );
   } catch (_) {
-    part.swapElement(slot, part.element(slot), before);
+    part.swapElement(slot, part.element(slot), before, position: position);
     rethrow;
   }
 }
