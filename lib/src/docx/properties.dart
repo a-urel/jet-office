@@ -412,14 +412,15 @@ final class PropertyContainer {
       }
     }
 
+    // Each kept child follows the one before it, so a chain is as long as
+    // the file makes it: this walks it with a stack of its own, not by
+    // recursion, which a small file could overflow.
     void writeFollowers(Object? anchor) {
-      final List<int>? after = followers[anchor];
-      if (after == null) {
-        return;
-      }
-      for (final int i in after) {
+      final List<int> pending = <int>[...?followers[anchor]?.reversed];
+      while (pending.isNotEmpty) {
+        final int i = pending.removeLast();
         writeSlot(i);
-        writeFollowers(i);
+        pending.addAll(followers[i]?.reversed ?? const <int>[]);
       }
     }
 

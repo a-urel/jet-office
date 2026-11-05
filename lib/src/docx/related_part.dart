@@ -25,7 +25,6 @@
 /// Comparing what is written, rather than tracking edits, covers a set, an
 /// added definition and an edit undone alike, whichever member made them.
 ///
-/// @docImport 'read_exception.dart';
 library;
 
 import 'dart:typed_data';
@@ -34,6 +33,7 @@ import '../opc/ooxml.dart' show ContentType;
 import '../opc/package.dart';
 import '../xml/xml_pull_reader.dart';
 import 'docx_package.dart';
+import 'read_exception.dart';
 
 /// The name of the relationships part of [part], such as
 /// `/word/_rels/document.xml.rels` for `/word/document.xml`.
@@ -144,7 +144,8 @@ final class RelatedPart {
   bool get exists => _exists;
 
   /// Reads the part with [read], inside [DocxPackage.guard], so a failure
-  /// of the part's ZIP entry or XML is a [DocxReadException] naming it, and
+  /// of the part's ZIP entry or XML is a [DocxReadException] naming it, as
+  /// is any failure to encode what was read, and
   /// gives it the content [read] returns, which the package writes from now
   /// on, as the file's bytes while it writes what it wrote when read. Throws
   /// [StateError] when the part does not [exist][exists].
@@ -155,11 +156,33 @@ final class RelatedPart {
     final DocxPackage package = _package;
     final T content = package.guard(_name, () => read(package.openXml(_name)));
     final String name = _name;
-    package.package.setContent(
-      name,
-      _KeptUntilChanged(content, () => package.package.originalBytes(name)),
-    );
+    package.package.setContent(name, _keptUntilChanged(content, name));
     return content;
+  }
+
+  /// [content] of the part [name], encoded once to know what it writes as
+  /// read. The file decides what that encode meets, so whatever it throws
+  /// is a [DocxReadException] naming the part, and the part stays as it
+  /// was.
+  _KeptUntilChanged _keptUntilChanged(PartContent content, String name) {
+    final DocxPackage package = _package;
+    try {
+      return package.guard(
+        name,
+        () => _KeptUntilChanged(
+          content,
+          () => package.package.originalBytes(name),
+        ),
+      );
+    } on DocxReadException {
+      rethrow;
+    } on Object catch (e) {
+      throw DocxReadException(
+        DocxReadFailure.malformedXml,
+        'The part cannot be written back from what was read: $e',
+        part: name,
+      );
+    }
   }
 
   /// Adds the part with [content] when it is not in the package yet, with
