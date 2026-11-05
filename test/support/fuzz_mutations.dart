@@ -72,17 +72,23 @@ String? mutatedPart(String mutation) {
 }
 
 /// A mutation of the bytes of one part that a caller adds to the eight
-/// operations of [mutationCases]: it returns what it did, as shown in the
-/// case's description, and the new bytes.
+/// operations of [mutationCases]: given the part's name and bytes, it
+/// returns what it did, as shown in the case's description, and the new
+/// bytes.
 typedef PartMutation =
-    (String, List<int>) Function(Uint8List part, Xorshift32 random);
+    (String, List<int>) Function(
+      String name,
+      Uint8List part,
+      Xorshift32 random,
+    );
 
 /// The first [count] cases of [seed], each one mutation of one entry of
 /// [corpus]; [parts] holds the parts of each entry, in the same order.
 ///
 /// [extra] adds operations on one part, chosen uniformly like the others,
-/// after the eight; with none the cases are the ones the eight give, so the
-/// XLSX seeds do not move.
+/// after the eight, on a part chosen among those [extraParts] accepts (all
+/// of them when it is null or accepts none); with none the cases are the
+/// ones the eight give, so the XLSX seeds do not move.
 ///
 /// The entry is chosen uniformly, then one of eight operations. On the
 /// archive's bytes: truncate; flip 1 to 8 bits; overwrite 4 bytes with
@@ -100,6 +106,7 @@ Iterable<FuzzCase> mutationCases({
   required List<List<(String, Uint8List)>> parts,
   required List<String> tokens,
   List<PartMutation> extra = const <PartMutation>[],
+  bool Function(String name)? extraParts,
 }) sync* {
   final Xorshift32 random = Xorshift32(seed);
   for (int index = 0; index < count; index++) {
@@ -108,7 +115,14 @@ Iterable<FuzzCase> mutationCases({
     final int operation = random.nextInt(8 + extra.length);
     final (String, Uint8List) mutated = operation < 3
         ? mutateArchive(entry.bytes, operation, random)
-        : mutatePart(parts[pick], operation - 3, random, tokens, extra: extra);
+        : mutatePart(
+            parts[pick],
+            operation - 3,
+            random,
+            tokens,
+            extra: extra,
+            extraParts: extraParts,
+          );
     yield (
       seed: seed,
       index: index,
@@ -152,20 +166,27 @@ Iterable<FuzzCase> mutationCases({
 }
 
 /// Applies part operation [operation] (0 to 4, and from 5 on the entries
-/// of [extra]) to one part of [parts],
-/// chosen uniformly, and rebuilds the archive stored.
+/// of [extra]) to one part of [parts], chosen uniformly (an [extra] one
+/// among those [extraParts] accepts), and rebuilds the archive stored.
 (String, Uint8List) mutatePart(
   List<(String, Uint8List)> parts,
   int operation,
   Xorshift32 random,
   List<String> tokens, {
   List<PartMutation> extra = const <PartMutation>[],
+  bool Function(String name)? extraParts,
 }) {
-  final int which = random.nextInt(parts.length);
+  final List<int> choices = <int>[
+    for (int i = 0; i < parts.length; i++)
+      if (operation < 5 || extraParts == null || extraParts(parts[i].$1)) i,
+  ];
+  final int which = choices.isEmpty
+      ? random.nextInt(parts.length)
+      : choices[random.nextInt(choices.length)];
   final (String name, Uint8List part) = parts[which];
   final (String what, List<int> bytes) = operation < 5
       ? mutateBytes(part, operation, random, tokens)
-      : extra[operation - 5](part, random);
+      : extra[operation - 5](name, part, random);
   return (
     '$name: $what',
     buildZipOrdered(<(String, List<int>)>[

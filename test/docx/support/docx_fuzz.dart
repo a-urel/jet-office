@@ -42,8 +42,8 @@ export '../../support/fuzz_mutations.dart'
 /// hyperlink, content controls, a table, markup compatibility content,
 /// fields and a bookmark), `localized_word`, the document of
 /// `localizedWordDocx()` with Word's styles part (Turkish ids, `w14` and
-/// `w15` content) and numbering part, then every fixture of `docxFixtures()` and every
-/// `producerVariants()` entry, each rebuilt with stored entries and a fixed
+/// `w15` content) and numbering part, then every fixture of
+/// `docxFixtures()` and every `producerVariants()` entry, each rebuilt with stored entries and a fixed
 /// timestamp, so the bytes are equal on every platform.
 ///
 /// Nothing is deflated, so inflation is fuzzed only by the archive
@@ -136,6 +136,11 @@ final List<String> _tokens = <String>[
   '<w:r>' * 300,
 ];
 
+/// How many of the operations of a case, out of eight plus this many, are
+/// the attribute mutation: a share of about one in three, so that every
+/// seed of the gate reaches the styles and numbering parts.
+const int _attributeShare = 5;
+
 /// The values the attribute mutation writes: text where a number is read,
 /// a number past every range, a bare sign and a unit the readers do not
 /// take.
@@ -146,14 +151,78 @@ const List<String> _attributeValues = <String>[
   '1in',
 ];
 
-/// Replaces the value of one attribute of [part], chosen uniformly among
-/// the `="..."` it holds, by one of [_attributeValues]; a part without an
-/// attribute gets a token inserted instead, as the digit mutation does.
-(String, List<int>) _replaceAttributeValue(Uint8List part, Xorshift32 random) {
+/// The attributes of the `w` prefix whose values the typed codecs read as
+/// numbers, enumerations or flags: the ones the attribute mutation prefers.
+const Set<String> typedAttributes = <String>{
+  'val',
+  'w',
+  'left',
+  'right',
+  'start',
+  'end',
+  'hanging',
+  'firstLine',
+  'before',
+  'after',
+  'line',
+  'lineRule',
+  'sz',
+  'szCs',
+  'pos',
+  'space',
+  'color',
+  'fill',
+  'themeColor',
+  'themeShade',
+  'themeTint',
+  'ilvl',
+  'numId',
+  'type',
+  'leader',
+  'ascii',
+  'hAnsi',
+  'eastAsia',
+  'cs',
+};
+
+/// Whether the part [name] holds typed properties: the main part, the
+/// styles part and the numbering part.
+bool _typedPart(String name) =>
+    name == 'word/document.xml' ||
+    name == 'word/styles.xml' ||
+    name == 'word/numbering.xml';
+
+/// Replaces the value of one `w:` attribute of [part], by one of
+/// [_attributeValues].
+///
+/// It runs only on a part that holds typed properties ([_typedPart]) when
+/// the document has one, and chooses uniformly among the `w:` attributes
+/// named in [typedAttributes], among all `w:` attributes when it holds none,
+/// and among all attributes when it holds no `w:` attribute. A part without
+/// an attribute gets a token inserted instead, as the digit mutation does.
+/// The description reads `replace <attribute> at <offset> with "<value>"`.
+(String, List<int>) _replaceAttributeValue(
+  String name,
+  Uint8List part,
+  Xorshift32 random,
+) {
   final String text = latin1.decode(part);
-  final List<RegExpMatch> found = RegExp(
-    r'="([^"]*)"',
+  final List<RegExpMatch> all = RegExp(
+    r'([\w:.-]+)="([^"]*)"',
   ).allMatches(text).toList();
+  final List<RegExpMatch> w = <RegExpMatch>[
+    for (final RegExpMatch m in all)
+      if (m.group(1)!.startsWith('w:')) m,
+  ];
+  final List<RegExpMatch> typed = <RegExpMatch>[
+    for (final RegExpMatch m in w)
+      if (typedAttributes.contains(m.group(1)!.substring(2))) m,
+  ];
+  final List<RegExpMatch> found = typed.isNotEmpty
+      ? typed
+      : w.isNotEmpty
+      ? w
+      : all;
   if (found.isEmpty) {
     final int at = random.nextInt(part.length + 1);
     return (
@@ -168,10 +237,11 @@ const List<String> _attributeValues = <String>[
   final RegExpMatch match = found[random.nextInt(found.length)];
   final String value =
       _attributeValues[random.nextInt(_attributeValues.length)];
+  final int from = match.start + match.group(1)!.length + 2;
   return (
-    'replace attribute value at ${match.start + 2} with "$value"',
+    'replace ${match.group(1)} at $from with "$value"',
     <int>[
-      ...part.sublist(0, match.start + 2),
+      ...part.sublist(0, from),
       ...latin1.encode(value),
       ...part.sublist(match.end - 1),
     ],
@@ -199,7 +269,8 @@ Iterable<FuzzCase> docxFuzzCases(int seed, int count) {
     corpus: corpus,
     parts: parts,
     tokens: _tokens,
-    extra: <PartMutation>[_replaceAttributeValue],
+    extra: List<PartMutation>.filled(_attributeShare, _replaceAttributeValue),
+    extraParts: _typedPart,
   );
 }
 
@@ -207,43 +278,57 @@ Iterable<FuzzCase> docxFuzzCases(int seed, int count) {
 /// reads the body, the styles and the numbering with every typed property,
 /// edits what loaded, saves, and opens the saved bytes again.
 ///
-/// Returns normally or throws [DocxReadException], and only from `open`, from
-/// the first access to `body`, `styles` or `numbering`, or from an edit of a
-/// part that could not be used (`DocxStyles.ensure` on a styles part whose
+/// Returns normally or throws [DocxReadException], and only from `open`,
+/// from loading the body, the styles or the numbering (the first access to
+/// `body`, `blocks`, `styles` or `numbering`), or from an edit of a part
+/// that could not be used (`DocxStyles.ensure` on a styles part whose
 /// content is not what it says): a file that opens but has such a part is
 /// saved anyway (the part is copied as it was), and the first exception is
 /// rethrown after the save and the reopen. Anything else thrown by `open`
 /// or those steps is a defect and propagates at once.
 ///
-/// Reading a typed property throws nothing, whatever the file holds. When
-/// styles and numbering both opened, `styles.ensure(DocxBuiltInStyle.heading1)`
-/// and `numbering.addBulletList()` run before the save.
+/// Reading a property or an accessor of what loaded throws nothing,
+/// whatever the file holds: a [DocxReadException] from there is a defect
+/// too, for the loading is guarded apart from the reading. When styles and
+/// numbering both opened, `styles.ensure(DocxBuiltInStyle.heading1)` and
+/// `numbering.addBulletList()` run before the save.
 ///
 /// The model makes nothing worse: `save()` may throw nothing, the saved
 /// bytes must open, and their body, styles and numbering must load unless
-/// the input's did not. A failure there is a [StateError] naming the step,
-/// so a [DocxReadException] from a later step cannot pass for a refused
-/// file.
+/// the input's did not; the styles then hold the id `ensure` returned and
+/// the numbering has one instance more. A failure there is a [StateError]
+/// naming the step, so a [DocxReadException] from a later step cannot pass
+/// for a refused file.
 void exerciseDocx(Uint8List bytes) {
   final DocxDocument doc = DocxDocument.open(bytes);
   DocxReadException? first;
-  final bool bodyReadable = _guard(() {
-    _walk(doc.body);
-    doc.body.addParagraph('x').addRun('y');
-  }, (DocxReadException e) => first ??= e);
-  final bool stylesReadable = _guard(
-    () => _readStyles(doc.styles),
-    (DocxReadException e) => first ??= e,
-  );
-  final bool numberingReadable = _guard(
-    () => _readNumbering(doc.numbering),
-    (DocxReadException e) => first ??= e,
-  );
-  if (stylesReadable && numberingReadable) {
+  void refused(DocxReadException e) => first ??= e;
+  DocxBody? body;
+  List<DocxBlock>? blocks;
+  DocxStyles? styles;
+  DocxNumbering? numbering;
+  _guard(() {
+    body = doc.body;
+    blocks = body!.blocks.toList();
+  }, refused);
+  _guard(() => styles = doc.styles, refused);
+  _guard(() => numbering = doc.numbering, refused);
+  if (blocks != null) {
+    _walk(blocks!);
+    body!.addParagraph('x').addRun('y');
+  }
+  if (styles != null) _readStyles(styles!);
+  final int instancesBefore = numbering == null
+      ? 0
+      : _readNumbering(numbering!);
+  String? ensured;
+  bool listAdded = false;
+  if (styles != null && numbering != null) {
     _guard(() {
-      doc.styles.ensure(DocxBuiltInStyle.heading1);
-      doc.numbering.addBulletList();
-    }, (DocxReadException e) => first ??= e);
+      ensured = styles!.ensure(DocxBuiltInStyle.heading1);
+      numbering!.addBulletList();
+      listAdded = true;
+    }, refused);
   }
   for (final DocxWarning warning in doc.warnings) {
     for (final OfficeLocale locale in OfficeLocale.values) {
@@ -258,9 +343,11 @@ void exerciseDocx(Uint8List bytes) {
   }
   _reopen(
     saved,
-    bodyReadable: bodyReadable,
-    stylesReadable: stylesReadable,
-    numberingReadable: numberingReadable,
+    bodyReadable: blocks != null,
+    stylesReadable: styles != null,
+    numberingReadable: numbering != null,
+    ensuredId: ensured,
+    instancesAfter: listAdded ? instancesBefore + 1 : null,
   );
   if (first != null) throw first!;
 }
@@ -281,10 +368,10 @@ bool _guard(
   }
 }
 
-/// Reads every block, inline and run content of [body], and every typed
+/// Reads every block, inline and run content of [blocks], and every typed
 /// property of its paragraphs and runs.
-void _walk(DocxBody body) {
-  for (final DocxBlock block in body.blocks) {
+void _walk(List<DocxBlock> blocks) {
+  for (final DocxBlock block in blocks) {
     block.toString();
     if (block is! DocxParagraph) continue;
     block.text;
@@ -317,6 +404,8 @@ void _readStyles(DocxStyles styles) {
       style.link,
       style.uiPriority,
       style.quickFormat,
+      style.isDefault,
+      style.isCustom,
     ].toString();
     _paragraph(style.paragraphProperties);
     _run(style.runProperties);
@@ -325,10 +414,11 @@ void _readStyles(DocxStyles styles) {
   }
 }
 
-/// Reads every level, instance and override of [numbering].
-void _readNumbering(DocxNumbering numbering) {
+/// Reads every level, instance and override of [numbering]; returns how
+/// many instances it lists.
+int _readNumbering(DocxNumbering numbering) {
   for (final DocxAbstractNumbering abstract in numbering.abstractNumberings) {
-    abstract.toString();
+    abstract.id.toString();
     for (final DocxNumberingLevel level in abstract.levels) {
       <Object?>[
         level.format,
@@ -341,11 +431,18 @@ void _readNumbering(DocxNumbering numbering) {
     }
   }
   for (final DocxNumberingInstance instance in numbering.instances) {
-    instance.ref().toString();
+    <Object?>[
+      instance.id,
+      instance.abstractId,
+      instance.abstractNumbering,
+      numbering.instanceById(instance.id),
+      instance.ref(),
+    ].toString();
     for (final DocxLevelOverride o in instance.overrides) {
       o.startOverride.toString();
     }
   }
+  return numbering.instances.length;
 }
 
 void _paragraph(DocxParagraphProperties p) => <Object?>[
@@ -387,11 +484,17 @@ void _run(DocxRunProperties r) => <Object?>[
 /// that the input could not read ([bodyReadable], [stylesReadable],
 /// [numberingReadable] false) may throw a [DocxReadException]. Anything
 /// else is a [StateError].
+///
+/// When [ensuredId] is not null the styles must hold that id; when
+/// [instancesAfter] is not null the numbering must list that many
+/// instances.
 void _reopen(
   Uint8List saved, {
   required bool bodyReadable,
   required bool stylesReadable,
   required bool numberingReadable,
+  required String? ensuredId,
+  required int? instancesAfter,
 }) {
   final DocxDocument again;
   try {
@@ -409,7 +512,18 @@ void _reopen(
     }
   }
 
-  load('body', bodyReadable, () => _walk(again.body));
-  load('styles', stylesReadable, () => _readStyles(again.styles));
-  load('numbering', numberingReadable, () => _readNumbering(again.numbering));
+  load('body', bodyReadable, () => _walk(again.body.blocks.toList()));
+  load('styles', stylesReadable, () {
+    final DocxStyles styles = again.styles;
+    _readStyles(styles);
+    if (ensuredId != null && styles.byId(ensuredId) == null) {
+      throw StateError('the style "$ensuredId" ensure returned is missing');
+    }
+  });
+  load('numbering', numberingReadable, () {
+    final int count = _readNumbering(again.numbering);
+    if (instancesAfter != null && count != instancesAfter) {
+      throw StateError('$count instances, not $instancesAfter');
+    }
+  });
 }

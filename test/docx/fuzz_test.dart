@@ -80,36 +80,42 @@ void main() {
     }
   });
 
-  test('attribute values are replaced in styles and numbering parts', () {
-    final List<FuzzCase> cases = <FuzzCase>[
-      for (final int seed in _seeds) ...docxFuzzCases(seed, _cases),
-    ];
-    for (final String part in <String>[
+  test('typed attributes are replaced in the typed parts', () {
+    final RegExp replacement = RegExp(r'replace w:(\w+) at \d+ with "(.*)"$');
+    final Map<String, Map<String, int>> perPart = <String, Map<String, int>>{};
+    final Set<String> values = <String>{};
+    for (final int seed in _seeds) {
+      final Set<String> hit = <String>{};
+      for (final FuzzCase c in docxFuzzCases(seed, _cases)) {
+        final RegExpMatch? m = replacement.firstMatch(c.mutation);
+        if (m == null || !typedAttributes.contains(m.group(1))) continue;
+        values.add(m.group(2)!);
+        hit.add(mutatedPart(c.mutation)!);
+        final Map<String, int> counts = perPart.putIfAbsent(
+          mutatedPart(c.mutation)!,
+          () => <String, int>{},
+        );
+        counts.update(m.group(1)!, (int n) => n + 1, ifAbsent: () => 1);
+      }
+      // Few corpus entries hold numbering, so it is required over all seeds.
+      expect(
+        hit,
+        containsAll(<String>['word/document.xml', 'word/styles.xml']),
+        reason: 'seed $seed',
+      );
+    }
+    // The counts, for the report: replacements per part and attribute.
+    printOnFailure('$perPart');
+    expect(perPart.keys.toSet(), <String>{
+      'word/document.xml',
       'word/styles.xml',
       'word/numbering.xml',
-    ]) {
-      expect(
-        cases.where(
-          (FuzzCase c) =>
-              mutatedPart(c.mutation) == part &&
-              c.mutation.contains('replace attribute value'),
-        ),
-        isNotEmpty,
-        reason: part,
-      );
+    });
+    for (final MapEntry<String, Map<String, int>> e in perPart.entries) {
+      expect(e.value['val'], greaterThan(0), reason: e.key);
+      expect(e.value.length, greaterThanOrEqualTo(3), reason: e.key);
     }
-    for (final String value in <String>[
-      'abc',
-      '99999999999999999999',
-      '-',
-      '1in',
-    ]) {
-      expect(
-        cases.where((FuzzCase c) => c.mutation.endsWith('with "$value"')),
-        isNotEmpty,
-        reason: value,
-      );
-    }
+    expect(values, <String>{'abc', '99999999999999999999', '-', '1in'});
   });
 
   test('every part name is mutated in some corpus entry', () {
