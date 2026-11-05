@@ -148,6 +148,18 @@ abstract base class PropertyCodec<T extends Object> {
   /// takes them from it.
   void write(XmlWriter w, String prefix, T value, PropertyElement? asRead);
 
+  /// Whether removing the value of [e], a child with a view, leaves
+  /// something: attributes the codec keeps as read beside the ones it
+  /// types, as `w:cs` of `w:rFonts`. Such a child stays, written by
+  /// [writeRest]; any other is removed. Most codecs keep nothing.
+  bool keepsRest(PropertyElement e) => false;
+
+  /// Writes the child without its value, what stays of [asRead] when
+  /// [keepsRest] says something does.
+  void writeRest(XmlWriter w, String prefix, PropertyElement asRead) {
+    throw StateError('The codec of $localName keeps nothing of the child.');
+  }
+
   /// Whether [value] is of the codec's type, so it can be set.
   bool accepts(Object value) => value is T;
 }

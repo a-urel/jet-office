@@ -14,7 +14,9 @@
 /// `w:cstheme`, `w:hint` and every attribute but the six it sets, and
 /// [LanguageCodec] keeps `w:eastAsia` and `w:bidi`. Those attributes are in
 /// the codec's [PropertyCodec.attributes], so a Word file that has them
-/// still types its fonts and language.
+/// still types its fonts and language. Removing the value removes what the
+/// codec types and keeps those attributes ([PropertyCodec.keepsRest]): the
+/// element goes only with nothing else on it.
 library;
 
 import '../opc/ooxml.dart' show Ns;
@@ -86,6 +88,30 @@ void _writeKept(
       writeKeptAttributes(w, <KeptAttribute>[a]);
     }
   }
+}
+
+/// Whether [e] has an attribute that is not in [replaced] (local names in
+/// `w:`), which [_writeKept] would write.
+bool _hasKept(PropertyElement e, Set<String> replaced) => e.attributes.any(
+  (KeptAttribute a) =>
+      a.namespaceUri != Ns.w ||
+      !replaced.contains(
+        a.qualifiedName.substring(a.qualifiedName.indexOf(':') + 1),
+      ),
+);
+
+/// Writes `[prefix]:[localName]` with the attributes of [asRead] that are
+/// not in [replaced] and nothing else.
+void _writeRest(
+  XmlWriter w,
+  String prefix,
+  String localName,
+  PropertyElement asRead,
+  Set<String> replaced,
+) {
+  w.start('$prefix:$localName');
+  _writeKept(w, prefix, asRead, replaced);
+  w.end();
 }
 
 /// The codec of an on/off property such as `w:b`: `true` is written as the
@@ -385,6 +411,13 @@ final class FontsCodec extends PropertyCodec<DocxFonts> {
     DocxFonts value,
     PropertyElement? asRead,
   ) => _writeFonts(w, '$prefix:$localName', prefix, value, asRead);
+
+  @override
+  bool keepsRest(PropertyElement e) => _hasKept(e, _fontSlots);
+
+  @override
+  void writeRest(XmlWriter w, String prefix, PropertyElement asRead) =>
+      _writeRest(w, prefix, localName, asRead, _fontSlots);
 }
 
 /// Writes the `w:rFonts` [qualifiedName] of [value]: its six slots, then
@@ -449,6 +482,13 @@ final class BulletFontsCodec extends PropertyCodec<DocxFonts> {
           : const <String, String>{},
     );
   }
+
+  @override
+  bool keepsRest(PropertyElement e) => _hasKept(e, _fontSlots);
+
+  @override
+  void writeRest(XmlWriter w, String prefix, PropertyElement asRead) =>
+      _writeRest(w, prefix, localName, asRead, _fontSlots);
 }
 
 /// The codec of `w:lang`: the language of Latin text (`w:val`).
@@ -481,6 +521,13 @@ final class LanguageCodec extends PropertyCodec<String> {
     _writeKept(w, prefix, asRead, const <String>{'val'});
     w.end();
   }
+
+  @override
+  bool keepsRest(PropertyElement e) => _hasKept(e, const <String>{'val'});
+
+  @override
+  void writeRest(XmlWriter w, String prefix, PropertyElement asRead) =>
+      _writeRest(w, prefix, localName, asRead, const <String>{'val'});
 }
 
 /// The schema of a run's `w:rPr`: [rPrOrder], typing the sixteen

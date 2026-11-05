@@ -14,7 +14,9 @@
 /// stay as read (Ruling 3). Setting a property to the value it reads is a
 /// no-op, so such a set neither records a change nor rewrites a child the
 /// model reads in another spelling. To remove formatting the getter cannot
-/// read, use [DocxRunProperties.clear].
+/// read, use [DocxRunProperties.clear]. Setting `fonts` or `language` to
+/// `null` removes what they type and keeps the other attributes of the
+/// element.
 ///
 /// Lengths are points; a value is rounded to the file's unit and reads back
 /// rounded (Ruling 4).
@@ -129,6 +131,10 @@ final class DocxRunProperties {
   /// Setting replaces the ASCII, high ANSI and East Asian slots and their
   /// theme fonts, and keeps `w:cs`, `w:cstheme`, `w:hint` and the other
   /// attributes of the file.
+  ///
+  /// Setting `null` removes those slots only: while another attribute
+  /// remains the element stays with it, and this reads `null`. [clear] with
+  /// [DocxRunProperty.fonts] removes the element.
   DocxFonts? get fonts => _set.valueOf('rFonts') as DocxFonts?;
 
   set fonts(DocxFonts? value) => _set.setValue('rFonts', value);
@@ -223,9 +229,12 @@ final class DocxRunProperties {
   /// `null`.
   ///
   /// A `w:lang` without `w:val` (only `w:eastAsia` or `w:bidi`) reads
-  /// `null`. Setting keeps `w:eastAsia` and `w:bidi`. A value that is not
-  /// a language tag (letters of two to eight, then groups of letters and
-  /// digits joined by hyphens) throws [ArgumentError].
+  /// `null`. Setting keeps `w:eastAsia` and `w:bidi`, and setting `null`
+  /// removes `w:val` only: while another attribute remains the element
+  /// stays with it. [clear] with [DocxRunProperty.language] removes the
+  /// element. A value that is not a language tag (letters of two to eight,
+  /// then groups of letters and digits joined by hyphens) throws
+  /// [ArgumentError].
   String? get language => _set.valueOf('lang') as String?;
 
   set language(String? value) {
@@ -241,8 +250,10 @@ final class DocxRunProperties {
   /// so a child the model cannot type (a `w:sz w:val="1in"`, two `w:b`)
   /// stays; clear removes every such child. It removes the element of
   /// [property] only: clearing [DocxRunProperty.bold] leaves `w:bCs`, and
-  /// clearing [DocxRunProperty.sizePt] leaves `w:szCs`. Nothing is recorded
-  /// when the run has no such child.
+  /// clearing [DocxRunProperty.sizePt] leaves `w:szCs`, while clearing
+  /// [DocxRunProperty.fonts] or [DocxRunProperty.language] removes the whole
+  /// element, the attributes of the other scripts with it. Nothing is
+  /// recorded when the run has no such child.
   void clear(DocxRunProperty property) => _set.clearChild(property._element);
 }
 

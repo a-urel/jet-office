@@ -423,6 +423,111 @@ void main() {
       expect(p.underline, const DocxUnderline(DocxUnderlineStyle.single));
     });
 
+    group('removing a typed attribute group', () {
+      const String allFonts =
+          '<w:rFonts w:ascii="A" w:hAnsi="A" w:eastAsia="E" w:cs="C" '
+          'w:cstheme="minorBidi" w:hint="eastAsia"/>';
+
+      test('fonts = null removes the typed slots and keeps cs, cstheme and '
+          'hint', () {
+        final DocxDocument doc = _open('$allFonts<w:b/>');
+        final DocxRunProperties p = _run(doc).properties;
+        p.fonts = null;
+        expect(p.fonts, isNull);
+        expect(
+          _rPr(doc),
+          '<w:rFonts w:cs="C" w:cstheme="minorBidi" w:hint="eastAsia"/><w:b/>',
+        );
+      });
+
+      test('fonts = null removes an element with nothing else', () {
+        final DocxDocument doc = _open('<w:rFonts w:ascii="A"/><w:b/>');
+        _run(doc).properties.fonts = null;
+        expect(_rPr(doc), '<w:b/>');
+      });
+
+      test('clear removes the whole element', () {
+        final DocxDocument doc = _open(allFonts);
+        final DocxRunProperties p = _run(doc).properties;
+        p.fonts = null;
+        p.clear(DocxRunProperty.fonts);
+        expect(_rPr(doc), '');
+      });
+
+      test('fonts set after null keep what stayed', () {
+        final DocxDocument doc = _open(allFonts);
+        final DocxRunProperties p = _run(doc).properties;
+        p.fonts = null;
+        p.fonts = DocxFonts(ascii: 'B');
+        expect(
+          _rPr(doc),
+          '<w:rFonts w:ascii="B" w:cs="C" w:cstheme="minorBidi" '
+          'w:hint="eastAsia"/>',
+        );
+      });
+
+      test('fonts = null a second time records nothing', () {
+        final DocxDocument doc = _open(allFonts);
+        final DocxRunProperties p = _run(doc).properties;
+        p.fonts = null;
+        final ChangeSet again = editsOf(doc).transaction(() => p.fonts = null);
+        expect(again.isEmpty, isTrue);
+      });
+
+      test('a fonts = null that fails is undone', () {
+        final DocxDocument doc = _open(allFonts);
+        final DocxRunProperties p = _run(doc).properties;
+        final DocxFonts? before = p.fonts;
+        expect(
+          () => editsOf(doc).transaction(() {
+            p.fonts = null;
+            throw StateError('fail');
+          }),
+          throwsStateError,
+        );
+        expect(p.fonts, before);
+      });
+
+      test('language = null removes w:val and keeps eastAsia and bidi', () {
+        final DocxDocument doc = _open(
+          '<w:lang w:val="tr-TR" w:eastAsia="ja-JP" w:bidi="ar-SA"/>',
+        );
+        final DocxRunProperties p = _run(doc).properties;
+        p.language = null;
+        expect(p.language, isNull);
+        expect(_rPr(doc), '<w:lang w:eastAsia="ja-JP" w:bidi="ar-SA"/>');
+        p.clear(DocxRunProperty.language);
+        expect(_rPr(doc), '');
+      });
+
+      test('language = null removes an element with nothing else', () {
+        final DocxDocument doc = _open('<w:lang w:val="tr-TR"/><w:b/>');
+        _run(doc).properties.language = null;
+        expect(_rPr(doc), '<w:b/>');
+      });
+
+      test('an attribute of another namespace stays too', () {
+        final DocxDocument doc = _open(
+          '<w:lang xmlns:x="urn:x" w:val="tr-TR" x:a="1"/>',
+        );
+        _run(doc).properties.language = null;
+        expect(_rPr(doc), contains('x:a="1"'));
+        expect(_rPr(doc), isNot(contains('w:val')));
+      });
+
+      test('a kept child after the element still follows it', () {
+        final DocxDocument doc = _open(
+          '<w:lang w:val="tr-TR" w:bidi="ar-SA"/><w14:ligatures w14:val="all"/>',
+        );
+        final DocxRunProperties p = _run(doc).properties;
+        p.language = null;
+        expect(
+          _rPr(doc),
+          '<w:lang w:bidi="ar-SA"/><w14:ligatures w14:val="all"/>',
+        );
+      });
+    });
+
     test('a comment between the children of a w:rPr stays while the part '
         'has no edit', () {
       final DocxDocument doc = _open('<w:b/><!-- kept? --><w:i/>');

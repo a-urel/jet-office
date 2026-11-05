@@ -259,6 +259,19 @@ void main() {
     expect(level.bulletFont, DocxFonts(ascii: 'Wingdings', hAnsi: 'Wingdings'));
   });
 
+  test('bulletFont = null keeps the other attributes of w:rFonts, and clear '
+      'removes the element', () {
+    final DocxDocument doc = DocxDocument.open(docxWithNumbering());
+    final DocxNumberingLevel level =
+        doc.numbering.abstractNumberings[0].levels[1];
+    level.bulletFont = null;
+    expect(level.bulletFont, isNull);
+    final String kept = _numberingOf(doc);
+    expect(kept, contains('<w:rFonts w:cs="Courier New" w:hint="default"/>'));
+    level.clear(DocxNumberingLevelProperty.bulletFont);
+    expect(_numberingOf(doc), isNot(contains('w:cs="Courier New"')));
+  });
+
   test('setting a bullet font keeps the other attributes of w:rFonts', () {
     final DocxDocument doc = DocxDocument.open(docxWithNumbering());
     final DocxNumberingLevel level =

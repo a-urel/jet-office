@@ -199,7 +199,9 @@ final class DocxNumberingLevel {
   /// A set writes the slots the value names, normally `w:ascii` and
   /// `w:hAnsi`, and keeps every other attribute of the element (`w:cs`,
   /// `w:hint`) as read; without a `w:hint` read, it writes
-  /// `w:hint="default"`, as Word does.
+  /// `w:hint="default"`, as Word does. Setting `null` removes those slots
+  /// only: while another attribute remains the element stays with it, and
+  /// [clear] removes it.
   DocxFonts? get bulletFont => _rPr.valueOf('rFonts') as DocxFonts?;
 
   set bulletFont(DocxFonts? value) => _rPr.setValue('rFonts', value);

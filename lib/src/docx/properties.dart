@@ -15,7 +15,9 @@
 /// [PropertyContainer.writeTo] merges the kept children with the values set
 /// (`overrides`) in the schema's order, because Word repairs a document
 /// whose property children are out of that order. A value set replaces
-/// every child of its name at its slot; `null` removes them.
+/// every child of its name at its slot; `null` removes them, and
+/// [valueRemoved] removes the value but keeps what its codec keeps of the
+/// child.
 ///
 /// Children are matched by namespace URI and local name, never by prefix:
 /// a `w14:shadow` is not the schema's `w:shadow`.
@@ -57,6 +59,16 @@ final class ContainerSchema {
   /// name, such as `pPr` and `rPr` in a `w:style`.
   final Map<String, ContainerSchema> nested;
 }
+
+/// What a value is set to in `overrides` when the child loses its value and
+/// keeps the rest ([PropertyCodec.keepsRest]), which is not `null`: `null`
+/// removes the child. A property with this value reads `null`.
+final class ValueRemoved {
+  const ValueRemoved._();
+}
+
+/// The one [ValueRemoved].
+const ValueRemoved valueRemoved = ValueRemoved._();
 
 /// A container written in place of a nested child of another, such as the
 /// `w:pPr` of a style with the values set on it. The property sets
@@ -294,6 +306,16 @@ final class PropertyContainer {
     return false;
   }
 
+  /// What to set for the typed child [localName] of [schema] to lose its
+  /// value: [valueRemoved] when its codec keeps something of the child read,
+  /// `null` when the child goes.
+  ValueRemoved? valueRemovedOf(String localName, ContainerSchema schema) {
+    final PropertyElement? element = _elementOf(localName);
+    return element != null && schema.codecs[localName]!.keepsRest(element)
+        ? valueRemoved
+        : null;
+  }
+
   /// The first child `w:<localName>` as its codec saw it, or `null`.
   PropertyElement? _elementOf(String localName) {
     for (final _Slot s in _slots) {
@@ -307,7 +329,8 @@ final class PropertyContainer {
   ///
   /// [overrides] maps the local name of a typed child to its value: a value
   /// replaces every kept child `w:` of that name with the one its codec
-  /// writes, at its slot in the schema order; `null` removes them. A name
+  /// writes, at its slot in the schema order; `null` removes them;
+  /// [valueRemoved] writes what its codec keeps of the child. A name
   /// without a codec in [schema], or a value the codec does not accept,
   /// throws [ArgumentError] before anything is written. [nested] maps the
   /// name of a nested container to the one written in its place (the first
@@ -343,7 +366,12 @@ final class PropertyContainer {
     List<KeptAttribute>? attributes,
   }) {
     overrides.forEach((String name, Object? value) {
-      checkSettable(schema, name, value, qualifiedName);
+      checkSettable(
+        schema,
+        name,
+        value is ValueRemoved ? null : value,
+        qualifiedName,
+      );
     });
     for (final String name in nested.keys) {
       if (!schema.nested.containsKey(name)) {
@@ -432,7 +460,11 @@ final class PropertyContainer {
     writeFollowers(null);
     for (final String child in schema.order) {
       final Object? value = overrides[child];
-      if (value != null) {
+      if (value is ValueRemoved) {
+        schema.codecs[child]!.writeRest(w, p, _elementOf(child)!);
+        wrote = true;
+        writeFollowers(child);
+      } else if (value != null) {
         schema.codecs[child]!.write(w, p, value, _elementOf(child));
         wrote = true;
         writeFollowers(child);

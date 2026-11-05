@@ -14,6 +14,8 @@
 /// It is the internal base of the public property classes
 /// (`DocxRunProperties`, `DocxParagraphProperties`), which give each
 /// property a typed getter and setter that checks the value.
+///
+/// @docImport '../property_codec.dart';
 library;
 
 import '../../opc/opaque_xml.dart' show KeptAttribute;
@@ -57,9 +59,11 @@ abstract base class PropertySet implements NestedProperties {
   /// A name that is not a typed child of [schema] throws [ArgumentError].
   Object? valueOf(String localName) {
     _check(localName, null);
-    return _overrides.containsKey(localName)
-        ? _overrides[localName]
-        : source.viewOf(localName);
+    if (!_overrides.containsKey(localName)) {
+      return source.viewOf(localName);
+    }
+    final Object? value = _overrides[localName];
+    return value is ValueRemoved ? null : value;
   }
 
   /// Whether a value (`null` included) was set for [localName], so the
@@ -70,7 +74,9 @@ abstract base class PropertySet implements NestedProperties {
   PropertyState stateOf(String localName) =>
       (isSet: isSet(localName), value: _overrides[localName]);
 
-  /// Sets the typed child [localName] to [value]; `null` removes it.
+  /// Sets the typed child [localName] to [value]; `null` removes it, but for
+  /// what its codec keeps of the child read ([PropertyCodec.keepsRest]),
+  /// such as `w:cs` of `w:rFonts`: that stays, and [clearChild] removes it.
   ///
   /// Nothing changes and nothing is reported when [value] equals the
   /// current value ([valueOf]), `null` included: setting a property to what
@@ -88,7 +94,7 @@ abstract base class PropertySet implements NestedProperties {
     if (value == valueOf(localName)) {
       return;
     }
-    _record(localName, value);
+    _record(localName, value ?? source.valueRemovedOf(localName, schema));
   }
 
   /// Sets the style reference [localName] (`w:pStyle`, `w:rStyle`) to the
