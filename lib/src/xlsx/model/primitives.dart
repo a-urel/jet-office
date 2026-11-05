@@ -473,7 +473,8 @@ void renameTableColumn(ChangeLog log, TablePart table, int index, String name) {
 }
 
 /// The entries one call appended to a styles part: [StylesPart.idFor] for
-/// a style, or [StylesPart.withNumberFormat].
+/// a style, [StylesPart.withNumberFormat], or
+/// [StylesPart.differentialIdFor].
 ///
 /// The styles part is append-only, so [revert] rolls it back to the mark
 /// taken before, and [reapply] makes the same call again, which appends
@@ -514,6 +515,22 @@ int appendNumberFormat(
   int? style,
   int numFmtId,
 ) => _appending(log, styles, () => styles.withNumberFormat(style, numFmtId));
+
+/// The differential style index of [style] in [styles]
+/// ([StylesPart.differentialIdFor]), and a [StylesAppendChange] recorded in
+/// [log] when that appended a `<dxf>`.
+///
+/// An equal exact `<dxf>` of the part is reused and records nothing. Must
+/// run inside `log.transaction`. Validates nothing itself: the caller has
+/// run `validateDifferentialStyle` (a conditional format's check does), and
+/// what the registry still refuses, such as a number format code, throws as
+/// [StylesPart.differentialIdFor] does, with nothing changed. If recording
+/// throws, the appended entry is removed before the error leaves.
+int appendDifferentialStyle(
+  ChangeLog log,
+  StylesPart styles,
+  XlsxStyle style,
+) => _appending(log, styles, () => styles.differentialIdFor(style));
 
 int _appending(ChangeLog log, StylesPart styles, int Function() append) {
   final StylesMark before = styles.mark();

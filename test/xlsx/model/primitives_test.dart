@@ -206,6 +206,63 @@ void main() {
     });
   });
 
+  group('appendDifferentialStyle', () {
+    StylesPart styles() => StylesPart.read(
+      XmlPullReader(
+        '<styleSheet xmlns="http://schemas.openxmlformats.org/'
+        'spreadsheetml/2006/main"><cellXfs><xf numFmtId="0"/></cellXfs>'
+        '<dxfs count="1"><dxf><font><b/></font></dxf></dxfs></styleSheet>',
+      ),
+      const XlsxReadLimits(),
+    );
+    const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+    const XlsxStyle italic = XlsxStyle(font: XlsxFont(italic: true));
+
+    test('records what it appended; revert and reapply', () {
+      final StylesPart part = styles();
+      final StylesMark before = part.mark();
+      final ChangeLog log = ChangeLog();
+      late int id;
+      final ChangeSet set = log.transaction(() {
+        id = appendDifferentialStyle(log, part, italic);
+      });
+      expect(id, 1);
+      expect(set.changes.single, isA<StylesAppendChange>());
+      final StylesMark after = part.mark();
+      expect(after.dxfs, before.dxfs + 1);
+      log.revertSet(set);
+      expect(part.mark(), before);
+      expect(part.dxfCount, 1);
+      log.reapplySet(set);
+      expect(part.mark(), after);
+      expect(part.differentialStyle(id), italic);
+    });
+
+    test('records nothing for a dxf the part has', () {
+      final StylesPart part = styles();
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        expect(appendDifferentialStyle(log, part, bold), 0);
+      });
+      expect(set.isEmpty, isTrue);
+      expect(log.hasChanges, isFalse);
+    });
+
+    test('a failed transaction removes the appended entry', () {
+      final StylesPart part = styles();
+      final StylesMark before = part.mark();
+      final ChangeLog log = ChangeLog();
+      expect(
+        () => log.transaction(() {
+          appendDifferentialStyle(log, part, italic);
+          throw StateError('later');
+        }),
+        throwsStateError,
+      );
+      expect(part.mark(), before);
+    });
+  });
+
   group('editWorkbook', () {
     const String ns =
         'http://schemas.openxmlformats.org/spreadsheetml/2006/main';

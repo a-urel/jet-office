@@ -5,6 +5,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/package.dart';
 import 'package:jet_office/src/xlsx/model/cell_store.dart';
+import 'package:jet_office/src/xlsx/model/primitives.dart';
 import 'package:jet_office/src/xlsx/model/styles_part.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_sheet.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
@@ -364,6 +365,27 @@ void main() {
       final ChangeSet set = log.transaction(() => sheet.setStyle(0, 0, _bold));
       log.revertSet(set);
       expect(sheet.styleAt(0, 0), isNull);
+      expect(hasStyles(book.save().bytes), isFalse);
+    });
+
+    test('a differential style makes the created part join', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(input());
+      final StylesPart styles = stylesForEditOf(book);
+      final ChangeLog log = changeLogOf(book);
+      log.transaction(() => appendDifferentialStyle(log, styles, _bold));
+      final Uint8List saved = book.save().bytes;
+      expect(hasStyles(saved), isTrue);
+      expect(partText(saved, 'xl/styles.xml'), contains('<dxfs count="1">'));
+    });
+
+    test('an undone differential style leaves no part', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(input());
+      final StylesPart styles = stylesForEditOf(book);
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(
+        () => appendDifferentialStyle(log, styles, _bold),
+      );
+      log.revertSet(set);
       expect(hasStyles(book.save().bytes), isFalse);
     });
 

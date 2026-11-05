@@ -82,6 +82,7 @@ final class StyleSeed {
     required this.xfs,
     this.customCodes = const <int, String>{},
     this.usedNumFmtIds = const <int>[],
+    this.dxfs = const <({String? key})>[],
   });
 
   /// The file's fonts, in order; see the class comment for `key`.
@@ -98,6 +99,13 @@ final class StyleSeed {
 
   /// The number format ids the file refers to, defined or not.
   final Iterable<int> usedNumFmtIds;
+
+  /// The file's differential styles, in order. An entry's `key` is what
+  /// [StyleRegistry.dxfKey] renders for the style read from the file, with
+  /// the number format the file wrote in it, and only for an entry read
+  /// exactly; otherwise it is `null` and the entry only keeps its index. The
+  /// keys may be given later, by [StyleRegistry.setDxfKeys].
+  final List<({String? key})> dxfs;
 
   /// The file's cell formats, in order.
   final List<
@@ -205,6 +213,12 @@ final class StyleRegistry {
       _xfs.add(value);
     }
     _seedCodeCount = _customCodes.length;
+    for (final ({String? key}) entry in seed.dxfs) {
+      final String? key = entry.key;
+      if (key != null) _dxfIds.putIfAbsent(key, () => _dxfs.length);
+      _dxfs.add(key ?? '');
+    }
+    _seedDxfCount = _dxfs.length;
   }
 
   static const int _firstCustomId = 164;
@@ -229,11 +243,20 @@ final class StyleRegistry {
   /// XML.
   static String borderKey(XlsxBorder border) => _borderXml(border);
 
+  /// The key of a differential [style] as the registry dedupes them: its
+  /// `<dxf>` XML with [numFmt], the number format as written in it (`null`
+  /// for none). Use it for a [StyleSeed] differential style read exactly.
+  static String dxfKey(XlsxStyle style, DifferentialNumFmt? numFmt) =>
+      _render((XmlWriter w) => writeDifferentialStyleXml(w, style, numFmt));
+
   /// The first id a new custom number format takes.
   final int _seedNextId;
 
   /// How many of [_customCodes] came from a seed.
   int _seedCodeCount = 0;
+
+  /// How many of [_dxfs] came from a seed.
+  int _seedDxfCount = 0;
 
   int get _nextCodeId => _seedNextId + (_customCodes.length - _seedCodeCount);
 
@@ -259,6 +282,35 @@ final class StyleRegistry {
 
   /// The rendered `<border>` of every border from index [start] on.
   List<String> bordersFrom(int start) => _borders.sublist(start);
+
+  /// The number of differential styles, the seed's included.
+  int get dxfCount => _dxfs.length;
+
+  /// The rendered `<dxf>` of every differential style from index [start]
+  /// on. A seeded entry renders as an empty string, as for [fontsFrom].
+  List<String> dxfsFrom(int start) => _dxfs.sublist(start);
+
+  /// Gives the seeded differential styles their keys, when the seed had
+  /// none to give: `keys[i]` is the key of seeded entry `i` (see
+  /// [StyleSeed.dxfs]), and a `null` leaves the entry unmatched. Entries
+  /// the registry appended itself are not touched.
+  ///
+  /// Throws [ArgumentError] when [keys] is not as long as the seed's list.
+  void setDxfKeys(List<String?> keys) {
+    if (keys.length != _seedDxfCount) {
+      throw ArgumentError.value(
+        keys.length,
+        'keys',
+        'There are $_seedDxfCount seeded differential styles.',
+      );
+    }
+    for (var i = 0; i < keys.length; i++) {
+      final String? key = keys[i];
+      if (key == null) continue;
+      _dxfs[i] = key;
+      _dxfIds.putIfAbsent(key, () => i);
+    }
+  }
 
   /// The rendered `<xf>` of every cell format from index [start] on.
   List<String> xfsFrom(int start) => <String>[
@@ -298,14 +350,17 @@ final class StyleRegistry {
 
   /// Drops everything registered after the given counts (each a value read
   /// from the matching getter earlier), and the styles that mapped to it.
-  /// A caller rolls back a failed edit this way.
+  /// A caller rolls back a failed edit this way. [dxfs], when given, is
+  /// the number of differential styles to keep; without it they are left.
   void truncate({
     required int fonts,
     required int fills,
     required int borders,
     required int codes,
     required int xfs,
+    int? dxfs,
   }) {
+    if (dxfs != null) _truncate(_dxfs, _dxfIds, dxfs);
     _truncate(_fonts, _fontIds, fonts);
     _truncate(_fills, _fillIds, fills);
     _truncate(_borders, _borderIds, borders);

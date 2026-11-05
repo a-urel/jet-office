@@ -85,6 +85,10 @@ SharedStrings? sharedStringsOf(XlsxWorkbook book) => book._book._strings;
 /// has none, for tests.
 StylesPart? stylesPartOf(XlsxWorkbook book) => book._book._styles;
 
+/// The styles part of [book] as an edit needs it, made in memory for a file
+/// without one (see `_stylesForEdit`), for tests.
+StylesPart stylesForEditOf(XlsxWorkbook book) => book._book._stylesForEdit();
+
 /// An XLSX workbook held in memory: opened from a file or started empty,
 /// read and changed cell by cell, and saved.
 ///
