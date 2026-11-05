@@ -60,8 +60,9 @@
 - `DocxDocument.numbering` (`DocxNumbering`): definitions and instances,
   `addBulletList`, `addNumberedList` and `addInstance` (with start
   overrides) with the lists Word's toolbar writes, and `DocxBody.addListItem`.
-- Two warnings, for references set through the API: `styleNotFound` and
-  `numberingNotFound`, in English, German and Turkish.
+- Two warnings, for references set through the API or moved in from another
+  document: `styleNotFound` and `numberingNotFound`, in English, German and
+  Turkish.
 - A styles or numbering part that was loaded and not changed is saved with
   its original bytes; a part with a change is written from the model, which
   drops comments directly under its root and its definitions. A theme colour

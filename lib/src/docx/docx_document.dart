@@ -426,6 +426,23 @@ final class DocxBody {
   /// the document's ([DocxParagraph.style] has the rules). When one is set
   /// and the styles part cannot be read, this throws a [DocxReadException]
   /// naming it, on a document that opened; nothing changes then.
+  ///
+  /// A paragraph read in another document counts as set here: its
+  /// `w:pStyle`, its `w:numPr` and the `w:rStyle` of its runs are resolved
+  /// by id, and a save reports the ones this document lacks
+  /// ([DocxWarningCode.styleNotFound], [DocxWarningCode.numberingNotFound]).
+  /// Moved within one document they stay as read. A move carries nothing
+  /// else over:
+  ///
+  /// * The style's `w:name` stays behind, so a built-in style under a
+  ///   localized id (`Balk1`) does not map to this document's by its name;
+  ///   it is reported instead.
+  /// * A `w:numId` this document has too joins that list, unreported, even
+  ///   when it is another list; ids are not remapped.
+  /// * A read opaque inline or block that holds an `r:id` (a hyperlink, a
+  ///   picture) keeps an id this document may lack or mean otherwise.
+  /// * A reference the model does not type, and one in the paragraph mark's
+  ///   `w:rPr`, stay as read, unreported.
   void insertBlock(int index, DocxBlock block) => _edits.transaction(
     () => primitives.insertBlock(_edits, this, _blocks, index, block),
   );
@@ -444,7 +461,8 @@ final class DocxBody {
   /// An [index] that is not one of a block throws [RangeError], and a
   /// [block] already in a body throws [StateError]. The styles set on
   /// [block] are resolved as [insertBlock] does, which may throw the same
-  /// [DocxReadException].
+  /// [DocxReadException], and a paragraph read in another document counts
+  /// as set as it says.
   void replaceBlockAt(int index, DocxBlock block) => _edits.transaction(
     () => primitives.replaceBlock(_edits, this, _blocks, index, block),
   );

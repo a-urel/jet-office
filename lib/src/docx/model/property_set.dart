@@ -120,6 +120,17 @@ abstract base class PropertySet implements NestedProperties {
     }
   }
 
+  /// Counts the child [localName] as read, when typed and not set since, as
+  /// set to what it reads: how the properties of content read in one
+  /// document join another, whose ids are not those it was read with. The
+  /// child is written anew from then on, and the edit is reported.
+  void countReadAsSet(String localName) {
+    final Object? read = source.viewOf(localName);
+    if (read != null && !isSet(localName)) {
+      _record(localName, read);
+    }
+  }
+
   /// Removes every child [localName] from the written properties, whatever
   /// the model reads of it, so a child it does not type goes too.
   ///

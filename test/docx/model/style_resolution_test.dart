@@ -444,6 +444,178 @@ void main() {
     });
   });
 
+  group('content read in one document and put in another', () {
+    const String body =
+        '<w:p><w:pPr><w:pStyle w:val="ListeParagraf"/></w:pPr>'
+        '<w:r><w:t>Madde</w:t></w:r></w:p>'
+        '<w:p><w:pPr><w:pStyle w:val="Balk1"/></w:pPr>'
+        '<w:r><w:rPr><w:rStyle w:val="Vurgu"/></w:rPr><w:t>Metin</w:t></w:r>'
+        '</w:p>'
+        '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/>'
+        '</w:numPr></w:pPr></w:p>'
+        '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr></w:p>'
+        '<w:p><w:pPr><w:pStyle w:foo="1" w:val="Eksik"/></w:pPr></w:p>'
+        '<w:p><w:pPr><w:numPr><w:numId w:val="0"/></w:numPr></w:pPr></w:p>'
+        '<w:p><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:p>';
+
+    /// A document with [body] and the styles of a Turkish Word, which define
+    /// neither `Vurgu` nor `Heading1`.
+    DocxDocument source() => DocxDocument.open(
+      rewriteDocxPart(
+        localizedWordDocx(),
+        'word/document.xml',
+        (String xml) =>
+            '<w:document xmlns:w="${Ns.w}"><w:body>$body</w:body>'
+            '</w:document>',
+      ),
+    );
+
+    /// Takes the block at [index] out of [doc].
+    DocxParagraph take(DocxDocument doc, int index) {
+      final DocxParagraph p = doc.body.blocks[index] as DocxParagraph;
+      doc.body.removeBlockAt(index);
+      return p;
+    }
+
+    test('a ListeParagraf paragraph in a new document warns styleNotFound', () {
+      final DocxDocument target = DocxDocument();
+      final DocxParagraph p = take(source(), 0);
+      target.body.insertBlock(1, p);
+      expect(p.style, 'ListeParagraf');
+      final DocxWarning found = _warnings(
+        target,
+        DocxWarningCode.styleNotFound,
+      ).single;
+      expect(found.detail, 'ListeParagraf');
+      expect(found.locations, <String>['body/p[1]']);
+      expect(
+        readDocxText(target.save().bytes)['word/document.xml'],
+        contains('<w:pStyle w:val="ListeParagraf"/>'),
+      );
+    });
+
+    test('a Balk1 heading put in by replaceBlockAt warns, and so does the '
+        'rStyle of its run', () {
+      final DocxDocument target = DocxDocument();
+      target.body.replaceBlockAt(0, take(source(), 1));
+      final List<DocxWarning> found = _warnings(
+        target,
+        DocxWarningCode.styleNotFound,
+      );
+      expect(<String?>[
+        for (final DocxWarning w in found) w.detail,
+      ], unorderedEquals(<String>['Balk1', 'Vurgu']));
+    });
+
+    test('a run put in a paragraph of a document warns', () {
+      final DocxDocument target = DocxDocument();
+      final DocxParagraph from = take(source(), 1);
+      final DocxInline run = from.inlines.single;
+      from.removeInlineAt(0);
+      target.body.addParagraph().insertInline(0, run);
+      final DocxWarning found = _warnings(
+        target,
+        DocxWarningCode.styleNotFound,
+      ).single;
+      expect(found.detail, 'Vurgu');
+      expect(found.locations, <String>['body/p[1]/r[0]']);
+    });
+
+    test('a run put in a new paragraph warns when that goes in', () {
+      final DocxDocument target = DocxDocument();
+      final DocxParagraph from = take(source(), 1);
+      final DocxInline run = from.inlines.single;
+      from.removeInlineAt(0);
+      final DocxParagraph fresh = DocxParagraph()..insertInline(0, run);
+      expect(target.warnings, isEmpty);
+      target.body.insertBlock(0, fresh);
+      expect(
+        _warnings(target, DocxWarningCode.styleNotFound).single.detail,
+        'Vurgu',
+      );
+    });
+
+    test('an id that resolves in the target does not warn', () {
+      final DocxDocument target = _localized();
+      target.body.insertBlock(0, take(source(), 3));
+      expect(target.body.blocks.first, isA<DocxParagraph>());
+      expect((target.body.blocks.first as DocxParagraph).style, 'Balk1');
+      expect(_warnings(target, DocxWarningCode.styleNotFound), isEmpty);
+    });
+
+    test('a numId missing in the target warns numberingNotFound', () {
+      final DocxDocument target = DocxDocument();
+      target.body.insertBlock(0, take(source(), 2));
+      final DocxWarning found = _warnings(
+        target,
+        DocxWarningCode.numberingNotFound,
+      ).single;
+      expect(found.detail, '7');
+      expect(found.locations, <String>['body/p[0]']);
+    });
+
+    test('a numId the target has joins that list, unreported', () {
+      final DocxDocument target = DocxDocument();
+      expect(target.numbering.addBulletList().id, 1);
+      target.body.insertBlock(0, take(source(), 6));
+      expect(_warnings(target, DocxWarningCode.numberingNotFound), isEmpty);
+    });
+
+    test('numId 0 names no list and does not warn', () {
+      final DocxDocument target = DocxDocument();
+      target.body.insertBlock(0, take(source(), 5));
+      expect(_warnings(target, DocxWarningCode.numberingNotFound), isEmpty);
+    });
+
+    test('a reference the model does not type stays as read, unreported', () {
+      final DocxDocument target = DocxDocument();
+      target.body.insertBlock(0, take(source(), 4));
+      expect(_warnings(target, DocxWarningCode.styleNotFound), isEmpty);
+      expect(
+        readDocxText(target.save().bytes)['word/document.xml'],
+        contains('w:foo="1"'),
+      );
+    });
+
+    test('moved within one document it stays unresolved', () {
+      final DocxDocument doc = _localized();
+      final DocxParagraph p = take(doc, 0);
+      final DocxParagraph q = doc.body.blocks.first as DocxParagraph;
+      final DocxInline run = q.inlines.single;
+      q.removeInlineAt(0);
+      doc.body.insertBlock(1, p);
+      (doc.body.blocks.last as DocxParagraph).insertInline(0, run);
+      expect(p.style, 'Heading3');
+      expect(isStylesLoaded(doc), isFalse);
+      doc.styles;
+      expect(_warnings(doc, DocxWarningCode.styleNotFound), isEmpty);
+    });
+
+    test('a target whose styles cannot be read changes nothing', () {
+      final DocxDocument from = source();
+      final DocxParagraph p = take(from, 0);
+      final DocxDocument target = DocxDocument.open(
+        docxWithStyles(styles: '<w:styles'),
+      );
+      final int blocks = target.body.blocks.length;
+      expect(
+        () => target.body.insertBlock(0, p),
+        throwsA(isA<DocxReadException>()),
+      );
+      expect(target.body.blocks, hasLength(blocks));
+      from.body.insertBlock(0, p);
+      expect(_warnings(from, DocxWarningCode.styleNotFound), isEmpty);
+    });
+
+    test('a style set before the move is the one resolved', () {
+      final DocxDocument target = DocxDocument();
+      final DocxParagraph p = take(source(), 0)..style = 'Heading1';
+      target.body.insertBlock(0, p);
+      expect(p.style, 'Heading1');
+      expect(_warnings(target, DocxWarningCode.styleNotFound), isEmpty);
+    });
+  });
+
   group('style links', () {
     test('basedOn, next and link take a built-in by its name', () {
       final DocxDocument doc = _localized();

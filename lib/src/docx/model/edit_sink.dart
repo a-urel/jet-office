@@ -23,6 +23,10 @@
 /// under a localized id (plan Ruling 5). A paragraph that belongs to no
 /// document stores what it was given, and is asked again when it goes in.
 ///
+/// What was read from a file stays as it is in that document, but counts as
+/// set once it goes in another ([DocxEditSink.isForeign]), since the ids it
+/// names were the other document's.
+///
 /// @docImport 'blocks.dart';
 library;
 
@@ -72,6 +76,11 @@ abstract interface class DocxEditSink {
   /// built-in style has it, otherwise the id of that built-in in the
   /// document, added if it lacks it. Call it inside [atomically].
   String resolveStyleId(String id, DocxStyleType type);
+
+  /// Whether content read in the document of [readIn] (`null`: not read
+  /// from a file) now belongs to another document, this one: never in a
+  /// replay, nor for the sink of no document.
+  bool isForeign(DocxEditSink? readIn);
 }
 
 /// The sink that ignores every call.
@@ -107,4 +116,7 @@ final class _NoEdits implements DocxEditSink {
 
   @override
   String resolveStyleId(String id, DocxStyleType type) => id;
+
+  @override
+  bool isForeign(DocxEditSink? readIn) => false;
 }

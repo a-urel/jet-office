@@ -84,6 +84,9 @@ final class DocxRun extends DocxInline {
   /// How many characters XML forbids were removed when the text was set.
   int _removed = 0;
 
+  /// The sink of the document the run was read in; `null` for a new run.
+  DocxEditSink? _readIn;
+
   DocxEditSink get _sink {
     final DocxParagraph? paragraph = _paragraph;
     return paragraph == null ? DocxEditSink.none : editSinkOf(paragraph);
@@ -245,6 +248,14 @@ PropertyContainer runPropertiesOf(DocxRun run) => run._source;
 /// The properties of [run], for the writer.
 PropertySet runPropertySetOf(DocxRun run) =>
     propertySetOfRunProperties(run._properties);
+
+/// The sink of the document [run] was read in, or `null` for a new run.
+DocxEditSink? runReadInOf(DocxRun run) => run._readIn;
+
+/// Records that [run] was read in the document of [sink].
+void setRunReadIn(DocxRun run, DocxEditSink sink) {
+  run._readIn = sink;
+}
 
 /// The attributes of `w:r` the reader kept on [run], in source order.
 List<KeptAttribute> runAttributesOf(DocxRun run) => run._attributes;

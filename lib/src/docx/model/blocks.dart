@@ -77,6 +77,10 @@ final class DocxParagraph extends DocxBlock {
 
   DocxEditSink _sink = DocxEditSink.none;
 
+  /// The sink of the document the paragraph was read in; `null` for a new
+  /// paragraph.
+  DocxEditSink? _readIn;
+
   /// The formatting of the paragraph: its `w:pPr`.
   ///
   /// It is the same object every time.
@@ -128,7 +132,9 @@ final class DocxParagraph extends DocxBlock {
   /// remove it there first. In a paragraph of a document, the style set on
   /// a run is resolved against the document's styles (`DocxRun.style` has
   /// the rules), in the same edit; a styles part that cannot be read throws
-  /// a `DocxReadException` naming it, and nothing changes.
+  /// a `DocxReadException` naming it, and nothing changes. The `w:rStyle` of
+  /// a run read in another document counts as set; `DocxBody.insertBlock`
+  /// says what such a move does and does not do.
   void insertInline(int index, DocxInline inline) {
     RangeError.checkValueInInterval(index, 0, _inlines.length, 'index');
     _checkDetached(inline);
@@ -137,7 +143,7 @@ final class DocxParagraph extends DocxBlock {
       setParagraphOf(inline, this);
       _sink.inlineInserted(this, index, inline);
       if (inline is DocxRun) {
-        _resolveRunStyle(inline);
+        _resolveRunStyle(inline, _sink);
       }
     });
   }
@@ -194,20 +200,43 @@ DocxParagraph readParagraph({
 }
 
 /// Resolves the style set through the API on [run], which is in a paragraph
-/// of a document now.
-void _resolveRunStyle(DocxRun run) =>
-    runPropertySetOf(run).resolveStyleIdSet('rStyle', DocxStyleType.character);
+/// of the document of [sink] now; one read in another document counts as set.
+void _resolveRunStyle(DocxRun run, DocxEditSink sink) {
+  final PropertySet properties = runPropertySetOf(run);
+  if (sink.isForeign(runReadInOf(run))) {
+    properties.countReadAsSet('rStyle');
+  }
+  properties.resolveStyleIdSet('rStyle', DocxStyleType.character);
+}
 
 /// Resolves the styles set through the API on [paragraph] and its runs,
-/// which are in a document now; what was read from a file stays (plan
-/// Ruling 5).
+/// which are in a document now; what was read from that document's file
+/// stays (plan Ruling 5), and what was read in another counts as set: the
+/// `w:pStyle`, the `w:numPr` that the save checks, and each run's
+/// `w:rStyle`.
 void resolveStylesSet(DocxParagraph paragraph) {
-  paragraphPropertySetOf(
-    paragraph,
-  ).resolveStyleIdSet('pStyle', DocxStyleType.paragraph);
+  final DocxEditSink sink = paragraph._sink;
+  final PropertySet properties = paragraphPropertySetOf(paragraph);
+  if (sink.isForeign(paragraph._readIn)) {
+    properties
+      ..countReadAsSet('pStyle')
+      ..countReadAsSet('numPr');
+  }
+  properties.resolveStyleIdSet('pStyle', DocxStyleType.paragraph);
   for (final DocxInline inline in paragraph._inlines) {
     if (inline is DocxRun) {
-      _resolveRunStyle(inline);
+      _resolveRunStyle(inline, sink);
+    }
+  }
+}
+
+/// Records that [paragraph] and its runs were read in the document of
+/// [sink], so what they name counts as set in any other.
+void markReadIn(DocxParagraph paragraph, DocxEditSink sink) {
+  paragraph._readIn = sink;
+  for (final DocxInline inline in paragraph._inlines) {
+    if (inline is DocxRun) {
+      setRunReadIn(inline, sink);
     }
   }
 }

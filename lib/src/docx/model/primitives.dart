@@ -141,6 +141,10 @@ final class DocxEdits implements DocxEditSink {
     final String Function(String, DocxStyleType)? resolver = styleResolver;
     return _replaying || resolver == null ? id : resolver(id, type);
   }
+
+  @override
+  bool isForeign(DocxEditSink? readIn) =>
+      !_replaying && readIn != null && !identical(readIn, this);
 }
 
 /// Inserts [block] at [index] of [blocks], the blocks of [container], and
@@ -218,8 +222,9 @@ void _resolveStyles(DocxBlock block) {
   }
 }
 
-/// Puts every block of [blocks] in [container] and makes its paragraphs
-/// report to [edits]: how a container read from a file is adopted.
+/// Puts every block of [blocks] in [container], makes its paragraphs report
+/// to [edits] and records that they and their runs were read there: how a
+/// container read from a file is adopted.
 ///
 /// Throws [StateError] for a block already in a container, before anything
 /// changes.
@@ -227,6 +232,7 @@ void adoptBlocks(DocxEdits edits, Object container, List<DocxBlock> blocks) {
   blocks.forEach(_checkDetached);
   for (final DocxBlock block in blocks) {
     _attach(edits, container, block);
+    if (block is DocxParagraph) markReadIn(block, edits);
   }
 }
 
