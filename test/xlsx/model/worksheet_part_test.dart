@@ -6,6 +6,7 @@ import 'package:jet_office/src/opc/ooxml.dart';
 import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/opc/package.dart';
 import 'package:jet_office/src/xlsx/cell_encoder.dart';
+import 'package:jet_office/src/xlsx/data_validation.dart';
 import 'package:jet_office/src/xlsx/model/element_node.dart';
 import 'package:jet_office/src/xlsx/model/item_group.dart';
 import 'package:jet_office/src/xlsx/model/primitives.dart';
@@ -504,7 +505,7 @@ void main() {
     });
 
     test(
-      'validations and conditional formats stay opaque, links are typed',
+      'conditional formats stay opaque, validations and links are typed',
       () {
         const String body =
             '<sheetData/>'
@@ -512,12 +513,11 @@ void main() {
             '<dataValidations count="9"/>'
             '<hyperlinks/>';
         final WorksheetPart part = _read(_sheet(body));
-        for (final String slot in <String>[
-          'conditionalFormatting',
-          'dataValidations',
-        ]) {
-          expect(part.layoutElement(slot), isNull, reason: slot);
-        }
+        expect(part.layoutElement('conditionalFormatting'), isNull);
+        expect(
+          part.layoutElement('dataValidations'),
+          isA<ItemGroup<XlsxDataValidation>>(),
+        );
         expect(part.layoutElement('hyperlinks'), isA<ItemGroup<LinkEntry>>());
         expect(_encode(part), contains(body));
       },

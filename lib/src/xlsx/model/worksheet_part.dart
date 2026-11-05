@@ -15,7 +15,8 @@
 /// [OpaqueXml] at its original position, except the first
 /// `<sheetFormatPr>` and the first `<cols>`, which are typed when plain
 /// (`columns.dart`), the first `<mergeCells>` ([MergeGroup]) and the first
-/// `<hyperlinks>` (an [ItemGroup] of [LinkEntry]); all of these
+/// `<hyperlinks>` (an [ItemGroup] of [LinkEntry]) and the first
+/// `<dataValidations>` (an [ItemGroup] of [XlsxDataValidation]); all of these
 /// are edited as immutable values, so `swapLayout` undoes an edit of one
 /// without touching the others. The first element of each of [_nodeSlots]
 /// (`sheetPr`, `sheetViews`, `pageSetup`, `extLst`, ...) is typed too, as an
@@ -49,6 +50,7 @@ import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
+import '../data_validation.dart' show XlsxDataValidation;
 import '../range.dart';
 import '../raw_cell.dart';
 import '../read/merge_reader.dart' show parseMergeRange;
@@ -62,6 +64,7 @@ import 'cell_store.dart';
 import 'columns.dart';
 import 'element_node.dart';
 import 'item_group.dart';
+import 'validation_elements.dart' show readDataValidation;
 
 /// The children of `<worksheet>` in the order of the schema's
 /// `CT_Worksheet` sequence.
@@ -480,6 +483,22 @@ final class WorksheetPart implements PartContent {
           ),
         );
       } else if (main &&
+          r.localName == 'dataValidations' &&
+          !sheet._hasDataValidations) {
+        sheet._hasDataValidations = true;
+        children.add(
+          readItemGroup<XlsxDataValidation>(
+            r,
+            childName: 'dataValidation',
+            read: readDataValidation,
+            warn: (String problem) => warn(
+              XlsxWarningCode.featureEntryInvalid,
+              null,
+              detail: problem,
+            ),
+          ),
+        );
+      } else if (main &&
           r.localName == 'sheetData' &&
           sheet._sheetData == null) {
         final _SheetData data = _SheetData(
@@ -560,6 +579,10 @@ final class WorksheetPart implements PartContent {
   /// Whether the part read a SpreadsheetML `<hyperlinks>`; a second one is
   /// kept opaque.
   bool _hasHyperlinks = false;
+
+  /// Whether the part read a SpreadsheetML `<dataValidations>`; a second one
+  /// is kept opaque.
+  bool _hasDataValidations = false;
 
   /// The elements of [_nodeSlots] the part read; a second one of a name is
   /// kept opaque.
@@ -997,6 +1020,14 @@ final class WorksheetPart implements PartContent {
   ItemGroup<LinkEntry>? get hyperlinkGroup {
     final ItemGroup<Object?>? group = _topGroup('hyperlinks');
     return group is ItemGroup<LinkEntry> ? group : null;
+  }
+
+  /// The first `<dataValidations>` as a group of [XlsxDataValidation]s, or
+  /// `null` when the part has none. Edited as a layout element of slot
+  /// `dataValidations`.
+  ItemGroup<XlsxDataValidation>? get dataValidationGroup {
+    final ItemGroup<Object?>? group = _topGroup('dataValidations');
+    return group is ItemGroup<XlsxDataValidation> ? group : null;
   }
 
   /// The [ItemGroup] of [slot], or `null`.

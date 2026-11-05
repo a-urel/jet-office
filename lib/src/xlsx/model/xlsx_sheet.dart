@@ -34,6 +34,7 @@ import '../cell_encoder.dart';
 import '../cell_ref.dart';
 import '../color.dart';
 import '../column.dart';
+import '../data_validation.dart';
 import '../date_serial.dart';
 import '../defined_name.dart';
 import '../format/format_kind.dart';
@@ -83,6 +84,7 @@ import 'protection_elements.dart';
 import 'style_elements.dart' show ReadStyleValue, readColor;
 import 'styles_part.dart';
 import 'table_part.dart';
+import 'validation_elements.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
 
@@ -91,6 +93,7 @@ part 'xlsx_sheet_links.dart';
 part 'xlsx_sheet_merges.dart';
 part 'xlsx_sheet_names.dart';
 part 'xlsx_sheet_print.dart';
+part 'xlsx_sheet_rules.dart';
 part 'xlsx_sheet_views.dart';
 
 /// What a sheet needs from its workbook.
@@ -197,6 +200,7 @@ final class XlsxSheet
         _SheetMerges,
         _SheetNames,
         _SheetPrint,
+        _SheetRules,
         _SheetViews {
   XlsxSheet._(this._host, this._entry, this._partName, this._part);
 
