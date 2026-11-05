@@ -95,23 +95,6 @@ final class CfBlock {
   /// The elements, in file order.
   final List<GroupItem<CfEntry>> items;
 
-  /// The highest priority the elements hold, or 0 for none.
-  int get highestPriority {
-    int highest = 0;
-    for (final GroupItem<CfEntry> item in items) {
-      final CfEntry? entry = item.value;
-      if (entry == null) {
-        final int found = highestRulePriority(item.source);
-        if (found > highest) highest = found;
-        continue;
-      }
-      for (final CfRuleEntry rule in entry.rules) {
-        if (rule.priority > highest) highest = rule.priority;
-      }
-    }
-    return highest;
-  }
-
   /// Writes the elements to [w]. [above] holds the bindings in scope.
   void writeTo(XmlWriter w, Map<String, String> above) {
     for (final GroupItem<CfEntry> item in items) {
@@ -184,9 +167,9 @@ int highestRulePriority(OpaqueXml element) {
 /// [format] as a reading of what the writer writes for it gives: a leading
 /// `=` of a formula or a `cfvo` value is not written, an icon set's default
 /// thresholds read as none, and so do the colors of a data bar `barAsWritten`
-/// drops. An added entry holds this form, so the
-/// model says what its file says, and removal looks for it, so a value built
-/// by hand matches the entry it was added as, after a save too.
+/// drops. An added entry holds this form, so the model says what its file
+/// says, and removal looks for it, so a value built by hand matches the entry
+/// it was added as, after a save too.
 XlsxConditionalFormat normalizedConditionalFormat(
   XlsxConditionalFormat format,
 ) => XlsxConditionalFormat(format.ranges, <XlsxConditionalRule>[

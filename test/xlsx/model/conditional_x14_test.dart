@@ -768,22 +768,34 @@ void main() {
       const String badCell =
           '<x14:cfRule type="cellIs" priority="4" operator="nope" id="{cell}">'
           '<xm:f>1</xm:f></x14:cfRule>';
+      // The defaults of the unlinked bar put this past the longest bar.
+      const String longBar =
+          '<x14:cfRule type="dataBar" priority="6" id="{long}">'
+          '<x14:dataBar minLength="95"><x14:cfvo type="autoMin"/>'
+          '<x14:cfvo type="autoMax"/><x14:fillColor rgb="FF638EC6"/>'
+          '</x14:dataBar></x14:cfRule>';
       final String badSqref = _element('not a range', _iconRule(_id1, 2));
       final String noSqref =
           '<x14:conditionalFormatting xmlns:xm="${Ns.xm}">'
           '${_iconRule(_id2, 5)}</x14:conditionalFormatting>';
       final Uint8List input = _file(
-        '<extLst>${_ext(_element('A1', noId + badBar + badIcons + badCell) + badSqref + noSqref)}</extLst>',
+        '<extLst>${_ext(_element('A1', noId + badBar + badIcons + badCell + longBar) + badSqref + noSqref)}</extLst>',
       );
       final XlsxWorkbook book = XlsxWorkbook.open(input);
       final XlsxSheet sheet = book.sheets.single;
       expect(sheet.conditionalFormats, isEmpty);
-      expect(_invalid(book, 'x14:cfRule'), 4);
+      expect(_invalid(book, 'x14:cfRule'), 5);
       expect(_invalid(book, 'x14:conditionalFormatting'), 2);
       expect(comparePackages(input, book.save().bytes), isEmpty);
       sheet.addConditionalFormat(_format('B1', XlsxDataBar(color: _green)));
       final String xml = _xml(book);
-      for (final String kept in <String>[noId, badBar, badSqref, noSqref]) {
+      for (final String kept in <String>[
+        noId,
+        badBar,
+        longBar,
+        badSqref,
+        noSqref,
+      ]) {
         expect(xml, contains(kept));
       }
     });
@@ -904,6 +916,98 @@ void main() {
         _format('A1', XlsxDataBar(color: _blue, minLength: 0, maxLength: 100)),
       ]);
       expect(book.warnings, isEmpty);
+    });
+
+    test('ids match in any case, as a GUID does', () {
+      const String lower = '{0000000a-0000-4000-8000-00000000000b}';
+      const String upper = '{0000000A-0000-4000-8000-00000000000B}';
+      final XlsxWorkbook book = _open(
+        '${_bar2007('A1', lower)}<extLst>'
+        '${_ext(_element('A1', _barRule(upper, attributes: 'gradient="0"')))}'
+        '</extLst>',
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      expect(sheet.conditionalFormats, <XlsxConditionalFormat>[
+        _format('A1', XlsxDataBar(color: _blue, gradient: false)),
+      ]);
+      sheet.removeConditionalFormat(sheet.conditionalFormats.single);
+      expect(_xml(book), isNot(contains('extLst')));
+    });
+
+    test('the half of an unlisted element matches in any case too', () {
+      const String lower = '{0000000a-0000-4000-8000-00000000000b}';
+      const String upper = '{0000000A-0000-4000-8000-00000000000B}';
+      final XlsxWorkbook book = _open(
+        '<conditionalFormatting sqref="A1">'
+        '<cfRule type="dataBar" priority="1"><dataBar/><extLst>'
+        '<ext uri="$_ruleExtUri" xmlns:x14="${Ns.x14}">'
+        '<x14:id>$lower</x14:id></ext></extLst></cfRule>'
+        '</conditionalFormatting><extLst>'
+        '${_ext(_element('A1', _iconRule(upper, 2)))}</extLst>',
+      );
+      expect(book.sheets.single.conditionalFormats, isEmpty);
+    });
+
+    test('rules on equal priorities keep file order; none goes last', () {
+      final XlsxIconSet stars = XlsxIconSet(XlsxIconSetType.threeStars);
+      final XlsxIconSet triangles = XlsxIconSet(XlsxIconSetType.threeTriangles);
+      final String noPriority = _iconRule(
+        '{n}',
+        0,
+      ).replaceFirst(' priority="0"', '');
+      final XlsxWorkbook book = _open(
+        '<conditionalFormatting sqref="A1">'
+        '<cfRule type="expression" priority="5"><formula>A1</formula></cfRule>'
+        '<cfRule type="expression" priority="2"><formula>A2</formula></cfRule>'
+        '</conditionalFormatting><extLst>'
+        '${_ext(_element('A1', noPriority + _iconRule('{a}', 9) + _iconRule('{b}', 3, set: '3Triangles') + _iconRule('{c}', 3) + _iconRule('{d}', 1)))}'
+        '</extLst>',
+      );
+      expect(
+        book.sheets.single.conditionalFormats.single.rules,
+        <XlsxConditionalRule>[
+          stars,
+          triangles,
+          stars,
+          const XlsxExpressionRule('A1'),
+          const XlsxExpressionRule('A2'),
+          stars,
+          stars,
+        ],
+      );
+    });
+
+    group('a file of very many rules joins in linear time', () {
+      const int count = 150000;
+      void joins(String name, String Function(int i) sqref, int formats) {
+        test(name, testOn: 'vm', () {
+          final StringBuffer elements = StringBuffer();
+          for (int i = 0; i < count; i++) {
+            elements.write(_element(sqref(i), _iconRule('{$i}', i + 1)));
+          }
+          final XlsxSheet sheet = _open(
+            '<extLst>${_ext(elements.toString())}</extLst>',
+          ).sheets.single;
+          // Loads the sheet, so that only the join is timed. A test's timeout
+          // cannot stop code that never yields, so the bound is checked after:
+          // a fraction of a second here, minutes when quadratic.
+          sheet.dataValidations;
+          final Stopwatch watch = Stopwatch()..start();
+          final List<XlsxConditionalFormat> read = sheet.conditionalFormats;
+          expect(watch.elapsed, lessThan(const Duration(seconds: 15)));
+          expect(read, hasLength(formats));
+          expect(
+            read.fold<int>(
+              0,
+              (int n, XlsxConditionalFormat f) => n + f.rules.length,
+            ),
+            count,
+          );
+        });
+      }
+
+      joins('on as many ranges', (int i) => 'A${i + 1}', count);
+      joins('on one range', (int i) => 'A1', 1);
     });
 
     test('a repeated ext stays as written; its ids and priorities count', () {

@@ -584,7 +584,8 @@ bool _writableRule(XlsxConditionalRule rule) =>
   final bool bad =
       id == null ||
       switch (type) {
-        'dataBar' => barFields == null,
+        'dataBar' =>
+          barFields == null || barFields.fillColor != null && rule == null,
         'iconSet' => iconRead == null || !iconRead.custom && rule == null,
         'expression' || 'cellIs' => rule == null,
         _ => false,
@@ -816,18 +817,42 @@ final class JoinedFormat {
   /// The rules, in the order the format lists them.
   final List<JoinedRule> rules;
 
-  /// Adds [rule] before the first rule of a higher priority, else last.
-  void _insert(JoinedRule rule) {
-    final int? priority = rule.priority;
-    int at = rules.length;
-    if (priority != null) {
-      final int found = rules.indexWhere((JoinedRule r) {
-        final int? other = r.priority;
-        return other != null && other > priority;
-      });
-      if (found >= 0) at = found;
+  /// The rules of the `extLst` alone waiting for [_placePending].
+  final List<X14Rule> _pending = <X14Rule>[];
+
+  /// Puts each rule of [_pending] before the first rule of a higher priority,
+  /// else last, and one with no priority after all of them, in one pass: a
+  /// file may hold any number, on one `sqref`.
+  void _placePending() {
+    if (_pending.isEmpty) return;
+    final List<(int, int, X14Rule)> ordered = <(int, int, X14Rule)>[
+      for (int i = 0; i < _pending.length; i++)
+        if (_pending[i].priority != null)
+          (_pending[i].priority!, i, _pending[i]),
+    ];
+    // The index keeps equal priorities in file order.
+    ordered.sort(
+      ((int, int, X14Rule) a, (int, int, X14Rule) b) =>
+          a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2),
+    );
+    JoinedRule alone(X14Rule rule) => JoinedRule(null, <X14Rule>[rule]);
+    final List<JoinedRule> placed = <JoinedRule>[];
+    int next = 0;
+    for (final JoinedRule rule in rules) {
+      final int priority = rule.priority!;
+      while (next < ordered.length && ordered[next].$1 < priority) {
+        placed.add(alone(ordered[next++].$3));
+      }
+      placed.add(rule);
     }
-    rules.insert(at, rule);
+    while (next < ordered.length) {
+      placed.add(alone(ordered[next++].$3));
+    }
+    placed.addAll(_pending.where((X14Rule r) => r.priority == null).map(alone));
+    rules
+      ..clear()
+      ..addAll(placed);
+    _pending.clear();
   }
 }
 
@@ -842,49 +867,51 @@ List<JoinedFormat> joinConditionalFormats(
   final Map<String, List<X14Rule>> byId = <String, List<X14Rule>>{};
   for (final X14Element element in x14?.elements ?? const <X14Element>[]) {
     for (final X14Rule rule in element.rules) {
-      final String? id = rule.id;
+      final String? id = rule.id?.toUpperCase();
       if (id != null) (byId[id] ??= <X14Rule>[]).add(rule);
     }
   }
-  final Set<String> named = <String>{...links};
+  final Set<String> named = <String>{
+    for (final String id in links) id.toUpperCase(),
+  };
   final List<JoinedFormat> formats = <JoinedFormat>[];
+  // The first format of each `sqref`, as a file may hold any number of them.
+  final Map<String, JoinedFormat> bySqref = <String, JoinedFormat>{};
   for (final GroupItem<CfEntry> item
       in block?.items ?? const <GroupItem<CfEntry>>[]) {
     final CfEntry? entry = item.value;
     if (entry == null) continue;
     final List<JoinedRule> rules = <JoinedRule>[];
     for (final CfRuleEntry rule in entry.rules) {
-      final String? id = rule.x14Id;
+      final String? id = rule.x14Id?.toUpperCase();
       if (id != null) named.add(id);
       rules.add(JoinedRule(rule, byId[id] ?? const <X14Rule>[]));
     }
-    formats.add(JoinedFormat(item, entry.ranges, rules));
+    final JoinedFormat format = JoinedFormat(item, entry.ranges, rules);
+    formats.add(format);
+    bySqref.putIfAbsent(_sqrefKey(entry.ranges), () => format);
   }
   for (final X14Element element in x14?.elements ?? const <X14Element>[]) {
     final List<XlsxRange>? ranges = element.ranges;
     if (ranges == null) continue;
     for (final X14Rule rule in element.rules) {
-      if (rule.rule == null || named.contains(rule.id)) continue;
-      JoinedFormat? target;
-      for (final JoinedFormat format in formats) {
-        if (_sameRanges(format.ranges, ranges)) {
-          target = format;
-          break;
-        }
+      if (rule.rule == null || named.contains(rule.id?.toUpperCase())) {
+        continue;
       }
-      if (target == null) {
-        formats.add(target = JoinedFormat(null, ranges, <JoinedRule>[]));
-      }
-      target._insert(JoinedRule(null, <X14Rule>[rule]));
+      final JoinedFormat target = bySqref.putIfAbsent(_sqrefKey(ranges), () {
+        final JoinedFormat own = JoinedFormat(null, ranges, <JoinedRule>[]);
+        formats.add(own);
+        return own;
+      });
+      target._pending.add(rule);
     }
+  }
+  for (final JoinedFormat format in formats) {
+    format._placePending();
   }
   return formats;
 }
 
-bool _sameRanges(List<XlsxRange> a, List<XlsxRange> b) {
-  if (a.length != b.length) return false;
-  for (int i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
+/// The key of [ranges]: equal ranges in equal order have equal keys.
+String _sqrefKey(List<XlsxRange> ranges) =>
+    ranges.map((XlsxRange r) => r.ref).join(' ');

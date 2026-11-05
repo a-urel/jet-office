@@ -237,9 +237,10 @@ mixin _SheetRules {
   /// Throws an [ArgumentError] naming the field, as the writer's
   /// `conditionalFormat` does (`rules[0].rank`, `rules[1].style.numFmt`),
   /// for a format that is not valid, an [XlsxLimitError] when the sheet's
-  /// priorities run out, a [StateError] for a sheet that is not a worksheet or has no part or a
-  /// styles part the model cannot edit and an [XlsxReadException] when the
-  /// sheet cannot be read. Whatever it throws, nothing has changed.
+  /// priorities run out, a [StateError] for a sheet that is not a worksheet
+  /// or has no part or a styles part the model cannot edit and an
+  /// [XlsxReadException] when the sheet cannot be read. Whatever it throws,
+  /// nothing has changed.
   void addConditionalFormat(XlsxConditionalFormat format) {
     final WorksheetPart part = _editablePart('conditional formats');
     checkConditionalFormat(format);
@@ -404,15 +405,17 @@ mixin _SheetRules {
     final X14Block? x14 = part.x14Block;
     // A half another rule still names stays, with that rule.
     final Set<String?> named = <String?>{
-      ...part.unlistedX14Links,
+      for (final String id in part.unlistedX14Links) id.toUpperCase(),
       for (final JoinedFormat other in formats)
         if (!identical(other, found))
-          for (final JoinedRule rule in other.rules) rule.entry?.x14Id,
+          for (final JoinedRule rule in other.rules)
+            rule.entry?.x14Id?.toUpperCase(),
     };
     final Set<OpaqueXml> gone = <OpaqueXml>{
       for (final JoinedRule rule in found.rules)
         for (final X14Rule half in rule.halves)
-          if (rule.entry == null || !named.contains(rule.entry!.x14Id))
+          if (rule.entry == null ||
+              !named.contains(rule.entry!.x14Id?.toUpperCase()))
             half.source,
     };
     final ChangeLog log = _host.log;
