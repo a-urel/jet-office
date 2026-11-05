@@ -9,7 +9,7 @@ import 'support/docx_fuzz.dart';
 const List<int> _seeds = <int>[1, 2, 3, 4];
 
 /// The cases per seed in the quality gate.
-const int _cases = 100;
+const int _cases = 150;
 
 /// The length and Adler-32 checksum of every corpus entry, computed once on
 /// the VM. The Chrome leg compares them, which proves the corpus (and so
@@ -25,12 +25,17 @@ const Map<String, ({int length, int adler32})> _corpus =
       'd1_text_rules': (length: 63248, adler32: 3935131841),
       'd1_unicode': (length: 62959, adler32: 2521569011),
       'd1_large': (length: 263451, adler32: 1522611747),
+      'd2_run_formatting': (length: 64345, adler32: 4272339350),
+      'd2_paragraph_formatting': (length: 64651, adler32: 475797816),
+      'd2_styles': (length: 66654, adler32: 2863778854),
+      'd2_lists': (length: 69004, adler32: 3869031974),
       'ns0_prefix': (length: 1407, adler32: 3668097186),
       'default_namespace': (length: 1344, adler32: 3335628311),
       'no_override': (length: 1259, adler32: 3490218517),
       'libreoffice': (length: 6318, adler32: 1326981182),
       'google_docs': (length: 4167, adler32: 3568252968),
       'docm': (length: 2695, adler32: 1708433424),
+      'google_docs_no_numbering': (length: 3626, adler32: 4219505065),
     };
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.

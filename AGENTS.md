@@ -133,7 +133,9 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   output with the Open XML SDK, so the model's edited and generated files
   are validated, not only its unchanged round trips.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX
-  fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, by
+  fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, or its
+  `<name>.libreoffice.txt` (`DocxFixture.libreOfficeText`: list labels such as
+  `    • Bullet one` that the model's text lacks), by
   `textDifferences` in `tool/src/text_compare.dart`: a leading BOM and one
   trailing newline are ignored, everything else must be equal. It prints
   each difference as `<name>: <line>`, exits 1 on any, 2 on unusable input.
@@ -142,12 +144,15 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   text; any warning is a mismatch unless `docxResaveAllowedWarnings` in
   `tool/src/read_compare.dart` names it with a reason. Exit codes as above.
 - `tool/round_trip_docx.dart` opens every `.docx` of a directory with
-  `DocxDocument`, reads the body, saves to the second directory and prints
+  `DocxDocument`, reads the body and every typed property (which loads
+  `styles` and `numbering`), saves to the second directory and prints
   each `comparePackages` difference (`tool/src/part_compare.dart`) as
   `<file>: <line>`; it exits 1 on any difference or error, 2 on unusable
-  arguments. CI runs it on the fixtures, on LibreOffice's re-save and on the
-  owner's Word files, then validates all three outputs with the Open XML
-  SDK. As for workbooks, the `d1_corrupt.docx` document round-trips (exit 0)
+  arguments. A loaded styles or numbering part nothing changed is saved as
+  read, so it also encodes both parts from the model and compares them with
+  the input (`encodedPartDifferences`, `tool/src/docx_serialize.dart`). CI
+  runs it on the fixtures, on LibreOffice's re-save and on the owner's Word
+  files, then validates all three outputs with the Open XML SDK. As for workbooks, the `d1_corrupt.docx` document round-trips (exit 0)
   and the SDK must reject the output; a truncated copy is the round trip's
   own negative control.
 - `tool/edit_docx.dart` opens every `.docx` of a directory with
@@ -257,7 +262,7 @@ longer runs with `dart run tool/fuzz_formatter.dart --seeds 1-200 --cases 1000`.
 The rules are in `docs/number-format.md`.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
-100 cases each, over the fixtures and producer variants of
+150 cases each, over the fixtures and producer variants of
 `test/docx/support/docx_fuzz.dart`: whole mutated files, with every part name
 mutated somewhere; open, read the body and save throw nothing but
 `DocxReadException`), the same cases on the VM and in Chrome; longer runs

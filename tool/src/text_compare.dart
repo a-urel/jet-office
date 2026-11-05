@@ -73,7 +73,8 @@ List<String> textDifferences(String expected, String actual) {
 }
 
 /// [text] in double quotes, with a tab as `\t`, a carriage return as `\r`
-/// and any other control character as `\u{…}`.
+/// and any other control character, zero-width space or mark (U+200B to
+/// U+200F) and byte order mark (U+FEFF) as `\u{…}`.
 String _quote(String text) {
   final StringBuffer out = StringBuffer('"');
   for (final int c in text.runes) {
@@ -81,7 +82,10 @@ String _quote(String text) {
       out.write(r'\t');
     } else if (c == 0x0D) {
       out.write(r'\r');
-    } else if (c < 0x20 || c == 0x7F) {
+    } else if (c < 0x20 ||
+        c == 0x7F ||
+        (c >= 0x200B && c <= 0x200F) ||
+        c == 0xFEFF) {
       out.write('\\u{${c.toRadixString(16)}}');
     } else {
       out.writeCharCode(c);

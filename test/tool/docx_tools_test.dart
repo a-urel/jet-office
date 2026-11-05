@@ -75,6 +75,24 @@ void main() {
       expect(written, contains('m1_values.xlsx'));
     });
 
+    test('writes what LibreOffice exports, only where it differs', () {
+      write_fixtures.main(<String>[dir.path]);
+      final List<String> written = names(dir);
+      for (final DocxFixture f in docxFixtures()) {
+        final String file = '${f.name}.libreoffice.txt';
+        if (f.libreOfficeText == f.expectedText) {
+          expect(written, isNot(contains(file)), reason: f.name);
+        } else {
+          expect(written, contains(file), reason: f.name);
+          expect(
+            File('${dir.path}/$file').readAsStringSync(),
+            '${f.libreOfficeText}\n',
+          );
+        }
+      }
+      expect(written, contains('d2_lists.libreoffice.txt'));
+    });
+
     test(
       '--corrupt adds d1_corrupt.docx: a stray run and a changed letter',
       () {
@@ -116,6 +134,37 @@ void main() {
       expect(code, 0, reason: '$out$err');
       expect(out.toString(), contains('2 documents'));
     });
+
+    test(
+      'a fixture with list labels is compared with its LibreOffice text',
+      () {
+        writeOnly(dir, <String>{
+          'd2_lists.docx',
+          'd2_lists.expected.txt',
+          'd2_lists.libreoffice.txt',
+        });
+        final DocxFixture lists = docxFixtures().singleWhere(
+          (DocxFixture f) => f.name == 'd2_lists',
+        );
+        final File exported = File('${dir.path}/d2_lists.txt');
+        exported.writeAsStringSync('\u{FEFF}${lists.libreOfficeText}\n');
+        final StringBuffer out = StringBuffer();
+        expect(
+          compareText(<String>[dir.path], out: out, err: StringBuffer()),
+          0,
+          reason: '$out',
+        );
+        // The model's own text, without the labels, is not what LibreOffice
+        // writes for it.
+        exported.writeAsStringSync('\u{FEFF}${lists.expectedText}\n');
+        final StringBuffer again = StringBuffer();
+        expect(
+          compareText(<String>[dir.path], out: again, err: StringBuffer()),
+          1,
+        );
+        expect(again.toString(), contains('d2_lists: line 2: expected'));
+      },
+    );
 
     test('the corrupt document: exit 1 naming its changed line', () {
       writeOnly(dir, <String>{
@@ -183,6 +232,44 @@ void main() {
       );
       expect(code, 0, reason: '$out$err');
       expect(names(output), <String>['d1_paragraphs.docx', 'd1_unicode.docx']);
+    });
+
+    test('round-trips the D2 fixtures: exit 0 and their outputs', () {
+      final Set<String> keep = <String>{
+        for (final DocxFixture f in docxFixtures())
+          if (f.name.startsWith('d2_')) '${f.name}.docx',
+      };
+      writeOnly(dir, keep);
+      final Directory output = Directory('${temp.path}/out');
+      final StringBuffer out = StringBuffer();
+      final int code = roundTripDocx(
+        <String>[dir.path, output.path],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 0, reason: '$out');
+      expect(names(output), keep.toList()..sort());
+    });
+
+    test('a styles part the model cannot read is refused with its name', () {
+      writeOnly(dir, <String>{'d2_styles.docx'});
+      final File file = File('${dir.path}/d2_styles.docx');
+      file.writeAsBytesSync(
+        rewriteDocxPart(
+          file.readAsBytesSync(),
+          'word/styles.xml',
+          (String xml) => xml.replaceFirst('</w:styles>', '<w:style'),
+        ),
+      );
+      final StringBuffer out = StringBuffer();
+      final int code = roundTripDocx(
+        <String>[dir.path, '${temp.path}/out'],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 1);
+      expect(out.toString(), contains('d2_styles.docx: '));
+      expect(out.toString(), contains('word/styles.xml'));
     });
 
     test('skips Word lock files', () {

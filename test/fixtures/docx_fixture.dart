@@ -17,8 +17,9 @@ final class DocxFixture {
     this.name,
     this.expectedText,
     this.build, {
+    String? libreOfficeText,
     this.expectedWarnings = const <DocxWarningCode, int>{},
-  });
+  }) : libreOfficeText = libreOfficeText ?? expectedText;
 
   /// The fixture's name, also its file name stem.
   final String name;
@@ -34,6 +35,16 @@ final class DocxFixture {
   /// included, must be equal. A D1 fixture holds paragraphs only, so no
   /// table text has to be agreed on.
   final String expectedText;
+
+  /// What LibreOffice's text export writes for the document: [expectedText]
+  /// unless the document has lists, whose labels LibreOffice writes before
+  /// the text of each item (`    • Bullet one`, `    1. Num one`: indented,
+  /// with `•` for the Symbol bullet U+F0B7). Pinned from a LibreOffice run.
+  ///
+  /// `tool/compare_text.dart` compares the export with this; the model's own
+  /// text has no labels, so `tool/compare_resaved_docx.dart` and the tests
+  /// keep [expectedText].
+  final String libreOfficeText;
 
   /// Builds the document and returns the saved file and its warnings. The
   /// same bytes every time.

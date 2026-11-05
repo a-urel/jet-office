@@ -8,6 +8,7 @@ import 'package:jet_office/src/docx/builtin_numbering.dart';
 import 'package:test/test.dart';
 
 import '../support/localized_document.dart';
+import '../support/numbering_documents.dart';
 import '../support/styles_documents.dart' show docxWithStyles, readDocxText;
 
 DocxParagraph _paragraph(DocxDocument doc, int index) =>
@@ -196,6 +197,99 @@ void main() {
       final DocxParagraph p = doc.body.addListItem(list, 'x');
       expect(p.style, 'ListParagraph');
       expect(doc.styles.idOf(DocxBuiltInStyle.listParagraph), 'ListParagraph');
+    });
+  });
+
+  group('list helpers in a numbering part with odd ids', () {
+    /// The names of the children of `w:numbering` and the ids of the
+    /// definitions and instances, as the saved part writes them.
+    (List<String>, List<String>) outline(DocxDocument doc) {
+      final String xml = readDocxText(doc.save().bytes)[_part]!;
+      final List<String> names = <String>[];
+      final List<String> ids = <String>[];
+      int depth = 0;
+      for (final RegExpMatch m in RegExp(
+        r'<(/?)w:([A-Za-z]+)([^>]*?)(/?)>',
+      ).allMatches(xml)) {
+        final bool closing = m.group(1) == '/';
+        final bool selfClosing = m.group(4) == '/';
+        if (closing) {
+          depth--;
+          continue;
+        }
+        if (depth == 1) {
+          names.add(m.group(2)!);
+          final RegExpMatch? id = RegExp(
+            r'w:(?:abstractNumId|numId)="([^"]*)"',
+          ).firstMatch(m.group(3)!);
+          if (id != null) ids.add('${m.group(2)}:${id.group(1)}');
+        }
+        if (!selfClosing) depth++;
+      }
+      return (names, ids);
+    }
+
+    test('duplicate ids, an opaque id and a trailing numIdMacAtCleanup: the '
+        'new definition follows the last abstractNum, the new instance the '
+        'last num, and both take the lowest unused ids', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithNumbering(
+          pictureTarget: null,
+          numbering: numberingXml(
+            '${abstractNumXml('0')}${abstractNumXml('0')}'
+            '${abstractNumXml('x')}'
+            '${numXml('1', '0')}${numXml('1', '0')}${numXml('y', '0')}'
+            '<w:numIdMacAtCleanup w:val="1"/>',
+          ),
+        ),
+      );
+      final DocxNumberingInstance list = doc.numbering.addBulletList();
+      // 0 is used twice and `x` is no id, so the lowest unused is 1; the
+      // same for numId 1 and `y`: the new instance is 2.
+      expect(list.abstractId, 1);
+      expect(list.id, 2);
+      final (List<String> names, List<String> ids) = outline(doc);
+      expect(names, <String>[
+        'abstractNum',
+        'abstractNum',
+        'abstractNum',
+        'abstractNum',
+        'num',
+        'num',
+        'num',
+        'num',
+        'numIdMacAtCleanup',
+      ]);
+      expect(ids, <String>[
+        'abstractNum:0',
+        'abstractNum:0',
+        'abstractNum:x',
+        'abstractNum:1',
+        'num:1',
+        'num:1',
+        'num:y',
+        'num:2',
+      ]);
+      // A paragraph put in it names the new instance.
+      expect(
+        doc.body.addListItem(list, 'x').properties.numbering,
+        DocxNumberingRef(2),
+      );
+    });
+
+    test('a numbering part with only a numIdMacAtCleanup gains the '
+        'definition and the instance before it', () {
+      final DocxDocument doc = DocxDocument.open(
+        docxWithNumbering(
+          pictureTarget: null,
+          numbering: numberingXml('<w:numIdMacAtCleanup w:val="0"/>'),
+        ),
+      );
+      final DocxNumberingInstance list = doc.numbering.addNumberedList();
+      expect((list.abstractId, list.id), (0, 1));
+      final (List<String> names, List<String> ids) = outline(doc);
+      expect(names, <String>['abstractNum', 'num', 'numIdMacAtCleanup']);
+      expect(ids, <String>['abstractNum:0', 'num:1']);
     });
   });
 

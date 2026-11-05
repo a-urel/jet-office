@@ -16,7 +16,10 @@
 /// newline. `tool/ooxml_validate` validates the `.docx` files too,
 /// `tool/compare_text.dart` compares LibreOffice's text export of them with
 /// the `.expected.txt` files, and `tool/compare_resaved_docx.dart` compares
-/// LibreOffice's re-save of them.
+/// LibreOffice's re-save of them. A fixture whose text LibreOffice writes
+/// differently (a list's labels, which the model's text does not have) also
+/// gets `<dir>/<name>.libreoffice.txt`, that text, which
+/// `tool/compare_text.dart` prefers.
 ///
 /// `--corrupt` also writes `m1_corrupt.xlsx` and its `.expected.json`, to
 /// prove that both checks fail on a bad file. It is `m1_values` with two
@@ -63,7 +66,13 @@ void main(List<String> args) {
   }
   final List<DocxFixture> documents = docxFixtures();
   for (final DocxFixture fixture in documents) {
-    _writeDocx(dir, fixture.name, fixture.build().bytes, fixture.expectedText);
+    _writeDocx(
+      dir,
+      fixture.name,
+      fixture.build().bytes,
+      fixture.expectedText,
+      libreOfficeText: fixture.libreOfficeText,
+    );
   }
   if (corrupt) {
     final DocxFixture paragraphs = documents.singleWhere(
@@ -105,9 +114,20 @@ void _write(
   ).writeAsStringSync('${json.convert(expected)}\n');
 }
 
-void _writeDocx(Directory dir, String name, Uint8List bytes, String text) {
+void _writeDocx(
+  Directory dir,
+  String name,
+  Uint8List bytes,
+  String text, {
+  String? libreOfficeText,
+}) {
   File('${dir.path}/$name.docx').writeAsBytesSync(bytes);
   File('${dir.path}/$name.expected.txt').writeAsStringSync('$text\n');
+  if (libreOfficeText != null && libreOfficeText != text) {
+    File(
+      '${dir.path}/$name.libreoffice.txt',
+    ).writeAsStringSync('$libreOfficeText\n');
+  }
 }
 
 /// [bytes] (the `d1_paragraphs` document) with an empty `w:r` directly

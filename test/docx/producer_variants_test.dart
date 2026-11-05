@@ -9,9 +9,11 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../../tool/src/docx_serialize.dart';
 import '../../tool/src/part_compare.dart';
 import '../fixtures/docx_fixtures.dart';
 import 'support/producer_variants.dart';
+import 'support/styles_documents.dart' show readDocxText;
 
 /// The blocks of [doc] as `p:<style>:<text>`, the shape the variants are
 /// compared by.
@@ -29,7 +31,7 @@ void main() {
   );
   final List<ProducerVariant> variants = producerVariants();
 
-  test('the variants are the six the plan names', () {
+  test('the variants are the seven the plan names', () {
     expect(
       <String>[for (final ProducerVariant v in variants) v.name],
       <String>[
@@ -39,6 +41,7 @@ void main() {
         'libreoffice',
         'google_docs',
         'docm',
+        'google_docs_no_numbering',
       ],
     );
   });
@@ -56,6 +59,62 @@ void main() {
       expect(differences, isEmpty, reason: differences.join('\n'));
     });
   }
+
+  test('the google_docs_no_numbering variant gains numbering.xml once', () {
+    final ProducerVariant variant = variants.singleWhere(
+      (ProducerVariant v) => v.name == 'google_docs_no_numbering',
+    );
+    final Map<String, String> before = readDocxText(variant.bytes);
+    expect(before.keys, isNot(contains('word/numbering.xml')));
+    expect(
+      before['word/_rels/document.xml.rels'],
+      isNot(contains('numbering')),
+    );
+    final DocxDocument doc = DocxDocument.open(variant.bytes);
+    final DocxNumberingInstance list = doc.numbering.addBulletList();
+    doc.body.addListItem(list, 'A bullet');
+    doc.body.addListItem(list, 'A nested bullet', level: 1);
+    // A second save of the same document must not add the part again.
+    doc.save();
+    final Uint8List saved = doc.save().bytes;
+    final Map<String, String> after = readDocxText(saved);
+    expect(after.keys.where((String k) => k.contains('numbering')), <String>[
+      'word/numbering.xml',
+    ]);
+    expect(
+      RegExp(
+        'Type="[^"]*/numbering"',
+      ).allMatches(after['word/_rels/document.xml.rels']!).length,
+      1,
+    );
+    expect(
+      RegExp(
+        'PartName="/word/numbering.xml"',
+      ).allMatches(after['[Content_Types].xml']!).length,
+      1,
+    );
+    // Reopened, the file holds the list, the paragraphs it had and the
+    // built-in style the helper added; nothing else about the layout moved.
+    final DocxDocument back = DocxDocument.open(saved);
+    expect(back.numbering.instances, hasLength(1));
+    expect(back.warnings, isEmpty);
+    expect(_outline(back).take(expected.length), expected);
+    expect(
+      comparePackages(
+        variant.bytes,
+        saved,
+        ignoreParts: <String>{
+          'word/document.xml',
+          'word/numbering.xml',
+          'word/styles.xml',
+          'word/_rels/document.xml.rels',
+          '[Content_Types].xml',
+        },
+      ),
+      isEmpty,
+    );
+    expect(encodedPartDifferences(saved), isEmpty);
+  });
 
   test('an edited .docm keeps every part but the body as it was', () {
     // comparePackages compares a binary part such as vbaProject.bin byte

@@ -13,6 +13,7 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../../tool/src/docx_serialize.dart';
 import '../../tool/src/part_compare.dart';
 import '../../tool/src/text_compare.dart';
 import '../support/owner_docx.dart';
@@ -84,6 +85,82 @@ void main() {
         reason: '${entry.file}\n${differences.join('\n')}',
       );
     }
+  });
+
+  test('every owner file round-trips with styles and numbering loaded', () {
+    // A loaded part nothing changed is saved as it was read, so the two
+    // parts are also encoded and compared: that is what proves the model
+    // can write what Word wrote.
+    for (final OwnerDocx entry in manifest) {
+      final Uint8List input = File('$_dir/${entry.file}').readAsBytesSync();
+      final DocxDocument doc = DocxDocument.open(input);
+      expect(doc.styles.styles, isNotEmpty, reason: entry.file);
+      doc.numbering.instances.length;
+      expect(doc.body.blocks, isNotEmpty, reason: entry.file);
+      final DocxResult saved = doc.save();
+      expect(saved.warnings, isEmpty, reason: entry.file);
+      final List<String> differences = <String>[
+        ...comparePackages(input, saved.bytes),
+        ...encodedPartDifferences(input),
+      ];
+      expect(
+        differences,
+        isEmpty,
+        reason: '${entry.file}\n${differences.join('\n')}',
+      );
+      expect(
+        encodedParts(input).keys,
+        contains('word/styles.xml'),
+        reason: entry.file,
+      );
+    }
+  });
+
+  test('reading every typed property of the owner files throws nothing', () {
+    for (final OwnerDocx entry in manifest) {
+      final DocxDocument doc = DocxDocument.open(
+        File('$_dir/${entry.file}').readAsBytesSync(),
+      );
+      expect(readTypedProperties(doc), greaterThan(0), reason: entry.file);
+    }
+    final DocxDocument doc = DocxDocument.open(
+      File('$_dir/long.docx').readAsBytesSync(),
+    );
+    final List<DocxParagraph> paragraphs = <DocxParagraph>[
+      for (final DocxBlock b in doc.body.blocks)
+        if (b is DocxParagraph) b,
+    ];
+    final DocxParagraph first = paragraphs.first;
+    expect(first.properties.style, 'KonuBal');
+    expect(first.properties.alignment, DocxAlignment.center);
+    final DocxRun firstRun = first.inlines.whereType<DocxRun>().first;
+    expect(firstRun.properties.color, DocxColor.rgb('17365D'));
+    expect(firstRun.properties.sizePt, 36);
+
+    // Word wrote this heading's 13.5 pt (w:sz 27) in the paragraph mark's
+    // properties, which the model keeps but does not type; the run itself
+    // names no size, and its style (heading 3) says 14.
+    final DocxParagraph detail = paragraphs.singleWhere(
+      (DocxParagraph p) => p.text == '3.1.1. Ayrıntı düzeyi',
+    );
+    expect(detail.properties.style, 'Balk3');
+    expect(
+      detail.inlines.whereType<DocxRun>().single.properties.sizePt,
+      isNull,
+    );
+    expect(doc.styles.byId('Balk3')!.runProperties.sizePt, 14);
+
+    final DocxParagraph toc = paragraphs.firstWhere(
+      (DocxParagraph p) => doc.styles.byId(p.style ?? '')?.name == 'toc 1',
+    );
+    expect(toc.properties.tabs, <DocxTabStop>[
+      DocxTabStop(
+        453.1,
+        alignment: DocxTabAlignment.right,
+        leader: DocxTabLeader.dot,
+      ),
+    ]);
+    expect(doc.styles.defaults.runProperties.language, 'tr-TR');
   });
 
   test('every owner file reads its confirmed text', () {
