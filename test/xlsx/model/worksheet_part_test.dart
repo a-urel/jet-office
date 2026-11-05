@@ -7,6 +7,7 @@ import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/opc/package.dart';
 import 'package:jet_office/src/xlsx/cell_encoder.dart';
 import 'package:jet_office/src/xlsx/data_validation.dart';
+import 'package:jet_office/src/xlsx/model/conditional_elements.dart';
 import 'package:jet_office/src/xlsx/model/element_node.dart';
 import 'package:jet_office/src/xlsx/model/item_group.dart';
 import 'package:jet_office/src/xlsx/model/primitives.dart';
@@ -504,24 +505,21 @@ void main() {
       expect(node.children.single, isA<OpaqueXml>());
     });
 
-    test(
-      'conditional formats stay opaque, validations and links are typed',
-      () {
-        const String body =
-            '<sheetData/>'
-            '<conditionalFormatting sqref="A1"/>'
-            '<dataValidations count="9"/>'
-            '<hyperlinks/>';
-        final WorksheetPart part = _read(_sheet(body));
-        expect(part.layoutElement('conditionalFormatting'), isNull);
-        expect(
-          part.layoutElement('dataValidations'),
-          isA<ItemGroup<XlsxDataValidation>>(),
-        );
-        expect(part.layoutElement('hyperlinks'), isA<ItemGroup<LinkEntry>>());
-        expect(_encode(part), contains(body));
-      },
-    );
+    test('conditional formats, validations and links are typed', () {
+      const String body =
+          '<sheetData/>'
+          '<conditionalFormatting sqref="A1"/>'
+          '<dataValidations count="9"/>'
+          '<hyperlinks/>';
+      final WorksheetPart part = _read(_sheet(body));
+      expect(part.layoutElement('conditionalFormatting'), isA<CfBlock>());
+      expect(
+        part.layoutElement('dataValidations'),
+        isA<ItemGroup<XlsxDataValidation>>(),
+      );
+      expect(part.layoutElement('hyperlinks'), isA<ItemGroup<LinkEntry>>());
+      expect(_encode(part), contains(body));
+    });
 
     group('a declaration with a forbidden character saves', () {
       /// The namespace of the element named [name] in [xml].

@@ -16,8 +16,9 @@
 /// `<sheetFormatPr>` and the first `<cols>`, which are typed when plain
 /// (`columns.dart`), the first `<mergeCells>` ([MergeGroup]) and the first
 /// `<hyperlinks>` (an [ItemGroup] of [LinkEntry]) and the first
-/// `<dataValidations>` (an [ItemGroup] of [XlsxDataValidation]); all of these
-/// are edited as immutable values, so `swapLayout` undoes an edit of one
+/// `<dataValidations>` (an [ItemGroup] of [XlsxDataValidation]) and the first
+/// run of adjacent `<conditionalFormatting>`s ([CfBlock]); all of these are
+/// edited as immutable values, so `swapLayout` undoes an edit of one
 /// without touching the others. The first element of each of [_nodeSlots]
 /// (`sheetPr`, `sheetViews`, `pageSetup`, `extLst`, ...) is typed too, as an
 /// [XmlNode] (`element_node.dart`), and swaps the same way; so does an
@@ -62,6 +63,7 @@ import '../read/sheet_reader.dart' show RawRow, RawRowReader;
 import '../warnings.dart';
 import 'cell_store.dart';
 import 'columns.dart';
+import 'conditional_elements.dart';
 import 'element_node.dart';
 import 'item_group.dart';
 import 'validation_elements.dart' show readDataValidation;
@@ -410,6 +412,9 @@ final class WorksheetPart implements PartContent {
       <Object>[],
     );
     final List<Object> children = sheet._children;
+    // The block's list grows while its run of elements lasts, and not after.
+    final List<GroupItem<CfEntry>> conditionalItems = <GroupItem<CfEntry>>[];
+    CfBlock? conditional;
     final int rootDepth = r.depth;
     while (r.next()) {
       if (r.eventType == XmlEventType.endElement && r.depth < rootDepth) {
@@ -499,6 +504,20 @@ final class WorksheetPart implements PartContent {
           ),
         );
       } else if (main &&
+          r.localName == 'conditionalFormatting' &&
+          (conditional == null || identical(children.last, conditional))) {
+        if (conditional == null) {
+          children.add(conditional = CfBlock(conditionalItems));
+        }
+        final OpaqueXml source = OpaqueXml.capture(r);
+        final ({CfEntry? value, String? problem}) read =
+            readConditionalFormatting(source);
+        final String? problem = read.problem;
+        if (problem != null) {
+          warn(XlsxWarningCode.featureEntryInvalid, null, detail: problem);
+        }
+        conditionalItems.add(GroupItem<CfEntry>(read.value, source));
+      } else if (main &&
           r.localName == 'sheetData' &&
           sheet._sheetData == null) {
         final _SheetData data = _SheetData(
@@ -544,7 +563,7 @@ final class WorksheetPart implements PartContent {
   final XmlRoot? _root;
 
   /// [_Dimension], [_SheetFormat], [ColsGroup], [MergeGroup], [XmlNode],
-  /// [ItemGroup], [_SheetData] and [OpaqueXml] children, in order.
+  /// [ItemGroup], [CfBlock], [_SheetData] and [OpaqueXml] children, in order.
   final List<Object> _children;
   _Dimension? _dimension;
 
@@ -712,6 +731,7 @@ final class WorksheetPart implements PartContent {
           c is MergeGroup && after.contains('mergeCells') ||
           c is XmlNode && after.contains(c.localName) ||
           c is ItemGroup<Object?> && after.contains(c.localName) ||
+          c is CfBlock && after.contains('conditionalFormatting') ||
           c is _SheetData && after.contains('sheetData') ||
           c is OpaqueXml &&
               c.namespaceUri == Ns.main &&
@@ -781,6 +801,8 @@ final class WorksheetPart implements PartContent {
             root.namespaces,
             countAttribute: c.localName == 'dataValidations' ? 'count' : null,
           );
+        case CfBlock():
+          c.writeTo(w, root.namespaces);
         case _SheetData():
           _writeSheetData(w, c, root.namespaces, encoder);
         case OpaqueXml():
@@ -1030,6 +1052,34 @@ final class WorksheetPart implements PartContent {
     return group is ItemGroup<XlsxDataValidation> ? group : null;
   }
 
+  /// The first run of adjacent `<conditionalFormatting>`s, or `null` when
+  /// the part has none. Edited as a layout element of slot
+  /// `conditionalFormatting`.
+  CfBlock? get conditionalBlock {
+    for (final Object c in _children) {
+      if (c is CfBlock) return c;
+    }
+    return null;
+  }
+
+  /// The highest priority of the sheet's conditional format rules, those of
+  /// an element that is not listed included, or 0 for none.
+  int get highestConditionalPriority {
+    int highest = 0;
+    for (final Object c in _children) {
+      final int found = switch (c) {
+        CfBlock() => c.highestPriority,
+        OpaqueXml()
+            when c.namespaceUri == Ns.main &&
+                c.localName == 'conditionalFormatting' =>
+          highestRulePriority(c),
+        _ => 0,
+      };
+      if (found > highest) highest = found;
+    }
+    return highest;
+  }
+
   /// The [ItemGroup] of [slot], or `null`.
   ItemGroup<Object?>? _topGroup(String slot) {
     for (final Object c in _children) {
@@ -1040,17 +1090,17 @@ final class WorksheetPart implements PartContent {
 
   /// The typed first element of [slot] (`cols`, `sheetFormatPr`,
   /// `mergeCells`, one of [_nodeSlots], `dataValidations`, `hyperlinks` or
-  /// `conditionalFormatting`), or `null` when the part has none typed. An
-  /// element kept as an [OpaqueXml] is not a slot's element: it is never
-  /// swapped, and a repeated one stays where it is. Elements are immutable,
-  /// so an edit replaces the element, and [swapLayout] undoes it.
+  /// `conditionalFormatting`, whose element is the [CfBlock]), or `null` when
+  /// the part has none typed. An element kept as an [OpaqueXml] is not a
+  /// slot's element: it is never swapped, and a repeated one stays where it
+  /// is. Elements are immutable, so an edit replaces the element, and
+  /// [swapLayout] undoes it.
   Object? layoutElement(String slot) => switch (slot) {
     'cols' => _cols,
     'sheetFormatPr' => _format,
     'mergeCells' => _mergeGroup,
-    'dataValidations' ||
-    'hyperlinks' ||
-    'conditionalFormatting' => _topGroup(slot),
+    'dataValidations' || 'hyperlinks' => _topGroup(slot),
+    'conditionalFormatting' => conditionalBlock,
     _ when _nodeSlots.contains(slot) => _topNode(slot),
     _ => throw ArgumentError.value(slot, 'slot', 'Not a layout slot.'),
   };

@@ -819,6 +819,49 @@ XlsxStyle? conditionalRuleStyle(XlsxConditionalRule rule) => switch (rule) {
   XlsxColorScale() || XlsxDataBar() || XlsxIconSet() => null,
 };
 
+/// [rule] with the style [style]; a kind that takes no style stays as it is.
+XlsxConditionalRule withRuleStyle(XlsxConditionalRule rule, XlsxStyle? style) =>
+    switch (rule) {
+      XlsxCellValueRule() => XlsxCellValueRule(
+        rule.comparison,
+        rule.formula1,
+        formula2: rule.formula2,
+        style: style,
+        stopIfTrue: rule.stopIfTrue,
+      ),
+      XlsxExpressionRule() => XlsxExpressionRule(
+        rule.formula,
+        style: style,
+        stopIfTrue: rule.stopIfTrue,
+      ),
+      XlsxTopBottomRule() => XlsxTopBottomRule(
+        rank: rule.rank,
+        percent: rule.percent,
+        bottom: rule.bottom,
+        style: style,
+        stopIfTrue: rule.stopIfTrue,
+      ),
+      XlsxAverageRule() => XlsxAverageRule(
+        above: rule.above,
+        orEqual: rule.orEqual,
+        standardDeviations: rule.standardDeviations,
+        style: style,
+        stopIfTrue: rule.stopIfTrue,
+      ),
+      XlsxDuplicateRule() => XlsxDuplicateRule(
+        unique: rule.unique,
+        style: style,
+        stopIfTrue: rule.stopIfTrue,
+      ),
+      XlsxTextRule() => XlsxTextRule(
+        rule.operator,
+        rule.text,
+        style: style,
+        stopIfTrue: rule.stopIfTrue,
+      ),
+      XlsxColorScale() || XlsxDataBar() || XlsxIconSet() => rule,
+    };
+
 /// A registered format as the trailer writes it: the rules' `dxfId`s
 /// (`null` for a rule without a style) and the priority of its first rule;
 /// rule `i` has priority `firstPriority + i`. Priorities run from 1 over
