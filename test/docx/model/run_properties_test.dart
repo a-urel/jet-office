@@ -423,14 +423,16 @@ void main() {
       expect(p.underline, const DocxUnderline(DocxUnderlineStyle.single));
     });
 
-    test('a comment between the children of a w:rPr is dropped once the '
-        'body is loaded and saved', () {
-      String document(DocxDocument doc) =>
-          readXlsx(doc.save().bytes)['word/document.xml']!;
+    test('a comment between the children of a w:rPr stays while the part '
+        'has no edit', () {
       final DocxDocument doc = _open('<w:b/><!-- kept? --><w:i/>');
       expect(_run(doc).properties.bold, isTrue);
-      expect(document(doc), isNot(contains('kept?')));
-      expect(_rPr(doc), '<w:b/><w:i/>');
+      expect(_rPr(doc), '<w:b/><!-- kept? --><w:i/>');
+    });
+
+    test('a comment between the children of a w:rPr is dropped by an edit '
+        'of the part', () {
+      final DocxDocument doc = _open('<w:b/><!-- kept? --><w:i/>');
       _run(doc).properties.sizePt = 12;
       expect(_rPr(doc), '<w:b/><w:i/><w:sz w:val="24"/>');
     });
@@ -439,7 +441,7 @@ void main() {
       final DocxDocument doc = _open('<w:sz w:val="1in"/><w:i/>');
       final DocxRunProperties p = _run(doc).properties;
       p.sizePt = null;
-      expect(_rPr(doc), '<w:i/><w:sz w:val="1in"/>');
+      expect(_rPr(doc), '<w:sz w:val="1in"/><w:i/>');
       p.clear(DocxRunProperty.sizePt);
       expect(_rPr(doc), '<w:i/>');
       p.clear(DocxRunProperty.sizePt);

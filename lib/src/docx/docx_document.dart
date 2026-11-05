@@ -15,8 +15,10 @@
 /// the model never loaded from its original bytes (layer 1), so a body never
 /// accessed is copied as it was, even when it would not parse; a loaded
 /// part from the model (layer 2), with what the model does not type kept as
-/// written inside it (layer 3). A styles or numbering part that was loaded
-/// and has not changed is written from its original bytes too.
+/// written inside it (layer 3). A loaded part with nothing to write is
+/// written from its original bytes too: the main part while the document's
+/// `ChangeLog` has no changes, a styles or numbering part while the model
+/// writes what it wrote when read.
 ///
 /// Every edit runs in a transaction of the document's `ChangeLog`
 /// (`primitives.dart`), so an edit that fails leaves the body as it was.
@@ -32,6 +34,7 @@ import 'dart:typed_data';
 
 import '../opc/change_log.dart';
 import '../opc/ooxml.dart' show ContentType, RelType;
+import '../opc/package.dart' show PartContent;
 import '../xml/xml_pull_reader.dart';
 import '../zip/archive_adapter.dart';
 import 'blank_document.dart';
@@ -190,9 +193,15 @@ final class DocxDocument {
   /// Saves the document and returns the file with the warnings of this
   /// save, which [warnings] then holds too.
   ///
-  /// A part never loaded is copied from the file, and a loaded one is
-  /// written from the model. Throws a [DocxReadException] if a part of the
-  /// file cannot be read after all.
+  /// A part never loaded is copied from the file, and so, byte for byte, is
+  /// a loaded one with nothing new to write, comments and out-of-order
+  /// properties included: the main part until the document has an edit (of
+  /// any part, since they share one change log; an edit that failed is
+  /// none, one undone still is), and a styles or numbering part for as long
+  /// as the model writes what it wrote when read. Any other part is written
+  /// from the model, which keeps every element, in schema order, but no
+  /// comment between the children it reads. Throws a [DocxReadException] if
+  /// a part of the file cannot be read after all.
   DocxResult save() {
     final ZipWriter zip = ZipWriter();
     _write(zip);
@@ -230,7 +239,10 @@ final class DocxDocument {
     );
     final DocxBody body = DocxBody._(_edits, part.blocks, this);
     primitives.adoptBlocks(_edits, body, part.blocks);
-    package.package.setContent(main, part);
+    package.package.setContent(
+      main,
+      _MainPart(part, _edits.log, () => package.package.originalBytes(main)),
+    );
     _part = part;
     return _body = body;
   }
@@ -320,6 +332,23 @@ final class DocxDocument {
       if (part != null) ...part.encodeWarnings.warnings,
     ]);
   }
+}
+
+/// The content of a loaded main part: the file's bytes until [_log] has a
+/// change, then what [_part] writes. No edit means nothing to report either:
+/// what the part warns about at save was put there through the API.
+final class _MainPart implements PartContent {
+  _MainPart(this._part, this._log, this._original);
+
+  final DocumentPart _part;
+  final ChangeLog _log;
+
+  /// The part's bytes in the file.
+  final Uint8List Function() _original;
+
+  @override
+  List<Uint8List> encode() =>
+      _log.hasChanges ? _part.encode() : <Uint8List>[_original()];
 }
 
 /// The body of a document, the content of `w:body`: its blocks, in order.

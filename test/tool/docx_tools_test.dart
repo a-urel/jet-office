@@ -12,6 +12,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:test/test.dart';
 
 import '../../tool/compare_resaved_docx.dart';
@@ -21,6 +22,7 @@ import '../../tool/round_trip_docx.dart';
 import '../../tool/src/text_compare.dart';
 import '../../tool/write_fixtures.dart' as write_fixtures;
 import '../docx/support/docx_builder.dart' show buildDocx, rewriteDocxPart;
+import '../docx/support/styles_documents.dart' show readDocxText;
 import '../fixtures/docx_fixtures.dart';
 
 void main() {
@@ -249,6 +251,31 @@ void main() {
       );
       expect(code, 0, reason: '$out');
       expect(names(output), keep.toList()..sort());
+    });
+
+    test('out-of-order properties round-trip: exit 0, the same bytes', () {
+      final Uint8List input = buildDocx(
+        document:
+            '<w:document xmlns:w="${Ns.w}"><w:body><w:p><w:pPr>'
+            '<w:jc w:val="left"/><w:keepNext/></w:pPr><w:r><w:rPr>'
+            '<w:sz w:val="20"/><w:b/></w:rPr><w:t>a</w:t></w:r></w:p>'
+            '</w:body></w:document>',
+      );
+      File('${dir.path}/order.docx').writeAsBytesSync(input);
+      final Directory output = Directory('${temp.path}/out');
+      final StringBuffer out = StringBuffer();
+      final int code = roundTripDocx(
+        <String>[dir.path, output.path],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 0, reason: '$out');
+      expect(
+        readDocxText(
+          File('${output.path}/order.docx').readAsBytesSync(),
+        )['word/document.xml'],
+        readDocxText(input)['word/document.xml'],
+      );
     });
 
     test('a styles part the model cannot read is refused with its name', () {

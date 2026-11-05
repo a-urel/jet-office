@@ -3,8 +3,8 @@
 /// Not ported from Quds; written for jet_office.
 ///
 /// [DocumentPart.read] walks the part once with the pull reader. It types
-/// `w:p`, its `w:pPr` (the style) and its runs; a run's `w:rPr` (the
-/// style), text, tabs, breaks and carriage returns. Everything else is kept
+/// `w:p`, its `w:pPr` and its runs; a run's `w:rPr`, text, tabs, breaks and
+/// carriage returns. Everything else is kept
 /// as written, in place: blocks other than paragraphs (tables, content
 /// controls, bookmarks) as opaque blocks, other paragraph children (tracked
 /// changes, hyperlinks, proofing marks) as opaque inlines, other run
@@ -22,9 +22,11 @@
 /// written as read, with every namespace declaration and `mc:Ignorable`, and
 /// every kept element and attribute is written with the root's bindings as
 /// the ones in scope, so it declares only what it needs and never redeclares
-/// `w`. Typed elements use the root's own prefix for WordprocessingML. An
-/// unchanged read writes the same document (by meaning; see
-/// `tool/src/part_compare.dart`).
+/// `w`. Typed elements use the root's own prefix for WordprocessingML. What
+/// it writes for a part read and not edited means the same as the part (see
+/// `tool/src/part_compare.dart`), with the children of each `w:pPr` and
+/// `w:rPr` in schema order and without comments between them; a document
+/// with no edit therefore saves the file's bytes instead (`DocxDocument`).
 library;
 
 import 'dart:typed_data';

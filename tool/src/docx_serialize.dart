@@ -1,13 +1,14 @@
-/// What a DOCX round trip must do to prove the model serializes the styles
-/// and numbering parts, and reads the typed properties of a document.
+/// What a DOCX round trip must do to prove the model serializes the main,
+/// styles and numbering parts, and reads the typed properties of a document.
 ///
-/// New in jet_office. A loaded styles or numbering part that nothing changed
-/// is saved as it was read, byte for byte (`RelatedPart.load`), so opening
-/// the part in a round trip no longer runs the encoder that writes it. These
-/// helpers do run it: [encodedParts] reads each of the two parts of a file
-/// into its model and encodes it, and [encodedPartDifferences] compares
-/// that with the part in the file by `compareXmlParts`, the meaning-based
-/// comparison of `tool/src/part_compare.dart`. [readTypedProperties] reads
+/// New in jet_office. A loaded part that nothing changed is saved as it was
+/// read, byte for byte (`DocxDocument.save`), so opening the part in a round
+/// trip no longer runs the encoder that writes it. These helpers do run it:
+/// [encodedParts] reads the styles and numbering parts of a file into their
+/// models and encodes them, and [encodedPartDifferences] compares that with
+/// the part in the file by `compareXmlParts`, the meaning-based comparison
+/// of `tool/src/part_compare.dart`; [encodedMainDifferences] does the same
+/// for the main part. [readTypedProperties] reads
 /// every typed property of every paragraph, run, style and list level, so a
 /// value the model cannot read throws here and not in a user's program.
 ///
@@ -15,9 +16,10 @@
 /// (`test/docx/round_trip_test.dart`, `test/docx/owner_files_test.dart`).
 /// Web-safe: no `dart:io`.
 ///
-/// The two parts are looked up by their usual names, `word/styles.xml` and
-/// `word/numbering.xml`; a package that keeps one elsewhere has it
-/// round-tripped as a copy, which the package comparison covers.
+/// The parts are looked up by their usual names, `word/document.xml`,
+/// `word/styles.xml` and `word/numbering.xml`; a package that keeps one
+/// elsewhere has it round-tripped as a copy, which the package comparison
+/// covers.
 library;
 
 import 'dart:convert';
@@ -25,13 +27,16 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/docx/document_part.dart';
 import 'package:jet_office/src/docx/model/primitives.dart' show DocxEdits;
 import 'package:jet_office/src/docx/numbering_part.dart';
 import 'package:jet_office/src/docx/styles_part.dart';
+import 'package:jet_office/src/docx/warnings.dart' show DocxWarningCollector;
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
 
 import 'part_compare.dart';
 
+const String _mainName = 'word/document.xml';
 const String _stylesName = 'word/styles.xml';
 const String _numberingName = 'word/numbering.xml';
 
@@ -83,6 +88,38 @@ List<String> encodedPartDifferences(Uint8List docx) {
     out.addAll(compareXmlParts(name, original, encoded));
   }
   return out;
+}
+
+/// The differences between the main part of [docx] and the same part read
+/// into the model and encoded, one line each, `'<part>: <what>'`; empty when
+/// they mean the same.
+///
+/// The children of each `w:pPr` and `w:rPr` compare in any order: the model
+/// writes them in schema order, and a document with no edit keeps the file's
+/// bytes, so a file whose properties are out of order loses nothing. A part
+/// the model cannot read is one line, not an exception.
+List<String> encodedMainDifferences(Uint8List docx) {
+  final Uint8List? original = _entries(docx)[_mainName];
+  if (original == null) return const <String>[];
+  final Uint8List encoded;
+  try {
+    encoded = _join(
+      DocumentPart.read(
+        XmlPullReader(utf8.decode(original)),
+        DocxWarningCollector(),
+        '/$_mainName',
+        limits: const DocxReadLimits(),
+      ).encode(),
+    );
+  } on Object catch (e) {
+    return <String>['$_mainName: the model cannot read the part: $e'];
+  }
+  return compareXmlParts(
+    _mainName,
+    original,
+    encoded,
+    unordered: const <String>{'pPr', 'rPr'},
+  );
 }
 
 /// Reads every typed property of [doc]: of each paragraph of the body and

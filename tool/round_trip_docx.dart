@@ -6,20 +6,22 @@
 /// ```
 ///
 /// For every `*.docx` in the first directory it opens the document with
-/// `DocxDocument.open`, reads the body (so the main part goes through the
-/// model, not only the copy of an unloaded part), reads every typed property
+/// `DocxDocument.open`, reads the body, reads every typed property
 /// of every paragraph, run, style and list level, which loads the styles and
 /// numbering parts, saves it and writes the bytes to `<outDir>/<name>.docx`.
 /// It then compares the saved package with the input by `comparePackages`
 /// from `tool/src/part_compare.dart`. A model that changes nothing must
 /// leave nothing different, so every difference is a defect.
 ///
-/// A styles or numbering part that is loaded and not changed is saved as it
-/// was read, byte for byte, so loading it does not run the encoder. The tool
-/// therefore also reads each of the two parts into its model, encodes it and
-/// compares that with the part in the input by `encodedPartDifferences` from
-/// `tool/src/docx_serialize.dart`, so CI's round trips serialize both parts
-/// on every fixture, every LibreOffice re-save and every owner file. A Word
+/// A main, styles or numbering part that is loaded and not changed is saved
+/// as it was read, byte for byte, so loading it does not run the encoder. The
+/// tool therefore also reads each of the three parts into its model, encodes
+/// it and compares that with the part in the input by
+/// `encodedPartDifferences` and `encodedMainDifferences` from
+/// `tool/src/docx_serialize.dart`, so CI's round trips serialize them on
+/// every fixture, every LibreOffice re-save and every owner file. The model
+/// writes the properties of a main part in schema order; that comparison
+/// takes them in any order. A Word
 /// lock file (`~$name.docx`, which Word leaves beside an open document) is
 /// skipped.
 ///
@@ -110,6 +112,7 @@ List<String> _roundTrip(File file, Directory output, String name) {
     return <String>[
       ...comparePackages(input, saved),
       ...encodedPartDifferences(input),
+      ...encodedMainDifferences(input),
     ];
   } on Object catch (e) {
     return <String>['the encoded parts failed: $e'];

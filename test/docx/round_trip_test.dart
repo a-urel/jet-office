@@ -144,6 +144,7 @@ void main() {
           ...comparePackages(input, saved.bytes),
           ...encodedPartDifferences(input),
           ...encodedPartDifferences(saved.bytes),
+          ...encodedMainDifferences(input),
         ];
         expect(
           differences,

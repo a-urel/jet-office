@@ -102,6 +102,7 @@ void main() {
       final List<String> differences = <String>[
         ...comparePackages(input, saved.bytes),
         ...encodedPartDifferences(input),
+        ...encodedMainDifferences(input),
       ];
       expect(
         differences,

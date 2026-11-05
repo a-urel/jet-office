@@ -55,6 +55,47 @@ void main() {
     });
   });
 
+  group('encodedMainDifferences', () {
+    const String w =
+        'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+
+    test('takes the properties in any order, as the model reorders them', () {
+      final Uint8List docx = buildDocx(
+        document:
+            '<w:document $w><w:body><w:p><w:pPr><w:jc w:val="left"/>'
+            '<w:keepNext/></w:pPr><w:r><w:rPr><w:sz w:val="20"/><w:b/>'
+            '</w:rPr><w:t>a</w:t></w:r></w:p></w:body></w:document>',
+      );
+      expect(encodedMainDifferences(docx), isEmpty);
+    });
+
+    test('negative control: a difference elsewhere is found', () {
+      final Uint8List docx = buildDocx(
+        document:
+            '<w:document $w><w:body><w:p><w:r><w:t>a</w:t>junk</w:r></w:p>'
+            '</w:body></w:document>',
+      );
+      final List<String> differences = encodedMainDifferences(docx);
+      expect(differences, isNotEmpty);
+      expect(differences.first, startsWith('word/document.xml: '));
+    });
+
+    test('a broken main part is one line', () {
+      final Uint8List docx = buildDocx(document: '<w:document');
+      expect(encodedMainDifferences(docx), hasLength(1));
+    });
+
+    test('finds none in the fixtures', () {
+      for (final DocxFixture f in docxFixtures()) {
+        expect(
+          encodedMainDifferences(f.build().bytes),
+          isEmpty,
+          reason: f.name,
+        );
+      }
+    });
+  });
+
   group('encodedPartDifferences', () {
     test('a broken numbering part is one line, naming only that part', () {
       final Uint8List docx = rewriteDocxPart(
