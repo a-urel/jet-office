@@ -11,10 +11,11 @@
 /// cells). Children of `<sheetData>` other than rows, which the schema does
 /// not allow, are kept too but written after the last row, so their position
 /// among the rows is not kept. Every
-/// other child of `<worksheet>` (`hyperlinks`, `dataValidations`, `drawing`,
-/// ...) is an [OpaqueXml] at its original position, except the first
+/// other child of `<worksheet>` (`dataValidations`, `drawing`, ...) is an
+/// [OpaqueXml] at its original position, except the first
 /// `<sheetFormatPr>` and the first `<cols>`, which are typed when plain
-/// (`columns.dart`), and the first `<mergeCells>` ([MergeGroup]); all three
+/// (`columns.dart`), the first `<mergeCells>` ([MergeGroup]) and the first
+/// `<hyperlinks>` (an [ItemGroup] of [LinkEntry]); all of these
 /// are edited as immutable values, so `swapLayout` undoes an edit of one
 /// without touching the others. The first element of each of [_nodeSlots]
 /// (`sheetPr`, `sheetViews`, `pageSetup`, `extLst`, ...) is typed too, as an
@@ -43,6 +44,7 @@ import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
 import '../../opc/package.dart';
 import '../../xml/utf8_buffer.dart';
+import '../../xml/xml_escape.dart' show decodeXstring;
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../cell_encoder.dart';
@@ -127,6 +129,44 @@ const Set<String> _nodeSlots = <String>{
   'headerFooter',
   'extLst',
 };
+
+/// A `<hyperlink>`, as the model reads it: the cells it covers and the
+/// attributes that say where it goes, as written (the `location`, `tooltip`
+/// and `display` with `_xHHHH_` decoded).
+///
+/// The relationship id names a relationship of the sheet part, whose target
+/// is the external address; `null` for a link inside the workbook.
+typedef LinkEntry = ({
+  XlsxRange range,
+  String? relationshipId,
+  String? location,
+  String? tooltip,
+  String? display,
+});
+
+/// The [LinkEntry] of the `<hyperlink>` [element], or the problem that keeps
+/// it from being read: no `ref`, or one that is not a range of cells.
+({LinkEntry? value, String? problem}) readLinkEntry(OpaqueXml element) {
+  final XmlPullReader r = readerOf(element);
+  final String? ref = r.getAttribute('ref', namespaceUri: '');
+  final XlsxRange? range = ref == null ? null : parseMergeRange(ref);
+  if (range == null) return (value: null, problem: 'hyperlink');
+  String? text(String name) {
+    final String? value = r.getAttribute(name, namespaceUri: '');
+    return value == null ? null : decodeXstring(value);
+  }
+
+  return (
+    value: (
+      range: range,
+      relationshipId: r.getAttribute('id', namespaceUri: Ns.rel),
+      location: text('location'),
+      tooltip: text('tooltip'),
+      display: text('display'),
+    ),
+    problem: null,
+  );
+}
 
 /// The typed `<dimension>`: its `ref` is recomputed on save.
 final class _Dimension {
@@ -425,6 +465,20 @@ final class WorksheetPart implements PartContent {
       } else if (main && r.localName == 'mergeCells' && !sheet._hasMergeCells) {
         sheet._hasMergeCells = true;
         children.add(_readMergeCells(r, part, limits, warn));
+      } else if (main && r.localName == 'hyperlinks' && !sheet._hasHyperlinks) {
+        sheet._hasHyperlinks = true;
+        children.add(
+          readItemGroup<LinkEntry>(
+            r,
+            childName: 'hyperlink',
+            read: readLinkEntry,
+            warn: (String problem) => warn(
+              XlsxWarningCode.featureEntryInvalid,
+              null,
+              detail: problem,
+            ),
+          ),
+        );
       } else if (main &&
           r.localName == 'sheetData' &&
           sheet._sheetData == null) {
@@ -502,6 +556,10 @@ final class WorksheetPart implements PartContent {
   /// Whether the part read a SpreadsheetML `<mergeCells>`; a second one is
   /// kept opaque and its merges are not read.
   bool _hasMergeCells = false;
+
+  /// Whether the part read a SpreadsheetML `<hyperlinks>`; a second one is
+  /// kept opaque.
+  bool _hasHyperlinks = false;
 
   /// The elements of [_nodeSlots] the part read; a second one of a name is
   /// kept opaque.
@@ -932,6 +990,13 @@ final class WorksheetPart implements PartContent {
     } else {
       _children[_children.indexOf(old)] = node;
     }
+  }
+
+  /// The first `<hyperlinks>` as a group of [LinkEntry]s, or `null` when the
+  /// part has none. Edited as a layout element of slot `hyperlinks`.
+  ItemGroup<LinkEntry>? get hyperlinkGroup {
+    final ItemGroup<Object?>? group = _topGroup('hyperlinks');
+    return group is ItemGroup<LinkEntry> ? group : null;
   }
 
   /// The [ItemGroup] of [slot], or `null`.

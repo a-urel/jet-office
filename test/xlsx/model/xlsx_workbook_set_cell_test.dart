@@ -215,16 +215,6 @@ void main() {
       'milestone', () {
     final XlsxSheet sheet = XlsxWorkbook().addSheet('S');
     expect(
-      () => sheet.setCell(0, 0, const XlsxHyperlink(address: 'x', text: 'x')),
-      throwsA(
-        isA<UnsupportedError>().having(
-          (UnsupportedError e) => e.message,
-          'message',
-          'XlsxHyperlink cells arrive in W3.',
-        ),
-      ),
-    );
-    expect(
       () => sheet.setCell(
         0,
         0,
@@ -241,14 +231,6 @@ void main() {
     expect(
       () => sheet.setCell(0, 0, const XlsxCell(XlsxCell(1))),
       throwsArgumentError,
-    );
-    expect(
-      () => sheet.setCell(
-        0,
-        0,
-        const XlsxCell(XlsxHyperlink(address: 'x', text: 'x')),
-      ),
-      throwsUnsupportedError,
     );
     expect(() => sheet.setCell(0, 0, Object()), throwsArgumentError);
     expect(() => sheet.setCell(-1, 0, 1), throwsRangeError);

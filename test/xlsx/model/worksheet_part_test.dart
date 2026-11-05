@@ -503,22 +503,25 @@ void main() {
       expect(node.children.single, isA<OpaqueXml>());
     });
 
-    test('validations, links and conditional formats stay opaque', () {
-      const String body =
-          '<sheetData/>'
-          '<conditionalFormatting sqref="A1"/>'
-          '<dataValidations count="9"/>'
-          '<hyperlinks/>';
-      final WorksheetPart part = _read(_sheet(body));
-      for (final String slot in <String>[
-        'conditionalFormatting',
-        'dataValidations',
-        'hyperlinks',
-      ]) {
-        expect(part.layoutElement(slot), isNull, reason: slot);
-      }
-      expect(_encode(part), contains(body));
-    });
+    test(
+      'validations and conditional formats stay opaque, links are typed',
+      () {
+        const String body =
+            '<sheetData/>'
+            '<conditionalFormatting sqref="A1"/>'
+            '<dataValidations count="9"/>'
+            '<hyperlinks/>';
+        final WorksheetPart part = _read(_sheet(body));
+        for (final String slot in <String>[
+          'conditionalFormatting',
+          'dataValidations',
+        ]) {
+          expect(part.layoutElement(slot), isNull, reason: slot);
+        }
+        expect(part.layoutElement('hyperlinks'), isA<ItemGroup<LinkEntry>>());
+        expect(_encode(part), contains(body));
+      },
+    );
 
     group('a declaration with a forbidden character saves', () {
       /// The namespace of the element named [name] in [xml].
