@@ -157,13 +157,17 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   and the SDK must reject the output; a truncated copy is the round trip's
   own negative control.
 - `tool/edit_docx.dart` opens every `.docx` of a directory with
-  `DocxDocument`, sets the text of the first run with text, replaces the
-  last paragraph of runs only with a new one, adds a paragraph of style
-  `Heading1` (`Normal` when `word/styles.xml` defines no `Heading1`), saves
-  to the second directory, and checks the edits read back and that
-  `comparePackages` finds differences in `word/document.xml` only (and in
-  the styles part with what names it, when the style had to be added). It
-  prints each problem as `<file>: <problem>` and exits 1 on any, 2 on
+  `DocxDocument`, sets the text of the first run with text and makes it bold
+  and accent 1, replaces the last paragraph of plain runs (no field,
+  drawing or `sectPr`) with a new one, adds a paragraph styled
+  `styles.ensure(DocxBuiltInStyle.heading1)` (`Balk1` in a Turkish Word
+  file), adds a two-item bullet list (the second item at level 1), saves to
+  the second directory, and checks the edits read back (bold, style, list
+  number) and that `comparePackages` finds differences only in the main part
+  (named by the root relationship), the numbering part, the styles part when
+  `ensure` added a style, and `[Content_Types].xml` with the main part's
+  relationships when a part was created. It prints each problem as
+  `<file>: <problem>` and exits 1 on any, 2 on
   unusable arguments. CI runs it on the fixtures, on LibreOffice's re-save
   and on the owner's Word files, and validates the three outputs with the
   Open XML SDK; the owner opens the edited owner files in Word
