@@ -106,7 +106,7 @@ bool _flag(String? text) => text == '1' || text == 'true';
     }
     final String name = r.localName;
     if (name != 'formula1' && name != 'formula2') continue;
-    final String formula = _childText(r);
+    final String formula = childText(r);
     if (name == 'formula1') {
       formula1 ??= formula;
     } else {
@@ -167,7 +167,7 @@ XlsxDataValidation normalizedValidation(XlsxDataValidation validation) {
 }
 
 /// The decoded text of the element [r] is on, consuming it.
-String _childText(XmlPullReader r) {
+String childText(XmlPullReader r) {
   final StringBuffer out = StringBuffer();
   final int depth = r.depth;
   while (r.next()) {

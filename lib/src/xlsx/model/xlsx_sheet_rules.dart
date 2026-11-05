@@ -194,6 +194,9 @@ mixin _SheetRules {
   /// Adds [format] after the others, as the sheet writer writes it: its
   /// rules take the priorities after the sheet's highest, and each style a
   /// `<dxf>` of the styles part, an equal one the file has or a new one.
+  /// [conditionalFormats] then gives it as the file says it: without a
+  /// leading `=` of a formula, and with none for an icon set's default
+  /// thresholds.
   ///
   /// Throws an [ArgumentError] naming the field, as the writer's
   /// `conditionalFormat` does (`rules[0].rank`, `rules[1].style.numFmt`),
@@ -238,10 +241,13 @@ mixin _SheetRules {
               (format: format, dxfIds: dxfIds, firstPriority: firstPriority),
             ], _host.sheetIndexOf(this as XlsxSheet) + 1),
       ).single;
+      final List<XlsxConditionalRule> rules = normalizedConditionalFormat(
+        format,
+      ).rules;
       final CfEntry entry = CfEntry(format.ranges, <CfRuleEntry>[
-        for (int i = 0; i < format.rules.length; i++)
+        for (int i = 0; i < rules.length; i++)
           CfRuleEntry(
-            withRuleStyle(format.rules[i], null),
+            withRuleStyle(rules[i], null),
             firstPriority + i,
             dxfId: dxfIds[i],
           ),
@@ -285,6 +291,11 @@ mixin _SheetRules {
   /// other elements, readable or not, stay as written and in their order,
   /// and the `<dxf>`s of the styles part stay.
   ///
+  /// [format] also matches as the writer writes it, so one built by hand
+  /// matches the entry it was added as: a leading `=` of a formula and
+  /// thresholds that are an icon set's defaults do not count. The value the
+  /// getter gives matches as it is, whatever the file wrote.
+  ///
   /// Throws an [ArgumentError] when none is equal, a [StateError] for a
   /// sheet that is not a worksheet or has no part and an
   /// [XlsxReadException] when the sheet cannot be read. Whatever it throws,
@@ -294,9 +305,12 @@ mixin _SheetRules {
     final CfBlock? block = part.conditionalBlock;
     final List<GroupItem<CfEntry>> items =
         block?.items ?? const <GroupItem<CfEntry>>[];
+    final XlsxConditionalFormat written = normalizedConditionalFormat(format);
     final int at = items.indexWhere((GroupItem<CfEntry> item) {
       final CfEntry? entry = item.value;
-      return entry != null && _conditionalFormatOf(entry) == format;
+      if (entry == null) return false;
+      final XlsxConditionalFormat listed = _conditionalFormatOf(entry);
+      return listed == format || listed == written;
     });
     if (block == null || at < 0) {
       throw ArgumentError.value(
@@ -305,9 +319,7 @@ mixin _SheetRules {
         'The sheet "$name" has no equal conditional format.',
       );
     }
-    final CfBlock next = block.withItems(
-      <GroupItem<CfEntry>>[...items]..removeAt(at),
-    );
+    final CfBlock next = CfBlock(<GroupItem<CfEntry>>[...items]..removeAt(at));
     final ChangeLog log = _host.log;
     log.transaction(() {
       editLayout(

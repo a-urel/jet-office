@@ -4,6 +4,8 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/ooxml.dart';
 import 'package:jet_office/src/opc/opaque_xml.dart';
+import 'package:jet_office/src/xlsx/conditional_format.dart'
+    show defaultIconSetThresholds;
 import 'package:jet_office/src/xlsx/model/conditional_elements.dart';
 import 'package:jet_office/src/xlsx/model/item_group.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
@@ -163,6 +165,25 @@ List<XlsxConditionalFormat> _addable() => <XlsxConditionalFormat>[
   ),
 ];
 
+/// Formats whose value differs from what a reading of the file gives.
+List<XlsxConditionalFormat> _asWrittenDiffers() => <XlsxConditionalFormat>[
+  _format('A1', const XlsxExpressionRule('=A1>0')),
+  _format(
+    'A1:A9',
+    XlsxColorScale(
+      const <XlsxCfValue>[XlsxCfValue.min(), XlsxCfValue.formula(r'=$A$1')],
+      <XlsxColor>[XlsxColor.hex('FF0000'), XlsxColor.hex('00FF00')],
+    ),
+  ),
+  _format(
+    'A1:A9',
+    XlsxIconSet(
+      XlsxIconSetType.threeArrows,
+      thresholds: defaultIconSetThresholds(3),
+    ),
+  ),
+];
+
 void main() {
   group('reading', () {
     test('reads m3_conditional', () {
@@ -178,15 +199,27 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook();
       final XlsxSheet sheet = book.addSheet('S');
       _addable().forEach(sheet.addConditionalFormat);
-      final List<XlsxConditionalFormat> added = _addable();
-      expect(sheet.conditionalFormats, added);
-      final XlsxWorkbook again = XlsxWorkbook.open(book.save().bytes);
-      final List<XlsxConditionalFormat> read =
-          again.sheets.single.conditionalFormats;
-      expect(read.skip(1), added.skip(1));
+      final List<XlsxConditionalFormat> listed = sheet.conditionalFormats;
       // The first has a formula with a leading `=`, which is not written.
-      expect((read.first.rules.first as XlsxCellValueRule).formula2, '2');
+      expect((listed.first.rules.first as XlsxCellValueRule).formula2, '2');
+      expect(listed, _addable().map(normalizedConditionalFormat));
+      final XlsxWorkbook again = XlsxWorkbook.open(book.save().bytes);
+      expect(again.sheets.single.conditionalFormats, listed);
       expect(_invalid(again), 0);
+    });
+
+    test('the getter gives what the file says, before and after a save', () {
+      for (final XlsxConditionalFormat format in _asWrittenDiffers()) {
+        final XlsxWorkbook book = XlsxWorkbook();
+        final XlsxSheet sheet = book.addSheet('S');
+        sheet.addConditionalFormat(format);
+        final XlsxWorkbook again = XlsxWorkbook.open(book.save().bytes);
+        expect(
+          again.sheets.single.conditionalFormats,
+          sheet.conditionalFormats,
+        );
+        expect(sheet.conditionalFormats.single, isNot(format));
+      }
     });
 
     test('rule order is the file\'s, not the priorities\'', () {
@@ -745,6 +778,182 @@ void main() {
       }
       expect(sheet.conditionalFormats, isEmpty);
       expect(_elements(_xml(book)), isEmpty);
+    });
+
+    test('add, reopen, remove with the original value', () {
+      for (final XlsxConditionalFormat format in <XlsxConditionalFormat>[
+        ..._asWrittenDiffers(),
+        ..._addable(),
+      ]) {
+        final XlsxWorkbook book = XlsxWorkbook();
+        book.addSheet('S').addConditionalFormat(format);
+        final XlsxWorkbook again = XlsxWorkbook.open(book.save().bytes);
+        final XlsxSheet sheet = again.sheets.single;
+        sheet.removeConditionalFormat(format);
+        expect(sheet.conditionalFormats, isEmpty, reason: '$format');
+      }
+    });
+
+    test('a value the getter gave removes, whatever the file wrote', () {
+      for (final String formula in <String>['=A1', '==A1']) {
+        final String body =
+            '<conditionalFormatting sqref="A1"><cfRule type="expression" '
+            'priority="1"><formula>$formula</formula></cfRule>'
+            '</conditionalFormatting>';
+        final XlsxSheet sheet = _open(body).sheets.single;
+        final XlsxConditionalFormat listed = sheet.conditionalFormats.single;
+        expect(
+          listed.rules.single,
+          XlsxExpressionRule(formula),
+          reason: 'kept as written',
+        );
+        sheet.removeConditionalFormat(listed);
+        expect(sheet.conditionalFormats, isEmpty);
+      }
+    });
+  });
+
+  group('normalizedConditionalFormat', () {
+    XlsxConditionalRule normalized(XlsxConditionalRule rule) =>
+        normalizedConditionalFormat(_format('A1', rule)).rules.single;
+
+    test('one leading = goes from every formula', () {
+      expect(
+        normalized(
+          const XlsxCellValueRule(
+            XlsxComparison.between,
+            '=1',
+            formula2: '==2',
+            style: _boldStyle,
+            stopIfTrue: true,
+          ),
+        ),
+        const XlsxCellValueRule(
+          XlsxComparison.between,
+          '1',
+          formula2: '=2',
+          style: _boldStyle,
+          stopIfTrue: true,
+        ),
+      );
+      expect(
+        normalized(
+          const XlsxExpressionRule('=A1', style: _boldStyle, stopIfTrue: true),
+        ),
+        const XlsxExpressionRule('A1', style: _boldStyle, stopIfTrue: true),
+      );
+    });
+
+    test('and from every point', () {
+      expect(
+        normalized(
+          XlsxColorScale(
+            const <XlsxCfValue>[
+              XlsxCfValue.formula('=A1', greaterOrEqual: false),
+              XlsxCfValue.max(),
+            ],
+            <XlsxColor>[XlsxColor.hex('FF0000'), XlsxColor.hex('00FF00')],
+            stopIfTrue: true,
+          ),
+        ),
+        XlsxColorScale(
+          const <XlsxCfValue>[
+            XlsxCfValue.formula('A1', greaterOrEqual: false),
+            XlsxCfValue.max(),
+          ],
+          <XlsxColor>[XlsxColor.hex('FF0000'), XlsxColor.hex('00FF00')],
+          stopIfTrue: true,
+        ),
+      );
+      final XlsxDataBar bar = XlsxDataBar(
+        min: const XlsxCfValue.formula('=A1'),
+        max: const XlsxCfValue(XlsxCfValueType.number, value: '=B1'),
+        color: XlsxColor.hex('638EC6'),
+        showValue: false,
+        minLength: 5,
+        maxLength: 95,
+        gradient: false,
+        border: true,
+        borderColor: XlsxColor.hex('000001'),
+        negativeFillColor: XlsxColor.hex('000002'),
+        negativeBorderColor: XlsxColor.hex('000003'),
+        axis: XlsxDataBarAxis.middle,
+        axisColor: XlsxColor.hex('000004'),
+        stopIfTrue: true,
+      );
+      expect(
+        normalized(bar),
+        XlsxDataBar(
+          min: const XlsxCfValue.formula('A1'),
+          max: const XlsxCfValue(XlsxCfValueType.number, value: 'B1'),
+          color: bar.color,
+          showValue: false,
+          minLength: 5,
+          maxLength: 95,
+          gradient: false,
+          border: true,
+          borderColor: bar.borderColor,
+          negativeFillColor: bar.negativeFillColor,
+          negativeBorderColor: bar.negativeBorderColor,
+          axis: XlsxDataBarAxis.middle,
+          axisColor: bar.axisColor,
+          stopIfTrue: true,
+        ),
+      );
+    });
+
+    test('default thresholds collapse, others stay', () {
+      expect(
+        normalized(
+          XlsxIconSet(
+            XlsxIconSetType.threeArrows,
+            thresholds: const <XlsxCfValue>[
+              XlsxCfValue(XlsxCfValueType.percent, value: '=0'),
+              XlsxCfValue(XlsxCfValueType.percent, value: '33'),
+              XlsxCfValue(XlsxCfValueType.percent, value: '67'),
+            ],
+            reverse: true,
+            showValue: false,
+            stopIfTrue: true,
+          ),
+        ),
+        XlsxIconSet(
+          XlsxIconSetType.threeArrows,
+          reverse: true,
+          showValue: false,
+          stopIfTrue: true,
+        ),
+      );
+      final XlsxIconSet other = XlsxIconSet(
+        XlsxIconSetType.threeArrows,
+        thresholds: <XlsxCfValue>[
+          XlsxCfValue.percent(0),
+          XlsxCfValue.percent(33),
+          XlsxCfValue.percent(68),
+        ],
+      );
+      expect(normalized(other), other);
+      expect(
+        normalized(XlsxIconSet(XlsxIconSetType.threeArrows)),
+        XlsxIconSet(XlsxIconSetType.threeArrows),
+      );
+    });
+
+    test('a text rule\'s text is not a formula', () {
+      const XlsxTextRule rule = XlsxTextRule(
+        XlsxTextOperator.contains,
+        '=x',
+        style: _boldStyle,
+      );
+      expect(normalized(rule), rule);
+    });
+
+    test('ranges stay', () {
+      final XlsxConditionalFormat format = XlsxConditionalFormat(
+        <XlsxRange>[_r('A1'), _r('B2:C3')],
+        const <XlsxConditionalRule>[XlsxDuplicateRule(), XlsxAverageRule()],
+      );
+      expect(normalizedConditionalFormat(format), format);
     });
   });
 

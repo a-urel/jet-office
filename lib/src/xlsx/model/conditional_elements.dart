@@ -36,7 +36,7 @@ import '../conditional_format.dart';
 import '../range.dart';
 import 'item_group.dart' show GroupItem, readerOf;
 import 'style_elements.dart' show ReadStyleValue, readColor;
-import 'validation_elements.dart' show parseSqref;
+import 'validation_elements.dart' show childText, parseSqref;
 
 /// The highest value of the `xsd:int` a `priority` is.
 const int maxRulePriority = 0x7FFFFFFF;
@@ -83,9 +83,9 @@ final class CfEntry {
 /// keeps the order of the elements.
 ///
 /// The elements are [items] in file order, each kept as written; one that
-/// cannot be read has no value. A block is immutable: an edit makes a new one
-/// with [withItems], and it may hold no item, when it writes nothing and only
-/// keeps its place, so an undo puts the elements back there.
+/// cannot be read has no value. A block is immutable: an edit makes a new one,
+/// and it may hold no item, when it writes nothing and only keeps its place,
+/// so an undo puts the elements back there.
 final class CfBlock {
   /// A block of [items].
   const CfBlock(this.items);
@@ -109,9 +109,6 @@ final class CfBlock {
     }
     return highest;
   }
-
-  /// This block holding [next].
-  CfBlock withItems(List<GroupItem<CfEntry>> next) => CfBlock(next);
 
   /// Writes the elements to [w]. [above] holds the bindings in scope.
   void writeTo(XmlWriter w, Map<String, String> above) {
@@ -182,6 +179,89 @@ int highestRulePriority(OpaqueXml element) {
   return (value: CfEntry(ranges, rules, element), problem: null);
 }
 
+/// [format] as a reading of what the writer writes for it gives: a leading
+/// `=` of a formula or a `cfvo` value is not written, and an icon set's
+/// default thresholds read as none. An added entry holds this form, so the
+/// model says what its file says, and removal looks for it, so a value built
+/// by hand matches the entry it was added as, after a save too.
+XlsxConditionalFormat normalizedConditionalFormat(
+  XlsxConditionalFormat format,
+) => XlsxConditionalFormat(format.ranges, <XlsxConditionalRule>[
+  for (final XlsxConditionalRule rule in format.rules) _normalizedRule(rule),
+]);
+
+XlsxConditionalRule _normalizedRule(XlsxConditionalRule rule) => switch (rule) {
+  XlsxCellValueRule() => XlsxCellValueRule(
+    rule.comparison,
+    _written(rule.formula1),
+    formula2: rule.formula2 == null ? null : _written(rule.formula2!),
+    style: rule.style,
+    stopIfTrue: rule.stopIfTrue,
+  ),
+  XlsxExpressionRule() => XlsxExpressionRule(
+    _written(rule.formula),
+    style: rule.style,
+    stopIfTrue: rule.stopIfTrue,
+  ),
+  XlsxColorScale() => XlsxColorScale(
+    rule.points.map(_normalizedPoint).toList(),
+    rule.colors,
+    stopIfTrue: rule.stopIfTrue,
+  ),
+  XlsxDataBar() => XlsxDataBar(
+    min: _normalizedPoint(rule.min),
+    max: _normalizedPoint(rule.max),
+    color: rule.color,
+    showValue: rule.showValue,
+    minLength: rule.minLength,
+    maxLength: rule.maxLength,
+    gradient: rule.gradient,
+    border: rule.border,
+    borderColor: rule.borderColor,
+    negativeFillColor: rule.negativeFillColor,
+    negativeBorderColor: rule.negativeBorderColor,
+    axis: rule.axis,
+    axisColor: rule.axisColor,
+    stopIfTrue: rule.stopIfTrue,
+  ),
+  XlsxIconSet() => XlsxIconSet(
+    rule.type,
+    thresholds: rule.thresholds == null
+        ? null
+        : _thresholds(
+            rule.type,
+            rule.thresholds!.map(_normalizedPoint).toList(),
+          ),
+    reverse: rule.reverse,
+    showValue: rule.showValue,
+    stopIfTrue: rule.stopIfTrue,
+  ),
+  XlsxTopBottomRule() ||
+  XlsxAverageRule() ||
+  XlsxDuplicateRule() ||
+  XlsxTextRule() => rule,
+};
+
+XlsxCfValue _normalizedPoint(XlsxCfValue point) => XlsxCfValue(
+  point.type,
+  value: point.value == null ? null : _written(point.value!),
+  greaterOrEqual: point.greaterOrEqual,
+);
+
+/// [text] without one leading `=`.
+String _written(String text) => text.startsWith('=') ? text.substring(1) : text;
+
+/// [points] as an icon set of [type] holds them: `null` when they are
+/// Excel's default thresholds, which the writer writes for none.
+List<XlsxCfValue>? _thresholds(XlsxIconSetType type, List<XlsxCfValue> points) {
+  final List<XlsxCfValue> defaults = defaultIconSetThresholds(type.iconCount);
+  if (points.length != defaults.length) return points;
+  for (int i = 0; i < points.length; i++) {
+    if (points[i] != defaults[i]) return points;
+  }
+  return null;
+}
+
 /// What the children of a `<cfRule>` hold.
 final class _RuleBody {
   /// The texts of the `<formula>` children, in order.
@@ -233,7 +313,7 @@ CfRuleEntry? _readRule(XmlPullReader r) {
     final String name = r.namespaceUri == Ns.main ? r.localName : '';
     switch (name) {
       case 'formula':
-        body.formulas.add(_childText(r));
+        body.formulas.add(childText(r));
       case 'colorScale' || 'dataBar' || 'iconSet' when body.name == null:
         _readBody(r, body);
       case 'extLst':
@@ -368,15 +448,9 @@ XlsxIconSet? _iconSet(_RuleBody body, bool stopIfTrue) {
     if (t.xmlName == name && !t.isX14Only) type = t;
   }
   if (type == null) return null;
-  final List<XlsxCfValue> defaults = defaultIconSetThresholds(type.iconCount);
-  final List<XlsxCfValue> points = body.points;
-  bool isDefault = points.length == defaults.length;
-  for (int i = 0; isDefault && i < points.length; i++) {
-    isDefault = points[i] == defaults[i];
-  }
   return XlsxIconSet(
     type,
-    thresholds: isDefault ? null : points,
+    thresholds: _thresholds(type, body.points),
     reverse: _flag(body.attributes['reverse']),
     showValue: _flag(body.attributes['showValue'], fallback: true),
     stopIfTrue: stopIfTrue,
@@ -455,7 +529,7 @@ String? _readX14Id(XmlPullReader r) {
     if (r.eventType == XmlEventType.startElement &&
         r.namespaceUri == Ns.x14 &&
         r.localName == 'id') {
-      final String text = _childText(r);
+      final String text = childText(r);
       id ??= text;
     }
   }
@@ -481,17 +555,3 @@ bool _flag(String? text, {bool fallback = false}) => switch (text) {
   '0' || 'false' => false,
   _ => fallback,
 };
-
-/// The decoded text of the element [r] is on, consuming it.
-String _childText(XmlPullReader r) {
-  final StringBuffer out = StringBuffer();
-  final int depth = r.depth;
-  while (r.next()) {
-    if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
-    if (r.eventType == XmlEventType.characters ||
-        r.eventType == XmlEventType.cdata) {
-      out.write(r.text);
-    }
-  }
-  return decodeXstring(out.toString());
-}
