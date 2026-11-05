@@ -251,8 +251,9 @@ final class WorkbookPart implements PartContent {
   ///
   /// Throws an [XlsxReadException] of reason `unsupportedFormat` for a Strict
   /// root and `limitExceeded` when `<sheets>` lists more than
-  /// [XlsxReadLimits.maxSheets] sheets. An `XmlParseException` passes
-  /// through.
+  /// [XlsxReadLimits.maxSheets] sheets or `<definedNames>` holds more than
+  /// [XlsxReadLimits.maxMerges] children, naming [part]. An
+  /// `XmlParseException` passes through.
   ///
   /// A `<sheet>`'s `sheetId` is written back exactly as read: absent stays
   /// absent and text that is not an unsigned int (`abc`, `-1`) is kept
@@ -267,6 +268,7 @@ final class WorkbookPart implements PartContent {
     XmlPullReader r,
     XlsxReadLimits limits, {
     void Function(XlsxWarningCode code, String detail)? warn,
+    String part = 'xl/workbook.xml',
   }) {
     while (r.next()) {
       if (r.eventType == XmlEventType.startElement) break;
@@ -313,6 +315,8 @@ final class WorkbookPart implements PartContent {
         names = readItemGroup<NameEntry>(
           r,
           childName: 'definedName',
+          limits: limits,
+          part: part,
           read: readNameEntry,
           warn: (String problem) =>
               warn?.call(XlsxWarningCode.featureEntryInvalid, problem),
@@ -535,9 +539,10 @@ final class WorkbookPart implements PartContent {
     );
   }
 
-  /// Replaces [old], as [names] returned it, by [entry], in the same place;
-  /// [entry] is rendered as the writer writes a name. Not recorded or
-  /// counted, as [addName].
+  /// Gives [old], as [names] returned it, the formula and the `hidden` of
+  /// [entry], in the same place: only the element's text changes, and
+  /// `hidden` when it differs, so every other attribute stays as written
+  /// (`rewriteNameEntry`). Not recorded or counted, as [addName].
   ///
   /// Throws an [ArgumentError] named `old` when it is not a name of the part
   /// and a [StateError] for an untyped part.
@@ -555,7 +560,10 @@ final class WorkbookPart implements PartContent {
     final List<GroupItem<NameEntry>> next = <GroupItem<NameEntry>>[
       ...current.items,
     ];
-    next[at] = GroupItem<NameEntry>(entry, renderNameEntry(entry));
+    next[at] = GroupItem<NameEntry>(
+      entry,
+      rewriteNameEntry(current.items[at].source, old, entry),
+    );
     swapElement('definedNames', current, current.withItems(next));
   }
 

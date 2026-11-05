@@ -49,6 +49,7 @@ import '../read/styles_reader.dart';
 import '../style.dart';
 import '../style_registry.dart';
 import '../warnings.dart';
+import 'item_group.dart' show checkListRoom;
 import 'palette.dart';
 import 'style_elements.dart';
 
@@ -340,6 +341,7 @@ final class StylesPart implements PartContent {
     XmlPullReader r,
     XlsxReadLimits limits, {
     StyleWarn? warn,
+    String part = 'xl/styles.xml',
   }) {
     while (r.next()) {
       if (r.eventType == XmlEventType.startElement) break;
@@ -386,6 +388,7 @@ final class StylesPart implements PartContent {
           _readEntry,
           limited: false,
           keepCount: true,
+          listIn: part,
         );
         children.add(dxfs);
       } else if (kind != null && groups[kind.index] == null) {
@@ -1261,6 +1264,7 @@ _Group _readGroup(
   Object Function(XmlPullReader, XlsxReadLimits) readItem, {
   bool limited = true,
   bool keepCount = false,
+  String? listIn,
 }) {
   final String localName = r.localName;
   final String qualifiedName = r.qualifiedName;
@@ -1290,6 +1294,7 @@ _Group _readGroup(
   while (r.next()) {
     if (r.eventType == XmlEventType.endElement && r.depth < groupDepth) break;
     if (r.eventType != XmlEventType.startElement) continue;
+    if (listIn != null) checkListRoom(items.length, limits, listIn);
     if (r.depth == groupDepth + 1 &&
         r.localName == name &&
         r.namespaceUri == Ns.main) {

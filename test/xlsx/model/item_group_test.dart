@@ -1,3 +1,5 @@
+import 'package:jet_office/jet_office.dart'
+    show XlsxReadException, XlsxReadFailure, XlsxReadLimits;
 import 'package:jet_office/src/opc/ooxml.dart';
 import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xlsx/model/item_group.dart';
@@ -19,17 +21,22 @@ XmlPullReader _onChild(String xml) {
 
 /// Reads the group that is the first child of the root of [xml], each
 /// `<item>` as its `v`; an item without one is a problem.
-ItemGroup<String> _read(String xml, {List<String>? problems}) =>
-    readItemGroup<String>(
-      _onChild(xml),
-      childName: 'item',
-      read: (OpaqueXml child) {
-        final XmlPullReader r = readerOf(child);
-        final String? v = r.getAttribute('v');
-        return (value: v, problem: v == null ? 'item: no v.' : null);
-      },
-      warn: (String problem) => problems?.add(problem),
-    );
+ItemGroup<String> _read(
+  String xml, {
+  List<String>? problems,
+  XlsxReadLimits limits = const XlsxReadLimits(),
+}) => readItemGroup<String>(
+  _onChild(xml),
+  childName: 'item',
+  limits: limits,
+  part: 'xl/part.xml',
+  read: (OpaqueXml child) {
+    final XmlPullReader r = readerOf(child);
+    final String? v = r.getAttribute('v');
+    return (value: v, problem: v == null ? 'item: no v.' : null);
+  },
+  warn: (String problem) => problems?.add(problem),
+);
 
 String _written(ItemGroup<String> group, {String? count = 'count'}) {
   final StringBuffer out = StringBuffer();
@@ -61,6 +68,8 @@ void main() {
       final ItemGroup<String> group = readItemGroup<String>(
         r,
         childName: 'item',
+        limits: const XlsxReadLimits(),
+        part: 'xl/part.xml',
         read: (OpaqueXml child) =>
             (value: readerOf(child).getAttribute('v'), problem: null),
         warn: (String problem) => fail(problem),
@@ -82,12 +91,39 @@ void main() {
       final ItemGroup<String> group = readItemGroup<String>(
         r,
         childName: 'item',
+        limits: const XlsxReadLimits(),
+        part: 'xl/part.xml',
         read: (OpaqueXml child) => fail('no child'),
         warn: (String problem) => fail(problem),
       );
       expect(group.items, isEmpty);
       r.next();
       expect(r.localName, 'after');
+    });
+
+    test('more children than maxMerges allows throw, naming the part', () {
+      String xml(int count) =>
+          '<root xmlns="${Ns.main}"><group>${'<item v="x"/>' * (count - 1)}'
+          '<other/></group></root>';
+      const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 3);
+      expect(
+        () => _read(xml(4), limits: limits),
+        throwsA(
+          isA<XlsxReadException>()
+              .having(
+                (XlsxReadException e) => e.reason,
+                'reason',
+                XlsxReadFailure.limitExceeded,
+              )
+              .having(
+                (XlsxReadException e) => e.message,
+                'message',
+                contains('maxMerges (3)'),
+              )
+              .having((XlsxReadException e) => e.part, 'part', 'xl/part.xml'),
+        ),
+      );
+      expect(_read(xml(3), limits: limits).items, hasLength(3));
     });
 
     test('an entry with a problem is kept, counted and reported', () {

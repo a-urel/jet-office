@@ -334,6 +334,21 @@ void main() {
     expect(XlsxWorkbook.open(book.save().bytes).definedNames.single.name, 'n');
   });
 
+  test('maxMerges bounds the names of the workbook, at open', () {
+    const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 5);
+    Uint8List file(int count) => _package(
+      '<definedNames>${'<definedName name="a"/>' * count}</definedNames>',
+    );
+    expect(
+      () => XlsxWorkbook.open(file(6), limits: limits),
+      throwsLimit('maxMerges', 5, 'xl/workbook.xml'),
+    );
+    expect(
+      XlsxWorkbook.open(file(5), limits: limits).definedNames,
+      hasLength(5),
+    );
+  });
+
   group('recalculation', () {
     String calcPr(XlsxWorkbook book) =>
         RegExp('<calcPr[^>]*/>').firstMatch(_workbookXml(book))!.group(0)!;

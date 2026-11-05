@@ -462,6 +462,133 @@ void main() {
     expect(log.hasChanges, isFalse);
   });
 
+  group('a sheet that is not a worksheet', () {
+    XlsxWorkbook chart() => XlsxWorkbook.open(
+      buildWorkbook(<String, String?>{'C': '<chartsheet xmlns="$mainNs"/>'}),
+    );
+    XlsxWorkbook partless() =>
+        XlsxWorkbook.open(buildWorkbook(<String, String?>{'P': null}));
+
+    for (final (String name, XlsxWorkbook Function() open)
+        in <(String, XlsxWorkbook Function())>[
+          ('a chartsheet', chart),
+          ('a sheet without a part', partless),
+        ]) {
+      test('$name takes no print area or titles', () {
+        final XlsxWorkbook book = open();
+        final XlsxSheet sheet = book.sheets.single;
+        expect(
+          () => sheet.printArea = <XlsxRange>[_r('A1:B2')],
+          throwsStateError,
+        );
+        expect(() => sheet.setPrintTitles(rows: (0, 0)), throwsStateError);
+        expect(changeLogOf(book).hasChanges, isFalse);
+        expect(_workbookXml(book), isNot(contains('definedName')));
+      });
+    }
+
+    test('a bad range is still an ArgumentError', () {
+      final XlsxSheet sheet = chart().sheets.single;
+      expect(() => sheet.setPrintTitles(rows: (2, 1)), throwsArgumentError);
+    });
+  });
+
+  group('a changed name keeps what it does not type', () {
+    const String kept =
+        'publishToServer="1" description="kept" xr:uid="{1}" '
+        'xmlns:xr="urn:xr"';
+
+    Uint8List file(String name, String formula, {String hidden = ''}) =>
+        _package(
+          <String, String>{'S': _worksheet('<autoFilter ref="A1:B2"/>')},
+          names:
+              '<definedNames><definedName name="$name" localSheetId="0" '
+              '$hidden$kept>$formula</definedName></definedNames>',
+        );
+
+    void keeps(String xml) {
+      expect(xml, contains('publishToServer="1"'));
+      expect(xml, contains('description="kept"'));
+      expect(xml, contains('xr:uid="{1}"'));
+      expect(xml, contains('xmlns:xr="urn:xr"'));
+    }
+
+    test('a print area', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        file('_xlnm.Print_Area', r'S!$A$1:$B$2'),
+      );
+      book.sheets.single.printArea = <XlsxRange>[_r('C3:D4')];
+      final String xml = _namesXml(_workbookXml(book));
+      keeps(xml);
+      expect(xml, contains(r"'S'!$C$3:$D$4</definedName>"));
+      expect(book.sheets.single.printArea, <XlsxRange>[_r('C3:D4')]);
+    });
+
+    test('print titles', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        file('_xlnm.Print_Titles', r'S!$1:$1'),
+      );
+      book.sheets.single.setPrintTitles(rows: (1, 2));
+      final String xml = _namesXml(_workbookXml(book));
+      keeps(xml);
+      expect(xml, contains(r"'S'!$2:$3</definedName>"));
+    });
+
+    test('a filter', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        file('_xlnm._FilterDatabase', r'S!$A$1:$B$2', hidden: 'hidden="true" '),
+      );
+      book.sheets.single.autoFilter = _r('A1:C9');
+      final String xml = _namesXml(_workbookXml(book));
+      keeps(xml);
+      expect(xml, contains('hidden="true"'));
+      expect(xml, contains(r"'S'!$A$1:$C$9</definedName>"));
+    });
+
+    test('a filter name that was not hidden becomes hidden', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        file('_xlnm._FilterDatabase', r'S!$A$1:$B$2'),
+      );
+      book.sheets.single.autoFilter = _r('A1:C9');
+      final String xml = _namesXml(_workbookXml(book));
+      keeps(xml);
+      expect(xml, contains('hidden="1"'));
+    });
+
+    test('a prefixed name stays prefixed, and undo restores it', () {
+      final Uint8List input = _package(
+        <String, String>{'S': _worksheet('')},
+        names:
+            '<x:definedNames xmlns:x="$mainNs"><x:definedName '
+            'name="_xlnm.Print_Area" localSheetId="0" $kept>'
+            'S!\$A\$1</x:definedName></x:definedNames>',
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(() {
+        book.sheets.single.printArea = <XlsxRange>[_r('B2')];
+      });
+      expect(_workbookXml(book), contains(r"'S'!$B$2</x:definedName>"));
+      log.revertSet(set);
+      expect(comparePackages(input, book.save().bytes), isEmpty);
+    });
+
+    test('a formula is escaped as the writer escapes it', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          <String, String>{'A&B': _worksheet('')},
+          names:
+              '<definedNames><definedName name="_xlnm.Print_Area" '
+              'localSheetId="0" $kept>\'A&amp;B\'!\$A\$1</definedName>'
+              '</definedNames>',
+        ),
+      );
+      book.sheets.single.printArea = <XlsxRange>[_r('B2')];
+      expect(_workbookXml(book), contains("'A&amp;B'!"));
+      expect(book.sheets.single.printArea, <XlsxRange>[_r('B2')]);
+    });
+  });
+
   test('an equal set records nothing', () {
     final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m3_names'));
     final XlsxSheet sheet = book.sheet("O'Brien");

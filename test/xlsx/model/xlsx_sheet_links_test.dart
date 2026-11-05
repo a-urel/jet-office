@@ -140,18 +140,89 @@ void main() {
       expect(book.warnings, isEmpty);
     });
 
-    test('the text is the display, else the cell text, else empty', () {
+    test('the text is the cell string, else the display, else empty', () {
       final XlsxWorkbook book = _open(
         '<hyperlinks><hyperlink ref="A1" location="L" display="shown"/>'
         '<hyperlink ref="A2" location="L"/>'
-        '<hyperlink ref="A3" location="L"/></hyperlinks>',
+        '<hyperlink ref="A3" location="L" display="shown"/>'
+        '<hyperlink ref="A4" location="L" display="shown"/>'
+        '<hyperlink ref="A5" location="L"/></hyperlinks>',
         data:
             '<row r="1">${_cell('A1', 'cell one')}</row>'
-            '<row r="2">${_cell('A2', 'cell two')}</row>',
+            '<row r="2">${_cell('A2', 'cell two')}</row>'
+            '<row r="4"><c r="A4"><v>4</v></c></row>',
       );
       expect(
         <String>[for (final h in book.sheets.single.hyperlinks) h.link.text],
-        <String>['shown', 'cell two', ''],
+        <String>['cell one', 'cell two', 'shown', 'shown', ''],
+      );
+    });
+
+    test('a plain value set in the cell is the text the link reads', () {
+      final XlsxWorkbook book = _open(
+        '<hyperlinks><hyperlink ref="A1" location="L" display="old"/>'
+        '</hyperlinks>',
+        data: '<row r="1">${_cell('A1', 'old')}</row>',
+      );
+      final XlsxSheet sheet = book.sheets.single..setCell(0, 0, 'new');
+      expect(sheet.hyperlinkAt(0, 0)?.text, 'new');
+    });
+
+    test('a sheet of very many links reads in linear time', testOn: 'vm', () {
+      const int count = 150000;
+      final StringBuffer links = StringBuffer('<hyperlinks>');
+      final StringBuffer rels = StringBuffer();
+      for (int i = 0; i < count; i++) {
+        links.write('<hyperlink ref="A${i + 1}" r:id="rId$i"/>');
+        rels.write(_rel('rId$i', 'https://a.example/$i'));
+      }
+      links.write('</hyperlinks>');
+      final XlsxSheet sheet = _open(
+        links.toString(),
+        rels: rels.toString(),
+      ).sheets.single;
+      // Loads the sheet, so that only the join is timed. A test's timeout
+      // cannot stop code that never yields, so the bound is checked after:
+      // a fraction of a second here, minutes when quadratic.
+      sheet.merges;
+      final Stopwatch watch = Stopwatch()..start();
+      final List<({XlsxRange range, XlsxHyperlink link})> read =
+          sheet.hyperlinks;
+      expect(watch.elapsed, lessThan(const Duration(seconds: 15)));
+      expect(read, hasLength(count));
+      expect(read.last.link.address, 'https://a.example/${count - 1}');
+    });
+
+    test('of two relationships with one id the first gives the address', () {
+      final XlsxWorkbook book = _open(
+        '<hyperlinks><hyperlink ref="A1" r:id="rId1"/></hyperlinks>',
+        rels:
+            '<Relationship Id="rId1" Type="$relNs/image" Target="i.png"/>'
+            '${_rel('rId1', 'https://first.example')}'
+            '${_rel('rId1', 'https://second.example')}',
+      );
+      expect(
+        book.sheets.single.hyperlinkAt(0, 0)?.address,
+        'https://first.example',
+      );
+    });
+
+    test('maxMerges bounds the links of a sheet', () {
+      const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 5);
+      Uint8List file(int count) => _package(
+        _worksheet(
+          '<hyperlinks>${'<hyperlink ref="A1" location="L"/>' * count}'
+          '</hyperlinks>',
+        ),
+      );
+      expect(
+        () =>
+            XlsxWorkbook.open(file(6), limits: limits).sheets.single.hyperlinks,
+        throwsLimit('maxMerges', 5, 'xl/worksheets/sheet1.xml'),
+      );
+      expect(
+        XlsxWorkbook.open(file(5), limits: limits).sheets.single.hyperlinks,
+        hasLength(5),
       );
     });
 
@@ -696,6 +767,125 @@ void main() {
       log.reapplySet(set);
       expect(sheet.hyperlinkAt(0, 0)?.address, 'https://a.example');
       expect(_relationships(book), 1);
+    });
+  });
+
+  group('an equal link is no edit', () {
+    void unchanged(
+      String name,
+      String links,
+      int row,
+      int column, {
+      String data = '',
+      String? rels,
+    }) {
+      test(name, () {
+        final Uint8List input = _package(
+          _worksheet(links, data: data),
+          rels: rels,
+        );
+        final XlsxWorkbook book = XlsxWorkbook.open(input);
+        final XlsxSheet sheet = book.sheets.single;
+        final XlsxHyperlink link = sheet.hyperlinkAt(row, column)!;
+        sheet.setCell(row, column, link);
+        expect(changeLogOf(book).hasChanges, isFalse);
+        expect(
+          comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+          isEmpty,
+        );
+      });
+    }
+
+    unchanged(
+      'a display that differs from the cell',
+      '<hyperlinks><hyperlink ref="A1" location="L" display="shown"/>'
+          '</hyperlinks>',
+      0,
+      0,
+      data: '<row r="1">${_cell('A1', 'cell')}</row>',
+    );
+    unchanged(
+      'a link on a number',
+      '<hyperlinks><hyperlink ref="A1" location="L"/></hyperlinks>',
+      0,
+      0,
+      data: '<row r="1"><c r="A1"><v>4</v></c></row>',
+    );
+    unchanged(
+      'a link on no cell',
+      '<hyperlinks><hyperlink ref="A1" location="L" display="d"/>'
+          '</hyperlinks>',
+      0,
+      0,
+    );
+    unchanged(
+      'a cell inside a link of several cells',
+      '<hyperlinks><hyperlink ref="A1:B2" location="L"/></hyperlinks>',
+      1,
+      1,
+      data: '<row r="1">${_cell('A1', 'first')}</row>',
+    );
+    unchanged(
+      'a link the writer would refuse: an r:id naming nothing',
+      '<hyperlinks><hyperlink ref="A1" r:id="rId9"/></hyperlinks>',
+      0,
+      0,
+    );
+    unchanged(
+      'an address with attributes the model does not type',
+      '<hyperlinks><hyperlink ref="A1" r:id="rId1" extra="1"/></hyperlinks>',
+      0,
+      0,
+      data: '<row r="1">${_cell('A1', 'a')}</row>',
+      rels: _rel('rId1', 'https://a.example'),
+    );
+
+    test('every link of m3_hyperlinks', () {
+      final Uint8List input = _fixture('m3_hyperlinks');
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      for (final XlsxSheet sheet in book.sheets) {
+        for (final h in sheet.hyperlinks) {
+          sheet.setCell(h.range.firstRow, h.range.firstColumn, h.link);
+        }
+      }
+      expect(changeLogOf(book).hasChanges, isFalse);
+    });
+
+    test('a link that differs is an edit', () {
+      final XlsxWorkbook book = _open(
+        '<hyperlinks><hyperlink ref="A1" location="L"/></hyperlinks>',
+        data: '<row r="1">${_cell('A1', 'a')}</row>',
+      );
+      book.sheets.single.setCell(0, 0, XlsxHyperlink.location('L', text: 'b'));
+      expect(changeLogOf(book).hasChanges, isTrue);
+    });
+
+    test('an invalid link that is not on the cell still throws', () {
+      final XlsxWorkbook book = _open(
+        '<hyperlinks><hyperlink ref="A1" r:id="rId9"/></hyperlinks>',
+      );
+      expect(
+        () => book.sheets.single.setCell(1, 0, const XlsxHyperlink(text: '')),
+        throwsArgumentError,
+      );
+    });
+
+    test('an XlsxCell of an equal link styles the cell, the link stays', () {
+      final XlsxWorkbook book = _open(
+        '<hyperlinks><hyperlink ref="A1" location="L" extra="1"/></hyperlinks>',
+        data: '<row r="1">${_cell('A1', 'a')}</row>',
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.setCell(
+        0,
+        0,
+        XlsxCell(
+          sheet.hyperlinkAt(0, 0),
+          style: const XlsxStyle(font: XlsxFont(bold: true)),
+        ),
+      );
+      expect(_sheetXml(book), contains('extra="1"'));
+      expect(book.sheets.single.cellAt(0, 0)?.value, 'a');
     });
   });
 

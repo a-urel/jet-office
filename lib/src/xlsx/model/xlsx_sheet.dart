@@ -394,7 +394,10 @@ final class XlsxSheet
   /// relationship, and the replaced link's relationship goes when no other
   /// link uses it. A value that is not a link leaves the cell's link, as
   /// Excel does ([removeHyperlink] removes it). A table's header cell takes
-  /// no link, as it takes only text. All of it is one change.
+  /// no link, as it takes only text. All of it is one change. A link equal
+  /// to the cell's [hyperlinkAt] changes nothing, neither the element nor
+  /// the cell, and throws nothing for a link the writer would refuse; in an
+  /// [XlsxCell] it leaves the element, and the cell takes the style as above.
   ///
   /// A shared formula's follower may be set and leaves its group. Throws a
   /// [StateError] for a cell inside an array or data-table formula (Excel
@@ -420,7 +423,13 @@ final class XlsxSheet
     final Object? plain = value is XlsxCell ? value.value : value;
     switch (plain) {
       case XlsxHyperlink():
-        checkHyperlink(plain);
+        try {
+          checkHyperlink(plain);
+        } on ArgumentError {
+          // A file may hold a link the writer refuses: set back, it is no
+          // edit.
+          if (hyperlinkAt(row, column) != plain) rethrow;
+        }
       case XlsxRichText():
         throw UnsupportedError('XlsxRichText cells arrive in W4.');
       case XlsxCell():
@@ -444,6 +453,9 @@ final class XlsxSheet
         );
     }
     final WorksheetPart part = _editablePart('cells');
+    final bool sameLink =
+        plain is XlsxHyperlink && hyperlinkAt(row, column) == plain;
+    if (sameLink && !styled) return;
     final CellStore store = part.cells;
     switch (groupRoleAt(store, row, column)) {
       case GroupRole.arrayOrTableMember:
@@ -532,7 +544,9 @@ final class XlsxSheet
     final StylesPart? styles = target == null ? null : _stylesFor();
     final ChangeLog log = _host.log;
     log.transaction(() {
-      if (link != null) _applyLink(part, row, column, link, linkPlan!);
+      if (link != null && !sameLink) {
+        _applyLink(part, row, column, link, linkPlan!);
+      }
       if (header != null && rename != null) {
         renameTableColumn(log, header.table, header.index, rename);
         _host.reader.package.setContent(header.partName, header.table);

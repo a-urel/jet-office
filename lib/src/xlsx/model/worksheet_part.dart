@@ -480,6 +480,8 @@ final class WorksheetPart implements PartContent {
           readItemGroup<LinkEntry>(
             r,
             childName: 'hyperlink',
+            limits: limits,
+            part: part,
             read: readLinkEntry,
             warn: (String problem) => warn(
               XlsxWarningCode.featureEntryInvalid,
@@ -496,6 +498,8 @@ final class WorksheetPart implements PartContent {
           readItemGroup<XlsxDataValidation>(
             r,
             childName: 'dataValidation',
+            limits: limits,
+            part: part,
             read: readDataValidation,
             warn: (String problem) => warn(
               XlsxWarningCode.featureEntryInvalid,
@@ -510,6 +514,7 @@ final class WorksheetPart implements PartContent {
         if (conditional == null) {
           children.add(conditional = CfBlock(conditionalItems));
         }
+        checkListRoom(conditionalItems.length, limits, part);
         final OpaqueXml source = OpaqueXml.capture(r);
         final ({CfEntry? value, String? problem}) read =
             readConditionalFormatting(source);
@@ -541,6 +546,7 @@ final class WorksheetPart implements PartContent {
         extLst,
         warn: (String problem) =>
             warn(XlsxWarningCode.featureEntryInvalid, null, detail: problem),
+        checkRoom: (int count) => checkListRoom(count, limits, part),
       );
     }
     sheet._fileRowLevel = sheet._deepestRowLevel();

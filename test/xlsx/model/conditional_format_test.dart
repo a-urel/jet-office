@@ -185,6 +185,51 @@ List<XlsxConditionalFormat> _asWrittenDiffers() => <XlsxConditionalFormat>[
 ];
 
 void main() {
+  test('maxMerges bounds the conditional formats of a sheet', () {
+    const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 5);
+    String body(int count) =>
+        '<conditionalFormatting sqref="A1"><cfRule type="expression" '
+            'priority="1"><formula>1</formula></cfRule></conditionalFormatting>' *
+        count;
+    expect(
+      () => XlsxWorkbook.open(
+        _file(body(6)),
+        limits: limits,
+      ).sheets.single.conditionalFormats,
+      throwsLimit('maxMerges', 5, 'xl/worksheets/sheet1.xml'),
+    );
+    expect(
+      XlsxWorkbook.open(
+        _file(body(5)),
+        limits: limits,
+      ).sheets.single.conditionalFormats,
+      hasLength(5),
+    );
+  });
+
+  test('maxMerges bounds the differential styles', () {
+    const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 5);
+    Uint8List file(int count) => _file(
+      '<conditionalFormatting sqref="A1"><cfRule type="expression" '
+      'priority="1"><formula>1</formula></cfRule></conditionalFormatting>',
+      styles: _styles('<dxf/>' * count),
+    );
+    expect(
+      () => XlsxWorkbook.open(
+        file(6),
+        limits: limits,
+      ).sheets.single.conditionalFormats,
+      throwsLimit('maxMerges', 5, 'xl/styles.xml'),
+    );
+    expect(
+      XlsxWorkbook.open(
+        file(5),
+        limits: limits,
+      ).sheets.single.conditionalFormats,
+      hasLength(1),
+    );
+  });
+
   group('reading', () {
     test('reads m3_conditional', () {
       final Fixture fixture = allFixtures().firstWhere(
@@ -972,6 +1017,35 @@ void main() {
       final String xml = _xml(book);
       expect(xml, contains(bad));
       expect(xml, isNot(contains('dxfId="7"')));
+    });
+
+    test('a dangling dxfId goes live when an add appends at its index', () {
+      const XlsxStyle red = XlsxStyle(
+        fill: XlsxFill.solid(XlsxColor.rgb(0xFF0000)),
+      );
+      final XlsxWorkbook book = _open(
+        '<conditionalFormatting sqref="C1">'
+        '<cfRule type="expression" dxfId="1" priority="1">'
+        '<formula>C1</formula></cfRule></conditionalFormatting>',
+        styles: _styles(_bold),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      expect(
+        (sheet.conditionalFormats.single.rules.single as XlsxExpressionRule)
+            .style,
+        isNull,
+      );
+      sheet.addConditionalFormat(
+        _format('D1', const XlsxExpressionRule('D1', style: red)),
+      );
+      final XlsxSheet again = XlsxWorkbook.open(
+        book.save().bytes,
+      ).sheets.single;
+      expect(
+        (again.conditionalFormats.first.rules.single as XlsxExpressionRule)
+            .style,
+        isNotNull,
+      );
     });
 
     test('a dangling id without a styles part reads with no style', () {

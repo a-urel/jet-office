@@ -47,22 +47,23 @@ mixin _SheetLinks {
   /// the sheet writer's `hyperlinks` writes them.
   ///
   /// A link's [XlsxHyperlink.address] is the target of the relationship its
-  /// `r:id` names, as written; the text is its `display`, else the text of
-  /// the first cell it covers, else empty. A `<hyperlink>` whose `ref` is not
-  /// a range of cells is kept as written, left out here and reported once as
-  /// `featureEntryInvalid` with the detail `hyperlink`; so is one whose `r:id`
-  /// names no hyperlink relationship, which is listed with no address. Only
-  /// the first `<hyperlinks>` is read. Unmodifiable. Loads the sheet. Throws
-  /// an [XlsxReadException] when the sheet, or its relationships when a link
+  /// `r:id` names, as written; the text is the string of the first cell it
+  /// covers, what Excel shows whatever `display` says, else its `display`,
+  /// else empty. A `<hyperlink>` whose `ref` is not a range of cells is kept
+  /// as written, left out here and reported once as `featureEntryInvalid`
+  /// with the detail `hyperlink`; so is one whose `r:id` names no hyperlink
+  /// relationship, which is listed with no address. Only the first
+  /// `<hyperlinks>` is read. Unmodifiable. Loads the sheet. Throws an
+  /// [XlsxReadException] when the sheet, or its relationships when a link
   /// names one, cannot be read.
   List<({XlsxRange range, XlsxHyperlink link})> get hyperlinks {
     final List<LinkEntry> entries =
         _load()?.hyperlinkGroup?.values ?? const <LinkEntry>[];
-    final List<OpcRelationship>? rels = _relationshipsFor(entries);
+    final Map<String, String>? targets = _targetsFor(entries);
     return List<({XlsxRange range, XlsxHyperlink link})>.unmodifiable(
       <({XlsxRange range, XlsxHyperlink link})>[
         for (final LinkEntry e in entries)
-          (range: e.range, link: _linkOf(e, rels)),
+          (range: e.range, link: _linkOf(e, targets)),
       ],
     );
   }
@@ -79,7 +80,7 @@ mixin _SheetLinks {
     final int at = _linkIndex(group, row, column);
     if (at < 0) return null;
     final LinkEntry entry = group.items[at].value!;
-    return _linkOf(entry, _relationshipsFor(<LinkEntry>[entry]));
+    return _linkOf(entry, _targetsFor(<LinkEntry>[entry]));
   }
 
   /// Removes the link that covers the cell at [row] and [column], the whole
@@ -276,36 +277,39 @@ mixin _SheetLinks {
     );
   }
 
-  /// The relationships [entries] need: read only when one names a
+  /// The targets of the sheet's hyperlink relationships by id, the first of
+  /// an id winning, which [entries] need: read only when one names a
   /// relationship, `null` otherwise.
-  List<OpcRelationship>? _relationshipsFor(List<LinkEntry> entries) =>
-      entries.any((LinkEntry e) => e.relationshipId != null)
-      ? _readRelationships()
-      : null;
+  Map<String, String>? _targetsFor(List<LinkEntry> entries) {
+    if (!entries.any((LinkEntry e) => e.relationshipId != null)) return null;
+    final Map<String, String> targets = <String, String>{};
+    for (final OpcRelationship r in _readRelationships()) {
+      if (r.type == RelType.hyperlink) {
+        targets.putIfAbsent(r.id, () => r.target);
+      }
+    }
+    return targets;
+  }
 
-  /// [entry] as the public value: its address from [rels], its text its
-  /// display, else the text of its first cell.
-  XlsxHyperlink _linkOf(LinkEntry entry, List<OpcRelationship>? rels) {
+  /// [entry] as the public value: its address from [targets], its text the
+  /// string of its first cell, else its display.
+  XlsxHyperlink _linkOf(LinkEntry entry, Map<String, String>? targets) {
     final String? id = entry.relationshipId;
     String? address;
     if (id != null) {
-      for (final OpcRelationship r in rels ?? const <OpcRelationship>[]) {
-        if (r.id == id && r.type == RelType.hyperlink) {
-          address = r.target;
-          break;
-        }
-      }
+      address = targets?[id];
       if (address == null && _featureReported.add('hyperlink')) {
         _warn(XlsxWarningCode.featureEntryInvalid, null, detail: 'hyperlink');
       }
     }
-    final Object? shown = entry.display == null
-        ? cellAt(entry.range.firstRow, entry.range.firstColumn)?.value
-        : null;
+    final Object? shown = cellAt(
+      entry.range.firstRow,
+      entry.range.firstColumn,
+    )?.value;
     return XlsxHyperlink(
       address: address,
       location: entry.location,
-      text: entry.display ?? (shown is String ? shown : ''),
+      text: shown is String ? shown : entry.display ?? '',
       tooltip: entry.tooltip,
     );
   }

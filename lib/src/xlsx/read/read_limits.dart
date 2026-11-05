@@ -66,6 +66,13 @@ final class XlsxReadLimits {
   ///
   /// The cache lives as long as the reader, so a small sheet part listing
   /// millions of `<mergeCell>`s could otherwise fill memory.
+  ///
+  /// `XlsxWorkbook` applies it to each sheet's merges when the sheet loads,
+  /// and in the same way to the other lists of small entries it keeps, each
+  /// list on its own: a sheet's hyperlinks, data validations, conditional
+  /// formats and Excel 2010 conditional formats (their elements, and the
+  /// rules of the sheet's), the workbook's defined names and the styles
+  /// part's differential styles.
   final int maxMerges;
 
   /// Throws an [ArgumentError] naming the first field below 1.

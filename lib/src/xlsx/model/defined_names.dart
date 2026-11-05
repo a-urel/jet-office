@@ -20,6 +20,7 @@ import '../../xml/xml_writer.dart';
 import '../defined_name.dart';
 import '../sheet_name.dart';
 import '../workbook_parts.dart' show writeDefinedName;
+import 'columns.dart' show replaceAttributes;
 import 'item_group.dart';
 import 'workbook_part.dart';
 
@@ -123,6 +124,47 @@ OpaqueXml renderNameEntry(NameEntry entry) => renderElements(
     comment: entry.comment,
   ),
 ).single;
+
+/// [source], the element of the name [old], holding the formula of [entry]
+/// as the writer writes one, with `hidden` set as [entry] says when it
+/// differs from [old]. Its name, prefix, declarations and every other
+/// attribute (`publishToServer`, `description`, `xr:uid`, ...) stay as
+/// written.
+OpaqueXml rewriteNameEntry(OpaqueXml source, NameEntry old, NameEntry entry) {
+  final XmlPullReader r = readerOf(source);
+  final Map<String, String> namespaces = Map<String, String>.of(
+    r.declaredNamespaces,
+  );
+  final List<KeptAttribute> kept = keepAttributes(r);
+  final Map<String, String> inner = mergeNamespaces(
+    source.inheritedNamespaces,
+    namespaces,
+  );
+  final StringBuffer out = StringBuffer();
+  final XmlWriter w = XmlWriter(out)..start('wrapper');
+  writeNamespaceDeclarations(w, source.inheritedNamespaces);
+  w.start(r.qualifiedName);
+  writeNamespaceDeclarations(w, namespaces);
+  writeKeptAttributes(
+    w,
+    old.hidden == entry.hidden
+        ? kept
+        : replaceAttributes(kept, <String, String?>{
+            'hidden': entry.hidden ? '1' : null,
+          }),
+    declaredAbove: inner,
+  );
+  w
+    ..raw(escapeFormulaText(scrubXmlText(entry.formula).text))
+    ..end()
+    ..end();
+  // The element was read under the file's depth limit, as in `readerOf`.
+  return OpaqueXml.capture(
+    XmlPullReader(out.toString(), maxDepth: 0x7FFFFFFF)
+      ..next()
+      ..next(),
+  );
+}
 
 /// The change of the `<definedNames>` group made by `defineName` or
 /// `removeName`: the group before and after, and, as that moves the

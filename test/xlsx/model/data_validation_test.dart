@@ -90,6 +90,27 @@ XlsxWorkbook _fixtureBook() => XlsxWorkbook.open(
 );
 
 void main() {
+  test('maxMerges bounds the validations of a sheet', () {
+    const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 5);
+    Uint8List file(int count) => buildWorkbook(<String, String>{
+      'S': _sheet(
+        '<dataValidations>${'<dataValidation sqref="A1"/>' * count}'
+        '</dataValidations>',
+      ),
+    });
+    expect(
+      () => XlsxWorkbook.open(
+        file(6),
+        limits: limits,
+      ).sheets.single.dataValidations,
+      throwsLimit('maxMerges', 5, 'xl/worksheets/sheet1.xml'),
+    );
+    expect(
+      XlsxWorkbook.open(file(5), limits: limits).sheets.single.dataValidations,
+      hasLength(5),
+    );
+  });
+
   test('reads m3_validation to the fixture values, in order', () {
     final XlsxWorkbook book = _fixtureBook();
     expect(book.sheets.single.dataValidations, _fixtureValidations());

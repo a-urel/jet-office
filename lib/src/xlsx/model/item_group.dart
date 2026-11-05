@@ -26,6 +26,8 @@ import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
+import '../read/read_exception.dart';
+import '../read/read_limits.dart';
 import 'columns.dart';
 
 /// One child of an [ItemGroup].
@@ -125,15 +127,34 @@ final class ItemGroup<T> {
   }
 }
 
+/// Checks that a list of [count] items may take one more under [limits].
+///
+/// A small part could otherwise list millions of entries, each a kept
+/// element. Throws a `limitExceeded` [XlsxReadException] naming `maxMerges`
+/// and [part] when it may not.
+void checkListRoom(int count, XlsxReadLimits limits, String part) {
+  if (count >= limits.maxMerges) {
+    throw XlsxReadException(
+      XlsxReadFailure.limitExceeded,
+      'Limit maxMerges (${limits.maxMerges}) exceeded.',
+      part: part,
+    );
+  }
+}
+
 /// Reads the group element the current event of [r] starts and consumes it:
 /// afterwards [r] is on the element's end event.
 ///
 /// A direct SpreadsheetML child named [childName] is an entry: [read] gives
 /// its value, or a problem for [warn], and the element is kept either way
-/// and counted. Any other child is kept, not counted and not read.
+/// and counted. Any other child is kept, not counted and not read. Throws a
+/// `limitExceeded` [XlsxReadException] naming `maxMerges` and [part] when
+/// the group holds more children of any kind than [limits] allows.
 ItemGroup<T> readItemGroup<T>(
   XmlPullReader r, {
   required String childName,
+  required XlsxReadLimits limits,
+  required String part,
   required ({T? value, String? problem}) Function(OpaqueXml child) read,
   required void Function(String problem) warn,
 }) {
@@ -151,6 +172,7 @@ ItemGroup<T> readItemGroup<T>(
     while (r.next()) {
       if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
       if (r.eventType != XmlEventType.startElement) continue;
+      checkListRoom(items.length, limits, part);
       final bool entry =
           r.depth == depth + 1 &&
           r.namespaceUri == Ns.main &&

@@ -65,10 +65,13 @@ mixin _SheetPrint {
   /// The name is written as the writer's `printArea` writes it, after the
   /// names already there, or in the place of this sheet's own. A list equal
   /// to [printArea] changes nothing. Throws an [ArgumentError] named
-  /// `ranges[i]` for a range the writer refuses; nothing has changed then.
-  /// A print area asks Excel for no recalculation.
+  /// `ranges[i]` for a range the writer refuses, a [StateError] for a sheet
+  /// that is not a worksheet or has no part and an [XlsxReadException] when
+  /// the sheet cannot be read; nothing has changed then. A print area asks
+  /// Excel for no recalculation.
   set printArea(List<XlsxRange> ranges) {
     checkPrintAreaRanges(ranges);
+    _editablePart('print area');
     final List<XlsxRange> current = printArea;
     if (current.length == ranges.length) {
       bool same = true;
@@ -111,10 +114,13 @@ mixin _SheetPrint {
   ///
   /// Written as the writer's `printTitles` writes it. Values equal to
   /// [printTitles] change nothing. Throws an [ArgumentError] named `rows`
-  /// or `columns` for a span outside the sheet or reversed; nothing has
-  /// changed then.
+  /// or `columns` for a span outside the sheet or reversed, a [StateError]
+  /// for a sheet that is not a worksheet or has no part and an
+  /// [XlsxReadException] when the sheet cannot be read; nothing has changed
+  /// then.
   void setPrintTitles({(int, int)? rows, (int, int)? columns}) {
     checkPrintTitles(rows: rows, columns: columns);
+    _editablePart('print titles');
     final ({(int, int)? rows, (int, int)? columns}) current = printTitles;
     if (current.rows == rows && current.columns == columns) return;
     _setBuiltIn(

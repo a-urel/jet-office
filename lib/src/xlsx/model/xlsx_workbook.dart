@@ -163,7 +163,8 @@ final class XlsxWorkbook {
   /// Throws an [ArgumentError] naming the field, as the writer's
   /// constructors do, for text XML cannot hold or a bad custom entry, and a
   /// [StateError] for a part that is not a properties part and would have
-  /// to change; nothing has changed then.
+  /// to change, and an [XlsxReadException] when a part is not readable XML
+  /// or exceeds a limit; nothing has changed then.
   set properties(XlsxProperties value) {
     final PropertiesState state = _book.propertiesState();
     _book.log.transaction(() => setProperties(_book.log, state, value));
@@ -463,8 +464,12 @@ final class _Book implements SheetHost {
     workbookName = reader.package.canonicalPartName(plain)!;
     final WorkbookPart part = reader.guardXml(
       plain,
-      () =>
-          WorkbookPart.read(reader.openXml(plain), limits, warn: _styleWarning),
+      () => WorkbookPart.read(
+        reader.openXml(plain),
+        limits,
+        warn: _styleWarning,
+        part: plain,
+      ),
     );
     if (!part.isTyped) {
       throw XlsxReadException(
@@ -626,6 +631,7 @@ final class _Book implements SheetHost {
               reader.openXml(stylesTarget),
               limits,
               warn: _styleWarning,
+              part: stylesTarget,
             ),
           );
     final String? stringsTarget = _target(RelType.sharedStrings);

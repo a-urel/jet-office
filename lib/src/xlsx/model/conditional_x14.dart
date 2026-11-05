@@ -334,7 +334,16 @@ final class X14Block {
 
 /// The [X14Block] of [extLst], or `null` when it holds none. Each problem
 /// goes to [warn], named `x14:cfRule` or `x14:conditionalFormatting`.
-X14Block? readX14Block(XmlNode extLst, {void Function(String problem)? warn}) {
+///
+/// [checkRoom] is called with the number kept so far before each child of
+/// the group is kept, and with its own count, across the elements, before
+/// each child of an element but its first `xm:sqref`; it throws when the
+/// file holds too many.
+X14Block? readX14Block(
+  XmlNode extLst, {
+  void Function(String problem)? warn,
+  void Function(int count)? checkRoom,
+}) {
   final XmlNode? ext = _conditionalExt(extLst);
   final OpaqueXml? group = ext == null ? null : _groupOf(ext);
   if (ext == null || group == null) return null;
@@ -345,11 +354,17 @@ X14Block? readX14Block(XmlNode extLst, {void Function(String problem)? warn}) {
   );
   final List<KeptAttribute> attributes = keepAttributes(r);
   final List<Object> children = <Object>[];
+  int rules = 0;
   _eachChild(r, () {
+    checkRoom?.call(children.length);
     final bool element =
         r.namespaceUri == Ns.x14 && r.localName == 'conditionalFormatting';
     final OpaqueXml source = OpaqueXml.capture(r);
-    children.add(element ? _readElement(source, warn) : source);
+    children.add(
+      element
+          ? _readElement(source, warn, () => checkRoom?.call(rules++))
+          : source,
+    );
   });
   return X14Block._(
     extLst,
@@ -475,7 +490,11 @@ void _eachChild(XmlPullReader r, void Function() onChild) {
   }
 }
 
-X14Element _readElement(OpaqueXml source, void Function(String problem)? warn) {
+X14Element _readElement(
+  OpaqueXml source,
+  void Function(String problem)? warn,
+  void Function() onChild,
+) {
   final XmlPullReader r = readerOf(source);
   final String qualifiedName = r.qualifiedName;
   final Map<String, String> namespaces = Map<String, String>.of(
@@ -484,9 +503,12 @@ X14Element _readElement(OpaqueXml source, void Function(String problem)? warn) {
   final List<KeptAttribute> attributes = keepAttributes(r);
   final List<Object> children = <Object>[];
   List<XlsxRange>? ranges;
+  bool hasSqref = false;
   _eachChild(r, () {
     final bool rule = r.namespaceUri == Ns.x14 && r.localName == 'cfRule';
     final bool sqref = r.namespaceUri == Ns.xm && r.localName == 'sqref';
+    if (!sqref || hasSqref) onChild();
+    hasSqref = hasSqref || sqref;
     final OpaqueXml child = OpaqueXml.capture(r);
     if (rule) {
       final ({X14Rule rule, bool bad}) read = _readRule(child);

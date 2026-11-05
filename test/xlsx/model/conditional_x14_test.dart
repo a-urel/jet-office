@@ -977,6 +977,47 @@ void main() {
       );
     });
 
+    group('maxMerges bounds', () {
+      const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 5);
+      String rules(int count) => <String>[
+        for (int i = 0; i < count; i++) _iconRule('{$i}', i + 1),
+      ].join();
+
+      void bounded(String name, String Function(int count) elements) {
+        test(name, () {
+          Uint8List file(int count) =>
+              _file('<extLst>${_ext(elements(count))}</extLst>');
+          expect(
+            () => XlsxWorkbook.open(
+              file(6),
+              limits: limits,
+            ).sheets.single.conditionalFormats,
+            throwsLimit('maxMerges', 5, 'xl/worksheets/sheet1.xml'),
+          );
+          expect(
+            XlsxWorkbook.open(
+              file(5),
+              limits: limits,
+            ).sheets.single.conditionalFormats,
+            isA<List<XlsxConditionalFormat>>(),
+          );
+        });
+      }
+
+      bounded('the rules of one element', (int n) => _element('A1', rules(n)));
+      bounded('the elements of the list', (int n) {
+        return <String>[
+          for (int i = 0; i < n; i++) _element('A${i + 1}', '<x14:other/>'),
+        ].join();
+      });
+      bounded('the rules across the elements, each kept to one', (int n) {
+        return <String>[
+          for (int i = 0; i < n; i++)
+            _element('A${i + 1}', _iconRule('{$i}', i + 1)),
+        ].join();
+      });
+    });
+
     group('a file of very many rules joins in linear time', () {
       const int count = 150000;
       void joins(String name, String Function(int i) sqref, int formats) {
