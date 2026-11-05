@@ -128,9 +128,13 @@ int highestRulePriority(OpaqueXml element) {
 /// that keeps it from being read, named `conditionalFormatting`: no usable
 /// `sqref`, no rule, a rule that cannot be read, or a value the writer's
 /// `checkConditionalFormat` refuses.
+///
+/// [onRule] is called before each `<cfRule>` is read; it throws when the file
+/// holds too many.
 ({CfEntry? value, String? problem}) readConditionalFormatting(
-  OpaqueXml element,
-) {
+  OpaqueXml element, {
+  void Function()? onRule,
+}) {
   const ({CfEntry? value, String? problem}) bad = (
     value: null,
     problem: 'conditionalFormatting',
@@ -148,6 +152,7 @@ int highestRulePriority(OpaqueXml element) {
       r.skip();
       continue;
     }
+    onRule?.call();
     final CfRuleEntry? rule = _readRule(r);
     if (rule == null) return bad;
     rules.add(rule);

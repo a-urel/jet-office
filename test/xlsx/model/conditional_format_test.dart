@@ -207,6 +207,35 @@ void main() {
     );
   });
 
+  group('maxMerges bounds the rules of a sheet', () {
+    const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 5);
+    String element(String sqref, int rules) =>
+        '<conditionalFormatting sqref="$sqref">'
+        '${'<cfRule type="expression" priority="1"><formula>1</formula>'
+                '</cfRule>' * rules}'
+        '</conditionalFormatting>';
+    List<XlsxConditionalFormat> read(String body) => XlsxWorkbook.open(
+      _file(body),
+      limits: limits,
+    ).sheets.single.conditionalFormats;
+
+    test('in one element', () {
+      expect(
+        () => read(element('A1', 6)),
+        throwsLimit('maxMerges', 5, 'xl/worksheets/sheet1.xml'),
+      );
+      expect(read(element('A1', 5)).single.rules, hasLength(5));
+    });
+
+    test('across the elements', () {
+      expect(
+        () => read(element('A1', 3) + element('B1', 3)),
+        throwsLimit('maxMerges', 5, 'xl/worksheets/sheet1.xml'),
+      );
+      expect(read(element('A1', 3) + element('B1', 2)), hasLength(2));
+    });
+  });
+
   test('maxMerges bounds the differential styles', () {
     const XlsxReadLimits limits = XlsxReadLimits(maxMerges: 5);
     Uint8List file(int count) => _file(

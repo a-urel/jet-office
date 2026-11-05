@@ -415,6 +415,7 @@ final class WorksheetPart implements PartContent {
     final List<Object> children = sheet._children;
     // The block's list grows while its run of elements lasts, and not after.
     final List<GroupItem<CfEntry>> conditionalItems = <GroupItem<CfEntry>>[];
+    int conditionalRules = 0;
     CfBlock? conditional;
     final int rootDepth = r.depth;
     while (r.next()) {
@@ -517,7 +518,10 @@ final class WorksheetPart implements PartContent {
         checkListRoom(conditionalItems.length, limits, part);
         final OpaqueXml source = OpaqueXml.capture(r);
         final ({CfEntry? value, String? problem}) read =
-            readConditionalFormatting(source);
+            readConditionalFormatting(
+              source,
+              onRule: () => checkListRoom(conditionalRules++, limits, part),
+            );
         final String? problem = read.problem;
         if (problem != null) {
           warn(XlsxWarningCode.featureEntryInvalid, null, detail: problem);
