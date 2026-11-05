@@ -52,6 +52,7 @@ import '../read/styles_reader.dart';
 import '../rich_text.dart';
 import '../row_format.dart';
 import '../sheet_name.dart' show sheetNameKey;
+import '../sheet_protection.dart';
 import '../sheet_view.dart';
 import '../sheet_writer.dart' show checkPrintAreaRanges, checkPrintTitles;
 import '../style.dart';
@@ -73,6 +74,7 @@ import 'defined_names.dart';
 import 'element_node.dart';
 import 'item_group.dart' show readerOf;
 import 'primitives.dart';
+import 'protection_elements.dart';
 import 'style_elements.dart' show ReadStyleValue, readColor;
 import 'styles_part.dart';
 import 'table_part.dart';
@@ -227,6 +229,66 @@ final class XlsxSheet
   /// [value] is not visible; nothing changes then.
   set visibility(XlsxSheetVisibility value) =>
       _host.setVisibility(_entry, value);
+
+  /// What the sheet's protection allows, or `null` when the sheet is not
+  /// protected: it has no `<sheetProtection>`, or its `sheet` is `0`.
+  ///
+  /// The password always reads `null`: the file stores a hash, never the
+  /// password ([hasStoredPassword] says whether it has one). Every flag has
+  /// its schema meaning, so an attribute the file omits reads as Excel
+  /// reads it. A boolean written `true` or `false` is read; any other text
+  /// reads as the attribute's default. Only the first `<sheetProtection>`
+  /// is read. Loads the sheet. Throws an [XlsxReadException] when the sheet
+  /// cannot be read.
+  XlsxSheetProtection? get protection {
+    final Object? node = _load()?.layoutElement('sheetProtection');
+    return node is XmlNode ? readSheetProtection(node) : null;
+  }
+
+  /// Protects the sheet as [value] says, or removes the `<sheetProtection>`
+  /// with `null`, a stored hash with it.
+  ///
+  /// A new element is the text the writer writes for the same protection,
+  /// in schema position. An existing element keeps its other attributes
+  /// (`lockRevision`, ...) and changes an attribute only when its meaning
+  /// changes, so `objects="0"` stays when objects stay editable. A
+  /// [value] whose `password` is `null` keeps the stored hash, which is how
+  /// a flag changes on a sheet whose password is not known; a password
+  /// replaces every hash attribute. An element with `sheet="0"` is edited
+  /// in place and gets `sheet="1"`. A value equal to [protection] changes
+  /// nothing.
+  ///
+  /// Throws an [ArgumentError] named `password` for a password that is not
+  /// 1 to 15 characters from U+0020 to U+007E (the message never repeats
+  /// it), a [StateError] for a sheet that is not a worksheet or has no part
+  /// and an [XlsxReadException] when the sheet cannot be read. Whatever it
+  /// throws, nothing has changed.
+  set protection(XlsxSheetProtection? value) {
+    checkProtectionPassword(value?.password);
+    final WorksheetPart part = _editablePart('protection');
+    if (value == protection) return;
+    final XmlNode? old = part.layoutElement('sheetProtection') as XmlNode?;
+    final XmlNode? next = value == null
+        ? null
+        : applySheetProtection(old, value, part.elementPrefix);
+    final ChangeLog log = _host.log;
+    log.transaction(() {
+      editLayout(
+        log,
+        part,
+        'sheetProtection',
+        () => part.setNode('sheetProtection', next),
+      );
+    });
+  }
+
+  /// Whether the sheet's `<sheetProtection>` stores a password: a `password`
+  /// or a `hashValue`, whether or not the protection is on. The password
+  /// itself is never read. Loads the sheet.
+  bool get hasStoredPassword {
+    final Object? node = _load()?.layoutElement('sheetProtection');
+    return node is XmlNode && sheetHasStoredPassword(node);
+  }
 
   /// The cell at [row] and [column] as [XlsxReader] reads it, or `null`
   /// when the cell holds no value, formula or inline string (an empty

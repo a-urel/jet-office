@@ -433,6 +433,10 @@ final class WorkbookPart implements PartContent {
     }
   }
 
+  /// The element name prefix (with the colon, or empty) the part's own
+  /// elements take. Throws a [StateError] for an untyped part.
+  String get elementPrefix => _prefixOf(_requireTyped().qualifiedName);
+
   void _checkSlot(String slot) {
     if (!_elementSlots.contains(slot)) {
       throw ArgumentError.value(slot, 'slot', 'Not a workbook element slot.');

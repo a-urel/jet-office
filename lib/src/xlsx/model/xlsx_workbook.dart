@@ -54,6 +54,7 @@ import '../read/shared_strings_reader.dart';
 import '../read/styles_reader.dart';
 import '../shared_strings.dart';
 import '../sheet_name.dart';
+import '../sheet_protection.dart';
 import '../sheet_view.dart';
 import '../style_registry.dart';
 import '../warnings.dart';
@@ -62,8 +63,10 @@ import '../worksheet_parts.dart';
 import '../xlsx_writer.dart';
 import 'cell_store.dart';
 import 'defined_names.dart';
+import 'element_node.dart';
 import 'palette.dart';
 import 'primitives.dart';
+import 'protection_elements.dart';
 import 'styles_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
@@ -207,6 +210,58 @@ final class XlsxWorkbook {
   /// Whether the workbook counts dates from 1904, as files from old Mac
   /// versions of Excel do; dates are set and read in its system.
   bool get date1904 => _book.workbook.date1904;
+
+  /// The workbook's protection, or `null` when it has no
+  /// `<workbookProtection>`.
+  ///
+  /// The password always reads `null`: the file stores a hash
+  /// ([hasStoredPassword] says whether it has one). An element that locks
+  /// nothing reads as a protection that locks nothing. Only the first
+  /// element is read.
+  XlsxWorkbookProtection? get protection {
+    final Object? node = _book.workbook.element('workbookProtection');
+    return node is XmlNode ? readWorkbookProtection(node) : null;
+  }
+
+  /// Protects the workbook as [value] says, or removes the
+  /// `<workbookProtection>` with `null`, a stored hash with it.
+  ///
+  /// A new element is the writer's, in schema position. An existing one
+  /// keeps its other attributes (`lockRevision`, the `revisions...` hash)
+  /// and changes a lock only when its meaning changes. A [value] with no
+  /// `password` keeps the stored hash; a password replaces the
+  /// `workbook...` hash attributes. A value that locks nothing and has no
+  /// password removes the element unless a stored hash stays, as the writer
+  /// writes nothing for it. A value equal to [protection] changes nothing.
+  ///
+  /// Throws an [ArgumentError] named `password` for a password that is not
+  /// 1 to 15 characters from U+0020 to U+007E and a [StateError] for a
+  /// workbook part that is not a workbook; nothing has changed then.
+  set protection(XlsxWorkbookProtection? value) {
+    checkProtectionPassword(value?.password);
+    final WorkbookPart part = _book.workbook;
+    if (value == protection) return;
+    final XmlNode? old = part.element('workbookProtection') as XmlNode?;
+    final XmlNode? next = value == null
+        ? null
+        : applyWorkbookProtection(old, value, part.elementPrefix);
+    _book.log.transaction(() {
+      editWorkbook(
+        _book.log,
+        part,
+        'workbookProtection',
+        () => part.swapElement('workbookProtection', old, next),
+      );
+    });
+  }
+
+  /// Whether the workbook's `<workbookProtection>` stores a password: a
+  /// `workbookPassword` or a `workbookHashValue`. The password itself is
+  /// never read.
+  bool get hasStoredPassword {
+    final Object? node = _book.workbook.element('workbookProtection');
+    return node is XmlNode && workbookHasStoredPassword(node);
+  }
 
   /// The 64 colours `<color indexed="N"/>` shows: the file's `<indexedColors>`
   /// or the default palette (ECMA-376 Part 1, section 18.8.27), unmodifiable.
