@@ -239,14 +239,16 @@ void main() {
       ),
     );
     expect(
-      () => sheet.setCell(0, 0, const XlsxCell(1)),
-      throwsA(
-        isA<UnsupportedError>().having(
-          (UnsupportedError e) => e.message,
-          'message',
-          'XlsxCell (styled) cells arrive in W2.',
-        ),
+      () => sheet.setCell(0, 0, const XlsxCell(XlsxCell(1))),
+      throwsArgumentError,
+    );
+    expect(
+      () => sheet.setCell(
+        0,
+        0,
+        const XlsxCell(XlsxHyperlink(address: 'x', text: 'x')),
       ),
+      throwsUnsupportedError,
     );
     expect(() => sheet.setCell(0, 0, Object()), throwsArgumentError);
     expect(() => sheet.setCell(-1, 0, 1), throwsRangeError);

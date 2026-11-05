@@ -11,10 +11,15 @@
 /// cells). Children of `<sheetData>` other than rows, which the schema does
 /// not allow, are kept too but written after the last row, so their position
 /// among the rows is not kept. Every
-/// other child of `<worksheet>` (`sheetPr`, `sheetViews`, `cols`,
-/// `mergeCells`, `hyperlinks`, `pageMargins`, `extLst`, ...) is an
-/// [OpaqueXml] at its original position, and the root keeps its namespace
-/// declarations and `mc:Ignorable`.
+/// other child of `<worksheet>` (`sheetPr`, `sheetViews`, `mergeCells`,
+/// `hyperlinks`, `pageMargins`, `extLst`, ...) is an [OpaqueXml] at its
+/// original position, except the first `<sheetFormatPr>` and the first
+/// `<cols>`, which are typed when plain (`columns.dart`), and the first
+/// `<mergeCells>` ([MergeGroup]); all three are edited as immutable values,
+/// so `swapLayout` undoes an edit of one without touching the others. The
+/// first `<sheetPr>` and the first `<sheetViews>` are typed too, as
+/// [XmlNode]s (`element_node.dart`), and swap the same way.
+/// The root keeps its namespace declarations and `mc:Ignorable`.
 ///
 /// Saving recomputes the bookkeeping (spec §4.4): `<dimension ref>` from the
 /// store's bounds (`A1` without cells), and each row's `spans` as the first
@@ -41,7 +46,9 @@ import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
+import '../range.dart';
 import '../raw_cell.dart';
+import '../read/merge_reader.dart' show parseMergeRange;
 import '../read/package_reader.dart'
     show strictSpreadsheetNs, strictUnsupported;
 import '../read/read_exception.dart';
@@ -49,6 +56,8 @@ import '../read/read_limits.dart';
 import '../read/sheet_reader.dart' show RawRow, RawRowReader;
 import '../warnings.dart';
 import 'cell_store.dart';
+import 'columns.dart';
+import 'element_node.dart';
 
 /// The children of `<worksheet>` in the order of the schema's
 /// `CT_Worksheet` sequence.
@@ -94,6 +103,13 @@ const List<String> worksheetChildOrder = <String>[
   'extLst',
 ];
 
+/// What is typed inside `<sheetPr>` and `<sheetViews>`.
+const NodeShape worksheetNodeShape = <String, Set<String>>{
+  'sheetPr': <String>{'tabColor', 'outlinePr', 'pageSetUpPr'},
+  'sheetViews': <String>{'sheetView'},
+  'sheetView': <String>{'pane', 'selection'},
+};
+
 /// The typed `<dimension>`: its `ref` is recomputed on save.
 final class _Dimension {
   _Dimension(this.qualifiedName, this.namespaces, this.attributes);
@@ -113,6 +129,161 @@ final class _Dimension {
       attributes,
       declaredAbove: mergeNamespaces(above, namespaces),
     );
+    w.end();
+  }
+}
+
+/// The typed `<sheetFormatPr>`: its attributes as written, with
+/// `outlineLevelRow` and `outlineLevelCol` raised on save when an edit went
+/// deeper than the element and the file's rows or columns did.
+///
+/// Only an element without element children is typed (an end tag with
+/// nothing between is the same as an empty element). One with children stays
+/// an [OpaqueXml], is written as it was, and its outline levels are not
+/// bookkept; no second element is made beside it, and it is read through an
+/// untyped view of the same class.
+final class _SheetFormat {
+  _SheetFormat(this.qualifiedName, this.namespaces, this.attributes);
+
+  final String qualifiedName;
+  final Map<String, String> namespaces;
+  final List<KeptAttribute> attributes;
+
+  /// The value of the first attribute without a namespace named [name].
+  String? attribute(String name) {
+    for (final KeptAttribute a in attributes) {
+      if (a.namespaceUri.isEmpty && a.qualifiedName == name) return a.value;
+    }
+    return null;
+  }
+
+  /// The kept `outlineLevelRow`, or 0 when it is absent or not a level.
+  int get outlineLevelRow =>
+      parseOutlineLevel(attribute('outlineLevelRow')) ?? 0;
+
+  /// The kept `outlineLevelCol`, or 0 when it is absent or not a level.
+  int get outlineLevelCol =>
+      parseOutlineLevel(attribute('outlineLevelCol')) ?? 0;
+
+  /// This element with [next] as its attributes.
+  _SheetFormat withAttributes(List<KeptAttribute> next) =>
+      _SheetFormat(qualifiedName, namespaces, next);
+
+  /// Writes the element with `outlineLevelRow` of [rowLevel] and
+  /// `outlineLevelCol` of [colLevel] when those are deeper than the kept
+  /// values, else as it was. A level no edit raised is passed as 0.
+  void writeTo(
+    XmlWriter w,
+    Map<String, String> above, {
+    required int rowLevel,
+    required int colLevel,
+  }) {
+    w.start(qualifiedName);
+    writeNamespaceDeclarations(w, namespaces);
+    final List<KeptAttribute> out =
+        replaceAttributes(attributes, <String, String?>{
+          if (rowLevel > outlineLevelRow) 'outlineLevelRow': '$rowLevel',
+          if (colLevel > outlineLevelCol) 'outlineLevelCol': '$colLevel',
+        });
+    writeKeptAttributes(
+      w,
+      out,
+      declaredAbove: mergeNamespaces(above, namespaces),
+    );
+    w.end();
+  }
+}
+
+/// One child of a `<mergeCells>`: a merged range, or an element kept as
+/// written (an unreadable `<mergeCell>`, or a foreign element).
+final class MergeItem {
+  const MergeItem._(this.range, this.source, this.counted);
+
+  /// A merge made by the model, written as `<mergeCell ref="..."/>`.
+  const MergeItem.made(XlsxRange this.range) : source = null, counted = true;
+
+  /// The merged range, or `null` for an element that is not a readable
+  /// `<mergeCell>`.
+  final XlsxRange? range;
+
+  /// The element as read; `null` for a merge made by the model.
+  final OpaqueXml? source;
+
+  /// Whether the element is a `<mergeCell>` (readable or not), which
+  /// `count` counts.
+  final bool counted;
+}
+
+/// The typed first `<mergeCells>`: its name, declarations and attributes as
+/// written, and its [items] in file order.
+///
+/// An untouched group is written as it was (a wrong `count` included); once
+/// [withItems] edits it, `count` is the number of its `<mergeCell>` items.
+final class MergeGroup {
+  /// A `<mergeCells>` named [qualifiedName] holding [items].
+  MergeGroup(
+    this.qualifiedName,
+    this.namespaces,
+    this.attributes,
+    this.items, {
+    this.edited = false,
+  });
+
+  /// The element's name with its prefix.
+  final String qualifiedName;
+
+  /// The namespace declarations of the start tag.
+  final Map<String, String> namespaces;
+
+  /// The attributes, `count` included, as written.
+  final List<KeptAttribute> attributes;
+
+  /// The children, in source order.
+  final List<MergeItem> items;
+
+  /// Whether `count` is recomputed on save.
+  final bool edited;
+
+  /// The readable merged ranges, in file order.
+  List<XlsxRange> get ranges => <XlsxRange>[
+    for (final MergeItem i in items)
+      if (i.range != null) i.range!,
+  ];
+
+  /// This group holding [next], with `count` recomputed on save.
+  MergeGroup withItems(List<MergeItem> next) =>
+      MergeGroup(qualifiedName, namespaces, attributes, next, edited: true);
+
+  /// Writes the element. [above] holds the bindings in scope at the
+  /// worksheet's root.
+  void writeTo(XmlWriter w, Map<String, String> above) {
+    w.start(qualifiedName);
+    writeNamespaceDeclarations(w, namespaces);
+    final Map<String, String> inner = mergeNamespaces(above, namespaces);
+    writeKeptAttributes(
+      w,
+      edited
+          ? replaceAttributes(attributes, <String, String?>{
+              'count': '${items.where((MergeItem i) => i.counted).length}',
+            })
+          : attributes,
+      declaredAbove: inner,
+    );
+    final int colon = qualifiedName.indexOf(':');
+    final String prefix = colon < 0
+        ? ''
+        : qualifiedName.substring(0, colon + 1);
+    for (final MergeItem item in items) {
+      final OpaqueXml? source = item.source;
+      if (source != null) {
+        source.writeTo(w, declaredAbove: inner);
+      } else {
+        w
+          ..start('${prefix}mergeCell')
+          ..attribute('ref', item.range!.ref)
+          ..end();
+      }
+    }
     w.end();
   }
 }
@@ -195,6 +366,50 @@ final class WorksheetPart implements PartContent {
         sheet._dimension = d;
         children.add(d);
       } else if (main &&
+          r.localName == 'sheetFormatPr' &&
+          !sheet._hasSheetFormat) {
+        sheet._hasSheetFormat = true;
+        final _SheetFormat f = _SheetFormat(
+          r.qualifiedName,
+          Map<String, String>.of(r.declaredNamespaces),
+          keepAttributes(r),
+        );
+        final int depth = r.depth;
+        bool hasChildren = false;
+        final OpaqueXml whole = OpaqueXml.capture(
+          r,
+          onEvent: (XmlPullReader e) {
+            if (e.eventType == XmlEventType.startElement && e.depth > depth) {
+              hasChildren = true;
+            }
+          },
+        );
+        if (hasChildren) {
+          sheet._formatOpaque = f;
+          children.add(whole);
+        } else {
+          children.add(f);
+        }
+      } else if (main && r.localName == 'cols' && !sheet._hasCols) {
+        sheet._hasCols = true;
+        final CapturedCols cols = captureCols(r);
+        final ColsGroup? typed = cols.typed;
+        if (typed == null) {
+          sheet._colsOpaque = true;
+          children.add(cols.whole);
+        } else {
+          children.add(typed);
+        }
+      } else if (main && r.localName == 'sheetPr' && !sheet._hasSheetPr) {
+        sheet._hasSheetPr = true;
+        children.add(XmlNode.read(r, worksheetNodeShape));
+      } else if (main && r.localName == 'sheetViews' && !sheet._hasSheetViews) {
+        sheet._hasSheetViews = true;
+        children.add(XmlNode.read(r, worksheetNodeShape));
+      } else if (main && r.localName == 'mergeCells' && !sheet._hasMergeCells) {
+        sheet._hasMergeCells = true;
+        children.add(_readMergeCells(r, part, limits, warn));
+      } else if (main &&
           r.localName == 'sheetData' &&
           sheet._sheetData == null) {
         final _SheetData data = _SheetData(
@@ -210,6 +425,8 @@ final class WorksheetPart implements PartContent {
       }
     }
     if (sheet._sheetData == null) sheet._insertSheetData();
+    sheet._fileRowLevel = sheet._deepestRowLevel();
+    sheet._fileColumnLevel = sheet._deepestColumnLevel();
     return sheet;
   }
 
@@ -237,9 +454,46 @@ final class WorksheetPart implements PartContent {
   final String? _untypedText;
   final XmlRoot? _root;
 
-  /// [_Dimension], [_SheetData] and [OpaqueXml] children, in order.
+  /// [_Dimension], [_SheetFormat], [_SheetData] and [OpaqueXml] children, in
+  /// order.
   final List<Object> _children;
   _Dimension? _dimension;
+
+  /// Whether the part read a `<sheetFormatPr>`, typed or kept opaque (one
+  /// with element children): a second one is not typed.
+  bool _hasSheetFormat = false;
+
+  /// The attributes of a `<sheetFormatPr>` kept opaque, for reading only.
+  _SheetFormat? _formatOpaque;
+
+  /// The deepest row outline level the file has: `<sheetFormatPr>` is made
+  /// or raised on save only for a level deeper than this, which only an
+  /// edit gives, so an unchanged file keeps what it says, even when that is
+  /// less than its rows need.
+  int _fileRowLevel = 0;
+
+  /// As [_fileRowLevel], for the columns.
+  int _fileColumnLevel = 0;
+
+  /// Whether the part read a `<cols>`, typed or kept opaque; a second one
+  /// is not typed.
+  bool _hasCols = false;
+
+  /// Whether the first `<cols>` is kept opaque (it is not plain, see
+  /// `columns.dart`): columns are not edited then.
+  bool _colsOpaque = false;
+
+  /// Whether the part read a SpreadsheetML `<mergeCells>`; a second one is
+  /// kept opaque and its merges are not read.
+  bool _hasMergeCells = false;
+
+  /// Whether the part read a SpreadsheetML `<sheetPr>`; a second one is
+  /// kept opaque.
+  bool _hasSheetPr = false;
+
+  /// Whether the part read a SpreadsheetML `<sheetViews>`; a second one is
+  /// kept opaque.
+  bool _hasSheetViews = false;
   _SheetData? _sheetData;
   CellEncoder? _encoder;
 
@@ -257,6 +511,60 @@ final class WorksheetPart implements PartContent {
   /// Sets the encoder that writes the cells; [encode] needs one.
   void bindEncoder(CellEncoder encoder) {
     _encoder = encoder;
+  }
+
+  /// Reads the `<mergeCells>` the current event of [r] starts and consumes
+  /// it. A `<mergeCell>` is read as `readMerges` reads it (same namespace,
+  /// same `ref` parse); one it would skip is kept as written and reported
+  /// to [warn] as `mergeRangeInvalid`. Throws a `limitExceeded`
+  /// [XlsxReadException] naming `maxMerges` and [part] when the group holds
+  /// more readable merges than [limits] allows.
+  static MergeGroup _readMergeCells(
+    XmlPullReader r,
+    String part,
+    XlsxReadLimits limits,
+    void Function(XlsxWarningCode code, String? cell, {String? detail}) warn,
+  ) {
+    final String qualifiedName = r.qualifiedName;
+    final Map<String, String> namespaces = Map<String, String>.of(
+      r.declaredNamespaces,
+    );
+    final List<KeptAttribute> attributes = keepAttributes(r);
+    final int depth = r.depth;
+    final List<MergeItem> items = <MergeItem>[];
+    int readable = 0;
+    if (r.isEmptyElement) {
+      r.skip();
+    } else {
+      while (r.next()) {
+        if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+        if (r.eventType != XmlEventType.startElement) continue;
+        final bool mergeCell =
+            r.depth == depth + 1 &&
+            r.namespaceUri == Ns.main &&
+            r.localName == 'mergeCell';
+        final String? ref = mergeCell
+            ? r.getAttribute('ref', namespaceUri: '')
+            : null;
+        final XlsxRange? range = ref == null ? null : parseMergeRange(ref);
+        final OpaqueXml source = OpaqueXml.capture(r);
+        if (mergeCell && range == null) {
+          warn(XlsxWarningCode.mergeRangeInvalid, null);
+        }
+        if (range != null) {
+          if (readable >= limits.maxMerges) {
+            throw XlsxReadException(
+              XlsxReadFailure.limitExceeded,
+              'Limit maxMerges (${limits.maxMerges}) exceeded.',
+              part: part,
+            );
+          }
+          readable++;
+        }
+        items.add(MergeItem._(range, source, mergeCell));
+      }
+    }
+    return MergeGroup(qualifiedName, namespaces, attributes, items);
   }
 
   void _readRows(
@@ -306,6 +614,11 @@ final class WorksheetPart implements PartContent {
     for (var i = 0; i < _children.length; i++) {
       final Object c = _children[i];
       if (c is _Dimension && after.contains('dimension') ||
+          c is _SheetFormat && after.contains('sheetFormatPr') ||
+          c is ColsGroup && after.contains('cols') ||
+          c is MergeGroup && after.contains('mergeCells') ||
+          c is XmlNode && after.contains(c.localName) ||
+          c is _SheetData && after.contains('sheetData') ||
           c is OpaqueXml &&
               c.namespaceUri == Ns.main &&
               after.contains(c.localName)) {
@@ -339,10 +652,34 @@ final class WorksheetPart implements PartContent {
     final XmlWriter w = XmlWriter(buffer)..declaration();
     final XmlRoot root = _root!;
     root.writeStart(w);
-    for (final Object c in _children) {
+    final int rowLevel = _deepestRowLevel();
+    final int colLevel = _deepestColumnLevel();
+    final int raisedRow = rowLevel > _fileRowLevel ? rowLevel : 0;
+    final int raisedCol = colLevel > _fileColumnLevel ? colLevel : 0;
+    final bool deeper = raisedRow > 0 || raisedCol > 0;
+    final int madeAt = !_formatPresent && deeper
+        ? _positionFor('sheetFormatPr')
+        : -1;
+    for (int i = 0; i <= _children.length; i++) {
+      if (i == madeAt) _writeMadeSheetFormat(w, rowLevel, colLevel);
+      if (i == _children.length) break;
+      final Object c = _children[i];
       switch (c) {
         case _Dimension():
           c.writeTo(w, root.namespaces, _dimensionRef());
+        case _SheetFormat():
+          c.writeTo(
+            w,
+            root.namespaces,
+            rowLevel: raisedRow,
+            colLevel: raisedCol,
+          );
+        case ColsGroup():
+          c.writeTo(w, root.namespaces);
+        case MergeGroup():
+          c.writeTo(w, root.namespaces);
+        case XmlNode():
+          c.writeTo(w, root.namespaces);
         case _SheetData():
           _writeSheetData(w, c, root.namespaces, encoder);
         case OpaqueXml():
@@ -351,6 +688,261 @@ final class WorksheetPart implements PartContent {
     }
     w.end();
     return buffer.takeChunks();
+  }
+
+  /// The deepest `outlineLevel` of the rows' attributes, 0 when none.
+  int _deepestRowLevel() {
+    int deepest = 0;
+    for (final int row in cells.rowIndexes) {
+      for (final KeptAttribute a in cells.rowAttributes(row)) {
+        if (a.namespaceUri.isNotEmpty || a.qualifiedName != 'outlineLevel') {
+          continue;
+        }
+        final int level = parseOutlineLevel(a.value) ?? 0;
+        if (level > deepest) deepest = level;
+      }
+    }
+    return deepest;
+  }
+
+  /// The deepest outline level of the typed `<cols>`, 0 when none.
+  int _deepestColumnLevel() => _cols?.deepestOutline ?? 0;
+
+  /// Writes the `<sheetFormatPr>` of a part that had none, as the writer
+  /// does for an outline: `defaultRowHeight` (required), then
+  /// `outlineLevelRow` and `outlineLevelCol` when they are deeper than 0.
+  void _writeMadeSheetFormat(XmlWriter w, int rowLevel, int colLevel) {
+    w
+      ..start('${_prefixOf(_root!.qualifiedName)}sheetFormatPr')
+      ..attribute('defaultRowHeight', '15');
+    if (rowLevel > 0) w.attribute('outlineLevelRow', '$rowLevel');
+    if (colLevel > 0) w.attribute('outlineLevelCol', '$colLevel');
+    w.end();
+  }
+
+  // -- Columns and default sizes ---------------------------------------------
+
+  /// The typed first `<cols>`, or `null` when there is none (or it is kept
+  /// opaque).
+  ColsGroup? get _cols {
+    for (final Object c in _children) {
+      if (c is ColsGroup) return c;
+    }
+    return null;
+  }
+
+  /// The typed first `<sheetFormatPr>`, or `null`.
+  _SheetFormat? get _format {
+    for (final Object c in _children) {
+      if (c is _SheetFormat) return c;
+    }
+    return null;
+  }
+
+  /// Whether the part has a `<sheetFormatPr>`, typed or kept opaque.
+  bool get _formatPresent => _formatOpaque != null || _format != null;
+
+  /// Whether the columns can be edited: the part is a worksheet and its
+  /// first `<cols>`, if any, is typed.
+  bool get columnsEditable => isTyped && !_colsOpaque;
+
+  /// The run of the first `<cols>` holding [column] (1-based), or `null`.
+  ColRun? columnRunAt(int column) => _cols?.runAt(column);
+
+  /// The runs of the first `<cols>`: none when the part has none or it is
+  /// kept opaque (see [columnsEditable]).
+  List<ColRun> get columnRuns => _cols?.runs ?? const <ColRun>[];
+
+  /// Makes [runs] the `<col>` elements of the first `<cols>`: an empty list
+  /// removes it, and a part without one gets it in schema position. Must
+  /// run inside `editLayout`; throws a [StateError] when [columnsEditable]
+  /// is false.
+  void setColumnRuns(List<ColRun> runs) {
+    if (!columnsEditable) {
+      throw StateError('The sheet\'s <cols> cannot be edited.');
+    }
+    final ColsGroup? group = _cols;
+    if (group == null) {
+      if (runs.isEmpty) return;
+      _children.insert(
+        _positionFor('cols'),
+        ColsGroup(
+          '${_prefixOf(_root!.qualifiedName)}cols',
+          const <String, String>{},
+          const <KeptAttribute>[],
+          runs,
+        ),
+      );
+      return;
+    }
+    final int at = _children.indexOf(group);
+    if (runs.isEmpty) {
+      _children.removeAt(at);
+    } else {
+      _children[at] = group.withRuns(runs);
+    }
+  }
+
+  /// The element name prefix (with the colon, or empty) the part's own
+  /// elements take.
+  String get elementPrefix => _prefixOf(_root!.qualifiedName);
+
+  /// Whether the `<sheetFormatPr>` can be edited: the part is a worksheet
+  /// and its first one, if any, has no element children.
+  bool get sheetFormatEditable => isTyped && _formatOpaque == null;
+
+  /// The value of the attribute without a namespace named [name] on the
+  /// first `<sheetFormatPr>`, whether typed or opaque, or `null`.
+  String? sheetFormatAttribute(String name) =>
+      (_format ?? _formatOpaque)?.attribute(name);
+
+  /// Whether the part has a `<sheetFormatPr>`.
+  bool get hasSheetFormat => _formatPresent;
+
+  /// Applies [changes] to the attributes of the `<sheetFormatPr>`, as
+  /// [replaceAttributes] does, making the element in schema position when
+  /// the part has none. Must run inside `editLayout`; throws a [StateError]
+  /// when [sheetFormatEditable] is false.
+  void changeSheetFormat(Map<String, String?> changes) {
+    if (!sheetFormatEditable) {
+      throw StateError('The sheet\'s <sheetFormatPr> cannot be edited.');
+    }
+    final _SheetFormat? format = _format;
+    if (format == null) {
+      _children.insert(
+        _positionFor('sheetFormatPr'),
+        _SheetFormat(
+          '${_prefixOf(_root!.qualifiedName)}sheetFormatPr',
+          const <String, String>{},
+          replaceAttributes(const <KeptAttribute>[], changes),
+        ),
+      );
+      return;
+    }
+    final List<KeptAttribute> next = replaceAttributes(
+      format.attributes,
+      changes,
+    );
+    if (sameAttributes(format.attributes, next)) return;
+    _children[_children.indexOf(format)] = format.withAttributes(next);
+  }
+
+  // -- Merged ranges ---------------------------------------------------------
+
+  MergeGroup? get _mergeGroup {
+    for (final Object c in _children) {
+      if (c is MergeGroup) return c;
+    }
+    return null;
+  }
+
+  /// The readable merged ranges of the first `<mergeCells>`, in file order;
+  /// none for an untyped part.
+  List<XlsxRange> get merges => _mergeGroup?.ranges ?? const <XlsxRange>[];
+
+  /// Adds the merge [range] after the others, making the `<mergeCells>` in
+  /// schema position when the part has none. Must run inside `editLayout`
+  /// of slot `mergeCells`; the caller has checked [range].
+  void addMerge(XlsxRange range) {
+    final MergeGroup? group = _mergeGroup;
+    if (group == null) {
+      _children.insert(
+        _positionFor('mergeCells'),
+        MergeGroup(
+          '${_prefixOf(_root!.qualifiedName)}mergeCells',
+          const <String, String>{},
+          const <KeptAttribute>[],
+          <MergeItem>[MergeItem.made(range)],
+          edited: true,
+        ),
+      );
+      return;
+    }
+    _children[_children.indexOf(group)] = group.withItems(<MergeItem>[
+      ...group.items,
+      MergeItem.made(range),
+    ]);
+  }
+
+  /// Removes the first merge equal to [range]; the `<mergeCells>` goes with
+  /// its last child. Must run inside `editLayout` of slot `mergeCells`.
+  /// Throws a [StateError] when [range] is not merged.
+  void removeMerge(XlsxRange range) {
+    final MergeGroup? group = _mergeGroup;
+    final int at = group == null
+        ? -1
+        : group.items.indexWhere((MergeItem i) => i.range == range);
+    if (group == null || at < 0) {
+      throw StateError('The range ${range.ref} is not merged.');
+    }
+    final List<MergeItem> next = <MergeItem>[...group.items]..removeAt(at);
+    final int index = _children.indexOf(group);
+    if (next.isEmpty) {
+      _children.removeAt(index);
+    } else {
+      _children[index] = group.withItems(next);
+    }
+  }
+
+  // -- Sheet properties and views --------------------------------------------
+
+  /// The typed first element of [slot], `sheetPr` or `sheetViews`, or
+  /// `null`.
+  XmlNode? _topNode(String slot) {
+    for (final Object c in _children) {
+      if (c is XmlNode && c.localName == slot) return c;
+    }
+    return null;
+  }
+
+  /// The typed first `<sheetPr>`, or `null`.
+  XmlNode? get sheetPr => _topNode('sheetPr');
+
+  /// The typed first `<sheetViews>`, or `null`.
+  XmlNode? get sheetViews => _topNode('sheetViews');
+
+  /// Makes [node] the first element of [slot] (`sheetPr` or `sheetViews`):
+  /// in place, or in schema position when the part has none; `null`
+  /// removes it. Must run inside `editLayout` of that slot.
+  void setNode(String slot, XmlNode? node) {
+    final XmlNode? old = _topNode(slot);
+    if (old == null) {
+      if (node != null) _children.insert(_positionFor(slot), node);
+    } else if (node == null) {
+      _children.remove(old);
+    } else {
+      _children[_children.indexOf(old)] = node;
+    }
+  }
+
+  /// The typed first element of [slot] (`cols`, `sheetFormatPr`,
+  /// `mergeCells`, `sheetPr` or `sheetViews`), or `null` when the part has
+  /// none typed. Elements are immutable, so an edit replaces the element,
+  /// and [swapLayout] undoes it.
+  Object? layoutElement(String slot) => switch (slot) {
+    'cols' => _cols,
+    'sheetFormatPr' => _format,
+    'mergeCells' => _mergeGroup,
+    'sheetPr' => sheetPr,
+    'sheetViews' => sheetViews,
+    _ => throw ArgumentError.value(slot, 'slot', 'Not a layout slot.'),
+  };
+
+  /// Replaces the layout element [from] of [slot] by [to]: in place, or
+  /// where the schema puts it when [from] is `null` (inserted) or no longer
+  /// there; `null` for [to] removes [from]. Only that slot's element is
+  /// touched, so edits of different elements swap independently.
+  void swapLayout(String slot, Object? from, Object? to) {
+    final int at = from == null
+        ? -1
+        : _children.indexWhere((Object c) => identical(c, from));
+    if (to == null) {
+      if (at >= 0) _children.removeAt(at);
+    } else if (at >= 0) {
+      _children[at] = to;
+    } else {
+      _children.insert(_positionFor(slot), to);
+    }
   }
 
   String _dimensionRef() {

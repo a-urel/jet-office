@@ -71,8 +71,18 @@
 /// [XlsxSheet]s load on first use; [XlsxSheet.cellAt] and [XlsxSheet.rows]
 /// return the reader's [XlsxReadCell]s and [XlsxReadRow]s, and
 /// [XlsxSheet.setCell] takes the writer's values (strings, numbers, `bool`,
-/// `DateTime`, [XlsxDate], [XlsxDecimal], [XlsxFormula] and `null`), checked
-/// and repaired as the writer does. [XlsxWorkbook.save] returns an
+/// `DateTime`, [XlsxDate], [XlsxDecimal], [XlsxFormula], an [XlsxCell] of
+/// them and `null`), checked and repaired as the writer does.
+/// [XlsxSheet.styleAt] and [XlsxSheet.setStyle] read and set a cell's
+/// [XlsxStyle], [XlsxSheet.rowFormat] and [XlsxSheet.setRowFormat] a row's
+/// [XlsxRowFormat], [XlsxSheet.column] and [XlsxSheet.setColumn] an
+/// [XlsxColumn]; [XlsxSheet.merges], [XlsxSheet.merge] and
+/// [XlsxSheet.unmerge] the merged ranges; [XlsxSheet.view],
+/// [XlsxSheet.tabColor] and [XlsxSheet.visibility] how a sheet shows.
+/// [XlsxWorkbook.activeSheet] is the sheet Excel opens on, and
+/// [XlsxWorkbook.resolveColor] gives the colour an [XlsxColor] shows, from
+/// the theme or [XlsxWorkbook.indexedColors]. A style is appended to the
+/// styles, so no existing index moves. [XlsxWorkbook.save] returns an
 /// [XlsxResult] and [XlsxWorkbook.saveTo] streams to a sink. Saving keeps
 /// every part the model did not change: what it never loaded is copied from
 /// the file, and what it does not understand inside a part it loaded is kept
@@ -113,6 +123,8 @@
 /// @docImport 'src/docx/read_exception.dart';
 /// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
+/// @docImport 'src/xlsx/color.dart';
+/// @docImport 'src/xlsx/column.dart';
 /// @docImport 'src/xlsx/format/format_locale.dart';
 /// @docImport 'src/xlsx/format/formatted_value.dart';
 /// @docImport 'src/xlsx/format/formatter.dart';
@@ -126,6 +138,7 @@
 /// @docImport 'src/xlsx/read/read_limits.dart';
 /// @docImport 'src/xlsx/read/xlsx_reader.dart';
 /// @docImport 'src/xlsx/rich_text.dart';
+/// @docImport 'src/xlsx/row_format.dart';
 /// @docImport 'src/xlsx/sheet_writer.dart';
 /// @docImport 'src/xlsx/style.dart';
 /// @docImport 'src/xlsx/values.dart';
@@ -159,7 +172,7 @@ export 'src/xlsx/alignment.dart'
         XlsxReadingOrder,
         XlsxVerticalAlignment;
 export 'src/xlsx/border.dart' show XlsxBorder, XlsxBorderSide, XlsxBorderStyle;
-export 'src/xlsx/color.dart' show XlsxColor;
+export 'src/xlsx/color.dart' show XlsxColor, XlsxColorKind;
 export 'src/xlsx/column.dart' show XlsxColumn;
 export 'src/xlsx/comparison.dart' show XlsxComparison;
 export 'src/xlsx/conditional_format.dart'
@@ -238,6 +251,7 @@ export 'src/xlsx/read/read_exception.dart'
 export 'src/xlsx/read/read_limits.dart' show XlsxReadLimits;
 export 'src/xlsx/read/xlsx_reader.dart' show XlsxReadSheet, XlsxReader;
 export 'src/xlsx/rich_text.dart' show XlsxRichText, XlsxTextRun;
+export 'src/xlsx/row_format.dart' show XlsxRowFormat;
 export 'src/xlsx/sheet_protection.dart'
     show XlsxSheetProtection, XlsxWorkbookProtection;
 export 'src/xlsx/sheet_view.dart'

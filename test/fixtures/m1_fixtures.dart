@@ -45,6 +45,38 @@ XlsxResult _make(
 
 const XlsxStyle _twoDecimals = XlsxStyle(numFmt: XlsxNumFmt.custom('#,##0.00'));
 
+/// The rows of `m1_values`' sheet, as the writer is given them.
+List<List<Object?>> m1ValuesRows() => <List<Object?>>[
+  <Object?>[
+    'int',
+    'double',
+    'negative',
+    'true',
+    'false',
+    'text',
+    'decimal',
+    'date',
+    'datetime',
+    'styled',
+    'gap',
+    'big',
+  ],
+  <Object?>[
+    42,
+    3.14159,
+    -0.25,
+    true,
+    false,
+    'plain text',
+    XlsxDecimal('1234.50'),
+    const XlsxDate(2026, 10, 24),
+    DateTime(2026, 10, 24, 13, 45),
+    const XlsxCell(1234.5, style: _twoDecimals),
+    null,
+    9007199254740992,
+  ],
+];
+
 Fixture _values() => Fixture(
   'm1_values',
   <String, List<List<String>>>{
@@ -112,35 +144,8 @@ Fixture _values() => Fixture(
     ],
   },
   () => _make((XlsxWriter book) {
-    book.addSheet('Values')
-      ..row(<Object?>[
-        'int',
-        'double',
-        'negative',
-        'true',
-        'false',
-        'text',
-        'decimal',
-        'date',
-        'datetime',
-        'styled',
-        'gap',
-        'big',
-      ])
-      ..row(<Object?>[
-        42,
-        3.14159,
-        -0.25,
-        true,
-        false,
-        'plain text',
-        XlsxDecimal('1234.50'),
-        const XlsxDate(2026, 10, 24),
-        DateTime(2026, 10, 24, 13, 45),
-        const XlsxCell(1234.5, style: _twoDecimals),
-        null,
-        9007199254740992,
-      ]);
+    final XlsxSheetWriter sheet = book.addSheet('Values');
+    m1ValuesRows().forEach(sheet.row);
   }),
 );
 
@@ -201,7 +206,7 @@ Fixture _dirtyText() => Fixture(
 );
 
 /// The names asked for, in order, and the names the file gets.
-const List<(String, String)> _sheetNames = <(String, String)>[
+const List<(String, String)> m1SheetNames = <(String, String)>[
   ('Özet', 'Özet'),
   ('a/b', 'a_b'),
   ('A_B', 'A_B (2)'),
@@ -222,7 +227,7 @@ const List<(String, String)> _sheetNames = <(String, String)>[
 Fixture _sheets() => Fixture(
   'm1_sheets',
   <String, List<List<String>>>{
-    for (final (String asked, String got) in _sheetNames)
+    for (final (String asked, String got) in m1SheetNames)
       got: <List<String>>[
         <String>['asked: ${escapeXstring(asked)}'],
       ],
@@ -231,7 +236,7 @@ Fixture _sheets() => Fixture(
     ],
   },
   <String, List<List<Object?>>>{
-    for (final (String asked, String got) in _sheetNames)
+    for (final (String asked, String got) in m1SheetNames)
       got: <List<Object?>>[
         <Object?>['asked: $asked'],
       ],
@@ -241,7 +246,7 @@ Fixture _sheets() => Fixture(
   },
   () => _make((XlsxWriter book) {
     XlsxSheetWriter? active;
-    for (final (String asked, String got) in _sheetNames) {
+    for (final (String asked, String got) in m1SheetNames) {
       final XlsxSheetWriter sheet = book.addSheet(asked);
       sheet.row(<Object?>['asked: $asked']);
       if (got == 'şube (2)') active = sheet;
@@ -354,6 +359,16 @@ Fixture _properties() => Fixture(
   ),
 );
 
+/// The one row of `m1_dates`' sheet, as the writer is given it.
+List<Object?> m1DatesRow() => <Object?>[
+  const XlsxDate(1900, 2, 28),
+  const XlsxDate(1900, 3, 1),
+  DateTime(2026, 10, 24),
+  DateTime(2026, 10, 24, 23, 59, 59, 999),
+  DateTime(1850, 6, 15), // before 1900: ISO text and a warning
+  const XlsxCell(XlsxDate(2026, 10, 24), style: _twoDecimals),
+];
+
 Fixture _dates() => Fixture(
   'm1_dates',
   <String, List<List<String>>>{
@@ -381,14 +396,7 @@ Fixture _dates() => Fixture(
     ],
   },
   () => _make((XlsxWriter book) {
-    book.addSheet('Dates').row(<Object?>[
-      const XlsxDate(1900, 2, 28),
-      const XlsxDate(1900, 3, 1),
-      DateTime(2026, 10, 24),
-      DateTime(2026, 10, 24, 23, 59, 59, 999),
-      DateTime(1850, 6, 15), // before 1900: ISO text and a warning
-      const XlsxCell(XlsxDate(2026, 10, 24), style: _twoDecimals),
-    ]);
+    book.addSheet('Dates').row(m1DatesRow());
   }),
   expectedWarnings: <XlsxWarningCode, int>{
     XlsxWarningCode.dateOutsideExcelRange: 1,

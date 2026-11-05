@@ -19,6 +19,21 @@ const int _maxThemeIndex = 11;
 /// system foreground and background).
 const int _maxIndexedColor = 65;
 
+/// Which kind of value an [XlsxColor] holds.
+enum XlsxColorKind {
+  /// An RGB or ARGB value.
+  rgb,
+
+  /// A theme color, with an optional tint.
+  theme,
+
+  /// A legacy palette color.
+  indexed,
+
+  /// The automatic color.
+  auto,
+}
+
 /// A color as SpreadsheetML (`CT_Color`) describes it: an RGB value, a theme
 /// color with an optional tint, an indexed palette color, or the automatic
 /// color.
@@ -101,6 +116,34 @@ final class XlsxColor {
 
   /// The tint of a theme color; `0` for every other kind.
   final double tint;
+
+  /// Which kind of color this is.
+  XlsxColorKind get kind {
+    switch (_kind) {
+      case _rgbKind:
+        return XlsxColorKind.rgb;
+      case _themeKind:
+        return XlsxColorKind.theme;
+      case _indexedKind:
+        return XlsxColorKind.indexed;
+      default:
+        return XlsxColorKind.auto;
+    }
+  }
+
+  /// The color as `0xAARRGGBB` for an [XlsxColorKind.rgb] color, `null` for
+  /// every other kind.
+  ///
+  /// Plain arithmetic, not bit shifts, so the browser agrees with the VM.
+  int? get argb => _kind == _rgbKind ? _alpha * 0x1000000 + _value : null;
+
+  /// The theme color index (`0..11`) of an [XlsxColorKind.theme] color,
+  /// `null` for every other kind.
+  int? get themeIndex => _kind == _themeKind ? _value : null;
+
+  /// The legacy palette index (`0..65`) of an [XlsxColorKind.indexed] color,
+  /// `null` for every other kind.
+  int? get paletteIndex => _kind == _indexedKind ? _value : null;
 
   @override
   bool operator ==(Object other) =>

@@ -1,7 +1,11 @@
+import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/change_log.dart';
+import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xlsx/model/cell_store.dart';
 import 'package:jet_office/src/xlsx/model/primitives.dart';
+import 'package:jet_office/src/xlsx/model/styles_part.dart';
 import 'package:jet_office/src/xlsx/raw_cell.dart';
+import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:test/test.dart';
 
 RawCell _num(String v) => RawCell(kind: RawCellKind.number, value: v);
@@ -50,6 +54,39 @@ void main() {
         throwsStateError,
       );
       expect(store.cellAt(0, 0), isNull);
+    });
+  });
+
+  group('setStoredRowAttributes', () {
+    const KeptAttribute ht = (
+      qualifiedName: 'ht',
+      namespaceUri: '',
+      value: '9',
+    );
+
+    test('records old and new; revert restores, and a bare row goes', () {
+      final CellStore store = CellStore();
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(
+        () => setStoredRowAttributes(log, store, 3, <KeptAttribute>[ht]),
+      );
+      expect(store.rowAttributes(3), <KeptAttribute>[ht]);
+      expect(store.rowIndexes, <int>[3]);
+      log.revertSet(set);
+      expect(store.rowAttributes(3), isEmpty);
+      expect(store.rowIndexes, isEmpty);
+      log.reapplySet(set);
+      expect(store.rowAttributes(3), <KeptAttribute>[ht]);
+    });
+
+    test('outside a transaction it throws and leaves the store unchanged', () {
+      final CellStore store = CellStore();
+      expect(
+        () =>
+            setStoredRowAttributes(ChangeLog(), store, 0, <KeptAttribute>[ht]),
+        throwsStateError,
+      );
+      expect(store.rowAttributes(0), isEmpty);
     });
   });
 
@@ -104,6 +141,60 @@ void main() {
 
     test('a store without formulas is none everywhere', () {
       expect(groupRoleAt(CellStore(), 0, 0), GroupRole.none);
+    });
+  });
+
+  group('appendStyle', () {
+    StylesPart styles() => StylesPart.read(
+      XmlPullReader(
+        '<styleSheet xmlns="http://schemas.openxmlformats.org/'
+        'spreadsheetml/2006/main"><cellXfs><xf numFmtId="0"/></cellXfs>'
+        '</styleSheet>',
+      ),
+      const XlsxReadLimits(),
+    );
+    const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+
+    test('records what it appended; revert and reapply', () {
+      final StylesPart part = styles();
+      final StylesMark before = part.mark();
+      final ChangeLog log = ChangeLog();
+      late int id;
+      final ChangeSet set = log.transaction(() {
+        id = appendStyle(log, part, bold);
+      });
+      expect(set.changes.single, isA<StylesAppendChange>());
+      final StylesMark after = part.mark();
+      expect(after, isNot(before));
+      log.revertSet(set);
+      expect(part.mark(), before);
+      log.reapplySet(set);
+      expect(part.mark(), after);
+      expect(part.styleOf(id).font?.bold, isTrue);
+    });
+
+    test('records nothing for a style the part has', () {
+      final StylesPart part = styles();
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        expect(appendStyle(log, part, null), 0);
+      });
+      expect(set.isEmpty, isTrue);
+      expect(log.hasChanges, isFalse);
+    });
+
+    test('a failed transaction removes the appended entries', () {
+      final StylesPart part = styles();
+      final StylesMark before = part.mark();
+      final ChangeLog log = ChangeLog();
+      expect(
+        () => log.transaction(() {
+          appendStyle(log, part, bold);
+          throw StateError('later');
+        }),
+        throwsStateError,
+      );
+      expect(part.mark(), before);
     });
   });
 }

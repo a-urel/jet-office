@@ -32,6 +32,7 @@ library;
 import 'dart:collection';
 import 'dart:typed_data';
 
+import '../../common/theme_colors.dart';
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
@@ -41,6 +42,7 @@ import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../../zip/archive_adapter.dart';
 import '../cell_encoder.dart';
+import '../color.dart';
 import '../number_format.dart';
 import '../properties.dart';
 import '../raw_cell.dart';
@@ -58,6 +60,8 @@ import '../workbook_parts.dart';
 import '../worksheet_parts.dart';
 import '../xlsx_writer.dart';
 import 'cell_store.dart';
+import 'palette.dart';
+import 'primitives.dart';
 import 'styles_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
@@ -142,9 +146,52 @@ final class XlsxWorkbook {
   /// styles, so it throws an [XlsxReadException] when they cannot be read.
   XlsxSheet addSheet(String name) => _book.addSheet(name);
 
+  /// The sheet Excel opens on: the one at the first `workbookView`'s
+  /// `activeTab`, or the first sheet when there is no such attribute or it
+  /// is past the last tab.
+  ///
+  /// Throws a [StateError] for a workbook with no sheet.
+  XlsxSheet get activeSheet => _book.activeSheet;
+
+  /// Makes [sheet] the sheet Excel opens on: sets `activeTab`, `tabSelected`
+  /// on its view, and clears `tabSelected` on the sheet that was active
+  /// (loading both sheets). A chartsheet or a sheet without a part has no
+  /// view to select; only `activeTab` changes for it. The sheet that is
+  /// active already changes nothing, so a file without `activeTab` or
+  /// `tabSelected` stays without them.
+  ///
+  /// Throws an [ArgumentError] for a sheet of another workbook and a
+  /// [StateError] for a sheet that is not visible; nothing changes then.
+  /// Throws an [XlsxReadException] when a sheet to load cannot be read.
+  set activeSheet(XlsxSheet sheet) => _book.setActiveSheet(sheet);
+
   /// Whether the workbook counts dates from 1904, as files from old Mac
   /// versions of Excel do; dates are set and read in its system.
   bool get date1904 => _book.workbook.date1904;
+
+  /// The 64 colours `<color indexed="N"/>` shows: the file's `<indexedColors>`
+  /// or the default palette (ECMA-376 Part 1, section 18.8.27), unmodifiable.
+  ///
+  /// A `[ColorN]` of a number format result is `XlsxColor.indexed(N + 7)`
+  /// and its value is `indexedColors[N + 7]`. Loads the shared strings and
+  /// styles, so it throws an [XlsxReadException] when they cannot be read.
+  List<int> get indexedColors => _book.indexedColors;
+
+  /// The colour [color] shows, as `0xAARRGGBB`, or `null` when it has none.
+  ///
+  /// An `rgb` colour is itself. An `indexed` colour 0 to 63 is
+  /// [indexedColors]'s entry; 64 and 65 (the system colours) and anything
+  /// else give `null`. A `theme` colour is the slot of the theme part the
+  /// workbook relates to, in SpreadsheetML's order (0 lt1, 1 dk1, 2 lt2,
+  /// 3 dk2, 4 to 9 accent1 to 6, 10 hlink, 11 folHlink), with its tint
+  /// applied; a tint that is not finite or not within -1 to 1 is ignored, so
+  /// the slot's own colour results. `auto`, a missing or unreadable theme
+  /// and a missing slot give `null`.
+  ///
+  /// The theme part is read once, from its bytes, and stays unloaded: saving
+  /// copies it unchanged. Only an `indexed` colour loads the styles (see
+  /// [indexedColors]); no colour makes this method throw on a theme.
+  int? resolveColor(XlsxColor color) => _book.resolveColor(color);
 
   /// What was repaired or could not be read exactly while opening, editing
   /// and saving, aggregated per sheet and [XlsxWarningCode]. An unmodifiable
@@ -345,6 +392,51 @@ final class _Book implements SheetHost {
   String? _stringsName;
   StylesPart? _styles;
 
+  /// The theme's colours, read once; `null` for no theme or an unreadable one.
+  ThemeColors? _theme;
+  bool _themeRead = false;
+
+  List<int> get indexedColors {
+    loadTables();
+    return _styles?.indexedColors ?? defaultIndexedColors;
+  }
+
+  int? resolveColor(XlsxColor color) {
+    switch (color.kind) {
+      case XlsxColorKind.rgb:
+        return color.argb;
+      case XlsxColorKind.auto:
+        return null;
+      case XlsxColorKind.indexed:
+        final int i = color.paletteIndex!;
+        return i >= 0 && i < 64 ? indexedColors[i] : null;
+      case XlsxColorKind.theme:
+        final int i = color.themeIndex!;
+        if (i < 0 || i >= themeSlotNames.length) return null;
+        final int? base = _themeColors()?.argbOf(themeSlotNames[i]);
+        if (base == null) return null;
+        final double tint = color.tint;
+        return tint.isFinite && tint >= -1 && tint <= 1
+            ? applyTint(base, tint)
+            : base;
+    }
+  }
+
+  ThemeColors? _themeColors() {
+    if (_themeRead) return _theme;
+    _themeRead = true;
+    final String? target = _target(RelType.theme);
+    if (target == null) return null;
+    try {
+      return _theme = reader.guardXml(
+        target,
+        () => ThemeColors.read(reader.openXml(target)),
+      );
+    } on XlsxReadException {
+      return null;
+    }
+  }
+
   OpcPackage get _package => reader.package;
 
   @override
@@ -367,7 +459,11 @@ final class _Book implements SheetHost {
         ? null
         : reader.guardXml(
             stylesTarget,
-            () => StylesPart.read(reader.openXml(stylesTarget), limits),
+            () => StylesPart.read(
+              reader.openXml(stylesTarget),
+              limits,
+              warn: _styleWarning,
+            ),
           );
     final String? stringsTarget = _target(RelType.sharedStrings);
     final SharedStrings strings;
@@ -403,6 +499,17 @@ final class _Book implements SheetHost {
     );
   }
 
+  /// Reports a style entry that cannot be read exactly: a warning about
+  /// the workbook, so it names no sheet.
+  void _styleWarning(XlsxWarningCode code, String detail) =>
+      warnings.add(code, sheet: '', detail: detail);
+
+  @override
+  StylesPart? get styles => _styles;
+
+  @override
+  StylesPart stylesForEdit() => _stylesForEdit();
+
   @override
   int? dateStyle(int? style, {required bool withTime}) {
     final XlsxNumFmt format = withTime
@@ -410,11 +517,13 @@ final class _Book implements SheetHost {
         : XlsxNumFmt.localeShortDate;
     final StylesPart styles = _stylesForEdit();
     if (!styles.isTyped) return null;
-    return styles.withNumberFormat(style, format.builtinId!);
+    return appendNumberFormat(log, styles, style, format.builtinId!);
   }
 
-  /// The styles part, added to the package from the writer's empty styles
-  /// when the file has none.
+  /// The styles part; for a file without one, a part of the writer's empty
+  /// styles that is held in memory only and joins the package on save once
+  /// it holds an appended entry (see [writeTo]), so an edit that fails or is
+  /// undone leaves the package as it was.
   StylesPart _stylesForEdit() {
     final StylesPart? loaded = _styles;
     if (loaded != null) return loaded;
@@ -423,9 +532,82 @@ final class _Book implements SheetHost {
     final StylesPart part = StylesPart.read(
       XmlPullReader.fromBytes(out.takeBytes()),
       reader.limits,
+      warn: _styleWarning,
     );
-    _addWorkbookPart('styles.xml', ContentType.styles, RelType.styles, part);
+    _createdStyles = part.mark();
     return _styles = part;
+  }
+
+  /// The counts of the styles part the model made for a file without one,
+  /// while it is not in the package yet; `null` otherwise.
+  StylesMark? _createdStyles;
+
+  XlsxSheet get activeSheet {
+    if (_sheets.isEmpty) throw StateError('The workbook has no sheet.');
+    final int i = workbook.activeTab;
+    return _sheets[i < _sheets.length ? i : 0];
+  }
+
+  void setActiveSheet(XlsxSheet sheet) {
+    if (!_sheets.any((XlsxSheet s) => identical(s, sheet))) {
+      throw ArgumentError.value(
+        sheet.name,
+        'sheet',
+        'The sheet belongs to another workbook.',
+      );
+    }
+    if (sheet.visibility != XlsxSheetVisibility.visible) {
+      throw StateError(
+        'The ${sheet.visibility.name} sheet "${sheet.name}" cannot be the '
+        'active sheet.',
+      );
+    }
+    if (identical(sheet, activeSheet)) return;
+    log.transaction(() => _activate(sheet));
+  }
+
+  /// Makes [target] active inside a transaction: `tabSelected` moves from
+  /// the sheet that was active, and `activeTab` is set.
+  void _activate(XlsxSheet target) {
+    final XlsxSheet old = activeSheet;
+    if (!identical(old, target) && sheetIsWorksheet(old)) {
+      setSheetTabSelected(old, false);
+    }
+    if (sheetIsWorksheet(target)) setSheetTabSelected(target, true);
+    setActiveTab(log, workbook, _sheets.indexOf(target));
+  }
+
+  @override
+  void setVisibility(SheetEntry entry, XlsxSheetVisibility value) {
+    if (entry.visibility == value) return;
+    final bool hiding =
+        entry.visibility == XlsxSheetVisibility.visible &&
+        value != XlsxSheetVisibility.visible;
+    final int index = _sheets.indexWhere(
+      (XlsxSheet s) => identical(entryOf(s), entry),
+    );
+    if (hiding &&
+        !_sheets.any(
+          (XlsxSheet s) =>
+              !identical(entryOf(s), entry) &&
+              s.visibility == XlsxSheetVisibility.visible,
+        )) {
+      throw StateError(
+        'The sheet "${entry.name}" is the last visible sheet and cannot be '
+        'hidden.',
+      );
+    }
+    log.transaction(() {
+      final bool wasActive = identical(activeSheet, _sheets[index]);
+      setEntryVisibility(log, entry, value);
+      if (wasActive && hiding) {
+        _activate(
+          _sheets.firstWhere(
+            (XlsxSheet s) => s.visibility == XlsxSheetVisibility.visible,
+          ),
+        );
+      }
+    });
   }
 
   XlsxSheet addSheet(String requested) {
@@ -512,7 +694,9 @@ final class _Book implements SheetHost {
     final bool allLoaded = _sheets.every(
       (XlsxSheet s) => isLoadedSheet(s) || !sheetHasPart(s),
     );
-    if (log.hasChanges) {
+    // Only a changed cell value or formula (spec section 4.4) makes the
+    // calculation chain and cached results stale.
+    if (_sheets.any((XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0)) {
       final String? chain = _target(RelType.calcChain);
       if (chain != null) {
         // Only the workbook refers to the calculation chain, so no other
@@ -526,6 +710,17 @@ final class _Book implements SheetHost {
           !allLoaded ||
           _sheets.any((XlsxSheet s) => cellStoreOf(s)?.hasFormulas ?? false);
       if (formulas) workbook.requestFullCalculation();
+    }
+    final StylesMark? created = _createdStyles;
+    final StylesPart? styles = _styles;
+    if (created != null && styles != null && styles.mark() != created) {
+      _addWorkbookPart(
+        'styles.xml',
+        ContentType.styles,
+        RelType.styles,
+        styles,
+      );
+      _createdStyles = null;
     }
     final SharedStrings? strings = _strings;
     if (strings != null) {

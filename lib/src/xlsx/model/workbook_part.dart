@@ -5,16 +5,18 @@
 ///
 /// A loaded part is always written from this model (spec §4.3). What the
 /// model types is the `<sheets>` group, each `<sheet>` as a [SheetEntry], and
-/// the attributes of `<calcPr>`. Every other child of `<workbook>`
-/// (`workbookPr` with its `date1904`, `bookViews`, `definedNames`,
-/// `extLst`, ...) is an [OpaqueXml] at its original position, and the root
-/// keeps its namespace declarations and `mc:Ignorable`.
+/// the attributes of `<calcPr>`; the first `<bookViews>` is an [XmlNode] whose
+/// first `<workbookView>` gives the active tab ([WorkbookPart.activeTab]) and
+/// keeps its other attributes. Every other child of `<workbook>`
+/// (`workbookPr` with its `date1904`, `definedNames`, `extLst`, ...) is an
+/// [OpaqueXml] at its original position, and the root keeps its namespace
+/// declarations and `mc:Ignorable`.
 ///
 /// Sheet names are `ST_Xstring`: `_xHHHH_` is decoded on read and escaped on
 /// write, as the writer does. A `<sheet>`'s `r:id` is written with the prefix
 /// it had, declared where the part does not bind it already.
 ///
-/// Only the first `<sheets>` and the first `<calcPr>` are typed; a repeated
+/// Only the first `<sheets>`, `<calcPr>` and `<bookViews>` are typed; a repeated
 /// one is kept opaque. A part with no root element, or whose root is not a
 /// SpreadsheetML `<workbook>`, is *untyped*: it has no sheets and is written
 /// back unchanged.
@@ -35,6 +37,7 @@ import '../read/read_exception.dart';
 import '../read/read_limits.dart';
 import '../read/workbook_reader.dart' show isDate1904, sheetVisibilityOf;
 import '../sheet_view.dart';
+import 'element_node.dart';
 
 /// The children of `<workbook>` in the order of the schema's `CT_Workbook`
 /// sequence.
@@ -59,6 +62,11 @@ const List<String> workbookChildOrder = <String>[
   'webPublishObjects',
   'extLst',
 ];
+
+/// The typed children of `<bookViews>`.
+const NodeShape _bookViewsShape = <String, Set<String>>{
+  'bookViews': <String>{'workbookView'},
+};
 
 /// A `<sheet>` of the workbook's `<sheets>`.
 final class SheetEntry {
@@ -107,8 +115,9 @@ final class SheetEntry {
   /// The prefix of the `r:id` attribute.
   final String relPrefix;
 
-  /// Whether the source said `state="visible"`, which is written back.
-  final bool explicitVisible;
+  /// Whether the source said `state="visible"`, which is written back until
+  /// the sheet's visibility is set (a visible sheet then has no `state`).
+  bool explicitVisible;
 
   void _writeTo(XmlWriter w, Map<String, String> above) {
     w.start(qualifiedName);
@@ -249,6 +258,7 @@ final class WorkbookPart implements PartContent {
     _Sheets? sheets;
     _CalcPr? calcPr;
     var date1904 = false;
+    var hasBookViews = false;
     while (r.next()) {
       if (r.eventType == XmlEventType.endElement && r.depth < 1) break;
       if (r.eventType != XmlEventType.startElement) continue;
@@ -264,6 +274,9 @@ final class WorkbookPart implements PartContent {
         );
         r.skip();
         children.add(calcPr);
+      } else if (main && r.localName == 'bookViews' && !hasBookViews) {
+        hasBookViews = true;
+        children.add(XmlNode.read(r, _bookViewsShape));
       } else {
         if (main && r.localName == 'workbookPr') {
           date1904 = isDate1904(r.getAttribute('date1904'));
@@ -327,6 +340,88 @@ final class WorkbookPart implements PartContent {
     calc.setFullCalcOnLoad();
   }
 
+  /// The first `<bookViews>`, or `null` when the part has none (or is
+  /// untyped). Immutable; [swapBookViews] replaces it.
+  XmlNode? get bookViews {
+    for (final Object c in _children) {
+      if (c is XmlNode) return c;
+    }
+    return null;
+  }
+
+  /// The index of the tab Excel opens on: the `activeTab` of the first
+  /// `<workbookView>`, or 0 when there is none or its text is not an
+  /// unsigned int.
+  int get activeTab =>
+      parseSheetId(bookViews?.child('workbookView')?.attribute('activeTab')) ??
+      0;
+
+  /// Sets the `activeTab` of the first `<workbookView>` to [index],
+  /// creating `<bookViews>` in its schema position and `<workbookView>` when
+  /// absent; every other attribute and child is kept. A value that is
+  /// already [index] (an absent attribute reads as 0) changes nothing.
+  ///
+  /// Not recorded in a change log: use `setActiveTab` of `primitives.dart`.
+  /// Throws a [StateError] for an untyped part.
+  void setActiveTabIndex(int index) {
+    final XmlRoot root = _requireTyped();
+    final XmlNode? views = bookViews;
+    final String prefix = _prefixOf(root.qualifiedName);
+    final XmlNode next;
+    if (views == null) {
+      next = XmlNode.made(
+        prefix,
+        'bookViews',
+        children: <Object>[
+          XmlNode.made(
+            prefix,
+            'workbookView',
+            attributes: <String, String>{'activeTab': '$index'},
+          ),
+        ],
+      );
+    } else {
+      final XmlNode? first = views.child('workbookView');
+      if (first == null) {
+        next = views.withChildren(<Object>[
+          XmlNode.made(
+            _prefixOf(views.qualifiedName),
+            'workbookView',
+            attributes: <String, String>{'activeTab': '$index'},
+          ),
+          ...views.children,
+        ]);
+      } else {
+        final String? text = first.attribute('activeTab');
+        if (text == '$index' || (text == null && index == 0)) return;
+        next = views.replacingChild(
+          first,
+          first.withChanges(<String, String?>{'activeTab': '$index'}),
+        );
+      }
+    }
+    swapBookViews(views, next);
+  }
+
+  /// Replaces the `<bookViews>` [from] (as [bookViews] returned it; `null`
+  /// for none) by [to] (`null` removes it), at the same place, or in schema
+  /// position when [from] is `null`. The primitive behind the undo of
+  /// [setActiveTabIndex].
+  void swapBookViews(XmlNode? from, XmlNode? to) {
+    _requireTyped();
+    if (from == null) {
+      if (to != null) _children.insert(_positionFor('bookViews'), to);
+      return;
+    }
+    final int at = _children.indexWhere((Object c) => identical(c, from));
+    if (at < 0) throw StateError('The workbook views are not in the part.');
+    if (to == null) {
+      _children.removeAt(at);
+    } else {
+      _children[at] = to;
+    }
+  }
+
   XmlRoot _requireTyped() {
     final XmlRoot? root = _root;
     if (root == null) {
@@ -364,11 +459,14 @@ final class WorkbookPart implements PartContent {
         .toSet();
     for (var i = 0; i < _children.length; i++) {
       final Object c = _children[i];
-      if (c is OpaqueXml &&
-          c.namespaceUri == Ns.main &&
-          after.contains(c.localName)) {
-        return i;
-      }
+      final String? childName = switch (c) {
+        OpaqueXml() when c.namespaceUri == Ns.main => c.localName,
+        _Sheets() => 'sheets',
+        _CalcPr() => 'calcPr',
+        XmlNode() => c.localName,
+        _ => null,
+      };
+      if (childName != null && after.contains(childName)) return i;
     }
     return _children.length;
   }
@@ -386,6 +484,8 @@ final class WorkbookPart implements PartContent {
         case _Sheets():
           c.writeTo(w, root.namespaces);
         case _CalcPr():
+          c.writeTo(w, root.namespaces);
+        case XmlNode():
           c.writeTo(w, root.namespaces);
         case OpaqueXml():
           c.writeTo(w, declaredAbove: root.namespaces);

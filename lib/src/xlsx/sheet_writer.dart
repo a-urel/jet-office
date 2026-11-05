@@ -59,6 +59,7 @@ import 'drawing.dart';
 import 'header_footer.dart';
 import 'hyperlink.dart';
 import 'limits.dart';
+import 'merge_check.dart';
 import 'note.dart';
 import 'page_setup.dart';
 import 'range.dart';
@@ -696,23 +697,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
   void merge(XlsxRange range) {
     _checkOpenSheet();
     validateRange(range, 'range');
-    if (range.isSingleCell) {
-      throw ArgumentError.value(
-        range,
-        'range',
-        'A merged range must cover at least two cells.',
-      );
-    }
-    for (final XlsxRange earlier in _merges) {
-      if (earlier.overlaps(range)) {
-        throw ArgumentError.value(
-          range,
-          'range',
-          'The range ${range.ref} overlaps the merged range ${earlier.ref}.',
-        );
-      }
-    }
-    _checkNoTableOverlap(range);
+    checkMerge(range, _merges, _tableRanges);
     _merges.add(range);
   }
 
@@ -733,20 +718,16 @@ final class WorksheetWriter implements XlsxSheetWriter {
     context.reserveDefinedName(name.name);
   }
 
+  /// The name and range of each table of the sheet.
+  Iterable<({String name, XlsxRange range})> get _tableRanges => _tables.map(
+    (({int id, XlsxTable table}) t) =>
+        (name: t.table.name, range: t.table.range),
+  );
+
   /// Throws [ArgumentError] named `range` when [range] overlaps a table of
   /// the sheet.
-  void _checkNoTableOverlap(XlsxRange range) {
-    for (final ({int id, XlsxTable table}) t in _tables) {
-      if (t.table.range.overlaps(range)) {
-        throw ArgumentError.value(
-          range,
-          'range',
-          'The range ${range.ref} overlaps the table "${t.table.name}" over '
-              '${t.table.range.ref}.',
-        );
-      }
-    }
-  }
+  void _checkNoTableOverlap(XlsxRange range) =>
+      checkNoTableOverlap(range, _tableRanges);
 
   @override
   void dataValidation(XlsxDataValidation validation) {

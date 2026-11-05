@@ -171,6 +171,28 @@ enum XlsxWarningCode {
   /// locale's short date (id 14) for ids 27 to 31, 36 and 50 to 58, its
   /// time (id 21) for ids 32 to 35, and the General format for the others.
   numberFormatLocaleDependent,
+
+  /// Editing an opened workbook: a font, fill, border or cell format of its
+  /// styles part cannot be read exactly: it holds a value the style types
+  /// cannot hold (a font size of `abc`, a pattern called `zigzag`), or a
+  /// cell format points at a font, fill or border that does not exist. What
+  /// cannot be read takes its default, and the entry is saved as written.
+  /// Reported once per entry, when it is first read. [XlsxWarning.detail]
+  /// names the entry and the problem, in English, such as
+  /// `font 3: The font size "abc" is not a finite number.`; after ten
+  /// entries, one warning without a detail counts the rest. It names no
+  /// cell.
+  styleEntryInvalid,
+
+  /// Editing an opened workbook: a row, column, sheet view, pane or merged
+  /// range of a sheet has an attribute the model cannot read (a row height
+  /// of `abc`, an outline level of 9). The typed value is the default, and
+  /// the attribute is saved as written until it is set. Reported once per
+  /// element and attribute, when it is first read. [XlsxWarning.detail]
+  /// names the element and the problem, in English, such as
+  /// `row 3: ht "abc" is not a row height.`; after ten, one warning without
+  /// a detail counts the rest. It names no cell.
+  layoutInvalid,
 }
 
 /// Something the writer changed or could not store exactly, or the reader

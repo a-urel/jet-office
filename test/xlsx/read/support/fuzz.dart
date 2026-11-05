@@ -182,6 +182,17 @@ void exerciseReader(Uint8List bytes) {
 /// rethrown as a [StateError] naming the step, so an [XlsxReadException]
 /// from a later step cannot pass for a refused file.
 ///
+/// Every sheet that reads also has its `styleAt`, `rowFormat`, `column`,
+/// `view`, `tabColor`, `outlineSummary`, `defaultSizes` and `merges` read,
+/// and the workbook its `indexedColors`; those may throw only an
+/// [XlsxReadException], kept as a sheet's first read keeps one, but the
+/// sheet still counts as readable below. The first sheet then
+/// has one style, one column, one row format and a frozen pane set, on the
+/// cell of the edit above. Each may refuse the edit as its API documents, a
+/// [StateError] for an untyped sheet or styles part or a `<cols>` that is
+/// not plain and an `XlsxLimitError` for a file already past a writer limit;
+/// any other throw is a model defect, a [StateError] naming the step.
+///
 /// The model makes nothing worse: the saved bytes must open, and each of
 /// their sheets must read, unless the same sheet of the input could not;
 /// a failure there is a [StateError] too.
@@ -207,6 +218,12 @@ void exerciseModel(Uint8List bytes) {
       e.toString();
       first ??= e;
       unreadable.add(i);
+      continue;
+    }
+    try {
+      _readLayout(workbook, sheet);
+    } on XlsxReadException catch (e) {
+      first ??= e;
     }
   }
   final int? row = nextRow;
@@ -226,6 +243,12 @@ void exerciseModel(Uint8List bytes) {
     } on Object catch (e) {
       throw StateError('cellAt($row, 0) threw: $e');
     }
+    _editLayout(sheet, row);
+  }
+  try {
+    workbook.indexedColors.toString();
+  } on XlsxReadException catch (e) {
+    first ??= e;
   }
   for (final XlsxWarning warning in workbook.warnings) {
     for (final OfficeLocale locale in OfficeLocale.values) {
@@ -240,6 +263,53 @@ void exerciseModel(Uint8List bytes) {
   }
   _reopen(saved, unreadable);
   if (first != null) throw first;
+}
+
+/// Reads everything of [sheet]'s look: each row's format, the style of
+/// each of its cells and the column of each, then the sheet's settings,
+/// resolving its tab colour with [workbook].
+void _readLayout(XlsxWorkbook workbook, XlsxSheet sheet) {
+  for (final XlsxReadRow row in sheet.rows) {
+    sheet.rowFormat(row.index).toString();
+    for (final XlsxReadCell cell in row.cells) {
+      sheet.styleAt(row.index, cell.column).toString();
+      sheet.column(cell.column).toString();
+    }
+  }
+  sheet.view.toString();
+  final XlsxColor? tab = sheet.tabColor;
+  if (tab != null) workbook.resolveColor(tab);
+  sheet.outlineSummary.toString();
+  sheet.defaultSizes.toString();
+  sheet.merges.toString();
+}
+
+/// Sets a style on the cell at [row], column 0, of [sheet], a column, a row
+/// format and a frozen pane, each its own step. See [exerciseModel] for
+/// what each may refuse.
+void _editLayout(XlsxSheet sheet, int row) {
+  const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+  final Map<String, void Function()> edits = <String, void Function()>{
+    'setStyle': () => sheet.setStyle(row, 0, bold),
+    'setColumn': () =>
+        sheet.setColumn(1, const XlsxColumn(width: 20, style: bold)),
+    'setRowFormat': () =>
+        sheet.setRowFormat(row, const XlsxRowFormat(height: 30, style: bold)),
+    'view': () => sheet.view = const XlsxSheetView(
+      pane: XlsxPane.frozen(rows: 1, columns: 1),
+    ),
+  };
+  for (final MapEntry<String, void Function()> edit in edits.entries) {
+    try {
+      edit.value();
+    } on StateError {
+      // An untyped part or a <cols> that is not plain: refused by design.
+    } on XlsxLimitError {
+      // A file already past a writer limit: refused by design.
+    } on Object catch (e) {
+      throw StateError('${edit.key} threw: $e');
+    }
+  }
 }
 
 /// Opens [saved] and reads every sheet's rows; only the sheets at the

@@ -13,11 +13,12 @@ import 'support/lib_sources.dart';
 
 const String _encoder = 'lib/src/xlsx/cell_encoder.dart';
 
-/// `<c`, `<v` followed by whitespace, `>` or (for `<c`) `/`.
+/// `<c`, `<v` followed by whitespace, `>` or (for `<c`) `/`, and the same
+/// two elements started through `XmlWriter.start`.
 ///
 /// Neighbouring SpreadsheetML elements such as `<cols>`, `<col>`, `<cfRule>`
 /// and `<vertAlign>` do not match.
-final RegExp _cellMarkup = RegExp(r'<c[\s>/]|<v[\s>]');
+final RegExp _cellMarkup = RegExp(r"<c[\s>/]|<v[\s>]|start\('[cv]'\)");
 
 List<String> _offenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
@@ -39,6 +40,7 @@ void main() {
       ),
       LibSource('lib/src/xlsx/workbook.dart', "out.write('<v>\$n</v>');"),
       LibSource('lib/src/xlsx/empty.dart', "out.write('<c/>');"),
+      LibSource('lib/src/xlsx/started.dart', "w.start('c');"),
       LibSource(
         'lib/src/xlsx/columns.dart',
         '''out.write('<cols><col min="1" max="1"/></cols>');'''
@@ -54,6 +56,7 @@ void main() {
       'lib/src/xlsx/xlsx_writer.dart',
       'lib/src/xlsx/workbook.dart',
       'lib/src/xlsx/empty.dart',
+      'lib/src/xlsx/started.dart',
     ]);
   });
 }

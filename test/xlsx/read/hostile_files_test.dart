@@ -20,12 +20,6 @@ enum _Model {
   /// worksheet, the shared strings or the styles). Saving still works: the
   /// part is copied from its bytes.
   sheet,
-
-  /// The model opens, reads and saves the file: the hostility is in
-  /// something the model keeps opaque in W1. Only `maxMerges`: the merges
-  /// stay opaque until W2, so the model does not apply that limit; their XML
-  /// stays bounded by the size, depth and text limits.
-  accepts,
 }
 
 /// Drives the whole public surface over [bytes] (open, every sheet's rows
@@ -324,9 +318,8 @@ void main() {
     });
 
     test('maxMerges', () {
-      // The reader refuses it; the workbook model in W1 keeps the merges
-      // opaque and so does not apply maxMerges (W2 types them): it opens,
-      // reads and saves the file (_Model.accepts).
+      // The reader refuses it; the workbook model types the merges and
+      // applies maxMerges when the sheet loads (_Model.sheet).
       final Uint8List zip = buildWorkbook(<String, String?>{
         'S':
             '<worksheet xmlns="$mainNs"><sheetData/><mergeCells>'
@@ -335,7 +328,7 @@ void main() {
       _expectRefused(
         zip,
         XlsxReadFailure.limitExceeded,
-        model: _Model.accepts,
+        model: _Model.sheet,
         limit: 'maxMerges',
         limits: const XlsxReadLimits(maxMerges: 5),
       );

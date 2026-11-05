@@ -125,13 +125,17 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   negative control.
 - `tool/edit_model.dart` opens every `.xlsx` of a directory with
   `XlsxWorkbook`, sets a `DateTime`, an `XlsxDate`, a formula and a string
-  in the row after the first sheet's last row, adds a sheet, saves to the
-  second directory, and checks the edits read back with `XlsxReader`; it
-  also writes the generated workbook of `tool/write_model_sample.dart`
-  there. It prints each problem as `<file>: <problem>` and exits 1 on any,
-  2 on unusable arguments. CI runs it on the fixtures and validates the
-  output with the Open XML SDK, so the model's edited and generated files
-  are validated, not only its unchanged round trips.
+  in the row after the first sheet's last row, gives those cells a bold
+  style with a red fill, sets column B's width, the new row's height, a
+  merge of the two cells right of them, a frozen first row and a tab
+  colour, adds a sheet, saves to the second directory, and checks the
+  edits read back with `XlsxReader` and the model; it also writes the
+  generated workbooks of `tool/write_model_sample.dart`,
+  `w1_generated.xlsx` and `w2_generated.xlsx`, there. It prints each
+  problem as `<file>: <problem>` and exits 1 on any, 2 on unusable
+  arguments. CI runs it on the fixtures and validates the output with the
+  Open XML SDK, so the model's edited and generated files are validated,
+  not only its unchanged round trips.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX
   fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, by
   `textDifferences` in `tool/src/text_compare.dart`: a leading BOM and one

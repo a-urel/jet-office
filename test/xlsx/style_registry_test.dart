@@ -696,6 +696,352 @@ void main() {
     final String xml = _xml(r);
     expect(xml, contains('<cellXfs count="65490">'));
   });
+
+  group('seeded', () {
+    ({String? key}) key(String? k) => (key: k);
+    ({
+      int numFmtId,
+      int fontId,
+      int fillId,
+      int borderId,
+      String? alignment,
+      String? protection,
+      bool exact,
+    })
+    xf({
+      int numFmtId = 0,
+      int fontId = 0,
+      int fillId = 0,
+      int borderId = 0,
+      bool exact = true,
+    }) => (
+      numFmtId: numFmtId,
+      fontId: fontId,
+      fillId: fillId,
+      borderId: borderId,
+      alignment: null,
+      protection: null,
+      exact: exact,
+    );
+    const XlsxFont bold = XlsxFont(bold: true);
+    const XlsxFont italic = XlsxFont(italic: true);
+    final String boldKey = StyleRegistry.fontKey(bold);
+    final String italicKey = StyleRegistry.fontKey(italic);
+    final String plainKey = StyleRegistry.fontKey(null);
+    final String noneFill = StyleRegistry.fillKey(
+      const XlsxFill.pattern(XlsxPatternType.none),
+    );
+    final String noBorder = StyleRegistry.borderKey(const XlsxBorder());
+
+    StyleSeed seed({
+      List<({String? key})>? fonts,
+      Map<int, String> codes = const <int, String>{},
+      List<
+        ({
+          int numFmtId,
+          int fontId,
+          int fillId,
+          int borderId,
+          String? alignment,
+          String? protection,
+          bool exact,
+        })
+      >?
+      xfs,
+    }) => StyleSeed(
+      fonts: fonts ?? <({String? key})>[key(plainKey)],
+      fills: <({String? key})>[key(noneFill)],
+      borders: <({String? key})>[key(noBorder)],
+      customCodes: codes,
+      xfs: xfs ?? [xf()],
+    );
+
+    test('seeded ids are the file\'s indexes', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(
+          fonts: <({String? key})>[key(plainKey), key(boldKey), key(italicKey)],
+          xfs: [xf(), xf(fontId: 2)],
+        ),
+      );
+      expect(r.fontCount, 3);
+      expect(r.idFor(const XlsxStyle(font: italic)), 1);
+      expect(r.xfCount, 2);
+      final int id = r.idFor(const XlsxStyle(font: bold));
+      expect(id, 2);
+      expect(r.fontCount, 3);
+      final int other = r.idFor(
+        const XlsxStyle(font: XlsxFont(bold: true, italic: true)),
+      );
+      expect(other, 3);
+      expect(r.fontCount, 4);
+      expect(r.fontsFrom(3), hasLength(1));
+      expect(r.xfsFrom(2).last, contains('fontId="3"'));
+      expect(r.xfsFrom(2), hasLength(2));
+    });
+
+    test('an inexact entry is never reused', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(
+          fonts: <({String? key})>[key(plainKey), key(null)],
+          xfs: [xf(), xf(fontId: 1, exact: false), xf(numFmtId: 1)],
+        ),
+      );
+      // The xf is inexact: same parts as xf 1 still appends.
+      expect(r.idFor(const XlsxStyle(font: bold)), 3);
+      // The inexact font 1 matches nothing: a new font is appended.
+      expect(r.fontCount, 3);
+      expect(r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.integer)), 2);
+    });
+
+    test('custom codes continue after the file\'s', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(codes: const <int, String>{164: '0.0', 170: '#,##0.000'}),
+      );
+      expect(r.customCodesFrom(0), hasLength(2));
+      r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.0%')));
+      expect(r.customCodesFrom(2), <({int id, String code})>[
+        (id: 171, code: '0.0%'),
+      ]);
+      final int before = r.xfCount;
+      expect(
+        r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('#,##0.000'))),
+        before,
+      );
+      expect(r.xfsFrom(before).last, contains('numFmtId="170"'));
+      expect(r.customCodesFrom(2), hasLength(1));
+    });
+
+    test('custom codes start at 164 when the file\'s ids are lower', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(codes: const <int, String>{100: 'x'}),
+      );
+      r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.0')));
+      expect(r.customCodesFrom(1).single.id, 164);
+    });
+
+    test('limits count file entries', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(
+          xfs:
+              <
+                ({
+                  int numFmtId,
+                  int fontId,
+                  int fillId,
+                  int borderId,
+                  String? alignment,
+                  String? protection,
+                  bool exact,
+                })
+              >[for (int i = 0; i < XlsxLimits.maxCellFormats; i++) xf()],
+        ),
+      );
+      expect(
+        () => r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.integer)),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      expect(r.xfCount, XlsxLimits.maxCellFormats);
+    });
+
+    test('truncate rolls back', () {
+      final StyleRegistry r = StyleRegistry.seeded(seed());
+      final int fonts = r.fontCount;
+      final int xfs = r.xfCount;
+      final int a = r.idFor(
+        const XlsxStyle(font: bold, numFmt: XlsxNumFmt.custom('0.0')),
+      );
+      final int b = r.idFor(const XlsxStyle(font: italic));
+      r.truncate(
+        fonts: fonts,
+        fills: r.fillCount,
+        borders: r.borderCount,
+        codes: 0,
+        xfs: xfs,
+      );
+      expect(r.xfCount, xfs);
+      expect(r.fontCount, fonts);
+      expect(r.customCodesFrom(0), isEmpty);
+      expect(
+        r.idFor(const XlsxStyle(font: bold, numFmt: XlsxNumFmt.custom('0.0'))),
+        a,
+      );
+      expect(r.idFor(const XlsxStyle(font: italic)), b);
+      // The cache was cleaned: both styles were registered again.
+      expect(r.xfCount, xfs + 2);
+      expect(r.fontCount, fonts + 2);
+      expect(r.customCodesFrom(0), hasLength(1));
+    });
+
+    test('a failing idsFor leaves the seeded registry as it was', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(codes: const <int, String>{164: '0.0'}),
+      );
+      expect(
+        () => r.idsFor(<XlsxStyle?>[
+          const XlsxStyle(font: bold, numFmt: XlsxNumFmt.custom('0.00')),
+          const XlsxStyle(numFmt: XlsxNumFmt.builtin(200)),
+        ]),
+        throwsArgumentError,
+      );
+      expect(r.xfCount, 1);
+      expect(r.fontCount, 1);
+      expect(r.customCodesFrom(0), <({int id, String code})>[
+        (id: 164, code: '0.0'),
+      ]);
+      // And the style registers afresh, with the next id.
+      expect(
+        r.idFor(const XlsxStyle(font: bold, numFmt: XlsxNumFmt.custom('0.00'))),
+        1,
+      );
+      expect(r.customCodesFrom(1).single.id, 165);
+    });
+
+    test('a none fill never uses a seeded fill 0 that is not none', () {
+      final String solid = StyleRegistry.fillKey(
+        const XlsxFill.solid(XlsxColor.rgb(0xFF0000)),
+      );
+      const XlsxStyle none = XlsxStyle(
+        fill: XlsxFill.pattern(XlsxPatternType.none),
+      );
+      final StyleRegistry appended = StyleRegistry.seeded(
+        StyleSeed(
+          fonts: <({String? key})>[key(plainKey)],
+          fills: <({String? key})>[key(solid)],
+          borders: <({String? key})>[key(noBorder)],
+          xfs: [xf()],
+        ),
+      );
+      expect(appended.idFor(none), 1);
+      expect(appended.fillCount, 2);
+      expect(appended.fillsFrom(1).single, noneFill);
+      expect(appended.xfsFrom(1).single, contains('fillId="1"'));
+
+      final StyleRegistry reused = StyleRegistry.seeded(
+        StyleSeed(
+          fonts: <({String? key})>[key(plainKey)],
+          fills: <({String? key})>[key(solid), key(noneFill)],
+          borders: <({String? key})>[key(noBorder)],
+          xfs: [xf()],
+        ),
+      );
+      reused.idFor(none);
+      expect(reused.fillCount, 2);
+      expect(reused.xfsFrom(1).single, contains('fillId="1"'));
+    });
+
+    test('a seed over a limit reuses and throws only to append', () {
+      final StyleRegistry fonts = StyleRegistry.seeded(
+        seed(
+          fonts: <({String? key})>[
+            key(plainKey),
+            key(boldKey),
+            for (int i = 2; i <= XlsxLimits.maxFonts; i++) key(null),
+          ],
+        ),
+      );
+      expect(fonts.fontCount, XlsxLimits.maxFonts + 1);
+      expect(fonts.idFor(const XlsxStyle(font: bold)), 1);
+      final int xfs = fonts.xfCount;
+      expect(
+        () => fonts.idFor(const XlsxStyle(font: italic)),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      expect(fonts.fontCount, XlsxLimits.maxFonts + 1);
+      expect(fonts.xfCount, xfs);
+
+      final StyleRegistry codes = StyleRegistry.seeded(
+        seed(
+          codes: <int, String>{
+            for (int i = 0; i <= XlsxLimits.maxNumberFormats; i++)
+              164 + i: 'c$i',
+          },
+        ),
+      );
+      expect(codes.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('c3'))), 1);
+      expect(
+        () => codes.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('new'))),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      expect(
+        codes.customCodesFrom(0),
+        hasLength(XlsxLimits.maxNumberFormats + 1),
+      );
+
+      final StyleRegistry cells = StyleRegistry.seeded(
+        seed(
+          fonts: <({String? key})>[key(plainKey), key(boldKey)],
+          xfs: [
+            xf(),
+            xf(fontId: 1),
+            for (int i = 2; i <= XlsxLimits.maxCellFormats; i++)
+              xf(exact: false),
+          ],
+        ),
+      );
+      expect(cells.idFor(const XlsxStyle(font: bold)), 1);
+      expect(
+        () => cells.idFor(const XlsxStyle(font: italic)),
+        throwsA(isA<XlsxLimitError>()),
+      );
+      expect(cells.xfCount, XlsxLimits.maxCellFormats + 1);
+      expect(cells.fontCount, 2);
+    });
+
+    test('new codes are numbered above every used numFmt id', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        StyleSeed(
+          fonts: <({String? key})>[key(plainKey)],
+          fills: <({String? key})>[key(noneFill)],
+          borders: <({String? key})>[key(noBorder)],
+          customCodes: const <int, String>{164: 'a'},
+          usedNumFmtIds: const <int>[3, 166, 165],
+          xfs: [xf()],
+        ),
+      );
+      r.idFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('b')));
+      expect(r.customCodesFrom(1).single.id, 167);
+    });
+
+    test('an added xf takes the next index and is never matched', () {
+      final StyleRegistry r = StyleRegistry.seeded(
+        seed(fonts: <({String? key})>[key(plainKey), key(boldKey)]),
+      );
+      expect(
+        r.addXf((
+          numFmtId: 14,
+          fontId: 1,
+          fillId: 0,
+          borderId: 0,
+          alignment: null,
+          protection: null,
+        )),
+        1,
+      );
+      expect(r.xfCount, 2);
+      expect(r.xfNumFmtIdsFrom(1), <int>[14]);
+      expect(
+        r.idFor(
+          const XlsxStyle(font: bold, numFmt: XlsxNumFmt.localeShortDate),
+        ),
+        2,
+      );
+      expect(r.xfNumFmtIdsFrom(0), <int>[0, 14, 14]);
+    });
+
+    test('an empty list is refused', () {
+      expect(
+        () => StyleRegistry.seeded(
+          StyleSeed(
+            fonts: const <({String? key})>[],
+            fills: <({String? key})>[key(noneFill)],
+            borders: <({String? key})>[key(noBorder)],
+            xfs: [xf()],
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
 }
 
 /// The `styles.xml` for one custom format (`0.000`) and one built-in date
