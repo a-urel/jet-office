@@ -157,6 +157,7 @@ library;
 
 export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
+export 'src/docx/builtin_styles.dart' show DocxBuiltInStyle;
 export 'src/docx/docx_document.dart' show DocxBody, DocxDocument, DocxResult;
 export 'src/docx/model/blocks.dart'
     show DocxBlock, DocxOpaqueBlock, DocxParagraph;
