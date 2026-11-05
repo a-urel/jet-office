@@ -168,7 +168,7 @@ void _writeDefinedNames(
   if (!any) return;
   w.start('definedNames');
   for (final XlsxDefinedName name in workbookNames) {
-    _writeName(
+    writeDefinedName(
       w,
       name.name,
       null,
@@ -182,7 +182,7 @@ void _writeDefinedNames(
     final String sheet = tab.name;
     final XlsxRange? filter = tab.autoFilter;
     if (filter != null) {
-      _writeName(
+      writeDefinedName(
         w,
         '_xlnm._FilterDatabase',
         index,
@@ -192,7 +192,7 @@ void _writeDefinedNames(
     }
     final SheetNames names = tab.names;
     if (names.printArea.isNotEmpty) {
-      _writeName(
+      writeDefinedName(
         w,
         '_xlnm.Print_Area',
         index,
@@ -205,7 +205,7 @@ void _writeDefinedNames(
     final (int, int)? rows = names.printTitleRows;
     final (int, int)? columns = names.printTitleColumns;
     if (rows != null || columns != null) {
-      _writeName(
+      writeDefinedName(
         w,
         '_xlnm.Print_Titles',
         index,
@@ -221,7 +221,7 @@ void _writeDefinedNames(
       );
     }
     for (final XlsxDefinedName name in names.defined) {
-      _writeName(
+      writeDefinedName(
         w,
         name.name,
         index,
@@ -238,7 +238,10 @@ void _writeDefinedNames(
 /// index, or `null` for the workbook), the [text] as a formula, and its
 /// optional [comment] and [hidden] flag. The name and comment are
 /// ST_Xstring, the text ST_Formula.
-void _writeName(
+///
+/// The workbook model writes a new name with this too, so a name it adds is
+/// the writer's own element.
+void writeDefinedName(
   XmlWriter w,
   String name,
   int? localSheetId,

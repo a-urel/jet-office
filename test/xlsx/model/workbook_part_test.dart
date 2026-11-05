@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/opc/package.dart';
+import 'package:jet_office/src/xlsx/model/defined_names.dart';
 import 'package:jet_office/src/xlsx/model/element_node.dart';
 import 'package:jet_office/src/xlsx/model/item_group.dart';
 import 'package:jet_office/src/xlsx/model/workbook_part.dart';
@@ -362,13 +363,33 @@ void main() {
       expect(part.element('workbookProtection'), isA<XmlNode>());
     });
 
-    test('definedNames stays opaque until it is typed', () {
+    test('definedNames is typed, and a repeated one stays', () {
       const String body =
           '<sheets/><definedNames><definedName name="a">1'
-          '</definedName></definedNames>';
+          '</definedName></definedNames><definedNames><definedName '
+          'name="b">2</definedName></definedNames>';
       final WorkbookPart part = _read(_book(body));
-      expect(part.element('definedNames'), isNull);
+      expect(part.element('definedNames'), isA<ItemGroup<NameEntry>>());
+      expect(part.names.map((NameEntry e) => e.name), <String>['a']);
       expect(_encode(part), contains(body));
+    });
+
+    test('addName and removeName leave nameEdits alone', () {
+      final WorkbookPart part = _read(_book('<sheets/>'));
+      final NameEntry entry = NameEntry(
+        name: '_xlnm.Print_Area',
+        formula: 'S!\$A\$1',
+        localSheetId: 0,
+      );
+      expect(entry.builtIn, isTrue);
+      part.addName(entry);
+      expect(part.names, <NameEntry>[entry]);
+      expect(_encode(part), contains('<definedName name="_xlnm.Print_Area"'));
+      part.removeName(entry);
+      expect(part.names, isEmpty);
+      expect(part.element('definedNames'), isNull);
+      expect(part.nameEdits, 0);
+      expect(() => part.removeName(entry), throwsArgumentError);
     });
 
     test('an element swaps in schema position, in place and out', () {

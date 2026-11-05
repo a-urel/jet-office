@@ -43,6 +43,7 @@ import '../../xml/xml_writer.dart';
 import '../../zip/archive_adapter.dart';
 import '../cell_encoder.dart';
 import '../color.dart';
+import '../defined_name.dart';
 import '../number_format.dart';
 import '../properties.dart';
 import '../raw_cell.dart';
@@ -60,6 +61,7 @@ import '../workbook_parts.dart';
 import '../worksheet_parts.dart';
 import '../xlsx_writer.dart';
 import 'cell_store.dart';
+import 'defined_names.dart';
 import 'palette.dart';
 import 'primitives.dart';
 import 'styles_part.dart';
@@ -152,6 +154,43 @@ final class XlsxWorkbook {
   ///
   /// Throws a [StateError] for a workbook with no sheet.
   XlsxSheet get activeSheet => _book.activeSheet;
+
+  /// The names defined for the whole workbook, in file order, as the file
+  /// has them.
+  ///
+  /// Excel's built-in names (`_xlnm.Print_Area` and the like) are not
+  /// listed, and a name the model cannot read is left out and reported
+  /// (`featureEntryInvalid`); both stay in the file as written. A sheet's
+  /// own names are [XlsxSheet.definedNames]. Unmodifiable.
+  List<XlsxDefinedName> get definedNames =>
+      definedNamesIn(_book.workbook, null);
+
+  /// Defines [name] for the whole workbook, after the names already there.
+  ///
+  /// Checked as the writer checks it: the same spelling may be defined on a
+  /// sheet as well, where it hides this one. Throws an [ArgumentError]
+  /// naming `name`, `formula` or `comment` for an invalid name, formula or
+  /// comment, a workbook name already defined or a name that a table has,
+  /// ignoring case; nothing changes then.
+  ///
+  /// A defined name changes what formulas show as a changed cell does, so
+  /// the save asks Excel to recalculate every formula (`fullCalcOnLoad`)
+  /// when the workbook has formulas; the calculation chain stays.
+  void defineName(XlsxDefinedName name) => defineNameIn(
+    _book.log,
+    _book.workbook,
+    null,
+    name,
+    _book.checkNotTableName,
+  );
+
+  /// Removes the workbook name [name], compared ignoring case.
+  ///
+  /// Throws an [ArgumentError] named `name` when the workbook has no such
+  /// name (a built-in name is none); nothing changes then. The save asks
+  /// for recalculation as [defineName] does.
+  void removeName(String name) =>
+      removeNameIn(_book.log, _book.workbook, null, name, 'the workbook');
 
   /// Makes [sheet] the sheet Excel opens on: sets `activeTab`, `tabSelected`
   /// on its view, and clears `tabSelected` on the sheet that was active
@@ -325,7 +364,8 @@ final class _Book implements SheetHost {
     workbookName = reader.package.canonicalPartName(plain)!;
     final WorkbookPart part = reader.guardXml(
       plain,
-      () => WorkbookPart.read(reader.openXml(plain), limits),
+      () =>
+          WorkbookPart.read(reader.openXml(plain), limits, warn: _styleWarning),
     );
     if (!part.isTyped) {
       throw XlsxReadException(
@@ -441,6 +481,30 @@ final class _Book implements SheetHost {
 
   @override
   bool get date1904 => workbook.date1904;
+
+  @override
+  WorkbookPart get workbookPart => workbook;
+
+  @override
+  int sheetIndexOf(XlsxSheet sheet) =>
+      _sheets.indexWhere((XlsxSheet s) => identical(s, sheet));
+
+  @override
+  void checkNotTableName(String name) {
+    final String key = sheetNameKey(name);
+    for (final XlsxSheet s in _sheets) {
+      for (final String table in sheetTableNames(s)) {
+        if (sheetNameKey(table) == key) {
+          throw ArgumentError.value(
+            name,
+            'name',
+            'The name "$name" is already the name of the table "$table"; '
+                'table names and defined names are compared ignoring case.',
+          );
+        }
+      }
+    }
+  }
 
   @override
   StyleTable get styleTable => _styles?.table ?? StyleTable.empty;
@@ -696,8 +760,13 @@ final class _Book implements SheetHost {
     );
     // Only a changed cell value or formula (spec section 4.4) makes the
     // calculation chain and cached results stale.
-    if (_sheets.any((XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0)) {
-      final String? chain = _target(RelType.calcChain);
+    final bool valueEdited = _sheets.any(
+      (XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0,
+    );
+    // A defined name that was defined or removed changes results as a
+    // changed cell does, but the chain of cells stays as it was.
+    if (valueEdited || workbook.nameEdits > 0) {
+      final String? chain = valueEdited ? _target(RelType.calcChain) : null;
       if (chain != null) {
         // Only the workbook refers to the calculation chain, so no other
         // relationships part is read or rewritten.

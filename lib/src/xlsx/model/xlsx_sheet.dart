@@ -34,6 +34,7 @@ import '../cell_ref.dart';
 import '../color.dart';
 import '../column.dart';
 import '../date_serial.dart';
+import '../defined_name.dart';
 import '../format/format_kind.dart';
 import '../hyperlink.dart';
 import '../limits.dart';
@@ -64,6 +65,7 @@ import '../worksheet_parts.dart'
         standardRowHeight;
 import 'cell_store.dart';
 import 'columns.dart';
+import 'defined_names.dart';
 import 'element_node.dart';
 import 'primitives.dart';
 import 'style_elements.dart' show ReadStyleValue, readColor;
@@ -74,6 +76,7 @@ import 'worksheet_part.dart';
 
 part 'xlsx_sheet_layout.dart';
 part 'xlsx_sheet_merges.dart';
+part 'xlsx_sheet_names.dart';
 part 'xlsx_sheet_views.dart';
 
 /// What a sheet needs from its workbook.
@@ -86,6 +89,16 @@ abstract interface class SheetHost {
 
   /// Whether the workbook counts dates from 1904.
   bool get date1904;
+
+  /// The workbook part, which holds the defined names.
+  WorkbookPart get workbookPart;
+
+  /// The tab index of [sheet] in `<sheets>`.
+  int sheetIndexOf(XlsxSheet sheet);
+
+  /// Throws an [ArgumentError] named `name` when a table of any sheet has
+  /// [name], ignoring case.
+  void checkNotTableName(String name);
 
   /// The opened package, for reading parts.
   PackageReader get reader;
@@ -133,6 +146,16 @@ XlsxSheet newSheet(
   WorksheetPart? part,
 }) => XlsxSheet._(host, entry, partName, part);
 
+/// The display names of [sheet]'s tables; none for a sheet without a part.
+/// Reads the table parts on first use.
+Iterable<String> sheetTableNames(XlsxSheet sheet) => sheet._partName == null
+    ? const <String>[]
+    : <String>[
+        for (final ({String partName, TablePart table}) t
+            in sheet._sheetTables())
+          t.table.displayName,
+      ];
+
 /// The workbook part's entry of [sheet].
 SheetEntry entryOf(XlsxSheet sheet) => sheet._entry;
 
@@ -153,7 +176,8 @@ int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
 ///
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
 /// `A`.
-final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
+final class XlsxSheet
+    with _SheetLayout, _SheetMerges, _SheetNames, _SheetViews {
   XlsxSheet._(this._host, this._entry, this._partName, this._part);
 
   @override
