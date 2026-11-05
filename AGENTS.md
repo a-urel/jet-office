@@ -148,9 +148,11 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   `styles` and `numbering`), saves to the second directory and prints
   each `comparePackages` difference (`tool/src/part_compare.dart`) as
   `<file>: <line>`; it exits 1 on any difference or error, 2 on unusable
-  arguments. A loaded styles or numbering part nothing changed is saved as
-  read, so it also encodes both parts from the model and compares them with
-  the input (`encodedPartDifferences`, `tool/src/docx_serialize.dart`). CI
+  arguments. A loaded part nothing changed is saved as read, so it also
+  encodes the main, styles and numbering parts from the model and compares
+  them with the input (`encodedPartDifferences`, `encodedMainDifferences`,
+  `tool/src/docx_serialize.dart`; the second takes the children of `w:pPr`
+  and `w:rPr` in any order, as the model writes them in schema order). CI
   runs it on the fixtures, on LibreOffice's re-save and on the owner's Word
   files, then validates all three outputs with the Open XML SDK. As for
   workbooks, the `d1_corrupt.docx` document round-trips (exit 0)

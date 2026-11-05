@@ -8,9 +8,9 @@
 
 - `DocxDocument` opens a DOCX file from bytes (`DocxDocument.open`, within
   `DocxReadLimits`), reads and edits the paragraphs of its body, and saves
-  (`save`, `saveTo`) with nothing lost: a body never accessed is copied byte
-  for byte, a loaded one is written from the model, and what the model does
-  not type (tables, content controls, tracked changes, hyperlinks, drawings,
+  (`save`, `saveTo`) with nothing lost: a body never accessed or never
+  edited is copied byte for byte, an edited one is written from the model,
+  and what the model does not type (tables, content controls, tracked changes, hyperlinks, drawings,
   fields, the final section) is kept as written in `DocxOpaqueBlock`,
   `DocxOpaqueInline` and `DocxOpaqueRunContent`.
 - Typed: `DocxBody`, `DocxParagraph`, `DocxRun` and `DocxRunContent`
@@ -26,7 +26,9 @@
   (`notZip`, `corruptZip`, `encrypted`, `legacyDoc`, `unsupportedFormat` for
   Strict OOXML, XLSX and PPTX, `missingDocument`, `malformedXml`,
   `limitExceeded`). Warnings come in English, German and Turkish.
-- `pPr` and `rPr` children are written in schema order.
+- `pPr` and `rPr` children are written in schema order. Once a part is
+  written from the model that holds for every container in it, not only the
+  one edited; a document with no edit saves its main part as it was.
 - Known gaps: the visible text of an opaque inline holding
   `mc:AlternateContent` or a text box is empty; tables are opaque until D3;
   the final section is opaque until D4; new documents have no `docProps`
@@ -65,7 +67,8 @@
   Turkish.
 - A styles or numbering part that was loaded and not changed is saved with
   its original bytes; a part with a change is written from the model, which
-  drops comments directly under its root and its definitions. A theme colour
+  drops comments directly under its root and its definitions, and those
+  between the children of a properties container. A theme colour
   is written with `w:val="auto"` beside its theme attributes (the Open XML
   SDK accepts it; a reader that ignores `themeColor` shows automatic).
 - Known gaps: the paragraph mark's `rPr`, table style parts, `...Chars` and
