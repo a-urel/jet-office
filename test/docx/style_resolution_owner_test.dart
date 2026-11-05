@@ -12,6 +12,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import '../../tool/src/part_compare.dart';
+import '../support/read_xlsx.dart';
 import 'support/styles_documents.dart';
 
 const String _dir = 'test/fixtures/owner/docx';
@@ -50,6 +51,24 @@ void main() {
     expect(doc.styles.byId('TableGrid')?.basedOn, 'NormalTablo');
     expect(_changedParts(input, doc.save().bytes), <String>{'word/styles.xml'});
   });
+
+  for (final String name in <String>[
+    'features.docx',
+    'long.docx',
+    'blank.docx',
+  ]) {
+    test('$name: a set that adds nothing leaves styles.xml byte for byte', () {
+      final Uint8List input = _bytes(name);
+      final DocxDocument doc = DocxDocument.open(input);
+      final int styles = doc.styles.styles.length;
+      doc.body.blocks.whereType<DocxParagraph>().first.style = 'Heading1';
+      expect(doc.styles.styles, hasLength(styles));
+      expect(
+        readXlsxBytes(doc.save().bytes)['word/styles.xml'],
+        readXlsxBytes(input)['word/styles.xml'],
+      );
+    });
+  }
 
   for (final String name in <String>['features.docx', 'long.docx']) {
     group(name, () {

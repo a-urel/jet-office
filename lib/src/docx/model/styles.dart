@@ -487,7 +487,11 @@ final class DocxStyles {
   /// and the outline level say nothing: `heading 1` is `Balk1` in a Turkish
   /// document and `berschrift1` in a German one, and a style with the id
   /// `Heading1` and another name is not it. A style of that name without an
-  /// id cannot be referenced, and does not count.
+  /// id cannot be referenced, and does not count. The type of the style is
+  /// not looked at: a style of another type that carries the built-in's name
+  /// is returned, since the document cannot hold a second style of that
+  /// name, and a reference to it as the built-in's type is reported at save
+  /// (`DocxWarningCode.styleNotFound`).
   String? idOf(DocxBuiltInStyle style) => _idNamed(style.name);
 
   /// The id of the built-in [style] in this document, added with Word's
@@ -600,7 +604,11 @@ final class DocxStyles {
     return null;
   }
 
-  /// The id of the default style of [type], or `null`.
+  /// Whether a style is the default of [type], with an id or without.
+  bool _hasDefault(DocxStyleType? type) =>
+      _styles.any((DocxStyle s) => s.isDefault && s.type == type);
+
+  /// The id of the first default style of [type] that has one, or `null`.
   String? _defaultIdOf(DocxStyleType? type) {
     for (final DocxStyle s in _styles) {
       if (s.isDefault && s.type == type && s.id != null) {
@@ -638,7 +646,7 @@ final class DocxStyles {
       source,
       type: read.type,
       id: id,
-      isDefault: read.isDefault && _defaultIdOf(read.type) == null,
+      isDefault: read.isDefault && !_hasDefault(read.type),
       isCustom: read.isCustom,
       isNew: true,
     );

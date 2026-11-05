@@ -151,7 +151,9 @@ final class DocxEdits implements DocxEditSink {
 /// [StateError]; both before anything changes. Must run inside
 /// `edits.transaction`. If recording throws, the block is taken out again
 /// before the error leaves. The styles set on a paragraph are resolved
-/// against the document's ([resolveStylesSet]).
+/// against the document's ([resolveStylesSet]), which throws a
+/// `DocxReadException` when the styles part cannot be read; the transaction
+/// then takes the block out.
 void insertBlock(
   DocxEdits edits,
   Object container,
@@ -190,7 +192,9 @@ void removeBlock(
 /// An [index] that is not one of a block throws [RangeError], and a [block]
 /// already in a container throws [StateError]; both before anything
 /// changes. Must run inside `edits.transaction`. The styles set on a
-/// paragraph are resolved against the document's ([resolveStylesSet]).
+/// paragraph are resolved against the document's ([resolveStylesSet]), which
+/// throws a `DocxReadException` when the styles part cannot be read; the
+/// transaction then puts the block replaced back.
 void replaceBlock(
   DocxEdits edits,
   Object container,

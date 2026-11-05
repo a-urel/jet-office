@@ -15,7 +15,8 @@
 /// the model never loaded from its original bytes (layer 1), so a body never
 /// accessed is copied as it was, even when it would not parse; a loaded
 /// part from the model (layer 2), with what the model does not type kept as
-/// written inside it (layer 3).
+/// written inside it (layer 3). A styles or numbering part that was loaded
+/// and has not changed is written from its original bytes too.
 ///
 /// Every edit runs in a transaction of the document's `ChangeLog`
 /// (`primitives.dart`), so an edit that fails leaves the body as it was.
@@ -150,8 +151,8 @@ final class DocxDocument {
   /// The part, found through the main part's relationship wherever it
   /// lives, loads on the first access, or when a style is set on content of
   /// the document (the id set is resolved against it, and such a set or
-  /// insertion throws what this does); until then a save copies it byte for
-  /// byte. A document without one has empty styles, and gains the part at
+  /// insertion throws what this does); until then, and for as long as
+  /// nothing in it changed, a save copies it byte for byte. A document without one has empty styles, and gains the part at
   /// save once a style or a default is set in it. Throws a
   /// [DocxReadException] naming the part when it cannot be read (malformed
   /// XML, a root that is not `w:styles`, or a damaged relationships part of
@@ -164,8 +165,9 @@ final class DocxDocument {
   ///
   /// The part, found through the main part's relationship wherever it
   /// lives, loads on the first access, or at save when a paragraph's
-  /// numbering was set (to report a list the document lacks); until then a
-  /// save copies it byte for byte. A document without one has an empty
+  /// numbering was set (to report a list the document lacks); until then,
+  /// and for as long as nothing in it changed, a save copies it byte for
+  /// byte. A document without one has an empty
   /// numbering, and gains the part at save once it holds a definition.
   /// Throws a [DocxReadException] naming the part when it cannot be read
   /// (malformed XML, a root that is not `w:numbering`, or a damaged
@@ -354,6 +356,11 @@ final class DocxBody {
   /// An [index] out of that range throws [RangeError]. A [block] that is
   /// already in a body, this one or another, throws [StateError]: remove it
   /// there first. Phase 4 neither moves nor copies a block implicitly.
+  ///
+  /// The styles set on a paragraph, and on its runs, are resolved against
+  /// the document's ([DocxParagraph.style] has the rules). When one is set
+  /// and the styles part cannot be read, this throws a [DocxReadException]
+  /// naming it, on a document that opened; nothing changes then.
   void insertBlock(int index, DocxBlock block) => _edits.transaction(
     () => primitives.insertBlock(_edits, this, _blocks, index, block),
   );
@@ -370,7 +377,9 @@ final class DocxBody {
   /// then in no body.
   ///
   /// An [index] that is not one of a block throws [RangeError], and a
-  /// [block] already in a body throws [StateError].
+  /// [block] already in a body throws [StateError]. The styles set on
+  /// [block] are resolved as [insertBlock] does, which may throw the same
+  /// [DocxReadException].
   void replaceBlockAt(int index, DocxBlock block) => _edits.transaction(
     () => primitives.replaceBlock(_edits, this, _blocks, index, block),
   );

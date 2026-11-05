@@ -113,6 +113,10 @@ final class DocxRunProperties {
   /// other id is kept and reported at save
   /// (`DocxWarningCode.styleNotFound`). A run in no document is resolved
   /// when it is inserted into one.
+  ///
+  /// A styles part that cannot be read makes the set throw a
+  /// `DocxReadException` naming it, on a document that opened; nothing
+  /// changes then.
   String? get style => _set.valueOf('rStyle') as String?;
 
   set style(String? value) {

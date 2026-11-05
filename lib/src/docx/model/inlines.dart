@@ -95,7 +95,9 @@ final class DocxRun extends DocxInline {
 
   /// The id of the run's character style (`w:rStyle`), or `null` for none.
   /// A shortcut for [DocxRunProperties.style] of [properties], which has
-  /// the rules.
+  /// the rules: the id set may read back as the document's own, and a set
+  /// on a run of a document throws a `DocxReadException` when its styles
+  /// part cannot be read.
   String? get style => _properties.style;
 
   set style(String? value) => _properties.style = value;

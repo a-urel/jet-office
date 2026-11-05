@@ -5,12 +5,17 @@
 // it holds a definition, once (plan Ruling 7); a numPr set through the API
 // that names no instance is reported at save (Ruling 8). The packages are
 // built in memory, so these tests run on the web as well.
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/docx_document.dart';
 import 'package:jet_office/src/docx/model/numbering.dart';
+import 'package:jet_office/src/docx/model/primitives.dart' show DocxEdits;
+import 'package:jet_office/src/docx/numbering_part.dart';
+import 'package:jet_office/src/opc/change_log.dart' show ChangeSet;
 import 'package:jet_office/src/opc/ooxml.dart';
+import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:test/test.dart';
 
 import '../../tool/src/part_compare.dart';
@@ -85,11 +90,20 @@ void main() {
       expect(isNumberingLoaded(doc), isTrue);
       final Uint8List output = doc.save().bytes;
       expect(comparePackages(input, output), isEmpty);
+      // Nothing changed, so the part is copied.
       expect(
         readXlsxBytes(output)['word/numbering.xml'],
-        isNot(readXlsxBytes(input)['word/numbering.xml']),
+        readXlsxBytes(input)['word/numbering.xml'],
       );
-      final String xml = readDocxText(output)['word/numbering.xml']!;
+      // What the model would write means the same.
+      final String xml = utf8.decode(
+        NumberingPart.read(
+          XmlPullReader(wordNumberingXml),
+          '/word/numbering.xml',
+          DocxEdits(),
+        ).encode().expand((Uint8List c) => c).toList(),
+      );
+      expect(compareXml('word/numbering.xml', wordNumberingXml, xml), isEmpty);
       for (final String kept in <String>[
         'w15:restartNumberingAfterBreak="0"',
         'w16cid:durableId="987654321"',
@@ -401,6 +415,48 @@ void main() {
         readXlsxBytes(output)['word/_rels/numbering.xml.rels'],
         readXlsxBytes(input)['word/_rels/numbering.xml.rels'],
       );
+    });
+  });
+
+  group('a numbering part with no change keeps its bytes', () {
+    final String kept =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
+        '<w:numbering xmlns:w="${Ns.w}"><!-- kept -->'
+        '${abstractNumXml('0')}${numXml('1', '0')}</w:numbering>';
+
+    DocxDocument open() =>
+        DocxDocument.open(docxWithNumbering(numbering: kept));
+
+    String saved(DocxDocument doc) =>
+        readDocxText(doc.save().bytes)['word/numbering.xml']!;
+
+    test('reading the numbering keeps it', () {
+      final DocxDocument doc = open();
+      expect(doc.numbering.instances, hasLength(1));
+      expect(saved(doc), kept);
+    });
+
+    test('a list set that the check loads the part for keeps it', () {
+      final DocxDocument doc = open();
+      doc.body.addParagraph('a').properties.numbering = DocxNumberingRef(1);
+      expect(saved(doc), kept);
+      expect(isNumberingLoaded(doc), isTrue);
+    });
+
+    test('a change is written from the model, and its revert is as read', () {
+      final DocxDocument doc = open();
+      final ChangeSet set = changeLogOf(doc).transaction(
+        () => doc.numbering.addInstance(doc.numbering.abstractNumberings.first),
+      );
+      final String changed = saved(doc);
+      expect(changed, contains('w:numId="2"'));
+      expect(changed, isNot(contains('<!-- kept -->')));
+
+      changeLogOf(doc).revertSet(set);
+      expect(saved(doc), kept);
+
+      changeLogOf(doc).reapplySet(set);
+      expect(saved(doc), changed);
     });
   });
 

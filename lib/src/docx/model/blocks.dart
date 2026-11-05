@@ -91,8 +91,9 @@ final class DocxParagraph extends DocxBlock {
   ///
   /// Setting the empty string, or an id holding a character XML forbids,
   /// throws [ArgumentError]; set `null` to remove the style. The id set may
-  /// read back as the document's own id for that style
-  /// ([DocxParagraphProperties.style] has the rules).
+  /// read back as the document's own id for that style, and a set on a
+  /// paragraph of a document throws a `DocxReadException` when its styles
+  /// part cannot be read ([DocxParagraphProperties.style] has the rules).
   String? get style => _properties.style;
 
   set style(String? value) => _properties.style = value;
@@ -126,7 +127,8 @@ final class DocxParagraph extends DocxBlock {
   /// already in a paragraph, this one or another, throws [StateError]:
   /// remove it there first. In a paragraph of a document, the style set on
   /// a run is resolved against the document's styles (`DocxRun.style` has
-  /// the rules), in the same edit.
+  /// the rules), in the same edit; a styles part that cannot be read throws
+  /// a `DocxReadException` naming it, and nothing changes.
   void insertInline(int index, DocxInline inline) {
     RangeError.checkValueInInterval(index, 0, _inlines.length, 'index');
     _checkDetached(inline);

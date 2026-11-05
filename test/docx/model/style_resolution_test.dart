@@ -195,7 +195,6 @@ void main() {
       doc.body.insertBlock(0, moved);
       expect(moved.style, 'Heading3');
       expect(doc.styles.byName('heading 3'), isNull);
-      expect(isStylesLoaded(doc), isTrue);
     });
 
     test('a read document that sets nothing does not load styles', () {
@@ -318,6 +317,48 @@ void main() {
       edits.log.reapplySet(set);
       expect(_ids(doc), after);
       expect(doc.styles.byId('Header')?.link, 'HeaderChar');
+    });
+  });
+
+  group('undoing a set that added styles', () {
+    test('a revert and a reapply resolve nothing', () {
+      final DocxDocument doc = _localized();
+      final DocxEdits edits = editsOf(doc);
+      final DocxParagraph p = doc.body.addParagraph();
+      final DocxRun run = DocxRun('x')..style = 'Hyperlink';
+      final List<String?> before = _ids(doc);
+      final ChangeSet set = edits.transaction(() => p.insertInline(0, run));
+      final List<String?> after = _ids(doc);
+      expect(after, hasLength(before.length + 1));
+      int resolved = 0;
+      edits.styleResolver = (String id, DocxStyleType type) {
+        resolved++;
+        return id;
+      };
+
+      edits.log.revertSet(set);
+      expect(_ids(doc), before);
+      expect(p.inlines, isEmpty);
+
+      edits.log.reapplySet(set);
+      expect(_ids(doc), after);
+      expect(p.inlines, <DocxInline>[run]);
+      expect(resolved, 0);
+    });
+
+    test('a set reverted and reapplied reads what it did', () {
+      final DocxDocument doc = _localized();
+      final DocxEdits edits = editsOf(doc);
+      final DocxParagraph p = doc.body.addParagraph();
+      final List<String?> before = _ids(doc);
+      final ChangeSet set = edits.transaction(() => p.style = 'Header');
+      final List<String?> after = _ids(doc);
+      edits.log.revertSet(set);
+      expect(p.style, isNull);
+      expect(_ids(doc), before);
+      edits.log.reapplySet(set);
+      expect(p.style, 'Header');
+      expect(_ids(doc), after);
     });
   });
 
@@ -489,6 +530,18 @@ void main() {
       expect(doc.styles.byId('NoSpacing'), isNull);
     });
 
+    test('a link that fails takes what it added with it', () {
+      final DocxDocument doc = _localized();
+      final int before = doc.styles.styles.length;
+      final DocxStyle normal = doc.styles.byId('Normal')!;
+      // Header is added, and it is based on Normal: a cycle.
+      expect(() => normal.basedOn = 'Header', throwsArgumentError);
+      expect(doc.styles.styles, hasLength(before));
+      expect(doc.styles.byId('Header'), isNull);
+      expect(normal.basedOn, isNull);
+      expect(changeLogOf(doc).hasChanges, isFalse);
+    });
+
     test('setting the link a style reads is a no-op', () {
       final DocxDocument doc = DocxDocument.open(
         docxWithStyles(
@@ -590,6 +643,78 @@ void main() {
     });
   });
 
+  group('a styles part with no change keeps its bytes', () {
+    const String kept =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
+        '<w:styles xmlns:w="${Ns.w}"><!-- kept -->'
+        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal">'
+        '<w:name w:val="Normal"/></w:style>'
+        '<w:style w:type="paragraph" w:styleId="Balk1">'
+        '<w:name w:val="heading 1"/><w:basedOn w:val="Normal"/></w:style>'
+        '</w:styles>';
+
+    DocxDocument open() => DocxDocument.open(docxWithStyles(styles: kept));
+
+    String saved(DocxDocument doc) =>
+        readDocxText(doc.save().bytes)['word/styles.xml']!;
+
+    test('a set that adds nothing keeps a comment under w:styles', () {
+      final DocxDocument doc = open();
+      final DocxParagraph p = doc.body.blocks.whereType<DocxParagraph>().first
+        ..style = 'Heading1';
+      expect(p.style, 'Balk1');
+      expect(saved(doc), kept);
+    });
+
+    test('reading the styles keeps them', () {
+      final DocxDocument doc = open();
+      expect(doc.styles.styles, hasLength(2));
+      expect(saved(doc), kept);
+    });
+
+    test('an edit rolled back keeps them', () {
+      final DocxDocument doc = open();
+      editsOf(doc).afterRecord = () => throw StateError('stop');
+      expect(
+        () => doc.styles.ensure(DocxBuiltInStyle.noSpacing),
+        throwsStateError,
+      );
+      editsOf(doc).afterRecord = null;
+      expect(saved(doc), kept);
+    });
+
+    test('a change is written from the model, and its revert is as read', () {
+      final DocxDocument doc = open();
+      final DocxEdits edits = editsOf(doc);
+      final ChangeSet set = edits.transaction(() {
+        doc.styles.byId('Balk1')!.uiPriority = 9;
+        doc.styles.ensure(DocxBuiltInStyle.noSpacing);
+      });
+      final String changed = saved(doc);
+      expect(changed, contains('<w:uiPriority w:val="9"/>'));
+      expect(changed, contains('w:styleId="NoSpacing"'));
+      expect(changed, isNot(contains('<!-- kept -->')));
+
+      edits.log.revertSet(set);
+      expect(saved(doc), kept);
+
+      edits.log.reapplySet(set);
+      expect(saved(doc), changed);
+    });
+
+    test('a default set is a change', () {
+      final DocxDocument doc = open();
+      doc.styles.defaults.runProperties.italic = true;
+      expect(saved(doc), contains('<w:docDefaults>'));
+    });
+
+    test('a set that changes nothing keeps them', () {
+      final DocxDocument doc = open();
+      doc.styles.byId('Balk1')!.quickFormat = false;
+      expect(saved(doc), kept);
+    });
+  });
+
   group('a styles part that cannot be read', () {
     test('a set or an insertion throws, changes nothing, and the part is '
         'copied', () {
@@ -611,6 +736,31 @@ void main() {
   });
 
   group('the default of a type', () {
+    for (final (DocxBuiltInStyle builtIn, String type)
+        in <(DocxBuiltInStyle, String)>[
+          (DocxBuiltInStyle.normal, 'paragraph'),
+          (DocxBuiltInStyle.defaultParagraphFont, 'character'),
+          (DocxBuiltInStyle.tableNormal, 'table'),
+          (DocxBuiltInStyle.noList, 'numbering'),
+        ]) {
+      test('a default $type style without an id is still the default', () {
+        final DocxDocument doc = DocxDocument.open(
+          docxWithStyles(
+            styles: stylesXmlOf(<String>[
+              '<w:style w:type="$type" w:default="1">'
+                  '<w:name w:val="Without an id"/></w:style>',
+            ]),
+          ),
+        );
+        expect(doc.styles.ensure(builtIn), builtIn.id);
+        expect(doc.styles.byId(builtIn.id)?.isDefault, isFalse);
+        expect(
+          RegExp('w:default=').allMatches(_savedStyles(doc)),
+          hasLength(1),
+        );
+      });
+    }
+
     test('adding a built-in keeps the default of the file', () {
       final DocxDocument doc = DocxDocument.open(
         docxWithStyles(
@@ -759,6 +909,20 @@ void main() {
       );
       expect(doc.styles.byId('Normal'), isNull);
       expect(doc.styles.byId('DefaultParagraphFont'), isNull);
+    });
+
+    test('idOf takes the first style of the name in document order', () {
+      DocxDocument named(List<String> ids) => DocxDocument.open(
+        docxWithStyles(
+          styles: stylesXmlOf(<String>[
+            styleXml('paragraph', ids.first, 'Heading 1'),
+            styleXml('paragraph', ids.last, 'heading 1'),
+          ]),
+        ),
+      );
+      const DocxBuiltInStyle h1 = DocxBuiltInStyle.heading1;
+      expect(named(<String>['Bir', 'Iki']).styles.idOf(h1), 'Bir');
+      expect(named(<String>['Iki', 'Bir']).styles.idOf(h1), 'Iki');
     });
 
     test('idOf never matches by id', () {

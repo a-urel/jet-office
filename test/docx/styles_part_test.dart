@@ -9,7 +9,10 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/docx_document.dart';
+import 'package:jet_office/src/docx/model/primitives.dart' show DocxEdits;
+import 'package:jet_office/src/docx/styles_part.dart';
 import 'package:jet_office/src/opc/ooxml.dart';
+import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:test/test.dart';
 
 import '../../tool/src/part_compare.dart';
@@ -52,10 +55,24 @@ void main() {
         expect(isStylesLoaded(doc), isTrue);
         final Uint8List output = doc.save().bytes;
         expect(comparePackages(input, output), isEmpty);
-        // The part was written from the model, not copied.
+        // Nothing changed, so the part is copied.
         expect(
           readXlsxBytes(output)['word/styles.xml'],
-          isNot(readXlsxBytes(input)['word/styles.xml']),
+          readXlsxBytes(input)['word/styles.xml'],
+        );
+        // What the model would write means the same.
+        final StylesPart part = StylesPart.read(
+          XmlPullReader(xml),
+          '/word/styles.xml',
+          DocxEdits(),
+        );
+        expect(
+          compareXml(
+            'word/styles.xml',
+            xml,
+            utf8.decode(part.encode().expand((Uint8List c) => c).toList()),
+          ),
+          isEmpty,
         );
       });
     }

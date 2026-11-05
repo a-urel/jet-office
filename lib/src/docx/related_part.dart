@@ -18,8 +18,17 @@
 /// a content type override. Creating at save keeps package edits out of the
 /// change log, so an edit rolled back never leaves a part behind.
 ///
+/// A part loaded keeps its bytes until the model says something else: at
+/// save, what the model writes is compared with what it wrote when it was
+/// read, and when they are the same the file's bytes go out, so a part that
+/// was only read loses neither a comment nor a line break (decision 0010).
+/// Comparing what is written, rather than tracking edits, covers a set, an
+/// added definition and an edit undone alike, whichever member made them.
+///
 /// @docImport 'read_exception.dart';
 library;
+
+import 'dart:typed_data';
 
 import '../opc/ooxml.dart' show ContentType;
 import '../opc/package.dart';
@@ -137,14 +146,19 @@ final class RelatedPart {
   /// Reads the part with [read], inside [DocxPackage.guard], so a failure
   /// of the part's ZIP entry or XML is a [DocxReadException] naming it, and
   /// gives it the content [read] returns, which the package writes from now
-  /// on. Throws [StateError] when the part does not [exist][exists].
+  /// on, as the file's bytes while it writes what it wrote when read. Throws
+  /// [StateError] when the part does not [exist][exists].
   T load<T extends PartContent>(T Function(XmlPullReader r) read) {
     if (!_exists) {
       throw StateError('The part "$_name" is not in the package.');
     }
     final DocxPackage package = _package;
     final T content = package.guard(_name, () => read(package.openXml(_name)));
-    package.package.setContent(_name, content);
+    final String name = _name;
+    package.package.setContent(
+      name,
+      _KeptUntilChanged(content, () => package.package.originalBytes(name)),
+    );
     return content;
   }
 
@@ -213,5 +227,46 @@ final class RelatedPart {
     return absolute.toLowerCase().startsWith(from.toLowerCase())
         ? absolute.substring(from.length)
         : absolute;
+  }
+}
+
+/// The content of a part read from the file: [_model], or the file's bytes
+/// while [_model] writes what it wrote when it was read.
+final class _KeptUntilChanged implements PartContent {
+  _KeptUntilChanged(this._model, this._original)
+    : _asRead = _joined(_model.encode());
+
+  final PartContent _model;
+
+  /// The part's bytes in the file.
+  final Uint8List Function() _original;
+
+  /// What [_model] wrote before any edit.
+  final Uint8List _asRead;
+
+  @override
+  List<Uint8List> encode() {
+    final List<Uint8List> written = _model.encode();
+    return _same(_joined(written), _asRead)
+        ? <Uint8List>[_original()]
+        : written;
+  }
+
+  static Uint8List _joined(List<Uint8List> chunks) {
+    final BytesBuilder out = BytesBuilder(copy: false);
+    chunks.forEach(out.add);
+    return out.takeBytes();
+  }
+
+  static bool _same(Uint8List a, Uint8List b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 }

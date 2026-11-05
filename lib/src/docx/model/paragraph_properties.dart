@@ -113,6 +113,10 @@ final class DocxParagraphProperties {
   /// when the document lacks it. Any other id is kept and reported at save
   /// (`DocxWarningCode.styleNotFound`). A paragraph in no document is
   /// resolved when it is inserted into one.
+  ///
+  /// A styles part that cannot be read makes the set throw a
+  /// `DocxReadException` naming it, on a document that opened; nothing
+  /// changes then.
   String? get style => _set.valueOf('pStyle') as String?;
 
   set style(String? value) {
