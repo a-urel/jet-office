@@ -1041,7 +1041,8 @@ dart run tool/write_model_sample.dart build/model_generated
 
 ### The edited fixtures
 
-Open every `build/model-edited/*.xlsx`. No repair prompt. Everything W2
+Open every `m1_*` to `m5_*` file of `build/model-edited/` (not the
+`w*_generated` ones). No repair prompt. Everything W2
 checked is still there (the bold red cells, the merge, the frozen row, the
 green tab, the sheet `Model edit`). On the first sheet, in the same new row:
 
@@ -1056,11 +1057,15 @@ green tab, the sheet `Model edit`). On the first sheet, in the same new row:
   "Automatic"), and the footer reads `Page 1 of 1` in the centre (Page
   Layout view or Print Preview);
 - a filter button sits on each of A to D of the new row, except in the
-  fixtures that already had a filter (`m2_merges_filter`), where the old
-  filter is as it was;
+  fixtures that already had a filter (`m2_merges_filter` and
+  `m5_list_plain`, A2:D14), where the old filter is as it was;
 - Formulas > Name Manager lists `Model_edit` (`Model_edit2` in a workbook that
   already had that name) and everything the fixture had;
 - File > Properties shows the title `Edited by jet_office`.
+
+`m3_protection`'s first sheet (`Locked`) is protected with the password
+`password`, so typing in G, H and I is refused there. Unprotect it (Review >
+Unprotect Sheet) to try the drop-down, the rule and the data bar; do not save.
 
 Everything else looks as the fixture of that name does.
 

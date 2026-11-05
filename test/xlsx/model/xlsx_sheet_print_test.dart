@@ -248,6 +248,32 @@ void main() {
     expect(_workbookXml(book), before);
   });
 
+  test('rows a filter hid stay hidden when it narrows and when it goes', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(<String, String>{
+        'S': _worksheet(
+          '<autoFilter ref="A1:D10"/>',
+          data:
+              '<sheetData><row r="1"><c r="A1"><v>1</v></c></row>'
+              '<row r="2" hidden="1"><c r="A2"><v>2</v></c></row>'
+              '</sheetData>',
+        ),
+      }),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    expect(sheet.rowFormat(1).hidden, isTrue);
+    sheet.autoFilter = _r('A1:B10');
+    expect(sheet.rowFormat(1).hidden, isTrue);
+    expect(_sheetXml(book), contains('hidden="1"'));
+    sheet.autoFilter = null;
+    expect(_filterXml(_sheetXml(book)), isEmpty);
+    expect(sheet.rowFormat(1).hidden, isTrue);
+    expect(
+      XlsxWorkbook.open(book.save().bytes).sheets.single.rowFormat(1).hidden,
+      isTrue,
+    );
+  });
+
   group('narrowing a filter', () {
     const String filter =
         '<autoFilter ref="A1:D10" x="1">'
