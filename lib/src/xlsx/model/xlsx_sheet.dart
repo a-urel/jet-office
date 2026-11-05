@@ -35,7 +35,8 @@ import '../cell_ref.dart';
 import '../color.dart';
 import '../column.dart';
 import '../conditional_format.dart';
-import '../conditional_format_x14.dart' show hasX14Rule;
+import '../conditional_format_x14.dart'
+    show hasX14Rule, writeX14ConditionalFormats;
 import '../data_validation.dart';
 import '../date_serial.dart';
 import '../defined_name.dart';
@@ -78,6 +79,7 @@ import '../worksheet_parts.dart'
 import 'cell_store.dart';
 import 'columns.dart';
 import 'conditional_elements.dart';
+import 'conditional_x14.dart';
 import 'defined_names.dart';
 import 'element_node.dart';
 import 'item_group.dart' show GroupItem, ItemGroup, readerOf, renderElements;

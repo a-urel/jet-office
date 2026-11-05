@@ -64,6 +64,7 @@ import '../warnings.dart';
 import 'cell_store.dart';
 import 'columns.dart';
 import 'conditional_elements.dart';
+import 'conditional_x14.dart';
 import 'element_node.dart';
 import 'item_group.dart';
 import 'validation_elements.dart' show readDataValidation;
@@ -533,6 +534,15 @@ final class WorksheetPart implements PartContent {
       }
     }
     if (sheet._sheetData == null) sheet._insertSheetData();
+    final XmlNode? extLst = sheet._topNode('extLst');
+    if (extLst != null) {
+      sheet._x14Node = extLst;
+      sheet._x14Block = readX14Block(
+        extLst,
+        warn: (String problem) =>
+            warn(XlsxWarningCode.featureEntryInvalid, null, detail: problem),
+      );
+    }
     sheet._fileRowLevel = sheet._deepestRowLevel();
     sheet._fileColumnLevel = sheet._deepestColumnLevel();
     return sheet;
@@ -602,6 +612,12 @@ final class WorksheetPart implements PartContent {
   /// Whether the part read a SpreadsheetML `<dataValidations>`; a second one
   /// is kept opaque.
   bool _hasDataValidations = false;
+
+  /// The `<extLst>` [_x14Block] is a reading of.
+  XmlNode? _x14Node;
+
+  /// The reading of [_x14Node]; see [x14Block].
+  X14Block? _x14Block;
 
   /// The elements of [_nodeSlots] the part read; a second one of a name is
   /// kept opaque.
@@ -1062,22 +1078,76 @@ final class WorksheetPart implements PartContent {
     return null;
   }
 
+  /// A reading of the first `<extLst>`, or `null` when it holds no Excel 2010
+  /// conditional formats. The element is edited as a layout element of slot
+  /// `extLst`; the reading follows it, an undo included.
+  X14Block? get x14Block {
+    final XmlNode? node = _topNode('extLst');
+    if (!identical(node, _x14Node)) {
+      _x14Node = node;
+      _x14Block = node == null ? null : readX14Block(node);
+    }
+    return _x14Block;
+  }
+
+  /// The elements that hold conditional format rules, as written: those of
+  /// the [CfBlock], those after it, and what an `<extLst>` keeps.
+  Iterable<OpaqueXml> get _ruleElements sync* {
+    for (final Object c in _children) {
+      if (c is CfBlock) {
+        yield* c.items.map((GroupItem<CfEntry> i) => i.source);
+      } else if (c is OpaqueXml &&
+          c.namespaceUri == Ns.main &&
+          (c.localName == 'conditionalFormatting' || c.localName == 'extLst')) {
+        yield c;
+      } else if (c is XmlNode && c.localName == 'extLst') {
+        for (final Object ext in c.children) {
+          if (ext is OpaqueXml) yield ext;
+          if (ext is XmlNode) yield* ext.children.whereType<OpaqueXml>();
+        }
+      }
+    }
+  }
+
   /// The highest priority of the sheet's conditional format rules, those of
-  /// an element that is not listed included, or 0 for none.
+  /// an element that is not listed and of the `<extLst>` included, or 0 for
+  /// none.
   int get highestConditionalPriority {
     int highest = 0;
-    for (final Object c in _children) {
-      final int found = switch (c) {
-        CfBlock() => c.highestPriority,
-        OpaqueXml()
-            when c.namespaceUri == Ns.main &&
-                c.localName == 'conditionalFormatting' =>
-          highestRulePriority(c),
-        _ => 0,
-      };
+    for (final OpaqueXml element in _ruleElements) {
+      final int found = highestRulePriority(element);
       if (found > highest) highest = found;
     }
     return highest;
+  }
+
+  /// Every id of an Excel 2010 rule the part uses, in uppercase: an
+  /// `x14:cfRule`'s and an `x14:id`'s, listed or not.
+  Set<String> get usedX14Ids {
+    final Set<String> ids = <String>{};
+    for (final OpaqueXml element in _ruleElements) {
+      collectX14Ids(element, ids, ids);
+    }
+    return <String>{for (final String id in ids) id.toUpperCase()};
+  }
+
+  /// The ids the Excel 2007 elements that are not listed name.
+  Set<String> get unlistedX14Links {
+    final Set<String> links = <String>{};
+    for (final Object c in _children) {
+      if (c is CfBlock) {
+        for (final GroupItem<CfEntry> item in c.items) {
+          if (item.value == null) {
+            collectX14Ids(item.source, <String>{}, links);
+          }
+        }
+      } else if (c is OpaqueXml &&
+          c.namespaceUri == Ns.main &&
+          c.localName == 'conditionalFormatting') {
+        collectX14Ids(c, <String>{}, links);
+      }
+    }
+    return links;
   }
 
   /// The [ItemGroup] of [slot], or `null`.

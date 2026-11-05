@@ -619,22 +619,6 @@ void main() {
       expect(comparePackages(before, book.save().bytes), isEmpty);
     });
 
-    test('rules needing the Excel 2010 ext are not added yet', () {
-      final XlsxWorkbook book = _open('');
-      final XlsxSheet sheet = book.sheets.single;
-      for (final XlsxConditionalRule rule in <XlsxConditionalRule>[
-        XlsxDataBar(color: XlsxColor.hex('638EC6')),
-        XlsxIconSet(XlsxIconSetType.threeStars),
-      ]) {
-        expect(
-          () => sheet.addConditionalFormat(_format('A1', rule)),
-          throwsUnsupportedError,
-        );
-      }
-      expect(changeLogOf(book).hasChanges, isFalse);
-      expect(sheet.conditionalFormats, isEmpty);
-    });
-
     test('the first append reads the file\'s dxfs and warns of a bad one', () {
       final XlsxWorkbook book = _open(
         '',

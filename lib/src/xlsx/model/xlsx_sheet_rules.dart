@@ -20,6 +20,10 @@
 /// (`writeConditionalFormats`), with the next priorities of the sheet and the
 /// rules' styles appended to the styles part. Those stay when the format is
 /// removed, as the part is append-only.
+///
+/// The Excel 2010 rules are in the `extLst`, its own slot of the part: an edit
+/// of a format is an edit of each, in one transaction. The getter joins the
+/// two (`joinConditionalFormats`).
 part of 'xlsx_sheet.dart';
 
 /// The data validation and conditional format half of [XlsxSheet].
@@ -156,21 +160,46 @@ mixin _SheetRules {
   /// `containsErrors` and `notContainsErrors` rules read as
   /// [XlsxExpressionRule]s, and stay as written. Only the first run of
   /// adjacent elements is read: one after another element stays as written,
-  /// unlisted. Unmodifiable. Loads the sheet. Throws an
-  /// [XlsxReadException] when the sheet cannot be read.
-  List<XlsxConditionalFormat> get conditionalFormats =>
-      List<XlsxConditionalFormat>.unmodifiable(<XlsxConditionalFormat>[
-        for (final GroupItem<CfEntry> item
-            in _load()?.conditionalBlock?.items ?? const <GroupItem<CfEntry>>[])
-          if (item.value != null) _conditionalFormatOf(item.value!),
-      ]);
+  /// unlisted.
+  ///
+  /// Excel 2010 rules are read from the first `x14:conditionalFormattings` of
+  /// the sheet's `extLst`. A data bar with a rule there has that rule's
+  /// fields; a color the writer fills for none (a negative fill of red, an
+  /// axis of black, a border of the bar's color) reads as none. A rule no
+  /// Excel 2007 rule names joins the format with an equal `sqref`, by
+  /// priority, else it makes a format of its own after the others. A custom
+  /// icon set and a rule of another kind stay as written, unlisted; one with
+  /// no `id` or a value the writer refuses, and an element with no usable
+  /// `xm:sqref`, too, reported as `featureEntryInvalid` with the detail
+  /// `x14:cfRule` or `x14:conditionalFormatting`.
+  ///
+  /// Unmodifiable. Loads the sheet. Throws an [XlsxReadException] when the
+  /// sheet cannot be read.
+  List<XlsxConditionalFormat> get conditionalFormats {
+    final WorksheetPart? part = _load();
+    if (part == null) return List<XlsxConditionalFormat>.unmodifiable(const []);
+    return List<XlsxConditionalFormat>.unmodifiable(<XlsxConditionalFormat>[
+      for (final JoinedFormat format in _joinedFormats(part))
+        _conditionalFormatOf(format),
+    ]);
+  }
 
-  /// The format of [entry], each rule joined with the style its `dxfId`
-  /// names.
-  XlsxConditionalFormat _conditionalFormatOf(CfEntry entry) {
+  List<JoinedFormat> _joinedFormats(WorksheetPart part) =>
+      joinConditionalFormats(
+        part.conditionalBlock,
+        part.x14Block,
+        part.unlistedX14Links,
+      );
+
+  /// The value of [format], each 2007 rule joined with the style its `dxfId`
+  /// names and its Excel 2010 half.
+  XlsxConditionalFormat _conditionalFormatOf(JoinedFormat format) {
     final StylesPart? styles = _host.styles;
-    return XlsxConditionalFormat(entry.ranges, <XlsxConditionalRule>[
-      for (final CfRuleEntry rule in entry.rules) _ruleWithStyle(rule, styles),
+    return XlsxConditionalFormat(format.ranges, <XlsxConditionalRule>[
+      for (final JoinedRule rule in format.rules)
+        rule.value(
+          rule.entry == null ? null : _ruleWithStyle(rule.entry!, styles),
+        ),
     ]);
   }
 
@@ -195,25 +224,25 @@ mixin _SheetRules {
   /// rules take the priorities after the sheet's highest, and each style a
   /// `<dxf>` of the styles part, an equal one the file has or a new one.
   /// [conditionalFormats] then gives it as the file says it: without a
-  /// leading `=` of a formula, and with none for an icon set's default
-  /// thresholds.
+  /// leading `=` of a formula, with none for an icon set's default
+  /// thresholds, and with none for a data bar's color the writer fills.
+  ///
+  /// A data bar and an icon set only Excel 2010 has also get a rule in the
+  /// sheet's `extLst`, which joins the file's `x14:conditionalFormattings` or
+  /// is made in schema position. Its id is the writer's, with the sheet's
+  /// number raised past any id the sheet uses. Such a rule on the `sqref` of
+  /// a format the sheet has, with no Excel 2007 rule, reads as part of that
+  /// format.
   ///
   /// Throws an [ArgumentError] naming the field, as the writer's
   /// `conditionalFormat` does (`rules[0].rank`, `rules[1].style.numFmt`),
-  /// for a format that is not valid, an [UnsupportedError] for a rule that
-  /// needs the Excel 2010 `extLst` (a data bar, an icon set only Excel 2010
-  /// has), an [XlsxLimitError] when the sheet's priorities run out, a
-  /// [StateError] for a sheet that is not a worksheet or has no part or a
+  /// for a format that is not valid, an [XlsxLimitError] when the sheet's
+  /// priorities run out, a [StateError] for a sheet that is not a worksheet or has no part or a
   /// styles part the model cannot edit and an [XlsxReadException] when the
   /// sheet cannot be read. Whatever it throws, nothing has changed.
   void addConditionalFormat(XlsxConditionalFormat format) {
     final WorksheetPart part = _editablePart('conditional formats');
     checkConditionalFormat(format);
-    if (format.rules.any(hasX14Rule)) {
-      throw UnsupportedError(
-        'Adding a data bar or an Excel 2010 icon set is not supported yet.',
-      );
-    }
     final int firstPriority = part.highestConditionalPriority + 1;
     if (firstPriority + format.rules.length - 1 > maxRulePriority) {
       throw XlsxLimitError('conditional format priorities', maxRulePriority);
@@ -225,6 +254,7 @@ mixin _SheetRules {
     final StylesPart? styles = ruleStyles.nonNulls.isEmpty
         ? null
         : _stylesFor();
+    final int sheetNumber = _x14SheetNumber(part, format, firstPriority);
     final CfBlock? block = part.conditionalBlock;
     final ChangeLog log = _host.log;
     log.transaction(() {
@@ -235,34 +265,84 @@ mixin _SheetRules {
           else
             _appendRuleStyle(log, styles!, ruleStyles[i]!, i),
       ];
-      final OpaqueXml source = renderElements(
-        (XmlWriter w) =>
-            writeConditionalFormats(w, <WorksheetConditionalFormat>[
-              (format: format, dxfIds: dxfIds, firstPriority: firstPriority),
-            ], _host.sheetIndexOf(this as XlsxSheet) + 1),
-      ).single;
-      final List<XlsxConditionalRule> rules = normalizedConditionalFormat(
-        format,
-      ).rules;
-      final CfEntry entry = CfEntry(format.ranges, <CfRuleEntry>[
-        for (int i = 0; i < rules.length; i++)
-          CfRuleEntry(
-            withRuleStyle(rules[i], null),
-            firstPriority + i,
-            dxfId: dxfIds[i],
-          ),
-      ], source);
-      final CfBlock next = CfBlock(<GroupItem<CfEntry>>[
-        ...?block?.items,
-        GroupItem<CfEntry>(entry, source),
-      ]);
-      editLayout(
-        log,
-        part,
-        'conditionalFormatting',
-        () => part.swapLayout('conditionalFormatting', block, next),
+      final List<WorksheetConditionalFormat> written =
+          <WorksheetConditionalFormat>[
+            (format: format, dxfIds: dxfIds, firstPriority: firstPriority),
+          ];
+      final List<OpaqueXml> sources = renderElements(
+        (XmlWriter w) => writeConditionalFormats(w, written, sheetNumber),
       );
+      if (sources.isNotEmpty) {
+        final List<XlsxConditionalRule> rules = normalizedConditionalFormat(
+          format,
+        ).rules;
+        final CfEntry entry = CfEntry(format.ranges, <CfRuleEntry>[
+          for (int i = 0; i < rules.length; i++)
+            if (!isX14OnlyRule(rules[i]))
+              CfRuleEntry(
+                withRuleStyle(rules[i], null),
+                firstPriority + i,
+                dxfId: dxfIds[i],
+                x14Id: rules[i] is XlsxDataBar
+                    ? x14RuleId(sheetNumber, firstPriority + i - 1)
+                    : null,
+              ),
+        ], sources.single);
+        final CfBlock next = CfBlock(<GroupItem<CfEntry>>[
+          ...?block?.items,
+          GroupItem<CfEntry>(entry, sources.single),
+        ]);
+        editLayout(
+          log,
+          part,
+          'conditionalFormatting',
+          () => part.swapLayout('conditionalFormatting', block, next),
+        );
+      }
+      final List<OpaqueXml> extension = renderElements(
+        (XmlWriter w) => writeX14ConditionalFormats(w, written, sheetNumber),
+      );
+      if (extension.isNotEmpty) {
+        final XmlNode? extLst = part.layoutElement('extLst') as XmlNode?;
+        final XmlNode next = withX14Format(
+          extLst,
+          extension.single,
+          part.elementPrefix,
+        );
+        editLayout(
+          log,
+          part,
+          'extLst',
+          () => part.swapLayout('extLst', extLst, next),
+        );
+      }
     });
+  }
+
+  /// The sheet number for `x14RuleId`: the sheet's place, raised until no id
+  /// of the rules of [format], numbered from [firstPriority], is in use.
+  int _x14SheetNumber(
+    WorksheetPart part,
+    XlsxConditionalFormat format,
+    int firstPriority,
+  ) {
+    int number = _host.sheetIndexOf(this as XlsxSheet) + 1;
+    if (!format.rules.any(hasX14Rule)) return number;
+    final Set<String> used = part.usedX14Ids;
+    bool taken() {
+      for (int i = 0; i < format.rules.length; i++) {
+        if (hasX14Rule(format.rules[i]) &&
+            used.contains(x14RuleId(number, firstPriority + i - 1))) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    while (taken()) {
+      number++;
+    }
+    return number;
   }
 
   /// The `<dxf>` of [style], the style of rule [index], appended when the
@@ -287,14 +367,18 @@ mixin _SheetRules {
     }
   }
 
-  /// Removes the first format of [conditionalFormats] equal to [format]. The
-  /// other elements, readable or not, stay as written and in their order,
-  /// and the `<dxf>`s of the styles part stay.
+  /// Removes the first format of [conditionalFormats] equal to [format]: its
+  /// `<conditionalFormatting>` and its Excel 2010 rules, with an
+  /// `x14:conditionalFormatting` left with no rule, the `ext` left with
+  /// nothing and an `extLst` left with no `ext`. The other elements, readable
+  /// or not, and the other rules of a shared element stay as written and in
+  /// their order, and the `<dxf>`s of the styles part stay.
   ///
   /// [format] also matches as the writer writes it, so one built by hand
-  /// matches the entry it was added as: a leading `=` of a formula and
-  /// thresholds that are an icon set's defaults do not count. The value the
-  /// getter gives matches as it is, whatever the file wrote.
+  /// matches the entry it was added as: a leading `=` of a formula, thresholds
+  /// that are an icon set's defaults and a data bar's colors the writer fills
+  /// do not count. The value the getter gives matches as it is, whatever the
+  /// file wrote.
   ///
   /// Throws an [ArgumentError] when none is equal, a [StateError] for a
   /// sheet that is not a worksheet or has no part and an
@@ -302,32 +386,58 @@ mixin _SheetRules {
   /// nothing has changed.
   void removeConditionalFormat(XlsxConditionalFormat format) {
     final WorksheetPart part = _editablePart('conditional formats');
-    final CfBlock? block = part.conditionalBlock;
-    final List<GroupItem<CfEntry>> items =
-        block?.items ?? const <GroupItem<CfEntry>>[];
     final XlsxConditionalFormat written = normalizedConditionalFormat(format);
-    final int at = items.indexWhere((GroupItem<CfEntry> item) {
-      final CfEntry? entry = item.value;
-      if (entry == null) return false;
-      final XlsxConditionalFormat listed = _conditionalFormatOf(entry);
+    final List<JoinedFormat> formats = _joinedFormats(part);
+    final int at = formats.indexWhere((JoinedFormat joined) {
+      final XlsxConditionalFormat listed = _conditionalFormatOf(joined);
       return listed == format || listed == written;
     });
-    if (block == null || at < 0) {
+    if (at < 0) {
       throw ArgumentError.value(
         format,
         'format',
         'The sheet "$name" has no equal conditional format.',
       );
     }
-    final CfBlock next = CfBlock(<GroupItem<CfEntry>>[...items]..removeAt(at));
+    final JoinedFormat found = formats[at];
+    final CfBlock? block = part.conditionalBlock;
+    final X14Block? x14 = part.x14Block;
+    // A half another rule still names stays, with that rule.
+    final Set<String?> named = <String?>{
+      ...part.unlistedX14Links,
+      for (final JoinedFormat other in formats)
+        if (!identical(other, found))
+          for (final JoinedRule rule in other.rules) rule.entry?.x14Id,
+    };
+    final Set<OpaqueXml> gone = <OpaqueXml>{
+      for (final JoinedRule rule in found.rules)
+        for (final X14Rule half in rule.halves)
+          if (rule.entry == null || !named.contains(rule.entry!.x14Id))
+            half.source,
+    };
     final ChangeLog log = _host.log;
     log.transaction(() {
-      editLayout(
-        log,
-        part,
-        'conditionalFormatting',
-        () => part.swapLayout('conditionalFormatting', block, next),
-      );
+      if (found.item != null) {
+        final CfBlock next = CfBlock(<GroupItem<CfEntry>>[
+          for (final GroupItem<CfEntry> item in block!.items)
+            if (!identical(item, found.item)) item,
+        ]);
+        editLayout(
+          log,
+          part,
+          'conditionalFormatting',
+          () => part.swapLayout('conditionalFormatting', block, next),
+        );
+      }
+      if (x14 != null && gone.isNotEmpty) {
+        final Object? extLst = part.layoutElement('extLst');
+        editLayout(
+          log,
+          part,
+          'extLst',
+          () => part.swapLayout('extLst', extLst, x14.withoutRules(gone)),
+        );
+      }
     });
   }
 }

@@ -25,7 +25,7 @@ import 'range.dart';
 
 /// The `uri` of the worksheet `ext` that holds Excel 2010 conditional
 /// formats. Excel writes it with the lowercase `d`.
-const String _sheetExtUri = '{78C0D931-6437-407d-A8EE-F0AAD7539E65}';
+const String x14SheetExtUri = '{78C0D931-6437-407d-A8EE-F0AAD7539E65}';
 
 /// Whether [rule] has an Excel 2010 rule: a data bar, or an icon set only
 /// Excel 2010 has.
@@ -54,7 +54,7 @@ void writeX14ConditionalFormats(
   if (!formats.any(hasRules)) return;
   w.start('extLst');
   w.start('ext');
-  w.attribute('uri', _sheetExtUri);
+  w.attribute('uri', x14SheetExtUri);
   w.attribute('xmlns:x14', Ns.x14);
   w.start('x14:conditionalFormattings');
   for (final WorksheetConditionalFormat f in formats.where(hasRules)) {
@@ -105,10 +105,10 @@ void _writeRule(
 }
 
 /// The negative fill Excel writes on a data bar it creates: red.
-const XlsxColor _defaultNegativeFill = XlsxColor.argb(0xFFFF0000);
+const XlsxColor defaultNegativeBarFill = XlsxColor.argb(0xFFFF0000);
 
 /// The axis color Excel writes on a data bar it creates: black.
-const XlsxColor _defaultAxis = XlsxColor.argb(0xFF000000);
+const XlsxColor defaultBarAxisColor = XlsxColor.argb(0xFF000000);
 
 /// Writes `x14:dataBar`: attributes in `CT_DataBar` order, those at the
 /// schema default left out except the lengths; then the two `x14:cfvo`,
@@ -147,12 +147,12 @@ void _writeDataBar(XmlWriter w, XlsxDataBar bar) {
   _writeColor(
     w,
     'x14:negativeFillColor',
-    bar.negativeFillColor ?? _defaultNegativeFill,
+    bar.negativeFillColor ?? defaultNegativeBarFill,
   );
   if (negativeBorder != null) {
     _writeColor(w, 'x14:negativeBorderColor', negativeBorder);
   }
-  _writeColor(w, 'x14:axisColor', bar.axisColor ?? _defaultAxis);
+  _writeColor(w, 'x14:axisColor', bar.axisColor ?? defaultBarAxisColor);
   w.end();
 }
 

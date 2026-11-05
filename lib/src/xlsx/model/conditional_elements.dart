@@ -12,7 +12,7 @@
 /// the writer writes those for none. A text rule's formula is derived from
 /// its text (`textRuleFormula`), so it is not read. A data bar reads with the
 /// fields the Excel 2007 element holds and the id of its Excel 2010 rule; the
-/// other fields are those of `conditional_format_x14.dart`.
+/// other fields are read in `conditional_x14.dart`.
 ///
 /// `timePeriod`, `containsBlanks`, `notContainsBlanks`, `containsErrors` and
 /// `notContainsErrors` have no value type: they carry a `<formula>` and read
@@ -33,6 +33,8 @@ import '../../xml/xml_writer.dart';
 import '../color.dart';
 import '../comparison.dart';
 import '../conditional_format.dart';
+import '../conditional_format_x14.dart'
+    show defaultBarAxisColor, defaultNegativeBarFill;
 import '../range.dart';
 import 'item_group.dart' show GroupItem, readerOf;
 import 'style_elements.dart' show ReadStyleValue, readColor;
@@ -118,8 +120,8 @@ final class CfBlock {
   }
 }
 
-/// The highest usable `priority` of the `<cfRule>`s of [element], which may
-/// be unreadable otherwise, or 0 for none. Never throws.
+/// The highest usable `priority` of the `<cfRule>`s and `x14:cfRule`s of
+/// [element], which may be unreadable otherwise, or 0 for none. Never throws.
 int highestRulePriority(OpaqueXml element) {
   final XmlPullReader r = readerOf(element);
   final int depth = r.depth;
@@ -127,11 +129,11 @@ int highestRulePriority(OpaqueXml element) {
   while (r.next()) {
     if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
     if (r.eventType != XmlEventType.startElement ||
-        r.namespaceUri != Ns.main ||
+        r.namespaceUri != Ns.main && r.namespaceUri != Ns.x14 ||
         r.localName != 'cfRule') {
       continue;
     }
-    final int? priority = _priority(
+    final int? priority = readPriority(
       r.getAttribute('priority', namespaceUri: ''),
     );
     if (priority != null && priority > highest) highest = priority;
@@ -180,8 +182,9 @@ int highestRulePriority(OpaqueXml element) {
 }
 
 /// [format] as a reading of what the writer writes for it gives: a leading
-/// `=` of a formula or a `cfvo` value is not written, and an icon set's
-/// default thresholds read as none. An added entry holds this form, so the
+/// `=` of a formula or a `cfvo` value is not written, an icon set's default
+/// thresholds read as none, and so do the colors of a data bar `barAsWritten`
+/// drops. An added entry holds this form, so the
 /// model says what its file says, and removal looks for it, so a value built
 /// by hand matches the entry it was added as, after a save too.
 XlsxConditionalFormat normalizedConditionalFormat(
@@ -208,27 +211,16 @@ XlsxConditionalRule _normalizedRule(XlsxConditionalRule rule) => switch (rule) {
     rule.colors,
     stopIfTrue: rule.stopIfTrue,
   ),
-  XlsxDataBar() => XlsxDataBar(
+  XlsxDataBar() => barAsWritten(
+    rule,
     min: _normalizedPoint(rule.min),
     max: _normalizedPoint(rule.max),
-    color: rule.color,
-    showValue: rule.showValue,
-    minLength: rule.minLength,
-    maxLength: rule.maxLength,
-    gradient: rule.gradient,
-    border: rule.border,
-    borderColor: rule.borderColor,
-    negativeFillColor: rule.negativeFillColor,
-    negativeBorderColor: rule.negativeBorderColor,
-    axis: rule.axis,
-    axisColor: rule.axisColor,
-    stopIfTrue: rule.stopIfTrue,
   ),
   XlsxIconSet() => XlsxIconSet(
     rule.type,
     thresholds: rule.thresholds == null
         ? null
-        : _thresholds(
+        : iconThresholds(
             rule.type,
             rule.thresholds!.map(_normalizedPoint).toList(),
           ),
@@ -242,6 +234,35 @@ XlsxConditionalRule _normalizedRule(XlsxConditionalRule rule) => switch (rule) {
   XlsxTextRule() => rule,
 };
 
+/// [bar] as a reading gives it, with [min] and [max] for its points when
+/// given: a color the writer fills for none reads as none (a negative fill of
+/// red, an axis of black, a border of the bar's color), and the colors of a
+/// border go without one, as the writer leaves them out.
+XlsxDataBar barAsWritten(
+  XlsxDataBar bar, {
+  XlsxCfValue? min,
+  XlsxCfValue? max,
+}) {
+  XlsxColor? unless(XlsxColor? color, XlsxColor filled) =>
+      color == filled ? null : color;
+  return XlsxDataBar(
+    min: min ?? bar.min,
+    max: max ?? bar.max,
+    color: bar.color,
+    showValue: bar.showValue,
+    minLength: bar.minLength,
+    maxLength: bar.maxLength,
+    gradient: bar.gradient,
+    border: bar.border,
+    borderColor: bar.border ? unless(bar.borderColor, bar.color) : null,
+    negativeFillColor: unless(bar.negativeFillColor, defaultNegativeBarFill),
+    negativeBorderColor: bar.border ? bar.negativeBorderColor : null,
+    axis: bar.axis,
+    axisColor: unless(bar.axisColor, defaultBarAxisColor),
+    stopIfTrue: bar.stopIfTrue,
+  );
+}
+
 XlsxCfValue _normalizedPoint(XlsxCfValue point) => XlsxCfValue(
   point.type,
   value: point.value == null ? null : _written(point.value!),
@@ -253,7 +274,10 @@ String _written(String text) => text.startsWith('=') ? text.substring(1) : text;
 
 /// [points] as an icon set of [type] holds them: `null` when they are
 /// Excel's default thresholds, which the writer writes for none.
-List<XlsxCfValue>? _thresholds(XlsxIconSetType type, List<XlsxCfValue> points) {
+List<XlsxCfValue>? iconThresholds(
+  XlsxIconSetType type,
+  List<XlsxCfValue> points,
+) {
   final List<XlsxCfValue> defaults = defaultIconSetThresholds(type.iconCount);
   if (points.length != defaults.length) return points;
   for (int i = 0; i < points.length; i++) {
@@ -291,19 +315,19 @@ final class _RuleBody {
 CfRuleEntry? _readRule(XmlPullReader r) {
   // The attributes are read before the children move the reader.
   String? attribute(String name) => r.getAttribute(name, namespaceUri: '');
-  final int? priority = _priority(attribute('priority'));
+  final int? priority = readPriority(attribute('priority'));
   final String? dxfText = attribute('dxfId');
-  final int? dxfId = dxfText == null ? null : _int(dxfText, 0, _maxDxfId);
+  final int? dxfId = dxfText == null ? null : readInt(dxfText, 0, _maxDxfId);
   final String? type = attribute('type');
   final String? operator = attribute('operator');
   final String? text = attribute('text');
   final String? rank = attribute('rank');
   final String? stdDev = attribute('stdDev');
-  final bool stopIfTrue = _flag(attribute('stopIfTrue'));
-  final bool percent = _flag(attribute('percent'));
-  final bool bottom = _flag(attribute('bottom'));
-  final bool above = _flag(attribute('aboveAverage'), fallback: true);
-  final bool orEqual = _flag(attribute('equalAverage'));
+  final bool stopIfTrue = readFlag(attribute('stopIfTrue'));
+  final bool percent = readFlag(attribute('percent'));
+  final bool bottom = readFlag(attribute('bottom'));
+  final bool above = readFlag(attribute('aboveAverage'), fallback: true);
+  final bool orEqual = readFlag(attribute('equalAverage'));
 
   final _RuleBody body = _RuleBody();
   final int depth = r.depth;
@@ -332,7 +356,7 @@ CfRuleEntry? _readRule(XmlPullReader r) {
       ? null
       : XlsxTextRule(operator, decodeXstring(text), stopIfTrue: stopIfTrue);
   final XlsxConditionalRule? rule = switch (type) {
-    'cellIs' => _cellValueRule(operator, formulas, stopIfTrue),
+    'cellIs' => cellValueRule(operator, formulas, stopIfTrue),
     'expression' ||
     'timePeriod' ||
     'containsBlanks' ||
@@ -356,7 +380,9 @@ CfRuleEntry? _readRule(XmlPullReader r) {
   return CfRuleEntry(rule, priority, dxfId: dxfId, x14Id: body.x14Id);
 }
 
-XlsxCellValueRule? _cellValueRule(
+/// The rule [operator] and [formulas] make, the reading of a `cellIs` rule, or
+/// `null` for an unknown operator or too few formulas.
+XlsxCellValueRule? cellValueRule(
   String? operator,
   List<String> formulas,
   bool stopIfTrue,
@@ -384,7 +410,7 @@ XlsxTopBottomRule? _topBottomRule(
 ) {
   final int? rank = rankText == null
       ? null
-      : _int(rankText, 0, maxRulePriority);
+      : readInt(rankText, 0, maxRulePriority);
   if (rank == null) return null;
   return XlsxTopBottomRule(
     rank: rank,
@@ -402,7 +428,7 @@ XlsxAverageRule? _averageRule(
 ) {
   final int? stdDev = stdDevText == null
       ? null
-      : _int(stdDevText, 0, maxRulePriority);
+      : readInt(stdDevText, 0, maxRulePriority);
   if (stdDevText != null && stdDev == null) return null;
   return XlsxAverageRule(
     above: above,
@@ -426,14 +452,14 @@ XlsxDataBar? _dataBar(_RuleBody body, bool stopIfTrue) {
   }
   final String? minText = body.attributes['minLength'];
   final String? maxText = body.attributes['maxLength'];
-  final int? minLength = minText == null ? 10 : _int(minText, 0, 100);
-  final int? maxLength = maxText == null ? 90 : _int(maxText, 0, 100);
+  final int? minLength = minText == null ? 10 : readInt(minText, 0, 100);
+  final int? maxLength = maxText == null ? 90 : readInt(maxText, 0, 100);
   if (minLength == null || maxLength == null) return null;
   return XlsxDataBar(
     min: body.points[0],
     max: body.points[1],
     color: body.colors.first,
-    showValue: _flag(body.attributes['showValue'], fallback: true),
+    showValue: readFlag(body.attributes['showValue'], fallback: true),
     minLength: minLength,
     maxLength: maxLength,
     stopIfTrue: stopIfTrue,
@@ -450,9 +476,9 @@ XlsxIconSet? _iconSet(_RuleBody body, bool stopIfTrue) {
   if (type == null) return null;
   return XlsxIconSet(
     type,
-    thresholds: _thresholds(type, body.points),
-    reverse: _flag(body.attributes['reverse']),
-    showValue: _flag(body.attributes['showValue'], fallback: true),
+    thresholds: iconThresholds(type, body.points),
+    reverse: readFlag(body.attributes['reverse']),
+    showValue: readFlag(body.attributes['showValue'], fallback: true),
     stopIfTrue: stopIfTrue,
   );
 }
@@ -502,7 +528,7 @@ void _readBody(XmlPullReader r, _RuleBody body) {
 XlsxCfValue? _readCfValue(XmlPullReader r) {
   final String? type = r.getAttribute('type', namespaceUri: '');
   final String? value = r.getAttribute('val', namespaceUri: '');
-  final bool gte = _flag(
+  final bool gte = readFlag(
     r.getAttribute('gte', namespaceUri: ''),
     fallback: true,
   );
@@ -537,11 +563,11 @@ String? _readX14Id(XmlPullReader r) {
 }
 
 /// The `priority` of [text], or `null` when it is absent or not an `xsd:int`.
-int? _priority(String? text) =>
-    text == null ? null : _int(text, -maxRulePriority - 1, maxRulePriority);
+int? readPriority(String? text) =>
+    text == null ? null : readInt(text, -maxRulePriority - 1, maxRulePriority);
 
 /// The integer [text] from [min] to [max], as `xsd:int` spells it, or `null`.
-int? _int(String text, int min, int max) {
+int? readInt(String text, int min, int max) {
   final String trimmed = text.trim();
   if (!RegExp(r'^[+-]?[0-9]{1,10}$').hasMatch(trimmed)) return null;
   final int value = int.parse(trimmed);
@@ -550,7 +576,7 @@ int? _int(String text, int min, int max) {
 
 /// `1` or `true` as true, `0` or `false` as false, anything else as
 /// [fallback], the schema's default.
-bool _flag(String? text, {bool fallback = false}) => switch (text) {
+bool readFlag(String? text, {bool fallback = false}) => switch (text) {
   '1' || 'true' => true,
   '0' || 'false' => false,
   _ => fallback,
