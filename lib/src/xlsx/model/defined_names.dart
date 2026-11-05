@@ -110,13 +110,15 @@ final class NameEntry {
   );
 }
 
-/// [entry] as the writer writes a `<definedName>`.
+/// [entry] as the writer writes a `<definedName>`. A forbidden character in
+/// the formula, which only the name of a sheet read from a file can have put
+/// there, is dropped, as it is from that name when the sheet is written.
 OpaqueXml renderNameEntry(NameEntry entry) => renderElements(
   (XmlWriter w) => writeDefinedName(
     w,
     entry.name,
     entry.localSheetId,
-    entry.formula,
+    scrubXmlText(entry.formula).text,
     hidden: entry.hidden,
     comment: entry.comment,
   ),

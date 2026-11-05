@@ -108,10 +108,9 @@ mixin _SheetRules {
   /// Both are compared as the writer writes them, so a value the getter gave
   /// and one built by hand match the entry (a leading `=` of a formula,
   /// which a file may have, and the fields its type ignores do not count).
-  /// Throws an [ArgumentError] when
-  /// none is equal, a [StateError] for a sheet that is not a worksheet or
-  /// has no part and an [XlsxReadException] when the sheet cannot be read.
-  /// Whatever it throws, nothing has changed.
+  /// Throws an [ArgumentError] when none is equal, a [StateError] for a sheet
+  /// that is not a worksheet or has no part and an [XlsxReadException] when
+  /// the sheet cannot be read. Whatever it throws, nothing has changed.
   void removeDataValidation(XlsxDataValidation validation) {
     final WorksheetPart part = _editablePart('data validations');
     final ItemGroup<XlsxDataValidation>? group = part.dataValidationGroup;

@@ -914,7 +914,7 @@ final class _Book implements SheetHost {
       }
       if (allLoaded) strings.setCount(references);
       // An undone edit leaves its string in the table, used by no cell.
-      if (_stringsName == null && references > 0) {
+      if (_stringsName == null && strings.length > 0 && references > 0) {
         _stringsName = _addWorkbookPart(
           'sharedStrings.xml',
           ContentType.sharedStrings,

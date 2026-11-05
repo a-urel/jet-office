@@ -123,6 +123,18 @@ void main() {
     expect(checked, greaterThan(3));
   });
 
+  test('a string cell with no shared strings part adds none on save', () {
+    final Uint8List input = buildWorkbook(<String, String>{
+      'S': worksheet('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
+    });
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    book.sheets.single.rows.toList();
+    expect(
+      comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+      isEmpty,
+    );
+  });
+
   test('a string set and undone leaves no shared strings part', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
       buildWorkbook(<String, String>{

@@ -1,8 +1,6 @@
 /// Test helper: seeded mutation fuzzing of the workbook model's sheet and
 /// workbook features (milestone W3).
 ///
-/// Not ported from Quds; written for jet_office.
-///
 /// [featureCorpus] is its own corpus, so the reader's pinned one and its
 /// cases do not change: the `m3_*` fixtures and [excelFeatureFile], a sheet
 /// as Excel writes it, with Excel 2010 rules. [featureFuzzCases] derives
@@ -15,6 +13,8 @@
 ///
 /// As in the reader's corpus, entries are stored, so a seed gives the same
 /// cases on the VM and in a browser.
+///
+/// Not ported from Quds; written for jet_office.
 library;
 
 import 'dart:convert';
@@ -442,18 +442,19 @@ int _elementEnd(String text, RegExpMatch tag) {
 /// Reads, sets, undoes and saves every W3 member of [bytes].
 ///
 /// It opens the file and reads every getter of the workbook and of each
-/// sheet. Then, one edit at a time: every value read is set back, which only
-/// a part the model cannot edit may refuse, never the value (a value read
-/// always goes back); the first validation, format, link and name of each
-/// sheet are removed; each feature is cleared and given a new value, which
-/// may be refused as the API documents, and so may a read name or validation
-/// or format added back: `definedNames` lists a name as the file has it,
+/// sheet. Then, one edit at a time: every value read is set back, which must
+/// record nothing and which only a part the model cannot edit may refuse,
+/// never the value (a value read always goes back); the first validation,
+/// format, link and name of each sheet are removed, which the value must
+/// not stop either; each feature is cleared and given a new value, which may
+/// be refused as the API documents, and so may a read name or validation or
+/// format added back: `definedNames` lists a name as the file has it,
 /// whatever the writer's rules, and a twin of what was removed may remain.
-/// It renders the warnings, saves,
-/// undoes every edit in reverse order, saves, redoes them, saves, reopens and
-/// reads the saved file, undoes them again and saves. With [proveUndo], the
-/// first save after undo must equal a save before the edits by
-/// [undoDifferences].
+///
+/// It renders the warnings, undoes every edit in reverse order and saves,
+/// redoes them, saves, reopens and reads the saved file, undoes them again
+/// and saves. With [proveUndo], a save comes before the edits too, and the
+/// first save after undo must equal it by [undoDifferences].
 ///
 /// Returns normally or throws [XlsxReadException]: from `open`, or after the
 /// rest has run, the first a sheet's or part's read threw. Anything else,
@@ -581,6 +582,20 @@ void _readSheet(XlsxSheet sheet) {
   sheet.conditionalFormats.toString();
 }
 
+/// The [StateError]s the API documents for an edit: a part it cannot edit, or
+/// a cell inside an array, a table header or a link over several cells.
+final RegExp _refusedStates = RegExp(
+  'has no worksheet part|is not a worksheet|'
+  'styles part( of the workbook)? is not a SpreadsheetML|'
+  'document properties part is not|<cols> cannot|<sheetFormatPr> cannot|'
+  'part of an array|is a header cell|is covered by',
+);
+
+/// The fields an [ArgumentError] of an edit names.
+final RegExp _refusedFields = RegExp(
+  r'^(name|formula\d?|comment|cell|validation|format|ranges?(\[\d+\].*)?)$',
+);
+
 /// One [exerciseFeatures] over a workbook: the edits it made and the first
 /// [XlsxReadException] it met.
 final class _Run {
@@ -609,30 +624,53 @@ final class _Run {
     }
   }
 
-  /// Sets back what was read: only a part the model cannot edit may refuse.
-  void back(String what, void Function() body) => _edit(what, body, false);
+  /// Sets back what was read: an equal set records nothing, and only a part
+  /// the model cannot edit may refuse.
+  void back(String what, void Function() body) {
+    final ChangeSet? set = _edit(what, body, false);
+    if (set != null && !set.isEmpty) {
+      throw StateError('$what recorded a change setting back a value read');
+    }
+  }
+
+  /// Removes what was read: only a part the model cannot edit may refuse.
+  void remove(String what, void Function() body) => _edit(what, body, false);
 
   /// Sets a new value: the API may refuse it as an [ArgumentError] too,
   /// for a clash with what a mutated file holds.
   void change(String what, void Function() body) => _edit(what, body, true);
 
-  void _edit(String what, void Function() body, bool refusable) {
+  /// Runs the edit [body] and keeps its changes, which it returns; `null`
+  /// when it was refused. A refusal must be one the API documents: an
+  /// [ArgumentError] only when [refusable], naming a field, and a
+  /// [StateError] matching [_refusedStates]. Any other, a [RangeError] or
+  /// an [IndexError] above all, is an internal crash.
+  ChangeSet? _edit(String what, void Function() body, bool refusable) {
     try {
       final ChangeSet set = log.transaction(body);
       if (!set.isEmpty) sets.add(set);
+      return set;
     } on XlsxReadException catch (e) {
       first ??= e;
-    } on StateError {
-      // An untyped part, or a cell inside an array: refused by design.
     } on UnsupportedError {
       // A shared formula's master: refused by design until W5.
     } on XlsxLimitError {
       // A file already past a writer limit: refused by design.
+    } on RangeError catch (e) {
+      throw StateError('$what threw: $e');
+    } on StateError catch (e) {
+      if (!_refusedStates.hasMatch(e.message)) {
+        throw StateError('$what threw: $e');
+      }
     } on ArgumentError catch (e) {
       if (!refusable) throw StateError('$what refused a value read: $e');
+      if (!_refusedFields.hasMatch('${e.name}')) {
+        throw StateError('$what threw: $e');
+      }
     } on Object catch (e) {
       throw StateError('$what threw: $e');
     }
+    return null;
   }
 
   void editWorkbook() {
@@ -642,7 +680,7 @@ final class _Run {
     read('names', () {
       final List<XlsxDefinedName> names = b.definedNames.toList();
       for (final XlsxDefinedName name in names.take(1)) {
-        back('book.removeName', () => b.removeName(name.name));
+        remove('book.removeName', () => b.removeName(name.name));
         change('book.defineName', () => b.defineName(name));
       }
     });
@@ -686,7 +724,7 @@ final class _Run {
     read('sheet names', () {
       final List<XlsxDefinedName> names = s.definedNames.toList();
       for (final XlsxDefinedName name in names.take(1)) {
-        back('removeName', () => s.removeName(name.name));
+        remove('removeName', () => s.removeName(name.name));
         change('defineName', () => s.defineName(name));
       }
     });
@@ -695,23 +733,23 @@ final class _Run {
   void _removeFirst(XlsxSheet s) {
     read('sheet entries', () {
       for (final XlsxDataValidation v in s.dataValidations.take(1).toList()) {
-        back('removeDataValidation', () => s.removeDataValidation(v));
+        remove('removeDataValidation', () => s.removeDataValidation(v));
         change('addDataValidation', () => s.addDataValidation(v));
       }
       for (final XlsxConditionalFormat f
           in s.conditionalFormats.take(1).toList()) {
-        back('removeConditionalFormat', () => s.removeConditionalFormat(f));
+        remove('removeConditionalFormat', () => s.removeConditionalFormat(f));
         change('addConditionalFormat', () => s.addConditionalFormat(f));
       }
       for (final ({XlsxRange range, XlsxHyperlink link}) l
           in s.hyperlinks.take(1).toList()) {
-        back(
+        remove(
           'removeHyperlink',
           () => s.removeHyperlink(l.range.firstRow, l.range.firstColumn),
         );
       }
       for (final XlsxDefinedName name in s.definedNames.take(1).toList()) {
-        back('removeName', () => s.removeName(name.name));
+        remove('removeName', () => s.removeName(name.name));
       }
     });
   }

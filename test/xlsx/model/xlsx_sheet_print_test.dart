@@ -501,4 +501,35 @@ void main() {
     expect(partText(saved, 'xl/workbook.xml'), isNot(contains('fullCalcOn')));
     expect(readXlsx(saved), contains('xl/calcChain.xml'));
   });
+
+  test('a sheet name with a forbidden character takes print names', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      buildWorkbook(<String, String>{
+        'a\u0001b': worksheet('<row r="1"><c r="A1"><v>1</v></c></row>'),
+      }).replaceSheetName(),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    sheet
+      ..printArea = <XlsxRange>[XlsxRange.parse('A1:B2')]
+      ..setPrintTitles(rows: (0, 0))
+      ..autoFilter = XlsxRange.parse('A1:B2');
+    final String xml = partText(book.save().bytes, 'xl/workbook.xml');
+    expect(xml, contains('<sheet name="ab"'));
+    expect(xml, contains(r"'ab'!$A$1:$B$2"));
+    expect(xml, contains(r"'ab'!$1:$1"));
+  });
+}
+
+extension on Uint8List {
+  /// This package with the control character of a sheet's name written as
+  /// the character reference a file needs for it.
+  Uint8List replaceSheetName() => buildZipOrdered(<(String, List<int>)>[
+    for (final MapEntry<String, Uint8List> p in readXlsxBytes(this).entries)
+      (
+        p.key,
+        p.key == 'xl/workbook.xml'
+            ? utf8.encode(utf8.decode(p.value).replaceAll('\u0001', '&#1;'))
+            : p.value,
+      ),
+  ]);
 }
