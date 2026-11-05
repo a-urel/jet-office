@@ -1,5 +1,6 @@
-/// A small typed element tree for the parts of a worksheet the model edits
-/// attribute by attribute: `sheetPr` and `sheetViews`.
+/// A small typed element tree for the parts of a worksheet or workbook the
+/// model edits attribute by attribute: `sheetPr`, `sheetViews`, `pageSetup`,
+/// `workbookProtection` and the like.
 ///
 /// Not ported from Quds; written for jet_office.
 ///

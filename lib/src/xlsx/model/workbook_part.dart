@@ -7,19 +7,21 @@
 /// model types is the `<sheets>` group, each `<sheet>` as a [SheetEntry], and
 /// the attributes of `<calcPr>`; the first `<bookViews>` is an [XmlNode] whose
 /// first `<workbookView>` gives the active tab ([WorkbookPart.activeTab]) and
-/// keeps its other attributes. Every other child of `<workbook>`
-/// (`workbookPr` with its `date1904`, `definedNames`, `extLst`, ...) is an
-/// [OpaqueXml] at its original position, and the root keeps its namespace
-/// declarations and `mc:Ignorable`.
+/// keeps its other attributes, and the first `<workbookProtection>` is an
+/// [XmlNode] too, which [WorkbookPart.swapElement] swaps as it does an
+/// [ItemGroup]. Every other child of `<workbook>` (`workbookPr` with its
+/// `date1904`, `definedNames`, `extLst`, ...) is an [OpaqueXml] at its
+/// original position, and the root keeps its namespace declarations and
+/// `mc:Ignorable`.
 ///
 /// Sheet names are `ST_Xstring`: `_xHHHH_` is decoded on read and escaped on
 /// write, as the writer does. A `<sheet>`'s `r:id` is written with the prefix
 /// it had, declared where the part does not bind it already.
 ///
-/// Only the first `<sheets>`, `<calcPr>` and `<bookViews>` are typed; a repeated
-/// one is kept opaque. A part with no root element, or whose root is not a
-/// SpreadsheetML `<workbook>`, is *untyped*: it has no sheets and is written
-/// back unchanged.
+/// Only the first `<sheets>`, `<calcPr>`, `<bookViews>` and
+/// `<workbookProtection>` are typed; a repeated one is kept opaque. A part
+/// with no root element, or whose root is not a SpreadsheetML `<workbook>`,
+/// is *untyped*: it has no sheets and is written back unchanged.
 library;
 
 import 'dart:typed_data';
@@ -38,6 +40,7 @@ import '../read/read_limits.dart';
 import '../read/workbook_reader.dart' show isDate1904, sheetVisibilityOf;
 import '../sheet_view.dart';
 import 'element_node.dart';
+import 'item_group.dart';
 
 /// The children of `<workbook>` in the order of the schema's `CT_Workbook`
 /// sequence.
@@ -66,6 +69,13 @@ const List<String> workbookChildOrder = <String>[
 /// The typed children of `<bookViews>`.
 const NodeShape _bookViewsShape = <String, Set<String>>{
   'bookViews': <String>{'workbookView'},
+};
+
+/// The children of `<workbook>` that [WorkbookPart.element] and
+/// [WorkbookPart.swapElement] take.
+const Set<String> _elementSlots = <String>{
+  'workbookProtection',
+  'definedNames',
 };
 
 /// A `<sheet>` of the workbook's `<sheets>`.
@@ -259,6 +269,7 @@ final class WorkbookPart implements PartContent {
     _CalcPr? calcPr;
     var date1904 = false;
     var hasBookViews = false;
+    var hasProtection = false;
     while (r.next()) {
       if (r.eventType == XmlEventType.endElement && r.depth < 1) break;
       if (r.eventType != XmlEventType.startElement) continue;
@@ -277,6 +288,11 @@ final class WorkbookPart implements PartContent {
       } else if (main && r.localName == 'bookViews' && !hasBookViews) {
         hasBookViews = true;
         children.add(XmlNode.read(r, _bookViewsShape));
+      } else if (main &&
+          r.localName == 'workbookProtection' &&
+          !hasProtection) {
+        hasProtection = true;
+        children.add(XmlNode.read(r, const <String, Set<String>>{}));
       } else {
         if (main && r.localName == 'workbookPr') {
           date1904 = isDate1904(r.getAttribute('date1904'));
@@ -344,9 +360,53 @@ final class WorkbookPart implements PartContent {
   /// untyped). Immutable; [swapBookViews] replaces it.
   XmlNode? get bookViews {
     for (final Object c in _children) {
-      if (c is XmlNode) return c;
+      if (c is XmlNode && c.localName == 'bookViews') return c;
     }
     return null;
+  }
+
+  /// The typed first element of [slot] (`workbookProtection` or
+  /// `definedNames`): an [XmlNode] or an [ItemGroup], or `null` when the part
+  /// has none typed (or is untyped). Immutable; [swapElement] replaces it.
+  /// An element kept as an [OpaqueXml] is not a slot's element.
+  ///
+  /// Throws an [ArgumentError] named `slot` for any other name.
+  Object? element(String slot) {
+    _checkSlot(slot);
+    for (final Object c in _children) {
+      if (c is XmlNode && c.localName == slot ||
+          c is ItemGroup<Object?> && c.localName == slot) {
+        return c;
+      }
+    }
+    return null;
+  }
+
+  /// Replaces the element [from] of [slot] by [to]: in place, or where the
+  /// schema puts it when [from] is `null` (inserted) or no longer there;
+  /// `null` for [to] removes [from]. Only that slot's element is touched.
+  ///
+  /// Throws an [ArgumentError] named `slot` for a name [element] does not
+  /// take, and a [StateError] for an untyped part.
+  void swapElement(String slot, Object? from, Object? to) {
+    _checkSlot(slot);
+    _requireTyped();
+    final int at = from == null
+        ? -1
+        : _children.indexWhere((Object c) => identical(c, from));
+    if (to == null) {
+      if (at >= 0) _children.removeAt(at);
+    } else if (at >= 0) {
+      _children[at] = to;
+    } else {
+      _children.insert(_positionFor(slot), to);
+    }
+  }
+
+  void _checkSlot(String slot) {
+    if (!_elementSlots.contains(slot)) {
+      throw ArgumentError.value(slot, 'slot', 'Not a workbook element slot.');
+    }
   }
 
   /// The index of the tab Excel opens on: the `activeTab` of the first
@@ -464,6 +524,7 @@ final class WorkbookPart implements PartContent {
         _Sheets() => 'sheets',
         _CalcPr() => 'calcPr',
         XmlNode() => c.localName,
+        ItemGroup<Object?>() => c.localName,
         _ => null,
       };
       if (childName != null && after.contains(childName)) return i;
@@ -486,6 +547,8 @@ final class WorkbookPart implements PartContent {
         case _CalcPr():
           c.writeTo(w, root.namespaces);
         case XmlNode():
+          c.writeTo(w, root.namespaces);
+        case ItemGroup<Object?>():
           c.writeTo(w, root.namespaces);
         case OpaqueXml():
           c.writeTo(w, declaredAbove: root.namespaces);

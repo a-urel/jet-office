@@ -29,6 +29,8 @@ String formatWarning(XlsxWarning w, OfficeLocale locale) {
   final String original = w.originalName ?? w.sheet;
   final String cells = _cellList(w);
   final String id = w.detail ?? '';
+  // A feature of the workbook has no sheet.
+  final bool book = sheet.isEmpty;
   return switch ((w.code, locale)) {
     (XlsxWarningCode.invalidCharactersRemoved, OfficeLocale.en) =>
       "$count cell(s) on sheet '$sheet' had characters removed that XML does "
@@ -415,5 +417,32 @@ String formatWarning(XlsxWarning w, OfficeLocale locale) {
       '“$sheet” sayfasındaki bir düzen ayarı tam olarak okunamıyor ($id); '
           'okunamayan kısımlar varsayılan değeri alıyor ve ayar olduğu gibi '
           'kaydediliyor.',
+    (XlsxWarningCode.featureEntryInvalid, OfficeLocale.en)
+        when w.detail == null =>
+      "$count feature entries of ${book ? 'the workbook' : "sheet '$sheet'"} "
+          'cannot be read; they are kept as written and left out of the typed '
+          'lists.',
+    (XlsxWarningCode.featureEntryInvalid, OfficeLocale.de)
+        when w.detail == null =>
+      '$count Funktionseinträge ${book ? 'der Arbeitsmappe' : 'im Blatt „$sheet“'} '
+          'können nicht gelesen werden; sie werden unverändert gespeichert '
+          'und in den Listen ausgelassen.',
+    (XlsxWarningCode.featureEntryInvalid, OfficeLocale.tr)
+        when w.detail == null =>
+      '${book ? 'Çalışma kitabındaki' : '“$sheet” sayfasındaki'} $count '
+          'özellik girdisi okunamıyor; olduğu gibi korunuyor ve '
+          'listelere alınmıyor.',
+    (XlsxWarningCode.featureEntryInvalid, OfficeLocale.en) =>
+      "A feature entry of ${book ? 'the workbook' : "sheet '$sheet'"} cannot "
+          'be read ($id); it is kept as written and left out of the typed '
+          'list.',
+    (XlsxWarningCode.featureEntryInvalid, OfficeLocale.de) =>
+      'Ein Funktionseintrag ${book ? 'der Arbeitsmappe' : 'im Blatt „$sheet“'} '
+          'kann nicht gelesen werden ($id); er wird unverändert gespeichert '
+          'und in der Liste ausgelassen.',
+    (XlsxWarningCode.featureEntryInvalid, OfficeLocale.tr) =>
+      '${book ? 'Çalışma kitabındaki' : '“$sheet” sayfasındaki'} bir özellik '
+          'girdisi okunamıyor ($id); olduğu gibi korunuyor ve listeye '
+          'alınmıyor.',
   };
 }

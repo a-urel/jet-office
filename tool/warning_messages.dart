@@ -34,6 +34,7 @@ import 'package:jet_office/src/xlsx/warnings.dart';
 XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
   const String entry = 'font 3: The font size "abc" is not a finite number.';
   const String layoutEntry = 'row 3: ht "abc" is not a row height.';
+  const String featureEntry = 'dataValidation: sqref "abc" is not a range.';
   final WarningCollector collector = WarningCollector();
   switch (code) {
     case XlsxWarningCode.sheetNameChanged:
@@ -53,6 +54,14 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
         return collector.warnings.last;
       }
       collector.add(code, sheet: 'Daten', detail: layoutEntry);
+    case XlsxWarningCode.featureEntryInvalid:
+      if (detail == null) {
+        for (var i = 0; i < 12; i++) {
+          collector.add(code, sheet: 'Daten', detail: 'dataValidation $i');
+        }
+        return collector.warnings.last;
+      }
+      collector.add(code, sheet: 'Daten', detail: featureEntry);
     case XlsxWarningCode.styleEntryInvalid:
       if (detail == null) {
         for (var i = 0; i < 12; i++) {
@@ -152,6 +161,10 @@ String warningMessagesMarkdown() {
     ..writeln('ten. `layoutInvalid` names no cell either: its first row is one')
     ..writeln('setting of sheet `Daten`, its second the warning without a')
     ..writeln('detail, which counts the settings after the first ten.')
+    ..writeln('`featureEntryInvalid` names no cell: its first row is one entry')
+    ..writeln('of sheet `Daten`, its second the warning without a detail,')
+    ..writeln('which counts the entries after the first ten. A workbook\'s')
+    ..writeln('entry says "the workbook" instead of the sheet.')
     ..writeln()
     ..writeln('The native-speaker check of the German and Turkish text is')
     ..writeln('recorded under "Native-speaker check" in')
@@ -170,7 +183,8 @@ String warningMessagesMarkdown() {
       row('`${code.name}` (no id)', _sample(code, detail: null));
     }
     if (code == XlsxWarningCode.styleEntryInvalid ||
-        code == XlsxWarningCode.layoutInvalid) {
+        code == XlsxWarningCode.layoutInvalid ||
+        code == XlsxWarningCode.featureEntryInvalid) {
       row('`${code.name}` (no detail)', _sample(code, detail: null));
     }
   }

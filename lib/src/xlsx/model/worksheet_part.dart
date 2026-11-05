@@ -11,14 +11,15 @@
 /// cells). Children of `<sheetData>` other than rows, which the schema does
 /// not allow, are kept too but written after the last row, so their position
 /// among the rows is not kept. Every
-/// other child of `<worksheet>` (`sheetPr`, `sheetViews`, `mergeCells`,
-/// `hyperlinks`, `pageMargins`, `extLst`, ...) is an [OpaqueXml] at its
-/// original position, except the first `<sheetFormatPr>` and the first
-/// `<cols>`, which are typed when plain (`columns.dart`), and the first
-/// `<mergeCells>` ([MergeGroup]); all three are edited as immutable values,
-/// so `swapLayout` undoes an edit of one without touching the others. The
-/// first `<sheetPr>` and the first `<sheetViews>` are typed too, as
-/// [XmlNode]s (`element_node.dart`), and swap the same way.
+/// other child of `<worksheet>` (`hyperlinks`, `dataValidations`, `drawing`,
+/// ...) is an [OpaqueXml] at its original position, except the first
+/// `<sheetFormatPr>` and the first `<cols>`, which are typed when plain
+/// (`columns.dart`), and the first `<mergeCells>` ([MergeGroup]); all three
+/// are edited as immutable values, so `swapLayout` undoes an edit of one
+/// without touching the others. The first element of each of [_nodeSlots]
+/// (`sheetPr`, `sheetViews`, `pageSetup`, `extLst`, ...) is typed too, as an
+/// [XmlNode] (`element_node.dart`), and swaps the same way; so does an
+/// [ItemGroup] (`item_group.dart`), the form of a list of feature entries.
 /// The root keeps its namespace declarations and `mc:Ignorable`.
 ///
 /// Saving recomputes the bookkeeping (spec §4.4): `<dimension ref>` from the
@@ -58,6 +59,7 @@ import '../warnings.dart';
 import 'cell_store.dart';
 import 'columns.dart';
 import 'element_node.dart';
+import 'item_group.dart';
 
 /// The children of `<worksheet>` in the order of the schema's
 /// `CT_Worksheet` sequence.
@@ -103,11 +105,27 @@ const List<String> worksheetChildOrder = <String>[
   'extLst',
 ];
 
-/// What is typed inside `<sheetPr>` and `<sheetViews>`.
+/// What is typed inside the elements of [_nodeSlots]. A `<headerFooter>`
+/// has opaque children, which keep their text.
 const NodeShape worksheetNodeShape = <String, Set<String>>{
   'sheetPr': <String>{'tabColor', 'outlinePr', 'pageSetUpPr'},
   'sheetViews': <String>{'sheetView'},
   'sheetView': <String>{'pane', 'selection'},
+  'headerFooter': <String>{},
+  'extLst': <String>{'ext'},
+};
+
+/// The children of `<worksheet>` whose first element is an [XmlNode].
+const Set<String> _nodeSlots = <String>{
+  'sheetPr',
+  'sheetViews',
+  'sheetProtection',
+  'autoFilter',
+  'printOptions',
+  'pageMargins',
+  'pageSetup',
+  'headerFooter',
+  'extLst',
 };
 
 /// The typed `<dimension>`: its `ref` is recomputed on save.
@@ -400,11 +418,9 @@ final class WorksheetPart implements PartContent {
         } else {
           children.add(typed);
         }
-      } else if (main && r.localName == 'sheetPr' && !sheet._hasSheetPr) {
-        sheet._hasSheetPr = true;
-        children.add(XmlNode.read(r, worksheetNodeShape));
-      } else if (main && r.localName == 'sheetViews' && !sheet._hasSheetViews) {
-        sheet._hasSheetViews = true;
+      } else if (main &&
+          _nodeSlots.contains(r.localName) &&
+          sheet._nodesRead.add(r.localName)) {
         children.add(XmlNode.read(r, worksheetNodeShape));
       } else if (main && r.localName == 'mergeCells' && !sheet._hasMergeCells) {
         sheet._hasMergeCells = true;
@@ -454,8 +470,8 @@ final class WorksheetPart implements PartContent {
   final String? _untypedText;
   final XmlRoot? _root;
 
-  /// [_Dimension], [_SheetFormat], [_SheetData] and [OpaqueXml] children, in
-  /// order.
+  /// [_Dimension], [_SheetFormat], [ColsGroup], [MergeGroup], [XmlNode],
+  /// [ItemGroup], [_SheetData] and [OpaqueXml] children, in order.
   final List<Object> _children;
   _Dimension? _dimension;
 
@@ -487,13 +503,9 @@ final class WorksheetPart implements PartContent {
   /// kept opaque and its merges are not read.
   bool _hasMergeCells = false;
 
-  /// Whether the part read a SpreadsheetML `<sheetPr>`; a second one is
+  /// The elements of [_nodeSlots] the part read; a second one of a name is
   /// kept opaque.
-  bool _hasSheetPr = false;
-
-  /// Whether the part read a SpreadsheetML `<sheetViews>`; a second one is
-  /// kept opaque.
-  bool _hasSheetViews = false;
+  final Set<String> _nodesRead = <String>{};
   _SheetData? _sheetData;
   CellEncoder? _encoder;
 
@@ -618,6 +630,7 @@ final class WorksheetPart implements PartContent {
           c is ColsGroup && after.contains('cols') ||
           c is MergeGroup && after.contains('mergeCells') ||
           c is XmlNode && after.contains(c.localName) ||
+          c is ItemGroup<Object?> && after.contains(c.localName) ||
           c is _SheetData && after.contains('sheetData') ||
           c is OpaqueXml &&
               c.namespaceUri == Ns.main &&
@@ -680,6 +693,13 @@ final class WorksheetPart implements PartContent {
           c.writeTo(w, root.namespaces);
         case XmlNode():
           c.writeTo(w, root.namespaces);
+        case ItemGroup<Object?>():
+          // Of the groups, only `<dataValidations>` has a `count`.
+          c.writeTo(
+            w,
+            root.namespaces,
+            countAttribute: c.localName == 'dataValidations' ? 'count' : null,
+          );
         case _SheetData():
           _writeSheetData(w, c, root.namespaces, encoder);
         case OpaqueXml():
@@ -886,8 +906,7 @@ final class WorksheetPart implements PartContent {
 
   // -- Sheet properties and views --------------------------------------------
 
-  /// The typed first element of [slot], `sheetPr` or `sheetViews`, or
-  /// `null`.
+  /// The typed first element of [slot], one of [_nodeSlots], or `null`.
   XmlNode? _topNode(String slot) {
     for (final Object c in _children) {
       if (c is XmlNode && c.localName == slot) return c;
@@ -901,9 +920,9 @@ final class WorksheetPart implements PartContent {
   /// The typed first `<sheetViews>`, or `null`.
   XmlNode? get sheetViews => _topNode('sheetViews');
 
-  /// Makes [node] the first element of [slot] (`sheetPr` or `sheetViews`):
-  /// in place, or in schema position when the part has none; `null`
-  /// removes it. Must run inside `editLayout` of that slot.
+  /// Makes [node] the first element of [slot], one of [_nodeSlots]: in
+  /// place, or in schema position when the part has none; `null` removes it.
+  /// Must run inside `editLayout` of that slot.
   void setNode(String slot, XmlNode? node) {
     final XmlNode? old = _topNode(slot);
     if (old == null) {
@@ -915,16 +934,28 @@ final class WorksheetPart implements PartContent {
     }
   }
 
+  /// The [ItemGroup] of [slot], or `null`.
+  ItemGroup<Object?>? _topGroup(String slot) {
+    for (final Object c in _children) {
+      if (c is ItemGroup<Object?> && c.localName == slot) return c;
+    }
+    return null;
+  }
+
   /// The typed first element of [slot] (`cols`, `sheetFormatPr`,
-  /// `mergeCells`, `sheetPr` or `sheetViews`), or `null` when the part has
-  /// none typed. Elements are immutable, so an edit replaces the element,
-  /// and [swapLayout] undoes it.
+  /// `mergeCells`, one of [_nodeSlots], `dataValidations`, `hyperlinks` or
+  /// `conditionalFormatting`), or `null` when the part has none typed. An
+  /// element kept as an [OpaqueXml] is not a slot's element: it is never
+  /// swapped, and a repeated one stays where it is. Elements are immutable,
+  /// so an edit replaces the element, and [swapLayout] undoes it.
   Object? layoutElement(String slot) => switch (slot) {
     'cols' => _cols,
     'sheetFormatPr' => _format,
     'mergeCells' => _mergeGroup,
-    'sheetPr' => sheetPr,
-    'sheetViews' => sheetViews,
+    'dataValidations' ||
+    'hyperlinks' ||
+    'conditionalFormatting' => _topGroup(slot),
+    _ when _nodeSlots.contains(slot) => _topNode(slot),
     _ => throw ArgumentError.value(slot, 'slot', 'Not a layout slot.'),
   };
 

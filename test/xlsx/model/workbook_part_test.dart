@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/opc/package.dart';
+import 'package:jet_office/src/xlsx/model/element_node.dart';
+import 'package:jet_office/src/xlsx/model/item_group.dart';
 import 'package:jet_office/src/xlsx/model/workbook_part.dart';
 import 'package:jet_office/src/xlsx/read/read_exception.dart';
 import 'package:jet_office/src/xlsx/read/read_limits.dart';
@@ -316,4 +319,144 @@ void main() {
     expect(workbookChildOrder.last, 'extLst');
     expect(workbookChildOrder.length, 19);
   });
+
+  group('element slots', () {
+    /// A `<definedNames>` group holding nothing.
+    ItemGroup<String> names() => const ItemGroup<String>(
+      'definedNames',
+      'definedNames',
+      <String, String>{},
+      <KeptAttribute>[],
+      <GroupItem<String>>[],
+    );
+
+    test('the first workbookProtection is typed, a second stays', () {
+      final WorkbookPart part = _read(
+        _book(
+          '<workbookProtection lockStructure="1"/><workbookProtection/>'
+          '<sheets/>',
+        ),
+      );
+      final Object? element = part.element('workbookProtection');
+      expect(element, isA<XmlNode>());
+      expect((element! as XmlNode).attribute('lockStructure'), '1');
+      expect(
+        _encode(part),
+        contains(
+          '<workbookProtection lockStructure="1"/><workbookProtection/>',
+        ),
+      );
+    });
+
+    test('bookViews is not taken for the protection before it', () {
+      final WorkbookPart part = _read(
+        _book(
+          '<workbookProtection/><bookViews><workbookView activeTab="2"/>'
+          '</bookViews><sheets/>',
+        ),
+      );
+      expect(part.activeTab, 2);
+      expect(part.bookViews!.localName, 'bookViews');
+      part.setActiveTabIndex(1);
+      expect(part.activeTab, 1);
+      expect(part.element('workbookProtection'), isA<XmlNode>());
+    });
+
+    test('definedNames stays opaque until it is typed', () {
+      const String body =
+          '<sheets/><definedNames><definedName name="a">1'
+          '</definedName></definedNames>';
+      final WorkbookPart part = _read(_book(body));
+      expect(part.element('definedNames'), isNull);
+      expect(_encode(part), contains(body));
+    });
+
+    test('an element swaps in schema position, in place and out', () {
+      final WorkbookPart part = _read(
+        _book('<workbookPr/><bookViews/><sheets/><calcPr/>'),
+      );
+      final XmlNode lock = XmlNode.made('', 'workbookProtection');
+      part.swapElement('workbookProtection', null, lock);
+      part.swapElement('definedNames', null, names());
+      expect(_children(_encode(part)), <String>[
+        'workbookPr',
+        'workbookProtection',
+        'bookViews',
+        'sheets',
+        'definedNames',
+        'calcPr',
+      ]);
+      expect(part.element('workbookProtection'), same(lock));
+      expect(part.element('definedNames'), isA<ItemGroup<String>>());
+
+      final XmlNode next = lock.withChanges(<String, String?>{
+        'lockStructure': '1',
+      });
+      part.swapElement('workbookProtection', lock, next);
+      expect(part.element('workbookProtection'), same(next));
+      expect(
+        _encode(part),
+        contains('<workbookProtection lockStructure="1"/>'),
+      );
+
+      part.swapElement('workbookProtection', next, null);
+      part.swapElement('definedNames', part.element('definedNames'), null);
+      expect(part.element('workbookProtection'), isNull);
+      expect(part.element('definedNames'), isNull);
+      expect(_children(_encode(part)), <String>[
+        'workbookPr',
+        'bookViews',
+        'sheets',
+        'calcPr',
+      ]);
+    });
+
+    test('a group is found by a later element\'s position', () {
+      final WorkbookPart part = _read(_book('<sheets/>'));
+      part.swapElement('definedNames', null, names());
+      part.requestFullCalculation();
+      expect(_children(_encode(part)), <String>[
+        'sheets',
+        'definedNames',
+        'calcPr',
+      ]);
+    });
+
+    test('an edited group has no count', () {
+      final WorkbookPart part = _read(_book('<sheets/>'));
+      part.swapElement('definedNames', null, names().withItems(const []));
+      expect(_encode(part), contains('<definedNames/>'));
+    });
+
+    test('an unknown slot throws', () {
+      final WorkbookPart part = _read(_book('<sheets/>'));
+      expect(() => part.element('bookViews'), throwsArgumentError);
+      expect(() => part.swapElement('sheets', null, null), throwsArgumentError);
+    });
+
+    test('an untyped part has no elements and takes none', () {
+      final WorkbookPart part = _read('<other/>');
+      expect(part.element('workbookProtection'), isNull);
+      expect(
+        () => part.swapElement(
+          'workbookProtection',
+          null,
+          XmlNode.made('', 'workbookProtection'),
+        ),
+        throwsStateError,
+      );
+    });
+  });
+}
+
+/// The local names of the root's child elements, in order.
+List<String> _children(String xml) {
+  final XmlPullReader r = XmlPullReader(xml);
+  final List<String> out = <String>[];
+  while (r.next()) {
+    if (r.eventType == XmlEventType.startElement && r.depth == 2) {
+      out.add(r.localName);
+    }
+  }
+  return out;
 }
