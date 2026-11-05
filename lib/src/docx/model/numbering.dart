@@ -42,6 +42,7 @@ import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart' show Ns;
 import '../../opc/opaque_xml.dart';
 import '../../xml/xml_pull_reader.dart';
+import '../builtin_numbering.dart';
 import '../numbering_schemas.dart';
 import '../paragraph_property_codecs.dart'
     show IntValCodec, paragraphPropertiesGeneralSchema;
@@ -485,6 +486,35 @@ final class DocxNumbering {
     return instance;
   }
 
+  /// Adds a bullet list as Word's Bullets button makes one, and returns its
+  /// instance: Symbol's bullet at level 0, `o` at level 1, Wingdings' square
+  /// at level 2, repeating, each level indented 36 points further.
+  ///
+  /// It adds one abstract definition and one instance, with the lowest
+  /// unused ids ([addInstance] has the rules), as one transaction. The
+  /// definition has none of the identifiers Word writes for a list it
+  /// makes (`w:nsid`, `w:tmpl`), and the definitions already in the
+  /// document are kept as they are. Put paragraphs in it with
+  /// `DocxBody.addListItem`.
+  DocxNumberingInstance addBulletList() => _addToolbarList(bulletAbstractXml);
+
+  /// Adds a numbered list as Word's Numbering button makes one, and
+  /// returns its instance: "1.", "a." and "i." at levels 0 to 2, repeating,
+  /// each level indented 36 points further.
+  ///
+  /// It adds one abstract definition and one instance, as [addBulletList]
+  /// does.
+  DocxNumberingInstance addNumberedList() =>
+      _addToolbarList(numberedAbstractXml);
+
+  DocxNumberingInstance _addToolbarList(String xml) {
+    late final DocxNumberingInstance instance;
+    _edits.transaction(() {
+      instance = addInstance(addAbstractNumbering(this, xml));
+    });
+    return instance;
+  }
+
   /// The first abstract definition whose id is [id], or `null`.
   DocxAbstractNumbering? _abstractById(int id) {
     for (final DocxAbstractNumbering a in _abstracts) {
@@ -898,3 +928,8 @@ PropertySet levelOverridePropertySetOf(DocxLevelOverride override) =>
 /// Whether [override] was added through the API, so its `w:ilvl` is
 /// written from [DocxLevelOverride.level].
 bool isNewLevelOverride(DocxLevelOverride override) => override._isNew;
+
+/// Whether [instance] is an instance of [numbering], not of another
+/// document's and not one a rollback took out.
+bool ownsInstance(DocxNumbering numbering, DocxNumberingInstance instance) =>
+    identical(instance._attachment.owner, numbering);

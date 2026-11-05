@@ -35,6 +35,7 @@ import '../opc/ooxml.dart' show ContentType, RelType;
 import '../xml/xml_pull_reader.dart';
 import '../zip/archive_adapter.dart';
 import 'blank_document.dart';
+import 'builtin_styles.dart' show DocxBuiltInStyle;
 import 'document_part.dart';
 import 'docx_package.dart';
 import 'model/blocks.dart';
@@ -43,6 +44,7 @@ import 'model/primitives.dart' as primitives;
 import 'model/primitives.dart' show DocxEdits;
 import 'model/styles.dart';
 import 'numbering_part.dart';
+import 'numbering_schemas.dart' show maxListLevel;
 import 'read_exception.dart';
 import 'read_limits.dart';
 import 'related_part.dart';
@@ -226,7 +228,7 @@ final class DocxDocument {
         limits: package.limits,
       ),
     );
-    final DocxBody body = DocxBody._(_edits, part.blocks);
+    final DocxBody body = DocxBody._(_edits, part.blocks, this);
     primitives.adoptBlocks(_edits, body, part.blocks);
     package.package.setContent(main, part);
     _part = part;
@@ -330,9 +332,10 @@ final class DocxDocument {
 /// A block is in at most one body at a time. Each edit is atomic: one that
 /// throws changes nothing.
 final class DocxBody {
-  DocxBody._(this._edits, this._blocks);
+  DocxBody._(this._edits, this._blocks, this._document);
 
   final DocxEdits _edits;
+  final DocxDocument _document;
   final List<DocxBlock> _blocks;
   late final List<DocxBlock> _blocksView = UnmodifiableListView<DocxBlock>(
     _blocks,
@@ -349,6 +352,38 @@ final class DocxBody {
   DocxParagraph addParagraph([String text = '']) {
     final DocxParagraph paragraph = DocxParagraph.text(text);
     insertBlock(_blocks.length, paragraph);
+    return paragraph;
+  }
+
+  /// Appends a paragraph that holds [text] as an item of [list], at [level]
+  /// (0 to 8), and returns it.
+  ///
+  /// The paragraph has the style `List Paragraph`, as Word gives the items
+  /// of its toolbar lists: the document's own style of that name, or Word's
+  /// definition added when the document lacks it ([DocxStyles.ensure]). The
+  /// label (the bullet or the number) is not part of [DocxParagraph.text].
+  ///
+  /// A [list] that is not an instance of this document's numbering throws
+  /// [ArgumentError], and a [level] outside 0 to 8 [RangeError]; nothing
+  /// changes then. When the styles or the numbering part cannot be read,
+  /// this throws a [DocxReadException] naming it, and nothing changes. The
+  /// add is one transaction.
+  DocxParagraph addListItem(
+    DocxNumberingInstance list,
+    String text, {
+    int level = 0,
+  }) {
+    RangeError.checkValueInInterval(level, 0, maxListLevel, 'level');
+    if (!ownsInstance(_document.numbering, list)) {
+      throw ArgumentError.value(list, 'list', 'Not a list of this document');
+    }
+    final DocxStyles styles = _document.styles;
+    final DocxParagraph paragraph = DocxParagraph.text(text);
+    _edits.transaction(() {
+      paragraph.style = styles.ensure(DocxBuiltInStyle.listParagraph);
+      paragraph.properties.numbering = list.ref(level: level);
+      insertBlock(_blocks.length, paragraph);
+    });
     return paragraph;
   }
 
