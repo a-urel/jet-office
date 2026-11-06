@@ -25,6 +25,11 @@ dependencies:
       url: https://github.com/a-urel/jet-office.git
 ```
 
+The repository is a pub workspace: `jet_office` is at its root, and
+[`jet_core`](packages/jet_core/README.md), the number format engine, is under
+`packages/`. A project that needs only `jet_core` adds `path: packages/jet_core`
+to the git dependency.
+
 ## Quick start
 
 ```dart

@@ -4,13 +4,15 @@ description: >-
   engine today. It knows no file format, has no dependencies and runs on the
   web, desktop, mobile and server alike.
 version: 0.1.0-dev.1
-repository: https://github.com/a-urel/jet-core
-issue_tracker: https://github.com/a-urel/jet-core/issues
+repository: https://github.com/a-urel/jet-office
+issue_tracker: https://github.com/a-urel/jet-office/issues
 # Not published until the extraction ships.
 publish_to: none
 
 environment:
   sdk: ^3.9.0
+
+resolution: workspace
 
 # Empty on purpose: jet_core has no runtime dependency (AGENTS.md, "Hard
 # rules"). test/architecture/dependencies_test.dart enforces it.

@@ -1,4 +1,4 @@
-# Working in jet-core
+# Working in jet_core
 
 `jet_core` is a pure-Dart package of building blocks shared by the jet_
 packages. Today that is one thing: the number format engine, extracted from
@@ -15,7 +15,8 @@ formatting) and Monépro. `jet_core` knows none of them.
 
 ## The quality gate
 
-Run from the repository root. A clean checkout must pass all four:
+Run from this package's folder, `packages/jet_core`, except the first two, which
+the repository's gate also runs from its root. A clean checkout must pass all four:
 
 ```bash
 dart format --output=none --set-exit-if-changed .
@@ -123,6 +124,6 @@ The engine's rules, each with its test, are in `docs/number-format.md`; the
 benchmark's figures are in `docs/benchmark.md`; why the package exists and what
 may be added to it is `docs/decisions/0001-jet-core-holds-what-the-families-share.md`.
 
-jet_office is cloned next to this repo (`../jet-office`), where the engine was
-written (its decision 0008) and which is to depend on `jet_core`. Read it for the
-history; never import from it.
+This package lives in the jet-office repository's workspace (its decision
+0013). `jet_office`, at the repository root, depends on it; nothing here may
+import `jet_office`.

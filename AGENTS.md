@@ -12,7 +12,8 @@ without loss; supersedes part of `0002`) and `0010` (phase 4: a DOCX document
 model, on the same fidelity standard), `0011` (a new document's parts are
 this library's own, with Word's values) and `0012` (the number format engine
 lives in `jet_core`; supersedes `0001`'s one runtime dependency and `0008`'s
-location and names) before any design change.
+location and names) and `0013` (one repository: a pub workspace, with
+`jet_core` under `packages/`) before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -20,13 +21,14 @@ knows nothing about either of them.
 
 ## The quality gate
 
-Run from the repository root. A clean checkout must pass all four:
+Run from the repository root. A clean checkout must pass all of it:
 
 ```bash
 dart format --output=none --set-exit-if-changed .
 dart analyze --fatal-infos
 dart test
 dart test -p chrome
+(cd packages/jet_core && dart test && dart test -p chrome)
 ```
 
 The Chrome leg runs every test that is not marked `@TestOn('vm')` in a
@@ -317,7 +319,8 @@ It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
   `lib/src/zip/archive_adapter.dart`.** Enforced by
   `test/architecture/archive_isolation_test.dart`.
 - **Runtime dependencies are `archive` and `jet_core`** (decision 0012), the
-  second a git dependency pinned to a commit. Enforced by `test/architecture/dependencies_test.dart`.
+  second a package of this workspace (`packages/jet_core`, decision 0013; it has
+  its own `AGENTS.md`). Enforced by `test/architecture/dependencies_test.dart`.
 - **The OPC layer does not know XLSX.** Nothing under `lib/src/opc` imports
   anything under `lib/src/xlsx`, so DOCX can share it (decision 0009).
   Enforced by `test/architecture/opc_isolation_test.dart`.

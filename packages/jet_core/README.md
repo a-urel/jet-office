@@ -27,6 +27,16 @@ print(german.format(46323, numberFormat: 'dddd, d. mmmm yyyy').text);
 format code; a code it cannot read shows the value as `General` and says so in
 `FormattedValue.warning`.
 
-Not published to pub.dev. See `AGENTS.md` for the rules of the package and
+Not published to pub.dev. Use it as a git dependency:
+
+```yaml
+dependencies:
+  jet_core:
+    git:
+      url: https://github.com/a-urel/jet-office.git
+      path: packages/jet_core
+```
+
+See `AGENTS.md` for the rules of the package and
 `docs/decisions/0001-jet-core-holds-what-the-families-share.md` for why it
 exists.
