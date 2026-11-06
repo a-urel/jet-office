@@ -168,4 +168,19 @@ void main() {
       );
     }
   });
+
+  test('the values of tables, rows and cells are exported', () {
+    expect(DocxTableWidth.points(72).widthPt, 72);
+    expect(DocxTableWidth.percent(50).kind, DocxTableWidthKind.percent);
+    expect(DocxTableLayout.values, hasLength(2));
+    expect(DocxTableAlignment.values, hasLength(3));
+    expect(const DocxTableBorders().top, isNull);
+    expect(const DocxCellBorders().topLeftToBottomRight, isNull);
+    expect(DocxTableMargins(leftPt: 5.4).leftPt, 5.4);
+    expect(const DocxTableLook(firstRow: true).firstRow, isTrue);
+    expect(DocxRowHeight(20, rule: DocxRowHeightRule.exact).heightPt, 20);
+    expect(DocxVerticalMerge.values, hasLength(2));
+    expect(DocxCellAlignment.values, hasLength(3));
+    expect(DocxTextDirection.values, hasLength(6));
+  });
 }

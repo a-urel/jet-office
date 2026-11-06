@@ -164,6 +164,7 @@
 /// @docImport 'src/docx/model/run_content.dart';
 /// @docImport 'src/docx/model/run_properties.dart';
 /// @docImport 'src/docx/model/styles.dart';
+/// @docImport 'src/docx/model/table_formatting.dart';
 /// @docImport 'src/docx/read_exception.dart';
 /// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
@@ -256,6 +257,21 @@ export 'src/docx/model/run_properties.dart'
     show DocxRunProperties, DocxRunProperty;
 export 'src/docx/model/styles.dart'
     show DocxDocumentDefaults, DocxStyle, DocxStyleType, DocxStyles;
+export 'src/docx/model/table_formatting.dart'
+    show
+        DocxCellAlignment,
+        DocxCellBorders,
+        DocxRowHeight,
+        DocxRowHeightRule,
+        DocxTableAlignment,
+        DocxTableBorders,
+        DocxTableLayout,
+        DocxTableLook,
+        DocxTableMargins,
+        DocxTableWidth,
+        DocxTableWidthKind,
+        DocxTextDirection,
+        DocxVerticalMerge;
 export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
 export 'src/docx/read_limits.dart' show DocxReadLimits;
 export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;
