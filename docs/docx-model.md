@@ -81,10 +81,10 @@ doc.body.addListItem(list, 'Nested item', level: 1);
   model gives.
 - **A new document has no `docProps`** until D5: no `core.xml`, no
   `app.xml`.
-- **The Word XML shipped in a new document** (theme, styles, font table,
-  settings) is taken from a blank document saved by Word for Mac. Whether it
-  may ship under this package's licence is an open question for the owner
-  (see `NOTICE`).
+- **A new document's theme is plainer than Word's** (decision 0011): no
+  per-script font list, a plain format scheme, and fewer latent styles
+  named, so Word's Styles pane recommends fewer built-in styles until they
+  are used.
 - **Fields show their cached result** until Word lays the document out; this
   library does not paginate.
 
@@ -260,7 +260,7 @@ Values and units.
 | `DocxStyles.idOf` and `ensure` | by name (the rule above); `idOf` gives the existing id without adding, `ensure` adds when absent. `idOf` ignores the style type | one lookup by name | `test/docx/model/style_resolution_test.dart` ("ensure(heading1) returns Balk1 and adds nothing", "idOf gives null for a built-in the document lacks", "a character style named heading 1 is the id of the built-in, and a paragraph given it warns styleNotFound") |
 | A built-in added | its `basedOn`, `next` and `link` map to the document's styles: `Normal`, `DefaultParagraphFont` and `TableNormal` to the default style of that type (`w:default="1"`), others by name; a missing dependency is added the same way (a linked `…Char` style included); the default style of a type is never replaced | no duplicate or parallel style | `test/docx/model/style_resolution_test.dart` ("ensure(header) adds Header basedOn Normal and HeaderChar linked both ways, and no name twice", "adding a built-in keeps the default of the file", "a dependency on Normal takes the default of the file") |
 | An English id already taken by a style of another name | the smallest free suffix: `Heading2_1`, `Heading2_2`, … | no id or name is ever duplicated | `test/docx/model/style_resolution_test.dart` ("ensure(heading2) adds Heading2_1 named heading 2 beside My heading", "the suffix is the smallest one free") |
-| The catalog | Word's definitions, from `blank.docx` and `builtins.docx` with ids and names mapped to the English ones, no rsids, no Turkish id or name | the definitions are Word's | `test/docx/builtin_styles_test.dart` ("every built-in has a definition of its type and name", "no definition carries an rsid or a Turkish id or name", "catalog entries in the blank document equal its styles"), `test/docx/builtin_styles_oracle_test.dart` ("definitions equal builtins.docx after mapping ids and names") |
+| The catalog | built by `default_styles.dart` with the values of `blank.docx` and `builtins.docx`, under the English ids and names, no rsids, no Turkish id or name | the definitions have Word's values (decision 0011) | `test/docx/builtin_styles_test.dart` ("every built-in has a definition of its type and name", "no definition carries an rsid or a Turkish id or name", "catalog entries in the blank document equal its styles"), `test/docx/builtin_styles_oracle_test.dart` ("definitions equal builtins.docx after mapping ids and names") |
 | `DocxStyles.add` | applies the same rules to `basedOn`, `next` and `link` before validating; rejects a used id, a used name, an unknown `basedOn`, a `basedOn` of another type and a cycle; a `link` must name a style of the other type; writes `w:customStyle` and the children in schema order, appended after the last style | one style per id and name | `test/docx/model/styles_test.dart` ("add rejects a used id, a used name, an unknown basedOn, a basedOn of another type and a cycle", "add writes customStyle and the children in styleOrder", "a style is appended after the last w:style"), `test/docx/model/style_resolution_test.dart` ("a link takes a built-in of the other type", "a link to a style of the same type throws") |
 | `DocxStyle.type`, `id` and `name` | read nullable: a file's style may lack them; a style without `w:type` is a paragraph style; the `name` setter throws `ArgumentError` on `null`, an empty name or a forbidden character | a file is never wrong | `test/docx/model/styles_test.dart` ("a style without w:type is a paragraph style, one of another type has none", "the constructor checks its arguments") |
 | The styles part | loaded on first access; found through the main part's relationship wherever it lives; a document without one reads as having none | the package, not the name, says where a part is | `test/docx/styles_part_test.dart` ("the styles part is found by relationship wherever it lives", "accessing the empty styles and saving changes nothing") |
@@ -348,14 +348,14 @@ Two codes, for references set through the API only, each with a message in
 
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
-| `DocxDocument()` | one empty paragraph and the parts of Word for Mac 16.114.1's blank document, without `docProps`; it opens and saves unchanged | like Word's blank document | `test/docx/blank_document_test.dart` |
+| `DocxDocument()` | one empty paragraph and this library's parts, with the values of Word for Mac 16.114.1's blank document, without `docProps`; it opens and saves unchanged | like Word's blank document (decisions 0010, 0011) | `test/docx/blank_document_test.dart` |
 | Page | A4 portrait | decision 0010 | `test/docx/blank_document_test.dart`, `test/docx/blank_document_oracle_test.dart` |
 | Fonts | Aptos through the theme, at 12 pt | Word's current default | `test/docx/blank_document_test.dart` |
 | Locale | none of the reference file's: every language is `en-US`, and the decimal symbol and list separator are left to the reader | a generated file must not carry its author's region | `test/docx/blank_document_test.dart`, `test/docx/blank_document_oracle_test.dart` |
 | Style ids and names | Word's en-US ones (`Normal`, `Heading1`), not the Turkish ones of the reference file | a library caller writes `style = 'Heading1'` | `test/docx/blank_document_test.dart` |
 | Revision ids, document id, proof state, attached template | none | they identify the reference file | `test/docx/blank_document_test.dart` |
 | `compatibilityMode` 15 and the web settings | kept | Word opens the file in the current mode | `test/docx/blank_document_test.dart` |
-| The parts | equal to the reference file's apart from `docProps`, after removing ids and locale; none of the owner's document properties is written | the reference is a file the owner saved from Word | `test/docx/blank_document_oracle_test.dart` |
+| The parts | the same part names as the reference file apart from `docProps`; its styles, document defaults, theme colours and fonts, font table and compatibility settings have equal values after removing ids and locale; none of the owner's document properties is written | the reference is a file the owner saved from Word | `test/docx/blank_document_oracle_test.dart` |
 
 ### Checks outside the unit tests
 
@@ -369,8 +369,8 @@ Two codes, for references set through the API only, each with a message in
 
 D2 read Quds' `wml_properties.dart` and `word_styles.dart` and ported
 neither: the enumerations are transcribed from ECMA-376 (Part 1, §17.18),
-and the built-in style and list definitions come from Word's own files
-(`blank.docx`, `builtins.docx`), not from Quds.
+and the built-in style and list definitions take their values from Word's
+own files (`blank.docx`, `builtins.docx`), not from Quds (decision 0011).
 
 D1 ports nothing from Quds (`quds_office_suite` at `15c5d29`). Its Word code
 is a good reader and a lossy writer (decision 0010), so the model, the

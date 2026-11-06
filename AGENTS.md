@@ -9,7 +9,8 @@ R10 in `docs/xlsx-writer.md`), `0006` (ZIP bytes may differ by platform),
 `0008` (a number format engine that shows values as Excel for Mac does) and
 `0009` (phase 3: a workbook model that opens, generates, edits and saves
 without loss; supersedes part of `0002`) and `0010` (phase 4: a DOCX document
-model, on the same fidelity standard) before any design change.
+model, on the same fidelity standard) and `0011` (a new document's parts are
+this library's own, with Word's values) before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
