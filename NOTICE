@@ -32,25 +32,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-Word blank document
+Word default values
 -------------------
 
-The theme, styles, font table, settings and web settings XML in
-lib/src/docx/blank_document.dart are taken from a blank document saved by
-Microsoft Word for Mac 16.114.1 (test/fixtures/owner/docx/blank.docx), with
-the revision identifiers and document ids removed, and the regional
-settings, style ids and style names normalised to Word's en-US defaults.
-Whether that XML may ship under this package's licence is an open question
-for the owner, not settled here.
-
-Word built-in styles
---------------------
-
-The style definitions in lib/src/docx/builtin_styles.dart that a new
-document does not hold (No Spacing, Strong, Emphasis, Table Grid,
-Hyperlink, Header, Footer and their linked styles) are taken from
-test/fixtures/owner/docx/builtins.docx, saved by Microsoft Word for Mac
-16.114, with the revision identifiers removed and the style ids and names
-normalised to Word's en-US ones. The others come from the blank document
-above. Whether that XML may ship under this package's licence is an open
-question for the owner, not settled here.
+A new document is built to look like Word's blank one (decision 0011). The
+XML in lib/src/docx/blank_document.dart, default_styles.dart and
+builtin_numbering.dart is written by this project. Its values (fonts, sizes,
+spacing, colours, list formats) follow the defaults of Microsoft Word for
+Mac 16.114. The one constant kept from a Word file is word/document.xml's
+root and section (blankDocument): a list of namespaces and the page's
+values. Word files saved by the owner are kept under
+test/fixtures/owner/docx/ as test input only.

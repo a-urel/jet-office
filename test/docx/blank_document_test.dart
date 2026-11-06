@@ -1,6 +1,6 @@
-// Tests of a new document, Word for Mac's blank one (spec 4.5): the parts it
-// writes, its A4 section, and that it carries no locale, identifier or
-// document property of the file it comes from. They build everything in
+// Tests of a new document, with the values of Word for Mac's blank one (spec
+// 4.5, decision 0011): the parts it writes, its A4 section, and that it
+// carries no locale, identifier or document property of the file it follows. They build everything in
 // memory, so they run on the web as well; the comparison with `blank.docx`
 // itself is in `blank_document_oracle_test.dart`.
 import 'dart:convert';
@@ -159,7 +159,7 @@ void main() {
       ]) {
         expect(styles, isNot(contains('"$id"')));
       }
-      expect(parts['word/theme/theme1.xml'], contains('name="Office Theme"'));
+      expect(parts['word/theme/theme1.xml'], contains('name="jet_office"'));
     });
 
     test('carries no revision identifier, document id or proof state', () {
@@ -173,6 +173,23 @@ void main() {
       final Map<String, String> parts = _saved();
       expect(parts['word/theme/theme1.xml'], contains('typeface="Aptos"'));
       expect(parts['word/styles.xml'], contains('<w:sz w:val="24"/>'));
+    });
+
+    test('writes its own theme and latent styles, not Word\'s text', () {
+      final Map<String, String> parts = _saved();
+      final String theme = parts['word/theme/theme1.xml']!;
+      expect(theme, isNot(contains('themeFamily')));
+      expect(theme, isNot(contains('gradFill')));
+      expect(theme, isNot(contains('<a:font script=')));
+      expect(theme, isNot(contains('Office Theme')));
+      expect(
+        RegExp('<w:lsdException ').allMatches(blankStyles).length,
+        lessThan(30),
+      );
+      expect(parts['word/settings.xml'], isNot(contains('w16')));
+      expect(parts['word/styles.xml'], isNot(contains('w16')));
+      expect(parts['word/fontTable.xml'], isNot(contains('w16')));
+      expect(parts['word/webSettings.xml'], isNot(contains('w16')));
     });
 
     test('the constants are the parts that are written', () {

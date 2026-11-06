@@ -203,6 +203,22 @@ For `d2_lists`, `d2_styles` and one edited owner file: change one word, save
 in Word, close and reopen. No repair prompt, the edit is there, and the
 lists and styles are as before.
 
+## Own parts (decision 0011)
+
+A new document's theme, styles, font table and settings are now written by
+this library, so what a new document writes is checked again. The owner's
+round trips and the edits keep the owner's own parts, but `styles.ensure`
+and the list helpers add the rewritten definitions. Write the documents with
+the commands at the top of this page and open:
+
+- `d1_blank`: no repair prompt, Aptos at 12 pt (Home shows `Aptos (Body)`),
+  the gallery offers Normal, Heading 1, Title, Subtitle, Strong, Emphasis and
+  the other styles as before; Design > Colors shows the theme's colours.
+- `d2_run_formatting`, `d2_styles` and `d2_lists`: as under D2.
+- `build/edited-docx-owner/blank.docx` and `features.docx`: as under D2,
+  "Edited owner files".
+- Save `d1_blank` in Word, close and reopen: no repair prompt.
+
 ## Results
 
 One row per file or check. `Result` is `ok`, `sorun` (a problem) or `not
