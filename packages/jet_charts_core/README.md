@@ -46,4 +46,4 @@ dependencies:
 
 See `AGENTS.md` for the rules of the package.
 
-The package is licensed under the MIT licence.
+Apache License 2.0, see [`LICENSE`](LICENSE), as the rest of this repository.
