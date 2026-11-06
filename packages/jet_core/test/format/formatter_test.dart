@@ -1,0 +1,605 @@
+import 'package:jet_core/jet_core.dart';
+import 'package:jet_core/src/format/formatter.dart' show formatterCacheSize;
+import 'package:test/test.dart';
+
+final NumberFormatter formatter = NumberFormatter();
+
+String text(Object? value, String code) =>
+    formatter.format(value, numberFormat: code).text;
+
+final NumberFormatter de = NumberFormatter(locale: FormatLocale.deDE);
+final NumberFormatter tr = NumberFormatter(locale: FormatLocale.trTR);
+
+/// en-US with [longDateCode] or [builtinCodes] replaced.
+FormatLocale custom({String? longDateCode, Map<int, String>? builtinCodes}) {
+  const FormatLocale en = FormatLocale.enUS;
+  return FormatLocale(
+    decimalSeparator: en.decimalSeparator,
+    groupSeparator: en.groupSeparator,
+    monthNames: en.monthNames,
+    monthAbbreviations: en.monthAbbreviations,
+    dayNames: en.dayNames,
+    dayAbbreviations: en.dayAbbreviations,
+    am: en.am,
+    pm: en.pm,
+    trueText: en.trueText,
+    falseText: en.falseText,
+    errorNames: en.errorNames,
+    lcid: en.lcid,
+    builtinCodes: builtinCodes ?? en.builtinCodes,
+    longDateCode: longDateCode ?? en.longDateCode,
+    longTimeCode: en.longTimeCode,
+    verified: false,
+  );
+}
+
+void main() {
+  group('end to end', () {
+    test('section choice', () {
+      expect(text(-1234, '#,##0 ;(#,##0)'), '(1,234)');
+    });
+
+    test('fixed point', () {
+      expect(text(FormatDecimal('1234.5'), '#,##0.00'), '1,234.50');
+    });
+
+    test('scientific', () {
+      expect(text(12345, '0.00E+00'), '1.23E+04');
+    });
+
+    test('fraction', () {
+      expect(text(2.5, '# ?/?'), '2 1/2');
+    });
+
+    test('General', () {
+      expect(text(123456789012, 'General'), '1.23457E+11');
+    });
+
+    test('a subnormal double shows as zero', () {
+      expect(text(1e-320, 'General'), '0');
+      expect(text(-1e-320, '0.00E+00'), '0.00E+00');
+      expect(text(5e-324, 'General'), '0');
+    });
+
+    test('text', () {
+      expect(text('abc', '"Name: "@'), 'Name: abc');
+    });
+
+    test('a last text section leaves numbers to the others', () {
+      expect(text(-5, '0;@'), '-5');
+      expect(text(5, '0;@'), '5');
+      expect(text('a', '0;@'), 'a');
+    });
+
+    test('a boolean, an error and null', () {
+      expect(text(true, '0.00'), 'TRUE');
+      expect(text(const FormatErrorValue('#DIV/0!'), '0.00'), '#DIV/0!');
+      expect(text(null, '0.00'), '');
+    });
+
+    test('a date code shows the date', () {
+      expect(text(46323, 'dd.mm.yyyy'), '28.10.2026');
+    });
+  });
+
+  group('the result', () {
+    test('text joins padding as one space and leaves fill out', () {
+      final FormattedValue result = formatter.format(
+        'abc',
+        numberFormat: '_(@_)*-',
+      );
+      expect(result.parts, <FormatPart>[
+        const FormatPadding('('),
+        const FormatText('abc'),
+        const FormatPadding(')'),
+        const FormatFill('-'),
+      ]);
+      expect(result.text, ' abc ');
+      expect(result.color, isNull);
+      expect(result.overflow, isFalse);
+      expect(result.warning, isNull);
+    });
+
+    test('no section matching is overflow, shown as #', () {
+      final FormattedValue result = formatter.format(
+        50,
+        numberFormat: '[>100]0;[<-100]0',
+      );
+      expect(result.overflow, isTrue);
+      expect(result.text, '#');
+      expect(result.warning, isNull);
+    });
+
+    test('a lone conditional section falls back to General', () {
+      expect(text(50, '[>100]0'), '50');
+      expect(text(-50.5, '[>100]0'), '-50.5');
+      expect(text(150, '[>100]0.0'), '150.0');
+      expect(formatter.format(50, numberFormat: '[>100]0').overflow, isFalse);
+    });
+
+    // Excel for Mac in all three regions (u03-01, u03-04, u03-05).
+    test('the second section shows no minus after a condition', () {
+      expect(text(-5, '[>0]0;0'), '5');
+      expect(text(-5, '0;0'), '5');
+      expect(text(-5, '[<0]"neg "0;"other "0'), 'neg 5');
+    });
+
+    // Excel for Mac in all three regions (u02-01 to u02-03).
+    test('a negative that rounds to zero keeps its section, not its minus', () {
+      expect(text(-0.4, '0'), '0');
+      expect(text(-0.001, '0.00'), '0.00');
+      expect(text(-0.4, '#,##0;(#,##0)'), '(0)');
+    });
+
+    test('a named color is rgb', () {
+      final FormattedValue result = formatter.format(
+        5,
+        numberFormat: '[Blue]0',
+      );
+      expect(result.text, '5');
+      expect(result.color, const FormatColor(rgb: 0x0000FF));
+    });
+
+    test('[ColorN] is the indexed entry N + 7', () {
+      expect(
+        formatter.format(5, numberFormat: '[Color12]0').color,
+        const FormatColor(index: 19),
+      );
+    });
+
+    test('has value equality and a toString', () {
+      final FormattedValue a = formatter.format(5, numberFormat: '0.0');
+      final FormattedValue b = formatter.format(5, numberFormat: '0.0');
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+      expect(a, isNot(formatter.format(6, numberFormat: '0.0')));
+      expect(a.toString(), contains('5.0'));
+    });
+  });
+
+  group('code resolution', () {
+    test('a built-in id without a code uses the built-in table', () {
+      expect(formatter.format(1234.5, numberFormatId: 4).text, '1,234.50');
+    });
+
+    test('id 0 without a code is General', () {
+      final FormattedValue result = formatter.format(1234.5);
+      expect(result.text, '1234.5');
+      expect(result.warning, isNull);
+    });
+
+    test('an unknown id without a code is General with a warning', () {
+      final FormattedValue result = formatter.format(
+        1234.5,
+        numberFormatId: 200,
+      );
+      expect(result.text, '1234.5');
+      expect(result.warning, FormatWarning.unresolved);
+    });
+
+    test('a code given wins over the id', () {
+      expect(
+        formatter.format(1234.5, numberFormatId: 4, numberFormat: '0').text,
+        '1235',
+      );
+    });
+  });
+
+  group('built-in ids by locale', () {
+    // Excel for Mac (c6): en-US and de-DE show a two-digit year, tr-TR four.
+    test('id 14 without a code is the locale\'s short date', () {
+      expect(formatter.format(46323, numberFormatId: 14).text, '10/28/26');
+      expect(de.format(46323, numberFormatId: 14).text, '28.10.26');
+      expect(tr.format(46323, numberFormatId: 14).text, '28.10.2026');
+    });
+
+    test('id 14 with the invariant code is the locale\'s short date', () {
+      for (final (NumberFormatter f, String shown)
+          in <(NumberFormatter, String)>[
+            (formatter, '10/28/26'),
+            (de, '28.10.26'),
+            (tr, '28.10.2026'),
+          ]) {
+        final FormattedValue result = f.format(
+          46323,
+          numberFormatId: 14,
+          numberFormat: 'mm-dd-yy',
+        );
+        expect(result.text, shown);
+        expect(result.warning, isNull);
+      }
+    });
+
+    test('id 22 en and de, as Excel for Mac shows them (c6)', () {
+      expect(
+        formatter.format(46323.5625, numberFormatId: 22).text,
+        '10/28/26 13:30',
+      );
+      expect(de.format(46323.5625, numberFormatId: 22).text, '28.10.26 13:30');
+    });
+
+    test('id 20 de', () {
+      expect(de.format(0.5625, numberFormatId: 20).text, '13:30');
+    });
+
+    test('id 4 de uses the invariant code with German separators', () {
+      expect(de.format(1234.5, numberFormatId: 4).text, '1.234,50');
+    });
+
+    test('id 7 de', () {
+      expect(de.format(-1234.5, numberFormatId: 7).text, '-1.234,50 €');
+    });
+
+    test('ids 37-41 and 43 de, as Excel for Mac shows them (c7)', () {
+      const Map<int, (String, String)> shown = <int, (String, String)>{
+        37: ('-1.235', '1.235'),
+        38: ('-1.235', '1.235'),
+        39: ('-1.234,50', '1.234,50'),
+        40: ('-1.234,50', '1.234,50'),
+        41: ('-1.235 ', ' 1.235 '),
+        43: ('-1.234,50 ', ' 1.234,50 '),
+      };
+      for (final MapEntry<int, (String, String)> e in shown.entries) {
+        expect(
+          de.format(-1234.5, numberFormatId: e.key).text,
+          e.value.$1,
+          reason: 'id ${e.key} on -1234.5',
+        );
+        expect(
+          de.format(1234.5, numberFormatId: e.key).text,
+          e.value.$2,
+          reason: 'id ${e.key} on 1234.5',
+        );
+      }
+    });
+
+    test('ids 5-8 and 37-44 tr, as Excel for Mac shows them (c7)', () {
+      const Map<int, (String, String)> shown = <int, (String, String)>{
+        5: ('-₺1.235', '₺1.235'),
+        6: ('-₺1.235', '₺1.235'),
+        7: ('-₺1.234,50', '₺1.234,50'),
+        8: ('-₺1.234,50', '₺1.234,50'),
+        37: ('-1.235', '1.235'),
+        38: ('-1.235', '1.235'),
+        39: ('-1.234,50', '1.234,50'),
+        40: ('-1.234,50', '1.234,50'),
+        41: ('-1.235 ', ' 1.235 '),
+        42: ('-₺1.235 ', ' ₺1.235 '),
+        43: ('-1.234,50 ', ' 1.234,50 '),
+        44: ('-₺1.234,50 ', ' ₺1.234,50 '),
+      };
+      for (final MapEntry<int, (String, String)> e in shown.entries) {
+        expect(
+          tr.format(-1234.5, numberFormatId: e.key).text,
+          e.value.$1,
+          reason: 'id ${e.key} on -1234.5',
+        );
+        expect(
+          tr.format(1234.5, numberFormatId: e.key).text,
+          e.value.$2,
+          reason: 'id ${e.key} on 1234.5',
+        );
+      }
+    });
+
+    test('id 18 tr shows the Turkish words, by its locale tag', () {
+      expect(tr.format(0.5625, numberFormatId: 18).text, '1:30 ÖS');
+      expect(tr.format(0.0625, numberFormatId: 19).text, '1:30:00 ÖÖ');
+    });
+
+    test('id 15 de, as Excel for Mac shows it (c6)', () {
+      expect(de.format(46323, numberFormatId: 15).text, '28. Okt 26');
+    });
+
+    test('a built-in id with a different code uses the code (c20)', () {
+      expect(
+        de.format(46323, numberFormatId: 14, numberFormat: 'yyyy-mm-dd').text,
+        '2026-10-28',
+      );
+      final NumberFormatter de1904 = NumberFormatter(
+        locale: FormatLocale.deDE,
+        date1904: true,
+      );
+      expect(
+        de1904
+            .format(46323, numberFormatId: 14, numberFormat: 'yyyy-mm-dd')
+            .text,
+        '2030-10-29',
+      );
+      expect(
+        de1904.format(1234.5, numberFormatId: 4, numberFormat: '0.000').text,
+        '1234,500',
+      );
+    }); // Owner Excel check C20
+  });
+
+  group('locale-dependent ids without a code', () {
+    test('id 27 shows as the locale\'s id 14', () {
+      final FormattedValue result = formatter.format(46323, numberFormatId: 27);
+      expect(result.text, '10/28/26');
+      expect(result.warning, FormatWarning.localeDependent);
+    });
+
+    test('ids 27-31, 36 and 50-58 show as id 14', () {
+      for (final int id in <int>[27, 28, 29, 30, 31, 36, 50, 54, 58]) {
+        final FormattedValue result = de.format(46323, numberFormatId: id);
+        expect(result.text, '28.10.26', reason: 'id $id');
+        expect(result.warning, FormatWarning.localeDependent, reason: 'id $id');
+      }
+    });
+
+    test('id 33 shows as the locale\'s id 21', () {
+      final FormattedValue result = formatter.format(
+        46323.5625,
+        numberFormatId: 33,
+      );
+      expect(result.text, '13:30:00');
+      expect(result.warning, FormatWarning.localeDependent);
+    });
+
+    test('ids 32-35 show as id 21', () {
+      for (final int id in <int>[32, 33, 34, 35]) {
+        expect(
+          formatter.format(0.5625, numberFormatId: id).text,
+          '13:30:00',
+          reason: 'id $id',
+        );
+      }
+    });
+
+    test('id 25 shows as General', () {
+      final FormattedValue result = formatter.format(46323, numberFormatId: 25);
+      expect(result.text, '46323');
+      expect(result.warning, FormatWarning.localeDependent);
+    });
+
+    test('ids 23-26 and 59-163 show as General', () {
+      for (final int id in <int>[23, 24, 26, 59, 100, 163]) {
+        final FormattedValue result = formatter.format(
+          46323,
+          numberFormatId: id,
+        );
+        expect(result.text, '46323', reason: 'id $id');
+        expect(result.warning, FormatWarning.localeDependent, reason: 'id $id');
+      }
+    });
+
+    test('a locale-dependent id with a code uses the code', () {
+      final FormattedValue result = formatter.format(
+        46323,
+        numberFormatId: 27,
+        numberFormat: 'yyyy',
+      );
+      expect(result.text, '2026');
+      expect(result.warning, isNull);
+    });
+
+    test('id 164 and above stay General with unresolvedNumberFormat', () {
+      for (final int id in <int>[164, 200]) {
+        final FormattedValue result = formatter.format(
+          46323,
+          numberFormatId: id,
+        );
+        expect(result.text, '46323');
+        expect(result.warning, FormatWarning.unresolved);
+      }
+    });
+  });
+
+  group('warning precedence', () {
+    test('a date code mixed with General is invalid', () {
+      final FormattedValue result = formatter.format(
+        46323,
+        numberFormat: 'General dd',
+      );
+      expect(result.text, '46323');
+      expect(result.warning, FormatWarning.invalidCode);
+    });
+
+    test('an unserved language is unsupported', () {
+      final FormattedValue result = formatter.format(
+        46323,
+        numberFormat: r'[$-40C]mmmm',
+      );
+      expect(result.text, 'October');
+      expect(result.warning, FormatWarning.unsupported);
+    });
+
+    test('a resolution warning beats a render warning', () {
+      final NumberFormatter own = NumberFormatter(
+        locale: custom(builtinCodes: <int, String>{14: r'[$-40C]mmmm'}),
+      );
+      expect(
+        own.format(46323, numberFormatId: 14).warning,
+        FormatWarning.unsupported,
+      );
+      final FormattedValue result = own.format(46323, numberFormatId: 27);
+      expect(result.text, 'October');
+      expect(result.warning, FormatWarning.localeDependent);
+    });
+
+    test('a caller locale without a built-in code uses the invariant one', () {
+      final NumberFormatter own = NumberFormatter(
+        locale: custom(builtinCodes: const <int, String>{}),
+      );
+      expect(own.format(46323, numberFormatId: 14).text, '10-28-26');
+      expect(own.format(46323, numberFormatId: 27).text, '10-28-26');
+    });
+
+    test('a long date of 1,000 characters is at the bound', () {
+      final NumberFormatter own = NumberFormatter(
+        locale: custom(longDateCode: '"${'x' * 1000}"'),
+      );
+      final FormattedValue result = own.format(
+        46323,
+        numberFormat: r'[$-F800]',
+      );
+      expect(result.text, 'x' * 1000);
+      expect(result.warning, isNull);
+    });
+
+    test('a long date past the output bound is General and invalid', () {
+      final NumberFormatter own = NumberFormatter(
+        locale: custom(longDateCode: '"${'x' * 1001}"'),
+      );
+      final FormattedValue result = own.format(
+        46323,
+        numberFormat: r'[$-F800]',
+      );
+      expect(result.text, '46323');
+      expect(result.warning, FormatWarning.invalidCode);
+    });
+  });
+
+  test('a system date keeps the section color', () {
+    final FormattedValue result = formatter.format(
+      46323,
+      numberFormat: r'[Red][$-F800]dddd',
+    );
+    expect(result.text, 'Wednesday, October 28, 2026');
+    expect(result.color, const FormatColor(rgb: 0xFF0000));
+  });
+
+  test('the 1904 date system', () {
+    expect(
+      NumberFormatter(date1904: true).format(0, numberFormatId: 14).text,
+      '1/1/04',
+    );
+  });
+
+  test('id 14 with the en-US code of a file shows the locale\'s date', () {
+    final DateTime date = DateTime.utc(2026, 10, 28);
+    expect(
+      formatter.format(date, numberFormatId: 14, numberFormat: 'mm-dd-yy').text,
+      '10/28/26',
+    );
+    expect(
+      de.format(date, numberFormatId: 14, numberFormat: 'mm-dd-yy').text,
+      '28.10.26',
+    );
+  });
+
+  group('invalid codes show General with numberFormatInvalid', () {
+    for (final String code in <String>['0"abc', '0' * 256, '0;0;0;0;0']) {
+      test(code.length > 20 ? 'a ${code.length}-character code' : code, () {
+        final FormattedValue result = formatter.format(
+          1234.5,
+          numberFormat: code,
+        );
+        expect(result.text, '1234.5');
+        expect(result.warning, FormatWarning.invalidCode);
+      });
+    }
+
+    // Codes Excel for Mac (tr-TR) repaired to General on opening.
+    for (final String code in <String>[
+      '0.00e+00',
+      '0.00e-00',
+      '?/9999999999',
+      '@;@',
+      r'[$-407][$-F800]dddd, mmmm dd, yyyy',
+    ]) {
+      test('$code, which Excel repairs', () {
+        final FormattedValue result = formatter.format(
+          1234.5,
+          numberFormat: code,
+        );
+        expect(result.text, '1234.5');
+        expect(result.warning, FormatWarning.invalidCode);
+      });
+    }
+
+    test('an output longer than 1,000 characters', () {
+      final FormattedValue result = formatter.format(
+        1e308,
+        numberFormat: '0${'%' * 254}',
+      );
+      expect(result.text, '1E+308');
+      expect(result.warning, FormatWarning.invalidCode);
+    });
+
+    test('a 1 MiB code is General and is not cached', () {
+      final NumberFormatter own = NumberFormatter();
+      final FormattedValue result = own.format(
+        1234.5,
+        numberFormat: '0' * (1 << 20),
+      );
+      expect(result.text, '1234.5');
+      expect(result.warning, FormatWarning.invalidCode);
+      expect(formatterCacheSize(own), 0);
+    });
+
+    test('@ repeated on long text is refused before it is built', () {
+      final String long = 'x' * 100000;
+      final Stopwatch watch = Stopwatch()..start();
+      final FormattedValue result = formatter.format(
+        long,
+        numberFormat: '@' * 255,
+      );
+      expect(watch.elapsedMilliseconds, lessThan(1000));
+      expect(result.text, long);
+      expect(result.warning, FormatWarning.invalidCode);
+    });
+
+    test('literals and a second @ count toward the bound', () {
+      final String text = 'x' * 600;
+      expect(formatter.format(text, numberFormat: '@@').warning, isNull);
+      expect(
+        formatter.format(text, numberFormat: '@"${'y' * 401}"@').warning,
+        FormatWarning.invalidCode,
+      );
+    });
+  });
+
+  group('a value shown unchanged is never over the bound', () {
+    final String long = 'x' * 1500;
+    for (final String code in <String>['General', '@', '0.00']) {
+      test('1,500 characters of text with $code', () {
+        final FormattedValue result = formatter.format(
+          long,
+          numberFormat: code,
+        );
+        expect(result.text, long);
+        expect(result.warning, isNull);
+      });
+    }
+
+    test('1,500 characters of text with a literal', () {
+      final FormattedValue result = formatter.format(
+        long,
+        numberFormat: '"Name: "@',
+      );
+      expect(result.text, 'Name: $long');
+      expect(result.warning, isNull);
+    });
+  });
+
+  group('programmer errors throw', () {
+    test('generalWidth below 1', () {
+      expect(() => formatter.format(5, generalWidth: 0), throwsArgumentError);
+    });
+
+    test('an unsupported value type', () {
+      expect(() => formatter.format(Object()), throwsArgumentError);
+    });
+  });
+
+  test('the cache stays bounded over 300,000 distinct codes', () {
+    final NumberFormatter own = NumberFormatter();
+    int largest = 0;
+    for (int i = 0; i < 300000; i++) {
+      final String shown = own.format(1, numberFormat: '0"$i"').text;
+      if (shown != '1$i') fail('code $i shows $shown');
+      final int size = formatterCacheSize(own);
+      if (size > largest) largest = size;
+    }
+    expect(largest, 1024);
+  });
+
+  test('the formatter keeps its locale and date system', () {
+    final NumberFormatter own = NumberFormatter(date1904: true);
+    expect(own.locale, FormatLocale.enUS);
+    expect(own.date1904, isTrue);
+    expect(formatter.date1904, isFalse);
+  });
+}

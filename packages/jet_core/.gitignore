@@ -1,0 +1,29 @@
+# AI-agent working files. Designs, implementation plans and task notes are
+# scaffolding for work in progress, not repository history. Durable decisions
+# go in docs/decisions/ (AGENTS.md).
+docs/superpowers/
+.superpowers/
+
+# Files and directories created by pub
+.dart_tool/
+.packages
+build/
+# A library: the lock file is not checked in.
+pubspec.lock
+
+# Directory created by dartdoc
+doc/api/
+
+# dotenv environment variables file
+.env*
+
+# Avoid committing generated Javascript files:
+*.dart.js
+*.info.json
+*.js
+*.js_
+*.js.deps
+*.js.map
+
+.flutter-plugins
+.flutter-plugins-dependencies
