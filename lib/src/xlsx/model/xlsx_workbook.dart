@@ -614,6 +614,9 @@ final class _Book implements SheetHost {
   StyleTable get styleTable => _styles?.table ?? StyleTable.empty;
 
   @override
+  SharedStrings? get sharedStrings => _strings;
+
+  @override
   List<String>? get sharedStringTexts =>
       _stringsName != null || _strings!.length > 0 ? _texts : null;
 

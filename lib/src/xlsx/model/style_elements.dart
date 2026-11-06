@@ -272,7 +272,15 @@ bool? _readFlag(XmlPullReader r, _Acc acc, String name) {
 
 /// Reads a `<font>` element. A field whose element is missing or unreadable
 /// is `null`.
-ReadStyleValue<XlsxFont> readFont(XmlPullReader r) {
+///
+/// [nameElement] is the local name of the element that holds the font name:
+/// `name` in a `<font>`, `rFont` in the `<rPr>` of a rich text run, which
+/// this function reads as well. `exact` is `false` for an `<rPr>` whose
+/// children are not in the order `CT_Font` has.
+ReadStyleValue<XlsxFont> readFont(
+  XmlPullReader r, {
+  String nameElement = 'name',
+}) {
   final _Acc acc = _Acc();
   _checkAttributes(r, acc, const <String>{});
   bool? bold, italic, strike, condense, extend, outline, shadow;
@@ -286,7 +294,11 @@ ReadStyleValue<XlsxFont> readFont(XmlPullReader r) {
   final Set<String> seen = <String>{};
   var last = -1;
   _eachChild(r, acc, () {
-    final String n = r.localName;
+    final String local = r.localName;
+    // The name element of the other spelling is not a font name here.
+    final String n = local == nameElement
+        ? 'name'
+        : (local == 'name' ? '' : local);
     final int? rank = _fontOrder[n];
     if (rank == null) return false;
     if (!seen.add(n) || rank < last) acc.inexact();

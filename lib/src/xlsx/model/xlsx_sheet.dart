@@ -59,6 +59,7 @@ import '../read/read_exception.dart';
 import '../read/styles_reader.dart';
 import '../rich_text.dart';
 import '../row_format.dart';
+import '../shared_strings.dart';
 import '../sheet_name.dart' show sheetNameKey;
 import '../sheet_protection.dart';
 import '../sheet_view.dart';
@@ -146,6 +147,10 @@ abstract interface class SheetHost {
   /// The shared strings by index, for decoding, or `null` when the workbook
   /// has none; [loadTables] must have run.
   List<String>? get sharedStringTexts;
+
+  /// The shared-string table with its kept items, or `null` when the
+  /// workbook has none; [loadTables] must have run.
+  SharedStrings? get sharedStrings;
 
   /// The style index for a date set on a cell of [style] in General: the
   /// writer's date-time format (id 22) with [withTime], else its short-date
@@ -405,9 +410,8 @@ final class XlsxSheet
   /// refuses that too), for a sheet that is not a worksheet or has no part,
   /// and for an [XlsxCell] or a link when the styles part is not a
   /// SpreadsheetML `styleSheet` and for a link on a cell a link of several
-  /// cells covers, an [UnsupportedError] for a shared formula's master (W5)
-  /// and for [XlsxRichText] (W4) values, also inside an [XlsxCell], an
-  /// [ArgumentError] for any other type, a nested [XlsxCell], a value the
+  /// cells covers, an [UnsupportedError] for a shared formula's master (W5),
+  /// an [ArgumentError] for any other type, a rich text without runs, a nested [XlsxCell], a value the
   /// encoder refuses, an invalid link (named by its field, as the writer's)
   /// or an invalid style (named by its field; an `XlsxLimitError` past the
   /// writer's limits, and for a sheet's 65,531st link), a
@@ -431,8 +435,6 @@ final class XlsxSheet
           // edit.
           if (hyperlinkAt(row, column) != plain) rethrow;
         }
-      case XlsxRichText():
-        throw UnsupportedError('XlsxRichText cells arrive in W4.');
       case XlsxCell():
         throw ArgumentError(
           'Cell ${cellRef(row, column)} on sheet "$name" nests an XlsxCell '
@@ -442,6 +444,7 @@ final class XlsxSheet
           String() ||
           num() ||
           bool() ||
+          XlsxRichText() ||
           DateTime() ||
           XlsxDate() ||
           XlsxDecimal() ||
@@ -457,6 +460,9 @@ final class XlsxSheet
     final bool sameLink =
         plain is XlsxHyperlink && hyperlinkAt(row, column) == plain;
     if (sameLink && !styled) return;
+    if (plain is XlsxRichText && !styled && richTextAt(row, column) == plain) {
+      return;
+    }
     final CellStore store = part.cells;
     switch (groupRoleAt(store, row, column)) {
       case GroupRole.arrayOrTableMember:
@@ -584,6 +590,9 @@ final class XlsxSheet
         currentFormat: _host.styleTable.formatOf(_styleText(base)),
         date1904: _host.date1904,
         dateStyle: dateStyle,
+        cellFont: stored is XlsxRichText
+            ? (styled ? target : _styleOfIndex(base?.style))?.font
+            : null,
       );
       final bool remove = stored == null && prepared.style == null;
       setStoredCell(log, store, row, column, remove ? null : prepared);
@@ -594,6 +603,45 @@ final class XlsxSheet
     }
     if (adjusted) {
       _warn(XlsxWarningCode.tableHeaderAdjusted, cellRef(row, column));
+    }
+  }
+
+  /// The runs of the rich text in the cell at [row] and [column], or `null`
+  /// when the cell is no string, a plain string, or a string whose item has
+  /// no `<r>` (phonetic runs alone do not make a rich text).
+  ///
+  /// A shared string reads from its `<si>` as kept, an inline string from
+  /// its `<is>`; the runs are parsed when asked, so [rows] and [cellAt] cost
+  /// nothing more for them. A run without an `<rPr>` has a `null` font; a
+  /// run's font is as the file has it, so a rich text set by [setCell] on a
+  /// styled cell reads back with the cell's font merged into each run. A
+  /// value of an `<rPr>` that the font types cannot hold is read as absent
+  /// and reported once, as `featureEntryInvalid` with the detail `rPr`.
+  /// The value of the cell is the runs' text joined, as [cellAt] reads it.
+  /// Loads the sheet. Throws a [RangeError] outside Excel's grid and an
+  /// [XlsxReadException] when the sheet cannot be read.
+  XlsxRichText? richTextAt(int row, int column) {
+    _checkCell(row, column);
+    final CellStore? store = _load()?.cells;
+    final RawCell? cell = store?.cellAt(row, column);
+    if (cell == null) return null;
+    void warn(String detail) {
+      if (_featureReported.add(detail)) {
+        _warn(XlsxWarningCode.featureEntryInvalid, null, detail: detail);
+      }
+    }
+
+    switch (cell.kind) {
+      case RawCellKind.sharedString:
+        final int? index = int.tryParse(cell.value ?? '');
+        if (index == null) return null;
+        _host.loadTables();
+        return _host.sharedStrings?.richTextAt(index, warn);
+      case RawCellKind.inlineString:
+        final OpaqueXml? inline = cell.inline;
+        return inline == null ? null : readRichTextOf(inline, warn);
+      default:
+        return null;
     }
   }
 

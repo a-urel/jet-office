@@ -32,7 +32,8 @@ written back, with the namespace declarations it needs.
 
 - **Edits.** `setCell` takes a `String`, `num`, `bool`, `DateTime`,
   `XlsxDate`, `XlsxDecimal`, an `XlsxFormula` without a group, or `null`.
-  Rich text throws `UnsupportedError` until W4; hyperlinks are typed since W3
+  Rich text is typed since W4 (`richTextAt`, `setCell` of an `XlsxRichText`);
+  hyperlinks are typed since W3
   (see "What W3 adds"). Editing a shared formula's master throws until W5.
   Since W2 `setCell` also takes an `XlsxCell`, layered as the writer layers it
   (see "What W2 adds").
@@ -247,7 +248,7 @@ Nothing is dropped silently.
 | A cell inside an array or data-table formula, its master included | `StateError`, permanent | Excel refuses it too | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups"), `test/xlsx/model/primitives_test.dart` |
 | A shared formula's child | leaves the group; the others stay | the child's formula stays correct | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
 | A shared formula's master | `UnsupportedError` until W5 | the children need reference shifting | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
-| `XlsxRichText` (also inside an `XlsxCell`) | `UnsupportedError` naming the milestone (W4) | not typed yet | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("unsupported value types") |
+| `XlsxRichText` (also inside an `XlsxCell`) | stored as the writer stores it (runs cleaned with `invalidCharactersRemoved`/`textTruncated`, run fonts merged over the cell's font, `ArgumentError` for no runs); equal to `richTextAt` with no style it is no edit, so a phonetic `<si>` survives; a table header cell refuses it (`StateError`) | the writer's rich text, without losing phonetic runs | `test/xlsx/model/xlsx_sheet_rich_text_test.dart` |
 | `XlsxCell(value, style: s)` | the value is set as a bare one; the style is the writer's layering, the row's style (with `customFormat="1"`) merged with `s`, appended when no cell format matches; a date takes the writer's date format only when that style sets none; an `XlsxCell` of `null` leaves an empty cell of that style, or none when it has no style or the default | the model and the writer give the same cell format | `test/xlsx/model/xlsx_sheet_style_test.dart` ("XlsxCell layers like the writer", "XlsxCell dates take the writer format rule", "an XlsxCell of null") |
 | `styleAt` | the cell's own style when the cell exists, else the row's with `customFormat="1"`; index 0 is `null` | what Excel shows there | `test/xlsx/model/xlsx_sheet_style_test.dart` ("styleAt reads cell and row styles") |
 | `setStyle` | sets exactly the style, no layering; an equal style keeps its index; a new one is appended, so no index moves and an unloaded sheet's styles stay; `null` gives index 0 and removes a cell left with nothing | appending keeps every other cell's format | `test/xlsx/model/xlsx_sheet_style_test.dart` |

@@ -53,6 +53,10 @@ final class SharedStrings {
 
   final Map<int, OpaqueXml> _raw = <int, OpaqueXml>{};
 
+  /// The runs of the kept items read so far, by index; `null` for an item
+  /// with none.
+  final Map<int, XlsxRichText?> _parsed = <int, XlsxRichText?>{};
+
   /// The distinct entries in index order: a `String` or an [XlsxRichText].
   final List<Object> _entries = <Object>[];
   final Map<String, int> _ids = <String, int>{};
@@ -86,6 +90,23 @@ final class SharedStrings {
   int _add(Object entry) {
     _entries.add(entry);
     return _entries.length - 1;
+  }
+
+  /// The runs of the entry at [index], or `null` when it is plain text, has
+  /// no `<r>` (a phonetic-only item, say) or [index] is no entry.
+  ///
+  /// An entry added as an [XlsxRichText] is returned as it is. A kept `<si>`
+  /// is parsed on first use (see [readRichTextOf]) and the result, `null`
+  /// included, is remembered, so [warn] is called while it is parsed and not
+  /// again. Nothing is parsed unless this is called.
+  XlsxRichText? richTextAt(int index, void Function(String) warn) {
+    if (index < 0 || index >= _entries.length) return null;
+    final Object entry = _entries[index];
+    if (entry is XlsxRichText) return entry;
+    final OpaqueXml? kept = _raw[index];
+    if (kept == null) return null;
+    if (_parsed.containsKey(index)) return _parsed[index];
+    return _parsed[index] = readRichTextOf(kept, warn);
   }
 
   /// The number of entries, that is, [uniqueCount].
