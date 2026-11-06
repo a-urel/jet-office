@@ -47,6 +47,7 @@ import '../header_footer.dart';
 import '../hyperlink.dart';
 import '../limits.dart';
 import '../merge_check.dart';
+import '../note.dart';
 import '../number_format.dart';
 import '../page_setup.dart';
 import '../range.dart';
@@ -80,6 +81,7 @@ import '../worksheet_parts.dart'
         writeHyperlink;
 import 'cell_store.dart';
 import 'columns.dart';
+import 'comments_part.dart';
 import 'conditional_elements.dart';
 import 'conditional_x14.dart';
 import 'defined_names.dart';
@@ -92,6 +94,7 @@ import 'style_elements.dart' show ReadStyleValue, readColor;
 import 'styles_part.dart';
 import 'table_part.dart';
 import 'validation_elements.dart';
+import 'vml_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
 
@@ -99,6 +102,7 @@ part 'xlsx_sheet_layout.dart';
 part 'xlsx_sheet_links.dart';
 part 'xlsx_sheet_merges.dart';
 part 'xlsx_sheet_names.dart';
+part 'xlsx_sheet_notes.dart';
 part 'xlsx_sheet_print.dart';
 part 'xlsx_sheet_rules.dart';
 part 'xlsx_sheet_views.dart';
@@ -200,6 +204,10 @@ CellStore? cellStoreOf(XlsxSheet sheet) => sheet._part?.cells;
 /// tests: a cell read without a problem is not remembered.
 int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
 
+/// A note of a sheet with the cell it is on: the zero-based `row` and
+/// `column`, and the `note`.
+typedef XlsxCellNote = ({int row, int column, XlsxNote note});
+
 /// One sheet of a workbook, opened or created.
 ///
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
@@ -210,6 +218,7 @@ final class XlsxSheet
         _SheetLinks,
         _SheetMerges,
         _SheetNames,
+        _SheetNotes,
         _SheetPrint,
         _SheetRules,
         _SheetViews {

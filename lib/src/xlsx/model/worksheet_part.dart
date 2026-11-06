@@ -1100,6 +1100,20 @@ final class WorksheetPart implements PartContent {
     return _x14Block;
   }
 
+  /// The `r:id` of the part's first SpreadsheetML `<legacyDrawing>`, the
+  /// relationship of the VML drawing that holds its notes' boxes, or `null`
+  /// when there is none or it names no relationship.
+  String? get legacyDrawingId {
+    for (final Object c in _children) {
+      if (c is OpaqueXml &&
+          c.namespaceUri == Ns.main &&
+          c.localName == 'legacyDrawing') {
+        return readerOf(c).getAttribute('id', namespaceUri: Ns.rel);
+      }
+    }
+    return null;
+  }
+
   /// The elements that hold conditional format rules, as written: those of
   /// the [CfBlock], those after it, and what an `<extLst>` keeps.
   Iterable<OpaqueXml> get _ruleElements sync* {
