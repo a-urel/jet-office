@@ -1,0 +1,45 @@
+name: CI
+
+# The `quality-gate` job runs the quality gate from AGENTS.md. A clean checkout
+# must pass it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# GitHub's default shell, `bash -e {0}`, has no pipefail, so `cmd | tee log`
+# reports tee's status. An explicit shell makes GitHub run
+# `bash --noprofile --norc -eo pipefail {0}` for every step.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  quality-gate:
+    name: quality gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.5
+
+      - name: Resolve dependencies
+        run: dart pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze (zero infos)
+        run: dart analyze --fatal-infos
+
+      - name: Run tests
+        run: dart test
+
+      - name: Run tests on Chrome
+        run: dart test -p chrome
