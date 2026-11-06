@@ -5,7 +5,19 @@
 /// the primitives the layout produces, and `jet_office` writes the model as a
 /// chart in an XLSX or DOCX file. The package depends on `jet_core` only.
 ///
-/// The milestone J1 tasks that follow add what is still missing.
+/// Milestone J1 holds:
+///
+/// * the chart model: `Chart`, `ChartSeries`, `ChartData`, `ChartAxis`, the
+///   title, legend and data label parts, and the kind and grouping enums;
+/// * the theme: `ChartTheme`, `ChartColor` and its scheme colours, text
+///   styles and export colours, with the Office theme as the default;
+/// * the drawing primitives (`ChartPrimitive` and its rectangle, path, arc,
+///   text and clip kinds) and the geometry they use;
+/// * the `TextMeasurer` a backend supplies, and a `FixedWidthTextMeasurer`
+///   for tests.
+///
+/// Milestone J2 adds the axis scales and the layout that turns a chart, a
+/// theme and a size into primitives.
 library;
 
 export 'src/layout/geometry.dart' show ChartPoint, ChartRect, ChartSize;

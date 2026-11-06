@@ -36,7 +36,7 @@ final class ChartData<T extends Object> {
 
   @override
   bool operator ==(Object other) {
-    return other is ChartData<T> &&
+    return other is ChartData &&
         reference == other.reference &&
         listValueEquals(values, other.values);
   }

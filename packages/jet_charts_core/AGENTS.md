@@ -4,12 +4,11 @@
 model, the theme, axis scales, layout and drawing primitives. It draws nothing,
 reads and writes no file format, and has no Flutter. Backends draw what it
 lays out; `jet_office` writes and reads the model as a chart in XLSX and DOCX.
-The design is `docs/superpowers/specs/2026-11-04-jet-charts-design.md` in the
-repository root (git-ignored working notes), and the record is the root's
+The record of the design is the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md`.
 
-At this stage the package exports nothing; the milestone J1 tasks add the
-model, theme, primitives and text measurer.
+Milestone J1 is done: the package exports the model, the theme, the drawing
+primitives and the text measurer. Scales and layout are J2.
 
 ## The packages
 
@@ -48,9 +47,10 @@ Never report work as done without running these and reading the output.
 ## The Excel oracle
 
 Excel's automatic axis is read from Excel for Mac, not LibreOffice, and only the
-owner's run counts as a result. The results are committed under `test/fixtures/owner/axis/`; the
-README there describes them, `TALIMATLAR.md` is the owner's steps, and
-`docs/axis-scaling.md` holds the question and the findings.
+owner's run counts as a result. The results are committed under
+`test/fixtures/owner/axis/`; the README there describes them, `TALIMATLAR.md`
+is the owner's steps, and `docs/axis-scaling.md` holds the question and the
+findings.
 
 - `test/axis_oracle_test.dart` (in the gate, VM only) checks each region's CSV
   against the case list; a region without a manifest entry prints `unverified`

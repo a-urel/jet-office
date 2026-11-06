@@ -58,9 +58,11 @@ final class ChartSize {
 
 /// An axis-aligned rectangle.
 ///
-/// A rectangle with a `NaN` or negative width or height is not an error: every
-/// comparison with it gives false, so it [intersects] nothing and is
-/// [contains]ed by nothing it does not fit in.
+/// A rectangle with a `NaN` or negative width or height is not an error.
+/// [intersects] is false for such a rectangle, on either side. [contains]
+/// compares plain edges and does not check the size, so a rectangle with a
+/// negative size may be contained by another, and one with a `NaN` size
+/// never is.
 final class ChartRect {
   /// Creates a rectangle whose top left corner is ([left], [top]).
   const ChartRect(this.left, this.top, this.width, this.height);

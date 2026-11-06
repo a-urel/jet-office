@@ -98,7 +98,10 @@ final class ChartTheme {
   /// colour of the palette, as a fixed colour, derived by a fixed rule: an odd
   /// `p` multiplies each channel by `0.6^((p + 1) / 2)`, an even `p` moves
   /// each channel toward 255 by `1 - 0.6^(p / 2)`. No colour repeats within
-  /// the first 24 series, and any index is valid.
+  /// the first 24 series of the office theme or of an ordinary palette (one of
+  /// distinct, mid-tone colours), and any index is valid. A palette with black
+  /// or white may repeat in the derived colours, as scaling black or moving
+  /// white toward 255 changes nothing.
   ///
   /// This is this library's own rule. Excel's real rule for series 7 and up is
   /// checked in the oracle gallery later and this rule follows it then.

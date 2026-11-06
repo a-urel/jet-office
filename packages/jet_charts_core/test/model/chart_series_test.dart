@@ -80,4 +80,16 @@ void main() {
     expect(s.axis, ChartAxisBinding.primary);
     expect(s.copyWith(), s);
   });
+
+  test('data of a narrower type equals the same data of a wider type', () {
+    final ChartData<String> narrow = ChartData<String>(
+      values: <String?>['a', null],
+    );
+    final ChartData<Object> wide = ChartData<Object>(
+      values: <Object?>['a', null],
+    );
+    expect(narrow == wide, isTrue);
+    expect(wide == narrow, isTrue);
+    expect(narrow.hashCode, wide.hashCode);
+  });
 }
