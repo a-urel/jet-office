@@ -29,6 +29,36 @@ imports. It needs a local Chrome.
 
 Never report work as done without running these and reading the output.
 
+## The Excel oracle
+
+The number formatter's oracle is Excel for Mac, not LibreOffice. The owner
+saves the CSVs of the oracle workbooks in each region and commits them under
+`test/fixtures/owner/number_format/`; the README there says how.
+
+- `test/format/oracle_test.dart` (in the gate, VM only) compares the formatter
+  with the owner's Excel CSVs, per region; a region without a manifest entry
+  prints `unverified` and passes. Excel wins: a mismatch is fixed with a test,
+  or recorded in the test's `knownDifferences` with a reason. Never edit a
+  committed CSV, `manifest.json` or `cases.json` there without the owner
+  (`docs/number-format.md`, "Excel as the oracle").
+- `tool/write_format_oracle.dart <dir>` writes the oracle workbooks from
+  `cases.json`. The workbooks come from a small XLSX writer in
+  `tool/src/format_oracle.dart`, using `archive` (a dev dependency): jet_core
+  has no writer of its own and depends on none.
+- `tool/compare_format_libreoffice.dart <dir>` compares the formatter with
+  LibreOffice's text "as shown" of the same workbooks. It reports and never
+  fails: LibreOffice is a second opinion, not Excel, so it exits 0 with
+  differences (2 only on unusable input). CI runs it in the `second-opinion`
+  job (`continue-on-error`); its doc comment explains the filter options:
+
+```bash
+dart run tool/write_format_oracle.dart build/format_oracle
+LC_ALL=C.UTF-8 soffice --headless \
+  --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,true,false,false,1' \
+  --outdir build/format_oracle build/format_oracle/*.xlsx
+dart run tool/compare_format_libreoffice.dart build/format_oracle
+```
+
 ## Hard rules
 
 - **Pure Dart, web-safe.** Nothing under `lib/` imports `dart:io`, `dart:ui`,
@@ -48,7 +78,7 @@ Never report work as done without running these and reading the output.
   write a new one that supersedes it.
 - **Excel is the oracle.** The owner's Excel for Mac output wins over any other
   producer. Never edit a committed owner file (CSV, manifest, cases) without
-  the owner. The oracle, fuzz and benchmark sections arrive with the engine.
+  the owner. The fuzz and benchmark sections arrive with the engine.
 - No `Xlsx...` name in `lib/`, except where text explains history.
 - Follow the surrounding code: explicit types, dartdoc on every public member,
   plain sentences.

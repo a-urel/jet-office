@@ -1,0 +1,172 @@
+﻿value,code,case,note
+2.68,0.00,u01-01,half-way rounding of a binary double
+1.01,0.00,u01-02,half-way rounding of a binary double
+0.29,0.00,u01-03,half-way rounding of a binary double
+-3,0,u01-04,half-way rounding of a binary double
+3,0,u01-05,half-way rounding of a binary double
+1,0,u01-06,half-way rounding of a binary double
+2,0,u01-07,half-way rounding of a binary double
+-1,0,u01-08,half-way rounding of a binary double
+0,0,u02-01,minus sign or parentheses on a value that rounds to zero
+0.00,0.00,u02-02,minus sign or parentheses on a value that rounds to zero
+(0),"#,##0;(#,##0)",u02-03,minus sign or parentheses on a value that rounds to zero
+neg 5,"[<0]""neg ""0;""other ""0",u03-01,is the minus shown after a condition?
+other 5,"[<0]""neg ""0;""other ""0",u03-02,
+50,[>100]0,u03-03,one conditional section that does not match: # or General?
+5,0;0,u03-04,two-section rule: second section shows no minus
+5,[>0]0;0,u03-05,own condition on the first section: minus in the second?
+###############################################################################################################################################################################################################################################################,[>100]0;[<-100]0,u03-06,no condition matches: # (no colour)?
+Jan,mmm,c4-01,month 1 name; de/tr abbreviation with or without a dot
+January,mmmm,c4-02,month 1 name; de/tr abbreviation with or without a dot
+Feb,mmm,c4-03,month 2 name; de/tr abbreviation with or without a dot
+February,mmmm,c4-04,month 2 name; de/tr abbreviation with or without a dot
+Mar,mmm,c4-05,month 3 name; de/tr abbreviation with or without a dot
+March,mmmm,c4-06,month 3 name; de/tr abbreviation with or without a dot
+Apr,mmm,c4-07,month 4 name; de/tr abbreviation with or without a dot
+April,mmmm,c4-08,month 4 name; de/tr abbreviation with or without a dot
+May,mmm,c4-09,month 5 name; de/tr abbreviation with or without a dot
+May,mmmm,c4-10,month 5 name; de/tr abbreviation with or without a dot
+Jun,mmm,c4-11,month 6 name; de/tr abbreviation with or without a dot
+June,mmmm,c4-12,month 6 name; de/tr abbreviation with or without a dot
+Jul,mmm,c4-13,month 7 name; de/tr abbreviation with or without a dot
+July,mmmm,c4-14,month 7 name; de/tr abbreviation with or without a dot
+Aug,mmm,c4-15,month 8 name; de/tr abbreviation with or without a dot
+August,mmmm,c4-16,month 8 name; de/tr abbreviation with or without a dot
+Sep,mmm,c4-17,month 9 name; de/tr abbreviation with or without a dot
+September,mmmm,c4-18,month 9 name; de/tr abbreviation with or without a dot
+Oct,mmm,c4-19,month 10 name; de/tr abbreviation with or without a dot
+October,mmmm,c4-20,month 10 name; de/tr abbreviation with or without a dot
+Nov,mmm,c4-21,month 11 name; de/tr abbreviation with or without a dot
+November,mmmm,c4-22,month 11 name; de/tr abbreviation with or without a dot
+Dec,mmm,c4-23,month 12 name; de/tr abbreviation with or without a dot
+December,mmmm,c4-24,month 12 name; de/tr abbreviation with or without a dot
+Sun,ddd,c4-25,weekday 0 (0 = Sunday) name
+Sunday,dddd,c4-26,weekday 0 (0 = Sunday) name
+Mon,ddd,c4-27,weekday 1 (0 = Sunday) name
+Monday,dddd,c4-28,weekday 1 (0 = Sunday) name
+Tue,ddd,c4-29,weekday 2 (0 = Sunday) name
+Tuesday,dddd,c4-30,weekday 2 (0 = Sunday) name
+Wed,ddd,c4-31,weekday 3 (0 = Sunday) name
+Wednesday,dddd,c4-32,weekday 3 (0 = Sunday) name
+Thu,ddd,c4-33,weekday 4 (0 = Sunday) name
+Thursday,dddd,c4-34,weekday 4 (0 = Sunday) name
+Fri,ddd,c4-35,weekday 5 (0 = Sunday) name
+Friday,dddd,c4-36,weekday 5 (0 = Sunday) name
+Sat,ddd,c4-37,weekday 6 (0 = Sunday) name
+Saturday,dddd,c4-38,weekday 6 (0 = Sunday) name
+M,mmmmm,c4c-01,first letter of the month
+1:30 PM,h:mm AM/PM,c5-01,the AM/PM marker of the region
+1:30 P,h:mm A/P,c5-02,the AM/PM marker of the region
+1:30 AM,h:mm AM/PM,c5-03,the AM/PM marker of the region
+1:30 A,h:mm A/P,c5-04,the AM/PM marker of the region
+12:00 AM,h:mm AM/PM,c5-05,the AM/PM marker of the region
+12:00 A,h:mm A/P,c5-06,the AM/PM marker of the region
+1:30 p,h:mm A/p,c5-07,own rule: A/P in mixed case is unchecked
+1:30 P,h:mm a/P,c5-08,own rule: a/P in mixed case is unchecked
+10/28/26,builtin 14,c6-01,"built-in id 14 without a code, in the region form"
+28-Oct-26,builtin 15,c6-02,"built-in id 15 without a code, in the region form"
+28-Oct,builtin 16,c6-03,"built-in id 16 without a code, in the region form"
+Oct-26,builtin 17,c6-04,"built-in id 17 without a code, in the region form"
+1:30 PM,builtin 18,c6-05,"built-in id 18 without a code, in the region form"
+1:30:00 PM,builtin 19,c6-06,"built-in id 19 without a code, in the region form"
+13:30,builtin 20,c6-07,"built-in id 20 without a code, in the region form"
+13:30:00,builtin 21,c6-08,"built-in id 21 without a code, in the region form"
+10/28/26 13:30,builtin 22,c6-09,"built-in id 22 without a code, in the region form"
+"($1,235)",builtin 5,c7-01,built-in id 5: currency symbol and its place
+"$1,235 ",builtin 5,c7-02,built-in id 5: currency symbol and its place
+"($1,235)",builtin 6,c7-03,built-in id 6: currency symbol and its place
+"$1,235 ",builtin 6,c7-04,built-in id 6: currency symbol and its place
+"($1,234.50)",builtin 7,c7-05,built-in id 7: currency symbol and its place
+"$1,234.50 ",builtin 7,c7-06,built-in id 7: currency symbol and its place
+"($1,234.50)",builtin 8,c7-07,built-in id 8: currency symbol and its place
+"$1,234.50 ",builtin 8,c7-08,built-in id 8: currency symbol and its place
+"(1,235)",builtin 37,c7-09,built-in id 37: currency symbol and its place
+"1,235 ",builtin 37,c7-10,built-in id 37: currency symbol and its place
+"(1,235)",builtin 38,c7-11,built-in id 38: currency symbol and its place
+"1,235 ",builtin 38,c7-12,built-in id 38: currency symbol and its place
+"(1,234.50)",builtin 39,c7-13,built-in id 39: currency symbol and its place
+"1,234.50 ",builtin 39,c7-14,built-in id 39: currency symbol and its place
+"(1,234.50)",builtin 40,c7-15,built-in id 40: currency symbol and its place
+"1,234.50 ",builtin 40,c7-16,built-in id 40: currency symbol and its place
+" (1,235)",builtin 41,c7-17,built-in id 41: currency symbol and its place; fill (*): CSV may differ from the cell
+" 1,235 ",builtin 41,c7-18,built-in id 41: currency symbol and its place; fill (*): CSV may differ from the cell
+" $(1,235)",builtin 42,c7-19,built-in id 42: currency symbol and its place; fill (*): CSV may differ from the cell
+" $1,235 ",builtin 42,c7-20,built-in id 42: currency symbol and its place; fill (*): CSV may differ from the cell
+" (1,234.50)",builtin 43,c7-21,built-in id 43: currency symbol and its place; fill (*): CSV may differ from the cell
+" 1,234.50 ",builtin 43,c7-22,built-in id 43: currency symbol and its place; fill (*): CSV may differ from the cell
+" $(1,234.50)",builtin 44,c7-23,built-in id 44: currency symbol and its place; fill (*): CSV may differ from the cell
+" $1,234.50 ",builtin 44,c7-24,built-in id 44: currency symbol and its place; fill (*): CSV may differ from the cell
+"Wednesday, October 28, 2026","[$-F800]dddd, mmmm dd, yyyy",c8-01,the region long date
+1:30:00 PM,[$-F400]h:mm:ss AM/PM,c8-02,the region long time
+46323,"[$-407][$-F800]dddd, mmmm dd, yyyy",c8b-01,long date with German names
+"Wednesday, October 28, 2026","[$USD-F800]dddd, mmmm dd, yyyy",c8-03,own rule: a currency on the system tag is dropped
+10:29,h:mm,c9-01,"minutes truncated, seconds rounded, carry"
+10:29:40,h:mm:ss,c9-02,"minutes truncated, seconds rounded, carry"
+10:29:40,[h]:mm:ss,c9-03,"minutes truncated, seconds rounded, carry"
+10:30,h:mm,c9-04,"minutes truncated, seconds rounded, carry"
+10:30:00,h:mm:ss,c9-05,"minutes truncated, seconds rounded, carry"
+10:30:00,[h]:mm:ss,c9-06,"minutes truncated, seconds rounded, carry"
+0:00,h:mm,c9-07,"minutes truncated, seconds rounded, carry"
+0:00:00,h:mm:ss,c9-08,"minutes truncated, seconds rounded, carry"
+24:00:00,[h]:mm:ss,c9-09,"minutes truncated, seconds rounded, carry"
+2026-10-29 0:00:00,yyyy-mm-dd h:mm:ss,c9b-01,carry into the next day
+2026-10-29,yyyy-mm-dd,c9-10,carry with a date and no time
+0:00:00.00,h:mm:ss.00,c9-11,carry of fractional seconds into the next day
+0:00:00.000,h:mm:ss.000,c9-12,carry of fractional seconds into the next day
+###############################################################################################################################################################################################################################################################,0;h:mm,c10b-01,"1900: explicit negative time section, # or 12:00"
+Saturday 1900-01-00,dddd yyyy-mm-dd,c11-01,Lotus leap day and weekdays
+Sunday 1900-01-01,dddd yyyy-mm-dd,c11-02,Lotus leap day and weekdays
+Tuesday 1900-02-28,dddd yyyy-mm-dd,c11-03,Lotus leap day and weekdays
+Wednesday 1900-02-29,dddd yyyy-mm-dd,c11-04,Lotus leap day and weekdays
+Thursday 1900-03-01,dddd yyyy-mm-dd,c11-05,Lotus leap day and weekdays
+12345,0.00e+00,u12-01,scientific
+1.23E+04,0.00E+00,u12-02,scientific
+0.00012345,0.00e-00,u12-03,scientific
+.50E+00,.00E+00,u12-04,scientific
+012.3E+3,000.0E+0,u12-05,scientific
+0.E+0,#.##E+0,u12-06,scientific
+ 1/3,# ?/?,u13-01,fraction padding and blanking
+3  1/7 ,# ??/??,u13-02,fraction padding and blanking
+0    ,# ?/?,u13-03,fraction padding and blanking
+2/1,?/?,u13-04,fraction padding and blanking
+2,# #/#,u13-05,fraction padding and blanking
+1 01/02,# 00/00,u13-06,fraction padding and blanking
+2,?/9999999999,u13-07,fraction padding and blanking
+0/1,# 0/0,u13-08,fraction padding and blanking
+-1 1/4,# ?/?,u13-09,fraction padding and blanking
+26,y,c15a-01,token length
+2026,yyy,c15a-02,token length
+2026,yyyyy,c15a-03,token length
+2026,e,c15a-04,token length
+26,bb,c15a-05,token length
+2026,bbbb,c15a-06,token length
+October,mmmmmm,c15a-07,token length
+28/10/2026,dd/mm/yyyy,c15b-01,literal / or the region date separator
+10:30:00.50,hh:mm:ss.00,c15b-02,decimal mark of fractional seconds
+12:00.0,h:mm.0,c15d-01,fraction after minutes
+59.4 59.45,ss.0 ss.00,c15e-01,several fraction tokens
+12:Jan,h:mmm,c15-01,own rule: three m are always the month
+00.5.5,ss.0.0,c15-02,own rule: ss.0.0
+59.5.5,ss.0.0,c15-03,own rule: ss.0.0 on 59.45 s
+TRUE,0.00,c16-01,boolean word of the region
+TRUE,General,c16-02,boolean word of the region
+TRUE,"""yes"";""no"";""zero"";@",c16-03,boolean word of the region
+FALSE,0.00,c16-04,boolean word of the region
+FALSE,General,c16-05,boolean word of the region
+FALSE,"""yes"";""no"";""zero"";@",c16-06,boolean word of the region
+Oktober Mittwoch,[$-407]mmmm dddd,c18-01,German names in any region?
+octobre,[$-40C]mmmm,c18-02,French names?
+Ekim Çarşamba,[$-41F]mmmm dddd,c18-03,Turkish names in any region?
+"€1,234.50","[$€-40C]#,##0.00",c18-04,a tag in a number section
+5,@;@,c19-01,empty or 5
+5,@,u19-01,text section on a number
+5,"""Name: ""@",u19-02,text section on a number
+-5,0;@,u19-03,text section on a number
+5,0;@,u19-04,text section on a number
+abc,0;@,u19-05,text section on a number
+0,0;-0;@,u19-06,text section on a number
+Name: abc,"""Name: ""@",u19-07,text section on a number
+1234.6,"0,.0",own-01,own rule: commas
+"1,235","#,##0,",own-02,own rule: commas
+"1234,567","0"",""000",own-03,own rule: commas
+"1,234.50","#,##0.00",own-04,own rule: commas

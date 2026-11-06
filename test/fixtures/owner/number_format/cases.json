@@ -1,0 +1,2838 @@
+{
+  "version": 1,
+  "workbooks": {
+    "main": {
+      "file": "format_oracle.xlsx",
+      "dateSystem": "1900",
+      "numFmts": {}
+    },
+    "date1904": {
+      "file": "format_oracle_1904.xlsx",
+      "dateSystem": "1904",
+      "numFmts": {
+        "4": "0.000",
+        "14": "yyyy-mm-dd"
+      }
+    },
+    "invalid": {
+      "file": "format_oracle_invalid.xlsx",
+      "dateSystem": "1900",
+      "numFmts": {}
+    }
+  },
+  "cases": [
+    {
+      "id": "u01-01",
+      "checks": [],
+      "unknown": 1,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "2.675"
+      },
+      "code": "0.00",
+      "eyeOnly": false,
+      "note": "half-way rounding of a binary double"
+    },
+    {
+      "id": "u01-02",
+      "checks": [],
+      "unknown": 1,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1.005"
+      },
+      "code": "0.00",
+      "eyeOnly": false,
+      "note": "half-way rounding of a binary double"
+    },
+    {
+      "id": "u01-03",
+      "checks": [],
+      "unknown": 1,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.285"
+      },
+      "code": "0.00",
+      "eyeOnly": false,
+      "note": "half-way rounding of a binary double"
+    },
+    {
+      "id": "u01-04",
+      "checks": [],
+      "unknown": 1,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-2.5"
+      },
+      "code": "0",
+      "eyeOnly": false,
+      "note": "half-way rounding of a binary double"
+    },
+    {
+      "id": "u01-05",
+      "checks": [],
+      "unknown": 1,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "2.5"
+      },
+      "code": "0",
+      "eyeOnly": false,
+      "note": "half-way rounding of a binary double"
+    },
+    {
+      "id": "u01-06",
+      "checks": [],
+      "unknown": 1,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5"
+      },
+      "code": "0",
+      "eyeOnly": false,
+      "note": "half-way rounding of a binary double"
+    },
+    {
+      "id": "u01-07",
+      "checks": [],
+      "unknown": 1,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1.5"
+      },
+      "code": "0",
+      "eyeOnly": false,
+      "note": "half-way rounding of a binary double"
+    },
+    {
+      "id": "u01-08",
+      "checks": [],
+      "unknown": 1,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-0.5"
+      },
+      "code": "0",
+      "eyeOnly": false,
+      "note": "half-way rounding of a binary double"
+    },
+    {
+      "id": "u02-01",
+      "checks": [],
+      "unknown": 2,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-0.4"
+      },
+      "code": "0",
+      "eyeOnly": false,
+      "note": "minus sign or parentheses on a value that rounds to zero"
+    },
+    {
+      "id": "u02-02",
+      "checks": [],
+      "unknown": 2,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-0.001"
+      },
+      "code": "0.00",
+      "eyeOnly": false,
+      "note": "minus sign or parentheses on a value that rounds to zero"
+    },
+    {
+      "id": "u02-03",
+      "checks": [],
+      "unknown": 2,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-0.4"
+      },
+      "code": "#,##0;(#,##0)",
+      "eyeOnly": false,
+      "note": "minus sign or parentheses on a value that rounds to zero"
+    },
+    {
+      "id": "u03-01",
+      "checks": [],
+      "unknown": 3,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-5"
+      },
+      "code": "[<0]\"neg \"0;\"other \"0",
+      "eyeOnly": false,
+      "note": "is the minus shown after a condition?"
+    },
+    {
+      "id": "u03-02",
+      "checks": [],
+      "unknown": 3,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "5"
+      },
+      "code": "[<0]\"neg \"0;\"other \"0",
+      "eyeOnly": false,
+      "note": ""
+    },
+    {
+      "id": "u03-03",
+      "checks": [],
+      "unknown": 3,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "50"
+      },
+      "code": "[>100]0",
+      "eyeOnly": false,
+      "note": "one conditional section that does not match: # or General?"
+    },
+    {
+      "id": "u03-04",
+      "checks": [],
+      "unknown": 3,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-5"
+      },
+      "code": "0;0",
+      "eyeOnly": false,
+      "note": "two-section rule: second section shows no minus"
+    },
+    {
+      "id": "u03-05",
+      "checks": [],
+      "unknown": 3,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-5"
+      },
+      "code": "[>0]0;0",
+      "eyeOnly": false,
+      "note": "own condition on the first section: minus in the second?"
+    },
+    {
+      "id": "u03-06",
+      "checks": [],
+      "unknown": 3,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "50"
+      },
+      "code": "[>100]0;[<-100]0",
+      "eyeOnly": false,
+      "note": "no condition matches: # (no colour)?"
+    },
+    {
+      "id": "c4-01",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46037"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 1 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-02",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46037"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 1 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-03",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46068"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 2 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-04",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46068"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 2 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-05",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46096"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 3 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-06",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46096"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 3 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-07",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46127"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 4 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-08",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46127"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 4 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-09",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46157"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 5 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-10",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46157"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 5 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-11",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46188"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 6 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-12",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46188"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 6 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-13",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46218"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 7 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-14",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46218"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 7 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-15",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46249"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 8 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-16",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46249"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 8 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-17",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46280"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 9 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-18",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46280"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 9 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-19",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46310"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 10 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-20",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46310"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 10 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-21",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46341"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 11 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-22",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46341"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 11 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-23",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46371"
+      },
+      "code": "mmm",
+      "eyeOnly": false,
+      "note": "month 12 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-24",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46371"
+      },
+      "code": "mmmm",
+      "eyeOnly": false,
+      "note": "month 12 name; de/tr abbreviation with or without a dot"
+    },
+    {
+      "id": "c4-25",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46082"
+      },
+      "code": "ddd",
+      "eyeOnly": false,
+      "note": "weekday 0 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-26",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46082"
+      },
+      "code": "dddd",
+      "eyeOnly": false,
+      "note": "weekday 0 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-27",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46083"
+      },
+      "code": "ddd",
+      "eyeOnly": false,
+      "note": "weekday 1 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-28",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46083"
+      },
+      "code": "dddd",
+      "eyeOnly": false,
+      "note": "weekday 1 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-29",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46084"
+      },
+      "code": "ddd",
+      "eyeOnly": false,
+      "note": "weekday 2 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-30",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46084"
+      },
+      "code": "dddd",
+      "eyeOnly": false,
+      "note": "weekday 2 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-31",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46085"
+      },
+      "code": "ddd",
+      "eyeOnly": false,
+      "note": "weekday 3 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-32",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46085"
+      },
+      "code": "dddd",
+      "eyeOnly": false,
+      "note": "weekday 3 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-33",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46086"
+      },
+      "code": "ddd",
+      "eyeOnly": false,
+      "note": "weekday 4 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-34",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46086"
+      },
+      "code": "dddd",
+      "eyeOnly": false,
+      "note": "weekday 4 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-35",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46087"
+      },
+      "code": "ddd",
+      "eyeOnly": false,
+      "note": "weekday 5 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-36",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46087"
+      },
+      "code": "dddd",
+      "eyeOnly": false,
+      "note": "weekday 5 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-37",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46088"
+      },
+      "code": "ddd",
+      "eyeOnly": false,
+      "note": "weekday 6 (0 = Sunday) name"
+    },
+    {
+      "id": "c4-38",
+      "checks": [
+        "C4a",
+        "C4b"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46088"
+      },
+      "code": "dddd",
+      "eyeOnly": false,
+      "note": "weekday 6 (0 = Sunday) name"
+    },
+    {
+      "id": "c4c-01",
+      "checks": [
+        "C4c"
+      ],
+      "unknown": 4,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46083"
+      },
+      "code": "mmmmm",
+      "eyeOnly": false,
+      "note": "first letter of the month"
+    },
+    {
+      "id": "c5-01",
+      "checks": [
+        "C5"
+      ],
+      "unknown": 5,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5625"
+      },
+      "code": "h:mm AM/PM",
+      "eyeOnly": false,
+      "note": "the AM/PM marker of the region"
+    },
+    {
+      "id": "c5-02",
+      "checks": [
+        "C5"
+      ],
+      "unknown": 5,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5625"
+      },
+      "code": "h:mm A/P",
+      "eyeOnly": false,
+      "note": "the AM/PM marker of the region"
+    },
+    {
+      "id": "c5-03",
+      "checks": [
+        "C5"
+      ],
+      "unknown": 5,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.0625"
+      },
+      "code": "h:mm AM/PM",
+      "eyeOnly": false,
+      "note": "the AM/PM marker of the region"
+    },
+    {
+      "id": "c5-04",
+      "checks": [
+        "C5"
+      ],
+      "unknown": 5,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.0625"
+      },
+      "code": "h:mm A/P",
+      "eyeOnly": false,
+      "note": "the AM/PM marker of the region"
+    },
+    {
+      "id": "c5-05",
+      "checks": [
+        "C5"
+      ],
+      "unknown": 5,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0"
+      },
+      "code": "h:mm AM/PM",
+      "eyeOnly": false,
+      "note": "the AM/PM marker of the region"
+    },
+    {
+      "id": "c5-06",
+      "checks": [
+        "C5"
+      ],
+      "unknown": 5,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0"
+      },
+      "code": "h:mm A/P",
+      "eyeOnly": false,
+      "note": "the AM/PM marker of the region"
+    },
+    {
+      "id": "c5-07",
+      "checks": [
+        "C5"
+      ],
+      "unknown": 5,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5625"
+      },
+      "code": "h:mm A/p",
+      "eyeOnly": false,
+      "note": "own rule: A/P in mixed case is unchecked"
+    },
+    {
+      "id": "c5-08",
+      "checks": [
+        "C5"
+      ],
+      "unknown": 5,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5625"
+      },
+      "code": "h:mm a/P",
+      "eyeOnly": false,
+      "note": "own rule: a/P in mixed case is unchecked"
+    },
+    {
+      "id": "c6-01",
+      "checks": [
+        "C6"
+      ],
+      "unknown": 6,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "builtinId": 14,
+      "eyeOnly": false,
+      "note": "built-in id 14 without a code, in the region form"
+    },
+    {
+      "id": "c6-02",
+      "checks": [
+        "C6"
+      ],
+      "unknown": 6,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "builtinId": 15,
+      "eyeOnly": false,
+      "note": "built-in id 15 without a code, in the region form"
+    },
+    {
+      "id": "c6-03",
+      "checks": [
+        "C6"
+      ],
+      "unknown": 6,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "builtinId": 16,
+      "eyeOnly": false,
+      "note": "built-in id 16 without a code, in the region form"
+    },
+    {
+      "id": "c6-04",
+      "checks": [
+        "C6"
+      ],
+      "unknown": 6,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "builtinId": 17,
+      "eyeOnly": false,
+      "note": "built-in id 17 without a code, in the region form"
+    },
+    {
+      "id": "c6-05",
+      "checks": [
+        "C6"
+      ],
+      "unknown": 6,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "builtinId": 18,
+      "eyeOnly": false,
+      "note": "built-in id 18 without a code, in the region form"
+    },
+    {
+      "id": "c6-06",
+      "checks": [
+        "C6"
+      ],
+      "unknown": 6,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "builtinId": 19,
+      "eyeOnly": false,
+      "note": "built-in id 19 without a code, in the region form"
+    },
+    {
+      "id": "c6-07",
+      "checks": [
+        "C6"
+      ],
+      "unknown": 6,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "builtinId": 20,
+      "eyeOnly": false,
+      "note": "built-in id 20 without a code, in the region form"
+    },
+    {
+      "id": "c6-08",
+      "checks": [
+        "C6"
+      ],
+      "unknown": 6,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "builtinId": 21,
+      "eyeOnly": false,
+      "note": "built-in id 21 without a code, in the region form"
+    },
+    {
+      "id": "c6-09",
+      "checks": [
+        "C6"
+      ],
+      "unknown": 6,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "builtinId": 22,
+      "eyeOnly": false,
+      "note": "built-in id 22 without a code, in the region form"
+    },
+    {
+      "id": "c7-01",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 5,
+      "eyeOnly": false,
+      "note": "built-in id 5: currency symbol and its place"
+    },
+    {
+      "id": "c7-02",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 5,
+      "eyeOnly": false,
+      "note": "built-in id 5: currency symbol and its place"
+    },
+    {
+      "id": "c7-03",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 6,
+      "eyeOnly": false,
+      "note": "built-in id 6: currency symbol and its place"
+    },
+    {
+      "id": "c7-04",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 6,
+      "eyeOnly": false,
+      "note": "built-in id 6: currency symbol and its place"
+    },
+    {
+      "id": "c7-05",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 7,
+      "eyeOnly": false,
+      "note": "built-in id 7: currency symbol and its place"
+    },
+    {
+      "id": "c7-06",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 7,
+      "eyeOnly": false,
+      "note": "built-in id 7: currency symbol and its place"
+    },
+    {
+      "id": "c7-07",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 8,
+      "eyeOnly": false,
+      "note": "built-in id 8: currency symbol and its place"
+    },
+    {
+      "id": "c7-08",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 8,
+      "eyeOnly": false,
+      "note": "built-in id 8: currency symbol and its place"
+    },
+    {
+      "id": "c7-09",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 37,
+      "eyeOnly": false,
+      "note": "built-in id 37: currency symbol and its place"
+    },
+    {
+      "id": "c7-10",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 37,
+      "eyeOnly": false,
+      "note": "built-in id 37: currency symbol and its place"
+    },
+    {
+      "id": "c7-11",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 38,
+      "eyeOnly": false,
+      "note": "built-in id 38: currency symbol and its place"
+    },
+    {
+      "id": "c7-12",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 38,
+      "eyeOnly": false,
+      "note": "built-in id 38: currency symbol and its place"
+    },
+    {
+      "id": "c7-13",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 39,
+      "eyeOnly": false,
+      "note": "built-in id 39: currency symbol and its place"
+    },
+    {
+      "id": "c7-14",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 39,
+      "eyeOnly": false,
+      "note": "built-in id 39: currency symbol and its place"
+    },
+    {
+      "id": "c7-15",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 40,
+      "eyeOnly": false,
+      "note": "built-in id 40: currency symbol and its place"
+    },
+    {
+      "id": "c7-16",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 40,
+      "eyeOnly": false,
+      "note": "built-in id 40: currency symbol and its place"
+    },
+    {
+      "id": "c7-17",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 41,
+      "eyeOnly": false,
+      "note": "built-in id 41: currency symbol and its place; fill (*): CSV may differ from the cell"
+    },
+    {
+      "id": "c7-18",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 41,
+      "eyeOnly": false,
+      "note": "built-in id 41: currency symbol and its place; fill (*): CSV may differ from the cell"
+    },
+    {
+      "id": "c7-19",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 42,
+      "eyeOnly": false,
+      "note": "built-in id 42: currency symbol and its place; fill (*): CSV may differ from the cell"
+    },
+    {
+      "id": "c7-20",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 42,
+      "eyeOnly": false,
+      "note": "built-in id 42: currency symbol and its place; fill (*): CSV may differ from the cell"
+    },
+    {
+      "id": "c7-21",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 43,
+      "eyeOnly": false,
+      "note": "built-in id 43: currency symbol and its place; fill (*): CSV may differ from the cell"
+    },
+    {
+      "id": "c7-22",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 43,
+      "eyeOnly": false,
+      "note": "built-in id 43: currency symbol and its place; fill (*): CSV may differ from the cell"
+    },
+    {
+      "id": "c7-23",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1234.5"
+      },
+      "builtinId": 44,
+      "eyeOnly": false,
+      "note": "built-in id 44: currency symbol and its place; fill (*): CSV may differ from the cell"
+    },
+    {
+      "id": "c7-24",
+      "checks": [
+        "C7"
+      ],
+      "unknown": 7,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 44,
+      "eyeOnly": false,
+      "note": "built-in id 44: currency symbol and its place; fill (*): CSV may differ from the cell"
+    },
+    {
+      "id": "c8-01",
+      "checks": [
+        "C8"
+      ],
+      "unknown": 8,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "code": "[$-F800]dddd, mmmm dd, yyyy",
+      "eyeOnly": false,
+      "note": "the region long date"
+    },
+    {
+      "id": "c8-02",
+      "checks": [
+        "C8"
+      ],
+      "unknown": 8,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.5625"
+      },
+      "code": "[$-F400]h:mm:ss AM/PM",
+      "eyeOnly": false,
+      "note": "the region long time"
+    },
+    {
+      "id": "c8b-01",
+      "checks": [
+        "C8b"
+      ],
+      "unknown": 8,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "[$-407][$-F800]dddd, mmmm dd, yyyy",
+      "eyeOnly": false,
+      "note": "long date with German names"
+    },
+    {
+      "id": "c8-03",
+      "checks": [],
+      "unknown": 8,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "[$USD-F800]dddd, mmmm dd, yyyy",
+      "eyeOnly": false,
+      "note": "own rule: a currency on the system tag is dropped"
+    },
+    {
+      "id": "c9-01",
+      "checks": [
+        "C9"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.437268518518519"
+      },
+      "code": "h:mm",
+      "eyeOnly": false,
+      "note": "minutes truncated, seconds rounded, carry"
+    },
+    {
+      "id": "c9-02",
+      "checks": [
+        "C9"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.437268518518519"
+      },
+      "code": "h:mm:ss",
+      "eyeOnly": false,
+      "note": "minutes truncated, seconds rounded, carry"
+    },
+    {
+      "id": "c9-03",
+      "checks": [
+        "C9"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.437268518518519"
+      },
+      "code": "[h]:mm:ss",
+      "eyeOnly": false,
+      "note": "minutes truncated, seconds rounded, carry"
+    },
+    {
+      "id": "c9-04",
+      "checks": [
+        "C9"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.43749537037037"
+      },
+      "code": "h:mm",
+      "eyeOnly": false,
+      "note": "minutes truncated, seconds rounded, carry"
+    },
+    {
+      "id": "c9-05",
+      "checks": [
+        "C9"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.43749537037037"
+      },
+      "code": "h:mm:ss",
+      "eyeOnly": false,
+      "note": "minutes truncated, seconds rounded, carry"
+    },
+    {
+      "id": "c9-06",
+      "checks": [
+        "C9"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.43749537037037"
+      },
+      "code": "[h]:mm:ss",
+      "eyeOnly": false,
+      "note": "minutes truncated, seconds rounded, carry"
+    },
+    {
+      "id": "c9-07",
+      "checks": [
+        "C9"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.99999999"
+      },
+      "code": "h:mm",
+      "eyeOnly": false,
+      "note": "minutes truncated, seconds rounded, carry"
+    },
+    {
+      "id": "c9-08",
+      "checks": [
+        "C9"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.99999999"
+      },
+      "code": "h:mm:ss",
+      "eyeOnly": false,
+      "note": "minutes truncated, seconds rounded, carry"
+    },
+    {
+      "id": "c9-09",
+      "checks": [
+        "C9"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.99999999"
+      },
+      "code": "[h]:mm:ss",
+      "eyeOnly": false,
+      "note": "minutes truncated, seconds rounded, carry"
+    },
+    {
+      "id": "c9b-01",
+      "checks": [
+        "C9b"
+      ],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.99999999"
+      },
+      "code": "yyyy-mm-dd h:mm:ss",
+      "eyeOnly": false,
+      "note": "carry into the next day"
+    },
+    {
+      "id": "c9-10",
+      "checks": [],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.99999999"
+      },
+      "code": "yyyy-mm-dd",
+      "eyeOnly": false,
+      "note": "carry with a date and no time"
+    },
+    {
+      "id": "c9-11",
+      "checks": [],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.99999999999"
+      },
+      "code": "h:mm:ss.00",
+      "eyeOnly": false,
+      "note": "carry of fractional seconds into the next day"
+    },
+    {
+      "id": "c9-12",
+      "checks": [],
+      "unknown": 9,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.99999999999"
+      },
+      "code": "h:mm:ss.000",
+      "eyeOnly": false,
+      "note": "carry of fractional seconds into the next day"
+    },
+    {
+      "id": "c10-01",
+      "checks": [
+        "C10"
+      ],
+      "unknown": 10,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "-0.25"
+      },
+      "code": "h:mm",
+      "eyeOnly": false,
+      "note": "1904 workbook: minus or #"
+    },
+    {
+      "id": "c10-02",
+      "checks": [
+        "C10"
+      ],
+      "unknown": 10,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "-1.5"
+      },
+      "code": "[h]:mm",
+      "eyeOnly": false,
+      "note": "1904 workbook: minus or #"
+    },
+    {
+      "id": "c10-03",
+      "checks": [
+        "C10"
+      ],
+      "unknown": 10,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "-1"
+      },
+      "code": "yyyy-mm-dd",
+      "eyeOnly": false,
+      "note": "1904 workbook: minus or #"
+    },
+    {
+      "id": "c10-04",
+      "checks": [
+        "C10"
+      ],
+      "unknown": 10,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "-0.25"
+      },
+      "code": "e h",
+      "eyeOnly": false,
+      "note": "1904 workbook: minus or #"
+    },
+    {
+      "id": "c10-05",
+      "checks": [
+        "C10"
+      ],
+      "unknown": 10,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "-0.000001"
+      },
+      "code": "h:mm:ss",
+      "eyeOnly": false,
+      "note": "1904 workbook: minus or #"
+    },
+    {
+      "id": "c10-06",
+      "checks": [
+        "C10"
+      ],
+      "unknown": 10,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "-0.25"
+      },
+      "code": "* h:mm",
+      "eyeOnly": false,
+      "note": "1904: minus before the fill or padding?"
+    },
+    {
+      "id": "c10-07",
+      "checks": [
+        "C10"
+      ],
+      "unknown": 10,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "-0.25"
+      },
+      "code": "_(h:mm",
+      "eyeOnly": false,
+      "note": "1904: minus before the fill or padding?"
+    },
+    {
+      "id": "c10b-01",
+      "checks": [
+        "C10b"
+      ],
+      "unknown": 10,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-0.5"
+      },
+      "code": "0;h:mm",
+      "eyeOnly": false,
+      "note": "1900: explicit negative time section, # or 12:00"
+    },
+    {
+      "id": "c11-01",
+      "checks": [
+        "C11"
+      ],
+      "unknown": 11,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0"
+      },
+      "code": "dddd yyyy-mm-dd",
+      "eyeOnly": false,
+      "note": "Lotus leap day and weekdays"
+    },
+    {
+      "id": "c11-02",
+      "checks": [
+        "C11"
+      ],
+      "unknown": 11,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1"
+      },
+      "code": "dddd yyyy-mm-dd",
+      "eyeOnly": false,
+      "note": "Lotus leap day and weekdays"
+    },
+    {
+      "id": "c11-03",
+      "checks": [
+        "C11"
+      ],
+      "unknown": 11,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "59"
+      },
+      "code": "dddd yyyy-mm-dd",
+      "eyeOnly": false,
+      "note": "Lotus leap day and weekdays"
+    },
+    {
+      "id": "c11-04",
+      "checks": [
+        "C11"
+      ],
+      "unknown": 11,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "60"
+      },
+      "code": "dddd yyyy-mm-dd",
+      "eyeOnly": false,
+      "note": "Lotus leap day and weekdays"
+    },
+    {
+      "id": "c11-05",
+      "checks": [
+        "C11"
+      ],
+      "unknown": 11,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "61"
+      },
+      "code": "dddd yyyy-mm-dd",
+      "eyeOnly": false,
+      "note": "Lotus leap day and weekdays"
+    },
+    {
+      "id": "c11-06",
+      "checks": [],
+      "unknown": 11,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "0"
+      },
+      "code": "dddd yyyy-mm-dd",
+      "eyeOnly": false,
+      "note": "1904: serial 0 is Friday 1904-01-01"
+    },
+    {
+      "id": "u12-01",
+      "checks": [],
+      "unknown": 12,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "12345"
+      },
+      "code": "0.00e+00",
+      "eyeOnly": false,
+      "note": "scientific"
+    },
+    {
+      "id": "u12-02",
+      "checks": [],
+      "unknown": 12,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "12345"
+      },
+      "code": "0.00E+00",
+      "eyeOnly": false,
+      "note": "scientific"
+    },
+    {
+      "id": "u12-03",
+      "checks": [],
+      "unknown": 12,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.00012345"
+      },
+      "code": "0.00e-00",
+      "eyeOnly": false,
+      "note": "scientific"
+    },
+    {
+      "id": "u12-04",
+      "checks": [],
+      "unknown": 12,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5"
+      },
+      "code": ".00E+00",
+      "eyeOnly": false,
+      "note": "scientific"
+    },
+    {
+      "id": "u12-05",
+      "checks": [],
+      "unknown": 12,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "12345"
+      },
+      "code": "000.0E+0",
+      "eyeOnly": false,
+      "note": "scientific"
+    },
+    {
+      "id": "u12-06",
+      "checks": [],
+      "unknown": 12,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0"
+      },
+      "code": "#.##E+0",
+      "eyeOnly": false,
+      "note": "scientific"
+    },
+    {
+      "id": "u13-01",
+      "checks": [],
+      "unknown": 13,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.333"
+      },
+      "code": "# ?/?",
+      "eyeOnly": false,
+      "note": "fraction padding and blanking"
+    },
+    {
+      "id": "u13-02",
+      "checks": [],
+      "unknown": 13,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "3.14159"
+      },
+      "code": "# ??/??",
+      "eyeOnly": false,
+      "note": "fraction padding and blanking"
+    },
+    {
+      "id": "u13-03",
+      "checks": [],
+      "unknown": 13,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0"
+      },
+      "code": "# ?/?",
+      "eyeOnly": false,
+      "note": "fraction padding and blanking"
+    },
+    {
+      "id": "u13-04",
+      "checks": [],
+      "unknown": 13,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "2"
+      },
+      "code": "?/?",
+      "eyeOnly": false,
+      "note": "fraction padding and blanking"
+    },
+    {
+      "id": "u13-05",
+      "checks": [],
+      "unknown": 13,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "2"
+      },
+      "code": "# #/#",
+      "eyeOnly": false,
+      "note": "fraction padding and blanking"
+    },
+    {
+      "id": "u13-06",
+      "checks": [],
+      "unknown": 13,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1.5"
+      },
+      "code": "# 00/00",
+      "eyeOnly": false,
+      "note": "fraction padding and blanking"
+    },
+    {
+      "id": "u13-07",
+      "checks": [],
+      "unknown": 13,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "2"
+      },
+      "code": "?/9999999999",
+      "eyeOnly": false,
+      "note": "fraction padding and blanking"
+    },
+    {
+      "id": "u13-08",
+      "checks": [],
+      "unknown": 13,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0"
+      },
+      "code": "# 0/0",
+      "eyeOnly": false,
+      "note": "fraction padding and blanking"
+    },
+    {
+      "id": "u13-09",
+      "checks": [],
+      "unknown": 13,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-1.25"
+      },
+      "code": "# ?/?",
+      "eyeOnly": false,
+      "note": "fraction padding and blanking"
+    },
+    {
+      "id": "u14-01",
+      "checks": [],
+      "unknown": 14,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "123456789012"
+      },
+      "code": "General",
+      "eyeOnly": true,
+      "note": "General at the default column width (eye sheet, column A)"
+    },
+    {
+      "id": "u14-02",
+      "checks": [],
+      "unknown": 14,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.333333333333333"
+      },
+      "code": "General",
+      "eyeOnly": true,
+      "note": "General at the default column width (eye sheet, column A)"
+    },
+    {
+      "id": "u14-03",
+      "checks": [],
+      "unknown": 14,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-0.333333333333333"
+      },
+      "code": "General",
+      "eyeOnly": true,
+      "note": "General at the default column width (eye sheet, column A)"
+    },
+    {
+      "id": "u14-04",
+      "checks": [],
+      "unknown": 14,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.000012345678"
+      },
+      "code": "General",
+      "eyeOnly": true,
+      "note": "General at the default column width (eye sheet, column A)"
+    },
+    {
+      "id": "u14-05",
+      "checks": [],
+      "unknown": 14,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "12345.6789012"
+      },
+      "code": "General",
+      "eyeOnly": true,
+      "note": "General at the default column width (eye sheet, column A)"
+    },
+    {
+      "id": "u14-06",
+      "checks": [],
+      "unknown": 14,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.00001"
+      },
+      "code": "General",
+      "eyeOnly": true,
+      "note": "General at the default column width (eye sheet, column A)"
+    },
+    {
+      "id": "c15a-01",
+      "checks": [
+        "C15a"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "y",
+      "eyeOnly": false,
+      "note": "token length"
+    },
+    {
+      "id": "c15a-02",
+      "checks": [
+        "C15a"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "yyy",
+      "eyeOnly": false,
+      "note": "token length"
+    },
+    {
+      "id": "c15a-03",
+      "checks": [
+        "C15a"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "yyyyy",
+      "eyeOnly": false,
+      "note": "token length"
+    },
+    {
+      "id": "c15a-04",
+      "checks": [
+        "C15a"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "e",
+      "eyeOnly": false,
+      "note": "token length"
+    },
+    {
+      "id": "c15a-05",
+      "checks": [
+        "C15a"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "bb",
+      "eyeOnly": false,
+      "note": "token length"
+    },
+    {
+      "id": "c15a-06",
+      "checks": [
+        "C15a"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "bbbb",
+      "eyeOnly": false,
+      "note": "token length"
+    },
+    {
+      "id": "c15a-07",
+      "checks": [
+        "C15a"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "mmmmmm",
+      "eyeOnly": false,
+      "note": "token length"
+    },
+    {
+      "id": "c15b-01",
+      "checks": [
+        "C15b"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.437505787"
+      },
+      "code": "dd/mm/yyyy",
+      "eyeOnly": false,
+      "note": "literal / or the region date separator"
+    },
+    {
+      "id": "c15b-02",
+      "checks": [
+        "C15b"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323.437505787"
+      },
+      "code": "hh:mm:ss.00",
+      "eyeOnly": false,
+      "note": "decimal mark of fractional seconds"
+    },
+    {
+      "id": "c15c-01",
+      "checks": [
+        "C15c"
+      ],
+      "unknown": 15,
+      "workbook": "invalid",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5"
+      },
+      "code": "h:mm:ss.0000",
+      "eyeOnly": false,
+      "note": "Excel may refuse the code or repair the file"
+    },
+    {
+      "id": "c15d-01",
+      "checks": [
+        "C15d"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5"
+      },
+      "code": "h:mm.0",
+      "eyeOnly": false,
+      "note": "fraction after minutes"
+    },
+    {
+      "id": "c15e-01",
+      "checks": [
+        "C15e"
+      ],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.000688078703704"
+      },
+      "code": "ss.0 ss.00",
+      "eyeOnly": false,
+      "note": "several fraction tokens"
+    },
+    {
+      "id": "c15-01",
+      "checks": [],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.5"
+      },
+      "code": "h:mmm",
+      "eyeOnly": false,
+      "note": "own rule: three m are always the month"
+    },
+    {
+      "id": "c15-02",
+      "checks": [],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.500005787037037"
+      },
+      "code": "ss.0.0",
+      "eyeOnly": false,
+      "note": "own rule: ss.0.0"
+    },
+    {
+      "id": "c15-03",
+      "checks": [],
+      "unknown": 15,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0.000688078703704"
+      },
+      "code": "ss.0.0",
+      "eyeOnly": false,
+      "note": "own rule: ss.0.0 on 59.45 s"
+    },
+    {
+      "id": "c16-01",
+      "checks": [
+        "C16"
+      ],
+      "unknown": 16,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "b": true
+      },
+      "code": "0.00",
+      "eyeOnly": false,
+      "note": "boolean word of the region"
+    },
+    {
+      "id": "c16-02",
+      "checks": [
+        "C16"
+      ],
+      "unknown": 16,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "b": true
+      },
+      "code": "General",
+      "eyeOnly": false,
+      "note": "boolean word of the region"
+    },
+    {
+      "id": "c16-03",
+      "checks": [
+        "C16"
+      ],
+      "unknown": 16,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "b": true
+      },
+      "code": "\"yes\";\"no\";\"zero\";@",
+      "eyeOnly": false,
+      "note": "boolean word of the region"
+    },
+    {
+      "id": "c16-04",
+      "checks": [
+        "C16"
+      ],
+      "unknown": 16,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "b": false
+      },
+      "code": "0.00",
+      "eyeOnly": false,
+      "note": "boolean word of the region"
+    },
+    {
+      "id": "c16-05",
+      "checks": [
+        "C16"
+      ],
+      "unknown": 16,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "b": false
+      },
+      "code": "General",
+      "eyeOnly": false,
+      "note": "boolean word of the region"
+    },
+    {
+      "id": "c16-06",
+      "checks": [
+        "C16"
+      ],
+      "unknown": 16,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "b": false
+      },
+      "code": "\"yes\";\"no\";\"zero\";@",
+      "eyeOnly": false,
+      "note": "boolean word of the region"
+    },
+    {
+      "id": "c17-01",
+      "checks": [
+        "C17"
+      ],
+      "unknown": 17,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "manual": "=SEQUENCE(1,2)",
+        "error": "#SPILL!"
+      },
+      "code": "General",
+      "eyeOnly": true,
+      "note": "type the formula in Excel's language; it spills into column B, which is full, so it shows the spill error"
+    },
+    {
+      "id": "c17-02",
+      "checks": [
+        "C17"
+      ],
+      "unknown": 17,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "manual": "=FILTER(1,FALSE)",
+        "error": "#CALC!"
+      },
+      "code": "General",
+      "eyeOnly": true,
+      "note": "type the formula in Excel's language; an empty FILTER shows the calc error"
+    },
+    {
+      "id": "u18-01",
+      "checks": [],
+      "unknown": 18,
+      "workbook": "invalid",
+      "dateSystem": "1900",
+      "value": {
+        "n": "5"
+      },
+      "code": "0;0;0;@;0",
+      "eyeOnly": false,
+      "note": "Excel may refuse the code or repair the file"
+    },
+    {
+      "id": "u18-02",
+      "checks": [],
+      "unknown": 18,
+      "workbook": "invalid",
+      "dateSystem": "1900",
+      "value": {
+        "n": "5"
+      },
+      "code": "[>1]0;[>2]0;[>3]0",
+      "eyeOnly": false,
+      "note": "Excel may refuse the code or repair the file"
+    },
+    {
+      "id": "u18-03",
+      "checks": [],
+      "unknown": 18,
+      "workbook": "invalid",
+      "dateSystem": "1900",
+      "value": {
+        "n": "5"
+      },
+      "code": "[>1][<5]0;0",
+      "eyeOnly": false,
+      "note": "Excel may refuse the code or repair the file"
+    },
+    {
+      "id": "c18-01",
+      "checks": [
+        "C18"
+      ],
+      "unknown": 21,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "[$-407]mmmm dddd",
+      "eyeOnly": false,
+      "note": "German names in any region?"
+    },
+    {
+      "id": "c18-02",
+      "checks": [
+        "C18"
+      ],
+      "unknown": 21,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "[$-40C]mmmm",
+      "eyeOnly": false,
+      "note": "French names?"
+    },
+    {
+      "id": "c18-03",
+      "checks": [
+        "C18"
+      ],
+      "unknown": 21,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "46323"
+      },
+      "code": "[$-41F]mmmm dddd",
+      "eyeOnly": false,
+      "note": "Turkish names in any region?"
+    },
+    {
+      "id": "c18-04",
+      "checks": [
+        "C18"
+      ],
+      "unknown": 21,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "code": "[$€-40C]#,##0.00",
+      "eyeOnly": false,
+      "note": "a tag in a number section"
+    },
+    {
+      "id": "c19-01",
+      "checks": [
+        "C19"
+      ],
+      "unknown": 19,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "5"
+      },
+      "code": "@;@",
+      "eyeOnly": false,
+      "note": "empty or 5"
+    },
+    {
+      "id": "u19-01",
+      "checks": [],
+      "unknown": 19,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "5"
+      },
+      "code": "@",
+      "eyeOnly": false,
+      "note": "text section on a number"
+    },
+    {
+      "id": "u19-02",
+      "checks": [],
+      "unknown": 19,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "5"
+      },
+      "code": "\"Name: \"@",
+      "eyeOnly": false,
+      "note": "text section on a number"
+    },
+    {
+      "id": "u19-03",
+      "checks": [],
+      "unknown": 19,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "-5"
+      },
+      "code": "0;@",
+      "eyeOnly": false,
+      "note": "text section on a number"
+    },
+    {
+      "id": "u19-04",
+      "checks": [],
+      "unknown": 19,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "5"
+      },
+      "code": "0;@",
+      "eyeOnly": false,
+      "note": "text section on a number"
+    },
+    {
+      "id": "u19-05",
+      "checks": [],
+      "unknown": 19,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "s": "abc"
+      },
+      "code": "0;@",
+      "eyeOnly": false,
+      "note": "text section on a number"
+    },
+    {
+      "id": "u19-06",
+      "checks": [],
+      "unknown": 19,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "0"
+      },
+      "code": "0;-0;@",
+      "eyeOnly": false,
+      "note": "text section on a number"
+    },
+    {
+      "id": "u19-07",
+      "checks": [],
+      "unknown": 19,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "s": "abc"
+      },
+      "code": "\"Name: \"@",
+      "eyeOnly": false,
+      "note": "text section on a number"
+    },
+    {
+      "id": "c20-01",
+      "checks": [
+        "C20"
+      ],
+      "unknown": 20,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "46323"
+      },
+      "builtinId": 14,
+      "eyeOnly": false,
+      "note": "file says id 14 is yyyy-mm-dd; 1904 serial 46323 is 2030-10-29"
+    },
+    {
+      "id": "c20-02",
+      "checks": [],
+      "unknown": 20,
+      "workbook": "date1904",
+      "dateSystem": "1904",
+      "value": {
+        "n": "1234.5"
+      },
+      "builtinId": 4,
+      "eyeOnly": false,
+      "note": "file says id 4 is 0.000"
+    },
+    {
+      "id": "own-01",
+      "checks": [],
+      "unknown": null,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234567"
+      },
+      "code": "0,.0",
+      "eyeOnly": false,
+      "note": "own rule: commas"
+    },
+    {
+      "id": "own-02",
+      "checks": [],
+      "unknown": null,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234567"
+      },
+      "code": "#,##0,",
+      "eyeOnly": false,
+      "note": "own rule: commas"
+    },
+    {
+      "id": "own-03",
+      "checks": [],
+      "unknown": null,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234567"
+      },
+      "code": "0\",\"000",
+      "eyeOnly": false,
+      "note": "own rule: commas"
+    },
+    {
+      "id": "own-04",
+      "checks": [],
+      "unknown": null,
+      "workbook": "main",
+      "dateSystem": "1900",
+      "value": {
+        "n": "1234.5"
+      },
+      "code": "#,##0.00",
+      "eyeOnly": false,
+      "note": "own rule: commas"
+    }
+  ]
+}
