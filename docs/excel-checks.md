@@ -1172,7 +1172,10 @@ Open `build/featured.xlsx` in Excel. Check:
   validations, conditional formats (Conditional Formatting > Manage Rules
   lists them all), print settings, filter and table.
 
-Result: pending.
+Result: ok, 2026-11-06 (see "Results"). The edited fixtures, `w3_generated`
+and two of the owner's own files, with no repair prompt on any. Excel hides
+the numbers of column H, so the `showValue` left out of `x14:dataBar` does no
+harm there.
 
 ## Open issues
 
@@ -1477,3 +1480,7 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: `w2_generated` | ok | No repair prompt. Opens on `Report`, green tab; title, header row, frozen rows, dates, `1.234,50`, hidden row 4, grouped row 5 and the hidden sheet as the list says. Widths read from a screenshot: 192, 112 and 129 pixels, the ratio of 24, 14 and 16. The bottom border's `medium` read from the file, not told apart on screen. |
 | 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: `w1_test.xlsx`, A1 restyled, column A widened, H1:I1 merged | ok | No repair prompt. Compared with the original; looks the same apart from the edits. |
 | 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: `excel_products.xlsx`, A1 restyled, column A widened, N1:O1 merged | ok | No repair prompt. Compared with the original; looks the same apart from the edits. This file has no named cell style beyond `Normal` and no conditional format, the owner's choice as the second file. |
+| 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: all 29 `build/model-edited/*.xlsx` | ok | No repair prompt on any; each as the W3 list says. |
+| 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `w3_generated` | ok | No repair prompt; `Report`, `Locked` and the properties as the W3 list says. Column H shows the bars only: the numbers are hidden. |
+| 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `w1_test.xlsx`, link in M1, list on N1:N5, rule on O1:O5, name `Owner_edit`, page setup | ok | No repair prompt. The additions and the file's own content as the W3 list says. |
+| 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `excel_products.xlsx`, link in M1, list on N1:N5, rule on O1:O5, name `Owner_edit`, page setup | ok | No repair prompt. The additions and the file's own content as the W3 list says. |
