@@ -338,6 +338,87 @@ void main() {
         expect(closing(part), 1);
       });
 
+      /// The local name of the last child of the cell of [part].
+      String last(DocumentPart part) => _elements(
+        XmlDocument.parse(_encode(part)),
+        Ns.w,
+        'tc',
+      ).first.childElements.last.localName;
+
+      test('one read as p and bookmarkEnd gets one when the paragraph is '
+          'removed, and undoing that restores the exception', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '<w:p/><w:bookmarkEnd w:id="1"/>',
+        );
+        expect(last(part), 'bookmarkEnd');
+        final ChangeSet removal = edits.transaction(
+          () => removeBlock(edits, cell, cellBlocksOf(cell), 0),
+        );
+        expect(cell.blocks.single, isA<DocxOpaqueBlock>());
+        expect(last(part), 'p');
+        edits.log.revertSet(removal);
+        expect(last(part), 'bookmarkEnd');
+        expect(closing(part), 1);
+      });
+
+      test('one read as p and bookmarkEnd gets one when the paragraph is '
+          'replaced, and undoing that restores the exception', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '<w:p/><w:bookmarkEnd w:id="1"/>',
+        );
+        final ChangeSet replacement = edits.transaction(
+          () => replaceBlock(
+            edits,
+            cell,
+            cellBlocksOf(cell),
+            0,
+            DocxParagraph.text('b'),
+          ),
+        );
+        expect(cell.blocks, hasLength(2));
+        expect(last(part), 'p');
+        expect(closing(part), 2);
+        edits.log.revertSet(replacement);
+        expect(last(part), 'bookmarkEnd');
+        expect(closing(part), 1);
+      });
+
+      test('a block put before the one read last closes the cell', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '<w:bookmarkEnd w:id="1"/>',
+        );
+        final ChangeSet insertion = edits.transaction(
+          () => insertBlock(
+            edits,
+            cell,
+            cellBlocksOf(cell),
+            0,
+            DocxParagraph.text('b'),
+          ),
+        );
+        expect(last(part), 'p');
+        edits.log.revertSet(insertion);
+        expect(last(part), 'bookmarkEnd');
+      });
+
+      test('a cell read empty is empty again once a block added goes', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '',
+        );
+        final ChangeSet insertion = edits.transaction(
+          () => insertBlock(
+            edits,
+            cell,
+            cellBlocksOf(cell),
+            0,
+            opaqueBlock(_capture('<w:bookmarkStart/>')),
+          ),
+        );
+        expect(closing(part), 1);
+        edits.log.revertSet(insertion);
+        expect(closing(part), 0);
+      });
+
       test('a cell emptied of its only block gets one', () {
         final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
           '<w:p><w:r><w:t>a</w:t></w:r></w:p>',

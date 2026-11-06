@@ -124,8 +124,9 @@ List<String> encodedMainDifferences(Uint8List docx) {
 }
 
 /// Reads every typed property of [doc]: of each paragraph of the body, in the
-/// cells of its tables too, and each of its runs, of the document defaults and each style, and of each
-/// level of each abstract list definition. Returns how many were set.
+/// cells of its tables too, and each of its runs, of the document defaults
+/// and each style, and of each level of each abstract list definition.
+/// Returns how many were set.
 ///
 /// A value the model cannot read throws. The styles and numbering parts are
 /// loaded by this.

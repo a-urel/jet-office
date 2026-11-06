@@ -112,17 +112,18 @@
 /// property or value the model does not understand is kept as written and
 /// reads `null`. A [DocxTable] gives its rows and cells, and a cell its
 /// blocks. What the model does not type yet, such as content controls,
-/// tracked changes, hyperlinks, drawings and fields, is kept as written in a [DocxOpaqueBlock], a [DocxOpaqueInline] or a
-/// [DocxOpaqueRunContent], which can be removed but not changed; the final
-/// section and the parts other than the body are kept as written too. Blocks
-/// and inlines are added, removed and replaced, and a run's text and the
-/// styles are set; each edit is atomic. [DocxDocument.save] returns a
-/// [DocxResult] and [DocxDocument.saveTo] streams to a sink. As for a
-/// workbook, saving keeps every part the model did not change: a body never
-/// accessed is copied from the file, and what a loaded body does not type is
-/// written back as it was. Characters XML forbids are removed from text when
-/// it is set and reported at save as a [DocxWarning]. The visible text of an
-/// opaque inline holding `mc:AlternateContent` or a text box is empty.
+/// tracked changes, hyperlinks, drawings and fields, is kept as written in a
+/// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
+/// can be removed but not changed; the final section and the parts other than
+/// the body are kept as written too. Blocks and inlines are added, removed and
+/// replaced, and a run's text and the styles are set; each edit is atomic.
+/// [DocxDocument.save] returns a [DocxResult] and [DocxDocument.saveTo] streams
+/// to a sink. As for a workbook, saving keeps every part the model did not
+/// change: a body never accessed is copied from the file, and what a loaded
+/// body does not type is written back as it was. Characters XML forbids are
+/// removed from text when it is set and reported at save as a [DocxWarning].
+/// The visible text of an opaque inline holding `mc:AlternateContent` or a text
+/// box is empty.
 ///
 /// [DocxDocument.styles] gives the document's [DocxStyles] (milestone D2):
 /// the [DocxDocumentDefaults] and each [DocxStyle] of the styles part, by

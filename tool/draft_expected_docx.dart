@@ -6,7 +6,8 @@
 ///
 /// Opens the file with `DocxDocument` and writes `<stem>.expected.txt`
 /// beside it: `docxBodyText` (each paragraph's text of the body, joined by
-/// `\n`; tables and opaque blocks are left out) and a final newline. It prints a review list, one line per block of the body:
+/// `\n`; tables and opaque blocks are left out) and a final newline. It
+/// prints a review list, one line per block of the body:
 /// `<n>  <text>` for a paragraph, with tabs and control characters shown
 /// escaped, and `<n>  [<element>: not in the text]` for any other block. The
 /// draft is the model's own answer: the owner checks every line against

@@ -251,8 +251,9 @@ final class DocxTableRow {
 /// A cell of a table row, `w:tc`.
 final class DocxTableCell {
   DocxTableCell._read(this._source, this._attributes, this._blocks)
-    : _lastRead = _blocks.lastOrNull,
-      _readUnclosed = _blocks.lastOrNull is! DocxParagraph;
+    : _readUnclosed = _blocks.lastOrNull is DocxParagraph
+          ? null
+          : List<DocxBlock>.of(_blocks);
 
   /// The cell's `w:tcPr` as read, by `tableCellPropertiesSchema`.
   final PropertyContainer _source;
@@ -266,11 +267,9 @@ final class DocxTableCell {
     _blocks,
   );
 
-  /// The last block read, or `null` for a cell read with none.
-  final DocxBlock? _lastRead;
-
-  /// Whether the cell was read without a paragraph last.
-  final bool _readUnclosed;
+  /// The blocks read, when the cell was read without a paragraph last; `null`
+  /// for a cell read with one, which needs no such copy.
+  final List<DocxBlock>? _readUnclosed;
 
   /// The cell's blocks, in order: paragraphs, tables and opaque blocks. The
   /// list cannot be modified.
@@ -525,14 +524,24 @@ List<DocxBlock> cellBlocksOf(DocxTableCell cell) => cell._blocks;
 /// Whether [cell] must be written with an empty `w:p` after its blocks: Word
 /// repairs a cell that does not end in a paragraph.
 ///
-/// A cell read without one, whose last block is still the one read, is
-/// written as read; the blocks compare by identity, so an undo restores that.
-/// The paragraph added is not in [DocxTableCell.blocks] until the file is read
-/// again.
+/// A cell read without one, whose blocks are still all the ones read, is
+/// written as read; the blocks compare by identity, so an undo restores that,
+/// and a cell read with no blocks stays empty. The paragraph added is not in
+/// [DocxTableCell.blocks] until the file is read again.
 bool cellNeedsClosingParagraph(DocxTableCell cell) {
-  final DocxBlock? last = cell._blocks.lastOrNull;
-  return last is! DocxParagraph &&
-      !(cell._readUnclosed && identical(last, cell._lastRead));
+  return cell._blocks.lastOrNull is! DocxParagraph && !_blocksAsRead(cell);
+}
+
+/// Whether [cell] was read without a closing paragraph and holds exactly the
+/// blocks it read, in order.
+bool _blocksAsRead(DocxTableCell cell) {
+  final List<DocxBlock>? read = cell._readUnclosed;
+  final List<DocxBlock> blocks = cell._blocks;
+  if (read == null || read.length != blocks.length) return false;
+  for (int i = 0; i < read.length; i++) {
+    if (!identical(read[i], blocks[i])) return false;
+  }
+  return true;
 }
 
 /// The container [block] is in, such as a document's body or a table cell, or
