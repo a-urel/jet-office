@@ -33,8 +33,8 @@ import 'styles.dart' show DocxStyleType;
 import 'table_formatting.dart';
 
 /// The most columns a table has through the API: Word's limit of 63. A
-/// `w:gridSpan` set is checked against it ([DocxTableCellProperties.gridSpan]);
-/// a file may hold more, and reads.
+/// `w:gridSpan` set is checked against it ([DocxTableCellProperties.gridSpan]),
+/// and a merge too; a file may hold more, and reads.
 const int maxTableColumns = 63;
 
 /// A property of a table, to name it for [DocxTableProperties.clear].
@@ -250,9 +250,17 @@ final class DocxTableCellProperties {
   DocxTableCellProperties._(
     PropertyContainer source,
     DocxEditSink Function() sink,
+    this._checkGridSpan,
+    this._checkContinuation,
   ) : _set = _CellSet(source, sink);
 
   final PropertySet _set;
+
+  /// Throws when a span does not fit where the cell is.
+  final void Function(int span) _checkGridSpan;
+
+  /// Throws when the cell has nothing above to continue.
+  final void Function() _checkContinuation;
 
   /// The width (`w:tcW`), or `null`.
   DocxTableWidth? get width => _set.valueOf('tcW') as DocxTableWidth?;
@@ -261,23 +269,40 @@ final class DocxTableCellProperties {
 
   /// How many grid columns the cell spans (`w:gridSpan`), or `null`.
   ///
-  /// A file may hold a span past [maxTableColumns], and it reads. Setting a
-  /// span outside 1 to [maxTableColumns] throws [RangeError]; whether it
-  /// fits the row and the grid is not checked here.
+  /// A file may hold a span past [maxTableColumns], or one that does not fit
+  /// its grid, and it reads. Setting a span outside 1 to [maxTableColumns]
+  /// throws [RangeError].
+  ///
+  /// In a row of a table with a grid, a wider span must fit: the spans of the
+  /// row with its `w:gridBefore` and `w:gridAfter` may not be more than the
+  /// columns of the grid, or [ArgumentError] is thrown. Remove the cells it
+  /// takes the place of first, or use `DocxTable.mergeCells`, which does both.
+  /// A cell in no table is not checked, and a row goes through the same check
+  /// when it goes in one (`DocxTable.insertRowAt`).
   int? get gridSpan => _set.valueOf('gridSpan') as int?;
 
   set gridSpan(int? value) {
     if (value != null) {
       RangeError.checkValueInInterval(value, 1, maxTableColumns, 'gridSpan');
+      _checkGridSpan(value);
     }
     _set.setValue('gridSpan', value);
   }
 
   /// The part the cell takes in a vertical merge (`w:vMerge`), or `null`.
+  ///
+  /// Setting [DocxVerticalMerge.continuation] on a cell of a row of a table
+  /// throws [ArgumentError] unless the row above has a cell of the same
+  /// columns; a file may hold one with nothing to continue, and it reads.
   DocxVerticalMerge? get verticalMerge =>
       _set.valueOf('vMerge') as DocxVerticalMerge?;
 
-  set verticalMerge(DocxVerticalMerge? value) => _set.setValue('vMerge', value);
+  set verticalMerge(DocxVerticalMerge? value) {
+    if (value == DocxVerticalMerge.continuation && value != verticalMerge) {
+      _checkContinuation();
+    }
+    _set.setValue('vMerge', value);
+  }
 
   /// How the content lines up between the top and the bottom (`w:vAlign`),
   /// or `null`.
@@ -324,10 +349,14 @@ DocxTableRowProperties newTableRowProperties(
 ) => DocxTableRowProperties._(source, sink);
 
 /// The cell properties over [source]; edits go to the sink [sink] gives.
+/// [checkGridSpan] throws for a span that does not fit where the cell is, and
+/// [checkContinuation] for a cell with nothing above to continue.
 DocxTableCellProperties newTableCellProperties(
   PropertyContainer source,
-  DocxEditSink Function() sink,
-) => DocxTableCellProperties._(source, sink);
+  DocxEditSink Function() sink, {
+  required void Function(int span) checkGridSpan,
+  required void Function() checkContinuation,
+}) => DocxTableCellProperties._(source, sink, checkGridSpan, checkContinuation);
 
 /// The property set behind [properties], for the writer. Not exported.
 PropertySet propertySetOfTableProperties(DocxTableProperties properties) =>

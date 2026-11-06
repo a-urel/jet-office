@@ -17,6 +17,11 @@ import '../support/styles_documents.dart';
 const String _head = '<w:document xmlns:w="${Ns.w}"><w:body>';
 const String _tail = '</w:body></w:document>';
 
+/// A grid of three columns, for a span to fit.
+const String _grid3 =
+    '<w:tblGrid><w:gridCol w:w="100"/><w:gridCol w:w="100"/>'
+    '<w:gridCol w:w="100"/></w:tblGrid>';
+
 /// A document whose body holds [body].
 DocxDocument _openBody(String body) =>
     DocxDocument.open(buildDocx(document: '$_head$body$_tail'));
@@ -432,11 +437,11 @@ void main() {
     });
 
     test('every member sets, writes first in the cell and reads back', () {
-      final DocxDocument doc = _open();
+      final DocxDocument doc = _open(grid: _grid3);
       _cell(doc).properties
         ..width = DocxTableWidth.points(50)
         ..gridSpan = 3
-        ..verticalMerge = DocxVerticalMerge.continuation
+        ..verticalMerge = DocxVerticalMerge.restart
         ..borders = DocxCellBorders(bottom: DocxBorder())
         ..shading = DocxShading(fill: DocxColor.rgb('00FF00'))
         ..textDirection = DocxTextDirection.topToBottomRightToLeft
@@ -445,14 +450,14 @@ void main() {
         _inner(doc, 'tc'),
         startsWith(
           '<w:tcPr><w:tcW w:w="1000" w:type="dxa"/><w:gridSpan w:val="3"/>'
-          '<w:vMerge/><w:tcBorders>',
+          '<w:vMerge w:val="restart"/><w:tcBorders>',
         ),
       );
       expect(_inner(doc, 'tc'), endsWith('</w:tcPr><w:p/>'));
       final DocxTableCellProperties back = _cell(_reopen(doc)).properties;
       expect(back.width, DocxTableWidth.points(50));
       expect(back.gridSpan, 3);
-      expect(back.verticalMerge, DocxVerticalMerge.continuation);
+      expect(back.verticalMerge, DocxVerticalMerge.restart);
       expect(back.borders, DocxCellBorders(bottom: DocxBorder()));
       expect(back.shading, DocxShading(fill: DocxColor.rgb('00FF00')));
       expect(back.textDirection, DocxTextDirection.topToBottomRightToLeft);
@@ -460,7 +465,7 @@ void main() {
     });
 
     test('gridSpan checks 1 to 63', () {
-      final DocxDocument doc = _open();
+      final DocxDocument doc = _open(grid: '');
       final DocxTableCellProperties p = _cell(doc).properties;
       expect(() => p.gridSpan = 0, throwsRangeError);
       expect(() => p.gridSpan = 64, throwsRangeError);
@@ -509,7 +514,7 @@ void main() {
     });
 
     test('a set is one change and undoes', () {
-      final DocxDocument doc = _open();
+      final DocxDocument doc = _open(grid: _grid3);
       final DocxTableCellProperties p = _cell(doc).properties;
       final ChangeSet set = changeLogOf(doc).transaction(() {
         p.gridSpan = 2;

@@ -271,10 +271,10 @@ void main() {
       expect(() => DocxTable(columns: 1).insertRowAt(0, row), throwsStateError);
     });
 
-    test('a row of another cell count than the grid goes in', () {
+    test('a row of fewer cells than the grid goes in', () {
       final DocxTable table = DocxTable(columns: 2);
-      table.insertRowAt(1, DocxTableRow(cells: 5));
-      expect(table.rows.last.cells, hasLength(5));
+      table.insertRowAt(1, DocxTableRow());
+      expect(table.rows.last.cells, hasLength(1));
     });
 
     test('a row in a table reports to its document until it is out', () {
