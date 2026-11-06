@@ -12,6 +12,8 @@
 /// had no decimal, date-only or formula value type.
 library;
 
+import 'package:jet_core/jet_core.dart' show FormatDecimal;
+
 import 'hyperlink.dart';
 import 'rich_text.dart';
 import 'style.dart';
@@ -89,8 +91,6 @@ final class XlsxDate {
   String toString() => 'XlsxDate($year, $month, $day)';
 }
 
-final RegExp _decimalDigits = RegExp(r'^-?\d+(\.\d+)?$');
-
 /// The largest integer a web `double` holds exactly, 2^53 - 1, as digits.
 const String _maxSafeInt = '9007199254740991';
 
@@ -106,32 +106,22 @@ const String _maxSafeInt = '9007199254740991';
 /// optionally a point followed by one or more digits. The constructor throws
 /// an [ArgumentError] for anything else (a decimal comma, an exponent, a
 /// leading plus sign, thousands separators, an empty string).
-final class XlsxDecimal {
+///
+/// [digits] is the number as written to the file. For a cell the reader
+/// returns, it is the file's number normalized to this form: a leading `+`
+/// and a trailing `.` are dropped, `.5` becomes `0.5`, a zero loses its sign
+/// (`-0` is `0`) and an exponent is applied (`1.5E3` is `1500`, with no
+/// leading zeros); without one the digits are kept as written (`1234.50` and
+/// `007` stay). [toDouble] gives `double.infinity` (or its negative) for a
+/// long number too large for a `double`, which any number read from a file
+/// can be, not only one written with an exponent (up to 400).
+///
+/// An [XlsxDecimal] is also a jet_core `FormatDecimal`, so the number format
+/// engine takes it as it is, and it equals a `FormatDecimal` of the same
+/// digits.
+final class XlsxDecimal extends FormatDecimal {
   /// Creates a decimal from [digits], for example `'12.30'`.
-  XlsxDecimal(this.digits) {
-    if (!_decimalDigits.hasMatch(digits)) {
-      throw ArgumentError.value(
-        digits,
-        'digits',
-        'Expected an optional minus sign, digits and an optional ".digits" '
-            'fraction, such as "-1234.50".',
-      );
-    }
-  }
-
-  /// The number as written to the file. For a cell the reader returns,
-  /// the file's number normalized to this form: a leading `+` and a
-  /// trailing `.` are dropped, `.5` becomes `0.5`, a zero loses its sign
-  /// (`-0` is `0`) and an exponent is applied (`1.5E3` is `1500`, with no
-  /// leading zeros); without one the digits are kept as written (`1234.50`
-  /// and `007` stay).
-  final String digits;
-
-  /// The number as a `double`, rounded to the nearest representable value:
-  /// `0.0` (or `-0.0`) when it is too small and `double.infinity` (or its
-  /// negative) when it is too large, which any long number read from a
-  /// file can be, not only one written with an exponent (up to 400).
-  double toDouble() => double.parse(digits);
+  XlsxDecimal(super.digits);
 
   /// The number as an `int`, or `null` when it is not a whole number or its
   /// magnitude exceeds 2^53 - 1 (9007199254740991).
@@ -164,13 +154,6 @@ final class XlsxDecimal {
     final int value = int.parse(magnitude);
     return negative ? -value : value;
   }
-
-  @override
-  bool operator ==(Object other) =>
-      other is XlsxDecimal && other.digits == digits;
-
-  @override
-  int get hashCode => digits.hashCode;
 
   @override
   String toString() => 'XlsxDecimal($digits)';

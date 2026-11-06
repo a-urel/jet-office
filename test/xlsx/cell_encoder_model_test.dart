@@ -1,7 +1,7 @@
+import 'package:jet_core/jet_core.dart' show FormatKind;
 import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xlsx/cell_encoder.dart';
 import 'package:jet_office/src/xlsx/date_serial.dart';
-import 'package:jet_office/src/xlsx/format/format_kind.dart';
 import 'package:jet_office/src/xlsx/number_format.dart';
 import 'package:jet_office/src/xlsx/raw_cell.dart';
 import 'package:jet_office/src/xlsx/read/styles_reader.dart';

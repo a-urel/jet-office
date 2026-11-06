@@ -5,8 +5,9 @@
 /// `style_registry.dart`.
 library;
 
+import 'package:jet_core/jet_core.dart' show FormatKind, classifyFormatCode;
+
 import '../xml/xml_escape.dart';
-import 'format/format_kind.dart';
 
 /// A number format: either one of Excel's built-in formats, identified by
 /// id, or a custom format code.

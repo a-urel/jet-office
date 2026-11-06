@@ -25,12 +25,13 @@
 /// its cells with `decodeRawCell` and tracks the formula groups.
 library;
 
+import 'package:jet_core/jet_core.dart' show FormatKind;
+
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../cell_ref.dart';
-import '../format/format_kind.dart';
 import '../limits.dart';
 import '../raw_cell.dart';
 import '../warnings.dart';

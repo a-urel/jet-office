@@ -99,17 +99,17 @@ enforces.
 
 ## Showing values
 
-`XlsxNumberFormatter` shows a cell value as Excel for Mac does, with the
+`NumberFormatter` shows a cell value as Excel for Mac does, with the
 cell's number format code: grouping, rounding, percent, scientific, fractions,
 `General`, text sections, dates and times in both date systems, and the
-`en-US`, `de-DE` and `tr-TR` regions (`XlsxFormatLocale`), compared with
+`en-US`, `de-DE` and `tr-TR` regions (`FormatLocale`), compared with
 Excel for Mac's output (the assumptions left are in
 [`docs/number-format.md`](docs/number-format.md)). It does not throw for a code it cannot read; it shows
 `General` and says so in the result's `warning`.
 
 ```dart
-final XlsxNumberFormatter formatter = XlsxNumberFormatter();
-final XlsxFormattedValue shown = formatter.format(
+final NumberFormatter formatter = NumberFormatter();
+final FormattedValue shown = formatter.format(
   XlsxDecimal('-1234.5'),
   numberFormat: '#,##0.00;(#,##0.00)',
 );
@@ -315,7 +315,7 @@ with lower bounds: time and memory follow the size of the XML.
   formulas. It refuses Strict OOXML, `.xlsb`, legacy `.xls` and encrypted
   files with an `XlsxReadException`.
 - The reader gives a cell's value and its number format code, not the text
-  Excel shows (`00123`, `28.10.2026`); `XlsxNumberFormatter` turns the two
+  Excel shows (`00123`, `28.10.2026`); `NumberFormatter` turns the two
   into that text. It ships three regions; a language tag it does not
   ship (French `[$-40C]`) shows the region's names, with a warning.
 - Uploads are untrusted: the reader stops at the `XlsxReadLimits` it is given

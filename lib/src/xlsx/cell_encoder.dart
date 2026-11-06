@@ -17,6 +17,8 @@
 /// both paths share the checks, repairs and warnings.
 library;
 
+import 'package:jet_core/jet_core.dart' show FormatKind;
+
 import '../opc/opaque_xml.dart';
 import '../xml/xml_escape.dart';
 import '../xml/xml_number.dart';
@@ -25,7 +27,6 @@ import 'cell_ref.dart';
 import 'color.dart';
 import 'date_serial.dart';
 import 'font.dart';
-import 'format/format_kind.dart';
 import 'formula_text.dart';
 import 'hyperlink.dart';
 import 'limits.dart';

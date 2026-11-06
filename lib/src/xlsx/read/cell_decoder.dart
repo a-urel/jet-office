@@ -17,11 +17,12 @@
 /// `XlsxGridReader`; written for jet_office.
 library;
 
+import 'package:jet_core/jet_core.dart' show FormatKind;
+
 import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
-import '../format/format_kind.dart';
 import '../raw_cell.dart';
 import '../values.dart';
 import '../warnings.dart';

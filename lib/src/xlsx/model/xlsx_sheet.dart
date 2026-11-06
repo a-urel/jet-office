@@ -22,6 +22,8 @@
 /// @docImport 'xlsx_workbook.dart';
 library;
 
+import 'package:jet_core/jet_core.dart' show FormatKind;
+
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
@@ -40,7 +42,6 @@ import '../conditional_format_x14.dart'
 import '../data_validation.dart';
 import '../date_serial.dart';
 import '../defined_name.dart';
-import '../format/format_kind.dart';
 import '../formula_text.dart' show quotedSheetRef;
 import '../header_footer.dart';
 import '../hyperlink.dart';

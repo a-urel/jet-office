@@ -23,6 +23,8 @@
 /// against the semantic XML comparer.
 library;
 
+import 'package:jet_core/jet_core.dart' show builtinNumberFormatCode;
+
 import '../../opc/ooxml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_number.dart';
@@ -33,7 +35,6 @@ import '../color.dart';
 import '../differential_style.dart';
 import '../fill.dart';
 import '../font.dart';
-import '../format/builtin_formats.dart';
 import '../number_format.dart';
 import '../read/styles_reader.dart' show readStyleId;
 import '../style.dart';

@@ -1,6 +1,6 @@
+import 'package:jet_core/jet_core.dart' show FormatKind;
 import 'package:jet_office/jet_office.dart' show XlsxErrorValue;
 import 'package:jet_office/src/opc/opaque_xml.dart';
-import 'package:jet_office/src/xlsx/format/format_kind.dart';
 import 'package:jet_office/src/xlsx/raw_cell.dart';
 import 'package:jet_office/src/xlsx/read/cell_decoder.dart';
 import 'package:jet_office/src/xlsx/read/styles_reader.dart';

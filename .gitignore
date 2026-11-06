@@ -43,3 +43,6 @@ example.xlsx
 
 # Word lock files, which Word leaves beside an open document.
 ~$*
+
+# Resolves jet_core to the local checkout in a worktree.
+pubspec_overrides.yaml

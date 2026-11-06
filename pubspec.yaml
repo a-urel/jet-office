@@ -13,11 +13,15 @@ environment:
   # Matches Monépro's floor, the first consumer.
   sdk: ^3.9.0
 
-# archive is the only runtime dependency (decision 0001). Its lower bound is
-# the version Monépro and jet_print already lock, so neither gets a forced bump.
-# Only lib/src/zip/archive_adapter.dart may import it.
+# archive and jet_core are the only runtime dependencies (decisions 0001 and
+# 0012). archive's lower bound is the version Monépro and jet_print already
+# lock, so neither gets a forced bump. Only lib/src/zip/archive_adapter.dart
+# may import archive. jet_core, the number format engine, is a sibling
+# repository: a worktree resolves it with a git-ignored pubspec_overrides.yaml.
 dependencies:
   archive: ^4.0.9
+  jet_core:
+    path: ../jet-core
 
 dev_dependencies:
   lints: ^6.0.0
