@@ -55,3 +55,29 @@ int listValueHash(List<Object?> list) {
   }
   return hash;
 }
+
+/// Whether [a] and [b] hold the same keys with [valueEquals] values.
+bool mapValueEquals(Map<Object?, Object?> a, Map<Object?, Object?> b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (final MapEntry<Object?, Object?> entry in a.entries) {
+    if (!b.containsKey(entry.key) || !valueEquals(entry.value, b[entry.key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// A hash code of [map] consistent with [mapValueEquals], whatever the order
+/// of its entries.
+int mapValueHash(Map<Object?, Object?> map) {
+  int hash = map.length;
+  for (final MapEntry<Object?, Object?> entry in map.entries) {
+    hash += Object.hash(entry.key, valueHash(entry.value));
+  }
+  return hash;
+}
