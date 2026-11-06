@@ -21,6 +21,10 @@
 /// [SetPropertiesChange].
 /// [addStoredRelationship] and [removeStoredRelationship] change a part's
 /// relationships, recording a [SetRelationshipChange].
+/// [addStoredPart] and [removeStoredPart] add a part to the package and take
+/// one out, recording an [AddPartChange] and a [RemovePartChange] whose undo
+/// gives back, or takes away, the part with its relationships and content
+/// type.
 /// [appendStyle] and [appendNumberFormat] give a cell format index,
 /// recording a [StylesAppendChange] when that appended to the styles part,
 /// so a transaction that fails later, or an undo, removes what it appended.
@@ -445,6 +449,134 @@ void removeStoredRelationship(
     null,
   );
   change.reapply();
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+}
+
+/// The change of adding a part: undone, the part leaves the package with its
+/// override and relationships, and the content type default this change
+/// added goes too.
+final class AddPartChange implements Change {
+  /// A change that added the part [name] to [package]; [addedDefault] is the
+  /// extension of the default content type the addition declared, `null`
+  /// when it declared none, and [defaultType] its type.
+  AddPartChange(this.package, this.name, this.addedDefault, this.defaultType);
+
+  /// The package.
+  final OpcPackage package;
+
+  /// The absolute name of the added part.
+  final String name;
+
+  /// The extension of the default this change declared, or `null`.
+  final String? addedDefault;
+
+  /// The type of that default.
+  final String? defaultType;
+
+  DetachedPart? _detached;
+
+  @override
+  void revert() {
+    _detached = package.detachPart(name);
+    final String? extension = addedDefault;
+    if (extension != null) package.removeDefault(extension);
+  }
+
+  @override
+  void reapply() {
+    final String? extension = addedDefault;
+    if (extension != null) package.ensureDefault(extension, defaultType!);
+    package.restorePart(_detached!);
+    _detached = null;
+  }
+}
+
+/// The change of removing a part: undone, the part comes back with its
+/// override and relationships.
+final class RemovePartChange implements Change {
+  /// A change that removed [detached] from [package].
+  RemovePartChange(this.package, this.detached);
+
+  /// The package.
+  final OpcPackage package;
+
+  /// What [OpcPackage.detachPart] took out.
+  final DetachedPart detached;
+
+  @override
+  void revert() => package.restorePart(detached);
+
+  @override
+  void reapply() => package.detachPart(detached.name);
+}
+
+/// Adds a part as [OpcPackage.addPart] does, records the change in [log] and
+/// returns the part's name.
+///
+/// Must run inside `log.transaction`. Throws as [OpcPackage.addPart] does,
+/// with nothing changed; if recording throws, the part is taken out again
+/// before the error leaves. Undoing the change removes the part and the
+/// default content type it declared; redoing it gives the same name.
+String addStoredPart(
+  ChangeLog log,
+  OpcPackage package,
+  String preferredName,
+  String contentType,
+  PartContent content, {
+  bool byExtension = false,
+}) {
+  final String last = preferredName.substring(
+    preferredName.lastIndexOf(RegExp(r'[/\\]')) + 1,
+  );
+  final int dot = last.lastIndexOf('.');
+  final String extension = dot < 0 ? '' : last.substring(dot + 1);
+  final bool declare = byExtension && extension.isNotEmpty;
+  final bool addedDefault =
+      declare && package.ensureDefault(extension, contentType);
+  final String name;
+  try {
+    name = package.addPart(
+      preferredName,
+      contentType,
+      content,
+      byExtension: byExtension,
+    );
+  } catch (_) {
+    if (addedDefault) package.removeDefault(extension);
+    rethrow;
+  }
+  final AddPartChange change = AddPartChange(
+    package,
+    name,
+    addedDefault ? extension : null,
+    addedDefault ? contentType : null,
+  );
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+  return name;
+}
+
+/// Takes the part [name] out of the package ([OpcPackage.detachPart]) and
+/// records the change in [log].
+///
+/// Relationships that point at the part stay; the caller removes them, as
+/// separate changes. Must run inside `log.transaction`. Throws
+/// [ArgumentError] when there is no such part; if recording throws, the part
+/// is put back before the error leaves.
+void removeStoredPart(ChangeLog log, OpcPackage package, String name) {
+  final RemovePartChange change = RemovePartChange(
+    package,
+    package.detachPart(name),
+  );
   try {
     log.record(change);
   } catch (_) {
