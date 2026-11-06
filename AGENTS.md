@@ -9,7 +9,8 @@ R10 in `docs/xlsx-writer.md`), `0006` (ZIP bytes may differ by platform),
 `0008` (a number format engine that shows values as Excel for Mac does) and
 `0009` (phase 3: a workbook model that opens, generates, edits and saves
 without loss; supersedes part of `0002`) and `0010` (phase 4: a DOCX document
-model, on the same fidelity standard) and `0012` (the number format engine
+model, on the same fidelity standard), `0011` (a new document's parts are
+this library's own, with Word's values) and `0012` (the number format engine
 lives in `jet_core`; supersedes `0001`'s one runtime dependency and `0008`'s
 location and names) before any design change.
 

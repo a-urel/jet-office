@@ -1,26 +1,13 @@
 /// Word's built-in styles: the catalog a document draws on when a style is
 /// added on demand.
 ///
-/// Not ported from Quds; written for jet_office. The definitions of the
-/// styles that a new document holds are taken at run time from
-/// [blankStyles], so the blank document and the catalog cannot disagree.
-/// The others (`NoSpacing`, `Strong`, `Emphasis`, `TableGrid`, `Hyperlink`,
-/// `Header`, `Footer` and the linked `HeaderChar` and `FooterChar`) are
-/// constants transcribed from `test/fixtures/owner/docx/builtins.docx`,
-/// saved by Microsoft Word for Mac 16.114 with the personal information
-/// removed. Removed from them: the revision identifiers (`w:rsid`). The
-/// file was saved on a Turkish system, so its style ids and the names of
-/// its linked character styles were Turkish (`stBilgi`, `Üst Bilgi Char`);
-/// they are written as Word's en-US ones (`Header`, `Header Char`), the
-/// same way as in `blank_document.dart`. The `w:name` of a built-in style
-/// is English in every locale, so those are the file's own.
-///
-/// Whether Word's style XML may ship in an Apache-2.0 package is an open
-/// question for the owner (`NOTICE`).
+/// Not ported from Quds; written for jet_office. The definitions are in
+/// `default_styles.dart`, so the blank document and the catalog cannot
+/// disagree. The `w:name` of a built-in style is English in every locale.
 library;
 
 import '../opc/ooxml.dart' show Ns;
-import 'blank_document.dart' show blankStyles;
+import 'default_styles.dart';
 import 'model/styles.dart' show DocxStyleType;
 
 /// A style that Word itself defines, by its id and name in a document
@@ -172,148 +159,15 @@ String builtInStyleXml(String englishId) {
 /// The ids of the styles [builtInStyleXml] holds a definition of.
 Iterable<String> get builtInStyleIds => _catalog.keys;
 
-/// The styles of the catalog that a new document holds, which are taken from
-/// [blankStyles].
-final RegExp _styleElement = RegExp(
-  r'<w:style [^>]*w:styleId="([^"]+)">.*?</w:style>',
-  dotAll: true,
-);
-
 /// [element] with the `w` namespace declared on it.
 String _declared(String element) =>
     element.replaceFirst('<w:style ', '<w:style xmlns:w="${Ns.w}" ');
 
-/// Every definition by id: those of [blankStyles] (parsed once, here) and
-/// the constants below.
-final Map<String, String> _catalog = () {
-  final Map<String, String> catalog = <String, String>{};
-  const Set<String> blankIds = <String>{
-    'Normal',
-    'DefaultParagraphFont',
-    'TableNormal',
-    'NoList',
-    'Title',
-    'TitleChar',
-    'Subtitle',
-    'SubtitleChar',
-    'Quote',
-    'QuoteChar',
-    'IntenseQuote',
-    'IntenseQuoteChar',
-    'ListParagraph',
-    'IntenseEmphasis',
-    'IntenseReference',
-    'Heading1',
-    'Heading2',
-    'Heading3',
-    'Heading4',
-    'Heading5',
-    'Heading6',
-    'Heading7',
-    'Heading8',
-    'Heading9',
-    'Heading1Char',
-    'Heading2Char',
-    'Heading3Char',
-    'Heading4Char',
-    'Heading5Char',
-    'Heading6Char',
-    'Heading7Char',
-    'Heading8Char',
-    'Heading9Char',
-  };
-  for (final RegExpMatch m in _styleElement.allMatches(blankStyles)) {
-    final String id = m.group(1)!;
-    if (blankIds.contains(id)) catalog[id] = _declared(m.group(0)!);
-  }
-  for (final String element in <String>[
-    _noSpacing,
-    _strong,
-    _emphasis,
-    _tableGrid,
-    _hyperlink,
-    _header,
-    _headerChar,
-    _footer,
-    _footerChar,
-  ]) {
-    final String id = _styleElement.firstMatch(element)!.group(1)!;
-    catalog[id] = _declared(element);
-  }
-  return catalog;
-}();
-
-const String _noSpacing =
-    r'<w:style w:type="paragraph" w:styleId="NoSpacing">'
-    r'<w:name w:val="No Spacing"/><w:uiPriority w:val="1"/><w:qFormat/>'
-    r'<w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/>'
-    r'</w:pPr></w:style>';
-
-const String _strong =
-    r'<w:style w:type="character" w:styleId="Strong">'
-    r'<w:name w:val="Strong"/><w:basedOn w:val="DefaultParagraphFont"/>'
-    r'<w:uiPriority w:val="22"/><w:qFormat/><w:rPr><w:b/><w:bCs/>'
-    r'</w:rPr></w:style>';
-
-const String _emphasis =
-    r'<w:style w:type="character" w:styleId="Emphasis">'
-    r'<w:name w:val="Emphasis"/>'
-    r'<w:basedOn w:val="DefaultParagraphFont"/>'
-    r'<w:uiPriority w:val="20"/><w:qFormat/><w:rPr><w:i/><w:iCs/>'
-    r'</w:rPr></w:style>';
-
-const String _tableGrid =
-    r'<w:style w:type="table" w:styleId="TableGrid">'
-    r'<w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/>'
-    r'<w:uiPriority w:val="39"/><w:pPr>'
-    r'<w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
-    r'<w:tblPr><w:tblBorders>'
-    r'<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
-    r'<w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
-    r'<w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
-    r'<w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
-    r'<w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
-    r'<w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
-    r'</w:tblBorders></w:tblPr></w:style>';
-
-const String _hyperlink =
-    r'<w:style w:type="character" w:styleId="Hyperlink">'
-    r'<w:name w:val="Hyperlink"/>'
-    r'<w:basedOn w:val="DefaultParagraphFont"/>'
-    r'<w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr>'
-    r'<w:color w:val="467886" w:themeColor="hyperlink"/>'
-    r'<w:u w:val="single"/></w:rPr></w:style>';
-
-const String _header =
-    r'<w:style w:type="paragraph" w:styleId="Header">'
-    r'<w:name w:val="header"/><w:basedOn w:val="Normal"/>'
-    r'<w:link w:val="HeaderChar"/><w:uiPriority w:val="99"/>'
-    r'<w:unhideWhenUsed/><w:pPr><w:tabs>'
-    r'<w:tab w:val="center" w:pos="4536"/>'
-    r'<w:tab w:val="right" w:pos="9072"/></w:tabs>'
-    r'<w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
-    r'</w:style>';
-
-const String _headerChar =
-    r'<w:style w:type="character" w:customStyle="1" '
-    r'w:styleId="HeaderChar">'
-    r'<w:name w:val="Header Char"/>'
-    r'<w:basedOn w:val="DefaultParagraphFont"/><w:link w:val="Header"/>'
-    r'<w:uiPriority w:val="99"/></w:style>';
-
-const String _footer =
-    r'<w:style w:type="paragraph" w:styleId="Footer">'
-    r'<w:name w:val="footer"/><w:basedOn w:val="Normal"/>'
-    r'<w:link w:val="FooterChar"/><w:uiPriority w:val="99"/>'
-    r'<w:unhideWhenUsed/><w:pPr><w:tabs>'
-    r'<w:tab w:val="center" w:pos="4536"/>'
-    r'<w:tab w:val="right" w:pos="9072"/></w:tabs>'
-    r'<w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
-    r'</w:style>';
-
-const String _footerChar =
-    r'<w:style w:type="character" w:customStyle="1" '
-    r'w:styleId="FooterChar">'
-    r'<w:name w:val="Footer Char"/>'
-    r'<w:basedOn w:val="DefaultParagraphFont"/><w:link w:val="Footer"/>'
-    r'<w:uiPriority w:val="99"/></w:style>';
+/// Every definition by id.
+final Map<String, String> _catalog = <String, String>{
+  for (final MapEntry<String, String> style in <MapEntry<String, String>>[
+    ...blankStyleDefinitions.entries,
+    ...catalogStyleDefinitions.entries,
+  ])
+    style.key: _declared(style.value),
+};

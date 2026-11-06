@@ -146,9 +146,9 @@ style catalog and the list definitions:
 - once confirmed, it reads its confirmed text; a draft prints `pending`
   and must still match what the model reads.
 
-The files now: `blank.docx` (Word's blank document, also the model of
-`DocxDocument()`), `features.docx` (a heading, a bullet list, a table, a
-header, a footer and a comment), `long.docx` (15 pages of fictional
+The files now: `blank.docx` (Word's blank document, also the source of the
+values of `DocxDocument()`), `features.docx` (a heading, a bullet list, a
+table, a header, a footer and a comment), `long.docx` (15 pages of fictional
 Turkish text with a table of contents, two tables and lists) and
 `builtins.docx` (below), all saved by Word for Mac 16.114 or 16.114.1 in
 Turkish. Save each file as Word writes it and commit it unmodified. Word

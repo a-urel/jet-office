@@ -203,6 +203,22 @@ For `d2_lists`, `d2_styles` and one edited owner file: change one word, save
 in Word, close and reopen. No repair prompt, the edit is there, and the
 lists and styles are as before.
 
+## Own parts (decision 0011)
+
+A new document's theme, styles, font table and settings are now written by
+this library, so what a new document writes is checked again. The owner's
+round trips and the edits keep the owner's own parts, but `styles.ensure`
+and the list helpers add the rewritten definitions. Write the documents with
+the commands at the top of this page and open:
+
+- `d1_blank`: no repair prompt, Aptos at 12 pt (Home shows `Aptos (Body)`),
+  the gallery offers Normal, Heading 1, Title, Subtitle, Strong, Emphasis and
+  the other styles as before; Design > Colors shows the theme's colours.
+- `d2_run_formatting`, `d2_styles` and `d2_lists`: as under D2.
+- `build/edited-docx-owner/blank.docx` and `features.docx`: as under D2,
+  "Edited owner files".
+- Save `d1_blank` in Word, close and reopen: no repair prompt.
+
 ## Results
 
 One row per file or check. `Result` is `ok`, `sorun` (a problem) or `not
@@ -231,3 +247,10 @@ its recovery log.
 | 2026-11-06 | Word for Mac 16.114.4 | `build/edited-docx-owner/builtins.docx` | ok |  |
 | 2026-11-06 | Word for Mac 16.114.4 | Save in Word | ok | `d1_blank`, `d1_text_rules`, `d2_lists`, `d2_styles`, round-tripped and edited `features.docx`. |
 | 2026-11-06 | Word for Mac 16.114.4 | Expected texts | ok | `features`, `builtins` and `long` compared with Word; `blank` has one empty paragraph. `confirmedBy` set. |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/fixtures/d1_blank.docx` | ok | Own parts (decision 0011): Aptos at 12 pt, gallery as before. |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/fixtures/d2_run_formatting.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/fixtures/d2_styles.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/fixtures/d2_lists.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/edited-docx-owner/blank.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/edited-docx-owner/features.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | Save in Word | ok | Own parts (decision 0011): `d1_blank` saved, closed and reopened. |

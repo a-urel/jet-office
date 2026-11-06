@@ -1,8 +1,10 @@
 // A new document against the owner's `blank.docx`, saved by Word for Mac
-// 16.114.1 on a Turkish system (spec 4.5): its styles, theme, font table,
-// settings and web settings are the file's with the identifiers and the
-// locale removed, and nothing of the file's document properties is written.
-// VM only: it reads the fixture from disk.
+// 16.114.1 on a Turkish system (spec 4.5, decision 0011): jet_office writes
+// its own parts, and the values in them are the file's with the identifiers
+// and the locale removed: every style, the document defaults, the theme's
+// colours and fonts, the font table and the compatibility settings. Nothing
+// of the file's document properties is written. VM only: it reads the
+// fixture from disk.
 @TestOn('vm')
 library;
 
@@ -13,8 +15,6 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
-
-import '../../tool/src/part_compare.dart';
 
 const String _fixture = 'test/fixtures/owner/docx/blank.docx';
 
@@ -90,21 +90,113 @@ void main() {
     created = _parts(DocxDocument().save().bytes);
   });
 
-  test('styles, theme, fontTable and settings equal blank.docx after '
-      'removing ids and locale', () {
-    for (final String name in <String>[
-      'word/styles.xml',
-      'word/theme/theme1.xml',
-      'word/fontTable.xml',
-      'word/settings.xml',
-      'word/webSettings.xml',
+  /// The text of the part [name] of [parts], for the file [cleaned].
+  String text(Map<String, Uint8List> parts, String name) =>
+      utf8.decode(parts[name]!);
+
+  /// The first element [tag] of [xml], with its children.
+  String element(String xml, String tag) =>
+      RegExp('<$tag[ >].*?</$tag>', dotAll: true).firstMatch(xml)!.group(0)!;
+
+  test('every style and the document defaults have the values of '
+      'blank.docx', () {
+    final String file = utf8.decode(_cleaned(blank['word/styles.xml']!));
+    final String mine = text(created, 'word/styles.xml');
+    expect(element(mine, 'w:docDefaults'), element(file, 'w:docDefaults'));
+
+    Map<String, String> styles(String xml) => <String, String>{
+      for (final RegExpMatch m in RegExp(
+        r'<w:style [^>]*w:styleId="([^"]+)">.*?</w:style>',
+        dotAll: true,
+      ).allMatches(xml))
+        m.group(1)!: m.group(0)!,
+    };
+    expect(styles(mine), styles(file));
+  });
+
+  test('the latent styles it names have the priority of blank.docx', () {
+    final String file = utf8.decode(_cleaned(blank['word/styles.xml']!));
+    final String mine = text(created, 'word/styles.xml');
+
+    Map<String, ({String? priority, bool quick, bool hidden})> latent(
+      String xml,
+    ) => <String, ({String? priority, bool quick, bool hidden})>{
+      for (final RegExpMatch m in RegExp(
+        r'<w:lsdException [^>]*/>',
+      ).allMatches(xml))
+        RegExp(r'w:name="([^"]+)"').firstMatch(m.group(0)!)!.group(1)!: (
+          priority: RegExp(
+            r'w:uiPriority="(\d+)"',
+          ).firstMatch(m.group(0)!)?.group(1),
+          quick: m.group(0)!.contains('w:qFormat="1"'),
+          hidden: m.group(0)!.contains('w:semiHidden="1"'),
+        ),
+    };
+    final Map<String, ({String? priority, bool quick, bool hidden})> word =
+        latent(file);
+    final Map<String, ({String? priority, bool quick, bool hidden})> own =
+        latent(mine);
+    expect(own, isNotEmpty);
+    own.forEach((String name, value) {
+      expect(word[name]?.priority, value.priority, reason: name);
+      expect(word[name]?.quick, value.quick, reason: name);
+    });
+    // Every style Word offers in the gallery is offered here too.
+    for (final String name in word.keys.where((n) => word[n]!.quick)) {
+      expect(own, contains(name));
+    }
+  });
+
+  test('the theme has the colours and the fonts of blank.docx', () {
+    final String file = text(blank, 'word/theme/theme1.xml');
+    final String mine = text(created, 'word/theme/theme1.xml');
+    String colours(String xml) => element(
+      xml,
+      'a:clrScheme',
+    ).replaceFirst(RegExp(r'<a:clrScheme [^>]*>'), '');
+    expect(colours(mine), colours(file));
+
+    List<String?> latin(String xml) => <String?>[
+      for (final RegExpMatch m in RegExp(
+        r'<a:latin typeface="([^"]*)"',
+      ).allMatches(xml))
+        m.group(1),
+    ];
+    expect(latin(mine), latin(file));
+  });
+
+  test('the font table and the settings have the values of blank.docx', () {
+    String fonts(String xml) =>
+        RegExp(r'<w:font .*</w:font>', dotAll: true).firstMatch(xml)!.group(0)!;
+    expect(
+      fonts(text(created, 'word/fontTable.xml')),
+      fonts(text(blank, 'word/fontTable.xml')),
+    );
+
+    final String file = text(blank, 'word/settings.xml');
+    final String mine = text(created, 'word/settings.xml');
+    expect(element(mine, 'w:compat'), element(file, 'w:compat'));
+    for (final String setting in <String>[
+      'w:zoom',
+      'w:defaultTabStop',
+      'w:hyphenationZone',
+      'w:characterSpacingControl',
+      'w:clrSchemeMapping',
     ]) {
-      expect(blank, contains(name));
+      String of(String xml) =>
+          RegExp('<$setting [^>]*/>').firstMatch(xml)!.group(0)!;
+      expect(of(mine), of(file), reason: setting);
+    }
+    for (final String setting in <String>[
+      'w:optimizeForBrowser',
+      'w:allowPNG',
+    ]) {
       expect(
-        compareXmlParts('/$name', _cleaned(blank[name]!), created[name]!),
-        isEmpty,
-        reason: name,
+        text(created, 'word/webSettings.xml'),
+        contains('<$setting/>'),
+        reason: setting,
       );
+      expect(text(blank, 'word/webSettings.xml'), contains('<$setting/>'));
     }
   });
 
