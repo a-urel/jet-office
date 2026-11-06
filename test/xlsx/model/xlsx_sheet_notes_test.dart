@@ -621,6 +621,76 @@ void main() {
       expect(again.noteAt(0, 1), XlsxNote.plain('b', author: 'A'));
     });
 
+    test('a child of the comment list with a ref takes no cell', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(
+            '<other ref="A1" authorId="0"/>${_comment('A1', '<t>real</t>')}',
+          ),
+          vml: '$_vmlHead${_vmlShape(0, 0)}</xml>',
+        ),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      expect(sheet.noteAt(0, 0), XlsxNote.plain('real', author: 'A'));
+      expect(sheet.notes, hasLength(1));
+      sheet.setNote(0, 0, XlsxNote.plain('new', author: 'A'));
+      final String comments = readXlsx(book.save().bytes)['xl/comments1.xml']!;
+      expect(comments, contains('<other ref="A1" authorId="0"/>'));
+      expect(comments, contains('<t>new</t>'));
+      expect(comments, isNot(contains('real')));
+    });
+
+    test('a sheet in a subfolder gets relationships that resolve', () {
+      final Map<String, Uint8List> parts = readXlsxBytes(
+        buildWorkbook(<String, String>{
+          'S': '<worksheet xmlns="$mainNs"><sheetData/></worksheet>',
+        }),
+      );
+      String moved(String name) => utf8
+          .decode(parts[name]!)
+          .replaceAll('worksheets/sheet1.xml', 'worksheets/sub/sheet1.xml');
+      parts['xl/worksheets/sub/sheet1.xml'] = parts.remove(
+        'xl/worksheets/sheet1.xml',
+      )!;
+      for (final String name in <String>[
+        '[Content_Types].xml',
+        'xl/_rels/workbook.xml.rels',
+      ]) {
+        parts[name] = Uint8List.fromList(utf8.encode(moved(name)));
+      }
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        buildZip(<String, List<int>>{...parts}),
+      );
+      final XlsxNote note = XlsxNote.plain('n', author: 'A', visible: true);
+      book.sheets.single.setNote(0, 0, note);
+      final Uint8List saved = book.save().bytes;
+      final String rels = readXlsx(
+        saved,
+      )['xl/worksheets/sub/_rels/sheet1.xml.rels']!;
+      expect(rels, contains('Target="../../comments1.xml"'));
+      expect(rels, contains('Target="../../drawings/vmlDrawing1.vml"'));
+      final XlsxWorkbook again = XlsxWorkbook.open(saved);
+      expect(again.sheets.single.noteAt(0, 0), note);
+      expect(again.warnings, isEmpty);
+    });
+
+    test('an empty VML root keeps what surrounds it', () {
+      const String source =
+          '<?xml version="1.0"?><!-- keep -->'
+          '<xml xmlns:v="urn:schemas-microsoft-com:vml"/><!-- after -->';
+      final XlsxWorkbook book = XlsxWorkbook.open(_package(vml: source));
+      final ChangeSet set = changeLogOf(book).transaction(
+        () => book.sheets.single.setNote(0, 0, XlsxNote.plain('n')),
+      );
+      final Uint8List saved = book.save().bytes;
+      final String vml = _vml(saved);
+      expect(vml, startsWith('<?xml version="1.0"?><!-- keep --><xml '));
+      expect(vml, endsWith('</v:shape></xml><!-- after -->'));
+      expect(XlsxWorkbook.open(saved).sheets.single.notes, hasLength(1));
+      changeLogOf(book).revertSet(set);
+      expect(_vml(book.save().bytes), source);
+    });
+
     test('a child of the comment list that is no comment is kept', () {
       final XlsxWorkbook book = XlsxWorkbook.open(
         _package(

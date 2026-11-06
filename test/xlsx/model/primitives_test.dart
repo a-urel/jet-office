@@ -22,6 +22,30 @@ RawCell _f(RawFormula f, [String? v]) =>
     RawCell(kind: RawCellKind.number, value: v, formula: f);
 
 void main() {
+  test('relationshipTarget gives the path from the source to the part', () {
+    expect(
+      relationshipTarget('/xl/worksheets/sheet1.xml', '/xl/comments1.xml'),
+      '../comments1.xml',
+    );
+    expect(
+      relationshipTarget(
+        '/xl/worksheets/sheet1.xml',
+        '/xl/drawings/vmlDrawing1.vml',
+      ),
+      '../drawings/vmlDrawing1.vml',
+    );
+    expect(
+      relationshipTarget('/xl/worksheets/sub/sheet1.xml', '/xl/comments1.xml'),
+      '../../comments1.xml',
+    );
+    expect(
+      relationshipTarget('/xl/worksheets/sheet1.xml', '/xl/worksheets/a.xml'),
+      'a.xml',
+    );
+    expect(relationshipTarget('/sheet1.xml', '/xl/a.xml'), 'xl/a.xml');
+    expect(relationshipTarget('/other/s.xml', '/xl/a.xml'), '../xl/a.xml');
+  });
+
   group('setStoredCell', () {
     test('records old and new; revert restores', () {
       final CellStore store = CellStore()..put(0, 0, _num('1'));

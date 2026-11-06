@@ -460,13 +460,6 @@ mixin _SheetNotes {
         : int.parse(match[1]!);
   }
 
-  /// The target of a relationship of the sheet to the part [name] (with a
-  /// leading `/`): the writer's when the parts lie where it puts them.
-  String _targetOf(String name) =>
-      _partName!.startsWith('/xl/worksheets/') && name.startsWith('/xl/')
-      ? '..${name.substring('/xl'.length)}'
-      : name;
-
   /// Adds a comments part and the sheet's relationship to it.
   CommentsPart _addComments(_NotesRead read) {
     final ChangeLog log = _host.log;
@@ -484,7 +477,7 @@ mixin _SheetNotes {
       package,
       _partName!,
       type: RelType.comments,
-      target: _targetOf(added),
+      target: relationshipTarget(_partName, added),
     );
     _setParts(read, (
       commentsName: added.substring(1),
@@ -515,7 +508,7 @@ mixin _SheetNotes {
       package,
       _partName!,
       type: RelType.vmlDrawing,
-      target: _targetOf(added),
+      target: relationshipTarget(_partName, added),
     );
     final OpaqueXml element = renderElements((XmlWriter w) {
       w.empty('legacyDrawing', <String, String>{'r:id': id});

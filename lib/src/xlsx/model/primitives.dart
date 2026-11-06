@@ -20,7 +20,8 @@
 /// [setProperties] replaces the document properties parts, recording a
 /// [SetPropertiesChange].
 /// [addStoredRelationship] and [removeStoredRelationship] change a part's
-/// relationships, recording a [SetRelationshipChange].
+/// relationships, recording a [SetRelationshipChange];
+/// [relationshipTarget] gives the target of a new one.
 /// [addStoredPart] and [removeStoredPart] add a part to the package and take
 /// one out, recording an [AddPartChange] and a [RemovePartChange] whose undo
 /// gives back, or takes away, the part with its relationships and content
@@ -456,6 +457,26 @@ void removeStoredRelationship(
     change.revert();
     rethrow;
   }
+}
+
+/// The target of a relationship of the part [source] to the part [part],
+/// both absolute names: the path from the folder of [source], as the writer
+/// writes it (`../comments1.xml` from `/xl/worksheets/sheet1.xml`).
+String relationshipTarget(String source, String part) {
+  final List<String> from = source.split('/')
+    ..removeLast()
+    ..removeAt(0);
+  final List<String> to = part.split('/')..removeAt(0);
+  int shared = 0;
+  while (shared < from.length &&
+      shared < to.length - 1 &&
+      from[shared] == to[shared]) {
+    shared++;
+  }
+  return <String>[
+    for (int i = shared; i < from.length; i++) '..',
+    ...to.skip(shared),
+  ].join('/');
 }
 
 /// The change of adding a part: undone, the part leaves the package with its

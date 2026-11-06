@@ -338,7 +338,8 @@ void _readAuthors(XmlPullReader r, List<String> authors, void Function() room) {
   }
 }
 
-/// The typed [CommentEntry] of the `<comment>` [source].
+/// The typed [CommentEntry] of the `<comment>` [source]. Another child of
+/// the list sits on no cell, whatever its attributes say.
 CommentEntry _entry(
   OpaqueXml source,
   List<String> authors,
@@ -346,7 +347,11 @@ CommentEntry _entry(
   WarnFn warn,
 ) {
   final XmlPullReader r = readerOf(source);
-  final ({int row, int column})? cell = _cell(r.getAttribute('ref'));
+  final bool isComment =
+      source.localName == 'comment' && source.namespaceUri == Ns.main;
+  final ({int row, int column})? cell = isComment
+      ? _cell(r.getAttribute('ref'))
+      : null;
   int? row;
   int? column;
   if (cell == null ||

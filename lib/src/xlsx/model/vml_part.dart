@@ -170,6 +170,7 @@ final class VmlPart implements PartContent {
   VmlPart._(
     this.frame,
     this.shapes,
+    this._rootStart,
     this._rootOpen,
     this._rootName,
     this._namespaces,
@@ -216,6 +217,9 @@ final class VmlPart implements PartContent {
   /// something (a `<v:rect>`, a `<v:group>`), so the part outlives its last
   /// shape.
   final bool holdsOther;
+
+  /// Where the root's start tag starts; what comes before it never changes.
+  final int _rootStart;
 
   /// The root's start tag, as a tag that opens it.
   final String _rootOpen;
@@ -275,9 +279,9 @@ final class VmlPart implements PartContent {
     VmlFrame next = frame;
     if (next.selfClosed) {
       next = next._copy(
-        head: '$_rootOpen${next.head.substring(next.rootEnd)}',
-        tail: '</$_rootName>',
-        rootEnd: _rootOpen.length,
+        head: '${next.head.substring(0, _rootStart)}$_rootOpen',
+        tail: '</$_rootName>${next.head.substring(next.rootEnd)}',
+        rootEnd: _rootStart + _rootOpen.length,
         selfClosed: false,
       );
     }
@@ -586,6 +590,7 @@ VmlPart _read(String source) {
       hasNoteType: hasNoteType,
     ),
     shapes,
+    rootStart,
     selfClosed ? '${rootTag.substring(0, rootTag.length - 2)}>' : rootTag,
     rootName,
     namespaces,
