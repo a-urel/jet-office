@@ -241,3 +241,111 @@ const List<String> stylesOrder = <String>[
   'latentStyles',
   'style',
 ];
+
+/// The children of a table's `w:tblPr` (`CT_TblPr`, §17.4.60), in order: the
+/// `CT_TblPrBase` sequence, then `tblPrChange`.
+const List<String> tblPrOrder = <String>[
+  'tblStyle',
+  'tblpPr',
+  'tblOverlap',
+  'bidiVisual',
+  'tblStyleRowBandSize',
+  'tblStyleColBandSize',
+  'tblW',
+  'jc',
+  'tblCellSpacing',
+  'tblInd',
+  'tblBorders',
+  'shd',
+  'tblLayout',
+  'tblCellMar',
+  'tblLook',
+  'tblCaption',
+  'tblDescription',
+  'tblPrChange',
+];
+
+/// The children of a row's `w:trPr` (`CT_TrPr`, §17.4.82), in order. In the
+/// schema `CT_TrPrBase` is a choice, so any order validates; this list is
+/// the order Word writes, followed by the revision children `ins`, `del`
+/// and `trPrChange`.
+const List<String> trPrOrder = <String>[
+  'cnfStyle',
+  'divId',
+  'gridBefore',
+  'gridAfter',
+  'wBefore',
+  'wAfter',
+  'cantSplit',
+  'trHeight',
+  'tblHeader',
+  'tblCellSpacing',
+  'jc',
+  'hidden',
+  'ins',
+  'del',
+  'trPrChange',
+];
+
+/// The children of a cell's `w:tcPr` (`CT_TcPr`, §17.4.70), in order: the
+/// `CT_TcPrBase` sequence, then the revision children.
+const List<String> tcPrOrder = <String>[
+  'cnfStyle',
+  'tcW',
+  'gridSpan',
+  'hMerge',
+  'vMerge',
+  'tcBorders',
+  'shd',
+  'noWrap',
+  'tcMar',
+  'textDirection',
+  'tcFitText',
+  'vAlign',
+  'hideMark',
+  'headers',
+  'cellIns',
+  'cellDel',
+  'cellMerge',
+  'tcPrChange',
+];
+
+/// The children of a table's `w:tblBorders` (`CT_TblBorders`, §17.4.38), in
+/// order. `start` and `end` are the newer names of `left` and `right`; a
+/// file holds one or the other.
+const List<String> tblBordersOrder = <String>[
+  'top',
+  'left',
+  'start',
+  'bottom',
+  'right',
+  'end',
+  'insideH',
+  'insideV',
+];
+
+/// The children of a cell's `w:tcBorders` (`CT_TcBorders`, §17.4.66), in
+/// order: `tblBordersOrder` then the two diagonals.
+const List<String> tcBordersOrder = <String>[
+  'top',
+  'left',
+  'start',
+  'bottom',
+  'right',
+  'end',
+  'insideH',
+  'insideV',
+  'tl2br',
+  'tr2bl',
+];
+
+/// The children of a table's `w:tblCellMar` (`CT_TblCellMar`, §17.4.43), in
+/// order.
+const List<String> tblCellMarOrder = <String>[
+  'top',
+  'left',
+  'start',
+  'bottom',
+  'right',
+  'end',
+];

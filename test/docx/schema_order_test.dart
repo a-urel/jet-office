@@ -95,11 +95,57 @@ void main() {
     expect(stylesOrder, <String>['docDefaults', 'latentStyles', 'style']);
   });
 
+  test('tblPrOrder matches the transitional schema', () {
+    expect(tblPrOrder, <String>[
+      'tblStyle', 'tblpPr', 'tblOverlap', 'bidiVisual', //
+      'tblStyleRowBandSize', 'tblStyleColBandSize', 'tblW', 'jc',
+      'tblCellSpacing', 'tblInd', 'tblBorders', 'shd', 'tblLayout',
+      'tblCellMar', 'tblLook', 'tblCaption', 'tblDescription', 'tblPrChange',
+    ]);
+  });
+
+  test('trPrOrder matches the transitional schema', () {
+    expect(trPrOrder, <String>[
+      'cnfStyle', 'divId', 'gridBefore', 'gridAfter', 'wBefore', 'wAfter', //
+      'cantSplit', 'trHeight', 'tblHeader', 'tblCellSpacing', 'jc', 'hidden',
+      'ins', 'del', 'trPrChange',
+    ]);
+  });
+
+  test('tcPrOrder matches the transitional schema', () {
+    expect(tcPrOrder, <String>[
+      'cnfStyle', 'tcW', 'gridSpan', 'hMerge', 'vMerge', 'tcBorders', //
+      'shd', 'noWrap', 'tcMar', 'textDirection', 'tcFitText', 'vAlign',
+      'hideMark', 'headers', 'cellIns', 'cellDel', 'cellMerge', 'tcPrChange',
+    ]);
+  });
+
+  test('tblBordersOrder matches the transitional schema', () {
+    expect(tblBordersOrder, <String>[
+      'top', 'left', 'start', 'bottom', 'right', 'end', 'insideH', //
+      'insideV',
+    ]);
+  });
+
+  test('tcBordersOrder matches the transitional schema', () {
+    expect(tcBordersOrder, <String>[
+      'top', 'left', 'start', 'bottom', 'right', 'end', 'insideH', //
+      'insideV', 'tl2br', 'tr2bl',
+    ]);
+  });
+
+  test('tblCellMarOrder matches the transitional schema', () {
+    expect(tblCellMarOrder, <String>[
+      'top', 'left', 'start', 'bottom', 'right', 'end', //
+    ]);
+  });
+
   test('no list names an element twice', () {
     for (final List<String> order in <List<String>>[
       pPrGeneralOrder, styleOrder, docDefaultsOrder, lvlOrder, //
       abstractNumOrder, numOrder, lvlOverrideOrder, numPrOrder, pBdrOrder,
-      numberingOrder, stylesOrder,
+      numberingOrder, stylesOrder, tblPrOrder, trPrOrder, tcPrOrder,
+      tblBordersOrder, tcBordersOrder, tblCellMarOrder,
     ]) {
       expect(order.toSet(), hasLength(order.length));
     }
