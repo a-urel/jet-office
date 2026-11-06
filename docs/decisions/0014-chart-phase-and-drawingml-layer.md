@@ -21,9 +21,10 @@ axes and colours. The design is in git-ignored working notes; this record
 keeps what must outlive them.
 
 Status today: no chart code exists in `jet_office`. `packages/jet_charts_core`
-holds the model, theme, primitives and text measurer, and no scale or layout. `jet_office` has no drawing layer. A chart in
-an opened file is a part this library keeps and does not read, and a chart is
-a picture in a DOCX until the work below is done (`0010`).
+holds the model, theme, primitives and text measurer, and no scale or layout.
+`jet_office` has no drawing layer. A chart in an opened file is a part this
+library keeps and does not read, and a chart is a picture in a DOCX until the
+work below is done (`0010`).
 
 ## Decision
 

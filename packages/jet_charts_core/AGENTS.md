@@ -7,8 +7,9 @@ lays out; `jet_office` writes and reads the model as a chart in XLSX and DOCX.
 The record of the design is the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md`.
 
-Milestone J1 is done, except that the axis oracle's owner run is still open: the package exports the model, the theme, the drawing
-primitives and the text measurer. Scales and layout are J2.
+Milestone J1 is done, except that the axis oracle's owner run is still open:
+the package exports the model, the theme, the drawing primitives and the text
+measurer. Scales and layout are J2.
 
 ## The packages
 
