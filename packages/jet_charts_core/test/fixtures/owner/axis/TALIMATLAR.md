@@ -49,7 +49,7 @@ Komutların hepsi deponun kök klasöründen çalışır.
    yukarıdan üçüncü grafik `d01-h600-f10`, beşincisi `d01-h300-f18`; `d08` sayfasında
    beşincisi `d08-h300-f18`. Her birinde değer ekseninin en üstteki etiketi `max`
    sütunuyla, iki komşu etiket arasındaki fark `major` sütunuyla aynı olmalı
-   (sütunlar: `case,height,font,min,max,major`; `2.5E+6`, 2.500.000 demektir).
+   (sütunlar: `case,height,font,min,max,major`; `7.7E+6`, 7.700.000 demektir).
 
    Biri uymuyorsa dur, sonraki adımlara geçme ve bana hangi grafikte ne gördüğünü
    yaz. Dosyayı kaydetmeden kapat.

@@ -10,7 +10,7 @@
 /// * the chart model: `Chart`, `ChartSeries`, `ChartData`, `ChartAxis`, the
 ///   title, legend and data label parts, and the kind and grouping enums;
 /// * the theme: `ChartTheme`, `ChartColor` and its scheme colours, text
-///   styles and export colours, with the Office theme as the default;
+///   styles and export colours, with the Office theme as a built-in;
 /// * the drawing primitives (`ChartPrimitive` and its rectangle, path, arc,
 ///   text and clip kinds) and the geometry they use;
 /// * the `TextMeasurer` a backend supplies, and a `FixedWidthTextMeasurer`

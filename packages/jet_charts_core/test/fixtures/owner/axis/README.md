@@ -73,7 +73,7 @@ case,height,font,min,max,major
   `major unit`.
 
 Numbers use `.` whatever the region and may be in exponent form (`1.0E-7`,
-`6.0E+9`), as AppleScript writes them; it keeps about 13 significant digits. A
+`9.1E+9`), as AppleScript writes them; it keeps about 13 significant digits. A
 BOM and CR line ends are accepted. Rows are matched to cases by `case`, never by
 position. A chart Excel could not answer for has no row: the script names it at
 the end and exits 1, and the check reports the case as missing.

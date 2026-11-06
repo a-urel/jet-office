@@ -17,12 +17,11 @@ axis and no legend, and Syncfusion is the closest to Excel but commercial,
 with a free licence that has revenue, headcount and funding limits, and is not
 open source. The owner chose to build a chart family of our own, so that a
 chart on a screen and the same chart exported to a file show the same data,
-axes and colours. The design is
-`docs/superpowers/specs/2026-11-04-jet-charts-design.md`, git-ignored working
-notes; this record keeps what must outlive them.
+axes and colours. The design is in git-ignored working notes; this record
+keeps what must outlive them.
 
 Status today: no chart code exists in `jet_office`. `packages/jet_charts_core`
-is set up and exports nothing. `jet_office` has no drawing layer. A chart in
+holds the model, theme, primitives and text measurer, and no scale or layout. `jet_office` has no drawing layer. A chart in
 an opened file is a part this library keeps and does not read, and a chart is
 a picture in a DOCX until the work below is done (`0010`).
 
@@ -86,8 +85,8 @@ reads charts with it.**
   Excel come back simpler, and that is not accepted.
 - **The dependency arrives with C1.** `0012` foresaw that `jet_office`'s
   runtime dependencies would grow by `jet_charts_core`. This record is the
-  decision it asked for. `pubspec.yaml` and `test/architecture/dependencies_test.dart`
-  of `jet_office` change when C1 lands, not now: today the list stays
+  decision it asked for. `pubspec.yaml` and
+  `test/architecture/dependencies_test.dart` of `jet_office` change when C1 lands, not now: today the list stays
   `archive` and `jet_core`.
 
 ## Consequences

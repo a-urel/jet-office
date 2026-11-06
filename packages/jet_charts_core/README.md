@@ -27,7 +27,7 @@ root) records why. The packages share one repository, a pub workspace (decision
 ## Status
 
 Milestone J1 is done. The package exports the chart model, the theme (with the
-Office theme as its default), the drawing primitives with their geometry, and
+Office theme built in), the drawing primitives with their geometry, and
 the text measurer interface with a fixed-width one for tests.
 
 Nothing draws yet: axis scales and layout are J2. The first Excel axis oracle
@@ -45,3 +45,5 @@ dependencies:
 ```
 
 See `AGENTS.md` for the rules of the package.
+
+The package is licensed under the MIT licence.

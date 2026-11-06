@@ -1,8 +1,9 @@
 // Tests the axis oracle's case list, workbook writer, CSV checks and analysis
 // (tool/src/axis_oracle.dart).
 //
-// Every row of a CSV here is hand-made to exercise the checks: none is a value
-// Excel gave. They read no files, so they run on the web as well as the VM.
+// Every row of a CSV here is hand-made to exercise the checks. The rows are
+// not evidence of what Excel gives, even where one looks like a plausible
+// answer. They read no files, so they run on the web as well as the VM.
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -160,17 +161,17 @@ void main() {
         _withRow(
           _goodLines(),
           'd01-h150-f10',
-          'd01-h150-f10,150,10,0.0,3.5E-7,5.0E-8',
+          'd01-h150-f10,150,10,0.0,4.3E-7,6.1E-8',
         ).join('\n'),
       );
       expect(csv.problems, isEmpty);
-      expect(csv.rows.first.max, 3.5e-7);
+      expect(csv.rows.first.max, 4.3e-7);
       expect(
         _problems(
           _withRow(
             _goodLines(),
             'd01-h150-f10',
-            'd01-h150-f10,150,10,1.0E+9,6.0E+9,1.0E+9',
+            'd01-h150-f10,150,10,1.3E+9,9.1E+9,1.3E+9',
           ),
         ),
         isEmpty,

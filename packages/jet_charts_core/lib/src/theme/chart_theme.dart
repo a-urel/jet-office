@@ -42,7 +42,8 @@ final class ChartTheme {
   /// 2026-11-06 (dark 1 `000000`, light 1 `FFFFFF`, dark 2 `0E2841`, light 2
   /// `E8E8E8`). Its [exportColors] is [ChartExportColors.fileTheme].
   ///
-  /// Unconfirmed, recalled and still to be measured against Excel: the font
+  /// Unconfirmed and still to be measured against Excel (`docs/excel-checks.md`
+  /// gives each value's source): the font
   /// family `Aptos Narrow` (the theme file names Aptos), the sizes (9 pt for
   /// axis labels, legend and data labels, 14 pt for the title), the text
   /// colour `595959`, the grid and axis line colour `D9D9D9`, the background
@@ -77,15 +78,16 @@ final class ChartTheme {
   final ChartColor background;
 
   /// The gap between the bars or columns of a category, as a percentage of a
-  /// bar's width. Excel's default is unconfirmed; 219 is recalled.
+  /// bar's width. Excel's default is unconfirmed; see
+  /// `docs/excel-checks.md` for 219.
   final double gapWidthPercent;
 
   /// The width of a line series, in points. Excel's default is unconfirmed;
-  /// 2.25 is recalled.
+  /// see `docs/excel-checks.md` for 2.25.
   final double lineWidth;
 
-  /// The size of a marker, in points. Excel's default is unconfirmed; 5 is
-  /// recalled.
+  /// The size of a marker, in points. Excel's default is unconfirmed; see
+  /// `docs/excel-checks.md` for 5.
   final double markerSize;
 
   /// How the theme's colours are exported to a file.
@@ -97,11 +99,11 @@ final class ChartTheme {
   /// slots included. A later pass `p` (`index ~/ palette.length`) gives each
   /// colour of the palette, as a fixed colour, derived by a fixed rule: an odd
   /// `p` multiplies each channel by `0.6^((p + 1) / 2)`, an even `p` moves
-  /// each channel toward 255 by `1 - 0.6^(p / 2)`. No colour repeats within
-  /// the first 24 series of the office theme or of an ordinary palette (one of
-  /// distinct, mid-tone colours), and any index is valid. A palette with black
-  /// or white may repeat in the derived colours, as scaling black or moving
-  /// white toward 255 changes nothing.
+  /// each channel toward 255 by `1 - 0.6^(p / 2)`. No repeat within the
+  /// first 24 series is checked for the office theme and for the five-colour
+  /// palette of the tests. Other palettes, greys, and palettes with black or
+  /// white can repeat derived colours, as scaling black or moving white toward
+  /// 255 changes nothing. Any index is valid.
   ///
   /// This is this library's own rule. Excel's real rule for series 7 and up is
   /// checked in the oracle gallery later and this rule follows it then.

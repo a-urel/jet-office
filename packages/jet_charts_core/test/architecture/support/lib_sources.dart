@@ -10,7 +10,7 @@ final class LibSource {
   const LibSource(this.path, this.text);
 
   /// The path relative to the package root, such as
-  /// `lib/src/format/format_code.dart`.
+  /// `lib/src/theme/chart_theme.dart`.
   final String path;
 
   /// The file content as written.

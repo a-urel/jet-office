@@ -7,7 +7,7 @@ lays out; `jet_office` writes and reads the model as a chart in XLSX and DOCX.
 The record of the design is the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md`.
 
-Milestone J1 is done: the package exports the model, the theme, the drawing
+Milestone J1 is done, except that the axis oracle's owner run is still open: the package exports the model, the theme, the drawing
 primitives and the text measurer. Scales and layout are J2.
 
 ## The packages
@@ -90,6 +90,21 @@ findings.
   an oracle value.
 - Follow the surrounding code: explicit types, dartdoc on every public member,
   plain sentences.
+
+## Open for J2 and C1
+
+- A series has no colour or semantic key, so `ChartTheme.semantic` has no
+  consumer and a file's series fill has nowhere to go.
+- The theme has colours but no line widths or dash for grid and axis, and no
+  spacing, tooltip or legend look. The design spec asks for them; the spec is
+  not tracked.
+- A scheme colour cannot carry `lumMod` or `lumOff`, so text, grid, and series
+  7 and up are fixed RGB even in the Office theme.
+- `ArcPrimitive` has no `strokeWidth`.
+- `TextPrimitive` must define what `rect` means under rotation before the
+  overlap check.
+- `ChartData<String>` used as `categories` can throw on `copyWith` with
+  `Object?` values, by covariance.
 
 ## Reference
 

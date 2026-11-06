@@ -21,6 +21,8 @@ it did not save, so each is confirmed from a chart Excel made. The optional
 | Text colour `595959` | Unconfirmed | Recalled, no source |
 | Line colour `D9D9D9` | Unconfirmed | Recalled, no source |
 | Background `FFFFFF` | Unconfirmed | Recalled, no source |
+| Legend at the bottom | Unconfirmed | Spec'd, recalled, no source |
+| Value gridlines on | Unconfirmed | Recalled, no source |
 
 ## Excel's palette past six colours
 
