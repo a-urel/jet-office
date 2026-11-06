@@ -6,8 +6,7 @@
 ///
 /// Opens the file with `DocxDocument` and writes `<stem>.expected.txt`
 /// beside it: `docxBodyText` (each paragraph's text of the body, joined by
-/// `\n`; tables and other blocks the model keeps opaque are left out) and a
-/// final newline. It prints a review list, one line per block of the body:
+/// `\n`; tables and opaque blocks are left out) and a final newline. It prints a review list, one line per block of the body:
 /// `<n>  <text>` for a paragraph, with tabs and control characters shown
 /// escaped, and `<n>  [<element>: not in the text]` for any other block. The
 /// draft is the model's own answer: the owner checks every line against
@@ -68,6 +67,7 @@ int draftExpectedDocx(
   for (int i = 0; i < blocks.length; i++) {
     final String shown = switch (blocks[i]) {
       final DocxParagraph p => _show(p.text),
+      DocxTable() => '[tbl: not in the text]',
       final DocxOpaqueBlock b => '[${b.localName}: not in the text]',
     };
     out.writeln('${'${i + 1}'.padLeft(4)}  $shown');

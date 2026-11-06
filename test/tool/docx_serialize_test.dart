@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:test/test.dart';
 
 import '../../tool/src/docx_serialize.dart';
@@ -13,6 +14,9 @@ import '../docx/support/docx_builder.dart' show buildDocx, rewriteDocxPart;
 import '../docx/support/numbering_documents.dart';
 import '../docx/support/styles_documents.dart';
 import '../fixtures/docx_fixtures.dart';
+
+/// The WordprocessingML namespace.
+const String _w = Ns.w;
 
 void main() {
   group('encodedParts', () {
@@ -140,6 +144,41 @@ void main() {
           reason: f.name,
         );
       }
+    });
+  });
+
+  group('tables', () {
+    Uint8List docx(String body) => buildDocx(
+      document: '<w:document xmlns:w="$_w"><w:body>$body</w:body></w:document>',
+    );
+
+    test('the children of tblPr, trPr and tcPr compare in any order', () {
+      expect(
+        encodedMainDifferences(
+          docx(
+            '<w:tbl><w:tblPr><w:tblLook w:val="04A0"/>'
+            '<w:tblStyle w:val="T"/></w:tblPr><w:tr><w:trPr><w:tblHeader/>'
+            '<w:cantSplit/></w:trPr><w:tc><w:tcPr><w:vAlign w:val="top"/>'
+            '<w:tcW w:w="20" w:type="dxa"/></w:tcPr><w:p/></w:tc></w:tr>'
+            '</w:tbl>',
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('readTypedProperties reads the paragraphs and runs of a cell, '
+        'nested tables too', () {
+      const String p =
+          '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/>'
+          '</w:rPr></w:r></w:p>';
+      final DocxDocument doc = DocxDocument.open(
+        docx(
+          '<w:tbl><w:tr><w:tc>$p<w:tbl><w:tr><w:tc>$p</w:tc></w:tr></w:tbl>'
+          '<w:p/></w:tc></w:tr></w:tbl>',
+        ),
+      );
+      expect(readTypedProperties(doc), 4);
     });
   });
 

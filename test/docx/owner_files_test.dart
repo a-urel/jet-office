@@ -55,6 +55,54 @@ void main() {
     }
   });
 
+  group('tables', () {
+    /// Every table of [doc]'s body.
+    Iterable<DocxTable> tables(DocxDocument doc) =>
+        doc.body.blocks.whereType<DocxTable>();
+
+    for (final (String file, int count) in <(String, int)>[
+      ('builtins.docx', 1),
+      ('features.docx', 1),
+      ('long.docx', 2),
+    ]) {
+      test('a table saves semantically equal: $file', () {
+        final Uint8List input = File('$_dir/$file').readAsBytesSync();
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(tables(doc), hasLength(count));
+        expect(encodedMainDifferences(input), isEmpty);
+        // An edit in a cell runs the writer on the whole part: only that
+        // text differs.
+        final DocxParagraph p =
+            tables(doc).first.rows.first.cells.first.blocks.first
+                as DocxParagraph;
+        final DocxRun run = p.inlines.whereType<DocxRun>().first;
+        final String text = run.text;
+        run.text = '$text!';
+        final Uint8List saved = doc.save().bytes;
+        final DocxDocument again = DocxDocument.open(saved);
+        final DocxParagraph edited =
+            tables(again).first.rows.first.cells.first.blocks.first
+                as DocxParagraph;
+        expect(edited.text, startsWith('$text!'));
+        expect(comparePackages(input, saved), hasLength(1));
+      });
+    }
+
+    test('a table reads rows, cells and paragraphs: builtins.docx', () {
+      final DocxTable table = tables(
+        DocxDocument.open(File('$_dir/builtins.docx').readAsBytesSync()),
+      ).single;
+      expect(table.gridColumnsPt, <double>[226.55, 226.55]);
+      expect(
+        <String>[
+          for (final DocxTableRow row in table.rows)
+            for (final DocxTableCell cell in row.cells) cell.text,
+        ],
+        <String>['A', 'B', 'C', 'D'],
+      );
+    });
+  });
+
   test('every owner file round-trips with its styles loaded', () {
     for (final OwnerDocx entry in manifest) {
       final Uint8List input = File('$_dir/${entry.file}').readAsBytesSync();

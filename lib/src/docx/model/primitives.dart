@@ -10,9 +10,9 @@
 /// Block edits are primitives here: [insertBlock], [removeBlock] and
 /// [replaceBlock] check the index and that a block to put in is in no
 /// container, apply, and record. A block in a container knows it
-/// (`blockContainerOf`); a paragraph put in one reports its edits to the
-/// document's [DocxEdits], and one taken out reports to
-/// [DocxEditSink.none].
+/// (`blockContainerOf`); a paragraph put in one, directly or in a cell of a
+/// table, reports its edits to the document's [DocxEdits], and one taken out
+/// reports to [DocxEditSink.none].
 ///
 /// Paragraph and run edits are made by the model's own members, which
 /// apply the edit and then report it to the paragraph's sink. [DocxEdits]
@@ -222,9 +222,9 @@ void _resolveStyles(DocxBlock block) {
   }
 }
 
-/// Puts every block of [blocks] in [container], makes its paragraphs report
-/// to [edits] and records that they and their runs were read there: how a
-/// container read from a file is adopted.
+/// Puts every block of [blocks] in [container], makes its paragraphs and those
+/// in its cells report to [edits] and records that they and their runs were
+/// read there: how a container read from a file is adopted.
 ///
 /// Throws [StateError] for a block already in a container, before anything
 /// changes.
@@ -232,7 +232,7 @@ void adoptBlocks(DocxEdits edits, Object container, List<DocxBlock> blocks) {
   blocks.forEach(_checkDetached);
   for (final DocxBlock block in blocks) {
     _attach(edits, container, block);
-    if (block is DocxParagraph) markReadIn(block, edits);
+    markBlockReadIn(block, edits);
   }
 }
 
@@ -258,16 +258,24 @@ void applyChange(DocxEdits edits, Change change) {
   edits.afterRecord?.call();
 }
 
-/// Puts [block] in [container]: a paragraph reports to [edits] from now on.
-void _attach(DocxEdits edits, Object container, DocxBlock block) {
-  setBlockContainerOf(block, container);
-  if (block is DocxParagraph) attachEditSink(block, edits);
+/// Makes [block], or every paragraph in the cells of a table, report to
+/// [sink].
+void _report(DocxBlock block, DocxEditSink sink) {
+  visitBlocks(block, (DocxBlock b) {
+    if (b is DocxParagraph) attachEditSink(b, sink);
+  });
 }
 
-/// Takes [block] out of its container: a paragraph reports to nothing.
+/// Puts [block] in [container]: its paragraphs report to [edits] from now on.
+void _attach(DocxEdits edits, Object container, DocxBlock block) {
+  setBlockContainerOf(block, container);
+  _report(block, edits);
+}
+
+/// Takes [block] out of its container: its paragraphs report to nothing.
 void _detach(DocxBlock block) {
   setBlockContainerOf(block, null);
-  if (block is DocxParagraph) attachEditSink(block, DocxEditSink.none);
+  _report(block, DocxEditSink.none);
 }
 
 /// A block inserted into a container's blocks.

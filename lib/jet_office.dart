@@ -110,9 +110,9 @@
 /// borders, tab stops and the rest of the typed members) as values such as
 /// [DocxColor] and [DocxIndentation], where `null` means "not set here"; a
 /// property or value the model does not understand is kept as written and
-/// reads `null`. What the model does not type yet, such as tables, content
-/// controls, tracked changes, hyperlinks, drawings and fields, is kept as
-/// written in a [DocxOpaqueBlock], a [DocxOpaqueInline] or a
+/// reads `null`. A [DocxTable] gives its rows and cells, and a cell its
+/// blocks. What the model does not type yet, such as content controls,
+/// tracked changes, hyperlinks, drawings and fields, is kept as written in a [DocxOpaqueBlock], a [DocxOpaqueInline] or a
 /// [DocxOpaqueRunContent], which can be removed but not changed; the final
 /// section and the parts other than the body are kept as written too. Blocks
 /// and inlines are added, removed and replaced, and a run's text and the
@@ -207,7 +207,13 @@ export 'src/common/locale.dart' show OfficeLocale;
 export 'src/docx/builtin_styles.dart' show DocxBuiltInStyle;
 export 'src/docx/docx_document.dart' show DocxBody, DocxDocument, DocxResult;
 export 'src/docx/model/blocks.dart'
-    show DocxBlock, DocxOpaqueBlock, DocxParagraph;
+    show
+        DocxBlock,
+        DocxOpaqueBlock,
+        DocxParagraph,
+        DocxTable,
+        DocxTableCell,
+        DocxTableRow;
 export 'src/docx/model/formatting.dart'
     show
         DocxAlignment,

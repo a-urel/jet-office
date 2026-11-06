@@ -94,10 +94,11 @@ List<String> encodedPartDifferences(Uint8List docx) {
 /// into the model and encoded, one line each, `'<part>: <what>'`; empty when
 /// they mean the same.
 ///
-/// The children of each `w:pPr` and `w:rPr` compare in any order: the model
-/// writes them in schema order, and a document with no edit keeps the file's
-/// bytes, so a file whose properties are out of order loses nothing. A part
-/// the model cannot read is one line, not an exception.
+/// The children of each `w:pPr`, `w:rPr`, `w:tblPr`, `w:trPr` and `w:tcPr`
+/// compare in any order: the model writes them in schema order, and a
+/// document with no edit keeps the file's bytes, so a file whose properties
+/// are out of order loses nothing. A part the model cannot read is one line,
+/// not an exception.
 List<String> encodedMainDifferences(Uint8List docx) {
   final Uint8List? original = _entries(docx)[_mainName];
   if (original == null) return const <String>[];
@@ -118,25 +119,18 @@ List<String> encodedMainDifferences(Uint8List docx) {
     _mainName,
     original,
     encoded,
-    unordered: const <String>{'pPr', 'rPr'},
+    unordered: const <String>{'pPr', 'rPr', 'tblPr', 'trPr', 'tcPr'},
   );
 }
 
-/// Reads every typed property of [doc]: of each paragraph of the body and
-/// each of its runs, of the document defaults and each style, and of each
+/// Reads every typed property of [doc]: of each paragraph of the body, in the
+/// cells of its tables too, and each of its runs, of the document defaults and each style, and of each
 /// level of each abstract list definition. Returns how many were set.
 ///
 /// A value the model cannot read throws. The styles and numbering parts are
 /// loaded by this.
 int readTypedProperties(DocxDocument doc) {
-  int set = 0;
-  for (final DocxBlock block in doc.body.blocks) {
-    if (block is! DocxParagraph) continue;
-    set += _paragraph(block.properties);
-    for (final DocxInline inline in block.inlines) {
-      if (inline is DocxRun) set += _run(inline.properties);
-    }
-  }
+  int set = _blocks(doc.body.blocks);
   final DocxStyles styles = doc.styles;
   set += _paragraph(styles.defaults.paragraphProperties);
   set += _run(styles.defaults.runProperties);
@@ -168,6 +162,30 @@ int readTypedProperties(DocxDocument doc) {
   for (final DocxNumberingInstance instance in numbering.instances) {
     for (final DocxLevelOverride o in instance.overrides) {
       set += _count(<Object?>[o.startOverride]);
+    }
+  }
+  return set;
+}
+
+/// Reads every typed property of the paragraphs of [blocks], and of those in
+/// the cells of its tables.
+int _blocks(List<DocxBlock> blocks) {
+  int set = 0;
+  for (final DocxBlock block in blocks) {
+    switch (block) {
+      case DocxParagraph():
+        set += _paragraph(block.properties);
+        for (final DocxInline inline in block.inlines) {
+          if (inline is DocxRun) set += _run(inline.properties);
+        }
+      case DocxTable():
+        for (final DocxTableRow row in block.rows) {
+          for (final DocxTableCell cell in row.cells) {
+            set += _blocks(cell.blocks);
+          }
+        }
+      case DocxOpaqueBlock():
+        break;
     }
   }
   return set;

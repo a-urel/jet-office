@@ -8,9 +8,8 @@
 /// back by the model) and the owner files' test:
 ///
 /// * a document's text is [docxBodyText]: the [DocxParagraph.text] of each
-///   paragraph of the body, joined by `\n`; a block the model does not
-///   type, such as a table, is left out (D1 keeps tables opaque, so it
-///   cannot say what their text is);
+///   paragraph of the body, joined by `\n`; tables and opaque blocks are
+///   left out;
 /// * a text file, expected or exported, is read by [readExpectedText]: a
 ///   leading BOM and one trailing `\n` are dropped, because LibreOffice
 ///   starts its export with a BOM and ends every paragraph with `\n`;

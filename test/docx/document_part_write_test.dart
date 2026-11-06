@@ -8,8 +8,12 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/document_part.dart';
+import 'package:jet_office/src/docx/model/blocks.dart';
+import 'package:jet_office/src/docx/model/primitives.dart';
 import 'package:jet_office/src/docx/warnings.dart' show DocxWarningCollector;
+import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/ooxml.dart' show Ns;
+import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
@@ -50,6 +54,14 @@ String _encode(DocumentPart part) => utf8.decode(_bytes(part));
 /// The differences between [xml] and what reading and writing it gives.
 List<String> _roundTrip(String xml) =>
     compareXmlParts(_part, utf8.encode(xml), _bytes(_read(xml)));
+
+/// [xml], an element, captured as it would be read.
+OpaqueXml _capture(String xml) {
+  final XmlPullReader r = XmlPullReader('<a xmlns:w="${Ns.w}">$xml</a>')
+    ..next()
+    ..next();
+  return OpaqueXml.capture(r);
+}
 
 /// The paragraph at [index] of [part].
 DocxParagraph _p(DocumentPart part, [int index = 0]) =>
@@ -171,6 +183,265 @@ void main() {
     expect(_unboundPrefixes(doc), isEmpty);
     final XmlElement pStyle = _elements(doc, Ns.w, 'pStyle').single;
     expect(_attribute(pStyle, Ns.w, 'val'), 'Title');
+  });
+
+  group('tables', () {
+    /// A table with attributes, properties out of no order, kept children
+    /// between rows and cells, and a nested table.
+    const String table =
+        '<w:tbl w:rsidR="00A1"><w:bookmarkStart w:id="0" w:name="a"/>'
+        '<w:tblPr w:rsidR="1"><w:tblStyle w:val="TableGrid"/>'
+        '<w:tblW w:w="0" w:type="auto"/><w:tblCaption w:val="c"/></w:tblPr>'
+        '<w:tblGrid><w:gridCol w:w="abc"/><w:gridCol w:w="20"/></w:tblGrid>'
+        '<w:bookmarkEnd w:id="0"/>'
+        '<w:tr w:rsidR="2" w14:paraId="3A"><w:tblPrEx><w:tblW w:w="0"/>'
+        '</w:tblPrEx><w:trPr><w:cantSplit/><w:hidden/></w:trPr>'
+        '<w:bookmarkStart w:id="1" w:name="b"/>'
+        '<w:tc w:rsidR="5"><w:tcPr><w:tcW w:w="20" w:type="dxa"/>'
+        '<w:noWrap/></w:tcPr><w:p w14:paraId="4B"><w:r><w:t>a</w:t></w:r></w:p>'
+        '<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl><w:p/></w:tc>'
+        '<w:sdt><w:sdtContent><w:tc><w:p/></w:tc></w:sdtContent></w:sdt>'
+        '<w:bookmarkEnd w:id="1"/></w:tr>'
+        '<w:customXml w:element="x"><w:tr/></w:customXml>'
+        '<w:tr/></w:tbl>';
+
+    test('a table saves semantically equal', () {
+      expect(_roundTrip(_doc('<w:p/>$table<w:p/>')), isEmpty);
+    });
+
+    test('a table saves semantically equal with odd prefixes', () {
+      const String ns0 =
+          '<ns0:document xmlns:ns0="${Ns.w}" xmlns:q="${Ns.w14}"><ns0:body>'
+          '<ns0:tbl ns0:rsidR="1"><ns0:tblPr><ns0:tblW ns0:w="0" '
+          'ns0:type="auto"/></ns0:tblPr><ns0:tblGrid><ns0:gridCol ns0:w="20"/>'
+          '</ns0:tblGrid><ns0:tr q:paraId="2"><ns0:trPr><ns0:cantSplit/>'
+          '</ns0:trPr><ns0:tc><ns0:tcPr><ns0:gridSpan ns0:val="2"/></ns0:tcPr>'
+          '<ns0:p><ns0:r><ns0:t>a</ns0:t></ns0:r></ns0:p></ns0:tc></ns0:tr>'
+          '</ns0:tbl></ns0:body></ns0:document>';
+      expect(_roundTrip(ns0), isEmpty);
+      const String plain =
+          '<document xmlns="${Ns.w}"><body><tbl><tblGrid><gridCol w="20"/>'
+          '</tblGrid><tr><tc><tcPr><gridSpan val="2"/></tcPr><p><r><t>a</t>'
+          '</r></p></tc></tr></tbl></body></document>';
+      expect(_roundTrip(plain), isEmpty);
+      // A prefix declared on the table, its row or its cell.
+      const String local =
+          '<v:document xmlns:v="${Ns.w}"><v:body>'
+          '<u:tbl xmlns:u="${Ns.w}" xmlns:x="urn:x" x:a="1"><u:tr x:b="2">'
+          '<t:tc xmlns:t="${Ns.w}" x:c="3"><x:kept/><t:p x:d="4"/></t:tc>'
+          '<x:kept/></u:tr><u:tblPr x:e="5"/></u:tbl>'
+          '</v:body></v:document>';
+      final List<String> differences = _roundTrip(local);
+      expect(differences, isEmpty);
+      expect(
+        _unboundPrefixes(XmlDocument.parse(_encode(_read(local)))),
+        isEmpty,
+      );
+    });
+
+    test('w:tblPr, w:trPr and w:tcPr are written in place', () {
+      // No schema allows this order, and a part read must keep what it read.
+      expect(
+        _roundTrip(
+          _doc(
+            '<w:tbl><w:tblGrid/><w:tblPr/><w:tr><w:tc><w:p/><w:tcPr/></w:tc>'
+            '<w:trPr/></w:tr><w:tblPr/><w:tblGrid/></w:tbl>',
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a file with no w:tblPr, w:trPr or w:tcPr gets none', () {
+      expect(
+        _roundTrip(_doc('<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>')),
+        isEmpty,
+      );
+    });
+
+    test('empty properties are written as read', () {
+      expect(
+        _roundTrip(
+          _doc(
+            '<w:tbl><w:tblPr></w:tblPr><w:tr><w:trPr/><w:tc><w:tcPr/><w:p/>'
+            '</w:tc></w:tr></w:tbl>',
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a table last in the body and before the final sectPr', () {
+      expect(
+        _roundTrip(
+          _doc(
+            '<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>'
+            '<w:sectPr><w:pgSz w:w="12240"/></w:sectPr>',
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    group('a cell without a closing paragraph', () {
+      test('a read cell without a closing paragraph is written as read', () {
+        for (final String inner in <String>[
+          '',
+          '<w:tcPr/>',
+          '<w:p/><w:bookmarkEnd w:id="1"/>',
+          '<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>',
+          '<w:sdt><w:sdtContent><w:p/></w:sdtContent></w:sdt>',
+        ]) {
+          final String body = '<w:tbl><w:tr><w:tc>$inner</w:tc></w:tr></w:tbl>';
+          expect(_roundTrip(_doc(body)), isEmpty, reason: inner);
+        }
+      });
+
+      /// The document of one cell of [inner], with what is needed to edit
+      /// the cell: its part, its log and the primitives' arguments.
+      (DocumentPart, DocxEdits, DocxTableCell) cellOf(String inner) {
+        final DocumentPart part = _read(
+          _doc('<w:tbl><w:tr><w:tc>$inner</w:tc></w:tr></w:tbl>'),
+        );
+        final DocxEdits edits = DocxEdits();
+        adoptBlocks(edits, Object(), part.blocks);
+        final DocxTable table = part.blocks.single as DocxTable;
+        return (part, edits, table.rows.single.cells.single);
+      }
+
+      /// How many `w:p` the cell of [part] holds directly.
+      int closing(DocumentPart part) {
+        final XmlElement tc = _elements(
+          XmlDocument.parse(_encode(part)),
+          Ns.w,
+          'tc',
+        ).first;
+        return tc.childElements
+            .where((XmlElement e) => e.localName == 'p')
+            .length;
+      }
+
+      test('one whose last block was removed gets one, and undoing that '
+          'restores the exception', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '<w:p/><w:bookmarkEnd w:id="1"/><w:bookmarkStart w:id="2"/>',
+        );
+        expect(closing(part), 1);
+        final ChangeSet removal = edits.transaction(
+          () => removeBlock(edits, cell, cellBlocksOf(cell), 2),
+        );
+        // The last is the bookmarkEnd, not the block read last.
+        expect(closing(part), 2);
+        // The added paragraph is not in blocks until the file is read again.
+        expect(cell.blocks, hasLength(2));
+        edits.log.revertSet(removal);
+        expect(closing(part), 1);
+      });
+
+      test('a cell emptied of its only block gets one', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '<w:p><w:r><w:t>a</w:t></w:r></w:p>',
+        );
+        edits.transaction(
+          () => removeBlock(edits, cell, cellBlocksOf(cell), 0),
+        );
+        expect(cell.blocks, isEmpty);
+        expect(closing(part), 1);
+      });
+
+      test('a cell read empty stays empty until a block goes in', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '',
+        );
+        expect(closing(part), 0);
+        edits.transaction(
+          () => insertBlock(
+            edits,
+            cell,
+            cellBlocksOf(cell),
+            0,
+            opaqueBlock(_capture('<w:bookmarkStart/>')),
+          ),
+        );
+        expect(closing(part), 1);
+      });
+
+      test('a paragraph that closes the cell needs no other', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '<w:bookmarkEnd w:id="1"/>',
+        );
+        edits.transaction(
+          () => insertBlock(
+            edits,
+            cell,
+            cellBlocksOf(cell),
+            1,
+            DocxParagraph.text('b'),
+          ),
+        );
+        expect(closing(part), 1);
+      });
+
+      test('a table last in a cell gets one when it is not the one read', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '<w:tbl/><w:p/>',
+        );
+        expect(closing(part), 1);
+        edits.transaction(
+          () => removeBlock(edits, cell, cellBlocksOf(cell), 1),
+        );
+        expect(cell.blocks.single, isA<DocxTable>());
+        expect(closing(part), 1);
+      });
+    });
+
+    test('warnings name the path in the table', () {
+      final DocumentPart part = _read(
+        _doc(
+          '<w:p/><w:tbl/><w:tbl><w:tr/><w:tr><w:tc/><w:tc><w:p/>'
+          '<w:p><w:r/><w:r/></w:p><w:tbl/>'
+          '<w:tbl><w:tr><w:tc><w:p><w:r/></w:p></w:tc></w:tr></w:tbl>'
+          '</w:tc></w:tr></w:tbl><w:p><w:r/></w:p>',
+        ),
+      );
+      final DocxTableCell cell = (part.blocks[2] as DocxTable).rows[1].cells[1];
+      _r(cell.blocks[1] as DocxParagraph, 1).text = 'a\u0001';
+      final DocxTable nested = cell.blocks[3] as DocxTable;
+      _r(nested.rows.single.cells.single.blocks.single as DocxParagraph).text =
+          'b\u0001';
+      _r(_p(part, 3)).text = 'c\u0001';
+      _encode(part);
+      expect(_warnings(part), <String>[
+        'invalidCharactersRemoved $_part '
+            '[body/tbl[1]/tr[1]/tc[1]/p[1]/r[1], '
+            'body/tbl[1]/tr[1]/tc[1]/tbl[1]/tr[0]/tc[0]/p[0]/r[0], '
+            'body/p[1]/r[0]] 3',
+      ]);
+    });
+
+    test('the checks of a list and a style name the path in the table', () {
+      final DocumentPart part = _read(
+        _doc('<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>'),
+      );
+      final DocxTable table = part.blocks.single as DocxTable;
+      final DocxParagraph p =
+          table.rows.single.cells.single.blocks.single as DocxParagraph;
+      p.style = 'Missing';
+      p.properties.numbering = DocxNumberingRef(7);
+      part
+        ..listDefined = ((int id) => false)
+        ..styleDefined = ((String id, DocxStyleType type) => false);
+      _encode(part);
+      expect(
+        part.encodeWarnings.warnings.map(
+          (DocxWarning w) => '${w.code.name} ${w.locations}',
+        ),
+        <String>[
+          'numberingNotFound [body/tbl[0]/tr[0]/tc[0]/p[0]]',
+          'styleNotFound [body/tbl[0]/tr[0]/tc[0]/p[0]]',
+        ],
+      );
+    });
   });
 
   test('a document without a body writes none', () {

@@ -24,6 +24,7 @@ List<String> _outline(DocxDocument doc) => <String>[
   for (final DocxBlock b in doc.body.blocks)
     switch (b) {
       DocxParagraph() => 'p:${b.text}',
+      DocxTable() => 'table:${b.rows.length}',
       DocxOpaqueBlock() => 'opaque:${b.localName}',
     },
 ];
@@ -200,7 +201,7 @@ void main() {
         );
       });
 
-      test('opens with its paragraphs typed and its table opaque', () {
+      test('opens with its paragraphs and its table typed', () {
         final DocxDocument doc = DocxDocument.open(richWordDocx());
         expect(_outline(doc), <String>[
           'p:Fiyat listesiÜrün ',
@@ -212,7 +213,7 @@ void main() {
           'p:Eski tutar, bkz. site',
           'p:Sayfa 1 / 2',
           'p:Gizli',
-          'opaque:tbl',
+          'table:1',
           'p:',
         ]);
       });

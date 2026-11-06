@@ -4,8 +4,10 @@
 // property set behind them or of the styles part's internals. It
 // imports the public library only, so it runs on the web as well.
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:test/test.dart';
 
+import 'support/docx_builder.dart';
 import 'support/numbering_documents.dart';
 
 /// The members of the internal property set, as calls on [p].
@@ -166,6 +168,26 @@ void main() {
         () => o.paragraphProperties = DocxParagraph().properties,
         throwsA(isA<NoSuchMethodError>()),
       );
+    }
+  });
+
+  test('tables, rows and cells are exported and expose no internals', () {
+    final DocxDocument doc = DocxDocument.open(
+      buildDocx(
+        document:
+            '<w:document xmlns:w="${Ns.w}"><w:body><w:tbl><w:tr><w:tc><w:p/>'
+            '</w:tc></w:tr></w:tbl></w:body></w:document>',
+      ),
+    );
+    final DocxBlock block = doc.body.blocks.single;
+    final DocxTable table = block as DocxTable;
+    final DocxTableRow row = table.rows.single;
+    final DocxTableCell cell = row.cells.single;
+    expect(cell.blocks.single, isA<DocxParagraph>());
+    expect(cell.text, '');
+    for (final dynamic o in <dynamic>[table, row, cell]) {
+      expect(() => o.children, throwsA(isA<NoSuchMethodError>()));
+      expect(() => o.source, throwsA(isA<NoSuchMethodError>()));
     }
   });
 

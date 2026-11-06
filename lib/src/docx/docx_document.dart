@@ -353,9 +353,9 @@ final class _MainPart implements PartContent {
 
 /// The body of a document, the content of `w:body`: its blocks, in order.
 ///
-/// Paragraphs ([DocxParagraph]) are typed; every other block, such as a
-/// table or a content control, is a [DocxOpaqueBlock] kept as written. The
-/// section properties of the last section belong to the body, not to its
+/// Paragraphs ([DocxParagraph]) and tables ([DocxTable]) are typed; every
+/// other block, such as a content control, is a [DocxOpaqueBlock] kept as
+/// written. The section properties of the last section belong to the body, not to its
 /// blocks, and are kept as written.
 ///
 /// A block is in at most one body at a time. Each edit is atomic: one that

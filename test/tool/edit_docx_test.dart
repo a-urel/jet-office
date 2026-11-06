@@ -50,6 +50,7 @@ void main() {
     for (final DocxBlock b in DocxDocument.open(bytes).body.blocks)
       switch (b) {
         DocxParagraph() => '${b.style ?? '-'}:${b.text}',
+        DocxTable() => 'table',
         DocxOpaqueBlock() => 'opaque:${b.localName}',
       },
   ];
