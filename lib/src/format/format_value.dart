@@ -1,8 +1,8 @@
 /// The two value types the number format engine takes besides `num`,
 /// `DateTime`, `Duration`, `String` and `bool`.
 ///
-/// Moved from jet_office, where `FormatDecimal` and `FormatErrorValue` extend
-/// these. The engine knows no file format, so it names its inputs plainly:
+/// Moved from jet_office, where a file library's own decimal and error types
+/// extend these. The engine knows no file format, so it names its inputs plainly:
 /// an exact decimal and an error value such as `#N/A`.
 library;
 

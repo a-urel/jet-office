@@ -11,7 +11,9 @@
 /// text, its parts, its colour and the warning for what it could not show as
 /// Excel does. Values are a `FormatDecimal` (an exact decimal), a `num`, a
 /// `DateTime`, a `Duration`, a `String`, a `bool`, a `FormatErrorValue` or
-/// `null`. The rules are in `docs/number-format.md`, and why the package
+/// `null`. For file libraries, `classifyFormatCode` returns the `FormatKind` a
+/// code shows (a number, a date or a time), and `builtinNumberFormatCode`
+/// the code of a built-in number format id. The rules are in `docs/number-format.md`, and why the package
 /// exists in `docs/decisions/0001`.
 ///
 /// The public API is exactly what this library exports; everything under

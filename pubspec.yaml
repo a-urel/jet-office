@@ -20,6 +20,7 @@ dev_dependencies:
   # Tests and tools only: tool/src/format_oracle.dart zips the Excel oracle
   # workbooks, and test/tool/support/read_workbook.dart unzips them.
   archive: ^4.0.9
+  # Lint rules for dart analyze (analysis_options.yaml).
   lints: ^6.0.0
   test: ^1.26.0
   # Tests only: read_workbook.dart parses the oracle workbooks' XML parts to

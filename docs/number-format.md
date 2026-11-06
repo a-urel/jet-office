@@ -33,8 +33,8 @@ final FormattedValue shown = formatter.format(
 print(shown.text); // (1,234.50)
 ```
 
-- `format(value, {numberFormatId, numberFormat, generalWidth})`: `value` is an
-  `FormatDecimal`, a `num`, a `DateTime`, a `Duration`, a `String`, a `bool`, an
+- `format(value, {numberFormatId, numberFormat, generalWidth})`: `value` is a
+  `FormatDecimal`, a `num`, a `DateTime`, a `Duration`, a `String`, a `bool`, a
   `FormatErrorValue` or `null`. `numberFormat` wins over `numberFormatId`,
   except for the built-in ids that follow the locale (see "Locales").
   `generalWidth` (default 11) is how many characters `General` may use.

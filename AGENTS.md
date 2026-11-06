@@ -100,7 +100,7 @@ The rules are in `docs/number-format.md`.
   `test/architecture/platform_imports_test.dart`.
 - **No dependencies.** `pubspec.yaml` keeps `dependencies:` empty and nothing
   under `lib/` imports a `package:` other than `package:jet_core/`. Enforced by
-  `test/architecture/dependencies_test.dart`. `archive`, `xml` and `test` are
+  `test/architecture/dependencies_test.dart`. `archive`, `xml`, `test` and `lints` are
   dev dependencies for tests only.
 - **The public API is exactly what `lib/jet_core.dart` exports.** Everything
   under `lib/src/` is private.
