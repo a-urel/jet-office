@@ -247,3 +247,10 @@ its recovery log.
 | 2026-11-06 | Word for Mac 16.114.4 | `build/edited-docx-owner/builtins.docx` | ok |  |
 | 2026-11-06 | Word for Mac 16.114.4 | Save in Word | ok | `d1_blank`, `d1_text_rules`, `d2_lists`, `d2_styles`, round-tripped and edited `features.docx`. |
 | 2026-11-06 | Word for Mac 16.114.4 | Expected texts | ok | `features`, `builtins` and `long` compared with Word; `blank` has one empty paragraph. `confirmedBy` set. |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/fixtures/d1_blank.docx` | ok | Own parts (decision 0011): Aptos at 12 pt, gallery as before. |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/fixtures/d2_run_formatting.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/fixtures/d2_styles.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/fixtures/d2_lists.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/edited-docx-owner/blank.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | `build/edited-docx-owner/features.docx` | ok | Own parts (decision 0011). |
+| 2026-11-06 | Word for Mac 16.114.4 | Save in Word | ok | Own parts (decision 0011): `d1_blank` saved, closed and reopened. |
