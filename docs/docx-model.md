@@ -362,7 +362,7 @@ Two codes, for references set through the API only, each with a message in
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | The five D1 fixtures (`d1_blank`, `d1_paragraphs`, `d1_text_rules`, `d1_unicode`, `d1_large`) | build the same bytes every time, with exactly their expected warnings, and round-trip | the CI validation starts from them | `test/docx/round_trip_test.dart` |
-| The layering | `lib/src/docx/` never imports `lib/src/xlsx/` (except `xlsx/format`), `lib/src/common/` imports neither, and nothing under `lib/src/` imports the barrel | shared machinery stays shared | `test/architecture/layering_test.dart` |
+| The layering | `lib/src/docx/` never imports `lib/src/xlsx/`, `lib/src/common/` imports neither, and nothing under `lib/src/` imports the barrel | shared machinery stays shared | `test/architecture/layering_test.dart` |
 | The fuzz corpus | the pinned bytes, the same on every run; every part name is mutated in some entry | a failing case is reproducible | `test/docx/fuzz_test.dart` |
 
 ## Port map

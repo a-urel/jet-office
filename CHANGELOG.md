@@ -86,6 +86,19 @@
 - Renamed the format-neutral public types, with no aliases: `XlsxLocale` is
   now `OfficeLocale`, `XlsxImage` is now `OfficeImage` and `XlsxImageFormat`
   is now `OfficeImageFormat`. Update imports and uses; nothing else changed.
+- The number format engine moved to the new package `jet_core` (decision
+  0012), with neutral names and no aliases: `XlsxNumberFormatter` is now
+  `NumberFormatter`, `XlsxFormatLocale` is `FormatLocale`,
+  `XlsxFormattedValue` is `FormattedValue` (`color` is a `FormatColor?`,
+  `warning` a `FormatWarning?`), `XlsxFormatPart` and its kin are
+  `FormatPart`, `FormatText`, `FormatPadding` and `FormatFill`.
+  `jet_office` re-exports them. `XlsxDecimal` and `XlsxErrorValue` extend
+  `FormatDecimal` and `FormatErrorValue`, so values from the reader go to the
+  formatter as they are. `formatCell` is an extension on `NumberFormatter`,
+  and `FormatWarning.xlsxCode` and `FormatColor.xlsxColor` map the warning and
+  the colour back to `XlsxWarningCode` and `XlsxColor`. What Excel shows is
+  unchanged. `jet_core` is a `path: ../jet-core` dependency until its GitHub
+  repository exists.
 
 ## 0.1.0-dev.1 (unreleased)
 

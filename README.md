@@ -103,8 +103,8 @@ enforces.
 cell's number format code: grouping, rounding, percent, scientific, fractions,
 `General`, text sections, dates and times in both date systems, and the
 `en-US`, `de-DE` and `tr-TR` regions (`FormatLocale`), compared with
-Excel for Mac's output (the assumptions left are in
-[`docs/number-format.md`](docs/number-format.md)). It does not throw for a code it cannot read; it shows
+Excel for Mac's output (the engine is in the `jet_core` package, and the
+assumptions left are in its `docs/number-format.md`). It does not throw for a code it cannot read; it shows
 `General` and says so in the result's `warning`.
 
 ```dart
@@ -116,7 +116,7 @@ final FormattedValue shown = formatter.format(
 print(shown.text); // (1,234.50)
 ```
 
-`formatCell` takes an `XlsxReadCell`. [`docs/number-format.md`](docs/number-format.md)
+`formatCell` takes an `XlsxReadCell`. `jet_core`'s `docs/number-format.md`
 has the rules and what is not yet confirmed against Excel.
 
 ## List export

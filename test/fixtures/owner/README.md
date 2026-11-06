@@ -10,9 +10,10 @@ ruling 12.
 Every `*.xlsx` and `*.expected.json` here must be listed in
 `manifest.json` (by `.xlsx` name) and have its partner, or the test fails.
 `README.md` and `manifest.json` are the only other files that belong here.
-The number format engine's Excel oracle has its own directory,
-`number_format/`, with its own README, and the Word files have theirs,
-`docx/`, described under "Word files" below.
+The number format engine's Excel oracle moved to `jet_core`
+(`test/fixtures/owner/number_format/` there, with its own README; decision
+0012), and the Word files have theirs, `docx/`, described under "Word files"
+below.
 
 ## The files
 
