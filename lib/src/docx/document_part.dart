@@ -300,63 +300,121 @@ final class _Writer {
   void _table(DocxTable t, String path) {
     _w.start('${_p}tbl');
     writeKeptAttributes(_w, tableAttributesOf(t), declaredAbove: _scope);
+    final PropertySet tblPr = tablePropertySetOf(t);
+    // A table read without a w:tblPr writes one first when a value was set.
+    if (!tablePropertiesOf(t).isRead && !tblPr.writesNothing) {
+      _propertySet(tblPr, 'tblPr');
+    }
+    final List<Object> children = tableChildrenOf(t);
+    final List<double?>? widths = tableGridWidthsOf(t);
+    // A table read without a grid writes one before its first row when the
+    // widths were set.
+    bool gridPending = widths != null && !children.any((c) => c is TableGrid);
     int rows = 0;
-    for (final Object child in tableChildrenOf(t)) {
+    for (final Object child in children) {
       if (child is DocxTableRow) {
+        if (gridPending) {
+          _newGrid(widths!);
+          gridPending = false;
+        }
         _row(child, '$path/tr[${rows++}]');
+      } else if (child is PropertyContainer) {
+        _propertySet(tblPr, 'tblPr');
+      } else if (child is TableGrid) {
+        if (tableGridAsRead(t)) {
+          child.xml.writeTo(_w, declaredAbove: _scope);
+        } else {
+          _grid(child, widths!);
+        }
       } else {
-        _kept(child, 'tblPr', tablePropertiesSchema);
+        (child as OpaqueXml).writeTo(_w, declaredAbove: _scope);
       }
     }
+    if (gridPending) {
+      _newGrid(widths!);
+    }
     _w.end();
+  }
+
+  /// Writes a `w:tblGrid` of [widths], in points.
+  void _newGrid(List<double?> widths) {
+    _w.start('${_p}tblGrid');
+    _gridCols(widths);
+    _w.end();
+  }
+
+  /// Writes the grid [grid] with the widths [widths], in points, and the
+  /// children that are no `w:gridCol` as they were.
+  void _grid(TableGrid grid, List<double?> widths) {
+    _w.start('${_p}tblGrid');
+    writeNamespaceDeclarations(_w, grid.declared);
+    grid.xml.inheritedNamespaces.forEach((String prefix, String uri) {
+      if (grid.declared.containsKey(prefix)) return;
+      final String? above = _scope[prefix] ?? (prefix.isEmpty ? '' : null);
+      if (above != uri) {
+        _w.attribute(prefix.isEmpty ? 'xmlns' : 'xmlns:$prefix', uri);
+      }
+    });
+    _gridCols(widths);
+    grid.keptChildren.forEach(_w.raw);
+    _w.end();
+  }
+
+  void _gridCols(List<double?> widths) {
+    for (final double? width in widths) {
+      _w
+        ..start('${_p}gridCol')
+        ..attribute('${_p}w', '${(width! * 20).round()}')
+        ..end();
+    }
   }
 
   /// Writes the row [row] at the location [path].
   void _row(DocxTableRow row, String path) {
     _w.start('${_p}tr');
     writeKeptAttributes(_w, rowAttributesOf(row), declaredAbove: _scope);
+    final PropertySet trPr = rowPropertySetOf(row);
+    // A row read without a w:trPr writes one when a value was set: after
+    // any w:tblPrEx, before everything else.
+    bool pending = !rowPropertiesOf(row).isRead && !trPr.writesNothing;
     int cells = 0;
     for (final Object child in rowChildrenOf(row)) {
+      if (pending && !_isTblPrEx(child)) {
+        _propertySet(trPr, 'trPr');
+        pending = false;
+      }
       if (child is DocxTableCell) {
         _cell(child, '$path/tc[${cells++}]');
+      } else if (child is PropertyContainer) {
+        _propertySet(trPr, 'trPr');
       } else {
-        _kept(child, 'trPr', tableRowPropertiesSchema);
+        (child as OpaqueXml).writeTo(_w, declaredAbove: _scope);
       }
+    }
+    if (pending) {
+      _propertySet(trPr, 'trPr');
     }
     _w.end();
   }
 
-  /// Writes a child of `w:tbl` or `w:tr` that is no row or cell: kept XML, or
-  /// the properties `w:<localName>` read by [schema].
-  void _kept(Object child, String localName, ContainerSchema schema) {
-    if (child is PropertyContainer) {
-      _properties(child, localName, schema);
-    } else {
-      (child as OpaqueXml).writeTo(_w, declaredAbove: _scope);
-    }
-  }
+  /// Whether [child] is a kept `w:tblPrEx`.
+  bool _isTblPrEx(Object child) =>
+      child is OpaqueXml &&
+      child.localName == 'tblPrEx' &&
+      child.namespaceUri == Ns.w;
 
-  /// Writes the properties [properties] as `w:<localName>`.
-  void _properties(
-    PropertyContainer properties,
-    String localName,
-    ContainerSchema schema,
-  ) => properties.writeTo(
-    _w,
-    '$_p$localName',
-    schema,
-    prefix: _prefix,
-    declaredAbove: _scope,
-  );
+  /// Writes [properties] as `w:<localName>`.
+  void _propertySet(PropertySet properties, String localName) => properties
+      .writeTo(_w, '$_p$localName', prefix: _prefix, declaredAbove: _scope);
 
   /// Writes the cell [cell] at the location [path], and the paragraph that
   /// closes it when it needs one.
   void _cell(DocxTableCell cell, String path) {
     _w.start('${_p}tc');
     writeKeptAttributes(_w, cellAttributesOf(cell), declaredAbove: _scope);
-    final PropertyContainer tcPr = cellPropertiesOf(cell);
-    if (tcPr.isRead) {
-      _properties(tcPr, 'tcPr', tableCellPropertiesSchema);
+    final PropertySet tcPr = cellPropertySetOf(cell);
+    if (!tcPr.writesNothing) {
+      _propertySet(tcPr, 'tcPr');
     }
     _blocks(cell.blocks, path);
     if (cellNeedsClosingParagraph(cell)) {
@@ -631,24 +689,42 @@ final class _PartReader {
   }
 
   /// Captures the `w:tblGrid` the reader is on, adding the width of each
-  /// `w:gridCol` child to [columns] in the same walk.
-  OpaqueXml _captureGrid(List<double?> columns) {
+  /// `w:gridCol` child to [columns] in the same walk, and keeping the text of
+  /// each other child for a grid written with new widths.
+  TableGrid _captureGrid(List<double?> columns) {
     final int depth = _r.depth;
-    return OpaqueXml.capture(
+    final Map<String, String> declared = <String, String>{};
+    final List<String> kept = <String>[];
+    int? keptStart;
+    final OpaqueXml xml = OpaqueXml.capture(
       _r,
       onEvent: (XmlPullReader r) {
-        if (r.eventType == XmlEventType.startElement &&
-            r.depth == depth + 1 &&
-            _isW(r, 'gridCol')) {
-          final int? twips = parseDecimal(
-            r.getAttribute('w', namespaceUri: Ns.w),
-            min: 0,
-            max: _maxGridColumnTwips,
-          );
-          columns.add(twips == null ? null : ptOfTwips(twips));
+        if (r.eventType == XmlEventType.startElement) {
+          if (r.depth == depth) {
+            declared.addAll(r.declaredNamespaces);
+          } else if (r.depth == depth + 1) {
+            if (_isW(r, 'gridCol')) {
+              final int? twips = parseDecimal(
+                r.getAttribute('w', namespaceUri: Ns.w),
+                min: 0,
+                max: _maxGridColumnTwips,
+              );
+              columns.add(twips == null ? null : ptOfTwips(twips));
+            } else if (r.isEmptyElement) {
+              kept.add(r.sourceText(r.eventStart, r.eventEnd));
+            } else {
+              keptStart = r.eventStart;
+            }
+          }
+        } else if (r.eventType == XmlEventType.endElement &&
+            r.depth == depth &&
+            keptStart != null) {
+          kept.add(r.sourceText(keptStart!, r.eventEnd));
+          keptStart = null;
         }
       },
     );
+    return TableGrid(xml, Map<String, String>.unmodifiable(declared), kept);
   }
 
   /// Reads the `w:tr` the reader is on, at the location [path].

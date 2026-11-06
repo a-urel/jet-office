@@ -341,6 +341,7 @@ void main() {
     expect(table.rows[1].cells.single.text, 'c');
     String name(Object child) => switch (child) {
       final OpaqueXml x => x.localName,
+      TableGrid() => 'tblGrid',
       PropertyContainer() => 'properties',
       DocxTableRow() => 'row',
       DocxTableCell() => 'cell',

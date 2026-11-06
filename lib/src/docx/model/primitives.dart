@@ -128,6 +128,15 @@ final class DocxEdits implements DocxEditSink {
   );
 
   @override
+  void apply(Change change) {
+    if (_replaying) {
+      change.reapply();
+    } else {
+      transaction(() => applyChange(this, change));
+    }
+  }
+
+  @override
   void atomically(void Function() body) {
     if (_replaying) {
       body();
@@ -258,13 +267,10 @@ void applyChange(DocxEdits edits, Change change) {
   edits.afterRecord?.call();
 }
 
-/// Makes [block], or every paragraph in the cells of a table, report to
+/// Makes [block], or every paragraph, row and cell of a table, report to
 /// [sink].
-void _report(DocxBlock block, DocxEditSink sink) {
-  visitBlocks(block, (DocxBlock b) {
-    if (b is DocxParagraph) attachEditSink(b, sink);
-  });
-}
+void _report(DocxBlock block, DocxEditSink sink) =>
+    attachBlockSink(block, sink);
 
 /// Puts [block] in [container]: its paragraphs report to [edits] from now on.
 void _attach(DocxEdits edits, Object container, DocxBlock block) {

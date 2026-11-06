@@ -308,6 +308,36 @@ void main() {
     });
   });
 
+  group('TableIndentCodec', () {
+    const TableIndentCodec codec = TableIndentCodec();
+
+    test('reads signed twips of type dxa, or no type', () {
+      expect(_parse(codec, '<w:tblInd w:w="108" w:type="dxa"/>'), 5.4);
+      expect(_parse(codec, '<w:tblInd w:w="-108"/>'), -5.4);
+      expect(_parse(codec, '<w:tblInd w:w="31680" w:type="dxa"/>'), 1584);
+    });
+
+    test('a type other than dxa, a bad or far number or a child give no '
+        'view', () {
+      for (final String bad in <String>[
+        '<w:tblInd w:w="108" w:type="pct"/>',
+        '<w:tblInd w:w="108" w:type="auto"/>',
+        '<w:tblInd w:w="1in" w:type="dxa"/>',
+        '<w:tblInd w:w="31681" w:type="dxa"/>',
+        '<w:tblInd w:w="-31681" w:type="dxa"/>',
+        '<w:tblInd/>',
+        '<w:tblInd w:w="1"><w:x/></w:tblInd>',
+      ]) {
+        expect(_parse(codec, bad), isNull, reason: bad);
+      }
+    });
+
+    test('writes w:w in twips and w:type dxa', () {
+      expect(_written(codec, -5.0), '<w:tblInd w:w="-100" w:type="dxa"/>');
+      expect(_written(codec, 5.4), '<w:tblInd w:w="108" w:type="dxa"/>');
+    });
+  });
+
   group('TableMarginsCodec', () {
     const TableMarginsCodec codec = TableMarginsCodec();
 
@@ -591,10 +621,10 @@ void main() {
   });
 
   group('the schemas', () {
-    test('tablePropertiesSchema types the six properties and tblStyle', () {
+    test('tablePropertiesSchema types the seven properties and tblStyle', () {
       expect(tablePropertiesSchema.codecs.keys.toSet(), <String>{
-        'tblStyle', 'tblW', 'jc', 'tblBorders', 'tblLayout', 'tblCellMar', //
-        'tblLook',
+        'tblStyle', 'tblW', 'jc', 'tblInd', 'tblBorders', 'tblLayout', //
+        'tblCellMar', 'tblLook',
       });
       final PropertyContainer c = _container(
         '<w:tblPr><w:tblStyle w:val="TableGrid"/>'
@@ -607,7 +637,7 @@ void main() {
       expect(c.viewOf('tblW'), const DocxTableWidth.auto());
       expect(c.viewOf('jc'), DocxTableAlignment.center);
       expect(c.viewOf('tblLayout'), DocxTableLayout.fixed);
-      expect(c.viewOf('tblInd'), isNull);
+      expect(c.viewOf('tblInd'), 0);
     });
 
     test('tableRowPropertiesSchema types five properties', () {

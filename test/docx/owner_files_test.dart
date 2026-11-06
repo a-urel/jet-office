@@ -101,6 +101,19 @@ void main() {
         <String>['A', 'B', 'C', 'D'],
       );
     });
+
+    test('a table style resolves in the document: builtins.docx', () {
+      final DocxDocument doc = DocxDocument.open(
+        File('$_dir/builtins.docx').readAsBytesSync(),
+      );
+      final DocxTable table = tables(doc).single;
+      expect(table.properties.style, 'TabloKlavuzu');
+      final int styles = doc.styles.styles.length;
+      table.properties.style = null;
+      table.properties.style = 'TableGrid';
+      expect(table.properties.style, 'TabloKlavuzu');
+      expect(doc.styles.styles, hasLength(styles));
+    });
   });
 
   test('every owner file round-trips with its styles loaded', () {

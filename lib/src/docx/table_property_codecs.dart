@@ -4,12 +4,12 @@
 /// Not ported from Quds; written for jet_office.
 ///
 /// [tablePropertiesSchema] types the table's `w:tblPr` (its style, width,
-/// alignment, borders, layout, cell margins and look), [tableRowPropertiesSchema]
-/// the row's `w:trPr` (grid cells before and after, `w:cantSplit`, height and
+/// alignment, indent, borders, layout, cell margins and look),
+/// [tableRowPropertiesSchema] the row's `w:trPr` (grid cells before and after, `w:cantSplit`, height and
 /// header row) and [tableCellPropertiesSchema] the cell's `w:tcPr` (width,
 /// grid span, vertical merge, borders, shading, text direction and vertical
 /// alignment). A child is typed under the rules of `property_codec.dart`;
-/// every other child (`w:tblpPr`, `w:tblInd`, `w:tcMar` and the like) is kept
+/// every other child (`w:tblpPr`, `w:tcMar` and the like) is kept
 /// as read.
 ///
 /// The three elements with children (`w:tblBorders`, `w:tcBorders`,
@@ -209,6 +209,44 @@ final class TableMarginCodec extends PropertyCodec<double> {
   ) {
     w.start('$prefix:$localName');
     w.attribute('$prefix:w', '${twipsOf(value, 'pt', min: 0, max: maxTwips)}');
+    w.attribute('$prefix:type', 'dxa');
+    w.end();
+  }
+}
+
+/// The codec of `w:tblInd`, the indent of a table from the margin: `w:w` in
+/// twips, from -1584 to 1584 points, with `w:type="dxa"` (or none).
+///
+/// An indent of another type (`auto`, `pct`, `nil`) has no view.
+final class TableIndentCodec extends PropertyCodec<double> {
+  /// The codec of `w:tblInd`.
+  const TableIndentCodec() : super('tblInd');
+
+  @override
+  Set<String> get attributes => const <String>{'w', 'type'};
+
+  @override
+  double? parse(PropertyElement e) {
+    final String? type = e.w('type');
+    if (!_plain(e) || (type != null && type != 'dxa')) {
+      return null;
+    }
+    final int? twips = parseDecimal(e.w('w'), min: -maxTwips, max: maxTwips);
+    return twips == null ? null : ptOfTwips(twips);
+  }
+
+  @override
+  void write(
+    XmlWriter w,
+    String prefix,
+    double value,
+    PropertyElement? asRead,
+  ) {
+    w.start('$prefix:$localName');
+    w.attribute(
+      '$prefix:w',
+      '${twipsOf(value, 'indentationPt', min: -maxTwips, max: maxTwips)}',
+    );
     w.attribute('$prefix:type', 'dxa');
     w.end();
   }
@@ -641,13 +679,14 @@ final class TextDirectionCodec extends ValEnumCodec<DocxTextDirection> {
 }
 
 /// The schema of a table's `w:tblPr`: [tblPrOrder], typing the style, width,
-/// alignment, borders, layout, cell margins and look.
+/// alignment, indent, borders, layout, cell margins and look.
 const ContainerSchema tablePropertiesSchema = ContainerSchema(
   tblPrOrder,
   codecs: <String, PropertyCodec<Object>>{
     'tblStyle': StyleIdCodec('tblStyle'),
     'tblW': TableWidthCodec('tblW'),
     'jc': TableAlignmentCodec(),
+    'tblInd': TableIndentCodec(),
     'tblBorders': TableBordersCodec(),
     'tblLayout': TableLayoutCodec(),
     'tblCellMar': TableMarginsCodec(),

@@ -111,7 +111,9 @@
 /// [DocxColor] and [DocxIndentation], where `null` means "not set here"; a
 /// property or value the model does not understand is kept as written and
 /// reads `null`. A [DocxTable] gives its rows and cells, and a cell its
-/// blocks. What the model does not type yet, such as content controls,
+/// blocks; the table, the row and the cell give their formatting as
+/// [DocxTableProperties], [DocxTableRowProperties] and
+/// [DocxTableCellProperties]. What the model does not type yet, such as content controls,
 /// tracked changes, hyperlinks, drawings and fields, is kept as written in a
 /// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
 /// can be removed but not changed; the final section and the parts other than
@@ -166,6 +168,7 @@
 /// @docImport 'src/docx/model/run_properties.dart';
 /// @docImport 'src/docx/model/styles.dart';
 /// @docImport 'src/docx/model/table_formatting.dart';
+/// @docImport 'src/docx/model/table_properties.dart';
 /// @docImport 'src/docx/read_exception.dart';
 /// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
@@ -279,6 +282,15 @@ export 'src/docx/model/table_formatting.dart'
         DocxTableWidthKind,
         DocxTextDirection,
         DocxVerticalMerge;
+export 'src/docx/model/table_properties.dart'
+    show
+        DocxTableCellProperties,
+        DocxTableCellProperty,
+        DocxTableProperties,
+        DocxTableProperty,
+        DocxTableRowProperties,
+        DocxTableRowProperty,
+        maxTableColumns;
 export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
 export 'src/docx/read_limits.dart' show DocxReadLimits;
 export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;

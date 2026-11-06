@@ -150,6 +150,7 @@ final List<ContainerSchemaCase> containerSchemaCases = <ContainerSchemaCase>[
       'tblStyle': 'TableGrid',
       'tblW': const DocxTableWidth.auto(),
       'jc': DocxTableAlignment.center,
+      'tblInd': 5.4,
       'tblBorders': const DocxTableBorders(),
       'tblLayout': DocxTableLayout.fixed,
       'tblCellMar': DocxTableMargins(leftPt: 5.4),

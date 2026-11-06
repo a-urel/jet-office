@@ -180,6 +180,21 @@ void main() {
       );
       expect(readTypedProperties(doc), 4);
     });
+
+    test('readTypedProperties reads the properties of tables, rows and '
+        'cells, and the grid', () {
+      final DocxDocument doc = DocxDocument.open(
+        docx(
+          '<w:tbl><w:tblPr><w:tblStyle w:val="T"/><w:tblLayout '
+          'w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="20"/>'
+          '</w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr>'
+          '<w:gridSpan w:val="1"/><w:vAlign w:val="top"/></w:tcPr><w:p/>'
+          '</w:tc></w:tr></w:tbl>',
+        ),
+      );
+      // Two of the table, the grid, one of the row, two of the cell.
+      expect(readTypedProperties(doc), 6);
+    });
   });
 
   group('readTypedProperties', () {

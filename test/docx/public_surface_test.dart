@@ -205,4 +205,37 @@ void main() {
     expect(DocxCellAlignment.values, hasLength(3));
     expect(DocxTextDirection.values, hasLength(6));
   });
+
+  test('the properties of tables, rows and cells are exported', () {
+    final DocxDocument doc = DocxDocument.open(
+      buildDocx(
+        document:
+            '<w:document xmlns:w="${Ns.w}"><w:body><w:tbl><w:tr><w:tc><w:p/>'
+            '</w:tc></w:tr></w:tbl></w:body></w:document>',
+      ),
+    );
+    final DocxTable table = doc.body.blocks.single as DocxTable;
+    final DocxTableProperties tableProperties = table.properties;
+    final DocxTableRowProperties rowProperties = table.rows.single.properties;
+    final DocxTableCellProperties cellProperties =
+        table.rows.single.cells.single.properties;
+    tableProperties.layout = DocxTableLayout.fixed;
+    rowProperties.cantSplit = true;
+    cellProperties.gridSpan = maxTableColumns;
+    expect(tableProperties.layout, DocxTableLayout.fixed);
+    expect(table.rows.single.isHeader, isFalse);
+    expect(cellProperties.gridSpan, 63);
+    tableProperties.clear(DocxTableProperty.layout);
+    rowProperties.clear(DocxTableRowProperty.cantSplit);
+    cellProperties.clear(DocxTableCellProperty.gridSpan);
+    expect(tableProperties.layout, isNull);
+    for (final dynamic o in <dynamic>[
+      tableProperties,
+      rowProperties,
+      cellProperties,
+    ]) {
+      expect(() => o.set, throwsA(isA<NoSuchMethodError>()));
+      expect(() => o.source, throwsA(isA<NoSuchMethodError>()));
+    }
+  });
 }

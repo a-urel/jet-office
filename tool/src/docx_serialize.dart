@@ -124,7 +124,8 @@ List<String> encodedMainDifferences(Uint8List docx) {
 }
 
 /// Reads every typed property of [doc]: of each paragraph of the body, in the
-/// cells of its tables too, and each of its runs, of the document defaults
+/// cells of its tables too, and each of its runs, of each table (and its
+/// grid), row and cell, of the document defaults
 /// and each style, and of each level of each abstract list definition.
 /// Returns how many were set.
 ///
@@ -180,9 +181,12 @@ int _blocks(List<DocxBlock> blocks) {
           if (inline is DocxRun) set += _run(inline.properties);
         }
       case DocxTable():
+        set +=
+            _table(block.properties) + _count(<Object?>[block.gridColumnsPt]);
         for (final DocxTableRow row in block.rows) {
+          set += _row(row.properties);
           for (final DocxTableCell cell in row.cells) {
-            set += _blocks(cell.blocks);
+            set += _cell(cell.properties) + _blocks(cell.blocks);
           }
         }
       case DocxOpaqueBlock():
@@ -206,6 +210,30 @@ int _paragraph(DocxParagraphProperties p) => _count(<Object?>[
   p.shading,
   p.tabs,
   p.numbering,
+]);
+
+int _table(DocxTableProperties t) => _count(<Object?>[
+  t.style,
+  t.width,
+  t.layout,
+  t.alignment,
+  t.indentationPt,
+  t.borders,
+  t.cellMargins,
+  t.look,
+]);
+
+int _row(DocxTableRowProperties r) =>
+    _count(<Object?>[r.height, r.cantSplit, r.repeatAsHeader]);
+
+int _cell(DocxTableCellProperties c) => _count(<Object?>[
+  c.width,
+  c.gridSpan,
+  c.verticalMerge,
+  c.verticalAlignment,
+  c.shading,
+  c.borders,
+  c.textDirection,
 ]);
 
 int _run(DocxRunProperties r) => _count(<Object?>[

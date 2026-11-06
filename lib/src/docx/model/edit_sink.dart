@@ -30,6 +30,7 @@
 /// @docImport 'blocks.dart';
 library;
 
+import '../../opc/change_log.dart';
 import 'blocks.dart';
 import 'inlines.dart';
 import 'property_set.dart';
@@ -66,6 +67,11 @@ abstract interface class DocxEditSink {
     String localName,
     PropertyState previous,
   );
+
+  /// Applies [change] and records it: how an edit that is none of the above
+  /// (the grid of a table) is made undoable. In a replay, and for the sink of
+  /// no document, it only applies [change] ([Change.reapply]).
+  void apply(Change change);
 
   /// Runs [body] as one edit: if it throws, everything it reported is
   /// undone before the error leaves.
@@ -110,6 +116,9 @@ final class _NoEdits implements DocxEditSink {
     String localName,
     PropertyState previous,
   ) {}
+
+  @override
+  void apply(Change change) => change.reapply();
 
   @override
   void atomically(void Function() body) => body();

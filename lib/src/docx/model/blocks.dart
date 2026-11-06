@@ -21,13 +21,16 @@ library;
 
 import 'dart:collection';
 
+import '../../opc/change_log.dart';
 import '../../opc/opaque_xml.dart';
 import '../properties.dart';
+import '../units.dart';
 import 'edit_sink.dart';
 import 'inlines.dart';
 import 'paragraph_properties.dart';
 import 'property_set.dart';
 import 'styles.dart' show DocxStyleType;
+import 'table_properties.dart';
 
 /// One child of a body or of a table cell.
 ///
@@ -183,15 +186,29 @@ final class DocxTable extends DocxBlock {
     this._gridColumnsPt,
     this._children,
   ) : _rows = _ofType<DocxTableRow>(_children),
+      _gridRead = _gridColumnsPt,
       super._();
 
   /// The table's `w:tblPr` as read, by `tablePropertiesSchema`.
   final PropertyContainer _source;
 
+  /// The table's properties: [_source] with the values set.
+  late final DocxTableProperties _properties = newTableProperties(
+    _source,
+    () => _sink,
+  );
+
   /// The attributes of `w:tbl` the reader kept, such as `w:rsidR`.
   final List<KeptAttribute> _attributes;
 
-  final List<double?>? _gridColumnsPt;
+  /// The widths of the grid now; the list read until [gridColumnsPt] is set.
+  List<double?>? _gridColumnsPt;
+
+  /// The widths of the grid as read, to know whether the grid is written as
+  /// read.
+  final List<double?>? _gridRead;
+
+  DocxEditSink _sink = DocxEditSink.none;
 
   /// The children of `w:tbl` in file order: the [_source] when the file has
   /// a `w:tblPr`, each [DocxTableRow], and an [OpaqueXml] for any other,
@@ -211,12 +228,99 @@ final class DocxTable extends DocxBlock {
   /// control or another kept element is not listed, and is written as read.
   List<DocxTableRow> get rows => _rowsView;
 
+  /// The formatting of the table: its `w:tblPr`.
+  ///
+  /// It is the same object every time.
+  DocxTableProperties get properties => _properties;
+
   /// The width of each column of the grid (`w:tblGrid`), in points, or `null`
   /// for a table without a grid. The list cannot be modified.
   ///
   /// An entry is `null` for a `w:gridCol` whose `w:w` is missing or is not a
   /// whole number of twips.
+  ///
+  /// Setting replaces the widths of the grid as one change: the grid's other
+  /// children (`w:tblGridChange`) stay, and a table without a grid gets one
+  /// before its rows. A width is stored in twips, from 0 to 1584 points, and
+  /// reads back rounded; setting the widths the grid holds changes nothing.
+  /// A list of another length than the grid's, once the table has rows,
+  /// throws [ArgumentError] (the cells of a row would no longer fit the
+  /// grid); so does `null` or an entry that is `null` or not finite, and an
+  /// entry out of range throws [RangeError]. Nothing changes then.
   List<double?>? get gridColumnsPt => _gridColumnsPt;
+
+  set gridColumnsPt(List<double?>? value) {
+    if (value == null) {
+      throw ArgumentError.notNull('gridColumnsPt');
+    }
+    final List<double?> columns = List<double?>.unmodifiable(<double>[
+      for (final double? width in value)
+        ptOfTwips(
+          twipsOf(
+            width ?? (throw ArgumentError.notNull('gridColumnsPt entry')),
+            'gridColumnsPt',
+            min: 0,
+            max: maxTwips,
+          ),
+        ),
+    ]);
+    final List<double?>? current = _gridColumnsPt;
+    if (current != null &&
+        _rows.isNotEmpty &&
+        current.length != columns.length) {
+      throw ArgumentError.value(
+        value,
+        'gridColumnsPt',
+        'must have the ${current.length} columns of the grid',
+      );
+    }
+    if (current != null && _sameWidths(current, columns)) {
+      return;
+    }
+    _sink.apply(_GridSet(this, current, columns));
+  }
+}
+
+bool _sameWidths(List<double?> a, List<double?> b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+/// The widths of a table's grid set: reverts to the list before.
+final class _GridSet implements Change {
+  _GridSet(this._table, this._previous, this._next);
+
+  final DocxTable _table;
+  final List<double?>? _previous;
+  final List<double?> _next;
+
+  @override
+  void revert() => _table._gridColumnsPt = _previous;
+
+  @override
+  void reapply() => _table._gridColumnsPt = _next;
+}
+
+/// A `w:tblGrid` as read: the element as written, for a grid nothing
+/// changed, and the parts a grid with new widths is written from.
+final class TableGrid {
+  /// A grid whose element is [xml], whose own namespace declarations are
+  /// [declared] and whose children that are no `w:gridCol` are the texts
+  /// [keptChildren], as written.
+  const TableGrid(this.xml, this.declared, this.keptChildren);
+
+  /// The element as written.
+  final OpaqueXml xml;
+
+  /// The namespaces the element declared, prefix to URI.
+  final Map<String, String> declared;
+
+  /// The children that are not a `w:gridCol` of WordprocessingML, in order,
+  /// as written, such as `w:tblGridChange`.
+  final List<String> keptChildren;
 }
 
 /// A row of a table, `w:tr`.
@@ -226,6 +330,14 @@ final class DocxTableRow {
 
   /// The row's `w:trPr` as read, by `tableRowPropertiesSchema`.
   final PropertyContainer _source;
+
+  /// The row's properties: [_source] with the values set.
+  late final DocxTableRowProperties _properties = newTableRowProperties(
+    _source,
+    () => _sink,
+  );
+
+  DocxEditSink _sink = DocxEditSink.none;
 
   /// The attributes of `w:tr` the reader kept, such as `w14:paraId`.
   final List<KeptAttribute> _attributes;
@@ -246,6 +358,20 @@ final class DocxTableRow {
   /// Only the `w:tc` children of `w:tr` are cells: one inside a content
   /// control or another kept element is not listed, and is written as read.
   List<DocxTableCell> get cells => _cellsView;
+
+  /// The formatting of the row: its `w:trPr`.
+  ///
+  /// It is the same object every time.
+  DocxTableRowProperties get properties => _properties;
+
+  /// Whether the row repeats as a header: a shortcut for
+  /// [DocxTableRowProperties.repeatAsHeader] being `true`.
+  ///
+  /// Setting `true` sets `repeatAsHeader`; setting `false` removes it, so a
+  /// `w:tblHeader w:val="0"` goes too.
+  bool get isHeader => _properties.repeatAsHeader == true;
+
+  set isHeader(bool value) => _properties.repeatAsHeader = value ? true : null;
 }
 
 /// A cell of a table row, `w:tc`.
@@ -257,6 +383,14 @@ final class DocxTableCell {
 
   /// The cell's `w:tcPr` as read, by `tableCellPropertiesSchema`.
   final PropertyContainer _source;
+
+  /// The cell's properties: [_source] with the values set.
+  late final DocxTableCellProperties _properties = newTableCellProperties(
+    _source,
+    () => _sink,
+  );
+
+  DocxEditSink _sink = DocxEditSink.none;
 
   /// The attributes of `w:tc` the reader kept, such as `w:rsidR`.
   final List<KeptAttribute> _attributes;
@@ -274,6 +408,11 @@ final class DocxTableCell {
   /// The cell's blocks, in order: paragraphs, tables and opaque blocks. The
   /// list cannot be modified.
   List<DocxBlock> get blocks => _blocksView;
+
+  /// The formatting of the cell: its `w:tcPr`.
+  ///
+  /// It is the same object every time.
+  DocxTableCellProperties get properties => _properties;
 
   /// The cell's text: the text of its paragraphs joined by `\n`. A nested
   /// table adds the text of its cells, row by row, in their place; an opaque
@@ -490,8 +629,52 @@ void replaceInlineAt(DocxParagraph paragraph, int index, DocxInline inline) {
   paragraph._sink.inlineReplaced(paragraph, index, previous, inline);
 }
 
+/// Makes [block], and everything in the cells of a table (rows, cells and
+/// the paragraphs and tables in them), report its edits to [sink];
+/// [DocxEditSink.none] detaches them.
+void attachBlockSink(DocxBlock block, DocxEditSink sink) {
+  switch (block) {
+    case DocxParagraph():
+      block._sink = sink;
+    case DocxTable():
+      block._sink = sink;
+      for (final DocxTableRow row in block._rows) {
+        row._sink = sink;
+        for (final DocxTableCell cell in row._cells) {
+          cell._sink = sink;
+          for (final DocxBlock inner in cell._blocks) {
+            attachBlockSink(inner, sink);
+          }
+        }
+      }
+    case DocxOpaqueBlock():
+      break;
+  }
+}
+
 /// The `w:tblPr` of [table] as read; an empty container for none.
 PropertyContainer tablePropertiesOf(DocxTable table) => table._source;
+
+/// The properties of [table], for the writer.
+PropertySet tablePropertySetOf(DocxTable table) =>
+    propertySetOfTableProperties(table._properties);
+
+/// The properties of [row], for the writer.
+PropertySet rowPropertySetOf(DocxTableRow row) =>
+    propertySetOfTableRowProperties(row._properties);
+
+/// The properties of [cell], for the writer.
+PropertySet cellPropertySetOf(DocxTableCell cell) =>
+    propertySetOfTableCellProperties(cell._properties);
+
+/// The widths of the grid of [table] now, and whether they are the ones the
+/// file gave (the grid is then written as read).
+List<double?>? tableGridWidthsOf(DocxTable table) => table._gridColumnsPt;
+
+/// Whether the grid of [table] is the one the file gave, so it is written as
+/// read.
+bool tableGridAsRead(DocxTable table) =>
+    identical(table._gridColumnsPt, table._gridRead);
 
 /// The attributes of `w:tbl` the reader kept on [table], in source order.
 List<KeptAttribute> tableAttributesOf(DocxTable table) => table._attributes;
