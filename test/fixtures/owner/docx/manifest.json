@@ -2,21 +2,21 @@
   {
     "file": "blank.docx",
     "producer": "Microsoft Word for Mac 16.114.1",
-    "confirmedBy": null
+    "confirmedBy": "owner"
   },
   {
     "file": "features.docx",
     "producer": "Microsoft Word for Mac 16.114.1",
-    "confirmedBy": null
+    "confirmedBy": "owner"
   },
   {
     "file": "long.docx",
     "producer": "Microsoft Word for Mac 16.114.1",
-    "confirmedBy": null
+    "confirmedBy": "owner"
   },
   {
     "file": "builtins.docx",
     "producer": "Microsoft Word for Mac 16.114",
-    "confirmedBy": null
+    "confirmedBy": "owner"
   }
 ]
