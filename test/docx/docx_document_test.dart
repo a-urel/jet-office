@@ -16,6 +16,7 @@ import 'package:test/test.dart';
 import '../../tool/src/part_compare.dart';
 import '../support/read_xlsx.dart';
 import 'support/docx_builder.dart';
+import 'support/styles_documents.dart' show docxWithStyles;
 import 'support/word_document.dart';
 
 /// The document's paragraph texts and opaque block names, in order.
@@ -88,13 +89,84 @@ void main() {
         ),
         isEmpty,
       );
-      // The body was written from the model, not copied.
-      expect(
-        after['word/document.xml'],
-        isNot(equals(before['word/document.xml'])),
-      );
+      expect(after['word/document.xml'], before['word/document.xml']);
       expect(after['word/settings.xml'], before['word/settings.xml']);
       expect(doc.warnings, isEmpty);
+    });
+
+    group('a main part with no edit keeps its bytes', () {
+      const String outOfOrder =
+          '<?xml version="1.0"?>\n<w:document xmlns:w="${Ns.w}">\n'
+          '  <!-- a comment --><w:body><w:p><w:pPr><w:jc w:val="left"/>'
+          '<w:keepNext/></w:pPr><w:r><w:rPr><w:sz w:val="20"/><w:b/></w:rPr>'
+          '<w:t>a</w:t></w:r></w:p></w:body></w:document>';
+
+      Uint8List mainOf(Uint8List docx) =>
+          readXlsxBytes(docx)['word/document.xml']!;
+
+      test('out-of-order properties, opened, read and saved', () {
+        final Uint8List input = buildDocx(document: outOfOrder);
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(doc.body.blocks, hasLength(1));
+        expect(mainOf(doc.save().bytes), mainOf(input));
+      });
+
+      test('a set to the value it reads is no edit', () {
+        final Uint8List input = buildDocx(document: outOfOrder);
+        final DocxDocument doc = DocxDocument.open(input);
+        final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+        p.properties.alignment = p.properties.alignment;
+        expect(mainOf(doc.save().bytes), mainOf(input));
+      });
+
+      test('an edit that failed leaves no edit', () {
+        final Uint8List input = buildDocx(document: outOfOrder);
+        final DocxDocument doc = DocxDocument.open(input);
+        final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+        editsOf(doc).afterRecord = () => throw StateError('fail');
+        expect(() => p.addRun('b'), throwsStateError);
+        editsOf(doc).afterRecord = null;
+        expect(changeLogOf(doc).hasChanges, isFalse);
+        expect(mainOf(doc.save().bytes), mainOf(input));
+      });
+
+      test('a real edit writes the part from the model', () {
+        final DocxDocument doc = DocxDocument.open(
+          buildDocx(document: outOfOrder),
+        );
+        (doc.body.blocks.single as DocxParagraph).addRun('b');
+        final String xml = utf8.decode(mainOf(doc.save().bytes));
+        expect(xml, isNot(contains('a comment')));
+        expect(xml, contains('<w:keepNext/><w:jc w:val="left"/>'));
+        expect(xml, contains('<w:b/><w:sz w:val="20"/>'));
+        expect(xml, contains('<w:t>b</w:t>'));
+      });
+
+      test('an edit undone still counts as an edit, as the log says', () {
+        final DocxDocument doc = DocxDocument.open(
+          buildDocx(document: outOfOrder),
+        );
+        final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+        p.addRun('b');
+        p.removeInlineAt(1);
+        expect(changeLogOf(doc).hasChanges, isTrue);
+        expect(
+          utf8.decode(mainOf(doc.save().bytes)),
+          isNot(contains('a comment')),
+        );
+      });
+
+      test('an edit of the styles counts too: the log is the document\'s', () {
+        final DocxDocument doc = DocxDocument.open(
+          docxWithStyles(document: outOfOrder),
+        );
+        expect(doc.body.blocks, hasLength(1));
+        doc.styles.defaults.runProperties.bold = true;
+        expect(
+          utf8.decode(mainOf(doc.save().bytes)),
+          isNot(contains('a comment')),
+        );
+      });
     });
 
     test('open, set one run text, save differs only in that w:t', () {

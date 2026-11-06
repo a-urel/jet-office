@@ -9,7 +9,10 @@
 ///
 /// For every `<name>.expected.txt` in the directory (written by
 /// `tool/write_fixtures.dart`) it reads LibreOffice's `<name>.txt` and
-/// compares the two by `textDifferences` from `tool/src/text_compare.dart`,
+/// compares it with the expected text, or with `<name>.libreoffice.txt` when
+/// that exists: the text LibreOffice writes for a document with lists, whose
+/// labels (`    • Bullet one`) the model's text does not have. The
+/// comparison is by `textDifferences` from `tool/src/text_compare.dart`,
 /// whose library comment states the contract: a leading BOM and one
 /// trailing newline are ignored, everything else must be equal. The filter
 /// `Text (encoded):UTF8` writes UTF-8 with a BOM and ends every paragraph
@@ -52,8 +55,10 @@ int compareText(
   }
   int failed = 0;
   for (final String name in names) {
+    final File pinned = File('${dir.path}/$name.libreoffice.txt');
     final String expected = readExpectedText(
-      File('${dir.path}/$name.expected.txt').readAsStringSync(),
+      (pinned.existsSync() ? pinned : File('${dir.path}/$name.expected.txt'))
+          .readAsStringSync(),
     );
     final File exported = File('${dir.path}/$name.txt');
     final List<String> problems = exported.existsSync()

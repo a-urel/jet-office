@@ -108,8 +108,10 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
 
 /// The sample DOCX warning of [code]: part `/word/document.xml`, locations
 /// `body/p[0]` and `body/p[1]`, count 2, and for the two content type codes
-/// the detail they name. With [one], `invalidCharactersRemoved` counts 1
-/// at `body/p[0]`, for its singular text.
+/// the detail they name; `numberingNotFound` names the list `7` and
+/// `styleNotFound` the style `Foo`. With [one], `invalidCharactersRemoved`,
+/// `numberingNotFound` and `styleNotFound` count 1 at `body/p[0]`, for their
+/// singular text.
 DocxWarning _docxSample(DocxWarningCode code, {bool one = false}) {
   final DocxWarningCollector collector = DocxWarningCollector();
   switch (code) {
@@ -126,6 +128,24 @@ DocxWarning _docxSample(DocxWarningCode code, {bool one = false}) {
       );
     case DocxWarningCode.mainPartContentTypeUnexpected:
       collector.add(code, part: '/word/document.xml', detail: 'text/plain');
+    case DocxWarningCode.numberingNotFound:
+      for (int i = 0; i < (one ? 1 : 2); i++) {
+        collector.add(
+          code,
+          part: '/word/document.xml',
+          location: 'body/p[$i]',
+          detail: '7',
+        );
+      }
+    case DocxWarningCode.styleNotFound:
+      for (int i = 0; i < (one ? 1 : 2); i++) {
+        collector.add(
+          code,
+          part: '/word/document.xml',
+          location: 'body/p[$i]',
+          detail: 'Foo',
+        );
+      }
   }
   return collector.warnings.single;
 }
@@ -196,8 +216,12 @@ String warningMessagesMarkdown() {
     ..writeln('`/word/document.xml`. `invalidCharactersRemoved` counts 2 and')
     ..writeln('names `body/p[0]` and `body/p[1]`; `contentTypeMissing` names')
     ..writeln('`application/xml` and `mainPartContentTypeUnexpected` names')
-    ..writeln('`text/plain`. The second `invalidCharactersRemoved` row counts')
-    ..writeln('1 and names `body/p[0]`, for the singular.')
+    ..writeln('`text/plain`; `numberingNotFound` counts 2, names `body/p[0]`')
+    ..writeln('and `body/p[1]` and the list `7`; `styleNotFound` counts 2,')
+    ..writeln('names `body/p[0]` and `body/p[1]` and the style `Foo`. The')
+    ..writeln('second `invalidCharactersRemoved`, `numberingNotFound` and')
+    ..writeln('`styleNotFound` rows count 1 and name `body/p[0]`, for the')
+    ..writeln('singular.')
     ..writeln()
     ..writeln('| Code | en | de | tr |')
     ..writeln('|---|---|---|---|');
@@ -208,7 +232,9 @@ String warningMessagesMarkdown() {
   );
   for (final DocxWarningCode code in DocxWarningCode.values) {
     docxRow('`docx: ${code.name}`', _docxSample(code));
-    if (code == DocxWarningCode.invalidCharactersRemoved) {
+    if (code == DocxWarningCode.invalidCharactersRemoved ||
+        code == DocxWarningCode.numberingNotFound ||
+        code == DocxWarningCode.styleNotFound) {
       docxRow('`docx: ${code.name}` (one)', _docxSample(code, one: true));
     }
   }

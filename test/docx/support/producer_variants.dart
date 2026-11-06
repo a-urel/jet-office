@@ -77,6 +77,10 @@ List<ProducerVariant> producerVariants() => <ProducerVariant>[
   ProducerVariant('libreoffice', buildZip(_libreOffice())),
   ProducerVariant('google_docs', buildZip(_googleDocs())),
   ProducerVariant('docm', buildZip(_docm())),
+  ProducerVariant(
+    'google_docs_no_numbering',
+    buildZip(_googleDocs(numbering: false)),
+  ),
 ];
 
 /// The `w:p` elements of `d1Paragraphs`, with [element] and [attribute] as
@@ -267,17 +271,23 @@ Map<String, List<int>> _libreOffice() => <String, List<int>>{
 /// Google Docs' layout: the main part named by an absolute target, ids
 /// `rId1`, `rId2`… in the order of the parts, no `settings.xml`, a
 /// `numbering.xml`, `xml:space="preserve"` on every `w:t` and
-/// `w:rtl w:val="0"` in every run.
-Map<String, List<int>> _googleDocs() => <String, List<int>>{
+/// `w:rtl w:val="0"` in every run. Without [numbering] (the
+/// `google_docs_no_numbering` variant) the package has no `numbering.xml`,
+/// no relationship to one and no content type override for one, as a
+/// Google Docs export of a document with no list has.
+Map<String, List<int>> _googleDocs({
+  bool numbering = true,
+}) => <String, List<int>>{
   '[Content_Types].xml': _types(
     <String, String>{
       'rels': ContentType.relationships,
       'xml': 'application/xml',
     },
     <String, String>{
-      '/word/numbering.xml':
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.'
-          'numbering+xml',
+      if (numbering)
+        '/word/numbering.xml':
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.'
+            'numbering+xml',
       '/word/styles.xml': ContentType.wmlStyles,
       '/word/fontTable.xml': ContentType.wmlFontTable,
       '/word/document.xml': ContentType.wmlDocument,
@@ -293,14 +303,15 @@ Map<String, List<int>> _googleDocs() => <String, List<int>>{
           'fontTable',
       'fontTable.xml',
     ),
+    if (numbering)
+      (
+        'rId2',
+        'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+            'numbering',
+        'numbering.xml',
+      ),
     (
-      'rId2',
-      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
-          'numbering',
-      'numbering.xml',
-    ),
-    (
-      'rId3',
+      numbering ? 'rId3' : 'rId2',
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
           'styles',
       'styles.xml',
@@ -326,7 +337,7 @@ Map<String, List<int>> _googleDocs() => <String, List<int>>{
     ),
   ),
   'word/fontTable.xml': _wPart('fonts', '<w:font w:name="Arial"/>'),
-  'word/numbering.xml': _wPart('numbering'),
+  if (numbering) 'word/numbering.xml': _wPart('numbering'),
   'word/styles.xml': _wPart(
     'styles',
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal">'

@@ -210,11 +210,16 @@ List<String> compareXml(
 /// `r:embed`) compares literally: one part has no relationships to resolve
 /// it through. Bytes that are not UTF-8 or not well-formed XML are a
 /// difference, not an exception.
+///
+/// The children of an element whose local name is in [unordered] compare as
+/// a multiset: for a part the model writes in schema order, and a file whose
+/// properties are not.
 List<String> compareXmlParts(
   String partName,
   Uint8List expected,
-  Uint8List actual,
-) {
+  Uint8List actual, {
+  Set<String> unordered = const <String>{},
+}) {
   final List<String> out = <String>[];
   _Node? canonical(Uint8List bytes, String side) {
     final String text;
@@ -229,8 +234,24 @@ List<String> compareXmlParts(
 
   final _Node? e = canonical(expected, 'expected');
   final _Node? a = canonical(actual, 'actual');
-  if (e != null && a != null) _diff(partName, e, a, '', out);
+  if (e != null && a != null) {
+    _sortChildren(e, unordered);
+    _sortChildren(a, unordered);
+    _diff(partName, e, a, '', out);
+  }
   return out;
+}
+
+/// Sorts the children of each element under [node] named in [names].
+void _sortChildren(_Node node, Set<String> names) {
+  if (names.isEmpty) return;
+  if (names.contains(node.local)) {
+    String key(Object c) => c is _Node ? c.serialize() : '$c';
+    node.children.sort((Object a, Object b) => key(a).compareTo(key(b)));
+  }
+  node.children.whereType<_Node>().forEach(
+    (_Node child) => _sortChildren(child, names),
+  );
 }
 
 _Node? _canonicalText(

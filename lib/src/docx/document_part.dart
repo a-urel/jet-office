@@ -3,8 +3,8 @@
 /// Not ported from Quds; written for jet_office.
 ///
 /// [DocumentPart.read] walks the part once with the pull reader. It types
-/// `w:p`, its `w:pPr` (the style) and its runs; a run's `w:rPr` (the
-/// style), text, tabs, breaks and carriage returns. Everything else is kept
+/// `w:p`, its `w:pPr` and its runs; a run's `w:rPr`, text, tabs, breaks and
+/// carriage returns. Everything else is kept
 /// as written, in place: blocks other than paragraphs (tables, content
 /// controls, bookmarks) as opaque blocks, other paragraph children (tracked
 /// changes, hyperlinks, proofing marks) as opaque inlines, other run
@@ -22,9 +22,11 @@
 /// written as read, with every namespace declaration and `mc:Ignorable`, and
 /// every kept element and attribute is written with the root's bindings as
 /// the ones in scope, so it declares only what it needs and never redeclares
-/// `w`. Typed elements use the root's own prefix for WordprocessingML. An
-/// unchanged read writes the same document (by meaning; see
-/// `tool/src/part_compare.dart`).
+/// `w`. Typed elements use the root's own prefix for WordprocessingML. What
+/// it writes for a part read and not edited means the same as the part (see
+/// `tool/src/part_compare.dart`), with the children of each `w:pPr` and
+/// `w:rPr` in schema order and without comments between them; a document
+/// with no edit therefore saves the file's bytes instead (`DocxDocument`).
 library;
 
 import 'dart:typed_data';
@@ -37,19 +39,30 @@ import '../xml/xml_escape.dart';
 import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'model/blocks.dart';
+import 'model/formatting.dart' show DocxNumberingRef;
 import 'model/inlines.dart';
+import 'model/property_set.dart';
 import 'model/run_content.dart';
+import 'model/styles.dart' show DocxStyleType;
+import 'paragraph_property_codecs.dart' show paragraphPropertiesSchema;
+import 'part_root.dart';
 import 'properties.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
-import 'schema_order.dart';
+import 'run_property_codecs.dart' show runPropertiesSchema;
 import 'warnings.dart';
 
-/// The paragraph properties the reader types: the style.
-const Set<String> _pPrTyped = <String>{'pStyle'};
-
-/// The run properties the reader types: the style.
-const Set<String> _rPrTyped = <String>{'rStyle'};
+/// The list [paragraph] was put in through the API: the value of a
+/// `w:numPr` set on it that names a list other than 0, or `null` (nothing
+/// set, removed, or read from the file).
+DocxNumberingRef? listSetOf(DocxParagraph paragraph) {
+  final PropertySet pPr = paragraphPropertySetOf(paragraph);
+  if (!pPr.isSet('numPr')) {
+    return null;
+  }
+  final Object? value = pPr.valueOf('numPr');
+  return value is DocxNumberingRef && value.numId != 0 ? value : null;
+}
 
 /// The main document part: the root's start tag, what surrounds the body,
 /// and the body's blocks.
@@ -110,6 +123,18 @@ final class DocumentPart implements PartContent {
 
   DocxWarningCollector _encodeWarnings = DocxWarningCollector();
 
+  /// Whether the document defines the list instance a numId names, so a
+  /// `w:numPr` set through the API that names another is reported at
+  /// [encode] (plan Ruling 8); `null` reports none. The save sets it
+  /// before it writes the part.
+  bool Function(int numId)? listDefined;
+
+  /// Whether the document defines a style of that id and type, so a
+  /// `w:pStyle` or `w:rStyle` set through the API that names another is
+  /// reported at [encode] (plan Ruling 8); `null` reports none. The save
+  /// sets it before it writes the part.
+  bool Function(String id, DocxStyleType type)? styleDefined;
+
   /// The warnings the last [encode] raised; empty before the first.
   ///
   /// Each [encode] starts a new collector, so encoding twice reports each
@@ -118,7 +143,13 @@ final class DocumentPart implements PartContent {
   /// [DocxWarningCode.invalidCharactersRemoved] at the run's location at
   /// that time, `body/p[i]/r[j]`, where `i` counts only the paragraphs of
   /// the body and `j` only the runs of the paragraph. A run that is no
-  /// longer in the body is not reported.
+  /// longer in the body is not reported. A paragraph whose `w:numPr` was
+  /// set through the API to a list other than 0 that [listDefined] denies
+  /// is reported with [DocxWarningCode.numberingNotFound] at `body/p[i]`,
+  /// with the list's id as the detail. A style set through the API that
+  /// [styleDefined] denies is reported with
+  /// [DocxWarningCode.styleNotFound] at `body/p[i]` or `body/p[i]/r[j]`,
+  /// with the style's id as the detail.
   DocxWarningCollector get encodeWarnings => _encodeWarnings;
 
   /// The root element's start tag: its name, namespace declarations and
@@ -153,45 +184,21 @@ final class DocumentPart implements PartContent {
     final DocxWarningCollector warnings = DocxWarningCollector();
     final Utf8Buffer buffer = Utf8Buffer();
     final XmlWriter w = XmlWriter(buffer)..declaration();
-    final XmlRoot root = this.root;
-    final String rootPrefix = _prefixOf(root.qualifiedName);
-    // The prefix typed elements use: one bound to WordprocessingML on the
-    // root, `w` first. Attributes need one, so a root that binds the
-    // namespace only as the default gets one declared.
-    String? prefix = root.namespaces['w'] == Ns.w
-        ? 'w'
-        : rootPrefix.isNotEmpty
-        ? rootPrefix
-        : _boundPrefix(root.namespaces);
-    final Map<String, String> scope = <String, String>{...root.namespaces};
-    root.writeStart(w);
-    if (prefix == null) {
-      prefix = 'w';
-      for (int i = 1; scope.containsKey(prefix); i++) {
-        prefix = 'w$i';
-      }
-      scope[prefix!] = Ns.w;
-      w.attribute('xmlns:$prefix', Ns.w);
-    }
-    _Writer(w, '$prefix:', prefix, scope, partName, warnings).write(this);
+    final (:String prefix, :Map<String, String> scope) = openWordRoot(w, root);
+    _Writer(
+      w,
+      '$prefix:',
+      prefix,
+      scope,
+      partName,
+      warnings,
+      listDefined,
+      styleDefined,
+    ).write(this);
     w.end();
     _encodeWarnings = warnings;
     return buffer.takeChunks();
   }
-}
-
-/// The prefix of the qualified name [name], or `''` for none.
-String _prefixOf(String name) {
-  final int colon = name.indexOf(':');
-  return colon < 0 ? '' : name.substring(0, colon);
-}
-
-/// A non-empty prefix [namespaces] binds to WordprocessingML, or null.
-String? _boundPrefix(Map<String, String> namespaces) {
-  for (final MapEntry<String, String> e in namespaces.entries) {
-    if (e.key.isNotEmpty && e.value == Ns.w) return e.key;
-  }
-  return null;
 }
 
 /// One write of a document part's content, inside the open root.
@@ -203,6 +210,8 @@ final class _Writer {
     this._scope,
     this._partName,
     this._warnings,
+    this._listDefined,
+    this._styleDefined,
   );
 
   final XmlWriter _w;
@@ -218,6 +227,8 @@ final class _Writer {
 
   final String _partName;
   final DocxWarningCollector _warnings;
+  final bool Function(int numId)? _listDefined;
+  final bool Function(String id, DocxStyleType type)? _styleDefined;
 
   void write(DocumentPart part) {
     for (final OpaqueXml x in part.beforeBody) {
@@ -250,14 +261,20 @@ final class _Writer {
     final XmlWriter w = _w;
     w.start('${_p}p');
     writeKeptAttributes(w, paragraphAttributesOf(p), declaredAbove: _scope);
-    final PropertyContainer pPr = paragraphPropertiesOf(p);
-    final String? style = p.style;
-    if (style != null || pPr.isRead || !pPr.isEmpty) {
-      pPr.writeTo(w, '${_p}pPr', pPrOrder, <String, void Function(XmlWriter)>{
-        if (style != null)
-          'pStyle': (XmlWriter w) =>
-              writeValElement(w, '${_p}pStyle', style, prefix: _prefix),
-      }, declaredAbove: _scope);
+    final PropertySet pPr = paragraphPropertySetOf(p);
+    final bool Function(int)? listDefined = _listDefined;
+    final DocxNumberingRef? list = listDefined == null ? null : listSetOf(p);
+    if (list != null && !listDefined!(list.numId)) {
+      _warnings.add(
+        DocxWarningCode.numberingNotFound,
+        part: _partName,
+        location: path,
+        detail: '${list.numId}',
+      );
+    }
+    _checkStyle(pPr, 'pStyle', DocxStyleType.paragraph, path);
+    if (!pPr.writesNothing) {
+      pPr.writeTo(w, '${_p}pPr', prefix: _prefix, declaredAbove: _scope);
     }
     int runs = 0;
     for (final DocxInline inline in p.inlines) {
@@ -269,6 +286,29 @@ final class _Writer {
       }
     }
     w.end();
+  }
+
+  /// Reports the style reference [localName] of [properties] at [path] if
+  /// it was set through the API and names no style of [type].
+  void _checkStyle(
+    PropertySet properties,
+    String localName,
+    DocxStyleType type,
+    String path,
+  ) {
+    final bool Function(String, DocxStyleType)? defined = _styleDefined;
+    if (defined == null || !properties.isSet(localName)) {
+      return;
+    }
+    final Object? id = properties.valueOf(localName);
+    if (id is String && !defined(id, type)) {
+      _warnings.add(
+        DocxWarningCode.styleNotFound,
+        part: _partName,
+        location: path,
+        detail: id,
+      );
+    }
   }
 
   /// Writes the run [r] at the location [path], and reports the characters
@@ -286,14 +326,10 @@ final class _Writer {
     final XmlWriter w = _w;
     w.start('${_p}r');
     writeKeptAttributes(w, runAttributesOf(r), declaredAbove: _scope);
-    final PropertyContainer rPr = runPropertiesOf(r);
-    final String? style = r.style;
-    if (style != null || rPr.isRead || !rPr.isEmpty) {
-      rPr.writeTo(w, '${_p}rPr', rPrOrder, <String, void Function(XmlWriter)>{
-        if (style != null)
-          'rStyle': (XmlWriter w) =>
-              writeValElement(w, '${_p}rStyle', style, prefix: _prefix),
-      }, declaredAbove: _scope);
+    final PropertySet rPr = runPropertySetOf(r);
+    _checkStyle(rPr, 'rStyle', DocxStyleType.character, path);
+    if (!rPr.writesNothing) {
+      rPr.writeTo(w, '${_p}rPr', prefix: _prefix, declaredAbove: _scope);
     }
     for (final DocxRunContent c in r.content) {
       _content(c);
@@ -435,19 +471,10 @@ final class _PartReader {
       keepAttributes(r),
     );
     PropertyContainer? properties;
-    String? style;
     final List<DocxInline> inlines = <DocxInline>[];
     _children(r, () {
       if (properties == null && _isW(r, 'pPr')) {
-        properties = PropertyContainer.read(
-          r,
-          typed: _pPrTyped,
-          accepts: _isPlainStyle,
-          onTyped: (String _, XmlPullReader r) {
-            style = _styleValue(r);
-            r.skip();
-          },
-        );
+        properties = PropertyContainer.read(r, paragraphPropertiesSchema);
       } else if (_isW(r, 'r')) {
         inlines.add(_readRun());
       } else {
@@ -456,7 +483,6 @@ final class _PartReader {
     });
     return readParagraph(
       properties: properties ?? const PropertyContainer.empty(),
-      style: style,
       attributes: attributes,
       inlines: inlines,
     );
@@ -483,7 +509,6 @@ final class _PartReader {
       keepAttributes(r),
     );
     PropertyContainer? properties;
-    String? style;
     final List<DocxRunContent> content = <DocxRunContent>[];
     _children(r, () {
       if (r.namespaceUri != Ns.w) {
@@ -492,15 +517,7 @@ final class _PartReader {
       }
       switch (r.localName) {
         case 'rPr' when properties == null:
-          properties = PropertyContainer.read(
-            r,
-            typed: _rPrTyped,
-            accepts: _isPlainStyle,
-            onTyped: (String _, XmlPullReader r) {
-              style = _styleValue(r);
-              r.skip();
-            },
-          );
+          properties = PropertyContainer.read(r, runPropertiesSchema);
         case 't':
           final List<KeptAttribute> kept = keepAttributes(r);
           content.add(readText(_readText(), kept));
@@ -519,7 +536,6 @@ final class _PartReader {
     });
     return readRun(
       properties: properties ?? const PropertyContainer.empty(),
-      style: style,
       attributes: attributes,
       content: content,
     );
@@ -585,20 +601,6 @@ final class _PartReader {
 /// Whether the element [r] is on is `w:<localName>`.
 bool _isW(XmlPullReader r, String localName) =>
     r.namespaceUri == Ns.w && r.localName == localName;
-
-/// The `w:val` of the style element [r] is on, which [_isPlainStyle]
-/// accepted.
-String _styleValue(XmlPullReader r) =>
-    r.getAttribute('val', namespaceUri: Ns.w)!;
-
-/// Whether the `w:pStyle` or `w:rStyle` [r] is on is typed: it has a
-/// non-empty `w:val` and no other attribute. Any other one (no `w:val`, an
-/// empty one, or more attributes) stays kept, so the style reads null and
-/// the element is written back as read.
-bool _isPlainStyle(String _, XmlPullReader r) {
-  final String? value = r.getAttribute('val', namespaceUri: Ns.w);
-  return value != null && value.isNotEmpty && keepAttributes(r).length == 1;
-}
 
 /// Calls [onChild] with [r] on the start of each child element of the
 /// element [r] is on; [onChild] must leave [r] on that child's end event.

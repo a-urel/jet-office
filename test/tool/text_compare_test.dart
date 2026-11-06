@@ -67,6 +67,21 @@ void main() {
       ]);
     });
 
+    test('a difference in a zero-width space is printed escaped', () {
+      expect(textDifferences('a\u200Bb', 'ab'), <String>[
+        r'line 1: expected "a\u{200b}b", got "ab"',
+      ]);
+      expect(textDifferences('a\u200Fb', 'a\u200Eb'), <String>[
+        r'line 1: expected "a\u{200f}b", got "a\u{200e}b"',
+      ]);
+      expect(textDifferences('\uFEFFab', 'ab'), <String>[
+        r'line 1: expected "\u{feff}ab", got "ab"',
+      ]);
+      expect(textDifferences('a\u2010b', 'ab'), <String>[
+        'line 1: expected "a\u2010b", got "ab"',
+      ]);
+    });
+
     test('stops after ten differing lines', () {
       final String expected = List<String>.filled(20, 'x').join('\n');
       final String actual = List<String>.filled(20, 'y').join('\n');

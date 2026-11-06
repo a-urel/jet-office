@@ -9,7 +9,7 @@ import 'support/docx_fuzz.dart';
 const List<int> _seeds = <int>[1, 2, 3, 4];
 
 /// The cases per seed in the quality gate.
-const int _cases = 100;
+const int _cases = 150;
 
 /// The length and Adler-32 checksum of every corpus entry, computed once on
 /// the VM. The Chrome leg compares them, which proves the corpus (and so
@@ -20,17 +20,23 @@ const int _cases = 100;
 const Map<String, ({int length, int adler32})> _corpus =
     <String, ({int length, int adler32})>{
       'word_like': (length: 8453, adler32: 2713099753),
+      'localized_word': (length: 8747, adler32: 3839375278),
       'd1_blank': (length: 62564, adler32: 126055035),
       'd1_paragraphs': (length: 62853, adler32: 3979269737),
       'd1_text_rules': (length: 63248, adler32: 3935131841),
       'd1_unicode': (length: 62959, adler32: 2521569011),
       'd1_large': (length: 263451, adler32: 1522611747),
+      'd2_run_formatting': (length: 64345, adler32: 4272339350),
+      'd2_paragraph_formatting': (length: 64651, adler32: 475797816),
+      'd2_styles': (length: 66654, adler32: 190303206),
+      'd2_lists': (length: 69004, adler32: 3869031974),
       'ns0_prefix': (length: 1407, adler32: 3668097186),
       'default_namespace': (length: 1344, adler32: 3335628311),
       'no_override': (length: 1259, adler32: 3490218517),
       'libreoffice': (length: 6318, adler32: 1326981182),
       'google_docs': (length: 4167, adler32: 3568252968),
       'docm': (length: 2695, adler32: 1708433424),
+      'google_docs_no_numbering': (length: 3626, adler32: 4219505065),
     };
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
@@ -72,6 +78,44 @@ void main() {
     for (final ({String name, Uint8List bytes}) entry in docxFuzzCorpus()) {
       exerciseDocx(entry.bytes);
     }
+  });
+
+  test('typed attributes are replaced in the typed parts', () {
+    final RegExp replacement = RegExp(r'replace w:(\w+) at \d+ with "(.*)"$');
+    final Map<String, Map<String, int>> perPart = <String, Map<String, int>>{};
+    final Set<String> values = <String>{};
+    for (final int seed in _seeds) {
+      final Set<String> hit = <String>{};
+      for (final FuzzCase c in docxFuzzCases(seed, _cases)) {
+        final RegExpMatch? m = replacement.firstMatch(c.mutation);
+        if (m == null || !typedAttributes.contains(m.group(1))) continue;
+        values.add(m.group(2)!);
+        hit.add(mutatedPart(c.mutation)!);
+        final Map<String, int> counts = perPart.putIfAbsent(
+          mutatedPart(c.mutation)!,
+          () => <String, int>{},
+        );
+        counts.update(m.group(1)!, (int n) => n + 1, ifAbsent: () => 1);
+      }
+      // Few corpus entries hold numbering, so it is required over all seeds.
+      expect(
+        hit,
+        containsAll(<String>['word/document.xml', 'word/styles.xml']),
+        reason: 'seed $seed',
+      );
+    }
+    // The counts, for the report: replacements per part and attribute.
+    printOnFailure('$perPart');
+    expect(perPart.keys.toSet(), <String>{
+      'word/document.xml',
+      'word/styles.xml',
+      'word/numbering.xml',
+    });
+    for (final MapEntry<String, Map<String, int>> e in perPart.entries) {
+      expect(e.value['val'], greaterThan(0), reason: e.key);
+      expect(e.value.length, greaterThanOrEqualTo(3), reason: e.key);
+    }
+    expect(values, <String>{'abc', '99999999999999999999', '-', '1in'});
   });
 
   test('every part name is mutated in some corpus entry', () {

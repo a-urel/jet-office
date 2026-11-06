@@ -15,7 +15,10 @@
 /// the model never loaded from its original bytes (layer 1), so a body never
 /// accessed is copied as it was, even when it would not parse; a loaded
 /// part from the model (layer 2), with what the model does not type kept as
-/// written inside it (layer 3).
+/// written inside it (layer 3). A loaded part with nothing to write is
+/// written from its original bytes too: the main part while the document's
+/// `ChangeLog` has no changes, a styles or numbering part while the model
+/// writes what it wrote when read.
 ///
 /// Every edit runs in a transaction of the document's `ChangeLog`
 /// (`primitives.dart`), so an edit that fails leaves the body as it was.
@@ -30,15 +33,25 @@ import 'dart:collection';
 import 'dart:typed_data';
 
 import '../opc/change_log.dart';
+import '../opc/ooxml.dart' show ContentType, RelType;
+import '../opc/package.dart' show PartContent;
+import '../xml/xml_pull_reader.dart';
 import '../zip/archive_adapter.dart';
 import 'blank_document.dart';
+import 'builtin_styles.dart' show DocxBuiltInStyle;
 import 'document_part.dart';
 import 'docx_package.dart';
 import 'model/blocks.dart';
+import 'model/numbering.dart';
 import 'model/primitives.dart' as primitives;
 import 'model/primitives.dart' show DocxEdits;
+import 'model/styles.dart';
+import 'numbering_part.dart';
+import 'numbering_schemas.dart' show maxListLevel;
 import 'read_exception.dart';
 import 'read_limits.dart';
+import 'related_part.dart';
+import 'styles_part.dart';
 import 'warnings.dart';
 
 /// The edits of [document]: its change log and the sink of its body's
@@ -51,6 +64,12 @@ ChangeLog changeLogOf(DocxDocument document) => document._edits.log;
 
 /// Whether the body of [document] has been loaded, for tests.
 bool isBodyLoaded(DocxDocument document) => document._body != null;
+
+/// Whether the styles of [document] have been loaded, for tests.
+bool isStylesLoaded(DocxDocument document) => document._styles != null;
+
+/// Whether the numbering of [document] has been loaded, for tests.
+bool isNumberingLoaded(DocxDocument document) => document._numbering != null;
 
 /// A Word document held in memory: opened from a DOCX file, read and
 /// changed block by block, and saved.
@@ -95,7 +114,10 @@ final class DocxDocument {
   }
 
   DocxDocument._(this._package, this._loadWarnings)
-    : _warnings = _loadWarnings.warnings;
+    : _warnings = _loadWarnings.warnings {
+    _edits.styleResolver = (String id, DocxStyleType type) =>
+        resolveStyleId(styles, id, type);
+  }
 
   final DocxPackage _package;
 
@@ -108,6 +130,16 @@ final class DocxDocument {
   DocumentPart? _part;
   DocxBody? _body;
 
+  /// The styles part and where it is, once the styles are loaded.
+  StylesPart? _stylesPart;
+  RelatedPart? _stylesSlot;
+  DocxStyles? _styles;
+
+  /// The numbering part and where it is, once the numbering is loaded.
+  NumberingPart? _numberingPart;
+  RelatedPart? _numberingSlot;
+  DocxNumbering? _numbering;
+
   List<DocxWarning> _warnings;
 
   /// The document's body, the content of `w:body`.
@@ -118,6 +150,36 @@ final class DocxDocument {
   /// [DocxReadLimits.maxTextLength]); nothing is loaded then, so the next
   /// access throws again and a save copies the part as it was.
   DocxBody get body => _body ?? _loadBody();
+
+  /// The document's styles and document defaults, from the styles part.
+  ///
+  /// The part, found through the main part's relationship wherever it
+  /// lives, loads on the first access, or when a style is set on content of
+  /// the document (the id set is resolved against it, and such a set or
+  /// insertion throws what this does); until then, and for as long as
+  /// nothing in it changed, a save copies it byte for byte. A document
+  /// without one has empty styles, and gains the part at save once a style
+  /// or a default is set in it. Throws a
+  /// [DocxReadException] naming the part when it cannot be read (malformed
+  /// XML, a root that is not `w:styles`, or a damaged relationships part of
+  /// the main part); nothing is loaded then, so the next access throws
+  /// again and a save copies the part as it was.
+  DocxStyles get styles => _styles ?? _loadStyles();
+
+  /// The document's lists, from the numbering part: the abstract
+  /// definitions and the instances paragraphs name.
+  ///
+  /// The part, found through the main part's relationship wherever it
+  /// lives, loads on the first access, or at save when a paragraph's
+  /// numbering was set (to report a list the document lacks); until then,
+  /// and for as long as nothing in it changed, a save copies it byte for
+  /// byte. A document without one has an empty
+  /// numbering, and gains the part at save once it holds a definition.
+  /// Throws a [DocxReadException] naming the part when it cannot be read
+  /// (malformed XML, a root that is not `w:numbering`, or a damaged
+  /// relationships part of the main part); nothing is loaded then, so the
+  /// next access throws again and a save copies the part as it was.
+  DocxNumbering get numbering => _numbering ?? _loadNumbering();
 
   /// What was repaired while opening and loading the document, followed by
   /// what the last [save] or [saveTo] repaired, in first-occurrence order.
@@ -131,9 +193,15 @@ final class DocxDocument {
   /// Saves the document and returns the file with the warnings of this
   /// save, which [warnings] then holds too.
   ///
-  /// A part never loaded is copied from the file, and a loaded one is
-  /// written from the model. Throws a [DocxReadException] if a part of the
-  /// file cannot be read after all.
+  /// A part never loaded is copied from the file, and so, byte for byte, is
+  /// a loaded one with nothing new to write, comments and out-of-order
+  /// properties included: the main part until the document has an edit (of
+  /// any part, since they share one change log; an edit that failed is
+  /// none, one undone still is), and a styles or numbering part for as long
+  /// as the model writes what it wrote when read. Any other part is written
+  /// from the model, which keeps every element, in schema order, but no
+  /// comment between the children it reads. Throws a [DocxReadException] if
+  /// a part of the file cannot be read after all.
   DocxResult save() {
     final ZipWriter zip = ZipWriter();
     _write(zip);
@@ -157,7 +225,7 @@ final class DocxDocument {
     // reported as the body's failure; a relationship whose target is
     // missing (a header, say) is kept as written.
     package.guard(
-      _relationshipsPartOf(main),
+      relationshipsPartOf(main),
       () => package.package.relationshipsOf(main),
     );
     final DocumentPart part = package.guard(
@@ -169,15 +237,94 @@ final class DocxDocument {
         limits: package.limits,
       ),
     );
-    final DocxBody body = DocxBody._(_edits, part.blocks);
+    final DocxBody body = DocxBody._(_edits, part.blocks, this);
     primitives.adoptBlocks(_edits, body, part.blocks);
-    package.package.setContent(main, part);
+    package.package.setContent(
+      main,
+      _MainPart(part, _edits.log, () => package.package.originalBytes(main)),
+    );
     _part = part;
     return _body = body;
   }
 
+  DocxStyles _loadStyles() {
+    final RelatedPart slot = RelatedPart.find(
+      _package,
+      source: _package.mainPart,
+      relationshipType: RelType.styles,
+      defaultName: '/word/styles.xml',
+      contentType: ContentType.wmlStyles,
+    );
+    final StylesPart part = slot.exists
+        ? slot.load((XmlPullReader r) => StylesPart.read(r, slot.name, _edits))
+        : StylesPart.empty(_edits);
+    _stylesSlot = slot;
+    _stylesPart = part;
+    return _styles = part.styles;
+  }
+
+  DocxNumbering _loadNumbering() {
+    final RelatedPart slot = RelatedPart.find(
+      _package,
+      source: _package.mainPart,
+      relationshipType: RelType.numbering,
+      defaultName: '/word/numbering.xml',
+      contentType: ContentType.wmlNumbering,
+    );
+    final NumberingPart part = slot.exists
+        ? slot.load(
+            (XmlPullReader r) => NumberingPart.read(r, slot.name, _edits),
+          )
+        : NumberingPart.empty(_edits);
+    _numberingSlot = slot;
+    _numberingPart = part;
+    return _numbering = part.numbering;
+  }
+
+  /// Whether the document defines a list instance, for the check of the
+  /// lists paragraphs were put in through the API (plan Ruling 8); `null`
+  /// when no paragraph of the body was, or the numbering part cannot be
+  /// read (nothing is reported then).
+  bool Function(int numId)? _listCheck() {
+    final DocxBody? body = _body;
+    if (body == null ||
+        !body._blocks.any(
+          (DocxBlock b) => b is DocxParagraph && listSetOf(b) != null,
+        )) {
+      return null;
+    }
+    final DocxNumbering numbering;
+    try {
+      numbering = this.numbering;
+    } on DocxReadException {
+      // A broken part is copied as it was, and its lists are unknown.
+      return null;
+    }
+    return numberingInstanceIds(numbering).contains;
+  }
+
   void _write(ZipWriter zip) {
     final DocxPackage package = _package;
+    final DocumentPart? main = _part;
+    if (main != null) {
+      main.listDefined = _listCheck();
+      // Only a style set through the API is reported, and setting one
+      // loaded the styles.
+      final DocxStyles? styles = _styles;
+      main.styleDefined = styles == null
+          ? null
+          : (String id, DocxStyleType type) => definesStyle(styles, id, type);
+    }
+    // A styles part the document lacked is added once it holds something
+    // (plan Ruling 7); after that it is a part like the others.
+    final StylesPart? stylesPart = _stylesPart;
+    if (stylesPart != null && stylesPart.holdsSomething) {
+      _stylesSlot!.create(stylesPart);
+    }
+    final NumberingPart? numbering = _numberingPart;
+    if (numbering != null && numbering.holdsSomething) {
+      _numberingSlot!.create(numbering);
+    }
     package.guard(package.mainPart, () => package.package.writeTo(zip));
     final DocumentPart? part = _part;
     _warnings = List<DocxWarning>.unmodifiable(<DocxWarning>[
@@ -185,14 +332,23 @@ final class DocxDocument {
       if (part != null) ...part.encodeWarnings.warnings,
     ]);
   }
+}
 
-  /// The name of the relationships part of [part], such as
-  /// `/word/_rels/document.xml.rels`.
-  static String _relationshipsPartOf(String part) {
-    final int slash = part.lastIndexOf('/');
-    return '${part.substring(0, slash + 1)}_rels/'
-        '${part.substring(slash + 1)}.rels';
-  }
+/// The content of a loaded main part: the file's bytes until [_log] has a
+/// change, then what [_part] writes. No edit means nothing to report either:
+/// what the part warns about at save was put there through the API.
+final class _MainPart implements PartContent {
+  _MainPart(this._part, this._log, this._original);
+
+  final DocumentPart _part;
+  final ChangeLog _log;
+
+  /// The part's bytes in the file.
+  final Uint8List Function() _original;
+
+  @override
+  List<Uint8List> encode() =>
+      _log.hasChanges ? _part.encode() : <Uint8List>[_original()];
 }
 
 /// The body of a document, the content of `w:body`: its blocks, in order.
@@ -205,9 +361,10 @@ final class DocxDocument {
 /// A block is in at most one body at a time. Each edit is atomic: one that
 /// throws changes nothing.
 final class DocxBody {
-  DocxBody._(this._edits, this._blocks);
+  DocxBody._(this._edits, this._blocks, this._document);
 
   final DocxEdits _edits;
+  final DocxDocument _document;
   final List<DocxBlock> _blocks;
   late final List<DocxBlock> _blocksView = UnmodifiableListView<DocxBlock>(
     _blocks,
@@ -227,11 +384,65 @@ final class DocxBody {
     return paragraph;
   }
 
+  /// Appends a paragraph that holds [text] as an item of [list], at [level]
+  /// (0 to 8), and returns it.
+  ///
+  /// The paragraph has the style `List Paragraph`, as Word gives the items
+  /// of its toolbar lists: the document's own style of that name, or Word's
+  /// definition added when the document lacks it ([DocxStyles.ensure]). The
+  /// label (the bullet or the number) is not part of [DocxParagraph.text].
+  ///
+  /// A [list] that is not an instance of this document's numbering throws
+  /// [ArgumentError], and a [level] outside 0 to 8 [RangeError]; nothing
+  /// changes then. When the styles or the numbering part cannot be read,
+  /// this throws a [DocxReadException] naming it, and nothing changes. The
+  /// add is one transaction.
+  DocxParagraph addListItem(
+    DocxNumberingInstance list,
+    String text, {
+    int level = 0,
+  }) {
+    RangeError.checkValueInInterval(level, 0, maxListLevel, 'level');
+    if (!ownsInstance(_document.numbering, list)) {
+      throw ArgumentError.value(list, 'list', 'Not a list of this document');
+    }
+    final DocxStyles styles = _document.styles;
+    final DocxParagraph paragraph = DocxParagraph.text(text);
+    _edits.transaction(() {
+      paragraph.style = styles.ensure(DocxBuiltInStyle.listParagraph);
+      paragraph.properties.numbering = list.ref(level: level);
+      insertBlock(_blocks.length, paragraph);
+    });
+    return paragraph;
+  }
+
   /// Inserts [block] at [index], from 0 to the number of blocks.
   ///
   /// An [index] out of that range throws [RangeError]. A [block] that is
   /// already in a body, this one or another, throws [StateError]: remove it
   /// there first. Phase 4 neither moves nor copies a block implicitly.
+  ///
+  /// The styles set on a paragraph, and on its runs, are resolved against
+  /// the document's ([DocxParagraph.style] has the rules). When one is set
+  /// and the styles part cannot be read, this throws a [DocxReadException]
+  /// naming it, on a document that opened; nothing changes then.
+  ///
+  /// A paragraph read in another document counts as set here: its
+  /// `w:pStyle`, its `w:numPr` and the `w:rStyle` of its runs are resolved
+  /// by id, and a save reports the ones this document lacks
+  /// ([DocxWarningCode.styleNotFound], [DocxWarningCode.numberingNotFound]).
+  /// Moved within one document they stay as read. A move carries nothing
+  /// else over:
+  ///
+  /// * The style's `w:name` stays behind, so a built-in style under a
+  ///   localized id (`Balk1`) does not map to this document's by its name;
+  ///   it is reported instead.
+  /// * A `w:numId` this document has too joins that list, unreported, even
+  ///   when it is another list; ids are not remapped.
+  /// * A read opaque inline or block that holds an `r:id` (a hyperlink, a
+  ///   picture) keeps an id this document may lack or mean otherwise.
+  /// * A reference the model does not type, and one in the paragraph mark's
+  ///   `w:rPr`, stay as read, unreported.
   void insertBlock(int index, DocxBlock block) => _edits.transaction(
     () => primitives.insertBlock(_edits, this, _blocks, index, block),
   );
@@ -248,7 +459,10 @@ final class DocxBody {
   /// then in no body.
   ///
   /// An [index] that is not one of a block throws [RangeError], and a
-  /// [block] already in a body throws [StateError].
+  /// [block] already in a body throws [StateError]. The styles set on
+  /// [block] are resolved as [insertBlock] does, which may throw the same
+  /// [DocxReadException], and a paragraph read in another document counts
+  /// as set as it says.
   void replaceBlockAt(int index, DocxBlock block) => _edits.transaction(
     () => primitives.replaceBlock(_edits, this, _blocks, index, block),
   );

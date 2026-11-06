@@ -19,7 +19,7 @@
 /// case is written to stderr as `seed <s> case <i> (<mutation>)` before it
 /// runs, so the last line names the case that never came back.
 ///
-/// The quality gate runs seeds 1 to 4 with 100 cases each
+/// The quality gate runs seeds 1 to 4 with 150 cases each
 /// (`test/docx/fuzz_test.dart`).
 library;
 

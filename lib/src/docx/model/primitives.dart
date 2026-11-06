@@ -19,7 +19,19 @@
 /// is that sink: it records each report, in a transaction of its own unless
 /// one is open. To undo, it replays the opposite edit through the same
 /// public members (or `replaceInlineAt` and `restoreRunText`) while it
-/// ignores the reports they make, so nothing is recorded twice.
+/// ignores the reports they make, so nothing is recorded twice. A property
+/// set (a style) is undone with `PropertySet.restore`, which reports
+/// nothing.
+///
+/// The styles part records its own edits the same way: a style added is a
+/// change applied with [applyChange], and a style's property sets report to
+/// the same [DocxEdits], so they are recorded and reverted like a
+/// paragraph's.
+///
+/// A style id set through the API is resolved against the document's styles
+/// ([DocxEdits.resolveStyleId]) as it is set, or as the content that holds
+/// it goes in ([insertBlock], [replaceBlock]), so the styles it adds are
+/// changes of the same transaction. A replay resolves nothing.
 ///
 /// @docImport 'edit_sink.dart';
 library;
@@ -28,6 +40,8 @@ import '../../opc/change_log.dart';
 import 'blocks.dart';
 import 'edit_sink.dart';
 import 'inlines.dart';
+import 'property_set.dart';
+import 'styles.dart' show DocxStyleType;
 
 /// The edits of one document: its [ChangeLog], and the sink its body's
 /// paragraphs report to.
@@ -40,6 +54,10 @@ final class DocxEdits implements DocxEditSink {
   /// applied and recorded, so a test can watch the transaction roll it
   /// back. `null` in normal use.
   void Function()? afterRecord;
+
+  /// What resolves a style id set through the API, which the document
+  /// provides (it loads the styles); `null` keeps every id as given.
+  String Function(String id, DocxStyleType type)? styleResolver;
 
   /// True while a change is reverted or reapplied: the reports the model
   /// makes then are the replay, not new edits.
@@ -96,12 +114,37 @@ final class DocxEdits implements DocxEditSink {
       _reported(_RunTextSet(run, previous, runTextOf(run)));
 
   @override
-  void paragraphStyleSet(DocxParagraph paragraph, String? previous) =>
-      _reported(_ParagraphStyleSet(this, paragraph, previous, paragraph.style));
+  void propertySet(
+    PropertySet properties,
+    String localName,
+    PropertyState previous,
+  ) => _reported(
+    _PropertySet(
+      properties,
+      localName,
+      previous,
+      properties.stateOf(localName),
+    ),
+  );
 
   @override
-  void runStyleSet(DocxRun run, String? previous) =>
-      _reported(_RunStyleSet(this, run, previous, run.style));
+  void atomically(void Function() body) {
+    if (_replaying) {
+      body();
+    } else {
+      transaction(body);
+    }
+  }
+
+  @override
+  String resolveStyleId(String id, DocxStyleType type) {
+    final String Function(String, DocxStyleType)? resolver = styleResolver;
+    return _replaying || resolver == null ? id : resolver(id, type);
+  }
+
+  @override
+  bool isForeign(DocxEditSink? readIn) =>
+      !_replaying && readIn != null && !identical(readIn, this);
 }
 
 /// Inserts [block] at [index] of [blocks], the blocks of [container], and
@@ -111,7 +154,10 @@ final class DocxEdits implements DocxEditSink {
 /// [block] already in a container (this one or another) throws
 /// [StateError]; both before anything changes. Must run inside
 /// `edits.transaction`. If recording throws, the block is taken out again
-/// before the error leaves.
+/// before the error leaves. The styles set on a paragraph are resolved
+/// against the document's ([resolveStylesSet]), which throws a
+/// `DocxReadException` when the styles part cannot be read; the transaction
+/// then takes the block out.
 void insertBlock(
   DocxEdits edits,
   Object container,
@@ -121,7 +167,8 @@ void insertBlock(
 ) {
   RangeError.checkValueInInterval(index, 0, blocks.length, 'index');
   _checkDetached(block);
-  _apply(edits, _BlockInserted(edits, container, blocks, index, block));
+  applyChange(edits, _BlockInserted(edits, container, blocks, index, block));
+  _resolveStyles(block);
 }
 
 /// Removes the block at [index] of [blocks], the blocks of [container], and
@@ -136,7 +183,10 @@ void removeBlock(
   int index,
 ) {
   RangeError.checkValidIndex(index, blocks, 'index');
-  _apply(edits, _BlockRemoved(edits, container, blocks, index, blocks[index]));
+  applyChange(
+    edits,
+    _BlockRemoved(edits, container, blocks, index, blocks[index]),
+  );
 }
 
 /// Puts [block] in place of the block at [index] of [blocks], the blocks of
@@ -145,7 +195,10 @@ void removeBlock(
 ///
 /// An [index] that is not one of a block throws [RangeError], and a [block]
 /// already in a container throws [StateError]; both before anything
-/// changes. Must run inside `edits.transaction`.
+/// changes. Must run inside `edits.transaction`. The styles set on a
+/// paragraph are resolved against the document's ([resolveStylesSet]), which
+/// throws a `DocxReadException` when the styles part cannot be read; the
+/// transaction then puts the block replaced back.
 void replaceBlock(
   DocxEdits edits,
   Object container,
@@ -155,14 +208,23 @@ void replaceBlock(
 ) {
   RangeError.checkValidIndex(index, blocks, 'index');
   _checkDetached(block);
-  _apply(
+  applyChange(
     edits,
     _BlockReplaced(edits, container, blocks, index, blocks[index], block),
   );
+  _resolveStyles(block);
 }
 
-/// Puts every block of [blocks] in [container] and makes its paragraphs
-/// report to [edits]: how a container read from a file is adopted.
+/// Resolves what was set on [block], now in a document.
+void _resolveStyles(DocxBlock block) {
+  if (block is DocxParagraph) {
+    resolveStylesSet(block);
+  }
+}
+
+/// Puts every block of [blocks] in [container], makes its paragraphs report
+/// to [edits] and records that they and their runs were read there: how a
+/// container read from a file is adopted.
 ///
 /// Throws [StateError] for a block already in a container, before anything
 /// changes.
@@ -170,6 +232,7 @@ void adoptBlocks(DocxEdits edits, Object container, List<DocxBlock> blocks) {
   blocks.forEach(_checkDetached);
   for (final DocxBlock block in blocks) {
     _attach(edits, container, block);
+    if (block is DocxParagraph) markReadIn(block, edits);
   }
 }
 
@@ -179,8 +242,12 @@ void _checkDetached(DocxBlock block) {
   }
 }
 
-/// Applies [change] and records it; if recording throws, reverts it first.
-void _apply(DocxEdits edits, Change change) {
+/// Applies [change] and records it in [edits]; if recording throws, reverts
+/// it first. Must run inside `edits.transaction`.
+///
+/// It is how a primitive of another library records its edit, such as a
+/// style added to the styles part (`model/styles.dart`).
+void applyChange(DocxEdits edits, Change change) {
   change.reapply();
   try {
     edits.log.record(change);
@@ -366,34 +433,20 @@ final class _RunTextSet implements Change {
   void reapply() => restoreRunText(_run, _next);
 }
 
-/// A paragraph's style set.
-final class _ParagraphStyleSet implements Change {
-  _ParagraphStyleSet(this._edits, this._paragraph, this._previous, this._next);
+/// A typed property of a paragraph, a run or a style set: its state before
+/// and after. Undoing and redoing restore the state silently, so it works on
+/// properties no longer in the document as well.
+final class _PropertySet implements Change {
+  _PropertySet(this._properties, this._localName, this._previous, this._next);
 
-  final DocxEdits _edits;
-  final DocxParagraph _paragraph;
-  final String? _previous;
-  final String? _next;
-
-  @override
-  void revert() => _edits._replay(() => _paragraph.style = _previous);
-
-  @override
-  void reapply() => _edits._replay(() => _paragraph.style = _next);
-}
-
-/// A run's style set.
-final class _RunStyleSet implements Change {
-  _RunStyleSet(this._edits, this._run, this._previous, this._next);
-
-  final DocxEdits _edits;
-  final DocxRun _run;
-  final String? _previous;
-  final String? _next;
+  final PropertySet _properties;
+  final String _localName;
+  final PropertyState _previous;
+  final PropertyState _next;
 
   @override
-  void revert() => _edits._replay(() => _run.style = _previous);
+  void revert() => _properties.restore(_localName, _previous);
 
   @override
-  void reapply() => _edits._replay(() => _run.style = _next);
+  void reapply() => _properties.restore(_localName, _next);
 }

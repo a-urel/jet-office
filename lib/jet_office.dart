@@ -89,16 +89,22 @@
 /// as written, so an opened file comes back with only the cells that were
 /// set changed.
 ///
-/// [DocxDocument] is the Word document model, in progress (milestone D1; the
-/// API may change before D6). [DocxDocument.new] starts a document like Word
-/// for Mac's blank one: A4 portrait, Aptos 12, no document properties.
+/// [DocxDocument] is the Word document model, in progress (milestones D1 and
+/// D2; the API may change before D6). [DocxDocument.new] starts a document
+/// like Word for Mac's blank one: A4 portrait, Aptos 12, no document
+/// properties.
 /// [DocxDocument.open] reads a DOCX file within [DocxReadLimits]; a file it
 /// cannot read throws a [DocxReadException] whose [DocxReadFailure] says why,
 /// and so does a part that turns out broken when it first loads. Its
 /// [DocxBody] loads on first access and holds the [DocxBlock]s of the
 /// document: each [DocxParagraph] holds [DocxInline]s, and each [DocxRun]
 /// holds [DocxRunContent] (text, tabs, breaks), with the paragraph and run
-/// style typed. What the model does not type yet, such as tables, content
+/// style typed, and [DocxRunProperties] and [DocxParagraphProperties] that
+/// give the formatting (bold, size, colour, alignment, indentation,
+/// borders, tab stops and the rest of the typed members) as values such as
+/// [DocxColor] and [DocxIndentation], where `null` means "not set here"; a
+/// property or value the model does not understand is kept as written and
+/// reads `null`. What the model does not type yet, such as tables, content
 /// controls, tracked changes, hyperlinks, drawings and fields, is kept as
 /// written in a [DocxOpaqueBlock], a [DocxOpaqueInline] or a
 /// [DocxOpaqueRunContent], which can be removed but not changed; the final
@@ -112,14 +118,45 @@
 /// it is set and reported at save as a [DocxWarning]. The visible text of an
 /// opaque inline holding `mc:AlternateContent` or a text box is empty.
 ///
+/// [DocxDocument.styles] gives the document's [DocxStyles] (milestone D2):
+/// the [DocxDocumentDefaults] and each [DocxStyle] of the styles part, by
+/// id or by name, whose name, links and [DocxParagraphProperties] and
+/// [DocxRunProperties] are set like a paragraph's; [DocxStyles.add] adds a
+/// custom style, and [DocxBuiltInStyle] names Word's built-in styles, which
+/// are found by their English name and added with Word's definition on
+/// demand, so that `style = 'Heading1'` lands on `Balk1` in a Turkish
+/// document. The styles part loads on first access, a part nothing changed
+/// is saved as it was read, and a document without one gains it at save once
+/// it holds something. A style set through the API that the document does
+/// not define is reported at save ([DocxWarningCode.styleNotFound]).
+///
+/// [DocxDocument.numbering] gives the document's lists, a [DocxNumbering]:
+/// each [DocxAbstractNumbering] holds the [DocxNumberingLevel]s that say
+/// how a level is numbered ([DocxNumberFormat], [DocxLevelAlignment]),
+/// and each [DocxNumberingInstance], which a paragraph names through
+/// [DocxNumberingInstance.ref], uses one of them, with a
+/// [DocxLevelOverride] per level whose start it changes.
+/// [DocxNumbering.addBulletList] and [DocxNumbering.addNumberedList] add the
+/// lists Word's Bullets and Numbering buttons write, [DocxBody.addListItem]
+/// puts a paragraph in one, and [DocxNumbering.addInstance] starts a new
+/// list of a definition. A paragraph put in a list the document does not
+/// define is reported at save ([DocxWarningCode.numberingNotFound]).
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
 /// @docImport 'src/common/locale.dart';
+/// @docImport 'src/docx/builtin_styles.dart';
 /// @docImport 'src/docx/docx_document.dart';
 /// @docImport 'src/docx/model/blocks.dart';
+/// @docImport 'src/docx/model/formatting.dart';
 /// @docImport 'src/docx/model/inlines.dart';
+/// @docImport 'src/docx/model/numbering.dart';
+/// @docImport 'src/docx/model/numbering_formats.dart';
+/// @docImport 'src/docx/model/paragraph_properties.dart';
 /// @docImport 'src/docx/model/run_content.dart';
+/// @docImport 'src/docx/model/run_properties.dart';
+/// @docImport 'src/docx/model/styles.dart';
 /// @docImport 'src/docx/read_exception.dart';
 /// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
@@ -148,10 +185,46 @@ library;
 
 export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
+export 'src/docx/builtin_styles.dart' show DocxBuiltInStyle;
 export 'src/docx/docx_document.dart' show DocxBody, DocxDocument, DocxResult;
 export 'src/docx/model/blocks.dart'
     show DocxBlock, DocxOpaqueBlock, DocxParagraph;
+export 'src/docx/model/formatting.dart'
+    show
+        DocxAlignment,
+        DocxBorder,
+        DocxBorderStyle,
+        DocxColor,
+        DocxFonts,
+        DocxHighlight,
+        DocxIndentation,
+        DocxLineRule,
+        DocxLineSpacing,
+        DocxNumberingRef,
+        DocxParagraphBorders,
+        DocxShading,
+        DocxShadingPattern,
+        DocxSpacing,
+        DocxTabAlignment,
+        DocxTabLeader,
+        DocxTabStop,
+        DocxThemeColor,
+        DocxUnderline,
+        DocxUnderlineStyle,
+        DocxVerticalAlign;
 export 'src/docx/model/inlines.dart' show DocxInline, DocxOpaqueInline, DocxRun;
+export 'src/docx/model/numbering.dart'
+    show
+        DocxAbstractNumbering,
+        DocxLevelOverride,
+        DocxNumbering,
+        DocxNumberingInstance,
+        DocxNumberingLevel,
+        DocxNumberingLevelProperty;
+export 'src/docx/model/numbering_formats.dart'
+    show DocxLevelAlignment, DocxNumberFormat;
+export 'src/docx/model/paragraph_properties.dart'
+    show DocxParagraphProperties, DocxParagraphProperty;
 export 'src/docx/model/run_content.dart'
     show
         DocxBreak,
@@ -161,6 +234,10 @@ export 'src/docx/model/run_content.dart'
         DocxRunContent,
         DocxTab,
         DocxText;
+export 'src/docx/model/run_properties.dart'
+    show DocxRunProperties, DocxRunProperty;
+export 'src/docx/model/styles.dart'
+    show DocxDocumentDefaults, DocxStyle, DocxStyleType, DocxStyles;
 export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
 export 'src/docx/read_limits.dart' show DocxReadLimits;
 export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;

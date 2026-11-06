@@ -47,6 +47,7 @@ void main() {
       'application/vnd.ms-word.template.macroEnabledTemplate.main+xml',
     );
     expect(ContentType.wmlStyles, '${wml}styles+xml');
+    expect(ContentType.wmlNumbering, '${wml}numbering+xml');
     expect(ContentType.wmlSettings, '${wml}settings+xml');
     expect(ContentType.wmlFontTable, '${wml}fontTable+xml');
     expect(ContentType.wmlWebSettings, '${wml}webSettings+xml');
