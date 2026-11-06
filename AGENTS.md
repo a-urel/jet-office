@@ -124,5 +124,5 @@ benchmark's figures are in `docs/benchmark.md`; why the package exists and what
 may be added to it is `docs/decisions/0001-jet-core-holds-what-the-families-share.md`.
 
 jet_office is cloned next to this repo (`../jet-office`), where the engine was
-written (its decision 0008) and which depends on `jet_core`. Read it for the
+written (its decision 0008) and which is to depend on `jet_core`. Read it for the
 history; never import from it.

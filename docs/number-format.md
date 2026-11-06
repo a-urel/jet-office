@@ -1,7 +1,7 @@
 # Number format engine
 
 `NumberFormatter` shows a cell value as Excel for Mac does: it applies the
-cell's number format code and returns an `FormattedValue`. It reads no
+cell's number format code and returns a `FormattedValue`. It reads no
 file and draws nothing; a viewer (or an importer that wants display text)
 calls it with a value and the `numberFormatId` and `numberFormat` the reader
 gives. jet_office's decision 0008 sets the scope; the engine moved here from
@@ -93,7 +93,7 @@ records, not thresholds.
 | Rounding | scaling and rounding happen on that digit string, half away from zero, never with `toStringAsFixed` | `2.675` with `0.00` shows `2.68` as in Excel (oracle `u01-01` to `u01-08`), on the VM and in JavaScript alike | `test/format/excel_number_test.dart`, `test/format/number_renderer_test.dart` |
 | Digit placeholders | `0` pads with a zero, `#` shows nothing, `?` a space; the first `.` is the decimal point | ECMA-376 | `test/format/number_renderer_test.dart` |
 | Grouping and scaling | `,` between placeholders groups, after the last placeholder it divides by 1000 each; `%` multiplies by 100 each; separators come from the locale | ECMA-376, MS | `test/format/number_renderer_test.dart` |
-| Literals, padding, fill | `"..."`, `\x` and the unquoted literal characters are copied; `_x` becomes `FormatPadding`, `*x` an `FormatFill` | a viewer needs the width of `_)` and the fill | `test/format/number_renderer_test.dart`, `test/format/value_renderer_test.dart` |
+| Literals, padding, fill | `"..."`, `\x` and the unquoted literal characters are copied; `_x` becomes `FormatPadding`, `*x` a `FormatFill` | a viewer needs the width of `_)` and the fill | `test/format/number_renderer_test.dart`, `test/format/value_renderer_test.dart` |
 | Negative zero | a value whose rounded digits are all zero shows no minus; it keeps the section its sign chose (`#,##0;(#,##0)` on -0.4 shows `(0)`) | Excel for Mac, oracle `u02-01` to `u02-03` | `test/format/number_renderer_test.dart`, `test/format/formatter_test.dart` |
 | Scientific | `E+` and `E-` (a lowercase `e` makes the code invalid). With one integer placeholder the mantissa is kept between 1 and 10; with two or more the exponent is a multiple of their count and the integer part is zero-padded to `0` placeholders (`000.0E+0` on 12345 shows `012.3E+3`; `##0.0E+0` is engineering). A zero shows one `0` in the integer part (`#.##E+0` shows `0.E+0`); `.00E+00` keeps a mantissa below 1 (`.50E+00`). `%` and `,` do not scale in a scientific code | SSF, numfmt; Excel for Mac, oracle `u12-01` to `u12-06` | `test/format/number_renderer_test.dart`, `test/format/format_code_test.dart` |
 | Fractions | `# ?/?`, `# ??/??`, fixed denominators such as `?/8` of at most nine digits. The fraction is the last continued-fraction convergent whose denominator fits the placeholders, not the best approximation (`# ??/??` on 3.14159 shows `3  1/7 `; so `# ?/?` on 0.1 shows `0    `, as SSF does, where the best approximation is `1/9`: unconfirmed by Excel); the numerator is right-aligned and the denominator left-aligned in the width of `?`, and a `0` placeholder zero-pads the denominator (`# 00/00` on 1.5 shows `1 01/02`). A blank fraction with no `?` and no fixed denominator drops the literals before it (`# #/#` on 2 shows `2`); a zero shown in full drops a whole part of `#` and its literals (`# 0/0` on 0 shows `0/1`) | MS-OI29500, SSF; Excel for Mac, oracle `u13-01` to `u13-09` | `test/format/number_renderer_test.dart` |

@@ -34,11 +34,11 @@ packages. It starts with the number format engine, extracted from
   `FormatDecimal` (an exact decimal, digit for digit), `FormatErrorValue`
   (`#N/A` and its kin), `FormatColor`, `FormatWarning` and `FormattedValue`
   with its parts. No `Xlsx…` name appears in `lib/`, except where text
-  explains history. `jet_office`'s `XlsxDecimal` and `XlsxErrorValue` extend
-  the neutral types, so a value read from a file reaches the engine with no
-  conversion; `formatCell`, which takes a read cell, stays in `jet_office` as a
-  thin wrapper. `jet_office` is unpublished, so its old names went and no alias
-  was left behind.
+  explains history. `jet_office`'s `XlsxDecimal` and `XlsxErrorValue` will
+  extend the neutral types, so a value read from a file reaches the engine with
+  no conversion; `formatCell`, which takes a read cell, stays in `jet_office` as
+  a thin wrapper. `jet_office` is unpublished, so its old names go and no alias
+  is left behind.
 - **No runtime dependencies.** `dependencies:` stays empty and nothing under
   `lib/` imports a `package:` other than `package:jet_core/`, nor `dart:io`,
   `dart:ui`, `dart:html` or Flutter. Values in, text out: it runs on the web,
@@ -58,19 +58,20 @@ packages. It starts with the number format engine, extracted from
   a tool of the oracle, not a library: it is not exported and is not the
   start of a writer.
 - **Repository and dependency form.** `jet_core` is its own repository
-  (`~/Projects/oss/jet-core`, `github.com/a-urel/jet-core`), not published to
-  pub.dev. `jet_office` depends on it by path while the two move together
-  (`jet_core: {path: ../jet-core}`), and by git when that stops working;
-  publishing is decided later and needs a new decision.
+  (`~/Projects/oss/jet-core`), not published to pub.dev. A GitHub repository
+  (`a-urel/jet-core`) is planned and does not exist yet. Until it does,
+  `jet_office` will depend on it by path (`jet_core: {path: ../jet-core}`);
+  once it exists, through a git dependency. Publishing is decided later and
+  needs a new decision.
 
 ## Consequences
 
 - A change to how Excel shows a value is made once, in `jet_core`, with the
   unit test that records Excel's text first, and every consumer gets it.
-- `jet_office`'s public API loses the `XlsxNumberFormatter` family of names
-  and re-exports the neutral ones. Its warning codes for number formats map
-  one for one onto `FormatWarning`, and keep their messages in `en`, `de` and
-  `tr` there.
+- `jet_office`'s public API will lose the `XlsxNumberFormatter` family of
+  names and re-export the neutral ones. Its warning codes for number formats
+  will map one for one onto `FormatWarning`, and keep their messages in `en`,
+  `de` and `tr` there.
 - The fuzz corpus no longer reads workbook fixtures. Its eight fixture codes
   are constants (`test/format/support/fixture_codes.dart`), and the length and
   hash of the whole corpus are pinned, so a seed gives the cases it gave in

@@ -290,7 +290,7 @@ final class OracleMissingRow extends OracleOutcome {
 /// in case order, with [csv] (case id to column A, [parseOracleCsv]) or,
 /// for an eye-only case, with [eye] (case id to the text the owner saw).
 ///
-/// Each case is formatted by an `NumberFormatter` of [locale] in the
+/// Each case is formatted by a `NumberFormatter` of [locale] in the
 /// case's date system: a code as `numberFormat`; a built-in id as
 /// `numberFormatId`, with the workbook's [OracleWorkbook.numFmts] code for
 /// it as `numberFormat`, as the reader passes them; a manual formula as its
