@@ -6,6 +6,14 @@
 /// touches `dart:io`, `dart:ui`, `dart:html` or Flutter, so it runs on the
 /// web, desktop, mobile and server alike.
 ///
+/// `NumberFormatter` applies a number format code to a value, in the separators,
+/// names and words of a `FormatLocale`, and returns a `FormattedValue`: the
+/// text, its parts, its colour and the warning for what it could not show as
+/// Excel does. Values are a `FormatDecimal` (an exact decimal), a `num`, a
+/// `DateTime`, a `Duration`, a `String`, a `bool`, a `FormatErrorValue` or
+/// `null`. The rules are in `docs/number-format.md`, and why the package
+/// exists in `docs/decisions/0001`.
+///
 /// The public API is exactly what this library exports; everything under
 /// `lib/src/` is private.
 library;

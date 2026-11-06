@@ -1,13 +1,13 @@
 # Number format engine
 
-`XlsxNumberFormatter` shows a cell value as Excel for Mac does: it applies the
-cell's number format code and returns an `XlsxFormattedValue`. It reads no
+`NumberFormatter` shows a cell value as Excel for Mac does: it applies the
+cell's number format code and returns an `FormattedValue`. It reads no
 file and draws nothing; a viewer (or an importer that wants display text)
 calls it with a value and the `numberFormatId` and `numberFormat` the reader
-gives. Decision [`0008`](decisions/0008-number-format-engine.md) sets the
-scope; the design is
-[`superpowers/specs/2026-10-29-number-format-engine-design.md`](superpowers/specs/2026-10-29-number-format-engine-design.md)
-(git-ignored, so not repository history).
+gives. jet_office's decision 0008 sets the scope; the engine moved here from
+jet_office (decision [`0001`](decisions/0001-jet-core-holds-what-the-families-share.md)).
+Its design is in jet_office's `docs/superpowers/` (git-ignored there, so not
+repository history).
 
 This page covers milestones N1 to N3. N1 is numbers: sections and
 conditions, fixed point, grouping and scaling, scientific, fractions,
@@ -25,27 +25,28 @@ Unknowns ("Settled by Excel") and the owner checklist below.
 ## API
 
 ```dart
-final XlsxNumberFormatter formatter = XlsxNumberFormatter();
-final XlsxFormattedValue shown = formatter.format(
-  XlsxDecimal('-1234.5'),
+final NumberFormatter formatter = NumberFormatter();
+final FormattedValue shown = formatter.format(
+  FormatDecimal('-1234.5'),
   numberFormat: '#,##0.00;(#,##0.00)',
 );
 print(shown.text); // (1,234.50)
 ```
 
 - `format(value, {numberFormatId, numberFormat, generalWidth})`: `value` is an
-  `XlsxDecimal`, a `num`, a `DateTime`, a `Duration`, a `String`, a `bool`, an
-  `XlsxErrorValue` or `null`. `numberFormat` wins over `numberFormatId`,
+  `FormatDecimal`, a `num`, a `DateTime`, a `Duration`, a `String`, a `bool`, an
+  `FormatErrorValue` or `null`. `numberFormat` wins over `numberFormatId`,
   except for the built-in ids that follow the locale (see "Locales").
   `generalWidth` (default 11) is how many characters `General` may use.
-- `formatCell(cell)`: `format` of an `XlsxReadCell`'s value and number format.
-- `XlsxFormattedValue`: `text` (each padding as one space, each fill left
-  out), `parts` (`XlsxFormatText`, `XlsxFormatPadding`, `XlsxFormatFill`, for
+- jet_office adds `formatCell(cell)` over this class: `format` of an
+  `XlsxReadCell`'s value and number format.
+- `FormattedValue`: `text` (each padding as one space, each fill left
+  out), `parts` (`FormatText`, `FormatPadding`, `FormatFill`, for
   a viewer that lays the cell out), `color`, `overflow` (Excel shows `#`
   whatever the width) and `warning`.
-- `XlsxNumberFormatter({locale, date1904})`: the locale (default `enUS`)
-  and the workbook's date system (`XlsxReader.date1904`).
-- `XlsxFormatLocale`: separators, names, words and built-in codes. `enUS`,
+- `NumberFormatter({locale, date1904})`: the locale (default `enUS`)
+  and the file's date system (jet_office passes `XlsxReader.date1904`).
+- `FormatLocale`: separators, names, words and built-in codes. `enUS`,
   `deDE` and `trTR` ship; a caller can build another with the public
   constructor.
 
@@ -55,9 +56,10 @@ another type, or a `generalWidth` below 1, is a programmer error and throws
 
 ### Speed
 
-On an Apple M3 Pro, `formatCell` costs about 1.4 µs a cell on the VM and
-2.3 µs in Chrome: a serial date about 2.2 and 1.6 times a number, a
-`DateTime` about 3.8 and 3.7 times. The method and every figure are in
+On an Apple M3 Pro, formatting a number with `#,##0.00` costs about 0.9 µs on
+the VM and 1.7 µs in Chrome: a serial date about 2.3 and 1.6 times that, a
+`DateTime` about 3.8 times on both. (jet_office's own benchmark times
+`formatCell` on a read workbook.) The method and every figure are in
 [`benchmark.md`, "Format figures"](benchmark.md#format-figures); they are
 records, not thresholds.
 
@@ -67,38 +69,38 @@ records, not thresholds.
 
 | Rule | Behaviour | Why | Test |
 |---|---|---|---|
-| Code resolution | `numberFormat` wins over the id, except for the ids that follow the locale ("Locales"); id 0 is `General`; a built-in id uses the built-in table; an id from 164 without a code is `General` with `unresolvedNumberFormat` | the reader gives a code only for custom ids | `test/xlsx/format/formatter_test.dart` |
-| Invalid code | an unterminated quote or bracket (the parse is `truncated`), more than four sections, more than two conditions, two conditions in one section, a condition without a number, `[ColorN]` with N outside 1 to 56, a lowercase exponent `e+` or `e-`, a fixed fraction denominator of ten or more digits, `@` in more than one section, two locale tags `[$…-…]` in one section, or a code over 255 UTF-16 units shows the value as `General` with `numberFormatInvalid` | Excel refuses such a code: Excel for Mac repairs `u12-01`, `u12-03`, `u13-07`, `c19-01` and `c8b-01` to `General` on load and shows `u18-01` to `u18-03` and `c15c-01` as `General`; the parser still returns what it scanned, so the reader's classifier works on any code | `test/xlsx/format/formatter_test.dart`, `test/xlsx/format/format_code_test.dart` |
-| Output bound | a result to which the code adds over 1,000 characters is replaced by `General` with `numberFormatInvalid`. For a number that is the whole result; for text it is the literals and each `@` after the first, checked before the text is built. A text shown unchanged (no text section, `General` or `@` alone) is never over the bound, however long | `0` followed by 254 `%` on `1E+308` would otherwise be thousands of characters, and `@` 255 times on a 1 MiB text 255 MiB | `test/xlsx/format/formatter_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
-| Code length | a code over 255 characters is `General` with `numberFormatInvalid` at once, neither parsed nor cached | a 1 MiB code would otherwise cost a token per character in the cache | `test/xlsx/format/formatter_test.dart` |
-| Bounded cache | at most 1,024 parsed codes, cleared when full | a file with 300,000 codes costs time, not memory | `test/xlsx/format/formatter_test.dart` |
-| Any code, any value | `format` throws nothing; `text` is at most 1,000 characters longer than a text value; `parts` joined equal `text`. Seeds 1 to 4 (200 cases each) run in the gate, on the VM and in Chrome | a file's code is untrusted | `test/xlsx/format/fuzz_test.dart`, `tool/fuzz_formatter.dart` |
-| Sections | `positive;negative;zero;text`; one section takes all numbers, two give positive and zero then negative, three give positive, negative, zero; an empty section shows nothing | ECMA-376, MS-OI29500 | `test/xlsx/format/section_choice_test.dart` |
-| Conditions | `[=n] [<n] [<=n] [>n] [>=n] [<>n]` replace the implied rules; a value takes the first section whose condition holds; no section matching is `overflow` with text `#` (`[>100]0;[<-100]0` on 50). A code whose only section has a condition is chosen as if `;General` followed it (`[>100]0` on 50 shows `50`) | ECMA-376; Excel for Mac, oracle `u03-03`, `u03-06` (Excel repairs `[>100]0` to `[>100]0;General` on load) | `test/xlsx/format/section_choice_test.dart`, `test/xlsx/format/value_renderer_test.dart`, `test/xlsx/format/formatter_test.dart` |
-| Minus sign in sections | a value in an explicit negative section is shown as its absolute value; an unconditioned second section never shows the automatic minus, also after a condition (`[>0]0;0` shows -5 as `5`); a conditioned section, first or second, shows it unless only negatives meet its condition (`[>10]0;[<5]0` shows -2 as `-2`); the `General` Excel adds after a lone conditional section keeps it (`[>100]0` shows -50.5 as `-50.5`) | Excel for Mac, oracle `u03-01`, `u03-04`, `u03-05` in tr-TR, en-US and de-DE; the conditioned second section and the `General` minus are assumed, unconfirmed by Excel | `test/xlsx/format/section_choice_test.dart` |
-| `@` as the only section | a number shows as `General` (a text-only single section; `"Name: "@` on 5 shows `5`) | SSF; Excel for Mac, oracle `u19-01`, `u19-02` | `test/xlsx/format/value_renderer_test.dart` |
-| Text | the text section is the last: the fourth, or with fewer sections the last one when it holds `@` and has no condition, never an earlier one (`"x"@;0` leaves text unchanged); without one text is unchanged; `@` twice in one section repeats the text | ECMA-376; Microsoft puts text last; Excel for Mac, oracle `u19-05`, `u19-07`; `"x"@;0` is SSF's rule, unconfirmed | `test/xlsx/format/value_renderer_test.dart`, `test/xlsx/format/section_choice_test.dart` |
-| Numbers beside a text section | a text section of a two- or three-section code takes no number; numbers choose among the sections before it by the rules for that many: `0;@` shows -5 as `-5`, `0;-0;@` shows 0 with the first section, as `0;-0` would | Excel for Mac, oracle `u19-03`, `u19-04`, `u19-06` | `test/xlsx/format/section_choice_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
-| Booleans, errors, empty | a boolean shows the locale's `trueText`/`falseText` and an error value the locale's name for its code (as written when the locale has none), whatever the code; `null` is empty | Excel ignores the code for them: `0.00`, `General` and `"yes";"no";"zero";@` all show the region's word (oracle `c16-01` to `c16-06`) | `test/xlsx/format/value_renderer_test.dart` |
-| NaN and infinity | `#NUM!` | only a `num` can hold them | `test/xlsx/format/value_renderer_test.dart` |
+| Code resolution | `numberFormat` wins over the id, except for the ids that follow the locale ("Locales"); id 0 is `General`; a built-in id uses the built-in table; an id from 164 without a code is `General` with `FormatWarning.unresolved` | the reader gives a code only for custom ids | `test/format/formatter_test.dart` |
+| Invalid code | an unterminated quote or bracket (the parse is `truncated`), more than four sections, more than two conditions, two conditions in one section, a condition without a number, `[ColorN]` with N outside 1 to 56, a lowercase exponent `e+` or `e-`, a fixed fraction denominator of ten or more digits, `@` in more than one section, two locale tags `[$…-…]` in one section, or a code over 255 UTF-16 units shows the value as `General` with `FormatWarning.invalidCode` | Excel refuses such a code: Excel for Mac repairs `u12-01`, `u12-03`, `u13-07`, `c19-01` and `c8b-01` to `General` on load and shows `u18-01` to `u18-03` and `c15c-01` as `General`; the parser still returns what it scanned, so the reader's classifier works on any code | `test/format/formatter_test.dart`, `test/format/format_code_test.dart` |
+| Output bound | a result to which the code adds over 1,000 characters is replaced by `General` with `FormatWarning.invalidCode`. For a number that is the whole result; for text it is the literals and each `@` after the first, checked before the text is built. A text shown unchanged (no text section, `General` or `@` alone) is never over the bound, however long | `0` followed by 254 `%` on `1E+308` would otherwise be thousands of characters, and `@` 255 times on a 1 MiB text 255 MiB | `test/format/formatter_test.dart`, `test/format/value_renderer_test.dart` |
+| Code length | a code over 255 characters is `General` with `FormatWarning.invalidCode` at once, neither parsed nor cached | a 1 MiB code would otherwise cost a token per character in the cache | `test/format/formatter_test.dart` |
+| Bounded cache | at most 1,024 parsed codes, cleared when full | a file with 300,000 codes costs time, not memory | `test/format/formatter_test.dart` |
+| Any code, any value | `format` throws nothing; `text` is at most 1,000 characters longer than a text value; `parts` joined equal `text`. Seeds 1 to 4 (200 cases each) run in the gate, on the VM and in Chrome | a file's code is untrusted | `test/format/fuzz_test.dart`, `tool/fuzz_formatter.dart` |
+| Sections | `positive;negative;zero;text`; one section takes all numbers, two give positive and zero then negative, three give positive, negative, zero; an empty section shows nothing | ECMA-376, MS-OI29500 | `test/format/section_choice_test.dart` |
+| Conditions | `[=n] [<n] [<=n] [>n] [>=n] [<>n]` replace the implied rules; a value takes the first section whose condition holds; no section matching is `overflow` with text `#` (`[>100]0;[<-100]0` on 50). A code whose only section has a condition is chosen as if `;General` followed it (`[>100]0` on 50 shows `50`) | ECMA-376; Excel for Mac, oracle `u03-03`, `u03-06` (Excel repairs `[>100]0` to `[>100]0;General` on load) | `test/format/section_choice_test.dart`, `test/format/value_renderer_test.dart`, `test/format/formatter_test.dart` |
+| Minus sign in sections | a value in an explicit negative section is shown as its absolute value; an unconditioned second section never shows the automatic minus, also after a condition (`[>0]0;0` shows -5 as `5`); a conditioned section, first or second, shows it unless only negatives meet its condition (`[>10]0;[<5]0` shows -2 as `-2`); the `General` Excel adds after a lone conditional section keeps it (`[>100]0` shows -50.5 as `-50.5`) | Excel for Mac, oracle `u03-01`, `u03-04`, `u03-05` in tr-TR, en-US and de-DE; the conditioned second section and the `General` minus are assumed, unconfirmed by Excel | `test/format/section_choice_test.dart` |
+| `@` as the only section | a number shows as `General` (a text-only single section; `"Name: "@` on 5 shows `5`) | SSF; Excel for Mac, oracle `u19-01`, `u19-02` | `test/format/value_renderer_test.dart` |
+| Text | the text section is the last: the fourth, or with fewer sections the last one when it holds `@` and has no condition, never an earlier one (`"x"@;0` leaves text unchanged); without one text is unchanged; `@` twice in one section repeats the text | ECMA-376; Microsoft puts text last; Excel for Mac, oracle `u19-05`, `u19-07`; `"x"@;0` is SSF's rule, unconfirmed | `test/format/value_renderer_test.dart`, `test/format/section_choice_test.dart` |
+| Numbers beside a text section | a text section of a two- or three-section code takes no number; numbers choose among the sections before it by the rules for that many: `0;@` shows -5 as `-5`, `0;-0;@` shows 0 with the first section, as `0;-0` would | Excel for Mac, oracle `u19-03`, `u19-04`, `u19-06` | `test/format/section_choice_test.dart`, `test/format/value_renderer_test.dart` |
+| Booleans, errors, empty | a boolean shows the locale's `trueText`/`falseText` and an error value the locale's name for its code (as written when the locale has none), whatever the code; `null` is empty | Excel ignores the code for them: `0.00`, `General` and `"yes";"no";"zero";@` all show the region's word (oracle `c16-01` to `c16-06`) | `test/format/value_renderer_test.dart` |
+| NaN and infinity | `#NUM!` | only a `num` can hold them | `test/format/value_renderer_test.dart` |
 
 ### Numbers
 
 | Rule | Behaviour | Why | Test |
 |---|---|---|---|
-| Excel's number | a value is parsed with `double.parse` and written with 15 significant digits; the only `double` use besides the fraction approximation | Excel stores a double and shows 15 digits, so `0.30000000000000004` shows `0.3` | `test/xlsx/format/excel_number_test.dart` |
-| Subnormal numbers | a `double` below 2.2250738585072014E-308 in magnitude is zero (`1E-320` shows `0` in `General`, `-1E-320` shows `0.00E+00`) | Excel has no denormals | `test/xlsx/format/excel_number_test.dart`, `test/xlsx/format/formatter_test.dart` |
-| Rounding | scaling and rounding happen on that digit string, half away from zero, never with `toStringAsFixed` | `2.675` with `0.00` shows `2.68` as in Excel (oracle `u01-01` to `u01-08`), on the VM and in JavaScript alike | `test/xlsx/format/excel_number_test.dart`, `test/xlsx/format/number_renderer_test.dart` |
-| Digit placeholders | `0` pads with a zero, `#` shows nothing, `?` a space; the first `.` is the decimal point | ECMA-376 | `test/xlsx/format/number_renderer_test.dart` |
-| Grouping and scaling | `,` between placeholders groups, after the last placeholder it divides by 1000 each; `%` multiplies by 100 each; separators come from the locale | ECMA-376, MS | `test/xlsx/format/number_renderer_test.dart` |
-| Literals, padding, fill | `"..."`, `\x` and the unquoted literal characters are copied; `_x` becomes `XlsxFormatPadding`, `*x` an `XlsxFormatFill` | a viewer needs the width of `_)` and the fill | `test/xlsx/format/number_renderer_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
-| Negative zero | a value whose rounded digits are all zero shows no minus; it keeps the section its sign chose (`#,##0;(#,##0)` on -0.4 shows `(0)`) | Excel for Mac, oracle `u02-01` to `u02-03` | `test/xlsx/format/number_renderer_test.dart`, `test/xlsx/format/formatter_test.dart` |
-| Scientific | `E+` and `E-` (a lowercase `e` makes the code invalid). With one integer placeholder the mantissa is kept between 1 and 10; with two or more the exponent is a multiple of their count and the integer part is zero-padded to `0` placeholders (`000.0E+0` on 12345 shows `012.3E+3`; `##0.0E+0` is engineering). A zero shows one `0` in the integer part (`#.##E+0` shows `0.E+0`); `.00E+00` keeps a mantissa below 1 (`.50E+00`). `%` and `,` do not scale in a scientific code | SSF, numfmt; Excel for Mac, oracle `u12-01` to `u12-06` | `test/xlsx/format/number_renderer_test.dart`, `test/xlsx/format/format_code_test.dart` |
-| Fractions | `# ?/?`, `# ??/??`, fixed denominators such as `?/8` of at most nine digits. The fraction is the last continued-fraction convergent whose denominator fits the placeholders, not the best approximation (`# ??/??` on 3.14159 shows `3  1/7 `; so `# ?/?` on 0.1 shows `0    `, as SSF does, where the best approximation is `1/9`: unconfirmed by Excel); the numerator is right-aligned and the denominator left-aligned in the width of `?`, and a `0` placeholder zero-pads the denominator (`# 00/00` on 1.5 shows `1 01/02`). A blank fraction with no `?` and no fixed denominator drops the literals before it (`# #/#` on 2 shows `2`); a zero shown in full drops a whole part of `#` and its literals (`# 0/0` on 0 shows `0/1`) | MS-OI29500, SSF; Excel for Mac, oracle `u13-01` to `u13-09` | `test/xlsx/format/number_renderer_test.dart` |
-| `General` | an integer that fits `generalWidth` (11) in full; otherwise fixed or scientific notation, whichever shows more significant digits within the width, a tie fixed (`0.00001` stays fixed, `0.000012345678` is scientific), trailing zeros dropped. A minus shown takes one of the width's characters (`-0.3333333` beside `0.33333333` at width 10). A section holding `General` and literals adds the literals | ECMA-376 §18.8.30; Excel for Mac at width 10, oracle `u14-01` to `u14-06` (by eye) | `test/xlsx/format/general_test.dart` |
-| Locale separators | the decimal point and the group separator come from `XlsxFormatLocale`, not from the code | the code in a file is invariant | `test/xlsx/format/format_locale_test.dart`, `test/xlsx/format/number_renderer_test.dart`, `test/xlsx/format/general_test.dart` |
-| Built-in table | ids 0 to 49 map to the ECMA-376 codes; ids 5 to 8, 14 to 22 and 37 to 44 use the locale's table instead ("Locales") | the reader passes the invariant code | `test/xlsx/format/format_locale_test.dart`, `test/xlsx/format/formatter_test.dart` |
-| Color | `[Red]` and the other names are `XlsxColor.rgb`; `[ColorN]` is the indexed color N + 7 | the viewer resolves indexed colors with the workbook's palette | `test/xlsx/format/formatter_test.dart` |
+| Excel's number | a value is parsed with `double.parse` and written with 15 significant digits; the only `double` use besides the fraction approximation | Excel stores a double and shows 15 digits, so `0.30000000000000004` shows `0.3` | `test/format/excel_number_test.dart` |
+| Subnormal numbers | a `double` below 2.2250738585072014E-308 in magnitude is zero (`1E-320` shows `0` in `General`, `-1E-320` shows `0.00E+00`) | Excel has no denormals | `test/format/excel_number_test.dart`, `test/format/formatter_test.dart` |
+| Rounding | scaling and rounding happen on that digit string, half away from zero, never with `toStringAsFixed` | `2.675` with `0.00` shows `2.68` as in Excel (oracle `u01-01` to `u01-08`), on the VM and in JavaScript alike | `test/format/excel_number_test.dart`, `test/format/number_renderer_test.dart` |
+| Digit placeholders | `0` pads with a zero, `#` shows nothing, `?` a space; the first `.` is the decimal point | ECMA-376 | `test/format/number_renderer_test.dart` |
+| Grouping and scaling | `,` between placeholders groups, after the last placeholder it divides by 1000 each; `%` multiplies by 100 each; separators come from the locale | ECMA-376, MS | `test/format/number_renderer_test.dart` |
+| Literals, padding, fill | `"..."`, `\x` and the unquoted literal characters are copied; `_x` becomes `FormatPadding`, `*x` an `FormatFill` | a viewer needs the width of `_)` and the fill | `test/format/number_renderer_test.dart`, `test/format/value_renderer_test.dart` |
+| Negative zero | a value whose rounded digits are all zero shows no minus; it keeps the section its sign chose (`#,##0;(#,##0)` on -0.4 shows `(0)`) | Excel for Mac, oracle `u02-01` to `u02-03` | `test/format/number_renderer_test.dart`, `test/format/formatter_test.dart` |
+| Scientific | `E+` and `E-` (a lowercase `e` makes the code invalid). With one integer placeholder the mantissa is kept between 1 and 10; with two or more the exponent is a multiple of their count and the integer part is zero-padded to `0` placeholders (`000.0E+0` on 12345 shows `012.3E+3`; `##0.0E+0` is engineering). A zero shows one `0` in the integer part (`#.##E+0` shows `0.E+0`); `.00E+00` keeps a mantissa below 1 (`.50E+00`). `%` and `,` do not scale in a scientific code | SSF, numfmt; Excel for Mac, oracle `u12-01` to `u12-06` | `test/format/number_renderer_test.dart`, `test/format/format_code_test.dart` |
+| Fractions | `# ?/?`, `# ??/??`, fixed denominators such as `?/8` of at most nine digits. The fraction is the last continued-fraction convergent whose denominator fits the placeholders, not the best approximation (`# ??/??` on 3.14159 shows `3  1/7 `; so `# ?/?` on 0.1 shows `0    `, as SSF does, where the best approximation is `1/9`: unconfirmed by Excel); the numerator is right-aligned and the denominator left-aligned in the width of `?`, and a `0` placeholder zero-pads the denominator (`# 00/00` on 1.5 shows `1 01/02`). A blank fraction with no `?` and no fixed denominator drops the literals before it (`# #/#` on 2 shows `2`); a zero shown in full drops a whole part of `#` and its literals (`# 0/0` on 0 shows `0/1`) | MS-OI29500, SSF; Excel for Mac, oracle `u13-01` to `u13-09` | `test/format/number_renderer_test.dart` |
+| `General` | an integer that fits `generalWidth` (11) in full; otherwise fixed or scientific notation, whichever shows more significant digits within the width, a tie fixed (`0.00001` stays fixed, `0.000012345678` is scientific), trailing zeros dropped. A minus shown takes one of the width's characters (`-0.3333333` beside `0.33333333` at width 10). A section holding `General` and literals adds the literals | ECMA-376 §18.8.30; Excel for Mac at width 10, oracle `u14-01` to `u14-06` (by eye) | `test/format/general_test.dart` |
+| Locale separators | the decimal point and the group separator come from `FormatLocale`, not from the code | the code in a file is invariant | `test/format/format_locale_test.dart`, `test/format/number_renderer_test.dart`, `test/format/general_test.dart` |
+| Built-in table | ids 0 to 49 map to the ECMA-376 codes; ids 5 to 8, 14 to 22 and 37 to 44 use the locale's table instead ("Locales") | the reader passes the invariant code | `test/format/format_locale_test.dart`, `test/format/formatter_test.dart` |
+| Color | `[Red]` and the other names are `FormatColor(rgb: …)`; `[ColorN]` is `FormatColor(index: N + 7)` | the viewer resolves indexed colors with the workbook's palette | `test/format/formatter_test.dart` |
 
 ### Dates and times
 
@@ -111,35 +113,35 @@ digits, so the VM and a browser show the same.
 
 | Rule | Behaviour | Why | Test |
 |---|---|---|---|
-| Rounding and truncation | the time is rounded to the second, or to the fraction of a second shown (`.0` to `.000`), then truncated: `h:mm` on 10:29:40 shows `10:29`, on 10:29:59.6 `10:30`. The carry runs through the hours into the day (`yyyy-mm-dd h:mm:ss` on 46323.99999999 shows `2026-10-29 0:00:00`; `[h]:mm:ss` on 0.99999999 `24:00:00`) | Excel for Mac, oracle `c9-01` to `c9-12`, `c9b-01`; the design's rounding to the smallest unit shown was wrong | `test/xlsx/format/excel_date_test.dart`, `test/xlsx/format/date_renderer_test.dart` |
-| Fractional seconds | `.` and one to three `0` after a time token; the point shows as the locale's decimal separator (`ss,00` in de-DE). Four or more `0`, or `.` followed by `#` or `?`, make the code invalid; a quoted or escaped dot, or a dot between date tokens, is a literal | Excel accepts at most three digits; with several fraction tokens the time is rounded to the widest and each shows its leading digits (`ss.0 ss.00` shows `59.4 59.45`, `ss.0.0` `59.5.5`); Excel for Mac, oracle `c15b-02`, `c15c-01`, `c15d-01`, `c15e-01`, `c15-02`, `c15-03` | `test/xlsx/format/format_code_test.dart`, `test/xlsx/format/date_renderer_test.dart` |
-| Mixed sections | a date section holding `General`, a digit placeholder (outside fractional seconds), an exponent or a fraction slash is invalid (`General` with `numberFormatInvalid`); `,` and `%` there are literals (`mmmm d, yyyy`). A date section beside a number section is fine | design §6.4 | `test/xlsx/format/format_code_test.dart`, `test/xlsx/format/formatter_test.dart` |
-| Negative values | in the 1900 system any negative value in a date or time section is `overflow` (`#`), also in an explicit negative section (`0;h:mm` on -0.5). In the 1904 system a negative value shows a `-` and the absolute value's text in any date or time section (`h:mm` on -0.25 shows `-6:00`, `yyyy-mm-dd` on -1 `-1904-01-02`, `e h` on -0.25 `-1904 6`), the minus before a leading literal, fill or padding (`_(h:mm` shows `- 6:00`), also when the value rounds to zero (`h:mm:ss` on -0.000001 shows `-0:00:00`) | Excel for Mac, oracle `c10-01` to `c10-07`, `c10b-01` | `test/xlsx/format/date_renderer_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
-| Range | a serial up to 9999-12-31 23:59:59 (2958465 in the 1900 system, 2957003 in the 1904 system); the check runs after rounding, so 2958465.999999999 is `overflow`, also in an elapsed section | Excel's last date | `test/xlsx/format/excel_date_test.dart`, `test/xlsx/format/date_renderer_test.dart` |
-| Serial 0 and the phantom leap day | in the 1900 system serial 0 is `1900-01-00`, 60 is `1900-02-29`, 61 is `1900-03-01`; the weekday is `(serial + 6) % 7` from Sunday, so 0 is a Saturday and 1 a Sunday. In the 1904 system 0 is Friday 1904-01-01 and every weekday is real | Lotus 1-2-3's leap year bug, which Excel keeps; Excel for Mac, oracle `c11-01` to `c11-06` | `test/xlsx/format/excel_date_test.dart`, `test/xlsx/format/date_renderer_test.dart` |
-| Month or minute | `m` and `mm` are minutes after `h` or before `s`, else the month; `mmm` and longer are always the month (`h:mmm` on 0.5 shows `12:Jan`) | ECMA-376; Excel for Mac, oracle `c15-01`; one shared rule with the reader's classifier | `test/xlsx/format/date_renderer_test.dart`, `test/xlsx/format/format_kind_test.dart` |
-| Token lengths | `y`/`yy` two-digit year, `yyy` and longer four; `m`/`mm` month number, `mmm` abbreviation, `mmmm` and six or more the full name, `mmmmm` the first letter; `d`/`dd` day, `ddd` abbreviation, `dddd` and longer the full name; `h`/`m`/`s` longer than two show two digits; elapsed `[hhh]` pads to three; `e`/`ee` four-digit year; `b`/`bb` the Gregorian year in two digits, `bbb` and longer in four (no Buddhist +543); `g` nothing | SSF and numfmt; Excel for Mac, oracle `c15a-01` to `c15a-07`, `c4c-01` (Excel repairs `y` to `yy`, `yyy` and `yyyyy` to `yyyy` and `mmmmmm` to `mmmm` on load, with the same text) | `test/xlsx/format/date_renderer_test.dart`, `test/xlsx/format/format_code_test.dart` |
-| Date separator | a bare `/` in a date or time section shows the locale's `dateSeparator` (`dd/mm/yyyy` is `28.10.2026` in de-DE and tr-TR, `28/10/2026` in en-US); an escaped `\/` or a quoted `"/"` stays `/` | Excel for Mac, oracle `c15b-01` | `test/xlsx/format/date_renderer_test.dart`, `test/xlsx/format/format_code_test.dart` |
-| Elapsed time | `[h]`, `[m]`, `[s]` count whole hours, minutes or seconds from serial 0; minutes and seconds after an elapsed token are modulo 60 | ECMA-376 | `test/xlsx/format/date_renderer_test.dart` |
-| AM/PM | `AM/PM` in any case shows `AM` and `PM` unless the section has a language tag or a system format; then the `am`/`pm` of the names' locale (the tag's, else the renderer's) (`[$-41F]h:mm AM/PM` shows `1:30 ÖS`). `A/P` shows `A`/`P` in the case written (`A/p` after noon shows `p`). Either makes `h` a 12-hour clock (0 shows 12) | Excel for Mac shows an untagged `AM/PM` in English in all three regions but tr-TR's id 18 as `1:30 ÖS`, oracle `c5-01` to `c5-08`, `c6-05`, `c6-06` | `test/xlsx/format/date_renderer_test.dart` |
-| `DateTime` | its wall-clock fields, `isUtc` ignored, milliseconds and microseconds kept, in the formatter's date system; a time before the first serial is a negative serial; a year above 9999 or below 1 becomes a stand-in serial (the system's maximum + 1, or -1), so a date code shows `#` and a number code shows that stand-in, not the real serial | as the writer's `date_serial.dart` | `test/xlsx/format/excel_date_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
-| `Duration` | its length in days as a serial (a `Duration` of 100,000 days or more either way counts whole days only, the time of day dropped, to stay exact in JavaScript); a negative one overflows in the 1900 system and shows a minus in a 1904 date or time section | `[h]:mm` is how a sheet shows a duration | `test/xlsx/format/excel_date_test.dart`, `test/xlsx/format/value_renderer_test.dart` |
-| Overflow keeps the section | a date section that overflows still reports its section (its color) and its warning | the section was chosen; a CSV shows no color, so unconfirmed | `test/xlsx/format/value_renderer_test.dart` |
+| Rounding and truncation | the time is rounded to the second, or to the fraction of a second shown (`.0` to `.000`), then truncated: `h:mm` on 10:29:40 shows `10:29`, on 10:29:59.6 `10:30`. The carry runs through the hours into the day (`yyyy-mm-dd h:mm:ss` on 46323.99999999 shows `2026-10-29 0:00:00`; `[h]:mm:ss` on 0.99999999 `24:00:00`) | Excel for Mac, oracle `c9-01` to `c9-12`, `c9b-01`; the design's rounding to the smallest unit shown was wrong | `test/format/excel_date_test.dart`, `test/format/date_renderer_test.dart` |
+| Fractional seconds | `.` and one to three `0` after a time token; the point shows as the locale's decimal separator (`ss,00` in de-DE). Four or more `0`, or `.` followed by `#` or `?`, make the code invalid; a quoted or escaped dot, or a dot between date tokens, is a literal | Excel accepts at most three digits; with several fraction tokens the time is rounded to the widest and each shows its leading digits (`ss.0 ss.00` shows `59.4 59.45`, `ss.0.0` `59.5.5`); Excel for Mac, oracle `c15b-02`, `c15c-01`, `c15d-01`, `c15e-01`, `c15-02`, `c15-03` | `test/format/format_code_test.dart`, `test/format/date_renderer_test.dart` |
+| Mixed sections | a date section holding `General`, a digit placeholder (outside fractional seconds), an exponent or a fraction slash is invalid (`General` with `FormatWarning.invalidCode`); `,` and `%` there are literals (`mmmm d, yyyy`). A date section beside a number section is fine | design §6.4 | `test/format/format_code_test.dart`, `test/format/formatter_test.dart` |
+| Negative values | in the 1900 system any negative value in a date or time section is `overflow` (`#`), also in an explicit negative section (`0;h:mm` on -0.5). In the 1904 system a negative value shows a `-` and the absolute value's text in any date or time section (`h:mm` on -0.25 shows `-6:00`, `yyyy-mm-dd` on -1 `-1904-01-02`, `e h` on -0.25 `-1904 6`), the minus before a leading literal, fill or padding (`_(h:mm` shows `- 6:00`), also when the value rounds to zero (`h:mm:ss` on -0.000001 shows `-0:00:00`) | Excel for Mac, oracle `c10-01` to `c10-07`, `c10b-01` | `test/format/date_renderer_test.dart`, `test/format/value_renderer_test.dart` |
+| Range | a serial up to 9999-12-31 23:59:59 (2958465 in the 1900 system, 2957003 in the 1904 system); the check runs after rounding, so 2958465.999999999 is `overflow`, also in an elapsed section | Excel's last date | `test/format/excel_date_test.dart`, `test/format/date_renderer_test.dart` |
+| Serial 0 and the phantom leap day | in the 1900 system serial 0 is `1900-01-00`, 60 is `1900-02-29`, 61 is `1900-03-01`; the weekday is `(serial + 6) % 7` from Sunday, so 0 is a Saturday and 1 a Sunday. In the 1904 system 0 is Friday 1904-01-01 and every weekday is real | Lotus 1-2-3's leap year bug, which Excel keeps; Excel for Mac, oracle `c11-01` to `c11-06` | `test/format/excel_date_test.dart`, `test/format/date_renderer_test.dart` |
+| Month or minute | `m` and `mm` are minutes after `h` or before `s`, else the month; `mmm` and longer are always the month (`h:mmm` on 0.5 shows `12:Jan`) | ECMA-376; Excel for Mac, oracle `c15-01`; one shared rule with the reader's classifier | `test/format/date_renderer_test.dart`, `test/format/format_kind_test.dart` |
+| Token lengths | `y`/`yy` two-digit year, `yyy` and longer four; `m`/`mm` month number, `mmm` abbreviation, `mmmm` and six or more the full name, `mmmmm` the first letter; `d`/`dd` day, `ddd` abbreviation, `dddd` and longer the full name; `h`/`m`/`s` longer than two show two digits; elapsed `[hhh]` pads to three; `e`/`ee` four-digit year; `b`/`bb` the Gregorian year in two digits, `bbb` and longer in four (no Buddhist +543); `g` nothing | SSF and numfmt; Excel for Mac, oracle `c15a-01` to `c15a-07`, `c4c-01` (Excel repairs `y` to `yy`, `yyy` and `yyyyy` to `yyyy` and `mmmmmm` to `mmmm` on load, with the same text) | `test/format/date_renderer_test.dart`, `test/format/format_code_test.dart` |
+| Date separator | a bare `/` in a date or time section shows the locale's `dateSeparator` (`dd/mm/yyyy` is `28.10.2026` in de-DE and tr-TR, `28/10/2026` in en-US); an escaped `\/` or a quoted `"/"` stays `/` | Excel for Mac, oracle `c15b-01` | `test/format/date_renderer_test.dart`, `test/format/format_code_test.dart` |
+| Elapsed time | `[h]`, `[m]`, `[s]` count whole hours, minutes or seconds from serial 0; minutes and seconds after an elapsed token are modulo 60 | ECMA-376 | `test/format/date_renderer_test.dart` |
+| AM/PM | `AM/PM` in any case shows `AM` and `PM` unless the section has a language tag or a system format; then the `am`/`pm` of the names' locale (the tag's, else the renderer's) (`[$-41F]h:mm AM/PM` shows `1:30 ÖS`). `A/P` shows `A`/`P` in the case written (`A/p` after noon shows `p`). Either makes `h` a 12-hour clock (0 shows 12) | Excel for Mac shows an untagged `AM/PM` in English in all three regions but tr-TR's id 18 as `1:30 ÖS`, oracle `c5-01` to `c5-08`, `c6-05`, `c6-06` | `test/format/date_renderer_test.dart` |
+| `DateTime` | its wall-clock fields, `isUtc` ignored, milliseconds and microseconds kept, in the formatter's date system; a time before the first serial is a negative serial; a year above 9999 or below 1 becomes a stand-in serial (the system's maximum + 1, or -1), so a date code shows `#` and a number code shows that stand-in, not the real serial | as jet_office's writer's `date_serial.dart` | `test/format/excel_date_test.dart`, `test/format/value_renderer_test.dart` |
+| `Duration` | its length in days as a serial (a `Duration` of 100,000 days or more either way counts whole days only, the time of day dropped, to stay exact in JavaScript); a negative one overflows in the 1900 system and shows a minus in a 1904 date or time section | `[h]:mm` is how a sheet shows a duration | `test/format/excel_date_test.dart`, `test/format/value_renderer_test.dart` |
+| Overflow keeps the section | a date section that overflows still reports its section (its color) and its warning | the section was chosen; a CSV shows no color, so unconfirmed | `test/format/value_renderer_test.dart` |
 
 ### Locales
 
 | Rule | Behaviour | Why | Test |
 |---|---|---|---|
-| Renderer locale | `XlsxNumberFormatter(locale: ...)` gives the separators, names, AM/PM, booleans, error names and built-in codes | the code in a file is invariant; the region is Excel's | `test/xlsx/format/format_locale_test.dart`, `test/xlsx/format/formatter_test.dart` |
-| Built-in ids by locale | ids 5 to 8, 14 to 22 and 37 to 44 without a code, or with the ECMA-376 code (`mm-dd-yy` for 14, as the reader gives it), use the locale's `builtinCodes`; any other code is used as written (a file's `yyyy-mm-dd` for id 14 shows `2030-10-29` on a 1904 serial 46323) | Excel shows a built-in id in the region's form and a file's own code as written; Excel for Mac, oracle `c6-01` to `c6-09`, `c7-01` to `c7-24`, `c20-01`, `c20-02` | `test/xlsx/format/formatter_test.dart` |
-| Locale-dependent ids | ids 27 to 31, 36 and 50 to 58 without a code show as the locale's id 14, ids 32 to 35 as its id 21, ids 23 to 26 and 59 to 163 as `General`, each with `numberFormatLocaleDependent`; from 164 `General` with `unresolvedNumberFormat` their code differs by region and version and a file should carry it | ruling of the plan | `test/xlsx/format/formatter_test.dart` |
-| Locale tags | in a date section the low 16 bits of `[$-xxx]` choose names and AM/PM: the renderer's locale when they equal its `lcid` (so a caller's locale with `0x407` wins over the shipped de-DE), else a shipped locale, else the renderer's locale with `numberFormatUnsupported`. Language 0 selects nothing and warns nothing; the first non-zero language decides. Separators always come from the renderer's locale. In a number section the language is ignored (`[$€-40C]#,##0.00` does not warn and shows `€1.234,50` in de-DE) | the tag names the language of the names: `[$-407]` and `[$-41F]` show German and Turkish names in every region; Excel for Mac, oracle `c18-01`, `c18-03`, `c18-04`. Excel shows `[$-40C]mmmm` in French (`octobre`, `c18-02`); no French names ship, a known difference | `test/xlsx/format/date_renderer_test.dart`, `test/xlsx/format/number_renderer_test.dart` |
-| Calendar and numeral bits | bits 16 to 23 (calendar) other than 0 or 1 warn `numberFormatUnsupported` in a date section; bits 24 to 31 (numeral system) other than 0 or 1 warn in any section | the engine renders only the Gregorian calendar and Western digits | `test/xlsx/format/date_renderer_test.dart`, `test/xlsx/format/number_renderer_test.dart` |
-| System formats | `[$-F800]` and `[$-F400]` (any upper bits) and `[$-x-sysdate]`, `[$-x-systime]` replace the whole section with the first section of the locale's `longDateCode` or `longTimeCode`, keeping the section's color and condition; the first system token wins; a currency on the tag is dropped (`[$USD-F800]`). A language tag as well (`[$-407][$-F800]`) is a second locale tag and makes the code invalid. Tags and brackets inside a long date or time code are neither applied nor reported | design §5.5, "ignoring the rest of the section"; Excel for Mac, oracle `c8-01` to `c8-03`, `c8b-01`; locale codes are trusted data | `test/xlsx/format/date_renderer_test.dart`, `test/xlsx/format/formatter_test.dart`, `test/xlsx/format/format_code_test.dart` |
-| Calendars and numerals | `B1` and `[B1]` are Gregorian and show nothing; `B2`, `[B2]`, `[DBNum1]` to `[DBNum4]`, `[NatNumN]` and any other bracket the parser does not interpret show nothing and warn `numberFormatUnsupported`. The `r` of design §5.4 is not implemented: it stays a literal `r` without a warning | `r` occurs only in zh-TW codes, and telling a bare `r` from `\r` needs a token for every literal | `test/xlsx/format/format_code_test.dart`, `test/xlsx/format/date_renderer_test.dart`, `test/xlsx/format/number_renderer_test.dart` |
-| Text sections | a text section never warns `numberFormatUnsupported` (`[DBNum1]@` on text shows the text) | calendars and numerals change digits and dates, not text; unconfirmed | `test/xlsx/format/value_renderer_test.dart` |
-| One warning | a result carries one warning: `numberFormatInvalid` first, then the resolution warnings (`unresolvedNumberFormat`, `numberFormatLocaleDependent`), then `numberFormatUnsupported` | ruling of the plan; the first problem is the one worth reporting | `test/xlsx/format/formatter_test.dart` |
-| New error codes | `#SPILL!` and `#CALC!` show the locale's name: `#ÜBERLAUF!` and `#CALC!` (untranslated) in de-DE, `#TAŞMA!` and `#HESAPLA!` in tr-TR; an error code not in a locale's table shows as written | Excel for Mac, oracle `c17-01`, `c17-02` (by eye) | `test/xlsx/format/value_renderer_test.dart` |
+| Renderer locale | `NumberFormatter(locale: ...)` gives the separators, names, AM/PM, booleans, error names and built-in codes | the code in a file is invariant; the region is Excel's | `test/format/format_locale_test.dart`, `test/format/formatter_test.dart` |
+| Built-in ids by locale | ids 5 to 8, 14 to 22 and 37 to 44 without a code, or with the ECMA-376 code (`mm-dd-yy` for 14, as the reader gives it), use the locale's `builtinCodes`; any other code is used as written (a file's `yyyy-mm-dd` for id 14 shows `2030-10-29` on a 1904 serial 46323) | Excel shows a built-in id in the region's form and a file's own code as written; Excel for Mac, oracle `c6-01` to `c6-09`, `c7-01` to `c7-24`, `c20-01`, `c20-02` | `test/format/formatter_test.dart` |
+| Locale-dependent ids | ids 27 to 31, 36 and 50 to 58 without a code show as the locale's id 14, ids 32 to 35 as its id 21, ids 23 to 26 and 59 to 163 as `General`, each with `FormatWarning.localeDependent`; from 164 `General` with `FormatWarning.unresolved` their code differs by region and version and a file should carry it | ruling of the plan | `test/format/formatter_test.dart` |
+| Locale tags | in a date section the low 16 bits of `[$-xxx]` choose names and AM/PM: the renderer's locale when they equal its `lcid` (so a caller's locale with `0x407` wins over the shipped de-DE), else a shipped locale, else the renderer's locale with `FormatWarning.unsupported`. Language 0 selects nothing and warns nothing; the first non-zero language decides. Separators always come from the renderer's locale. In a number section the language is ignored (`[$€-40C]#,##0.00` does not warn and shows `€1.234,50` in de-DE) | the tag names the language of the names: `[$-407]` and `[$-41F]` show German and Turkish names in every region; Excel for Mac, oracle `c18-01`, `c18-03`, `c18-04`. Excel shows `[$-40C]mmmm` in French (`octobre`, `c18-02`); no French names ship, a known difference | `test/format/date_renderer_test.dart`, `test/format/number_renderer_test.dart` |
+| Calendar and numeral bits | bits 16 to 23 (calendar) other than 0 or 1 warn `FormatWarning.unsupported` in a date section; bits 24 to 31 (numeral system) other than 0 or 1 warn in any section | the engine renders only the Gregorian calendar and Western digits | `test/format/date_renderer_test.dart`, `test/format/number_renderer_test.dart` |
+| System formats | `[$-F800]` and `[$-F400]` (any upper bits) and `[$-x-sysdate]`, `[$-x-systime]` replace the whole section with the first section of the locale's `longDateCode` or `longTimeCode`, keeping the section's color and condition; the first system token wins; a currency on the tag is dropped (`[$USD-F800]`). A language tag as well (`[$-407][$-F800]`) is a second locale tag and makes the code invalid. Tags and brackets inside a long date or time code are neither applied nor reported | design §5.5, "ignoring the rest of the section"; Excel for Mac, oracle `c8-01` to `c8-03`, `c8b-01`; locale codes are trusted data | `test/format/date_renderer_test.dart`, `test/format/formatter_test.dart`, `test/format/format_code_test.dart` |
+| Calendars and numerals | `B1` and `[B1]` are Gregorian and show nothing; `B2`, `[B2]`, `[DBNum1]` to `[DBNum4]`, `[NatNumN]` and any other bracket the parser does not interpret show nothing and warn `FormatWarning.unsupported`. The `r` of design §5.4 is not implemented: it stays a literal `r` without a warning | `r` occurs only in zh-TW codes, and telling a bare `r` from `\r` needs a token for every literal | `test/format/format_code_test.dart`, `test/format/date_renderer_test.dart`, `test/format/number_renderer_test.dart` |
+| Text sections | a text section never warns `FormatWarning.unsupported` (`[DBNum1]@` on text shows the text) | calendars and numerals change digits and dates, not text; unconfirmed | `test/format/value_renderer_test.dart` |
+| One warning | a result carries one warning: `FormatWarning.invalidCode` first, then the resolution warnings (`FormatWarning.unresolved`, `FormatWarning.localeDependent`), then `FormatWarning.unsupported` | ruling of the plan; the first problem is the one worth reporting | `test/format/formatter_test.dart` |
+| New error codes | `#SPILL!` and `#CALC!` show the locale's name: `#ÜBERLAUF!` and `#CALC!` (untranslated) in de-DE, `#TAŞMA!` and `#HESAPLA!` in tr-TR; an error code not in a locale's table shows as written | Excel for Mac, oracle `c17-01`, `c17-02` (by eye) | `test/format/value_renderer_test.dart` |
 
 The three shipped locales, in short. All three have `verified` true: the
 owner's run of 2026-10-30 checked them against Excel for Mac 16.114.1
@@ -155,7 +157,7 @@ their `AM`/`PM` by a tag (de-DE's words are the English ones, so the text
 is the same); the error names other than `#SPILL!` and `#CALC!`, which no
 case shows; and the names of a language no shipped locale serves (French,
 `c18-02`). The table lists each `builtinCodes` entry in full, as
-`test/xlsx/format/format_locale_test.dart` asserts it.
+`test/format/format_locale_test.dart` asserts it.
 
 | | `enUS` | `deDE` | `trTR` |
 |---|---|---|---|
@@ -193,75 +195,75 @@ No Microsoft source confirmed these; the owner's Excel for Mac runs in
 where Excel disagreed. The list is §10 of the design. Each item gives
 Excel's answer (the same in all three regions unless it says so), its
 oracle cases and the unit test that pins it;
-`test/xlsx/format/oracle_test.dart` compares every case as well. The test
+`test/format/oracle_test.dart` compares every case as well. The test
 of a checklist item carries an `Owner Excel check C<n>` comment.
 
 1. Rounding is half away from zero on the decimal digits: `2.675`,
    `1.005`, `0.285` with `0.00` show `2.68`, `1.01`, `0.29`; `-2.5` with `0`
    shows `-3` (`u01-01` to `u01-08`;
-   `test/xlsx/format/excel_number_test.dart`,
-   `test/xlsx/format/number_renderer_test.dart`).
+   `test/format/excel_number_test.dart`,
+   `test/format/number_renderer_test.dart`).
 2. Negative zero shows no minus but keeps its section: `-0.4` with `0`
    shows `0`, `-0.001` with `0.00` `0.00`, `-0.4` with `#,##0;(#,##0)`
-   `(0)` (`u02-01` to `u02-03`; `test/xlsx/format/formatter_test.dart`).
+   `(0)` (`u02-01` to `u02-03`; `test/format/formatter_test.dart`).
 3. Conditions: `[<0]"neg "0;"other "0` on -5 shows `neg 5`, and the second
    section never shows the minus (`[>0]0;0` on -5 shows `5`); `[>100]0`
    alone on 50 shows `50`, as Excel repairs it to `[>100]0;General`;
    `[>100]0;[<-100]0` on 50 is `#` (`u03-01` to `u03-06`;
-   `test/xlsx/format/section_choice_test.dart`,
-   `test/xlsx/format/formatter_test.dart`).
+   `test/format/section_choice_test.dart`,
+   `test/format/formatter_test.dart`).
 4. Month and day names: CLDR's, abbreviations without dots (`Mär`, `Mo`;
    `Mar`, `Pzt`); `mmmmm` is the first letter (`M`) (C4a, C4b, C4c;
    `c4-01` to `c4-38`, `c4c-01`;
-   `test/xlsx/format/date_renderer_test.dart`).
+   `test/format/date_renderer_test.dart`).
 5. AM/PM: an untagged `AM/PM` is `AM`/`PM` and `A/P` is `A`/`P` in every
    region; tr-TR's words need its tag (C5; `c5-01` to `c5-08`;
-   `test/xlsx/format/date_renderer_test.dart`).
+   `test/format/date_renderer_test.dart`).
 6. Built-ins 14 to 22: en-US and de-DE show a two-digit year in 14 and 22
    (`10/28/26`, `28.10.26`), tr-TR a four-digit one; tr-TR's 18 and 19 show
-   `ÖS` (C6; `c6-01` to `c6-09`; `test/xlsx/format/formatter_test.dart`,
-   `test/xlsx/format/format_locale_test.dart`).
+   `ÖS` (C6; `c6-01` to `c6-09`; `test/format/formatter_test.dart`,
+   `test/format/format_locale_test.dart`).
 7. Currency ids 5 to 8 and 37 to 44: tr-TR puts `₺` before the number
    with the minus first (`-₺1.235`); de-DE and tr-TR 37 to 40 have no
    padding (`-1.235`); 41 to 44 are Excel's accounting codes (C7; `c7-01`
-   to `c7-24`; `test/xlsx/format/formatter_test.dart`,
-   `test/xlsx/format/format_locale_test.dart`).
+   to `c7-24`; `test/format/formatter_test.dart`,
+   `test/format/format_locale_test.dart`).
 8. `[$-F800]` and `[$-F400]` show the region's long date and time
    (`Mittwoch, 28. Oktober 2026`, `28 Ekim 2026 Çarşamba`; `13:30:00` in
    de-DE and tr-TR); `[$-407][$-F800]` is invalid, shown as `General` (C8,
    C8b; `c8-01` to `c8-03`, `c8b-01`;
-   `test/xlsx/format/date_renderer_test.dart`,
-   `test/xlsx/format/format_code_test.dart`).
+   `test/format/date_renderer_test.dart`,
+   `test/format/format_code_test.dart`).
 9. Time carry and truncation: `h:mm` on 10:29:40 shows `10:29`;
    0.99999999 shows `0:00`, `0:00:00` and `[h]:mm:ss` `24:00:00`; the carry
    reaches the date (`2026-10-29 0:00:00`) (C9, C9b; `c9-01` to `c9-12`,
-   `c9b-01`; `test/xlsx/format/date_renderer_test.dart`).
+   `c9b-01`; `test/format/date_renderer_test.dart`).
 10. Negative times in a 1904 workbook show a minus in any date or time
     section (`-6:00`, `-36:00`, `-1904-01-02`, `-1904 6`), also when they
     round to zero (`-0:00:00`), before a fill or padding (`-6:00`,
     `- 6:00`); `0;h:mm` on -0.5 in the 1900 system is `#` (C10, C10b;
     `c10-01` to `c10-07`, `c10b-01`;
-    `test/xlsx/format/date_renderer_test.dart`,
-    `test/xlsx/format/value_renderer_test.dart`).
+    `test/format/date_renderer_test.dart`,
+    `test/format/value_renderer_test.dart`).
 11. Serial 0 is Saturday `1900-01-00`, 60 Wednesday `1900-02-29`; 1904
     serial 0 is Friday `1904-01-01` (C11; `c11-01` to `c11-06`;
-    `test/xlsx/format/date_renderer_test.dart`).
+    `test/format/date_renderer_test.dart`).
 12. Lowercase `e+` and `e-` are invalid: Excel repairs `0.00e+00` to
-    `General` (`u12-01`, `u12-03`; `test/xlsx/format/format_code_test.dart`,
-    `test/xlsx/format/formatter_test.dart`). `000.0E+0` on 12345 shows
+    `General` (`u12-01`, `u12-03`; `test/format/format_code_test.dart`,
+    `test/format/formatter_test.dart`). `000.0E+0` on 12345 shows
     `012.3E+3`, `#.##E+0` on 0 `0.E+0`, `.00E+00` on 0.5 `.50E+00`
     (`u12-02`, `u12-04` to `u12-06`;
-    `test/xlsx/format/number_renderer_test.dart`).
+    `test/format/number_renderer_test.dart`).
 13. Fractions: `0.333` with `# ?/?` shows ` 1/3`; `3.14159` with `# ??/??`
     `3  1/7 `; `0` with `# ?/?` `0    `; `?/?` on 2 `2/1`; `# #/#` on 2
     `2`; `# 00/00` on 1.5 `1 01/02`; `# 0/0` on 0 `0/1`; `-1.25` with
     `# ?/?` `-1 1/4`; `?/9999999999` is invalid (`u13-01` to `u13-09`;
-    `test/xlsx/format/number_renderer_test.dart`,
-    `test/xlsx/format/format_code_test.dart`).
+    `test/format/number_renderer_test.dart`,
+    `test/format/format_code_test.dart`).
 14. `General` at width 10: `123456789012` shows `1.2346E+11`, `1/3`
     `0.33333333`, `-1/3` `-0.3333333`, `0.000012345678` `1.2346E-05`,
     `12345.6789012` `12345.6789`, `0.00001` `0.00001` (`u14-01` to
-    `u14-06`, by eye; `test/xlsx/format/general_test.dart`).
+    `u14-06`, by eye; `test/format/general_test.dart`).
 15. Token lengths: `y` shows `26`, `yyy` and `yyyyy` `2026`, `e` `2026`,
     `bb` `26` and `bbbb` `2026` (no +543), `mmmmmm` the full name (C15a;
     `c15a-01` to `c15a-07`). `dd/mm/yyyy` shows the region's date separator
@@ -269,33 +271,33 @@ of a checklist item carries an `Owner Excel check C<n>` comment.
     (`10:30:00,50`) (C15b; `c15b-01`, `c15b-02`). `h:mm:ss.0000` is
     invalid (C15c; `c15c-01`); `h:mm.0` shows `12:00.0` (C15d; `c15d-01`);
     `ss.0 ss.00` shows `59.4 59.45` (C15e; `c15e-01`)
-    (`test/xlsx/format/date_renderer_test.dart`,
-    `test/xlsx/format/format_code_test.dart`).
+    (`test/format/date_renderer_test.dart`,
+    `test/format/format_code_test.dart`).
 16. Booleans show the region's word whatever the code: `TRUE`, `WAHR`,
     `DOĞRU` with `0.00`, `General` and a four-section code (C16; `c16-01`
-    to `c16-06`; `test/xlsx/format/value_renderer_test.dart`).
+    to `c16-06`; `test/format/value_renderer_test.dart`).
 17. `#SPILL!` is `#ÜBERLAUF!` in de-DE and `#TAŞMA!` in tr-TR; `#CALC!`
     stays `#CALC!` in de-DE and is `#HESAPLA!` in tr-TR (C17; `c17-01`,
-    `c17-02`, by eye; `test/xlsx/format/value_renderer_test.dart`).
+    `c17-02`, by eye; `test/format/value_renderer_test.dart`).
 18. Five sections, three conditions, or two conditions in one section
     are invalid, shown as `General` (`u18-01` to `u18-03`;
-    `test/xlsx/format/format_code_test.dart`).
+    `test/format/format_code_test.dart`).
 19. `@` alone on a number shows `General`, and `"Name: "@` on 5 shows `5`;
     `0;@` on -5 shows `-5`, on 5 `5`, on text the text; `0;-0;@` on 0 shows
     `0`; `@;@` is invalid (C19; `u19-01` to `u19-07`, `c19-01`;
-    `test/xlsx/format/value_renderer_test.dart`,
-    `test/xlsx/format/section_choice_test.dart`,
-    `test/xlsx/format/format_code_test.dart`).
+    `test/format/value_renderer_test.dart`,
+    `test/format/section_choice_test.dart`,
+    `test/format/format_code_test.dart`).
 20. A file's own `<numFmt>` for a built-in id is used as written: id 14
     with `yyyy-mm-dd` shows `2030-10-29` on a 1904 serial 46323, id 4 with
     `0.000` shows `1234.500` (C20; `c20-01`, `c20-02`;
-    `test/xlsx/format/formatter_test.dart`).
+    `test/format/formatter_test.dart`).
 21. Locale tags: `[$-407]mmmm dddd` shows `Oktober Mittwoch` and
     `[$-41F]` `Ekim Çarşamba` in every region; `[$€-40C]#,##0.00` keeps the
     region's separators. Excel shows `[$-40C]mmmm` as `octobre`; no French
     names ship, so the engine shows the renderer's names with
-    `numberFormatUnsupported`, a known difference (C18; `c18-01` to
-    `c18-04`; `test/xlsx/format/date_renderer_test.dart`).
+    `FormatWarning.unsupported`, a known difference (C18; `c18-01` to
+    `c18-04`; `test/format/date_renderer_test.dart`).
 
 Own rules of N1 and N2, as the oracle found them:
 
@@ -315,7 +317,7 @@ Own rules of N1 and N2, as the oracle found them:
 - Tags and brackets inside a locale's long date or time code are neither
   applied nor reported; unchecked, as the codes are the library's own.
 - A date section that overflows keeps its color and warning, and a text
-  section never warns `numberFormatUnsupported`; a CSV shows neither.
+  section never warns `FormatWarning.unsupported`; a CSV shows neither.
 - `ss.0.0` gives two fractional second tokens (`59.5.5`; `c15-02`,
   `c15-03`).
 - Mixed-case `A/p` shows the letter as written (`1:30 p`; `c5-07`,
@@ -331,13 +333,14 @@ then; the oracle later changed one row (the 1904 minus, below).
   full. Its bytes are bounded too: each code is a locale's own
   `longDateCode` or `longTimeCode`, trusted data, never a file's.
 - A formatter knows the date system only from its constructor. Built
-  without the reader's `date1904`, it reads every serial of a 1904 workbook
+  without the file's `date1904`, it reads every serial of a 1904 workbook
   in the 1900 system, and each date shows four years and a day early with
-  no warning. The constructor's doc says to pass `XlsxReader.date1904`.
+  no warning. The constructor's doc says to pass the file's date system
+  (jet_office's `XlsxReader.date1904`).
 - These rows are pinned by tests
-  (`test/xlsx/format/date_renderer_test.dart`,
-  `test/xlsx/format/value_renderer_test.dart`,
-  `test/xlsx/format/format_code_test.dart`):
+  (`test/format/date_renderer_test.dart`,
+  `test/format/value_renderer_test.dart`,
+  `test/format/format_code_test.dart`):
   - `DateTime` extremes: year -271820, year 1 and 1899-12-30 overflow in
     `yyyy-mm-dd`; the last millisecond of 9999 shows `.999`.
   - 1904 before the epoch: `-1` and `DateTime(1903, 12, 31)` show
@@ -352,9 +355,9 @@ then; the oracle later changed one row (the 1904 minus, below).
   - Mixed-case `A/p` shows the letter as written (`1:30 p`).
   - No section matching (`[>100]0;[<-100]0` on 50) overflows without a
     color or a warning.
-  - A bare `[]` shows the number and warns `numberFormatUnsupported`.
+  - A bare `[]` shows the number and warns `FormatWarning.unsupported`.
 - Each shipped locale's `builtinCodes` is asserted as a whole map
-  (`test/xlsx/format/format_locale_test.dart`), so the "Locales" table
+  (`test/format/format_locale_test.dart`), so the "Locales" table
   above and the code cannot drift apart unseen.
 
 Excel confirmed the pinned rows it was asked: the fractional-second carry
@@ -417,7 +420,7 @@ run belong to the owner's process, described in
 - `<workbook stem>.<region>.csv`: Excel's CSV, committed as Excel saved it.
   A committed CSV or manifest entry is never edited without the owner.
 
-`test/xlsx/format/oracle_test.dart` (VM only: it reads files) compares
+`test/format/oracle_test.dart` (VM only: it reads files) compares
 them, region by region (`en-US`, `de-DE`, `tr-TR`):
 
 | Rule | Behaviour |
@@ -426,13 +429,13 @@ them, region by region (`en-US`, `de-DE`, `tr-TR`):
 | Manifest | the entry must name CSVs of real workbooks that exist, run the 1900 and 1904 workbooks (and `invalid` in `en-US`) and give eye text for exactly the eye-only cases of the workbooks it ran |
 | Rows | a CSV row is matched to its case by the case id in column C, never by position; the CSV may hold no other case; a case with no row fails |
 | Separator | read from the header row, `value`, `code`, `case`, `note`, which holds no code: `,` in `en-US`, `;` where the decimal separator is a comma. A leading BOM and CRLF are accepted |
-| Formatting | each case with `XlsxNumberFormatter(locale:, date1904:)` of its region and date system; a built-in id as `numberFormatId`, with the workbook's own code for it as `numberFormat`, as the reader passes them; `General` at width 11 for a CSV case and 10 for an eye-only one (the oracle writer's column width) |
+| Formatting | each case with `NumberFormatter(locale:, date1904:)` of its region and date system; a built-in id as `numberFormatId`, with the workbook's own code for it as `numberFormat`, as the reader passes them; `General` at width 11 for a CSV case and 10 for an eye-only one (the oracle writer's column width) |
 | Texts | exact, never trimmed (the trailing space of `_)` is part of what Excel shows), with two tolerances for what a CSV cannot show as the cell does: when ours overflows, any run of `#` matches; when ours has a fill, any count of the fill character stands for it, unless that character could be part of a number or is in the text next to it |
 | Eye only | a case the CSV cannot show (`General` at the default column width, the newer error names) is compared with the manifest's eye text; a manual formula is formatted as its error, in the region's name for it. Without eye text it is skipped as by eye |
 | Known differences | `knownDifferences` in the test maps `<case id> <region>` to the reason Excel and the engine differ (the ruling); such a case is skipped with that reason. A key that names no case or region, or a reason left empty, fails, so the map cannot go stale. It holds `c18-02` in each region (`[$-40C]mmmm` is `octobre` in Excel; no French names ship) |
 
 Excel wins. A mismatch changes the rule: the unit test in the owning
-`test/xlsx/format/*_test.dart` gets Excel's text first (for a checklist
+`test/format/*_test.dart` gets Excel's text first (for a checklist
 item, its `Owner Excel check C<n>` test), then the engine is fixed. Only
 a difference that cannot be fixed now goes in `knownDifferences`. When
 every case of a region matches or is recorded, its locale is set
@@ -483,14 +486,15 @@ for the owner's run, never a reason to change a rule.
 
 ## Fuzzing
 
-`test/xlsx/format/fuzz_test.dart` formats seeded cases and requires no
+`test/format/fuzz_test.dart` formats seeded cases and requires no
 throw, a `text` at most 1,000 characters longer than a text value and
 `parts` that join to `text`. A case is a corpus code (every built-in code;
 the built-in, long date and long time codes of `enUS`, `deDE` and `trTR`;
-the number formats of `allFixtures()`; the codes of the format tests and of
+the number formats jet_office's workbook fixtures store
+(`test/format/support/fixture_codes.dart`); the codes of the format tests and of
 the owner checklist; `dddd` 60 times) with up to three mutations (insert,
 delete or duplicate a character of `0#?.,%E+-/@"\_*[];$` or a letter,
-repeat a slice, splice two codes), and a value: a random `XlsxDecimal` of up
+repeat a slice, splice two codes), and a value: a random `FormatDecimal` of up
 to 30 digits (now and then up to 309, or a tiny one), a `double` of such
 digits, a date serial from 0 to 3,000,000 (now and then negative, or with a
 fraction of nines that rounds up), NaN, infinity, a string, a boolean, an
@@ -508,6 +512,7 @@ dart run tool/fuzz_formatter.dart --seeds 1-200 --cases 1000
 It prints each failure as
 `seed <s> case <i>: <code> <value> width <w> <locale> <system>: <problem>`
 and exits 1 on any. A failure is a formatter defect: pin it as a
-unit test in the owning `test/xlsx/format/*_test.dart` with the input
-minimized by hand, then fix it. The owner manifest lists no file yet, so it
-adds no codes.
+unit test in the owning `test/format/*_test.dart` with the input
+minimized by hand, then fix it. A seed gives the same cases as it did in
+jet_office; `test/format/fuzz_test.dart` pins the corpus by its length and a
+hash.

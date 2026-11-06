@@ -2,8 +2,9 @@
 
 `jet_core` is a pure-Dart package of building blocks shared by the jet_
 packages. Today that is one thing: the number format engine, extracted from
-`jet_office` (decision 0008 there), which shows a value as Excel for Mac does.
-It has no dependencies, no editors, no rendering and knows no file format.
+`jet_office` (its decision 0008; jet_core's `docs/decisions/0001`), which shows
+a value as Excel for Mac does. It has no dependencies, no editors, no rendering
+and knows no file format.
 
 **The rule for adding to it:** two families really use it, and it knows no file
 format. Code that only one family needs stays in that family's package; code
@@ -59,6 +60,39 @@ LC_ALL=C.UTF-8 soffice --headless \
 dart run tool/compare_format_libreoffice.dart build/format_oracle
 ```
 
+## Benchmark
+
+`benchmark/format_benchmark_test.dart` times `NumberFormatter` on 100,000
+numbers, serial dates (`FormatDecimal`) and `DateTime`s, and prints the time of
+each. The quality gate does not run it; run it by hand on the VM and in Chrome.
+It records figures and fails on none (`docs/benchmark.md`):
+
+```bash
+dart test benchmark
+dart test -p chrome benchmark
+```
+
+## Fuzzing
+
+`test/format/fuzz_test.dart` mutates a corpus of format codes
+(`test/format/support/fuzz.dart`) and requires `NumberFormatter` to throw
+nothing, to return a `text` of at most 1,000 characters more than a text value
+it shows unchanged, and `parts` that join to `text`. It runs seeds 1 to 4 with
+200 cases each, in three locales and both date systems; the same cases on the
+VM and in Chrome. The corpus is pinned by its length and a hash in the test,
+and a seed gives the cases it gave in jet_office: change the corpus only on
+purpose, with both numbers in the same commit. For longer runs, by hand:
+
+```bash
+dart run tool/fuzz_formatter.dart --seeds 1-200 --cases 1000
+```
+
+It prints each failure as
+`seed <s> case <i>: <code> <value> width <w> <locale> <system>: <problem>` and
+exits 1 on any. A failure is a formatter defect: pin it as a unit test in the
+owning `test/format/*_test.dart` with the input minimized by hand, then fix it.
+The rules are in `docs/number-format.md`.
+
 ## Hard rules
 
 - **Pure Dart, web-safe.** Nothing under `lib/` imports `dart:io`, `dart:ui`,
@@ -78,7 +112,17 @@ dart run tool/compare_format_libreoffice.dart build/format_oracle
   write a new one that supersedes it.
 - **Excel is the oracle.** The owner's Excel for Mac output wins over any other
   producer. Never edit a committed owner file (CSV, manifest, cases) without
-  the owner. The fuzz and benchmark sections arrive with the engine.
+  the owner.
 - No `Xlsx...` name in `lib/`, except where text explains history.
 - Follow the surrounding code: explicit types, dartdoc on every public member,
   plain sentences.
+
+## Reference
+
+The engine's rules, each with its test, are in `docs/number-format.md`; the
+benchmark's figures are in `docs/benchmark.md`; why the package exists and what
+may be added to it is `docs/decisions/0001-jet-core-holds-what-the-families-share.md`.
+
+jet_office is cloned next to this repo (`../jet-office`), where the engine was
+written (its decision 0008) and which depends on `jet_core`. Read it for the
+history; never import from it.
