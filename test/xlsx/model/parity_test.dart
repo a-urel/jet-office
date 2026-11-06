@@ -8,6 +8,7 @@ import '../../../tool/src/part_compare.dart';
 import '../../fixtures/fixtures.dart' show Fixture;
 import '../../fixtures/m1_fixtures.dart';
 import '../../fixtures/m2_fixtures.dart';
+import '../../fixtures/m3_fixtures.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/zip_builder.dart';
 
@@ -17,8 +18,7 @@ typedef _Sheets = List<(String, List<List<Object?>>)>;
 
 /// The fixtures of plain rows, rebuilt with the model.
 ///
-/// `m1_properties` waits for W3 (document properties). The M1 and M2
-/// fixtures that set more than cells are in [_scripted].
+/// The fixtures that set more than cells are in [_scripted].
 final Map<String, _Sheets> _rebuilt = <String, _Sheets>{
   'm1_values': <(String, List<List<Object?>>)>[('Values', m1ValuesRows())],
   'm1_dates': <(String, List<List<Object?>>)>[
@@ -101,6 +101,16 @@ final Map<String, XlsxResult Function()> _scripted =
       'm2_views': _viewsBook,
       'm2_merges_filter': _mergesBook,
       'm2_formula_xstring': _formulaBook,
+      'm1_properties': _propertiesBook,
+      'm3_names': _namesBook,
+      'm3_hyperlinks': _linksBook,
+      'm3_validation': _validationBook,
+      'm3_conditional': _conditionalBook,
+      'm3_conditional_x14': _conditionalX14Book,
+      'm3_page_setup': _pageSetupBook,
+      'm3_header_footer': _headerFooterBook,
+      'm3_protection': _protectionBook,
+      'm3_properties': _m3PropertiesBook,
     };
 
 /// Where the model's file may differ from the writer's, applied to the
@@ -115,11 +125,6 @@ final Map<String, Uint8List Function(Uint8List)> _allowed =
           _tabSelected(_lastTabLast(bytes), 'xl/worksheets/sheet5.xml'),
       'm2_views': (Uint8List bytes) =>
           _tabSelected(bytes, 'xl/worksheets/sheet3.xml'),
-      // Auto filters arrive in W3. The merges of the sheet are compared.
-      'm2_merges_filter': _withoutAutoFilter,
-      // Auto filters arrive in W3. This fixture's `Probe` sheet, the
-      // reason it is here, is compared, and so is its second sheet's name.
-      'm2_formula_xstring': _withoutAutoFilter,
     };
 
 /// [bytes] with [edit] applied to the text of the [parts] it selects.
@@ -159,17 +164,6 @@ Uint8List _lastTabLast(Uint8List bytes) =>
           .replaceFirst(last, '$last$first')
           .replaceFirst(active.group(0)!, 'activeTab="${tab - 1}"');
     });
-
-/// [bytes] without `<autoFilter>` and without the defined names, which hold
-/// only each filter's `_xlnm._FilterDatabase`.
-Uint8List _withoutAutoFilter(Uint8List bytes) => _edited(
-  bytes,
-  (String name) =>
-      name == 'xl/workbook.xml' || name.startsWith('xl/worksheets/sheet'),
-  (String text) => text
-      .replaceAll(RegExp(r'<autoFilter [^>]*/>'), '')
-      .replaceAll(RegExp(r'<definedNames>.*</definedNames>'), ''),
-);
 
 /// Writes [rows] to [sheet] from row 0, as the writer's `row` writes them:
 /// the row's attributes first, then each cell, a row's style laid under the
@@ -281,38 +275,145 @@ XlsxResult _mergesBook() {
   data
     ..merge(XlsxRange.parse('A1:D1'))
     ..merge(XlsxRange.parse('B3:C4'));
+  data.autoFilter = XlsxRange.parse('A6:D20');
   _writeRows(book.addSheet('Plain'), rows['Plain']!);
   return book.save();
 }
 
-XlsxResult _formulaBook() => _build(<(String, List<List<Object?>>)>[
-  (
-    'Probe',
-    <List<Object?>>[
-      <Object?>[const XlsxFormula('"_x0041_"')],
-      <Object?>['_x0041_'],
-    ],
-  ),
-  (
-    '_x0041_',
-    <List<Object?>>[
-      <Object?>['Key', 'Value'],
-      <Object?>['a', 1],
-      <Object?>['b', 2],
-    ],
-  ),
-]);
+XlsxResult _formulaBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _fill(book.addSheet('Probe'), <List<Object?>>[
+    <Object?>[const XlsxFormula('"_x0041_"')],
+    <Object?>['_x0041_'],
+  ]);
+  _fill(book.addSheet('_x0041_'), <List<Object?>>[
+    <Object?>['Key', 'Value'],
+    <Object?>['a', 1],
+    <Object?>['b', 2],
+  ]).autoFilter = XlsxRange.parse(
+    'A1:B3',
+  );
+  return book.save();
+}
+
+XlsxResult _propertiesBook() {
+  final XlsxWorkbook book = XlsxWorkbook()..properties = m1Properties();
+  book.addSheet('Props').setCell(0, 0, 'properties');
+  return book.save();
+}
+
+XlsxResult _namesBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  final XlsxSheet data = _fill(book.addSheet('Data'), <List<Object?>>[
+    <Object?>[const XlsxFormula('TaxRate*100', cached: 18), 'Tax percent'],
+    <Object?>['Local', 5],
+  ]);
+  final XlsxSheet other = _fill(book.addSheet("O'Brien"), <List<Object?>>[
+    <Object?>['Id', 'Name', null, 'Note'],
+    <Object?>[1, 'one', null, 'a'],
+    <Object?>[2, 'two', null, 'b'],
+    <Object?>[3, 'three'],
+  ]);
+  // The writer's output order: the workbook's names, then each tab's.
+  book.defineName(const XlsxDefinedName('TaxRate', '0.18'));
+  data.defineName(const XlsxDefinedName('Local', r'Data!$B$2'));
+  other
+    ..printArea = <XlsxRange>[
+      XlsxRange.parse('A1:B4'),
+      XlsxRange.parse('D1:D3'),
+    ]
+    ..setPrintTitles(rows: (0, 0), columns: (0, 0));
+  return book.save();
+}
+
+XlsxResult _linksBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  final XlsxSheet links = book.addSheet('Links');
+  _setColumns(links, m3LinkColumns);
+  _fill(links, m3LinkRows());
+  _fill(book.addSheet("O'Brien"), <List<Object?>>[
+    <Object?>['top'],
+    <Object?>[null, 'B2'],
+    <Object?>[null, null, 'C3'],
+  ]);
+  book.defineName(const XlsxDefinedName('Target', r"'O''Brien'!$C$3"));
+  return book.save();
+}
+
+XlsxResult _validationBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  final XlsxSheet form = _fill(book.addSheet('Form'), m3ValidationRows);
+  m3Validations().forEach(form.addDataValidation);
+  return book.save();
+}
+
+XlsxResult _conditionalBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  final XlsxSheet sheet = _fill(book.addSheet('Scores'), <List<Object?>>[
+    m3ScoreHeader,
+    ...m3ScoreRows(),
+  ]);
+  m3ScoreFormats().forEach(sheet.addConditionalFormat);
+  return book.save();
+}
+
+XlsxResult _conditionalX14Book() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  final XlsxSheet sheet = _fill(book.addSheet('Bars'), <List<Object?>>[
+    m3BarHeader,
+    ...m3BarRows(),
+  ]);
+  m3BarFormats().forEach(sheet.addConditionalFormat);
+  return book.save();
+}
+
+XlsxResult _pageSetupBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _fill(book.addSheet('Landscape'), <List<Object?>>[
+    <Object?>['a', 'b', 'c'],
+    ...m3PageRows,
+  ]).pageSetup = m3LandscapeSetup;
+  _fill(book.addSheet('Scaled'), m3PageRows).pageSetup = m3ScaledSetup;
+  return book.save();
+}
+
+XlsxResult _headerFooterBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _fill(book.addSheet('Report'), m3ReportRows()).headerFooter =
+      m3ReportHeaderFooter();
+  return book.save();
+}
+
+XlsxResult _protectionBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _fill(book.addSheet('Locked'), m3LockedRows).protection = m3SheetProtection;
+  book.protection = m3WorkbookProtection;
+  return book.save();
+}
+
+XlsxResult _m3PropertiesBook() {
+  final XlsxWorkbook book = XlsxWorkbook()..properties = m3Properties();
+  _fill(book.addSheet('Info'), <List<Object?>>[
+    <Object?>['Properties', 'set'],
+  ]);
+  return book.save();
+}
+
+/// Sets [rows] on [sheet] from row 0 and returns it.
+XlsxSheet _fill(XlsxSheet sheet, List<List<Object?>> rows) {
+  for (int r = 0; r < rows.length; r++) {
+    for (int c = 0; c < rows[r].length; c++) {
+      sheet.setCell(r, c, rows[r][c]);
+    }
+  }
+  return sheet;
+}
 
 /// Builds [sheets] with the model.
 XlsxResult _build(_Sheets sheets) {
   final XlsxWorkbook book = XlsxWorkbook();
   for (final (String name, List<List<Object?>> rows) in sheets) {
-    final XlsxSheet sheet = book.addSheet(name);
-    for (int r = 0; r < rows.length; r++) {
-      for (int c = 0; c < rows[r].length; c++) {
-        sheet.setCell(r, c, rows[r][c]);
-      }
-    }
+    _fill(book.addSheet(name), rows);
   }
   return book.save();
 }
@@ -328,7 +429,11 @@ Map<XlsxWarningCode, int> _totals(
 
 void main() {
   group('fixtures built with the model equal the writer\'s', () {
-    for (final Fixture f in <Fixture>[...m1Fixtures(), ...m2Fixtures()]) {
+    for (final Fixture f in <Fixture>[
+      ...m1Fixtures(),
+      ...m2Fixtures(),
+      ...m3Fixtures(),
+    ]) {
       final _Sheets? sheets = _rebuilt[f.name];
       final XlsxResult Function()? script = _scripted[f.name];
       if (sheets == null && script == null) continue;
@@ -402,13 +507,50 @@ void main() {
     }
   });
 
+  test('an Excel 2010 rule on a later sheet has the writer\'s id', () {
+    final XlsxConditionalFormat stars = XlsxConditionalFormat(
+      <XlsxRange>[XlsxRange.parse('A1:A3')],
+      <XlsxConditionalRule>[XlsxIconSet(XlsxIconSetType.threeStars)],
+    );
+    final XlsxConditionalFormat bar = XlsxConditionalFormat(
+      <XlsxRange>[XlsxRange.parse('B1:B3')],
+      <XlsxConditionalRule>[XlsxDataBar(color: XlsxColor.hex('638EC6'))],
+    );
+    final XlsxWriter writer = XlsxWriter();
+    writer.addSheet('One').conditionalFormat(bar);
+    writer.addSheet('Two')
+      ..conditionalFormat(stars)
+      ..conditionalFormat(bar);
+    final XlsxWorkbook book = XlsxWorkbook();
+    book.addSheet('One').addConditionalFormat(bar);
+    book.addSheet('Two')
+      ..addConditionalFormat(stars)
+      ..addConditionalFormat(bar);
+    expect(
+      comparePackages(
+        writer.close().bytes,
+        book.save().bytes,
+        ignoreBookkeeping: true,
+      ),
+      isEmpty,
+    );
+  });
+
   test('every rebuilt fixture exists', () {
     final Set<String> names = <String>{
-      for (final Fixture f in <Fixture>[...m1Fixtures(), ...m2Fixtures()])
+      for (final Fixture f in <Fixture>[
+        ...m1Fixtures(),
+        ...m2Fixtures(),
+        ...m3Fixtures(),
+      ])
         f.name,
     };
     expect(names, containsAll(_rebuilt.keys));
     expect(names, containsAll(_scripted.keys));
     expect(_scripted.keys, containsAll(_allowed.keys));
+    expect(<String>{
+      ..._rebuilt.keys,
+      ..._scripted.keys,
+    }, containsAll(m3Fixtures().map((Fixture f) => f.name)));
   });
 }

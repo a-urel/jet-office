@@ -6,8 +6,11 @@ library;
 
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:jet_office/jet_office.dart'
+    show XlsxReadException, XlsxReadFailure;
 import 'package:jet_office/src/xlsx/model/cell_store.dart';
 import 'package:jet_office/src/xlsx/raw_cell.dart';
+import 'package:test/test.dart';
 import '../../../support/read_xlsx.dart';
 import '../../read/support/workbook_builder.dart';
 import '../../read/support/zip_builder.dart';
@@ -96,3 +99,20 @@ List<Object?> cellsOf(CellStore store) => <Object?>[
       return out;
     }(),
 ];
+
+/// A matcher for the `limitExceeded` [XlsxReadException] of [limit], set to
+/// [value], in [part].
+Matcher throwsLimit(String limit, int value, String part) => throwsA(
+  isA<XlsxReadException>()
+      .having(
+        (XlsxReadException e) => e.reason,
+        'reason',
+        XlsxReadFailure.limitExceeded,
+      )
+      .having(
+        (XlsxReadException e) => e.message,
+        'message',
+        contains('$limit ($value)'),
+      )
+      .having((XlsxReadException e) => e.part, 'part', part),
+);

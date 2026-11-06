@@ -1028,6 +1028,85 @@ void main() {
       expect(r.xfNumFmtIdsFrom(0), <int>[0, 14, 14]);
     });
 
+    group('seeded differential styles', () {
+      const XlsxStyle boldDxf = XlsxStyle(font: XlsxFont(bold: true));
+      const XlsxStyle italicDxf = XlsxStyle(font: XlsxFont(italic: true));
+      final String boldDxfKey = StyleRegistry.dxfKey(boldDxf, null);
+
+      StyleRegistry seededWith(List<({String? key})> dxfs) =>
+          StyleRegistry.seeded(
+            StyleSeed(
+              fonts: <({String? key})>[key(plainKey)],
+              fills: <({String? key})>[key(noneFill)],
+              borders: <({String? key})>[key(noBorder)],
+              xfs: [xf()],
+              dxfs: dxfs,
+            ),
+          );
+
+      test('a seeded entry keeps its index and is reused by its key', () {
+        final StyleRegistry r = seededWith(<({String? key})>[key(boldDxfKey)]);
+        expect(r.dxfCount, 1);
+        expect(r.dxfIdFor(boldDxf), 0);
+        expect(r.dxfCount, 1);
+        expect(r.dxfIdFor(italicDxf), 1);
+        expect(r.dxfsFrom(1).single, StyleRegistry.dxfKey(italicDxf, null));
+      });
+
+      test('an entry without a key keeps its place and never matches', () {
+        final StyleRegistry r = seededWith(<({String? key})>[key(null)]);
+        expect(r.dxfCount, 1);
+        expect(r.dxfIdFor(boldDxf), 1);
+        expect(r.dxfCount, 2);
+      });
+
+      test('keys set later give seeded entries their match', () {
+        final StyleRegistry r = seededWith(<({String? key})>[
+          key(null),
+          key(null),
+        ]);
+        r.setDxfKeys(<String?>[null, boldDxfKey]);
+        expect(r.dxfIdFor(boldDxf), 1);
+        expect(r.dxfCount, 2);
+      });
+
+      test('a seed without dxfs has none', () {
+        final StyleRegistry r = seededWith(const <({String? key})>[]);
+        expect(r.dxfCount, 0);
+        expect(r.dxfIdFor(boldDxf), 0);
+      });
+
+      test('truncate drops differential styles and what mapped to them', () {
+        final StyleRegistry r = seededWith(<({String? key})>[key(null)]);
+        r.dxfIdFor(boldDxf);
+        r.truncate(
+          fonts: r.fontCount,
+          fills: r.fillCount,
+          borders: r.borderCount,
+          codes: 0,
+          xfs: r.xfCount,
+          dxfs: 1,
+        );
+        expect(r.dxfCount, 1);
+        expect(r.dxfIdFor(boldDxf), 1);
+      });
+
+      test('a new dxf with a custom code numbers after the seed', () {
+        final StyleRegistry r = StyleRegistry.seeded(
+          StyleSeed(
+            fonts: <({String? key})>[key(plainKey)],
+            fills: <({String? key})>[key(noneFill)],
+            borders: <({String? key})>[key(noBorder)],
+            xfs: [xf()],
+            dxfs: <({String? key})>[key(null)],
+            usedNumFmtIds: const <int>[170],
+          ),
+        );
+        r.dxfIdFor(const XlsxStyle(numFmt: XlsxNumFmt.custom('0.0')));
+        expect(r.customCodesFrom(0).single.id, 171);
+      });
+    });
+
     test('an empty list is refused', () {
       expect(
         () => StyleRegistry.seeded(

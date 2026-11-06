@@ -7,17 +7,21 @@
 /// model types is the `<sheets>` group, each `<sheet>` as a [SheetEntry], and
 /// the attributes of `<calcPr>`; the first `<bookViews>` is an [XmlNode] whose
 /// first `<workbookView>` gives the active tab ([WorkbookPart.activeTab]) and
-/// keeps its other attributes. Every other child of `<workbook>`
-/// (`workbookPr` with its `date1904`, `definedNames`, `extLst`, ...) is an
-/// [OpaqueXml] at its original position, and the root keeps its namespace
-/// declarations and `mc:Ignorable`.
+/// keeps its other attributes, and the first `<workbookProtection>` is an
+/// [XmlNode] too, which [WorkbookPart.swapElement] swaps as it does an
+/// [ItemGroup]. The first `<definedNames>` is an [ItemGroup] of [NameEntry]
+/// ([WorkbookPart.names]). Every other child of `<workbook>` (`workbookPr`
+/// with its `date1904`, `extLst`, ...) is an [OpaqueXml] at its original
+/// position, and the root keeps its namespace declarations and
+/// `mc:Ignorable`.
 ///
 /// Sheet names are `ST_Xstring`: `_xHHHH_` is decoded on read and escaped on
 /// write, as the writer does. A `<sheet>`'s `r:id` is written with the prefix
 /// it had, declared where the part does not bind it already.
 ///
-/// Only the first `<sheets>`, `<calcPr>` and `<bookViews>` are typed; a repeated
-/// one is kept opaque. A part with no root element, or whose root is not a
+/// Only the first `<sheets>`, `<calcPr>`, `<bookViews>`,
+/// `<workbookProtection>` and `<definedNames>` are typed; a repeated one is
+/// kept opaque. A part with no root element, or whose root is not a
 /// SpreadsheetML `<workbook>`, is *untyped*: it has no sheets and is written
 /// back unchanged.
 library;
@@ -37,7 +41,10 @@ import '../read/read_exception.dart';
 import '../read/read_limits.dart';
 import '../read/workbook_reader.dart' show isDate1904, sheetVisibilityOf;
 import '../sheet_view.dart';
+import '../warnings.dart';
+import 'defined_names.dart';
 import 'element_node.dart';
+import 'item_group.dart';
 
 /// The children of `<workbook>` in the order of the schema's `CT_Workbook`
 /// sequence.
@@ -66,6 +73,13 @@ const List<String> workbookChildOrder = <String>[
 /// The typed children of `<bookViews>`.
 const NodeShape _bookViewsShape = <String, Set<String>>{
   'bookViews': <String>{'workbookView'},
+};
+
+/// The children of `<workbook>` that [WorkbookPart.element] and
+/// [WorkbookPart.swapElement] take.
+const Set<String> _elementSlots = <String>{
+  'workbookProtection',
+  'definedNames',
 };
 
 /// A `<sheet>` of the workbook's `<sheets>`.
@@ -123,8 +137,10 @@ final class SheetEntry {
     w.start(qualifiedName);
     writeNamespaceDeclarations(w, namespaces);
     final Map<String, String> inner = mergeNamespaces(above, namespaces);
-    w.attribute('name', escapeXstring(name));
-    if (rawSheetId != null) w.attribute('sheetId', rawSheetId!);
+    w.attribute('name', scrubXmlText(escapeXstring(name)).text);
+    if (rawSheetId != null) {
+      w.attribute('sheetId', scrubXmlText(rawSheetId!).text);
+    }
     if (visibility != XlsxSheetVisibility.visible || explicitVisible) {
       w.attribute('state', visibility.name);
     }
@@ -235,14 +251,25 @@ final class WorkbookPart implements PartContent {
   ///
   /// Throws an [XlsxReadException] of reason `unsupportedFormat` for a Strict
   /// root and `limitExceeded` when `<sheets>` lists more than
-  /// [XlsxReadLimits.maxSheets] sheets. An `XmlParseException` passes
-  /// through.
+  /// [XlsxReadLimits.maxSheets] sheets or `<definedNames>` holds more than
+  /// [XlsxReadLimits.maxMerges] children, naming [part]. An
+  /// `XmlParseException` passes through.
   ///
   /// A `<sheet>`'s `sheetId` is written back exactly as read: absent stays
   /// absent and text that is not an unsigned int (`abc`, `-1`) is kept
   /// verbatim, with [SheetEntry.sheetId] `null`. The children of `<sheet>`
   /// and `<calcPr>` (the schema has none) are not kept.
-  factory WorkbookPart.read(XmlPullReader r, XlsxReadLimits limits) {
+  ///
+  /// A `<definedName>` that cannot be read (no name, or a `localSheetId`
+  /// that is no number) or whose `localSheetId` names no sheet is kept as
+  /// written, left out of [names], and given to [warn] as
+  /// [XlsxWarningCode.featureEntryInvalid] with the detail `definedName`.
+  factory WorkbookPart.read(
+    XmlPullReader r,
+    XlsxReadLimits limits, {
+    void Function(XlsxWarningCode code, String detail)? warn,
+    String part = 'xl/workbook.xml',
+  }) {
     while (r.next()) {
       if (r.eventType == XmlEventType.startElement) break;
     }
@@ -259,6 +286,8 @@ final class WorkbookPart implements PartContent {
     _CalcPr? calcPr;
     var date1904 = false;
     var hasBookViews = false;
+    var hasProtection = false;
+    ItemGroup<NameEntry>? names;
     while (r.next()) {
       if (r.eventType == XmlEventType.endElement && r.depth < 1) break;
       if (r.eventType != XmlEventType.startElement) continue;
@@ -277,11 +306,34 @@ final class WorkbookPart implements PartContent {
       } else if (main && r.localName == 'bookViews' && !hasBookViews) {
         hasBookViews = true;
         children.add(XmlNode.read(r, _bookViewsShape));
+      } else if (main &&
+          r.localName == 'workbookProtection' &&
+          !hasProtection) {
+        hasProtection = true;
+        children.add(XmlNode.read(r, const <String, Set<String>>{}));
+      } else if (main && r.localName == 'definedNames' && names == null) {
+        names = readItemGroup<NameEntry>(
+          r,
+          childName: 'definedName',
+          limits: limits,
+          part: part,
+          read: readNameEntry,
+          warn: (String problem) =>
+              warn?.call(XlsxWarningCode.featureEntryInvalid, problem),
+        );
+        children.add(names);
       } else {
         if (main && r.localName == 'workbookPr') {
           date1904 = isDate1904(r.getAttribute('date1904'));
         }
         children.add(OpaqueXml.capture(r));
+      }
+    }
+    final int sheetCount = sheets?.entries.length ?? 0;
+    for (final NameEntry e in names?.values ?? const <NameEntry>[]) {
+      final int? scope = e.localSheetId;
+      if (scope != null && scope >= sheetCount) {
+        warn?.call(XlsxWarningCode.featureEntryInvalid, 'definedName');
       }
     }
     return WorkbookPart._typed(root, children, sheets, calcPr, date1904);
@@ -344,9 +396,175 @@ final class WorkbookPart implements PartContent {
   /// untyped). Immutable; [swapBookViews] replaces it.
   XmlNode? get bookViews {
     for (final Object c in _children) {
-      if (c is XmlNode) return c;
+      if (c is XmlNode && c.localName == 'bookViews') return c;
     }
     return null;
+  }
+
+  /// The typed first element of [slot] (`workbookProtection` or
+  /// `definedNames`): an [XmlNode] or an [ItemGroup], or `null` when the part
+  /// has none typed (or is untyped). Immutable; [swapElement] replaces it.
+  /// An element kept as an [OpaqueXml] is not a slot's element.
+  ///
+  /// Throws an [ArgumentError] named `slot` for any other name.
+  Object? element(String slot) {
+    _checkSlot(slot);
+    for (final Object c in _children) {
+      if (c is XmlNode && c.localName == slot ||
+          c is ItemGroup<Object?> && c.localName == slot) {
+        return c;
+      }
+    }
+    return null;
+  }
+
+  /// Replaces the element [from] of [slot] by [to]: in place, or where the
+  /// schema puts it when [from] is `null` (inserted) or no longer there;
+  /// `null` for [to] removes [from]. Only that slot's element is touched.
+  ///
+  /// Throws an [ArgumentError] named `slot` for a name [element] does not
+  /// take, and a [StateError] for an untyped part.
+  ///
+  /// [position], from [elementPosition], puts an inserted element back where
+  /// it was, which a file out of schema order needs; -1 asks for the schema's
+  /// place.
+  void swapElement(String slot, Object? from, Object? to, {int position = -1}) {
+    _checkSlot(slot);
+    _requireTyped();
+    final int at = from == null
+        ? -1
+        : _children.indexWhere((Object c) => identical(c, from));
+    if (to == null) {
+      if (at >= 0) _children.removeAt(at);
+    } else if (at >= 0) {
+      _children[at] = to;
+    } else if (position >= 0 && position <= _children.length) {
+      _children.insert(position, to);
+    } else {
+      _children.insert(_positionFor(slot), to);
+    }
+  }
+
+  /// Where [element] is among the part's children, or -1 when it is not
+  /// there, for [swapElement].
+  int elementPosition(Object? element) =>
+      _children.indexWhere((Object c) => identical(c, element));
+
+  /// The element name prefix (with the colon, or empty) the part's own
+  /// elements take. Throws a [StateError] for an untyped part.
+  String get elementPrefix => _prefixOf(_requireTyped().qualifiedName);
+
+  void _checkSlot(String slot) {
+    if (!_elementSlots.contains(slot)) {
+      throw ArgumentError.value(slot, 'slot', 'Not a workbook element slot.');
+    }
+  }
+
+  /// The names of the first `<definedNames>` that could be read, in file
+  /// order, built-in names included. Unmodifiable; empty for an untyped
+  /// part or a file without names.
+  List<NameEntry> get names {
+    final Object? group = element('definedNames');
+    return List<NameEntry>.unmodifiable(
+      group is ItemGroup<NameEntry> ? group.values : const <NameEntry>[],
+    );
+  }
+
+  /// How many changes of the names that count for recalculation are in
+  /// force: `defineName` and `removeName` of a user name raise it, their
+  /// undo lowers it and their redo raises it again (`SetNamesChange`). A
+  /// name a sheet setting writes (a print area, a filter) is not counted,
+  /// so [addName] and [removeName] leave it alone.
+  int nameEdits = 0;
+
+  /// Adds [entry] after the other names, as the writer writes a name; the
+  /// `<definedNames>` is made in schema position when the part has none.
+  ///
+  /// Not recorded in a change log, and not counted in [nameEdits]: use
+  /// `editWorkbook` (or `editNames` for a user name). Throws a
+  /// [StateError] for an untyped part.
+  void addName(NameEntry entry) {
+    final XmlRoot root = _requireTyped();
+    final Object? current = element('definedNames');
+    final GroupItem<NameEntry> item = GroupItem<NameEntry>(
+      entry,
+      renderNameEntry(entry),
+    );
+    if (current is ItemGroup<NameEntry>) {
+      swapElement(
+        'definedNames',
+        current,
+        current.withItems(<GroupItem<NameEntry>>[...current.items, item]),
+      );
+    } else {
+      swapElement(
+        'definedNames',
+        null,
+        ItemGroup<NameEntry>(
+          '${_prefixOf(root.qualifiedName)}definedNames',
+          'definedNames',
+          const <String, String>{},
+          const <KeptAttribute>[],
+          <GroupItem<NameEntry>>[item],
+          edited: true,
+        ),
+      );
+    }
+  }
+
+  /// Removes [entry], as [names] returned it, keeping the rest in order;
+  /// the group goes with its last child. Not recorded or counted, as
+  /// [addName].
+  ///
+  /// Throws an [ArgumentError] named `entry` when it is not a name of the
+  /// part and a [StateError] for an untyped part.
+  void removeName(NameEntry entry) {
+    _requireTyped();
+    final Object? current = element('definedNames');
+    final int at = current is ItemGroup<NameEntry>
+        ? current.items.indexWhere(
+            (GroupItem<NameEntry> i) => identical(i.value, entry),
+          )
+        : -1;
+    if (current is! ItemGroup<NameEntry> || at < 0) {
+      throw ArgumentError.value(entry.name, 'entry', 'Not a name of the part.');
+    }
+    final List<GroupItem<NameEntry>> rest = <GroupItem<NameEntry>>[
+      ...current.items,
+    ]..removeAt(at);
+    swapElement(
+      'definedNames',
+      current,
+      rest.isEmpty ? null : current.withItems(rest),
+    );
+  }
+
+  /// Gives [old], as [names] returned it, the formula and the `hidden` of
+  /// [entry], in the same place: only the element's text changes, and
+  /// `hidden` when it differs, so every other attribute stays as written
+  /// (`rewriteNameEntry`). Not recorded or counted, as [addName].
+  ///
+  /// Throws an [ArgumentError] named `old` when it is not a name of the part
+  /// and a [StateError] for an untyped part.
+  void replaceName(NameEntry old, NameEntry entry) {
+    _requireTyped();
+    final Object? current = element('definedNames');
+    final int at = current is ItemGroup<NameEntry>
+        ? current.items.indexWhere(
+            (GroupItem<NameEntry> i) => identical(i.value, old),
+          )
+        : -1;
+    if (current is! ItemGroup<NameEntry> || at < 0) {
+      throw ArgumentError.value(old.name, 'old', 'Not a name of the part.');
+    }
+    final List<GroupItem<NameEntry>> next = <GroupItem<NameEntry>>[
+      ...current.items,
+    ];
+    next[at] = GroupItem<NameEntry>(
+      entry,
+      rewriteNameEntry(current.items[at].source, old, entry),
+    );
+    swapElement('definedNames', current, current.withItems(next));
   }
 
   /// The index of the tab Excel opens on: the `activeTab` of the first
@@ -464,6 +682,7 @@ final class WorkbookPart implements PartContent {
         _Sheets() => 'sheets',
         _CalcPr() => 'calcPr',
         XmlNode() => c.localName,
+        ItemGroup<Object?>() => c.localName,
         _ => null,
       };
       if (childName != null && after.contains(childName)) return i;
@@ -478,7 +697,7 @@ final class WorkbookPart implements PartContent {
     if (untyped != null) return (buffer..write(untyped)).takeChunks();
     final XmlWriter w = XmlWriter(buffer)..declaration();
     final XmlRoot root = _root!;
-    root.writeStart(w);
+    writeRootStart(w, root);
     for (final Object c in _children) {
       switch (c) {
         case _Sheets():
@@ -486,6 +705,8 @@ final class WorkbookPart implements PartContent {
         case _CalcPr():
           c.writeTo(w, root.namespaces);
         case XmlNode():
+          c.writeTo(w, root.namespaces);
+        case ItemGroup<Object?>():
           c.writeTo(w, root.namespaces);
         case OpaqueXml():
           c.writeTo(w, declaredAbove: root.namespaces);

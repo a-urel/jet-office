@@ -427,23 +427,14 @@ mixin _SheetViews {
   /// nothing is left in it.
   void _editSheetPr(WorksheetPart part, String name, XmlNode? child) {
     final XmlNode? pr = part.sheetPr;
-    final XmlNode? old = pr?.child(name);
-    XmlNode? next;
-    if (pr == null) {
-      if (child == null) return;
-      next = XmlNode.made(
-        part.elementPrefix,
-        'sheetPr',
-        children: <Object>[child],
-      );
-    } else if (old != null) {
-      next = pr.replacingChild(old, child);
-    } else if (child != null) {
-      next = pr.withChildInOrder(child, _sheetPrOrder);
-    } else {
-      return;
-    }
-    final XmlNode? result = next.isBare ? null : next;
+    final XmlNode? result = sheetPrWith(
+      pr,
+      part.elementPrefix,
+      name,
+      child,
+      _sheetPrOrder,
+    );
+    if (identical(result, pr)) return;
     final ChangeLog log = _host.log;
     log.transaction(() {
       editLayout(log, part, 'sheetPr', () => part.setNode('sheetPr', result));

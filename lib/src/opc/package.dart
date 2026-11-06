@@ -337,17 +337,20 @@ final class OpcPackage {
   }
 
   /// Adds a relationship to [source] (a part name, or `''` for the package
-  /// root) and returns its id: `rId<n>` with the lowest free `n`.
+  /// root) and returns its id: [id] when given, else `rId<n>` with the
+  /// lowest free `n`.
   ///
   /// [target] is written as given, relative to [source] or absolute. With
   /// [external] it is an outside address. Throws [ArgumentError] when
-  /// [source] is neither `''` nor a part, or [type] or [target] is empty, and
-  /// an [OpcFormatException] when the existing relationships cannot be read.
+  /// [source] is neither `''` nor a part, [type] or [target] is empty, or
+  /// [id] is empty or already used, and an [OpcFormatException] when the
+  /// existing relationships cannot be read.
   String addRelationship(
     String source, {
     required String type,
     required String target,
     bool external = false,
+    String? id,
   }) {
     if (_key(source).isNotEmpty && !hasPart(source)) {
       throw ArgumentError.value(
@@ -357,11 +360,24 @@ final class OpcPackage {
       );
     }
     final Relationships rels = _relsOf(source, create: true)!;
+    if (id != null) return rels.add(type, target, id: id, external: external);
     int n = 1;
     while (rels.hasId('rId$n')) {
       n++;
     }
     return rels.add(type, target, id: 'rId$n', external: external);
+  }
+
+  /// Removes the relationship [id] of [source] (a part name, or `''` for the
+  /// package root), every one of them when a file repeats the id. An id or a
+  /// source that has none does nothing.
+  ///
+  /// Throws an [OpcFormatException] when the relationships cannot be read.
+  void removeRelationship(String source, String id) {
+    _relsOf(
+      source,
+      create: false,
+    )?.removeWhere((OpcRelationship r) => r.id == id);
   }
 
   /// Removes the part [name], its content type override, its own

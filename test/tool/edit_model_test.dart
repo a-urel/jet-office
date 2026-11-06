@@ -56,6 +56,7 @@ void main() {
         'm1_sheets.xlsx',
         'w1_generated.xlsx',
         'w2_generated.xlsx',
+        'w3_generated.xlsx',
       ]),
     );
     expect(out.toString(), contains('All 2 workbooks edited'));
@@ -149,6 +150,76 @@ void main() {
       expect(read.cells[1].isDate, isTrue, reason: file.key);
       expect(read.cells[3].numberFormatId, 0, reason: file.key);
     }
+  });
+
+  /// Edits [name] of the fixtures with the tool and opens the result.
+  XlsxWorkbook editedBook(String name) {
+    expect(
+      editModel(
+        <String>[input.path, output.path],
+        out: StringBuffer(),
+        err: StringBuffer(),
+      ),
+      0,
+    );
+    return XlsxWorkbook.open(File('${output.path}/$name').readAsBytesSync());
+  }
+
+  test('an edited workbook holds the sheet and workbook features', () {
+    writeOnly(input, <String>{'m1_values.xlsx'});
+    final int row =
+        XlsxReader(
+          File('${input.path}/m1_values.xlsx').readAsBytesSync(),
+        ).rowsAt(0).last.index +
+        1;
+    final XlsxWorkbook book = editedBook('m1_values.xlsx');
+    final XlsxSheet sheet = book.sheets.first;
+    expect(
+      book.definedNames.map((XlsxDefinedName n) => n.name),
+      contains('Model_edit'),
+    );
+    final XlsxHyperlink? link = sheet.hyperlinkAt(row, 3);
+    expect(link?.address, startsWith('https://'));
+    expect(link?.text, 'edited by the model');
+    expect(sheet.cellAt(row, 3)?.value, 'edited by the model');
+    expect(sheet.dataValidations.single.type, XlsxValidationType.list);
+    expect(sheet.dataValidations.single.ranges, <XlsxRange>[XlsxRange(row, 6)]);
+    final List<XlsxConditionalFormat> formats = sheet.conditionalFormats;
+    expect(formats, hasLength(2));
+    expect(formats[0].rules.single, isA<XlsxCellValueRule>());
+    expect(formats[0].ranges, <XlsxRange>[XlsxRange(row, 7)]);
+    expect(formats[1].rules.single, isA<XlsxDataBar>());
+    expect(formats[1].ranges, <XlsxRange>[XlsxRange(row, 8)]);
+    final XlsxPageSetup? setup = sheet.pageSetup;
+    expect(setup?.orientation, XlsxOrientation.landscape);
+    expect(setup?.paperSize, XlsxPaperSize.a4);
+    expect(setup?.fitToWidth, 1);
+    expect(setup?.fitToHeight, isNull);
+    expect(sheet.headerFooter?.oddFooter, isNotNull);
+    expect(sheet.autoFilter, XlsxRange(row, 0, row, 3));
+    expect(book.properties.title, 'Edited by jet_office');
+    expect(book.warnings, isEmpty);
+  });
+
+  test('the defined name takes a number when its name is taken', () {
+    final XlsxWorkbook source = XlsxWorkbook();
+    source.addSheet('One').setCell(0, 0, 'x');
+    source.defineName(const XlsxDefinedName('model_EDIT', 'One!\$A\$1'));
+    File('${input.path}/taken.xlsx').writeAsBytesSync(source.save().bytes);
+    final XlsxWorkbook book = editedBook('taken.xlsx');
+    expect(book.definedNames.map((XlsxDefinedName n) => n.name), <String>[
+      'model_EDIT',
+      'Model_edit2',
+    ]);
+  });
+
+  test('an auto filter in the way is left alone', () {
+    writeOnly(input, <String>{'m2_merges_filter.xlsx'});
+    final XlsxRange? before = XlsxWorkbook.open(
+      File('${input.path}/m2_merges_filter.xlsx').readAsBytesSync(),
+    ).sheets.first.autoFilter;
+    expect(before, isNotNull);
+    expect(editedBook('m2_merges_filter.xlsx').sheets.first.autoFilter, before);
   });
 
   test('setting a width keeps what the column already had', () {

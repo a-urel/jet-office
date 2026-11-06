@@ -80,6 +80,34 @@ Fixture _names() => Fixture(
   },
 );
 
+/// The columns of `m3_hyperlinks`' `Links` sheet: C is bold.
+const List<XlsxColumn?> m3LinkColumns = <XlsxColumn?>[
+  null,
+  null,
+  XlsxColumn(style: XlsxStyle(font: XlsxFont(bold: true))),
+];
+
+/// The rows of `m3_hyperlinks`' `Links` sheet, as the writer is given them.
+List<List<Object?>> m3LinkRows() => <List<Object?>>[
+  <Object?>[
+    XlsxHyperlink.url('https://example.com/a b'),
+    XlsxHyperlink.email(
+      'sales@example.com',
+      subject: 'Q&A ç',
+      tooltip: 'Write to sales',
+    ),
+    XlsxHyperlink.location('Target', text: 'Bold link'),
+    XlsxCell(
+      XlsxHyperlink.url('https://example.com/red', text: 'Red link'),
+      style: const XlsxStyle(font: XlsxFont(color: XlsxColor.rgb(0xFF0000))),
+    ),
+  ],
+  <Object?>[
+    XlsxHyperlink.sheet("O'Brien", range: XlsxRange.parse('B2')),
+    XlsxHyperlink.location('Target'),
+  ],
+];
+
 /// Hyperlinks of every kind, on `Links`, and the places they go to.
 ///
 /// Row 1 holds a web link whose address has a space (`%20` in the rels
@@ -125,31 +153,9 @@ Fixture _hyperlinks() => Fixture(
   },
   () {
     final XlsxWriter book = XlsxWriter();
-    book.addSheet('Links')
-      ..columns(<XlsxColumn?>[
-        null,
-        null,
-        const XlsxColumn(style: XlsxStyle(font: XlsxFont(bold: true))),
-      ])
-      ..row(<Object?>[
-        XlsxHyperlink.url('https://example.com/a b'),
-        XlsxHyperlink.email(
-          'sales@example.com',
-          subject: 'Q&A ç',
-          tooltip: 'Write to sales',
-        ),
-        XlsxHyperlink.location('Target', text: 'Bold link'),
-        XlsxCell(
-          XlsxHyperlink.url('https://example.com/red', text: 'Red link'),
-          style: const XlsxStyle(
-            font: XlsxFont(color: XlsxColor.rgb(0xFF0000)),
-          ),
-        ),
-      ])
-      ..row(<Object?>[
-        XlsxHyperlink.sheet("O'Brien", range: XlsxRange.parse('B2')),
-        XlsxHyperlink.location('Target'),
-      ]);
+    final XlsxSheetWriter links = book.addSheet('Links')
+      ..columns(m3LinkColumns);
+    m3LinkRows().forEach(links.row);
     book.addSheet("O'Brien")
       ..row(<Object?>['top'])
       ..row(<Object?>[null, 'B2'])
@@ -158,6 +164,74 @@ Fixture _hyperlinks() => Fixture(
     return book.close();
   },
 );
+
+/// The rows of `m3_validation`'s `Form` sheet.
+const List<List<Object?>> m3ValidationRows = <List<Object?>>[
+  <Object?>['Field', 'Input', null, 'Choices'],
+  <Object?>['Quoted list', null, null, 'red'],
+  <Object?>['List from range', null, null, 'green'],
+  <Object?>['Whole 1 to 10', null, null, 'blue'],
+  <Object?>['Decimal above 0'],
+  <Object?>['Date after 24.10.2026'],
+  <Object?>['Time before 12:00'],
+  <Object?>['Text of at most 5'],
+  <Object?>['Even number'],
+  <Object?>['Prompt only'],
+];
+
+/// The validations of `m3_validation`'s `Form` sheet, in the writer's order.
+List<XlsxDataValidation> m3Validations() {
+  XlsxRange input(int row) => XlsxRange(row, 1);
+  return <XlsxDataValidation>[
+    XlsxDataValidation.list(
+      <XlsxRange>[input(1)],
+      <String>['Fish', 'say "hi"', 'R&D'],
+    ),
+    XlsxDataValidation.listFrom(<XlsxRange>[input(2)], r'$D$2:$D$4'),
+    XlsxDataValidation.whole(
+      <XlsxRange>[input(3)],
+      XlsxComparison.between,
+      1,
+      b: 10,
+      promptTitle: 'Count',
+      prompt: 'Enter a whole number from 1 to 10.',
+      errorTitle: 'Not allowed',
+      error: 'Use 1 to 10.',
+    ),
+    XlsxDataValidation.decimal(
+      <XlsxRange>[input(4)],
+      XlsxComparison.greaterThan,
+      0,
+    ),
+    XlsxDataValidation.date(
+      <XlsxRange>[input(5)],
+      XlsxComparison.greaterThan,
+      const XlsxDate(2026, 10, 24),
+    ),
+    XlsxDataValidation.time(
+      <XlsxRange>[input(6)],
+      XlsxComparison.lessThan,
+      const Duration(hours: 12),
+    ),
+    XlsxDataValidation.textLength(
+      <XlsxRange>[input(7)],
+      XlsxComparison.lessThanOrEqual,
+      5,
+    ),
+    XlsxDataValidation.custom(
+      <XlsxRange>[input(8)],
+      'ISEVEN(B9)',
+      errorStyle: XlsxValidationErrorStyle.warning,
+      errorTitle: 'Odd',
+      error: 'The number is not even.',
+    ),
+    XlsxDataValidation.any(
+      <XlsxRange>[input(9)],
+      promptTitle: 'Note',
+      prompt: 'Anything goes here.',
+    ),
+  ];
+}
 
 /// Data validation of every kind, on `Form`.
 ///
@@ -201,83 +275,9 @@ Fixture _validation() => Fixture(
   },
   () {
     final XlsxWriter book = XlsxWriter();
-    XlsxRange input(int row) => XlsxRange(row, 1);
-    book.addSheet('Form')
-      ..row(<Object?>['Field', 'Input', null, 'Choices'])
-      ..row(<Object?>['Quoted list', null, null, 'red'])
-      ..row(<Object?>['List from range', null, null, 'green'])
-      ..row(<Object?>['Whole 1 to 10', null, null, 'blue'])
-      ..row(<Object?>['Decimal above 0'])
-      ..row(<Object?>['Date after 24.10.2026'])
-      ..row(<Object?>['Time before 12:00'])
-      ..row(<Object?>['Text of at most 5'])
-      ..row(<Object?>['Even number'])
-      ..row(<Object?>['Prompt only'])
-      ..dataValidation(
-        XlsxDataValidation.list(
-          <XlsxRange>[input(1)],
-          <String>['Fish', 'say "hi"', 'R&D'],
-        ),
-      )
-      ..dataValidation(
-        XlsxDataValidation.listFrom(<XlsxRange>[input(2)], r'$D$2:$D$4'),
-      )
-      ..dataValidation(
-        XlsxDataValidation.whole(
-          <XlsxRange>[input(3)],
-          XlsxComparison.between,
-          1,
-          b: 10,
-          promptTitle: 'Count',
-          prompt: 'Enter a whole number from 1 to 10.',
-          errorTitle: 'Not allowed',
-          error: 'Use 1 to 10.',
-        ),
-      )
-      ..dataValidation(
-        XlsxDataValidation.decimal(
-          <XlsxRange>[input(4)],
-          XlsxComparison.greaterThan,
-          0,
-        ),
-      )
-      ..dataValidation(
-        XlsxDataValidation.date(
-          <XlsxRange>[input(5)],
-          XlsxComparison.greaterThan,
-          const XlsxDate(2026, 10, 24),
-        ),
-      )
-      ..dataValidation(
-        XlsxDataValidation.time(
-          <XlsxRange>[input(6)],
-          XlsxComparison.lessThan,
-          const Duration(hours: 12),
-        ),
-      )
-      ..dataValidation(
-        XlsxDataValidation.textLength(
-          <XlsxRange>[input(7)],
-          XlsxComparison.lessThanOrEqual,
-          5,
-        ),
-      )
-      ..dataValidation(
-        XlsxDataValidation.custom(
-          <XlsxRange>[input(8)],
-          'ISEVEN(B9)',
-          errorStyle: XlsxValidationErrorStyle.warning,
-          errorTitle: 'Odd',
-          error: 'The number is not even.',
-        ),
-      )
-      ..dataValidation(
-        XlsxDataValidation.any(
-          <XlsxRange>[input(9)],
-          promptTitle: 'Note',
-          prompt: 'Anything goes here.',
-        ),
-      );
+    final XlsxSheetWriter form = book.addSheet('Form');
+    m3ValidationRows.forEach(form.row);
+    m3Validations().forEach(form.dataValidation);
     return book.close();
   },
 );
@@ -340,99 +340,102 @@ List<Object> _scoreRow(int i) {
 /// icons; the values below are what a reader computes, as conditional
 /// formatting changes no value.
 Fixture _conditional() {
-  final List<List<Object>> rows = <List<Object>>[
-    for (int i = 0; i < 20; i++) _scoreRow(i),
-  ];
-  const List<String> header = <String>[
-    'Name',
-    'Maths',
-    'Art',
-    'Music',
-    'Sport',
-    'Team',
-    'Hours',
-    'Progress',
-    'Rating',
-  ];
+  final List<List<Object>> rows = m3ScoreRows();
   return Fixture(
     'm3_conditional',
     <String, List<List<String>>>{
       'Scores': <List<String>>[
-        header,
+        m3ScoreHeader,
         for (final List<Object> row in rows)
           <String>[for (final Object v in row) '$v'],
       ],
     },
     <String, List<List<Object?>>>{
-      'Scores': <List<Object?>>[header, ...rows],
+      'Scores': <List<Object?>>[m3ScoreHeader, ...rows],
     },
     () {
       final XlsxWriter book = XlsxWriter();
-      final XlsxStyle red = XlsxStyle(
-        font: XlsxFont(color: XlsxColor.hex('9C0006')),
-        fill: XlsxFill.solid(XlsxColor.hex('FFC7CE')),
-      );
-      final XlsxStyle green = XlsxStyle(
-        font: XlsxFont(color: XlsxColor.hex('006100')),
-        fill: XlsxFill.solid(XlsxColor.hex('C6EFCE')),
-      );
-      const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
-      XlsxRange column(int c) => XlsxRange(1, c, 20, c);
-      final XlsxSheetWriter sheet = book.addSheet('Scores')..row(header);
+      final XlsxSheetWriter sheet = book.addSheet('Scores')..row(m3ScoreHeader);
       rows.forEach(sheet.row);
-      void format(XlsxRange range, XlsxConditionalRule rule) =>
-          sheet.conditionalFormat(
-            XlsxConditionalFormat(
-              <XlsxRange>[range],
-              <XlsxConditionalRule>[rule],
-            ),
-          );
-      format(
-        column(0),
-        XlsxTextRule(XlsxTextOperator.contains, 'an', style: red),
-      );
-      format(
-        column(1),
-        XlsxCellValueRule(
-          XlsxComparison.greaterThanOrEqual,
-          '70',
-          style: green,
-        ),
-      );
-      format(
-        column(2),
-        XlsxExpressionRule(r'C2>AVERAGE($C$2:$C$21)', style: green),
-      );
-      format(column(3), XlsxTopBottomRule(rank: 3, style: red));
-      format(
-        column(4),
-        XlsxAverageRule(above: false, orEqual: true, style: green),
-      );
-      format(column(5), XlsxDuplicateRule(style: red));
-      format(
-        column(6),
-        XlsxColorScale(
-          <XlsxCfValue>[
-            const XlsxCfValue.min(),
-            XlsxCfValue.percentile(50),
-            const XlsxCfValue.max(),
-          ],
-          <XlsxColor>[
-            XlsxColor.hex('F8696B'),
-            XlsxColor.hex('FFEB84'),
-            XlsxColor.hex('63BE7B'),
-          ],
-        ),
-      );
-      format(column(7), XlsxDataBar(color: XlsxColor.hex('638EC6')));
-      format(column(8), XlsxIconSet(XlsxIconSetType.threeArrows));
-      format(
-        XlsxRange.parse('B2:C21'),
-        const XlsxCellValueRule(XlsxComparison.lessThan, '40', style: bold),
-      );
+      m3ScoreFormats().forEach(sheet.conditionalFormat);
       return book.close();
     },
   );
+}
+
+/// The header of `m3_conditional`'s `Scores` sheet.
+const List<String> m3ScoreHeader = <String>[
+  'Name',
+  'Maths',
+  'Art',
+  'Music',
+  'Sport',
+  'Team',
+  'Hours',
+  'Progress',
+  'Rating',
+];
+
+/// The rows under [m3ScoreHeader].
+List<List<Object>> m3ScoreRows() => <List<Object>>[
+  for (int i = 0; i < 20; i++) _scoreRow(i),
+];
+
+/// The conditional formats of `m3_conditional`, in the writer's order.
+List<XlsxConditionalFormat> m3ScoreFormats() {
+  final XlsxStyle red = XlsxStyle(
+    font: XlsxFont(color: XlsxColor.hex('9C0006')),
+    fill: XlsxFill.solid(XlsxColor.hex('FFC7CE')),
+  );
+  final XlsxStyle green = XlsxStyle(
+    font: XlsxFont(color: XlsxColor.hex('006100')),
+    fill: XlsxFill.solid(XlsxColor.hex('C6EFCE')),
+  );
+  const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+  XlsxRange column(int c) => XlsxRange(1, c, 20, c);
+  XlsxConditionalFormat format(XlsxRange range, XlsxConditionalRule rule) =>
+      XlsxConditionalFormat(<XlsxRange>[range], <XlsxConditionalRule>[rule]);
+  return <XlsxConditionalFormat>[
+    format(
+      column(0),
+      XlsxTextRule(XlsxTextOperator.contains, 'an', style: red),
+    ),
+    format(
+      column(1),
+      XlsxCellValueRule(XlsxComparison.greaterThanOrEqual, '70', style: green),
+    ),
+    format(
+      column(2),
+      XlsxExpressionRule(r'C2>AVERAGE($C$2:$C$21)', style: green),
+    ),
+    format(column(3), XlsxTopBottomRule(rank: 3, style: red)),
+    format(
+      column(4),
+      XlsxAverageRule(above: false, orEqual: true, style: green),
+    ),
+    format(column(5), XlsxDuplicateRule(style: red)),
+    format(
+      column(6),
+      XlsxColorScale(
+        <XlsxCfValue>[
+          const XlsxCfValue.min(),
+          XlsxCfValue.percentile(50),
+          const XlsxCfValue.max(),
+        ],
+        <XlsxColor>[
+          XlsxColor.hex('F8696B'),
+          XlsxColor.hex('FFEB84'),
+          XlsxColor.hex('63BE7B'),
+        ],
+      ),
+    ),
+    format(column(7), XlsxDataBar(color: XlsxColor.hex('638EC6'))),
+    format(column(8), XlsxIconSet(XlsxIconSetType.threeArrows)),
+    format(
+      XlsxRange.parse('B2:C21'),
+      const XlsxCellValueRule(XlsxComparison.lessThan, '40', style: bold),
+    ),
+  ];
 }
 
 /// The Excel 2010 data bars and icon sets, on `Bars`.
@@ -445,62 +448,103 @@ Fixture _conditional() {
 /// the values below are what a reader computes, as conditional formatting
 /// changes no value.
 Fixture _conditionalX14() {
-  final List<List<int>> rows = <List<int>>[
-    for (int v = -50; v <= 50; v += 5) <int>[v, v, v, v, v],
-  ];
-  const List<String> header = <String>[
-    'Bar',
-    'Solid',
-    'Stars',
-    'Triangles',
-    'Boxes',
-  ];
+  final List<List<int>> rows = m3BarRows();
   return Fixture(
     'm3_conditional_x14',
     <String, List<List<String>>>{
       'Bars': <List<String>>[
-        header,
+        m3BarHeader,
         for (final List<int> row in rows)
           <String>[for (final int v in row) '$v'],
       ],
     },
     <String, List<List<Object?>>>{
-      'Bars': <List<Object?>>[header, ...rows],
+      'Bars': <List<Object?>>[m3BarHeader, ...rows],
     },
     () {
       final XlsxWriter book = XlsxWriter();
-      final XlsxSheetWriter sheet = book.addSheet('Bars')..row(header);
+      final XlsxSheetWriter sheet = book.addSheet('Bars')..row(m3BarHeader);
       rows.forEach(sheet.row);
-      void format(int column, XlsxConditionalRule rule) =>
-          sheet.conditionalFormat(
-            XlsxConditionalFormat(
-              <XlsxRange>[XlsxRange(1, column, rows.length, column)],
-              <XlsxConditionalRule>[rule],
-            ),
-          );
-      format(
-        0,
-        XlsxDataBar(
-          color: XlsxColor.hex('638EC6'),
-          negativeFillColor: XlsxColor.hex('FF0000'),
-          axis: XlsxDataBarAxis.middle,
-        ),
-      );
-      format(
-        1,
-        XlsxDataBar(
-          color: XlsxColor.hex('63C384'),
-          gradient: false,
-          border: true,
-        ),
-      );
-      format(2, XlsxIconSet(XlsxIconSetType.threeStars));
-      format(3, XlsxIconSet(XlsxIconSetType.threeTriangles));
-      format(4, XlsxIconSet(XlsxIconSetType.fiveBoxes));
+      m3BarFormats().forEach(sheet.conditionalFormat);
       return book.close();
     },
   );
 }
+
+/// The header of `m3_conditional_x14`'s `Bars` sheet.
+const List<String> m3BarHeader = <String>[
+  'Bar',
+  'Solid',
+  'Stars',
+  'Triangles',
+  'Boxes',
+];
+
+/// The rows under [m3BarHeader].
+List<List<int>> m3BarRows() => <List<int>>[
+  for (int v = -50; v <= 50; v += 5) <int>[v, v, v, v, v],
+];
+
+/// The conditional formats of `m3_conditional_x14`, in the writer's order.
+List<XlsxConditionalFormat> m3BarFormats() {
+  final int last = m3BarRows().length;
+  XlsxConditionalFormat format(int column, XlsxConditionalRule rule) =>
+      XlsxConditionalFormat(
+        <XlsxRange>[XlsxRange(1, column, last, column)],
+        <XlsxConditionalRule>[rule],
+      );
+  return <XlsxConditionalFormat>[
+    format(
+      0,
+      XlsxDataBar(
+        color: XlsxColor.hex('638EC6'),
+        negativeFillColor: XlsxColor.hex('FF0000'),
+        axis: XlsxDataBarAxis.middle,
+      ),
+    ),
+    format(
+      1,
+      XlsxDataBar(
+        color: XlsxColor.hex('63C384'),
+        gradient: false,
+        border: true,
+      ),
+    ),
+    format(2, XlsxIconSet(XlsxIconSetType.threeStars)),
+    format(3, XlsxIconSet(XlsxIconSetType.threeTriangles)),
+    format(4, XlsxIconSet(XlsxIconSetType.fiveBoxes)),
+  ];
+}
+
+/// The number rows of `m3_page_setup`'s sheets.
+const List<List<int>> m3PageRows = <List<int>>[
+  <int>[1, 2, 3],
+  <int>[4, 5, 6],
+];
+
+/// The page setup of `m3_page_setup`'s `Landscape` sheet.
+const XlsxPageSetup m3LandscapeSetup = XlsxPageSetup(
+  orientation: XlsxOrientation.landscape,
+  paperSize: XlsxPaperSize.a4,
+  fitToWidth: 1,
+  centerHorizontally: true,
+  printGridLines: true,
+);
+
+/// The page setup of `m3_page_setup`'s `Scaled` sheet.
+const XlsxPageSetup m3ScaledSetup = XlsxPageSetup(
+  scale: 85,
+  firstPageNumber: 3,
+  pageOrder: XlsxPageOrder.overThenDown,
+  margins: XlsxPageMargins(
+    left: 0.25,
+    right: 0.25,
+    top: 0.5,
+    bottom: 0.5,
+    header: 0.2,
+    footer: 0.2,
+  ),
+);
 
 /// Page setup on two sheets.
 ///
@@ -510,10 +554,7 @@ Fixture _conditionalX14() {
 /// a reader computes; Excel's Page Setup dialog and Print Preview show the
 /// settings.
 Fixture _pageSetup() {
-  const List<List<int>> rows = <List<int>>[
-    <int>[1, 2, 3],
-    <int>[4, 5, 6],
-  ];
+  const List<List<int>> rows = m3PageRows;
   return Fixture(
     'm3_page_setup',
     <String, List<List<String>>>{
@@ -539,36 +580,32 @@ Fixture _pageSetup() {
       final XlsxSheetWriter landscape = book.addSheet('Landscape')
         ..row(<Object?>['a', 'b', 'c']);
       rows.forEach(landscape.row);
-      landscape.pageSetup(
-        const XlsxPageSetup(
-          orientation: XlsxOrientation.landscape,
-          paperSize: XlsxPaperSize.a4,
-          fitToWidth: 1,
-          centerHorizontally: true,
-          printGridLines: true,
-        ),
-      );
+      landscape.pageSetup(m3LandscapeSetup);
       final XlsxSheetWriter scaled = book.addSheet('Scaled');
       rows.forEach(scaled.row);
-      scaled.pageSetup(
-        const XlsxPageSetup(
-          scale: 85,
-          firstPageNumber: 3,
-          pageOrder: XlsxPageOrder.overThenDown,
-          margins: XlsxPageMargins(
-            left: 0.25,
-            right: 0.25,
-            top: 0.5,
-            bottom: 0.5,
-            header: 0.2,
-            footer: 0.2,
-          ),
-        ),
-      );
+      scaled.pageSetup(m3ScaledSetup);
       return book.close();
     },
   );
 }
+
+/// The rows of `m3_header_footer`'s `Report` sheet.
+List<List<Object?>> m3ReportRows() => <List<Object?>>[
+  for (int i = 1; i <= 60; i++) <Object?>['Row $i', i],
+];
+
+/// The headers and footers of `m3_header_footer`'s `Report` sheet.
+XlsxHeaderFooter m3ReportHeaderFooter() => XlsxHeaderFooter(
+  oddHeader: XlsxHeaderFooter.sections(
+    left: XlsxHeaderFooter.literal('R&D'),
+    right: XlsxHeaderFooter.date,
+  ),
+  oddFooter:
+      'Page ${XlsxHeaderFooter.pageNumber} of '
+      '${XlsxHeaderFooter.pageCount}',
+  evenFooter: XlsxHeaderFooter.sheetName,
+  firstHeader: 'Cover',
+);
 
 /// Headers and footers on a sheet that prints on two pages.
 ///
@@ -578,9 +615,7 @@ Fixture _pageSetup() {
 /// right. Headers change no value, so the values below are what a reader
 /// computes; Excel's Print Preview shows the text.
 Fixture _headerFooter() {
-  final List<List<Object?>> rows = <List<Object?>>[
-    for (int i = 1; i <= 60; i++) <Object?>['Row $i', i],
-  ];
+  final List<List<Object?>> rows = m3ReportRows();
   return Fixture(
     'm3_header_footer',
     <String, List<List<String>>>{
@@ -593,23 +628,42 @@ Fixture _headerFooter() {
       final XlsxWriter book = XlsxWriter();
       final XlsxSheetWriter sheet = book.addSheet('Report');
       rows.forEach(sheet.row);
-      sheet.headerFooter(
-        XlsxHeaderFooter(
-          oddHeader: XlsxHeaderFooter.sections(
-            left: XlsxHeaderFooter.literal('R&D'),
-            right: XlsxHeaderFooter.date,
-          ),
-          oddFooter:
-              'Page ${XlsxHeaderFooter.pageNumber} of '
-              '${XlsxHeaderFooter.pageCount}',
-          evenFooter: XlsxHeaderFooter.sheetName,
-          firstHeader: 'Cover',
-        ),
-      );
+      sheet.headerFooter(m3ReportHeaderFooter());
       return book.close();
     },
   );
 }
+
+/// The rows of `m3_protection`'s `Locked` sheet.
+const List<List<Object?>> m3LockedRows = <List<Object?>>[
+  <Object?>['Locked label'],
+  <Object?>[
+    null,
+    XlsxCell(
+      'input',
+      style: XlsxStyle(protection: XlsxProtection(locked: false)),
+    ),
+  ],
+  <Object?>[
+    null,
+    null,
+    XlsxCell(
+      XlsxFormula('1+1', cached: 2),
+      style: XlsxStyle(protection: XlsxProtection(hidden: true)),
+    ),
+  ],
+];
+
+/// The protection of `m3_protection`'s `Locked` sheet.
+const XlsxSheetProtection m3SheetProtection = XlsxSheetProtection(
+  password: 'password',
+  allowFormatColumns: true,
+);
+
+/// The workbook protection of `m3_protection`.
+const XlsxWorkbookProtection m3WorkbookProtection = XlsxWorkbookProtection(
+  password: 'test',
+);
 
 /// A protected sheet and a workbook with locked structure.
 ///
@@ -638,31 +692,34 @@ Fixture _protection() => Fixture(
   },
   () {
     final XlsxWriter book = XlsxWriter();
-    book.addSheet('Locked')
-      ..row(<Object?>['Locked label'])
-      ..row(<Object?>[
-        null,
-        const XlsxCell(
-          'input',
-          style: XlsxStyle(protection: XlsxProtection(locked: false)),
-        ),
-      ])
-      ..row(<Object?>[
-        null,
-        null,
-        const XlsxCell(
-          XlsxFormula('1+1', cached: 2),
-          style: XlsxStyle(protection: XlsxProtection(hidden: true)),
-        ),
-      ])
-      ..protect(
-        const XlsxSheetProtection(
-          password: 'password',
-          allowFormatColumns: true,
-        ),
-      );
-    book.protectWorkbook(const XlsxWorkbookProtection(password: 'test'));
+    final XlsxSheetWriter sheet = book.addSheet('Locked');
+    m3LockedRows.forEach(sheet.row);
+    sheet.protect(m3SheetProtection);
+    book.protectWorkbook(m3WorkbookProtection);
     return book.close();
+  },
+);
+
+/// The properties of `m3_properties`.
+XlsxProperties m3Properties() => XlsxProperties(
+  title: 'Quarterly report',
+  subject: 'Accounts',
+  creator: 'Ahmet Urel',
+  keywords: 'report; accounts',
+  description: 'Fixture for the document properties',
+  lastModifiedBy: 'Jet Office',
+  category: 'Finance',
+  contentStatus: 'Final',
+  company: 'Jetronik',
+  manager: 'Ayse Yilmaz',
+  created: DateTime.utc(2026, 10, 24, 9, 30),
+  modified: DateTime.utc(2026, 10, 25, 18, 45, 10),
+  custom: <String, Object>{
+    'Project': 'Atlas',
+    'Count': 3,
+    'Ratio': 0.5,
+    'Final': true,
+    'Due': DateTime.utc(2026, 10, 24),
   },
 );
 
@@ -688,29 +745,7 @@ Fixture _properties() => Fixture(
     ],
   },
   () {
-    final XlsxWriter book = XlsxWriter(
-      properties: XlsxProperties(
-        title: 'Quarterly report',
-        subject: 'Accounts',
-        creator: 'Ahmet Urel',
-        keywords: 'report; accounts',
-        description: 'Fixture for the document properties',
-        lastModifiedBy: 'Jet Office',
-        category: 'Finance',
-        contentStatus: 'Final',
-        company: 'Jetronik',
-        manager: 'Ayse Yilmaz',
-        created: DateTime.utc(2026, 10, 24, 9, 30),
-        modified: DateTime.utc(2026, 10, 25, 18, 45, 10),
-        custom: <String, Object>{
-          'Project': 'Atlas',
-          'Count': 3,
-          'Ratio': 0.5,
-          'Final': true,
-          'Due': DateTime.utc(2026, 10, 24),
-        },
-      ),
-    );
+    final XlsxWriter book = XlsxWriter(properties: m3Properties());
     book.addSheet('Info').row(<Object?>['Properties', 'set']);
     return book.close();
   },

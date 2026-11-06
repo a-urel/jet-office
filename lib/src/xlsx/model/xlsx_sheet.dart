@@ -25,6 +25,7 @@ library;
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
+import '../../opc/package.dart' show OpcRelationship;
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_number.dart';
 import '../../xml/xml_pull_reader.dart';
@@ -33,12 +34,20 @@ import '../cell_encoder.dart';
 import '../cell_ref.dart';
 import '../color.dart';
 import '../column.dart';
+import '../conditional_format.dart';
+import '../conditional_format_x14.dart'
+    show hasX14Rule, writeX14ConditionalFormats;
+import '../data_validation.dart';
 import '../date_serial.dart';
+import '../defined_name.dart';
 import '../format/format_kind.dart';
+import '../formula_text.dart' show quotedSheetRef;
+import '../header_footer.dart';
 import '../hyperlink.dart';
 import '../limits.dart';
 import '../merge_check.dart';
 import '../number_format.dart';
+import '../page_setup.dart';
 import '../range.dart';
 import '../raw_cell.dart';
 import '../read/cell_decoder.dart';
@@ -49,10 +58,14 @@ import '../read/read_exception.dart';
 import '../read/styles_reader.dart';
 import '../rich_text.dart';
 import '../row_format.dart';
+import '../sheet_name.dart' show sheetNameKey;
+import '../sheet_protection.dart';
 import '../sheet_view.dart';
+import '../sheet_writer.dart' show checkPrintAreaRanges, checkPrintTitles;
 import '../style.dart';
 import '../values.dart';
 import '../warnings.dart';
+import '../workbook_parts.dart' show printAreaFormula, printTitlesFormula;
 import '../worksheet_parts.dart'
     show
         checkColumnWidth,
@@ -61,19 +74,31 @@ import '../worksheet_parts.dart'
         paneAttributes,
         sheetViewAttributes,
         standardColumnWidth,
-        standardRowHeight;
+        standardRowHeight,
+        writeHyperlink;
 import 'cell_store.dart';
 import 'columns.dart';
+import 'conditional_elements.dart';
+import 'conditional_x14.dart';
+import 'defined_names.dart';
 import 'element_node.dart';
+import 'item_group.dart' show GroupItem, ItemGroup, readerOf, renderElements;
+import 'page_elements.dart';
 import 'primitives.dart';
+import 'protection_elements.dart';
 import 'style_elements.dart' show ReadStyleValue, readColor;
 import 'styles_part.dart';
 import 'table_part.dart';
+import 'validation_elements.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
 
 part 'xlsx_sheet_layout.dart';
+part 'xlsx_sheet_links.dart';
 part 'xlsx_sheet_merges.dart';
+part 'xlsx_sheet_names.dart';
+part 'xlsx_sheet_print.dart';
+part 'xlsx_sheet_rules.dart';
 part 'xlsx_sheet_views.dart';
 
 /// What a sheet needs from its workbook.
@@ -86,6 +111,16 @@ abstract interface class SheetHost {
 
   /// Whether the workbook counts dates from 1904.
   bool get date1904;
+
+  /// The workbook part, which holds the defined names.
+  WorkbookPart get workbookPart;
+
+  /// The tab index of [sheet] in `<sheets>`.
+  int sheetIndexOf(XlsxSheet sheet);
+
+  /// Throws an [ArgumentError] named `name` when a table of any sheet has
+  /// [name], ignoring case.
+  void checkNotTableName(String name);
 
   /// The opened package, for reading parts.
   PackageReader get reader;
@@ -133,6 +168,16 @@ XlsxSheet newSheet(
   WorksheetPart? part,
 }) => XlsxSheet._(host, entry, partName, part);
 
+/// The display names of [sheet]'s tables; none for a sheet without a part.
+/// Reads the table parts on first use.
+Iterable<String> sheetTableNames(XlsxSheet sheet) => sheet._partName == null
+    ? const <String>[]
+    : <String>[
+        for (final ({String partName, TablePart table}) t
+            in sheet._sheetTables())
+          t.table.displayName,
+      ];
+
 /// The workbook part's entry of [sheet].
 SheetEntry entryOf(XlsxSheet sheet) => sheet._entry;
 
@@ -153,12 +198,21 @@ int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
 ///
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
 /// `A`.
-final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
+final class XlsxSheet
+    with
+        _SheetLayout,
+        _SheetLinks,
+        _SheetMerges,
+        _SheetNames,
+        _SheetPrint,
+        _SheetRules,
+        _SheetViews {
   XlsxSheet._(this._host, this._entry, this._partName, this._part);
 
   @override
   final SheetHost _host;
   final SheetEntry _entry;
+  @override
   final String? _partName;
   WorksheetPart? _part;
 
@@ -172,6 +226,11 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
   /// problem is reported once however often its element is read.
   @override
   final Set<String> _layoutReported = <String>{};
+
+  /// The print and filter problems reported (`featureEntryInvalid`), by
+  /// name, so a problem is reported once however often it is read.
+  @override
+  final Set<String> _featureReported = <String>{};
 
   /// The tables of the sheet the model can type, read on the first
   /// [setCell]; `null` until then.
@@ -193,6 +252,66 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
   set visibility(XlsxSheetVisibility value) =>
       _host.setVisibility(_entry, value);
 
+  /// What the sheet's protection allows, or `null` when the sheet is not
+  /// protected: it has no `<sheetProtection>`, or its `sheet` is `0`.
+  ///
+  /// The password always reads `null`: the file stores a hash, never the
+  /// password ([hasStoredPassword] says whether it has one). Every flag has
+  /// its schema meaning, so an attribute the file omits reads as Excel
+  /// reads it. A boolean written `true` or `false` is read; any other text
+  /// reads as the attribute's default. Only the first `<sheetProtection>`
+  /// is read. Loads the sheet. Throws an [XlsxReadException] when the sheet
+  /// cannot be read.
+  XlsxSheetProtection? get protection {
+    final Object? node = _load()?.layoutElement('sheetProtection');
+    return node is XmlNode ? readSheetProtection(node) : null;
+  }
+
+  /// Protects the sheet as [value] says, or removes the `<sheetProtection>`
+  /// with `null`, a stored hash with it.
+  ///
+  /// A new element is the text the writer writes for the same protection,
+  /// in schema position. An existing element keeps its other attributes
+  /// (`lockRevision`, ...) and changes an attribute only when its meaning
+  /// changes, so `objects="0"` stays when objects stay editable. A
+  /// [value] whose `password` is `null` keeps the stored hash, which is how
+  /// a flag changes on a sheet whose password is not known; a password
+  /// replaces every hash attribute. An element with `sheet="0"` is edited
+  /// in place and gets `sheet="1"`. A value equal to [protection] changes
+  /// nothing.
+  ///
+  /// Throws an [ArgumentError] named `password` for a password that is not
+  /// 1 to 15 characters from U+0020 to U+007E (the message never repeats
+  /// it), a [StateError] for a sheet that is not a worksheet or has no part
+  /// and an [XlsxReadException] when the sheet cannot be read. Whatever it
+  /// throws, nothing has changed.
+  set protection(XlsxSheetProtection? value) {
+    checkProtectionPassword(value?.password);
+    final WorksheetPart part = _editablePart('protection');
+    if (value == protection) return;
+    final XmlNode? old = part.layoutElement('sheetProtection') as XmlNode?;
+    final XmlNode? next = value == null
+        ? null
+        : applySheetProtection(old, value, part.elementPrefix);
+    final ChangeLog log = _host.log;
+    log.transaction(() {
+      editLayout(
+        log,
+        part,
+        'sheetProtection',
+        () => part.setNode('sheetProtection', next),
+      );
+    });
+  }
+
+  /// Whether the sheet's `<sheetProtection>` stores a password: a `password`
+  /// or a `hashValue`, whether or not the protection is on. The password
+  /// itself is never read. Loads the sheet.
+  bool get hasStoredPassword {
+    final Object? node = _load()?.layoutElement('sheetProtection');
+    return node is XmlNode && sheetHasStoredPassword(node);
+  }
+
   /// The cell at [row] and [column] as [XlsxReader] reads it, or `null`
   /// when the cell holds no value, formula or inline string (an empty
   /// styled cell included).
@@ -205,6 +324,7 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
   /// warnings once, shared with [rows]. Loads the sheet. Throws a
   /// [RangeError] outside Excel's grid and an [XlsxReadException] when the
   /// sheet cannot be read.
+  @override
   XlsxReadCell? cellAt(int row, int column) {
     _checkCell(row, column);
     final CellStore? store = _load()?.cells;
@@ -230,7 +350,8 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
   /// Sets the cell at [row] and [column] to [value].
   ///
   /// [value] is a `String`, `int`, `double`, `bool`, `DateTime`,
-  /// [XlsxDate], [XlsxDecimal], [XlsxFormula] or `null`. It is checked,
+  /// [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxHyperlink] or `null`.
+  /// It is checked,
   /// repaired and reported as the writer does (`CellEncoder`), when it is
   /// set: text with characters XML forbids is cleaned with a warning, and a
   /// `NaN` throws now, so saving cannot fail on data. The cell keeps its
@@ -263,17 +384,35 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
   /// [XlsxCell] of `null` leaves an empty cell of that style, or no cell
   /// when it has no style or its style is the default, as the writer does.
   ///
+  /// An [XlsxHyperlink] sets the cell to its text, a string, with the
+  /// writer's hyperlink font (the theme's hyperlink color, underlined)
+  /// beneath the cell's style: a plain link keeps the style the cell shows
+  /// there (its fill and number format stay), and an [XlsxCell] of a link
+  /// layers as an [XlsxCell] of a string does. The sheet gets the
+  /// `<hyperlink>` the writer writes for it, replacing the one on exactly
+  /// that cell; an address a link of the sheet already has shares its
+  /// relationship, and the replaced link's relationship goes when no other
+  /// link uses it. A value that is not a link leaves the cell's link, as
+  /// Excel does ([removeHyperlink] removes it). A table's header cell takes
+  /// no link, as it takes only text. All of it is one change. A link equal
+  /// to the cell's [hyperlinkAt] changes nothing, neither the element nor
+  /// the cell, and throws nothing for a link the writer would refuse; in an
+  /// [XlsxCell] it leaves the element, and the cell takes the style as above.
+  ///
   /// A shared formula's follower may be set and leaves its group. Throws a
   /// [StateError] for a cell inside an array or data-table formula (Excel
   /// refuses that too), for a sheet that is not a worksheet or has no part,
-  /// and for an [XlsxCell] when the styles part is not a SpreadsheetML
-  /// `styleSheet`, an [UnsupportedError] for a shared formula's master (W5)
-  /// and for [XlsxHyperlink] (W3) and [XlsxRichText] (W4) values, also
-  /// inside an [XlsxCell], an [ArgumentError] for any other type, a nested
-  /// [XlsxCell], a value the encoder refuses or an invalid style (named by
-  /// its field; an `XlsxLimitError` past the writer's limits), a
+  /// and for an [XlsxCell] or a link when the styles part is not a
+  /// SpreadsheetML `styleSheet` and for a link on a cell a link of several
+  /// cells covers, an [UnsupportedError] for a shared formula's master (W5)
+  /// and for [XlsxRichText] (W4) values, also inside an [XlsxCell], an
+  /// [ArgumentError] for any other type, a nested [XlsxCell], a value the
+  /// encoder refuses, an invalid link (named by its field, as the writer's)
+  /// or an invalid style (named by its field; an `XlsxLimitError` past the
+  /// writer's limits, and for a sheet's 65,531st link), a
   /// [RangeError] outside Excel's grid, and an [XlsxReadException] when the
-  /// sheet cannot be read. Whatever it throws, nothing has changed, except
+  /// sheet cannot be read (for a link, also the sheet's relationships).
+  /// Whatever it throws, nothing has changed, except
   /// that reading warnings (such as `styleEntryInvalid` for a style entry
   /// read for the first time) are reported on first read.
   void setCell(int row, int column, Object? value) {
@@ -284,7 +423,13 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
     final Object? plain = value is XlsxCell ? value.value : value;
     switch (plain) {
       case XlsxHyperlink():
-        throw UnsupportedError('XlsxHyperlink cells arrive in W3.');
+        try {
+          checkHyperlink(plain);
+        } on ArgumentError {
+          // A file may hold a link the writer refuses: set back, it is no
+          // edit.
+          if (hyperlinkAt(row, column) != plain) rethrow;
+        }
       case XlsxRichText():
         throw UnsupportedError('XlsxRichText cells arrive in W4.');
       case XlsxCell():
@@ -307,7 +452,11 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
           '${plain.runtimeType}, which is not a supported cell value.',
         );
     }
-    final CellStore store = _editableCells('cells');
+    final WorksheetPart part = _editablePart('cells');
+    final bool sameLink =
+        plain is XlsxHyperlink && hyperlinkAt(row, column) == plain;
+    if (sameLink && !styled) return;
+    final CellStore store = part.cells;
     switch (groupRoleAt(store, row, column)) {
       case GroupRole.arrayOrTableMember:
         throw StateError(
@@ -357,6 +506,13 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
     }
     final RawCell? current = store.cellAt(row, column);
     if (stored == null && current == null && cellStyle == null) return;
+    // A link: the cell holds its text, and the sheet its element, found
+    // before anything is recorded.
+    final XlsxHyperlink? link = plain is XlsxHyperlink ? plain : null;
+    final _LinkPlan? linkPlan = link == null
+        ? null
+        : _planLink(part, row, column, link);
+    if (link != null) stored = link.text;
     final CellEncoder encoder = _host.loadTables();
     // The writer's layers, column under row under cell, and the style the
     // cell takes:
@@ -370,7 +526,17 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
             cellStyle,
           )
         : null;
-    final XlsxStyle? target = !styled
+    final XlsxStyle? target = link != null
+        ? withHyperlinkFont(
+            styled
+                ? layered
+                : _styleOfIndex(
+                    current == null
+                        ? _inheritedIndex(store, row, column)
+                        : current.style,
+                  ),
+          )
+        : !styled
         ? null
         : stored == null
         ? (cellStyle == null ? null : layered)
@@ -378,6 +544,9 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
     final StylesPart? styles = target == null ? null : _stylesFor();
     final ChangeLog log = _host.log;
     log.transaction(() {
+      if (link != null && !sameLink) {
+        _applyLink(part, row, column, link, linkPlan!);
+      }
       if (header != null && rename != null) {
         renameTableColumn(log, header.table, header.index, rename);
         _host.reader.package.setContent(header.partName, header.table);
@@ -385,7 +554,7 @@ final class XlsxSheet with _SheetLayout, _SheetMerges, _SheetViews {
       RawCell? base = current ?? _cellOfInheritedStyle(store, row, column);
       int? Function(int? style, {required bool withTime}) dateStyle =
           _host.dateStyle;
-      if (styled) {
+      if (styled || link != null) {
         final int id = styles == null ? 0 : appendStyle(log, styles, target);
         if (stored == null) {
           // As the writer: an XlsxCell of null writes an empty cell of the

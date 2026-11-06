@@ -57,7 +57,9 @@ Uint8List _roundTrip(Uint8List bytes) {
 
 /// Sets on [sheet] everything it reads: every cell's style, every row's
 /// format, every column, the default sizes, the view, the tab colour, the
-/// outline summary and the merges, unmerged and merged back in order.
+/// outline summary, the merges, unmerged and merged back in order, and the
+/// sheet's features: protection, page setup, headers and footers, auto
+/// filter, print area and print titles.
 ///
 /// The cells and rows are the store's, so a styled empty cell and a row of
 /// attributes alone are set too. A cell the file lacks is left out: `styleAt`
@@ -95,22 +97,64 @@ void _setWhatWasRead(XlsxSheet sheet) {
   final List<XlsxRange> merges = sheet.merges.toList();
   merges.forEach(sheet.unmerge);
   merges.forEach(sheet.merge);
+  sheet.protection = sheet.protection;
+  sheet.pageSetup = sheet.pageSetup;
+  sheet.headerFooter = sheet.headerFooter;
+  sheet.autoFilter = sheet.autoFilter;
+  sheet.printArea = sheet.printArea;
+  final ({(int, int)? rows, (int, int)? columns}) titles = sheet.printTitles;
+  sheet.setPrintTitles(rows: titles.rows, columns: titles.columns);
 }
 
 /// The differences between saving [bytes] unchanged and saving it after
-/// [_setWhatWasRead] on every sheet.
+/// [_setWhatWasRead] on every sheet and setting the workbook's protection
+/// and properties to what it read.
 List<String> _resetDifferences(Uint8List bytes) {
   final XlsxWorkbook book = XlsxWorkbook.open(bytes);
   for (final XlsxSheet sheet in book.sheets) {
     sheet.rows.toList();
     _setWhatWasRead(sheet);
   }
+  book.protection = book.protection;
+  book.properties = book.properties;
   return comparePackages(
     _roundTrip(bytes),
     book.save().bytes,
     ignoreBookkeeping: true,
   );
 }
+
+/// Removes every validation and conditional format of every sheet of
+/// [bytes] and adds each back: [_reads] gives what it gave, and so it does
+/// from the saved file.
+void _expectRemovedAndAddedBack(Uint8List bytes) {
+  final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+  final List<List<Object>> before = _reads(book);
+  for (final XlsxSheet sheet in book.sheets) {
+    if (!sheetIsWorksheet(sheet)) continue;
+    final List<XlsxDataValidation> validations = sheet.dataValidations.toList();
+    validations.forEach(sheet.removeDataValidation);
+    expect(sheet.dataValidations, isEmpty);
+    validations.forEach(sheet.addDataValidation);
+    final List<XlsxConditionalFormat> formats = sheet.conditionalFormats
+        .toList();
+    formats.forEach(sheet.removeConditionalFormat);
+    expect(sheet.conditionalFormats, isEmpty);
+    formats.forEach(sheet.addConditionalFormat);
+  }
+  expect(_reads(book), before);
+  expect(_reads(XlsxWorkbook.open(book.save().bytes)), before);
+}
+
+/// The validations and the conditional formats of every worksheet of
+/// [book], in order.
+List<List<Object>> _reads(XlsxWorkbook book) => <List<Object>>[
+  for (final XlsxSheet sheet in book.sheets)
+    if (sheetIsWorksheet(sheet)) ...<List<Object>>[
+      sheet.dataValidations.toList(),
+      sheet.conditionalFormats.toList(),
+    ],
+];
 
 void main() {
   // Owner files (test/fixtures/owner/manifest.json) join this test when
@@ -149,6 +193,15 @@ void main() {
     }
     for (final ProducerFile p in producerFiles()) {
       test(p.name, () => expect(_resetDifferences(p.bytes), isEmpty));
+    }
+  });
+
+  group('removing and re-adding keeps the meaning', () {
+    for (final Fixture f in allFixtures()) {
+      test(f.name, () => _expectRemovedAndAddedBack(f.build()));
+    }
+    for (final ProducerFile p in producerFiles()) {
+      test(p.name, () => _expectRemovedAndAddedBack(p.bytes));
     }
   });
 

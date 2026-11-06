@@ -10,6 +10,7 @@
 /// relationship of a file, whatever its type.
 library;
 
+import '../xml/xml_escape.dart';
 import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'ooxml.dart';
@@ -126,9 +127,9 @@ final class Relationships {
     w.attribute('xmlns', Ns.packageRel);
     for (final item in _items) {
       w.start('Relationship');
-      w.attribute('Id', item.id);
-      w.attribute('Type', item.type);
-      w.attribute('Target', item.target);
+      w.attribute('Id', scrubXmlText(item.id).text);
+      w.attribute('Type', scrubXmlText(item.type).text);
+      w.attribute('Target', scrubXmlText(item.target).text);
       if (item.external) w.attribute('TargetMode', 'External');
       w.end();
     }

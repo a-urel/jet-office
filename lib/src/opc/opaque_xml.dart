@@ -197,7 +197,7 @@ final class OpaqueXml {
       }
       missing
         ..write(prefix.isEmpty ? ' xmlns="' : ' xmlns:$prefix="')
-        ..write(escapeXmlAttribute(uri))
+        ..write(escapeXmlAttribute(scrubXmlText(uri).text))
         ..write('"');
     });
     if (missing.isEmpty) {
@@ -295,9 +295,18 @@ final class XmlRoot {
 
 /// Writes `xmlns` declarations for [namespaces], prefix to URI (`''` for the
 /// default namespace), on the start tag open on [w].
+///
+/// A character XML forbids in a URI, which only a character reference in the
+/// source can have put there, is dropped. Only what is written is scrubbed:
+/// the bindings handed to an element's children stay as read, since a kept
+/// child compares the URI it inherited with them and would otherwise declare
+/// it again.
 void writeNamespaceDeclarations(XmlWriter w, Map<String, String> namespaces) {
   namespaces.forEach((String prefix, String uri) {
-    w.attribute(prefix.isEmpty ? 'xmlns' : 'xmlns:$prefix', uri);
+    w.attribute(
+      prefix.isEmpty ? 'xmlns' : 'xmlns:$prefix',
+      scrubXmlText(uri).text,
+    );
   });
 }
 

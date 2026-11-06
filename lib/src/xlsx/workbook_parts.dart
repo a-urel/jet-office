@@ -168,7 +168,7 @@ void _writeDefinedNames(
   if (!any) return;
   w.start('definedNames');
   for (final XlsxDefinedName name in workbookNames) {
-    _writeName(
+    writeDefinedName(
       w,
       name.name,
       null,
@@ -182,7 +182,7 @@ void _writeDefinedNames(
     final String sheet = tab.name;
     final XlsxRange? filter = tab.autoFilter;
     if (filter != null) {
-      _writeName(
+      writeDefinedName(
         w,
         '_xlnm._FilterDatabase',
         index,
@@ -192,36 +192,25 @@ void _writeDefinedNames(
     }
     final SheetNames names = tab.names;
     if (names.printArea.isNotEmpty) {
-      _writeName(
+      writeDefinedName(
         w,
         '_xlnm.Print_Area',
         index,
-        <String>[
-          for (final XlsxRange r in names.printArea)
-            quotedSheetRef(sheet, r.absoluteRef),
-        ].join(','),
+        printAreaFormula(sheet, names.printArea),
       );
     }
     final (int, int)? rows = names.printTitleRows;
     final (int, int)? columns = names.printTitleColumns;
     if (rows != null || columns != null) {
-      _writeName(
+      writeDefinedName(
         w,
         '_xlnm.Print_Titles',
         index,
-        <String>[
-          if (columns != null)
-            quotedSheetRef(
-              sheet,
-              '\$${columnName(columns.$1)}:\$${columnName(columns.$2)}',
-            ),
-          if (rows != null)
-            quotedSheetRef(sheet, '\$${rows.$1 + 1}:\$${rows.$2 + 1}'),
-        ].join(','),
+        printTitlesFormula(sheet, rows: rows, columns: columns),
       );
     }
     for (final XlsxDefinedName name in names.defined) {
-      _writeName(
+      writeDefinedName(
         w,
         name.name,
         index,
@@ -234,11 +223,40 @@ void _writeDefinedNames(
   w.end();
 }
 
+/// The text of `_xlnm.Print_Area` for [ranges] on the sheet [sheet]: each
+/// range quoted and absolute, joined by commas, as the writer writes it.
+///
+/// The workbook model writes a print area with this too.
+String printAreaFormula(String sheet, List<XlsxRange> ranges) => <String>[
+  for (final XlsxRange r in ranges) quotedSheetRef(sheet, r.absoluteRef),
+].join(',');
+
+/// The text of `_xlnm.Print_Titles` for [rows] and [columns] (0-based,
+/// inclusive spans) on the sheet [sheet]: the columns first, as Excel writes
+/// them, each quoted and absolute.
+///
+/// The workbook model writes print titles with this too.
+String printTitlesFormula(
+  String sheet, {
+  (int, int)? rows,
+  (int, int)? columns,
+}) => <String>[
+  if (columns != null)
+    quotedSheetRef(
+      sheet,
+      '\$${columnName(columns.$1)}:\$${columnName(columns.$2)}',
+    ),
+  if (rows != null) quotedSheetRef(sheet, '\$${rows.$1 + 1}:\$${rows.$2 + 1}'),
+].join(',');
+
 /// Writes one `definedName`: its [name], the scope [localSheetId] (the tab
 /// index, or `null` for the workbook), the [text] as a formula, and its
 /// optional [comment] and [hidden] flag. The name and comment are
 /// ST_Xstring, the text ST_Formula.
-void _writeName(
+///
+/// The workbook model writes a new name with this too, so a name it adds is
+/// the writer's own element.
+void writeDefinedName(
   XmlWriter w,
   String name,
   int? localSheetId,

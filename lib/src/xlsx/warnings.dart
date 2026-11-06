@@ -193,6 +193,13 @@ enum XlsxWarningCode {
   /// `row 3: ht "abc" is not a row height.`; after ten, one warning without
   /// a detail counts the rest. It names no cell.
   layoutInvalid,
+
+  /// Reading: an entry of a sheet or workbook feature could not be read; it
+  /// is kept as written and left out of the typed list. The detail names the
+  /// element, and the problem, in English; after ten, one warning without a
+  /// detail counts the rest. A workbook's entry has an empty
+  /// [XlsxWarning.sheet]. It names no cell.
+  featureEntryInvalid,
 }
 
 /// Something the writer changed or could not store exactly, or the reader

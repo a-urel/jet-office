@@ -1,5 +1,6 @@
-/// A small typed element tree for the parts of a worksheet the model edits
-/// attribute by attribute: `sheetPr` and `sheetViews`.
+/// A small typed element tree for the parts of a worksheet or workbook the
+/// model edits attribute by attribute: `sheetPr`, `sheetViews`, `pageSetup`,
+/// `workbookProtection` and the like.
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -25,6 +26,16 @@ import 'columns.dart';
 /// children that are read as [XmlNode]s. An element the shape does not list
 /// has only opaque children.
 typedef NodeShape = Map<String, Set<String>>;
+
+/// Opens [root] on [w], as [XmlRoot.writeStart] does, without a character
+/// XML forbids in an attribute's value, which only a character reference in
+/// the source can have put there. The caller writes the content and ends
+/// the element.
+void writeRootStart(XmlWriter w, XmlRoot root) {
+  w.start(root.qualifiedName);
+  writeNamespaceDeclarations(w, root.namespaces);
+  writeKeptAttributes(w, root.attributes, declaredAbove: root.namespaces);
+}
 
 /// One typed element: see the library comment.
 final class XmlNode {

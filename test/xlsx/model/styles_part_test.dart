@@ -6,6 +6,8 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/package.dart';
 import 'package:jet_office/src/xlsx/alignment.dart'
     show alignmentXml, protectionXml;
+import 'package:jet_office/src/xlsx/differential_style.dart'
+    show validateDifferentialStyle, writeDifferentialStyleXml;
 import 'package:jet_office/src/xlsx/font.dart' show resolveFont;
 import 'package:jet_office/src/xlsx/model/palette.dart';
 import 'package:jet_office/src/xlsx/model/styles_part.dart';
@@ -324,6 +326,13 @@ void main() {
     });
   });
 
+  test('a forbidden character in a kept count is not written', () {
+    final StylesPart part = _read(
+      _sheet('<cellXfs count="1&#1;"><xf numFmtId="0"/></cellXfs>'),
+    );
+    expect(_encode(part), contains('<cellXfs count="1">'));
+  });
+
   group('limits and failures', () {
     test('more xfs than maxCellFormats is a limit error', () {
       final String xml = _sheet('<cellXfs count="3"><xf/><xf/><xf/></cellXfs>');
@@ -392,6 +401,8 @@ const XlsxStyle _boldRed = XlsxStyle(
 );
 
 void _typedTests() {
+  _differentialTests();
+
   group('typed styles', () {
     test('styles read into values', () {
       final List<XlsxStyle> styles = m2StyleRowStyles();
@@ -540,9 +551,8 @@ void _typedTests() {
       ]);
       final StylesPart part = _read(xml);
       final String original = _encode(part);
-      final ({int fonts, int fills, int borders, int codes, int xfs}) m = part
-          .mark();
-      expect(m, (fonts: 1, fills: 2, borders: 1, codes: 0, xfs: 2));
+      final StylesMark m = part.mark();
+      expect(m, (fonts: 1, fills: 2, borders: 1, codes: 0, xfs: 2, dxfs: 0));
       part.idFor(_boldRed);
       part.idFor(
         const XlsxStyle(
@@ -551,9 +561,8 @@ void _typedTests() {
           border: XlsxBorder(top: XlsxBorderSide(style: XlsxBorderStyle.thin)),
         ),
       );
-      final ({int fonts, int fills, int borders, int codes, int xfs}) m2 = part
-          .mark();
-      expect(m2, (fonts: 2, fills: 3, borders: 2, codes: 1, xfs: 4));
+      final StylesMark m2 = part.mark();
+      expect(m2, (fonts: 2, fills: 3, borders: 2, codes: 1, xfs: 4, dxfs: 0));
       part.withNumberFormat(1, 22);
       expect(part.mark().xfs, 5);
       part.rollBack(m2);
@@ -569,11 +578,25 @@ void _typedTests() {
     test('rollBack refuses a mark of another state', () {
       final StylesPart part = _read(_writerStyles(const <XlsxStyle>[]));
       expect(
-        () => part.rollBack((fonts: 2, fills: 2, borders: 1, codes: 0, xfs: 1)),
+        () => part.rollBack((
+          fonts: 2,
+          fills: 2,
+          borders: 1,
+          codes: 0,
+          xfs: 1,
+          dxfs: 0,
+        )),
         throwsArgumentError,
       );
       expect(
-        () => part.rollBack((fonts: 0, fills: 2, borders: 1, codes: 0, xfs: 1)),
+        () => part.rollBack((
+          fonts: 0,
+          fills: 2,
+          borders: 1,
+          codes: 0,
+          xfs: 1,
+          dxfs: 0,
+        )),
         throwsArgumentError,
       );
     });
@@ -604,8 +627,7 @@ void _typedTests() {
         xml,
         warn: (XlsxWarningCode c, String d) => warnings.add(d),
       );
-      final ({int fonts, int fills, int borders, int codes, int xfs}) m = part
-          .mark();
+      final StylesMark m = part.mark();
       expect(m.fonts, 0);
       expect(part.idFor(_boldRed), 1);
       final String out = _encode(part);
@@ -884,8 +906,402 @@ void _typedTests() {
       expect(part.styleOf(3), const XlsxStyle());
       expect(part.isExact(0), isFalse);
       expect(() => part.idFor(_boldRed), throwsStateError);
-      expect(part.mark(), (fonts: 0, fills: 0, borders: 0, codes: 0, xfs: 0));
+      expect(part.mark(), (
+        fonts: 0,
+        fills: 0,
+        borders: 0,
+        codes: 0,
+        xfs: 0,
+        dxfs: 0,
+      ));
       part.rollBack(part.mark());
     });
   });
+}
+
+/// A styles part with the given `<dxfs>` children and a cell format.
+String _withDxfs(String dxfs, {String count = ''}) => _sheet(
+  '<cellXfs count="1"><xf numFmtId="0"/></cellXfs>'
+  '<cellStyles count="1"><cellStyle name="Normal" xfId="0"/></cellStyles>'
+  '<dxfs$count>$dxfs</dxfs><tableStyles count="0"/>',
+);
+
+const XlsxStyle _redFont = XlsxStyle(
+  font: XlsxFont(color: XlsxColor.argb(0xFF9C0006)),
+  fill: XlsxFill.solid(XlsxColor.argb(0xFFFFC7CE)),
+);
+const XlsxStyle _greenFont = XlsxStyle(
+  font: XlsxFont(color: XlsxColor.argb(0xFF006100)),
+  fill: XlsxFill.solid(XlsxColor.argb(0xFFC6EFCE)),
+);
+const XlsxStyle _boldOnly = XlsxStyle(font: XlsxFont(bold: true));
+
+void _differentialTests() {
+  group('differential styles', () {
+    test('writer dxfs read back exactly', () {
+      final Fixture fixture = allFixtures().firstWhere(
+        (Fixture f) => f.name == 'm3_conditional',
+      );
+      final String xml = _stylesXml(fixture.build())!;
+      final StylesPart part = _read(xml);
+      expect(part.dxfCount, 3);
+      expect(part.differentialStyle(0), _redFont);
+      expect(part.differentialStyle(1), _greenFont);
+      expect(part.differentialStyle(2), _boldOnly);
+      for (var i = 0; i < 3; i++) {
+        expect(part.isDifferentialExact(i), isTrue, reason: 'dxf $i');
+        final StringBuffer out = StringBuffer();
+        writeDifferentialStyleXml(
+          XmlWriter(out),
+          part.differentialStyle(i)!,
+          null,
+        );
+        final String written = RegExp(
+          '<dxf>.*?</dxf>',
+        ).allMatches(xml).elementAt(i).group(0)!;
+        expect(compareXml('dxf', written, out.toString()), isEmpty);
+      }
+      expect(part.differentialStyle(3), isNull);
+      expect(part.differentialStyle(-1), isNull);
+    });
+
+    test('every writer dxf of every fixture reads exactly', () {
+      var seen = 0;
+      for (final MapEntry<String, String> e in _allStyles().entries) {
+        final StylesPart part = _read(e.value);
+        for (var i = 0; i < part.dxfCount; i++) {
+          seen++;
+          expect(part.differentialStyle(i), isNotNull, reason: e.key);
+          if (!e.key.startsWith('producer')) {
+            expect(part.isDifferentialExact(i), isTrue, reason: '${e.key} $i');
+          }
+        }
+      }
+      expect(seen, greaterThanOrEqualTo(3));
+    });
+
+    test('a dxf reads what it sets and leaves the rest unset', () {
+      final StylesPart part = _read(
+        _withDxfs(
+          '<dxf><font><b val="0"/><i/><strike/><u val="none"/>'
+          '<vertAlign val="superscript"/><color theme="1" tint="0.5"/></font>'
+          '<numFmt numFmtId="170" formatCode="0.0"/>'
+          '<fill><patternFill patternType="lightUp"><fgColor rgb="FF112233"/>'
+          '<bgColor indexed="5"/></patternFill></fill>'
+          '<border><left style="thin"><color auto="1"/></left><right/><top/>'
+          '<bottom style="double"/><diagonal/></border></dxf>'
+          '<dxf/>',
+        ),
+      );
+      final XlsxStyle s = part.differentialStyle(0)!;
+      expect(s.font?.bold, isFalse);
+      expect(s.font?.italic, isTrue);
+      expect(s.font?.underline, XlsxUnderline.none);
+      expect(s.font?.strike, isTrue);
+      expect(s.font?.script, XlsxFontScript.superscript);
+      expect(s.font?.color, const XlsxColor.theme(1, tint: 0.5));
+      expect(s.font?.size, isNull);
+      expect(s.font?.name, isNull);
+      expect(s.numFmt, const XlsxNumFmt.custom('0.0'));
+      expect(
+        s.fill,
+        const XlsxFill.pattern(
+          XlsxPatternType.lightUp,
+          foreground: XlsxColor.argb(0xFF112233),
+          background: XlsxColor.indexed(5),
+        ),
+      );
+      expect(s.border?.left?.style, XlsxBorderStyle.thin);
+      expect(s.border?.left?.color, XlsxColor.auto);
+      expect(s.border?.bottom?.style, XlsxBorderStyle.doubleLine);
+      expect(part.isDifferentialExact(0), isTrue);
+      expect(part.differentialStyle(1), const XlsxStyle());
+      expect(part.isDifferentialExact(1), isTrue);
+    });
+
+    test('a builtin number format is read as that format', () {
+      final StylesPart part = _read(
+        _withDxfs(
+          '<dxf><numFmt numFmtId="9" formatCode="0%"/></dxf>'
+          '<dxf><numFmt numFmtId="9" formatCode="0.0%"/></dxf>',
+        ),
+      );
+      expect(part.differentialStyle(0)?.numFmt, const XlsxNumFmt.builtin(9));
+      expect(part.isDifferentialExact(0), isTrue);
+      expect(
+        part.differentialStyle(1)?.numFmt,
+        const XlsxNumFmt.custom('0.0%'),
+      );
+      expect(part.isDifferentialExact(1), isFalse);
+    });
+
+    test('what a dxf cannot hold is dropped and the entry inexact', () {
+      final StylesPart part = _read(
+        _withDxfs(
+          '<dxf><font><b/><sz val="11"/><name val="Arial"/></font>'
+          '<alignment horizontal="center"/>'
+          '<border><left style="thin"/><right/><top/><bottom/>'
+          '<diagonal style="thin"/></border></dxf>'
+          '<dxf><extLst/></dxf>',
+        ),
+      );
+      final XlsxStyle s = part.differentialStyle(0)!;
+      expect(s.font, const XlsxFont(bold: true));
+      expect(s.alignment, isNull);
+      expect(s.border?.diagonal, isNull);
+      expect(s.border?.left?.style, XlsxBorderStyle.thin);
+      expect(part.isDifferentialExact(0), isFalse);
+      expect(part.isDifferentialExact(1), isFalse);
+      validateDifferentialStyle(s);
+    });
+
+    test('a spelling the writer does not use is inexact', () {
+      for (final String dxf in <String>[
+        '<dxf><font><b val="1"/></font></dxf>',
+        '<dxf><font><b val="true"/></font></dxf>',
+        '<dxf><font><u val="single"/></font></dxf>',
+        '<dxf><font><b/><i/></font><font><b/></font></dxf>',
+        '<dxf><font><i/><b/></font></dxf>',
+        '<dxf><font/></dxf>',
+        '<dxf><font><vertAlign val="baseline"/></font></dxf>',
+        '<dxf><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/>'
+            '</patternFill></fill></dxf>',
+        '<dxf><fill><patternFill><fgColor rgb="FF000000"/></patternFill>'
+            '</fill></dxf>',
+        '<dxf><fill><patternFill><bgColor rgb="ff000000"/></patternFill>'
+            '</fill></dxf>',
+        '<dxf><fill><patternFill><bgColor rgb="FF000000"/></patternFill>'
+            '</fill><font><b/></font></dxf>',
+        '<dxf extra="1"/>',
+        '<dxf><other/></dxf>',
+        '<dxf><numFmt numFmtId="170"/></dxf>',
+      ]) {
+        final StylesPart part = _read(_withDxfs(dxf));
+        expect(part.isDifferentialExact(0), isFalse, reason: dxf);
+        expect(part.differentialStyle(0), isNotNull, reason: dxf);
+      }
+    });
+
+    test('a bad value reports styleEntryInvalid once, when first read', () {
+      final List<String> warnings = <String>[];
+      final StylesPart part = _read(
+        _withDxfs(
+          '<dxf><font><b/></font></dxf>'
+          '<dxf><font><color rgb="zz"/></font></dxf>'
+          '<dxf><fill><patternFill patternType="zigzag"/></fill></dxf>',
+        ),
+        warn: (XlsxWarningCode c, String d) {
+          expect(c, XlsxWarningCode.styleEntryInvalid);
+          warnings.add(d);
+        },
+      );
+      expect(warnings, isEmpty);
+      expect(part.dxfCount, 3);
+      expect(part.differentialStyle(0), isNotNull);
+      expect(warnings, isEmpty);
+      expect(part.differentialStyle(1), isNotNull);
+      expect(warnings, hasLength(1));
+      expect(warnings.single, startsWith('dxf 1: '));
+      part.differentialStyle(1);
+      part.isDifferentialExact(1);
+      expect(warnings, hasLength(1));
+      expect(part.isDifferentialExact(1), isFalse);
+      part.differentialStyle(2);
+      expect(warnings, hasLength(2));
+      expect(warnings.last, startsWith('dxf 2: '));
+    });
+
+    test('many dxfs are not parsed until one is asked for or appended', () {
+      final List<String> warnings = <String>[];
+      final StylesPart part = _read(
+        _withDxfs(
+          '<dxf><fill><patternFill patternType="zigzag"/></fill></dxf>' * 10000,
+        ),
+        warn: (XlsxWarningCode c, String d) => warnings.add(d),
+      );
+      expect(part.dxfCount, 10000);
+      expect(part.idFor(_boldRed), 1);
+      expect(warnings.where((String w) => w.startsWith('dxf')), isEmpty);
+      // Looking for an equal dxf to reuse reads them, and says what is wrong.
+      expect(part.differentialIdFor(_boldOnly), 10000);
+      expect(
+        warnings.where((String w) => w.startsWith('dxf')),
+        hasLength(10000),
+      );
+      expect(part.dxfCount, 10001);
+    });
+
+    test('an unchanged file keeps its dxfs as written', () {
+      final String xml = _withDxfs(
+        '<dxf><font><b val="1"/></font><junk a="1"/></dxf><dxf/>'
+        '<x:ext xmlns:x="urn:x"/>',
+        count: ' count="7" k="v"',
+      );
+      final StylesPart part = _read(xml);
+      part.differentialStyle(0);
+      part.isDifferentialExact(1);
+      final String out = _encode(part);
+      expect(compareXml('s', xml, out), isEmpty);
+      expect(out, contains('<dxfs count="7" k="v">'));
+    });
+
+    test('a part without dxfs reads none and gets the group in place', () {
+      final StylesPart part = _read(
+        _sheet(
+          '<cellXfs count="1"><xf numFmtId="0"/></cellXfs>'
+          '<cellStyles count="1"><cellStyle name="Normal" xfId="0"/>'
+          '</cellStyles><tableStyles count="0"/><extLst/>',
+        ),
+      );
+      expect(part.dxfCount, 0);
+      expect(part.differentialStyle(0), isNull);
+      expect(part.differentialIdFor(_boldOnly), 0);
+      final String out = _encode(part);
+      expect(
+        out,
+        contains(
+          '</cellStyles><dxfs count="1"><dxf><font><b/></font></dxf></dxfs>'
+          '<tableStyles',
+        ),
+      );
+      expect(part.differentialStyle(0), _boldOnly);
+      expect(part.isDifferentialExact(0), isTrue);
+    });
+
+    test('an existing dxf is reused', () {
+      final String xml = _writerDxfStyles(<XlsxStyle>[_redFont, _boldOnly]);
+      final StylesPart part = _read(xml);
+      final StylesMark before = part.mark();
+      expect(part.differentialIdFor(_boldOnly), 1);
+      expect(part.differentialIdFor(_redFont), 0);
+      expect(part.mark(), before);
+      expect(_encode(part), _encode(_read(xml)));
+    });
+
+    test('an inexact one is not', () {
+      final StylesPart part = _read(
+        _withDxfs('<dxf><font><b val="1"/></font></dxf>'),
+      );
+      expect(part.differentialStyle(0), _boldOnly);
+      expect(part.differentialIdFor(_boldOnly), 1);
+      expect(part.dxfCount, 2);
+      // The entry that was there stays as written and in place.
+      expect(_encode(part), contains('<dxf><font><b val="1"/></font></dxf>'));
+    });
+
+    test('a new one is appended and undone', () {
+      final String xml = _writerDxfStyles(<XlsxStyle>[_redFont]);
+      final StylesPart part = _read(xml);
+      final String before = _encode(part);
+      final StylesMark mark = part.mark();
+      final int id = part.differentialIdFor(_greenFont);
+      expect(id, 1);
+      expect(part.dxfCount, 2);
+      expect(part.mark(), isNot(mark));
+      expect(part.differentialStyle(1), _greenFont);
+      expect(part.isDifferentialExact(1), isTrue);
+      final String after = _encode(part);
+      expect(_countOf(after, 'dxfs'), '2');
+      expect(after.indexOf('FFC6EFCE'), greaterThan(after.indexOf('FFFFC7CE')));
+      part.rollBack(mark);
+      expect(part.dxfCount, 1);
+      expect(_encode(part), before);
+      expect(part.differentialStyle(1), isNull);
+      expect(part.differentialIdFor(_greenFont), 1);
+      expect(_encode(part), after);
+    });
+
+    test('undoing an append that made the group removes the group', () {
+      final StylesPart part = _read(
+        _sheet('<cellXfs count="1"><xf numFmtId="0"/></cellXfs>'),
+      );
+      final String before = _encode(part);
+      final StylesMark mark = part.mark();
+      part.differentialIdFor(_boldOnly);
+      expect(_encode(part), contains('<dxfs count="1">'));
+      part.rollBack(mark);
+      expect(_encode(part), before);
+    });
+
+    test('a new dxf numbers its custom format after the file\'s own', () {
+      final StylesPart part = _read(
+        _withDxfs('<dxf><numFmt numFmtId="170" formatCode="0.0"/></dxf>'),
+      );
+      const XlsxStyle style = XlsxStyle(numFmt: XlsxNumFmt.custom('0.00'));
+      expect(part.differentialIdFor(style), 1);
+      final String out = _encode(part);
+      expect(out, contains('<numFmt numFmtId="171" formatCode="0.00"/>'));
+      expect(out, contains('<dxf><numFmt numFmtId="171"'));
+      expect(part.differentialStyle(1), style);
+    });
+
+    test('a cell style and a dxf append side by side and undo together', () {
+      final StylesPart part = _read(_withDxfs('<dxf><font><b/></font></dxf>'));
+      final String before = _encode(part);
+      final StylesMark mark = part.mark();
+      expect(part.idFor(_boldRed), 1);
+      expect(part.differentialIdFor(_greenFont), 1);
+      expect(part.idFor(const XlsxStyle(font: XlsxFont(italic: true))), 2);
+      expect(part.differentialIdFor(_redFont), 2);
+      expect(part.mark().dxfs, 3);
+      part.rollBack(mark);
+      expect(_encode(part), before);
+      expect(part.idFor(_boldRed), 1);
+    });
+
+    test('rollBack refuses a dxf count of another state', () {
+      final StylesPart part = _read(_withDxfs('<dxf/>'));
+      final StylesMark m = part.mark();
+      expect(
+        () => part.rollBack((
+          fonts: m.fonts,
+          fills: m.fills,
+          borders: m.borders,
+          codes: m.codes,
+          xfs: m.xfs,
+          dxfs: 0,
+        )),
+        throwsArgumentError,
+      );
+      expect(
+        () => part.rollBack((
+          fonts: m.fonts,
+          fills: m.fills,
+          borders: m.borders,
+          codes: m.codes,
+          xfs: m.xfs,
+          dxfs: 2,
+        )),
+        throwsArgumentError,
+      );
+    });
+
+    test('an untyped styles part throws StateError on append', () {
+      final StylesPart part = _read('<other xmlns="$_main"/>');
+      expect(part.dxfCount, 0);
+      expect(part.differentialStyle(0), isNull);
+      expect(part.isDifferentialExact(0), isFalse);
+      expect(() => part.differentialIdFor(_boldOnly), throwsStateError);
+    });
+
+    test('a repeated dxfs group stays opaque', () {
+      final String xml = _sheet(
+        '<dxfs count="1"><dxf><font><b/></font></dxf></dxfs>'
+        '<dxfs count="1"><dxf><font><i/></font></dxf></dxfs>',
+      );
+      final StylesPart part = _read(xml);
+      expect(part.dxfCount, 1);
+      expect(compareXml('s', xml, _encode(part)), isEmpty);
+    });
+  });
+}
+
+/// The `styles.xml` the writer writes with [styles] as its differential
+/// styles.
+String _writerDxfStyles(List<XlsxStyle> styles) {
+  final StyleRegistry registry = StyleRegistry();
+  registry.dxfIdsFor(styles);
+  final StringBuffer out = StringBuffer();
+  registry.writeStylesXml(XmlWriter(out));
+  return out.toString();
 }

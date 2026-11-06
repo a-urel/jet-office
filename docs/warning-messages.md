@@ -23,6 +23,10 @@ without a detail, which counts the entries after the first
 ten. `layoutInvalid` names no cell either: its first row is one
 setting of sheet `Daten`, its second the warning without a
 detail, which counts the settings after the first ten.
+`featureEntryInvalid` names no cell: its first row is one entry
+of sheet `Daten`, its second the warning without a detail,
+which counts the entries after the first ten. A workbook's
+entry says "the workbook" instead of the sheet.
 
 The native-speaker check of the German and Turkish text is
 recorded under "Native-speaker check" in
@@ -65,6 +69,8 @@ recorded under "Native-speaker check" in
 | `styleEntryInvalid` (no detail) | 2 style entries of the workbook cannot be read exactly; what cannot be read takes its default, and the entries are saved as written. | 2 Formatierungseinträge der Arbeitsmappe können nicht exakt gelesen werden; was nicht gelesen werden kann, erhält den Standardwert, und die Einträge werden unverändert gespeichert. | Çalışma kitabındaki 2 biçim girdisi tam olarak okunamıyor; okunamayan kısımlar varsayılan değeri alıyor ve girdiler olduğu gibi kaydediliyor. |
 | `layoutInvalid` | A layout setting of sheet 'Daten' cannot be read exactly (row 3: ht "abc" is not a row height.); what cannot be read takes its default, and the setting is saved as written. | Eine Layouteinstellung im Blatt „Daten“ kann nicht exakt gelesen werden (row 3: ht "abc" is not a row height.); was nicht gelesen werden kann, erhält den Standardwert, und die Einstellung wird unverändert gespeichert. | “Daten” sayfasındaki bir düzen ayarı tam olarak okunamıyor (row 3: ht "abc" is not a row height.); okunamayan kısımlar varsayılan değeri alıyor ve ayar olduğu gibi kaydediliyor. |
 | `layoutInvalid` (no detail) | 2 layout settings of sheet 'Daten' cannot be read exactly; what cannot be read takes its default, and the settings are saved as written. | 2 Layouteinstellungen im Blatt „Daten“ können nicht exakt gelesen werden; was nicht gelesen werden kann, erhält den Standardwert, und die Einstellungen werden unverändert gespeichert. | “Daten” sayfasındaki 2 düzen ayarı tam olarak okunamıyor; okunamayan kısımlar varsayılan değeri alıyor ve ayarlar olduğu gibi kaydediliyor. |
+| `featureEntryInvalid` | A feature entry of sheet 'Daten' cannot be read (dataValidation: sqref "abc" is not a range.); it is kept as written and left out of the typed list. | Ein Funktionseintrag im Blatt „Daten“ kann nicht gelesen werden (dataValidation: sqref "abc" is not a range.); er wird unverändert gespeichert und in der Liste ausgelassen. | “Daten” sayfasındaki bir özellik girdisi okunamıyor (dataValidation: sqref "abc" is not a range.); olduğu gibi korunuyor ve listeye alınmıyor. |
+| `featureEntryInvalid` (no detail) | 2 feature entries of sheet 'Daten' cannot be read; they are kept as written and left out of the typed lists. | 2 Funktionseinträge im Blatt „Daten“ können nicht gelesen werden; sie werden unverändert gespeichert und in den Listen ausgelassen. | “Daten” sayfasındaki 2 özellik girdisi okunamıyor; olduğu gibi korunuyor ve listelere alınmıyor. |
 
 ## DOCX
 

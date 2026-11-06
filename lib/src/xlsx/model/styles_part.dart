@@ -7,10 +7,11 @@
 /// `<fonts>`, `<fills>` and `<borders>` groups (each entry kept as written
 /// and read into an [XlsxFont], [XlsxFill] or [XlsxBorder] on first use) and
 /// the `<cellXfs>` group (each `<xf>` as its `numFmtId` plus the element
-/// itself, read into an [XlsxStyle] on first use). Everything else, such as
-/// cell styles, differential formats, the palette and extensions, is an
-/// [OpaqueXml] child at its original position, and the root keeps its
-/// namespace declarations and `mc:Ignorable`.
+/// itself, read into an [XlsxStyle] on first use) and the `<dxfs>` group
+/// (each `<dxf>` kept as written and read into a differential [XlsxStyle] on
+/// first use). Everything else, such as cell styles, the palette and
+/// extensions, is an [OpaqueXml] child at its original position, and the
+/// root keeps its namespace declarations and `mc:Ignorable`.
 ///
 /// Every group is append-only (spec §4.4): while a sheet is unloaded its
 /// cells point at style indexes, so an existing entry never moves.
@@ -48,6 +49,7 @@ import '../read/styles_reader.dart';
 import '../style.dart';
 import '../style_registry.dart';
 import '../warnings.dart';
+import 'item_group.dart' show checkListRoom;
 import 'palette.dart';
 import 'style_elements.dart';
 
@@ -71,8 +73,17 @@ const List<String> _schemaOrder = <String>[
 /// detail that names the entry, such as `font 3: …`.
 typedef StyleWarn = void Function(XlsxWarningCode code, String detail);
 
-/// The counts [StylesPart.mark] records and [StylesPart.rollBack] restores.
-typedef StylesMark = ({int fonts, int fills, int borders, int codes, int xfs});
+/// The counts [StylesPart.mark] records and [StylesPart.rollBack] restores:
+/// the fonts, fills, borders, number format codes, cell formats and
+/// differential styles.
+typedef StylesMark = ({
+  int fonts,
+  int fills,
+  int borders,
+  int codes,
+  int xfs,
+  int dxfs,
+});
 
 /// The typed groups of entries read into a value of their own.
 enum _Kind {
@@ -101,6 +112,9 @@ final class _Entry {
 
   /// The entry read into its value, once it has been read.
   ReadStyleValue<Object>? value;
+
+  /// A `<dxf>` read into its value, once it has been read.
+  ReadDifferentialStyle? dxf;
 
   void writeTo(XmlWriter w, Map<String, String> above) {
     final OpaqueXml? o = _opaque;
@@ -205,6 +219,7 @@ final class _Group {
     this.hasCount,
     this.items, {
     this.created = false,
+    this.rawCount,
   });
 
   /// The group's local name, such as `fonts`.
@@ -224,6 +239,14 @@ final class _Group {
   /// removes it again.
   final bool created;
 
+  /// The `count` as the file wrote it, for a group that keeps it while it
+  /// holds the entries the file had ([fileItems]); `null` for a group whose
+  /// count is always recomputed.
+  final String? rawCount;
+
+  /// How many items the group held when it was read.
+  int fileItems = 0;
+
   void writeTo(XmlWriter w, Map<String, String> above) {
     w.start(qualifiedName);
     writeNamespaceDeclarations(w, namespaces);
@@ -240,7 +263,12 @@ final class _Group {
           n++;
         }
       }
-      w.attribute('count', '$n');
+      w.attribute(
+        'count',
+        rawCount != null && items.length == fileItems
+            ? scrubXmlText(rawCount!).text
+            : '$n',
+      );
     }
     writeKeptAttributes(w, attributes, declaredAbove: inner);
     for (final Object item in items) {
@@ -268,6 +296,7 @@ final class StylesPart implements PartContent {
     this._numFmts,
     this._groups,
     this._cellXfs,
+    this._dxfGroup,
     this._warn,
   ) : _untypedText = null {
     for (final _NumFmt n
@@ -281,6 +310,8 @@ final class StylesPart implements PartContent {
       _fileCounts[k.index] = _entries[k.index].length;
     }
     _xfs.addAll(_cellXfs?.items.whereType<_Xf>() ?? const <_Xf>[]);
+    _dxfs.addAll(_dxfGroup?.items.whereType<_Entry>() ?? const <_Entry>[]);
+    _dxfFileCount = _dxfs.length;
     _fileCounts[_codesAt] = _numFmtList.length;
     _fileCounts[_xfsAt] = _xfs.length;
   }
@@ -310,6 +341,7 @@ final class StylesPart implements PartContent {
     XmlPullReader r,
     XlsxReadLimits limits, {
     StyleWarn? warn,
+    String part = 'xl/styles.xml',
   }) {
     while (r.next()) {
       if (r.eventType == XmlEventType.startElement) break;
@@ -325,6 +357,7 @@ final class StylesPart implements PartContent {
     final List<Object> children = <Object>[];
     _Group? numFmts;
     _Group? cellXfs;
+    _Group? dxfs;
     final List<_Group?> groups = List<_Group?>.filled(
       _Kind.values.length,
       null,
@@ -345,6 +378,19 @@ final class StylesPart implements PartContent {
           cellXfs == null) {
         cellXfs = _readGroup(r, limits, 'xf', _readXf);
         children.add(cellXfs);
+      } else if (r.namespaceUri == Ns.main &&
+          r.localName == 'dxfs' &&
+          dxfs == null) {
+        dxfs = _readGroup(
+          r,
+          limits,
+          'dxf',
+          _readEntry,
+          limited: false,
+          keepCount: true,
+          listIn: part,
+        );
+        children.add(dxfs);
       } else if (kind != null && groups[kind.index] == null) {
         final _Group group = _readGroup(
           r,
@@ -359,7 +405,7 @@ final class StylesPart implements PartContent {
         children.add(OpaqueXml.capture(r));
       }
     }
-    return StylesPart._(root, children, numFmts, groups, cellXfs, warn);
+    return StylesPart._(root, children, numFmts, groups, cellXfs, dxfs, warn);
   }
 
   StylesPart._untyped(this._untypedText)
@@ -368,6 +414,7 @@ final class StylesPart implements PartContent {
       _numFmts = null,
       _groups = List<_Group?>.filled(_Kind.values.length, null),
       _cellXfs = null,
+      _dxfGroup = null,
       _warn = null;
 
   static _Kind? _kindOf(String localName) => switch (localName) {
@@ -392,6 +439,9 @@ final class StylesPart implements PartContent {
   /// The typed `<fonts>`, `<fills>` and `<borders>`, by [_Kind.index].
   final List<_Group?> _groups;
   _Group? _cellXfs;
+
+  /// The typed `<dxfs>`.
+  _Group? _dxfGroup;
   final StyleWarn? _warn;
 
   /// The typed `<numFmt>`s, `<font>`s, `<fill>`s, `<border>`s and `<xf>`s,
@@ -401,6 +451,12 @@ final class StylesPart implements PartContent {
     for (final _Kind _ in _Kind.values) <_Entry>[],
   ];
   final List<_Xf> _xfs = <_Xf>[];
+
+  /// The typed `<dxf>`s, in order, the appended ones included.
+  final List<_Entry> _dxfs = <_Entry>[];
+
+  /// How many differential styles the file had: [rollBack] never goes below.
+  int _dxfFileCount = 0;
 
   /// How many fonts, fills, borders, number formats and cell formats the
   /// file had: [rollBack] never goes below them, and a cell format of the
@@ -417,6 +473,11 @@ final class StylesPart implements PartContent {
   /// How far into the registry's lists the part holds entries; the
   /// registry's defaults for a group the file lacks come after.
   StylesMark? _written;
+
+  /// How many differential styles the registry was seeded with, and whether
+  /// it has their keys yet (they are read only when one is appended).
+  int _dxfSeeded = 0;
+  bool _dxfKeysGiven = false;
 
   /// Whether the part is a SpreadsheetML `<styleSheet>`; an untyped part
   /// cannot take a new `<xf>` ([withNumberFormat] adds nothing to it).
@@ -613,6 +674,74 @@ final class StylesPart implements PartContent {
         _valueOf(_Kind.border, info.seed.borderId).exact;
   }
 
+  // -- Differential styles ---------------------------------------------------
+
+  /// The number of differential styles (`<dxf>`s of `<dxfs>`), the appended
+  /// ones included; 0 on an untyped part.
+  int get dxfCount => _dxfs.length;
+
+  /// The `<dxf>` at [id] read into a style, or `null` when [id] is outside
+  /// `<dxfs>`. It is read on first use, and a value in it that cannot be
+  /// read is reported then as [XlsxWarningCode.styleEntryInvalid]; such a
+  /// value is left unset.
+  ///
+  /// The style holds only what a differential style can hold (see
+  /// `readDifferentialStyle`); what else the entry has stays in the file.
+  XlsxStyle? differentialStyle(int id) =>
+      id < 0 || id >= _dxfs.length ? null : _dxfRead(id).value;
+
+  /// Whether [differentialStyle] gives everything the `<dxf>` at [id] holds,
+  /// so that the writer's own `<dxf>` for it is the entry. An inexact entry
+  /// is still written back as it was read. False outside `<dxfs>`.
+  bool isDifferentialExact(int id) =>
+      id >= 0 && id < _dxfs.length && _dxfRead(id).exact;
+
+  ReadDifferentialStyle _dxfRead(int index) {
+    final _Entry entry = _dxfs[index];
+    final ReadDifferentialStyle? known = entry.dxf;
+    if (known != null) return known;
+    final ReadDifferentialStyle read = readDifferentialEntry(
+      _openItem(_dxfGroup!, entry.writeTo),
+    );
+    final String? problem = read.problem;
+    if (problem != null) {
+      _warn?.call(XlsxWarningCode.styleEntryInvalid, 'dxf $index: $problem');
+    }
+    return entry.dxf = read;
+  }
+
+  /// The registry key of a `<dxf>` read, or `null` when it is not exact.
+  static String? _dxfKey(ReadDifferentialStyle read) =>
+      read.exact ? StyleRegistry.dxfKey(read.value, read.numFmt) : null;
+
+  /// The index of [style] as a differential style, appending what it needs.
+  ///
+  /// A style that looks like a `<dxf>` of the part read exactly, or like one
+  /// appended before, gets its index; otherwise a `<dxf>` is appended as the
+  /// writer's [StyleRegistry] makes it, with a custom number format code in
+  /// `<numFmts>` as for a cell format, so no existing index moves. A part
+  /// without `<dxfs>` gets the group in the schema's order.
+  ///
+  /// Throws as [StyleRegistry.dxfIdFor] does ([ArgumentError] naming the
+  /// field, `XlsxLimitError`); a throw changes nothing. Throws [StateError]
+  /// on an untyped part (see [isTyped]).
+  int differentialIdFor(XlsxStyle style) {
+    if (!isTyped) {
+      throw StateError('The styles part is not a SpreadsheetML styleSheet.');
+    }
+    final StyleRegistry registry = _registry ??= _seeded();
+    if (!_dxfKeysGiven) {
+      registry.setDxfKeys(<String?>[
+        for (var i = 0; i < _dxfSeeded; i++) _dxfKey(_dxfRead(i)),
+      ]);
+      _dxfKeysGiven = true;
+    }
+    final int before = registry.dxfCount;
+    final int id = registry.dxfIdFor(style);
+    if (registry.dxfCount != before) _appendFrom(registry);
+    return id;
+  }
+
   /// The colours of `<colors><indexedColors>`: 64 ARGB values, the file's
   /// `rgbColor`s in order and [defaultIndexedColors] for each one the file
   /// lacks or that is not 8 hex digits. `null` when the part has no
@@ -746,6 +875,9 @@ final class StylesPart implements PartContent {
         ),
         customCodes: Map<int, String>.of(_codeMap),
         usedNumFmtIds: _usedNumFmtIds(),
+        dxfs: <({String? key})>[
+          for (var i = 0; i < _dxfs.length; i++) (key: null),
+        ],
         xfs:
             <
               ({
@@ -778,7 +910,10 @@ final class StylesPart implements PartContent {
       borders: _entries[_Kind.border.index].length,
       codes: _codeMap.length,
       xfs: _xfs.length,
+      dxfs: _dxfs.length,
     );
+    _dxfSeeded = _dxfs.length;
+    _dxfKeysGiven = false;
     return registry;
   }
 
@@ -817,6 +952,15 @@ final class StylesPart implements PartContent {
         _entries[kind.index].add(entry);
       }
     }
+    final List<String> dxfs = registry.dxfsFrom(written.dxfs);
+    if (dxfs.isNotEmpty) {
+      final _Group group = _dxfGroup ??= _createGroup('dxfs', 'dxf');
+      for (final String xml in dxfs) {
+        final _Entry entry = _Entry.made(_inMain(xml, group));
+        group.items.add(entry);
+        _dxfs.add(entry);
+      }
+    }
     final List<String> xfs = registry.xfsFrom(written.xfs);
     if (xfs.isNotEmpty) {
       final _Group group = _cellXfs ??= _createGroup('cellXfs', 'xf');
@@ -833,6 +977,7 @@ final class StylesPart implements PartContent {
       borders: registry.borderCount,
       codes: written.codes + codes.length,
       xfs: registry.xfCount,
+      dxfs: registry.dxfCount,
     );
     _table = null;
   }
@@ -843,16 +988,32 @@ final class StylesPart implements PartContent {
 
   /// The number format ids the part refers to: those of its cell formats,
   /// and those written in its cell style formats and differential formats
-  /// (kept opaque, so read from their text).
-  List<int> _usedNumFmtIds() => <int>[
-    for (var i = 0; i < _xfs.length; i++) _xfInfo(i).seed.numFmtId,
-    for (final Object c in _children)
-      if (c is OpaqueXml &&
-          c.namespaceUri == Ns.main &&
-          (c.localName == 'cellStyleXfs' || c.localName == 'dxfs'))
-        for (final RegExpMatch m in _numFmtIdAttribute.allMatches(c.xml))
-          int.parse(m.group(1)!),
-  ];
+  /// (not read into values, so read from their text).
+  List<int> _usedNumFmtIds() {
+    final _Group? dxfGroup = _dxfGroup;
+    return <int>[
+      for (var i = 0; i < _xfs.length; i++) _xfInfo(i).seed.numFmtId,
+      for (final Object c in _children)
+        if (c is OpaqueXml &&
+            c.namespaceUri == Ns.main &&
+            (c.localName == 'cellStyleXfs' || c.localName == 'dxfs'))
+          for (final RegExpMatch m in _numFmtIdAttribute.allMatches(c.xml))
+            int.parse(m.group(1)!),
+      if (dxfGroup != null)
+        for (final _Entry e in _dxfs)
+          for (final RegExpMatch m in _numFmtIdAttribute.allMatches(
+            _entryText(dxfGroup, e),
+          ))
+            int.parse(m.group(1)!),
+    ];
+  }
+
+  /// The text of [entry] as written in [group].
+  String _entryText(_Group group, _Entry entry) {
+    final StringBuffer b = StringBuffer();
+    entry.writeTo(XmlWriter(b), _above(group));
+    return b.toString();
+  }
 
   /// [xml], an element the registry rendered without a prefix, as it goes
   /// in [group]: with the SpreadsheetML namespace declared on it when the
@@ -868,18 +1029,20 @@ final class StylesPart implements PartContent {
   }
 
   /// The counts of the part's typed entries, for [rollBack]: fonts, fills,
-  /// borders, `<numFmt>`s and cell formats (all zero on an untyped part).
+  /// borders, `<numFmt>`s, cell formats and `<dxf>`s (all zero on an untyped
+  /// part).
   StylesMark mark() => (
     fonts: _entries[_Kind.font.index].length,
     fills: _entries[_Kind.fill.index].length,
     borders: _entries[_Kind.border.index].length,
     codes: _numFmtList.length,
     xfs: _xfs.length,
+    dxfs: _dxfs.length,
   );
 
-  /// Removes every entry appended since [mark] was taken, by [idFor] or
-  /// [withNumberFormat], and a group made for them, so the part encodes as
-  /// it did then.
+  /// Removes every entry appended since [mark] was taken, by [idFor],
+  /// [differentialIdFor] or [withNumberFormat], and a group made for them,
+  /// so the part encodes as it did then.
   ///
   /// Throws [ArgumentError] for a mark that is not an earlier [StylesPart.mark]
   /// of this part: a count above the current one or below the file's.
@@ -901,6 +1064,9 @@ final class StylesPart implements PartContent {
         throw ArgumentError.value(mark, 'mark', 'Not a mark of this part.');
       }
     }
+    if (mark.dxfs < _dxfFileCount || mark.dxfs > _dxfs.length) {
+      throw ArgumentError.value(mark, 'mark', 'Not a mark of this part.');
+    }
     var changed = false;
     for (final _Kind kind in _Kind.values) {
       final int drop = current[kind.index] - target[kind.index];
@@ -921,6 +1087,12 @@ final class StylesPart implements PartContent {
       changed = true;
       _xfs.removeRange(mark.xfs, current[_xfsAt]);
       if (_shrink(_cellXfs!, xfs)) _cellXfs = null;
+    }
+    final int dxfs = _dxfs.length - mark.dxfs;
+    if (dxfs > 0) {
+      changed = true;
+      _dxfs.removeRange(mark.dxfs, _dxfs.length);
+      if (_shrink(_dxfGroup!, dxfs)) _dxfGroup = null;
     }
     if (changed) _dropRegistry();
   }
@@ -1002,6 +1174,7 @@ final class StylesPart implements PartContent {
         borders: w.borders,
         codes: w.codes,
         xfs: w.xfs + 1,
+        dxfs: w.dxfs,
       );
     } else {
       // No registry yet, or one whose default xf 0 the part does not hold:
@@ -1090,13 +1263,16 @@ _Group _readGroup(
   String name,
   Object Function(XmlPullReader, XlsxReadLimits) readItem, {
   bool limited = true,
+  bool keepCount = false,
+  String? listIn,
 }) {
   final String localName = r.localName;
   final String qualifiedName = r.qualifiedName;
   final Map<String, String> namespaces = Map<String, String>.of(
     r.declaredNamespaces,
   );
-  final bool hasCount = r.getAttribute('count') != null;
+  final String? rawCount = r.getAttribute('count');
+  final bool hasCount = rawCount != null;
   final List<KeptAttribute> attributes = keepAttributes(
     r,
     except: const <String>{'count'},
@@ -1110,6 +1286,7 @@ _Group _readGroup(
     attributes,
     hasCount,
     items,
+    rawCount: keepCount ? rawCount : null,
   );
   if (r.isEmptyElement) return group;
   final int groupDepth = r.depth;
@@ -1117,6 +1294,7 @@ _Group _readGroup(
   while (r.next()) {
     if (r.eventType == XmlEventType.endElement && r.depth < groupDepth) break;
     if (r.eventType != XmlEventType.startElement) continue;
+    if (listIn != null) checkListRoom(items.length, limits, listIn);
     if (r.depth == groupDepth + 1 &&
         r.localName == name &&
         r.namespaceUri == Ns.main) {
@@ -1132,6 +1310,7 @@ _Group _readGroup(
       items.add(OpaqueXml.capture(r));
     }
   }
+  group.fileItems = items.length;
   return group;
 }
 

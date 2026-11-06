@@ -43,6 +43,7 @@ import '../../xml/xml_writer.dart';
 import '../../zip/archive_adapter.dart';
 import '../cell_encoder.dart';
 import '../color.dart';
+import '../defined_name.dart';
 import '../number_format.dart';
 import '../properties.dart';
 import '../raw_cell.dart';
@@ -53,6 +54,7 @@ import '../read/shared_strings_reader.dart';
 import '../read/styles_reader.dart';
 import '../shared_strings.dart';
 import '../sheet_name.dart';
+import '../sheet_protection.dart';
 import '../sheet_view.dart';
 import '../style_registry.dart';
 import '../warnings.dart';
@@ -60,8 +62,12 @@ import '../workbook_parts.dart';
 import '../worksheet_parts.dart';
 import '../xlsx_writer.dart';
 import 'cell_store.dart';
+import 'defined_names.dart';
+import 'element_node.dart';
 import 'palette.dart';
 import 'primitives.dart';
+import 'properties_parts.dart';
+import 'protection_elements.dart';
 import 'styles_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
@@ -79,6 +85,10 @@ SharedStrings? sharedStringsOf(XlsxWorkbook book) => book._book._strings;
 /// The styles part of [book], or `null` before it loads or when the file
 /// has none, for tests.
 StylesPart? stylesPartOf(XlsxWorkbook book) => book._book._styles;
+
+/// The styles part of [book] as an edit needs it, made in memory for a file
+/// without one (see `_stylesForEdit`), for tests.
+StylesPart stylesForEditOf(XlsxWorkbook book) => book._book._stylesForEdit();
 
 /// An XLSX workbook held in memory: opened from a file or started empty,
 /// read and changed cell by cell, and saved.
@@ -120,6 +130,46 @@ final class XlsxWorkbook {
 
   XlsxWorkbook._(this._book);
 
+  /// The document properties: core (`docProps/core.xml`), extended
+  /// (`docProps/app.xml`) and custom (`docProps/custom.xml`) merged into
+  /// the writer's [XlsxProperties].
+  ///
+  /// The parts load on first use, each found by its relationship in the
+  /// package root. A part the file lacks, or whose root is not the expected
+  /// element, reads as no values. A value that cannot be read (a date that
+  /// is not W3CDTF, a custom number that is not one, a name that is empty
+  /// or longer than `XlsxLimits.maxCustomPropertyNameLength`) stays as
+  /// written, reads as no value and is reported once as
+  /// [XlsxWarningCode.featureEntryInvalid] with the element's name. A
+  /// custom property of another type than text, number, yes/no or date
+  /// stays and is not listed, with no warning; of equal names the first is
+  /// listed. Throws an [XlsxReadException] when a part is not readable XML
+  /// or exceeds a limit; the workbook still saves, with the part as it was.
+  XlsxProperties get properties => _book.propertiesState().parts.merged;
+
+  /// Sets the document properties to [value].
+  ///
+  /// Only the fields that differ from [properties] change, each in its own
+  /// element, which is replaced where it is, appended when new, or removed
+  /// for a `null`; every other element of the parts (`dc:language`,
+  /// `cp:revision`, `TitlesOfParts`, a property of a type that is not
+  /// listed) stays. A custom property of an equal name and value stays as
+  /// written; a new one takes the lowest free `pid`. A custom part joins
+  /// the package when it first has a property and leaves when none is left
+  /// and the part held no other, at the next save. The file's `modified` and
+  /// `lastModifiedBy` change only when set here. A [value] equal to
+  /// [properties] changes nothing.
+  ///
+  /// Throws an [ArgumentError] naming the field, as the writer's
+  /// constructors do, for text XML cannot hold or a bad custom entry, and a
+  /// [StateError] for a part that is not a properties part and would have
+  /// to change, and an [XlsxReadException] when a part is not readable XML
+  /// or exceeds a limit; nothing has changed then.
+  set properties(XlsxProperties value) {
+    final PropertiesState state = _book.propertiesState();
+    _book.log.transaction(() => setProperties(_book.log, state, value));
+  }
+
   final _Book _book;
 
   /// The sheets in tab order. Unmodifiable.
@@ -153,6 +203,43 @@ final class XlsxWorkbook {
   /// Throws a [StateError] for a workbook with no sheet.
   XlsxSheet get activeSheet => _book.activeSheet;
 
+  /// The names defined for the whole workbook, in file order, as the file
+  /// has them.
+  ///
+  /// Excel's built-in names (`_xlnm.Print_Area` and the like) are not
+  /// listed, and a name the model cannot read is left out and reported
+  /// (`featureEntryInvalid`); both stay in the file as written. A sheet's
+  /// own names are [XlsxSheet.definedNames]. Unmodifiable.
+  List<XlsxDefinedName> get definedNames =>
+      definedNamesIn(_book.workbook, null);
+
+  /// Defines [name] for the whole workbook, after the names already there.
+  ///
+  /// Checked as the writer checks it: the same spelling may be defined on a
+  /// sheet as well, where it hides this one. Throws an [ArgumentError]
+  /// naming `name`, `formula` or `comment` for an invalid name, formula or
+  /// comment, a workbook name already defined or a name that a table has,
+  /// ignoring case; nothing changes then.
+  ///
+  /// A defined name changes what formulas show as a changed cell does, so
+  /// the save asks Excel to recalculate every formula (`fullCalcOnLoad`)
+  /// when the workbook has formulas; the calculation chain stays.
+  void defineName(XlsxDefinedName name) => defineNameIn(
+    _book.log,
+    _book.workbook,
+    null,
+    name,
+    _book.checkNotTableName,
+  );
+
+  /// Removes the workbook name [name], compared ignoring case.
+  ///
+  /// Throws an [ArgumentError] named `name` when the workbook has no such
+  /// name (a built-in name is none); nothing changes then. The save asks
+  /// for recalculation as [defineName] does.
+  void removeName(String name) =>
+      removeNameIn(_book.log, _book.workbook, null, name, 'the workbook');
+
   /// Makes [sheet] the sheet Excel opens on: sets `activeTab`, `tabSelected`
   /// on its view, and clears `tabSelected` on the sheet that was active
   /// (loading both sheets). A chartsheet or a sheet without a part has no
@@ -168,6 +255,58 @@ final class XlsxWorkbook {
   /// Whether the workbook counts dates from 1904, as files from old Mac
   /// versions of Excel do; dates are set and read in its system.
   bool get date1904 => _book.workbook.date1904;
+
+  /// The workbook's protection, or `null` when it has no
+  /// `<workbookProtection>`.
+  ///
+  /// The password always reads `null`: the file stores a hash
+  /// ([hasStoredPassword] says whether it has one). An element that locks
+  /// nothing reads as a protection that locks nothing. Only the first
+  /// element is read.
+  XlsxWorkbookProtection? get protection {
+    final Object? node = _book.workbook.element('workbookProtection');
+    return node is XmlNode ? readWorkbookProtection(node) : null;
+  }
+
+  /// Protects the workbook as [value] says, or removes the
+  /// `<workbookProtection>` with `null`, a stored hash with it.
+  ///
+  /// A new element is the writer's, in schema position. An existing one
+  /// keeps its other attributes (`lockRevision`, the `revisions...` hash)
+  /// and changes a lock only when its meaning changes. A [value] with no
+  /// `password` keeps the stored hash; a password replaces the
+  /// `workbook...` hash attributes. A value that locks nothing and has no
+  /// password removes the element unless a stored hash stays, as the writer
+  /// writes nothing for it. A value equal to [protection] changes nothing.
+  ///
+  /// Throws an [ArgumentError] named `password` for a password that is not
+  /// 1 to 15 characters from U+0020 to U+007E and a [StateError] for a
+  /// workbook part that is not a workbook; nothing has changed then.
+  set protection(XlsxWorkbookProtection? value) {
+    checkProtectionPassword(value?.password);
+    final WorkbookPart part = _book.workbook;
+    if (value == protection) return;
+    final XmlNode? old = part.element('workbookProtection') as XmlNode?;
+    final XmlNode? next = value == null
+        ? null
+        : applyWorkbookProtection(old, value, part.elementPrefix);
+    _book.log.transaction(() {
+      editWorkbook(
+        _book.log,
+        part,
+        'workbookProtection',
+        () => part.swapElement('workbookProtection', old, next),
+      );
+    });
+  }
+
+  /// Whether the workbook's `<workbookProtection>` stores a password: a
+  /// `workbookPassword` or a `workbookHashValue`. The password itself is
+  /// never read.
+  bool get hasStoredPassword {
+    final Object? node = _book.workbook.element('workbookProtection');
+    return node is XmlNode && workbookHasStoredPassword(node);
+  }
 
   /// The 64 colours `<color indexed="N"/>` shows: the file's `<indexedColors>`
   /// or the default palette (ECMA-376 Part 1, section 18.8.27), unmodifiable.
@@ -325,7 +464,12 @@ final class _Book implements SheetHost {
     workbookName = reader.package.canonicalPartName(plain)!;
     final WorkbookPart part = reader.guardXml(
       plain,
-      () => WorkbookPart.read(reader.openXml(plain), limits),
+      () => WorkbookPart.read(
+        reader.openXml(plain),
+        limits,
+        warn: _styleWarning,
+        part: plain,
+      ),
     );
     if (!part.isTyped) {
       throw XlsxReadException(
@@ -443,6 +587,30 @@ final class _Book implements SheetHost {
   bool get date1904 => workbook.date1904;
 
   @override
+  WorkbookPart get workbookPart => workbook;
+
+  @override
+  int sheetIndexOf(XlsxSheet sheet) =>
+      _sheets.indexWhere((XlsxSheet s) => identical(s, sheet));
+
+  @override
+  void checkNotTableName(String name) {
+    final String key = sheetNameKey(name);
+    for (final XlsxSheet s in _sheets) {
+      for (final String table in sheetTableNames(s)) {
+        if (sheetNameKey(table) == key) {
+          throw ArgumentError.value(
+            name,
+            'name',
+            'The name "$name" is already the name of the table "$table"; '
+                'table names and defined names are compared ignoring case.',
+          );
+        }
+      }
+    }
+  }
+
+  @override
   StyleTable get styleTable => _styles?.table ?? StyleTable.empty;
 
   @override
@@ -463,6 +631,7 @@ final class _Book implements SheetHost {
               reader.openXml(stylesTarget),
               limits,
               warn: _styleWarning,
+              part: stylesTarget,
             ),
           );
     final String? stringsTarget = _target(RelType.sharedStrings);
@@ -537,6 +706,19 @@ final class _Book implements SheetHost {
     _createdStyles = part.mark();
     return _styles = part;
   }
+
+  PropertiesState? _properties;
+
+  /// The document properties, loaded on first use; a part that cannot be
+  /// read throws and nothing is kept.
+  PropertiesState propertiesState() => _properties ??= PropertiesState.load(
+    reader,
+    (String element) => warnings.add(
+      XlsxWarningCode.featureEntryInvalid,
+      sheet: '',
+      detail: element,
+    ),
+  );
 
   /// The counts of the styles part the model made for a file without one,
   /// while it is not in the package yet; `null` otherwise.
@@ -696,8 +878,13 @@ final class _Book implements SheetHost {
     );
     // Only a changed cell value or formula (spec section 4.4) makes the
     // calculation chain and cached results stale.
-    if (_sheets.any((XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0)) {
-      final String? chain = _target(RelType.calcChain);
+    final bool valueEdited = _sheets.any(
+      (XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0,
+    );
+    // A defined name that was defined or removed changes results as a
+    // changed cell does, but the chain of cells stays as it was.
+    if (valueEdited || workbook.nameEdits > 0) {
+      final String? chain = valueEdited ? _target(RelType.calcChain) : null;
       if (chain != null) {
         // Only the workbook refers to the calculation chain, so no other
         // relationships part is read or rewritten.
@@ -724,17 +911,16 @@ final class _Book implements SheetHost {
     }
     final SharedStrings? strings = _strings;
     if (strings != null) {
-      if (allLoaded) {
-        var references = 0;
-        for (final XlsxSheet s in _sheets) {
-          final CellStore? store = cellStoreOf(s);
-          if (store != null) {
-            references += store.countOf(RawCellKind.sharedString);
-          }
+      var references = 0;
+      for (final XlsxSheet s in _sheets) {
+        final CellStore? store = cellStoreOf(s);
+        if (store != null) {
+          references += store.countOf(RawCellKind.sharedString);
         }
-        strings.setCount(references);
       }
-      if (_stringsName == null && strings.length > 0) {
+      if (allLoaded) strings.setCount(references);
+      // An undone edit leaves its string in the table, used by no cell.
+      if (_stringsName == null && strings.length > 0 && references > 0) {
         _stringsName = _addWorkbookPart(
           'sharedStrings.xml',
           ContentType.sharedStrings,
@@ -742,6 +928,10 @@ final class _Book implements SheetHost {
           _SharedStringsContent(strings),
         ).$1;
       }
+    }
+    final PropertiesState? properties = _properties;
+    if (properties != null) {
+      reader.guardXml(reader.workbookPart, properties.sync);
     }
     reader.guardXml(reader.workbookPart, () => _package.writeTo(zip));
   }

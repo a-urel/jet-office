@@ -1,12 +1,20 @@
+import 'dart:typed_data';
+
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/opaque_xml.dart';
+import 'package:jet_office/src/opc/package.dart';
 import 'package:jet_office/src/xlsx/model/cell_store.dart';
+import 'package:jet_office/src/xlsx/model/element_node.dart';
 import 'package:jet_office/src/xlsx/model/primitives.dart';
 import 'package:jet_office/src/xlsx/model/styles_part.dart';
+import 'package:jet_office/src/xlsx/model/workbook_part.dart';
 import 'package:jet_office/src/xlsx/raw_cell.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
+import 'package:jet_office/src/zip/archive_adapter.dart';
 import 'package:test/test.dart';
+
+import '../read/support/zip_builder.dart';
 
 RawCell _num(String v) => RawCell(kind: RawCellKind.number, value: v);
 
@@ -197,4 +205,295 @@ void main() {
       expect(part.mark(), before);
     });
   });
+
+  group('appendDifferentialStyle', () {
+    StylesPart styles() => StylesPart.read(
+      XmlPullReader(
+        '<styleSheet xmlns="http://schemas.openxmlformats.org/'
+        'spreadsheetml/2006/main"><cellXfs><xf numFmtId="0"/></cellXfs>'
+        '<dxfs count="1"><dxf><font><b/></font></dxf></dxfs></styleSheet>',
+      ),
+      const XlsxReadLimits(),
+    );
+    const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+    const XlsxStyle italic = XlsxStyle(font: XlsxFont(italic: true));
+
+    test('records what it appended; revert and reapply', () {
+      final StylesPart part = styles();
+      final StylesMark before = part.mark();
+      final ChangeLog log = ChangeLog();
+      late int id;
+      final ChangeSet set = log.transaction(() {
+        id = appendDifferentialStyle(log, part, italic);
+      });
+      expect(id, 1);
+      expect(set.changes.single, isA<StylesAppendChange>());
+      final StylesMark after = part.mark();
+      expect(after.dxfs, before.dxfs + 1);
+      log.revertSet(set);
+      expect(part.mark(), before);
+      expect(part.dxfCount, 1);
+      log.reapplySet(set);
+      expect(part.mark(), after);
+      expect(part.differentialStyle(id), italic);
+    });
+
+    test('records nothing for a dxf the part has', () {
+      final StylesPart part = styles();
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        expect(appendDifferentialStyle(log, part, bold), 0);
+      });
+      expect(set.isEmpty, isTrue);
+      expect(log.hasChanges, isFalse);
+    });
+
+    test('a failed transaction removes the appended entry', () {
+      final StylesPart part = styles();
+      final StylesMark before = part.mark();
+      final ChangeLog log = ChangeLog();
+      expect(
+        () => log.transaction(() {
+          appendDifferentialStyle(log, part, italic);
+          throw StateError('later');
+        }),
+        throwsStateError,
+      );
+      expect(part.mark(), before);
+    });
+  });
+
+  group('editWorkbook', () {
+    const String ns =
+        'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    WorkbookPart book() => WorkbookPart.read(
+      XmlPullReader(
+        '<workbook xmlns="$ns"><workbookProtection lockStructure="1"/>'
+        '<sheets/></workbook>',
+      ),
+      const XlsxReadLimits(),
+    );
+
+    test('records a change that reverts and reapplies', () {
+      final WorkbookPart part = book();
+      final Object before = part.element('workbookProtection')!;
+      final XmlNode next = (before as XmlNode).withChanges(<String, String?>{
+        'lockWindows': '1',
+      });
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        editWorkbook(
+          log,
+          part,
+          'workbookProtection',
+          () => part.swapElement('workbookProtection', before, next),
+        );
+      });
+      expect(set.changes.single, isA<SetWorkbookElementChange>());
+      expect(part.element('workbookProtection'), same(next));
+      log.revertSet(set);
+      expect(part.element('workbookProtection'), same(before));
+      log.reapplySet(set);
+      expect(part.element('workbookProtection'), same(next));
+    });
+
+    test('an edit that changes nothing records nothing', () {
+      final WorkbookPart part = book();
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        editWorkbook(log, part, 'workbookProtection', () {});
+      });
+      expect(set.isEmpty, isTrue);
+      expect(log.hasChanges, isFalse);
+    });
+
+    test('a failed edit puts the element back', () {
+      final WorkbookPart part = book();
+      final Object before = part.element('workbookProtection')!;
+      final ChangeLog log = ChangeLog();
+      expect(
+        () => log.transaction(() {
+          editWorkbook(log, part, 'workbookProtection', () {
+            part.swapElement('workbookProtection', before, null);
+            throw StateError('no');
+          });
+        }),
+        throwsStateError,
+      );
+      expect(part.element('workbookProtection'), same(before));
+      expect(log.hasChanges, isFalse);
+    });
+
+    test('recording outside a transaction leaves the element', () {
+      final WorkbookPart part = book();
+      final Object before = part.element('workbookProtection')!;
+      expect(
+        () => editWorkbook(
+          ChangeLog(),
+          part,
+          'workbookProtection',
+          () => part.swapElement('workbookProtection', before, null),
+        ),
+        throwsStateError,
+      );
+      expect(part.element('workbookProtection'), same(before));
+    });
+  });
+
+  group('stored relationships', () {
+    OpcPackage package() => OpcPackage.empty()
+      ..addPart('/a.xml', 'x/a', _Xml())
+      ..addRelationship('/a.xml', type: 't', target: 'first')
+      ..addRelationship(
+        '/a.xml',
+        type: 'u',
+        target: 'https://example.com',
+        external: true,
+      );
+
+    /// A package whose part `/a.xml` has the relationships [elements].
+    OpcPackage withRels(String elements) => OpcPackage.read(
+      ZipReader(
+        buildZipOrdered(<(String, List<int>)>[
+          ('a.xml', '<a/>'.codeUnits),
+          (
+            '_rels/a.xml.rels',
+            '<Relationships>$elements</Relationships>'.codeUnits,
+          ),
+        ]),
+        maxEntries: 10,
+        maxEntryBytes: 1 << 20,
+        maxTotalBytes: 1 << 20,
+        maxCompressionRatio: 1000,
+      ),
+      maxDepth: 64,
+    );
+
+    List<String> ids(OpcPackage p) => <String>[
+      for (final OpcRelationship r in p.relationshipsOf('/a.xml')) r.id,
+    ];
+
+    test('an added relationship reverts and comes back with its id', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      late String id;
+      final ChangeSet set = log.transaction(() {
+        id = addStoredRelationship(log, p, '/a.xml', type: 't', target: 'x');
+      });
+      expect(id, 'rId3');
+      expect(set.changes.single, isA<SetRelationshipChange>());
+      log.revertSet(set);
+      expect(ids(p), <String>['rId1', 'rId2']);
+      log.reapplySet(set);
+      expect(p.relationshipsOf('/a.xml').last, (
+        id: 'rId3',
+        type: 't',
+        target: 'x',
+        external: false,
+      ));
+    });
+
+    test('a removed relationship comes back whole', () {
+      final OpcPackage p = package();
+      final OpcRelationship gone = p.relationshipsOf('/a.xml').last;
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        removeStoredRelationship(log, p, '/a.xml', 'rId2');
+      });
+      expect(ids(p), <String>['rId1']);
+      log.revertSet(set);
+      expect(p.relationshipsOf('/a.xml').last, gone);
+      log.reapplySet(set);
+      expect(ids(p), <String>['rId1']);
+    });
+
+    test('removing an unknown id records nothing', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        removeStoredRelationship(log, p, '/a.xml', 'rId9');
+      });
+      expect(set.isEmpty, isTrue);
+    });
+
+    test('an id a file repeats stays, as it could not be put back', () {
+      final OpcPackage p = withRels(
+        '<Relationship Id="rId1" Type="t" Target="x"/>'
+        '<Relationship Id="rId1" Type="t" Target="y"/>',
+      );
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        removeStoredRelationship(log, p, '/a.xml', 'rId1');
+      });
+      expect(set.isEmpty, isTrue);
+      expect(p.relationshipsOf('/a.xml').length, 2);
+    });
+
+    for (final (String what, String element) in <(String, String)>[
+      ('target', '<Relationship Id="rId1" Type="t" Target=""/>'),
+      ('type', '<Relationship Id="rId1" Type="" Target="x"/>'),
+    ]) {
+      test('a relationship with an empty $what stays', () {
+        final OpcPackage p = withRels(element);
+        final ChangeLog log = ChangeLog();
+        final ChangeSet set = log.transaction(() {
+          removeStoredRelationship(log, p, '/a.xml', 'rId1');
+        });
+        expect(set.isEmpty, isTrue);
+        expect(p.relationshipsOf('/a.xml').length, 1);
+      });
+    }
+
+    test('a relationship with an empty id stays', () {
+      final OpcPackage p = withRels(
+        '<Relationship Id="" Type="t" Target="x"/>',
+      );
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        removeStoredRelationship(log, p, '/a.xml', '');
+      });
+      expect(set.isEmpty, isTrue);
+      expect(p.relationshipsOf('/a.xml').length, 1);
+    });
+
+    test('a failed transaction undoes both kinds', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      expect(
+        () => log.transaction(() {
+          removeStoredRelationship(log, p, '/a.xml', 'rId1');
+          addStoredRelationship(log, p, '/a.xml', type: 't', target: 'x');
+          throw StateError('no');
+        }),
+        throwsStateError,
+      );
+      expect(ids(p).toSet(), <String>{'rId1', 'rId2'});
+      expect(ids(p).length, 2);
+    });
+
+    test('recording outside a transaction changes nothing', () {
+      final OpcPackage p = package();
+      expect(
+        () => addStoredRelationship(
+          ChangeLog(),
+          p,
+          '/a.xml',
+          type: 't',
+          target: 'x',
+        ),
+        throwsStateError,
+      );
+      expect(ids(p), <String>['rId1', 'rId2']);
+      expect(
+        () => removeStoredRelationship(ChangeLog(), p, '/a.xml', 'rId1'),
+        throwsStateError,
+      );
+      expect(ids(p).toSet(), <String>{'rId1', 'rId2'});
+    });
+  });
+}
+
+final class _Xml implements PartContent {
+  @override
+  List<Uint8List> encode() => <Uint8List>[Uint8List(0)];
 }

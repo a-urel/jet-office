@@ -374,6 +374,18 @@ _expected = <(XlsxWarningCode, OfficeLocale), String>{
     XlsxWarningCode.layoutInvalid,
     OfficeLocale.tr,
   ): '“S” sayfasındaki bir düzen ayarı tam olarak okunamıyor (27); okunamayan kısımlar varsayılan değeri alıyor ve ayar olduğu gibi kaydediliyor.',
+  (
+    XlsxWarningCode.featureEntryInvalid,
+    OfficeLocale.en,
+  ): "A feature entry of sheet 'S' cannot be read (27); it is kept as written and left out of the typed list.",
+  (
+    XlsxWarningCode.featureEntryInvalid,
+    OfficeLocale.de,
+  ): 'Ein Funktionseintrag im Blatt „S“ kann nicht gelesen werden (27); er wird unverändert gespeichert und in der Liste ausgelassen.',
+  (
+    XlsxWarningCode.featureEntryInvalid,
+    OfficeLocale.tr,
+  ): '“S” sayfasındaki bir özellik girdisi okunamıyor (27); olduğu gibi korunuyor ve listeye alınmıyor.',
 };
 
 void main() {
@@ -455,14 +467,14 @@ void main() {
     );
   });
 
-  test('all 96 messages are worded exactly as specified', () {
+  test('all 99 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, OfficeLocale)> keys =
         <(XlsxWarningCode, OfficeLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final OfficeLocale locale in OfficeLocale.values)
               (code, locale),
         ];
-    expect(keys, hasLength(96));
+    expect(keys, hasLength(99));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, OfficeLocale) key in keys) {
       final XlsxWarning w =
@@ -505,6 +517,57 @@ void main() {
       'kaydediliyor.',
     );
     expect(c.warnings.first.message(), contains('(font 0)'));
+  });
+
+  test('featureEntryInvalid without a detail counts the entries', () {
+    final WarningCollector c = WarningCollector();
+    for (var i = 0; i < 12; i++) {
+      c.add(XlsxWarningCode.featureEntryInvalid, sheet: 'S', detail: 'e $i');
+    }
+    final XlsxWarning rest = c.warnings.last;
+    expect(rest.detail, isNull);
+    expect(rest.count, 2);
+    expect(
+      rest.message(OfficeLocale.en),
+      "2 feature entries of sheet 'S' cannot be read; they are kept as "
+      'written and left out of the typed lists.',
+    );
+    expect(
+      rest.message(OfficeLocale.de),
+      '2 Funktionseinträge im Blatt „S“ können nicht gelesen werden; sie '
+      'werden unverändert gespeichert und in den Listen ausgelassen.',
+    );
+    expect(
+      rest.message(OfficeLocale.tr),
+      '“S” sayfasındaki 2 özellik girdisi okunamıyor; olduğu gibi korunuyor '
+      've listelere alınmıyor.',
+    );
+  });
+
+  test('featureEntryInvalid of the workbook names no sheet', () {
+    final XlsxWarning w =
+        (WarningCollector()..add(
+              XlsxWarningCode.featureEntryInvalid,
+              sheet: '',
+              detail: 'd',
+            ))
+            .warnings
+            .single;
+    expect(
+      w.message(OfficeLocale.en),
+      'A feature entry of the workbook cannot be read (d); it is kept as '
+      'written and left out of the typed list.',
+    );
+    expect(
+      w.message(OfficeLocale.de),
+      'Ein Funktionseintrag der Arbeitsmappe kann nicht gelesen werden (d); '
+      'er wird unverändert gespeichert und in der Liste ausgelassen.',
+    );
+    expect(
+      w.message(OfficeLocale.tr),
+      'Çalışma kitabındaki bir özellik girdisi okunamıyor (d); olduğu gibi '
+      'korunuyor ve listeye alınmıyor.',
+    );
   });
 
   test('layoutInvalid without a detail counts the settings', () {

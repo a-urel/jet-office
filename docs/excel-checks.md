@@ -1026,6 +1026,157 @@ Result: ok, 2026-11-05 (see "Results"). The edited fixtures,
 Only `w1_test.xlsx` holds a named style and a conditional format;
 `excel_products.xlsx`, the second file, has neither.
 
+## W3
+
+Sheet and workbook features in the model: names, links, validations,
+conditional formats, print settings, a filter, protection and properties. Open
+each file in Excel for Mac and record the result under "Results". A repair
+prompt is a model bug. Run this first:
+
+```bash
+dart run tool/write_fixtures.dart build/fixtures
+dart run tool/edit_model.dart build/fixtures build/model-edited
+dart run tool/write_model_sample.dart build/model_generated
+```
+
+### The edited fixtures
+
+Open every `m1_*` to `m5_*` file of `build/model-edited/` (not the
+`w*_generated` ones). No repair prompt. Everything W2
+checked is still there (the bold red cells, the merge, the frozen row, the
+green tab, the sheet `Model edit`). On the first sheet, in the same new row:
+
+- D shows `edited by the model` as a link: it points at
+  `https://example.com/jet-office` and its tooltip says `set by the model`
+  (do not click it; hovering is enough);
+- G has a drop-down list with `yes` and `no`, and typing anything else is
+  refused;
+- typing a number above 0 in H gives a yellow fill, and any number in I gives
+  a data bar;
+- Page Layout shows landscape, A4, fit to one page wide (the height is
+  "Automatic"), and the footer reads `Page 1 of 1` in the centre (Page
+  Layout view or Print Preview);
+- a filter button sits on each of A to D of the new row, except in the
+  fixtures that already had a filter (`m2_merges_filter` and
+  `m5_list_plain`, A2:D14), where the old filter is as it was;
+- Formulas > Name Manager lists `Model_edit` (`Model_edit2` in a workbook that
+  already had that name) and everything the fixture had;
+- File > Properties shows the title `Edited by jet_office`.
+
+`m3_protection`'s first sheet (`Locked`) is protected with the password
+`password`, so typing in G, H and I is refused there. Unprotect it (Review >
+Unprotect Sheet) to try the drop-down, the rule and the data bar; do not save.
+
+Everything else looks as the fixture of that name does.
+
+### The generated workbook
+
+Open `build/model_generated/w3_generated.xlsx`. No repair prompt. Two sheets:
+`Report` and `Locked`.
+
+On `Report`:
+
+- Row 1 is bold: `Product`, `Region`, `Amount`, `Score`, `Stock`, `Rating`,
+  `With tax`, `Bar only`. A filter button sits on each of A1 to G1, and
+  filtering works.
+- B2 to B7 have a drop-down list with `North`, `South`, `East` and `West`;
+  typing another value is refused.
+- C (`Amount`): the amounts 3400, 4100 and 5200 (`Pears`, `Cherries`,
+  `Grapes`) have a light red fill, the others none.
+- D (`Score`): a colour scale from red (10) through yellow to green (100).
+- E (`Stock`): blue data bars, longest at 90, shortest at 10.
+- H (`Bar only`, outside the filter and the print area): green data bars set
+  to show the bar only. The writer leaves `showValue` out of the Excel 2010
+  half of the rule (`x14:dataBar`), so record what Excel does: whether it hides
+  the numbers (Home > Conditional Formatting > Manage Rules shows the "Show Bar
+  Only" box). Numbers still showing are not a repair prompt, but note them.
+- F (`Rating`): arrows, pointing down for 1 and 2, sideways for 3, up for 4
+  and 5.
+- G (`With tax`) shows 1416, 4012, 2950, 4838, 1062 and 6136; the formula bar
+  of G2 reads `=C2*(1+TaxRate)`.
+- A9 reads `jet_office web page` and A10 `Go to Locked`, both as links. A10
+  jumps to the sheet `Locked` (click it); do not click A9. Hovering A9 shows
+  `Opens a web page`.
+- Page Layout: landscape, A4, fit to one page wide. Print Preview shows one
+  page wide, the print area A1:G7 only (not the links below it), row 1 on
+  every page, `Sales report` in the centre of the header, and `Printed` with
+  the date at the left and `Page 1 of 1` at the right of the footer.
+- Formulas > Name Manager lists `TaxRate` (`=0,18` or `=0.18`, workbook),
+  `Print_Area` and `Print_Titles` (`Report`).
+
+On `Locked`:
+
+- A1 reads `Locked sheet`. Typing in any cell is refused with a message that
+  the sheet is protected.
+- Review > Unprotect Sheet asks for a password; `secret` unprotects it.
+
+Workbook properties (File > Properties): Title `W3 sample`, Subject `Sheet and
+workbook features`, Author `jet_office`; under Custom, `Project` is `Atlas`
+and `Reviewed` is `Yes`.
+
+### Two of the owner's own files
+
+Take two Excel files the owner made, different from each other, with at least
+one table or filter in one of them. For each: open it in Excel and note what it
+holds (names, links, validations, conditional formats, page setup), then add
+features with the model. Save this as `tool/add_features_one_file.dart` (do
+not commit it) and run
+`dart run tool/add_features_one_file.dart my.xlsx build/featured.xlsx`:
+
+```dart
+import 'dart:io';
+
+import 'package:jet_office/jet_office.dart';
+
+void main(List<String> args) {
+  final XlsxWorkbook book = XlsxWorkbook.open(File(args[0]).readAsBytesSync());
+  final XlsxSheet sheet = book.sheets.first;
+  // Choose empty cells of the file's first sheet that nothing overlaps.
+  book.defineName(const XlsxDefinedName('Owner_edit', '0.5'));
+  sheet
+    ..setCell(0, 12, XlsxHyperlink.url('https://example.com', text: 'link'))
+    ..addDataValidation(
+      XlsxDataValidation(
+        <XlsxRange>[XlsxRange.parse('N1:N5')],
+        XlsxValidationType.list,
+        formula1: '"yes,no"',
+      ),
+    )
+    ..addConditionalFormat(
+      XlsxConditionalFormat(<XlsxRange>[XlsxRange.parse('O1:O5')], <
+        XlsxConditionalRule
+      >[
+        const XlsxCellValueRule(
+          XlsxComparison.greaterThan,
+          '0',
+          style: XlsxStyle(fill: XlsxFill.solid(XlsxColor.rgb(0xFFFF00))),
+        ),
+      ]),
+    )
+    ..pageSetup = const XlsxPageSetup(
+      orientation: XlsxOrientation.landscape,
+      paperSize: XlsxPaperSize.a4,
+      fitToWidth: 1,
+    );
+  File(args[1]).writeAsBytesSync(book.save().bytes);
+}
+```
+
+Open `build/featured.xlsx` in Excel. Check:
+
+- no repair prompt;
+- M1 shows `link` as a link, N1 to N5 have a `yes`/`no` list, a number above 0
+  in O1 to O5 turns yellow, `Owner_edit` is in Name Manager, and the page
+  setup is landscape, A4, one page wide;
+- everything the original had is as it was: its own names, links,
+  validations, conditional formats (Conditional Formatting > Manage Rules
+  lists them all), print settings, filter and table.
+
+Result: ok, 2026-11-06 (see "Results"). The edited fixtures, `w3_generated`
+and two of the owner's own files, with no repair prompt on any. Excel hides
+the numbers of column H, so the `showValue` left out of `x14:dataBar` does no
+harm there.
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
@@ -1329,3 +1480,7 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: `w2_generated` | ok | No repair prompt. Opens on `Report`, green tab; title, header row, frozen rows, dates, `1.234,50`, hidden row 4, grouped row 5 and the hidden sheet as the list says. Widths read from a screenshot: 192, 112 and 129 pixels, the ratio of 24, 14 and 16. The bottom border's `medium` read from the file, not told apart on screen. |
 | 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: `w1_test.xlsx`, A1 restyled, column A widened, H1:I1 merged | ok | No repair prompt. Compared with the original; looks the same apart from the edits. |
 | 2026-11-05 | Microsoft 365, Excel for Mac 16.114.1 (26102031) | W2: `excel_products.xlsx`, A1 restyled, column A widened, N1:O1 merged | ok | No repair prompt. Compared with the original; looks the same apart from the edits. This file has no named cell style beyond `Normal` and no conditional format, the owner's choice as the second file. |
+| 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: all 29 `build/model-edited/*.xlsx` | ok | No repair prompt on any; each as the W3 list says. |
+| 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `w3_generated` | ok | No repair prompt; `Report`, `Locked` and the properties as the W3 list says. Column H shows the bars only: the numbers are hidden. |
+| 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `w1_test.xlsx`, link in M1, list on N1:N5, rule on O1:O5, name `Owner_edit`, page setup | ok | No repair prompt. The additions and the file's own content as the W3 list says. |
+| 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `excel_products.xlsx`, link in M1, list on N1:N5, rule on O1:O5, name `Owner_edit`, page setup | ok | No repair prompt. The additions and the file's own content as the W3 list says. |

@@ -901,37 +901,16 @@ final class WorksheetWriter implements XlsxSheetWriter {
         'A print area needs at least one range.',
       );
     }
-    for (int i = 0; i < ranges.length; i++) {
-      validateRange(ranges[i], 'ranges[$i]');
-    }
+    checkPrintAreaRanges(ranges);
     _printArea = List<XlsxRange>.unmodifiable(ranges);
   }
 
   @override
   void printTitles({(int, int)? rows, (int, int)? columns}) {
     _checkOpenSheet();
-    if (rows != null) _checkSpan(rows, 'rows', XlsxLimits.maxRows);
-    if (columns != null) _checkSpan(columns, 'columns', XlsxLimits.maxColumns);
+    checkPrintTitles(rows: rows, columns: columns);
     _printTitleRows = rows;
     _printTitleColumns = columns;
-  }
-
-  static void _checkSpan((int, int) span, String field, int count) {
-    final (int first, int last) = span;
-    if (first < 0 || last >= count) {
-      throw ArgumentError.value(
-        span,
-        field,
-        'The span lies outside the sheet: 0 to ${count - 1} are allowed.',
-      );
-    }
-    if (first > last) {
-      throw ArgumentError.value(
-        span,
-        field,
-        'The first of the span must not be after its last.',
-      );
-    }
   }
 
   @override
@@ -1329,5 +1308,41 @@ final class WorksheetWriter implements XlsxSheetWriter {
     context.contentTypes
       ..addDefault('vml', ContentType.vmlDrawing)
       ..addOverride('/${commentsPartName(number)}', ContentType.comments);
+  }
+}
+
+/// Throws an [ArgumentError] named `ranges[i]` for the first of [ranges]
+/// that `validateRange` refuses: the check of a print area's ranges, shared
+/// by the writer and the workbook model. An empty list passes; the writer
+/// refuses it itself.
+void checkPrintAreaRanges(List<XlsxRange> ranges) {
+  for (int i = 0; i < ranges.length; i++) {
+    validateRange(ranges[i], 'ranges[$i]');
+  }
+}
+
+/// Throws an [ArgumentError] named `rows` or `columns` when a given span of
+/// print titles lies outside the sheet or has its first index after its
+/// last: the check shared by the writer and the workbook model.
+void checkPrintTitles({(int, int)? rows, (int, int)? columns}) {
+  if (rows != null) _checkSpan(rows, 'rows', XlsxLimits.maxRows);
+  if (columns != null) _checkSpan(columns, 'columns', XlsxLimits.maxColumns);
+}
+
+void _checkSpan((int, int) span, String field, int count) {
+  final (int first, int last) = span;
+  if (first < 0 || last >= count) {
+    throw ArgumentError.value(
+      span,
+      field,
+      'The span lies outside the sheet: 0 to ${count - 1} are allowed.',
+    );
+  }
+  if (first > last) {
+    throw ArgumentError.value(
+      span,
+      field,
+      'The first of the span must not be after its last.',
+    );
   }
 }

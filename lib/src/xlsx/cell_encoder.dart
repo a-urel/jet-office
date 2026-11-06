@@ -50,6 +50,14 @@ const XlsxFont _hyperlinkFont = XlsxFont(
   underline: XlsxUnderline.single,
 );
 
+/// [style] with the hyperlink font beneath its font: the theme's hyperlink
+/// color, underlined, unless [style] sets a font field.
+///
+/// What the writer gives a hyperlink cell, and the workbook model gives one
+/// it sets.
+XlsxStyle withHyperlinkFont(XlsxStyle? style) => (style ?? const XlsxStyle())
+    .copyWith(font: _hyperlinkFont.merge(style?.font));
+
 /// `intPrecisionLost` when Excel, which stores every number as a double,
 /// may round [v]; otherwise `null`.
 ///
@@ -962,9 +970,7 @@ final class _Resolved {
     column,
     row,
     cell,
-    (style ?? const XlsxStyle()).copyWith(
-      font: _hyperlinkFont.merge(style?.font),
-    ),
+    withHyperlinkFont(style),
   );
 
   final XlsxStyle? column;

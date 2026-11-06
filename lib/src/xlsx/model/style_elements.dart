@@ -4,7 +4,8 @@
 /// of a writer function: [readColor] of `writeColorAttributes`, [readFont] of
 /// `writeFontXml`, [readFill] of `writeFillXml`, [readBorder] of
 /// `writeBorderXml` and [readXf] of `alignmentXml` and `protectionXml` (the
-/// `<xf>` itself is the registry's).
+/// `<xf>` itself is the registry's); [readDifferentialStyle] is the reverse
+/// of `writeDifferentialStyleXml`.
 ///
 /// Every function reads the element the reader is on, leaves the reader on
 /// that element's end event and never throws for a value in the file. A value
@@ -23,14 +24,19 @@
 library;
 
 import '../../opc/ooxml.dart';
+import '../../xml/xml_escape.dart';
 import '../../xml/xml_number.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../alignment.dart';
 import '../border.dart';
 import '../color.dart';
+import '../differential_style.dart';
 import '../fill.dart';
 import '../font.dart';
+import '../format/builtin_formats.dart';
+import '../number_format.dart';
 import '../read/styles_reader.dart' show readStyleId;
+import '../style.dart';
 
 /// A value read from a style element: `exact` says that writing `value` back
 /// gives the element that was read, and `problem` describes a value in the
@@ -396,7 +402,15 @@ final Map<String, XlsxPatternType> _patterns = _names(XlsxPatternType.values);
 
 /// Reads a `<fill>` element: a `patternFill` or a `gradientFill`. A fill the
 /// types cannot hold is a pattern fill of `none` and a `problem`.
-ReadStyleValue<XlsxFill> readFill(XmlPullReader r) {
+ReadStyleValue<XlsxFill> readFill(XmlPullReader r) =>
+    _readFill(r, differential: false);
+
+/// [readFill] for the fill of a differential style, which the writer writes
+/// differently: a solid fill as a `bgColor` and no `patternType`.
+ReadStyleValue<XlsxFill> _readFill(
+  XmlPullReader r, {
+  required bool differential,
+}) {
   final _Acc acc = _Acc();
   _checkAttributes(r, acc, const <String>{});
   XlsxFill? fill;
@@ -409,7 +423,7 @@ ReadStyleValue<XlsxFill> readFill(XmlPullReader r) {
       return true;
     }
     fill = n == 'patternFill'
-        ? _readPatternFill(r, acc)
+        ? _readPatternFill(r, acc, differential)
         : _readGradient(r, acc);
     return true;
   });
@@ -422,7 +436,7 @@ ReadStyleValue<XlsxFill> readFill(XmlPullReader r) {
   return acc.result(read);
 }
 
-XlsxFill? _readPatternFill(XmlPullReader r, _Acc acc) {
+XlsxFill? _readPatternFill(XmlPullReader r, _Acc acc, bool differential) {
   _checkAttributes(r, acc, const <String>{'patternType'});
   final String? type = _attr(r, 'patternType');
   XlsxColor? fg, bg;
@@ -442,6 +456,15 @@ XlsxFill? _readPatternFill(XmlPullReader r, _Acc acc) {
     }
     return true;
   });
+  if (differential) {
+    // A differential style's solid fill is written as its color in
+    // `bgColor` (the color a cell shows) and without a `patternType`.
+    if (type == null) {
+      if (fg != null) acc.inexact();
+      return XlsxPatternFill(XlsxPatternType.solid, foreground: fg ?? bg);
+    }
+    if (type == 'solid') acc.inexact();
+  }
   if (type == null) {
     acc.inexact();
     return XlsxPatternFill(
@@ -875,5 +898,277 @@ readXf(XmlPullReader r) {
     alignment: alignment,
     protection: protection,
     exact: acc.exact,
+  );
+}
+
+// -- Differential styles -----------------------------------------------------
+
+/// A differential style read from a `<dxf>`: what [readDifferentialStyle]
+/// gives, and the number format as the element wrote it (`null` for none, or
+/// for one that could not be read), which only a registry key needs.
+typedef ReadDifferentialStyle = ({
+  XlsxStyle value,
+  bool exact,
+  String? problem,
+  DifferentialNumFmt? numFmt,
+});
+
+/// The children of a `<dxf>` in `CT_Dxf` order.
+const Map<String, int> _dxfOrder = <String, int>{
+  'font': 0,
+  'numFmt': 1,
+  'fill': 2,
+  'alignment': 3,
+  'border': 4,
+  'protection': 5,
+};
+
+/// Reads a `<dxf>` element, the reverse of `writeDifferentialStyleXml`.
+///
+/// The value holds only what a differential style can hold, so it passes
+/// `validateDifferentialStyle`: a font's flags, underline, script and colour,
+/// a number format, a fill and the four sides of a border. A font name, size,
+/// family, charset or scheme, an alignment, a protection, and a diagonal,
+/// vertical or horizontal border side are read past and dropped, and make the
+/// result inexact, as does anything else the writer would not write back:
+/// the value is exact only when `writeDifferentialStyleXml` of it gives the
+/// element that was read. A font flag is `null` when its element is absent
+/// (the cell's font shows through) and `false` for `val="0"`. A number
+/// format is the built-in one when the file's code is that format's code,
+/// else a custom one; a custom id is the registry's to number, so it does
+/// not make the element inexact.
+ReadStyleValue<XlsxStyle> readDifferentialStyle(XmlPullReader r) {
+  final ReadDifferentialStyle read = readDifferentialEntry(r);
+  return (value: read.value, exact: read.exact, problem: read.problem);
+}
+
+/// [readDifferentialStyle], with the number format as written in the
+/// element.
+ReadDifferentialStyle readDifferentialEntry(XmlPullReader r) {
+  final _Acc acc = _Acc();
+  _checkAttributes(r, acc, const <String>{});
+  XlsxFont? font;
+  XlsxNumFmt? numFmt;
+  DifferentialNumFmt? written;
+  XlsxFill? fill;
+  XlsxBorder? border;
+  final Set<String> seen = <String>{};
+  var last = -1;
+  _eachChild(r, acc, () {
+    final String n = r.localName;
+    final int? rank = _dxfOrder[n];
+    if (rank == null) return false;
+    final bool first = seen.add(n);
+    if (!first || rank < last) acc.inexact();
+    if (rank > last) last = rank;
+    if (!first) {
+      // The first of a kind is the one read, as for a cell format.
+      r.skip();
+      return true;
+    }
+    switch (n) {
+      case 'font':
+        final ReadStyleValue<XlsxFont?> f = _readDifferentialFont(r);
+        acc.absorb(f);
+        font = f.value;
+      case 'numFmt':
+        final ({
+          XlsxNumFmt? value,
+          DifferentialNumFmt? written,
+          bool exact,
+          String? problem,
+        })
+        f = _readDifferentialNumFmt(r);
+        acc.absorb((value: f.value, exact: f.exact, problem: f.problem));
+        numFmt = f.value;
+        written = f.written;
+      case 'fill':
+        final ReadStyleValue<XlsxFill> f = _readFill(r, differential: true);
+        acc.absorb(f);
+        fill = f.value;
+      case 'border':
+        final ReadStyleValue<XlsxBorder> b = readBorder(r);
+        acc.absorb(b);
+        final XlsxBorder read = b.value;
+        // A differential style has the four sides and the outline flag.
+        if (read.diagonal != null ||
+            read.vertical != null ||
+            read.horizontal != null ||
+            read.diagonalUp != null ||
+            read.diagonalDown != null) {
+          acc.inexact();
+        }
+        border = XlsxBorder(
+          left: read.left,
+          right: read.right,
+          top: read.top,
+          bottom: read.bottom,
+          outline: read.outline,
+        );
+      default:
+        // An alignment or a protection: a differential style has neither.
+        acc.inexact();
+        r.skip();
+    }
+    return true;
+  });
+  return (
+    value: XlsxStyle(numFmt: numFmt, font: font, fill: fill, border: border),
+    exact: acc.exact,
+    problem: acc.problem,
+    numFmt: written,
+  );
+}
+
+/// Reads the `<font>` of a differential style, which has no defaults: an
+/// absent flag is `null`. The result is `null` for a font that sets nothing
+/// a differential style can hold, which the writer does not write.
+ReadStyleValue<XlsxFont?> _readDifferentialFont(XmlPullReader r) {
+  final _Acc acc = _Acc();
+  _checkAttributes(r, acc, const <String>{});
+  bool? bold, italic, strike, condense, extend, outline, shadow;
+  XlsxUnderline? underline;
+  XlsxFontScript? script;
+  XlsxColor? color;
+  final Set<String> seen = <String>{};
+  var last = -1;
+
+  // `<b/>` is true and `<b val="0"/>` false, as the writer spells them.
+  bool? flag(String name) {
+    final String? val = _valOnly(r, acc);
+    if (val == null) return true;
+    final bool? value = _parseBool(val);
+    if (value == null) {
+      acc.bad('The font $name val "$val" is not a boolean.');
+    } else if (val != '0') {
+      acc.inexact();
+    }
+    return value;
+  }
+
+  _eachChild(r, acc, () {
+    final String n = r.localName;
+    final int? rank = _fontOrder[n];
+    if (rank == null) return false;
+    if (!seen.add(n) || rank < last) acc.inexact();
+    if (rank > last) last = rank;
+    switch (n) {
+      case 'b':
+        bold = flag(n);
+      case 'i':
+        italic = flag(n);
+      case 'strike':
+        strike = flag(n);
+      case 'condense':
+        condense = flag(n);
+      case 'extend':
+        extend = flag(n);
+      case 'outline':
+        outline = flag(n);
+      case 'shadow':
+        shadow = flag(n);
+      case 'u':
+        final String? val = _valOnly(r, acc);
+        if (val == null) {
+          underline = XlsxUnderline.single;
+        } else {
+          underline = _underlines[val];
+          if (underline == null) {
+            acc.bad('The font underline "$val" is not an underline style.');
+          } else if (underline == XlsxUnderline.single) {
+            acc.inexact();
+          }
+        }
+      case 'vertAlign':
+        final String? val = _valOnly(r, acc);
+        script = val == null ? null : _scripts[val];
+        if (script == null) {
+          acc.bad('The font vertAlign "$val" is not a script.');
+        } else if (script == XlsxFontScript.baseline) {
+          acc.inexact();
+        }
+      case 'color':
+        final ReadStyleValue<XlsxColor?> c = readColor(r);
+        acc.absorb(c);
+        color = c.value;
+      default:
+        // Size, name, family, charset and scheme: a differential style does
+        // not hold them.
+        acc.inexact();
+        r.skip();
+    }
+    return true;
+  });
+  final bool sets =
+      bold != null ||
+      italic != null ||
+      strike != null ||
+      condense != null ||
+      extend != null ||
+      outline != null ||
+      shadow != null ||
+      underline != null ||
+      color != null ||
+      (script != null && script != XlsxFontScript.baseline);
+  // The writer writes nothing for a font that sets nothing.
+  if (!sets) {
+    acc.inexact();
+    return acc.result<XlsxFont?>(null);
+  }
+  return acc.result<XlsxFont?>(
+    XlsxFont(
+      bold: bold,
+      italic: italic,
+      strike: strike,
+      condense: condense,
+      extend: extend,
+      outline: outline,
+      shadow: shadow,
+      underline: underline,
+      script: script == XlsxFontScript.baseline ? null : script,
+      color: color,
+    ),
+  );
+}
+
+/// Reads the `<numFmt>` of a differential style: the format, and the id and
+/// code as written (`null` when the element has no usable id and code).
+({XlsxNumFmt? value, DifferentialNumFmt? written, bool exact, String? problem})
+_readDifferentialNumFmt(XmlPullReader r) {
+  final _Acc acc = _Acc();
+  _checkAttributes(r, acc, const <String>{'numFmtId', 'formatCode'});
+  final String? rawId = _attr(r, 'numFmtId');
+  final String? rawCode = _attr(r, 'formatCode');
+  _finishLeaf(r, acc);
+  final int? id = readStyleId(rawId);
+  if (id == null) {
+    acc.bad('The numFmt numFmtId "$rawId" is not a number format id.');
+  }
+  if (rawCode == null || rawCode.isEmpty) {
+    acc.bad('The numFmt has no formatCode.');
+  }
+  if (id == null || rawCode == null || rawCode.isEmpty) {
+    return (value: null, written: null, exact: false, problem: acc.problem);
+  }
+  final String code = decodeXstring(rawCode);
+  if (code != rawCode) acc.inexact();
+  if (scrubXmlText(code).removed != 0) {
+    acc.bad('The numFmt formatCode has characters XML cannot carry.');
+    return (value: null, written: null, exact: false, problem: acc.problem);
+  }
+  XlsxNumFmt value;
+  if (id < 164 && builtinNumberFormatCode(id) == code) {
+    value = XlsxNumFmt.builtin(id);
+  } else {
+    value = XlsxNumFmt.custom(code);
+    // The writer numbers a custom format from 164, so an id below it with
+    // another code is not one it would write.
+    if (id < 164) acc.inexact();
+  }
+  return (
+    value: value,
+    written: (id: id, code: code),
+    exact: acc.exact,
+    problem: acc.problem,
   );
 }

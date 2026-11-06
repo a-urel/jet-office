@@ -388,6 +388,61 @@ void main() {
       );
     });
 
+    test('addRelationship uses a given id', () {
+      final OpcPackage p = OpcPackage.empty();
+      p.addPart('/a.xml', 'x/a', _Text('<a/>'));
+      expect(
+        p.addRelationship('/a.xml', type: 't', target: 'x', id: 'rId7'),
+        'rId7',
+      );
+      expect(p.addRelationship('/a.xml', type: 't', target: 'y'), 'rId1');
+      expect(
+        () => p.addRelationship('/a.xml', type: 't', target: 'z', id: 'rId7'),
+        throwsArgumentError,
+      );
+      expect(
+        _reopen(p).relationshipsOf('/a.xml').map((r) => r.id).toList(),
+        <String>['rId7', 'rId1'],
+      );
+    });
+
+    test('removeRelationship removes one and leaves the others', () {
+      final OpcPackage p = OpcPackage.empty();
+      p.addPart('/a.xml', 'x/a', _Text('<a/>'));
+      p.addRelationship('/a.xml', type: 't', target: 'x');
+      p.addRelationship('/a.xml', type: 't', target: 'y');
+      p.addRelationship('/a.xml', type: 't', target: 'z');
+      p.removeRelationship('/a.xml', 'rId2');
+      expect(
+        _reopen(p).relationshipsOf('/a.xml').map((r) => r.target).toList(),
+        <String>['x', 'z'],
+      );
+      expect(p.addRelationship('/a.xml', type: 't', target: 'w'), 'rId2');
+    });
+
+    test('removing an unknown id does nothing', () {
+      final OpcPackage p = OpcPackage.empty();
+      p.addPart('/a.xml', 'x/a', _Text('<a/>'));
+      p.removeRelationship('/a.xml', 'rId1');
+      p.removeRelationship('/nope.xml', 'rId1');
+      p.addRelationship('/a.xml', type: 't', target: 'x');
+      p.removeRelationship('/a.xml', 'rId9');
+      expect(p.relationshipsOf('/a.xml').map((r) => r.id).toList(), <String>[
+        'rId1',
+      ]);
+    });
+
+    test('removeRelationship throws when the rels cannot be read', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('a.xml', '<a/>'),
+        ('_rels/a.xml.rels', '<Relationships><Relationship'),
+      ]);
+      expect(
+        () => p.removeRelationship('/a.xml', 'rId1'),
+        throwsA(isA<OpcFormatException>()),
+      );
+    });
+
     test('removePart drops its override and relationships', () {
       final OpcPackage p = _package(<(String, String)>[
         (

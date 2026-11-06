@@ -205,6 +205,25 @@ String worksheetHeader(WorksheetSettings settings, {required bool hasRows}) {
   return out.toString();
 }
 
+/// Writes one `<hyperlink>` element: the trailer's, and the workbook
+/// model's for a link it adds.
+///
+/// The attributes follow CT_Hyperlink's order: `ref`, `r:id`, `location`,
+/// `tooltip`, `display`. `location`, `tooltip` and `display` go through
+/// `escapeXstring`.
+void writeHyperlink(XmlWriter w, WorksheetHyperlink link) {
+  final String? id = link.relationshipId;
+  final String? location = link.location;
+  final String? tooltip = link.tooltip;
+  w.empty('hyperlink', <String, String>{
+    'ref': link.ref,
+    'r:id': ?id,
+    if (location != null) 'location': escapeXstring(location),
+    if (tooltip != null) 'tooltip': escapeXstring(tooltip),
+    'display': escapeXstring(link.display),
+  });
+}
+
 /// The `<worksheet>` frame after the rows: `</sheetData>` when [hasRows],
 /// then `sheetProtection`, `autoFilter`, `mergeCells`, `conditionalFormatting`,
 /// `dataValidations`, `hyperlinks`, the page setup's `printOptions`,
@@ -235,17 +254,7 @@ String worksheetTrailer(WorksheetSettings settings, {required bool hasRows}) {
   if (settings.hyperlinks.isNotEmpty) {
     w.start('hyperlinks');
     for (final WorksheetHyperlink link in settings.hyperlinks) {
-      // CT_Hyperlink attribute order: ref, r:id, location, tooltip, display.
-      final String? id = link.relationshipId;
-      final String? location = link.location;
-      final String? tooltip = link.tooltip;
-      w.empty('hyperlink', <String, String>{
-        'ref': link.ref,
-        'r:id': ?id,
-        if (location != null) 'location': escapeXstring(location),
-        if (tooltip != null) 'tooltip': escapeXstring(tooltip),
-        'display': escapeXstring(link.display),
-      });
+      writeHyperlink(w, link);
     }
     w.end();
   }

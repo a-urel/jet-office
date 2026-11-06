@@ -11,14 +11,18 @@
 /// cells). Children of `<sheetData>` other than rows, which the schema does
 /// not allow, are kept too but written after the last row, so their position
 /// among the rows is not kept. Every
-/// other child of `<worksheet>` (`sheetPr`, `sheetViews`, `mergeCells`,
-/// `hyperlinks`, `pageMargins`, `extLst`, ...) is an [OpaqueXml] at its
-/// original position, except the first `<sheetFormatPr>` and the first
-/// `<cols>`, which are typed when plain (`columns.dart`), and the first
-/// `<mergeCells>` ([MergeGroup]); all three are edited as immutable values,
-/// so `swapLayout` undoes an edit of one without touching the others. The
-/// first `<sheetPr>` and the first `<sheetViews>` are typed too, as
-/// [XmlNode]s (`element_node.dart`), and swap the same way.
+/// other child of `<worksheet>` (`dataValidations`, `drawing`, ...) is an
+/// [OpaqueXml] at its original position, except the first
+/// `<sheetFormatPr>` and the first `<cols>`, which are typed when plain
+/// (`columns.dart`), the first `<mergeCells>` ([MergeGroup]) and the first
+/// `<hyperlinks>` (an [ItemGroup] of [LinkEntry]) and the first
+/// `<dataValidations>` (an [ItemGroup] of [XlsxDataValidation]) and the first
+/// run of adjacent `<conditionalFormatting>`s ([CfBlock]); all of these are
+/// edited as immutable values, so `swapLayout` undoes an edit of one
+/// without touching the others. The first element of each of [_nodeSlots]
+/// (`sheetPr`, `sheetViews`, `pageSetup`, `extLst`, ...) is typed too, as an
+/// [XmlNode] (`element_node.dart`), and swaps the same way; so does an
+/// [ItemGroup] (`item_group.dart`), the form of a list of feature entries.
 /// The root keeps its namespace declarations and `mc:Ignorable`.
 ///
 /// Saving recomputes the bookkeeping (spec §4.4): `<dimension ref>` from the
@@ -42,10 +46,12 @@ import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
 import '../../opc/package.dart';
 import '../../xml/utf8_buffer.dart';
+import '../../xml/xml_escape.dart' show decodeXstring;
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
+import '../data_validation.dart' show XlsxDataValidation;
 import '../range.dart';
 import '../raw_cell.dart';
 import '../read/merge_reader.dart' show parseMergeRange;
@@ -57,7 +63,11 @@ import '../read/sheet_reader.dart' show RawRow, RawRowReader;
 import '../warnings.dart';
 import 'cell_store.dart';
 import 'columns.dart';
+import 'conditional_elements.dart';
+import 'conditional_x14.dart';
 import 'element_node.dart';
+import 'item_group.dart';
+import 'validation_elements.dart' show readDataValidation;
 
 /// The children of `<worksheet>` in the order of the schema's
 /// `CT_Worksheet` sequence.
@@ -103,12 +113,66 @@ const List<String> worksheetChildOrder = <String>[
   'extLst',
 ];
 
-/// What is typed inside `<sheetPr>` and `<sheetViews>`.
+/// What is typed inside the elements of [_nodeSlots]. A `<headerFooter>`
+/// has opaque children, which keep their text.
 const NodeShape worksheetNodeShape = <String, Set<String>>{
   'sheetPr': <String>{'tabColor', 'outlinePr', 'pageSetUpPr'},
   'sheetViews': <String>{'sheetView'},
   'sheetView': <String>{'pane', 'selection'},
+  'headerFooter': <String>{},
+  'extLst': <String>{'ext'},
 };
+
+/// The children of `<worksheet>` whose first element is an [XmlNode].
+const Set<String> _nodeSlots = <String>{
+  'sheetPr',
+  'sheetViews',
+  'sheetProtection',
+  'autoFilter',
+  'printOptions',
+  'pageMargins',
+  'pageSetup',
+  'headerFooter',
+  'extLst',
+};
+
+/// A `<hyperlink>`, as the model reads it: the cells it covers and the
+/// attributes that say where it goes, as written (the `location`, `tooltip`
+/// and `display` with `_xHHHH_` decoded).
+///
+/// The relationship id names a relationship of the sheet part, whose target
+/// is the external address; `null` for a link inside the workbook.
+typedef LinkEntry = ({
+  XlsxRange range,
+  String? relationshipId,
+  String? location,
+  String? tooltip,
+  String? display,
+});
+
+/// The [LinkEntry] of the `<hyperlink>` [element], or the problem that keeps
+/// it from being read: no `ref`, or one that is not a range of cells.
+({LinkEntry? value, String? problem}) readLinkEntry(OpaqueXml element) {
+  final XmlPullReader r = readerOf(element);
+  final String? ref = r.getAttribute('ref', namespaceUri: '');
+  final XlsxRange? range = ref == null ? null : parseMergeRange(ref);
+  if (range == null) return (value: null, problem: 'hyperlink');
+  String? text(String name) {
+    final String? value = r.getAttribute(name, namespaceUri: '');
+    return value == null ? null : decodeXstring(value);
+  }
+
+  return (
+    value: (
+      range: range,
+      relationshipId: r.getAttribute('id', namespaceUri: Ns.rel),
+      location: text('location'),
+      tooltip: text('tooltip'),
+      display: text('display'),
+    ),
+    problem: null,
+  );
+}
 
 /// The typed `<dimension>`: its `ref` is recomputed on save.
 final class _Dimension {
@@ -349,6 +413,10 @@ final class WorksheetPart implements PartContent {
       <Object>[],
     );
     final List<Object> children = sheet._children;
+    // The block's list grows while its run of elements lasts, and not after.
+    final List<GroupItem<CfEntry>> conditionalItems = <GroupItem<CfEntry>>[];
+    int conditionalRules = 0;
+    CfBlock? conditional;
     final int rootDepth = r.depth;
     while (r.next()) {
       if (r.eventType == XmlEventType.endElement && r.depth < rootDepth) {
@@ -400,15 +468,65 @@ final class WorksheetPart implements PartContent {
         } else {
           children.add(typed);
         }
-      } else if (main && r.localName == 'sheetPr' && !sheet._hasSheetPr) {
-        sheet._hasSheetPr = true;
-        children.add(XmlNode.read(r, worksheetNodeShape));
-      } else if (main && r.localName == 'sheetViews' && !sheet._hasSheetViews) {
-        sheet._hasSheetViews = true;
+      } else if (main &&
+          _nodeSlots.contains(r.localName) &&
+          sheet._nodesRead.add(r.localName)) {
         children.add(XmlNode.read(r, worksheetNodeShape));
       } else if (main && r.localName == 'mergeCells' && !sheet._hasMergeCells) {
         sheet._hasMergeCells = true;
         children.add(_readMergeCells(r, part, limits, warn));
+      } else if (main && r.localName == 'hyperlinks' && !sheet._hasHyperlinks) {
+        sheet._hasHyperlinks = true;
+        children.add(
+          readItemGroup<LinkEntry>(
+            r,
+            childName: 'hyperlink',
+            limits: limits,
+            part: part,
+            read: readLinkEntry,
+            warn: (String problem) => warn(
+              XlsxWarningCode.featureEntryInvalid,
+              null,
+              detail: problem,
+            ),
+          ),
+        );
+      } else if (main &&
+          r.localName == 'dataValidations' &&
+          !sheet._hasDataValidations) {
+        sheet._hasDataValidations = true;
+        children.add(
+          readItemGroup<XlsxDataValidation>(
+            r,
+            childName: 'dataValidation',
+            limits: limits,
+            part: part,
+            read: readDataValidation,
+            warn: (String problem) => warn(
+              XlsxWarningCode.featureEntryInvalid,
+              null,
+              detail: problem,
+            ),
+          ),
+        );
+      } else if (main &&
+          r.localName == 'conditionalFormatting' &&
+          (conditional == null || identical(children.last, conditional))) {
+        if (conditional == null) {
+          children.add(conditional = CfBlock(conditionalItems));
+        }
+        checkListRoom(conditionalItems.length, limits, part);
+        final OpaqueXml source = OpaqueXml.capture(r);
+        final ({CfEntry? value, String? problem}) read =
+            readConditionalFormatting(
+              source,
+              onRule: () => checkListRoom(conditionalRules++, limits, part),
+            );
+        final String? problem = read.problem;
+        if (problem != null) {
+          warn(XlsxWarningCode.featureEntryInvalid, null, detail: problem);
+        }
+        conditionalItems.add(GroupItem<CfEntry>(read.value, source));
       } else if (main &&
           r.localName == 'sheetData' &&
           sheet._sheetData == null) {
@@ -425,6 +543,16 @@ final class WorksheetPart implements PartContent {
       }
     }
     if (sheet._sheetData == null) sheet._insertSheetData();
+    final XmlNode? extLst = sheet._topNode('extLst');
+    if (extLst != null) {
+      sheet._x14Node = extLst;
+      sheet._x14Block = readX14Block(
+        extLst,
+        warn: (String problem) =>
+            warn(XlsxWarningCode.featureEntryInvalid, null, detail: problem),
+        checkRoom: (int count) => checkListRoom(count, limits, part),
+      );
+    }
     sheet._fileRowLevel = sheet._deepestRowLevel();
     sheet._fileColumnLevel = sheet._deepestColumnLevel();
     return sheet;
@@ -454,8 +582,8 @@ final class WorksheetPart implements PartContent {
   final String? _untypedText;
   final XmlRoot? _root;
 
-  /// [_Dimension], [_SheetFormat], [_SheetData] and [OpaqueXml] children, in
-  /// order.
+  /// [_Dimension], [_SheetFormat], [ColsGroup], [MergeGroup], [XmlNode],
+  /// [ItemGroup], [CfBlock], [_SheetData] and [OpaqueXml] children, in order.
   final List<Object> _children;
   _Dimension? _dimension;
 
@@ -487,13 +615,23 @@ final class WorksheetPart implements PartContent {
   /// kept opaque and its merges are not read.
   bool _hasMergeCells = false;
 
-  /// Whether the part read a SpreadsheetML `<sheetPr>`; a second one is
+  /// Whether the part read a SpreadsheetML `<hyperlinks>`; a second one is
   /// kept opaque.
-  bool _hasSheetPr = false;
+  bool _hasHyperlinks = false;
 
-  /// Whether the part read a SpreadsheetML `<sheetViews>`; a second one is
+  /// Whether the part read a SpreadsheetML `<dataValidations>`; a second one
+  /// is kept opaque.
+  bool _hasDataValidations = false;
+
+  /// The `<extLst>` [_x14Block] is a reading of.
+  XmlNode? _x14Node;
+
+  /// The reading of [_x14Node]; see [x14Block].
+  X14Block? _x14Block;
+
+  /// The elements of [_nodeSlots] the part read; a second one of a name is
   /// kept opaque.
-  bool _hasSheetViews = false;
+  final Set<String> _nodesRead = <String>{};
   _SheetData? _sheetData;
   CellEncoder? _encoder;
 
@@ -618,6 +756,8 @@ final class WorksheetPart implements PartContent {
           c is ColsGroup && after.contains('cols') ||
           c is MergeGroup && after.contains('mergeCells') ||
           c is XmlNode && after.contains(c.localName) ||
+          c is ItemGroup<Object?> && after.contains(c.localName) ||
+          c is CfBlock && after.contains('conditionalFormatting') ||
           c is _SheetData && after.contains('sheetData') ||
           c is OpaqueXml &&
               c.namespaceUri == Ns.main &&
@@ -651,7 +791,7 @@ final class WorksheetPart implements PartContent {
     }
     final XmlWriter w = XmlWriter(buffer)..declaration();
     final XmlRoot root = _root!;
-    root.writeStart(w);
+    writeRootStart(w, root);
     final int rowLevel = _deepestRowLevel();
     final int colLevel = _deepestColumnLevel();
     final int raisedRow = rowLevel > _fileRowLevel ? rowLevel : 0;
@@ -679,6 +819,15 @@ final class WorksheetPart implements PartContent {
         case MergeGroup():
           c.writeTo(w, root.namespaces);
         case XmlNode():
+          c.writeTo(w, root.namespaces);
+        case ItemGroup<Object?>():
+          // Of the groups, only `<dataValidations>` has a `count`.
+          c.writeTo(
+            w,
+            root.namespaces,
+            countAttribute: c.localName == 'dataValidations' ? 'count' : null,
+          );
+        case CfBlock():
           c.writeTo(w, root.namespaces);
         case _SheetData():
           _writeSheetData(w, c, root.namespaces, encoder);
@@ -886,8 +1035,7 @@ final class WorksheetPart implements PartContent {
 
   // -- Sheet properties and views --------------------------------------------
 
-  /// The typed first element of [slot], `sheetPr` or `sheetViews`, or
-  /// `null`.
+  /// The typed first element of [slot], one of [_nodeSlots], or `null`.
   XmlNode? _topNode(String slot) {
     for (final Object c in _children) {
       if (c is XmlNode && c.localName == slot) return c;
@@ -901,9 +1049,9 @@ final class WorksheetPart implements PartContent {
   /// The typed first `<sheetViews>`, or `null`.
   XmlNode? get sheetViews => _topNode('sheetViews');
 
-  /// Makes [node] the first element of [slot] (`sheetPr` or `sheetViews`):
-  /// in place, or in schema position when the part has none; `null`
-  /// removes it. Must run inside `editLayout` of that slot.
+  /// Makes [node] the first element of [slot], one of [_nodeSlots]: in
+  /// place, or in schema position when the part has none; `null` removes it.
+  /// Must run inside `editLayout` of that slot.
   void setNode(String slot, XmlNode? node) {
     final XmlNode? old = _topNode(slot);
     if (old == null) {
@@ -915,16 +1063,125 @@ final class WorksheetPart implements PartContent {
     }
   }
 
+  /// The first `<hyperlinks>` as a group of [LinkEntry]s, or `null` when the
+  /// part has none. Edited as a layout element of slot `hyperlinks`.
+  ItemGroup<LinkEntry>? get hyperlinkGroup {
+    final ItemGroup<Object?>? group = _topGroup('hyperlinks');
+    return group is ItemGroup<LinkEntry> ? group : null;
+  }
+
+  /// The first `<dataValidations>` as a group of [XlsxDataValidation]s, or
+  /// `null` when the part has none. Edited as a layout element of slot
+  /// `dataValidations`.
+  ItemGroup<XlsxDataValidation>? get dataValidationGroup {
+    final ItemGroup<Object?>? group = _topGroup('dataValidations');
+    return group is ItemGroup<XlsxDataValidation> ? group : null;
+  }
+
+  /// The first run of adjacent `<conditionalFormatting>`s, or `null` when
+  /// the part has none. Edited as a layout element of slot
+  /// `conditionalFormatting`.
+  CfBlock? get conditionalBlock {
+    for (final Object c in _children) {
+      if (c is CfBlock) return c;
+    }
+    return null;
+  }
+
+  /// A reading of the first `<extLst>`, or `null` when it holds no Excel 2010
+  /// conditional formats. The element is edited as a layout element of slot
+  /// `extLst`; the reading follows it, an undo included.
+  X14Block? get x14Block {
+    final XmlNode? node = _topNode('extLst');
+    if (!identical(node, _x14Node)) {
+      _x14Node = node;
+      _x14Block = node == null ? null : readX14Block(node);
+    }
+    return _x14Block;
+  }
+
+  /// The elements that hold conditional format rules, as written: those of
+  /// the [CfBlock], those after it, and what an `<extLst>` keeps.
+  Iterable<OpaqueXml> get _ruleElements sync* {
+    for (final Object c in _children) {
+      if (c is CfBlock) {
+        yield* c.items.map((GroupItem<CfEntry> i) => i.source);
+      } else if (c is OpaqueXml &&
+          c.namespaceUri == Ns.main &&
+          (c.localName == 'conditionalFormatting' || c.localName == 'extLst')) {
+        yield c;
+      } else if (c is XmlNode && c.localName == 'extLst') {
+        for (final Object ext in c.children) {
+          if (ext is OpaqueXml) yield ext;
+          if (ext is XmlNode) yield* ext.children.whereType<OpaqueXml>();
+        }
+      }
+    }
+  }
+
+  /// The highest priority of the sheet's conditional format rules, those of
+  /// an element that is not listed and of the `<extLst>` included, or 0 for
+  /// none.
+  int get highestConditionalPriority {
+    int highest = 0;
+    for (final OpaqueXml element in _ruleElements) {
+      final int found = highestRulePriority(element);
+      if (found > highest) highest = found;
+    }
+    return highest;
+  }
+
+  /// Every id of an Excel 2010 rule the part uses, in uppercase: an
+  /// `x14:cfRule`'s and an `x14:id`'s, listed or not.
+  Set<String> get usedX14Ids {
+    final Set<String> ids = <String>{};
+    for (final OpaqueXml element in _ruleElements) {
+      collectX14Ids(element, ids, ids);
+    }
+    return <String>{for (final String id in ids) id.toUpperCase()};
+  }
+
+  /// The ids the Excel 2007 elements that are not listed name.
+  Set<String> get unlistedX14Links {
+    final Set<String> links = <String>{};
+    for (final Object c in _children) {
+      if (c is CfBlock) {
+        for (final GroupItem<CfEntry> item in c.items) {
+          if (item.value == null) {
+            collectX14Ids(item.source, <String>{}, links);
+          }
+        }
+      } else if (c is OpaqueXml &&
+          c.namespaceUri == Ns.main &&
+          c.localName == 'conditionalFormatting') {
+        collectX14Ids(c, <String>{}, links);
+      }
+    }
+    return links;
+  }
+
+  /// The [ItemGroup] of [slot], or `null`.
+  ItemGroup<Object?>? _topGroup(String slot) {
+    for (final Object c in _children) {
+      if (c is ItemGroup<Object?> && c.localName == slot) return c;
+    }
+    return null;
+  }
+
   /// The typed first element of [slot] (`cols`, `sheetFormatPr`,
-  /// `mergeCells`, `sheetPr` or `sheetViews`), or `null` when the part has
-  /// none typed. Elements are immutable, so an edit replaces the element,
-  /// and [swapLayout] undoes it.
+  /// `mergeCells`, one of [_nodeSlots], `dataValidations`, `hyperlinks` or
+  /// `conditionalFormatting`, whose element is the [CfBlock]), or `null` when
+  /// the part has none typed. An element kept as an [OpaqueXml] is not a
+  /// slot's element: it is never swapped, and a repeated one stays where it
+  /// is. Elements are immutable, so an edit replaces the element, and
+  /// [swapLayout] undoes it.
   Object? layoutElement(String slot) => switch (slot) {
     'cols' => _cols,
     'sheetFormatPr' => _format,
     'mergeCells' => _mergeGroup,
-    'sheetPr' => sheetPr,
-    'sheetViews' => sheetViews,
+    'dataValidations' || 'hyperlinks' => _topGroup(slot),
+    'conditionalFormatting' => conditionalBlock,
+    _ when _nodeSlots.contains(slot) => _topNode(slot),
     _ => throw ArgumentError.value(slot, 'slot', 'Not a layout slot.'),
   };
 
@@ -932,7 +1189,11 @@ final class WorksheetPart implements PartContent {
   /// where the schema puts it when [from] is `null` (inserted) or no longer
   /// there; `null` for [to] removes [from]. Only that slot's element is
   /// touched, so edits of different elements swap independently.
-  void swapLayout(String slot, Object? from, Object? to) {
+  ///
+  /// [position], from [layoutPosition], puts an inserted element back where
+  /// it was, which a file out of schema order needs; -1 asks for the schema's
+  /// place.
+  void swapLayout(String slot, Object? from, Object? to, {int position = -1}) {
     final int at = from == null
         ? -1
         : _children.indexWhere((Object c) => identical(c, from));
@@ -940,10 +1201,17 @@ final class WorksheetPart implements PartContent {
       if (at >= 0) _children.removeAt(at);
     } else if (at >= 0) {
       _children[at] = to;
+    } else if (position >= 0 && position <= _children.length) {
+      _children.insert(position, to);
     } else {
       _children.insert(_positionFor(slot), to);
     }
   }
+
+  /// Where [element] is among the part's children, or -1 when it is not
+  /// there, for [swapLayout].
+  int layoutPosition(Object? element) =>
+      _children.indexWhere((Object c) => identical(c, element));
 
   String _dimensionRef() {
     final ({int firstRow, int lastRow, int firstColumn, int lastColumn})? b =

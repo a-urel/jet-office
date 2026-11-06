@@ -1,5 +1,5 @@
-// Tests tool/write_model_sample.dart: the generated workbooks of the W1 and W2
-// Excel checks. It writes files, so it runs on the VM only.
+// Tests tool/write_model_sample.dart: the generated workbooks of the W1, W2
+// and W3 Excel checks. It writes files, so it runs on the VM only.
 @TestOn('vm')
 library;
 
@@ -40,7 +40,7 @@ void main() {
         'model_sample',
       );
       addTearDown(() => temp.deleteSync(recursive: true));
-      final String path = writeModelSample('${temp.path}/out').last;
+      final String path = writeModelSample('${temp.path}/out')[1];
       expect(path, endsWith('w2_generated.xlsx'));
       final Uint8List bytes = File(path).readAsBytesSync();
       book = XlsxWorkbook.open(bytes);
@@ -96,6 +96,92 @@ void main() {
       expect(reader.rowsAt(0).toList(), isNotEmpty);
       expect(reader.warnings, isEmpty);
       expect(book.warnings, isEmpty);
+    });
+  });
+
+  group('w3_generated.xlsx', () {
+    late XlsxWorkbook book;
+    late XlsxSheet report;
+
+    setUpAll(() {
+      final Directory temp = Directory.systemTemp.createTempSync(
+        'model_sample',
+      );
+      addTearDown(() => temp.deleteSync(recursive: true));
+      final List<String> paths = writeModelSample('${temp.path}/out');
+      expect(paths, hasLength(3));
+      expect(paths.last, endsWith('w3_generated.xlsx'));
+      book = XlsxWorkbook.open(File(paths.last).readAsBytesSync());
+      report = book.sheet('Report');
+    });
+
+    test('has a Report and a Locked sheet and opens with no warning', () {
+      expect(book.sheets.map((XlsxSheet s) => s.name), <String>[
+        'Report',
+        'Locked',
+      ]);
+      expect(book.warnings, isEmpty);
+    });
+
+    test('has a header, a filter and a list validation', () {
+      expect(report.cellAt(0, 0)?.value, 'Product');
+      expect(report.styleAt(0, 0)?.font?.bold, isTrue);
+      expect(report.autoFilter, XlsxRange.parse('A1:G7'));
+      final XlsxDataValidation list = report.dataValidations.single;
+      expect(list.type, XlsxValidationType.list);
+      expect(list.ranges, <XlsxRange>[XlsxRange.parse('B2:B7')]);
+    });
+
+    test(
+      'has a cell-value rule, a colour scale, two data bars and an icon set',
+      () {
+        final List<XlsxConditionalRule> rules = <XlsxConditionalRule>[
+          for (final XlsxConditionalFormat f in report.conditionalFormats)
+            ...f.rules,
+        ];
+        expect(rules.map((XlsxConditionalRule r) => r.runtimeType), <Type>[
+          XlsxCellValueRule,
+          XlsxColorScale,
+          XlsxDataBar,
+          XlsxDataBar,
+          XlsxIconSet,
+        ]);
+        expect(
+          <bool>[
+            for (final XlsxDataBar bar in rules.whereType<XlsxDataBar>())
+              bar.showValue,
+          ],
+          <bool>[true, false],
+        );
+      },
+    );
+
+    test('has a link to a web page and one to the second sheet', () {
+      expect(report.hyperlinks, hasLength(2));
+      expect(report.hyperlinkAt(8, 0)?.address, startsWith('https://'));
+      expect(report.hyperlinkAt(9, 0)?.location, startsWith("'Locked'!"));
+    });
+
+    test('has print settings, a name used by a formula and properties', () {
+      expect(report.printArea, <XlsxRange>[XlsxRange.parse('A1:G7')]);
+      expect(report.pageSetup?.orientation, XlsxOrientation.landscape);
+      expect(report.pageSetup?.fitToWidth, 1);
+      expect(report.headerFooter?.oddHeader, isNotNull);
+      expect(report.headerFooter?.oddFooter, isNotNull);
+      expect(
+        book.definedNames.map((XlsxDefinedName n) => n.name),
+        contains('TaxRate'),
+      );
+      expect(report.cellAt(1, 6)?.formula, contains('TaxRate'));
+      expect(book.properties.title, isNotNull);
+      expect(book.properties.custom, isNotEmpty);
+    });
+
+    test('protects the Locked sheet with a password', () {
+      final XlsxSheet locked = book.sheet('Locked');
+      expect(locked.protection, isNotNull);
+      expect(locked.hasStoredPassword, isTrue);
+      expect(report.protection, isNull);
     });
   });
 }

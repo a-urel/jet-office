@@ -766,40 +766,49 @@ void writeDataValidations(XmlWriter w, List<XlsxDataValidation> validations) {
   w.start('dataValidations');
   w.attribute('count', '${validations.length}');
   for (final XlsxDataValidation v in validations) {
-    w.start('dataValidation');
-    if (v.type != XlsxValidationType.any) w.attribute('type', v.type.name);
-    if (v.errorStyle != XlsxValidationErrorStyle.stop) {
-      w.attribute('errorStyle', v.errorStyle.name);
-    }
-    if (v.type.compares && v.comparison != XlsxComparison.between) {
-      w.attribute('operator', v.comparison.name);
-    }
-    if (v.allowBlank) w.attribute('allowBlank', '1');
-    if (!v.showDropDownArrow) w.attribute('showDropDown', '1');
-    if (v.showInputMessage) w.attribute('showInputMessage', '1');
-    if (v.showErrorMessage) w.attribute('showErrorMessage', '1');
-    final String? errorTitle = v.errorTitle;
-    final String? error = v.error;
-    final String? promptTitle = v.promptTitle;
-    final String? prompt = v.prompt;
-    if (errorTitle != null) {
-      w.attribute('errorTitle', escapeXstring(errorTitle));
-    }
-    if (error != null) w.attribute('error', escapeXstring(error));
-    if (promptTitle != null) {
-      w.attribute('promptTitle', escapeXstring(promptTitle));
-    }
-    if (prompt != null) w.attribute('prompt', escapeXstring(prompt));
-    w.attribute('sqref', v.ranges.map((XlsxRange r) => r.ref).join(' '));
-    final String? formula1 = v.formula1;
-    final String? formula2 = v.formula2;
-    if (v.type != XlsxValidationType.any && formula1 != null) {
-      _writeFormula(w, 'formula1', formula1);
-    }
-    if (_takesSecondOperand(v) && formula2 != null) {
-      _writeFormula(w, 'formula2', formula2);
-    }
-    w.end();
+    writeDataValidation(w, v);
+  }
+  w.end();
+}
+
+/// Writes one `dataValidation` element for [v], which the writer has
+/// checked, as [writeDataValidations] writes each of its children.
+///
+/// The model writes a validation it adds to a loaded sheet with this, so
+/// that it is the same text.
+void writeDataValidation(XmlWriter w, XlsxDataValidation v) {
+  w.start('dataValidation');
+  if (v.type != XlsxValidationType.any) w.attribute('type', v.type.name);
+  if (v.errorStyle != XlsxValidationErrorStyle.stop) {
+    w.attribute('errorStyle', v.errorStyle.name);
+  }
+  if (v.type.compares && v.comparison != XlsxComparison.between) {
+    w.attribute('operator', v.comparison.name);
+  }
+  if (v.allowBlank) w.attribute('allowBlank', '1');
+  if (!v.showDropDownArrow) w.attribute('showDropDown', '1');
+  if (v.showInputMessage) w.attribute('showInputMessage', '1');
+  if (v.showErrorMessage) w.attribute('showErrorMessage', '1');
+  final String? errorTitle = v.errorTitle;
+  final String? error = v.error;
+  final String? promptTitle = v.promptTitle;
+  final String? prompt = v.prompt;
+  if (errorTitle != null) {
+    w.attribute('errorTitle', escapeXstring(errorTitle));
+  }
+  if (error != null) w.attribute('error', escapeXstring(error));
+  if (promptTitle != null) {
+    w.attribute('promptTitle', escapeXstring(promptTitle));
+  }
+  if (prompt != null) w.attribute('prompt', escapeXstring(prompt));
+  w.attribute('sqref', v.ranges.map((XlsxRange r) => r.ref).join(' '));
+  final String? formula1 = v.formula1;
+  final String? formula2 = v.formula2;
+  if (v.type != XlsxValidationType.any && formula1 != null) {
+    _writeFormula(w, 'formula1', formula1);
+  }
+  if (_takesSecondOperand(v) && formula2 != null) {
+    _writeFormula(w, 'formula2', formula2);
   }
   w.end();
 }
