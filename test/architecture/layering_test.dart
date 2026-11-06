@@ -2,9 +2,11 @@
 //
 // lib/src/common holds what XLSX and DOCX share: the warning aggregator, the
 // read guard, the ZIP limits and the message locale. It must import neither
-// lib/src/xlsx nor lib/src/docx. lib/src/docx may use the number formatter
-// under lib/src/xlsx/format, and nothing else of lib/src/xlsx. Neither layer
-// may import the public barrel, lib/jet_office.dart, which exports xlsx.
+// lib/src/xlsx nor lib/src/docx. lib/src/docx may import nothing of
+// lib/src/xlsx: the number formatter is in jet_core (decision 0012). Neither
+// layer may import the public barrel, lib/jet_office.dart, which exports
+// xlsx. No file under lib/ may reach into jet_core's `src/`: its public
+// barrel, `package:jet_core/jet_core.dart`, is the only way in.
 @TestOn('vm')
 library;
 
@@ -34,8 +36,8 @@ bool _namesBarrel(String uri) =>
     uri == 'package:jet_office/jet_office.dart' ||
     (!uri.startsWith('package:') && uri.endsWith('jet_office.dart'));
 
-/// Whether [uri] names the number formatter under `lib/src/xlsx/format`.
-bool _namesFormat(String uri) => uri.contains('xlsx/format/');
+/// Whether [uri] reaches into jet_core's private `src/`.
+bool _namesCoreSource(String uri) => uri.startsWith('package:jet_core/src/');
 
 Iterable<String> _uris(LibSource source) =>
     _directive.allMatches(source.code).map((RegExpMatch m) => m.group(1)!);
@@ -53,16 +55,24 @@ List<String> _commonOffenders(Iterable<LibSource> sources) => <String>[
 List<String> _docxOffenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
     if (source.path.startsWith(_docx) &&
-        _uris(source).any(
-          (String uri) =>
-              (_names(uri, 'xlsx') && !_namesFormat(uri)) || _namesBarrel(uri),
-        ))
+        _uris(
+          source,
+        ).any((String uri) => _names(uri, 'xlsx') || _namesBarrel(uri)))
       source.path,
 ];
 
+List<String> _coreSourceOffenders(Iterable<LibSource> sources) => <String>[
+  for (final LibSource source in sources)
+    if (_uris(source).any(_namesCoreSource)) source.path,
+];
+
 void main() {
-  test('lib/src/docx does not import lib/src/xlsx except xlsx/format', () {
+  test('lib/src/docx does not import lib/src/xlsx', () {
     expect(_docxOffenders(libSources()), isEmpty);
+  });
+
+  test('no file under lib/ imports package:jet_core/src/', () {
+    expect(_coreSourceOffenders(libSources()), isEmpty);
   });
 
   test('lib/src/common imports neither xlsx nor docx', () {
@@ -92,9 +102,19 @@ void main() {
         "// import '../xlsx/warnings.dart';\nconst int x = 0;",
       ),
       LibSource('lib/src/docx/f.dart', "import '../xlsx/warnings.dart';"),
+      LibSource('lib/src/docx/g.dart', "import '../xlsx/color.dart';"),
       LibSource(
-        'lib/src/docx/g.dart',
-        "import '../xlsx/format/number_formatter.dart';",
+        'lib/src/docx/m.dart',
+        "import 'package:jet_core/jet_core.dart' show NumberFormatter;",
+      ),
+      LibSource(
+        'lib/src/xlsx/n.dart',
+        "import 'package:jet_core/src/format/formatter.dart';",
+      ),
+      LibSource(
+        'lib/src/xlsx/o.dart',
+        "// import 'package:jet_core/src/format/formatter.dart';\n"
+            "export 'package:jet_core/jet_core.dart';",
       ),
       LibSource(
         'lib/src/docx/read/h.dart',
@@ -117,8 +137,10 @@ void main() {
       'lib/src/common/c.dart',
       'lib/src/common/j.dart',
     ]);
+    expect(_coreSourceOffenders(fixtures), <String>['lib/src/xlsx/n.dart']);
     expect(_docxOffenders(fixtures), <String>[
       'lib/src/docx/f.dart',
+      'lib/src/docx/g.dart',
       'lib/src/docx/read/h.dart',
       'lib/src/docx/k.dart',
       'lib/src/docx/l.dart',

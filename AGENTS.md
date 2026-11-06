@@ -9,8 +9,11 @@ R10 in `docs/xlsx-writer.md`), `0006` (ZIP bytes may differ by platform),
 `0008` (a number format engine that shows values as Excel for Mac does) and
 `0009` (phase 3: a workbook model that opens, generates, edits and saves
 without loss; supersedes part of `0002`) and `0010` (phase 4: a DOCX document
-model, on the same fidelity standard) and `0011` (a new document's parts are
-this library's own, with Word's values) before any design change.
+model, on the same fidelity standard), `0011` (a new document's parts are
+this library's own, with Word's values) and `0012` (the number format engine
+lives in `jet_core`; supersedes `0001`'s one runtime dependency and `0008`'s
+location and names) and `0013` (one repository: a pub workspace, with
+`jet_core` under `packages/`) before any design change.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -18,13 +21,14 @@ knows nothing about either of them.
 
 ## The quality gate
 
-Run from the repository root. A clean checkout must pass all four:
+Run from the repository root. A clean checkout must pass all of it:
 
 ```bash
 dart format --output=none --set-exit-if-changed .
 dart analyze --fatal-infos
 dart test
 dart test -p chrome
+(cd packages/jet_core && dart test && dart test -p chrome)
 ```
 
 The Chrome leg runs every test that is not marked `@TestOn('vm')` in a
@@ -58,11 +62,6 @@ dotnet run --project tool/ooxml_validate -- build/model
 dotnet run --project tool/ooxml_validate -- build/model-resaved
 dart run tool/edit_model.dart build/fixtures build/model-edited
 dotnet run --project tool/ooxml_validate -- build/model-edited
-dart run tool/write_format_oracle.dart build/format_oracle
-LC_ALL=C.UTF-8 soffice --headless \
-  --convert-to 'csv:Text - txt - csv (StarCalc):44,34,UTF8,1,,0,false,true,true,false,false,1' \
-  --outdir build/format_oracle build/format_oracle/*.xlsx
-dart run tool/compare_format_libreoffice.dart build/format_oracle
 LC_ALL=C.UTF-8 soffice --headless --convert-to 'txt:Text (encoded):UTF8' \
   --outdir build/fixtures build/fixtures/*.docx
 dart run tool/compare_text.dart build/fixtures
@@ -196,22 +195,11 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 - `tool/draft_expected_docx.dart` drafts the `<name>.expected.txt` of an owner
   file from the model's own reading and prints a review list; it never
   overwrites an existing text.
-- `tool/compare_format_libreoffice.dart` compares the number formatter with
-  LibreOffice's text "as shown" of the oracle cases
-  (`test/fixtures/owner/number_format/`), exported from the workbooks
-  `tool/write_format_oracle.dart` writes, and lists every difference. It
-  reports and never fails: LibreOffice is a second opinion, not Excel, so
-  it exits 0 with differences (2 only on unusable input) and its CI steps
-  have `continue-on-error`. Its doc comment explains the filter options.
-- The number formatter's oracle is Excel for Mac, not LibreOffice.
-  `test/xlsx/format/oracle_test.dart` (in the gate, VM only) compares it
-  with the owner's Excel CSVs of the oracle workbooks, per region; a region
-  without a manifest entry prints `unverified` and passes. The README under
-  `test/fixtures/owner/number_format/` says how the owner runs them.
-  Excel wins: a mismatch is fixed with a test, or recorded in the test's
-  `knownDifferences` with a reason. Never edit a committed CSV or manifest
-  entry there without the owner (`docs/number-format.md`, "Excel as the
-  oracle").
+- The number formatter's tools and its Excel oracle (the owner's Excel for
+  Mac CSVs, the LibreOffice comparison, the oracle workbook writer) are in
+  `jet_core` (decision 0012); see its `AGENTS.md` and `docs/number-format.md`.
+  `jet_office` keeps `test/xlsx/cell_formatting_test.dart`, which tests the
+  `formatCell` extension and the warning and colour mappings.
 - `docs/warning-messages.md` lists every warning message in `en`, `de` and
   `tr`, for the native-speaker check recorded in `docs/excel-checks.md`. It is
   generated: after a message changes, run
@@ -256,9 +244,9 @@ and for a formula-dense one. `xlsx_read_worst_case_test.dart`
 reads the largest single sheet the default limits accept (about 250 MiB of XML;
 about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file size and
 peak memory per run. `xlsx_format_benchmark_test.dart` times
-`XlsxNumberFormatter` on every cell of the read file and on 100,000 numbers,
-serial dates and `DateTime`s. The quality gate does not run them; run them by
-hand on the VM and in Chrome (`dart test benchmark` runs all five). They record
+`NumberFormatter.formatCell` on every cell of the read file (the benchmark of
+synthetic values is in `jet_core`). The quality gate does not run them; run
+them by hand on the VM and in Chrome (`dart test benchmark` runs all five). They record
 figures and fail on none (`docs/benchmark.md`):
 
 ```bash
@@ -283,12 +271,8 @@ It prints each failure as `seed <s> case <i> (<mutation>): <error>` and
 exits 1 on any. A failure is a reader defect: pin it as a unit test in the
 owning `*_test.dart` with the input minimized by hand, then fix it.
 
-`test/xlsx/format/fuzz_test.dart` does the same for `XlsxNumberFormatter`
-(seeds 1 to 4, 200 cases each: mutated format codes and random values, in
-three locales and both date systems; no throw, `text` of at most 1,000
-characters, `parts` joined equal `text`);
-longer runs with `dart run tool/fuzz_formatter.dart --seeds 1-200 --cases 1000`.
-The rules are in `docs/number-format.md`.
+The number formatter's fuzz test and `tool/fuzz_formatter.dart` are in
+`jet_core` (decision 0012).
 
 `test/xlsx/model/feature_fuzz_test.dart` fuzzes the model's sheet and
 workbook features (seeds 1 to 4, 100 cases each, over the `m3_*` fixtures and
@@ -334,11 +318,14 @@ It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
 - **`package:archive` is reachable only from
   `lib/src/zip/archive_adapter.dart`.** Enforced by
   `test/architecture/archive_isolation_test.dart`.
+- **Runtime dependencies are `archive` and `jet_core`** (decision 0012), the
+  second a package of this workspace (`packages/jet_core`, decision 0013; it has
+  its own `AGENTS.md`). Enforced by `test/architecture/dependencies_test.dart`.
 - **The OPC layer does not know XLSX.** Nothing under `lib/src/opc` imports
   anything under `lib/src/xlsx`, so DOCX can share it (decision 0009).
   Enforced by `test/architecture/opc_isolation_test.dart`.
 - **The format layers depend one way.** Nothing under `lib/src/docx/` imports
-  `lib/src/xlsx/` except `lib/src/xlsx/format/` (the number formatter);
+  `lib/src/xlsx/` (the number formatter is `package:jet_core`, decision 0012);
   nothing under `lib/src/common/` imports `lib/src/xlsx/`, `lib/src/docx/` or
   the barrel; nothing under `lib/src/` imports `lib/jet_office.dart`.
   Enforced by `test/architecture/layering_test.dart`.

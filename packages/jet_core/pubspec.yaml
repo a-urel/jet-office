@@ -1,0 +1,30 @@
+name: jet_core
+description: >-
+  Pure-Dart building blocks shared by the jet_ packages: the number format
+  engine today. It knows no file format, has no dependencies and runs on the
+  web, desktop, mobile and server alike.
+version: 0.1.0-dev.1
+repository: https://github.com/a-urel/jet-office
+issue_tracker: https://github.com/a-urel/jet-office/issues
+# Not published until the extraction ships.
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
+
+# Empty on purpose: jet_core has no runtime dependency (AGENTS.md, "Hard
+# rules"). test/architecture/dependencies_test.dart enforces it.
+dependencies:
+
+dev_dependencies:
+  # Tests and tools only: tool/src/format_oracle.dart zips the Excel oracle
+  # workbooks, and test/tool/support/read_workbook.dart unzips them.
+  archive: ^4.0.9
+  # Lint rules for dart analyze (analysis_options.yaml).
+  lints: ^6.0.0
+  test: ^1.26.0
+  # Tests only: read_workbook.dart parses the oracle workbooks' XML parts to
+  # check they are well-formed and read them back.
+  xml: '>=6.5.0 <8.0.0'

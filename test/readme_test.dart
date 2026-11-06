@@ -73,8 +73,8 @@ XlsxReader reading(XlsxResult out, void Function(String) print) {
 }
 
 void showing(void Function(String) print) {
-  final XlsxNumberFormatter formatter = XlsxNumberFormatter();
-  final XlsxFormattedValue shown = formatter.format(
+  final NumberFormatter formatter = NumberFormatter();
+  final FormattedValue shown = formatter.format(
     XlsxDecimal('-1234.5'),
     numberFormat: '#,##0.00;(#,##0.00)',
   );

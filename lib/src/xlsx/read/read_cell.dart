@@ -11,18 +11,25 @@
 /// @docImport '../warnings.dart';
 library;
 
+import 'package:jet_core/jet_core.dart' show FormatErrorValue;
+
 import '../range.dart';
 
 /// The error value of a cell (`t="e"`), such as `#N/A`.
 ///
 /// The seven [classic] codes have constants. A newer code a file may hold,
 /// such as `#SPILL!` or `#CALC!`, is kept as written and is not [isClassic].
-final class XlsxErrorValue {
+///
+/// An [XlsxErrorValue] is also a jet_core `FormatErrorValue`, so the number
+/// format engine takes it as it is, and it equals a `FormatErrorValue` of the
+/// same code. Its `code` is as the file wrote it, trimmed and XML-string
+/// decoded.
+final class XlsxErrorValue extends FormatErrorValue {
   /// The error value written as [code], such as `#N/A`.
   ///
   /// The reader builds these; the constructor is public so that a caller
   /// can build expected values in its own tests.
-  const XlsxErrorValue(this.code);
+  const XlsxErrorValue(super.code);
 
   /// `#NULL!`: two ranges that do not intersect.
   static const XlsxErrorValue nullError = XlsxErrorValue('#NULL!');
@@ -57,19 +64,9 @@ final class XlsxErrorValue {
     na,
   ];
 
-  /// The code as the file wrote it, trimmed and XML-string decoded.
-  final String code;
-
   /// Whether [code] is one of the [classic] seven (compared exactly, so
   /// `#n/a` is not).
   bool get isClassic => classic.contains(this);
-
-  @override
-  bool operator ==(Object other) =>
-      other is XlsxErrorValue && other.code == code;
-
-  @override
-  int get hashCode => code.hashCode;
 
   @override
   String toString() => 'XlsxErrorValue($code)';

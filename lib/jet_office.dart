@@ -57,13 +57,19 @@
 /// interface, run the reader in an isolate or a web worker too, and send
 /// the values it reads back to the caller.
 ///
-/// [XlsxNumberFormatter] shows a cell value as Excel for Mac does: it
+/// [NumberFormatter], from the jet_core package that holds the number format
+/// engine (decision 0012), shows a cell value as Excel for Mac does: it
 /// applies the cell's number format code with the separators and words of
-/// an [XlsxFormatLocale] and returns an [XlsxFormattedValue], whose text is
-/// what the cell shows and whose parts mark the padding and fill a viewer
-/// lays out. [XlsxNumberFormatter.formatCell] takes an [XlsxReadCell]
-/// directly. A code it cannot read shows as `General`, and the result's
-/// [XlsxFormattedValue.warning] says so.
+/// a [FormatLocale] and returns a [FormattedValue], whose text is what the
+/// cell shows and whose parts mark the padding and fill a viewer lays out.
+/// jet_office re-exports the engine's types, so a caller needs no import of
+/// jet_core. [XlsxCellFormatting.formatCell] takes an [XlsxReadCell]
+/// directly. A code the engine cannot read shows as `General`, and the
+/// result's [FormattedValue.warning] says so; [XlsxFormatWarning.xlsxCode]
+/// gives the [XlsxWarningCode] of that [FormatWarning], and
+/// [XlsxFormatColor.xlsxColor] the [XlsxColor] of a [FormattedValue.color].
+/// [XlsxDecimal] and [XlsxErrorValue] are the engine's [FormatDecimal] and
+/// [FormatErrorValue], so a cell's value goes to it unconverted.
 ///
 /// [XlsxWorkbook] is the workbook model: [XlsxWorkbook.open] reads a file,
 /// within the same [XlsxReadLimits] and with the same [XlsxReadException]s
@@ -145,6 +151,7 @@
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
+/// @docImport 'package:jet_core/jet_core.dart';
 /// @docImport 'src/common/locale.dart';
 /// @docImport 'src/docx/builtin_styles.dart';
 /// @docImport 'src/docx/docx_document.dart';
@@ -160,11 +167,9 @@
 /// @docImport 'src/docx/read_exception.dart';
 /// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
+/// @docImport 'src/xlsx/cell_formatting.dart';
 /// @docImport 'src/xlsx/color.dart';
 /// @docImport 'src/xlsx/column.dart';
-/// @docImport 'src/xlsx/format/format_locale.dart';
-/// @docImport 'src/xlsx/format/formatted_value.dart';
-/// @docImport 'src/xlsx/format/formatter.dart';
 /// @docImport 'src/xlsx/hyperlink.dart';
 /// @docImport 'src/xlsx/limits.dart';
 /// @docImport 'src/xlsx/list_export.dart';
@@ -183,6 +188,19 @@
 /// @docImport 'src/xlsx/xlsx_writer.dart';
 library;
 
+export 'package:jet_core/jet_core.dart'
+    show
+        FormatDecimal,
+        FormatErrorValue,
+        FormatColor,
+        FormatFill,
+        FormatLocale,
+        FormatPadding,
+        FormatPart,
+        FormatText,
+        FormatWarning,
+        FormattedValue,
+        NumberFormatter;
 export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
 export 'src/docx/builtin_styles.dart' show DocxBuiltInStyle;
@@ -249,6 +267,8 @@ export 'src/xlsx/alignment.dart'
         XlsxReadingOrder,
         XlsxVerticalAlignment;
 export 'src/xlsx/border.dart' show XlsxBorder, XlsxBorderSide, XlsxBorderStyle;
+export 'src/xlsx/cell_formatting.dart'
+    show XlsxCellFormatting, XlsxFormatColor, XlsxFormatWarning;
 export 'src/xlsx/color.dart' show XlsxColor, XlsxColorKind;
 export 'src/xlsx/column.dart' show XlsxColumn;
 export 'src/xlsx/comparison.dart' show XlsxComparison;
@@ -290,15 +310,6 @@ export 'src/xlsx/fill.dart'
         XlsxPatternType;
 export 'src/xlsx/font.dart'
     show XlsxFont, XlsxFontScheme, XlsxFontScript, XlsxUnderline;
-export 'src/xlsx/format/format_locale.dart' show XlsxFormatLocale;
-export 'src/xlsx/format/formatted_value.dart'
-    show
-        XlsxFormatFill,
-        XlsxFormatPadding,
-        XlsxFormatPart,
-        XlsxFormatText,
-        XlsxFormattedValue;
-export 'src/xlsx/format/formatter.dart' show XlsxNumberFormatter;
 export 'src/xlsx/header_footer.dart' show XlsxHeaderFooter;
 export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;

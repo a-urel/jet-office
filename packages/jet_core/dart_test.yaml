@@ -1,0 +1,13 @@
+# Test runner settings.
+#
+# Chrome exposes exact `performance.memory` figures only when it starts with
+# --enable-precise-memory-info. The benchmark (benchmark/) reads them; the
+# suite itself does not care.
+override_platforms:
+  chrome:
+    settings:
+      arguments: --enable-precise-memory-info
+
+tags:
+  benchmark:
+    timeout: 10m

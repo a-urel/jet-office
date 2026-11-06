@@ -9,8 +9,8 @@ writers, and `benchmark/xlsx_read_benchmark_test.dart` times `XlsxReader`
 reading the file the workload makes ("Read figures" below). A third,
 `benchmark/xlsx_read_worst_case_test.dart`, reads the largest sheet the
 reader's default limits let through ("Worst case" below). A fourth,
-`benchmark/xlsx_format_benchmark_test.dart`, times `XlsxNumberFormatter` on
-every cell of the read workload ("Format figures" below). A fifth,
+`benchmark/xlsx_format_benchmark_test.dart`, times `NumberFormatter.formatCell`
+on every cell of the read workload ("Format figures" below). A fifth,
 `benchmark/xlsx_model_benchmark_test.dart`, opens that file with
 `XlsxWorkbook`, loads the sheet, reads every row, sets one cell and saves,
 and measures the store of a formula-dense sheet ("Model figures" below).
@@ -440,8 +440,13 @@ chrome | XlsxReader | 19582 ms | 1965092 bytes | peak JS heap peak 2331909207 by
 ## Format figures
 
 The format benchmark (`benchmark/xlsx_format_benchmark_test.dart`) times
-`XlsxNumberFormatter` (en-US, 1900 date system) on the read workload's
-values, and on three kinds of value alone.
+`NumberFormatter.formatCell` (en-US, 1900 date system) on every cell of the
+read workload. Until decision 0012 it also timed three kinds of value alone;
+that part moved with the engine to `jet_core`
+(`benchmark/format_benchmark_test.dart` and `docs/benchmark.md` there, with
+newer figures). The figures below are the run of 2026-10-30, before the move,
+under the old names (`XlsxNumberFormatter`, `XlsxDecimal` as the input), kept
+as history; its `formatCell` line is the one this benchmark still makes.
 
 ### Method
 

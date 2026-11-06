@@ -8,6 +8,10 @@
 /// warnings are aggregated per sheet and code, so a column of 100,000 dirty
 /// cells yields one warning with a count and the first ten references, not
 /// 100,000 objects.
+///
+/// The number format engine, in jet_core, names its own warnings
+/// (`FormatWarning`); `XlsxFormatWarning.xlsxCode` maps them to the
+/// formatting codes here.
 library;
 
 import 'dart:collection';
@@ -149,7 +153,7 @@ enum XlsxWarningCode {
   /// number of ranges skipped; it names no cell.
   mergeRangeInvalid,
 
-  /// Formatting: `XlsxNumberFormatter` cannot read a cell's number format
+  /// Formatting: `NumberFormatter` cannot read a cell's number format
   /// code (an unterminated quote or bracket, more than four sections, more
   /// than two conditions, two conditions in one section, a condition
   /// without a number, a `[ColorN]` with N outside 1 to 56, more than 255
@@ -161,7 +165,7 @@ enum XlsxWarningCode {
   /// the Gregorian (`B2`, a locale tag's calendar), a numeral system
   /// (`[DBNum1]`, `[NatNum1]`, a locale tag's numeral system), a language
   /// no format locale serves (`[$-40C]` in a date) or another bracket
-  /// `XlsxNumberFormatter` does not render. The cell shows with Gregorian
+  /// `NumberFormatter` does not render. The cell shows with Gregorian
   /// dates, Western digits and the default language.
   numberFormatUnsupported,
 

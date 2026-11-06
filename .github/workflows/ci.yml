@@ -48,6 +48,14 @@ jobs:
       - name: Run tests on Chrome
         run: dart test -p chrome
 
+      - name: Run jet_core's tests
+        working-directory: packages/jet_core
+        run: dart test
+
+      - name: Run jet_core's tests on Chrome
+        working-directory: packages/jet_core
+        run: dart test -p chrome
+
   validate:
     name: validate fixtures
     runs-on: ubuntu-24.04
@@ -389,9 +397,36 @@ jobs:
           fi
           echo "All checks rejected the corrupt document."
 
-      # A second opinion on the number formatter, not Excel: LibreOffice's
-      # text "as shown" for each oracle case. The tool lists differences
-      # and exits 0 with any; these steps never fail the job.
+  # A second opinion on the number formatter, not Excel: LibreOffice's text
+  # "as shown" for each oracle case. The tool lists differences and exits 0
+  # with any; this job never fails the run.
+  second-opinion:
+    name: second opinion (LibreOffice)
+    needs: quality-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/jet_core
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.5
+
+      - name: Resolve dependencies
+        run: dart pub get
+
+      - name: Install LibreOffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice-calc
+
       - name: Export the number format oracle as shown with LibreOffice
         continue-on-error: true
         env:
