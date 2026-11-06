@@ -60,8 +60,8 @@ dev_dependencies:
 ''';
     expect(_dependencies(pubspec), <String>['archive', 'foo']);
     expect(
-      _dependencies('name: x\\ndependencies:\\n\\ndev_dependencies:\\n'),
-      (isEmpty),
+      _dependencies('name: x\ndependencies:\n\ndev_dependencies:\n'),
+      isEmpty,
     );
   });
 
@@ -75,10 +75,10 @@ dev_dependencies:
       LibSource('lib/src/b.dart', 'export "package:meta/meta.dart";'),
       LibSource(
         'lib/src/fine.dart',
-        "// import 'package:foo/foo.dart';\\n"
-            "import 'package:archive/archive.dart';\\n"
-            "import 'package:jet_core/jet_core.dart';\\n"
-            "import 'dart:convert';\\n"
+        "// import 'package:foo/foo.dart';\n"
+            "import 'package:archive/archive.dart';\n"
+            "import 'package:jet_core/jet_core.dart';\n"
+            "import 'dart:convert';\n"
             "import 'x.dart';",
       ),
     ];

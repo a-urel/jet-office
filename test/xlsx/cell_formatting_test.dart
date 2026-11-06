@@ -64,7 +64,7 @@ void main() {
       );
       expect(
         formatter.format(XlsxDecimal('1.5'), numberFormat: '0.00').text,
-        ('1.50'),
+        '1.50',
       );
     });
 
