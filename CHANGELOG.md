@@ -97,8 +97,7 @@
   formatter as they are. `formatCell` is an extension on `NumberFormatter`,
   and `FormatWarning.xlsxCode` and `FormatColor.xlsxColor` map the warning and
   the colour back to `XlsxWarningCode` and `XlsxColor`. What Excel shows is
-  unchanged. `jet_core` is a `path: ../jet-core` dependency until its GitHub
-  repository exists.
+  unchanged. `jet_core` is a git dependency pinned to a commit.
 
 ## 0.1.0-dev.1 (unreleased)
 

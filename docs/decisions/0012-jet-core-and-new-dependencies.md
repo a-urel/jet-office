@@ -23,7 +23,7 @@ other things two families share
 (`docs/superpowers/specs/2026-11-04-jet-charts-design.md`, section 4.5).
 `jet_core`'s own record
 (`docs/decisions/0001-jet-core-holds-what-the-families-share.md` in
-`../jet-core`) states the rule for what it holds. This record is
+`a-urel/jet-core`) states the rule for what it holds. This record is
 `jet_office`'s side of the same move.
 
 ## Decision
@@ -61,11 +61,9 @@ own record.**
   and date system is the same as before the move. The oracle test passes in
   `jet_core` with the same `knownDifferences`, and `jet_office`'s tests
   check the extensions and the equality of the value types.
-- **Dependency form.** `pubspec.yaml` has `jet_core: {path: ../jet-core}`.
-  The `jet-core` GitHub repository (`a-urel/jet-core`) does not exist yet.
-  When it does, the dependency becomes a git dependency (`git: url: ...`, with
-  a `ref`), in the same commit that removes the sibling-checkout assumption
-  below. Publishing to pub.dev is decided later and needs its own record.
+- **Dependency form.** `pubspec.yaml` has `jet_core` as a git dependency on
+  `https://github.com/a-urel/jet-core.git`, with a `ref` that pins a commit.
+  Publishing to pub.dev is decided later and needs its own record.
 - **Layering.** The format layers' rule in `AGENTS.md` loses its exception:
   nothing under `lib/src/docx/` imports `lib/src/xlsx/`, because the number
   formatter, the one shared piece, is a package now. DOCX may import
@@ -75,15 +73,10 @@ own record.**
 
 ## Consequences
 
-- **CI cannot pass until the `jet-core` repository exists.** `dart pub get`
-  needs `../jet-core` beside the checkout, and a clean CI checkout has none.
-  No workaround is added to the workflow. When the repository exists, the
-  dependency changes to a git dependency and the workflow needs nothing else.
-- **A worktree needs two things.** A git-ignored `pubspec_overrides.yaml` with
-  an absolute path to `jet-core` makes `dart pub get` work from any directory,
-  but `dart analyze` still checks the relative path of `pubspec.yaml`, so
-  `../jet-core` must exist beside the worktree too (a symlink to the
-  checkout).
+- **A change in `jet_core` reaches `jet_office` when the `ref` moves.** The
+  repository is public, so CI needs no key. To work on both at once, a
+  git-ignored `pubspec_overrides.yaml` can point `jet_core` at a local
+  checkout.
 - A change to how Excel shows a value is made once, in `jet_core`, with the
   unit test that records Excel's text first, and every consumer gets it. It is
   then a manual step to run `jet_office`'s gate against the new `jet_core`

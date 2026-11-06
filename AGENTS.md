@@ -316,9 +316,7 @@ It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
   `lib/src/zip/archive_adapter.dart`.** Enforced by
   `test/architecture/archive_isolation_test.dart`.
 - **Runtime dependencies are `archive` and `jet_core`** (decision 0012), the
-  second by `path: ../jet-core` until its GitHub repository exists. A worktree
-  needs a git-ignored `pubspec_overrides.yaml` and a `../jet-core` symlink.
-  Enforced by `test/architecture/dependencies_test.dart`.
+  second a git dependency pinned to a commit. Enforced by `test/architecture/dependencies_test.dart`.
 - **The OPC layer does not know XLSX.** Nothing under `lib/src/opc` imports
   anything under `lib/src/xlsx`, so DOCX can share it (decision 0009).
   Enforced by `test/architecture/opc_isolation_test.dart`.

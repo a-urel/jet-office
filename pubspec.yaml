@@ -16,14 +16,14 @@ environment:
 # archive and jet_core are the only runtime dependencies (decisions 0001 and
 # 0012). archive's lower bound is the version Monépro and jet_print already
 # lock, so neither gets a forced bump. Only lib/src/zip/archive_adapter.dart
-# may import archive. jet_core, the number format engine, is a sibling
-# repository. A git worktree resolves it with a git-ignored
-# pubspec_overrides.yaml (an absolute path), but dart analyze still checks this
-# relative path, so ../jet-core must exist beside the worktree too (a symlink).
+# may import archive. jet_core, the number format engine, is its own
+# repository, pinned to a commit; move the ref to take a change.
 dependencies:
   archive: ^4.0.9
   jet_core:
-    path: ../jet-core
+    git:
+      url: https://github.com/a-urel/jet-core.git
+      ref: df803e5c620cdbd3c230258824d4aab0fd7c8b54
 
 dev_dependencies:
   lints: ^6.0.0
