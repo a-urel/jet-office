@@ -18,6 +18,10 @@
 /// `<workbookPr date1904="1"/>` in the workbook part for a 1904 workbook and
 /// an [OracleWorkbook.numFmts] entry per overridden built-in id in the styles
 /// part, so a file can carry its own code for id 14, as Excel's files do.
+///
+/// It throws a [FormatException] rather than write a file Excel would
+/// repair: for a cell's text of more than 32,767 characters and for a format
+/// code of more than 255.
 library;
 
 import 'dart:convert';
@@ -31,6 +35,12 @@ const String oracleCasesPath = 'test/fixtures/owner/number_format/cases.json';
 /// The highest number of the "Settled by Excel" list (the Unknowns) in
 /// `docs/number-format.md`.
 const int _maxUnknown = 21;
+
+/// The most characters Excel keeps in a cell's text.
+const int _maxCellText = 32767;
+
+/// The most characters Excel keeps in a number format code.
+const int _maxFormatCode = 255;
 
 final RegExp _idPattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
 final RegExp _checkPattern = RegExp(r'^C\d+[a-z]?$');
@@ -414,7 +424,14 @@ final class _Styles {
     } else if (c.code == 'General') {
       id = 0;
     } else {
-      id = _idOfCode.putIfAbsent(c.code!, () => 164 + _idOfCode.length);
+      final String code = c.code!;
+      if (code.length > _maxFormatCode) {
+        throw FormatException(
+          'case ${c.id}: the format code has ${code.length} characters, '
+          'Excel keeps $_maxFormatCode',
+        );
+      }
+      id = _idOfCode.putIfAbsent(code, () => 164 + _idOfCode.length);
     }
     return _xfOfId.putIfAbsent(id, () {
       _xfFormatIds.add(id);
@@ -591,10 +608,17 @@ String _sheetXml(_Sheet sheet, _Styles styles) {
 }
 
 /// An inline string cell. `xml:space="preserve"` keeps leading and trailing
-/// spaces.
-String _textCell(String ref, String text, {String style = ''}) =>
-    '<c r="$ref"$style t="inlineStr"><is>'
-    '<t xml:space="preserve">${_text(text)}</t></is></c>';
+/// spaces. Throws a [FormatException] for a text over 32,767 characters.
+String _textCell(String ref, String text, {String style = ''}) {
+  if (text.length > _maxCellText) {
+    throw FormatException(
+      '$ref: the text has ${text.length} characters, Excel keeps '
+      '$_maxCellText',
+    );
+  }
+  return '<c r="$ref"$style t="inlineStr"><is>'
+      '<t xml:space="preserve">${_text(text)}</t></is></c>';
+}
 
 /// XML 1.0 forbids U+0000 to U+001F except tab, LF and CR, U+FFFE, U+FFFF
 /// and lone surrogates; the writer drops them, as jet_office's does.

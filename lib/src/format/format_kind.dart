@@ -6,7 +6,7 @@
 /// It extends the idea of phase 1's `isDateFormat` (`number_format.dart`),
 /// which asked whether a code shows a date or a time anywhere, by looking at
 /// each section of the code on its own and by telling dates from times and
-/// elapsed times. Since decision 0008 `isDateFormat` is built on it, and both
+/// elapsed times. Since jet_office's decision 0008 `isDateFormat` is built on it, and both
 /// read the tokens of `parseFormatCode`.
 library;
 

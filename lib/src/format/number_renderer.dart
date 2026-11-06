@@ -3,13 +3,12 @@
 /// Moved from jet_office's lib/src/xlsx/format/ at commit 632115d; written
 /// there, not ported from Quds.
 ///
-/// [renderNumber]
-/// lays a number out in the section [chooseNumberSection] picked: digit
-/// placeholders, grouping and scaling commas, percent signs, literals,
-/// padding and fill (spec §5.2). Scaling and rounding work on the
-/// number's decimal digits ([ExcelNumber.shift], [ExcelNumber.toFixed]),
-/// never on a `double`, so the result is exact and the same on the VM and
-/// in JavaScript. The one exception is a fraction's continued-fraction
+/// [renderNumber] lays a number out in the section [chooseNumberSection]
+/// picked: digit placeholders, grouping and scaling commas, percent signs,
+/// literals, padding and fill (spec §5.2). Scaling and rounding work on the
+/// number's decimal digits ([ExcelNumber.shift], [ExcelNumber.toFixed]), never
+/// on a `double`, so the result is exact and the same on the VM and in
+/// JavaScript. The one exception is a fraction's continued-fraction
 /// approximation, which runs on the fractional part as a `double`; IEEE
 /// arithmetic gives the same result on both.
 library;

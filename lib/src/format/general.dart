@@ -3,12 +3,11 @@
 /// Moved from jet_office's lib/src/xlsx/format/ at commit 632115d; written
 /// there, not ported from Quds.
 ///
-/// [renderGeneral]
-/// shows a number in at most `width` characters, a minus included
-/// (ECMA-376 §18.8.30, spec §5.3): an integer that fits in full, else
-/// fixed or scientific notation, whichever shows more significant digits
-/// (a tie is fixed), as Excel for Mac does. Rounding works on the number's decimal digits
-/// ([ExcelNumber.toFixed], [ExcelNumber.toSignificant]), never on a
+/// [renderGeneral] shows a number in at most `width` characters, a minus
+/// included (ECMA-376 §18.8.30, spec §5.3): an integer that fits in full, else
+/// fixed or scientific notation, whichever shows more significant digits (a tie
+/// is fixed), as Excel for Mac does. Rounding works on the number's decimal
+/// digits ([ExcelNumber.toFixed], [ExcelNumber.toSignificant]), never on a
 /// `double`.
 library;
 

@@ -3,12 +3,11 @@
 /// Moved from jet_office's lib/src/xlsx/format/ at commit 632115d; written
 /// there, not ported from Quds.
 ///
-/// A format code can
-/// ask for space as wide as a character (`_)`) and for a character repeated
-/// to fill the cell (`* `). Neither has a fixed width in plain text, so the
-/// renderers return the result as parts: text, padding and fill, in the
-/// order shown. Joined with each padding as one space and each fill left
-/// out, the parts are the result's text. [FormattedValue] holds both,
+/// A format code can ask for space as wide as a character (`_)`) and for a
+/// character repeated to fill the cell (`* `). Neither has a fixed width in
+/// plain text, so the renderers return the result as parts: text, padding and
+/// fill, in the order shown. Joined with each padding as one space and each
+/// fill left out, the parts are the result's text. [FormattedValue] holds both,
 /// with the section's color and what Excel would show differently.
 library;
 

@@ -3,14 +3,13 @@
 /// Moved from jet_office's lib/src/xlsx/format/ at commit 632115d; written
 /// there, not ported from Quds.
 ///
-/// [renderDate] lays
-/// a serial out in a section that has date or time tokens (spec §5.4): it
-/// reads the serial's calendar fields with [serialToFields] and shows each
-/// token from them, with month and day names from the renderer's locale
-/// or the one a locale tag selects. Literals, `,`, `%`, a locale tag's
+/// [renderDate] lays a serial out in a section that has date or time tokens
+/// (spec §5.4): it reads the serial's calendar fields with [serialToFields] and
+/// shows each token from them, with month and day names from the renderer's
+/// locale or the one a locale tag selects. Literals, `,`, `%`, a locale tag's
 /// currency, padding and fill show as the number renderer shows them.
-/// [sectionWarning] tells which sections ask for a calendar, numeral
-/// system or language the engine does not render.
+/// [sectionWarning] tells which sections ask for a calendar, numeral system or
+/// language the engine does not render.
 library;
 
 import 'excel_date.dart';

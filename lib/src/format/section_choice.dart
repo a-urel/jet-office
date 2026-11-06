@@ -3,18 +3,16 @@
 /// Moved from jet_office's lib/src/xlsx/format/ at commit 632115d; written
 /// there, not ported from Quds.
 ///
-/// A code holds up to
-/// four sections, for positive numbers, negative numbers, zero and text.
-/// The text section is always the last: the fourth, or with fewer the last
-/// one when it holds `@` and has no condition (SheetJS SSF's rule; Microsoft
-/// puts text last). Numbers then choose among the sections before it, by
-/// the rules for that many sections. With `[...]` conditions on the first
-/// two sections the implied rules are replaced: the first section whose
-/// condition holds wins, then the second if it holds or has none, then the
-/// third. A code whose only section has a condition is read as that
-/// section followed by `General`, as Excel repairs `[>100]0` to
-/// `[>100]0;General`. The rules follow Excel for Mac
-/// as described in `docs/decisions/0008`.
+/// A code holds up to four sections, for positive numbers, negative numbers,
+/// zero and text. The text section is always the last: the fourth, or with
+/// fewer the last one when it holds `@` and has no condition (SheetJS SSF's
+/// rule; Microsoft puts text last). Numbers then choose among the sections
+/// before it, by the rules for that many sections. With `[...]` conditions on
+/// the first two sections the implied rules are replaced: the first section
+/// whose condition holds wins, then the second if it holds or has none, then
+/// the third. A code whose only section has a condition is read as that section
+/// followed by `General`, as Excel repairs `[>100]0` to `[>100]0;General`. The
+/// rules follow Excel for Mac, as jet_office's decision 0008 describes.
 library;
 
 import 'excel_number.dart';

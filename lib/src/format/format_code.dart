@@ -3,11 +3,10 @@
 /// Moved from jet_office's lib/src/xlsx/format/ at commit 632115d; written
 /// there, not ported from Quds.
 ///
-/// [parseFormatCode]
-/// splits a code such as `#,##0.00;[Red]-#,##0.00` into sections and each
-/// section into tokens, in one left-to-right scan with no regular
-/// expression. The classifier and the renderers read its output; nothing
-/// else in the library interprets a format code.
+/// [parseFormatCode] splits a code such as `#,##0.00;[Red]-#,##0.00` into
+/// sections and each section into tokens, in one left-to-right scan with no
+/// regular expression. The classifier and the renderers read its output;
+/// nothing else in the library interprets a format code.
 library;
 
 import 'excel_number.dart';

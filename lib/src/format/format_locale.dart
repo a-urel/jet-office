@@ -5,8 +5,8 @@
 ///
 /// A file's format codes are written in an invariant syntax (`.` for the
 /// decimal point, `,` for grouping, English words); what a cell shows depends
-/// on the region of the Excel that opens it. [FormatLocale] holds that
-/// region's separators, names and built-in codes (spec §5.5, §6.1).
+/// on the region of the Excel that opens it. [FormatLocale] holds that region's
+/// separators, names and built-in codes (spec §5.5, §6.1).
 library;
 
 /// Formatting data for one region: separators, month and day names, the

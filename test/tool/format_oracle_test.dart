@@ -5,6 +5,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:test/test.dart';
 
 import '../../tool/src/format_oracle.dart';
@@ -71,6 +72,28 @@ ReadCell _cellA(ReadWorkbook book, String sheet, int rowIndex) => book
     .singleWhere((ReadRow r) => r.index == rowIndex)
     .cells
     .singleWhere((ReadCell c) => c.column == 0);
+
+/// [bytes] with the part [name] replaced by [text], or dropped for `null`.
+Uint8List _withPart(Uint8List bytes, String name, String? text) {
+  final Archive source = ZipDecoder().decodeBytes(bytes);
+  final Archive out = Archive();
+  for (final ArchiveFile file in source.files) {
+    if (file.name == name) {
+      if (text != null) out.add(ArchiveFile.bytes(name, utf8.encode(text)));
+    } else {
+      out.add(ArchiveFile.bytes(file.name, file.content));
+    }
+  }
+  return Uint8List.fromList(ZipEncoder().encodeBytes(out));
+}
+
+String _part(Uint8List bytes, String name) => utf8.decode(
+  ZipDecoder()
+      .decodeBytes(bytes)
+      .files
+      .singleWhere((f) => f.name == name)
+      .content,
+);
 
 void main() {
   group('parseOracleCases', () {
@@ -545,6 +568,156 @@ void main() {
       expect(buildOracleWorkbooks(only1904).keys, <String>[
         'format_oracle_1904.xlsx',
       ]);
+    });
+
+    test('an empty manual cell keeps the case format, or is left out', () {
+      final OracleCases manual = parseOracleCases(
+        _doc(<Map<String, Object?>>[
+          _case('a-01', <String, Object?>{
+            'value': <String, Object?>{'manual': '=NA()', 'error': '#N/A'},
+            'code': '0.00',
+            'eyeOnly': true,
+          }),
+          _case('a-02', <String, Object?>{
+            'value': <String, Object?>{'manual': '=NA()', 'error': '#N/A'},
+            'code': 'General',
+            'eyeOnly': true,
+          }),
+        ]),
+      );
+      final ReadWorkbook reader = ReadWorkbook(
+        buildOracleWorkbooks(manual)['format_oracle.xlsx']!,
+      );
+      expect(reader.problems, isEmpty);
+      final ReadCell styled = _cellA(reader, 'eye', 1);
+      expect(styled.value, isNull);
+      expect(styled.numberFormat, '0.00');
+      // With the default format the cell would carry nothing: no cell.
+      final ReadRow plain = reader
+          .sheet('eye')
+          .rows
+          .singleWhere((ReadRow r) => r.index == 2);
+      expect(plain.cells.where((ReadCell c) => c.column == 0), isEmpty);
+    });
+
+    test('text of 32,767 characters is written; one more throws', () {
+      OracleCases withText(String text, {String note = 'n'}) =>
+          parseOracleCases(
+            _doc(<Map<String, Object?>>[
+              _case('a-01', <String, Object?>{
+                'value': <String, Object?>{'s': text},
+                'note': note,
+              }),
+            ]),
+          );
+      final ReadWorkbook reader = ReadWorkbook(
+        buildOracleWorkbooks(withText('x' * 32767))['format_oracle.xlsx']!,
+      );
+      expect(reader.problems, isEmpty);
+      expect(_cellA(reader, 'cases', 1).value, 'x' * 32767);
+      expect(
+        () => buildOracleWorkbooks(withText('x' * 32768)),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => buildOracleWorkbooks(withText('x', note: 'n' * 32768)),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('a code of 255 characters is written; 256 throws', () {
+      OracleCases withCode(int length) => parseOracleCases(
+        _doc(<Map<String, Object?>>[
+          _case('a-01', <String, Object?>{'code': '#' * length}),
+        ]),
+      );
+      final ReadWorkbook reader = ReadWorkbook(
+        buildOracleWorkbooks(withCode(255))['format_oracle.xlsx']!,
+      );
+      expect(_cellA(reader, 'cases', 1).numberFormat, '#' * 255);
+      expect(
+        () => buildOracleWorkbooks(withCode(256)),
+        throwsA(isA<FormatException>()),
+      );
+    });
+  });
+
+  group('ReadWorkbook.problems', () {
+    final Uint8List good = buildOracleWorkbooks(
+      parseOracleCases(
+        _doc(<Map<String, Object?>>[
+          _case('a-01', <String, Object?>{'code': '0.000'}),
+        ]),
+      ),
+    )['format_oracle.xlsx']!;
+
+    test('a sound workbook has none', () {
+      expect(ReadWorkbook(good).problems, isEmpty);
+    });
+
+    test('a part that is not well-formed XML is flagged', () {
+      final Uint8List bad = _withPart(good, 'xl/styles.xml', '<styleSheet>');
+      expect(
+        ReadWorkbook(bad).problems,
+        contains(startsWith('xl/styles.xml: not well-formed XML')),
+      );
+    });
+
+    test('a root relationship that is not the workbook is flagged', () {
+      final Uint8List bad = _withPart(
+        good,
+        '_rels/.rels',
+        _part(good, '_rels/.rels').replaceAll('/officeDocument"', '/other"'),
+      );
+      expect(
+        ReadWorkbook(bad).problems,
+        contains('_rels/.rels: no officeDocument relationship'),
+      );
+      final Uint8List none = _withPart(good, '_rels/.rels', null);
+      expect(
+        ReadWorkbook(none).problems,
+        contains('_rels/.rels: no officeDocument relationship'),
+      );
+    });
+
+    test('a custom number format id with no numFmt is flagged', () {
+      final Uint8List bad = _withPart(
+        good,
+        'xl/styles.xml',
+        _part(
+          good,
+          'xl/styles.xml',
+        ).replaceAll(RegExp(r'<numFmts.*?</numFmts>'), ''),
+      );
+      expect(
+        ReadWorkbook(bad).problems,
+        contains('xl/styles.xml: numFmtId 164 has no numFmt'),
+      );
+    });
+
+    test('a style index out of range is flagged', () {
+      final Uint8List bad = _withPart(
+        good,
+        'xl/worksheets/sheet1.xml',
+        _part(
+          good,
+          'xl/worksheets/sheet1.xml',
+        ).replaceFirst('<c r="A2" s="1">', '<c r="A2" s="9">'),
+      );
+      expect(
+        ReadWorkbook(bad).problems,
+        contains('cases A2: style 9 out of range'),
+      );
+    });
+
+    test('a relationship to a missing part is flagged', () {
+      final Uint8List bad = _withPart(good, 'xl/styles.xml', null);
+      expect(
+        ReadWorkbook(bad).problems,
+        contains(
+          'xl/_rels/workbook.xml.rels: rId2 points at missing xl/styles.xml',
+        ),
+      );
     });
   });
 }

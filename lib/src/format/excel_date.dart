@@ -3,13 +3,11 @@
 /// Moved from jet_office's lib/src/xlsx/format/ at commit 632115d; written
 /// there, not ported from Quds.
 ///
-/// A date section
-/// shows a serial's calendar fields (spec §5.4): [serialToFields] rounds
-/// the serial to the second, or to the fraction of a second the section
-/// shows, and splits it into a date, a time and a weekday.
-/// [dateTimeToSerial] and [durationToSerial] turn the caller's `DateTime`
-/// and `Duration` values into serials first, so every value takes the same
-/// path.
+/// A date section shows a serial's calendar fields (spec §5.4):
+/// [serialToFields] rounds the serial to the second, or to the fraction of a
+/// second the section shows, and splits it into a date, a time and a weekday.
+/// [dateTimeToSerial] and [durationToSerial] turn the caller's `DateTime` and
+/// `Duration` values into serials first, so every value takes the same path.
 ///
 /// No `double` arithmetic touches a serial: the rounding is `BigInt` on the
 /// serial's decimal digits, and every `int` stays below 2^53, so the result

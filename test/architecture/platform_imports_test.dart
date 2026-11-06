@@ -1,6 +1,6 @@
 // Architecture guard: lib/ stays pure Dart and runs everywhere.
 //
-// jet_core is bytes in, bytes out (AGENTS.md, "Pure Dart, web-safe";
+// jet_core is values in, text out (AGENTS.md, "Pure Dart, web-safe"; its
 // decision 0001). No file under lib/ may import or export a library that is
 // missing on the web, missing on the VM, or ties the package to Flutter.
 @TestOn('vm')

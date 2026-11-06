@@ -3,12 +3,11 @@
 /// Moved from jet_office's lib/src/xlsx/format/ at commit 632115d; written
 /// there, not ported from Quds.
 ///
-/// The formatter
-/// resolves a cell's number format code from its id, its code and the
-/// format locale, parses it once into a bounded cache, renders the value
+/// The formatter resolves a cell's number format code from its id, its code and
+/// the format locale, parses it once into a bounded cache, renders the value
 /// with [renderValue] and falls back to `General` with
-/// [FormatWarning.invalidCode] when the code cannot be read or
-/// would show too much.
+/// [FormatWarning.invalidCode] when the code cannot be read or would show too
+/// much.
 ///
 /// @docImport 'format_value.dart';
 library;
@@ -34,8 +33,7 @@ final class NumberFormatter {
   /// The region whose separators, names and words the results use.
   final FormatLocale locale;
 
-  /// Whether date serials count from 1904, as a file's date system
-  /// says.
+  /// Whether date serials count from 1904, as the file's date system says.
   final bool date1904;
 
   static const int _cacheLimit = 1024;
@@ -54,8 +52,8 @@ final class NumberFormatter {
   /// The code is resolved as Excel does in [locale]:
   ///
   /// - Ids 5–8, 14–22 and 37–44 differ by locale. Without [numberFormat],
-  ///   or with the en-US code of ECMA-376 (`mm-dd-yy` for id 14, as the
-  ///   a file gives it), they use [FormatLocale.builtinCodes]; another
+  ///   or with the en-US code of ECMA-376 (`mm-dd-yy` for id 14, as a
+  ///   file gives it), they use [FormatLocale.builtinCodes]; another
   ///   code is used as written.
   /// - Otherwise [numberFormat] wins over [numberFormatId]. Without it,
   ///   id 0 is `General` and ids 1–4, 9–13 and 45–49 use the ECMA-376 code.

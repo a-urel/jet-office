@@ -1,9 +1,10 @@
 // Architecture guard: one tokenizer of number format codes.
 //
-// A number format code is scanned in exactly one place (decision 0008),
-// `parseFormatCode`; the classifier and the renderers read its tokens. A
-// scanner of its own needs the markers `AM/PM` and `A/P` as literals, so no
-// file under lib/ but the parser may hold one.
+// A number format code is scanned in exactly one place (jet_office's
+// decision 0008, where the engine was written), `parseFormatCode`; the
+// classifier and the renderers read its tokens. A scanner of its own needs
+// the markers `AM/PM` and `A/P` as literals, so no file under lib/ but the
+// parser may hold one.
 @TestOn('vm')
 library;
 

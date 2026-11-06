@@ -3,14 +3,12 @@
 /// Moved from jet_office's lib/src/xlsx/format/ at commit 632115d; written
 /// there, not ported from Quds.
 ///
-/// [renderValue]
-/// takes a value of any supported type, picks the section that applies
-/// ([chooseNumberSection], [chooseTextSection]) and hands numbers to
-/// [renderNumber], or to [renderDate] when the section has date or time
-/// tokens. A `DateTime` or `Duration` becomes its serial first
-/// ([dateTimeToSerial], [durationToSerial]) and then takes the number
-/// path. Text is laid out here; booleans and errors ignore the code and
-/// read their words from the locale.
+/// [renderValue] takes a value of any supported type, picks the section that
+/// applies ([chooseNumberSection], [chooseTextSection]) and hands numbers to
+/// [renderNumber], or to [renderDate] when the section has date or time tokens.
+/// A `DateTime` or `Duration` becomes its serial first ([dateTimeToSerial],
+/// [durationToSerial]) and then takes the number path. Text is laid out here;
+/// booleans and errors ignore the code and read their words from the locale.
 library;
 
 import 'date_renderer.dart';

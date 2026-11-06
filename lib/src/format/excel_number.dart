@@ -5,8 +5,8 @@
 ///
 /// [ExcelNumber.from] turns a file's digits or a `num` into the number Excel
 /// shows (spec §5.2, step 1); the renderers then scale and round it on its
-/// decimal digits (step 2), never on a `double`, so the result is exact and
-/// the same on the VM and in JavaScript.
+/// decimal digits (step 2), never on a `double`, so the result is exact and the
+/// same on the VM and in JavaScript.
 library;
 
 import 'format_value.dart';

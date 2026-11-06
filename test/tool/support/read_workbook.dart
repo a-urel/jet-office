@@ -6,8 +6,14 @@
 /// any library that reads XLSX. It knows only what the tests ask: the sheet
 /// names, the date system, each sheet's rows and column widths, each cell's
 /// value and number format, and [ReadWorkbook.problems], the structural
-/// defects of the package (a part that is not well-formed XML, a relationship
-/// or content type pointing nowhere, a style index out of range).
+/// defects of the package: a part that is not well-formed XML, a missing
+/// root relationship to the workbook, a relationship or content type pointing
+/// nowhere, a style index out of range, a custom number format id with no
+/// `numFmt`.
+///
+/// It is a sanity check, not a validator. It does not check element order,
+/// attribute values or any other rule of the schema, and no schema validation
+/// runs in the gate: whether Excel opens a workbook is the owner's check.
 library;
 
 import 'dart:convert';
@@ -138,6 +144,19 @@ final class ReadWorkbook {
       }
     }
 
+    // The package's root relationship names the workbook part.
+    final bool hasWorkbookRel =
+        parts['_rels/.rels']?.rootElement
+            .findElements('Relationship')
+            .any(
+              (XmlElement r) =>
+                  (r.getAttribute('Type') ?? '').endsWith('/officeDocument'),
+            ) ??
+        false;
+    if (!hasWorkbookRel) {
+      problems.add('_rels/.rels: no officeDocument relationship');
+    }
+
     // Relationships: every target is a part.
     final Map<String, String> sheetTargets = <String, String>{};
     for (final String relsName in parts.keys.where(
@@ -181,6 +200,12 @@ final class ReadWorkbook {
                 .expand((XmlElement e) => e.findElements('xf')))
           int.parse(xf.getAttribute('numFmtId')!),
     ];
+
+    for (final int id in xfIds.toSet()) {
+      if (id >= 164 && !codes.containsKey(id)) {
+        problems.add('xl/styles.xml: numFmtId $id has no numFmt');
+      }
+    }
 
     final List<ReadSheet> sheets = <ReadSheet>[];
     if (workbook != null) {
