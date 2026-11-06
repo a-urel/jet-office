@@ -2,7 +2,8 @@
 
 Excel's automatic minimum, maximum and major unit are not documented and are not
 in the file. Excel recomputes them, and they can be read from it by script. This
-page says what is known of them; the design is section 4.6 of the charts spec.
+page says what is known of them; the chart phase's record is
+[decision 0014](../../../docs/decisions/0014-chart-phase-and-drawingml-layer.md).
 
 ## The question
 
@@ -12,8 +13,8 @@ are one step. J2's scale design starts from the answer.
 
 ## The oracle
 
-Excel for Mac is the oracle, and only the owner runs it, as for the number format
-engine. `test/fixtures/owner/axis/` holds the case list and the results; its
+Excel for Mac is the oracle, and only the owner's run counts as a result, as for
+the number format engine. `test/fixtures/owner/axis/` holds the case list and the results; its
 `README.md` describes the files, and `TALIMATLAR.md` is the owner's steps.
 
 From the repository root:

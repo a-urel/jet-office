@@ -57,7 +57,7 @@ void main() {
       expect(_regionProblems(dir.path, cases, entry), isEmpty);
     });
 
-    test('a bad CSV has', () {
+    test('a bad CSV has problems', () {
       File('${dir.path}/${entry.csv}').writeAsStringSync(axisCsvHeader);
       expect(_regionProblems(dir.path, cases, entry), hasLength(60));
     });

@@ -397,6 +397,22 @@ void _checkChart(XmlDocument chart, AxisCase kase) {
     expect(chart.findAllElements(absent, namespaceUri: _c), isEmpty);
   }
 
+  final XmlElement ser = chart.findAllElements('ser', namespaceUri: _c).single;
+  expect(ser.childElements.map((XmlElement e) => e.localName).take(4), <String>[
+    'idx',
+    'order',
+    'spPr',
+    'invertIfNegative',
+  ]);
+  expect(
+    ser
+        .getElement('c:spPr')!
+        .findAllElements('srgbClr', namespaceUri: _a)
+        .single
+        .getAttribute('val'),
+    '156082',
+  );
+
   final XmlElement val = chart.findAllElements('val', namespaceUri: _c).single;
   final int n = kase.set.values.length;
   expect(

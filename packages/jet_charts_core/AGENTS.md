@@ -48,7 +48,7 @@ Never report work as done without running these and reading the output.
 ## The Excel oracle
 
 Excel's automatic axis is read from Excel for Mac, not LibreOffice, and only the
-owner runs it. The results are committed under `test/fixtures/owner/axis/`; the
+owner's run counts as a result. The results are committed under `test/fixtures/owner/axis/`; the
 README there describes them, `TALIMATLAR.md` is the owner's steps, and
 `docs/axis-scaling.md` holds the question and the findings.
 

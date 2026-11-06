@@ -1,8 +1,8 @@
 # Eksen oracle'ı: Excel'de çalıştırma
 
 Bu adımlar, Excel for Mac'in otomatik değer ekseninin grafik yüksekliğine ve yazı
-boyutuna bağlı olup olmadığını öğrenmek içindir. Excel'i yalnızca sen
-çalıştırıyorsun. Bir bölge (`tr-TR`) soruyu yanıtlamaya yeter. Bölge ve dil
+boyutuna bağlı olup olmadığını öğrenmek içindir. Yalnızca senin çalıştırman sonuç
+sayılır. Bir bölge (`tr-TR`) soruyu yanıtlamaya yeter. Bölge ve dil
 ayarlarını değiştirmen gerekmiyor.
 
 Komutların hepsi deponun kök klasöründen çalışır.
@@ -26,22 +26,33 @@ Komutların hepsi deponun kök klasöründen çalışır.
    ```
 
    Excel öne gelir, dosyayı salt okunur açar, sayfalar sırayla görünür ve dosya
-   kaydedilmeden kapanır. Bir iki dakika sürebilir; bu sırada Excel'e dokunma.
+   kaydedilmeden kapanır. Yaklaşık bir dakika sürer; bu sırada Excel'e dokunma.
    Beklenen çıktı, satır sayısı 60 olarak: `60 rows written to ...`
 
-   Ekrana şu sorular gelebilir:
+   Ekrana şu sorular gelebilir (metinleri yaklaşıktır, sende biraz farklı olabilir):
 
-   - **"Terminal", "Microsoft Excel" uygulamasını denetlemek istiyor:** İzin Ver
-     de. Yalnızca ilk seferde sorulur.
+   - **"Terminal", "Microsoft Excel" uygulamasını denetlemek istiyor:** **İzin
+     Ver**'e tıkla. Yalnızca ilk seferde sorulur.
    - **Excel'in dosya erişimi sorusu** (Erişim İzni Ver, ya da dosyayı seçmeni
      isteyen bir pencere): izin ver ya da `axis_oracle.xlsx` dosyasını seç. Betik
      bunun için on dakika bekler.
    - **Excel dosyada sorun bulduğunu söylerse** (onarım önerisi): kabul etme, dur
-     ve iletisini aynen yaz. Bu, yazıcının hatasıdır.
+     ve iletisini aynen yaz. Bu, çalışma kitabını yazan kodun hatasıdır.
 
-4. İstersen `build/axis_oracle/axis_oracle.xlsx` dosyasını Excel'de aç ve bak: her
-   sayfada beş grafik var, üst üste binmiyorlar. Görünüş önemli değil: dosyada tema
-   yok, çubuklar soluk, farklı renkte ya da görünmez olabilir. Kaydetmeden kapat.
+4. Gözle denetle; bu adımı atlama. Üç grafiğin satırını yazdır:
+
+   ```bash
+   grep -E '^(d01-h600-f10|d01-h300-f18|d08-h300-f18),' build/axis_oracle/axis_oracle.tr-TR.csv
+   ```
+
+   Sonra `build/axis_oracle/axis_oracle.xlsx` dosyasını Excel'de aç. `d01` sayfasında
+   yukarıdan üçüncü grafik `d01-h600-f10`, beşincisi `d01-h300-f18`; `d08` sayfasında
+   beşincisi `d08-h300-f18`. Her birinde değer ekseninin en üstteki etiketi `max`
+   sütunuyla, iki komşu etiket arasındaki fark `major` sütunuyla aynı olmalı
+   (sütunlar: `case,height,font,min,max,major`; `2.5E+6`, 2.500.000 demektir).
+
+   Biri uymuyorsa dur, sonraki adımlara geçme ve bana hangi grafikte ne gördüğünü
+   yaz. Dosyayı kaydetmeden kapat.
 
 5. CSV'ye bak:
 
@@ -82,7 +93,7 @@ Komutların hepsi deponun kök klasöründen çalışır.
        "appleLocale": "<defaults read -g AppleLocale çıktısı>",
        "excelLanguage": "<Excel'in dili, örneğin Türkçe>",
        "excel": "<Excel Hakkında: ad, sürüm ve yapı>",
-       "macos": "<sw_vers çıktısı>",
+       "macos": "<sw_vers -productVersion çıktısı>",
        "confirmedBy": "owner",
        "csv": "axis_oracle.tr-TR.csv",
        "notes": ""
@@ -97,8 +108,9 @@ Komutların hepsi deponun kök klasöründen çalışır.
    dart run packages/jet_charts_core/tool/analyze_axis_oracle.dart
    ```
 
-   Beklenen: test geçer (`tr-TR results are well formed`). Çözümleme her veri seti
-   için bir satır, en sonda da `answer:` ile başlayan yanıt satırını yazar.
+   Beklenen: test geçer (`tr-TR results are well formed`). Çözümleme önce bölge
+   satırını (`tr-TR`), sonra her veri seti için bir satır, en sonda da `answer:` ile
+   başlayan yanıt satırını yazar.
 
 ## Betik durursa
 

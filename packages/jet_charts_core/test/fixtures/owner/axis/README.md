@@ -3,8 +3,8 @@
 What Excel for Mac chooses for an automatic value axis: its minimum, maximum and
 major unit, for twelve data sets at different chart heights and font sizes. It
 answers the question of `docs/axis-scaling.md`: does Excel's automatic scale
-depend on the chart's size and font? Only the owner runs Excel. The steps, in
-Turkish, are in `TALIMATLAR.md`.
+depend on the chart's size and font? Only the owner's run counts as a result.
+The steps, in Turkish, are in `TALIMATLAR.md`.
 
 Files here:
 
@@ -31,8 +31,8 @@ sheet per data set (`d01` to `d12`), labels in column A and values in column B,
 and five clustered column charts of one series, 360 pt wide, stacked to the right
 of the data. A chart is named by its case id. Nothing in a chart fixes the scale:
 no `c:min`, `c:max` or `c:majorUnit`. Its font is `Aptos Narrow` at the case's
-size, set on the chart space. The file has no theme part, so its look says
-nothing about Excel's defaults; LibreOffice draws its bars invisible.
+size, set on the chart space. Its bars have a fixed fill. The file has no theme
+part, so its look says nothing about Excel's defaults.
 
 ## `cases.json`
 
@@ -92,7 +92,7 @@ A list, one object per region run:
     "appleLocale": "<what defaults read -g AppleLocale printed>",
     "excelLanguage": "<Excel's language in the run>",
     "excel": "<Excel → About Excel: name, version and build>",
-    "macos": "<Apple menu → About This Mac>",
+    "macos": "<what sw_vers -productVersion printed>",
     "confirmedBy": "owner",
     "csv": "axis_oracle.tr-TR.csv",
     "notes": ""
@@ -105,6 +105,13 @@ Every field is required, and no other; all but `notes` must be filled in, and a
 holds anything Excel said or did, or `""`.
 
 ## How results are confirmed
+
+The script brings each chart into view before reading it, but nothing in the CSV
+shows that the values come from a laid-out chart. So the owner compares three
+charts on screen with their rows: `d01-h600-f10`, `d01-h300-f18` and
+`d08-h300-f18`, the axis' top label with `max` and the step between labels with
+`major` (`TALIMATLAR.md`, step 4). A mismatch means the run is not a result: stop
+and say so.
 
 `test/axis_oracle_test.dart`, in the gate, checks each region with an entry:
 its CSV exists and has no problems (a wrong header, a case missing, unknown or

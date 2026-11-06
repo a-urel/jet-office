@@ -5,8 +5,8 @@
 /// The case list is `test/fixtures/owner/axis/cases.json`; the README beside
 /// it describes its format, the CSV and the manifest. A case is one chart: a
 /// data set at a height and a font size. The question is whether Excel's
-/// automatic minimum, maximum and major unit depend on the last two (spec
-/// section 4.6).
+/// automatic minimum, maximum and major unit depend on the last two; Excel
+/// is the oracle (decision 0014).
 ///
 /// [buildAxisWorkbook] writes the file itself, with a small writer of its own
 /// (`archive`, a dev dependency): this package knows no file format and may
@@ -278,7 +278,9 @@ String _chartXml(AxisCase kase) {
       '<c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/>'
       '<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>'
       '<c:varyColors val="0"/>'
-      '<c:ser><c:idx val="0"/><c:order val="0"/><c:invertIfNegative val="0"/>'
+      '<c:ser><c:idx val="0"/><c:order val="0"/>'
+      '<c:spPr><a:solidFill><a:srgbClr val="156082"/></a:solidFill></c:spPr>'
+      '<c:invertIfNegative val="0"/>'
       '<c:cat><c:strRef><c:f>$sheet!\$A\$1:\$A\$$n</c:f>'
       '<c:strCache>${points(_label)}</c:strCache></c:strRef></c:cat>'
       '<c:val><c:numRef><c:f>$sheet!\$B\$1:\$B\$$n</c:f>'

@@ -16,10 +16,11 @@ it did not save, so each is confirmed from a chart Excel made. The optional
 | Marker size 5 | Unconfirmed | 39 styles use 5 and 112 use 6; 5 is the schema default |
 | Gap width 219 | Unconfirmed | Second-hand only (docx.js documentation); the bundled layouts mostly give 100 and 150 |
 | Overlap -27 | Unconfirmed | Second-hand only, as gap width; not in the theme yet |
-| Font Aptos Narrow | Unconfirmed | Recalled, no source |
+| Font Aptos Narrow | Unconfirmed | `Office Theme.thmx` names Aptos, not Aptos Narrow; the narrow face is recalled, no source |
 | Font sizes 9 and 14 pt | Unconfirmed | Recalled, no source |
 | Text colour `595959` | Unconfirmed | Recalled, no source |
 | Line colour `D9D9D9` | Unconfirmed | Recalled, no source |
+| Background `FFFFFF` | Unconfirmed | Recalled, no source |
 
 ## Excel's palette past six colours
 

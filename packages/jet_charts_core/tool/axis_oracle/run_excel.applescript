@@ -15,6 +15,7 @@ on run argv
 	set csvPath to my absolutePath(item 2 of argv)
 	set csvRows to {"case,height,font,min,max,major"}
 	set failures to {}
+	set unseen to {}
 	tell application "Microsoft Excel"
 		activate
 		-- Excel may wait for its file access prompt, so allow the owner time.
@@ -46,6 +47,14 @@ on run argv
 				try
 					set theObject to chart object chartIndex of theSheet
 					set caseId to name of theObject
+					-- The dictionary has no select for a chart object: goto scrolls
+					-- its top left cell into view. A read works without it, so a
+					-- failure here only goes in the summary.
+					try
+						goto reference (top left cell of theObject) with scroll
+					on error
+						set end of unseen to caseId
+					end try
 					set theAxis to get axis (chart of theObject) axis type value axis which axis primary axis
 					set theHeight to height of theObject
 					set theFont to font size of font object of tick labels of theAxis
@@ -66,6 +75,7 @@ on run argv
 	end tell
 	my writeUtf8(csvPath, my joined(csvRows, linefeed) & linefeed)
 	set summary to (((count of csvRows) - 1) as text) & " rows written to " & csvPath
+	if (count of unseen) > 0 then set summary to summary & linefeed & "not brought into view: " & my joined(unseen, ", ")
 	if (count of failures) > 0 then
 		error summary & linefeed & ((count of failures) as text) & " failed:" & linefeed & my joined(failures, linefeed) number 1
 	end if
