@@ -25,6 +25,7 @@
 /// one out, recording an [AddPartChange] and a [RemovePartChange] whose undo
 /// gives back, or takes away, the part with its relationships and content
 /// type.
+/// [applyChange] applies and records a change an edit built itself.
 /// [appendStyle] and [appendNumberFormat] give a cell format index,
 /// recording a [StylesAppendChange] when that appended to the styles part,
 /// so a transaction that fails later, or an undo, removes what it appended.
@@ -577,6 +578,20 @@ void removeStoredPart(ChangeLog log, OpcPackage package, String name) {
     package,
     package.detachPart(name),
   );
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+}
+
+/// Applies [change] ([Change.reapply]) and records it in [log].
+///
+/// Must run inside `log.transaction`. If recording throws, the change is
+/// reverted before the error leaves.
+void applyChange(ChangeLog log, Change change) {
+  change.reapply();
   try {
     log.record(change);
   } catch (_) {

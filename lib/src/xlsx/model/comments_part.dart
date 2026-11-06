@@ -7,8 +7,11 @@
 /// ([OpaqueXml]) beside the typed cell, text and author, so a note nobody
 /// edits is written back character for character. The `<authors>` strings,
 /// the root and every other child of the root (an `<extLst>`, a second
-/// `<commentList>`) are kept as well. A later edit changes `entries` and
-/// `authors`, which are mutable lists, and `encode` writes the part from them.
+/// `<commentList>`) are kept as well, and so is any other child of the
+/// `<commentList>`, as an entry on no cell. An edit changes `entries` and
+/// `authors`, which are mutable lists, and `encode` writes the part from them;
+/// a new `<comment>` is the writer's (`writeCommentEntry`), and a replaced one
+/// keeps all but its `authorId` and `<text>`.
 library;
 
 import 'dart:typed_data';
@@ -22,9 +25,11 @@ import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../cell_ref.dart';
 import '../limits.dart';
+import '../note.dart';
 import '../read/read_limits.dart';
 import '../rich_text.dart';
-import 'item_group.dart' show checkListRoom, readerOf;
+import 'item_group.dart'
+    show checkListRoom, readerOf, renderElements, rewrittenElement;
 
 /// Reports a problem with an entry the part could not read, by detail:
 /// `comment` for a `<comment>` whose cell or author cannot be read and
@@ -59,6 +64,91 @@ final class CommentEntry {
 
   /// The `<comment>` as written.
   OpaqueXml source;
+
+  /// A new entry of the writer's `<comment>` for [note], whose author is
+  /// entry [authorId] of the part's `authors`.
+  factory CommentEntry.of(WorksheetNote note, int authorId) => CommentEntry(
+    row: note.row,
+    column: note.column,
+    text: note.text,
+    author: note.author,
+    source: renderElements(
+      (XmlWriter w) => writeCommentEntry(w, note, authorId),
+    ).single,
+  );
+
+  /// This entry with the text and author of [note], whose author is entry
+  /// [authorId] of the part's `authors`. The `<text>` and the `authorId`
+  /// are replaced; every other attribute and child stays as written.
+  CommentEntry replacedBy(WorksheetNote note, int authorId) => CommentEntry(
+    row: row,
+    column: column,
+    text: note.text,
+    author: note.author,
+    source: _replaced(source, note.text, authorId),
+  );
+}
+
+final RegExp _authorIdAttribute = RegExp(
+  r'''(?<![\w:.-])authorId\s*=\s*(?:"[^"]*"|'[^']*')''',
+);
+
+/// The `<comment>` [source] with [text] for its `<text>` and [authorId] for
+/// its `authorId`.
+OpaqueXml _replaced(OpaqueXml source, XlsxRichText text, int authorId) {
+  final XmlPullReader r = readerOf(source);
+  final int base = r.eventStart;
+  final String xml = source.xml;
+  final String name = r.qualifiedName;
+  final bool empty = r.isEmptyElement;
+  final int tagEnd = r.eventEnd - base;
+  final StringBuffer rendered = StringBuffer();
+  renderElements(
+    (XmlWriter w) => writeCommentText(w, text),
+  ).single.writeTo(XmlWriter(rendered), declaredAbove: r.namespacesInScope);
+  int textStart = -1;
+  int textEnd = -1;
+  int close = -1;
+  if (!empty) {
+    final int depth = r.depth;
+    while (r.next()) {
+      if (r.eventType == XmlEventType.endElement && r.depth < depth) {
+        close = r.eventStart - base;
+        break;
+      }
+      if (r.eventType != XmlEventType.startElement) continue;
+      final bool first =
+          textStart < 0 &&
+          r.depth == depth + 1 &&
+          r.localName == 'text' &&
+          r.namespaceUri == Ns.main;
+      final int start = r.eventStart - base;
+      r.skip();
+      if (first) {
+        textStart = start;
+        textEnd = r.eventEnd - base;
+      }
+    }
+  }
+  String tag = xml.substring(0, tagEnd);
+  final String attribute = 'authorId="$authorId"';
+  if (_authorIdAttribute.hasMatch(tag)) {
+    tag = tag.replaceFirst(_authorIdAttribute, attribute);
+  } else {
+    final int at = tag.length - (empty ? 2 : 1);
+    tag = '${tag.substring(0, at)} $attribute${tag.substring(at)}';
+  }
+  final String body;
+  if (empty) {
+    tag = '${tag.substring(0, tag.length - 2)}>';
+    body = '$rendered</$name>';
+  } else if (textStart < 0) {
+    body = '${xml.substring(tagEnd, close)}$rendered${xml.substring(close)}';
+  } else {
+    body =
+        '${xml.substring(tagEnd, textStart)}$rendered${xml.substring(textEnd)}';
+  }
+  return rewrittenElement(source, '$tag$body');
 }
 
 /// A comments part with its authors and entries typed and every other
@@ -72,6 +162,15 @@ final class CommentsPart implements PartContent {
     this._authorsWritten,
   );
 
+  /// A new part without notes, as the writer starts one.
+  factory CommentsPart.empty() => CommentsPart._(
+    const XmlRoot.of('comments', <String, String>{'': Ns.main}),
+    <String>[],
+    <CommentEntry>[],
+    const <OpaqueXml>[],
+    true,
+  );
+
   /// Reads the comments part [r] is positioned before, or returns `null`
   /// when the root is not a SpreadsheetML `<comments>`.
   ///
@@ -80,7 +179,8 @@ final class CommentsPart implements PartContent {
   /// `ref` cannot be read, or that repeats a cell, is kept with a `null`
   /// [CommentEntry.row] and reported to [warn] as `comment`; so is a
   /// missing, unreadable or out-of-range `authorId`, which reads author
-  /// `''`. A run font the model cannot hold is reported as `rPr`.
+  /// `''`; a child of the list that is no `<comment>` is such an entry as
+  /// well. A run font the model cannot hold is reported as `rPr`.
   ///
   /// Throws an `XlsxReadException` (`limitExceeded`, naming `maxMerges` and
   /// [part]) when the part holds more authors, comments or other children
@@ -127,13 +227,7 @@ final class CommentsPart implements PartContent {
             }
             if (r.eventType != XmlEventType.startElement) continue;
             checkListRoom(count++, limits, part);
-            if (r.depth == depth + 1 &&
-                r.localName == 'comment' &&
-                r.namespaceUri == Ns.main) {
-              raws.add(OpaqueXml.capture(r));
-            } else {
-              r.skip();
-            }
+            raws.add(OpaqueXml.capture(r));
           }
         } else {
           r.skip();
@@ -166,6 +260,18 @@ final class CommentsPart implements PartContent {
   final List<OpaqueXml> trailing;
 
   final bool _authorsWritten;
+
+  /// Where a new `<comment>` on the cell at [row], [column] goes: before the
+  /// first entry on a later cell in row-major order, or last.
+  int insertionIndex(int row, int column) {
+    for (int i = 0; i < entries.length; i++) {
+      final int? r = entries[i].row;
+      final int? c = entries[i].column;
+      if (r == null || c == null) continue;
+      if (r > row || (r == row && c > column)) return i;
+    }
+    return entries.length;
+  }
 
   @override
   List<Uint8List> encode() {

@@ -30,6 +30,7 @@
 library;
 
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../common/theme_colors.dart';
@@ -69,6 +70,7 @@ import 'primitives.dart';
 import 'properties_parts.dart';
 import 'protection_elements.dart';
 import 'styles_part.dart';
+import 'vml_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
 import 'xlsx_sheet.dart';
@@ -592,6 +594,36 @@ final class _Book implements SheetHost {
   @override
   int sheetIndexOf(XlsxSheet sheet) =>
       _sheets.indexWhere((XlsxSheet s) => identical(s, sheet));
+
+  /// The VML blocks the package's parts use, once they were scanned.
+  Set<int>? _usedVmlBlocks;
+
+  /// The next VML block to try.
+  int _nextVmlBlock = 1;
+
+  @override
+  int takeVmlBlock() {
+    final Set<int> used = _usedVmlBlocks ??= _scanVmlBlocks();
+    while (used.contains(_nextVmlBlock)) {
+      _nextVmlBlock++;
+    }
+    return _nextVmlBlock++;
+  }
+
+  /// The blocks every `.vml` part of the file uses, read from its text:
+  /// VML need not be XML, and the parts of unloaded sheets count.
+  Set<int> _scanVmlBlocks() {
+    final Set<int> used = <int>{};
+    for (final String name in _package.partNames.toList()) {
+      if (!name.toLowerCase().endsWith('.vml')) continue;
+      final Uint8List bytes = reader.guardXml(
+        name,
+        () => _package.originalBytes(name),
+      );
+      used.addAll(vmlBlocksIn(utf8.decode(bytes, allowMalformed: true)));
+    }
+    return used;
+  }
 
   @override
   void checkNotTableName(String name) {

@@ -801,29 +801,13 @@ final class WorksheetWriter implements XlsxSheetWriter {
         'Cell $ref on sheet "$name" already has a note; a cell takes one.',
       );
     }
-    final ({XlsxRichText text, int removed, bool truncated}) clean =
-        cleanRichText(note.text);
     // Only after every check: a note that throws leaves no warning.
-    if (clean.removed > 0) {
-      context.warnings.add(
-        XlsxWarningCode.invalidCharactersRemoved,
-        sheet: name,
-        cell: ref,
-      );
-    }
-    if (clean.truncated) {
-      context.warnings.add(
-        XlsxWarningCode.textTruncated,
-        sheet: name,
-        cell: ref,
-      );
-    }
-    _notes[key] = (
-      row: row,
-      column: column,
-      text: clean.text,
-      author: note.author,
-      visible: note.visible,
+    _notes[key] = cleanNote(
+      row,
+      column,
+      note,
+      (XlsxWarningCode code) =>
+          context.warnings.add(code, sheet: name, cell: ref),
     );
   }
 

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/opc/change_log.dart';
+import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart' show changeLogOf;
 import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
@@ -61,6 +63,8 @@ String _comments(String list, {String authors = '<author>A</author>'}) =>
 
 String _comment(String ref, String text, {int author = 0}) =>
     '<comment ref="$ref" authorId="$author"><text>$text</text></comment>';
+
+String _vml(Uint8List bytes) => readXlsx(bytes)['xl/drawings/vmlDrawing1.vml']!;
 
 int _invalid(XlsxWorkbook book, String detail) => book.warnings
     .where(
@@ -237,5 +241,673 @@ void main() {
       comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
       isEmpty,
     );
+  });
+
+  group('setNote', () {
+    test('adds to a sheet without notes', () {
+      final Uint8List input = buildWorkbook(<String, String>{
+        'S':
+            '<worksheet xmlns="$mainNs"><sheetData/><pageSetup paperSize="9"/>'
+            '<tableParts count="0"/></worksheet>',
+      });
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final XlsxNote note = XlsxNote.plain('New', author: 'Ayşe');
+      book.sheets.single.setNote(2, 1, note);
+      expect(book.sheets.single.noteAt(2, 1), note);
+      final Uint8List saved = book.save().bytes;
+      final Map<String, String> parts = readXlsx(saved);
+      expect(parts.keys, contains('xl/comments1.xml'));
+      expect(parts.keys, contains('xl/drawings/vmlDrawing1.vml'));
+      final String types = parts['[Content_Types].xml']!;
+      expect(types, contains('Extension="vml"'));
+      expect(types, contains('PartName="/xl/comments1.xml"'));
+      final String rels = parts['xl/worksheets/_rels/sheet1.xml.rels']!;
+      expect(
+        rels.indexOf('vmlDrawing1.vml'),
+        lessThan(rels.indexOf('comments1.xml')),
+      );
+      expect(rels, contains('Target="../drawings/vmlDrawing1.vml"'));
+      expect(rels, contains('Target="../comments1.xml"'));
+      final String sheet = parts['xl/worksheets/sheet1.xml']!;
+      expect(sheet, contains('legacyDrawing'));
+      expect(
+        sheet.indexOf('pageSetup'),
+        lessThan(sheet.indexOf('legacyDrawing')),
+      );
+      expect(
+        sheet.indexOf('legacyDrawing'),
+        lessThan(sheet.indexOf('tableParts')),
+      );
+      final XlsxWorkbook again = XlsxWorkbook.open(saved);
+      expect(again.sheets.single.notes, hasLength(1));
+      expect(again.sheets.single.noteAt(2, 1), note);
+      expect(again.warnings, isEmpty);
+    });
+
+    test('rich text and visible read back equal', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_package());
+      final XlsxNote note = XlsxNote(
+        XlsxRichText(<XlsxTextRun>[
+          const XlsxTextRun('Bold', font: XlsxFont(bold: true)),
+          const XlsxTextRun(' plain'),
+        ]),
+        author: 'A',
+        visible: true,
+      );
+      book.sheets.single.setNote(0, 0, note);
+      final XlsxWorkbook again = XlsxWorkbook.open(book.save().bytes);
+      expect(again.sheets.single.noteAt(0, 0), note);
+    });
+
+    test('a new comment goes in row-major order', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(
+            _comment('A1', '<t>a</t>') + _comment('C3', '<t>c</t>'),
+          ),
+          vml: '$_vmlHead${_vmlShape(0, 0)}${_vmlShape(2, 2)}</xml>',
+        ),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.setNote(1, 1, XlsxNote.plain('b', author: 'A'));
+      sheet.setNote(9, 9, XlsxNote.plain('z', author: 'A'));
+      expect(sheet.notes.map((XlsxCellNote n) => n.note.text.text), <String>[
+        'a',
+        'b',
+        'c',
+        'z',
+      ]);
+    });
+
+    test('adds beside a form control shape', () {
+      const String control =
+          '<v:shape id="_x0000_s1025" type="#_x0000_t201" style="z-index:7">'
+          '<x:ClientData ObjectType="Button"><x:FmlaMacro>[0]!Go'
+          '</x:FmlaMacro></x:ClientData></v:shape>';
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          vml:
+              '$_vmlHead<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" '
+              'data="1"/></o:shapelayout>$control</xml>',
+        ),
+      );
+      book.sheets.single.setNote(0, 0, XlsxNote.plain('n'));
+      final Uint8List saved = book.save().bytes;
+      final String vml = _vml(saved);
+      expect(vml, contains(control));
+      expect(vml, contains('id="_x0000_s1026"'));
+      expect(vml, contains('z-index:8'));
+      expect(vml, contains('id="_x0000_t202"'));
+      expect(readXlsx(saved).keys, contains('xl/comments1.xml'));
+      expect(
+        readXlsx(saved).keys.where((String n) => n.endsWith('.vml')),
+        hasLength(1),
+      );
+      expect(
+        XlsxWorkbook.open(saved).sheets.single.noteAt(0, 0)!.text.text,
+        'n',
+      );
+    });
+
+    test('replaces text and keeps xr:uid and the shape', () {
+      const String ns = 'xmlns:xr="urn:xr"';
+      final String shape = _vmlShape(0, 0);
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(
+            '<comment ref="A1" authorId="0" shapeId="0" xr:uid="{1}" $ns>'
+            '<text><t>old</t></text></comment>',
+          ),
+          vml: '$_vmlHead$shape</xml>',
+        ),
+      );
+      final XlsxNote note = XlsxNote.plain('new', author: 'B');
+      book.sheets.single.setNote(0, 0, note);
+      expect(book.sheets.single.noteAt(0, 0), note);
+      final Uint8List saved = book.save().bytes;
+      final String comments = readXlsx(saved)['xl/comments1.xml']!;
+      expect(comments, contains('xr:uid="{1}"'));
+      expect(comments, contains('shapeId="0"'));
+      expect(comments, contains('authorId="1"'));
+      expect(comments, contains('<t>new</t>'));
+      expect(comments, isNot(contains('old')));
+      expect(_vml(saved), contains(shape));
+      expect(XlsxWorkbook.open(saved).sheets.single.noteAt(0, 0), note);
+    });
+
+    test('a prefixed comments root takes new and replaced notes', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments:
+              '<c:comments xmlns:c="$mainNs"><c:authors><c:author>Z</c:author>'
+              '</c:authors><c:commentList><c:comment ref="A1" authorId="0">'
+              '<c:text><c:t>x</c:t></c:text></c:comment></c:commentList>'
+              '</c:comments>',
+          vml: '$_vmlHead${_vmlShape(0, 0)}</xml>',
+        ),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.setNote(0, 0, XlsxNote.plain('r', author: 'Z'));
+      sheet.setNote(1, 0, XlsxNote.plain('n', author: 'Z'));
+      final XlsxSheet again = XlsxWorkbook.open(
+        book.save().bytes,
+      ).sheets.single;
+      expect(again.noteAt(0, 0)!.text.text, 'r');
+      expect(again.noteAt(1, 0)!.text.text, 'n');
+    });
+
+    test('visible toggles the shape', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(_comment('A1', '<t>x</t>')),
+          vml:
+              '$_vmlHead<v:shape id="_x0000_s1025" '
+              'style="position:absolute;visibility:hidden">'
+              '<x:ClientData ObjectType="Note"><x:Row>0</x:Row>'
+              '<x:Column>0</x:Column></x:ClientData></v:shape></xml>',
+        ),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.setNote(0, 0, XlsxNote.plain('x', author: 'A', visible: true));
+      expect(sheet.noteAt(0, 0)!.visible, isTrue);
+      String vml = _vml(book.save().bytes);
+      expect(vml, contains('visibility:visible'));
+      expect(vml, contains('<x:Visible/>'));
+      sheet.setNote(0, 0, XlsxNote.plain('x', author: 'A'));
+      expect(sheet.noteAt(0, 0)!.visible, isFalse);
+      vml = _vml(book.save().bytes);
+      expect(vml, contains('visibility:hidden'));
+      expect(vml, isNot(contains('Visible')));
+    });
+
+    test('an author is reused and a new one appended', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(
+            _comment('A1', '<t>x</t>'),
+            authors: '<author>A</author><author>Unused</author>',
+          ),
+          vml: '$_vmlHead${_vmlShape(0, 0)}</xml>',
+        ),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.setNote(1, 0, XlsxNote.plain('y', author: 'A'));
+      sheet.setNote(2, 0, XlsxNote.plain('z', author: 'New'));
+      final String comments = readXlsx(book.save().bytes)['xl/comments1.xml']!;
+      expect(
+        comments,
+        contains(
+          '<authors><author>A</author><author>Unused</author>'
+          '<author>New</author></authors>',
+        ),
+      );
+      expect(comments, contains('ref="A2" authorId="0"'));
+      expect(comments, contains('ref="A3" authorId="2"'));
+    });
+
+    test('shape ids and blocks stay unique across sheets, unloaded ones '
+        'included', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m4_notes'));
+      final XlsxSheet added = book.addSheet('Added');
+      final XlsxSheet other = book.addSheet('Other');
+      added.setNote(0, 0, XlsxNote.plain('a'));
+      other.setNote(0, 0, XlsxNote.plain('b'));
+      final Map<String, String> parts = readXlsx(book.save().bytes);
+      final List<String> blocks = <String>[];
+      final List<String> ids = <String>[];
+      for (final MapEntry<String, String> p in parts.entries) {
+        if (!p.key.endsWith('.vml')) continue;
+        blocks.addAll(
+          RegExp(
+            r'data="([^"]*)"',
+          ).allMatches(p.value).expand((Match m) => m[1]!.split(',')),
+        );
+        ids.addAll(
+          RegExp(
+            r'<v:shape id="([^"]*)"',
+          ).allMatches(p.value).map((Match m) => m[1]!),
+        );
+      }
+      expect(blocks.length, greaterThanOrEqualTo(5));
+      expect(blocks.toSet(), hasLength(blocks.length));
+      expect(ids.toSet(), hasLength(ids.length));
+    });
+
+    test('1,100 notes take a second block', () {
+      final Uint8List input = _package();
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final XlsxSheet sheet = book.sheets.single;
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(() {
+        for (int i = 0; i < 1100; i++) {
+          sheet.setNote(i, 0, XlsxNote.plain('n$i'));
+        }
+      });
+      final Uint8List saved = book.save().bytes;
+      final String vml = _vml(saved);
+      expect(vml, contains('data="1,2"'));
+      final List<int> ids = RegExp(
+        r'<v:shape id="_x0000_s(\d+)"',
+      ).allMatches(vml).map((Match m) => int.parse(m[1]!)).toList();
+      expect(ids, hasLength(1100));
+      expect(ids.toSet(), hasLength(1100));
+      expect(ids.map((int id) => id ~/ 1024).toSet(), <int>{1, 2});
+      expect(XlsxWorkbook.open(saved).sheets.single.notes, hasLength(1100));
+      log.revertSet(set);
+      expect(
+        comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+        isEmpty,
+      );
+      log.reapplySet(set);
+      expect(_vml(book.save().bytes), vml);
+    });
+
+    test('removing the last note removes both parts and legacyDrawing', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(_comment('A1', '<t>x</t>')),
+          vml: '$_vmlHead${_vmlShape(0, 0)}</xml>',
+        ),
+      );
+      book.sheets.single.setNote(0, 0, null);
+      expect(book.sheets.single.notes, isEmpty);
+      final Map<String, String> parts = readXlsx(book.save().bytes);
+      expect(parts.keys, isNot(contains('xl/comments1.xml')));
+      expect(parts.keys, isNot(contains('xl/drawings/vmlDrawing1.vml')));
+      expect(
+        parts['xl/worksheets/sheet1.xml'],
+        isNot(contains('legacyDrawing')),
+      );
+      expect(parts['[Content_Types].xml'], isNot(contains('comments1')));
+      expect(
+        parts['xl/worksheets/_rels/sheet1.xml.rels'] ?? '',
+        isNot(contains('Target')),
+      );
+    });
+
+    test('removing one of several keeps the text between shapes', () {
+      final String source =
+          '$_vmlHead${_vmlShape(0, 0)}<v:rect id="r1"/>${_vmlShape(1, 1)}'
+          '<v:rect id="r2"/>${_vmlShape(2, 2)}</xml>';
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(
+            _comment('A1', '<t>x</t>') +
+                _comment('B2', '<t>y</t>') +
+                _comment('C3', '<t>z</t>'),
+          ),
+          vml: source,
+        ),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(() {
+        sheet.setNote(0, 0, null);
+        sheet.setNote(1, 1, null);
+      });
+      final String vml = _vml(book.save().bytes);
+      expect(vml, contains('<v:rect id="r1"/><v:rect id="r2"/>'));
+      expect(vml, contains('<x:Row>2</x:Row>'));
+      expect(vml, isNot(contains('<x:Row>0</x:Row>')));
+      expect(vml, isNot(contains('<x:Row>1</x:Row>')));
+      log.revertSet(set);
+      expect(_vml(book.save().bytes), source);
+    });
+
+    test('notes set in order are what the writer writes', () {
+      final List<XlsxNote> notes = <XlsxNote>[
+        XlsxNote.plain('One', author: 'A'),
+        XlsxNote(
+          XlsxRichText(const <XlsxTextRun>[
+            XlsxTextRun('Two', font: XlsxFont(bold: true)),
+          ]),
+          author: 'B',
+          visible: true,
+        ),
+        XlsxNote.plain('Three', author: 'A'),
+      ];
+      final XlsxWriter writer = XlsxWriter();
+      final XlsxSheetWriter written = writer.addSheet('S');
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet sheet = book.addSheet('S');
+      for (int i = 0; i < notes.length; i++) {
+        written.note(i, i, notes[i]);
+        sheet.setNote(i, i, notes[i]);
+      }
+      final Map<String, String> expected = readXlsx(writer.close().bytes);
+      final Map<String, String> actual = readXlsx(book.save().bytes);
+      for (final String part in <String>[
+        'xl/comments1.xml',
+        'xl/drawings/vmlDrawing1.vml',
+        'xl/worksheets/_rels/sheet1.xml.rels',
+      ]) {
+        expect(actual[part], expected[part], reason: part);
+      }
+    });
+
+    test('the VML of a sheet with shapes but no idmap gets one', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(_comment('A1', '<t>x</t>')),
+          vml: '$_vmlHead${_vmlShape(0, 0)}</xml>',
+        ),
+      );
+      book.sheets.single.setNote(1, 1, XlsxNote.plain('y', author: 'A'));
+      final String vml = _vml(book.save().bytes);
+      expect(vml, contains('<o:shapelayout v:ext="edit"><o:idmap'));
+      expect(vml, contains('id="_x0000_t202"'));
+      expect(
+        RegExp(r'<v:shape id="[^"]*"').allMatches(vml).map((Match m) => m[0]),
+        hasLength(2),
+      );
+    });
+
+    test('a replaced comment with no text and no authorId takes both', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(
+            '<comment ref="A1"/><comment ref="B1"><x/></comment>',
+          ),
+          vml: '$_vmlHead${_vmlShape(0, 0)}${_vmlShape(0, 1)}</xml>',
+        ),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.setNote(0, 0, XlsxNote.plain('a', author: 'A'));
+      sheet.setNote(0, 1, XlsxNote.plain('b', author: 'A'));
+      final XlsxSheet again = XlsxWorkbook.open(
+        book.save().bytes,
+      ).sheets.single;
+      expect(again.noteAt(0, 0), XlsxNote.plain('a', author: 'A'));
+      expect(again.noteAt(0, 1), XlsxNote.plain('b', author: 'A'));
+    });
+
+    test('a child of the comment list that is no comment is kept', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments('${_comment('A1', '<t>x</t>')}<other a="1"/>'),
+          vml: '$_vmlHead${_vmlShape(0, 0)}</xml>',
+        ),
+      );
+      book.sheets.single.setNote(0, 0, null);
+      final Map<String, String> parts = readXlsx(book.save().bytes);
+      expect(parts['xl/comments1.xml'], contains('<other a="1"/>'));
+    });
+
+    test('removing keeps VML with a form control', () {
+      const String control =
+          '<v:shape id="_x0000_s1026" type="#_x0000_t201">'
+          '<x:ClientData ObjectType="Button"/></v:shape>';
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(_comment('A1', '<t>x</t>')),
+          vml: '$_vmlHead${_vmlShape(0, 0)}$control</xml>',
+        ),
+      );
+      book.sheets.single.setNote(0, 0, null);
+      final Map<String, String> parts = readXlsx(book.save().bytes);
+      expect(parts.keys, isNot(contains('xl/comments1.xml')));
+      expect(parts['xl/drawings/vmlDrawing1.vml'], contains(control));
+      expect(parts['xl/drawings/vmlDrawing1.vml'], isNot(contains('"Note"')));
+      expect(parts['xl/worksheets/sheet1.xml'], contains('legacyDrawing'));
+    });
+
+    test('removing keeps VML that holds another kind of element', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(_comment('A1', '<t>x</t>')),
+          vml: '$_vmlHead${_vmlShape(0, 0)}<v:rect id="r1"/></xml>',
+        ),
+      );
+      book.sheets.single.setNote(0, 0, null);
+      final Map<String, String> parts = readXlsx(book.save().bytes);
+      expect(
+        parts['xl/drawings/vmlDrawing1.vml'],
+        contains('<v:rect id="r1"/>'),
+      );
+    });
+
+    test('a tc= note throws StateError and nothing changes', () {
+      final Uint8List input = _package(
+        comments: _comments(
+          _comment('A1', '<t>[Threaded comment]</t>'),
+          authors: '<author>tc={A1B2}</author>',
+        ),
+        vml: '$_vmlHead${_vmlShape(0, 0)}</xml>',
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final XlsxSheet sheet = book.sheets.single;
+      expect(() => sheet.setNote(0, 0, null), throwsStateError);
+      expect(() => sheet.setNote(0, 0, XlsxNote.plain('x')), throwsStateError);
+      expect(changeLogOf(book).hasChanges, isFalse);
+      expect(
+        comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+        isEmpty,
+      );
+    });
+
+    test('malformed VML throws StateError', () {
+      final Uint8List input = _package(
+        comments: _comments(_comment('A1', '<t>x</t>')),
+        vml: '$_vmlHead<v:shape><br></xml>',
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final XlsxSheet sheet = book.sheets.single;
+      expect(() => sheet.setNote(1, 1, XlsxNote.plain('y')), throwsStateError);
+      expect(() => sheet.setNote(0, 0, null), throwsStateError);
+      expect(changeLogOf(book).hasChanges, isFalse);
+    });
+
+    test('a comments part that is not SpreadsheetML throws StateError', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(comments: '<comments xmlns="urn:other"/>'),
+      );
+      expect(
+        () => book.sheets.single.setNote(0, 0, XlsxNote.plain('y')),
+        throwsStateError,
+      );
+    });
+
+    test('a bad note throws and nothing changes', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_package());
+      final XlsxSheet sheet = book.sheets.single;
+      expect(
+        () => sheet.setNote(-1, 0, XlsxNote.plain('y')),
+        throwsArgumentError,
+      );
+      expect(
+        () =>
+            sheet.setNote(0, 0, XlsxNote(XlsxRichText(const <XlsxTextRun>[]))),
+        throwsArgumentError,
+      );
+      expect(() => sheet.setNote(0, 1 << 20, null), throwsRangeError);
+      expect(changeLogOf(book).hasChanges, isFalse);
+    });
+
+    test('text is repaired with the warnings of the writer', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_package());
+      book.sheets.single.setNote(0, 0, XlsxNote.plain('a\u0001b'));
+      expect(book.sheets.single.noteAt(0, 0)!.text.text, 'ab');
+      expect(
+        book.warnings.map((XlsxWarning w) => (w.code, w.cells.single)),
+        contains((XlsxWarningCode.invalidCharactersRemoved, 'A1')),
+      );
+    });
+
+    test('comments without VML get one with every note', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          comments: _comments(
+            _comment('A1', '<t>x</t>') + _comment('B2', '<t>y</t>'),
+          ),
+        ),
+      );
+      book.sheets.single.setNote(2, 2, XlsxNote.plain('z', author: 'A'));
+      final Uint8List saved = book.save().bytes;
+      final String vml = _vml(saved);
+      expect('<v:shape '.allMatches(vml), hasLength(3));
+      expect(vml, contains('<x:Row>0</x:Row>'));
+      expect(vml, contains('<x:Row>1</x:Row>'));
+      expect(vml, contains('<x:Row>2</x:Row>'));
+      expect(
+        readXlsx(saved)['xl/worksheets/sheet1.xml'],
+        contains('legacyDrawing'),
+      );
+      expect(XlsxWorkbook.open(saved).sheets.single.notes, hasLength(3));
+    });
+
+    test('a legacyDrawing naming no part gets a new VML', () {
+      final Uint8List input = buildWorkbook(<String, String>{
+        'S':
+            '<worksheet xmlns="$mainNs" xmlns:r="$relNs"><sheetData/>'
+            '<legacyDrawing r:id="rId9"/></worksheet>',
+      });
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      book.sheets.single.setNote(0, 0, XlsxNote.plain('z'));
+      final Uint8List saved = book.save().bytes;
+      expect(
+        'legacyDrawing r:id'.allMatches(
+          readXlsx(saved)['xl/worksheets/sheet1.xml']!,
+        ),
+        hasLength(1),
+      );
+      expect(_vml(saved), contains('<x:Row>0</x:Row>'));
+    });
+
+    test(
+      'a root that binds other prefixes gets a shape that declares them',
+      () {
+        final XlsxWorkbook book = XlsxWorkbook.open(
+          _package(vml: '<xml xmlns:vv="urn:schemas-microsoft-com:vml"></xml>'),
+        );
+        final XlsxSheet sheet = book.sheets.single;
+        sheet.setNote(0, 0, XlsxNote.plain('n', visible: true));
+        final Uint8List saved = book.save().bytes;
+        final String vml = _vml(saved);
+        expect(vml, contains('<v:shape xmlns:v='));
+        expect(vml, contains('data="1"'));
+        expect(
+          XlsxWorkbook.open(saved).sheets.single.noteAt(0, 0)!.visible,
+          isTrue,
+        );
+      },
+    );
+
+    test('an empty VML root opens to take a shape', () {
+      final Uint8List input = _package(vml: '<xml/>');
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final ChangeSet set = changeLogOf(book).transaction(
+        () => book.sheets.single.setNote(0, 0, XlsxNote.plain('n')),
+      );
+      expect(_vml(book.save().bytes), endsWith('</v:shape></xml>'));
+      changeLogOf(book).revertSet(set);
+      expect(_vml(book.save().bytes), '<xml/>');
+    });
+
+    test('equal set is no edit', () {
+      final Uint8List input = _fixture('m4_notes');
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final XlsxSheet sheet = book.sheets.first;
+      for (final XlsxCellNote n in sheet.notes) {
+        sheet.setNote(n.row, n.column, n.note);
+      }
+      sheet.setNote(0, 0, null);
+      expect(changeLogOf(book).hasChanges, isFalse);
+      expect(
+        comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+        isEmpty,
+      );
+    });
+
+    group('undo of add, replace and remove restores the file', () {
+      void undone(Uint8List input, void Function(XlsxSheet sheet) edit) {
+        final XlsxWorkbook book = XlsxWorkbook.open(input);
+        final XlsxSheet sheet = book.sheets.first;
+        final ChangeLog log = changeLogOf(book);
+        final List<XlsxCellNote> before = sheet.notes;
+        final ChangeSet set = log.transaction(() => edit(sheet));
+        final List<XlsxCellNote> after = sheet.notes;
+        final Uint8List edited = book.save().bytes;
+        log.revertSet(set);
+        expect(sheet.notes, before);
+        expect(
+          comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+          isEmpty,
+        );
+        log.reapplySet(set);
+        expect(sheet.notes, after);
+        expect(
+          comparePackages(edited, book.save().bytes, ignoreBookkeeping: true),
+          isEmpty,
+        );
+      }
+
+      test('add on a sheet without notes', () {
+        undone(_package(), (XlsxSheet s) {
+          s.setNote(0, 0, XlsxNote.plain('a', author: 'A', visible: true));
+          s.setNote(1, 0, XlsxNote.plain('b', author: 'B'));
+        });
+      });
+
+      test('add on the fixture, a new author and block included', () {
+        undone(_fixture('m4_notes'), (XlsxSheet s) {
+          s.setNote(0, 0, XlsxNote.plain('a', author: 'New'));
+        });
+      });
+
+      test('replace and visible', () {
+        undone(_fixture('m4_notes'), (XlsxSheet s) {
+          s.setNote(1, 1, XlsxNote.plain('r', author: 'Ahmet', visible: true));
+          s.setNote(3, 3, XlsxNote.plain('r', author: 'Ayse Yilmaz'));
+        });
+      });
+
+      test('remove one and all', () {
+        undone(_fixture('m4_notes'), (XlsxSheet s) => s.setNote(1, 1, null));
+        undone(_fixture('m4_notes'), (XlsxSheet s) {
+          for (final XlsxCellNote n in s.notes) {
+            s.setNote(n.row, n.column, null);
+          }
+        });
+      });
+
+      test('comments without VML', () {
+        undone(
+          _package(comments: _comments(_comment('A1', '<t>x</t>'))),
+          (XlsxSheet s) => s.setNote(1, 1, XlsxNote.plain('y', author: 'A')),
+        );
+      });
+
+      test('a failed transaction leaves nothing', () {
+        final Uint8List input = _package();
+        final XlsxWorkbook book = XlsxWorkbook.open(input);
+        final XlsxSheet sheet = book.sheets.single;
+        expect(
+          () => changeLogOf(book).transaction(() {
+            sheet.setNote(0, 0, XlsxNote.plain('a'));
+            throw StateError('later');
+          }),
+          throwsStateError,
+        );
+        expect(sheet.notes, isEmpty);
+        expect(
+          comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+          isEmpty,
+        );
+      });
+    });
+
+    test('generates 10,000 notes in under 5 s', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_package());
+      final XlsxSheet sheet = book.sheets.single;
+      final Stopwatch watch = Stopwatch()..start();
+      for (int i = 0; i < 10000; i++) {
+        sheet.setNote(i, i % 10, XlsxNote.plain('Note $i', author: 'A'));
+      }
+      final Uint8List saved = book.save().bytes;
+      watch.stop();
+      printOnFailure('${watch.elapsedMilliseconds} ms');
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(XlsxWorkbook.open(saved).sheets.single.notes, hasLength(10000));
+    });
   });
 }

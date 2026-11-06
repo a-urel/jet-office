@@ -27,7 +27,7 @@ import 'package:jet_core/jet_core.dart' show FormatKind;
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
-import '../../opc/package.dart' show OpcRelationship;
+import '../../opc/package.dart' show OpcPackage, OpcRelationship;
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_number.dart';
 import '../../xml/xml_pull_reader.dart';
@@ -74,10 +74,12 @@ import '../worksheet_parts.dart'
         checkColumnWidth,
         checkOutlineLevel,
         checkRowHeight,
+        commentsPartName,
         paneAttributes,
         sheetViewAttributes,
         standardColumnWidth,
         standardRowHeight,
+        vmlDrawingPartName,
         writeHyperlink;
 import 'cell_store.dart';
 import 'columns.dart';
@@ -130,6 +132,12 @@ abstract interface class SheetHost {
 
   /// The opened package, for reading parts.
   PackageReader get reader;
+
+  /// An id block for VML shapes that no `.vml` part of the package uses:
+  /// the parts are scanned once, then the blocks are counted up, so a block
+  /// is never given twice. Throws an [XlsxReadException] when a `.vml` part
+  /// cannot be read.
+  int takeVmlBlock();
 
   /// Loads the shared strings and styles, once, and returns the encoder that
   /// prepares and writes cells. Throws an [XlsxReadException] when either

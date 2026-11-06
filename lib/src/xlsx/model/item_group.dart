@@ -220,9 +220,17 @@ List<OpaqueXml> renderElements(void Function(XmlWriter w) write) {
 /// inherited in scope, so a prefix an ancestor declared resolves as it did.
 ///
 /// The element was read under the file's depth limit, so none applies here.
-XmlPullReader readerOf(OpaqueXml element) {
+XmlPullReader readerOf(OpaqueXml element) =>
+    _readerOver(element.inheritedNamespaces, element.xml);
+
+/// [xml], an edited copy of [element]'s text, as an element with the
+/// bindings [element] inherited in scope.
+OpaqueXml rewrittenElement(OpaqueXml element, String xml) =>
+    OpaqueXml.capture(_readerOver(element.inheritedNamespaces, xml));
+
+XmlPullReader _readerOver(Map<String, String> namespaces, String xml) {
   final StringBuffer out = StringBuffer('<wrapper');
-  element.inheritedNamespaces.forEach((String prefix, String uri) {
+  namespaces.forEach((String prefix, String uri) {
     out
       ..write(prefix.isEmpty ? ' xmlns="' : ' xmlns:$prefix="')
       ..write(escapeXmlAttribute(scrubXmlText(uri).text))
@@ -230,7 +238,7 @@ XmlPullReader readerOf(OpaqueXml element) {
   });
   out
     ..write('>')
-    ..write(element.xml)
+    ..write(xml)
     ..write('</wrapper>');
   return XmlPullReader(out.toString(), maxDepth: 0x7FFFFFFF)
     ..next()
