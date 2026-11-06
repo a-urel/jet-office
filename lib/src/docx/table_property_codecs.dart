@@ -5,8 +5,9 @@
 ///
 /// [tablePropertiesSchema] types the table's `w:tblPr` (its style, width,
 /// alignment, indent, borders, layout, cell margins and look),
-/// [tableRowPropertiesSchema] the row's `w:trPr` (grid cells before and after, `w:cantSplit`, height and
-/// header row) and [tableCellPropertiesSchema] the cell's `w:tcPr` (width,
+/// [tableRowPropertiesSchema] the row's `w:trPr` (grid cells before and
+/// after, `w:cantSplit`, height and header row) and
+/// [tableCellPropertiesSchema] the cell's `w:tcPr` (width,
 /// grid span, vertical merge, borders, shading, text direction and vertical
 /// alignment). A child is typed under the rules of `property_codec.dart`;
 /// every other child (`w:tblpPr`, `w:tcMar` and the like) is kept

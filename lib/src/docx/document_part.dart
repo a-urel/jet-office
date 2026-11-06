@@ -67,16 +67,6 @@ import 'table_property_codecs.dart'
 import 'units.dart' show ptOfTwips;
 import 'warnings.dart';
 
-/// How deep tables may nest in a part: a table in a cell of a table is at
-/// nesting 2.
-///
-/// `DocxReadLimits.maxDepth` bounds it by itself at its default, some 84
-/// tables deep. The reader, the writer and the walks of the tree recurse once
-/// per table, so a raised `maxDepth` must not raise this: past it the read
-/// fails the same way on every platform, and not with a stack overflow that
-/// depends on the platform's stack.
-const int maxTableNesting = 256;
-
 /// The largest width of a `w:gridCol`, in twips: what `parseDecimal` reads.
 const int _maxGridColumnTwips = 999999999;
 
@@ -301,8 +291,10 @@ final class _Writer {
     _w.start('${_p}tbl');
     writeKeptAttributes(_w, tableAttributesOf(t), declaredAbove: _scope);
     final PropertySet tblPr = tablePropertySetOf(t);
-    // A table read without a w:tblPr writes one first when a value was set.
-    if (!tablePropertiesOf(t).isRead && !tblPr.writesNothing) {
+    // A table read without a w:tblPr writes one first when a value was set; a
+    // new table always does, as the schema requires it.
+    if (tableIsNew(t) ||
+        (!tablePropertiesOf(t).isRead && !tblPr.writesNothing)) {
       _propertySet(tblPr, 'tblPr');
     }
     final List<Object> children = tableChildrenOf(t);

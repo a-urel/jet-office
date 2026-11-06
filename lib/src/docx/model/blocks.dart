@@ -13,7 +13,14 @@
 /// `w:customXml`, bookmarks, `w:tblPrEx`). A table and a row keep them in a
 /// private list in file order, with the rows or cells and the properties, and
 /// show only the typed rows and cells: rows inside a `w:sdt` are not in
-/// [DocxTable.rows]. [visitBlocks] is the walk of the tree.
+/// [DocxTable.rows]. An index of a row or a cell counts the typed ones: a
+/// row or a cell inserted goes directly before the one at its index, or last
+/// of all the children, and one removed leaves the others where they were.
+/// [visitBlocks] is the walk of the tree.
+///
+/// A table, a row and a cell are edited the same in a document and in none:
+/// the edits go through the [DocxEditSink] they report to, which records them
+/// in a document and only applies them outside one.
 ///
 /// The top-level functions are the model's internal surface for the reader,
 /// the writer and the document; none of them is exported.
@@ -28,14 +35,30 @@ import '../units.dart';
 import 'edit_sink.dart';
 import 'inlines.dart';
 import 'paragraph_properties.dart';
+import 'primitives.dart' as primitives;
 import 'property_set.dart';
 import 'styles.dart' show DocxStyleType;
+import 'table_formatting.dart';
 import 'table_properties.dart';
+
+/// How deep tables may nest in a part: a table in a cell of a table is at
+/// nesting 2.
+///
+/// `DocxReadLimits.maxDepth` bounds it by itself at its default, some 84
+/// tables deep. The reader, the writer and the walks of the tree recurse once
+/// per table, so a raised `maxDepth` must not raise this: past it the read
+/// fails the same way on every platform, and not with a stack overflow that
+/// depends on the platform's stack.
+const int maxTableNesting = 256;
+
+/// The width of the text of a blank A4 page, in twips: what the columns of a
+/// new table share.
+const int _pageTextWidthTwips = 9062;
 
 /// One child of a body or of a table cell.
 ///
 /// A block is in at most one container at a time: inserting one that is
-/// already in a body throws [StateError]; remove it there first.
+/// already in a body or a cell throws [StateError]; remove it there first.
 sealed class DocxBlock {
   DocxBlock._();
 
@@ -179,15 +202,66 @@ final class DocxParagraph extends DocxBlock {
 ///
 /// A table read from a file is written as read: the children it does not show
 /// stay where they were, and a grid that does not fit its rows is kept.
+///
+/// Tables nest at most 256 deep, as a read accepts, so what saves opens again:
+/// an edit past that throws [ArgumentError].
 final class DocxTable extends DocxBlock {
+  /// A table of [rows] rows of [columns] empty cells.
+  ///
+  /// The columns share the text width of a blank A4 page, 9062 twips, rounded
+  /// down to whole twips: in the grid and in the width of each cell. The table
+  /// has no style. It belongs to no document until it is inserted into one.
+  ///
+  /// A [columns] outside 1 to [maxTableColumns], or [rows] below 1, throws
+  /// [RangeError].
+  DocxTable({required int columns, int rows = 1})
+    : this._read(
+        const PropertyContainer.empty(),
+        const <KeptAttribute>[],
+        _equalGrid(columns),
+        _emptyRows(columns, rows),
+        isNew: true,
+      );
+
   DocxTable._read(
     this._source,
     this._attributes,
     this._gridColumnsPt,
-    this._children,
-  ) : _rows = _ofType<DocxTableRow>(_children),
-      _gridRead = _gridColumnsPt,
-      super._();
+    this._children, {
+    bool isNew = false,
+  }) : _rows = _ofType<DocxTableRow>(_children),
+       _gridRead = _gridColumnsPt,
+       _isNew = isNew,
+       super._() {
+    for (final DocxTableRow row in _rows) {
+      row._table = this;
+    }
+  }
+
+  /// The grid of a new table of [columns] columns, each of equal width.
+  static List<double?> _equalGrid(int columns) {
+    RangeError.checkValueInInterval(columns, 1, maxTableColumns, 'columns');
+    return List<double?>.unmodifiable(
+      List<double>.filled(columns, _columnPt(columns)),
+    );
+  }
+
+  /// The width of a column of a new table of [columns] columns, in points.
+  static double _columnPt(int columns) =>
+      ptOfTwips(_pageTextWidthTwips ~/ columns);
+
+  /// [rows] rows of [columns] empty cells of the width of a column.
+  static List<Object> _emptyRows(int columns, int rows) {
+    if (rows < 1) {
+      throw RangeError.value(rows, 'rows', 'must be at least 1');
+    }
+    final DocxTableWidth width = DocxTableWidth.points(_columnPt(columns));
+    return <Object>[
+      for (int i = 0; i < rows; i++)
+        DocxTableRow(cells: columns)
+          .._cells.forEach((DocxTableCell c) => c.properties.width = width),
+    ];
+  }
 
   /// The table's `w:tblPr` as read, by `tablePropertiesSchema`.
   final PropertyContainer _source;
@@ -207,6 +281,10 @@ final class DocxTable extends DocxBlock {
   /// The widths of the grid as read, to know whether the grid is written as
   /// read.
   final List<double?>? _gridRead;
+
+  /// Whether the table was built here and not read from a file, so it writes
+  /// the `w:tblPr` the schema requires even when it is empty.
+  final bool _isNew;
 
   DocxEditSink _sink = DocxEditSink.none;
 
@@ -279,6 +357,26 @@ final class DocxTable extends DocxBlock {
     }
     _sink.apply(_GridSet(this, current, columns));
   }
+
+  /// Inserts [row] at [index], from 0 to the number of rows: directly before
+  /// the row at [index], or after the last child of the table for the last
+  /// index, so what the table does not show stays where it was.
+  ///
+  /// An [index] out of that range throws [RangeError]. A [row] already in a
+  /// table, this one or another, throws [StateError]: remove it there first. A
+  /// [row] that holds this table, or that would nest tables past 256 deep,
+  /// throws [ArgumentError]. Nothing changes then.
+  void insertRowAt(int index, DocxTableRow row) =>
+      primitives.insertChild(_sink, this, _children, _rows, index, row);
+
+  /// Removes the row at [index]. The row is then in no table and can be
+  /// inserted again; what the table does not show stays where it was.
+  ///
+  /// An [index] that is not one of a row throws [RangeError]. The last row
+  /// throws [StateError]: Word repairs a table without rows, so remove the
+  /// table instead. Nothing changes then.
+  void removeRowAt(int index) =>
+      primitives.removeChild(_sink, this, _children, _rows, index);
 }
 
 bool _sameWidths(List<double?> a, List<double?> b) {
@@ -325,8 +423,29 @@ final class TableGrid {
 
 /// A row of a table, `w:tr`.
 final class DocxTableRow {
+  /// A row of [cells] empty cells, each with one empty paragraph.
+  ///
+  /// It belongs to no table until it is inserted into one. A [cells] outside
+  /// 1 to [maxTableColumns] throws [RangeError].
+  DocxTableRow({int cells = 1})
+    : this._read(
+        const PropertyContainer.empty(),
+        const <KeptAttribute>[],
+        _emptyCells(cells),
+      );
+
   DocxTableRow._read(this._source, this._attributes, this._children)
-    : _cells = _ofType<DocxTableCell>(_children);
+    : _cells = _ofType<DocxTableCell>(_children) {
+    for (final DocxTableCell cell in _cells) {
+      cell._row = this;
+    }
+  }
+
+  /// [cells] empty cells.
+  static List<Object> _emptyCells(int cells) {
+    RangeError.checkValueInInterval(cells, 1, maxTableColumns, 'cells');
+    return <Object>[for (int i = 0; i < cells; i++) DocxTableCell()];
+  }
 
   /// The row's `w:trPr` as read, by `tableRowPropertiesSchema`.
   final PropertyContainer _source;
@@ -338,6 +457,9 @@ final class DocxTableRow {
   );
 
   DocxEditSink _sink = DocxEditSink.none;
+
+  /// The table the row is in, or `null` while it is in none.
+  DocxTable? _table;
 
   /// The attributes of `w:tr` the reader kept, such as `w14:paraId`.
   final List<KeptAttribute> _attributes;
@@ -372,14 +494,58 @@ final class DocxTableRow {
   bool get isHeader => _properties.repeatAsHeader == true;
 
   set isHeader(bool value) => _properties.repeatAsHeader = value ? true : null;
+
+  /// Inserts [cell] at [index], from 0 to the number of cells: directly before
+  /// the cell at [index], or after the last child of the row for the last
+  /// index, so what the row does not show stays where it was.
+  ///
+  /// An [index] out of that range throws [RangeError]. A [cell] already in a
+  /// row, this one or another, throws [StateError]: remove it there first. A
+  /// [cell] that holds this row, or that would nest tables past 256 deep,
+  /// throws [ArgumentError]. Nothing changes then.
+  void insertCellAt(int index, DocxTableCell cell) =>
+      primitives.insertChild(_sink, this, _children, _cells, index, cell);
+
+  /// Removes the cell at [index]. The cell is then in no row and can be
+  /// inserted again; what the row does not show stays where it was.
+  ///
+  /// An [index] that is not one of a cell throws [RangeError]. The last cell
+  /// throws [StateError]: Word repairs a row without cells, so remove the row
+  /// instead. Nothing changes then.
+  void removeCellAt(int index) =>
+      primitives.removeChild(_sink, this, _children, _cells, index);
 }
 
 /// A cell of a table row, `w:tc`.
+///
+/// A saved cell ends in a paragraph: one whose last block is another is written
+/// with an empty `w:p` after it, which is not in [blocks] until the file is
+/// read again.
 final class DocxTableCell {
+  /// A cell of one paragraph that holds [text], or an empty paragraph for the
+  /// empty text. The text is split and scrubbed as [DocxRun.text] is when set.
+  ///
+  /// It belongs to no row until it is inserted into one.
+  DocxTableCell([String text = ''])
+    : this._read(
+        const PropertyContainer.empty(),
+        const <KeptAttribute>[],
+        <DocxBlock>[DocxParagraph.text(text)],
+      );
+
+  /// A cell of [_blocks], which are in it from now on. A block already in a
+  /// container throws [StateError].
   DocxTableCell._read(this._source, this._attributes, this._blocks)
     : _readUnclosed = _blocks.lastOrNull is DocxParagraph
           ? null
-          : List<DocxBlock>.of(_blocks);
+          : List<DocxBlock>.of(_blocks) {
+    for (final DocxBlock block in _blocks) {
+      if (block._container != null) {
+        throw StateError('The block is already in a container.');
+      }
+      block._container = this;
+    }
+  }
 
   /// The cell's `w:tcPr` as read, by `tableCellPropertiesSchema`.
   final PropertyContainer _source;
@@ -391,6 +557,9 @@ final class DocxTableCell {
   );
 
   DocxEditSink _sink = DocxEditSink.none;
+
+  /// The row the cell is in, or `null` while it is in none.
+  DocxTableRow? _row;
 
   /// The attributes of `w:tc` the reader kept, such as `w:rsidR`.
   final List<KeptAttribute> _attributes;
@@ -406,7 +575,8 @@ final class DocxTableCell {
   final List<DocxBlock>? _readUnclosed;
 
   /// The cell's blocks, in order: paragraphs, tables and opaque blocks. The
-  /// list cannot be modified.
+  /// list cannot be modified, and shows later edits; use [addParagraph],
+  /// [insertBlock], [removeBlockAt] and [replaceBlockAt].
   List<DocxBlock> get blocks => _blocksView;
 
   /// The formatting of the cell: its `w:tcPr`.
@@ -422,6 +592,44 @@ final class DocxTableCell {
     _addLines(lines);
     return lines.join('\n');
   }
+
+  /// Appends a new paragraph that holds [text] and returns it. The text is
+  /// split and scrubbed as [DocxRun.text] is when set; the empty text gives a
+  /// paragraph without runs.
+  DocxParagraph addParagraph([String text = '']) {
+    final DocxParagraph paragraph = DocxParagraph.text(text);
+    insertBlock(_blocks.length, paragraph);
+    return paragraph;
+  }
+
+  /// Inserts [block] at [index], from 0 to the number of blocks.
+  ///
+  /// An [index] out of that range throws [RangeError]. A [block] already in a
+  /// body or a cell throws [StateError]: remove it there first. A table that
+  /// holds this cell, or that would nest tables past 256 deep, throws
+  /// [ArgumentError]. Nothing changes then.
+  ///
+  /// In a cell of a document, the styles set on a paragraph are resolved as
+  /// `DocxBody.insertBlock` says, and it may throw the same
+  /// `DocxReadException`.
+  void insertBlock(int index, DocxBlock block) =>
+      primitives.insertBlock(_sink, this, _blocks, index, block);
+
+  /// Removes the block at [index]. The block is then in no cell and can be
+  /// inserted again. A cell left without blocks is written with an empty
+  /// paragraph.
+  ///
+  /// An [index] that is not one of a block throws [RangeError].
+  void removeBlockAt(int index) =>
+      primitives.removeBlock(_sink, this, _blocks, index);
+
+  /// Puts [block] in place of the block at [index]. The block replaced is
+  /// then in no cell.
+  ///
+  /// An [index] that is not one of a block throws [RangeError], and the rest
+  /// is as for [insertBlock].
+  void replaceBlockAt(int index, DocxBlock block) =>
+      primitives.replaceBlock(_sink, this, _blocks, index, block);
 
   void _addLines(List<String> lines) {
     for (final DocxBlock block in _blocks) {
@@ -505,38 +713,46 @@ DocxTableCell readTableCell({
   required PropertyContainer properties,
   required List<KeptAttribute> attributes,
   required List<DocxBlock> blocks,
-}) {
-  final DocxTableCell cell = DocxTableCell._read(
-    properties,
-    attributes,
-    blocks,
-  );
-  for (final DocxBlock block in blocks) {
-    if (block._container != null) {
-      throw StateError('The block is already in a container.');
-    }
-    block._container = cell;
-  }
-  return cell;
-}
+}) => DocxTableCell._read(properties, attributes, blocks);
 
 /// The elements of type [T] among [children], in order.
 List<T> _ofType<T>(List<Object> children) => children.whereType<T>().toList();
+
+/// The one walk of the tree: calls [visit] with [item] (a block, a row or a
+/// cell) and everything it holds in document order, each with the number of
+/// tables around it, counted from [tables] for [item].
+///
+/// Rows and cells inside a kept element are not part of the tree.
+void _walk(
+  Object item,
+  int tables,
+  void Function(Object item, int tables) visit,
+) {
+  visit(item, tables);
+  switch (item) {
+    case DocxTable():
+      for (final DocxTableRow row in item._rows) {
+        _walk(row, tables + 1, visit);
+      }
+    case DocxTableRow():
+      for (final DocxTableCell cell in item._cells) {
+        _walk(cell, tables, visit);
+      }
+    case DocxTableCell():
+      for (final DocxBlock block in item._blocks) {
+        _walk(block, tables, visit);
+      }
+  }
+}
 
 /// Calls [visit] with [block], then with every block in the cells of a table,
 /// nested tables included, in document order.
 ///
 /// Rows and cells inside a kept element are not part of the tree.
 void visitBlocks(DocxBlock block, void Function(DocxBlock block) visit) {
-  visit(block);
-  if (block is! DocxTable) return;
-  for (final DocxTableRow row in block._rows) {
-    for (final DocxTableCell cell in row._cells) {
-      for (final DocxBlock inner in cell._blocks) {
-        visitBlocks(inner, visit);
-      }
-    }
-  }
+  _walk(block, 0, (Object item, int _) {
+    if (item is DocxBlock) visit(item);
+  });
 }
 
 /// Resolves the style set through the API on [run], which is in a paragraph
@@ -629,26 +845,47 @@ void replaceInlineAt(DocxParagraph paragraph, int index, DocxInline inline) {
   paragraph._sink.inlineReplaced(paragraph, index, previous, inline);
 }
 
-/// Makes [block], and everything in the cells of a table (rows, cells and
-/// the paragraphs and tables in them), report its edits to [sink];
-/// [DocxEditSink.none] detaches them.
-void attachBlockSink(DocxBlock block, DocxEditSink sink) {
-  switch (block) {
-    case DocxParagraph():
-      block._sink = sink;
-    case DocxTable():
-      block._sink = sink;
-      for (final DocxTableRow row in block._rows) {
-        row._sink = sink;
-        for (final DocxTableCell cell in row._cells) {
-          cell._sink = sink;
-          for (final DocxBlock inner in cell._blocks) {
-            attachBlockSink(inner, sink);
-          }
-        }
-      }
-    case DocxOpaqueBlock():
-      break;
+/// Makes [item] (a block, a row or a cell) and everything it holds report
+/// its edits to [sink]; [DocxEditSink.none] detaches them.
+void attachSink(Object item, DocxEditSink sink) {
+  _walk(item, 0, (Object node, int _) {
+    switch (node) {
+      case DocxParagraph():
+        node._sink = sink;
+      case DocxTable():
+        node._sink = sink;
+      case DocxTableRow():
+        node._sink = sink;
+      case DocxTableCell():
+        node._sink = sink;
+    }
+  });
+}
+
+/// Throws [ArgumentError] when [item] (a table, a row or a cell) cannot go in
+/// [container]: it holds [container], or the tables around [container] and
+/// those in [item] together nest past [maxTableNesting].
+///
+/// It walks up from [container] and through [item] only, once per edit, so an
+/// edit costs what is inserted and not what the document holds.
+void checkFitsIn(Object item, Object container) {
+  int tables = 0;
+  for (Object? at = container; at != null; at = parentOf(at)) {
+    if (identical(at, item)) {
+      throw ArgumentError.value(item, 'item', 'must not go inside itself');
+    }
+    if (at is DocxTable) tables++;
+  }
+  int deepest = tables;
+  _walk(item, tables, (Object node, int around) {
+    if (node is DocxTable && around >= deepest) deepest = around + 1;
+  });
+  if (deepest > maxTableNesting) {
+    throw ArgumentError.value(
+      item,
+      'item',
+      'must not nest tables past $maxTableNesting',
+    );
   }
 }
 
@@ -675,6 +912,10 @@ List<double?>? tableGridWidthsOf(DocxTable table) => table._gridColumnsPt;
 /// read.
 bool tableGridAsRead(DocxTable table) =>
     identical(table._gridColumnsPt, table._gridRead);
+
+/// Whether [table] was built here and not read from a file, so it writes a
+/// `w:tblPr` even when empty.
+bool tableIsNew(DocxTable table) => table._isNew;
 
 /// The attributes of `w:tbl` the reader kept on [table], in source order.
 List<KeptAttribute> tableAttributesOf(DocxTable table) => table._attributes;
@@ -731,10 +972,26 @@ bool _blocksAsRead(DocxTableCell cell) {
 /// `null`.
 Object? blockContainerOf(DocxBlock block) => block._container;
 
-/// Records that [block] is now in [container] (`null`: in none). Only the
-/// block primitives call it.
-void setBlockContainerOf(DocxBlock block, Object? container) {
-  block._container = container;
+/// What holds [item]: the container of a block, the table of a row, the row
+/// of a cell; `null` for one in nothing, or for anything else, such as a body.
+Object? parentOf(Object item) => switch (item) {
+  DocxBlock() => item._container,
+  DocxTableRow() => item._table,
+  DocxTableCell() => item._row,
+  _ => null,
+};
+
+/// Records that [item] (a block, a row or a cell) is now in [parent] (`null`:
+/// in nothing). Only the primitives call it.
+void setParentOf(Object item, Object? parent) {
+  switch (item) {
+    case DocxBlock():
+      item._container = parent;
+    case DocxTableRow():
+      item._table = parent as DocxTable?;
+    case DocxTableCell():
+      item._row = parent as DocxTableRow?;
+  }
 }
 
 /// An opaque block for the element [xml] captured.

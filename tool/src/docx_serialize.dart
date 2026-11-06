@@ -8,9 +8,9 @@
 /// models and encodes them, and [encodedPartDifferences] compares that with
 /// the part in the file by `compareXmlParts`, the meaning-based comparison
 /// of `tool/src/part_compare.dart`; [encodedMainDifferences] does the same
-/// for the main part. [readTypedProperties] reads
-/// every typed property of every paragraph, run, style and list level, so a
-/// value the model cannot read throws here and not in a user's program.
+/// for the main part. [readTypedProperties] reads every typed property of
+/// every paragraph, run, style and list level, so a value the model cannot
+/// read throws here and not in a user's program.
 ///
 /// Used by `tool/round_trip_docx.dart` and by the round-trip tests
 /// (`test/docx/round_trip_test.dart`, `test/docx/owner_files_test.dart`).
@@ -125,9 +125,8 @@ List<String> encodedMainDifferences(Uint8List docx) {
 
 /// Reads every typed property of [doc]: of each paragraph of the body, in the
 /// cells of its tables too, and each of its runs, of each table (and its
-/// grid), row and cell, of the document defaults
-/// and each style, and of each level of each abstract list definition.
-/// Returns how many were set.
+/// grid), row and cell, of the document defaults and each style, and of each
+/// level of each abstract list definition. Returns how many were set.
 ///
 /// A value the model cannot read throws. The styles and numbering parts are
 /// loaded by this.

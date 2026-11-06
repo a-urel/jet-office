@@ -419,8 +419,9 @@ final class DocxBody {
   /// Inserts [block] at [index], from 0 to the number of blocks.
   ///
   /// An [index] out of that range throws [RangeError]. A [block] that is
-  /// already in a body, this one or another, throws [StateError]: remove it
-  /// there first. Phase 4 neither moves nor copies a block implicitly.
+  /// already in a body, this one or another, or in a table cell, throws
+  /// [StateError]: remove it there first. Phase 4 neither moves nor copies a
+  /// block implicitly.
   ///
   /// The styles set on a paragraph, and on its runs, are resolved against
   /// the document's ([DocxParagraph.style] has the rules). When one is set
@@ -443,29 +444,26 @@ final class DocxBody {
   ///   picture) keeps an id this document may lack or mean otherwise.
   /// * A reference the model does not type, and one in the paragraph mark's
   ///   `w:rPr`, stay as read, unreported.
-  void insertBlock(int index, DocxBlock block) => _edits.transaction(
-    () => primitives.insertBlock(_edits, this, _blocks, index, block),
-  );
+  void insertBlock(int index, DocxBlock block) =>
+      primitives.insertBlock(_edits, this, _blocks, index, block);
 
   /// Removes the block at [index]. The block is then in no body and can be
   /// inserted again.
   ///
   /// An [index] that is not one of a block throws [RangeError].
-  void removeBlockAt(int index) => _edits.transaction(
-    () => primitives.removeBlock(_edits, this, _blocks, index),
-  );
+  void removeBlockAt(int index) =>
+      primitives.removeBlock(_edits, this, _blocks, index);
 
   /// Puts [block] in place of the block at [index]. The block replaced is
   /// then in no body.
   ///
   /// An [index] that is not one of a block throws [RangeError], and a
-  /// [block] already in a body throws [StateError]. The styles set on
+  /// [block] already in a body or a cell throws [StateError]. The styles set on
   /// [block] are resolved as [insertBlock] does, which may throw the same
   /// [DocxReadException], and a paragraph read in another document counts
   /// as set as it says.
-  void replaceBlockAt(int index, DocxBlock block) => _edits.transaction(
-    () => primitives.replaceBlock(_edits, this, _blocks, index, block),
-  );
+  void replaceBlockAt(int index, DocxBlock block) =>
+      primitives.replaceBlock(_edits, this, _blocks, index, block);
 }
 
 /// A saved DOCX file and what the save had to repair to produce it.

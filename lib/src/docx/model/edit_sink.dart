@@ -69,8 +69,9 @@ abstract interface class DocxEditSink {
   );
 
   /// Applies [change] and records it: how an edit that is none of the above
-  /// (the grid of a table) is made undoable. In a replay, and for the sink of
-  /// no document, it only applies [change] ([Change.reapply]).
+  /// (the grid of a table, a block, a row or a cell put in or taken out) is
+  /// made undoable. In a replay, and for the sink of no document, it only
+  /// applies [change] ([Change.reapply]).
   void apply(Change change);
 
   /// Runs [body] as one edit: if it throws, everything it reported is

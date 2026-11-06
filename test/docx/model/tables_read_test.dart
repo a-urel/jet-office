@@ -557,7 +557,7 @@ void main() {
 
   test('a block already in a container cannot be read into a cell', () {
     final DocxParagraph p = DocxParagraph();
-    setBlockContainerOf(p, Object());
+    setParentOf(p, Object());
     expect(
       () => readTableCell(
         properties: const PropertyContainer.empty(),
