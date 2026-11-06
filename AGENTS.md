@@ -13,7 +13,11 @@ model, on the same fidelity standard), `0011` (a new document's parts are
 this library's own, with Word's values) and `0012` (the number format engine
 lives in `jet_core`; supersedes `0001`'s one runtime dependency and `0008`'s
 location and names) and `0013` (one repository: a pub workspace, with
-`jet_core` under `packages/`) before any design change.
+`jet_core` under `packages/`) and `0014` (the chart phase: `jet_charts_core`
+under `packages/`, and a DrawingML layer here) before any design change.
+
+`packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
+its own `AGENTS.md`, and this package does not depend on it until C1.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -29,6 +33,7 @@ dart analyze --fatal-infos
 dart test
 dart test -p chrome
 (cd packages/jet_core && dart test && dart test -p chrome)
+(cd packages/jet_charts_core && dart test && dart test -p chrome)
 ```
 
 The Chrome leg runs every test that is not marked `@TestOn('vm')` in a

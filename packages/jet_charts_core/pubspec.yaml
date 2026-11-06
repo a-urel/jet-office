@@ -1,0 +1,29 @@
+name: jet_charts_core
+description: >-
+  Pure-Dart chart core: the chart model, theme, scales, layout and drawing
+  primitives. It has no Flutter and no dart:io, so it runs on the web, desktop,
+  mobile and server alike.
+version: 0.1.0-dev.1
+repository: https://github.com/a-urel/jet-office
+issue_tracker: https://github.com/a-urel/jet-office/issues
+# Not published; publishing needs its own record.
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
+
+# jet_core is the only runtime dependency (AGENTS.md, "Hard rules").
+# test/architecture/dependencies_test.dart enforces it.
+dependencies:
+  jet_core:
+    path: ../jet_core
+
+dev_dependencies:
+  # Tests only.
+  archive: ^4.0.9
+  # Lint rules for dart analyze (analysis_options.yaml).
+  lints: ^6.0.0
+  test: ^1.26.0
+  xml: '>=6.5.0 <8.0.0'

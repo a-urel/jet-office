@@ -56,6 +56,14 @@ jobs:
         working-directory: packages/jet_core
         run: dart test -p chrome
 
+      - name: Run jet_charts_core's tests
+        working-directory: packages/jet_charts_core
+        run: dart test
+
+      - name: Run jet_charts_core's tests on Chrome
+        working-directory: packages/jet_charts_core
+        run: dart test -p chrome
+
   validate:
     name: validate fixtures
     runs-on: ubuntu-24.04
