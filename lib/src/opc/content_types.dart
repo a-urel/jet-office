@@ -76,6 +76,20 @@ final class ContentTypes {
   /// they were added or read.
   Iterable<String> get overrideNames => _overrides.keys;
 
+  /// The type declared for [extension] (without the dot, any case), or
+  /// `null` when there is no default for it.
+  String? defaultTypeOf(String extension) =>
+      _defaults[extension.toLowerCase()]?.type;
+
+  /// Removes the default of [extension] (without the dot), if it has one.
+  void removeDefault(String extension) {
+    _defaults.remove(extension.toLowerCase());
+  }
+
+  /// The type of the override of [partName], or `null` when it has none.
+  String? overrideTypeOf(String partName) =>
+      _overrides[absolutePartName(partName).toLowerCase()]?.type;
+
   /// Removes the override of [partName], if it has one.
   void removeOverride(String partName) {
     _overrides.remove(absolutePartName(partName).toLowerCase());

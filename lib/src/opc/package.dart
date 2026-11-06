@@ -89,6 +89,31 @@ final class _Part {
   PartContent? content;
 }
 
+/// A part taken out of a package by [OpcPackage.detachPart]: the part, its
+/// content type override and its own relationships.
+///
+/// Opaque; give it back to [OpcPackage.restorePart] of the same package.
+final class DetachedPart {
+  DetachedPart._(
+    this._key,
+    this._part,
+    this._index,
+    this._overrideType,
+    this._relsEntry,
+    this._rels,
+  );
+
+  final String _key;
+  final _Part _part;
+  final int _index;
+  final String? _overrideType;
+  final String? _relsEntry;
+  final ({String source, Relationships rels, bool fromInput})? _rels;
+
+  /// The absolute name the part had, as stored.
+  String get name => _part.name;
+}
+
 /// An OPC package held in memory.
 ///
 /// Parts load lazily; see the library documentation. Methods that take a part
@@ -293,15 +318,19 @@ final class OpcPackage {
   /// When [preferredName] is taken, its number is raised until the name is
   /// free: `/xl/worksheets/sheet3.xml` becomes `sheet4.xml`, and a name
   /// without a number gets `2`, `3` and so on. Names are compared without
-  /// regard to case. The content type is declared as an override.
+  /// regard to case. The content type is declared as an override; with
+  /// [byExtension] it is declared as a default for the name's extension
+  /// instead, added when there is none, reused when it has the same type,
+  /// and replaced by an override when the extension maps to another type.
   ///
   /// Throws [ArgumentError] when [preferredName] is empty, names a folder, or
   /// is `[Content_Types].xml` or a relationships part.
   String addPart(
     String preferredName,
     String contentType,
-    PartContent content,
-  ) {
+    PartContent content, {
+    bool byExtension = false,
+  }) {
     final String plain = _plain(preferredName);
     if (plain.isEmpty ||
         plain.endsWith('/') ||
@@ -331,10 +360,129 @@ final class OpcPackage {
       name = '$stem$n$ext';
     }
     final _Part part = _Part('/$name', null)..content = content;
+    final int dot = name.lastIndexOf('.');
+    final String extension = dot > name.lastIndexOf('/') + 1
+        ? name.substring(dot + 1)
+        : '';
     _parts[name.toLowerCase()] = part;
+    if (byExtension && extension.isNotEmpty && !extension.contains('/')) {
+      ensureDefault(extension, contentType);
+      if (_sameType(_contentTypes.defaultTypeOf(extension), contentType)) {
+        return part.name;
+      }
+    }
     _contentTypes.replaceOverride(part.name, contentType);
     return part.name;
   }
+
+  /// Declares [type] as the default for [extension] (without the dot) when
+  /// it has none, and returns whether it added one. An extension that
+  /// already maps to a type, the same or another, is left as it is and gives
+  /// `false`.
+  ///
+  /// Throws [ArgumentError] when [extension] is empty or contains a dot.
+  bool ensureDefault(String extension, String type) {
+    if (_contentTypes.defaultTypeOf(extension) != null) return false;
+    _contentTypes.addDefault(extension, type);
+    return true;
+  }
+
+  /// Removes the default content type of [extension] (without the dot), if
+  /// it has one.
+  void removeDefault(String extension) =>
+      _contentTypes.removeDefault(extension);
+
+  /// Whether a relationship of any part, or of the package root, targets the
+  /// part [name].
+  ///
+  /// Relationships of [exceptSource] (a part name, or `''` for the root) are
+  /// not looked at. A relationships part never parsed is parsed into a
+  /// throwaway, so it stays byte-copied on writing. Throws an
+  /// [OpcFormatException] when one cannot be read.
+  bool isReferenced(String name, {String? exceptSource}) {
+    final String key = _key(name);
+    final String? skip = exceptSource == null ? null : _key(exceptSource);
+    final List<String> sourceKeys = <String>{
+      ..._relsEntries.keys,
+      ..._rels.keys,
+    }.toList();
+    for (final String sourceKey in sourceKeys) {
+      if (sourceKey == skip) continue;
+      final String source = _sourceName(sourceKey);
+      final Relationships rels;
+      final known = _rels[sourceKey];
+      if (known != null) {
+        rels = known.rels;
+      } else {
+        final String entry = _relsEntries[sourceKey]!;
+        final Uint8List bytes = _readEntry(_zip!, entry);
+        rels = _parseXml(
+          entry,
+          () => Relationships.parse(_pull(bytes, _maxDepth)),
+        );
+      }
+      for (final OpcRelationship r in rels.items) {
+        if (!r.external && _key(resolve(source, r.target)) == key) return true;
+      }
+    }
+    return false;
+  }
+
+  /// Takes the part [name] out of the package with its content type override
+  /// and its own relationships, and returns what [restorePart] needs to put
+  /// it back exactly.
+  ///
+  /// Relationships that point at the part stay; removing them is the
+  /// caller's job. Never parses the part's own relationships. Throws
+  /// [ArgumentError] when there is no such part.
+  DetachedPart detachPart(String name) {
+    final String key = _key(name);
+    final _Part? part = _parts[key];
+    if (part == null) {
+      throw ArgumentError.value(name, 'name', 'The package has no such part.');
+    }
+    final int index = _parts.keys.toList().indexOf(key);
+    final String? type = _contentTypes.overrideTypeOf(part.name);
+    final DetachedPart detached = DetachedPart._(
+      key,
+      part,
+      index,
+      type,
+      _relsEntries.remove(key),
+      _rels.remove(key),
+    );
+    _parts.remove(key);
+    _contentTypes.removeOverride(part.name);
+    return detached;
+  }
+
+  /// Puts [part], from [detachPart] of this package, back: at its place in
+  /// [partNames], with its override and its relationships. Throws
+  /// [StateError] when a part of that name exists now.
+  void restorePart(DetachedPart part) {
+    final String key = part._key;
+    if (_parts.containsKey(key)) {
+      throw StateError('The package already has the part ${part.name}.');
+    }
+    if (part._index >= _parts.length) {
+      _parts[key] = part._part;
+    } else {
+      final List<MapEntry<String, _Part>> entries = _parts.entries.toList()
+        ..insert(part._index, MapEntry<String, _Part>(key, part._part));
+      _parts
+        ..clear()
+        ..addEntries(entries);
+    }
+    final String? type = part._overrideType;
+    if (type != null) _contentTypes.replaceOverride(part.name, type);
+    final String? relsEntry = part._relsEntry;
+    if (relsEntry != null) _relsEntries[key] = relsEntry;
+    final rels = part._rels;
+    if (rels != null) _rels[key] = rels;
+  }
+
+  static bool _sameType(String? a, String b) =>
+      a != null && a.toLowerCase() == b.toLowerCase();
 
   /// Adds a relationship to [source] (a part name, or `''` for the package
   /// root) and returns its id: [id] when given, else `rId<n>` with the
