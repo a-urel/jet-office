@@ -95,6 +95,15 @@ DocxTableCell _bottom(DocxTable top) {
   return cell;
 }
 
+/// The innermost table of a chain of tables.
+DocxTable _deepest(DocxTable top) {
+  DocxTable at = top;
+  while (_cell(at).blocks.first is DocxTable) {
+    at = _cell(at).blocks.first as DocxTable;
+  }
+  return at;
+}
+
 void main() {
   group('a new table', () {
     test('has the rows and columns asked for, with empty cells', () {
@@ -449,6 +458,12 @@ void main() {
       final List<DocxBlock> blocks = List<DocxBlock>.of(
         rows.first.cells.single.blocks,
       );
+      final List<Object> tableChildren = List<Object>.of(
+        tableChildrenOf(table),
+      );
+      final List<Object> rowChildren = List<Object>.of(
+        rowChildrenOf(rows.first),
+      );
       edits.afterRecord = () => throw StateError('hook');
       expect(
         () => edit(table),
@@ -464,8 +479,9 @@ void main() {
       expect(table.rows, orderedEquals(rows));
       expect(_rows(table), <String>['A', 'B']);
       expect(rows.first.cells.single.blocks, orderedEquals(blocks));
+      expect(tableChildrenOf(table), orderedEquals(tableChildren));
+      expect(rowChildrenOf(rows.first), orderedEquals(rowChildren));
       expect(edits.log.hasChanges, isFalse);
-      expect(_names(_all(_saved(doc), 'tbl').single), <String>['tr', 'tr']);
     }
 
     test('inserting a row', () {
@@ -489,9 +505,13 @@ void main() {
         '<w:tbl><w:tr>${_tc('A')}${_tc('B')}</w:tr></w:tbl>',
       );
       final DocxTable table = _table(doc);
+      final List<Object> children = List<Object>.of(
+        rowChildrenOf(table.rows.single),
+      );
       editsOf(doc).afterRecord = () => throw StateError('hook');
       expect(() => table.rows.single.removeCellAt(0), throwsStateError);
       expect(_rows(table), <String>['A|B']);
+      expect(rowChildrenOf(table.rows.single), orderedEquals(children));
       expect(editsOf(doc).log.hasChanges, isFalse);
     });
 
@@ -551,8 +571,8 @@ void main() {
   });
 
   group('the nesting of tables', () {
-    test('reaches 256 and goes no further', () {
-      final DocxTable top = _chain(maxTableNesting);
+    test('reaches the limit of the API and goes no further', () {
+      final DocxTable top = _chain(maxBuiltTableNesting);
       final DocxTableCell bottom = _bottom(top);
       expect(
         () => bottom.insertBlock(0, DocxTable(columns: 1)),
@@ -566,17 +586,13 @@ void main() {
     });
 
     test('counts what goes in, and where it goes', () {
-      final DocxTableCell bottom = _bottom(_chain(128));
-      expect(() => bottom.insertBlock(0, _chain(129)), throwsArgumentError);
-      bottom.insertBlock(0, _chain(128));
+      final DocxTableCell bottom = _bottom(_chain(40));
+      expect(() => bottom.insertBlock(0, _chain(41)), throwsArgumentError);
+      bottom.insertBlock(0, _chain(40));
     });
 
     test('counts a row and a cell that go in', () {
-      final DocxTable top = _chain(maxTableNesting);
-      DocxTable last = top;
-      while (_cell(last).blocks.first is DocxTable) {
-        last = _cell(last).blocks.first as DocxTable;
-      }
+      final DocxTable last = _deepest(_chain(maxBuiltTableNesting));
 
       final DocxTableRow row = DocxTableRow();
       row.cells.single.insertBlock(0, DocxTable(columns: 1));
@@ -589,21 +605,72 @@ void main() {
       expect(last.rows.single.cells, hasLength(1));
     });
 
-    test('at its deepest, what saves opens again', () {
+    test('at its deepest, what saves opens under the default limits', () {
       final DocxDocument doc = _open(_p('a'));
-      final DocxTable top = _chain(maxTableNesting);
-      doc.body.insertBlock(1, top);
-      final DocxDocument again = DocxDocument.open(
-        doc.save().bytes,
-        limits: const DocxReadLimits(maxDepth: 1 << 20),
-      );
+      doc.body.insertBlock(1, _chain(maxBuiltTableNesting));
+      final DocxDocument again = DocxDocument.open(doc.save().bytes);
       DocxTable at = again.body.blocks[1] as DocxTable;
       int levels = 1;
       while (_cell(at).blocks.first is DocxTable) {
         at = _cell(at).blocks.first as DocxTable;
         levels++;
       }
-      expect(levels, maxTableNesting);
+      expect(levels, maxBuiltTableNesting);
+    });
+
+    group('in a file nested past the limit of the API', () {
+      const int levels = maxBuiltTableNesting + 2;
+
+      /// The innermost table of a file of [levels] nested tables.
+      DocxTable innermost() => _deepest(
+        _table(
+          _open(
+            '${'<w:tbl><w:tr><w:tc>' * levels}${_p('x')}'
+            '${'</w:tc></w:tr></w:tbl>' * levels}',
+          ),
+        ),
+      );
+
+      test('a plain row goes in, as it deepens nothing', () {
+        final DocxTable table = innermost();
+        table.insertRowAt(1, DocxTableRow());
+        expect(table.rows, hasLength(2));
+      });
+
+      test('a plain cell goes in, as it deepens nothing', () {
+        final DocxTableRow row = innermost().rows.single;
+        row.insertCellAt(1, DocxTableCell('y'));
+        expect(row.cells, hasLength(2));
+      });
+
+      test('a table read that deep cannot go back in the API', () {
+        final DocxDocument doc = _open(
+          '${'<w:tbl><w:tr><w:tc>' * levels}${_p('x')}'
+          '${'</w:tc></w:tr></w:tbl>' * levels}',
+        );
+        final DocxBlock table = doc.body.blocks.single;
+        final ChangeSet removal = editsOf(
+          doc,
+        ).transaction(() => doc.body.removeBlockAt(0));
+        expect(() => doc.body.insertBlock(0, table), throwsArgumentError);
+        editsOf(doc).log.revertSet(removal);
+        expect(doc.body.blocks.single, same(table));
+      });
+
+      test('a nested table throws, and changes nothing', () {
+        final DocxTable table = innermost();
+        final DocxTableCell cell = _cell(table);
+        expect(
+          () => cell.insertBlock(0, DocxTable(columns: 1)),
+          throwsArgumentError,
+        );
+        expect(cell.blocks, hasLength(1));
+
+        final DocxTableRow row = DocxTableRow();
+        row.cells.single.insertBlock(0, DocxTable(columns: 1));
+        expect(() => table.insertRowAt(1, row), throwsArgumentError);
+        expect(table.rows, hasLength(1));
+      });
     });
   });
 

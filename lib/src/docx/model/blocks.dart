@@ -41,15 +41,25 @@ import 'styles.dart' show DocxStyleType;
 import 'table_formatting.dart';
 import 'table_properties.dart';
 
-/// How deep tables may nest in a part: a table in a cell of a table is at
-/// nesting 2.
+/// How deep tables may nest in a part that is read: a table in a cell of a
+/// table is at nesting 2.
 ///
 /// `DocxReadLimits.maxDepth` bounds it by itself at its default, some 84
 /// tables deep. The reader, the writer and the walks of the tree recurse once
 /// per table, so a raised `maxDepth` must not raise this: past it the read
 /// fails the same way on every platform, and not with a stack overflow that
-/// depends on the platform's stack.
+/// depends on the platform's stack. What the API may build is less:
+/// [maxBuiltTableNesting].
 const int maxTableNesting = 256;
+
+/// How deep the API may nest tables, counted as [maxTableNesting] is.
+///
+/// A table takes three XML levels, so the default `DocxReadLimits.maxDepth`
+/// stops near 84 tables: 80 leaves room for what the innermost cell holds, and
+/// what the API builds opens again under the default limits. A file may nest
+/// deeper, up to [maxTableNesting]; it reads and saves, and a row or a cell
+/// holding no table still goes in there, as it deepens nothing.
+const int maxBuiltTableNesting = 80;
 
 /// The width of the text of a blank A4 page, in twips: what the columns of a
 /// new table share.
@@ -203,8 +213,9 @@ final class DocxParagraph extends DocxBlock {
 /// A table read from a file is written as read: the children it does not show
 /// stay where they were, and a grid that does not fit its rows is kept.
 ///
-/// Tables nest at most 256 deep, as a read accepts, so what saves opens again:
-/// an edit past that throws [ArgumentError].
+/// The API nests tables at most 80 deep, so what it builds opens again under
+/// the default read limits: an edit that puts tables past that throws
+/// [ArgumentError]. A file may nest deeper, and is kept.
 final class DocxTable extends DocxBlock {
   /// A table of [rows] rows of [columns] empty cells.
   ///
@@ -364,7 +375,7 @@ final class DocxTable extends DocxBlock {
   ///
   /// An [index] out of that range throws [RangeError]. A [row] already in a
   /// table, this one or another, throws [StateError]: remove it there first. A
-  /// [row] that holds this table, or that would nest tables past 256 deep,
+  /// [row] that holds this table, or whose tables would nest past 80 deep,
   /// throws [ArgumentError]. Nothing changes then.
   void insertRowAt(int index, DocxTableRow row) =>
       primitives.insertChild(_sink, this, _children, _rows, index, row);
@@ -501,7 +512,7 @@ final class DocxTableRow {
   ///
   /// An [index] out of that range throws [RangeError]. A [cell] already in a
   /// row, this one or another, throws [StateError]: remove it there first. A
-  /// [cell] that holds this row, or that would nest tables past 256 deep,
+  /// [cell] that holds this row, or whose tables would nest past 80 deep,
   /// throws [ArgumentError]. Nothing changes then.
   void insertCellAt(int index, DocxTableCell cell) =>
       primitives.insertChild(_sink, this, _children, _cells, index, cell);
@@ -606,7 +617,7 @@ final class DocxTableCell {
   ///
   /// An [index] out of that range throws [RangeError]. A [block] already in a
   /// body or a cell throws [StateError]: remove it there first. A table that
-  /// holds this cell, or that would nest tables past 256 deep, throws
+  /// holds this cell, or that would nest tables past 80 deep, throws
   /// [ArgumentError]. Nothing changes then.
   ///
   /// In a cell of a document, the styles set on a paragraph are resolved as
@@ -863,8 +874,9 @@ void attachSink(Object item, DocxEditSink sink) {
 }
 
 /// Throws [ArgumentError] when [item] (a table, a row or a cell) cannot go in
-/// [container]: it holds [container], or the tables around [container] and
-/// those in [item] together nest past [maxTableNesting].
+/// [container]: it holds [container], or it holds tables that, with those
+/// around [container], nest past [maxBuiltTableNesting]. An [item] that holds
+/// no table deepens nothing and always fits, even in a file nested past that.
 ///
 /// It walks up from [container] and through [item] only, once per edit, so an
 /// edit costs what is inserted and not what the document holds.
@@ -876,15 +888,15 @@ void checkFitsIn(Object item, Object container) {
     }
     if (at is DocxTable) tables++;
   }
-  int deepest = tables;
+  int deepest = 0;
   _walk(item, tables, (Object node, int around) {
     if (node is DocxTable && around >= deepest) deepest = around + 1;
   });
-  if (deepest > maxTableNesting) {
+  if (deepest > maxBuiltTableNesting) {
     throw ArgumentError.value(
       item,
       'item',
-      'must not nest tables past $maxTableNesting',
+      'must not nest tables past $maxBuiltTableNesting',
     );
   }
 }
@@ -942,7 +954,8 @@ PropertyContainer cellPropertiesOf(DocxTableCell cell) => cell._source;
 /// The attributes of `w:tc` the reader kept on [cell], in source order.
 List<KeptAttribute> cellAttributesOf(DocxTableCell cell) => cell._attributes;
 
-/// The list of the blocks of [cell], for the block primitives.
+/// The list of the blocks of [cell], for tests that call the block primitives
+/// themselves.
 List<DocxBlock> cellBlocksOf(DocxTableCell cell) => cell._blocks;
 
 /// Whether [cell] must be written with an empty `w:p` after its blocks: Word

@@ -408,8 +408,8 @@ final class _ListEdit<T extends Object> implements Change {
       _items.removeAt(_index);
       _children?.removeAt(_position);
     } else {
+      // Only a block is replaced, and a block is in one list.
       _items[_index] = into;
-      _children?[_position] = into;
     }
     if (out != null) _detach(out);
     if (into != null) _attach(_sink, _parent, into);

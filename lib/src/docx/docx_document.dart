@@ -421,7 +421,9 @@ final class DocxBody {
   /// An [index] out of that range throws [RangeError]. A [block] that is
   /// already in a body, this one or another, or in a table cell, throws
   /// [StateError]: remove it there first. Phase 4 neither moves nor copies a
-  /// block implicitly.
+  /// block implicitly. A table nested past 80 deep, which only a file can
+  /// hold, throws [ArgumentError]: what the API builds opens again under the
+  /// default read limits.
   ///
   /// The styles set on a paragraph, and on its runs, are resolved against
   /// the document's ([DocxParagraph.style] has the rules). When one is set
