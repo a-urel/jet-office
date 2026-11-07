@@ -54,6 +54,7 @@ import 'numbering_schemas.dart' show maxListLevel;
 import 'read_exception.dart';
 import 'read_limits.dart';
 import 'related_part.dart';
+import 'story_writer.dart' show listSetOf;
 import 'styles_part.dart';
 import 'warnings.dart';
 
@@ -383,17 +384,19 @@ final class _MainPart implements PartContent {
       _log.hasChanges ? _part.encode() : <Uint8List>[_original()];
 }
 
-/// The body of a document, the content of `w:body`: its blocks, in order.
+/// The blocks of a story: the run of paragraphs and tables a part holds under
+/// its root, as `w:body` does in the main part.
 ///
 /// Paragraphs ([DocxParagraph]) and tables ([DocxTable]) are typed; every
 /// other block, such as a content control, is a [DocxOpaqueBlock] kept as
-/// written. The last section belongs to the body, not to its blocks
-/// ([DocxDocument.sections]); the others are in the paragraphs that end them.
+/// written. A block is in at most one story at a time. Each edit is atomic: one
+/// that throws changes nothing.
 ///
-/// A block is in at most one body at a time. Each edit is atomic: one that
-/// throws changes nothing.
-final class DocxBody {
-  DocxBody._(this._edits, this._blocks, this._document);
+/// The checks only the body needs, such as a section break's references,
+/// belong to [DocxBody] and reach the edits here through [_checkBlock]; so does
+/// the width a new table takes from the last section.
+abstract base class DocxStory {
+  DocxStory._(this._edits, this._blocks, this._document);
 
   final DocxEdits _edits;
   final DocxDocument _document;
@@ -402,12 +405,20 @@ final class DocxBody {
     _blocks,
   );
 
+  /// Checks that [block] may go into this story, before it is inserted: the
+  /// body's section break check. The story's own edits check nothing more.
+  void _checkBlock(DocxBlock block) {}
+
+  /// The twips [columns] new columns share in this story, or `null` for the
+  /// page of a blank document ([DocxBody.addTable] has the rule).
+  int? _tableWidthTwips(int columns);
+
   /// The blocks in order. The list cannot be modified, and shows later
   /// edits; use [addParagraph], [insertBlock], [removeBlockAt] and
   /// [replaceBlockAt].
   List<DocxBlock> get blocks => _blocksView;
 
-  /// Whether a paragraph of the body, or in one of its tables, was put in a
+  /// Whether a paragraph of the story, or in one of its tables, was put in a
   /// list through the API.
   bool get _holdsListSet {
     bool found = false;
@@ -503,9 +514,86 @@ final class DocxBody {
     return table;
   }
 
+  /// Inserts [block] at [index], from 0 to the number of blocks.
+  ///
+  /// An [index] out of that range throws [RangeError]. A [block] that is
+  /// already in a body, this one or another, or in a table cell, throws
+  /// [StateError]: remove it there first. Phase 4 neither moves nor copies a
+  /// block implicitly. A table nested past 80 deep, which only a file can
+  /// hold, throws [ArgumentError]: what the API builds opens again under the
+  /// default read limits. So does a paragraph with a section break of another
+  /// document: the ids of its references mean nothing here. In a table cell
+  /// such a break starts no section, and goes in as read.
+  ///
+  /// The styles set on a paragraph, on its runs and on a table, and on
+  /// everything in the cells of a table, nested tables included, are resolved
+  /// against the document's ([DocxParagraph.style] has the rules). When one is
+  /// set and the styles part cannot be read, this throws a [DocxReadException]
+  /// naming it, on a document that opened; nothing changes then.
+  ///
+  /// A paragraph or a table read in another document counts as set here, with
+  /// what its cells hold: a paragraph's `w:pStyle` and `w:numPr`, the
+  /// `w:rStyle` of its runs and a table's `w:tblStyle` are resolved by id, and
+  /// a save reports the ones this document lacks, each at its own location
+  /// ([DocxWarningCode.styleNotFound], [DocxWarningCode.numberingNotFound]).
+  /// A row or a cell going into a table here does the same. Moved within one
+  /// document they stay as read. A move carries nothing else over:
+  ///
+  /// * The style's `w:name` stays behind, so a built-in style under a
+  ///   localized id (`Balk1`) does not map to this document's by its name;
+  ///   it is reported instead.
+  /// * A `w:numId` this document has too joins that list, unreported, even
+  ///   when it is another list; ids are not remapped.
+  /// * A read opaque inline or block that holds an `r:id` (a hyperlink, a
+  ///   picture) keeps an id this document may lack or mean otherwise.
+  /// * A reference the model does not type, and one in the paragraph mark's
+  ///   `w:rPr`, stay as read, unreported.
+  void insertBlock(int index, DocxBlock block) {
+    _checkBlock(block);
+    primitives.insertBlock(_edits, this, _blocks, index, block);
+  }
+
+  /// Removes the block at [index]. The block is then in no body and can be
+  /// inserted again.
+  ///
+  /// An [index] that is not one of a block throws [RangeError].
+  void removeBlockAt(int index) =>
+      primitives.removeBlock(_edits, this, _blocks, index);
+
+  /// Puts [block] in place of the block at [index]. The block replaced is
+  /// then in no body.
+  ///
+  /// An [index] that is not one of a block throws [RangeError], and a
+  /// [block] already in a body or a cell throws [StateError]. The styles set on
+  /// [block] are resolved as [insertBlock] does, which may throw the same
+  /// [DocxReadException], and what was read in another document counts as set
+  /// as it says. A section break of another document throws [ArgumentError],
+  /// as there.
+  void replaceBlockAt(int index, DocxBlock block) {
+    _checkBlock(block);
+    primitives.replaceBlock(_edits, this, _blocks, index, block);
+  }
+}
+
+/// The body of a document, the content of `w:body`: its blocks, in order.
+///
+/// Paragraphs ([DocxParagraph]) and tables ([DocxTable]) are typed; every
+/// other block, such as a content control, is a [DocxOpaqueBlock] kept as
+/// written. The last section belongs to the body, not to its blocks
+/// ([DocxDocument.sections]); the others are in the paragraphs that end them.
+///
+/// A block is in at most one body at a time. Each edit is atomic: one that
+/// throws changes nothing.
+final class DocxBody extends DocxStory {
+  DocxBody._(super.edits, super.blocks, super.document) : super._();
+
+  @override
+  void _checkBlock(DocxBlock block) => checkBreakFits(block, _edits);
+
   /// The twips [columns] new columns share: what Word's Insert Table takes of
   /// the last section, or `null` for the page of a blank document when that
   /// does not read or gives a column less than a twip.
+  @override
   int? _tableWidthTwips(int columns) {
     final double? pt = _document._part!.finalSection.textWidthPt;
     if (pt == null) return null;
@@ -543,66 +631,6 @@ final class DocxBody {
       _edits.apply(_SectionAdded(_document, part, paragraph, held, next));
     });
     return next;
-  }
-
-  /// Inserts [block] at [index], from 0 to the number of blocks.
-  ///
-  /// An [index] out of that range throws [RangeError]. A [block] that is
-  /// already in a body, this one or another, or in a table cell, throws
-  /// [StateError]: remove it there first. Phase 4 neither moves nor copies a
-  /// block implicitly. A table nested past 80 deep, which only a file can
-  /// hold, throws [ArgumentError]: what the API builds opens again under the
-  /// default read limits. So does a paragraph with a section break of another
-  /// document: the ids of its references mean nothing here. In a table cell
-  /// such a break starts no section, and goes in as read.
-  ///
-  /// The styles set on a paragraph, on its runs and on a table, and on
-  /// everything in the cells of a table, nested tables included, are resolved
-  /// against the document's ([DocxParagraph.style] has the rules). When one is
-  /// set and the styles part cannot be read, this throws a [DocxReadException]
-  /// naming it, on a document that opened; nothing changes then.
-  ///
-  /// A paragraph or a table read in another document counts as set here, with
-  /// what its cells hold: a paragraph's `w:pStyle` and `w:numPr`, the
-  /// `w:rStyle` of its runs and a table's `w:tblStyle` are resolved by id, and
-  /// a save reports the ones this document lacks, each at its own location
-  /// ([DocxWarningCode.styleNotFound], [DocxWarningCode.numberingNotFound]).
-  /// A row or a cell going into a table here does the same. Moved within one
-  /// document they stay as read. A move carries nothing else over:
-  ///
-  /// * The style's `w:name` stays behind, so a built-in style under a
-  ///   localized id (`Balk1`) does not map to this document's by its name;
-  ///   it is reported instead.
-  /// * A `w:numId` this document has too joins that list, unreported, even
-  ///   when it is another list; ids are not remapped.
-  /// * A read opaque inline or block that holds an `r:id` (a hyperlink, a
-  ///   picture) keeps an id this document may lack or mean otherwise.
-  /// * A reference the model does not type, and one in the paragraph mark's
-  ///   `w:rPr`, stay as read, unreported.
-  void insertBlock(int index, DocxBlock block) {
-    checkBreakFits(block, _edits);
-    primitives.insertBlock(_edits, this, _blocks, index, block);
-  }
-
-  /// Removes the block at [index]. The block is then in no body and can be
-  /// inserted again.
-  ///
-  /// An [index] that is not one of a block throws [RangeError].
-  void removeBlockAt(int index) =>
-      primitives.removeBlock(_edits, this, _blocks, index);
-
-  /// Puts [block] in place of the block at [index]. The block replaced is
-  /// then in no body.
-  ///
-  /// An [index] that is not one of a block throws [RangeError], and a
-  /// [block] already in a body or a cell throws [StateError]. The styles set on
-  /// [block] are resolved as [insertBlock] does, which may throw the same
-  /// [DocxReadException], and what was read in another document counts as set
-  /// as it says. A section break of another document throws [ArgumentError],
-  /// as there.
-  void replaceBlockAt(int index, DocxBlock block) {
-    checkBreakFits(block, _edits);
-    primitives.replaceBlock(_edits, this, _blocks, index, block);
   }
 }
 
