@@ -31,6 +31,7 @@ import 'dart:collection';
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart' show Ns;
 import '../../opc/opaque_xml.dart';
+import '../builtin_styles.dart' show DocxBuiltInStyle;
 import '../properties.dart';
 import '../units.dart';
 import 'edit_sink.dart';
@@ -262,6 +263,37 @@ final class DocxTable extends DocxBlock {
     );
   }
 
+  /// The grid of a new table of [columns] columns, of the widths [widthsPt], or
+  /// of equal width for `null`.
+  static List<double?> _newGrid(int columns, List<double>? widthsPt) {
+    final List<double?> grid = _equalGrid(columns);
+    if (widthsPt == null) return grid;
+    if (widthsPt.length != columns) {
+      throw ArgumentError.value(
+        widthsPt,
+        'columnWidthsPt',
+        'must have one width for each of the $columns columns',
+      );
+    }
+    return _checkedWidths(widthsPt, 'columnWidthsPt');
+  }
+
+  /// [widths] as the grid stores them, rounded to twips; throws what
+  /// [gridColumnsPt] says of an entry, naming [name].
+  static List<double?> _checkedWidths(List<double?> widths, String name) {
+    return List<double?>.unmodifiable(<double>[
+      for (final double? width in widths)
+        ptOfTwips(
+          twipsOf(
+            width ?? (throw ArgumentError.notNull('$name entry')),
+            name,
+            min: 0,
+            max: maxTwips,
+          ),
+        ),
+    ]);
+  }
+
   /// The width of a column of a new table of [columns] columns, in points.
   static double _columnPt(int columns) =>
       ptOfTwips(_pageTextWidthTwips ~/ columns);
@@ -303,6 +335,9 @@ final class DocxTable extends DocxBlock {
   final bool _isNew;
 
   DocxEditSink _sink = DocxEditSink.none;
+
+  /// The sink of the document the table was read in; `null` for a new table.
+  DocxEditSink? _readIn;
 
   /// The children of `w:tbl` in file order: the [_source] when the file has
   /// a `w:tblPr`, each [DocxTableRow], and an [OpaqueXml] for any other,
@@ -347,17 +382,7 @@ final class DocxTable extends DocxBlock {
     if (value == null) {
       throw ArgumentError.notNull('gridColumnsPt');
     }
-    final List<double?> columns = List<double?>.unmodifiable(<double>[
-      for (final double? width in value)
-        ptOfTwips(
-          twipsOf(
-            width ?? (throw ArgumentError.notNull('gridColumnsPt entry')),
-            'gridColumnsPt',
-            min: 0,
-            max: maxTwips,
-          ),
-        ),
-    ]);
+    final List<double?> columns = _checkedWidths(value, 'gridColumnsPt');
     final List<double?>? current = _gridColumnsPt;
     if (current != null &&
         _rows.isNotEmpty &&
@@ -387,6 +412,10 @@ final class DocxTable extends DocxBlock {
   /// vertical merge and no cell of the same columns in the row that will be
   /// above it. Nothing changes then.
   ///
+  /// In a table of a document, the styles set on what the row holds are
+  /// resolved as `DocxBody.insertBlock` says, and it may throw the same
+  /// `DocxReadException`.
+  ///
   /// A row with no such cell may go inside a vertical merge, and a row removed
   /// may leave a merge without its start: neither is checked.
   void insertRowAt(int index, DocxTableRow row) {
@@ -409,6 +438,53 @@ final class DocxTable extends DocxBlock {
   /// table instead. Nothing changes then.
   void removeRowAt(int index) =>
       primitives.removeChild(_sink, this, _children, _rows, index);
+
+  /// Appends a row of the width of the grid that holds [values], one per
+  /// column, and returns it.
+  ///
+  /// `null` is an empty cell, and the columns past the last value have empty
+  /// cells; a cell holds one paragraph, with the text split and scrubbed as
+  /// [DocxRun.text] is when set. Numbers are text here: how they show is the
+  /// caller's. A cell takes the width of its column (`w:tcW`), when the grid
+  /// has one that a cell can hold.
+  ///
+  /// With [header] the row repeats at the top of each page and stays on one
+  /// page: [DocxTableRowProperties.repeatAsHeader] and
+  /// [DocxTableRowProperties.cantSplit] are set. Word repeats only an unbroken
+  /// run of header rows from the first row of the table.
+  ///
+  /// More [values] than columns throw [ArgumentError], and so does a table
+  /// without a grid, or with an empty one, which says no width. Nothing
+  /// changes then; otherwise the add is one edit.
+  DocxTableRow addRow(List<String?> values, {bool header = false}) {
+    final int? columns = _columnCount;
+    if (columns == null) {
+      throw ArgumentError('A table without a grid has no width for a row.');
+    }
+    if (values.length > columns) {
+      throw ArgumentError.value(
+        values,
+        'values',
+        'must be at most the $columns columns of the grid',
+      );
+    }
+    final DocxTableRow row = DocxTableRow._read(
+      const PropertyContainer.empty(),
+      const <KeptAttribute>[],
+      <Object>[
+        for (int i = 0; i < columns; i++)
+          DocxTableCell(i < values.length ? values[i] ?? '' : '')
+            ..properties.width = _widthOfColumns(i, i),
+      ],
+    );
+    if (header) {
+      row.properties
+        ..repeatAsHeader = true
+        ..cantSplit = true;
+    }
+    insertRowAt(_rows.length, row);
+    return row;
+  }
 
   /// Merges the cells of a range of the grid and returns the top-left one.
   ///
@@ -831,6 +907,10 @@ final class DocxTableRow {
   /// [cell] that holds this row, or whose tables would nest past 80 deep,
   /// throws [ArgumentError]; so does one that, in a row of a table with a
   /// grid, takes the row past the columns of the grid. Nothing changes then.
+  ///
+  /// In a row of a document, the styles set on what the cell holds are resolved
+  /// as `DocxBody.insertBlock` says, and it may throw the same
+  /// `DocxReadException`.
   void insertCellAt(int index, DocxTableCell cell) {
     RangeError.checkValueInInterval(index, 0, _cells.length, 'index');
     if (cell._row == null) _table?._checkFits(_gridTotal + cell._span);
@@ -973,6 +1053,26 @@ final class DocxTableCell {
     return paragraph;
   }
 
+  /// Appends a new table of [columns] columns, with no rows yet, and returns
+  /// it; `DocxBody.addTable` has the rules and what it throws.
+  ///
+  /// In a cell of a document it has the document's `Table Grid` style, as a
+  /// table of the body. In a cell of no document it has no style, as
+  /// [DocxTable.new]: set one on the table, and it resolves when the cell goes
+  /// in a document.
+  ///
+  /// Whatever the cell held stays before the table, an empty paragraph too, and
+  /// a table last in a cell is saved with an empty paragraph after it. A table
+  /// that would nest past 80 deep throws [ArgumentError], and nothing changes.
+  DocxTable addTable({required int columns, List<double>? columnWidthsPt}) {
+    final DocxTable table = newTable(columns, columnWidthsPt);
+    _sink.atomically(() {
+      table.properties.style = _sink.ensureStyle(DocxBuiltInStyle.tableGrid);
+      insertBlock(_blocks.length, table);
+    });
+    return table;
+  }
+
   /// Inserts [block] at [index], from 0 to the number of blocks.
   ///
   /// An [index] out of that range throws [RangeError]. A [block] already in a
@@ -980,7 +1080,7 @@ final class DocxTableCell {
   /// holds this cell, or that would nest tables past 80 deep, throws
   /// [ArgumentError]. Nothing changes then.
   ///
-  /// In a cell of a document, the styles set on a paragraph are resolved as
+  /// In a cell of a document, the styles set on [block] are resolved as
   /// `DocxBody.insertBlock` says, and it may throw the same
   /// `DocxReadException`.
   void insertBlock(int index, DocxBlock block) =>
@@ -1125,6 +1225,31 @@ DocxTable readTable({
   required List<Object> children,
 }) => DocxTable._read(properties, attributes, gridColumnsPt, children);
 
+/// A new table as `DocxBody.addTable` builds it, in no document yet, without a
+/// style or rows: Word's width and look (plan Ruling 6), and the grid of
+/// [columns] columns of the widths [columnWidthsPt], or sharing the page.
+///
+/// A [columns] outside 1 to [maxTableColumns], or a width out of range, throws
+/// [RangeError]; [columnWidthsPt] of another length than [columns], or with a
+/// width that is not finite, throws [ArgumentError].
+DocxTable newTable(int columns, List<double>? columnWidthsPt) {
+  final DocxTable table = DocxTable._read(
+    const PropertyContainer.empty(),
+    const <KeptAttribute>[],
+    DocxTable._newGrid(columns, columnWidthsPt),
+    <Object>[],
+    isNew: true,
+  );
+  table.properties
+    ..width = const DocxTableWidth.auto()
+    ..look = const DocxTableLook(
+      firstRow: true,
+      firstColumn: true,
+      noVerticalBands: true,
+    );
+  return table;
+}
+
 /// A row as the reader builds it: its `w:trPr` as read (by
 /// `tableRowPropertiesSchema`; an empty container for none), the kept
 /// attributes of `w:tr`, and its children in file order: the [properties]
@@ -1200,7 +1325,7 @@ void _resolveRunStyle(DocxRun run, DocxEditSink sink) {
 /// stays (plan Ruling 5), and what was read in another counts as set: the
 /// `w:pStyle`, the `w:numPr` that the save checks, and each run's
 /// `w:rStyle`.
-void resolveStylesSet(DocxParagraph paragraph) {
+void _resolveStylesSet(DocxParagraph paragraph) {
   final DocxEditSink sink = paragraph._sink;
   final PropertySet properties = paragraphPropertySetOf(paragraph);
   if (sink.isForeign(paragraph._readIn)) {
@@ -1216,6 +1341,31 @@ void resolveStylesSet(DocxParagraph paragraph) {
   }
 }
 
+/// Resolves the style set through the API on [table], which is in a document
+/// now; one read in another document counts as set.
+void _resolveTableStyle(DocxTable table) {
+  final PropertySet properties = tablePropertySetOf(table);
+  if (table._sink.isForeign(table._readIn)) {
+    properties.countReadAsSet('tblStyle');
+  }
+  properties.resolveStyleIdSet('tblStyle', DocxStyleType.table);
+}
+
+/// Resolves the styles of [item] (a block, a row or a cell) and of everything
+/// it holds, nested tables included, as [_resolveStylesSet] does for a
+/// paragraph: what was read from the document [item] is in now stays, and what
+/// was read in another counts as set, a table's `w:tblStyle` too.
+void resolveStylesIn(Object item) {
+  _walk(item, 0, (Object node, int _) {
+    switch (node) {
+      case DocxParagraph():
+        _resolveStylesSet(node);
+      case DocxTable():
+        _resolveTableStyle(node);
+    }
+  });
+}
+
 /// Records that [paragraph] and its runs were read in the document of
 /// [sink], so what they name counts as set in any other.
 void markReadIn(DocxParagraph paragraph, DocxEditSink sink) {
@@ -1228,10 +1378,14 @@ void markReadIn(DocxParagraph paragraph, DocxEditSink sink) {
 }
 
 /// Records that [block] and everything in its cells were read in the document
-/// of [sink] ([markReadIn]).
+/// of [sink] ([markReadIn]), so what they name counts as set in any other.
 void markBlockReadIn(DocxBlock block, DocxEditSink sink) {
   visitBlocks(block, (DocxBlock b) {
-    if (b is DocxParagraph) markReadIn(b, sink);
+    if (b is DocxParagraph) {
+      markReadIn(b, sink);
+    } else if (b is DocxTable) {
+      b._readIn = sink;
+    }
   });
 }
 

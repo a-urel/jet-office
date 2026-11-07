@@ -95,8 +95,8 @@
 /// as written, so an opened file comes back with only the cells that were
 /// set changed.
 ///
-/// [DocxDocument] is the Word document model, in progress (milestones D1 and
-/// D2; the API may change before D6). [DocxDocument.new] starts a document
+/// [DocxDocument] is the Word document model, in progress (milestones D1 to
+/// D3; the API may change before D6). [DocxDocument.new] starts a document
 /// like Word for Mac's blank one: A4 portrait, Aptos 12, no document
 /// properties.
 /// [DocxDocument.open] reads a DOCX file within [DocxReadLimits]; a file it
@@ -113,7 +113,13 @@
 /// reads `null`. A [DocxTable] gives its rows and cells, and a cell its
 /// blocks; the table, the row and the cell give their formatting as
 /// [DocxTableProperties], [DocxTableRowProperties] and
-/// [DocxTableCellProperties]. What the model does not type yet, such as content controls,
+/// [DocxTableCellProperties]. [DocxBody.addTable] adds a table as Word's Insert
+/// Table writes it, with the document's `Table Grid` style, and
+/// [DocxTable.addRow] fills it row by row with text; [DocxTableCell.addTable]
+/// nests one. Rows, cells and blocks of a cell are added, removed and replaced
+/// like the blocks of the body, [DocxTable.mergeCells] merges a range, and a
+/// table built in no document, or read in another, has its styles resolved when
+/// it goes in. What the model does not type yet, such as content controls,
 /// tracked changes, hyperlinks, drawings and fields, is kept as written in a
 /// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
 /// can be removed but not changed; the final section and the parts other than

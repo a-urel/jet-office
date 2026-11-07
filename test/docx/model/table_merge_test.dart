@@ -166,6 +166,9 @@ final class _RecordingSink implements DocxEditSink {
       _edits.resolveStyleId(id, type);
 
   @override
+  String? ensureStyle(DocxBuiltInStyle style) => _edits.ensureStyle(style);
+
+  @override
   bool isForeign(DocxEditSink? readIn) => _edits.isForeign(readIn);
 }
 

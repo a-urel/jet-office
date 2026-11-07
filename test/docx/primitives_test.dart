@@ -52,6 +52,9 @@ final class _CountingSink implements DocxEditSink {
   void atomically(void Function() body) => body();
 
   @override
+  String? ensureStyle(DocxBuiltInStyle style) => null;
+
+  @override
   bool isForeign(DocxEditSink? readIn) => false;
 
   @override

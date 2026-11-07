@@ -31,6 +31,7 @@
 library;
 
 import '../../opc/change_log.dart';
+import '../builtin_styles.dart' show DocxBuiltInStyle;
 import 'blocks.dart';
 import 'inlines.dart';
 import 'property_set.dart';
@@ -84,6 +85,11 @@ abstract interface class DocxEditSink {
   /// document, added if it lacks it. Call it inside [atomically].
   String resolveStyleId(String id, DocxStyleType type);
 
+  /// The id of the built-in [style] in the document, added if it lacks it
+  /// (`DocxStyles.ensure`); `null` for the sink of no document, which has no
+  /// styles. Call it inside [atomically].
+  String? ensureStyle(DocxBuiltInStyle style);
+
   /// Whether content read in the document of [readIn] (`null`: not read
   /// from a file) now belongs to another document, this one: never in a
   /// replay, nor for the sink of no document.
@@ -126,6 +132,9 @@ final class _NoEdits implements DocxEditSink {
 
   @override
   String resolveStyleId(String id, DocxStyleType type) => id;
+
+  @override
+  String? ensureStyle(DocxBuiltInStyle style) => null;
 
   @override
   bool isForeign(DocxEditSink? readIn) => false;

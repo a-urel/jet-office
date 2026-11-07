@@ -36,13 +36,15 @@
 ///
 /// A style id set through the API is resolved against the document's styles
 /// ([DocxEdits.resolveStyleId]) as it is set, or as the content that holds
-/// it goes in ([insertBlock], [replaceBlock]), so the styles it adds are
-/// changes of the same transaction. A replay resolves nothing.
+/// it goes in ([insertBlock], [replaceBlock], [insertChild]), however deep in
+/// a table it is, so the styles it adds are changes of the same transaction. A
+/// replay resolves nothing.
 ///
 /// @docImport 'edit_sink.dart';
 library;
 
 import '../../opc/change_log.dart';
+import '../builtin_styles.dart' show DocxBuiltInStyle;
 import 'blocks.dart';
 import 'edit_sink.dart';
 import 'inlines.dart';
@@ -64,6 +66,10 @@ final class DocxEdits implements DocxEditSink {
   /// What resolves a style id set through the API, which the document
   /// provides (it loads the styles); `null` keeps every id as given.
   String Function(String id, DocxStyleType type)? styleResolver;
+
+  /// What gives the id of a built-in style, adding it when the document lacks
+  /// it, which the document provides; `null` adds none.
+  String Function(DocxBuiltInStyle style)? styleEnsurer;
 
   /// True while a change is reverted or reapplied: the reports the model
   /// makes then are the replay, not new edits.
@@ -158,6 +164,9 @@ final class DocxEdits implements DocxEditSink {
   }
 
   @override
+  String? ensureStyle(DocxBuiltInStyle style) => styleEnsurer?.call(style);
+
+  @override
   bool isForeign(DocxEditSink? readIn) =>
       !_replaying && readIn != null && !identical(readIn, this);
 }
@@ -168,9 +177,10 @@ final class DocxEdits implements DocxEditSink {
 /// An [index] outside 0 to the number of blocks throws [RangeError], a [block]
 /// already in a container (this one or another) throws [StateError], and a
 /// table that does not fit ([checkFitsIn]) throws [ArgumentError]; all before
-/// anything changes. The styles set on a paragraph are resolved against the
-/// document's ([resolveStylesSet]), which throws a `DocxReadException` when the
-/// styles part cannot be read; the block is then taken out again.
+/// anything changes. The styles set on the block and on everything in it are
+/// resolved against the document's ([resolveStylesIn]), which throws a
+/// `DocxReadException` when the styles part cannot be read; the block is then
+/// taken out again.
 void insertBlock(
   DocxEditSink sink,
   Object container,
@@ -184,7 +194,7 @@ void insertBlock(
     sink.apply(
       _ListEdit<DocxBlock>(sink, container, blocks, index, null, block),
     );
-    _resolveStyles(block);
+    resolveStylesIn(block);
   });
 }
 
@@ -230,7 +240,7 @@ void replaceBlock(
         block,
       ),
     );
-    _resolveStyles(block);
+    resolveStylesIn(block);
   });
 }
 
@@ -242,7 +252,9 @@ void replaceBlock(
 ///
 /// An [index] outside 0 to the number of items throws [RangeError], an [item]
 /// already in a parent throws [StateError], and one that does not fit
-/// ([checkFitsIn]) throws [ArgumentError]; all before anything changes.
+/// ([checkFitsIn]) throws [ArgumentError]; all before anything changes. The
+/// styles set on what [item] holds are resolved as [insertBlock] says, and a
+/// failure takes it out again.
 void insertChild<T extends Object>(
   DocxEditSink sink,
   Object parent,
@@ -261,9 +273,12 @@ void insertChild<T extends Object>(
   final int position = index == items.length
       ? children.length
       : children.indexOf(items[index]);
-  sink.apply(
-    _ListEdit<T>(sink, parent, items, index, null, item, children, position),
-  );
+  sink.atomically(() {
+    sink.apply(
+      _ListEdit<T>(sink, parent, items, index, null, item, children, position),
+    );
+    resolveStylesIn(item);
+  });
 }
 
 /// Removes the item at [index] of [items], the typed items of [children], the
@@ -297,13 +312,6 @@ void removeChild<T extends Object>(
       children.indexOf(item),
     ),
   );
-}
-
-/// Resolves what was set on [block], now in a document.
-void _resolveStyles(DocxBlock block) {
-  if (block is DocxParagraph) {
-    resolveStylesSet(block);
-  }
 }
 
 /// Puts every block of [blocks] in [container], makes its paragraphs and those

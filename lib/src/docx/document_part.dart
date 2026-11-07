@@ -150,7 +150,7 @@ final class DocumentPart implements PartContent {
   bool Function(int numId)? listDefined;
 
   /// Whether the document defines a style of that id and type, so a
-  /// `w:pStyle` or `w:rStyle` set through the API that names another is
+  /// `w:pStyle`, `w:rStyle` or `w:tblStyle` set through the API that names another is
   /// reported at [encode] (plan Ruling 8); `null` reports none. The save
   /// sets it before it writes the part.
   bool Function(String id, DocxStyleType type)? styleDefined;
@@ -171,7 +171,7 @@ final class DocumentPart implements PartContent {
   /// [DocxWarningCode.numberingNotFound] at its location, with the list's id
   /// as the detail. A style set through the API that [styleDefined] denies
   /// is reported with [DocxWarningCode.styleNotFound] at the location of the
-  /// paragraph or the run, with the style's id as the detail.
+  /// paragraph, the run or the table, with the style's id as the detail.
   DocxWarningCollector get encodeWarnings => _encodeWarnings;
 
   /// The root element's start tag: its name, namespace declarations and
@@ -198,6 +198,32 @@ final class DocumentPart implements PartContent {
   /// The children of `w:document` after `w:body`, in order. A second
   /// `w:body` is one of them.
   final List<OpaqueXml> afterBody;
+
+  /// Throws [StateError] naming the first table the API left without rows,
+  /// at its location: Word repairs a table without rows, and a save must find
+  /// that out before it writes anything. A table read with no rows is kept.
+  void checkBuiltTables() => _checkBuiltTables(blocks, 'body');
+
+  static void _checkBuiltTables(List<DocxBlock> blocks, String path) {
+    int tables = 0;
+    for (final DocxBlock block in blocks) {
+      if (block is! DocxTable) continue;
+      final String at = '$path/tbl[${tables++}]';
+      final List<DocxTableRow> rows = block.rows;
+      if (rows.isEmpty && tableIsNew(block)) {
+        throw StateError(
+          'The table at $at has no rows: add one with addRow, or remove the '
+          'table.',
+        );
+      }
+      for (int r = 0; r < rows.length; r++) {
+        final List<DocxTableCell> cells = rows[r].cells;
+        for (int c = 0; c < cells.length; c++) {
+          _checkBuiltTables(cells[c].blocks, '$at/tr[$r]/tc[$c]');
+        }
+      }
+    }
+  }
 
   /// Writes the part, and replaces [encodeWarnings] with the warnings of
   /// this write.
@@ -291,6 +317,7 @@ final class _Writer {
     _w.start('${_p}tbl');
     writeKeptAttributes(_w, tableAttributesOf(t), declaredAbove: _scope);
     final PropertySet tblPr = tablePropertySetOf(t);
+    _checkStyle(tblPr, 'tblStyle', DocxStyleType.table, path);
     // A table read without a w:tblPr writes one first when a value was set; a
     // new table always does, as the schema requires it.
     if (tableIsNew(t) ||
