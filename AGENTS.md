@@ -62,7 +62,7 @@ dotnet run --project tool/ooxml_validate -- build/model
 dotnet run --project tool/ooxml_validate -- build/model-resaved
 dart run tool/edit_model.dart build/fixtures build/model-edited
 dotnet run --project tool/ooxml_validate -- build/model-edited
-(ulimit -f 2000000; LC_ALL=C.UTF-8 soffice --headless \
+(ulimit -f 500000; LC_ALL=C.UTF-8 soffice --headless \
   --convert-to 'txt:Text (encoded):UTF8' \
   --outdir build/fixtures build/fixtures/*.docx)
 dart run tool/compare_text.dart build/fixtures
@@ -317,15 +317,20 @@ It prints failures as the reader's run does. Pin a failure as a unit test in
 the owning `*_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
-150 cases each, over the fixtures and producer variants of
-`test/docx/support/docx_fuzz.dart`: whole mutated files, with every part name
-mutated somewhere, and about a third of the cases replacing the value of a
-`w:` attribute (`w:val`, `w:w`, `w:left` and the like) of the main, styles or
-numbering part by `abc`, twenty digits, `-` or `1in`; open, load the body,
+400 cases each, over the fixtures (the `d3_*` table fixtures among them), a
+hand-made table with every element of the table values, and the producer
+variants of `test/docx/support/docx_fuzz.dart`: whole mutated files, with every
+part name mutated somewhere, and about a third of the cases replacing the value
+of a `w:` attribute (`w:val`, `w:w`, `w:left` and the like) of the main, styles
+or numbering part by `abc`, twenty digits, `-` or `1in`; open, load the body,
 styles and numbering, then read every typed property (a throw there is a
-failure, even a `DocxReadException`), call `styles.ensure` and
-`numbering.addBulletList` on what loaded, and save throw nothing but
-`DocxReadException` from a load), the same cases on the VM and in Chrome;
+failure, even a `DocxReadException`), including every table's, row's and
+cell's properties and grid, walking cells and nested tables; call
+`styles.ensure` and `numbering.addBulletList` on what loaded; add a row to
+each loaded table and merge ranges of its cells (only `ArgumentError` may
+come out of those two); and save (never a `StateError`, even for a table the
+file left without rows), throw nothing but `DocxReadException` from a load),
+the same cases on the VM and in Chrome;
 longer runs by hand:
 
 ```bash

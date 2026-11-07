@@ -9,7 +9,7 @@ import 'support/docx_fuzz.dart';
 const List<int> _seeds = <int>[1, 2, 3, 4];
 
 /// The cases per seed in the quality gate.
-const int _cases = 150;
+const int _cases = 400;
 
 /// The length and Adler-32 checksum of every corpus entry, computed once on
 /// the VM. The Chrome leg compares them, which proves the corpus (and so
@@ -30,6 +30,12 @@ const Map<String, ({int length, int adler32})> _corpus =
       'd2_paragraph_formatting': (length: 28888, adler32: 112903577),
       'd2_styles': (length: 30891, adler32: 2410709247),
       'd2_lists': (length: 33241, adler32: 3332337364),
+      'd3_basic': (length: 28802, adler32: 1105568960),
+      'd3_header_row': (length: 69977, adler32: 413452673),
+      'd3_merges': (length: 30091, adler32: 1143289435),
+      'd3_formatting': (length: 29818, adler32: 2879188645),
+      'd3_nested': (length: 33028, adler32: 4287832120),
+      'tables_by_hand': (length: 9996, adler32: 2530907752),
       'ns0_prefix': (length: 1407, adler32: 3668097186),
       'default_namespace': (length: 1344, adler32: 3335628311),
       'no_override': (length: 1259, adler32: 3490218517),

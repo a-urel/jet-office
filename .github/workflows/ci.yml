@@ -151,7 +151,7 @@ jobs:
         # and writes the file without bound: the file size cap fails the step
         # instead of filling the disk. No fixture ends in a table.
         run: |
-          ulimit -f 2000000
+          ulimit -f 500000
           soffice --headless --convert-to 'txt:Text (encoded):UTF8' \
             --outdir build/fixtures build/fixtures/*.docx
           ls -1 build/fixtures/*.txt
@@ -343,8 +343,12 @@ jobs:
             echo "::error::The Open XML SDK validator with --libreoffice-resave exited with $status on a corrupt document; expected 1."
             exit 1
           fi
+          if ! grep -q 'FAIL  d1_corrupt.docx' build/corrupt-docx-resave-validate.log; then
+            echo "::error::The Open XML SDK validator with --libreoffice-resave did not report d1_corrupt.docx."
+            exit 1
+          fi
 
-          ulimit -f 2000000
+          ulimit -f 500000
           soffice --headless --convert-to 'txt:Text (encoded):UTF8' \
             --outdir build/corrupt-docx build/corrupt-docx/d1_corrupt.docx
           ls -1 build/corrupt-docx

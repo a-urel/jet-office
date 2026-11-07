@@ -114,9 +114,9 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
     () => _build(_fillLists),
     libreOfficeText: _listLibreOfficeTexts.join('\n'),
   ),
-  _tableFixture('d3_basic', _fillBasic),
+  _tableFixture('d3_basic', _fillBasic, expectedText: _basicText),
   _tableFixture('d3_header_row', _fillHeaderRow),
-  _tableFixture('d3_merges', _fillMerges),
+  _tableFixture('d3_merges', _fillMerges, expectedText: _mergesText),
   _tableFixture('d3_formatting', _fillFormatting),
   _tableFixture(
     'd3_nested',
@@ -127,15 +127,60 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
   ),
 ];
 
-/// A D3 fixture: built by [fill], whose expected text is what `docxFullText`
-/// reads from the saved file (tables as lines of cells joined by tabs).
+/// The text of `d3_basic`, written by hand from what `_fillBasic` adds: the
+/// paragraphs as lines, each row of the table as a line of its cells joined by
+/// tabs. Not read from the model, so a cell-text bug cannot hide in it.
+final String _basicText = <String>[
+  'Before the table.',
+  'Name\tQuantity\tPrice',
+  'Tea\t2\t3.50',
+  'Coffee\t1\t4.25',
+  'After the table.',
+].join('\n');
+
+/// The text of `d3_merges`, written by hand from the merges of `_fillMerges`
+/// (the cell `rRcC` holds the text `rRcC`). A merged cell holds the text of
+/// every cell it took, one paragraph each in reading order, so each of those
+/// is a line of its own; a cell that continues a vertical merge holds an
+/// empty paragraph. Rows:
+///
+/// - 0: `r0c0 r0c1` across, then `r0c2`, `r0c3`;
+/// - 1: `r1c0 r2c0` down, `r1c1`, and `r1c2 r1c3 r2c2 r2c3` as a block;
+/// - 2: the continued cell, `r2c1`, the continued block;
+/// - 3: `r3c0`, then `r3c1 r3c2 r3c3` across;
+/// - 4: `r4c0 r4c1 r5c0 r5c1` as a block, `r4c2`, `r4c3`;
+/// - 5: the continued block (empty), `r5c2`, `r5c3`.
+final String _mergesText = <String>[
+  'r0c0',
+  'r0c1\tr0c2\tr0c3',
+  'r1c0',
+  'r2c0\tr1c1\tr1c2',
+  'r1c3',
+  'r2c2',
+  'r2c3',
+  '\tr2c1\t',
+  'r3c0\tr3c1',
+  'r3c2',
+  'r3c3',
+  'r4c0',
+  'r4c1',
+  'r5c0',
+  'r5c1\tr4c2\tr4c3',
+  '\tr5c2\tr5c3',
+  'After the merges.',
+].join('\n');
+
+/// A D3 fixture: built by [fill], whose expected text is [expectedText] when
+/// given, else what `docxFullText` reads from the saved file (tables as lines
+/// of cells joined by tabs).
 DocxFixture _tableFixture(
   String name,
   void Function(DocxDocument doc) fill, {
+  String? expectedText,
   String? libreOfficeTextSkip,
 }) => DocxFixture(
   name,
-  docxFullText(DocxDocument.open(_build(fill).bytes)),
+  expectedText ?? docxFullText(DocxDocument.open(_build(fill).bytes)),
   () => _build(fill),
   libreOfficeTextSkip: libreOfficeTextSkip,
 );
