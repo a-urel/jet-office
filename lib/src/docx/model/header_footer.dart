@@ -67,12 +67,12 @@ enum DocxHeaderFooterType {
 /// Word's "Link to Previous" does, and every reference that names its part.
 ///
 /// The first block of an empty one gives the section a reference to it in the
-/// same transaction, and the part is added at save; the section's next
-/// sections inherit it. The first block of a story of the first page sets
-/// [DocxSection.titlePage] on the sections that have it as their own; that of an
-/// even one sets [DocxDocument.evenAndOddHeaders]. Empty
-/// paragraphs are no content, as Word writes one in a header nobody filled: a
-/// block added after them is a first block too.
+/// same transaction, and the part is added at save; the section's next sections
+/// inherit it. The first block of a story of the first page sets
+/// [DocxSection.titlePage] on the sections that have it as their own; that of
+/// an even one sets [DocxDocument.evenAndOddHeaders]. Empty paragraphs are no
+/// content, as Word writes one in a header nobody filled: a block added after
+/// them is a first block too.
 ///
 /// A paragraph with a section break cannot go in one: [insertBlock] and
 /// [replaceBlockAt] throw [ArgumentError], wherever the paragraph comes from.

@@ -122,7 +122,6 @@ const String _wNs =
 /// drawing.
 const Set<String> _fieldOrDrawing = <String>{
   'fldChar',
-  'instrText',
   'delInstrText',
   'drawing',
   'pict',

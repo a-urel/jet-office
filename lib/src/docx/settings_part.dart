@@ -127,11 +127,11 @@ final class SettingsPart implements PartContent {
   /// already reads as [value].
   ///
   /// A root that binds WordprocessingML only as its default namespace cannot
-  /// take the child: this throws a [DocxReadException] naming the part, and
-  /// nothing changes.
+  /// take the child: setting `true` throws a [DocxReadException] naming the
+  /// part, and nothing changes.
   set evenAndOddHeaders(bool value) {
     if (value == evenAndOddHeaders) return;
-    if (_prefix == null) {
+    if (value && _prefix == null) {
       throw DocxReadException(
         DocxReadFailure.malformedXml,
         'The settings part binds WordprocessingML only as the default '

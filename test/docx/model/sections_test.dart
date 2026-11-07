@@ -84,6 +84,17 @@ void main() {
       expect(section.textWidthPt, 453.6);
     });
 
+    test('stray text in a final w:sectPr is dropped when it is edited', () {
+      const String stray =
+          '<w:sectPr>junk<w:pgSz w:w="1000" w:h="2000"/>'
+          '</w:sectPr>';
+      final DocxDocument kept = _open('${_p('a')}$stray');
+      expect(_saved(kept), contains('junk'));
+      final DocxDocument doc = _open('${_p('a')}$stray');
+      doc.sections.single.pageSize = DocxPageSize.a4();
+      expect(_saved(doc), isNot(contains('junk')));
+    });
+
     test('a body of two breaks gives three sections, in order', () {
       final DocxDocument doc = _open(
         '${_break('a', 1000)}${_p('b')}${_break('c', 2000)}${_p('d')}$_a4',

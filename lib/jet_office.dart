@@ -103,36 +103,34 @@
 /// control or a threaded comment beside them is kept as written, and removing
 /// a table that a formula names is refused.
 ///
-/// [DocxDocument] is the Word document model, in progress (milestones D1 to
-/// D4; the API may change before D6). [DocxDocument.new] starts a document
-/// like Word for Mac's blank one: A4 portrait, Aptos 12, no document
-/// properties.
+/// [DocxDocument] is the Word document model, in progress (milestones D1 to D4;
+/// the API may change before D6). [DocxDocument.new] starts a document like
+/// Word for Mac's blank one: A4 portrait, Aptos 12, no document properties.
 /// [DocxDocument.open] reads a DOCX file within [DocxReadLimits]; a file it
 /// cannot read throws a [DocxReadException] whose [DocxReadFailure] says why,
-/// and so does a part that turns out broken when it first loads. Its
-/// [DocxBody] loads on first access and holds the [DocxBlock]s of the
-/// document: each [DocxParagraph] holds [DocxInline]s, and each [DocxRun]
-/// holds [DocxRunContent] (text, tabs, breaks), with the paragraph and run
-/// style typed, and [DocxRunProperties] and [DocxParagraphProperties] that
-/// give the formatting (bold, size, colour, alignment, indentation,
-/// borders, tab stops and the rest of the typed members) as values such as
-/// [DocxColor] and [DocxIndentation], where `null` means "not set here"; a
-/// property or value the model does not understand is kept as written and
-/// reads `null`. A [DocxTable] gives its rows and cells, and a cell its
-/// blocks; the table, the row and the cell give their formatting as
-/// [DocxTableProperties], [DocxTableRowProperties] and
-/// [DocxTableCellProperties]. [DocxBody.addTable] adds a table as Word's Insert
-/// Table writes it, with the document's `Table Grid` style, and
-/// [DocxTable.addRow] fills it row by row with text; [DocxTableCell.addTable]
-/// nests one. Rows, cells and blocks of a cell are added, removed and replaced
-/// like the blocks of the body, [DocxTable.mergeCells] merges a range, and a
-/// table built in no document, or read in another, has its styles resolved when
-/// it goes in. A table lists only its typed rows and cells (one inside a
-/// content control is kept in place, not listed), the API nests tables at most
-/// 80 deep, [DocxBody.addTable] takes at most [maxTableColumns] columns, and
-/// a table with no row is not saved. What the model does not type yet, such
-/// as content controls, tracked changes, hyperlinks, drawings and a
-/// `w:fldSimple`, is kept as written in a
+/// and so does a part that turns out broken when it first loads. Its [DocxBody]
+/// loads on first access and holds the [DocxBlock]s of the document: each
+/// [DocxParagraph] holds [DocxInline]s, and each [DocxRun] holds
+/// [DocxRunContent] (text, tabs, breaks), with the paragraph and run style
+/// typed, and [DocxRunProperties] and [DocxParagraphProperties] that give the
+/// formatting (bold, size, colour, alignment, indentation, borders, tab stops
+/// and the rest of the typed members) as values such as [DocxColor] and
+/// [DocxIndentation], where `null` means "not set here"; a property or value
+/// the model does not understand is kept as written and reads `null`. A
+/// [DocxTable] gives its rows and cells, and a cell its blocks; the table, the
+/// row and the cell give their formatting as [DocxTableProperties],
+/// [DocxTableRowProperties] and [DocxTableCellProperties]. [DocxBody.addTable]
+/// adds a table as Word's Insert Table writes it, with the document's `Table
+/// Grid` style, and [DocxTable.addRow] fills it row by row with text;
+/// [DocxTableCell.addTable] nests one. Rows, cells and blocks of a cell are
+/// added, removed and replaced like the blocks of the body,
+/// [DocxTable.mergeCells] merges a range, and a table built in no document, or
+/// read in another, has its styles resolved when it goes in. A table lists only
+/// its typed rows and cells (one inside a content control is kept in place, not
+/// listed), the API nests tables at most 80 deep, [DocxBody.addTable] takes at
+/// most [maxTableColumns] columns, and a table with no row is not saved. What
+/// the model does not type yet, such as content controls, tracked changes,
+/// hyperlinks, drawings and a `w:fldSimple`, is kept as written in a
 /// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
 /// can be removed but not changed; the parts the model does not read are kept
 /// as written too. [DocxDocument.sections] gives each [DocxSection], with its
@@ -141,22 +139,21 @@
 /// [DocxBody] is, read on the first access to its blocks, its own or a previous
 /// section's. Reading one creates nothing, and [DocxDocument.evenAndOddHeaders]
 /// says whether the even ones show. A `w:sectPr` in a table cell or in a
-/// content control starts no section. A complex field of one paragraph is a [DocxField]
-/// among its inlines, built with [DocxField.new] or a helper such as
-/// [DocxField.page]; the model does not evaluate it, and its text is the result
-/// cached in the file. A field that is not plain stays runs, whose
+/// content control starts no section. A complex field of one paragraph is a
+/// [DocxField] among its inlines, built with [DocxField.new] or a helper such
+/// as [DocxField.page]; the model does not evaluate it, and its text is the
+/// result cached in the file. A field that is not plain stays runs, whose
 /// [DocxFieldMark]s and [DocxFieldInstruction]s are their content: one across
 /// paragraphs, one in an instruction, one with two `separate` marks or a
 /// `w:instrText` in its result, and one nested more than 32 deep in results.
-/// Blocks and inlines are added, removed and replaced, and a run's text and
-/// the styles are set; each edit is atomic.
-/// [DocxDocument.save] returns a [DocxResult] and [DocxDocument.saveTo] streams
-/// to a sink. As for a workbook, saving keeps every part the model did not
-/// change: a body never accessed is copied from the file, and what a loaded
-/// body does not type is written back as it was. Characters XML forbids are
-/// removed from text when it is set and reported at save as a [DocxWarning].
-/// The visible text of an opaque inline holding `mc:AlternateContent` or a text
-/// box is empty.
+/// Blocks and inlines are added, removed and replaced, and a run's text and the
+/// styles are set; each edit is atomic. [DocxDocument.save] returns a
+/// [DocxResult] and [DocxDocument.saveTo] streams to a sink. As for a workbook,
+/// saving keeps every part the model did not change: a body never accessed is
+/// copied from the file, and what a loaded body does not type is written back
+/// as it was. Characters XML forbids are removed from text when it is set and
+/// reported at save as a [DocxWarning]. The visible text of an opaque inline
+/// holding `mc:AlternateContent` or a text box is empty.
 ///
 /// [DocxDocument.styles] gives the document's [DocxStyles] (milestone D2):
 /// the [DocxDocumentDefaults] and each [DocxStyle] of the styles part, by

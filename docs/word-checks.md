@@ -451,7 +451,7 @@ Layout > Line Numbers, and Insert > Page Number > Format Page Numbers.
     finding to report, with what Update Field (Control-click the place, or F9)
     does there: the model's rule for these two rests on this check.
   - **Page numbers move.** Click at the end of the body and press Cmd-Return
-    for a page break. Both footers now read `Page 1 of 2, section pages: 2` and
+    for a page break. The footer on page 1 and on page 2 now read `Page 1 of 2, section pages: 2` and
     `Page 2 of 2, section pages: 2`. Undo the break, or close without saving.
 
 ### Round trips: `build/d4/model/d4_*.docx` and `build/d4/model-owner/*.docx`

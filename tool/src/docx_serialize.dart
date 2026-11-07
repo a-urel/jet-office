@@ -112,8 +112,8 @@ List<String> encodedPartDifferences(Uint8List docx) {
 /// they mean the same.
 ///
 /// The children of each `w:pPr`, `w:rPr`, `w:tblPr`, `w:trPr`, `w:tcPr` and
-/// `w:sectPr` compare in any order: the model writes them in schema order, and a
-/// document with no edit keeps the file's bytes, so a file whose properties
+/// `w:sectPr` compare in any order: the model writes them in schema order, and
+/// a document with no edit keeps the file's bytes, so a file whose properties
 /// are out of order loses nothing. A part the model cannot read is one line,
 /// not an exception.
 List<String> encodedMainDifferences(Uint8List docx) {

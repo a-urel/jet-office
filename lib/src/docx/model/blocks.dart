@@ -73,7 +73,7 @@ const int _pageTextWidthTwips = 9062;
 /// One child of a body or of a table cell.
 ///
 /// A block is in at most one container at a time: inserting one that is
-/// already in a body or a cell throws [StateError]; remove it there first.
+/// already in a story or a cell throws [StateError]; remove it there first.
 sealed class DocxBlock {
   DocxBlock._();
 

@@ -10,10 +10,9 @@
 /// `tool/write_fixtures.dart` is one and this file is written apart: open it in
 /// Word for Mac (`docs/word-checks.md`, sections D3 and D4). Word writes a
 /// paragraph after every table it saves, so the owner cannot make this file in
-/// Word. A
-/// body whose last block carries a section break is written apart too: the
-/// model adds no block after the break (plan Ruling 8), and no fixture may end
-/// so. The exit code is 64 on bad arguments. Not ported from Quds.
+/// Word. A body whose last block carries a section break is written apart too:
+/// the model adds no block after the break (plan Ruling 8), and no fixture may
+/// end so. The exit code is 64 on bad arguments. Not ported from Quds.
 library;
 
 import 'dart:io';

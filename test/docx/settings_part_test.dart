@@ -250,6 +250,19 @@ void main() {
         );
       },
     );
+    test('removing the child needs no prefix', () {
+      final DocxDocument doc = DocxDocument.open(
+        _docx(
+          '<settings xmlns="${Ns.w}"><evenAndOddHeaders/><zoom/></settings>',
+        ),
+      );
+      expect(doc.evenAndOddHeaders, isTrue);
+      doc.evenAndOddHeaders = false;
+      expect(doc.evenAndOddHeaders, isFalse);
+      final String part = _part(doc.save().bytes, 'word/settings.xml');
+      expect(part, isNot(contains('evenAndOddHeaders')));
+      expect(part, contains('zoom'));
+    });
   });
 
   group('the part in the package', () {

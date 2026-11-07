@@ -316,11 +316,14 @@ doc.body.addParagraph('The report.');
   contributes its runs").
 - **A `w:fldChar` inside `mc:AlternateContent`** in a result run is not seen:
   the model takes that run for plain content, so the field around it is typed
-  and the mark inside the opaque content pairs with nothing.
+  and the mark inside the opaque content pairs with nothing (test:
+  `test/docx/model/fields_read_test.dart`, "a w:fldChar in mc:AlternateContent
+  of a result run is not seen").
 - **A field nested in an instruction begun in an earlier paragraph** is typed:
   the grouping pass looks at one paragraph, which cannot show that the field
   lies in an instruction. It reads and saves as read; only its meaning is the
-  outer field's.
+  outer field's (test: `test/docx/model/fields_read_test.dart`, "a field in an
+  instruction begun earlier is typed, as read").
 - **`DocxField.resultText` drops what the old result held**, bookmark and
   comment marks too, so a mark whose partner lies outside the result is left
   alone in the file (test: `test/docx/model/fields_edit_test.dart`, "a nested
@@ -333,7 +336,9 @@ doc.body.addParagraph('The report.');
   `test/docx/model/header_footer_read_test.dart`, "a paragraph with a section
   break cannot go in a story").
 - **Text directly in a final `w:sectPr`** is dropped on an edit of that section,
-  as stray text in a `w:pPr` is. A file that is not edited keeps it.
+  as stray text in a `w:pPr` is. A file that is not edited keeps it (test:
+  `test/docx/model/sections_test.dart`, "stray text in a final w:sectPr is
+  dropped when it is edited").
 - **A settings root that binds WordprocessingML only as the default namespace**
   cannot take `w:evenAndOddHeaders`: setting it, or adding an even story,
   throws `DocxReadException` naming the part, and the part stays as read (test:
@@ -555,7 +560,7 @@ Two codes, for references set through the API only, each with a message in
 | The owner's `builtins.docx` | round-trips with no warning and no difference, also with styles and numbering loaded; every typed property of the owner files reads without throwing | Word's own toolbar lists and built-in styles are the fidelity input | `test/docx/owner_files_test.dart` ("every owner file round-trips", "every owner file round-trips with styles and numbering loaded", "reading every typed property of the owner files throws nothing") |
 | `tool/edit_docx.dart` | edits the first run (bold, accent 1), replaces a paragraph, edits the first cell of the first table and appends a row to it, appends a table with a header row and a merged row, adds a `Heading1`-style paragraph and a two-item bullet list, and checks the edits read back and that only the allowed parts differ | CI validates the edited files with the Open XML SDK | `test/tool/edit_docx_test.dart` ("a Word-like document gets the edits, and only the allowed parts change", "edits a document with Turkish style ids using Balk1", "creates numbering.xml in a document without one") |
 | Styles and numbering in `tool/round_trip_docx.dart` | the model's own encoding of each part is compared, not a copy of the input | a part left as read would hide a writer bug | `test/tool/docx_serialize_test.dart` ("is the model's own writing, not a copy of the input", "finds none in the D2 fixtures") |
-| The fuzz | seeds 1 to 4 at 400 cases each over the fixtures (tables among them), a hand-made table and producer variants, with typed attributes replaced in the typed parts, access to `styles` and `numbering`, and a `DocxReadException` from a typed getter counted as a failure | the typed exception is the contract | `test/docx/fuzz_test.dart` ("typed attributes are replaced in the typed parts", "mutated files raise only DocxReadException") |
+| The fuzz | seeds 1 to 4 at 600 cases each over the fixtures (tables among them), a hand-made table and producer variants, with typed attributes replaced in the typed parts, access to `styles` and `numbering`, and a `DocxReadException` from a typed getter counted as a failure | the typed exception is the contract | `test/docx/fuzz_test.dart` ("typed attributes are replaced in the typed parts", "mutated files raise only DocxReadException") |
 
 ### Writing and saving
 
@@ -582,7 +587,7 @@ Two codes, for references set through the API only, each with a message in
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
 | `insertBlock`, `removeBlockAt`, `replaceBlockAt`; `insertInline`, `removeInlineAt`, `replaceInlineAt` | edit in place; the `blocks` and `inlines` lists are views that cannot be modified | one way to change a list | `test/docx/docx_document_test.dart` ("body edits"), `test/docx/model/body_model_test.dart` ("inline edits") |
-| A block or inline already in a body or paragraph (this one or another document) | `StateError`; nothing changes | phase 4 neither moves nor copies implicitly | `test/docx/docx_document_test.dart`, `test/docx/model/body_model_test.dart`, `test/docx/primitives_test.dart` |
+| A block or inline already in a story, a cell or paragraph (this one or another document) | `StateError`; nothing changes | phase 4 neither moves nor copies implicitly | `test/docx/docx_document_test.dart`, `test/docx/model/body_model_test.dart`, `test/docx/primitives_test.dart` |
 | An index out of range | `RangeError`; nothing changes and nothing is recorded | a programmer error | `test/docx/docx_document_test.dart`, `test/docx/model/body_model_test.dart`, `test/docx/primitives_test.dart` |
 | A removed block or inline | belongs to nothing and can be inserted again | removal is not destruction | `test/docx/primitives_test.dart` |
 | Each edit | a change in the document's `ChangeLog` that reverts and reapplies; an edit that fails, or a transaction of several that throws, undoes all of them | each edit is atomic | `test/docx/primitives_test.dart` ("rollback") |

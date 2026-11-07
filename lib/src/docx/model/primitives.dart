@@ -379,7 +379,7 @@ void adoptBlocks(DocxEdits edits, Object container, List<DocxBlock> blocks) {
 void _checkDetached(DocxBlock block) {
   if (blockContainerOf(block) != null) {
     throw StateError(
-      'The block is already in a body or a cell; remove it there first.',
+      'The block is already in a story or a cell; remove it there first.',
     );
   }
 }

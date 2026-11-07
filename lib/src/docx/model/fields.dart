@@ -90,10 +90,10 @@ final class DocxField extends DocxInline {
   /// A field that shows the date, in [format] (a Word date picture such as
   /// `dd.MM.yyyy`): the instruction is ` DATE \@ "dd.MM.yyyy" `.
   ///
-  /// The library has no clock, so [result] is what is cached (empty by
-  /// default) and Word computes the date when it opens the file. A [format]
-  /// holding `"`, or ending in a backslash, throws [ArgumentError]; the picture is not checked
-  /// otherwise.
+  /// The library has no clock, so [result] is what is cached (empty by default)
+  /// and Word computes the date when it opens the file. A [format] holding `"`,
+  /// or ending in a backslash, throws [ArgumentError]; the picture is not
+  /// checked otherwise.
   factory DocxField.date({String format = 'dd.MM.yyyy', String result = ''}) =>
       DocxField(' DATE \\@ "${_picture(format)}" ', result: result);
 
@@ -110,7 +110,8 @@ final class DocxField extends DocxInline {
     _attach();
   }
 
-  /// [format], which must not hold `"` or end in a backslash, or an [ArgumentError].
+  /// [format], which must not hold `"` or end in a backslash, or an
+  /// [ArgumentError].
   static String _picture(String format) {
     if (format.contains('"') || format.endsWith('\\')) {
       throw ArgumentError.value(

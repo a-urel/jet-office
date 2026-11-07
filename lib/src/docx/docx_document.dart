@@ -626,6 +626,20 @@ final class DocxDocument {
     _storiesToCreate = stories;
   }
 
+  /// The ids a new relationship of [slot] must not take: those of the header
+  /// and footer references of the main part, as [_fileReferenceIds]. None
+  /// when the part exists, and none when the main part cannot be read: it
+  /// is copied as it is, and a failure to read it is not this part's to
+  /// report.
+  Set<String> _reservedFor(RelatedPart slot) {
+    if (slot.exists) return const <String>{};
+    try {
+      return _fileReferenceIds;
+    } on DocxReadException {
+      return const <String>{};
+    }
+  }
+
   /// Creates the parts [_nameNewStories] named, so that the main part, which
   /// the package writes after this, knows the ids.
   void _createNewStories() {
@@ -691,15 +705,18 @@ final class DocxDocument {
     // (plan Ruling 7); after that it is a part like the others.
     final StylesPart? stylesPart = _stylesPart;
     if (stylesPart != null && stylesPart.holdsSomething) {
-      _stylesSlot!.create(stylesPart);
+      final RelatedPart slot = _stylesSlot!;
+      slot.create(stylesPart, reservedIds: _reservedFor(slot));
     }
     final NumberingPart? numbering = _numberingPart;
     if (numbering != null && numbering.holdsSomething) {
-      _numberingSlot!.create(numbering);
+      final RelatedPart slot = _numberingSlot!;
+      slot.create(numbering, reservedIds: _reservedFor(slot));
     }
     final SettingsPart? settings = _settings;
     if (settings != null && settings.holdsSomething) {
-      _settingsSlot!.create(settings);
+      final RelatedPart slot = _settingsSlot!;
+      slot.create(settings, reservedIds: _reservedFor(slot));
     }
     _createNewStories();
     package.guard(package.mainPart, () => package.package.writeTo(zip));

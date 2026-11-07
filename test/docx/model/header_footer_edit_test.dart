@@ -236,6 +236,21 @@ void main() {
       expect(rels, contains('Id="rId2"'));
     });
 
+    test('the styles, numbering and settings parts take none either', () {
+      final DocxDocument doc = DocxDocument.open(
+        _docx('${_p('A')}<w:sectPr>${_h('default', 'rId1')}</w:sectPr>'),
+      );
+      doc.styles.ensure(DocxBuiltInStyle.heading1);
+      doc.numbering.addBulletList();
+      doc.evenAndOddHeaders = true;
+      final Map<String, String> text = readDocxText(doc.save().bytes);
+      final String rels = _rels(text);
+      expect(rels, isNot(contains('Id="rId1"')), reason: rels);
+      expect(rels, contains(RelType.styles));
+      expect(rels, contains(RelType.numbering));
+      expect(rels, contains(RelType.settings));
+    });
+
     test('takes no id of a reference of a w:sectPr in a cell', () {
       final DocxDocument doc = DocxDocument.open(
         _docx(

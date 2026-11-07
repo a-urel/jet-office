@@ -502,6 +502,44 @@ void main() {
     });
   });
 
+  group('known gaps of D4', () {
+    test('a w:fldChar in mc:AlternateContent of a result run is not seen', () {
+      const String mc =
+          'http://schemas.openxmlformats.org/markup-compatibility'
+          '/2006';
+      const String hidden =
+          '<w:r><mc:AlternateContent xmlns:mc="$mc"><mc:Choice Requires="w">'
+          '<w:fldChar w:fldCharType="begin"/></mc:Choice></mc:AlternateContent>'
+          '</w:r>';
+      final String paragraph = _p(
+        '$_begin${_instr(' PAGE ')}$_separate$hidden${_r('1')}$_end',
+      );
+      final DocxDocument doc = _open('${_p(_r('x'))}$paragraph');
+      final DocxParagraph p = doc.body.blocks[1] as DocxParagraph;
+      // The field around it is typed, and the hidden mark pairs with nothing.
+      expect(_kinds(p), <Type>[DocxField]);
+      expect(p.text, '1');
+      ((doc.body.blocks[0] as DocxParagraph).inlines.single as DocxRun).text =
+          'y';
+      expect(_savedMain(doc.save().bytes), _main('${_p(_r('y'))}$paragraph'));
+    });
+
+    test('a field in an instruction begun earlier is typed, as read', () {
+      final String first = _p('$_begin${_instr(' A ')}');
+      final String second = _p('${_page('1')}${_r('t')}$_end');
+      final DocxDocument doc = _open('${_p(_r('x'))}$first$second');
+      final DocxParagraph p = doc.body.blocks[2] as DocxParagraph;
+      expect(p.inlines.whereType<DocxField>(), hasLength(1));
+      expect(p.text, '1t');
+      ((doc.body.blocks[0] as DocxParagraph).inlines.single as DocxRun).text =
+          'y';
+      expect(
+        _savedMain(doc.save().bytes),
+        _main('${_p(_r('y'))}$first$second'),
+      );
+    });
+  });
+
   group('marks inside an opaque inline', () {
     test('stay in it, and a whole field there is no DocxField', () {
       final String content =

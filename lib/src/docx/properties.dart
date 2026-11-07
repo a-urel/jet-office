@@ -46,9 +46,9 @@ final class ContainerSchema {
   /// typing the children [codecs] names and reading those [nested] names
   /// as containers of their own.
   ///
-  /// Every name in [codecs], [nested] and [repeated] must be in [order],
-  /// and none in two of them; `test/docx/container_order_test.dart` checks every schema the
-  /// library defines.
+  /// Every name in [codecs], [nested] and [repeated] must be in [order], and
+  /// none in two of them; `test/docx/container_order_test.dart` checks every
+  /// schema the library defines.
   const ContainerSchema(
     this.order, {
     this.codecs = const <String, PropertyCodec<Object>>{},
