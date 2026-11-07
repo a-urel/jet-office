@@ -306,14 +306,45 @@ WorksheetPicture checkPicture(String sheet, int index, XlsxPicture picture) {
     );
   }
   final XlsxAnchor anchor = picture.anchor;
+  checkAnchor(anchor, size, which);
+  final String? name = picture.name;
+  final String? description = picture.description;
+  _checkText(name, 'name', which);
+  _checkText(description, 'description', which);
+  return (
+    image: image,
+    format: image.format!,
+    anchor: anchor,
+    size: size,
+    name: name ?? 'Picture $index',
+    description: description,
+  );
+}
+
+/// Checks [anchor], the place of the picture [which] whose image is [size]
+/// pixels, as [checkPicture] does, and returns the size in EMU of a one-cell
+/// anchor ([oneCellExtent]), `null` for a two-cell one.
+///
+/// [size] may be `null` only for an anchor that needs none: a two-cell one,
+/// or a one-cell one that gives both its width and its height. Throws
+/// [ArgumentError] named as [checkPicture] says.
+({int cx, int cy})? checkAnchor(
+  XlsxAnchor anchor,
+  ({int width, int height})? size,
+  String which,
+) {
   _checkPoint(anchor.from, 'from', which);
   switch (anchor) {
     case XlsxOneCellAnchor(:final width, :final height):
       _checkSize(width, 'width', which);
       _checkSize(height, 'height', which);
-      final ({int cx, int cy}) extent = oneCellExtent(anchor, size);
+      final ({int cx, int cy}) extent = oneCellExtent(
+        anchor,
+        size ?? (width: 1, height: 1),
+      );
       _checkExtent(extent.cx, 'width', which);
       _checkExtent(extent.cy, 'height', which);
+      return extent;
     case XlsxTwoCellAnchor(:final from, :final to):
       _checkPoint(to, 'to', which);
       final bool after =
@@ -327,19 +358,8 @@ WorksheetPicture checkPicture(String sheet, int index, XlsxPicture picture) {
               'top-left corner $from, by cell and then by offset.',
         );
       }
+      return null;
   }
-  final String? name = picture.name;
-  final String? description = picture.description;
-  _checkText(name, 'name', which);
-  _checkText(description, 'description', which);
-  return (
-    image: image,
-    format: image.format!,
-    anchor: anchor,
-    size: size,
-    name: name ?? 'Picture $index',
-    description: description,
-  );
 }
 
 /// Throws unless [point], the anchor point [field] of [which], lies on a
@@ -450,15 +470,9 @@ void _checkText(String? text, String field, String which) {
 /// Writes the drawing part of a sheet's [pictures], XML declaration
 /// included, to [w].
 ///
-/// Picture `i` (from 0) is one anchor, in the order given: a
-/// `oneCellAnchor` with its `from` and `ext` ([oneCellExtent]), or a
-/// `twoCellAnchor` with its `from` and `to` and an `editAs` unless it
-/// moves and sizes with its cells. Its `pic` has the `cNvPr` id `i + 2`,
-/// its name and its description (`descr`), and shows the media whose
-/// relationship id is `embedIds[i]`; a one-cell picture's `spPr` repeats
-/// its size in `a:xfrm`. Offsets are in EMU ([pixelsToEmu]). The name and
-/// description are `xsd:string`, so they take plain XML escaping only, no
-/// `escapeXstring`; everything else written is a number or a constant.
+/// Picture `i` (from 0) is one anchor ([writeAnchor]), in the order given,
+/// with the `cNvPr` id `i + 2`, showing the media whose relationship id is
+/// `embedIds[i]`.
 void writeDrawing(
   XmlWriter w,
   List<WorksheetPicture> pictures,
@@ -470,65 +484,98 @@ void writeDrawing(
   w.attribute('xmlns:a', Ns.drawingMain);
   w.attribute('xmlns:r', Ns.rel);
   for (int i = 0; i < pictures.length; i++) {
-    final WorksheetPicture picture = pictures[i];
-    switch (picture.anchor) {
-      case final XlsxOneCellAnchor anchor:
-        final ({int cx, int cy}) extent = oneCellExtent(anchor, picture.size);
-        w.start('xdr:oneCellAnchor');
-        _writeMarker(w, 'xdr:from', anchor.from);
-        w.empty('xdr:ext', <String, String>{
-          'cx': '${extent.cx}',
-          'cy': '${extent.cy}',
-        });
-        writeDrawingPic(
-          w,
-          DrawingPic(
-            id: i + 2,
-            name: picture.name,
-            description: picture.description,
-            embedId: embedIds[i],
-          ),
-          prefix: 'xdr',
-          extent: extent,
-        );
-      case XlsxTwoCellAnchor(:final from, :final to, :final resize):
-        w.start('xdr:twoCellAnchor');
-        switch (resize) {
-          case XlsxPictureResize.moveAndSize:
-            break;
-          case XlsxPictureResize.move:
-            w.attribute('editAs', 'oneCell');
-          case XlsxPictureResize.none:
-            w.attribute('editAs', 'absolute');
-        }
-        _writeMarker(w, 'xdr:from', from);
-        _writeMarker(w, 'xdr:to', to);
-        writeDrawingPic(
-          w,
-          DrawingPic(
-            id: i + 2,
-            name: picture.name,
-            description: picture.description,
-            embedId: embedIds[i],
-          ),
-          prefix: 'xdr',
-        );
-    }
-    w.empty('xdr:clientData');
-    w.end();
+    writeAnchor(w, pictures[i], id: i + 2, embedId: embedIds[i]);
   }
   w.end();
 }
 
-/// Writes the marker [name] (`xdr:from` or `xdr:to`) of [point]: its
-/// column and column offset, then its row and row offset, in `CT_Marker`
-/// order.
-void _writeMarker(XmlWriter w, String name, XlsxAnchorPoint point) {
-  w.start(name);
-  _writeNumber(w, 'xdr:col', point.column);
-  _writeNumber(w, 'xdr:colOff', pixelsToEmu(point.offsetX));
-  _writeNumber(w, 'xdr:row', point.row);
-  _writeNumber(w, 'xdr:rowOff', pixelsToEmu(point.offsetY));
+/// Writes the anchor of [picture] to [w]: a `oneCellAnchor` with its `from`
+/// and `ext` ([oneCellExtent]), or a `twoCellAnchor` with its `from` and
+/// `to` and an `editAs` unless it moves and sizes with its cells. Its `pic`
+/// has the `cNvPr` id [id], its name and its description (`descr`), and
+/// shows the media of the relationship [embedId]; a one-cell picture's
+/// `spPr` repeats its size in `a:xfrm`. Offsets are in EMU ([pixelsToEmu]).
+/// The name and description are `xsd:string`, so they take plain XML
+/// escaping only, no `escapeXstring`; everything else written is a number or
+/// a constant. The prefixes `xdr`, `a` and `r` must be declared above.
+void writeAnchor(
+  XmlWriter w,
+  WorksheetPicture picture, {
+  required int id,
+  required String embedId,
+}) {
+  final XlsxAnchor anchor = picture.anchor;
+  final ({int cx, int cy})? extent = anchor is XlsxOneCellAnchor
+      ? oneCellExtent(anchor, picture.size)
+      : null;
+  w.start('xdr:${anchorElementName(anchor)}');
+  final String? editAs = anchorEditAs(anchor);
+  if (editAs != null) w.attribute('editAs', editAs);
+  writeAnchorPlace(w, anchor, extent: extent);
+  writeDrawingPic(
+    w,
+    DrawingPic(
+      id: id,
+      name: picture.name,
+      description: picture.description,
+      embedId: embedId,
+    ),
+    prefix: 'xdr',
+    extent: extent,
+  );
+  w.empty('xdr:clientData');
+  w.end();
+}
+
+/// The local name of the element of [anchor].
+String anchorElementName(XlsxAnchor anchor) => switch (anchor) {
+  XlsxOneCellAnchor() => 'oneCellAnchor',
+  XlsxTwoCellAnchor() => 'twoCellAnchor',
+};
+
+/// The `editAs` of [anchor], `null` when none is written: a one-cell anchor
+/// has none, and moving and sizing with the cells is a two-cell one's
+/// default.
+String? anchorEditAs(XlsxAnchor anchor) => switch (anchor) {
+  XlsxOneCellAnchor() => null,
+  XlsxTwoCellAnchor(:final resize) => switch (resize) {
+    XlsxPictureResize.moveAndSize => null,
+    XlsxPictureResize.move => 'oneCell',
+    XlsxPictureResize.none => 'absolute',
+  },
+};
+
+/// Writes where [anchor] sits, its elements named with [prefix] (empty for
+/// none): its `from`, then its `to` or, for a one-cell anchor, its `ext` of
+/// [extent], which such an anchor must be given.
+void writeAnchorPlace(
+  XmlWriter w,
+  XlsxAnchor anchor, {
+  ({int cx, int cy})? extent,
+  String prefix = 'xdr',
+}) {
+  final String p = prefix.isEmpty ? '' : '$prefix:';
+  _writeMarker(w, p, 'from', anchor.from);
+  switch (anchor) {
+    case XlsxOneCellAnchor():
+      w.empty('${p}ext', <String, String>{
+        'cx': '${extent!.cx}',
+        'cy': '${extent.cy}',
+      });
+    case XlsxTwoCellAnchor(:final to):
+      _writeMarker(w, p, 'to', to);
+  }
+}
+
+/// Writes the marker [name] (`from` or `to`) of [point], its elements
+/// starting with [p]: its column and column offset, then its row and row
+/// offset, in `CT_Marker` order.
+void _writeMarker(XmlWriter w, String p, String name, XlsxAnchorPoint point) {
+  w.start('$p$name');
+  _writeNumber(w, '${p}col', point.column);
+  _writeNumber(w, '${p}colOff', pixelsToEmu(point.offsetX));
+  _writeNumber(w, '${p}row', point.row);
+  _writeNumber(w, '${p}rowOff', pixelsToEmu(point.offsetY));
   w.end();
 }
 

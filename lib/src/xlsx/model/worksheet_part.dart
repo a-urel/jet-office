@@ -1204,8 +1204,8 @@ final class WorksheetPart implements PartContent {
 
   /// The typed first element of [slot] (`cols`, `sheetFormatPr`,
   /// `mergeCells`, one of [_nodeSlots], `dataValidations`, `hyperlinks`,
-  /// `conditionalFormatting`, whose element is the [CfBlock], or
-  /// `legacyDrawing`, whose element is its [OpaqueXml]), or `null` when the
+  /// `conditionalFormatting`, whose element is the [CfBlock], or `drawing`
+  /// and `legacyDrawing`, whose element is its [OpaqueXml]), or `null` when the
   /// part has none typed. Any other element kept as an [OpaqueXml] is not a
   /// slot's element: it is never swapped, and a repeated one stays where it
   /// is. Elements are immutable, so an edit replaces the element, and
@@ -1216,6 +1216,7 @@ final class WorksheetPart implements PartContent {
     'mergeCells' => _mergeGroup,
     'dataValidations' || 'hyperlinks' => _topGroup(slot),
     'conditionalFormatting' => conditionalBlock,
+    'drawing' => _firstMainChild('drawing'),
     'legacyDrawing' => _legacyDrawing,
     _ when _nodeSlots.contains(slot) => _topNode(slot),
     _ => throw ArgumentError.value(slot, 'slot', 'Not a layout slot.'),

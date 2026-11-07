@@ -23,6 +23,19 @@ final RegExp _mediaFolder = RegExp(
 );
 final RegExp _trailingNumber = RegExp(r'(\d+)\.[^/.]*$');
 
+/// The content of a media part added to a package: the image file's bytes,
+/// held as given.
+final class DrawingMediaContent implements PartContent {
+  /// Content of [bytes].
+  const DrawingMediaContent(this.bytes);
+
+  /// The bytes of the image file.
+  final Uint8List bytes;
+
+  @override
+  List<Uint8List> encode() => <Uint8List>[bytes];
+}
+
 /// The images of a package's media parts.
 final class DrawingMediaIndex {
   /// An index over the media of a package; nothing is read until a method needs it.
@@ -39,8 +52,33 @@ final class DrawingMediaIndex {
   /// entry is corrupt.
   OfficeImage imageOf(String partName) {
     final String name = _package.canonicalPartName(partName) ?? partName;
-    final String key = _plain(name).toLowerCase();
-    return _images[key] ??= OfficeImage(_package.originalBytes(name));
+    return _images[_keyOf(name)] ??= OfficeImage(_package.originalBytes(name));
+  }
+
+  /// The image of the part [partName] when it was read or added, else
+  /// `null`. Reads nothing.
+  OfficeImage? loaded(String partName) => _images[_keyOf(partName)];
+
+  /// Records that the media part [partName] holds [image], for a part just
+  /// added to the package, whose bytes are not in the file, or put back.
+  void add(String partName, OfficeImage image) {
+    _images[_keyOf(partName)] = image;
+    _byHash
+        ?.putIfAbsent(_hash(image.bytes), () => <String>[])
+        .add(_plain(partName));
+  }
+
+  /// Forgets the media part [partName], for a part taken out of the package:
+  /// it is no more found by its bytes. A part not read does nothing.
+  void forget(String partName) {
+    final String key = _keyOf(partName);
+    final OfficeImage? image = _images.remove(key);
+    final Map<int, List<String>>? byHash = _byHash;
+    if (image == null || byHash == null) return;
+    final int hash = _hash(image.bytes);
+    final List<String>? names = byHash[hash];
+    names?.removeWhere((String name) => _keyOf(name) == key);
+    if (names != null && names.isEmpty) byHash.remove(hash);
   }
 
   /// The name (no leading slash) of a media part holding [image]: the one
@@ -89,6 +127,8 @@ final class DrawingMediaIndex {
   }
 
   String _nameOf(String key) => _plain(_package.canonicalPartName(key) ?? key);
+
+  static String _keyOf(String name) => _plain(name).toLowerCase();
 
   static String _plain(String name) =>
       name.startsWith('/') ? name.substring(1) : name;

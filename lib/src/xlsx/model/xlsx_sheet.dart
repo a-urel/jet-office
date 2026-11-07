@@ -24,9 +24,10 @@ library;
 
 import 'package:jet_core/jet_core.dart' show FormatKind;
 
-import '../../common/image.dart' show OfficeImage;
+import '../../common/image.dart'
+    show OfficeImage, OfficeImageFormat, checkImage;
 import '../../drawingml/media.dart';
-import '../../drawingml/picture.dart' show DrawingPic;
+import '../../drawingml/picture.dart' show DrawingPic, emuPerPixel;
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
@@ -45,7 +46,14 @@ import '../conditional_format_x14.dart'
 import '../data_validation.dart';
 import '../date_serial.dart';
 import '../defined_name.dart';
-import '../drawing.dart' show XlsxAnchor, XlsxPicture;
+import '../drawing.dart'
+    show
+        WorksheetPicture,
+        XlsxAnchor,
+        XlsxOneCellAnchor,
+        XlsxPicture,
+        checkAnchor,
+        checkPicture;
 import '../formula_text.dart' show quotedSheetRef;
 import '../header_footer.dart';
 import '../hyperlink.dart';
@@ -79,6 +87,8 @@ import '../worksheet_parts.dart'
         checkOutlineLevel,
         checkRowHeight,
         commentsPartName,
+        drawingPartName,
+        mediaPartName,
         paneAttributes,
         sheetViewAttributes,
         standardColumnWidth,

@@ -195,15 +195,19 @@ ItemGroup<T> readItemGroup<T>(
 ///
 /// [write] runs inside a wrapper that binds the default namespace to
 /// SpreadsheetML and `r` to the relationships namespace, as the writer's
-/// root does. Each element records the bindings it uses, so
+/// root does, or binds [namespaces] when given. Each element records the bindings it uses, so
 /// [OpaqueXml.writeTo] declares the ones its new parent lacks, and writes
 /// none under a parent that has them.
-List<OpaqueXml> renderElements(void Function(XmlWriter w) write) {
+List<OpaqueXml> renderElements(
+  void Function(XmlWriter w) write, {
+  Map<String, String> namespaces = const <String, String>{
+    '': Ns.main,
+    'r': Ns.rel,
+  },
+}) {
   final StringBuffer out = StringBuffer();
-  final XmlWriter w = XmlWriter(out)
-    ..start('wrapper')
-    ..attribute('xmlns', Ns.main)
-    ..attribute('xmlns:r', Ns.rel);
+  final XmlWriter w = XmlWriter(out)..start('wrapper');
+  writeNamespaceDeclarations(w, namespaces);
   write(w);
   w.end();
   final XmlPullReader r = XmlPullReader(out.toString())..next();

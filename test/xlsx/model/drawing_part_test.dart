@@ -36,7 +36,9 @@ void main() {
     expect(part.entries[0].pic, isNull);
     expect(part.entries[1].pic!.id, 4);
     expect(part.entries[1].pic!.embedId, 'rId1');
-    expect(part.ids, <int>{9, 4});
+    expect(part.entries[0].ids, <int>[9]);
+    expect(part.entries[1].ids, <int>[4]);
+    expect(part.nextId, 10);
   });
 
   test('encode writes the root and the entries back', () {

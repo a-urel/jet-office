@@ -9,8 +9,10 @@
 /// that directly holds a picture showing embedded media also keeps its typed
 /// [XlsxAnchor] and [DrawingPic]; every other child of the root is an entry
 /// without a value. An edit changes [DrawingPart.entries], a mutable list, and
-/// [DrawingPart.encode] writes the part from it; the `cNvPr` ids the part
-/// uses are in [DrawingPart.ids], so a new picture takes a free one.
+/// [DrawingPart.encode] writes the part from it; each entry knows the `cNvPr`
+/// ids it uses, so a new picture takes a free one ([DrawingPart.nextId]). A
+/// new entry is the writer's anchor ([DrawingEntry.rendered]); a moved one
+/// keeps all but its place ([DrawingEntry.movedTo]).
 library;
 
 import 'dart:typed_data';
@@ -25,28 +27,124 @@ import '../../xml/xml_writer.dart';
 import '../drawing.dart';
 import '../read/read_limits.dart';
 import 'comments_part.dart' show WarnFn;
-import 'item_group.dart' show checkListRoom, readerOf;
+import 'item_group.dart'
+    show checkListRoom, readerOf, renderElements, rewrittenElement;
 
 /// One child of a drawing's root: the element as written and, for a picture
 /// the model lists, where it sits and what it is.
+///
+/// Immutable: an edit replaces the entry.
 final class DrawingEntry {
-  /// An entry kept as [source]; [anchor] and [pic] are `null` for an element
-  /// that is no picture the model reads.
-  DrawingEntry({required this.source, this.anchor, this.pic});
+  /// An entry kept as [source], which holds the `cNvPr` ids [ids]; [anchor]
+  /// and [pic] are `null` for an element that is no picture the model reads.
+  const DrawingEntry({
+    required this.source,
+    this.ids = const <int>[],
+    this.anchor,
+    this.pic,
+  });
+
+  /// The entry of [picture] as the writer renders it, with the `cNvPr` id
+  /// [id], showing the media of the relationship [embedId]. It records the
+  /// prefixes it uses, so `OpaqueXml.writeTo` declares them on the anchor
+  /// under a root that binds others.
+  factory DrawingEntry.rendered(
+    WorksheetPicture picture, {
+    required int id,
+    required String embedId,
+  }) => _entry(
+    renderElements(
+      (XmlWriter w) => writeAnchor(w, picture, id: id, embedId: embedId),
+      namespaces: const <String, String>{
+        'xdr': Ns.xdr,
+        'a': Ns.drawingMain,
+        'r': Ns.rel,
+      },
+    ).single,
+    <int>[id],
+    _noWarning,
+  );
 
   /// The element as written.
-  OpaqueXml source;
+  final OpaqueXml source;
+
+  /// The `id` of every `cNvPr` the element holds.
+  final List<int> ids;
 
   /// Where the picture sits, or `null`.
-  XlsxAnchor? anchor;
+  final XlsxAnchor? anchor;
 
   /// The picture's identity and the relationship of its media, or `null`.
-  DrawingPic? pic;
+  final DrawingPic? pic;
+
+  /// This picture at [place], whose size in EMU is [extent] for a one-cell
+  /// anchor: the element takes the kind of [place] and its markers, `ext` and
+  /// `editAs`, in the anchor's own prefix. Its other attributes, its
+  /// namespace declarations and every other child (the `pic`, `clientData`)
+  /// stay as written.
+  ///
+  /// Must be an entry with an [anchor]. The first of the old `from`, `to` and
+  /// `ext` gives way to the new ones.
+  DrawingEntry movedTo(XlsxAnchor place, ({int cx, int cy})? extent) {
+    final XmlPullReader r = readerOf(source);
+    final String prefix = r.prefix;
+    final String kind = anchorElementName(place);
+    final StringBuffer out = StringBuffer();
+    final XmlWriter w = XmlWriter(out)
+      ..start(prefix.isEmpty ? kind : '$prefix:$kind');
+    writeNamespaceDeclarations(w, r.declaredNamespaces);
+    writeKeptAttributes(
+      w,
+      keepAttributes(r, except: const <String>{'editAs'}),
+      declaredAbove: r.namespacesInScope,
+    );
+    final String? editAs = anchorEditAs(place);
+    if (editAs != null) w.attribute('editAs', editAs);
+    int at = r.eventEnd;
+    bool placed = false;
+    final int depth = r.depth;
+    while (r.next()) {
+      if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+      if (r.eventType != XmlEventType.startElement) continue;
+      final int start = r.eventStart;
+      final bool marker =
+          r.depth == depth + 1 &&
+          r.namespaceUri == Ns.xdr &&
+          const <String>{'from', 'to', 'ext'}.contains(r.localName);
+      r.skip();
+      if (!marker) continue;
+      w.raw(r.sourceText(at, start));
+      at = r.eventEnd;
+      if (!placed) writeAnchorPlace(w, place, extent: extent, prefix: prefix);
+      placed = true;
+    }
+    w
+      ..raw(r.sourceText(at, r.eventStart))
+      ..end();
+    return _entry(rewrittenElement(source, out.toString()), ids, _noWarning);
+  }
+}
+
+void _noWarning(String detail) {}
+
+/// The relationship ids [element] names: the value of every attribute in the
+/// relationships namespace, at any depth. Throws XML errors as a reader does
+/// on what a file holds.
+Set<String> relationshipIdsIn(OpaqueXml element) {
+  final Set<String> ids = <String>{};
+  final XmlPullReader r = readerOf(element);
+  do {
+    if (r.eventType != XmlEventType.startElement) continue;
+    for (int i = 0; i < r.attributeCount; i++) {
+      if (r.attributeNamespace(i) == Ns.rel) ids.add(r.attributeValue(i));
+    }
+  } while (r.next());
+  return ids;
 }
 
 /// A drawing part with its anchors kept as written and its pictures typed.
 final class DrawingPart implements PartContent {
-  DrawingPart._(this.root, this.entries, this.ids);
+  DrawingPart._(this.root, this.entries);
 
   /// A new part without anchors, as the writer starts one.
   factory DrawingPart.empty() => DrawingPart._(
@@ -56,7 +154,6 @@ final class DrawingPart implements PartContent {
       'r': Ns.rel,
     }),
     <DrawingEntry>[],
-    <int>{},
   );
 
   /// Reads the drawing part [r] is positioned before, or returns `null` when
@@ -68,8 +165,8 @@ final class DrawingPart implements PartContent {
   /// warning, as is every other element. A `pic` that cannot be read (no
   /// numeric `cNvPr` id, neither `r:embed` nor `r:link`, a marker or an
   /// `ext` that is not a number, a missing marker) is kept without a value
-  /// and reported to [warn] as `pic`. The `id` of every `cNvPr` of the part
-  /// goes into [ids].
+  /// and reported to [warn] as `pic`. Each entry keeps the `id` of every
+  /// `cNvPr` it holds.
   ///
   /// Throws an `XlsxReadException` (`limitExceeded`, naming `maxMerges` and
   /// [part]) when the part holds more children than [limits] allows, and XML
@@ -82,7 +179,6 @@ final class DrawingPart implements PartContent {
   }) {
     XmlRoot? root;
     final List<DrawingEntry> entries = <DrawingEntry>[];
-    final Set<int> ids = <int>{};
     while (r.next()) {
       if (r.eventType != XmlEventType.startElement) continue;
       if (r.depth == 1) {
@@ -92,6 +188,7 @@ final class DrawingPart implements PartContent {
       }
       if (r.depth != 2) continue;
       checkListRoom(entries.length, limits, part);
+      final List<int> ids = <int>[];
       final OpaqueXml source = OpaqueXml.capture(
         r,
         onEvent: (XmlPullReader e) {
@@ -103,10 +200,10 @@ final class DrawingPart implements PartContent {
           if (id != null) ids.add(id);
         },
       );
-      entries.add(_entry(source, warn));
+      entries.add(_entry(source, ids, warn));
     }
     if (root == null) return null;
-    return DrawingPart._(root, entries, ids);
+    return DrawingPart._(root, entries);
   }
 
   /// The start tag of the root, kept as written.
@@ -115,8 +212,17 @@ final class DrawingPart implements PartContent {
   /// Every child of the root, in file order, listed or not.
   final List<DrawingEntry> entries;
 
-  /// The `id` of every `cNvPr` the part holds, of any kind of object.
-  final Set<int> ids;
+  /// The `cNvPr` id of a new picture: one above the highest the part holds,
+  /// at least 2, as the writer's first picture.
+  int get nextId {
+    int highest = 1;
+    for (final DrawingEntry e in entries) {
+      for (final int id in e.ids) {
+        if (id > highest) highest = id;
+      }
+    }
+    return highest + 1;
+  }
 
   @override
   List<Uint8List> encode() {
@@ -131,16 +237,19 @@ final class DrawingPart implements PartContent {
   }
 }
 
-DrawingEntry _entry(OpaqueXml source, WarnFn warn) {
+DrawingEntry _entry(OpaqueXml source, List<int> ids, WarnFn warn) {
   if (source.namespaceUri != Ns.xdr ||
       (source.localName != 'oneCellAnchor' &&
           source.localName != 'twoCellAnchor')) {
-    return DrawingEntry(source: source);
+    return DrawingEntry(source: source, ids: ids);
   }
   final ({XlsxAnchor anchor, DrawingPic pic})? typed = _typed(source, warn);
-  return typed == null
-      ? DrawingEntry(source: source)
-      : DrawingEntry(source: source, anchor: typed.anchor, pic: typed.pic);
+  return DrawingEntry(
+    source: source,
+    ids: ids,
+    anchor: typed?.anchor,
+    pic: typed?.pic,
+  );
 }
 
 /// The anchor and picture of [source], an anchor element, or `null` when it

@@ -60,4 +60,55 @@ void main() {
   test('nextNumber is 1 for a package without media', () {
     expect(DrawingMediaIndex(_package(<String, List<int>>{})).nextNumber(), 1);
   });
+
+  group('a part added or removed', () {
+    final Uint8List png = Uint8List.fromList(<int>[1, 2, 3]);
+
+    test('add makes an image found by its bytes, after a scan too', () {
+      final OpcPackage package = OpcPackage.empty();
+      final DrawingMediaIndex index = DrawingMediaIndex(package);
+      expect(index.partFor(OfficeImage(png)), isNull);
+      final String name = package.addPart(
+        'xl/media/image1.png',
+        'image/png',
+        DrawingMediaContent(png),
+      );
+      final OfficeImage image = OfficeImage(png);
+      index.add(name, image);
+      expect(index.imageOf(name), same(image));
+      expect(
+        index.partFor(OfficeImage(Uint8List.fromList(png))),
+        'xl/media/image1.png',
+      );
+    });
+
+    test('forget stops finding it', () {
+      final OpcPackage package = OpcPackage.empty();
+      final DrawingMediaIndex index = DrawingMediaIndex(package);
+      final String name = package.addPart(
+        'xl/media/image1.png',
+        'image/png',
+        DrawingMediaContent(png),
+      );
+      final OfficeImage image = OfficeImage(png);
+      index.add(name, image);
+      index.partFor(image);
+      expect(index.loaded(name), same(image));
+      index.forget(name);
+      package.removePart(name);
+      expect(index.loaded(name), isNull);
+      expect(index.partFor(OfficeImage(Uint8List.fromList(png))), isNull);
+      expect(index.partFor(image), isNull);
+    });
+
+    test('forgetting what was never read does nothing', () {
+      final DrawingMediaIndex index = DrawingMediaIndex(OpcPackage.empty());
+      index.forget('xl/media/image9.png');
+      expect(index.loaded('xl/media/image9.png'), isNull);
+    });
+
+    test('the content of a media part is its bytes', () {
+      expect(DrawingMediaContent(png).encode(), <Uint8List>[png]);
+    });
+  });
 }
