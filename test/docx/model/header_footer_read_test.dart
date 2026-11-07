@@ -10,10 +10,12 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/docx_document.dart'
     show changeLogOf, editsOf;
+import 'package:jet_office/src/docx/model/blocks.dart' show blockContainerOf;
 import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/ooxml.dart';
 import 'package:test/test.dart';
 
+import '../../support/read_xlsx.dart';
 import '../support/docx_builder.dart';
 import '../support/styles_documents.dart';
 
@@ -277,7 +279,27 @@ void main() {
       expect(_text(doc.sections.single.footer), 'Footer');
     });
 
-    test('a damaged relationships part of a story throws from blocks', () {
+    test('reading leaves the relationships part of a story unread', () {
+      const String rels =
+          '<?xml version="1.0" encoding="UTF-8"?>\n<!-- kept -->'
+          '<Relationships xmlns="$packageRelsNs"></Relationships>\n';
+      final Uint8List input = _docx(
+        '<w:sectPr>${_h('default', 'rId1')}</w:sectPr>',
+        rels: _rel('rId1', 'header1.xml'),
+        parts: <String, String>{
+          'word/header1.xml': _hdr(_p('Header')),
+          'word/_rels/header1.xml.rels': rels,
+        },
+      );
+      final DocxDocument doc = DocxDocument.open(input);
+      expect(_text(doc.sections.single.header), 'Header');
+      expect(
+        readXlsxBytes(doc.save().bytes)['word/_rels/header1.xml.rels'],
+        utf8.encode(rels),
+      );
+    });
+
+    test('a damaged relationships part of a story opens, reads and saves', () {
       final Uint8List input = _docx(
         '<w:sectPr>${_h('default', 'rId1')}</w:sectPr>',
         rels: _rel('rId1', 'header1.xml'),
@@ -287,18 +309,11 @@ void main() {
         },
       );
       final DocxDocument doc = DocxDocument.open(input);
-      final DocxHeaderFooter header = doc.sections.single.header;
+      expect(_text(doc.sections.single.header), 'Header');
       expect(
-        () => header.blocks,
-        throwsA(
-          isA<DocxReadException>().having(
-            (DocxReadException e) => e.part,
-            'part',
-            '/word/_rels/header1.xml.rels',
-          ),
-        ),
+        readXlsxBytes(doc.save().bytes)['word/_rels/header1.xml.rels'],
+        utf8.encode('<Relationships'),
       );
-      _expectSame(input, doc.save().bytes);
     });
 
     test('a story keeps its own relationships', () {
@@ -309,7 +324,7 @@ void main() {
           'word/header1.xml': _hdr(_p('Header')),
           'word/_rels/header1.xml.rels':
               '<Relationships xmlns="$packageRelsNs">'
-              '${_rel('rId1', 'https://example.com', type: RelType.hyperlink, external: true)}'
+              '${_rel('rId1', 'x', type: RelType.hyperlink, external: true)}'
               '</Relationships>',
         },
       );
@@ -491,12 +506,12 @@ void main() {
 
     test('a section that left the document keeps only its own story', () {
       final DocxDocument doc = DocxDocument.open(middle);
-      final DocxSection third = doc.sections[0];
-      final DocxSection two = doc.sections[1];
+      final DocxSection first = doc.sections[0];
+      final DocxSection second = doc.sections[1];
       doc.body.removeBlockAt(1);
       expect(doc.sections, hasLength(2));
-      expect(_text(two.footer), 'Footer');
-      expect(third.footer.blocks, isEmpty);
+      expect(_text(second.footer), 'Footer');
+      expect(first.footer.blocks, isEmpty);
       expect(doc.sections[1].footer.blocks, isEmpty);
     });
   });
@@ -658,19 +673,39 @@ void main() {
       expect(_text(doc.sections.single.header), 'Generic');
     });
 
-    test('a part read as a header counts as no footer', () {
-      final DocxDocument doc = DocxDocument.open(
-        file(
-          '${_h('default', 'rId2')}${_f('default', 'rId3')}',
-          '${_rel('rId2', 'other.xml')}'
-              '${_rel('rId3', 'other.xml', type: RelType.footer)}',
-          otherType: ContentType.xml,
-          other: _hdr(_p('Generic')),
-        ),
+    group('a generic part named as a header and as a footer', () {
+      Uint8List both() => file(
+        '${_h('default', 'rId2')}${_f('default', 'rId3')}',
+        '${_rel('rId2', 'other.xml')}'
+            '${_rel('rId3', 'other.xml', type: RelType.footer)}',
+        otherType: ContentType.xml,
+        other: _hdr(_p('Generic')),
       );
-      final DocxSection section = doc.sections.single;
-      expect(_text(section.header), 'Generic');
-      expect(section.footer.blocks, isEmpty);
+
+      test('counts as none for both, the header read first', () {
+        final DocxSection section = DocxDocument.open(both()).sections.single;
+        expect(section.header.blocks, isEmpty);
+        expect(section.footer.blocks, isEmpty);
+      });
+
+      test('counts as none for both, the footer read first', () {
+        final DocxSection section = DocxDocument.open(both()).sections.single;
+        expect(section.footer.blocks, isEmpty);
+        expect(section.header.blocks, isEmpty);
+      });
+
+      test('counts as none when only the other kind is referenced', () {
+        final DocxDocument doc = DocxDocument.open(
+          file(
+            _h('default', 'rId2'),
+            '${_rel('rId2', 'other.xml')}'
+            '${_rel('rId3', 'other.xml', type: RelType.footer)}',
+            otherType: ContentType.xml,
+            other: _hdr(_p('Generic')),
+          ),
+        );
+        expect(doc.sections.single.header.blocks, isEmpty);
+      });
     });
   });
 
@@ -783,6 +818,52 @@ void main() {
       doc.body.insertBlock(0, block);
       expect(header.blocks, isEmpty);
       expect(doc.body.blocks.first, same(block));
+    });
+
+    test('a paragraph with a section break cannot go in a story', () {
+      final Uint8List file = _docx(
+        '${_break('One', '')}${_p('Two')}'
+        '<w:sectPr>${_h('default', 'rId1')}</w:sectPr>',
+        rels: _rel('rId1', 'header1.xml'),
+        parts: <String, String>{'word/header1.xml': _hdr(_p('Header'))},
+      );
+      final DocxDocument doc = DocxDocument.open(file);
+      final DocxHeaderFooter header = doc.sections.last.header;
+      final DocxBlock moved = doc.body.blocks.first;
+      doc.body.removeBlockAt(0);
+      final int sections = doc.sections.length;
+      expect(() => header.insertBlock(0, moved), throwsArgumentError);
+      expect(() => header.replaceBlockAt(0, moved), throwsArgumentError);
+      expect(header.blocks, hasLength(1));
+      expect(_text(header), 'Header');
+      expect(blockContainerOf(moved), isNull);
+      expect(doc.sections, hasLength(sections));
+    });
+
+    test('a break of another document cannot go in a story either', () {
+      final DocxDocument other = DocxDocument.open(
+        _docx('${_break('One', '')}<w:sectPr/>'),
+      );
+      final DocxBlock moved = other.body.blocks.first;
+      other.body.removeBlockAt(0);
+      final DocxDocument doc = DocxDocument.open(input);
+      final DocxHeaderFooter header = doc.sections.single.header;
+      expect(() => header.insertBlock(0, moved), throwsArgumentError);
+      expect(changeLogOf(doc).hasChanges, isFalse);
+    });
+
+    test('a break read in a story cannot go back in, and undo restores it', () {
+      final DocxDocument doc = DocxDocument.open(
+        _withHeader(_hdr('<w:p><w:pPr><w:sectPr/></w:pPr></w:p>')),
+      );
+      final DocxHeaderFooter header = doc.sections.single.header;
+      final DocxBlock read = header.blocks.single;
+      final ChangeSet removal = editsOf(doc).transaction(() {
+        header.removeBlockAt(0);
+      });
+      expect(() => header.insertBlock(0, read), throwsArgumentError);
+      editsOf(doc).log.revertSet(removal);
+      expect(header.blocks.single, same(read));
     });
 
     test('addTable shares the width of the last section', () {

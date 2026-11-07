@@ -15,9 +15,13 @@
 ///
 /// A reference counts when its relationship of the main part is internal, of
 /// the header or the footer type as the reference is, and names a part of the
-/// matching content type, or of the generic XML type, that is not the main
-/// part and not a story of the other kind. Any other reference stays as read
-/// and counts as none (plan Ruling 7).
+/// matching content type, or of the generic XML type when no relationship of
+/// the other kind names it too, that is not the main part. Any other reference
+/// stays as read and counts as none (plan Ruling 7), whichever is read first.
+///
+/// The part's own relationships are not read: a read of the package parses
+/// them, and a parsed relationships part is written anew at save, which a
+/// story only read must not do.
 part of '../docx_document.dart';
 
 /// Which pages of a section a header or a footer is for.
@@ -46,10 +50,13 @@ enum DocxHeaderFooterType {
 /// ([isInherited]), or, when no section up to this one has one, empty.
 ///
 /// Reading one changes nothing, and its part loads on the first access to
-/// [blocks] or edit: a [DocxReadException] names the part or its relationships
-/// part when it cannot be read, nothing is loaded then, and a save copies the
-/// part as it was. An edit reaches every section that uses the story, as
+/// [blocks] or edit: a [DocxReadException] names the part when it cannot be
+/// read, nothing is loaded then, and a save copies the part as it was. An edit
+/// reaches every section that uses the story, as
 /// Word's "Link to Previous" does, and every reference that names its part.
+///
+/// A paragraph with a section break cannot go in one: [insertBlock] and
+/// [replaceBlockAt] throw [ArgumentError], wherever the paragraph comes from.
 final class DocxHeaderFooter extends DocxStory {
   DocxHeaderFooter._(this._story, this.type, {required this.isInherited})
     : super._(_story._document._edits, _story._document);
@@ -71,6 +78,17 @@ final class DocxHeaderFooter extends DocxStory {
 
   @override
   Object get _container => _story;
+
+  @override
+  void _checkBlock(DocxBlock block) {
+    if (block is DocxParagraph && paragraphHasBreak(block)) {
+      throw ArgumentError.value(
+        block,
+        'block',
+        'must not bring a section break into a header or a footer',
+      );
+    }
+  }
 }
 
 /// The blocks of a header or a footer, shared by the handles on it. A story
@@ -107,17 +125,11 @@ final class _Story {
   /// The blocks, read on the first access.
   List<DocxBlock> get blocks => _blocks ??= _load();
 
-  /// Reads the part and its relationships, which load with it so that a
-  /// damaged one is reported as the story's failure. Nothing is loaded when
-  /// it throws.
+  /// Reads the part. Nothing is loaded when it throws.
   List<DocxBlock> _load() {
     final RelatedPart? slot = _slot;
     if (slot == null) return <DocxBlock>[];
     final DocxPackage package = _document._package;
-    package.guard(
-      relationshipsPartOf(slot.name),
-      () => package.package.relationshipsOf(slot.name),
-    );
     final StoryPart read = slot.load(
       (XmlPullReader r) => StoryPart.read(
         r,

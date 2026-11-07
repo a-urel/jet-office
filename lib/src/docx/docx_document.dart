@@ -340,12 +340,20 @@ final class DocxDocument {
     DocxHeaderFooterType type, {
     required bool isHeader,
   }) {
+    final OpcPackage opc = _package.package;
+    final String main = _package.mainPart;
+    final String otherKind = isHeader ? RelType.footer : RelType.header;
     final Map<String, OpcRelationship> relationships =
         <String, OpcRelationship>{};
-    for (final OpcRelationship rel in _package.package.relationshipsOf(
-      _package.mainPart,
-    )) {
+    final Set<String> namedAsOther = <String>{};
+    for (final OpcRelationship rel in opc.relationshipsOf(main)) {
       relationships.putIfAbsent(rel.id, () => rel);
+      if (!rel.external && rel.type == otherKind) {
+        final String? name = opc.canonicalPartName(
+          opc.resolve(main, rel.target),
+        );
+        if (name != null) namedAsOther.add(name);
+      }
     }
     _Story? ownOf(DocxSection s) {
       for (final SectionReference ref in sectionReferencesOf(
@@ -353,7 +361,11 @@ final class DocxDocument {
         isHeader: isHeader,
       )) {
         if (ref.type != type._reference) continue;
-        final _Story? story = _storyOf(relationships[ref.relId], isHeader);
+        final _Story? story = _storyOf(
+          relationships[ref.relId],
+          isHeader,
+          namedAsOther,
+        );
         if (story != null) return story;
       }
       return null;
@@ -377,8 +389,14 @@ final class DocxDocument {
 
   /// The story of the part [rel] names, for a reference of a header when
   /// [isHeader] and of a footer otherwise, or `null` when it names none
-  /// (see `model/header_footer.dart`).
-  _Story? _storyOf(OpcRelationship? rel, bool isHeader) {
+  /// (see `model/header_footer.dart`). [namedAsOther] holds the parts a
+  /// relationship of the other kind names: only its content type could tell
+  /// what a part is, so a generic one among them is neither.
+  _Story? _storyOf(
+    OpcRelationship? rel,
+    bool isHeader,
+    Set<String> namedAsOther,
+  ) {
     if (rel == null ||
         rel.external ||
         rel.type != (isHeader ? RelType.header : RelType.footer)) {
@@ -389,16 +407,16 @@ final class DocxDocument {
     final String? name = opc.canonicalPartName(opc.resolve(main, rel.target));
     if (name == null || name == main) return null;
     final String? type = opc.contentTypeOf(name);
-    if (type != (isHeader ? ContentType.wmlHeader : ContentType.wmlFooter) &&
-        type != ContentType.xml &&
-        type != 'text/xml') {
+    final bool generic = type == ContentType.xml || type == 'text/xml';
+    if (generic
+        ? namedAsOther.contains(name)
+        : type != (isHeader ? ContentType.wmlHeader : ContentType.wmlFooter)) {
       return null;
     }
-    final _Story story = _stories.putIfAbsent(
+    return _stories.putIfAbsent(
       name,
       () => _Story(this, isHeader, RelatedPart.named(_package, name)),
     );
-    return story.isHeader == isHeader ? story : null;
   }
 
   /// The header and footer parts loaded so far.
@@ -627,13 +645,15 @@ abstract base class DocxStory {
   /// Inserts [block] at [index], from 0 to the number of blocks.
   ///
   /// An [index] out of that range throws [RangeError]. A [block] that is
-  /// already in a body, this one or another, or in a table cell, throws
+  /// already in a story, this one or another, or in a table cell, throws
   /// [StateError]: remove it there first. Phase 4 neither moves nor copies a
   /// block implicitly. A table nested past 80 deep, which only a file can
   /// hold, throws [ArgumentError]: what the API builds opens again under the
   /// default read limits. So does a paragraph with a section break of another
-  /// document: the ids of its references mean nothing here. In a table cell
-  /// such a break starts no section, and goes in as read.
+  /// document: the ids of its references mean nothing here. A paragraph with
+  /// a section break, from anywhere, throws it going in a [DocxHeaderFooter],
+  /// which has no sections. In a table cell such a break starts no section,
+  /// and goes in as read.
   ///
   /// The styles set on a paragraph, on its runs and on a table, and on
   /// everything in the cells of a table, nested tables included, are resolved
@@ -655,7 +675,9 @@ abstract base class DocxStory {
   /// * A `w:numId` this document has too joins that list, unreported, even
   ///   when it is another list; ids are not remapped.
   /// * A read opaque inline or block that holds an `r:id` (a hyperlink, a
-  ///   picture) keeps an id this document may lack or mean otherwise.
+  ///   picture) keeps an id this document may lack or mean otherwise. Ids are
+  ///   per part, so the same holds, unreported, for one moved between the
+  ///   body, a header and a footer of one document.
   /// * A reference the model does not type, and one in the paragraph mark's
   ///   `w:rPr`, stay as read, unreported.
   void insertBlock(int index, DocxBlock block) {
@@ -663,7 +685,7 @@ abstract base class DocxStory {
     primitives.insertBlock(_edits, _container, _blocks, index, block);
   }
 
-  /// Removes the block at [index]. The block is then in no body and can be
+  /// Removes the block at [index]. The block is then in no story and can be
   /// inserted again.
   ///
   /// An [index] that is not one of a block throws [RangeError].
@@ -671,14 +693,14 @@ abstract base class DocxStory {
       primitives.removeBlock(_edits, _container, _blocks, index);
 
   /// Puts [block] in place of the block at [index]. The block replaced is
-  /// then in no body.
+  /// then in no story.
   ///
   /// An [index] that is not one of a block throws [RangeError], and a
-  /// [block] already in a body or a cell throws [StateError]. The styles set on
-  /// [block] are resolved as [insertBlock] does, which may throw the same
+  /// [block] already in a story or a cell throws [StateError]. The styles set
+  /// on [block] are resolved as [insertBlock] does, which may throw the same
   /// [DocxReadException], and what was read in another document counts as set
-  /// as it says. A section break of another document throws [ArgumentError],
-  /// as there.
+  /// as it says. A section break of another document, or any going in a
+  /// [DocxHeaderFooter], throws [ArgumentError], as there.
   void replaceBlockAt(int index, DocxBlock block) {
     _checkBlock(block);
     primitives.replaceBlock(_edits, _container, _blocks, index, block);
