@@ -295,7 +295,9 @@ Iterable<FuzzCase> docxFuzzCases(int seed, int count) {
 ///
 /// Returns normally or throws [DocxReadException], and only from `open`,
 /// from loading the body, the styles or the numbering (the first access to
-/// `body`, `blocks`, `styles` or `numbering`), or from an edit of a part
+/// `body`, `blocks`, `styles` or `numbering`), from a story's blocks (a header
+/// or footer part that cannot be read) or the edit of that story (the footer
+/// paragraph added), or from an edit of a part
 /// that could not be used (`DocxStyles.ensure` on a styles part whose
 /// content is not what it says): a file that opens but has such a part is
 /// saved anyway (the part is copied as it was), and the first exception is
@@ -334,12 +336,15 @@ void exerciseDocx(Uint8List bytes) {
   }, refused);
   _guard(() => styles = doc.styles, refused);
   _guard(() => numbering = doc.numbering, refused);
-  bool storiesRefused = false;
+  Set<_StoryKey> refusedStories = <_StoryKey>{};
+  int sectionCount = 0;
   if (blocks != null) {
     _walk(blocks!);
     docxEditTables(blocks!);
     body!.addParagraph('x').addRun('y');
-    storiesRefused = !_sections(doc, refused);
+    final ({Set<_StoryKey> refused, int count}) read = _sections(doc, refused);
+    refusedStories = read.refused;
+    sectionCount = read.count;
   }
   if (styles != null) _readStyles(styles!);
   final int instancesBefore = numbering == null
@@ -372,31 +377,38 @@ void exerciseDocx(Uint8List bytes) {
     numberingReadable: numbering != null,
     ensuredId: ensured,
     instancesAfter: listAdded ? instancesBefore + 1 : null,
-    storiesReadable: !storiesRefused,
+    refusedStories: refusedStories,
+    sectionCount: sectionCount,
   );
   if (first != null) throw first!;
 }
+
+/// A story of a section: its index, its type and whether it is a header.
+typedef _StoryKey = (int, DocxHeaderFooterType, bool);
 
 /// Reads every section of [doc], every typed value of each, `evenAndOddHeaders`
 /// and all six stories (blocks, inlines and fields); then sets the result text
 /// of every field of the body and the stories, adds a paragraph to the last
 /// section's footer, and adds a section.
 ///
-/// Reading a section value throws nothing. A story whose part cannot be read
-/// may throw [DocxReadException] from its blocks or from an edit, which goes
-/// to [onRefusal] (the part is saved as it was); any other exception, an
-/// [ArgumentError] included, propagates. Returns whether every story loaded.
-bool _sections(DocxDocument doc, void Function(DocxReadException) onRefusal) {
-  bool loaded = true;
-  void story(void Function() action) {
-    if (!_guard(action, onRefusal)) loaded = false;
-  }
-
+/// Reading a section value or what a story loaded throws nothing: only the
+/// load, `h.blocks`, may throw [DocxReadException], for a part that cannot be
+/// read, and that goes to [onRefusal] and the story's key to the returned set
+/// (a story that inherits a refused part is refused too). The edit of the last
+/// footer may throw it only when that story's own load was refused; anything
+/// else, an [ArgumentError] included, propagates. Returns the refused stories
+/// and the number of sections read.
+({Set<_StoryKey> refused, int count}) _sections(
+  DocxDocument doc,
+  void Function(DocxReadException) onRefusal,
+) {
+  final Set<_StoryKey> refused = <_StoryKey>{};
   doc.evenAndOddHeaders;
   final List<DocxField> fields = <DocxField>[];
   _fields(doc.body.blocks.toList(), fields);
   final List<DocxSection> sections = doc.sections;
-  for (final DocxSection section in sections) {
+  for (int i = 0; i < sections.length; i++) {
+    final DocxSection section = sections[i];
     <Object?>[
       section.pageSize,
       section.margins,
@@ -417,20 +429,35 @@ bool _sections(DocxDocument doc, void Function(DocxReadException) onRefusal) {
       section.evenFooter,
     ]) {
       <Object?>[h.type, h.isHeader, h.isInherited].toString();
-      story(() {
-        final List<DocxBlock> blocks = h.blocks.toList();
-        _walk(blocks);
-        _fields(blocks, fields);
-      });
+      List<DocxBlock>? blocks;
+      if (!_guard(() => blocks = h.blocks.toList(), onRefusal)) {
+        refused.add((i, h.type, h.isHeader));
+        continue;
+      }
+      _walk(blocks!);
+      _fields(blocks!, fields);
     }
   }
   for (final DocxField field in fields) {
     field.resultText = 'x';
     field.text;
   }
-  story(() => sections.last.footer.addParagraph('footer'));
+  final DocxHeaderFooter footer = sections.last.footer;
+  try {
+    footer.addParagraph('footer');
+  } on DocxReadException catch (e) {
+    final _StoryKey key = (
+      sections.length - 1,
+      DocxHeaderFooterType.primary,
+      false,
+    );
+    if (!refused.contains(key)) {
+      throw StateError('adding to a footer that loaded threw: $e');
+    }
+    onRefusal(e);
+  }
   doc.body.addSection();
-  return loaded;
+  return (refused: refused, count: sections.length);
 }
 
 /// Adds every field of [blocks], tables and nested fields included, to [out].
@@ -692,8 +719,10 @@ void _run(DocxRunProperties r) => <Object?>[
 /// [numberingReadable] false) may throw a [DocxReadException]. Anything
 /// else is a [StateError].
 ///
-/// The stories of every section load unless the input's did not
-/// ([storiesReadable] false).
+/// A story of the saved document may throw [DocxReadException] from its
+/// blocks only when the same story of the input did ([refusedStories], by
+/// section index; the section added by the walk, at [sectionCount] or later,
+/// inherits from the last one read).
 ///
 /// When [ensuredId] is not null the styles must hold that id; when
 /// [instancesAfter] is not null the numbering must list that many
@@ -705,7 +734,8 @@ void _reopen(
   required bool numberingReadable,
   required String? ensuredId,
   required int? instancesAfter,
-  required bool storiesReadable,
+  required Set<_StoryKey> refusedStories,
+  required int sectionCount,
 }) {
   final DocxDocument again;
   try {
@@ -724,8 +754,11 @@ void _reopen(
   }
 
   load('body', bodyReadable, () => _walk(again.body.blocks.toList()));
-  load('stories', bodyReadable && storiesReadable, () {
-    for (final DocxSection section in again.sections) {
+  if (bodyReadable) {
+    final List<DocxSection> sections = again.sections;
+    for (int i = 0; i < sections.length; i++) {
+      final DocxSection section = sections[i];
+      final int read = i < sectionCount ? i : sectionCount - 1;
       for (final DocxHeaderFooter h in <DocxHeaderFooter>[
         section.header,
         section.firstHeader,
@@ -734,10 +767,23 @@ void _reopen(
         section.firstFooter,
         section.evenFooter,
       ]) {
-        _walk(h.blocks.toList());
+        List<DocxBlock> blocks;
+        try {
+          blocks = h.blocks.toList();
+        } on DocxReadException catch (e) {
+          if (refusedStories.contains((read, h.type, h.isHeader))) continue;
+          throw StateError('the saved story ${h.type} of section $i threw: $e');
+        } on Object catch (e) {
+          throw StateError('the saved story of section $i threw: $e');
+        }
+        try {
+          _walk(blocks);
+        } on Object catch (e) {
+          throw StateError('walking the saved story of section $i threw: $e');
+        }
       }
     }
-  });
+  }
   load('styles', stylesReadable, () {
     final DocxStyles styles = again.styles;
     _readStyles(styles);

@@ -80,8 +80,7 @@ const String _brokenSection =
 final String _body =
     '${_p('One')}'
     '<w:p><w:pPr>$_firstSection</w:pPr><w:r><w:t>End of one</w:t></w:r></w:p>'
-    // A section break in a paragraph with other properties, and a simple
-    // field, a complex field with a nested one, a begin with no end.
+    // A simple field, a complex field, a begin with no end.
     '<w:p><w:r><w:t>Two </w:t></w:r>'
     '<w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple>'
     '${_field('IF { PAGE } = 1 "a" "b"', 'a')}'
@@ -119,8 +118,9 @@ final String sectionsByHandDocumentXml = wordDocumentXml.replaceFirst(
 String _story(String root, String content) =>
     '<w:$root xmlns:w="${Ns.w}" xmlns:r="${Ns.rel}">$content</w:$root>';
 
-/// The relationships of the main part: the settings, six stories, an external header, an
-/// image where a footer is named and a header that names a missing part.
+/// The relationships of the main part: the settings, six stories, an
+/// external header, an image where a footer is named and a header that names
+/// a missing part.
 const String sectionsByHandRels =
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
     '<Relationships xmlns="$packageRelsNs">'
