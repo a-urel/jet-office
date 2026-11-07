@@ -234,6 +234,36 @@ void main() {
     );
   });
 
+  test('the document root declares the namespaces of blank.docx', () {
+    // Prefix to namespace, from the root element's start tag.
+    Map<String, String> declared(Uint8List document) {
+      final String root = RegExp(
+        r'<w:document [^>]*>',
+      ).firstMatch(utf8.decode(document))!.group(0)!;
+      return <String, String>{
+        for (final RegExpMatch m in RegExp(
+          r'xmlns:(\w+)="([^"]*)"',
+        ).allMatches(root))
+          m.group(1)!: m.group(2)!,
+      };
+    }
+
+    final Map<String, String> word = declared(blank['word/document.xml']!);
+    expect(word, contains('w14'));
+    declared(created['word/document.xml']!).forEach((
+      String prefix,
+      String namespace,
+    ) {
+      expect(namespace, word[prefix], reason: prefix);
+    });
+  });
+
+  test('no part of a new document holds an unexpanded interpolation', () {
+    for (final MapEntry<String, Uint8List> part in created.entries) {
+      expect(utf8.decode(part.value), isNot(contains(r'${')), reason: part.key);
+    }
+  });
+
   test('the package parts match blank.docx apart from docProps', () {
     expect(
       created.keys.toSet(),
