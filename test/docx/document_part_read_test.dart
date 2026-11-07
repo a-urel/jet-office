@@ -6,6 +6,8 @@ import 'package:jet_office/src/docx/docx_package.dart';
 import 'package:jet_office/src/docx/model/blocks.dart';
 import 'package:jet_office/src/docx/model/inlines.dart';
 import 'package:jet_office/src/docx/model/run_content.dart';
+import 'package:jet_office/src/docx/model/sections.dart'
+    show sectionPropertySetOf;
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/warnings.dart' show DocxWarningCollector;
 import 'package:jet_office/src/opc/ooxml.dart' show Ns;
@@ -94,8 +96,10 @@ String _dump(DocumentPart part) {
     }
     out.write('\n');
   }
-  final OpaqueXml? sectPr = part.finalSectPr;
-  out.write('sectPr:${sectPr?.namespaceUri}|${sectPr?.localName}');
+  final PropertyContainer sectPr = sectionPropertySetOf(
+    part.finalSection,
+  ).source;
+  out.write('sectPr:${sectPr.isRead}|${part.finalSection.pageSize}');
   return out.toString();
 }
 
@@ -140,7 +144,7 @@ void main() {
     expect(_p(part, 1).inlines, isEmpty);
     expect(_p(part, 1).style, isNull);
     expect(_p(part, 2).text, 'second');
-    expect(part.finalSectPr, isNull);
+    expect(sectionPropertySetOf(part.finalSection).writesNothing, isTrue);
     expect(part.root.qualifiedName, 'w:document');
     expect(part.root.namespaces['w14'], Ns.w14);
   });
@@ -198,15 +202,13 @@ void main() {
       '<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906"/></w:sectPr></w:pPr>'
       '<w:r><w:t>one</w:t></w:r></w:p>'
       '<w:p><w:r><w:t>two</w:t></w:r></w:p>'
-      '<w:sectPr w:rsidR="00A1"><w:pgSz w:w="12240"/></w:sectPr>',
+      '<w:sectPr w:rsidR="00A1"><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>',
     );
     expect(part.blocks, hasLength(2));
     // It is read as a container of its own, no longer kept untyped.
     expect(paragraphPropertiesOf(_p(part)).kept, isEmpty);
     expect(paragraphPropertiesOf(_p(part)).nestedOf('sectPr'), isNotNull);
-    final OpaqueXml sectPr = part.finalSectPr!;
-    expect(sectPr.localName, 'sectPr');
-    expect(sectPr.xml, contains('12240'));
+    expect(part.finalSection.pageSize, DocxPageSize.letter());
   });
 
   test('a sectPr that is not the last child of the body is a block', () {
@@ -217,7 +219,7 @@ void main() {
       DocxOpaqueBlock,
       DocxParagraph,
     ]);
-    expect(part.finalSectPr!.xml, '<w:sectPr><w:cols/></w:sectPr>');
+    expect(part.finalSection.columns, DocxColumns());
   });
 
   test('a ns0 prefix and a default namespace read the same model', () {
@@ -252,7 +254,7 @@ void main() {
     expect(expected, contains('r(Emph)'));
     expect(expected, contains('br:page'));
     expect(expected, contains('oi:${Ns.w}|ins"c"'));
-    expect(expected, contains('sectPr:${Ns.w}|sectPr'));
+    expect(expected, contains('sectPr:true|null'));
     expect(_dump(ns0), expected);
     expect(_dump(plain), expected);
     expect(_p(ns0).text, 'a\t\n b c');
@@ -429,7 +431,7 @@ void main() {
     final DocumentPart part = _readXml('<w:document $_decls/>');
     expect(part.blocks, isEmpty);
     expect(part.bodyAttributes, isEmpty);
-    expect(part.finalSectPr, isNull);
+    expect(sectionPropertySetOf(part.finalSection).writesNothing, isTrue);
   });
 
   test('a root that is not w:document is malformedXml', () {

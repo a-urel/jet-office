@@ -40,6 +40,7 @@ import 'paragraph_properties.dart';
 import 'primitives.dart' as primitives;
 import 'property_set.dart';
 import 'run_content.dart';
+import 'sections.dart';
 import 'styles.dart' show DocxStyleType;
 import 'table_formatting.dart';
 import 'table_properties.dart';
@@ -64,8 +65,8 @@ const int maxTableNesting = 256;
 /// holding no table still goes in there, as it deepens nothing.
 const int maxBuiltTableNesting = 80;
 
-/// The width of the text of a blank A4 page, in twips: what the columns of a
-/// new table share.
+/// What Word's Insert Table takes of a blank A4 page, in twips: what the
+/// columns of a new table share.
 const int _pageTextWidthTwips = 9062;
 
 /// One child of a body or of a table cell.
@@ -101,7 +102,12 @@ final class DocxParagraph extends DocxBlock {
     }
   }
 
-  DocxParagraph._read(this._source, this._attributes) : super._();
+  DocxParagraph._read(this._source, this._attributes) : super._() {
+    final PropertyContainer? sectPr = _source.nestedOf('sectPr');
+    if (sectPr != null) {
+      setParagraphSection(this, newSection(sectPr));
+    }
+  }
 
   /// The paragraph's `w:pPr` as read.
   final PropertyContainer _source;
@@ -110,7 +116,19 @@ final class DocxParagraph extends DocxBlock {
   late final DocxParagraphProperties _properties = newParagraphProperties(
     _source,
     () => _sink,
+    nested: _nestedProperties,
   );
+
+  /// The section the paragraph's `w:sectPr` is, or `null` for none.
+  DocxSection? _section;
+
+  /// What the paragraph's `w:pPr` writes in place of its nested containers.
+  Map<String, NestedProperties> _nestedProperties() {
+    final DocxSection? section = _section;
+    return section == null
+        ? const <String, NestedProperties>{}
+        : <String, NestedProperties>{'sectPr': sectionBreakOf(section)};
+  }
 
   /// The attributes of `w:p` the reader kept, such as `w14:paraId`.
   final List<KeptAttribute> _attributes;
@@ -131,6 +149,14 @@ final class DocxParagraph extends DocxBlock {
   ///
   /// It is the same object every time.
   DocxParagraphProperties get properties => _properties;
+
+  /// The section this paragraph ends, or `null` for a paragraph with no
+  /// section break (`w:sectPr` in its `w:pPr`).
+  ///
+  /// A break in a table cell is `null` here: it stays as read and starts no
+  /// section. A paragraph taken out of a body keeps its break, and reads it,
+  /// until it goes in a cell.
+  DocxSection? get section => _container is DocxTableCell ? null : _section;
 
   /// The id of the paragraph's style (`w:pStyle`), or `null` for none; a
   /// shortcut for [DocxParagraphProperties.style].
@@ -1292,12 +1318,16 @@ DocxTable readTable({
 DocxTable newTable(
   int columns,
   List<double>? columnWidthsPt, {
-  int widthTwips = _pageTextWidthTwips,
+  int? widthTwips,
 }) {
   final DocxTable table = DocxTable._read(
     const PropertyContainer.empty(),
     const <KeptAttribute>[],
-    DocxTable._newGrid(columns, columnWidthsPt, widthTwips),
+    DocxTable._newGrid(
+      columns,
+      columnWidthsPt,
+      widthTwips ?? _pageTextWidthTwips,
+    ),
     <Object>[],
     isNew: true,
   );
@@ -1431,6 +1461,10 @@ void resolveStylesIn(Object item) {
 /// [sink], so what they name counts as set in any other.
 void markReadIn(DocxParagraph paragraph, DocxEditSink sink) {
   paragraph._readIn = sink;
+  final DocxSection? section = paragraph._section;
+  if (section != null) {
+    setSectionHome(section, sink);
+  }
   for (final DocxInline inline in paragraph._inlines) {
     if (inline is DocxRun) {
       setRunReadIn(inline, sink);
@@ -1452,6 +1486,35 @@ void markBlockReadIn(DocxBlock block, DocxEditSink sink) {
 
 /// The sink of the document [paragraph] was read in, or `null` for a new one.
 DocxEditSink? paragraphReadInOf(DocxParagraph paragraph) => paragraph._readIn;
+
+/// Makes [section] the break of [paragraph], whatever the container of the
+/// paragraph, and has it report to the paragraph's sink; `null` takes the
+/// break away. Only an edit of the sections calls it, and the reader.
+void setParagraphSection(DocxParagraph paragraph, DocxSection? section) {
+  paragraph._section = section;
+  if (section != null) {
+    bindSection(section, () => paragraph._sink);
+  }
+}
+
+/// Whether [paragraph] has a section break, wherever it is.
+bool paragraphHasBreak(DocxParagraph paragraph) => paragraph._section != null;
+
+/// Throws [ArgumentError] when [block], in no container, is a paragraph whose
+/// section break belongs to another document than that of [sink]: the
+/// `r:id`s of its references mean nothing there (plan Ruling 10). A body
+/// calls it; in a cell a break starts no section and stays as read.
+void checkBreakFits(DocxBlock block, DocxEditSink sink) {
+  if (block is! DocxParagraph || block._container != null) return;
+  final DocxSection? section = block._section;
+  if (section != null && sink.isForeign(sectionHomeOf(section))) {
+    throw ArgumentError.value(
+      block,
+      'block',
+      'must not bring a section break from another document',
+    );
+  }
+}
 
 /// The `w:pPr` of [paragraph] as read, without the values set since.
 PropertyContainer paragraphPropertiesOf(DocxParagraph paragraph) =>

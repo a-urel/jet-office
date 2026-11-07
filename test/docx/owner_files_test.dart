@@ -39,6 +39,27 @@ void main() {
     ], containsAll(<String>['blank.docx', 'features.docx', 'long.docx']));
   });
 
+  test('blank.docx is one A4 section with the margins of the file', () {
+    final DocxDocument doc = DocxDocument.open(
+      File('$_dir/blank.docx').readAsBytesSync(),
+    );
+    final DocxSection section = doc.sections.single;
+    expect(section.pageSize, DocxPageSize.a4());
+    expect(
+      section.margins,
+      DocxPageMargins(
+        top: 70.85,
+        right: 70.85,
+        bottom: 70.85,
+        left: 70.85,
+        header: 35.4,
+        footer: 35.4,
+        gutter: 0,
+      ),
+    );
+    expect(section.columns, DocxColumns(spacingPt: 35.4));
+  });
+
   test('every owner file round-trips', () {
     for (final OwnerDocx entry in manifest) {
       final Uint8List input = File('$_dir/${entry.file}').readAsBytesSync();

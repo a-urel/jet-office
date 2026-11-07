@@ -193,7 +193,7 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   encodes the main, styles and numbering parts from the model and compares
   them with the input (`encodedPartDifferences`, `encodedMainDifferences`,
   `tool/src/docx_serialize.dart`; the second takes the children of `w:pPr`,
-  `w:rPr`, `w:tblPr`, `w:trPr` and `w:tcPr` in any order, as the model writes
+  `w:rPr`, `w:tblPr`, `w:trPr`, `w:tcPr` and `w:sectPr` in any order, as the model writes
   them in schema order). CI
   runs it on the fixtures, on LibreOffice's re-save and on the owner's Word
   files, then validates all three outputs with the Open XML SDK. As for

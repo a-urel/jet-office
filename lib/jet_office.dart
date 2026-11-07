@@ -176,6 +176,7 @@
 /// @docImport 'src/docx/model/paragraph_properties.dart';
 /// @docImport 'src/docx/model/run_content.dart';
 /// @docImport 'src/docx/model/run_properties.dart';
+/// @docImport 'src/docx/model/sections.dart';
 /// @docImport 'src/docx/model/styles.dart';
 /// @docImport 'src/docx/model/table_formatting.dart';
 /// @docImport 'src/docx/model/table_properties.dart';
@@ -287,6 +288,7 @@ export 'src/docx/model/section_formatting.dart'
         DocxPageSize,
         DocxSectionStart,
         DocxSectionVerticalAlignment;
+export 'src/docx/model/sections.dart' show DocxSection;
 export 'src/docx/model/styles.dart'
     show DocxDocumentDefaults, DocxStyle, DocxStyleType, DocxStyles;
 export 'src/docx/model/table_formatting.dart'

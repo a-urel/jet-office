@@ -68,7 +68,9 @@ final class ContainerSchema {
 
   /// The codec of each child that may occur several times, by local name,
   /// such as `headerReference` in a `w:sectPr`. Each occurrence is typed on
-  /// its own; none is a [codecs] child.
+  /// its own; none is a [codecs] child. The schema lets them mix (Word writes
+  /// headers and footers in turn), so those read keep their order among
+  /// themselves, at the place of the first name of [order] that is repeated.
   final Map<String, PropertyCodec<Object>> repeated;
 }
 
@@ -323,6 +325,27 @@ final class PropertyContainer {
   /// had children.
   final String? _innerText;
 
+  /// This container with only its children in `w:` named in [names], and
+  /// their views, without its attributes and the namespaces it declared: a
+  /// copy for a new element. A kept child declares what it needs and lacks.
+  PropertyContainer keeping(Set<String> names) {
+    if (!isRead) return this;
+    return PropertyContainer._(
+      const <String, String>{},
+      const <KeptAttribute>[],
+      <_Slot>[
+        for (final _Slot s in _slots)
+          if (s.isW && names.contains(s.name)) s,
+      ],
+      <String, Object>{
+        for (final MapEntry<String, Object> e in _views.entries)
+          if (names.contains(e.key)) e.key: e.value,
+      },
+      const <String, List<Object?>>{},
+      null,
+    );
+  }
+
   /// This container without the namespaces its element declared: a
   /// definition parsed on its own, once it goes in a part whose root binds
   /// them. A kept child declares what it needs and lacks.
@@ -405,7 +428,8 @@ final class PropertyContainer {
   /// The merge of the rest:
   ///
   /// * A kept child in `w:` whose name is in the schema order is written at
-  ///   its slot; several of one name keep their input order.
+  ///   its slot; several of one name keep their input order, and so do
+  ///   repeated children of several names ([ContainerSchema.repeated]).
   /// * Any other kept child (another namespace, such as `w14:`, or a name
   ///   the schema lacks) follows the child that preceded it in the input,
   ///   or the one written in its place. When that child is removed, the one
@@ -485,7 +509,7 @@ final class PropertyContainer {
             )
             .add(i);
       } else if (!replaced(s)) {
-        byName.putIfAbsent(s.name, () => <int>[]).add(i);
+        byName.putIfAbsent(_placeOf(s.name, schema), () => <int>[]).add(i);
       } else if (repeated.containsKey(s.name)) {
         occurrences.putIfAbsent(s.name, () => <int>[]).add(i);
       }
@@ -579,6 +603,13 @@ final class PropertyContainer {
     }
     w.end();
   }
+
+  /// The child of [schema] whose place in its order the kept child [name]
+  /// is written at: its own, or for a repeated child the first repeated one.
+  static String _placeOf(String name, ContainerSchema schema) =>
+      schema.repeated.containsKey(name)
+      ? schema.order.firstWhere(schema.repeated.containsKey)
+      : name;
 
   /// The prefix to write WordprocessingML with inside the container, the
   /// container's qualified name with it, and a prefix to declare on the

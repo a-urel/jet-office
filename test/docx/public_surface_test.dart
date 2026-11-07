@@ -45,6 +45,14 @@ void main() {
     },
   );
 
+  test('DocxSection exposes no member of the internal property set', () {
+    final dynamic s = DocxDocument().sections.single;
+    _internalCalls(s, 'pgSz').forEach((String name, void Function() call) {
+      expect(call, throwsA(isA<NoSuchMethodError>()), reason: name);
+    });
+    expect((s as DocxSection).pageSize, isNotNull);
+  });
+
   test('DocxStyle exposes no member of the internal property set', () {
     final dynamic s = DocxStyle(
       type: DocxStyleType.paragraph,

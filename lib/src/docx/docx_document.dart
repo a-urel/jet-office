@@ -23,8 +23,8 @@
 /// Every edit runs in a transaction of the document's `ChangeLog`
 /// (`primitives.dart`), so an edit that fails leaves the body as it was.
 /// Everything that leaves [DocxDocument.open], [DocxDocument.body],
-/// [DocxDocument.save] or [DocxDocument.saveTo] because of the file's
-/// content is a [DocxReadException].
+/// [DocxDocument.sections], [DocxDocument.save] or [DocxDocument.saveTo]
+/// because of the file's content is a [DocxReadException].
 ///
 /// @docImport 'model/inlines.dart';
 library;
@@ -42,9 +42,12 @@ import 'builtin_styles.dart' show DocxBuiltInStyle;
 import 'document_part.dart';
 import 'docx_package.dart';
 import 'model/blocks.dart';
+import 'model/edit_sink.dart';
 import 'model/numbering.dart';
 import 'model/primitives.dart' as primitives;
 import 'model/primitives.dart' show DocxEdits;
+import 'model/section_formatting.dart' show DocxSectionStart;
+import 'model/sections.dart';
 import 'model/styles.dart';
 import 'numbering_part.dart';
 import 'numbering_schemas.dart' show maxListLevel;
@@ -152,6 +155,26 @@ final class DocxDocument {
   /// access throws again and a save copies the part as it was.
   DocxBody get body => _body ?? _loadBody();
 
+  /// The document's sections, in order: one for each paragraph of the body
+  /// with a section break, then the last, which every document has. A
+  /// document with no final `w:sectPr` has a last section of no values, which
+  /// is written once one is set.
+  ///
+  /// A `w:sectPr` in a table cell, in a content control or between the
+  /// body's blocks stays as read and starts no section. Removing a paragraph
+  /// with a break removes its section.
+  ///
+  /// The list cannot be changed and does not follow later edits; its
+  /// sections do. It loads the body, and throws what [body] throws.
+  List<DocxSection> get sections {
+    final DocxBody body = this.body;
+    return List<DocxSection>.unmodifiable(<DocxSection>[
+      for (final DocxBlock block in body._blocks)
+        if (block is DocxParagraph && block.section != null) block.section!,
+      _part!.finalSection,
+    ]);
+  }
+
   /// The document's styles and document defaults, from the styles part.
   ///
   /// The part, found through the main part's relationship wherever it
@@ -241,12 +264,19 @@ final class DocxDocument {
     );
     final DocxBody body = DocxBody._(_edits, part.blocks, this);
     primitives.adoptBlocks(_edits, body, part.blocks);
+    _adoptLastSection(part.finalSection);
     package.package.setContent(
       main,
       _MainPart(part, _edits.log, () => package.package.originalBytes(main)),
     );
     _part = part;
     return _body = body;
+  }
+
+  /// Makes [section] the document's last section: it reports to [_edits].
+  void _adoptLastSection(DocxSection section) {
+    bindSection(section, () => _edits);
+    setSectionHome(section, _edits);
   }
 
   DocxStyles _loadStyles() {
@@ -357,8 +387,8 @@ final class _MainPart implements PartContent {
 ///
 /// Paragraphs ([DocxParagraph]) and tables ([DocxTable]) are typed; every
 /// other block, such as a content control, is a [DocxOpaqueBlock] kept as
-/// written. The section properties of the last section belong to the body,
-/// not to its blocks, and are kept as written.
+/// written. The last section belongs to the body, not to its blocks
+/// ([DocxDocument.sections]); the others are in the paragraphs that end them.
 ///
 /// A block is in at most one body at a time. Each edit is atomic: one that
 /// throws changes nothing.
@@ -440,9 +470,10 @@ final class DocxBody {
   /// on the first row and the first column and turns off the column bands.
   ///
   /// [columnWidthsPt] gives the width of each column, in points, from 0 to
-  /// 1584. Without it the columns share 9062 twips, rounded down to whole
-  /// twips: the text width of a blank A4 page. For another page, pass the
-  /// widths, or Word's autofit corrects them when it opens the file.
+  /// 1584. Without it the columns share what Word's Insert Table takes of the
+  /// last section's [DocxSection.textWidthPt], 10 twips less, rounded down to
+  /// whole twips: 9062 twips on a blank A4 page. A section whose text width
+  /// does not read, or would give a column less than a twip, shares 9062 too.
   ///
   /// A table with no rows is not a table Word opens: a [DocxDocument.save] or
   /// [DocxDocument.saveTo] of one left that way throws [StateError] naming it.
@@ -458,7 +489,11 @@ final class DocxBody {
   /// [DocxReadException] naming it. Nothing changes then; otherwise the add is
   /// one transaction.
   DocxTable addTable({required int columns, List<double>? columnWidthsPt}) {
-    final DocxTable table = newTable(columns, columnWidthsPt);
+    final DocxTable table = newTable(
+      columns,
+      columnWidthsPt,
+      widthTwips: _tableWidthTwips(columns),
+    );
     _edits.transaction(() {
       table.properties.style = _document.styles.ensure(
         DocxBuiltInStyle.tableGrid,
@@ -468,6 +503,48 @@ final class DocxBody {
     return table;
   }
 
+  /// The twips [columns] new columns share: what Word's Insert Table takes of
+  /// the last section, or `null` for the page of a blank document when that
+  /// does not read or gives a column less than a twip.
+  int? _tableWidthTwips(int columns) {
+    final double? pt = _document._part!.finalSection.textWidthPt;
+    if (pt == null) return null;
+    final int twips = (pt * 20).round() - _insertTableInsetTwips;
+    return twips >= columns ? twips : null;
+  }
+
+  /// Ends the last section after the last block and returns the new last
+  /// section, which [start] says how to start.
+  ///
+  /// As in Word, the last block takes the break when it is a paragraph with
+  /// none; otherwise a new empty paragraph is added for it. The section that
+  /// was last stays the same object, as a section held keeps pointing at its
+  /// page, and is now the [DocxParagraph.section] of that paragraph.
+  ///
+  /// The new section copies its page size, margins, columns, line numbering,
+  /// vertical alignment, page number format and `w:docGrid`. It has no header
+  /// or footer references, so it inherits them, no [DocxSection.titlePage],
+  /// and no first page number. A `w:pgNumType` the model cannot type is not
+  /// copied, as it may hold a first page number.
+  ///
+  /// The model adds no block after the break: a body whose last block carries
+  /// it is saved so, until something is added after it. The add is one
+  /// transaction.
+  DocxSection addSection({DocxSectionStart start = DocxSectionStart.nextPage}) {
+    final DocumentPart part = _document._part!;
+    final DocxSection held = part.finalSection;
+    final DocxSection next = nextSection(held, start);
+    _edits.transaction(() {
+      final DocxBlock? last = _blocks.lastOrNull;
+      final DocxParagraph paragraph =
+          last is DocxParagraph && !paragraphHasBreak(last)
+          ? last
+          : addParagraph();
+      _edits.apply(_SectionAdded(_document, part, paragraph, held, next));
+    });
+    return next;
+  }
+
   /// Inserts [block] at [index], from 0 to the number of blocks.
   ///
   /// An [index] out of that range throws [RangeError]. A [block] that is
@@ -475,7 +552,9 @@ final class DocxBody {
   /// [StateError]: remove it there first. Phase 4 neither moves nor copies a
   /// block implicitly. A table nested past 80 deep, which only a file can
   /// hold, throws [ArgumentError]: what the API builds opens again under the
-  /// default read limits.
+  /// default read limits. So does a paragraph with a section break of another
+  /// document: the ids of its references mean nothing here. In a table cell
+  /// such a break starts no section, and goes in as read.
   ///
   /// The styles set on a paragraph, on its runs and on a table, and on
   /// everything in the cells of a table, nested tables included, are resolved
@@ -500,8 +579,10 @@ final class DocxBody {
   ///   picture) keeps an id this document may lack or mean otherwise.
   /// * A reference the model does not type, and one in the paragraph mark's
   ///   `w:rPr`, stay as read, unreported.
-  void insertBlock(int index, DocxBlock block) =>
-      primitives.insertBlock(_edits, this, _blocks, index, block);
+  void insertBlock(int index, DocxBlock block) {
+    checkBreakFits(block, _edits);
+    primitives.insertBlock(_edits, this, _blocks, index, block);
+  }
 
   /// Removes the block at [index]. The block is then in no body and can be
   /// inserted again.
@@ -517,9 +598,49 @@ final class DocxBody {
   /// [block] already in a body or a cell throws [StateError]. The styles set on
   /// [block] are resolved as [insertBlock] does, which may throw the same
   /// [DocxReadException], and what was read in another document counts as set
-  /// as it says.
-  void replaceBlockAt(int index, DocxBlock block) =>
-      primitives.replaceBlock(_edits, this, _blocks, index, block);
+  /// as it says. A section break of another document throws [ArgumentError],
+  /// as there.
+  void replaceBlockAt(int index, DocxBlock block) {
+    checkBreakFits(block, _edits);
+    primitives.replaceBlock(_edits, this, _blocks, index, block);
+  }
+}
+
+/// What Word's Insert Table leaves of the text width, less: 9062 of the 9072
+/// twips of a blank A4 page, as `builtins.docx` holds them.
+const int _insertTableInsetTwips = 10;
+
+/// The swap of [DocxBody.addSection]: [_held], the last section, moves to
+/// [_paragraph] and [_next] becomes the last.
+final class _SectionAdded implements Change {
+  _SectionAdded(
+    this._document,
+    this._part,
+    this._paragraph,
+    this._held,
+    this._next,
+  );
+
+  final DocxDocument _document;
+  final DocumentPart _part;
+  final DocxParagraph _paragraph;
+  final DocxSection _held;
+  final DocxSection _next;
+
+  @override
+  void revert() {
+    setParagraphSection(_paragraph, null);
+    bindSection(_next, () => DocxEditSink.none);
+    _part.finalSection = _held;
+    _document._adoptLastSection(_held);
+  }
+
+  @override
+  void reapply() {
+    setParagraphSection(_paragraph, _held);
+    _part.finalSection = _next;
+    _document._adoptLastSection(_next);
+  }
 }
 
 /// A saved DOCX file and what the save had to repair to produce it.

@@ -94,8 +94,8 @@ List<String> encodedPartDifferences(Uint8List docx) {
 /// into the model and encoded, one line each, `'<part>: <what>'`; empty when
 /// they mean the same.
 ///
-/// The children of each `w:pPr`, `w:rPr`, `w:tblPr`, `w:trPr` and `w:tcPr`
-/// compare in any order: the model writes them in schema order, and a
+/// The children of each `w:pPr`, `w:rPr`, `w:tblPr`, `w:trPr`, `w:tcPr` and
+/// `w:sectPr` compare in any order: the model writes them in schema order, and a
 /// document with no edit keeps the file's bytes, so a file whose properties
 /// are out of order loses nothing. A part the model cannot read is one line,
 /// not an exception.
@@ -119,7 +119,7 @@ List<String> encodedMainDifferences(Uint8List docx) {
     _mainName,
     original,
     encoded,
-    unordered: const <String>{'pPr', 'rPr', 'tblPr', 'trPr', 'tcPr'},
+    unordered: const <String>{'pPr', 'rPr', 'tblPr', 'trPr', 'tcPr', 'sectPr'},
   );
 }
 

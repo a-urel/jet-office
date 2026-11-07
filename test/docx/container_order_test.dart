@@ -75,6 +75,19 @@ final class _Replacement implements NestedProperties {
   }
 }
 
+/// What children read in reverse order are written as: the order of [schema],
+/// but for its repeated children, which may mix and stay as they were read.
+List<String> _orderOfReversed(ContainerSchema schema) {
+  final List<String> repeated = schema.order
+      .where(schema.repeated.containsKey)
+      .toList();
+  int next = repeated.length;
+  return <String>[
+    for (final String name in schema.order)
+      schema.repeated.containsKey(name) ? repeated[--next] : name,
+  ];
+}
+
 void main() {
   for (final ContainerSchemaCase c in containerSchemaCases) {
     final ContainerSchema schema = c.schema;
@@ -118,7 +131,7 @@ void main() {
         );
         expect(
           _written(read, element, schema, const <String, Object?>{}),
-          schema.order,
+          _orderOfReversed(schema),
         );
       });
 
@@ -132,14 +145,20 @@ void main() {
           for (final String name in schema.order.reversed)
             if (!overrides.containsKey(name)) name,
         ], schema);
-        expect(_written(read, element, schema, overrides), schema.order);
+        expect(
+          _written(read, element, schema, overrides),
+          _orderOfReversed(schema),
+        );
         // And over children of the same names, read in reverse order.
         final PropertyContainer all = _read(
           element,
           schema.order.reversed.toList(),
           schema,
         );
-        expect(_written(all, element, schema, overrides), schema.order);
+        expect(
+          _written(all, element, schema, overrides),
+          _orderOfReversed(schema),
+        );
       });
 
       if (schema.repeated.isNotEmpty) {

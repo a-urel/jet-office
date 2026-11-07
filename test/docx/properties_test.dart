@@ -112,6 +112,23 @@ final class _Set extends PropertySet {
 }
 
 void main() {
+  test('keeping leaves the children named, with their views, and no more', () {
+    final PropertyContainer c = _read(
+      '<w:rPr xmlns:x="urn:x" x:y="1"><w:rStyle w:val="A"/><w:b/><w:sz/>'
+      '<w14:shadow/></w:rPr>',
+    );
+    final PropertyContainer kept = c.keeping(const <String>{'b', 'shadow'});
+    expect(kept.viewOf('b'), isTrue);
+    expect(kept.viewOf('rStyle'), isNull);
+    expect(kept.holds('rStyle'), isFalse);
+    expect(kept.isRead, isTrue);
+    expect(_write(kept, 'w:rPr', _rPr), '<w:rPr><w:b/></w:rPr>');
+    expect(
+      const PropertyContainer.empty().keeping(const <String>{'b'}).isRead,
+      isFalse,
+    );
+  });
+
   test('typed pStyle is written first among kept children', () {
     final PropertyContainer c = _read(
       '<w:pPr><w:jc/><w:spacing/></w:pPr>',

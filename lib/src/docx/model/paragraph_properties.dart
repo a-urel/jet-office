@@ -10,10 +10,11 @@
 /// else `null`: a `w:ind w:left="1in"` or a `w:jc w:val="lowKashida"` reads
 /// `null` and stays in the file (plan Ruling 2). Setting writes one element,
 /// replacing the old one, in the place the schema gives; the paragraph
-/// mark's `w:rPr`, `w:sectPr`, `w:pPrChange` and every child the model does
-/// not type stay as read. Setting a property to the value it reads is a
-/// no-op, so such a set neither records a change nor rewrites a child the
-/// model reads in another spelling. To remove formatting the getter cannot
+/// mark's `w:rPr`, `w:pPrChange` and every child the model does not type stay
+/// as read, and the `w:sectPr` is the paragraph's section (`DocxSection`).
+/// Setting a property to the value it reads is a no-op, so such a set neither
+/// records a change nor rewrites a child the model reads in another spelling.
+/// To remove formatting the getter cannot
 /// read, use [DocxParagraphProperties.clear].
 ///
 /// Lengths are points; a value is rounded to the file's unit and reads back
@@ -92,7 +93,8 @@ final class DocxParagraphProperties {
     PropertyContainer source,
     ContainerSchema schema,
     DocxEditSink Function() sink,
-  ) : _set = _ParagraphSet(source, schema, sink);
+    Map<String, NestedProperties> Function()? nested,
+  ) : _set = _ParagraphSet(source, schema, sink, nested);
 
   /// The set behind the members; private so a caller cannot reach its
   /// untyped surface.
@@ -262,12 +264,14 @@ bool _sameStops(List<DocxTabStop> a, List<DocxTabStop> b) {
 /// The paragraph properties over [source], read by [schema]: a paragraph's
 /// `w:pPr` (`paragraphPropertiesSchema`, as `DocxParagraph` holds them) or
 /// the `w:pPr` of a style or a default (`paragraphPropertiesGeneralSchema`).
-/// Edits go to the sink [sink] gives.
+/// Edits go to the sink [sink] gives. [nested], when given, gives what is
+/// written in place of the nested containers: a paragraph's `w:sectPr`.
 DocxParagraphProperties newParagraphProperties(
   PropertyContainer source,
   DocxEditSink Function() sink, {
   ContainerSchema schema = paragraphPropertiesSchema,
-}) => DocxParagraphProperties._(source, schema, sink);
+  Map<String, NestedProperties> Function()? nested,
+}) => DocxParagraphProperties._(source, schema, sink, nested);
 
 /// The property set behind [properties], for the writer and the edit
 /// primitives. Not exported.
@@ -277,5 +281,11 @@ PropertySet propertySetOfParagraphProperties(
 
 /// The property set of a `w:pPr`.
 final class _ParagraphSet extends PropertySet {
-  _ParagraphSet(super.source, super.schema, super.sink);
+  _ParagraphSet(super.source, super.schema, super.sink, this._nested);
+
+  final Map<String, NestedProperties> Function()? _nested;
+
+  @override
+  Map<String, NestedProperties> get nested =>
+      _nested?.call() ?? const <String, NestedProperties>{};
 }

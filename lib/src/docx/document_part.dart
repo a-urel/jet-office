@@ -17,6 +17,11 @@
 /// visible text of an opaque inline is collected while it is captured, so its
 /// slice is parsed once, under the part's own depth limit.
 ///
+/// The body's last child, when it is a `w:sectPr`, is the last section
+/// ([DocumentPart.finalSection]); a `w:sectPr` before another child stays an
+/// opaque block. It is captured like any other element, because only what
+/// follows tells, and its slice is read as a container once it is last.
+///
 /// A property element is typed only before the rows, cells or blocks of its
 /// parent, and only the first of its name; one elsewhere is kept in place.
 /// A table nested past [maxTableNesting] is refused.
@@ -32,9 +37,9 @@
 /// `w`. Typed elements use the root's own prefix for WordprocessingML. What
 /// it writes for a part read and not edited means the same as the part (see
 /// `tool/src/part_compare.dart`), with the children of each `w:pPr`, `w:rPr`,
-/// `w:tblPr`, `w:trPr` and `w:tcPr` in schema order and without comments
-/// between them; a document with no edit therefore saves the file's bytes
-/// instead (`DocxDocument`).
+/// `w:tblPr`, `w:trPr`, `w:tcPr` and `w:sectPr` in schema order and without
+/// comments between them; a document with no edit therefore saves the file's
+/// bytes instead (`DocxDocument`).
 library;
 
 import 'dart:typed_data';
@@ -51,6 +56,7 @@ import 'model/formatting.dart' show DocxNumberingRef;
 import 'model/inlines.dart';
 import 'model/property_set.dart';
 import 'model/run_content.dart';
+import 'model/sections.dart';
 import 'model/styles.dart' show DocxStyleType;
 import 'paragraph_property_codecs.dart' show paragraphPropertiesSchema;
 import 'part_root.dart';
@@ -59,6 +65,7 @@ import 'property_codec.dart' show parseDecimal;
 import 'read_exception.dart';
 import 'read_limits.dart';
 import 'run_property_codecs.dart' show runPropertiesSchema;
+import 'section_property_codecs.dart' show sectionPropertiesSchema;
 import 'table_property_codecs.dart'
     show
         tableCellPropertiesSchema,
@@ -91,13 +98,14 @@ final class DocumentPart implements PartContent {
     this.beforeBody,
     this.bodyAttributes,
     this.blocks,
-    this.finalSectPr,
+    this.finalSection,
     this.afterBody, {
     required bool hasBody,
   }) : _hasBody = hasBody;
 
   /// The main document part of a new document: a `w:document` that declares
-  /// only `w`, with an empty body. Add paragraphs to [blocks].
+  /// only `w`, with an empty body and a last section of no values. Add
+  /// paragraphs to [blocks].
   DocumentPart.create({String partName = '/word/document.xml'})
     : this._(
         partName,
@@ -105,7 +113,7 @@ final class DocumentPart implements PartContent {
         const <OpaqueXml>[],
         const <KeptAttribute>[],
         <DocxBlock>[],
-        null,
+        newSection(const PropertyContainer.empty()),
         const <OpaqueXml>[],
         hasBody: true,
       );
@@ -131,7 +139,7 @@ final class DocumentPart implements PartContent {
     DocxWarningCollector warnings,
     String partName, {
     required DocxReadLimits limits,
-  }) => _PartReader(r, partName, limits.maxTextLength).read();
+  }) => _PartReader(r, partName, limits.maxTextLength, limits.maxDepth).read();
 
   /// The part's absolute name, such as `/word/document.xml`: the part of
   /// the warnings [encode] raises.
@@ -187,13 +195,14 @@ final class DocumentPart implements PartContent {
   final List<KeptAttribute> bodyAttributes;
 
   /// The body's blocks in order: paragraphs, tables and opaque blocks. The
-  /// final `w:sectPr` is not one of them; see [finalSectPr].
+  /// final `w:sectPr` is not one of them; see [finalSection].
   final List<DocxBlock> blocks;
 
-  /// The body's last child when it is a `w:sectPr`: the section properties
-  /// of the last section. A `w:sectPr` anywhere else in the body is an
-  /// opaque block, and one in a paragraph's `w:pPr` stays there.
-  final OpaqueXml? finalSectPr;
+  /// The last section: the body's last child when it is a `w:sectPr`, else
+  /// a section of no values, written once one is set. A `w:sectPr` anywhere
+  /// else in the body is an opaque block, and one in a paragraph's `w:pPr`
+  /// is that paragraph's section. Only `DocxBody.addSection` changes it.
+  DocxSection finalSection;
 
   /// The children of `w:document` after `w:body`, in order. A second
   /// `w:body` is one of them.
@@ -282,13 +291,17 @@ final class _Writer {
     for (final OpaqueXml x in part.beforeBody) {
       x.writeTo(_w, declaredAbove: _scope);
     }
+    final PropertySet sectPr = sectionPropertySetOf(part.finalSection);
     if (part._hasBody ||
         part.blocks.isNotEmpty ||
-        part.bodyAttributes.isNotEmpty) {
+        part.bodyAttributes.isNotEmpty ||
+        !sectPr.writesNothing) {
       _w.start('${_p}body');
       writeKeptAttributes(_w, part.bodyAttributes, declaredAbove: _scope);
       _blocks(part.blocks, 'body');
-      part.finalSectPr?.writeTo(_w, declaredAbove: _scope);
+      if (!sectPr.writesNothing) {
+        _propertySet(sectPr, 'sectPr');
+      }
       _w.end();
     }
     for (final OpaqueXml x in part.afterBody) {
@@ -578,11 +591,12 @@ bool _isSpace(int unit) =>
 
 /// One read of a document part.
 final class _PartReader {
-  _PartReader(this._r, this._partName, this._maxTextLength);
+  _PartReader(this._r, this._partName, this._maxTextLength, this._maxDepth);
 
   final XmlPullReader _r;
   final String _partName;
   final int _maxTextLength;
+  final int _maxDepth;
 
   /// The body or cell of the paragraph being read, for errors.
   late _BlockReader _paragraphIn;
@@ -607,7 +621,7 @@ final class _PartReader {
     final List<OpaqueXml> after = <OpaqueXml>[];
     List<KeptAttribute> bodyAttributes = const <KeptAttribute>[];
     final List<DocxBlock> blocks = <DocxBlock>[];
-    OpaqueXml? finalSectPr;
+    PropertyContainer finalSectPr = const PropertyContainer.empty();
     bool bodySeen = false;
     _children(r, () {
       if (!bodySeen && _isW(r, 'body')) {
@@ -624,15 +638,15 @@ final class _PartReader {
       List<OpaqueXml>.unmodifiable(before),
       bodyAttributes,
       blocks,
-      finalSectPr,
+      newSection(finalSectPr),
       List<OpaqueXml>.unmodifiable(after),
       hasBody: bodySeen,
     );
   }
 
   /// Reads the children of `w:body` into [blocks] and returns the final
-  /// `w:sectPr`, if the last child is one.
-  OpaqueXml? _readBody(List<DocxBlock> blocks) {
+  /// `w:sectPr`, or an empty container when the last child is no `w:sectPr`.
+  PropertyContainer _readBody(List<DocxBlock> blocks) {
     final XmlPullReader r = _r;
     final _BlockReader reader = _BlockReader('body', blocks);
     // A sectPr is final only if nothing follows it.
@@ -648,7 +662,32 @@ final class _PartReader {
         _readBlock(reader);
       }
     });
-    return sectPr;
+    final OpaqueXml? last = sectPr;
+    return last == null ? const PropertyContainer.empty() : _readSectPr(last);
+  }
+
+  /// Reads the `w:sectPr` [xml] captured as a container, under a root that
+  /// declares the bindings it inherited, so its prefixes resolve as they did
+  /// in the part.
+  PropertyContainer _readSectPr(OpaqueXml xml) {
+    final StringBuffer source = StringBuffer('<r');
+    xml.inheritedNamespaces.forEach((String prefix, String uri) {
+      source
+        ..write(prefix.isEmpty ? ' xmlns="' : ' xmlns:$prefix="')
+        ..write(escapeXmlAttribute(scrubXmlText(uri).text))
+        ..write('"');
+    });
+    source
+      ..write('>')
+      ..write(xml.xml)
+      ..write('</r>');
+    final XmlPullReader r = XmlPullReader(
+      source.toString(),
+      maxDepth: _maxDepth + 1,
+    );
+    r.nextTag();
+    r.nextTag();
+    return PropertyContainer.read(r, sectionPropertiesSchema);
   }
 
   /// Reads the block the reader is on, a child of `w:body` or `w:tc`.

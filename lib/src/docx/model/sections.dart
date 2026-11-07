@@ -1,0 +1,223 @@
+/// The sections of a document: what ends each one, and its page.
+///
+/// Not ported from Quds; written for jet_office.
+///
+/// A [DocxSection] is a view over a `w:sectPr` as read (a private
+/// [PropertySet]), in the shape of `DocxParagraphProperties`: each member is
+/// a nullable getter and setter, `null` meaning "not set here", a value the
+/// model cannot type reads `null` and stays in the file, setting what a
+/// member reads is a no-op, and a set writes one element in the place the
+/// schema gives, among the children the model does not type. Header and
+/// footer references and every other child stay as read.
+///
+/// A section lives in one of two places, and may move from the second to the
+/// first (`DocxBody.addSection`): in the `w:pPr` of the paragraph that ends
+/// it, or at the end of the body, as the last section. The section reports
+/// its edits to the sink of the place it is in ([bindSection]). A last
+/// section the file does not have is written once something is set; a
+/// section in a paragraph is always written, as it is the break.
+///
+/// The top-level functions are the model's internal surface for the reader,
+/// the writer and the document; none of them is exported.
+library;
+
+import '../../xml/xml_writer.dart';
+import '../properties.dart';
+import '../section_property_codecs.dart';
+import '../units.dart';
+import 'edit_sink.dart';
+import 'numbering_formats.dart';
+import 'property_set.dart';
+import 'section_formatting.dart';
+
+/// What a new last section takes from the section before it (plan Ruling 8):
+/// its page, numbering and alignment, and the kept `w:docGrid`. Not its
+/// references, so it inherits them, nor its title page or its type.
+const Set<String> _copiedChildren = <String>{
+  'pgSz',
+  'pgMar',
+  'lnNumType',
+  'pgNumType',
+  'cols',
+  'vAlign',
+  'docGrid',
+};
+
+/// A section of a document: a run of the body with one page setup.
+///
+/// Get them from `DocxDocument.sections`, or from `DocxParagraph.section`
+/// for the one a paragraph ends. A section is the same object for as long
+/// as it is in the document, also when `DocxBody.addSection` ends it. Each
+/// set is one change of the document's change log.
+final class DocxSection {
+  DocxSection._(PropertyContainer source, this._sink) {
+    _set = _SectionSet(source, () => _sink());
+  }
+
+  late final PropertySet _set;
+
+  /// What gives the sink of the place the section is in.
+  DocxEditSink Function() _sink;
+
+  /// The sink of the document the section belongs to; `null` until it is in
+  /// one.
+  DocxEditSink? _home;
+
+  /// How big the pages are (`w:pgSz`), or `null`.
+  DocxPageSize? get pageSize => _set.valueOf('pgSz') as DocxPageSize?;
+
+  set pageSize(DocxPageSize? value) => _set.setValue('pgSz', value);
+
+  /// The margins of the pages (`w:pgMar`), or `null`.
+  DocxPageMargins? get margins => _set.valueOf('pgMar') as DocxPageMargins?;
+
+  set margins(DocxPageMargins? value) => _set.setValue('pgMar', value);
+
+  /// The text columns (`w:cols`), or `null`.
+  DocxColumns? get columns => _set.valueOf('cols') as DocxColumns?;
+
+  set columns(DocxColumns? value) => _set.setValue('cols', value);
+
+  /// How the section breaks from the one before it (`w:type`), or `null`:
+  /// Word then starts it on the next page.
+  DocxSectionStart? get start => _set.valueOf('type') as DocxSectionStart?;
+
+  set start(DocxSectionStart? value) => _set.setValue('type', value);
+
+  /// Whether the section's first page has a header and a footer of its own
+  /// (`w:titlePg`).
+  ///
+  /// Setting `true` sets the child, and setting `false` removes it, unless
+  /// it already reads `false`: a `w:titlePg w:val="0"`, or one the model
+  /// cannot type, then stays as read.
+  bool get titlePage => _set.valueOf('titlePg') == true;
+
+  set titlePage(bool value) {
+    if (value != titlePage) _set.setValue('titlePg', value ? true : null);
+  }
+
+  /// How the text sits between the top and bottom margins (`w:vAlign`), or
+  /// `null`.
+  DocxSectionVerticalAlignment? get verticalAlignment =>
+      _set.valueOf('vAlign') as DocxSectionVerticalAlignment?;
+
+  set verticalAlignment(DocxSectionVerticalAlignment? value) =>
+      _set.setValue('vAlign', value);
+
+  /// How the pages are numbered (`w:pgNumType`), or `null`. Its chapter
+  /// attributes, which the model does not type, stay as read.
+  DocxPageNumbering? get pageNumbering =>
+      _set.valueOf('pgNumType') as DocxPageNumbering?;
+
+  set pageNumbering(DocxPageNumbering? value) =>
+      _set.setValue('pgNumType', value);
+
+  /// How the lines are numbered (`w:lnNumType`), or `null`.
+  DocxLineNumbering? get lineNumbering =>
+      _set.valueOf('lnNumType') as DocxLineNumbering?;
+
+  set lineNumbering(DocxLineNumbering? value) =>
+      _set.setValue('lnNumType', value);
+
+  /// The width of the text, in points: the width of the page less the left
+  /// and right margins and the gutter; `null` while [pageSize] or [margins]
+  /// reads `null`.
+  ///
+  /// It does not count columns, and it is negative for margins wider than
+  /// the page, which a file may hold.
+  double? get textWidthPt {
+    final DocxPageSize? page = pageSize;
+    final DocxPageMargins? margin = margins;
+    if (page == null || margin == null) return null;
+    return ptOfTwips(
+      _twips(page.widthPt) -
+          _twips(margin.leftPt) -
+          _twips(margin.rightPt) -
+          _twips(margin.gutterPt),
+    );
+  }
+
+  /// [pt], a length a value of this library holds, in twips.
+  static int _twips(double pt) => twipsOf(pt, 'pt', min: 0, max: maxTwips);
+}
+
+/// A section over [source] (a `w:sectPr` as read, or an empty container for
+/// a section the file does not have), in no document: its edits go nowhere
+/// until [bindSection].
+DocxSection newSection(PropertyContainer source) =>
+    DocxSection._(source, () => DocxEditSink.none);
+
+/// The last section that follows [previous], in no document yet, as
+/// `DocxBody.addSection` makes it (plan Ruling 8): [start] as its type, and
+/// a copy of [_copiedChildren] with the values set on them, without the
+/// first page number. A `w:pgNumType` the model cannot type may hold one, so
+/// it is not copied.
+DocxSection nextSection(DocxSection previous, DocxSectionStart start) {
+  final PropertySet from = previous._set;
+  final DocxSection next = newSection(from.source.keeping(_copiedChildren));
+  final PropertySet to = next._set;
+  for (final String name in _copiedChildren) {
+    if (from.isSet(name)) to.restore(name, from.stateOf(name));
+  }
+  final DocxPageNumbering? numbering = next.pageNumbering;
+  if (numbering == null) {
+    if (!to.isSet('pgNumType')) to.clearChild('pgNumType');
+  } else if (numbering.start != null) {
+    final DocxNumberFormat? format = numbering.format;
+    next.pageNumbering = format == null
+        ? null
+        : DocxPageNumbering(format: format);
+  }
+  next.start = start;
+  return next;
+}
+
+/// Makes [section] report its edits to the sink [sink] gives from now on.
+void bindSection(DocxSection section, DocxEditSink Function() sink) {
+  section._sink = sink;
+}
+
+/// Records that [section] belongs to the document of [sink].
+void setSectionHome(DocxSection section, DocxEditSink sink) {
+  section._home = sink;
+}
+
+/// The sink of the document [section] belongs to, or `null`.
+DocxEditSink? sectionHomeOf(DocxSection section) => section._home;
+
+/// The properties of [section], for the writer.
+PropertySet sectionPropertySetOf(DocxSection section) => section._set;
+
+/// What the `w:pPr` of a paragraph writes for its break [section]: its
+/// `w:sectPr`, even with nothing in it.
+NestedProperties sectionBreakOf(DocxSection section) =>
+    _SectionBreak(section._set);
+
+/// A `w:sectPr` in a paragraph, which is the break whatever it holds.
+final class _SectionBreak implements NestedProperties {
+  const _SectionBreak(this._set);
+
+  final PropertySet _set;
+
+  @override
+  bool get writesNothing => false;
+
+  @override
+  void writeTo(
+    XmlWriter w,
+    String qualifiedName, {
+    String prefix = 'w',
+    Map<String, String> declaredAbove = const <String, String>{},
+  }) => _set.writeTo(
+    w,
+    qualifiedName,
+    prefix: prefix,
+    declaredAbove: declaredAbove,
+  );
+}
+
+/// The property set of a `w:sectPr`.
+final class _SectionSet extends PropertySet {
+  _SectionSet(PropertyContainer source, DocxEditSink Function() sink)
+    : super(source, sectionPropertiesSchema, sink);
+}

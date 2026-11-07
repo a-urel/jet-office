@@ -12,6 +12,8 @@ import 'package:jet_office/src/docx/model/blocks.dart';
 import 'package:jet_office/src/docx/model/edit_sink.dart';
 import 'package:jet_office/src/docx/model/inlines.dart';
 import 'package:jet_office/src/docx/model/primitives.dart';
+import 'package:jet_office/src/docx/model/sections.dart'
+    show sectionPropertySetOf;
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/warnings.dart' show DocxWarningCollector;
 import 'package:jet_office/src/opc/change_log.dart';
@@ -171,7 +173,7 @@ void main() {
     final DocumentPart part = _read(
       '<w:tbl><w:tr><w:tc><w:sectPr/></w:tc></w:tr></w:tbl><w:sectPr/>',
     );
-    expect(part.finalSectPr, isNotNull);
+    expect(sectionPropertySetOf(part.finalSection).source.isRead, isTrue);
     expect(_names(_table(part).rows.single.cells.single.blocks), <String>[
       'sectPr',
     ]);
@@ -182,7 +184,7 @@ void main() {
       '<w:sectPr/><w:tbl><w:tr>${_tc('a')}</w:tr></w:tbl><w:sectPr/>',
     );
     expect(_names(part.blocks), <String>['sectPr', 'tbl']);
-    expect(part.finalSectPr, isNotNull);
+    expect(sectionPropertySetOf(part.finalSection).source.isRead, isTrue);
   });
 
   group('gridColumnsPt', () {
