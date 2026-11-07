@@ -23,11 +23,12 @@
 ///
 /// The sheet `Report` of `w3_generated.xlsx` has a header, a filter, a list
 /// validation, a cell-value rule, a colour scale, a data bar and an icon set,
-/// a data bar with `showValue` off in a column of its own, a link to a web page and one to the sheet `Locked`, a print area and
-/// print titles, a landscape fit-to-width page setup, a header and a footer,
-/// and a formula that uses the workbook name `TaxRate`. `Locked` is protected
-/// with the password `secret`. The workbook has properties, one of them
-/// custom. `docs/excel-checks.md`, "W3", says what Excel shows.
+/// a data bar with `showValue` off in a column of its own, a link to a web
+/// page and one to the sheet `Locked`, a print area and print titles, a
+/// landscape fit-to-width page setup, a header and a footer, and a formula
+/// that uses the workbook name `TaxRate`. `Locked` is protected with the
+/// password `secret`. The workbook has properties, one of them custom.
+/// `docs/excel-checks.md`, "W3", says what Excel shows.
 ///
 /// Not ported from Quds; written for jet_office.
 library;

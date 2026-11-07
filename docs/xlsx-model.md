@@ -341,7 +341,7 @@ Nothing is dropped silently.
 | An Excel 2010 rule the types cannot hold (a custom icon set, another kind of rule) | stays kept, unlisted and unreported | the getter lists only what it can hold | `test/xlsx/model/conditional_x14_test.dart` ("a custom icon set stays kept and unlisted", "another kind of rule stays kept and unlisted, unreported") |
 | Properties | `custom.xml` joins when a custom property is set (part, relationship, content type) and leaves when no property is left in it; a part that holds a kept property stays; other elements and variants stay | the part follows the content | `test/xlsx/model/properties_test.dart` ("custom part joins and leaves", "a custom part leaves when no property is left", "a custom part holding a kept property stays") |
 | `modified` and `lastModifiedBy` | a save never touches them; only a set changes them | the model does not invent a time | `test/xlsx/model/properties_test.dart` ("modified and lastModifiedBy are not touched by a save") |
-| Fuzzing and undo | the feature corpus, mutated, opens, then reads, sets, undoes and saves every W3 member with nothing thrown but `XlsxReadException`; undoing every edit of a corpus file restores it | the file is untrusted input | `test/xlsx/model/feature_fuzz_test.dart` |
+| Fuzzing and undo | the feature corpus, mutated, opens, then reads, sets, undoes and saves every W3 and W4 member with nothing thrown but `XlsxReadException`; undoing every edit of a corpus file restores it | the file is untrusted input | `test/xlsx/model/feature_fuzz_test.dart` |
 
 ### What W3 reads and edits less than it might
 

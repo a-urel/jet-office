@@ -1010,10 +1010,12 @@ void main() {
           for (int i = 0; i < n; i++) _element('A${i + 1}', '<x14:other/>'),
         ].join();
       });
-      bounded('the rules across the elements, each kept to one', (int n) {
+      // Two elements of up to three rules: neither the list nor one element
+      // reaches the bound, so only the rules counted across them can.
+      bounded('the rules across the elements', (int n) {
         return <String>[
-          for (int i = 0; i < n; i++)
-            _element('A${i + 1}', _iconRule('{$i}', i + 1)),
+          _element('A1', rules(3)),
+          _element('A2', rules(n - 3)),
         ].join();
       });
     });
@@ -1029,9 +1031,10 @@ void main() {
           final XlsxSheet sheet = _open(
             '<extLst>${_ext(elements.toString())}</extLst>',
           ).sheets.single;
-          // Loads the sheet, so that only the join is timed. A test's timeout
-          // cannot stop code that never yields, so the bound is checked after:
-          // a fraction of a second here, minutes when quadratic.
+          // Loads the sheet, so that the getter alone is timed: reading the
+          // entries and joining them. A test's timeout cannot stop code that
+          // never yields, so the bound is checked after: a fraction of a second
+          // here, minutes when quadratic.
           sheet.dataValidations;
           final Stopwatch watch = Stopwatch()..start();
           final List<XlsxConditionalFormat> read = sheet.conditionalFormats;

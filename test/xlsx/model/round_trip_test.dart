@@ -2,14 +2,17 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/xlsx/model/cell_store.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_sheet.dart'
     show cellStoreOf, sheetIsWorksheet;
+import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart' show changeLogOf;
 import 'package:jet_office/src/xlsx/raw_cell.dart';
 import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
 import '../../fixtures/fixtures.dart';
+import '../../fixtures/m4_fixtures.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/producers.dart';
 import '../read/support/workbook_builder.dart';
@@ -46,20 +49,36 @@ Uint8List _expected(String name, Uint8List bytes) {
   ]);
 }
 
-/// Opens [bytes], loads every sheet and saves.
+/// The cells of [sheet] that hold a string, by row and column.
+Iterable<(int, int)> _stringCells(XlsxSheet sheet) sync* {
+  for (final XlsxReadRow row in sheet.rows) {
+    for (final XlsxReadCell cell in row.cells) {
+      if (cell.value is String) yield (row.index, cell.column);
+    }
+  }
+}
+
+/// Opens [bytes], loads every sheet, reads its objects and saves.
 Uint8List _roundTrip(Uint8List bytes) {
   final XlsxWorkbook book = XlsxWorkbook.open(bytes);
   for (final XlsxSheet sheet in book.sheets) {
     sheet.rows.toList();
+    for (final (int row, int column) in _stringCells(sheet)) {
+      sheet.richTextAt(row, column);
+    }
+    sheet.notes.toList();
+    sheet.pictures.toList();
+    sheet.tables.toList();
   }
   return book.save().bytes;
 }
 
 /// Sets on [sheet] everything it reads: every cell's style, every row's
 /// format, every column, the default sizes, the view, the tab colour, the
-/// outline summary, the merges, unmerged and merged back in order, and the
-/// sheet's features: protection, page setup, headers and footers, auto
-/// filter, print area and print titles.
+/// outline summary, the merges, unmerged and merged back in order, the
+/// sheet's features (protection, page setup, headers and footers, auto
+/// filter, print area and print titles) and its objects: every rich text,
+/// every note, every picture's anchor and every table's style.
 ///
 /// The cells and rows are the store's, so a styled empty cell and a row of
 /// attributes alone are set too. A cell the file lacks is left out: `styleAt`
@@ -104,6 +123,20 @@ void _setWhatWasRead(XlsxSheet sheet) {
   sheet.printArea = sheet.printArea;
   final ({(int, int)? rows, (int, int)? columns}) titles = sheet.printTitles;
   sheet.setPrintTitles(rows: titles.rows, columns: titles.columns);
+  for (final (int row, int column) in _stringCells(sheet).toList()) {
+    final XlsxRichText? rich = sheet.richTextAt(row, column);
+    if (rich != null) sheet.setCell(row, column, rich);
+  }
+  for (final XlsxCellNote n in sheet.notes) {
+    sheet.setNote(n.row, n.column, n.note);
+  }
+  final List<XlsxPicture> pictures = sheet.pictures;
+  for (int i = 0; i < pictures.length; i++) {
+    sheet.movePicture(i, pictures[i].anchor);
+  }
+  for (final XlsxTable table in sheet.tables) {
+    sheet.setTableStyle(table.name, table.style);
+  }
 }
 
 /// The differences between saving [bytes] unchanged and saving it after
@@ -156,6 +189,83 @@ List<List<Object>> _reads(XlsxWorkbook book) => <List<Object>>[
     ],
 ];
 
+/// Puts one of each object on a free spot of [sheet], far from anything a
+/// fixture holds: a rich text, a note, a picture and a table named [table].
+void _addOneOfEach(XlsxSheet sheet, String table) {
+  sheet
+    ..setCell(
+      1999,
+      30,
+      XlsxRichText(const <XlsxTextRun>[
+        XlsxTextRun('Rich', font: XlsxFont(bold: true)),
+        XlsxTextRun(' text'),
+      ]),
+    )
+    ..setNote(1999, 30, XlsxNote.plain('A new note', author: 'Proof'))
+    ..addPicture(
+      XlsxPicture(
+        OfficeImage(jpeg3x5),
+        const XlsxOneCellAnchor(XlsxAnchorPoint(1999, 31)),
+      ),
+    )
+    ..addTable(
+      XlsxTable(
+        table,
+        XlsxRange.parse('AK2000:AL2002'),
+        const <XlsxTableColumn>[XlsxTableColumn('One'), XlsxTableColumn('Two')],
+      ),
+    );
+}
+
+/// Removes every object of [sheet] that it allows to go: every note but a
+/// thread's, every picture, every table no formula uses.
+void _removeEveryObject(XlsxSheet sheet) {
+  for (final XlsxCellNote n in sheet.notes) {
+    if (!n.note.author.startsWith('tc=')) sheet.setNote(n.row, n.column, null);
+  }
+  for (int i = sheet.pictures.length - 1; i >= 0; i--) {
+    sheet.removePicture(i);
+  }
+  for (final XlsxTable table in sheet.tables) {
+    try {
+      sheet.removeTable(table.name);
+    } on StateError catch (e) {
+      expect(e.message, contains('uses it'));
+    }
+  }
+}
+
+/// The differences between saving [bytes] unchanged and saving it after
+/// [edit] of every worksheet, all in one change, is undone.
+List<String> _undoneDifferences(
+  Uint8List bytes,
+  void Function(XlsxSheet sheet, int index) edit,
+) {
+  final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+  final ChangeLog log = changeLogOf(book);
+  final ChangeSet set = log.transaction(() {
+    for (int i = 0; i < book.sheets.length; i++) {
+      if (sheetIsWorksheet(book.sheets[i])) edit(book.sheets[i], i);
+    }
+  });
+  log.revertSet(set);
+  return comparePackages(
+    _roundTrip(bytes),
+    book.save().bytes,
+    ignoreBookkeeping: true,
+  );
+}
+
+/// The parts that differ between [before] and [after], by name.
+Set<String> _partsChanged(Uint8List before, Uint8List after) => <String>{
+  for (final String line in comparePackages(
+    before,
+    after,
+    ignoreBookkeeping: true,
+  ))
+    line.substring(0, line.indexOf(':')),
+};
+
 void main() {
   // Owner files (test/fixtures/owner/manifest.json) join this test when
   // the owner supplies XLSX workbooks; today the manifest lists none.
@@ -203,6 +313,167 @@ void main() {
     for (final ProducerFile p in producerFiles()) {
       test(p.name, () => _expectRemovedAndAddedBack(p.bytes));
     }
+  });
+
+  group('undoing object edits restores the file', () {
+    final Map<String, Uint8List Function()> files =
+        <String, Uint8List Function()>{
+          for (final Fixture f in m4Fixtures()) f.name: f.build,
+          'excel_objects': () => excelObjectsFile().bytes,
+        };
+    files.forEach((String name, Uint8List Function() build) {
+      test('$name: one of each added', () {
+        expect(
+          _undoneDifferences(
+            build(),
+            (XlsxSheet sheet, int i) => _addOneOfEach(sheet, 'Proof$i'),
+          ),
+          isEmpty,
+        );
+      });
+      test('$name: every object removed', () {
+        expect(
+          _undoneDifferences(
+            build(),
+            (XlsxSheet sheet, int _) => _removeEveryObject(sheet),
+          ),
+          isEmpty,
+        );
+      });
+    });
+    test('the first of each on a sheet without any', () {
+      final Uint8List input = allFixtures()
+          .firstWhere((Fixture f) => f.name == 'm1_values')
+          .build();
+      expect(
+        _undoneDifferences(
+          input,
+          (XlsxSheet sheet, int i) => _addOneOfEach(sheet, 'Proof$i'),
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  group('a file with more than the model types', () {
+    late Uint8List input;
+    late XlsxWorkbook book;
+    late XlsxSheet sheet;
+    const String sheetPart = 'xl/worksheets/sheet1.xml';
+    const String sheetRels = 'xl/worksheets/_rels/sheet1.xml.rels';
+    const String vml = 'xl/drawings/vmlDrawing1.vml';
+
+    setUp(() {
+      input = excelObjectsFile().bytes;
+      book = XlsxWorkbook.open(input);
+      sheet = book.sheets.single;
+    });
+
+    test('reads what the model types beside what it does not', () {
+      expect(sheet.richTextAt(2, 0)!.text, 'Nut M8');
+      expect(sheet.pictures.single.description, 'A small picture');
+      expect(sheet.notes.map((XlsxCellNote n) => n.note.author), <Object>[
+        'Ahmet',
+        startsWith('tc='),
+      ]);
+      expect(sheet.tables.single.name, 'Stock');
+      // Excel's own runs in a note are `<color indexed="81"/>`, past the
+      // palette the writer accepts: read without the colour, kept as written.
+      expect(sheet.notes.first.note.text.runs.first.font?.color, isNull);
+      expect(book.warnings.map((XlsxWarning w) => (w.code, w.detail)), <Object>[
+        (XlsxWarningCode.featureEntryInvalid, 'rPr'),
+      ]);
+    });
+
+    test('a note added touches the comments and the box alone', () {
+      sheet.setNote(9, 0, XlsxNote.plain('New', author: 'Ahmet'));
+      expect(_partsChanged(input, book.save().bytes), <String>{
+        'xl/comments1.xml',
+        vml,
+      });
+    });
+
+    test('the plain note removed leaves the thread and the control', () {
+      sheet.setNote(4, 0, null);
+      final Uint8List saved = book.save().bytes;
+      expect(_partsChanged(input, saved), <String>{'xl/comments1.xml', vml});
+      final String box = readXlsx(saved)[vml]!;
+      expect(box, contains('ObjectType="Checkbox"'));
+      expect(box, contains('<x:Column>1</x:Column>'));
+      expect(box, isNot(contains('<x:Column>0</x:Column>')));
+    });
+
+    test('the thread\'s note cannot be set or removed', () {
+      expect(() => sheet.setNote(4, 1, null), throwsStateError);
+      expect(() => sheet.setNote(4, 1, XlsxNote.plain('x')), throwsStateError);
+    });
+
+    test('a picture added touches the drawing alone', () {
+      sheet.addPicture(
+        XlsxPicture(
+          OfficeImage(png4x2),
+          const XlsxOneCellAnchor(XlsxAnchorPoint(20, 0)),
+        ),
+      );
+      expect(_partsChanged(input, book.save().bytes), <String>{
+        'xl/drawings/drawing1.xml',
+      });
+    });
+
+    test('the picture removed leaves the chart and the shape', () {
+      sheet.removePicture(0);
+      final Uint8List saved = book.save().bytes;
+      expect(_partsChanged(input, saved), <String>{
+        'xl/drawings/drawing1.xml',
+        'xl/drawings/_rels/drawing1.xml.rels',
+        'xl/media/image1.png',
+      });
+      final String drawing = readXlsx(saved)['xl/drawings/drawing1.xml']!;
+      expect(drawing, contains('Chart 2'));
+      expect(drawing, contains('Rectangle 3'));
+      expect(readXlsx(saved), contains('xl/charts/chart1.xml'));
+    });
+
+    test('a table added keeps <tableParts> after the controls', () {
+      sheet.addTable(
+        XlsxTable('More', XlsxRange.parse('E10:F12'), const <XlsxTableColumn>[
+          XlsxTableColumn('One'),
+          XlsxTableColumn('Two'),
+        ]),
+      );
+      final Uint8List saved = book.save().bytes;
+      // The workbook part asks Excel to recalculate, as any cell set does.
+      expect(_partsChanged(input, saved), <String>{
+        '[Content_Types].xml',
+        'xl/workbook.xml',
+        sheetPart,
+        sheetRels,
+        'xl/sharedStrings.xml',
+        'xl/tables/table2.xml',
+      });
+      final String text = readXlsx(saved)[sheetPart]!;
+      expect(
+        text.indexOf('<tableParts'),
+        greaterThan(text.indexOf('</mc:AlternateContent>')),
+      );
+      expect(readXlsx(saved)['xl/tables/table1.xml'], contains('xr:uid'));
+    });
+
+    test('the table its own formulas use cannot be removed', () {
+      expect(() => sheet.removeTable('Stock'), throwsStateError);
+    });
+
+    test('restyling and resizing the table keep its calculated column', () {
+      sheet
+        ..setTableStyle('Stock', XlsxTableStyle.light(1))
+        ..resizeTable('Stock', XlsxRange.parse('A1:C4'));
+      final Uint8List saved = book.save().bytes;
+      expect(_partsChanged(input, saved), <String>{'xl/tables/table1.xml'});
+      final String table = readXlsx(saved)['xl/tables/table1.xml']!;
+      expect(table, contains('<calculatedColumnFormula>'));
+      expect(table, contains('dataDxfId="0"'));
+      expect(table, contains('xr3:uid'));
+    });
   });
 
   test('outline levels without a sheetFormatPr round-trip', () {

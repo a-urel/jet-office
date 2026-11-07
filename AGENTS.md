@@ -275,11 +275,13 @@ The number formatter's fuzz test and `tool/fuzz_formatter.dart` are in
 `jet_core` (decision 0012).
 
 `test/xlsx/model/feature_fuzz_test.dart` fuzzes the model's sheet and
-workbook features (seeds 1 to 4, 100 cases each, over the `m3_*` fixtures and
-a sheet as Excel writes it: whole mutated files, many of them well formed so
-they reach the features' own parsers; open, then reading, setting, undoing and
-saving every W3 member throw nothing but `XlsxReadException`, and undoing the
-edits of a corpus file restores it), the same cases on the VM and in Chrome;
+workbook features (seeds 1 to 4, 100 cases each, over the `m3_*` and `m4_*`
+fixtures, a sheet as Excel writes it and the `excel_objects` producer file:
+whole mutated files, many of them well formed so they reach the features' own
+parsers; open, then reading, setting, undoing and saving every W3 and W4 member
+throw nothing but `XlsxReadException`, and undoing the edits of a file restores
+it, unless the mutation hit the shared strings or the archive), the same cases
+on the VM and in Chrome;
 longer runs by hand:
 
 ```bash

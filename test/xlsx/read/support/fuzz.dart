@@ -24,6 +24,7 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 
 import '../../../fixtures/fixtures.dart';
+import '../../../fixtures/m4_fixtures.dart' show png4x2;
 import '../../../support/fuzz_mutations.dart';
 import '../../../support/read_xlsx.dart';
 import 'producers.dart';
@@ -33,11 +34,13 @@ export '../../../support/fuzz_mutations.dart'
     show FuzzCase, Xorshift32, mutatedPart;
 
 /// The fixtures of `allFixtures()` in the corpus: `m1_values`, the smallest
-/// fixture with a formula and the smallest with a date format.
+/// fixture with a formula, the smallest with a date format and the smallest
+/// whose styles reach columns, rows and cells.
 const List<String> _corpusFixtures = <String>[
   'm1_values',
   'm1_formulas',
   'm1_dates',
+  'm2_style_precedence',
 ];
 
 /// The corpus entries also added deflated, to fuzz inflation.
@@ -186,12 +189,18 @@ void exerciseReader(Uint8List bytes) {
 /// `view`, `tabColor`, `outlineSummary`, `defaultSizes` and `merges` read,
 /// and the workbook its `indexedColors`; those may throw only an
 /// [XlsxReadException], kept as a sheet's first read keeps one, but the
-/// sheet still counts as readable below. The first sheet then
-/// has one style, one column, one row format and a frozen pane set, on the
-/// cell of the edit above. Each may refuse the edit as its API documents, a
-/// [StateError] for an untyped sheet or styles part or a `<cols>` that is
-/// not plain and an `XlsxLimitError` for a file already past a writer limit;
-/// any other throw is a model defect, a [StateError] naming the step.
+/// sheet still counts as readable below. Its objects are read too: the rich
+/// text of every string cell, its `notes`, `pictures` and `tables`. The first
+/// sheet then has one style, one column, one row format and a frozen pane
+/// set, on the cell of the edit above. Each may refuse the edit as its API
+/// documents, a [StateError] for an untyped sheet or styles part or a
+/// `<cols>` that is not plain and an `XlsxLimitError` for a file already past
+/// a writer limit; any other throw is a model defect, a [StateError] naming
+/// the step.
+///
+/// The first sheet also gets a rich text, a note, a picture and a table, and
+/// loses one of each when it has one; [_editObjects] says what those may
+/// refuse.
 ///
 /// The model makes nothing worse: the saved bytes must open, and each of
 /// their sheets must read, unless the same sheet of the input could not;
@@ -244,6 +253,8 @@ void exerciseModel(Uint8List bytes) {
       throw StateError('cellAt($row, 0) threw: $e');
     }
     _editLayout(sheet, row);
+    final XlsxReadException? objects = _editObjects(sheet, row);
+    first ??= objects;
   }
   try {
     workbook.indexedColors.toString();
@@ -266,14 +277,18 @@ void exerciseModel(Uint8List bytes) {
 }
 
 /// Reads everything of [sheet]'s look: each row's format, the style of
-/// each of its cells and the column of each, then the sheet's settings,
-/// resolving its tab colour with [workbook].
+/// each of its cells and the column of each, the rich text of each string,
+/// then the sheet's settings, resolving its tab colour with [workbook], and
+/// its objects.
 void _readLayout(XlsxWorkbook workbook, XlsxSheet sheet) {
   for (final XlsxReadRow row in sheet.rows) {
     sheet.rowFormat(row.index).toString();
     for (final XlsxReadCell cell in row.cells) {
       sheet.styleAt(row.index, cell.column).toString();
       sheet.column(cell.column).toString();
+      if (cell.value is String) {
+        sheet.richTextAt(row.index, cell.column).toString();
+      }
     }
   }
   sheet.view.toString();
@@ -282,6 +297,9 @@ void _readLayout(XlsxWorkbook workbook, XlsxSheet sheet) {
   sheet.outlineSummary.toString();
   sheet.defaultSizes.toString();
   sheet.merges.toString();
+  sheet.notes.toString();
+  sheet.pictures.toString();
+  sheet.tables.toString();
 }
 
 /// Sets a style on the cell at [row], column 0, of [sheet], a column, a row
@@ -310,6 +328,79 @@ void _editLayout(XlsxSheet sheet, int row) {
       throw StateError('${edit.key} threw: $e');
     }
   }
+}
+
+/// Sets a rich text on the cell at [row], column 1, of [sheet], a note on it,
+/// a picture and a table, then removes the first note, picture and table,
+/// each its own step, and returns the first [XlsxReadException] met.
+///
+/// Each may refuse the edit as its API documents: a [StateError] for an
+/// untyped sheet, part or a table or note it cannot change, an
+/// [UnsupportedError] for a shared formula's master, an `XlsxLimitError`
+/// past a writer limit, and an [ArgumentError] for a clash with what the file
+/// holds. A [RangeError], and anything else, is a model defect, a
+/// [StateError] naming the step.
+XlsxReadException? _editObjects(XlsxSheet sheet, int row) {
+  XlsxReadException? first;
+  void step(String name, void Function() edit) {
+    try {
+      edit();
+    } on XlsxReadException catch (e) {
+      first ??= e;
+    } on RangeError catch (e) {
+      throw StateError('$name threw: $e');
+    } on StateError {
+      // An untyped part, or an object the model must not change.
+    } on UnsupportedError {
+      // A shared formula's master: refused by design until W5.
+    } on XlsxLimitError {
+      // A file already past a writer limit: refused by design.
+    } on ArgumentError {
+      // A clash with what the file holds: a name taken, a range in use.
+    } on Object catch (e) {
+      throw StateError('$name threw: $e');
+    }
+  }
+
+  step('setCell rich text', () {
+    sheet.setCell(
+      row,
+      1,
+      XlsxRichText(const <XlsxTextRun>[
+        XlsxTextRun('x', font: XlsxFont(bold: true)),
+      ]),
+    );
+  });
+  step('setNote', () => sheet.setNote(row, 1, XlsxNote.plain('x')));
+  step('addPicture', () {
+    sheet.addPicture(
+      XlsxPicture(
+        OfficeImage(png4x2),
+        XlsxOneCellAnchor(XlsxAnchorPoint(row, 2)),
+      ),
+    );
+  });
+  step('addTable', () {
+    sheet.addTable(
+      XlsxTable(
+        'FuzzTable',
+        XlsxRange.parse('XFA1:XFB2'),
+        const <XlsxTableColumn>[XlsxTableColumn('One'), XlsxTableColumn('Two')],
+      ),
+    );
+  });
+  step('remove a note', () {
+    final List<XlsxCellNote> notes = sheet.notes;
+    if (notes.isNotEmpty) sheet.setNote(notes[0].row, notes[0].column, null);
+  });
+  step('removePicture', () {
+    if (sheet.pictures.isNotEmpty) sheet.removePicture(0);
+  });
+  step('removeTable', () {
+    final List<XlsxTable> tables = sheet.tables;
+    if (tables.isNotEmpty) sheet.removeTable(tables[0].name);
+  });
+  return first;
 }
 
 /// Opens [saved] and reads every sheet's rows; only the sheets at the

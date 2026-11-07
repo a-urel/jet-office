@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
@@ -9,6 +10,7 @@ import 'package:test/test.dart';
 import '../../../tool/src/part_compare.dart';
 import '../../fixtures/fixtures.dart';
 import '../../support/read_xlsx.dart';
+import '../read/support/zip_builder.dart';
 import 'support/workbook_support.dart';
 
 Uint8List _fixture(String name) =>
@@ -37,6 +39,21 @@ String _table(String id, String name, {String column = ''}) =>
     'ref="A1:A3"/><tableColumns count="1"><tableColumn id="1" name="A" '
     '$column/></tableColumns><tableStyleInfo name="TableStyleMedium2" '
     'showRowStripes="1"/></table>';
+
+/// The one-sheet package [bytes] with a second tab on the same sheet part.
+Uint8List _sharedSheetPart(Uint8List bytes) {
+  final Map<String, Uint8List> parts = readXlsxBytes(bytes);
+  final String workbook = utf8.decode(parts['xl/workbook.xml']!);
+  final Match sheet = RegExp(r'<sheet [^>]*/>').firstMatch(workbook)!;
+  final String tab = sheet
+      .group(0)!
+      .replaceFirst(RegExp(r'name="[^"]*"'), 'name="Twin"')
+      .replaceFirst(RegExp(r'sheetId="\d+"'), 'sheetId="9"');
+  parts['xl/workbook.xml'] = Uint8List.fromList(
+    utf8.encode(workbook.replaceRange(sheet.end, sheet.end, tab)),
+  );
+  return buildZip(<String, List<int>>{...parts});
+}
 
 const String _tableType =
     'application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml';
@@ -254,6 +271,22 @@ void main() {
     );
     expect(book.sheets.single.tables, hasLength(1));
     expect(_invalid(book, 'table'), 1);
+  });
+
+  test('a table with no id reads, and a new table takes the next id', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(<String>[_table('1', 'T').replaceFirst('id="1" ', '')]),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    expect(sheet.tables.single.name, 'T');
+    sheet.addTable(
+      XlsxTable('U', XlsxRange.parse('C1:C2'), const <XlsxTableColumn>[
+        XlsxTableColumn('A'),
+      ]),
+    );
+    final Uint8List saved = book.save().bytes;
+    expect(partText(saved, 'xl/tables/table2.xml'), contains(' id="1"'));
+    expect(XlsxWorkbook.open(saved).sheets.single.tables, hasLength(2));
   });
 
   test('reading saves the input unchanged', () {
@@ -1070,6 +1103,38 @@ void main() {
       final XlsxSheet sheet = XlsxWorkbook().addSheet('S');
       expect(() => sheet.removeTable('Nope'), _argument('name'));
     });
+  });
+
+  test('addTable on broken relationships throws XlsxReadException', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      packageWith(
+        rows: '',
+        extra: <String, String>{
+          'xl/worksheets/_rels/sheet1.xml.rels': '<Relationships a=',
+        },
+      ),
+    );
+    expect(
+      () => book.sheets.single.addTable(
+        XlsxTable('T', XlsxRange.parse('A1:A2'), const <XlsxTableColumn>[
+          XlsxTableColumn('A'),
+        ]),
+      ),
+      throwsA(isA<XlsxReadException>()),
+    );
+    expect(changeLogOf(book).hasChanges, isFalse);
+  });
+
+  test('a table part two sheets share is removed once, then refused', () {
+    final Uint8List shared = _sharedSheetPart(
+      _listed(<String>[_table('1', 'T')]),
+    );
+    final XlsxWorkbook book = XlsxWorkbook.open(shared);
+    final XlsxSheet first = book.sheets[0];
+    final XlsxSheet second = book.sheets[1];
+    expect(second.tables, hasLength(1));
+    first.removeTable('T');
+    expect(() => second.removeTable('T'), throwsStateError);
   });
 
   group('undo of each restores the file', () {

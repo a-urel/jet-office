@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
 import '../../fixtures/fixtures.dart';
+import '../../support/read_xlsx.dart';
 import '../read/support/workbook_builder.dart';
 import 'support/workbook_support.dart';
 
@@ -44,6 +45,59 @@ const String _phonetic =
     '<rPh sb="0" eb="5"><t>toukyou</t></rPh><phoneticPr fontId="1"/></si>';
 
 void main() {
+  test('text past the limit is cut and warned about, as in a string', () {
+    final XlsxWorkbook book = XlsxWorkbook();
+    final XlsxSheet sheet = book.addSheet('S')
+      ..setCell(
+        0,
+        0,
+        XlsxRichText(<XlsxTextRun>[
+          XlsxTextRun('a' * 32760, font: _bold),
+          XlsxTextRun('b' * 20),
+        ]),
+      );
+    expect(sheet.richTextAt(0, 0)!.text, hasLength(32767));
+    expect(
+      book.warnings.map((XlsxWarning w) => w.code),
+      contains(XlsxWarningCode.textTruncated),
+    );
+  });
+
+  test('an inline rich string set back equal is no edit', () {
+    final Uint8List input = _book(
+      '<c r="A1" t="inlineStr"><is><r><rPr><b/></rPr><t>Bold</t></r>'
+      '<r><t> plain</t></r></is></c><c r="B1" t="s"><v>0</v></c>',
+      si: '<si><t>shared</t></si>',
+    );
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    final XlsxSheet sheet = book.sheets.single;
+    final XlsxRichText read = sheet.richTextAt(0, 0)!;
+    expect(read.text, 'Bold plain');
+    sheet.setCell(0, 0, read);
+    expect(changeLogOf(book).hasChanges, isFalse);
+    expect(
+      comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+      isEmpty,
+    );
+  });
+
+  test('a rich text set drops calcChain, as any value', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      packageWith(
+        rows: '<row r="1"><c r="A1"><f>1+1</f><v>2</v></c></row>',
+        calcChain: true,
+      ),
+    );
+    book.sheets.single.setCell(
+      1,
+      0,
+      XlsxRichText(const <XlsxTextRun>[XlsxTextRun('x', font: _bold)]),
+    );
+    final Map<String, String> parts = readXlsx(book.save().bytes);
+    expect(parts, isNot(contains('xl/calcChain.xml')));
+    expect(parts['xl/workbook.xml'], contains('fullCalcOnLoad="1"'));
+  });
+
   group('reading', () {
     test('reads runs of a shared string', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m4_rich_text'));

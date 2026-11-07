@@ -29,12 +29,12 @@ String _vmlShape(int row, int column, {bool visible = false}) =>
 
 /// A one-sheet package whose sheet has [comments] (raw part text) and, when
 /// given, [vml], with the sheet's `legacyDrawing` naming the VML part.
-Uint8List _package({String? comments, String? vml, bool legacy = true}) {
+Uint8List _package({String? comments, String? vml}) {
   final Map<String, Uint8List> parts = readXlsxBytes(
     buildWorkbook(<String, String>{
       'S':
           '<worksheet xmlns="$mainNs" xmlns:r="$relNs"><sheetData/>'
-          '${vml != null && legacy ? '<legacyDrawing r:id="rId1"/>' : ''}'
+          '${vml != null ? '<legacyDrawing r:id="rId1"/>' : ''}'
           '</worksheet>',
     }),
   );
@@ -168,6 +168,29 @@ void main() {
     expect(book.sheets.single.noteAt(0, 0)!.visible, isFalse);
     expect(book.sheets.single.notes, hasLength(1));
     expect(_invalid(book, 'legacyDrawing'), 1);
+  });
+
+  test('a legacyDrawing id with no relationship has no boxes', () {
+    final Map<String, Uint8List> parts = readXlsxBytes(
+      _package(
+        comments: _comments(_comment('A1', '<t>x</t>')),
+        vml: '$_vmlHead${_vmlShape(0, 0, visible: true)}</xml>',
+      ),
+    );
+    parts['xl/worksheets/sheet1.xml'] = Uint8List.fromList(
+      utf8.encode(
+        utf8
+            .decode(parts['xl/worksheets/sheet1.xml']!)
+            .replaceFirst('r:id="rId1"', 'r:id="rId9"'),
+      ),
+    );
+    final Uint8List input = buildZip(<String, List<int>>{...parts});
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    final XlsxSheet sheet = book.sheets.single;
+    expect(sheet.noteAt(0, 0)!.visible, isFalse);
+    sheet.setNote(1, 1, XlsxNote.plain('y'));
+    final XlsxWorkbook again = XlsxWorkbook.open(book.save().bytes);
+    expect(again.sheets.single.notes, hasLength(2));
   });
 
   test('visible comes from the shape of the same row and column', () {
@@ -749,6 +772,74 @@ void main() {
       expect(() => sheet.setNote(0, 0, null), throwsStateError);
       expect(() => sheet.setNote(0, 0, XlsxNote.plain('x')), throwsStateError);
       expect(changeLogOf(book).hasChanges, isFalse);
+      expect(
+        comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+        isEmpty,
+      );
+    });
+
+    group('a note set back as read is no edit', () {
+      void expectNoEdit(
+        String comment, {
+        String authors = '<author>A</author>',
+      }) {
+        final Uint8List input = _package(
+          comments: _comments(comment, authors: authors),
+          vml: '$_vmlHead${_vmlShape(0, 0)}</xml>',
+        );
+        final XlsxWorkbook book = XlsxWorkbook.open(input);
+        final XlsxSheet sheet = book.sheets.single;
+        final int before = book.warnings.length;
+        sheet.setNote(0, 0, sheet.noteAt(0, 0));
+        expect(changeLogOf(book).hasChanges, isFalse);
+        expect(book.warnings, hasLength(before));
+        expect(
+          comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+          isEmpty,
+        );
+      }
+
+      test('the note of a thread', () {
+        expectNoEdit(
+          _comment('A1', '<t>[Threaded comment]</t>'),
+          authors: '<author>tc={A1B2}</author>',
+        );
+      });
+
+      test('an author the writer refuses', () {
+        expectNoEdit(
+          _comment('A1', '<t>x</t>'),
+          authors: '<author>${'a' * 300}</author>',
+        );
+      });
+
+      test('a text the writer would cut', () {
+        expectNoEdit(_comment('A1', '<t>${'a' * 40000}</t>'));
+      });
+    });
+
+    test('undo of the last note gives a repeated <legacyDrawing> back', () {
+      final Map<String, Uint8List> parts = readXlsxBytes(
+        _package(
+          comments: _comments(_comment('A1', '<t>x</t>')),
+          vml: '$_vmlHead${_vmlShape(0, 0)}</xml>',
+        ),
+      );
+      const String element = '<legacyDrawing r:id="rId1"/>';
+      parts['xl/worksheets/sheet1.xml'] = Uint8List.fromList(
+        utf8.encode(
+          utf8
+              .decode(parts['xl/worksheets/sheet1.xml']!)
+              .replaceFirst(element, '$element$element'),
+        ),
+      );
+      final Uint8List input = buildZip(<String, List<int>>{...parts});
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(
+        () => book.sheets.single.setNote(0, 0, null),
+      );
+      log.revertSet(set);
       expect(
         comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
         isEmpty,

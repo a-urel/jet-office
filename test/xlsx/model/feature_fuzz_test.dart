@@ -15,8 +15,8 @@ const int _cases = 100;
 /// Adler-32 of the first [_cases] cases of each of [_seeds]: their
 /// descriptions and bytes' lengths, computed once on the VM. The Chrome leg
 /// compares it, which proves a seed gives the same cases in a browser. A
-/// changed `m3_*` fixture changes it.
-const int _casesDigest = 2207782105;
+/// changed `m3_*` or `m4_*` fixture changes it.
+const int _casesDigest = 3657917492;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {
@@ -56,6 +56,12 @@ void main() {
         'docProps/core.xml',
         'docProps/app.xml',
         'docProps/custom.xml',
+        'xl/sharedStrings.xml',
+        'xl/comments1.xml',
+        'xl/drawings/drawing1.xml',
+        'xl/drawings/vmlDrawing1.vml',
+        'xl/drawings/_rels/drawing1.xml.rels',
+        'xl/tables/table1.xml',
       ]),
     );
   });
@@ -82,7 +88,7 @@ void main() {
       for (final FuzzCase c in featureFuzzCases(seed, _cases)) {
         final Stopwatch watch = Stopwatch()..start();
         try {
-          exerciseFeatures(c.bytes, proveUndo: true);
+          exerciseFeatureCase(c);
         } on XlsxReadException {
           // A file problem, reported as the model promises.
         } on Object catch (e) {

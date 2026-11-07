@@ -23,7 +23,8 @@
 /// With `--features` it fuzzes the workbook model's sheet and workbook
 /// features instead: the corpus and cases of
 /// `test/xlsx/model/support/feature_fuzz.dart`, each run by
-/// `exerciseFeatures`, which `featureFuzzCases(s, i + 1)` reproduces.
+/// `exerciseFeatureCase`, which proves undo too and which
+/// `featureFuzzCases(s, i + 1)` reproduces.
 ///
 /// The quality gate runs seeds 1 to 4 with 100 cases each
 /// (`test/xlsx/read/fuzz_test.dart`, `test/xlsx/model/feature_fuzz_test.dart`).
@@ -32,7 +33,7 @@ library;
 import 'dart:io';
 
 import '../test/xlsx/model/support/feature_fuzz.dart';
-import '../test/xlsx/read/support/fuzz.dart' show exerciseReader, fuzzCases;
+import '../test/xlsx/read/support/fuzz.dart' show fuzzCases;
 import 'src/fuzz_run.dart';
 
 void main(List<String> args) {
@@ -54,7 +55,7 @@ void main(List<String> args) {
     last: options.last,
     cases: options.cases,
     verbose: options.verbose,
-    exercise: features ? exerciseFeatures : exerciseReader,
+    exerciseCase: features ? exerciseFeatureCase : null,
     generate: features ? featureFuzzCases : fuzzCases,
     out: stdout,
     err: stderr,

@@ -243,7 +243,9 @@ mixin _SheetNotes {
   }
 
   /// Puts [note] on the cell at [row] and [column], replacing the note it
-  /// has; `null` removes the note. An equal note is no edit.
+  /// has; `null` removes the note. A note equal to the cell's [noteAt] is no
+  /// edit, and throws nothing for a note the writer would refuse or repair
+  /// or for the note of a threaded comment.
   ///
   /// The checks and repairs are the sheet writer's (`XlsxSheetWriter.note`):
   /// characters XML forbids are removed from the text and text past 32,767
@@ -269,26 +271,38 @@ mixin _SheetNotes {
   /// the sheet, its relationships or the note parts cannot be read. Whatever
   /// it throws, nothing has changed.
   void setNote(int row, int column, XlsxNote? note) {
-    WorksheetNote? wanted;
-    final List<XlsxWarningCode> repairs = <XlsxWarningCode>[];
     if (note == null) {
       XlsxSheet._checkCell(row, column);
     } else {
-      checkNote(name, row, column, note);
-      wanted = cleanNote(row, column, note, repairs.add);
+      try {
+        checkNote(name, row, column, note);
+      } on ArgumentError catch (error) {
+        // A file may hold a note the writer refuses: set back, it is no edit.
+        if (error.name == 'row' ||
+            error.name == 'column' ||
+            noteAt(row, column) != note) {
+          rethrow;
+        }
+        return;
+      }
     }
     final WorksheetPart part = _editablePart('notes');
     final _NotesRead read = _readNotes();
     final CommentEntry? entry =
         read.index[row * XlsxLimits.maxColumns + column];
     final String ref = cellRef(row, column);
+    final XlsxNote? current = entry == null ? null : read.noteOf(entry).note;
+    if (note == current) return;
     if (entry != null && entry.author.startsWith('tc=')) {
       throw StateError(
         'The note on cell $ref on sheet "$name" belongs to a threaded '
         'comment; it cannot be set or removed.',
       );
     }
-    final XlsxNote? current = entry == null ? null : read.noteOf(entry).note;
+    final List<XlsxWarningCode> repairs = <XlsxWarningCode>[];
+    final WorksheetNote? wanted = note == null
+        ? null
+        : cleanNote(row, column, note, repairs.add);
     final XlsxNote? next = wanted == null
         ? null
         : XlsxNote(wanted.text, author: wanted.author, visible: wanted.visible);
@@ -596,13 +610,7 @@ mixin _SheetNotes {
     if (id != null) {
       removeStoredRelationship(log, _host.reader.package, _partName!, id);
     }
-    final Object? old = part.layoutElement('legacyDrawing');
-    editLayout(
-      log,
-      part,
-      'legacyDrawing',
-      () => part.swapLayout('legacyDrawing', old, null),
-    );
+    removeLayout(log, part, 'legacyDrawing');
     _dropPart(read.parts.vmlName!);
     _setParts(read, (
       commentsName: read.parts.commentsName,

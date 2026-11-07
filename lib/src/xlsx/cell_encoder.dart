@@ -312,10 +312,9 @@ final class CellEncoder {
   /// [DateTime] its date-time format and an [XlsxDate] its short-date one);
   /// any other format keeps the style and warns `dateInNonDateFormat`, and
   /// so does General when [dateStyle] returns `null` (no date style can be
-  /// added).
-  /// Dates are serials of the 1904 system when [date1904] is true, and a
-  /// date that has no serial there (before 1904-01-01) is written as text
-  /// with `dateOutsideExcelRange`, like one before 1900.
+  /// added). Dates are serials of the 1904 system when [date1904] is true,
+  /// and a date that has no serial there (before 1904-01-01) is written as
+  /// text with `dateOutsideExcelRange`, like one before 1900.
   ///
   /// An [XlsxRichText] is stored as a shared string whose runs have [cellFont]
   /// (the font of the cell's style, or `null`) merged under their fonts, and

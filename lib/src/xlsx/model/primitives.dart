@@ -285,6 +285,20 @@ void editLayout(
   }
 }
 
+/// Removes the first element of [slot] of [part], if it has one, and records
+/// the change in [log]. A repeated element stays, and an undo gives this one
+/// back beside it, where [editLayout] would take the repeat for the new
+/// element of the slot.
+///
+/// Must run inside `log.transaction`.
+void removeLayout(ChangeLog log, WorksheetPart part, String slot) {
+  final Object? before = part.layoutElement(slot);
+  if (before == null) return;
+  final int position = part.layoutPosition(before);
+  part.swapLayout(slot, before, null);
+  log.record(SetLayoutChange(part, slot, before, null, position: position));
+}
+
 /// The change of one element of a workbook part (a slot of
 /// [WorkbookPart.element]): the element before and after.
 final class SetWorkbookElementChange implements Change {

@@ -1279,11 +1279,10 @@ final class WorksheetPart implements PartContent {
   /// `mergeCells`, one of [_nodeSlots], `dataValidations`, `hyperlinks`,
   /// `tableParts`, `conditionalFormatting`, whose element is the [CfBlock],
   /// or `drawing` and `legacyDrawing`, whose element is its [OpaqueXml]), or
-  /// `null` when the
-  /// part has none typed. Any other element kept as an [OpaqueXml] is not a
-  /// slot's element: it is never swapped, and a repeated one stays where it
-  /// is. Elements are immutable, so an edit replaces the element, and
-  /// [swapLayout] undoes it.
+  /// `null` when the part has none typed. Any other element kept as an
+  /// [OpaqueXml] is not a slot's element: it is never swapped, and a repeated
+  /// one stays where it is. Elements are immutable, so an edit replaces the
+  /// element, and [swapLayout] undoes it.
   Object? layoutElement(String slot) => switch (slot) {
     'cols' => _cols,
     'sheetFormatPr' => _format,

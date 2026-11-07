@@ -526,8 +526,10 @@ final class XlsxSheet
   /// Excel does ([removeHyperlink] removes it). A table's header cell takes
   /// no link, as it takes only text. All of it is one change. A link equal
   /// to the cell's [hyperlinkAt] changes nothing, neither the element nor
-  /// the cell, and throws nothing for a link the writer would refuse; in an
-  /// [XlsxCell] it leaves the element, and the cell takes the style as above.
+  /// the cell, and throws nothing for a link the writer would refuse. In an
+  /// [XlsxCell] it leaves the element, and the cell takes the link's text in
+  /// place of its value and the style as above; an equal link of several
+  /// cells throws there as any link on such a cell does.
   ///
   /// A shared formula's follower may be set and leaves its group. Throws a
   /// [StateError] for a cell inside an array or data-table formula (Excel
@@ -535,19 +537,20 @@ final class XlsxSheet
   /// and for an [XlsxCell] or a link when the styles part is not a
   /// SpreadsheetML `styleSheet` and for a link on a cell a link of several
   /// cells covers, an [UnsupportedError] for a shared formula's master (W5),
-  /// an [ArgumentError] for any other type, a rich text without runs, a nested [XlsxCell], a value the
-  /// encoder refuses, an invalid link (named by its field, as the writer's)
-  /// or an invalid style (named by its field; an `XlsxLimitError` past the
-  /// writer's limits, and for a sheet's 65,531st link), a
-  /// [RangeError] outside Excel's grid, and an [XlsxReadException] when the
-  /// sheet cannot be read (for a link, also the sheet's relationships).
-  /// Whatever it throws, nothing has changed, except
-  /// that reading warnings (such as `styleEntryInvalid` for a style entry
-  /// read for the first time) are reported on first read.
+  /// an [ArgumentError] for any other type, a rich text without runs, a
+  /// nested [XlsxCell], a value the encoder refuses, an invalid link (named
+  /// by its field, as the writer's) or an invalid style (named by its field;
+  /// an `XlsxLimitError` past the writer's limits, and for a sheet's 65,531st
+  /// link), a [RangeError] outside Excel's grid, and an [XlsxReadException]
+  /// when the sheet cannot be read (for a link, also the sheet's
+  /// relationships). Whatever it throws, nothing has changed, except that
+  /// reading warnings (such as `styleEntryInvalid` for a style entry read for
+  /// the first time) are reported on first read.
   @override
   void setCell(int row, int column, Object? value) {
     _checkCell(row, column);
-    // Programmer errors first, so they throw whatever the sheet holds.
+    // Programmer errors first, so they throw whatever the sheet holds; only a
+    // link the writer refuses looks at the sheet, which may hold it.
     final bool styled = value is XlsxCell;
     final XlsxStyle? cellStyle = value is XlsxCell ? value.style : null;
     final Object? plain = value is XlsxCell ? value.value : value;

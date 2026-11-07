@@ -139,7 +139,47 @@ String _drawingOf(Uint8List bytes, [int n = 1]) =>
 String _drawingRels(Uint8List bytes, [int n = 1]) =>
     partText(bytes, 'xl/drawings/_rels/drawing$n.xml.rels');
 
+/// [bytes] with the sheet's `<drawing>` written twice.
+Uint8List _repeatedDrawing(Uint8List bytes) {
+  const String element = '<drawing r:id="rId1"/>';
+  final Map<String, Uint8List> parts = readXlsxBytes(bytes);
+  parts['xl/worksheets/sheet1.xml'] = Uint8List.fromList(
+    utf8.encode(
+      utf8
+          .decode(parts['xl/worksheets/sheet1.xml']!)
+          .replaceFirst(element, '$element$element'),
+    ),
+  );
+  return buildZip(<String, List<int>>{...parts});
+}
+
 void main() {
+  test('a drawing whose root is not wsDr warns and cannot be edited', () {
+    final Uint8List input = _package('<other/>');
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    final XlsxSheet sheet = book.sheets.single;
+    expect(sheet.pictures, isEmpty);
+    expect(_invalid(book, 'drawing'), 1);
+    expect(() => sheet.addPicture(_sized()), throwsStateError);
+    _unchanged(input, book);
+  });
+
+  test('undo of the last picture gives a repeated <drawing> back', () {
+    final Uint8List input = _repeatedDrawing(
+      _package(
+        _drawing(_oneCell(_pic(2))),
+        media: <String, (String, List<int>)>{'rId1': ('image1.png', png4x2)},
+      ),
+    );
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    final ChangeLog log = changeLogOf(book);
+    final ChangeSet set = log.transaction(
+      () => book.sheets.single.removePicture(0),
+    );
+    log.revertSet(set);
+    _unchanged(input, book);
+  });
+
   test("reads the fixture's pictures", () {
     final Uint8List input = _fixture('m4_images');
     final XlsxWorkbook book = XlsxWorkbook.open(input);

@@ -147,10 +147,6 @@ void main() {
   });
 
   group('VmlPart', () {
-    String shape(int id, String client) =>
-        '<v:shape id="_x0000_s$id" type="#_x0000_t202"><v:fill/>'
-        '<x:ClientData ObjectType="$client">$client</x:ClientData></v:shape>';
-
     test('splits head, shapes, text after them and tail', () {
       const String source =
           '<xml xmlns:v="urn:schemas-microsoft-com:vml" '
@@ -192,7 +188,6 @@ void main() {
       expect(part.shapes, isEmpty);
       expect(_vmlText(part), '<xml/>');
       expect(part.blocks, isEmpty);
-      expect(shape(1, 'Note'), isNotEmpty);
     });
   });
 }

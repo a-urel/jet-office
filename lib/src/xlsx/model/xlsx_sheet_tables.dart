@@ -103,9 +103,9 @@ mixin _SheetTablesApi {
   /// for a header cell that holds anything but the column's name. Throws a
   /// [StateError] for a sheet that is not a worksheet or has no part, and as
   /// [setCell] does for a cell it cannot set, and an [XlsxReadException] when
-  /// the sheet or a table part it needs cannot be read. Whatever it throws,
-  /// nothing has changed, except that reading warnings are reported on first
-  /// read.
+  /// the sheet, its relationships or a table part it needs cannot be read.
+  /// Whatever it throws, nothing has changed, except that reading warnings
+  /// are reported on first read.
   void addTable(XlsxTable table) {
     checkTable(table);
     final WorksheetPart part = _editablePart('tables');
@@ -119,6 +119,7 @@ mixin _SheetTablesApi {
     final ChangeLog log = _host.log;
     final OpcPackage package = _host.reader.package;
     final String sheetPart = _partName!;
+    _host.reader.relationshipsOf(sheetPart.substring(1));
     log.transaction(() {
       for (final ({int row, int column, Object? value}) c in cells) {
         setCell(c.row, c.column, c.value);
@@ -291,7 +292,8 @@ mixin _SheetTablesApi {
   /// repairs a file whose formula names a table it lacks; a string in a
   /// formula that holds the text refuses too, until W5's lexer tells them
   /// apart), when the table part has relationships of its own (a query
-  /// table), and for a sheet that is not a worksheet or has no part; and an
+  /// table) or a tab on the same sheet part removed it, and for a sheet that
+  /// is not a worksheet or has no part; and an
   /// [XlsxReadException] when a sheet cannot be read. Whatever it throws,
   /// nothing has changed, except that reading warnings are reported on first
   /// read.
@@ -305,6 +307,12 @@ mixin _SheetTablesApi {
     final PackageReader reader = _host.reader;
     final OpcPackage package = reader.package;
     final String partName = entry.partName;
+    if (!package.hasPart(partName)) {
+      throw StateError(
+        'The table "$tableName" cannot be removed: a sheet on the same part '
+        'removed it.',
+      );
+    }
     if (reader
         .guardXml(partName, () => package.relationshipsOf(partName))
         .isNotEmpty) {

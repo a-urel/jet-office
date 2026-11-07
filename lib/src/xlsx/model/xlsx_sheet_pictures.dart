@@ -557,13 +557,7 @@ mixin _SheetPictures {
     if (id != null) {
       removeStoredRelationship(log, package, _partName!, id);
     }
-    final Object? old = part.layoutElement('drawing');
-    editLayout(
-      log,
-      part,
-      'drawing',
-      () => part.swapLayout('drawing', old, null),
-    );
+    removeLayout(log, part, 'drawing');
     final Iterable<String> left = _relationshipTargets(drawingName).values;
     <String, String>{...read.media}.forEach((String id, String media) {
       applyChange(log, _DrawingMediaChange(read, id, media, null));
