@@ -53,8 +53,8 @@ const int _maxGridColumnTwips = 999999999;
 
 /// One read of the blocks of a story.
 final class StoryReader {
-  /// Reads from [r] a part named `_partName`, for errors, with texts bounded
-  /// by `_maxTextLength` and XML nested at most [maxDepth] deep.
+  /// Reads a part from [r], naming it in errors, with texts bounded and XML
+  /// nested at most [maxDepth] deep.
   StoryReader(this.r, this._partName, this._maxTextLength, this.maxDepth);
 
   /// The pull reader the story is read from.

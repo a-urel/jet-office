@@ -52,6 +52,7 @@ import 'story_reader.dart';
 import 'story_writer.dart';
 import 'warnings.dart';
 
+/// The main document part: the root's start tag, what surrounds the body,
 /// and the body's blocks.
 final class DocumentPart implements PartContent {
   DocumentPart._(
