@@ -297,6 +297,14 @@ abstract final class ContentType {
   static const String wmlStyles =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml';
 
+  /// A header part of a Word document (`word/header1.xml`).
+  static const String wmlHeader =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml';
+
+  /// A footer part of a Word document (`word/footer1.xml`).
+  static const String wmlFooter =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml';
+
   /// The numbering part of a Word document (`word/numbering.xml`).
   static const String wmlNumbering =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml';

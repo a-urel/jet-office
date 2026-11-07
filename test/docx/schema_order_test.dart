@@ -150,4 +150,16 @@ void main() {
       expect(order.toSet(), hasLength(order.length));
     }
   });
+
+  test('sectPrOrder matches the transitional schema', () {
+    // CT_SectPrBase after the header and footer references, as the Open XML
+    // SDK (3.5.1) orders the members.
+    expect(sectPrOrder, <String>[
+      'headerReference', 'footerReference', 'footnotePr', 'endnotePr', //
+      'type', 'pgSz', 'pgMar', 'paperSrc', 'pgBorders', 'lnNumType',
+      'pgNumType', 'cols', 'formProt', 'vAlign', 'noEndnote', 'titlePg',
+      'textDirection', 'bidi', 'rtlGutter', 'docGrid', 'printerSettings',
+      'sectPrChange',
+    ]);
+  });
 }

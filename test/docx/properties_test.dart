@@ -4,9 +4,11 @@
 // web as well.
 import 'package:jet_office/src/docx/model/edit_sink.dart';
 import 'package:jet_office/src/docx/model/property_set.dart';
+import 'package:jet_office/src/docx/model/section_formatting.dart';
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/property_codec.dart';
 import 'package:jet_office/src/docx/schema_order.dart';
+import 'package:jet_office/src/docx/section_property_codecs.dart';
 import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
@@ -105,8 +107,8 @@ List<String> _compare(String expected, String actual) {
 
 /// A property set over a container, reporting to no document.
 final class _Set extends PropertySet {
-  _Set(PropertyContainer source, ContainerSchema schema)
-    : super(source, schema, () => DocxEditSink.none);
+  _Set(PropertyContainer source, ContainerSchema schema, {DocxEditSink? sink})
+    : super(source, schema, () => sink ?? DocxEditSink.none);
 }
 
 void main() {
@@ -517,4 +519,169 @@ void main() {
       expect(s.isSet('b'), isFalse);
     });
   });
+
+  group('repeated children', () {
+    const String refs =
+        '<w:sectPr>'
+        '<w:headerReference w:type="default" r:id="rId1"/>'
+        '<w:headerReference w:type="first" r:id="rId2"/>'
+        '<w:headerReference w:type="bogus" r:id="rId3"/>'
+        '<w14:x/>'
+        '<w:footerReference w:type="default" r:id="rId4"/>'
+        '<w:footerReference w:type="even"/>'
+        '<w:pgSz w:w="1" w:h="1"/></w:sectPr>';
+
+    PropertyContainer read() => _read(
+      refs.replaceFirst('<w:sectPr>', '<w:sectPr xmlns:r="${Ns.rel}">'),
+      sectionPropertiesSchema,
+    );
+
+    String write(PropertySet s) {
+      final StringBuffer b = StringBuffer();
+      s.writeTo(XmlWriter(b), 'w:sectPr', declaredAbove: _above);
+      return b.toString();
+    }
+
+    test('five children read five views, null where there is none', () {
+      final _Set s = _Set(read(), sectionPropertiesSchema);
+      final List<Object?> headers = s.repeatedOf('headerReference');
+      expect(headers, hasLength(3));
+      expect(headers[0], isA<SectionReference>());
+      expect(headers[2], isNull);
+      final List<Object?> footers = s.repeatedOf('footerReference');
+      expect(footers, hasLength(2));
+      expect(footers[1], isNull);
+    });
+
+    test('a name that is not repeated throws ArgumentError', () {
+      final _Set s = _Set(read(), sectionPropertiesSchema);
+      expect(() => s.repeatedOf('pgSz'), throwsArgumentError);
+      expect(
+        () => s.addRepeated('pgSz', DocxPageSize(1, 1)),
+        throwsArgumentError,
+      );
+      expect(() => s.addRepeated('headerReference', 'x'), throwsArgumentError);
+      expect(() => s.setValue('headerReference', 'x'), throwsArgumentError);
+    });
+
+    test('nothing touched is written as read', () {
+      final _Set s = _Set(read(), sectionPropertiesSchema);
+      s.repeatedOf('headerReference');
+      expect(
+        _compare(
+          refs.replaceFirst('<w:sectPr>', '<w:sectPr xmlns:r="${Ns.rel}">'),
+          write(s),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('adding one writes the others byte for byte, and restore undoes '
+        'it', () {
+      final _Set s = _Set(read(), sectionPropertiesSchema);
+      final PropertyState before = s.stateOf('footerReference');
+      expect(before.isSet, isFalse);
+      s.addRepeated(
+        'footerReference',
+        const SectionReference(SectionReferenceType.first, 'rId9'),
+      );
+      expect(s.repeatedOf('footerReference'), hasLength(3));
+      expect(s.isSet('footerReference'), isTrue);
+      final String written = write(s);
+      expect(
+        written,
+        '<w:sectPr xmlns:r="${Ns.rel}">'
+        '<w:headerReference w:type="default" r:id="rId1"/>'
+        '<w:headerReference w:type="first" r:id="rId2"/>'
+        '<w:headerReference w:type="bogus" r:id="rId3"/>'
+        '<w14:x/>'
+        '<w:footerReference w:type="default" r:id="rId4"/>'
+        '<w:footerReference w:type="even"/>'
+        '<w:footerReference w:type="first" r:id="rId9"/>'
+        '<w:pgSz w:w="1" w:h="1"/></w:sectPr>',
+      );
+      s.restore('footerReference', before);
+      expect(s.repeatedOf('footerReference'), hasLength(2));
+      expect(s.isSet('footerReference'), isFalse);
+    });
+
+    test('replace and remove keep the children not touched', () {
+      final _Set s = _Set(read(), sectionPropertiesSchema);
+      s.replaceRepeatedAt(
+        'headerReference',
+        0,
+        const SectionReference(SectionReferenceType.even, 'rId5'),
+      );
+      s.removeRepeatedAt('headerReference', 2);
+      expect(
+        write(s),
+        '<w:sectPr xmlns:r="${Ns.rel}">'
+        '<w:headerReference w:type="even" r:id="rId5"/>'
+        '<w:headerReference w:type="first" r:id="rId2"/>'
+        '<w14:x/>'
+        '<w:footerReference w:type="default" r:id="rId4"/>'
+        '<w:footerReference w:type="even"/>'
+        '<w:pgSz w:w="1" w:h="1"/></w:sectPr>',
+      );
+      expect(
+        () => s.replaceRepeatedAt(
+          'headerReference',
+          2,
+          const SectionReference(SectionReferenceType.even, 'rId5'),
+        ),
+        throwsRangeError,
+      );
+      expect(() => s.removeRepeatedAt('headerReference', -1), throwsRangeError);
+    });
+
+    test('every edit is reported to the sink with the state before', () {
+      final List<(String, PropertyState)> seen = <(String, PropertyState)>[];
+      final _Set s = _Set(
+        read(),
+        sectionPropertiesSchema,
+        sink: _Recorder(seen),
+      );
+      s.addRepeated(
+        'footerReference',
+        const SectionReference(SectionReferenceType.first, 'rId9'),
+      );
+      s.removeRepeatedAt('footerReference', 0);
+      expect(seen.map(((String, PropertyState) e) => e.$1), <String>[
+        'footerReference',
+        'footerReference',
+      ]);
+      expect(seen[0].$2.isSet, isFalse);
+      expect(seen[1].$2.isSet, isTrue);
+      s.restore('footerReference', seen[1].$2);
+      s.restore('footerReference', seen[0].$2);
+      expect(s.repeatedOf('footerReference'), hasLength(2));
+    });
+
+    test('removing every child of a read container still writes it', () {
+      final _Set s = _Set(read(), sectionPropertiesSchema);
+      for (int i = 0; i < 3; i++) {
+        s.removeRepeatedAt('headerReference', 0);
+      }
+      expect(s.repeatedOf('headerReference'), isEmpty);
+      expect(write(s), isNot(contains('headerReference')));
+      expect(write(s), contains('<w14:x/>'));
+    });
+  });
+}
+
+/// Records each property set reported to it.
+final class _Recorder implements DocxEditSink {
+  _Recorder(this.seen);
+
+  final List<(String, PropertyState)> seen;
+
+  @override
+  void propertySet(
+    PropertySet properties,
+    String localName,
+    PropertyState previous,
+  ) => seen.add((localName, previous));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }

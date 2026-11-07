@@ -23,6 +23,7 @@ import 'properties.dart';
 import 'property_codec.dart';
 import 'run_property_codecs.dart';
 import 'schema_order.dart';
+import 'section_property_codecs.dart' show sectionPropertiesSchema;
 import 'units.dart';
 import 'value_codecs.dart';
 
@@ -551,10 +552,13 @@ const Map<String, PropertyCodec<Object>> _paragraphCodecs =
     };
 
 /// The schema of a paragraph's `w:pPr`: [pPrOrder], typing the thirteen
-/// properties of `DocxParagraphProperties`.
+/// properties of `DocxParagraphProperties` and reading the `w:sectPr` that
+/// ends a section as a container of its own ([sectionPropertiesSchema]), so
+/// it is written as read unless a section edit replaces it.
 const ContainerSchema paragraphPropertiesSchema = ContainerSchema(
   pPrOrder,
   codecs: _paragraphCodecs,
+  nested: <String, ContainerSchema>{'sectPr': sectionPropertiesSchema},
 );
 
 /// The schema of the `w:pPr` of a style, a numbering level or the

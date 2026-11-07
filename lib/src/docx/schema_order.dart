@@ -349,3 +349,32 @@ const List<String> tblCellMarOrder = <String>[
   'right',
   'end',
 ];
+
+/// The children of a section's `w:sectPr` (`CT_SectPr`, §17.6.17), in order:
+/// the header and footer references, then the `CT_SectPrBase` sequence
+/// (`EG_HdrFtrReferences` come first and each repeats), then `sectPrChange`;
+/// checked against the member order of the Open XML SDK (3.5.1).
+const List<String> sectPrOrder = <String>[
+  'headerReference',
+  'footerReference',
+  'footnotePr',
+  'endnotePr',
+  'type',
+  'pgSz',
+  'pgMar',
+  'paperSrc',
+  'pgBorders',
+  'lnNumType',
+  'pgNumType',
+  'cols',
+  'formProt',
+  'vAlign',
+  'noEndnote',
+  'titlePg',
+  'textDirection',
+  'bidi',
+  'rtlGutter',
+  'docGrid',
+  'printerSettings',
+  'sectPrChange',
+];

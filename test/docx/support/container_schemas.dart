@@ -3,7 +3,7 @@
 ///
 /// A task that adds a `ContainerSchema` adds one entry to
 /// [containerSchemaCases]: the container's local name, the schema, and one
-/// sample value for each of its codecs (any value the codec accepts and
+/// sample value for each of its codecs and repeated children (any value the codec accepts and
 /// writes). Nested schemas are entries of their own as well; a schema with
 /// nested containers is also checked with replacements written in their
 /// place.
@@ -11,11 +11,13 @@ library;
 
 import 'package:jet_office/src/docx/model/formatting.dart';
 import 'package:jet_office/src/docx/model/numbering_formats.dart';
+import 'package:jet_office/src/docx/model/section_formatting.dart';
 import 'package:jet_office/src/docx/model/table_formatting.dart';
 import 'package:jet_office/src/docx/numbering_schemas.dart';
 import 'package:jet_office/src/docx/paragraph_property_codecs.dart';
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/run_property_codecs.dart';
+import 'package:jet_office/src/docx/section_property_codecs.dart';
 import 'package:jet_office/src/docx/style_schemas.dart';
 import 'package:jet_office/src/docx/table_property_codecs.dart';
 
@@ -28,7 +30,8 @@ typedef ContainerSchemaCase = ({
   /// The schema.
   ContainerSchema schema,
 
-  /// A value for each codec of [schema], by local name.
+  /// A value for each codec and each repeated child of [schema], by local
+  /// name.
   Map<String, Object> samples,
 });
 
@@ -215,6 +218,36 @@ final List<ContainerSchemaCase> containerSchemaCases = <ContainerSchemaCase>[
       'insideV': DocxBorder(),
       'tl2br': DocxBorder(),
       'tr2bl': DocxBorder(),
+    },
+  ),
+  (
+    name: 'sectPr',
+    schema: sectionPropertiesSchema,
+    samples: <String, Object>{
+      'headerReference': const SectionReference(
+        SectionReferenceType.defaultPage,
+        'rId1',
+      ),
+      'footerReference': const SectionReference(
+        SectionReferenceType.first,
+        'rId2',
+      ),
+      'type': DocxSectionStart.continuous,
+      'pgSz': DocxPageSize.a4(),
+      'pgMar': DocxPageMargins(
+        top: 72,
+        right: 72,
+        bottom: 72,
+        left: 72,
+        header: 36,
+        footer: 36,
+        gutter: 0,
+      ),
+      'lnNumType': DocxLineNumbering(),
+      'pgNumType': DocxPageNumbering(),
+      'cols': DocxColumns(count: 2),
+      'vAlign': DocxSectionVerticalAlignment.center,
+      'titlePg': true,
     },
   ),
 ];

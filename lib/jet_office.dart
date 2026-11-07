@@ -275,6 +275,18 @@ export 'src/docx/model/run_content.dart'
         DocxText;
 export 'src/docx/model/run_properties.dart'
     show DocxRunProperties, DocxRunProperty;
+export 'src/docx/model/section_formatting.dart'
+    show
+        DocxColumn,
+        DocxColumns,
+        DocxLineNumberRestart,
+        DocxLineNumbering,
+        DocxPageMargins,
+        DocxPageNumbering,
+        DocxPageOrientation,
+        DocxPageSize,
+        DocxSectionStart,
+        DocxSectionVerticalAlignment;
 export 'src/docx/model/styles.dart'
     show DocxDocumentDefaults, DocxStyle, DocxStyleType, DocxStyles;
 export 'src/docx/model/table_formatting.dart'

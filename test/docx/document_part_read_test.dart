@@ -201,10 +201,9 @@ void main() {
       '<w:sectPr w:rsidR="00A1"><w:pgSz w:w="12240"/></w:sectPr>',
     );
     expect(part.blocks, hasLength(2));
-    expect(
-      paragraphPropertiesOf(_p(part)).kept.map((OpaqueXml k) => k.localName),
-      <String>['sectPr'],
-    );
+    // It is read as a container of its own, no longer kept untyped.
+    expect(paragraphPropertiesOf(_p(part)).kept, isEmpty);
+    expect(paragraphPropertiesOf(_p(part)).nestedOf('sectPr'), isNotNull);
     final OpaqueXml sectPr = part.finalSectPr!;
     expect(sectPr.localName, 'sectPr');
     expect(sectPr.xml, contains('12240'));

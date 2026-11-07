@@ -47,6 +47,11 @@ abstract base class PropertySet implements NestedProperties {
   /// The values set, by local name; `null` removes the child.
   final Map<String, Object?> _overrides = <String, Object?>{};
 
+  /// The entries set for each repeated child, by local name: a
+  /// [RepeatedKept] for an occurrence as read, else a value. Lists are
+  /// replaced, never changed, so a [PropertyState] may hold one.
+  final Map<String, List<Object>> _repeated = <String, List<Object>>{};
+
   /// The nested properties written in place of [source]'s nested
   /// containers, by local name; none by default. A subclass with nested
   /// containers (a style's `w:pPr`) overrides it.
@@ -68,11 +73,90 @@ abstract base class PropertySet implements NestedProperties {
 
   /// Whether a value (`null` included) was set for [localName], so the
   /// child is written anew rather than as read.
-  bool isSet(String localName) => _overrides.containsKey(localName);
+  bool isSet(String localName) => schema.repeated.containsKey(localName)
+      ? _repeated.containsKey(localName)
+      : _overrides.containsKey(localName);
 
-  /// Whether [localName] is set, and to what.
-  PropertyState stateOf(String localName) =>
-      (isSet: isSet(localName), value: _overrides[localName]);
+  /// Whether [localName] is set, and to what: for a repeated child, the
+  /// list of entries ([RepeatedKept] or value) written.
+  PropertyState stateOf(String localName) => (
+    isSet: isSet(localName),
+    value: schema.repeated.containsKey(localName)
+        ? _repeated[localName]
+        : _overrides[localName],
+  );
+
+  /// The value of each occurrence of the repeated child [localName], in
+  /// order: the value set, else the view of [source] (`null` for an
+  /// occurrence the codec cannot type, which is still written as read).
+  ///
+  /// A name that is not a repeated child of [schema] throws [ArgumentError].
+  List<Object?> repeatedOf(String localName) {
+    _checkRepeated(localName);
+    final List<Object?> views = source.repeatedViewsOf(localName);
+    final List<Object>? entries = _repeated[localName];
+    if (entries == null) {
+      return views;
+    }
+    return List<Object?>.unmodifiable(<Object?>[
+      for (final Object e in entries) e is RepeatedKept ? views[e.index] : e,
+    ]);
+  }
+
+  /// Adds [value] after the occurrences of the repeated child [localName];
+  /// the others are written as read. A value its codec does not accept, or
+  /// a name that is not repeated, throws [ArgumentError] before anything
+  /// changes.
+  void addRepeated(String localName, Object value) {
+    _checkRepeated(localName, value);
+    _recordRepeated(localName, <Object>[..._entries(localName), value]);
+  }
+
+  /// Replaces the occurrence [index] of the repeated child [localName] with
+  /// [value]. Nothing changes when it already reads [value]. An [index]
+  /// out of range throws [RangeError], a bad name or value [ArgumentError],
+  /// before anything changes.
+  void replaceRepeatedAt(String localName, int index, Object value) {
+    _checkRepeated(localName, value);
+    final List<Object> entries = _entries(localName);
+    RangeError.checkValidIndex(index, entries, 'index');
+    if (repeatedOf(localName)[index] == value) {
+      return;
+    }
+    _recordRepeated(localName, <Object>[...entries]..[index] = value);
+  }
+
+  /// Removes the occurrence [index] of the repeated child [localName]; the
+  /// others are written as read. An [index] out of range throws
+  /// [RangeError], a bad name [ArgumentError], before anything changes.
+  void removeRepeatedAt(String localName, int index) {
+    _checkRepeated(localName);
+    final List<Object> entries = _entries(localName);
+    RangeError.checkValidIndex(index, entries, 'index');
+    _recordRepeated(localName, <Object>[...entries]..removeAt(index));
+  }
+
+  /// The entries now written for [localName]: the ones set, else every
+  /// occurrence as read.
+  List<Object> _entries(String localName) =>
+      _repeated[localName] ??
+      <Object>[
+        for (int i = 0; i < source.repeatedViewsOf(localName).length; i++)
+          RepeatedKept(i),
+      ];
+
+  void _recordRepeated(String localName, List<Object> entries) {
+    final PropertyState previous = stateOf(localName);
+    _repeated[localName] = List<Object>.unmodifiable(entries);
+    _sink().propertySet(this, localName, previous);
+  }
+
+  void _checkRepeated(String localName, [Object? value]) => checkRepeated(
+    schema,
+    localName,
+    <Object>[?value],
+    source.repeatedViewsOf(localName).length,
+  );
 
   /// Sets the typed child [localName] to [value]; `null` removes it, but for
   /// what its codec keeps of the child read ([PropertyCodec.keepsRest]),
@@ -161,7 +245,13 @@ abstract base class PropertySet implements NestedProperties {
   /// Puts [state] back for [localName] without reporting it: how a recorded
   /// set is undone or redone.
   void restore(String localName, PropertyState state) {
-    if (state.isSet) {
+    if (schema.repeated.containsKey(localName)) {
+      if (state.isSet) {
+        _repeated[localName] = state.value! as List<Object>;
+      } else {
+        _repeated.remove(localName);
+      }
+    } else if (state.isSet) {
       _overrides[localName] = state.value;
     } else {
       _overrides.remove(localName);
@@ -185,6 +275,7 @@ abstract base class PropertySet implements NestedProperties {
     schema,
     overrides: _overrides,
     nested: nested,
+    repeated: _repeated,
     prefix: prefix,
     declaredAbove: declaredAbove,
     attributes: attributes,
@@ -199,6 +290,7 @@ abstract base class PropertySet implements NestedProperties {
       !source.isRead &&
       source.isEmpty &&
       _overrides.values.every((Object? v) => v == null) &&
+      _repeated.values.every((List<Object> v) => v.isEmpty) &&
       nested.values.every((NestedProperties n) => n.writesNothing);
 
   void _check(String localName, Object? value) =>

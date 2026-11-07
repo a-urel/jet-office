@@ -4,6 +4,7 @@
 // schemas are listed in support/container_schemas.dart. The tests build the
 // XML in memory, so they run on the web as well.
 import 'package:jet_office/src/docx/properties.dart';
+import 'package:jet_office/src/docx/property_codec.dart';
 import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
@@ -35,6 +36,7 @@ List<String> _written(
   ContainerSchema schema,
   Map<String, Object?> overrides, {
   Map<String, NestedProperties> nested = const <String, NestedProperties>{},
+  Map<String, List<Object>> repeated = const <String, List<Object>>{},
 }) {
   final StringBuffer b = StringBuffer();
   c.writeTo(
@@ -43,6 +45,7 @@ List<String> _written(
     schema,
     overrides: overrides,
     nested: nested,
+    repeated: repeated,
     declaredAbove: const <String, String>{'w': Ns.w},
   );
   final XmlDocument doc = XmlDocument.parse(
@@ -83,12 +86,25 @@ void main() {
         expect(schema.order.toSet(), hasLength(schema.order.length));
         expect(schema.order, containsAll(schema.codecs.keys));
         expect(schema.order, containsAll(schema.nested.keys));
+        expect(schema.order, containsAll(schema.repeated.keys));
+        expect(
+          schema.repeated.keys.toSet().intersection(
+            schema.codecs.keys.toSet().union(schema.nested.keys.toSet()),
+          ),
+          isEmpty,
+        );
         expect(
           schema.codecs.keys.toSet().intersection(schema.nested.keys.toSet()),
           isEmpty,
         );
-        expect(c.samples.keys.toSet(), schema.codecs.keys.toSet());
-        schema.codecs.forEach((String name, codec) {
+        expect(c.samples.keys.toSet(), {
+          ...schema.codecs.keys,
+          ...schema.repeated.keys,
+        });
+        <String, PropertyCodec<Object>>{
+          ...schema.codecs,
+          ...schema.repeated,
+        }.forEach((String name, codec) {
           expect(codec.localName, name);
           expect(codec.accepts(c.samples[name]!), isTrue, reason: name);
         });
@@ -109,7 +125,7 @@ void main() {
       test('values set in reverse order are written in table order', () {
         final Map<String, Object?> overrides = <String, Object?>{
           for (final String name in schema.order.reversed)
-            if (c.samples.containsKey(name)) name: c.samples[name],
+            if (schema.codecs.containsKey(name)) name: c.samples[name],
         };
         // Among the other children, read in reverse order.
         final PropertyContainer read = _read(element, <String>[
@@ -125,6 +141,42 @@ void main() {
         );
         expect(_written(all, element, schema, overrides), schema.order);
       });
+
+      if (schema.repeated.isNotEmpty) {
+        test('repeated values set, and children kept, are written in table '
+            'order', () {
+          // Two values of each repeated child, set in reverse order, in place
+          // of children read in reverse order (the reads are kept by index).
+          final Map<String, List<Object>> set = <String, List<Object>>{
+            for (final String name in schema.order.reversed)
+              if (schema.repeated.containsKey(name))
+                name: <Object>[c.samples[name]!, c.samples[name]!],
+          };
+          final PropertyContainer all = _read(
+            element,
+            schema.order.reversed.toList(),
+            schema,
+          );
+          expect(
+            _written(all, element, schema, const {}, repeated: set),
+            <String>[
+              for (final String name in schema.order)
+                if (set.containsKey(name)) ...<String>[name, name] else name,
+            ],
+          );
+          final Map<String, List<Object>> kept = <String, List<Object>>{
+            for (final String name in set.keys)
+              name: <Object>[const RepeatedKept(0), c.samples[name]!],
+          };
+          expect(
+            _written(all, element, schema, const {}, repeated: kept),
+            <String>[
+              for (final String name in schema.order)
+                if (kept.containsKey(name)) ...<String>[name, name] else name,
+            ],
+          );
+        });
+      }
 
       if (schema.nested.isNotEmpty) {
         test('nested replacements are written in table order', () {

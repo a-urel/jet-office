@@ -22,6 +22,12 @@
 /// Children are matched by namespace URI and local name, never by prefix:
 /// a `w14:shadow` is not the schema's `w:shadow`.
 ///
+/// A child that repeats (`w:headerReference` of a `w:sectPr`) is a
+/// *repeated* child of its schema: each occurrence gets a view of its own
+/// ([PropertyContainer.repeatedViewsOf], `null` for one the codec cannot
+/// type), and a set writes the occurrences it lists, each as read
+/// ([RepeatedKept]) or as a value the codec writes, in place of all of them.
+///
 /// The schema of a paragraph's `w:pPr`, `paragraphPropertiesSchema`, is in
 /// `paragraph_property_codecs.dart`; the run's, `runPropertiesSchema`, is in
 /// `run_property_codecs.dart`.
@@ -40,13 +46,14 @@ final class ContainerSchema {
   /// typing the children [codecs] names and reading those [nested] names
   /// as containers of their own.
   ///
-  /// Every name in [codecs] and [nested] must be in [order], and none in
-  /// both; `test/docx/container_order_test.dart` checks every schema the
+  /// Every name in [codecs], [nested] and [repeated] must be in [order],
+  /// and none in two of them; `test/docx/container_order_test.dart` checks every schema the
   /// library defines.
   const ContainerSchema(
     this.order, {
     this.codecs = const <String, PropertyCodec<Object>>{},
     this.nested = const <String, ContainerSchema>{},
+    this.repeated = const <String, PropertyCodec<Object>>{},
   });
 
   /// The local names of the children, in `w:`, in schema order.
@@ -58,6 +65,29 @@ final class ContainerSchema {
   /// The schema of each child read as a container of its own, by local
   /// name, such as `pPr` and `rPr` in a `w:style`.
   final Map<String, ContainerSchema> nested;
+
+  /// The codec of each child that may occur several times, by local name,
+  /// such as `headerReference` in a `w:sectPr`. Each occurrence is typed on
+  /// its own; none is a [codecs] child.
+  final Map<String, PropertyCodec<Object>> repeated;
+}
+
+/// An entry of a repeated child's list that stays as read: the occurrence
+/// at [index] among the container's children of that name, written byte
+/// for byte as it was read.
+final class RepeatedKept {
+  /// The occurrence at [index], counting from 0.
+  const RepeatedKept(this.index);
+
+  /// The position among the children of that name read.
+  final int index;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RepeatedKept && other.index == index;
+
+  @override
+  int get hashCode => index.hashCode;
 }
 
 /// What a value is set to in `overrides` when the child loses its value and
@@ -130,6 +160,7 @@ final class PropertyContainer {
       attributes = const <KeptAttribute>[],
       _slots = const <_Slot>[],
       _views = const <String, Object>{},
+      _repeated = const <String, List<Object?>>{},
       _innerText = null;
 
   PropertyContainer._(
@@ -137,6 +168,7 @@ final class PropertyContainer {
     this.attributes,
     this._slots,
     this._views,
+    this._repeated,
     this._innerText,
   ) : isRead = true;
 
@@ -174,6 +206,7 @@ final class PropertyContainer {
         attributes,
         slots,
         const <String, Object>{},
+        const <String, List<Object?>>{},
         null,
       );
     }
@@ -200,7 +233,8 @@ final class PropertyContainer {
         slots.add(_Slot.nested(localName, PropertyContainer.read(r, nested)));
         continue;
       }
-      if (schema.codecs.containsKey(localName)) {
+      if (schema.codecs.containsKey(localName) ||
+          schema.repeated.containsKey(localName)) {
         final PropertyElementBuilder element = PropertyElementBuilder();
         final OpaqueXml xml = OpaqueXml.capture(r, onEvent: element.add);
         slots.add(_Slot.kept(xml, element.element));
@@ -216,6 +250,7 @@ final class PropertyContainer {
       attributes,
       slots,
       _viewsOf(slots, schema),
+      _repeatedViewsOf(slots, schema),
       innerText,
     );
   }
@@ -243,6 +278,28 @@ final class PropertyContainer {
     return Map<String, Object>.unmodifiable(views);
   }
 
+  /// The view of each occurrence of each repeated child, in input order.
+  static Map<String, List<Object?>> _repeatedViewsOf(
+    List<_Slot> slots,
+    ContainerSchema schema,
+  ) {
+    final Map<String, List<Object?>> views = <String, List<Object?>>{};
+    schema.repeated.forEach((String name, PropertyCodec<Object> codec) {
+      final List<Object?> list = <Object?>[];
+      for (final _Slot s in slots) {
+        if (!s.isW || s.name != name) continue;
+        final PropertyElement? e = s.element;
+        list.add(
+          e == null || !codec.attributes.containsAll(e.wAttributeNames)
+              ? null
+              : codec.parse(e),
+        );
+      }
+      views[name] = List<Object?>.unmodifiable(list);
+    });
+    return Map<String, List<Object?>>.unmodifiable(views);
+  }
+
   /// Whether the container was read from a file. A read container is
   /// written back even when it holds nothing, as it was; an empty one built
   /// from scratch need not be.
@@ -259,6 +316,8 @@ final class PropertyContainer {
 
   final Map<String, Object> _views;
 
+  final Map<String, List<Object?>> _repeated;
+
   /// What a container without child elements held between its tags
   /// (whitespace, comments), as written; `null` when it held nothing or
   /// had children.
@@ -272,6 +331,7 @@ final class PropertyContainer {
     attributes,
     _slots,
     _views,
+    _repeated,
     _innerText,
   );
 
@@ -288,6 +348,13 @@ final class PropertyContainer {
   /// The view of the typed child [localName]: its value, or `null` when
   /// there is no such child or it is not typed (plan Ruling 2).
   Object? viewOf(String localName) => _views[localName];
+
+  /// The view of each occurrence of the repeated child [localName], in
+  /// input order: the value, or `null` for one the codec cannot type (a
+  /// `w:` attribute it does not understand, a value out of range). Empty
+  /// when the container has none or [localName] is not repeated.
+  List<Object?> repeatedViewsOf(String localName) =>
+      _repeated[localName] ?? const <Object?>[];
 
   /// The nested container [localName] read, or `null` when the container
   /// has none.
@@ -361,6 +428,7 @@ final class PropertyContainer {
     ContainerSchema schema, {
     Map<String, Object?> overrides = const <String, Object?>{},
     Map<String, NestedProperties> nested = const <String, NestedProperties>{},
+    Map<String, List<Object>> repeated = const <String, List<Object>>{},
     String prefix = 'w',
     Map<String, String> declaredAbove = const <String, String>{},
     List<KeptAttribute>? attributes,
@@ -382,6 +450,9 @@ final class PropertyContainer {
         );
       }
     }
+    repeated.forEach((String name, List<Object> entries) {
+      checkRepeated(schema, name, entries, _repeated[name]?.length ?? 0);
+    });
     final Set<String> inOrder = schema.order.toSet();
     bool inSchema(_Slot s) => s.isW && inOrder.contains(s.name);
     // Whether the slot is not written because a value or a nested
@@ -389,15 +460,20 @@ final class PropertyContainer {
     bool replaced(_Slot s) =>
         s.isW &&
         (overrides.containsKey(s.name) ||
+            repeated.containsKey(s.name) ||
             (s.container != null && nested.containsKey(s.name)));
     // Whether what takes the place of the name is written.
     bool replacementWritten(String name) => overrides.containsKey(name)
         ? overrides[name] != null
+        : repeated.containsKey(name)
+        ? repeated[name]!.isNotEmpty
         : !nested[name]!.writesNothing;
 
     // Kept schema children by local name, and the kept children that follow
     // each anchor: null for the start, a slot index or a replaced name.
     final Map<String, List<int>> byName = <String, List<int>>{};
+    // The slots of each repeated child that a set replaces, by occurrence.
+    final Map<String, List<int>> occurrences = <String, List<int>>{};
     final Map<Object?, List<int>> followers = <Object?, List<int>>{};
     for (int i = 0; i < _slots.length; i++) {
       final _Slot s = _slots[i];
@@ -410,6 +486,8 @@ final class PropertyContainer {
             .add(i);
       } else if (!replaced(s)) {
         byName.putIfAbsent(s.name, () => <int>[]).add(i);
+      } else if (repeated.containsKey(s.name)) {
+        occurrences.putIfAbsent(s.name, () => <int>[]).add(i);
       }
     }
 
@@ -471,6 +549,18 @@ final class PropertyContainer {
       } else if (nested[child] case final NestedProperties n
           when !n.writesNothing) {
         n.writeTo(w, '$p:$child', prefix: p, declaredAbove: inner);
+        wrote = true;
+        writeFollowers(child);
+      }
+      if (repeated[child] case final List<Object> entries
+          when entries.isNotEmpty) {
+        for (final Object entry in entries) {
+          if (entry is RepeatedKept) {
+            writeSlot(occurrences[child]![entry.index]);
+          } else {
+            schema.repeated[child]!.write(w, p, entry, null);
+          }
+        }
         wrote = true;
         writeFollowers(child);
       }
@@ -571,5 +661,41 @@ void checkSettable(
       name,
       'Not a value of the ${codec.localName} property',
     );
+  }
+}
+
+/// Throws [ArgumentError] unless [name] is a repeated child of [schema] (in
+/// its order, with a codec) and every entry of [entries] is a [RepeatedKept]
+/// of one of the [count] occurrences read or a value its codec accepts.
+void checkRepeated(
+  ContainerSchema schema,
+  String name,
+  List<Object> entries,
+  int count,
+) {
+  final PropertyCodec<Object>? codec = schema.repeated[name];
+  if (codec == null || !schema.order.contains(name)) {
+    throw ArgumentError.value(
+      name,
+      'name',
+      'Not a repeated child in schema order',
+    );
+  }
+  for (final Object entry in entries) {
+    if (entry is RepeatedKept) {
+      if (entry.index < 0 || entry.index >= count) {
+        throw ArgumentError.value(
+          entry.index,
+          name,
+          'Not an occurrence read ($count)',
+        );
+      }
+    } else if (!codec.accepts(entry)) {
+      throw ArgumentError.value(
+        entry,
+        name,
+        'Not a value of the ${codec.localName} property',
+      );
+    }
   }
 }
