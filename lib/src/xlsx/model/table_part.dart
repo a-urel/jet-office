@@ -308,6 +308,36 @@ final class TablePart implements PartContent {
   /// The name of column [index] (0 is the range's first column).
   String columnName(int index) => _columns[index].name;
 
+  /// Every `calculatedColumnFormula` and `totalsRowFormula` of the part, with
+  /// the column's name, both decoded, read from the part's text.
+  List<({String column, String formula})> get columnFormulas {
+    final List<({String column, String formula})> found =
+        <({String column, String formula})>[];
+    final XmlPullReader r = XmlPullReader(_text(), maxDepth: 0x7FFFFFFF);
+    String column = '';
+    while (r.next()) {
+      if (r.eventType != XmlEventType.startElement ||
+          r.namespaceUri != Ns.main) {
+        continue;
+      }
+      if (r.depth == 3 && r.localName == 'tableColumn') {
+        column = decodeXstring(r.getAttribute('name') ?? '');
+      } else if (r.depth == 4 &&
+          (r.localName == 'calculatedColumnFormula' ||
+              r.localName == 'totalsRowFormula')) {
+        final StringBuffer text = StringBuffer();
+        while (r.next() && r.eventType != XmlEventType.endElement) {
+          if (r.eventType == XmlEventType.characters ||
+              r.eventType == XmlEventType.cdata) {
+            text.write(r.text);
+          }
+        }
+        found.add((column: column, formula: decodeXstring(text.toString())));
+      }
+    }
+    return found;
+  }
+
   /// Gives column [index] the name [name], which the caller has checked
   /// (scrubbed, unique in the table, 1 to 255 characters).
   void setColumnName(int index, String name) {

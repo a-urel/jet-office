@@ -1146,6 +1146,206 @@ void main() {
     });
   });
 
+  group('a part name used again after a removal', () {
+    /// A file with the table `T` in `xl/tables/table1.xml`, as the writer
+    /// makes it, so a new table takes that name once `T` left.
+    Uint8List made() {
+      final XlsxWorkbook book = XlsxWorkbook();
+      book.addSheet('S').addTable(_plain('A1:B3', name: 'T'));
+      return book.save().bytes;
+    }
+
+    /// `T` removed, `X` added in its part, both undone.
+    XlsxWorkbook undoneBoth() {
+      final XlsxWorkbook book = XlsxWorkbook.open(made());
+      final XlsxSheet sheet = book.sheets.single;
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet removed = log.transaction(() => sheet.removeTable('T'));
+      final ChangeSet added = log.transaction(
+        () => sheet.addTable(_plain('D1:E2', name: 'X')),
+      );
+      expect(
+        partText(book.save().bytes, 'xl/tables/table1.xml'),
+        contains('name="X"'),
+      );
+      log.revertSet(added);
+      log.revertSet(removed);
+      return book;
+    }
+
+    test('a later restyle reaches the file', () {
+      final XlsxWorkbook book = undoneBoth();
+      book.sheets.single.setTableStyle('T', XlsxTableStyle.dark(2));
+      expect(
+        XlsxWorkbook.open(book.save().bytes).sheets.single.tables.single.style,
+        XlsxTableStyle.dark(2),
+      );
+    });
+
+    test('a later header rename reaches the part', () {
+      final XlsxWorkbook book = undoneBoth();
+      book.sheets.single.setCell(0, 0, 'Renamed');
+      final XlsxSheet saved = XlsxWorkbook.open(
+        book.save().bytes,
+      ).sheets.single;
+      expect(saved.cellAt(0, 0)!.value, 'Renamed');
+      expect(saved.tables.single.columns.first.name, 'Renamed');
+    });
+
+    test('the removed name is free, also after defineName read the parts', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(made());
+      final XlsxSheet sheet = book.sheets.single;
+      book.defineName(const XlsxDefinedName('Prime', 'S!\$A\$1'));
+      sheet.removeTable('T');
+      sheet.addTable(_plain('D1:E2', name: 'X'));
+      sheet.addTable(_plain('G1:H2', name: 'T'));
+      expect(sheet.tables.map((XlsxTable t) => t.name), <String>['X', 'T']);
+    });
+
+    test('defineName takes the removed name, and an undo takes it back', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(made());
+      final XlsxSheet sheet = book.sheets.single;
+      final ChangeLog log = changeLogOf(book);
+      book.defineName(const XlsxDefinedName('Prime', 'S!\$A\$1'));
+      final ChangeSet removed = log.transaction(() => sheet.removeTable('T'));
+      final ChangeSet added = log.transaction(
+        () => sheet.addTable(_plain('D1:E2', name: 'X')),
+      );
+      final ChangeSet named = log.transaction(
+        () => book.defineName(const XlsxDefinedName('T', 'S!\$A\$1')),
+      );
+      log.revertSet(named);
+      log.revertSet(added);
+      log.revertSet(removed);
+      expect(
+        () => book.defineName(const XlsxDefinedName('T', 'S!\$A\$1')),
+        _argument('name'),
+      );
+    });
+
+    test('an unlisted name keeps a part that was not removed', () {
+      // `Foo` is the name of a typed table whose displayName differs.
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _listed(<String>[_excelTable.replaceFirst('name="T" ', 'name="Foo" ')]),
+      );
+      expect(
+        () => book.defineName(const XlsxDefinedName('Foo', 'S!\$A\$1')),
+        _argument('name'),
+      );
+      book.sheets.single.removeTable('T');
+      book.defineName(const XlsxDefinedName('Foo', 'S!\$A\$1'));
+    });
+  });
+
+  group('what removeTable finds', () {
+    Uint8List withColumn(String child) => _listed(<String>[
+      _excelTable,
+      '$_tableOpen'
+          'id="8" name="Other" displayName="Other" ref="D1:D3"><tableColumns '
+          'count="1"><tableColumn id="1" name="C">$child</tableColumn>'
+          '</tableColumns></table>',
+    ]);
+
+    test('a longer name ending in the table name does not refuse', () {
+      for (final String formula in <String>[
+        'MyT[A]',
+        '_T[A]',
+        'A.T[A]',
+        'a\\T[A]',
+        'çT[A]',
+        '1T[A]',
+      ]) {
+        final XlsxSheet sheet = XlsxWorkbook.open(
+          _listed(<String>[_excelTable]),
+        ).sheets.single;
+        sheet.setCell(9, 0, XlsxFormula(formula));
+        sheet.removeTable('T');
+        expect(sheet.tables, isEmpty, reason: formula);
+      }
+    });
+
+    test('what may stand before the name refuses', () {
+      for (final String formula in <String>[
+        'T[A]',
+        '1+T[A]',
+        'SUM(t[A])',
+        '[1]!T[A]',
+        'Book.xlsx!T[A]',
+      ]) {
+        final XlsxSheet sheet = XlsxWorkbook.open(
+          _listed(<String>[_excelTable]),
+        ).sheets.single;
+        sheet.setCell(9, 0, XlsxFormula(formula));
+        expect(
+          () => sheet.removeTable('T'),
+          _state(contains('A10')),
+          reason: formula,
+        );
+      }
+    });
+
+    test('a name of a file with syntax characters is matched as text', () {
+      final XlsxSheet sheet = XlsxWorkbook.open(
+        _listed(<String>[
+          _excelTable.replaceAll('displayName="T"', 'displayName="T(1"'),
+        ]),
+      ).sheets.single;
+      sheet.setCell(9, 0, const XlsxFormula('T(1[A]'));
+      expect(() => sheet.removeTable('T(1'), _state(contains('A10')));
+    });
+
+    test('a calculated column of another table refuses', () {
+      final XlsxSheet sheet = XlsxWorkbook.open(
+        withColumn(
+          '<calculatedColumnFormula>SUM(T[A])</calculatedColumnFormula>',
+        ),
+      ).sheets.single;
+      expect(
+        () => sheet.removeTable('T'),
+        _state(allOf(contains('"C"'), contains('"Other"'))),
+      );
+    });
+
+    test('a totals formula of another table refuses', () {
+      final XlsxSheet sheet = XlsxWorkbook.open(
+        withColumn('<totalsRowFormula>SUM(T[A])</totalsRowFormula>'),
+      ).sheets.single;
+      expect(() => sheet.removeTable('T'), _state(contains('"Other"')));
+    });
+
+    test('a table on another sheet refuses', () {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet first = book.addSheet('S');
+      final XlsxSheet second = book.addSheet('O');
+      first.addTable(_plain('A1:B3', name: 'T'));
+      second.setCell(2, 0, 1);
+      second.addTable(
+        XlsxTable('U', XlsxRange.parse('A1:A3'), const <XlsxTableColumn>[
+          XlsxTableColumn(
+            'C',
+            totalsFunction: XlsxTotalsFunction.custom,
+            totalsFormula: 'SUM(T[P])',
+          ),
+        ], totalsRow: true),
+      );
+      expect(() => first.removeTable('T'), _state(contains('"U"')));
+    });
+
+    test("the table's own column formula does not refuse", () {
+      const String table =
+          '$_tableOpen'
+          'id="8" name="Own" displayName="Own" ref="D1:D3"><tableColumns '
+          'count="1"><tableColumn id="1" name="C"><calculatedColumnFormula>'
+          'Own[C]</calculatedColumnFormula></tableColumn></tableColumns>'
+          '</table>';
+      final XlsxSheet sheet = XlsxWorkbook.open(
+        _listed(<String>[table]),
+      ).sheets.single;
+      sheet.removeTable('Own');
+      expect(sheet.tables, isEmpty);
+    });
+  });
+
   group('calculation', () {
     const String formula = '<row r="9"><c r="A9"><f>1+1</f><v>2</v></c></row>';
 

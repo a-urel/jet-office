@@ -23,7 +23,8 @@
 /// relationships, recording a [SetRelationshipChange];
 /// [relationshipTarget] gives the target of a new one.
 /// [attachStoredPart] gives a part read from the file its typed content,
-/// recording an [AttachPartChange] whose undo brings the file's bytes back.
+/// recording an [AttachPartChange] whose undo brings the file's bytes back;
+/// [markStoredPart] records a created part the same way, in a [MarkPartChange].
 /// [addStoredPart] and [removeStoredPart] add a part to the package and take
 /// one out, recording an [AddPartChange] and a [RemovePartChange] whose undo
 /// gives back, or takes away, the part with its relationships and content
@@ -666,7 +667,8 @@ final class AttachPartChange implements Change {
 /// what follows the declaration). [attached] is the read cache's set of the
 /// parts it attached; `OpcPackage.isLoaded` cannot say, since it stays true
 /// once this is undone. A name in it records nothing, so a read cache also
-/// adds the name of a part it created, which has no bytes to go back to.
+/// marks a part it created, which has no bytes to go back to, with
+/// [markStoredPart].
 ///
 /// Must run inside `log.transaction`. Throws [ArgumentError] when there is
 /// no such part.
@@ -680,6 +682,39 @@ void attachStoredPart(
   if (attached.contains(name)) return;
   applyChange(log, AttachPartChange(package, attached, name, content));
 }
+
+/// The change of a read cache taking the name of a part it created into its
+/// [attached] set: undone, the name leaves, unless it was there before.
+final class MarkPartChange implements Change {
+  /// A change that adds [name] to [attached].
+  MarkPartChange(this.attached, this.name);
+
+  /// The names attached, kept by the read cache of the part.
+  final Set<String> attached;
+
+  /// The part's name.
+  final String name;
+
+  bool _added = false;
+
+  @override
+  void revert() {
+    if (_added) attached.remove(name);
+  }
+
+  @override
+  void reapply() => _added = attached.add(name);
+}
+
+/// Takes [name], a part just created with [addStoredPart], into [attached],
+/// since the part has no bytes of the file to go back to, and records the
+/// change in [log].
+///
+/// The undo must take the name out: the name can be a removed part's, used
+/// again, and that part comes back from its own undo with its bytes and
+/// nothing attached. Must run inside `log.transaction`.
+void markStoredPart(ChangeLog log, Set<String> attached, String name) =>
+    applyChange(log, MarkPartChange(attached, name));
 
 /// Applies [change] ([Change.reapply]) and records it in [log].
 ///

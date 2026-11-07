@@ -494,7 +494,7 @@ mixin _SheetNotes {
       ContentType.comments,
       comments,
     );
-    read.attached.add(added.substring(1));
+    markStoredPart(log, read.attached, added.substring(1));
     addStoredRelationship(
       log,
       package,
@@ -526,7 +526,7 @@ mixin _SheetNotes {
       vml,
       byExtension: true,
     );
-    read.attached.add(added.substring(1));
+    markStoredPart(log, read.attached, added.substring(1));
     final String id = addStoredRelationship(
       log,
       package,

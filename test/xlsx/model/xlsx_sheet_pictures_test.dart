@@ -1291,4 +1291,28 @@ void main() {
       expect(mediaOf(book.save().bytes), hasLength(2));
     });
   });
+
+  test('a part name used again after a removal keeps later edits', () {
+    final XlsxWorkbook made = XlsxWorkbook.open(_bare());
+    made.sheets.single.addPicture(_sized());
+    final XlsxWorkbook book = XlsxWorkbook.open(made.save().bytes);
+    final XlsxSheet sheet = book.sheets.single;
+    final ChangeLog log = changeLogOf(book);
+    final ChangeSet removed = log.transaction(() => sheet.removePicture(0));
+    final ChangeSet added = log.transaction(
+      () => sheet.addPicture(_sized(name: 'Other')),
+    );
+    log.revertSet(added);
+    log.revertSet(removed);
+    const XlsxAnchor moved = XlsxOneCellAnchor(
+      XlsxAnchorPoint(5, 5),
+      width: 8,
+      height: 4,
+    );
+    sheet.movePicture(0, moved);
+    expect(
+      XlsxWorkbook.open(book.save().bytes).sheets.single.pictures.single.anchor,
+      moved,
+    );
+  });
 }

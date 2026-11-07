@@ -147,8 +147,7 @@ mixin _SheetTablesApi {
         'tableParts',
         () => part.addTablePart(relationship),
       );
-      // A part made here has no bytes of the file to go back to.
-      _attachedTables.add(added.substring(1));
+      markStoredPart(log, _attachedTables, added.substring(1));
       applyChange(
         log,
         _TableListChange(list, list.length, (
@@ -286,14 +285,19 @@ mixin _SheetTablesApi {
   ///
   /// Throws an [ArgumentError] named `name` when the sheet has no table
   /// [name], ignoring case; a [StateError] naming the first use when a cell
-  /// formula or a defined name of any sheet holds `name[`, ignoring case
-  /// (Excel repairs a file whose formula names a table it lacks; a string in
-  /// a formula that holds the text refuses too, until W5's lexer tells them
+  /// formula, a defined name of any sheet or a `calculatedColumnFormula` or
+  /// `totalsRowFormula` of another table holds `name[`, ignoring case, not
+  /// after a character of a name (`MySales[` does not use `Sales`; Excel
+  /// repairs a file whose formula names a table it lacks; a string in a
+  /// formula that holds the text refuses too, until W5's lexer tells them
   /// apart), when the table part has relationships of its own (a query
   /// table), and for a sheet that is not a worksheet or has no part; and an
   /// [XlsxReadException] when a sheet cannot be read. Whatever it throws,
   /// nothing has changed, except that reading warnings are reported on first
   /// read.
+  ///
+  /// A slicer or a pivot cache that names the table without a relationship
+  /// of the table part is not checked.
   void removeTable(String name) {
     final WorksheetPart part = _editablePart('tables');
     final ({String partName, TablePart table}) entry = _tableNamed(name);
@@ -309,7 +313,7 @@ mixin _SheetTablesApi {
         'say); it cannot be removed.',
       );
     }
-    final String? use = _host.firstTableUse(tableName);
+    final String? use = _host.firstTableUse(entry.table);
     if (use != null) {
       throw StateError(
         'The table "$tableName" cannot be removed: $use uses it, and rewriting '
@@ -334,7 +338,10 @@ mixin _SheetTablesApi {
         partName,
         () => package.isReferenced(partName),
       );
-      if (!referenced) removeStoredPart(log, package, partName);
+      if (!referenced) {
+        _host.forgetTablePart(partName);
+        removeStoredPart(log, package, partName);
+      }
       applyChange(
         log,
         _TableListChange(list, list.indexOf(entry), entry, added: false),

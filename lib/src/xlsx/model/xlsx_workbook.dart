@@ -416,6 +416,21 @@ Uint8List _emptyPackage() {
   return zip.close()!;
 }
 
+/// The change of a table part leaving what the file's table parts say.
+final class _TableHeadChange implements Change {
+  _TableHeadChange(this.heads, this.part, this.head);
+
+  final Map<String, ({int id, List<String> names})> heads;
+  final String part;
+  final ({int id, List<String> names}) head;
+
+  @override
+  void revert() => heads[part] = head;
+
+  @override
+  void reapply() => heads.remove(part);
+}
+
 /// The shared strings as a part's content.
 ///
 /// [_root] and [_trailing] are the opened part's `<sst>` start tag and its
@@ -636,7 +651,8 @@ final class _Book implements SheetHost {
   /// The `id` and the names of every table part of the file, read once from
   /// each root, by part name: a part no sheet types keeps its name and id
   /// that way, and so does one of a sheet never read. Parts added since are
-  /// typed, so a sheet's list holds them.
+  /// typed, so a sheet's list holds them; a part that leaves leaves this too
+  /// ([forgetTablePart]), so a later part of its name is not taken for it.
   Map<String, ({int id, List<String> names})>? _tableHeads;
 
   Map<String, ({int id, List<String> names})> get _fileTables =>
@@ -660,12 +676,12 @@ final class _Book implements SheetHost {
     return heads;
   }
 
-  /// The table parts of [_fileTables] the package still holds.
-  Iterable<({int id, List<String> names})> get _heldFileTables sync* {
-    for (final MapEntry<String, ({int id, List<String> names})> e
-        in _fileTables.entries) {
-      if (_package.hasPart(e.key)) yield e.value;
-    }
+  @override
+  void forgetTablePart(String name) {
+    final String? part = _package.canonicalPartName(name);
+    final ({int id, List<String> names})? head = _fileTables[part];
+    if (part == null || head == null) return;
+    applyChange(log, _TableHeadChange(_fileTables, part, head));
   }
 
   @override
@@ -673,7 +689,7 @@ final class _Book implements SheetHost {
     final String key = sheetNameKey(name);
     final Iterable<String> tables = <String>[
       for (final XlsxSheet s in _sheets) ...sheetTableNames(s),
-      for (final ({int id, List<String> names}) head in _heldFileTables)
+      for (final ({int id, List<String> names}) head in _fileTables.values)
         ...head.names,
     ];
     for (final String table in tables) {
@@ -708,7 +724,7 @@ final class _Book implements SheetHost {
   int takeTableId() {
     int highest = 0;
     for (final int id in <int>[
-      for (final ({int id, List<String> names}) head in _heldFileTables)
+      for (final ({int id, List<String> names}) head in _fileTables.values)
         head.id,
       ..._sheets.expand(sheetTableIds),
     ]) {
@@ -718,11 +734,24 @@ final class _Book implements SheetHost {
   }
 
   @override
-  String? firstTableUse(String name) {
-    final String reference = '${sheetNameKey(name)}[';
+  String? firstTableUse(TablePart table) {
+    // A file's name may hold anything; the syntax characters are escaped.
+    final String key = sheetNameKey(
+      table.displayName,
+    ).replaceAllMapped(RegExp(r'[\^$.*+?()[\]{}|/]'), (Match m) => '\\${m[0]}');
+    // Letters, marks, digits and these three go on a name.
+    final RegExp reference = RegExp(
+      r'(?<![\p{L}\p{M}\p{N}_.\\?])'
+      '$key\\[',
+      unicode: true,
+    );
     for (final XlsxSheet s in _sheets) {
-      final String? cell = firstFormulaHolding(s, reference);
+      final String? cell = firstFormulaMatching(s, reference);
       if (cell != null) return cell;
+    }
+    for (final XlsxSheet s in _sheets) {
+      final String? column = firstColumnFormulaMatching(s, reference, table);
+      if (column != null) return column;
     }
     for (final NameEntry e in workbook.names) {
       if (sheetNameKey(e.formula).contains(reference)) {

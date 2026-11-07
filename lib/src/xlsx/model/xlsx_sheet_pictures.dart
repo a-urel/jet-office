@@ -485,7 +485,7 @@ mixin _SheetPictures {
       'drawing',
       () => part.swapLayout('drawing', null, element),
     );
-    read.attached.add(added.substring(1));
+    markStoredPart(log, read.attached, added.substring(1));
     applyChange(log, _DrawingPartChange(read, drawing, added.substring(1)));
     return drawing;
   }

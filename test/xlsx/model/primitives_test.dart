@@ -364,6 +364,30 @@ void main() {
     });
   });
 
+  group('markStoredPart', () {
+    test('an undo takes the name out, and a redo puts it back', () {
+      final ChangeLog log = ChangeLog();
+      final Set<String> attached = <String>{};
+      final ChangeSet set = log.transaction(
+        () => markStoredPart(log, attached, 'xl/a.xml'),
+      );
+      expect(attached, <String>{'xl/a.xml'});
+      log.revertSet(set);
+      expect(attached, isEmpty);
+      log.reapplySet(set);
+      expect(attached, <String>{'xl/a.xml'});
+    });
+
+    test('a name attached before stays after the undo', () {
+      final ChangeLog log = ChangeLog();
+      final Set<String> attached = <String>{'xl/a.xml'};
+      log.revertSet(
+        log.transaction(() => markStoredPart(log, attached, 'xl/a.xml')),
+      );
+      expect(attached, <String>{'xl/a.xml'});
+    });
+  });
+
   group('attachStoredPart', () {
     OpcPackage package() => OpcPackage.read(
       ZipReader(

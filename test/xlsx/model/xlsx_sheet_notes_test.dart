@@ -1032,4 +1032,24 @@ void main() {
       }
     });
   });
+
+  test('a part name used again after a removal keeps later edits', () {
+    final XlsxWorkbook made = XlsxWorkbook();
+    made.addSheet('S').setNote(0, 0, XlsxNote.plain('First'));
+    final XlsxWorkbook book = XlsxWorkbook.open(made.save().bytes);
+    final XlsxSheet sheet = book.sheets.single;
+    final ChangeLog log = changeLogOf(book);
+    final ChangeSet removed = log.transaction(() => sheet.setNote(0, 0, null));
+    final ChangeSet added = log.transaction(
+      () => sheet.setNote(2, 2, XlsxNote.plain('Other')),
+    );
+    log.revertSet(added);
+    log.revertSet(removed);
+    sheet.setNote(1, 1, XlsxNote.plain('Later'));
+    final XlsxSheet saved = XlsxWorkbook.open(book.save().bytes).sheets.single;
+    expect(saved.notes.map((XlsxCellNote n) => n.note.text.text), <String>[
+      'First',
+      'Later',
+    ]);
+  });
 }

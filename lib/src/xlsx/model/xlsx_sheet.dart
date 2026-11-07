@@ -161,10 +161,18 @@ abstract interface class SheetHost {
   /// from a failed edit or an undone one.
   int takeTableId();
 
-  /// Where a formula first holds `name[`, ignoring case: a cell of a sheet,
-  /// in tab order, then a defined name; `null` when none does. Loads every
-  /// sheet. Throws an [XlsxReadException] when one cannot be read.
-  String? firstTableUse(String name);
+  /// Takes the table part [name] out of what the file's table parts say, in
+  /// a recorded change, as the part leaves: the name it held is free, and a
+  /// later part that takes its name is another table. Must run inside
+  /// `log.transaction`, before the part leaves.
+  void forgetTablePart(String name);
+
+  /// Where a formula first uses [table] as `name[`, ignoring case and not
+  /// after a character of a name: a cell of a sheet, in tab order, then a
+  /// column formula of another table, then a defined name; `null` when none
+  /// does. Loads every sheet. Throws an [XlsxReadException] when one cannot
+  /// be read.
+  String? firstTableUse(TablePart table);
 
   /// The opened package, for reading parts.
   PackageReader get reader;
@@ -245,11 +253,32 @@ Iterable<int> sheetTableIds(XlsxSheet sheet) => sheet._partName == null
           t.table.id,
       ];
 
-/// The first cell of [sheet], in row order, whose formula text holds
-/// [reference], which is a [sheetNameKey]: `cell B2 of the sheet "S"`, or
-/// `null` for none. A shared formula's follower has no text; its master
-/// holds it. Loads the sheet.
-String? firstFormulaHolding(XlsxSheet sheet, String reference) {
+/// The first column formula of a table of [sheet] other than [except] that
+/// [reference] matches in its [sheetNameKey]: `the column "C" of the table
+/// "T"`, or `null` for none.
+String? firstColumnFormulaMatching(
+  XlsxSheet sheet,
+  Pattern reference,
+  TablePart except,
+) {
+  if (sheet._partName == null) return null;
+  for (final ({String partName, TablePart table}) t in sheet._sheetTables()) {
+    if (identical(t.table, except)) continue;
+    for (final ({String column, String formula}) f in t.table.columnFormulas) {
+      if (sheetNameKey(f.formula).contains(reference)) {
+        return 'the column "${f.column}" of the table '
+            '"${t.table.displayName}"';
+      }
+    }
+  }
+  return null;
+}
+
+/// The first cell of [sheet], in row order, whose formula text [reference]
+/// matches in its [sheetNameKey]: `cell B2 of the sheet "S"`, or `null` for
+/// none. A shared formula's follower has no text; its master holds it. Loads
+/// the sheet.
+String? firstFormulaMatching(XlsxSheet sheet, Pattern reference) {
   final CellStore? store = sheet._load()?.cells;
   if (store == null || !store.hasFormulas) return null;
   for (final int row in store.rowIndexes) {
