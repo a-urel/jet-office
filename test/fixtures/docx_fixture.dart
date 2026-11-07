@@ -18,6 +18,7 @@ final class DocxFixture {
     this.expectedText,
     this.build, {
     String? libreOfficeText,
+    this.libreOfficeTextSkip,
     this.expectedWarnings = const <DocxWarningCode, int>{},
   }) : libreOfficeText = libreOfficeText ?? expectedText;
 
@@ -42,14 +43,18 @@ final class DocxFixture {
   /// What LibreOffice's text export writes for the document: [expectedText]
   /// unless the document has lists, whose labels LibreOffice writes before
   /// the text of each item (`    • Bullet one`, `    1. Num one`: indented,
-  /// with `•` for the Symbol bullet U+F0B7), or nested tables, whose cell
-  /// ends LibreOffice's export places differently. Pinned from a LibreOffice
-  /// run.
+  /// with `•` for the Symbol bullet U+F0B7). Pinned from a LibreOffice run.
   ///
   /// `tool/compare_text.dart` compares the export with this; the model's own
   /// text has no labels, so `tool/compare_resaved_docx.dart` and the tests
   /// keep [expectedText].
   final String libreOfficeText;
+
+  /// Why `tool/compare_text.dart` does not compare LibreOffice's text export
+  /// of this document, or `null` to compare it. Set where LibreOffice's text
+  /// is not a reading of the document that can be pinned (it differs by
+  /// version); the fixture's re-save is still compared.
+  final String? libreOfficeTextSkip;
 
   /// Builds the document and returns the saved file and its warnings. The
   /// same bytes every time.

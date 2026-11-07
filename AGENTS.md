@@ -62,8 +62,9 @@ dotnet run --project tool/ooxml_validate -- build/model
 dotnet run --project tool/ooxml_validate -- build/model-resaved
 dart run tool/edit_model.dart build/fixtures build/model-edited
 dotnet run --project tool/ooxml_validate -- build/model-edited
-LC_ALL=C.UTF-8 soffice --headless --convert-to 'txt:Text (encoded):UTF8' \
-  --outdir build/fixtures build/fixtures/*.docx
+(ulimit -f 2000000; LC_ALL=C.UTF-8 soffice --headless \
+  --convert-to 'txt:Text (encoded):UTF8' \
+  --outdir build/fixtures build/fixtures/*.docx)
 dart run tool/compare_text.dart build/fixtures
 mkdir -p build/resaved-docx
 LC_ALL=C.UTF-8 soffice --headless --convert-to 'docx:MS Word 2007 XML' \
@@ -73,13 +74,13 @@ dart run tool/round_trip_docx.dart build/fixtures build/model-docx-fixtures
 dart run tool/round_trip_docx.dart build/resaved-docx build/model-docx
 dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/model-docx-owner
 dotnet run --project tool/ooxml_validate -- build/model-docx-fixtures
-dotnet run --project tool/ooxml_validate -- build/model-docx
+dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/model-docx
 dotnet run --project tool/ooxml_validate -- build/model-docx-owner
 dart run tool/edit_docx.dart build/fixtures build/edited-docx-fixtures
 dart run tool/edit_docx.dart build/resaved-docx build/edited-docx
 dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 dotnet run --project tool/ooxml_validate -- build/edited-docx-fixtures
-dotnet run --project tool/ooxml_validate -- build/edited-docx
+dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/edited-docx
 dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 ```
 
@@ -104,6 +105,23 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 - `tool/ooxml_validate` validates every `.xlsx` and `.docx` with the Open XML
   SDK against the Microsoft 365 schemas and fails on any error. An error there
   is a writer or model bug.
+  `--libreoffice-resave` is for a directory that came from LibreOffice's
+  re-save, or from the model's round trip or edit of one (`build/resaved-docx`,
+  `build/model-docx`, `build/edited-docx`): LibreOffice writes a repeating
+  header row as `<w:tblHeader w:val="true"/>`, which the SDK refuses (it takes
+  only `on` and `off` there) and the model keeps as read. The flag ignores
+  that one error, matched on the element and its value; every other error, and
+  every run without the flag, counts. The `d1_corrupt.docx` negative control
+  must still fail with it.
+- LibreOffice's text export of a document whose body ends in a table never
+  ends: it writes the file without bound. No fixture may end in a table (the
+  fixture list says so), and the CI step and the command above cap the file
+  size with `ulimit -f` so a runaway fails instead of filling the disk.
+- `DocxFixture.libreOfficeTextSkip` (a reason; `d3_nested`, whose text
+  LibreOffice writes differently by version) makes `tool/write_fixtures.dart`
+  write `<name>.libreoffice-skip.txt`, and `tool/compare_text.dart` skip that
+  document and print `<name>: skipped: <reason>`. Its re-save is still
+  compared.
 - `tool/compare_csv.dart` compares LibreOffice's CSV export of every sheet
   with the expected values on raw values. Its doc comment explains the filter
   options; `tool/src/csv_compare.dart` holds the comparison and its contract.

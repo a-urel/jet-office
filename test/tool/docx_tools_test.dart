@@ -95,6 +95,24 @@ void main() {
       expect(written, contains('d2_lists.libreoffice.txt'));
     });
 
+    test('writes the reason of a skipped LibreOffice text, only for those', () {
+      write_fixtures.main(<String>[dir.path]);
+      final List<String> written = names(dir);
+      for (final DocxFixture f in docxFixtures()) {
+        final String file = '${f.name}.libreoffice-skip.txt';
+        if (f.libreOfficeTextSkip == null) {
+          expect(written, isNot(contains(file)), reason: f.name);
+        } else {
+          expect(written, contains(file), reason: f.name);
+          expect(
+            File('${dir.path}/$file').readAsStringSync(),
+            '${f.libreOfficeTextSkip}\n',
+          );
+        }
+      }
+      expect(written, contains('d3_nested.libreoffice-skip.txt'));
+    });
+
     test(
       '--corrupt adds d1_corrupt.docx: a stray run and a changed letter',
       () {
@@ -167,6 +185,30 @@ void main() {
         expect(again.toString(), contains('d2_lists: line 2: expected'));
       },
     );
+
+    test('a skipped fixture is not compared and the output says so', () {
+      writeOnly(dir, <String>{
+        'd1_paragraphs.docx',
+        'd1_paragraphs.expected.txt',
+        'd3_nested.docx',
+        'd3_nested.expected.txt',
+        'd3_nested.libreoffice-skip.txt',
+      });
+      exportText(File('${dir.path}/d1_paragraphs.docx'));
+      // The export of d3_nested is missing, and would differ if present.
+      final StringBuffer out = StringBuffer();
+      final int code = compareText(
+        <String>[dir.path],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 0, reason: '$out');
+      expect(
+        out.toString(),
+        contains('d3_nested: skipped: LibreOffice repeats'),
+      );
+      expect(out.toString(), contains('1 skipped'));
+    });
 
     test('the corrupt document: exit 1 naming its changed line', () {
       writeOnly(dir, <String>{

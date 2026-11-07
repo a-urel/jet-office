@@ -147,7 +147,11 @@ jobs:
       - name: Export every document to text with LibreOffice
         env:
           LC_ALL: C.UTF-8
+        # LibreOffice's text export of a body that ends in a table never ends
+        # and writes the file without bound: the file size cap fails the step
+        # instead of filling the disk. No fixture ends in a table.
         run: |
+          ulimit -f 2000000
           soffice --headless --convert-to 'txt:Text (encoded):UTF8' \
             --outdir build/fixtures build/fixtures/*.docx
           ls -1 build/fixtures/*.txt
@@ -181,7 +185,10 @@ jobs:
       - name: Validate the model's output for the documents
         run: |
           dotnet run --project tool/ooxml_validate -- build/model-docx-fixtures
-          dotnet run --project tool/ooxml_validate -- build/model-docx
+          # LibreOffice's re-save writes w:tblHeader w:val="true", which the
+          # SDK refuses and the model keeps as read: the flag ignores that
+          # one error (tool/ooxml_validate/Program.cs).
+          dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/model-docx
           dotnet run --project tool/ooxml_validate -- build/model-docx-owner
 
       # What the model saves after an edit must be valid too: every
@@ -196,7 +203,7 @@ jobs:
       - name: Validate the model's edited documents
         run: |
           dotnet run --project tool/ooxml_validate -- build/edited-docx-fixtures
-          dotnet run --project tool/ooxml_validate -- build/edited-docx
+          dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/edited-docx
           dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 
       # Negative control: every check must reject m1_corrupt.xlsx (see
@@ -329,6 +336,15 @@ jobs:
             exit 1
           fi
 
+          status=0
+          dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/corrupt-docx \
+            | tee build/corrupt-docx-resave-validate.log || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::The Open XML SDK validator with --libreoffice-resave exited with $status on a corrupt document; expected 1."
+            exit 1
+          fi
+
+          ulimit -f 2000000
           soffice --headless --convert-to 'txt:Text (encoded):UTF8' \
             --outdir build/corrupt-docx build/corrupt-docx/d1_corrupt.docx
           ls -1 build/corrupt-docx

@@ -27,6 +27,11 @@ const List<(String?, String)> d1Paragraphs = <(String?, String)>[
 ];
 
 /// The fixtures of D1, D2 and D3, in a fixed order.
+///
+/// No fixture may end in a table: LibreOffice's text export of a document
+/// whose body ends in a table never ends, it writes the file without bound
+/// (the model adds no paragraph after a last table), and the CI job converts
+/// every fixture. End the body in a paragraph.
 List<DocxFixture> docxFixtures() => <DocxFixture>[
   DocxFixture('d1_blank', '', () => DocxDocument().save()),
   DocxFixture(
@@ -116,7 +121,9 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
   _tableFixture(
     'd3_nested',
     _fillNested,
-    libreOfficeText: _nestedLibreOfficeTexts.join('\n'),
+    libreOfficeTextSkip:
+        'LibreOffice repeats a paragraph in the text of nested tables; '
+        'differs by version',
   ),
 ];
 
@@ -125,12 +132,12 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
 DocxFixture _tableFixture(
   String name,
   void Function(DocxDocument doc) fill, {
-  String? libreOfficeText,
+  String? libreOfficeTextSkip,
 }) => DocxFixture(
   name,
   docxFullText(DocxDocument.open(_build(fill).bytes)),
   () => _build(fill),
-  libreOfficeText: libreOfficeText,
+  libreOfficeTextSkip: libreOfficeTextSkip,
 );
 
 /// A new document whose body holds what [fill] adds in place of its one
@@ -571,30 +578,6 @@ void _fillFormatting(DocxDocument doc) {
   }
   doc.body.addParagraph('After the formatted table.');
 }
-
-/// What LibreOffice's text export writes for `d3_nested`, pinned from a
-/// LibreOffice 26.8 run. LibreOffice writes a tab for the end of every cell
-/// but the last of a row, in place of the line feed that ends its last
-/// paragraph; with a nested table of two rows it puts the tabs one place off
-/// the model's cells and writes the body's last paragraph five times, in
-/// lines of two joined by a tab. (Its export of a document whose body ends in
-/// a table does not end: it writes the file without bound, which is why no
-/// fixture ends in one.) The model's text is `expectedText`.
-const List<String> _nestedLibreOfficeTexts = <String>[
-  'Tables in tables.',
-  'Outer one\tOuter two',
-  'Holds a table\tInner a',
-  'Inner b\tInner c',
-  'Inner d\t',
-  'Holds a list',
-  '    \u2022 First item',
-  '    \u2022 Second item\tEnds in a table',
-  'Last in the cell',
-  '\tPlain',
-  'After the tables.\tAfter the tables.',
-  'After the tables.\tAfter the tables.',
-  'After the tables.',
-];
 
 /// Fills `d3_nested`: a nested table, a list in a cell, a cell whose last
 /// block is a table, and a second table in the body.
