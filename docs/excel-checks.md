@@ -1356,7 +1356,11 @@ original with the rich text and the note added, and neither the picture nor
 `Owner_table` (its header and data cells are plain cells now); the chart and
 the shapes the drawing also holds are still there, unmoved.
 
-Result: pending.
+Result: ok, 2026-11-07 (see "Results"). The edited fixtures, `w4_generated` and
+two of the owner's own files, with no repair prompt on any. Excel takes a moved
+picture's size from the anchor, so the old `a:xfrm` does no harm. The owner's
+files kept what they had: a chart, a text box, an arrow and a picture in one,
+a note and a threaded comment with replies in the other.
 
 ## Open issues
 
@@ -1665,3 +1669,7 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `w3_generated` | ok | No repair prompt; `Report`, `Locked` and the properties as the W3 list says. Column H shows the bars only: the numbers are hidden. |
 | 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `w1_test.xlsx`, link in M1, list on N1:N5, rule on O1:O5, name `Owner_edit`, page setup | ok | No repair prompt. The additions and the file's own content as the W3 list says. |
 | 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `excel_products.xlsx`, link in M1, list on N1:N5, rule on O1:O5, name `Owner_edit`, page setup | ok | No repair prompt. The additions and the file's own content as the W3 list says. |
+| 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `build/model-edited/*.xlsx`, at least `m4_notes`, `m4_images`, `m4_tables` and `m4_objects` | ok | No repair prompt; each as the W4 list says. The owner reported the whole list as ok in one line. |
+| 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `w4_generated` | ok | No repair prompt; `Objects` and `Removed` as the W4 list says. `Moved picture` shows 200 by 100 pixels, as the list requires. |
+| 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `Kitap1.xlsx` (chart, text box, arrow, picture), objects added, then picture and table removed | ok | No repair prompt on either file. The additions and the file's own content as the W4 list says. The Open XML SDK's two errors in `chart1.xml` are in Excel's own file too; the part is unchanged. |
+| 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `Kitap2.xlsx` (note, threaded comment with replies), objects added, then picture and table removed | ok | No repair prompt on either file. The additions and the file's own content as the W4 list says. |
