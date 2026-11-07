@@ -103,8 +103,8 @@
 /// control or a threaded comment beside them is kept as written, and removing
 /// a table that a formula names is refused.
 ///
-/// [DocxDocument] is the Word document model, in progress (milestones D1 and
-/// D2; the API may change before D6). [DocxDocument.new] starts a document
+/// [DocxDocument] is the Word document model, in progress (milestones D1 to
+/// D3; the API may change before D6). [DocxDocument.new] starts a document
 /// like Word for Mac's blank one: A4 portrait, Aptos 12, no document
 /// properties.
 /// [DocxDocument.open] reads a DOCX file within [DocxReadLimits]; a file it
@@ -118,19 +118,32 @@
 /// borders, tab stops and the rest of the typed members) as values such as
 /// [DocxColor] and [DocxIndentation], where `null` means "not set here"; a
 /// property or value the model does not understand is kept as written and
-/// reads `null`. What the model does not type yet, such as tables, content
-/// controls, tracked changes, hyperlinks, drawings and fields, is kept as
-/// written in a [DocxOpaqueBlock], a [DocxOpaqueInline] or a
-/// [DocxOpaqueRunContent], which can be removed but not changed; the final
-/// section and the parts other than the body are kept as written too. Blocks
-/// and inlines are added, removed and replaced, and a run's text and the
-/// styles are set; each edit is atomic. [DocxDocument.save] returns a
-/// [DocxResult] and [DocxDocument.saveTo] streams to a sink. As for a
-/// workbook, saving keeps every part the model did not change: a body never
-/// accessed is copied from the file, and what a loaded body does not type is
-/// written back as it was. Characters XML forbids are removed from text when
-/// it is set and reported at save as a [DocxWarning]. The visible text of an
-/// opaque inline holding `mc:AlternateContent` or a text box is empty.
+/// reads `null`. A [DocxTable] gives its rows and cells, and a cell its
+/// blocks; the table, the row and the cell give their formatting as
+/// [DocxTableProperties], [DocxTableRowProperties] and
+/// [DocxTableCellProperties]. [DocxBody.addTable] adds a table as Word's Insert
+/// Table writes it, with the document's `Table Grid` style, and
+/// [DocxTable.addRow] fills it row by row with text; [DocxTableCell.addTable]
+/// nests one. Rows, cells and blocks of a cell are added, removed and replaced
+/// like the blocks of the body, [DocxTable.mergeCells] merges a range, and a
+/// table built in no document, or read in another, has its styles resolved when
+/// it goes in. A table lists only its typed rows and cells (one inside a
+/// content control is kept in place, not listed), the API nests tables at most
+/// 80 deep, [DocxBody.addTable] takes at most [maxTableColumns] columns, and
+/// a table with no row is not saved. What the model does not type yet, such
+/// as content controls, tracked changes, hyperlinks, drawings and fields, is
+/// kept as written in a
+/// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
+/// can be removed but not changed; the final section and the parts other than
+/// the body are kept as written too. Blocks and inlines are added, removed and
+/// replaced, and a run's text and the styles are set; each edit is atomic.
+/// [DocxDocument.save] returns a [DocxResult] and [DocxDocument.saveTo] streams
+/// to a sink. As for a workbook, saving keeps every part the model did not
+/// change: a body never accessed is copied from the file, and what a loaded
+/// body does not type is written back as it was. Characters XML forbids are
+/// removed from text when it is set and reported at save as a [DocxWarning].
+/// The visible text of an opaque inline holding `mc:AlternateContent` or a text
+/// box is empty.
 ///
 /// [DocxDocument.styles] gives the document's [DocxStyles] (milestone D2):
 /// the [DocxDocumentDefaults] and each [DocxStyle] of the styles part, by
@@ -172,6 +185,8 @@
 /// @docImport 'src/docx/model/run_content.dart';
 /// @docImport 'src/docx/model/run_properties.dart';
 /// @docImport 'src/docx/model/styles.dart';
+/// @docImport 'src/docx/model/table_formatting.dart';
+/// @docImport 'src/docx/model/table_properties.dart';
 /// @docImport 'src/docx/read_exception.dart';
 /// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
@@ -214,7 +229,13 @@ export 'src/common/locale.dart' show OfficeLocale;
 export 'src/docx/builtin_styles.dart' show DocxBuiltInStyle;
 export 'src/docx/docx_document.dart' show DocxBody, DocxDocument, DocxResult;
 export 'src/docx/model/blocks.dart'
-    show DocxBlock, DocxOpaqueBlock, DocxParagraph;
+    show
+        DocxBlock,
+        DocxOpaqueBlock,
+        DocxParagraph,
+        DocxTable,
+        DocxTableCell,
+        DocxTableRow;
 export 'src/docx/model/formatting.dart'
     show
         DocxAlignment,
@@ -264,6 +285,30 @@ export 'src/docx/model/run_properties.dart'
     show DocxRunProperties, DocxRunProperty;
 export 'src/docx/model/styles.dart'
     show DocxDocumentDefaults, DocxStyle, DocxStyleType, DocxStyles;
+export 'src/docx/model/table_formatting.dart'
+    show
+        DocxCellAlignment,
+        DocxCellBorders,
+        DocxRowHeight,
+        DocxRowHeightRule,
+        DocxTableAlignment,
+        DocxTableBorders,
+        DocxTableLayout,
+        DocxTableLook,
+        DocxTableMargins,
+        DocxTableWidth,
+        DocxTableWidthKind,
+        DocxTextDirection,
+        DocxVerticalMerge;
+export 'src/docx/model/table_properties.dart'
+    show
+        DocxTableCellProperties,
+        DocxTableCellProperty,
+        DocxTableProperties,
+        DocxTableProperty,
+        DocxTableRowProperties,
+        DocxTableRowProperty,
+        maxTableColumns;
 export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
 export 'src/docx/read_limits.dart' show DocxReadLimits;
 export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;

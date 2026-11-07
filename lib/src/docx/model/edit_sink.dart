@@ -30,6 +30,8 @@
 /// @docImport 'blocks.dart';
 library;
 
+import '../../opc/change_log.dart';
+import '../builtin_styles.dart' show DocxBuiltInStyle;
 import 'blocks.dart';
 import 'inlines.dart';
 import 'property_set.dart';
@@ -67,6 +69,12 @@ abstract interface class DocxEditSink {
     PropertyState previous,
   );
 
+  /// Applies [change] and records it: how an edit that is none of the above
+  /// (the grid of a table, a block, a row or a cell put in or taken out) is
+  /// made undoable. In a replay, and for the sink of no document, it only
+  /// applies [change] ([Change.reapply]).
+  void apply(Change change);
+
   /// Runs [body] as one edit: if it throws, everything it reported is
   /// undone before the error leaves.
   void atomically(void Function() body);
@@ -76,6 +84,11 @@ abstract interface class DocxEditSink {
   /// built-in style has it, otherwise the id of that built-in in the
   /// document, added if it lacks it. Call it inside [atomically].
   String resolveStyleId(String id, DocxStyleType type);
+
+  /// The id of the built-in [style] in the document, added if it lacks it
+  /// (`DocxStyles.ensure`); `null` for the sink of no document, which has no
+  /// styles. Call it inside [atomically].
+  String? ensureStyle(DocxBuiltInStyle style);
 
   /// Whether content read in the document of [readIn] (`null`: not read
   /// from a file) now belongs to another document, this one: never in a
@@ -112,10 +125,16 @@ final class _NoEdits implements DocxEditSink {
   ) {}
 
   @override
+  void apply(Change change) => change.reapply();
+
+  @override
   void atomically(void Function() body) => body();
 
   @override
   String resolveStyleId(String id, DocxStyleType type) => id;
+
+  @override
+  String? ensureStyle(DocxBuiltInStyle style) => null;
 
   @override
   bool isForeign(DocxEditSink? readIn) => false;

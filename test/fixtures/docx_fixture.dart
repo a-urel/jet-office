@@ -18,22 +18,26 @@ final class DocxFixture {
     this.expectedText,
     this.build, {
     String? libreOfficeText,
+    this.libreOfficeTextSkip,
     this.expectedWarnings = const <DocxWarningCode, int>{},
   }) : libreOfficeText = libreOfficeText ?? expectedText;
 
   /// The fixture's name, also its file name stem.
   final String name;
 
-  /// The document's text: the text of each paragraph of the body
-  /// ([DocxParagraph.text]: a tab as `\t`, a line break as `\n`), joined by
-  /// `\n`, as LibreOffice's text export writes them.
+  /// The document's text, as `docxFullText` (`tool/src/text_compare.dart`)
+  /// reads it from the saved file: the blocks of the body in order joined by
+  /// `\n`, a paragraph as its text ([DocxParagraph.text]: a tab as `\t`, a
+  /// line break as `\n`) and a table as a line for each row, its cells joined
+  /// by `\t`, as LibreOffice's text export writes them. A cell of several
+  /// paragraphs has a line for each, and a cell that continues a vertical
+  /// merge is empty.
   ///
   /// The comparison contract of `tool/compare_text.dart` and
   /// `tool/compare_resaved_docx.dart`: LibreOffice ends every paragraph
   /// with `\n` and starts the file with a BOM, so one trailing newline and
   /// a leading BOM are ignored; everything else, edge and double spaces
-  /// included, must be equal. A D1 fixture holds paragraphs only, so no
-  /// table text has to be agreed on.
+  /// included, must be equal.
   final String expectedText;
 
   /// What LibreOffice's text export writes for the document: [expectedText]
@@ -45,6 +49,12 @@ final class DocxFixture {
   /// text has no labels, so `tool/compare_resaved_docx.dart` and the tests
   /// keep [expectedText].
   final String libreOfficeText;
+
+  /// Why `tool/compare_text.dart` does not compare LibreOffice's text export
+  /// of this document, or `null` to compare it. Set where LibreOffice's text
+  /// is not a reading of the document that can be pinned (it differs by
+  /// version); the fixture's re-save is still compared.
+  final String? libreOfficeTextSkip;
 
   /// Builds the document and returns the saved file and its warnings. The
   /// same bytes every time.

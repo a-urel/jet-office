@@ -4,8 +4,10 @@
 // property set behind them or of the styles part's internals. It
 // imports the public library only, so it runs on the web as well.
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:test/test.dart';
 
+import 'support/docx_builder.dart';
 import 'support/numbering_documents.dart';
 
 /// The members of the internal property set, as calls on [p].
@@ -166,6 +168,74 @@ void main() {
         () => o.paragraphProperties = DocxParagraph().properties,
         throwsA(isA<NoSuchMethodError>()),
       );
+    }
+  });
+
+  test('tables, rows and cells are exported and expose no internals', () {
+    final DocxDocument doc = DocxDocument.open(
+      buildDocx(
+        document:
+            '<w:document xmlns:w="${Ns.w}"><w:body><w:tbl><w:tr><w:tc><w:p/>'
+            '</w:tc></w:tr></w:tbl></w:body></w:document>',
+      ),
+    );
+    final DocxBlock block = doc.body.blocks.single;
+    final DocxTable table = block as DocxTable;
+    final DocxTableRow row = table.rows.single;
+    final DocxTableCell cell = row.cells.single;
+    expect(cell.blocks.single, isA<DocxParagraph>());
+    expect(cell.text, '');
+    for (final dynamic o in <dynamic>[table, row, cell]) {
+      expect(() => o.children, throwsA(isA<NoSuchMethodError>()));
+      expect(() => o.source, throwsA(isA<NoSuchMethodError>()));
+    }
+  });
+
+  test('the values of tables, rows and cells are exported', () {
+    expect(DocxTableWidth.points(72).widthPt, 72);
+    expect(DocxTableWidth.percent(50).kind, DocxTableWidthKind.percent);
+    expect(DocxTableLayout.values, hasLength(2));
+    expect(DocxTableAlignment.values, hasLength(3));
+    expect(const DocxTableBorders().top, isNull);
+    expect(const DocxCellBorders().topLeftToBottomRight, isNull);
+    expect(DocxTableMargins(leftPt: 5.4).leftPt, 5.4);
+    expect(const DocxTableLook(firstRow: true).firstRow, isTrue);
+    expect(DocxRowHeight(20, rule: DocxRowHeightRule.exact).heightPt, 20);
+    expect(DocxVerticalMerge.values, hasLength(2));
+    expect(DocxCellAlignment.values, hasLength(3));
+    expect(DocxTextDirection.values, hasLength(6));
+  });
+
+  test('the properties of tables, rows and cells are exported', () {
+    final DocxDocument doc = DocxDocument.open(
+      buildDocx(
+        document:
+            '<w:document xmlns:w="${Ns.w}"><w:body><w:tbl><w:tr><w:tc><w:p/>'
+            '</w:tc></w:tr></w:tbl></w:body></w:document>',
+      ),
+    );
+    final DocxTable table = doc.body.blocks.single as DocxTable;
+    final DocxTableProperties tableProperties = table.properties;
+    final DocxTableRowProperties rowProperties = table.rows.single.properties;
+    final DocxTableCellProperties cellProperties =
+        table.rows.single.cells.single.properties;
+    tableProperties.layout = DocxTableLayout.fixed;
+    rowProperties.cantSplit = true;
+    cellProperties.gridSpan = maxTableColumns;
+    expect(tableProperties.layout, DocxTableLayout.fixed);
+    expect(table.rows.single.isHeader, isFalse);
+    expect(cellProperties.gridSpan, 63);
+    tableProperties.clear(DocxTableProperty.layout);
+    rowProperties.clear(DocxTableRowProperty.cantSplit);
+    cellProperties.clear(DocxTableCellProperty.gridSpan);
+    expect(tableProperties.layout, isNull);
+    for (final dynamic o in <dynamic>[
+      tableProperties,
+      rowProperties,
+      cellProperties,
+    ]) {
+      expect(() => o.set, throwsA(isA<NoSuchMethodError>()));
+      expect(() => o.source, throwsA(isA<NoSuchMethodError>()));
     }
   });
 }

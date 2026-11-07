@@ -6,6 +6,7 @@ import 'package:jet_office/src/docx/model/property_set.dart';
 import 'package:jet_office/src/docx/model/run_content.dart';
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/run_property_codecs.dart';
+import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:jet_office/src/opc/opaque_xml.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
@@ -64,10 +65,19 @@ final class _RecordingSink implements DocxEditSink {
   ) => calls.add('$localName ${previous.value}');
 
   @override
+  void apply(Change change) {
+    calls.add('apply');
+    change.reapply();
+  }
+
+  @override
   void atomically(void Function() body) => body();
 
   @override
   String resolveStyleId(String id, DocxStyleType type) => id;
+
+  @override
+  String? ensureStyle(DocxBuiltInStyle style) => null;
 
   @override
   bool isForeign(DocxEditSink? readIn) => false;

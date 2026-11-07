@@ -55,6 +55,102 @@ void main() {
     }
   });
 
+  group('tables', () {
+    /// Every table of [doc]'s body.
+    Iterable<DocxTable> tables(DocxDocument doc) =>
+        doc.body.blocks.whereType<DocxTable>();
+
+    for (final (String file, int count) in <(String, int)>[
+      ('builtins.docx', 1),
+      ('features.docx', 1),
+      ('long.docx', 2),
+    ]) {
+      test('a table saves semantically equal: $file', () {
+        final Uint8List input = File('$_dir/$file').readAsBytesSync();
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(tables(doc), hasLength(count));
+        expect(encodedMainDifferences(input), isEmpty);
+        // An edit in a cell runs the writer on the whole part: only that
+        // text differs.
+        final DocxParagraph p =
+            tables(doc).first.rows.first.cells.first.blocks.first
+                as DocxParagraph;
+        final DocxRun run = p.inlines.whereType<DocxRun>().first;
+        final String text = run.text;
+        run.text = '$text!';
+        final Uint8List saved = doc.save().bytes;
+        final DocxDocument again = DocxDocument.open(saved);
+        final DocxParagraph edited =
+            tables(again).first.rows.first.cells.first.blocks.first
+                as DocxParagraph;
+        expect(edited.text, startsWith('$text!'));
+        expect(comparePackages(input, saved), hasLength(1));
+      });
+    }
+
+    test('a table reads rows, cells and paragraphs: builtins.docx', () {
+      final DocxTable table = tables(
+        DocxDocument.open(File('$_dir/builtins.docx').readAsBytesSync()),
+      ).single;
+      expect(table.gridColumnsPt, <double>[226.55, 226.55]);
+      expect(
+        <String>[
+          for (final DocxTableRow row in table.rows)
+            for (final DocxTableCell cell in row.cells) cell.text,
+        ],
+        <String>['A', 'B', 'C', 'D'],
+      );
+    });
+
+    test('owner tables read their cells', () {
+      for (final (String file, List<String>? expected)
+          in <(String, List<String>?)>[
+            ('builtins.docx', <String>['A', 'B', 'C', 'D']),
+            ('features.docx', null),
+            ('long.docx', null),
+          ]) {
+        final DocxDocument doc = DocxDocument.open(
+          File('$_dir/$file').readAsBytesSync(),
+        );
+        final List<DocxTableCell> cells = <DocxTableCell>[
+          for (final DocxTable table in tables(doc))
+            for (final DocxTableRow row in table.rows) ...row.cells,
+        ];
+        expect(cells, isNotEmpty, reason: file);
+        for (final DocxTableCell cell in cells) {
+          expect(cell.blocks, isNotEmpty, reason: file);
+          expect(
+            cell.text,
+            <String>[
+              for (final DocxBlock b in cell.blocks)
+                if (b is DocxParagraph) b.text,
+            ].join('\n'),
+            reason: file,
+          );
+        }
+        if (expected != null) {
+          expect(<String>[
+            for (final DocxTableCell c in cells) c.text,
+          ], expected);
+        }
+        expect(doc.warnings, isEmpty, reason: file);
+      }
+    });
+
+    test('a table style resolves in the document: builtins.docx', () {
+      final DocxDocument doc = DocxDocument.open(
+        File('$_dir/builtins.docx').readAsBytesSync(),
+      );
+      final DocxTable table = tables(doc).single;
+      expect(table.properties.style, 'TabloKlavuzu');
+      final int styles = doc.styles.styles.length;
+      table.properties.style = null;
+      table.properties.style = 'TableGrid';
+      expect(table.properties.style, 'TabloKlavuzu');
+      expect(doc.styles.styles, hasLength(styles));
+    });
+  });
+
   test('every owner file round-trips with its styles loaded', () {
     for (final OwnerDocx entry in manifest) {
       final Uint8List input = File('$_dir/${entry.file}').readAsBytesSync();

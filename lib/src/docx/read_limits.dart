@@ -39,6 +39,10 @@ final class DocxReadLimits {
   final int maxCompressionRatio;
 
   /// The deepest element nesting an XML part may have.
+  ///
+  /// Raising it does not raise how deep tables may nest in the main document
+  /// part: past `maxTableNesting` (256) a read fails as
+  /// [DocxReadFailure.limitExceeded] whatever this value is.
   final int maxDepth;
 
   /// The most characters one text value of the document may have.

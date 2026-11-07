@@ -4,15 +4,22 @@
 ///
 /// [DocumentPart.read] walks the part once with the pull reader. It types
 /// `w:p`, its `w:pPr` and its runs; a run's `w:rPr`, text, tabs, breaks and
-/// carriage returns. Everything else is kept
-/// as written, in place: blocks other than paragraphs (tables, content
-/// controls, bookmarks) as opaque blocks, other paragraph children (tracked
-/// changes, hyperlinks, proofing marks) as opaque inlines, other run
-/// children (drawings, fields, `mc:AlternateContent`) as opaque run
-/// content, and unknown attributes on `w:body`, `w:p`, `w:r`, `w:t`,
-/// `w:tab`, `w:br` and `w:cr` as kept attributes. The visible text of an
-/// opaque inline is collected while it is captured, so its slice is parsed
-/// once, under the part's own depth limit.
+/// carriage returns; `w:tbl`, `w:tr` and `w:tc` with their `w:tblPr`, `w:trPr`
+/// and `w:tcPr`, the blocks of a cell being read as those of the body.
+/// Everything else is kept as written, in place: other blocks (content
+/// controls, bookmarks) as opaque blocks, other children of `w:tbl` and
+/// `w:tr` (`w:tblGrid`, `w:tblPrEx`, content controls, bookmarks) as kept
+/// children, other paragraph children (tracked changes, hyperlinks, proofing
+/// marks) as opaque inlines, other run children (drawings, fields,
+/// `mc:AlternateContent`) as opaque run content, and unknown attributes on
+/// `w:body`, `w:tbl`, `w:tr`, `w:tc`, `w:p`, `w:r`, `w:t`, `w:tab`, `w:br` and
+/// `w:cr` as kept attributes. A `w:tbl` inside a kept element stays kept. The
+/// visible text of an opaque inline is collected while it is captured, so its
+/// slice is parsed once, under the part's own depth limit.
+///
+/// A property element is typed only before the rows, cells or blocks of its
+/// parent, and only the first of its name; one elsewhere is kept in place.
+/// A table nested past [maxTableNesting] is refused.
 ///
 /// Elements match by namespace URI and local name, never by prefix: a
 /// document written with `ns0:` or a default namespace reads the same.
@@ -24,9 +31,10 @@
 /// the ones in scope, so it declares only what it needs and never redeclares
 /// `w`. Typed elements use the root's own prefix for WordprocessingML. What
 /// it writes for a part read and not edited means the same as the part (see
-/// `tool/src/part_compare.dart`), with the children of each `w:pPr` and
-/// `w:rPr` in schema order and without comments between them; a document
-/// with no edit therefore saves the file's bytes instead (`DocxDocument`).
+/// `tool/src/part_compare.dart`), with the children of each `w:pPr`, `w:rPr`,
+/// `w:tblPr`, `w:trPr` and `w:tcPr` in schema order and without comments
+/// between them; a document with no edit therefore saves the file's bytes
+/// instead (`DocxDocument`).
 library;
 
 import 'dart:typed_data';
@@ -47,10 +55,20 @@ import 'model/styles.dart' show DocxStyleType;
 import 'paragraph_property_codecs.dart' show paragraphPropertiesSchema;
 import 'part_root.dart';
 import 'properties.dart';
+import 'property_codec.dart' show parseDecimal;
 import 'read_exception.dart';
 import 'read_limits.dart';
 import 'run_property_codecs.dart' show runPropertiesSchema;
+import 'table_property_codecs.dart'
+    show
+        tableCellPropertiesSchema,
+        tablePropertiesSchema,
+        tableRowPropertiesSchema;
+import 'units.dart' show ptOfTwips;
 import 'warnings.dart';
+
+/// The largest width of a `w:gridCol`, in twips: what `parseDecimal` reads.
+const int _maxGridColumnTwips = 999999999;
 
 /// The list [paragraph] was put in through the API: the value of a
 /// `w:numPr` set on it that names a list other than 0, or `null` (nothing
@@ -98,9 +116,11 @@ final class DocumentPart implements PartContent {
   /// [partName] is the part's absolute name, for errors. [limits] bounds
   /// every text: a `w:t`, or the visible text of an opaque inline, longer
   /// than [DocxReadLimits.maxTextLength] throws a [DocxReadException] of
-  /// [DocxReadFailure.limitExceeded]. A root that is not `w:document`
-  /// throws one of [DocxReadFailure.malformedXml]. [warnings] receives the
-  /// problems the reader repairs; D1 repairs none in this part.
+  /// [DocxReadFailure.limitExceeded] that names the paragraph, as
+  /// `body/p[i]` or `body/tbl[i]/tr[j]/tc[k]/p[m]`; so does a table nested
+  /// past [maxTableNesting], by its own path. A root that is not
+  /// `w:document` throws one of [DocxReadFailure.malformedXml]. [warnings]
+  /// receives the problems the reader repairs; D1 repairs none in this part.
   ///
   /// XML that is not well-formed, nested deeper than the reader allows or
   /// holds an entity that cannot be decoded throws [XmlParseException]:
@@ -130,9 +150,9 @@ final class DocumentPart implements PartContent {
   bool Function(int numId)? listDefined;
 
   /// Whether the document defines a style of that id and type, so a
-  /// `w:pStyle` or `w:rStyle` set through the API that names another is
-  /// reported at [encode] (plan Ruling 8); `null` reports none. The save
-  /// sets it before it writes the part.
+  /// `w:pStyle`, `w:rStyle` or `w:tblStyle` set through the API that names
+  /// another is reported at [encode] (plan Ruling 8); `null` reports none.
+  /// The save sets it before it writes the part.
   bool Function(String id, DocxStyleType type)? styleDefined;
 
   /// The warnings the last [encode] raised; empty before the first.
@@ -142,14 +162,16 @@ final class DocumentPart implements PartContent {
   /// characters a run lost when its text was set are reported here, with
   /// [DocxWarningCode.invalidCharactersRemoved] at the run's location at
   /// that time, `body/p[i]/r[j]`, where `i` counts only the paragraphs of
-  /// the body and `j` only the runs of the paragraph. A run that is no
-  /// longer in the body is not reported. A paragraph whose `w:numPr` was
-  /// set through the API to a list other than 0 that [listDefined] denies
-  /// is reported with [DocxWarningCode.numberingNotFound] at `body/p[i]`,
-  /// with the list's id as the detail. A style set through the API that
-  /// [styleDefined] denies is reported with
-  /// [DocxWarningCode.styleNotFound] at `body/p[i]` or `body/p[i]/r[j]`,
-  /// with the style's id as the detail.
+  /// the body and `j` only the runs of the paragraph. In a table the
+  /// location is `body/tbl[i]/tr[j]/tc[k]/p[m]/r[n]`, each index counting
+  /// its own kind in its container, and `tbl[a]/tr[b]/tc[c]` repeats for a
+  /// nested table. A run that is no longer in the body is not reported. A
+  /// paragraph whose `w:numPr` was set through the API to a list other than
+  /// 0 that [listDefined] denies is reported with
+  /// [DocxWarningCode.numberingNotFound] at its location, with the list's id
+  /// as the detail. A style set through the API that [styleDefined] denies
+  /// is reported with [DocxWarningCode.styleNotFound] at the location of the
+  /// paragraph, the run or the table, with the style's id as the detail.
   DocxWarningCollector get encodeWarnings => _encodeWarnings;
 
   /// The root element's start tag: its name, namespace declarations and
@@ -164,8 +186,8 @@ final class DocumentPart implements PartContent {
   /// The attributes of `w:body`, in source order; empty without a body.
   final List<KeptAttribute> bodyAttributes;
 
-  /// The body's blocks in order: paragraphs and opaque blocks. The final
-  /// `w:sectPr` is not one of them; see [finalSectPr].
+  /// The body's blocks in order: paragraphs, tables and opaque blocks. The
+  /// final `w:sectPr` is not one of them; see [finalSectPr].
   final List<DocxBlock> blocks;
 
   /// The body's last child when it is a `w:sectPr`: the section properties
@@ -176,6 +198,32 @@ final class DocumentPart implements PartContent {
   /// The children of `w:document` after `w:body`, in order. A second
   /// `w:body` is one of them.
   final List<OpaqueXml> afterBody;
+
+  /// Throws [StateError] naming the first table the API left without rows,
+  /// at its location: Word repairs a table without rows, and a save must find
+  /// that out before it writes anything. A table read with no rows is kept.
+  void checkBuiltTables() => _checkBuiltTables(blocks, 'body');
+
+  static void _checkBuiltTables(List<DocxBlock> blocks, String path) {
+    int tables = 0;
+    for (final DocxBlock block in blocks) {
+      if (block is! DocxTable) continue;
+      final String at = '$path/tbl[${tables++}]';
+      final List<DocxTableRow> rows = block.rows;
+      if (rows.isEmpty && tableIsNew(block)) {
+        throw StateError(
+          'The table at $at has no rows: add one with addRow, or remove the '
+          'table.',
+        );
+      }
+      for (int r = 0; r < rows.length; r++) {
+        final List<DocxTableCell> cells = rows[r].cells;
+        for (int c = 0; c < cells.length; c++) {
+          _checkBuiltTables(cells[c].blocks, '$at/tr[$r]/tc[$c]');
+        }
+      }
+    }
+  }
 
   /// Writes the part, and replaces [encodeWarnings] with the warnings of
   /// this write.
@@ -239,21 +287,161 @@ final class _Writer {
         part.bodyAttributes.isNotEmpty) {
       _w.start('${_p}body');
       writeKeptAttributes(_w, part.bodyAttributes, declaredAbove: _scope);
-      int paragraphs = 0;
-      for (final DocxBlock block in part.blocks) {
-        switch (block) {
-          case DocxParagraph():
-            _paragraph(block, 'body/p[${paragraphs++}]');
-          case DocxOpaqueBlock():
-            opaqueBlockXml(block).writeTo(_w, declaredAbove: _scope);
-        }
-      }
+      _blocks(part.blocks, 'body');
       part.finalSectPr?.writeTo(_w, declaredAbove: _scope);
       _w.end();
     }
     for (final OpaqueXml x in part.afterBody) {
       x.writeTo(_w, declaredAbove: _scope);
     }
+  }
+
+  /// Writes [blocks], of the body or the cell at the location [path].
+  void _blocks(List<DocxBlock> blocks, String path) {
+    int paragraphs = 0;
+    int tables = 0;
+    for (final DocxBlock block in blocks) {
+      switch (block) {
+        case DocxParagraph():
+          _paragraph(block, '$path/p[${paragraphs++}]');
+        case DocxTable():
+          _table(block, '$path/tbl[${tables++}]');
+        case DocxOpaqueBlock():
+          opaqueBlockXml(block).writeTo(_w, declaredAbove: _scope);
+      }
+    }
+  }
+
+  /// Writes the table [t] at the location [path].
+  void _table(DocxTable t, String path) {
+    _w.start('${_p}tbl');
+    writeKeptAttributes(_w, tableAttributesOf(t), declaredAbove: _scope);
+    final PropertySet tblPr = tablePropertySetOf(t);
+    _checkStyle(tblPr, 'tblStyle', DocxStyleType.table, path);
+    // A table read without a w:tblPr writes one first when a value was set; a
+    // new table always does, as the schema requires it.
+    if (tableIsNew(t) ||
+        (!tablePropertiesOf(t).isRead && !tblPr.writesNothing)) {
+      _propertySet(tblPr, 'tblPr');
+    }
+    final List<Object> children = tableChildrenOf(t);
+    final List<double?>? widths = tableGridWidthsOf(t);
+    // A table read without a grid writes one before its first row when the
+    // widths were set.
+    bool gridPending = widths != null && !children.any((c) => c is TableGrid);
+    int rows = 0;
+    for (final Object child in children) {
+      if (child is DocxTableRow) {
+        if (gridPending) {
+          _newGrid(widths!);
+          gridPending = false;
+        }
+        _row(child, '$path/tr[${rows++}]');
+      } else if (child is PropertyContainer) {
+        _propertySet(tblPr, 'tblPr');
+      } else if (child is TableGrid) {
+        if (tableGridAsRead(t)) {
+          child.xml.writeTo(_w, declaredAbove: _scope);
+        } else {
+          _grid(child, widths!);
+        }
+      } else {
+        (child as OpaqueXml).writeTo(_w, declaredAbove: _scope);
+      }
+    }
+    if (gridPending) {
+      _newGrid(widths!);
+    }
+    _w.end();
+  }
+
+  /// Writes a `w:tblGrid` of [widths], in points.
+  void _newGrid(List<double?> widths) {
+    _w.start('${_p}tblGrid');
+    _gridCols(widths);
+    _w.end();
+  }
+
+  /// Writes the grid [grid] with the widths [widths], in points, and the
+  /// children that are no `w:gridCol` as they were.
+  void _grid(TableGrid grid, List<double?> widths) {
+    _w.start('${_p}tblGrid');
+    writeNamespaceDeclarations(_w, grid.declared);
+    grid.xml.inheritedNamespaces.forEach((String prefix, String uri) {
+      if (grid.declared.containsKey(prefix)) return;
+      final String? above = _scope[prefix] ?? (prefix.isEmpty ? '' : null);
+      if (above != uri) {
+        _w.attribute(prefix.isEmpty ? 'xmlns' : 'xmlns:$prefix', uri);
+      }
+    });
+    _gridCols(widths);
+    grid.keptChildren.forEach(_w.raw);
+    _w.end();
+  }
+
+  void _gridCols(List<double?> widths) {
+    for (final double? width in widths) {
+      _w
+        ..start('${_p}gridCol')
+        ..attribute('${_p}w', '${(width! * 20).round()}')
+        ..end();
+    }
+  }
+
+  /// Writes the row [row] at the location [path].
+  void _row(DocxTableRow row, String path) {
+    _w.start('${_p}tr');
+    writeKeptAttributes(_w, rowAttributesOf(row), declaredAbove: _scope);
+    final PropertySet trPr = rowPropertySetOf(row);
+    // A row read without a w:trPr writes one when a value was set: after
+    // any w:tblPrEx, before everything else.
+    bool pending = !rowPropertiesOf(row).isRead && !trPr.writesNothing;
+    int cells = 0;
+    for (final Object child in rowChildrenOf(row)) {
+      if (pending && !_isTblPrEx(child)) {
+        _propertySet(trPr, 'trPr');
+        pending = false;
+      }
+      if (child is DocxTableCell) {
+        _cell(child, '$path/tc[${cells++}]');
+      } else if (child is PropertyContainer) {
+        _propertySet(trPr, 'trPr');
+      } else {
+        (child as OpaqueXml).writeTo(_w, declaredAbove: _scope);
+      }
+    }
+    if (pending) {
+      _propertySet(trPr, 'trPr');
+    }
+    _w.end();
+  }
+
+  /// Whether [child] is a kept `w:tblPrEx`.
+  bool _isTblPrEx(Object child) =>
+      child is OpaqueXml &&
+      child.localName == 'tblPrEx' &&
+      child.namespaceUri == Ns.w;
+
+  /// Writes [properties] as `w:<localName>`.
+  void _propertySet(PropertySet properties, String localName) => properties
+      .writeTo(_w, '$_p$localName', prefix: _prefix, declaredAbove: _scope);
+
+  /// Writes the cell [cell] at the location [path], and the paragraph that
+  /// closes it when it needs one.
+  void _cell(DocxTableCell cell, String path) {
+    _w.start('${_p}tc');
+    writeKeptAttributes(_w, cellAttributesOf(cell), declaredAbove: _scope);
+    final PropertySet tcPr = cellPropertySetOf(cell);
+    if (!tcPr.writesNothing) {
+      _propertySet(tcPr, 'tcPr');
+    }
+    _blocks(cell.blocks, path);
+    if (cellNeedsClosingParagraph(cell)) {
+      _w
+        ..start('${_p}p')
+        ..end();
+    }
+    _w.end();
   }
 
   /// Writes the paragraph [p] at the location [path].
@@ -396,10 +584,11 @@ final class _PartReader {
   final String _partName;
   final int _maxTextLength;
 
-  /// The index among the body's paragraphs of the paragraph being read,
-  /// for errors: the index of a warning's location (`body/p[i]`), which
-  /// other blocks do not shift.
-  int _paragraphIndex = 0;
+  /// The body or cell of the paragraph being read, for errors.
+  late _BlockReader _paragraphIn;
+
+  /// How many tables are open around the element being read.
+  int _tableNesting = 0;
 
   DocumentPart read() {
     final XmlPullReader r = _r;
@@ -445,6 +634,7 @@ final class _PartReader {
   /// `w:sectPr`, if the last child is one.
   OpaqueXml? _readBody(List<DocxBlock> blocks) {
     final XmlPullReader r = _r;
+    final _BlockReader reader = _BlockReader('body', blocks);
     // A sectPr is final only if nothing follows it.
     OpaqueXml? sectPr;
     _children(r, () {
@@ -452,16 +642,161 @@ final class _PartReader {
         blocks.add(opaqueBlock(sectPr!));
         sectPr = null;
       }
-      if (_isW(r, 'p')) {
-        blocks.add(_readParagraph());
-        _paragraphIndex++;
-      } else if (_isW(r, 'sectPr')) {
+      if (_isW(r, 'sectPr')) {
         sectPr = OpaqueXml.capture(r);
       } else {
-        blocks.add(opaqueBlock(OpaqueXml.capture(r)));
+        _readBlock(reader);
       }
     });
     return sectPr;
+  }
+
+  /// Reads the block the reader is on, a child of `w:body` or `w:tc`.
+  void _readBlock(_BlockReader into) {
+    final XmlPullReader r = _r;
+    if (_isW(r, 'p')) {
+      _paragraphIn = into;
+      into.blocks.add(_readParagraph());
+      into.paragraphs++;
+    } else if (_isW(r, 'tbl')) {
+      into.blocks.add(_readTable('${into.path}/tbl[${into.tables++}]'));
+    } else {
+      into.blocks.add(opaqueBlock(OpaqueXml.capture(r)));
+    }
+  }
+
+  /// Reads the `w:tbl` the reader is on, at the location [path].
+  DocxTable _readTable(String path) {
+    if (_tableNesting == maxTableNesting) {
+      throw DocxReadException(
+        DocxReadFailure.limitExceeded,
+        'Limit table nesting ($maxTableNesting) exceeded by $path.',
+        part: _partName,
+      );
+    }
+    _tableNesting++;
+    final XmlPullReader r = _r;
+    final List<KeptAttribute> attributes = List<KeptAttribute>.unmodifiable(
+      keepAttributes(r),
+    );
+    PropertyContainer? properties;
+    List<double?>? grid;
+    final List<Object> children = <Object>[];
+    int rows = 0;
+    _children(r, () {
+      if (_isW(r, 'tr')) {
+        children.add(_readRow('$path/tr[${rows++}]'));
+      } else if (rows == 0 && properties == null && _isW(r, 'tblPr')) {
+        children.add(
+          properties = PropertyContainer.read(r, tablePropertiesSchema),
+        );
+      } else if (rows == 0 && grid == null && _isW(r, 'tblGrid')) {
+        final List<double?> columns = <double?>[];
+        children.add(_captureGrid(columns));
+        grid = List<double?>.unmodifiable(columns);
+      } else {
+        children.add(OpaqueXml.capture(r));
+      }
+    });
+    _tableNesting--;
+    return readTable(
+      properties: properties ?? const PropertyContainer.empty(),
+      attributes: attributes,
+      gridColumnsPt: grid,
+      children: children,
+    );
+  }
+
+  /// Captures the `w:tblGrid` the reader is on, adding the width of each
+  /// `w:gridCol` child to [columns] in the same walk, and keeping the text of
+  /// each other child for a grid written with new widths.
+  TableGrid _captureGrid(List<double?> columns) {
+    final int depth = _r.depth;
+    final Map<String, String> declared = <String, String>{};
+    final List<String> kept = <String>[];
+    int? keptStart;
+    final OpaqueXml xml = OpaqueXml.capture(
+      _r,
+      onEvent: (XmlPullReader r) {
+        if (r.eventType == XmlEventType.startElement) {
+          if (r.depth == depth) {
+            declared.addAll(r.declaredNamespaces);
+          } else if (r.depth == depth + 1) {
+            if (_isW(r, 'gridCol')) {
+              final int? twips = parseDecimal(
+                r.getAttribute('w', namespaceUri: Ns.w),
+                min: 0,
+                max: _maxGridColumnTwips,
+              );
+              columns.add(twips == null ? null : ptOfTwips(twips));
+            } else if (r.isEmptyElement) {
+              kept.add(r.sourceText(r.eventStart, r.eventEnd));
+            } else {
+              keptStart = r.eventStart;
+            }
+          }
+        } else if (r.eventType == XmlEventType.endElement &&
+            r.depth == depth &&
+            keptStart != null) {
+          kept.add(r.sourceText(keptStart!, r.eventEnd));
+          keptStart = null;
+        }
+      },
+    );
+    return TableGrid(xml, Map<String, String>.unmodifiable(declared), kept);
+  }
+
+  /// Reads the `w:tr` the reader is on, at the location [path].
+  DocxTableRow _readRow(String path) {
+    final XmlPullReader r = _r;
+    final List<KeptAttribute> attributes = List<KeptAttribute>.unmodifiable(
+      keepAttributes(r),
+    );
+    PropertyContainer? properties;
+    final List<Object> children = <Object>[];
+    int cells = 0;
+    _children(r, () {
+      if (_isW(r, 'tc')) {
+        children.add(_readCell('$path/tc[${cells++}]'));
+      } else if (cells == 0 && properties == null && _isW(r, 'trPr')) {
+        children.add(
+          properties = PropertyContainer.read(r, tableRowPropertiesSchema),
+        );
+      } else {
+        children.add(OpaqueXml.capture(r));
+      }
+    });
+    return readTableRow(
+      properties: properties ?? const PropertyContainer.empty(),
+      attributes: attributes,
+      children: children,
+    );
+  }
+
+  /// Reads the `w:tc` the reader is on, at the location [path].
+  ///
+  /// Only a first child `w:tcPr` is the cell's properties: the writer puts
+  /// them first, so one anywhere else stays a block, in place.
+  DocxTableCell _readCell(String path) {
+    final XmlPullReader r = _r;
+    final List<KeptAttribute> attributes = List<KeptAttribute>.unmodifiable(
+      keepAttributes(r),
+    );
+    PropertyContainer? properties;
+    final List<DocxBlock> blocks = <DocxBlock>[];
+    final _BlockReader reader = _BlockReader(path, blocks);
+    _children(r, () {
+      if (properties == null && blocks.isEmpty && _isW(r, 'tcPr')) {
+        properties = PropertyContainer.read(r, tableCellPropertiesSchema);
+      } else {
+        _readBlock(reader);
+      }
+    });
+    return readTableCell(
+      properties: properties ?? const PropertyContainer.empty(),
+      attributes: attributes,
+      blocks: blocks,
+    );
   }
 
   /// Reads the `w:p` the reader is on.
@@ -589,13 +924,33 @@ final class _PartReader {
     return buffer.toString();
   }
 
-  /// The `limitExceeded` failure of a text in the paragraph being read.
+  /// The `limitExceeded` failure of a text in the paragraph being read,
+  /// named as a warning names it (`body/p[i]`,
+  /// `body/tbl[i]/tr[j]/tc[k]/p[m]`): other blocks do not shift the index.
   DocxReadException _tooLong() => DocxReadException(
     DocxReadFailure.limitExceeded,
     'Limit maxTextLength ($_maxTextLength) exceeded by '
-    'body/p[$_paragraphIndex].',
+    '${_paragraphIn.path}/p[${_paragraphIn.paragraphs}].',
     part: _partName,
   );
+}
+
+/// The blocks of a body or a cell being read, with the location of the
+/// container and the count of each kind of block that has a location.
+final class _BlockReader {
+  _BlockReader(this.path, this.blocks);
+
+  /// The location of the container, such as `body`.
+  final String path;
+
+  /// The blocks read so far.
+  final List<DocxBlock> blocks;
+
+  /// How many paragraphs were read.
+  int paragraphs = 0;
+
+  /// How many tables were read.
+  int tables = 0;
 }
 
 /// Whether the element [r] is on is `w:<localName>`.

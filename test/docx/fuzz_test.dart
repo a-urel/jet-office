@@ -4,12 +4,13 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import 'support/docx_fuzz.dart';
+import 'support/table_document.dart';
 
 /// The seeds the quality gate fuzzes, each with [_cases] cases.
 const List<int> _seeds = <int>[1, 2, 3, 4];
 
 /// The cases per seed in the quality gate.
-const int _cases = 150;
+const int _cases = 400;
 
 /// The length and Adler-32 checksum of every corpus entry, computed once on
 /// the VM. The Chrome leg compares them, which proves the corpus (and so
@@ -21,15 +22,21 @@ const Map<String, ({int length, int adler32})> _corpus =
     <String, ({int length, int adler32})>{
       'word_like': (length: 8453, adler32: 2713099753),
       'localized_word': (length: 8747, adler32: 3839375278),
-      'd1_blank': (length: 26801, adler32: 3657637971),
-      'd1_paragraphs': (length: 27090, adler32: 2948431703),
-      'd1_text_rules': (length: 27485, adler32: 558892400),
-      'd1_unicode': (length: 27196, adler32: 3542140742),
-      'd1_large': (length: 227688, adler32: 3000492970),
-      'd2_run_formatting': (length: 28582, adler32: 3181143967),
-      'd2_paragraph_formatting': (length: 28888, adler32: 112903577),
-      'd2_styles': (length: 30891, adler32: 2410709247),
-      'd2_lists': (length: 33241, adler32: 3332337364),
+      'd1_blank': (length: 26844, adler32: 977744039),
+      'd1_paragraphs': (length: 27133, adler32: 3186070677),
+      'd1_text_rules': (length: 27528, adler32: 1424365293),
+      'd1_unicode': (length: 27239, adler32: 4169520655),
+      'd1_large': (length: 227731, adler32: 1592063295),
+      'd2_run_formatting': (length: 28625, adler32: 445085634),
+      'd2_paragraph_formatting': (length: 28931, adler32: 1867241301),
+      'd2_styles': (length: 30934, adler32: 2382400719),
+      'd2_lists': (length: 33284, adler32: 1929608764),
+      'd3_basic': (length: 28845, adler32: 3066803131),
+      'd3_header_row': (length: 70020, adler32: 3183794624),
+      'd3_merges': (length: 30134, adler32: 2775992460),
+      'd3_formatting': (length: 30246, adler32: 3404101736),
+      'd3_nested': (length: 33071, adler32: 2045718154),
+      'tables_by_hand': (length: 9996, adler32: 2530907752),
       'ns0_prefix': (length: 1407, adler32: 3668097186),
       'default_namespace': (length: 1344, adler32: 3335628311),
       'no_override': (length: 1259, adler32: 3490218517),
@@ -51,6 +58,14 @@ int _adler32(List<int> data) {
 }
 
 void main() {
+  test('the table edits take on tables_by_hand', () {
+    final ({int rows, int merges}) edits = docxEditTables(
+      DocxDocument.open(tablesByHandDocx()).body.blocks.toList(),
+    );
+    expect(edits.rows, greaterThan(0));
+    expect(edits.merges, greaterThan(0));
+  });
+
   test('the corpus is the pinned bytes, the same on every run', () {
     final List<({String name, Uint8List bytes})> first = docxFuzzCorpus();
     final List<({String name, Uint8List bytes})> second = docxFuzzCorpus();

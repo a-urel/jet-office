@@ -48,6 +48,11 @@ void main() {
     expect(names, hasLength(5));
   });
 
+  final List<DocxFixture> d3 = <DocxFixture>[
+    for (final DocxFixture f in all)
+      if (f.name.startsWith('d3_')) f,
+  ];
+
   test('the D2 fixtures are the four the plan names, each named once', () {
     expect(
       <String>[for (final DocxFixture f in d2) f.name],
@@ -58,8 +63,21 @@ void main() {
         'd2_lists',
       ],
     );
-    expect(all, hasLength(9));
-    expect(<String>{for (final DocxFixture f in all) f.name}, hasLength(9));
+    expect(all, hasLength(14));
+    expect(<String>{for (final DocxFixture f in all) f.name}, hasLength(14));
+  });
+
+  test('the D3 fixtures are the five the plan names', () {
+    expect(
+      <String>[for (final DocxFixture f in d3) f.name],
+      <String>[
+        'd3_basic',
+        'd3_header_row',
+        'd3_merges',
+        'd3_formatting',
+        'd3_nested',
+      ],
+    );
   });
 
   test('every D1 fixture builds the same bytes every time', () {
@@ -191,7 +209,7 @@ void main() {
         expect(f.libreOfficeText, contains('    \u2022 Bullet one'));
         expect(f.libreOfficeText, contains('    1. Num one'));
         for (final DocxFixture other in all) {
-          if (other.name == 'd2_lists') continue;
+          if (other.name == 'd2_lists' || other.name == 'd3_nested') continue;
           expect(other.libreOfficeText, other.expectedText, reason: other.name);
         }
       },
@@ -263,6 +281,108 @@ void main() {
         restarted.abstractId,
         numbering.instances[1].abstractId,
         reason: 'the same definition as the numbered list',
+      );
+    });
+  });
+
+  group('D3', () {
+    test('every D3 fixture builds the same bytes and no warnings', () {
+      for (final DocxFixture f in d3) {
+        final DocxResult built = f.build();
+        expect(built.bytes, f.build().bytes, reason: f.name);
+        expect(built.warnings, isEmpty, reason: f.name);
+      }
+    });
+
+    test('every D3 fixture reads its text and round-trips', () {
+      for (final DocxFixture f in d3) {
+        final Uint8List input = f.build().bytes;
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(docxFullText(doc), f.expectedText, reason: f.name);
+        expect(
+          doc.body.blocks.whereType<DocxTable>(),
+          isNotEmpty,
+          reason: f.name,
+        );
+        expect(readTypedProperties(doc), greaterThan(0), reason: f.name);
+        expect(doc.styles.styles, isNotEmpty, reason: f.name);
+        final DocxResult saved = doc.save();
+        expect(saved.warnings, isEmpty, reason: f.name);
+        final List<String> differences = <String>[
+          ...comparePackages(input, saved.bytes),
+          ...encodedPartDifferences(input),
+          ...encodedMainDifferences(input),
+        ];
+        expect(
+          differences,
+          isEmpty,
+          reason: '${f.name}\n${differences.join('\n')}',
+        );
+      }
+    });
+
+    test('a body that ends in a table saves and reads back', () {
+      final DocxDocument doc = DocxDocument();
+      doc.body.removeBlockAt(0);
+      doc.body.addTable(columns: 2).addRow(<String?>['a', 'b']);
+      final Uint8List bytes = doc.save().bytes;
+      final DocxDocument again = DocxDocument.open(bytes);
+      expect(again.body.blocks.single, isA<DocxTable>());
+      expect(docxFullText(again), 'a\tb');
+      expect(comparePackages(bytes, again.save().bytes), isEmpty);
+    });
+
+    test('d3_header_row repeats its header over 120 rows', () {
+      final DocxFixture f = d3.singleWhere(
+        (DocxFixture f) => f.name == 'd3_header_row',
+      );
+      final DocxTable table = DocxDocument.open(
+        f.build().bytes,
+      ).body.blocks.whereType<DocxTable>().single;
+      expect(table.rows, hasLength(121));
+      expect(table.rows.first.isHeader, isTrue);
+      expect(table.rows[3].properties.height!.rule, DocxRowHeightRule.exact);
+      expect(table.rows[5].properties.cantSplit, isTrue);
+    });
+
+    test('d3_merges reads each merge shape', () {
+      final DocxFixture f = d3.singleWhere(
+        (DocxFixture f) => f.name == 'd3_merges',
+      );
+      final DocxTable table = DocxDocument.open(
+        f.build().bytes,
+      ).body.blocks.whereType<DocxTable>().single;
+      expect(table.rows[0].cells, hasLength(3));
+      expect(table.rows[0].cells.first.properties.gridSpan, 2);
+      expect(
+        table.rows[1].cells.first.properties.verticalMerge,
+        DocxVerticalMerge.restart,
+      );
+      expect(
+        table.rows[2].cells.first.properties.verticalMerge,
+        DocxVerticalMerge.continuation,
+      );
+    });
+
+    test('d3_nested holds a table in a cell, a list and a last table', () {
+      final DocxFixture f = d3.singleWhere(
+        (DocxFixture f) => f.name == 'd3_nested',
+      );
+      final DocxDocument doc = DocxDocument.open(f.build().bytes);
+      final DocxTable outer = doc.body.blocks.whereType<DocxTable>().single;
+      expect(
+        outer.rows[1].cells[0].blocks.whereType<DocxTable>(),
+        hasLength(1),
+      );
+      expect(
+        outer.rows[2].cells[0].blocks.whereType<DocxTable>(),
+        hasLength(1),
+      );
+      expect(
+        outer.rows[1].cells[1].blocks.whereType<DocxParagraph>().where(
+          (DocxParagraph p) => p.properties.numbering != null,
+        ),
+        hasLength(2),
       );
     });
   });

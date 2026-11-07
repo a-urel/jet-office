@@ -8,9 +8,8 @@
 /// back by the model) and the owner files' test:
 ///
 /// * a document's text is [docxBodyText]: the [DocxParagraph.text] of each
-///   paragraph of the body, joined by `\n`; a block the model does not
-///   type, such as a table, is left out (D1 keeps tables opaque, so it
-///   cannot say what their text is);
+///   paragraph of the body, joined by `\n`; tables and opaque blocks are
+///   left out;
 /// * a text file, expected or exported, is read by [readExpectedText]: a
 ///   leading BOM and one trailing `\n` are dropped, because LibreOffice
 ///   starts its export with a BOM and ends every paragraph with `\n`;
@@ -26,6 +25,28 @@ String docxBodyText(DocxDocument doc) => <String>[
   for (final DocxBlock block in doc.body.blocks)
     if (block is DocxParagraph) block.text,
 ].join('\n');
+
+/// The text of [doc]'s body with its tables, for the fixtures: the blocks in
+/// order, joined by `\n`; a paragraph is its [DocxParagraph.text] and a table
+/// is a line for each row, the text of its cells joined by a tab, as
+/// LibreOffice's text export writes it. Other blocks are left out.
+///
+/// A cell's text is [DocxTableCell.text]. A cell that continues a vertical
+/// merge is an empty cell, and a row of merged cells has one cell for each
+/// `w:tc`.
+String docxFullText(DocxDocument doc) =>
+    _blocksText(doc.body.blocks).join('\n');
+
+List<String> _blocksText(List<DocxBlock> blocks) => <String>[
+  for (final DocxBlock block in blocks)
+    if (block is DocxParagraph)
+      block.text
+    else if (block is DocxTable)
+      for (final DocxTableRow row in block.rows)
+        <String>[
+          for (final DocxTableCell cell in row.cells) cell.text,
+        ].join('\t'),
+];
 
 /// The text a file holds, as compared: [file] without a leading BOM and
 /// without one trailing `\n`.

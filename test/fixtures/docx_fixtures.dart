@@ -1,6 +1,6 @@
-/// The fixtures of DOCX milestones D1 and D2: new documents with paragraphs
-/// of text (D1) and with run and paragraph formatting, styles and lists
-/// (D2).
+/// The fixtures of DOCX milestones D1, D2 and D3: new documents with
+/// paragraphs of text (D1), with run and paragraph formatting, styles and
+/// lists (D2) and with tables (D3).
 ///
 /// New in jet_office. Every fixture starts from `DocxDocument()`, the blank
 /// document, so what LibreOffice and the Open XML SDK see is what the model
@@ -10,6 +10,7 @@ library;
 
 import 'package:jet_office/jet_office.dart';
 
+import '../../tool/src/text_compare.dart' show docxFullText;
 import 'docx_fixture.dart';
 
 export 'docx_fixture.dart';
@@ -25,7 +26,12 @@ const List<(String?, String)> d1Paragraphs = <(String?, String)>[
   (null, 'Last.'),
 ];
 
-/// The fixtures of D1 and D2, in a fixed order.
+/// The fixtures of D1, D2 and D3, in a fixed order.
+///
+/// No fixture may end in a table: LibreOffice's text export of a document
+/// whose body ends in a table never ends, it writes the file without bound
+/// (the model adds no paragraph after a last table), and the CI job converts
+/// every fixture. End the body in a paragraph.
 List<DocxFixture> docxFixtures() => <DocxFixture>[
   DocxFixture('d1_blank', '', () => DocxDocument().save()),
   DocxFixture(
@@ -108,7 +114,76 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
     () => _build(_fillLists),
     libreOfficeText: _listLibreOfficeTexts.join('\n'),
   ),
+  _tableFixture('d3_basic', _fillBasic, expectedText: _basicText),
+  _tableFixture('d3_header_row', _fillHeaderRow),
+  _tableFixture('d3_merges', _fillMerges, expectedText: _mergesText),
+  _tableFixture('d3_formatting', _fillFormatting),
+  _tableFixture(
+    'd3_nested',
+    _fillNested,
+    libreOfficeTextSkip:
+        'LibreOffice repeats a paragraph in the text of nested tables; '
+        'differs by version',
+  ),
 ];
+
+/// The text of `d3_basic`, written by hand from what `_fillBasic` adds: the
+/// paragraphs as lines, each row of the table as a line of its cells joined by
+/// tabs. Not read from the model, so a cell-text bug cannot hide in it.
+final String _basicText = <String>[
+  'Before the table.',
+  'Name\tQuantity\tPrice',
+  'Tea\t2\t3.50',
+  'Coffee\t1\t4.25',
+  'After the table.',
+].join('\n');
+
+/// The text of `d3_merges`, written by hand from the merges of `_fillMerges`
+/// (the cell `rRcC` holds the text `rRcC`). A merged cell holds the text of
+/// every cell it took, one paragraph each in reading order, so each of those
+/// is a line of its own; a cell that continues a vertical merge holds an
+/// empty paragraph. Rows:
+///
+/// - 0: `r0c0 r0c1` across, then `r0c2`, `r0c3`;
+/// - 1: `r1c0 r2c0` down, `r1c1`, and `r1c2 r1c3 r2c2 r2c3` as a block;
+/// - 2: the continued cell, `r2c1`, the continued block;
+/// - 3: `r3c0`, then `r3c1 r3c2 r3c3` across;
+/// - 4: `r4c0 r4c1 r5c0 r5c1` as a block, `r4c2`, `r4c3`;
+/// - 5: the continued block (empty), `r5c2`, `r5c3`.
+final String _mergesText = <String>[
+  'r0c0',
+  'r0c1\tr0c2\tr0c3',
+  'r1c0',
+  'r2c0\tr1c1\tr1c2',
+  'r1c3',
+  'r2c2',
+  'r2c3',
+  '\tr2c1\t',
+  'r3c0\tr3c1',
+  'r3c2',
+  'r3c3',
+  'r4c0',
+  'r4c1',
+  'r5c0',
+  'r5c1\tr4c2\tr4c3',
+  '\tr5c2\tr5c3',
+  'After the merges.',
+].join('\n');
+
+/// A D3 fixture: built by [fill], whose expected text is [expectedText] when
+/// given, else what `docxFullText` reads from the saved file (tables as lines
+/// of cells joined by tabs).
+DocxFixture _tableFixture(
+  String name,
+  void Function(DocxDocument doc) fill, {
+  String? expectedText,
+  String? libreOfficeTextSkip,
+}) => DocxFixture(
+  name,
+  expectedText ?? docxFullText(DocxDocument.open(_build(fill).bytes)),
+  () => _build(fill),
+  libreOfficeTextSkip: libreOfficeTextSkip,
+);
 
 /// A new document whose body holds what [fill] adds in place of its one
 /// empty paragraph, saved.
@@ -441,4 +516,147 @@ DocxResult _document(List<DocxParagraph> paragraphs) {
     body.insertBlock(body.blocks.length, p);
   }
   return doc.save();
+}
+
+/// Fills `d3_basic`: text, a 3 by 3 table in `Table Grid`, text.
+void _fillBasic(DocxDocument doc) {
+  doc.body.addParagraph('Before the table.');
+  final DocxTable table = doc.body.addTable(columns: 3);
+  table.addRow(<String?>['Name', 'Quantity', 'Price'], header: true);
+  table.addRow(<String?>['Tea', '2', '3.50']);
+  table.addRow(<String?>['Coffee', '1', '4.25']);
+  doc.body.addParagraph('After the table.');
+}
+
+/// Fills `d3_header_row`: 120 rows over several pages under a repeating
+/// header, no row split across pages and one row of an exact height.
+void _fillHeaderRow(DocxDocument doc) {
+  doc.body.addParagraph('A long table.');
+  final DocxTable table = doc.body.addTable(columns: 3);
+  table.addRow(<String?>['Number', 'Square', 'Text'], header: true);
+  for (int i = 1; i <= 120; i++) {
+    final DocxTableRow row = table.addRow(<String?>[
+      '$i',
+      '${i * i}',
+      'Row $i of 120',
+    ]);
+    row.properties.cantSplit = true;
+    if (i == 3) {
+      row.properties.height = DocxRowHeight(36, rule: DocxRowHeightRule.exact);
+    }
+  }
+  doc.body.addParagraph('The end.');
+}
+
+/// Fills `d3_merges`: each shape of merge, in a table of four columns.
+void _fillMerges(DocxDocument doc) {
+  final DocxTable table = doc.body.addTable(columns: 4);
+  for (int r = 0; r < 6; r++) {
+    table.addRow(<String?>[for (int c = 0; c < 4; c++) 'r${r}c$c']);
+  }
+  void merge(int r0, int c0, int r1, int c1) => table.mergeCells(
+    firstRow: r0,
+    firstColumn: c0,
+    lastRow: r1,
+    lastColumn: c1,
+  );
+  merge(0, 0, 0, 1); // across
+  merge(1, 0, 2, 0); // down
+  merge(1, 2, 2, 3); // a block
+  merge(3, 1, 3, 3); // across three
+  merge(4, 0, 5, 1); // a block at the edge
+  doc.body.addParagraph('After the merges.');
+}
+
+/// Fills `d3_formatting`: a table with the properties of the table, its rows
+/// and its cells that LibreOffice and the Open XML SDK should accept.
+void _fillFormatting(DocxDocument doc) {
+  final DocxTable table = doc.body.addTable(
+    columns: 3,
+    columnWidthsPt: <double>[100, 150, 200],
+  );
+  final DocxBorder box = DocxBorder(widthPt: 1, color: DocxColor.rgb('1F4E79'));
+  table.properties
+    ..layout = DocxTableLayout.fixed
+    ..width = DocxTableWidth.points(450)
+    ..alignment = DocxTableAlignment.center
+    ..indentationPt = 12
+    ..borders = DocxTableBorders(
+      top: box,
+      left: box,
+      bottom: box,
+      right: box,
+      insideHorizontal: DocxBorder(style: DocxBorderStyle.dashed),
+      insideVertical: DocxBorder(style: DocxBorderStyle.dotted),
+    )
+    ..cellMargins = DocxTableMargins(
+      topPt: 2,
+      leftPt: 6,
+      bottomPt: 2,
+      rightPt: 6,
+    )
+    ..look = const DocxTableLook(
+      firstRow: true,
+      noHorizontalBands: true,
+      noVerticalBands: true,
+    );
+  table.addRow(<String?>['Top', 'Center', 'Bottom'], header: true);
+  table.addRow(<String?>['Shaded', 'Vertical text', 'Bordered']);
+  final DocxTableRow tall = table.addRow(<String?>['High', 'High', 'High']);
+  tall.properties.height = DocxRowHeight(48);
+  table.addRow(<String?>['Splits', 'Splits', 'Splits']).properties
+    ..cantSplit = false
+    ..repeatAsHeader = false;
+  final DocxTableRow first = table.rows[0];
+  first.cells[0].properties.verticalAlignment = DocxCellAlignment.top;
+  first.cells[1].properties.verticalAlignment = DocxCellAlignment.center;
+  first.cells[2].properties.verticalAlignment = DocxCellAlignment.bottom;
+  final DocxTableRow second = table.rows[1];
+  second.cells[0].properties.shading = DocxShading(
+    fill: DocxColor.rgb('FFF2CC'),
+  );
+  second.cells[1].properties.textDirection =
+      DocxTextDirection.bottomToTopLeftToRight;
+  second.cells[2].properties.borders = DocxCellBorders(
+    top: DocxBorder(style: DocxBorderStyle.double, widthPt: 1.5),
+    bottom: DocxBorder(widthPt: 2.25, color: DocxColor.rgb('C00000')),
+  );
+  for (final DocxTableCell cell in tall.cells) {
+    cell.properties.verticalAlignment = DocxCellAlignment.center;
+  }
+  doc.body.addParagraph('After the formatted table.');
+}
+
+/// Fills `d3_nested`: a nested table, a list in a cell, a cell whose last
+/// block is a table, and a second table in the body.
+void _fillNested(DocxDocument doc) {
+  doc.body.addParagraph('Tables in tables.');
+  final DocxTable outer = doc.body.addTable(columns: 2);
+  outer.addRow(<String?>['Outer one', 'Outer two']);
+  outer.addRow(<String?>['Holds a table', 'Holds a list']);
+  outer.addRow(<String?>['Ends in a table', 'Plain']);
+
+  final DocxTableCell host = outer.rows[1].cells[0];
+  final DocxTable inner = host.addTable(columns: 2);
+  inner.addRow(<String?>['Inner a', 'Inner b']);
+  inner.addRow(<String?>['Inner c', 'Inner d']);
+
+  final DocxTableCell listCell = outer.rows[1].cells[1];
+  final DocxNumberingInstance bullets = doc.numbering.addBulletList();
+  final String listStyle = doc.styles.ensure(DocxBuiltInStyle.listParagraph);
+  for (final String item in <String>['First item', 'Second item']) {
+    final DocxParagraph p = listCell.addParagraph(item);
+    p.style = listStyle;
+    p.properties.numbering = bullets.ref();
+  }
+
+  final DocxTableCell last = outer.rows[2].cells[0];
+  final DocxTable tail = last.addTable(columns: 1);
+  tail.addRow(<String?>['Last in the cell']);
+
+  // Not a table last in the body: LibreOffice's text export never ends on a
+  // document whose body ends in a table (it writes the file without bound),
+  // so the fixtures the CI job converts all end in a paragraph. A body that
+  // ends in a table is covered by `round_trip_test.dart` and the Word check.
+  doc.body.addParagraph('After the tables.');
 }

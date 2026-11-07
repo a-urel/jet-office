@@ -32,6 +32,7 @@ import 'localized_document.dart';
 import 'numbering_documents.dart';
 import 'producer_variants.dart';
 import 'styles_documents.dart';
+import 'table_document.dart';
 import 'word_document.dart';
 
 export '../../support/fuzz_mutations.dart'
@@ -43,9 +44,10 @@ export '../../support/fuzz_mutations.dart'
 /// fields and a bookmark), `localized_word`, the document of
 /// `localizedWordDocx()` with Word's styles part (Turkish ids, `w14` and
 /// `w15` content) and numbering part, then every fixture of
-/// `docxFixtures()` and every `producerVariants()` entry, each rebuilt with
-/// stored entries and a fixed timestamp, so the bytes are equal on every
-/// platform.
+/// `docxFixtures()` (the `d3_*` table fixtures among them), `tables_by_hand`,
+/// the document of `tablesByHandDocx()` with every element the table values
+/// read, and every `producerVariants()` entry, each rebuilt with stored
+/// entries and a fixed timestamp, so the bytes are equal on every platform.
 ///
 /// Nothing is deflated, so inflation is fuzzed only by the archive
 /// mutations, which damage the stored headers and sizes.
@@ -55,6 +57,7 @@ List<({String name, Uint8List bytes})> docxFuzzCorpus() =>
       (name: 'localized_word', bytes: _rebuild(_localizedWithNumbering())),
       for (final DocxFixture f in docxFixtures())
         (name: f.name, bytes: _rebuild(f.build().bytes)),
+      (name: 'tables_by_hand', bytes: _rebuild(tablesByHandDocx())),
       for (final ProducerVariant v in producerVariants())
         (name: v.name, bytes: _rebuild(v.bytes)),
     ];
@@ -184,6 +187,13 @@ const Set<String> typedAttributes = <String>{
   'hAnsi',
   'eastAsia',
   'cs',
+  'hRule',
+  'firstRow',
+  'lastRow',
+  'firstColumn',
+  'lastColumn',
+  'noHBand',
+  'noVBand',
 };
 
 /// Whether the part [name] holds typed properties: the main part, the
@@ -288,6 +298,12 @@ Iterable<FuzzCase> docxFuzzCases(int seed, int count) {
 /// rethrown after the save and the reopen. Anything else thrown by `open`
 /// or those steps is a defect and propagates at once.
 ///
+/// Every table of what loaded is read (its properties, its rows' and its
+/// cells', the grid, nested tables), then gets a row added and merges over
+/// a range of its cells; only [ArgumentError] may come out of those edits.
+/// A table the file left without rows is a read one: the save writes it as
+/// read and throws no [StateError].
+///
 /// Reading a property or an accessor of what loaded throws nothing,
 /// whatever the file holds: a [DocxReadException] from there is a defect
 /// too, for the loading is guarded apart from the reading. When styles and
@@ -316,6 +332,7 @@ void exerciseDocx(Uint8List bytes) {
   _guard(() => numbering = doc.numbering, refused);
   if (blocks != null) {
     _walk(blocks!);
+    docxEditTables(blocks!);
     body!.addParagraph('x').addRun('y');
   }
   if (styles != null) _readStyles(styles!);
@@ -374,6 +391,10 @@ bool _guard(
 void _walk(List<DocxBlock> blocks) {
   for (final DocxBlock block in blocks) {
     block.toString();
+    if (block is DocxTable) {
+      _table(block);
+      continue;
+    }
     if (block is! DocxParagraph) continue;
     block.text;
     block.style;
@@ -389,6 +410,101 @@ void _walk(List<DocxBlock> blocks) {
       }
     }
   }
+}
+
+/// Reads every typed property of [table], its rows and its cells, and walks
+/// the blocks of each cell, nested tables included.
+void _table(DocxTable table) {
+  final DocxTableProperties p = table.properties;
+  <Object?>[
+    p.style,
+    p.width,
+    p.layout,
+    p.alignment,
+    p.indentationPt,
+    p.borders,
+    p.cellMargins,
+    p.look,
+    table.gridColumnsPt,
+  ].toString();
+  for (final DocxTableRow row in table.rows) {
+    final DocxTableRowProperties r = row.properties;
+    <Object?>[r.height, r.cantSplit, r.repeatAsHeader, row.isHeader].toString();
+    for (final DocxTableCell cell in row.cells) {
+      final DocxTableCellProperties c = cell.properties;
+      <Object?>[
+        c.width,
+        c.gridSpan,
+        c.verticalMerge,
+        c.verticalAlignment,
+        c.shading,
+        c.borders,
+        c.textDirection,
+        cell.toString(),
+      ].toString();
+      _walk(cell.blocks.toList());
+    }
+  }
+}
+
+/// Edits every table of [blocks] and of the cells below them: a row added,
+/// then merges over a range of what loaded (the whole table, its first
+/// rows and columns, its last cell, its first row, its first column).
+///
+/// Only [ArgumentError] may come out of the calls, for a table whose grid
+/// or rows do not allow the edit; anything else, a [RangeError] too, is a
+/// defect and propagates. Returns how many rows and merges took.
+({int rows, int merges}) docxEditTables(List<DocxBlock> blocks) {
+  int rows = 0;
+  int merges = 0;
+  for (final DocxBlock block in blocks) {
+    if (block is! DocxTable) continue;
+    final int columns = block.gridColumnsPt?.length ?? 0;
+
+    /// Whether [edit] took. A [RangeError] is a bug inside the model: every
+    /// argument here is in range or refused with a plain [ArgumentError].
+    bool attempt(void Function() edit) {
+      try {
+        edit();
+        return true;
+      } on RangeError {
+        rethrow;
+      } on ArgumentError {
+        // The table's shape does not allow it, as the API documents.
+        return false;
+      }
+    }
+
+    if (attempt(() => block.addRow(<String?>['x', null]))) rows++;
+    final int last = block.rows.length - 1;
+    for (final (int, int, int, int) range in <(int, int, int, int)>[
+      (0, 0, last, columns - 1),
+      (0, 0, 1, 1),
+      (last, columns - 1, last, columns - 1),
+      (0, 0, 0, columns - 1),
+      (0, 0, last, 0),
+    ]) {
+      final bool merged = attempt(
+        () => block.mergeCells(
+          firstRow: range.$1,
+          firstColumn: range.$2,
+          lastRow: range.$3,
+          lastColumn: range.$4,
+        ),
+      );
+      if (merged) merges++;
+    }
+    for (final DocxTableRow row in block.rows) {
+      for (final DocxTableCell cell in row.cells) {
+        final ({int rows, int merges}) nested = docxEditTables(
+          cell.blocks.toList(),
+        );
+        rows += nested.rows;
+        merges += nested.merges;
+      }
+    }
+  }
+  return (rows: rows, merges: merges);
 }
 
 /// Reads the defaults, every style and every typed property of [styles].

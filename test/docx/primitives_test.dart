@@ -38,6 +38,30 @@ DocxDocument _open() => DocxDocument.open(
   ),
 );
 
+/// A sink of no document that counts the changes it applies.
+final class _CountingSink implements DocxEditSink {
+  int applied = 0;
+
+  @override
+  void apply(Change change) {
+    applied++;
+    DocxEditSink.none.apply(change);
+  }
+
+  @override
+  void atomically(void Function() body) => body();
+
+  @override
+  String? ensureStyle(DocxBuiltInStyle style) => null;
+
+  @override
+  bool isForeign(DocxEditSink? readIn) => false;
+
+  @override
+  Never noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('${invocation.memberName}');
+}
+
 void main() {
   group('block primitives', () {
     test('insert, remove and replace record changes that revert and '
@@ -124,16 +148,52 @@ void main() {
       expect(edits.log.hasChanges, isFalse);
     });
 
-    test('outside a transaction it throws and leaves the list unchanged', () {
+    test('outside a transaction an edit is a transaction of its own', () {
       final DocxEdits edits = DocxEdits();
       final List<DocxBlock> blocks = <DocxBlock>[];
       final DocxParagraph a = DocxParagraph();
+      insertBlock(edits, _container, blocks, 0, a);
+      expect(blocks, <DocxBlock>[a]);
+      expect(edits.log.hasChanges, isTrue);
+    });
+
+    test('an edit that fails once recorded is taken out again', () {
+      final DocxEdits edits = DocxEdits();
+      final List<DocxBlock> blocks = <DocxBlock>[];
+      final DocxParagraph a = DocxParagraph();
+      edits.afterRecord = () => throw StateError('hook');
       expect(
         () => insertBlock(edits, _container, blocks, 0, a),
         throwsStateError,
       );
       expect(blocks, isEmpty);
       expect(blockContainerOf(a), isNull);
+      expect(editSinkOf(a), same(DocxEditSink.none));
+      expect(edits.log.hasChanges, isFalse);
+    });
+
+    test('on the sink of no document they apply and record nothing', () {
+      const DocxEditSink none = DocxEditSink.none;
+      final List<DocxBlock> blocks = <DocxBlock>[];
+      final DocxParagraph a = DocxParagraph.text('a');
+      final DocxParagraph b = DocxParagraph.text('b');
+      insertBlock(none, _container, blocks, 0, a);
+      expect(blockContainerOf(a), same(_container));
+      replaceBlock(none, _container, blocks, 0, b);
+      expect(_texts(blocks), <String>['b']);
+      expect(blockContainerOf(a), isNull);
+      removeBlock(none, _container, blocks, 0);
+      expect(blocks, isEmpty);
+      expect(blockContainerOf(b), isNull);
+    });
+
+    test('a block change is applied by the sink, once', () {
+      final _CountingSink sink = _CountingSink();
+      final List<DocxBlock> blocks = <DocxBlock>[];
+      insertBlock(sink, _container, blocks, 0, DocxParagraph());
+      removeBlock(sink, _container, blocks, 0);
+      expect(sink.applied, 2);
+      expect(blocks, isEmpty);
     });
   });
 

@@ -18,6 +18,11 @@
 /// `Text (encoded):UTF8` writes UTF-8 with a BOM and ends every paragraph
 /// with a line feed; `LC_ALL=C.UTF-8` keeps the locale from changing that.
 ///
+/// A document with a `<name>.libreoffice-skip.txt` (its reason, written by
+/// `tool/write_fixtures.dart` from `DocxFixture.libreOfficeTextSkip`) is not
+/// compared: the tool prints `<name>: skipped: <reason>` and counts it apart.
+/// Its re-save is still compared by `tool/compare_resaved_docx.dart`.
+///
 /// Each difference is printed as `<name>: <line>`, a missing export as
 /// `<name>: missing <file>`. The exit code is 1 on any difference, 2 when
 /// the arguments are unusable or the directory holds no `.expected.txt`,
@@ -54,7 +59,14 @@ int compareText(
     return 2;
   }
   int failed = 0;
+  int skipped = 0;
   for (final String name in names) {
+    final File skip = File('${dir.path}/$name.libreoffice-skip.txt');
+    if (skip.existsSync()) {
+      out.writeln('$name: skipped: ${skip.readAsStringSync().trim()}');
+      skipped++;
+      continue;
+    }
     final File pinned = File('${dir.path}/$name.libreoffice.txt');
     final String expected = readExpectedText(
       (pinned.existsSync() ? pinned : File('${dir.path}/$name.expected.txt'))
@@ -72,10 +84,12 @@ int compareText(
     }
     if (problems.isNotEmpty) failed++;
   }
+  final String note = skipped == 0 ? '' : ' ($skipped skipped)';
   out.writeln(
     failed == 0
-        ? 'All ${names.length} documents export the expected text.'
-        : '$failed of ${names.length} documents differ.',
+        ? 'All ${names.length - skipped} documents export the expected '
+              'text$note.'
+        : '$failed of ${names.length - skipped} documents differ$note.',
   );
   return failed == 0 ? 0 : 1;
 }

@@ -87,6 +87,8 @@ String _dump(DocumentPart part) {
           out.write(';');
         }
         out.write(']');
+      case DocxTable():
+        out.write('tbl(${block.rows.length})');
       case DocxOpaqueBlock():
         out.write('ob:${block.namespaceUri}|${block.localName}');
     }
@@ -163,7 +165,7 @@ void main() {
     expect(_attr(contentAttributesOf(run.content[1]), 'w:type'), isNull);
   });
 
-  test('tables and sdt blocks are opaque blocks in place', () {
+  test('tables are typed and sdt blocks are opaque blocks, in place', () {
     final DocumentPart part = _read(
       '<w:p><w:r><w:t>before</w:t></w:r></w:p>'
       '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc>'
@@ -174,17 +176,18 @@ void main() {
     );
     expect(part.blocks.map((DocxBlock b) => b.runtimeType), <Type>[
       DocxParagraph,
-      DocxOpaqueBlock,
+      DocxTable,
       DocxOpaqueBlock,
       DocxOpaqueBlock,
       DocxParagraph,
     ]);
-    final DocxOpaqueBlock table = part.blocks[1] as DocxOpaqueBlock;
-    expect(table.localName, 'tbl');
-    expect(table.namespaceUri, Ns.w);
-    expect(opaqueBlockXml(table).xml, startsWith('<w:tbl>'));
-    expect(opaqueBlockXml(table).xml, endsWith('</w:tbl>'));
-    expect((part.blocks[2] as DocxOpaqueBlock).localName, 'sdt');
+    final DocxTable table = part.blocks[1] as DocxTable;
+    expect(table.rows.single.cells.single.text, 'cell');
+    final DocxOpaqueBlock sdt = part.blocks[2] as DocxOpaqueBlock;
+    expect(sdt.localName, 'sdt');
+    expect(sdt.namespaceUri, Ns.w);
+    expect(opaqueBlockXml(sdt).xml, startsWith('<w:sdt>'));
+    expect(opaqueBlockXml(sdt).xml, endsWith('</w:sdt>'));
     expect((part.blocks[3] as DocxOpaqueBlock).localName, 'bookmarkStart');
     expect(_p(part, 4).text, 'after');
   });

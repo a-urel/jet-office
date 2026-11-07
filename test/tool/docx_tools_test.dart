@@ -21,6 +21,7 @@ import '../../tool/draft_expected_docx.dart';
 import '../../tool/round_trip_docx.dart';
 import '../../tool/src/text_compare.dart';
 import '../../tool/write_fixtures.dart' as write_fixtures;
+import '../../tool/write_table_last.dart' as write_table_last;
 import '../docx/support/docx_builder.dart' show buildDocx, rewriteDocxPart;
 import '../docx/support/styles_documents.dart' show readDocxText;
 import '../fixtures/docx_fixtures.dart';
@@ -56,6 +57,25 @@ void main() {
       docx.path.replaceFirst(RegExp(r'\.docx$'), '.txt'),
     ).writeAsStringSync('﻿$text\n');
   }
+
+  group('write_table_last', () {
+    test('writes a document whose body ends in a table, and nothing else', () {
+      write_table_last.main(<String>[dir.path]);
+      expect(names(dir), <String>['d3_table_last.docx']);
+      final DocxDocument doc = DocxDocument.open(
+        File('${dir.path}/d3_table_last.docx').readAsBytesSync(),
+      );
+      expect(doc.body.blocks.first, isA<DocxParagraph>());
+      expect(doc.body.blocks.last, isA<DocxTable>());
+      expect(doc.save().warnings, isEmpty);
+    });
+
+    test('a usage error exits 64', () {
+      write_table_last.main(<String>[]);
+      expect(exitCode, 64);
+      exitCode = 0;
+    });
+  });
 
   group('write_fixtures', () {
     test('writes every D1 fixture as .docx with its .expected.txt', () {
@@ -93,6 +113,24 @@ void main() {
         }
       }
       expect(written, contains('d2_lists.libreoffice.txt'));
+    });
+
+    test('writes the reason of a skipped LibreOffice text, only for those', () {
+      write_fixtures.main(<String>[dir.path]);
+      final List<String> written = names(dir);
+      for (final DocxFixture f in docxFixtures()) {
+        final String file = '${f.name}.libreoffice-skip.txt';
+        if (f.libreOfficeTextSkip == null) {
+          expect(written, isNot(contains(file)), reason: f.name);
+        } else {
+          expect(written, contains(file), reason: f.name);
+          expect(
+            File('${dir.path}/$file').readAsStringSync(),
+            '${f.libreOfficeTextSkip}\n',
+          );
+        }
+      }
+      expect(written, contains('d3_nested.libreoffice-skip.txt'));
     });
 
     test(
@@ -167,6 +205,30 @@ void main() {
         expect(again.toString(), contains('d2_lists: line 2: expected'));
       },
     );
+
+    test('a skipped fixture is not compared and the output says so', () {
+      writeOnly(dir, <String>{
+        'd1_paragraphs.docx',
+        'd1_paragraphs.expected.txt',
+        'd3_nested.docx',
+        'd3_nested.expected.txt',
+        'd3_nested.libreoffice-skip.txt',
+      });
+      exportText(File('${dir.path}/d1_paragraphs.docx'));
+      // The export of d3_nested is missing, and would differ if present.
+      final StringBuffer out = StringBuffer();
+      final int code = compareText(
+        <String>[dir.path],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 0, reason: '$out');
+      expect(
+        out.toString(),
+        contains('d3_nested: skipped: LibreOffice repeats'),
+      );
+      expect(out.toString(), contains('1 skipped'));
+    });
 
     test('the corrupt document: exit 1 naming its changed line', () {
       writeOnly(dir, <String>{

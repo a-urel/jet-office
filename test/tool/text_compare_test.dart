@@ -33,6 +33,52 @@ void main() {
     });
   });
 
+  group('docxFullText', () {
+    DocxDocument open(String body) => DocxDocument.open(
+      buildDocx(
+        document:
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+            'wordprocessingml/2006/main"><w:body>$body</w:body></w:document>',
+      ),
+    );
+
+    test('a table is a line for each row, its cells joined by a tab', () {
+      final DocxDocument doc = open(
+        '<w:p><w:r><w:t>One</w:t></w:r></w:p>'
+        '<w:tbl><w:tr>'
+        '<w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc>'
+        '<w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc></w:tr>'
+        '<w:tr><w:tc><w:p/></w:tc>'
+        '<w:tc><w:p><w:r><w:t>D</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+        '<w:p><w:r><w:t>Two</w:t></w:r></w:p>',
+      );
+      expect(docxFullText(doc), 'One\nA\tB\n\tD\nTwo');
+    });
+
+    test('paragraphs of a cell are lines, as LibreOffice writes them', () {
+      final DocxDocument doc = open(
+        '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>A1</w:t></w:r></w:p>'
+        '<w:p><w:r><w:t>A2</w:t></w:r></w:p></w:tc>'
+        '<w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
+      );
+      expect(docxFullText(doc), 'A1\nA2\tB');
+    });
+
+    test('a nested table adds the lines of its rows in place', () {
+      final DocxDocument doc = open(
+        '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p>'
+        '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc>'
+        '<w:tc><w:p><w:r><w:t>y</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+        '<w:p/></w:tc></w:tr></w:tbl>',
+      );
+      expect(docxFullText(doc), 'A\nx\ny\n');
+    });
+
+    test('a new document reads as the empty text', () {
+      expect(docxFullText(DocxDocument()), '');
+    });
+  });
+
   group('readExpectedText', () {
     test('drops a leading BOM and one trailing newline', () {
       expect(readExpectedText('﻿a\nb\n'), 'a\nb');

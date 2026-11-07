@@ -13,7 +13,11 @@ model, on the same fidelity standard), `0011` (a new document's parts are
 this library's own, with Word's values) and `0012` (the number format engine
 lives in `jet_core`; supersedes `0001`'s one runtime dependency and `0008`'s
 location and names) and `0013` (one repository: a pub workspace, with
-`jet_core` under `packages/`) before any design change.
+`jet_core` under `packages/`) and `0014` (the chart phase: `jet_charts_core`
+under `packages/`, and a DrawingML layer here) before any design change.
+
+`packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
+its own `AGENTS.md`, and this package does not depend on it until C1.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -29,6 +33,7 @@ dart analyze --fatal-infos
 dart test
 dart test -p chrome
 (cd packages/jet_core && dart test && dart test -p chrome)
+(cd packages/jet_charts_core && dart test && dart test -p chrome)
 ```
 
 The Chrome leg runs every test that is not marked `@TestOn('vm')` in a
@@ -62,8 +67,9 @@ dotnet run --project tool/ooxml_validate -- build/model
 dotnet run --project tool/ooxml_validate -- build/model-resaved
 dart run tool/edit_model.dart build/fixtures build/model-edited
 dotnet run --project tool/ooxml_validate -- build/model-edited
-LC_ALL=C.UTF-8 soffice --headless --convert-to 'txt:Text (encoded):UTF8' \
-  --outdir build/fixtures build/fixtures/*.docx
+(ulimit -f 500000; LC_ALL=C.UTF-8 soffice --headless \
+  --convert-to 'txt:Text (encoded):UTF8' \
+  --outdir build/fixtures build/fixtures/*.docx)
 dart run tool/compare_text.dart build/fixtures
 mkdir -p build/resaved-docx
 LC_ALL=C.UTF-8 soffice --headless --convert-to 'docx:MS Word 2007 XML' \
@@ -73,13 +79,13 @@ dart run tool/round_trip_docx.dart build/fixtures build/model-docx-fixtures
 dart run tool/round_trip_docx.dart build/resaved-docx build/model-docx
 dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/model-docx-owner
 dotnet run --project tool/ooxml_validate -- build/model-docx-fixtures
-dotnet run --project tool/ooxml_validate -- build/model-docx
+dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/model-docx
 dotnet run --project tool/ooxml_validate -- build/model-docx-owner
 dart run tool/edit_docx.dart build/fixtures build/edited-docx-fixtures
 dart run tool/edit_docx.dart build/resaved-docx build/edited-docx
 dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 dotnet run --project tool/ooxml_validate -- build/edited-docx-fixtures
-dotnet run --project tool/ooxml_validate -- build/edited-docx
+dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/edited-docx
 dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 ```
 
@@ -87,7 +93,10 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
   `<name>.xlsx` and its expected values as `<name>.expected.json`, and each
   DOCX fixture of `docxFixtures()` (`test/fixtures/docx_fixtures.dart`) as
-  `<name>.docx` and its expected text as `<name>.expected.txt`.
+  `<name>.docx` and its expected text as `<name>.expected.txt`: the D1
+  documents (`d1_*`), the D2 ones (`d2_*`) and the D3 tables (`d3_basic`,
+  `d3_header_row`, `d3_merges`, `d3_formatting`, `d3_nested`). No fixture ends
+  in a table, because LibreOffice's text export of one never ends (see below).
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx` and
   `d1_corrupt.docx`, to prove every check still fails on a bad file. The
   `validate` job's negative-control step writes `m1_corrupt.xlsx` to
@@ -104,6 +113,25 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 - `tool/ooxml_validate` validates every `.xlsx` and `.docx` with the Open XML
   SDK against the Microsoft 365 schemas and fails on any error. An error there
   is a writer or model bug.
+  `--libreoffice-resave` is for a directory that came from LibreOffice's
+  re-save, or from the model's round trip or edit of one (`build/resaved-docx`,
+  `build/model-docx`, `build/edited-docx`): LibreOffice writes a repeating
+  header row as `<w:tblHeader w:val="true"/>`, which the SDK refuses (it takes
+  only `on` and `off` there) and the model keeps as read. `w:cantSplit` has the
+  same type, so the flag covers `w:val="true"` there too, though the
+  LibreOffice checked writes it bare. The flag ignores that one error on those
+  two elements, matched on the element and its exact value; every other error,
+  and every run without the flag, counts. The `d1_corrupt.docx` negative
+  control must still fail with it.
+- LibreOffice's text export of a document whose body ends in a table never
+  ends: it writes the file without bound. No fixture may end in a table (the
+  fixture list says so), and the CI step and the command above cap the file
+  size with `ulimit -f` so a runaway fails instead of filling the disk.
+- `DocxFixture.libreOfficeTextSkip` (a reason; `d3_nested`, whose text
+  LibreOffice writes differently by version) makes `tool/write_fixtures.dart`
+  write `<name>.libreoffice-skip.txt`, and `tool/compare_text.dart` skip that
+  document and print `<name>: skipped: <reason>`. Its re-save is still
+  compared.
 - `tool/compare_csv.dart` compares LibreOffice's CSV export of every sheet
   with the expected values on raw values. Its doc comment explains the filter
   options; `tool/src/csv_compare.dart` holds the comparison and its contract.
@@ -170,8 +198,9 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   arguments. A loaded part nothing changed is saved as read, so it also
   encodes the main, styles and numbering parts from the model and compares
   them with the input (`encodedPartDifferences`, `encodedMainDifferences`,
-  `tool/src/docx_serialize.dart`; the second takes the children of `w:pPr`
-  and `w:rPr` in any order, as the model writes them in schema order). CI
+  `tool/src/docx_serialize.dart`; the second takes the children of `w:pPr`,
+  `w:rPr`, `w:tblPr`, `w:trPr` and `w:tcPr` in any order, as the model writes
+  them in schema order). CI
   runs it on the fixtures, on LibreOffice's re-save and on the owner's Word
   files, then validates all three outputs with the Open XML SDK. As for
   workbooks, the `d1_corrupt.docx` document round-trips (exit 0)
@@ -186,13 +215,21 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   the style `styles.ensure(DocxBuiltInStyle.heading1)` (`Balk1` in a
   Turkish Word file; Word's definition when the file has none); and it adds
   a bullet list (`numbering.addBulletList`) of two items, `First item` and
-  `Second item` at level 1 (`addListItem`). It saves to the second
-  directory, reads the saved file back and checks the text, bold and
-  accent of the run, the replacing paragraph, the heading's style, and each
-  item's text, list number and level, and that the body has three blocks
-  more. `comparePackages` must find differences only in the main part
-  (named by the root relationship), the numbering part, the styles part
-  when `ensure` added a style, and `[Content_Types].xml` with the main
+  `Second item` at level 1 (`addListItem`). In a document with a table (the
+  first top-level `DocxTable` with a cell) it sets the text of the first
+  cell's first paragraph to `Edited cell`, through that paragraph's first
+  run or a new one, and appends a row `New row` when the table has a grid
+  (`addRow`; left out otherwise). In every document it appends, before the
+  heading and the list, a table `addTable(columns: 2)` of a header row
+  `Head one`, `Head two`, a body row and a third row merged across both
+  columns. It saves to the second directory, reads the saved file back and
+  checks the text, bold and accent of the run, the replacing paragraph, the
+  heading's style, each item's text, list number and level, the cell text,
+  the new row, the added table's rows (header flag, texts, merge), and that
+  the body has four blocks more. `comparePackages` must find differences
+  only in the main part (named by the root relationship), the numbering
+  part, the styles part when `ensure` added a style (`Heading1`, or
+  `TableGrid` and `Normal Table`), and `[Content_Types].xml` with the main
   part's relationships when a part was created. It prints each problem as
   `<file>: <problem>` and exits 1 on any, 2 on unusable arguments. CI runs
   it on the fixtures, on LibreOffice's re-save and on the owner's Word
@@ -222,11 +259,15 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   (`tool/draft_expected.dart` drafts them). Never edit a committed owner file or
   its expected JSON without the owner.
 - Neither is Word. The owner opens each D milestone's fixtures
-  (`build/fixtures/d1_*.docx`), the model's round trips of them and of the
-  owner's Word files, and the model's edits of the owner's Word files in
-  Word for Mac, and records the result in
+  (`build/fixtures/d1_*.docx`, `d2_*`, `d3_*`), the model's round trips of
+  them and of the owner's Word files, and the model's edits of the owner's
+  Word files in Word for Mac, and records the result in
   `docs/word-checks.md`, which says how to write them. A repair prompt there
-  is a model or writer bug, as in Excel's case.
+  is a model or writer bug, as in Excel's case. A body that ends in a table
+  cannot be a fixture (LibreOffice's text export never ends on one) and Word
+  cannot save one, so `dart run tool/write_table_last.dart build/table-last`
+  writes `d3_table_last.docx` for that check alone; never run `soffice` on
+  that folder.
 - Word files go in `test/fixtures/owner/docx/`, listed in its
   `manifest.json`, each with `<name>.expected.txt`, the text of the body's
   paragraphs (`test/fixtures/owner/README.md`, section "Word files", says
@@ -249,11 +290,13 @@ timing each phase and recording what the loaded store retains, for that sheet
 and for a formula-dense one. `xlsx_read_worst_case_test.dart`
 reads the largest single sheet the default limits accept (about 250 MiB of XML;
 about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file size and
-peak memory per run. `xlsx_format_benchmark_test.dart` times
-`NumberFormatter.formatCell` on every cell of the read file (the benchmark of
-synthetic values is in `jet_core`). The quality gate does not run them; run
-them by hand on the VM and in Chrome (`dart test benchmark` runs all five). They record
-figures and fail on none (`docs/benchmark.md`):
+peak memory per run. `docx_benchmark_test.dart` builds a 10,000 x 12 table
+with `addTable` and `addRow`, saves it, opens the bytes and reads every cell,
+printing time, file size and memory per phase. `xlsx_format_benchmark_test.dart`
+times `NumberFormatter.formatCell` on every cell of the read file (the
+benchmark of synthetic values is in `jet_core`). The quality gate does not run
+them; run them by hand on the VM and in Chrome (`dart test benchmark` runs all
+six). They record figures and fail on none (`docs/benchmark.md`):
 
 ```bash
 dart test benchmark
@@ -298,15 +341,20 @@ It prints failures as the reader's run does. Pin a failure as a unit test in
 the owning `*_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
-150 cases each, over the fixtures and producer variants of
-`test/docx/support/docx_fuzz.dart`: whole mutated files, with every part name
-mutated somewhere, and about a third of the cases replacing the value of a
-`w:` attribute (`w:val`, `w:w`, `w:left` and the like) of the main, styles or
-numbering part by `abc`, twenty digits, `-` or `1in`; open, load the body,
+400 cases each, over the fixtures (the `d3_*` table fixtures among them), a
+hand-made table with every element of the table values, and the producer
+variants of `test/docx/support/docx_fuzz.dart`: whole mutated files, with every
+part name mutated somewhere, and about a third of the cases replacing the value
+of a `w:` attribute (`w:val`, `w:w`, `w:left` and the like) of the main, styles
+or numbering part by `abc`, twenty digits, `-` or `1in`; open, load the body,
 styles and numbering, then read every typed property (a throw there is a
-failure, even a `DocxReadException`), call `styles.ensure` and
-`numbering.addBulletList` on what loaded, and save throw nothing but
-`DocxReadException` from a load), the same cases on the VM and in Chrome;
+failure, even a `DocxReadException`), including every table's, row's and
+cell's properties and grid, walking cells and nested tables; call
+`styles.ensure` and `numbering.addBulletList` on what loaded; add a row to
+each loaded table and merge ranges of its cells (only `ArgumentError` may
+come out of those two); and save (never a `StateError`, even for a table the
+file left without rows), throw nothing but `DocxReadException` from a load),
+the same cases on the VM and in Chrome;
 longer runs by hand:
 
 ```bash
@@ -315,6 +363,12 @@ dart run tool/fuzz_docx.dart --seeds 1-200 --cases 1000
 
 It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
 1 on any. Pin a failure as a unit test in the owning `*_test.dart` first.
+
+The gate runs 400 cases per seed, not 150, for one reason: the seeds are fixed,
+so the cases must between them mutate every part name of the corpus
+(`every part name is mutated in some corpus entry`), and the D3 fixtures and
+`tables_by_hand` joined the corpus and made 150 too few. When a new part name
+joins the corpus, run that test and raise the count again if it fails.
 
 ## Hard rules
 

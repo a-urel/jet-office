@@ -11,11 +11,13 @@ library;
 
 import 'package:jet_office/src/docx/model/formatting.dart';
 import 'package:jet_office/src/docx/model/numbering_formats.dart';
+import 'package:jet_office/src/docx/model/table_formatting.dart';
 import 'package:jet_office/src/docx/numbering_schemas.dart';
 import 'package:jet_office/src/docx/paragraph_property_codecs.dart';
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/run_property_codecs.dart';
 import 'package:jet_office/src/docx/style_schemas.dart';
+import 'package:jet_office/src/docx/table_property_codecs.dart';
 
 /// One container schema under test.
 typedef ContainerSchemaCase = ({
@@ -140,5 +142,79 @@ final List<ContainerSchemaCase> containerSchemaCases = <ContainerSchemaCase>[
     name: 'lvlOverride',
     schema: levelOverrideSchema,
     samples: <String, Object>{'startOverride': 3},
+  ),
+  (
+    name: 'tblPr',
+    schema: tablePropertiesSchema,
+    samples: <String, Object>{
+      'tblStyle': 'TableGrid',
+      'tblW': const DocxTableWidth.auto(),
+      'jc': DocxTableAlignment.center,
+      'tblInd': 5.4,
+      'tblBorders': const DocxTableBorders(),
+      'tblLayout': DocxTableLayout.fixed,
+      'tblCellMar': DocxTableMargins(leftPt: 5.4),
+      'tblLook': const DocxTableLook(firstRow: true),
+    },
+  ),
+  (
+    name: 'tblBorders',
+    schema: tableBordersSchema,
+    samples: <String, Object>{
+      'top': DocxBorder(),
+      'left': DocxBorder(),
+      'bottom': DocxBorder(),
+      'right': DocxBorder(),
+      'insideH': DocxBorder(),
+      'insideV': DocxBorder(),
+    },
+  ),
+  (
+    name: 'tblCellMar',
+    schema: tableMarginsSchema,
+    samples: <String, Object>{
+      'top': 1.0,
+      'left': 5.4,
+      'bottom': 1.0,
+      'right': 5.4,
+    },
+  ),
+  (
+    name: 'trPr',
+    schema: tableRowPropertiesSchema,
+    samples: <String, Object>{
+      'gridBefore': 1,
+      'gridAfter': 1,
+      'cantSplit': true,
+      'trHeight': DocxRowHeight(20),
+      'tblHeader': true,
+    },
+  ),
+  (
+    name: 'tcPr',
+    schema: tableCellPropertiesSchema,
+    samples: <String, Object>{
+      'tcW': DocxTableWidth.points(72),
+      'gridSpan': 2,
+      'vMerge': DocxVerticalMerge.restart,
+      'tcBorders': const DocxCellBorders(),
+      'shd': const DocxShading(pattern: DocxShadingPattern.clear),
+      'textDirection': DocxTextDirection.tbRlV,
+      'vAlign': DocxCellAlignment.center,
+    },
+  ),
+  (
+    name: 'tcBorders',
+    schema: cellBordersSchema,
+    samples: <String, Object>{
+      'top': DocxBorder(),
+      'left': DocxBorder(),
+      'bottom': DocxBorder(),
+      'right': DocxBorder(),
+      'insideH': DocxBorder(),
+      'insideV': DocxBorder(),
+      'tl2br': DocxBorder(),
+      'tr2bl': DocxBorder(),
+    },
   ),
 ];

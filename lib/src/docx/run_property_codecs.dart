@@ -119,9 +119,16 @@ void _writeRest(
 ///
 /// `w:val` reads as `ST_OnOff` does: absent, `true`, `1` or `on` is `true`,
 /// `false`, `0` or `off` is `false`, anything else gives no view.
+///
+/// `false` is written as `w:val="0"`, or `w:val="off"` for an element whose
+/// schema type takes only `on` and `off`.
 final class OnOffCodec extends PropertyCodec<bool> {
-  /// The codec of the on/off element `w:<localName>`.
-  const OnOffCodec(super.localName);
+  /// The codec of the on/off element `w:<localName>`, which writes `false` as
+  /// [falseValue].
+  const OnOffCodec(super.localName, {this.falseValue = '0'});
+
+  /// The `w:val` that `false` is written as.
+  final String falseValue;
 
   @override
   Set<String> get attributes => const <String>{'val'};
@@ -133,7 +140,7 @@ final class OnOffCodec extends PropertyCodec<bool> {
   void write(XmlWriter w, String prefix, bool value, PropertyElement? asRead) {
     w.start('$prefix:$localName');
     if (!value) {
-      w.attribute('$prefix:val', '0');
+      w.attribute('$prefix:val', falseValue);
     }
     w.end();
   }

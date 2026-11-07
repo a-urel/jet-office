@@ -2,7 +2,62 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/warnings.dart' show DocxWarningCollector;
 import 'package:test/test.dart';
 
+/// The warning of [code] of a save of [doc].
+DocxWarning _warning(DocxDocument doc, DocxWarningCode code) =>
+    doc.save().warnings.singleWhere((DocxWarning w) => w.code == code);
+
 void main() {
+  test('styleNotFound names a paragraph in a cell by its full path', () {
+    final DocxDocument doc = DocxDocument();
+    final DocxTable table = doc.body.addTable(columns: 1);
+    table.addRow(<String?>['a']);
+    (table.rows.single.cells.single.blocks.single as DocxParagraph).style =
+        'Bilinmez';
+    final DocxWarning w = _warning(doc, DocxWarningCode.styleNotFound);
+    expect(w.locations, <String>['body/tbl[0]/tr[0]/tc[0]/p[0]']);
+    expect(w.detail, 'Bilinmez');
+  });
+
+  test('numberingNotFound names a paragraph in a cell by its full path', () {
+    final DocxDocument doc = DocxDocument();
+    final DocxTable table = doc.body.addTable(columns: 1);
+    table.addRow(<String?>['a']);
+    (table.rows.single.cells.single.blocks.single as DocxParagraph)
+        .properties
+        .numbering = DocxNumberingRef(
+      42,
+    );
+    final DocxWarning w = _warning(doc, DocxWarningCode.numberingNotFound);
+    expect(w.locations, <String>['body/tbl[0]/tr[0]/tc[0]/p[0]']);
+    expect(w.detail, '42');
+  });
+
+  test('styleNotFound names a table and a nested table by their paths', () {
+    final DocxDocument doc = DocxDocument();
+    final DocxTable table = doc.body.addTable(columns: 1);
+    table.addRow(<String?>['a']);
+    table.properties.style = 'Bilinmez';
+    final DocxTable nested = table.rows.single.cells.single.addTable(
+      columns: 1,
+    );
+    nested.addRow(<String?>['b']);
+    nested.properties.style = 'Bilinmez';
+    expect(_warning(doc, DocxWarningCode.styleNotFound).locations, <String>[
+      'body/tbl[0]',
+      'body/tbl[0]/tr[0]/tc[0]/tbl[0]',
+    ]);
+  });
+
+  test('a table style of another type counts as not found', () {
+    final DocxDocument doc = DocxDocument();
+    final DocxTable table = doc.body.addTable(columns: 1);
+    table.addRow(<String?>['a']);
+    table.properties.style = 'Normal';
+    expect(_warning(doc, DocxWarningCode.styleNotFound).locations, <String>[
+      'body/tbl[0]',
+    ]);
+  });
+
   test('invalidCharactersRemoved aggregates per part with ten locations', () {
     final DocxWarningCollector collector = DocxWarningCollector();
     for (int i = 0; i < 25; i++) {

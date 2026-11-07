@@ -19,7 +19,8 @@
 /// LibreOffice's re-save of them. A fixture whose text LibreOffice writes
 /// differently (a list's labels, which the model's text does not have) also
 /// gets `<dir>/<name>.libreoffice.txt`, that text, which
-/// `tool/compare_text.dart` prefers.
+/// `tool/compare_text.dart` prefers. A fixture with a `libreOfficeTextSkip`
+/// reason gets `<dir>/<name>.libreoffice-skip.txt`, the reason.
 ///
 /// `--corrupt` also writes `m1_corrupt.xlsx` and its `.expected.json`, to
 /// prove that both checks fail on a bad file. It is `m1_values` with two
@@ -72,6 +73,7 @@ void main(List<String> args) {
       fixture.build().bytes,
       fixture.expectedText,
       libreOfficeText: fixture.libreOfficeText,
+      libreOfficeTextSkip: fixture.libreOfficeTextSkip,
     );
   }
   if (corrupt) {
@@ -120,6 +122,7 @@ void _writeDocx(
   Uint8List bytes,
   String text, {
   String? libreOfficeText,
+  String? libreOfficeTextSkip,
 }) {
   File('${dir.path}/$name.docx').writeAsBytesSync(bytes);
   File('${dir.path}/$name.expected.txt').writeAsStringSync('$text\n');
@@ -127,6 +130,11 @@ void _writeDocx(
     File(
       '${dir.path}/$name.libreoffice.txt',
     ).writeAsStringSync('$libreOfficeText\n');
+  }
+  if (libreOfficeTextSkip != null) {
+    File(
+      '${dir.path}/$name.libreoffice-skip.txt',
+    ).writeAsStringSync('$libreOfficeTextSkip\n');
   }
 }
 

@@ -117,6 +117,7 @@ final class DocxDocument {
     : _warnings = _loadWarnings.warnings {
     _edits.styleResolver = (String id, DocxStyleType type) =>
         resolveStyleId(styles, id, type);
+    _edits.styleEnsurer = (DocxBuiltInStyle style) => styles.ensure(style);
   }
 
   final DocxPackage _package;
@@ -201,7 +202,8 @@ final class DocxDocument {
   /// as the model writes what it wrote when read. Any other part is written
   /// from the model, which keeps every element, in schema order, but no
   /// comment between the children it reads. Throws a [DocxReadException] if
-  /// a part of the file cannot be read after all.
+  /// a part of the file cannot be read after all, and a [StateError] naming a
+  /// table [DocxBody.addTable] left without rows, before anything is written.
   DocxResult save() {
     final ZipWriter zip = ZipWriter();
     _write(zip);
@@ -283,14 +285,11 @@ final class DocxDocument {
 
   /// Whether the document defines a list instance, for the check of the
   /// lists paragraphs were put in through the API (plan Ruling 8); `null`
-  /// when no paragraph of the body was, or the numbering part cannot be
-  /// read (nothing is reported then).
+  /// when no paragraph of the body or of its tables was, or the numbering
+  /// part cannot be read (nothing is reported then).
   bool Function(int numId)? _listCheck() {
     final DocxBody? body = _body;
-    if (body == null ||
-        !body._blocks.any(
-          (DocxBlock b) => b is DocxParagraph && listSetOf(b) != null,
-        )) {
+    if (body == null || !body._holdsListSet) {
       return null;
     }
     final DocxNumbering numbering;
@@ -307,6 +306,9 @@ final class DocxDocument {
     final DocxPackage package = _package;
     final DocumentPart? main = _part;
     if (main != null) {
+      // Only an edit leaves a table without rows, and the check comes before
+      // anything is written, to the part or to the sink.
+      if (_edits.log.hasChanges) main.checkBuiltTables();
       main.listDefined = _listCheck();
       // Only a style set through the API is reported, and setting one
       // loaded the styles.
@@ -353,10 +355,10 @@ final class _MainPart implements PartContent {
 
 /// The body of a document, the content of `w:body`: its blocks, in order.
 ///
-/// Paragraphs ([DocxParagraph]) are typed; every other block, such as a
-/// table or a content control, is a [DocxOpaqueBlock] kept as written. The
-/// section properties of the last section belong to the body, not to its
-/// blocks, and are kept as written.
+/// Paragraphs ([DocxParagraph]) and tables ([DocxTable]) are typed; every
+/// other block, such as a content control, is a [DocxOpaqueBlock] kept as
+/// written. The section properties of the last section belong to the body,
+/// not to its blocks, and are kept as written.
 ///
 /// A block is in at most one body at a time. Each edit is atomic: one that
 /// throws changes nothing.
@@ -374,6 +376,19 @@ final class DocxBody {
   /// edits; use [addParagraph], [insertBlock], [removeBlockAt] and
   /// [replaceBlockAt].
   List<DocxBlock> get blocks => _blocksView;
+
+  /// Whether a paragraph of the body, or in one of its tables, was put in a
+  /// list through the API.
+  bool get _holdsListSet {
+    bool found = false;
+    for (final DocxBlock block in _blocks) {
+      visitBlocks(block, (DocxBlock b) {
+        found = found || (b is DocxParagraph && listSetOf(b) != null);
+      });
+      if (found) return true;
+    }
+    return false;
+  }
 
   /// Appends a new paragraph that holds [text] and returns it. The text is
   /// split and scrubbed as [DocxRun.text] is when set; the empty text gives
@@ -416,23 +431,65 @@ final class DocxBody {
     return paragraph;
   }
 
+  /// Appends a new table of [columns] columns as Word's Insert Table writes it
+  /// and returns it, with no rows yet: add them with [DocxTable.addRow].
+  ///
+  /// The table has the style `Table Grid`: the document's own style of that
+  /// name, or Word's definition added when the document lacks it, with `Normal
+  /// Table` ([DocxStyles.ensure]). Its width is automatic, and its look turns
+  /// on the first row and the first column and turns off the column bands.
+  ///
+  /// [columnWidthsPt] gives the width of each column, in points, from 0 to
+  /// 1584. Without it the columns share 9062 twips, rounded down to whole
+  /// twips: the text width of a blank A4 page. For another page, pass the
+  /// widths, or Word's autofit corrects them when it opens the file.
+  ///
+  /// A table with no rows is not a table Word opens: a [DocxDocument.save] or
+  /// [DocxDocument.saveTo] of one left that way throws [StateError] naming it.
+  /// A table of a file with no rows is kept as read.
+  ///
+  /// The model adds no block: two tables added one after the other join in
+  /// Word, unless a paragraph is put between them, and a body that ends in a
+  /// table is saved so.
+  ///
+  /// A [columns] outside 1 to 63, or a width out of range, throws [RangeError];
+  /// [columnWidthsPt] of another length, or a width that is not finite, throws
+  /// [ArgumentError]. When the styles part cannot be read, this throws a
+  /// [DocxReadException] naming it. Nothing changes then; otherwise the add is
+  /// one transaction.
+  DocxTable addTable({required int columns, List<double>? columnWidthsPt}) {
+    final DocxTable table = newTable(columns, columnWidthsPt);
+    _edits.transaction(() {
+      table.properties.style = _document.styles.ensure(
+        DocxBuiltInStyle.tableGrid,
+      );
+      insertBlock(_blocks.length, table);
+    });
+    return table;
+  }
+
   /// Inserts [block] at [index], from 0 to the number of blocks.
   ///
   /// An [index] out of that range throws [RangeError]. A [block] that is
-  /// already in a body, this one or another, throws [StateError]: remove it
-  /// there first. Phase 4 neither moves nor copies a block implicitly.
+  /// already in a body, this one or another, or in a table cell, throws
+  /// [StateError]: remove it there first. Phase 4 neither moves nor copies a
+  /// block implicitly. A table nested past 80 deep, which only a file can
+  /// hold, throws [ArgumentError]: what the API builds opens again under the
+  /// default read limits.
   ///
-  /// The styles set on a paragraph, and on its runs, are resolved against
-  /// the document's ([DocxParagraph.style] has the rules). When one is set
-  /// and the styles part cannot be read, this throws a [DocxReadException]
+  /// The styles set on a paragraph, on its runs and on a table, and on
+  /// everything in the cells of a table, nested tables included, are resolved
+  /// against the document's ([DocxParagraph.style] has the rules). When one is
+  /// set and the styles part cannot be read, this throws a [DocxReadException]
   /// naming it, on a document that opened; nothing changes then.
   ///
-  /// A paragraph read in another document counts as set here: its
-  /// `w:pStyle`, its `w:numPr` and the `w:rStyle` of its runs are resolved
-  /// by id, and a save reports the ones this document lacks
+  /// A paragraph or a table read in another document counts as set here, with
+  /// what its cells hold: a paragraph's `w:pStyle` and `w:numPr`, the
+  /// `w:rStyle` of its runs and a table's `w:tblStyle` are resolved by id, and
+  /// a save reports the ones this document lacks, each at its own location
   /// ([DocxWarningCode.styleNotFound], [DocxWarningCode.numberingNotFound]).
-  /// Moved within one document they stay as read. A move carries nothing
-  /// else over:
+  /// A row or a cell going into a table here does the same. Moved within one
+  /// document they stay as read. A move carries nothing else over:
   ///
   /// * The style's `w:name` stays behind, so a built-in style under a
   ///   localized id (`Balk1`) does not map to this document's by its name;
@@ -443,29 +500,26 @@ final class DocxBody {
   ///   picture) keeps an id this document may lack or mean otherwise.
   /// * A reference the model does not type, and one in the paragraph mark's
   ///   `w:rPr`, stay as read, unreported.
-  void insertBlock(int index, DocxBlock block) => _edits.transaction(
-    () => primitives.insertBlock(_edits, this, _blocks, index, block),
-  );
+  void insertBlock(int index, DocxBlock block) =>
+      primitives.insertBlock(_edits, this, _blocks, index, block);
 
   /// Removes the block at [index]. The block is then in no body and can be
   /// inserted again.
   ///
   /// An [index] that is not one of a block throws [RangeError].
-  void removeBlockAt(int index) => _edits.transaction(
-    () => primitives.removeBlock(_edits, this, _blocks, index),
-  );
+  void removeBlockAt(int index) =>
+      primitives.removeBlock(_edits, this, _blocks, index);
 
   /// Puts [block] in place of the block at [index]. The block replaced is
   /// then in no body.
   ///
   /// An [index] that is not one of a block throws [RangeError], and a
-  /// [block] already in a body throws [StateError]. The styles set on
+  /// [block] already in a body or a cell throws [StateError]. The styles set on
   /// [block] are resolved as [insertBlock] does, which may throw the same
-  /// [DocxReadException], and a paragraph read in another document counts
-  /// as set as it says.
-  void replaceBlockAt(int index, DocxBlock block) => _edits.transaction(
-    () => primitives.replaceBlock(_edits, this, _blocks, index, block),
-  );
+  /// [DocxReadException], and what was read in another document counts as set
+  /// as it says.
+  void replaceBlockAt(int index, DocxBlock block) =>
+      primitives.replaceBlock(_edits, this, _blocks, index, block);
 }
 
 /// A saved DOCX file and what the save had to repair to produce it.
