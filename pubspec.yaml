@@ -11,6 +11,7 @@ publish_to: none
 
 workspace:
   - packages/jet_core
+  - packages/jet_charts_core
 
 environment:
   # Matches Monépro's floor, the first consumer.
