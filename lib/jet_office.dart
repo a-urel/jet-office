@@ -126,9 +126,12 @@
 /// as content controls, tracked changes, hyperlinks, drawings and fields, is
 /// kept as written in a
 /// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
-/// can be removed but not changed; the final section and the parts other than
-/// the body are kept as written too. Blocks and inlines are added, removed and
-/// replaced, and a run's text and the styles are set; each edit is atomic.
+/// can be removed but not changed; the parts the model does not read are kept
+/// as written too. [DocxDocument.sections] gives each [DocxSection], and a
+/// section its [DocxHeaderFooter]s: a [DocxStory] of blocks as the [DocxBody]
+/// is, read on the first access to its blocks, its own or a previous section's.
+/// Blocks and inlines are added, removed and replaced, and a run's text and
+/// the styles are set; each edit is atomic.
 /// [DocxDocument.save] returns a [DocxResult] and [DocxDocument.saveTo] streams
 /// to a sink. As for a workbook, saving keeps every part the model did not
 /// change: a body never accessed is copied from the file, and what a loaded
@@ -220,7 +223,14 @@ export 'package:jet_core/jet_core.dart'
 export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
 export 'src/docx/builtin_styles.dart' show DocxBuiltInStyle;
-export 'src/docx/docx_document.dart' show DocxBody, DocxDocument, DocxResult;
+export 'src/docx/docx_document.dart'
+    show
+        DocxBody,
+        DocxDocument,
+        DocxHeaderFooter,
+        DocxHeaderFooterType,
+        DocxResult,
+        DocxStory;
 export 'src/docx/model/blocks.dart'
     show
         DocxBlock,

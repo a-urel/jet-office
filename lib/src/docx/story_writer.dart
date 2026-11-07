@@ -38,6 +38,31 @@ DocxNumberingRef? listSetOf(DocxParagraph paragraph) {
   return value is DocxNumberingRef && value.numId != 0 ? value : null;
 }
 
+/// Throws [StateError] naming the first table of [blocks], at the location
+/// [path], that the API left without rows: Word repairs a table without rows,
+/// and a save must find that out before it writes anything. A table read with
+/// no rows is kept.
+void checkTablesHaveRows(List<DocxBlock> blocks, String path) {
+  int tables = 0;
+  for (final DocxBlock block in blocks) {
+    if (block is! DocxTable) continue;
+    final String at = '$path/tbl[${tables++}]';
+    final List<DocxTableRow> rows = block.rows;
+    if (rows.isEmpty && tableIsNew(block)) {
+      throw StateError(
+        'The table at $at has no rows: add one with addRow, or remove the '
+        'table.',
+      );
+    }
+    for (int r = 0; r < rows.length; r++) {
+      final List<DocxTableCell> cells = rows[r].cells;
+      for (int c = 0; c < cells.length; c++) {
+        checkTablesHaveRows(cells[c].blocks, '$at/tr[$r]/tc[$c]');
+      }
+    }
+  }
+}
+
 /// One write of the blocks of a story, inside the open root of its part.
 ///
 /// A story is a part's run of blocks: the body of the main part, and later

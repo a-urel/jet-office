@@ -60,6 +60,27 @@ void main() {
     expect(section.columns, DocxColumns(spacingPt: 35.4));
   });
 
+  test('features.docx reads its header, and saves it as read', () {
+    final Uint8List input = File('$_dir/features.docx').readAsBytesSync();
+    final DocxDocument doc = DocxDocument.open(input);
+    final DocxSection section = doc.sections.last;
+    expect(
+      (section.header.blocks.first as DocxParagraph).text,
+      'Jet Office test header',
+    );
+    for (final DocxHeaderFooter story in <DocxHeaderFooter>[
+      section.firstHeader,
+      section.evenHeader,
+      section.footer,
+      section.firstFooter,
+      section.evenFooter,
+    ]) {
+      expect(story.blocks, isNotEmpty);
+    }
+    expect(comparePackages(input, doc.save().bytes), isEmpty);
+    expect(doc.save().warnings, isEmpty);
+  });
+
   test('every owner file round-trips', () {
     for (final OwnerDocx entry in manifest) {
       final Uint8List input = File('$_dir/${entry.file}').readAsBytesSync();

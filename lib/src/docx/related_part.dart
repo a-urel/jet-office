@@ -129,6 +129,20 @@ final class RelatedPart {
     );
   }
 
+  /// The part [name] of [package], found through a relationship the caller
+  /// read: a header or footer part, by the id its reference gives. [name] is
+  /// the canonical name of a part in the package.
+  RelatedPart.named(DocxPackage package, String name)
+    : this._(
+        package,
+        package.mainPart,
+        '',
+        '',
+        name,
+        exists: true,
+        related: true,
+      );
+
   final DocxPackage _package;
   final String _source;
   final String _relationshipType;

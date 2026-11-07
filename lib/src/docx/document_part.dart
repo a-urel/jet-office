@@ -177,28 +177,7 @@ final class DocumentPart implements PartContent {
   /// Throws [StateError] naming the first table the API left without rows,
   /// at its location: Word repairs a table without rows, and a save must find
   /// that out before it writes anything. A table read with no rows is kept.
-  void checkBuiltTables() => _checkBuiltTables(blocks, 'body');
-
-  static void _checkBuiltTables(List<DocxBlock> blocks, String path) {
-    int tables = 0;
-    for (final DocxBlock block in blocks) {
-      if (block is! DocxTable) continue;
-      final String at = '$path/tbl[${tables++}]';
-      final List<DocxTableRow> rows = block.rows;
-      if (rows.isEmpty && tableIsNew(block)) {
-        throw StateError(
-          'The table at $at has no rows: add one with addRow, or remove the '
-          'table.',
-        );
-      }
-      for (int r = 0; r < rows.length; r++) {
-        final List<DocxTableCell> cells = rows[r].cells;
-        for (int c = 0; c < cells.length; c++) {
-          _checkBuiltTables(cells[c].blocks, '$at/tr[$r]/tc[$c]');
-        }
-      }
-    }
-  }
+  void checkBuiltTables() => checkTablesHaveRows(blocks, 'body');
 
   /// Writes the part, and replaces [encodeWarnings] with the warnings of
   /// this write.

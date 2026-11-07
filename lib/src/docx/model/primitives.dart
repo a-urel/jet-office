@@ -45,10 +45,12 @@ library;
 
 import '../../opc/change_log.dart';
 import '../builtin_styles.dart' show DocxBuiltInStyle;
+import '../docx_document.dart' show DocxHeaderFooter, DocxHeaderFooterType;
 import 'blocks.dart';
 import 'edit_sink.dart';
 import 'inlines.dart';
 import 'property_set.dart';
+import 'sections.dart';
 import 'styles.dart' show DocxStyleType;
 
 /// The edits of one document: its [ChangeLog], and the sink its body's
@@ -70,6 +72,15 @@ final class DocxEdits implements DocxEditSink {
   /// What gives the id of a built-in style, adding it when the document lacks
   /// it, which the document provides; `null` adds none.
   String Function(DocxBuiltInStyle style)? styleEnsurer;
+
+  /// What gives the header or footer a section reads, which the document
+  /// provides.
+  DocxHeaderFooter Function(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  })?
+  headerFooterResolver;
 
   /// True while a change is reverted or reapplied: the reports the model
   /// makes then are the replay, not new edits.
@@ -165,6 +176,13 @@ final class DocxEdits implements DocxEditSink {
 
   @override
   String? ensureStyle(DocxBuiltInStyle style) => styleEnsurer?.call(style);
+
+  @override
+  DocxHeaderFooter? headerFooterOf(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) => headerFooterResolver?.call(section, type, isHeader: isHeader);
 
   @override
   bool isForeign(DocxEditSink? readIn) =>

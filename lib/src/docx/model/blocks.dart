@@ -32,6 +32,7 @@ import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart' show Ns;
 import '../../opc/opaque_xml.dart';
 import '../builtin_styles.dart' show DocxBuiltInStyle;
+import '../docx_document.dart' show DocxBody;
 import '../properties.dart';
 import '../units.dart';
 import 'edit_sink.dart';
@@ -153,10 +154,13 @@ final class DocxParagraph extends DocxBlock {
   /// The section this paragraph ends, or `null` for a paragraph with no
   /// section break (`w:sectPr` in its `w:pPr`).
   ///
-  /// A break in a table cell is `null` here: it stays as read and starts no
-  /// section. A paragraph taken out of a body keeps its break, and reads it,
-  /// until it goes in a cell.
-  DocxSection? get section => _container is DocxTableCell ? null : _section;
+  /// A break in a table cell or in a header or footer is `null` here: it stays
+  /// as read and starts no section. A paragraph taken out of a body keeps its
+  /// break, and reads it, until it goes in one of those.
+  DocxSection? get section {
+    final Object? container = _container;
+    return container == null || container is DocxBody ? _section : null;
+  }
 
   /// The id of the paragraph's style (`w:pStyle`), or `null` for none; a
   /// shortcut for [DocxParagraphProperties.style].

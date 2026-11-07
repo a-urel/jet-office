@@ -38,6 +38,13 @@ final class _RecordingSink implements DocxEditSink {
   final List<String> calls = <String>[];
 
   @override
+  DocxHeaderFooter? headerFooterOf(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) => null;
+
+  @override
   void inlineInserted(DocxParagraph paragraph, int index, DocxInline inline) =>
       calls.add('insert $index');
 

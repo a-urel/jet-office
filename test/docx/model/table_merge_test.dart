@@ -103,6 +103,13 @@ final class _RecordingSink implements DocxEditSink {
   }
 
   @override
+  DocxHeaderFooter? headerFooterOf(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) => null;
+
+  @override
   void atomically(void Function() body) {
     if (_depth > 0) {
       body();

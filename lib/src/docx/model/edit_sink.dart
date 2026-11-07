@@ -32,9 +32,11 @@ library;
 
 import '../../opc/change_log.dart';
 import '../builtin_styles.dart' show DocxBuiltInStyle;
+import '../docx_document.dart' show DocxHeaderFooter, DocxHeaderFooterType;
 import 'blocks.dart';
 import 'inlines.dart';
 import 'property_set.dart';
+import 'sections.dart';
 import 'styles.dart' show DocxStyleType;
 
 /// Receives each edit of the body model after it was applied.
@@ -90,6 +92,14 @@ abstract interface class DocxEditSink {
   /// styles. Call it inside [atomically].
   String? ensureStyle(DocxBuiltInStyle style);
 
+  /// The header (when [isHeader]) or footer of [type] that [section] of the
+  /// document reads; `null` for the sink of no document.
+  DocxHeaderFooter? headerFooterOf(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  });
+
   /// Whether content read in the document of [readIn] (`null`: not read
   /// from a file) now belongs to another document, this one: never in a
   /// replay, nor for the sink of no document.
@@ -135,6 +145,13 @@ final class _NoEdits implements DocxEditSink {
 
   @override
   String? ensureStyle(DocxBuiltInStyle style) => null;
+
+  @override
+  DocxHeaderFooter? headerFooterOf(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) => null;
 
   @override
   bool isForeign(DocxEditSink? readIn) => false;

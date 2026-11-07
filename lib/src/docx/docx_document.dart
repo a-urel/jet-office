@@ -9,7 +9,8 @@
 /// ([DocxPackage]). It checks every other entry's size and CRC-32 without
 /// keeping or parsing it, so a damaged entry is refused at `open` instead of
 /// at save. The main document part and its relationships load on the first
-/// access to [DocxDocument.body] (spec §4.3).
+/// access to [DocxDocument.body] (spec §4.3), and a header or footer part on
+/// the first access to its blocks.
 ///
 /// Saving writes every part of the package in its order (spec §4.3): a part
 /// the model never loaded from its original bytes (layer 1), so a body never
@@ -17,14 +18,15 @@
 /// part from the model (layer 2), with what the model does not type kept as
 /// written inside it (layer 3). A loaded part with nothing to write is
 /// written from its original bytes too: the main part while the document's
-/// `ChangeLog` has no changes, a styles or numbering part while the model
-/// writes what it wrote when read.
+/// `ChangeLog` has no changes, a styles, numbering, header or footer part
+/// while the model writes what it wrote when read.
 ///
 /// Every edit runs in a transaction of the document's `ChangeLog`
 /// (`primitives.dart`), so an edit that fails leaves the body as it was.
 /// Everything that leaves [DocxDocument.open], [DocxDocument.body],
-/// [DocxDocument.sections], [DocxDocument.save] or [DocxDocument.saveTo]
-/// because of the file's content is a [DocxReadException].
+/// [DocxDocument.sections], [DocxStory.blocks], [DocxDocument.save] or
+/// [DocxDocument.saveTo] because of the file's content is a
+/// [DocxReadException].
 ///
 /// @docImport 'model/inlines.dart';
 library;
@@ -34,7 +36,7 @@ import 'dart:typed_data';
 
 import '../opc/change_log.dart';
 import '../opc/ooxml.dart' show ContentType, RelType;
-import '../opc/package.dart' show PartContent;
+import '../opc/package.dart' show OpcPackage, OpcRelationship, PartContent;
 import '../xml/xml_pull_reader.dart';
 import '../zip/archive_adapter.dart';
 import 'blank_document.dart';
@@ -54,9 +56,14 @@ import 'numbering_schemas.dart' show maxListLevel;
 import 'read_exception.dart';
 import 'read_limits.dart';
 import 'related_part.dart';
+import 'section_property_codecs.dart'
+    show SectionReference, SectionReferenceType;
+import 'story_part.dart';
 import 'story_writer.dart' show listSetOf;
 import 'styles_part.dart';
 import 'warnings.dart';
+
+part 'model/header_footer.dart';
 
 /// The edits of [document]: its change log and the sink of its body's
 /// paragraphs, for tests (`DocxEdits.afterRecord` is the hook that makes an
@@ -122,6 +129,7 @@ final class DocxDocument {
     _edits.styleResolver = (String id, DocxStyleType type) =>
         resolveStyleId(styles, id, type);
     _edits.styleEnsurer = (DocxBuiltInStyle style) => styles.ensure(style);
+    _edits.headerFooterResolver = _headerFooterOf;
   }
 
   final DocxPackage _package;
@@ -144,6 +152,15 @@ final class DocxDocument {
   NumberingPart? _numberingPart;
   RelatedPart? _numberingSlot;
   DocxNumbering? _numbering;
+
+  /// The stories of the header and footer parts references named so far, by
+  /// the part's canonical name.
+  final Map<String, _Story> _stories = <String, _Story>{};
+
+  /// The stories of no part, by what a section asked for: reading one
+  /// creates nothing in the file.
+  final Map<(DocxSection, bool, DocxHeaderFooterType), _Story> _emptyStories =
+      <(DocxSection, bool, DocxHeaderFooterType), _Story>{};
 
   List<DocxWarning> _warnings;
 
@@ -222,12 +239,13 @@ final class DocxDocument {
   /// a loaded one with nothing new to write, comments and out-of-order
   /// properties included: the main part until the document has an edit (of
   /// any part, since they share one change log; an edit that failed is
-  /// none, one undone still is), and a styles or numbering part for as long
-  /// as the model writes what it wrote when read. Any other part is written
-  /// from the model, which keeps every element, in schema order, but no
-  /// comment between the children it reads. Throws a [DocxReadException] if
-  /// a part of the file cannot be read after all, and a [StateError] naming a
-  /// table [DocxBody.addTable] left without rows, before anything is written.
+  /// none, one undone still is), and a styles, numbering, header or footer
+  /// part for as long as the model writes what it wrote when read. Any other
+  /// part is written from the model, which keeps every element, in schema
+  /// order, but no comment between the children it reads. Throws a
+  /// [DocxReadException] if a part of the file cannot be read after all, and a
+  /// [StateError] naming a table [DocxBody.addTable] left without rows, before
+  /// anything is written.
   DocxResult save() {
     final ZipWriter zip = ZipWriter();
     _write(zip);
@@ -314,13 +332,88 @@ final class DocxDocument {
     return _numbering = part.numbering;
   }
 
+  /// The header or footer of [type] that [section] reads (plan Ruling 5):
+  /// its own, else the nearest previous section's, else an empty one. A
+  /// section that left the document has no previous section.
+  DocxHeaderFooter _headerFooterOf(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) {
+    final Map<String, OpcRelationship> relationships =
+        <String, OpcRelationship>{};
+    for (final OpcRelationship rel in _package.package.relationshipsOf(
+      _package.mainPart,
+    )) {
+      relationships.putIfAbsent(rel.id, () => rel);
+    }
+    _Story? ownOf(DocxSection s) {
+      for (final SectionReference ref in sectionReferencesOf(
+        s,
+        isHeader: isHeader,
+      )) {
+        if (ref.type != type._reference) continue;
+        final _Story? story = _storyOf(relationships[ref.relId], isHeader);
+        if (story != null) return story;
+      }
+      return null;
+    }
+
+    final _Story? own = ownOf(section);
+    if (own != null) return own.handle(type, inherited: false);
+    final List<DocxSection> all = sections;
+    for (int i = all.indexOf(section) - 1; i >= 0; i--) {
+      final _Story? story = ownOf(all[i]);
+      if (story != null) return story.handle(type, inherited: true);
+    }
+    return _emptyStories
+        .putIfAbsent((
+          section,
+          isHeader,
+          type,
+        ), () => _Story(this, isHeader, null))
+        .handle(type, inherited: false);
+  }
+
+  /// The story of the part [rel] names, for a reference of a header when
+  /// [isHeader] and of a footer otherwise, or `null` when it names none
+  /// (see `model/header_footer.dart`).
+  _Story? _storyOf(OpcRelationship? rel, bool isHeader) {
+    if (rel == null ||
+        rel.external ||
+        rel.type != (isHeader ? RelType.header : RelType.footer)) {
+      return null;
+    }
+    final OpcPackage opc = _package.package;
+    final String main = _package.mainPart;
+    final String? name = opc.canonicalPartName(opc.resolve(main, rel.target));
+    if (name == null || name == main) return null;
+    final String? type = opc.contentTypeOf(name);
+    if (type != (isHeader ? ContentType.wmlHeader : ContentType.wmlFooter) &&
+        type != ContentType.xml &&
+        type != 'text/xml') {
+      return null;
+    }
+    final _Story story = _stories.putIfAbsent(
+      name,
+      () => _Story(this, isHeader, RelatedPart.named(_package, name)),
+    );
+    return story.isHeader == isHeader ? story : null;
+  }
+
+  /// The header and footer parts loaded so far.
+  Iterable<StoryPart> get _storyParts =>
+      _stories.values.map((_Story s) => s.part).nonNulls;
+
   /// Whether the document defines a list instance, for the check of the
   /// lists paragraphs were put in through the API (plan Ruling 8); `null`
-  /// when no paragraph of the body or of its tables was, or the numbering
-  /// part cannot be read (nothing is reported then).
+  /// when no paragraph of the body, of a story or of their tables was, or the
+  /// numbering part cannot be read (nothing is reported then).
   bool Function(int numId)? _listCheck() {
     final DocxBody? body = _body;
-    if (body == null || !body._holdsListSet) {
+    if (body == null ||
+        !(_holdsListSet(body._blocks) ||
+            _storyParts.any((StoryPart p) => _holdsListSet(p.blocks)))) {
       return null;
     }
     final DocxNumbering numbering;
@@ -339,14 +432,27 @@ final class DocxDocument {
     if (main != null) {
       // Only an edit leaves a table without rows, and the check comes before
       // anything is written, to the part or to the sink.
-      if (_edits.log.hasChanges) main.checkBuiltTables();
-      main.listDefined = _listCheck();
+      if (_edits.log.hasChanges) {
+        main.checkBuiltTables();
+        for (final StoryPart story in _storyParts) {
+          story.checkBuiltTables();
+        }
+      }
+      final bool Function(int)? listDefined = _listCheck();
       // Only a style set through the API is reported, and setting one
       // loaded the styles.
       final DocxStyles? styles = _styles;
-      main.styleDefined = styles == null
+      final bool Function(String, DocxStyleType)? styleDefined = styles == null
           ? null
           : (String id, DocxStyleType type) => definesStyle(styles, id, type);
+      main
+        ..listDefined = listDefined
+        ..styleDefined = styleDefined;
+      for (final StoryPart story in _storyParts) {
+        story
+          ..listDefined = listDefined
+          ..styleDefined = styleDefined;
+      }
     }
     // A styles part the document lacked is added once it holds something
     // (plan Ruling 7); after that it is a part like the others.
@@ -363,6 +469,8 @@ final class DocxDocument {
     _warnings = List<DocxWarning>.unmodifiable(<DocxWarning>[
       ..._loadWarnings.warnings,
       if (part != null) ...part.encodeWarnings.warnings,
+      for (final StoryPart story in _storyParts)
+        ...story.encodeWarnings.warnings,
     ]);
   }
 }
@@ -392,15 +500,24 @@ final class _MainPart implements PartContent {
 /// written. A block is in at most one story at a time. Each edit is atomic: one
 /// that throws changes nothing.
 ///
+/// [DocxBody] is the story of the main part, and [DocxHeaderFooter] that of a
+/// header or footer part, which loads on the first access to [blocks] or edit
+/// and throws a [DocxReadException] naming the part when it cannot be read.
+///
 /// The checks only the body needs, such as a section break's references,
-/// belong to [DocxBody] and reach the edits here through [_checkBlock]; so does
-/// the width a new table takes from the last section.
+/// belong to [DocxBody] and reach the edits here through [_checkBlock].
 abstract base class DocxStory {
-  DocxStory._(this._edits, this._blocks, this._document);
+  DocxStory._(this._edits, this._document);
 
   final DocxEdits _edits;
   final DocxDocument _document;
-  final List<DocxBlock> _blocks;
+
+  /// The list of blocks, which a header or footer part loads.
+  List<DocxBlock> get _blocks;
+
+  /// What holds the blocks: [DocxHeaderFooter]s of one part share it.
+  Object get _container => this;
+
   late final List<DocxBlock> _blocksView = UnmodifiableListView<DocxBlock>(
     _blocks,
   );
@@ -409,27 +526,20 @@ abstract base class DocxStory {
   /// body's section break check. The story's own edits check nothing more.
   void _checkBlock(DocxBlock block) {}
 
-  /// The twips [columns] new columns share in this story, or `null` for the
-  /// page of a blank document ([DocxBody.addTable] has the rule).
-  int? _tableWidthTwips(int columns);
+  /// The twips [columns] new columns share: what Word's Insert Table takes of
+  /// the last section, or `null` for the page of a blank document when that
+  /// does not read or gives a column less than a twip.
+  int? _tableWidthTwips(int columns) {
+    final double? pt = _document._part!.finalSection.textWidthPt;
+    if (pt == null) return null;
+    final int twips = (pt * 20).round() - _insertTableInsetTwips;
+    return twips >= columns ? twips : null;
+  }
 
   /// The blocks in order. The list cannot be modified, and shows later
   /// edits; use [addParagraph], [insertBlock], [removeBlockAt] and
   /// [replaceBlockAt].
   List<DocxBlock> get blocks => _blocksView;
-
-  /// Whether a paragraph of the story, or in one of its tables, was put in a
-  /// list through the API.
-  bool get _holdsListSet {
-    bool found = false;
-    for (final DocxBlock block in _blocks) {
-      visitBlocks(block, (DocxBlock b) {
-        found = found || (b is DocxParagraph && listSetOf(b) != null);
-      });
-      if (found) return true;
-    }
-    return false;
-  }
 
   /// Appends a new paragraph that holds [text] and returns it. The text is
   /// split and scrubbed as [DocxRun.text] is when set; the empty text gives
@@ -550,7 +660,7 @@ abstract base class DocxStory {
   ///   `w:rPr`, stay as read, unreported.
   void insertBlock(int index, DocxBlock block) {
     _checkBlock(block);
-    primitives.insertBlock(_edits, this, _blocks, index, block);
+    primitives.insertBlock(_edits, _container, _blocks, index, block);
   }
 
   /// Removes the block at [index]. The block is then in no body and can be
@@ -558,7 +668,7 @@ abstract base class DocxStory {
   ///
   /// An [index] that is not one of a block throws [RangeError].
   void removeBlockAt(int index) =>
-      primitives.removeBlock(_edits, this, _blocks, index);
+      primitives.removeBlock(_edits, _container, _blocks, index);
 
   /// Puts [block] in place of the block at [index]. The block replaced is
   /// then in no body.
@@ -571,7 +681,7 @@ abstract base class DocxStory {
   /// as there.
   void replaceBlockAt(int index, DocxBlock block) {
     _checkBlock(block);
-    primitives.replaceBlock(_edits, this, _blocks, index, block);
+    primitives.replaceBlock(_edits, _container, _blocks, index, block);
   }
 }
 
@@ -585,21 +695,14 @@ abstract base class DocxStory {
 /// A block is in at most one body at a time. Each edit is atomic: one that
 /// throws changes nothing.
 final class DocxBody extends DocxStory {
-  DocxBody._(super.edits, super.blocks, super.document) : super._();
+  DocxBody._(DocxEdits edits, this._blocks, DocxDocument document)
+    : super._(edits, document);
+
+  @override
+  final List<DocxBlock> _blocks;
 
   @override
   void _checkBlock(DocxBlock block) => checkBreakFits(block, _edits);
-
-  /// The twips [columns] new columns share: what Word's Insert Table takes of
-  /// the last section, or `null` for the page of a blank document when that
-  /// does not read or gives a column less than a twip.
-  @override
-  int? _tableWidthTwips(int columns) {
-    final double? pt = _document._part!.finalSection.textWidthPt;
-    if (pt == null) return null;
-    final int twips = (pt * 20).round() - _insertTableInsetTwips;
-    return twips >= columns ? twips : null;
-  }
 
   /// Ends the last section after the last block and returns the new last
   /// section, which [start] says how to start.
@@ -632,6 +735,19 @@ final class DocxBody extends DocxStory {
     });
     return next;
   }
+}
+
+/// Whether a paragraph of [blocks], or in one of their tables, was put in a
+/// list through the API.
+bool _holdsListSet(List<DocxBlock> blocks) {
+  bool found = false;
+  for (final DocxBlock block in blocks) {
+    visitBlocks(block, (DocxBlock b) {
+      found = found || (b is DocxParagraph && listSetOf(b) != null);
+    });
+    if (found) return true;
+  }
+  return false;
 }
 
 /// What Word's Insert Table leaves of the text width, less: 9062 of the 9072

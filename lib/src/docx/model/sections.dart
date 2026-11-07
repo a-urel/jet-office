@@ -7,8 +7,9 @@
 /// a nullable getter and setter, `null` meaning "not set here", a value the
 /// model cannot type reads `null` and stays in the file, setting what a
 /// member reads is a no-op, and a set writes one element in the place the
-/// schema gives, among the children the model does not type. Header and
-/// footer references and every other child stay as read.
+/// schema gives, among the children the model does not type. Every other
+/// child stays as read, header and footer references among them: the six
+/// getters read them, and reading one creates nothing (plan Ruling 5).
 ///
 /// A section lives in one of two places, and may move from the second to the
 /// first (`DocxBody.addSection`): in the `w:pPr` of the paragraph that ends
@@ -22,6 +23,7 @@
 library;
 
 import '../../xml/xml_writer.dart';
+import '../docx_document.dart' show DocxHeaderFooter, DocxHeaderFooterType;
 import '../properties.dart';
 import '../section_property_codecs.dart';
 import '../units.dart';
@@ -119,6 +121,50 @@ final class DocxSection {
   set lineNumbering(DocxLineNumbering? value) =>
       _set.setValue('lnNumType', value);
 
+  /// The header of the section's pages: the section's own, else the nearest
+  /// previous section's ([DocxHeaderFooter.isInherited]), else an empty one.
+  ///
+  /// Reading it creates nothing, and its part loads only on the first access
+  /// to [DocxHeaderFooter.blocks]. Throws [StateError] for a section in no
+  /// document.
+  DocxHeaderFooter get header =>
+      _headerFooter(DocxHeaderFooterType.primary, isHeader: true);
+
+  /// The header of the section's first page, as [header] reads it. Word shows
+  /// it only when this section has a [titlePage], also when it is inherited.
+  DocxHeaderFooter get firstHeader =>
+      _headerFooter(DocxHeaderFooterType.first, isHeader: true);
+
+  /// The header of the section's even pages, as [header] reads it. Word shows
+  /// it only when the document has odd and even headers.
+  DocxHeaderFooter get evenHeader =>
+      _headerFooter(DocxHeaderFooterType.even, isHeader: true);
+
+  /// The footer of the section's pages, as [header] reads it.
+  DocxHeaderFooter get footer =>
+      _headerFooter(DocxHeaderFooterType.primary, isHeader: false);
+
+  /// The footer of the section's first page, as [firstHeader] reads it.
+  DocxHeaderFooter get firstFooter =>
+      _headerFooter(DocxHeaderFooterType.first, isHeader: false);
+
+  /// The footer of the section's even pages, as [evenHeader] reads it.
+  DocxHeaderFooter get evenFooter =>
+      _headerFooter(DocxHeaderFooterType.even, isHeader: false);
+
+  DocxHeaderFooter _headerFooter(
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) {
+    final DocxHeaderFooter? story = _home?.headerFooterOf(
+      this,
+      type,
+      isHeader: isHeader,
+    );
+    if (story == null) throw StateError('The section is in no document.');
+    return story;
+  }
+
   /// The width of the text, in points: the width of the page less the left
   /// and right margins and the gutter; `null` while [pageSize] or [margins]
   /// reads `null`.
@@ -184,6 +230,15 @@ void setSectionHome(DocxSection section, DocxEditSink sink) {
 
 /// The sink of the document [section] belongs to, or `null`.
 DocxEditSink? sectionHomeOf(DocxSection section) => section._home;
+
+/// The references of [section] the model can type, in order: to headers when
+/// [isHeader], else to footers.
+Iterable<SectionReference> sectionReferencesOf(
+  DocxSection section, {
+  required bool isHeader,
+}) => section._set
+    .repeatedOf(isHeader ? 'headerReference' : 'footerReference')
+    .whereType<SectionReference>();
 
 /// The properties of [section], for the writer.
 PropertySet sectionPropertySetOf(DocxSection section) => section._set;
