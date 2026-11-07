@@ -17,10 +17,12 @@
 // a repeating header row as <w:tblHeader w:val="true"/>, which the SDK's
 // schema refuses (it takes only on and off there) although ECMA-376's
 // ST_OnOff and Word accept true. The model keeps the element as read, so the
-// error is LibreOffice's, not the model's. The flag ignores exactly that: a
-// Sch_AttributeValueDataTypeDetailed error on a w:tblHeader element whose
-// w:val is "true". Every other error, and every file without the flag,
-// counts as before.
+// error is LibreOffice's, not the model's. w:cantSplit has the same type and
+// the same fate: LibreOffice 26.8 writes it bare, but the flag covers it too,
+// so a producer's true there fails no more than on its sibling. The flag
+// ignores exactly that: a Sch_AttributeValueDataTypeDetailed error on a
+// w:tblHeader or a w:cantSplit element whose w:val is exactly "true". Every
+// other error, and every file without the flag, counts as before.
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Validation;
@@ -33,11 +35,13 @@ if (paths.Length != 1 || !Directory.Exists(paths[0]))
     return 2;
 }
 
-// LibreOffice's w:tblHeader w:val="true", see the header comment.
-static bool IsLibreOfficeTableHeaderTrue(ValidationErrorInfo e) =>
+// LibreOffice's w:tblHeader and w:cantSplit w:val="true", see the header
+// comment.
+static bool IsLibreOfficeRowOnOffTrue(ValidationErrorInfo e) =>
     e.Id == "Sch_AttributeValueDataTypeDetailed"
-    && e.Node is DocumentFormat.OpenXml.Wordprocessing.TableHeader header
-    && header.GetAttributes().Any(a => a.LocalName == "val" && a.Value == "true");
+    && e.Node is DocumentFormat.OpenXml.Wordprocessing.TableHeader
+        or DocumentFormat.OpenXml.Wordprocessing.CantSplit
+    && e.Node.GetAttributes().Any(a => a.LocalName == "val" && a.Value == "true");
 
 string[] files = Directory.GetFiles(paths[0], "*.xlsx")
     .Concat(Directory.GetFiles(paths[0], "*.docx"))
@@ -63,7 +67,7 @@ foreach (string file in files)
             : SpreadsheetDocument.Open(file, false);
         errors = validator
             .Validate(document)
-            .Where(e => !(libreOfficeResave && IsLibreOfficeTableHeaderTrue(e)))
+            .Where(e => !(libreOfficeResave && IsLibreOfficeRowOnOffTrue(e)))
             .Select(e => $"{e.ErrorType} {e.Id} in {e.Part?.Uri} at {e.Path?.XPath}: {e.Description}")
             .ToList();
     }

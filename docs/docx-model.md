@@ -626,8 +626,8 @@ aggregator and the read guard (`lib/src/common/`), and the change log.
   "Validation"). The D2 and D3 fixtures, the edits of `tool/edit_docx.dart`
   and the model's own encoding of the styles and numbering parts go through
   the same checks; the LibreOffice re-save is validated with
-  `--libreoffice-resave`, which ignores only LibreOffice's
-  `<w:tblHeader w:val="true"/>` and `<w:cantSplit w:val="true"/>`, values the
+  `--libreoffice-resave`, which ignores only `w:val="true"` on `w:tblHeader`,
+  as LibreOffice writes it, and on `w:cantSplit`, of the same type: values the
   model keeps as read.
 - Neither is Word. The owner opens each D milestone's fixtures and round
   trips in Word for Mac and records the result in

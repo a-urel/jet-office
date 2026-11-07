@@ -232,11 +232,18 @@ dart run tool/write_table_last.dart build/table-last
 ```
 
 No repair prompt in any of them; then, per document, as below. This section
-says what to look for; the result of the check is recorded under "Results",
-and none is recorded here before the owner has looked. Word repairs a table
+says what to look for: what each document should show comes from the code that
+wrote it and from the SDK, not from Word, so read every statement here as what
+to expect until the owner has looked. The result of the check is recorded under
+"Results", and none is recorded here before then. Word repairs a table
 with no row, a row with no cell and a cell with no paragraph, and the model
 writes none of them; if a prompt appears anyway, read its recovery log and
 name the part in "Notes".
+
+A new document's root changed after the D1 check and the check of its own
+parts: it now declares the real `w14` namespace, where it held a literal
+placeholder. Open `build/fixtures/d1_blank.docx` again: no repair prompt, and
+as under "Own parts (decision 0011)".
 
 ### Fixtures: `build/fixtures/d3_*.docx`
 

@@ -112,10 +112,12 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   re-save, or from the model's round trip or edit of one (`build/resaved-docx`,
   `build/model-docx`, `build/edited-docx`): LibreOffice writes a repeating
   header row as `<w:tblHeader w:val="true"/>`, which the SDK refuses (it takes
-  only `on` and `off` there) and the model keeps as read. The flag ignores
-  that one error, matched on the element and its value; every other error, and
-  every run without the flag, counts. The `d1_corrupt.docx` negative control
-  must still fail with it.
+  only `on` and `off` there) and the model keeps as read. `w:cantSplit` has the
+  same type, so the flag covers `w:val="true"` there too, though the
+  LibreOffice checked writes it bare. The flag ignores that one error on those
+  two elements, matched on the element and its exact value; every other error,
+  and every run without the flag, counts. The `d1_corrupt.docx` negative
+  control must still fail with it.
 - LibreOffice's text export of a document whose body ends in a table never
   ends: it writes the file without bound. No fixture may end in a table (the
   fixture list says so), and the CI step and the command above cap the file

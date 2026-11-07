@@ -732,7 +732,7 @@ The text is built not to repeat the way deflate likes. Each cell is one to
 eight words drawn by a hash of its row and column from 4,096 made-up words of
 8 to 12 letters, about one cell in three also ends in a token unique to the
 cell (`#` and its number in base 36), and about one in 25 is empty. A cell is
-8 to about 105 characters, 43 on average (5,145,557 characters in 120,012
+8 to about 109 characters, 43 on average (5,145,557 characters in 120,012
 cells). 109,337 of the 120,012 cells (91 %) hold a text no other cell holds
 (2,500 rows: 28,232 of 30,012, 94 %). It is still not real text: the
 vocabulary is small, so the words repeat across cells, and the XML around the

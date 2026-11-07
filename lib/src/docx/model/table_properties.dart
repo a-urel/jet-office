@@ -16,7 +16,7 @@
 /// writes one in its place when a value is first set (`w:tblPr` before the
 /// grid and the rows, `w:trPr` after any `w:tblPrEx` and before the cells,
 /// `w:tcPr` first in the cell); one read in another place stays there and
-/// the new one is written in the schema's place (plan Ruling 8).
+/// the new one is written in the schema's place.
 ///
 /// Lengths are points; a value is rounded to the file's unit and reads back
 /// rounded.

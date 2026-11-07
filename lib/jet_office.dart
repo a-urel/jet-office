@@ -122,8 +122,9 @@
 /// it goes in. A table lists only its typed rows and cells (one inside a
 /// content control is kept in place, not listed), the API nests tables at most
 /// 80 deep, [DocxBody.addTable] takes at most [maxTableColumns] columns, and
-/// a table with no row is not saved. What the model does not type yet, such as content controls,
-/// tracked changes, hyperlinks, drawings and fields, is kept as written in a
+/// a table with no row is not saved. What the model does not type yet, such
+/// as content controls, tracked changes, hyperlinks, drawings and fields, is
+/// kept as written in a
 /// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
 /// can be removed but not changed; the final section and the parts other than
 /// the body are kept as written too. Blocks and inlines are added, removed and

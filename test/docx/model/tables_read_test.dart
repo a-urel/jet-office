@@ -332,7 +332,7 @@ void main() {
         '<w:tr>${_tc('c')}</w:tr></w:tbl>',
       ),
     );
-    // Ruling 1: only typed rows and cells are shown.
+    // Only typed rows and cells are shown.
     expect(table.rows, hasLength(2));
     expect(table.rows[0].cells.map((DocxTableCell c) => c.text), <String>[
       'a',

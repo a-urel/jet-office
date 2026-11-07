@@ -43,8 +43,8 @@
 /// `tool/src/part_compare.dart` must find differences only in the allowed
 /// parts: the main part (named by the root relationship, not assumed to be
 /// `word/document.xml`), the numbering part, the styles part when `ensure`
-/// added a style (`Heading1` or `TableGrid`), and `[Content_Types].xml` and the main part's
-/// relationships when the edit created a part the file lacked.
+/// added a style (`Heading1` or `TableGrid`), and `[Content_Types].xml` and the
+/// main part's relationships when the edit created a part the file lacked.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
 /// problem, 2 when the arguments are unusable or the input directory holds

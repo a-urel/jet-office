@@ -8,7 +8,8 @@
 /// `w:pPr` (`CT_PPrGeneral`) and `w:rPr` as containers of their own. Every
 /// other child, such as `w:rsid`, `w:tblPr` or `w:tblStylePr`, is kept as
 /// read: a table style's `w:tblPr`, `w:trPr`, `w:tcPr` and `w:tblStylePr`
-/// are not typed (plan D3, Ruling 7). [docDefaultsSchema] reads
+/// are not typed: the table's reference to a style is, the style's definition
+/// is not. [docDefaultsSchema] reads
 /// `w:docDefaults` as two levels of nested containers: `w:rPrDefault/w:rPr`
 /// and `w:pPrDefault/w:pPr`.
 library;

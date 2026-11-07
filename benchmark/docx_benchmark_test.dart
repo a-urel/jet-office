@@ -8,9 +8,9 @@
 /// by a hash of its row and column from a vocabulary of 4,096 made-up words
 /// (each 8 to 12 letters), and about one cell in three also ends in a token
 /// unique to the cell (`#` and the cell's number in base 36), so a cell is 8 to
-/// about 105 characters. About one cell in 25 is empty. Each platform opens its own bytes (decision 0006). Run it with
-/// `dart test benchmark` and `dart test -p chrome benchmark`; the quality gate
-/// does not.
+/// about 109 characters. About one cell in 25 is empty. Each platform opens its
+/// own bytes (decision 0006). Run it with `dart test benchmark` and
+/// `dart test -p chrome benchmark`; the quality gate does not.
 @Tags(<String>['benchmark'])
 @Timeout(Duration(minutes: 20))
 library;
