@@ -34,6 +34,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../common/theme_colors.dart';
+import '../../drawingml/media.dart';
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
@@ -600,6 +601,12 @@ final class _Book implements SheetHost {
 
   /// The next VML block to try.
   int _nextVmlBlock = 1;
+
+  DrawingMediaIndex? _mediaIndex;
+
+  @override
+  DrawingMediaIndex get mediaIndex =>
+      _mediaIndex ??= DrawingMediaIndex(_package);
 
   @override
   int takeVmlBlock() {

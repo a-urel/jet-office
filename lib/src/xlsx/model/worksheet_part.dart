@@ -1111,11 +1111,23 @@ final class WorksheetPart implements PartContent {
   }
 
   /// The first SpreadsheetML `<legacyDrawing>`, or `null`.
-  OpaqueXml? get _legacyDrawing {
+  OpaqueXml? get _legacyDrawing => _firstMainChild('legacyDrawing');
+
+  /// The `r:id` of the part's first SpreadsheetML `<drawing>`, the
+  /// relationship of the drawing part that holds its pictures, or `null`
+  /// when there is none or it names no relationship.
+  String? get drawingId {
+    final OpaqueXml? element = _firstMainChild('drawing');
+    return element == null
+        ? null
+        : readerOf(element).getAttribute('id', namespaceUri: Ns.rel);
+  }
+
+  OpaqueXml? _firstMainChild(String localName) {
     for (final Object c in _children) {
       if (c is OpaqueXml &&
           c.namespaceUri == Ns.main &&
-          c.localName == 'legacyDrawing') {
+          c.localName == localName) {
         return c;
       }
     }

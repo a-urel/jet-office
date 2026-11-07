@@ -24,6 +24,9 @@ library;
 
 import 'package:jet_core/jet_core.dart' show FormatKind;
 
+import '../../common/image.dart' show OfficeImage;
+import '../../drawingml/media.dart';
+import '../../drawingml/picture.dart' show DrawingPic;
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
@@ -42,6 +45,7 @@ import '../conditional_format_x14.dart'
 import '../data_validation.dart';
 import '../date_serial.dart';
 import '../defined_name.dart';
+import '../drawing.dart' show XlsxAnchor, XlsxPicture;
 import '../formula_text.dart' show quotedSheetRef;
 import '../header_footer.dart';
 import '../hyperlink.dart';
@@ -87,6 +91,7 @@ import 'comments_part.dart';
 import 'conditional_elements.dart';
 import 'conditional_x14.dart';
 import 'defined_names.dart';
+import 'drawing_part.dart';
 import 'element_node.dart';
 import 'item_group.dart' show GroupItem, ItemGroup, readerOf, renderElements;
 import 'page_elements.dart';
@@ -105,6 +110,7 @@ part 'xlsx_sheet_links.dart';
 part 'xlsx_sheet_merges.dart';
 part 'xlsx_sheet_names.dart';
 part 'xlsx_sheet_notes.dart';
+part 'xlsx_sheet_pictures.dart';
 part 'xlsx_sheet_print.dart';
 part 'xlsx_sheet_rules.dart';
 part 'xlsx_sheet_views.dart';
@@ -138,6 +144,9 @@ abstract interface class SheetHost {
   /// is never given twice. Throws an [XlsxReadException] when a `.vml` part
   /// cannot be read.
   int takeVmlBlock();
+
+  /// The images of the package's media parts, one `Uint8List` per part.
+  DrawingMediaIndex get mediaIndex;
 
   /// Loads the shared strings and styles, once, and returns the encoder that
   /// prepares and writes cells. Throws an [XlsxReadException] when either
@@ -227,6 +236,7 @@ final class XlsxSheet
         _SheetMerges,
         _SheetNames,
         _SheetNotes,
+        _SheetPictures,
         _SheetPrint,
         _SheetRules,
         _SheetViews {

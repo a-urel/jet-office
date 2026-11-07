@@ -5,7 +5,8 @@
 // lib/src/xlsx nor lib/src/docx. lib/src/docx may import nothing of
 // lib/src/xlsx: the number formatter is in jet_core (decision 0012). Neither
 // layer may import the public barrel, lib/jet_office.dart, which exports
-// xlsx. No file under lib/ may reach into jet_core's `src/`: its public
+// xlsx. lib/src/drawingml holds what XLSX and DOCX share of DrawingML, so it
+// imports neither (decision 0014). No file under lib/ may reach into jet_core's `src/`: its public
 // barrel, `package:jet_core/jet_core.dart`, is the only way in.
 @TestOn('vm')
 library;
@@ -16,6 +17,7 @@ import 'support/lib_sources.dart';
 
 const String _common = 'lib/src/common/';
 const String _docx = 'lib/src/docx/';
+const String _drawingml = 'lib/src/drawingml/';
 
 /// The URI of every `import` or `export` directive of a source.
 final RegExp _directive = RegExp(
@@ -61,6 +63,16 @@ List<String> _docxOffenders(Iterable<LibSource> sources) => <String>[
       source.path,
 ];
 
+List<String> _drawingmlOffenders(Iterable<LibSource> sources) => <String>[
+  for (final LibSource source in sources)
+    if (source.path.startsWith(_drawingml) &&
+        _uris(source).any(
+          (String uri) =>
+              _names(uri, 'xlsx') || _names(uri, 'docx') || _namesBarrel(uri),
+        ))
+      source.path,
+];
+
 List<String> _coreSourceOffenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
     if (_uris(source).any(_namesCoreSource)) source.path,
@@ -69,6 +81,16 @@ List<String> _coreSourceOffenders(Iterable<LibSource> sources) => <String>[
 void main() {
   test('lib/src/docx does not import lib/src/xlsx', () {
     expect(_docxOffenders(libSources()), isEmpty);
+  });
+
+  test('nothing under drawingml imports xlsx or docx', () {
+    final List<LibSource> sources = libSources();
+    expect(
+      sources.map((LibSource s) => s.path),
+      contains('${_drawingml}picture.dart'),
+      reason: 'lib/src/drawingml must exist, or the guard scans nothing.',
+    );
+    expect(_drawingmlOffenders(sources), isEmpty);
   });
 
   test('no file under lib/ imports package:jet_core/src/', () {
@@ -130,7 +152,19 @@ void main() {
         'lib/src/docx/l.dart',
         "import 'package:jet_office/jet_office.dart' show OfficeLocale;",
       ),
+      LibSource('lib/src/drawingml/p.dart', "import '../xlsx/range.dart';"),
+      LibSource('lib/src/drawingml/q.dart', "export '../docx/x.dart';"),
+      LibSource(
+        'lib/src/drawingml/r.dart',
+        "import 'package:jet_office/jet_office.dart';",
+      ),
+      LibSource('lib/src/drawingml/s.dart', "import '../opc/package.dart';"),
     ];
+    expect(_drawingmlOffenders(fixtures), <String>[
+      'lib/src/drawingml/p.dart',
+      'lib/src/drawingml/q.dart',
+      'lib/src/drawingml/r.dart',
+    ]);
     expect(_commonOffenders(fixtures), <String>[
       'lib/src/common/a.dart',
       'lib/src/common/b.dart',

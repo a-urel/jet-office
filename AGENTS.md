@@ -327,7 +327,9 @@ It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
 - **The format layers depend one way.** Nothing under `lib/src/docx/` imports
   `lib/src/xlsx/` (the number formatter is `package:jet_core`, decision 0012);
   nothing under `lib/src/common/` imports `lib/src/xlsx/`, `lib/src/docx/` or
-  the barrel; nothing under `lib/src/` imports `lib/jet_office.dart`.
+  the barrel; nothing under `lib/src/drawingml/` (the DrawingML both formats
+  share, decision 0014) imports `lib/src/xlsx/`, `lib/src/docx/` or the barrel;
+  nothing under `lib/src/` imports `lib/jet_office.dart`.
   Enforced by `test/architecture/layering_test.dart`.
 - **One cell encoder.** Only `lib/src/xlsx/cell_encoder.dart` writes `<c ` or
   `<v>` (decision 0002). Enforced by `test/architecture/cell_encoder_test.dart`.

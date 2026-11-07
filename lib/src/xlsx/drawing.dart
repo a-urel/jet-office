@@ -25,6 +25,7 @@
 library;
 
 import '../common/image.dart';
+import '../drawingml/picture.dart';
 import '../opc/ooxml.dart';
 import '../opc/relationships.dart';
 import '../xml/xml_escape.dart';
@@ -32,6 +33,8 @@ import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
 import 'limits.dart';
 import 'range.dart';
+
+export '../drawingml/picture.dart' show emuPerPixel, pixelsToEmu;
 
 /// A corner of a picture: a zero-based cell and an offset into it, in
 /// pixels.
@@ -243,15 +246,6 @@ final class XlsxPicture {
 
 String _describe(double? value) =>
     value == null ? 'null' : describeDouble(value);
-
-/// EMU (English Metric Units) per pixel at 96 dpi, as Excel inserts a
-/// picture at 100 % zoom: 914,400 EMU per inch ÷ 96 (Decision 4 of the M4
-/// plan). The image's own resolution (`pHYs`, the JFIF density) is
-/// ignored.
-const int emuPerPixel = 9525;
-
-/// [pixels] in EMU, rounded to a whole EMU (half away from zero).
-int pixelsToEmu(double pixels) => (pixels * emuPerPixel).round();
 
 /// A picture as a sheet holds it until the sheet finishes: its image and
 /// the format of its bytes, its anchor, the image's own size in pixels,
@@ -486,7 +480,17 @@ void writeDrawing(
           'cx': '${extent.cx}',
           'cy': '${extent.cy}',
         });
-        _writePic(w, picture, i + 2, embedIds[i], extent);
+        writeDrawingPic(
+          w,
+          DrawingPic(
+            id: i + 2,
+            name: picture.name,
+            description: picture.description,
+            embedId: embedIds[i],
+          ),
+          prefix: 'xdr',
+          extent: extent,
+        );
       case XlsxTwoCellAnchor(:final from, :final to, :final resize):
         w.start('xdr:twoCellAnchor');
         switch (resize) {
@@ -499,7 +503,16 @@ void writeDrawing(
         }
         _writeMarker(w, 'xdr:from', from);
         _writeMarker(w, 'xdr:to', to);
-        _writePic(w, picture, i + 2, embedIds[i], null);
+        writeDrawingPic(
+          w,
+          DrawingPic(
+            id: i + 2,
+            name: picture.name,
+            description: picture.description,
+            embedId: embedIds[i],
+          ),
+          prefix: 'xdr',
+        );
     }
     w.empty('xdr:clientData');
     w.end();
@@ -522,52 +535,6 @@ void _writeMarker(XmlWriter w, String name, XlsxAnchorPoint point) {
 void _writeNumber(XmlWriter w, String name, int value) {
   w.start(name);
   w.text('$value');
-  w.end();
-}
-
-/// Writes the `xdr:pic` of [picture] with the `cNvPr` [id], showing the
-/// media [embedId]; [extent], given for a one-cell picture, goes into
-/// `a:xfrm`.
-void _writePic(
-  XmlWriter w,
-  WorksheetPicture picture,
-  int id,
-  String embedId,
-  ({int cx, int cy})? extent,
-) {
-  w.start('xdr:pic');
-  w.start('xdr:nvPicPr');
-  w.start('xdr:cNvPr');
-  w.attribute('id', '$id');
-  w.attribute('name', picture.name);
-  final String? description = picture.description;
-  if (description != null) w.attribute('descr', description);
-  w.end();
-  w.start('xdr:cNvPicPr');
-  w.empty('a:picLocks', const <String, String>{'noChangeAspect': '1'});
-  w.end();
-  w.end();
-  w.start('xdr:blipFill');
-  w.empty('a:blip', <String, String>{'r:embed': embedId});
-  w.start('a:stretch');
-  w.empty('a:fillRect');
-  w.end();
-  w.end();
-  w.start('xdr:spPr');
-  if (extent != null) {
-    w.start('a:xfrm');
-    w.empty('a:off', const <String, String>{'x': '0', 'y': '0'});
-    w.empty('a:ext', <String, String>{
-      'cx': '${extent.cx}',
-      'cy': '${extent.cy}',
-    });
-    w.end();
-  }
-  w.start('a:prstGeom');
-  w.attribute('prst', 'rect');
-  w.empty('a:avLst');
-  w.end();
-  w.end();
   w.end();
 }
 
