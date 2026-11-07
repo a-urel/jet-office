@@ -397,3 +397,20 @@ its recovery log.
 | 2026-11-06 | Word for Mac 16.114.4 | `build/edited-docx-owner/blank.docx` | ok | Own parts (decision 0011). |
 | 2026-11-06 | Word for Mac 16.114.4 | `build/edited-docx-owner/features.docx` | ok | Own parts (decision 0011). |
 | 2026-11-06 | Word for Mac 16.114.4 | Save in Word | ok | Own parts (decision 0011): `d1_blank` saved, closed and reopened. |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/fixtures/d1_blank.docx` | ok | Reopened after the `w14` fix: new root declares the real namespace. |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/fixtures/d3_basic.docx` | ok |  |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/fixtures/d3_header_row.docx` | ok |  |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/fixtures/d3_merges.docx` | ok |  |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/fixtures/d3_formatting.docx` | ok |  |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/fixtures/d3_nested.docx` | ok |  |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/model-docx/d3_*.docx` | ok | Compared with the fixtures. |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/model-docx-owner/blank.docx` | ok | Compared with the original. |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/model-docx-owner/features.docx` | ok | Compared with the original. |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/model-docx-owner/long.docx` | ok | Compared with the original. |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/model-docx-owner/builtins.docx` | ok | Compared with the original. |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/edited-docx-owner/blank.docx` | ok |  |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/edited-docx-owner/features.docx` | ok |  |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/edited-docx-owner/long.docx` | ok |  |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/edited-docx-owner/builtins.docx` | ok |  |
+| 2026-11-07 | Word for Mac 16.114.4 | `build/table-last/d3_table_last.docx` | ok | Saved in Word, closed and reopened. |
+| 2026-11-07 | Word for Mac 16.114.4 | Save in Word | ok | D3: `d3_basic`, `d3_merges`, `d3_nested`, `d3_header_row` and one edited owner file. |
