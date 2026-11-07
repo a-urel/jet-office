@@ -256,7 +256,7 @@ final class DocxTableCellProperties {
 
   final PropertySet _set;
 
-  /// Throws when a span does not fit where the cell is.
+  /// Throws when a span the cell would change to does not fit where it is.
   final void Function(int span) _checkGridSpan;
 
   /// Throws when the cell has nothing above to continue.
@@ -277,15 +277,24 @@ final class DocxTableCellProperties {
   /// row with its `w:gridBefore` and `w:gridAfter` may not be more than the
   /// columns of the grid, or [ArgumentError] is thrown. Remove the cells it
   /// takes the place of first, or use `DocxTable.mergeCells`, which does both.
-  /// A cell in no table is not checked, and a row goes through the same check
-  /// when it goes in one (`DocxTable.insertRowAt`).
+  ///
+  /// A span that changes, wider or narrower, `null` and
+  /// [DocxTableCellProperty.gridSpan] of [clear] included, must also leave
+  /// vertical merges in line, or [ArgumentError] is thrown: a cell that
+  /// continues one keeps the columns of the cell above it, and a cell that
+  /// the row below continues keeps its own, for the cell itself and those it
+  /// moves along the row. So to build a merge by hand, set the spans first
+  /// and then [verticalMerge], from the top row down.
+  ///
+  /// A cell in no table is not checked; a row is when it goes in one
+  /// (`DocxTable.insertRowAt`), and a cell (`DocxTableRow.insertCellAt`).
   int? get gridSpan => _set.valueOf('gridSpan') as int?;
 
   set gridSpan(int? value) {
     if (value != null) {
       RangeError.checkValueInInterval(value, 1, maxTableColumns, 'gridSpan');
-      _checkGridSpan(value);
     }
+    _checkGridSpan(value ?? 1);
     _set.setValue('gridSpan', value);
   }
 
@@ -293,7 +302,8 @@ final class DocxTableCellProperties {
   ///
   /// Setting [DocxVerticalMerge.continuation] on a cell of a row of a table
   /// throws [ArgumentError] unless the row above has a cell of the same
-  /// columns; a file may hold one with nothing to continue, and it reads.
+  /// columns; a file may hold one with nothing to continue, and it reads. Set
+  /// it after the spans of the merge: [gridSpan] has the rule.
   DocxVerticalMerge? get verticalMerge =>
       _set.valueOf('vMerge') as DocxVerticalMerge?;
 
@@ -330,9 +340,12 @@ final class DocxTableCellProperties {
       _set.setValue('textDirection', value);
 
   /// Removes [property] from the cell, whatever the getter reads of it.
-  /// Nothing is recorded when the cell has no such child.
-  void clear(DocxTableCellProperty property) =>
-      _set.clearChild(property._element);
+  /// Nothing is recorded when the cell has no such child. Clearing
+  /// [DocxTableCellProperty.gridSpan] is checked as [gridSpan] is.
+  void clear(DocxTableCellProperty property) {
+    if (property == DocxTableCellProperty.gridSpan) _checkGridSpan(1);
+    _set.clearChild(property._element);
+  }
 }
 
 /// The table properties over [source] (a table's `w:tblPr` as read, or an
@@ -349,8 +362,8 @@ DocxTableRowProperties newTableRowProperties(
 ) => DocxTableRowProperties._(source, sink);
 
 /// The cell properties over [source]; edits go to the sink [sink] gives.
-/// [checkGridSpan] throws for a span that does not fit where the cell is, and
-/// [checkContinuation] for a cell with nothing above to continue.
+/// [checkGridSpan] throws for a new span that does not fit where the cell is,
+/// and [checkContinuation] for a cell with nothing above to continue.
 DocxTableCellProperties newTableCellProperties(
   PropertyContainer source,
   DocxEditSink Function() sink, {

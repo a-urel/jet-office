@@ -895,7 +895,7 @@ void main() {
       final DocxDocument doc = _open(_p('a'));
       final DocxEdits edits = editsOf(doc);
       final DocxTable outer = DocxTable(columns: 1);
-      final DocxTable inner = DocxTable(columns: 1);
+      final DocxTable inner = DocxTable(columns: 2);
       _cell(outer).insertBlock(0, inner);
       doc.body.insertBlock(1, outer);
       expect(
@@ -904,9 +904,7 @@ void main() {
       );
       expect(
         edits
-            .transaction(
-              () => inner.rows.first.insertCellAt(0, DocxTableCell()),
-            )
+            .transaction(() => inner.rows.last.insertCellAt(0, DocxTableCell()))
             .changes,
         hasLength(1),
       );

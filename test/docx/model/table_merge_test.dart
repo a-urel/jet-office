@@ -7,7 +7,10 @@
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/docx_document.dart' show editsOf;
 import 'package:jet_office/src/docx/model/blocks.dart';
+import 'package:jet_office/src/docx/model/edit_sink.dart';
+import 'package:jet_office/src/docx/model/inlines.dart';
 import 'package:jet_office/src/docx/model/primitives.dart';
+import 'package:jet_office/src/docx/model/property_set.dart';
 import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:test/test.dart';
@@ -83,6 +86,88 @@ DocxDocument _reopen(DocxDocument doc) => DocxDocument.open(doc.save().bytes);
 /// last column.
 DocxTableCell _merge(DocxTable table, int r0, int c0, int r1, int c1) => table
     .mergeCells(firstRow: r0, firstColumn: c0, lastRow: r1, lastColumn: c1);
+
+/// A sink that passes everything to [_edits] and keeps the change set of each
+/// outermost [atomically], so a test can undo an edit that opened no
+/// transaction of its own, and counts what is reported outside one.
+final class _RecordingSink implements DocxEditSink {
+  _RecordingSink(this._edits);
+
+  final DocxEdits _edits;
+  final List<ChangeSet> sets = <ChangeSet>[];
+  int outside = 0;
+  int _depth = 0;
+
+  void _report() {
+    if (_depth == 0) outside++;
+  }
+
+  @override
+  void atomically(void Function() body) {
+    if (_depth > 0) {
+      body();
+      return;
+    }
+    _depth++;
+    try {
+      sets.add(_edits.transaction(body));
+    } finally {
+      _depth--;
+    }
+  }
+
+  @override
+  void apply(Change change) {
+    _report();
+    _edits.apply(change);
+  }
+
+  @override
+  void inlineInserted(DocxParagraph paragraph, int index, DocxInline inline) {
+    _report();
+    _edits.inlineInserted(paragraph, index, inline);
+  }
+
+  @override
+  void inlineRemoved(DocxParagraph paragraph, int index, DocxInline inline) {
+    _report();
+    _edits.inlineRemoved(paragraph, index, inline);
+  }
+
+  @override
+  void inlineReplaced(
+    DocxParagraph paragraph,
+    int index,
+    DocxInline previous,
+    DocxInline replacement,
+  ) {
+    _report();
+    _edits.inlineReplaced(paragraph, index, previous, replacement);
+  }
+
+  @override
+  void runTextSet(DocxRun run, DocxRunText previous) {
+    _report();
+    _edits.runTextSet(run, previous);
+  }
+
+  @override
+  void propertySet(
+    PropertySet properties,
+    String localName,
+    PropertyState previous,
+  ) {
+    _report();
+    _edits.propertySet(properties, localName, previous);
+  }
+
+  @override
+  String resolveStyleId(String id, DocxStyleType type) =>
+      _edits.resolveStyleId(id, type);
+
+  @override
+  bool isForeign(DocxEditSink? readIn) => _edits.isForeign(readIn);
+}
 
 void main() {
   group('a merge of a 3 x 3 table', () {
@@ -193,7 +278,7 @@ void main() {
       expect(merged.blocks, hasLength(1));
     });
 
-    test('keep a paragraph that holds a drawing or a bookmark', () {
+    test('keep a paragraph that holds a tab or a bookmark', () {
       final DocxDocument doc = _tableOf(2, <String>[
         _tr(<String>[
           '<w:tc><w:p><w:bookmarkStart w:id="1" w:name="b"/></w:p></w:tc>',
@@ -258,6 +343,56 @@ void main() {
       expect(_saved(doc), contains('</w:tbl><w:p/></w:tc>'));
     });
 
+    group('between two tables', () {
+      final String inner =
+          '<w:tbl>${_grid(1)}${_tr(<String>[_tc('in')])}</w:tbl>';
+
+      /// The kinds of the blocks of the merge of a row of [cells].
+      List<Type> merged(List<String> cells) {
+        final DocxDocument doc = _tableOf(cells.length, <String>[_tr(cells)]);
+        final DocxTableCell cell = _merge(
+          _table(doc),
+          0,
+          0,
+          0,
+          cells.length - 1,
+        );
+        expect(_saved(doc), isNot(contains('</w:tbl><w:tbl>')));
+        return cell.blocks.map((DocxBlock b) => b.runtimeType).toList();
+      }
+
+      test('an empty paragraph stays, so Word does not join them', () {
+        expect(
+          merged(<String>[
+            '<w:tc>$inner<w:p/></w:tc>',
+            '<w:tc>$inner<w:p/></w:tc>',
+          ]),
+          <Type>[DocxTable, DocxParagraph, DocxTable],
+        );
+      });
+
+      test('one empty paragraph stays of several', () {
+        expect(
+          merged(<String>[
+            '<w:tc>$inner<w:p/><w:p/></w:tc>',
+            '<w:tc><w:p/>$inner</w:tc>',
+          ]),
+          <Type>[DocxTable, DocxParagraph, DocxTable],
+        );
+      });
+
+      test('none stays where another block is between them', () {
+        expect(
+          merged(<String>[
+            '<w:tc>$inner<w:p/></w:tc>',
+            _tc('B'),
+            '<w:tc><w:p/>$inner<w:p/></w:tc>',
+          ]),
+          <Type>[DocxTable, DocxParagraph, DocxTable],
+        );
+      });
+    });
+
     test('an edit of a moved paragraph is recorded by the document', () {
       final DocxDocument doc = _open(_threeByThree());
       final DocxTableCell merged = _merge(_table(doc), 0, 0, 0, 1);
@@ -290,6 +425,16 @@ void main() {
     test('stays when the sum is more than a width holds', () {
       final DocxDocument doc = _open(
         '<w:tbl><w:tblGrid><w:gridCol w:w="20000"/><w:gridCol w:w="20000"/>'
+        '</w:tblGrid>${_tr(<String>[_tc('A', _width), _tc('B', _width)])}'
+        '</w:tbl>',
+      );
+      final DocxTableCell merged = _merge(_table(doc), 0, 0, 0, 1);
+      expect(merged.properties.width, DocxTableWidth.points(50));
+    });
+
+    test('stays when the merged columns have no width between them', () {
+      final DocxDocument doc = _open(
+        '<w:tbl><w:tblGrid><w:gridCol w:w="0"/><w:gridCol w:w="0"/>'
         '</w:tblGrid>${_tr(<String>[_tc('A', _width), _tc('B', _width)])}'
         '</w:tbl>',
       );
@@ -345,6 +490,31 @@ void main() {
       _merge(table, 0, 0, 1, 1);
       expect(_rows(table), <String>['A/D/E|C', '|F']);
       expect(table.rows[1].cells[0].properties.gridSpan, 2);
+    });
+
+    test('of rows around a bookmark keeps the bookmark', () {
+      const String bookmark = '<w:bookmarkStart w:id="1" w:name="b"/>';
+      final DocxDocument doc = _tableOf(1, <String>[
+        _tr(<String>[_tc('A')]),
+        bookmark,
+        _tr(<String>[_tc('C')]),
+      ]);
+      expect(_merge(_table(doc), 0, 0, 1, 0).text, 'A\nC');
+      expect(_saved(doc), contains(bookmark));
+    });
+
+    test('of rows next to a w:sdt that is outside the range goes', () {
+      const String sdt =
+          '<w:sdt><w:sdtContent><w:tr><w:tc><w:p/></w:tc></w:tr></w:sdtContent>'
+          '</w:sdt>';
+      final DocxDocument doc = _tableOf(1, <String>[
+        sdt,
+        _tr(<String>[_tc('A')]),
+        _tr(<String>[_tc('B')]),
+        sdt,
+        _tr(<String>[_tc('C')]),
+      ]);
+      expect(_merge(_table(doc), 0, 0, 1, 0).text, 'A\nB');
     });
 
     test('of a range that is one cell changes nothing', () {
@@ -427,6 +597,29 @@ void main() {
       ];
       refuses(_tableOf(3, rows), 0, 1, 0, 2);
     });
+
+    final Map<String, String> hiding = <String, String>{
+      'w:sdt':
+          '<w:sdt><w:sdtContent>${_tr(<String>[_tc('H')])}</w:sdtContent>'
+          '</w:sdt>',
+      'w:customXml':
+          '<w:customXml w:element="x">${_tr(<String>[_tc('H')])}</w:customXml>',
+    };
+    for (final MapEntry<String, String> kept in hiding.entries) {
+      test('rows around a ${kept.key} throw ArgumentError', () {
+        refuses(
+          _tableOf(1, <String>[
+            _tr(<String>[_tc('A')]),
+            kept.value,
+            _tr(<String>[_tc('C')]),
+          ]),
+          0,
+          0,
+          1,
+          0,
+        );
+      });
+    }
 
     test('a span past 63 columns throws ArgumentError', () {
       final DocxDocument doc = _tableOf(64, <String>[
@@ -527,7 +720,11 @@ void main() {
       final DocxTable table = _table(doc);
       final DocxTableCell first = table.rows[1].cells[1];
       final ChangeLog log = editsOf(doc).log;
-      final ChangeSet set = log.transaction(() => _merge(table, 1, 1, 2, 2));
+      final _RecordingSink sink = _RecordingSink(editsOf(doc));
+      attachSink(table, sink);
+      _merge(table, 1, 1, 2, 2);
+      expect(sink.outside, 0);
+      final ChangeSet set = sink.sets.single;
       expect(set.isEmpty, isFalse);
       log.revertSet(set);
       expect(_rows(table), <String>['A|B|C', 'D|E|F', 'G|H|I']);
@@ -655,6 +852,148 @@ void main() {
     });
   });
 
+  group('gridSpan in a vertical merge', () {
+    /// `[A restart][B]` over `[continue][D]`, in a grid of two columns.
+    DocxDocument stacked() => _tableOf(2, <String>[
+      _tr(<String>[_tc('A', _restart), _tc('B')]),
+      _tr(<String>[_empty(_continue), _tc('D')]),
+    ]);
+
+    /// One cell of two columns restarting, one continuing below it.
+    DocxDocument wide() => _tableOf(2, <String>[
+      _tr(<String>[_tc('A', '$_span2$_restart')]),
+      _tr(<String>[_empty('$_span2$_continue')]),
+    ]);
+
+    test('a continuation widened past the cell above throws', () {
+      final DocxDocument doc = stacked();
+      final DocxTableRow row = _table(doc).rows[1];
+      row.removeCellAt(1);
+      final String saved = _saved(doc);
+      expect(
+        () => row.cells.single.properties.gridSpan = 2,
+        throwsArgumentError,
+      );
+      expect(row.cells.single.properties.gridSpan, isNull);
+      expect(_saved(doc), saved);
+    });
+
+    test('a cell widened past the continuation below throws', () {
+      final DocxDocument doc = stacked();
+      final DocxTableRow row = _table(doc).rows[0];
+      row.removeCellAt(1);
+      expect(
+        () => row.cells.single.properties.gridSpan = 2,
+        throwsArgumentError,
+      );
+      expect(row.cells.single.properties.gridSpan, isNull);
+    });
+
+    test('a continuation narrowed under the cell above throws', () {
+      final DocxTableCellProperties p = _table(
+        wide(),
+      ).rows[1].cells.single.properties;
+      expect(() => p.gridSpan = 1, throwsArgumentError);
+      expect(() => p.gridSpan = null, throwsArgumentError);
+      expect(
+        () => p.clear(DocxTableCellProperty.gridSpan),
+        throwsArgumentError,
+      );
+      expect(p.gridSpan, 2);
+    });
+
+    test('a cell narrowed over the continuation below throws', () {
+      final DocxTableCellProperties p = _table(
+        wide(),
+      ).rows[0].cells.single.properties;
+      expect(() => p.gridSpan = 1, throwsArgumentError);
+      expect(() => p.gridSpan = null, throwsArgumentError);
+      expect(
+        () => p.clear(DocxTableCellProperty.gridSpan),
+        throwsArgumentError,
+      );
+      expect(p.gridSpan, 2);
+    });
+
+    test('a span that moves a merged cell along the row throws', () {
+      final DocxDocument doc = _tableOf(3, <String>[
+        _tr(<String>[_tc('A'), _tc('B', _restart)]),
+        _tr(<String>[_tc('C'), _empty(_continue)]),
+      ]);
+      final DocxTable table = _table(doc);
+      expect(
+        () => table.rows[0].cells[0].properties.gridSpan = 2,
+        throwsArgumentError,
+      );
+      expect(
+        () => table.rows[1].cells[0].properties.gridSpan = 2,
+        throwsArgumentError,
+      );
+    });
+
+    test('a span that changes nothing is no change', () {
+      final DocxDocument doc = stacked();
+      final DocxTable table = _table(doc);
+      final DocxTableCellProperties p = table.rows[1].cells[0].properties;
+      p.gridSpan = p.gridSpan;
+      final DocxDocument other = wide();
+      final DocxTableCellProperties q = _table(
+        other,
+      ).rows[0].cells.single.properties;
+      q.gridSpan = 2;
+      expect(editsOf(doc).log.hasChanges, isFalse);
+      expect(editsOf(other).log.hasChanges, isFalse);
+    });
+
+    test('a cell away from the merge still takes a span', () {
+      final DocxDocument doc = _tableOf(3, <String>[
+        _tr(<String>[_tc('A', _restart), _tc('B')]),
+        _tr(<String>[_empty(_continue), _tc('D')]),
+      ]);
+      final DocxTableCell cell = _table(doc).rows[0].cells[1];
+      cell.properties.gridSpan = 2;
+      expect(cell.properties.gridSpan, 2);
+    });
+
+    test('a continuation read out of line can be brought into line', () {
+      final DocxDocument doc = _tableOf(2, <String>[
+        _tr(<String>[_tc('A', _span2)]),
+        _tr(<String>[_empty(_continue), _tc('D')]),
+      ]);
+      final DocxTableRow row = _table(doc).rows[1];
+      row.removeCellAt(1);
+      row.cells.single.properties.gridSpan = 2;
+      expect(row.cells.single.properties.gridSpan, 2);
+    });
+
+    test('spans first, then verticalMerge, builds a merge by hand', () {
+      final DocxTable table = DocxTable(columns: 2, rows: 2);
+      for (final DocxTableRow row in table.rows) {
+        row.removeCellAt(1);
+        row.cells.single.properties.gridSpan = 2;
+      }
+      table.rows[0].cells.single.properties.verticalMerge =
+          DocxVerticalMerge.restart;
+      table.rows[1].cells.single.properties.verticalMerge =
+          DocxVerticalMerge.continuation;
+      expect(
+        table.rows[1].cells.single.properties.verticalMerge,
+        DocxVerticalMerge.continuation,
+      );
+    });
+
+    test('a merge widens merged cells past its own transient states', () {
+      final DocxDocument doc = _tableOf(3, <String>[
+        _tr(<String>[_tc('A', _restart), _tc('B'), _tc('C')]),
+        _tr(<String>[_empty(_continue), _tc('E'), _tc('F')]),
+      ]);
+      final DocxTable table = _table(doc);
+      _merge(table, 0, 0, 1, 1);
+      expect(table.rows[0].cells[0].properties.gridSpan, 2);
+      expect(table.rows[1].cells[0].properties.gridSpan, 2);
+    });
+  });
+
   group('verticalMerge', () {
     test('continuation in the first row throws ArgumentError', () {
       final DocxDocument doc = _open(_threeByThree());
@@ -777,6 +1116,76 @@ void main() {
       expect(wide.rows, hasLength(2));
     });
 
+    /// A new row of [cells] cells, the first a continuation.
+    DocxTableRow continuing(int cells) {
+      final DocxTableRow row = DocxTableRow(cells: cells);
+      row.cells.first.properties.verticalMerge = DocxVerticalMerge.continuation;
+      return row;
+    }
+
+    test('with a continuation first in the table throws', () {
+      final DocxDocument doc = _open(_threeByThree());
+      final DocxTable table = _table(doc);
+      final DocxTableRow row = continuing(3);
+      expect(() => table.insertRowAt(0, row), throwsArgumentError);
+      expect(table.rows, hasLength(3));
+      expect(parentOf(row), isNull);
+      expect(editsOf(doc).log.hasChanges, isFalse);
+    });
+
+    test('with a continuation under another span throws', () {
+      final DocxDocument doc = _tableOf(2, <String>[
+        _tr(<String>[_tc('A', _span2)]),
+      ]);
+      final DocxTable table = _table(doc);
+      expect(() => table.insertRowAt(1, continuing(2)), throwsArgumentError);
+      expect(table.rows, hasLength(1));
+    });
+
+    test('with a continuation is judged by the row above its index', () {
+      final DocxDocument doc = _tableOf(2, <String>[
+        _tr(<String>[_tc('A', _span2)]),
+        _tr(<String>[_tc('C'), _tc('D')]),
+      ]);
+      final DocxTable table = _table(doc);
+      expect(() => table.insertRowAt(1, continuing(2)), throwsArgumentError);
+      table.insertRowAt(2, continuing(2));
+      expect(table.rows, hasLength(3));
+    });
+
+    test('with a continuation in a table without a grid is checked', () {
+      final DocxDocument doc = _open(
+        '<w:tbl>${_tr(<String>[_tc('A')])}</w:tbl>',
+      );
+      expect(
+        () => _table(doc).insertRowAt(0, continuing(1)),
+        throwsArgumentError,
+      );
+    });
+
+    test('at an index out of range is a RangeError', () {
+      final DocxTable table = DocxTable(columns: 1);
+      expect(() => table.insertRowAt(5, continuing(1)), throwsRangeError);
+    });
+
+    test('that is plain may go inside a vertical merge (Ruling P10)', () {
+      final DocxDocument doc = _tableOf(2, <String>[
+        _tr(<String>[_tc('A', _restart), _tc('B')]),
+        _tr(<String>[_empty(_continue), _tc('D')]),
+      ]);
+      _table(doc).insertRowAt(1, DocxTableRow(cells: 2));
+      expect(_table(doc).rows, hasLength(3));
+    });
+
+    test('a removal that orphans a merge is allowed (Ruling P10)', () {
+      final DocxDocument doc = _tableOf(2, <String>[
+        _tr(<String>[_tc('A', _restart), _tc('B')]),
+        _tr(<String>[_empty(_continue), _tc('D')]),
+      ]);
+      _table(doc).removeRowAt(0);
+      expect(_table(doc).rows, hasLength(1));
+    });
+
     test('in a table without a grid is not checked', () {
       final DocxDocument doc = _open(
         '<w:tbl>${_tr(<String>[_tc('A')])}</w:tbl>',
@@ -788,6 +1197,52 @@ void main() {
     test('that is in a table still throws StateError', () {
       final DocxTable table = DocxTable(columns: 1, rows: 2);
       expect(() => table.insertRowAt(0, table.rows.first), throwsStateError);
+    });
+  });
+
+  group('a cell inserted', () {
+    test('past the grid throws, and nothing changes', () {
+      final DocxDocument doc = _open(_threeByThree());
+      final DocxTableRow row = _table(doc).rows[0];
+      final DocxTableCell cell = DocxTableCell();
+      expect(() => row.insertCellAt(0, cell), throwsArgumentError);
+      expect(row.cells, hasLength(3));
+      expect(parentOf(cell), isNull);
+      expect(editsOf(doc).log.hasChanges, isFalse);
+    });
+
+    test('counts its span and what the row skips', () {
+      final DocxDocument doc = _tableOf(4, <String>[
+        _tr(<String>[_tc('B')], '<w:gridBefore w:val="1"/>'),
+      ]);
+      final DocxTableRow row = _table(doc).rows.single;
+      final DocxTableCell cell = DocxTableCell();
+      cell.properties.gridSpan = 3;
+      expect(() => row.insertCellAt(1, cell), throwsArgumentError);
+      cell.properties.gridSpan = 2;
+      row.insertCellAt(1, cell);
+      expect(row.cells, hasLength(2));
+    });
+
+    test('in a row in no table is not checked', () {
+      final DocxTableRow row = DocxTableRow(cells: 63);
+      row.insertCellAt(0, DocxTableCell());
+      expect(row.cells, hasLength(64));
+    });
+
+    test('in a table without a grid is not checked', () {
+      final DocxDocument doc = _open(
+        '<w:tbl>${_tr(<String>[_tc('A')])}</w:tbl>',
+      );
+      final DocxTableRow row = _table(doc).rows.single;
+      row.insertCellAt(1, DocxTableCell());
+      expect(row.cells, hasLength(2));
+    });
+
+    test('that is in a row still throws StateError', () {
+      final DocxTable table = DocxTable(columns: 1);
+      final DocxTableRow row = table.rows.single;
+      expect(() => row.insertCellAt(0, row.cells.single), throwsStateError);
     });
   });
 }

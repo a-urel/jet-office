@@ -29,6 +29,7 @@ library;
 import 'dart:collection';
 
 import '../../opc/change_log.dart';
+import '../../opc/ooxml.dart' show Ns;
 import '../../opc/opaque_xml.dart';
 import '../properties.dart';
 import '../units.dart';
@@ -382,9 +383,21 @@ final class DocxTable extends DocxBlock {
   /// [row] that holds this table, or whose tables would nest past 80 deep,
   /// throws [ArgumentError], and so does one whose spans, with its
   /// `w:gridBefore` and `w:gridAfter`, are more than the columns of the grid
-  /// (a table without a grid checks nothing). Nothing changes then.
+  /// (a table without a grid checks nothing), or with a cell that continues a
+  /// vertical merge and no cell of the same columns in the row that will be
+  /// above it. Nothing changes then.
+  ///
+  /// A row with no such cell may go inside a vertical merge, and a row removed
+  /// may leave a merge without its start: neither is checked.
   void insertRowAt(int index, DocxTableRow row) {
-    if (row._table == null) _checkRowFits(row);
+    RangeError.checkValueInInterval(index, 0, _rows.length, 'index');
+    if (row._table == null) {
+      _checkFits(row._gridTotal);
+      final List<_PlacedCell> above = _placedAt(index - 1);
+      for (final _PlacedCell at in row._placed()) {
+        if (at.cell._continues) _checkContinues(above, at.start, at.end);
+      }
+    }
     primitives.insertChild(_sink, this, _children, _rows, index, row);
   }
 
@@ -425,6 +438,8 @@ final class DocxTable extends DocxBlock {
   /// - a range that cuts a merged cell: one that crosses its edge, starts on a
   ///   `w:vMerge` continue, runs on below the range or continues no cell of
   ///   the range above it;
+  /// - a `w:sdt` or a `w:customXml` between the first and the last row, which
+  ///   may hold rows the table does not show (a bookmark there is fine);
   /// - a nested table that would go past 80 tables deep.
   DocxTableCell mergeCells({
     required int firstRow,
@@ -457,9 +472,10 @@ final class DocxTable extends DocxBlock {
         if (range.length > 1) {
           final DocxTableCell first = range[i].first;
           if (i > 0) first.addParagraph();
-          first.properties.verticalMerge = i == 0
-              ? DocxVerticalMerge.restart
-              : DocxVerticalMerge.continuation;
+          cellPropertySetOf(first).setValue(
+            'vMerge',
+            i == 0 ? DocxVerticalMerge.restart : DocxVerticalMerge.continuation,
+          );
         }
       }
     });
@@ -473,15 +489,38 @@ final class DocxTable extends DocxBlock {
     return columns == 0 ? null : columns;
   }
 
-  /// Throws [ArgumentError] when [row] does not fit the grid.
-  void _checkRowFits(DocxTableRow row) {
+  /// Throws [ArgumentError] when a row taking [total] columns does not fit
+  /// the grid; a table without a grid fits anything.
+  void _checkFits(int total) {
     final int? columns = _columnCount;
-    if (columns != null && row._gridTotal > columns) {
+    if (columns != null && total > columns) {
       throw ArgumentError.value(
-        row,
-        'row',
+        total,
+        'columns',
         'must fit the $columns columns of the grid',
       );
+    }
+  }
+
+  /// The cells of the row at [index], placed; none for no such row.
+  List<_PlacedCell> _placedAt(int index) => index < 0 || index >= _rows.length
+      ? const <_PlacedCell>[]
+      : _rows[index]._placed();
+
+  /// Throws [ArgumentError] when a child between the rows [r0] and [r1] may
+  /// hold rows that [rows] does not list, which a merge would run across.
+  void _checkNoRowsHidden(int r0, int r1) {
+    final int last = _children.indexOf(_rows[r1]);
+    for (int i = _children.indexOf(_rows[r0]) + 1; i < last; i++) {
+      final Object child = _children[i];
+      if (child is OpaqueXml &&
+          child.namespaceUri == Ns.w &&
+          (child.localName == 'sdt' || child.localName == 'customXml')) {
+        throw ArgumentError(
+          'Rows $r0 to $r1 are around a w:${child.localName}, which a merge '
+          'cannot cross.',
+        );
+      }
     }
   }
 
@@ -503,6 +542,7 @@ final class DocxTable extends DocxBlock {
     if (c1 - c0 >= maxTableColumns) {
       throw ArgumentError('A cell spans at most $maxTableColumns columns.');
     }
+    if (r0 < r1) _checkNoRowsHidden(r0, r1);
     final List<List<DocxTableCell>> range = <List<DocxTableCell>>[];
     List<_PlacedCell> above = const <_PlacedCell>[];
     for (int r = r0; r <= r1; r++) {
@@ -565,7 +605,7 @@ final class DocxTable extends DocxBlock {
   }
 
   /// The width of the columns [first] to [last] together; `null` when one has
-  /// no width, or the sum is more than a width holds.
+  /// no width, or the sum is none at all or more than a width holds.
   DocxTableWidth? _widthOfColumns(int first, int last) {
     final List<double?> grid = _gridColumnsPt!;
     double sum = 0;
@@ -574,39 +614,74 @@ final class DocxTable extends DocxBlock {
       if (width == null) return null;
       sum += width;
     }
-    return sum > ptOfTwips(maxTwips) ? null : DocxTableWidth.points(sum);
+    if (sum == 0 || sum > ptOfTwips(maxTwips)) return null;
+    return DocxTableWidth.points(sum);
   }
 
-  /// Moves the blocks of [merged], which starts with [kept], to [kept], in
-  /// order, without empty paragraphs; one stays when nothing else is left.
+  /// Moves what [_blocksToKeep] gives of [merged], which starts with [kept],
+  /// to [kept], in order; the other blocks go. A cell left with nothing gets
+  /// an empty paragraph.
   static void _gatherBlocks(DocxTableCell kept, List<DocxTableCell> merged) {
-    final bool hasContent = merged.any(
-      (DocxTableCell cell) =>
-          cell._blocks.any((DocxBlock block) => !_isEmptyParagraph(block)),
-    );
+    final Set<DocxBlock> keep = Set<DocxBlock>.identity()
+      ..addAll(_blocksToKeep(merged));
     for (int i = kept._blocks.length - 1; i >= 0; i--) {
-      if (_isEmptyParagraph(kept._blocks[i]) && (hasContent || i > 0)) {
-        kept.removeBlockAt(i);
-      }
+      if (!keep.contains(kept._blocks[i])) kept.removeBlockAt(i);
     }
-    if (!hasContent && kept._blocks.isEmpty) kept.addParagraph();
     for (final DocxTableCell cell in merged.skip(1)) {
       final List<DocxBlock> blocks = List<DocxBlock>.of(cell._blocks);
       for (int i = blocks.length - 1; i >= 0; i--) {
         cell.removeBlockAt(i);
       }
       for (final DocxBlock block in blocks) {
-        if (!_isEmptyParagraph(block)) {
+        if (keep.contains(block)) {
           kept.insertBlock(kept._blocks.length, block);
         }
       }
     }
+    if (kept._blocks.isEmpty) kept.addParagraph();
+  }
+
+  /// The blocks of [merged] in order, without empty paragraphs, but for one
+  /// between two tables, which Word would otherwise join, and the first block
+  /// when all of them are empty.
+  static List<DocxBlock> _blocksToKeep(List<DocxTableCell> merged) {
+    final List<DocxBlock> all = merged
+        .expand((DocxTableCell cell) => cell._blocks)
+        .toList();
+    final List<bool> tableNext = List<bool>.filled(all.length, false);
+    bool next = false;
+    for (int i = all.length - 1; i >= 0; i--) {
+      tableNext[i] = next;
+      if (!_isEmptyParagraph(all[i])) next = all[i] is DocxTable;
+    }
+    final List<DocxBlock> keep = <DocxBlock>[];
+    for (int i = 0; i < all.length; i++) {
+      if (!_isEmptyParagraph(all[i]) ||
+          (tableNext[i] && keep.lastOrNull is DocxTable)) {
+        keep.add(all[i]);
+      }
+    }
+    if (keep.isEmpty && all.isNotEmpty) keep.add(all.first);
+    return keep;
   }
 }
 
 /// A cell of a row and the columns of the grid it takes, from `start` up to
 /// and without `end`.
 typedef _PlacedCell = ({DocxTableCell cell, int start, int end});
+
+/// Throws [ArgumentError] unless [above], the cells of a row, has a cell of
+/// the columns [start] up to and without [end], for a cell to continue.
+void _checkContinues(List<_PlacedCell> above, int start, int end) {
+  for (final _PlacedCell cell in above) {
+    if (cell.start == start && cell.end == end) return;
+  }
+  throw ArgumentError.value(
+    DocxVerticalMerge.continuation,
+    'verticalMerge',
+    'must continue a cell of the same columns in the row above',
+  );
+}
 
 /// Whether [block] is a paragraph that shows nothing and holds nothing: no
 /// inline but runs without content or with empty text.
@@ -754,9 +829,13 @@ final class DocxTableRow {
   /// An [index] out of that range throws [RangeError]. A [cell] already in a
   /// row, this one or another, throws [StateError]: remove it there first. A
   /// [cell] that holds this row, or whose tables would nest past 80 deep,
-  /// throws [ArgumentError]. Nothing changes then.
-  void insertCellAt(int index, DocxTableCell cell) =>
-      primitives.insertChild(_sink, this, _children, _cells, index, cell);
+  /// throws [ArgumentError]; so does one that, in a row of a table with a
+  /// grid, takes the row past the columns of the grid. Nothing changes then.
+  void insertCellAt(int index, DocxTableCell cell) {
+    RangeError.checkValueInInterval(index, 0, _cells.length, 'index');
+    if (cell._row == null) _table?._checkFits(_gridTotal + cell._span);
+    primitives.insertChild(_sink, this, _children, _cells, index, cell);
+  }
 
   /// Removes the cell at [index]. The cell is then in no row and can be
   /// inserted again; what the row does not show stays where it was.
@@ -792,15 +871,17 @@ final class DocxTableRow {
 
   /// Takes out every cell of [cells], neighbours in the row, but the first,
   /// which spans [span] columns from now on and takes [width] if it took the
-  /// place of others. Cells go first, so the span fits.
+  /// place of others. The span is set past the checks of
+  /// [DocxTableCellProperties.gridSpan]: the merge has checked the whole
+  /// range, and the rows around this one are half way through it.
   void _mergeCells(List<DocxTableCell> cells, int span, DocxTableWidth? width) {
     final int first = _cells.indexOf(cells.first);
     for (int i = cells.length - 1; i > 0; i--) {
       removeCellAt(first + i);
     }
-    final DocxTableCellProperties properties = cells.first.properties;
-    if (span > 1) properties.gridSpan = span;
-    if (width != null && cells.length > 1) properties.width = width;
+    final DocxTableCell kept = cells.first;
+    if (span > 1) cellPropertySetOf(kept).setValue('gridSpan', span);
+    if (width != null && cells.length > 1) kept.properties.width = width;
   }
 }
 
@@ -928,19 +1009,40 @@ final class DocxTableCell {
   bool get _continues =>
       _properties.verticalMerge == DocxVerticalMerge.continuation;
 
-  /// Throws [ArgumentError] when [span], wider than the cell, does not fit
-  /// the grid of the table the cell is in. A span no wider adds nothing, so
-  /// the row of a file that does not fit can still be narrowed.
+  /// Throws [ArgumentError] when [span], another than the cell has, does not
+  /// fit the table the cell is in: a wider one past the grid, and any that
+  /// takes the cell, or one after it in the row, out of line with a vertical
+  /// merge. A narrower one adds no column, so the row of a file that does not
+  /// fit the grid can still be narrowed.
   void _checkGridSpan(int span) {
     final DocxTableRow? row = _row;
-    final int? columns = row?._table?._columnCount;
-    if (row == null || columns == null || span <= _span) return;
-    if (row._gridTotal - _span + span > columns) {
-      throw ArgumentError.value(
-        span,
-        'gridSpan',
-        'must fit the $columns columns of the grid',
-      );
+    final DocxTable? table = row?._table;
+    if (row == null || table == null || span == _span) return;
+    final int change = span - _span;
+    if (change > 0) table._checkFits(row._gridTotal + change);
+    final int index = table._rows.indexOf(row);
+    final List<_PlacedCell> above = table._placedAt(index - 1);
+    final List<_PlacedCell> below = table._placedAt(index + 1);
+    bool moves = false;
+    for (final _PlacedCell at in row._placed()) {
+      final bool isThis = identical(at.cell, this);
+      moves = moves || isThis;
+      if (!moves) continue;
+      if (at.cell._continues) {
+        final int start = isThis ? at.start : at.start + change;
+        _checkContinues(above, start, at.end + change);
+      }
+      for (final _PlacedCell cell in below) {
+        if (cell.cell._continues &&
+            cell.start == at.start &&
+            cell.end == at.end) {
+          throw ArgumentError.value(
+            span,
+            'gridSpan',
+            'must keep the columns of the cell the row below continues',
+          );
+        }
+      }
     }
   }
 
@@ -953,17 +1055,10 @@ final class DocxTableCell {
     final _PlacedCell at = row._placed().firstWhere(
       (_PlacedCell placed) => identical(placed.cell, this),
     );
-    final int above = table._rows.indexOf(row) - 1;
-    if (above >= 0) {
-      for (final _PlacedCell cell in table._rows[above]._placed()) {
-        if (cell.start == at.start && cell.end == at.end) return;
-      }
-    }
-    throw ArgumentError.value(
-      DocxVerticalMerge.continuation,
-      'verticalMerge',
-      'must continue a cell of the same columns in the row above',
+    final List<_PlacedCell> above = table._placedAt(
+      table._rows.indexOf(row) - 1,
     );
+    _checkContinues(above, at.start, at.end);
   }
 
   void _addLines(List<String> lines) {
