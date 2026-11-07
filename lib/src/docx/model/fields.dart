@@ -92,7 +92,7 @@ final class DocxField extends DocxInline {
   ///
   /// The library has no clock, so [result] is what is cached (empty by
   /// default) and Word computes the date when it opens the file. A [format]
-  /// holding `"` throws [ArgumentError]; the picture is not checked
+  /// holding `"`, or ending in a backslash, throws [ArgumentError]; the picture is not checked
   /// otherwise.
   factory DocxField.date({String format = 'dd.MM.yyyy', String result = ''}) =>
       DocxField(' DATE \\@ "${_picture(format)}" ', result: result);
