@@ -980,4 +980,56 @@ void main() {
       expect(XlsxWorkbook.open(saved).sheets.single.notes, hasLength(10000));
     });
   });
+
+  group('the bytes of the note parts', () {
+    final String comments =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<!-- after the declaration -->\n'
+        '${_comments('\n  <!-- between -->\n  ${_comment('A1', '<t>x</t>')}\n')}';
+    final String vml = '$_vmlHead\n<!-- kept -->\n${_vmlShape(0, 0)}\n</xml>\n';
+    Uint8List input() => _package(comments: comments, vml: vml);
+    void same(Uint8List a, Uint8List b) {
+      for (final String part in <String>[
+        'xl/comments1.xml',
+        'xl/drawings/vmlDrawing1.vml',
+      ]) {
+        expect(readXlsxBytes(b)[part], readXlsxBytes(a)[part], reason: part);
+      }
+    }
+
+    test('stay after a failed edit', () {
+      final Uint8List bytes = input();
+      final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+      expect(
+        () => changeLogOf(book).transaction(() {
+          book.sheets.single.setNote(0, 0, XlsxNote.plain('new', author: 'A'));
+          throw StateError('later');
+        }),
+        throwsStateError,
+      );
+      expect(changeLogOf(book).hasChanges, isFalse);
+      same(bytes, book.save().bytes);
+    });
+
+    test('come back on undo, of a removal too', () {
+      for (final XlsxNote? note in <XlsxNote?>[
+        XlsxNote.plain('new', author: 'A'),
+        null,
+      ]) {
+        final Uint8List bytes = input();
+        final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+        final ChangeLog log = changeLogOf(book);
+        final XlsxSheet sheet = book.sheets.single;
+        final ChangeSet set = log.transaction(() => sheet.setNote(0, 0, note));
+        final Uint8List edited = book.save().bytes;
+        log.revertSet(set);
+        same(bytes, book.save().bytes);
+        log.reapplySet(set);
+        expect(
+          comparePackages(edited, book.save().bytes, ignoreBookkeeping: true),
+          isEmpty,
+        );
+      }
+    });
+  });
 }

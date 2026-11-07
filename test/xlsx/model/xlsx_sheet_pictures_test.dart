@@ -65,6 +65,7 @@ Uint8List _package(
   Map<String, (String, List<int>)> media =
       const <String, (String, List<int>)>{},
   String extraRels = '',
+  Map<String, List<int>> extraParts = const <String, List<int>>{},
 }) {
   final Map<String, Uint8List> parts = readXlsxBytes(
     buildWorkbook(<String, String>{
@@ -91,7 +92,7 @@ Uint8List _package(
   for (final (String, List<int>) m in media.values) {
     parts['xl/media/${m.$1}'] = Uint8List.fromList(m.$2);
   }
-  return buildZip(<String, List<int>>{...parts});
+  return buildZip(<String, List<int>>{...parts, ...extraParts});
 }
 
 int _invalid(XlsxWorkbook book, String detail) => book.warnings
@@ -1078,6 +1079,216 @@ void main() {
       // The index forgot the part, so its bytes get a new one.
       sheet.addPicture(_sized());
       expect(readXlsxBytes(book.save().bytes)['xl/media/image1.png'], png4x2);
+    });
+  });
+  group('fix round 1', () {
+    Iterable<String> mediaOf(Uint8List bytes) => readXlsxBytes(
+      bytes,
+    ).keys.where((String name) => name.startsWith('xl/media/'));
+
+    const String hdphotoRel =
+        '<Relationship Id="rId2" Type="$relNs/hdphoto" '
+        'Target="../media/hdphoto1.wdp"/>';
+    final Map<String, List<int>> hdphoto = <String, List<int>>{
+      'xl/media/hdphoto1.wdp': <int>[9, 9, 9],
+    };
+    final String layered = _pic(
+      2,
+      attributes:
+          '<a:blip r:embed="rId1"><a:extLst><a:ext uri="x">'
+          '<a14:imgProps xmlns:a14="urn:a14"><a14:imgLayer r:embed="rId2"/>'
+          '</a14:imgProps></a:ext></a:extLst></a:blip>',
+    );
+
+    test('two unnamed relationships to one part drop it once', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          _drawing(_oneCell(_pic(2))),
+          media: <String, (String, List<int>)>{
+            'rId1': ('image1.png', png4x2),
+            'rId2': ('image2.jpeg', jpeg3x5),
+            'rId3': ('image2.jpeg', jpeg3x5),
+          },
+        ),
+      );
+      book.sheets.single.removePicture(0);
+      expect(mediaOf(book.save().bytes), isEmpty);
+    });
+
+    test('a part a non-image relationship of the picture names goes', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          _drawing('${_chart(5)}${_oneCell(layered)}'),
+          media: <String, (String, List<int>)>{'rId1': ('image1.png', png4x2)},
+          extraRels: hdphotoRel,
+          extraParts: hdphoto,
+        ),
+      );
+      book.sheets.single.removePicture(0);
+      final Uint8List saved = book.save().bytes;
+      expect(_drawingRels(saved), isNot(contains('hdphoto')));
+      expect(mediaOf(saved), isEmpty);
+    });
+
+    test('a non-image part only a dropped drawing relates to goes', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          _drawing(_oneCell(_pic(2))),
+          media: <String, (String, List<int>)>{'rId1': ('image1.png', png4x2)},
+          extraRels: hdphotoRel,
+          extraParts: hdphoto,
+        ),
+      );
+      book.sheets.single.removePicture(0);
+      expect(mediaOf(book.save().bytes), isEmpty);
+    });
+
+    test('undo gives a non-image part back', () {
+      final Uint8List input = _package(
+        _drawing(_oneCell(layered)),
+        media: <String, (String, List<int>)>{'rId1': ('image1.png', png4x2)},
+        extraRels: hdphotoRel,
+        extraParts: hdphoto,
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(
+        () => book.sheets.single.removePicture(0),
+      );
+      log.revertSet(set);
+      _unchanged(input, book);
+    });
+
+    group('the bytes of the drawing', () {
+      final String kept =
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+          '<!-- after the declaration -->\n'
+          '${_drawing('\n  <!-- between -->\n  ${_oneCell(_pic(2))}\n  ${_chart(5)}\n')}';
+      Uint8List input() => _package(
+        kept,
+        media: <String, (String, List<int>)>{'rId1': ('image1.png', png4x2)},
+      );
+      void same(Uint8List a, Uint8List b) => expect(
+        readXlsxBytes(b)['xl/drawings/drawing1.xml'],
+        readXlsxBytes(a)['xl/drawings/drawing1.xml'],
+      );
+
+      test('stay after a failed edit', () {
+        for (final void Function(XlsxSheet) edit in <void Function(XlsxSheet)>[
+          (XlsxSheet s) => s.addPicture(_sized()),
+          (XlsxSheet s) =>
+              s.movePicture(0, const XlsxOneCellAnchor(XlsxAnchorPoint(9, 9))),
+          (XlsxSheet s) => s.removePicture(0),
+        ]) {
+          final Uint8List bytes = input();
+          final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+          final XlsxSheet sheet = book.sheets.single;
+          expect(
+            () => changeLogOf(book).transaction(() {
+              edit(sheet);
+              throw StateError('later');
+            }),
+            throwsStateError,
+          );
+          expect(changeLogOf(book).hasChanges, isFalse);
+          same(bytes, book.save().bytes);
+        }
+      });
+
+      test('stay when removing fails on an unreadable part', () {
+        final Map<String, Uint8List> parts = readXlsxBytes(input());
+        parts['xl/worksheets/_rels/sheet9.xml.rels'] = Uint8List.fromList(
+          utf8.encode('<Relationships'),
+        );
+        final Uint8List bytes = buildZip(<String, List<int>>{...parts});
+        final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+        expect(
+          () => book.sheets.single.removePicture(0),
+          throwsA(isA<XlsxReadException>()),
+        );
+        same(bytes, book.save().bytes);
+      });
+
+      test('come back on undo and go again on redo', () {
+        final Uint8List bytes = input();
+        final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+        final XlsxSheet sheet = book.sheets.single;
+        final ChangeLog log = changeLogOf(book);
+        final ChangeSet add = log.transaction(() => sheet.addPicture(_sized()));
+        final ChangeSet again = log.transaction(
+          () => sheet.addPicture(_sized(name: 'Second')),
+        );
+        final Uint8List edited = book.save().bytes;
+        log
+          ..revertSet(again)
+          ..revertSet(add);
+        same(bytes, book.save().bytes);
+        log
+          ..reapplySet(add)
+          ..reapplySet(again);
+        same(edited, book.save().bytes);
+        expect(_drawingOf(book.save().bytes), contains('Second'));
+        log
+          ..revertSet(again)
+          ..revertSet(add);
+        same(bytes, book.save().bytes);
+        sheet.addPicture(_sized(name: 'Third'));
+        expect(_drawingOf(book.save().bytes), contains('Third'));
+      });
+
+      test('come back when undo restores a dropped drawing', () {
+        final String only =
+            '<?xml version="1.0" encoding="UTF-8"?>\n<!-- c -->'
+            '${_drawing('\n ${_oneCell(_pic(2))}\n')}';
+        final Uint8List bytes = _package(
+          only,
+          media: <String, (String, List<int>)>{'rId1': ('image1.png', png4x2)},
+        );
+        final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+        final ChangeLog log = changeLogOf(book);
+        final ChangeSet set = log.transaction(
+          () => book.sheets.single.removePicture(0),
+        );
+        log.revertSet(set);
+        same(bytes, book.save().bytes);
+      });
+    });
+
+    test('a new relationship takes no id a dangling entry names', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(_drawing(_oneCell(_pic(2)))),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      expect(sheet.pictures, isEmpty);
+      sheet.addPicture(_sized());
+      expect(sheet.pictures, hasLength(1));
+      final Uint8List saved = book.save().bytes;
+      expect(XlsxWorkbook.open(saved).sheets.single.pictures, hasLength(1));
+      expect(_drawingRels(saved), contains('Id="rId2"'));
+    });
+
+    test('a part never read and put back is found by its bytes', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m4_images'));
+      final XlsxSheet sheet = book.sheets[0];
+      final ChangeLog log = changeLogOf(book);
+      final ChangeSet set = log.transaction(() {
+        sheet
+          ..removePicture(1)
+          ..addPicture(
+            XlsxPicture(
+              OfficeImage(Uint8List.fromList(png4x2)),
+              const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
+            ),
+          );
+      });
+      log.revertSet(set);
+      sheet.addPicture(
+        XlsxPicture(
+          OfficeImage(Uint8List.fromList(jpeg3x5)),
+          const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
+        ),
+      );
+      expect(mediaOf(book.save().bytes), hasLength(2));
     });
   });
 }

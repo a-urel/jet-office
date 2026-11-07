@@ -37,7 +37,7 @@ import 'item_group.dart'
 final class DrawingEntry {
   /// An entry kept as [source], which holds the `cNvPr` ids [ids]; [anchor]
   /// and [pic] are `null` for an element that is no picture the model reads.
-  const DrawingEntry({
+  DrawingEntry({
     required this.source,
     this.ids = const <int>[],
     this.anchor,
@@ -70,6 +70,10 @@ final class DrawingEntry {
 
   /// The `id` of every `cNvPr` the element holds.
   final List<int> ids;
+
+  /// The relationship ids the element names ([relationshipIdsIn]), read on
+  /// first use. Throws XML errors as a reader does.
+  late final Set<String> relationshipIds = relationshipIdsIn(source);
 
   /// Where the picture sits, or `null`.
   final XlsxAnchor? anchor;

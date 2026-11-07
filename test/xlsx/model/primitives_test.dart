@@ -364,6 +364,65 @@ void main() {
     });
   });
 
+  group('attachStoredPart', () {
+    OpcPackage package() => OpcPackage.read(
+      ZipReader(
+        buildZip(<String, List<int>>{
+          'xl/a.xml': <int>[60, 97, 47, 62],
+        }),
+        maxEntries: 10,
+        maxEntryBytes: 1000,
+        maxTotalBytes: 1000,
+        maxCompressionRatio: 1000,
+      ),
+      maxDepth: 8,
+    );
+
+    List<int> written(OpcPackage p) =>
+        p.openXml('xl/a.xml').sourceText(0, 4).codeUnits;
+
+    test('gives the part its content; undone, the file bytes come back', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      final Set<String> attached = <String>{};
+      final ChangeSet set = log.transaction(() {
+        attachStoredPart(log, p, attached, 'xl/a.xml', _Typed());
+      });
+      expect(attached, <String>{'xl/a.xml'});
+      expect(set.changes, hasLength(1));
+      log.revertSet(set);
+      expect(attached, isEmpty);
+      expect(written(p), <int>[60, 97, 47, 62]);
+      log.reapplySet(set);
+      expect(attached, <String>{'xl/a.xml'});
+      expect(written(p), '<b/>'.codeUnits);
+    });
+
+    test('a part attached, or created, records nothing', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        attachStoredPart(log, p, <String>{'xl/a.xml'}, 'xl/a.xml', _Xml());
+      });
+      expect(set.isEmpty, isTrue);
+    });
+
+    test('a failed transaction takes it back', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      final Set<String> attached = <String>{};
+      expect(
+        () => log.transaction(() {
+          attachStoredPart(log, p, attached, 'xl/a.xml', _Xml());
+          throw StateError('later');
+        }),
+        throwsStateError,
+      );
+      expect(attached, isEmpty);
+      expect(written(p), <int>[60, 97, 47, 62]);
+    });
+  });
+
   group('stored parts', () {
     OpcPackage package() => OpcPackage.empty()
       ..addPart('/xl/sheet1.xml', 'x/sheet', _Xml())
@@ -689,6 +748,11 @@ void main() {
       expect(ids(p).toSet(), <String>{'rId1', 'rId2'});
     });
   });
+}
+
+final class _Typed implements PartContent {
+  @override
+  List<Uint8List> encode() => <Uint8List>[Uint8List.fromList('<b/>'.codeUnits)];
 }
 
 final class _Xml implements PartContent {

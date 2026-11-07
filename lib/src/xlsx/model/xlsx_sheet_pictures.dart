@@ -32,6 +32,10 @@ final class _PicturesRead {
   /// The names (no leading `/`) of the existing media parts the drawing's
   /// image relationships point at, by relationship id.
   final Map<String, String> media;
+
+  /// The names of the parts the package writes from the typed drawing, for
+  /// `attachStoredPart`.
+  final Set<String> attached = <String>{};
 }
 
 /// The change of which drawing part holds the sheet's pictures.
@@ -228,7 +232,7 @@ mixin _SheetPictures {
       final DrawingPart drawing = read.part ?? _addDrawing(part, read);
       final String media = shared ?? _addMedia(checked);
       final String embedId = _mediaRelationship(read, media);
-      reader.package.setContent(read.partName!, drawing);
+      _attach(read, drawing);
       applyChange(
         _host.log,
         _DrawingEntryChange(
@@ -286,7 +290,7 @@ mixin _SheetPictures {
       () => entry.movedTo(anchor, extent),
     );
     _host.log.transaction(() {
-      reader.package.setContent(drawingName, drawing);
+      _attach(read, drawing);
       applyChange(_host.log, _DrawingEntryChange(drawing, at, entry, moved));
     });
   }
@@ -295,7 +299,8 @@ mixin _SheetPictures {
   ///
   /// The relationships the picture names go when no other entry of the
   /// drawing, whatever its kind, names them; a media part goes when no
-  /// relationship of the package, an unloaded sheet's included, targets it. A
+  /// relationship of the package, an unloaded sheet's included, targets it,
+  /// and so does any other part they targeted (the `hdphoto` of a picture). A
   /// drawing left with no entry goes with the sheet's relationship to it and
   /// `<drawing>`, unless something else still targets it. The default content
   /// type of an extension stays, so a later picture may use it.
@@ -316,24 +321,25 @@ mixin _SheetPictures {
     final PackageReader reader = _host.reader;
     final String drawingName = read.partName!;
     final Set<String> unused = reader.guardXml(drawingName, () {
-      final Set<String> ids = relationshipIdsIn(entry.source);
+      final Set<String> ids = <String>{...entry.relationshipIds};
       for (final DrawingEntry other in drawing.entries) {
-        if (!identical(other, entry)) {
-          ids.removeAll(relationshipIdsIn(other.source));
-        }
+        if (!identical(other, entry)) ids.removeAll(other.relationshipIds);
       }
       return ids;
     });
+    final Map<String, String> targets = _relationshipTargets(drawingName);
     final ChangeLog log = _host.log;
     log.transaction(() {
-      reader.package.setContent(drawingName, drawing);
+      _attach(read, drawing);
       applyChange(log, _DrawingEntryChange(drawing, at, entry, null));
       for (final String id in unused) {
         removeStoredRelationship(log, reader.package, drawingName, id);
         final String? media = read.media[id];
-        if (media == null) continue;
-        applyChange(log, _DrawingMediaChange(read, id, media, null));
-        _dropMedia(media);
+        if (media != null) {
+          applyChange(log, _DrawingMediaChange(read, id, media, null));
+        }
+        final String? target = targets[id];
+        if (target != null) _dropTarget(target);
       }
       if (drawing.entries.isEmpty) _dropDrawing(part, read);
     });
@@ -479,6 +485,7 @@ mixin _SheetPictures {
       'drawing',
       () => part.swapLayout('drawing', null, element),
     );
+    read.attached.add(added.substring(1));
     applyChange(log, _DrawingPartChange(read, drawing, added.substring(1)));
     return drawing;
   }
@@ -502,23 +509,44 @@ mixin _SheetPictures {
     return media;
   }
 
-  /// Takes the media part [media] out of the package unless a relationship
-  /// still points at it.
-  void _dropMedia(String media) {
+  /// Makes [drawing], the part [_PicturesRead.partName] of [read], what the
+  /// package writes for that part.
+  void _attach(_PicturesRead read, DrawingPart drawing) => attachStoredPart(
+    _host.log,
+    _host.reader.package,
+    read.attached,
+    read.partName!,
+    drawing,
+  );
+
+  /// The parts the internal relationships of [source] target, by id.
+  Map<String, String> _relationshipTargets(String source) {
     final PackageReader reader = _host.reader;
-    final bool used = reader.guardXml(
-      media,
-      () => reader.package.isReferenced(media),
-    );
-    if (used) return;
+    return <String, String>{
+      for (final PartRelationship rel in reader.relationshipsOf(source))
+        if (reader.hasPart(rel.target)) rel.id: rel.target,
+    };
+  }
+
+  /// Takes the part [target], the target of a relationship just removed, out
+  /// of the package unless a relationship still points at it or it left
+  /// already. The media index keeps its image, so an undo finds it again by
+  /// its bytes.
+  void _dropTarget(String target) {
+    final PackageReader reader = _host.reader;
+    if (!reader.hasPart(target)) return;
     final DrawingMediaIndex index = _host.mediaIndex;
-    final OfficeImage? image = index.loaded(media);
-    removeStoredPart(_host.log, reader.package, media);
-    applyChange(_host.log, _MediaIndexChange(index, media, image, null));
+    final OfficeImage? image = reader.guardXml(
+      target,
+      () => reader.package.isReferenced(target) ? null : index.imageOf(target),
+    );
+    if (image == null) return;
+    removeStoredPart(_host.log, reader.package, target);
+    applyChange(_host.log, _MediaIndexChange(index, target, image, null));
   }
 
   /// Removes the sheet's `<drawing>` and its relationship, and the drawing
-  /// part, with the media only it still relates to, unless something else
+  /// part, with the parts only it still relates to, unless something else
   /// points at the part.
   void _dropDrawing(WorksheetPart part, _PicturesRead read) {
     final ChangeLog log = _host.log;
@@ -536,8 +564,8 @@ mixin _SheetPictures {
       'drawing',
       () => part.swapLayout('drawing', old, null),
     );
-    final Map<String, String> left = <String, String>{...read.media};
-    left.forEach((String id, String media) {
+    final Iterable<String> left = _relationshipTargets(drawingName).values;
+    <String, String>{...read.media}.forEach((String id, String media) {
       applyChange(log, _DrawingMediaChange(read, id, media, null));
     });
     final bool used = reader.guardXml(
@@ -546,7 +574,7 @@ mixin _SheetPictures {
     );
     if (!used) {
       removeStoredPart(log, package, drawingName);
-      left.values.forEach(_dropMedia);
+      left.forEach(_dropTarget);
     }
     applyChange(log, _DrawingPartChange(read, null, null));
   }
@@ -564,9 +592,31 @@ mixin _SheetPictures {
       source,
       type: RelType.image,
       target: relationshipTarget(source, '/$media'),
+      id: _freeRelationshipId(read),
     );
     applyChange(_host.log, _DrawingMediaChange(read, id, null, media));
     return id;
+  }
+
+  /// The lowest `rId<n>` the drawing has no relationship of and no entry
+  /// names, so a dangling name stays dangling.
+  String _freeRelationshipId(_PicturesRead read) {
+    final PackageReader reader = _host.reader;
+    final String drawingName = read.partName!;
+    return reader.guardXml(drawingName, () {
+      final Set<String> taken = <String>{
+        for (final OpcRelationship r in reader.package.relationshipsOf(
+          drawingName,
+        ))
+          r.id,
+        for (final DrawingEntry e in read.part!.entries) ...e.relationshipIds,
+      };
+      int n = 1;
+      while (taken.contains('rId$n')) {
+        n++;
+      }
+      return 'rId$n';
+    });
   }
 
   static bool _sameMedia(String a, String b) =>

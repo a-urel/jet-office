@@ -22,6 +22,8 @@
 /// [addStoredRelationship] and [removeStoredRelationship] change a part's
 /// relationships, recording a [SetRelationshipChange];
 /// [relationshipTarget] gives the target of a new one.
+/// [attachStoredPart] gives a part read from the file its typed content,
+/// recording an [AttachPartChange] whose undo brings the file's bytes back.
 /// [addStoredPart] and [removeStoredPart] add a part to the package and take
 /// one out, recording an [AddPartChange] and a [RemovePartChange] whose undo
 /// gives back, or takes away, the part with its relationships and content
@@ -31,6 +33,8 @@
 /// recording a [StylesAppendChange] when that appended to the styles part,
 /// so a transaction that fails later, or an undo, removes what it appended.
 library;
+
+import 'dart:typed_data';
 
 import '../../opc/change_log.dart';
 import '../../opc/opaque_xml.dart';
@@ -396,18 +400,20 @@ String addStoredRelationship(
   required String type,
   required String target,
   bool external = false,
+  String? id,
 }) {
-  final String id = package.addRelationship(
+  final String added = package.addRelationship(
     source,
     type: type,
     target: target,
     external: external,
+    id: id,
   );
   final SetRelationshipChange change = SetRelationshipChange(
     package,
     source,
     null,
-    (id: id, type: type, target: target, external: external),
+    (id: added, type: type, target: target, external: external),
   );
   try {
     log.record(change);
@@ -415,7 +421,7 @@ String addStoredRelationship(
     change.revert();
     rethrow;
   }
-  return id;
+  return added;
 }
 
 /// Removes the relationship [id] of [source] and records the change in
@@ -605,6 +611,74 @@ void removeStoredPart(ChangeLog log, OpcPackage package, String name) {
     change.revert();
     rethrow;
   }
+}
+
+/// The content of a part of the file left as it was: its original bytes.
+final class _OriginalContent implements PartContent {
+  _OriginalContent(this.package, this.name);
+
+  final OpcPackage package;
+  final String name;
+
+  @override
+  List<Uint8List> encode() => <Uint8List>[package.originalBytes(name)];
+}
+
+/// The change of attaching a typed part: undone, the package writes the
+/// part's bytes from the file again, so a failed or undone edit leaves
+/// everything the typed part does not keep.
+final class AttachPartChange implements Change {
+  /// A change that made [content] what [package] writes for the file's part
+  /// [name], tracked in [attached].
+  AttachPartChange(this.package, this.attached, this.name, this.content);
+
+  /// The package.
+  final OpcPackage package;
+
+  /// The names attached, kept by the read cache of the part.
+  final Set<String> attached;
+
+  /// The part's name.
+  final String name;
+
+  /// The typed part.
+  final PartContent content;
+
+  @override
+  void revert() {
+    attached.remove(name);
+    package.setContent(name, _OriginalContent(package, name));
+  }
+
+  @override
+  void reapply() {
+    attached.add(name);
+    package.setContent(name, content);
+  }
+}
+
+/// Gives the part [name] of the file its typed [content], before an edit
+/// changes that content, and records the change in [log].
+///
+/// A typed part read from the file (a drawing, comments, a VML drawing, a
+/// table) stays out of the package until an edit: the file's bytes are
+/// written, with what the typed part does not keep (comments, whitespace,
+/// what follows the declaration). [attached] is the read cache's set of the
+/// parts it attached; `OpcPackage.isLoaded` cannot say, since it stays true
+/// once this is undone. A name in it records nothing, so a read cache also
+/// adds the name of a part it created, which has no bytes to go back to.
+///
+/// Must run inside `log.transaction`. Throws [ArgumentError] when there is
+/// no such part.
+void attachStoredPart(
+  ChangeLog log,
+  OpcPackage package,
+  Set<String> attached,
+  String name,
+  PartContent content,
+) {
+  if (attached.contains(name)) return;
+  applyChange(log, AttachPartChange(package, attached, name, content));
 }
 
 /// Applies [change] ([Change.reapply]) and records it in [log].

@@ -34,6 +34,10 @@ final class _NotesRead {
   /// The sheet's two parts.
   _NoteParts parts;
 
+  /// The names of the parts the package writes from the typed parts, for
+  /// `attachStoredPart`.
+  final Set<String> attached = <String>{};
+
   /// The listed entries by `row * maxColumns + column`.
   final Map<int, CommentEntry> index = <int, CommentEntry>{};
 
@@ -328,9 +332,15 @@ mixin _SheetNotes {
     final ChangeLog log = _host.log;
     final VmlPart vml = read.parts.vml ?? _addVml(part, read);
     final CommentsPart comments = read.parts.comments ?? _addComments(read);
-    _host.reader.package
-      ..setContent(read.parts.commentsName!, comments)
-      ..setContent(read.parts.vmlName!, vml);
+    final OpcPackage package = _host.reader.package;
+    attachStoredPart(
+      log,
+      package,
+      read.attached,
+      read.parts.commentsName!,
+      comments,
+    );
+    attachStoredPart(log, package, read.attached, read.parts.vmlName!, vml);
     int authorId = comments.authors.indexOf(note.author);
     if (authorId < 0) {
       authorId = comments.authors.length;
@@ -378,7 +388,13 @@ mixin _SheetNotes {
   void _removeNote(WorksheetPart part, _NotesRead read, CommentEntry entry) {
     final OpcPackage package = _host.reader.package;
     final CommentsPart comments = read.parts.comments!;
-    package.setContent(read.parts.commentsName!, comments);
+    attachStoredPart(
+      _host.log,
+      package,
+      read.attached,
+      read.parts.commentsName!,
+      comments,
+    );
     applyChange(
       _host.log,
       _CommentChange(
@@ -391,7 +407,13 @@ mixin _SheetNotes {
     );
     VmlPart? vml = read.parts.vml;
     if (vml != null) {
-      package.setContent(read.parts.vmlName!, vml);
+      attachStoredPart(
+        _host.log,
+        package,
+        read.attached,
+        read.parts.vmlName!,
+        vml,
+      );
       final List<int> boxes = vml.noteShapes(entry.row!, entry.column!);
       for (final int at in boxes.reversed) {
         _removeShape(read, vml, at);
@@ -472,6 +494,7 @@ mixin _SheetNotes {
       ContentType.comments,
       comments,
     );
+    read.attached.add(added.substring(1));
     addStoredRelationship(
       log,
       package,
@@ -503,6 +526,7 @@ mixin _SheetNotes {
       vml,
       byExtension: true,
     );
+    read.attached.add(added.substring(1));
     final String id = addStoredRelationship(
       log,
       package,
