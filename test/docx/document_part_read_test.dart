@@ -75,11 +75,16 @@ String _dump(DocumentPart part) {
                   DocxTab() => 'tab',
                   DocxBreak(:final DocxBreakType type) => 'br:${type.name}',
                   DocxCarriageReturn() => 'cr',
+                  DocxFieldMark(:final DocxFieldMarkType type) =>
+                    'mark:${type.name}',
+                  DocxFieldInstruction(:final String text) => 'instr"$text"',
                   DocxOpaqueRunContent() =>
                     'o:${c.namespaceUri}|${c.localName}',
                 });
                 out.write(',');
               }
+            case DocxField():
+              out.write('field(${inline.instruction})"${inline.text}"');
             case DocxOpaqueInline():
               out.write(
                 'oi:${inline.namespaceUri}|${inline.localName}'

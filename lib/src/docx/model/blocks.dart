@@ -183,8 +183,9 @@ final class DocxParagraph extends DocxBlock {
   List<DocxInline> get inlines => _inlinesView;
 
   /// The paragraph's visible text: the [DocxInline.text] of each inline, in
-  /// order. A run gives its text and an opaque inline the visible text
-  /// inside it, so inserted text counts and deleted text does not.
+  /// order. A run gives its text, a field its result and an opaque inline
+  /// the visible text inside it, so inserted text counts and deleted text
+  /// does not.
   String get text {
     final StringBuffer out = StringBuffer();
     for (final DocxInline inline in _inlines) {
@@ -205,9 +206,10 @@ final class DocxParagraph extends DocxBlock {
   ///
   /// An [index] out of that range throws [RangeError]. An [inline] that is
   /// already in a paragraph, this one or another, throws [StateError]:
-  /// remove it there first. In a paragraph of a document, the style set on
-  /// a run is resolved against the document's styles (`DocxRun.style` has
-  /// the rules), in the same edit; a styles part that cannot be read throws
+  /// remove it there first. So does one of a [DocxField], which goes with
+  /// its field. In a paragraph of a document, the style set on a run, one of
+  /// a field among them, is resolved against the document's styles
+  /// (`DocxRun.style` has the rules), in the same edit; a styles part that cannot be read throws
   /// a `DocxReadException` naming it, and nothing changes. The `w:rStyle` of
   /// a run read in another document counts as set; `DocxBody.insertBlock`
   /// says what such a move does and does not do.
@@ -218,9 +220,7 @@ final class DocxParagraph extends DocxBlock {
       _inlines.insert(index, inline);
       setParagraphOf(inline, this);
       _sink.inlineInserted(this, index, inline);
-      if (inline is DocxRun) {
-        _resolveRunStyle(inline, _sink);
-      }
+      _resolveInlineStyles(inline, _sink);
     });
   }
 
@@ -237,6 +237,9 @@ final class DocxParagraph extends DocxBlock {
   static void _checkDetached(DocxInline inline) {
     if (paragraphOf(inline) != null) {
       throw StateError('The inline is already in a paragraph.');
+    }
+    if (isInField(inline)) {
+      throw StateError('The inline is in a field.');
     }
   }
 }
@@ -1413,6 +1416,14 @@ void _resolveRunStyle(DocxRun run, DocxEditSink sink) {
   properties.resolveStyleIdSet('rStyle', DocxStyleType.character);
 }
 
+/// Resolves the style set on each run of [inline], itself or those of a field,
+/// as [_resolveRunStyle] does.
+void _resolveInlineStyles(DocxInline inline, DocxEditSink sink) {
+  visitInlines(inline, (DocxInline held) {
+    if (held is DocxRun) _resolveRunStyle(held, sink);
+  });
+}
+
 /// Resolves the styles set through the API on [paragraph] and its runs,
 /// which are in a document now; what was read from that document's file
 /// stays (plan Ruling 5), and what was read in another counts as set: the
@@ -1428,9 +1439,7 @@ void _resolveStylesSet(DocxParagraph paragraph) {
   }
   properties.resolveStyleIdSet('pStyle', DocxStyleType.paragraph);
   for (final DocxInline inline in paragraph._inlines) {
-    if (inline is DocxRun) {
-      _resolveRunStyle(inline, sink);
-    }
+    _resolveInlineStyles(inline, sink);
   }
 }
 
@@ -1468,9 +1477,9 @@ void markReadIn(DocxParagraph paragraph, DocxEditSink sink) {
     setSectionHome(section, sink);
   }
   for (final DocxInline inline in paragraph._inlines) {
-    if (inline is DocxRun) {
-      setRunReadIn(inline, sink);
-    }
+    visitInlines(inline, (DocxInline held) {
+      if (held is DocxRun) setRunReadIn(held, sink);
+    });
   }
 }
 

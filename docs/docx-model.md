@@ -47,7 +47,7 @@ table.rows[1].cells[0].addTable(columns: 2).addRow(<String?>['a', 'b']);
 - **Typed.** The body's paragraphs (`DocxParagraph`), their runs
   (`DocxRun`), the paragraph and run style, and a run's text, tabs, breaks and
   carriage returns (`DocxRunContent`).
-- **Opaque, kept as written.** Everything else: content controls, bookmarks, tracked changes, hyperlinks, drawings, fields
+- **Opaque, kept as written.** Everything else: content controls, bookmarks, tracked changes, hyperlinks, drawings
   and `mc:AlternateContent` (`DocxOpaqueBlock`, `DocxOpaqueInline`,
   `DocxOpaqueRunContent`). An opaque node can be removed, not changed.
 - **The final `w:sectPr`** of the body is held by the body and kept as
@@ -284,7 +284,11 @@ dropped silently.
 | A content control, a bookmark or any other block | an opaque block, in place | typed later (D5) or never | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
 | The final `w:sectPr` of the body | held by the body; a `w:sectPr` in a paragraph's `w:pPr` stays there; one that is not the last child of the body is a block | the last section belongs to the body (typed in D4) | `test/docx/document_part_read_test.dart` |
 | Any other child of a paragraph (tracked change, hyperlink, content control, smart tag, proofing mark) | an opaque inline, in place, with its visible text computed once | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
-| Any other child of a run (drawing, field, `mc:AlternateContent`) | opaque run content, in place; it adds nothing to the run's text | kept as written | `test/docx/document_part_read_test.dart` |
+| Any other child of a run (drawing, `w:delInstrText`, a `w:fldChar` of no known type, `mc:AlternateContent`) | opaque run content, in place; it adds nothing to the run's text | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/fields_read_test.dart` |
+| `w:fldChar` and `w:instrText` in a run | `DocxFieldMark` and `DocxFieldInstruction`, keeping the element as read; no text | D4 Ruling 3 | `test/docx/model/fields_read_test.dart` |
+| A complex field of one paragraph's direct runs, each mark alone in its run, only `w:instrText` runs and inlines holding no run in the instruction | one `DocxField`; a field in a result is a `DocxField` of it; a run keeps the location it had when read, and a field writes its inlines in order, as read | D4 Ruling 2 | `test/docx/model/fields_read_test.dart` |
+| Any other field: a mark with no partner or in an inline of its own, a field across paragraphs or in an instruction, two marks or more than a mark in a run, an unknown `w:fldChar` | stays runs, with the paragraph's text as before, and saves as read; a mark inside a run breaks every field open around it | D4 Ruling 2 | `test/docx/model/fields_read_test.dart`, `test/docx/owner_files_test.dart` |
+| Fields nested past `maxFieldNesting` (32) in a result | the deeper ones stay runs in the result | a paragraph's fields nest without nesting in the XML, so `maxDepth` does not bound them and the model recurses | `test/docx/model/fields_read_test.dart` |
 | Every child of `w:pPr` and `w:rPr` | kept as written; a typed one (in D1 the style) also gives a view, its value, and is written as read until it is set | a read file saves as it was (plan Ruling 2) | `test/docx/properties_test.dart` |
 | `pStyle` or `rStyle` that is not one non-empty `w:val` with no other `w:` attribute, no child element and no text, or that occurs twice | not typed (the style reads as `null`); written back as it was | not a style id the model can set without losing something | `test/docx/document_part_write_test.dart` ("kept styles"), `test/docx/property_codec_test.dart` |
 | A paragraph or run whose style element is not typed | its `style` reads `null`, although the file names a style element; setting `style` to another id replaces every `pStyle` or `rStyle` of the container, while setting it to what it reads (`null` included) changes nothing, so `x.style = x.style` never deletes a child the model does not type; `clear` removes them | one style per container | `test/docx/document_part_write_test.dart` ("kept styles"), `test/docx/properties_test.dart` |

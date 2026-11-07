@@ -1,5 +1,5 @@
-/// The inlines of a paragraph, the children of `w:p`: runs, and opaque
-/// inlines for everything else.
+/// The inlines of a paragraph, the children of `w:p`: runs, complex fields
+/// (`fields.dart`), and opaque inlines for everything else.
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -31,15 +31,21 @@ import 'property_set.dart';
 import 'run_content.dart';
 import 'run_properties.dart';
 
-/// One child of a paragraph.
+part 'fields.dart';
+
+/// One child of a paragraph, or an inline of a [DocxField].
 sealed class DocxInline {
   DocxInline._();
 
-  /// The paragraph the inline is in, or `null` while it is in none.
+  /// The paragraph the inline is in, or `null` while it is in none. An
+  /// inline of a field is in the paragraph of the field.
   DocxParagraph? _paragraph;
 
-  /// The text the inline shows: the run's text, or the visible text inside
-  /// an opaque inline.
+  /// The field that holds the inline, or `null`.
+  DocxField? _field;
+
+  /// The text the inline shows: the run's text, the visible text inside an
+  /// opaque inline, or a field's result.
   String get text;
 }
 
@@ -115,8 +121,9 @@ final class DocxRun extends DocxInline {
   ///
   /// Setting it replaces the whole content: `\t` becomes a [DocxTab], and
   /// `\n`, `\r\n` and a lone `\r` each become one line [DocxBreak]. Whatever
-  /// else the run held is removed with it: opaque content (drawings, fields,
-  /// note and comment references, `mc:AlternateContent`) and carriage returns
+  /// else the run held is removed with it: opaque content (drawings, note
+  /// and comment references, `mc:AlternateContent`), the marks and instruction
+  /// of a field ([DocxFieldMark], [DocxFieldInstruction]) and carriage returns
   /// ([DocxCarriageReturn]) are gone, so set the text of a run that holds
   /// only text. Characters XML forbids (control characters other than tab,
   /// LF and CR, U+FFFE, U+FFFF and lone surrogates) are removed; the save
@@ -176,9 +183,18 @@ final class DocxRun extends DocxInline {
 
 /// An inline the model does not type, kept as written.
 final class DocxOpaqueInline extends DocxInline {
-  DocxOpaqueInline._(this._xml, this.text) : super._();
+  DocxOpaqueInline._(this._xml, this.text, this._holdsRuns, this._breaksFields)
+    : super._();
 
   final OpaqueXml _xml;
+
+  /// Whether a run or a `w:fldSimple` is inside the element, which can then
+  /// not sit in the instruction of a field.
+  final bool _holdsRuns;
+
+  /// Whether the field marks inside the element do not pair among themselves,
+  /// so some of them belong to a field around it.
+  final bool _breaksFields;
 
   /// The element's local name, such as `ins` or `proofErr`.
   String get localName => _xml.localName;
@@ -201,7 +217,7 @@ String _textOf(DocxRunContent content) => switch (content) {
   DocxText(:final String text) => text,
   DocxTab() => '\t',
   DocxBreak() || DocxCarriageReturn() => '\n',
-  DocxOpaqueRunContent() => '',
+  DocxFieldMark() || DocxFieldInstruction() || DocxOpaqueRunContent() => '',
 };
 
 /// Splits [text] into text, tabs and line breaks; `\r\n` is one break.
@@ -282,18 +298,30 @@ void restoreRunText(DocxRun run, DocxRunText state) {
 /// The paragraph [inline] is in, or `null`.
 DocxParagraph? paragraphOf(DocxInline inline) => inline._paragraph;
 
-/// Records that [inline] is now in [paragraph] (`null`: in none). Only the
-/// paragraph's own edits call it.
+/// Records that [inline], and every inline of it if it is a field, is now in
+/// [paragraph] (`null`: in none). Only the paragraph's own edits call it.
 void setParagraphOf(DocxInline inline, DocxParagraph? paragraph) {
   inline._paragraph = paragraph;
+  if (inline is DocxField) {
+    for (final DocxInline held in inline._inlines) {
+      setParagraphOf(held, paragraph);
+    }
+  }
 }
 
 /// An opaque inline for the element [xml] captured.
 ///
 /// [text] is its visible text, when the reader computed it while capturing;
-/// without it, [visibleText] computes it from [xml].
-DocxOpaqueInline opaqueInline(OpaqueXml xml, {String? text}) =>
-    DocxOpaqueInline._(xml, text ?? visibleText(xml));
+/// without it, [visibleText] computes it from [xml]. [holdsRuns] says that a
+/// run or a `w:fldSimple` is inside it, and [breaksFields] that the field
+/// marks inside it do not pair among themselves.
+DocxOpaqueInline opaqueInline(
+  OpaqueXml xml, {
+  String? text,
+  bool holdsRuns = false,
+  bool breaksFields = false,
+}) =>
+    DocxOpaqueInline._(xml, text ?? visibleText(xml), holdsRuns, breaksFields);
 
 /// The element [inline] keeps, for the writer.
 OpaqueXml opaqueInlineXml(DocxOpaqueInline inline) => inline._xml;

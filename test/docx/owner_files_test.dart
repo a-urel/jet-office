@@ -81,6 +81,43 @@ void main() {
     expect(doc.save().warnings, isEmpty);
   });
 
+  test('long.docx keeps its TOC as runs, its PAGEREFs in hyperlinks', () {
+    final DocxDocument doc = DocxDocument.open(
+      File('$_dir/long.docx').readAsBytesSync(),
+    );
+    final List<DocxInline> inlines = <DocxInline>[
+      for (final DocxBlock block in doc.body.blocks)
+        if (block is DocxParagraph) ...block.inlines,
+    ];
+    expect(inlines.whereType<DocxField>(), isEmpty);
+    expect(
+      <DocxFieldMarkType>[
+        for (final DocxRun run in inlines.whereType<DocxRun>())
+          for (final DocxRunContent c in run.content)
+            if (c is DocxFieldMark) c.type,
+      ],
+      <DocxFieldMarkType>[
+        DocxFieldMarkType.begin,
+        DocxFieldMarkType.separate,
+        DocxFieldMarkType.end,
+      ],
+    );
+    expect(
+      <String>[
+        for (final DocxRun run in inlines.whereType<DocxRun>())
+          for (final DocxRunContent c in run.content)
+            if (c is DocxFieldInstruction) c.text,
+      ],
+      <String>[' TOC \\o "1-1" \\h \\* MERGEFORMAT '],
+    );
+    expect(
+      inlines.whereType<DocxOpaqueInline>().where(
+        (DocxOpaqueInline i) => i.localName == 'hyperlink',
+      ),
+      hasLength(13),
+    );
+  });
+
   test('every owner file round-trips', () {
     for (final OwnerDocx entry in manifest) {
       final Uint8List input = File('$_dir/${entry.file}').readAsBytesSync();

@@ -288,14 +288,22 @@ final class StoryWriter {
     if (!pPr.writesNothing) {
       pPr.writeTo(w, '${_p}pPr', prefix: _prefix, declaredAbove: scope);
     }
+    // A field writes its inlines in order, and its runs count as they did when
+    // read, so a location does not depend on what was typed as a field.
     int runs = 0;
-    for (final DocxInline inline in p.inlines) {
+    void write(DocxInline inline) {
       switch (inline) {
         case DocxRun():
           _run(inline, '$path/r[${runs++}]');
         case DocxOpaqueInline():
           opaqueInlineXml(inline).writeTo(w, declaredAbove: scope);
+        case DocxField():
+          throw StateError('visitInlines gives no field.');
       }
+    }
+
+    for (final DocxInline inline in p.inlines) {
+      visitInlines(inline, write);
     }
     scope = outer;
     w.end();
@@ -374,6 +382,10 @@ final class StoryWriter {
         w.end();
       case DocxCarriageReturn():
         _empty('cr', c);
+      case DocxFieldMark():
+        fieldMarkXml(c).writeTo(w, declaredAbove: scope);
+      case DocxFieldInstruction():
+        fieldInstructionXml(c).writeTo(w, declaredAbove: scope);
       case DocxOpaqueRunContent():
         opaqueRunContentXml(c).writeTo(w, declaredAbove: scope);
     }

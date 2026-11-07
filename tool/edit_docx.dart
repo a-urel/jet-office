@@ -65,6 +65,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/docx/model/inlines.dart' show visitInlines;
 import 'package:xml/xml.dart';
 
 import 'src/part_compare.dart';
@@ -188,7 +189,7 @@ List<String> _edit(
     final ({int block, int inline})? run = _firstRunWithText(body);
     if (run != null) {
       final DocxParagraph p = body.blocks[run.block] as DocxParagraph;
-      (p.inlines[run.inline] as DocxRun)
+      (_flat(p)[run.inline] as DocxRun)
         ..text = editedText
         ..properties.bold = true
         ..properties.color = DocxColor.theme(DocxThemeColor.accent1);
@@ -247,7 +248,7 @@ List<String> _edit(
     final DocxParagraph paragraph =
         cell.blocks.whereType<DocxParagraph>().firstOrNull ??
         cell.addParagraph();
-    final DocxRun? run = paragraph.inlines.whereType<DocxRun>().firstOrNull;
+    final DocxRun? run = _flat(paragraph).whereType<DocxRun>().firstOrNull;
     if (run != null) {
       run.text = editedCellText;
     } else {
@@ -419,14 +420,25 @@ List<bool> _mustKeep(Uint8List docx, DocxBody body) {
   }
 }
 
-/// The block and inline index of the first run of a body paragraph whose
+/// The inlines of [paragraph] as they are in the file: a field's runs count,
+/// so what the tool edits does not depend on what the model types as a field.
+List<DocxInline> _flat(DocxParagraph paragraph) {
+  final List<DocxInline> out = <DocxInline>[];
+  for (final DocxInline inline in paragraph.inlines) {
+    visitInlines(inline, out.add);
+  }
+  return out;
+}
+
+/// The block and [_flat] index of the first run of a body paragraph whose
 /// text is not empty, or null when there is none.
 ({int block, int inline})? _firstRunWithText(DocxBody body) {
   for (int b = 0; b < body.blocks.length; b++) {
     final DocxBlock block = body.blocks[b];
     if (block is! DocxParagraph) continue;
-    for (int i = 0; i < block.inlines.length; i++) {
-      final DocxInline inline = block.inlines[i];
+    final List<DocxInline> inlines = _flat(block);
+    for (int i = 0; i < inlines.length; i++) {
+      final DocxInline inline = inlines[i];
       if (inline is DocxRun && inline.text.isNotEmpty) {
         return (block: b, inline: i);
       }
@@ -454,9 +466,12 @@ int? _paragraphToReplace(DocxBody body, int? edited, List<bool> keep) {
 bool _isPlainRun(DocxInline inline) => switch (inline) {
   DocxRun() => !inline.content.any(
     (DocxRunContent c) =>
+        c is DocxFieldMark ||
+        c is DocxFieldInstruction ||
         c is DocxOpaqueRunContent && _fieldOrDrawing.contains(c.localName),
   ),
   DocxOpaqueInline() => inline.localName == 'proofErr',
+  DocxField() => false,
 };
 
 /// The table edits the read-back [blocks] lack.
@@ -471,7 +486,9 @@ List<String> _checkTables(List<DocxBlock> blocks, _Edits edits) {
       final DocxParagraph? p = b.rows.first.cells.first.blocks
           .whereType<DocxParagraph>()
           .firstOrNull;
-      final DocxRun? r = p?.inlines.whereType<DocxRun>().firstOrNull;
+      final DocxRun? r = p == null
+          ? null
+          : _flat(p).whereType<DocxRun>().firstOrNull;
       if (r == null || r.text != editedCellText) {
         problems.add('the edited cell text is missing');
       }
@@ -521,8 +538,11 @@ List<String> _check(Uint8List saved, _Edits edits) {
     final ({int block, int inline})? run = edits.run;
     if (run != null) {
       final DocxBlock b = blocks[run.block];
-      final DocxInline? i = b is DocxParagraph && run.inline < b.inlines.length
-          ? b.inlines[run.inline]
+      final List<DocxInline> inlines = b is DocxParagraph
+          ? _flat(b)
+          : const <DocxInline>[];
+      final DocxInline? i = run.inline < inlines.length
+          ? inlines[run.inline]
           : null;
       if (i is! DocxRun || i.text != editedText) {
         problems.add('the edited run text is missing');

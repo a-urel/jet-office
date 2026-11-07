@@ -28,6 +28,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/document_part.dart';
+import 'package:jet_office/src/docx/model/inlines.dart' show visitInlines;
 import 'package:jet_office/src/docx/model/primitives.dart' show DocxEdits;
 import 'package:jet_office/src/docx/numbering_part.dart';
 import 'package:jet_office/src/docx/styles_part.dart';
@@ -177,7 +178,9 @@ int _blocks(List<DocxBlock> blocks) {
       case DocxParagraph():
         set += _paragraph(block.properties);
         for (final DocxInline inline in block.inlines) {
-          if (inline is DocxRun) set += _run(inline.properties);
+          visitInlines(inline, (DocxInline held) {
+            if (held is DocxRun) set += _run(held.properties);
+          });
         }
       case DocxTable():
         set +=

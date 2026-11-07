@@ -1,5 +1,6 @@
 /// The content of a run, the children of `w:r`: text, tab, break, carriage
-/// return, and opaque content for everything else.
+/// return, the marks and instruction of a field, and opaque content for
+/// everything else.
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -7,7 +8,10 @@
 /// break type are equal. What a reader keeps of them that the model does not
 /// type (the attributes of `w:t`, `w:tab`, `w:br` and `w:cr`, `xml:space`
 /// among them) is held beside the value and does not take part in equality.
-/// Opaque content keeps its element as written, for the writer.
+/// Opaque content keeps its element as written, for the writer, and so do a
+/// field's marks and instruction, whose value is what the model reads of it.
+///
+/// @docImport 'inlines.dart';
 library;
 
 import '../../opc/opaque_xml.dart';
@@ -119,8 +123,68 @@ final class DocxCarriageReturn extends DocxRunContent {
   String toString() => 'DocxCarriageReturn()';
 }
 
-/// Run content the model does not type, such as `w:drawing`, `w:fldChar`,
-/// `w:instrText`, `w:sym` or `mc:AlternateContent`. It is kept as written
+/// What a [DocxFieldMark] marks: the value of `w:fldChar/@w:fldCharType`.
+enum DocxFieldMarkType {
+  /// The start of a field and of its instruction.
+  begin,
+
+  /// The end of a field's instruction and the start of its result.
+  separate,
+
+  /// The end of a field.
+  end,
+}
+
+/// A mark of a complex field, `w:fldChar`; it has no text.
+///
+/// A field that is plain is a [DocxField] and its runs are behind it, so a run
+/// that shows a mark in its [DocxRun.content] is one of a field the model
+/// left as runs, such as a field across paragraphs. The element is kept as
+/// read, `w:fldLock`, `w:dirty` and `w:fldData` among what it holds. A
+/// `w:fldChar` of no known type is no mark but [DocxOpaqueRunContent].
+final class DocxFieldMark extends DocxRunContent {
+  DocxFieldMark._read(this.type, this._xml) : super(const <KeptAttribute>[]);
+
+  final OpaqueXml _xml;
+
+  /// What the mark marks.
+  final DocxFieldMarkType type;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxFieldMark && other.type == type;
+
+  @override
+  int get hashCode => Object.hash(DocxFieldMark, type);
+
+  @override
+  String toString() => 'DocxFieldMark(${type.name})';
+}
+
+/// A piece of a field's instruction, `w:instrText`; it has no text of the run.
+/// The element is kept as read.
+final class DocxFieldInstruction extends DocxRunContent {
+  DocxFieldInstruction._read(this.text, this._xml)
+    : super(const <KeptAttribute>[]);
+
+  final OpaqueXml _xml;
+
+  /// The instruction text, as decoded from the element.
+  final String text;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocxFieldInstruction && other.text == text;
+
+  @override
+  int get hashCode => Object.hash(DocxFieldInstruction, text);
+
+  @override
+  String toString() => 'DocxFieldInstruction($text)';
+}
+
+/// Run content the model does not type, such as `w:drawing`,
+/// `w:delInstrText`, `w:sym` or `mc:AlternateContent`. It is kept as written
 /// and has no text.
 final class DocxOpaqueRunContent extends DocxRunContent {
   DocxOpaqueRunContent._(this._xml) : super(const <KeptAttribute>[]);
@@ -153,9 +217,17 @@ DocxBreak readBreak(DocxBreakType type, List<KeptAttribute> attributes) =>
 DocxCarriageReturn readCarriageReturn(List<KeptAttribute> attributes) =>
     DocxCarriageReturn._read(attributes);
 
+/// A mark of [type] read from the `w:fldChar` [xml] captured.
+DocxFieldMark readFieldMark(DocxFieldMarkType type, OpaqueXml xml) =>
+    DocxFieldMark._read(type, xml);
+
+/// Instruction [text] read from the `w:instrText` [xml] captured.
+DocxFieldInstruction readFieldInstruction(String text, OpaqueXml xml) =>
+    DocxFieldInstruction._read(text, xml);
+
 /// The attributes the reader kept on [content], in source order; empty for
-/// content built by the API and for opaque content, whose element keeps its
-/// own.
+/// content built by the API, and for opaque content and a field's marks and
+/// instruction, whose elements keep their own.
 List<KeptAttribute> contentAttributesOf(DocxRunContent content) =>
     content._attributes;
 
@@ -170,3 +242,10 @@ DocxOpaqueRunContent opaqueRunContent(OpaqueXml xml) =>
 
 /// The element [content] keeps, for the writer.
 OpaqueXml opaqueRunContentXml(DocxOpaqueRunContent content) => content._xml;
+
+/// The `w:fldChar` [mark] keeps, for the writer.
+OpaqueXml fieldMarkXml(DocxFieldMark mark) => mark._xml;
+
+/// The `w:instrText` [instruction] keeps, for the writer.
+OpaqueXml fieldInstructionXml(DocxFieldInstruction instruction) =>
+    instruction._xml;

@@ -11,12 +11,16 @@
 /// blocks, other children of `w:tbl` and `w:tr` (`w:tblGrid`, `w:tblPrEx`,
 /// content controls, bookmarks) as kept children, other paragraph children
 /// (tracked changes, hyperlinks, proofing marks) as opaque inlines, other run
-/// children (drawings, fields, `mc:AlternateContent`) as opaque run content,
-/// and unknown attributes on `w:tbl`, `w:tr`, `w:tc`, `w:p`, `w:r`, `w:t`,
+/// children (drawings, `mc:AlternateContent`) as opaque run content, and
+/// unknown attributes on `w:tbl`, `w:tr`, `w:tc`, `w:p`, `w:r`, `w:t`,
 /// `w:tab`, `w:br` and `w:cr` as kept attributes. A `w:tbl` inside a kept
 /// element stays kept. The visible text of an opaque inline is collected while
 /// it is captured, so its slice is parsed once, under the part's own depth
 /// limit.
+///
+/// `w:fldChar` and `w:instrText` are typed run content that keeps its element;
+/// when a paragraph is read, [groupFields] puts each plain field of its inlines
+/// in a `DocxField`.
 ///
 /// A property element is typed only before the rows, cells or blocks of its
 /// parent, and only the first of its name; one elsewhere is kept in place.
@@ -240,23 +244,56 @@ final class StoryReader {
     return readParagraph(
       properties: properties ?? const PropertyContainer.empty(),
       attributes: attributes,
-      inlines: inlines,
+      inlines: groupFields(inlines),
     );
   }
 
-  /// Captures the inline the reader is on, collecting its visible text in
-  /// the same walk.
+  /// Captures the inline the reader is on, collecting in the same walk its
+  /// visible text and what a field around it needs to know of it.
   DocxOpaqueInline _readOpaqueInline() {
     final VisibleTextCollector text = VisibleTextCollector();
+    bool holdsRuns = false;
+    bool unpaired = false;
+    int open = 0;
     final OpaqueXml xml = OpaqueXml.capture(
       r,
       onEvent: (XmlPullReader r) {
         text.add(r);
         if (text.length > _maxTextLength) throw _tooLong();
+        if (r.eventType != XmlEventType.startElement) return;
+        if (isW(r, 'r') || isW(r, 'fldSimple')) {
+          holdsRuns = true;
+        } else if (isW(r, 'fldChar')) {
+          switch (_fieldMarkType(r)) {
+            case DocxFieldMarkType.begin:
+              open++;
+            case DocxFieldMarkType.separate:
+              if (open == 0) unpaired = true;
+            case DocxFieldMarkType.end:
+              if (open == 0) unpaired = true;
+              if (open > 0) open--;
+            case null:
+              unpaired = true;
+          }
+        }
       },
     );
-    return opaqueInline(xml, text: text.text);
+    return opaqueInline(
+      xml,
+      text: text.text,
+      holdsRuns: holdsRuns,
+      breaksFields: unpaired || open > 0,
+    );
   }
+
+  /// What the `w:fldChar` [r] is on marks, or `null` when it is no mark.
+  DocxFieldMarkType? _fieldMarkType(XmlPullReader r) =>
+      switch (r.getAttribute('fldCharType', namespaceUri: Ns.w)) {
+        'begin' => DocxFieldMarkType.begin,
+        'separate' => DocxFieldMarkType.separate,
+        'end' => DocxFieldMarkType.end,
+        _ => null,
+      };
 
   /// Reads the `w:r` the reader is on.
   DocxRun _readRun() {
@@ -286,6 +323,14 @@ final class StoryReader {
         case 'cr':
           content.add(readCarriageReturn(keepAttributes(r)));
           r.skip();
+        case 'fldChar':
+          final DocxFieldMarkType? type = _fieldMarkType(r);
+          final OpaqueXml xml = OpaqueXml.capture(r);
+          content.add(
+            type == null ? opaqueRunContent(xml) : readFieldMark(type, xml),
+          );
+        case 'instrText':
+          content.add(_readInstruction());
         default:
           content.add(opaqueRunContent(OpaqueXml.capture(r)));
       }
@@ -295,6 +340,25 @@ final class StoryReader {
       attributes: attributes,
       content: content,
     );
+  }
+
+  /// The `w:instrText` the reader is on, kept as read, with its own character
+  /// data decoded and joined.
+  DocxFieldInstruction _readInstruction() {
+    final StringBuffer text = StringBuffer();
+    final int depth = r.depth;
+    final OpaqueXml xml = OpaqueXml.capture(
+      r,
+      onEvent: (XmlPullReader r) {
+        final XmlEventType type = r.eventType;
+        if ((type == XmlEventType.characters || type == XmlEventType.cdata) &&
+            r.depth == depth) {
+          text.write(r.text);
+          if (text.length > _maxTextLength) throw _tooLong();
+        }
+      },
+    );
+    return readFieldInstruction(text.toString(), xml);
   }
 
   /// The `w:br` the reader is on; the reader stays on it.

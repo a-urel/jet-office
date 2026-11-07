@@ -123,7 +123,7 @@
 /// content control is kept in place, not listed), the API nests tables at most
 /// 80 deep, [DocxBody.addTable] takes at most [maxTableColumns] columns, and
 /// a table with no row is not saved. What the model does not type yet, such
-/// as content controls, tracked changes, hyperlinks, drawings and fields, is
+/// as content controls, tracked changes, hyperlinks and drawings, is
 /// kept as written in a
 /// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
 /// can be removed but not changed; the parts the model does not read are kept
@@ -262,7 +262,8 @@ export 'src/docx/model/formatting.dart'
         DocxUnderline,
         DocxUnderlineStyle,
         DocxVerticalAlign;
-export 'src/docx/model/inlines.dart' show DocxInline, DocxOpaqueInline, DocxRun;
+export 'src/docx/model/inlines.dart'
+    show DocxField, DocxInline, DocxOpaqueInline, DocxRun;
 export 'src/docx/model/numbering.dart'
     show
         DocxAbstractNumbering,
@@ -280,6 +281,9 @@ export 'src/docx/model/run_content.dart'
         DocxBreak,
         DocxBreakType,
         DocxCarriageReturn,
+        DocxFieldInstruction,
+        DocxFieldMark,
+        DocxFieldMarkType,
         DocxOpaqueRunContent,
         DocxRunContent,
         DocxTab,

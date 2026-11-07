@@ -399,16 +399,24 @@ void _walk(List<DocxBlock> blocks) {
     block.text;
     block.style;
     _paragraph(block.properties);
-    for (final DocxInline inline in block.inlines) {
-      inline.text;
-      inline.toString();
-      if (inline is! DocxRun) continue;
-      inline.style;
-      _run(inline.properties);
-      for (final DocxRunContent content in inline.content) {
-        content.toString();
-      }
-    }
+    block.inlines.forEach(_inline);
+  }
+}
+
+/// Reads [inline] and, for a field, its instruction and what is in its result.
+void _inline(DocxInline inline) {
+  inline.text;
+  inline.toString();
+  if (inline is DocxField) {
+    inline.instruction;
+    inline.name;
+    inline.result.forEach(_inline);
+  }
+  if (inline is! DocxRun) return;
+  inline.style;
+  _run(inline.properties);
+  for (final DocxRunContent content in inline.content) {
+    content.toString();
   }
 }
 
