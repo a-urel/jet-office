@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 
 import '../../tool/edit_model.dart';
 import '../../tool/write_fixtures.dart' as write_fixtures;
+import '../fixtures/m4_fixtures.dart' show png4x2;
 
 void main() {
   late Directory temp;
@@ -57,6 +58,7 @@ void main() {
         'w1_generated.xlsx',
         'w2_generated.xlsx',
         'w3_generated.xlsx',
+        'w4_generated.xlsx',
       ]),
     );
     expect(out.toString(), contains('All 2 workbooks edited'));
@@ -88,11 +90,12 @@ void main() {
     final List<Object?> values = <Object?>[
       for (final XlsxReadCell c in row.cells) c.value,
     ];
-    expect(values, hasLength(4));
+    expect(values, hasLength(5));
     expect(values[0], isA<DateTime>());
     expect(values[1], isA<DateTime>());
     expect(row.cells[2].formula, 'SUM(1,2)');
     expect(values[3], 'edited by the model');
+    expect(values[4], 'Rich text');
     expect(
       edited.rowsAt(edited.sheets.length - 1).single.cells.single.value,
       'added sheet',
@@ -199,6 +202,62 @@ void main() {
     expect(sheet.autoFilter, XlsxRange(row, 0, row, 3));
     expect(book.properties.title, 'Edited by jet_office');
     expect(book.warnings, isEmpty);
+  });
+
+  /// The first row after the last one [name] lists in the input.
+  int newRow(String name) =>
+      XlsxReader(
+        File('${input.path}/$name').readAsBytesSync(),
+      ).rowsAt(0).last.index +
+      1;
+
+  test(
+    'an edited workbook holds a rich text, a note, a picture and a table',
+    () {
+      writeOnly(input, <String>{'m1_values.xlsx', 'm4_notes.xlsx'});
+      for (final String name in <String>['m1_values.xlsx', 'm4_notes.xlsx']) {
+        final int row = newRow(name);
+        final XlsxSheet sheet = editedBook(name).sheets.first;
+        final XlsxRichText? rich = sheet.richTextAt(row, 9);
+        expect(rich?.text, 'Rich text', reason: name);
+        expect(rich?.runs.first.text, 'Rich ', reason: name);
+        expect(rich?.runs.first.font?.bold, isTrue, reason: name);
+        expect(rich?.runs.last.text, 'text', reason: name);
+        expect(rich?.runs.last.font?.bold, isNot(true), reason: name);
+        final XlsxNote? note = sheet.noteAt(row, 10);
+        expect(note?.author, 'jet_office', reason: name);
+        expect(note?.text.text, isNotEmpty, reason: name);
+        final XlsxPicture picture = sheet.pictures.last;
+        expect(picture.image, OfficeImage(png4x2), reason: name);
+        expect(picture.anchor, isA<XlsxOneCellAnchor>(), reason: name);
+        expect(picture.anchor.from, XlsxAnchorPoint(row, 11), reason: name);
+        final XlsxTable table = sheet.tables.last;
+        expect(table.name, 'Model_table', reason: name);
+        expect(table.headerRow, isTrue, reason: name);
+        expect(table.columns, hasLength(2), reason: name);
+        expect(table.range, XlsxRange(row + 1, 0, row + 2, 1), reason: name);
+      }
+    },
+  );
+
+  test('the table takes a number when its name is taken', () {
+    final XlsxWorkbook source = XlsxWorkbook();
+    source.addSheet('One').setCell(0, 0, 'x');
+    source
+        .addSheet('Two')
+        .addTable(
+          XlsxTable(
+            'MODEL_table',
+            const XlsxRange(0, 3, 1, 4),
+            <XlsxTableColumn>[
+              const XlsxTableColumn('P'),
+              const XlsxTableColumn('Q'),
+            ],
+          ),
+        );
+    File('${input.path}/taken.xlsx').writeAsBytesSync(source.save().bytes);
+    final XlsxSheet sheet = editedBook('taken.xlsx').sheets.first;
+    expect(sheet.tables.single.name, 'Model_table2');
   });
 
   test('the defined name takes a number when its name is taken', () {

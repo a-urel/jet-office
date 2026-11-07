@@ -169,7 +169,10 @@ final RegExp _hex6 = RegExp(r'^[0-9A-Fa-f]{6}$');
 /// the writer would refuse (a theme index above 11, a tint outside `-1..1`
 /// or not finite, a palette index above 65), which is also a `problem`. With
 /// [tooltipText], index 81 is `null` without a problem: Excel's system colour
-/// of a note's text, which the writer's palette does not hold.
+/// of tooltip text, which Excel writes in the runs of notes and which the
+/// writer's palette does not hold. The model sets it for every rich text run
+/// it reads (a note's, a shared string's, an inline string's), not only a
+/// note's.
 ReadStyleValue<XlsxColor?> readColor(
   XmlPullReader r, {
   bool tooltipText = false,

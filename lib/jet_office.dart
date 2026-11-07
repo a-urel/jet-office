@@ -93,7 +93,15 @@
 /// every part the model did not change: what it never loaded is copied from
 /// the file, and what it does not understand inside a part it loaded is kept
 /// as written, so an opened file comes back with only the cells that were
-/// set changed.
+/// set changed. A sheet also reads and edits its objects: rich text cells
+/// ([XlsxSheet.richTextAt], and [XlsxSheet.setCell] with an [XlsxRichText]),
+/// notes ([XlsxSheet.notes], [XlsxSheet.noteAt], [XlsxSheet.setNote]),
+/// pictures ([XlsxSheet.pictures], [XlsxSheet.addPicture],
+/// [XlsxSheet.movePicture], [XlsxSheet.removePicture]) and tables
+/// ([XlsxSheet.tables], [XlsxSheet.addTable], [XlsxSheet.setTableStyle],
+/// [XlsxSheet.resizeTable], [XlsxSheet.removeTable]). A chart, a shape, a form
+/// control or a threaded comment beside them is kept as written, and removing
+/// a table that a formula names is refused.
 ///
 /// [DocxDocument] is the Word document model, in progress (milestones D1 and
 /// D2; the API may change before D6). [DocxDocument.new] starts a document

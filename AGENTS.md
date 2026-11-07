@@ -133,14 +133,20 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   rule and a data bar on free cells of the new row, sets a landscape A4 page
   setup that fits one page wide, a footer, an auto filter over the new row
   (when no filter or table is in the way) and the workbook's title (no
-  protection: it would lock the owner's review), adds a sheet, saves to the
-  second directory, and checks the edits read back with `XlsxReader` and the
-  model; it also writes the generated workbooks of
-  `tool/write_model_sample.dart`, `w1_generated.xlsx`, `w2_generated.xlsx`
-  and `w3_generated.xlsx` (a `Report` sheet with a filter, a validation, the
-  four conditional rule kinds, two links, print settings, header and footer,
-  and a formula using a workbook name; a protected `Locked` sheet; workbook
-  properties), there. It prints each
+  protection: it would lock the owner's review), sets a rich text cell, a
+  note and a 4 by 2 pixel PNG picture on the next free columns of the new
+  row, adds a table `Model_table` (a number added when taken) over the two
+  rows below it, adds a sheet, saves to the second directory, and checks the
+  edits read back with `XlsxReader` and the model; it also writes the
+  generated workbooks of `tool/write_model_sample.dart`, `w1_generated.xlsx`,
+  `w2_generated.xlsx`, `w3_generated.xlsx` (a `Report` sheet with a filter, a
+  validation, the four conditional rule kinds, two links, print settings,
+  header and footer, and a formula using a workbook name; a protected
+  `Locked` sheet; workbook properties) and `w4_generated.xlsx` (an `Objects`
+  sheet with rich text, a visible and a hidden note, a PNG and a JPEG as
+  one-cell and two-cell pictures, a picture moved to a larger size, a table
+  with totals and one without a style; a `Removed` sheet where a table and a
+  picture were added and removed again), there. It prints each
   problem as `<file>: <problem>` and exits 1 on any, 2 on unusable
   arguments. CI runs it on the fixtures and validates the output with the
   Open XML SDK, so the model's edited and generated files are validated,
