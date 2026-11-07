@@ -9,8 +9,8 @@
 ///
 /// For every `<name>.expected.txt` in the first directory (written by
 /// `tool/write_fixtures.dart`) it opens `<resaved>/<name>.docx`, reads the
-/// body and compares `docxBodyText` (each paragraph's text, joined by
-/// `\n`) with the expected text by `textDifferences`
+/// body and compares `docxFullText` (the body's paragraphs and tables:
+/// `tool/src/text_compare.dart`) with the expected text by `textDifferences`
 /// (`tool/src/text_compare.dart`). Every warning opening and reading the
 /// re-save reports is a mismatch unless `docxResaveAllowedWarnings` in
 /// `tool/src/read_compare.dart` names the fixture and the code. A missing
@@ -90,7 +90,7 @@ List<String> _compare(String name, String expected, File file) {
   final String text;
   try {
     doc = DocxDocument.open(file.readAsBytesSync());
-    text = docxBodyText(doc);
+    text = docxFullText(doc);
   } on DocxReadException catch (e) {
     return <String>['the model refused the re-save: $e'];
   }

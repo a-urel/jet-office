@@ -199,9 +199,10 @@ fails; `manifest.json` is the only other file that belongs there.
 joined by a line feed, then one final line feed. A paragraph's text is
 what `DocxParagraph.text` returns: a tab is a tab, a line or page break a
 line feed, and text inside an inserted revision, a hyperlink or a field
-result counts. Tables are left out: D1 keeps them as opaque blocks, so
-their cells are not part of the text until D3 types them. Headers,
-footers and comments are not part of the body.
+result counts. Tables are left out and the texts stay as confirmed: D3
+types tables, and `owner_files_test.dart` checks their cell text against
+constants (`builtins.docx`: `A`, `B`, `C`, `D`). Headers, footers and
+comments are not part of the body.
 
 ### Draft, confirm, add
 

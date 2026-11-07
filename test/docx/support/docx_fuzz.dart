@@ -43,7 +43,8 @@ export '../../support/fuzz_mutations.dart'
 /// fields and a bookmark), `localized_word`, the document of
 /// `localizedWordDocx()` with Word's styles part (Turkish ids, `w14` and
 /// `w15` content) and numbering part, then every fixture of
-/// `docxFixtures()` and every `producerVariants()` entry, each rebuilt with
+/// `docxFixtures()` but the D3 ones (the table fixtures join the corpus with
+/// the table mutations) and every `producerVariants()` entry, each rebuilt with
 /// stored entries and a fixed timestamp, so the bytes are equal on every
 /// platform.
 ///
@@ -54,7 +55,8 @@ List<({String name, Uint8List bytes})> docxFuzzCorpus() =>
       (name: 'word_like', bytes: _rebuild(richWordDocx())),
       (name: 'localized_word', bytes: _rebuild(_localizedWithNumbering())),
       for (final DocxFixture f in docxFixtures())
-        (name: f.name, bytes: _rebuild(f.build().bytes)),
+        if (!f.name.startsWith('d3_'))
+          (name: f.name, bytes: _rebuild(f.build().bytes)),
       for (final ProducerVariant v in producerVariants())
         (name: v.name, bytes: _rebuild(v.bytes)),
     ];

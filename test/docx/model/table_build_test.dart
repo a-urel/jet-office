@@ -867,6 +867,8 @@ void main() {
 
     test('a style read in a table of this document is not reported', () {
       final DocxDocument doc = _open(_foreignTable);
+      // Loading the styles makes the check run at the save.
+      expect(doc.styles, isNotNull);
       doc.body.addParagraph('x');
       expect(doc.save().warnings, isEmpty);
     });

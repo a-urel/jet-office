@@ -150,9 +150,9 @@ final class DocumentPart implements PartContent {
   bool Function(int numId)? listDefined;
 
   /// Whether the document defines a style of that id and type, so a
-  /// `w:pStyle`, `w:rStyle` or `w:tblStyle` set through the API that names another is
-  /// reported at [encode] (plan Ruling 8); `null` reports none. The save
-  /// sets it before it writes the part.
+  /// `w:pStyle`, `w:rStyle` or `w:tblStyle` set through the API that names
+  /// another is reported at [encode] (plan Ruling 8); `null` reports none.
+  /// The save sets it before it writes the part.
   bool Function(String id, DocxStyleType type)? styleDefined;
 
   /// The warnings the last [encode] raised; empty before the first.

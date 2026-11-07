@@ -102,6 +102,41 @@ void main() {
       );
     });
 
+    test('owner tables read their cells', () {
+      for (final (String file, List<String>? expected)
+          in <(String, List<String>?)>[
+            ('builtins.docx', <String>['A', 'B', 'C', 'D']),
+            ('features.docx', null),
+            ('long.docx', null),
+          ]) {
+        final DocxDocument doc = DocxDocument.open(
+          File('$_dir/$file').readAsBytesSync(),
+        );
+        final List<DocxTableCell> cells = <DocxTableCell>[
+          for (final DocxTable table in tables(doc))
+            for (final DocxTableRow row in table.rows) ...row.cells,
+        ];
+        expect(cells, isNotEmpty, reason: file);
+        for (final DocxTableCell cell in cells) {
+          expect(cell.blocks, isNotEmpty, reason: file);
+          expect(
+            cell.text,
+            <String>[
+              for (final DocxBlock b in cell.blocks)
+                if (b is DocxParagraph) b.text,
+            ].join('\n'),
+            reason: file,
+          );
+        }
+        if (expected != null) {
+          expect(<String>[
+            for (final DocxTableCell c in cells) c.text,
+          ], expected);
+        }
+        expect(doc.warnings, isEmpty, reason: file);
+      }
+    });
+
     test('a table style resolves in the document: builtins.docx', () {
       final DocxDocument doc = DocxDocument.open(
         File('$_dir/builtins.docx').readAsBytesSync(),

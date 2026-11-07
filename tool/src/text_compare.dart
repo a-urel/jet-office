@@ -26,6 +26,28 @@ String docxBodyText(DocxDocument doc) => <String>[
     if (block is DocxParagraph) block.text,
 ].join('\n');
 
+/// The text of [doc]'s body with its tables, for the fixtures: the blocks in
+/// order, joined by `\n`; a paragraph is its [DocxParagraph.text] and a table
+/// is a line for each row, the text of its cells joined by a tab, as
+/// LibreOffice's text export writes it. Other blocks are left out.
+///
+/// A cell's text is [DocxTableCell.text]. A cell that continues a vertical
+/// merge is an empty cell, and a row of merged cells has one cell for each
+/// `w:tc`.
+String docxFullText(DocxDocument doc) =>
+    _blocksText(doc.body.blocks).join('\n');
+
+List<String> _blocksText(List<DocxBlock> blocks) => <String>[
+  for (final DocxBlock block in blocks)
+    if (block is DocxParagraph)
+      block.text
+    else if (block is DocxTable)
+      for (final DocxTableRow row in block.rows)
+        <String>[
+          for (final DocxTableCell cell in row.cells) cell.text,
+        ].join('\t'),
+];
+
 /// The text a file holds, as compared: [file] without a leading BOM and
 /// without one trailing `\n`.
 String readExpectedText(String file) {
