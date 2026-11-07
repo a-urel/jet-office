@@ -1,11 +1,14 @@
-/// The DOCX table benchmark: build a 10,000 x 12 table of text with
-/// `DocxBody.addTable` and `DocxTable.addRow`, save it, open the bytes and
-/// read every cell.
+/// The DOCX table benchmark: build a table of text with `DocxBody.addTable`
+/// and `DocxTable.addRow`, save it, open the bytes and read every cell, at
+/// 2,500 and at 10,000 rows of 12 columns.
 ///
 /// Not ported from Quds; written for jet_office. It records figures, it does
-/// not judge them (docs/benchmark.md). The text is deterministic and mixed in
-/// length (3 to about 60 characters, some with an accent or an entity
-/// character). Each platform opens its own bytes (decision 0006). Run it with
+/// not judge them (docs/benchmark.md). The text is deterministic and does not
+/// repeat in a way deflate can exploit: each cell is one to eight words drawn
+/// by a hash of its row and column from a vocabulary of 4,096 made-up words
+/// (each 8 to 12 letters), and about one cell in three also ends in a token
+/// unique to the cell (`#` and the cell's number in base 36), so a cell is 8 to
+/// about 105 characters. About one cell in 25 is empty. Each platform opens its own bytes (decision 0006). Run it with
 /// `dart test benchmark` and `dart test -p chrome benchmark`; the quality gate
 /// does not.
 @Tags(<String>['benchmark'])
@@ -19,35 +22,73 @@ import 'package:test/test.dart';
 
 import 'src/memory_probe.dart';
 
-const int _rows = 10000;
 const int _columns = 12;
 
-const List<String> _words = <String>[
-  'alpha',
-  'Beta & co',
-  'gamma',
-  'delta <x>',
-  'epsilon',
-  'zeta',
-  'eta',
-  'theta',
-  'Çay',
-  'kappa',
-  'lambda',
-  'mu',
+/// The table sizes, in data rows: a smaller one beside the larger, to show how
+/// the phases grow.
+const List<int> _sizes = <int>[2500, 10000];
+
+const int _vocabularySize = 4096;
+
+/// A 31-bit hash of [a] and [b]: a linear congruential step (multiplier
+/// 48271, modulus 2^31 - 1) kept below 2^53, so it gives the same value on
+/// the VM and in dart2js, mixed twice so near inputs give far outputs.
+int _hash(int a, int b) {
+  int h = (a * 7919 + b * 104729 + 12345) % 2147483647;
+  for (int i = 0; i < 3; i++) {
+    h = (h * 48271 + 1) % 2147483647;
+    h = (h ^ (h >> 13)) % 2147483647;
+  }
+  return h;
+}
+
+const List<String> _syllables = <String>[
+  'ba',
+  'ko',
+  'ri',
+  'tu',
+  'sen',
+  'mo',
+  'la',
+  'dre',
+  'vi',
+  'xan',
+  'pe',
+  'ju',
 ];
 
-/// The text of the cell at [row] and [column]: one to eight words, chosen by
-/// a fixed arithmetic, so every run and platform writes the same document.
-String _text(int row, int column) {
-  final int count = 1 + (row * 7 + column * 3) % 8;
+/// The vocabulary word at [index]: four syllables read off [index] in base 12,
+/// so every word differs; each has 8 to 12 letters.
+String _word(int index) {
   final StringBuffer b = StringBuffer();
-  for (int i = 0; i < count; i++) {
-    if (i > 0) b.write(' ');
-    b.write(_words[(row * 31 + column * 17 + i * 5) % _words.length]);
+  int n = index;
+  for (int i = 0; i < 4; i++) {
+    b.write(_syllables[n % _syllables.length]);
+    n ~/= _syllables.length;
   }
   return b.toString();
 }
+
+final List<String> _vocabulary = <String>[
+  for (int i = 0; i < _vocabularySize; i++) _word(i),
+];
+
+/// The text of the cell at [row] and [column].
+String _text(int row, int column) {
+  final int h = _hash(row, column);
+  final int count = 1 + h % 8;
+  final StringBuffer b = StringBuffer();
+  for (int i = 0; i < count; i++) {
+    if (i > 0) b.write(' ');
+    b.write(_vocabulary[_hash(h, i) % _vocabularySize]);
+  }
+  if (h % 3 == 0) b.write(' #${(row * _columns + column).toRadixString(36)}');
+  return b.toString();
+}
+
+/// The cell as the table gets it: `null` for about one in 25.
+String? _cell(int row, int column) =>
+    _hash(column, row) % 25 == 0 ? null : _text(row, column);
 
 const bool _isWeb = identical(0, 0.0);
 
@@ -81,45 +122,64 @@ void main() {
     return result;
   }
 
-  test('build, save, open and read a $_rows x $_columns table', () {
-    final DocxDocument doc = DocxDocument();
-    final DocxTable table = phase('build ($_rows rows)', () {
-      final DocxTable t = doc.body.addTable(columns: _columns);
-      t.addRow(<String?>[
-        for (int c = 0; c < _columns; c++) 'Column ${c + 1}',
-      ], header: true);
-      for (int r = 0; r < _rows; r++) {
+  for (final int rows in _sizes) {
+    test('build, save, open and read a $rows x $_columns table', () {
+      final DocxDocument doc = DocxDocument();
+      final DocxTable table = phase('$rows rows | build', () {
+        final DocxTable t = doc.body.addTable(columns: _columns);
         t.addRow(<String?>[
-          for (int c = 0; c < _columns; c++)
-            if ((r + c) % 25 == 0) null else _text(r, c),
-        ]);
+          for (int c = 0; c < _columns; c++) 'Column ${c + 1}',
+        ], header: true);
+        for (int r = 0; r < rows; r++) {
+          t.addRow(<String?>[for (int c = 0; c < _columns; c++) _cell(r, c)]);
+        }
+        return t;
+      });
+      expect(table.rows, hasLength(rows + 1));
+
+      final Uint8List bytes = phase(
+        '$rows rows | save',
+        () => doc.save().bytes,
+      );
+      line('$rows rows | file | ${bytes.length} bytes');
+
+      final DocxDocument opened = phase(
+        '$rows rows | open (and load the body)',
+        () => DocxDocument.open(bytes)..body,
+      );
+      final DocxTable read = opened.body.blocks.whereType<DocxTable>().single;
+
+      int cells = 0;
+      int characters = 0;
+      phase('$rows rows | read every cell', () {
+        for (final DocxTableRow row in read.rows) {
+          for (final DocxTableCell cell in row.cells) {
+            cells++;
+            characters += cell.text.length;
+          }
+        }
+      });
+      expect(cells, (rows + 1) * _columns);
+      expect(read.rows[1].cells[2].text, _cell(0, 2) ?? '');
+      expect(read.rows[rows].cells[5].text, _cell(rows - 1, 5) ?? '');
+      int shortest = 1 << 30;
+      int longest = 0;
+      for (final DocxTableCell cell in read.rows[1].cells) {
+        final int n = cell.text.length;
+        if (n > 0 && n < shortest) shortest = n;
+        if (n > longest) longest = n;
       }
-      return t;
-    });
-    expect(table.rows, hasLength(_rows + 1));
-
-    final Uint8List bytes = phase('save', () => doc.save().bytes);
-    line('file | ${bytes.length} bytes');
-
-    final DocxDocument opened = phase(
-      'open (and load the body)',
-      () => DocxDocument.open(bytes)..body,
-    );
-    final DocxTable read = opened.body.blocks.whereType<DocxTable>().single;
-
-    int cells = 0;
-    int characters = 0;
-    phase('read every cell', () {
+      final Set<String> distinct = <String>{};
       for (final DocxTableRow row in read.rows) {
         for (final DocxTableCell cell in row.cells) {
-          cells++;
-          characters += cell.text.length;
+          distinct.add(cell.text);
         }
       }
+      line(
+        '$rows rows | cells | $cells | $characters characters | '
+        '${distinct.length} distinct texts | first data row $shortest to '
+        '$longest characters',
+      );
     });
-    expect(cells, (_rows + 1) * _columns);
-    expect(read.rows[1].cells[1].text, _text(0, 1));
-    expect(read.rows[_rows].cells[5].text, _text(_rows - 1, 5));
-    line('cells | $cells | $characters characters');
-  });
+  }
 }
