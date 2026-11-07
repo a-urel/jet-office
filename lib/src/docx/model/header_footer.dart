@@ -69,7 +69,9 @@ enum DocxHeaderFooterType {
 /// The first block of an empty one gives the section a reference to it in the
 /// same transaction, and the part is added at save; the section's next
 /// sections inherit it. The first block of a story of the first page sets
-/// [DocxSection.titlePage] on the sections that have it as their own.
+/// [DocxSection.titlePage] on the sections that have it as their own. Empty
+/// paragraphs are no content, as Word writes one in a header nobody filled: a
+/// block added after them is a first block too.
 ///
 /// A paragraph with a section break cannot go in one: [insertBlock] and
 /// [replaceBlockAt] throw [ArgumentError], wherever the paragraph comes from.
@@ -99,9 +101,9 @@ final class DocxHeaderFooter extends DocxStory {
   void insertBlock(int index, DocxBlock block) {
     _checkBlock(block);
     _edits.transaction(() {
-      final bool wasEmpty = _blocks.isEmpty;
+      final bool hadNoContent = _blocks.every(_isBlank);
       primitives.insertBlock(_edits, _container, _blocks, index, block);
-      if (wasEmpty) _story.turnOn(type);
+      if (hadNoContent) _story.turnOn(type);
     });
   }
 
@@ -178,16 +180,29 @@ final class _Story {
   /// The blocks, read on the first access.
   List<DocxBlock> get blocks => _blocks ??= _load();
 
-  /// Records that the story holds content, or that a section asked for it,
-  /// through a handle of [type]: a new story gets its reference, and a first
-  /// story sets the title page of the sections it is the own story of (plan
-  /// Ruling 6). Call it inside a transaction.
-  void turnOn(DocxHeaderFooterType type) {
+  /// Gives a new story its reference, once.
+  void _attach() {
     final _EmptyStoryKey? key = _key;
     if (key != null && !_attached) {
       _document._edits.apply(_StoryAttached(_document, this, key));
       putSectionReference(key.$1, _reference, isHeader: isHeader);
     }
+  }
+
+  /// Records that [section] asked for this story as its own of [type]: a new
+  /// story gets its reference, and a first story sets the title page of
+  /// [section] alone (plan Ruling 6). Call it inside a transaction.
+  void turnOnFor(DocxSection section, DocxHeaderFooterType type) {
+    _attach();
+    if (type == DocxHeaderFooterType.first) section.titlePage = true;
+  }
+
+  /// Records that the story got its first content through a handle of [type],
+  /// which any section using the story may hold: a new story gets its
+  /// reference, and a first story sets the title page of the sections it is
+  /// the own story of (plan Ruling 6). Call it inside a transaction.
+  void turnOn(DocxHeaderFooterType type) {
+    _attach();
     if (type == DocxHeaderFooterType.first) {
       final _Story? Function(DocxSection) ownOf = _document._ownStories(
         type,
@@ -230,6 +245,10 @@ final class _Story {
     return read.blocks;
   }
 }
+
+/// Whether [block] is a paragraph that holds nothing, which is no content.
+bool _isBlank(DocxBlock block) =>
+    block is DocxParagraph && block.inlines.isEmpty;
 
 /// The move of a new story out of the empty ones: a section refers to it now.
 final class _StoryAttached implements Change {

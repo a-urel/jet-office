@@ -58,6 +58,7 @@ Uint8List _docx(
   String rels = '',
   Map<String, String> parts = const <String, String>{},
   String root = _decls,
+  String bodyAttributes = '',
 }) {
   final StringBuffer overrides = StringBuffer();
   for (final String name in parts.keys) {
@@ -67,7 +68,8 @@ Uint8List _docx(
     overrides.write('<Override PartName="/$name" ContentType="$type"/>');
   }
   return buildDocx(
-    document: '<w:document $root><w:body>$body</w:body></w:document>',
+    document:
+        '<w:document $root><w:body$bodyAttributes>$body</w:body></w:document>',
     extra: <String, List<int>>{
       '[Content_Types].xml': utf8.encode(
         '<Types xmlns="$contentTypesNs">'
@@ -222,6 +224,31 @@ void main() {
       final DocxDocument again = DocxDocument.open(bytes);
       expect(again.sections.first.header.blocks, isEmpty);
       expect(_text(again.sections.last.footer), 'x');
+    });
+
+    test('takes no id of a reference of an unknown type', () {
+      final DocxDocument doc = DocxDocument.open(
+        _docx('${_p('A')}<w:sectPr>${_h('odd', 'rId1')}</w:sectPr>'),
+      );
+      doc.sections.single.footer.addParagraph('x');
+      final String rels = _rels(readDocxText(doc.save().bytes));
+      expect(rels, isNot(contains('Id="rId1"')));
+      expect(rels, contains('Id="rId2"'));
+    });
+
+    test('takes no id of a reference of a w:sectPr in a cell', () {
+      final DocxDocument doc = DocxDocument.open(
+        _docx(
+          '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="100"/></w:tblGrid><w:tr>'
+          '<w:tc><w:p><w:pPr><w:sectPr>${_h('default', 'rId1')}</w:sectPr>'
+          '</w:pPr></w:p></w:tc></w:tr></w:tbl>${_p('A')}<w:sectPr/>',
+        ),
+      );
+      doc.sections.single.footer.addParagraph('x');
+      expect(
+        _rels(readDocxText(doc.save().bytes)),
+        isNot(contains('Id="rId1"')),
+      );
     });
 
     test('names the parts in the order of the sections', () {
@@ -397,6 +424,50 @@ void main() {
         '<w:footerReference w:type="default" xmlns:r1="${Ns.rel}" '
         'r1:id="rId1"/>',
       );
+    });
+
+    test('takes what a paragraph\'s kept attribute binds', () {
+      final DocxDocument doc = DocxDocument.open(
+        _docx(
+          '<w:p xmlns:r="urn:x" r:foo="1"><w:pPr><w:sectPr/></w:pPr></w:p>'
+          '${_p('B')}<w:sectPr/>',
+        ),
+      );
+      doc.sections.first.footer.addParagraph('x');
+      final Uint8List bytes = doc.save().bytes;
+      expect(readDocxText(bytes)['word/document.xml'], contains(' r:foo="1"'));
+      expect(_text(DocxDocument.open(bytes).sections.first.footer), 'x');
+    });
+
+    test('takes what the body\'s kept attribute binds', () {
+      final DocxDocument doc = DocxDocument.open(
+        _docx(
+          '${_p('A')}<w:sectPr/>',
+          bodyAttributes: ' xmlns:r="urn:x" r:foo="1"',
+        ),
+      );
+      doc.sections.single.footer.addParagraph('x');
+      final Uint8List bytes = doc.save().bytes;
+      expect(_text(DocxDocument.open(bytes).sections.single.footer), 'x');
+    });
+
+    test('takes what a kept attribute around a moved break binds', () {
+      final DocxDocument doc = DocxDocument.open(
+        _docx(
+          '${_break('A')}${_p('B')}'
+          '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="100"/></w:tblGrid><w:tr>'
+          '<w:tc xmlns:r="urn:x" r:foo="1"><w:p/></w:tc></w:tr></w:tbl>'
+          '${_p('C')}<w:sectPr/>',
+        ),
+      );
+      doc.sections.first.footer.addParagraph('x');
+      doc.save();
+      final DocxBlock block = doc.body.blocks.first;
+      doc.body.removeBlockAt(0);
+      final DocxTable table = doc.body.blocks[1] as DocxTable;
+      table.rows.single.cells.single.insertBlock(0, block);
+      final String main = readDocxText(doc.save().bytes)['word/document.xml']!;
+      expect(main, contains('xmlns:r1="${Ns.rel}" r1:id="rId1"'));
     });
 
     test('works in a paragraph break too', () {
@@ -712,6 +783,21 @@ void main() {
       expect(section.titlePage, isTrue);
     });
 
+    test('own sets it on the section asked, not on others of the part', () {
+      final DocxDocument doc = DocxDocument.open(
+        _docx(
+          '${_break('One', _h('first', 'rId1'))}${_p('Two')}'
+          '<w:sectPr>${_h('first', 'rId1')}</w:sectPr>',
+          rels: _rel('rId1', 'header1.xml'),
+          parts: <String, String>{'word/header1.xml': _hdr(_p('F'))},
+        ),
+      );
+      final List<DocxSection> sections = doc.sections;
+      sections[1].ownHeader(DocxHeaderFooterType.first);
+      expect(sections[0].titlePage, isFalse);
+      expect(sections[1].titlePage, isTrue);
+    });
+
     test('own of a first story the section has sets it too', () {
       final DocxDocument doc = DocxDocument.open(
         _docx(
@@ -735,6 +821,24 @@ void main() {
         ),
       );
       final DocxSection section = doc.sections.single;
+      section.firstHeader.addParagraph('x');
+      expect(section.titlePage, isTrue);
+    });
+
+    test('a story of empty paragraphs has no content yet', () {
+      final DocxDocument doc = DocxDocument.open(
+        _docx(
+          '${_p('A')}<w:sectPr>${_h('first', 'rId1')}</w:sectPr>',
+          rels: _rel('rId1', 'header1.xml'),
+          parts: <String, String>{
+            'word/header1.xml': _hdr(
+              '<w:p><w:pPr><w:pStyle w:val="Header"/></w:pPr></w:p>',
+            ),
+          },
+        ),
+      );
+      final DocxSection section = doc.sections.single;
+      expect(section.titlePage, isFalse);
       section.firstHeader.addParagraph('x');
       expect(section.titlePage, isTrue);
     });
@@ -948,6 +1052,27 @@ void main() {
       });
       changeLogOf(doc).revertSet(set);
       expect(comparePackages(input, doc.save().bytes), isEmpty);
+    });
+
+    test('an undo after a save brings back a broken reference, broken', () {
+      final Uint8List input = _docx(
+        '${_p('A')}<w:sectPr>${_h('default', 'rId1')}</w:sectPr>',
+      );
+      final DocxDocument doc = DocxDocument.open(input);
+      final DocxSection section = doc.sections.single;
+      final ChangeSet set = editsOf(doc).transaction(
+        () => section.ownHeader(DocxHeaderFooterType.primary).addParagraph('x'),
+      );
+      final Map<String, String> saved = readDocxText(doc.save().bytes);
+      expect(_rels(saved), isNot(contains('Id="rId1"')));
+      changeLogOf(doc).revertSet(set);
+      expect(section.header.blocks, isEmpty);
+      final Uint8List bytes = doc.save().bytes;
+      expect(
+        readDocxText(bytes)['word/document.xml'],
+        contains(_h('default', 'rId1')),
+      );
+      expect(DocxDocument.open(bytes).sections.single.header.blocks, isEmpty);
     });
 
     test('a redo gives the story and its reference back', () {

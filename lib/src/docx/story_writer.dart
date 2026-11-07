@@ -71,14 +71,14 @@ void checkTablesHaveRows(List<DocxBlock> blocks, String path) {
 /// repairs there.
 final class StoryWriter {
   /// Writes to [_w] with the WordprocessingML prefix [_prefix] (with its colon
-  /// as [_p]), the root's bindings [_scope], and warnings for the part
+  /// as [_p]), the root's bindings [scope], and warnings for the part
   /// [_partName], asking [_listDefined] and [_styleDefined] about what the
   /// API set.
   StoryWriter(
     this._w,
     this._p,
     this._prefix,
-    this._scope,
+    this.scope,
     this._partName,
     this._warnings,
     this._listDefined,
@@ -93,8 +93,10 @@ final class StoryWriter {
   /// The WordprocessingML prefix, such as `w`.
   final String _prefix;
 
-  /// The bindings in scope inside the root.
-  final Map<String, String> _scope;
+  /// The bindings in scope where the writer is: those of the root, and those
+  /// the kept attributes of the elements open around it declared. What
+  /// surrounds the blocks sets them when it declares some.
+  Map<String, String> scope;
 
   final String _partName;
   final DocxWarningCollector _warnings;
@@ -107,9 +109,6 @@ final class StoryWriter {
   /// The WordprocessingML prefix with its colon, such as `w:`.
   String get wordPrefix => _p;
 
-  /// The bindings in scope inside the root.
-  Map<String, String> get scope => _scope;
-
   /// Writes [blocks], of the story or the cell at the location [path].
   void writeBlocks(List<DocxBlock> blocks, String path) {
     int paragraphs = 0;
@@ -121,7 +120,7 @@ final class StoryWriter {
         case DocxTable():
           _table(block, '$path/tbl[${tables++}]');
         case DocxOpaqueBlock():
-          opaqueBlockXml(block).writeTo(_w, declaredAbove: _scope);
+          opaqueBlockXml(block).writeTo(_w, declaredAbove: scope);
       }
     }
   }
@@ -129,7 +128,9 @@ final class StoryWriter {
   /// Writes the table [t] at the location [path].
   void _table(DocxTable t, String path) {
     _w.start('${_p}tbl');
-    writeKeptAttributes(_w, tableAttributesOf(t), declaredAbove: _scope);
+    writeKeptAttributes(_w, tableAttributesOf(t), declaredAbove: scope);
+    final Map<String, String> outer = scope;
+    scope = scopeInside(tableAttributesOf(t), outer);
     final PropertySet tblPr = tablePropertySetOf(t);
     _checkStyle(tblPr, 'tblStyle', DocxStyleType.table, path);
     // A table read without a w:tblPr writes one first when a value was set; a
@@ -155,17 +156,18 @@ final class StoryWriter {
         writePropertySet(tblPr, 'tblPr');
       } else if (child is TableGrid) {
         if (tableGridAsRead(t)) {
-          child.xml.writeTo(_w, declaredAbove: _scope);
+          child.xml.writeTo(_w, declaredAbove: scope);
         } else {
           _grid(child, widths!);
         }
       } else {
-        (child as OpaqueXml).writeTo(_w, declaredAbove: _scope);
+        (child as OpaqueXml).writeTo(_w, declaredAbove: scope);
       }
     }
     if (gridPending) {
       _newGrid(widths!);
     }
+    scope = outer;
     _w.end();
   }
 
@@ -183,7 +185,7 @@ final class StoryWriter {
     writeNamespaceDeclarations(_w, grid.declared);
     grid.xml.inheritedNamespaces.forEach((String prefix, String uri) {
       if (grid.declared.containsKey(prefix)) return;
-      final String? above = _scope[prefix] ?? (prefix.isEmpty ? '' : null);
+      final String? above = scope[prefix] ?? (prefix.isEmpty ? '' : null);
       if (above != uri) {
         _w.attribute(prefix.isEmpty ? 'xmlns' : 'xmlns:$prefix', uri);
       }
@@ -205,7 +207,9 @@ final class StoryWriter {
   /// Writes the row [row] at the location [path].
   void _row(DocxTableRow row, String path) {
     _w.start('${_p}tr');
-    writeKeptAttributes(_w, rowAttributesOf(row), declaredAbove: _scope);
+    writeKeptAttributes(_w, rowAttributesOf(row), declaredAbove: scope);
+    final Map<String, String> outer = scope;
+    scope = scopeInside(rowAttributesOf(row), outer);
     final PropertySet trPr = rowPropertySetOf(row);
     // A row read without a w:trPr writes one when a value was set: after
     // any w:tblPrEx, before everything else.
@@ -221,12 +225,13 @@ final class StoryWriter {
       } else if (child is PropertyContainer) {
         writePropertySet(trPr, 'trPr');
       } else {
-        (child as OpaqueXml).writeTo(_w, declaredAbove: _scope);
+        (child as OpaqueXml).writeTo(_w, declaredAbove: scope);
       }
     }
     if (pending) {
       writePropertySet(trPr, 'trPr');
     }
+    scope = outer;
     _w.end();
   }
 
@@ -238,13 +243,15 @@ final class StoryWriter {
 
   /// Writes [properties] as `w:<localName>`.
   void writePropertySet(PropertySet properties, String localName) => properties
-      .writeTo(_w, '$_p$localName', prefix: _prefix, declaredAbove: _scope);
+      .writeTo(_w, '$_p$localName', prefix: _prefix, declaredAbove: scope);
 
   /// Writes the cell [cell] at the location [path], and the paragraph that
   /// closes it when it needs one.
   void _cell(DocxTableCell cell, String path) {
     _w.start('${_p}tc');
-    writeKeptAttributes(_w, cellAttributesOf(cell), declaredAbove: _scope);
+    writeKeptAttributes(_w, cellAttributesOf(cell), declaredAbove: scope);
+    final Map<String, String> outer = scope;
+    scope = scopeInside(cellAttributesOf(cell), outer);
     final PropertySet tcPr = cellPropertySetOf(cell);
     if (!tcPr.writesNothing) {
       writePropertySet(tcPr, 'tcPr');
@@ -255,6 +262,7 @@ final class StoryWriter {
         ..start('${_p}p')
         ..end();
     }
+    scope = outer;
     _w.end();
   }
 
@@ -262,7 +270,9 @@ final class StoryWriter {
   void _paragraph(DocxParagraph p, String path) {
     final XmlWriter w = _w;
     w.start('${_p}p');
-    writeKeptAttributes(w, paragraphAttributesOf(p), declaredAbove: _scope);
+    writeKeptAttributes(w, paragraphAttributesOf(p), declaredAbove: scope);
+    final Map<String, String> outer = scope;
+    scope = scopeInside(paragraphAttributesOf(p), outer);
     final PropertySet pPr = paragraphPropertySetOf(p);
     final bool Function(int)? listDefined = _listDefined;
     final DocxNumberingRef? list = listDefined == null ? null : listSetOf(p);
@@ -276,7 +286,7 @@ final class StoryWriter {
     }
     _checkStyle(pPr, 'pStyle', DocxStyleType.paragraph, path);
     if (!pPr.writesNothing) {
-      pPr.writeTo(w, '${_p}pPr', prefix: _prefix, declaredAbove: _scope);
+      pPr.writeTo(w, '${_p}pPr', prefix: _prefix, declaredAbove: scope);
     }
     int runs = 0;
     for (final DocxInline inline in p.inlines) {
@@ -284,9 +294,10 @@ final class StoryWriter {
         case DocxRun():
           _run(inline, '$path/r[${runs++}]');
         case DocxOpaqueInline():
-          opaqueInlineXml(inline).writeTo(w, declaredAbove: _scope);
+          opaqueInlineXml(inline).writeTo(w, declaredAbove: scope);
       }
     }
+    scope = outer;
     w.end();
   }
 
@@ -327,11 +338,11 @@ final class StoryWriter {
     }
     final XmlWriter w = _w;
     w.start('${_p}r');
-    writeKeptAttributes(w, runAttributesOf(r), declaredAbove: _scope);
+    writeKeptAttributes(w, runAttributesOf(r), declaredAbove: scope);
     final PropertySet rPr = runPropertySetOf(r);
     _checkStyle(rPr, 'rStyle', DocxStyleType.character, path);
     if (!rPr.writesNothing) {
-      rPr.writeTo(w, '${_p}rPr', prefix: _prefix, declaredAbove: _scope);
+      rPr.writeTo(w, '${_p}rPr', prefix: _prefix, declaredAbove: scope);
     }
     for (final DocxRunContent c in r.content) {
       _content(c);
@@ -346,7 +357,7 @@ final class StoryWriter {
       case DocxText(:final String text):
         w.start('${_p}t');
         if (textWasRead(c)) {
-          writeKeptAttributes(w, contentAttributesOf(c), declaredAbove: _scope);
+          writeKeptAttributes(w, contentAttributesOf(c), declaredAbove: scope);
         } else if (_needsPreserve(text)) {
           w.attribute('xml:space', 'preserve');
         }
@@ -359,19 +370,19 @@ final class StoryWriter {
         if (type != DocxBreakType.line) {
           w.attribute('${_p}type', type.name);
         }
-        writeKeptAttributes(w, contentAttributesOf(c), declaredAbove: _scope);
+        writeKeptAttributes(w, contentAttributesOf(c), declaredAbove: scope);
         w.end();
       case DocxCarriageReturn():
         _empty('cr', c);
       case DocxOpaqueRunContent():
-        opaqueRunContentXml(c).writeTo(w, declaredAbove: _scope);
+        opaqueRunContentXml(c).writeTo(w, declaredAbove: scope);
     }
   }
 
   /// Writes `w:<localName>` with the attributes [c] kept and no content.
   void _empty(String localName, DocxRunContent c) {
     _w.start('$_p$localName');
-    writeKeptAttributes(_w, contentAttributesOf(c), declaredAbove: _scope);
+    writeKeptAttributes(_w, contentAttributesOf(c), declaredAbove: scope);
     _w.end();
   }
 }

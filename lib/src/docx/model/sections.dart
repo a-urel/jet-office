@@ -139,9 +139,9 @@ final class DocxSection {
   /// The header of the section's first page, as [header] reads it. Word shows
   /// it only when this section has a [titlePage], also when it is inherited.
   ///
-  /// The first content of a story sets [titlePage] on the sections that have
-  /// it as their own, in the same transaction; not on one that inherits it,
-  /// which sets its own.
+  /// The first content of a story, where empty paragraphs are none, sets
+  /// [titlePage] on the sections that have it as their own, in the same
+  /// transaction; not on one that inherits it, which sets its own.
   DocxHeaderFooter get firstHeader =>
       _headerFooter(DocxHeaderFooterType.first, isHeader: true);
 
@@ -182,7 +182,7 @@ final class DocxSection {
   ///
   /// A section that gets no content in it still shows an empty header, as a
   /// part of one empty paragraph is written. [DocxHeaderFooterType.first]
-  /// sets [titlePage], also when the section had that header.
+  /// sets [titlePage] on this section alone, also when it had that header.
   ///
   /// One transaction. Throws [StateError] for a section in no document.
   DocxHeaderFooter ownHeader(DocxHeaderFooterType type) =>

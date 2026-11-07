@@ -80,6 +80,25 @@ void writeKeptAttributes(
   }
 }
 
+/// The bindings in scope inside an element that [writeKeptAttributes] wrote
+/// [attributes] on, under [declaredAbove]: those bindings with the ones it
+/// declared, which rebind a prefix for what the element holds. [declaredAbove]
+/// itself when it declared none.
+Map<String, String> scopeInside(
+  List<KeptAttribute> attributes,
+  Map<String, String> declaredAbove,
+) {
+  Map<String, String>? scope;
+  for (final KeptAttribute a in attributes) {
+    final int colon = a.qualifiedName.indexOf(':');
+    if (colon <= 0) continue;
+    final String prefix = a.qualifiedName.substring(0, colon);
+    if (prefix == 'xml' || declaredAbove[prefix] == a.namespaceUri) continue;
+    (scope ??= <String, String>{...declaredAbove})[prefix] = a.namespaceUri;
+  }
+  return scope ?? declaredAbove;
+}
+
 /// An element and everything inside it, kept as written.
 final class OpaqueXml {
   const OpaqueXml._(

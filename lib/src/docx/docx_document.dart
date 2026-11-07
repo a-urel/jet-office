@@ -36,7 +36,8 @@ import 'dart:collection';
 import 'dart:typed_data';
 
 import '../opc/change_log.dart';
-import '../opc/ooxml.dart' show ContentType, RelType;
+import '../opc/ooxml.dart' show ContentType, Ns, RelType;
+import '../opc/opaque_xml.dart' show KeptAttribute, keepAttributes;
 import '../opc/package.dart' show OpcPackage, OpcRelationship, PartContent;
 import '../xml/xml_pull_reader.dart';
 import '../zip/archive_adapter.dart';
@@ -390,7 +391,7 @@ final class DocxDocument {
     final _Story story =
         _ownStories(type, isHeader: isHeader)(section) ??
         _emptyStoryOf(section, type, isHeader);
-    _edits.transaction(() => story.turnOn(type));
+    _edits.transaction(() => story.turnOnFor(section, type));
     return story.handle(type, inherited: false);
   }
 
@@ -499,6 +500,36 @@ final class DocxDocument {
     ..._storiesToCreate,
   ].map((_Story s) => s.part).nonNulls;
 
+  /// The `r:id` of every `w:headerReference` and `w:footerReference` of the
+  /// main part in the file: a new relationship takes none of them, or a
+  /// reference that names nothing would name the new part. Those the model
+  /// does not type count, wherever they are, and so does one replaced, which
+  /// an undo brings back.
+  late final Set<String> _fileReferenceIds = _package.guard(
+    _package.mainPart,
+    () {
+      final XmlPullReader r = XmlPullReader.fromBytes(
+        _package.package.originalBytes(_package.mainPart),
+        maxDepth: _package.limits.maxDepth,
+      );
+      final Set<String> ids = <String>{};
+      while (r.next()) {
+        if (r.eventType != XmlEventType.startElement ||
+            r.namespaceUri != Ns.w ||
+            (r.localName != 'headerReference' &&
+                r.localName != 'footerReference')) {
+          continue;
+        }
+        for (final KeptAttribute a in keepAttributes(r)) {
+          if (a.namespaceUri == Ns.rel && a.qualifiedName.endsWith(':id')) {
+            ids.add(a.value);
+          }
+        }
+      }
+      return ids;
+    },
+  );
+
   /// Finds the new stories a section of the document refers to and names
   /// their parts, without touching the package, so that a save that stops at
   /// a check creates nothing.
@@ -540,22 +571,11 @@ final class DocxDocument {
   }
 
   /// Creates the parts [_nameNewStories] named, so that the main part, which
-  /// the package writes after this, knows the ids. A new relationship takes no
-  /// id a reference names, or that reference, which names nothing, would name
-  /// the new part.
+  /// the package writes after this, knows the ids.
   void _createNewStories() {
     if (_storiesToCreate.isEmpty) return;
-    final Set<String> named = <String>{
-      for (final DocxSection section in sections)
-        for (final bool isHeader in const <bool>[true, false])
-          for (final SectionReference ref in sectionReferencesOf(
-            section,
-            isHeader: isHeader,
-          ))
-            ref.relId,
-    };
     for (final _Story story in _storiesToCreate) {
-      story.create(named);
+      story.create(_fileReferenceIds);
       _stories[story.part!.partName] = story;
     }
     _storiesToCreate = const <_Story>[];

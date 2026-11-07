@@ -221,10 +221,12 @@ void _writePart(StoryWriter story, DocumentPart part) {
       !sectPr.writesNothing) {
     w.start('${story.wordPrefix}body');
     writeKeptAttributes(w, part.bodyAttributes, declaredAbove: scope);
+    story.scope = scopeInside(part.bodyAttributes, scope);
     story.writeBlocks(part.blocks, 'body');
     if (!sectPr.writesNothing) {
       story.writePropertySet(sectPr, 'sectPr');
     }
+    story.scope = scope;
     w.end();
   }
   for (final OpaqueXml x in part.afterBody) {
