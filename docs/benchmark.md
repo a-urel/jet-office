@@ -13,7 +13,10 @@ reader's default limits let through ("Worst case" below). A fourth,
 on every cell of the read workload ("Format figures" below). A fifth,
 `benchmark/xlsx_model_benchmark_test.dart`, opens that file with
 `XlsxWorkbook`, loads the sheet, reads every row, sets one cell and saves,
-and measures the store of a formula-dense sheet ("Model figures" below).
+and measures the store of a formula-dense sheet ("Model figures" below). A
+sixth, `benchmark/docx_benchmark_test.dart`, builds a 10,000 x 12 table of
+text with `addTable` and `addRow`, saves it, opens it and reads every cell
+("DOCX table figures" below).
 
 The figures below are records, not thresholds (spec section 5): nothing fails
 when a later run is slower, and they are not a promise.
@@ -38,6 +41,8 @@ dart test benchmark/xlsx_format_benchmark_test.dart
 dart test -p chrome benchmark/xlsx_format_benchmark_test.dart
 dart test benchmark/xlsx_model_benchmark_test.dart
 dart test -p chrome benchmark/xlsx_model_benchmark_test.dart
+dart test benchmark/docx_benchmark_test.dart
+dart test -p chrome benchmark/docx_benchmark_test.dart
 ```
 
 The quality gate does not run it. `dart_test.yaml` starts Chrome with
@@ -704,3 +709,64 @@ chrome | phase | open, set one cell, save | 5558.9 ms
   estimate counts constants per map entry, not the heap, so it may be off
   by some tens of percent. Styled empty cells or kept attributes still cost
   an entry each; that case is not measured.
+
+## DOCX table figures
+
+`benchmark/docx_benchmark_test.dart` builds one table of 10,000 data rows and
+a header row, 12 columns of text (one to eight words of 2 to 9 characters
+each, with some `&`, `<` and `Ç`, and about one cell in 25 empty), with
+`DocxBody.addTable` and `DocxTable.addRow`. It then saves, opens the bytes
+with `DocxDocument.open`, loads the body, and reads the `text` of each of the
+120,012 cells (3,100,901 characters). Each phase runs once, not as a median:
+the work is deterministic and none of it takes more than 1.3 s. Memory is the
+process memory (VM: `ProcessInfo.currentRss`; Chrome: used JS heap) read
+before and after a phase, so the difference includes garbage not yet freed
+and is an upper bound on what a phase keeps. The test asserts the row and
+cell counts and the text of two cells, and fails on no time.
+
+- Date: 2026-11-07.
+- Machine: Mac15,7, Apple M3 Pro, 36 GiB RAM.
+- OS: macOS 27.2.
+- Dart SDK 3.13.7 (stable); the VM runs the JIT, Chrome runs dart2js output.
+
+| Phase | VM (ms) | VM RSS after (bytes) | Chrome (ms) | Chrome heap after (bytes) |
+|---|---|---|---|---|
+| Build (10,001 rows) | 221.6 | 389,349,376 | 213.1 | 126,557,357 |
+| Save | 491.8 | 456,998,912 | 709.2 | 204,614,948 |
+| Open and load the body | 878.1 | 694,960,128 | 1279.6 | 424,156,053 |
+| Read every cell | 43.9 | 699,416,576 | 39.0 | 448,241,037 |
+
+The file is 204,824 bytes on the VM and 210,119 in Chrome (the deflate
+streams differ, decision
+[`0006`](decisions/0006-zip-bytes-may-differ-by-platform.md)). The RSS before
+the build was 193,708,032 bytes; the heap before it was 39,704,552.
+
+Every line:
+
+```text
+vm | phase | build (10000 rows) | 221.6 ms | RSS before 193708032 | after 389349376 | peak RSS 389349376 (was 193708032)
+vm | phase | save | 491.8 ms | RSS before 389480448 | after 456998912 | peak RSS 456998912 (was 389480448)
+vm | file | 204824 bytes
+vm | phase | open (and load the body) | 878.1 ms | RSS before 456998912 | after 694960128 | peak RSS 695156736 (was 456998912)
+vm | phase | read every cell | 43.9 ms | RSS before 694960128 | after 699416576 | peak RSS 699416576 (was 695156736)
+vm | cells | 120012 | 3100901 characters
+chrome | phase | build (10000 rows) | 213.1 ms | peak JS heap before 39704552 | after 126557357 | peak JS heap 126557373 (was 39706048)
+chrome | phase | save | 709.2 ms | peak JS heap before 126576082 | after 204614948 | peak JS heap 204614964 (was 126576098)
+chrome | file | 210119 bytes
+chrome | phase | open (and load the body) | 1279.6 ms | peak JS heap before 204621480 | after 424156053 | peak JS heap 424156069 (was 204622068)
+chrome | phase | read every cell | 39.0 ms | peak JS heap before 424159833 | after 448241037 | peak JS heap 448241053 (was 424159849)
+chrome | cells | 120012 | 3100901 characters
+```
+
+### Reading the figures
+
+- **No phase is quadratic.** Building 10,001 rows takes about 22 microseconds
+  a row on the VM, and a whole build, save, open and read is under 2 s on both
+  platforms. `addRow` does no per-row work that grows with the table.
+- **Opening costs the most, in time and memory.** The open adds about 240 MB
+  of RSS on the VM for 120,012 cells, about 2 KB a cell (the figure includes
+  the part's XML and garbage not yet freed; the benchmark does not split
+  them). A table of hundreds of thousands of rows would need that times ten.
+- The memory figures include garbage the collector has not yet freed (the
+  VM's RSS never falls); the VM and Chrome figures measure different things
+  and must not be compared (see "First figures").
