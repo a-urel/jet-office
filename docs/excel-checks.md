@@ -1177,6 +1177,191 @@ and two of the owner's own files, with no repair prompt on any. Excel hides
 the numbers of column H, so the `showValue` left out of `x14:dataBar` does no
 harm there.
 
+## W4
+
+Objects in the model: rich text, notes, pictures and tables, read, added,
+moved, restyled, resized and removed. Open each file in Excel for Mac and
+record the result under "Results". A repair prompt is a model bug. Run this
+first:
+
+```bash
+dart run tool/write_fixtures.dart build/fixtures
+dart run tool/edit_model.dart build/fixtures build/model-edited
+```
+
+`edit_model` also writes the four generated workbooks, `w4_generated.xlsx`
+among them, to `build/model-edited/` (`dart run tool/write_model_sample.dart
+build/model_generated` writes the same four).
+
+### The edited fixtures
+
+Open every `m1_*` to `m5_*` file of `build/model-edited/` (not the
+`w*_generated` ones). No repair prompt. Everything W3 checked is still there
+(the link in D, the drop-down in G, the yellow rule in H, the data bar in I,
+the page setup, the footer, the filter, `Model_edit`, the title). On the first
+sheet, in the same new row:
+
+- J shows `Rich text`; in the formula bar `Rich ` is bold and `text` is not;
+- K has a note (a red triangle in the corner). Hovering shows `A note set by
+  the model.`, and its author, as Review > Edit Note shows it, is
+  `jet_office`;
+- L holds a very small picture (4 by 2 pixels, a gradient: a dot of
+  colour). Home > Find & Select > Selection Pane lists `Model picture`;
+- the two rows below the new row hold a table `Model_table` over A and B:
+  `Item` and `Count` in the header row, one empty data row, filter buttons,
+  the default style (blue, banded rows). Formulas > Name Manager lists
+  `Model_table` (`Model_table2` in a workbook that already had that name),
+  and Table Design shows the same name. In `m5_list_table` and
+  `m4_tables` the tables the file had are as before, beside it.
+
+Fixtures that already had objects show everything they had, beside the new
+ones: `m4_notes` (hover each note; the ones the fixture shows all the time
+are still shown), `m4_images` (every picture where it was, same size),
+`m4_tables` and `m4_objects` (the tables with their styles and totals, the
+notes and pictures).
+
+Everything else looks as the fixture of that name does.
+
+### The generated workbook
+
+Open `build/model-edited/w4_generated.xlsx`. No repair prompt. Two sheets:
+`Objects` and `Removed`.
+
+On `Objects`:
+
+- A1 reads `Bold, plain and red italic`: `Bold` in bold, `, plain and ` plain,
+  `red italic` in dark red italic.
+- Notes: B3 (`Hidden note`) and C3 (`Visible note`) each have a red triangle.
+  Only the note of C3 is shown all the time, in a box beside the cell (`Always
+  shown, beside C3.`). The note of B3 shows only on hover: a bold line
+  `jet_office:` and then `shown only when the pointer rests on B3.`. Review >
+  Show All Comments shows both. Each note's author is `jet_office`.
+- Pictures (Home > Find & Select > Selection Pane lists them by name):
+  `PNG one-cell` at E5, 120 by 60 pixels, a stretched gradient; `PNG two-cell`
+  filling H5:J8; `JPEG one-cell` at E11, 60 by 100 pixels; `JPEG two-cell`
+  filling H11:J15; the two PNGs show the same image, and so do the two JPEGs.
+  Format Picture > Alt Text of each reads its description.
+- The picture `Moved picture` at L5 was added 40 by 20 pixels and then moved to
+  200 by 100 pixels with `movePicture`. Excel must show it 200 by 100 pixels
+  (Format Picture > Size: about 5.29 cm wide and 2.65 cm high, the aspect
+  locked), not 40 by 20. The library leaves the `a:xfrm` inside the picture at
+  its old 40 by 20 and expects Excel to take the size from the anchor; record
+  what Excel does, and note it even when it is right. A small size here is a
+  model bug.
+- A16 reads `Table with a totals row (Sales, A17:B21)`. The table `Sales` fills
+  A17:B21: header `Product` and `Amount`, rows `Apples` 120, `Pears` 80,
+  `Plums` 45, and a totals row `Total` and 245. B21's formula bar reads
+  `=SUBTOTAL(109,Sales[Amount])` and Excel calculates 245 on opening. Blue
+  banded rows, filter buttons on the header row. Table Design shows Header Row
+  and Total Row ticked.
+- D16 reads `Table without a style (Plain, D17:E19)`. The table `Plain` fills
+  D17:E19: header `Item` and `Count`, rows `Screws` 12 and `Nails` 30. It has
+  filter buttons and no style: no fill, no banding. Table Design shows Table
+  Style: None.
+- Table Design > Table Name reads `Sales` and `Plain` for the two tables, and
+  Review > Show All Comments finds no third note.
+
+On `Removed`: A1 reads `A table and a picture were added here, then removed.`
+Nothing else is on the sheet: no picture (the Selection Pane is empty), no
+table (A5:B7 is no table), no note. The header texts the table wrote, `First`
+in A5 and `Second` in B5, stay as plain cells. Opening it gives no repair
+prompt, which is what the removal of the last picture and the last table must
+not break.
+
+### Two of the owner's own files
+
+Take two Excel files the owner made, different from each other. One must
+hold a chart or a shape (a text box, an arrow) on its first sheet, ideally
+beside a picture. The other must hold notes, or a table, on its first sheet,
+ideally a threaded comment (a "Comment" of Excel 365, with replies) as well as
+an old-style note. For each: open it in Excel and note what it holds (the
+chart's series and position, the shapes, the notes and which are shown, the
+threads, the tables and their styles), then add objects with the model. Save
+this as `tool/add_objects_one_file.dart` (do not commit it) and run
+`dart run tool/add_objects_one_file.dart my.xlsx build/objects.xlsx
+build/objects_removed.xlsx picture.png` with any PNG or JPEG of the owner's
+choice:
+
+```dart
+import 'dart:io';
+
+import 'package:jet_office/jet_office.dart';
+
+void main(List<String> args) {
+  final XlsxWorkbook book = XlsxWorkbook.open(File(args[0]).readAsBytesSync());
+  final XlsxSheet sheet = book.sheets.first;
+  // A free row below everything the sheet lists; columns A to E.
+  final int row = sheet.rows.isEmpty ? 0 : sheet.rows.last.index + 2;
+  sheet
+    ..setCell(
+      row,
+      0,
+      XlsxRichText(<XlsxTextRun>[
+        const XlsxTextRun('Rich ', font: XlsxFont(bold: true)),
+        const XlsxTextRun('text'),
+      ]),
+    )
+    ..setNote(row, 1, XlsxNote.plain('Added by the model.', author: 'jet_office'))
+    ..addPicture(
+      XlsxPicture(
+        OfficeImage(File(args[3]).readAsBytesSync()),
+        XlsxOneCellAnchor(XlsxAnchorPoint(row, 3), width: 60, height: 40),
+        name: 'Owner picture',
+      ),
+    )
+    ..addTable(
+      XlsxTable('Owner_table', XlsxRange(row + 4, 0, row + 6, 1), <
+        XlsxTableColumn
+      >[const XlsxTableColumn('First'), const XlsxTableColumn('Second')]),
+    );
+  // Grow the picture: Excel must show 240 by 160 pixels.
+  sheet.movePicture(
+    sheet.pictures.length - 1,
+    XlsxOneCellAnchor(XlsxAnchorPoint(row, 3), width: 240, height: 160),
+  );
+  File(args[1]).writeAsBytesSync(book.save().bytes);
+  // Remove the picture and the table again, from a reopened copy.
+  final XlsxWorkbook again = XlsxWorkbook.open(File(args[1]).readAsBytesSync());
+  again.sheets.first
+    ..removePicture(again.sheets.first.pictures.length - 1)
+    ..removeTable('Owner_table');
+  File(args[2]).writeAsBytesSync(again.save().bytes);
+}
+```
+
+A sheet where `Owner_table` is taken, or the first sheet is a chart sheet,
+needs another name or sheet; a `StateError` or `ArgumentError` says which. If
+`removeTable` throws, a formula or name of the file uses the table's name (it
+cannot, here: the name is new), so report it.
+
+Open `build/objects.xlsx` in Excel. Check:
+
+- no repair prompt;
+- below the last row: `Rich text` with `Rich ` bold; a note in the cell right
+  of it (hover: `Added by the model.`); the table `Owner_table` with `First`
+  and `Second`; the picture at D of that row, 240 by 160 pixels (after
+  `movePicture`; if it shows 60 by 40, record it);
+- everything the original had is as it was: the chart (same series, same
+  place and size, same title and colours), every shape and text box, each
+  picture the file had, every note (hover; the ones that were always shown
+  still are), every threaded comment with its replies (the thread still opens
+  as a thread and a reply can be added: the model leaves it alone, and its
+  placeholder note `[Threaded comment]` is not shown as a plain note), and
+  every table with its style, filter and totals;
+- Page Layout and Name Manager are as before, and no table or name of the
+  original is renamed.
+
+Open `build/objects_removed.xlsx`. Check: no repair prompt; the file is as the
+original with the rich text and the note added, and neither the picture nor
+`Owner_table` (its header and data cells are plain cells now); the chart and
+the shapes the drawing also holds are still there, unmoved.
+
+Result: ok, 2026-11-07 (see "Results"). The edited fixtures, `w4_generated` and
+two of the owner's own files, with no repair prompt on any. Excel takes a moved
+picture's size from the anchor, so the old `a:xfrm` does no harm. The owner's
+files kept what they had: a chart, a text box, an arrow and a picture in one,
+a note and a threaded comment with replies in the other.
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
@@ -1484,3 +1669,7 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `w3_generated` | ok | No repair prompt; `Report`, `Locked` and the properties as the W3 list says. Column H shows the bars only: the numbers are hidden. |
 | 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `w1_test.xlsx`, link in M1, list on N1:N5, rule on O1:O5, name `Owner_edit`, page setup | ok | No repair prompt. The additions and the file's own content as the W3 list says. |
 | 2026-11-06 | Microsoft 365, Excel for Mac 16.114.1 | W3: `excel_products.xlsx`, link in M1, list on N1:N5, rule on O1:O5, name `Owner_edit`, page setup | ok | No repair prompt. The additions and the file's own content as the W3 list says. |
+| 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `build/model-edited/*.xlsx`, at least `m4_notes`, `m4_images`, `m4_tables` and `m4_objects` | ok | No repair prompt; each as the W4 list says. The owner reported the whole list as ok in one line. |
+| 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `w4_generated` | ok | No repair prompt; `Objects` and `Removed` as the W4 list says. `Moved picture` shows 200 by 100 pixels, as the list requires. |
+| 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `Kitap1.xlsx` (chart, text box, arrow, picture), objects added, then picture and table removed | ok | No repair prompt on either file. The additions and the file's own content as the W4 list says. The Open XML SDK's two errors in `chart1.xml` are in Excel's own file too; the part is unchanged. |
+| 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `Kitap2.xlsx` (note, threaded comment with replies), objects added, then picture and table removed | ok | No repair prompt on either file. The additions and the file's own content as the W4 list says. |

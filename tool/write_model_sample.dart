@@ -1,4 +1,4 @@
-/// Writes the workbooks the owner opens in the W1, W2 and W3 Excel checks:
+/// Writes the workbooks the owner opens in the W1, W2, W3 and W4 Excel checks:
 /// each made from nothing with `XlsxWorkbook`.
 ///
 /// ```bash
@@ -6,7 +6,8 @@
 /// ```
 ///
 /// The files are `<dir>/w1_generated.xlsx`, `<dir>/w2_generated.xlsx` and
-/// `<dir>/w3_generated.xlsx` (the directory is created).
+/// `<dir>/w3_generated.xlsx` and `<dir>/w4_generated.xlsx` (the directory is
+/// created).
 ///
 /// The sheet `Values` of `w1_generated.xlsx` holds, in row 1, text, an
 /// integer, a double, an `XlsxDecimal`, a boolean, a date, a date and time
@@ -23,11 +24,19 @@
 ///
 /// The sheet `Report` of `w3_generated.xlsx` has a header, a filter, a list
 /// validation, a cell-value rule, a colour scale, a data bar and an icon set,
-/// a data bar with `showValue` off in a column of its own, a link to a web page and one to the sheet `Locked`, a print area and
-/// print titles, a landscape fit-to-width page setup, a header and a footer,
-/// and a formula that uses the workbook name `TaxRate`. `Locked` is protected
-/// with the password `secret`. The workbook has properties, one of them
-/// custom. `docs/excel-checks.md`, "W3", says what Excel shows.
+/// a data bar with `showValue` off in a column of its own, a link to a web
+/// page and one to the sheet `Locked`, a print area and print titles, a
+/// landscape fit-to-width page setup, a header and a footer, and a formula
+/// that uses the workbook name `TaxRate`. `Locked` is protected with the
+/// password `secret`. The workbook has properties, one of them custom.
+/// `docs/excel-checks.md`, "W3", says what Excel shows.
+///
+/// The sheet `Objects` of `w4_generated.xlsx` has a rich text cell, a hidden
+/// and a visible note, a PNG and a JPEG each as a one-cell and a two-cell
+/// picture (the PNG twice, for one media part), a PNG added small and moved to
+/// a larger size, a table with a totals row and a second table without a
+/// style. The sheet `Removed` had a table and a picture added and removed
+/// again. `docs/excel-checks.md`, "W4", says what Excel shows.
 ///
 /// Not ported from Quds; written for jet_office.
 library;
@@ -35,6 +44,8 @@ library;
 import 'dart:io';
 
 import 'package:jet_office/jet_office.dart';
+
+import '../test/fixtures/m4_fixtures.dart' show jpeg3x5, png4x2;
 
 void main(List<String> args) {
   if (args.length != 1) {
@@ -45,12 +56,13 @@ void main(List<String> args) {
   writeModelSample(args.single).forEach(stdout.writeln);
 }
 
-/// Writes `w1_generated.xlsx`, `w2_generated.xlsx` and `w3_generated.xlsx`
-/// to [dir] and returns their paths, in that order.
+/// Writes `w1_generated.xlsx`, `w2_generated.xlsx`, `w3_generated.xlsx` and
+/// `w4_generated.xlsx` to [dir] and returns their paths, in that order.
 List<String> writeModelSample(String dir) => <String>[
   _writeBook('$dir/w1_generated.xlsx', _valuesBook()),
   _writeBook('$dir/w2_generated.xlsx', _reportBook()),
   _writeBook('$dir/w3_generated.xlsx', _featuresBook()),
+  _writeBook('$dir/w4_generated.xlsx', _objectsBook()),
 ];
 
 /// Saves [book] to [path], making its directory, and returns [path].
@@ -290,5 +302,146 @@ XlsxWorkbook _featuresBook() {
     creator: 'jet_office',
     custom: <String, Object>{'Project': 'Atlas', 'Reviewed': true},
   );
+  return book;
+}
+
+/// The workbook of the W4 check: rich text, notes, pictures and tables.
+XlsxWorkbook _objectsBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  final XlsxSheet objects = book.addSheet('Objects');
+  final XlsxSheet removed = book.addSheet('Removed');
+  final OfficeImage png = OfficeImage(png4x2);
+  final OfficeImage jpeg = OfficeImage(jpeg3x5);
+
+  objects
+    ..setColumn(0, const XlsxColumn(width: 28))
+    ..setCell(
+      0,
+      0,
+      XlsxRichText(<XlsxTextRun>[
+        const XlsxTextRun('Bold', font: XlsxFont(bold: true)),
+        const XlsxTextRun(', plain and '),
+        const XlsxTextRun(
+          'red italic',
+          font: XlsxFont(italic: true, color: XlsxColor.rgb(0xC00000)),
+        ),
+      ]),
+    )
+    ..setCell(2, 0, 'Notes: hover B3; the note of C3 is always shown')
+    ..setCell(2, 1, 'Hidden note')
+    ..setCell(2, 2, 'Visible note')
+    ..setNote(
+      2,
+      1,
+      XlsxNote(
+        XlsxRichText(<XlsxTextRun>[
+          const XlsxTextRun('jet_office:\n', font: XlsxFont(bold: true)),
+          const XlsxTextRun('shown only when the pointer rests on B3.'),
+        ]),
+        author: 'jet_office',
+      ),
+    )
+    ..setNote(
+      2,
+      2,
+      XlsxNote.plain(
+        'Always shown, beside C3.',
+        author: 'jet_office',
+        visible: true,
+      ),
+    )
+    // The PNG twice, one-cell and two-cell, shares one media part.
+    ..addPicture(
+      XlsxPicture(
+        png,
+        const XlsxOneCellAnchor(XlsxAnchorPoint(4, 4), width: 120, height: 60),
+        name: 'PNG one-cell',
+        description: 'A 4 by 2 pixel gradient, 120 by 60 pixels',
+      ),
+    )
+    ..addPicture(
+      XlsxPicture(
+        png,
+        XlsxTwoCellAnchor.range(const XlsxRange(4, 7, 7, 9)),
+        name: 'PNG two-cell',
+        description: 'The same gradient, filling H5:J8',
+      ),
+    )
+    ..addPicture(
+      XlsxPicture(
+        jpeg,
+        const XlsxOneCellAnchor(XlsxAnchorPoint(10, 4), width: 60, height: 100),
+        name: 'JPEG one-cell',
+        description: 'A 3 by 5 pixel gradient, 60 by 100 pixels',
+      ),
+    )
+    ..addPicture(
+      XlsxPicture(
+        jpeg,
+        XlsxTwoCellAnchor.range(const XlsxRange(10, 7, 14, 9)),
+        name: 'JPEG two-cell',
+        description: 'The same gradient, filling H11:J15',
+      ),
+    )
+    // Added small, then moved: Excel must show the new size.
+    ..addPicture(
+      XlsxPicture(
+        png,
+        const XlsxOneCellAnchor(XlsxAnchorPoint(4, 11), width: 40, height: 20),
+        name: 'Moved picture',
+        description: 'Added 40 by 20 pixels, then moved to 200 by 100',
+      ),
+    )
+    ..movePicture(
+      4,
+      const XlsxOneCellAnchor(XlsxAnchorPoint(4, 11), width: 200, height: 100),
+    )
+    ..setCell(15, 0, 'Table with a totals row (Sales, A17:B21)')
+    ..addTable(
+      XlsxTable('Sales', const XlsxRange(16, 0, 20, 1), <XlsxTableColumn>[
+        const XlsxTableColumn('Product', totalsLabel: 'Total'),
+        const XlsxTableColumn('Amount', totalsFunction: XlsxTotalsFunction.sum),
+      ], totalsRow: true),
+    );
+  const List<(String, int)> sales = <(String, int)>[
+    ('Apples', 120),
+    ('Pears', 80),
+    ('Plums', 45),
+  ];
+  for (int i = 0; i < sales.length; i++) {
+    objects
+      ..setCell(17 + i, 0, sales[i].$1)
+      ..setCell(17 + i, 1, sales[i].$2);
+  }
+  objects
+    ..setCell(15, 3, 'Table without a style (Plain, D17:E19)')
+    ..addTable(
+      XlsxTable('Plain', const XlsxRange(16, 3, 18, 4), <XlsxTableColumn>[
+        const XlsxTableColumn('Item'),
+        const XlsxTableColumn('Count'),
+      ], style: null),
+    )
+    ..setCell(17, 3, 'Screws')
+    ..setCell(17, 4, 12)
+    ..setCell(18, 3, 'Nails')
+    ..setCell(18, 4, 30);
+
+  // A table and a picture are added and removed again: only cells remain.
+  removed
+    ..setCell(0, 0, 'A table and a picture were added here, then removed.')
+    ..addPicture(
+      XlsxPicture(
+        png,
+        const XlsxOneCellAnchor(XlsxAnchorPoint(2, 2), width: 80, height: 40),
+      ),
+    )
+    ..addTable(
+      XlsxTable('Gone', const XlsxRange(4, 0, 6, 1), <XlsxTableColumn>[
+        const XlsxTableColumn('First'),
+        const XlsxTableColumn('Second'),
+      ]),
+    )
+    ..removePicture(0)
+    ..removeTable('Gone');
   return book;
 }

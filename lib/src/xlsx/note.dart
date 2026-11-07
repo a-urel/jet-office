@@ -22,6 +22,7 @@ import 'cell_ref.dart';
 import 'font.dart';
 import 'limits.dart';
 import 'rich_text.dart';
+import 'warnings.dart';
 
 /// A note on a cell: the text Excel shows in a yellow box when the cell is
 /// hovered, or all the time when the note is [visible].
@@ -211,6 +212,31 @@ typedef WorksheetNote = ({
   bool visible,
 });
 
+/// [note] on the zero-based cell ([row], [column]) as a sheet holds it, its
+/// text cleaned with [cleanRichText]. [warn] hears
+/// `invalidCharactersRemoved` when characters were removed and
+/// `textTruncated` when the text was cut.
+///
+/// The note must have passed [checkNote].
+WorksheetNote cleanNote(
+  int row,
+  int column,
+  XlsxNote note,
+  void Function(XlsxWarningCode code) warn,
+) {
+  final ({XlsxRichText text, int removed, bool truncated}) clean =
+      cleanRichText(note.text);
+  if (clean.removed > 0) warn(XlsxWarningCode.invalidCharactersRemoved);
+  if (clean.truncated) warn(XlsxWarningCode.textTruncated);
+  return (
+    row: row,
+    column: column,
+    text: clean.text,
+    author: note.author,
+    visible: note.visible,
+  );
+}
+
 /// Writes the comments part of a sheet's [notes], XML declaration
 /// included, to [w].
 ///
@@ -239,22 +265,34 @@ void writeComments(XmlWriter w, List<WorksheetNote> notes) {
   w.end();
   w.start('commentList');
   for (final WorksheetNote note in notes) {
-    w.start('comment');
-    w.attribute('ref', cellRef(note.row, note.column));
-    w.attribute('authorId', '${authors[note.author]}');
-    w.start('text');
-    final List<XlsxTextRun> runs = note.text.runs;
-    if (runs.isEmpty) {
-      writeTextElement(w, '');
-    } else if (runs.length == 1 && runs.single.font == null) {
-      writeTextElement(w, runs.single.text);
-    } else {
-      writeTextRuns(w, note.text);
-    }
-    w.end();
-    w.end();
+    writeCommentEntry(w, note, authors[note.author]!);
   }
   w.end();
+  w.end();
+}
+
+/// Writes the `<comment>` of [note], whose author is entry [authorId] of
+/// the part's `authors`, to [w].
+void writeCommentEntry(XmlWriter w, WorksheetNote note, int authorId) {
+  w.start('comment');
+  w.attribute('ref', cellRef(note.row, note.column));
+  w.attribute('authorId', '$authorId');
+  writeCommentText(w, note.text);
+  w.end();
+}
+
+/// Writes the `<text>` of a `<comment>` holding [text] to [w], as
+/// [writeComments] says.
+void writeCommentText(XmlWriter w, XlsxRichText text) {
+  w.start('text');
+  final List<XlsxTextRun> runs = text.runs;
+  if (runs.isEmpty) {
+    writeTextElement(w, '');
+  } else if (runs.length == 1 && runs.single.font == null) {
+    writeTextElement(w, runs.single.text);
+  } else {
+    writeTextRuns(w, text);
+  }
   w.end();
 }
 
@@ -264,30 +302,54 @@ void writeComments(XmlWriter w, List<WorksheetNote> notes) {
 ///
 /// The sheet's id blocks are the [vmlBlockCount] blocks from [firstBlock]
 /// on, which `o:idmap` lists. Shape `i`
-/// (from 0) is `_x0000_s{1024 × firstBlock + i + 1}` with z-index `i + 1`.
-/// Its `x:Anchor` is [noteAnchor] of its cell, and `x:Row` and `x:Column`
-/// name the cell, zero-based. Every value written is a number or a
-/// constant, so nothing needs escaping.
+/// (from 0) is `_x0000_s{1024 × firstBlock + i + 1}` with z-index `i + 1`
+/// (see [vmlShape]). Every value written is a number or a constant, so
+/// nothing needs escaping.
 void writeVmlDrawing(XmlWriter w, List<WorksheetNote> notes, int firstBlock) {
   final int blocks = vmlBlockCount(notes.length);
   w.declaration();
   w.raw(
     '<xml xmlns:v="${Ns.vml}" xmlns:o="${Ns.vmlOffice}" '
     'xmlns:x="${Ns.vmlExcel}">'
-    '<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="'
-    '${<int>[for (int b = 0; b < blocks; b++) firstBlock + b].join(',')}'
-    '"/></o:shapelayout>'
-    '<v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" '
-    'path="m,l,21600r21600,l21600,xe"><v:stroke joinstyle="miter"/>'
-    '<v:path gradientshapeok="t" o:connecttype="rect"/></v:shapetype>',
+    '${vmlShapeLayout(<int>[for (int b = 0; b < blocks; b++) firstBlock + b])}'
+    '${vmlNoteShapeType()}',
   );
   for (int i = 0; i < notes.length; i++) {
-    final WorksheetNote note = notes[i];
-    final String visibility = note.visible ? 'visible' : 'hidden';
-    w.raw(
-      '<v:shape id="_x0000_s${vmlBlockSize * firstBlock + i + 1}" '
+    w.raw(vmlShape(vmlBlockSize * firstBlock + i + 1, i + 1, notes[i]));
+  }
+  w.raw('</xml>');
+}
+
+/// The `<o:shapelayout>` listing the id [blocks] in its `o:idmap`.
+/// [declarations] goes on its start tag, for a part whose root does not bind
+/// the prefixes.
+String vmlShapeLayout(List<int> blocks, {String declarations = ''}) =>
+    '<o:shapelayout$declarations v:ext="edit"><o:idmap v:ext="edit" data="'
+    '${blocks.join(',')}"/></o:shapelayout>';
+
+/// The `<v:shapetype>` a note's box names. [declarations] goes on its start
+/// tag, as for [vmlShapeLayout].
+String vmlNoteShapeType({String declarations = ''}) =>
+    '<v:shapetype$declarations id="_x0000_t202" coordsize="21600,21600" '
+    'o:spt="202" path="m,l,21600r21600,l21600,xe">'
+    '<v:stroke joinstyle="miter"/>'
+    '<v:path gradientshapeok="t" o:connecttype="rect"/></v:shapetype>';
+
+/// The `<v:shape>` of the box of [note], with the id `_x0000_s{id}` and
+/// [zIndex]: hidden unless the note is visible. Its `x:Anchor` is
+/// [noteAnchor] of its cell, and `x:Row` and `x:Column` name the cell,
+/// zero-based. [declarations] goes on its start tag, as for
+/// [vmlShapeLayout].
+String vmlShape(
+  int id,
+  int zIndex,
+  WorksheetNote note, {
+  String declarations = '',
+}) {
+  final String visibility = note.visible ? 'visible' : 'hidden';
+  return '<v:shape$declarations id="_x0000_s$id" '
       'type="#_x0000_t202" style="position:absolute;margin-left:59.25pt;'
-      'margin-top:1.5pt;width:108pt;height:59.25pt;z-index:${i + 1};'
+      'margin-top:1.5pt;width:108pt;height:59.25pt;z-index:$zIndex;'
       'visibility:$visibility" fillcolor="#ffffe1" o:insetmode="auto">'
       '<v:fill color2="#ffffe1"/>'
       '<v:shadow on="t" color="black" obscured="t"/>'
@@ -298,8 +360,5 @@ void writeVmlDrawing(XmlWriter w, List<WorksheetNote> notes, int firstBlock) {
       '<x:Anchor>${noteAnchor(note.row, note.column)}</x:Anchor>'
       '<x:AutoFill>False</x:AutoFill><x:Row>${note.row}</x:Row>'
       '<x:Column>${note.column}</x:Column>'
-      '${note.visible ? '<x:Visible/>' : ''}</x:ClientData></v:shape>',
-    );
-  }
-  w.raw('</xml>');
+      '${note.visible ? '<x:Visible/>' : ''}</x:ClientData></v:shape>';
 }

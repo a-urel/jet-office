@@ -801,29 +801,13 @@ final class WorksheetWriter implements XlsxSheetWriter {
         'Cell $ref on sheet "$name" already has a note; a cell takes one.',
       );
     }
-    final ({XlsxRichText text, int removed, bool truncated}) clean =
-        cleanRichText(note.text);
     // Only after every check: a note that throws leaves no warning.
-    if (clean.removed > 0) {
-      context.warnings.add(
-        XlsxWarningCode.invalidCharactersRemoved,
-        sheet: name,
-        cell: ref,
-      );
-    }
-    if (clean.truncated) {
-      context.warnings.add(
-        XlsxWarningCode.textTruncated,
-        sheet: name,
-        cell: ref,
-      );
-    }
-    _notes[key] = (
-      row: row,
-      column: column,
-      text: clean.text,
-      author: note.author,
-      visible: note.visible,
+    _notes[key] = cleanNote(
+      row,
+      column,
+      note,
+      (XlsxWarningCode code) =>
+          context.warnings.add(code, sheet: name, cell: ref),
     );
   }
 
@@ -839,35 +823,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
     checkTable(table);
     context.checkNameFree(table.name, 'name');
     final XlsxRange range = table.range;
-    for (final ({int id, XlsxTable table}) t in _tables) {
-      if (t.table.range.overlaps(range)) {
-        throw ArgumentError.value(
-          range,
-          'range',
-          'The table "${table.name}" over ${range.ref} overlaps the table '
-              '"${t.table.name}" over ${t.table.range.ref}.',
-        );
-      }
-    }
-    final XlsxRange? filter = _autoFilter;
-    if (filter != null && filter.overlaps(range)) {
-      throw ArgumentError.value(
-        range,
-        'range',
-        'The table "${table.name}" over ${range.ref} overlaps the auto filter '
-            '${filter.ref}; a table has its own.',
-      );
-    }
-    for (final XlsxRange merge in _merges) {
-      if (merge.overlaps(range)) {
-        throw ArgumentError.value(
-          range,
-          'range',
-          'The table "${table.name}" over ${range.ref} overlaps the merged '
-              'range ${merge.ref}.',
-        );
-      }
-    }
+    checkTablePlace(table.name, range, _tableRanges, _autoFilter, _merges);
     if (table.headerRow && range.firstRow < _rowCount) {
       throw ArgumentError.value(
         range,

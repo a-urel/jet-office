@@ -24,10 +24,14 @@ library;
 
 import 'package:jet_core/jet_core.dart' show FormatKind;
 
+import '../../common/image.dart'
+    show OfficeImage, OfficeImageFormat, checkImage;
+import '../../drawingml/media.dart';
+import '../../drawingml/picture.dart' show DrawingPic, emuPerPixel;
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
-import '../../opc/package.dart' show OpcRelationship;
+import '../../opc/package.dart' show OpcPackage, OpcRelationship;
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_number.dart';
 import '../../xml/xml_pull_reader.dart';
@@ -42,11 +46,20 @@ import '../conditional_format_x14.dart'
 import '../data_validation.dart';
 import '../date_serial.dart';
 import '../defined_name.dart';
+import '../drawing.dart'
+    show
+        WorksheetPicture,
+        XlsxAnchor,
+        XlsxOneCellAnchor,
+        XlsxPicture,
+        checkAnchor,
+        checkPicture;
 import '../formula_text.dart' show quotedSheetRef;
 import '../header_footer.dart';
 import '../hyperlink.dart';
 import '../limits.dart';
 import '../merge_check.dart';
+import '../note.dart';
 import '../number_format.dart';
 import '../page_setup.dart';
 import '../range.dart';
@@ -59,11 +72,13 @@ import '../read/read_exception.dart';
 import '../read/styles_reader.dart';
 import '../rich_text.dart';
 import '../row_format.dart';
+import '../shared_strings.dart';
 import '../sheet_name.dart' show sheetNameKey;
 import '../sheet_protection.dart';
 import '../sheet_view.dart';
 import '../sheet_writer.dart' show checkPrintAreaRanges, checkPrintTitles;
 import '../style.dart';
+import '../table.dart';
 import '../values.dart';
 import '../warnings.dart';
 import '../workbook_parts.dart' show printAreaFormula, printTitlesFormula;
@@ -72,16 +87,23 @@ import '../worksheet_parts.dart'
         checkColumnWidth,
         checkOutlineLevel,
         checkRowHeight,
+        commentsPartName,
+        drawingPartName,
+        mediaPartName,
         paneAttributes,
         sheetViewAttributes,
         standardColumnWidth,
         standardRowHeight,
+        tablePartName,
+        vmlDrawingPartName,
         writeHyperlink;
 import 'cell_store.dart';
 import 'columns.dart';
+import 'comments_part.dart';
 import 'conditional_elements.dart';
 import 'conditional_x14.dart';
 import 'defined_names.dart';
+import 'drawing_part.dart';
 import 'element_node.dart';
 import 'item_group.dart' show GroupItem, ItemGroup, readerOf, renderElements;
 import 'page_elements.dart';
@@ -91,6 +113,7 @@ import 'style_elements.dart' show ReadStyleValue, readColor;
 import 'styles_part.dart';
 import 'table_part.dart';
 import 'validation_elements.dart';
+import 'vml_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
 
@@ -98,8 +121,11 @@ part 'xlsx_sheet_layout.dart';
 part 'xlsx_sheet_links.dart';
 part 'xlsx_sheet_merges.dart';
 part 'xlsx_sheet_names.dart';
+part 'xlsx_sheet_notes.dart';
+part 'xlsx_sheet_pictures.dart';
 part 'xlsx_sheet_print.dart';
 part 'xlsx_sheet_rules.dart';
+part 'xlsx_sheet_tables.dart';
 part 'xlsx_sheet_views.dart';
 
 /// What a sheet needs from its workbook.
@@ -120,11 +146,45 @@ abstract interface class SheetHost {
   int sheetIndexOf(XlsxSheet sheet);
 
   /// Throws an [ArgumentError] named `name` when a table of any sheet has
-  /// [name], ignoring case.
+  /// [name], ignoring case, or a table part of the file that no sheet types
+  /// does (in its `name` or its `displayName`).
   void checkNotTableName(String name);
+
+  /// Throws an [ArgumentError] named `name` as [checkNotTableName] does, and
+  /// when a defined name of any scope has [name], ignoring case. Sheets are
+  /// not loaded.
+  void checkTableNameFree(String name);
+
+  /// The `id` of a new table: one above the highest of the table parts the
+  /// package holds, those of unloaded sheets and those no sheet types
+  /// included. It looks at what the package holds now, so it takes nothing
+  /// from a failed edit or an undone one.
+  int takeTableId();
+
+  /// Takes the table part [name] out of what the file's table parts say, in
+  /// a recorded change, as the part leaves: the name it held is free, and a
+  /// later part that takes its name is another table. Must run inside
+  /// `log.transaction`, before the part leaves.
+  void forgetTablePart(String name);
+
+  /// Where a formula first uses [table] as `name[`, ignoring case and not
+  /// after a character of a name: a cell of a sheet, in tab order, then a
+  /// column formula of another table, then a defined name; `null` when none
+  /// does. Loads every sheet. Throws an [XlsxReadException] when one cannot
+  /// be read.
+  String? firstTableUse(TablePart table);
 
   /// The opened package, for reading parts.
   PackageReader get reader;
+
+  /// An id block for VML shapes that no `.vml` part of the package uses:
+  /// the parts are scanned once, then the blocks are counted up, so a block
+  /// is never given twice. Throws an [XlsxReadException] when a `.vml` part
+  /// cannot be read.
+  int takeVmlBlock();
+
+  /// The images of the package's media parts, one `Uint8List` per part.
+  DrawingMediaIndex get mediaIndex;
 
   /// Loads the shared strings and styles, once, and returns the encoder that
   /// prepares and writes cells. Throws an [XlsxReadException] when either
@@ -146,6 +206,10 @@ abstract interface class SheetHost {
   /// The shared strings by index, for decoding, or `null` when the workbook
   /// has none; [loadTables] must have run.
   List<String>? get sharedStringTexts;
+
+  /// The shared-string table with its kept items, or `null` when the
+  /// workbook has none; [loadTables] must have run.
+  SharedStrings? get sharedStrings;
 
   /// The style index for a date set on a cell of [style] in General: the
   /// writer's date-time format (id 22) with [withTime], else its short-date
@@ -179,6 +243,59 @@ Iterable<String> sheetTableNames(XlsxSheet sheet) => sheet._partName == null
           t.table.displayName,
       ];
 
+/// The `id`s of [sheet]'s tables; none for a sheet without a part. Reads the
+/// table parts on first use.
+Iterable<int> sheetTableIds(XlsxSheet sheet) => sheet._partName == null
+    ? const <int>[]
+    : <int>[
+        for (final ({String partName, TablePart table}) t
+            in sheet._sheetTables())
+          t.table.id,
+      ];
+
+/// The first column formula of a table of [sheet] other than [except] that
+/// [reference] matches in its [sheetNameKey]: `the column "C" of the table
+/// "T"`, or `null` for none.
+String? firstColumnFormulaMatching(
+  XlsxSheet sheet,
+  Pattern reference,
+  TablePart except,
+) {
+  if (sheet._partName == null) return null;
+  for (final ({String partName, TablePart table}) t in sheet._sheetTables()) {
+    if (identical(t.table, except)) continue;
+    for (final ({String column, String formula}) f in t.table.columnFormulas) {
+      if (sheetNameKey(f.formula).contains(reference)) {
+        return 'the column "${f.column}" of the table '
+            '"${t.table.displayName}"';
+      }
+    }
+  }
+  return null;
+}
+
+/// The first cell of [sheet], in row order, whose formula text [reference]
+/// matches in its [sheetNameKey]: `cell B2 of the sheet "S"`, or `null` for
+/// none. A shared formula's follower has no text; its master holds it. Loads
+/// the sheet.
+String? firstFormulaMatching(XlsxSheet sheet, Pattern reference) {
+  final CellStore? store = sheet._load()?.cells;
+  if (store == null || !store.hasFormulas) return null;
+  for (final int row in store.rowIndexes) {
+    String? found;
+    store.forEachInRow(row, (int column, RawCell cell) {
+      final String? text = cell.formula?.text;
+      if (found == null &&
+          text != null &&
+          sheetNameKey(text).contains(reference)) {
+        found = 'cell ${cellRef(row, column)} of the sheet "${sheet.name}"';
+      }
+    });
+    if (found != null) return found;
+  }
+  return null;
+}
+
 /// The workbook part's entry of [sheet].
 SheetEntry entryOf(XlsxSheet sheet) => sheet._entry;
 
@@ -195,6 +312,10 @@ CellStore? cellStoreOf(XlsxSheet sheet) => sheet._part?.cells;
 /// tests: a cell read without a problem is not remembered.
 int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
 
+/// A note of a sheet with the cell it is on: the zero-based `row` and
+/// `column`, and the `note`.
+typedef XlsxCellNote = ({int row, int column, XlsxNote note});
+
 /// One sheet of a workbook, opened or created.
 ///
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
@@ -205,8 +326,11 @@ final class XlsxSheet
         _SheetLinks,
         _SheetMerges,
         _SheetNames,
+        _SheetNotes,
+        _SheetPictures,
         _SheetPrint,
         _SheetRules,
+        _SheetTablesApi,
         _SheetViews {
   XlsxSheet._(this._host, this._entry, this._partName, this._part);
 
@@ -236,6 +360,11 @@ final class XlsxSheet
   /// The tables of the sheet the model can type, read on the first
   /// [setCell]; `null` until then.
   List<({String partName, TablePart table})>? _tables;
+
+  /// The names of the table parts the package writes from their typed parts,
+  /// for `attachStoredPart`.
+  @override
+  final Set<String> _attachedTables = <String>{};
 
   /// The sheet's name, as the workbook lists it.
   @override
@@ -397,28 +526,31 @@ final class XlsxSheet
   /// Excel does ([removeHyperlink] removes it). A table's header cell takes
   /// no link, as it takes only text. All of it is one change. A link equal
   /// to the cell's [hyperlinkAt] changes nothing, neither the element nor
-  /// the cell, and throws nothing for a link the writer would refuse; in an
-  /// [XlsxCell] it leaves the element, and the cell takes the style as above.
+  /// the cell, and throws nothing for a link the writer would refuse. In an
+  /// [XlsxCell] it leaves the element, and the cell takes the link's text in
+  /// place of its value and the style as above; an equal link of several
+  /// cells throws there as any link on such a cell does.
   ///
   /// A shared formula's follower may be set and leaves its group. Throws a
   /// [StateError] for a cell inside an array or data-table formula (Excel
   /// refuses that too), for a sheet that is not a worksheet or has no part,
   /// and for an [XlsxCell] or a link when the styles part is not a
   /// SpreadsheetML `styleSheet` and for a link on a cell a link of several
-  /// cells covers, an [UnsupportedError] for a shared formula's master (W5)
-  /// and for [XlsxRichText] (W4) values, also inside an [XlsxCell], an
-  /// [ArgumentError] for any other type, a nested [XlsxCell], a value the
-  /// encoder refuses, an invalid link (named by its field, as the writer's)
-  /// or an invalid style (named by its field; an `XlsxLimitError` past the
-  /// writer's limits, and for a sheet's 65,531st link), a
-  /// [RangeError] outside Excel's grid, and an [XlsxReadException] when the
-  /// sheet cannot be read (for a link, also the sheet's relationships).
-  /// Whatever it throws, nothing has changed, except
-  /// that reading warnings (such as `styleEntryInvalid` for a style entry
-  /// read for the first time) are reported on first read.
+  /// cells covers, an [UnsupportedError] for a shared formula's master (W5),
+  /// an [ArgumentError] for any other type, a rich text without runs, a
+  /// nested [XlsxCell], a value the encoder refuses, an invalid link (named
+  /// by its field, as the writer's) or an invalid style (named by its field;
+  /// an `XlsxLimitError` past the writer's limits, and for a sheet's 65,531st
+  /// link), a [RangeError] outside Excel's grid, and an [XlsxReadException]
+  /// when the sheet cannot be read (for a link, also the sheet's
+  /// relationships). Whatever it throws, nothing has changed, except that
+  /// reading warnings (such as `styleEntryInvalid` for a style entry read for
+  /// the first time) are reported on first read.
+  @override
   void setCell(int row, int column, Object? value) {
     _checkCell(row, column);
-    // Programmer errors first, so they throw whatever the sheet holds.
+    // Programmer errors first, so they throw whatever the sheet holds; only a
+    // link the writer refuses looks at the sheet, which may hold it.
     final bool styled = value is XlsxCell;
     final XlsxStyle? cellStyle = value is XlsxCell ? value.style : null;
     final Object? plain = value is XlsxCell ? value.value : value;
@@ -431,8 +563,6 @@ final class XlsxSheet
           // edit.
           if (hyperlinkAt(row, column) != plain) rethrow;
         }
-      case XlsxRichText():
-        throw UnsupportedError('XlsxRichText cells arrive in W4.');
       case XlsxCell():
         throw ArgumentError(
           'Cell ${cellRef(row, column)} on sheet "$name" nests an XlsxCell '
@@ -442,6 +572,7 @@ final class XlsxSheet
           String() ||
           num() ||
           bool() ||
+          XlsxRichText() ||
           DateTime() ||
           XlsxDate() ||
           XlsxDecimal() ||
@@ -457,6 +588,9 @@ final class XlsxSheet
     final bool sameLink =
         plain is XlsxHyperlink && hyperlinkAt(row, column) == plain;
     if (sameLink && !styled) return;
+    if (plain is XlsxRichText && !styled && richTextAt(row, column) == plain) {
+      return;
+    }
     final CellStore store = part.cells;
     switch (groupRoleAt(store, row, column)) {
       case GroupRole.arrayOrTableMember:
@@ -549,8 +683,15 @@ final class XlsxSheet
         _applyLink(part, row, column, link, linkPlan!);
       }
       if (header != null && rename != null) {
-        renameTableColumn(log, header.table, header.index, rename);
-        _host.reader.package.setContent(header.partName, header.table);
+        final TablePart table = header.table;
+        attachStoredPart(
+          log,
+          _host.reader.package,
+          _attachedTables,
+          header.partName,
+          table,
+        );
+        editTable(log, table, () => table.setColumnName(header.index, rename!));
       }
       RawCell? base = current ?? _cellOfInheritedStyle(store, row, column);
       int? Function(int? style, {required bool withTime}) dateStyle =
@@ -584,6 +725,9 @@ final class XlsxSheet
         currentFormat: _host.styleTable.formatOf(_styleText(base)),
         date1904: _host.date1904,
         dateStyle: dateStyle,
+        cellFont: stored is XlsxRichText
+            ? (styled ? target : _styleOfIndex(base?.style))?.font
+            : null,
       );
       final bool remove = stored == null && prepared.style == null;
       setStoredCell(log, store, row, column, remove ? null : prepared);
@@ -594,6 +738,45 @@ final class XlsxSheet
     }
     if (adjusted) {
       _warn(XlsxWarningCode.tableHeaderAdjusted, cellRef(row, column));
+    }
+  }
+
+  /// The runs of the rich text in the cell at [row] and [column], or `null`
+  /// when the cell is no string, a plain string, or a string whose item has
+  /// no `<r>` (phonetic runs alone do not make a rich text).
+  ///
+  /// A shared string reads from its `<si>` as kept, an inline string from
+  /// its `<is>`; the runs are parsed when asked, so [rows] and [cellAt] cost
+  /// nothing more for them. A run without an `<rPr>` has a `null` font; a
+  /// run's font is as the file has it, so a rich text set by [setCell] on a
+  /// styled cell reads back with the cell's font merged into each run. A
+  /// value of an `<rPr>` that the font types cannot hold is read as absent
+  /// and reported once, as `featureEntryInvalid` with the detail `rPr`.
+  /// The value of the cell is the runs' text joined, as [cellAt] reads it.
+  /// Loads the sheet. Throws a [RangeError] outside Excel's grid and an
+  /// [XlsxReadException] when the sheet cannot be read.
+  XlsxRichText? richTextAt(int row, int column) {
+    _checkCell(row, column);
+    final CellStore? store = _load()?.cells;
+    final RawCell? cell = store?.cellAt(row, column);
+    if (cell == null) return null;
+    void warn(String detail) {
+      if (_featureReported.add(detail)) {
+        _warn(XlsxWarningCode.featureEntryInvalid, null, detail: detail);
+      }
+    }
+
+    switch (cell.kind) {
+      case RawCellKind.sharedString:
+        final int? index = int.tryParse(cell.value ?? '');
+        if (index == null) return null;
+        _host.loadTables();
+        return _host.sharedStrings?.richTextAt(index, warn);
+      case RawCellKind.inlineString:
+        final OpaqueXml? inline = cell.inline;
+        return inline == null ? null : readRichTextOf(inline, warn);
+      default:
+        return null;
     }
   }
 
@@ -886,6 +1069,13 @@ final class XlsxSheet
       }
     } on XlsxReadException {
       // The sheet's relationships cannot be read: no table is typed.
+    }
+    for (final ({String partName, TablePart table}) t in found) {
+      for (final String detail in t.table.problems) {
+        if (_featureReported.add(detail)) {
+          _warn(XlsxWarningCode.featureEntryInvalid, null, detail: detail);
+        }
+      }
     }
     return _tables = found;
   }

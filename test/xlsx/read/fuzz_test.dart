@@ -23,10 +23,12 @@ const Map<String, ({int length, int adler32})> _storedCorpus =
       'm1_values': (length: 6704, adler32: 3853013050),
       'm1_formulas': (length: 5599, adler32: 2780369878),
       'm1_dates': (length: 5963, adler32: 3931601365),
+      'm2_style_precedence': (length: 7276, adler32: 148506124),
       'libreoffice': (length: 17758, adler32: 3013262995),
       'google_sheets': (length: 10635, adler32: 3903365900),
       'dotnet_sdk': (length: 3072, adler32: 1661782054),
       'erp_export': (length: 4187, adler32: 3525780887),
+      'excel_objects': (length: 20115, adler32: 263504902),
     };
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
@@ -63,10 +65,12 @@ void main() {
         'm1_values',
         'm1_formulas',
         'm1_dates',
+        'm2_style_precedence',
         'libreoffice',
         'google_sheets',
         'dotnet_sdk',
         'erp_export',
+        'excel_objects',
         'm1_values_deflated',
         'libreoffice_deflated',
       ],

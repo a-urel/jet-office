@@ -15,7 +15,8 @@
 /// [OpaqueXml] at its original position, except the first
 /// `<sheetFormatPr>` and the first `<cols>`, which are typed when plain
 /// (`columns.dart`), the first `<mergeCells>` ([MergeGroup]) and the first
-/// `<hyperlinks>` (an [ItemGroup] of [LinkEntry]) and the first
+/// `<hyperlinks>` (an [ItemGroup] of [LinkEntry]), the first `<tableParts>`
+/// (an [ItemGroup] of relationship ids) and the first
 /// `<dataValidations>` (an [ItemGroup] of [XlsxDataValidation]) and the first
 /// run of adjacent `<conditionalFormatting>`s ([CfBlock]); all of these are
 /// edited as immutable values, so `swapLayout` undoes an edit of one
@@ -509,6 +510,21 @@ final class WorksheetPart implements PartContent {
             ),
           ),
         );
+      } else if (main && r.localName == 'tableParts' && !sheet._hasTableParts) {
+        sheet._hasTableParts = true;
+        children.add(
+          readItemGroup<String>(
+            r,
+            childName: 'tablePart',
+            limits: limits,
+            part: part,
+            read: (OpaqueXml child) => (
+              value: readerOf(child).getAttribute('id', namespaceUri: Ns.rel),
+              problem: null,
+            ),
+            warn: (String problem) {},
+          ),
+        );
       } else if (main &&
           r.localName == 'conditionalFormatting' &&
           (conditional == null || identical(children.last, conditional))) {
@@ -618,6 +634,10 @@ final class WorksheetPart implements PartContent {
   /// Whether the part read a SpreadsheetML `<hyperlinks>`; a second one is
   /// kept opaque.
   bool _hasHyperlinks = false;
+
+  /// Whether the first `<tableParts>` was read as a group; a later one stays
+  /// as written.
+  bool _hasTableParts = false;
 
   /// Whether the part read a SpreadsheetML `<dataValidations>`; a second one
   /// is kept opaque.
@@ -821,11 +841,11 @@ final class WorksheetPart implements PartContent {
         case XmlNode():
           c.writeTo(w, root.namespaces);
         case ItemGroup<Object?>():
-          // Of the groups, only `<dataValidations>` has a `count`.
+          // `<hyperlinks>` is the group without a `count`.
           c.writeTo(
             w,
             root.namespaces,
-            countAttribute: c.localName == 'dataValidations' ? 'count' : null,
+            countAttribute: c.localName == 'hyperlinks' ? null : 'count',
           );
         case CfBlock():
           c.writeTo(w, root.namespaces);
@@ -1100,6 +1120,93 @@ final class WorksheetPart implements PartContent {
     return _x14Block;
   }
 
+  /// The `r:id` of the part's first SpreadsheetML `<legacyDrawing>`, the
+  /// relationship of the VML drawing that holds its notes' boxes, or `null`
+  /// when there is none or it names no relationship.
+  String? get legacyDrawingId {
+    final OpaqueXml? element = _legacyDrawing;
+    return element == null
+        ? null
+        : readerOf(element).getAttribute('id', namespaceUri: Ns.rel);
+  }
+
+  /// Adds a `<tablePart>` of the relationship [id] after the others, making
+  /// the `<tableParts>` in schema position when the part has none. Must run
+  /// inside `editLayout` of slot `tableParts`.
+  void addTablePart(String id) {
+    final GroupItem<String> item = GroupItem<String>(
+      id,
+      renderElements((XmlWriter w) {
+        w.empty('tablePart', <String, String>{'r:id': id});
+      }).single,
+    );
+    final ItemGroup<String>? group = _tableParts;
+    if (group == null) {
+      _children.insert(
+        _positionFor('tableParts'),
+        ItemGroup<String>(
+          '${elementPrefix}tableParts',
+          'tableParts',
+          const <String, String>{},
+          const <KeptAttribute>[],
+          <GroupItem<String>>[item],
+          edited: true,
+        ),
+      );
+      return;
+    }
+    _children[_children.indexOf(group)] = group.withItems(<GroupItem<String>>[
+      ...group.items,
+      item,
+    ]);
+  }
+
+  /// Removes the `<tablePart>`s of the relationship [id]; the `<tableParts>`
+  /// goes when nothing is left in it. Must run inside `editLayout` of slot
+  /// `tableParts`. A part without such an entry changes nothing.
+  void removeTablePart(String id) {
+    final ItemGroup<String>? group = _tableParts;
+    if (group == null || !group.values.contains(id)) return;
+    final List<GroupItem<String>> next = <GroupItem<String>>[
+      for (final GroupItem<String> i in group.items)
+        if (i.value != id) i,
+    ];
+    final int index = _children.indexOf(group);
+    if (next.isEmpty) {
+      _children.removeAt(index);
+    } else {
+      _children[index] = group.withItems(next);
+    }
+  }
+
+  /// The first `<tableParts>`, or `null`.
+  ItemGroup<String>? get _tableParts =>
+      _topGroup('tableParts') as ItemGroup<String>?;
+
+  /// The first SpreadsheetML `<legacyDrawing>`, or `null`.
+  OpaqueXml? get _legacyDrawing => _firstMainChild('legacyDrawing');
+
+  /// The `r:id` of the part's first SpreadsheetML `<drawing>`, the
+  /// relationship of the drawing part that holds its pictures, or `null`
+  /// when there is none or it names no relationship.
+  String? get drawingId {
+    final OpaqueXml? element = _firstMainChild('drawing');
+    return element == null
+        ? null
+        : readerOf(element).getAttribute('id', namespaceUri: Ns.rel);
+  }
+
+  OpaqueXml? _firstMainChild(String localName) {
+    for (final Object c in _children) {
+      if (c is OpaqueXml &&
+          c.namespaceUri == Ns.main &&
+          c.localName == localName) {
+        return c;
+      }
+    }
+    return null;
+  }
+
   /// The elements that hold conditional format rules, as written: those of
   /// the [CfBlock], those after it, and what an `<extLst>` keeps.
   Iterable<OpaqueXml> get _ruleElements sync* {
@@ -1169,18 +1276,21 @@ final class WorksheetPart implements PartContent {
   }
 
   /// The typed first element of [slot] (`cols`, `sheetFormatPr`,
-  /// `mergeCells`, one of [_nodeSlots], `dataValidations`, `hyperlinks` or
-  /// `conditionalFormatting`, whose element is the [CfBlock]), or `null` when
-  /// the part has none typed. An element kept as an [OpaqueXml] is not a
-  /// slot's element: it is never swapped, and a repeated one stays where it
-  /// is. Elements are immutable, so an edit replaces the element, and
-  /// [swapLayout] undoes it.
+  /// `mergeCells`, one of [_nodeSlots], `dataValidations`, `hyperlinks`,
+  /// `tableParts`, `conditionalFormatting`, whose element is the [CfBlock],
+  /// or `drawing` and `legacyDrawing`, whose element is its [OpaqueXml]), or
+  /// `null` when the part has none typed. Any other element kept as an
+  /// [OpaqueXml] is not a slot's element: it is never swapped, and a repeated
+  /// one stays where it is. Elements are immutable, so an edit replaces the
+  /// element, and [swapLayout] undoes it.
   Object? layoutElement(String slot) => switch (slot) {
     'cols' => _cols,
     'sheetFormatPr' => _format,
     'mergeCells' => _mergeGroup,
-    'dataValidations' || 'hyperlinks' => _topGroup(slot),
+    'dataValidations' || 'hyperlinks' || 'tableParts' => _topGroup(slot),
     'conditionalFormatting' => conditionalBlock,
+    'drawing' => _firstMainChild('drawing'),
+    'legacyDrawing' => _legacyDrawing,
     _ when _nodeSlots.contains(slot) => _topNode(slot),
     _ => throw ArgumentError.value(slot, 'slot', 'Not a layout slot.'),
   };

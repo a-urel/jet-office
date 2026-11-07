@@ -9,6 +9,7 @@ import '../../fixtures/fixtures.dart' show Fixture;
 import '../../fixtures/m1_fixtures.dart';
 import '../../fixtures/m2_fixtures.dart';
 import '../../fixtures/m3_fixtures.dart';
+import '../../fixtures/m4_fixtures.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/zip_builder.dart';
 
@@ -111,6 +112,11 @@ final Map<String, XlsxResult Function()> _scripted =
       'm3_header_footer': _headerFooterBook,
       'm3_protection': _protectionBook,
       'm3_properties': _m3PropertiesBook,
+      'm4_rich_text': _richTextBook,
+      'm4_notes': _notesBook,
+      'm4_images': _imagesBook,
+      'm4_tables': _tablesBook,
+      'm4_objects': _objectsBook,
     };
 
 /// Where the model's file may differ from the writer's, applied to the
@@ -399,6 +405,203 @@ XlsxResult _m3PropertiesBook() {
   return book.save();
 }
 
+XlsxResult _richTextBook() {
+  const XlsxFont bold = XlsxFont(bold: true);
+  final XlsxWorkbook book = XlsxWorkbook();
+  _fill(book.addSheet('Rich'), <List<Object?>>[
+    <Object?>[
+      XlsxRichText(const <XlsxTextRun>[
+        XlsxTextRun('Total: ', font: bold),
+        XlsxTextRun('42'),
+      ]),
+    ],
+    <Object?>[
+      XlsxRichText(const <XlsxTextRun>[
+        XlsxTextRun(
+          'Red italic',
+          font: XlsxFont(italic: true, color: XlsxColor.rgb(0xFF0000)),
+        ),
+        XlsxTextRun(
+          ' and underlined',
+          font: XlsxFont(underline: XlsxUnderline.single),
+        ),
+      ]),
+    ],
+    <Object?>[
+      XlsxRichText(const <XlsxTextRun>[
+        XlsxTextRun('x'),
+        XlsxTextRun('2', font: XlsxFont(script: XlsxFontScript.superscript)),
+      ]),
+    ],
+    <Object?>[
+      XlsxCell(
+        XlsxRichText(const <XlsxTextRun>[
+          XlsxTextRun('Bold', font: bold),
+          XlsxTextRun(' in Arial 14'),
+        ]),
+        style: const XlsxStyle(font: XlsxFont(name: 'Arial', size: 14)),
+      ),
+    ],
+    <Object?>[
+      XlsxRichText(const <XlsxTextRun>[XlsxTextRun('Same text')]),
+    ],
+    <Object?>['Same text'],
+  ]);
+  return book.save();
+}
+
+XlsxResult _notesBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _fill(book.addSheet('Notes'), <List<Object?>>[
+      <Object?>[],
+      <Object?>[null, 'Plain'],
+      <Object?>[null, null, 'Rich'],
+      <Object?>[null, null, null, 'Visible'],
+    ])
+    ..setNote(1, 1, XlsxNote.plain('Check this', author: 'Ahmet'))
+    ..setNote(
+      2,
+      2,
+      XlsxNote(
+        XlsxRichText(const <XlsxTextRun>[
+          XlsxTextRun('Ahmet:', font: XlsxFont(bold: true)),
+          XlsxTextRun('\nThe total is checked.'),
+        ]),
+        author: 'Ahmet',
+      ),
+    )
+    ..setNote(
+      3,
+      3,
+      XlsxNote.plain('Always shown', author: 'Ayse Yilmaz', visible: true),
+    );
+  _fill(book.addSheet('Right'), <List<Object?>>[
+    <Object?>['Note on XFD1', 'The last column'],
+  ]).setNote(0, 16383, XlsxNote.plain('The last column', author: 'Ahmet'));
+  _fill(book.addSheet('Bottom'), <List<Object?>>[
+    <Object?>['Note on A1048576', 'The last row'],
+  ]).setNote(1048575, 0, XlsxNote.plain('The last row', author: 'Ahmet'));
+  return book.save();
+}
+
+XlsxResult _imagesBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _fill(book.addSheet('Pictures'), <List<Object?>>[
+      <Object?>[],
+      <Object?>['PNG at B2, JPEG at E2'],
+      <Object?>[],
+      <Object?>[],
+      <Object?>[],
+      <Object?>['PNG over B6:D10'],
+    ])
+    ..addPicture(
+      XlsxPicture(
+        OfficeImage(png4x2),
+        const XlsxOneCellAnchor(XlsxAnchorPoint(1, 1)),
+      ),
+    )
+    ..addPicture(
+      XlsxPicture(
+        OfficeImage(jpeg3x5),
+        const XlsxOneCellAnchor(XlsxAnchorPoint(1, 4), width: 60),
+      ),
+    )
+    ..addPicture(
+      XlsxPicture(
+        OfficeImage(png4x2),
+        XlsxTwoCellAnchor.range(
+          XlsxRange.parse('B6:D10'),
+          resize: XlsxPictureResize.move,
+        ),
+        description: 'The PNG over B6:D10',
+      ),
+    );
+  _fill(book.addSheet('Again'), <List<Object?>>[
+    <Object?>[],
+    <Object?>['The same PNG at A1'],
+  ]).addPicture(
+    XlsxPicture(
+      OfficeImage(png4x2),
+      const XlsxOneCellAnchor(XlsxAnchorPoint(0, 0)),
+    ),
+  );
+  return book.save();
+}
+
+XlsxResult _tablesBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _fill(book.addSheet('Sales'), <List<Object?>>[
+      <Object?>['Region', 'Amount'],
+      <Object?>['North', 120, 'Checked', null, 'Paper', 15],
+      <Object?>['South', 80, null, null, 'Ink', 30.5],
+      <Object?>['East', 45.5],
+    ])
+    ..addTable(
+      XlsxTable('Sales', XlsxRange.parse('A1:C5'), const <XlsxTableColumn>[
+        XlsxTableColumn('Region', totalsLabel: 'Total'),
+        XlsxTableColumn('Amount', totalsFunction: XlsxTotalsFunction.sum),
+        XlsxTableColumn('Note'),
+      ], totalsRow: true),
+    )
+    ..addTable(
+      XlsxTable('Costs', XlsxRange.parse('E1:F3'), const <XlsxTableColumn>[
+        XlsxTableColumn('Item'),
+        XlsxTableColumn('Cost'),
+      ], style: XlsxTableStyle.light(9, showColumnStripes: true)),
+    );
+  _fill(book.addSheet('Plain'), <List<Object?>>[
+    <Object?>[1, 2],
+    <Object?>[3, 4],
+  ]).addTable(
+    XlsxTable(
+      'Numbers',
+      XlsxRange.parse('A1:B2'),
+      const <XlsxTableColumn>[XlsxTableColumn('X'), XlsxTableColumn('Y')],
+      headerRow: false,
+      style: null,
+    ),
+  );
+  return book.save();
+}
+
+XlsxResult _objectsBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _fill(book.addSheet('All'), <List<Object?>>[
+      <Object?>[
+        XlsxHyperlink.url('https://example.com/a', text: 'Site A'),
+        XlsxHyperlink.url('https://example.com/b', text: 'Site B'),
+        'Noted',
+      ],
+      <Object?>[],
+      <Object?>[],
+      <Object?>['Bolt', 10, null, 'B-1', 0.25],
+      <Object?>['Nut', 25, null, 'N-1', 0.1],
+    ])
+    ..setNote(0, 2, XlsxNote.plain('Check C1', author: 'Ahmet'))
+    ..addPicture(
+      XlsxPicture(
+        OfficeImage(png4x2),
+        const XlsxOneCellAnchor(XlsxAnchorPoint(1, 6)),
+      ),
+    )
+    ..addTable(
+      XlsxTable('Stock', XlsxRange.parse('A3:B5'), const <XlsxTableColumn>[
+        XlsxTableColumn('Item'),
+        XlsxTableColumn('Qty'),
+      ]),
+    )
+    ..addTable(
+      XlsxTable('Prices', XlsxRange.parse('D3:E5'), const <XlsxTableColumn>[
+        XlsxTableColumn('Code'),
+        XlsxTableColumn('Price'),
+      ]),
+    );
+  _fill(book.addSheet('More'), <List<Object?>>[
+    <Object?>['One note'],
+  ]).setNote(0, 0, XlsxNote.plain('The second sheet', author: 'Ahmet'));
+  return book.save();
+}
+
 /// Sets [rows] on [sheet] from row 0 and returns it.
 XlsxSheet _fill(XlsxSheet sheet, List<List<Object?>> rows) {
   for (int r = 0; r < rows.length; r++) {
@@ -433,6 +636,7 @@ void main() {
       ...m1Fixtures(),
       ...m2Fixtures(),
       ...m3Fixtures(),
+      ...m4Fixtures(),
     ]) {
       final _Sheets? sheets = _rebuilt[f.name];
       final XlsxResult Function()? script = _scripted[f.name];
@@ -542,15 +746,18 @@ void main() {
         ...m1Fixtures(),
         ...m2Fixtures(),
         ...m3Fixtures(),
+        ...m4Fixtures(),
       ])
         f.name,
     };
     expect(names, containsAll(_rebuilt.keys));
     expect(names, containsAll(_scripted.keys));
     expect(_scripted.keys, containsAll(_allowed.keys));
-    expect(<String>{
-      ..._rebuilt.keys,
-      ..._scripted.keys,
-    }, containsAll(m3Fixtures().map((Fixture f) => f.name)));
+    expect(
+      <String>{..._rebuilt.keys, ..._scripted.keys},
+      containsAll(
+        <Fixture>[...m3Fixtures(), ...m4Fixtures()].map((Fixture f) => f.name),
+      ),
+    );
   });
 }

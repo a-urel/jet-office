@@ -30,9 +30,11 @@
 library;
 
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../common/theme_colors.dart';
+import '../../drawingml/media.dart';
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
@@ -69,6 +71,8 @@ import 'primitives.dart';
 import 'properties_parts.dart';
 import 'protection_elements.dart';
 import 'styles_part.dart';
+import 'table_part.dart';
+import 'vml_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
 import 'xlsx_sheet.dart';
@@ -412,6 +416,21 @@ Uint8List _emptyPackage() {
   return zip.close()!;
 }
 
+/// The change of a table part leaving what the file's table parts say.
+final class _TableHeadChange implements Change {
+  _TableHeadChange(this.heads, this.part, this.head);
+
+  final Map<String, ({int id, List<String> names})> heads;
+  final String part;
+  final ({int id, List<String> names}) head;
+
+  @override
+  void revert() => heads[part] = head;
+
+  @override
+  void reapply() => heads.remove(part);
+}
+
 /// The shared strings as a part's content.
 ///
 /// [_root] and [_trailing] are the opened part's `<sst>` start tag and its
@@ -593,25 +612,161 @@ final class _Book implements SheetHost {
   int sheetIndexOf(XlsxSheet sheet) =>
       _sheets.indexWhere((XlsxSheet s) => identical(s, sheet));
 
+  /// The VML blocks the package's parts use, once they were scanned.
+  Set<int>? _usedVmlBlocks;
+
+  /// The next VML block to try.
+  int _nextVmlBlock = 1;
+
+  DrawingMediaIndex? _mediaIndex;
+
+  @override
+  DrawingMediaIndex get mediaIndex =>
+      _mediaIndex ??= DrawingMediaIndex(_package);
+
+  @override
+  int takeVmlBlock() {
+    final Set<int> used = _usedVmlBlocks ??= _scanVmlBlocks();
+    while (used.contains(_nextVmlBlock)) {
+      _nextVmlBlock++;
+    }
+    return _nextVmlBlock++;
+  }
+
+  /// The blocks every `.vml` part of the file uses, read from its text:
+  /// VML need not be XML, and the parts of unloaded sheets count.
+  Set<int> _scanVmlBlocks() {
+    final Set<int> used = <int>{};
+    for (final String name in _package.partNames.toList()) {
+      if (!name.toLowerCase().endsWith('.vml')) continue;
+      final Uint8List bytes = reader.guardXml(
+        name,
+        () => _package.originalBytes(name),
+      );
+      used.addAll(vmlBlocksIn(utf8.decode(bytes, allowMalformed: true)));
+    }
+    return used;
+  }
+
+  /// The `id` and the names of every table part of the file, read once from
+  /// each root, by part name: a part no sheet types keeps its name and id
+  /// that way, and so does one of a sheet never read. Parts added since are
+  /// typed, so a sheet's list holds them; a part that leaves leaves this too
+  /// ([forgetTablePart]), so a later part of its name is not taken for it.
+  Map<String, ({int id, List<String> names})>? _tableHeads;
+
+  Map<String, ({int id, List<String> names})> get _fileTables =>
+      _tableHeads ??= _readTableHeads();
+
+  Map<String, ({int id, List<String> names})> _readTableHeads() {
+    final Map<String, ({int id, List<String> names})> heads =
+        <String, ({int id, List<String> names})>{};
+    for (final String name in _package.partNames.toList()) {
+      if (_package.contentTypeOf(name) != ContentType.table) continue;
+      try {
+        final ({int id, List<String> names})? head = reader.guardXml(
+          name,
+          () => TablePart.readHead(reader.openXml(name)),
+        );
+        if (head != null) heads[name] = head;
+      } on XlsxReadException {
+        // Kept as written: an unreadable part has no name to keep.
+      }
+    }
+    return heads;
+  }
+
+  @override
+  void forgetTablePart(String name) {
+    final String? part = _package.canonicalPartName(name);
+    final ({int id, List<String> names})? head = _fileTables[part];
+    if (part == null || head == null) return;
+    applyChange(log, _TableHeadChange(_fileTables, part, head));
+  }
+
   @override
   void checkNotTableName(String name) {
     final String key = sheetNameKey(name);
-    for (final XlsxSheet s in _sheets) {
-      for (final String table in sheetTableNames(s)) {
-        if (sheetNameKey(table) == key) {
-          throw ArgumentError.value(
-            name,
-            'name',
-            'The name "$name" is already the name of the table "$table"; '
-                'table names and defined names are compared ignoring case.',
-          );
-        }
+    final Iterable<String> tables = <String>[
+      for (final XlsxSheet s in _sheets) ...sheetTableNames(s),
+      for (final ({int id, List<String> names}) head in _fileTables.values)
+        ...head.names,
+    ];
+    for (final String table in tables) {
+      if (sheetNameKey(table) == key) {
+        throw ArgumentError.value(
+          name,
+          'name',
+          'The name "$name" is already the name of the table "$table"; '
+              'table names and defined names are compared ignoring case.',
+        );
       }
     }
   }
 
   @override
+  void checkTableNameFree(String name) {
+    checkNotTableName(name);
+    final String key = sheetNameKey(name);
+    for (final NameEntry e in workbook.names) {
+      if (sheetNameKey(e.name) == key) {
+        throw ArgumentError.value(
+          name,
+          'name',
+          'The name "$name" is already a defined name, "${e.name}"; table '
+              'names and defined names are compared ignoring case.',
+        );
+      }
+    }
+  }
+
+  @override
+  int takeTableId() {
+    int highest = 0;
+    for (final int id in <int>[
+      for (final ({int id, List<String> names}) head in _fileTables.values)
+        head.id,
+      ..._sheets.expand(sheetTableIds),
+    ]) {
+      if (id > highest) highest = id;
+    }
+    return highest + 1;
+  }
+
+  @override
+  String? firstTableUse(TablePart table) {
+    // A file's name may hold anything; the syntax characters are escaped.
+    final String key = sheetNameKey(table.displayName).replaceAllMapped(
+      RegExp(r'[\\^$.*+?()[\]{}|/]'),
+      (Match m) => '\\${m[0]}',
+    );
+    // Letters, marks, digits and these three go on a name.
+    final RegExp reference = RegExp(
+      r'(?<![\p{L}\p{M}\p{N}_.\\?])'
+      '$key\\[',
+      unicode: true,
+    );
+    for (final XlsxSheet s in _sheets) {
+      final String? cell = firstFormulaMatching(s, reference);
+      if (cell != null) return cell;
+    }
+    for (final XlsxSheet s in _sheets) {
+      final String? column = firstColumnFormulaMatching(s, reference, table);
+      if (column != null) return column;
+    }
+    for (final NameEntry e in workbook.names) {
+      if (sheetNameKey(e.formula).contains(reference)) {
+        return 'the defined name "${e.name}"';
+      }
+    }
+    return null;
+  }
+
+  @override
   StyleTable get styleTable => _styles?.table ?? StyleTable.empty;
+
+  @override
+  SharedStrings? get sharedStrings => _strings;
 
   @override
   List<String>? get sharedStringTexts =>
@@ -881,9 +1036,10 @@ final class _Book implements SheetHost {
     final bool valueEdited = _sheets.any(
       (XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0,
     );
-    // A defined name that was defined or removed changes results as a
-    // changed cell does, but the chain of cells stays as it was.
-    if (valueEdited || workbook.nameEdits > 0) {
+    // A defined name that was defined or removed, or a table that was
+    // resized, changes results as a changed cell does, but the chain of
+    // cells stays as it was.
+    if (valueEdited || workbook.nameEdits > 0 || workbook.tableEdits > 0) {
       final String? chain = valueEdited ? _target(RelType.calcChain) : null;
       if (chain != null) {
         // Only the workbook refers to the calculation chain, so no other

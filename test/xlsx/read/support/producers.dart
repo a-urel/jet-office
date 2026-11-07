@@ -12,6 +12,7 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../../../fixtures/m4_fixtures.dart' show png4x2;
 import 'zip_builder.dart';
 
 /// A package written in the style of one producer, and what the reader must
@@ -83,6 +84,7 @@ List<ProducerFile> producerFiles() => <ProducerFile>[
   googleSheetsFile(),
   dotNetSdkFile(),
   erpExportFile(),
+  excelObjectsFile(),
 ];
 
 /// Reads [f] and fails with a [TestFailure] listing every difference from
@@ -1103,4 +1105,343 @@ ProducerFile erpExportFile() {
     warnings: const <XlsxWarningCode, int>{XlsxWarningCode.cellDuplicated: 1},
     date1904: true,
   );
+}
+
+/// The declaration Excel writes, ended by CRLF.
+const String _xlDecl =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
+
+const String _xrNs =
+    'http://schemas.microsoft.com/office/spreadsheetml/2014/revision';
+const String _xr3Ns =
+    'http://schemas.microsoft.com/office/spreadsheetml/2016/revision3';
+const String _threadNs =
+    'http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments';
+const String _relMs =
+    'http://schemas.microsoft.com/office/2017/10/relationships';
+const String _xdrNs =
+    'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing';
+const String _aNs = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+const String _chartNs =
+    'http://schemas.openxmlformats.org/drawingml/2006/chart';
+
+/// The text Excel writes in the legacy note beside a thread.
+const String _threadPlaceholder =
+    '[Threaded comment]\n\nYour version of Excel allows you to read this '
+    'threaded comment; however, any edits to it will get removed if the file '
+    'is opened in a newer version of Excel. Learn more: '
+    'https://go.microsoft.com/fwlink/?linkid=870924\n\nComment:\n    '
+    'Looks right';
+
+/// One `<xdr:from>` or `<xdr:to>` of an Excel drawing.
+String _xdrMarker(String tag, int row, int column) =>
+    '<xdr:$tag><xdr:col>$column</xdr:col><xdr:colOff>0</xdr:colOff>'
+    '<xdr:row>$row</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:$tag>';
+
+/// One note's box as Excel writes it in a VML drawing.
+String _noteShape(int id, int row, int column) =>
+    '<v:shape id="_x0000_s$id" type="#_x0000_t202" style=\'position:absolute;'
+    'margin-left:59.25pt;margin-top:1.5pt;width:108pt;height:59.25pt;'
+    "z-index:${id - 1024};visibility:hidden' fillcolor=\"infoBackground "
+    '[80]" strokecolor="none [81]" o:insetmode="auto">'
+    '<v:fill color2="infoBackground [80]"/><v:shadow color="none [81]" '
+    'obscured="t"/><v:path o:connecttype="none"/>'
+    '<v:textbox style=\'mso-direction-alt:auto\'><div style=\'text-align:left'
+    "'></div></v:textbox><x:ClientData ObjectType=\"Note\"><x:MoveWithCells/>"
+    '<x:SizeWithCells/><x:Anchor>${column + 1}, 15, $row, 2, ${column + 3}, '
+    '31, ${row + 4}, 1</x:Anchor><x:AutoFill>False</x:AutoFill>'
+    '<x:Row>$row</x:Row><x:Column>$column</x:Column></x:ClientData></v:shape>';
+
+/// A file with more than the model types, shaped as Excel 365 writes one.
+///
+/// Written from knowledge of Excel's output, not copied from a file (plan
+/// ruling 6). Sheet `Objects` has:
+///
+/// * a drawing of a picture, a chart (with its part) and a rectangle;
+/// * a VML drawing of two note boxes and a check box form control, which the
+///   sheet's `<controls>` names, with its `ctrlProp` part;
+/// * a plain note on `A5`, and on `B5` the `[Threaded comment]` note Excel
+///   keeps beside a thread (author `tc={GUID}`), with the thread's part and
+///   the workbook's persons part;
+/// * the table `Stock` over `A1:C3`, with `xr:uid`s, and its column `Total`
+///   calculated, a `dataDxfId` and the formulas in its cells.
+///
+/// Expected: every cell as the rows say, and no warning.
+ProducerFile excelObjectsFile() {
+  const String person = '{4E3B1F60-5D8A-4C7E-9B12-6A1C0F2E7D31}';
+  const String thread = '{9A7C2D14-3B6E-4F58-8E21-0D5B7C4A1F62}';
+  const String tcAuthor = 'tc=$thread';
+  String text(String ref, int index) => '<c r="$ref" t="s"><v>$index</v></c>';
+  const String sheet =
+      '$_xlDecl<worksheet xmlns="$_main" xmlns:r="$_relNs" '
+      'xmlns:mc="$_mcNs" mc:Ignorable="x14ac xr" xmlns:x14ac="$_x14acNs" '
+      'xmlns:xr="$_xrNs" '
+      'xr:uid="{1D9F4A36-7C20-4E18-A5B3-2F6E8C0D7A14}">'
+      '<dimension ref="A1:C5"/>'
+      '<sheetViews><sheetView tabSelected="1" workbookViewId="0"/>'
+      '</sheetViews><sheetFormatPr defaultRowHeight="15" '
+      'x14ac:dyDescent="0.25"/>';
+  final String cells =
+      '<sheetData>'
+      '<row r="1" spans="1:3" x14ac:dyDescent="0.25">${text('A1', 0)}'
+      '${text('B1', 1)}${text('C1', 2)}</row>'
+      '<row r="2" spans="1:3" x14ac:dyDescent="0.25">${text('A2', 3)}'
+      '<c r="B2"><v>10</v></c><c r="C2"><f>Stock[[#This Row],[Qty]]*2</f>'
+      '<v>20</v></c></row>'
+      '<row r="3" spans="1:3" x14ac:dyDescent="0.25">${text('A3', 4)}'
+      '<c r="B3"><v>25</v></c><c r="C3"><f>Stock[[#This Row],[Qty]]*2</f>'
+      '<v>50</v></c></row>'
+      '<row r="5" spans="1:3" x14ac:dyDescent="0.25">${text('A5', 5)}'
+      '${text('B5', 6)}</row>'
+      '</sheetData>';
+  const String tail =
+      '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" '
+      'header="0.3" footer="0.3"/>'
+      '<drawing r:id="rId1"/><legacyDrawing r:id="rId2"/>'
+      '<mc:AlternateContent><mc:Choice Requires="x14" '
+      'xmlns:x14="$_x14Ns"><controls><mc:AlternateContent>'
+      '<mc:Choice Requires="x14"><control shapeId="1027" r:id="rId6" '
+      'name="Check Box 3"><controlPr defaultSize="0" autoFill="0" '
+      'autoLine="0" autoPict="0"><anchor moveWithCells="1">'
+      '<from><xdr:col xmlns:xdr="$_xdrNs">4</xdr:col><xdr:colOff '
+      'xmlns:xdr="$_xdrNs">0</xdr:colOff><xdr:row xmlns:xdr="$_xdrNs">0'
+      '</xdr:row><xdr:rowOff xmlns:xdr="$_xdrNs">0</xdr:rowOff></from>'
+      '<to><xdr:col xmlns:xdr="$_xdrNs">5</xdr:col><xdr:colOff '
+      'xmlns:xdr="$_xdrNs">0</xdr:colOff><xdr:row xmlns:xdr="$_xdrNs">1'
+      '</xdr:row><xdr:rowOff xmlns:xdr="$_xdrNs">0</xdr:rowOff></to>'
+      '</anchor></controlPr></control></mc:Choice></mc:AlternateContent>'
+      '</controls></mc:Choice></mc:AlternateContent>'
+      '<tableParts count="1"><tablePart r:id="rId3"/></tableParts>'
+      '</worksheet>';
+  const String sheetRels =
+      '$_xlDecl<Relationships xmlns="$_pkgRelNs">'
+      '<Relationship Id="rId1" Type="$_relNs/drawing" '
+      'Target="../drawings/drawing1.xml"/>'
+      '<Relationship Id="rId2" Type="$_relNs/vmlDrawing" '
+      'Target="../drawings/vmlDrawing1.vml"/>'
+      '<Relationship Id="rId3" Type="$_relNs/table" '
+      'Target="../tables/table1.xml"/>'
+      '<Relationship Id="rId4" Type="$_relNs/comments" '
+      'Target="../comments1.xml"/>'
+      '<Relationship Id="rId5" Type="$_relMs/threadedComment" '
+      'Target="../threadedComments/threadedComment1.xml"/>'
+      '<Relationship Id="rId6" Type="$_relNs/ctrlProp" '
+      'Target="../ctrlProps/ctrlProp1.xml"/>'
+      '</Relationships>';
+  final String drawing =
+      '$_xlDecl<xdr:wsDr xmlns:xdr="$_xdrNs" xmlns:a="$_aNs">'
+      '<xdr:twoCellAnchor editAs="oneCell">${_xdrMarker('from', 6, 0)}'
+      '${_xdrMarker('to', 8, 1)}<xdr:pic><xdr:nvPicPr>'
+      '<xdr:cNvPr id="2" name="Picture 1" descr="A small picture"/>'
+      '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>'
+      '</xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="$_relNs" r:embed="rId1"/>'
+      '<a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr>'
+      '<a:xfrm><a:off x="0" y="1143000"/><a:ext cx="609600" cy="381000"/>'
+      '</a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>'
+      '</xdr:pic><xdr:clientData/></xdr:twoCellAnchor>'
+      '<xdr:twoCellAnchor>${_xdrMarker('from', 6, 2)}'
+      '${_xdrMarker('to', 14, 6)}<xdr:graphicFrame macro="">'
+      '<xdr:nvGraphicFramePr><xdr:cNvPr id="3" name="Chart 2"/>'
+      '<xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm>'
+      '<a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic>'
+      '<a:graphicData uri="$_chartNs"><c:chart xmlns:c="$_chartNs" '
+      'xmlns:r="$_relNs" r:id="rId2"/></a:graphicData></a:graphic>'
+      '</xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>'
+      '<xdr:twoCellAnchor>${_xdrMarker('from', 15, 0)}'
+      '${_xdrMarker('to', 18, 2)}<xdr:sp macro="" textlink=""><xdr:nvSpPr>'
+      '<xdr:cNvPr id="4" name="Rectangle 3"/><xdr:cNvSpPr/></xdr:nvSpPr>'
+      '<xdr:spPr><a:xfrm><a:off x="0" y="2857500"/>'
+      '<a:ext cx="1219200" cy="571500"/></a:xfrm><a:prstGeom prst="rect">'
+      '<a:avLst/></a:prstGeom></xdr:spPr></xdr:sp><xdr:clientData/>'
+      '</xdr:twoCellAnchor></xdr:wsDr>';
+  const String drawingRels =
+      '$_xlDecl<Relationships xmlns="$_pkgRelNs">'
+      '<Relationship Id="rId1" Type="$_relNs/image" '
+      'Target="../media/image1.png"/>'
+      '<Relationship Id="rId2" Type="$_relNs/chart" '
+      'Target="../charts/chart1.xml"/>'
+      '</Relationships>';
+  const String chart =
+      '$_xlDecl<c:chartSpace xmlns:c="$_chartNs" xmlns:a="$_aNs" '
+      'xmlns:r="$_relNs"><c:chart><c:plotArea><c:layout/><c:barChart>'
+      '<c:barDir val="col"/><c:grouping val="clustered"/><c:ser>'
+      '<c:idx val="0"/><c:order val="0"/><c:val><c:numRef>'
+      r'<c:f>Objects!$B$2:$B$3</c:f></c:numRef></c:val></c:ser>'
+      '<c:axId val="111"/><c:axId val="222"/></c:barChart><c:catAx>'
+      '<c:axId val="111"/><c:scaling/><c:delete val="0"/>'
+      '<c:axPos val="b"/><c:crossAx val="222"/></c:catAx><c:valAx>'
+      '<c:axId val="222"/><c:scaling/><c:delete val="0"/>'
+      '<c:axPos val="l"/><c:crossAx val="111"/></c:valAx></c:plotArea>'
+      '<c:plotVisOnly val="1"/></c:chart></c:chartSpace>';
+  final String vml =
+      '<xml xmlns:v="urn:schemas-microsoft-com:vml" '
+      'xmlns:o="urn:schemas-microsoft-com:office:office" '
+      'xmlns:x="urn:schemas-microsoft-com:office:excel">'
+      '<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/>'
+      '</o:shapelayout><v:shapetype id="_x0000_t202" coordsize="21600,21600" '
+      'o:spt="202" path="m,l,21600r21600,l21600,xe"><v:stroke '
+      'joinstyle="miter"/><v:path gradientshapeok="t" o:connecttype="rect"/>'
+      '</v:shapetype><v:shapetype id="_x0000_t201" coordsize="21600,21600" '
+      'o:spt="201" path="m,l,21600r21600,l21600,xe"><v:stroke '
+      'joinstyle="miter"/><v:path shadowok="f" o:extrusionok="f" '
+      'strokeok="f" fillok="f" o:connecttype="rect"/><o:lock v:ext="edit" '
+      'shapetype="t"/></v:shapetype>'
+      '${_noteShape(1025, 4, 0)}${_noteShape(1026, 4, 1)}'
+      '<v:shape id="_x0000_s1027" type="#_x0000_t201" '
+      "style='position:absolute;margin-left:192pt;margin-top:0;width:48pt;"
+      "height:15pt;z-index:3;mso-wrap-style:tight' stroked=\"f\" "
+      'fillcolor="window [65]" o:insetmode="auto"><v:path '
+      'shadowok="t" strokeok="t" fillok="t"/><o:lock v:ext="edit" '
+      'rotation="t"/><v:textbox style=\'mso-direction-alt:auto\' '
+      'o:singleclick="f"><div style=\'text-align:left\'><font face="Tahoma" '
+      'size="160" color="auto">Check</font></div></v:textbox>'
+      '<x:ClientData ObjectType="Checkbox"><x:SizeWithCells/>'
+      '<x:Anchor>4, 0, 0, 0, 5, 0, 1, 0</x:Anchor><x:AutoFill>False'
+      '</x:AutoFill><x:AutoLine>False</x:AutoLine><x:TextVAlign>Center'
+      '</x:TextVAlign><x:NoThreeD/></x:ClientData></v:shape></xml>';
+  const String comments =
+      '$_xlDecl<comments xmlns="$_main" xmlns:mc="$_mcNs" mc:Ignorable="xr" '
+      'xmlns:xr="$_xrNs"><authors><author>Ahmet</author>'
+      '<author>$tcAuthor</author></authors><commentList>'
+      '<comment ref="A5" authorId="0" shapeId="0" '
+      'xr:uid="{6C2E0B57-1A94-4D36-B7F8-3E9D5A1C7024}"><text><r><rPr><b/>'
+      '<sz val="9"/><color indexed="81"/><rFont val="Tahoma"/><family '
+      'val="2"/></rPr><t>Ahmet:</t></r><r><rPr><sz val="9"/><color '
+      'indexed="81"/><rFont val="Tahoma"/><family val="2"/></rPr>'
+      '<t xml:space="preserve">\nCounted twice</t></r></text></comment>'
+      '<comment ref="B5" authorId="1" shapeId="0" '
+      'xr:uid="$thread"><text><t xml:space="preserve">$_threadPlaceholder'
+      '</t></text></comment></commentList></comments>';
+  const String threads =
+      '$_xlDecl<ThreadedComments xmlns="$_threadNs" xmlns:x="$_main">'
+      '<threadedComment ref="B5" dT="2026-11-01T10:00:00.00" '
+      'personId="$person" id="$thread"><text>Looks right</text>'
+      '</threadedComment></ThreadedComments>';
+  const String persons =
+      '$_xlDecl<personList xmlns="$_threadNs" xmlns:x="$_main">'
+      '<person displayName="Ahmet" id="$person" userId="Ahmet" '
+      'providerId="None"/></personList>';
+  const String control =
+      '$_xlDecl<formControlPr xmlns="$_x14Ns" objectType="CheckBox" '
+      'lockText="1"/>';
+  const String table =
+      '$_xlDecl<table xmlns="$_main" xmlns:mc="$_mcNs" mc:Ignorable="xr xr3" '
+      'xmlns:xr="$_xrNs" xmlns:xr3="$_xr3Ns" id="1" '
+      'xr:uid="{2B7E5C81-9F03-4A62-8D14-7C1A6E3F0B95}" name="Stock" '
+      'displayName="Stock" ref="A1:C3" totalsRowShown="0" dataDxfId="1">'
+      '<autoFilter ref="A1:C3" '
+      'xr:uid="{2B7E5C81-9F03-4A62-8D14-7C1A6E3F0B96}"/>'
+      '<tableColumns count="3">'
+      '<tableColumn id="1" '
+      'xr3:uid="{0F4D8A26-6B31-4C97-A2E5-9D7B3C1E6F01}" name="Item"/>'
+      '<tableColumn id="2" '
+      'xr3:uid="{0F4D8A26-6B31-4C97-A2E5-9D7B3C1E6F02}" name="Qty"/>'
+      '<tableColumn id="3" '
+      'xr3:uid="{0F4D8A26-6B31-4C97-A2E5-9D7B3C1E6F03}" name="Total" '
+      'dataDxfId="0"><calculatedColumnFormula>'
+      'Stock[[#This Row],[Qty]]*2</calculatedColumnFormula></tableColumn>'
+      '</tableColumns><tableStyleInfo name="TableStyleMedium2" '
+      'showFirstColumn="0" showLastColumn="0" showRowStripes="1" '
+      'showColumnStripes="0"/></table>';
+  const String strings =
+      '$_xlDecl<sst xmlns="$_main" count="7" uniqueCount="7">'
+      '<si><t>Item</t></si><si><t>Qty</t></si><si><t>Total</t></si>'
+      '<si><t>Bolt</t></si><si><r><rPr><b/><sz val="11"/><color theme="1"/>'
+      '<rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr>'
+      '<t>Nut</t></r><r><rPr><sz val="11"/><color theme="1"/>'
+      '<rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr>'
+      '<t xml:space="preserve"> M8</t></r></si>'
+      '<si><t>Noted</t></si><si><t>Discussed</t></si></sst>';
+  const String styles =
+      '$_xlDecl<styleSheet xmlns="$_main">'
+      '<fonts count="1"><font><sz val="11"/><color theme="1"/>'
+      '<name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'
+      '</fonts><fills count="2"><fill><patternFill patternType="none"/>'
+      '</fill><fill><patternFill patternType="gray125"/></fill></fills>'
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/>'
+      '</border></borders><cellStyleXfs count="1"><xf numFmtId="0" '
+      'fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" '
+      'borderId="0" xfId="0"/></cellXfs><cellStyles count="1">'
+      '<cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+      '<dxfs count="2"><dxf><font><b/></font></dxf><dxf><font><i/></font>'
+      '</dxf></dxfs></styleSheet>';
+  const String workbook =
+      '$_xlDecl<workbook xmlns="$_main" xmlns:r="$_relNs">'
+      '<sheets><sheet name="Objects" sheetId="1" r:id="rId1"/></sheets>'
+      '</workbook>';
+  const String workbookRels =
+      '$_xlDecl<Relationships xmlns="$_pkgRelNs">'
+      '<Relationship Id="rId1" Type="$_relNs/worksheet" '
+      'Target="worksheets/sheet1.xml"/>'
+      '<Relationship Id="rId2" Type="$_relNs/styles" Target="styles.xml"/>'
+      '<Relationship Id="rId3" Type="$_relNs/sharedStrings" '
+      'Target="sharedStrings.xml"/>'
+      '<Relationship Id="rId4" Type="$_relMs/person" '
+      'Target="persons/person.xml"/>'
+      '</Relationships>';
+  const String rootRels =
+      '$_xlDecl<Relationships xmlns="$_pkgRelNs">'
+      '<Relationship Id="rId1" Type="$_relNs/officeDocument" '
+      'Target="xl/workbook.xml"/>'
+      '</Relationships>';
+  const String contentTypes =
+      '$_xlDecl<Types xmlns="$_ctNs">'
+      '<Default Extension="png" ContentType="image/png"/>'
+      '<Default Extension="rels" ContentType="$_ctRels"/>'
+      '<Default Extension="vml" ContentType="application/vnd.openxmlformats-'
+      'officedocument.vmlDrawing"/>'
+      '<Default Extension="xml" ContentType="application/xml"/>'
+      '<Override PartName="/xl/workbook.xml" '
+      'ContentType="$_ctSheet.sheet.main+xml"/>'
+      '<Override PartName="/xl/worksheets/sheet1.xml" '
+      'ContentType="$_ctSheet.worksheet+xml"/>'
+      '<Override PartName="/xl/styles.xml" '
+      'ContentType="$_ctSheet.styles+xml"/>'
+      '<Override PartName="/xl/sharedStrings.xml" '
+      'ContentType="$_ctSheet.sharedStrings+xml"/>'
+      '<Override PartName="/xl/tables/table1.xml" '
+      'ContentType="$_ctSheet.table+xml"/>'
+      '<Override PartName="/xl/comments1.xml" '
+      'ContentType="$_ctSheet.comments+xml"/>'
+      '<Override PartName="/xl/threadedComments/threadedComment1.xml" '
+      'ContentType="application/vnd.ms-excel.threadedcomments+xml"/>'
+      '<Override PartName="/xl/persons/person.xml" '
+      'ContentType="application/vnd.ms-excel.person+xml"/>'
+      '<Override PartName="/xl/ctrlProps/ctrlProp1.xml" '
+      'ContentType="application/vnd.ms-excel.controlproperties+xml"/>'
+      '<Override PartName="/xl/drawings/drawing1.xml" ContentType="'
+      'application/vnd.openxmlformats-officedocument.drawing+xml"/>'
+      '<Override PartName="/xl/charts/chart1.xml" ContentType="'
+      'application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>'
+      '</Types>';
+  final Uint8List bytes = buildZipOrdered(<(String, List<int>)>[
+    ('[Content_Types].xml', utf8.encode(contentTypes)),
+    ('_rels/.rels', utf8.encode(rootRels)),
+    ('xl/workbook.xml', utf8.encode(workbook)),
+    ('xl/_rels/workbook.xml.rels', utf8.encode(workbookRels)),
+    ('xl/worksheets/sheet1.xml', utf8.encode('$sheet$cells$tail')),
+    ('xl/worksheets/_rels/sheet1.xml.rels', utf8.encode(sheetRels)),
+    ('xl/styles.xml', utf8.encode(styles)),
+    ('xl/sharedStrings.xml', utf8.encode(strings)),
+    ('xl/drawings/drawing1.xml', utf8.encode(drawing)),
+    ('xl/drawings/_rels/drawing1.xml.rels', utf8.encode(drawingRels)),
+    ('xl/drawings/vmlDrawing1.vml', utf8.encode(vml)),
+    ('xl/charts/chart1.xml', utf8.encode(chart)),
+    ('xl/media/image1.png', png4x2),
+    ('xl/comments1.xml', utf8.encode(comments)),
+    ('xl/threadedComments/threadedComment1.xml', utf8.encode(threads)),
+    ('xl/persons/person.xml', utf8.encode(persons)),
+    ('xl/ctrlProps/ctrlProp1.xml', utf8.encode(control)),
+    ('xl/tables/table1.xml', utf8.encode(table)),
+  ]);
+  return ProducerFile('excel_objects', bytes, <ProducerSheet>[
+    ProducerSheet('Objects', <List<Object?>>[
+      <Object?>['Item', 'Qty', 'Total'],
+      <Object?>['Bolt', XlsxDecimal('10'), XlsxDecimal('20')],
+      <Object?>['Nut M8', XlsxDecimal('25'), XlsxDecimal('50')],
+      <Object?>[],
+      <Object?>['Noted', 'Discussed'],
+    ]),
+  ]);
 }

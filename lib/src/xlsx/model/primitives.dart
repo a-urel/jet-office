@@ -7,8 +7,8 @@
 /// applies the change, then records a [SetCellChange] so the edit can be
 /// reverted and reapplied. [groupRoleAt] says whether a cell belongs to a
 /// shared, array or data-table formula group, which the editing methods use to
-/// refuse an edit that would break a group. [renameTableColumn] gives a table
-/// column a new name, recording a [TableColumnNameChange] the same way, and
+/// refuse an edit that would break a group. [editTable] changes a table
+/// part, recording a [TableChange] the same way, and
 /// [setStoredRowAttributes] sets a row's attributes, recording a
 /// [SetRowAttributesChange]; [editLayout] edits an element of a worksheet
 /// part (a slot of [WorksheetPart.layoutElement]), recording a
@@ -20,11 +20,22 @@
 /// [setProperties] replaces the document properties parts, recording a
 /// [SetPropertiesChange].
 /// [addStoredRelationship] and [removeStoredRelationship] change a part's
-/// relationships, recording a [SetRelationshipChange].
+/// relationships, recording a [SetRelationshipChange];
+/// [relationshipTarget] gives the target of a new one.
+/// [attachStoredPart] gives a part read from the file its typed content,
+/// recording an [AttachPartChange] whose undo brings the file's bytes back;
+/// [markStoredPart] records a created part the same way, in a [MarkPartChange].
+/// [addStoredPart] and [removeStoredPart] add a part to the package and take
+/// one out, recording an [AddPartChange] and a [RemovePartChange] whose undo
+/// gives back, or takes away, the part with its relationships and content
+/// type.
+/// [applyChange] applies and records a change an edit built itself.
 /// [appendStyle] and [appendNumberFormat] give a cell format index,
 /// recording a [StylesAppendChange] when that appended to the styles part,
 /// so a transaction that fails later, or an undo, removes what it appended.
 library;
+
+import 'dart:typed_data';
 
 import '../../opc/change_log.dart';
 import '../../opc/opaque_xml.dart';
@@ -274,6 +285,20 @@ void editLayout(
   }
 }
 
+/// Removes the first element of [slot] of [part], if it has one, and records
+/// the change in [log]. A repeated element stays, and an undo gives this one
+/// back beside it, where [editLayout] would take the repeat for the new
+/// element of the slot.
+///
+/// Must run inside `log.transaction`.
+void removeLayout(ChangeLog log, WorksheetPart part, String slot) {
+  final Object? before = part.layoutElement(slot);
+  if (before == null) return;
+  final int position = part.layoutPosition(before);
+  part.swapLayout(slot, before, null);
+  log.record(SetLayoutChange(part, slot, before, null, position: position));
+}
+
 /// The change of one element of a workbook part (a slot of
 /// [WorkbookPart.element]): the element before and after.
 final class SetWorkbookElementChange implements Change {
@@ -390,18 +415,20 @@ String addStoredRelationship(
   required String type,
   required String target,
   bool external = false,
+  String? id,
 }) {
-  final String id = package.addRelationship(
+  final String added = package.addRelationship(
     source,
     type: type,
     target: target,
     external: external,
+    id: id,
   );
   final SetRelationshipChange change = SetRelationshipChange(
     package,
     source,
     null,
-    (id: id, type: type, target: target, external: external),
+    (id: added, type: type, target: target, external: external),
   );
   try {
     log.record(change);
@@ -409,7 +436,7 @@ String addStoredRelationship(
     change.revert();
     rethrow;
   }
-  return id;
+  return added;
 }
 
 /// Removes the relationship [id] of [source] and records the change in
@@ -453,47 +480,304 @@ void removeStoredRelationship(
   }
 }
 
-/// The change of one table column's name: before and after.
-final class TableColumnNameChange implements Change {
-  /// A change of column [index] of [table] from [oldName] to [newName].
-  TableColumnNameChange(this.table, this.index, this.oldName, this.newName);
-
-  /// The table part the column belongs to.
-  final TablePart table;
-
-  /// The column's index in the table, 0 for its first column.
-  final int index;
-
-  /// The name before the change.
-  final String oldName;
-
-  /// The name after the change.
-  final String newName;
-
-  @override
-  void revert() => table.setColumnName(index, oldName);
-
-  @override
-  void reapply() => table.setColumnName(index, newName);
+/// The target of a relationship of the part [source] to the part [part],
+/// both absolute names: the path from the folder of [source], as the writer
+/// writes it (`../comments1.xml` from `/xl/worksheets/sheet1.xml`).
+String relationshipTarget(String source, String part) {
+  final List<String> from = source.split('/')
+    ..removeLast()
+    ..removeAt(0);
+  final List<String> to = part.split('/')..removeAt(0);
+  int shared = 0;
+  while (shared < from.length &&
+      shared < to.length - 1 &&
+      from[shared] == to[shared]) {
+    shared++;
+  }
+  return <String>[
+    for (int i = shared; i < from.length; i++) '..',
+    ...to.skip(shared),
+  ].join('/');
 }
 
-/// Gives column [index] of [table] the name [name] and records the change in
-/// [log].
+/// The change of adding a part: undone, the part leaves the package with its
+/// override and relationships, and the content type default this change
+/// added goes too.
+final class AddPartChange implements Change {
+  /// A change that added the part [name] to [package]; [addedDefault] is the
+  /// extension of the default content type the addition declared, `null`
+  /// when it declared none, and [defaultType] its type.
+  AddPartChange(this.package, this.name, this.addedDefault, this.defaultType);
+
+  /// The package.
+  final OpcPackage package;
+
+  /// The absolute name of the added part.
+  final String name;
+
+  /// The extension of the default this change declared, or `null`.
+  final String? addedDefault;
+
+  /// The type of that default.
+  final String? defaultType;
+
+  DetachedPart? _detached;
+
+  @override
+  void revert() {
+    _detached = package.detachPart(name);
+    final String? extension = addedDefault;
+    if (extension != null) package.removeDefault(extension);
+  }
+
+  @override
+  void reapply() {
+    final String? extension = addedDefault;
+    if (extension != null) package.ensureDefault(extension, defaultType!);
+    package.restorePart(_detached!);
+    _detached = null;
+  }
+}
+
+/// The change of removing a part: undone, the part comes back with its
+/// override and relationships.
+final class RemovePartChange implements Change {
+  /// A change that removed [detached] from [package].
+  RemovePartChange(this.package, this.detached);
+
+  /// The package.
+  final OpcPackage package;
+
+  /// What [OpcPackage.detachPart] took out.
+  final DetachedPart detached;
+
+  @override
+  void revert() => package.restorePart(detached);
+
+  @override
+  void reapply() => package.detachPart(detached.name);
+}
+
+/// Adds a part as [OpcPackage.addPart] does, records the change in [log] and
+/// returns the part's name.
 ///
-/// Must run inside `log.transaction`. If recording throws, the old name is
-/// put back before the error leaves.
-void renameTableColumn(ChangeLog log, TablePart table, int index, String name) {
-  final TableColumnNameChange change = TableColumnNameChange(
-    table,
-    index,
-    table.columnName(index),
-    name,
+/// Must run inside `log.transaction`. Throws as [OpcPackage.addPart] does,
+/// with nothing changed; if recording throws, the part is taken out again
+/// before the error leaves. Undoing the change removes the part and the
+/// default content type it declared; redoing it gives the same name.
+String addStoredPart(
+  ChangeLog log,
+  OpcPackage package,
+  String preferredName,
+  String contentType,
+  PartContent content, {
+  bool byExtension = false,
+}) {
+  final String last = preferredName.substring(
+    preferredName.lastIndexOf(RegExp(r'[/\\]')) + 1,
   );
+  final int dot = last.lastIndexOf('.');
+  final String extension = dot < 0 ? '' : last.substring(dot + 1);
+  final bool declare = byExtension && extension.isNotEmpty;
+  final bool addedDefault =
+      declare && package.ensureDefault(extension, contentType);
+  final String name;
+  try {
+    name = package.addPart(
+      preferredName,
+      contentType,
+      content,
+      byExtension: byExtension,
+    );
+  } catch (_) {
+    if (addedDefault) package.removeDefault(extension);
+    rethrow;
+  }
+  final AddPartChange change = AddPartChange(
+    package,
+    name,
+    addedDefault ? extension : null,
+    addedDefault ? contentType : null,
+  );
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+  return name;
+}
+
+/// Takes the part [name] out of the package ([OpcPackage.detachPart]) and
+/// records the change in [log].
+///
+/// Relationships that point at the part stay; the caller removes them, as
+/// separate changes. Must run inside `log.transaction`. Throws
+/// [ArgumentError] when there is no such part; if recording throws, the part
+/// is put back before the error leaves.
+void removeStoredPart(ChangeLog log, OpcPackage package, String name) {
+  final RemovePartChange change = RemovePartChange(
+    package,
+    package.detachPart(name),
+  );
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+}
+
+/// The content of a part of the file left as it was: its original bytes.
+final class _OriginalContent implements PartContent {
+  _OriginalContent(this.package, this.name);
+
+  final OpcPackage package;
+  final String name;
+
+  @override
+  List<Uint8List> encode() => <Uint8List>[package.originalBytes(name)];
+}
+
+/// The change of attaching a typed part: undone, the package writes the
+/// part's bytes from the file again, so a failed or undone edit leaves
+/// everything the typed part does not keep.
+final class AttachPartChange implements Change {
+  /// A change that made [content] what [package] writes for the file's part
+  /// [name], tracked in [attached].
+  AttachPartChange(this.package, this.attached, this.name, this.content);
+
+  /// The package.
+  final OpcPackage package;
+
+  /// The names attached, kept by the read cache of the part.
+  final Set<String> attached;
+
+  /// The part's name.
+  final String name;
+
+  /// The typed part.
+  final PartContent content;
+
+  @override
+  void revert() {
+    attached.remove(name);
+    package.setContent(name, _OriginalContent(package, name));
+  }
+
+  @override
+  void reapply() {
+    attached.add(name);
+    package.setContent(name, content);
+  }
+}
+
+/// Gives the part [name] of the file its typed [content], before an edit
+/// changes that content, and records the change in [log].
+///
+/// A typed part read from the file (a drawing, comments, a VML drawing, a
+/// table) stays out of the package until an edit: the file's bytes are
+/// written, with what the typed part does not keep (comments, whitespace,
+/// what follows the declaration). [attached] is the read cache's set of the
+/// parts it attached; `OpcPackage.isLoaded` cannot say, since it stays true
+/// once this is undone. A name in it records nothing, so a read cache also
+/// marks a part it created, which has no bytes to go back to, with
+/// [markStoredPart].
+///
+/// Must run inside `log.transaction`. Throws [ArgumentError] when there is
+/// no such part.
+void attachStoredPart(
+  ChangeLog log,
+  OpcPackage package,
+  Set<String> attached,
+  String name,
+  PartContent content,
+) {
+  if (attached.contains(name)) return;
+  applyChange(log, AttachPartChange(package, attached, name, content));
+}
+
+/// The change of a read cache taking the name of a part it created into its
+/// [attached] set: undone, the name leaves, unless it was there before.
+final class MarkPartChange implements Change {
+  /// A change that adds [name] to [attached].
+  MarkPartChange(this.attached, this.name);
+
+  /// The names attached, kept by the read cache of the part.
+  final Set<String> attached;
+
+  /// The part's name.
+  final String name;
+
+  bool _added = false;
+
+  @override
+  void revert() {
+    if (_added) attached.remove(name);
+  }
+
+  @override
+  void reapply() => _added = attached.add(name);
+}
+
+/// Takes [name], a part just created with [addStoredPart], into [attached],
+/// since the part has no bytes of the file to go back to, and records the
+/// change in [log].
+///
+/// The undo must take the name out: the name can be a removed part's, used
+/// again, and that part comes back from its own undo with its bytes and
+/// nothing attached. Must run inside `log.transaction`.
+void markStoredPart(ChangeLog log, Set<String> attached, String name) =>
+    applyChange(log, MarkPartChange(attached, name));
+
+/// Applies [change] ([Change.reapply]) and records it in [log].
+///
+/// Must run inside `log.transaction`. If recording throws, the change is
+/// reverted before the error leaves.
+void applyChange(ChangeLog log, Change change) {
   change.reapply();
   try {
     log.record(change);
   } catch (_) {
     change.revert();
+    rethrow;
+  }
+}
+
+/// The change of a table part: a column's name, its style or its range.
+final class TableChange implements Change {
+  /// A change of [table] from the state [before] to the state [after].
+  TableChange(this.table, this.before, this.after);
+
+  /// The table part.
+  final TablePart table;
+
+  /// The state before the change.
+  final TableState before;
+
+  /// The state after the change.
+  final TableState after;
+
+  @override
+  void revert() => table.restore(before);
+
+  @override
+  void reapply() => table.restore(after);
+}
+
+/// Runs [edit], which changes [table] through [TablePart.setColumnName],
+/// [TablePart.setStyle] or [TablePart.resize], and records the change in
+/// [log].
+///
+/// Must run inside `log.transaction`. If [edit] or recording throws, the
+/// table is put back as it was before the error leaves.
+void editTable(ChangeLog log, TablePart table, void Function() edit) {
+  final TableState before = table.state;
+  try {
+    edit();
+    log.record(TableChange(table, before, table.state));
+  } catch (_) {
+    table.restore(before);
     rethrow;
   }
 }
