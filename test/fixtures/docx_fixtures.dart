@@ -1,6 +1,6 @@
-/// The fixtures of DOCX milestones D1, D2 and D3: new documents with
-/// paragraphs of text (D1), with run and paragraph formatting, styles and
-/// lists (D2) and with tables (D3).
+/// The fixtures of DOCX milestones D1 to D4: new documents with paragraphs of
+/// text (D1), with run and paragraph formatting, styles and lists (D2), with
+/// tables (D3) and with sections, headers, footers and fields (D4).
 ///
 /// New in jet_office. Every fixture starts from `DocxDocument()`, the blank
 /// document, so what LibreOffice and the Open XML SDK see is what the model
@@ -26,12 +26,14 @@ const List<(String?, String)> d1Paragraphs = <(String?, String)>[
   (null, 'Last.'),
 ];
 
-/// The fixtures of D1, D2 and D3, in a fixed order.
+/// The fixtures of D1 to D4, in a fixed order.
 ///
 /// No fixture may end in a table: LibreOffice's text export of a document
 /// whose body ends in a table never ends, it writes the file without bound
 /// (the model adds no paragraph after a last table), and the CI job converts
-/// every fixture. End the body in a paragraph.
+/// every fixture. End the body in a paragraph, and not in one that carries a
+/// section break: `tool/write_table_last.dart` writes that document for the
+/// Word check alone.
 List<DocxFixture> docxFixtures() => <DocxFixture>[
   DocxFixture('d1_blank', '', () => DocxDocument().save()),
   DocxFixture(
@@ -124,6 +126,25 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
     libreOfficeTextSkip:
         'LibreOffice repeats a paragraph in the text of nested tables; '
         'differs by version',
+  ),
+  DocxFixture(
+    'd4_sections',
+    _sectionsText.join('\n'),
+    () => _build(_fillSections),
+  ),
+  DocxFixture(
+    'd4_headers',
+    _headersText.join('\n'),
+    () => _build(_fillHeaders),
+    headerFooterText: _headersStories.join('\n'),
+  ),
+  // LibreOffice's text export writes the cached result of the body's PAGE and
+  // of the custom field, so its text is the expected text.
+  DocxFixture(
+    'd4_fields',
+    _fieldsText.join('\n'),
+    () => _build(_fillFields),
+    headerFooterText: _fieldsStories.join('\n'),
   ),
 ];
 
@@ -659,4 +680,150 @@ void _fillNested(DocxDocument doc) {
   // so the fixtures the CI job converts all end in a paragraph. A body that
   // ends in a table is covered by `round_trip_test.dart` and the Word check.
   doc.body.addParagraph('After the tables.');
+}
+
+/// The text of `d4_sections`, written by hand from what `_fillSections` adds.
+const List<String> _sectionsText = <String>[
+  'Portrait, with wide margins, its pages numbered from 5.',
+  'Its lines are numbered and it sits in the middle of the page.',
+  'Landscape, in two columns with a line between them.',
+  'The second paragraph of the columns.',
+  'Continuous: this section starts on the same page, in one column.',
+  'Letter, on a page of its own.',
+  'Name\tValue',
+  'Width\tThe text width less 10 twips',
+  'After the table.',
+];
+
+/// Fills `d4_sections`: four sections, each changing what the one before it
+/// left for it to copy.
+void _fillSections(DocxDocument doc) {
+  final DocxBody body = doc.body;
+  doc.sections.last
+    ..pageSize = DocxPageSize.a4()
+    ..margins = _margins(108, gutter: 18)
+    ..pageNumbering = DocxPageNumbering(start: 5)
+    ..lineNumbering = DocxLineNumbering(
+      countBy: 1,
+      restart: DocxLineNumberRestart.newSection,
+    )
+    ..verticalAlignment = DocxSectionVerticalAlignment.center;
+  body.addParagraph(_sectionsText[0]);
+  body.addParagraph(_sectionsText[1]);
+  body.addSection()
+    ..pageSize = DocxPageSize.a4(landscape: true)
+    ..margins = _margins(72)
+    ..columns = DocxColumns(count: 2, separator: true)
+    ..lineNumbering = null
+    ..verticalAlignment = null;
+  body.addParagraph(_sectionsText[2]);
+  body.addParagraph(_sectionsText[3]);
+  body.addSection(start: DocxSectionStart.continuous).columns = DocxColumns();
+  body.addParagraph(_sectionsText[4]);
+  body.addSection().pageSize = DocxPageSize.letter();
+  body.addParagraph(_sectionsText[5]);
+  body.addTable(columns: 2)
+    ..addRow(<String?>['Name', 'Value'], header: true)
+    ..addRow(<String?>['Width', 'The text width less 10 twips']);
+  body.addParagraph(_sectionsText[8]);
+}
+
+/// Margins of [side] points on the four sides, with the header and footer at
+/// half an inch.
+DocxPageMargins _margins(double side, {double gutter = 0}) => DocxPageMargins(
+  top: side,
+  right: side,
+  bottom: side,
+  left: side,
+  header: 36,
+  footer: 36,
+  gutter: gutter,
+);
+
+/// The text of `d4_headers`, written by hand from what `_fillHeaders` adds.
+const List<String> _headersText = <String>[
+  'Page one of section one: the first page stories.',
+  'Page two of section one: the even stories.',
+  'Page three of section one: the default stories.',
+  'Section two inherits the stories of section one.',
+  'Section three has its own header and footer.',
+];
+
+/// What the sections of `d4_headers` show: section one all six, section two
+/// what it inherits but the first page's, as it has no title page, and section
+/// three its own default stories and the even ones of section one.
+const List<String> _headersStories = <String>[
+  '1 header: Header one',
+  '1 first header: First header one',
+  '1 even header: Even header one',
+  '1 footer: Footer one',
+  '1 first footer: First footer one',
+  '1 even footer: Even footer one',
+  '2 header: Header one',
+  '2 even header: Even header one',
+  '2 footer: Footer one',
+  '2 even footer: Even footer one',
+  '3 header: Header three',
+  '3 even header: Even header one',
+  '3 footer: Footer three',
+  '3 even footer: Even footer one',
+];
+
+/// Fills `d4_headers`: a first, an even and a default story of each kind in
+/// section one, whose three pages show all three, then a section with none
+/// of its own and a section with its own default ones.
+void _fillHeaders(DocxDocument doc) {
+  final DocxBody body = doc.body;
+  final DocxSection one = doc.sections.last;
+  one.header.addParagraph('Header one');
+  one.firstHeader.addParagraph('First header one');
+  one.evenHeader.addParagraph('Even header one');
+  one.footer.addParagraph('Footer one');
+  one.firstFooter.addParagraph('First footer one');
+  one.evenFooter.addParagraph('Even footer one');
+  body.addParagraph(_headersText[0]);
+  body.addParagraph(_headersText[1]).properties.pageBreakBefore = true;
+  body.addParagraph(_headersText[2]).properties.pageBreakBefore = true;
+  body.addSection();
+  body.addParagraph(_headersText[3]);
+  final DocxSection three = body.addSection();
+  three.ownHeader(DocxHeaderFooterType.primary).addParagraph('Header three');
+  three.ownFooter(DocxHeaderFooterType.primary).addParagraph('Footer three');
+  body.addParagraph(_headersText[4]);
+}
+
+/// The text of `d4_fields`, written by hand from what `_fillFields` adds: a
+/// field's text is its cached result.
+const List<String> _fieldsText = <String>[
+  'This is page 1.',
+  'A field the model has no helper for: Custom text.',
+];
+
+/// What the footer of `d4_fields` shows, each field by its name.
+const List<String> _fieldsStories = <String>[
+  '1 footer: Page {PAGE} of {NUMPAGES}, section pages: {SECTIONPAGES}',
+  '1 footer: Printed on {DATE} at {TIME}',
+];
+
+/// Fills `d4_fields`: `PAGE`, `NUMPAGES` and `SECTIONPAGES` in the footer, and
+/// `DATE` and `TIME` there with no result, which Word computes when it opens
+/// the file; `PAGE` and a custom field in the body.
+void _fillFields(DocxDocument doc) {
+  final DocxHeaderFooter footer = doc.sections.last.footer;
+  footer.addParagraph('Page ')
+    ..addField(DocxField.page())
+    ..addRun(' of ')
+    ..addField(DocxField.numPages())
+    ..addRun(', section pages: ')
+    ..addField(DocxField.sectionPages());
+  footer.addParagraph('Printed on ')
+    ..addField(DocxField.date())
+    ..addRun(' at ')
+    ..addField(DocxField.time());
+  doc.body.addParagraph('This is page ')
+    ..addField(DocxField.page())
+    ..addRun('.');
+  doc.body.addParagraph('A field the model has no helper for: ')
+    ..addField(DocxField(' QUOTE "Custom text" ', result: 'Custom text'))
+    ..addRun('.');
 }

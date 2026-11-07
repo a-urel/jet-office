@@ -61,12 +61,23 @@ void main() {
   group('write_table_last', () {
     test('writes a document whose body ends in a table, and nothing else', () {
       write_table_last.main(<String>[dir.path]);
-      expect(names(dir), <String>['d3_table_last.docx']);
+      expect(names(dir), <String>['d3_table_last.docx', 'd4_break_last.docx']);
       final DocxDocument doc = DocxDocument.open(
         File('${dir.path}/d3_table_last.docx').readAsBytesSync(),
       );
       expect(doc.body.blocks.first, isA<DocxParagraph>());
       expect(doc.body.blocks.last, isA<DocxTable>());
+      expect(doc.save().warnings, isEmpty);
+    });
+
+    test('writes a document whose last block carries the section break', () {
+      write_table_last.main(<String>[dir.path]);
+      final DocxDocument doc = DocxDocument.open(
+        File('${dir.path}/d4_break_last.docx').readAsBytesSync(),
+      );
+      expect(doc.sections, hasLength(2));
+      final DocxParagraph last = doc.body.blocks.last as DocxParagraph;
+      expect(last.section, same(doc.sections.first));
       expect(doc.save().warnings, isEmpty);
     });
 
@@ -131,6 +142,25 @@ void main() {
         }
       }
       expect(written, contains('d3_nested.libreoffice-skip.txt'));
+    });
+
+    test('writes the text of the stories, only for those that have it', () {
+      write_fixtures.main(<String>[dir.path]);
+      final List<String> written = names(dir);
+      for (final DocxFixture f in docxFixtures()) {
+        final String file = '${f.name}.stories.txt';
+        if (f.headerFooterText == null) {
+          expect(written, isNot(contains(file)), reason: f.name);
+        } else {
+          expect(
+            File('${dir.path}/$file').readAsStringSync(),
+            '${f.headerFooterText}\n',
+            reason: f.name,
+          );
+        }
+      }
+      expect(written, contains('d4_headers.stories.txt'));
+      expect(written, contains('d4_fields.stories.txt'));
     });
 
     test(
@@ -340,6 +370,42 @@ void main() {
       );
     });
 
+    test('round-trips the D4 fixtures: exit 0, and encodes their stories', () {
+      writeOnly(dir, <String>{
+        'd4_sections.docx',
+        'd4_headers.docx',
+        'd4_fields.docx',
+      });
+      final StringBuffer out = StringBuffer();
+      final int code = roundTripDocx(
+        <String>[dir.path, '${temp.path}/out'],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 0, reason: '$out');
+      expect(out.toString(), contains('All 3 documents round-trip.'));
+    });
+
+    test('a footer the model cannot read is refused with its name', () {
+      writeOnly(dir, <String>{'d4_fields.docx'});
+      final File file = File('${dir.path}/d4_fields.docx');
+      file.writeAsBytesSync(
+        rewriteDocxPart(
+          file.readAsBytesSync(),
+          'word/footer1.xml',
+          (String xml) => xml.replaceFirst('</w:ftr>', ''),
+        ),
+      );
+      final StringBuffer out = StringBuffer();
+      final int code = roundTripDocx(
+        <String>[dir.path, '${temp.path}/out'],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 1);
+      expect(out.toString(), contains('word/footer1.xml'));
+    });
+
     test('a styles part the model cannot read is refused with its name', () {
       writeOnly(dir, <String>{'d2_styles.docx'});
       final File file = File('${dir.path}/d2_styles.docx');
@@ -464,6 +530,47 @@ void main() {
       );
       expect(code, 1);
       expect(out.toString(), contains('d1_corrupt: line 1: expected'));
+    });
+
+    test('a story that differs: exit 1 naming the line', () {
+      writeOnly(dir, <String>{
+        'd4_headers.expected.txt',
+        'd4_headers.stories.txt',
+        'd4_headers.docx',
+      });
+      File('${resaved.path}/d4_headers.docx').writeAsBytesSync(
+        rewriteDocxPart(
+          File('${dir.path}/d4_headers.docx').readAsBytesSync(),
+          'word/header2.xml',
+          (String x) => x.replaceFirst('First header one', 'Lost'),
+        ),
+      );
+      final StringBuffer out = StringBuffer();
+      final int code = compareResavedDocx(
+        <String>[dir.path, resaved.path],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 1);
+      expect(out.toString(), contains('d4_headers: stories: line 2: expected'));
+    });
+
+    test('an unchanged document of stories: exit 0', () {
+      writeOnly(dir, <String>{
+        'd4_headers.expected.txt',
+        'd4_headers.stories.txt',
+        'd4_headers.docx',
+      });
+      File(
+        '${dir.path}/d4_headers.docx',
+      ).copySync('${resaved.path}/d4_headers.docx');
+      final StringBuffer out = StringBuffer();
+      final int code = compareResavedDocx(
+        <String>[dir.path, resaved.path],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 0, reason: '$out');
     });
 
     test('a warning on the re-save is a mismatch', () {

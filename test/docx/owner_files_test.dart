@@ -292,6 +292,32 @@ void main() {
     }
   });
 
+  test('every owner file\'s headers and footers encode as Word wrote them', () {
+    for (final OwnerDocx entry in manifest) {
+      final Uint8List input = File('$_dir/${entry.file}').readAsBytesSync();
+      final List<String> differences = encodedStoryDifferences(input);
+      expect(
+        differences,
+        isEmpty,
+        reason: '${entry.file}\n${differences.join('\n')}',
+      );
+    }
+  });
+
+  test('reading every section and story of the owner files saves as read', () {
+    for (final OwnerDocx entry in manifest) {
+      final Uint8List input = File('$_dir/${entry.file}').readAsBytesSync();
+      final DocxDocument doc = DocxDocument.open(input);
+      readTypedProperties(doc);
+      final List<String> differences = comparePackages(input, doc.save().bytes);
+      expect(
+        differences,
+        isEmpty,
+        reason: '${entry.file}\n${differences.join('\n')}',
+      );
+    }
+  });
+
   test('reading every typed property of the owner files throws nothing', () {
     for (final OwnerDocx entry in manifest) {
       final DocxDocument doc = DocxDocument.open(

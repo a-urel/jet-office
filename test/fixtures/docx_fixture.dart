@@ -19,6 +19,7 @@ final class DocxFixture {
     this.build, {
     String? libreOfficeText,
     this.libreOfficeTextSkip,
+    this.headerFooterText,
     this.expectedWarnings = const <DocxWarningCode, int>{},
   }) : libreOfficeText = libreOfficeText ?? expectedText;
 
@@ -55,6 +56,14 @@ final class DocxFixture {
   /// is not a reading of the document that can be pinned (it differs by
   /// version); the fixture's re-save is still compared.
   final String? libreOfficeTextSkip;
+
+  /// What the document's headers and footers show, as `docxStoriesText`
+  /// (`tool/src/text_compare.dart`) reads it: a line for each paragraph of each
+  /// story each section shows, or `null` for a fixture that has none.
+  ///
+  /// `tool/write_fixtures.dart` writes it to `<name>.stories.txt`, and
+  /// `tool/compare_resaved_docx.dart` compares LibreOffice's re-save with it.
+  final String? headerFooterText;
 
   /// Builds the document and returns the saved file and its warnings. The
   /// same bytes every time.

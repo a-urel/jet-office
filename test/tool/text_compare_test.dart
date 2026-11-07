@@ -10,6 +10,120 @@ import '../../tool/src/text_compare.dart';
 import '../docx/support/docx_builder.dart';
 
 void main() {
+  group('docxResavedText', () {
+    const String ns =
+        'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+
+    test('leaves out an empty paragraph that only carries a break', () {
+      final DocxDocument doc = DocxDocument.open(
+        buildDocx(
+          document:
+              '<w:document $ns><w:body><w:p><w:r><w:t>One</w:t></w:r></w:p>'
+              '<w:p><w:pPr><w:sectPr/></w:pPr></w:p><w:p/>'
+              '<w:p><w:r><w:t>Two</w:t></w:r></w:p></w:body></w:document>',
+        ),
+      );
+      expect(docxResavedText(doc), 'One\n\nTwo');
+    });
+
+    test('a paragraph with text and a break keeps its text', () {
+      final DocxDocument doc = DocxDocument.open(
+        buildDocx(
+          document:
+              '<w:document $ns><w:body><w:p><w:pPr><w:sectPr/></w:pPr>'
+              '<w:r><w:t>One</w:t></w:r></w:p></w:body></w:document>',
+        ),
+      );
+      expect(docxResavedText(doc), 'One');
+    });
+
+    test('takes a page break at the edge of a paragraph for no line', () {
+      final DocxDocument doc = DocxDocument.open(
+        buildDocx(
+          document:
+              '<w:document $ns><w:body><w:p><w:r><w:t>One</w:t></w:r>'
+              '<w:r><w:br w:type="page"/></w:r></w:p>'
+              '<w:p><w:r><w:t>Two</w:t><w:br/></w:r></w:p>'
+              '<w:p><w:r><w:br w:type="page"/><w:t>Three</w:t></w:r></w:p>'
+              '</w:body></w:document>',
+        ),
+      );
+      expect(docxResavedText(doc), 'One\nTwo\n\nThree');
+    });
+
+    test('is docxFullText for a document with neither', () {
+      final DocxDocument doc = DocxDocument();
+      doc.body.addParagraph('After');
+      doc.body.addTable(columns: 2).addRow(<String?>['a', 'b']);
+      expect(docxResavedText(doc), docxFullText(doc));
+    });
+  });
+
+  group('docxStoriesText', () {
+    test('a document with no stories has no lines', () {
+      expect(docxStoriesText(DocxDocument()), '');
+    });
+
+    test('names each story a section shows, by section, in order', () {
+      final DocxDocument doc = DocxDocument();
+      final DocxSection one = doc.sections.last;
+      one.header.addParagraph('Default');
+      one.firstHeader.addParagraph('First');
+      one.footer.addParagraph('Foot');
+      doc.body.addSection();
+      expect(
+        docxStoriesText(doc),
+        <String>[
+          '1 header: Default',
+          '1 first header: First',
+          '1 footer: Foot',
+          '2 header: Default',
+          '2 footer: Foot',
+        ].join('\n'),
+      );
+    });
+
+    test('an even story shows only when the document has them', () {
+      final DocxDocument doc = DocxDocument();
+      doc.sections.last.evenFooter.addParagraph('Even');
+      expect(docxStoriesText(doc), '1 even footer: Even');
+      doc.evenAndOddHeaders = false;
+      expect(docxStoriesText(doc), '');
+    });
+
+    test('a first story shows only with a title page', () {
+      final DocxDocument doc = DocxDocument();
+      doc.sections.last.firstFooter.addParagraph('First');
+      doc.sections.last.titlePage = false;
+      expect(docxStoriesText(doc), '');
+    });
+
+    test('a field reads as its name, whatever its result and switches', () {
+      final DocxDocument doc = DocxDocument();
+      doc.sections.last.footer.addParagraph('Page ')
+        ..addField(DocxField.page())
+        ..addRun(' on ')
+        ..addField(DocxField.date(result: '07.11.2026'));
+      expect(docxStoriesText(doc), '1 footer: Page {PAGE} on {DATE}');
+    });
+
+    test('a story has a line for each paragraph, and none for a blank one', () {
+      final DocxDocument doc = DocxDocument();
+      final DocxHeaderFooter header = doc.sections.last.header;
+      header.addParagraph('One');
+      header.addParagraph(' ');
+      header.addParagraph();
+      header.addParagraph('Two');
+      expect(docxStoriesText(doc), '1 header: One\n1 header: Two');
+    });
+
+    test('a table in a story has a line for each row', () {
+      final DocxDocument doc = DocxDocument();
+      doc.sections.last.header.addTable(columns: 2).addRow(<String?>['a', 'b']);
+      expect(docxStoriesText(doc), '1 header: a\tb');
+    });
+  });
+
   group('docxBodyText', () {
     test('joins the paragraphs with a newline and leaves tables out', () {
       final DocxDocument doc = DocxDocument.open(

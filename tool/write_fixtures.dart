@@ -20,7 +20,10 @@
 /// differently (a list's labels, which the model's text does not have) also
 /// gets `<dir>/<name>.libreoffice.txt`, that text, which
 /// `tool/compare_text.dart` prefers. A fixture with a `libreOfficeTextSkip`
-/// reason gets `<dir>/<name>.libreoffice-skip.txt`, the reason.
+/// reason gets `<dir>/<name>.libreoffice-skip.txt`, the reason. A fixture with
+/// a `headerFooterText` gets `<dir>/<name>.stories.txt`, that text, which
+/// `tool/compare_resaved_docx.dart` compares with what the re-save's headers
+/// and footers show.
 ///
 /// `--corrupt` also writes `m1_corrupt.xlsx` and its `.expected.json`, to
 /// prove that both checks fail on a bad file. It is `m1_values` with two
@@ -74,6 +77,7 @@ void main(List<String> args) {
       fixture.expectedText,
       libreOfficeText: fixture.libreOfficeText,
       libreOfficeTextSkip: fixture.libreOfficeTextSkip,
+      headerFooterText: fixture.headerFooterText,
     );
   }
   if (corrupt) {
@@ -123,6 +127,7 @@ void _writeDocx(
   String text, {
   String? libreOfficeText,
   String? libreOfficeTextSkip,
+  String? headerFooterText,
 }) {
   File('${dir.path}/$name.docx').writeAsBytesSync(bytes);
   File('${dir.path}/$name.expected.txt').writeAsStringSync('$text\n');
@@ -135,6 +140,11 @@ void _writeDocx(
     File(
       '${dir.path}/$name.libreoffice-skip.txt',
     ).writeAsStringSync('$libreOfficeTextSkip\n');
+  }
+  if (headerFooterText != null) {
+    File(
+      '${dir.path}/$name.stories.txt',
+    ).writeAsStringSync('$headerFooterText\n');
   }
 }
 

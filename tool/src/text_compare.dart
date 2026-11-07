@@ -10,6 +10,9 @@
 /// * a document's text is [docxBodyText]: the [DocxParagraph.text] of each
 ///   paragraph of the body, joined by `\n`; tables and opaque blocks are
 ///   left out;
+/// * a re-save is read by [docxResavedText], as LibreOffice ends a section and
+///   a page otherwise than the fixture did;
+/// * what the headers and footers show is [docxStoriesText];
 /// * a text file, expected or exported, is read by [readExpectedText]: a
 ///   leading BOM and one trailing `\n` are dropped, because LibreOffice
 ///   starts its export with a BOM and ends every paragraph with `\n`;
@@ -37,16 +40,96 @@ String docxBodyText(DocxDocument doc) => <String>[
 String docxFullText(DocxDocument doc) =>
     _blocksText(doc.body.blocks).join('\n');
 
-List<String> _blocksText(List<DocxBlock> blocks) => <String>[
+/// [docxFullText] of a document LibreOffice saved, which ends sections and
+/// pages in its own way: an empty paragraph that carries a section break is
+/// no line (LibreOffice adds one after a paragraph that ended a section with
+/// columns or another page), and a page break at either edge of a paragraph
+/// is not one of its lines either (LibreOffice turns `w:pageBreakBefore` into
+/// a `w:br` of the page before).
+String docxResavedText(DocxDocument doc) => _blocksText(<DocxBlock>[
+  for (final DocxBlock block in doc.body.blocks)
+    if (block is! DocxParagraph || block.section == null || block.text != '')
+      block,
+], paragraph: _withoutEdgePageBreaks).join('\n');
+
+/// The text of [paragraph] less a page break that starts or ends it.
+String _withoutEdgePageBreaks(DocxParagraph paragraph) {
+  String text = paragraph.text;
+  bool isPageBreak(DocxRunContent? c) =>
+      c is DocxBreak && c.type == DocxBreakType.page;
+  final DocxInline? first = paragraph.inlines.firstOrNull;
+  final DocxInline? last = paragraph.inlines.lastOrNull;
+  if (first is DocxRun && isPageBreak(first.content.firstOrNull)) {
+    text = text.substring(1);
+  }
+  if (text.isNotEmpty &&
+      last is DocxRun &&
+      isPageBreak(last.content.lastOrNull)) {
+    text = text.substring(0, text.length - 1);
+  }
+  return text;
+}
+
+/// What the headers and footers of [doc] show, for the fixtures: a line for
+/// each paragraph (a row, for a table) of each story a section shows, as
+/// `<section> <kind>: <text>`, the sections in order, each with its `header`,
+/// `first header`, `even header`, `footer`, `first footer` and `even footer`.
+///
+/// That is the document as Word shows it, not as the file writes it, which is
+/// what survives a re-save: a section's stories count, inherited or its own
+/// (LibreOffice writes every section its own copies), a `first` one with
+/// [DocxSection.titlePage], an `even` one with
+/// [DocxDocument.evenAndOddHeaders]. A blank line is left out, as LibreOffice
+/// writes a blank paragraph in a story nobody filled. A field reads as
+/// `{NAME}`, the first word of its instruction: its result is not this
+/// comparison's, as LibreOffice computes `DATE` and `TIME`, and rewrites the
+/// switches.
+String docxStoriesText(DocxDocument doc) {
+  final bool even = doc.evenAndOddHeaders;
+  final List<DocxSection> sections = doc.sections;
+  return <String>[
+    for (int i = 0; i < sections.length; i++)
+      for (final (String kind, DocxHeaderFooter story, bool shown)
+          in <(String, DocxHeaderFooter, bool)>[
+            ('header', sections[i].header, true),
+            ('first header', sections[i].firstHeader, sections[i].titlePage),
+            ('even header', sections[i].evenHeader, even),
+            ('footer', sections[i].footer, true),
+            ('first footer', sections[i].firstFooter, sections[i].titlePage),
+            ('even footer', sections[i].evenFooter, even),
+          ])
+        if (shown)
+          for (final String line in _blocksText(
+            story.blocks,
+            paragraph: _withFieldNames,
+          ))
+            if (line.trim().isNotEmpty) '${i + 1} $kind: $line',
+  ].join('\n');
+}
+
+/// The text of [paragraph] with each field as `{NAME}`.
+String _withFieldNames(DocxParagraph paragraph) => <String>[
+  for (final DocxInline inline in paragraph.inlines)
+    inline is DocxField
+        ? '{${inline.instruction.trim().split(RegExp(r'\s+')).first}}'
+        : inline.text,
+].join();
+
+List<String> _blocksText(
+  List<DocxBlock> blocks, {
+  String Function(DocxParagraph) paragraph = _paragraphText,
+}) => <String>[
   for (final DocxBlock block in blocks)
     if (block is DocxParagraph)
-      block.text
+      paragraph(block)
     else if (block is DocxTable)
       for (final DocxTableRow row in block.rows)
         <String>[
           for (final DocxTableCell cell in row.cells) cell.text,
         ].join('\t'),
 ];
+
+String _paragraphText(DocxParagraph paragraph) => paragraph.text;
 
 /// The text a file holds, as compared: [file] without a leading BOM and
 /// without one trailing `\n`.

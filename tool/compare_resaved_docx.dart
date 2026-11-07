@@ -9,10 +9,14 @@
 ///
 /// For every `<name>.expected.txt` in the first directory (written by
 /// `tool/write_fixtures.dart`) it opens `<resaved>/<name>.docx`, reads the
-/// body and compares `docxFullText` (the body's paragraphs and tables:
-/// `tool/src/text_compare.dart`) with the expected text by `textDifferences`
-/// (`tool/src/text_compare.dart`). Every warning opening and reading the
-/// re-save reports is a mismatch unless `docxResaveAllowedWarnings` in
+/// body and compares `docxResavedText` (the body's paragraphs and tables, less
+/// the empty paragraphs and page breaks LibreOffice ends sections and pages
+/// with: `tool/src/text_compare.dart`) with the expected text by
+/// `textDifferences` (`tool/src/text_compare.dart`). A fixture with a
+/// `<name>.stories.txt` has what its headers and footers show compared too, by
+/// `docxStoriesText`, each difference as `stories: <line>`. Every warning
+/// opening and reading the re-save reports is a mismatch unless
+/// `docxResaveAllowedWarnings` in
 /// `tool/src/read_compare.dart` names the fixture and the code. A missing
 /// or unreadable re-save is a mismatch. This is spec 9's "DOCX re-save
 /// opened with `DocxDocument` and compared".
@@ -64,9 +68,13 @@ int compareResavedDocx(
     final String expected = readExpectedText(
       File('${dir.path}/$name.expected.txt').readAsStringSync(),
     );
+    final File stories = File('${dir.path}/$name.stories.txt');
     final List<String> problems = _compare(
       name,
       expected,
+      stories.existsSync()
+          ? readExpectedText(stories.readAsStringSync())
+          : null,
       File('${args[1]}/$name.docx'),
     );
     for (final String line in problems) {
@@ -83,14 +91,21 @@ int compareResavedDocx(
 }
 
 /// The mismatches of the re-saved [file] of fixture [name] against its
-/// [expected] text.
-List<String> _compare(String name, String expected, File file) {
+/// [expected] text and, when it has any, its [stories].
+List<String> _compare(
+  String name,
+  String expected,
+  String? stories,
+  File file,
+) {
   if (!file.existsSync()) return <String>['missing ${file.path}'];
   final DocxDocument doc;
   final String text;
+  final String? storiesText;
   try {
     doc = DocxDocument.open(file.readAsBytesSync());
-    text = docxFullText(doc);
+    text = docxResavedText(doc);
+    storiesText = stories == null ? null : docxStoriesText(doc);
   } on DocxReadException catch (e) {
     return <String>['the model refused the re-save: $e'];
   }
@@ -98,6 +113,9 @@ List<String> _compare(String name, String expected, File file) {
       docxResaveAllowedWarnings[name] ?? const <DocxWarningCode, String>{};
   return <String>[
     ...textDifferences(expected, text),
+    if (stories != null)
+      for (final String line in textDifferences(stories, storiesText!))
+        'stories: $line',
     for (final DocxWarning w in doc.warnings)
       if (!allowed.containsKey(w.code))
         'warning ${w.code.name} in ${w.part}: ${w.message()}',

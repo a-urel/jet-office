@@ -10,6 +10,7 @@ import 'package:jet_office/src/opc/ooxml.dart' show Ns;
 import 'package:test/test.dart';
 
 import '../../tool/src/docx_serialize.dart';
+import '../../tool/src/part_compare.dart';
 import '../docx/support/docx_builder.dart' show buildDocx, rewriteDocxPart;
 import '../docx/support/numbering_documents.dart';
 import '../docx/support/styles_documents.dart';
@@ -194,6 +195,93 @@ void main() {
       );
       // Two of the table, the grid, one of the row, two of the cell.
       expect(readTypedProperties(doc), 6);
+    });
+  });
+
+  group('sections and stories', () {
+    Uint8List fixture(String name) => docxFixtures()
+        .singleWhere((DocxFixture f) => f.name == name)
+        .build()
+        .bytes;
+
+    test('the children of sectPr compare in any order', () {
+      expect(
+        encodedMainDifferences(
+          buildDocx(
+            document:
+                '<w:document xmlns:w="$_w"><w:body><w:sectPr>'
+                '<w:titlePg/><w:pgMar w:top="1" w:right="1" w:bottom="1" '
+                'w:left="1" w:header="1" w:footer="1" w:gutter="0"/>'
+                '<w:pgSz w:w="100" w:h="200"/></w:sectPr></w:body>'
+                '</w:document>',
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('encodedStoryDifferences finds none in the D4 fixtures', () {
+      for (final String name in <String>['d4_headers', 'd4_fields']) {
+        expect(encodedStoryDifferences(fixture(name)), isEmpty, reason: name);
+      }
+    });
+
+    test('a document with no stories has nothing to compare', () {
+      expect(encodedStoryDifferences(DocxDocument().save().bytes), isEmpty);
+    });
+
+    test('a broken footer is one line, naming the part', () {
+      final List<String> differences = encodedStoryDifferences(
+        rewriteDocxPart(
+          fixture('d4_fields'),
+          'word/footer1.xml',
+          (String x) => x.replaceFirst('</w:ftr>', ''),
+        ),
+      );
+      expect(differences, hasLength(1));
+      expect(differences.single, startsWith('word/footer1.xml: '));
+    });
+
+    test('the children of a story\'s properties compare in any order', () {
+      expect(
+        encodedStoryDifferences(
+          rewriteDocxPart(
+            fixture('d4_fields'),
+            'word/footer1.xml',
+            (String x) => x.replaceFirst(
+              '<w:p>',
+              '<w:p><w:pPr><w:jc w:val="left"/><w:keepNext/></w:pPr>',
+            ),
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('readTypedProperties reads the values of a section', () {
+      final DocxDocument bare = DocxDocument.open(buildDocx());
+      final int none = readTypedProperties(bare);
+      final DocxDocument doc = DocxDocument.open(fixture('d4_sections'));
+      expect(readTypedProperties(doc), greaterThan(none + 20));
+    });
+
+    test('readTypedProperties loads the stories, and a bad one throws', () {
+      final Uint8List broken = rewriteDocxPart(
+        fixture('d4_fields'),
+        'word/footer1.xml',
+        (String x) => x.replaceFirst('</w:ftr>', ''),
+      );
+      expect(
+        () => readTypedProperties(DocxDocument.open(broken)),
+        throwsA(isA<DocxReadException>()),
+      );
+    });
+
+    test('readTypedProperties leaves a document saving what it read', () {
+      final Uint8List input = fixture('d4_headers');
+      final DocxDocument doc = DocxDocument.open(input);
+      readTypedProperties(doc);
+      expect(comparePackages(input, doc.save().bytes), isEmpty);
     });
   });
 

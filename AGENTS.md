@@ -94,9 +94,14 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   `<name>.xlsx` and its expected values as `<name>.expected.json`, and each
   DOCX fixture of `docxFixtures()` (`test/fixtures/docx_fixtures.dart`) as
   `<name>.docx` and its expected text as `<name>.expected.txt`: the D1
-  documents (`d1_*`), the D2 ones (`d2_*`) and the D3 tables (`d3_basic`,
-  `d3_header_row`, `d3_merges`, `d3_formatting`, `d3_nested`). No fixture ends
-  in a table, because LibreOffice's text export of one never ends (see below).
+  documents (`d1_*`), the D2 ones (`d2_*`), the D3 tables (`d3_basic`,
+  `d3_header_row`, `d3_merges`, `d3_formatting`, `d3_nested`) and the D4
+  sections, headers and fields (`d4_sections`, four sections with a Letter one
+  last; `d4_headers`; `d4_fields`). A fixture with a
+  `DocxFixture.headerFooterText` also gets `<name>.stories.txt`, what its
+  headers and footers show. No fixture ends in a table, because LibreOffice's
+  text export of one never ends (see below), or in a section break, as the
+  model adds no block after one.
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx` and
   `d1_corrupt.docx`, to prove every check still fails on a bad file. The
   `validate` job's negative-control step writes `m1_corrupt.xlsx` to
@@ -182,19 +187,29 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   each difference as `<name>: <line>`, exits 1 on any, 2 on unusable input.
 - `tool/compare_resaved_docx.dart` opens LibreOffice's DOCX re-save of every
   fixture with `DocxDocument` and compares the body's text with the expected
-  text; any warning is a mismatch unless `docxResaveAllowedWarnings` in
-  `tool/src/read_compare.dart` names it with a reason. Exit codes as above.
+  text, by `docxResavedText` (`tool/src/text_compare.dart`): LibreOffice ends a
+  section with columns or another page in an empty paragraph of its own and
+  turns `w:pageBreakBefore` into a `w:br` of the page before, so neither is a
+  line. A fixture with a `<name>.stories.txt` has what its headers and footers
+  show compared too, by `docxStoriesText`: per section the stories it shows, a
+  first one with a title page and an even one with odd and even headers, as
+  LibreOffice writes every section its own copies, each field as `{NAME}`, as it
+  computes `DATE` and `TIME` and rewrites switches. Any warning is a mismatch
+  unless `docxResaveAllowedWarnings` in `tool/src/read_compare.dart` names it
+  with a reason. Exit codes as above.
 - `tool/round_trip_docx.dart` opens every `.docx` of a directory with
-  `DocxDocument`, reads the body and every typed property (which loads
-  `styles` and `numbering`), saves to the second directory and prints
+  `DocxDocument`, reads the body, every typed property and every section value
+  and story (which loads `styles`, `numbering`, `settings` and the headers and
+  footers), saves to the second directory and prints
   each `comparePackages` difference (`tool/src/part_compare.dart`) as
   `<file>: <line>`; it exits 1 on any difference or error, 2 on unusable
   arguments. A loaded part nothing changed is saved as read, so it also
-  encodes the main, styles and numbering parts from the model and compares
-  them with the input (`encodedPartDifferences`, `encodedMainDifferences`,
-  `tool/src/docx_serialize.dart`; the second takes the children of `w:pPr`,
-  `w:rPr`, `w:tblPr`, `w:trPr`, `w:tcPr` and `w:sectPr` in any order, as the model writes
-  them in schema order). CI
+  encodes the main, styles, numbering, header and footer parts from the model
+  and compares them with the input (`encodedPartDifferences`,
+  `encodedMainDifferences`, `encodedStoryDifferences`,
+  `tool/src/docx_serialize.dart`; the last two take the children of `w:pPr`,
+  `w:rPr`, `w:tblPr`, `w:trPr`, `w:tcPr` and `w:sectPr` in any order, as the
+  model writes them in schema order). CI
   runs it on the fixtures, on LibreOffice's re-save and on the owner's Word
   files, then validates all three outputs with the Open XML SDK. As for
   workbooks, the `d1_corrupt.docx` document round-trips (exit 0)
@@ -205,26 +220,35 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   text to `Edited by the model` and makes it bold in the theme colour accent
   1; it replaces the last paragraph of plain runs (or `w:proofErr` marks;
   no field, drawing or `w:sectPr`), other than the edited one, with
-  `Replaced by the model`; it appends a paragraph `Added by the model` of
-  the style `styles.ensure(DocxBuiltInStyle.heading1)` (`Balk1` in a
-  Turkish Word file; Word's definition when the file has none); and it adds
-  a bullet list (`numbering.addBulletList`) of two items, `First item` and
-  `Second item` at level 1 (`addListItem`). In a document with a table (the
+  `Replaced by the model`. In a document with a table (the
   first top-level `DocxTable` with a cell) it sets the text of the first
   cell's first paragraph to `Edited cell`, through that paragraph's first
   run or a new one, and appends a row `New row` when the table has a grid
-  (`addRow`; left out otherwise). In every document it appends, before the
-  heading and the list, a table `addTable(columns: 2)` of a header row
-  `Head one`, `Head two`, a body row and a third row merged across both
-  columns. It saves to the second directory, reads the saved file back and
-  checks the text, bold and accent of the run, the replacing paragraph, the
-  heading's style, each item's text, list number and level, the cell text,
-  the new row, the added table's rows (header flag, texts, merge), and that
-  the body has four blocks more. `comparePackages` must find differences
+  (`addRow`; left out otherwise). In every document it adds to `section.footer`
+  of the last section (the story it has, its own or inherited, or a new one) a
+  paragraph `Page ` + `PAGE` + ` of ` + `NUMPAGES`, then `addSection()` (next
+  page) and makes the new last section landscape A4. In that section it appends
+  a table `addTable(columns: 2)`, whose width follows the landscape page, of a
+  header row `Head one`, `Head two`, a body row and a third row merged across
+  both columns; a paragraph `Added by the model` of the style
+  `styles.ensure(DocxBuiltInStyle.heading1)` (`Balk1` in a Turkish Word file;
+  Word's definition when the file has none); and a bullet list
+  (`numbering.addBulletList`) of two items, `First item` and `Second item` at
+  level 1 (`addListItem`). It saves to the second directory, reads the saved
+  file back and checks the text, bold and accent of the run, the replacing
+  paragraph, the heading's style, each item's text, list number and level, the
+  cell text, the new row, the added table's rows (header flag, texts, merge) and
+  width, the section count, the new section's page and start, the break before
+  the table, the footer paragraph in the section that was last and, inherited,
+  in the new one, and that the body has four blocks more (the table, the
+  heading, the two items), or five when its last block could not take the break
+  (a table, or a paragraph with a break) and `addSection` added a paragraph.
+  `comparePackages` must find differences
   only in the main part (named by the root relationship), the numbering
   part, the styles part when `ensure` added a style (`Heading1`, or
-  `TableGrid` and `Normal Table`), and `[Content_Types].xml` with the main
-  part's relationships when a part was created. It prints each problem as
+  `TableGrid` and `Normal Table`), one footer part, and `[Content_Types].xml`
+  with the main part's relationships when a part was created, a footer among
+  them. It prints each problem as
   `<file>: <problem>` and exits 1 on any, 2 on unusable arguments. CI runs
   it on the fixtures, on LibreOffice's re-save and on the owner's Word
   files, and validates the three outputs with the Open XML SDK; the owner
@@ -253,15 +277,16 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   (`tool/draft_expected.dart` drafts them). Never edit a committed owner file or
   its expected JSON without the owner.
 - Neither is Word. The owner opens each D milestone's fixtures
-  (`build/fixtures/d1_*.docx`, `d2_*`, `d3_*`), the model's round trips of
+  (`build/fixtures/d1_*.docx`, `d2_*`, `d3_*`, `d4_*`), the model's round trips of
   them and of the owner's Word files, and the model's edits of the owner's
   Word files in Word for Mac, and records the result in
   `docs/word-checks.md`, which says how to write them. A repair prompt there
   is a model or writer bug, as in Excel's case. A body that ends in a table
   cannot be a fixture (LibreOffice's text export never ends on one) and Word
   cannot save one, so `dart run tool/write_table_last.dart build/table-last`
-  writes `d3_table_last.docx` for that check alone; never run `soffice` on
-  that folder.
+  writes `d3_table_last.docx` for that check alone, and `d4_break_last.docx`, a
+  body whose last block carries a section break, which no fixture may be either;
+  never run `soffice` on that folder.
 - Word files go in `test/fixtures/owner/docx/`, listed in its
   `manifest.json`, each with `<name>.expected.txt`, the text of the body's
   paragraphs (`test/fixtures/owner/README.md`, section "Word files", says
@@ -333,7 +358,7 @@ It prints failures as the reader's run does. Pin a failure as a unit test in
 the owning `*_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
-400 cases each, over the fixtures (the `d3_*` table fixtures among them), a
+600 cases each, over the fixtures (the `d3_*` and `d4_*` ones among them), a
 hand-made table with every element of the table values, and the producer
 variants of `test/docx/support/docx_fuzz.dart`: whole mutated files, with every
 part name mutated somewhere, and about a third of the cases replacing the value
@@ -356,10 +381,11 @@ dart run tool/fuzz_docx.dart --seeds 1-200 --cases 1000
 It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
 1 on any. Pin a failure as a unit test in the owning `*_test.dart` first.
 
-The gate runs 400 cases per seed, not 150, for one reason: the seeds are fixed,
+The gate runs 600 cases per seed, not 150, for one reason: the seeds are fixed,
 so the cases must between them mutate every part name of the corpus
-(`every part name is mutated in some corpus entry`), and the D3 fixtures and
-`tables_by_hand` joined the corpus and made 150 too few. When a new part name
+(`every part name is mutated in some corpus entry`), and the D3 fixtures,
+`tables_by_hand` and the D4 fixtures, with their header and footer parts, joined
+the corpus and made fewer too few. When a new part name
 joins the corpus, run that test and raise the count again if it fails.
 
 ## Hard rules

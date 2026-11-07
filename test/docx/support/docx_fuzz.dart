@@ -44,7 +44,7 @@ export '../../support/fuzz_mutations.dart'
 /// fields and a bookmark), `localized_word`, the document of
 /// `localizedWordDocx()` with Word's styles part (Turkish ids, `w14` and
 /// `w15` content) and numbering part, then every fixture of
-/// `docxFixtures()` (the `d3_*` table fixtures among them), `tables_by_hand`,
+/// `docxFixtures()` (the `d3_*` and `d4_*` fixtures among them), `tables_by_hand`,
 /// the document of `tablesByHandDocx()` with every element the table values
 /// read, and every `producerVariants()` entry, each rebuilt with stored
 /// entries and a fixed timestamp, so the bytes are equal on every platform.

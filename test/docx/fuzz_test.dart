@@ -10,7 +10,7 @@ import 'support/table_document.dart';
 const List<int> _seeds = <int>[1, 2, 3, 4];
 
 /// The cases per seed in the quality gate.
-const int _cases = 400;
+const int _cases = 600;
 
 /// The length and Adler-32 checksum of every corpus entry, computed once on
 /// the VM. The Chrome leg compares them, which proves the corpus (and so
@@ -36,6 +36,9 @@ const Map<String, ({int length, int adler32})> _corpus =
       'd3_merges': (length: 30134, adler32: 2775992460),
       'd3_formatting': (length: 30246, adler32: 3404101736),
       'd3_nested': (length: 33071, adler32: 2045718154),
+      'd4_sections': (length: 29750, adler32: 1806293741),
+      'd4_headers': (length: 33335, adler32: 2013299904),
+      'd4_fields': (length: 29559, adler32: 1228128671),
       'tables_by_hand': (length: 9996, adler32: 2530907752),
       'ns0_prefix': (length: 1407, adler32: 3668097186),
       'default_namespace': (length: 1344, adler32: 3335628311),

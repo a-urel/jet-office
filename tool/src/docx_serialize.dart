@@ -8,9 +8,10 @@
 /// models and encodes them, and [encodedPartDifferences] compares that with
 /// the part in the file by `compareXmlParts`, the meaning-based comparison
 /// of `tool/src/part_compare.dart`; [encodedMainDifferences] does the same
-/// for the main part. [readTypedProperties] reads every typed property of
-/// every paragraph, run, style and list level, so a value the model cannot
-/// read throws here and not in a user's program.
+/// for the main part, and [encodedStoryDifferences] for the header and footer
+/// parts. [readTypedProperties] reads every typed property of every paragraph,
+/// run, style, list level, section and story, so a value the model cannot read
+/// throws here and not in a user's program.
 ///
 /// Used by `tool/round_trip_docx.dart` and by the round-trip tests
 /// (`test/docx/round_trip_test.dart`, `test/docx/owner_files_test.dart`).
@@ -19,7 +20,8 @@
 /// The parts are looked up by their usual names, `word/document.xml`,
 /// `word/styles.xml` and `word/numbering.xml`; a package that keeps one
 /// elsewhere has it round-tripped as a copy, which the package comparison
-/// covers.
+/// covers. Header and footer parts are the ones the relationships of
+/// `word/document.xml` name.
 library;
 
 import 'dart:convert';
@@ -31,15 +33,29 @@ import 'package:jet_office/src/docx/document_part.dart';
 import 'package:jet_office/src/docx/model/inlines.dart' show visitInlines;
 import 'package:jet_office/src/docx/model/primitives.dart' show DocxEdits;
 import 'package:jet_office/src/docx/numbering_part.dart';
+import 'package:jet_office/src/docx/story_part.dart';
 import 'package:jet_office/src/docx/styles_part.dart';
 import 'package:jet_office/src/docx/warnings.dart' show DocxWarningCollector;
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
+import 'package:xml/xml.dart';
 
 import 'part_compare.dart';
 
 const String _mainName = 'word/document.xml';
 const String _stylesName = 'word/styles.xml';
 const String _numberingName = 'word/numbering.xml';
+const String _mainRelsName = 'word/_rels/document.xml.rels';
+
+/// The elements whose children the model writes in schema order, so a
+/// comparison takes them in any order.
+const Set<String> _propertyElements = <String>{
+  'pPr',
+  'rPr',
+  'tblPr',
+  'trPr',
+  'tcPr',
+  'sectPr',
+};
 
 /// The styles and numbering parts of the DOCX file [docx] that it has,
 /// by part name (without a leading `/`), each read into its model and
@@ -120,19 +136,75 @@ List<String> encodedMainDifferences(Uint8List docx) {
     _mainName,
     original,
     encoded,
-    unordered: const <String>{'pPr', 'rPr', 'tblPr', 'trPr', 'tcPr', 'sectPr'},
+    unordered: _propertyElements,
   );
 }
 
-/// Reads every typed property of [doc]: of each paragraph of the body, in the
-/// cells of its tables too, and each of its runs, of each table (and its
-/// grid), row and cell, of the document defaults and each style, and of each
-/// level of each abstract list definition. Returns how many were set.
+/// The differences between each header and footer part of [docx] and the same
+/// part read into the model and encoded, one line each, `'<part>: <what>'`;
+/// empty when they mean the same.
 ///
-/// A value the model cannot read throws. The styles and numbering parts are
-/// loaded by this.
+/// The parts are those the relationships of the main part name as a header or
+/// a footer; properties compare in any order, as [encodedMainDifferences] has
+/// them. A part the model cannot read is one line, not an exception.
+List<String> encodedStoryDifferences(Uint8List docx) {
+  final Map<String, Uint8List> entries = _entries(docx);
+  final List<String> out = <String>[];
+  _storyParts(entries).forEach((String name, bool isHeader) {
+    final Uint8List? original = entries[name];
+    if (original == null) return;
+    final Uint8List encoded;
+    try {
+      encoded = _join(
+        StoryPart.read(
+          XmlPullReader(utf8.decode(original)),
+          '/$name',
+          isHeader: isHeader,
+          limits: const DocxReadLimits(),
+        ).encode(),
+      );
+    } on Object catch (e) {
+      out.add('$name: the model cannot read the part: $e');
+      return;
+    }
+    out.addAll(
+      compareXmlParts(name, original, encoded, unordered: _propertyElements),
+    );
+  });
+  return out;
+}
+
+/// The parts the main part's relationships name as a header (`true`) or a
+/// footer (`false`), by part name.
+Map<String, bool> _storyParts(Map<String, Uint8List> entries) {
+  final Uint8List? rels = entries[_mainRelsName];
+  if (rels == null) return const <String, bool>{};
+  final Uri main = Uri.parse('/$_mainName');
+  return <String, bool>{
+    for (final XmlElement r in XmlDocument.parse(
+      utf8.decode(rels),
+    ).rootElement.childElements)
+      if (r.getAttribute('Type') case final String type
+          when type.endsWith('/header') || type.endsWith('/footer'))
+        main.resolve(r.getAttribute('Target') ?? '').path.substring(1): type
+            .endsWith('/header'),
+  };
+}
+
+/// Reads every typed property of [doc]: of each paragraph of the body, in the
+/// cells of its tables too, and each of its runs and fields, of each table
+/// (and its grid), row and cell, of each section and of the blocks of each
+/// story it has as its own, of the document defaults and each style, and of
+/// each level of each abstract list definition. Returns how many were set.
+///
+/// A value the model cannot read throws. The styles, numbering and settings
+/// parts and every story a section names are loaded by this.
 int readTypedProperties(DocxDocument doc) {
   int set = _blocks(doc.body.blocks);
+  set += _count(<Object?>[doc.evenAndOddHeaders ? true : null]);
+  for (final DocxSection section in doc.sections) {
+    set += _section(section);
+  }
   final DocxStyles styles = doc.styles;
   set += _paragraph(styles.defaults.paragraphProperties);
   set += _run(styles.defaults.runProperties);
@@ -178,6 +250,9 @@ int _blocks(List<DocxBlock> blocks) {
       case DocxParagraph():
         set += _paragraph(block.properties);
         for (final DocxInline inline in block.inlines) {
+          if (inline is DocxField) {
+            set += _count(<Object?>[inline.instruction, inline.text]);
+          }
           visitInlines(inline, (DocxInline held) {
             if (held is DocxRun) set += _run(held.properties);
           });
@@ -194,6 +269,32 @@ int _blocks(List<DocxBlock> blocks) {
       case DocxOpaqueBlock():
         break;
     }
+  }
+  return set;
+}
+
+/// Reads the values of [s] and the blocks of the stories it has as its own.
+int _section(DocxSection s) {
+  int set = _count(<Object?>[
+    s.pageSize,
+    s.margins,
+    s.columns,
+    s.start,
+    s.titlePage ? true : null,
+    s.verticalAlignment,
+    s.pageNumbering,
+    s.lineNumbering,
+    s.textWidthPt,
+  ]);
+  for (final DocxHeaderFooter story in <DocxHeaderFooter>[
+    s.header,
+    s.firstHeader,
+    s.evenHeader,
+    s.footer,
+    s.firstFooter,
+    s.evenFooter,
+  ]) {
+    if (!story.isInherited) set += _blocks(story.blocks);
   }
   return set;
 }

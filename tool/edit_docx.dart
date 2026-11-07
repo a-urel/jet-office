@@ -20,31 +20,40 @@
 ///   that holds a field or a drawing (`fldChar`, `instrText`, `drawing`,
 ///   `pict`, `object`) or a `w:pPr` with a `w:sectPr`, whose loss could
 ///   unpair markup or drop a section;
-/// * it appends a paragraph `Added by the model` styled with
-///   `styles.ensure(DocxBuiltInStyle.heading1)`: the document's own heading
-///   style, whatever its id (`Balk1` under a Turkish Word), or Word's
-///   definition added when it has none;
 /// * in a document with a table (the first top-level `DocxTable` with a
 ///   cell) it sets the text of the first cell's first paragraph to
 ///   `Edited cell`, through the paragraph's first run or a new run, and
 ///   appends a row `New row` when the table has a grid the row fits;
-/// * it appends, before the heading, a table `addTable(columns: 2)`: a
-///   header row `Head one`, `Head two`, a body row and a third row merged
-///   across both columns;
+/// * it adds to `section.footer` of the last section, the story it has or a
+///   new one, a paragraph `Page ` + `PAGE` + ` of ` + `NUMPAGES`;
+/// * it ends that section (`addSection(start: nextPage)`) and makes the new
+///   last section landscape A4, so what follows sits on that page;
+/// * it appends, in the new section, a table `addTable(columns: 2)`, whose
+///   width follows the landscape page: a header row `Head one`, `Head two`, a
+///   body row and a third row merged across both columns;
+/// * it appends a paragraph `Added by the model` styled with
+///   `styles.ensure(DocxBuiltInStyle.heading1)`: the document's own heading
+///   style, whatever its id (`Balk1` under a Turkish Word), or Word's
+///   definition added when it has none;
 /// * it adds a bullet list (`numbering.addBulletList`) of two items at the
 ///   end, `First item` and, at level 1, `Second item` (`addListItem`).
 ///
 /// A document without such a run or such a paragraph skips that edit. It
 /// saves and writes the bytes to `<outDir>/<name>.docx`, then reads the
 /// saved file back with `DocxDocument`: the edits must be there, the body
-/// must have four blocks more than it had before the table, the run must
-/// be bold, the heading must have the style `ensure` returned and the list
-/// items the new list's number. Last, `comparePackages` from
+/// must have four blocks more than it had before the table (the table, the
+/// heading and the two items), and five when its last block could not take
+/// the break, a table or a paragraph with a break of its own, so `addSection`
+/// added a paragraph for it. The run must be bold, the heading must have the
+/// style `ensure` returned, the list items the new list's number, the
+/// document one section more, the footer its two fields, in both last sections,
+/// and the table the width of the landscape page. Last, `comparePackages` from
 /// `tool/src/part_compare.dart` must find differences only in the allowed
 /// parts: the main part (named by the root relationship, not assumed to be
 /// `word/document.xml`), the numbering part, the styles part when `ensure`
-/// added a style (`Heading1` or `TableGrid`), and `[Content_Types].xml` and the
-/// main part's relationships when the edit created a part the file lacked.
+/// added a style (`Heading1` or `TableGrid`), one footer part, and
+/// `[Content_Types].xml` and the main part's relationships when the edit
+/// created a part the file lacked, a footer among them.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
 /// problem, 2 when the arguments are unusable or the input directory holds
@@ -94,6 +103,12 @@ const String editedCellText = 'Edited cell';
 
 /// The text of the first cell of the row the tool appends to that table.
 const String newRowText = 'New row';
+
+/// The text before the `PAGE` field of the footer paragraph.
+const String footerPageText = 'Page ';
+
+/// The text between the two fields of the footer paragraph.
+const String footerOfText = ' of ';
 
 /// The namespace of the elements of a relationships part.
 const String _relsNs =
@@ -170,6 +185,7 @@ typedef _Edits = ({
   int numId,
   ({int block, int rows, bool added})? table,
   int tableBlock,
+  int sections,
 });
 
 /// Edits [file], writes the result to [output], and returns the problems.
@@ -201,6 +217,11 @@ List<String> _edit(
     final int blocks = body.blocks.length;
     final int styles = doc.styles.styles.length;
     final ({int block, int rows, bool added})? table = _editFirstTable(body);
+    _addFooter(doc.sections.last);
+    final int sections = doc.sections.length;
+    body.addSection().pageSize = DocxPageSize.a4(landscape: true);
+    // The break's own paragraph comes before the table when one was added.
+    final int tableBlock = body.blocks.length;
     _appendTable(body);
     final String heading = doc.styles.ensure(DocxBuiltInStyle.heading1);
     body.addParagraph(addedText).style = heading;
@@ -215,7 +236,8 @@ List<String> _edit(
       stylesAdded: doc.styles.styles.length != styles,
       numId: list.id,
       table: table,
-      tableBlock: blocks,
+      tableBlock: tableBlock,
+      sections: sections,
     );
     saved = doc.save().bytes;
   } on Object catch (e) {
@@ -268,6 +290,15 @@ List<String> _edit(
   return null;
 }
 
+/// Adds a paragraph to the footer of [section]: the story it has, its own or
+/// one it inherits, or a new one.
+void _addFooter(DocxSection section) {
+  section.footer.addParagraph(footerPageText)
+    ..addField(DocxField.page())
+    ..addRun(footerOfText)
+    ..addField(DocxField.numPages());
+}
+
 /// Appends a table of two columns: a header row, a body row and a row merged
 /// across both columns.
 void _appendTable(DocxBody body) {
@@ -283,26 +314,35 @@ void _appendTable(DocxBody body) {
 List<String> _partProblems(Uint8List input, Uint8List saved, _Edits edits) {
   final List<String> problems = <String>[];
   final _Layout layout;
+  final Set<String> footers;
   try {
     layout = _Layout(input);
+    footers = _Layout(saved).footerParts;
   } on Object catch (e) {
     return <String>['reading the package layout failed: $e'];
   }
   final bool created =
       (edits.stylesAdded && !layout.has(layout.stylesPart)) ||
-      !layout.has(layout.numberingPart);
+      !layout.has(layout.numberingPart) ||
+      !layout.footerParts.containsAll(footers);
   final Set<String> allowed = <String>{
     layout.mainPart,
     layout.numberingPart,
     if (edits.stylesAdded) layout.stylesPart,
     if (created) ...<String>['[Content_Types].xml', layout.mainRels],
   };
+  final Set<String> changedFooters = <String>{};
   for (final String d in comparePackages(input, saved)) {
     final int colon = d.indexOf(': ');
     final String part = colon < 0 ? d : d.substring(0, colon);
-    if (!allowed.contains(part)) {
+    if (footers.contains(part)) {
+      changedFooters.add(part);
+    } else if (!allowed.contains(part)) {
       problems.add('a part outside the allowed set: $d');
     }
+  }
+  if (changedFooters.length > 1) {
+    problems.add('more than one footer part changed: $changedFooters');
   }
   return problems;
 }
@@ -329,6 +369,11 @@ final class _Layout {
 
     stylesPart = related('styles', 'styles.xml');
     numberingPart = related('numbering', 'numbering.xml');
+    footerParts = <String>{
+      for (final XmlElement r in _relationships(mainRels))
+        if (_type(r).endsWith('/footer'))
+          _resolve(dir, r.getAttribute('Target') ?? ''),
+    };
   }
 
   final Archive _archive;
@@ -344,6 +389,9 @@ final class _Layout {
 
   /// The numbering part, or where the model creates one.
   late final String numberingPart;
+
+  /// The parts the main part's relationships name as a footer.
+  late final Set<String> footerParts;
 
   bool has(String part) => _archive.findFile(part) != null;
 
@@ -523,18 +571,76 @@ List<String> _checkTables(List<DocxBlock> blocks, _Edits edits) {
   return problems;
 }
 
+/// Whether the last paragraph of [story] is the one [_addFooter] adds.
+bool _hasFooterParagraph(DocxHeaderFooter story) {
+  final DocxBlock? last = story.blocks.lastOrNull;
+  if (last is! DocxParagraph || last.inlines.length != 4) return false;
+  final [DocxInline start, DocxInline page, DocxInline of, DocxInline pages] =
+      last.inlines;
+  return start is DocxRun &&
+      start.text == footerPageText &&
+      page is DocxField &&
+      page.instruction == ' PAGE ' &&
+      of is DocxRun &&
+      of.text == footerOfText &&
+      pages is DocxField &&
+      pages.instruction == ' NUMPAGES ';
+}
+
+/// The section edits [doc] lacks when read back: the new last section, on its
+/// landscape page, the break before the table, the footer of the section that
+/// was last, which the new one shows too, and the table's width.
+List<String> _checkSections(DocxDocument doc, _Edits edits) {
+  final List<DocxSection> sections = doc.sections;
+  if (sections.length != edits.sections + 1) {
+    return <String>[
+      'the document has ${sections.length} sections, '
+          'not ${edits.sections + 1}',
+    ];
+  }
+  final DocxSection last = sections.last;
+  final DocxSection ended = sections[sections.length - 2];
+  final DocxBlock broken = doc.body.blocks[edits.tableBlock - 1];
+  final DocxBlock table = doc.body.blocks[edits.tableBlock];
+  return <String>[
+    if (edits.tableBlock - edits.blocks > 1)
+      'the break added ${edits.tableBlock - edits.blocks} blocks',
+    if (last.pageSize != DocxPageSize.a4(landscape: true))
+      'the new section is not landscape A4',
+    if (last.start != DocxSectionStart.nextPage)
+      'the new section does not start on the next page',
+    if (broken is! DocxParagraph || !identical(broken.section, ended))
+      'the break is not before the added table',
+    if (!_hasFooterParagraph(ended.footer) || !_hasFooterParagraph(last.footer))
+      'the footer of the last section is missing',
+    if (table is DocxTable && !_fills(table, last))
+      'the added table is not as wide as the section',
+  ];
+}
+
+/// Whether the two columns of [table] share the text width of [section], less
+/// the 10 twips of `addTable`, or the 9062 twips it has without one.
+bool _fills(DocxTable table, DocxSection section) {
+  final double? width = section.textWidthPt;
+  final int twips = width == null ? 9062 : (width * 20).round() - 10;
+  return table.gridColumnsPt?.first == (twips ~/ 2) / 20;
+}
+
 /// The edits [saved] lacks when read back with `DocxDocument`.
 List<String> _check(Uint8List saved, _Edits edits) {
   final List<String> problems = <String>[];
   try {
-    final List<DocxBlock> blocks = DocxDocument.open(saved).body.blocks;
-    if (blocks.length != edits.blocks + 4) {
-      problems.add(
-        'the body has ${blocks.length} blocks, not ${edits.blocks + 4}',
-      );
+    final DocxDocument doc = DocxDocument.open(saved);
+    final List<DocxBlock> blocks = doc.body.blocks;
+    // The table, the heading and the two items, after any paragraph
+    // `addSection` added for its break.
+    final int expected = edits.tableBlock + 4;
+    if (blocks.length != expected) {
+      problems.add('the body has ${blocks.length} blocks, not $expected');
       return problems;
     }
     problems.addAll(_checkTables(blocks, edits));
+    problems.addAll(_checkSections(doc, edits));
     final ({int block, int inline})? run = edits.run;
     if (run != null) {
       final DocxBlock b = blocks[run.block];

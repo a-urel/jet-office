@@ -98,6 +98,215 @@ void main() {
     expect(after[after.length - 4], 'table');
   });
 
+  group('sections', () {
+    DocxDocument edited(String name) =>
+        DocxDocument.open(File('${output.path}/$name').readAsBytesSync());
+
+    /// The text of [story] with each field's instruction in place of its
+    /// result, as the last paragraph holds them.
+    List<String> lastParagraph(DocxHeaderFooter story) => <String>[
+      for (final DocxInline i in (story.blocks.last as DocxParagraph).inlines)
+        i is DocxField ? i.instruction : (i as DocxRun).text,
+    ];
+
+    const List<String> footer = <String>[
+      footerPageText,
+      ' PAGE ',
+      footerOfText,
+      ' NUMPAGES ',
+    ];
+
+    test(
+      'a new footer goes in a new part, and the new section inherits it',
+      () {
+        writeOnly(input, <String>{'d1_paragraphs.docx'});
+        final StringBuffer out = StringBuffer();
+        expect(run(out: out), 0, reason: '$out');
+        final DocxDocument doc = edited('d1_paragraphs.docx');
+        expect(doc.sections, hasLength(2));
+        expect(doc.sections.first.footer.isInherited, isFalse);
+        expect(lastParagraph(doc.sections.first.footer), footer);
+        expect(doc.sections.last.footer.isInherited, isTrue);
+        expect(lastParagraph(doc.sections.last.footer), footer);
+      },
+    );
+
+    test('the footer goes at the end of the story the last section has', () {
+      writeOnly(input, <String>{'d4_headers.docx'});
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      final DocxDocument doc = edited('d4_headers.docx');
+      expect(doc.sections, hasLength(4));
+      final DocxHeaderFooter story = doc.sections[2].footer;
+      expect((story.blocks.first as DocxParagraph).text, 'Footer three');
+      expect(story.blocks, hasLength(2));
+      expect(lastParagraph(story), footer);
+      // Section one's is another story, which the edit left alone.
+      expect(doc.sections.first.footer.blocks, hasLength(1));
+    });
+
+    test('an inherited footer is edited where it lives', () {
+      final DocxDocument source = DocxDocument();
+      source.body.addParagraph('One');
+      source.sections.last.footer.addParagraph('Shared');
+      source.body.addSection();
+      source.body.addParagraph('Two');
+      File('${input.path}/s.docx').writeAsBytesSync(source.save().bytes);
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      final DocxDocument doc = edited('s.docx');
+      expect(doc.sections.first.footer.blocks, hasLength(2));
+      expect(lastParagraph(doc.sections.first.footer), footer);
+    });
+
+    test('the new last section is landscape A4, and starts on a new page', () {
+      writeOnly(input, <String>{'d4_sections.docx'});
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      final DocxDocument doc = edited('d4_sections.docx');
+      expect(doc.sections, hasLength(5));
+      expect(doc.sections.last.pageSize, DocxPageSize.a4(landscape: true));
+      expect(doc.sections.last.start, DocxSectionStart.nextPage);
+      expect(doc.sections[3].pageSize, DocxPageSize.letter());
+    });
+
+    test('the table, the heading and the list follow the break', () {
+      writeOnly(input, <String>{'d1_paragraphs.docx'});
+      expect(run(), 0);
+      final DocxDocument doc = edited('d1_paragraphs.docx');
+      final List<DocxBlock> blocks = doc.body.blocks;
+      // The last paragraph took the break, so there are four blocks more.
+      expect(blocks, hasLength(9));
+      expect((blocks[4] as DocxParagraph).section, same(doc.sections.first));
+      expect(blocks[5], isA<DocxTable>());
+      for (final DocxParagraph b in blocks.skip(5).whereType<DocxParagraph>()) {
+        expect(b.section, isNull);
+      }
+    });
+
+    test('the added table shares the width of the landscape page', () {
+      writeOnly(input, <String>{'d1_paragraphs.docx'});
+      expect(run(), 0);
+      final DocxDocument doc = edited('d1_paragraphs.docx');
+      // 16838 twips, less 2 x 1417 of margin and 10, shared by two columns.
+      expect(doc.sections.last.textWidthPt, 700.2);
+      expect(
+        doc.body.blocks.whereType<DocxTable>().last.gridColumnsPt,
+        <double>[349.85, 349.85],
+      );
+    });
+
+    test('a body that ends in a table gets a paragraph for the break', () {
+      final DocxDocument source = DocxDocument();
+      source.body.addTable(columns: 1).addRow(<String?>['Last']);
+      File('${input.path}/t.docx').writeAsBytesSync(source.save().bytes);
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      final DocxDocument doc = edited('t.docx');
+      final List<DocxBlock> blocks = doc.body.blocks;
+      // The source's two blocks, the paragraph of the break and four more.
+      expect(blocks, hasLength(7));
+      expect((blocks[2] as DocxParagraph).section, same(doc.sections.first));
+      expect((blocks[2] as DocxParagraph).text, '');
+    });
+
+    test('a body whose last block holds a break gets one too', () {
+      final DocxDocument source = DocxDocument();
+      source.body.addParagraph('Text');
+      source.body.addSection();
+      File('${input.path}/b.docx').writeAsBytesSync(source.save().bytes);
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      expect(edited('b.docx').sections, hasLength(3));
+    });
+
+    test('a new footer may add its part, content type and relationship', () {
+      writeOnly(input, <String>{'d1_paragraphs.docx'});
+      expect(run(), 0);
+      final Archive before = ZipDecoder().decodeBytes(
+        File('${input.path}/d1_paragraphs.docx').readAsBytesSync(),
+      );
+      final Archive after = ZipDecoder().decodeBytes(
+        File('${output.path}/d1_paragraphs.docx').readAsBytesSync(),
+      );
+      expect(before.findFile('word/footer1.xml'), isNull);
+      expect(after.findFile('word/footer1.xml'), isNotNull);
+    });
+
+    String corrupted(
+      String fixture,
+      String part,
+      String Function(String) rewrite,
+    ) {
+      writeOnly(input, <String>{fixture});
+      final StringBuffer out = StringBuffer();
+      final int code = editDocx(
+        <String>[input.path, output.path],
+        out: out,
+        err: StringBuffer(),
+        corruptForTest: (Uint8List saved) =>
+            rewriteDocxPart(saved, part, rewrite),
+      );
+      expect(code, 1, reason: '$out');
+      return out.toString();
+    }
+
+    test('reports a footer that does not read back', () {
+      expect(
+        corrupted(
+          'd1_paragraphs.docx',
+          'word/footer1.xml',
+          (String x) => x.replaceFirst(' NUMPAGES ', ' PAGE '),
+        ),
+        contains('the footer of the last section is missing'),
+      );
+    });
+
+    test('reports a new section that is not landscape', () {
+      expect(
+        corrupted(
+          'd1_paragraphs.docx',
+          'word/document.xml',
+          (String x) => x.replaceFirst(' w:orient="landscape"', ''),
+        ),
+        contains('the new section is not landscape A4'),
+      );
+    });
+
+    test('reports a section break that does not read back', () {
+      expect(
+        corrupted(
+          'd1_paragraphs.docx',
+          'word/document.xml',
+          (String x) => x.replaceFirst(RegExp(r'<w:sectPr.*?</w:sectPr>'), ''),
+        ),
+        contains('sections, not 2'),
+      );
+    });
+
+    test('reports a table that does not take the width of the section', () {
+      expect(
+        corrupted(
+          'd1_paragraphs.docx',
+          'word/document.xml',
+          (String x) => x.replaceAll('w:w="6997"', 'w:w="4531"'),
+        ),
+        contains('the added table is not as wide as the section'),
+      );
+    });
+
+    test('reports a second footer part that changes', () {
+      expect(
+        corrupted(
+          'd4_headers.docx',
+          'word/footer1.xml',
+          (String x) => x.replaceFirst('Footer one', 'Changed'),
+        ),
+        contains('more than one footer part changed'),
+      );
+    });
+  });
+
   group('tables', () {
     List<DocxBlock> edited(String name) => DocxDocument.open(
       File('${output.path}/$name').readAsBytesSync(),
@@ -302,13 +511,14 @@ void main() {
     expect(after[1], '-:$replacedText');
   });
 
-  group('a document that has its styles and numbering', () {
+  group('a document that has its styles, numbering and a footer', () {
     Uint8List both() {
       final DocxDocument doc = DocxDocument();
       doc.body.addParagraph('Start');
       doc.styles.ensure(DocxBuiltInStyle.heading1);
       doc.styles.ensure(DocxBuiltInStyle.listParagraph);
       doc.numbering.addBulletList();
+      doc.sections.last.footer.addParagraph('Foot');
       return doc.save().bytes;
     }
 
