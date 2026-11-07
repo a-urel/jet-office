@@ -94,6 +94,11 @@ void main() {
       expect(DocxField.time(result: '10:30').text, '10:30');
     });
 
+    test('a format ending in a backslash throws', () {
+      expect(() => DocxField.date(format: 'dd\\'), throwsArgumentError);
+      expect(() => DocxField.time(format: 'HH\\'), throwsArgumentError);
+    });
+
     test('a format holding a quote throws', () {
       expect(() => DocxField.date(format: 'dd"'), throwsArgumentError);
       expect(() => DocxField.time(format: '"'), throwsArgumentError);
@@ -380,6 +385,36 @@ void main() {
       expect(_paragraphXml(doc), contains('PAGE'));
     });
 
+    test('an empty result set empty changes nothing and adds nothing', () {
+      for (final String content in <String>[
+        '$_begin${_instr(' PAGE ')}$_end',
+        '$_begin${_instr(' PAGE ')}$_separate$_end',
+      ]) {
+        final DocxDocument doc = _open(content);
+        final String input = _savedMain(doc.save().bytes);
+        final DocxField field = _first(doc).inlines.single as DocxField;
+        field.resultText = '';
+        expect(changeLogOf(doc).hasChanges, isFalse);
+        expect(field.result, isEmpty);
+        expect(_savedMain(doc.save().bytes), input);
+      }
+    });
+
+    test('a result set to its own text keeps every inline of it', () {
+      final DocxDocument doc = _open(
+        '$_begin${_instr(' IF ')}$_separate'
+        '<w:r><w:rPr><w:b/></w:rPr><w:t>a</w:t></w:r>'
+        '<w:r><w:rPr><w:i/></w:rPr><w:t>b</w:t></w:r>'
+        '$_begin${_instr(' PAGE ')}$_separate${_r('3')}$_end$_end',
+      );
+      final String input = _savedMain(doc.save().bytes);
+      final DocxField field = _first(doc).inlines.single as DocxField;
+      field.resultText = field.text;
+      expect(changeLogOf(doc).hasChanges, isFalse);
+      expect(field.result, hasLength(3));
+      expect(_savedMain(doc.save().bytes), input);
+    });
+
     test('the same result changes nothing', () {
       final DocxDocument doc = _open(
         '$_begin${_instr(' PAGE ')}$_separate${_r('3')}$_end',
@@ -478,7 +513,7 @@ void main() {
       expect(_savedMain(doc.save().bytes), edited);
     });
 
-    test('a bare set is one change that undoes every run', () {
+    test('one transaction records one change per run, and undoes them', () {
       final DocxDocument doc = DocxDocument();
       final DocxField field = _newParagraph(doc).addField(DocxField.page());
       final String before = _paragraphXml(doc);

@@ -6,9 +6,10 @@
 ///
 /// A complex field is a sequence of a paragraph's runs: a `begin` mark, the
 /// instruction, an optional `separate` mark, the cached result, and an `end`
-/// mark. A field is only ever a view of those inlines: it holds them in order
-/// and the writer writes them so, which is why typing a field changes nothing
-/// in the part.
+/// mark. A field is only ever those inlines: it holds them in order and the
+/// writer writes them so, which is why typing a field read changes nothing in
+/// the part. A field built by the API holds new runs, and editing one (its
+/// instruction, its result, its properties) changes those runs.
 ///
 /// [groupFields] types a field only when it is plain (plan Ruling 2), and
 /// leaves every other run where it was, as a run with its marks as typed
@@ -109,10 +110,14 @@ final class DocxField extends DocxInline {
     _attach();
   }
 
-  /// [format], which must not hold `"`, or an [ArgumentError].
+  /// [format], which must not hold `"` or end in a backslash, or an [ArgumentError].
   static String _picture(String format) {
-    if (format.contains('"')) {
-      throw ArgumentError.value(format, 'format', 'must not hold a quote');
+    if (format.contains('"') || format.endsWith('\\')) {
+      throw ArgumentError.value(
+        format,
+        'format',
+        'must not hold a quote or end in a backslash',
+      );
     }
     return format;
   }
@@ -136,8 +141,9 @@ final class DocxField extends DocxInline {
     return run;
   }
 
-  /// Every inline of the field, from the `begin` run to the `end` run, as
-  /// read. A field in the result is one of them.
+  /// Every inline of the field, from the `begin` run to the `end` run: as
+  /// read, or as built, and as edited since. A field in the result is one of
+  /// them.
   late List<DocxInline> _inlines;
 
   /// The index in [_inlines] of the first inline of the result, or of the
@@ -302,10 +308,7 @@ final class DocxField extends DocxInline {
         break;
       }
     }
-    if (kept != null &&
-        _result.length == 1 &&
-        kept._removed == scrubbed.removed &&
-        kept._sameContent(content)) {
+    if (scrubbed.text == text && scrubbed.removed == (kept?._removed ?? 0)) {
       return;
     }
     final DocxRun run = kept ?? DocxRun(value);
