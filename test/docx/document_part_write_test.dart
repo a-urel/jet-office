@@ -324,18 +324,80 @@ void main() {
       test('one whose last block was removed gets one, and undoing that '
           'restores the exception', () {
         final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
-          '<w:p/><w:bookmarkEnd w:id="1"/><w:bookmarkStart w:id="2"/>',
+          '<w:p/><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>'
+          '<w:bookmarkEnd w:id="1"/>',
         );
         expect(closing(part), 1);
         final ChangeSet removal = edits.transaction(
           () => removeBlock(edits, cell, cellBlocksOf(cell), 2),
         );
-        // The last is the bookmarkEnd, not the block read last.
+        // The last is the table, not the block read last.
         expect(closing(part), 2);
         // The added paragraph is not in blocks until the file is read again.
         expect(cell.blocks, hasLength(2));
         edits.log.revertSet(removal);
         expect(closing(part), 1);
+      });
+
+      for (final String marker in <String>[
+        'bookmarkStart',
+        'bookmarkEnd',
+        'commentRangeStart',
+        'commentRangeEnd',
+        'permStart',
+        'permEnd',
+        'moveFromRangeStart',
+        'moveFromRangeEnd',
+        'moveToRangeStart',
+        'moveToRangeEnd',
+      ]) {
+        test('a paragraph before a trailing $marker closes an edited cell', () {
+          final (DocumentPart part, DocxEdits edits, DocxTableCell cell) =
+              cellOf('<w:p/><w:$marker w:id="1"/>');
+          edits.transaction(
+            () => insertBlock(
+              edits,
+              cell,
+              cellBlocksOf(cell),
+              0,
+              DocxParagraph.text(''),
+            ),
+          );
+          expect(closing(part), 2);
+        });
+      }
+
+      test('a table before a trailing marker does not close a cell', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>'
+          '<w:bookmarkEnd w:id="1"/>',
+        );
+        edits.transaction(
+          () => insertBlock(
+            edits,
+            cell,
+            cellBlocksOf(cell),
+            0,
+            DocxParagraph.text(''),
+          ),
+        );
+        expect(closing(part), 2);
+      });
+
+      test('an element of another namespace is not a marker', () {
+        final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
+          '<w:p/><x:bookmarkEnd xmlns:x="urn:x"/>',
+        );
+        edits.transaction(
+          () => insertBlock(
+            edits,
+            cell,
+            cellBlocksOf(cell),
+            0,
+            DocxParagraph.text(''),
+          ),
+        );
+        expect(closing(part), 3);
       });
 
       /// The local name of the last child of the cell of [part].
@@ -361,8 +423,8 @@ void main() {
         expect(closing(part), 1);
       });
 
-      test('one read as p and bookmarkEnd gets one when the paragraph is '
-          'replaced, and undoing that restores the exception', () {
+      test('one read as p and bookmarkEnd gets one when a table replaces the '
+          'paragraph, and undoing that restores the exception', () {
         final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
           '<w:p/><w:bookmarkEnd w:id="1"/>',
         );
@@ -372,18 +434,17 @@ void main() {
             cell,
             cellBlocksOf(cell),
             0,
-            DocxParagraph.text('b'),
+            DocxTable(columns: 1),
           ),
         );
         expect(cell.blocks, hasLength(2));
         expect(last(part), 'p');
-        expect(closing(part), 2);
         edits.log.revertSet(replacement);
         expect(last(part), 'bookmarkEnd');
         expect(closing(part), 1);
       });
 
-      test('a block put before the one read last closes the cell', () {
+      test('a table put before the one read last closes the cell', () {
         final (DocumentPart part, DocxEdits edits, DocxTableCell cell) = cellOf(
           '<w:bookmarkEnd w:id="1"/>',
         );
@@ -393,7 +454,7 @@ void main() {
             cell,
             cellBlocksOf(cell),
             0,
-            DocxParagraph.text('b'),
+            DocxTable(columns: 1),
           ),
         );
         expect(last(part), 'p');

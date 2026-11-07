@@ -445,6 +445,25 @@ void main() {
       expect(merged.properties.width, DocxTableWidth.points(50));
     });
 
+    test('stays when the merged cells are not in twips', () {
+      const String percent = '<w:tcW w:w="2500" w:type="pct"/>';
+      const String auto = '<w:tcW w:w="0" w:type="auto"/>';
+      for (final (String, String, DocxTableWidth?) c
+          in <(String, String, DocxTableWidth?)>[
+            (percent, percent, DocxTableWidth.percent(50)),
+            (auto, auto, const DocxTableWidth.auto()),
+            ('', '', null),
+            (percent, _width, DocxTableWidth.percent(50)),
+            (_width, percent, DocxTableWidth.points(50)),
+          ]) {
+        final DocxDocument doc = _tableOf(2, <String>[
+          _tr(<String>[_tc('A', c.$1), _tc('B', c.$2)]),
+        ]);
+        final DocxTableCell merged = _merge(_table(doc), 0, 0, 0, 1);
+        expect(merged.properties.width, c.$3, reason: '${c.$1} ${c.$2}');
+      }
+    });
+
     test('stays when no cell of the row goes', () {
       const String auto = '<w:tcW w:w="0" w:type="auto"/>';
       final DocxDocument doc = _tableOf(1, <String>[
@@ -1171,7 +1190,7 @@ void main() {
       expect(() => table.insertRowAt(5, continuing(1)), throwsRangeError);
     });
 
-    test('that is plain may go inside a vertical merge (Ruling P10)', () {
+    test('that is plain may go inside a vertical merge', () {
       final DocxDocument doc = _tableOf(2, <String>[
         _tr(<String>[_tc('A', _restart), _tc('B')]),
         _tr(<String>[_empty(_continue), _tc('D')]),
@@ -1180,7 +1199,7 @@ void main() {
       expect(_table(doc).rows, hasLength(3));
     });
 
-    test('a removal that orphans a merge is allowed (Ruling P10)', () {
+    test('a removal that orphans a merge is allowed', () {
       final DocxDocument doc = _tableOf(2, <String>[
         _tr(<String>[_tc('A', _restart), _tc('B')]),
         _tr(<String>[_empty(_continue), _tc('D')]),

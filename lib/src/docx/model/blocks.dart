@@ -216,7 +216,7 @@ final class DocxParagraph extends DocxBlock {
 /// A table read from a file is written as read: the children it does not show
 /// stay where they were, and a grid that does not fit its rows is kept. Only
 /// the API checks the fit: [mergeCells], [insertRowAt],
-/// [DocxTableCellProperties.gridSpan] and
+/// [DocxTableRow.insertCellAt], [DocxTableCellProperties.gridSpan] and
 /// [DocxTableCellProperties.verticalMerge].
 ///
 /// The API nests tables at most 80 deep, so what it builds opens again under
@@ -255,18 +255,26 @@ final class DocxTable extends DocxBlock {
     }
   }
 
-  /// The grid of a new table of [columns] columns, each of equal width.
-  static List<double?> _equalGrid(int columns) {
+  /// The grid of a new table of [columns] columns, each of an equal share of
+  /// [widthTwips].
+  static List<double?> _equalGrid(
+    int columns, [
+    int widthTwips = _pageTextWidthTwips,
+  ]) {
     RangeError.checkValueInInterval(columns, 1, maxTableColumns, 'columns');
     return List<double?>.unmodifiable(
-      List<double>.filled(columns, _columnPt(columns)),
+      List<double>.filled(columns, ptOfTwips(widthTwips ~/ columns)),
     );
   }
 
   /// The grid of a new table of [columns] columns, of the widths [widthsPt], or
-  /// of equal width for `null`.
-  static List<double?> _newGrid(int columns, List<double>? widthsPt) {
-    final List<double?> grid = _equalGrid(columns);
+  /// sharing [widthTwips] for `null`.
+  static List<double?> _newGrid(
+    int columns,
+    List<double>? widthsPt,
+    int widthTwips,
+  ) {
+    final List<double?> grid = _equalGrid(columns, widthTwips);
     if (widthsPt == null) return grid;
     if (widthsPt.length != columns) {
       throw ArgumentError.value(
@@ -294,16 +302,14 @@ final class DocxTable extends DocxBlock {
     ]);
   }
 
-  /// The width of a column of a new table of [columns] columns, in points.
-  static double _columnPt(int columns) =>
-      ptOfTwips(_pageTextWidthTwips ~/ columns);
-
   /// [rows] rows of [columns] empty cells of the width of a column.
   static List<Object> _emptyRows(int columns, int rows) {
     if (rows < 1) {
       throw RangeError.value(rows, 'rows', 'must be at least 1');
     }
-    final DocxTableWidth width = DocxTableWidth.points(_columnPt(columns));
+    final DocxTableWidth width = DocxTableWidth.points(
+      ptOfTwips(_pageTextWidthTwips ~/ columns),
+    );
     return <Object>[
       for (int i = 0; i < rows; i++)
         DocxTableRow(cells: columns)
@@ -370,20 +376,32 @@ final class DocxTable extends DocxBlock {
   ///
   /// Setting replaces the widths of the grid as one change: the grid's other
   /// children (`w:tblGridChange`) stay, and a table without a grid gets one
-  /// before its rows. A width is stored in twips, from 0 to 1584 points, and
-  /// reads back rounded; setting the widths the grid holds changes nothing.
+  /// before its rows. Each cell's `w:tcW` stays, and Word lays a table out
+  /// from those. A width is stored in twips, from 0 to 1584 points, and reads
+  /// back rounded; setting what this reads, or the widths the grid holds,
+  /// changes nothing, whatever it reads.
+  ///
   /// A list of another length than the grid's, once the table has rows,
   /// throws [ArgumentError] (the cells of a row would no longer fit the
-  /// grid); so does `null` or an entry that is `null` or not finite, and an
-  /// entry out of range throws [RangeError]. Nothing changes then.
+  /// grid); so does one of fewer columns than the widest row of a table
+  /// without a grid, an empty list, `null` or an entry that is `null` or not
+  /// finite, and an entry out of range throws [RangeError]. Nothing changes
+  /// then.
   List<double?>? get gridColumnsPt => _gridColumnsPt;
 
   set gridColumnsPt(List<double?>? value) {
+    final List<double?>? current = _gridColumnsPt;
+    if (value == null && current == null) return;
+    if (value != null && current != null && _sameWidths(current, value)) {
+      return;
+    }
     if (value == null) {
       throw ArgumentError.notNull('gridColumnsPt');
     }
+    if (value.isEmpty) {
+      throw ArgumentError.value(value, 'gridColumnsPt', 'must not be empty');
+    }
     final List<double?> columns = _checkedWidths(value, 'gridColumnsPt');
-    final List<double?>? current = _gridColumnsPt;
     if (current != null &&
         _rows.isNotEmpty &&
         current.length != columns.length) {
@@ -392,6 +410,17 @@ final class DocxTable extends DocxBlock {
         'gridColumnsPt',
         'must have the ${current.length} columns of the grid',
       );
+    }
+    if (current == null) {
+      for (final DocxTableRow row in _rows) {
+        if (row._gridTotal > columns.length) {
+          throw ArgumentError.value(
+            value,
+            'gridColumnsPt',
+            'must have the ${row._gridTotal} columns of the widest row',
+          );
+        }
+      }
     }
     if (current != null && _sameWidths(current, columns)) {
       return;
@@ -422,7 +451,7 @@ final class DocxTable extends DocxBlock {
     RangeError.checkValueInInterval(index, 0, _rows.length, 'index');
     if (row._table == null) {
       _checkFits(row._gridTotal);
-      final List<_PlacedCell> above = _placedAt(index - 1);
+      final Map<int, int> above = _endsByStart(_placedAt(index - 1));
       for (final _PlacedCell at in row._placed()) {
         if (at.cell._continues) _checkContinues(above, at.start, at.end);
       }
@@ -498,8 +527,9 @@ final class DocxTable extends DocxBlock {
   /// The blocks of every merged cell move to the top-left cell in reading
   /// order, without empty paragraphs, as Word does; a merge of empty cells
   /// leaves one. A cell that stays and took the place of others gets the sum
-  /// of the merged columns as its width (`w:tcW`), when every one of them has
-  /// a width and the sum is one a width can hold, else it keeps its own.
+  /// of the merged columns as its width (`w:tcW`), when each cell merged in
+  /// that row has a width in twips, each column has a width and the sum is one
+  /// a width can hold, else it keeps its own.
   ///
   /// A merged cell wholly inside the range joins the merge. A range of one
   /// cell changes nothing.
@@ -746,12 +776,16 @@ final class DocxTable extends DocxBlock {
 /// and without `end`.
 typedef _PlacedCell = ({DocxTableCell cell, int start, int end});
 
-/// Throws [ArgumentError] unless [above], the cells of a row, has a cell of
+/// The column after each of [cells] by the column it starts on, so a row of
+/// many cells is looked up, not searched cell by cell.
+Map<int, int> _endsByStart(Iterable<_PlacedCell> cells) => <int, int>{
+  for (final _PlacedCell cell in cells) cell.start: cell.end,
+};
+
+/// Throws [ArgumentError] unless [above], a row's [_endsByStart], has a cell of
 /// the columns [start] up to and without [end], for a cell to continue.
-void _checkContinues(List<_PlacedCell> above, int start, int end) {
-  for (final _PlacedCell cell in above) {
-    if (cell.start == start && cell.end == end) return;
-  }
+void _checkContinues(Map<int, int> above, int start, int end) {
+  if (above[start] == end) return;
   throw ArgumentError.value(
     DocxVerticalMerge.continuation,
     'verticalMerge',
@@ -951,17 +985,23 @@ final class DocxTableRow {
 
   /// Takes out every cell of [cells], neighbours in the row, but the first,
   /// which spans [span] columns from now on and takes [width] if it took the
-  /// place of others. The span is set past the checks of
-  /// [DocxTableCellProperties.gridSpan]: the merge has checked the whole
+  /// place of others, all of a width in twips. The span is set past the checks
+  /// of [DocxTableCellProperties.gridSpan]: the merge has checked the whole
   /// range, and the rows around this one are half way through it.
   void _mergeCells(List<DocxTableCell> cells, int span, DocxTableWidth? width) {
     final int first = _cells.indexOf(cells.first);
+    final bool inTwips = cells.every(
+      (DocxTableCell cell) =>
+          cell.properties.width?.kind == DocxTableWidthKind.points,
+    );
     for (int i = cells.length - 1; i > 0; i--) {
       removeCellAt(first + i);
     }
     final DocxTableCell kept = cells.first;
     if (span > 1) cellPropertySetOf(kept).setValue('gridSpan', span);
-    if (width != null && cells.length > 1) kept.properties.width = width;
+    if (width != null && cells.length > 1 && inTwips) {
+      kept.properties.width = width;
+    }
   }
 }
 
@@ -1054,7 +1094,9 @@ final class DocxTableCell {
   }
 
   /// Appends a new table of [columns] columns, with no rows yet, and returns
-  /// it; `DocxBody.addTable` has the rules and what it throws.
+  /// it; `DocxBody.addTable` has the rules and what it throws, but that without
+  /// [columnWidthsPt] the columns share the cell's own width, when it has one
+  /// in twips (`w:tcW`) that gives each a twip, so the table fits the cell.
   ///
   /// In a cell of a document it has the document's `Table Grid` style, as a
   /// table of the body. In a cell of no document it has no style, as
@@ -1065,12 +1107,27 @@ final class DocxTableCell {
   /// a table last in a cell is saved with an empty paragraph after it. A table
   /// that would nest past 80 deep throws [ArgumentError], and nothing changes.
   DocxTable addTable({required int columns, List<double>? columnWidthsPt}) {
-    final DocxTable table = newTable(columns, columnWidthsPt);
+    final DocxTable table = newTable(
+      columns,
+      columnWidthsPt,
+      widthTwips: _widthToShare(columns),
+    );
     _sink.atomically(() {
       table.properties.style = _sink.ensureStyle(DocxBuiltInStyle.tableGrid);
       insertBlock(_blocks.length, table);
     });
     return table;
+  }
+
+  /// The twips [columns] new columns share: the cell's own width when it has
+  /// one in twips that gives each a twip, else the page's.
+  int _widthToShare(int columns) {
+    final double? pt = _properties.width?.widthPt;
+    if (pt == null || pt < 0 || pt > ptOfTwips(maxTwips)) {
+      return _pageTextWidthTwips;
+    }
+    final int twips = twipsOf(pt, 'width', min: 0, max: maxTwips);
+    return twips >= columns ? twips : _pageTextWidthTwips;
   }
 
   /// Inserts [block] at [index], from 0 to the number of blocks.
@@ -1121,8 +1178,12 @@ final class DocxTableCell {
     final int change = span - _span;
     if (change > 0) table._checkFits(row._gridTotal + change);
     final int index = table._rows.indexOf(row);
-    final List<_PlacedCell> above = table._placedAt(index - 1);
-    final List<_PlacedCell> below = table._placedAt(index + 1);
+    final Map<int, int> above = _endsByStart(table._placedAt(index - 1));
+    final Map<int, int> continuedBelow = _endsByStart(
+      table
+          ._placedAt(index + 1)
+          .where((_PlacedCell placed) => placed.cell._continues),
+    );
     bool moves = false;
     for (final _PlacedCell at in row._placed()) {
       final bool isThis = identical(at.cell, this);
@@ -1132,16 +1193,12 @@ final class DocxTableCell {
         final int start = isThis ? at.start : at.start + change;
         _checkContinues(above, start, at.end + change);
       }
-      for (final _PlacedCell cell in below) {
-        if (cell.cell._continues &&
-            cell.start == at.start &&
-            cell.end == at.end) {
-          throw ArgumentError.value(
-            span,
-            'gridSpan',
-            'must keep the columns of the cell the row below continues',
-          );
-        }
+      if (continuedBelow[at.start] == at.end) {
+        throw ArgumentError.value(
+          span,
+          'gridSpan',
+          'must keep the columns of the cell the row below continues',
+        );
       }
     }
   }
@@ -1155,8 +1212,8 @@ final class DocxTableCell {
     final _PlacedCell at = row._placed().firstWhere(
       (_PlacedCell placed) => identical(placed.cell, this),
     );
-    final List<_PlacedCell> above = table._placedAt(
-      table._rows.indexOf(row) - 1,
+    final Map<int, int> above = _endsByStart(
+      table._placedAt(table._rows.indexOf(row) - 1),
     );
     _checkContinues(above, at.start, at.end);
   }
@@ -1226,17 +1283,21 @@ DocxTable readTable({
 }) => DocxTable._read(properties, attributes, gridColumnsPt, children);
 
 /// A new table as `DocxBody.addTable` builds it, in no document yet, without a
-/// style or rows: Word's width and look (plan Ruling 6), and the grid of
-/// [columns] columns of the widths [columnWidthsPt], or sharing the page.
+/// style or rows: Word's width and look, and the grid of [columns] columns of
+/// the widths [columnWidthsPt], or sharing [widthTwips], by default the page.
 ///
 /// A [columns] outside 1 to [maxTableColumns], or a width out of range, throws
 /// [RangeError]; [columnWidthsPt] of another length than [columns], or with a
 /// width that is not finite, throws [ArgumentError].
-DocxTable newTable(int columns, List<double>? columnWidthsPt) {
+DocxTable newTable(
+  int columns,
+  List<double>? columnWidthsPt, {
+  int widthTwips = _pageTextWidthTwips,
+}) {
   final DocxTable table = DocxTable._read(
     const PropertyContainer.empty(),
     const <KeptAttribute>[],
-    DocxTable._newGrid(columns, columnWidthsPt),
+    DocxTable._newGrid(columns, columnWidthsPt, widthTwips),
     <Object>[],
     isNew: true,
   );
@@ -1531,15 +1592,41 @@ List<KeptAttribute> cellAttributesOf(DocxTableCell cell) => cell._attributes;
 /// themselves.
 List<DocxBlock> cellBlocksOf(DocxTableCell cell) => cell._blocks;
 
+/// The range markers of `w:` that may stand at the block level: they show
+/// nothing, so a paragraph before them still closes a cell.
+const Set<String> _rangeMarkers = <String>{
+  'bookmarkStart',
+  'bookmarkEnd',
+  'commentRangeStart',
+  'commentRangeEnd',
+  'permStart',
+  'permEnd',
+  'moveFromRangeStart',
+  'moveFromRangeEnd',
+  'moveToRangeStart',
+  'moveToRangeEnd',
+};
+
+/// Whether [block] is one of the [_rangeMarkers].
+bool _isRangeMarker(DocxBlock block) =>
+    block is DocxOpaqueBlock &&
+    block.namespaceUri == Ns.w &&
+    _rangeMarkers.contains(block.localName);
+
 /// Whether [cell] must be written with an empty `w:p` after its blocks: Word
-/// repairs a cell that does not end in a paragraph.
+/// repairs a cell that does not end in a paragraph, trailing range markers
+/// aside. A cell with no paragraph at all gets one, whatever else it holds.
 ///
 /// A cell read without one, whose blocks are still all the ones read, is
 /// written as read; the blocks compare by identity, so an undo restores that,
 /// and a cell read with no blocks stays empty. The paragraph added is not in
 /// [DocxTableCell.blocks] until the file is read again.
 bool cellNeedsClosingParagraph(DocxTableCell cell) {
-  return cell._blocks.lastOrNull is! DocxParagraph && !_blocksAsRead(cell);
+  if (_blocksAsRead(cell)) return false;
+  for (final DocxBlock block in cell._blocks.reversed) {
+    if (!_isRangeMarker(block)) return block is! DocxParagraph;
+  }
+  return true;
 }
 
 /// Whether [cell] was read without a closing paragraph and holds exactly the

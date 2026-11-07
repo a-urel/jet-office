@@ -628,6 +628,57 @@ void main() {
       );
     });
 
+    group('default widths', () {
+      /// A cell with the `w:tcW` [tcW], in a document.
+      DocxTableCell cellOf(String tcW) {
+        final DocxDocument doc = _open(
+          '<w:tbl><w:tblGrid><w:gridCol w:w="3001"/></w:tblGrid><w:tr><w:tc>'
+          '<w:tcPr>$tcW</w:tcPr><w:p/></w:tc></w:tr></w:tbl>',
+        );
+        return (doc.body.blocks.single as DocxTable).rows.single.cells.single;
+      }
+
+      test('share a cell width in twips, rounded down', () {
+        final DocxTable inner = cellOf(
+          '<w:tcW w:w="3001" w:type="dxa"/>',
+        ).addTable(columns: 2);
+        expect(inner.gridColumnsPt, <double>[75, 75]);
+      });
+
+      test('share a new cell\'s width, so the table fits in it', () {
+        final DocxTable outer = DocxDocument().body.addTable(columns: 2);
+        final DocxTable inner = outer
+            .addRow(<String?>['a', 'b'])
+            .cells
+            .first
+            .addTable(columns: 2);
+        expect(inner.gridColumnsPt, <double>[113.25, 113.25]);
+      });
+
+      test('share the page without a width in twips', () {
+        for (final String tcW in <String>[
+          '',
+          '<w:tcW w:w="0" w:type="auto"/>',
+          '<w:tcW w:w="2500" w:type="pct"/>',
+          '<w:tcW w:w="1" w:type="dxa"/>',
+          '<w:tcW w:w="99999" w:type="dxa"/>',
+          '<w:tcW w:w="-5" w:type="dxa"/>',
+        ]) {
+          expect(cellOf(tcW).addTable(columns: 2).gridColumnsPt, <double>[
+            226.55,
+            226.55,
+          ], reason: tcW);
+        }
+      });
+
+      test('give way to the widths asked for', () {
+        final DocxTable inner = cellOf(
+          '<w:tcW w:w="3000" w:type="dxa"/>',
+        ).addTable(columns: 2, columnWidthsPt: <double>[10, 20]);
+        expect(inner.gridColumnsPt, <double>[10, 20]);
+      });
+    });
+
     test(
       'in no document sets no style, and the caller\'s resolves on insert',
       () {

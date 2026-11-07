@@ -332,7 +332,7 @@ void exerciseDocx(Uint8List bytes) {
   _guard(() => numbering = doc.numbering, refused);
   if (blocks != null) {
     _walk(blocks!);
-    _editTables(blocks!);
+    docxEditTables(blocks!);
     body!.addParagraph('x').addRun('y');
   }
   if (styles != null) _readStyles(styles!);
@@ -452,21 +452,30 @@ void _table(DocxTable table) {
 /// rows and columns, its last cell, its first row, its first column).
 ///
 /// Only [ArgumentError] may come out of the calls, for a table whose grid
-/// or rows do not allow the edit; anything else is a defect and propagates.
-void _editTables(List<DocxBlock> blocks) {
+/// or rows do not allow the edit; anything else, a [RangeError] too, is a
+/// defect and propagates. Returns how many rows and merges took.
+({int rows, int merges}) docxEditTables(List<DocxBlock> blocks) {
+  int rows = 0;
+  int merges = 0;
   for (final DocxBlock block in blocks) {
     if (block is! DocxTable) continue;
-    final int rows = block.rows.length;
     final int columns = block.gridColumnsPt?.length ?? 0;
-    void attempt(void Function() edit) {
+
+    /// Whether [edit] took. A [RangeError] is a bug inside the model: every
+    /// argument here is in range or refused with a plain [ArgumentError].
+    bool attempt(void Function() edit) {
       try {
         edit();
+        return true;
+      } on RangeError {
+        rethrow;
       } on ArgumentError {
         // The table's shape does not allow it, as the API documents.
+        return false;
       }
     }
 
-    attempt(() => block.addRow(<String?>['x', null]));
+    if (attempt(() => block.addRow(<String?>['x', null]))) rows++;
     final int last = block.rows.length - 1;
     for (final (int, int, int, int) range in <(int, int, int, int)>[
       (0, 0, last, columns - 1),
@@ -475,7 +484,7 @@ void _editTables(List<DocxBlock> blocks) {
       (0, 0, 0, columns - 1),
       (0, 0, last, 0),
     ]) {
-      attempt(
+      final bool merged = attempt(
         () => block.mergeCells(
           firstRow: range.$1,
           firstColumn: range.$2,
@@ -483,15 +492,19 @@ void _editTables(List<DocxBlock> blocks) {
           lastColumn: range.$4,
         ),
       );
+      if (merged) merges++;
     }
-    if (rows > 0) {
-      for (final DocxTableRow row in block.rows) {
-        for (final DocxTableCell cell in row.cells) {
-          _editTables(cell.blocks.toList());
-        }
+    for (final DocxTableRow row in block.rows) {
+      for (final DocxTableCell cell in row.cells) {
+        final ({int rows, int merges}) nested = docxEditTables(
+          cell.blocks.toList(),
+        );
+        rows += nested.rows;
+        merges += nested.merges;
       }
     }
   }
+  return (rows: rows, merges: merges);
 }
 
 /// Reads the defaults, every style and every typed property of [styles].

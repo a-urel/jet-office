@@ -4,6 +4,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import 'support/docx_fuzz.dart';
+import 'support/table_document.dart';
 
 /// The seeds the quality gate fuzzes, each with [_cases] cases.
 const List<int> _seeds = <int>[1, 2, 3, 4];
@@ -34,7 +35,7 @@ const Map<String, ({int length, int adler32})> _corpus =
       'd3_header_row': (length: 70020, adler32: 3183794624),
       'd3_merges': (length: 30134, adler32: 2775992460),
       'd3_formatting': (length: 30246, adler32: 3404101736),
-      'd3_nested': (length: 33071, adler32: 2162307222),
+      'd3_nested': (length: 33071, adler32: 2045718154),
       'tables_by_hand': (length: 9996, adler32: 2530907752),
       'ns0_prefix': (length: 1407, adler32: 3668097186),
       'default_namespace': (length: 1344, adler32: 3335628311),
@@ -57,6 +58,14 @@ int _adler32(List<int> data) {
 }
 
 void main() {
+  test('the table edits take on tables_by_hand', () {
+    final ({int rows, int merges}) edits = docxEditTables(
+      DocxDocument.open(tablesByHandDocx()).body.blocks.toList(),
+    );
+    expect(edits.rows, greaterThan(0));
+    expect(edits.merges, greaterThan(0));
+  });
+
   test('the corpus is the pinned bytes, the same on every run', () {
     final List<({String name, Uint8List bytes})> first = docxFuzzCorpus();
     final List<({String name, Uint8List bytes})> second = docxFuzzCorpus();

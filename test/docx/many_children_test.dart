@@ -52,7 +52,40 @@ final class _Failing implements PartContent {
   List<Uint8List> encode() => _fail();
 }
 
+/// The fastest of three runs of a change of `w:gridSpan` in the middle row of
+/// a table of three rows of [cells] cells: every later cell of that row moves
+/// and continues a cell of the row above, and the row below is plain.
+Duration _gridSpanSet(int cells) {
+  const String plain = '<w:tc><w:p/></w:tc>';
+  const String continues = '<w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc>';
+  String wide(int span) =>
+      '<w:tc><w:tcPr><w:gridSpan w:val="$span"/></w:tcPr><w:p/></w:tc>';
+  final Uint8List bytes = buildDocx(
+    document: _document(
+      '<w:tbl><w:tr>${wide(3)}${plain * cells}</w:tr>'
+      '<w:tr>${wide(2)}${continues * cells}</w:tr>'
+      '<w:tr>${plain * cells}</w:tr></w:tbl>',
+    ),
+  );
+  Duration? fastest;
+  for (int run = 0; run < 3; run++) {
+    final DocxTable table = _open(bytes).body.blocks.single as DocxTable;
+    final Stopwatch watch = Stopwatch()..start();
+    table.rows[1].cells.first.properties.gridSpan = 3;
+    final Duration elapsed = watch.elapsed;
+    expect(table.rows[1].cells.first.properties.gridSpan, 3);
+    if (fastest == null || elapsed < fastest) fastest = elapsed;
+  }
+  return fastest!;
+}
+
 void main() {
+  test('a span set on a row of 20,000 cells stays near linear', () {
+    // About 20 ms when linear and 15 s when quadratic, on the machine this was
+    // measured on: the limit is far from both, so load does not fail it.
+    expect(_gridSpanSet(20000), lessThan(const Duration(seconds: 1)));
+  });
+
   group('$_count children the schema lacks', () {
     test('in a run: the body loads, saves and is edited', () {
       final DocxDocument doc = _open(

@@ -634,6 +634,44 @@ void main() {
       expect(changeLogOf(doc).hasChanges, isFalse);
     });
 
+    test('setting what it reads changes nothing, whatever it reads', () {
+      for (final String grid in <String>[
+        '',
+        '<w:tblGrid/>',
+        '<w:tblGrid><w:gridCol/><w:gridCol w:w="abc"/></w:tblGrid>',
+      ]) {
+        final DocxDocument doc = _open(grid: grid);
+        final DocxTable t = _table(doc);
+        t.gridColumnsPt = t.gridColumnsPt;
+        expect(changeLogOf(doc).hasChanges, isFalse, reason: grid);
+      }
+    });
+
+    test('a table with no grid takes no fewer columns than its widest row', () {
+      final DocxDocument doc = _openBody(
+        '<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr><w:tr><w:trPr>'
+        '<w:gridBefore w:val="1"/></w:trPr><w:tc><w:tcPr>'
+        '<w:gridSpan w:val="2"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>',
+      );
+      final DocxTable t = _table(doc);
+      expect(() => t.gridColumnsPt = <double?>[1, 2], throwsArgumentError);
+      expect(changeLogOf(doc).hasChanges, isFalse);
+      t.gridColumnsPt = <double?>[1, 2, 3];
+      expect(t.gridColumnsPt, <double>[1, 2, 3]);
+    });
+
+    test('an empty list throws, with or without rows and a grid', () {
+      final DocxDocument gridless = _open(grid: '');
+      expect(
+        () => _table(gridless).gridColumnsPt = <double?>[],
+        throwsArgumentError,
+      );
+      expect(changeLogOf(gridless).hasChanges, isFalse);
+      final DocxTable rowless = DocxDocument().body.addTable(columns: 2);
+      expect(() => rowless.gridColumnsPt = <double?>[], throwsArgumentError);
+      expect(rowless.gridColumnsPt, hasLength(2));
+    });
+
     test('a list of another length throws once the table has rows', () {
       final DocxDocument doc = _open();
       final DocxTable t = _table(doc);
