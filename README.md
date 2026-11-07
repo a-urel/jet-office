@@ -11,8 +11,8 @@ rendering and no PDF.
 Pre-release (`0.1.0-dev.1`). The package is not published to pub.dev
 (`publish_to: none`) until the owner decides. Phase 1 writes XLSX files and
 phase 2 reads them, and phase 3 opens, edits and saves them. Phase 4, DOCX,
-is in progress (milestone D1 of D1 to D6 is built, pending the owner's Word
-check; see "DOCX" below).
+is in progress (milestones D1 to D3 of D1 to D6 are built and checked in Word,
+and D4 is built, pending the owner's Word check; see "DOCX" below).
 
 ## Installing
 
@@ -195,11 +195,26 @@ report.body.addListItem(list, 'A nested item', level: 1);
 final DocxResult formatted = report.save();
 ```
 
+Tables, sections, headers, footers and fields are typed as well:
+
+```dart
+final DocxDocument sheet = DocxDocument();
+sheet.body.addTable(columns: 2)
+  ..addRow(<String?>['Item', 'Price'], header: true)
+  ..addRow(<String?>['Tea', '3.50']);
+sheet.body.addParagraph('The summary follows.');
+final DocxSection wide = sheet.body.addSection();
+wide.pageSize = DocxPageSize.a4(landscape: true);
+wide.footer.addParagraph('Page ').addField(DocxField.page());
+sheet.body.addParagraph('Summary');
+final DocxResult paged = sheet.save();
+```
+
 Paragraphs, runs and their text, tabs and breaks, their formatting, the
-styles and the numbering are typed so far. Everything else in the file
-(tables, content controls, tracked changes, drawings, fields, headers,
-footers, the page setup) is kept as written, so the file comes back with only
-your changes. The file is untrusted input, as
+styles, the numbering, tables, sections, headers, footers and complex fields
+are typed so far. Everything else in the file (content controls, tracked
+changes, drawings, hyperlinks, notes) is kept as written, so the file comes
+back with only your changes. The file is untrusted input, as
 for XLSX: `DocxReadLimits`, and a file that cannot be read throws a
 `DocxReadException`. [`docs/docx-model.md`](docs/docx-model.md) has the rules
 the model enforces and the known gaps; the owner's check in Word for Mac is

@@ -122,7 +122,36 @@ DocxResult docxFormat() {
   return formatted;
 }
 
+DocxResult docxSections() {
+  final DocxDocument sheet = DocxDocument();
+  sheet.body.addTable(columns: 2)
+    ..addRow(<String?>['Item', 'Price'], header: true)
+    ..addRow(<String?>['Tea', '3.50']);
+  sheet.body.addParagraph('The summary follows.');
+  final DocxSection wide = sheet.body.addSection();
+  wide.pageSize = DocxPageSize.a4(landscape: true);
+  wide.footer.addParagraph('Page ').addField(DocxField.page());
+  sheet.body.addParagraph('Summary');
+  final DocxResult paged = sheet.save();
+  return paged;
+}
+
 void main() {
+  test('README DOCX sections block saves a table and a landscape section', () {
+    final DocxResult paged = docxSections();
+    expect(paged.warnings, isEmpty);
+    final DocxDocument reopened = DocxDocument.open(paged.bytes);
+    expect(reopened.body.blocks.whereType<DocxTable>(), hasLength(1));
+    final List<DocxSection> sections = reopened.sections;
+    expect(sections, hasLength(2));
+    expect(sections.first.pageSize, DocxPageSize.a4());
+    expect(sections.last.pageSize, DocxPageSize.a4(landscape: true));
+    final DocxParagraph footer =
+        sections.last.footer.blocks.single as DocxParagraph;
+    expect(footer.inlines.whereType<DocxField>().single.name, 'PAGE');
+    expect(footer.text, 'Page 1');
+  });
+
   test('README DOCX formatting block saves a styled document with a list', () {
     final DocxResult formatted = docxFormat();
     expect(formatted.warnings, isEmpty);

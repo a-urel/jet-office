@@ -23,11 +23,12 @@ dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 
 (The D2 and D3 sections below use the same commands; their folders hold the
 `d2_*` and `d3_*` documents as well. The D3 section adds one command, for a
-document that ends in a table.)
+document that ends in a table. The D4 section has commands of its own, which
+write to `build/d4/`.)
 
 `build/fixtures` also holds the workbooks of the Excel checks; open the
-`d1_*.docx` files (D1), the `d2_*.docx` files (D2) and the `d3_*.docx` files
-(D3).
+`d1_*.docx` files (D1), the `d2_*.docx` files (D2), the `d3_*.docx` files
+(D3) and the `d4_*.docx` files (D4).
 `tool/round_trip_docx.dart` prints each difference between an input and the
 model's output and exits 1 on any, so run it first and expect none;
 `tool/edit_docx.dart` likewise prints each problem with an edited document
@@ -361,6 +362,166 @@ For `d3_basic`, `d3_merges` and `d3_nested`, and one edited owner file: change
 one word in a cell, save in Word, close and reopen. No repair prompt, the edit
 is there, and the merges, the header and the nested table are as before. For
 `d3_header_row`, also scroll to the third page: the header row is still there.
+
+## D4
+
+D4 types sections, headers, footers and complex fields. Open the D4 fixtures,
+their round trips, the round trips and edits of the owner's files and the
+document whose last block carries a section break in Word for Mac. All of them
+are under `build/d4/`, the folder to open. Write them with:
+
+```bash
+dart run tool/write_fixtures.dart build/d4/fixtures
+dart run tool/round_trip_docx.dart build/d4/fixtures build/d4/model
+dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/d4/model-owner
+dart run tool/edit_docx.dart test/fixtures/owner/docx build/d4/edited-owner
+dart run tool/write_table_last.dart build/d4/table-last
+```
+
+`tool/round_trip_docx.dart` and `tool/edit_docx.dart` print each problem and
+exit 1 on any, so expect none. Never run `soffice` on `build/d4/table-last`.
+
+No repair prompt in any of them; then, per document, as below. As under D3, this
+section says what to look for: what each document should show comes from the
+code that wrote it and from the SDK, not from Word, so read every statement here
+as what to expect until the owner has looked. The result is recorded under
+"Results", and none is recorded here before then. In the views below,
+Show/Hide is the ¶ button on the Home tab; a section's values are read with the
+cursor in that section. The menus are Word for Mac's: Layout > Margins > Custom
+Margins (with its Margins and Layout tabs), Layout > Columns > More Columns,
+Layout > Line Numbers, and Insert > Page Number > Format Page Numbers.
+
+### Fixtures: `build/d4/fixtures/d4_*.docx`
+
+- `d4_sections`: three pages and four sections; Show/Hide shows a section break
+  at the end of each of the first three.
+  - Section 1, page 1: A4 portrait (21 × 29.7 cm), margins of 3.81 cm on the
+    four sides and a gutter of 0.64 cm, so the text sits a little further right
+    than the margin alone. The text is in the middle of the page, top to bottom
+    (Layout tab, Vertical alignment: Center). Its two paragraphs read
+    `Portrait, with wide margins, its pages numbered from 5.` and `Its lines are
+    numbered and it sits in the middle of the page.`. The lines carry numbers
+    in the left margin, from 1 (Line Numbers: Restart Each Section). The pages
+    have no visible number, so read it in Format Page Numbers: Start at 5.
+  - Section 2, page 2: A4 landscape (Orientation: Landscape), margins of 2.54 cm
+    and no gutter, two columns of equal width with a line between them (More
+    Columns: Two, Line between ticked), no line numbers, the text at the top of
+    the page, and Format Page Numbers on Continue from previous section. It
+    holds `Landscape, in two columns with a line between them.` and `The second
+    paragraph of the columns.`. Word balances columns before a continuous
+    break, so each paragraph may sit in a column of its own.
+  - Section 3, the same page: the break before it is continuous (Layout tab,
+    Section start: Continuous). One column across the landscape page, below
+    the two: `Continuous: this section starts on the same page, in one column.`.
+  - Section 4, page 3: Letter portrait (21.59 × 27.94 cm, Size shows Letter) on
+    a page of its own (Section start: New page), margins of 2.54 cm. It holds
+    `Letter, on a page of its own.`, a table and `After the table.`. The table
+    is the check of the 10 twips (`docx-model.md`, "Known gaps of D3"): `Name`,
+    `Value` / `Width`, `The text width less 10 twips`, in `Table Grid`, with a
+    repeating header row and two columns of equal width (Table Properties >
+    Column: 8.25 cm each). **The table reaches both margins:** with the ruler
+    on, its right edge sits on the right margin, as a table inserted by hand on
+    that page does. A gap or an overhang that can be seen is the finding to
+    report, with the widths Table Properties shows.
+- `d4_headers`: five pages, three sections, and in Header & Footer (double click
+  a header) Different Odd & Even Pages ticked everywhere. Each page shows:
+
+  | Page | Section | Body | Header | Footer |
+  |---|---|---|---|---|
+  | 1 | 1 | `Page one of section one: the first page stories.` | `First header one` | `First footer one` |
+  | 2 | 1 | `Page two of section one: the even stories.` | `Even header one` | `Even footer one` |
+  | 3 | 1 | `Page three of section one: the default stories.` | `Header one` | `Footer one` |
+  | 4 | 2 | `Section two inherits the stories of section one.` | `Even header one` | `Even footer one` |
+  | 5 | 3 | `Section three has its own header and footer.` | `Header three` | `Footer three` |
+
+  Different First Page is ticked in section 1 only, so pages 4 and 5 show no
+  first story. In section 2 every header and footer has Link to Previous on
+  (Word labels them `Same as Previous`). In section 3 the odd header and footer
+  have it off, and the even ones on: type nothing, only look.
+- `d4_fields`: one page. The body reads `This is page 1.` and `A field the model
+  has no helper for: Custom text.`. The footer has two lines:
+  `Page 1 of 1, section pages: 1` and `Printed on <date> at <time>`, the date
+  as `dd.MM.yyyy` and the time as `HH:mm`, those of the moment Word opened the
+  file. Each of the five, and `Custom text`, is a field: it turns grey when
+  clicked, and Option-F9 (Fn as well on a Mac keyboard) shows its code: ` PAGE
+  `, ` NUMPAGES `, ` SECTIONPAGES `, ` DATE \@ "dd.MM.yyyy" `, ` TIME \@ "HH:mm"
+  ` and ` QUOTE "Custom text" `. Option-F9 again hides them.
+  - **`DATE` and `TIME` have an empty result in the file**, so what shows is what
+    Word computed. If the second line stays `Printed on  at `, that is the
+    finding to report, with what Update Field (Control-click the place, or F9)
+    does there: the model's rule for these two rests on this check.
+  - **Page numbers move.** Click at the end of the body and press Cmd-Return
+    for a page break. Both footers now read `Page 1 of 2, section pages: 2` and
+    `Page 2 of 2, section pages: 2`. Undo the break, or close without saving.
+
+### Round trips: `build/d4/model/d4_*.docx` and `build/d4/model-owner/*.docx`
+
+The model opened each document, read the body, every property, every section
+value and every header and footer, and saved it, changing nothing;
+`tool/round_trip_docx.dart` prints any difference from the input. The three
+`d4_*` documents of `build/d4/model` are byte for byte the fixtures, which
+`cmp` shows, so opening the fixtures covers them. Open every file of
+`build/d4/model-owner`: no repair prompt, and each looks and reads as the
+original. In the owner's files the headers and footers are the ones to compare:
+`features.docx` keeps `Jet Office test footer` and its header, `long.docx` its
+`Sayfa <n>` footers on odd and even pages and its table of contents, and
+`builtins.docx` its `Footer text`.
+
+### Edited owner files: `build/d4/edited-owner/*.docx`
+
+`tool/edit_docx.dart` adds a footer and a section to what it did under D1, D2
+and D3 (AGENTS.md has its rules). The table, the heading and the list it appends
+are now in a section of their own, on a landscape page. Open all four files.
+No repair prompt, and:
+
+- **Footer page numbers.** The last paragraph of the default footer reads
+  `Page <n> of <m>`, with `<n>` the page and `<m>` the pages, both moving from
+  page to page. In `blank.docx` it is the only text of a footer the file did not
+  have. In `features.docx` it follows `Jet Office test footer`, and in
+  `builtins.docx` `Footer text`. `long.docx` has even pages of their own and
+  only its default footer changed, so `Page <n> of <m>` follows `Sayfa <n>` on odd
+  pages, and even pages show `Sayfa <n>` alone.
+- **The last section landscape.** The original body keeps its pages, and the
+  document ends with one new landscape A4 page (Orientation: Landscape, Size: A4,
+  Section start: New page; Show/Hide shows a `Section Break (Next Page)` after the
+  original body). When the original body ended in a table or a break, an empty
+  paragraph carries the break. The margins are those of the page before.
+- That page holds the table of D3's list (`Head one`, `Head two`, `Body one`,
+  `Body two`, `Merged`), whose two equal columns reach the margins of the wider
+  page, then `Added by the model` and the two-item list, as under D2.
+- The new section's header and footer have Link to Previous on, so its footer
+  shows the same `Page <n> of <m>`.
+- The edits to the original body (the first run, the replaced paragraph, the
+  first cell and its `New row`) are as under D1 and D3; the headers and footers
+  not named here are as in the original.
+
+### A section break last: `build/d4/table-last/d4_break_last.docx`
+
+The model adds no block after a section break, so the body's last block carries
+the break and the last section holds nothing: Word cannot have made this file,
+no fixture may be one, and CI does not open it in Word. The owner is the check.
+The body is an empty paragraph and `This paragraph carries the last section
+break.`.
+
+Open it. No repair prompt, and the two paragraphs as above; Show/Hide shows a
+`Section Break (Next Page)` after the second. Word may show a second, empty page
+with a paragraph of its own: that is Word's to add, and is no problem. A repair
+prompt here is the finding to report: the model's rule that it adds no block
+after a break rests on this check. Then add a word to the second paragraph,
+save in Word, close and reopen: no prompt, and the break and the word are there.
+
+`build/d4/table-last/d3_table_last.docx` is the D3 document, written again by
+the same command; its check is under D3.
+
+### Save in Word
+
+For `d4_sections`, `d4_headers`, `d4_fields` and one edited owner file: change
+one word in the body and one in a footer, save in Word, close and reopen. No
+repair prompt, the edits are there, and the sections, the stories on their
+pages and the fields are as before: `d4_sections` still has its four sections,
+`d4_headers` its five pages with the table above, `d4_fields` its five fields
+(`DATE` and `TIME` now hold a result in the file), and the edited owner file its
+last page landscape.
 
 ## Results
 

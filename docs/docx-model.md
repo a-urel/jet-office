@@ -10,7 +10,8 @@ fidelity standard; it applies decision
 WordprocessingML.
 
 This page covers milestone D1, the foundation, milestone D2, formatting,
-styles and lists, and milestone D3, tables. **The DOCX API is in progress and
+styles and lists, milestone D3, tables, and milestone D4, sections, headers,
+footers and fields. **The DOCX API is in progress and
 may change before D6**; the names are fixed at D6 (decision 0010).
 
 ```dart
@@ -42,23 +43,38 @@ table.mergeCells(firstRow: 2, firstColumn: 0, lastRow: 2, lastColumn: 1);
 table.rows[1].cells[0].addTable(columns: 2).addRow(<String?>['a', 'b']);
 ```
 
+A landscape section with page numbers in its footer (D4):
+
+```dart
+final DocxDocument doc = DocxDocument();
+doc.body.addParagraph('Cover');
+final DocxSection report = doc.body.addSection();
+report.pageSize = DocxPageSize.a4(landscape: true);
+report.footer.addParagraph('Page ')
+  ..addField(DocxField.page())
+  ..addRun(' of ')
+  ..addField(DocxField.numPages());
+doc.body.addParagraph('The report.');
+```
+
 ## What D1 does and does not do
 
 - **Typed.** The body's paragraphs (`DocxParagraph`), their runs
   (`DocxRun`), the paragraph and run style, and a run's text, tabs, breaks and
   carriage returns (`DocxRunContent`).
-- **Opaque, kept as written.** Everything else: content controls, bookmarks, tracked changes, hyperlinks, drawings
-  and `mc:AlternateContent` (`DocxOpaqueBlock`, `DocxOpaqueInline`,
+- **Opaque, kept as written.** Everything else: content controls, bookmarks,
+  tracked changes, hyperlinks, drawings, `w:fldSimple` and
+  `mc:AlternateContent` (`DocxOpaqueBlock`, `DocxOpaqueInline`,
   `DocxOpaqueRunContent`). An opaque node can be removed, not changed.
-- **The final `w:sectPr`** of the body is held by the body and kept as
-  written until D4.
+- **The final `w:sectPr`** of the body is held by the body, not by its
+  blocks; D4 types it (`DocxDocument.sections`).
 - **Edits.** `addParagraph`, `insertBlock`, `removeBlockAt`,
   `replaceBlockAt`, the same for inlines, a run's `text` and the two styles.
   Each edit is atomic (a transaction of the document's `ChangeLog`).
 - **Not in D1.** Formatting, styles and lists (D2, below), tables (D3, below),
-  sections, headers, footers and fields (D4), pictures, hyperlinks,
-  bookmarks and document properties (D5), `DocxListExport` (D6). Headers,
-  footers, notes and comments are saved as they were, not read.
+  sections, headers, footers and complex fields (D4, below), pictures,
+  hyperlinks, bookmarks and document properties (D5), `DocxListExport` (D6).
+  Notes and comments are saved as they were, not read.
 
 ## What D2 does
 
@@ -120,6 +136,46 @@ table.rows[1].cells[0].addTable(columns: 2).addRow(<String?>['a', 'b']);
   the like). `w:gridBefore` and `w:gridAfter` are read for the grid check
   only. A cell written by the API carries no `w:cnfStyle`: Word recomputes
   it.
+
+## What D4 does
+
+- **Sections, typed.** `DocxDocument.sections` lists each `DocxSection`: one
+  for each top-level paragraph of the body with a `w:sectPr`, in order, then
+  the last, which every document has. A section gives `pageSize`
+  (`DocxPageSize`), `margins` (`DocxPageMargins`), `columns` (`DocxColumns`,
+  `DocxColumn`), `start` (`DocxSectionStart`), `titlePage`,
+  `verticalAlignment` (`DocxSectionVerticalAlignment`), `pageNumbering`
+  (`DocxPageNumbering`), `lineNumbering` (`DocxLineNumbering`), each a nullable
+  get and set in the way of the paragraph's (`titlePage` a `bool`), and
+  `textWidthPt`. `DocxBody.addSection` ends the last section and starts a new
+  one, as Word's Insert Break does.
+- **Headers and footers, typed.** A section's six getters (`header`,
+  `firstHeader`, `evenHeader`, `footer`, `firstFooter`, `evenFooter`) give a
+  `DocxHeaderFooter`: the section's own story, else the nearest previous
+  section's (`isInherited`), else an empty one. It is a `DocxStory`, as the
+  `DocxBody` is, so it holds the same blocks, tables and lists among them, and
+  takes the same edits. `ownHeader`, `ownFooter`, `removeHeader` and
+  `removeFooter` unlink and link a section again.
+  `DocxDocument.evenAndOddHeaders` is the one typed child of `settings.xml`.
+- **Complex fields, typed.** A plain field of one paragraph is one `DocxField`
+  among its inlines: `instruction`, `name`, `result`, `resultText` and
+  `properties`. `DocxField.new` builds any field, and `.page()`, `.numPages()`,
+  `.sectionPages()`, `.date()` and `.time()` the common ones;
+  `DocxParagraph.addField` adds one. In a run, `w:fldChar` and `w:instrText`
+  are `DocxFieldMark` and `DocxFieldInstruction`, typed content that gives no
+  text, also where the field around them is not plain. The model does not
+  evaluate a field: its text is the result as cached.
+- **Still kept as written, never typed:** `w:fldSimple` and `w:delInstrText`,
+  which stay opaque (a `w:fldSimple` still gives its visible text); of a section
+  `w:pgBorders`, `w:paperSrc`, `w:docGrid`, `w:footnotePr`, `w:endnotePr`,
+  `w:formProt`, `w:noEndnote`, `w:textDirection`, `w:bidi`, `w:rtlGutter`,
+  `w:printerSettings`, `w:sectPrChange` and the chapter attributes of
+  `w:pgNumType`; every child of `settings.xml` but `w:evenAndOddHeaders`.
+- **No new read limit and no new warning code.** Story parts are bounded by
+  `maxEntries` and each part by the part limits, a broken reference is kept
+  silently, and an instruction's forbidden characters report
+  `invalidCharactersRemoved`. A warning in a story starts with the part's name:
+  `word/header1.xml/p[0]/r[1]`.
 
 ## Known gaps
 
@@ -222,13 +278,18 @@ table.rows[1].cells[0].addTable(columns: 2).addRow(<String?>['a', 'b']);
   then removed cannot be inserted again through the API (`ArgumentError`); its
   removal still undoes (test: `test/docx/model/tables_edit_test.dart`, "a
   table read that deep cannot go back in the API").
-- **`addTable`'s default widths are for the blank A4 page**: 9062 twips
-  shared among the columns. Sections are typed in D4; until then a document
-  with another page needs `columnWidthsPt`, or Word's autofit corrects the
-  widths when it opens the file (test: `test/docx/model/table_build_test.dart`,
-  "shares the width of a blank A4 page, in whole twips"). A table added to a
-  cell shares the cell's own `w:tcW` when it has one in twips (tests: same
-  file, "default widths").
+- **`addTable`'s default widths are the last section's text width less 10
+  twips** (`textWidthPt`), shared among the columns: 9062 twips on a blank A4
+  page, the width `builtins.docx` pins. The 10 twips are Word's on that page;
+  on another page they are this library's reading, and the Word check of
+  `d4_sections` looks at a Letter page. A section whose page or margins do not
+  read, or a width that gives a column no twip, shares 9062 twips, and then a
+  document needs `columnWidthsPt`, or Word's autofit corrects the widths when
+  it opens the file (tests: `test/docx/model/sections_test.dart`, group
+  "addTable"; `test/docx/model/table_build_test.dart`, "shares the width of a
+  blank A4 page, in whole twips"). A table added to a cell shares the cell's
+  own `w:tcW` when it has one in twips (tests: same file, "default widths"),
+  and `DocxTable.new` stays at 9062 twips.
 - **No paragraph is added** between two tables or after a last table, so two
   tables added one after the other join in Word unless the caller puts a
   paragraph between them. A body that ends in a table is saved so, and the Open
@@ -238,6 +299,61 @@ table.rows[1].cells[0].addTable(columns: 2).addRow(<String?>['a', 'b']);
 - **A table with no rows** (what `addTable` returns before the first
   `addRow`) cannot be saved: `StateError` names it. A file's own empty table
   is kept as read.
+
+### Known gaps of D4
+
+- **A section break in a cell or a `w:sdt`** stays as read and starts no
+  section, and neither does a `w:sectPr` between the body's blocks (test:
+  `test/docx/model/sections_test.dart`, "a sectPr in a cell or a content control
+  starts no section", "a mid-body sectPr stays an opaque block and starts no
+  section"). Its references are still kept, and a new part's id avoids them.
+- **Fields across paragraphs stay runs**, as the `TOC` of `long.docx` does:
+  their marks are typed run content, and `resultText` and the rest of
+  `DocxField` are out of reach (test: `test/docx/owner_files_test.dart`, "long.docx
+  keeps its TOC as runs, its PAGEREFs in hyperlinks").
+- **`w:fldSimple` is opaque.** It gives its visible text, and can be removed,
+  not changed (test: `test/docx/model/body_model_test.dart`, "fldSimple
+  contributes its runs").
+- **A `w:fldChar` inside `mc:AlternateContent`** in a result run is not seen:
+  the model takes that run for plain content, so the field around it is typed
+  and the mark inside the opaque content pairs with nothing.
+- **A field nested in an instruction begun in an earlier paragraph** is typed:
+  the grouping pass looks at one paragraph, which cannot show that the field
+  lies in an instruction. It reads and saves as read; only its meaning is the
+  outer field's.
+- **`DocxField.resultText` drops what the old result held**, bookmark and
+  comment marks too, so a mark whose partner lies outside the result is left
+  alone in the file (test: `test/docx/model/fields_edit_test.dart`, "a nested
+  field in the result goes with the old result").
+- **A read `r:id` moved between parts of one document** stays as read,
+  unreported. Ids are per part, so a hyperlink or a picture moved from the body
+  to a header, or the other way, can name nothing there or something else, and
+  Word may repair the file. The same holds between documents (`insertBlock`'s
+  dartdoc). A section break cannot go in a story at all (test:
+  `test/docx/model/header_footer_read_test.dart`, "a paragraph with a section
+  break cannot go in a story").
+- **Text directly in a final `w:sectPr`** is dropped on an edit of that section,
+  as stray text in a `w:pPr` is. A file that is not edited keeps it.
+- **A settings root that binds WordprocessingML only as the default namespace**
+  cannot take `w:evenAndOddHeaders`: setting it, or adding an even story,
+  throws `DocxReadException` naming the part, and the part stays as read (test:
+  `test/docx/settings_part_test.dart`, "a root that binds WordprocessingML only
+  by default cannot take it").
+- **`addSection` does not copy a page numbering the model cannot type**: a
+  `w:pgNumType` of a format it lacks is left out whole, not only its start (test:
+  `test/docx/model/sections_test.dart`, "a page numbering the model cannot type
+  is not copied").
+- **Filling a first or even story's empty paragraph in place turns nothing
+  on.** Only a block added to the story does, or `ownHeader` and `ownFooter`;
+  otherwise set `titlePage` or `evenAndOddHeaders` yourself (test:
+  `test/docx/model/header_footer_edit_test.dart`, "a story of empty paragraphs
+  has no content yet").
+- **A first story shows only with a title page of its own.** A later section
+  that inherits one does not get `titlePage`, as it is per section (test: same
+  file, "a section that inherits the story keeps its own titlePage").
+- **The model does not lay out.** `DATE` and `TIME` built with no `result` have
+  an empty result until Word opens the file, and a document read by anything
+  that does not compute fields shows nothing there.
 
 ## Rules the model enforces
 
@@ -282,13 +398,16 @@ dropped silently.
 | A `w:br` of type `textWrapping` | read as a line break, and its type is kept | the type is the file's | `test/docx/document_part_read_test.dart` |
 | A table | a `DocxTable`, in place, typed (see "Tables") | D3 | `test/docx/document_part_read_test.dart` ("tables are typed and sdt blocks are opaque blocks, in place") |
 | A content control, a bookmark or any other block | an opaque block, in place | typed later (D5) or never | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
-| The final `w:sectPr` of the body | held by the body; a `w:sectPr` in a paragraph's `w:pPr` stays there; one that is not the last child of the body is a block | the last section belongs to the body (typed in D4) | `test/docx/document_part_read_test.dart` |
+| The final `w:sectPr` of the body | held by the body as its last section (see "Sections"); a `w:sectPr` in a paragraph's `w:pPr` is that paragraph's break; one that is not the last child of the body is a block | the last section belongs to the body | `test/docx/document_part_read_test.dart`, `test/docx/model/sections_test.dart` |
 | Any other child of a paragraph (tracked change, hyperlink, content control, smart tag, proofing mark) | an opaque inline, in place, with its visible text computed once | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
 | Any other child of a run (drawing, `w:delInstrText`, a `w:fldChar` of no known type, `mc:AlternateContent`) | opaque run content, in place; it adds nothing to the run's text | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/fields_read_test.dart` |
 | `w:fldChar` and `w:instrText` in a run | `DocxFieldMark` and `DocxFieldInstruction`, keeping the element as read; no text | D4 Ruling 3 | `test/docx/model/fields_read_test.dart` |
 | A complex field of one paragraph's direct runs, each mark alone in its run, only `w:instrText` runs and inlines holding no run in the instruction | one `DocxField`; a field in a result is a `DocxField` of it; a run keeps the location it had when read, and a field writes its inlines in order, as read | D4 Ruling 2 | `test/docx/model/fields_read_test.dart` |
-| Any other field: a mark with no partner or in an inline of its own, a field across paragraphs or in an instruction, two marks or more than a mark in a run, an unknown `w:fldChar` | stays runs, with the paragraph's text as before, and saves as read; a mark inside a run breaks every field open around it | D4 Ruling 2 | `test/docx/model/fields_read_test.dart`, `test/docx/owner_files_test.dart` |
+| A `w:fldSimple` | an opaque inline; its visible text counts | D4 Ruling 1: an opaque inline already gives its text | `test/docx/model/body_model_test.dart` ("fldSimple contributes its runs") |
+| Any other field: a mark with no partner or in an inline of its own, a field across paragraphs or in an instruction, two `separate`s, `w:instrText` in a result, two marks or more than a mark in a run, an unknown `w:fldChar` | stays runs, with the paragraph's text as before, and saves as read; a mark inside a run breaks every field open around it | D4 Ruling 2 | `test/docx/model/fields_read_test.dart`, `test/docx/owner_files_test.dart` |
 | Fields nested past `maxFieldNesting` (32) in a result | the deeper ones stay runs in the result | a paragraph's fields nest without nesting in the XML, so `maxDepth` does not bound them and the model recurses | `test/docx/model/fields_read_test.dart` |
+| A `w:instrText` past `maxTextLength` | `limitExceeded`, as a `w:t` | the same bound for all text; entities in it are decoded, also inside opaque inlines | `test/docx/model/fields_read_test.dart` ("an instruction past maxTextLength is refused") |
+| `DocxField.name` | the first word of the instruction in upper case, stopping at a backslash; `null` without one | what Word shows as the field's kind | `test/docx/model/fields_read_test.dart`, `test/docx/model/fields_edit_test.dart` ("name stops at a backslash") |
 | `DocxField(instruction, {result})` and `.page()`, `.numPages()`, `.sectionPages()`, `.date()`, `.time()` | a field of real runs, written `begin`, `w:instrText xml:space="preserve"`, `separate`, the result run (`1` for the page fields; `date` and `time` write the `result` argument, empty by default), `end`; no `w:dirty`, no `w:updateFields` | D4 Ruling 4: the library has no clock, and Word computes the fields | `test/docx/model/fields_edit_test.dart` |
 | An empty or blank instruction (once forbidden characters are removed), a `date` or `time` format holding `"` | `ArgumentError`, before anything changes | programmer error | `test/docx/model/fields_edit_test.dart` |
 | Forbidden characters in an instruction or a result | removed, counted on the run, and reported at save with `invalidCharactersRemoved` at that run | as a run's text | `test/docx/model/fields_edit_test.dart` |
@@ -453,7 +572,7 @@ Two codes, for references set through the API only, each with a message in
 | An edited `.docm` | every part but the body as it was; the macro content type is kept | macros are never run, created or edited | `test/docx/producer_variants_test.dart` |
 | `saveTo` | the same bytes as `save`, sent to the sink | one writer | `test/docx/docx_document_test.dart` |
 | `save().warnings` | what opening, loading and that save repaired, in first-occurrence order; `warnings` holds the same afterwards | the list reflects the document as last saved | `test/docx/docx_document_test.dart` |
-| A relationship to a missing header | kept as written; no throw in D1 | headers arrive in D4 | `test/docx/docx_document_test.dart` |
+| A relationship to a missing header | kept as written, with no throw; a reference through it counts as none | a broken reference is not an error (see "Headers and footers") | `test/docx/docx_document_test.dart`, `test/docx/model/header_footer_read_test.dart` |
 | The body | loads once, on first access; a failed load changes nothing, so the next access throws again | the failure is the file's | `test/docx/docx_document_test.dart` |
 | Owner files saved by Word for Mac | open, read the body and save with no warning and no difference; a confirmed file reads its confirmed text | the fidelity claim rests on Word's files | `test/docx/owner_files_test.dart` |
 | Six packaging variants of `d1_paragraphs` (`ns0:` prefix, default namespace, no content type override, LibreOffice's, Google Docs' and a `.docm`) | open as `d1_paragraphs` and save equal | files from other producers are held to the same bar | `test/docx/producer_variants_test.dart` |
@@ -532,7 +651,7 @@ paragraphs, so a table does not shift it. A nested table is `tc[k]/tbl[i]/…`.
 
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
-| `DocxBody.addTable` | writes what Word's Insert Table writes: the style `Table Grid` (the document's own, or Word's definition added with `Normal Table`), `w:tblW` of `w:w="0"` and `w:type="auto"`, `w:tblLook` of `04A0` with its six flags, equal `w:gridCol` and `w:tcW` of 9062 twips divided by the columns, rounded down, in schema order; `columnWidthsPt` sets the grid and the cells instead | the owner's `builtins.docx` is the oracle | `test/docx/table_build_oracle_test.dart` ("addTable writes what Word's Insert Table writes"), `test/docx/model/table_build_test.dart` ("writes the properties of Insert Table, in schema order", "shares the width of a blank A4 page, in whole twips", "columnWidthsPt sets the grid and the cells of each row") |
+| `DocxBody.addTable` | writes what Word's Insert Table writes: the style `Table Grid` (the document's own, or Word's definition added with `Normal Table`), `w:tblW` of `w:w="0"` and `w:type="auto"`, `w:tblLook` of `04A0` with its six flags, equal `w:gridCol` and `w:tcW` of the last section's text width less 10 twips (9062 on a blank A4 page) divided by the columns, rounded down, in schema order; `columnWidthsPt` sets the grid and the cells instead | the owner's `builtins.docx` is the oracle | `test/docx/table_build_oracle_test.dart` ("addTable writes what Word's Insert Table writes"), `test/docx/model/table_build_test.dart` ("writes the properties of Insert Table, in schema order", "shares the width of a blank A4 page, in whole twips", "columnWidthsPt sets the grid and the cells of each row") |
 | The style of a new table | a Turkish document gets `TabloKlavuzu`; a document with the normal table style only gets `TableGrid` on it; a blank one gets `TableGrid` and `TableNormal` | the built-in is found by name (D2) | `test/docx/model/table_build_test.dart` ("a Turkish document gets TabloKlavuzu", "a document with the normal table only gets TableGrid on it", "a blank document gets TableGrid and TableNormal") |
 | A bad `addTable` argument | `columns` outside 1 to 63 or a width out of range throw `RangeError`; `columnWidthsPt` of another length or a width that is not finite throws `ArgumentError`; an unreadable styles part throws `DocxReadException`; nothing changes | programmer errors throw (Global Constraints) | `test/docx/model/table_build_test.dart` ("a bad argument throws and changes nothing", "on an unreadable styles part throws and changes nothing") |
 | `addTable` | one transaction with the style it adds; a failure after the insert takes all back; adds no paragraph between two tables or after the last | the model never adds a block | `test/docx/model/table_build_test.dart` ("is one transaction, with the style it adds", "a failure after the insert takes it all back", "adds no paragraph between two tables or after the last") |
@@ -598,7 +717,77 @@ changes anything.
 | `d3_nested` and LibreOffice's text | left out of the text comparison, with its reason printed (`DocxFixture.libreOfficeTextSkip`): LibreOffice repeats a paragraph in the text of nested tables, and differs by version; its re-save is still compared | a second opinion that disagrees with itself decides nothing | `test/tool/docx_tools_test.dart` ("writes the reason of a skipped LibreOffice text, only for those", "a skipped fixture is not compared and the output says so") |
 | `tool/edit_docx.dart` on tables | edits the first cell of the first table and appends a row `New row` when the table has a grid, appends a table of a header row, a body row and a merged row to every document, and checks the edits read back | CI validates the edited files with the Open XML SDK | `test/tool/edit_docx_test.dart` ("every fixture is edited, and the appended table is as built", "a table of a document takes the cell text and a new row", "reports a cell edit that does not read back") |
 | Tables in `tool/round_trip_docx.dart` | the children of `w:tblPr`, `w:trPr` and `w:tcPr` compare in any order, and the typed properties of every paragraph and run of a cell and of every table, row and cell are read | the model writes them in schema order | `test/tool/docx_serialize_test.dart` ("the children of tblPr, trPr and tcPr compare in any order", "readTypedProperties reads the paragraphs and runs of a cell", "readTypedProperties reads the properties of tables, rows and") |
-| The fuzz | seeds 1 to 4 at 400 cases each, not 150: the fixed seeds must mutate every part name of the corpus, and the corpus grew by the D3 fixtures and `tables_by_hand`, so raise it again if a new part name joins; each loaded table's and cell's properties and grid are read, a row is added to each table and ranges of its cells are merged (only `ArgumentError` may come out of those two), and a save never throws `StateError`, even for a table the file left without rows | the typed exception is the contract | `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry", "mutated files raise only DocxReadException") |
+| The fuzz | seeds 1 to 4 at more cases than 150 (600 since D4): the fixed seeds must mutate every part name of the corpus, and the corpus grew by the D3 fixtures and `tables_by_hand`, so raise it again if a new part name joins; each loaded table's and cell's properties and grid are read, a row is added to each table and ranges of its cells are merged (only `ArgumentError` may come out of those two), and a save never throws `StateError`, even for a table the file left without rows | the typed exception is the contract | `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry", "mutated files raise only DocxReadException") |
+
+### Sections
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| `DocxDocument.sections` | the top-level paragraphs of the body with a `w:sectPr`, in order, then the last; each the same object every time; the list is a snapshot that cannot be modified; it loads the body and throws what the body throws | Ruling 9: what Word calls a section | `test/docx/model/sections_test.dart` ("a body of two breaks gives three sections, in order", "a section is the same object every time", "the list cannot be changed and is a snapshot", "it loads the body and throws what the body throws") |
+| A `w:sectPr` between the body's blocks, in a cell or in a `w:sdt` | stays as read and starts no section; the first stays an opaque block | Ruling 9, a known gap | `test/docx/model/sections_test.dart` ("a mid-body sectPr stays an opaque block and starts no section", "a sectPr in a cell or a content control starts no section") |
+| A body with no final `w:sectPr` | has a last section of no values, written only once something is set; a document with no body gains one for a value set | every document has a last section, and nothing is invented | `test/docx/model/sections_test.dart` ("a body without a final sectPr has a last section of no values", "that section is written only once something is set", "a document without a body gains one for a value set") |
+| A paragraph with a break removed, or moved out of a cell | removing it removes that section, and its text joins the next; moved to the body it starts one | the paragraph is the break | `test/docx/model/sections_test.dart` ("removing a paragraph with a break removes its section", "a break moved out of a cell starts a section") |
+| A section's values | a nullable get and set, in points; a child the model cannot type reads `null` and stays; `titlePage` is a `bool` and `false` removes the child | D2 Ruling 2, Ruling 15 | `test/docx/model/sections_test.dart` ("reads every value", "every value is set and reads back", "a child the model cannot type reads null and stays", "titlePage set to false removes the child"), `test/docx/section_property_codecs_test.dart` |
+| A value out of range | `DocxPageSize`, `DocxPageMargins`, `DocxColumns`, `DocxPageNumbering` and `DocxLineNumbering` throw `RangeError` or `ArgumentError` when built; top and bottom margins are signed, the rest are not | a programmer error, and `w:pgMar` allows it | `test/docx/section_property_codecs_test.dart` ("a page size out of range throws RangeError", "margins: top and bottom are signed, the rest are not", "columns", "page and line numbering") |
+| A value the file holds and the model cannot read (`w:pgSz w:w="abc"`, a `w:pgMar` without a side, `w:pgNumType w:fmt="chicago"`) | reads `null`, stays as read; a paper code and the chapter attributes of `w:pgNumType` stay beside a value that reads | data problems do not throw | `test/docx/section_property_codecs_test.dart` ("refuses what it cannot type", "keeps the paper code as read", "refuses what it cannot type, keeps the chapter attributes") |
+| A set | writes one element, at its place in `sectPrOrder`, among the children the model does not type; every other child stays as read; setting what a member reads records nothing; a set on a section of a break is written in its paragraph; one change, whose undo restores the part's bytes | a change touches only what it changes | `test/docx/model/sections_test.dart` ("setting pageSize changes only w:pgSz", "a set on a section of a break is written in its paragraph", "titlePage set to what it reads records nothing", "a set is one change, and the save writes the model", "undoing a set restores the bytes of the part", "a failed edit leaves the section as it was") |
+| What repeats in a `w:sectPr` | `w:headerReference` and `w:footerReference` are repeated children of `ContainerSchema`, read in the order of the file, not grouped by name; adding one writes the others byte for byte, and undo restores them | Ruling 7; Word mixes the two | `test/docx/container_order_test.dart`, `test/docx/model/sections_test.dart` ("references keep the order of the file, as Word mixes them", "references survive an edit, and any other child too") |
+| `textWidthPt` | the page's width less the side margins and the gutter; `null` when the page or a margin does not read | `addTable` needs it | `test/docx/model/sections_test.dart` ("textWidthPt takes the side margins and the gutter off the page", "textWidthPt is null when the page or a margin is unread") |
+| `addSection({start})` | ends the last section after the last block: a last paragraph with no break takes it; otherwise, after a table, a break, an opaque block or in an empty body, an empty paragraph is added for it; no block is added after the break | Ruling 8: as Word does | `test/docx/model/sections_test.dart` ("the last paragraph takes the break", "a body ending in a table gets an empty paragraph for the break", "a last paragraph that has a break gets one after it", "an empty body or an opaque block gets an empty paragraph") |
+| A held section | the `DocxSection` that was last moves to the paragraph, stays that section and stays editable; a new one becomes last | a caller's handle means what it meant | `test/docx/model/sections_test.dart` ("a held section keeps its values and stays editable", "a set on the held section is recorded after the swap", "two sections add up, each section held") |
+| The new last section | copies the page size, margins, columns, line and page numbering, vertical alignment and the kept `w:docGrid` as they stand, without references (it inherits), `titlePage` and the numbering's `start`; `start` is its type, by default `nextPage`; a page numbering of only a start, or one the model cannot type, is not copied | Ruling 8: as Word does | `test/docx/model/sections_test.dart` ("the new section copies what Ruling 8 lists, and nothing else", "a page numbering of only a start is not copied", "a page numbering the model cannot type is not copied", "the copy takes the values set since the file was read") |
+| A last section of no values | still writes its break in the paragraph | a section in a paragraph is the break | `test/docx/model/sections_test.dart` ("a last section of no values still writes its break") |
+| `addSection` undone, or failing | undo restores the part's bytes and redo the sections; a failure takes everything back | one transaction | `test/docx/model/sections_test.dart` ("undo restores the bytes of the part, and redo the sections", "a failure takes everything back") |
+| A paragraph with a break of another document | `insertBlock` and `replaceBlockAt` throw `ArgumentError`, whoever made the break; in its own body it goes back; in a cell it stays as read and starts no section; a block still in a body throws `StateError` first | Ruling 10: its `r:id`s mean nothing here | `test/docx/model/sections_test.dart`, group "a section break between documents" |
+| `addTable` on a body or a story | shares the last section's `textWidthPt` less 10 twips; 9062 twips when that does not read or gives a column no twip; `columnWidthsPt` still wins; a table made by hand or nested stays as it was | Ruling 12, as a ledger ruling corrects it: Word's Insert Table on A4 pins 4531 a column of two, not 4536 | `test/docx/model/sections_test.dart`, group "addTable", `test/docx/model/header_footer_read_test.dart` ("addTable shares the width of the last section") |
+| A new document's section | read as typed from the same bytes; `blankDocumentBytes` does not change | Ruling 16 | `test/docx/blank_document_oracle_test.dart` ("the section equals the section of blank.docx"), `test/docx/model/sections_test.dart` ("a new document has one A4 section with the margins of the file") |
+
+### Headers and footers
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| The six getters | give the section's own story, else the nearest previous section's by type (`isInherited`), else an empty one; the same getter gives the same story; a read creates nothing | Ruling 5: reading never changes a file | `test/docx/model/header_footer_read_test.dart` ("read the story of each type", "the same getter gives the same story, also for no reference", "the nearest previous section wins, by type"), `test/docx/model/header_footer_edit_test.dart` ("a read of the getters creates nothing") |
+| Section 2 of 3 gets a footer | section 1 has none, section 3 inherits it; a section added later inherits it too; an edit of an inherited story reaches every section using it | Word's "Link to Previous" | `test/docx/model/header_footer_edit_test.dart`, group "sections around a footer (Review Focus 1)" |
+| A section that left the document | keeps only its own story | it has no previous section | `test/docx/model/header_footer_read_test.dart` ("a section that left the document keeps only its own story") |
+| A story's part | loads on the first access to `blocks` or an edit; reading saves the bytes of the part, and leaves its relationships part unread; a story keeps its own relationships; a damaged relationships part opens, reads and saves | layer 1 of decision 0009 | `test/docx/model/header_footer_read_test.dart`, group "reading" |
+| A story that cannot be read | `blocks` throws `DocxReadException` naming the part, as for a root that is not `w:hdr` or `w:ftr`; nothing is loaded, the others read, and a save copies it | as the styles part | `test/docx/model/header_footer_read_test.dart` ("a broken story leaves the others readable", "a root that is not w:hdr throws as styles does", "a root that is not w:ftr throws for a footer") |
+| What a story holds | the blocks of the body, tables and lists too, matched by namespace; a `w:sectPr` in a story starts no section; an empty root reads no blocks and saves as read | one story layer | `test/docx/model/header_footer_read_test.dart` ("tables, lists and other blocks type as in the body", "a break in a story starts no section", "an empty root reads no blocks and saves as read", "elements match by namespace, not by prefix") |
+| References that count | only `default`, `first` and `even`; the first of a type that names a story is the section's; one of an unknown type, with no `r:id`, or whose id names no internal relationship of the header or footer type to a part in the package counts as none and is kept; a broken first leaves the next of its type | Ruling 7, Review Focus 2; a file's broken reference is not an error | `test/docx/model/header_footer_read_test.dart`, group "references that name nothing" |
+| The part's type | must match the kind in relationship type and content type, or be generic XML; a generic part named as a header and as a footer counts as none for both | a tighter reading of Ruling 7, deterministic | `test/docx/model/header_footer_read_test.dart` ("a part of the generic XML type is read", "a generic part named as a header and as a footer") |
+| One part named by several references | one story object; an edit reaches every reference | they are one part | `test/docx/model/header_footer_read_test.dart`, group "one part named by several references" |
+| The first block of an empty story | gives the section a reference in the same transaction; the part and relationship come at save, with the first number `n` no part or target has, in the order of the sections, under an id no relationship or reference has, a reference of a `w:sectPr` in a cell included; two saves give the same names | Ruling 5; a part is created at save, as the styles part | `test/docx/model/header_footer_edit_test.dart`, group "a new story" |
+| A new reference's prefix | `r` where it binds relationships, else the one the part binds, else one declared on the element; what the `w:sectPr` or a paragraph around it binds counts | a kept `r` may mean something else | `test/docx/model/header_footer_edit_test.dart`, group "the prefix of a new reference" |
+| A section with no `w:sectPr` of its own | gets one when a reference goes in, and has none after an undo | Ruling 9 | `test/docx/model/header_footer_edit_test.dart`, group "a section with no w:sectPr of its own" |
+| `ownHeader` and `ownFooter` | give the section a new empty story in place of an inherited one, its own when it has one; replace a reference that names nothing, of its type, as an edit does; keep one of an unknown type; left empty, the story is written as one empty paragraph | Ruling 5, Ruling 7 | `test/docx/model/header_footer_edit_test.dart`, group "ownHeader and ownFooter" |
+| `removeHeader` and `removeFooter` | drop the references of the type that name a story, so the section inherits again; a broken reference stays; the part and its relationship stay in the package; with no own reference nothing is recorded; a story not yet made is not created; nothing is turned off | Ruling 5; §4.2 keeps parts | `test/docx/model/header_footer_edit_test.dart`, group "removeHeader and removeFooter" |
+| A first story's first content, or `own…` of one | sets `titlePage`, in the same transaction, on every section owning the story (`own…` only on its section), never on one that inherits it; a story of only empty paragraphs has no content yet, as Word writes one; more content sets nothing | Ruling 6 | `test/docx/model/header_footer_edit_test.dart`, group "a first story turns itself on (Ruling 6)" |
+| A story's last block | written with `<w:p/>` after it when the last is not a paragraph, an empty story too, except a story whose blocks are all as read; undo keeps it as read | Ruling 11: Word requires a paragraph last | `test/docx/model/header_footer_edit_test.dart`, group "a story ends in a paragraph (Ruling 11)" |
+| A paragraph with a break going in a story | `ArgumentError`, wherever it comes from | a story has no sections | `test/docx/model/header_footer_read_test.dart` ("a paragraph with a section break cannot go in a story", "a break of another document cannot go in a story either") |
+| A save with a story left without table rows, or a section out of the document | the empty table stops the save by location and creates nothing; a section that left creates no part; a break moved to a cell writes no reference without a part | a save is all or nothing | `test/docx/model/header_footer_edit_test.dart` ("a table left without rows stops the save, and creates nothing", "a section that left the body creates no part", "a break moved to a cell writes no reference without a part") |
+| Undo and failure | a failed first header and `addSection` leave no part, relationship or `titlePage`; a save after an undo means what the input did; a redo gives the story and its reference back; an undo after a save leaves the part, with no reference | Review Focus 4 | `test/docx/model/header_footer_edit_test.dart`, group "undo and failure (Review Focus 4)" |
+| A story's warnings | forbidden characters, a missing style and a missing list are reported at save, at a location starting with the part's name; a list added in a story is saved | Ruling 14 | `test/docx/model/header_footer_read_test.dart`, group "the save warnings of a story" |
+| The owner's Word files | `features.docx` reads its header and saves it as read; reading every section and story of the owner files saves as read | the fidelity claim rests on Word's files | `test/docx/owner_files_test.dart` |
+
+### Even and odd pages
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| `evenAndOddHeaders` read | `false` when the part or the child is absent; the bare child, `1`, `true` and `on` read `true`; `0`, `off`, `false`, a value it cannot parse and a child twice read `false`, and stay | Ruling 13; §4.8 | `test/docx/settings_part_test.dart`, group "reading" |
+| `evenAndOddHeaders` set | `true` writes `<w:evenAndOddHeaders/>` at its schema position, replacing what was read; `false` removes the child; every other child stays as read and in order; a value it already reads changes nothing; one undoable edit | Review Focus 5 | `test/docx/settings_part_test.dart`, group "setting" |
+| `settings.xml` in the package | a read that changes nothing saves the bytes; a document without the part gains one holding only the child; set then unset adds none; a broken part or a wrong root throws naming the part and is saved as read | through `RelatedPart`, as styles | `test/docx/settings_part_test.dart`, group "the part in the package", `test/docx/settings_owner_test.dart` |
+| An even story's first content, or `own…` of one | sets `evenAndOddHeaders` in the same transaction; removing the story turns nothing off; a broken settings part makes the edit throw, and nothing changes | Ruling 6 | `test/docx/settings_part_test.dart`, group "an even story turns it on" |
+
+### D4 fixtures and tools
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| The three D4 fixtures (`d4_sections`, `d4_headers`, `d4_fields`) | build the same bytes every time with no warnings, round-trip with everything read and encoded, and hold what the plan says: four sections with a Letter one last, six stories in section one with one section inheriting and one with its own, and five fields | the validation starts from them | `test/docx/round_trip_test.dart`, group "D4" |
+| No fixture ends in a table or a section break | a fixture's last block is a plain paragraph | LibreOffice's text export of a table last never ends, and the model adds no block after a break; `tool/write_table_last.dart` writes `d4_break_last.docx` for the Word check alone | `test/docx/round_trip_test.dart` ("no fixture ends in a table or a section break"), `test/tool/docx_tools_test.dart` ("writes a document whose last block carries the section break") |
+| `<name>.stories.txt` | written for a fixture with a `DocxFixture.headerFooterText`: per section the stories it shows, by `docxStoriesText`, each field as `{NAME}`; `tool/compare_resaved_docx.dart` compares it with LibreOffice's re-save | a re-save keeps what a page shows, not the stories | `test/tool/text_compare_test.dart`, group "docxStoriesText", `test/tool/docx_tools_test.dart` ("writes the text of the stories, only for those that have it") |
+| LibreOffice's re-save | `docxResavedText` leaves out the empty paragraph that only carries a break and a page break at the edge of a paragraph, as LibreOffice adds them; so a section's values in the re-save are not compared, and the round trip and the SDK cover the model | the text and the stories are what a re-save keeps | `test/tool/text_compare_test.dart`, group "docxResavedText" |
+| Sections and stories in `tool/round_trip_docx.dart` | every section value and story is read, `w:sectPr`'s children compare in any order, and the header and footer parts are encoded from the model (`encodedStoryDifferences`) | a story nothing changed is saved as read, so the encoder needs its own check | `test/tool/docx_serialize_test.dart`, group "sections and stories", `test/tool/docx_tools_test.dart` ("round-trips the D4 fixtures: exit 0, and encodes their stories") |
+| `tool/edit_docx.dart` on sections | adds a footer paragraph `Page ` + `PAGE` + ` of ` + `NUMPAGES` to the last section's story, adds a next page section, landscape A4, with the table, heading and list in it, and checks them read back | CI validates the edited files with the Open XML SDK | `test/tool/edit_docx_test.dart`, group "sections" |
+| The fuzz | seeds 1 to 4 at 600 cases each: `sections_by_hand` (every section child, six stories, broken references and fields) and the D4 fixtures join the corpus; each section's values, its stories with their fields and `evenAndOddHeaders` are read, every field's `resultText` is set, a footer paragraph and a section are added, and only a `DocxReadException` from a part that cannot be read may come out | the typed exception is the contract | `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry", "mutated files raise only DocxReadException") |
 
 ### Checks outside the unit tests
 
@@ -634,13 +823,14 @@ aggregator and the read guard (`lib/src/common/`), and the change log.
   owner's Word files with the Open XML SDK, compares LibreOffice's text
   export and re-save of every fixture with the expected texts, and proves
   each check rejects the deliberately broken `d1_corrupt.docx` (AGENTS.md,
-  "Validation"). The D2 and D3 fixtures, the edits of `tool/edit_docx.dart`
-  and the model's own encoding of the styles and numbering parts go through
-  the same checks; the LibreOffice re-save is validated with
+  "Validation"). The D2, D3 and D4 fixtures, the edits of `tool/edit_docx.dart`
+  and the model's own encoding of the styles, numbering, header and footer
+  parts go through the same checks; the LibreOffice re-save is validated with
   `--libreoffice-resave`, which ignores only `w:val="true"` on `w:tblHeader`,
   as LibreOffice writes it, and on `w:cantSplit`, of the same type: values the
   model keeps as read.
 - Neither is Word. The owner opens each D milestone's fixtures and round
   trips in Word for Mac and records the result in
-  [`word-checks.md`](word-checks.md); its D2 and D3 sections say what to look
-  for, and D3 adds a document whose body ends in a table.
+  [`word-checks.md`](word-checks.md); its D2, D3 and D4 sections say what to
+  look for, D3 adds a document whose body ends in a table, and D4 one whose last
+  block carries a section break.

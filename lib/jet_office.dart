@@ -104,7 +104,7 @@
 /// a table that a formula names is refused.
 ///
 /// [DocxDocument] is the Word document model, in progress (milestones D1 to
-/// D3; the API may change before D6). [DocxDocument.new] starts a document
+/// D4; the API may change before D6). [DocxDocument.new] starts a document
 /// like Word for Mac's blank one: A4 portrait, Aptos 12, no document
 /// properties.
 /// [DocxDocument.open] reads a DOCX file within [DocxReadLimits]; a file it
@@ -131,13 +131,23 @@
 /// content control is kept in place, not listed), the API nests tables at most
 /// 80 deep, [DocxBody.addTable] takes at most [maxTableColumns] columns, and
 /// a table with no row is not saved. What the model does not type yet, such
-/// as content controls, tracked changes, hyperlinks and drawings, is
-/// kept as written in a
+/// as content controls, tracked changes, hyperlinks, drawings and a
+/// `w:fldSimple`, is kept as written in a
 /// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
 /// can be removed but not changed; the parts the model does not read are kept
-/// as written too. [DocxDocument.sections] gives each [DocxSection], and a
-/// section its [DocxHeaderFooter]s: a [DocxStory] of blocks as the [DocxBody]
-/// is, read on the first access to its blocks, its own or a previous section's.
+/// as written too. [DocxDocument.sections] gives each [DocxSection], with its
+/// page, margins, columns and numbering, and [DocxBody.addSection] adds one. A
+/// section gives its [DocxHeaderFooter]s: a [DocxStory] of blocks as the
+/// [DocxBody] is, read on the first access to its blocks, its own or a previous
+/// section's. Reading one creates nothing, and [DocxDocument.evenAndOddHeaders]
+/// says whether the even ones show. A `w:sectPr` in a table cell or in a
+/// content control starts no section. A complex field of one paragraph is a [DocxField]
+/// among its inlines, built with [DocxField.new] or a helper such as
+/// [DocxField.page]; the model does not evaluate it, and its text is the result
+/// cached in the file. A field that is not plain stays runs, whose
+/// [DocxFieldMark]s and [DocxFieldInstruction]s are their content: one across
+/// paragraphs, one in an instruction, one with two `separate` marks or a
+/// `w:instrText` in its result, and one nested more than 32 deep in results.
 /// Blocks and inlines are added, removed and replaced, and a run's text and
 /// the styles are set; each edit is atomic.
 /// [DocxDocument.save] returns a [DocxResult] and [DocxDocument.saveTo] streams

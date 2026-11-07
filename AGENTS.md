@@ -140,6 +140,10 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 - `tool/compare_csv.dart` compares LibreOffice's CSV export of every sheet
   with the expected values on raw values. Its doc comment explains the filter
   options; `tool/src/csv_compare.dart` holds the comparison and its contract.
+  On a Mac LibreOffice takes the system's locale, not `LC_ALL`, so on a Turkish
+  system this check fails on `3,14159` and `DOĞRU`: use a profile of its own
+  (`-env:UserInstallation=file:///<dir>`) whose `registrymodifications.xcu` sets
+  `ooSetupSystemLocale` to `en-US`.
 - `tool/compare_resaved.dart` reads LibreOffice's XLSX re-save of every
   fixture with `XlsxReader` and compares it with the expected values; any
   reader warning is a mismatch unless `resaveAllowedWarnings` in
