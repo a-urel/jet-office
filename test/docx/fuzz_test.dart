@@ -33,7 +33,7 @@ const Map<String, ({int length, int adler32})> _corpus =
       'd3_basic': (length: 28845, adler32: 3066803131),
       'd3_header_row': (length: 70020, adler32: 3183794624),
       'd3_merges': (length: 30134, adler32: 2775992460),
-      'd3_formatting': (length: 29861, adler32: 1727659781),
+      'd3_formatting': (length: 30246, adler32: 3404101736),
       'd3_nested': (length: 33071, adler32: 2162307222),
       'tables_by_hand': (length: 9996, adler32: 2530907752),
       'ns0_prefix': (length: 1407, adler32: 3668097186),

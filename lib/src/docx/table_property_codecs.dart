@@ -696,15 +696,16 @@ const ContainerSchema tablePropertiesSchema = ContainerSchema(
 );
 
 /// The schema of a row's `w:trPr`: [trPrOrder], typing the grid cells
-/// before and after, `w:cantSplit`, the height and `w:tblHeader`.
+/// before and after, `w:cantSplit`, the height and `w:tblHeader`. The schema
+/// types those two as on or off only, so `false` is written `off`.
 const ContainerSchema tableRowPropertiesSchema = ContainerSchema(
   trPrOrder,
   codecs: <String, PropertyCodec<Object>>{
     'gridBefore': IntValCodec('gridBefore', 0, maxGridColumns),
     'gridAfter': IntValCodec('gridAfter', 0, maxGridColumns),
-    'cantSplit': OnOffCodec('cantSplit'),
+    'cantSplit': OnOffCodec('cantSplit', falseValue: 'off'),
     'trHeight': RowHeightCodec(),
-    'tblHeader': OnOffCodec('tblHeader'),
+    'tblHeader': OnOffCodec('tblHeader', falseValue: 'off'),
   },
 );
 

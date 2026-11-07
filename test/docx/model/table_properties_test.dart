@@ -346,6 +346,38 @@ void main() {
       expect(back.repeatAsHeader, isTrue);
     });
 
+    test('false is written w:val="off", the only word w:trPr takes', () {
+      // The schema's type for these two is on or off, not ST_OnOff: the Open
+      // XML SDK refuses `0`.
+      final DocxDocument doc = _open();
+      _row(doc).properties
+        ..cantSplit = false
+        ..repeatAsHeader = false;
+      expect(
+        _inner(doc, 'trPr'),
+        '<w:cantSplit w:val="off"/><w:tblHeader w:val="off"/>',
+      );
+      final DocxTableRowProperties back = _row(_reopen(doc)).properties;
+      expect(back.cantSplit, isFalse);
+      expect(back.repeatAsHeader, isFalse);
+    });
+
+    test('a read w:val stays as read until it is set', () {
+      const String trPr = '<w:cantSplit w:val="true"/><w:tblHeader w:val="0"/>';
+      final DocxDocument doc = _open(trPr: '<w:trPr>$trPr</w:trPr>');
+      final DocxTableRowProperties p = _row(doc).properties;
+      p.height = DocxRowHeight(30);
+      p.height = null;
+      expect(p.cantSplit, isTrue);
+      expect(p.repeatAsHeader, isFalse);
+      expect(_inner(doc, 'trPr'), trPr);
+      p.cantSplit = false;
+      expect(
+        _inner(doc, 'trPr'),
+        '<w:cantSplit w:val="off"/><w:tblHeader w:val="0"/>',
+      );
+    });
+
     test('a w:trPr is written after a w:tblPrEx and before the cells', () {
       final DocxDocument doc = _openBody(
         '<w:tbl><w:tblGrid/><w:tr><w:tblPrEx><w:tblW w:w="0"/></w:tblPrEx>'

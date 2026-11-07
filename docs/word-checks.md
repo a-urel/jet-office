@@ -279,7 +279,10 @@ name the part in "Notes".
   bottom to top** (Table Layout > Text Direction), and `Bordered` with a
   double line above it and a thick dark red line below. The third row
   (`High`, three times) is at least 48 pt tall (Table Properties > Row), with
-  its text in the middle of each cell. `After the formatted table.` follows.
+  its text in the middle of each cell. The fourth row (`Splits`, three times)
+  looks like any other: **Allow row to break across pages** is on and **Repeat
+  as header row** is off (Table Properties > Row). `After the formatted table.`
+  follows.
 - `d3_nested`: `Tables in tables.`, then a table of two columns. Its second
   row holds, at the left, `Holds a table` followed by a table of two
   columns and two rows (`Inner a`, `Inner b` / `Inner c`, `Inner d`), and, at

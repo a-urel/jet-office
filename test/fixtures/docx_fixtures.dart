@@ -604,6 +604,9 @@ void _fillFormatting(DocxDocument doc) {
   table.addRow(<String?>['Shaded', 'Vertical text', 'Bordered']);
   final DocxTableRow tall = table.addRow(<String?>['High', 'High', 'High']);
   tall.properties.height = DocxRowHeight(48);
+  table.addRow(<String?>['Splits', 'Splits', 'Splits']).properties
+    ..cantSplit = false
+    ..repeatAsHeader = false;
   final DocxTableRow first = table.rows[0];
   first.cells[0].properties.verticalAlignment = DocxCellAlignment.top;
   first.cells[1].properties.verticalAlignment = DocxCellAlignment.center;

@@ -222,13 +222,13 @@ final class DocxTableRowProperties {
   set height(DocxRowHeight? value) => _set.setValue('trHeight', value);
 
   /// Whether the row stays on one page (`w:cantSplit`), or `null`. `false`
-  /// is written as `w:val="0"`.
+  /// is written as `w:val="off"`.
   bool? get cantSplit => _set.valueOf('cantSplit') as bool?;
 
   set cantSplit(bool? value) => _set.setValue('cantSplit', value);
 
   /// Whether the row is repeated at the top of each page the table spans
-  /// (`w:tblHeader`), or `null`. `false` is written as `w:val="0"`.
+  /// (`w:tblHeader`), or `null`. `false` is written as `w:val="off"`.
   ///
   /// Word repeats only an unbroken run of header rows from the first row of
   /// the table; the model does not check that.
