@@ -1423,7 +1423,6 @@ void main() {
       final XlsxWorkbook styled = XlsxWorkbook.open(input);
       final XlsxSheet sheet = styled.sheets.single;
       sheet.setTableStyle('T', null);
-      sheet.resizeTable('T', XlsxRange.parse('A1:B5'));
       sheet.removeTable('T');
       Map<String, String> parts = readXlsx(styled.save().bytes);
       expect(parts.keys, contains('xl/calcChain.xml'));
@@ -1434,6 +1433,91 @@ void main() {
       parts = readXlsx(added.save().bytes);
       expect(parts.keys, isNot(contains('xl/calcChain.xml')));
       expect(parts['xl/workbook.xml'], contains('fullCalcOnLoad="1"'));
+    });
+
+    test('resizeTable asks for recalculation, keeps calcChain, undo clears '
+        'it', () {
+      final Uint8List input = _listed(
+        <String>[_excelTable],
+        rows: formula,
+        calcChain: true,
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.resizeTable('T', XlsxRange.parse('A1:B5'));
+      Map<String, String> parts = readXlsx(book.save().bytes);
+      expect(parts.keys, contains('xl/calcChain.xml'));
+      expect(parts['xl/workbook.xml'], contains('fullCalcOnLoad="1"'));
+
+      final XlsxWorkbook undone = XlsxWorkbook.open(input);
+      final ChangeLog log = changeLogOf(undone);
+      final ChangeSet resized = log.transaction(
+        () => undone.sheets.single.resizeTable('T', XlsxRange.parse('A1:B5')),
+      );
+      log.revertSet(resized);
+      parts = readXlsx(undone.save().bytes);
+      expect(parts['xl/workbook.xml'], isNot(contains('fullCalcOnLoad')));
+      log.reapplySet(resized);
+      parts = readXlsx(undone.save().bytes);
+      expect(parts['xl/workbook.xml'], contains('fullCalcOnLoad="1"'));
+    });
+
+    test('an equal resize asks for nothing', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _listed(<String>[_excelTable], rows: formula),
+      );
+      book.sheets.single.resizeTable('T', XlsxRange.parse('A1:B3'));
+      expect(
+        readXlsx(book.save().bytes)['xl/workbook.xml'],
+        isNot(contains('fullCalcOnLoad')),
+      );
+    });
+  });
+
+  group('a backslash in a table name', () {
+    for (final String name in <String>[r'\Sales', r'\quarter']) {
+      test('$name is matched as text and refuses removal', () {
+        final XlsxSheet sheet = XlsxWorkbook.open(
+          _listed(<String>[
+            _excelTable.replaceAll('displayName="T"', 'displayName="$name"'),
+          ]),
+        ).sheets.single;
+        sheet.setCell(9, 0, XlsxFormula('SUM($name[A])'));
+        expect(() => sheet.removeTable(name), _state(contains('A10')));
+        expect(sheet.tables, hasLength(1));
+      });
+    }
+  });
+
+  group('a slicer cache', () {
+    const String slicerType = 'application/vnd.ms-excel.slicerCache+xml';
+    Uint8List withSlicer(String tableId) => _listed(
+      <String>[_excelTable],
+      extraTypes:
+          '<Override PartName="/xl/slicerCaches/slicerCache1.xml" '
+          'ContentType="$slicerType"/>',
+      extra: <String, String>{
+        'xl/slicerCaches/slicerCache1.xml':
+            '<slicerCacheDefinition xmlns="urn:x" name="S"><extLst><ext>'
+            '<tableSlicerCache xmlns="urn:y" tableId="$tableId" column="1"/>'
+            '</ext></extLst></slicerCacheDefinition>',
+      },
+    );
+
+    test('naming the table refuses removal', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(withSlicer('3'));
+      expect(
+        () => book.sheets.single.removeTable('T'),
+        _state(contains('slicer')),
+      );
+      expect(book.sheets.single.tables, hasLength(1));
+      expect(changeLogOf(book).hasChanges, isFalse);
+    });
+
+    test('naming another table does not', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(withSlicer('4'));
+      book.sheets.single.removeTable('T');
+      expect(book.sheets.single.tables, isEmpty);
     });
   });
 }

@@ -298,6 +298,31 @@ void main() {
     );
   });
 
+  test('more VML shapes than maxMerges leave the part as written', () {
+    final Uint8List input = _package(
+      comments: _comments(_comment('A1', '<t>x</t>')),
+      vml: '$_vmlHead${_vmlShape(0, 0)}${_vmlShape(1, 1)}</xml>',
+    );
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      input,
+      limits: const XlsxReadLimits(maxMerges: 1),
+    );
+    expect(
+      () => book.sheets.single.notes,
+      throwsA(
+        isA<XlsxReadException>().having(
+          (XlsxReadException e) => e.reason,
+          'reason',
+          XlsxReadFailure.limitExceeded,
+        ),
+      ),
+    );
+    expect(
+      comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+      isEmpty,
+    );
+  });
+
   test('reading saves the input unchanged', () {
     final Uint8List input = _fixture('m4_notes');
     final XlsxWorkbook book = XlsxWorkbook.open(input);

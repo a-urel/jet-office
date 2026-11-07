@@ -391,6 +391,34 @@ void main() {
       });
     });
 
+    test('a visibility-only setNote leaves the comments part as written', () {
+      final XlsxNote note = sheet.noteAt(4, 0)!;
+      sheet.setNote(
+        4,
+        0,
+        XlsxNote(note.text, author: note.author, visible: true),
+      );
+      expect(sheet.noteAt(4, 0)!.visible, isTrue);
+      expect(_partsChanged(input, book.save().bytes), <String>{vml});
+    });
+
+    test('a note of a thread cannot be copied to a cell without one', () {
+      final XlsxNote thread = sheet.noteAt(4, 1)!;
+      expect(
+        () => sheet.setNote(9, 9, thread),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.name,
+            'name',
+            'author',
+          ),
+        ),
+      );
+      expect(changeLogOf(book).hasChanges, isFalse);
+      sheet.setNote(4, 1, thread);
+      expect(changeLogOf(book).hasChanges, isFalse);
+    });
+
     test('the plain note removed leaves the thread and the control', () {
       sheet.setNote(4, 0, null);
       final Uint8List saved = book.save().bytes;
@@ -466,7 +494,11 @@ void main() {
         ..setTableStyle('Stock', XlsxTableStyle.light(1))
         ..resizeTable('Stock', XlsxRange.parse('A1:C4'));
       final Uint8List saved = book.save().bytes;
-      expect(_partsChanged(input, saved), <String>{'xl/tables/table1.xml'});
+      // The resize asks for recalculation: `fullCalcOnLoad` in the workbook.
+      expect(_partsChanged(input, saved), <String>{
+        'xl/tables/table1.xml',
+        'xl/workbook.xml',
+      });
       final String table = readXlsx(saved)['xl/tables/table1.xml']!;
       expect(table, contains('<calculatedColumnFormula>'));
       expect(table, contains('dataDxfId="0"'));

@@ -262,8 +262,13 @@ mixin _SheetNotes {
   /// the sheet's `<legacyDrawing>` go too unless the drawing still holds
   /// something.
   ///
+  /// A note whose text and author equal the cell's, with another
+  /// visibility, changes the box alone: the comments part stays as written.
+  ///
   /// Throws an [ArgumentError] for a bad note, as `XlsxSheetWriter.note`
-  /// does, and a [RangeError] for a cell outside Excel's grid when [note] is
+  /// does, and one named `author` for a new note on a cell without one whose
+  /// author starts `tc=` (it would be a thread's placeholder with no thread),
+  /// and a [RangeError] for a cell outside Excel's grid when [note] is
   /// `null`; a [StateError] for the note of a threaded comment (its author
   /// starts `tc=`: the thread would lose it), for a sheet that is not a
   /// worksheet or has no part, for a comments part that is not SpreadsheetML
@@ -297,6 +302,14 @@ mixin _SheetNotes {
       throw StateError(
         'The note on cell $ref on sheet "$name" belongs to a threaded '
         'comment; it cannot be set or removed.',
+      );
+    }
+    if (note != null && entry == null && note.author.startsWith('tc=')) {
+      throw ArgumentError.value(
+        note.author,
+        'author',
+        'An author that starts with "tc=" belongs to a threaded comment, '
+            'whose note this model does not create.',
       );
     }
     final List<XlsxWarningCode> repairs = <XlsxWarningCode>[];
@@ -345,39 +358,49 @@ mixin _SheetNotes {
   ) {
     final ChangeLog log = _host.log;
     final VmlPart vml = read.parts.vml ?? _addVml(part, read);
+    // Only the box changes when the text and the author are what the note
+    // holds: the comment is left as written, with the runs' fonts the model
+    // does not type (Excel's `<color indexed="81"/>`).
+    final XlsxNote? held = entry == null ? null : read.noteOf(entry).note;
+    final bool sameComment =
+        held != null && held.text == note.text && held.author == note.author;
     final CommentsPart comments = read.parts.comments ?? _addComments(read);
     final OpcPackage package = _host.reader.package;
-    attachStoredPart(
-      log,
-      package,
-      read.attached,
-      read.parts.commentsName!,
-      comments,
-    );
-    attachStoredPart(log, package, read.attached, read.parts.vmlName!, vml);
-    int authorId = comments.authors.indexOf(note.author);
-    if (authorId < 0) {
-      authorId = comments.authors.length;
-      applyChange(log, _AuthorChange(comments, note.author));
+    if (!sameComment) {
+      attachStoredPart(
+        log,
+        package,
+        read.attached,
+        read.parts.commentsName!,
+        comments,
+      );
     }
-    applyChange(
-      log,
-      entry == null
-          ? _CommentChange(
-              read,
-              comments,
-              comments.insertionIndex(note.row, note.column),
-              null,
-              CommentEntry.of(note, authorId),
-            )
-          : _CommentChange(
-              read,
-              comments,
-              comments.entries.indexOf(entry),
-              entry,
-              entry.replacedBy(note, authorId),
-            ),
-    );
+    attachStoredPart(log, package, read.attached, read.parts.vmlName!, vml);
+    if (!sameComment) {
+      int authorId = comments.authors.indexOf(note.author);
+      if (authorId < 0) {
+        authorId = comments.authors.length;
+        applyChange(log, _AuthorChange(comments, note.author));
+      }
+      applyChange(
+        log,
+        entry == null
+            ? _CommentChange(
+                read,
+                comments,
+                comments.insertionIndex(note.row, note.column),
+                null,
+                CommentEntry.of(note, authorId),
+              )
+            : _CommentChange(
+                read,
+                comments,
+                comments.entries.indexOf(entry),
+                entry,
+                entry.replacedBy(note, authorId),
+              ),
+      );
+    }
     final List<int> boxes = vml.noteShapes(note.row, note.column);
     if (boxes.isEmpty) _addShape(read, vml, note);
     for (final int at in boxes) {
@@ -699,7 +722,11 @@ mixin _SheetNotes {
       final String name = vmlName;
       vml = reader.guardXml(name, () {
         final XmlPullReader r = reader.openXml(name);
-        return VmlPart.read(r.sourceText(0, r.sourceLength));
+        return VmlPart.read(
+          r.sourceText(0, r.sourceLength),
+          limits: reader.limits,
+          partName: name,
+        );
       });
       if (vml == null) problems.add('legacyDrawing');
     }

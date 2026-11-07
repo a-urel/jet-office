@@ -199,6 +199,22 @@ final class SetNamesChange implements Change {
   }
 }
 
+/// The mark a table resize leaves on the workbook: [WorkbookPart.tableEdits]
+/// one higher while the resize is in force.
+final class TableResizeChange implements Change {
+  /// A change that raised the count of [part], already applied.
+  TableResizeChange(this.part);
+
+  /// The workbook part.
+  final WorkbookPart part;
+
+  @override
+  void revert() => part.tableEdits--;
+
+  @override
+  void reapply() => part.tableEdits++;
+}
+
 /// Runs [edit], which changes the names of [part] through
 /// [WorkbookPart.addName] or [WorkbookPart.removeName], and records the
 /// change in [log] as a name edit, which makes the save ask Excel to

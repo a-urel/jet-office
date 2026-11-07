@@ -50,6 +50,9 @@ final class _TableListChange implements Change {
   }
 }
 
+/// The content type of a slicer cache part, which names its table by id.
+const String _slicerCacheType = 'application/vnd.ms-excel.slicerCache+xml';
+
 /// The table half of [XlsxSheet].
 mixin _SheetTablesApi {
   // What the sheet gives its table half.
@@ -64,8 +67,11 @@ mixin _SheetTablesApi {
   XlsxReadCell? cellAt(int row, int column);
   void setCell(int row, int column, Object? value);
 
-  /// The tables of the sheet, in the order of the sheet's table
-  /// relationships, each as [XlsxTable] types it.
+  /// The tables of the sheet, each as [XlsxTable] types it: in the order of
+  /// the sheet's table relationships when the file is opened, then a table
+  /// added goes last. After a save and a reopen the order follows the
+  /// relationships again, which may differ from this list's after a table
+  /// was removed and another added.
   ///
   /// A table part the model cannot type (a root that is not a SpreadsheetML
   /// `table`, a `ref` that is not a range, or columns that do not match it)
@@ -224,6 +230,10 @@ mixin _SheetTablesApi {
   /// The `ref` of the table and of its `<autoFilter>` change; cells stay. A
   /// [range] equal to the table's is no edit.
   ///
+  /// A formula over the table (`SUM(T[A])`) has another result, so the save
+  /// sets `fullCalcOnLoad` when the workbook has formulas, as a name edit
+  /// does; `calcChain` stays. Undoing the resize takes that back.
+  ///
   /// Throws an [ArgumentError] named `name` when the sheet has no table
   /// [name], ignoring case; named `range` for a range outside the sheet or in
   /// reverse, one whose first row, first column or last column differ from
@@ -278,7 +288,11 @@ mixin _SheetTablesApi {
       autoFilter,
       merges,
     );
-    _editTable(entry, () => table.resize(range));
+    _host.log.transaction(() {
+      _editTable(entry, () => table.resize(range));
+      _host.workbookPart.tableEdits++;
+      _host.log.record(TableResizeChange(_host.workbookPart));
+    });
   }
 
   /// Removes the table [name]: its `<tablePart>`, its relationship and its
@@ -300,8 +314,11 @@ mixin _SheetTablesApi {
   /// nothing has changed, except that reading warnings are reported on first
   /// read.
   ///
-  /// A slicer or a pivot cache that names the table without a relationship
-  /// of the table part is not checked.
+  /// A slicer cache part (content type
+  /// `application/vnd.ms-excel.slicerCache+xml`) whose `tableId` is the
+  /// table's `id` refuses too, with a [StateError]: Excel would find a
+  /// slicer on a table the file lacks. Every such part is read. A pivot
+  /// cache that names the table is not checked.
   void removeTable(String name) {
     final WorksheetPart part = _editablePart('tables');
     final ({String partName, TablePart table}) entry = _tableNamed(name);
@@ -321,6 +338,13 @@ mixin _SheetTablesApi {
       throw StateError(
         'The table "$tableName" has relationships of its own (a query table, '
         'say); it cannot be removed.',
+      );
+    }
+    final String? slicer = _slicerOf(reader, package, entry.table.id);
+    if (slicer != null) {
+      throw StateError(
+        'The table "$tableName" cannot be removed: the slicer cache '
+        '"$slicer" is on it.',
       );
     }
     final String? use = _host.firstTableUse(entry.table);
@@ -357,6 +381,29 @@ mixin _SheetTablesApi {
         _TableListChange(list, list.indexOf(entry), entry, added: false),
       );
     });
+  }
+
+  /// The name of the first slicer cache part of [package] whose
+  /// `tableSlicerCache` names the table [id], or `null`. Throws an
+  /// [XlsxReadException] when a slicer cache part cannot be read.
+  String? _slicerOf(PackageReader reader, OpcPackage package, int id) {
+    if (id <= 0) return null;
+    for (final String name in package.partNames) {
+      if (package.contentTypeOf(name) != _slicerCacheType) continue;
+      final bool found = reader.guardXml(name, () {
+        final XmlPullReader r = reader.openXml(name);
+        while (r.next()) {
+          if (r.eventType == XmlEventType.startElement &&
+              r.localName == 'tableSlicerCache' &&
+              r.getAttribute('tableId', namespaceUri: '') == '$id') {
+            return true;
+          }
+        }
+        return false;
+      });
+      if (found) return name;
+    }
+    return null;
   }
 
   /// Runs [edit], a change of the table of [entry], in one transaction, with

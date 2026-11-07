@@ -22,6 +22,8 @@ import '../../opc/package.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../note.dart';
+import '../read/read_limits.dart';
+import 'item_group.dart' show checkListRoom;
 
 /// One `<v:shape>` directly under the root of a VML part.
 final class VmlShape {
@@ -180,10 +182,18 @@ final class VmlPart implements PartContent {
   /// Reads [source], or returns `null` when it is not well formed XML,
   /// which Excel's older VML often is; the model then leaves the part as
   /// written and reads no visibility from it.
-  static VmlPart? read(String source) {
+  ///
+  /// Throws a `limitExceeded` `XlsxReadException` naming `maxMerges` and
+  /// [partName] when the source holds more shapes than [limits] allows, as the
+  /// comments part does for its entries.
+  static VmlPart? read(
+    String source, {
+    XlsxReadLimits limits = const XlsxReadLimits(),
+    String partName = '',
+  }) {
     try {
-      final VmlPart part = _read(source);
-      return part._rootName.isEmpty ? null : part;
+      final VmlPart read = _read(source, limits, partName);
+      return read._rootName.isEmpty ? null : read;
     } on XmlParseException {
       return null;
     }
@@ -193,7 +203,7 @@ final class VmlPart implements PartContent {
   factory VmlPart.empty(int block) {
     final StringBuffer out = StringBuffer();
     writeVmlDrawing(XmlWriter(out), const <WorksheetNote>[], block);
-    return _read(out.toString());
+    return _read(out.toString(), const XlsxReadLimits(), '');
   }
 
   /// What surrounds the shapes.
@@ -333,8 +343,11 @@ final class VmlPart implements PartContent {
   }
 
   /// [text] as a shape followed by [after], read under the part's root.
-  VmlShape _parse(String text, String after) =>
-      _read('$_rootOpen$text</$_rootName>').shapes.single.withAfter(after);
+  VmlShape _parse(String text, String after) => _read(
+    '$_rootOpen$text</$_rootName>',
+    const XlsxReadLimits(),
+    '',
+  ).shapes.single.withAfter(after);
 
   /// The declarations a new element needs for the prefixes `v`, `o` and `x`:
   /// those the root does not bind to the VML namespaces.
@@ -482,7 +495,7 @@ String _styled(String tag, String word) {
   return '${tag.substring(0, end - value.length)}$next${tag.substring(end)}';
 }
 
-VmlPart _read(String source) {
+VmlPart _read(String source, XlsxReadLimits limits, String partName) {
   final XmlPullReader r = XmlPullReader(source);
   final Set<int> blocks = <int>{};
   final List<_Found> found = <_Found>[];
@@ -540,6 +553,7 @@ VmlPart _read(String source) {
           }
         }
       }
+      checkListRoom(found.length, limits, partName);
       found.add(_Found(start, tagEnd, r.eventEnd, client));
     } else if (r.localName == 'shapetype' && r.namespaceUri == Ns.vml) {
       if (r.getAttribute('id', namespaceUri: '') == '_x0000_t202') {

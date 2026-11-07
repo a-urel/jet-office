@@ -295,10 +295,9 @@ final class CellEncoder {
   ///
   /// [value] is a `String`, `int`, `double`, `bool`, [DateTime],
   /// [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxRichText] or `null`. The
-  /// checks,
-  /// repairs and warnings are those of [encode], and it throws as [encode]
-  /// does, with nothing recorded: the string table and the warnings are as
-  /// they were. A string is interned into the shared-string table and
+  /// checks, repairs and warnings are those of [encode], and it throws as
+  /// [encode] does, with nothing recorded: the string table and the warnings
+  /// are as they were. A string is interned into the shared-string table and
   /// stored as its index. A formula is stored as a normal formula with its
   /// text as written (one leading `=` removed) and its cached result as the
   /// `<v>` text [encode] writes. `null` gives an empty cell carrying

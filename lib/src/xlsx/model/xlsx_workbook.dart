@@ -736,9 +736,10 @@ final class _Book implements SheetHost {
   @override
   String? firstTableUse(TablePart table) {
     // A file's name may hold anything; the syntax characters are escaped.
-    final String key = sheetNameKey(
-      table.displayName,
-    ).replaceAllMapped(RegExp(r'[\^$.*+?()[\]{}|/]'), (Match m) => '\\${m[0]}');
+    final String key = sheetNameKey(table.displayName).replaceAllMapped(
+      RegExp(r'[\\^$.*+?()[\]{}|/]'),
+      (Match m) => '\\${m[0]}',
+    );
     // Letters, marks, digits and these three go on a name.
     final RegExp reference = RegExp(
       r'(?<![\p{L}\p{M}\p{N}_.\\?])'
@@ -1035,9 +1036,10 @@ final class _Book implements SheetHost {
     final bool valueEdited = _sheets.any(
       (XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0,
     );
-    // A defined name that was defined or removed changes results as a
-    // changed cell does, but the chain of cells stays as it was.
-    if (valueEdited || workbook.nameEdits > 0) {
+    // A defined name that was defined or removed, or a table that was
+    // resized, changes results as a changed cell does, but the chain of
+    // cells stays as it was.
+    if (valueEdited || workbook.nameEdits > 0 || workbook.tableEdits > 0) {
       final String? chain = valueEdited ? _target(RelType.calcChain) : null;
       if (chain != null) {
         // Only the workbook refers to the calculation chain, so no other
