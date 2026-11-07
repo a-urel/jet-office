@@ -40,6 +40,7 @@ const Map<String, ({int length, int adler32})> _corpus =
       'd4_headers': (length: 33335, adler32: 2013299904),
       'd4_fields': (length: 29559, adler32: 1228128671),
       'tables_by_hand': (length: 9996, adler32: 2530907752),
+      'sections_by_hand': (length: 10839, adler32: 3271755158),
       'ns0_prefix': (length: 1407, adler32: 3668097186),
       'default_namespace': (length: 1344, adler32: 3335628311),
       'no_override': (length: 1259, adler32: 3490218517),

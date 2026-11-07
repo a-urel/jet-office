@@ -359,17 +359,23 @@ the owning `*_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
 600 cases each, over the fixtures (the `d3_*` and `d4_*` ones among them), a
-hand-made table with every element of the table values, and the producer
-variants of `test/docx/support/docx_fuzz.dart`: whole mutated files, with every
+hand-made table with every element of the table values, a hand-made
+`sections_by_hand` (every section child, six stories, broken references and
+broken fields), and the producer variants of `test/docx/support/docx_fuzz.dart`: whole mutated files, with every
 part name mutated somewhere, and about a third of the cases replacing the value
 of a `w:` attribute (`w:val`, `w:w`, `w:left` and the like) of the main, styles
 or numbering part by `abc`, twenty digits, `-` or `1in`; open, load the body,
 styles and numbering, then read every typed property (a throw there is a
 failure, even a `DocxReadException`), including every table's, row's and
-cell's properties and grid, walking cells and nested tables; call
+cell's properties and grid, walking cells and nested tables, and every
+section's typed values, `evenAndOddHeaders` and its six stories with their
+fields (a throw there is a failure, except a `DocxReadException` from the
+blocks of a story part that cannot be read, as from a load); call
 `styles.ensure` and `numbering.addBulletList` on what loaded; add a row to
 each loaded table and merge ranges of its cells (only `ArgumentError` may
-come out of those two); and save (never a `StateError`, even for a table the
+come out of those two); set every field's `resultText`, add a footer
+paragraph and call `addSection` (nothing but that `DocxReadException` may come
+out of them); and save (never a `StateError`, even for a table the
 file left without rows), throw nothing but `DocxReadException` from a load),
 the same cases on the VM and in Chrome;
 longer runs by hand:
@@ -384,8 +390,8 @@ It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
 The gate runs 600 cases per seed, not 150, for one reason: the seeds are fixed,
 so the cases must between them mutate every part name of the corpus
 (`every part name is mutated in some corpus entry`), and the D3 fixtures,
-`tables_by_hand` and the D4 fixtures, with their header and footer parts, joined
-the corpus and made fewer too few. When a new part name
+`tables_by_hand`, the D4 fixtures, with their header and footer parts, and
+`sections_by_hand` joined the corpus and made fewer too few. When a new part name
 joins the corpus, run that test and raise the count again if it fails.
 
 ## Hard rules

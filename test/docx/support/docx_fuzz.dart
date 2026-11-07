@@ -31,6 +31,7 @@ import '../../xlsx/read/support/zip_builder.dart';
 import 'localized_document.dart';
 import 'numbering_documents.dart';
 import 'producer_variants.dart';
+import 'sections_document.dart';
 import 'styles_documents.dart';
 import 'table_document.dart';
 import 'word_document.dart';
@@ -46,7 +47,9 @@ export '../../support/fuzz_mutations.dart'
 /// `w15` content) and numbering part, then every fixture of
 /// `docxFixtures()` (the `d3_*` and `d4_*` fixtures among them), `tables_by_hand`,
 /// the document of `tablesByHandDocx()` with every element the table values
-/// read, and every `producerVariants()` entry, each rebuilt with stored
+/// read, `sections_by_hand`, the document of `sectionsByHandDocx()` with
+/// every section child, six stories, broken references and broken fields,
+/// and every `producerVariants()` entry, each rebuilt with stored
 /// entries and a fixed timestamp, so the bytes are equal on every platform.
 ///
 /// Nothing is deflated, so inflation is fuzzed only by the archive
@@ -58,6 +61,7 @@ List<({String name, Uint8List bytes})> docxFuzzCorpus() =>
       for (final DocxFixture f in docxFixtures())
         (name: f.name, bytes: _rebuild(f.build().bytes)),
       (name: 'tables_by_hand', bytes: _rebuild(tablesByHandDocx())),
+      (name: 'sections_by_hand', bytes: _rebuild(sectionsByHandDocx())),
       for (final ProducerVariant v in producerVariants())
         (name: v.name, bytes: _rebuild(v.bytes)),
     ];
@@ -330,10 +334,12 @@ void exerciseDocx(Uint8List bytes) {
   }, refused);
   _guard(() => styles = doc.styles, refused);
   _guard(() => numbering = doc.numbering, refused);
+  bool storiesRefused = false;
   if (blocks != null) {
     _walk(blocks!);
     docxEditTables(blocks!);
     body!.addParagraph('x').addRun('y');
+    storiesRefused = !_sections(doc, refused);
   }
   if (styles != null) _readStyles(styles!);
   final int instancesBefore = numbering == null
@@ -366,8 +372,84 @@ void exerciseDocx(Uint8List bytes) {
     numberingReadable: numbering != null,
     ensuredId: ensured,
     instancesAfter: listAdded ? instancesBefore + 1 : null,
+    storiesReadable: !storiesRefused,
   );
   if (first != null) throw first!;
+}
+
+/// Reads every section of [doc], every typed value of each, `evenAndOddHeaders`
+/// and all six stories (blocks, inlines and fields); then sets the result text
+/// of every field of the body and the stories, adds a paragraph to the last
+/// section's footer, and adds a section.
+///
+/// Reading a section value throws nothing. A story whose part cannot be read
+/// may throw [DocxReadException] from its blocks or from an edit, which goes
+/// to [onRefusal] (the part is saved as it was); any other exception, an
+/// [ArgumentError] included, propagates. Returns whether every story loaded.
+bool _sections(DocxDocument doc, void Function(DocxReadException) onRefusal) {
+  bool loaded = true;
+  void story(void Function() action) {
+    if (!_guard(action, onRefusal)) loaded = false;
+  }
+
+  doc.evenAndOddHeaders;
+  final List<DocxField> fields = <DocxField>[];
+  _fields(doc.body.blocks.toList(), fields);
+  final List<DocxSection> sections = doc.sections;
+  for (final DocxSection section in sections) {
+    <Object?>[
+      section.pageSize,
+      section.margins,
+      section.columns,
+      section.start,
+      section.titlePage,
+      section.verticalAlignment,
+      section.pageNumbering,
+      section.lineNumbering,
+      section.textWidthPt,
+    ].toString();
+    for (final DocxHeaderFooter h in <DocxHeaderFooter>[
+      section.header,
+      section.firstHeader,
+      section.evenHeader,
+      section.footer,
+      section.firstFooter,
+      section.evenFooter,
+    ]) {
+      <Object?>[h.type, h.isHeader, h.isInherited].toString();
+      story(() {
+        final List<DocxBlock> blocks = h.blocks.toList();
+        _walk(blocks);
+        _fields(blocks, fields);
+      });
+    }
+  }
+  for (final DocxField field in fields) {
+    field.resultText = 'x';
+    field.text;
+  }
+  story(() => sections.last.footer.addParagraph('footer'));
+  doc.body.addSection();
+  return loaded;
+}
+
+/// Adds every field of [blocks], tables and nested fields included, to [out].
+void _fields(List<DocxBlock> blocks, List<DocxField> out) {
+  void inline(DocxInline i) {
+    if (i is! DocxField) return;
+    out.add(i);
+    i.result.forEach(inline);
+  }
+
+  for (final DocxBlock block in blocks) {
+    if (block is DocxParagraph) block.inlines.forEach(inline);
+    if (block is! DocxTable) continue;
+    for (final DocxTableRow row in block.rows) {
+      for (final DocxTableCell cell in row.cells) {
+        _fields(cell.blocks.toList(), out);
+      }
+    }
+  }
 }
 
 /// Runs [action]; a [DocxReadException] goes to [onRefusal] and the result
@@ -610,6 +692,9 @@ void _run(DocxRunProperties r) => <Object?>[
 /// [numberingReadable] false) may throw a [DocxReadException]. Anything
 /// else is a [StateError].
 ///
+/// The stories of every section load unless the input's did not
+/// ([storiesReadable] false).
+///
 /// When [ensuredId] is not null the styles must hold that id; when
 /// [instancesAfter] is not null the numbering must list that many
 /// instances.
@@ -620,6 +705,7 @@ void _reopen(
   required bool numberingReadable,
   required String? ensuredId,
   required int? instancesAfter,
+  required bool storiesReadable,
 }) {
   final DocxDocument again;
   try {
@@ -638,6 +724,20 @@ void _reopen(
   }
 
   load('body', bodyReadable, () => _walk(again.body.blocks.toList()));
+  load('stories', bodyReadable && storiesReadable, () {
+    for (final DocxSection section in again.sections) {
+      for (final DocxHeaderFooter h in <DocxHeaderFooter>[
+        section.header,
+        section.firstHeader,
+        section.evenHeader,
+        section.footer,
+        section.firstFooter,
+        section.evenFooter,
+      ]) {
+        _walk(h.blocks.toList());
+      }
+    }
+  });
   load('styles', stylesReadable, () {
     final DocxStyles styles = again.styles;
     _readStyles(styles);
