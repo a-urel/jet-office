@@ -1114,6 +1114,28 @@ void main() {
       expect(readDocxText(doc.save().bytes), saved);
     });
   });
+
+  test(
+    'what follows the root element does not stop a save that makes a part',
+    () {
+      // The reader stops at the end of w:document, so the open succeeds; the
+      // save looks for the used ids in the main part and must stop there too.
+      final Uint8List input = _docx('${_p('A')}<w:sectPr/>');
+      final DocxDocument doc = DocxDocument.open(
+        rewriteDocxPart(
+          input,
+          'word/document.xml',
+          (String xml) => '$xml<w:r>',
+        ),
+      );
+      doc.sections.last.footer.addParagraph('Footer');
+      final Uint8List saved = doc.save().bytes;
+      expect(
+        DocxDocument.open(saved).sections.last.footer.blocks,
+        hasLength(1),
+      );
+    },
+  );
 }
 
 /// A sink that collects what it is given in [_out].

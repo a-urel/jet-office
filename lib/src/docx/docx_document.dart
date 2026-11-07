@@ -567,6 +567,9 @@ final class DocxDocument {
       );
       final Set<String> ids = <String>{};
       while (r.next()) {
+        // The reader of the main part stops at the end of `w:document`; so
+        // does this, or what a file holds after it fails a save.
+        if (r.eventType == XmlEventType.endElement && r.depth == 0) break;
         if (r.eventType != XmlEventType.startElement ||
             r.namespaceUri != Ns.w ||
             (r.localName != 'headerReference' &&
