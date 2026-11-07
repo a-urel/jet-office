@@ -199,13 +199,21 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   the style `styles.ensure(DocxBuiltInStyle.heading1)` (`Balk1` in a
   Turkish Word file; Word's definition when the file has none); and it adds
   a bullet list (`numbering.addBulletList`) of two items, `First item` and
-  `Second item` at level 1 (`addListItem`). It saves to the second
-  directory, reads the saved file back and checks the text, bold and
-  accent of the run, the replacing paragraph, the heading's style, and each
-  item's text, list number and level, and that the body has three blocks
-  more. `comparePackages` must find differences only in the main part
-  (named by the root relationship), the numbering part, the styles part
-  when `ensure` added a style, and `[Content_Types].xml` with the main
+  `Second item` at level 1 (`addListItem`). In a document with a table (the
+  first top-level `DocxTable` with a cell) it sets the text of the first
+  cell's first paragraph to `Edited cell`, through that paragraph's first
+  run or a new one, and appends a row `New row` when the table has a grid
+  (`addRow`; left out otherwise). In every document it appends, before the
+  heading and the list, a table `addTable(columns: 2)` of a header row
+  `Head one`, `Head two`, a body row and a third row merged across both
+  columns. It saves to the second directory, reads the saved file back and
+  checks the text, bold and accent of the run, the replacing paragraph, the
+  heading's style, each item's text, list number and level, the cell text,
+  the new row, the added table's rows (header flag, texts, merge), and that
+  the body has four blocks more. `comparePackages` must find differences
+  only in the main part (named by the root relationship), the numbering
+  part, the styles part when `ensure` added a style (`Heading1`, or
+  `TableGrid` and `Normal Table`), and `[Content_Types].xml` with the main
   part's relationships when a part was created. It prints each problem as
   `<file>: <problem>` and exits 1 on any, 2 on unusable arguments. CI runs
   it on the fixtures, on LibreOffice's re-save and on the owner's Word

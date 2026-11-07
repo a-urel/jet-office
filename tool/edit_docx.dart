@@ -24,19 +24,26 @@
 ///   `styles.ensure(DocxBuiltInStyle.heading1)`: the document's own heading
 ///   style, whatever its id (`Balk1` under a Turkish Word), or Word's
 ///   definition added when it has none;
+/// * in a document with a table (the first top-level `DocxTable` with a
+///   cell) it sets the text of the first cell's first paragraph to
+///   `Edited cell`, through the paragraph's first run or a new run, and
+///   appends a row `New row` when the table has a grid the row fits;
+/// * it appends, before the heading, a table `addTable(columns: 2)`: a
+///   header row `Head one`, `Head two`, a body row and a third row merged
+///   across both columns;
 /// * it adds a bullet list (`numbering.addBulletList`) of two items at the
 ///   end, `First item` and, at level 1, `Second item` (`addListItem`).
 ///
 /// A document without such a run or such a paragraph skips that edit. It
 /// saves and writes the bytes to `<outDir>/<name>.docx`, then reads the
 /// saved file back with `DocxDocument`: the edits must be there, the body
-/// must have three blocks more than it had before the heading, the run must
+/// must have four blocks more than it had before the table, the run must
 /// be bold, the heading must have the style `ensure` returned and the list
 /// items the new list's number. Last, `comparePackages` from
 /// `tool/src/part_compare.dart` must find differences only in the allowed
 /// parts: the main part (named by the root relationship, not assumed to be
 /// `word/document.xml`), the numbering part, the styles part when `ensure`
-/// added a style, and `[Content_Types].xml` and the main part's
+/// added a style (`Heading1` or `TableGrid`), and `[Content_Types].xml` and the main part's
 /// relationships when the edit created a part the file lacked.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
@@ -80,6 +87,12 @@ const String firstItemText = 'First item';
 
 /// The text of the second list item, at level 1.
 const String secondItemText = 'Second item';
+
+/// The text the tool sets on the first cell of the first table.
+const String editedCellText = 'Edited cell';
+
+/// The text of the first cell of the row the tool appends to that table.
+const String newRowText = 'New row';
 
 /// The namespace of the elements of a relationships part.
 const String _relsNs =
@@ -154,6 +167,8 @@ typedef _Edits = ({
   String style,
   bool stylesAdded,
   int numId,
+  ({int block, int rows, bool added})? table,
+  int tableBlock,
 });
 
 /// Edits [file], writes the result to [output], and returns the problems.
@@ -184,6 +199,8 @@ List<String> _edit(
     }
     final int blocks = body.blocks.length;
     final int styles = doc.styles.styles.length;
+    final ({int block, int rows, bool added})? table = _editFirstTable(body);
+    _appendTable(body);
     final String heading = doc.styles.ensure(DocxBuiltInStyle.heading1);
     body.addParagraph(addedText).style = heading;
     final DocxNumberingInstance list = doc.numbering.addBulletList();
@@ -196,6 +213,8 @@ List<String> _edit(
       style: heading,
       stylesAdded: doc.styles.styles.length != styles,
       numId: list.id,
+      table: table,
+      tableBlock: blocks,
     );
     saved = doc.save().bytes;
   } on Object catch (e) {
@@ -207,6 +226,55 @@ List<String> _edit(
     ..._check(saved, edits),
     ..._partProblems(input, saved, edits),
   ];
+}
+
+/// Sets the text of the first cell of the first top-level table that has a
+/// cell, and appends a row `New row` when the table has a grid the row fits.
+/// Returns the table's block index, its row count before the edit and
+/// whether the row was added, or null when no table qualifies.
+///
+/// The text goes through the first run of the cell's first paragraph, or a
+/// new run, and a cell with no paragraph gets one.
+({int block, int rows, bool added})? _editFirstTable(DocxBody body) {
+  for (int b = 0; b < body.blocks.length; b++) {
+    final DocxBlock block = body.blocks[b];
+    if (block is! DocxTable ||
+        block.rows.isEmpty ||
+        block.rows.first.cells.isEmpty) {
+      continue;
+    }
+    final DocxTableCell cell = block.rows.first.cells.first;
+    final DocxParagraph paragraph =
+        cell.blocks.whereType<DocxParagraph>().firstOrNull ??
+        cell.addParagraph();
+    final DocxRun? run = paragraph.inlines.whereType<DocxRun>().firstOrNull;
+    if (run != null) {
+      run.text = editedCellText;
+    } else {
+      paragraph.addRun(editedCellText);
+    }
+    final int rows = block.rows.length;
+    final List<double?>? grid = block.gridColumnsPt;
+    if (grid != null && grid.isNotEmpty) {
+      try {
+        block.addRow(<String?>[newRowText]);
+      } on ArgumentError {
+        // A row that does not fit this table is left out.
+      }
+    }
+    return (block: b, rows: rows, added: block.rows.length > rows);
+  }
+  return null;
+}
+
+/// Appends a table of two columns: a header row, a body row and a row merged
+/// across both columns.
+void _appendTable(DocxBody body) {
+  final DocxTable table = body.addTable(columns: 2)
+    ..addRow(<String?>['Head one', 'Head two'], header: true)
+    ..addRow(<String?>['Body one', 'Body two'])
+    ..addRow(<String?>['Merged', null]);
+  table.mergeCells(firstRow: 2, firstColumn: 0, lastRow: 2, lastColumn: 1);
 }
 
 /// The problems of the parts [saved] changes: any difference outside the
@@ -391,17 +459,65 @@ bool _isPlainRun(DocxInline inline) => switch (inline) {
   DocxOpaqueInline() => inline.localName == 'proofErr',
 };
 
+/// The table edits the read-back [blocks] lack.
+List<String> _checkTables(List<DocxBlock> blocks, _Edits edits) {
+  final List<String> problems = <String>[];
+  final ({int block, int rows, bool added})? edited = edits.table;
+  if (edited != null) {
+    final DocxBlock b = blocks[edited.block];
+    if (b is! DocxTable || b.rows.isEmpty || b.rows.first.cells.isEmpty) {
+      problems.add('the edited table is missing');
+    } else {
+      final DocxParagraph? p = b.rows.first.cells.first.blocks
+          .whereType<DocxParagraph>()
+          .firstOrNull;
+      final DocxRun? r = p?.inlines.whereType<DocxRun>().firstOrNull;
+      if (r == null || r.text != editedCellText) {
+        problems.add('the edited cell text is missing');
+      }
+      final int rows = edited.rows + (edited.added ? 1 : 0);
+      if (b.rows.length != rows) {
+        problems.add('the edited table has ${b.rows.length} rows, not $rows');
+      } else if (edited.added && b.rows.last.cells.first.text != newRowText) {
+        problems.add('the new row text is missing');
+      }
+    }
+  }
+  final DocxBlock added = blocks[edits.tableBlock];
+  if (added is! DocxTable || added.rows.length != 3) {
+    problems.add('the added table is missing');
+    return problems;
+  }
+  final List<DocxTableRow> rows = added.rows;
+  if (!rows[0].isHeader ||
+      rows[0].cells.map((DocxTableCell c) => c.text).join('|') !=
+          'Head one|Head two') {
+    problems.add('the added table header row is missing');
+  }
+  if (rows[1].cells.map((DocxTableCell c) => c.text).join('|') !=
+      'Body one|Body two') {
+    problems.add('the added table body row is missing');
+  }
+  if (rows[2].cells.length != 1 ||
+      rows[2].cells.first.text != 'Merged' ||
+      rows[2].cells.first.properties.gridSpan != 2) {
+    problems.add('the added table merged row is missing');
+  }
+  return problems;
+}
+
 /// The edits [saved] lacks when read back with `DocxDocument`.
 List<String> _check(Uint8List saved, _Edits edits) {
   final List<String> problems = <String>[];
   try {
     final List<DocxBlock> blocks = DocxDocument.open(saved).body.blocks;
-    if (blocks.length != edits.blocks + 3) {
+    if (blocks.length != edits.blocks + 4) {
       problems.add(
-        'the body has ${blocks.length} blocks, not ${edits.blocks + 3}',
+        'the body has ${blocks.length} blocks, not ${edits.blocks + 4}',
       );
       return problems;
     }
+    problems.addAll(_checkTables(blocks, edits));
     final ({int block, int inline})? run = edits.run;
     if (run != null) {
       final DocxBlock b = blocks[run.block];

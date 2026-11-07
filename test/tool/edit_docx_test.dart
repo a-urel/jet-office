@@ -82,7 +82,7 @@ void main() {
     final List<String> after = outline(
       File('${output.path}/word.docx').readAsBytesSync(),
     );
-    expect(after, hasLength(before.length + 3));
+    expect(after, hasLength(before.length + 4));
     // The first run with text is the title's.
     expect(before.first, 'Title:Fiyat listesiÜrün ');
     expect(after.first, 'Title:$editedTextÜrün ');
@@ -94,6 +94,69 @@ void main() {
     expect(after[after.length - 2], 'ListParagraph:$firstItemText');
     expect(after.last, 'ListParagraph:$secondItemText');
     expect(after.sublist(1, 10), before.sublist(1, 10));
+    // The appended table comes before the heading and the list.
+    expect(after[after.length - 4], 'table');
+  });
+
+  group('tables', () {
+    List<DocxBlock> edited(String name) => DocxDocument.open(
+      File('${output.path}/$name').readAsBytesSync(),
+    ).body.blocks;
+
+    test('every fixture is edited, and the appended table is as built', () {
+      write_fixtures.main(<String>[input.path]);
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      for (final FileSystemEntity e in output.listSync()) {
+        final String name = e.uri.pathSegments.last;
+        final List<DocxBlock> blocks = edited(name);
+        final DocxTable table = blocks[blocks.length - 4] as DocxTable;
+        expect(table.rows, hasLength(3), reason: name);
+        expect(table.rows[0].isHeader, isTrue, reason: name);
+        expect(table.rows[0].cells.map((DocxTableCell c) => c.text), <String>[
+          'Head one',
+          'Head two',
+        ]);
+        expect(table.rows[2].cells, hasLength(1), reason: name);
+        expect(table.rows[2].cells.single.properties.gridSpan, 2);
+      }
+    });
+
+    test('a table of a document takes the cell text and a new row', () {
+      writeOnly(input, <String>{'d3_basic.docx', 'd3_merges.docx'});
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      for (final String name in <String>['d3_basic.docx', 'd3_merges.docx']) {
+        final DocxTable before = DocxDocument.open(
+          File('${input.path}/$name').readAsBytesSync(),
+        ).body.blocks.whereType<DocxTable>().first;
+        final DocxTable table = edited(name).whereType<DocxTable>().first;
+        expect(
+          (table.rows[0].cells[0].blocks.first as DocxParagraph).text,
+          editedCellText,
+          reason: name,
+        );
+        expect(table.rows, hasLength(before.rows.length + 1), reason: name);
+        expect(table.rows.last.cells.first.text, newRowText, reason: name);
+      }
+    });
+
+    test('reports a cell edit that does not read back', () {
+      writeOnly(input, <String>{'d3_basic.docx'});
+      final StringBuffer out = StringBuffer();
+      final int code = editDocx(
+        <String>[input.path, output.path],
+        out: out,
+        err: StringBuffer(),
+        corruptForTest: (Uint8List saved) => rewriteDocxPart(
+          saved,
+          'word/document.xml',
+          (String x) => x.replaceFirst(editedCellText, 'Not edited'),
+        ),
+      );
+      expect(code, 1);
+      expect(out.toString(), contains('the edited cell text is missing'));
+    });
   });
 
   test('a document that defines Heading1 gets a Heading1 paragraph', () {
