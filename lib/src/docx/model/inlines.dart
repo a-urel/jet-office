@@ -20,6 +20,7 @@ library;
 
 import 'dart:collection';
 
+import '../../opc/change_log.dart' show Change;
 import '../../opc/ooxml.dart' show Ns;
 import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';

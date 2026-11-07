@@ -143,9 +143,14 @@ enum DocxFieldMarkType {
 /// read, `w:fldLock`, `w:dirty` and `w:fldData` among what it holds. A
 /// `w:fldChar` of no known type is no mark but [DocxOpaqueRunContent].
 final class DocxFieldMark extends DocxRunContent {
-  DocxFieldMark._read(this.type, this._xml) : super(const <KeptAttribute>[]);
+  DocxFieldMark._read(this.type, OpaqueXml this._xml)
+    : super(const <KeptAttribute>[]);
 
-  final OpaqueXml _xml;
+  DocxFieldMark._built(this.type) : _xml = null, super(const <KeptAttribute>[]);
+
+  /// The element as read; `null` for a mark a field was built with, which the
+  /// writer writes as `<w:fldChar w:fldCharType="..."/>`.
+  final OpaqueXml? _xml;
 
   /// What the mark marks.
   final DocxFieldMarkType type;
@@ -164,10 +169,16 @@ final class DocxFieldMark extends DocxRunContent {
 /// A piece of a field's instruction, `w:instrText`; it has no text of the run.
 /// The element is kept as read.
 final class DocxFieldInstruction extends DocxRunContent {
-  DocxFieldInstruction._read(this.text, this._xml)
+  DocxFieldInstruction._read(this.text, OpaqueXml this._xml)
     : super(const <KeptAttribute>[]);
 
-  final OpaqueXml _xml;
+  DocxFieldInstruction._built(this.text)
+    : _xml = null,
+      super(const <KeptAttribute>[]);
+
+  /// The element as read; `null` for an instruction a field was built with,
+  /// which the writer writes with `xml:space="preserve"`.
+  final OpaqueXml? _xml;
 
   /// The instruction text, as decoded from the element.
   final String text;
@@ -243,9 +254,19 @@ DocxOpaqueRunContent opaqueRunContent(OpaqueXml xml) =>
 /// The element [content] keeps, for the writer.
 OpaqueXml opaqueRunContentXml(DocxOpaqueRunContent content) => content._xml;
 
-/// The `w:fldChar` [mark] keeps, for the writer.
-OpaqueXml fieldMarkXml(DocxFieldMark mark) => mark._xml;
+/// A mark of [type] for a field built by the API.
+DocxFieldMark newFieldMark(DocxFieldMarkType type) =>
+    DocxFieldMark._built(type);
 
-/// The `w:instrText` [instruction] keeps, for the writer.
-OpaqueXml fieldInstructionXml(DocxFieldInstruction instruction) =>
+/// Instruction [text] for a field built by the API; the caller has scrubbed
+/// it.
+DocxFieldInstruction newFieldInstruction(String text) =>
+    DocxFieldInstruction._built(text);
+
+/// The `w:fldChar` [mark] keeps for the writer, or `null` for a built mark.
+OpaqueXml? fieldMarkXml(DocxFieldMark mark) => mark._xml;
+
+/// The `w:instrText` [instruction] keeps for the writer, or `null` for a built
+/// one.
+OpaqueXml? fieldInstructionXml(DocxFieldInstruction instruction) =>
     instruction._xml;

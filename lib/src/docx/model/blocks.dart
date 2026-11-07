@@ -209,10 +209,10 @@ final class DocxParagraph extends DocxBlock {
   /// remove it there first. So does one of a [DocxField], which goes with
   /// its field. In a paragraph of a document, the style set on a run, one of
   /// a field among them, is resolved against the document's styles
-  /// (`DocxRun.style` has the rules), in the same edit; a styles part that cannot be read throws
-  /// a `DocxReadException` naming it, and nothing changes. The `w:rStyle` of
-  /// a run read in another document counts as set; `DocxBody.insertBlock`
-  /// says what such a move does and does not do.
+  /// (`DocxRun.style` has the rules), in the same edit; a styles part that
+  /// cannot be read throws a `DocxReadException` naming it, and nothing
+  /// changes. The `w:rStyle` of a run read in another document counts as set;
+  /// `DocxBody.insertBlock` says what such a move does and does not do.
   void insertInline(int index, DocxInline inline) {
     RangeError.checkValueInInterval(index, 0, _inlines.length, 'index');
     _checkDetached(inline);
@@ -222,6 +222,13 @@ final class DocxParagraph extends DocxBlock {
       _sink.inlineInserted(this, index, inline);
       _resolveInlineStyles(inline, _sink);
     });
+  }
+
+  /// Appends [field] and returns it; [insertInline] has the rules. A field
+  /// already in a paragraph throws [StateError].
+  DocxField addField(DocxField field) {
+    insertInline(_inlines.length, field);
+    return field;
   }
 
   /// Removes the inline at [index].

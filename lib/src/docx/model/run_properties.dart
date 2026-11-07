@@ -96,6 +96,8 @@ final class DocxRunProperties {
   DocxRunProperties._(PropertyContainer source, DocxEditSink Function() sink)
     : _set = _RunSet(source, sink);
 
+  DocxRunProperties._over(this._set);
+
   /// The set behind the members; private so a caller cannot reach its
   /// untyped surface.
   final PropertySet _set;
@@ -264,6 +266,13 @@ DocxRunProperties newRunProperties(
   DocxEditSink Function() sink,
 ) => DocxRunProperties._(source, sink);
 
+/// The properties of a field: reads the first set [sets] gives and sets every
+/// one of them, in one edit of [sink]'s document.
+DocxRunProperties newFieldRunProperties(
+  List<PropertySet> Function() sets,
+  DocxEditSink Function() sink,
+) => DocxRunProperties._over(_FieldRunSet(sets, sink));
+
 /// The property set behind [properties], for the writer and the edit
 /// primitives. Not exported.
 PropertySet propertySetOfRunProperties(DocxRunProperties properties) =>
@@ -273,4 +282,39 @@ PropertySet propertySetOfRunProperties(DocxRunProperties properties) =>
 final class _RunSet extends PropertySet {
   _RunSet(PropertyContainer source, DocxEditSink Function() sink)
     : super(source, runPropertiesSchema, sink);
+}
+
+/// The set behind a field's properties: it answers with the first run's set
+/// and sends every edit to the sets of all the runs, in one transaction. It
+/// holds nothing of its own, and the writer never sees it.
+final class _FieldRunSet extends PropertySet {
+  _FieldRunSet(this._sets, this._sinkOf)
+    : super(const PropertyContainer.empty(), runPropertiesSchema, _sinkOf);
+
+  final List<PropertySet> Function() _sets;
+  final DocxEditSink Function() _sinkOf;
+
+  @override
+  Object? valueOf(String localName) => _sets().first.valueOf(localName);
+
+  @override
+  void setValue(String localName, Object? value) =>
+      _each((PropertySet s) => s.setValue(localName, value));
+
+  @override
+  void setStyleId(String localName, String? id, DocxStyleType type) =>
+      _each((PropertySet s) => s.setStyleId(localName, id, type));
+
+  @override
+  void clearChild(String localName) =>
+      _each((PropertySet s) => s.clearChild(localName));
+
+  void _each(void Function(PropertySet set) edit) {
+    final List<PropertySet> sets = _sets();
+    _sinkOf().atomically(() {
+      for (final PropertySet s in sets) {
+        edit(s);
+      }
+    });
+  }
 }

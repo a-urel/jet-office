@@ -18,9 +18,16 @@ part of 'inlines.dart';
 /// How deep fields nest in a field's result before the deeper ones stay runs.
 ///
 /// Nesting in a paragraph is not nesting in the XML, so `maxDepth` does not
-/// bound it, and everything that walks a field recurses. Word's own limit is
-/// far below this.
+/// bound it, and everything that walks a field recurses.
 const int maxFieldNesting = 32;
+
+/// What a field holds at one moment, for [_FieldEdit]: its inlines, where its
+/// result starts, and the content of the runs an edit changes.
+typedef _FieldState = ({
+  List<DocxInline> inlines,
+  int resultStart,
+  Map<DocxRun, DocxRunText> texts,
+});
 
 /// A complex field: an instruction and the result cached for it.
 ///
@@ -28,29 +35,188 @@ const int maxFieldNesting = 32;
 /// as one inline, and [result] shows the inlines of its result, whose runs can
 /// be edited as those of the paragraph. A field across paragraphs, and any
 /// other that is not plain, stays runs ([DocxFieldMark] has how to tell).
+///
+/// A field is built with [DocxField.new] or one of the helpers, and goes in a
+/// paragraph with [DocxParagraph.addField] or [DocxParagraph.insertInline]; it
+/// holds real runs (the `begin` mark, the instruction, the `separate` mark, the
+/// cached result and the `end` mark), which the save writes in that order. The
+/// model computes nothing: the result is the text it was given, and Word
+/// recomputes `PAGE`, `NUMPAGES` and `SECTIONPAGES` when it lays the document
+/// out, and `DATE` and `TIME` when it opens it. A field goes in one paragraph
+/// once; inserting it again while it is in one throws [StateError].
 final class DocxField extends DocxInline {
-  DocxField._read(this._inlines, this._resultStart, int resultEnd)
-    : _result = List<DocxInline>.unmodifiable(
-        _inlines.sublist(_resultStart, resultEnd),
-      ),
+  /// A field with [instruction], such as ` PAGE \* Arabic `, and [result] as
+  /// its cached result.
+  ///
+  /// The instruction is written as given (the field's own spaces and
+  /// switches are the caller's). Characters XML forbids are removed from it
+  /// and from [result], and the save reports how many
+  /// (`DocxWarningCode.invalidCharactersRemoved`). An [instruction] that is
+  /// empty or only white space, once those are removed, throws
+  /// [ArgumentError].
+  DocxField(String instruction, {String result = ''}) : super._() {
+    final ScrubResult scrubbed = _checkInstruction(instruction);
+    final DocxRun begin = _runOf(<DocxRunContent>[
+      newFieldMark(DocxFieldMarkType.begin),
+    ]);
+    final DocxRun instructionRun = _runOf(<DocxRunContent>[
+      newFieldInstruction(scrubbed.text),
+    ], removed: scrubbed.removed);
+    final DocxRun separate = _runOf(<DocxRunContent>[
+      newFieldMark(DocxFieldMarkType.separate),
+    ]);
+    final DocxRun resultRun = DocxRun(result);
+    final DocxRun end = _runOf(<DocxRunContent>[
+      newFieldMark(DocxFieldMarkType.end),
+    ]);
+    _inlines = <DocxInline>[begin, instructionRun, separate, resultRun, end];
+    _resultStart = 3;
+    _attach();
+  }
+
+  /// A field that shows the number of the page it is on (` PAGE `), cached as
+  /// `1`.
+  factory DocxField.page() => DocxField(' PAGE ', result: '1');
+
+  /// A field that shows the number of pages of the document
+  /// (` NUMPAGES `), cached as `1`.
+  factory DocxField.numPages() => DocxField(' NUMPAGES ', result: '1');
+
+  /// A field that shows the number of pages of the section
+  /// (` SECTIONPAGES `), cached as `1`.
+  factory DocxField.sectionPages() => DocxField(' SECTIONPAGES ', result: '1');
+
+  /// A field that shows the date, in [format] (a Word date picture such as
+  /// `dd.MM.yyyy`): the instruction is ` DATE \@ "dd.MM.yyyy" `.
+  ///
+  /// The library has no clock, so [result] is what is cached (empty by
+  /// default) and Word computes the date when it opens the file. A [format]
+  /// holding `"` throws [ArgumentError]; the picture is not checked
+  /// otherwise.
+  factory DocxField.date({String format = 'dd.MM.yyyy', String result = ''}) =>
+      DocxField(' DATE \\@ "${_picture(format)}" ', result: result);
+
+  /// A field that shows the time, in [format] (a Word time picture such as
+  /// `HH:mm`): the instruction is ` TIME \@ "HH:mm" `. [result] and [format]
+  /// are as [DocxField.date] has them.
+  factory DocxField.time({String format = 'HH:mm', String result = ''}) =>
+      DocxField(' TIME \\@ "${_picture(format)}" ', result: result);
+
+  DocxField._read(List<DocxInline> inlines, int resultStart)
+    : _inlines = inlines,
+      _resultStart = resultStart,
       super._() {
-    for (final DocxInline inline in _inlines) {
-      inline._field = this;
+    _attach();
+  }
+
+  /// [format], which must not hold `"`, or an [ArgumentError].
+  static String _picture(String format) {
+    if (format.contains('"')) {
+      throw ArgumentError.value(format, 'format', 'must not hold a quote');
     }
+    return format;
+  }
+
+  static ScrubResult _checkInstruction(String instruction) {
+    final ScrubResult scrubbed = scrubXmlText(instruction);
+    if (scrubbed.text.trim().isEmpty) {
+      throw ArgumentError.value(
+        instruction,
+        'instruction',
+        'must not be empty',
+      );
+    }
+    return scrubbed;
+  }
+
+  static DocxRun _runOf(List<DocxRunContent> content, {int removed = 0}) {
+    final DocxRun run = DocxRun();
+    run._content.addAll(content);
+    run._removed = removed;
+    return run;
   }
 
   /// Every inline of the field, from the `begin` run to the `end` run, as
   /// read. A field in the result is one of them.
-  final List<DocxInline> _inlines;
+  late List<DocxInline> _inlines;
 
   /// The index in [_inlines] of the first inline of the result, or of the
   /// `end` run for a field with no `separate`.
-  final int _resultStart;
+  late int _resultStart;
 
-  final List<DocxInline> _result;
+  late List<DocxInline> _result = _resultOf(_inlines, _resultStart);
+
+  static List<DocxInline> _resultOf(List<DocxInline> inlines, int start) =>
+      List<DocxInline>.unmodifiable(inlines.sublist(start, inlines.length - 1));
+
+  /// Makes every inline of the field know the field and its paragraph.
+  void _attach() {
+    _result = _resultOf(_inlines, _resultStart);
+    for (final DocxInline inline in _inlines) {
+      inline._field = this;
+      setParagraphOf(inline, _paragraph);
+    }
+  }
+
+  DocxEditSink get _sink {
+    final DocxParagraph? paragraph = _paragraph;
+    return paragraph == null ? DocxEditSink.none : editSinkOf(paragraph);
+  }
+
+  /// The runs of the field, nested fields' among them, in order.
+  List<DocxRun> get _runs {
+    final List<DocxRun> out = <DocxRun>[];
+    visitInlines(this, (DocxInline inline) {
+      if (inline is DocxRun) out.add(inline);
+    });
+    return out;
+  }
+
+  /// The runs before the result that hold an instruction, in order.
+  List<DocxRun> get _instructionRuns => <DocxRun>[
+    for (final DocxInline inline in _inlines.take(_resultStart))
+      if (inline is DocxRun &&
+          inline._content.any((DocxRunContent c) => c is DocxFieldInstruction))
+        inline,
+  ];
+
+  /// Whether the field has a `separate` mark.
+  bool get _hasSeparate {
+    final DocxInline before = _inlines[_resultStart - 1];
+    return before is DocxRun &&
+        before._content.any(
+          (DocxRunContent c) =>
+              c is DocxFieldMark && c.type == DocxFieldMarkType.separate,
+        );
+  }
+
+  late final DocxRunProperties _properties = newFieldRunProperties(
+    () => <PropertySet>[for (final DocxRun run in _runs) runPropertySetOf(run)],
+    () => _sink,
+  );
+
+  /// The formatting of the field's runs (`w:rPr`), the same object every
+  /// time.
+  ///
+  /// A member reads the first run of the field, the one that holds the
+  /// `begin` mark. Setting one sets it on every run of the field, those of
+  /// nested fields among them, as one edit: the instruction and the result
+  /// show in the one format, as Word formats a field. The runs an edit adds
+  /// ([resultText] on a field with no result, [instruction] on one with no
+  /// instruction run) carry none of it.
+  DocxRunProperties get properties => _properties;
 
   /// The field's instruction, the text of its `w:instrText`s joined as read,
   /// such as ` PAGE `.
+  ///
+  /// Setting it puts the whole text in the first run that holds an
+  /// instruction, which keeps its `w:rPr`, and removes the other instruction
+  /// runs; inlines between them (a `w:proofErr`) stay. A field with no
+  /// instruction run gets one after its `begin` run. The text is written as
+  /// given, with characters XML forbids removed and reported at save. An
+  /// empty instruction, or one of white space only, throws [ArgumentError]
+  /// before anything changes. Setting the text the field has changes nothing.
+  /// The edit is one change of the document's log.
   String get instruction {
     final StringBuffer out = StringBuffer();
     for (final DocxInline inline in _inlines.take(_resultStart)) {
@@ -62,12 +228,44 @@ final class DocxField extends DocxInline {
     return out.toString();
   }
 
+  set instruction(String value) {
+    final ScrubResult scrubbed = _checkInstruction(value);
+    final List<DocxRun> runs = _instructionRuns;
+    int removed = 0;
+    for (final DocxRun run in runs) {
+      removed += run._removed;
+    }
+    if (scrubbed.text == instruction && scrubbed.removed == removed) return;
+    final DocxRunText next = (
+      content: <DocxRunContent>[newFieldInstruction(scrubbed.text)],
+      removed: scrubbed.removed,
+    );
+    final List<DocxInline> inlines = <DocxInline>[..._inlines];
+    final Map<DocxRun, DocxRunText> before = <DocxRun, DocxRunText>{};
+    final Map<DocxRun, DocxRunText> after = <DocxRun, DocxRunText>{};
+    int resultStart = _resultStart;
+    if (runs.isEmpty) {
+      final DocxRun added = DocxRun();
+      inlines.insert(1, added);
+      resultStart++;
+      after[added] = next;
+    } else {
+      before[runs.first] = runTextOf(runs.first);
+      after[runs.first] = next;
+      for (final DocxRun gone in runs.skip(1)) {
+        inlines.remove(gone);
+        resultStart--;
+      }
+    }
+    _apply(before, inlines, resultStart, after);
+  }
+
   /// The first word of [instruction] in upper case, such as `PAGE`, or `null`
-  /// for an instruction of no word.
+  /// for an instruction of no word. A word ends at white space or at a
+  /// backslash, so `PAGE\* Arabic` is `PAGE`.
   String? get name {
-    final String trimmed = instruction.trim();
-    if (trimmed.isEmpty) return null;
-    return trimmed.split(RegExp(r'\s')).first.toUpperCase();
+    final String word = instruction.trim().split(RegExp(r'[\s\\]')).first;
+    return word.isEmpty ? null : word.toUpperCase();
   }
 
   /// The inlines of the cached result, in order: empty for a field with no
@@ -85,8 +283,99 @@ final class DocxField extends DocxInline {
     return out.toString();
   }
 
+  /// Sets the cached result to [value], split into text, tabs and breaks as
+  /// [DocxRun.text] is, with characters XML forbids removed and reported at
+  /// save.
+  ///
+  /// The first run of the result keeps its `w:rPr` and takes the text, and
+  /// every other inline of the old result goes, a field nested in it with
+  /// them. A field with no `separate` gets one, and a run for the text. The
+  /// edit is one change of the document's log, and setting what the result
+  /// already is changes nothing.
+  set resultText(String value) {
+    final ScrubResult scrubbed = scrubXmlText(value);
+    final List<DocxRunContent> content = _split(scrubbed.text);
+    DocxRun? kept;
+    for (final DocxInline inline in _result) {
+      if (inline is DocxRun) {
+        kept = inline;
+        break;
+      }
+    }
+    if (kept != null &&
+        _result.length == 1 &&
+        kept._removed == scrubbed.removed &&
+        kept._sameContent(content)) {
+      return;
+    }
+    final DocxRun run = kept ?? DocxRun(value);
+    final List<DocxInline> inlines = _inlines.sublist(0, _resultStart);
+    if (!_hasSeparate) {
+      inlines.add(
+        _runOf(<DocxRunContent>[newFieldMark(DocxFieldMarkType.separate)]),
+      );
+    }
+    final int resultStart = inlines.length;
+    inlines
+      ..add(run)
+      ..add(_inlines.last);
+    final Map<DocxRun, DocxRunText> before = <DocxRun, DocxRunText>{};
+    if (kept != null) before[kept] = runTextOf(kept);
+    _apply(before, inlines, resultStart, <DocxRun, DocxRunText>{
+      run: (content: content, removed: scrubbed.removed),
+    });
+  }
+
+  /// Records the edit that gives the field [inlines], [resultStart] and the
+  /// run content [after], from what it has and [before] now.
+  void _apply(
+    Map<DocxRun, DocxRunText> before,
+    List<DocxInline> inlines,
+    int resultStart,
+    Map<DocxRun, DocxRunText> after,
+  ) {
+    _sink.apply(
+      _FieldEdit(
+        this,
+        (inlines: _inlines, resultStart: _resultStart, texts: before),
+        (inlines: inlines, resultStart: resultStart, texts: after),
+      ),
+    );
+  }
+
+  /// Puts [state] on the field, without reporting it.
+  void _restore(_FieldState state) {
+    final Set<DocxInline> kept = Set<DocxInline>.identity()
+      ..addAll(state.inlines);
+    for (final DocxInline gone in _inlines) {
+      if (kept.contains(gone)) continue;
+      gone._field = null;
+      setParagraphOf(gone, null);
+    }
+    _inlines = state.inlines;
+    _resultStart = state.resultStart;
+    _attach();
+    state.texts.forEach(restoreRunText);
+  }
+
   @override
   String toString() => 'DocxField($name)';
+}
+
+/// An edit of a field's inlines and the content of some of its runs, from one
+/// state to another.
+final class _FieldEdit implements Change {
+  _FieldEdit(this._field, this._before, this._after);
+
+  final DocxField _field;
+  final _FieldState _before;
+  final _FieldState _after;
+
+  @override
+  void revert() => _field._restore(_before);
+
+  @override
+  void reapply() => _field._restore(_after);
 }
 
 /// Calls [visit] with [inline], or for a field with every inline it holds, in
@@ -163,15 +452,11 @@ List<DocxInline> _grouped(
     );
     final int head = resultStart - i;
     out.add(
-      DocxField._read(
-        <DocxInline>[
-          ...inlines.getRange(i, resultStart),
-          ...result,
-          inlines[field.end],
-        ],
-        head,
-        head + result.length,
-      ),
+      DocxField._read(<DocxInline>[
+        ...inlines.getRange(i, resultStart),
+        ...result,
+        inlines[field.end],
+      ], head),
     );
     i = field.end;
   }

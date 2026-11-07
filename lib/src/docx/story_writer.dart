@@ -382,10 +382,25 @@ final class StoryWriter {
         w.end();
       case DocxCarriageReturn():
         _empty('cr', c);
-      case DocxFieldMark():
-        fieldMarkXml(c).writeTo(w, declaredAbove: scope);
-      case DocxFieldInstruction():
-        fieldInstructionXml(c).writeTo(w, declaredAbove: scope);
+      case DocxFieldMark(:final DocxFieldMarkType type):
+        final OpaqueXml? xml = fieldMarkXml(c);
+        if (xml != null) {
+          xml.writeTo(w, declaredAbove: scope);
+        } else {
+          w.start('${_p}fldChar');
+          w.attribute('${_p}fldCharType', type.name);
+          w.end();
+        }
+      case DocxFieldInstruction(:final String text):
+        final OpaqueXml? xml = fieldInstructionXml(c);
+        if (xml != null) {
+          xml.writeTo(w, declaredAbove: scope);
+        } else {
+          w.start('${_p}instrText');
+          w.attribute('xml:space', 'preserve');
+          w.text(text);
+          w.end();
+        }
       case DocxOpaqueRunContent():
         opaqueRunContentXml(c).writeTo(w, declaredAbove: scope);
     }
