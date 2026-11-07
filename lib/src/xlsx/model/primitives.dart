@@ -7,8 +7,8 @@
 /// applies the change, then records a [SetCellChange] so the edit can be
 /// reverted and reapplied. [groupRoleAt] says whether a cell belongs to a
 /// shared, array or data-table formula group, which the editing methods use to
-/// refuse an edit that would break a group. [renameTableColumn] gives a table
-/// column a new name, recording a [TableColumnNameChange] the same way, and
+/// refuse an edit that would break a group. [editTable] changes a table
+/// part, recording a [TableChange] the same way, and
 /// [setStoredRowAttributes] sets a row's attributes, recording a
 /// [SetRowAttributesChange]; [editLayout] edits an element of a worksheet
 /// part (a slot of [WorksheetPart.layoutElement]), recording a
@@ -695,47 +695,40 @@ void applyChange(ChangeLog log, Change change) {
   }
 }
 
-/// The change of one table column's name: before and after.
-final class TableColumnNameChange implements Change {
-  /// A change of column [index] of [table] from [oldName] to [newName].
-  TableColumnNameChange(this.table, this.index, this.oldName, this.newName);
+/// The change of a table part: a column's name, its style or its range.
+final class TableChange implements Change {
+  /// A change of [table] from the state [before] to the state [after].
+  TableChange(this.table, this.before, this.after);
 
-  /// The table part the column belongs to.
+  /// The table part.
   final TablePart table;
 
-  /// The column's index in the table, 0 for its first column.
-  final int index;
+  /// The state before the change.
+  final TableState before;
 
-  /// The name before the change.
-  final String oldName;
-
-  /// The name after the change.
-  final String newName;
+  /// The state after the change.
+  final TableState after;
 
   @override
-  void revert() => table.setColumnName(index, oldName);
+  void revert() => table.restore(before);
 
   @override
-  void reapply() => table.setColumnName(index, newName);
+  void reapply() => table.restore(after);
 }
 
-/// Gives column [index] of [table] the name [name] and records the change in
+/// Runs [edit], which changes [table] through [TablePart.setColumnName],
+/// [TablePart.setStyle] or [TablePart.resize], and records the change in
 /// [log].
 ///
-/// Must run inside `log.transaction`. If recording throws, the old name is
-/// put back before the error leaves.
-void renameTableColumn(ChangeLog log, TablePart table, int index, String name) {
-  final TableColumnNameChange change = TableColumnNameChange(
-    table,
-    index,
-    table.columnName(index),
-    name,
-  );
-  change.reapply();
+/// Must run inside `log.transaction`. If [edit] or recording throws, the
+/// table is put back as it was before the error leaves.
+void editTable(ChangeLog log, TablePart table, void Function() edit) {
+  final TableState before = table.state;
   try {
-    log.record(change);
+    edit();
+    log.record(TableChange(table, before, table.state));
   } catch (_) {
-    change.revert();
+    table.restore(before);
     rethrow;
   }
 }

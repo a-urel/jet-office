@@ -400,7 +400,53 @@ void checkTable(XlsxTable table) {
     _checkTotals(columns[i], 'columns[$i]');
   }
   final XlsxTableStyle? style = table.style;
-  if (style != null && !_styleName.hasMatch(style.name)) {
+  if (style != null) checkTableStyle(style);
+}
+
+/// Throws [ArgumentError] named `range` when the table [name] over [range]
+/// overlaps a table of [tables], the sheet's auto [filter] (`null` for none)
+/// or one of [merges]; the message names both.
+void checkTablePlace(
+  String name,
+  XlsxRange range,
+  Iterable<({String name, XlsxRange range})> tables,
+  XlsxRange? filter,
+  Iterable<XlsxRange> merges,
+) {
+  for (final ({String name, XlsxRange range}) t in tables) {
+    if (t.range.overlaps(range)) {
+      throw ArgumentError.value(
+        range,
+        'range',
+        'The table "$name" over ${range.ref} overlaps the table '
+            '"${t.name}" over ${t.range.ref}.',
+      );
+    }
+  }
+  if (filter != null && filter.overlaps(range)) {
+    throw ArgumentError.value(
+      range,
+      'range',
+      'The table "$name" over ${range.ref} overlaps the auto filter '
+          '${filter.ref}; a table has its own.',
+    );
+  }
+  for (final XlsxRange merge in merges) {
+    if (merge.overlaps(range)) {
+      throw ArgumentError.value(
+        range,
+        'range',
+        'The table "$name" over ${range.ref} overlaps the merged '
+            'range ${merge.ref}.',
+      );
+    }
+  }
+}
+
+/// Throws [ArgumentError] named `style` when [style] does not name one of
+/// Excel's built-in table styles.
+void checkTableStyle(XlsxTableStyle style) {
+  if (!_styleName.hasMatch(style.name)) {
     throw ArgumentError.value(
       style.name,
       'style',
@@ -570,6 +616,18 @@ Object? _totalOf(XlsxTable table, int column) {
   return formula == null ? null : XlsxFormula(formula);
 }
 
+/// Writes the `<tableStyleInfo>` of [style], its name prefixed by [prefix]
+/// (with its colon, or empty).
+void writeTableStyle(XmlWriter w, XlsxTableStyle style, {String prefix = ''}) {
+  w.empty('${prefix}tableStyleInfo', <String, String>{
+    'name': style.name,
+    'showFirstColumn': style.showFirstColumn ? '1' : '0',
+    'showLastColumn': style.showLastColumn ? '1' : '0',
+    'showRowStripes': style.showRowStripes ? '1' : '0',
+    'showColumnStripes': style.showColumnStripes ? '1' : '0',
+  });
+}
+
 /// Writes the part of [table], whose workbook-wide id is [id].
 ///
 /// `CT_Table` attributes in schema order: `id`, `name`, `displayName`
@@ -630,14 +688,6 @@ void writeTable(XmlWriter w, int id, XlsxTable table) {
   }
   w.end();
   final XlsxTableStyle? style = table.style;
-  if (style != null) {
-    w.empty('tableStyleInfo', <String, String>{
-      'name': style.name,
-      'showFirstColumn': style.showFirstColumn ? '1' : '0',
-      'showLastColumn': style.showLastColumn ? '1' : '0',
-      'showRowStripes': style.showRowStripes ? '1' : '0',
-      'showColumnStripes': style.showColumnStripes ? '1' : '0',
-    });
-  }
+  if (style != null) writeTableStyle(w, style);
   w.end();
 }

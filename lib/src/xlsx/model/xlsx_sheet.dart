@@ -94,6 +94,7 @@ import '../worksheet_parts.dart'
         sheetViewAttributes,
         standardColumnWidth,
         standardRowHeight,
+        tablePartName,
         vmlDrawingPartName,
         writeHyperlink;
 import 'cell_store.dart';
@@ -145,8 +146,25 @@ abstract interface class SheetHost {
   int sheetIndexOf(XlsxSheet sheet);
 
   /// Throws an [ArgumentError] named `name` when a table of any sheet has
-  /// [name], ignoring case.
+  /// [name], ignoring case, or a table part of the file that no sheet types
+  /// does (in its `name` or its `displayName`).
   void checkNotTableName(String name);
+
+  /// Throws an [ArgumentError] named `name` as [checkNotTableName] does, and
+  /// when a defined name of any scope has [name], ignoring case. Sheets are
+  /// not loaded.
+  void checkTableNameFree(String name);
+
+  /// The `id` of a new table: one above the highest of the table parts the
+  /// package holds, those of unloaded sheets and those no sheet types
+  /// included. It looks at what the package holds now, so it takes nothing
+  /// from a failed edit or an undone one.
+  int takeTableId();
+
+  /// Where a formula first holds `name[`, ignoring case: a cell of a sheet,
+  /// in tab order, then a defined name; `null` when none does. Loads every
+  /// sheet. Throws an [XlsxReadException] when one cannot be read.
+  String? firstTableUse(String name);
 
   /// The opened package, for reading parts.
   PackageReader get reader;
@@ -217,6 +235,38 @@ Iterable<String> sheetTableNames(XlsxSheet sheet) => sheet._partName == null
           t.table.displayName,
       ];
 
+/// The `id`s of [sheet]'s tables; none for a sheet without a part. Reads the
+/// table parts on first use.
+Iterable<int> sheetTableIds(XlsxSheet sheet) => sheet._partName == null
+    ? const <int>[]
+    : <int>[
+        for (final ({String partName, TablePart table}) t
+            in sheet._sheetTables())
+          t.table.id,
+      ];
+
+/// The first cell of [sheet], in row order, whose formula text holds
+/// [reference], which is a [sheetNameKey]: `cell B2 of the sheet "S"`, or
+/// `null` for none. A shared formula's follower has no text; its master
+/// holds it. Loads the sheet.
+String? firstFormulaHolding(XlsxSheet sheet, String reference) {
+  final CellStore? store = sheet._load()?.cells;
+  if (store == null || !store.hasFormulas) return null;
+  for (final int row in store.rowIndexes) {
+    String? found;
+    store.forEachInRow(row, (int column, RawCell cell) {
+      final String? text = cell.formula?.text;
+      if (found == null &&
+          text != null &&
+          sheetNameKey(text).contains(reference)) {
+        found = 'cell ${cellRef(row, column)} of the sheet "${sheet.name}"';
+      }
+    });
+    if (found != null) return found;
+  }
+  return null;
+}
+
 /// The workbook part's entry of [sheet].
 SheetEntry entryOf(XlsxSheet sheet) => sheet._entry;
 
@@ -281,6 +331,11 @@ final class XlsxSheet
   /// The tables of the sheet the model can type, read on the first
   /// [setCell]; `null` until then.
   List<({String partName, TablePart table})>? _tables;
+
+  /// The names of the table parts the package writes from their typed parts,
+  /// for `attachStoredPart`.
+  @override
+  final Set<String> _attachedTables = <String>{};
 
   /// The sheet's name, as the workbook lists it.
   @override
@@ -460,6 +515,7 @@ final class XlsxSheet
   /// Whatever it throws, nothing has changed, except
   /// that reading warnings (such as `styleEntryInvalid` for a style entry
   /// read for the first time) are reported on first read.
+  @override
   void setCell(int row, int column, Object? value) {
     _checkCell(row, column);
     // Programmer errors first, so they throw whatever the sheet holds.
@@ -595,8 +651,15 @@ final class XlsxSheet
         _applyLink(part, row, column, link, linkPlan!);
       }
       if (header != null && rename != null) {
-        renameTableColumn(log, header.table, header.index, rename);
-        _host.reader.package.setContent(header.partName, header.table);
+        final TablePart table = header.table;
+        attachStoredPart(
+          log,
+          _host.reader.package,
+          _attachedTables,
+          header.partName,
+          table,
+        );
+        editTable(log, table, () => table.setColumnName(header.index, rename!));
       }
       RawCell? base = current ?? _cellOfInheritedStyle(store, row, column);
       int? Function(int? style, {required bool withTime}) dateStyle =

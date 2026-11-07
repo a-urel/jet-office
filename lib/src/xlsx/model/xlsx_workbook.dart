@@ -71,6 +71,7 @@ import 'primitives.dart';
 import 'properties_parts.dart';
 import 'protection_elements.dart';
 import 'styles_part.dart';
+import 'table_part.dart';
 import 'vml_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
@@ -632,21 +633,103 @@ final class _Book implements SheetHost {
     return used;
   }
 
+  /// The `id` and the names of every table part of the file, read once from
+  /// each root, by part name: a part no sheet types keeps its name and id
+  /// that way, and so does one of a sheet never read. Parts added since are
+  /// typed, so a sheet's list holds them.
+  Map<String, ({int id, List<String> names})>? _tableHeads;
+
+  Map<String, ({int id, List<String> names})> get _fileTables =>
+      _tableHeads ??= _readTableHeads();
+
+  Map<String, ({int id, List<String> names})> _readTableHeads() {
+    final Map<String, ({int id, List<String> names})> heads =
+        <String, ({int id, List<String> names})>{};
+    for (final String name in _package.partNames.toList()) {
+      if (_package.contentTypeOf(name) != ContentType.table) continue;
+      try {
+        final ({int id, List<String> names})? head = reader.guardXml(
+          name,
+          () => TablePart.readHead(reader.openXml(name)),
+        );
+        if (head != null) heads[name] = head;
+      } on XlsxReadException {
+        // Kept as written: an unreadable part has no name to keep.
+      }
+    }
+    return heads;
+  }
+
+  /// The table parts of [_fileTables] the package still holds.
+  Iterable<({int id, List<String> names})> get _heldFileTables sync* {
+    for (final MapEntry<String, ({int id, List<String> names})> e
+        in _fileTables.entries) {
+      if (_package.hasPart(e.key)) yield e.value;
+    }
+  }
+
   @override
   void checkNotTableName(String name) {
     final String key = sheetNameKey(name);
-    for (final XlsxSheet s in _sheets) {
-      for (final String table in sheetTableNames(s)) {
-        if (sheetNameKey(table) == key) {
-          throw ArgumentError.value(
-            name,
-            'name',
-            'The name "$name" is already the name of the table "$table"; '
-                'table names and defined names are compared ignoring case.',
-          );
-        }
+    final Iterable<String> tables = <String>[
+      for (final XlsxSheet s in _sheets) ...sheetTableNames(s),
+      for (final ({int id, List<String> names}) head in _heldFileTables)
+        ...head.names,
+    ];
+    for (final String table in tables) {
+      if (sheetNameKey(table) == key) {
+        throw ArgumentError.value(
+          name,
+          'name',
+          'The name "$name" is already the name of the table "$table"; '
+              'table names and defined names are compared ignoring case.',
+        );
       }
     }
+  }
+
+  @override
+  void checkTableNameFree(String name) {
+    checkNotTableName(name);
+    final String key = sheetNameKey(name);
+    for (final NameEntry e in workbook.names) {
+      if (sheetNameKey(e.name) == key) {
+        throw ArgumentError.value(
+          name,
+          'name',
+          'The name "$name" is already a defined name, "${e.name}"; table '
+              'names and defined names are compared ignoring case.',
+        );
+      }
+    }
+  }
+
+  @override
+  int takeTableId() {
+    int highest = 0;
+    for (final int id in <int>[
+      for (final ({int id, List<String> names}) head in _heldFileTables)
+        head.id,
+      ..._sheets.expand(sheetTableIds),
+    ]) {
+      if (id > highest) highest = id;
+    }
+    return highest + 1;
+  }
+
+  @override
+  String? firstTableUse(String name) {
+    final String reference = '${sheetNameKey(name)}[';
+    for (final XlsxSheet s in _sheets) {
+      final String? cell = firstFormulaHolding(s, reference);
+      if (cell != null) return cell;
+    }
+    for (final NameEntry e in workbook.names) {
+      if (sheetNameKey(e.formula).contains(reference)) {
+        return 'the defined name "${e.name}"';
+      }
+    }
+    return null;
   }
 
   @override

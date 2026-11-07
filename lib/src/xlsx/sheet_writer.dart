@@ -823,35 +823,7 @@ final class WorksheetWriter implements XlsxSheetWriter {
     checkTable(table);
     context.checkNameFree(table.name, 'name');
     final XlsxRange range = table.range;
-    for (final ({int id, XlsxTable table}) t in _tables) {
-      if (t.table.range.overlaps(range)) {
-        throw ArgumentError.value(
-          range,
-          'range',
-          'The table "${table.name}" over ${range.ref} overlaps the table '
-              '"${t.table.name}" over ${t.table.range.ref}.',
-        );
-      }
-    }
-    final XlsxRange? filter = _autoFilter;
-    if (filter != null && filter.overlaps(range)) {
-      throw ArgumentError.value(
-        range,
-        'range',
-        'The table "${table.name}" over ${range.ref} overlaps the auto filter '
-            '${filter.ref}; a table has its own.',
-      );
-    }
-    for (final XlsxRange merge in _merges) {
-      if (merge.overlaps(range)) {
-        throw ArgumentError.value(
-          range,
-          'range',
-          'The table "${table.name}" over ${range.ref} overlaps the merged '
-              'range ${merge.ref}.',
-        );
-      }
-    }
+    checkTablePlace(table.name, range, _tableRanges, _autoFilter, _merges);
     if (table.headerRow && range.firstRow < _rowCount) {
       throw ArgumentError.value(
         range,
