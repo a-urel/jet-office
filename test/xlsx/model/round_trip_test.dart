@@ -380,9 +380,7 @@ void main() {
       // Excel's own runs in a note are `<color indexed="81"/>`, past the
       // palette the writer accepts: read without the colour, kept as written.
       expect(sheet.notes.first.note.text.runs.first.font?.color, isNull);
-      expect(book.warnings.map((XlsxWarning w) => (w.code, w.detail)), <Object>[
-        (XlsxWarningCode.featureEntryInvalid, 'rPr'),
-      ]);
+      expect(book.warnings, isEmpty);
     });
 
     test('a note added touches the comments and the box alone', () {

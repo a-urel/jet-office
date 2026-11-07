@@ -167,8 +167,13 @@ final RegExp _hex6 = RegExp(r'^[0-9A-Fa-f]{6}$');
 /// Reads a `CT_Color` element: `rgb`, `theme` with `tint`, `indexed` or
 /// `auto`. The value is `null` when the element names no colour, or names one
 /// the writer would refuse (a theme index above 11, a tint outside `-1..1`
-/// or not finite, a palette index above 65), which is also a `problem`.
-ReadStyleValue<XlsxColor?> readColor(XmlPullReader r) {
+/// or not finite, a palette index above 65), which is also a `problem`. With
+/// [tooltipText], index 81 is `null` without a problem: Excel's system colour
+/// of a note's text, which the writer's palette does not hold.
+ReadStyleValue<XlsxColor?> readColor(
+  XmlPullReader r, {
+  bool tooltipText = false,
+}) {
   final _Acc acc = _Acc();
   _checkAttributes(r, acc, const <String>{
     'rgb',
@@ -209,7 +214,11 @@ ReadStyleValue<XlsxColor?> readColor(XmlPullReader r) {
     }
   } else if (indexed != null) {
     final int? index = _int(indexed, acc, 'The color indexed');
-    if (index != null) color = XlsxColor.indexed(index);
+    if (tooltipText && index == 81) {
+      acc.inexact();
+    } else if (index != null) {
+      color = XlsxColor.indexed(index);
+    }
     if (tint != null) acc.inexact();
   } else if (auto != null) {
     switch (_parseBool(auto)) {
@@ -348,7 +357,10 @@ ReadStyleValue<XlsxFont> readFont(
           size = null;
         }
       case 'color':
-        final ReadStyleValue<XlsxColor?> c = readColor(r);
+        final ReadStyleValue<XlsxColor?> c = readColor(
+          r,
+          tooltipText: nameElement == 'rFont',
+        );
         acc.absorb(c);
         color = c.value;
       case 'name':

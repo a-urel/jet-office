@@ -280,8 +280,8 @@ fixtures, a sheet as Excel writes it and the `excel_objects` producer file:
 whole mutated files, many of them well formed so they reach the features' own
 parsers; open, then reading, setting, undoing and saving every W3 and W4 member
 throw nothing but `XlsxReadException`, and undoing the edits of a file restores
-it, unless the mutation hit the shared strings or the archive), the same cases
-on the VM and in Chrome;
+it, all but what the mutated part itself may lose: `undoDifferences`), the same
+cases on the VM and in Chrome;
 longer runs by hand:
 
 ```bash

@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../../support/read_xlsx.dart';
+import '../read/support/zip_builder.dart';
 import 'support/feature_fuzz.dart';
 
 /// The seeds the quality gate fuzzes, each with [_cases] cases.
@@ -80,6 +82,85 @@ void main() {
         reason: entry.name,
       );
     }
+  });
+
+  group('undoDifferences leaves out only what the mutated part may lose', () {
+    const String sheet = 'xl/worksheets/sheet1.xml';
+    const String rels = 'xl/worksheets/_rels/sheet1.xml.rels';
+    const String styles = 'xl/styles.xml';
+    final Uint8List clean = featureCorpus()
+        .firstWhere(
+          (({String name, Uint8List bytes}) e) => e.name == 'excel_features',
+        )
+        .bytes;
+
+    /// [clean] with [edit] applied to the text of [part].
+    Uint8List changed(String part, String Function(String text) edit) {
+      final Map<String, Uint8List> parts = readXlsxBytes(clean);
+      return buildZipOrdered(<(String, List<int>)>[
+        for (final MapEntry<String, Uint8List> e in parts.entries)
+          (
+            e.key,
+            e.key == part ? utf8.encode(edit(utf8.decode(e.value))) : e.value,
+          ),
+      ], store: true);
+    }
+
+    void expectOnlyFor(String part, Uint8List lossy) {
+      expect(undoDifferences(lossy, clean, mutated: part), isEmpty);
+      expect(
+        undoDifferences(lossy, clean, mutated: 'xl/workbook.xml'),
+        isNot(isEmpty),
+      );
+      expect(undoDifferences(lossy, clean), isNot(isEmpty));
+    }
+
+    test('stray text', () {
+      expectOnlyFor(
+        sheet,
+        changed(
+          sheet,
+          (String t) => t.replaceFirst('</sheetData>', '</sheetData>stray'),
+        ),
+      );
+    });
+
+    test('text in a styles part', () {
+      expectOnlyFor(
+        styles,
+        changed(
+          styles,
+          (String t) => t.replaceFirst('<dxfs count="1">', '<dxfs count="1">x'),
+        ),
+      );
+    });
+
+    test('a relationship the parse skips', () {
+      expectOnlyFor(
+        rels,
+        changed(
+          rels,
+          (String t) =>
+              t.replaceFirst('</Relationships>', '<Other/></Relationships>'),
+        ),
+      );
+    });
+
+    test('a value of a part no ignore names is reported', () {
+      final Uint8List other = changed(
+        sheet,
+        (String t) => t.replaceFirst('<v>1</v>', '<v>7</v>'),
+      );
+      expect(undoDifferences(other, clean, mutated: sheet), isNot(isEmpty));
+      expect(
+        undoDifferences(other, clean, mutated: 'xl/sharedStrings.xml'),
+        isNot(isEmpty),
+      );
+      expect(
+        undoDifferences(other, clean, mutated: archiveMutated),
+        isNot(isEmpty),
+      );
+    });
   });
 
   test('mutated files raise only XlsxReadException', () {

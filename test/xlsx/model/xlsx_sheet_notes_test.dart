@@ -170,6 +170,50 @@ void main() {
     expect(_invalid(book, 'legacyDrawing'), 1);
   });
 
+  group('the colour of a run', () {
+    XlsxWorkbook open(int index) => XlsxWorkbook.open(
+      _package(
+        comments: _comments(
+          _comment(
+            'A1',
+            '<r><rPr><b/><color indexed="$index"/></rPr><t>x</t></r>',
+          ),
+        ),
+      ),
+    );
+
+    test("Excel's indexed 81 reads as no colour, without a warning", () {
+      final XlsxWorkbook book = open(81);
+      final XlsxFont font = book.sheets.single.noteAt(0, 0)!.text.runs[0].font!;
+      expect(font.bold, isTrue);
+      expect(font.color, isNull);
+      expect(book.warnings, isEmpty);
+    });
+
+    test('another index past the palette warns', () {
+      final XlsxWorkbook book = open(82);
+      final XlsxFont font = book.sheets.single.noteAt(0, 0)!.text.runs[0].font!;
+      expect(font.color, isNull);
+      expect(_invalid(book, 'rPr'), 1);
+    });
+
+    test('the writer still refuses indexed 81', () {
+      final XlsxSheet sheet = XlsxWorkbook().addSheet('S');
+      expect(
+        () => sheet.setNote(
+          0,
+          0,
+          XlsxNote(
+            XlsxRichText(const <XlsxTextRun>[
+              XlsxTextRun('x', font: XlsxFont(color: XlsxColor.indexed(81))),
+            ]),
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
   test('a legacyDrawing id with no relationship has no boxes', () {
     final Map<String, Uint8List> parts = readXlsxBytes(
       _package(

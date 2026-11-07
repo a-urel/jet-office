@@ -119,6 +119,8 @@ mixin _SheetTablesApi {
     final ChangeLog log = _host.log;
     final OpcPackage package = _host.reader.package;
     final String sheetPart = _partName!;
+    // Read here, so that a broken part throws XlsxReadException: inside the
+    // transaction `addStoredRelationship` would throw the package's own error.
     _host.reader.relationshipsOf(sheetPart.substring(1));
     log.transaction(() {
       for (final ({int row, int column, Object? value}) c in cells) {

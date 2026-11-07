@@ -467,13 +467,18 @@ int _elementEnd(String text, RegExpMatch tag) {
 /// It renders the warnings, undoes every edit in reverse order and saves,
 /// redoes them, saves, reopens and reads the saved file, undoes them again
 /// and saves. With [proveUndo], a save comes before the edits too, and the
-/// first save after undo must equal it by [undoDifferences].
+/// first save after undo must equal it by [undoDifferences], told that
+/// [mutated] was the part a mutation changed.
 ///
 /// Returns normally or throws [XlsxReadException]: from `open`, or after the
 /// rest has run, the first a sheet's or part's read threw. Anything else,
 /// and any refusal outside those above, is a defect, and is rethrown as a
 /// [StateError] naming the step. `save()` must never throw.
-void exerciseFeatures(Uint8List bytes, {bool proveUndo = false}) {
+void exerciseFeatures(
+  Uint8List bytes, {
+  bool proveUndo = false,
+  String? mutated,
+}) {
   final XlsxWorkbook book = XlsxWorkbook.open(bytes);
   final _Run run = _Run(book);
   if (proveUndo) run.before = _save(book, 'save() before the edits');
@@ -496,7 +501,11 @@ void exerciseFeatures(Uint8List bytes, {bool proveUndo = false}) {
   final Uint8List undone = _save(book, 'save() after undo');
   final Uint8List? before = run.before;
   if (before != null) {
-    final List<String> differences = undoDifferences(before, undone);
+    final List<String> differences = undoDifferences(
+      before,
+      undone,
+      mutated: mutated,
+    );
     if (differences.isNotEmpty) {
       throw StateError('undo left: ${differences.join('; ')}');
     }
@@ -509,45 +518,55 @@ void exerciseFeatures(Uint8List bytes, {bool proveUndo = false}) {
   if (first != null) throw first;
 }
 
-/// [exerciseFeatures] on the case [c], proving undo unless it mutated the
-/// shared strings or the archive. An edit writes the shared strings afresh
-/// from what it read, a repair that stays after undo: `<si>` items of two
-/// `<t>` become one, and a part in another namespace becomes one of the
-/// strings added. A mutated archive may rename an entry that opens all the
-/// same, and the save then has no content types to compare by, or a
-/// relationship to a part that is gone, which an added strings part fills.
-void exerciseFeatureCase(FuzzCase c) {
-  final String? part = mutatedPart(c.mutation);
-  exerciseFeatures(
-    c.bytes,
-    proveUndo: part != null && part != 'xl/sharedStrings.xml',
-  );
-}
+/// What [undoDifferences] takes for a mutation of the archive's bytes.
+const String archiveMutated = '(archive)';
+
+/// [exerciseFeatures] on the case [c], proving undo with what it mutated.
+void exerciseFeatureCase(FuzzCase c) => exerciseFeatures(
+  c.bytes,
+  proveUndo: true,
+  mutated: mutatedPart(c.mutation) ?? archiveMutated,
+);
 
 /// What differs by meaning between the save [before] the edits and the save
 /// [after] undoing them.
 ///
-/// Left out, as a part a save writes afresh is not the bytes it read: what
-/// asks Excel to recalculate (`fullCalcOnLoad`, which an undone edit keeps,
-/// the log saying a change still counts), a character reference XML forbids,
-/// which such a part scrubs, a styles group's `count`, which it recomputes,
-/// and the namespace of a `.rels` root, which it states. A part a strict
-/// parser refuses cannot be compared by meaning: it is left out when the
-/// lenient reader wrote it well formed or when both are the same text, and
-/// the shared strings with it, whose comparison counts the cells it holds.
+/// Left out everywhere, as a part a save writes afresh is not the bytes it
+/// read: what asks Excel to recalculate (`fullCalcOnLoad`, which an undone
+/// edit keeps, the log saying a change still counts), a character reference
+/// XML forbids, which such a part scrubs, a styles group's `count`, which it
+/// recomputes, and the namespace of a `.rels` root, which it states.
 ///
-/// `Relationships.parse` is lossy on invalid input, and a `.rels` part the
-/// edits touched is written from it, so the file is repaired and stays so
-/// after undo: it reads a part with a second root (a `<Relationship>` copied
-/// before `<Relationships>`), which comes back well formed, it skips an
-/// element that is no relationship and a relationship without `Id`, `Type`
-/// or `Target`, and it takes a `TargetMode` other than `External` as none.
-/// Such a part is left out, with what it resolves in its source. So is text
-/// between the elements of a part, which nothing reads and a part written
-/// afresh leaves out.
-List<String> undoDifferences(Uint8List before, Uint8List after) {
-  final Map<String, Uint8List> a = _normalized(before);
-  final Map<String, Uint8List> b = _normalized(after);
+/// Left out only for the part [mutated], the one a case changed, so every
+/// other part must come back whole. It is `null` for a file as it was made.
+/// A mutated part a strict parser refuses cannot be compared by meaning: it
+/// is left out when the lenient reader wrote it well formed or when both are
+/// the same text, and the shared strings with it, whose comparison counts
+/// the cells it holds. A mutated `.rels` part `Relationships.parse` loses
+/// something of is left out with what it resolves in its source, as an edit
+/// writes it from that parse and it stays repaired after undo: a part with a
+/// second root (a `<Relationship>` copied before `<Relationships>`) comes
+/// back well formed, an element that is no relationship and a relationship
+/// without `Id`, `Type` or `Target` go, and a `TargetMode` other than
+/// `External` becomes none. Text between the elements of a mutated part goes
+/// too, which nothing reads and a part written afresh leaves out, and all
+/// text of a mutated styles part.
+///
+/// When [mutated] is the shared strings, or [archiveMutated], the strings
+/// and what cells show through them are left out and the rest is compared.
+/// An edit writes that part afresh from what it read, a repair that stays:
+/// `<si>` items of two `<t>` become one, and a part in another namespace, or
+/// an entry a mutated archive renamed, reads as no strings, so the strings
+/// an edit added give the file's indexes a meaning they lacked. With such a
+/// rename the workbook's relationship to the strings goes with them, as the
+/// save adds it.
+List<String> undoDifferences(
+  Uint8List before,
+  Uint8List after, {
+  String? mutated,
+}) {
+  final Map<String, Uint8List> a = _normalized(before, mutated);
+  final Map<String, Uint8List> b = _normalized(after, mutated);
   Uint8List zip(Map<String, Uint8List> parts) =>
       buildZipOrdered(<(String, List<int>)>[
         for (final MapEntry<String, Uint8List> e in parts.entries)
@@ -558,30 +577,44 @@ List<String> undoDifferences(Uint8List before, Uint8List after) {
     zip(b),
     ignoreBookkeeping: true,
   );
-  final Set<String> blind = <String>{
-    for (final String line in lines)
-      if (line.contains('the expected part is not well-formed'))
-        line.substring(0, line.indexOf(':')),
-    for (final MapEntry<String, Uint8List> e in a.entries)
-      if (e.key.endsWith('.rels') && _lossyRelationships(utf8.decode(e.value)))
-        e.key,
-  };
-  final Set<String> sources = <String>{
-    for (final String part in blind)
-      if (part.endsWith('.rels'))
-        part.replaceFirst('_rels/', '').replaceFirst(RegExp(r'\.rels$'), ''),
-  };
+  String partOf(String line) => line.substring(0, line.indexOf(':'));
+  final bool refused = lines.any(
+    (String line) =>
+        partOf(line) == mutated &&
+        line.contains('the expected part is not well-formed'),
+  );
+  final bool lossy =
+      mutated != null &&
+      mutated.endsWith('.rels') &&
+      a.containsKey(mutated) &&
+      _lossyRelationships(utf8.decode(a[mutated]!));
+  final bool blind = refused || lossy;
+  final String? source = blind && mutated!.endsWith('.rels')
+      ? mutated.replaceFirst('_rels/', '').replaceFirst(RegExp(r'\.rels$'), '')
+      : null;
+  final bool strings =
+      blind || mutated == 'xl/sharedStrings.xml' || mutated == archiveMutated;
+  final bool archive = mutated == archiveMutated;
   return <String>[
     for (final String line in lines)
-      if (!blind.contains(line.substring(0, line.indexOf(':'))) &&
-          !(sources.contains(line.substring(0, line.indexOf(':'))) &&
-              _resolvedId.hasMatch(line)) &&
-          !(blind.isNotEmpty && line.startsWith('xl/sharedStrings.xml:')) &&
+      if (!(blind && partOf(line) == mutated) &&
+          !(partOf(line) == source && _resolvedId.hasMatch(line)) &&
+          !(strings && partOf(line) == 'xl/sharedStrings.xml') &&
+          !((mutated == 'xl/sharedStrings.xml' || archive) &&
+              _stringCell.hasMatch(line)) &&
+          !(archive && partOf(line) == 'xl/_rels/workbook.xml.rels') &&
           !RegExp(r'^xl/styles\.xml: .*: attribute count ').hasMatch(line) &&
           !RegExp(r'\.rels: /Relationships: element ').hasMatch(line))
         line,
   ];
 }
+
+/// A difference of `comparePackages` in the string a shared string cell
+/// shows; a cell of any other type stays a difference.
+final RegExp _stringCell = RegExp(
+  r'^xl/worksheets/[^:]*: [A-Z]+\d+/v: text "(<si>|unresolved:).*" vs '
+  r'"(<si>|unresolved:)',
+);
 
 /// A difference of `comparePackages` in what a relationship id resolves to,
 /// which it gives as `type|target|mode`.
@@ -603,18 +636,25 @@ bool _lossyRelationships(String text) =>
           ].every((String name) => RegExp('\\s$name\\s*=').hasMatch(tag));
     });
 
-/// The parts of [zip] without what [undoDifferences] leaves out of its text.
-Map<String, Uint8List> _normalized(Uint8List zip) => <String, Uint8List>{
-  for (final MapEntry<String, Uint8List> e in readXlsxBytes(zip).entries)
-    e.key: Uint8List.fromList(
-      utf8.encode(
-        _withoutStrayText(e.key, utf8.decode(e.value, allowMalformed: true))
-            .replaceAll(RegExp('&#1;|&#xFFFE;'), '')
-            .replaceAll(RegExp(r'<(\w+:)?calcPr fullCalcOnLoad="1"/>'), '')
-            .replaceAll(' fullCalcOnLoad="1"', ''),
-      ),
-    ),
-};
+/// The parts of [zip] without what [undoDifferences] leaves out of its text,
+/// [mutated] being the part a case changed.
+Map<String, Uint8List> _normalized(Uint8List zip, String? mutated) =>
+    <String, Uint8List>{
+      for (final MapEntry<String, Uint8List> e in readXlsxBytes(zip).entries)
+        e.key: Uint8List.fromList(
+          utf8.encode(
+            (e.key == mutated
+                    ? _withoutStrayText(
+                        e.key,
+                        utf8.decode(e.value, allowMalformed: true),
+                      )
+                    : utf8.decode(e.value, allowMalformed: true))
+                .replaceAll(RegExp('&#1;|&#xFFFE;'), '')
+                .replaceAll(RegExp(r'<(\w+:)?calcPr fullCalcOnLoad="1"/>'), '')
+                .replaceAll(' fullCalcOnLoad="1"', ''),
+          ),
+        ),
+    };
 
 /// [text] without the text between the elements of the part [name]; the
 /// text of a VML drawing may be mixed with its elements, and no element of a
