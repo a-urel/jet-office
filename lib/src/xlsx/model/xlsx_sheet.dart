@@ -78,6 +78,7 @@ import '../sheet_protection.dart';
 import '../sheet_view.dart';
 import '../sheet_writer.dart' show checkPrintAreaRanges, checkPrintTitles;
 import '../style.dart';
+import '../table.dart';
 import '../values.dart';
 import '../warnings.dart';
 import '../workbook_parts.dart' show printAreaFormula, printTitlesFormula;
@@ -123,6 +124,7 @@ part 'xlsx_sheet_notes.dart';
 part 'xlsx_sheet_pictures.dart';
 part 'xlsx_sheet_print.dart';
 part 'xlsx_sheet_rules.dart';
+part 'xlsx_sheet_tables.dart';
 part 'xlsx_sheet_views.dart';
 
 /// What a sheet needs from its workbook.
@@ -249,6 +251,7 @@ final class XlsxSheet
         _SheetPictures,
         _SheetPrint,
         _SheetRules,
+        _SheetTablesApi,
         _SheetViews {
   XlsxSheet._(this._host, this._entry, this._partName, this._part);
 
@@ -971,6 +974,13 @@ final class XlsxSheet
       }
     } on XlsxReadException {
       // The sheet's relationships cannot be read: no table is typed.
+    }
+    for (final ({String partName, TablePart table}) t in found) {
+      for (final String detail in t.table.problems) {
+        if (_featureReported.add(detail)) {
+          _warn(XlsxWarningCode.featureEntryInvalid, null, detail: detail);
+        }
+      }
     }
     return _tables = found;
   }
