@@ -9,9 +9,9 @@ fidelity standard; it applies decision
 [`0009`](decisions/0009-phase-3-workbook-model.md)'s preservation layers to
 WordprocessingML.
 
-This page covers milestone D1, the foundation, and milestone D2, formatting,
-styles and lists. **The DOCX API is in progress and may change before D6**;
-the names are fixed at D6 (decision 0010).
+This page covers milestone D1, the foundation, milestone D2, formatting,
+styles and lists, and milestone D3, tables. **The DOCX API is in progress and
+may change before D6**; the names are fixed at D6 (decision 0010).
 
 ```dart
 final DocxDocument doc = DocxDocument.open(bytes);
@@ -30,13 +30,24 @@ doc.body.addListItem(list, 'First item');
 doc.body.addListItem(list, 'Nested item', level: 1);
 ```
 
+A table, a merge and a nested table (D3):
+
+```dart
+final DocxDocument doc = DocxDocument();
+final DocxTable table = doc.body.addTable(columns: 3);
+table.addRow(<String?>['Item', 'Quantity', 'Price'], header: true);
+table.addRow(<String?>['Tea', '2', '3.50']);
+table.addRow(<String?>['Total', null, '7.00']);
+table.mergeCells(firstRow: 2, firstColumn: 0, lastRow: 2, lastColumn: 1);
+table.rows[1].cells[0].addTable(columns: 2).addRow(<String?>['a', 'b']);
+```
+
 ## What D1 does and does not do
 
 - **Typed.** The body's paragraphs (`DocxParagraph`), their runs
   (`DocxRun`), the paragraph and run style, and a run's text, tabs, breaks and
   carriage returns (`DocxRunContent`).
-- **Opaque, kept as written.** Everything else: tables (typed in D3),
-  content controls, bookmarks, tracked changes, hyperlinks, drawings, fields
+- **Opaque, kept as written.** Everything else: content controls, bookmarks, tracked changes, hyperlinks, drawings, fields
   and `mc:AlternateContent` (`DocxOpaqueBlock`, `DocxOpaqueInline`,
   `DocxOpaqueRunContent`). An opaque node can be removed, not changed.
 - **The final `w:sectPr`** of the body is held by the body and kept as
@@ -44,7 +55,7 @@ doc.body.addListItem(list, 'Nested item', level: 1);
 - **Edits.** `addParagraph`, `insertBlock`, `removeBlockAt`,
   `replaceBlockAt`, the same for inlines, a run's `text` and the two styles.
   Each edit is atomic (a transaction of the document's `ChangeLog`).
-- **Not in D1.** Formatting, styles and lists (D2, below), tables (D3),
+- **Not in D1.** Formatting, styles and lists (D2, below), tables (D3, below),
   sections, headers, footers and fields (D4), pictures, hyperlinks,
   bookmarks and document properties (D5), `DocxListExport` (D6). Headers,
   footers, notes and comments are saved as they were, not read.
@@ -72,13 +83,49 @@ doc.body.addListItem(list, 'Nested item', level: 1);
   property container the model does not type (see the first rule of
   "Properties" below).
 
+## What D3 does
+
+- **Tables, typed.** A `w:tbl` in the body or in a cell is a `DocxTable`: its
+  `rows` (`DocxTableRow`), each with its `cells` (`DocxTableCell`), each with
+  its `blocks` again, so tables nest. `DocxTable.gridColumnsPt` is the
+  `w:tblGrid` in points, and `DocxTableCell.text` the text of a cell. Only
+  the typed `w:tr` and `w:tc` are listed; what lies between them is kept
+  (see "Known gaps of D3").
+- **Properties, typed.** `DocxTable.properties` (`DocxTableProperties`:
+  `style`, `width`, `layout`, `alignment`, `indentationPt`, `borders`,
+  `cellMargins`, `look`), `DocxTableRow.properties`
+  (`DocxTableRowProperties`: `height`, `cantSplit`, `repeatAsHeader`, with
+  `isHeader` as a shortcut on the row) and `DocxTableCell.properties`
+  (`DocxTableCellProperties`: `width`, `gridSpan`, `verticalMerge`,
+  `verticalAlignment`, `shading`, `borders`, `textDirection`), each a
+  nullable get and set in the way of the paragraph's, over the values
+  `DocxTableWidth`, `DocxTableBorders`, `DocxCellBorders`,
+  `DocxTableMargins`, `DocxTableLook`, `DocxRowHeight` and the enumerations.
+- **Building.** `DocxBody.addTable` writes what Word's Insert Table writes
+  (the style `Table Grid`, an automatic width, the look `04A0`, equal column
+  widths), `DocxTable.addRow` adds a row of text, `DocxTableCell.addTable`
+  nests a table, and `DocxTable.new`, `DocxTableRow.new` and
+  `DocxTableCell.new` build parts to insert later.
+- **Editing.** `insertRowAt`, `removeRowAt`, `insertCellAt`, `removeCellAt`,
+  the blocks of a cell (`addParagraph`, `insertBlock`, `removeBlockAt`,
+  `replaceBlockAt`), `gridColumnsPt`, the properties, and
+  `DocxTable.mergeCells`, which merges a range across and down as Word does.
+  Each edit is atomic, in the document's `ChangeLog`; the styles of what goes
+  in are resolved as for a paragraph (D2).
+- **Kept as written, never typed:** `w:tblpPr`, `w:tblOverlap`,
+  `w:bidiVisual`, the band sizes, `w:tblCellSpacing`, a table's `w:shd`,
+  `w:tblCaption`, `w:tblDescription`, `w:cnfStyle`, `w:tcMar`, `w:noWrap`,
+  `w:tcFitText`, `w:hideMark`, `w:hMerge`, `w:hidden`, `w:wBefore`,
+  `w:wAfter`, a row's `w:jc` and the revision children (`w:tblPrChange` and
+  the like). `w:gridBefore` and `w:gridAfter` are read for the grid check
+  only. A cell written by the API carries no `w:cnfStyle`: Word recomputes
+  it.
+
 ## Known gaps
 
 - **Visible text of some opaque inlines.** `mc:AlternateContent` and the text
   of a text box give `''` for an opaque inline's visible text, so a paragraph
   whose words are only there reads as empty.
-- **Tables are opaque** until D3, so their cells are not part of any text the
-  model gives.
 - **A new document has no `docProps`** until D5: no `core.xml`, no
   `app.xml`.
 - **A new document's theme is plainer than Word's** (decision 0011): no
@@ -96,8 +143,9 @@ doc.body.addListItem(list, 'Nested item', level: 1);
   `test/docx/model/paragraph_properties_test.dart`, "the paragraph mark rPr
   is never typed").
 - **Style parts the model does not type.** A style's `w:tblPr`, `w:trPr`,
-  `w:tcPr` and `w:tblStylePr` (table styles, typed in D3) are kept as
-  written.
+  `w:tcPr` and `w:tblStylePr` (the definition of a table style) are kept as
+  written: D3 types a table's reference to a style, not the style's own table
+  properties.
 - **Measures the model reads as `null`.** The `…Chars` attributes
   (`w:leftChars`, `w:firstLineChars`), universal measures (`1in`, `2.5cm`),
   a `+` sign, and numbers of ten digits or more give no view; so does
@@ -124,6 +172,70 @@ doc.body.addListItem(list, 'Nested item', level: 1);
   built-in's name whatever that style's type; a reference that has the
   wrong type is reported at save as `styleNotFound`.
 
+### Known gaps of D3
+
+- **Rows and cells the model does not show.** `rows` lists only the `w:tr`
+  children of `w:tbl`, and `cells` the `w:tc` children of `w:tr`. A row inside
+  a `w:sdt` or a `w:customXml` is not in `rows`, and a cell there is not in
+  `cells`; it is kept in place, and an insert or a removal leaves it where it
+  was (tests: `test/docx/model/tables_read_test.dart` "a w:tbl inside a
+  w:sdt stays opaque", `test/docx/model/tables_edit_test.dart` "the rows in
+  a content control are not counted"). A merge refuses a range with a
+  `w:sdt` or `w:customXml` between its rows.
+- **A style's table properties** (`w:tblPr`, `w:trPr`, `w:tcPr`,
+  `w:tblStylePr`) are kept, as the D2 gap says; so is every child of a table,
+  row and cell listed under "What D3 does" as never typed, and what the
+  model cannot read of a typed one (a width in an unusual unit, a border of
+  art): it reads `null` and is written back as read (test:
+  `test/docx/model/table_properties_test.dart`, "a child in schema order
+  among kept ones").
+- **`w:hMerge` on a kept cell** is not typed, so `gridSpan` and
+  `verticalMerge` do not account for a horizontal merge made that way; the
+  merge checks treat such a cell as one cell.
+- **A merge can be split without a warning.** A plain row inserted between a
+  cell that restarts a vertical merge and the one that continues it, a row or
+  a cell removed that holds one end of a merge, and `removeCellAt` and
+  `insertCellAt`, which can move a later cell off the columns of the merge
+  above or below it, are allowed: removal and insertion must keep working on
+  any table, and Word reads a continuation with nothing above as a new cell
+  (tests: `test/docx/model/table_merge_test.dart`, "that is plain may go
+  inside a vertical merge (Ruling P10)", "a removal that orphans a merge is
+  allowed (Ruling P10)"). `insertCellAt` does not check a continuation on the
+  inserted cell.
+- **Two tables can end up adjacent after a merge.** `mergeCells` keeps one
+  empty paragraph between two tables it brings into one cell; when the merged
+  cells held none between them (a cell whose last block is a table and that
+  was read without its closing paragraph, say), the tables are adjacent and
+  Word joins them into one.
+- **An orphan continuation read from a file** (a `w:vMerge` continue with no
+  cell above, or one out of line with it) opens, reads and saves as it was;
+  but a change of the span of a cell earlier in its row throws
+  `ArgumentError`, because the cells it would move no longer fit what is
+  above. Bring the continuation into line first (test:
+  `test/docx/model/table_merge_test.dart`, "a continuation read out of line
+  can be brought into line").
+- **The API nests tables at most 80 deep, the reader 256.** A table takes
+  three XML levels, so the default `maxDepth` of 256 stops near 84 tables, and
+  what the API builds must open again under the default limits; the reader's
+  own limit (`maxTableNesting`, 256, which `DocxReadLimits.maxDepth` cannot
+  raise) only keeps recursion bounded. A table read nested deeper than 80 and
+  then removed cannot be inserted again through the API (`ArgumentError`); its
+  removal still undoes (test: `test/docx/model/tables_edit_test.dart`, "a
+  table read that deep cannot go back in the API").
+- **`addTable`'s default widths are for the blank A4 page**: 9062 twips
+  shared among the columns. Sections are typed in D4; until then a document
+  with another page needs `columnWidthsPt`, or Word's autofit corrects the
+  widths when it opens the file (test: `test/docx/model/table_build_test.dart`,
+  "shares the width of a blank A4 page, in whole twips").
+- **No paragraph is added** between two tables or after a last table, so two
+  tables added one after the other join in Word unless the caller puts a
+  paragraph between them. A body that ends in a table is saved so, and Word
+  opens it; LibreOffice's text export of one never ends, so the Word check
+  covers it (`docs/word-checks.md`).
+- **A table with no rows** (what `addTable` returns before the first
+  `addRow`) cannot be saved: `StateError` names it. A file's own empty table
+  is kept as read.
+
 ## Rules the model enforces
 
 A file the model cannot read at all throws a `DocxReadException` with a
@@ -140,7 +252,7 @@ dropped silently.
 | Default limits | the XLSX reader's: `maxEntries` 10,000; `maxEntryBytes` 256 MiB; `maxTotalBytes` 1 GiB; `maxCompressionRatio` 1,000; `maxDepth` 256; `maxTextLength` 1,048,576 characters | both formats refuse the same archive the same way | `test/docx/docx_package_test.dart` |
 | More entries than `maxEntries`; an entry past `maxEntryBytes`; entries past `maxTotalBytes`; a ratio past `maxCompressionRatio` | `limitExceeded` naming the limit, before anything is inflated | ZIP bomb | `test/docx/docx_package_test.dart` ("limits") |
 | XML nested past `maxDepth` | `limitExceeded` naming `maxDepth` and the part | stack and memory | `test/docx/docx_package_test.dart` ("limits") |
-| A `w:t` longer than `maxTextLength`, or an opaque inline whose visible text is | `limitExceeded` naming the limit and the paragraph as `body/p[i]`, `i` its zero-based index among the body's paragraphs (as in a warning's location: a table or content control before it does not count), on the first access to `body`; deleted text does not count | one text must not be as large as the file | `test/docx/docx_package_test.dart`, `test/docx/document_part_read_test.dart` ("maxTextLength"), `test/docx/docx_document_test.dart` |
+| A `w:t` longer than `maxTextLength`, or an opaque inline whose visible text is | `limitExceeded` naming the limit and the paragraph as `body/p[i]`, `i` its zero-based index among the body's paragraphs (as in a warning's location: a table or content control before it does not count), or, in a table, as `body/tbl[i]/tr[j]/tc[k]/p[m]` (see "Tables"), on the first access to `body`; deleted text does not count | one text must not be as large as the file | `test/docx/docx_package_test.dart`, `test/docx/document_part_read_test.dart` ("maxTextLength"), `test/docx/docx_document_test.dart` |
 | Bytes that are not a ZIP; a ZIP with a damaged directory | `notZip`; `corruptZip` | tell a wrong upload from a damaged one | `test/docx/docx_package_test.dart`, `test/docx/docx_document_test.dart` |
 | An entry whose CRC-32 does not match, or a damaged entry of a part never loaded | `corruptZip` naming the entry, at `open`, so a save cannot meet it | every entry is inflated once and checked when the document opens | `test/docx/docx_package_test.dart`, `test/docx/docx_document_test.dart` |
 | An encrypted ZIP entry, or an OLE file holding `EncryptedPackage` | `encrypted` | the model has no password | `test/docx/docx_package_test.dart` |
@@ -165,7 +277,8 @@ dropped silently.
 | Elements | matched by namespace URI and local name, never by prefix: `ns0:`, a default namespace and `w:` read the same; an element in another namespace with a `w` local name is not typed | a producer may choose any prefix | `test/docx/document_part_read_test.dart`, `test/docx/producer_variants_test.dart` |
 | `w:p`, its runs, text, tabs, breaks and carriage returns | typed in place | the model's job in D1 | `test/docx/document_part_read_test.dart` |
 | A `w:br` of type `textWrapping` | read as a line break, and its type is kept | the type is the file's | `test/docx/document_part_read_test.dart` |
-| A table, a content control, a bookmark or any other block | an opaque block, in place | typed later (D3, D5) or never | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
+| A table | a `DocxTable`, in place, typed (see "Tables") | D3 | `test/docx/document_part_read_test.dart` ("tables are typed and sdt blocks are opaque blocks, in place") |
+| A content control, a bookmark or any other block | an opaque block, in place | typed later (D5) or never | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
 | The final `w:sectPr` of the body | held by the body; a `w:sectPr` in a paragraph's `w:pPr` stays there; one that is not the last child of the body is a block | the last section belongs to the body (typed in D4) | `test/docx/document_part_read_test.dart` |
 | Any other child of a paragraph (tracked change, hyperlink, content control, smart tag, proofing mark) | an opaque inline, in place, with its visible text computed once | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
 | Any other child of a run (drawing, field, `mc:AlternateContent`) | opaque run content, in place; it adds nothing to the run's text | kept as written | `test/docx/document_part_read_test.dart` |
@@ -199,7 +312,7 @@ opaque inlines, in order.
 | `\t` in a run's text | a tab | Word has a tab element | `test/docx/model/body_model_test.dart` ("run text"), `test/docx/document_part_write_test.dart` |
 | `\n`, a lone `\r`, `\r\n` | one line break each (`\r\n` is one) | the three spellings of a line end | `test/docx/model/body_model_test.dart`, `test/docx/document_part_write_test.dart` |
 | Characters XML forbids (control characters, `U+FFFE`, `U+FFFF`, lone surrogates) | removed when the text is set and counted; a supplementary character is kept | the one XML escaper (decision 0010) | `test/docx/model/body_model_test.dart` |
-| Removed characters | one `invalidCharactersRemoved` warning per part, reported at save with a location such as `body/p[5]/r[0]` (`p[i]` counts paragraphs only, `r[j]` runs only; a path to another block would be `body/<localName>[i]`, indexed among blocks of that local name); the count is the characters removed, and the location list ends with `…` only when more than ten runs lost characters; a run removed before the save, or a second save, does not add to it | the warning describes the file saved, not the edits made | `test/docx/document_part_write_test.dart` ("warnings at save"), `test/docx/warnings_test.dart` |
+| Removed characters | one `invalidCharactersRemoved` warning per part, reported at save with a location such as `body/p[5]/r[0]` (`p[i]` counts paragraphs only, `r[j]` runs only; a path to another block would be `body/<localName>[i]`, indexed among blocks of that local name, and one inside a table is the path given under "Tables"); the count is the characters removed, and the location list ends with `…` only when more than ten runs lost characters; a run removed before the save, or a second save, does not add to it | the warning describes the file saved, not the edits made | `test/docx/document_part_write_test.dart` ("warnings at save"), `test/docx/warnings_test.dart` |
 | `xml:space="preserve"` | computed only for text set through the API: when it starts or ends with whitespace or holds two spaces in a row; a text read from a file keeps its own attribute | a reader must not collapse what the caller set, and a file's attribute is its own | `test/docx/document_part_write_test.dart` |
 | A run's text set to the text it has | nothing is recorded and a read run keeps its read content | an unchanged value is not a change | `test/docx/model/body_model_test.dart` ("edit sink") |
 | `text` of a paragraph | the texts of its inlines joined | what Word shows | `test/docx/model/body_model_test.dart` |
@@ -357,6 +470,120 @@ Two codes, for references set through the API only, each with a message in
 | `compatibilityMode` 15 and the web settings | kept | Word opens the file in the current mode | `test/docx/blank_document_test.dart` |
 | The parts | the same part names as the reference file apart from `docProps`; its styles, document defaults, theme colours and fonts, font table and compatibility settings have equal values after removing ids and locale; none of the owner's document properties is written | the reference is a file the owner saved from Word | `test/docx/blank_document_oracle_test.dart` |
 
+### Tables
+
+Reading, writing and the limits. Every table in this part follows the fidelity
+standard of the rest: a table read and not edited is written as read, and
+what the model does not type is kept in place. Paths in warnings and in the
+`maxTextLength` failure name the tree: `body/tbl[i]/tr[j]/tc[k]/p[m]/r[n]`,
+each index counting that kind of element among its siblings, only the typed
+ones (`tbl` among the blocks of its container, `tr` among rows, `tc` among
+cells, `p` among paragraphs); `body/p[i]` keeps counting the body's own
+paragraphs, so a table does not shift it. A nested table is `tc[k]/tbl[i]/…`.
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| A table, row and cell | `w:tbl`, `w:tr` and `w:tc` are matched by namespace and local name; a table, a row and a cell read as `DocxTable`, `DocxTableRow` and `DocxTableCell`, a cell's blocks as paragraphs, tables and opaque blocks, and a nested table is a block of its cell | the model's job in D3 | `test/docx/model/tables_read_test.dart` ("a table reads rows, cells and paragraphs", "a nested table is a block of its cell") |
+| A `w:tbl` inside a `w:sdt`; a `w:tr` or `w:tc` where its parent does not allow one; an element of another namespace named `tbl`, `tr` or `tc` | not typed: kept as an opaque block (or kept child) in place | nothing is guessed | `test/docx/model/tables_read_test.dart` ("a w:tbl inside a w:sdt stays opaque", "w:tr and w:tc out of place are opaque", "an element of another namespace named tbl, tr or tc is not typed") |
+| A `w:sectPr` in a cell; a table last in the body | a block of the cell; the table comes before the body's final `w:sectPr` | the final section is the body's | `test/docx/model/tables_read_test.dart` ("a w:sectPr in a cell is a block of the cell", "a table last in the body comes before the final sectPr") |
+| Bookmarks, `w:sdt` and `w:tblPrEx` between rows and cells; the attributes of `w:tbl`, `w:tr` and `w:tc` | kept in a private child list, in place; not shown by `rows` and `cells` | what the model does not show stays where it was | `test/docx/model/tables_read_test.dart` ("bookmarks, sdt and tblPrEx stay in place", "attributes of w:tbl, w:tr and w:tc are kept") |
+| `gridColumnsPt` | `null` with no `w:tblGrid`, empty for an empty one, `null` for an entry that is not a whole number of twips; only the direct `w:gridCol` children count, and a second `w:tblGrid` or one after a row is not read | a grid in a file may be anything | `test/docx/model/tables_read_test.dart` ("is null with no w:tblGrid", "is empty for an empty grid", "an entry that does not parse is null", "only the direct w:gridCol children count", "a second w:tblGrid, or one after a row, is not read") |
+| A `w:tblPr`, `w:trPr` or `w:tcPr` that is second, or after a row, a cell or a block | the first is typed and the second kept; one in the wrong place is not typed | one properties element per container | `test/docx/model/tables_read_test.dart` ("a second one is kept and the first is typed", "one after a row, a cell or a block is not typed") |
+| Tables nested deeper than `maxTableNesting` (256) | `limitExceeded` naming the limit and the part, whatever `DocxReadLimits.maxDepth` is; the deepest nesting the default `maxDepth` allows reads and saves | the reader, the writer and the walks recurse once per table | `test/docx/model/tables_read_test.dart` ("a table at maxDepth reads or fails as limitExceeded", "the deepest tables the default limit allows save", "tables past the nesting a raised limit allows fail as") |
+| A `w:t` or an opaque inline too long in a cell | `limitExceeded` naming the paragraph's full path | the path says where | `test/docx/model/tables_read_test.dart` ("text past maxTextLength in a cell names", "indexes count typed rows, cells, tables and paragraphs", "the visible text of an opaque inline in a cell names its path", "paragraphs in a cell do not shift body/p[i]") |
+| A table read, no edit, save | the part's bytes; edited elsewhere, the table means the same by `comparePackages` | layers 1 and 2 | `test/docx/model/tables_read_test.dart` ("a document with no edit saves its bytes"), `test/docx/document_part_write_test.dart` ("a table saves semantically equal", "a table saves semantically equal with odd prefixes"), `test/docx/owner_files_test.dart` ("a table saves semantically equal") |
+| The owner's tables (`builtins.docx`) | read their rows, cells and paragraphs; the cell text is checked against constants in the test, since the confirmed expected texts stay paragraphs only; the table style resolves in the document | the confirmed texts may not change | `test/docx/owner_files_test.dart` ("a table reads rows, cells and paragraphs: builtins.docx", "owner tables read their cells", "a table style resolves in the document: builtins.docx") |
+| The lists `rows`, `cells`, `blocks` and `gridColumnsPt` | cannot be modified | one way to change them | `test/docx/model/tables_read_test.dart` ("the lists of a table, a row and a cell cannot be modified", "cannot be modified") |
+| Visiting the tree | `visitBlocks` reaches a block and everything in its cells, in order; a block read into a cell that is already in another container throws `StateError` | one walk for the reader, the sink and the writer | `test/docx/model/tables_read_test.dart` ("visits a block and everything in its cell", "markBlockReadIn marks what a table holds", "a block already in a container cannot be read into a cell") |
+
+#### Table values and properties
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| The schema order of `w:tblPr`, `w:trPr`, `w:tcPr`, `w:tblBorders`, `w:tcBorders` and `w:tblCellMar` | the order lists equal the transitional schema's sequences, and name no element twice | a set writes in the place the schema gives (D2's rule for containers) | `test/docx/schema_order_test.dart` ("tblPrOrder matches the transitional schema", "trPrOrder matches the transitional schema", "tcPrOrder matches the transitional schema", "tblBordersOrder matches the transitional schema", "tcBordersOrder matches the transitional schema", "tblCellMarOrder matches the transitional schema", "no list names an element twice") |
+| A width (`w:tblW`, `w:tcW`) | reads `auto`, `nil`, `dxa` (also with no type) and `pct`; points are rounded to twips; a percent written with a sign, a bad type or a bad number has no view; a table's and a cell's width codecs are distinct | the values are the file's | `test/docx/table_property_codecs_test.dart` ("TableWidthCodec") |
+| Layout, alignment, indentation, borders, margins, look, row height, vertical merge, cell alignment and text direction | each reads what the file holds and writes its own spelling; a value the model cannot type (`start` and `end` sides, a border not in `dxa`, a bad number) has no view and is kept; `w:tblLook` writes the six flags and the bits of `w:val`, and the attributes win when both are read | read what is there, write what Word writes | `test/docx/table_property_codecs_test.dart` ("TableLayoutCodec", "TableAlignmentCodec", "TableBordersCodec", "CellBordersCodec", "TableIndentCodec", "TableMarginsCodec", "TableLookCodec", "RowHeightCodec", "VerticalMergeCodec", "CellAlignmentCodec", "TextDirectionCodec") |
+| The three schemas | type the properties named above, and an attribute a codec does not know gives the child no view; `gridSpan` below 1 and `gridBefore` below 0 have no view | no value is invented | `test/docx/table_property_codecs_test.dart` ("tablePropertiesSchema types the seven properties and tblStyle", "tableRowPropertiesSchema types five properties", "tableCellPropertiesSchema types seven properties", "gridSpan below 1 and gridBefore below 0 have no view", "an attribute a codec does not know gives the child no view") |
+| A member of `DocxTableProperties`, `DocxTableRowProperties` or `DocxTableCellProperties` | a nullable get and set, written in place among the children the model does not type, `w:tblPr` before the grid and the rows, `w:trPr` after any `w:tblPrEx` and before the cells, `w:tcPr` first in the cell; one read in another place stays there and the new one is written in the schema's place | the paragraph's rule, for tables | `test/docx/model/table_properties_test.dart` ("every member sets, writes in place and reads back", "a w:tblPr is written before the grid and the rows", "a w:trPr is written after a w:tblPrEx and before the cells", "a w:tcPr is first in the cell, before a kept child", "a misplaced w:tblPr stays where it was") |
+| Setting what a member reads; a set; `null`; `clear` | setting the value read changes nothing and records nothing; a set is one change that undoes; `null` removes the child, and `clear` removes what the getter cannot read; bad values throw before anything changes; a row with nothing set writes no `w:trPr` | the same as the paragraph's | `test/docx/model/table_properties_test.dart` ("setting what it reads changes nothing", "a set is one change and undoes", "a null removes the child and clear removes what it cannot read", "bad values throw before anything changes", "a row with nothing set writes no w:trPr") |
+| `DocxTableProperties.style` | resolved as a table style in the document (`TableGrid` becomes the document's id for it, and is added with `Normal Table` when the document lacks it); a set is one change with the style it adds | D2's style rules, for the table type; a table style of another type counts as not found | `test/docx/model/table_properties_test.dart` ("style resolves as a table style in the document", "a style set is one change with the style it adds"), `test/docx/warnings_test.dart` ("a table style of another type counts as not found") |
+| `DocxTableRow.isHeader` | `repeatAsHeader == true`; setting `true` sets `w:tblHeader`, `false` removes it | the shortcut | `test/docx/model/table_properties_test.dart` ("isHeader is repeatAsHeader == true") |
+| `gridSpan` | a set outside 1 to 63 throws `RangeError`; a file may hold more and it reads | 63 is Word's limit | `test/docx/model/table_properties_test.dart` ("gridSpan checks 1 to 63", "a file may hold a gridSpan past 63 and it reads") |
+| `gridColumnsPt` set | replaces the grid in one change, writes a grid before the rows for a table with none, rounds to twips; a list of another length once the table has rows throws `ArgumentError`; setting what it reads changes nothing | a row's cells must fit the grid | `test/docx/model/table_properties_test.dart` ("a set replaces the grid in one change and undoes", "a list of another length throws once the table has rows", "a table with no grid takes one before its rows", "the grid is written after a w:tblPr that was set") |
+| A cell edited in a nested table | reports to the document | the change log sees every table | `test/docx/model/table_properties_test.dart` ("a cell edited in a nested table reports to the document") |
+| The public surface | `DocxTable`, `DocxTableRow`, `DocxTableCell`, the values and the properties are exported, and expose no internals | the barrel is the API | `test/docx/public_surface_test.dart` |
+
+#### Building a table
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| `DocxBody.addTable` | writes what Word's Insert Table writes: the style `Table Grid` (the document's own, or Word's definition added with `Normal Table`), `w:tblW` of `w:w="0"` and `w:type="auto"`, `w:tblLook` of `04A0` with its six flags, equal `w:gridCol` and `w:tcW` of 9062 twips divided by the columns, rounded down, in schema order; `columnWidthsPt` sets the grid and the cells instead | the owner's `builtins.docx` is the oracle | `test/docx/table_build_oracle_test.dart` ("addTable writes what Word's Insert Table writes"), `test/docx/model/table_build_test.dart` ("writes the properties of Insert Table, in schema order", "shares the width of a blank A4 page, in whole twips", "columnWidthsPt sets the grid and the cells of each row") |
+| The style of a new table | a Turkish document gets `TabloKlavuzu`; a document with the normal table style only gets `TableGrid` on it; a blank one gets `TableGrid` and `TableNormal` | the built-in is found by name (D2) | `test/docx/model/table_build_test.dart` ("a Turkish document gets TabloKlavuzu", "a document with the normal table only gets TableGrid on it", "a blank document gets TableGrid and TableNormal") |
+| A bad `addTable` argument | `columns` outside 1 to 63 or a width out of range throw `RangeError`; `columnWidthsPt` of another length or a width that is not finite throws `ArgumentError`; an unreadable styles part throws `DocxReadException`; nothing changes | programmer errors throw (Global Constraints) | `test/docx/model/table_build_test.dart` ("a bad argument throws and changes nothing", "on an unreadable styles part throws and changes nothing") |
+| `addTable` | one transaction with the style it adds; a failure after the insert takes all back; adds no paragraph between two tables or after the last | the model never adds a block | `test/docx/model/table_build_test.dart` ("is one transaction, with the style it adds", "a failure after the insert takes it all back", "adds no paragraph between two tables or after the last") |
+| `DocxTable.addRow` | takes `List<String?>`: `null` is an empty cell, fewer values leave empty cells, more throw `ArgumentError`; text is split and scrubbed as a run's; a cell takes the width of its column; `header: true` sets `repeatAsHeader` and `cantSplit` | formatting numbers belongs to the caller | `test/docx/model/table_build_test.dart` ("null is an empty cell, and fewer values leave empty cells", "more values than columns throw and change nothing", "text is scrubbed and split as a run does it", "is one change that undoes and redoes", "works on a table in no document") |
+| `addRow` on a table read | a row of the grid's width after the rows; a column without a usable width gives a cell without one; a grid past 63 columns gives a row of its width; a table with no grid, or an empty one, throws `ArgumentError` (use `insertRowAt`) | a row's width needs a grid (`insertRowAt` takes any row) | `test/docx/model/table_build_test.dart` ("on a table read takes the width of its grid, after its rows", "a column without a usable width gives a cell without one", "a grid past 63 columns gives a row of its width", "a table without a grid throws: it has no width") |
+| A table with no rows | `addTable` returns one; a save of it throws `StateError` naming it (also one nested in a cell), writes nothing, and the first row, or removing the table, makes it saveable; a table read with no rows is kept, edited or not; the constructor refuses `rows` below 1 | Word repairs a table without rows | `test/docx/model/table_build_test.dart` ("a save names it, and writes nothing", "a save names one nested in a cell", "the first row, or removing the table, makes it saveable", "an undone first row leaves it unsaveable again", "a table read with no rows is kept, edited or not", "the constructor still refuses it") |
+| `DocxTableCell.addTable` | behaves as the body's: the document's `Table Grid` style, one transaction, a bad argument changes nothing; in a cell of no document the table has no style, and one set resolves when the cell goes in a document; nesting past 80 throws `ArgumentError` | the same rules at every level | `test/docx/model/table_build_test.dart` ("in a document behaves as the body does", "in a document adds the style a document lacks", "finds the built-in by name, as the body does, past a squatter", "past the nesting the API builds throws and changes nothing") |
+| The styles of what goes in | a table, a row or a cell put in a document has every style set on it and in its cells resolved as `insertBlock` does, an unreadable styles part changing nothing; inserted in no document the id is stored as given; a table moved within its document stays as read | D2's rules for blocks | `test/docx/model/table_build_test.dart` ("the styles of what goes in", "a style set on a table in a document resolves as it is set", "an insert in no document stores the id as given", "the styles a route adds undo with it", "a read table moved within its document stays as read") |
+| A table, row or cell read in another document and inserted | its `w:tblStyle`, `w:pStyle`, `w:rStyle` and `w:numPr` count as set, a missing one is reported at save with its full path, a built-in it names resolves to this document's id, and undoing the insert takes the count back; a style read in a table of this document is not reported | the references of D2, in tables | `test/docx/model/table_build_test.dart` ("its w:tblStyle and the deep references count as set, and a missing", "a built-in it names resolves to this document's id", "a row or a cell read there joins the same way", "undoing the insert takes the count back", "a style read in a table of this document is not reported") |
+| `styleNotFound` and `numberingNotFound` in a table | name the paragraph, the table and the nested table by their full paths | warnings keep their paths | `test/docx/warnings_test.dart` ("styleNotFound names a paragraph in a cell by its full path", "numberingNotFound names a paragraph in a cell by its full path", "styleNotFound names a table and a nested table by their paths"), `test/docx/document_part_write_test.dart` ("warnings name the path in the table", "the checks of a list and a style name the path in the table") |
+
+#### Editing a table
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| A new `DocxTable`, `DocxTableRow`, `DocxTableCell` | a table of the rows and columns asked for, of empty cells, dividing 9062 twips (rounded down), one row by default; `w:tblPr` and `w:tblGrid` are written, each `w:tcW` in twips; a table read without a `w:tblPr` still writes none; a new cell holds one paragraph of its text | the constructors build what `addTable` builds, without a style | `test/docx/model/tables_edit_test.dart` ("has the rows and columns asked for, with empty cells", "divides 9062 twips among its columns, rounded down", "takes 1 to 63 columns and at least one row", "writes w:tblPr and w:tblGrid, and each w:tcW in twips", "a table read without w:tblPr still writes none", "a new cell holds one paragraph of its text") |
+| `insertRowAt`, `removeRowAt`, `insertCellAt`, `removeCellAt` | the item is at its index counting the typed ones, and the edit undoes and redoes; a removed one can go in again; an index out of range throws `RangeError`; a row or cell in another table or row throws `StateError` | one way to change a list (D1) | `test/docx/model/tables_edit_test.dart` ("an inserted row is at its index, and undoes and redoes", "a removed row can go in again, and the removal undoes", "an index out of range throws RangeError", "a row in a table cannot go in another", "an inserted cell is at its index, and undoes and redoes", "a removed cell undoes, and can go in again", "a cell in a row cannot go in another") |
+| The last row of a table and the last cell of a row | removing it throws `StateError` and changes nothing; a file's empty table or row is kept as read and takes a row | Word repairs them | `test/docx/model/tables_edit_test.dart` ("removing the last row throws StateError and changes nothing", "a file's empty table is kept as read and takes a row", "removing the last cell throws StateError and changes nothing") |
+| A row or a cell inserted into a table of a document | reports to the document until it is out | the change log sees what is in the document | `test/docx/model/tables_edit_test.dart` ("a row in a table reports to its document until it is out", "a cell in a row reports to its document until it is out") |
+| The blocks of a cell | outside a document an edit records nothing; in a document each is one change that undoes; `addParagraph` is one change; a bad index or a block already in a container changes nothing; a style set on a paragraph resolves as it goes in | the body's rules, for a cell | `test/docx/model/tables_edit_test.dart` ("outside a document they change and record nothing", "in a document each edit is one change that undoes", "addParagraph is one change", "a bad index or a block in a container changes nothing", "a style set on a paragraph resolves as it goes in a cell") |
+| A failed edit | rolls back: inserting or removing a row or a cell, inserting, removing or replacing a block | each edit is atomic | `test/docx/model/tables_edit_test.dart` ("a failed edit rolls back") |
+| A table inside itself | a table cannot go in a cell of itself or of a nested table, nor a row in a table it holds, nor a cell | no cycle | `test/docx/model/tables_edit_test.dart` ("in a cell of the table", "in a cell of a nested table", "nor a row in a table it holds, nor a cell") |
+| The nesting of tables | the API builds at most 80 deep, counting what goes in and where, a row and a cell that go in; at its deepest, what saves opens under the default limits; in a file nested past 80, a plain row or cell still goes in, a nested table throws and changes nothing, and a table read that deep cannot go back in the API (undo restores it) | what is saved must reopen; the reader's limit is 256 | `test/docx/model/tables_edit_test.dart` ("reaches the limit of the API and goes no further", "counts what goes in, and where it goes", "counts a row and a cell that go in", "at its deepest, what saves opens under the default limits", "a plain row goes in, as it deepens nothing", "a table read that deep cannot go back in the API"), `test/docx/model/table_merge_test.dart` ("a table that would nest past 80 deep throws ArgumentError") |
+| A saved cell | ends in a paragraph: a table last in a cell, a cell whose only block was removed, and a new cell whose only block was removed all save with an empty `w:p` after them, which `blocks` does not show until the file is read again | Word repairs a cell without one | `test/docx/model/tables_edit_test.dart` ("a table last in a cell", "a table last in the body", "a cell whose only block was removed", "a new cell whose only block was removed", "a cell whose paragraph was replaced by a table, in a table") |
+| A cell read without a closing paragraph | written as read while its blocks are the ones read; the exception is by identity, so an undo restores it; a block put before the last read one closes the cell, and a cell read empty is empty again once a block added goes | the fidelity standard | `test/docx/document_part_write_test.dart` ("a read cell without a closing paragraph is written as read", "a block put before the one read last closes the cell", "a cell read empty is empty again once a block added goes", "a cell emptied of its only block gets one", "a cell read empty stays empty until a block goes in", "a paragraph that closes the cell needs no other", "a table last in a cell gets one when it is not the one read") |
+| What the model does not show | an inserted row goes directly before the row at its index, the last after the last child; a removed row leaves what lay between, and its undo puts it back; between cells it is the same; an undone insert leaves the file as it read | what the model does not show stays where it was | `test/docx/model/tables_edit_test.dart` ("an inserted row goes directly before the row at its index", "a row inserted first goes before the first row", "a row inserted last goes after the last child", "a removed row leaves them, and the undo puts it back", "between cells it is the same", "an undone insert leaves the file as it read", "the rows in a content control are not counted") |
+| A prebuilt nested table | records an edit only while it is in the document; a row and a cell of it follow; a table moved between cells keeps reporting | the sink follows the tree | `test/docx/model/tables_edit_test.dart` ("records an edit only while it is in the document", "a row and a cell of it follow too", "a table moved between cells keeps reporting") |
+| 200,000 kept children | a row and a table with that many insert in time | a 2 KB ZIP can hold them | `test/docx/model/tables_edit_test.dart` ("a row with 200,000 kept children inserts in time", "a table with as many inserts in time") |
+| The edit sink | an edit outside a transaction is a transaction of its own; one that fails once recorded is taken out again; on the sink of no document edits apply and record nothing | one path for every container | `test/docx/primitives_test.dart` ("outside a transaction an edit is a transaction of its own", "an edit that fails once recorded is taken out again", "on the sink of no document they apply and record nothing", "a block change is applied by the sink, once") |
+
+#### Merging cells and spans
+
+`mergeCells` takes the rows of `rows` and the columns of the grid, all
+inclusive. Everything below is one edit that throws `ArgumentError` before it
+changes anything.
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| A merge in a 3 x 3 table | a whole row leaves one cell; part of a row spans what it covers; a column restarts, continues and removes no cell; a block spans in each row and continues below the first; the whole table keeps every row with its one cell; it saves and reads back the same, and the same on a table in no document | Word's merges | `test/docx/model/table_merge_test.dart` ("of a whole row leaves one cell, with the text in order", "of part of a row spans what it covers", "of a column restarts, continues and removes no cell", "of a block spans in each row and continues below the first", "of the whole table keeps every row, with its one cell", "saves and reads back the same", "works the same on a table in no document") |
+| The blocks of a merge | move to the top-left cell in reading order without empty paragraphs, in the first cell too; a run without text counts as empty, a paragraph holding a tab or a bookmark does not; a merge of empty cells, or of cells without blocks, leaves one empty paragraph; tables and opaque blocks move in order, and a table moved last leaves a cell that saves with a paragraph; an edit of a moved paragraph is recorded | Word drops the empty paragraphs of a merge | `test/docx/model/table_merge_test.dart` ("lose their empty paragraphs, in the first cell too", "count a run without text as empty", "keep a paragraph that holds a tab or a bookmark", "a merge of empty cells leaves one empty paragraph", "a merge of cells without blocks leaves one empty paragraph", "tables and opaque blocks move in reading order", "a table moved last leaves a cell that saves with a paragraph", "an edit of a moved paragraph is recorded by the document") |
+| Two tables brought into one cell | an empty paragraph stays between them, so Word does not join them; one of several | an adjacent pair is one table in Word | `test/docx/model/table_merge_test.dart` ("an empty paragraph stays, so Word does not join them", "one empty paragraph stays of several") |
+| The width of a merged cell | the sum of the merged columns, in each row of the merge; the cell keeps its own width when a merged column has none, when the sum is more than a width holds, or when no cell of the row goes | a width must be one a cell can hold | `test/docx/model/table_merge_test.dart` ("is the sum of the merged columns, in each row of the merge", "stays when a merged column has no width", "stays when the sum is more than a width holds", "stays when the merged columns have no width between them", "stays when no cell of the row goes") |
+| A merge over what is merged | a cell spanning columns, or a vertical merge, wholly inside the range joins it; rows around a bookmark keep the bookmark, and rows next to a `w:sdt` outside the range go; a range of one cell changes nothing; `w:gridBefore` and `w:gridAfter` shift the columns | Word's behaviour | `test/docx/model/table_merge_test.dart` ("holds a cell spanning columns inside the range", "holds a vertical merge inside the range", "of rows of different cells goes by the grid", "of rows around a bookmark keeps the bookmark", "of rows next to a w:sdt that is outside the range goes", "of a range that is one cell changes nothing", "w:gridBefore and w:gridAfter shift the columns") |
+| A merge that does not fit | a range past the grid, backwards, cutting a merged cell, on the columns of `w:gridBefore` or `w:gridAfter`, around a `w:sdt` or a `w:customXml`, spanning more than 63 columns, or whose tables would nest past 80 deep throws `ArgumentError`, as does a table with no grid | what a merge cannot do is refused | `test/docx/model/table_merge_test.dart` ("a merge past the grid throws ArgumentError", "a range that runs backwards throws ArgumentError", "a merge that splits a merged cell throws ArgumentError", "a range on the columns of w:gridBefore throws ArgumentError", "a range on the columns of w:gridAfter throws ArgumentError", "a span past 63 columns throws ArgumentError", "a table that would nest past 80 deep throws ArgumentError", "an empty w:tblGrid throws ArgumentError") |
+| An irregular file | rows of unequal cell counts, a `w:gridSpan` past the grid, a `w:vMerge` continue with no restart and no `w:tblGrid` open, read and round-trip, and `mergeCells` over one throws `ArgumentError`; one irregular row outside the range does not matter | a file is never refused for its grid | `test/docx/model/table_merge_test.dart` ("an irregular file", "a continue with no restart inside the range throws too", "a continue under another span inside the range throws too", "a row with fewer cells throws even in the columns it has", "an irregular row outside the range does not matter") |
+| A merge | undoes in one step, and one that fails half way rolls back | each edit is atomic | `test/docx/model/table_merge_test.dart` ("a merge undoes in one step", "a merge that fails half way rolls back") |
+| `gridSpan` of a cell of a row in a table | a span that does not fit the grid with `w:gridBefore` and `w:gridAfter` throws, and nothing changes; one that fits once a cell is removed first goes in; a row in no table, or a table with no grid, is not checked; a file that does not fit reads and can be narrowed | the API checks the fit, a file is kept | `test/docx/model/table_merge_test.dart` ("past the grid throws ArgumentError, and nothing changes", "fits once a cell is removed first", "counts w:gridBefore and w:gridAfter", "is not checked in a row in no table, or in no row", "is not checked in a table without a grid", "a file that does not fit reads, and can be narrowed") |
+| `gridSpan` and `verticalMerge` in a vertical merge | a continuation widened or narrowed against the cell above, a cell widened or narrowed against the continuation below, and a span that moves a merged cell along the row throw; a span that changes nothing is no change; a cell away from the merge takes a span; a continuation read out of line can be brought into line; spans first and then `verticalMerge` build a merge by hand | merges stay aligned through every set | `test/docx/model/table_merge_test.dart` ("a continuation widened past the cell above throws", "a cell widened past the continuation below throws", "a continuation narrowed under the cell above throws", "a cell narrowed over the continuation below throws", "a span that moves a merged cell along the row throws", "a span that changes nothing is no change", "a cell away from the merge still takes a span", "a continuation read out of line can be brought into line", "spans first, then verticalMerge, builds a merge by hand", "a merge widens merged cells past its own transient states") |
+| `verticalMerge` continuation | in the first row, under another span, or with nothing above throws; under a cell of the same span it sets; restart and `null` are not checked, nor is a cell in no table; a continue read with no restart can be set to what it reads | a continuation needs a cell above | `test/docx/model/table_merge_test.dart` ("continuation in the first row throws ArgumentError", "continuation under another span throws ArgumentError", "continuation with nothing above throws ArgumentError", "continuation under a cell of the same span sets", "restart and null are not checked", "is not checked in a row in no table", "a continue read with no restart can be set to what it reads") |
+| A row or a cell inserted | one whose spans, with `w:gridBefore` and `w:gridAfter`, exceed the grid throws, as does one with a continuation first in the table or under another span; a row with fewer columns goes in; an index out of range is `RangeError`; in a table without a grid a row is not checked, and a continuation is | the fit is checked where the row lands | `test/docx/model/table_merge_test.dart` ("whose spans exceed the grid throws, and nothing changes", "counts the spans of its cells", "that fits, with fewer columns, goes in", "with a continuation first in the table throws", "with a continuation under another span throws", "with a continuation is judged by the row above its index", "in a table without a grid is not checked", "past the grid throws, and nothing changes", "counts its span and what the row skips") |
+| `cellAtGrid` | counts `w:gridBefore` and each span, and reads a span set since | the merge's reading of the grid | `test/docx/model/table_merge_test.dart` ("counts w:gridBefore and each span", "reads a span set since") |
+| A plain row between a restart and its continuation; a removal that orphans a merge | allowed (a known gap) | removal and insertion must keep working on any table | `test/docx/model/table_merge_test.dart` ("that is plain may go inside a vertical merge (Ruling P10)", "a removal that orphans a merge is allowed (Ruling P10)") |
+
+### D3 fixtures and tools
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| The five D3 fixtures (`d3_basic`, `d3_header_row`, `d3_merges`, `d3_formatting`, `d3_nested`) | build the same bytes every time with no warning, read their text and round-trip; none ends in a table | the CI validation starts from them | `test/docx/round_trip_test.dart` ("the D3 fixtures are the five the plan names", "every D3 fixture builds the same bytes and no warnings", "every D3 fixture reads its text and round-trips") |
+| What the fixtures hold | `d3_header_row` repeats its header over 120 rows, keeps its rows whole and has one row of an exact height; `d3_merges` holds each merge shape; `d3_nested` holds a table in a cell, a list in a cell and a table last in a cell | the Word check looks for these (`word-checks.md`) | `test/docx/round_trip_test.dart` ("d3_header_row repeats its header over 120 rows", "d3_merges reads each merge shape", "d3_nested holds a table in a cell, a list and a last table") |
+| A body that ends in a table | saves, reads back and round-trips; no fixture is one, because LibreOffice's text export of such a document never ends, so `tool/write_table_last.dart` writes `d3_table_last.docx` for the owner's Word check | the case must be checked somewhere | `test/docx/round_trip_test.dart` ("a body that ends in a table saves and reads back"), `test/tool/docx_tools_test.dart` ("writes a document whose body ends in a table, and nothing else") |
+| The expected text of a table fixture | `d3_basic` and `d3_merges` have text written by hand (a line for each row, the cells joined by a tab, a merged cell's paragraphs as lines of their own); the others take the model's reading. The owner's expected texts stay paragraphs only: `docxBodyText` keeps its meaning and `docxFullText` adds the tables | a bug in cell text must not hide in its own expectation | `test/tool/text_compare_test.dart` ("a table is a line for each row, its cells joined by a tab", "paragraphs of a cell are lines, as LibreOffice writes them", "a nested table adds the lines of its rows in place", "a new document reads as the empty text") |
+| `d3_nested` and LibreOffice's text | left out of the text comparison, with its reason printed (`DocxFixture.libreOfficeTextSkip`): LibreOffice repeats a paragraph in the text of nested tables, and differs by version; its re-save is still compared | a second opinion that disagrees with itself decides nothing | `test/tool/docx_tools_test.dart` ("writes the reason of a skipped LibreOffice text, only for those", "a skipped fixture is not compared and the output says so") |
+| `tool/edit_docx.dart` on tables | edits the first cell of the first table and appends a row `New row` when the table has a grid, appends a table of a header row, a body row and a merged row to every document, and checks the edits read back | CI validates the edited files with the Open XML SDK | `test/tool/edit_docx_test.dart` ("every fixture is edited, and the appended table is as built", "a table of a document takes the cell text and a new row", "reports a cell edit that does not read back") |
+| Tables in `tool/round_trip_docx.dart` | the children of `w:tblPr`, `w:trPr` and `w:tcPr` compare in any order, and the typed properties of every paragraph and run of a cell and of every table, row and cell are read | the model writes them in schema order | `test/tool/docx_serialize_test.dart` ("the children of tblPr, trPr and tcPr compare in any order", "readTypedProperties reads the paragraphs and runs of a cell", "readTypedProperties reads the properties of tables, rows and") |
+| The fuzz | seeds 1 to 4 at 400 cases each, not 150: the fixed seeds must mutate every part name of the corpus, and the corpus grew by the D3 fixtures and `tables_by_hand`, so raise it again if a new part name joins; each loaded table's and cell's properties and grid are read, a row is added to each table and ranges of its cells are merged (only `ArgumentError` may come out of those two), and a save never throws `StateError`, even for a table the file left without rows | the typed exception is the contract | `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry", "mutated files raise only DocxReadException") |
+
 ### Checks outside the unit tests
 
 | Case | Behaviour | Why | Test |
@@ -391,9 +618,12 @@ aggregator and the read guard (`lib/src/common/`), and the change log.
   owner's Word files with the Open XML SDK, compares LibreOffice's text
   export and re-save of every fixture with the expected texts, and proves
   each check rejects the deliberately broken `d1_corrupt.docx` (AGENTS.md,
-  "Validation"). The D2 fixtures, the edits of `tool/edit_docx.dart` and
-  the model's own encoding of the styles and numbering parts go through the
-  same checks.
+  "Validation"). The D2 and D3 fixtures, the edits of `tool/edit_docx.dart`
+  and the model's own encoding of the styles and numbering parts go through
+  the same checks; the LibreOffice re-save is validated with
+  `--libreoffice-resave`, which ignores only LibreOffice's
+  `<w:tblHeader w:val="true"/>`, a value the model keeps as read.
 - Neither is Word. The owner opens each D milestone's fixtures and round
   trips in Word for Mac and records the result in
-  [`word-checks.md`](word-checks.md); the D2 section says what to look for.
+  [`word-checks.md`](word-checks.md); its D2 and D3 sections say what to look
+  for, and D3 adds a document whose body ends in a table.

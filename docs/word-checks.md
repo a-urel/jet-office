@@ -21,11 +21,13 @@ dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/model-docx-own
 dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 ```
 
-(The D2 section below uses the same commands; its folders hold the `d2_*`
-documents as well.)
+(The D2 and D3 sections below use the same commands; their folders hold the
+`d2_*` and `d3_*` documents as well. The D3 section adds one command, for a
+document that ends in a table.)
 
 `build/fixtures` also holds the workbooks of the Excel checks; open the
-`d1_*.docx` files (D1) and the `d2_*.docx` files (D2).
+`d1_*.docx` files (D1), the `d2_*.docx` files (D2) and the `d3_*.docx` files
+(D3).
 `tool/round_trip_docx.dart` prints each difference between an input and the
 model's output and exits 1 on any, so run it first and expect none;
 `tool/edit_docx.dart` likewise prints each problem with an edited document
@@ -218,6 +220,137 @@ the commands at the top of this page and open:
 - `build/edited-docx-owner/blank.docx` and `features.docx`: as under D2,
   "Edited owner files".
 - Save `d1_blank` in Word, close and reopen: no repair prompt.
+
+## D3
+
+D3 types tables. Open the D3 fixtures, their round trips, the edited owner
+files and the document that ends in a table in Word for Mac. Write them with
+the commands at the top of this page, and with this one:
+
+```bash
+dart run tool/write_table_last.dart build/table-last
+```
+
+No repair prompt in any of them; then, per document, as below. This section
+says what to look for; the result of the check is recorded under "Results",
+and none is recorded here before the owner has looked. Word repairs a table
+with no row, a row with no cell and a cell with no paragraph, and the model
+writes none of them; if a prompt appears anyway, read its recovery log and
+name the part in "Notes".
+
+### Fixtures: `build/fixtures/d3_*.docx`
+
+- `d3_basic`: `Before the table.`, a table of three columns and three rows,
+  and `After the table.`. The table has the `Table Grid` style (thin black
+  borders on every cell; the Table Design tab shows `Table Grid`, and the
+  Styles pane lists it once, by its Turkish name in a Turkish Word), the
+  look of Insert Table (Table Design > Header Row, First Column and Banded
+  Rows are ticked, Banded Columns and the other two are not), the first row
+  repeating as a header (Table Layout > Repeat Header Rows), the three
+  columns of equal width that together fill the text width, and the cells
+  `Name`, `Quantity`, `Price` / `Tea`, `2`, `3.50` / `Coffee`, `1`, `4.25`.
+- `d3_header_row`: `A long table.`, then a table of 121 rows over several
+  pages and `The end.`. The first row (`Number`, `Square`, `Text`) repeats at
+  the top of every page (Table Layout > Repeat Header Rows is on for it, and
+  for no other row); no row is split across a page break; the row `3`, `9`,
+  `Row 3 of 120` is exactly 36 pt tall (Table Properties > Row shows
+  `Exactly` and `36 pt`).
+- `d3_merges`: a table of four columns and six rows, each cell reading
+  `r<row>c<column>`, with five merges, so that the cells read as follows.
+  Across: `r0c0` spans two columns in the first row (it holds `r0c0` and
+  `r0c1`, one above the other). Down: `r1c0` spans the second and third rows
+  (it holds `r1c0` and `r2c0`). A block: `r1c1`'s neighbours `r1c2`, `r1c3`,
+  `r2c2`, `r2c3` are one cell, two columns wide and two rows tall, holding the
+  four texts as four lines. Across three: in the fourth row `r3c1` spans three
+  columns (`r3c1`, `r3c2`, `r3c3` as three lines) beside `r3c0`. A block at the
+  edge: `r4c0`, `r4c1`, `r5c0`, `r5c1` are one cell two columns wide and two
+  rows tall. Cells that were not merged (`r1c1`, `r2c1`, `r4c2`, `r4c3`,
+  `r3c0`, `r5c2`, `r5c3`) are as they were. `After the merges.` follows.
+- `d3_formatting`: a table of three columns whose widths are 100, 150 and 200 pt
+  (Table Properties > Column shows them), with a fixed layout (Options >
+  Automatically resize to fit contents is off), 450 pt wide, centred on the
+  page (Table Properties > Table > Alignment is Center) with an indent of 12 pt
+  set. The outer borders are dark blue lines 1 pt thick, the lines between rows are
+  dashed and the lines between columns dotted; the cells have margins of 2 pt
+  above and below and 6 pt at the sides. The header row reads `Top`, `Center`,
+  `Bottom`, with the words at the top, in the middle and at the bottom of
+  their cells (Table Properties > Cell > Vertical Alignment). The second row:
+  `Shaded` on a pale yellow fill, `Vertical text` **rotated, reading from
+  bottom to top** (Table Layout > Text Direction), and `Bordered` with a
+  double line above it and a thick dark red line below. The third row
+  (`High`, three times) is at least 48 pt tall (Table Properties > Row), with
+  its text in the middle of each cell. `After the formatted table.` follows.
+- `d3_nested`: `Tables in tables.`, then a table of two columns. Its second
+  row holds, at the left, `Holds a table` followed by a table of two
+  columns and two rows (`Inner a`, `Inner b` / `Inner c`, `Inner d`), and, at
+  the right, `Holds a list` followed by a bulleted list of `First item` and
+  `Second item`, with bullets. Its third row holds `Ends in a table` and
+  then a one-cell table `Last in the cell`, at the left, and `Plain` at the
+  right: Word shows a paragraph mark after the nested table (Show/Hide), as
+  every cell must end in one. `After the tables.` follows.
+
+### Round trips: `build/model-docx/d3_*.docx` and `build/model-docx-owner/*.docx`
+
+The model opened each document, read the body and every property (the tables'
+too), loaded the styles and the numbering and saved it, changing nothing;
+`tool/round_trip_docx.dart` prints any difference from the input. Open the
+`d3_*` documents of `build/model-docx` and every file of
+`build/model-docx-owner`: no repair prompt, and each looks and reads as the
+original. In the owner's files the tables are the ones to compare:
+`features.docx` keeps its table, `long.docx` its two tables and
+`builtins.docx` its table, with their borders, widths and text.
+
+### Edited owner files: `build/edited-docx-owner/*.docx`
+
+`tool/edit_docx.dart` edits tables as well as paragraphs now (its
+rules are under D1, "Edited owner files", and in AGENTS.md). Besides the run,
+the replaced paragraph, the heading and the list, it:
+
+- set the text of the first paragraph of the first cell of the first table to
+  `Edited cell`;
+- appended a row to that table whose first cell reads `New row` and whose other
+  cells are empty (left out when the table has no grid);
+- appended a table of two columns before the added heading: a header row
+  `Head one`, `Head two`, a row `Body one`, `Body two`, and a last row whose
+  one cell, `Merged`, spans both columns.
+
+Open `features.docx`, `long.docx` and `builtins.docx` (`blank.docx` has no
+table to edit, but gets the appended one). No repair prompt, and:
+
+- the first cell of the first table reads `Edited cell` and the table has a
+  `New row` row at its end, in the table's own style and with the width of its
+  columns; nothing else in the table changed;
+- the appended table follows the original body, in the document's own `Table
+  Grid` style if it has one, else in Word's definition, which the model adds
+  (the Styles pane lists one `Table Grid`, by its Turkish name in a Turkish
+  Word, never two), with `Head one` and `Head two` as a
+  header row that repeats on a page break, and `Merged` across both columns of
+  the last row (clicking in it selects one cell);
+- the heading `Added by the model` and the two-item list follow the table, as
+  under D2;
+- `long.docx` may now run to a sixteenth page; its table of contents, two
+  tables and lists are as in the original.
+
+### A body that ends in a table: `build/table-last/d3_table_last.docx`
+
+LibreOffice's text export never ends on a document whose body ends in a table,
+so no fixture is one and CI cannot check this case; the owner is the check. The
+body is an empty paragraph, `The table is the last block of the body.` and a
+table of two columns that is the last block of the body: a header row `Name`,
+`Value` and a row `Last`, `row`. Word writes a paragraph after every table it saves, so Word
+cannot have made this file: it is the case where the model saves the table
+last, before the document's final section properties.
+
+Open it. No repair prompt, and the text and the table as above. Then add a
+word to a cell, save in Word, close and reopen: no prompt appears, and Show/Hide
+shows a paragraph mark after the table.
+
+### Save in Word
+
+For `d3_basic`, `d3_merges` and `d3_nested`, and one edited owner file: change
+one word in a cell, save in Word, close and reopen. No repair prompt, the edit
+is there, and the merges, the header and the nested table are as before. For
+`d3_header_row`, also scroll to the third page: the header row is still there.
 
 ## Results
 

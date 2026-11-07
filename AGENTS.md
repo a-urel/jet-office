@@ -88,7 +88,10 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
   `<name>.xlsx` and its expected values as `<name>.expected.json`, and each
   DOCX fixture of `docxFixtures()` (`test/fixtures/docx_fixtures.dart`) as
-  `<name>.docx` and its expected text as `<name>.expected.txt`.
+  `<name>.docx` and its expected text as `<name>.expected.txt`: the D1
+  documents (`d1_*`), the D2 ones (`d2_*`) and the D3 tables (`d3_basic`,
+  `d3_header_row`, `d3_merges`, `d3_formatting`, `d3_nested`). No fixture ends
+  in a table, because LibreOffice's text export of one never ends (see below).
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx` and
   `d1_corrupt.docx`, to prove every check still fails on a bad file. The
   `validate` job's negative-control step writes `m1_corrupt.xlsx` to
@@ -243,11 +246,15 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   (`tool/draft_expected.dart` drafts them). Never edit a committed owner file or
   its expected JSON without the owner.
 - Neither is Word. The owner opens each D milestone's fixtures
-  (`build/fixtures/d1_*.docx`), the model's round trips of them and of the
-  owner's Word files, and the model's edits of the owner's Word files in
-  Word for Mac, and records the result in
+  (`build/fixtures/d1_*.docx`, `d2_*`, `d3_*`), the model's round trips of
+  them and of the owner's Word files, and the model's edits of the owner's
+  Word files in Word for Mac, and records the result in
   `docs/word-checks.md`, which says how to write them. A repair prompt there
-  is a model or writer bug, as in Excel's case.
+  is a model or writer bug, as in Excel's case. A body that ends in a table
+  cannot be a fixture (LibreOffice's text export never ends on one) and Word
+  cannot save one, so `dart run tool/write_table_last.dart build/table-last`
+  writes `d3_table_last.docx` for that check alone; never run `soffice` on
+  that folder.
 - Word files go in `test/fixtures/owner/docx/`, listed in its
   `manifest.json`, each with `<name>.expected.txt`, the text of the body's
   paragraphs (`test/fixtures/owner/README.md`, section "Word files", says
@@ -341,6 +348,12 @@ dart run tool/fuzz_docx.dart --seeds 1-200 --cases 1000
 
 It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
 1 on any. Pin a failure as a unit test in the owning `*_test.dart` first.
+
+The gate runs 400 cases per seed, not 150, for one reason: the seeds are fixed,
+so the cases must between them mutate every part name of the corpus
+(`every part name is mutated in some corpus entry`), and the D3 fixtures and
+`tables_by_hand` joined the corpus and made 150 too few. When a new part name
+joins the corpus, run that test and raise the count again if it fails.
 
 ## Hard rules
 

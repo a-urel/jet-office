@@ -21,6 +21,7 @@ import '../../tool/draft_expected_docx.dart';
 import '../../tool/round_trip_docx.dart';
 import '../../tool/src/text_compare.dart';
 import '../../tool/write_fixtures.dart' as write_fixtures;
+import '../../tool/write_table_last.dart' as write_table_last;
 import '../docx/support/docx_builder.dart' show buildDocx, rewriteDocxPart;
 import '../docx/support/styles_documents.dart' show readDocxText;
 import '../fixtures/docx_fixtures.dart';
@@ -56,6 +57,25 @@ void main() {
       docx.path.replaceFirst(RegExp(r'\.docx$'), '.txt'),
     ).writeAsStringSync('﻿$text\n');
   }
+
+  group('write_table_last', () {
+    test('writes a document whose body ends in a table, and nothing else', () {
+      write_table_last.main(<String>[dir.path]);
+      expect(names(dir), <String>['d3_table_last.docx']);
+      final DocxDocument doc = DocxDocument.open(
+        File('${dir.path}/d3_table_last.docx').readAsBytesSync(),
+      );
+      expect(doc.body.blocks.first, isA<DocxParagraph>());
+      expect(doc.body.blocks.last, isA<DocxTable>());
+      expect(doc.save().warnings, isEmpty);
+    });
+
+    test('a usage error exits 64', () {
+      write_table_last.main(<String>[]);
+      expect(exitCode, 64);
+      exitCode = 0;
+    });
+  });
 
   group('write_fixtures', () {
     test('writes every D1 fixture as .docx with its .expected.txt', () {
