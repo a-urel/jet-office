@@ -529,13 +529,40 @@ final class SectionReference {
   String toString() => 'SectionReference(${type.name}, $relId)';
 }
 
+/// A reference the API put in a section: it names its [story] directly, as
+/// the story's part and relationship are created at save, which fills
+/// [relId]. Until then [relId] is empty, and such a reference is not written.
+final class AddedSectionReference extends SectionReference {
+  /// A reference of [type] to [story], with no relationship yet.
+  AddedSectionReference(SectionReferenceType type, this.story)
+    : super(type, '');
+
+  /// The story, which only the document knows the type of.
+  final Object story;
+
+  String _id = '';
+
+  @override
+  String get relId => _id;
+
+  /// Fills [relId], once the save added the relationship.
+  set relId(String value) => _id = value;
+
+  @override
+  bool operator ==(Object other) => identical(this, other);
+
+  @override
+  int get hashCode => identityHashCode(this);
+}
+
 /// The codec of one `w:headerReference` or `w:footerReference`, which
 /// repeat in a `w:sectPr`: a [SectionReference].
 ///
 /// A reference with no `w:type` or an unknown one, or no `r:id` (or an empty
-/// one), gives no view. A reference is written with the prefix `r` for
-/// `r:id`, which must be bound to the relationships namespace where the
-/// element goes.
+/// one), gives no view. A reference is written with a prefix the bindings in
+/// scope give the relationships namespace: `r` first, then any other. With
+/// none, it declares one on the element: `r`, or `r1` (`r2`, ...) when `r`
+/// means something else there.
 final class SectionReferenceCodec extends PropertyCodec<SectionReference> {
   /// The codec of `w:headerReference` or `w:footerReference`.
   const SectionReferenceCodec(super.localName);
@@ -565,10 +592,33 @@ final class SectionReferenceCodec extends PropertyCodec<SectionReference> {
     String prefix,
     SectionReference value,
     PropertyElement? asRead,
+  ) => writeRepeated(w, prefix, value, const <String, String>{'r': Ns.rel});
+
+  @override
+  void writeRepeated(
+    XmlWriter w,
+    String prefix,
+    SectionReference value,
+    Map<String, String> scope,
   ) {
+    // A break taken to a table cell leaves the sections, so its story has no
+    // part, and there is nothing for the reference to name.
+    if (value.relId.isEmpty) return;
     w.start('$prefix:$localName');
     w.attribute('$prefix:type', value.type.xml);
-    w.attribute('r:id', scrubXmlText(value.relId).text);
+    String? rel = scope['r'] == Ns.rel ? 'r' : null;
+    for (final MapEntry<String, String> e in scope.entries) {
+      if (rel != null) break;
+      if (e.key.isNotEmpty && e.value == Ns.rel) rel = e.key;
+    }
+    if (rel == null) {
+      rel = 'r';
+      for (int i = 1; scope.containsKey(rel); i++) {
+        rel = 'r$i';
+      }
+      w.attribute('xmlns:$rel', Ns.rel);
+    }
+    w.attribute('$rel:id', scrubXmlText(value.relId).text);
     w.end();
   }
 }

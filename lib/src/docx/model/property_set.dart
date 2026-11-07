@@ -21,6 +21,7 @@ library;
 import '../../opc/opaque_xml.dart' show KeptAttribute;
 import '../../xml/xml_writer.dart';
 import '../properties.dart';
+import '../property_codec.dart' show PropertyElement;
 import 'edit_sink.dart';
 import 'styles.dart' show DocxStyleType;
 
@@ -101,6 +102,22 @@ abstract base class PropertySet implements NestedProperties {
     return List<Object?>.unmodifiable(<Object?>[
       for (final Object e in entries) e is RepeatedKept ? views[e.index] : e,
     ]);
+  }
+
+  /// The element read of each occurrence of the repeated child [localName],
+  /// in the order of [repeatedOf]: `null` for a value set.
+  ///
+  /// A name that is not a repeated child of [schema] throws [ArgumentError].
+  List<PropertyElement?> repeatedElementsOf(String localName) {
+    _checkRepeated(localName);
+    final List<PropertyElement?> read = source.repeatedElementsOf(localName);
+    final List<Object>? entries = _repeated[localName];
+    if (entries == null) {
+      return read;
+    }
+    return <PropertyElement?>[
+      for (final Object e in entries) e is RepeatedKept ? read[e.index] : null,
+    ];
   }
 
   /// Adds [value] after the occurrences of the repeated child [localName];

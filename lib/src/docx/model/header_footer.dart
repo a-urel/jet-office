@@ -22,6 +22,17 @@
 /// The part's own relationships are not read: a read of the package parses
 /// them, and a parsed relationships part is written anew at save, which a
 /// story only read must not do.
+///
+/// A section with no story of a type gets an empty one, kept by the document
+/// for that section and type, with a [StoryPart] of no name. Its first block,
+/// or `own…`, attaches it: it leaves the empty ones, and the section gets an
+/// [AddedSectionReference] that names it, both undoable and in the transaction
+/// of the edit. Nothing of it reaches the package then, so an edit undone or
+/// failed leaves no trace. A save creates the part and the relationship of each
+/// story a section of the document still refers to, and fills the reference's
+/// id, before the main part is written; the story is then a part like any
+/// other, and stays one: an undo leaves it with no reference, which a package
+/// may hold.
 part of '../docx_document.dart';
 
 /// Which pages of a section a header or a footer is for.
@@ -55,6 +66,11 @@ enum DocxHeaderFooterType {
 /// reaches every section that uses the story, as
 /// Word's "Link to Previous" does, and every reference that names its part.
 ///
+/// The first block of an empty one gives the section a reference to it in the
+/// same transaction, and the part is added at save; the section's next
+/// sections inherit it. The first block of a story of the first page sets
+/// [DocxSection.titlePage] on the sections that have it as their own.
+///
 /// A paragraph with a section break cannot go in one: [insertBlock] and
 /// [replaceBlockAt] throw [ArgumentError], wherever the paragraph comes from.
 final class DocxHeaderFooter extends DocxStory {
@@ -80,6 +96,16 @@ final class DocxHeaderFooter extends DocxStory {
   Object get _container => _story;
 
   @override
+  void insertBlock(int index, DocxBlock block) {
+    _checkBlock(block);
+    _edits.transaction(() {
+      final bool wasEmpty = _blocks.isEmpty;
+      primitives.insertBlock(_edits, _container, _blocks, index, block);
+      if (wasEmpty) _story.turnOn(type);
+    });
+  }
+
+  @override
   void _checkBlock(DocxBlock block) {
     if (block is DocxParagraph && paragraphHasBreak(block)) {
       throw ArgumentError.value(
@@ -91,21 +117,48 @@ final class DocxHeaderFooter extends DocxStory {
   }
 }
 
+/// What a section asked for when it got an empty story: the section, whether
+/// it is a header, and the type.
+typedef _EmptyStoryKey = (DocxSection, bool, DocxHeaderFooterType);
+
 /// The blocks of a header or a footer, shared by the handles on it. A story
-/// with no [_slot] has no part: it reads empty and writes nothing.
+/// with no [_slot] has no part in the package: it reads as its blocks, and
+/// writes nothing until a save finds a section that refers to it.
 final class _Story {
-  _Story(this._document, this.isHeader, this._slot);
+  /// The story of the part [_slot] names.
+  _Story(this._document, this.isHeader, RelatedPart this._slot) : _key = null;
+
+  /// A new empty story of what [_key] says.
+  _Story.empty(this._document, this.isHeader, _EmptyStoryKey this._key)
+    : part = StoryPart.create(isHeader: isHeader) {
+    _blocks = part!.blocks;
+  }
 
   final DocxDocument _document;
 
   /// Whether the story is a header's; otherwise it is a footer's.
   final bool isHeader;
 
-  /// Where the part is, or `null` for a story with none.
-  final RelatedPart? _slot;
+  /// Where the part is, or `null` for a story that has none yet.
+  RelatedPart? _slot;
 
-  /// The part, once it is loaded.
+  /// What the story was made for, when it was made empty.
+  final _EmptyStoryKey? _key;
+
+  /// Whether a section was given a reference to this new story.
+  bool _attached = false;
+
+  /// The one reference to this new story.
+  late final AddedSectionReference _reference = AddedSectionReference(
+    _key!.$3._reference,
+    this,
+  );
+
+  /// The part, once it is loaded; a new story's from the start.
   StoryPart? part;
+
+  /// Whether the save has a part to create for this story.
+  bool get needsPart => _slot == null;
 
   List<DocxBlock>? _blocks;
 
@@ -125,10 +178,44 @@ final class _Story {
   /// The blocks, read on the first access.
   List<DocxBlock> get blocks => _blocks ??= _load();
 
+  /// Records that the story holds content, or that a section asked for it,
+  /// through a handle of [type]: a new story gets its reference, and a first
+  /// story sets the title page of the sections it is the own story of (plan
+  /// Ruling 6). Call it inside a transaction.
+  void turnOn(DocxHeaderFooterType type) {
+    final _EmptyStoryKey? key = _key;
+    if (key != null && !_attached) {
+      _document._edits.apply(_StoryAttached(_document, this, key));
+      putSectionReference(key.$1, _reference, isHeader: isHeader);
+    }
+    if (type == DocxHeaderFooterType.first) {
+      final _Story? Function(DocxSection) ownOf = _document._ownStories(
+        type,
+        isHeader: isHeader,
+      );
+      for (final DocxSection section in _document.sections) {
+        if (identical(ownOf(section), this)) section.titlePage = true;
+      }
+    }
+  }
+
+  /// Adds the part at the name its [StoryPart] holds, with a relationship
+  /// whose id is not in [reservedIds], and fills the reference.
+  void create(Set<String> reservedIds) {
+    final StoryPart content = part!;
+    final RelatedPart slot = RelatedPart.added(
+      _document._package,
+      content.partName,
+      relationshipType: isHeader ? RelType.header : RelType.footer,
+      contentType: isHeader ? ContentType.wmlHeader : ContentType.wmlFooter,
+    )..create(content, reservedIds: reservedIds);
+    _slot = slot;
+    _reference.relId = slot.relationshipId!;
+  }
+
   /// Reads the part. Nothing is loaded when it throws.
   List<DocxBlock> _load() {
-    final RelatedPart? slot = _slot;
-    if (slot == null) return <DocxBlock>[];
+    final RelatedPart slot = _slot!;
     final DocxPackage package = _document._package;
     final StoryPart read = slot.load(
       (XmlPullReader r) => StoryPart.read(
@@ -141,5 +228,26 @@ final class _Story {
     primitives.adoptBlocks(_document._edits, this, read.blocks);
     part = read;
     return read.blocks;
+  }
+}
+
+/// The move of a new story out of the empty ones: a section refers to it now.
+final class _StoryAttached implements Change {
+  _StoryAttached(this._document, this._story, this._key);
+
+  final DocxDocument _document;
+  final _Story _story;
+  final _EmptyStoryKey _key;
+
+  @override
+  void revert() {
+    _story._attached = false;
+    _document._emptyStories[_key] = _story;
+  }
+
+  @override
+  void reapply() {
+    _story._attached = true;
+    _document._emptyStories.remove(_key);
   }
 }

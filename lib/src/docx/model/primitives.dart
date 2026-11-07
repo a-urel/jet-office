@@ -82,6 +82,22 @@ final class DocxEdits implements DocxEditSink {
   })?
   headerFooterResolver;
 
+  /// What gives a section a story of its own, which the document provides.
+  DocxHeaderFooter Function(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  })?
+  headerFooterOwner;
+
+  /// What drops a section's references, which the document provides.
+  void Function(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  })?
+  headerFooterRemover;
+
   /// True while a change is reverted or reapplied: the reports the model
   /// makes then are the replay, not new edits.
   bool _replaying = false;
@@ -183,6 +199,20 @@ final class DocxEdits implements DocxEditSink {
     DocxHeaderFooterType type, {
     required bool isHeader,
   }) => headerFooterResolver?.call(section, type, isHeader: isHeader);
+
+  @override
+  DocxHeaderFooter? ownHeaderFooter(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) => headerFooterOwner?.call(section, type, isHeader: isHeader);
+
+  @override
+  void removeHeaderFooter(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) => headerFooterRemover?.call(section, type, isHeader: isHeader);
 
   @override
   bool isForeign(DocxEditSink? readIn) =>

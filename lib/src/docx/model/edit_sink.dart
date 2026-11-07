@@ -100,6 +100,23 @@ abstract interface class DocxEditSink {
     required bool isHeader,
   });
 
+  /// The story of its own of [type] that [section] gets for
+  /// `DocxSection.ownHeader` (when [isHeader]) or `ownFooter`; `null` for the
+  /// sink of no document.
+  DocxHeaderFooter? ownHeaderFooter(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  });
+
+  /// Drops the references of [type] that give [section] a story of its own,
+  /// for `DocxSection.removeHeader` (when [isHeader]) or `removeFooter`.
+  void removeHeaderFooter(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  });
+
   /// Whether content read in the document of [readIn] (`null`: not read
   /// from a file) now belongs to another document, this one: never in a
   /// replay, nor for the sink of no document.
@@ -152,6 +169,20 @@ final class _NoEdits implements DocxEditSink {
     DocxHeaderFooterType type, {
     required bool isHeader,
   }) => null;
+
+  @override
+  DocxHeaderFooter? ownHeaderFooter(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) => null;
+
+  @override
+  void removeHeaderFooter(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) {}
 
   @override
   bool isForeign(DocxEditSink? readIn) => false;

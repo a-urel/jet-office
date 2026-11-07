@@ -379,6 +379,14 @@ final class PropertyContainer {
   List<Object?> repeatedViewsOf(String localName) =>
       _repeated[localName] ?? const <Object?>[];
 
+  /// The element of each occurrence of the repeated child [localName], in
+  /// input order, for what a [repeatedViewsOf] that is `null` still tells.
+  List<PropertyElement?> repeatedElementsOf(String localName) =>
+      <PropertyElement?>[
+        for (final _Slot s in _slots)
+          if (s.isW && s.name == localName) s.element,
+      ];
+
   /// The nested container [localName] read, or `null` when the container
   /// has none.
   PropertyContainer? nestedOf(String localName) {
@@ -582,7 +590,7 @@ final class PropertyContainer {
           if (entry is RepeatedKept) {
             writeSlot(occurrences[child]![entry.index]);
           } else {
-            schema.repeated[child]!.write(w, p, entry, null);
+            schema.repeated[child]!.writeRepeated(w, p, entry, inner);
           }
         }
         wrote = true;

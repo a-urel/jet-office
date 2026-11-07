@@ -9,7 +9,9 @@
 /// member reads is a no-op, and a set writes one element in the place the
 /// schema gives, among the children the model does not type. Every other
 /// child stays as read, header and footer references among them: the six
-/// getters read them, and reading one creates nothing (plan Ruling 5).
+/// getters read them, and reading one creates nothing (plan Ruling 5). An edit
+/// of a story adds a reference, and so does [DocxSection.ownHeader]; the part
+/// and the relationship it names come at save.
 ///
 /// A section lives in one of two places, and may move from the second to the
 /// first (`DocxBody.addSection`): in the `w:pPr` of the paragraph that ends
@@ -25,6 +27,7 @@ library;
 import '../../xml/xml_writer.dart';
 import '../docx_document.dart' show DocxHeaderFooter, DocxHeaderFooterType;
 import '../properties.dart';
+import '../property_codec.dart' show PropertyElement;
 import '../section_property_codecs.dart';
 import '../units.dart';
 import 'edit_sink.dart';
@@ -125,13 +128,20 @@ final class DocxSection {
   /// previous section's ([DocxHeaderFooter.isInherited]), else an empty one.
   ///
   /// Reading it creates nothing, and its part loads only on the first access
-  /// to [DocxHeaderFooter.blocks]. Throws [StateError] for a section in no
-  /// document.
+  /// to [DocxHeaderFooter.blocks]. A block added to an empty one gives the
+  /// section a reference to it, and one added to an inherited one reaches
+  /// every section that uses it, as Word's "Link to Previous" does; use
+  /// [ownHeader] for one of the section's own. Throws [StateError] for a
+  /// section in no document.
   DocxHeaderFooter get header =>
       _headerFooter(DocxHeaderFooterType.primary, isHeader: true);
 
   /// The header of the section's first page, as [header] reads it. Word shows
   /// it only when this section has a [titlePage], also when it is inherited.
+  ///
+  /// The first content of a story sets [titlePage] on the sections that have
+  /// it as their own, in the same transaction; not on one that inherits it,
+  /// which sets its own.
   DocxHeaderFooter get firstHeader =>
       _headerFooter(DocxHeaderFooterType.first, isHeader: true);
 
@@ -163,6 +173,52 @@ final class DocxSection {
     );
     if (story == null) throw StateError('The section is in no document.');
     return story;
+  }
+
+  /// Gives the section a header of [type] of its own and returns it: the one
+  /// it has, or a new empty one in place of the one it inherits, which it no
+  /// longer shows. A reference of [type] that names no header, such as one
+  /// with no relationship, is replaced; any other stays.
+  ///
+  /// A section that gets no content in it still shows an empty header, as a
+  /// part of one empty paragraph is written. [DocxHeaderFooterType.first]
+  /// sets [titlePage], also when the section had that header.
+  ///
+  /// One transaction. Throws [StateError] for a section in no document.
+  DocxHeaderFooter ownHeader(DocxHeaderFooterType type) =>
+      _own(type, isHeader: true);
+
+  /// Gives the section a footer of [type] of its own, as [ownHeader] does.
+  DocxHeaderFooter ownFooter(DocxHeaderFooterType type) =>
+      _own(type, isHeader: false);
+
+  /// Drops the section's own header of [type], so that it inherits the
+  /// previous section's again. Nothing happens when it has none, and a
+  /// reference that names no header stays.
+  ///
+  /// The part and its relationship stay in the package, and [titlePage] stays
+  /// as it is. One transaction. Throws [StateError] for a section in no
+  /// document.
+  void removeHeader(DocxHeaderFooterType type) => _remove(type, isHeader: true);
+
+  /// Drops the section's own footer of [type], as [removeHeader] does.
+  void removeFooter(DocxHeaderFooterType type) =>
+      _remove(type, isHeader: false);
+
+  DocxHeaderFooter _own(DocxHeaderFooterType type, {required bool isHeader}) {
+    final DocxHeaderFooter? story = _home?.ownHeaderFooter(
+      this,
+      type,
+      isHeader: isHeader,
+    );
+    if (story == null) throw StateError('The section is in no document.');
+    return story;
+  }
+
+  void _remove(DocxHeaderFooterType type, {required bool isHeader}) {
+    final DocxEditSink? home = _home;
+    if (home == null) throw StateError('The section is in no document.');
+    home.removeHeaderFooter(this, type, isHeader: isHeader);
   }
 
   /// The width of the text, in points: the width of the page less the left
@@ -237,8 +293,54 @@ Iterable<SectionReference> sectionReferencesOf(
   DocxSection section, {
   required bool isHeader,
 }) => section._set
-    .repeatedOf(isHeader ? 'headerReference' : 'footerReference')
+    .repeatedOf(_referenceName(isHeader))
     .whereType<SectionReference>();
+
+/// Puts [reference] in [section], in place of the first reference of its type
+/// there: when the section has a story of that type this is not called, so
+/// that one names nothing. To a header when [isHeader], else to a footer.
+void putSectionReference(
+  DocxSection section,
+  SectionReference reference, {
+  required bool isHeader,
+}) {
+  final String name = _referenceName(isHeader);
+  final PropertySet set = section._set;
+  final List<Object?> views = set.repeatedOf(name);
+  final List<PropertyElement?> elements = set.repeatedElementsOf(name);
+  for (int i = 0; i < views.length; i++) {
+    final Object? view = views[i];
+    final bool sameType = view is SectionReference
+        ? view.type == reference.type
+        : elements[i]?.w('type') == reference.type.xml;
+    if (sameType) {
+      set.replaceRepeatedAt(name, i, reference);
+      return;
+    }
+  }
+  set.addRepeated(name, reference);
+}
+
+/// Removes the references of [section] that [drops] says so of, to headers
+/// when [isHeader], else to footers.
+void removeSectionReferences(
+  DocxSection section,
+  bool Function(SectionReference) drops, {
+  required bool isHeader,
+}) {
+  final String name = _referenceName(isHeader);
+  final PropertySet set = section._set;
+  final List<Object?> views = set.repeatedOf(name);
+  for (int i = views.length - 1; i >= 0; i--) {
+    final Object? view = views[i];
+    if (view is SectionReference && drops(view)) {
+      set.removeRepeatedAt(name, i);
+    }
+  }
+}
+
+String _referenceName(bool isHeader) =>
+    isHeader ? 'headerReference' : 'footerReference';
 
 /// The properties of [section], for the writer.
 PropertySet sectionPropertySetOf(DocxSection section) => section._set;

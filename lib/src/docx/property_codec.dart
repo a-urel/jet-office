@@ -148,6 +148,17 @@ abstract base class PropertyCodec<T extends Object> {
   /// takes them from it.
   void write(XmlWriter w, String prefix, T value, PropertyElement? asRead);
 
+  /// Writes [value] as an occurrence of a repeated child
+  /// (`ContainerSchema.repeated`) set through the API, where the bindings
+  /// [scope] are in scope: what a codec needs when it writes an attribute of
+  /// another namespace. By default it is [write], with nothing read.
+  void writeRepeated(
+    XmlWriter w,
+    String prefix,
+    T value,
+    Map<String, String> scope,
+  ) => write(w, prefix, value, null);
+
   /// Whether removing the value of [e], a child with a view, leaves
   /// something: attributes the codec keeps as read beside the ones it
   /// types, as `w:cs` of `w:rFonts`. Such a child stays, written by

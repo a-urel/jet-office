@@ -1055,9 +1055,7 @@ final class DocxTableCell {
   /// A cell of [_blocks], which are in it from now on. A block already in a
   /// container throws [StateError].
   DocxTableCell._read(this._source, this._attributes, this._blocks)
-    : _readUnclosed = _blocks.lastOrNull is DocxParagraph
-          ? null
-          : List<DocxBlock>.of(_blocks) {
+    : _readUnclosed = readUnclosedOf(_blocks) {
     for (final DocxBlock block in _blocks) {
       if (block._container != null) {
         throw StateError('The block is already in a container.');
@@ -1680,27 +1678,39 @@ bool _isRangeMarker(DocxBlock block) =>
     block.namespaceUri == Ns.w &&
     _rangeMarkers.contains(block.localName);
 
-/// Whether [cell] must be written with an empty `w:p` after its blocks: Word
-/// repairs a cell that does not end in a paragraph, trailing range markers
-/// aside. A cell with no paragraph at all gets one, whatever else it holds.
-///
-/// A cell read without one, whose blocks are still all the ones read, is
-/// written as read; the blocks compare by identity, so an undo restores that,
-/// and a cell read with no blocks stays empty. The paragraph added is not in
+/// Whether [cell] must be written with an empty `w:p` after its blocks, as
+/// [needsClosingParagraph] says. The paragraph added is not in
 /// [DocxTableCell.blocks] until the file is read again.
-bool cellNeedsClosingParagraph(DocxTableCell cell) {
-  if (_blocksAsRead(cell)) return false;
-  for (final DocxBlock block in cell._blocks.reversed) {
+bool cellNeedsClosingParagraph(DocxTableCell cell) =>
+    needsClosingParagraph(cell._blocks, cell._readUnclosed);
+
+/// What [needsClosingParagraph] needs of [blocks] as read: a copy when they do
+/// not end in a paragraph, and `null` when they do, which needs no such copy.
+List<DocxBlock>? readUnclosedOf(List<DocxBlock> blocks) =>
+    blocks.lastOrNull is DocxParagraph ? null : List<DocxBlock>.of(blocks);
+
+/// Whether [blocks], of a cell or a story, must be written with an empty `w:p`
+/// after them: Word repairs one that does not end in a paragraph, trailing
+/// range markers aside. Blocks with no paragraph at all get one, whatever else
+/// they hold.
+///
+/// Blocks read without one ([readUnclosed], from [readUnclosedOf]) that are
+/// still all the ones read are written as read; they compare by identity, so
+/// an undo restores that, and a cell or a story read with no blocks stays
+/// empty.
+bool needsClosingParagraph(
+  List<DocxBlock> blocks,
+  List<DocxBlock>? readUnclosed,
+) {
+  if (_blocksAsRead(blocks, readUnclosed)) return false;
+  for (final DocxBlock block in blocks.reversed) {
     if (!_isRangeMarker(block)) return block is! DocxParagraph;
   }
   return true;
 }
 
-/// Whether [cell] was read without a closing paragraph and holds exactly the
-/// blocks it read, in order.
-bool _blocksAsRead(DocxTableCell cell) {
-  final List<DocxBlock>? read = cell._readUnclosed;
-  final List<DocxBlock> blocks = cell._blocks;
+/// Whether [blocks] are exactly the blocks [read], in order.
+bool _blocksAsRead(List<DocxBlock> blocks, List<DocxBlock>? read) {
   if (read == null || read.length != blocks.length) return false;
   for (int i = 0; i < read.length; i++) {
     if (!identical(read[i], blocks[i])) return false;

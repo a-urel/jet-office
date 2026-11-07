@@ -143,6 +143,24 @@ final class RelatedPart {
         related: true,
       );
 
+  /// A new header or footer part, not in the package yet, at the free name
+  /// [name]: [create] adds it, with a relationship of [relationshipType] from
+  /// the main part ([relationshipId]) and [contentType] as its override.
+  RelatedPart.added(
+    DocxPackage package,
+    String name, {
+    required String relationshipType,
+    required String contentType,
+  }) : this._(
+         package,
+         package.mainPart,
+         relationshipType,
+         contentType,
+         name,
+         exists: false,
+         related: false,
+       );
+
   final DocxPackage _package;
   final String _source;
   final String _relationshipType;
@@ -150,6 +168,10 @@ final class RelatedPart {
   String _name;
   bool _exists;
   bool _related;
+  String? _relationshipId;
+
+  /// The id of the relationship [create] added, or `null`.
+  String? get relationshipId => _relationshipId;
 
   /// The part's absolute name: where it is, or where [create] puts it.
   String get name => _name;
@@ -207,8 +229,12 @@ final class RelatedPart {
   /// When [name] is taken by a part no relationship of this type names,
   /// or by another part created at the same missing target, the part gets
   /// the next free name (`styles2.xml`) and a relationship of its own; a
-  /// relationship read keeps its target.
-  void create(PartContent content) {
+  /// relationship read keeps its target. A new relationship takes no id of
+  /// [reservedIds].
+  void create(
+    PartContent content, {
+    Set<String> reservedIds = const <String>{},
+  }) {
     if (_exists) {
       return;
     }
@@ -219,10 +245,11 @@ final class RelatedPart {
     // target), the part got the next free name, and the relationship read
     // stays as it was beside a new one.
     if (!_related || added.toLowerCase() != _name.toLowerCase()) {
-      opc.addRelationship(
+      _relationshipId = opc.addRelationship(
         _source,
         type: _relationshipType,
         target: _targetFrom(_source, added),
+        reservedIds: reservedIds,
       );
     }
     _name = added;

@@ -338,7 +338,8 @@ final class OpcPackage {
 
   /// Adds a relationship to [source] (a part name, or `''` for the package
   /// root) and returns its id: [id] when given, else `rId<n>` with the
-  /// lowest free `n`.
+  /// lowest `n` free and not in [reservedIds], ids something names without a
+  /// relationship that a new one must not answer.
   ///
   /// [target] is written as given, relative to [source] or absolute. With
   /// [external] it is an outside address. Throws [ArgumentError] when
@@ -351,6 +352,7 @@ final class OpcPackage {
     required String target,
     bool external = false,
     String? id,
+    Set<String> reservedIds = const <String>{},
   }) {
     if (_key(source).isNotEmpty && !hasPart(source)) {
       throw ArgumentError.value(
@@ -362,7 +364,7 @@ final class OpcPackage {
     final Relationships rels = _relsOf(source, create: true)!;
     if (id != null) return rels.add(type, target, id: id, external: external);
     int n = 1;
-    while (rels.hasId('rId$n')) {
+    while (rels.hasId('rId$n') || reservedIds.contains('rId$n')) {
       n++;
     }
     return rels.add(type, target, id: 'rId$n', external: external);

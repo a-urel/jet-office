@@ -14,12 +14,19 @@
 /// the comments between the blocks, so a part the model did not change goes
 /// out as the file's bytes (`RelatedPart.load`).
 ///
+/// A story ends in a paragraph, as a cell does (plan Ruling 11): an empty `w:p`
+/// follows blocks that do not, an empty story's too, unless they are all as
+/// read ([needsClosingParagraph]).
+///
+/// [StoryPart.create] is a part for a new story, whose name the save gives it.
+///
 /// Locations in errors and warnings start with the part's name without the
 /// leading slash: `word/header1.xml/p[0]/r[1]`.
 library;
 
 import 'dart:typed_data';
 
+import '../opc/ooxml.dart' show Ns;
 import '../opc/opaque_xml.dart';
 import '../opc/package.dart' show PartContent;
 import '../xml/utf8_buffer.dart';
@@ -36,7 +43,20 @@ import 'warnings.dart';
 
 /// A header or footer part: the root's start tag and the story's blocks.
 final class StoryPart implements PartContent {
-  StoryPart._(this.partName, this._location, this.root, this.blocks);
+  StoryPart._(this.partName, this.root, this.blocks)
+    : _readUnclosed = readUnclosedOf(blocks);
+
+  /// A part with no blocks and no name yet: a `w:hdr` when [isHeader], else a
+  /// `w:ftr`, that declares `w` and `r`. It writes one empty paragraph until
+  /// blocks go in. Nothing was read, so [blocks] have no state as read.
+  StoryPart.create({required bool isHeader})
+    : partName = '',
+      root = XmlRoot.of(isHeader ? 'w:hdr' : 'w:ftr', const <String, String>{
+        'w': Ns.w,
+        'r': Ns.rel,
+      }),
+      blocks = <DocxBlock>[],
+      _readUnclosed = null;
 
   /// Reads the part from [r], which must not have been advanced, and
   /// consumes it to the end of the root element.
@@ -70,11 +90,8 @@ final class StoryPart implements PartContent {
       );
     }
     final XmlRoot root = XmlRoot.capture(r);
-    final String location = partName.startsWith('/')
-        ? partName.substring(1)
-        : partName;
     final List<DocxBlock> blocks = <DocxBlock>[];
-    final BlockReader into = BlockReader(location, blocks);
+    final BlockReader into = BlockReader(_locationOf(partName), blocks);
     final StoryReader story = StoryReader(
       r,
       partName,
@@ -82,15 +99,19 @@ final class StoryPart implements PartContent {
       limits.maxDepth,
     );
     eachChild(r, () => story.readBlock(into));
-    return StoryPart._(partName, location, root, blocks);
+    return StoryPart._(partName, root, blocks);
   }
 
+  /// [partName] without its leading slash.
+  static String _locationOf(String partName) =>
+      partName.startsWith('/') ? partName.substring(1) : partName;
+
   /// The part's absolute name, such as `/word/header1.xml`: the part of the
-  /// warnings [encode] raises.
-  final String partName;
+  /// warnings [encode] raises. The save sets it on a new part.
+  String partName;
 
   /// The location of the blocks: [partName] without its leading slash.
-  final String _location;
+  String get _location => _locationOf(partName);
 
   /// The root element's start tag: its name, namespace declarations and
   /// attributes, so the part is written back with every binding its kept
@@ -99,6 +120,10 @@ final class StoryPart implements PartContent {
 
   /// The story's blocks in order.
   final List<DocxBlock> blocks;
+
+  /// The blocks read, when they did not end in a paragraph
+  /// ([readUnclosedOf]).
+  final List<DocxBlock>? _readUnclosed;
 
   DocxWarningCollector _encodeWarnings = DocxWarningCollector();
 
@@ -139,6 +164,11 @@ final class StoryPart implements PartContent {
       listDefined,
       styleDefined,
     ).writeBlocks(blocks, _location);
+    if (needsClosingParagraph(blocks, _readUnclosed)) {
+      w
+        ..start('$prefix:p')
+        ..end();
+    }
     w.end();
     _encodeWarnings = warnings;
     return buffer.takeChunks();

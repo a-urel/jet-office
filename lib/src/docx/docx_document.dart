@@ -19,7 +19,8 @@
 /// written inside it (layer 3). A loaded part with nothing to write is
 /// written from its original bytes too: the main part while the document's
 /// `ChangeLog` has no changes, a styles, numbering, header or footer part
-/// while the model writes what it wrote when read.
+/// while the model writes what it wrote when read. A new header or footer
+/// part is added first, so the main part writes the id of its relationship.
 ///
 /// Every edit runs in a transaction of the document's `ChangeLog`
 /// (`primitives.dart`), so an edit that fails leaves the body as it was.
@@ -57,7 +58,7 @@ import 'read_exception.dart';
 import 'read_limits.dart';
 import 'related_part.dart';
 import 'section_property_codecs.dart'
-    show SectionReference, SectionReferenceType;
+    show AddedSectionReference, SectionReference, SectionReferenceType;
 import 'story_part.dart';
 import 'story_writer.dart' show listSetOf;
 import 'styles_part.dart';
@@ -130,6 +131,8 @@ final class DocxDocument {
         resolveStyleId(styles, id, type);
     _edits.styleEnsurer = (DocxBuiltInStyle style) => styles.ensure(style);
     _edits.headerFooterResolver = _headerFooterOf;
+    _edits.headerFooterOwner = _ownHeaderFooterOf;
+    _edits.headerFooterRemover = _removeHeaderFooterOf;
   }
 
   final DocxPackage _package;
@@ -159,8 +162,11 @@ final class DocxDocument {
 
   /// The stories of no part, by what a section asked for: reading one
   /// creates nothing in the file.
-  final Map<(DocxSection, bool, DocxHeaderFooterType), _Story> _emptyStories =
-      <(DocxSection, bool, DocxHeaderFooterType), _Story>{};
+  final Map<_EmptyStoryKey, _Story> _emptyStories = <_EmptyStoryKey, _Story>{};
+
+  /// The new stories this save creates a part for, from before it checks
+  /// their blocks until it has.
+  List<_Story> _storiesToCreate = const <_Story>[];
 
   List<DocxWarning> _warnings;
 
@@ -246,6 +252,12 @@ final class DocxDocument {
   /// [DocxReadException] if a part of the file cannot be read after all, and a
   /// [StateError] naming a table [DocxBody.addTable] left without rows, before
   /// anything is written.
+  ///
+  /// A header or footer a section refers to gets its part and its relationship
+  /// here, at `/word/header<n>.xml` or `/word/footer<n>.xml`, with the first
+  /// `n` no part or relationship has; one no section refers to any more gets
+  /// neither. It keeps them from then on, so saving again gives the same names
+  /// and ids.
   DocxResult save() {
     final ZipWriter zip = ZipWriter();
     _write(zip);
@@ -340,6 +352,95 @@ final class DocxDocument {
     DocxHeaderFooterType type, {
     required bool isHeader,
   }) {
+    final _Story? Function(DocxSection) ownOf = _ownStories(
+      type,
+      isHeader: isHeader,
+    );
+    final _Story? own = ownOf(section);
+    if (own != null) return own.handle(type, inherited: false);
+    final List<DocxSection> all = sections;
+    for (int i = all.indexOf(section) - 1; i >= 0; i--) {
+      final _Story? story = ownOf(all[i]);
+      if (story != null) return story.handle(type, inherited: true);
+    }
+    return _emptyStoryOf(
+      section,
+      type,
+      isHeader,
+    ).handle(type, inherited: false);
+  }
+
+  /// The empty story [section] gets for [type].
+  _Story _emptyStoryOf(
+    DocxSection section,
+    DocxHeaderFooterType type,
+    bool isHeader,
+  ) {
+    final _EmptyStoryKey key = (section, isHeader, type);
+    return _emptyStories[key] ??= _Story.empty(this, isHeader, key);
+  }
+
+  /// The story of its own of [type] [section] gets (plan Ruling 5): the one it
+  /// has, else a new one, which [_Story.turnOn] attaches.
+  DocxHeaderFooter _ownHeaderFooterOf(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) {
+    final _Story story =
+        _ownStories(type, isHeader: isHeader)(section) ??
+        _emptyStoryOf(section, type, isHeader);
+    _edits.transaction(() => story.turnOn(type));
+    return story.handle(type, inherited: false);
+  }
+
+  /// Drops every reference of [type] of [section] that names a story, so the
+  /// section inherits again; one that names nothing stays.
+  void _removeHeaderFooterOf(
+    DocxSection section,
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) {
+    final _Story? Function(SectionReference) storyOf = _referenceStories(
+      isHeader: isHeader,
+    );
+    _edits.transaction(
+      () => removeSectionReferences(
+        section,
+        (SectionReference ref) =>
+            ref.type == type._reference && storyOf(ref) != null,
+        isHeader: isHeader,
+      ),
+    );
+  }
+
+  /// What gives a section's own story of [type]: that of its first reference
+  /// of [type] that names one, or `null`.
+  _Story? Function(DocxSection) _ownStories(
+    DocxHeaderFooterType type, {
+    required bool isHeader,
+  }) {
+    final _Story? Function(SectionReference) storyOf = _referenceStories(
+      isHeader: isHeader,
+    );
+    return (DocxSection section) {
+      for (final SectionReference ref in sectionReferencesOf(
+        section,
+        isHeader: isHeader,
+      )) {
+        if (ref.type != type._reference) continue;
+        final _Story? story = storyOf(ref);
+        if (story != null) return story;
+      }
+      return null;
+    };
+  }
+
+  /// What gives the story a reference names, to a header when [isHeader] and
+  /// to a footer otherwise, or `null` when it names none.
+  _Story? Function(SectionReference) _referenceStories({
+    required bool isHeader,
+  }) {
     final OpcPackage opc = _package.package;
     final String main = _package.mainPart;
     final String otherKind = isHeader ? RelType.footer : RelType.header;
@@ -355,36 +456,9 @@ final class DocxDocument {
         if (name != null) namedAsOther.add(name);
       }
     }
-    _Story? ownOf(DocxSection s) {
-      for (final SectionReference ref in sectionReferencesOf(
-        s,
-        isHeader: isHeader,
-      )) {
-        if (ref.type != type._reference) continue;
-        final _Story? story = _storyOf(
-          relationships[ref.relId],
-          isHeader,
-          namedAsOther,
-        );
-        if (story != null) return story;
-      }
-      return null;
-    }
-
-    final _Story? own = ownOf(section);
-    if (own != null) return own.handle(type, inherited: false);
-    final List<DocxSection> all = sections;
-    for (int i = all.indexOf(section) - 1; i >= 0; i--) {
-      final _Story? story = ownOf(all[i]);
-      if (story != null) return story.handle(type, inherited: true);
-    }
-    return _emptyStories
-        .putIfAbsent((
-          section,
-          isHeader,
-          type,
-        ), () => _Story(this, isHeader, null))
-        .handle(type, inherited: false);
+    return (SectionReference ref) => ref is AddedSectionReference
+        ? ref.story as _Story
+        : _storyOf(relationships[ref.relId], isHeader, namedAsOther);
   }
 
   /// The story of the part [rel] names, for a reference of a header when
@@ -419,9 +493,73 @@ final class DocxDocument {
     );
   }
 
-  /// The header and footer parts loaded so far.
-  Iterable<StoryPart> get _storyParts =>
-      _stories.values.map((_Story s) => s.part).nonNulls;
+  /// The header and footer parts loaded so far, and those this save creates.
+  Iterable<StoryPart> get _storyParts => <_Story>[
+    ..._stories.values,
+    ..._storiesToCreate,
+  ].map((_Story s) => s.part).nonNulls;
+
+  /// Finds the new stories a section of the document refers to and names
+  /// their parts, without touching the package, so that a save that stops at
+  /// a check creates nothing.
+  ///
+  /// A name is free when no part has it and no relationship of the main part
+  /// targets it: a part there would give a relationship read, and any
+  /// reference through it, a target they never had. A folder `/word` that
+  /// cannot hold a part, because a part has that name, leaves the root.
+  void _nameNewStories() {
+    final OpcPackage opc = _package.package;
+    final String main = _package.mainPart;
+    final Set<String> taken = <String>{
+      for (final OpcRelationship rel in opc.relationshipsOf(main))
+        if (!rel.external) opc.resolve(main, rel.target).toLowerCase(),
+    };
+    final String folder = opc.isNewPartName('/word/_') ? '/word/' : '/';
+    final List<_Story> stories = <_Story>[];
+    for (final DocxSection section in sections) {
+      for (final bool isHeader in const <bool>[true, false]) {
+        for (final SectionReference ref in sectionReferencesOf(
+          section,
+          isHeader: isHeader,
+        )) {
+          if (ref is! AddedSectionReference) continue;
+          final _Story story = ref.story as _Story;
+          if (!story.needsPart) continue;
+          final String kind = isHeader ? 'header' : 'footer';
+          int n = 1;
+          while (!opc.isNewPartName('$folder$kind$n.xml') ||
+              !taken.add('$folder$kind$n.xml')) {
+            n++;
+          }
+          story.part!.partName = '$folder$kind$n.xml';
+          stories.add(story);
+        }
+      }
+    }
+    _storiesToCreate = stories;
+  }
+
+  /// Creates the parts [_nameNewStories] named, so that the main part, which
+  /// the package writes after this, knows the ids. A new relationship takes no
+  /// id a reference names, or that reference, which names nothing, would name
+  /// the new part.
+  void _createNewStories() {
+    if (_storiesToCreate.isEmpty) return;
+    final Set<String> named = <String>{
+      for (final DocxSection section in sections)
+        for (final bool isHeader in const <bool>[true, false])
+          for (final SectionReference ref in sectionReferencesOf(
+            section,
+            isHeader: isHeader,
+          ))
+            ref.relId,
+    };
+    for (final _Story story in _storiesToCreate) {
+      story.create(named);
+      _stories[story.part!.partName] = story;
+    }
+    _storiesToCreate = const <_Story>[];
+  }
 
   /// Whether the document defines a list instance, for the check of the
   /// lists paragraphs were put in through the API (plan Ruling 8); `null`
@@ -451,6 +589,7 @@ final class DocxDocument {
       // Only an edit leaves a table without rows, and the check comes before
       // anything is written, to the part or to the sink.
       if (_edits.log.hasChanges) {
+        _nameNewStories();
         main.checkBuiltTables();
         for (final StoryPart story in _storyParts) {
           story.checkBuiltTables();
@@ -482,6 +621,7 @@ final class DocxDocument {
     if (numbering != null && numbering.holdsSomething) {
       _numberingSlot!.create(numbering);
     }
+    _createNewStories();
     package.guard(package.mainPart, () => package.package.writeTo(zip));
     final DocumentPart? part = _part;
     _warnings = List<DocxWarning>.unmodifiable(<DocxWarning>[
