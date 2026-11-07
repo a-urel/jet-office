@@ -60,6 +60,7 @@ import 'read_limits.dart';
 import 'related_part.dart';
 import 'section_property_codecs.dart'
     show AddedSectionReference, SectionReference, SectionReferenceType;
+import 'settings_part.dart';
 import 'story_part.dart';
 import 'story_writer.dart' show listSetOf;
 import 'styles_part.dart';
@@ -83,6 +84,9 @@ bool isStylesLoaded(DocxDocument document) => document._styles != null;
 
 /// Whether the numbering of [document] has been loaded, for tests.
 bool isNumberingLoaded(DocxDocument document) => document._numbering != null;
+
+/// Whether the settings of [document] have been loaded, for tests.
+bool isSettingsLoaded(DocxDocument document) => document._settings != null;
 
 /// A Word document held in memory: opened from a DOCX file, read and
 /// changed block by block, and saved.
@@ -157,6 +161,10 @@ final class DocxDocument {
   RelatedPart? _numberingSlot;
   DocxNumbering? _numbering;
 
+  /// The settings part and where it is, once the settings are loaded.
+  SettingsPart? _settings;
+  RelatedPart? _settingsSlot;
+
   /// The stories of the header and footer parts references named so far, by
   /// the part's canonical name.
   final Map<String, _Story> _stories = <String, _Story>{};
@@ -229,6 +237,32 @@ final class DocxDocument {
   /// relationships part of the main part); nothing is loaded then, so the
   /// next access throws again and a save copies the part as it was.
   DocxNumbering get numbering => _numbering ?? _loadNumbering();
+
+  /// Whether the document has odd and even headers
+  /// (`w:evenAndOddHeaders` of `word/settings.xml`): the even header and
+  /// footer of each section show on its even pages when it is `true`.
+  ///
+  /// It is `false` for a document without a settings part, with no such
+  /// child, with one whose `w:val` is false or does not parse, or with two.
+  /// Setting `true` writes `<w:evenAndOddHeaders/>` at its place in the
+  /// schema, replacing what was read, and `false` removes the child; the
+  /// part is added at save for a document without one, holding only this
+  /// child, and every other child of a part read stays as it was. The first
+  /// content of an even header or footer, and [DocxSection.ownHeader] of the
+  /// even type, set it to `true` in the same edit; removing one sets nothing.
+  ///
+  /// The part loads on the first access, through the main part's
+  /// relationship wherever it lives; until then a save copies it as it was,
+  /// and so it does for as long as the model writes what it wrote when read.
+  /// A part that cannot be read makes this throw a [DocxReadException] naming
+  /// it, nothing is loaded then, and a save copies it as it was. The set is
+  /// one edit of the change log.
+  bool get evenAndOddHeaders => _settingsPart().evenAndOddHeaders;
+
+  set evenAndOddHeaders(bool value) {
+    final SettingsPart part = _settingsPart();
+    _edits.transaction(() => part.evenAndOddHeaders = value);
+  }
 
   /// What was repaired while opening and loading the document, followed by
   /// what the last [save] or [saveTo] repaired, in first-occurrence order.
@@ -325,6 +359,25 @@ final class DocxDocument {
     _stylesSlot = slot;
     _stylesPart = part;
     return _styles = part.styles;
+  }
+
+  SettingsPart _settingsPart() => _settings ?? _loadSettings();
+
+  SettingsPart _loadSettings() {
+    final RelatedPart slot = RelatedPart.find(
+      _package,
+      source: _package.mainPart,
+      relationshipType: RelType.settings,
+      defaultName: '/word/settings.xml',
+      contentType: ContentType.wmlSettings,
+    );
+    final SettingsPart part = slot.exists
+        ? slot.load(
+            (XmlPullReader r) => SettingsPart.read(r, slot.name, _edits),
+          )
+        : SettingsPart.empty(_edits, slot.name);
+    _settingsSlot = slot;
+    return _settings = part;
   }
 
   DocxNumbering _loadNumbering() {
@@ -640,6 +693,10 @@ final class DocxDocument {
     final NumberingPart? numbering = _numberingPart;
     if (numbering != null && numbering.holdsSomething) {
       _numberingSlot!.create(numbering);
+    }
+    final SettingsPart? settings = _settings;
+    if (settings != null && settings.holdsSomething) {
+      _settingsSlot!.create(settings);
     }
     _createNewStories();
     package.guard(package.mainPart, () => package.package.writeTo(zip));

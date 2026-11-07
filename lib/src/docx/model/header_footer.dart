@@ -69,7 +69,8 @@ enum DocxHeaderFooterType {
 /// The first block of an empty one gives the section a reference to it in the
 /// same transaction, and the part is added at save; the section's next
 /// sections inherit it. The first block of a story of the first page sets
-/// [DocxSection.titlePage] on the sections that have it as their own. Empty
+/// [DocxSection.titlePage] on the sections that have it as their own; that of an
+/// even one sets [DocxDocument.evenAndOddHeaders]. Empty
 /// paragraphs are no content, as Word writes one in a header nobody filled: a
 /// block added after them is a first block too.
 ///
@@ -195,6 +196,7 @@ final class _Story {
   void turnOnFor(DocxSection section, DocxHeaderFooterType type) {
     _attach();
     if (type == DocxHeaderFooterType.first) section.titlePage = true;
+    if (type == DocxHeaderFooterType.even) _document.evenAndOddHeaders = true;
   }
 
   /// Records that the story got its first content through a handle of [type],
@@ -212,6 +214,7 @@ final class _Story {
         if (identical(ownOf(section), this)) section.titlePage = true;
       }
     }
+    if (type == DocxHeaderFooterType.even) _document.evenAndOddHeaders = true;
   }
 
   /// Adds the part at the name its [StoryPart] holds, with a relationship

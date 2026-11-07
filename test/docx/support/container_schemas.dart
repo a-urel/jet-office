@@ -18,6 +18,7 @@ import 'package:jet_office/src/docx/paragraph_property_codecs.dart';
 import 'package:jet_office/src/docx/properties.dart';
 import 'package:jet_office/src/docx/run_property_codecs.dart';
 import 'package:jet_office/src/docx/section_property_codecs.dart';
+import 'package:jet_office/src/docx/settings_part.dart';
 import 'package:jet_office/src/docx/style_schemas.dart';
 import 'package:jet_office/src/docx/table_property_codecs.dart';
 
@@ -249,5 +250,10 @@ final List<ContainerSchemaCase> containerSchemaCases = <ContainerSchemaCase>[
       'vAlign': DocxSectionVerticalAlignment.center,
       'titlePg': true,
     },
+  ),
+  (
+    name: 'settings',
+    schema: settingsSchema,
+    samples: <String, Object>{'evenAndOddHeaders': true},
   ),
 ];
