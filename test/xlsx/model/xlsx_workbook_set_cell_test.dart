@@ -211,23 +211,8 @@ void main() {
     expect(watch.elapsed, lessThan(const Duration(seconds: 15)));
   });
 
-  test('unsupported value types throw UnsupportedError naming the '
-      'milestone', () {
+  test('unsupported value types throw ArgumentError', () {
     final XlsxSheet sheet = XlsxWorkbook().addSheet('S');
-    expect(
-      () => sheet.setCell(
-        0,
-        0,
-        XlsxRichText(const <XlsxTextRun>[XlsxTextRun('x')]),
-      ),
-      throwsA(
-        isA<UnsupportedError>().having(
-          (UnsupportedError e) => e.message,
-          'message',
-          'XlsxRichText cells arrive in W4.',
-        ),
-      ),
-    );
     expect(
       () => sheet.setCell(0, 0, const XlsxCell(XlsxCell(1))),
       throwsArgumentError,

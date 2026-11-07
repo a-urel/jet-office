@@ -1,15 +1,17 @@
 // Tests tool/write_model_sample.dart: the generated workbooks of the W1, W2
-// and W3 Excel checks. It writes files, so it runs on the VM only.
+// W3 and W4 Excel checks. It writes files, so it runs on the VM only.
 @TestOn('vm')
 library;
 
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import '../../tool/write_model_sample.dart';
+import '../fixtures/m4_fixtures.dart' show jpeg3x5, png4x2;
 
 void main() {
   test('writes a workbook the reader reads back, with the values listed', () {
@@ -109,9 +111,9 @@ void main() {
       );
       addTearDown(() => temp.deleteSync(recursive: true));
       final List<String> paths = writeModelSample('${temp.path}/out');
-      expect(paths, hasLength(3));
-      expect(paths.last, endsWith('w3_generated.xlsx'));
-      book = XlsxWorkbook.open(File(paths.last).readAsBytesSync());
+      expect(paths, hasLength(4));
+      expect(paths[2], endsWith('w3_generated.xlsx'));
+      book = XlsxWorkbook.open(File(paths[2]).readAsBytesSync());
       report = book.sheet('Report');
     });
 
@@ -182,6 +184,123 @@ void main() {
       expect(locked.protection, isNotNull);
       expect(locked.hasStoredPassword, isTrue);
       expect(report.protection, isNull);
+    });
+  });
+  group('w4_generated.xlsx', () {
+    late Uint8List bytes;
+    late XlsxWorkbook book;
+    late XlsxSheet objects;
+
+    setUpAll(() {
+      final Directory temp = Directory.systemTemp.createTempSync(
+        'model_sample',
+      );
+      addTearDown(() => temp.deleteSync(recursive: true));
+      final List<String> paths = writeModelSample('${temp.path}/out');
+      expect(paths.last, endsWith('w4_generated.xlsx'));
+      bytes = File(paths.last).readAsBytesSync();
+      book = XlsxWorkbook.open(bytes);
+      objects = book.sheet('Objects');
+    });
+
+    test('has an Objects and a Removed sheet and opens with no warning', () {
+      expect(book.sheets.map((XlsxSheet s) => s.name), <String>[
+        'Objects',
+        'Removed',
+      ]);
+      expect(book.warnings, isEmpty);
+    });
+
+    test('has a rich text with a bold run and a red italic one', () {
+      final XlsxRichText? rich = objects.richTextAt(0, 0);
+      expect(rich?.text, 'Bold, plain and red italic');
+      expect(rich?.runs.first.font?.bold, isTrue);
+      expect(rich?.runs.last.font?.italic, isTrue);
+      expect(rich?.runs.last.font?.color, const XlsxColor.rgb(0xC00000));
+    });
+
+    test('has a hidden and a visible note', () {
+      expect(objects.notes, hasLength(2));
+      final XlsxNote hidden = objects.noteAt(2, 1)!;
+      final XlsxNote shown = objects.noteAt(2, 2)!;
+      expect(hidden.visible, isFalse);
+      expect(shown.visible, isTrue);
+      expect(hidden.author, 'jet_office');
+      expect(shown.text.text, isNotEmpty);
+    });
+
+    test('has a PNG and a JPEG, one-cell and two-cell', () {
+      final List<XlsxPicture> pictures = objects.pictures;
+      Iterable<XlsxPicture> of(OfficeImageFormat f) =>
+          pictures.where((XlsxPicture p) => p.image.format == f);
+      expect(of(OfficeImageFormat.png), hasLength(3));
+      expect(of(OfficeImageFormat.jpeg), hasLength(2));
+      expect(
+        pictures.where((XlsxPicture p) => p.anchor is XlsxOneCellAnchor),
+        hasLength(3),
+      );
+      expect(
+        pictures.where((XlsxPicture p) => p.anchor is XlsxTwoCellAnchor),
+        hasLength(2),
+      );
+      expect(of(OfficeImageFormat.png).first.image, OfficeImage(png4x2));
+      expect(of(OfficeImageFormat.jpeg).first.image, OfficeImage(jpeg3x5));
+    });
+
+    test('shows a PNG used twice from one media part', () {
+      final Archive archive = ZipDecoder().decodeBytes(bytes);
+      final List<String> media = <String>[
+        for (final ArchiveFile f in archive)
+          if (f.name.startsWith('xl/media/')) f.name,
+      ];
+      expect(media, hasLength(2));
+    });
+
+    test('has a picture moved to a new size', () {
+      final XlsxPicture moved = objects.pictures.firstWhere(
+        (XlsxPicture p) => p.name == 'Moved picture',
+      );
+      final XlsxOneCellAnchor anchor = moved.anchor as XlsxOneCellAnchor;
+      expect(anchor.width, 200);
+      expect(anchor.height, 100);
+    });
+
+    test('has a table with totals and one without a style', () {
+      final XlsxTable sales = objects.tables.firstWhere(
+        (XlsxTable t) => t.name == 'Sales',
+      );
+      expect(sales.totalsRow, isTrue);
+      expect(sales.columns.last.totalsFunction, XlsxTotalsFunction.sum);
+      expect(sales.style, isNotNull);
+      final XlsxTable plain = objects.tables.firstWhere(
+        (XlsxTable t) => t.name == 'Plain',
+      );
+      expect(plain.style, isNull);
+      expect(objects.tables, hasLength(2));
+    });
+
+    test('has a sheet where a table and a picture were removed again', () {
+      final XlsxSheet removed = book.sheet('Removed');
+      expect(removed.tables, isEmpty);
+      expect(removed.pictures, isEmpty);
+      expect(removed.cellAt(0, 0)?.value, isNotNull);
+      final Archive archive = ZipDecoder().decodeBytes(bytes);
+      final List<String> parts = <String>[
+        for (final ArchiveFile f in archive) f.name,
+      ];
+      // One drawing and two tables, all of the sheet Objects.
+      expect(
+        parts.where(
+          (String n) => RegExp(r'^xl/drawings/drawing\d+\.xml$').hasMatch(n),
+        ),
+        hasLength(1),
+      );
+      expect(
+        parts.where(
+          (String n) => RegExp(r'^xl/tables/table\d+\.xml$').hasMatch(n),
+        ),
+        hasLength(2),
+      );
     });
   });
 }

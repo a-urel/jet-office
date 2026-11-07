@@ -27,10 +27,10 @@ mixin _SheetLayout {
   ///
   /// A row the file lacks has the default format. An `ht` without
   /// `customHeight="1"` is Excel's automatic height, so `height` is `null`;
-  /// the style is read as [XlsxSheet.styleAt] reads a row's. An attribute that cannot
-  /// be read (an `ht` of `abc`, an outline level of 9) reads as its default
-  /// and is reported once (`layoutInvalid`); it is saved as written until
-  /// [setRowFormat] sets that field. Loads the sheet. Throws a
+  /// the style is read as [XlsxSheet.styleAt] reads a row's. An attribute
+  /// that cannot be read (an `ht` of `abc`, an outline level of 9) reads as
+  /// its default and is reported once (`layoutInvalid`); it is saved as
+  /// written until [setRowFormat] sets that field. Loads the sheet. Throws a
   /// [RangeError] outside Excel's rows and an [XlsxReadException] when the
   /// sheet cannot be read.
   XlsxRowFormat rowFormat(int row) {

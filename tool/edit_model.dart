@@ -28,9 +28,16 @@
 /// landscape A4 page setup that fits one page wide, a footer, an auto filter
 /// over the new row (left out when the sheet has a filter or a table in the
 /// way) and the workbook's title. Each is read back through the model. No
-/// protection is set, as it would lock the owner's review. Last it writes the
-/// workbooks `tool/write_model_sample.dart` makes, `w1_generated.xlsx`,
-/// `w2_generated.xlsx` and `w3_generated.xlsx`, to the same directory.
+/// protection is set, as it would lock the owner's review. The objects follow,
+/// in the same row: a rich text cell in J (`Rich ` bold, `text` plain), a note
+/// on K by `jet_office`, a 4 by 2 pixel PNG at L as a one-cell picture, and a
+/// table `Model_table` (`Model_table2` and so on when the name is taken, by a
+/// table or a defined name) of two columns over the two rows below the new
+/// row, a header and a data row (left out when a cell there is not free). Each
+/// is read back through the model. Last it writes the workbooks
+/// `tool/write_model_sample.dart` makes, `w1_generated.xlsx`,
+/// `w2_generated.xlsx`, `w3_generated.xlsx` and `w4_generated.xlsx`, to the
+/// same directory.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
 /// problem, 2 when the arguments are unusable or the input directory holds
@@ -50,6 +57,7 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/number_format.dart' show isDateFormat;
 
+import '../test/fixtures/m4_fixtures.dart' show png4x2;
 import 'write_model_sample.dart' as sample;
 
 void main(List<String> args) {
@@ -84,6 +92,14 @@ const String _footer = '&CPage &P of &N';
 const int _validationColumn = 6;
 const int _ruleColumn = 7;
 const int _barColumn = 8;
+
+/// The columns of the new row that take the rich text, the note and the
+/// picture, and the table's base name.
+const int _richColumn = 9;
+const int _noteColumn = 10;
+const int _pictureColumn = 11;
+const String _tableBase = 'Model_table';
+const String _noteAuthor = 'jet_office';
 
 /// The number of cells the tool sets in the new row.
 const int _cells = 4;
@@ -145,7 +161,8 @@ int editModel(
   out.writeln(
     failed == 0
         ? 'All ${files.length} workbooks edited, and w1_generated.xlsx, '
-              'w2_generated.xlsx and w3_generated.xlsx written.'
+              'w2_generated.xlsx, w3_generated.xlsx and w4_generated.xlsx '
+              'written.'
         : '$failed failed.',
   );
   return failed == 0 ? 0 : 1;
@@ -158,6 +175,7 @@ List<String> _edit(File file, Directory output, String name) {
   final Set<int> formatted;
   final String added;
   final _Features features;
+  final String? table;
   try {
     final XlsxWorkbook book = XlsxWorkbook.open(file.readAsBytesSync());
     final XlsxSheet sheet = book.sheets.first;
@@ -173,6 +191,7 @@ List<String> _edit(File file, Directory output, String name) {
       ..setCell(row, 3, _link);
     _styleAndLayOut(sheet, row);
     features = _addFeatures(book, sheet, row);
+    table = _addObjects(book, sheet, row);
     added = _freeName(book, 'Model edit');
     book.addSheet(added).setCell(0, 0, _addedText);
     saved = book.save().bytes;
@@ -180,7 +199,7 @@ List<String> _edit(File file, Directory output, String name) {
     return <String>['the edit failed: $e'];
   }
   File('${output.path}/$name').writeAsBytesSync(saved);
-  return _check(saved, row, added, formatted, features);
+  return _check(saved, row, added, formatted, features, table);
 }
 
 /// Whether [style] sets a number format that shows no date: not General,
@@ -252,6 +271,7 @@ List<String> _check(
   String added,
   Set<int> formatted,
   _Features features,
+  String? table,
 ) {
   final List<String> problems = <String>[];
   try {
@@ -295,7 +315,8 @@ List<String> _check(
     final XlsxWorkbook model = XlsxWorkbook.open(saved);
     problems
       ..addAll(_checkModel(model.sheets.first, row))
-      ..addAll(_checkFeatures(model, row, features));
+      ..addAll(_checkFeatures(model, row, features))
+      ..addAll(_checkObjects(model.sheets.first, row, table));
   } on Object catch (e) {
     problems.add('reading the saved workbook failed: $e');
   }
@@ -459,5 +480,91 @@ List<String> _checkFeatures(XlsxWorkbook model, int row, _Features features) {
     if (features.filtered && sheet.autoFilter != XlsxRange(row, 0, row, 3))
       'the auto filter is missing',
     if (model.properties.title != _title) 'the title is missing',
+  ];
+}
+
+/// The rich text of the new row's column J: a bold run, then a plain one.
+final XlsxRichText _rich = XlsxRichText(<XlsxTextRun>[
+  const XlsxTextRun('Rich ', font: XlsxFont(bold: true)),
+  const XlsxTextRun('text'),
+]);
+
+/// The note of the new row's column K.
+final XlsxNote _note = XlsxNote.plain(
+  'A note set by the model.',
+  author: _noteAuthor,
+);
+
+/// Sets the rich text, the note, the picture and the table on [sheet] in and
+/// below [row], and returns the table's name, or `null` when a cell the table
+/// needs is not free or a table or the sheet's layout is in the way (the
+/// setter refuses with an [ArgumentError], changing nothing).
+String? _addObjects(XlsxWorkbook book, XlsxSheet sheet, int row) {
+  sheet
+    ..setCell(row, _richColumn, _rich)
+    ..setNote(row, _noteColumn, _note)
+    ..addPicture(
+      XlsxPicture(
+        OfficeImage(png4x2),
+        XlsxOneCellAnchor(XlsxAnchorPoint(row, _pictureColumn)),
+        name: 'Model picture',
+      ),
+    );
+  if (row + 2 >= XlsxLimits.maxRows) return null;
+  final XlsxRange range = XlsxRange(row + 1, 0, row + 2, 1);
+  for (int r = range.firstRow; r <= range.lastRow; r++) {
+    for (int c = range.firstColumn; c <= range.lastColumn; c++) {
+      if (sheet.cellAt(r, c) != null) return null;
+    }
+  }
+  final Set<String> taken = <String>{
+    for (final XlsxDefinedName n in book.definedNames) n.name.toLowerCase(),
+    for (final XlsxSheet s in book.sheets)
+      for (final XlsxTable t in s.tables) t.name.toLowerCase(),
+  };
+  String name = _tableBase;
+  for (int n = 2; taken.contains(name.toLowerCase()); n++) {
+    name = '$_tableBase$n';
+  }
+  try {
+    sheet.addTable(
+      XlsxTable(name, range, const <XlsxTableColumn>[
+        XlsxTableColumn('Item'),
+        XlsxTableColumn('Count'),
+      ]),
+    );
+  } on ArgumentError {
+    return null;
+  }
+  return name;
+}
+
+/// The objects [sheet] lacks, read back through the model. [table] is the
+/// name [_addObjects] gave the table, or `null` for none.
+List<String> _checkObjects(XlsxSheet sheet, int row, String? table) {
+  final XlsxRichText? rich = sheet.richTextAt(row, _richColumn);
+  final XlsxNote? note = sheet.noteAt(row, _noteColumn);
+  final List<XlsxPicture> pictures = sheet.pictures;
+  final XlsxPicture? picture = pictures.isEmpty ? null : pictures.last;
+  XlsxTable? found;
+  for (final XlsxTable t in sheet.tables) {
+    if (t.name == table) found = t;
+  }
+  return <String>[
+    if (rich?.text != _rich.text ||
+        rich?.runs.first.font?.bold != true ||
+        rich?.runs.last.font?.bold == true)
+      'the rich text is missing',
+    if (note?.author != _noteAuthor || note?.text.text != _note.text.text)
+      'the note is missing',
+    if (picture?.image != OfficeImage(png4x2) ||
+        picture?.anchor.from != XlsxAnchorPoint(row, _pictureColumn))
+      'the picture is missing',
+    if (table != null &&
+        (found == null ||
+            found.range != XlsxRange(row + 1, 0, row + 2, 1) ||
+            found.columns.length != 2 ||
+            !found.headerRow))
+      'the table is missing',
   ];
 }

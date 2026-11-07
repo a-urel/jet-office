@@ -3,10 +3,14 @@
 /// New in jet_office; quds_office_engine has no rich text writer.
 library;
 
+import '../opc/ooxml.dart';
+import '../opc/opaque_xml.dart';
 import '../xml/xml_escape.dart';
+import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'font.dart';
 import 'limits.dart';
+import 'model/style_elements.dart';
 
 /// One run of an [XlsxRichText]: a piece of text and its font.
 ///
@@ -172,3 +176,92 @@ bool _isPadded(String text) {
 
 bool _isSpace(int unit) =>
     unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D;
+
+/// The runs of the rich text element [r] is on (an `<si>`, an `<is>` or a
+/// comment's `<text>`), or `null` when it holds no `<r>`.
+///
+/// Leaves [r] on the element's end. Each run is its `<t>` text, decoded
+/// (`_x0041_` is `A`) and joined when the run has several, and its font
+/// from the `<rPr>`, or `null` for a run without one. Text outside runs, a
+/// phonetic run (`<rPh>`) and elements of other namespaces are not part of
+/// the result. A run's text is kept as read, so an empty one stays. A value
+/// of an `<rPr>` the font types cannot hold (a size of `abc`, say) is read
+/// as absent and [warn] is called with `rPr`; it may be called once for
+/// each such run, and the caller reports it once.
+XlsxRichText? readRichTextRuns(XmlPullReader r, void Function(String) warn) {
+  if (r.isEmptyElement) return null;
+  final int depth = r.depth;
+  final List<XlsxTextRun> runs = <XlsxTextRun>[];
+  while (r.next()) {
+    if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+    if (r.eventType != XmlEventType.startElement) continue;
+    if (r.depth == depth + 1 &&
+        r.localName == 'r' &&
+        r.namespaceUri == Ns.main) {
+      runs.add(_readRun(r, warn));
+    } else {
+      r.skip();
+    }
+  }
+  return runs.isEmpty ? null : XlsxRichText(runs);
+}
+
+/// [readRichTextRuns] for an element kept as written, such as the `<is>` of
+/// an inline string cell or a shared string's `<si>`.
+///
+/// The element is parsed again with no depth limit of its own, as the
+/// reader that captured it already accepted it.
+XlsxRichText? readRichTextOf(OpaqueXml xml, void Function(String) warn) {
+  final StringBuffer standalone = StringBuffer();
+  xml.writeTo(XmlWriter(standalone));
+  final XmlPullReader r = XmlPullReader(
+    standalone.toString(),
+    maxDepth: 0x7fffffff,
+  );
+  while (r.next()) {
+    if (r.eventType == XmlEventType.startElement) {
+      return readRichTextRuns(r, warn);
+    }
+  }
+  return null;
+}
+
+/// The run the reader is on (an `<r>`), leaving it on the run's end.
+XlsxTextRun _readRun(XmlPullReader r, void Function(String) warn) {
+  final StringBuffer text = StringBuffer();
+  XlsxFont? font;
+  if (!r.isEmptyElement) {
+    final int depth = r.depth;
+    while (r.next()) {
+      if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+      if (r.eventType != XmlEventType.startElement) continue;
+      if (r.depth != depth + 1 || r.namespaceUri != Ns.main) {
+        r.skip();
+      } else if (r.localName == 't') {
+        text.write(_readT(r));
+      } else if (r.localName == 'rPr') {
+        final ReadStyleValue<XlsxFont> read = readFont(r, nameElement: 'rFont');
+        if (read.problem != null) warn('rPr');
+        font = read.value;
+      } else {
+        r.skip();
+      }
+    }
+  }
+  return XlsxTextRun(text.toString(), font: font);
+}
+
+/// The decoded text of the `<t>` the reader is on, leaving it on its end.
+String _readT(XmlPullReader r) {
+  if (r.isEmptyElement) return '';
+  final StringBuffer buffer = StringBuffer();
+  final int depth = r.depth;
+  while (r.next()) {
+    if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+    if (r.eventType == XmlEventType.characters ||
+        r.eventType == XmlEventType.cdata) {
+      buffer.write(r.text);
+    }
+  }
+  return decodeXstring(buffer.toString());
+}

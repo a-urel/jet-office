@@ -477,6 +477,12 @@ final class WorkbookPart implements PartContent {
   /// so [addName] and [removeName] leave it alone.
   int nameEdits = 0;
 
+  /// How many resizes of a table are in force (`TableResizeChange`): a
+  /// formula over the table, as `SUM(T[A])`, has another result, so the save
+  /// asks Excel to recalculate, and keeps `calcChain`. Undo lowers it, redo
+  /// raises it again.
+  int tableEdits = 0;
+
   /// Adds [entry] after the other names, as the writer writes a name; the
   /// `<definedNames>` is made in schema position when the part has none.
   ///

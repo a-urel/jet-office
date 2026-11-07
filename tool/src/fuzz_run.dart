@@ -36,7 +36,9 @@ final class FuzzRunResult {
 /// Runs `cases` mutated files for each seed from [first] to [last] through
 /// [exercise] (default [exerciseReader]) and returns the totals.
 ///
-/// [generate] makes the cases of a seed (default [fuzzCases]). A thrown
+/// [exerciseCase], when given, takes the whole case in its place, for an
+/// exercise that goes by the mutation. [generate] makes the cases of a seed
+/// (default [fuzzCases]). A thrown
 /// object for which [isRefusal] is true (default: an `XlsxReadException`) is
 /// a refusal; any other is a failure.
 ///
@@ -52,6 +54,7 @@ FuzzRunResult runFuzz({
   required StringSink out,
   required StringSink err,
   void Function(Uint8List bytes) exercise = exerciseReader,
+  void Function(FuzzCase c)? exerciseCase,
   Iterable<FuzzCase> Function(int seed, int count) generate = fuzzCases,
   bool Function(Object error) isRefusal = _isXlsxRefusal,
 }) {
@@ -66,7 +69,11 @@ FuzzRunResult runFuzz({
       }
       final Stopwatch watch = Stopwatch()..start();
       try {
-        exercise(c.bytes);
+        if (exerciseCase != null) {
+          exerciseCase(c);
+        } else {
+          exercise(c.bytes);
+        }
       } on Object catch (e) {
         if (isRefusal(e)) {
           refused++;

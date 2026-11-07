@@ -1,13 +1,14 @@
 /// Test helper: seeded mutation fuzzing of the workbook model's sheet and
-/// workbook features (milestone W3).
+/// workbook features (milestones W3 and W4).
 ///
 /// [featureCorpus] is its own corpus, so the reader's pinned one and its
-/// cases do not change: the `m3_*` fixtures and [excelFeatureFile], a sheet
-/// as Excel writes it, with Excel 2010 rules. [featureFuzzCases] derives
+/// cases do not change: the `m3_*` and `m4_*` fixtures, [excelFeatureFile], a
+/// sheet as Excel writes it, with Excel 2010 rules, and [excelObjectsFile],
+/// with more objects than the model types. [featureFuzzCases] derives
 /// mutated copies with the machinery of `test/support/fuzz_mutations.dart`,
 /// and with mutations that keep the XML well formed, so most cases reach the
 /// features' own parsers instead of stopping at the XML reader.
-/// [exerciseFeatures] reads, sets, undoes and saves every W3 member.
+/// [exerciseFeatures] reads, sets, undoes and saves every W3 and W4 member.
 /// `feature_fuzz_test.dart` runs a fixed range of seeds in the quality gate;
 /// `tool/fuzz_reader.dart --features` runs any range by hand.
 ///
@@ -27,8 +28,10 @@ import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 import '../../../../tool/src/part_compare.dart';
 import '../../../fixtures/fixture.dart';
 import '../../../fixtures/m3_fixtures.dart';
+import '../../../fixtures/m4_fixtures.dart';
 import '../../../support/fuzz_mutations.dart';
 import '../../../support/read_xlsx.dart';
+import '../../read/support/producers.dart';
 import '../../read/support/workbook_builder.dart';
 import '../../read/support/zip_builder.dart';
 
@@ -176,12 +179,14 @@ Uint8List excelFeatureFile() {
 }
 
 /// The packages the fuzzer mutates, in a fixed order, entries stored: every
-/// fixture of `m3Fixtures()`, then [excelFeatureFile] as `excel_features`.
+/// fixture of `m3Fixtures()` and `m4Fixtures()`, then [excelFeatureFile] as
+/// `excel_features` and [excelObjectsFile] as `excel_objects`.
 List<({String name, Uint8List bytes})> featureCorpus() =>
     <({String name, Uint8List bytes})>[
-      for (final Fixture f in m3Fixtures())
+      for (final Fixture f in <Fixture>[...m3Fixtures(), ...m4Fixtures()])
         (name: f.name, bytes: _stored(f.build())),
       (name: 'excel_features', bytes: excelFeatureFile()),
+      (name: 'excel_objects', bytes: _stored(excelObjectsFile().bytes)),
     ];
 
 /// [zip] with the same entries in the same order, stored.
@@ -283,7 +288,11 @@ const List<String> _texts = <String>[
 bool _holdsFeatures(String name) =>
     name == 'xl/workbook.xml' ||
     name == 'xl/styles.xml' ||
+    name == 'xl/sharedStrings.xml' ||
     name.startsWith('xl/worksheets/') ||
+    name.startsWith('xl/comments') ||
+    name.startsWith('xl/drawings/') ||
+    name.startsWith('xl/tables/') ||
     name.startsWith('docProps/');
 
 /// The offset in [text] where the features start, past the cells of a sheet.
@@ -439,7 +448,7 @@ int _elementEnd(String text, RegExpMatch tag) {
   return -1;
 }
 
-/// Reads, sets, undoes and saves every W3 member of [bytes].
+/// Reads, sets, undoes and saves every W3 and W4 member of [bytes].
 ///
 /// It opens the file and reads every getter of the workbook and of each
 /// sheet. Then, one edit at a time: every value read is set back, which must
@@ -450,17 +459,26 @@ int _elementEnd(String text, RegExpMatch tag) {
 /// be refused as the API documents, and so may a read name or validation or
 /// format added back: `definedNames` lists a name as the file has it,
 /// whatever the writer's rules, and a twin of what was removed may remain.
+/// The objects take the same steps: every rich text, note, picture's anchor
+/// and table's style is set back; the first note, picture and table are
+/// removed and added back; and a rich text, a note, a picture and a table
+/// are set, changed, removed and set again on free cells.
 ///
 /// It renders the warnings, undoes every edit in reverse order and saves,
 /// redoes them, saves, reopens and reads the saved file, undoes them again
 /// and saves. With [proveUndo], a save comes before the edits too, and the
-/// first save after undo must equal it by [undoDifferences].
+/// first save after undo must equal it by [undoDifferences], told that
+/// [mutated] was the part a mutation changed.
 ///
 /// Returns normally or throws [XlsxReadException]: from `open`, or after the
 /// rest has run, the first a sheet's or part's read threw. Anything else,
 /// and any refusal outside those above, is a defect, and is rethrown as a
 /// [StateError] naming the step. `save()` must never throw.
-void exerciseFeatures(Uint8List bytes, {bool proveUndo = false}) {
+void exerciseFeatures(
+  Uint8List bytes, {
+  bool proveUndo = false,
+  String? mutated,
+}) {
   final XlsxWorkbook book = XlsxWorkbook.open(bytes);
   final _Run run = _Run(book);
   if (proveUndo) run.before = _save(book, 'save() before the edits');
@@ -483,7 +501,11 @@ void exerciseFeatures(Uint8List bytes, {bool proveUndo = false}) {
   final Uint8List undone = _save(book, 'save() after undo');
   final Uint8List? before = run.before;
   if (before != null) {
-    final List<String> differences = undoDifferences(before, undone);
+    final List<String> differences = undoDifferences(
+      before,
+      undone,
+      mutated: mutated,
+    );
     if (differences.isNotEmpty) {
       throw StateError('undo left: ${differences.join('; ')}');
     }
@@ -496,20 +518,55 @@ void exerciseFeatures(Uint8List bytes, {bool proveUndo = false}) {
   if (first != null) throw first;
 }
 
+/// What [undoDifferences] takes for a mutation of the archive's bytes.
+const String archiveMutated = '(archive)';
+
+/// [exerciseFeatures] on the case [c], proving undo with what it mutated.
+void exerciseFeatureCase(FuzzCase c) => exerciseFeatures(
+  c.bytes,
+  proveUndo: true,
+  mutated: mutatedPart(c.mutation) ?? archiveMutated,
+);
+
 /// What differs by meaning between the save [before] the edits and the save
 /// [after] undoing them.
 ///
-/// Left out, as a part a save writes afresh is not the bytes it read: what
-/// asks Excel to recalculate (`fullCalcOnLoad`, which an undone edit keeps,
-/// the log saying a change still counts), a character reference XML forbids,
-/// which such a part scrubs, a styles group's `count`, which it recomputes,
-/// and the namespace of a `.rels` root, which it states. A part a strict
-/// parser refuses cannot be compared by meaning: it is left out when the
-/// lenient reader wrote it well formed or when both are the same text, and
-/// the shared strings with it, whose comparison counts the cells it holds.
-List<String> undoDifferences(Uint8List before, Uint8List after) {
-  final Map<String, Uint8List> a = _normalized(before);
-  final Map<String, Uint8List> b = _normalized(after);
+/// Left out everywhere, as a part a save writes afresh is not the bytes it
+/// read: what asks Excel to recalculate (`fullCalcOnLoad`, which an undone
+/// edit keeps, the log saying a change still counts), a character reference
+/// XML forbids, which such a part scrubs, a styles group's `count`, which it
+/// recomputes, and the namespace of a `.rels` root, which it states.
+///
+/// Left out only for the part [mutated], the one a case changed, so every
+/// other part must come back whole. It is `null` for a file as it was made.
+/// A mutated part a strict parser refuses cannot be compared by meaning: it
+/// is left out when the lenient reader wrote it well formed or when both are
+/// the same text, and the shared strings with it, whose comparison counts
+/// the cells it holds. A mutated `.rels` part `Relationships.parse` loses
+/// something of is left out with what it resolves in its source, as an edit
+/// writes it from that parse and it stays repaired after undo: a part with a
+/// second root (a `<Relationship>` copied before `<Relationships>`) comes
+/// back well formed, an element that is no relationship and a relationship
+/// without `Id`, `Type` or `Target` go, and a `TargetMode` other than
+/// `External` becomes none. Text between the elements of a mutated part goes
+/// too, which nothing reads and a part written afresh leaves out, and all
+/// text of a mutated styles part.
+///
+/// When [mutated] is the shared strings, or [archiveMutated], the strings
+/// and what cells show through them are left out and the rest is compared.
+/// An edit writes that part afresh from what it read, a repair that stays:
+/// `<si>` items of two `<t>` become one, and a part in another namespace, or
+/// an entry a mutated archive renamed, reads as no strings, so the strings
+/// an edit added give the file's indexes a meaning they lacked. With such a
+/// rename the workbook's relationship to the strings goes with them, as the
+/// save adds it.
+List<String> undoDifferences(
+  Uint8List before,
+  Uint8List after, {
+  String? mutated,
+}) {
+  final Map<String, Uint8List> a = _normalized(before, mutated);
+  final Map<String, Uint8List> b = _normalized(after, mutated);
   Uint8List zip(Map<String, Uint8List> parts) =>
       buildZipOrdered(<(String, List<int>)>[
         for (final MapEntry<String, Uint8List> e in parts.entries)
@@ -520,34 +577,98 @@ List<String> undoDifferences(Uint8List before, Uint8List after) {
     zip(b),
     ignoreBookkeeping: true,
   );
-  final Set<String> blind = <String>{
-    for (final String line in lines)
-      if (line.contains('the expected part is not well-formed'))
-        line.substring(0, line.indexOf(':')),
-  };
+  String partOf(String line) => line.substring(0, line.indexOf(':'));
+  final bool refused = lines.any(
+    (String line) =>
+        partOf(line) == mutated &&
+        line.contains('the expected part is not well-formed'),
+  );
+  final bool lossy =
+      mutated != null &&
+      mutated.endsWith('.rels') &&
+      a.containsKey(mutated) &&
+      _lossyRelationships(utf8.decode(a[mutated]!));
+  final bool blind = refused || lossy;
+  final String? source = blind && mutated!.endsWith('.rels')
+      ? mutated.replaceFirst('_rels/', '').replaceFirst(RegExp(r'\.rels$'), '')
+      : null;
+  final bool strings =
+      blind || mutated == 'xl/sharedStrings.xml' || mutated == archiveMutated;
+  final bool archive = mutated == archiveMutated;
   return <String>[
     for (final String line in lines)
-      if (!blind.contains(line.substring(0, line.indexOf(':'))) &&
-          !(blind.isNotEmpty && line.startsWith('xl/sharedStrings.xml:')) &&
+      if (!(blind && partOf(line) == mutated) &&
+          !(partOf(line) == source && _resolvedId.hasMatch(line)) &&
+          !(strings && partOf(line) == 'xl/sharedStrings.xml') &&
+          !((mutated == 'xl/sharedStrings.xml' || archive) &&
+              _stringCell.hasMatch(line)) &&
+          !(archive && partOf(line) == 'xl/_rels/workbook.xml.rels') &&
           !RegExp(r'^xl/styles\.xml: .*: attribute count ').hasMatch(line) &&
           !RegExp(r'\.rels: /Relationships: element ').hasMatch(line))
         line,
   ];
 }
 
-/// The parts of [zip] without what [undoDifferences] leaves out of its text.
-Map<String, Uint8List> _normalized(Uint8List zip) => <String, Uint8List>{
-  for (final MapEntry<String, Uint8List> e in readXlsxBytes(zip).entries)
-    e.key: Uint8List.fromList(
-      utf8.encode(
-        utf8
-            .decode(e.value, allowMalformed: true)
-            .replaceAll(RegExp('&#1;|&#xFFFE;'), '')
-            .replaceAll(RegExp(r'<(\w+:)?calcPr fullCalcOnLoad="1"/>'), '')
-            .replaceAll(' fullCalcOnLoad="1"', ''),
-      ),
-    ),
-};
+/// A difference of `comparePackages` in the string a shared string cell
+/// shows; a cell of any other type stays a difference.
+final RegExp _stringCell = RegExp(
+  r'^xl/worksheets/[^:]*: [A-Z]+\d+/v: text "(<si>|unresolved:).*" vs '
+  r'"(<si>|unresolved:)',
+);
+
+/// A difference of `comparePackages` in what a relationship id resolves to,
+/// which it gives as `type|target|mode`.
+final RegExp _resolvedId = RegExp(r': attribute \w+ .*\|');
+
+/// Whether `Relationships.parse` loses something of the `.rels` [text].
+bool _lossyRelationships(String text) =>
+    RegExp(r'<(?!/?Relationships?[\s/>])[A-Za-z]').hasMatch(text) ||
+    RegExp(r'<Relationship\s[^>]*>').allMatches(text).any((Match m) {
+      final String tag = m.group(0)!;
+      final String? mode = RegExp(
+        r'\sTargetMode\s*=\s*"([^"]*)"',
+      ).firstMatch(tag)?.group(1);
+      return (mode != null && mode != 'External' && mode != 'Internal') ||
+          !<String>[
+            'Id',
+            'Type',
+            'Target',
+          ].every((String name) => RegExp('\\s$name\\s*=').hasMatch(tag));
+    });
+
+/// The parts of [zip] without what [undoDifferences] leaves out of its text,
+/// [mutated] being the part a case changed.
+Map<String, Uint8List> _normalized(Uint8List zip, String? mutated) =>
+    <String, Uint8List>{
+      for (final MapEntry<String, Uint8List> e in readXlsxBytes(zip).entries)
+        e.key: Uint8List.fromList(
+          utf8.encode(
+            (e.key == mutated
+                    ? _withoutStrayText(
+                        e.key,
+                        utf8.decode(e.value, allowMalformed: true),
+                      )
+                    : utf8.decode(e.value, allowMalformed: true))
+                .replaceAll(RegExp('&#1;|&#xFFFE;'), '')
+                .replaceAll(RegExp(r'<(\w+:)?calcPr fullCalcOnLoad="1"/>'), '')
+                .replaceAll(' fullCalcOnLoad="1"', ''),
+          ),
+        ),
+    };
+
+/// [text] without the text between the elements of the part [name]; the
+/// text of a VML drawing may be mixed with its elements, and no element of a
+/// styles part has text.
+String _withoutStrayText(String name, String text) => name.endsWith('.vml')
+    ? text
+    : name == 'xl/styles.xml'
+    ? text.replaceAll(RegExp(r'>[^<]+<'), '><')
+    : text
+          .replaceAllMapped(
+            RegExp(r'(/>|</[\w:]+>)[^<]+<'),
+            (Match m) => '${m.group(1)}<',
+          )
+          .replaceAll(RegExp(r'>[^<]+<(?=[A-Za-z])'), '><');
 
 Uint8List _save(XlsxWorkbook book, String step) {
   try {
@@ -565,9 +686,23 @@ void _readWorkbook(XlsxWorkbook book) {
   book.properties.toString();
 }
 
-/// Reads the sheet's rows and W3 members.
+/// The cells of [sheet] that hold a string, by row and column.
+List<(int, int)> _stringCells(XlsxSheet sheet) => <(int, int)>[
+  for (final XlsxReadRow row in sheet.rows)
+    for (final XlsxReadCell cell in row.cells)
+      if (cell.value is String) (row.index, cell.column),
+];
+
+/// Reads the sheet's rows and its W3 and W4 members.
 void _readSheet(XlsxSheet sheet) {
   sheet.rows.toList();
+  for (final (int row, int column) in _stringCells(sheet)) {
+    sheet.richTextAt(row, column).toString();
+  }
+  sheet.notes.toString();
+  sheet.noteAt(0, 0).toString();
+  sheet.pictures.toString();
+  sheet.tables.toString();
   sheet.definedNames.toString();
   sheet.printArea.toString();
   sheet.printTitles.toString();
@@ -588,12 +723,16 @@ final RegExp _refusedStates = RegExp(
   'has no worksheet part|is not a worksheet|'
   'styles part( of the workbook)? is not a SpreadsheetML|'
   'document properties part is not|<cols> cannot|<sheetFormatPr> cannot|'
-  'part of an array|is a header cell|is covered by',
+  'part of an array|is a header cell|is covered by|'
+  'belongs to a threaded comment|comments part of sheet|VML drawing of sheet|'
+  'drawing of sheet|has a totals row|has a sort state|'
+  'has relationships of its own|cannot be removed:',
 );
 
 /// The fields an [ArgumentError] of an edit names.
 final RegExp _refusedFields = RegExp(
-  r'^(name|formula\d?|comment|cell|validation|format|ranges?(\[\d+\].*)?)$',
+  r'^(name|formula\d?|comment|cell|validation|format|ranges?(\[\d+\].*)?|'
+  r'runs.*|author|style|columns.*|values.*)$',
 );
 
 /// One [exerciseFeatures] over a workbook: the edits it made and the first
@@ -709,6 +848,108 @@ final class _Run {
     _removeFirst(s);
     _clear(s);
     _setNew(s);
+    _setObjectsBack(s);
+    _removeFirstObjects(s);
+    _setNewObjects(s);
+  }
+
+  void _setObjectsBack(XlsxSheet s) {
+    read('objects', () {
+      for (final (int row, int column) in _stringCells(s)) {
+        final XlsxRichText? rich = s.richTextAt(row, column);
+        if (rich != null) back('setCell', () => s.setCell(row, column, rich));
+      }
+      for (final XlsxCellNote n in s.notes) {
+        back('setNote', () => s.setNote(n.row, n.column, n.note));
+      }
+      final List<XlsxPicture> pictures = s.pictures;
+      for (int i = 0; i < pictures.length; i++) {
+        back('movePicture', () => s.movePicture(i, pictures[i].anchor));
+      }
+      for (final XlsxTable t in s.tables) {
+        back('setTableStyle', () => s.setTableStyle(t.name, t.style));
+      }
+    });
+  }
+
+  void _removeFirstObjects(XlsxSheet s) {
+    read('first objects', () {
+      for (final XlsxCellNote n in s.notes.take(1).toList()) {
+        remove('setNote', () => s.setNote(n.row, n.column, null));
+        change('setNote', () => s.setNote(n.row, n.column, n.note));
+      }
+      for (final XlsxPicture p in s.pictures.take(1).toList()) {
+        remove('removePicture', () => s.removePicture(0));
+        change('addPicture', () => s.addPicture(p));
+      }
+      for (final XlsxTable t in s.tables.take(1).toList()) {
+        remove('removeTable', () => s.removeTable(t.name));
+        change('addTable', () => s.addTable(t));
+      }
+    });
+  }
+
+  void _setNewObjects(XlsxSheet s) {
+    const XlsxFont bold = XlsxFont(bold: true);
+    final String table = 'FuzzTable${book.sheets.indexOf(s)}';
+    final XlsxPicture picture = XlsxPicture(
+      OfficeImage(png4x2),
+      const XlsxOneCellAnchor(XlsxAnchorPoint(1100, 31)),
+    );
+    change('setCell', () {
+      s.setCell(
+        1100,
+        30,
+        XlsxRichText(const <XlsxTextRun>[XlsxTextRun('Fuzz', font: bold)]),
+      );
+    });
+    change('setNote', () => s.setNote(1100, 30, XlsxNote.plain('One')));
+    change('setNote', () {
+      s.setNote(1100, 30, XlsxNote.plain('Two', visible: true));
+    });
+    change('setNote', () => s.setNote(1100, 30, null));
+    change('setNote', () => s.setNote(1100, 30, XlsxNote.plain('Three')));
+    change('addPicture', () => s.addPicture(picture));
+    read('new picture', () {
+      final int last = s.pictures.length - 1;
+      if (last < 0) return;
+      change('movePicture', () {
+        s.movePicture(last, const XlsxOneCellAnchor(XlsxAnchorPoint(1101, 31)));
+      });
+      change('removePicture', () => s.removePicture(last));
+    });
+    change('addPicture', () => s.addPicture(picture));
+    change('addTable', () {
+      s.addTable(
+        XlsxTable(
+          table,
+          XlsxRange.parse('AK1100:AL1102'),
+          const <XlsxTableColumn>[
+            XlsxTableColumn('One'),
+            XlsxTableColumn('Two'),
+          ],
+        ),
+      );
+    });
+    change('setTableStyle', () {
+      s.setTableStyle(table, XlsxTableStyle.light(1));
+    });
+    change('resizeTable', () {
+      s.resizeTable(table, XlsxRange.parse('AK1100:AL1103'));
+    });
+    change('removeTable', () => s.removeTable(table));
+    change('addTable', () {
+      s.addTable(
+        XlsxTable(
+          table,
+          XlsxRange.parse('AK1100:AL1102'),
+          const <XlsxTableColumn>[
+            XlsxTableColumn('One'),
+            XlsxTableColumn('Two'),
+          ],
+        ),
+      );
+    });
   }
 
   void _setBack(XlsxSheet s) {

@@ -638,4 +638,150 @@ void main() {
       expect(p.resolve('/xl/workbook.xml', '../../../up.xml'), '/up.xml');
     });
   });
+
+  group('parts that join and leave', () {
+    const String png = 'image/png';
+
+    OpcPackage base() => _package(<(String, String)>[
+      (
+        '[Content_Types].xml',
+        '<Types xmlns="$_typesNs">'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/xl/a.xml" ContentType="x/a"/>'
+            '<Override PartName="/xl/b.xml" ContentType="x/b"/></Types>',
+      ),
+      (
+        '_rels/.rels',
+        _rels(<String>[_item('rId1', '$_rel/officeDocument', 'xl/a.xml')]),
+      ),
+      ('xl/a.xml', '<a/>'),
+      (
+        'xl/_rels/b.xml.rels',
+        _rels(<String>[_item('rId1', '$_rel/image', 'c.bin')]),
+      ),
+      ('xl/b.xml', '<b/>'),
+      ('xl/c.bin', 'bin'),
+    ]);
+
+    // Every entry of the written package, in order.
+    List<(String, String)> dump(OpcPackage p) {
+      final ZipWriter writer = ZipWriter();
+      p.writeTo(writer);
+      final ZipReader zip = ZipReader(
+        writer.close()!,
+        maxEntries: 1000,
+        maxEntryBytes: 1 << 24,
+        maxTotalBytes: 1 << 26,
+        maxCompressionRatio: 1000,
+      );
+      return <(String, String)>[
+        for (final String n in zip.names) (n, utf8.decode(zip.read(n))),
+      ];
+    }
+
+    test('detachPart then restorePart writes the same package', () {
+      final OpcPackage p = base();
+      final List<(String, String)> before = dump(p);
+      final DetachedPart gone = p.detachPart('/xl/b.xml');
+      expect(p.hasPart('/xl/b.xml'), isFalse);
+      expect(p.contentTypeOf('/xl/b.xml'), 'application/xml');
+      expect(p.relationshipsOf('/xl/b.xml'), isEmpty);
+      expect(
+        dump(p).map(((String, String) e) => e.$1),
+        isNot(contains('xl/b.xml')),
+      );
+      p.restorePart(gone);
+      expect(p.contentTypeOf('/xl/b.xml'), 'x/b');
+      expect(dump(p), before);
+      expect(p.relationshipsOf('/xl/b.xml').single.target, 'c.bin');
+    });
+
+    test('detaching a part with parsed relationships restores them', () {
+      final OpcPackage p = base();
+      p.addRelationship('/xl/b.xml', type: 't', target: 'd.bin');
+      final List<(String, String)> before = dump(p);
+      final DetachedPart gone = p.detachPart('/xl/b.xml');
+      p.restorePart(gone);
+      expect(dump(p), before);
+    });
+
+    test('detachPart of an unknown part throws; restore twice throws', () {
+      final OpcPackage p = base();
+      expect(() => p.detachPart('/nope.xml'), throwsArgumentError);
+      final DetachedPart gone = p.detachPart('/xl/b.xml');
+      p.restorePart(gone);
+      expect(() => p.restorePart(gone), throwsStateError);
+    });
+
+    test('byExtension adds a Default and no Override, and is reused', () {
+      final OpcPackage p = base();
+      expect(
+        p.addPart('/xl/media/image1.png', png, _Text('p'), byExtension: true),
+        '/xl/media/image1.png',
+      );
+      expect(p.overridePartNames, isNot(contains('/xl/media/image1.png')));
+      expect(p.contentTypeOf('/xl/media/image1.png'), png);
+      expect(
+        p.addPart('/xl/media/image1.png', png, _Text('q'), byExtension: true),
+        '/xl/media/image2.png',
+      );
+      final String types = dump(
+        p,
+      ).firstWhere(((String, String) e) => e.$1 == '[Content_Types].xml').$2;
+      expect('Extension="png"'.allMatches(types), hasLength(1));
+      expect(types, isNot(contains('image1.png')));
+    });
+
+    test('an extension mapped to another type falls back to an Override', () {
+      final OpcPackage p = base();
+      expect(
+        p.addPart('/xl/x.xml', 'x/other', _Text('x'), byExtension: true),
+        '/xl/x.xml',
+      );
+      expect(p.contentTypeOf('/xl/x.xml'), 'x/other');
+      expect(p.overridePartNames, contains('/xl/x.xml'));
+      expect(p.contentTypeOf('/xl/zzz.xml'), 'application/xml');
+    });
+
+    test('ensureDefault and removeDefault', () {
+      final OpcPackage p = base();
+      expect(p.ensureDefault('png', png), isTrue);
+      expect(p.ensureDefault('PNG', png), isFalse);
+      expect(p.ensureDefault('xml', 'other'), isFalse);
+      expect(p.contentTypeOf('/xl/zzz.xml'), 'application/xml');
+      p.removeDefault('png');
+      expect(p.ensureDefault('png', png), isTrue);
+      expect(() => p.ensureDefault('', png), throwsArgumentError);
+    });
+
+    test('isReferenced sees a relationship of a part never loaded', () {
+      final OpcPackage p = base();
+      expect(p.isReferenced('/xl/c.bin'), isTrue);
+      expect(p.isReferenced('/XL/a.xml'), isTrue);
+      expect(p.isReferenced('/xl/b.xml'), isFalse);
+      expect(p.isReferenced('/xl/c.bin', exceptSource: '/xl/b.xml'), isFalse);
+      expect(p.isReferenced('/xl/a.xml', exceptSource: ''), isFalse);
+      // The scan parsed nothing: the part's rels are still byte-copied.
+      final List<(String, String)> out = dump(p);
+      expect(
+        out
+            .firstWhere(((String, String) e) => e.$1 == 'xl/_rels/b.xml.rels')
+            .$2,
+        _rels(<String>[_item('rId1', '$_rel/image', 'c.bin')]),
+      );
+    });
+
+    test('isReferenced of an external or relative target', () {
+      final OpcPackage p = base();
+      p.addRelationship('/xl/a.xml', type: 't', target: '../xl/b.xml');
+      p.addRelationship(
+        '/xl/a.xml',
+        type: 't',
+        target: 'c.bin',
+        external: true,
+      );
+      expect(p.isReferenced('/xl/b.xml'), isTrue);
+      expect(p.isReferenced('/xl/b.xml', exceptSource: '/xl/a.xml'), isFalse);
+    });
+  });
 }

@@ -167,8 +167,16 @@ final RegExp _hex6 = RegExp(r'^[0-9A-Fa-f]{6}$');
 /// Reads a `CT_Color` element: `rgb`, `theme` with `tint`, `indexed` or
 /// `auto`. The value is `null` when the element names no colour, or names one
 /// the writer would refuse (a theme index above 11, a tint outside `-1..1`
-/// or not finite, a palette index above 65), which is also a `problem`.
-ReadStyleValue<XlsxColor?> readColor(XmlPullReader r) {
+/// or not finite, a palette index above 65), which is also a `problem`. With
+/// [tooltipText], index 81 is `null` without a problem: Excel's system colour
+/// of tooltip text, which Excel writes in the runs of notes and which the
+/// writer's palette does not hold. The model sets it for every rich text run
+/// it reads (a note's, a shared string's, an inline string's), not only a
+/// note's.
+ReadStyleValue<XlsxColor?> readColor(
+  XmlPullReader r, {
+  bool tooltipText = false,
+}) {
   final _Acc acc = _Acc();
   _checkAttributes(r, acc, const <String>{
     'rgb',
@@ -209,7 +217,11 @@ ReadStyleValue<XlsxColor?> readColor(XmlPullReader r) {
     }
   } else if (indexed != null) {
     final int? index = _int(indexed, acc, 'The color indexed');
-    if (index != null) color = XlsxColor.indexed(index);
+    if (tooltipText && index == 81) {
+      acc.inexact();
+    } else if (index != null) {
+      color = XlsxColor.indexed(index);
+    }
     if (tint != null) acc.inexact();
   } else if (auto != null) {
     switch (_parseBool(auto)) {
@@ -272,7 +284,15 @@ bool? _readFlag(XmlPullReader r, _Acc acc, String name) {
 
 /// Reads a `<font>` element. A field whose element is missing or unreadable
 /// is `null`.
-ReadStyleValue<XlsxFont> readFont(XmlPullReader r) {
+///
+/// [nameElement] is the local name of the element that holds the font name:
+/// `name` in a `<font>`, `rFont` in the `<rPr>` of a rich text run, which
+/// this function reads as well. `exact` is `false` for an `<rPr>` whose
+/// children are not in the order `CT_Font` has.
+ReadStyleValue<XlsxFont> readFont(
+  XmlPullReader r, {
+  String nameElement = 'name',
+}) {
   final _Acc acc = _Acc();
   _checkAttributes(r, acc, const <String>{});
   bool? bold, italic, strike, condense, extend, outline, shadow;
@@ -286,7 +306,11 @@ ReadStyleValue<XlsxFont> readFont(XmlPullReader r) {
   final Set<String> seen = <String>{};
   var last = -1;
   _eachChild(r, acc, () {
-    final String n = r.localName;
+    final String local = r.localName;
+    // The name element of the other spelling is not a font name here.
+    final String n = local == nameElement
+        ? 'name'
+        : (local == 'name' ? '' : local);
     final int? rank = _fontOrder[n];
     if (rank == null) return false;
     if (!seen.add(n) || rank < last) acc.inexact();
@@ -336,7 +360,10 @@ ReadStyleValue<XlsxFont> readFont(XmlPullReader r) {
           size = null;
         }
       case 'color':
-        final ReadStyleValue<XlsxColor?> c = readColor(r);
+        final ReadStyleValue<XlsxColor?> c = readColor(
+          r,
+          tooltipText: nameElement == 'rFont',
+        );
         acc.absorb(c);
         color = c.value;
       case 'name':

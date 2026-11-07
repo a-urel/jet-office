@@ -22,6 +22,30 @@ RawCell _f(RawFormula f, [String? v]) =>
     RawCell(kind: RawCellKind.number, value: v, formula: f);
 
 void main() {
+  test('relationshipTarget gives the path from the source to the part', () {
+    expect(
+      relationshipTarget('/xl/worksheets/sheet1.xml', '/xl/comments1.xml'),
+      '../comments1.xml',
+    );
+    expect(
+      relationshipTarget(
+        '/xl/worksheets/sheet1.xml',
+        '/xl/drawings/vmlDrawing1.vml',
+      ),
+      '../drawings/vmlDrawing1.vml',
+    );
+    expect(
+      relationshipTarget('/xl/worksheets/sub/sheet1.xml', '/xl/comments1.xml'),
+      '../../comments1.xml',
+    );
+    expect(
+      relationshipTarget('/xl/worksheets/sheet1.xml', '/xl/worksheets/a.xml'),
+      'a.xml',
+    );
+    expect(relationshipTarget('/sheet1.xml', '/xl/a.xml'), 'xl/a.xml');
+    expect(relationshipTarget('/other/s.xml', '/xl/a.xml'), '../xl/a.xml');
+  });
+
   group('setStoredCell', () {
     test('records old and new; revert restores', () {
       final CellStore store = CellStore()..put(0, 0, _num('1'));
@@ -340,6 +364,263 @@ void main() {
     });
   });
 
+  group('markStoredPart', () {
+    test('an undo takes the name out, and a redo puts it back', () {
+      final ChangeLog log = ChangeLog();
+      final Set<String> attached = <String>{};
+      final ChangeSet set = log.transaction(
+        () => markStoredPart(log, attached, 'xl/a.xml'),
+      );
+      expect(attached, <String>{'xl/a.xml'});
+      log.revertSet(set);
+      expect(attached, isEmpty);
+      log.reapplySet(set);
+      expect(attached, <String>{'xl/a.xml'});
+    });
+
+    test('a name attached before stays after the undo', () {
+      final ChangeLog log = ChangeLog();
+      final Set<String> attached = <String>{'xl/a.xml'};
+      log.revertSet(
+        log.transaction(() => markStoredPart(log, attached, 'xl/a.xml')),
+      );
+      expect(attached, <String>{'xl/a.xml'});
+    });
+  });
+
+  group('attachStoredPart', () {
+    OpcPackage package() => OpcPackage.read(
+      ZipReader(
+        buildZip(<String, List<int>>{
+          'xl/a.xml': <int>[60, 97, 47, 62],
+        }),
+        maxEntries: 10,
+        maxEntryBytes: 1000,
+        maxTotalBytes: 1000,
+        maxCompressionRatio: 1000,
+      ),
+      maxDepth: 8,
+    );
+
+    List<int> written(OpcPackage p) =>
+        p.openXml('xl/a.xml').sourceText(0, 4).codeUnits;
+
+    test('gives the part its content; undone, the file bytes come back', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      final Set<String> attached = <String>{};
+      final ChangeSet set = log.transaction(() {
+        attachStoredPart(log, p, attached, 'xl/a.xml', _Typed());
+      });
+      expect(attached, <String>{'xl/a.xml'});
+      expect(set.changes, hasLength(1));
+      log.revertSet(set);
+      expect(attached, isEmpty);
+      expect(written(p), <int>[60, 97, 47, 62]);
+      log.reapplySet(set);
+      expect(attached, <String>{'xl/a.xml'});
+      expect(written(p), '<b/>'.codeUnits);
+    });
+
+    test('a part attached, or created, records nothing', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        attachStoredPart(log, p, <String>{'xl/a.xml'}, 'xl/a.xml', _Xml());
+      });
+      expect(set.isEmpty, isTrue);
+    });
+
+    test('a failed transaction takes it back', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      final Set<String> attached = <String>{};
+      expect(
+        () => log.transaction(() {
+          attachStoredPart(log, p, attached, 'xl/a.xml', _Xml());
+          throw StateError('later');
+        }),
+        throwsStateError,
+      );
+      expect(attached, isEmpty);
+      expect(written(p), <int>[60, 97, 47, 62]);
+    });
+  });
+
+  group('stored parts', () {
+    OpcPackage package() => OpcPackage.empty()
+      ..addPart('/xl/sheet1.xml', 'x/sheet', _Xml())
+      ..addRelationship('/xl/sheet1.xml', type: 't', target: 'x');
+
+    // The written package: every entry name with its bytes.
+    List<String> written(OpcPackage p) {
+      final ZipWriter writer = ZipWriter();
+      p.writeTo(writer);
+      final ZipReader zip = ZipReader(
+        writer.close()!,
+        maxEntries: 100,
+        maxEntryBytes: 1 << 20,
+        maxTotalBytes: 1 << 20,
+        maxCompressionRatio: 1000,
+      );
+      return <String>[
+        for (final String n in zip.names)
+          '$n:${String.fromCharCodes(zip.read(n))}',
+      ];
+    }
+
+    test('addStoredPart undone leaves no part, Default or Override', () {
+      final OpcPackage p = package();
+      final List<String> before = written(p);
+      final ChangeLog log = ChangeLog();
+      late String name;
+      final ChangeSet set = log.transaction(() {
+        name = addStoredPart(
+          log,
+          p,
+          '/xl/drawings/drawing1.xml',
+          'x/d',
+          _Xml(),
+        );
+        addStoredPart(
+          log,
+          p,
+          '/xl/media/image1.png',
+          'image/png',
+          _Xml(),
+          byExtension: true,
+        );
+      });
+      expect(name, '/xl/drawings/drawing1.xml');
+      expect(p.hasPart('/xl/media/image1.png'), isTrue);
+      expect(p.contentTypeOf('/xl/media/image1.png'), 'image/png');
+      expect(log.hasChanges, isTrue);
+
+      log.revertSet(set);
+      expect(p.hasPart(name), isFalse);
+      expect(p.hasPart('/xl/media/image1.png'), isFalse);
+      expect(p.contentTypeOf('/xl/media/image1.png'), isNull);
+      expect(written(p), before);
+    });
+
+    test('reapply after revert gives the same name', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      late String name;
+      final ChangeSet set = log.transaction(() {
+        name = addStoredPart(log, p, '/xl/sheet1.xml', 'x/sheet', _Xml());
+        addStoredPart(
+          log,
+          p,
+          '/xl/media/image1.png',
+          'image/png',
+          _Xml(),
+          byExtension: true,
+        );
+      });
+      expect(name, '/xl/sheet2.xml');
+      final List<String> after = written(p);
+      log.revertSet(set);
+      log.reapplySet(set);
+      expect(p.hasPart('/xl/sheet2.xml'), isTrue);
+      expect(p.contentTypeOf('/xl/media/image1.png'), 'image/png');
+      expect(written(p), after);
+    });
+
+    test('a Default that was already there stays when the part is undone', () {
+      final OpcPackage p = package();
+      p.addPart('/xl/media/image1.png', 'image/png', _Xml(), byExtension: true);
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        addStoredPart(
+          log,
+          p,
+          '/xl/media/image1.png',
+          'image/png',
+          _Xml(),
+          byExtension: true,
+        );
+      });
+      log.revertSet(set);
+      expect(p.hasPart('/xl/media/image2.png'), isFalse);
+      expect(p.contentTypeOf('/xl/media/image2.png'), 'image/png');
+    });
+
+    test('removeStoredPart undone restores it', () {
+      final OpcPackage p = package();
+      final List<String> before = written(p);
+      final ChangeLog log = ChangeLog();
+      final ChangeSet set = log.transaction(() {
+        removeStoredPart(log, p, '/xl/sheet1.xml');
+      });
+      expect(p.hasPart('/xl/sheet1.xml'), isFalse);
+      expect(p.contentTypeOf('/xl/sheet1.xml'), isNull);
+      log.revertSet(set);
+      expect(written(p), before);
+      log.reapplySet(set);
+      expect(p.hasPart('/xl/sheet1.xml'), isFalse);
+      log.revertSet(set);
+      expect(written(p), before);
+    });
+
+    test('a failed transaction gives the part back', () {
+      final OpcPackage p = package();
+      final List<String> before = written(p);
+      final ChangeLog log = ChangeLog();
+      expect(
+        () => log.transaction(() {
+          removeStoredPart(log, p, '/xl/sheet1.xml');
+          addStoredPart(
+            log,
+            p,
+            '/xl/media/a.png',
+            'image/png',
+            _Xml(),
+            byExtension: true,
+          );
+          throw StateError('x');
+        }),
+        throwsStateError,
+      );
+      expect(written(p), before);
+    });
+
+    test('outside a transaction nothing changes', () {
+      final OpcPackage p = package();
+      final List<String> before = written(p);
+      final ChangeLog log = ChangeLog();
+      expect(
+        () => addStoredPart(
+          log,
+          p,
+          '/xl/media/a.png',
+          'image/png',
+          _Xml(),
+          byExtension: true,
+        ),
+        throwsStateError,
+      );
+      expect(
+        () => removeStoredPart(log, p, '/xl/sheet1.xml'),
+        throwsStateError,
+      );
+      expect(written(p), before);
+    });
+
+    test('removing an unknown part throws and records nothing', () {
+      final OpcPackage p = package();
+      final ChangeLog log = ChangeLog();
+      late ChangeSet set;
+      expect(
+        () => log.transaction(() => removeStoredPart(log, p, '/nope.xml')),
+        throwsArgumentError,
+      );
+      expect(log.hasChanges, isFalse);
+      set = log.transaction(() {});
+      expect(set.isEmpty, isTrue);
+    });
+  });
+
   group('stored relationships', () {
     OpcPackage package() => OpcPackage.empty()
       ..addPart('/a.xml', 'x/a', _Xml())
@@ -491,6 +772,11 @@ void main() {
       expect(ids(p).toSet(), <String>{'rId1', 'rId2'});
     });
   });
+}
+
+final class _Typed implements PartContent {
+  @override
+  List<Uint8List> encode() => <Uint8List>[Uint8List.fromList('<b/>'.codeUnits)];
 }
 
 final class _Xml implements PartContent {

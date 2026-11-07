@@ -294,10 +294,10 @@ final class CellEncoder {
   /// [current] (`null` when the cell does not exist yet).
   ///
   /// [value] is a `String`, `int`, `double`, `bool`, [DateTime],
-  /// [XlsxDate], [XlsxDecimal], [XlsxFormula] or `null`. The checks,
-  /// repairs and warnings are those of [encode], and it throws as [encode]
-  /// does, with nothing recorded: the string table and the warnings are as
-  /// they were. A string is interned into the shared-string table and
+  /// [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxRichText] or `null`. The
+  /// checks, repairs and warnings are those of [encode], and it throws as
+  /// [encode] does, with nothing recorded: the string table and the warnings
+  /// are as they were. A string is interned into the shared-string table and
   /// stored as its index. A formula is stored as a normal formula with its
   /// text as written (one leading `=` removed) and its cached result as the
   /// `<v>` text [encode] writes. `null` gives an empty cell carrying
@@ -311,13 +311,17 @@ final class CellEncoder {
   /// [DateTime] its date-time format and an [XlsxDate] its short-date one);
   /// any other format keeps the style and warns `dateInNonDateFormat`, and
   /// so does General when [dateStyle] returns `null` (no date style can be
-  /// added).
-  /// Dates are serials of the 1904 system when [date1904] is true, and a
-  /// date that has no serial there (before 1904-01-01) is written as text
-  /// with `dateOutsideExcelRange`, like one before 1900.
+  /// added). Dates are serials of the 1904 system when [date1904] is true,
+  /// and a date that has no serial there (before 1904-01-01) is written as
+  /// text with `dateOutsideExcelRange`, like one before 1900.
   ///
-  /// An [XlsxHyperlink], [XlsxRichText], [XlsxCell] or any other type
-  /// throws [ArgumentError]; the model does not take them yet.
+  /// An [XlsxRichText] is stored as a shared string whose runs have [cellFont]
+  /// (the font of the cell's style, or `null`) merged under their fonts, and
+  /// a run without a font given it, as [encode] does; the cell is checked
+  /// before anything is recorded, so a rich text without runs throws
+  /// [ArgumentError] with the table unchanged. An [XlsxHyperlink], an
+  /// [XlsxCell] or any other type throws [ArgumentError]; the model unwraps
+  /// them itself.
   RawCell prepare(
     Object? value, {
     required String sheet,
@@ -327,12 +331,15 @@ final class CellEncoder {
     required CellFormat currentFormat,
     required bool date1904,
     required int? Function(int? style, {required bool withTime}) dateStyle,
+    XlsxFont? cellFont,
   }) {
     final String ref = cellRef(row, column);
     final int? style = current?.style;
     switch (value) {
       case null:
         return RawCell(kind: RawCellKind.number, style: style);
+      case XlsxRichText():
+        return _preparedRichText(sheet, ref, value, style, cellFont);
       case String():
         return _preparedString(sheet, ref, value, style);
       case num() when !value.isFinite:
@@ -631,6 +638,42 @@ final class CellEncoder {
     XlsxRichText text,
     _Resolved style,
   ) {
+    final ({XlsxRichText text, int removed, bool truncated}) clean =
+        _cleanedRuns(sheet, ref, text, style.style?.font);
+    // The style can throw; resolve it before anything is recorded.
+    final int id = _idOf(style);
+    _reportRuns(sheet, ref, clean);
+    _write(out, ref, id, 's', '<v>${_strings.indexOfRich(clean.text)}</v>');
+  }
+
+  /// [text] as a stored shared-string cell with [style], repaired and
+  /// reported as [_writeRichText] does, its runs merged over [cellFont].
+  RawCell _preparedRichText(
+    String sheet,
+    String ref,
+    XlsxRichText text,
+    int? style,
+    XlsxFont? cellFont,
+  ) {
+    final ({XlsxRichText text, int removed, bool truncated}) clean =
+        _cleanedRuns(sheet, ref, text, cellFont);
+    _reportRuns(sheet, ref, clean);
+    return RawCell(
+      kind: RawCellKind.sharedString,
+      style: style,
+      value: '${_strings.indexOfRich(clean.text)}',
+    );
+  }
+
+  /// [text] with its run fonts merged over [cellFont] and then cleaned (see
+  /// [_mergeRunFonts] and [cleanRichText]). Throws [ArgumentError] for a
+  /// rich text without runs or a merged font that is invalid.
+  static ({XlsxRichText text, int removed, bool truncated}) _cleanedRuns(
+    String sheet,
+    String ref,
+    XlsxRichText text,
+    XlsxFont? cellFont,
+  ) {
     if (text.runs.isEmpty) {
       throw ArgumentError.value(
         text.runs,
@@ -638,16 +681,14 @@ final class CellEncoder {
         'The rich text in cell $ref on sheet "$sheet" has no runs.',
       );
     }
-    final XlsxRichText merged = _mergeRunFonts(
-      sheet,
-      ref,
-      text,
-      style.style?.font,
-    );
-    final ({XlsxRichText text, int removed, bool truncated}) clean =
-        cleanRichText(merged);
-    // The style can throw; resolve it before anything is recorded.
-    final int id = _idOf(style);
+    return cleanRichText(_mergeRunFonts(sheet, ref, text, cellFont));
+  }
+
+  void _reportRuns(
+    String sheet,
+    String ref,
+    ({XlsxRichText text, int removed, bool truncated}) clean,
+  ) {
     if (clean.removed > 0) {
       _warnings.add(
         XlsxWarningCode.invalidCharactersRemoved,
@@ -658,7 +699,6 @@ final class CellEncoder {
     if (clean.truncated) {
       _warnings.add(XlsxWarningCode.textTruncated, sheet: sheet, cell: ref);
     }
-    _write(out, ref, id, 's', '<v>${_strings.indexOfRich(clean.text)}</v>');
   }
 
   /// [text] with the font of each run that has one merged over [cellFont],

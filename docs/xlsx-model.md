@@ -7,10 +7,11 @@ Decision [`0009`](decisions/0009-phase-3-workbook-model.md) sets the scope
 and the fidelity standard.
 
 This page covers milestone W1, the foundation: open and save with no loss, and
-generate values; milestone W2, styles and layout typed; and milestone W3,
+generate values; milestone W2, styles and layout typed; milestone W3,
 sheet and workbook features typed (defined names, print settings, filters,
 protection, hyperlinks, data validations, conditional formats and document
-properties). Objects (W4) and structural editing (W5) remain.
+properties); and milestone W4, objects (rich text, notes, pictures and
+tables). Structural editing (W5) remains.
 
 ```dart
 final XlsxWorkbook book = XlsxWorkbook.open(bytes);
@@ -25,14 +26,15 @@ writes values as the writers do. What the model does not type (W1 types only
 cells, the workbook's sheet list and `date1904`, the shared strings and the
 number formats of the styles; W2 adds the rest of the styles, rows, columns,
 merges, views and tab colours; W3 adds the features listed under "What W3
-adds") is kept as opaque XML at its position and
+adds"; W4 adds rich text, notes, pictures and tables) is kept as opaque XML at its position and
 written back, with the namespace declarations it needs.
 
 ## What W1 does and does not do
 
 - **Edits.** `setCell` takes a `String`, `num`, `bool`, `DateTime`,
   `XlsxDate`, `XlsxDecimal`, an `XlsxFormula` without a group, or `null`.
-  Rich text throws `UnsupportedError` until W4; hyperlinks are typed since W3
+  Rich text is typed since W4 (`richTextAt`, `setCell` of an `XlsxRichText`);
+  hyperlinks are typed since W3
   (see "What W3 adds"). Editing a shared formula's master throws until W5.
   Since W2 `setCell` also takes an `XlsxCell`, layered as the writer layers it
   (see "What W2 adds").
@@ -196,6 +198,61 @@ Five rulings fill a silence of the spec (plan R1 to R5):
 - **R5 Excel 2010 data validation.** `x14:dataValidations` stays opaque: the
   spec names only conditional formats' `extLst` forms.
 
+## What W4 adds
+
+`XlsxSheet` reads and edits the four kinds of object a sheet holds besides
+values and features: rich text cells, notes, pictures and tables. The values
+are the writer's types (`XlsxRichText`, `XlsxNote`, `XlsxPicture`,
+`XlsxTable`), checked by the writer's checks, and a new object is rendered by
+the writer's own functions, so the model forks no writer.
+
+```dart
+final XlsxSheet sheet = book.sheet('Prices');
+sheet
+  ..setCell(0, 0, XlsxRichText(<XlsxTextRun>[
+    const XlsxTextRun('Total ', font: XlsxFont(bold: true)),
+    const XlsxTextRun('due'),
+  ]))
+  ..setNote(1, 1, XlsxNote.plain('Checked.', author: 'Ayse'))
+  ..addPicture(XlsxPicture(
+    OfficeImage(pngBytes),
+    const XlsxOneCellAnchor(XlsxAnchorPoint(3, 3), width: 120, height: 60),
+  ))
+  ..addTable(XlsxTable('Sales', XlsxRange.parse('A10:B14'), columns));
+```
+
+- **Reading and setting.** On a sheet: `richTextAt` (and `setCell` with an
+  `XlsxRichText`, plain or in an `XlsxCell`); `notes`, `noteAt`, `setNote`
+  (`null` removes); `pictures`, `addPicture`, `movePicture`, `removePicture`;
+  `tables`, `addTable`, `setTableStyle`, `resizeTable`, `removeTable`.
+- **What is read is typed, the rest is kept.** A drawing with charts, shapes
+  and groups beside pictures, a VML part with form controls beside notes and a
+  table with calculated columns, `xr:uid` or a query table keep everything the
+  types do not hold, as written. Adding or removing one object changes
+  nothing else.
+- **Parts come and go inside the transaction.** Unlike W3's features, an object
+  needs a part (comments, VML, drawing, media, table) and a relationship the
+  moment it is set. The package can detach and restore a part, so an edit that
+  adds or removes one is a single change of the log: a failed edit and an undo
+  give the part, its relationships, its content type and its bytes back.
+- **Names follow the writer's.** A new comments, VML or drawing part takes
+  the number of the sheet's own part (`sheet3.xml` gives `comments3.xml`,
+  `vmlDrawing3.xml`, `drawing3.xml`), the next number when that name is taken;
+  media take `xl/media/image{n}`, tables `xl/tables/table{id}.xml`, so a
+  workbook the model generates equals the writer's.
+- **The DrawingML layer.** What DOCX shares with the sheet drawing (the `pic`
+  element and the de-duplication of media by their bytes) lives in
+  `lib/src/drawingml/`, which imports the OPC, XML and common layers only.
+- **An equal set is no edit**, as in W3: a rich text, note, picture anchor or
+  table style set back as read records nothing and leaves the file's spelling.
+- **Recalculation.** `setCell` of a rich text drops `calcChain` and sets
+  `fullCalcOnLoad`, as any value does; so does `addTable` (it writes header
+  and totals cells). Setting, moving, restyling, resizing or removing an
+  object alone does not (W2's Ruling 15), except that `resizeTable` sets
+  `fullCalcOnLoad` as a name edit does and keeps `calcChain`.
+- **Warnings.** One code, `featureEntryInvalid`, with the detail `rPr`,
+  `comment`, `legacyDrawing`, `pic`, `drawing` or `table`, once per sheet.
+
 ## Rules the model enforces
 
 A file the model cannot open throws `XlsxReadException` with the reader's
@@ -247,7 +304,7 @@ Nothing is dropped silently.
 | A cell inside an array or data-table formula, its master included | `StateError`, permanent | Excel refuses it too | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups"), `test/xlsx/model/primitives_test.dart` |
 | A shared formula's child | leaves the group; the others stay | the child's formula stays correct | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
 | A shared formula's master | `UnsupportedError` until W5 | the children need reference shifting | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
-| `XlsxRichText` (also inside an `XlsxCell`) | `UnsupportedError` naming the milestone (W4) | not typed yet | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("unsupported value types") |
+| `XlsxRichText` (also inside an `XlsxCell`) | stored as the writer stores it (runs cleaned with `invalidCharactersRemoved`/`textTruncated`, run fonts merged over the cell's font, `ArgumentError` for no runs); equal to `richTextAt` with no style it is no edit, so a phonetic `<si>` survives; a table header cell refuses it (`StateError`) | the writer's rich text, without losing phonetic runs | `test/xlsx/model/xlsx_sheet_rich_text_test.dart` |
 | `XlsxCell(value, style: s)` | the value is set as a bare one; the style is the writer's layering, the row's style (with `customFormat="1"`) merged with `s`, appended when no cell format matches; a date takes the writer's date format only when that style sets none; an `XlsxCell` of `null` leaves an empty cell of that style, or none when it has no style or the default | the model and the writer give the same cell format | `test/xlsx/model/xlsx_sheet_style_test.dart` ("XlsxCell layers like the writer", "XlsxCell dates take the writer format rule", "an XlsxCell of null") |
 | `styleAt` | the cell's own style when the cell exists, else the row's with `customFormat="1"`; index 0 is `null` | what Excel shows there | `test/xlsx/model/xlsx_sheet_style_test.dart` ("styleAt reads cell and row styles") |
 | `setStyle` | sets exactly the style, no layering; an equal style keeps its index; a new one is appended, so no index moves and an unloaded sheet's styles stay; `null` gives index 0 and removes a cell left with nothing | appending keeps every other cell's format | `test/xlsx/model/xlsx_sheet_style_test.dart` |
@@ -340,7 +397,37 @@ Nothing is dropped silently.
 | An Excel 2010 rule the types cannot hold (a custom icon set, another kind of rule) | stays kept, unlisted and unreported | the getter lists only what it can hold | `test/xlsx/model/conditional_x14_test.dart` ("a custom icon set stays kept and unlisted", "another kind of rule stays kept and unlisted, unreported") |
 | Properties | `custom.xml` joins when a custom property is set (part, relationship, content type) and leaves when no property is left in it; a part that holds a kept property stays; other elements and variants stay | the part follows the content | `test/xlsx/model/properties_test.dart` ("custom part joins and leaves", "a custom part leaves when no property is left", "a custom part holding a kept property stays") |
 | `modified` and `lastModifiedBy` | a save never touches them; only a set changes them | the model does not invent a time | `test/xlsx/model/properties_test.dart` ("modified and lastModifiedBy are not touched by a save") |
-| Fuzzing and undo | the feature corpus, mutated, opens, then reads, sets, undoes and saves every W3 member with nothing thrown but `XlsxReadException`; undoing every edit of a corpus file restores it | the file is untrusted input | `test/xlsx/model/feature_fuzz_test.dart` |
+| Fuzzing and undo | the feature corpus, mutated, opens, then reads, sets, undoes and saves every W3 and W4 member with nothing thrown but `XlsxReadException`; undoing every edit of a corpus file restores it | the file is untrusted input | `test/xlsx/model/feature_fuzz_test.dart` |
+
+### Objects (W4)
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| Rich text read | `richTextAt` gives the runs of a shared or inline string, a plain cell `null`; each run's font is read as stored (the writer fills the cell's font into a run without one); a bad `rPr` value keeps the font's readable fields and warns once | the runs of a file are its own | `test/xlsx/model/xlsx_sheet_rich_text_test.dart` ("reads runs of a shared string", "a phonetic-only item reads null", "a run with a bad size warns once") |
+| Rich text set | repaired as a string is (dirty characters removed, text past 32,767 code units cut, with the writer's warnings); no runs, or a table header cell, throws and nothing changes; an `XlsxCell` keeps its style; the value equal to `richTextAt` is no edit and a phonetic `<si>` survives | one way to write a value | `test/xlsx/model/xlsx_sheet_rich_text_test.dart` ("dirty text repairs as the writer", "no runs throws and changes nothing", "a header cell refuses it", "setting back what was read changes nothing") |
+| Excel's rich run colour `indexed="81"` | reads as no colour, without a warning, in every rich text run (notes, shared strings, inline strings); another index past the palette (82 and up) warns `featureEntryInvalid` (`rPr`); the writer still refuses 81 | Excel writes 81 (the system colour of tooltip text) in every note it makes, so warning would flag every Excel file; the font keeps its other fields and the file keeps what it wrote | `test/xlsx/model/xlsx_sheet_notes_test.dart` ("Excel's indexed 81 reads as no colour, without a warning", "another index past the palette warns", "the writer still refuses indexed 81") |
+| Notes read | `notes` lists each `<comment>` with its cell, author and runs; `visible` is the VML shape of the same row and column with `<x:Visible/>`; a `ref` that is bad or repeated is kept as written, unlisted and warned (`comment`); a bad `authorId` reads an empty author; VML that is not XML reads every note hidden and warns (`legacyDrawing`); a comments part that is not SpreadsheetML reads none | nothing lost, nothing thrown on a file that opened | `test/xlsx/model/xlsx_sheet_notes_test.dart` ("a repeated ref is kept and warned", "a bad authorId reads an empty author", "VML that is not XML warns and reads visible false", "visible comes from the shape of the same row and column", "a comments part that is not SpreadsheetML reads no notes") |
+| `setNote` equal set | a note equal to `noteAt` is no edit, and throws nothing even for a note the writer would refuse or repair (an over-long author, text past the limit) or the note of a thread; the check comes before the part checks, so it holds on malformed VML too | typing must not alter output, and a note read must be settable back | `test/xlsx/model/xlsx_sheet_notes_test.dart` ("equal set is no edit", "a note set back as read is no edit") |
+| A thread's placeholder note | Excel keeps a legacy note `[Threaded comment]` by author `tc={GUID}` beside each thread; the thread is opaque (decision 0009), so `setNote` (also with `null`) on such a cell with a different note throws `StateError`, nothing changes; an equal set is no edit; a new note whose author starts `tc=` on a cell without one throws `ArgumentError` named `author` (model only; the writer is unchanged) | setting or removing it would orphan the thread, and a copy is a placeholder with no thread | `test/xlsx/model/xlsx_sheet_notes_test.dart` ("a tc= note throws StateError and nothing changes", "the note of a thread"); `test/xlsx/model/round_trip_test.dart` ("a note of a thread cannot be copied to a cell without one") |
+| `setNote` of a new note | checked and repaired as `XlsxSheetWriter.note` does, with `invalidCharactersRemoved` and `textTruncated`; goes in row-major order; the first note creates the comments part and, unless the sheet has one, the VML part and `<legacyDrawing>`; an author is reused, else appended; a replaced note keeps its other attributes (`xr:uid`) and its box; `visible` shows or hides the box; a note whose text and author equal the cell's and only `visible` differs changes the box alone, so the comments part keeps its bytes (Excel's `indexed="81"` runs stay) | what changes is what was set | `test/xlsx/model/xlsx_sheet_notes_test.dart` ("adds to a sheet without notes", "a new comment goes in row-major order", "replaces text and keeps xr:uid and the shape", "an author is reused and a new one appended", "visible toggles the shape", `round_trip_test.dart` ("a visibility-only setNote leaves the comments part as written"), "more VML shapes than maxMerges leave the part as written" (shapes are bounded by `maxMerges` as the comments are: `limitExceeded` on first read of the notes, the file saves as written), "text is repaired with the warnings of the writer", "notes set in order are what the writer writes") |
+| VML beside notes | a VML part that holds form controls or another kind of element takes the boxes beside them and stays when the last note goes; shape ids come from one block per 1,024 and are unique across sheets, unloaded ones included; a part with no `o:idmap` gets one | a note must not disturb the other objects of the part | `test/xlsx/model/xlsx_sheet_notes_test.dart` ("adds beside a form control shape", "removing keeps VML with a form control", "removing keeps VML that holds another kind of element", "shape ids and blocks stay unique across sheets, unloaded ones included", "1,100 notes take a second block", "the VML of a sheet with shapes but no idmap gets one") |
+| Removing a note | removing the last note removes the comments part; the VML part and `<legacyDrawing>` go too unless the drawing holds something else or another relationship names it; the text between shapes goes with the shape before it | nothing that is left empty stays | `test/xlsx/model/xlsx_sheet_notes_test.dart` ("removing the last note removes both parts and legacyDrawing", "removing one of several keeps the text between shapes") |
+| Malformed note parts | `setNote` throws `StateError` for VML that is not well formed or a comments part that is not SpreadsheetML, with nothing changed; a malformed relationships part is an `XlsxReadException` | the model does not guess what it cannot read | `test/xlsx/model/xlsx_sheet_notes_test.dart` ("malformed VML throws StateError", "a comments part that is not SpreadsheetML throws StateError") |
+| Pictures read | `pictures` lists each `oneCellAnchor` or `twoCellAnchor` that directly holds a `pic` embedding a part of the file, with sizes and offsets in pixels; a GIF or EMF is listed with `format` `null`; a chart, a shape, a group, an absolute anchor, a picture in `mc:AlternateContent` or a linked picture is kept, unlisted, without a warning; a dangling embed, a marker or size that is not a number or a `cNvPr` without an id is kept, unlisted and warned (`pic`); a drawing that is not a spreadsheet drawing reads none and warns (`drawing`) | the getter lists what it can hold | `test/xlsx/model/xlsx_sheet_pictures_test.dart` ("a chart and a shape beside a picture stay kept and unlisted", "a linked picture is unlisted without a warning", "a dangling embed warns once", "a GIF is listed with format null", "editAs maps to the resize modes") |
+| `addPicture` | checked as `XlsxSheetWriter.picture`; goes after everything the drawing holds, creating the drawing when there is none; a `cNvPr` id one above the highest (at least 2), counting a group's inner ids; a default name `Picture {k}`; bytes equal to a media part of the file (any sheet, any extension spelling) share it and the drawing's relationship to it; else a part `xl/media/image{n}` with its extension declared as a default content type; a relationship takes the lowest id no entry of the drawing names, so a dangling id does not start to resolve | one picture changes nothing else | `test/xlsx/model/xlsx_sheet_pictures_test.dart` ("renders as the writer does", "adds beside a chart, keeping it character for character", "ids stay unique over a group's inner cNvPr", "the same bytes share one media part", "a new extension adds a Default and takes the next number", "a new relationship takes no id a dangling entry names") |
+| `movePicture` | the anchor element takes the new markers, `ext` and `editAs` (and the other kind's name); its `pic`, `clientData` and other attributes stay as written; an equal anchor is no edit; an unsizable image (GIF, EMF) moved to a size-less anchor throws `ArgumentError` | one edit, one change | `test/xlsx/model/xlsx_sheet_pictures_test.dart` ("moves one-cell to two-cell keeping pic and clientData", "an equal anchor is no edit", "an unsizable image moved to a size-less anchor throws") |
+| A stale `a:xfrm` after `movePicture` | the `pic` stays verbatim, so a one-cell picture written with `a:xfrm` keeps its old size there after a resize; Excel is expected to take the size from the anchor, which only the owner's Excel check confirms (`docs/excel-checks.md`, "W4") | rewriting `pic` would break the rule that a move changes only the anchor | `test/xlsx/model/xlsx_sheet_pictures_test.dart` ("moves one-cell to two-cell keeping pic and clientData"); the check is Excel's |
+| `removePicture` | removes the entry; every relationship the entry names goes when no other entry or opaque entry names it, and the part it pointed at goes when no relationship anywhere points at it (unloaded sheets' drawings included); the drawing and its relationship go with the last entry unless it holds something else | a removed picture's bytes do not stay in the file | `test/xlsx/model/xlsx_sheet_pictures_test.dart` ("removes and keeps media another sheet's unloaded drawing shows", "removes the media nothing else uses", "keeps the relationship an opaque entry names", "the relationships of the picture's other names go too", "removing the last entry removes the drawing", "a drawing that holds something else stays") |
+| A broken `<drawing>` | `addPicture`, `movePicture` and `removePicture` throw `StateError` when the part is missing or is not a spreadsheet drawing, nothing changed | the model does not edit what it cannot read | `test/xlsx/model/xlsx_sheet_pictures_test.dart` ("a broken drawing throws StateError", "a drawing whose root is not wsDr warns and cannot be edited") |
+| Tables read | `tables` lists each table part of the sheet's table relationships in order; a part the model cannot type (a root that is not `table`, a bad `ref`, columns that do not match it) is kept, unlisted, and its name and id stay taken; an unknown `totalsRowFunction` reads none and warns (`table`); calculated columns, `dataDxfId`, `xr:uid`, filter criteria and sort state stay as written | nothing lost | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("reads the fixture's tables", "an untypable part stays unlisted and its name stays taken", "a bad function warns once and reads none") |
+| `addTable` | rendered by the writer with the `id` one above the highest of the package, the part `xl/tables/table{id}.xml` (the next number when taken); `<tableParts>` made in schema position, `count` recomputed; an empty header cell takes the column's name, an empty totals cell the label or `SUBTOTAL`; a header cell that holds another text, a formula in a header cell or a name taken (a table of any sheet, loaded or not, listed or not; a defined name) throws `ArgumentError` with nothing changed; an overlap with a table, the auto filter or a merge throws naming both | a table is cells, a part and a name in one | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("adds a table and writes its header and totals", "tableParts is made in schema position", "a name taken by a table on an unloaded sheet throws", "a defined name throws", "an overlap with merge, filter and table throw naming both", "ids stay unique over the package", "a part name taken by another part is bumped") |
+| `setTableStyle` | the `name` and the flags that differ are set in place, everything else of the part stays; a table without `<tableStyleInfo>` gains it after `<tableColumns>`, `null` removes it; an equal style is no edit; a style Excel lacks throws `ArgumentError` (a custom style the table already has may change its flags) | a typed member edits what it types | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("restyle keeps xr:uid", "null style removes tableStyleInfo", "a table without a style gains the element after its columns", "equal is no edit", "a custom style of the file takes new flags") |
+| `resizeTable` | moves the last row: `ref` of the table and its `<autoFilter>` change, cells stay; the first row and the columns stay; an overlap with another table, a merge or the auto filter throws; a table with a totals row or a sort state throws `StateError` (W5 moves them); an equal range is no edit. It rewrites no cached result, so a recorded count (`WorkbookPart.tableEdits`, as `nameEdits`) makes the save set `fullCalcOnLoad` when the workbook has formulas; `calcChain` stays, undo takes the count back, and `setTableStyle` and an equal resize ask nothing | a `SUM(T[A])` over a resized table has another result, as a name edit's formulas do; W5 owns what moves with it | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("resize moves both refs", "resizeTable asks for recalculation, keeps calcChain, undo clears it", "an equal resize asks for nothing", "resize refuses totals, sortState, other corners and no data row", "resize refuses an overlap with a table, a merge or the filter", "addTable drops calcChain, setTableStyle does not") |
+| `removeTable` is conservative | it removes the `<tablePart>`, the relationship and the part, and the cells stay, but throws `StateError` naming the first use when a cell formula, a defined name of any sheet, or a `calculatedColumnFormula` or `totalsRowFormula` of another table holds `Name[` (ignoring case, not after a character of a name, so `MySales[` does not use `Sales`; a string that holds the text refuses too, until W5's lexer); also when the table part has relationships of its own (a query table), or a tab on the same sheet part already removed it. a slicer cache part (`application/vnd.ms-excel.slicerCache+xml`) whose `tableSlicerCache` has the table's `id` in `tableId` refuses too. A pivot cache that names the table is not checked (it fails on refresh; W5, and the owner's Excel) | Excel repairs a file whose formula names a table it lacks; refusing is safe, repairing is not; W5 lifts this | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("a formula using the table refuses removal, named cell in the message", "a string holding the text refuses too", "a defined name using it refuses", "a query table refuses", "a slicer cache naming the table refuses removal", "a backslash in a table name",  "a table part two sheets share is removed once, then refused", "a longer name ending in the table name does not refuse", "what may stand before the name refuses", "a calculated column of another table refuses", "a totals formula of another table refuses") |
+| A part name used again after a removal | every cache keyed by a part name is edited in a recorded change (`markStoredPart`, `forgetTablePart`), so a part that takes a removed name starts clean and an undo restores the old state: a later restyle, rename, note or picture edit reaches the file | a removed part's name is free for the next part | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("a part name used again after a removal", "a later restyle reaches the file", "a later header rename reaches the part"), `test/xlsx/model/xlsx_sheet_notes_test.dart` and `test/xlsx/model/xlsx_sheet_pictures_test.dart` ("a part name used again after a removal keeps later edits") |
+| Undo across parts | adding or removing a note, picture or table, one or the last, and undoing it restores the file: parts, relationships, content types and the parts' bytes (by `attachStoredPart`), also after a failed edit | one change per edit, parts included | `test/xlsx/model/round_trip_test.dart` ("undoing object edits restores the file"), `test/xlsx/model/xlsx_sheet_notes_test.dart`, `xlsx_sheet_pictures_test.dart` and `xlsx_sheet_tables_test.dart` (groups "undo of ...", "the bytes of ...") |
+| A file with more than this model types | a drawing with charts and shapes, a VML part with form controls, a table with calculated columns: adding or removing one picture, note or table changes only its own parts; the thread's note cannot be set or removed; the table its own formulas use cannot be removed | the owner's files hold much the model does not type | `test/xlsx/model/round_trip_test.dart` ("a file with more than the model types") |
+| Fuzzing | the feature fuzz also reads, sets, undoes and saves every W4 member over `m4_*` and `excel_objects` | the file is untrusted input | `test/xlsx/model/feature_fuzz_test.dart` |
 
 ### What W3 reads and edits less than it might
 
@@ -366,7 +453,7 @@ Nothing is dropped silently.
 
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
-| A fixture rebuilt with the model | semantically equal to the writer's: `m1_values`, `m1_dates`, `m1_sheets`, `m1_properties`, `m2_styles`, `m2_columns_rows`, `m2_style_precedence`, `m2_views`, `m2_merges_filter`, `m2_formula_xstring`, `m3_names`, `m3_hyperlinks`, `m3_validation`, `m3_conditional`, `m3_conditional_x14`, `m3_page_setup`, `m3_header_footer`, `m3_protection` and `m3_properties`, apart from the two named differences below | one way to write a value | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
+| A fixture rebuilt with the model | semantically equal to the writer's: `m1_values`, `m1_dates`, `m1_sheets`, `m1_properties`, `m2_styles`, `m2_columns_rows`, `m2_style_precedence`, `m2_views`, `m2_merges_filter`, `m2_formula_xstring`, `m3_names`, `m3_hyperlinks`, `m3_validation`, `m3_conditional`, `m3_conditional_x14`, `m3_page_setup`, `m3_header_footer`, `m3_protection`, `m3_properties`, `m4_rich_text`, `m4_notes`, `m4_images`, `m4_tables` and `m4_objects`, apart from the two named differences below | one way to write a value | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
 | `tabSelected` (named difference) | setting the model's `activeSheet` to another sheet writes `tabSelected="1"`, the writer never does; Excel selects the active tab either way (`m1_sheets` and `m2_views`) | an opened file's old `tabSelected` must move, and the writer's output is pinned | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
 | The tab position of `m1_sheets` (named difference) | the writer's `addSheet(position: 0)` has no model equivalent until W5, so the expected `workbook.xml` moves the first tab last and lowers `activeTab` | structural editing is W5 | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
 | Re-setting what was read | every style, row format, column, default size, view, tab colour, outline summary and merge, and of W3 `protection`, `pageSetup`, `headerFooter`, `autoFilter`, `printArea`, `setPrintTitles` and the workbook's `protection` and `properties`, set back to what it reads changes nothing, on every writer fixture and producer file; a dangling or invalid `s` is the exception (see "Setting cells"). Validations and conditional formats have no setter of their list: removing each and adding it back keeps the getters' values, in the model and after a reopen. Links have their own test | typing must not alter output | `test/xlsx/model/round_trip_test.dart` ("re-setting what was read changes nothing", "removing and re-adding keeps the meaning"), `test/xlsx/model/xlsx_sheet_links_test.dart` ("an equal link is no edit") |
@@ -411,14 +498,18 @@ the workbook name `Model_edit`, links the new string cell, adds a list
 validation, a cell-value rule and a data bar on free cells of the new row,
 sets a landscape A4 page setup that fits one page wide, a footer, an auto
 filter over the new row (when no filter or table is in the way) and the
-workbook's title, adds a sheet, saves to `<outDir>` and reads the edits back
-with `XlsxReader` and the model; it also writes the generated workbooks of
-`tool/write_model_sample.dart`, `w1_generated.xlsx`, `w2_generated.xlsx` and
-`w3_generated.xlsx`, there. CI runs it on the writer fixtures and validates the output with the
-Open XML SDK (spec section 9).
+workbook's title, sets a rich text cell (`Rich ` bold, `text` plain), a note
+by `jet_office` and a 4 by 2 pixel PNG picture on the next free columns of the
+new row and a table `Model_table` (a number added when taken) of two columns
+over the two rows below it, adds a sheet, saves to `<outDir>` and reads the
+edits back with `XlsxReader` and the model; it also writes the generated
+workbooks of `tool/write_model_sample.dart`, `w1_generated.xlsx`,
+`w2_generated.xlsx`, `w3_generated.xlsx` and `w4_generated.xlsx`, there. CI
+runs it on the writer fixtures and validates the output with the Open XML SDK
+(spec section 9).
 
 ## Port map
 
-W1 to W3 port nothing from Quds (spec section 8): every file is new and
+W1 to W4 port nothing from Quds (spec section 8): every file is new and
 says "Not ported from Quds; written for jet_office." Ports start in W5
 (formula reference shifting) and are listed here when they land.

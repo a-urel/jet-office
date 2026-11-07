@@ -6,8 +6,9 @@
 /// ```
 ///
 /// For every `*.xlsx` in the first directory it opens the workbook with
-/// `XlsxWorkbook.open`, loads every sheet by reading its rows, saves it and
-/// writes the bytes to `<outDir>/<name>.xlsx`. It then compares the saved
+/// `XlsxWorkbook.open`, loads every sheet by reading its rows, reads its
+/// objects (the rich text of every string cell, its notes, pictures and
+/// tables), saves it and writes the bytes to `<outDir>/<name>.xlsx`. It then compares the saved
 /// package with the input by `comparePackages` from `tool/src/part_compare.dart`
 /// with `ignoreBookkeeping`, because the model recomputes `dimension/@ref` and
 /// `row/@spans` on save by design. A model that changes nothing must leave
@@ -87,7 +88,7 @@ List<String> _roundTrip(File file, Directory output, String name) {
   try {
     final XlsxWorkbook book = XlsxWorkbook.open(input);
     for (final XlsxSheet sheet in book.sheets) {
-      sheet.rows.toList();
+      _readObjects(sheet);
     }
     saved = book.save().bytes;
   } on XlsxReadException catch (e) {
@@ -97,4 +98,16 @@ List<String> _roundTrip(File file, Directory output, String name) {
   }
   File('${output.path}/$name').writeAsBytesSync(saved);
   return comparePackages(input, saved, ignoreBookkeeping: true);
+}
+
+/// Loads [sheet] and reads its rows and objects, which must change nothing.
+void _readObjects(XlsxSheet sheet) {
+  for (final XlsxReadRow row in sheet.rows) {
+    for (final XlsxReadCell cell in row.cells) {
+      if (cell.value is String) sheet.richTextAt(row.index, cell.column);
+    }
+  }
+  sheet.notes.toList();
+  sheet.pictures.toList();
+  sheet.tables.toList();
 }

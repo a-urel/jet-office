@@ -181,9 +181,10 @@ void main() {
         links.toString(),
         rels: rels.toString(),
       ).sheets.single;
-      // Loads the sheet, so that only the join is timed. A test's timeout
-      // cannot stop code that never yields, so the bound is checked after:
-      // a fraction of a second here, minutes when quadratic.
+      // Loads the sheet, so that the getter alone is timed: reading the
+      // entries and joining them. A test's timeout cannot stop code that
+      // never yields, so the bound is checked after: a fraction of a second
+      // here, minutes when quadratic.
       sheet.merges;
       final Stopwatch watch = Stopwatch()..start();
       final List<({XlsxRange range, XlsxHyperlink link})> read =
