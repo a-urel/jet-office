@@ -1,1 +1,3 @@
-[]
+[
+  {"region": "tr-TR", "appleLocale": "tr_TR", "excelLanguage": "Türkçe", "excel": "Microsoft Excel 16.114.4 (26110224)", "macos": "27.2", "confirmedBy": "owner", "csv": "axis_oracle_full.tr-TR.csv", "notes": "Step 4 checked through the Claude in Excel add-in: axis values read through the API, labels from Excel's rendered chart image (Chart.getImage); all three charts matched."}
+]
