@@ -246,4 +246,12 @@ void main() {
       expect(() => o.source, throwsA(isA<NoSuchMethodError>()));
     }
   });
+
+  test('the list export is exported', () {
+    const DocxListColumn column = DocxListColumn('A', widthPt: 50);
+    final DocxListExport export = DocxListExport(<DocxListColumn>[column]);
+    expect(export.columns.single, column);
+    expect(export.headerShading, 'D9D9D9');
+    expect(export.footerBefore, 'Page ');
+  });
 }

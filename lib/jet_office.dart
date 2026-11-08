@@ -263,6 +263,7 @@ export 'src/docx/docx_document.dart'
         DocxHeaderFooterType,
         DocxResult,
         DocxStory;
+export 'src/docx/list_export.dart' show DocxListColumn, DocxListExport;
 export 'src/docx/model/blocks.dart'
     show
         DocxBlock,

@@ -78,7 +78,100 @@ List<String> _coreSourceOffenders(Iterable<LibSource> sources) => <String>[
     if (_uris(source).any(_namesCoreSource)) source.path,
 ];
 
+/// The files under `lib/src/docx/` that the barrel, `lib/jet_office.dart`,
+/// exports, as paths relative to the package root.
+Set<String> _barrelDocxFiles(Iterable<LibSource> sources) {
+  final LibSource barrel = sources.firstWhere(
+    (LibSource s) => s.path == 'lib/jet_office.dart',
+  );
+  return <String>{
+    for (final String uri in _uris(barrel))
+      if (uri.startsWith('src/docx/')) 'lib/$uri',
+  };
+}
+
+/// The files under `lib/src/docx/` that [source] imports, as paths relative
+/// to the package root, or a path under `lib/src/` for any other relative
+/// import. Package imports are not resolved.
+Iterable<String> _relativeImports(LibSource source) => <String>[
+  for (final String uri in _uris(source))
+    if (!uri.startsWith('package:') && !uri.startsWith('dart:'))
+      Uri.parse(source.path).resolve(uri).path,
+];
+
+/// The imports of [source] that break the list export's rule: a file under
+/// `lib/src/docx/` the barrel does not export, or a relative import outside
+/// `lib/src/docx/` and `lib/src/common/`, or a package other than
+/// `package:jet_core/jet_core.dart` and the Dart SDK.
+List<String> _listExportOffenders(LibSource source, Set<String> exported) =>
+    <String>[
+      for (final String uri in _uris(source))
+        if (uri.startsWith('package:')
+            ? uri != 'package:jet_core/jet_core.dart'
+            : !uri.startsWith('dart:') &&
+                  !_allowedRelative(
+                    Uri.parse(source.path).resolve(uri).path,
+                    exported,
+                  ))
+          uri,
+    ];
+
+bool _allowedRelative(String path, Set<String> exported) =>
+    path.startsWith(_common) ||
+    (path.startsWith(_docx) && exported.contains(path));
+
 void main() {
+  test('lib/src/docx/list_export.dart imports only exported docx files', () {
+    final List<LibSource> sources = libSources();
+    final LibSource export = sources.firstWhere(
+      (LibSource s) => s.path == '${_docx}list_export.dart',
+    );
+    final Set<String> exported = _barrelDocxFiles(sources);
+    expect(
+      exported,
+      contains('${_docx}docx_document.dart'),
+      reason: 'the barrel must export docx files, or the guard allows none.',
+    );
+    expect(_relativeImports(export), isNotEmpty);
+    expect(_listExportOffenders(export, exported), isEmpty);
+  });
+
+  test('the list export guard flags an import', () {
+    const Set<String> exported = <String>{'lib/src/docx/docx_document.dart'};
+    List<String> offenders(String code) => _listExportOffenders(
+      LibSource('lib/src/docx/list_export.dart', code),
+      exported,
+    );
+    expect(
+      offenders(
+        "import 'docx_document.dart';\n"
+        "import '../common/image.dart';\n"
+        "import 'dart:typed_data';\n"
+        "import 'package:jet_core/jet_core.dart';",
+      ),
+      isEmpty,
+    );
+    expect(
+      offenders(
+        "import 'save_plan.dart';\n"
+        "import 'model/edit_sink.dart';\n"
+        "import '../xml/xml_number.dart';\n"
+        "import '../xlsx/range.dart';\n"
+        "import 'package:archive/archive.dart';\n"
+        "import 'package:jet_core/src/format/formatter.dart';",
+      ),
+      <String>[
+        'save_plan.dart',
+        'model/edit_sink.dart',
+        '../xml/xml_number.dart',
+        '../xlsx/range.dart',
+        'package:archive/archive.dart',
+        'package:jet_core/src/format/formatter.dart',
+      ],
+    );
+    expect(offenders("// import 'save_plan.dart';\nconst int x = 0;"), isEmpty);
+  });
+
   test('lib/src/docx does not import lib/src/xlsx', () {
     expect(_docxOffenders(libSources()), isEmpty);
   });
