@@ -37,6 +37,7 @@ final class FrameAttempt {
     this.plot,
     this.scale,
     this.valueLabels = const <MeasuredLabel>[],
+    this.valueStride = 1,
     this.plan,
     this.categoryOffset = 0,
   });
@@ -65,6 +66,10 @@ final class FrameAttempt {
 
   /// The value axis' tick labels, measured.
   final List<MeasuredLabel> valueLabels;
+
+  /// Every how many tick labels one is drawn, from the first: 1 draws them
+  /// all; more thins the labels of a fixed unit that crowd.
+  final int valueStride;
 
   /// The category labels' plan.
   final CategoryLabelPlan? plan;
@@ -138,6 +143,13 @@ final class FrameContext {
     fixedMajorUnit: chart.valueAxis.majorUnit,
     percent: resolved.percent,
   );
+
+  /// Whether the chart fixes the value axis' major unit, which coarsening
+  /// cannot change.
+  bool get fixedUnit {
+    final double? unit = chart.valueAxis.majorUnit;
+    return unit != null && unit.isFinite && unit > 0;
+  }
 
   /// The tick labels of [scale], measured.
   List<MeasuredLabel> tickLabels(ValueScale scale) => measureLabels(
@@ -213,6 +225,7 @@ extension FramePaint on FrameContext {
           theme.axisLabels,
           horizontal: bar,
           labelGap: gap,
+          stride: a.valueStride,
         ),
       if (shown.categoryLabels)
         ...placeCategoryLabels(
@@ -299,8 +312,10 @@ extension FramePaint on FrameContext {
 
   /// The texts [wanted] that [shown] leaves out, grouped in the order of
   /// [DegradeStep]: data labels (the ones [hiddenData] lists, or all of them
-  /// when [shown] has none), legend entries, axis titles, title, category labels (every
-  /// one not shown and every cut one, with its full text), value labels.
+  /// when [shown] has none), legend entries, axis titles, title, category
+  /// labels (every one not shown and every cut one, with its full text),
+  /// value labels (all of them when not shown, else the ones thinning left
+  /// out).
   ///
   /// Value labels of an attempt with no room at all come from a fallback
   /// scale of at most `provisionalMaxIntervals(0)` intervals.
@@ -338,9 +353,10 @@ extension FramePaint on FrameContext {
         for (int i = 0; i < resolved.categoryCount; i++)
           if (drawn[i] != resolved.categoryLabels[i])
             (ids.axisLabelId(ids.categoryAxis, i), resolved.categoryLabels[i]),
-      if (wanted.valueLabels && !shown.valueLabels)
+      if (wanted.valueLabels)
         for (int i = 0; i < ticks.length; i++)
-          (ids.axisLabelId(ids.valueAxis, i), ticks[i]),
+          if (!shown.valueLabels || i % a.valueStride != 0)
+            (ids.axisLabelId(ids.valueAxis, i), ticks[i]),
     ];
   }
 }

@@ -20,8 +20,9 @@ import 'resolve.dart';
 /// does not fit. When no step can and the frame still does not fit, only the
 /// background is drawn.
 enum DegradeStep {
-  /// The data labels go. They take no room from the frame, so dropping them
-  /// relieves only a frame with no room at all, but they go first.
+  /// The data labels go. They take no room from the frame, so this step
+  /// relieves no misfit: they go, first, only when nothing else helps and
+  /// only the background is drawn.
   dataLabels,
 
   /// The legend goes.
@@ -45,7 +46,8 @@ enum FrameMisfit {
   /// The plot would be under 1 by 1, or the bands around it do not settle.
   space,
 
-  /// The value axis' tick labels collide, at the coarsest scale it allows.
+  /// The value axis' tick labels collide, at the coarsest scale it allows
+  /// (an automatic unit; a fixed one is thinned instead).
   valueLabels,
 
   /// No plan of the category labels fits: their band limit (40% of the space
@@ -140,19 +142,26 @@ final class FrameShown {
 
   /// Whether taking [step] can relieve any of [misfits].
   ///
-  /// A step that hides nothing shown relieves nothing. The data labels' step
-  /// relieves [FrameMisfit.space] only in name: they take no room, but a frame
-  /// that has to lose parts loses them first, and they are listed as hidden.
-  /// Any other step frees space, so it relieves [FrameMisfit.space]. The value labels collide less on a longer value
-  /// axis, and the category labels get a deeper band from more space across
-  /// the category axis; both lie in the same direction, the plot's height for
-  /// a column, line or area chart ([bar] false) and its width for a bar chart.
-  /// So the legend relieves them when it stands at the top or bottom of a
-  /// column chart, or at the left or right of a bar chart; the axis titles
-  /// when the category axis has a title (it stands across that direction);
-  /// the title only on a column chart; and the category labels always. The
-  /// value labels relieve only their own collision and space. Only the
-  /// category labels relieve [FrameMisfit.categoryRoom].
+  /// A step that hides nothing shown relieves nothing. The data labels take
+  /// no room from the frame and are never part of its misfit (a label that
+  /// collides is hidden alone), so their step relieves nothing: they go only
+  /// when no step can relieve the frame and only the background is left,
+  /// and they stay first in the order and in the hidden list. Any other step
+  /// frees space, so it relieves [FrameMisfit.space].
+  ///
+  /// The category labels get a deeper band from more space across the
+  /// category axis, which is the plot's height for a column, line or area
+  /// chart ([bar] false) and its width for a bar chart. So the legend
+  /// relieves [FrameMisfit.categoryLabels] when it stands at the top or
+  /// bottom of a column chart, or at the left or right of a bar chart; the
+  /// axis titles when the category axis has a title (it stands across that
+  /// direction); the title only on a column chart; and the category labels
+  /// always. Only the category labels relieve [FrameMisfit.categoryRoom].
+  ///
+  /// [FrameMisfit.valueLabels] is relieved only by the value labels' own
+  /// step: a fixed unit is thinned by the frame instead, and an automatic
+  /// one has taken its coarsest step, so the legend, the titles and the
+  /// category labels are never given up for the tick labels.
   bool relieves(
     DegradeStep step,
     Set<FrameMisfit> misfits, {
@@ -160,12 +169,10 @@ final class FrameShown {
     required ChartLegendPosition legendPosition,
   }) {
     final bool space = misfits.contains(FrameMisfit.space);
-    final bool along =
-        misfits.contains(FrameMisfit.valueLabels) ||
-        misfits.contains(FrameMisfit.categoryLabels);
+    final bool along = misfits.contains(FrameMisfit.categoryLabels);
     switch (step) {
       case DegradeStep.dataLabels:
-        return dataLabels && space;
+        return false;
       case DegradeStep.legend:
         final bool vertical =
             legendPosition == ChartLegendPosition.top ||
@@ -177,7 +184,8 @@ final class FrameShown {
       case DegradeStep.title:
         return title && (space || along && !bar);
       case DegradeStep.categoryLabels:
-        return categoryLabels && misfits.isNotEmpty;
+        return categoryLabels &&
+            (space || along || misfits.contains(FrameMisfit.categoryRoom));
       case DegradeStep.valueLabels:
         return valueLabels &&
             (space || misfits.contains(FrameMisfit.valueLabels));

@@ -329,6 +329,35 @@ void main() {
     expect(l.hidden[1], ChartHiddenLabel(ids.dataLabelId(0, 1), '20'));
   });
 
+  test('a small tile keeps its data labels when the legend and title free '
+      'space', () {
+    // At 68 by 62 a top legend and a title leave too little room for the
+    // plot; they go, and the data labels, which take no room, stay.
+    final ChartLayout l = layoutChart(
+      Chart(
+        kind: ChartKind.column,
+        title: const ChartTitle(text: 'Sales'),
+        dataLabels: const ChartDataLabels(visible: true),
+        legend: const ChartLegend(position: ChartLegendPosition.top),
+        valueAxis: fixed,
+        series: <ChartSeries>[
+          series('Revenue', <double?>[10, 60]),
+        ],
+      ),
+      theme: ChartTheme.office,
+      size: const ChartSize(68, 62),
+      measurer: measurer,
+    );
+    expect(l.plotArea, isNotNull);
+    expect(l.hidden, <ChartHiddenLabel>[
+      ChartHiddenLabel(ids.legendTextId(0), 'Revenue'),
+      const ChartHiddenLabel(ids.title, 'Sales'),
+    ]);
+    expect(has(l, ids.dataLabelId(0, 0)), isTrue);
+    expect(has(l, ids.dataLabelId(0, 1)), isTrue);
+    expect(findOverlaps(l.primitives, l.size), isEmpty);
+  });
+
   test('every label of a sweep lies inside the plot and apart', () {
     for (final ChartKind kind in <ChartKind>[
       ChartKind.column,

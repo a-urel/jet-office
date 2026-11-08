@@ -11,11 +11,15 @@
 /// intervals come from the plot's length (`provisionalMaxIntervals`), the
 /// tick labels from the scale, and the bands from the labels. [layoutFrame]
 /// starts from the plot without bands and repeats until the scale and bands
-/// stay the same, at most four passes, keeping the last. When adjacent tick
-/// labels would then come closer than `minTextGap`, it asks for fewer
-/// intervals until they fit or only one is left: the next coarser step. Excel
-/// lets such labels collide; taking the coarser step is a deliberate
-/// difference (Task 11 lists it in `docs/parity.md`).
+/// stay the same, at most 12 passes, keeping the last: the first four take
+/// the bands each pass needs, and from the fifth the bands only widen, so the
+/// plot only shrinks and the passes settle. When adjacent tick labels would
+/// then come closer than `minTextGap`, it asks for fewer intervals until they
+/// fit or only one is left: the next coarser step. A fixed major unit cannot
+/// be coarsened, so its tick labels are thinned instead: every k-th is drawn,
+/// from the first, for the smallest k that fits, with every grid line kept.
+/// Excel lets such labels collide; taking the coarser step or thinning is a
+/// deliberate difference (Task 11 lists it in `docs/parity.md`).
 library;
 
 import 'dart:math' as math;
@@ -35,35 +39,16 @@ import 'primitives.dart';
 import 'resolve.dart';
 import 'text_measurer.dart';
 
-/// Where the frame put the plot and its scale, for the marks (Task 6) and the
-/// data labels (Task 8).
+/// Where the frame put the plot and its scale.
 final class FrameGeometry {
   /// Creates the geometry of a laid out frame.
-  const FrameGeometry({
-    required this.plot,
-    required this.scale,
-    required this.valueAxisHorizontal,
-    required this.resolved,
-  });
+  const FrameGeometry({required this.plot, required this.scale});
 
   /// The plot area.
   final ChartRect plot;
 
   /// The value axis' scale.
   final ValueScale scale;
-
-  /// Whether the value axis runs horizontally (a bar chart).
-  final bool valueAxisHorizontal;
-
-  /// The chart's resolved data.
-  final ResolvedChart resolved;
-
-  /// The value the category axis crosses at (`crossingValue`).
-  double get crossing => crossingValue(scale);
-
-  /// The position of [value] along the value axis.
-  double position(double value) =>
-      valuePosition(value, scale, plot, horizontal: valueAxisHorizontal);
 }
 
 /// A laid out frame.
@@ -117,12 +102,7 @@ FrameLayout layoutFrame(
       return FrameLayout(
         primitives: painted.primitives,
         hidden: frame.hiddenTexts(wanted, shown, attempt, painted.hiddenData),
-        geometry: FrameGeometry(
-          plot: attempt.plot!,
-          scale: attempt.scale!,
-          valueAxisHorizontal: frame.bar,
-          resolved: resolved,
-        ),
+        geometry: FrameGeometry(plot: attempt.plot!, scale: attempt.scale!),
       );
     }
     DegradeStep? next;
@@ -222,8 +202,8 @@ extension on FrameContext {
       valueTitle,
       categoryTitle,
     );
-    // After four passes the bands only grow, so the plot only shrinks and the
-    // passes settle.
+    // At most 12 passes: from the fifth the bands only widen, so the plot
+    // only shrinks and the passes settle.
     for (int pass = 0; pass < 12; pass++) {
       final ChartRect plot = _deflate(inner, bands);
       final ValueScale next = scaleFor(_maxIntervals(plot));
@@ -258,6 +238,15 @@ extension on FrameContext {
         plot = _deflate(inner, bands);
       }
     }
+    // A fixed unit cannot be coarsened: draw every stride-th tick label
+    // instead, the smallest stride that fits (a single label always does).
+    int stride = 1;
+    if (shown.valueLabels && fixedUnit) {
+      while (stride < labels.length &&
+          !_valueLabelsFit(labels, scale!, plot, stride: stride)) {
+        stride++;
+      }
+    }
     // The category labels' plan on the final plot must fit the bands kept
     // for it; widen them a few times if not.
     CategoryLabelPlan plan = _plan(
@@ -288,7 +277,8 @@ extension on FrameContext {
     }
     final Set<FrameMisfit> misfits = <FrameMisfit>{
       if (!settled || !(plot.width >= 1 && plot.height >= 1)) FrameMisfit.space,
-      if (shown.valueLabels && !_valueLabelsFit(labels, scale!, plot))
+      if (shown.valueLabels &&
+          !_valueLabelsFit(labels, scale!, plot, stride: stride))
         FrameMisfit.valueLabels,
       if (shown.categoryLabels && !plan.fits)
         plan.cramped ? FrameMisfit.categoryRoom : FrameMisfit.categoryLabels,
@@ -311,6 +301,7 @@ extension on FrameContext {
       plot: plot,
       scale: scale,
       valueLabels: labels,
+      valueStride: stride,
       plan: plan,
       categoryOffset: _categoryOffset(shown, labels, plan),
     );
@@ -326,13 +317,15 @@ extension on FrameContext {
   bool _valueLabelsFit(
     List<MeasuredLabel> labels,
     ValueScale scale,
-    ChartRect plot,
-  ) => valueLabelsFit(
+    ChartRect plot, {
+    int stride = 1,
+  }) => valueLabelsFit(
     labels,
     scale,
     plot,
     horizontal: bar,
     minTextGap: theme.spacing.minTextGap,
+    stride: stride,
   );
 
   /// The category labels' plan on [plot], whose band may take 40% of the

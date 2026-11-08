@@ -82,28 +82,33 @@ double crossingValue(ValueScale scale) {
 }
 
 /// Whether the tick [labels] of [scale] keep `minTextGap` apart on a value
-/// axis of [plot].
+/// axis of [plot], when every [stride]-th of them is drawn (from the first).
 ///
-/// Vertical, adjacent labels' centres must lie half their heights plus the gap
-/// apart; horizontal, half their widths plus the gap.
+/// Vertical, adjacent drawn labels' centres must lie half their heights plus
+/// the gap apart; horizontal, half their widths plus the gap.
 bool valueLabelsFit(
   List<MeasuredLabel> labels,
   ValueScale scale,
   ChartRect plot, {
   required bool horizontal,
   required double minTextGap,
+  int stride = 1,
 }) {
-  for (int i = 1; i < labels.length && i < scale.ticks.length; i++) {
+  for (
+    int i = stride;
+    i < labels.length && i < scale.ticks.length;
+    i += stride
+  ) {
     final double distance =
         (valuePosition(scale.ticks[i], scale, plot, horizontal: horizontal) -
                 valuePosition(
-                  scale.ticks[i - 1],
+                  scale.ticks[i - stride],
                   scale,
                   plot,
                   horizontal: horizontal,
                 ))
             .abs();
-    final ChartSize a = labels[i - 1].size;
+    final ChartSize a = labels[i - stride].size;
     final ChartSize b = labels[i].size;
     final double need = horizontal
         ? (a.width + b.width) / 2
@@ -115,7 +120,8 @@ bool valueLabelsFit(
   return true;
 }
 
-/// The value axis' tick labels of [scale], outside [plot].
+/// The value axis' tick labels of [scale], outside [plot]: every [stride]-th
+/// of them, from the first.
 ///
 /// Vertical, each is right-aligned `labelGap` left of the plot and centred on
 /// its tick; horizontal, each is centred under its tick, `labelGap` below.
@@ -126,9 +132,10 @@ List<TextPrimitive> valueLabelPrimitives(
   ChartTextStyle style, {
   required bool horizontal,
   required double labelGap,
+  int stride = 1,
 }) {
   return <TextPrimitive>[
-    for (int i = 0; i < labels.length && i < scale.ticks.length; i++)
+    for (int i = 0; i < labels.length && i < scale.ticks.length; i += stride)
       _valueLabel(
         i,
         labels[i],

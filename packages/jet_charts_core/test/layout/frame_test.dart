@@ -1,5 +1,8 @@
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
+import 'package:jet_charts_core/src/layout/degradation.dart';
+import 'package:jet_charts_core/src/layout/resolve.dart';
+import 'package:jet_core/jet_core.dart';
 import 'package:test/test.dart';
 
 const FixedWidthTextMeasurer measurer = FixedWidthTextMeasurer();
@@ -361,7 +364,7 @@ void main() {
   test('a step that cannot relieve the misfit is passed over', () {
     // A bar chart's tick labels at a fixed unit of 0.5 collide on any
     // width: neither the title nor a bottom legend lengthens its
-    // horizontal value axis, so both stay.
+    // horizontal value axis, so both stay, and the labels are thinned.
     const ChartSize size = ChartSize(400, 300);
     final ChartLayout layout = lay(
       chart(
@@ -376,12 +379,90 @@ void main() {
     ).map((ChartPrimitive p) => p.id).toSet();
     expect(kept, contains(ids.title));
     expect(kept, contains(ids.legend));
-    expect(kept, isNot(contains(ids.axisLabelId(ids.valueAxis, 0))));
+    expect(kept, contains(ids.axisLabelId(ids.valueAxis, 0)));
+    expect(kept, isNot(contains(ids.axisLabelId(ids.valueAxis, 1))));
     expect(
       layout.hidden.map((ChartHiddenLabel h) => h.id),
       isNot(contains(ids.title)),
     );
     expect(problems(layout), isEmpty);
+  });
+
+  test('a fixed unit whose labels crowd thins them and keeps the rest', () {
+    const ChartSize size = ChartSize(360, 240);
+    final ChartLayout layout = lay(
+      Chart(
+        kind: ChartKind.column,
+        title: const ChartTitle(text: 'Sales'),
+        valueAxis: const ChartAxis(gridLines: true, majorUnit: 2500),
+        series: <ChartSeries>[
+          series(
+            'Revenue',
+            <double?>[12000, 35000, 50000],
+            <Object?>['North', 'South', 'East'],
+          ),
+        ],
+      ),
+      size,
+    );
+    final Set<String> kept = flat(
+      layout.primitives,
+    ).map((ChartPrimitive p) => p.id).toSet();
+    expect(kept, contains(ids.title));
+    expect(kept, contains(ids.legend));
+    expect(kept, contains(ids.axisLabelId(ids.categoryAxis, 0)));
+    // The first tick's label is always drawn; not every one is.
+    expect(kept, contains(ids.axisLabelId(ids.valueAxis, 0)));
+    final int ticks = layout.valueScale!.ticks.length;
+    final List<TextPrimitive> drawn = textsStarting(
+      layout,
+      'axis/value/label/',
+    );
+    expect(drawn.length, greaterThan(1));
+    expect(drawn.length, lessThan(ticks));
+    // Every grid line stays.
+    for (int i = 0; i < ticks; i++) {
+      expect(kept, contains(ids.gridId(ids.valueAxis, i)), reason: '$i');
+    }
+    // The undrawn labels are listed, and nothing else is.
+    final List<String> hiddenIds = <String>[
+      for (final ChartHiddenLabel h in layout.hidden) h.id,
+    ];
+    expect(hiddenIds, hasLength(ticks - drawn.length));
+    expect(hiddenIds, everyElement(startsWith('axis/value/label/')));
+    expect(problems(layout), isEmpty);
+  });
+
+  test('a valueLabels misfit is relieved only by the value labels', () {
+    final FrameShown shown = FrameShown.wanted(
+      chart(
+        title: 'Sales',
+        categoryAxis: const ChartAxis(title: 'Quarter'),
+        valueAxis: const ChartAxis(title: 'Revenue'),
+      ),
+      resolveChart(
+        chart(),
+        ChartTheme.office,
+        NumberFormatter(locale: FormatLocale.enUS),
+      ),
+    );
+    for (final bool bar in <bool>[false, true]) {
+      for (final ChartLegendPosition position in ChartLegendPosition.values) {
+        final List<DegradeStep> relieving = <DegradeStep>[
+          for (final DegradeStep step in DegradeStep.values)
+            if (shown.relieves(
+              step,
+              const <FrameMisfit>{FrameMisfit.valueLabels},
+              bar: bar,
+              legendPosition: position,
+            ))
+              step,
+        ];
+        expect(relieving, <DegradeStep>[
+          DegradeStep.valueLabels,
+        ], reason: 'bar: $bar, $position');
+      }
+    }
   });
 
   test('a tiny chart draws only its background', () {
