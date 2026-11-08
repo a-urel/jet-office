@@ -65,8 +65,12 @@ final class ChartLayout {
   /// The value axis' scale, or `null` when there is no plot area.
   final ValueScale? valueScale;
 
-  /// The texts left out because they did not fit, in the order they were
-  /// taken away.
+  /// The texts left out because they did not fit, grouped in the
+  /// degradation order whatever the order they were taken away in: legend
+  /// entries, the value and category axis titles, the title, category labels
+  /// (every one not shown and every cut one, with its full text), value tick
+  /// labels; each group in index order. A kind this version does not draw
+  /// lists its title and its placeholder.
   final List<ChartHiddenLabel> hidden;
 
   @override

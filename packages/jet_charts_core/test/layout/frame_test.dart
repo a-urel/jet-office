@@ -171,34 +171,58 @@ void main() {
 
   test('the legend never covers the plot', () {
     const ChartSize size = ChartSize(360, 240);
-    for (final ChartLegendPosition position in ChartLegendPosition.values) {
-      final ChartLayout layout = lay(
-        chart(
-          seriesCount: 8,
-          names: <String>[
-            for (int i = 1; i <= 8; i++) 'A rather long series name $i',
-          ],
-          legend: ChartLegend(position: position),
-        ),
-        size,
-      );
-      expect(
-        findOverlaps(layout.primitives, size),
-        isEmpty,
-        reason: '$position',
-      );
-      expect(problems(layout), isEmpty, reason: '$position');
-      final Iterable<ChartPrimitive> legends = flat(
-        layout.primitives,
-      ).where((ChartPrimitive p) => p.id == ids.legend);
-      for (final ChartPrimitive p in legends) {
-        expect(
-          (p as RectPrimitive).rect.intersects(layout.plotArea!),
-          isFalse,
-          reason: '$position',
+    int checked = 0;
+    for (final (List<String> names, Set<ChartLegendPosition> fit)
+        in <(List<String>, Set<ChartLegendPosition>)>[
+          // Long names fit only in rows; a column of them would take more
+          // than a third of the width, so the legend is hidden there.
+          (
+            <String>[
+              for (int i = 1; i <= 8; i++) 'A rather long series name $i',
+            ],
+            <ChartLegendPosition>{
+              ChartLegendPosition.top,
+              ChartLegendPosition.bottom,
+            },
+          ),
+          // Short names fit on every side.
+          (
+            <String>[for (int i = 1; i <= 3; i++) 'Series $i'],
+            ChartLegendPosition.values.toSet(),
+          ),
+        ]) {
+      for (final ChartLegendPosition position in ChartLegendPosition.values) {
+        final ChartLayout layout = lay(
+          chart(
+            seriesCount: names.length,
+            names: names,
+            legend: ChartLegend(position: position),
+          ),
+          size,
         );
+        final String reason = '${names.first} $position';
+        expect(problems(layout), isEmpty, reason: reason);
+        final List<RectPrimitive> legends = flat(layout.primitives)
+            .whereType<RectPrimitive>()
+            .where((RectPrimitive p) => p.id == ids.legend)
+            .toList();
+        expect(
+          legends,
+          hasLength(fit.contains(position) ? 1 : 0),
+          reason: reason,
+        );
+        for (final RectPrimitive legend in legends) {
+          expect(
+            legend.rect.intersects(layout.plotArea!),
+            isFalse,
+            reason: reason,
+          );
+          checked++;
+        }
       }
     }
+    // Two long-name rows and four short-name sides.
+    expect(checked, 6);
   });
 
   test('value tick labels follow the scale', () {
@@ -375,6 +399,19 @@ void main() {
       expect(
         layout.hidden.map((ChartHiddenLabel h) => h.id),
         contains(ids.title),
+      );
+      // The value tick labels are listed too, even with no room at all.
+      expect(
+        layout.hidden.map((ChartHiddenLabel h) => h.id),
+        containsAll(<String>[
+          ids.axisLabelId(ids.valueAxis, 0),
+          ids.axisLabelId(ids.valueAxis, 1),
+        ]),
+        reason: '$size',
+      );
+      expect(
+        layout.hidden.map((ChartHiddenLabel h) => h.id).last,
+        startsWith('axis/value/label/'),
       );
     }
   });

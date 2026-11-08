@@ -128,6 +128,11 @@ List<List<double?>> _shaped(ResolvedChart resolved) {
   ];
 }
 
+/// [value] percent as a fraction, kept between [low] and [high] percent; a
+/// value that is not a number counts as [low].
+double _percent(double value, double low, double high) =>
+    (value.isNaN ? low : value.clamp(low, high)) / 100;
+
 bool _stacked(ResolvedChart r) => r.grouping != ChartGrouping.clustered;
 
 List<ChartPrimitive> _bars(
@@ -138,8 +143,12 @@ List<ChartPrimitive> _bars(
 ) {
   final int n = values.length;
   final bool stacked = _stacked(resolved);
-  final double g = theme.gapWidthPercent / 100;
-  final double o = stacked ? 1 : theme.spacing.overlapPercent / 100;
+  // Excel's ranges: gap 0 to 500, overlap -100 to 100. Kept to them, the
+  // width's denominator is at least 1 (one series, no gap) and never 0.
+  final double g = _percent(theme.gapWidthPercent, 0, 500);
+  final double o = stacked
+      ? 1
+      : _percent(theme.spacing.overlapPercent, -100, 100);
   final double band = axes.categoryLength / math.max(1, resolved.categoryCount);
   final double w = band / (g + n - (n - 1) * o);
   final List<ChartPrimitive> out = <ChartPrimitive>[];

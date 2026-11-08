@@ -101,6 +101,86 @@ void main() {
     );
   });
 
+  test('clustered bars overlap by the theme\'s percentage', () {
+    final ChartLayout l = layoutChart(
+      Chart(
+        kind: ChartKind.column,
+        legend: const ChartLegend(visible: false),
+        series: <ChartSeries>[
+          series('S0', <double?>[1, 2, 3, 4]),
+          series('S1', <double?>[2, 3, 4, 5]),
+          series('S2', <double?>[3, 4, 5, 6]),
+        ],
+      ),
+      theme: theme.copyWith(
+        gapWidthPercent: 150,
+        spacing: theme.spacing.copyWith(overlapPercent: 50),
+      ),
+      size: const ChartSize(400, 300),
+      measurer: measurer,
+    );
+    final ChartRect p = l.plotArea!;
+    final double band = p.width / 4;
+    // w = band / (g + n - (n - 1) * o) = band / (1.5 + 3 - 2 * 0.5).
+    final double w = band / 3.5;
+    for (int c = 0; c < 4; c++) {
+      for (int s = 0; s < 3; s++) {
+        final ChartRect r = bar(l, s, c);
+        expect(r.width, near(w));
+        // Series s starts s * w * (1 - o) after the half gap.
+        expect(r.left, near(p.left + c * band + 1.5 * w / 2 + s * w * 0.5));
+      }
+    }
+  });
+
+  test('gap and overlap are kept to Excel\'s ranges', () {
+    for (final (double gap, double overlap) in <(double, double)>[
+      (-50, 0),
+      (100, 150),
+      (-50, 150),
+      (900, -300),
+    ]) {
+      final ChartLayout l = layoutChart(
+        Chart(
+          kind: ChartKind.column,
+          legend: const ChartLegend(visible: false),
+          series: <ChartSeries>[
+            series('S0', <double?>[1, 2, 3]),
+            series('S1', <double?>[2, 3, 4]),
+          ],
+        ),
+        theme: theme.copyWith(
+          gapWidthPercent: gap,
+          spacing: theme.spacing.copyWith(overlapPercent: overlap),
+        ),
+        size: const ChartSize(400, 300),
+        measurer: measurer,
+      );
+      final ChartRect p = l.plotArea!;
+      final double band = p.width / 3;
+      // Gap 0..500 and overlap -100..100, as Excel allows.
+      final double g = gap.clamp(0, 500) / 100;
+      final double o = overlap.clamp(-100, 100) / 100;
+      final double w = band / (g + 2 - o);
+      for (int s = 0; s < 2; s++) {
+        for (int c = 0; c < 3; c++) {
+          final ChartRect r = bar(l, s, c);
+          expect(
+            r.width.isFinite && r.width > 0,
+            isTrue,
+            reason: '$gap $overlap',
+          );
+          expect(r.width, near(w), reason: '$gap $overlap');
+          expect(
+            r.left,
+            near(p.left + c * band + g * w / 2 + s * w * (1 - o)),
+            reason: '$gap $overlap',
+          );
+        }
+      }
+    }
+  });
+
   test('stacked bars build up and down apart', () {
     final ChartLayout l = lay(<List<double?>>[
       <double?>[3, -1],
