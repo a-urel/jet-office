@@ -62,9 +62,10 @@
 /// parts: the main part (named by the root relationship, not assumed to be
 /// `word/document.xml`), the numbering part, the styles part when `ensure`
 /// added a style (`Heading1`, `TableGrid` or `Hyperlink`), one footer part,
-/// the core properties part (and `_rels/.rels` when it is created, and the
-/// extended properties part when the file lacks one), at most one media part
-/// the file lacked (none when the file has the PNG already: the picture
+/// the core properties part (and, when the file lacks it, `_rels/.rels` and
+/// the extended properties part if the file lacks that too: an extended part
+/// added beside a core part the file had is a problem), at most one media
+/// part the file lacked (none when the file has the PNG already: the picture
 /// shares it), `[Content_Types].xml` when the edit created a part, and the
 /// main part's relationships, which may only gain relationships of the
 /// hyperlink and image types, and of the footer, styles and numbering types
@@ -406,7 +407,7 @@ List<String> _partProblems(Uint8List input, Uint8List saved, _Edits edits) {
     layout.numberingPart,
     if (edits.stylesAdded) layout.stylesPart,
     core,
-    if (!layout.has(app)) app,
+    if (coreCreated && !layout.has(app)) app,
     if (coreCreated) '_rels/.rels',
   };
   bool contentTypes = false;

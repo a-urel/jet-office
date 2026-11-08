@@ -14,7 +14,7 @@ import 'package:test/test.dart';
 
 import '../../tool/edit_docx.dart';
 import '../../tool/write_fixtures.dart' as write_fixtures;
-import '../docx/support/docx_builder.dart' show rewriteDocxPart;
+import '../docx/support/docx_builder.dart' show buildZip, rewriteDocxPart;
 import '../docx/support/localized_document.dart';
 import '../docx/support/styles_documents.dart';
 import '../docx/support/word_document.dart';
@@ -436,6 +436,62 @@ void main() {
           (String x) => x.replaceFirst(editedText, 'Not edited'),
         ),
         contains('the title is missing'),
+      );
+    });
+
+    test('every property but the title survives the edit', () {
+      writeOnly(input, <String>{'d5_properties.docx'});
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      final OfficeProperties p = edited('d5_properties.docx').properties;
+      final OfficeProperties e = d5Properties;
+      expect(p.title, editedText);
+      expect(
+        <Object?>[
+          p.subject, p.creator, p.keywords, p.description, //
+          p.lastModifiedBy, p.category, p.company, p.manager,
+          p.contentStatus, p.revision, p.application, p.created,
+          p.modified, p.custom,
+        ],
+        <Object?>[
+          e.subject, e.creator, e.keywords, e.description, //
+          e.lastModifiedBy, e.category, e.company, e.manager,
+          e.contentStatus, e.revision, e.application, e.created,
+          e.modified, e.custom,
+        ],
+      );
+    });
+
+    test('reports an extended properties part added beside a core part the '
+        'file had', () {
+      writeOnly(input, <String>{'d5_properties.docx'});
+      final File file = File('${input.path}/d5_properties.docx');
+      final Archive archive = ZipDecoder().decodeBytes(file.readAsBytesSync());
+      final List<int> app = archive.findFile('docProps/app.xml')!.content;
+      file.writeAsBytesSync(
+        buildZip(<String, List<int>>{
+          for (final ArchiveFile f in archive.files)
+            if (f.isFile && f.name != 'docProps/app.xml') f.name: f.content,
+        }),
+      );
+      final StringBuffer out = StringBuffer();
+      final int code = editDocx(
+        <String>[input.path, output.path],
+        out: out,
+        err: StringBuffer(),
+        corruptForTest: (Uint8List saved) {
+          final Archive a = ZipDecoder().decodeBytes(saved);
+          return buildZip(<String, List<int>>{
+            for (final ArchiveFile f in a.files)
+              if (f.isFile) f.name: f.content,
+            'docProps/app.xml': app,
+          });
+        },
+      );
+      expect(code, 1, reason: '$out');
+      expect(
+        out.toString(),
+        contains('a part outside the allowed set: docProps/app.xml'),
       );
     });
 
