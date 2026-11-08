@@ -3,7 +3,9 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../fixtures/m4_fixtures.dart' show png4x2;
 import 'support/docx_fuzz.dart';
+import 'support/drawings_document.dart';
 import 'support/table_document.dart';
 
 /// The seeds the quality gate fuzzes, each with [_cases] cases.
@@ -44,6 +46,7 @@ const Map<String, ({int length, int adler32})> _corpus =
       'd5_properties': (length: 28838, adler32: 351789149),
       'tables_by_hand': (length: 9996, adler32: 2530907752),
       'sections_by_hand': (length: 10839, adler32: 3271755158),
+      'drawings_by_hand': (length: 18633, adler32: 842550552),
       'ns0_prefix': (length: 1407, adler32: 3668097186),
       'default_namespace': (length: 1344, adler32: 3335628311),
       'no_override': (length: 1259, adler32: 3490218517),
@@ -71,6 +74,71 @@ void main() {
     );
     expect(edits.rows, greaterThan(0));
     expect(edits.merges, greaterThan(0));
+  });
+
+  test('drawings_by_hand reads its pictures, links, bookmarks and '
+      'properties', () {
+    final DocxDocument doc = DocxDocument.open(drawingsByHandDocx());
+    final List<DocxInline> inlines = <DocxInline>[];
+    void collect(DocxInline i) {
+      inlines.add(i);
+      if (i is DocxHyperlink) i.inlines.forEach(collect);
+      if (i is DocxField) i.result.forEach(collect);
+    }
+
+    for (final DocxBlock b in doc.body.blocks) {
+      if (b is DocxParagraph) b.inlines.forEach(collect);
+    }
+    final List<DocxPicture> pictures = <DocxPicture>[
+      for (final DocxRun r in inlines.whereType<DocxRun>())
+        ...r.content.whereType<DocxPicture>(),
+    ];
+    expect(
+      pictures.where((DocxPicture p) => p.image == OfficeImage(png4x2)),
+      isNotEmpty,
+    );
+    expect(pictures.where((DocxPicture p) => p.image == null), isNotEmpty);
+    expect(pictures.where((DocxPicture p) => p.widthPt == null), isNotEmpty);
+    final List<DocxHyperlink> links = inlines
+        .whereType<DocxHyperlink>()
+        .toList();
+    expect(
+      links.map((DocxHyperlink l) => l.url),
+      containsAll(<String?>['https://example.com/a?b=1&c=2', null]),
+    );
+    expect(links.map((DocxHyperlink l) => l.anchor), contains('Top'));
+    final List<DocxBookmarkStart> starts = inlines
+        .whereType<DocxBookmarkStart>()
+        .toList();
+    expect(starts.map((DocxBookmarkStart s) => s.id), contains(isNull));
+    final DocxHeaderFooter header = doc.sections.single.header;
+    final List<DocxInline> headerInlines = <DocxInline>[
+      for (final DocxParagraph p in header.blocks.whereType<DocxParagraph>())
+        ...p.inlines,
+    ];
+    expect(
+      headerInlines.whereType<DocxHyperlink>().map((DocxHyperlink l) => l.url),
+      contains('https://example.com/home'),
+    );
+    expect(
+      headerInlines
+          .whereType<DocxRun>()
+          .expand((DocxRun r) => r.content)
+          .whereType<DocxPicture>()
+          .map((DocxPicture p) => p.image),
+      contains(OfficeImage(png4x2)),
+    );
+    final OfficeProperties p = doc.properties;
+    expect(p.title, 'Drawings');
+    expect(p.revision, isNull);
+    expect(p.created, isNull);
+    expect(p.company, 'Acme');
+    expect(p.custom['Text'], 'value');
+    expect(p.custom.containsKey('Count'), isFalse);
+    expect(
+      doc.save().warnings.map((DocxWarning w) => w.code),
+      contains(DocxWarningCode.propertyValueInvalid),
+    );
   });
 
   test('the corpus is the pinned bytes, the same on every run', () {

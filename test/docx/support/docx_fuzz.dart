@@ -25,9 +25,11 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/ooxml.dart';
 
 import '../../fixtures/docx_fixtures.dart';
+import '../../fixtures/m4_fixtures.dart' show png4x2;
 import '../../support/fuzz_mutations.dart';
 import '../../support/read_xlsx.dart';
 import '../../xlsx/read/support/zip_builder.dart';
+import 'drawings_document.dart';
 import 'localized_document.dart';
 import 'numbering_documents.dart';
 import 'producer_variants.dart';
@@ -49,7 +51,11 @@ export '../../support/fuzz_mutations.dart'
 /// the document of `tablesByHandDocx()` with every element the table values
 /// read, `sections_by_hand`, the document of `sectionsByHandDocx()` with
 /// every section child, six stories, broken references and broken fields,
-/// and every `producerVariants()` entry, each rebuilt with stored
+/// `drawings_by_hand`, the document of `drawingsByHandDocx()` with inline,
+/// anchored, linked and broken pictures, external, anchor and broken
+/// hyperlinks, bookmarks with bad ids, a header with a picture and a link and
+/// properties parts with values that cannot be read, and every
+/// `producerVariants()` entry, each rebuilt with stored
 /// entries and a fixed timestamp, so the bytes are equal on every platform.
 ///
 /// Nothing is deflated, so inflation is fuzzed only by the archive
@@ -62,6 +68,7 @@ List<({String name, Uint8List bytes})> docxFuzzCorpus() =>
         (name: f.name, bytes: _rebuild(f.build().bytes)),
       (name: 'tables_by_hand', bytes: _rebuild(tablesByHandDocx())),
       (name: 'sections_by_hand', bytes: _rebuild(sectionsByHandDocx())),
+      (name: 'drawings_by_hand', bytes: _rebuild(drawingsByHandDocx())),
       for (final ProducerVariant v in producerVariants())
         (name: v.name, bytes: _rebuild(v.bytes)),
     ];
@@ -201,11 +208,17 @@ const Set<String> typedAttributes = <String>{
 };
 
 /// Whether the part [name] holds typed properties: the main part, the
-/// styles part and the numbering part.
+/// styles part, the numbering part and the document properties parts
+/// ([_propertiesPart]).
 bool _typedPart(String name) =>
     name == 'word/document.xml' ||
     name == 'word/styles.xml' ||
-    name == 'word/numbering.xml';
+    name == 'word/numbering.xml' ||
+    _propertiesPart(name);
+
+/// Whether the part [name] is a document properties part, under `docProps/`,
+/// whose values are element text as much as attributes.
+bool _propertiesPart(String name) => name.startsWith('docProps/');
 
 /// Replaces the value of one `w:` attribute of [part], by one of
 /// [_attributeValues].
@@ -216,12 +229,19 @@ bool _typedPart(String name) =>
 /// and among all attributes when it holds no `w:` attribute. A part without
 /// an attribute gets a token inserted instead, as the digit mutation does.
 /// The description reads `replace <attribute> at <offset> with "<value>"`.
+///
+/// A document properties part ([_propertiesPart]) keeps its values in element
+/// text (`<cp:revision>3</cp:revision>`, `<vt:i4>1</vt:i4>`) as much as in
+/// attributes, so there the choice is uniform among every attribute and every
+/// element's text, and a text replaced reads
+/// `replace text at <offset> with "<value>"`.
 (String, List<int>) _replaceAttributeValue(
   String name,
   Uint8List part,
   Xorshift32 random,
 ) {
   final String text = latin1.decode(part);
+  if (_propertiesPart(name)) return _replacePropertyValue(text, part, random);
   final List<RegExpMatch> all = RegExp(
     r'([\w:.-]+)="([^"]*)"',
   ).allMatches(text).toList();
@@ -263,6 +283,52 @@ bool _typedPart(String name) =>
   );
 }
 
+/// Replaces one attribute value or element text of the properties part
+/// [part] (as [text]) by one of [_attributeValues], chosen uniformly; a part
+/// with neither gets a token inserted, as [_replaceAttributeValue] does.
+(String, List<int>) _replacePropertyValue(
+  String text,
+  Uint8List part,
+  Xorshift32 random,
+) {
+  final List<({String what, int from, int to})> values =
+      <({String what, int from, int to})>[
+        for (final RegExpMatch m in RegExp(
+          r'([\w:.-]+)="([^"]*)"',
+        ).allMatches(text))
+          (
+            what: m.group(1)!,
+            from: m.start + m.group(1)!.length + 2,
+            to: m.end - 1,
+          ),
+        for (final RegExpMatch m in RegExp(r'>([^<]+)<').allMatches(text))
+          (what: 'text', from: m.start + 1, to: m.end - 1),
+      ];
+  if (values.isEmpty) {
+    final int at = random.nextInt(part.length + 1);
+    return (
+      'insert "abc" at $at',
+      <int>[
+        ...part.sublist(0, at),
+        ...latin1.encode('abc'),
+        ...part.sublist(at),
+      ],
+    );
+  }
+  final ({String what, int from, int to}) chosen =
+      values[random.nextInt(values.length)];
+  final String value =
+      _attributeValues[random.nextInt(_attributeValues.length)];
+  return (
+    'replace ${chosen.what} at ${chosen.from} with "$value"',
+    <int>[
+      ...part.sublist(0, chosen.from),
+      ...latin1.encode(value),
+      ...part.sublist(chosen.to),
+    ],
+  );
+}
+
 /// The first [count] cases of [seed], each one mutation of one corpus
 /// entry, chosen and mutated as `mutationCases` describes.
 ///
@@ -290,16 +356,21 @@ Iterable<FuzzCase> docxFuzzCases(int seed, int count) {
 }
 
 /// Opens [bytes], renders every warning in English, German and Turkish,
-/// reads the body, the styles and the numbering with every typed property,
-/// edits what loaded, saves, and opens the saved bytes again.
+/// reads the body, the styles, the numbering and the document properties
+/// with every typed property, every picture, hyperlink and bookmark, edits
+/// what loaded, saves, and opens the saved bytes again.
 ///
 /// Returns normally or throws [DocxReadException], and only from `open`,
-/// from loading the body, the styles or the numbering (the first access to
-/// `body`, `blocks`, `styles` or `numbering`), from a story's blocks (a header
-/// or footer part that cannot be read) or the edit of that story (the footer
-/// paragraph added), or from an edit of a part
-/// that could not be used (`DocxStyles.ensure` on a styles part whose
-/// content is not what it says): a file that opens but has such a part is
+/// from loading the body, the styles, the numbering or the properties (the
+/// first access to `body`, `blocks`, `styles`, `numbering` or `properties`),
+/// from a story's blocks (a header or footer part that cannot be read) or the
+/// edit of that story (the footer paragraph added), from a hyperlink added
+/// while the styles part cannot be read, from a save that finds a story's
+/// relationships part unreadable once a picture or link was added to it
+/// (plan D5, Ruling H; the walk then takes them out and saves again), or from
+/// an edit of a part that could not be used (`DocxStyles.ensure` on a styles
+/// part whose content is not what it says, `properties` set on a properties
+/// part whose root is not one): a file that opens but has such a part is
 /// saved anyway (the part is copied as it was), and the first exception is
 /// rethrown after the save and the reopen. Anything else thrown by `open`
 /// or those steps is a defect and propagates at once.
@@ -314,12 +385,17 @@ Iterable<FuzzCase> docxFuzzCases(int seed, int count) {
 /// whatever the file holds: a [DocxReadException] from there is a defect
 /// too, for the loading is guarded apart from the reading. When styles and
 /// numbering both opened, `styles.ensure(DocxBuiltInStyle.heading1)` and
-/// `numbering.addBulletList()` run before the save.
+/// `numbering.addBulletList()` run before the save. When the properties
+/// loaded, they are set to [fuzzProperties]. A paragraph added to the body
+/// and the one added to the last section's footer each get a picture, a
+/// bookmark pair and two hyperlinks (`_addInlines`).
 ///
 /// The model makes nothing worse: `save()` may throw nothing, the saved
 /// bytes must open, and their body, styles and numbering must load unless
-/// the input's did not; the styles then hold the id `ensure` returned and
-/// the numbering has one instance more. A failure there is a [StateError]
+/// the input's did not; the styles then hold the id `ensure` returned, the
+/// numbering has one instance more, the body (and the footer, when its
+/// edits were saved) holds the picture, bookmark and link added, and the
+/// properties hold the title set. A failure there is a [StateError]
 /// naming the step, so a [DocxReadException] from a later step cannot pass
 /// for a refused file.
 void exerciseDocx(Uint8List bytes) {
@@ -336,15 +412,44 @@ void exerciseDocx(Uint8List bytes) {
   }, refused);
   _guard(() => styles = doc.styles, refused);
   _guard(() => numbering = doc.numbering, refused);
+  OfficeProperties? properties;
+  _guard(() => properties = doc.properties, refused);
+  bool propertiesSet = false;
+  if (properties != null) {
+    _readProperties(properties!);
+    try {
+      doc.properties = fuzzProperties;
+      propertiesSet = true;
+    } on DocxReadException catch (e) {
+      // A part whose root is not a properties part cannot take the value.
+      if (e.reason != DocxReadFailure.malformedXml ||
+          doc.properties != properties) {
+        throw StateError('setting properties that loaded threw: $e');
+      }
+      refused(e);
+    }
+  }
   Set<_StoryKey> refusedStories = <_StoryKey>{};
   int sectionCount = 0;
+  DocxParagraph? storyEdit;
+  bool linkAdded = false;
+  bool footerLinks = false;
   if (blocks != null) {
     _walk(blocks!);
     docxEditTables(blocks!);
-    body!.addParagraph('x').addRun('y');
-    final ({Set<_StoryKey> refused, int count}) read = _sections(doc, refused);
+    final DocxParagraph added = body!.addParagraph('x')..addRun('y');
+    linkAdded = _addInlines(added, stylesReadable: styles != null, refused);
+    final ({
+      Set<_StoryKey> refused,
+      int count,
+      DocxParagraph? footer,
+      bool footerLinks,
+    })
+    read = _sections(doc, refused, stylesReadable: styles != null);
     refusedStories = read.refused;
     sectionCount = read.count;
+    storyEdit = read.footer;
+    footerLinks = read.footerLinks;
   }
   if (styles != null) _readStyles(styles!);
   final int instancesBefore = numbering == null
@@ -364,9 +469,23 @@ void exerciseDocx(Uint8List bytes) {
       warning.message(locale);
     }
   }
-  final Uint8List saved;
+  Uint8List saved;
   try {
     saved = doc.save().bytes;
+  } on DocxReadException catch (e) {
+    // Ruling H: a link or picture built in a story whose relationships part
+    // cannot be read makes the save throw. Without them it must save.
+    if (storyEdit == null) throw StateError('save() threw: $e');
+    refused(e);
+    while (storyEdit.inlines.length > 1) {
+      storyEdit.removeInlineAt(storyEdit.inlines.length - 1);
+    }
+    storyEdit = null;
+    try {
+      saved = doc.save().bytes;
+    } on Object catch (e) {
+      throw StateError('save() without the story edits threw: $e');
+    }
   } on Object catch (e) {
     throw StateError('save() threw: $e');
   }
@@ -379,9 +498,83 @@ void exerciseDocx(Uint8List bytes) {
     instancesAfter: listAdded ? instancesBefore + 1 : null,
     refusedStories: refusedStories,
     sectionCount: sectionCount,
+    propertiesSet: propertiesSet,
+    linkAdded: linkAdded,
+    footerLinked: storyEdit != null && footerLinks,
   );
   if (first != null) throw first!;
 }
+
+/// The properties the walk sets on a document whose properties loaded.
+final OfficeProperties fuzzProperties = OfficeProperties(
+  title: 'Fuzzed',
+  creator: 'jet_office',
+  revision: 7,
+  created: DateTime.utc(2026, 11, 8),
+  custom: const <String, Object>{'Fuzz': 1, 'Flag': true},
+);
+
+/// The url of the hyperlinks the walk adds.
+const String fuzzUrl = 'https://example.com/fuzz';
+
+/// The name of the bookmark the walk adds.
+const String fuzzBookmark = 'Fuzz_mark';
+
+/// Adds to [paragraph] a picture of `png4x2`, a bookmark pair named
+/// [fuzzBookmark] and, unless the styles could not be read, hyperlinks to
+/// [fuzzUrl] and to that bookmark, then a picture inside nothing else.
+///
+/// Nothing of it may throw, except [DocxReadException] from a hyperlink when
+/// the styles part cannot be read ([stylesReadable] false), which goes to
+/// [onRefusal]. Returns whether the hyperlinks were added.
+bool _addInlines(
+  DocxParagraph paragraph,
+  void Function(DocxReadException) onRefusal, {
+  required bool stylesReadable,
+}) {
+  final DocxBookmarkStart start = paragraph.addBookmarkStart(fuzzBookmark);
+  paragraph.addPicture(
+    OfficeImage(png4x2),
+    widthPt: 30,
+    name: 'Fuzz picture',
+    description: 'Fuzzed',
+  );
+  paragraph.addBookmarkEnd(start);
+  try {
+    paragraph
+      ..addHyperlink('link', url: fuzzUrl, tooltip: 'Fuzz')
+      ..addHyperlink('back', anchor: fuzzBookmark);
+  } on DocxReadException catch (e) {
+    if (stylesReadable) {
+      throw StateError('adding a hyperlink with readable styles threw: $e');
+    }
+    onRefusal(e);
+    return false;
+  }
+  return true;
+}
+
+/// Reads every field of [p].
+void _readProperties(OfficeProperties p) => <Object?>[
+  p.title,
+  p.subject,
+  p.creator,
+  p.keywords,
+  p.description,
+  p.lastModifiedBy,
+  p.category,
+  p.company,
+  p.manager,
+  p.contentStatus,
+  p.revision,
+  p.application,
+  p.created,
+  p.modified,
+  for (final MapEntry<String, Object> e in p.custom.entries)
+    '${e.key}=${e.value}',
+  p.hashCode,
+  p == p,
+].toString();
 
 /// A story of a section: its index, its type and whether it is a header.
 typedef _StoryKey = (int, DocxHeaderFooterType, bool);
@@ -398,10 +591,12 @@ typedef _StoryKey = (int, DocxHeaderFooterType, bool);
 /// footer may throw it only when that story's own load was refused; anything
 /// else, an [ArgumentError] included, propagates. Returns the refused stories
 /// and the number of sections read.
-({Set<_StoryKey> refused, int count}) _sections(
+({Set<_StoryKey> refused, int count, DocxParagraph? footer, bool footerLinks})
+_sections(
   DocxDocument doc,
-  void Function(DocxReadException) onRefusal,
-) {
+  void Function(DocxReadException) onRefusal, {
+  required bool stylesReadable,
+}) {
   final Set<_StoryKey> refused = <_StoryKey>{};
   doc.evenAndOddHeaders;
   final List<DocxField> fields = <DocxField>[];
@@ -443,8 +638,9 @@ typedef _StoryKey = (int, DocxHeaderFooterType, bool);
     field.text;
   }
   final DocxHeaderFooter footer = sections.last.footer;
+  DocxParagraph? added;
   try {
-    footer.addParagraph('footer');
+    added = footer.addParagraph('footer');
   } on DocxReadException catch (e) {
     final _StoryKey key = (
       sections.length - 1,
@@ -456,8 +652,16 @@ typedef _StoryKey = (int, DocxHeaderFooterType, bool);
     }
     onRefusal(e);
   }
+  final bool links =
+      added != null &&
+      _addInlines(added, onRefusal, stylesReadable: stylesReadable);
   doc.body.addSection();
-  return (refused: refused, count: sections.length);
+  return (
+    refused: refused,
+    count: sections.length,
+    footer: added,
+    footerLinks: links,
+  );
 }
 
 /// Adds every field of [blocks], tables and nested fields included, to [out].
@@ -538,6 +742,17 @@ void _inline(DocxInline inline) {
   _run(inline.properties);
   for (final DocxRunContent content in inline.content) {
     content.toString();
+    if (content is DocxPicture) {
+      final OfficeImage? image = content.image;
+      <Object?>[
+        content.widthPt,
+        content.heightPt,
+        content.name,
+        content.description,
+        image?.format,
+        image?.bytes.length,
+      ].toString();
+    }
   }
 }
 
@@ -726,6 +941,56 @@ void _run(DocxRunProperties r) => <Object?>[
   r.language,
 ].toString();
 
+/// Throws a [StateError] unless [blocks] of the saved [story] hold the
+/// picture and the bookmark that [_addInlines] added and, when [linkAdded],
+/// its hyperlink to [fuzzUrl].
+void _checkAdded(
+  String story,
+  List<DocxBlock> blocks, {
+  required bool linkAdded,
+}) {
+  bool picture = false;
+  bool bookmark = false;
+  bool link = false;
+  void inline(DocxInline i) {
+    if (i is DocxBookmarkStart && i.name == fuzzBookmark) bookmark = true;
+    if (i is DocxHyperlink) {
+      if (i.url == fuzzUrl) link = true;
+      i.inlines.forEach(inline);
+    }
+    if (i is DocxField) i.result.forEach(inline);
+    if (i is! DocxRun) return;
+    for (final DocxRunContent c in i.content) {
+      if (c is DocxPicture && c.name.startsWith('Fuzz picture')) {
+        if (c.image != OfficeImage(png4x2)) {
+          throw StateError('the saved picture of the $story shows no image');
+        }
+        picture = true;
+      }
+    }
+  }
+
+  void walk(List<DocxBlock> blocks) {
+    for (final DocxBlock block in blocks) {
+      if (block is DocxParagraph) block.inlines.forEach(inline);
+      if (block is! DocxTable) continue;
+      for (final DocxTableRow row in block.rows) {
+        for (final DocxTableCell cell in row.cells) {
+          walk(cell.blocks.toList());
+        }
+      }
+    }
+  }
+
+  walk(blocks);
+  if (!picture || !bookmark || (linkAdded && !link)) {
+    throw StateError(
+      'the saved $story lacks what was added: picture $picture, '
+      'bookmark $bookmark, link $link',
+    );
+  }
+}
+
 /// Opens [saved] and loads its body, styles and numbering; only a part
 /// that the input could not read ([bodyReadable], [stylesReadable],
 /// [numberingReadable] false) may throw a [DocxReadException]. Anything
@@ -748,6 +1013,9 @@ void _reopen(
   required int? instancesAfter,
   required Set<_StoryKey> refusedStories,
   required int sectionCount,
+  required bool propertiesSet,
+  required bool linkAdded,
+  required bool footerLinked,
 }) {
   final DocxDocument again;
   try {
@@ -765,7 +1033,37 @@ void _reopen(
     }
   }
 
-  load('body', bodyReadable, () => _walk(again.body.blocks.toList()));
+  load('body', bodyReadable, () {
+    final List<DocxBlock> blocks = again.body.blocks.toList();
+    _walk(blocks);
+    if (bodyReadable) _checkAdded('body', blocks, linkAdded: linkAdded);
+  });
+  if (footerLinked) {
+    try {
+      _checkAdded(
+        'footer',
+        again.sections[sectionCount - 1].footer.blocks.toList(),
+        linkAdded: true,
+      );
+    } on StateError {
+      rethrow;
+    } on Object catch (e) {
+      throw StateError('reading the saved footer threw: $e');
+    }
+  }
+  try {
+    final OfficeProperties p = again.properties;
+    _readProperties(p);
+    if (propertiesSet && p.title != fuzzProperties.title) {
+      throw StateError('the saved title is "${p.title}", not "Fuzzed"');
+    }
+  } on DocxReadException catch (e) {
+    if (propertiesSet) throw StateError('the saved properties threw: $e');
+  } on StateError {
+    rethrow;
+  } on Object catch (e) {
+    throw StateError('the saved properties threw: $e');
+  }
   if (bodyReadable) {
     final List<DocxSection> sections = again.sections;
     for (int i = 0; i < sections.length; i++) {
