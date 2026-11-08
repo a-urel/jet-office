@@ -77,7 +77,8 @@ final class FrameLayout {
   /// What to draw, in paint order.
   final List<ChartPrimitive> primitives;
 
-  /// The texts the frame hid, as id and text, in the order of [DegradeStep].
+  /// The texts the frame hid, as id and text, grouped in the order of
+  /// [DegradeStep].
   final List<(String, String)> hidden;
 
   /// The plot and scale, or `null` when only the background is drawn.
@@ -104,14 +105,13 @@ FrameLayout layoutFrame(
   );
   final FrameShown wanted = FrameShown.wanted(chart, resolved);
   final FrameShown shown = FrameShown.wanted(chart, resolved);
-  int step = 0;
   while (true) {
     final FrameAttempt attempt = frame.attempt(shown);
     if (attempt.misfit != null) {
       shown.hide(attempt.misfit!);
       continue;
     }
-    if (attempt.fits) {
+    if (attempt.misfits.isEmpty) {
       return FrameLayout(
         primitives: frame.paint(attempt, shown),
         hidden: frame.hiddenTexts(wanted, shown, attempt),
@@ -123,14 +123,26 @@ FrameLayout layoutFrame(
         ),
       );
     }
-    if (step == DegradeStep.values.length) {
+    DegradeStep? next;
+    for (final DegradeStep step in DegradeStep.values) {
+      if (shown.relieves(
+        step,
+        attempt.misfits,
+        bar: frame.bar,
+        legendPosition: chart.legend.position,
+      )) {
+        next = step;
+        break;
+      }
+    }
+    if (next == null) {
       shown.hideAll();
       return FrameLayout(
         primitives: <ChartPrimitive>[frame.background()],
         hidden: frame.hiddenTexts(wanted, shown, attempt),
       );
     }
-    shown.take(DegradeStep.values[step++]);
+    shown.take(next);
   }
 }
 
@@ -195,19 +207,23 @@ extension on FrameContext {
     _Bands bands = (left: 0, top: 0, right: 0, bottom: 0);
     ValueScale? scale;
     List<MeasuredLabel> labels = const <MeasuredLabel>[];
-    for (int pass = 0; pass < 4; pass++) {
+    _Bands need(List<MeasuredLabel> labels, ChartRect plot) => _bandsFor(
+      shown,
+      labels,
+      _plan(shown, inner, plot, labels, valueTitle, categoryTitle),
+      valueTitle,
+      categoryTitle,
+    );
+    // After four passes the bands only grow, so the plot only shrinks and the
+    // passes settle.
+    for (int pass = 0; pass < 12; pass++) {
       final ChartRect plot = _deflate(inner, bands);
       final ValueScale next = scaleFor(_maxIntervals(plot));
       final List<MeasuredLabel> nextLabels = next == scale
           ? labels
           : tickLabels(next);
-      final _Bands nextBands = _bandsFor(
-        shown,
-        nextLabels,
-        _plan(shown, plot),
-        valueTitle,
-        categoryTitle,
-      );
+      final _Bands needed = need(nextLabels, plot);
+      final _Bands nextBands = pass < 4 ? needed : _widest(bands, needed);
       final bool same = next == scale && nextBands == bands;
       scale = next;
       labels = nextLabels;
@@ -230,23 +246,44 @@ extension on FrameContext {
         }
         scale = coarser;
         labels = tickLabels(coarser);
-        bands = _bandsFor(
-          shown,
-          labels,
-          _plan(shown, plot),
-          valueTitle,
-          categoryTitle,
-        );
+        bands = need(labels, plot);
         plot = _deflate(inner, bands);
       }
     }
-    final CategoryLabelPlan plan = _plan(shown, plot);
-    final bool fits =
-        plot.width >= 1 &&
-        plot.height >= 1 &&
-        (!shown.valueLabels || _valueLabelsFit(labels, scale!, plot)) &&
-        (!shown.categoryLabels || plan.fits);
-    if (fits) {
+    // The category labels' plan on the final plot must fit the bands kept
+    // for it; widen them a few times if not.
+    CategoryLabelPlan plan = _plan(
+      shown,
+      inner,
+      plot,
+      labels,
+      valueTitle,
+      categoryTitle,
+    );
+    bool settled = false;
+    for (int i = 0; i < 4; i++) {
+      final _Bands needed = _bandsFor(
+        shown,
+        labels,
+        plan,
+        valueTitle,
+        categoryTitle,
+      );
+      if (_within(needed, bands)) {
+        settled = true;
+        break;
+      }
+      bands = _widest(bands, needed);
+      plot = _deflate(inner, bands);
+      plan = _plan(shown, inner, plot, labels, valueTitle, categoryTitle);
+    }
+    final Set<FrameMisfit> misfits = <FrameMisfit>{
+      if (!settled || !(plot.width >= 1 && plot.height >= 1)) FrameMisfit.space,
+      if (shown.valueLabels && !_valueLabelsFit(labels, scale!, plot))
+        FrameMisfit.valueLabels,
+      if (shown.categoryLabels && !plan.fits) FrameMisfit.categoryLabels,
+    };
+    if (misfits.isEmpty) {
       if (valueTitle != null &&
           valueTitle.width > _titleSpan(inner, plot, rotated: !bar)) {
         return FrameAttempt(misfit: FramePart.valueTitle);
@@ -257,7 +294,7 @@ extension on FrameContext {
       }
     }
     return FrameAttempt(
-      fits: fits,
+      misfits: misfits,
       title: title,
       legend: legend,
       inner: inner,
@@ -265,6 +302,7 @@ extension on FrameContext {
       scale: scale,
       valueLabels: labels,
       plan: plan,
+      categoryOffset: _categoryOffset(shown, labels, plan),
     );
   }
 
@@ -287,18 +325,87 @@ extension on FrameContext {
     minTextGap: theme.spacing.minTextGap,
   );
 
-  CategoryLabelPlan _plan(FrameShown shown, ChartRect plot) =>
-      shown.categoryLabels
-      ? planCategoryLabels(
-          categoryLabels,
-          bar ? plot.height : plot.width,
-          vertical: bar,
-          spacing: theme.spacing,
-        )
-      : const CategoryLabelPlan(thickness: 0, fits: true);
+  /// The category labels' plan on [plot], whose band may take 40% of the
+  /// space left for the plot and the band across the category axis: [inner]
+  /// less the category title's band and the tick labels' overhang at the
+  /// far end, less the label gap (or the larger offset of
+  /// [_categoryOffset]).
+  CategoryLabelPlan _plan(
+    FrameShown shown,
+    ChartRect inner,
+    ChartRect plot,
+    List<MeasuredLabel> labels,
+    ChartSize? valueTitle,
+    ChartSize? categoryTitle,
+  ) {
+    if (!shown.categoryLabels) {
+      return CategoryLabelPlan.none();
+    }
+    double widest = 0;
+    for (final MeasuredLabel label in labels) {
+      widest = math.max(widest, label.size.width);
+    }
+    // The room before the axis' start that the tick labels and the value
+    // title make, without what a column chart keeps for turned labels.
+    final double room = bar
+        ? inner.bottom - plot.bottom
+        : math.min(
+            plot.left - inner.left,
+            (valueTitle == null ? 0 : valueTitle.height + gap) +
+                (shown.valueLabels && labels.isNotEmpty ? widest + gap : 0),
+          );
+    final bool ticks = shown.valueLabels && labels.isNotEmpty;
+    final double overhang = !ticks
+        ? 0
+        : bar
+        ? labels.last.size.width / 2
+        : labels.last.size.height / 2;
+    final double titleBand = categoryTitle == null
+        ? 0
+        : categoryTitle.height + gap;
+    final double cross =
+        (bar ? inner.width : inner.height) - overhang - titleBand;
+    return planCategoryLabels(
+      categoryLabels,
+      bar ? plot.height : plot.width,
+      maxDepth: 0.4 * cross - _largestOffset(shown, labels),
+      roomBefore: room,
+      turnedRoomBefore: bar ? room : plot.left - inner.left,
+      roomAfter: bar ? plot.top - inner.top : inner.right - plot.right,
+      vertical: bar,
+      spacing: theme.spacing,
+      measurer: measurer,
+      style: theme.axisLabels,
+    );
+  }
+
+  /// The category labels' offset from the plot when they reach past the
+  /// axis' start under the first tick label: clear of that label.
+  double _largestOffset(FrameShown shown, List<MeasuredLabel> labels) {
+    if (!shown.valueLabels || labels.isEmpty) {
+      return gap;
+    }
+    final ChartSize first = labels.first.size;
+    return math.max(
+      gap,
+      (bar ? first.width : first.height) / 2 + theme.spacing.minTextGap,
+    );
+  }
+
+  /// The category labels' offset from the plot: the label gap, or clear of
+  /// the first tick label (at the axis' start) when [plan]'s labels reach
+  /// further than the label gap past that start.
+  double _categoryOffset(
+    FrameShown shown,
+    List<MeasuredLabel> labels,
+    CategoryLabelPlan plan,
+  ) => plan.before > gap ? _largestOffset(shown, labels) : gap;
 
   /// The bands around the plot for the tick [labels], the category [plan] and
-  /// the axis titles.
+  /// the axis titles. The category labels' reach past the axis' ends stays
+  /// within the bands the tick labels and the value title make there, which
+  /// a column chart widens at its left to the labels'
+  /// [CategoryLabelPlan.reserveBefore].
   _Bands _bandsFor(
     FrameShown shown,
     List<MeasuredLabel> labels,
@@ -313,7 +420,9 @@ extension on FrameContext {
     final double categoryTitleBand = categoryTitle == null
         ? 0
         : categoryTitle.height + gap;
-    final double categoryBand = shown.categoryLabels ? plan.thickness + gap : 0;
+    final double categoryBand = shown.categoryLabels
+        ? _categoryOffset(shown, labels, plan) + plan.thickness
+        : 0;
     double widest = 0;
     double tallest = 0;
     for (final MeasuredLabel label in labels) {
@@ -332,7 +441,10 @@ extension on FrameContext {
       );
     }
     return (
-      left: valueTitleBand + (ticks ? widest + gap : 0),
+      left: math.max(
+        valueTitleBand + (ticks ? widest + gap : 0),
+        shown.categoryLabels ? plan.reserveBefore : 0,
+      ),
       top: ticks ? labels.last.size.height / 2 : 0,
       right: 0,
       bottom: math.max(
@@ -348,6 +460,21 @@ extension on FrameContext {
   double _titleSpan(ChartRect inner, ChartRect plot, {required bool rotated}) =>
       rotated ? plot.bottom - inner.top : plot.width;
 }
+
+/// Each side of [a] and [b], the larger.
+_Bands _widest(_Bands a, _Bands b) => (
+  left: math.max(a.left, b.left),
+  top: math.max(a.top, b.top),
+  right: math.max(a.right, b.right),
+  bottom: math.max(a.bottom, b.bottom),
+);
+
+/// Whether no side of [a] is wider than that of [b].
+bool _within(_Bands a, _Bands b) =>
+    a.left <= b.left + 1e-9 &&
+    a.top <= b.top + 1e-9 &&
+    a.right <= b.right + 1e-9 &&
+    a.bottom <= b.bottom + 1e-9;
 
 ChartRect _deflate(ChartRect r, _Bands b) => ChartRect(
   r.left + b.left,

@@ -4,13 +4,14 @@
 /// The value axis is vertical at the left of the plot for column, line and
 /// area charts and horizontal under it for bar charts; the category axis takes
 /// the other side. Tick labels sit outside the plot, `labelGap` from it, and
-/// never inside the plot. The category labels' plan and placement
-/// ([planCategoryLabels], [placeCategoryLabels]) are the one place Task 7
-/// replaces with skip, rotate and truncate.
+/// never inside the plot. Category labels never collide: [planCategoryLabels]
+/// skips, then turns, then cuts them, and [placeCategoryLabels] puts them
+/// down.
 library;
 
 import 'dart:math' as math;
 
+import '../model/equality.dart';
 import '../scale/value_scale.dart';
 import '../theme/chart_color.dart';
 import '../theme/chart_spacing.dart';
@@ -162,101 +163,401 @@ TextPrimitive _valueLabel(
   );
 }
 
-/// How the category labels go: how thick their band is and whether they fit.
-///
-/// Task 7 adds which labels are shown, the rotation and the cut texts.
+/// How the category labels go: which are shown, how they are turned and cut,
+/// how deep their band is and how far they reach past the axis' ends.
 final class CategoryLabelPlan {
-  /// Creates a plan of a band [thickness] (without the label gap).
-  const CategoryLabelPlan({required this.thickness, required this.fits});
+  /// Creates a plan.
+  CategoryLabelPlan({
+    required this.fits,
+    this.thickness = 0,
+    this.rotationDegrees = 0,
+    List<int> shown = const <int>[],
+    List<MeasuredLabel> labels = const <MeasuredLabel>[],
+    this.before = 0,
+    this.after = 0,
+    this.reserveBefore = 0,
+  }) : shown = List<int>.unmodifiable(shown),
+       labels = List<MeasuredLabel>.unmodifiable(labels);
 
-  /// The depth of the labels across the axis: their tallest height under a
-  /// horizontal axis, their widest width beside a vertical one.
+  /// The plan of no labels: it fits and takes no room.
+  factory CategoryLabelPlan.none() => CategoryLabelPlan(fits: true);
+
+  /// Whether the shown labels keep `minTextGap` apart and stay within the
+  /// band limit.
+  final bool fits;
+
+  /// The depth of the shown labels across the axis (without the label gap):
+  /// the height of their turned boxes under a horizontal axis, their widest
+  /// width beside a vertical one.
   final double thickness;
 
-  /// Whether every label fits along the axis without coming closer than
-  /// `minTextGap` to its neighbour and without leaving the plot's extent.
-  final bool fits;
+  /// The labels' clockwise rotation: 0, -45 or -90 (rising to the right).
+  final double rotationDegrees;
+
+  /// The indexes of the categories whose labels are shown, ascending.
+  final List<int> shown;
+
+  /// The shown labels as drawn, one for each of [shown]: the full text, or
+  /// the text cut with `…`.
+  final List<MeasuredLabel> labels;
+
+  /// How far the shown labels reach before the axis' start (the plot's left,
+  /// or a bar chart's plot bottom), within the room the frame gave.
+  final double before;
+
+  /// How far the shown labels reach past the axis' end (the plot's right, or
+  /// a bar chart's plot top), within the room the frame gave.
+  final double after;
+
+  /// The room before the axis' start that the labels ask the frame to keep:
+  /// at -45 degrees, the reach of the first label cut to the band limit
+  /// alone, as if its tick were at the axis' start; 0 otherwise. Kept, it
+  /// lets the first label stand whole, and as it does not depend on the
+  /// axis' length, keeping it does not feed back into the plan.
+  final double reserveBefore;
 
   @override
   bool operator ==(Object other) =>
       other is CategoryLabelPlan &&
+      fits == other.fits &&
       thickness == other.thickness &&
-      fits == other.fits;
+      rotationDegrees == other.rotationDegrees &&
+      before == other.before &&
+      after == other.after &&
+      reserveBefore == other.reserveBefore &&
+      listValueEquals(shown, other.shown) &&
+      listValueEquals(labels, other.labels);
 
   @override
-  int get hashCode => Object.hash(thickness, fits);
+  int get hashCode => Object.hash(
+    fits,
+    thickness,
+    rotationDegrees,
+    before,
+    after,
+    reserveBefore,
+    listValueHash(shown),
+    listValueHash(labels),
+  );
 
   @override
-  String toString() => 'CategoryLabelPlan($thickness, fits: $fits)';
+  String toString() =>
+      'CategoryLabelPlan(fits: $fits, $rotationDegrees°, '
+      '${shown.length} shown, thickness $thickness)';
 }
 
-/// Plans the category [labels] along an axis of [axisLength].
+/// The ellipsis a cut label ends in.
+const String ellipsis = '…';
+
+/// Plans the category [labels] along an axis of [axisLength], their band at
+/// most [maxDepth] deep (40% of the space left for the plot and the band,
+/// less the labels' offset from the plot).
 ///
-/// For now every label is shown, horizontal: they fit when the band of each
-/// category holds half of each neighbour plus `minTextGap`, and the first and
-/// last stay inside the axis. `vertical` is a bar chart's category axis, where
-/// heights count instead of widths. Task 7 replaces this.
+/// Under a horizontal axis it tries, in order, 0 degrees showing every `N`th
+/// label for `N` = 1, 2, 3; then -45 degrees for `N` = 1, 2, 3; then -90
+/// degrees for `N` = 1, 2, … until they fit. Shown labels fit when no two come
+/// closer than `minTextGap`, their band is no deeper than [maxDepth], and they
+/// reach no further than [roomBefore] before the axis' start and [roomAfter]
+/// past its end: the room the frame has there anyway, which the labels never
+/// widen, so the plot does not depend on them along the axis. At -45 degrees
+/// the room before is [turnedRoomBefore], which also holds what the frame
+/// keeps for a plan's [CategoryLabelPlan.reserveBefore]. At -45 and -90
+/// degrees a label deeper than [maxDepth] is cut with `…`, and at -45 degrees
+/// also one that would reach further than [turnedRoomBefore]; at 0 degrees
+/// none is.
+/// A turned label's end sits at its tick.
+///
+/// Beside a vertical axis (`vertical`, a bar chart) labels stay level: every
+/// label wider than [maxDepth] is cut, and every `N`th is shown for the least
+/// `N` that keeps them apart and within the room.
+///
+/// The plan does not fit when no try does: the band limit is too small for a
+/// label (or a lone `…`), or the axis has no length.
 CategoryLabelPlan planCategoryLabels(
   List<MeasuredLabel> labels,
   double axisLength, {
+  required double maxDepth,
+  required double roomBefore,
+  required double turnedRoomBefore,
+  required double roomAfter,
   required bool vertical,
   required ChartSpacing spacing,
+  required TextMeasurer measurer,
+  required ChartTextStyle style,
 }) {
   if (labels.isEmpty) {
-    return const CategoryLabelPlan(thickness: 0, fits: true);
+    return CategoryLabelPlan.none();
   }
-  double thickness = 0;
-  for (final MeasuredLabel label in labels) {
-    thickness = math.max(
-      thickness,
-      vertical ? label.size.width : label.size.height,
-    );
+  final _Planner planner = _Planner(
+    labels,
+    axisLength,
+    maxDepth,
+    roomBefore,
+    turnedRoomBefore,
+    roomAfter,
+    spacing.minTextGap,
+    vertical: vertical,
+  );
+  if (!(planner.band > 0) || !(maxDepth > 0) || !axisLength.isFinite) {
+    return CategoryLabelPlan(fits: false);
   }
-  final double band = axisLength / labels.length;
-  double along(int i) =>
-      vertical ? labels[i].size.height : labels[i].size.width;
-  bool fits = band > 0 && along(0) <= band && along(labels.length - 1) <= band;
-  for (int i = 1; fits && i < labels.length; i++) {
-    if (band < (along(i - 1) + along(i)) / 2 + spacing.minTextGap) {
-      fits = false;
+  final List<(int, int)> tries = vertical
+      ? <(int, int)>[for (int n = 1; n <= labels.length; n++) (0, n)]
+      : <(int, int)>[
+          for (int n = 1; n <= 3; n++) (0, n),
+          for (int n = 1; n <= 3; n++) (45, n),
+          for (int n = 1; n <= labels.length; n++) (90, n),
+        ];
+  final Map<int, List<MeasuredLabel?>> cut = <int, List<MeasuredLabel?>>{};
+  for (final (int angle, int every) in tries) {
+    final List<MeasuredLabel?> drawn = angle == 0 && !vertical
+        ? labels
+        : cut.putIfAbsent(angle, () => planner.cut(angle, measurer, style));
+    final CategoryLabelPlan? plan = planner.attempt(drawn, angle, every);
+    if (plan != null) {
+      return angle == 45 ? planner.reserved(plan, measurer, style) : plan;
     }
   }
-  return CategoryLabelPlan(thickness: thickness, fits: fits);
+  return CategoryLabelPlan(fits: false);
 }
 
-/// The category [labels] of [plan], outside [plot].
+/// The tries of [planCategoryLabels]. Angles are counter-clockwise, in
+/// degrees: 0, 45 or 90.
+final class _Planner {
+  _Planner(
+    this.labels,
+    this.axisLength,
+    this.maxDepth,
+    this.roomBefore,
+    this.turnedRoomBefore,
+    this.roomAfter,
+    this.minTextGap, {
+    required this.vertical,
+  }) : band = axisLength / labels.length;
+
+  final List<MeasuredLabel> labels;
+  final double axisLength;
+  final double band;
+  final double maxDepth;
+  final double roomBefore;
+  final double turnedRoomBefore;
+  final double roomAfter;
+  final double minTextGap;
+  final bool vertical;
+
+  static const double _tolerance = 1e-9;
+
+  /// The depth across the axis of a label of [size] at [angle].
+  double depth(ChartSize size, int angle) {
+    if (vertical) {
+      return size.width;
+    }
+    return switch (angle) {
+      0 => size.height,
+      90 => size.width,
+      _ => (size.width + size.height) * math.sqrt1_2,
+    };
+  }
+
+  /// The extent along the axis, from the axis' start, of a label of [size]
+  /// at [angle] whose tick is that of category [index].
+  (double, double) extent(ChartSize size, int angle, int index) {
+    final double tick = (index + 0.5) * band;
+    if (vertical) {
+      return (tick - size.height / 2, tick + size.height / 2);
+    }
+    switch (angle) {
+      case 0:
+        return (tick - size.width / 2, tick + size.width / 2);
+      case 90:
+        return (tick - size.height / 2, tick + size.height / 2);
+      default:
+        final double half = size.height / 2 * math.sqrt1_2;
+        return (tick - size.width * math.sqrt1_2 - half, tick + half);
+    }
+  }
+
+  /// Whether the label of category [index] at [size] may be drawn at
+  /// [angle] without a cut: within the depth, and at -45 degrees, when [room]
+  /// counts, within the room before the axis.
+  bool whole(ChartSize size, int angle, int index, {bool room = true}) =>
+      depth(size, angle) <= maxDepth + _tolerance &&
+      (!room ||
+          vertical ||
+          angle != 45 ||
+          extent(size, angle, index).$1 >= -turnedRoomBefore - _tolerance);
+
+  /// [labels], each cut with `…` until [whole] holds at [angle]; `null` for a
+  /// label that a lone `…` still does not fit.
+  List<MeasuredLabel?> cut(
+    int angle,
+    TextMeasurer measurer,
+    ChartTextStyle style,
+  ) => <MeasuredLabel?>[
+    for (int index = 0; index < labels.length; index++)
+      cutOne(index, angle, measurer, style),
+  ];
+
+  /// [plan] (at -45 degrees) with its [CategoryLabelPlan.reserveBefore].
+  CategoryLabelPlan reserved(
+    CategoryLabelPlan plan,
+    TextMeasurer measurer,
+    ChartTextStyle style,
+  ) {
+    final MeasuredLabel? first = cutOne(0, 45, measurer, style, room: false);
+    final ChartSize size = first?.size ?? const ChartSize(0, 0);
+    return CategoryLabelPlan(
+      fits: plan.fits,
+      thickness: plan.thickness,
+      rotationDegrees: plan.rotationDegrees,
+      shown: plan.shown,
+      labels: plan.labels,
+      before: plan.before,
+      after: plan.after,
+      reserveBefore: (size.width + size.height / 2) * math.sqrt1_2,
+    );
+  }
+
+  /// The label of category [index] cut with `…` until [whole] holds at
+  /// [angle]; `null` when a lone `…` still does not fit.
+  MeasuredLabel? cutOne(
+    int index,
+    int angle,
+    TextMeasurer measurer,
+    ChartTextStyle style, {
+    bool room = true,
+  }) {
+    final MeasuredLabel label = labels[index];
+    if (whole(label.size, angle, index, room: room)) {
+      return label;
+    }
+    final List<int> runes = label.text.runes.toList();
+    MeasuredLabel cutTo(int keep) {
+      final String text =
+          '${String.fromCharCodes(runes.take(keep)).trimRight()}$ellipsis';
+      return MeasuredLabel(text, measurer.measure(text, style));
+    }
+
+    MeasuredLabel best = cutTo(0);
+    if (!whole(best.size, angle, index, room: room)) {
+      return null;
+    }
+    int low = 0;
+    int high = runes.length - 1;
+    while (low < high) {
+      final int mid = (low + high + 1) ~/ 2;
+      final MeasuredLabel tried = cutTo(mid);
+      if (whole(tried.size, angle, index, room: room)) {
+        low = mid;
+        best = tried;
+      } else {
+        high = mid - 1;
+      }
+    }
+    return best;
+  }
+
+  /// The plan that shows every [every]th of [drawn] at [angle], or `null`
+  /// when it does not fit.
+  CategoryLabelPlan? attempt(List<MeasuredLabel?> drawn, int angle, int every) {
+    final List<int> shown = <int>[
+      for (int i = 0; i < drawn.length; i += every) i,
+    ];
+    double thickness = 0;
+    double before = 0;
+    double after = 0;
+    for (final int i in shown) {
+      final MeasuredLabel? label = drawn[i];
+      if (label == null) {
+        return null;
+      }
+      thickness = math.max(thickness, depth(label.size, angle));
+      final (double lo, double hi) = extent(label.size, angle, i);
+      before = math.max(before, -lo);
+      after = math.max(after, hi - axisLength);
+    }
+    if (thickness > maxDepth + _tolerance ||
+        before > (angle == 45 ? turnedRoomBefore : roomBefore) + _tolerance ||
+        after > roomAfter + _tolerance) {
+      return null;
+    }
+    final double distance = every * band;
+    for (int k = 1; k < shown.length; k++) {
+      final ChartSize a = drawn[shown[k - 1]]!.size;
+      final ChartSize b = drawn[shown[k]]!.size;
+      final bool apart = vertical
+          ? distance >= (a.height + b.height) / 2 + minTextGap
+          : switch (angle) {
+              0 => distance >= (a.width + b.width) / 2 + minTextGap,
+              90 => distance >= math.max(a.height, b.height) + minTextGap,
+              _ =>
+                distance * math.sqrt1_2 >=
+                    math.max(a.height, b.height) + minTextGap,
+            };
+      if (!apart) {
+        return null;
+      }
+    }
+    return CategoryLabelPlan(
+      fits: true,
+      thickness: thickness,
+      rotationDegrees: angle == 0 ? 0 : -angle.toDouble(),
+      shown: shown,
+      labels: <MeasuredLabel>[for (final int i in shown) drawn[i]!],
+      before: before,
+      after: after,
+    );
+  }
+}
+
+/// The category labels of [plan] outside [plot], [offset] from it.
 ///
-/// Under a horizontal axis each is centred under its category's band,
-/// `labelGap` below the plot. Beside a vertical one (a bar chart) each is
-/// right-aligned `labelGap` left of the plot and centred on its band, the
-/// first category at the bottom, as Excel draws it.
+/// Under a horizontal axis a level label is centred on its category's tick
+/// (the middle of its band) and a turned one has its end, the middle of its
+/// right edge, at the tick; the top of every label's turned box is [offset]
+/// below the plot. Beside a vertical one (a bar chart) each is right-aligned
+/// [offset] left of the plot and centred on its band, the first category at
+/// the bottom, as Excel draws it. A label keeps its category's index in its
+/// id.
 List<TextPrimitive> placeCategoryLabels(
   CategoryLabelPlan plan,
-  List<MeasuredLabel> labels,
+  int categoryCount,
   ChartRect plot,
   ChartTextStyle style, {
   required bool vertical,
-  required ChartSpacing spacing,
+  required double offset,
 }) {
-  final int n = labels.length;
   final List<TextPrimitive> placed = <TextPrimitive>[];
-  for (int i = 0; i < n; i++) {
-    final double w = labels[i].size.width;
-    final double h = labels[i].size.height;
+  final double radians = -plan.rotationDegrees * math.pi / 180;
+  final double sine = math.sin(radians);
+  final double cosine = math.cos(radians);
+  for (int k = 0; k < plan.shown.length; k++) {
+    final int i = plan.shown[k];
+    final MeasuredLabel label = plan.labels[k];
+    final double w = label.size.width;
+    final double h = label.size.height;
     final ChartRect rect;
     if (vertical) {
-      final double cy = plot.bottom - (i + 0.5) * plot.height / n;
-      rect = ChartRect(plot.left - spacing.labelGap - w, cy - h / 2, w, h);
+      final double cy = plot.bottom - (i + 0.5) * plot.height / categoryCount;
+      rect = ChartRect(plot.left - offset - w, cy - h / 2, w, h);
     } else {
-      final double cx = plot.left + (i + 0.5) * plot.width / n;
-      rect = ChartRect(cx - w / 2, plot.bottom + spacing.labelGap, w, h);
+      final double tick = plot.left + (i + 0.5) * plot.width / categoryCount;
+      final double top = plot.bottom + offset;
+      if (plan.rotationDegrees == 0) {
+        rect = ChartRect(tick - w / 2, top, w, h);
+      } else {
+        final double cx = tick - w / 2 * cosine;
+        final double cy = top + w / 2 * sine + h / 2 * cosine;
+        rect = ChartRect(cx - w / 2, cy - h / 2, w, h);
+      }
     }
     placed.add(
       TextPrimitive(
         ids.axisLabelId(ids.categoryAxis, i),
-        labels[i].text,
+        label.text,
         rect,
         style,
+        rotationDegrees: plan.rotationDegrees,
       ),
     );
   }

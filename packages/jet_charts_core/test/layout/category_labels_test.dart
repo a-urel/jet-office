@@ -1,0 +1,311 @@
+import 'dart:math' as math;
+
+import 'package:jet_charts_core/jet_charts_core.dart';
+import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
+import 'package:test/test.dart';
+
+const FixedWidthTextMeasurer measurer = FixedWidthTextMeasurer();
+
+/// The axis labels' height under the fixed measurer: 9 pt times 1.2.
+const double labelHeight = 10.8;
+
+/// The Office theme's gaps.
+const double labelGap = 4;
+const double minTextGap = 2;
+
+/// [count] labels of exactly [length] characters, each distinct.
+List<String> labelsOf(int count, int length) => <String>[
+  for (int i = 0; i < count; i++)
+    'L${i.toString().padLeft(3, '0')}'.padRight(length, 'x'),
+];
+
+ChartLayout lay(
+  List<String> categories,
+  ChartSize size, {
+  ChartKind kind = ChartKind.column,
+  String? title,
+  ChartLegend legend = const ChartLegend(visible: false),
+}) {
+  return layoutChart(
+    Chart(
+      kind: kind,
+      title: title == null ? null : ChartTitle(text: title),
+      legend: legend,
+      series: <ChartSeries>[
+        ChartSeries(
+          name: ChartData<String>(values: <String?>['Sales']),
+          categories: ChartData<Object>(values: categories),
+          values: ChartData<double>(
+            values: <double?>[
+              for (int c = 0; c < categories.length; c++) 3 + c % 7 * 2.5,
+            ],
+          ),
+        ),
+      ],
+    ),
+    theme: ChartTheme.office,
+    size: size,
+    measurer: measurer,
+  );
+}
+
+Iterable<ChartPrimitive> flat(List<ChartPrimitive> list) sync* {
+  for (final ChartPrimitive p in list) {
+    yield p;
+    if (p is ClipPrimitive) {
+      yield* flat(p.children);
+    }
+  }
+}
+
+/// The category labels drawn, by their index.
+Map<int, TextPrimitive> categoryLabels(ChartLayout layout) {
+  const String prefix = 'axis/category/label/';
+  return <int, TextPrimitive>{
+    for (final TextPrimitive t
+        in flat(layout.primitives).whereType<TextPrimitive>().where(
+          (TextPrimitive t) => t.id.startsWith(prefix),
+        ))
+      int.parse(t.id.substring(prefix.length)): t,
+  };
+}
+
+bool drawn(ChartLayout layout, String id) =>
+    flat(layout.primitives).any((ChartPrimitive p) => p.id == id);
+
+/// The middle of a label's end edge: the right edge of its unturned box.
+ChartPoint endOf(TextPrimitive t) {
+  final List<ChartPoint> c = t.corners;
+  return ChartPoint((c[1].x + c[2].x) / 2, (c[1].y + c[2].y) / 2);
+}
+
+/// The x of category [i]'s tick, the middle of its band.
+double tickX(ChartLayout layout, int i, int n) {
+  final ChartRect plot = layout.plotArea!;
+  return plot.left + (i + 0.5) * plot.width / n;
+}
+
+void main() {
+  test('short labels stay horizontal', () {
+    final List<String> cats = <String>['Q1', 'Q2', 'Q3', 'Q4'];
+    final ChartLayout layout = lay(cats, const ChartSize(400, 300));
+    final Map<int, TextPrimitive> labels = categoryLabels(layout);
+    expect(labels.keys, <int>[0, 1, 2, 3]);
+    final ChartRect plot = layout.plotArea!;
+    for (int i = 0; i < 4; i++) {
+      final TextPrimitive t = labels[i]!;
+      expect(t.text, cats[i]);
+      expect(t.rotationDegrees, 0);
+      expect(
+        t.rect.left + t.rect.width / 2,
+        closeTo(tickX(layout, i, 4), 1e-9),
+      );
+      expect(t.rect.top, closeTo(plot.bottom + labelGap, 1e-9));
+    }
+    expect(layout.hidden, isEmpty);
+  });
+
+  test('crowded labels skip every second', () {
+    // Twelve labels 16.2 wide on a plot about 170 wide: a band of about 14
+    // holds no label and a neighbour, two bands hold one.
+    final List<String> cats = <String>[
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final ChartLayout layout = lay(cats, const ChartSize(200, 200));
+    final double band = layout.plotArea!.width / 12;
+    expect(band, lessThan(16.2 + minTextGap));
+    expect(2 * band, greaterThanOrEqualTo(16.2 + minTextGap));
+    final Map<int, TextPrimitive> labels = categoryLabels(layout);
+    expect(labels.keys, <int>[0, 2, 4, 6, 8, 10]);
+    for (final MapEntry<int, TextPrimitive> e in labels.entries) {
+      expect(e.value.rotationDegrees, 0);
+      expect(e.value.text, cats[e.key]);
+      expect(
+        e.value.rect.left + e.value.rect.width / 2,
+        closeTo(tickX(layout, e.key, 12), 1e-9),
+      );
+    }
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+
+  test('long labels turn to 45 degrees', () {
+    // 18 labels 64.8 wide: three bands are too few at 0 degrees, one band
+    // holds a turned label and its neighbour.
+    final List<String> cats = labelsOf(18, 12);
+    final ChartLayout layout = lay(cats, const ChartSize(400, 300));
+    final Map<int, TextPrimitive> labels = categoryLabels(layout);
+    expect(labels.keys, List<int>.generate(18, (int i) => i));
+    for (final MapEntry<int, TextPrimitive> e in labels.entries) {
+      expect(e.value.rotationDegrees, -45);
+      expect(e.value.text, cats[e.key]);
+    }
+    final double band = layout.plotArea!.width / 18;
+    expect(3 * band, lessThan(64.8 + minTextGap));
+    expect(
+      band * math.sin(math.pi / 4),
+      greaterThanOrEqualTo(labelHeight + minTextGap),
+    );
+    expect(layout.hidden, isEmpty);
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+
+  test('very long labels turn to 90 and are cut with an ellipsis', () {
+    // 100 labels on a plot about 360 wide: a band of about 3.6 is too narrow
+    // even for every third label at 45 degrees.
+    final List<String> cats = labelsOf(100, 60);
+    final ChartLayout layout = lay(cats, const ChartSize(400, 300));
+    final Map<int, TextPrimitive> labels = categoryLabels(layout);
+    expect(labels, isNotEmpty);
+    final ChartRect plot = layout.plotArea!;
+    final int step = labels.keys.elementAt(1) - labels.keys.first;
+    expect(labels.keys, <int>[for (int i = 0; i < 100; i += step) i]);
+    final double band = plot.width / 100;
+    expect(
+      3 * band * math.sin(math.pi / 4),
+      lessThan(labelHeight + minTextGap),
+    );
+    expect(step * band, greaterThanOrEqualTo(labelHeight + minTextGap));
+    expect((step - 1) * band, lessThan(labelHeight + minTextGap));
+    for (final MapEntry<int, TextPrimitive> e in labels.entries) {
+      final TextPrimitive t = e.value;
+      expect(t.rotationDegrees, -90);
+      expect(t.text, endsWith('…'));
+      final String kept = t.text.substring(0, t.text.length - 1);
+      expect(cats[e.key], startsWith(kept));
+      expect(kept.length, greaterThan(0));
+      // The band (label gap and depth) stays within 40% of the plot and
+      // band.
+      final double depth = t.bounds.bottom - plot.bottom;
+      expect(depth, lessThanOrEqualTo(0.4 * (plot.height + depth) + 1e-9));
+    }
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+
+  test('hidden labels are listed', () {
+    final List<String> cats = labelsOf(100, 60);
+    final ChartLayout layout = lay(cats, const ChartSize(400, 300));
+    final Map<int, TextPrimitive> labels = categoryLabels(layout);
+    // Every label not shown, and every cut one, with its full text, in
+    // index order.
+    expect(layout.hidden, <ChartHiddenLabel>[
+      for (int i = 0; i < 100; i++)
+        if (labels[i] == null || labels[i]!.text != cats[i])
+          ChartHiddenLabel(ids.axisLabelId(ids.categoryAxis, i), cats[i]),
+    ]);
+    expect(layout.hidden, hasLength(100));
+
+    final ChartLayout skipped = lay(<String>[
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ], const ChartSize(200, 200));
+    expect(skipped.hidden, <ChartHiddenLabel>[
+      for (final (int i, String m) in <(int, String)>[
+        (1, 'Feb'),
+        (3, 'Apr'),
+        (5, 'Jun'),
+        (7, 'Aug'),
+        (9, 'Oct'),
+        (11, 'Dec'),
+      ])
+        ChartHiddenLabel(ids.axisLabelId(ids.categoryAxis, i), m),
+    ]);
+  });
+
+  test('the end of a turned label sits at its tick', () {
+    for (final (List<String> cats, double rotation) in <(List<String>, double)>[
+      (labelsOf(18, 12), -45),
+      (labelsOf(100, 60), -90),
+    ]) {
+      final ChartLayout layout = lay(cats, const ChartSize(400, 300));
+      final ChartRect plot = layout.plotArea!;
+      expect(categoryLabels(layout), isNotEmpty);
+      for (final MapEntry<int, TextPrimitive> e in categoryLabels(
+        layout,
+      ).entries) {
+        final TextPrimitive t = e.value;
+        expect(t.rotationDegrees, rotation);
+        final ChartPoint end = endOf(t);
+        expect(end.x, closeTo(tickX(layout, e.key, cats.length), 1e-9));
+        // The end is the label's highest edge: the label hangs from the
+        // axis, labelGap or more below the plot.
+        expect(
+          t.bounds.top,
+          greaterThanOrEqualTo(plot.bottom + labelGap - 1e-9),
+        );
+        expect(end.y, lessThan(t.bounds.top + labelHeight));
+      }
+    }
+  });
+
+  test('bar labels stay level, skip and are cut', () {
+    final List<String> cats = labelsOf(60, 40);
+    final ChartLayout layout = lay(
+      cats,
+      const ChartSize(300, 200),
+      kind: ChartKind.bar,
+    );
+    final ChartRect plot = layout.plotArea!;
+    final Map<int, TextPrimitive> labels = categoryLabels(layout);
+    final int step = labels.keys.elementAt(1) - labels.keys.first;
+    expect(step, greaterThan(1));
+    expect(labels.keys, <int>[for (int i = 0; i < 60; i += step) i]);
+    final double band = plot.height / 60;
+    expect(step * band, greaterThanOrEqualTo(labelHeight + minTextGap));
+    expect((step - 1) * band, lessThan(labelHeight + minTextGap));
+    for (final MapEntry<int, TextPrimitive> e in labels.entries) {
+      final TextPrimitive t = e.value;
+      expect(t.rotationDegrees, 0);
+      expect(t.text, endsWith('…'));
+      expect(t.rect.right, closeTo(plot.left - labelGap, 1e-9));
+      expect(
+        t.rect.top + t.rect.height / 2,
+        closeTo(plot.bottom - (e.key + 0.5) * band, 1e-9),
+      );
+      // Within 40% of the width left for the plot and the band.
+      final double depth = plot.left - t.rect.left;
+      expect(depth, lessThanOrEqualTo(0.4 * (plot.width + depth) + 1e-9));
+    }
+    expect(layout.hidden, hasLength(60));
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+
+  test('no overlap at widths 80 to 800 step 40 for 30 labels of 25 '
+      'characters', () {
+    final List<String> cats = labelsOf(30, 25);
+    for (final ChartKind kind in <ChartKind>[
+      ChartKind.column,
+      ChartKind.line,
+      ChartKind.bar,
+    ]) {
+      for (double w = 80; w <= 800; w += 40) {
+        for (final double h in <double>[120, 300, 600]) {
+          final ChartLayout layout = lay(
+            cats,
+            ChartSize(w, h),
+            kind: kind,
+            title: 'Revenue',
+            legend: const ChartLegend(),
+          );
+          expect(
+            findOverlaps(layout.primitives, layout.size),
+            isEmpty,
+            reason: '$kind $w x $h',
+          );
+        }
+      }
+    }
+  });
+
+  test('200 crowded categories keep the title and the legend', () {
+    final ChartLayout layout = lay(
+      labelsOf(200, 20),
+      const ChartSize(400, 300),
+      title: 'Revenue',
+      legend: const ChartLegend(),
+    );
+    expect(drawn(layout, ids.title), isTrue);
+    expect(drawn(layout, ids.legend), isTrue);
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+}

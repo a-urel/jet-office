@@ -3,19 +3,22 @@
 ///
 /// Two ways take content away. A part that does not fit its own space (a
 /// title wider than the chart, a legend over a third of it, an axis title
-/// longer than its axis) is hidden alone ([FramePart]). When the plot would
-/// be under 1 by 1, or tick or category labels would collide, the next
-/// [DegradeStep] is taken, in order.
+/// longer than its axis) is hidden alone ([FramePart]). When the frame does
+/// not fit ([FrameMisfit]), the first [DegradeStep] in order that can relieve
+/// the misfit is taken ([FrameShown.relieves]); a step that cannot is passed
+/// over, so a chart whose category labels alone do not fit keeps its title and
+/// legend.
 library;
 
 import '../model/chart.dart';
+import '../model/chart_kind.dart';
 import 'resolve.dart';
 
 /// The steps that take content away when it does not fit, in order.
 ///
-/// A step is taken when the plot would be under 1 by 1 or the tick labels or
-/// category labels would collide. When every step is taken and the plot is
-/// still under 1 by 1, only the background is drawn.
+/// A step is taken when the frame does not fit and the step can relieve what
+/// does not fit. When no step can and the frame still does not fit, only the
+/// background is drawn.
 enum DegradeStep {
   /// The data labels go. Task 8 fills this hook; until then it hides nothing.
   dataLabels,
@@ -34,6 +37,19 @@ enum DegradeStep {
 
   /// The value axis' tick labels go.
   valueLabels,
+}
+
+/// Why a frame does not fit.
+enum FrameMisfit {
+  /// The plot would be under 1 by 1, or the bands around it do not settle.
+  space,
+
+  /// The value axis' tick labels collide, at the coarsest scale it allows.
+  valueLabels,
+
+  /// No plan of the category labels fits: their band limit (40% of the space
+  /// left for the plot and the band) is too small even for a cut label.
+  categoryLabels,
 }
 
 /// A part that is hidden alone when it does not fit its own space.
@@ -115,6 +131,50 @@ final class FrameShown {
         categoryLabels = false;
       case DegradeStep.valueLabels:
         valueLabels = false;
+    }
+  }
+
+  /// Whether taking [step] can relieve any of [misfits].
+  ///
+  /// A step that hides nothing shown relieves nothing; neither does the data
+  /// labels' step yet (Task 8). Any other step frees space, so it relieves
+  /// [FrameMisfit.space]. The value labels collide less on a longer value
+  /// axis, and the category labels get a deeper band from more space across
+  /// the category axis; both lie in the same direction, the plot's height for
+  /// a column, line or area chart ([bar] false) and its width for a bar chart.
+  /// So the legend relieves them when it stands at the top or bottom of a
+  /// column chart, or at the left or right of a bar chart; the axis titles
+  /// when the category axis has a title (it stands across that direction);
+  /// the title only on a column chart; and the category labels always. The
+  /// value labels relieve only their own collision and space.
+  bool relieves(
+    DegradeStep step,
+    Set<FrameMisfit> misfits, {
+    required bool bar,
+    required ChartLegendPosition legendPosition,
+  }) {
+    final bool space = misfits.contains(FrameMisfit.space);
+    final bool along =
+        misfits.contains(FrameMisfit.valueLabels) ||
+        misfits.contains(FrameMisfit.categoryLabels);
+    switch (step) {
+      case DegradeStep.dataLabels:
+        return false;
+      case DegradeStep.legend:
+        final bool vertical =
+            legendPosition == ChartLegendPosition.top ||
+            legendPosition == ChartLegendPosition.bottom;
+        return legend && (space || along && vertical != bar);
+      case DegradeStep.axisTitles:
+        return (valueTitle || categoryTitle) &&
+            (space || along && categoryTitle);
+      case DegradeStep.title:
+        return title && (space || along && !bar);
+      case DegradeStep.categoryLabels:
+        return categoryLabels && misfits.isNotEmpty;
+      case DegradeStep.valueLabels:
+        return valueLabels &&
+            (space || misfits.contains(FrameMisfit.valueLabels));
     }
   }
 

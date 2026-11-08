@@ -334,6 +334,32 @@ void main() {
     expect(problems(layout), isEmpty);
   });
 
+  test('a step that cannot relieve the misfit is passed over', () {
+    // A bar chart's tick labels at a fixed unit of 0.5 collide on any
+    // width: neither the title nor a bottom legend lengthens its
+    // horizontal value axis, so both stay.
+    const ChartSize size = ChartSize(400, 300);
+    final ChartLayout layout = lay(
+      chart(
+        kind: ChartKind.bar,
+        title: 'Sales',
+        valueAxis: const ChartAxis(majorUnit: 0.5),
+      ),
+      size,
+    );
+    final Set<String> kept = flat(
+      layout.primitives,
+    ).map((ChartPrimitive p) => p.id).toSet();
+    expect(kept, contains(ids.title));
+    expect(kept, contains(ids.legend));
+    expect(kept, isNot(contains(ids.axisLabelId(ids.valueAxis, 0))));
+    expect(
+      layout.hidden.map((ChartHiddenLabel h) => h.id),
+      isNot(contains(ids.title)),
+    );
+    expect(problems(layout), isEmpty);
+  });
+
   test('a tiny chart draws only its background', () {
     for (final ChartSize size in const <ChartSize>[
       ChartSize(0, 0),

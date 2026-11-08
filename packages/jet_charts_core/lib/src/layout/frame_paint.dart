@@ -29,7 +29,7 @@ final class FrameAttempt {
   /// Creates an attempt; one with no plot is a frame with no room at all.
   FrameAttempt({
     this.misfit,
-    this.fits = false,
+    this.misfits = const <FrameMisfit>{FrameMisfit.space},
     this.title,
     this.legend,
     this.inner,
@@ -37,13 +37,15 @@ final class FrameAttempt {
     this.scale,
     this.valueLabels = const <MeasuredLabel>[],
     this.plan,
+    this.categoryOffset = 0,
   });
 
   /// A part that does not fit its own space, to hide before trying again.
   final FramePart? misfit;
 
-  /// Whether the plot is at least 1 by 1 and no labels collide.
-  final bool fits;
+  /// Why the attempt does not fit; empty when it does. An attempt with no
+  /// room at all does not fit for [FrameMisfit.space].
+  final Set<FrameMisfit> misfits;
 
   /// The placed title, or `null` when it is not shown.
   final Placed? title;
@@ -65,6 +67,9 @@ final class FrameAttempt {
 
   /// The category labels' plan.
   final CategoryLabelPlan? plan;
+
+  /// The distance of the category labels from the plot.
+  final double categoryOffset;
 }
 
 /// The inputs of a frame and what is derived from them once.
@@ -208,11 +213,11 @@ extension FramePaint on FrameContext {
       if (shown.categoryLabels)
         ...placeCategoryLabels(
           a.plan!,
-          categoryLabels,
+          resolved.categoryCount,
           plot,
           theme.axisLabels,
           vertical: bar,
-          spacing: theme.spacing,
+          offset: a.categoryOffset,
         ),
       // Task 8: the data labels go here, above everything else.
       if (shown.valueTitle)
@@ -272,16 +277,29 @@ extension FramePaint on FrameContext {
     );
   }
 
-  /// The texts [wanted] that [shown] leaves out, in the order of
-  /// [DegradeStep].
+  /// The texts [wanted] that [shown] leaves out, grouped in the order of
+  /// [DegradeStep]: legend entries, axis titles, title, category labels (every
+  /// one not shown and every cut one, with its full text), value labels.
+  ///
+  /// Value labels of an attempt with no room at all come from a fallback
+  /// scale of at most `provisionalMaxIntervals(0)` intervals.
   List<(String, String)> hiddenTexts(
     FrameShown wanted,
     FrameShown shown,
     FrameAttempt a,
   ) {
     final List<String> ticks = <String>[
-      for (final MeasuredLabel label in a.valueLabels) label.text,
+      for (final MeasuredLabel label
+          in a.valueLabels.isEmpty && wanted.valueLabels
+              ? tickLabels(scaleFor(provisionalMaxIntervals(0)))
+              : a.valueLabels)
+        label.text,
     ];
+    final Map<int, String> drawn = <int, String>{
+      if (shown.categoryLabels && a.plan != null)
+        for (int k = 0; k < a.plan!.shown.length; k++)
+          a.plan!.shown[k]: a.plan!.labels[k].text,
+    };
     return <(String, String)>[
       // Task 8: hidden data labels come first.
       if (wanted.legend && !shown.legend)
@@ -292,9 +310,10 @@ extension FramePaint on FrameContext {
       if (wanted.categoryTitle && !shown.categoryTitle)
         (ids.axisTitleId(ids.categoryAxis), chart.categoryAxis.title!),
       if (wanted.title && !shown.title) (ids.title, chart.title!.text),
-      if (wanted.categoryLabels && !shown.categoryLabels)
+      if (wanted.categoryLabels)
         for (int i = 0; i < resolved.categoryCount; i++)
-          (ids.axisLabelId(ids.categoryAxis, i), resolved.categoryLabels[i]),
+          if (drawn[i] != resolved.categoryLabels[i])
+            (ids.axisLabelId(ids.categoryAxis, i), resolved.categoryLabels[i]),
       if (wanted.valueLabels && !shown.valueLabels)
         for (int i = 0; i < ticks.length; i++)
           (ids.axisLabelId(ids.valueAxis, i), ticks[i]),

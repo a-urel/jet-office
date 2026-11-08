@@ -102,8 +102,10 @@ final class ChartLayout {
 /// `placeholder` text of the chart's `unsupportedName`, else its kind's name,
 /// centred in what is left; the placeholder is hidden when it does not fit.
 ///
-/// Content that does not fit is taken away in a fixed order (data labels,
-/// legend, axis titles, title, category labels, value labels) and listed in
+/// Category labels that crowd are skipped, then turned, then cut with `…`.
+/// Content that still does not fit is taken away in a fixed order (data
+/// labels, legend, axis titles, title, category labels, value labels), each
+/// step only when it can relieve what does not fit, and listed in
 /// [ChartLayout.hidden]; a chart too small for a 1 by 1 plot draws only its
 /// background. No text overlaps another and every primitive lies inside
 /// [size].
