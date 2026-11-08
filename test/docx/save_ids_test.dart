@@ -176,6 +176,13 @@ void main() {
       }
     });
 
+    test('an id of eleven digits is reserved', () {
+      final SaveIds saveIds = SaveIds(
+        _open(_package(_document(_paragraph(_bookmark('12345678901'))))),
+      );
+      expect(saveIds.nextBookmarkId(), 12345678902);
+    });
+
     test('with none, drawings start at 1 and bookmarks at 0', () {
       final SaveIds saveIds = SaveIds(_open(buildDocx()));
       expect(saveIds.nextDrawingId(), 1);

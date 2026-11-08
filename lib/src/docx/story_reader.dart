@@ -45,6 +45,7 @@ import 'properties.dart';
 import 'property_codec.dart' show parseDecimal;
 import 'read_exception.dart';
 import 'run_property_codecs.dart' show runPropertiesSchema;
+import 'save_ids.dart' show parseOfficeId;
 import 'table_property_codecs.dart'
     show
         tableCellPropertiesSchema,
@@ -254,15 +255,7 @@ final class StoryReader {
 
   /// The bookmark id the reader's element states: `null` unless `w:id` is a
   /// non-negative whole number.
-  int? _bookmarkId() {
-    final String? value = r.getAttribute('id', namespaceUri: Ns.w)?.trim();
-    if (value == null || value.isEmpty || value.length > 15) return null;
-    for (int i = 0; i < value.length; i++) {
-      final int unit = value.codeUnitAt(i);
-      if (unit < 0x30 || unit > 0x39) return null;
-    }
-    return int.parse(value);
-  }
+  int? _bookmarkId() => parseOfficeId(r.getAttribute('id', namespaceUri: Ns.w));
 
   /// Reads the `w:bookmarkStart` the reader is on, keeping its element.
   DocxBookmarkStart _readBookmarkStart() {

@@ -55,11 +55,6 @@ final class SaveIds {
     ContentType.wmlComments,
   };
 
-  /// The largest id `wp:docPr/@id` takes (`ST_DrawingElementId`, an
-  /// `unsignedInt`); a larger value is not an id and is ignored. Bookmark ids
-  /// are bounded by the same, which keeps every value exact on the web.
-  static const int _maxId = 0xFFFFFFFF;
-
   /// A new `wp:docPr/@id` (which a picture's `pic:cNvPr/@id` repeats): one
   /// more than the highest in the original bytes of every story part and
   /// than any this save gave before, and at least 1.
@@ -146,11 +141,13 @@ final class SaveIds {
         final String ns = r.namespaceUri;
         final String name = r.localName;
         if (ns == Ns.wp && name == 'docPr') {
-          final int? id = _idOf(r.getAttribute('id', namespaceUri: ''));
+          final int? id = parseOfficeId(r.getAttribute('id', namespaceUri: ''));
           if (id != null && id > drawing) drawing = id;
         } else if (ns == Ns.w &&
             (name == 'bookmarkStart' || name == 'bookmarkEnd')) {
-          final int? id = _idOf(r.getAttribute('id', namespaceUri: Ns.w));
+          final int? id = parseOfficeId(
+            r.getAttribute('id', namespaceUri: Ns.w),
+          );
           if (id != null && id > bookmark) bookmark = id;
         }
       });
@@ -180,18 +177,22 @@ final class SaveIds {
       // Unknown from here on: see the library comment.
     }
   }
+}
 
-  /// The id [value] states: decimal digits, surrounding white space allowed
-  /// as XML Schema collapses it, at most [_maxId]; `null` for anything else.
-  static int? _idOf(String? value) {
-    if (value == null) return null;
-    final String digits = value.trim();
-    if (digits.isEmpty || digits.length > 10) return null;
-    for (int i = 0; i < digits.length; i++) {
-      final int unit = digits.codeUnitAt(i);
-      if (unit < 0x30 || unit > 0x39) return null;
-    }
-    final int id = int.parse(digits);
-    return id > _maxId ? null : id;
+/// The largest id the model reads or counts: 15 decimal digits, which keeps
+/// every value exact on the web. Reading a bookmark's id and reserving ids at
+/// save use this one bound, so an id the model reads is an id a save avoids.
+const int maxOfficeId = 999999999999999;
+
+/// The id [value] states: decimal digits, surrounding white space allowed as
+/// XML Schema collapses it, at most [maxOfficeId]; `null` for anything else.
+int? parseOfficeId(String? value) {
+  if (value == null) return null;
+  final String digits = value.trim();
+  if (digits.isEmpty || digits.length > 15) return null;
+  for (int i = 0; i < digits.length; i++) {
+    final int unit = digits.codeUnitAt(i);
+    if (unit < 0x30 || unit > 0x39) return null;
   }
+  return int.parse(digits);
 }

@@ -324,12 +324,10 @@ final class StoryWriter {
 
   /// The id a save writes for the bookmark [start] begins.
   int _idOf(DocxBookmarkStart start) =>
-      start.id ??
-      (_bookmarkId ??
-          (DocxBookmarkStart s) => _ownBookmarkIds.putIfAbsent(
-            s,
-            () => _ownBookmarkIds.length,
-          ))(start);
+      start.id ?? (_bookmarkId ?? _ownBookmarkId)(start);
+
+  int _ownBookmarkId(DocxBookmarkStart start) =>
+      _ownBookmarkIds.putIfAbsent(start, () => _ownBookmarkIds.length);
 
   /// Writes the bookmark start [start] of the paragraph at [path]: as read
   /// when it was read, else with the id of this save, reporting a name the

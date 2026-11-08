@@ -252,7 +252,9 @@ final class DocxParagraph extends DocxBlock {
   /// [start] may be in another paragraph, or in none yet; the save writes
   /// the end with the id of its start, so build the start's paragraph and
   /// this one before saving. An end whose start is in no part of the
-  /// document is written all the same: Word ignores it.
+  /// document is written all the same: Word ignores it. An end of a read
+  /// start whose id could not be read ([DocxBookmarkStart.id] `null`) gets a
+  /// fresh id, so the pair does not match in the file.
   DocxBookmarkEnd addBookmarkEnd(DocxBookmarkStart start) {
     final DocxBookmarkEnd end = newBookmarkEnd(start);
     insertInline(_inlines.length, end);
