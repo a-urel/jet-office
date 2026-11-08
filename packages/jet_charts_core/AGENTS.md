@@ -78,8 +78,10 @@ findings.
 
 `test/layout/fuzz_test.dart` lays out seeded random charts
 (`test/layout/support/chart_fuzz.dart`: every kind, 0 to 12 series, 0 to 60
-text, number or date categories, `NaN`, infinite and huge values, long titles,
-tiny to large sizes) and requires of each that `layoutChart` throws nothing,
+text, number or date categories, `NaN`, infinite and huge values, long titles
+and line breaks in text, fixed bounds with a fixed major unit down to `5e-324`
+or one to ignore, format codes on axes, series and data labels, tiny to large
+sizes) and requires of each that `layoutChart` throws nothing,
 every number is finite, `findOverlaps` finds nothing and every primitive lies
 inside the size (marks inside a clip are checked for finiteness only). The gate
 runs seeds 1 to 4 with 100 cases each, the same cases on the VM and in Chrome

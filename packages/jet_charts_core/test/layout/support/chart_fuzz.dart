@@ -75,13 +75,19 @@ final class LayoutFuzzCase {
         'legend: ${chart.legend.position.name}, '
         'visible: ${chart.legend.visible}',
       )
-      ..writeln('dataLabels: ${chart.dataLabels.visible}')
+      ..writeln(
+        'dataLabels: ${chart.dataLabels.visible}, '
+        'formatCode ${_quote(chart.dataLabels.formatCode)}',
+      )
       ..writeln('categoryAxis: ${_axis(chart.categoryAxis)}')
       ..writeln('valueAxis: ${_axis(chart.valueAxis)}');
     for (int s = 0; s < chart.series.length; s++) {
       final ChartSeries series = chart.series[s];
       out
-        ..writeln('series $s: name ${series.name.values.map(_quote).toList()}')
+        ..writeln(
+          'series $s: name ${series.name.values.map(_quote).toList()}, '
+          'formatCode ${_quote(series.formatCode)}',
+        )
         ..writeln(
           '  categories: '
           '${series.categories.values.map(_category).toList()}',
@@ -94,6 +100,7 @@ final class LayoutFuzzCase {
 
 String _axis(ChartAxis axis) =>
     'title ${_quote(axis.title)}, min ${axis.min}, max ${axis.max}, '
+    'majorUnit ${axis.majorUnit}, formatCode ${_quote(axis.formatCode)}, '
     'visible ${axis.visible}, gridLines ${axis.gridLines}';
 
 String _quote(String? text) => text == null ? 'null' : '"$text"';
@@ -125,11 +132,12 @@ const List<ChartKind> _other = <ChartKind>[
   ChartKind.unsupported,
 ];
 
-/// The runes text is made of: Latin, digits, space, Turkish letters and
-/// emoji (outside the Basic Multilingual Plane, so two UTF-16 units each).
+/// The runes text is made of: Latin, digits, space, a line break, Turkish
+/// letters and emoji (outside the Basic Multilingual Plane, so two UTF-16
+/// units each).
 const List<int> _runes = <int>[
   0x41, 0x42, 0x43, 0x4D, 0x57, 0x61, 0x65, 0x69, 0x6D, 0x77, //
-  0x30, 0x31, 0x37, 0x39, 0x20, 0x20, 0x2D, 0x2E, //
+  0x30, 0x31, 0x37, 0x39, 0x20, 0x20, 0x2D, 0x2E, 0x0A, //
   0x130, 0x131, 0x11E, 0x11F, 0x15E, 0x15F, //
   0x1F600, 0x1F4C8, 0x1F1F9, 0x2764, //
 ];
@@ -163,6 +171,44 @@ double? _value(math.Random r, {bool extreme = true}) {
       return r.nextDouble() * 100;
   }
 }
+
+/// A fixed major unit: ordinary, tiny, the smallest double, or one the
+/// layout must ignore (0, negative, `NaN`, infinite).
+double _majorUnit(math.Random r) {
+  switch (r.nextInt(8)) {
+    case 0:
+      return 1e-9;
+    case 1:
+      return 1e-300;
+    case 2:
+      return 5e-324;
+    case 3:
+      return 0;
+    case 4:
+      return -r.nextDouble() * 10;
+    case 5:
+      return double.nan;
+    case 6:
+      return r.nextBool() ? double.infinity : double.negativeInfinity;
+    default:
+      return 0.5 + r.nextDouble() * 20;
+  }
+}
+
+/// The format codes an axis, a series or the data labels may carry: a
+/// currency literal, colours and sections, a date, a percent, and a code
+/// that does not parse.
+const List<String> _formatCodes = <String>[
+  '"\$"#,##0.00',
+  '[Red]0;[Blue]-0',
+  'yyyy-mm-dd',
+  '0%',
+  'bogus[',
+];
+
+/// A format code from [_formatCodes] one time in four, else `null`.
+String? _formatCode(math.Random r) =>
+    r.nextInt(4) == 0 ? _formatCodes[r.nextInt(_formatCodes.length)] : null;
 
 /// A finite value for an axis bound.
 double _bound(math.Random r) {
@@ -220,6 +266,7 @@ LayoutFuzzCase layoutFuzzCase(int seed, int index) {
           values: <String?>[if (r.nextInt(8) != 0) _text(r, 30)],
         ),
         categories: ChartData<Object>(values: categories),
+        formatCode: _formatCode(r),
         values: ChartData<double>(
           values: <double?>[
             for (
@@ -235,6 +282,7 @@ LayoutFuzzCase layoutFuzzCase(int seed, int index) {
   ChartAxis axis({required bool value}) {
     double? min;
     double? max;
+    double? majorUnit;
     if (value && r.nextInt(4) == 0) {
       switch (r.nextInt(3)) {
         case 0:
@@ -245,11 +293,16 @@ LayoutFuzzCase layoutFuzzCase(int seed, int index) {
           min = _bound(r);
           max = _bound(r);
       }
+      if (r.nextBool()) {
+        majorUnit = _majorUnit(r);
+      }
     }
     return ChartAxis(
       title: r.nextInt(4) == 0 ? _text(r, 200) : null,
       min: min,
       max: max,
+      majorUnit: majorUnit,
+      formatCode: _formatCode(r),
       visible: r.nextInt(6) != 0,
       gridLines: r.nextBool(),
     );
@@ -267,7 +320,10 @@ LayoutFuzzCase layoutFuzzCase(int seed, int index) {
           .values[r.nextInt(ChartLegendPosition.values.length)],
       visible: r.nextInt(4) != 0,
     ),
-    dataLabels: ChartDataLabels(visible: r.nextInt(3) == 0),
+    dataLabels: ChartDataLabels(
+      visible: r.nextInt(3) == 0,
+      formatCode: _formatCode(r),
+    ),
     categoryAxis: categoryAxis,
     valueAxis: valueAxis,
   );
@@ -318,6 +374,9 @@ int layoutFuzzFingerprint(LayoutFuzzCase c) {
       add(2);
     } else if (v.isInfinite) {
       add(v > 0 ? 3 : 4);
+    } else if (v != 0 && v.abs() < 1e-300) {
+      // Below 1e-300 the power of ten underflows; 5e-324 is the one drawn.
+      add(v > 0 ? 7 : 8);
     } else {
       // Six significant digits as an integer mantissa and an exponent.
       final int e = v == 0 ? 0 : (math.log(v.abs()) / math.ln10).floor();
@@ -343,6 +402,7 @@ int layoutFuzzFingerprint(LayoutFuzzCase c) {
   add(chart.legend.position.index);
   add(chart.legend.visible ? 1 : 0);
   add(chart.dataLabels.visible ? 1 : 0);
+  addText(chart.dataLabels.formatCode);
   addText(chart.title?.text);
   for (final ChartAxis axis in <ChartAxis>[
     chart.categoryAxis,
@@ -351,6 +411,8 @@ int layoutFuzzFingerprint(LayoutFuzzCase c) {
     addText(axis.title);
     addDouble(axis.min);
     addDouble(axis.max);
+    addDouble(axis.majorUnit);
+    addText(axis.formatCode);
     add(axis.visible ? 1 : 0);
     add(axis.gridLines ? 1 : 0);
   }
@@ -358,6 +420,7 @@ int layoutFuzzFingerprint(LayoutFuzzCase c) {
     for (final String? name in s.name.values) {
       addText(name);
     }
+    addText(s.formatCode);
     for (final Object? category in s.categories.values) {
       switch (category) {
         case final String text:

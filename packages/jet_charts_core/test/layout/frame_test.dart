@@ -435,6 +435,42 @@ void main() {
     expect(problems(layout), isEmpty);
   });
 
+  test('a thinned tick label never leaves the chart', () {
+    // Fuzz seeds 1 case 684 and 6 case 13, minimized. A bar chart's last
+    // tick label is the narrow `0`, so the band past the axis' end is
+    // narrow: a wider label that thinning keeps near the end, or a lone
+    // first label wider than the plot, would reach past the size.
+    final List<(ChartAxis, List<double?>, double)> cases =
+        <(ChartAxis, List<double?>, double)>[
+          (const ChartAxis(majorUnit: 1e-300), <double?>[-1e300, -1], 100),
+          (const ChartAxis(majorUnit: 1e-300), <double?>[-1e300, -1], 480),
+          (
+            const ChartAxis(
+              min: -1e100,
+              max: 1,
+              majorUnit: 1e-300,
+              formatCode: '0',
+            ),
+            <double?>[1, 0.5],
+            400,
+          ),
+        ];
+    for (final (ChartAxis axis, List<double?> values, double width) in cases) {
+      final ChartLayout layout = lay(
+        Chart(
+          kind: ChartKind.bar,
+          legend: const ChartLegend(visible: false),
+          valueAxis: axis,
+          series: <ChartSeries>[
+            series('S', values, <Object?>['A', 'B']),
+          ],
+        ),
+        ChartSize(width, 200),
+      );
+      expect(problems(layout), isEmpty, reason: '$axis $width');
+    }
+  });
+
   test('a valueLabels misfit is relieved only by the value labels', () {
     final FrameShown shown = FrameShown.wanted(
       chart(

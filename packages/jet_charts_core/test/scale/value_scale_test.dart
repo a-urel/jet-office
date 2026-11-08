@@ -502,7 +502,7 @@ void main() {
       final ValueScale s = autoValueScale(
         dataMin: 0,
         dataMax: 1,
-        maxIntervals: 1 << 40,
+        maxIntervals: 1000000,
       );
       expect(s.ticks.length, lessThanOrEqualTo(1001));
       expect(s, autoValueScale(dataMin: 0, dataMax: 1, maxIntervals: 1000));

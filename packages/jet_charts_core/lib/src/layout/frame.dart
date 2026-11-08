@@ -238,15 +238,6 @@ extension on FrameContext {
         plot = _deflate(inner, bands);
       }
     }
-    // A fixed unit cannot be coarsened: draw every stride-th tick label
-    // instead, the smallest stride that fits (a single label always does).
-    int stride = 1;
-    if (shown.valueLabels && fixedUnit) {
-      while (stride < labels.length &&
-          !_valueLabelsFit(labels, scale!, plot, stride: stride)) {
-        stride++;
-      }
-    }
     // The category labels' plan on the final plot must fit the bands kept
     // for it; widen them a few times if not.
     CategoryLabelPlan plan = _plan(
@@ -275,11 +266,24 @@ extension on FrameContext {
       plot = _deflate(inner, bands);
       plan = _plan(shown, inner, plot, labels, valueTitle, categoryTitle);
     }
+    // A fixed unit cannot be coarsened: draw every stride-th tick label
+    // instead, the smallest stride whose labels keep apart and stay inside
+    // [inner] (the bands cover the first and last label, not a wider one
+    // thinning keeps between them).
+    final ValueScale finalScale = scale!;
+    int stride = 1;
+    bool valueLabelsFit() =>
+        _valueLabelsFit(labels, finalScale, plot, stride: stride) &&
+        (!fixedUnit ||
+            _valueLabelsInside(labels, finalScale, plot, inner, stride));
+    if (shown.valueLabels && fixedUnit) {
+      while (stride < labels.length && !valueLabelsFit()) {
+        stride++;
+      }
+    }
     final Set<FrameMisfit> misfits = <FrameMisfit>{
       if (!settled || !(plot.width >= 1 && plot.height >= 1)) FrameMisfit.space,
-      if (shown.valueLabels &&
-          !_valueLabelsFit(labels, scale!, plot, stride: stride))
-        FrameMisfit.valueLabels,
+      if (shown.valueLabels && !valueLabelsFit()) FrameMisfit.valueLabels,
       if (shown.categoryLabels && !plan.fits)
         plan.cramped ? FrameMisfit.categoryRoom : FrameMisfit.categoryLabels,
     };
@@ -327,6 +331,35 @@ extension on FrameContext {
     minTextGap: theme.spacing.minTextGap,
     stride: stride,
   );
+
+  /// Whether every [stride]-th tick label, from the first, lies inside
+  /// [inner].
+  bool _valueLabelsInside(
+    List<MeasuredLabel> labels,
+    ValueScale scale,
+    ChartRect plot,
+    ChartRect inner,
+    int stride,
+  ) {
+    for (final TextPrimitive label in valueLabelPrimitives(
+      labels,
+      scale,
+      plot,
+      theme.axisLabels,
+      horizontal: bar,
+      labelGap: gap,
+      stride: stride,
+    )) {
+      final ChartRect r = label.rect;
+      if (r.left < inner.left - 1e-9 ||
+          r.top < inner.top - 1e-9 ||
+          r.right > inner.right + 1e-9 ||
+          r.bottom > inner.bottom + 1e-9) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   /// The category labels' plan on [plot], whose band may take 40% of the
   /// space left for the plot and the band across the category axis: [inner]
