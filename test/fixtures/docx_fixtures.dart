@@ -1,7 +1,8 @@
-/// The fixtures of DOCX milestones D1 to D5: new documents with paragraphs of
+/// The fixtures of DOCX milestones D1 to D6: new documents with paragraphs of
 /// text (D1), with run and paragraph formatting, styles and lists (D2), with
 /// tables (D3), with sections, headers, footers and fields (D4) and with
-/// pictures, hyperlinks, bookmarks and document properties (D5).
+/// pictures, hyperlinks, bookmarks and document properties (D5) and with
+/// lists written by `DocxListExport` (D6).
 ///
 /// New in jet_office. Every fixture starts from `DocxDocument()`, the blank
 /// document, so what LibreOffice and the Open XML SDK see is what the model
@@ -11,7 +12,7 @@ library;
 
 import 'package:jet_office/jet_office.dart';
 
-import '../../tool/src/text_compare.dart' show docxFullText;
+import '../../tool/src/text_compare.dart' show docxFullText, docxStoriesText;
 import 'docx_fixture.dart';
 import 'm4_fixtures.dart' show jpeg3x5, png4x2;
 
@@ -28,7 +29,7 @@ const List<(String?, String)> d1Paragraphs = <(String?, String)>[
   (null, 'Last.'),
 ];
 
-/// The fixtures of D1 to D5, in a fixed order.
+/// The fixtures of D1 to D6, in a fixed order.
 ///
 /// No fixture may end in a table: LibreOffice's text export of a document
 /// whose body ends in a table never ends, it writes the file without bound
@@ -161,6 +162,8 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
     headerFooterText: _linksStories.join('\n'),
   ),
   DocxFixture('d5_properties', _propertiesText, () => _build(_fillProperties)),
+  _listFixture('d6_list', _tr, _trRows(), _trTotals),
+  _listFixture('d6_list_landscape', _landscape, _landscapeRows(), null),
 ];
 
 /// The text of `d3_basic`, written by hand from what `_fillBasic` adds: the
@@ -949,4 +952,106 @@ final OfficeProperties d5Properties = OfficeProperties(
 void _fillProperties(DocxDocument doc) {
   doc.body.addParagraph(_propertiesText);
   doc.properties = d5Properties;
+}
+
+/// The Turkish list of `d6_list`: a logo, a title, a date, a caption, five
+/// columns (a date, an amount in lira and a share among them), a footer in
+/// Turkish. 120 rows run over three A4 portrait pages.
+final DocxListExport _tr = DocxListExport(
+  const <DocxListColumn>[
+    DocxListColumn('Kod', widthPt: 60),
+    DocxListColumn('Müşteri'),
+    DocxListColumn('Tarih', numberFormat: 'dd.mm.yyyy', widthPt: 70),
+    DocxListColumn('Tutar', numberFormat: '#,##0.00 ₺', widthPt: 90),
+    DocxListColumn('Pay', numberFormat: '0%', widthPt: 50),
+  ],
+  title: 'Müşteri listesi',
+  logo: OfficeImage(png4x2),
+  logoHeightPt: 20,
+  date: DateTime(2026, 11, 8),
+  caption: 'Kasım 2026 müşteri bakiyeleri',
+  footerBefore: 'Sayfa ',
+  footerMiddle: ' / ',
+  locale: FormatLocale.trTR,
+);
+
+/// Names of `d6_list`, with the Turkish letters ç ğ ı İ ö ş ü among them.
+const List<String> _trNames = <String>[
+  'Çağlar Işık',
+  'İpek Özdemir',
+  'Gülşen Şahin',
+  'Ümit Yıldız',
+  'Ömer Çelik',
+  'Şükrü Doğan',
+];
+
+/// The 120 rows of `d6_list`: a code, a name, a date, an amount and a share.
+List<List<Object?>> _trRows() => <List<Object?>>[
+  for (int i = 0; i < 120; i++)
+    <Object?>[
+      'M-${(1001 + i)}',
+      _trNames[i % _trNames.length],
+      DateTime(2026, 1 + i % 12, 1 + i % 28),
+      1234.5 + i * 17.25,
+      (i % 20) / 20,
+    ],
+];
+
+/// The totals row of `d6_list`, given as the caller's own values.
+const List<Object?> _trTotals = <Object?>['Toplam', null, null, 271305.0, null];
+
+/// The English landscape list of `d6_list_landscape`: no logo, twelve
+/// columns with a width for four, 1.27 cm (36 points) margins all round.
+final DocxListExport _landscape = DocxListExport(
+  <DocxListColumn>[
+    const DocxListColumn('Code', widthPt: 50),
+    const DocxListColumn('Name', widthPt: 90),
+    const DocxListColumn('Started', numberFormat: 'yyyy-mm-dd', widthPt: 60),
+    const DocxListColumn('Amount', numberFormat: '#,##0.00', widthPt: 70),
+    for (int c = 1; c <= 8; c++)
+      DocxListColumn('Month $c', numberFormat: '0.0'),
+  ],
+  title: 'Monthly figures',
+  date: DateTime(2026, 11, 8),
+  pageSize: DocxPageSize.a4(landscape: true),
+  margins: DocxPageMargins(
+    top: 36,
+    right: 36,
+    bottom: 36,
+    left: 36,
+    header: 35.4,
+    footer: 35.4,
+    gutter: 0,
+  ),
+);
+
+/// The 40 rows of `d6_list_landscape`.
+List<List<Object?>> _landscapeRows() => <List<Object?>>[
+  for (int i = 0; i < 40; i++)
+    <Object?>[
+      'C${100 + i}',
+      'Item ${i + 1}',
+      DateTime(2026, 1 + i % 12, 1 + i % 28),
+      10.5 + i * 1000.25,
+      for (int c = 0; c < 8; c++) (i + 1) * (c + 1) / 4,
+    ],
+];
+
+/// A D6 fixture: [export] written with [rows] and [totals]. Its expected
+/// text is what the cells show, as the model reads them; its stories are the
+/// header and footer, as `docxStoriesText` reads them.
+DocxFixture _listFixture(
+  String name,
+  DocxListExport export,
+  List<List<Object?>> rows,
+  List<Object?>? totals,
+) {
+  DocxResult build() => export.toDocx(rows, totals: totals);
+  final DocxDocument doc = DocxDocument.open(build().bytes);
+  return DocxFixture(
+    name,
+    docxFullText(doc),
+    build,
+    headerFooterText: docxStoriesText(doc),
+  );
 }

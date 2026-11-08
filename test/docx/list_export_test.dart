@@ -1,6 +1,8 @@
-// The value semantics and argument checks of DocxListColumn and
-// DocxListExport (milestone D6, Task 1). It imports the public library only,
-// so it runs on the web as well.
+// Tests of DocxListColumn and DocxListExport (milestone D6): the value
+// semantics and argument checks, the page, header and footer written into a
+// section, the values as Excel shows them, and the body. It runs on the web
+// as well; the package:archive and tool/src imports below only read the
+// saved bytes.
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';

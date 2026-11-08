@@ -64,8 +64,8 @@ void main() {
         'd2_lists',
       ],
     );
-    expect(all, hasLength(20));
-    expect(<String>{for (final DocxFixture f in all) f.name}, hasLength(20));
+    expect(all, hasLength(22));
+    expect(<String>{for (final DocxFixture f in all) f.name}, hasLength(22));
   });
 
   test('the D3 fixtures are the five the plan names', () {

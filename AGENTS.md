@@ -101,8 +101,12 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   (`d5_pictures`, a PNG in the body, a JPEG in a cell and the PNG as a header
   logo; `d5_links`, a bookmark, an external and an internal link and a footer
   link; `d5_properties`, every core property, the company and the
-  application). A fixture with a `DocxFixture.headerFooterText` (`d4_headers`,
-  `d4_fields`, `d5_pictures`, `d5_links`) also gets `<name>.stories.txt`, what
+  application) and the D6 lists written by `DocxListExport` (`d6_list`, Turkish
+  with a logo, a caption, a date, an amount and a share column, 120 rows over
+  three A4 pages and a totals row; `d6_list_landscape`, English on landscape A4
+  with 1.27 cm margins, twelve columns and 40 rows). A fixture with a `DocxFixture.headerFooterText` (`d4_headers`,
+  `d4_fields`, `d5_pictures`, `d5_links`, `d6_list`, `d6_list_landscape`) also
+  gets `<name>.stories.txt`, what
   its headers and footers show. No fixture ends in a table, because
   LibreOffice's text export of one never ends (see below), or in a section
   break, as the model adds no block after one.
@@ -392,8 +396,8 @@ It prints failures as the reader's run does. Pin a failure as a unit test in
 the owning `*_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
-750 cases each, over the fixtures (the `d3_*`, `d4_*` and `d5_*` ones among
-them), a hand-made table with every element of the table values, a hand-made
+900 cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*` and `d6_*` ones
+among them), a hand-made table with every element of the table values, a hand-made
 `sections_by_hand` (every section child, six stories, broken references and
 broken fields), a hand-made `drawings_by_hand` (inline, anchored, linked and
 broken pictures, external, anchor and broken hyperlinks, bookmarks with bad
@@ -432,12 +436,13 @@ dart run tool/fuzz_docx.dart --seeds 1-200 --cases 1000
 It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
 1 on any. Pin a failure as a unit test in the owning `*_test.dart` first.
 
-The gate runs 750 cases per seed, not 150, for one reason: the seeds are fixed,
+The gate runs 900 cases per seed, not 150, for one reason: the seeds are fixed,
 so the cases must between them mutate every part name of the corpus
 (`every part name is mutated in some corpus entry`), and the D3 fixtures,
 `tables_by_hand`, the D4 fixtures, with their header and footer parts,
 `sections_by_hand` and the D5 fixtures joined the corpus and made fewer too few
-(with the D5 fixtures, 600 left `word/footer4.xml` of `d4_headers` unmutated).
+(with the D5 fixtures, 600 left `word/footer4.xml` of `d4_headers` unmutated;
+with the D6 ones, 750 left `word/_rels/footer1.xml.rels` unmutated).
 When a new part name or corpus entry joins the corpus, run that test and raise
 the count again if it fails.
 

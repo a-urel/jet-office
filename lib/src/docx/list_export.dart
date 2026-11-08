@@ -209,7 +209,9 @@ final class DocxListExport {
   /// and any other is left as the paragraph default.
   ///
   /// Throws [ArgumentError], before [document] changes, for no columns or
-  /// more than [maxTableColumns] (named `columns`), an empty header or one
+  /// more than [maxTableColumns], or columns without a width that would get 1
+  /// point or less of the text width each (all named `columns`), an empty
+  /// header or one
   /// that repeats an earlier header ignoring case (`columns[i].header`), a
   /// width that is not finite or not greater than 0 (`columns[i].widthPt`),
   /// a number format that cannot be read (`columns[i].numberFormat`), a
