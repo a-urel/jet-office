@@ -697,13 +697,53 @@ void _fullTests() {
             '$id,179.2,300.9,10,0,10,2,10,10,144,240,1',
         'a plot box to the edge plus 1 pt':
             '$id,180,300,10,0,10,2,-1,0,182,301,1',
-        'an empty labelSpacing': '$id,180,300,10,0,10,2,10,10,144,240,',
         'exponent forms': '$id,180,300,10,0,1.0E+2,2.5E+1,10,10,144,240,3',
       };
       accepted.forEach((String name, String row) {
         test('$name is accepted', () {
           expect(_fullProblems(_withRow(_goodFullLines(), id, row)), isEmpty);
         });
+      });
+
+      test('an empty labelSpacing is accepted on a case without labels', () {
+        const String m01 = 'M01-w360-h300-f10';
+        expect(
+          _fullProblems(
+            _withRow(
+              _goodFullLines(),
+              m01,
+              '$m01,360,300,10,0,120,20,10,10,288,240,',
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      const String f05 = 'F05-w360-h300-f10';
+      test('max equal to min is accepted where both are fixed equal', () {
+        expect(
+          _fullProblems(
+            _withRow(
+              _goodFullLines(),
+              f05,
+              '$f05,360,300,10,5,5,1,10,10,288,240,',
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('max below min gives one problem even where both are fixed', () {
+        expect(
+          _fullProblems(
+            _withRow(
+              _goodFullLines(),
+              f05,
+              '$f05,360,300,10,5,4,1,10,10,288,240,',
+            ),
+          ),
+          hasLength(1),
+        );
       });
 
       final Map<String, List<String> Function(List<String>)> bad =
@@ -752,6 +792,14 @@ void _fullTests() {
                 _withRow(l, id, '$id,180,300,10,0,10,2,10,10,144,240,1.5'),
             'a labelSpacing that is no number': (List<String> l) =>
                 _withRow(l, id, '$id,180,300,10,0,10,2,10,10,144,240,x'),
+            'an empty labelSpacing on a case with labels': (List<String> l) =>
+                _withRow(l, id, '$id,180,300,10,0,10,2,10,10,144,240,'),
+            'max equal to min where nothing is fixed': (List<String> l) =>
+                _withRow(
+                  l,
+                  'F01-w360-h300-f10',
+                  'F01-w360-h300-f10,360,300,10,5,5,1,10,10,288,240,',
+                ),
             'a version 1 header': (List<String> l) => <String>[
               axisCsvHeader,
               ...l.skip(1),
@@ -964,8 +1012,18 @@ void _checkFullChart(XmlDocument chart, AxisFullCase kase, String sheet) {
     if (kase.categories == null) {
       expect(cat, isNull);
     } else {
+      final RegExpMatch rows = RegExp(r'\$(\d+):\$[A-Z]\$(\d+)$').firstMatch(
+        val.findAllElements('f', namespaceUri: _c).single.innerText,
+      )!;
+      final int first = int.parse(rows.group(1)!);
+      final int last = int.parse(rows.group(2)!);
+      expect(last - first + 1, values.length);
       expect(
-        cat!
+        cat!.getElement('c:strRef')!.getElement('c:f')!.innerText,
+        "'$sheet'!\$A\$$first:\$A\$$last",
+      );
+      expect(
+        cat
             .getElement('c:strRef')!
             .findAllElements('v', namespaceUri: _c)
             .map((XmlElement v) => v.innerText),

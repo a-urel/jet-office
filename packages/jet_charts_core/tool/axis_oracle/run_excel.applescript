@@ -8,7 +8,8 @@
 -- list version 2 (test/fixtures/owner/axis_full/README.md): the chart's width
 -- as well, the plot area's inside left, top, width and height, and the
 -- category axis' tick label spacing, left empty when the chart has no category
--- labels or Excel gives none.
+-- labels. A chart with labels whose spacing Excel does not give as a whole
+-- number is a failure, like any other read that fails.
 --
 -- Paths are POSIX, absolute or relative to the current folder. The workbook
 -- opens read-only and closes without saving. A chart Excel cannot answer for
@@ -94,11 +95,11 @@ on run argv
 							set theFormula to formula of series 1 of theChart
 							if theFormula starts with "=SERIES(,," or theFormula starts with "=SERIES(;;" then set hasLabels to false
 						end try
+						-- A chart with labels must give a whole number; a failed read
+						-- goes to the failures below and the chart gets no row.
 						if hasLabels then
-							try
-								set theSpacing to tick label spacing of (get axis theChart axis type category axis which axis primary axis)
-								if class of theSpacing is integer then set spacingText to theSpacing as text
-							end try
+							set theSpacing to tick label spacing of (get axis theChart axis type category axis which axis primary axis)
+							set spacingText to my wholeText(theSpacing)
 						end if
 						set end of csvRows to my csvRow(caseId, {theWidth, theHeight, theFont, theMin, theMax, theMajor, plotLeft, plotTop, plotWidth, plotHeight}) & "," & spacingText
 					else
@@ -153,6 +154,16 @@ on numberText(theNumber)
 	if class of theNumber is not in {real, integer} then error "not a number: " & (theNumber as text)
 	return my joined(my pieces(theNumber as text, ","), ".")
 end numberText
+
+-- A whole number as text without a decimal point; an integral real such as
+-- 2.0 is written 2. Anything else is an error.
+on wholeText(theNumber)
+	if class of theNumber is integer then return theNumber as text
+	if class of theNumber is real then
+		if theNumber mod 1 is 0 and theNumber > 0 and theNumber < 1.0E+9 then return (theNumber as integer) as text
+	end if
+	error "tick label spacing is not a whole number: " & (theNumber as text)
+end wholeText
 
 on pieces(theText, separator)
 	set saved to AppleScript's text item delimiters

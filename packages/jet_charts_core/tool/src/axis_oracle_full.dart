@@ -508,7 +508,9 @@ final class AxisFullCsv {
 /// a width more than a point from the case's, a plot field that is no number,
 /// a plot box of negative size or reaching more than a point outside the
 /// chart Excel reports, and a `labelSpacing` that is neither empty nor a
-/// positive whole number. A row has at most one problem.
+/// positive whole number, or is empty on a case with category labels. A
+/// maximum equal to the minimum is accepted only where the case fixes both
+/// to one value. A row has at most one problem.
 AxisFullCsv readAxisFullCsv(AxisFullCases cases, String text) {
   final List<String> lines = <String>[
     for (final String line
@@ -547,6 +549,10 @@ AxisFullCsv readAxisFullCsv(AxisFullCases cases, String text) {
       continue;
     }
     final String spacing = fields[11];
+    if (spacing.isEmpty && kase.categories != null) {
+      problems.add('$id: labelSpacing is empty on a chart with labels');
+      continue;
+    }
     if (spacing.isNotEmpty &&
         (!_count.hasMatch(spacing) || int.parse(spacing) == 0)) {
       problems.add('$id: labelSpacing $spacing is not a positive whole number');
@@ -569,7 +575,10 @@ AxisFullCsv readAxisFullCsv(AxisFullCases cases, String text) {
     );
     rows.add(row);
     const double slack = _plotTolerance + 1e-9;
-    if (row.max <= row.min) {
+    // A case that fixes both bounds to one value may get them back equal.
+    final bool fixedEqual =
+        kase.fixedMin != null && kase.fixedMin == kase.fixedMax;
+    if (row.max < row.min || (row.max == row.min && !fixedEqual)) {
       problems.add('$id: max is not above min');
     } else if (row.major <= 0) {
       problems.add('$id: major is not above zero');

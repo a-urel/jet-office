@@ -19,7 +19,7 @@ Files here:
   exactly as the script wrote it.
 - `chart_defaults.xlsx`: Excel's default column and line charts, saved unedited,
   which settle the theme values listed in `docs/excel-checks.md` (required in
-  this run; `TALIMATLAR.md`, last section).
+  this run; `TALIMATLAR.md`, step 9).
 
 Never edit a committed CSV, manifest entry or `chart_defaults.xlsx` without the
 owner, and never write a row by hand: no oracle value is ever invented.
@@ -96,14 +96,18 @@ case,width,height,font,min,max,major,plotLeft,plotTop,plotWidth,plotHeight,label
   Excel took them: `width` and `height` within 1 pt of the case's, `font` exactly
   the case's.
 - `min`, `max`, `major`: the value axis' `minimum scale`, `maximum scale` and
-  `major unit` (for a bar chart too: it is still Excel's `value axis`).
+  `major unit` (for a bar chart too: it is still Excel's `value axis`). `max`
+  must be above `min`, except that it may equal it where the case fixes both to
+  one value (`F05`).
 - `plotLeft`, `plotTop`, `plotWidth`, `plotHeight`: the plot area's `inside
   left`, `inside top`, `inside width` and `inside height`, in points from the
   chart's edge. They must be numbers, of no negative size, and the box may reach
   at most 1 pt outside the chart.
 - `labelSpacing`: the category axis' `tick label spacing`, a positive whole
-  number; empty when the chart has no category labels (its series formula names
-  none) or Excel gives none.
+  number (an integral real such as `2.0` is written `2`); empty when the chart
+  has no category labels (its series formula names none). A chart with labels
+  must have it: where Excel does not give a whole number, the script counts the
+  chart among its failures and writes no row.
 
 Numbers are written as in the first oracle (`.` whatever the region, exponent
 forms accepted). Rows are matched to cases by `case`. A chart Excel could not

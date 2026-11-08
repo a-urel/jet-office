@@ -59,8 +59,10 @@ Komutların hepsi deponun kök klasöründen çalışır.
 
    Sütunlar: `case,width,height,font,min,max,major,plotLeft,plotTop,plotWidth,plotHeight,labelSpacing`.
 
-   Sonra çalışma kitabını Excel'de aç. Bir grafiğe tıklayınca adı, sol üstteki
-   ad kutusunda görünür. Grafikler sayfada yukarıdan aşağı dizilidir:
+   Sonra `build/axis_oracle_full/axis_oracle_full.xlsx` dosyasını Excel'de aç
+   (3. adımda kopyayı kullandıysan
+   `~/Documents/jet_charts_oracle/axis_oracle_full.xlsx` dosyasını). Bir
+   grafiğe tıklayınca adı, sol üstteki ad kutusunda görünür. Grafikler sayfada yukarıdan aşağı dizilidir:
 
    - **`L07-w360-h80-f10`**, `length` sayfasında yukarıdan 26. grafik (alçak bir
      sütun grafiği). Dikey eksenin en üstteki etiketi `max`, iki komşu etiket

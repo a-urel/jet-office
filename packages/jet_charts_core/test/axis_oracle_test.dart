@@ -108,7 +108,8 @@ void main() {
       axisFullCsvHeader,
       for (final AxisFullCase kase in cases.cases)
         '${kase.id},${kase.width},${kase.height},${kase.font},0,10,2,'
-            '10,10,${kase.width / 2},${kase.height / 2},',
+            '10,10,${kase.width / 2},${kase.height / 2},'
+            '${kase.categories == null ? '' : '1'}',
     ].join('\n');
 
     late Directory dir;
