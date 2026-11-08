@@ -388,4 +388,82 @@ void main() {
       expect((e.min, e.max), (-2.0, 4.0));
     });
   });
+
+  group('review fixes', () {
+    ValueScale scale(
+      double dMin,
+      double dMax, {
+      double? fMin,
+      double? fMax,
+      double? unit,
+      int n = 10,
+    }) => autoValueScale(
+      dataMin: dMin,
+      dataMax: dMax,
+      maxIntervals: n,
+      fixedMin: fMin,
+      fixedMax: fMax,
+      fixedMajorUnit: unit,
+    );
+
+    test('a fixed min above the data reads the data as fixed to fixed + s', () {
+      final ValueScale s = scale(1, 10, fMin: 50);
+      expect(_of(s), <double>[50, 110, 10]);
+      expect(s.ticks.length, greaterThanOrEqualTo(2));
+    });
+
+    test('a fixed min equal to the data max', () {
+      expect(_of(scale(1, 10, fMin: 10)), <double>[10, 22, 2]);
+    });
+
+    test('a fixed min with no data', () {
+      expect(_of(scale(double.nan, double.nan, fMin: 5)), <double>[5, 11, 1]);
+      expect(_of(scale(double.nan, double.nan, fMin: 0)), <double>[
+        0,
+        1.2,
+        0.2,
+      ]);
+    });
+
+    test('the mirror: a fixed max with no data', () {
+      expect(_of(scale(double.nan, double.nan, fMax: -50)), <double>[
+        -110,
+        -50,
+        10,
+      ]);
+      expect(_of(scale(double.nan, double.nan, fMax: 0)), <double>[
+        -1.2,
+        0,
+        0.2,
+      ]);
+    });
+
+    test('a tiny fixed unit is multiplied by 10 without float error', () {
+      expect(scale(0, 10, unit: 1e-300).majorUnit, 0.1);
+      final ValueScale s = scale(0, 1, fMin: -1e308, fMax: 1e308, unit: 1);
+      expect(s.majorUnit, 1e298);
+      expect(s.ticks, hasLength(201));
+    });
+
+    test('an all-negative scale has no negative zero', () {
+      final ValueScale s = scale(-10, -5);
+      expect(s.max, 0);
+      expect(s.max.isNegative, isFalse);
+      expect(s.ticks.last.isNegative, isFalse);
+    });
+
+    test('quotients near 1e9 are guarded relatively', () {
+      expect(_of(scale(1e9 + 1, 1e9 + 2)), <double>[
+        1000000000.4,
+        1000000002.2,
+        0.2,
+      ]);
+    });
+
+    test('data far below 1e-15 still gets a scale', () {
+      final ValueScale s = scale(1e-20, 2e-20);
+      expect(_of(s), <double>[0, 2.5e-20, 5e-21]);
+      expect(s.ticks, hasLength(6));
+    });
+  });
 }

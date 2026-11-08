@@ -174,6 +174,13 @@ int provisionalMaxIntervals(double axisLength) {
 /// the rule; a [fixedMajorUnit] that is not a positive finite number is
 /// ignored. [percent] is a percent stacked axis. A [maxIntervals] below 1 is
 /// read as 1.
+///
+/// A fixed maximum is ignored when it is not above the fixed minimum or, with
+/// no fixed minimum, not above the data's minimum (when there is data). A fixed
+/// minimum at or above the data's maximum, or with no data, reads the data as
+/// `fixedMin` to `fixedMin + s`, where `s` is `|fixedMin|` or 1 for 0; a fixed
+/// maximum with no data and no fixed minimum reads it as `fixedMax - s` to
+/// `fixedMax`. Step 2 never applies to a fixed bound.
 ValueScale autoValueScale({
   required double dataMin,
   required double dataMax,
@@ -205,16 +212,31 @@ ValueScale autoValueScale({
     hi = _clamp(math.max(dataMin, dataMax));
   }
   final bool negatives = lo < 0;
+  final bool hasData = dataMin.isFinite || dataMax.isFinite;
+  final double dataHi = hi;
 
   // Step 6: a fixed bound stands in for the data's.
-  if (fMax != null && fMax <= (fMin ?? lo)) {
+  if (fMax != null && fMax <= (fMin ?? (hasData ? lo : -double.infinity))) {
     fMax = null;
   }
-  if (fMin != null) {
+  // A fixed bound the data does not reach: the data is read as a span from it.
+  bool derived = false;
+  if (fMin != null && fMax == null && (!hasData || fMin >= dataHi)) {
     lo = fMin;
-  }
-  if (fMax != null) {
+    hi = fMin + (fMin != 0 ? fMin.abs() : 1);
+    derived = true;
+  } else if (fMax != null && fMin == null && !hasData) {
     hi = fMax;
+    lo = fMax - (fMax != 0 ? fMax.abs() : 1);
+    derived = true;
+  }
+  if (!derived) {
+    if (fMin != null) {
+      lo = fMin;
+    }
+    if (fMax != null) {
+      hi = fMax;
+    }
   }
   if (lo > hi) {
     hi = lo;
@@ -226,7 +248,7 @@ ValueScale autoValueScale({
   if (percent) {
     ruleMin = negatives ? -1 : 0;
     ruleMax = 1;
-  } else if (lo == hi) {
+  } else if (lo == hi && !derived) {
     if (lo == 0) {
       ruleMin = 0;
       ruleMax = 1;
@@ -251,15 +273,28 @@ ValueScale autoValueScale({
   if (fUnit != null) {
     u = fUnit;
     bounds = _bounds(u, a, c, mFixB, mFixT);
-    while ((bounds.top - bounds.bottom) / u > _fixedUnitIntervals) {
-      u *= 10;
+    for (
+      int n = 1;
+      (bounds.top - bounds.bottom) / u > _fixedUnitIntervals;
+      n++
+    ) {
+      final double next = _significant(fUnit * math.pow(10.0, n).toDouble());
+      if (!next.isFinite) {
+        break;
+      }
+      u = next;
       bounds = _bounds(u, a, c, mFixB, mFixT);
     }
   } else {
     u = 1;
     bounds = _bounds(u, a, c, mFixB, mFixT);
     bool found = false;
-    for (int k = -15; k <= 302 && !found; k++) {
+    // Start two decades below the span, so tiny data still gets a unit.
+    final double span = mFixB != null && mFixT != null ? mFixT - mFixB : c - a;
+    final int start = span > 0 && span.isFinite
+        ? math.max(-300, (math.log(span) / math.ln10).floor() - 2)
+        : -15;
+    for (int k = start; k <= 302 && !found; k++) {
       for (final int m in const <int>[1, 2, 5]) {
         u = k < 0
             ? m / math.pow(10.0, -k).toDouble()
@@ -273,8 +308,8 @@ ValueScale autoValueScale({
     }
   }
 
-  final double min = mirrored ? -bounds.top : bounds.bottom;
-  final double max = mirrored ? -bounds.bottom : bounds.top;
+  final double min = (mirrored ? -bounds.top : bounds.bottom) + 0.0;
+  final double max = (mirrored ? -bounds.bottom : bounds.top) + 0.0;
   return ValueScale(
     min: min,
     max: max,
@@ -322,41 +357,54 @@ double? _negate(double? value) => value == null ? null : -value;
 }
 
 /// The quotient [q] to 9 decimals, so float error never adds a step.
+///
+/// Beyond 1e6 float error exceeds 1e-9 and `q * 1e9` would lose its meaning,
+/// so there the guard is relative: [q] to 14 significant digits (a deviation
+/// from the brief's absolute 9 decimals, which cannot hold at that size).
 double _guard(double q) {
-  if (!q.isFinite || q.abs() >= 1e6) {
+  if (!q.isFinite) {
     return q;
+  }
+  if (q.abs() >= 1e6) {
+    return _significant(q, 14);
   }
   return (q * 1e9).round() / 1e9;
 }
+
+/// [value] to [digits] significant digits.
+double _significant(double value, [int digits = 15]) =>
+    value.isFinite && value != 0
+    ? double.parse(value.toStringAsPrecision(digits))
+    : value;
 
 double _ceil(double q) => _guard(q).ceilToDouble();
 
 double _floor(double q) => _guard(q).floorToDouble();
 
-/// How many decimal places [value] needs, up to 15.
+/// How many decimal places [value] needs, from its 15 significant digits.
 int _decimals(double value) {
   final double v = value.abs();
   if (!v.isFinite || v == 0) {
     return 0;
   }
-  for (int d = 0; d < 15; d++) {
-    final double s = v * math.pow(10, d);
-    final double whole = s.roundToDouble();
-    if (s >= 1e15 || (whole >= 1 && (s - whole).abs() <= 1e-9 * whole)) {
-      return d;
-    }
-  }
-  return 15;
+  final List<String> parts = v.toStringAsExponential(14).split('e');
+  final String fraction = parts.first
+      .split('.')
+      .last
+      .replaceFirst(RegExp(r'0+$'), '');
+  return math.max(0, fraction.length - int.parse(parts.last));
 }
 
 /// [value] rounded to [digits] decimal places; a whole number stays as is.
 double _round(double value, int digits) {
-  final double scale = math.pow(10, digits).toDouble();
+  final double scale = math.pow(10.0, digits).toDouble();
   final double x = value * scale;
   if (!x.isFinite || x.abs() >= _wholeAbove) {
     return value;
   }
-  return x.roundToDouble() / scale + 0.0;
+  // Parsing the decimal text rounds correctly where dividing by an inexact
+  // power of ten would not.
+  return double.parse('${x.roundToDouble().toInt()}e-$digits') + 0.0;
 }
 
 /// [value] snapped to the decimals of the unit [u] plus two.
@@ -364,7 +412,7 @@ double _snap(double value, double u) => _round(value, _decimals(u) + 2);
 
 /// The ticks from [min] to [max] by [u], snapped.
 List<double> _ticks(double min, double max, double u) {
-  final int digits = math.min(17, math.max(_decimals(u), _decimals(min)) + 2);
+  final int digits = math.max(_decimals(u), _decimals(min)) + 2;
   final int count = _guard((max - min) / u).floor();
   return <double>[for (int i = 0; i <= count; i++) _round(min + i * u, digits)];
 }
