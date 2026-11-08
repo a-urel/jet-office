@@ -284,10 +284,12 @@ final class DocxParagraph extends DocxBlock {
   /// Appends a run holding an inline picture of [image] and returns the
   /// picture.
   ///
-  /// The size is the image's pixels at 96 dots per inch (0.75 points each)
-  /// unless given: one of [widthPt] and [heightPt] scales the other by the
-  /// image's ratio, both are used as given. [name] is the picture's name and
-  /// [description] its alternative text. It works in the body, a table cell,
+  /// The size is the image's pixels at 96 dots per inch (0.75 points each),
+  /// scaled down by the image's ratio so that neither side passes 1584
+  /// points (22 inches, Word's bound), unless given: one of [widthPt] and
+  /// [heightPt] scales the other by the image's ratio, both are used as
+  /// given. [name] is the picture's name and [description] its alternative
+  /// text. It works in the body, a table cell,
   /// a header and a footer.
   ///
   /// The model holds the picture alone. Each save gives it what the file
@@ -301,9 +303,10 @@ final class DocxParagraph extends DocxBlock {
   ///
   /// An image that is not a PNG or a JPEG (`checkImage`), and a [name] or
   /// [description] that holds a character XML forbids, throw
-  /// [ArgumentError]; a side given or computed that is not finite, not above
-  /// 0 or above 1584 points (22 inches) throws [RangeError]. Nothing changes
-  /// when it throws; otherwise the add is one edit.
+  /// [ArgumentError]; a side given that is not finite, not above 0 or above
+  /// 1584 points throws [RangeError], and so does the side computed from the
+  /// one given when it passes 1584 points. Nothing changes when it throws;
+  /// otherwise the add is one edit.
   DocxPicture addPicture(
     OfficeImage image, {
     double? widthPt,

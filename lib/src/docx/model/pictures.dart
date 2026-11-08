@@ -138,12 +138,14 @@ OfficeImage? builtPictureImage(DocxPicture picture) => picture._built;
 String? builtPictureName(DocxPicture picture) => picture._givenName;
 
 /// The largest side of a built picture, in points: 22 inches, Word's bound.
+/// A picture sized from its pixels is scaled down to it; a side given, or
+/// computed from the one given, that passes it is refused.
 const double maxPictureSidePt = 1584;
 
 /// A new picture of [image], as `DocxParagraph.addPicture` builds it, sized
 /// and checked as that says: [checkImage] first ([ArgumentError] for an
-/// image that is not PNG or JPEG), then the size, then [name] and
-/// [description]. It throws before anything is built.
+/// image that is not PNG or JPEG), then the size ([RangeError]), then [name]
+/// and [description]. It throws before anything is built.
 DocxPicture checkedPicture(
   OfficeImage image, {
   double? widthPt,
@@ -164,9 +166,16 @@ DocxPicture checkedPicture(
     height = _checkSide(heightPt, 'heightPt');
     width = _checkSide(height * pixels.width / pixels.height, 'widthPt');
   } else {
-    // 96 pixels to the inch: 0.75 pt each.
-    width = _checkSide(pixels.width * 0.75, 'widthPt');
-    height = _checkSide(pixels.height * 0.75, 'heightPt');
+    // 96 pixels to the inch: 0.75 pt each, scaled down by the image's ratio
+    // when a side would pass the bound (Ruling L).
+    final double w = pixels.width * 0.75;
+    final double h = pixels.height * 0.75;
+    final double longest = w > h ? w : h;
+    final double scale = longest > maxPictureSidePt
+        ? maxPictureSidePt / longest
+        : 1;
+    width = _checkSide(w * scale, 'widthPt');
+    height = _checkSide(h * scale, 'heightPt');
   }
   _checkText(name, 'name');
   _checkText(description, 'description');

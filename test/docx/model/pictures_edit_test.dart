@@ -91,6 +91,46 @@ Uint8List _withImage3() {
   );
 }
 
+/// The first 24 bytes of a PNG of [width] by [height] pixels: its signature
+/// and the start of its `IHDR`, which is all `checkImage` reads of it.
+Uint8List _pngOfSize(int width, int height) {
+  int byte(int value, int shift) => (value >> shift) & 0xFF;
+  return Uint8List.fromList(<int>[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, //
+    0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, //
+    byte(width, 24), byte(width, 16), byte(width, 8), byte(width, 0), //
+    byte(height, 24), byte(height, 16), byte(height, 8), byte(height, 0), //
+    8, 2, 0, 0, 0, 0, 0, 0, 0, //
+  ]);
+}
+
+/// [_withImage3] with [rels] in place of the main part's relationships and
+/// [footer], when given, as `word/footer1.xml`, a footer part the main
+/// part's `rId2` names.
+Uint8List _withImage3And({required String rels, String? footer}) {
+  final Uint8List base = _withImage3();
+  final Map<String, Uint8List> entries = _entries(base);
+  return buildDocx(
+    document: utf8.decode(entries['word/document.xml']!),
+    extra: <String, List<int>>{
+      '[Content_Types].xml': utf8.encode(
+        '<Types xmlns="$contentTypesNs">'
+        '<Default Extension="rels" ContentType="${ContentType.relationships}"/>'
+        '<Default Extension="png" ContentType="image/png"/>'
+        '<Override PartName="/word/document.xml" '
+        'ContentType="${ContentType.wmlDocument}"/>'
+        '<Override PartName="/word/footer1.xml" '
+        'ContentType="${ContentType.wmlFooter}"/></Types>',
+      ),
+      'word/_rels/document.xml.rels': utf8.encode(
+        '<Relationships xmlns="$packageRelsNs">$rels</Relationships>',
+      ),
+      'word/media/image3.png': png4x2,
+      if (footer != null) 'word/footer1.xml': utf8.encode(footer),
+    },
+  );
+}
+
 /// A GIF's first bytes: a format neither PNG nor JPEG.
 final Uint8List _gif = Uint8List.fromList(utf8.encode('GIF89a\x04\x00'));
 
@@ -132,6 +172,18 @@ void main() {
         'Picture ${ids.single}',
       ]);
       expect(_values(main, 'a:blip', 'r:embed'), <String>[rels.single.$1]);
+    });
+
+    test('a large image with no size is scaled to fit 1584 pt', () {
+      final DocxDocument doc = DocxDocument();
+      final DocxPicture wide = _first(
+        doc,
+      ).addPicture(OfficeImage(_pngOfSize(3000, 1500)));
+      expect((wide.widthPt, wide.heightPt), (1584, 792));
+      final DocxPicture tall = _first(
+        doc,
+      ).addPicture(OfficeImage(_pngOfSize(100, 4000)));
+      expect((tall.widthPt, tall.heightPt), (39.6, 1584));
     });
 
     test('one side given scales the other; both are used as given', () {
@@ -220,6 +272,64 @@ void main() {
       final String main = utf8.decode(entries['word/document.xml']!);
       // The new docPr id is one more than the highest the file holds.
       expect(_values(main, 'wp:docPr', 'id'), <String>['7', '8']);
+    });
+
+    test('a name a dangling relationship targets is skipped', () {
+      final DocxDocument doc = DocxDocument.open(
+        _withImage3And(
+          rels:
+              '<Relationship Id="rId1" Type="${RelType.image}" '
+              'Target="media/image3.png"/>'
+              '<Relationship Id="rId9" Type="${RelType.image}" '
+              'Target="media/image4.png"/>',
+        ),
+      );
+      // Other bytes than image3.png's, so the image is not shared.
+      _first(doc).addPicture(OfficeImage(_pngOfSize(8, 8)));
+      final Map<String, Uint8List> entries = _entries(doc.save().bytes);
+      expect(_media(entries)..sort(), <String>[
+        'word/media/image3.png',
+        'word/media/image5.png',
+      ]);
+    });
+
+    test('an unreadable relationships part does not block a picture', () {
+      final DocxDocument doc = DocxDocument.open(
+        buildDocx(
+          document: utf8.decode(_entries(_withImage3())['word/document.xml']!),
+          extra: <String, List<int>>{
+            ..._entries(_withImage3()),
+            'word/other.xml': utf8.encode('<x/>'),
+            'word/_rels/other.xml.rels': utf8.encode('<Relationships'),
+          },
+        ),
+      );
+      _first(doc).addPicture(OfficeImage(jpeg3x5));
+      expect(
+        _media(_entries(doc.save().bytes)),
+        contains('word/media/image4.jpeg'),
+      );
+    });
+
+    test('a new docPr id goes past one held in a footer of the file', () {
+      final DocxDocument doc = DocxDocument.open(
+        _withImage3And(
+          rels:
+              '<Relationship Id="rId1" Type="${RelType.image}" '
+              'Target="media/image3.png"/>'
+              '<Relationship Id="rId2" Type="${RelType.footer}" '
+              'Target="footer1.xml"/>',
+          footer:
+              '<w:ftr xmlns:w="${Ns.w}" xmlns:wp="${Ns.wp}"><w:p><w:r>'
+              '<w:drawing><wp:inline><wp:docPr id="40" name="Foot"/>'
+              '</wp:inline></w:drawing></w:r></w:p></w:ftr>',
+        ),
+      );
+      _first(doc).addPicture(OfficeImage(png4x2));
+      final String main = utf8.decode(
+        _entries(doc.save().bytes)['word/document.xml']!,
+      );
+      expect(_values(main, 'wp:docPr', 'id'), <String>['7', '41']);
     });
 
     test('the image a file holds is shared, through its relationship', () {
@@ -367,7 +477,9 @@ void main() {
               p.addPicture(OfficeImage(png4x2), heightPt: double.infinity),
           'widthPt -1 with heightPt': (DocxParagraph p) =>
               p.addPicture(OfficeImage(png4x2), widthPt: -1, heightPt: 5),
-          'a computed side over 1584': (DocxParagraph p) =>
+          'a side computed from widthPt over 1584': (DocxParagraph p) =>
+              p.addPicture(OfficeImage(_pngOfSize(100, 4000)), widthPt: 50),
+          'a side computed from heightPt over 1584': (DocxParagraph p) =>
               p.addPicture(OfficeImage(png4x2), heightPt: 800),
           'a name with U+0001': (DocxParagraph p) =>
               p.addPicture(OfficeImage(png4x2), name: 'a\u0001'),
@@ -452,6 +564,42 @@ void main() {
         entries['[Content_Types].xml'],
         _entries(DocxDocument.open(input).save().bytes)['[Content_Types].xml'],
       );
+    });
+
+    test('setting the text of a built picture\'s run leaves no media', () {
+      final Uint8List input = DocxDocument().save().bytes;
+      final DocxDocument doc = DocxDocument.open(input);
+      final DocxParagraph p = _first(doc);
+      p.addPicture(OfficeImage(png4x2));
+      expect(_media(_entries(doc.save().bytes)), hasLength(1));
+      (p.inlines.single as DocxRun).text = 'words';
+      final Map<String, Uint8List> entries = _entries(doc.save().bytes);
+      expect(_media(entries), isEmpty);
+      expect(
+        entries['word/_rels/document.xml.rels'],
+        _entries(input)['word/_rels/document.xml.rels'],
+      );
+    });
+
+    test('a picture built in a paragraph of no document saves once in one', () {
+      final DocxParagraph p = DocxParagraph();
+      final DocxPicture picture = p.addPicture(OfficeImage(png4x2));
+      final DocxDocument doc = DocxDocument();
+      doc.body.insertBlock(1, p);
+      final Map<String, Uint8List> entries = _entries(doc.save().bytes);
+      expect(_media(entries), <String>['word/media/image1.png']);
+      final List<(String, String)> rels = _images(
+        utf8.decode(entries['word/_rels/document.xml.rels']!),
+      );
+      expect(
+        _values(
+          utf8.decode(entries['word/document.xml']!),
+          'a:blip',
+          'r:embed',
+        ),
+        <String>[rels.single.$1],
+      );
+      expect(picture.image!.bytes, png4x2);
     });
 
     test('a picture reads back typed, with its image', () {

@@ -37,7 +37,8 @@ library;
 import '../common/image.dart';
 import '../drawingml/media.dart';
 import '../opc/ooxml.dart' show RelType;
-import '../opc/package.dart' show OpcPackage, OpcRelationship;
+import '../opc/package.dart'
+    show OpcFormatException, OpcPackage, OpcRelationship;
 import 'docx_package.dart';
 import 'model/blocks.dart';
 import 'model/inlines.dart';
@@ -70,8 +71,9 @@ final class SavePlan {
   /// name), from that part: a relationship for each built hyperlink to an
   /// address, and for each media part of a built picture, which is added to
   /// the package when none holds its image. Throws a [DocxReadException]
-  /// naming the part's relationships part when it cannot be read, and the
-  /// media part that cannot be read when one cannot.
+  /// naming the part's relationships part when it cannot be read, and one
+  /// naming the main part when a media part of the package, which is read to
+  /// find the image, cannot be.
   void planPart(String part, List<DocxBlock> blocks) {
     visitStoryInlines(blocks, (DocxInline inline) {
       if (inline is DocxRun) {
@@ -180,7 +182,11 @@ final class SavePlan {
         ? '/word/media/'
         : '/';
     int n = _media.nextNumber();
-    while (!opc.isNewPartName('${folder}image$n.$extension')) {
+    // A name a relationship targets, a dangling one, is not free: the
+    // reference would come to show the new image (Ruling M).
+    final Set<String> targets = _relationshipTargets();
+    while (!opc.isNewPartName('${folder}image$n.$extension') ||
+        targets.contains('${folder}image$n.$extension'.toLowerCase())) {
       n++;
     }
     final bool declared = opc.ensureDefault(extension, format.contentType);
@@ -194,6 +200,36 @@ final class SavePlan {
     _added.add((part: name, extension: declared ? extension : null));
     return name;
   }
+
+  /// The lower-cased absolute names every internal relationship of the
+  /// package targets, found once per save; relationships parts are peeked,
+  /// never marked for rewriting, and one that cannot be read is passed over
+  /// (it targets nothing that blocks a name): a broken part elsewhere must
+  /// not keep a picture from the file.
+  Set<String> _relationshipTargets() {
+    final Set<String>? known = _targets;
+    if (known != null) return known;
+    final OpcPackage opc = _package.package;
+    final Set<String> targets = <String>{};
+    for (final String source in <String>['', ...opc.partNames]) {
+      final List<OpcRelationship> relationships;
+      try {
+        relationships = opc.peekRelationships(source);
+      } on OpcFormatException {
+        continue;
+      }
+      for (final OpcRelationship rel in relationships) {
+        if (rel.external) continue;
+        final String target = opc.resolve(source, rel.target);
+        targets.add(
+          (target.startsWith('/') ? target : '/$target').toLowerCase(),
+        );
+      }
+    }
+    return _targets = targets;
+  }
+
+  Set<String>? _targets;
 
   /// Takes back what the plan added to the package, newest first: each
   /// media part, the content type default it declared, and its entry in the

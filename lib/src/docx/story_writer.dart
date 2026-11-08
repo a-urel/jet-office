@@ -563,8 +563,12 @@ final class StoryWriter {
   }
 }
 
-/// [points] in EMU, 12,700 to the point, rounded.
-int _emu(double points) => (points * 12700).round();
+/// [points] in EMU, 12,700 to the point, rounded, and at least 1, so a side
+/// that rounds to nothing still shows.
+int _emu(double points) {
+  final int emu = (points * 12700).round();
+  return emu < 1 ? 1 : emu;
+}
 
 /// Whether text set through the API needs `xml:space="preserve"`: it starts
 /// or ends with whitespace, or holds two spaces in a row, which a reader
