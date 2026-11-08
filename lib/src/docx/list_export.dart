@@ -11,8 +11,10 @@ library;
 import 'package:jet_core/jet_core.dart';
 
 import '../common/image.dart';
+import '../common/name_key.dart';
 import '../common/properties.dart';
 import 'docx_document.dart';
+import 'model/blocks.dart';
 import 'model/formatting.dart';
 import 'model/section_formatting.dart';
 import 'model/table_properties.dart';
@@ -175,8 +177,17 @@ final class DocxListExport {
   /// `null` for none.
   final String? headerShading;
 
-  /// Writes the list into the last section of [document], one data row per
-  /// entry of [rows] and [totals] as a last row when given.
+  /// Writes the list into [document], one data row per entry of [rows] and
+  /// [totals] as a last row when given.
+  ///
+  /// Until the page, header, footer and look are added in later steps of D6,
+  /// the list is a plain table appended to the end of the body: a header row
+  /// that repeats, the data rows and the totals row, each cell holding the
+  /// value as Excel shows it. A `String` is written as given, `null` as an
+  /// empty cell, and a `num`, [FormatDecimal], `DateTime`, `Duration` or
+  /// `bool` through [NumberFormatter] with the column's
+  /// [DocxListColumn.numberFormat] and [locale] (`General` without a code, and
+  /// the locale's short date for a `DateTime` without one).
   ///
   /// Throws [ArgumentError], before [document] changes, for no columns or
   /// more than [maxTableColumns] (named `columns`), an empty header or one
@@ -184,16 +195,53 @@ final class DocxListExport {
   /// width that is not finite or not greater than 0 (`columns[i].widthPt`),
   /// a number format that cannot be read (`columns[i].numberFormat`), a
   /// [logoHeightPt] that is not finite or not greater than 0
-  /// (`logoHeightPt`) and a [headerShading] that is not six hex digits
-  /// (`headerShading`). Until the writing is added, a call that passes the
-  /// checks throws [UnimplementedError].
+  /// (`logoHeightPt`), a [headerShading] that is not six hex digits
+  /// (`headerShading`), [totals] longer than [columns] (`totals`) and a
+  /// [totals] value of an unsupported type (`totals[j]`). A row longer than
+  /// [columns] throws [ArgumentError] named `rows[i]`, `i` counting from 0,
+  /// and a value of an unsupported type named `rows[i][j]`, each before that
+  /// row is written. [rows] is read once, so the rows before it stay written.
   void writeTo(
     DocxDocument document,
     Iterable<List<Object?>> rows, {
     List<Object?>? totals,
   }) {
     _check();
-    throw UnimplementedError('DocxListExport writes in a later step of D6.');
+    final NumberFormatter formatter = NumberFormatter(locale: locale);
+    List<String>? totalsTexts;
+    if (totals != null) {
+      if (totals.length > columns.length) {
+        throw ArgumentError.value(
+          totals.length,
+          'totals',
+          'The totals have more values than the ${columns.length} columns.',
+        );
+      }
+      totalsTexts = <String>[
+        for (int j = 0; j < totals.length; j++)
+          _cellText(formatter, totals[j], columns[j], 'totals[$j]'),
+      ];
+    }
+    final DocxTable table = document.body.addTable(columns: columns.length);
+    table.addRow(<String>[
+      for (final DocxListColumn c in columns) c.header,
+    ], header: true);
+    int index = 0;
+    for (final List<Object?> row in rows) {
+      if (row.length > columns.length) {
+        throw ArgumentError.value(
+          row.length,
+          'rows[$index]',
+          'The row has more values than the ${columns.length} columns.',
+        );
+      }
+      table.addRow(<String>[
+        for (int j = 0; j < row.length; j++)
+          _cellText(formatter, row[j], columns[j], 'rows[$index][$j]'),
+      ]);
+      index++;
+    }
+    if (totalsTexts != null) table.addRow(totalsTexts);
   }
 
   /// A document of its own holding the list, with the document properties
@@ -203,8 +251,10 @@ final class DocxListExport {
     List<Object?>? totals,
     OfficeProperties properties = const OfficeProperties(),
   }) {
-    _check();
-    throw UnimplementedError('DocxListExport writes in a later step of D6.');
+    final DocxDocument document = DocxDocument();
+    writeTo(document, rows, totals: totals);
+    document.properties = properties;
+    return document.save();
   }
 
   @override
@@ -253,11 +303,39 @@ final class DocxListExport {
   @override
   String toString() =>
       'DocxListExport($columns, title: $title, logo: $logo, '
-      'logoHeightPt: ${_describe(logoHeightPt)}, date: $date, dateFormat: $dateFormat, '
-      'caption: $caption, pageSize: $pageSize, margins: $margins, '
+      'logoHeightPt: ${_describe(logoHeightPt)}, date: $date, '
+      'dateFormat: $dateFormat, caption: $caption, pageSize: $pageSize, margins: $margins, '
       'footerBefore: $footerBefore, footerMiddle: $footerMiddle, '
       'footerAfter: $footerAfter, locale: $locale, '
       'headerShading: $headerShading)';
+
+  /// [value] as the text of a cell of [column], as Excel shows it; [name] is
+  /// `rows[i][j]` or `totals[j]` for the error of an unsupported type.
+  static String _cellText(
+    NumberFormatter formatter,
+    Object? value,
+    DocxListColumn column,
+    String name,
+  ) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is DateTime && column.numberFormat == null) {
+      return formatter.format(value, numberFormatId: 14).text;
+    }
+    if (value is num ||
+        value is FormatDecimal ||
+        value is DateTime ||
+        value is Duration ||
+        value is bool) {
+      return formatter.format(value, numberFormat: column.numberFormat).text;
+    }
+    throw ArgumentError.value(
+      value,
+      name,
+      'A cell takes a String, num, FormatDecimal, DateTime, Duration, bool '
+      'or null.',
+    );
+  }
 
   static final RegExp _hex6 = RegExp(r'^[0-9A-Fa-f]{6}$');
 
@@ -289,7 +367,7 @@ final class DocxListExport {
           'A header must not be empty.',
         );
       }
-      final String key = c.header.toLowerCase();
+      final String key = officeNameKey(c.header);
       final String? earlier = seen[key];
       if (earlier != null) {
         throw ArgumentError.value(
