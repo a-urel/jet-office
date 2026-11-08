@@ -374,6 +374,9 @@ owning `*_test.dart` with the input minimized by hand, then fix it.
 The number formatter's fuzz test and `tool/fuzz_formatter.dart` are in
 `jet_core` (decision 0012).
 
+The chart layout's fuzz test and `tool/fuzz_layout.dart` are in
+`packages/jet_charts_core` (its `AGENTS.md`, "Fuzzing").
+
 `test/xlsx/model/feature_fuzz_test.dart` fuzzes the model's sheet and
 workbook features (seeds 1 to 4, 100 cases each, over the `m3_*` and `m4_*`
 fixtures, a sheet as Excel writes it and the `excel_objects` producer file:

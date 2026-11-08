@@ -74,6 +74,26 @@ findings.
 
 `docs/excel-checks.md` lists the Office theme values Excel has not confirmed.
 
+## Fuzzing
+
+`test/layout/fuzz_test.dart` lays out seeded random charts
+(`test/layout/support/chart_fuzz.dart`: every kind, 0 to 12 series, 0 to 60
+text, number or date categories, `NaN`, infinite and huge values, long titles,
+tiny to large sizes) and requires of each that `layoutChart` throws nothing,
+every number is finite, `findOverlaps` finds nothing and every primitive lies
+inside the size (marks inside a clip are checked for finiteness only). The gate
+runs seeds 1 to 4 with 100 cases each, the same cases on the VM and in Chrome
+(a fingerprint test proves it); longer runs by hand:
+
+```bash
+dart run tool/fuzz_layout.dart --seeds 1-200 --cases 1000
+```
+
+It prints each failure as `seed <s> case <i>: <problem>` and the chart, and
+exits 1 on any, 2 on unusable arguments. A failure is a layout defect: pin it
+as a unit test in the owning `test/layout/*_test.dart` with the input minimized
+by hand, then fix it.
+
 ## Hard rules
 
 - **Pure Dart, web-safe.** Nothing under `lib/` imports `dart:io`, `dart:ui`,
