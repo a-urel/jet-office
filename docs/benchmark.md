@@ -17,8 +17,8 @@ and measures the store of a formula-dense sheet ("Model figures" below). A
 sixth, `benchmark/docx_benchmark_test.dart`, builds a table of 12 columns of
 text, 2,500 and 10,000 rows, with `addTable` and `addRow`, saves it, opens it
 and reads every cell
-("DOCX table figures" below). A seventh, `benchmark/docx_model_benchmark_test.dart`,
-scales the owner's `long.docx` to about 40,000 paragraphs, opens it, changes
+("DOCX table figures" below). A seventh,
+`benchmark/docx_model_benchmark_test.dart`, scales the owner's `long.docx` to about 40,000 paragraphs, opens it, changes
 one paragraph and saves ("DOCX document figures" below).
 
 The figures below are records, not thresholds (spec section 5): nothing fails
@@ -833,7 +833,9 @@ part as it was. Word's markup is kept, with two changes: the `w:id` of each
 bookmark (shifted 1,000 a copy) and the number in each `_Toc` name (suffixed
 with the copy number, so the `PAGEREF` fields and hyperlink anchors pointing to
 the names follow) differ per copy; and the `w14:paraId` and `w14:textId`
-attributes, which are optional and meant to be unique, are dropped. The result
+attributes, which are optional and meant to be unique, are dropped. Other ids
+(`wp:docPr` ids, `_Ref` names) repeat across copies; the model does not check
+them. The result
 has 40,810 blocks, 40,040 of them paragraphs, and a main part of 34,981,100
 bytes of XML. On the VM the bytes are read from disk and in Chrome by
 `spawnHybridUri` (`benchmark/src/owner_file_hybrid.dart`); each platform
@@ -892,14 +894,15 @@ chrome | read back | block 20405 | "Changed by the benchmark"
   the 35 MB main part takes about 2.0 s on the VM and 3.0 s in Chrome, and
   adds 450 MB of RSS on the VM and 278 MB of JS heap in Chrome, about 11 KB and
   7 KB a paragraph of this markup (the figures include garbage not yet freed).
-- **Changing one paragraph costs nothing; saving costs half a load.**
+- **Changing one paragraph costs nothing; saving costs less than a load.**
   The edit is under a millisecond. The save, 0.9 s on the VM and 2.1 s in
   Chrome, re-encodes the main part from the model, since the body was loaded
-  and changed; a document whose body was never loaded is saved as read.
+  and changed; a document whose body was never loaded is saved as read. Saving
+  takes about half the time of loading on the VM (0.9 s against 2.0 s), but
+  nearly as long as loading in Chrome (2.1 s against 3.0 s).
 - **Reopening the saved bytes takes as long as the first load**, 1.9 s and
   3.2 s, as it loads the body again; the saved file is 21 percent smaller than
-  the input on the VM, as the repackaged input and the model's output are
-  deflated differently.
-- Two figures here are one run each on one machine, so they show the order of
-  magnitude and not a precise ratio, and the VM and Chrome memory figures
+  the input on the VM (and 24 percent in Chrome); this run does not say why.
+- Every figure here is one run on one machine, so the figures show the order
+  of magnitude and not a precise ratio, and the VM and Chrome memory figures
   measure different things and must not be compared.

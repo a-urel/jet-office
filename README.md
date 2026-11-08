@@ -1,18 +1,17 @@
 # jet_office
 
-A pure-Dart library that writes and reads XLSX files and, in progress, opens,
-edits and saves DOCX files. Bytes in, bytes out: it
-imports no Flutter, no `dart:io` and no `dart:ui`, so the same code runs on the
-web, on desktop and mobile, and on a Dart server. It has no editors, no
-rendering and no PDF.
+A pure-Dart library that writes and reads XLSX files and opens, edits,
+generates and saves DOCX files. Bytes in, bytes out: it imports no Flutter, no
+`dart:io` and no `dart:ui`, so the same code runs on the web, on desktop and
+mobile, and on a Dart server. It has no editors, no rendering and no PDF.
 
 ## Status
 
 Pre-release (`0.1.0-dev.1`). The package is not published to pub.dev
 (`publish_to: none`) until the owner decides. Phase 1 writes XLSX files and
 phase 2 reads them, and phase 3 opens, edits and saves them. Phase 4, DOCX,
-is in progress (milestones D1 to D4 of D1 to D6 are built and checked in Word,
-and D5 is built, pending the owner's Word check; see "DOCX" below).
+is built (milestones D1 to D6): D1 to D5 are checked in Word, and D6, the list
+export, is built and pending the owner's Word check; see "DOCX" below.
 
 ## Installing
 
@@ -158,7 +157,7 @@ adds a summary sheet written with `XlsxWriter`, and reads the file back with
 
 ## DOCX
 
-**In progress; the API may change before D6.** `DocxDocument` is a model of a
+`DocxDocument` is a model of a
 Word document: it starts a new one, or opens a file from bytes, lets you read
 and change the paragraphs of its body and saves it, keeping what you did not
 change. A new document looks like Word's blank one (A4, Aptos 12).
@@ -222,6 +221,37 @@ page.body.addParagraph('More at ')
 page.properties = const OfficeProperties(title: 'Quarterly report');
 final DocxResult linked = page.save();
 ```
+
+`DocxListExport` is the Word counterpart of `XlsxListExport`: a list under a
+page header (a logo, the report's name and its date) and a footer with the page
+number and the number of pages, as a table whose header row repeats on every
+page. A column's number format is an Excel code, shown through `NumberFormatter`
+in the locale you pass, and the totals row holds the values you give, since
+Word has no formulas:
+
+```dart
+const List<DocxListColumn> columns = <DocxListColumn>[
+  DocxListColumn('Code', widthPt: 80),
+  DocxListColumn('Amount', numberFormat: '#,##0.00'),
+];
+final DocxListExport export = DocxListExport(
+  columns,
+  title: 'Accounts',
+  date: DateTime(2026, 11, 8),
+);
+final DocxResult list = export.toDocx(
+  <List<Object?>>[
+    <Object?>['A-1', XlsxDecimal('1234.50')],
+    <Object?>['A-2', 99.5],
+  ],
+  totals: <Object?>['Total', XlsxDecimal('1334')],
+);
+```
+
+`export.writeTo(document, rows)` puts the list in the last section of a
+document you have, and `OfficeProperties.copyWith` changes one property of a
+file and keeps the rest. [`example/jet_office_example.dart`](example/jet_office_example.dart)
+writes the Excel list above and the same rows as a Word list.
 
 Paragraphs, runs and their text, tabs and breaks, their formatting, the
 styles, the numbering, tables, sections, headers, footers, complex fields,
@@ -341,11 +371,11 @@ with lower bounds: time and memory follow the size of the XML.
 
 ## Limits
 
-- XLSX is complete; DOCX is in progress (paragraphs, text, formatting,
+- XLSX is complete; DOCX is complete for phase 4 (paragraphs, text, formatting,
   styles, lists, tables, sections, headers, footers, fields, inline pictures,
-  hyperlinks, bookmarks and properties; no `DocxListExport`, floating pictures
-  or charts yet). The writer writes
-  no charts, pivot tables, macros or encryption.
+  hyperlinks, bookmarks, properties and `DocxListExport`); floating pictures,
+  charts, notes and comments are kept as written but not typed. The writer
+  writes no charts, pivot tables, macros or encryption.
 - The reader reads values, formulas, number formats and merged ranges; it
   reads no other styles, notes, pictures or tables, and does not calculate
   formulas. It refuses Strict OOXML, `.xlsb`, legacy `.xls` and encrypted

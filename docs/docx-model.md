@@ -11,9 +11,11 @@ WordprocessingML.
 
 This page covers milestone D1, the foundation, milestone D2, formatting,
 styles and lists, milestone D3, tables, milestone D4, sections, headers,
-footers and fields, and milestone D5, pictures, hyperlinks, bookmarks and
-document properties. **The DOCX API is in progress and
-may change before D6**; the names are fixed at D6 (decision 0010).
+footers and fields, milestone D5, pictures, hyperlinks, bookmarks and
+document properties, and milestone D6, the list export. **The names are fixed
+as of D6** (decision 0010): the DOCX API is complete for phase 4, and a later
+rename is a breaking change. D6 renamed three symbols that D1 to D5 had
+published only inside the repository (see "What D6 does").
 
 ```dart
 final DocxDocument doc = DocxDocument.open(bytes);
@@ -73,6 +75,22 @@ doc.body.addParagraph('See ')
   ..addRun(' or go back to ')
   ..addHyperlink('the top', anchor: 'Top');
 doc.properties = const OfficeProperties(title: 'Report');
+```
+
+A list under a page header and footer (D6):
+
+```dart
+final DocxResult out = DocxListExport(
+  const <DocxListColumn>[
+    DocxListColumn('Code', widthPt: 80),
+    DocxListColumn('Amount', numberFormat: '#,##0.00'),
+  ],
+  title: 'Accounts',
+  date: DateTime(2026, 11, 8),
+).toDocx(<List<Object?>>[
+  <Object?>['A-1', 1234.5],
+  <Object?>['A-2', 99.5],
+]);
 ```
 
 ## What D1 does and does not do
@@ -237,6 +255,65 @@ doc.properties = const OfficeProperties(title: 'Report');
   `w:docLocation` (kept on a read link, as read), `w14:paraId`, and a
   bookmark between blocks or in a table row. A linked picture is typed, with
   `image` `null`.
+
+## What D6 does
+
+- **`DocxListExport`, a list as a Word document.** The Word counterpart of
+  `XlsxListExport`: `DocxListExport(columns, ...)` with `writeTo(document,
+  rows, {totals})`, which writes a list into the last section of a document
+  that exists, and `toDocx(rows, {totals, properties})`, which returns a
+  document of its own. It composes the public model's calls and writes no XML
+  of its own (a guard test keeps `list_export.dart` to the barrel's files,
+  `lib/src/common/` and `package:jet_core`).
+- **The page, every page.** A header paragraph with the logo at the left, the
+  report name centred in bold and the date at the right (a centre and a right
+  tab stop at the text width); a footer with the caller's text around `PAGE`
+  and `NUMPAGES` (`Page 2 of 3` by default, `Sayfa 2 / 3` with
+  `footerBefore: 'Sayfa '` and `footerMiddle: ' / '`); an optional caption
+  above the table. The size is A4 portrait and the margins are Word's blank
+  document's (2.5 cm; header and footer 1.25 cm) unless the caller gives them.
+- **The table.** `Table Grid`, one column per `DocxListColumn`, a header row
+  that is bold, shaded `D9D9D9` (or the caller's `headerShading`, or none),
+  repeated on every page and never split, then the data rows, then the totals
+  row when the caller gives one. A column with a number format is aligned to
+  the end of the line unless the column says otherwise.
+- **Values as Excel shows them.** A cell's text comes from `jet_core`'s
+  `NumberFormatter` with the column's Excel number format code and the
+  export's `locale`: a number, a `FormatDecimal` (so an `XlsxDecimal`, and the
+  rows of an Excel list export can be passed as they are), a `DateTime`, a
+  `Duration` or a `bool`. A `String` is written as given, `null` is an empty
+  cell, anything else throws.
+- **Totals come from the caller.** Word has no formulas, so `totals` holds the
+  values to show, formatted like the data; the helper adds nothing up.
+- **The date is text.** `date` is the report's date as the caller gives it,
+  written with `dateFormat` (the locale's short date by default), not a `DATE`
+  field, which would show the day the file is opened.
+- **Programmer errors throw, data problems warn, as everywhere.** A bad column
+  list, header, width, number or date format code, logo height, header
+  shading or totals value throws `ArgumentError` naming the field, before the
+  document changes; a control character in a text still warns
+  `invalidCharactersRemoved`. No new warning code.
+- **`OfficeProperties.copyWith`** replaces the fields it is given and keeps
+  the others (it closes the gap of D5 that `tool/edit_docx.dart` had called
+  `_withTitle`; it works for `XlsxWorkbook.properties` too).
+- **Names are fixed.** The dartdoc review of the whole DOCX surface renamed
+  `DocxTable.insertRowAt` to `insertRow` and `DocxTableRow.insertCellAt` to
+  `insertCell` (the other containers' inserts are `insertBlock` and
+  `insertInline`), and `DocxCellAlignment` to `DocxCellVerticalAlignment` (it
+  is the vertical alignment of a cell and, beside `DocxAlignment` and
+  `DocxVerticalAlign`, the old name read as the paragraph's). None had been
+  released, so the old names are gone. Three names that were questioned stay,
+  each with its reason: `DocxVerticalAlign` mirrors `w:vertAlign` and the
+  member `verticalAlign`, and its values `superscript` and `subscript` cannot
+  be confused with a cell's or a section's alignment; the `DocxTextDirection`
+  values `lrTbV`, `tbRlV` and `tbLrV` mirror `ST_TextDirection`; and
+  `DocxAlignment` keeps the bare name, since a paragraph's `w:jc` is the common
+  alignment.
+- **A benchmark of a large Word document** (`benchmark/docx_model_benchmark_test.dart`,
+  figures in [`benchmark.md`](benchmark.md)): the owner's `long.docx` repeated
+  to about 40,000 paragraphs is opened, loaded, changed and saved.
+- **The fuzz** runs 900 cases a seed instead of 750, the D6 fixtures joining
+  the corpus.
 
 ## Known gaps
 
@@ -486,6 +563,45 @@ doc.properties = const OfficeProperties(title: 'Report');
   `w:tgtFrame`, `w:history` and `w:docLocation` (kept as read), charts and
   `w14:paraId`. A read picture or a read link's target cannot be changed in
   D5; a read picture is removed with its run.
+
+### Known gaps of D6
+
+- **The helper adds nothing up and measures nothing.** `totals` are the
+  caller's values; a column without a `widthPt` takes an equal share of the
+  width that is left, since a pure-Dart library has no font metrics, so a long
+  text wraps rather than widening its column.
+- **The header's date is fixed text.** It shows the day the caller gave, not
+  the day the file is opened (a deliberate choice, owner decision O2); a caller
+  who wants Word's own date changes the header's paragraph after the export.
+- **A list goes in the last section only, and replaces what that section shows.**
+  `writeTo` sets the last section's page, header and footer. A cover or a
+  letter before the list is the caller's, through `addSection`. With
+  `DocxDocument.evenAndOddHeaders` on, the even pages still show the section's
+  old even header and footer (only the default ones are replaced), and the
+  first-page and even-page stories are left alone. A section with a title page
+  has it turned off, so that its first page shows the list's header (test:
+  `test/docx/list_export_test.dart`, "a title page is turned off so page 1
+  shows the header").
+- **No header written leaves an inherited one.** With no logo, title or date,
+  the section's own default header is removed and none is made, so the section
+  may still show an earlier section's header (test: "with nothing for the
+  header the section's own is dropped").
+- **A row that cannot be written stays half written.** `rows` is read once,
+  as it goes: a row longer than the columns or with a value of an unsupported
+  type throws after the page, caption and table were written, so the rows
+  before it stay in the document and the table has no totals row and no
+  closing paragraph. Everything that can be checked up front (columns, formats,
+  totals, the page) is, and throws before the document changes (test: "a row
+  longer than the columns is named and earlier rows stay").
+- **Widths given in full are not held to the page.** When every column has a
+  `widthPt`, they are written as given, even past the margins (test: "every
+  width given is written as given, even past the page").
+- **The benchmark document is scaled, not a real large file.** The owner had no
+  Word file of 100 pages or more, so `docx_model_benchmark_test.dart` repeats
+  the markup of `long.docx` (bookmark ids and `_Toc` names made unique per copy;
+  `wp:docPr` ids and `_Ref` names repeat, which the model does not check). Its
+  figures show the order of magnitude of a long document's cost, not of a
+  particular one.
 
 ## Rules the model enforces
 
@@ -1009,6 +1125,42 @@ letters are rulings its ledger made while the tasks ran.
 | `tool/edit_docx.dart` on D5 | adds, in the new section, a paragraph with a 4 by 2 pixel PNG (3 by 1.5 pt), an external link and an internal link to the bookmark `Model_edit` around the heading, sets the title and keeps every other property; checks each reads back; the allowed changed parts grow by the core part (and `_rels/.rels` and the extended part when the file lacks a core part), at most one new media part, and relationships of the main part of the hyperlink and image types only | CI validates the edited files with the Open XML SDK | `test/tool/edit_docx_test.dart`, group "pictures, links, bookmarks and properties" |
 | The fuzz | seeds 1 to 4 at 750 cases each: the D5 fixtures and `drawings_by_hand` (inline, anchored, linked and broken pictures, broken links, bookmarks with bad ids, a header with a picture and a link, properties that cannot be read) join the corpus, and the values of the properties parts are mutated as element text as much as attributes; every picture, link, bookmark and property is read, the properties are set, a picture, a bookmark pair and two links are added to a body paragraph and to the last footer, and the saved file must hold them | the fixed seeds must mutate every part name of the corpus: 600 left one footer part of `d4_headers` unmutated | `test/docx/fuzz_test.dart` ("drawings_by_hand reads its pictures, links, bookmarks and properties", "values of the core, app and custom properties parts are replaced", "every part name is mutated in some corpus entry") |
 
+### The list export
+
+A list written by `DocxListExport` follows these rules. Tests are in `test/docx/list_export_test.dart` unless
+named otherwise.
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| A list's columns and fields | `DocxListColumn` and `DocxListExport` compare by value over every field, print every field in `toString`, keep the documented defaults and copy the columns into an unmodifiable list; the constructors check nothing | the checks belong to `writeTo` and `toDocx`, where the page is known | groups "DocxListColumn" and "DocxListExport" ("== and hashCode cover every field", "toString names every field", "has the documented defaults", "the columns are unmodifiable and copied") |
+| No columns, more than `maxTableColumns`, an empty header, a header repeated ignoring case (Turkish case included), a width not finite or not above 0 | `ArgumentError` named `columns`, `columns[i].header` or `columns[i].widthPt`, before the document changes | a programmer error in the caller's own call | group "checks" ("no columns", "too many columns", "an empty header", "a header that repeats an earlier one ignoring case", "headers that differ only in Turkish case clash", "an infinite width", "a width of $width") |
+| A number format or a date format the formatter cannot read | `ArgumentError` named `columns[i].numberFormat` or `dateFormat`, found by formatting `0` and looking for `FormatWarning.invalidCode`; a readable code passes. Without the check an unreadable date code would show the serial number | a code is the caller's, and a cell that shows the wrong thing silently is worse than a throw; no warning code is added | group "checks" ("a number format that cannot be read", "a date format that cannot be read", "a date format that can be read passes the checks") |
+| A logo height not finite or not above 0, a header shading that is not six hex digits (either case passes) | `ArgumentError` named `logoHeightPt` or `headerShading` | as above | group "checks" ("a logo height of 0", "a logo height that is not finite", "a header shading that is not six hex digits", "a header shading in either case passes the checks") |
+| The page | A4 portrait and Word's blank-document margins (70.85 pt; header and footer 35.4 pt) when none is given; a given page size and margins are set as given, on the last section | the model's defaults are Word's | group "page" ("the defaults are A4 portrait and Word's blank margins", "a given page size and margins are set as given") |
+| The page header | One paragraph: the logo `logoHeightPt` high, a tab, the title in bold, a tab, the date as text, with a centre tab stop at half and a right one at the whole text width of the page set; a missing piece leaves its tab; the date without a code shows as the locale's short date | one line with the three pieces in their places | group "page" ("the header holds the logo, a tab, the title, a tab and the date", "the tab stops follow the text width of the page", "absent pieces leave their tabs", "the date shows in the locale's short date without a code") |
+| No logo, title or date | the section's own default header is removed and none is made (an earlier section's, if any, is then inherited); the footer is always written | an empty header part would only take room | group "page" ("with no logo, title or date there is no own header") and "in an opened document" ("with nothing for the header the section's own is dropped") |
+| The footer | One centred paragraph: `footerBefore`, a `PAGE` field, `footerMiddle`, a `NUMPAGES` field and `footerAfter`, each text left out when empty | `Page 2 of 3` and `Sayfa 2 / 3` | group "page" ("the footer is centred: Page, PAGE, of, NUMPAGES", "footer texts are replaced and empty ones left out") |
+| Writing into an opened document | The last section's header and footer are replaced; a title page is turned off whether or not a header is written, so page 1 shows the list's header and footer; the first-page and even-page stories are left alone | a first-page header would hide the list's header on page 1 | group "in an opened document" ("the last section's header and footer are replaced", "a title page is turned off so page 1 shows the header", "a title page is turned off with no header to write too") |
+| Cell values | A header row, the data rows and the totals row; a short row leaves its last cells empty; `null` is an empty cell; a string with a tab holds a `DocxTab`; a number, decimal, date, duration or boolean shows through `NumberFormatter` in the export's locale (`General` without a code; a boolean in `tr-TR`; a date without a code as the locale's short date) | the text is what Excel would show | group "values" ("a header row, the data rows and a totals row", "a short row leaves its last cells empty", "a number with a code in tr-TR", "the same decimal in en-US reads as the formatter gives it", "General without a code, and a boolean in tr-TR", "a date without a code is the locale short date", "a date with a code", "a duration with a code", "a string with a tab holds a DocxTab", "null is an empty cell") |
+| A value of another type, a row or totals longer than the columns | `ArgumentError` named `rows[i][j]`, `rows[i]`, `totals[j]` or `totals`; the totals are checked before anything is written, the rows as they are written (earlier rows stay) | a value that cannot be shown is the caller's mistake | group "values" ("a value of another type is named", "a row longer than the columns is named and earlier rows stay", "totals are checked before anything is written") |
+| The body | A caption (one bold 14 pt run), the table and one empty paragraph; no empty paragraph before the list in a new document; a last empty paragraph that ends a section or follows a table is kept; two lists written one after the other are two tables with a paragraph between; a letter before the list stays | Word wants a paragraph after a table, and two tables with none join | group "body" ("a caption, the table and one empty paragraph, no leading one", "without a caption the table comes first", "a body ending in a paragraph with a section break keeps it", "writing twice gives two tables with a paragraph between", "a second caption stands after the separating paragraph", "a letter before the list stays") |
+| Widths | A column's `widthPt` as given; columns without one share what is left of the text width of the page the list sets, equally, and the shares must exceed 1 pt each or `columns` throws before the document changes; every width given is written as given | nothing is measured | group "body" ("the grid has the given widths and shares the rest equally", "all widths null share the text width", "the widths follow the page the list sets", "widths that leave nothing throw before the document changes", "the check uses the page the list sets", "every width given is written as given, even past the page") |
+| The look | The header row repeats, never splits, holds bold runs and is shaded `headerShading` (none for `null`; lower case is stored as RGB); the totals row is bold and unshaded; a column with a number format is aligned `end`, header and totals too, and a column's `alignment` wins; an empty cell has no run to make bold | Table Grid with a grey header, as owner decision O5 | group "body" ("the header row repeats, holds bold runs and is shaded", "headerShading null leaves the header unshaded", "headerShading in lower case is stored as RGB", "a number format aligns to the end, header and cells", "a column alignment wins, header and totals too", "the totals row is last and bold, without shading", "no rows: the header and totals rows only", "an empty cell has no run to make bold") |
+| The saved file | opens without warnings and round-trips; a control character in a text warns `invalidCharactersRemoved`; `toDocx` sets the given properties and, with the default ones, saves no `docProps` part | the list is an ordinary document | group "body" ("the saved bytes open without warnings and round trip", "a control character warns", "toDocx sets the title") and group "values" ("toDocx saves a document that reads back, with its properties", "toDocx with default properties saves no docProps part") |
+| The layering | `lib/src/docx/list_export.dart` imports only `package:jet_core`, `lib/src/common/` and the docx files the barrel exports | the helper is a composition of the public model | `test/architecture/layering_test.dart` ("lib/src/docx/list_export.dart imports only exported docx files", "the list export guard flags an import") |
+| `OfficeProperties.copyWith` | replaces the fields given and keeps the others; `null` keeps; no argument equals the original; each field alone changes only itself | closes the `_withTitle` gap of D5 | `test/common/properties_test.dart`, group "copyWith" |
+
+### D6 fixtures and tools
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| The two D6 fixtures (`d6_list`, `d6_list_landscape`) | build the same bytes every time with no warnings, read their text, round-trip, and none ends in a table: each ends in the helper's empty paragraph | the validation starts from them | `test/docx/round_trip_test.dart` (the fixture count and "no fixture ends in a table or a section break"), `test/tool/docx_tools_test.dart` and `test/tool/docx_serialize_test.dart` (every fixture of `docxFixtures()`) |
+| What the fixtures hold | `d6_list`: a 4 by 2 pixel PNG logo 20 pt high, the title `Müşteri listesi`, the date `08.11.2026`, a caption, five columns (a code, a name with the letters ç ğ ı İ ö ş ü among them, a date, an amount as `#,##0.00 ₺`, a share as `0%`), 120 rows over three A4 portrait pages, a totals row `Toplam` and the footer `Sayfa 1 / 3`; `d6_list_landscape`: English, no logo, twelve columns (four with a width), 40 rows on landscape A4 with 36 pt margins, no totals | the Word check looks for these (`word-checks.md`) | `test/docx/list_export_test.dart`, group "the D6 fixtures, by hand" ("d6_list: 122 rows, the totals last", "d6_list: the header shows the date, the footer the page", "d6_list_landscape: 41 rows of 12 cells") |
+| `<name>.stories.txt` of both | the header (a tab, `Müşteri listesi`, a tab and `08.11.2026`; for the landscape one `Monthly figures` and `11/8/26`) and the footer as `Sayfa {PAGE} / {NUMPAGES}` (`Page {PAGE} of {NUMPAGES}`), compared with LibreOffice's re-save | a re-save keeps what a page shows | `test/tool/docx_tools_test.dart` ("writes the text of the stories, only for those that have it"), `test/tool/text_compare_test.dart`, group "docxStoriesText" |
+| `tool/edit_docx.dart` and `tool/edit_model.dart` | set the title with `properties.copyWith(title: ...)`, so every other property of the file is kept | the owner's files keep their authors and dates | `test/tool/edit_docx_test.dart`, group "pictures, links, bookmarks and properties" |
+| The fuzz | seeds 1 to 4 at 900 cases each (750 before): the D6 fixtures join the corpus, so the fixed seeds still mutate every part name | the corpus grew by two fixtures and their header and footer parts | `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry", "mutated files raise only DocxReadException") |
+| The benchmark | `benchmark/docx_model_benchmark_test.dart` repeats the body of `long.docx` to about 40,000 paragraphs, opens it, loads the body, changes a paragraph, saves and reopens; it records figures and judges none | the fidelity standard says nothing of speed; a large document must still open | run by hand (`AGENTS.md`, "Benchmark"; `benchmark.md`, "DOCX document figures") |
+
 ### Checks outside the unit tests
 
 | Case | Behaviour | Why | Test |
@@ -1019,7 +1171,7 @@ letters are rulings its ledger made while the tasks ran.
 
 ## Port map
 
-D5 ports one writer. The file below names its Quds source path and commit in
+D5 ports one writer (D6 none). The file below names its Quds source path and commit in
 its library doc comment (AGENTS.md). Quds paths are relative to
 `../quds_office_suite/packages/quds_office_engine/lib/src/`, at commit
 `15c5d29`.
@@ -1027,6 +1179,9 @@ its library doc comment (AGENTS.md). Quds paths are relative to
 | jet_office file (`lib/src/`) | Ported from Quds | Changes |
 |---|---|---|
 | `docx/drawing.dart` (`writeInlineDrawing`) | `word/serial/word_drawing_io.dart` (`WordDrawingIo.writeInline`, the inline branch of `_writeAnchorOrInline`) | Writes the `wp:inline` alone (the story writer wraps it in `w:drawing` and a run, not a paragraph); no anchor, wrapping, shadow, outline, cropping or aspect switch (a built picture is inline with its aspect locked); `descr` only when given; `pic:cNvPr` repeats the `wp:docPr` id; `pic:pic` comes from the shared `drawingml/picture.dart`; `wp`, `a`, `pic` and `r` are declared only where the bindings above lack them. The reader in the same file is jet_office's own. |
+
+D6 ports nothing: `DocxListExport` is new in jet_office (Quds has no list
+export) and says so in its library doc comment.
 
 D2 read Quds' `wml_properties.dart` and `word_styles.dart` and ported
 neither: the enumerations are transcribed from ECMA-376 (Part 1, §17.18),
@@ -1052,7 +1207,7 @@ aggregator and the read guard (`lib/src/common/`), and the change log.
   owner's Word files with the Open XML SDK, compares LibreOffice's text
   export and re-save of every fixture with the expected texts, and proves
   each check rejects the deliberately broken `d1_corrupt.docx` (AGENTS.md,
-  "Validation"). The D2, D3, D4 and D5 fixtures, the edits of
+  "Validation"). The D2 to D6 fixtures, the edits of
   `tool/edit_docx.dart` and the model's own encoding of the styles, numbering,
   header, footer and properties parts go through the same checks; the
   LibreOffice re-save is validated with `--libreoffice-resave`, which ignores
@@ -1060,6 +1215,6 @@ aggregator and the read guard (`lib/src/common/`), and the change log.
   `w:cantSplit`, of the same type: values the model keeps as read.
 - Neither is Word. The owner opens each D milestone's fixtures and round
   trips in Word for Mac and records the result in
-  [`word-checks.md`](word-checks.md); its D2, D3, D4 and D5 sections say what
-  to look for, D3 adds a document whose body ends in a table, and D4 one whose
-  last block carries a section break.
+  [`word-checks.md`](word-checks.md); its D2 to D6 sections say what
+  to look for, D3 adds a document whose body ends in a table, D4 one whose
+  last block carries a section break, and D6 the benchmark's large document.

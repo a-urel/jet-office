@@ -12,6 +12,9 @@
 /// bookmark and the numbers in the `_Toc` names (and so in the `PAGEREF` and
 /// hyperlink anchors that point to them) differ per copy, and the
 /// `w14:paraId` and `w14:textId` attributes are dropped (they are optional).
+/// Only bookmark ids and `_Toc` names are made unique per copy: other ids,
+/// such as `wp:docPr` ids and `_Ref` names, may repeat across copies, which
+/// the model does not check.
 /// The bytes are read from disk on the VM and by `spawnHybridUri` in Chrome
 /// (`src/owner_file_hybrid.dart`), then built once; each platform deflates and
 /// opens its own bytes (decision 0006). Phases: open, load the body, set the

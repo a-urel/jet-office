@@ -4,7 +4,7 @@
 
 ### Added
 
-#### Phase 4, DOCX, D1 (foundation; the API may change before D6)
+#### Phase 4, DOCX, D1 (foundation)
 
 - `DocxDocument` opens a DOCX file from bytes (`DocxDocument.open`, within
   `DocxReadLimits`), reads and edits the paragraphs of its body, and saves
@@ -40,7 +40,7 @@
   test in the gate. The owner's Word check is recorded in
   `docs/word-checks.md`; the rules are in `docs/docx-model.md`.
 
-#### Phase 4, DOCX, D2 (formatting, styles and lists; the API may change before D6)
+#### Phase 4, DOCX, D2 (formatting, styles and lists)
 
 - Run and paragraph properties are typed: `DocxRun.properties`
   (`DocxRunProperties`: fonts, bold, italic, caps, small caps, strike,
@@ -81,7 +81,62 @@
   attributes. The owner's Word check is in `docs/word-checks.md`; the rules,
   each with its test, are in `docs/docx-model.md`.
 
-#### Phase 4, DOCX, D5 (pictures, hyperlinks, bookmarks and properties; the API may change before D6)
+#### Phase 4, DOCX, D3 (tables)
+
+- `DocxTable`, `DocxTableRow` and `DocxTableCell` type a `w:tbl` in the body or
+  in a cell, so tables nest. `DocxTable.gridColumnsPt` is the grid in points
+  and `DocxTableCell.text` the text of a cell; what lies between the typed
+  `w:tr` and `w:tc` is kept as written.
+- Typed properties, each a nullable get and set: `DocxTable.properties`
+  (`style`, `width`, `layout`, `alignment`, `indentationPt`, `borders`,
+  `cellMargins`, `look`), `DocxTableRow.properties` (`height`, `cantSplit`,
+  `repeatAsHeader`, and `isHeader` on the row) and `DocxTableCell.properties`
+  (`width`, `gridSpan`, `verticalMerge`, `verticalAlignment`, `shading`,
+  `borders`, `textDirection`), with the values `DocxTableWidth`,
+  `DocxTableBorders`, `DocxCellBorders`, `DocxTableMargins`, `DocxTableLook`,
+  `DocxRowHeight` and their enumerations.
+- Building: `DocxBody.addTable` writes what Word's Insert Table writes (the
+  style `Table Grid`, an automatic width, the look `04A0`, equal column
+  widths); `DocxTable.addRow` adds a row of text, `DocxTableCell.addTable`
+  nests a table, and `DocxTable.new`, `DocxTableRow.new` and
+  `DocxTableCell.new` build parts to insert later. Editing: rows, cells and the
+  blocks of a cell, and `DocxTable.mergeCells`, which merges across and down as
+  Word does. Each edit is atomic.
+- Kept as written, never typed: floating tables, table cell spacing, a table's
+  own shading, captions, `w:cnfStyle`, `w:hMerge` and the revision children.
+- Verification: five D3 fixtures, a table that ends a body (`tool/write_table_last.dart`,
+  for Word alone), edited owner files with a table, and a fuzz corpus entry
+  with every element of the table values. The rules and the known gaps are in
+  `docs/docx-model.md`; the owner's Word check is in `docs/word-checks.md`.
+
+#### Phase 4, DOCX, D4 (sections, headers, footers and fields)
+
+- `DocxDocument.sections` lists each `DocxSection`: its `pageSize`, `margins`,
+  `columns`, `start`, `titlePage`, `verticalAlignment`, `pageNumbering` and
+  `lineNumbering`, each a nullable get and set, and `textWidthPt`.
+  `DocxBody.addSection` ends the last section and starts a new one, as Word's
+  Insert Break does; the final `w:sectPr`, opaque in D1, is typed.
+- Headers and footers: a section's `header`, `firstHeader`, `evenHeader`,
+  `footer`, `firstFooter` and `evenFooter` give a `DocxHeaderFooter`, its own
+  story or the nearest previous section's (`isInherited`); it is a `DocxStory`
+  like the body, so tables and lists go in it. `ownHeader`, `ownFooter`,
+  `removeHeader` and `removeFooter` unlink and link a section, and
+  `DocxDocument.evenAndOddHeaders` is the one typed child of `settings.xml`.
+  Story parts, their relationships and content types are created at save.
+- `DocxField` types a complex field of one paragraph (`instruction`, `name`,
+  `result`, `resultText`, `properties`), with `.page()`, `.numPages()`,
+  `.sectionPages()`, `.date()` and `.time()` and `DocxParagraph.addField`;
+  `DocxFieldMark` and `DocxFieldInstruction` are the run content around it.
+  The model does not evaluate a field: its text is the cached result.
+- No new warning code and no new read limit.
+- Verification: three D4 fixtures (`d4_sections`, `d4_headers`, `d4_fields`),
+  a document whose last block carries a section break (for Word alone), the
+  stories in the round trip and in LibreOffice's re-save text, edited owner
+  files with a footer and a landscape section, and a fuzz corpus entry of
+  every section child and six stories. The rules and the known gaps are in
+  `docs/docx-model.md`; the owner's Word check is in `docs/word-checks.md`.
+
+#### Phase 4, DOCX, D5 (pictures, hyperlinks, bookmarks and properties)
 
 - `DocxDocument.properties`: the core, extended and custom document
   properties as `OfficeProperties`, the type `XlsxWorkbook.properties` gives
@@ -110,6 +165,43 @@
   test, and the known gaps are in `docs/docx-model.md`; the owner's Word check
   is in `docs/word-checks.md`.
 
+#### Phase 4, DOCX, D6 (the list export; the names are fixed)
+
+- `DocxListExport` and `DocxListColumn`: the Word counterpart of
+  `XlsxListExport`. `writeTo(document, rows, {totals})` writes a list into the
+  last section of a document, `toDocx(rows, {totals, properties})` returns a
+  document of its own. Every page has a header (a logo at the left, the
+  report's name centred in bold, the date at the right) and a footer with the
+  page number and the number of pages (`Page 2 of 3`, or the caller's text);
+  an optional caption stands above the table. The table is `Table Grid`, with a
+  header row that is bold, shaded, repeated on every page and never split, the
+  data rows and a totals row; a column with a number format is aligned to the
+  end. The page is A4 portrait with Word's blank-document margins unless the
+  caller gives others.
+- Values show as Excel shows them: a `num`, `FormatDecimal` (so an
+  `XlsxDecimal`), `DateTime`, `Duration` or `bool` goes through jet_core's
+  `NumberFormatter` with the column's number format code and the export's
+  locale. The totals are the caller's values (Word has no formulas), and the
+  date is fixed text, not a `DATE` field. A bad column, header, width, number
+  or date format code, logo height, header shading or value throws
+  `ArgumentError` naming the field before the document changes; no new warning
+  code.
+- `OfficeProperties.copyWith` replaces the given fields and keeps the others
+  (settles D5's gap; `tool/edit_docx.dart` and `tool/edit_model.dart` use it).
+- Renamed, with no aliases (none had been released): `DocxTable.insertRowAt` is
+  now `insertRow`, `DocxTableRow.insertCellAt` is now `insertCell`, and
+  `DocxCellAlignment` is now `DocxCellVerticalAlignment`. The dartdoc review of
+  the whole DOCX surface found no other change; `DocxVerticalAlign`, the short
+  `DocxTextDirection` values and `DocxAlignment` keep their names, with the
+  reasons in `docs/docx-model.md`. Update uses. The names are fixed as of D6.
+- Verification: two D6 fixtures (`d6_list`, a Turkish list of 120 rows with a
+  logo, a date, a totals row and `Sayfa 1 / 3`; `d6_list_landscape`, twelve
+  columns on landscape A4), a benchmark that opens, changes and saves a Word
+  document of about 40,000 paragraphs (figures in `docs/benchmark.md`), and a
+  fuzz run of 900 cases a seed. The rules and the known gaps are in
+  `docs/docx-model.md`; the owner's Word check is in `docs/word-checks.md`,
+  which also holds the German and Turkish check of the DOCX warning messages.
+
 ### Changed
 
 - Renamed the format-neutral public types, with no aliases: `XlsxLocale` is
@@ -119,6 +211,9 @@
   properties of an XLSX workbook to a value whose `revision` or `application`
   is null now removes `cp:revision` and `Application`, which were kept, untyped,
   before.
+- DOCX (D6): `DocxTable.insertRowAt` is now `insertRow`,
+  `DocxTableRow.insertCellAt` is now `insertCell` and `DocxCellAlignment` is
+  now `DocxCellVerticalAlignment`, with no aliases; the DOCX names are fixed.
 - The number format engine moved to the new package `jet_core` (decision
   0012), with neutral names and no aliases: `XlsxNumberFormatter` is now
   `NumberFormatter`, `XlsxFormatLocale` is `FormatLocale`,

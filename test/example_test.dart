@@ -49,4 +49,28 @@ void main() {
     ]);
     expect(read.warnings.single.cells, <String>['C6']);
   });
+
+  test('the example document holds the same accounts as a Word list', () {
+    final DocxResult out = buildExampleDocument();
+    expect(out.warnings.map((DocxWarning w) => w.code), <DocxWarningCode>[
+      DocxWarningCode.invalidCharactersRemoved,
+    ]);
+    final DocxDocument doc = DocxDocument.open(out.bytes);
+    final DocxTable table = doc.body.blocks.whereType<DocxTable>().single;
+    expect(
+      <List<String>>[
+        for (final DocxTableRow r in table.rows)
+          <String>[for (final DocxTableCell c in r.cells) c.text],
+      ],
+      <List<String>>[
+        <String>['Code', 'Customer', 'Balance', 'Opened'],
+        <String>['A-1', 'Acme Ltd', '1,234.50', '1/5/26'],
+        <String>['A-2', 'Birch & Co', '99.99', '3/17/26'],
+        <String>['A-3', 'Cedar GmbH', '480.00', '6/2/26'],
+        <String>['Total', '', '1,814.49', ''],
+      ],
+    );
+    expect(table.rows.first.isHeader, isTrue);
+    expect(doc.properties.title, 'Accounts');
+  });
 }

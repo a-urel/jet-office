@@ -148,7 +148,62 @@ DocxResult docxPictures(Uint8List logoPng) {
   return linked;
 }
 
+DocxResult docxListExport() {
+  const List<DocxListColumn> columns = <DocxListColumn>[
+    DocxListColumn('Code', widthPt: 80),
+    DocxListColumn('Amount', numberFormat: '#,##0.00'),
+  ];
+  final DocxListExport export = DocxListExport(
+    columns,
+    title: 'Accounts',
+    date: DateTime(2026, 11, 8),
+  );
+  final DocxResult list = export.toDocx(
+    <List<Object?>>[
+      <Object?>['A-1', XlsxDecimal('1234.50')],
+      <Object?>['A-2', 99.5],
+    ],
+    totals: <Object?>['Total', XlsxDecimal('1334')],
+  );
+  return list;
+}
+
 void main() {
+  test(
+    'README DOCX list export block saves a list with its page furniture',
+    () {
+      final DocxResult list = docxListExport();
+      expect(list.warnings, isEmpty);
+      final DocxDocument reopened = DocxDocument.open(list.bytes);
+      final DocxTable table = reopened.body.blocks
+          .whereType<DocxTable>()
+          .single;
+      expect(
+        <List<String>>[
+          for (final DocxTableRow r in table.rows)
+            <String>[for (final DocxTableCell c in r.cells) c.text],
+        ],
+        <List<String>>[
+          <String>['Code', 'Amount'],
+          <String>['A-1', '1,234.50'],
+          <String>['A-2', '99.50'],
+          <String>['Total', '1,334.00'],
+        ],
+      );
+      expect(table.rows.first.isHeader, isTrue);
+      final DocxSection section = reopened.sections.last;
+      expect(section.pageSize, DocxPageSize.a4());
+      expect(
+        (section.header.blocks.single as DocxParagraph).text,
+        '\tAccounts\t11/8/26',
+      );
+      expect(
+        (section.footer.blocks.single as DocxParagraph).text,
+        'Page 1 of 1',
+      );
+    },
+  );
+
   test('README DOCX pictures block saves a picture, a link and a title', () {
     final DocxResult linked = docxPictures(png4x2);
     expect(linked.warnings, isEmpty);

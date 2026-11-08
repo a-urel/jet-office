@@ -1,5 +1,7 @@
 // Writes `example.xlsx`, an accounts list and a summary sheet, then reads
-// it back with `XlsxReader` and prints the first rows of the list.
+// it back with `XlsxReader` and prints the first rows of the list. Then it
+// writes `example.docx`, the same accounts as a Word list with a page header
+// and footer.
 //
 // Run it from the repository root:
 //
@@ -84,6 +86,48 @@ XlsxResult buildExample() {
 /// The example workbook as bytes.
 Uint8List buildExampleWorkbook() => buildExample().bytes;
 
+/// Builds the same accounts as a Word document: a header with the report's
+/// name and date, the list with its header row repeated on every page, a
+/// totals row the caller adds up, and a footer with the page numbers.
+DocxResult buildExampleDocument() {
+  final DocxListExport list = DocxListExport(
+    const <DocxListColumn>[
+      DocxListColumn('Code', widthPt: 60),
+      DocxListColumn('Customer'),
+      DocxListColumn('Balance', widthPt: 90, numberFormat: '#,##0.00'),
+      DocxListColumn('Opened', widthPt: 80),
+    ],
+    title: 'Accounts',
+    date: DateTime(2026, 11, 8),
+    caption: 'Accounts',
+  );
+  // Word has no formulas: the totals are the values to show.
+  return list.toDocx(
+    <List<Object?>>[
+      <Object?>[
+        'A-1',
+        'Acme Ltd',
+        XlsxDecimal('1234.50'),
+        DateTime(2026, 1, 5),
+      ],
+      <Object?>[
+        'A-2',
+        'Birch & Co',
+        XlsxDecimal('99.99'),
+        DateTime(2026, 3, 17),
+      ],
+      <Object?>[
+        'A-3',
+        'Cedar\u0001 GmbH',
+        XlsxDecimal('480'),
+        DateTime(2026, 6, 2),
+      ],
+    ],
+    totals: <Object?>['Total', null, XlsxDecimal('1814.49'), null],
+    properties: const OfficeProperties(title: 'Accounts'),
+  );
+}
+
 /// What [readExample] reads: the sheet names, the cell values of the first
 /// rows of the `Accounts` sheet and the reader's warnings.
 typedef ExampleReadBack = ({
@@ -130,5 +174,13 @@ void main() {
   }
   for (final XlsxWarning warning in read.warnings) {
     stdout.writeln(warning.message());
+  }
+
+  // The same list as a Word document. Its warnings come in the same locales.
+  final DocxResult document = buildExampleDocument();
+  File('example.docx').writeAsBytesSync(document.bytes);
+  stdout.writeln('example.docx: ${document.bytes.length} bytes');
+  for (final DocxWarning warning in document.warnings) {
+    stdout.writeln(warning.message(OfficeLocale.tr));
   }
 }

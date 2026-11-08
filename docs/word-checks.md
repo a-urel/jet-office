@@ -23,13 +23,13 @@ dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 
 (The D2 and D3 sections below use the same commands; their folders hold the
 `d2_*` and `d3_*` documents as well. The D3 section adds one command, for a
-document that ends in a table. The D4 and D5 sections have commands of their
-own, which write to `build/d4/` and `build/d5/`.)
+document that ends in a table. The D4, D5 and D6 sections have commands of
+their own, which write to `build/d4/`, `build/d5/` and `build/d6/`.)
 
 `build/fixtures` also holds the workbooks of the Excel checks; open the
 `d1_*.docx` files (D1), the `d2_*.docx` files (D2) and the `d3_*.docx` files
-(D3); the `d4_*.docx` (D4) and `d5_*.docx` (D5) files are under `build/d4/` and
-`build/d5/`.
+(D3); the `d4_*.docx` (D4), `d5_*.docx` (D5) and `d6_*.docx` (D6) files are
+under `build/d4/`, `build/d5/` and `build/d6/`.
 `tool/round_trip_docx.dart` prints each difference between an input and the
 model's output and exits 1 on any, so run it first and expect none;
 `tool/edit_docx.dart` likewise prints each problem with an edited document
@@ -647,6 +647,155 @@ the links (addresses, the jump to the bookmark, the footer link) and the
 properties (Word now updates Modified, Last saved by and Revision number, the
 rest stays) are as before.
 
+## D6
+
+D6 adds `DocxListExport`, a list as a Word document: a header with a logo, a
+name and a date, a table whose header row repeats, a footer with the page
+number and the number of pages. Open the two D6 fixtures, their round trips,
+the round trips and edits of the owner's files and the benchmark's large
+document in Word for Mac. All of them are under `build/d6/`, the folder to
+open. Write them with:
+
+```bash
+dart run tool/write_fixtures.dart build/d6/fixtures
+dart run tool/round_trip_docx.dart build/d6/fixtures build/d6/model
+dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/d6/model-owner
+dart run tool/edit_docx.dart test/fixtures/owner/docx build/d6/edited-owner
+```
+
+`tool/round_trip_docx.dart` and `tool/edit_docx.dart` print each problem and
+exit 1 on any, so expect none. The benchmark's document is written by
+`dart test benchmark/docx_model_benchmark_test.dart` to
+`build/d6/benchmark/large.docx`; if that file is not there, skip its check and
+leave its row `not checked`.
+
+No repair prompt in any of them; then, per document, as below. As under D3 to
+D5, this section says what to look for: what each document should show comes
+from the code that wrote it and from the SDK, not from Word, so read every
+statement here as what to expect until the owner has looked. The result is
+recorded under "Results", and none is recorded here before then. A page's
+size and margins are in Layout > Size and Margins; a header or footer opens by
+double clicking it; Option-F9 shows a field's code (Option-F9 again hides it).
+
+### Fixtures: `build/d6/fixtures/d6_*.docx`
+
+- `d6_list`: three A4 portrait pages (Layout > Size: A4) with margins of
+  2.5 cm (Layout > Margins: Normal is 2.54 cm; here the top, bottom, left and
+  right read 2.5 cm) and a header and footer of 1.25 cm from the edge.
+  - **The header, on every page.** One line: a small picture at the left (a
+    4 × 2 pixel PNG scaled to 20 pt high, so a thin stripe: 0.71 cm high, 1.41 cm
+    wide), `Müşteri listesi` in bold in the middle of the line and the date
+    `08.11.2026` at the right edge. Click into the header and look at the
+    ruler: a centre tab stop at the middle of the text and a right tab stop at
+    its right edge. The date is plain text, not a field: it does not turn grey
+    when clicked and Option-F9 shows no code. Scroll to page 2 and page 3: the
+    same header.
+  - **The footer, on every page.** `Sayfa 1 / 3`, `Sayfa 2 / 3` and
+    `Sayfa 3 / 3`, centred. `1`, `2` and `3` are `PAGE` fields and `3` is a
+    `NUMPAGES` field: each turns grey when clicked, and Option-F9 shows ` PAGE `
+    and ` NUMPAGES `. If the total reads another number than the pages there
+    are, press Cmd-A then F9 to update the fields and report both.
+  - **The caption.** The first line of the body, `Kasım 2026 müşteri
+    bakiyeleri`, is bold and 14 pt, above the table.
+  - **The table.** Five columns, `Kod`, `Müşteri`, `Tarih`, `Tutar` and `Pay`, in
+    `Table Grid` (thin black borders on every cell). Table Properties > Column
+    shows `Kod` 2.12 cm, `Tarih` 2.47 cm, `Tutar` 3.17 cm and `Pay` 1.76 cm
+    (60, 70, 90 and 50 pt), and `Müşteri` taking what is left of the text
+    width. The header row is bold on light grey (Table Properties, Borders and
+    Shading: Fill `D9D9D9`, or Table Design > Shading: White, Background 1,
+    Darker 15%).
+  - **The header row repeats.** On page 2 and page 3 the first row of the table
+    is the grey header `Kod`, `Müşteri`, `Tarih`, `Tutar`, `Pay` again (Table
+    Properties > Row: Repeat as header row at the top of each page is ticked
+    on the first row, and Allow row to break across pages is off). No row is
+    split between two pages.
+  - **The data.** 120 rows, `M-1001` to `M-1120`. The first reads `M-1001`,
+    `Çağlar Işık`, `01.01.2026`, `1.234,50 ₺`, `0%`; the second `M-1002`,
+    `İpek Özdemir`, `02.02.2026`, `1.251,75 ₺`, `5%`; the last `M-1120`,
+    `Şükrü Doğan`, `08.12.2026`, `3.287,25 ₺`, `95%`. The Turkish letters ç ğ ı
+    İ ö ş ü read right (names cycle through six, among them `Gülşen Şahin`,
+    `Ümit Yıldız` and `Ömer Çelik`). The `Tarih`, `Tutar` and `Pay` columns, and
+    their headers, are aligned to the right edge of their cells (Home >
+    Align Right is highlighted in them), `Kod` and `Müşteri` to the left.
+  - **The totals, on the last page.** The last row reads `Toplam` in the first
+    cell, nothing in the next two and `271.305,00 ₺` in the `Tutar` column,
+    in bold, right-aligned, not shaded. It is a value written by the caller, not
+    a formula: a number written in a cell is not a field and Option-F9 shows
+    nothing there.
+  - **After the table.** Click at the end of the document: below the table is
+    one empty paragraph, as Word needs after a table. It does not start a page
+    of its own; if the last page holds only that paragraph, report it.
+  - **Fonts.** The text is in the document's own font (Aptos, 12 pt), not a
+    font of the helper's.
+- `d6_list_landscape`: A4 landscape (Layout > Orientation: Landscape) with
+  margins of 1.27 cm on all four sides and no gutter; the header and footer
+  still 1.25 cm from the edge.
+  - **The header, on every page.** No picture: a tab, `Monthly figures` in bold
+    in the middle and `11/8/26` (the English short date of 8 November 2026) at
+    the right edge. The footer reads `Page 1 of <n>`, centred, and `<n>` should
+    be 2 (41 rows on landscape A4); report the count Word makes if it is not.
+  - **The table.** Twelve columns, `Code`, `Name`, `Started`, `Amount` and
+    `Month 1` to `Month 8`, in `Table Grid`, the header row bold on light grey
+    and repeated at the top of every page. `Code`, `Name`, `Started` and
+    `Amount` are 1.76, 3.18, 2.12 and 2.47 cm wide (50, 90, 60 and 70 pt); the
+    eight month columns share the rest of the 27.16 cm text width equally, and
+    the table reaches both margins (with the ruler on, its right edge sits on
+    the right margin). **No column is cut off or wraps a number:** every month
+    cell fits on one line.
+  - **The data.** 40 rows, `C100` to `C139`. The first reads `C100`, `Item 1`,
+    `2026-01-01`, `10.50`, then `0.3`, `0.5`, `0.8`, `1.0`, `1.3`, `1.5`, `1.8`,
+    `2.0`; the second `C101`, `Item 2`, `2026-02-02`, `1,010.75`, `0.5`, `1.0`,
+    and so on. The `Started`, `Amount` and month columns are right-aligned.
+  - **No totals row:** the last row is `C139`.
+  - **After the table.** One empty paragraph, as in `d6_list`.
+
+### Round trips: `build/d6/model/d6_*.docx` and `build/d6/model-owner/*.docx`
+
+The model opened each document, read the body, every property, every picture,
+link and bookmark, every section value and story and the document properties,
+and saved it, changing nothing; `tool/round_trip_docx.dart` prints any
+difference from the input. `build/d6/model/d6_*.docx` should be byte for byte
+the fixtures, or hold the same parts with the same bytes in another ZIP order
+as D5's did (`cmp` says which): open both and compare them with the fixtures
+above. Open every file of `build/d6/model-owner`: no repair prompt, and each
+looks and reads as the original, with File > Properties as the original's.
+
+### Edited owner files: `build/d6/edited-owner/*.docx`
+
+`tool/edit_docx.dart` makes the same edits as under D5 (AGENTS.md has its
+rules); since D6 it sets the title with `OfficeProperties.copyWith`, so every
+other property is the original's. Open all four files. No repair prompt, and
+as under D5: the footer's `Page <n> of <m>`, the landscape page with the
+table, the picture, the two links, the heading `Added by the model` in the
+bookmark `Model_edit`, the list, the title `Edited by the model` in File >
+Properties > Summary, and in the other fields of File > Properties the
+original's (author, company, dates, revision), none lost.
+
+### The benchmark's document: `build/d6/benchmark/large.docx`
+
+About 40,000 paragraphs: the owner's `long.docx` repeated 385 times, one
+paragraph changed to `Changed by the benchmark` near the middle (block 20405),
+saved by the model. It is a stress test and not a design: nobody reads it.
+
+- Word opens it without a repair prompt. It is long (15 pages repeated 385
+  times, so some 5,800 pages; the exact number is Word's): report how long it
+  took to open and the page count the status bar gives.
+- The table of contents of each copy jumps to its own copy's headings (Cmd-click
+  a few entries): the bookmark ids and `_Toc` names were made unique per copy.
+- Search for `Changed by the benchmark` (Cmd-F): exactly one hit, near the
+  middle of the document.
+- Close without saving, or save in Word and reopen (see below).
+
+### Save in Word
+
+For `d6_list`, `d6_list_landscape` and one edited owner file: change one word
+in the body, save in Word, close and reopen. No repair prompt, the edit is
+there, and the header (logo, name, date), the footer (`Sayfa 2 / 3`), the
+repeating header row, the right-aligned columns, the totals row and the page
+sizes are as before. For `d6_list` also add a line to the
+caption and see that the table moves down and its header row still repeats on
+the next page.
+
 ## Results
 
 One row per file or check. `Result` is `ok`, `sorun` (a problem) or `not
@@ -726,3 +875,55 @@ its recovery log.
 | 2026-11-08 | Word for Mac 16.114.4 | `build/d5/edited-owner/long.docx` | ok | Picture, external link, internal link to `Model_edit`, title `Edited by the model`; links in the file's own `Kpr` style. Values read by Claude in Word as well. |
 | 2026-11-08 | Word for Mac 16.114.4 | `build/d5/edited-owner/builtins.docx` | ok | Picture, external link, internal link to `Model_edit`, title `Edited by the model`; links in the file's own `Kpr` style. |
 | 2026-11-08 | Word for Mac 16.114.4 | Save in Word | ok | D5: no repair prompt in any file, nor on reopening one changed and saved in Word. |
+
+## Final checklist
+
+One line per milestone: what the owner opened in Word for Mac, where the
+result is recorded (the rows of "Results" above name each file) and whether
+it is done. A milestone is done only when every file shows no repair prompt
+and the text the section lists (decision
+[`0010`](decisions/0010-phase-4-docx-document-model.md)).
+
+| Milestone | What was opened | Recorded under "Results" | Result |
+|---|---|---|---|
+| D1 | the five `d1_*` fixtures, the round trips and edits of the owner's four files, save in Word, the expected texts | rows of 2026-11-06 (`d1_*`, `model-docx-owner`, `edited-docx-owner`, Save in Word, Expected texts) | ok |
+| Own parts (decision 0011) | `d1_blank`, `d2_*` and the edited `blank` and `features` again, with the new document's own parts | rows of 2026-11-06 marked "Own parts", and 2026-11-07 (`d1_blank` after the `w14` fix) | ok |
+| D2 | the four `d2_*` fixtures, their round trip, the edited owner files, save in Word | rows of 2026-11-06 (`d2_*`, `model-docx`, Save in Word) | ok |
+| D3 | the five `d3_*` fixtures, their round trips, the edited owner files, `d3_table_last`, save in Word | rows of 2026-11-07 | ok |
+| D4 | `d4_sections`, `d4_headers`, `d4_fields`, `d4_break_last`, the round trips and edited owner files, save in Word | rows of 2026-11-08 under `build/d4/` | ok |
+| D5 | `d5_pictures`, `d5_links`, `d5_properties`, the round trips and edited owner files, save in Word | rows of 2026-11-08 under `build/d5/` | ok |
+| D6 | `d6_list`, `d6_list_landscape`, their round trips, the round trips and edited owner files, the benchmark's `large.docx`, save in Word | rows under `build/d6/` | pending |
+
+## Messages
+
+`docs/warning-messages.md` lists every warning message in English, German and
+Turkish, built for one sample warning and generated by
+`tool/warning_messages.dart`. The table below is its DOCX section, the
+messages of `DocxWarningCode` (see that file for the sample warning each row
+is built for), with a column for each reader's verdict. The Turkish reader is
+the owner; the German reader is a native speaker the owner names. Read the
+column of your language only: write `ok`, or the correction you want, in your
+verdict column, and fill the reviewers in the table after it. The XLSX
+messages are checked in
+[`excel-checks.md`](excel-checks.md), "Native-speaker check". After a message
+changes, regenerate `docs/warning-messages.md` and copy its DOCX rows here;
+the verdicts of a changed row are void.
+
+| Code | en | de | tr | Verdict tr (owner) | Verdict de (reader) |
+|---|---|---|---|---|---|
+| `docx: invalidCharactersRemoved` | 2 characters that XML does not allow were removed from text in /word/document.xml (body/p[0], body/p[1]). | 2 Zeichen, die XML nicht erlaubt, wurden aus dem Text in /word/document.xml entfernt (body/p[0], body/p[1]). | /word/document.xml içindeki metinden XML'in izin vermediği 2 karakter çıkarıldı (body/p[0], body/p[1]). |  |  |
+| `docx: invalidCharactersRemoved` (one) | 1 character that XML does not allow was removed from text in /word/document.xml (body/p[0]). | 1 Zeichen, das XML nicht erlaubt, wurde aus dem Text in /word/document.xml entfernt (body/p[0]). | /word/document.xml içindeki metinden XML'in izin vermediği 1 karakter çıkarıldı (body/p[0]). |  |  |
+| `docx: contentTypeMissing` | /word/document.xml had no content type; it was read as application/xml. | Für /word/document.xml fehlte der Inhaltstyp; der Teil wurde als application/xml gelesen. | /word/document.xml için içerik türü yoktu; application/xml olarak okundu. |  |  |
+| `docx: mainPartContentTypeUnexpected` | The main document /word/document.xml has the content type text/plain, which is not a Word document type; it was read as one. | Das Hauptdokument /word/document.xml hat den Inhaltstyp text/plain, der kein Word-Dokumenttyp ist; es wurde als Word-Dokument gelesen. | Ana belge /word/document.xml, Word belge türü olmayan text/plain içerik türüne sahip; Word belgesi olarak okundu. |  |  |
+| `docx: numberingNotFound` | 2 paragraphs in /word/document.xml (body/p[0], body/p[1]) belong to the list 7, which the document does not define; Word shows them without a number. | 2 Absätze in /word/document.xml (body/p[0], body/p[1]) gehören zur Liste 7, die das Dokument nicht definiert; Word zeigt sie ohne Nummer. | /word/document.xml (body/p[0], body/p[1]) içindeki 2 paragraf, belgenin tanımlamadığı 7 listesine ait; Word bunları numarasız gösterir. |  |  |
+| `docx: numberingNotFound` (one) | 1 paragraph in /word/document.xml (body/p[0]) belongs to the list 7, which the document does not define; Word shows it without a number. | 1 Absatz in /word/document.xml (body/p[0]) gehört zur Liste 7, die das Dokument nicht definiert; Word zeigt ihn ohne Nummer. | /word/document.xml (body/p[0]) içindeki 1 paragraf, belgenin tanımlamadığı 7 listesine ait; Word onu numarasız gösterir. |  |  |
+| `docx: styleNotFound` | 2 references in /word/document.xml (body/p[0], body/p[1]) name the style Foo, which the document does not define; Word shows them in the default style. | 2 Verweise in /word/document.xml (body/p[0], body/p[1]) nennen die Formatvorlage Foo, die das Dokument nicht definiert; Word zeigt sie in der Standardformatvorlage. | /word/document.xml (body/p[0], body/p[1]) içindeki 2 başvuru, belgenin tanımlamadığı Foo stilini adlandırıyor; Word bunları varsayılan stilde gösterir. |  |  |
+| `docx: styleNotFound` (one) | 1 reference in /word/document.xml (body/p[0]) names the style Foo, which the document does not define; Word shows it in the default style. | 1 Verweis in /word/document.xml (body/p[0]) nennt die Formatvorlage Foo, die das Dokument nicht definiert; Word zeigt ihn in der Standardformatvorlage. | /word/document.xml (body/p[0]) içindeki 1 başvuru, belgenin tanımlamadığı Foo stilini adlandırıyor; Word onu varsayılan stilde gösterir. |  |  |
+| `docx: propertyValueInvalid` | Document property cp:revision in /docProps/core.xml could not be read; it was kept as it is. | Die Dokumenteigenschaft cp:revision in /docProps/core.xml konnte nicht gelesen werden; sie wurde unverändert beibehalten. | /docProps/core.xml içindeki cp:revision belge özelliği okunamadı; olduğu gibi korundu. |  |  |
+| `docx: bookmarkNameRepaired` | 2 bookmark names in /word/document.xml did not follow Word's rules and were repaired: 2 Totals!. | 2 Textmarkennamen in /word/document.xml entsprachen nicht den Regeln von Word und wurden korrigiert: 2 Totals!. | /word/document.xml içindeki 2 yer işareti adı Word kurallarına uymuyordu ve düzeltildi: 2 Totals!. |  |  |
+| `docx: bookmarkNameRepaired` (one) | A bookmark name in /word/document.xml did not follow Word's rules and was repaired: 2 Totals!. | Ein Textmarkenname in /word/document.xml entsprach nicht den Regeln von Word und wurde korrigiert: 2 Totals!. | /word/document.xml içindeki bir yer işareti adı Word kurallarına uymuyordu ve düzeltildi: 2 Totals!. |  |  |
+
+| Language | Reviewer | Date | Corrections |
+|---|---|---|---|
+| tr | Ahmet Urel (owner) | not checked |  |
+| de | not named yet | not checked |  |

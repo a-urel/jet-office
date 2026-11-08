@@ -312,16 +312,16 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   (`tool/draft_expected.dart` drafts them). Never edit a committed owner file or
   its expected JSON without the owner.
 - Neither is Word. The owner opens each D milestone's fixtures
-  (`build/fixtures/d1_*.docx`, `d2_*`, `d3_*`, `d4_*`, `d5_*`; D4 and D5 write
-  theirs under `build/d4/` and `build/d5/`), the model's round trips of them
-  and of the owner's Word files, and the model's edits of the owner's
-  Word files in Word for Mac, and records the result in
-  `docs/word-checks.md`, which says how to write them. A repair prompt there
-  is a model or writer bug, as in Excel's case. A body that ends in a table
-  cannot be a fixture (LibreOffice's text export never ends on one) and Word
-  cannot save one, so `dart run tool/write_table_last.dart build/table-last`
-  writes `d3_table_last.docx` for that check alone, and `d4_break_last.docx`, a
-  body whose last block carries a section break, which no fixture may be either;
+  (`build/fixtures/d1_*.docx`, `d2_*`, `d3_*`, `d4_*`, `d5_*`, `d6_*`; D4, D5
+  and D6 write theirs under `build/d4/`, `build/d5/` and `build/d6/`), the
+  model's round trips of them and of the owner's Word files, and the model's
+  edits of the owner's Word files in Word for Mac, and records the result in
+  `docs/word-checks.md`, which says how to write them. A repair prompt there is
+  a model or writer bug, as in Excel's case. A body that ends in a table cannot
+  be a fixture (LibreOffice's text export never ends on one) and Word cannot
+  save one, so `dart run tool/write_table_last.dart build/table-last` writes
+  `d3_table_last.docx` for that check alone, and `d4_break_last.docx`, a body
+  whose last block carries a section break, which no fixture may be either;
   never run `soffice` on that folder.
 - Word files go in `test/fixtures/owner/docx/`, listed in its
   `manifest.json`, each with `<name>.expected.txt`, the text of the body's
@@ -350,10 +350,11 @@ with `addTable` and `addRow`, saves it, opens the bytes and reads every cell,
 printing time, file size and memory per phase. `docx_model_benchmark_test.dart`
 scales the owner's `long.docx` to about 40,000 paragraphs, opens it, loads the
 body, changes one paragraph, saves and reopens the saved bytes, timing each
-phase. `xlsx_format_benchmark_test.dart` times `NumberFormatter.formatCell` on every cell of the read file (the
-benchmark of synthetic values is in `jet_core`). The quality gate does not run
-them; run them by hand on the VM and in Chrome (`dart test benchmark` runs all
-seven). They record figures and fail on none (`docs/benchmark.md`):
+phase. `xlsx_format_benchmark_test.dart` times `NumberFormatter.formatCell`
+on every cell of the read file (the benchmark of synthetic values is in
+`jet_core`). The quality gate does not run them; run them by hand on the VM and
+in Chrome (`dart test benchmark` runs all seven). They record figures and fail
+on none (`docs/benchmark.md`):
 
 ```bash
 dart test benchmark
@@ -397,39 +398,36 @@ dart run tool/fuzz_reader.dart --features --seeds 1-200 --cases 1000
 It prints failures as the reader's run does. Pin a failure as a unit test in
 the owning `*_test.dart` first.
 
-`test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
-900 cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*` and `d6_*` ones
-among them), a hand-made table with every element of the table values, a
-hand-made `sections_by_hand` (every section child, six stories, broken references and
+`test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4, 900
+cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*` and `d6_*` ones among
+them), a hand-made table with every element of the table values, a hand-made
+`sections_by_hand` (every section child, six stories, broken references and
 broken fields), a hand-made `drawings_by_hand` (inline, anchored, linked and
-broken pictures, external, anchor and broken hyperlinks, bookmarks with bad
-ids, a header with a picture and a link, and properties parts with values that
-cannot be read), and the producer variants of
-`test/docx/support/docx_fuzz.dart`: whole mutated files, with every part name
-mutated somewhere, and about a third of the cases replacing the value of a
-`w:` attribute (`w:val`, `w:w`, `w:left` and the like) of the main, styles or
-numbering part, or an attribute or element text of a `docProps` part, by
-`abc`, twenty digits, `-` or `1in`; open, load the body, styles, numbering and
-properties, then read every typed property (a throw there is a failure, even a
-`DocxReadException`), including every table's, row's and cell's properties
-and grid, walking cells and nested tables, every picture, hyperlink and
-bookmark, every property field, and every section's typed values,
+broken pictures, external, anchor and broken hyperlinks, bookmarks with bad ids,
+a header with a picture and a link, and properties parts with values that cannot
+be read), and the producer variants of `test/docx/support/docx_fuzz.dart`: whole
+mutated files, with every part name mutated somewhere, and about a third of the
+cases replacing the value of a `w:` attribute (`w:val`, `w:w`, `w:left` and the
+like) of the main, styles or numbering part, or an attribute or element text of
+a `docProps` part, by `abc`, twenty digits, `-` or `1in`; open, load the body,
+styles, numbering and properties, then read every typed property (a throw there
+is a failure, even a `DocxReadException`), including every table's, row's and
+cell's properties and grid, walking cells and nested tables, every picture,
+hyperlink and bookmark, every property field, and every section's typed values,
 `evenAndOddHeaders` and its six stories with their fields (a throw there is a
 failure, except a `DocxReadException` from the blocks of a story part that
 cannot be read, as from a load); call `styles.ensure` and
 `numbering.addBulletList` on what loaded, and set the properties; add a row to
-each loaded table and merge ranges of its cells (only `ArgumentError` may
-come out of those two); set every field's `resultText`, add a footer
-paragraph and call `addSection` (nothing but that `DocxReadException` may come
-out of them); add a picture, a bookmark pair and two hyperlinks to a body
-paragraph and to the last footer's paragraph; and save (never a `StateError`,
-even for a table the file left without rows; a `DocxReadException` naming a
-story's relationships part that cannot be read, when a picture or link went
-in that story, plan D5's ledger Ruling H, after which the walk takes them out
-and saves again), throw nothing but `DocxReadException` from a load), and
-check the saved file holds what was added, the same cases on the VM and in
-Chrome;
-longer runs by hand:
+each loaded table and merge ranges of its cells (only `ArgumentError` may come
+out of those two); set every field's `resultText`, add a footer paragraph and
+call `addSection` (nothing but that `DocxReadException` may come out of them);
+add a picture, a bookmark pair and two hyperlinks to a body paragraph and to the
+last footer's paragraph; and save (never a `StateError`, even for a table the
+file left without rows; a `DocxReadException` naming a story's relationships
+part that cannot be read, when a picture or link went in that story, plan D5's
+ledger Ruling H, after which the walk takes them out and saves again), throw
+nothing but `DocxReadException` from a load), and check the saved file holds
+what was added, the same cases on the VM and in Chrome; longer runs by hand:
 
 ```bash
 dart run tool/fuzz_docx.dart --seeds 1-200 --cases 1000
