@@ -63,8 +63,9 @@ final class ResolvedChart {
 /// The category count is the longest of the series' values and the first
 /// series' categories. Category labels come from the first series, as Excel
 /// takes them: a `String` as it is, a `num` in `General`, a `DateTime` in the
-/// category axis' format code, else the first series', else the locale's short
-/// date (built-in format 14), a `null` as an empty text, anything else by its
+/// category axis' format code, else the first series' when it shows a date or
+/// a time (`classifyFormatCode`), else the locale's short date (built-in
+/// format 14), a `null` as an empty text, anything else by its
 /// `toString`. A chart whose first series has no category value at all numbers
 /// its categories from 1, as Excel does.
 ///
@@ -133,12 +134,29 @@ String categoryLabelText(
     null => '',
     final String text => text,
     final num number => formatter.format(number).text,
-    final DateTime date =>
-      axisCode != null || seriesCode != null
-          ? formatter.format(date, numberFormat: axisCode ?? seriesCode).text
-          : formatter.format(date, numberFormatId: 14).text,
+    final DateTime date => _dateText(date, axisCode, seriesCode, formatter),
     _ => value.toString(),
   };
+}
+
+/// The label of the category [date]: the category axis' code, else the
+/// series' code when it shows a date or a time, else the locale's short date
+/// (built-in format 14). A series code for its values, such as a currency,
+/// would show the date's serial number.
+String _dateText(
+  DateTime date,
+  String? axisCode,
+  String? seriesCode,
+  NumberFormatter formatter,
+) {
+  final String? code =
+      axisCode ??
+      (seriesCode != null && classifyFormatCode(seriesCode) != FormatKind.number
+          ? seriesCode
+          : null);
+  return code != null
+      ? formatter.format(date, numberFormat: code).text
+      : formatter.format(date, numberFormatId: 14).text;
 }
 
 /// [value] formatted with the number format [code].

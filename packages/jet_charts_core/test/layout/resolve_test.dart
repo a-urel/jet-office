@@ -95,6 +95,36 @@ void main() {
     expect(resolve(byAxis).categoryLabels, <String>['Mar 5']);
   });
 
+  test('a date ignores a series code that is not a date or time', () {
+    final DateTime day = DateTime(2026, 3, 5);
+    final Chart currency = Chart(
+      kind: ChartKind.column,
+      series: <ChartSeries>[
+        series(
+          <double?>[1],
+          categories: <Object?>[day],
+          formatCode: '"\$"#,##0.00',
+        ),
+      ],
+    );
+    expect(resolve(currency).categoryLabels, <String>['3/5/26']);
+    expect(
+      resolve(currency, locale: FormatLocale.trTR).categoryLabels,
+      <String>['05.03.2026'],
+    );
+    final Chart time = Chart(
+      kind: ChartKind.column,
+      series: <ChartSeries>[
+        series(
+          <double?>[1],
+          categories: <Object?>[DateTime(2026, 3, 5, 14, 30)],
+          formatCode: 'h:mm',
+        ),
+      ],
+    );
+    expect(resolve(time).categoryLabels, <String>['14:30']);
+  });
+
   test('numbers show as General and text as it is', () {
     final ResolvedChart resolved = resolve(
       Chart(
