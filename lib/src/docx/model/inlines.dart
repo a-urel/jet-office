@@ -5,7 +5,7 @@
 /// Not ported from Quds; written for jet_office.
 ///
 /// A [DocxRun] holds its content ([DocxRunContent]) and its properties
-/// (`w:rPr`, a [PropertySet]), of which D1 types only the style. Setting
+/// (`w:rPr`, a [PropertySet], typed by [DocxRunProperties]). Setting
 /// its text splits the string into text, tabs and breaks and removes the
 /// characters XML forbids; the run records how many it removed, and the
 /// save reports them.

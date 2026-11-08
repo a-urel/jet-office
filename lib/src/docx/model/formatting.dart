@@ -481,7 +481,7 @@ final class DocxBorder {
 /// carry theme fonts ([asciiTheme], [hAnsiTheme], [eastAsiaTheme], such as
 /// `minorHAnsi`), which a caller cannot make. Setting fonts replaces these
 /// slots and the theme attributes, and keeps the complex-script font and
-/// the other attributes of the file (plan Ruling 3).
+/// the other attributes of the file.
 final class DocxFonts {
   /// Fonts named for the slots given; a slot left out is not set.
   ///
@@ -774,9 +774,8 @@ enum DocxAlignment {
 /// Each member is `null` when the file has none, and the style or the
 /// document default decides. At most one of [firstLinePt] and [hangingPt]
 /// is set. A value is stored in twips and reads back rounded to a
-/// twentieth of a point; two values are equal when their twips are (plan
-/// Ruling 4). A `w:ind` with `w:start`, `w:end` or a `…Chars` attribute has
-/// no view.
+/// twentieth of a point; two values are equal when their twips are. A
+/// `w:ind` with `w:start`, `w:end` or a `…Chars` attribute has no view.
 final class DocxIndentation {
   /// An indentation of the given distances. [leftPt] and [rightPt] go from
   /// -1584 to 1584 points (negative moves into the margin), [firstLinePt]
@@ -866,7 +865,7 @@ enum DocxLineRule {
 ///
 /// A multiple is stored in 240ths of a line and a height in twips, so a
 /// value reads back rounded to them and two values are equal when their
-/// stored numbers are (plan Ruling 4).
+/// stored numbers are.
 final class DocxLineSpacing {
   /// A multiple of the line height: 1 is single spacing, 1.5 one and a
   /// half. From 1/240 to 132 lines; throws [ArgumentError] for a value that

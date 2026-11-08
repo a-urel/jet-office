@@ -115,7 +115,7 @@ bool isSettingsLoaded(DocxDocument document) => document._settings != null;
 final class DocxDocument {
   /// A new document like Word for Mac's blank one: one empty paragraph, an
   /// A4 portrait section, Aptos at 12 pt through the theme, and Word's
-  /// default styles (spec 4.5).
+  /// default styles.
   ///
   /// It carries no locale: the theme font language and every default
   /// language are `en-US`, and the decimal symbol and list separator are
@@ -964,7 +964,7 @@ final class _MainPart implements PartContent {
 /// and throws a [DocxReadException] naming the part when it cannot be read.
 ///
 /// The checks only the body needs, such as a section break's references,
-/// belong to [DocxBody] and reach the edits here through [_checkBlock].
+/// belong to [DocxBody].
 abstract base class DocxStory {
   DocxStory._(this._edits, this._document);
 
@@ -1087,8 +1087,8 @@ abstract base class DocxStory {
   ///
   /// An [index] out of that range throws [RangeError]. A [block] that is
   /// already in a story, this one or another, or in a table cell, throws
-  /// [StateError]: remove it there first. Phase 4 neither moves nor copies a
-  /// block implicitly. A table nested past 80 deep, which only a file can
+  /// [StateError]: remove it there first. The model neither moves nor copies
+  /// a block implicitly. A table nested past 80 deep, which only a file can
   /// hold, throws [ArgumentError]: what the API builds opens again under the
   /// default read limits. So does a paragraph with a section break of another
   /// document: the ids of its references mean nothing here. A paragraph with

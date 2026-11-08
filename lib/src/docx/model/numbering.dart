@@ -93,8 +93,8 @@ enum DocxNumberingLevelProperty {
 /// at that level looks and where it sits.
 ///
 /// Every member is nullable, `null` meaning "not set here", and reads
-/// `null` too when the file holds a value the model cannot type (plan
-/// Ruling 2); such a child is written back as read. Setting a member to
+/// `null` too when the file holds a value the model cannot type; such a
+/// child is written back as read. Setting a member to
 /// the value it reads is a no-op, so `null` does not remove a child the
 /// model cannot type; [clear] does. Each set of a level in a document is
 /// one change of its change log. `w:tplc`, `w:tentative` and every child

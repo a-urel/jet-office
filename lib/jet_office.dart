@@ -103,9 +103,9 @@
 /// control or a threaded comment beside them is kept as written, and removing
 /// a table that a formula names is refused.
 ///
-/// [DocxDocument] is the Word document model, in progress (milestones D1 to D5;
-/// the API may change before D6). [DocxDocument.new] starts a document like
-/// Word for Mac's blank one: A4 portrait, Aptos 12, no document properties.
+/// [DocxDocument] is the Word document model. [DocxDocument.new] starts a
+/// document like Word for Mac's blank one: A4 portrait, Aptos 12, no document
+/// properties.
 /// [DocxDocument.open] reads a DOCX file within [DocxReadLimits]; a file it
 /// cannot read throws a [DocxReadException] whose [DocxReadFailure] says why,
 /// and so does a part that turns out broken when it first loads. Its [DocxBody]
@@ -129,7 +129,7 @@
 /// its typed rows and cells (one inside a content control is kept in place, not
 /// listed), the API nests tables at most 80 deep, [DocxBody.addTable] takes at
 /// most [maxTableColumns] columns, and a table with no row is not saved. What
-/// the model does not type yet, such as content controls, tracked changes,
+/// the model does not type, such as content controls, tracked changes,
 /// floating drawings and a `w:fldSimple`, is kept as written in a
 /// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
 /// can be removed but not changed; the parts the model does not read are kept
@@ -155,9 +155,9 @@
 /// reported at save as a [DocxWarning]. The visible text of an opaque inline
 /// holding `mc:AlternateContent` or a text box is empty.
 ///
-/// Pictures, hyperlinks, bookmarks and document properties are typed
-/// (milestone D5). An inline picture is a [DocxPicture], run content that gives
-/// its size in points, name, description and `OfficeImage`;
+/// Pictures, hyperlinks, bookmarks and document properties are typed. An
+/// inline picture is a [DocxPicture], run content that gives its size in
+/// points, name, description and `OfficeImage`;
 /// [DocxParagraph.addPicture] adds a PNG or JPEG in the body, a cell, a header
 /// or a footer. A [DocxHyperlink] is an inline holding inlines, with its
 /// external `url` or internal `anchor`; [DocxParagraph.addHyperlink] adds one
@@ -171,8 +171,8 @@
 /// [XlsxWorkbook.properties] gives too; a new document has none until one is
 /// set. A floating picture, a chart and a `w:fldSimple` stay opaque.
 ///
-/// [DocxDocument.styles] gives the document's [DocxStyles] (milestone D2):
-/// the [DocxDocumentDefaults] and each [DocxStyle] of the styles part, by
+/// [DocxDocument.styles] gives the document's [DocxStyles]: the
+/// [DocxDocumentDefaults] and each [DocxStyle] of the styles part, by
 /// id or by name, whose name, links and [DocxParagraphProperties] and
 /// [DocxRunProperties] are set like a paragraph's; [DocxStyles.add] adds a
 /// custom style, and [DocxBuiltInStyle] names Word's built-in styles, which
@@ -195,6 +195,15 @@
 /// list of a definition. A paragraph put in a list the document does not
 /// define is reported at save ([DocxWarningCode.numberingNotFound]).
 ///
+/// [DocxListExport] writes a whole list into a document in one call, as
+/// [XlsxListExport] does into a sheet: a table of one [DocxListColumn] per
+/// column whose header row repeats on every page, an optional caption above
+/// it and totals row below it, numbers and dates shown through
+/// [NumberFormatter] with each column's number format, and a page header
+/// (logo, title, date) and footer (page numbers).
+/// [DocxListExport.writeTo] writes into the last section of a
+/// [DocxDocument], and [DocxListExport.toDocx] makes a document of its own.
+///
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
@@ -202,6 +211,7 @@
 /// @docImport 'src/common/locale.dart';
 /// @docImport 'src/docx/builtin_styles.dart';
 /// @docImport 'src/docx/docx_document.dart';
+/// @docImport 'src/docx/list_export.dart';
 /// @docImport 'src/docx/model/blocks.dart';
 /// @docImport 'src/docx/model/formatting.dart';
 /// @docImport 'src/docx/model/inlines.dart';

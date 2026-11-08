@@ -36,10 +36,10 @@ part of 'inlines.dart';
 /// left its paragraph.
 ///
 /// A hyperlink read in one document and inserted in another keeps its `r:id`
-/// as read (plan D5, Ruling 13), which that document may lack or mean
-/// otherwise; [url] still gives the target the part it was read from names.
-/// One built with [DocxParagraph.addHyperlink] has no relationship until a
-/// save, which gives it one in the part it is in then, wherever that is.
+/// as read, which that document may lack or mean otherwise; [url] still gives
+/// the target the part it was read from names. One built with
+/// [DocxParagraph.addHyperlink] has no relationship until a save, which gives
+/// it one in the part it is in then, wherever that is.
 final class DocxHyperlink extends DocxInline {
   DocxHyperlink._read(
     this._attributes,
@@ -109,9 +109,9 @@ final class DocxHyperlink extends DocxInline {
   ///
   /// It is found on the first read and kept. A header's or footer's
   /// relationships are read for it without being marked for rewriting, so
-  /// the save still copies them as they were (Ruling 12). A relationships part
-  /// that cannot be read gives `null`, and throws nothing: the part's own
-  /// content read, and the link still writes as read.
+  /// the save still copies them as they were. A relationships part that
+  /// cannot be read gives `null`, and throws nothing: the part's own content
+  /// read, and the link still writes as read.
   /// A built hyperlink gives the address it was built with.
   late final String? url = _findUrl();
 

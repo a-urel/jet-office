@@ -4,8 +4,7 @@
 ///
 /// New in jet_office; quds_office_engine has no list export. Not ported from
 /// Quds. The helper is a composition of the public document model's calls and
-/// writes no XML of its own. This file holds the columns, the export's value
-/// and its argument checks; the writing is added in later steps of D6.
+/// writes no XML of its own.
 library;
 
 import 'package:jet_core/jet_core.dart';
@@ -109,8 +108,8 @@ final class DocxListColumn {
 /// ]);
 /// ```
 final class DocxListExport {
-  /// A list of [columns]. The remaining fields default as they are
-  /// described. The constructor checks nothing; [writeTo] does.
+  /// A list of [columns]. The remaining fields default as each field's
+  /// doc says. The constructor checks nothing; [writeTo] and [toDocx] do.
   DocxListExport(
     List<DocxListColumn> columns, {
     this.title,
@@ -139,8 +138,8 @@ final class DocxListExport {
   /// The picture at the left of the page header; `null` for none.
   final OfficeImage? logo;
 
-  /// The height of the [logo] in points, finite and greater than 0; the
-  /// width follows the picture's proportions.
+  /// The height of the [logo] in points, finite and greater than 0; 28 by
+  /// default. The width follows the picture's proportions.
   final double logoHeightPt;
 
   /// The report's date, shown at the right of the page header as fixed text
@@ -163,20 +162,22 @@ final class DocxListExport {
   /// (2.5 cm, header and footer 1.25 cm).
   final DocxPageMargins? margins;
 
-  /// The text before the page number in the footer.
+  /// The text before the page number in the footer; `Page ` by default.
   final String footerBefore;
 
-  /// The text between the page number and the number of pages.
+  /// The text between the page number and the number of pages; ` of ` by
+  /// default.
   final String footerMiddle;
 
-  /// The text after the number of pages.
+  /// The text after the number of pages; empty by default.
   final String footerAfter;
 
-  /// The locale that formats the numbers and dates.
+  /// The locale that formats the numbers and dates; `FormatLocale.enUS` by
+  /// default.
   final FormatLocale locale;
 
   /// The fill of the header row as RGB hex of six digits, in either case;
-  /// `null` for none.
+  /// `D9D9D9` (light grey) by default, `null` for none.
   final String? headerShading;
 
   /// Writes the list into [document], one data row per entry of [rows] and
@@ -403,6 +404,9 @@ final class DocxListExport {
 
   /// A document of its own holding the list, with the document properties
   /// [properties]; see [writeTo] for the layout and the errors.
+  ///
+  /// A [properties] value XML cannot hold throws [ArgumentError], as
+  /// `DocxDocument.properties` does; no document is returned then.
   DocxResult toDocx(
     Iterable<List<Object?>> rows, {
     List<Object?>? totals,

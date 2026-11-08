@@ -121,9 +121,9 @@ final class OfficeProperties {
   ///
   /// The map is held as given, not copied: the `const` default rules out
   /// `Map.unmodifiable` in the constructor. Do not change it after the
-  /// writer is created: the writer checks and renders it then, so a later
-  /// change would make this value differ from the file, and its `==` and
-  /// `hashCode` change with it.
+  /// writer is created or the value is set on a model: they check and render
+  /// it then, so a later change would make this value differ from the file,
+  /// and its `==` and `hashCode` change with it.
   final Map<String, Object> custom;
 
   /// These properties with each field the call gives replaced and every

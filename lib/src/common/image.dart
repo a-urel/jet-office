@@ -38,16 +38,19 @@ enum OfficeImageFormat {
   };
 }
 
-/// The bytes of a PNG or JPEG file, shown by an `XlsxPicture`.
+/// The bytes of a PNG or JPEG file, shown by an `XlsxPicture` of a workbook
+/// or a `DocxPicture` of a document.
 ///
 /// The bytes are held as given, not copied: an image can be megabytes, and
-/// a copy would double the memory. Do not change them while a writer holds
-/// the image. The same `Uint8List` used by several pictures of a workbook
-/// is written once; equal bytes in two lists are written twice (see
-/// `XlsxSheetWriter.picture`).
+/// a copy would double the memory. Do not change them while a writer or a
+/// model holds the image. The same `Uint8List` used by several pictures of a
+/// workbook is written once; equal bytes in two lists are written twice (see
+/// `XlsxSheetWriter.picture`). A document shares one media part between
+/// pictures of equal bytes (see `DocxParagraph.addPicture`).
 ///
-/// The constructor checks nothing; the sheet writer checks the bytes when
-/// the picture is added (see `XlsxSheetWriter.picture`).
+/// The constructor checks nothing; the bytes are checked when the picture is
+/// added (`XlsxSheetWriter.picture`, `XlsxSheet.addPicture`,
+/// `DocxParagraph.addPicture`).
 final class OfficeImage {
   /// Creates an image of the file [bytes], a PNG or a JPEG.
   OfficeImage(this.bytes);
