@@ -384,8 +384,8 @@ final class DocxParagraph extends DocxBlock {
 ///
 /// A table read from a file is written as read: the children it does not show
 /// stay where they were, and a grid that does not fit its rows is kept. Only
-/// the API checks the fit: [mergeCells], [insertRowAt],
-/// [DocxTableRow.insertCellAt], [DocxTableCellProperties.gridSpan] and
+/// the API checks the fit: [mergeCells], [insertRow],
+/// [DocxTableRow.insertCell], [DocxTableCellProperties.gridSpan] and
 /// [DocxTableCellProperties.verticalMerge].
 ///
 /// The API nests tables at most 80 deep, so what it builds opens again under
@@ -616,7 +616,7 @@ final class DocxTable extends DocxBlock {
   ///
   /// A row with no such cell may go inside a vertical merge, and a row removed
   /// may leave a merge without its start: neither is checked.
-  void insertRowAt(int index, DocxTableRow row) {
+  void insertRow(int index, DocxTableRow row) {
     RangeError.checkValueInInterval(index, 0, _rows.length, 'index');
     if (row._table == null) {
       _checkFits(row._gridTotal);
@@ -680,7 +680,7 @@ final class DocxTable extends DocxBlock {
         ..repeatAsHeader = true
         ..cantSplit = true;
     }
-    insertRowAt(_rows.length, row);
+    insertRow(_rows.length, row);
     return row;
   }
 
@@ -1114,7 +1114,7 @@ final class DocxTableRow {
   /// In a row of a document, the styles set on what the cell holds are resolved
   /// as `DocxBody.insertBlock` says, and it may throw the same
   /// `DocxReadException`.
-  void insertCellAt(int index, DocxTableCell cell) {
+  void insertCell(int index, DocxTableCell cell) {
     RangeError.checkValueInInterval(index, 0, _cells.length, 'index');
     if (cell._row == null) _table?._checkFits(_gridTotal + cell._span);
     primitives.insertChild(_sink, this, _children, _cells, index, cell);

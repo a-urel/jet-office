@@ -287,7 +287,7 @@ final class DocxTableCellProperties {
   /// and then [verticalMerge], from the top row down.
   ///
   /// A cell in no table is not checked; a row is when it goes in one
-  /// (`DocxTable.insertRowAt`), and a cell (`DocxTableRow.insertCellAt`).
+  /// (`DocxTable.insertRow`), and a cell (`DocxTableRow.insertCell`).
   int? get gridSpan => _set.valueOf('gridSpan') as int?;
 
   set gridSpan(int? value) {

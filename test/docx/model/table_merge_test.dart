@@ -1119,7 +1119,7 @@ void main() {
       final DocxDocument doc = _open(_threeByThree());
       final DocxTable table = _table(doc);
       final DocxTableRow row = DocxTableRow(cells: 4);
-      expect(() => table.insertRowAt(0, row), throwsArgumentError);
+      expect(() => table.insertRow(0, row), throwsArgumentError);
       expect(table.rows, hasLength(3));
       expect(parentOf(row), isNull);
       expect(editsOf(doc).log.hasChanges, isFalse);
@@ -1130,15 +1130,15 @@ void main() {
       final DocxTable table = _table(doc);
       final DocxTableRow row = DocxTableRow(cells: 2);
       row.cells[0].properties.gridSpan = 3;
-      expect(() => table.insertRowAt(3, row), throwsArgumentError);
+      expect(() => table.insertRow(3, row), throwsArgumentError);
       row.cells[0].properties.gridSpan = 2;
-      table.insertRowAt(3, row);
+      table.insertRow(3, row);
       expect(table.rows, hasLength(4));
     });
 
     test('that fits, with fewer columns, goes in', () {
       final DocxTable table = DocxTable(columns: 3);
-      table.insertRowAt(1, DocxTableRow(cells: 2));
+      table.insertRow(1, DocxTableRow(cells: 2));
       expect(table.rows, hasLength(2));
     });
 
@@ -1153,9 +1153,9 @@ void main() {
       final DocxTableRow row = _table(source).rows[1];
       _table(source).removeRowAt(1);
       final DocxTable narrow = DocxTable(columns: 2);
-      expect(() => narrow.insertRowAt(0, row), throwsArgumentError);
+      expect(() => narrow.insertRow(0, row), throwsArgumentError);
       final DocxTable wide = DocxTable(columns: 3);
-      wide.insertRowAt(0, row);
+      wide.insertRow(0, row);
       expect(wide.rows, hasLength(2));
     });
 
@@ -1170,7 +1170,7 @@ void main() {
       final DocxDocument doc = _open(_threeByThree());
       final DocxTable table = _table(doc);
       final DocxTableRow row = continuing(3);
-      expect(() => table.insertRowAt(0, row), throwsArgumentError);
+      expect(() => table.insertRow(0, row), throwsArgumentError);
       expect(table.rows, hasLength(3));
       expect(parentOf(row), isNull);
       expect(editsOf(doc).log.hasChanges, isFalse);
@@ -1181,7 +1181,7 @@ void main() {
         _tr(<String>[_tc('A', _span2)]),
       ]);
       final DocxTable table = _table(doc);
-      expect(() => table.insertRowAt(1, continuing(2)), throwsArgumentError);
+      expect(() => table.insertRow(1, continuing(2)), throwsArgumentError);
       expect(table.rows, hasLength(1));
     });
 
@@ -1191,8 +1191,8 @@ void main() {
         _tr(<String>[_tc('C'), _tc('D')]),
       ]);
       final DocxTable table = _table(doc);
-      expect(() => table.insertRowAt(1, continuing(2)), throwsArgumentError);
-      table.insertRowAt(2, continuing(2));
+      expect(() => table.insertRow(1, continuing(2)), throwsArgumentError);
+      table.insertRow(2, continuing(2));
       expect(table.rows, hasLength(3));
     });
 
@@ -1201,14 +1201,14 @@ void main() {
         '<w:tbl>${_tr(<String>[_tc('A')])}</w:tbl>',
       );
       expect(
-        () => _table(doc).insertRowAt(0, continuing(1)),
+        () => _table(doc).insertRow(0, continuing(1)),
         throwsArgumentError,
       );
     });
 
     test('at an index out of range is a RangeError', () {
       final DocxTable table = DocxTable(columns: 1);
-      expect(() => table.insertRowAt(5, continuing(1)), throwsRangeError);
+      expect(() => table.insertRow(5, continuing(1)), throwsRangeError);
     });
 
     test('that is plain may go inside a vertical merge', () {
@@ -1216,7 +1216,7 @@ void main() {
         _tr(<String>[_tc('A', _restart), _tc('B')]),
         _tr(<String>[_empty(_continue), _tc('D')]),
       ]);
-      _table(doc).insertRowAt(1, DocxTableRow(cells: 2));
+      _table(doc).insertRow(1, DocxTableRow(cells: 2));
       expect(_table(doc).rows, hasLength(3));
     });
 
@@ -1233,13 +1233,13 @@ void main() {
       final DocxDocument doc = _open(
         '<w:tbl>${_tr(<String>[_tc('A')])}</w:tbl>',
       );
-      _table(doc).insertRowAt(1, DocxTableRow(cells: 5));
+      _table(doc).insertRow(1, DocxTableRow(cells: 5));
       expect(_table(doc).rows, hasLength(2));
     });
 
     test('that is in a table still throws StateError', () {
       final DocxTable table = DocxTable(columns: 1, rows: 2);
-      expect(() => table.insertRowAt(0, table.rows.first), throwsStateError);
+      expect(() => table.insertRow(0, table.rows.first), throwsStateError);
     });
   });
 
@@ -1248,7 +1248,7 @@ void main() {
       final DocxDocument doc = _open(_threeByThree());
       final DocxTableRow row = _table(doc).rows[0];
       final DocxTableCell cell = DocxTableCell();
-      expect(() => row.insertCellAt(0, cell), throwsArgumentError);
+      expect(() => row.insertCell(0, cell), throwsArgumentError);
       expect(row.cells, hasLength(3));
       expect(parentOf(cell), isNull);
       expect(editsOf(doc).log.hasChanges, isFalse);
@@ -1261,15 +1261,15 @@ void main() {
       final DocxTableRow row = _table(doc).rows.single;
       final DocxTableCell cell = DocxTableCell();
       cell.properties.gridSpan = 3;
-      expect(() => row.insertCellAt(1, cell), throwsArgumentError);
+      expect(() => row.insertCell(1, cell), throwsArgumentError);
       cell.properties.gridSpan = 2;
-      row.insertCellAt(1, cell);
+      row.insertCell(1, cell);
       expect(row.cells, hasLength(2));
     });
 
     test('in a row in no table is not checked', () {
       final DocxTableRow row = DocxTableRow(cells: 63);
-      row.insertCellAt(0, DocxTableCell());
+      row.insertCell(0, DocxTableCell());
       expect(row.cells, hasLength(64));
     });
 
@@ -1278,14 +1278,14 @@ void main() {
         '<w:tbl>${_tr(<String>[_tc('A')])}</w:tbl>',
       );
       final DocxTableRow row = _table(doc).rows.single;
-      row.insertCellAt(1, DocxTableCell());
+      row.insertCell(1, DocxTableCell());
       expect(row.cells, hasLength(2));
     });
 
     test('that is in a row still throws StateError', () {
       final DocxTable table = DocxTable(columns: 1);
       final DocxTableRow row = table.rows.single;
-      expect(() => row.insertCellAt(0, row.cells.single), throwsStateError);
+      expect(() => row.insertCell(0, row.cells.single), throwsStateError);
     });
   });
 }

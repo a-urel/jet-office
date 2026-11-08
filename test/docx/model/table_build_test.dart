@@ -691,7 +691,7 @@ void main() {
         expect(inner.properties.style, 'TableGrid');
 
         final DocxDocument doc = _turkish();
-        doc.body.addTable(columns: 1).insertRowAt(0, _rowOf(cell));
+        doc.body.addTable(columns: 1).insertRow(0, _rowOf(cell));
         expect(inner.properties.style, 'TabloKlavuzu');
       },
     );
@@ -743,17 +743,14 @@ void main() {
               _first(doc.body.blocks.last as DocxTable).insertBlock(0, tree),
           'DocxTableCell.replaceBlockAt': (DocxDocument doc, DocxTable tree) =>
               _first(doc.body.blocks.last as DocxTable).replaceBlockAt(0, tree),
-          'DocxTable.insertRowAt': (DocxDocument doc, DocxTable tree) {
+          'DocxTable.insertRow': (DocxDocument doc, DocxTable tree) {
             final DocxTableRow row = DocxTableRow();
             _rowCell(row).insertBlock(0, tree);
-            (doc.body.blocks.last as DocxTable).insertRowAt(0, row);
+            (doc.body.blocks.last as DocxTable).insertRow(0, row);
           },
-          'DocxTableRow.insertCellAt': (DocxDocument doc, DocxTable tree) {
+          'DocxTableRow.insertCell': (DocxDocument doc, DocxTable tree) {
             final DocxTableCell cell = DocxTableCell()..insertBlock(0, tree);
-            (doc.body.blocks.last as DocxTable).rows.first.insertCellAt(
-              0,
-              cell,
-            );
+            (doc.body.blocks.last as DocxTable).rows.first.insertCell(0, cell);
           },
         };
 
@@ -815,7 +812,7 @@ void main() {
       final DocxTable table = doc.body.blocks.last as DocxTable;
       final DocxTableRow row = DocxTableRow();
       _paragraph(_rowCell(row)).style = 'Heading1';
-      final ChangeSet set = edits.transaction(() => table.insertRowAt(1, row));
+      final ChangeSet set = edits.transaction(() => table.insertRow(1, row));
       expect(doc.styles.byId('Heading1'), isNotNull);
       edits.log.revertSet(set);
       expect(table.rows, hasLength(1));
@@ -892,8 +889,8 @@ void main() {
 
       final DocxDocument into = DocxDocument();
       final DocxTable table = into.body.addTable(columns: 1);
-      table.insertRowAt(0, row);
-      table.insertRowAt(1, _rowOf(cell));
+      table.insertRow(0, row);
+      table.insertRow(1, _rowOf(cell));
       expect(_locations(into, DocxWarningCode.styleNotFound, 'Eksik'), <String>[
         'body/tbl[0]/tr[0]/tc[0]/p[0]',
       ]);
@@ -931,7 +928,7 @@ DocxTableCell _rowCell(DocxTableRow row) => row.cells.single;
 
 /// A new row of [cell] only.
 DocxTableRow _rowOf(DocxTableCell cell) => DocxTableRow()
-  ..insertCellAt(0, cell)
+  ..insertCell(0, cell)
   ..removeCellAt(1);
 
 /// A sink that keeps what it is given.

@@ -203,7 +203,7 @@ void main() {
       final DocxTableRow row = _row('N');
       final ChangeSet set = editsOf(
         doc,
-      ).transaction(() => table.insertRowAt(1, row));
+      ).transaction(() => table.insertRow(1, row));
       expect(set.changes, hasLength(1));
       expect(_rows(table), <String>['A', 'N', 'B']);
       editsOf(doc).log.revertSet(set);
@@ -225,14 +225,14 @@ void main() {
       expect(table.rows.first, same(first));
       editsOf(doc).log.reapplySet(set);
       expect(_rows(table), <String>['B']);
-      table.insertRowAt(1, first);
+      table.insertRow(1, first);
       expect(_rows(table), <String>['B', 'A']);
     });
 
     test('an index out of range throws RangeError', () {
       final DocxTable table = _table(_twoRows());
-      expect(() => table.insertRowAt(-1, DocxTableRow()), throwsRangeError);
-      expect(() => table.insertRowAt(3, DocxTableRow()), throwsRangeError);
+      expect(() => table.insertRow(-1, DocxTableRow()), throwsRangeError);
+      expect(() => table.insertRow(3, DocxTableRow()), throwsRangeError);
       expect(() => table.removeRowAt(2), throwsRangeError);
       expect(_rows(table), <String>['A', 'B']);
     });
@@ -249,7 +249,7 @@ void main() {
       final DocxDocument doc = _open('<w:tbl><w:tblGrid/></w:tbl>');
       final DocxTable table = _table(doc);
       expect(() => table.removeRowAt(0), throwsRangeError);
-      table.insertRowAt(0, DocxTableRow());
+      table.insertRow(0, DocxTableRow());
       expect(_names(_all(_saved(doc), 'tbl').single), <String>[
         'tblGrid',
         'tr',
@@ -260,20 +260,20 @@ void main() {
       final DocxTable one = DocxTable(columns: 1);
       final DocxTable two = DocxTable(columns: 1);
       final DocxTableRow row = one.rows.single;
-      expect(() => two.insertRowAt(0, row), throwsStateError);
-      expect(() => one.insertRowAt(0, row), throwsStateError);
+      expect(() => two.insertRow(0, row), throwsStateError);
+      expect(() => one.insertRow(0, row), throwsStateError);
       expect(two.rows, hasLength(1));
       expect(one.rows, hasLength(1));
     });
 
     test('a row read in a document cannot go in another table', () {
       final DocxTableRow row = _table(_twoRows()).rows.first;
-      expect(() => DocxTable(columns: 1).insertRowAt(0, row), throwsStateError);
+      expect(() => DocxTable(columns: 1).insertRow(0, row), throwsStateError);
     });
 
     test('a row of fewer cells than the grid goes in', () {
       final DocxTable table = DocxTable(columns: 2);
-      table.insertRowAt(1, DocxTableRow());
+      table.insertRow(1, DocxTableRow());
       expect(table.rows.last.cells, hasLength(1));
     });
 
@@ -283,7 +283,7 @@ void main() {
       final DocxTable table = _table(doc);
       final DocxTableRow row = DocxTableRow();
       final DocxTableCell cell = row.cells.single;
-      table.insertRowAt(2, row);
+      table.insertRow(2, row);
       expect(
         edits.transaction(() => row.isHeader = true).changes,
         hasLength(1),
@@ -309,7 +309,7 @@ void main() {
       final DocxTableRow row = table.rows.single;
       final ChangeSet set = editsOf(
         doc,
-      ).transaction(() => row.insertCellAt(1, DocxTableCell('N')));
+      ).transaction(() => row.insertCell(1, DocxTableCell('N')));
       expect(set.changes, hasLength(1));
       expect(_rows(table), <String>['A|N|B']);
       editsOf(doc).log.revertSet(set);
@@ -328,14 +328,14 @@ void main() {
       editsOf(doc).log.revertSet(set);
       expect(_rows(table), <String>['A|B']);
       editsOf(doc).log.reapplySet(set);
-      row.insertCellAt(1, first);
+      row.insertCell(1, first);
       expect(_rows(table), <String>['B|A']);
     });
 
     test('an index out of range throws RangeError', () {
       final DocxTableRow row = _table(twoCells()).rows.single;
-      expect(() => row.insertCellAt(-1, DocxTableCell()), throwsRangeError);
-      expect(() => row.insertCellAt(3, DocxTableCell()), throwsRangeError);
+      expect(() => row.insertCell(-1, DocxTableCell()), throwsRangeError);
+      expect(() => row.insertCell(3, DocxTableCell()), throwsRangeError);
       expect(() => row.removeCellAt(2), throwsRangeError);
     });
 
@@ -350,7 +350,7 @@ void main() {
     test('a cell in a row cannot go in another', () {
       final DocxTableRow one = DocxTableRow();
       final DocxTableRow two = DocxTableRow();
-      expect(() => two.insertCellAt(0, one.cells.single), throwsStateError);
+      expect(() => two.insertCell(0, one.cells.single), throwsStateError);
       expect(two.cells, hasLength(1));
     });
 
@@ -359,7 +359,7 @@ void main() {
       final DocxEdits edits = editsOf(doc);
       final DocxTableRow row = _table(doc).rows.single;
       final DocxTableCell cell = DocxTableCell();
-      row.insertCellAt(2, cell);
+      row.insertCell(2, cell);
       expect(
         edits.transaction(() => cell.addParagraph('x')).changes,
         hasLength(1),
@@ -486,8 +486,8 @@ void main() {
 
     test('inserting a row', () {
       final DocxTableRow row = DocxTableRow();
-      rollsBack((DocxTable t) => t.insertRowAt(1, row));
-      DocxTable(columns: 1).insertRowAt(0, row);
+      rollsBack((DocxTable t) => t.insertRow(1, row));
+      DocxTable(columns: 1).insertRow(0, row);
     });
 
     test('removing a row', () {
@@ -496,8 +496,8 @@ void main() {
 
     test('inserting a cell', () {
       final DocxTableCell cell = DocxTableCell();
-      rollsBack((DocxTable t) => t.rows.first.insertCellAt(0, cell));
-      DocxTableRow().insertCellAt(0, cell);
+      rollsBack((DocxTable t) => t.rows.first.insertCell(0, cell));
+      DocxTableRow().insertCell(0, cell);
     });
 
     test('removing a cell', () {
@@ -556,16 +556,13 @@ void main() {
       final DocxTableRow row = DocxTableRow();
       final DocxTable inner = DocxTable(columns: 1);
       row.cells.single.insertBlock(0, inner);
-      expect(() => inner.insertRowAt(0, row), throwsArgumentError);
+      expect(() => inner.insertRow(0, row), throwsArgumentError);
       expect(inner.rows, hasLength(1));
 
       final DocxTableCell cell = DocxTableCell();
       final DocxTable holder = DocxTable(columns: 1);
       cell.insertBlock(0, holder);
-      expect(
-        () => holder.rows.single.insertCellAt(0, cell),
-        throwsArgumentError,
-      );
+      expect(() => holder.rows.single.insertCell(0, cell), throwsArgumentError);
       expect(holder.rows.single.cells, hasLength(1));
     });
   });
@@ -596,12 +593,12 @@ void main() {
 
       final DocxTableRow row = DocxTableRow();
       row.cells.single.insertBlock(0, DocxTable(columns: 1));
-      expect(() => last.insertRowAt(0, row), throwsArgumentError);
+      expect(() => last.insertRow(0, row), throwsArgumentError);
       expect(last.rows, hasLength(1));
 
       final DocxTableCell cell = DocxTableCell();
       cell.insertBlock(0, DocxTable(columns: 1));
-      expect(() => last.rows.single.insertCellAt(0, cell), throwsArgumentError);
+      expect(() => last.rows.single.insertCell(0, cell), throwsArgumentError);
       expect(last.rows.single.cells, hasLength(1));
     });
 
@@ -633,13 +630,13 @@ void main() {
 
       test('a plain row goes in, as it deepens nothing', () {
         final DocxTable table = innermost();
-        table.insertRowAt(1, DocxTableRow());
+        table.insertRow(1, DocxTableRow());
         expect(table.rows, hasLength(2));
       });
 
       test('a plain cell goes in, as it deepens nothing', () {
         final DocxTableRow row = innermost().rows.single;
-        row.insertCellAt(1, DocxTableCell('y'));
+        row.insertCell(1, DocxTableCell('y'));
         expect(row.cells, hasLength(2));
       });
 
@@ -668,7 +665,7 @@ void main() {
 
         final DocxTableRow row = DocxTableRow();
         row.cells.single.insertBlock(0, DocxTable(columns: 1));
-        expect(() => table.insertRowAt(1, row), throwsArgumentError);
+        expect(() => table.insertRow(1, row), throwsArgumentError);
         expect(table.rows, hasLength(1));
       });
     });
@@ -743,7 +740,7 @@ void main() {
 
     test('an inserted row goes directly before the row at its index', () {
       final DocxDocument doc = keptBetweenRows();
-      _table(doc).insertRowAt(1, _row('N'));
+      _table(doc).insertRow(1, _row('N'));
       expect(tblNames(doc), <String>[
         'tblPr',
         'tblGrid',
@@ -763,7 +760,7 @@ void main() {
 
     test('a row inserted first goes before the first row', () {
       final DocxDocument doc = keptBetweenRows();
-      _table(doc).insertRowAt(0, DocxTableRow());
+      _table(doc).insertRow(0, DocxTableRow());
       expect(tblNames(doc).sublist(0, 4), <String>[
         'tblPr',
         'tblGrid',
@@ -774,7 +771,7 @@ void main() {
 
     test('a row inserted last goes after the last child', () {
       final DocxDocument doc = keptBetweenRows();
-      _table(doc).insertRowAt(2, DocxTableRow());
+      _table(doc).insertRow(2, DocxTableRow());
       expect(tblNames(doc).sublist(5), <String>['tr', 'bookmarkEnd', 'tr']);
     });
 
@@ -811,7 +808,7 @@ void main() {
       final List<String> before = tblNames(doc);
       final ChangeSet insert = editsOf(
         doc,
-      ).transaction(() => table.insertRowAt(1, DocxTableRow()));
+      ).transaction(() => table.insertRow(1, DocxTableRow()));
       editsOf(doc).log.revertSet(insert);
       expect(tblNames(doc), before);
       editsOf(doc).log.reapplySet(insert);
@@ -826,7 +823,7 @@ void main() {
       final DocxTableRow row = _table(doc).rows.single;
       List<String> trNames() => _names(_all(_saved(doc), 'tr').single);
 
-      row.insertCellAt(1, DocxTableCell('N'));
+      row.insertCell(1, DocxTableCell('N'));
       expect(trNames(), <String>[
         'trPr',
         'tc',
@@ -844,7 +841,7 @@ void main() {
         'tc',
         'bookmarkEnd',
       ]);
-      row.insertCellAt(2, DocxTableCell('E'));
+      row.insertCell(2, DocxTableCell('E'));
       expect(trNames().last, 'tc');
       expect(_rows(_table(doc)), <String>['N|B|E']);
     });
@@ -899,18 +896,18 @@ void main() {
       _cell(outer).insertBlock(0, inner);
       doc.body.insertBlock(1, outer);
       expect(
-        edits.transaction(() => inner.insertRowAt(1, DocxTableRow())).changes,
+        edits.transaction(() => inner.insertRow(1, DocxTableRow())).changes,
         hasLength(1),
       );
       expect(
         edits
-            .transaction(() => inner.rows.last.insertCellAt(0, DocxTableCell()))
+            .transaction(() => inner.rows.last.insertCell(0, DocxTableCell()))
             .changes,
         hasLength(1),
       );
       doc.body.removeBlockAt(1);
       expect(
-        edits.transaction(() => inner.insertRowAt(1, DocxTableRow())).isEmpty,
+        edits.transaction(() => inner.insertRow(1, DocxTableRow())).isEmpty,
         isTrue,
       );
     });
@@ -943,8 +940,8 @@ void main() {
       );
       final DocxTableRow row = _table(doc).rows.single;
       for (int i = 0; i < 100; i++) {
-        row.insertCellAt(0, DocxTableCell());
-        row.insertCellAt(row.cells.length, DocxTableCell());
+        row.insertCell(0, DocxTableCell());
+        row.insertCell(row.cells.length, DocxTableCell());
       }
       expect(row.cells, hasLength(201));
       final String xml = readDocxText(doc.save().bytes)['word/document.xml']!;
@@ -959,7 +956,7 @@ void main() {
       );
       final DocxTable table = _table(doc);
       for (int i = 0; i < 100; i++) {
-        table.insertRowAt(0, DocxTableRow());
+        table.insertRow(0, DocxTableRow());
       }
       expect(table.rows, hasLength(101));
     });
