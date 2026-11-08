@@ -661,6 +661,8 @@ dart run tool/write_fixtures.dart build/d6/fixtures
 dart run tool/round_trip_docx.dart build/d6/fixtures build/d6/model
 dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/d6/model-owner
 dart run tool/edit_docx.dart test/fixtures/owner/docx build/d6/edited-owner
+dart run tool/write_list_into.dart test/fixtures/owner/docx \
+  build/d6/list-into-owner
 ```
 
 `tool/round_trip_docx.dart` and `tool/edit_docx.dart` print each problem and
@@ -770,6 +772,33 @@ table, the picture, the two links, the heading `Added by the model` in the
 bookmark `Model_edit`, the list, the title `Edited by the model` in File >
 Properties > Summary, and in the other fields of File > Properties the
 original's (author, company, dates, revision), none lost.
+
+### A list in the owner's files: `build/d6/list-into-owner/*.docx`
+
+`tool/write_list_into.dart` wrote the same Turkish list (`Müşteri listesi`,
+three rows and the totals row `Toplam`) into the last section of each of the
+four owner files, with `DocxListExport.writeTo`. Open all four: no repair
+prompt, and in each:
+
+- **The file's own content is as before**, from its first page to its last
+  paragraph, and the list comes after it: the caption `Kasım 2026 müşteri
+  bakiyeleri`, the table of four rows below the grey header row (`Kod`,
+  `Müşteri`, `Tarih`, `Tutar`, `Pay`; the last row `Toplam`), one empty
+  paragraph.
+- **The header and footer, on every page of the last section.** The header
+  shows the small logo at the left, `Müşteri listesi` in bold in the middle and
+  `08.11.2026` at the right edge; the footer reads `Sayfa <n> / <m>`, centred.
+  In a section before the last, the file's own header and footer are as they
+  were. If the list's section had a different first page, that page now shows
+  the list's header too: the list turns the title page off.
+- **Even pages too, in `long.docx`**, which has different odd and even pages:
+  scroll to an even page of the list's section and see the same header and
+  footer as on an odd page. In `blank.docx`, `builtins.docx` and `features.docx`
+  there is no even setting and nothing to see.
+- The list sets A4 portrait and Word's blank margins (and one text column) on
+  the last section, so its pages may differ in size or margins from the
+  file's own.
+- Save in Word and reopen one of them: the same.
 
 ### The benchmark's document: `build/d6/benchmark/large.docx`
 
@@ -893,7 +922,7 @@ and the text the section lists (decision
 | D3 | the five `d3_*` fixtures, their round trips, the edited owner files, `d3_table_last`, save in Word | rows of 2026-11-07 | ok |
 | D4 | `d4_sections`, `d4_headers`, `d4_fields`, `d4_break_last`, the round trips and edited owner files, save in Word | rows of 2026-11-08 under `build/d4/` | ok |
 | D5 | `d5_pictures`, `d5_links`, `d5_properties`, the round trips and edited owner files, save in Word | rows of 2026-11-08 under `build/d5/` | ok |
-| D6 | `d6_list`, `d6_list_landscape`, their round trips, the round trips and edited owner files, the benchmark's `large.docx`, save in Word | rows under `build/d6/` | pending |
+| D6 | `d6_list`, `d6_list_landscape`, their round trips, the round trips and edited owner files, the list written into the owner files, the benchmark's `large.docx`, save in Word | rows under `build/d6/` | pending |
 
 ## Messages
 

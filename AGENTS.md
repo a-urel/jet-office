@@ -298,6 +298,15 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   part of the CI chain; `dotnet run --project tool/ooxml_validate --
   build/d6/benchmark` validates its output. Exit 2 on unusable arguments, 1 on
   any error.
+- `tool/write_list_into.dart <in-dir> <out-dir>` writes a fixed Turkish list
+  (`turkishList()`: a logo, a title, a date, a caption, three rows and a totals
+  row) with `DocxListExport.writeTo` into every `.docx` of the first directory
+  and saves it to the second, for the owner's Word check of D6 on real files
+  (`build/d6/list-into-owner` from `test/fixtures/owner/docx`;
+  `dotnet run --project tool/ooxml_validate -- build/d6/list-into-owner`
+  validates it). It is not part of the CI chain;
+  `test/docx/list_into_owner_test.dart` (VM) holds the same check as tests.
+  Exit 2 on unusable arguments, 1 on any error.
 - The number formatter's tools and its Excel oracle (the owner's Excel for
   Mac CSVs, the LibreOffice comparison, the oracle workbook writer) are in
   `jet_core` (decision 0012); see its `AGENTS.md` and `docs/number-format.md`.
