@@ -82,10 +82,11 @@ names `body/p[0]` and `body/p[1]`; `contentTypeMissing` names
 and `body/p[1]` and the list `7`; `styleNotFound` counts 2,
 names `body/p[0]` and `body/p[1]` and the style `Foo`;
 `propertyValueInvalid` names `/docProps/core.xml` and
-`cp:revision`. The
-second `invalidCharactersRemoved`, `numberingNotFound` and
-`styleNotFound` rows count 1 and name `body/p[0]`, for the
-singular.
+`cp:revision`; `bookmarkNameRepaired` counts 2 and names
+`2 Totals!`. The second `invalidCharactersRemoved`,
+`numberingNotFound`, `styleNotFound` and
+`bookmarkNameRepaired` rows count 1 and name `body/p[0]`, for
+the singular.
 
 | Code | en | de | tr |
 |---|---|---|---|
@@ -98,3 +99,5 @@ singular.
 | `docx: styleNotFound` | 2 references in /word/document.xml (body/p[0], body/p[1]) name the style Foo, which the document does not define; Word shows them in the default style. | 2 Verweise in /word/document.xml (body/p[0], body/p[1]) nennen die Formatvorlage Foo, die das Dokument nicht definiert; Word zeigt sie in der Standardformatvorlage. | /word/document.xml (body/p[0], body/p[1]) içindeki 2 başvuru, belgenin tanımlamadığı Foo stilini adlandırıyor; Word bunları varsayılan stilde gösterir. |
 | `docx: styleNotFound` (one) | 1 reference in /word/document.xml (body/p[0]) names the style Foo, which the document does not define; Word shows it in the default style. | 1 Verweis in /word/document.xml (body/p[0]) nennt die Formatvorlage Foo, die das Dokument nicht definiert; Word zeigt ihn in der Standardformatvorlage. | /word/document.xml (body/p[0]) içindeki 1 başvuru, belgenin tanımlamadığı Foo stilini adlandırıyor; Word onu varsayılan stilde gösterir. |
 | `docx: propertyValueInvalid` | Document property cp:revision in /docProps/core.xml could not be read; it was kept as it is. | Die Dokumenteigenschaft cp:revision in /docProps/core.xml konnte nicht gelesen werden; sie wurde unverändert beibehalten. | /docProps/core.xml içindeki cp:revision belge özelliği okunamadı; olduğu gibi korundu. |
+| `docx: bookmarkNameRepaired` | 2 bookmark names in /word/document.xml did not follow Word's rules and were repaired: 2 Totals!. | 2 Textmarkennamen in /word/document.xml entsprachen nicht den Regeln von Word und wurden korrigiert: 2 Totals!. | /word/document.xml içindeki 2 yer işareti adı Word kurallarına uymuyordu ve düzeltildi: 2 Totals!. |
+| `docx: bookmarkNameRepaired` (one) | A bookmark name in /word/document.xml did not follow Word's rules and was repaired: 2 Totals!. | Ein Textmarkenname in /word/document.xml entsprach nicht den Regeln von Word und wurde korrigiert: 2 Totals!. | /word/document.xml içindeki bir yer işareti adı Word kurallarına uymuyordu ve düzeltildi: 2 Totals!. |

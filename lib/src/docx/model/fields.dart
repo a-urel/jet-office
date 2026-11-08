@@ -422,6 +422,9 @@ List<DocxInline> groupFields(List<DocxInline> inlines) {
         pairs.run(i, run);
       case final DocxOpaqueInline inline:
         pairs.opaque(inline);
+      case DocxBookmarkStart() || DocxBookmarkEnd():
+        // Holds no run and no mark: it sits anywhere in a field.
+        break;
       case DocxField():
         throw StateError('The inlines were grouped already.');
     }

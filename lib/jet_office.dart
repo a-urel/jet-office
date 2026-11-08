@@ -279,7 +279,14 @@ export 'src/docx/model/formatting.dart'
         DocxUnderlineStyle,
         DocxVerticalAlign;
 export 'src/docx/model/inlines.dart'
-    show DocxField, DocxInline, DocxOpaqueInline, DocxRun;
+    show
+        DocxBookmarkEnd,
+        DocxBookmarkStart,
+        DocxField,
+        DocxInline,
+        DocxOpaqueInline,
+        DocxRun,
+        repairBookmarkName;
 export 'src/docx/model/numbering.dart'
     show
         DocxAbstractNumbering,

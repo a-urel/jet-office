@@ -33,6 +33,7 @@ import '../xml/utf8_buffer.dart';
 import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'model/blocks.dart';
+import 'model/inlines.dart' show DocxBookmarkStart;
 import 'model/styles.dart' show DocxStyleType;
 import 'part_root.dart';
 import 'read_exception.dart';
@@ -137,6 +138,11 @@ final class StoryPart implements PartContent {
   /// part.
   bool Function(String id, DocxStyleType type)? styleDefined;
 
+  /// The id this save gives the bookmark a built start begins, the same for
+  /// its end wherever it is written; `null` outside a save. The save sets it
+  /// before it writes the part.
+  int Function(DocxBookmarkStart start)? bookmarkId;
+
   /// The warnings the last [encode] raised, as
   /// `DocumentPart.encodeWarnings` says, at locations under the part's name,
   /// such as `word/header1.xml/p[0]/r[1]`.
@@ -163,6 +169,7 @@ final class StoryPart implements PartContent {
       warnings,
       listDefined,
       styleDefined,
+      bookmarkId,
     ).writeBlocks(blocks, _location);
     if (needsClosingParagraph(blocks, _readUnclosed)) {
       w

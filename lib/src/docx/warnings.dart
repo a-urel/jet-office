@@ -51,6 +51,13 @@ enum DocxWarningCode {
   /// [DocxWarning.detail] is the element's name. It reads `null`, and the
   /// element is kept as it is in the file.
   propertyValueInvalid,
+
+  /// A bookmark was given a name through the API that does not follow Word's
+  /// rules (40 characters at most, a letter first, then letters, digits and
+  /// `_`); it was repaired, and [DocxWarning.detail] is the name as given.
+  /// Every save of a document that holds the repaired start reports it. A
+  /// name read from a file is kept and never reported.
+  bookmarkNameRepaired,
 }
 
 /// One data problem found while reading or writing a DOCX file, possibly
@@ -76,7 +83,8 @@ final class DocxWarning {
   /// content type the package declared; [DocxWarningCode.numberingNotFound]
   /// carries the id of the list; [DocxWarningCode.styleNotFound] carries the
   /// id of the style; [DocxWarningCode.propertyValueInvalid] carries the
-  /// name of the property's element.
+  /// name of the property's element; [DocxWarningCode.bookmarkNameRepaired]
+  /// carries the name as given.
   String? get detail => _entry.detail;
 
   /// How many times the problem occurred in [part].

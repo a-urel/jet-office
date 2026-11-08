@@ -231,6 +231,34 @@ final class DocxParagraph extends DocxBlock {
     return field;
   }
 
+  /// Appends the start of a bookmark named [name] and returns it.
+  ///
+  /// A [name] that breaks Word's rules is repaired as [repairBookmarkName]
+  /// says, and every save of the document reports it with
+  /// `DocxWarningCode.bookmarkNameRepaired` (the name as given is the
+  /// detail) while the start is in it. A name already used is not repaired:
+  /// Word keeps the first bookmark of a name.
+  ///
+  /// The start holds no [DocxBookmarkStart.id]: each save allocates one,
+  /// unique across the parts of the document, and does not store it.
+  DocxBookmarkStart addBookmarkStart(String name) {
+    final DocxBookmarkStart start = newBookmarkStart(name);
+    insertInline(_inlines.length, start);
+    return start;
+  }
+
+  /// Appends the end of the bookmark that [start] begins and returns it.
+  ///
+  /// [start] may be in another paragraph, or in none yet; the save writes
+  /// the end with the id of its start, so build the start's paragraph and
+  /// this one before saving. An end whose start is in no part of the
+  /// document is written all the same: Word ignores it.
+  DocxBookmarkEnd addBookmarkEnd(DocxBookmarkStart start) {
+    final DocxBookmarkEnd end = newBookmarkEnd(start);
+    insertInline(_inlines.length, end);
+    return end;
+  }
+
   /// Removes the inline at [index].
   ///
   /// An [index] that is not one of an inline throws [RangeError].

@@ -519,6 +519,9 @@ bool _isPlainRun(DocxInline inline) => switch (inline) {
   ),
   DocxOpaqueInline() => inline.localName == 'proofErr',
   DocxField() => false,
+  // A bookmark mark pairs with one outside the paragraph, as the opaque
+  // inline it was before D5 did.
+  DocxBookmarkStart() || DocxBookmarkEnd() => false,
 };
 
 /// The table edits the read-back [blocks] lack.

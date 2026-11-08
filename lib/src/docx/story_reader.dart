@@ -237,6 +237,10 @@ final class StoryReader {
         properties = PropertyContainer.read(r, paragraphPropertiesSchema);
       } else if (isW(r, 'r')) {
         inlines.add(_readRun());
+      } else if (isW(r, 'bookmarkStart')) {
+        inlines.add(_readBookmarkStart());
+      } else if (isW(r, 'bookmarkEnd')) {
+        inlines.add(_readBookmarkEnd());
       } else {
         inlines.add(_readOpaqueInline());
       }
@@ -246,6 +250,31 @@ final class StoryReader {
       attributes: attributes,
       inlines: groupFields(inlines),
     );
+  }
+
+  /// The bookmark id the reader's element states: `null` unless `w:id` is a
+  /// non-negative whole number.
+  int? _bookmarkId() {
+    final String? value = r.getAttribute('id', namespaceUri: Ns.w)?.trim();
+    if (value == null || value.isEmpty || value.length > 15) return null;
+    for (int i = 0; i < value.length; i++) {
+      final int unit = value.codeUnitAt(i);
+      if (unit < 0x30 || unit > 0x39) return null;
+    }
+    return int.parse(value);
+  }
+
+  /// Reads the `w:bookmarkStart` the reader is on, keeping its element.
+  DocxBookmarkStart _readBookmarkStart() {
+    final int? id = _bookmarkId();
+    final String name = r.getAttribute('name', namespaceUri: Ns.w) ?? '';
+    return readBookmarkStart(OpaqueXml.capture(r), id, name);
+  }
+
+  /// Reads the `w:bookmarkEnd` the reader is on, keeping its element.
+  DocxBookmarkEnd _readBookmarkEnd() {
+    final int? id = _bookmarkId();
+    return readBookmarkEnd(OpaqueXml.capture(r), id);
   }
 
   /// Captures the inline the reader is on, collecting in the same walk its

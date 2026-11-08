@@ -109,8 +109,9 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
 /// The sample DOCX warning of [code]: part `/word/document.xml`, locations
 /// `body/p[0]` and `body/p[1]`, count 2, and for the two content type codes
 /// the detail they name; `numberingNotFound` names the list `7` and
-/// `styleNotFound` the style `Foo`. With [one], `invalidCharactersRemoved`,
-/// `numberingNotFound` and `styleNotFound` count 1 at `body/p[0]`, for their
+/// `styleNotFound` the style `Foo`; `bookmarkNameRepaired` names `2 Totals!`.
+/// With [one], `invalidCharactersRemoved`, `numberingNotFound`,
+/// `styleNotFound` and `bookmarkNameRepaired` count 1 at `body/p[0]`, for their
 /// singular text.
 DocxWarning _docxSample(DocxWarningCode code, {bool one = false}) {
   final DocxWarningCollector collector = DocxWarningCollector();
@@ -148,6 +149,15 @@ DocxWarning _docxSample(DocxWarningCode code, {bool one = false}) {
       }
     case DocxWarningCode.propertyValueInvalid:
       collector.add(code, part: '/docProps/core.xml', detail: 'cp:revision');
+    case DocxWarningCode.bookmarkNameRepaired:
+      for (int i = 0; i < (one ? 1 : 2); i++) {
+        collector.add(
+          code,
+          part: '/word/document.xml',
+          location: 'body/p[$i]',
+          detail: '2 Totals!',
+        );
+      }
   }
   return collector.warnings.single;
 }
@@ -222,10 +232,11 @@ String warningMessagesMarkdown() {
     ..writeln('and `body/p[1]` and the list `7`; `styleNotFound` counts 2,')
     ..writeln('names `body/p[0]` and `body/p[1]` and the style `Foo`;')
     ..writeln('`propertyValueInvalid` names `/docProps/core.xml` and')
-    ..writeln('`cp:revision`. The')
-    ..writeln('second `invalidCharactersRemoved`, `numberingNotFound` and')
-    ..writeln('`styleNotFound` rows count 1 and name `body/p[0]`, for the')
-    ..writeln('singular.')
+    ..writeln('`cp:revision`; `bookmarkNameRepaired` counts 2 and names')
+    ..writeln('`2 Totals!`. The second `invalidCharactersRemoved`,')
+    ..writeln('`numberingNotFound`, `styleNotFound` and')
+    ..writeln('`bookmarkNameRepaired` rows count 1 and name `body/p[0]`, for')
+    ..writeln('the singular.')
     ..writeln()
     ..writeln('| Code | en | de | tr |')
     ..writeln('|---|---|---|---|');
@@ -238,7 +249,8 @@ String warningMessagesMarkdown() {
     docxRow('`docx: ${code.name}`', _docxSample(code));
     if (code == DocxWarningCode.invalidCharactersRemoved ||
         code == DocxWarningCode.numberingNotFound ||
-        code == DocxWarningCode.styleNotFound) {
+        code == DocxWarningCode.styleNotFound ||
+        code == DocxWarningCode.bookmarkNameRepaired) {
       docxRow('`docx: ${code.name}` (one)', _docxSample(code, one: true));
     }
   }

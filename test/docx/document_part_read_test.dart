@@ -85,6 +85,10 @@ String _dump(DocumentPart part) {
               }
             case DocxField():
               out.write('field(${inline.instruction})"${inline.text}"');
+            case DocxBookmarkStart():
+              out.write('bs(${inline.id},${inline.name})');
+            case DocxBookmarkEnd():
+              out.write('be(${inline.id})');
             case DocxOpaqueInline():
               out.write(
                 'oi:${inline.namespaceUri}|${inline.localName}'

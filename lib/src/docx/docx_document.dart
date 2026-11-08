@@ -48,6 +48,7 @@ import 'document_part.dart';
 import 'docx_package.dart';
 import 'model/blocks.dart';
 import 'model/edit_sink.dart';
+import 'model/inlines.dart' show DocxBookmarkStart;
 import 'model/numbering.dart';
 import 'model/primitives.dart' as primitives;
 import 'model/primitives.dart' show DocxEdits;
@@ -722,13 +723,21 @@ final class DocxDocument {
       final bool Function(String, DocxStyleType)? styleDefined = styles == null
           ? null
           : (String id, DocxStyleType type) => definesStyle(styles, id, type);
+      // A built bookmark's id is allocated here, once for its start and its
+      // end, and stored nowhere else (plan Ruling A).
+      final Map<DocxBookmarkStart, int> bookmarkIds =
+          Map<DocxBookmarkStart, int>.identity();
+      int bookmarkId(DocxBookmarkStart start) =>
+          bookmarkIds.putIfAbsent(start, () => _saveIds.nextBookmarkId());
       main
         ..listDefined = listDefined
-        ..styleDefined = styleDefined;
+        ..styleDefined = styleDefined
+        ..bookmarkId = bookmarkId;
       for (final StoryPart story in _storyParts) {
         story
           ..listDefined = listDefined
-          ..styleDefined = styleDefined;
+          ..styleDefined = styleDefined
+          ..bookmarkId = bookmarkId;
       }
     }
     // A styles part the document lacked is added once it holds something

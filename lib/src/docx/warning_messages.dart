@@ -27,6 +27,9 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
   final String part = w.part;
   final String locations = _locationList(w);
   final String detail = w.detail ?? '';
+  // A repaired bookmark name's detail, after a colon; none when the
+  // warning aggregated more names than it keeps.
+  final String named = w.detail == null ? '' : ': $detail';
   return switch ((w.code, locale)) {
     (DocxWarningCode.invalidCharactersRemoved, OfficeLocale.en) =>
       count == 1
@@ -116,5 +119,24 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
     (DocxWarningCode.propertyValueInvalid, OfficeLocale.tr) =>
       '$part içindeki $detail belge özelliği okunamadı; olduğu gibi '
           'korundu.',
+    (DocxWarningCode.bookmarkNameRepaired, OfficeLocale.en) =>
+      count == 1
+          ? "A bookmark name in $part did not follow Word's rules and was "
+                'repaired$named.'
+          : "$count bookmark names in $part did not follow Word's rules and "
+                'were repaired$named.',
+    (DocxWarningCode.bookmarkNameRepaired, OfficeLocale.de) =>
+      count == 1
+          ? 'Ein Textmarkenname in $part entsprach nicht den Regeln von Word '
+                'und wurde korrigiert$named.'
+          : '$count Textmarkennamen in $part entsprachen nicht den Regeln '
+                'von Word und wurden korrigiert$named.',
+    // Turkish keeps the noun singular after a numeral: "2 yer işareti adı".
+    (DocxWarningCode.bookmarkNameRepaired, OfficeLocale.tr) =>
+      count == 1
+          ? '$part içindeki bir yer işareti adı Word kurallarına uymuyordu ve '
+                'düzeltildi$named.'
+          : '$part içindeki $count yer işareti adı Word kurallarına '
+                'uymuyordu ve düzeltildi$named.',
   };
 }

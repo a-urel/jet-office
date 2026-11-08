@@ -1,5 +1,6 @@
 /// The inlines of a paragraph, the children of `w:p`: runs, complex fields
-/// (`fields.dart`), and opaque inlines for everything else.
+/// (`fields.dart`), bookmark marks (`bookmarks.dart`), and opaque inlines for
+/// everything else.
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -32,6 +33,7 @@ import 'property_set.dart';
 import 'run_content.dart';
 import 'run_properties.dart';
 
+part 'bookmarks.dart';
 part 'fields.dart';
 
 /// One child of a paragraph, or an inline of a [DocxField].

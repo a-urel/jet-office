@@ -521,6 +521,12 @@ void _inline(DocxInline inline) {
     inline.name;
     inline.result.forEach(_inline);
   }
+  if (inline is DocxBookmarkStart) {
+    <Object?>[inline.id, inline.name].toString();
+  }
+  if (inline is DocxBookmarkEnd) {
+    <Object?>[inline.id, inline.start].toString();
+  }
   if (inline is! DocxRun) return;
   inline.style;
   _run(inline.properties);

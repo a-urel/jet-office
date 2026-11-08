@@ -40,6 +40,7 @@ import '../xml/utf8_buffer.dart';
 import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'model/blocks.dart';
+import 'model/inlines.dart' show DocxBookmarkStart;
 import 'model/property_set.dart';
 import 'model/sections.dart';
 import 'model/styles.dart' show DocxStyleType;
@@ -129,6 +130,11 @@ final class DocumentPart implements PartContent {
   /// The save sets it before it writes the part.
   bool Function(String id, DocxStyleType type)? styleDefined;
 
+  /// The id this save gives the bookmark a built start begins, the same for
+  /// its end wherever it is written; `null` outside a save. The save sets it
+  /// before it writes the part.
+  int Function(DocxBookmarkStart start)? bookmarkId;
+
   /// The warnings the last [encode] raised; empty before the first.
   ///
   /// Each [encode] starts a new collector, so encoding twice reports each
@@ -197,6 +203,7 @@ final class DocumentPart implements PartContent {
         warnings,
         listDefined,
         styleDefined,
+        bookmarkId,
       ),
       this,
     );

@@ -82,8 +82,9 @@ final class StoryWriter {
     this._partName,
     this._warnings,
     this._listDefined,
-    this._styleDefined,
-  );
+    this._styleDefined, [
+    this._bookmarkId,
+  ]);
 
   final XmlWriter _w;
 
@@ -102,6 +103,14 @@ final class StoryWriter {
   final DocxWarningCollector _warnings;
   final bool Function(int numId)? _listDefined;
   final bool Function(String id, DocxStyleType type)? _styleDefined;
+
+  /// The id of the bookmark a built start begins, in this save (the same for
+  /// its end); `null` outside a save, when the writer numbers them itself
+  /// from 0.
+  final int Function(DocxBookmarkStart start)? _bookmarkId;
+
+  final Map<DocxBookmarkStart, int> _ownBookmarkIds =
+      Map<DocxBookmarkStart, int>.identity();
 
   /// The writer of the part's XML, for what surrounds the blocks.
   XmlWriter get writer => _w;
@@ -297,6 +306,10 @@ final class StoryWriter {
           _run(inline, '$path/r[${runs++}]');
         case DocxOpaqueInline():
           opaqueInlineXml(inline).writeTo(w, declaredAbove: scope);
+        case DocxBookmarkStart():
+          _bookmarkStart(inline, path);
+        case DocxBookmarkEnd():
+          _bookmarkEnd(inline);
         case DocxField():
           throw StateError('visitInlines gives no field.');
       }
@@ -307,6 +320,54 @@ final class StoryWriter {
     }
     scope = outer;
     w.end();
+  }
+
+  /// The id a save writes for the bookmark [start] begins.
+  int _idOf(DocxBookmarkStart start) =>
+      start.id ??
+      (_bookmarkId ??
+          (DocxBookmarkStart s) => _ownBookmarkIds.putIfAbsent(
+            s,
+            () => _ownBookmarkIds.length,
+          ))(start);
+
+  /// Writes the bookmark start [start] of the paragraph at [path]: as read
+  /// when it was read, else with the id of this save, reporting a name the
+  /// API repaired.
+  void _bookmarkStart(DocxBookmarkStart start, String path) {
+    final OpaqueXml? xml = bookmarkXml(start);
+    if (xml != null) {
+      xml.writeTo(_w, declaredAbove: scope);
+      return;
+    }
+    final String? given = bookmarkRepairedFrom(start);
+    if (given != null) {
+      _warnings.add(
+        DocxWarningCode.bookmarkNameRepaired,
+        part: _partName,
+        location: path,
+        detail: given,
+      );
+    }
+    _w
+      ..start('${_p}bookmarkStart')
+      ..attribute('${_p}id', '${_idOf(start)}')
+      ..attribute('${_p}name', start.name)
+      ..end();
+  }
+
+  /// Writes the bookmark end [end]: as read when it was read, else with the
+  /// id of its start in this save.
+  void _bookmarkEnd(DocxBookmarkEnd end) {
+    final OpaqueXml? xml = bookmarkXml(end);
+    if (xml != null) {
+      xml.writeTo(_w, declaredAbove: scope);
+      return;
+    }
+    _w
+      ..start('${_p}bookmarkEnd')
+      ..attribute('${_p}id', '${_idOf(end.start!)}')
+      ..end();
   }
 
   /// Reports the style reference [localName] of [properties] at [path] if
