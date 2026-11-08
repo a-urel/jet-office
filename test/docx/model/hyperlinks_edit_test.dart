@@ -62,6 +62,59 @@ Uint8List _turkish() => docxWithStyles(
   ]),
 );
 
+/// A package whose last section has the header part `word/header1.xml` and
+/// the footer part `word/footer1.xml`, each with a relationships part
+/// ([headerRels], [footerRels], written as given), in that ZIP order;
+/// [footer] is the footer's blocks.
+Uint8List _withStories({
+  required String headerRels,
+  required String footerRels,
+  String footer = '<w:p><w:r><w:t>Foot</w:t></w:r></w:p>',
+}) => buildDocx(
+  document: _main(
+    '<w:p><w:r><w:t>Body</w:t></w:r></w:p><w:sectPr>'
+    '<w:headerReference w:type="default" r:id="rId1"/>'
+    '<w:footerReference w:type="default" r:id="rId2"/></w:sectPr>',
+  ),
+  extra: <String, List<int>>{
+    '[Content_Types].xml': utf8.encode(
+      '<Types xmlns="$contentTypesNs">'
+      '<Default Extension="rels" ContentType="${ContentType.relationships}"/>'
+      '<Override PartName="/word/document.xml" '
+      'ContentType="${ContentType.wmlDocument}"/>'
+      '<Override PartName="/word/header1.xml" '
+      'ContentType="${ContentType.wmlHeader}"/>'
+      '<Override PartName="/word/footer1.xml" '
+      'ContentType="${ContentType.wmlFooter}"/>'
+      '<Override PartName="/word/styles.xml" '
+      'ContentType="${ContentType.wmlStyles}"/></Types>',
+    ),
+    'word/_rels/document.xml.rels': utf8.encode(
+      '<Relationships xmlns="$packageRelsNs">'
+      '<Relationship Id="rId1" Type="${RelType.header}" '
+      'Target="header1.xml"/>'
+      '<Relationship Id="rId2" Type="${RelType.footer}" '
+      'Target="footer1.xml"/>'
+      '<Relationship Id="rId3" Type="${RelType.styles}" '
+      'Target="styles.xml"/></Relationships>',
+    ),
+    'word/styles.xml': utf8.encode(
+      stylesXmlOf(<String>[styleXml('character', 'Hyperlink', 'Hyperlink')]),
+    ),
+    'word/header1.xml': utf8.encode(
+      '<w:hdr $_decls><w:p><w:r><w:t>Head</w:t></w:r></w:p></w:hdr>',
+    ),
+    'word/_rels/header1.xml.rels': utf8.encode(headerRels),
+    'word/footer1.xml': utf8.encode('<w:ftr $_decls>$footer</w:ftr>'),
+    'word/_rels/footer1.xml.rels': utf8.encode(footerRels),
+  },
+);
+
+const String _someRels =
+    '<Relationships xmlns="$packageRelsNs">'
+    '<Relationship Id="rId9" Type="${RelType.hyperlink}" '
+    'Target="https://old.test/" TargetMode="External"/></Relationships>';
+
 void main() {
   group('an external link', () {
     test('saves a relationship of the main part and the Hyperlink style', () {
@@ -192,6 +245,38 @@ void main() {
       );
     });
 
+    test('a link in a nested table cell is related from the main part', () {
+      final DocxDocument doc = DocxDocument();
+      final DocxTable outer = doc.body.addTable(columns: 1);
+      outer.addRow(<String?>[null]);
+      doc.body.addParagraph();
+      final DocxTable inner = outer.rows.single.cells.single.addTable(
+        columns: 1,
+      );
+      inner.addRow(<String?>[null]);
+      final DocxParagraph cell =
+          inner.rows.single.cells.single.blocks.single as DocxParagraph;
+      cell.addHyperlink('deep', url: 'https://deep.test/');
+      final Map<String, String> parts = _parts(doc.save().bytes);
+      final List<(String, String)> rels = _links(
+        parts['word/_rels/document.xml.rels']!,
+      );
+      expect(rels.single.$2, 'https://deep.test/');
+      expect(_linkIds(parts['word/document.xml']!), <String>[rels.single.$1]);
+    });
+
+    test('a url with a scheme and a backslash is written as given', () {
+      final DocxDocument doc = DocxDocument();
+      final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
+      expect(p.addHyperlink('c', url: r'C:\x').url, r'C:\x');
+      expect(
+        _links(
+          _parts(doc.save().bytes)['word/_rels/document.xml.rels']!,
+        ).single.$2,
+        r'C:\x',
+      );
+    });
+
     test('saving twice gives the same file and stores no id', () {
       final DocxDocument doc = DocxDocument();
       final DocxParagraph p = doc.body.blocks.single as DocxParagraph;
@@ -302,6 +387,52 @@ void main() {
     });
   });
 
+  group('saves that add and take back relationships', () {
+    test('save, link, save, undo, save gives the first file again', () {
+      final DocxDocument doc = DocxDocument.open(
+        _withStories(headerRels: _someRels, footerRels: _someRels),
+      );
+      final DocxHeaderFooter header = doc.sections.single.header;
+      expect(header.blocks, hasLength(1));
+      expect(doc.sections.single.footer.blocks, hasLength(1));
+      final Uint8List first = doc.save().bytes;
+      final ChangeSet set = editsOf(doc).transaction(() {
+        (header.blocks.single as DocxParagraph).addHyperlink(
+          'new',
+          url: 'https://new.test/',
+        );
+      });
+      expect(
+        _links(_parts(doc.save().bytes)['word/_rels/header1.xml.rels']!),
+        hasLength(2),
+      );
+      changeLogOf(doc).revertSet(set);
+      expect(doc.save().bytes, first);
+    });
+
+    test('a save that fails on a broken footer rels part adds nothing', () {
+      const String broken = '<Relationships';
+      final DocxDocument doc = DocxDocument.open(
+        _withStories(headerRels: _someRels, footerRels: broken),
+      );
+      final DocxParagraph foot =
+          doc.sections.single.footer.blocks.single as DocxParagraph;
+      (doc.body.blocks.first as DocxParagraph).addHyperlink(
+        'body',
+        url: 'https://body.test/',
+      );
+      foot.addHyperlink('foot', url: 'https://foot.test/');
+      expect(doc.save, throwsA(isA<DocxReadException>()));
+      foot.removeInlineAt(foot.inlines.length - 1);
+      final Map<String, String> parts = _parts(doc.save().bytes);
+      expect(
+        _links(parts['word/_rels/document.xml.rels']!).single.$2,
+        'https://body.test/',
+      );
+      expect(parts['word/_rels/footer1.xml.rels'], broken);
+    });
+  });
+
   group('an anchor link', () {
     test('links to a built bookmark with w:anchor and no relationship', () {
       final DocxDocument doc = DocxDocument();
@@ -336,6 +467,14 @@ void main() {
         <String, void Function(DocxParagraph p)>{
           'a url that is not a URI': (DocxParagraph p) =>
               p.addHyperlink('x', url: 'not a uri'),
+          'a url with a space in its host': (DocxParagraph p) =>
+              p.addHyperlink('x', url: 'https://a b/'),
+          'a url with a space in its path': (DocxParagraph p) =>
+              p.addHyperlink('x', url: 'https://x.test/a b'),
+          'a url with a tab': (DocxParagraph p) =>
+              p.addHyperlink('x', url: 'https://x.test/a\tb'),
+          'a url with a C1 control': (DocxParagraph p) =>
+              p.addHyperlink('x', url: 'https://x.test/\u0085'),
           'a relative url': (DocxParagraph p) =>
               p.addHyperlink('x', url: 'page.html'),
           'a url XML cannot hold': (DocxParagraph p) =>

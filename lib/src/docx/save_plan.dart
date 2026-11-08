@@ -5,21 +5,22 @@
 /// Not ported from Quds; written for jet_office.
 ///
 /// A built object holds no relationship in the model. Before the package is
-/// written, the save walks every part it writes from the model ([SavePlan.planPart]):
-/// the blocks of the body, of each header and footer, and of their table
-/// cells and nested tables, the inlines of each paragraph with those of its
-/// fields and hyperlinks. Each built hyperlink to an address gets a
-/// relationship of the part it is in now, from [SaveIds.addRelationship], so
-/// the relationships part, which the package writes before the part, holds
-/// it, and the part's writer reads its id through [SavePlan.relationshipIdsOf].
-/// [SaveIds.restoreRelationships] takes every one back once the package is
-/// written: the next save adds them again, with the same ids.
+/// written, the save walks every part it writes from the model
+/// ([SavePlan.planPart]): the blocks of the body, of each header and footer,
+/// and of their table cells and nested tables, the inlines of each paragraph
+/// with those of its fields and hyperlinks. Each built hyperlink to an
+/// address gets a relationship of the part it is in now, from
+/// [SaveIds.addRelationship], so the relationships part, which the package
+/// writes before the part, holds it, and the part's writer reads its id
+/// through [SavePlan.relationshipIdsOf]. [SaveIds.restoreRelationships]
+/// takes every one back once the package is written: the next save adds them
+/// again, with the same ids.
 ///
-/// [SavePlan.relate] is the one way to add a relationship for a built object: one per
-/// part and key, so a key that stands for something shared (an image's media
-/// part, for pictures) gives one relationship however many objects use it,
-/// while a hyperlink, its own key, gets one of its own, as Word writes two
-/// links to one address.
+/// [SavePlan.relate] is the one way to add a relationship for a built
+/// object: one per part and key, so a key that stands for something shared
+/// (an image's media part, for pictures) gives one relationship however many
+/// objects use it, while a hyperlink, its own key, gets one of its own, as
+/// Word writes two links to one address.
 library;
 
 import '../opc/ooxml.dart' show RelType;

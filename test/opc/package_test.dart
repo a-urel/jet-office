@@ -631,6 +631,21 @@ void main() {
       expect(p.relationshipsOf('word/header1.xml'), hasLength(1));
     });
 
+    test('an entry never parsed goes back to its place in the order', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('a.xml', '<a/>'),
+        ('_rels/a.xml.rels', raw),
+        ('b.xml', '<b/>'),
+        ('_rels/b.xml.rels', raw),
+      ]);
+      final Uint8List before = write(p);
+      final RelationshipsMark mark = p.markRelationships('a.xml');
+      p.addRelationship('a.xml', type: 't', target: 'http://y');
+      write(p);
+      p.restoreRelationships(mark);
+      expect(write(p), before);
+    });
+
     test('a parsed one loses only what was added after the mark', () {
       final OpcPackage p = _package(<(String, String)>[
         ('a.xml', '<a/>'),

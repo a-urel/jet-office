@@ -120,10 +120,20 @@ final class DetachedPart {
 ///
 /// Opaque; give it back to the package that made it.
 final class RelationshipsMark {
-  RelationshipsMark._(this._key, this._entry, this._known, this._length);
+  RelationshipsMark._(
+    this._key,
+    this._entry,
+    this._after,
+    this._known,
+    this._length,
+  );
 
   final String _key;
   final String? _entry;
+
+  /// The keys of the entries never parsed that followed [_entry] then, so it
+  /// goes back to its place in the write order.
+  final List<String> _after;
   final ({String source, Relationships rels, bool fromInput})? _known;
   final int _length;
 }
@@ -562,9 +572,12 @@ final class OpcPackage {
   RelationshipsMark markRelationships(String source) {
     final String key = _key(source);
     final known = _rels[key];
+    final String? entry = _relsEntries[key];
+    final List<String> keys = _relsEntries.keys.toList();
     return RelationshipsMark._(
       key,
-      _relsEntries[key],
+      entry,
+      entry == null ? const <String>[] : keys.sublist(keys.indexOf(key) + 1),
       known,
       known?.rels.items.length ?? 0,
     );
@@ -572,7 +585,9 @@ final class OpcPackage {
 
   /// Puts the relationships of the source of [mark] back as they were when
   /// it was made, after relationships were only added to them: an input
-  /// entry never parsed then is copied from its bytes again, the
+  /// entry never parsed then is copied from its bytes again, at its place
+  /// among the entries never parsed (before the first of those that followed
+  /// it then and still are), so the write order is the same, the
   /// relationships parsed then keep those they had, and a source that had
   /// none has none.
   void restoreRelationships(RelationshipsMark mark) {
@@ -581,7 +596,18 @@ final class OpcPackage {
     final known = mark._known;
     if (entry != null) {
       _rels.remove(key);
-      _relsEntries[key] = entry;
+      _relsEntries.remove(key);
+      final Set<String> after = mark._after.toSet();
+      final List<MapEntry<String, String>> entries = _relsEntries.entries
+          .toList();
+      int at = entries.indexWhere(
+        (MapEntry<String, String> e) => after.contains(e.key),
+      );
+      if (at < 0) at = entries.length;
+      entries.insert(at, MapEntry<String, String>(key, entry));
+      _relsEntries
+        ..clear()
+        ..addEntries(entries);
     } else if (known == null) {
       _rels.remove(key);
     } else {

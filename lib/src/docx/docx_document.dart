@@ -743,6 +743,18 @@ final class DocxDocument {
       // with it (plan Ruling A).
       _saveIdsOfSave?.restoreRelationships();
       _saveIdsOfSave = null;
+      // Nor does a part keep what the save told it about ids.
+      final DocumentPart? main = _part;
+      if (main != null) {
+        main
+          ..bookmarkId = null
+          ..relationshipId = null;
+      }
+      for (final StoryPart story in _storyParts) {
+        story
+          ..bookmarkId = null
+          ..relationshipId = null;
+      }
     }
   }
 

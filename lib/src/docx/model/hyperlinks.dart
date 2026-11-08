@@ -182,25 +182,20 @@ typedef _BuiltTargets = ({String? url, String? anchor, String? tooltip});
 /// A new hyperlink of one [run] to [url] or to the bookmark [anchor] (exactly
 /// one of them), with [tooltip], as `DocxParagraph.addHyperlink` builds it.
 ///
-/// Throws [ArgumentError] when both or neither target is given, when [url]
-/// is not an absolute URI (`Uri.tryParse` gives none, or one without a
-/// scheme), when [anchor] is empty, and when [url], [anchor] or [tooltip]
-/// holds a character XML forbids.
+/// The targets must have passed [checkHyperlinkTargets], which the caller
+/// runs before it changes anything.
 DocxHyperlink newHyperlink(
   DocxRun run, {
   String? url,
   String? anchor,
   String? tooltip,
-}) {
-  checkHyperlinkTargets(url: url, anchor: anchor, tooltip: tooltip);
-  return DocxHyperlink._built((
-    url: url,
-    anchor: anchor,
-    tooltip: tooltip,
-  ), run);
-}
+}) => DocxHyperlink._built((url: url, anchor: anchor, tooltip: tooltip), run);
 
-/// Throws as [newHyperlink] does for targets it refuses.
+/// Throws [ArgumentError] when both or neither target is given, when [url]
+/// is not an absolute URI (`Uri.tryParse` gives none, or one without a
+/// scheme) or holds white space or a control character, when [anchor] is
+/// empty, and when [url], [anchor] or [tooltip] holds a character XML
+/// forbids. A [url] it accepts is written as given, unencoded.
 void checkHyperlinkTargets({String? url, String? anchor, String? tooltip}) {
   if ((url == null) == (anchor == null)) {
     throw ArgumentError(
@@ -210,11 +205,15 @@ void checkHyperlinkTargets({String? url, String? anchor, String? tooltip}) {
   }
   if (url != null) {
     final Uri? uri = Uri.tryParse(url);
-    if (uri == null || !uri.hasScheme || _forbidden(url)) {
+    if (uri == null ||
+        !uri.hasScheme ||
+        _forbidden(url) ||
+        _spaceOrControl.hasMatch(url)) {
       throw ArgumentError.value(
         url,
         'url',
-        'must be an absolute URI without a character XML forbids',
+        'must be an absolute URI without white space, a control character '
+            'or a character XML forbids',
       );
     }
   }
@@ -233,6 +232,9 @@ void checkHyperlinkTargets({String? url, String? anchor, String? tooltip}) {
     );
   }
 }
+
+/// White space and the C0 and C1 control characters.
+final RegExp _spaceOrControl = RegExp(r'[\s\x00-\x1F\x7F-\x9F]');
 
 /// Whether [text] holds a character XML forbids.
 bool _forbidden(String text) => scrubXmlText(text).removed > 0;
