@@ -312,6 +312,16 @@ final class XmlRoot {
   }
 }
 
+/// Opens [root] on [w], as [XmlRoot.writeStart] does, without a character
+/// XML forbids in an attribute's value, which only a character reference in
+/// the source can have put there. The caller writes the content and ends
+/// the element.
+void writeRootStart(XmlWriter w, XmlRoot root) {
+  w.start(root.qualifiedName);
+  writeNamespaceDeclarations(w, root.namespaces);
+  writeKeptAttributes(w, root.attributes, declaredAbove: root.namespaces);
+}
+
 /// Writes `xmlns` declarations for [namespaces], prefix to URI (`''` for the
 /// default namespace), on the start tag open on [w].
 ///

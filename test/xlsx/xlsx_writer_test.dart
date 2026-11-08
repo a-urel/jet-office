@@ -602,7 +602,7 @@ void main() {
 
   test('properties reach the property parts', () {
     final XlsxWriter book = XlsxWriter(
-      properties: const XlsxProperties(title: 'Accounts', company: 'Jet'),
+      properties: const OfficeProperties(title: 'Accounts', company: 'Jet'),
     );
     book.addSheet('S');
     final Map<String, String> parts = readXlsx(book.close().bytes);
@@ -618,14 +618,14 @@ void main() {
     expect(
       () => XlsxStreamWriter(
         sink,
-        properties: const XlsxProperties(title: 'bad\u0001'),
+        properties: const OfficeProperties(title: 'bad\u0001'),
       ),
       throwsArgumentError,
     );
     expect(sink.chunks, isEmpty);
     expect(sink.closed, isFalse);
     expect(
-      () => XlsxWriter(properties: const XlsxProperties(company: 'x\u0000')),
+      () => XlsxWriter(properties: const OfficeProperties(company: 'x\u0000')),
       throwsArgumentError,
     );
   });
@@ -638,7 +638,7 @@ void main() {
 
     test('write docProps/custom.xml, a relationship and an override', () {
       final XlsxWriter book = XlsxWriter(
-        properties: XlsxProperties(custom: custom),
+        properties: OfficeProperties(custom: custom),
       );
       book.addSheet('S');
       final Map<String, String> parts = readXlsx(book.close().bytes);
@@ -680,7 +680,7 @@ void main() {
       expect(
         () => XlsxStreamWriter(
           sink,
-          properties: const XlsxProperties(
+          properties: const OfficeProperties(
             custom: <String, Object>{'N': double.nan},
           ),
         ),
@@ -690,7 +690,7 @@ void main() {
       expect(sink.closed, isFalse);
       expect(
         () => XlsxWriter(
-          properties: const XlsxProperties(custom: <String, Object>{'': 1}),
+          properties: const OfficeProperties(custom: <String, Object>{'': 1}),
         ),
         throwsArgumentError,
       );
@@ -699,7 +699,7 @@ void main() {
 
   test('every part is well-formed XML', () {
     final XlsxWriter book = XlsxWriter(
-      properties: XlsxProperties(
+      properties: OfficeProperties(
         title: 'T & <C>',
         creator: 'Ahmet',
         created: DateTime.utc(2026, 10, 24),

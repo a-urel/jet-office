@@ -36,7 +36,7 @@ List<Fixture> m1Fixtures() => <Fixture>[
 
 XlsxResult _make(
   void Function(XlsxWriter book) script, {
-  XlsxProperties properties = const XlsxProperties(),
+  OfficeProperties properties = const OfficeProperties(),
 }) {
   final XlsxWriter book = XlsxWriter(properties: properties);
   script(book);
@@ -346,7 +346,7 @@ Fixture _properties() => Fixture(
 );
 
 /// The properties of `m1_properties`.
-XlsxProperties m1Properties() => XlsxProperties(
+OfficeProperties m1Properties() => OfficeProperties(
   title: 'Quarterly report',
   subject: 'Sales',
   creator: 'Ahmet Urel',

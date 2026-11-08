@@ -148,7 +148,7 @@ sheet
   )
   ..addConditionalFormat(conditionalFormat)
   ..protection = const XlsxSheetProtection(password: 'secret');
-book.properties = const XlsxProperties(title: 'Prices');
+book.properties = const OfficeProperties(title: 'Prices');
 ```
 
 - **Reading and setting.** On a sheet: `definedNames`, `defineName`,

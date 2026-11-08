@@ -7,6 +7,8 @@
 /// This file is new in jet_office; Quds has no equivalent.
 library;
 
+import '../common/properties.dart' as properties;
+
 /// The size limits of an Excel workbook, as published by Microsoft.
 ///
 /// Callers that write more data than fits split it across sheets themselves,
@@ -140,8 +142,9 @@ abstract final class XlsxLimits {
   ///
   /// jet_office sets 255, the length of Excel's Custom Properties name box.
   /// The value is not on Microsoft's "Excel specifications and limits"
-  /// page.
-  static const int maxCustomPropertyNameLength = 255;
+  /// page. A document's custom properties take the same bound.
+  static const int maxCustomPropertyNameLength =
+      properties.maxCustomPropertyNameLength;
 
   /// The longest title of a validation's input or error message, in UTF-16
   /// code units.

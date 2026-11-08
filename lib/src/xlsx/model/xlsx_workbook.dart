@@ -33,6 +33,8 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../../common/properties.dart';
+import '../../common/properties_parts.dart';
 import '../../common/theme_colors.dart';
 import '../../drawingml/media.dart';
 import '../../opc/change_log.dart';
@@ -47,7 +49,6 @@ import '../cell_encoder.dart';
 import '../color.dart';
 import '../defined_name.dart';
 import '../number_format.dart';
-import '../properties.dart';
 import '../raw_cell.dart';
 import '../read/package_reader.dart';
 import '../read/read_exception.dart';
@@ -68,7 +69,6 @@ import 'defined_names.dart';
 import 'element_node.dart';
 import 'palette.dart';
 import 'primitives.dart';
-import 'properties_parts.dart';
 import 'protection_elements.dart';
 import 'styles_part.dart';
 import 'table_part.dart';
@@ -136,7 +136,7 @@ final class XlsxWorkbook {
 
   /// The document properties: core (`docProps/core.xml`), extended
   /// (`docProps/app.xml`) and custom (`docProps/custom.xml`) merged into
-  /// the writer's [XlsxProperties].
+  /// the writer's [OfficeProperties].
   ///
   /// The parts load on first use, each found by its relationship in the
   /// package root. A part the file lacks, or whose root is not the expected
@@ -149,7 +149,7 @@ final class XlsxWorkbook {
   /// stays and is not listed, with no warning; of equal names the first is
   /// listed. Throws an [XlsxReadException] when a part is not readable XML
   /// or exceeds a limit; the workbook still saves, with the part as it was.
-  XlsxProperties get properties => _book.propertiesState().parts.merged;
+  OfficeProperties get properties => _book.propertiesState().parts.merged;
 
   /// Sets the document properties to [value].
   ///
@@ -169,7 +169,7 @@ final class XlsxWorkbook {
   /// [StateError] for a part that is not a properties part and would have
   /// to change, and an [XlsxReadException] when a part is not readable XML
   /// or exceeds a limit; nothing has changed then.
-  set properties(XlsxProperties value) {
+  set properties(OfficeProperties value) {
     final PropertiesState state = _book.propertiesState();
     _book.log.transaction(() => setProperties(_book.log, state, value));
   }
@@ -381,7 +381,7 @@ Uint8List _emptyPackage() {
     return out.takeBytes();
   }
 
-  const XlsxProperties properties = XlsxProperties();
+  const OfficeProperties properties = OfficeProperties();
   final ZipWriter zip = ZipWriter()
     ..add(
       'xl/workbook.xml',
@@ -867,7 +867,7 @@ final class _Book implements SheetHost {
   /// The document properties, loaded on first use; a part that cannot be
   /// read throws and nothing is kept.
   PropertiesState propertiesState() => _properties ??= PropertiesState.load(
-    reader,
+    _XlsxPropertiesSource(reader),
     (String element) => warnings.add(
       XlsxWarningCode.featureEntryInvalid,
       sheet: '',
@@ -1091,4 +1091,33 @@ final class _Book implements SheetHost {
     }
     reader.guardXml(reader.workbookPart, () => _package.writeTo(zip));
   }
+}
+
+/// The package of a workbook as the document properties read it: the
+/// workbook's limits and its read exceptions.
+final class _XlsxPropertiesSource implements PropertiesSource {
+  _XlsxPropertiesSource(this._reader);
+
+  final PackageReader _reader;
+
+  @override
+  OpcPackage get package => _reader.package;
+
+  /// A workbook's properties part lists at most as many entries as it may
+  /// have sheets.
+  @override
+  int get maxChildren => _reader.limits.maxSheets;
+
+  @override
+  int get maxTextLength => _reader.limits.maxTextLength;
+
+  @override
+  T guard<T>(String part, T Function() body) => _reader.guardXml(part, body);
+
+  @override
+  XmlPullReader openXml(String part) => _reader.openXml(part);
+
+  @override
+  Never limitExceeded(String part, String message) =>
+      throw XlsxReadException(XlsxReadFailure.limitExceeded, message);
 }

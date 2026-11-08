@@ -701,7 +701,7 @@ Fixture _protection() => Fixture(
 );
 
 /// The properties of `m3_properties`.
-XlsxProperties m3Properties() => XlsxProperties(
+OfficeProperties m3Properties() => OfficeProperties(
   title: 'Quarterly report',
   subject: 'Accounts',
   creator: 'Ahmet Urel',

@@ -1,6 +1,6 @@
-/// The document properties parts of a workbook as model content: core
-/// (`docProps/core.xml`), extended (`docProps/app.xml`) and custom
-/// (`docProps/custom.xml`).
+/// The document properties parts of a workbook or a document as model
+/// content: core (`docProps/core.xml`), extended (`docProps/app.xml`) and
+/// custom (`docProps/custom.xml`).
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -11,8 +11,9 @@
 /// package relationship of its kind, never by name. The values a part shows
 /// are read from the first child of each kind; a value that cannot be read
 /// (a date that is not W3CDTF, a number that is not one) leaves the child
-/// where it is, reads as no value and is reported once as
-/// `XlsxWarningCode.featureEntryInvalid` with the element's name. A part
+/// where it is, reads as no value and is reported once, with the element's
+/// name, through the host's [PropertyWarn] (a workbook reports
+/// `XlsxWarningCode.featureEntryInvalid`). A part
 /// whose root is not the expected element is untyped: it reads as nothing
 /// and is never written from the model.
 ///
@@ -20,28 +21,49 @@
 /// parts: only the fields that differ change, each as the writer's own
 /// element rendered with the new value and captured, replaced in place, or
 /// appended, or removed for a `null`. [PropertiesState] holds the current
-/// parts of a workbook and what they need at save: a part that is not in the
+/// parts of a workbook or a document and what they need at save: a part that is not in the
 /// package joins it, and a custom part that holds nothing leaves.
 library;
 
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../../opc/ooxml.dart';
-import '../../opc/opaque_xml.dart';
-import '../../opc/package.dart';
-import '../../xml/utf8_buffer.dart';
-import '../../xml/xml_pull_reader.dart';
-import '../../xml/xml_writer.dart';
-import '../properties.dart';
-import '../read/package_reader.dart';
-import '../read/read_exception.dart';
-import '../read/read_limits.dart';
-import '../sheet_name.dart';
-import 'element_node.dart';
+import '../opc/ooxml.dart';
+import '../opc/opaque_xml.dart';
+import '../opc/package.dart';
+import '../xml/utf8_buffer.dart';
+import '../xml/xml_pull_reader.dart';
+import '../xml/xml_writer.dart';
+import 'name_key.dart';
+import 'properties.dart';
 
 /// Reports a value that cannot be read: the element's name.
 typedef PropertyWarn = void Function(String element);
+
+/// What the properties parts are read from: the package of an open workbook
+/// or document, its read limits and its way of reporting a part that cannot
+/// be read.
+abstract interface class PropertiesSource {
+  /// The package the parts are found in, read from and written to.
+  OpcPackage get package;
+
+  /// The most children a properties part may have.
+  int get maxChildren;
+
+  /// The most UTF-16 code units one property's text may have.
+  int get maxTextLength;
+
+  /// Runs [body], which reads [part], mapping what the package or the XML
+  /// parser throws to the format's read exception.
+  T guard<T>(String part, T Function() body);
+
+  /// A pull reader over the XML part [part], which the package holds.
+  XmlPullReader openXml(String part);
+
+  /// Throws the format's read exception for a limit that [part] exceeds,
+  /// described by [message].
+  Never limitExceeded(String part, String message);
+}
 
 /// One child of a properties part: the element as written and what a typed
 /// read takes from it.
@@ -118,7 +140,7 @@ abstract base class _PropertiesPart implements PartContent {
 }
 
 /// A field of the core or extended properties: its element and how to read
-/// it from an [XlsxProperties].
+/// it from an [OfficeProperties].
 final class _Field {
   const _Field(
     this.qualified,
@@ -133,49 +155,59 @@ final class _Field {
   final String namespace;
   final String local;
 
-  /// The field of [XlsxProperties].
-  final Object? Function(XlsxProperties) get;
+  /// The field of [OfficeProperties].
+  final Object? Function(OfficeProperties) get;
 
   /// Whether the text is a W3CDTF date.
   final bool isDate;
 }
 
 final List<_Field> _coreFields = <_Field>[
-  _Field('dc:title', Ns.dc, 'title', (XlsxProperties p) => p.title),
-  _Field('dc:subject', Ns.dc, 'subject', (XlsxProperties p) => p.subject),
-  _Field('dc:creator', Ns.dc, 'creator', (XlsxProperties p) => p.creator),
-  _Field('cp:keywords', Ns.core, 'keywords', (XlsxProperties p) => p.keywords),
+  _Field('dc:title', Ns.dc, 'title', (OfficeProperties p) => p.title),
+  _Field('dc:subject', Ns.dc, 'subject', (OfficeProperties p) => p.subject),
+  _Field('dc:creator', Ns.dc, 'creator', (OfficeProperties p) => p.creator),
+  _Field(
+    'cp:keywords',
+    Ns.core,
+    'keywords',
+    (OfficeProperties p) => p.keywords,
+  ),
   _Field(
     'dc:description',
     Ns.dc,
     'description',
-    (XlsxProperties p) => p.description,
+    (OfficeProperties p) => p.description,
   ),
   _Field(
     'cp:lastModifiedBy',
     Ns.core,
     'lastModifiedBy',
-    (XlsxProperties p) => p.lastModifiedBy,
+    (OfficeProperties p) => p.lastModifiedBy,
   ),
-  _Field('cp:category', Ns.core, 'category', (XlsxProperties p) => p.category),
+  _Field(
+    'cp:category',
+    Ns.core,
+    'category',
+    (OfficeProperties p) => p.category,
+  ),
   _Field(
     'cp:contentStatus',
     Ns.core,
     'contentStatus',
-    (XlsxProperties p) => p.contentStatus,
+    (OfficeProperties p) => p.contentStatus,
   ),
   _Field(
     'dcterms:created',
     Ns.dcterms,
     'created',
-    (XlsxProperties p) => p.created,
+    (OfficeProperties p) => p.created,
     isDate: true,
   ),
   _Field(
     'dcterms:modified',
     Ns.dcterms,
     'modified',
-    (XlsxProperties p) => p.modified,
+    (OfficeProperties p) => p.modified,
     isDate: true,
   ),
 ];
@@ -185,27 +217,29 @@ final List<_Field> _appFields = <_Field>[
     'Company',
     Ns.extendedProperties,
     'Company',
-    (XlsxProperties p) => p.company,
+    (OfficeProperties p) => p.company,
   ),
   _Field(
     'Manager',
     Ns.extendedProperties,
     'Manager',
-    (XlsxProperties p) => p.manager,
+    (OfficeProperties p) => p.manager,
   ),
 ];
 
 /// Reads the part [r] walks: its root when it is [local] in [ns] (`null`
 /// otherwise, for an untyped part) and its children, each captured whole.
 ///
-/// [limits], when given, bound the number of children (by `maxSheets`, the
-/// count a workbook may list) and each text value (by `maxTextLength`); a
-/// breach throws an [XlsxReadException] of reason `limitExceeded`.
+/// [source], when given, bounds the number of children (by
+/// [PropertiesSource.maxChildren]) and each text value (by
+/// [PropertiesSource.maxTextLength]) of the part [part]; a breach throws
+/// what [PropertiesSource.limitExceeded] throws.
 (XmlRoot?, List<PropertyChild>) _readPart(
   XmlPullReader r,
   String ns,
   String local,
-  XlsxReadLimits? limits,
+  PropertiesSource? source,
+  String part,
 ) {
   while (r.next()) {
     if (r.eventType == XmlEventType.startElement) break;
@@ -222,19 +256,23 @@ final List<_Field> _appFields = <_Field>[
   while (r.next()) {
     if (r.eventType == XmlEventType.endElement && r.depth < rootDepth) break;
     if (r.eventType != XmlEventType.startElement) continue;
-    if (limits != null && children.length >= limits.maxSheets) {
-      throw XlsxReadException(
-        XlsxReadFailure.limitExceeded,
-        'Limit maxSheets (${limits.maxSheets}) exceeded by the entries of a '
+    if (source != null && children.length >= source.maxChildren) {
+      source.limitExceeded(
+        part,
+        'Limit (${source.maxChildren} entries) exceeded by the entries of a '
         'document properties part.',
       );
     }
-    children.add(_readChild(r, limits));
+    children.add(_readChild(r, source, part));
   }
   return (root, children);
 }
 
-PropertyChild _readChild(XmlPullReader r, XlsxReadLimits? limits) {
+PropertyChild _readChild(
+  XmlPullReader r,
+  PropertiesSource? source,
+  String part,
+) {
   final bool custom =
       r.localName == 'property' && r.namespaceUri == Ns.customProperties;
   final int startDepth = r.depth;
@@ -269,10 +307,10 @@ PropertyChild _readChild(XmlPullReader r, XlsxReadLimits? limits) {
           if (!custom || inVariant) {
             final String t = e.text;
             length += t.length;
-            if (limits != null && length > limits.maxTextLength) {
-              throw XlsxReadException(
-                XlsxReadFailure.limitExceeded,
-                'Limit maxTextLength (${limits.maxTextLength}) exceeded by '
+            if (source != null && length > source.maxTextLength) {
+              source.limitExceeded(
+                part,
+                'Limit maxTextLength (${source.maxTextLength}) exceeded by '
                 'a document property.',
               );
             }
@@ -307,63 +345,11 @@ List<PropertyChild> _rendered(void Function(XmlWriter w) write) {
   while (r.next()) {
     if (r.eventType == XmlEventType.endElement && r.depth < rootDepth) break;
     if (r.eventType == XmlEventType.startElement) {
-      children.add(_readChild(r, null));
+      children.add(_readChild(r, null, ''));
     }
   }
   return children;
 }
-
-/// Reads [text] as a W3CDTF date (`2026-10-24T09:30:00Z`, with an offset,
-/// with fractions of a second, without a zone, or a date or year alone) in
-/// UTC; `null` when it is not one. A text without a zone is read as UTC.
-DateTime? parseW3cdtf(String text) {
-  final RegExpMatch? m = _w3cdtfPattern.firstMatch(text.trim());
-  if (m == null) return null;
-  int part(int group, int fallback) =>
-      m.group(group) == null ? fallback : int.parse(m.group(group)!);
-  final int year = int.parse(m.group(1)!);
-  final int month = part(2, 1);
-  final int day = part(3, 1);
-  final int hour = part(4, 0);
-  final int minute = part(5, 0);
-  final int second = part(6, 0);
-  if (month < 1 ||
-      month > 12 ||
-      day < 1 ||
-      day > 31 ||
-      hour > 23 ||
-      minute > 59 ||
-      second > 59) {
-    return null;
-  }
-  final String? fraction = m.group(7);
-  final int millis = fraction == null
-      ? 0
-      : int.parse(fraction.padRight(3, '0').substring(0, 3));
-  final DateTime utc = DateTime.utc(
-    year,
-    month,
-    day,
-    hour,
-    minute,
-    second,
-    millis,
-  );
-  // A day the month lacks would roll over into the next month.
-  if (utc.month != month || utc.day != day) return null;
-  final String? zone = m.group(8);
-  if (zone == null || zone == 'Z') return utc;
-  final int sign = zone.startsWith('-') ? -1 : 1;
-  final String digits = zone.substring(1).replaceAll(':', '');
-  final int offset =
-      int.parse(digits.substring(0, 2)) * 60 + int.parse(digits.substring(2));
-  return utc.subtract(Duration(minutes: sign * offset));
-}
-
-final RegExp _w3cdtfPattern = RegExp(
-  r'^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})'
-  r'(?:[.,](\d+))?)?(Z|[+-]\d{2}:?\d{2})?)?)?)?$',
-);
 
 /// The core properties part.
 final class CoreProperties extends _PropertiesPart {
@@ -388,18 +374,20 @@ final class CoreProperties extends _PropertiesPart {
   factory CoreProperties.untyped() =>
       CoreProperties._(null, const <PropertyChild>[]);
 
-  /// Reads the part [r] walks; [warn] hears of each value that cannot be
-  /// read.
+  /// Reads the part [part], which [r] walks, within the limits of
+  /// [source]; [warn] hears of each value that cannot be read.
   factory CoreProperties.read(
     XmlPullReader r,
-    XlsxReadLimits limits,
+    PropertiesSource source,
+    String part,
     PropertyWarn warn,
   ) {
     final (XmlRoot? root, List<PropertyChild> children) = _readPart(
       r,
       Ns.core,
       'coreProperties',
-      limits,
+      source,
+      part,
     );
     return CoreProperties._(root, children, warn);
   }
@@ -410,7 +398,7 @@ final class CoreProperties extends _PropertiesPart {
   ///
   /// Returns this part when nothing in it changes. Throws a [StateError]
   /// when a field changes and the part is untyped.
-  CoreProperties apply(XlsxProperties old, XlsxProperties next) {
+  CoreProperties apply(OfficeProperties old, OfficeProperties next) {
     final List<PropertyChild>? changed = _changedChildren(
       this,
       _coreFields,
@@ -438,18 +426,20 @@ final class AppProperties extends _PropertiesPart {
   factory AppProperties.untyped() =>
       AppProperties._(null, const <PropertyChild>[]);
 
-  /// Reads the part [r] walks; [warn] hears of each value that cannot be
-  /// read.
+  /// Reads the part [part], which [r] walks, within the limits of
+  /// [source]; [warn] hears of each value that cannot be read.
   factory AppProperties.read(
     XmlPullReader r,
-    XlsxReadLimits limits,
+    PropertiesSource source,
+    String part,
     PropertyWarn warn,
   ) {
     final (XmlRoot? root, List<PropertyChild> children) = _readPart(
       r,
       Ns.extendedProperties,
       'Properties',
-      limits,
+      source,
+      part,
     );
     return AppProperties._(root, children, warn);
   }
@@ -458,7 +448,7 @@ final class AppProperties extends _PropertiesPart {
 
   /// These parts with the fields of [next] that differ from [old] changed;
   /// see [CoreProperties.apply].
-  AppProperties apply(XlsxProperties old, XlsxProperties next) {
+  AppProperties apply(OfficeProperties old, OfficeProperties next) {
     final List<PropertyChild>? changed = _changedChildren(
       this,
       _appFields,
@@ -504,8 +494,8 @@ Map<String, Object?> _readValues(
 List<PropertyChild>? _changedChildren(
   _PropertiesPart part,
   List<_Field> fields,
-  XlsxProperties old,
-  XlsxProperties next,
+  OfficeProperties old,
+  OfficeProperties next,
   void Function(XmlWriter w) render,
 ) {
   final List<_Field> changed = <_Field>[
@@ -552,12 +542,14 @@ final class CustomProperties extends _PropertiesPart {
       final Object? value = _customValue(c, warn);
       if (value == null) continue;
       try {
-        checkProperties(XlsxProperties(custom: <String, Object>{name: value}));
+        checkProperties(
+          OfficeProperties(custom: <String, Object>{name: value}),
+        );
       } on ArgumentError {
         warn?.call('property');
         continue;
       }
-      if (!seen.add(sheetNameKey(name))) continue;
+      if (!seen.add(officeNameKey(name))) continue;
       listed.add(_Listed(i, name, value));
     }
     _listed = List<_Listed>.unmodifiable(listed);
@@ -576,18 +568,20 @@ final class CustomProperties extends _PropertiesPart {
   factory CustomProperties.untyped() =>
       CustomProperties._(null, const <PropertyChild>[]);
 
-  /// Reads the part [r] walks; [warn] hears of each value that cannot be
-  /// read.
+  /// Reads the part [part], which [r] walks, within the limits of
+  /// [source]; [warn] hears of each value that cannot be read.
   factory CustomProperties.read(
     XmlPullReader r,
-    XlsxReadLimits limits,
+    PropertiesSource source,
+    String part,
     PropertyWarn warn,
   ) {
     final (XmlRoot? root, List<PropertyChild> children) = _readPart(
       r,
       Ns.customProperties,
       'Properties',
-      limits,
+      source,
+      part,
     );
     return CustomProperties._(root, children, warn);
   }
@@ -697,7 +691,7 @@ PropertyChild _renderCustom(MapEntry<String, Object> entry, int pid) {
   final Utf8Buffer out = Utf8Buffer();
   writeCustomProperties(
     XmlWriter(out),
-    XlsxProperties(custom: <String, Object>{entry.key: entry.value}),
+    OfficeProperties(custom: <String, Object>{entry.key: entry.value}),
   );
   // The pid is the writer's 2 and comes before the name, whose quotes are
   // escaped, so the first match is the attribute.
@@ -711,7 +705,7 @@ PropertyChild _renderCustom(MapEntry<String, Object> entry, int pid) {
   while (r.next()) {
     if (r.eventType == XmlEventType.startElement) break;
   }
-  return _readChild(r, null);
+  return _readChild(r, null, '');
 }
 
 /// The value of a custom property of a variant the model lists, or `null`
@@ -745,7 +739,7 @@ Object? _customValue(PropertyChild c, PropertyWarn? warn) {
   }
 }
 
-/// The three properties parts of a workbook, held together.
+/// The three properties parts of a workbook or a document, held together.
 final class PropertyParts {
   /// The parts [core], [app] and [custom].
   PropertyParts(this.core, this.app, this.custom);
@@ -760,7 +754,7 @@ final class PropertyParts {
   final CustomProperties custom;
 
   /// The properties the parts show, merged into one value.
-  late final XlsxProperties merged = XlsxProperties(
+  late final OfficeProperties merged = OfficeProperties(
     title: core._values['dc:title'] as String?,
     subject: core._values['dc:subject'] as String?,
     creator: core._values['dc:creator'] as String?,
@@ -780,8 +774,8 @@ final class PropertyParts {
   /// [CoreProperties.apply] and [CustomProperties.apply].
   ///
   /// Throws a [StateError] when a part that must change is untyped.
-  PropertyParts withProperties(XlsxProperties next) {
-    final XlsxProperties old = merged;
+  PropertyParts withProperties(OfficeProperties next) {
+    final OfficeProperties old = merged;
     return PropertyParts(
       core.apply(old, next),
       app.apply(old, next),
@@ -821,8 +815,8 @@ enum PropertyKind {
   final String contentType;
 }
 
-/// The properties of an open workbook: the current parts, where they are in
-/// the package and what saving must add or remove.
+/// The properties of an open workbook or document: the current parts,
+/// where they are in the package and what saving must add or remove.
 ///
 /// Loaded once, on first use. The parts of the package are replaced
 /// ([swap]) with each edit; the package gains a part that has content and
@@ -832,21 +826,27 @@ enum PropertyKind {
 final class PropertiesState {
   PropertiesState._(this._package, this._parts, this._names, this._initial);
 
-  /// Reads the three parts of the package of [reader], each found by its
+  /// Reads the three parts of the package of [source], each found by its
   /// relationship in the package root.
   ///
-  /// Throws an [XlsxReadException] when a part cannot be read, as
-  /// `XlsxReader` does; then nothing is kept and [warn] has heard of
-  /// nothing. [warn] hears of each value that cannot be read once.
-  factory PropertiesState.load(PackageReader reader, PropertyWarn warn) {
-    final XlsxReadLimits limits = reader.limits;
-    final OpcPackage package = reader.package;
-    final List<PartRelationship> rels = reader.relationshipsOf('');
+  /// Throws what [source] throws when a part cannot be read; then nothing
+  /// is kept and [warn] has heard of nothing. [warn] hears of each value
+  /// that cannot be read once.
+  factory PropertiesState.load(PropertiesSource source, PropertyWarn warn) {
+    final OpcPackage package = source.package;
+    final List<OpcRelationship> rels = source.guard(
+      '_rels/.rels',
+      () => package.relationshipsOf(''),
+    );
     final Map<PropertyKind, String?> names = <PropertyKind, String?>{};
     for (final PropertyKind kind in PropertyKind.values) {
-      for (final PartRelationship r in rels) {
-        if (r.type == kind.relationshipType && reader.hasPart(r.target)) {
-          names[kind] = package.canonicalPartName(r.target);
+      for (final OpcRelationship r in rels) {
+        if (r.external || r.type != kind.relationshipType) continue;
+        final String? name = package.canonicalPartName(
+          package.resolve('', r.target),
+        );
+        if (name != null) {
+          names[kind] = name;
           break;
         }
       }
@@ -855,27 +855,30 @@ final class PropertiesState {
     void hear(String element) => problems.add(element);
     T read<T>(
       PropertyKind kind,
-      T Function(XmlPullReader r) parse,
+      T Function(XmlPullReader r, String name) parse,
       T Function() absent,
     ) {
       final String? name = names[kind];
       if (name == null) return absent();
-      return reader.guardXml(name, () => parse(reader.openXml(name)));
+      return source.guard(name, () => parse(source.openXml(name), name));
     }
 
     final CoreProperties core = read<CoreProperties>(
       PropertyKind.core,
-      (XmlPullReader r) => CoreProperties.read(r, limits, hear),
+      (XmlPullReader r, String name) =>
+          CoreProperties.read(r, source, name, hear),
       CoreProperties.empty,
     );
     final AppProperties app = read<AppProperties>(
       PropertyKind.app,
-      (XmlPullReader r) => AppProperties.read(r, limits, hear),
+      (XmlPullReader r, String name) =>
+          AppProperties.read(r, source, name, hear),
       AppProperties.empty,
     );
     final CustomProperties custom = read<CustomProperties>(
       PropertyKind.custom,
-      (XmlPullReader r) => CustomProperties.read(r, limits, hear),
+      (XmlPullReader r, String name) =>
+          CustomProperties.read(r, source, name, hear),
       CustomProperties.empty,
     );
     problems.forEach(warn);

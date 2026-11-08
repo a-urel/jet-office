@@ -8,6 +8,7 @@
 /// surrogate pair, and every change is reported as a warning.
 library;
 
+import '../common/name_key.dart';
 import '../xml/xml_escape.dart';
 import 'limits.dart';
 import 'warnings.dart';
@@ -17,28 +18,9 @@ final Set<String> _reservedKeys = <String>{sheetNameKey('History')};
 
 const int _apostrophe = 0x27;
 
-/// The key under which Excel considers two sheet names equal.
-///
-/// Excel compares names case-insensitively. Dart's `toUpperCase()` differs
-/// between platforms for a few letters: it keeps `ß`, and it leaves the
-/// Turkish `İ` and `ı` apart from `I`. The key maps those letters first, so
-/// `liste`/`LİSTE` and `straße`/`STRASSE` clash on every platform. The
-/// folding is deliberately generous: an extra rename never makes Excel refuse
-/// a file, a missed one does.
-///
-/// The Kelvin sign (U+212A) is mapped to `K` too. It is already an
-/// upper-case letter, so `toUpperCase()` keeps it apart from `K`, but Excel
-/// refuses a Kelvin-sign sheet name when a sheet `K` exists (checked by hand
-/// in Excel for the web, see `docs/excel-checks.md`). The long s (U+017F)
-/// needs no mapping: `toUpperCase()` gives `S`, so it clashes with `s` and
-/// `S` already.
-String sheetNameKey(String name) => name
-    .replaceAll('İ', 'I')
-    .replaceAll('ı', 'I')
-    .replaceAll('ß', 'SS')
-    .replaceAll('ẞ', 'SS')
-    .replaceAll('\u212A', 'K')
-    .toUpperCase();
+/// The key under which Excel considers two sheet names equal: see
+/// [officeNameKey], which holds the folding for every Office name.
+String sheetNameKey(String name) => officeNameKey(name);
 
 bool _isHigh(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
 

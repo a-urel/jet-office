@@ -1,5 +1,5 @@
-/// Document properties of a workbook (`docProps/core.xml`,
-/// `docProps/app.xml` and `docProps/custom.xml`).
+/// Document properties of a workbook or a document (`docProps/core.xml`,
+/// `docProps/app.xml` and `docProps/custom.xml`), shared by both formats.
 ///
 /// Ported from quds_office_engine `lib/src/office/office_document_properties.dart` at commit 15c5d29.
 /// Ported: the core and extended property parts. What changed: only the
@@ -14,20 +14,27 @@ import '../opc/ooxml.dart';
 import '../xml/xml_escape.dart';
 import '../xml/xml_number.dart';
 import '../xml/xml_writer.dart';
-import 'limits.dart';
-import 'sheet_name.dart';
+import 'name_key.dart';
 
-/// The document properties stored in a workbook, shown by Excel under
-/// File > Info.
+/// The longest name of a custom document property, in UTF-16 code units.
+///
+/// jet_office sets 255, the length of Excel's Custom Properties name box.
+/// The value is not on Microsoft's "Excel specifications and limits"
+/// page. `maxCustomPropertyNameLength` is this value.
+const int maxCustomPropertyNameLength = 255;
+
+/// The document properties stored in a workbook or a document, shown by
+/// Excel and Word under File > Info.
 ///
 /// Every field is optional; only the fields that are set are written. Text
 /// must not contain characters XML cannot represent (control characters other
 /// than tab, line feed and carriage return, and lone surrogates); otherwise
-/// the writer constructors, `XlsxWriter` and `XlsxStreamWriter`, throw an
-/// [ArgumentError]. The same constructors check [custom].
-final class XlsxProperties {
+/// the workbook writer constructors, `XlsxWriter` and `XlsxStreamWriter`,
+/// and the `properties` setters of the models throw an [ArgumentError]. The
+/// same check covers [custom].
+final class OfficeProperties {
   /// Creates the properties. All fields are optional.
-  const XlsxProperties({
+  const OfficeProperties({
     this.title,
     this.subject,
     this.creator,
@@ -43,25 +50,25 @@ final class XlsxProperties {
     this.custom = const <String, Object>{},
   });
 
-  /// The title of the workbook.
+  /// The title of the workbook or document.
   final String? title;
 
-  /// The subject of the workbook.
+  /// The subject of the workbook or document.
   final String? subject;
 
-  /// The author of the workbook.
+  /// The author of the workbook or document.
   final String? creator;
 
   /// Keywords, as one string (conventionally separated by semicolons).
   final String? keywords;
 
-  /// A description, shown by Excel as "Comments".
+  /// A description, shown by Excel and Word as "Comments".
   final String? description;
 
-  /// The name of the person who last modified the workbook.
+  /// The name of the person who last modified the workbook or document.
   final String? lastModifiedBy;
 
-  /// The category of the workbook.
+  /// The category of the workbook or document.
   final String? category;
 
   /// The company, written to the extended properties.
@@ -74,26 +81,29 @@ final class XlsxProperties {
   /// the core properties as `cp:contentStatus`.
   final String? contentStatus;
 
-  /// When the workbook was created. Written in UTC with whole seconds. When
-  /// null, no creation date is written, so the file is the same on every run.
+  /// When the workbook or document was created. Written in UTC with whole
+  /// seconds. When null, no creation date is written, so the file is the
+  /// same on every run.
   final DateTime? created;
 
-  /// When the workbook was last modified. Written in UTC with whole seconds.
-  /// When null, no modification date is written.
+  /// When the workbook or document was last modified. Written in UTC with
+  /// whole seconds. When null, no modification date is written.
   final DateTime? modified;
 
-  /// Custom properties, shown by Excel under File > Info > Properties >
-  /// Advanced Properties > Custom, in map order.
+  /// Custom properties, shown by Excel and Word under File > Info >
+  /// Properties > Advanced Properties > Custom, in map order.
   ///
   /// A value is a [String], a finite number, a [bool] or a [DateTime]
   /// (written in UTC with whole seconds). A whole number in the signed
   /// 32-bit range, an [int] or a [double] such as `3.0`, is written as an
   /// integer (`vt:i4`), any other number as a double (`vt:r8`), the same on
   /// the VM and the web.
-  /// A name is 1 to [XlsxLimits.maxCustomPropertyNameLength] UTF-16 code
-  /// units, holds no character XML forbids and is unique ignoring case.
-  /// When empty, no custom part is written. The writer constructors throw an
-  /// [ArgumentError] naming `custom` or `custom["<name>"]` for a bad entry.
+  /// A name is 1 to 255 UTF-16 code units
+  /// (`XlsxLimits.maxCustomPropertyNameLength`), holds no character XML
+  /// forbids and is unique ignoring case.
+  /// When empty, no custom part is written. The writer constructors and the
+  /// setters throw an [ArgumentError] naming `custom` or `custom["<name>"]`
+  /// for a bad entry.
   ///
   /// The map is held as given, not copied: the `const` default rules out
   /// `Map.unmodifiable` in the constructor. Do not change it after the
@@ -104,7 +114,7 @@ final class XlsxProperties {
 
   @override
   bool operator ==(Object other) {
-    if (other is! XlsxProperties) return false;
+    if (other is! OfficeProperties) return false;
     if (other.title != title ||
         other.subject != subject ||
         other.creator != creator ||
@@ -156,7 +166,7 @@ final class XlsxProperties {
 
   @override
   String toString() =>
-      'XlsxProperties(title: $title, subject: $subject, creator: $creator, '
+      'OfficeProperties(title: $title, subject: $subject, creator: $creator, '
       'keywords: $keywords, description: $description, '
       'lastModifiedBy: $lastModifiedBy, category: $category, '
       'company: $company, manager: $manager, '
@@ -171,7 +181,7 @@ final class XlsxProperties {
 /// It runs the checks of [writeCoreProperties], [writeAppProperties] and
 /// [writeCustomProperties] without writing anything, so a setter can refuse
 /// a value before it changes the model.
-void checkProperties(XlsxProperties p) {
+void checkProperties(OfficeProperties p) {
   _checkText('dc:title', p.title);
   _checkText('dc:subject', p.subject);
   _checkText('dc:creator', p.creator);
@@ -192,7 +202,7 @@ void checkProperties(XlsxProperties p) {
 /// Writes `docProps/core.xml`, with only the fields set in [p].
 ///
 /// Throws [ArgumentError] when a text field holds forbidden characters.
-void writeCoreProperties(XmlWriter w, XlsxProperties p) {
+void writeCoreProperties(XmlWriter w, OfficeProperties p) {
   w.declaration();
   w.start('cp:coreProperties');
   w.attribute('xmlns:cp', Ns.core);
@@ -218,7 +228,7 @@ void writeCoreProperties(XmlWriter w, XlsxProperties p) {
 ///
 /// Throws [ArgumentError] when the company or manager holds forbidden
 /// characters.
-void writeAppProperties(XmlWriter w, XlsxProperties p) {
+void writeAppProperties(XmlWriter w, OfficeProperties p) {
   w.declaration();
   w.start('Properties');
   w.attribute('xmlns', Ns.extendedProperties);
@@ -236,7 +246,7 @@ const String _customFormatId = '{D5CDD505-2E9C-101B-9397-08002B2CF9AE}';
 /// map, with `pid` from 2 in map order.
 ///
 /// Throws [ArgumentError] naming `custom` for a name that is empty, longer
-/// than [XlsxLimits.maxCustomPropertyNameLength], holds forbidden characters
+/// than [maxCustomPropertyNameLength], holds forbidden characters
 /// or repeats an earlier name ignoring case, and naming `custom["<name>"]`
 /// for a value that is not a [String], a finite number, a [bool] or a
 /// [DateTime], or a string holding forbidden characters. Check everything
@@ -247,7 +257,7 @@ const String _customFormatId = '{D5CDD505-2E9C-101B-9397-08002B2CF9AE}';
 /// [double], is `vt:r8`, so no finite number throws. The VM and the web
 /// agree, although a whole [double] is an [int] on the web: `3.0` is
 /// `vt:i4` and `0.5` and `3e9` are `vt:r8` on both.
-void writeCustomProperties(XmlWriter w, XlsxProperties p) {
+void writeCustomProperties(XmlWriter w, OfficeProperties p) {
   final Set<String> seen = <String>{};
   for (final MapEntry<String, Object> e in p.custom.entries) {
     _checkCustomName(e.key, seen);
@@ -303,11 +313,11 @@ void _checkCustomName(String name, Set<String> seen) {
   if (name.isEmpty) {
     throw ArgumentError.value(name, 'custom', 'A name must not be empty.');
   }
-  if (name.length > XlsxLimits.maxCustomPropertyNameLength) {
+  if (name.length > maxCustomPropertyNameLength) {
     throw ArgumentError.value(
       '${name.length} characters',
       'custom',
-      'A name has at most ${XlsxLimits.maxCustomPropertyNameLength} '
+      'A name has at most $maxCustomPropertyNameLength '
           'characters.',
     );
   }
@@ -319,7 +329,7 @@ void _checkCustomName(String name, Set<String> seen) {
           'surrogates).',
     );
   }
-  if (!seen.add(sheetNameKey(name))) {
+  if (!seen.add(officeNameKey(name))) {
     throw ArgumentError.value(
       name,
       'custom',
@@ -393,3 +403,55 @@ String w3cdtf(DateTime value) {
   return '$year-${two(u.month)}-${two(u.day)}'
       'T${two(u.hour)}:${two(u.minute)}:${two(u.second)}Z';
 }
+
+/// Reads [text] as a W3CDTF date (`2026-10-24T09:30:00Z`, with an offset,
+/// with fractions of a second, without a zone, or a date or year alone) in
+/// UTC; `null` when it is not one. A text without a zone is read as UTC.
+DateTime? parseW3cdtf(String text) {
+  final RegExpMatch? m = _w3cdtfPattern.firstMatch(text.trim());
+  if (m == null) return null;
+  int part(int group, int fallback) =>
+      m.group(group) == null ? fallback : int.parse(m.group(group)!);
+  final int year = int.parse(m.group(1)!);
+  final int month = part(2, 1);
+  final int day = part(3, 1);
+  final int hour = part(4, 0);
+  final int minute = part(5, 0);
+  final int second = part(6, 0);
+  if (month < 1 ||
+      month > 12 ||
+      day < 1 ||
+      day > 31 ||
+      hour > 23 ||
+      minute > 59 ||
+      second > 59) {
+    return null;
+  }
+  final String? fraction = m.group(7);
+  final int millis = fraction == null
+      ? 0
+      : int.parse(fraction.padRight(3, '0').substring(0, 3));
+  final DateTime utc = DateTime.utc(
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    millis,
+  );
+  // A day the month lacks would roll over into the next month.
+  if (utc.month != month || utc.day != day) return null;
+  final String? zone = m.group(8);
+  if (zone == null || zone == 'Z') return utc;
+  final int sign = zone.startsWith('-') ? -1 : 1;
+  final String digits = zone.substring(1).replaceAll(':', '');
+  final int offset =
+      int.parse(digits.substring(0, 2)) * 60 + int.parse(digits.substring(2));
+  return utc.subtract(Duration(minutes: sign * offset));
+}
+
+final RegExp _w3cdtfPattern = RegExp(
+  r'^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})'
+  r'(?:[.,](\d+))?)?(Z|[+-]\d{2}:?\d{2})?)?)?)?$',
+);

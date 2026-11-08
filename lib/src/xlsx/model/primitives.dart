@@ -37,17 +37,17 @@ library;
 
 import 'dart:typed_data';
 
+import '../../common/properties.dart';
+import '../../common/properties_parts.dart';
 import '../../opc/change_log.dart';
 import '../../opc/opaque_xml.dart';
 import '../../opc/package.dart';
-import '../properties.dart';
 import '../range.dart';
 import '../raw_cell.dart';
 import '../sheet_view.dart';
 import '../style.dart';
 import 'cell_store.dart';
 import 'element_node.dart';
-import 'properties_parts.dart';
 import 'styles_part.dart';
 import 'table_part.dart';
 import 'workbook_part.dart';
@@ -1063,7 +1063,11 @@ final class SetPropertiesChange implements Change {
 /// [value] (see `checkProperties`) and a [StateError] when a part that must
 /// change is not a properties part; nothing has changed then. If recording
 /// throws, the parts are put back as they were before the error leaves.
-void setProperties(ChangeLog log, PropertiesState state, XlsxProperties value) {
+void setProperties(
+  ChangeLog log,
+  PropertiesState state,
+  OfficeProperties value,
+) {
   if (value == state.parts.merged) return;
   checkProperties(value);
   final PropertyParts before = state.parts;

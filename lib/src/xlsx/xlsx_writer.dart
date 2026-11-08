@@ -23,11 +23,11 @@ library;
 
 import 'dart:typed_data';
 
+import '../common/properties.dart';
 import '../xml/utf8_buffer.dart';
 import '../xml/xml_writer.dart';
 import '../zip/archive_adapter.dart';
 import 'defined_name.dart';
-import 'properties.dart';
 import 'sheet_name.dart';
 import 'sheet_protection.dart';
 import 'sheet_view.dart';
@@ -67,7 +67,7 @@ Uint8List _render(void Function(XmlWriter w) write) {
 /// XML plus the workbook's distinct strings and styles, not the whole file.
 /// The same calls always produce the same bytes.
 sealed class XlsxWriterBase {
-  XlsxWriterBase._(XlsxProperties properties, ZipWriter Function() createZip)
+  XlsxWriterBase._(OfficeProperties properties, ZipWriter Function() createZip)
     : _coreXml = _render((XmlWriter w) => writeCoreProperties(w, properties)),
       _appXml = _render((XmlWriter w) => writeAppProperties(w, properties)),
       _customXml = properties.custom.isEmpty
@@ -314,7 +314,7 @@ final class XlsxWriter extends XlsxWriterBase {
   ///
   /// Throws [ArgumentError] when a property holds characters XML forbids or
   /// a custom property has an invalid name or value.
-  XlsxWriter({XlsxProperties properties = const XlsxProperties()})
+  XlsxWriter({OfficeProperties properties = const OfficeProperties()})
     : super._(properties, ZipWriter.new);
 
   /// Finishes the open sheet and the file, and returns the file with the
@@ -356,7 +356,7 @@ final class XlsxStreamWriter extends XlsxWriterBase {
   /// to [sink] then.
   XlsxStreamWriter(
     Sink<List<int>> sink, {
-    XlsxProperties properties = const XlsxProperties(),
+    OfficeProperties properties = const OfficeProperties(),
   }) : super._(properties, () => ZipWriter(sink: sink));
 
   /// Finishes the open sheet and the file, closes the sink and returns the

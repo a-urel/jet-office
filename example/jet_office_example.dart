@@ -12,7 +12,7 @@ import 'package:jet_office/jet_office.dart';
 /// Builds the example workbook and returns it with its warnings.
 XlsxResult buildExample() {
   final XlsxWriter book = XlsxWriter(
-    properties: const XlsxProperties(title: 'Accounts'),
+    properties: const OfficeProperties(title: 'Accounts'),
   );
 
   // The list helper writes caption, header, rows and totals on one sheet.

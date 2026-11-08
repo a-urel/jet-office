@@ -225,7 +225,7 @@ recorded in [`docs/word-checks.md`](docs/word-checks.md).
 The writer supports, by milestone:
 
 - **M1:** values (text, numbers, booleans, dates, decimals, formulas),
-  sheets, document properties, streaming output, warnings.
+  sheets, document properties (`OfficeProperties`), streaming output, warnings.
 - **M2:** styles, column and row sizes, outlines, sheet views, freeze panes,
   merged cells, the auto filter.
 - **M3:** defined names, print areas and titles, hyperlinks, data validation,

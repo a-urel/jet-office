@@ -680,7 +680,7 @@ void main() {
     );
     final XlsxResult result = export.toXlsx(
       _twoRows,
-      properties: const XlsxProperties(title: 'Accounts'),
+      properties: const OfficeProperties(title: 'Accounts'),
     );
     expect(checkXlsx(result.bytes), isEmpty);
     expect(result.warnings, isEmpty);

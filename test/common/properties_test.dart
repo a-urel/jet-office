@@ -1,23 +1,23 @@
 import 'package:jet_office/jet_office.dart' show XlsxLimits, XlsxWriter;
-import 'package:jet_office/src/xlsx/properties.dart';
+import 'package:jet_office/src/common/properties.dart';
 import 'package:jet_office/src/xml/xml_writer.dart';
 import 'package:test/test.dart';
 
 import '../support/read_xlsx.dart';
 
-String _core(XlsxProperties p) {
+String _core(OfficeProperties p) {
   final StringBuffer out = StringBuffer();
   writeCoreProperties(XmlWriter(out), p);
   return out.toString();
 }
 
-String _custom(XlsxProperties p) {
+String _custom(OfficeProperties p) {
   final StringBuffer out = StringBuffer();
   writeCustomProperties(XmlWriter(out), p);
   return out.toString();
 }
 
-String _app(XlsxProperties p) {
+String _app(OfficeProperties p) {
   final StringBuffer out = StringBuffer();
   writeAppProperties(XmlWriter(out), p);
   return out.toString();
@@ -35,7 +35,7 @@ const String _coreRoot =
 void main() {
   test('core writes only the given fields, dates as UTC W3CDTF seconds', () {
     final String xml = _core(
-      XlsxProperties(
+      OfficeProperties(
         title: 'Cari Hesaplar',
         created: DateTime.utc(2026, 10, 24, 9, 30, 15, 500),
       ),
@@ -50,14 +50,14 @@ void main() {
   });
 
   test('empty properties write no dcterms date elements', () {
-    final String xml = _core(const XlsxProperties());
+    final String xml = _core(const OfficeProperties());
     expect(xml, '${_coreRoot.substring(0, _coreRoot.length - 1)}/>');
     expect(xml, isNot(contains('<dcterms:')));
   });
 
   test('core keeps the order Excel writes', () {
     final String xml = _core(
-      XlsxProperties(
+      OfficeProperties(
         modified: DateTime.utc(2026, 1, 2, 3, 4, 5),
         created: DateTime.utc(2026, 1, 1),
         category: 'cat',
@@ -91,14 +91,14 @@ void main() {
     // everywhere and the test never passes by comparing UTC with UTC.
     expect(local.isUtc, isFalse);
     expect(
-      _core(XlsxProperties(modified: local)),
+      _core(OfficeProperties(modified: local)),
       contains('>2026-06-01T12:00:00Z<'),
     );
   });
 
   test('fractions of a second are cut, never rounded up', () {
     final String xml = _core(
-      XlsxProperties(
+      OfficeProperties(
         created: DateTime.utc(2026, 10, 24, 9, 30, 15, 999, 999),
         modified: DateTime.utc(2026, 12, 31, 23, 59, 59, 999),
       ),
@@ -109,18 +109,18 @@ void main() {
 
   test('text is escaped', () {
     expect(
-      _core(const XlsxProperties(title: 'A & B <c>')),
+      _core(const OfficeProperties(title: 'A & B <c>')),
       contains('<dc:title>A &amp; B &lt;c&gt;</dc:title>'),
     );
   });
 
   test('forbidden characters throw ArgumentError', () {
     expect(
-      () => _core(const XlsxProperties(title: 'a\u0000b')),
+      () => _core(const OfficeProperties(title: 'a\u0000b')),
       throwsArgumentError,
     );
     expect(
-      () => _app(const XlsxProperties(company: 'a\uD800')),
+      () => _app(const OfficeProperties(company: 'a\uD800')),
       throwsArgumentError,
     );
   });
@@ -130,9 +130,9 @@ void main() {
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
         '<Application>jet_office</Application>';
-    expect(_app(const XlsxProperties()), '$head</Properties>');
+    expect(_app(const OfficeProperties()), '$head</Properties>');
     expect(
-      _app(const XlsxProperties(company: 'Jetronik')),
+      _app(const OfficeProperties(company: 'Jetronik')),
       '$head<Company>Jetronik</Company></Properties>',
     );
   });
@@ -141,7 +141,7 @@ void main() {
     'manager follows Company in app.xml, contentStatus follows category',
     () {
       final String app = _app(
-        const XlsxProperties(company: 'Jetronik', manager: 'Ayse'),
+        const OfficeProperties(company: 'Jetronik', manager: 'Ayse'),
       );
       expect(
         app,
@@ -150,7 +150,7 @@ void main() {
         ),
       );
       final String core = _core(
-        XlsxProperties(
+        OfficeProperties(
           contentStatus: 'Final',
           category: 'cat',
           created: DateTime.utc(2026, 1, 1),
@@ -163,24 +163,24 @@ void main() {
           '<cp:contentStatus>Final</cp:contentStatus><dcterms:created ',
         ),
       );
-      expect(_core(const XlsxProperties()), isNot(contains('contentStatus')));
-      expect(_app(const XlsxProperties()), isNot(contains('Manager')));
+      expect(_core(const OfficeProperties()), isNot(contains('contentStatus')));
+      expect(_app(const OfficeProperties()), isNot(contains('Manager')));
     },
   );
 
   test('forbidden characters in manager and contentStatus throw', () {
     expect(
-      () => _app(const XlsxProperties(manager: 'a\u0001')),
+      () => _app(const OfficeProperties(manager: 'a\u0001')),
       throwsArgumentError,
     );
     expect(
-      () => _core(const XlsxProperties(contentStatus: 'a\u0001')),
+      () => _core(const OfficeProperties(contentStatus: 'a\u0001')),
       throwsArgumentError,
     );
   });
 
   group('custom properties', () {
-    final XlsxProperties five = XlsxProperties(
+    final OfficeProperties five = OfficeProperties(
       custom: <String, Object>{
         'Project': 'Atlas',
         'Count': 3,
@@ -214,7 +214,7 @@ void main() {
 
     test('false, a local DateTime and escaping', () {
       final String xml = _custom(
-        XlsxProperties(
+        OfficeProperties(
           custom: <String, Object>{
             'A&B': 'x<y',
             'No': false,
@@ -232,7 +232,7 @@ void main() {
     void bad(String label, Map<String, Object> custom, String field) {
       test('$label throws ArgumentError naming $field', () {
         expect(
-          () => _custom(XlsxProperties(custom: custom)),
+          () => _custom(OfficeProperties(custom: custom)),
           throwsA(
             isA<ArgumentError>().having(
               (ArgumentError e) => e.name,
@@ -256,7 +256,7 @@ void main() {
     group('numbers on the VM and the web alike', () {
       String value(Object number) => RegExp(r'<vt:\w+>[^<]*</vt:\w+>')
           .firstMatch(
-            _custom(XlsxProperties(custom: <String, Object>{'N': number})),
+            _custom(OfficeProperties(custom: <String, Object>{'N': number})),
           )!
           .group(0)!;
 
@@ -299,14 +299,14 @@ void main() {
     test('a name of 255 units is accepted', () {
       expect(XlsxLimits.maxCustomPropertyNameLength, 255);
       expect(
-        _custom(XlsxProperties(custom: <String, Object>{'n' * 255: 'x'})),
+        _custom(OfficeProperties(custom: <String, Object>{'n' * 255: 'x'})),
         contains('name="${'n' * 255}"'),
       );
     });
 
     test('an empty custom map writes no custom part', () {
       final XlsxWriter book = XlsxWriter(
-        properties: const XlsxProperties(title: 't'),
+        properties: const OfficeProperties(title: 't'),
       );
       book.addSheet('S');
       final Map<String, String> parts = readXlsx(book.close().bytes);
@@ -316,23 +316,23 @@ void main() {
     });
 
     test('== and hashCode compare the map entry by entry, in order', () {
-      XlsxProperties of(Map<String, Object> m) =>
-          XlsxProperties(title: 't', manager: 'm', custom: m);
-      final XlsxProperties a = of(<String, Object>{'a': 1, 'b': 'x'});
+      OfficeProperties of(Map<String, Object> m) =>
+          OfficeProperties(title: 't', manager: 'm', custom: m);
+      final OfficeProperties a = of(<String, Object>{'a': 1, 'b': 'x'});
       expect(a, of(<String, Object>{'a': 1, 'b': 'x'}));
       expect(a.hashCode, of(<String, Object>{'a': 1, 'b': 'x'}).hashCode);
       expect(a, isNot(of(<String, Object>{'b': 'x', 'a': 1})));
       expect(a, isNot(of(<String, Object>{'a': 1, 'b': 'y'})));
       expect(a, isNot(of(<String, Object>{'a': 1})));
       expect(
-        const XlsxProperties(contentStatus: 'a'),
-        isNot(const XlsxProperties(contentStatus: 'b')),
+        const OfficeProperties(contentStatus: 'a'),
+        isNot(const OfficeProperties(contentStatus: 'b')),
       );
-      expect(const XlsxProperties(), const XlsxProperties());
+      expect(const OfficeProperties(), const OfficeProperties());
     });
 
     test('toString names manager, contentStatus and custom', () {
-      final String s = const XlsxProperties(
+      final String s = const OfficeProperties(
         manager: 'Ayse',
         contentStatus: 'Final',
         custom: <String, Object>{'k': 1},

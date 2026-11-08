@@ -1791,7 +1791,7 @@ void main() {
   group('rule 27: custom properties', () {
     Uint8List customBook() {
       final XlsxWriter book = XlsxWriter(
-        properties: const XlsxProperties(
+        properties: const OfficeProperties(
           custom: <String, Object>{'Project': 'Atlas', 'Count': 3},
         ),
       );

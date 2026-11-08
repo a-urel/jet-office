@@ -237,6 +237,7 @@ export 'package:jet_core/jet_core.dart'
         NumberFormatter;
 export 'src/common/image.dart' show OfficeImage, OfficeImageFormat;
 export 'src/common/locale.dart' show OfficeLocale;
+export 'src/common/properties.dart' show OfficeProperties;
 export 'src/docx/builtin_styles.dart' show DocxBuiltInStyle;
 export 'src/docx/docx_document.dart'
     show
@@ -413,7 +414,6 @@ export 'src/xlsx/page_setup.dart'
         XlsxPageOrder,
         XlsxPageSetup,
         XlsxPaperSize;
-export 'src/xlsx/properties.dart' show XlsxProperties;
 export 'src/xlsx/range.dart' show XlsxRange;
 export 'src/xlsx/read/read_cell.dart'
     show

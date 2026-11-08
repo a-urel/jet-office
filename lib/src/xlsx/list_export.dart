@@ -8,13 +8,13 @@
 /// own.
 library;
 
+import '../common/properties.dart';
 import '../xml/xml_number.dart';
 import 'cell_ref.dart';
 import 'column.dart';
 import 'defined_name.dart';
 import 'font.dart';
 import 'number_format.dart';
-import 'properties.dart';
 import 'range.dart';
 import 'sheet_name.dart';
 import 'sheet_writer.dart';
@@ -416,7 +416,7 @@ final class XlsxListExport {
   XlsxResult toXlsx(
     Iterable<List<Object?>> rows, {
     String sheetName = 'List',
-    XlsxProperties properties = const XlsxProperties(),
+    OfficeProperties properties = const OfficeProperties(),
   }) {
     final XlsxWriter book = XlsxWriter(properties: properties);
     writeTo(book.addSheet(sheetName), rows);

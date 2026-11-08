@@ -409,8 +409,8 @@ _Features _addFeatures(XlsxWorkbook book, XlsxSheet sheet, int row) {
     alignWithMargins: own?.alignWithMargins ?? true,
   );
   final bool filtered = _filter(sheet, row);
-  final XlsxProperties props = book.properties;
-  book.properties = XlsxProperties(
+  final OfficeProperties props = book.properties;
+  book.properties = OfficeProperties(
     title: _title,
     subject: props.subject,
     creator: props.creator,

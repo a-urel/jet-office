@@ -14,7 +14,7 @@ import '../read/support/zip_builder.dart';
 Uint8List _fixture(String name) =>
     allFixtures().firstWhere((Fixture f) => f.name == name).build();
 
-final XlsxProperties _m3 = XlsxProperties(
+final OfficeProperties _m3 = OfficeProperties(
   title: 'Quarterly report',
   subject: 'Accounts',
   creator: 'Ahmet Urel',
@@ -141,7 +141,7 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m1_properties'));
       expect(
         book.properties,
-        XlsxProperties(
+        OfficeProperties(
           title: 'Quarterly report',
           subject: 'Sales',
           creator: 'Ahmet Urel',
@@ -157,7 +157,7 @@ void main() {
     });
 
     test('a new workbook has no properties', () {
-      expect(XlsxWorkbook().properties, const XlsxProperties());
+      expect(XlsxWorkbook().properties, const OfficeProperties());
     });
 
     test('a file without the parts has no properties', () {
@@ -174,10 +174,13 @@ void main() {
               (p.key, p.key == '_rels/.rels' ? utf8.encode(rels) : p.value),
         ]),
       );
-      expect(book.properties, const XlsxProperties());
-      book.properties = const XlsxProperties(title: 'T', company: 'C');
+      expect(book.properties, const OfficeProperties());
+      book.properties = const OfficeProperties(title: 'T', company: 'C');
       final XlsxWorkbook again = XlsxWorkbook.open(book.save().bytes);
-      expect(again.properties, const XlsxProperties(title: 'T', company: 'C'));
+      expect(
+        again.properties,
+        const OfficeProperties(title: 'T', company: 'C'),
+      );
       expect(
         readXlsx(book.save().bytes).keys,
         containsAll(<String>['docProps/core.xml', 'docProps/app.xml']),
@@ -233,7 +236,7 @@ void main() {
       ]);
       final XlsxWorkbook book = XlsxWorkbook.open(bytes);
       expect(book.properties.title, 'Found');
-      book.properties = const XlsxProperties(title: 'Changed');
+      book.properties = const OfficeProperties(title: 'Changed');
       final Map<String, String> saved = readXlsx(book.save().bytes);
       expect(saved['meta/info.xml'], contains('Changed'));
       expect(saved.containsKey('docProps/core.xml'), isFalse);
@@ -258,13 +261,13 @@ void main() {
         },
       );
       final XlsxWorkbook book = XlsxWorkbook.open(bytes);
-      expect(book.properties, const XlsxProperties());
+      expect(book.properties, const OfficeProperties());
       expect(comparePackages(bytes, book.save().bytes), isEmpty);
       expect(
-        () => book.properties = const XlsxProperties(title: 'T'),
+        () => book.properties = const OfficeProperties(title: 'T'),
         throwsStateError,
       );
-      expect(book.properties, const XlsxProperties());
+      expect(book.properties, const OfficeProperties());
       expect(comparePackages(bytes, book.save().bytes), isEmpty);
     });
 
@@ -290,7 +293,10 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(bytes);
       expect(
         book.properties,
-        const XlsxProperties(title: 'Fine', custom: <String, Object>{'Ok': 7}),
+        const OfficeProperties(
+          title: 'Fine',
+          custom: <String, Object>{'Ok': 7},
+        ),
       );
       final List<String?> details = <String?>[
         for (final XlsxWarning w in book.warnings)
@@ -305,7 +311,7 @@ void main() {
       book.properties;
       expect(book.warnings.length, count);
       expect(comparePackages(bytes, book.save().bytes), isEmpty);
-      book.properties = const XlsxProperties(
+      book.properties = const OfficeProperties(
         title: 'New',
         custom: <String, Object>{'Ok': 7},
       );
@@ -327,7 +333,7 @@ void main() {
       final String before = _part(book, 'docProps/custom.xml');
       expect(before, contains('two'));
       expect(before, contains('three'));
-      book.properties = const XlsxProperties(
+      book.properties = const OfficeProperties(
         custom: <String, Object>{'Dup': 'uno'},
       );
       final String after = _part(book, 'docProps/custom.xml');
@@ -368,7 +374,7 @@ void main() {
     test('set writes what the writer writes', () {
       for (final String name in <String>['m3_properties', 'm1_properties']) {
         final XlsxWorkbook source = XlsxWorkbook.open(_fixture(name));
-        final XlsxProperties value = source.properties;
+        final OfficeProperties value = source.properties;
         final XlsxWorkbook book = XlsxWorkbook()..addSheet(_sheetOf(name));
         book.properties = value;
         expect(book.properties, value);
@@ -417,7 +423,7 @@ void main() {
         },
       );
       final XlsxWorkbook book = XlsxWorkbook.open(bytes);
-      book.properties = const XlsxProperties(
+      book.properties = const OfficeProperties(
         title: 'New',
         creator: 'Me',
         company: 'New Co',
@@ -436,7 +442,7 @@ void main() {
       expect(app, contains('<Manager>Boss</Manager>'));
       expect(app, isNot(contains('Old Co')));
       // A null field's element goes, the others stay.
-      book.properties = const XlsxProperties(creator: 'Me');
+      book.properties = const OfficeProperties(creator: 'Me');
       final String cleared = _part(book, 'docProps/core.xml');
       expect(cleared, isNot(contains('dc:title')));
       expect(cleared, contains('dc:language'));
@@ -461,7 +467,7 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(
         buildZip(<String, List<int>>{...parts}),
       );
-      book.properties = const XlsxProperties(title: 'New');
+      book.properties = const OfficeProperties(title: 'New');
       final Uint8List saved = book.save().bytes;
       final String core = readXlsx(saved)['docProps/core.xml']!;
       expect(RegExp('xmlns:mc=').allMatches(core), hasLength(1));
@@ -472,7 +478,7 @@ void main() {
     test('modified and lastModifiedBy are not touched by a save', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m3_properties'));
       book.sheets.first.setCell(5, 1, 'x');
-      final XlsxProperties saved = XlsxWorkbook.open(
+      final OfficeProperties saved = XlsxWorkbook.open(
         book.save().bytes,
       ).properties;
       expect(saved.modified, _m3.modified);
@@ -483,7 +489,7 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook()..addSheet('S');
       final Map<String, String> plain = readXlsx(book.save().bytes);
       expect(plain.containsKey('docProps/custom.xml'), isFalse);
-      book.properties = const XlsxProperties(
+      book.properties = const OfficeProperties(
         custom: <String, Object>{'A': 1, 'B': 'two'},
       );
       for (int i = 0; i < 2; i++) {
@@ -493,7 +499,7 @@ void main() {
         expect(parts['_rels/.rels'], contains('docProps/custom.xml'));
         expect(parts['[Content_Types].xml'], contains('/docProps/custom.xml'));
       }
-      book.properties = const XlsxProperties();
+      book.properties = const OfficeProperties();
       for (int i = 0; i < 2; i++) {
         final Map<String, String> parts = readXlsx(book.save().bytes);
         expect(parts.containsKey('docProps/custom.xml'), isFalse);
@@ -523,7 +529,7 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(
         _withCustom(_prop(2, 'A', '<vt:lpwstr>x</vt:lpwstr>')),
       );
-      book.properties = const XlsxProperties();
+      book.properties = const OfficeProperties();
       expect(
         readXlsx(book.save().bytes).containsKey('docProps/custom.xml'),
         isFalse,
@@ -537,7 +543,7 @@ void main() {
               _prop(3, 'D', '<vt:decimal>1.5</vt:decimal>'),
         ),
       );
-      book.properties = const XlsxProperties();
+      book.properties = const OfficeProperties();
       final String custom = _part(book, 'docProps/custom.xml');
       expect(custom, contains('vt:decimal'));
       expect(custom, isNot(contains('name="A"')));
@@ -559,7 +565,7 @@ void main() {
       );
       expect(book.properties.custom, <String, Object>{'Text': 'x'});
       expect(book.warnings, isEmpty);
-      book.properties = const XlsxProperties(
+      book.properties = const OfficeProperties(
         custom: <String, Object>{'Text': 'x', 'New': 1, 'New2': true},
       );
       final String custom = _part(book, 'docProps/custom.xml');
@@ -582,13 +588,13 @@ void main() {
       final Uint8List input = _fixture('m3_properties');
       final XlsxWorkbook book = XlsxWorkbook.open(input);
       final ChangeLog log = changeLogOf(book);
-      for (final XlsxProperties bad in <XlsxProperties>[
-        const XlsxProperties(title: 'a\u0000b'),
-        const XlsxProperties(company: 'a\u0001'),
-        const XlsxProperties(custom: <String, Object>{'': 1}),
-        const XlsxProperties(custom: <String, Object>{'A': 1, 'a': 2}),
-        const XlsxProperties(custom: <String, Object>{'A': double.nan}),
-        const XlsxProperties(custom: <String, Object>{'A': Object()}),
+      for (final OfficeProperties bad in <OfficeProperties>[
+        const OfficeProperties(title: 'a\u0000b'),
+        const OfficeProperties(company: 'a\u0001'),
+        const OfficeProperties(custom: <String, Object>{'': 1}),
+        const OfficeProperties(custom: <String, Object>{'A': 1, 'a': 2}),
+        const OfficeProperties(custom: <String, Object>{'A': double.nan}),
+        const OfficeProperties(custom: <String, Object>{'A': Object()}),
       ]) {
         expect(() => book.properties = bad, throwsArgumentError);
       }
@@ -602,7 +608,7 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(input);
       final ChangeLog log = changeLogOf(book);
       final ChangeSet set = log.transaction(() {
-        book.properties = const XlsxProperties(
+        book.properties = const OfficeProperties(
           title: 'Other',
           custom: <String, Object>{'Z': 1},
         );
@@ -621,7 +627,7 @@ void main() {
       final Uint8List empty = book.save().bytes;
       final ChangeLog log = changeLogOf(book);
       final ChangeSet set = log.transaction(() {
-        book.properties = const XlsxProperties(
+        book.properties = const OfficeProperties(
           title: 'T',
           custom: <String, Object>{'A': 1},
         );
@@ -637,7 +643,7 @@ void main() {
 
     test('a changed value keeps its place in the map order', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m3_properties'));
-      final XlsxProperties value = XlsxProperties(
+      final OfficeProperties value = OfficeProperties(
         custom: <String, Object>{
           'Due': DateTime.utc(2027),
           'Project': 'Atlas',

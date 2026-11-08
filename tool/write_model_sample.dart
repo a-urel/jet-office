@@ -296,7 +296,7 @@ XlsxWorkbook _featuresBook() {
     ..setCell(0, 0, 'Locked sheet')
     ..setCell(1, 0, 'Editing this sheet asks for the password: secret')
     ..protection = const XlsxSheetProtection(password: 'secret');
-  book.properties = const XlsxProperties(
+  book.properties = const OfficeProperties(
     title: 'W3 sample',
     subject: 'Sheet and workbook features',
     creator: 'jet_office',

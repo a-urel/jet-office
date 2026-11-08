@@ -835,7 +835,7 @@ final class _Run {
       b.protection = const XlsxWorkbookProtection(password: 'x');
     });
     change('book.properties', () {
-      b.properties = XlsxProperties(
+      b.properties = OfficeProperties(
         title: 'Fuzz',
         modified: DateTime.utc(2026, 11, 5),
         custom: const <String, Object>{'Fuzz': 1},
