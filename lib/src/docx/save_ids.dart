@@ -22,8 +22,8 @@
 /// nothing here throws a [DocxReadException].
 library;
 
-import '../opc/ooxml.dart' show ContentType, Ns;
-import '../opc/package.dart' show OpcPackage;
+import '../opc/ooxml.dart' show ContentType, Ns, RelType;
+import '../opc/package.dart' show OpcPackage, OpcRelationship;
 import '../xml/xml_pull_reader.dart';
 import 'docx_package.dart';
 import 'read_exception.dart';
@@ -124,9 +124,22 @@ final class SaveIds {
     int bookmark = -1;
     final OpcPackage opc = _package.package;
     final String main = _package.mainPart;
+    // D4 accepts a header or footer part of any content type when a
+    // relationship of the main part names it, so its ids count too.
+    final Set<String> named = <String>{};
+    for (final OpcRelationship rel in opc.relationshipsOf(main)) {
+      if (rel.external ||
+          (rel.type != RelType.header && rel.type != RelType.footer)) {
+        continue;
+      }
+      final String? name = opc.canonicalPartName(opc.resolve(main, rel.target));
+      if (name != null) named.add(name);
+    }
     for (final String part in opc.partNames) {
       // The main part is read as a Word main part whatever its type.
-      if (part != main && !storyTypes.contains(opc.contentTypeOf(part))) {
+      if (part != main &&
+          !storyTypes.contains(opc.contentTypeOf(part)) &&
+          !named.contains(part)) {
         continue;
       }
       _scan(part, (XmlPullReader r) {

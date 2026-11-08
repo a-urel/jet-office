@@ -146,6 +146,36 @@ void main() {
       }
     });
 
+    test('a story part typed as generic XML counts when the main part names '
+        'it as a header or footer', () {
+      for (final (String, String) named in <(String, String)>[
+        (RelType.footer, 'w:ftr'),
+        (RelType.header, 'w:hdr'),
+      ]) {
+        final SaveIds saveIds = SaveIds(
+          _open(
+            _package(
+              _document(_paragraph(_drawing('3') + _bookmark('4'))),
+              mainRels:
+                  '<Relationships xmlns="$packageRelsNs">'
+                  '<Relationship Id="rId1" Type="${named.$1}" '
+                  'Target="part.xml"/></Relationships>',
+              parts: <String, (String, String)>{
+                'word/part.xml': (
+                  ContentType.xml,
+                  '<${named.$2} $_ns>'
+                      '${_paragraph(_drawing('20') + _bookmark('20'))}'
+                      '</${named.$2}>',
+                ),
+              },
+            ),
+          ),
+        );
+        expect(saveIds.nextBookmarkId(), 21, reason: named.$2);
+        expect(saveIds.nextDrawingId(), 21, reason: named.$2);
+      }
+    });
+
     test('with none, drawings start at 1 and bookmarks at 0', () {
       final SaveIds saveIds = SaveIds(_open(buildDocx()));
       expect(saveIds.nextDrawingId(), 1);
