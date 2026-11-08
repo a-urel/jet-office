@@ -16,7 +16,9 @@ import '../common/properties.dart';
 import 'docx_document.dart';
 import 'model/blocks.dart';
 import 'model/formatting.dart';
+import 'model/inlines.dart';
 import 'model/section_formatting.dart';
+import 'model/sections.dart';
 import 'model/table_properties.dart';
 
 /// [value] as text that reads the same on every platform: a whole number
@@ -180,8 +182,9 @@ final class DocxListExport {
   /// Writes the list into [document], one data row per entry of [rows] and
   /// [totals] as a last row when given.
   ///
-  /// Until the page, header, footer and look are added in later steps of D6,
-  /// the list is a plain table appended to the end of the body: a header row
+  /// The list goes in the body's last section, whose page, header and footer
+  /// it sets first (below). Until the look is added in later steps of D6, the
+  /// list is a plain table appended to the end of the body: a header row
   /// that repeats, the data rows and the totals row, each cell holding the
   /// value as Excel shows it. A `String` is written as given, `null` as an
   /// empty cell, and a `num`, [FormatDecimal], `DateTime`, `Duration` or
@@ -201,6 +204,30 @@ final class DocxListExport {
   /// [columns] throws [ArgumentError] named `rows[i]`, `i` counting from 0,
   /// and a value of an unsupported type named `rows[i][j]`, each before that
   /// row is written. [rows] is read once, so the rows before it stay written.
+  ///
+  /// **Page.** The last section gets [pageSize] (A4 portrait when `null`) and
+  /// [margins] (Word's blank-document margins when `null`).
+  ///
+  /// **Header.** With a [logo], [title] or [date], the section's own
+  /// default header (`DocxHeaderFooterType.primary`) is replaced by one
+  /// paragraph: the logo [logoHeightPt] high, a tab, the title in bold, a tab
+  /// and the date as text, with a centre tab stop at half and a right one at
+  /// the whole text width. A missing piece is left out but its tab stays, so
+  /// a title alone is a tab and the title, and a date alone two tabs and the
+  /// date. With none of the three the section's own default header is
+  /// dropped, and none is created; the section may then still show an earlier
+  /// section's header, which it inherits. A section with a title page
+  /// (`DocxSection.titlePage`) has it turned off, so that its first page does
+  /// not hide the list's header behind a first-page header; the first-page and
+  /// even-page headers and footers themselves are left alone.
+  ///
+  /// **Footer.** The section's own default footer is replaced by one centred
+  /// paragraph: [footerBefore], the `PAGE` field, [footerMiddle], the
+  /// `NUMPAGES` field and [footerAfter], each text left out when empty.
+  ///
+  /// A header or footer part of an opened file that cannot be read throws the
+  /// model's `DocxReadException` naming it; the page values have been set by
+  /// then.
   void writeTo(
     DocxDocument document,
     Iterable<List<Object?>> rows, {
@@ -222,6 +249,7 @@ final class DocxListExport {
           _cellText(formatter, totals[j], columns[j], 'totals[$j]'),
       ];
     }
+    _writePage(document.sections.last, formatter);
     final DocxTable table = document.body.addTable(columns: columns.length);
     table.addRow(<String>[
       for (final DocxListColumn c in columns) c.header,
@@ -255,6 +283,75 @@ final class DocxListExport {
     writeTo(document, rows, totals: totals);
     document.properties = properties;
     return document.save();
+  }
+
+  /// Sets [section]'s page, header and footer; see [writeTo].
+  void _writePage(DocxSection section, NumberFormatter formatter) {
+    section.pageSize = pageSize ?? DocxPageSize.a4();
+    section.margins =
+        margins ??
+        DocxPageMargins(
+          top: 70.85,
+          right: 70.85,
+          bottom: 70.85,
+          left: 70.85,
+          header: 35.4,
+          footer: 35.4,
+          gutter: 0,
+        );
+    final OfficeImage? image = logo;
+    final String? name = title;
+    final DateTime? day = date;
+    if (image == null && name == null && day == null) {
+      section.removeHeader(DocxHeaderFooterType.primary);
+    } else {
+      final DocxHeaderFooter header = section.ownHeader(
+        DocxHeaderFooterType.primary,
+      );
+      _clear(header);
+      final double width = section.textWidthPt!;
+      final DocxParagraph p = header.addParagraph();
+      p.properties.tabs = <DocxTabStop>[
+        DocxTabStop(width / 2, alignment: DocxTabAlignment.center),
+        DocxTabStop(width, alignment: DocxTabAlignment.right),
+      ];
+      if (image != null) p.addPicture(image, heightPt: logoHeightPt);
+      if (name != null || day != null) {
+        p.addRun('\t');
+        if (name != null) p.addRun(name).properties.bold = true;
+      }
+      if (day != null) {
+        p.addRun('\t');
+        p.addRun(
+          formatter
+              .format(
+                day,
+                numberFormat: dateFormat,
+                numberFormatId: dateFormat == null ? 14 : 0,
+              )
+              .text,
+        );
+      }
+      if (section.titlePage) section.titlePage = false;
+    }
+    final DocxHeaderFooter footer = section.ownFooter(
+      DocxHeaderFooterType.primary,
+    );
+    _clear(footer);
+    final DocxParagraph f = footer.addParagraph();
+    f.properties.alignment = DocxAlignment.center;
+    if (footerBefore.isNotEmpty) f.addRun(footerBefore);
+    f.addField(DocxField.page());
+    if (footerMiddle.isNotEmpty) f.addRun(footerMiddle);
+    f.addField(DocxField.numPages());
+    if (footerAfter.isNotEmpty) f.addRun(footerAfter);
+  }
+
+  /// Removes every block of [story].
+  static void _clear(DocxHeaderFooter story) {
+    while (story.blocks.isNotEmpty) {
+      story.removeBlockAt(story.blocks.length - 1);
+    }
   }
 
   @override
@@ -304,7 +401,8 @@ final class DocxListExport {
   String toString() =>
       'DocxListExport($columns, title: $title, logo: $logo, '
       'logoHeightPt: ${_describe(logoHeightPt)}, date: $date, '
-      'dateFormat: $dateFormat, caption: $caption, pageSize: $pageSize, margins: $margins, '
+      'dateFormat: $dateFormat, caption: $caption, pageSize: $pageSize, '
+      'margins: $margins, '
       'footerBefore: $footerBefore, footerMiddle: $footerMiddle, '
       'footerAfter: $footerAfter, locale: $locale, '
       'headerShading: $headerShading)';

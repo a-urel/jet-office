@@ -3,6 +3,7 @@
 // so it runs on the web as well.
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
@@ -22,6 +23,19 @@ void _throwsNamed(void Function() call, String name) {
       isA<ArgumentError>().having((ArgumentError e) => e.name, 'name', name),
     ),
   );
+}
+
+/// The first 33 bytes of a PNG of [width] by [height] pixels: its signature
+/// and the start of its `IHDR`, which is all the model reads of it.
+Uint8List _pngOfSize(int width, int height) {
+  int byte(int value, int shift) => (value >> shift) & 0xFF;
+  return Uint8List.fromList(<int>[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, //
+    0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, //
+    byte(width, 24), byte(width, 16), byte(width, 8), byte(width, 0), //
+    byte(height, 24), byte(height, 16), byte(height, 8), byte(height, 0), //
+    8, 2, 0, 0, 0, 0, 0, 0, 0, //
+  ]);
 }
 
 void main() {
@@ -455,6 +469,268 @@ void main() {
     });
   });
 
+  group('page', () {
+    DocxSection last(DocxDocument d) => d.sections.last;
+
+    DocxDocument written(DocxListExport e, [DocxDocument? into]) {
+      final DocxDocument doc = into ?? DocxDocument();
+      e.writeTo(doc, <List<Object?>>[
+        <Object?>['A', 1],
+      ]);
+      return doc;
+    }
+
+    /// The paragraph of the section's header, which must be its only block.
+    DocxParagraph headerParagraph(DocxSection section) {
+      expect(section.header.blocks, hasLength(1));
+      return section.header.blocks.single as DocxParagraph;
+    }
+
+    List<String> runTexts(DocxParagraph p) => <String>[
+      for (final DocxInline i in p.inlines) i.text,
+    ];
+
+    test('the defaults are A4 portrait and Word\'s blank margins', () {
+      final DocxSection s = last(written(DocxListExport(_two)));
+      expect(s.pageSize, DocxPageSize.a4());
+      final DocxPageMargins m = s.margins!;
+      expect(m.topPt, 70.85);
+      expect(m.rightPt, 70.85);
+      expect(m.bottomPt, 70.85);
+      expect(m.leftPt, 70.85);
+      expect(m.headerPt, 35.4);
+      expect(m.footerPt, 35.4);
+      expect(m.gutterPt, 0);
+    });
+
+    test('a given page size and margins are set as given', () {
+      final DocxPageMargins margins = DocxPageMargins(
+        top: 36,
+        right: 40,
+        bottom: 36,
+        left: 40,
+        header: 18,
+        footer: 18,
+        gutter: 2,
+      );
+      final DocxSection s = last(
+        written(
+          DocxListExport(
+            _two,
+            pageSize: DocxPageSize.a4(landscape: true),
+            margins: margins,
+          ),
+        ),
+      );
+      expect(s.pageSize, DocxPageSize.a4(landscape: true));
+      expect(s.margins, margins);
+    });
+
+    test('the header holds the logo, a tab, the title, a tab and the date', () {
+      final DocxSection s = last(
+        written(
+          DocxListExport(
+            _two,
+            logo: OfficeImage(_pngOfSize(100, 50)),
+            logoHeightPt: 30,
+            title: 'Accounts',
+            date: DateTime(2026, 11, 8),
+            dateFormat: 'dd.mm.yyyy',
+          ),
+        ),
+      );
+      final DocxParagraph p = headerParagraph(s);
+      expect(runTexts(p), <String>['', '\t', 'Accounts', '\t', '08.11.2026']);
+      expect(p.text, '\tAccounts\t08.11.2026');
+      final DocxPicture pic =
+          (p.inlines.first as DocxRun).content.single as DocxPicture;
+      expect(pic.heightPt, 30);
+      expect(pic.widthPt, 60);
+      expect((p.inlines[2] as DocxRun).properties.bold, isTrue);
+      final double width = s.textWidthPt!;
+      expect(p.properties.tabs, <DocxTabStop>[
+        DocxTabStop(width / 2, alignment: DocxTabAlignment.center),
+        DocxTabStop(width, alignment: DocxTabAlignment.right),
+      ]);
+    });
+
+    test('the tab stops follow the text width of the page', () {
+      final DocxSection s = last(
+        written(
+          DocxListExport(
+            _two,
+            pageSize: DocxPageSize.a4(landscape: true),
+            title: 'T',
+          ),
+        ),
+      );
+      final double width = s.textWidthPt!;
+      expect(width, greaterThan(700));
+      expect(headerParagraph(s).properties.tabs, <DocxTabStop>[
+        DocxTabStop(width / 2, alignment: DocxTabAlignment.center),
+        DocxTabStop(width, alignment: DocxTabAlignment.right),
+      ]);
+    });
+
+    test('absent pieces leave their tabs', () {
+      DocxParagraph of(DocxListExport e) => headerParagraph(last(written(e)));
+      expect(runTexts(of(DocxListExport(_two, title: 'T'))), <String>[
+        '\t',
+        'T',
+      ]);
+      expect(
+        runTexts(
+          of(DocxListExport(_two, title: null, date: DateTime(2026, 11, 8))),
+        ),
+        <String>['\t', '\t', '11/8/26'],
+      );
+      expect(
+        runTexts(
+          of(
+            DocxListExport(
+              _two,
+              title: 'T',
+              logo: OfficeImage(_pngOfSize(10, 10)),
+            ),
+          ),
+        ),
+        <String>['', '\t', 'T'],
+      );
+      expect(
+        runTexts(
+          of(
+            DocxListExport(
+              _two,
+              title: null,
+              logo: OfficeImage(_pngOfSize(10, 10)),
+              date: DateTime(2026, 11, 8),
+            ),
+          ),
+        ),
+        <String>['', '\t', '\t', '11/8/26'],
+      );
+    });
+
+    test('the date shows in the locale\'s short date without a code', () {
+      final DocxSection s = last(
+        written(
+          DocxListExport(
+            _two,
+            title: null,
+            date: DateTime(2026, 11, 8),
+            locale: FormatLocale.trTR,
+          ),
+        ),
+      );
+      expect(headerParagraph(s).text, '\t\t08.11.2026');
+    });
+
+    test('with no logo, title or date there is no own header', () {
+      final DocxDocument doc = written(DocxListExport(_two, title: null));
+      expect(last(doc).header.isInherited, isFalse);
+      expect(last(doc).header.blocks, isEmpty);
+      final Map<String, bool> parts = <String, bool>{
+        for (final ArchiveFile f in ZipDecoder().decodeBytes(_saved(doc)).files)
+          f.name: true,
+      };
+      expect(parts.keys.where((String n) => n.contains('header')), isEmpty);
+      expect(
+        parts.keys.where((String n) => n.contains('footer')),
+        hasLength(1),
+      );
+    });
+
+    test('the footer is centred: Page, PAGE, of, NUMPAGES', () {
+      final DocxSection s = last(written(DocxListExport(_two)));
+      expect(s.footer.blocks, hasLength(1));
+      final DocxParagraph p = s.footer.blocks.single as DocxParagraph;
+      expect(p.properties.alignment, DocxAlignment.center);
+      expect(p.inlines, hasLength(4));
+      expect((p.inlines[0] as DocxRun).text, 'Page ');
+      expect((p.inlines[1] as DocxField).instruction.trim(), 'PAGE');
+      expect((p.inlines[2] as DocxRun).text, ' of ');
+      expect((p.inlines[3] as DocxField).instruction.trim(), 'NUMPAGES');
+      expect(p.text, 'Page 1 of 1');
+    });
+
+    test('footer texts are replaced and empty ones left out', () {
+      final DocxSection s = last(
+        written(
+          DocxListExport(_two, footerBefore: 'Sayfa ', footerMiddle: ' / '),
+        ),
+      );
+      expect((s.footer.blocks.single as DocxParagraph).text, 'Sayfa 1 / 1');
+      final DocxSection bare = last(
+        written(
+          DocxListExport(
+            _two,
+            footerBefore: '',
+            footerMiddle: '',
+            footerAfter: '',
+          ),
+        ),
+      );
+      final DocxParagraph p = bare.footer.blocks.single as DocxParagraph;
+      expect(p.inlines.whereType<DocxRun>(), isEmpty);
+      expect(p.text, '11');
+      final DocxSection after = last(
+        written(DocxListExport(_two, footerAfter: ' pages')),
+      );
+      expect(
+        (after.footer.blocks.single as DocxParagraph).text,
+        'Page 1 of 1 pages',
+      );
+    });
+
+    group('in an opened document', () {
+      /// A document of two sections whose both have their own header and
+      /// footer, and whose last has a title page.
+      DocxDocument twoSections() {
+        final DocxDocument doc = DocxDocument();
+        doc.body.addParagraph('first');
+        final DocxSection one = doc.sections.last;
+        one.ownHeader(DocxHeaderFooterType.primary).addParagraph('H1');
+        one.ownFooter(DocxHeaderFooterType.primary).addParagraph('F1');
+        doc.body.addSection();
+        final DocxSection two = doc.sections.last;
+        two.ownHeader(DocxHeaderFooterType.primary).addParagraph('H2');
+        two.ownFooter(DocxHeaderFooterType.primary).addParagraph('F2');
+        two.ownHeader(DocxHeaderFooterType.first).addParagraph('First page');
+        expect(two.titlePage, isTrue);
+        return DocxDocument.open(doc.save().bytes);
+      }
+
+      test('the last section\'s header and footer are replaced', () {
+        final DocxDocument doc = twoSections();
+        written(DocxListExport(_two, title: 'List'), doc);
+        final DocxSection one = doc.sections.first;
+        final DocxSection two = doc.sections.last;
+        expect(one.header.blocks.single, isA<DocxParagraph>());
+        expect((one.header.blocks.single as DocxParagraph).text, 'H1');
+        expect((one.footer.blocks.single as DocxParagraph).text, 'F1');
+        expect(headerParagraph(two).text, '\tList');
+        expect(two.footer.blocks, hasLength(1));
+        expect((two.footer.blocks.single as DocxParagraph).text, 'Page 1 of 1');
+      });
+
+      test('a title page is turned off so page 1 shows the header', () {
+        final DocxDocument doc = twoSections();
+        written(DocxListExport(_two, title: 'List'), doc);
+        expect(doc.sections.last.titlePage, isFalse);
+        final DocxDocument back = DocxDocument.open(doc.save().bytes);
+        expect(back.sections.last.titlePage, isFalse);
+      });
+
+      test('with nothing for the header the section\'s own is dropped', () {
+        final DocxDocument doc = twoSections();
+        written(DocxListExport(_two, title: null), doc);
+        final DocxSection two = doc.sections.last;
+        expect(two.header.isInherited, isTrue);
+        expect((two.header.blocks.single as DocxParagraph).text, 'H1');
+      });
+    });
+  });
+
   group('values', () {
     /// The tables of [document]'s body.
     List<DocxTable> tables(DocxDocument document) =>
@@ -683,6 +959,16 @@ void main() {
       final DocxDocument back = DocxDocument.open(out.bytes);
       expect(tables(back).single.rows, hasLength(3));
       expect(back.properties.title, 'Accounts');
+    });
+    test('toDocx with default properties saves no docProps part', () {
+      final DocxResult out = DocxListExport(_two).toDocx(<List<Object?>>[
+        <Object?>['A', 1],
+      ]);
+      final List<String> names = <String>[
+        for (final ArchiveFile f in ZipDecoder().decodeBytes(out.bytes).files)
+          f.name,
+      ];
+      expect(names.where((String n) => n.startsWith('docProps')), isEmpty);
     });
   });
 }
