@@ -37,7 +37,6 @@ library;
 
 import 'dart:typed_data';
 
-import '../../common/properties.dart';
 import '../../common/properties_parts.dart';
 import '../../opc/change_log.dart';
 import '../../opc/opaque_xml.dart';
@@ -1031,53 +1030,6 @@ void setActiveTab(ChangeLog log, WorkbookPart part, int index) {
     log.record(SetBookViewsChange(part, before, after));
   } catch (_) {
     part.swapBookViews(after, before);
-    rethrow;
-  }
-}
-
-/// The change of the document properties: the three parts before and after.
-final class SetPropertiesChange implements Change {
-  /// A change of [state]'s parts from [before] to [after].
-  SetPropertiesChange(this.state, this.before, this.after);
-
-  /// The properties of the workbook.
-  final PropertiesState state;
-
-  /// The parts before the change.
-  final PropertyParts before;
-
-  /// The parts after the change.
-  final PropertyParts after;
-
-  @override
-  void revert() => state.swap(before);
-
-  @override
-  void reapply() => state.swap(after);
-}
-
-/// Sets the document properties of [state] to [value] and records the
-/// change in [log]; a [value] equal to what [state] shows changes nothing.
-///
-/// Must run inside `log.transaction`. Throws an [ArgumentError] for a bad
-/// [value] (see `checkProperties`) and a [StateError] when a part that must
-/// change is not a properties part; nothing has changed then. If recording
-/// throws, the parts are put back as they were before the error leaves.
-void setProperties(
-  ChangeLog log,
-  PropertiesState state,
-  OfficeProperties value,
-) {
-  if (value == state.parts.merged) return;
-  checkProperties(value);
-  final PropertyParts before = state.parts;
-  final PropertyParts after = before.withProperties(value);
-  final SetPropertiesChange change = SetPropertiesChange(state, before, after);
-  change.reapply();
-  try {
-    log.record(change);
-  } catch (_) {
-    change.revert();
     rethrow;
   }
 }
