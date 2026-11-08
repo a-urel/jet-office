@@ -208,6 +208,27 @@ void main() {
     expect(values, <String>{'abc', '99999999999999999999', '-', '1in'});
   });
 
+  test('values of the core, app and custom properties parts are replaced', () {
+    final RegExp replacement = RegExp(r'replace [\w:.-]+ at \d+ with "');
+    final Map<String, int> perPart = <String, int>{};
+    for (final int seed in _seeds) {
+      for (final FuzzCase c in docxFuzzCases(seed, _cases)) {
+        final String? part = mutatedPart(c.mutation);
+        if (part == null || !part.startsWith('docProps/')) continue;
+        if (!replacement.hasMatch(c.mutation)) continue;
+        perPart.update(part, (int n) => n + 1, ifAbsent: () => 1);
+      }
+    }
+    printOnFailure('$perPart');
+    for (final String part in <String>[
+      'docProps/core.xml',
+      'docProps/app.xml',
+      'docProps/custom.xml',
+    ]) {
+      expect(perPart[part] ?? 0, greaterThan(0), reason: part);
+    }
+  });
+
   test('every part name is mutated in some corpus entry', () {
     final Set<String> parts = <String>{
       for (final ({String name, Uint8List bytes}) entry in docxFuzzCorpus())

@@ -474,8 +474,11 @@ void exerciseDocx(Uint8List bytes) {
     saved = doc.save().bytes;
   } on DocxReadException catch (e) {
     // Ruling H: a link or picture built in a story whose relationships part
-    // cannot be read makes the save throw. Without them it must save.
-    if (storyEdit == null) throw StateError('save() threw: $e');
+    // cannot be read makes the save throw, naming that relationships part.
+    // Without them it must save.
+    if (storyEdit == null || !_storyRelationshipsPart(e.part)) {
+      throw StateError('save() threw: $e');
+    }
     refused(e);
     while (storyEdit.inlines.length > 1) {
       storyEdit.removeInlineAt(storyEdit.inlines.length - 1);
@@ -498,12 +501,20 @@ void exerciseDocx(Uint8List bytes) {
     instancesAfter: listAdded ? instancesBefore + 1 : null,
     refusedStories: refusedStories,
     sectionCount: sectionCount,
+    propertiesLoaded: properties != null,
     propertiesSet: propertiesSet,
     linkAdded: linkAdded,
     footerLinked: storyEdit != null && footerLinks,
   );
   if (first != null) throw first!;
 }
+
+/// Whether [part] names the relationships part of a story: a `.rels` part
+/// in a `_rels` folder, not the package root's.
+bool _storyRelationshipsPart(String? part) =>
+    part != null &&
+    part != '/_rels/.rels' &&
+    RegExp(r'/_rels/[^/]+\.rels$').hasMatch(part);
 
 /// The properties the walk sets on a document whose properties loaded.
 final OfficeProperties fuzzProperties = OfficeProperties(
@@ -1013,6 +1024,7 @@ void _reopen(
   required int? instancesAfter,
   required Set<_StoryKey> refusedStories,
   required int sectionCount,
+  required bool propertiesLoaded,
   required bool propertiesSet,
   required bool linkAdded,
   required bool footerLinked,
@@ -1058,7 +1070,9 @@ void _reopen(
       throw StateError('the saved title is "${p.title}", not "Fuzzed"');
     }
   } on DocxReadException catch (e) {
-    if (propertiesSet) throw StateError('the saved properties threw: $e');
+    // Properties that loaded load again, set or not (a refused set leaves the
+    // parts as read).
+    if (propertiesLoaded) throw StateError('the saved properties threw: $e');
   } on StateError {
     rethrow;
   } on Object catch (e) {
