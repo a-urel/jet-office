@@ -268,7 +268,7 @@ List<String> _edit(
     final DocxNumberingInstance list = doc.numbering.addBulletList();
     body.addListItem(list, firstItemText);
     body.addListItem(list, secondItemText, level: 1);
-    doc.properties = _withTitle(doc.properties, editedText);
+    doc.properties = doc.properties.copyWith(title: editedText);
     edits = (
       blocks: blocks,
       run: run,
@@ -361,26 +361,6 @@ void _appendLinks(DocxBody body) {
     ..addHyperlink(internalLinkText, anchor: bookmarkName)
     ..addRun('.');
 }
-
-/// [p] with the title [title].
-OfficeProperties _withTitle(OfficeProperties p, String title) =>
-    OfficeProperties(
-      title: title,
-      subject: p.subject,
-      creator: p.creator,
-      keywords: p.keywords,
-      description: p.description,
-      lastModifiedBy: p.lastModifiedBy,
-      category: p.category,
-      company: p.company,
-      manager: p.manager,
-      contentStatus: p.contentStatus,
-      revision: p.revision,
-      application: p.application,
-      created: p.created,
-      modified: p.modified,
-      custom: p.custom,
-    );
 
 /// The problems of the parts [saved] changes: any difference outside the
 /// allowed set.

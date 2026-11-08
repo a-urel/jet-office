@@ -410,23 +410,7 @@ _Features _addFeatures(XlsxWorkbook book, XlsxSheet sheet, int row) {
   );
   final bool filtered = _filter(sheet, row);
   final OfficeProperties props = book.properties;
-  book.properties = OfficeProperties(
-    title: _title,
-    subject: props.subject,
-    creator: props.creator,
-    keywords: props.keywords,
-    description: props.description,
-    lastModifiedBy: props.lastModifiedBy,
-    category: props.category,
-    company: props.company,
-    manager: props.manager,
-    contentStatus: props.contentStatus,
-    revision: props.revision,
-    application: props.application,
-    created: props.created,
-    modified: props.modified,
-    custom: props.custom,
-  );
+  book.properties = props.copyWith(title: _title);
   return (name: name, filtered: filtered);
 }
 

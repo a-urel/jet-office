@@ -104,10 +104,10 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   application) and the D6 lists written by `DocxListExport` (`d6_list`, Turkish
   with a logo, a caption, a date, an amount and a share column, 120 rows over
   three A4 pages and a totals row; `d6_list_landscape`, English on landscape A4
-  with 1.27 cm margins, twelve columns and 40 rows). A fixture with a `DocxFixture.headerFooterText` (`d4_headers`,
-  `d4_fields`, `d5_pictures`, `d5_links`, `d6_list`, `d6_list_landscape`) also
-  gets `<name>.stories.txt`, what
-  its headers and footers show. No fixture ends in a table, because
+  with 1.27 cm margins, twelve columns and 40 rows). A fixture with a
+  `DocxFixture.headerFooterText` (`d4_headers`, `d4_fields`, `d5_pictures`,
+  `d5_links`, `d6_list`, `d6_list_landscape`) also gets `<name>.stories.txt`,
+  what its headers and footers show. No fixture ends in a table, because
   LibreOffice's text export of one never ends (see below), or in a section
   break, as the model adds no block after one.
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx` and
@@ -397,8 +397,8 @@ the owning `*_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
 900 cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*` and `d6_*` ones
-among them), a hand-made table with every element of the table values, a hand-made
-`sections_by_hand` (every section child, six stories, broken references and
+among them), a hand-made table with every element of the table values, a
+hand-made `sections_by_hand` (every section child, six stories, broken references and
 broken fields), a hand-made `drawings_by_hand` (inline, anchored, linked and
 broken pictures, external, anchor and broken hyperlinks, bookmarks with bad
 ids, a header with a picture and a link, and properties parts with values that

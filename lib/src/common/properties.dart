@@ -126,6 +126,51 @@ final class OfficeProperties {
   /// `hashCode` change with it.
   final Map<String, Object> custom;
 
+  /// These properties with each field the call gives replaced and every
+  /// other field kept, so a caller changing one field does not copy the rest
+  /// by hand.
+  ///
+  /// A parameter that is `null`, or left out, keeps the field: this method
+  /// cannot clear one. To remove a field, build the properties with the
+  /// constructor, which leaves it `null`. [custom] is replaced as a whole
+  /// (the map given, held as given, not merged with the old one); left out,
+  /// the copy shares this one's map. The values are not checked here: the
+  /// writer constructors and the `properties` setters check them, as for any
+  /// [OfficeProperties].
+  OfficeProperties copyWith({
+    String? title,
+    String? subject,
+    String? creator,
+    String? keywords,
+    String? description,
+    String? lastModifiedBy,
+    String? category,
+    String? company,
+    String? manager,
+    String? contentStatus,
+    int? revision,
+    String? application,
+    DateTime? created,
+    DateTime? modified,
+    Map<String, Object>? custom,
+  }) => OfficeProperties(
+    title: title ?? this.title,
+    subject: subject ?? this.subject,
+    creator: creator ?? this.creator,
+    keywords: keywords ?? this.keywords,
+    description: description ?? this.description,
+    lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
+    category: category ?? this.category,
+    company: company ?? this.company,
+    manager: manager ?? this.manager,
+    contentStatus: contentStatus ?? this.contentStatus,
+    revision: revision ?? this.revision,
+    application: application ?? this.application,
+    created: created ?? this.created,
+    modified: modified ?? this.modified,
+    custom: custom ?? this.custom,
+  );
+
   @override
   bool operator ==(Object other) {
     if (other is! OfficeProperties) return false;

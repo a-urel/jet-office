@@ -432,12 +432,12 @@ doc.properties = const OfficeProperties(title: 'Report');
   `d5_links` hold the same parts with the same bytes in another ZIP order;
   `docs/word-checks.md` says so. Two saves of one model still give the same
   bytes.
-- **`OfficeProperties` has no `copyWith`.** Setting `properties` to a value
-  built from scratch removes every field it leaves null (the creator, the
-  dates, the revision, the application of a Word file), as "sets to value"
-  says; a caller changing one field copies the fields it keeps, as
-  `tool/edit_docx.dart`'s `_withTitle` does. To be settled in D6's API
-  review.
+- **`OfficeProperties.copyWith` (added in D6, closing this gap).** Setting
+  `properties` to a value built from scratch removes every field it leaves null
+  (the creator, the dates, the revision, the application of a Word file), as
+  "sets to value" says; a caller changing one field uses
+  `properties.copyWith(...)`, which keeps every field it is not given. A
+  `null` argument keeps the field, so clearing one stays the constructor's job.
 - **A read hyperlink or picture moved to another part or document keeps its
   `r:id` as read** (Ruling 13), as an opaque one did. Its `url` or `image`
   still reads the target in the relationships of the part it was read from

@@ -426,4 +426,106 @@ void main() {
       expect(s, contains('application: Word'));
     });
   });
+
+  group('copyWith', () {
+    final OfficeProperties full = OfficeProperties(
+      title: 'Title',
+      subject: 'Subject',
+      creator: 'Creator',
+      keywords: 'one;two',
+      description: 'Description',
+      lastModifiedBy: 'Editor',
+      category: 'Category',
+      company: 'Company',
+      manager: 'Manager',
+      contentStatus: 'Draft',
+      revision: 3,
+      application: 'Word',
+      created: DateTime.utc(2026, 1, 2, 3, 4, 5),
+      modified: DateTime.utc(2026, 6, 7, 8, 9, 10),
+      custom: const <String, Object>{'Project': 'Alpha', 'Count': 2},
+    );
+
+    test('with no argument equals the original', () {
+      expect(full.copyWith(), full);
+      expect(const OfficeProperties().copyWith(), const OfficeProperties());
+    });
+
+    test('keeps every field it is not given', () {
+      final OfficeProperties copy = full.copyWith(title: 'New');
+      expect(copy.title, 'New');
+      expect(
+        copy,
+        OfficeProperties(
+          title: 'New',
+          subject: full.subject,
+          creator: full.creator,
+          keywords: full.keywords,
+          description: full.description,
+          lastModifiedBy: full.lastModifiedBy,
+          category: full.category,
+          company: full.company,
+          manager: full.manager,
+          contentStatus: full.contentStatus,
+          revision: full.revision,
+          application: full.application,
+          created: full.created,
+          modified: full.modified,
+          custom: full.custom,
+        ),
+      );
+    });
+
+    test('replaces every field when given', () {
+      final DateTime created = DateTime.utc(2027, 2, 3);
+      final DateTime modified = DateTime.utc(2027, 3, 4);
+      const Map<String, Object> custom = <String, Object>{'Other': true};
+      final OfficeProperties copy = full.copyWith(
+        title: 't',
+        subject: 's',
+        creator: 'c',
+        keywords: 'k',
+        description: 'd',
+        lastModifiedBy: 'l',
+        category: 'g',
+        company: 'y',
+        manager: 'm',
+        contentStatus: 'Final',
+        revision: 9,
+        application: 'a',
+        created: created,
+        modified: modified,
+        custom: custom,
+      );
+      expect(copy.title, 't');
+      expect(copy.subject, 's');
+      expect(copy.creator, 'c');
+      expect(copy.keywords, 'k');
+      expect(copy.description, 'd');
+      expect(copy.lastModifiedBy, 'l');
+      expect(copy.category, 'g');
+      expect(copy.company, 'y');
+      expect(copy.manager, 'm');
+      expect(copy.contentStatus, 'Final');
+      expect(copy.revision, 9);
+      expect(copy.application, 'a');
+      expect(copy.created, created);
+      expect(copy.modified, modified);
+      expect(copy.custom, custom);
+    });
+
+    test('each field alone changes only that field', () {
+      expect(full.copyWith(subject: 'x').subject, 'x');
+      expect(full.copyWith(subject: 'x').title, 'Title');
+      expect(full.copyWith(revision: 0).revision, 0);
+      expect(full.copyWith(revision: 0).company, 'Company');
+      expect(full.copyWith(custom: const <String, Object>{}).custom, isEmpty);
+      expect(full.copyWith(custom: const <String, Object>{}).title, 'Title');
+    });
+
+    test('null keeps the field; the constructor clears one', () {
+      expect(full.copyWith(title: null).title, 'Title');
+      expect(full.copyWith(created: null).created, full.created);
+    });
+  });
 }

@@ -209,16 +209,15 @@ final class DocxListExport {
   /// and any other is left as the paragraph default.
   ///
   /// Throws [ArgumentError], before [document] changes, for no columns or
-  /// more than [maxTableColumns], or columns without a width that would get 1
-  /// point or less of the text width each (all named `columns`), an empty
-  /// header or one
-  /// that repeats an earlier header ignoring case (`columns[i].header`), a
-  /// width that is not finite or not greater than 0 (`columns[i].widthPt`),
-  /// a number format that cannot be read (`columns[i].numberFormat`), a
-  /// [logoHeightPt] that is not finite or not greater than 0
-  /// (`logoHeightPt`), a [headerShading] that is not six hex digits
-  /// (`headerShading`), [totals] longer than [columns] (`totals`) and a
-  /// [totals] value of an unsupported type (`totals[j]`). A row longer than
+  /// more than [maxTableColumns], or columns without a width that would get
+  /// 1 point or less of the text width each (all named `columns`), an empty
+  /// header or one that repeats an earlier header ignoring case
+  /// (`columns[i].header`), a width that is not finite or not greater than 0
+  /// (`columns[i].widthPt`), a number format that cannot be read
+  /// (`columns[i].numberFormat`), a [logoHeightPt] that is not finite or not
+  /// greater than 0 (`logoHeightPt`), a [headerShading] that is not six hex
+  /// digits (`headerShading`), [totals] longer than [columns] (`totals`) and
+  /// a [totals] value of an unsupported type (`totals[j]`). A row longer than
   /// [columns] throws [ArgumentError] named `rows[i]`, `i` counting from 0,
   /// and a value of an unsupported type named `rows[i][j]`, each before that
   /// row is written. Those two come after the page, header, footer, caption,

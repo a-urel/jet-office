@@ -10,6 +10,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import '../../tool/src/part_compare.dart';
+import '../fixtures/docx_fixtures.dart';
 
 const List<DocxListColumn> _two = <DocxListColumn>[
   DocxListColumn('Code'),
@@ -1253,6 +1254,48 @@ void main() {
         _two,
       ).toDocx(three, properties: const OfficeProperties(title: 'X'));
       expect(DocxDocument.open(out.bytes).properties.title, 'X');
+    });
+  });
+
+  group('the D6 fixtures, by hand', () {
+    DocxFixture fixture(String name) =>
+        docxFixtures().singleWhere((DocxFixture f) => f.name == name);
+
+    /// The lines of [text] that are table rows: a row's cells are joined by
+    /// tabs, and no other line of these fixtures holds a tab.
+    List<String> rowLines(String text) => <String>[
+      for (final String line in text.split('\n'))
+        if (line.contains('\t')) line,
+    ];
+
+    test('d6_list: 122 rows, the totals last', () {
+      final String text = fixture('d6_list').expectedText;
+      final List<String> rows = rowLines(text);
+      // The header, 120 data rows and the totals row, five cells each.
+      expect(rows, hasLength(122));
+      expect(rows.every((String r) => '\t'.allMatches(r).length == 4), isTrue);
+      expect(rows.first, startsWith('Kod\t'));
+      expect(rows.last, startsWith('Toplam'));
+      expect(
+        text.split('\n').where((String l) => l.startsWith('Toplam')),
+        hasLength(1),
+      );
+    });
+
+    test('d6_list: the header shows the date, the footer the page', () {
+      // The date is in the header, not the body, so the stories hold it.
+      final String? stories = fixture('d6_list').headerFooterText;
+      expect(stories, contains('08.11.2026'));
+      expect(stories, contains('Sayfa {PAGE} / {NUMPAGES}'));
+    });
+
+    test('d6_list_landscape: 41 rows of 12 cells', () {
+      final List<String> rows = rowLines(
+        fixture('d6_list_landscape').expectedText,
+      );
+      expect(rows, hasLength(41));
+      expect(rows.every((String r) => '\t'.allMatches(r).length == 11), isTrue);
+      expect(rows.first, startsWith('Code\t'));
     });
   });
 }
