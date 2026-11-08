@@ -2,6 +2,13 @@
 -- workbook and writes a CSV (test/fixtures/owner/axis/README.md).
 --
 --   osascript run_excel.applescript <workbook> <csv>
+--   osascript run_excel.applescript <workbook> <csv> full
+--
+-- With "full" it reads the full oracle's workbook and writes the CSV of case
+-- list version 2 (test/fixtures/owner/axis_full/README.md): the chart's width
+-- as well, the plot area's inside left, top, width and height, and the
+-- category axis' tick label spacing, left empty when the chart has no category
+-- labels or Excel gives none.
 --
 -- Paths are POSIX, absolute or relative to the current folder. The workbook
 -- opens read-only and closes without saving. A chart Excel cannot answer for
@@ -10,10 +17,20 @@
 -- separator; the CSV is UTF-8 with LF line ends.
 
 on run argv
-	if (count of argv) is not 2 then error "usage: osascript run_excel.applescript <workbook> <csv>" number 2
+	set argCount to count of argv
+	if argCount < 2 or argCount > 3 then error "usage: osascript run_excel.applescript <workbook> <csv> [full]" number 2
+	set fullRun to false
+	if argCount is 3 then
+		if item 3 of argv is not "full" then error "usage: osascript run_excel.applescript <workbook> <csv> [full]" number 2
+		set fullRun to true
+	end if
 	set workbookPath to my absolutePath(item 1 of argv)
 	set csvPath to my absolutePath(item 2 of argv)
-	set csvRows to {"case,height,font,min,max,major"}
+	if fullRun then
+		set csvRows to {"case,width,height,font,min,max,major,plotLeft,plotTop,plotWidth,plotHeight,labelSpacing"}
+	else
+		set csvRows to {"case,height,font,min,max,major"}
+	end if
 	set failures to {}
 	set unseen to {}
 	tell application "Microsoft Excel"
@@ -55,13 +72,38 @@ on run argv
 					on error
 						set end of unseen to caseId
 					end try
-					set theAxis to get axis (chart of theObject) axis type value axis which axis primary axis
+					set theChart to chart of theObject
+					set theAxis to get axis theChart axis type value axis which axis primary axis
 					set theHeight to height of theObject
 					set theFont to font size of font object of tick labels of theAxis
 					set theMin to minimum scale of theAxis
 					set theMax to maximum scale of theAxis
 					set theMajor to major unit of theAxis
-					set end of csvRows to my csvRow(caseId, {theHeight, theFont, theMin, theMax, theMajor})
+					if fullRun then
+						set theWidth to width of theObject
+						set thePlot to plot area object of theChart
+						set plotLeft to inside left of thePlot
+						set plotTop to inside top of thePlot
+						set plotWidth to inside width of thePlot
+						set plotHeight to inside height of thePlot
+						-- A series formula names its categories second:
+						-- =SERIES(,,'sheet'!$B$1:$B$2,1) has none.
+						set spacingText to ""
+						set hasLabels to true
+						try
+							set theFormula to formula of series 1 of theChart
+							if theFormula starts with "=SERIES(,," or theFormula starts with "=SERIES(;;" then set hasLabels to false
+						end try
+						if hasLabels then
+							try
+								set theSpacing to tick label spacing of (get axis theChart axis type category axis which axis primary axis)
+								if class of theSpacing is integer then set spacingText to theSpacing as text
+							end try
+						end if
+						set end of csvRows to my csvRow(caseId, {theWidth, theHeight, theFont, theMin, theMax, theMajor, plotLeft, plotTop, plotWidth, plotHeight}) & "," & spacingText
+					else
+						set end of csvRows to my csvRow(caseId, {theHeight, theFont, theMin, theMax, theMajor})
+					end if
 				on error errorText number errorNumber
 					set end of failures to caseId & ": " & errorText & " (" & errorNumber & ")"
 				end try

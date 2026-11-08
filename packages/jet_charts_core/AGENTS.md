@@ -66,6 +66,11 @@ findings.
   Excel.
 - `tool/analyze_axis_oracle.dart [folder]` prints what differs across height and
   font, and the answer.
+- The full oracle (J2, case list version 2) lives in `test/fixtures/owner/axis_full/`
+  with its own README and `TALIMATLAR.md`: `write_axis_oracle.dart --full`, the
+  script's third argument `full`, and `analyze_axis_oracle.dart --full`. Its
+  code is the part `tool/src/axis_oracle_full.dart`. `test/axis_oracle_test.dart`
+  checks it as it checks the first; the first oracle's files stay as committed.
 
 `docs/excel-checks.md` lists the Office theme values Excel has not confirmed.
 
