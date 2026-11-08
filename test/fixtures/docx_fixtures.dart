@@ -647,9 +647,11 @@ void _fillFormatting(DocxDocument doc) {
     ..cantSplit = false
     ..repeatAsHeader = false;
   final DocxTableRow first = table.rows[0];
-  first.cells[0].properties.verticalAlignment = DocxCellAlignment.top;
-  first.cells[1].properties.verticalAlignment = DocxCellAlignment.center;
-  first.cells[2].properties.verticalAlignment = DocxCellAlignment.bottom;
+  first.cells[0].properties.verticalAlignment = DocxCellVerticalAlignment.top;
+  first.cells[1].properties.verticalAlignment =
+      DocxCellVerticalAlignment.center;
+  first.cells[2].properties.verticalAlignment =
+      DocxCellVerticalAlignment.bottom;
   final DocxTableRow second = table.rows[1];
   second.cells[0].properties.shading = DocxShading(
     fill: DocxColor.rgb('FFF2CC'),
@@ -661,7 +663,7 @@ void _fillFormatting(DocxDocument doc) {
     bottom: DocxBorder(widthPt: 2.25, color: DocxColor.rgb('C00000')),
   );
   for (final DocxTableCell cell in tall.cells) {
-    cell.properties.verticalAlignment = DocxCellAlignment.center;
+    cell.properties.verticalAlignment = DocxCellVerticalAlignment.center;
   }
   doc.body.addParagraph('After the formatted table.');
 }

@@ -630,18 +630,20 @@ final class VerticalMergeCodec extends PropertyCodec<DocxVerticalMerge> {
   }
 }
 
-final Map<String, DocxCellAlignment> _cellAlignments =
-    <String, DocxCellAlignment>{
-      for (final DocxCellAlignment a in DocxCellAlignment.values) a.name: a,
+final Map<String, DocxCellVerticalAlignment> _cellAlignments =
+    <String, DocxCellVerticalAlignment>{
+      for (final DocxCellVerticalAlignment a
+          in DocxCellVerticalAlignment.values)
+        a.name: a,
     };
 
 /// The codec of `w:vAlign`; `both` has no view.
-final class CellAlignmentCodec extends ValEnumCodec<DocxCellAlignment> {
+final class CellAlignmentCodec extends ValEnumCodec<DocxCellVerticalAlignment> {
   /// The codec of `w:vAlign`.
   const CellAlignmentCodec() : super('vAlign');
 
   @override
-  Map<String, DocxCellAlignment> get byXml => _cellAlignments;
+  Map<String, DocxCellVerticalAlignment> get byXml => _cellAlignments;
 }
 
 const Map<String, DocxTextDirection> _textDirections =

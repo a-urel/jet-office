@@ -210,7 +210,7 @@ void main() {
     expect(const DocxTableLook(firstRow: true).firstRow, isTrue);
     expect(DocxRowHeight(20, rule: DocxRowHeightRule.exact).heightPt, 20);
     expect(DocxVerticalMerge.values, hasLength(2));
-    expect(DocxCellAlignment.values, hasLength(3));
+    expect(DocxCellVerticalAlignment.values, hasLength(3));
     expect(DocxTextDirection.values, hasLength(6));
   });
 

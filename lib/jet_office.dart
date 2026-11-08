@@ -349,8 +349,8 @@ export 'src/docx/model/styles.dart'
     show DocxDocumentDefaults, DocxStyle, DocxStyleType, DocxStyles;
 export 'src/docx/model/table_formatting.dart'
     show
-        DocxCellAlignment,
         DocxCellBorders,
+        DocxCellVerticalAlignment,
         DocxRowHeight,
         DocxRowHeightRule,
         DocxTableAlignment,

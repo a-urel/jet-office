@@ -204,7 +204,7 @@ final List<ContainerSchemaCase> containerSchemaCases = <ContainerSchemaCase>[
       'tcBorders': const DocxCellBorders(),
       'shd': const DocxShading(pattern: DocxShadingPattern.clear),
       'textDirection': DocxTextDirection.tbRlV,
-      'vAlign': DocxCellAlignment.center,
+      'vAlign': DocxCellVerticalAlignment.center,
     },
   ),
   (

@@ -316,10 +316,10 @@ final class DocxTableCellProperties {
 
   /// How the content lines up between the top and the bottom (`w:vAlign`),
   /// or `null`.
-  DocxCellAlignment? get verticalAlignment =>
-      _set.valueOf('vAlign') as DocxCellAlignment?;
+  DocxCellVerticalAlignment? get verticalAlignment =>
+      _set.valueOf('vAlign') as DocxCellVerticalAlignment?;
 
-  set verticalAlignment(DocxCellAlignment? value) =>
+  set verticalAlignment(DocxCellVerticalAlignment? value) =>
       _set.setValue('vAlign', value);
 
   /// The shading behind the cell (`w:shd`), or `null`.

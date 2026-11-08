@@ -465,7 +465,7 @@ void main() {
       expect(p.borders!.top, isNotNull);
       expect(p.shading!.fill, DocxColor.rgb('FFFF00'));
       expect(p.textDirection, DocxTextDirection.bottomToTopLeftToRight);
-      expect(p.verticalAlignment, DocxCellAlignment.center);
+      expect(p.verticalAlignment, DocxCellVerticalAlignment.center);
     });
 
     test('every member sets, writes first in the cell and reads back', () {
@@ -477,7 +477,7 @@ void main() {
         ..borders = DocxCellBorders(bottom: DocxBorder())
         ..shading = DocxShading(fill: DocxColor.rgb('00FF00'))
         ..textDirection = DocxTextDirection.topToBottomRightToLeft
-        ..verticalAlignment = DocxCellAlignment.bottom;
+        ..verticalAlignment = DocxCellVerticalAlignment.bottom;
       expect(
         _inner(doc, 'tc'),
         startsWith(
@@ -493,7 +493,7 @@ void main() {
       expect(back.borders, DocxCellBorders(bottom: DocxBorder()));
       expect(back.shading, DocxShading(fill: DocxColor.rgb('00FF00')));
       expect(back.textDirection, DocxTextDirection.topToBottomRightToLeft);
-      expect(back.verticalAlignment, DocxCellAlignment.bottom);
+      expect(back.verticalAlignment, DocxCellVerticalAlignment.bottom);
     });
 
     test('gridSpan checks 1 to 63', () {
@@ -519,7 +519,7 @@ void main() {
         '<w:tbl><w:tblGrid/><w:tr><w:tc><w:bookmarkStart w:id="1" '
         'w:name="b"/><w:p/></w:tc></w:tr></w:tbl>',
       );
-      _cell(doc).properties.verticalAlignment = DocxCellAlignment.top;
+      _cell(doc).properties.verticalAlignment = DocxCellVerticalAlignment.top;
       expect(
         _inner(doc, 'tc'),
         '<w:tcPr><w:vAlign w:val="top"/></w:tcPr>'
@@ -566,7 +566,8 @@ void main() {
             '<w:tcMar><w:top w:w="10" w:type="dxa"/></w:tcMar>'
             '<w:hideMark/></w:tcPr>',
       );
-      _cell(doc).properties.verticalAlignment = DocxCellAlignment.center;
+      _cell(doc).properties.verticalAlignment =
+          DocxCellVerticalAlignment.center;
       expect(
         _inner(doc, 'tcPr'),
         '<w:tcW w:w="100" w:type="dxa"/>'

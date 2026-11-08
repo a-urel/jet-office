@@ -447,7 +447,7 @@ enum DocxVerticalMerge {
 
 /// How a cell's content lines up between its top and bottom (`w:vAlign`).
 /// `both` has no view.
-enum DocxCellAlignment {
+enum DocxCellVerticalAlignment {
   /// At the top.
   top,
 

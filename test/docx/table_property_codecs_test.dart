@@ -573,14 +573,17 @@ void main() {
     const CellAlignmentCodec codec = CellAlignmentCodec();
 
     test('reads top, center and bottom; both has no view', () {
-      expect(_parse(codec, '<w:vAlign w:val="top"/>'), DocxCellAlignment.top);
+      expect(
+        _parse(codec, '<w:vAlign w:val="top"/>'),
+        DocxCellVerticalAlignment.top,
+      );
       expect(
         _parse(codec, '<w:vAlign w:val="center"/>'),
-        DocxCellAlignment.center,
+        DocxCellVerticalAlignment.center,
       );
       expect(
         _parse(codec, '<w:vAlign w:val="bottom"/>'),
-        DocxCellAlignment.bottom,
+        DocxCellVerticalAlignment.bottom,
       );
       expect(_parse(codec, '<w:vAlign w:val="both"/>'), isNull);
       expect(_parse(codec, '<w:vAlign/>'), isNull);
@@ -588,7 +591,7 @@ void main() {
 
     test('writes the value', () {
       expect(
-        _written(codec, DocxCellAlignment.bottom),
+        _written(codec, DocxCellVerticalAlignment.bottom),
         '<w:vAlign w:val="bottom"/>',
       );
     });
@@ -676,7 +679,7 @@ void main() {
       expect(c.viewOf('gridSpan'), 2);
       expect(c.viewOf('vMerge'), DocxVerticalMerge.restart);
       expect(c.viewOf('shd'), isA<DocxShading>());
-      expect(c.viewOf('vAlign'), DocxCellAlignment.center);
+      expect(c.viewOf('vAlign'), DocxCellVerticalAlignment.center);
       expect(c.viewOf('noWrap'), isNull);
     });
 
