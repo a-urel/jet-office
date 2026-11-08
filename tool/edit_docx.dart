@@ -523,6 +523,7 @@ bool _isPlainRun(DocxInline inline) => switch (inline) {
     (DocxRunContent c) =>
         c is DocxFieldMark ||
         c is DocxFieldInstruction ||
+        c is DocxPicture ||
         c is DocxOpaqueRunContent && _fieldOrDrawing.contains(c.localName),
   ),
   DocxOpaqueInline() => inline.localName == 'proofErr',

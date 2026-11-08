@@ -39,8 +39,10 @@ library;
 import 'dart:collection';
 import 'dart:typed_data';
 
+import '../common/image.dart' show OfficeImage;
 import '../common/properties.dart';
 import '../common/properties_parts.dart';
+import '../drawingml/media.dart' show DrawingMediaIndex;
 import '../opc/change_log.dart';
 import '../opc/ooxml.dart' show ContentType, RelType;
 import '../opc/package.dart' show OpcPackage, OpcRelationship, PartContent;
@@ -376,6 +378,7 @@ final class DocxDocument {
         main,
         limits: package.limits,
         resolveUrl: _urlResolverOf(main),
+        resolveImage: _imageResolverOf(main),
       ),
     );
     final DocxBody body = DocxBody._(_edits, part.blocks, this);
@@ -400,28 +403,79 @@ final class DocxDocument {
   /// is remembered, so the part is not parsed again for each hyperlink. Of
   /// two relationships with one id, the first counts.
   String? Function(String id) _urlResolverOf(String part) {
-    bool unreadable = false;
+    final OpcRelationship? Function(String) lookup = _relationshipLookupOf(
+      part,
+    );
     return (String id) {
-      if (unreadable) return null;
-      final List<OpcRelationship> relationships;
-      try {
-        relationships = _package.guard(
-          relationshipsPartOf(part),
-          () => _package.package.peekRelationships(part),
-        );
-      } on DocxReadException {
-        unreadable = true;
-        return null;
-      }
-      for (final OpcRelationship rel in relationships) {
-        if (rel.id != id) continue;
-        return rel.type == RelType.hyperlink && rel.external
-            ? rel.target
-            : null;
-      }
-      return null;
+      final OpcRelationship? rel = lookup(id);
+      return rel != null && rel.type == RelType.hyperlink && rel.external
+          ? rel.target
+          : null;
     };
   }
+
+  /// What a picture read from [part] asks for its image: the image of the
+  /// media part the relationship of [part] that an id names points at, when
+  /// it is of the image type, internal and its target is a part of the file;
+  /// else `null`, as for a media part that cannot be read (Ruling 12). It
+  /// peeks at the relationships as [_urlResolverOf] does, and the images come
+  /// from the document's one [DrawingMediaIndex], so pictures of one media
+  /// part share one [OfficeImage].
+  OfficeImage? Function(String id) _imageResolverOf(String part) {
+    final OpcRelationship? Function(String) lookup = _relationshipLookupOf(
+      part,
+    );
+    return (String id) {
+      final OpcRelationship? rel = lookup(id);
+      if (rel == null || rel.type != RelType.image || rel.external) {
+        return null;
+      }
+      final OpcPackage package = _package.package;
+      final String target = package.resolve(part, rel.target);
+      if (!package.hasPart(target)) return null;
+      try {
+        return _package.guard(target, () => _mediaIndex.imageOf(target));
+      } on DocxReadException {
+        return null;
+      }
+    };
+  }
+
+  /// The document's media index: the images of its media parts, read as a
+  /// picture asks for them.
+  late final DrawingMediaIndex _mediaIndex = DrawingMediaIndex(
+    _package.package,
+  );
+
+  final Map<String, OpcRelationship? Function(String)> _relationshipLookups =
+      <String, OpcRelationship? Function(String)>{};
+
+  /// The relationship of [part] an id names (the first of several), peeked
+  /// and not registered for rewriting, `null` for none; the lookup is the
+  /// same for a part however often it is asked for, and a relationships part
+  /// that cannot be read answers `null` for every id, remembered so it is
+  /// not parsed again.
+  OpcRelationship? Function(String id) _relationshipLookupOf(String part) =>
+      _relationshipLookups[part] ??= () {
+        bool unreadable = false;
+        return (String id) {
+          if (unreadable) return null;
+          final List<OpcRelationship> relationships;
+          try {
+            relationships = _package.guard(
+              relationshipsPartOf(part),
+              () => _package.package.peekRelationships(part),
+            );
+          } on DocxReadException {
+            unreadable = true;
+            return null;
+          }
+          for (final OpcRelationship rel in relationships) {
+            if (rel.id == id) return rel;
+          }
+          return null;
+        };
+      }();
 
   /// Makes [section] the document's last section: it reports to [_edits].
   void _adoptLastSection(DocxSection section) {

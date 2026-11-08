@@ -130,7 +130,7 @@
 /// listed), the API nests tables at most 80 deep, [DocxBody.addTable] takes at
 /// most [maxTableColumns] columns, and a table with no row is not saved. What
 /// the model does not type yet, such as content controls, tracked changes,
-/// hyperlinks, drawings and a `w:fldSimple`, is kept as written in a
+/// floating drawings and a `w:fldSimple`, is kept as written in a
 /// [DocxOpaqueBlock], a [DocxOpaqueInline] or a [DocxOpaqueRunContent], which
 /// can be removed but not changed; the parts the model does not read are kept
 /// as written too. [DocxDocument.sections] gives each [DocxSection], with its
@@ -309,6 +309,7 @@ export 'src/docx/model/run_content.dart'
         DocxFieldMark,
         DocxFieldMarkType,
         DocxOpaqueRunContent,
+        DocxPicture,
         DocxRunContent,
         DocxTab,
         DocxText;

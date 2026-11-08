@@ -33,6 +33,7 @@ library;
 
 import 'dart:typed_data';
 
+import '../common/image.dart' show OfficeImage;
 import '../opc/ooxml.dart' show Ns;
 import '../opc/opaque_xml.dart';
 import '../opc/package.dart' show PartContent;
@@ -95,7 +96,8 @@ final class DocumentPart implements PartContent {
   /// receives the problems the reader repairs; D1 repairs none in this part.
   /// [resolveUrl] gives each hyperlink read the target of an external
   /// hyperlink relationship of the part by id (`DocxHyperlink.url`); without
-  /// it, every hyperlink's url is `null`.
+  /// it, every hyperlink's url is `null`. [resolveImage] likewise gives each
+  /// picture read the image its `r:embed` names (`DocxPicture.image`).
   ///
   /// XML that is not well-formed, nested deeper than the reader allows or
   /// holds an entity that cannot be decoded throws [XmlParseException]:
@@ -107,6 +109,7 @@ final class DocumentPart implements PartContent {
     String partName, {
     required DocxReadLimits limits,
     String? Function(String id)? resolveUrl,
+    OfficeImage? Function(String id)? resolveImage,
   }) => _PartReader(
     StoryReader(
       r,
@@ -114,6 +117,7 @@ final class DocumentPart implements PartContent {
       limits.maxTextLength,
       limits.maxDepth,
       resolveUrl: resolveUrl,
+      resolveImage: resolveImage,
     ),
     partName,
   ).read();

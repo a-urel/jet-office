@@ -26,6 +26,7 @@ library;
 
 import 'dart:typed_data';
 
+import '../common/image.dart' show OfficeImage;
 import '../opc/ooxml.dart' show Ns;
 import '../opc/opaque_xml.dart';
 import '../opc/package.dart' show PartContent;
@@ -66,7 +67,7 @@ final class StoryPart implements PartContent {
   /// which root it must have, and one it does not have throws a
   /// [DocxReadException] of [DocxReadFailure.malformedXml]. [limits] bounds
   /// every text, as `DocumentPart.read` says, with the part's location in
-  /// place of `body`; [resolveUrl] is as `DocumentPart.read` has it.
+  /// place of `body`; [resolveUrl] and [resolveImage] are as `DocumentPart.read` has them.
   ///
   /// XML that is not well-formed, nested deeper than the reader allows or
   /// holds an entity that cannot be decoded throws [XmlParseException]: call
@@ -78,6 +79,7 @@ final class StoryPart implements PartContent {
     required bool isHeader,
     required DocxReadLimits limits,
     String? Function(String id)? resolveUrl,
+    OfficeImage? Function(String id)? resolveImage,
   }) {
     while (r.next()) {
       if (r.eventType == XmlEventType.startElement) break;
@@ -100,6 +102,7 @@ final class StoryPart implements PartContent {
       limits.maxTextLength,
       limits.maxDepth,
       resolveUrl: resolveUrl,
+      resolveImage: resolveImage,
     );
     eachChild(r, () => story.readBlock(into));
     return StoryPart._(partName, root, blocks);

@@ -1,6 +1,6 @@
 /// The content of a run, the children of `w:r`: text, tab, break, carriage
-/// return, the marks and instruction of a field, and opaque content for
-/// everything else.
+/// return, the marks and instruction of a field, an inline picture, and
+/// opaque content for everything else.
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -14,7 +14,10 @@
 /// @docImport 'inlines.dart';
 library;
 
+import '../../common/image.dart' show OfficeImage;
 import '../../opc/opaque_xml.dart';
+
+part 'pictures.dart';
 
 /// One child of a run.
 sealed class DocxRunContent {

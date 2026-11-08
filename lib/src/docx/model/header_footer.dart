@@ -245,6 +245,7 @@ final class _Story {
         isHeader: isHeader,
         limits: package.limits,
         resolveUrl: _document._urlResolverOf(slot.name),
+        resolveImage: _document._imageResolverOf(slot.name),
       ),
     );
     primitives.adoptBlocks(_document._edits, this, read.blocks);

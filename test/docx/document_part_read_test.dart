@@ -78,6 +78,7 @@ String _dump(DocumentPart part) {
                   DocxFieldMark(:final DocxFieldMarkType type) =>
                     'mark:${type.name}',
                   DocxFieldInstruction(:final String text) => 'instr"$text"',
+                  DocxPicture() => 'pic',
                   DocxOpaqueRunContent() =>
                     'o:${c.namespaceUri}|${c.localName}',
                 });

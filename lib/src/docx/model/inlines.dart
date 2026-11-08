@@ -227,7 +227,10 @@ String _textOf(DocxRunContent content) => switch (content) {
   DocxText(:final String text) => text,
   DocxTab() => '\t',
   DocxBreak() || DocxCarriageReturn() => '\n',
-  DocxFieldMark() || DocxFieldInstruction() || DocxOpaqueRunContent() => '',
+  DocxFieldMark() ||
+  DocxFieldInstruction() ||
+  DocxPicture() ||
+  DocxOpaqueRunContent() => '',
 };
 
 /// Splits [text] into text, tabs and line breaks; `\r\n` is one break.

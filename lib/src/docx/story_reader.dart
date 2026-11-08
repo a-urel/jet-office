@@ -11,12 +11,15 @@
 /// blocks, other children of `w:tbl` and `w:tr` (`w:tblGrid`, `w:tblPrEx`,
 /// content controls, bookmarks) as kept children, other paragraph children
 /// (tracked changes, proofing marks) as opaque inlines, other run
-/// children (drawings, `mc:AlternateContent`) as opaque run content, and
+/// children (anchored drawings, `mc:AlternateContent`) as opaque run content, and
 /// unknown attributes on `w:tbl`, `w:tr`, `w:tc`, `w:p`, `w:r`, `w:t`,
 /// `w:tab`, `w:br` and `w:cr` as kept attributes. A `w:tbl` inside a kept
 /// element stays kept. The visible text of an opaque inline is collected while
 /// it is captured, so its slice is parsed once, under the part's own depth
 /// limit.
+///
+/// A `w:drawing` that is one inline picture is a `DocxPicture`, read from its
+/// captured slice; its image is found lazily through `resolveImage`.
 ///
 /// `w:fldChar` and `w:instrText` are typed run content that keeps its element;
 /// when a paragraph is read, [groupFields] puts each plain field of its inlines
@@ -39,10 +42,12 @@
 /// Elements match by namespace URI and local name, never by prefix.
 library;
 
+import '../common/image.dart' show OfficeImage;
 import '../opc/ooxml.dart' show Ns;
 import '../opc/opaque_xml.dart';
 import '../xml/xml_escape.dart';
 import '../xml/xml_pull_reader.dart';
+import 'drawing.dart';
 import 'model/blocks.dart';
 import 'model/inlines.dart';
 import 'model/run_content.dart';
@@ -67,15 +72,18 @@ final class StoryReader {
   /// Reads a part from [r], naming it in errors, with texts bounded and XML
   /// nested at most [maxDepth] deep. [resolveUrl] gives the target of an
   /// external hyperlink relationship of the part by its id, for the
-  /// hyperlinks read; `null` when the part has no relationships to ask.
+  /// hyperlinks read, and [resolveImage] the image a picture's `r:embed`
+  /// names; `null` when the part has no relationships to ask.
   StoryReader(
     XmlPullReader r,
     this._partName,
     this._maxTextLength,
     this.maxDepth, {
     String? Function(String id)? resolveUrl,
+    OfficeImage? Function(String id)? resolveImage,
   }) : _r = r,
-       _resolveUrl = resolveUrl;
+       _resolveUrl = resolveUrl,
+       _resolveImage = resolveImage;
 
   /// The pull reader the story is read from: the part's, or the one over a
   /// hyperlink's slice while its inlines are read. Read it at each use and
@@ -84,6 +92,7 @@ final class StoryReader {
   XmlPullReader _r;
 
   final String? Function(String id)? _resolveUrl;
+  final OfficeImage? Function(String id)? _resolveImage;
   final String _partName;
   final int _maxTextLength;
 
@@ -403,6 +412,8 @@ final class StoryReader {
           );
         case 'instrText':
           content.add(_readInstruction());
+        case 'drawing':
+          content.add(_readDrawing());
         default:
           content.add(opaqueRunContent(OpaqueXml.capture(r)));
       }
@@ -411,6 +422,25 @@ final class StoryReader {
       properties: properties ?? const PropertyContainer.empty(),
       attributes: attributes,
       content: content,
+    );
+  }
+
+  /// Reads the `w:drawing` the reader is on: a picture when it is an inline
+  /// one ([readInlineDrawing]), else opaque; either way it keeps its element.
+  DocxRunContent _readDrawing() {
+    final OpaqueXml xml = OpaqueXml.capture(r);
+    final InlineDrawing? drawing = readInlineDrawing(
+      readerOfCaptured(xml, maxDepth),
+    );
+    if (drawing == null) return opaqueRunContent(xml);
+    return readPicture(
+      xml,
+      widthPt: drawing.widthPt,
+      heightPt: drawing.heightPt,
+      name: drawing.name,
+      description: drawing.description,
+      embedId: drawing.embedId,
+      resolveImage: _resolveImage,
     );
   }
 

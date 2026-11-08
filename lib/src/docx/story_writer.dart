@@ -513,6 +513,8 @@ final class StoryWriter {
           w.text(text);
           w.end();
         }
+      case DocxPicture():
+        pictureXml(c).writeTo(w, declaredAbove: scope);
       case DocxOpaqueRunContent():
         opaqueRunContentXml(c).writeTo(w, declaredAbove: scope);
     }
