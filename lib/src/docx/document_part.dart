@@ -145,6 +145,11 @@ final class DocumentPart implements PartContent {
   /// before it writes the part.
   int Function(DocxBookmarkStart start)? bookmarkId;
 
+  /// The id of the relationship this save gave the part for what the API
+  /// built in it, such as a hyperlink to an address; `null` outside a save.
+  /// The save sets it before it writes the part.
+  String? Function(Object built)? relationshipId;
+
   /// The warnings the last [encode] raised; empty before the first.
   ///
   /// Each [encode] starts a new collector, so encoding twice reports each
@@ -213,7 +218,8 @@ final class DocumentPart implements PartContent {
         warnings,
         listDefined,
         styleDefined,
-        bookmarkId,
+        bookmarkId: bookmarkId,
+        relationshipId: relationshipId,
       ),
       this,
     );

@@ -73,7 +73,8 @@ final class StoryWriter {
   /// Writes to [_w] with the WordprocessingML prefix [_prefix] (with its colon
   /// as [_p]), the root's bindings [scope], and warnings for the part
   /// [_partName], asking [_listDefined] and [_styleDefined] about what the
-  /// API set.
+  /// API set, [bookmarkId] for the id of a built bookmark and
+  /// [relationshipId] for the relationship of a built hyperlink.
   StoryWriter(
     this._w,
     this._p,
@@ -82,9 +83,11 @@ final class StoryWriter {
     this._partName,
     this._warnings,
     this._listDefined,
-    this._styleDefined, [
-    this._bookmarkId,
-  ]);
+    this._styleDefined, {
+    int Function(DocxBookmarkStart start)? bookmarkId,
+    String? Function(Object built)? relationshipId,
+  }) : _bookmarkId = bookmarkId,
+       _relationshipId = relationshipId;
 
   final XmlWriter _w;
 
@@ -108,6 +111,11 @@ final class StoryWriter {
   /// its end); `null` outside a save, when the writer numbers them itself
   /// from 0.
   final int Function(DocxBookmarkStart start)? _bookmarkId;
+
+  /// The id of the relationship this save gave the part for what the API
+  /// built, such as a hyperlink; `null` outside a save, and for what has none,
+  /// which is then written without one.
+  final String? Function(Object built)? _relationshipId;
 
   final Map<DocxBookmarkStart, int> _ownBookmarkIds =
       Map<DocxBookmarkStart, int>.identity();
@@ -315,6 +323,12 @@ final class StoryWriter {
         case DocxField():
           heldInlinesOf(inline)!.forEach(write);
         case DocxHyperlink():
+          if (hyperlinkIsBuilt(inline)) {
+            _builtHyperlinkStart(inline);
+            inline.inlines.forEach(write);
+            w.end();
+            break;
+          }
           final List<KeptAttribute> attributes = hyperlinkAttributesOf(inline);
           w.start('${_p}hyperlink');
           writeKeptAttributes(w, attributes, declaredAbove: scope);
@@ -329,6 +343,36 @@ final class StoryWriter {
     p.inlines.forEach(write);
     scope = outer;
     w.end();
+  }
+
+  /// Opens the `w:hyperlink` of [link], which the API built, as Word writes
+  /// one: `r:id` (the relationship of this save, for an address), then
+  /// `w:anchor`, `w:tooltip` and `w:history="1"`. A prefix for the
+  /// relationships namespace is declared on it when none is in scope.
+  void _builtHyperlinkStart(DocxHyperlink link) {
+    final XmlWriter w = _w;
+    w.start('${_p}hyperlink');
+    final String? id = link.url == null ? null : _relationshipId?.call(link);
+    if (id != null) {
+      String? rel = scope['r'] == Ns.rel ? 'r' : null;
+      for (final MapEntry<String, String> e in scope.entries) {
+        if (rel != null) break;
+        if (e.key.isNotEmpty && e.value == Ns.rel) rel = e.key;
+      }
+      if (rel == null) {
+        rel = 'r';
+        for (int i = 1; scope.containsKey(rel); i++) {
+          rel = 'r$i';
+        }
+        w.attribute('xmlns:$rel', Ns.rel);
+      }
+      w.attribute('$rel:id', id);
+    }
+    final String? anchor = link.anchor;
+    if (anchor != null) w.attribute('${_p}anchor', anchor);
+    final String? tooltip = link.tooltip;
+    if (tooltip != null) w.attribute('${_p}tooltip', tooltip);
+    w.attribute('${_p}history', '1');
   }
 
   /// The id a save writes for the bookmark [start] begins.

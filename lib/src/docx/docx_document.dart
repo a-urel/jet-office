@@ -21,6 +21,10 @@
 /// `ChangeLog` has no changes, a styles, numbering, header or footer part
 /// while the model writes what it wrote when read. A new header or footer
 /// part is added first, so the main part writes the id of its relationship.
+/// So is each relationship of a hyperlink the API built, in the part the
+/// hyperlink is in (`save_plan.dart`); it is this save's alone, and leaves
+/// the package once the file is written, as nothing a save allocates is
+/// stored in the model (plan D5, Ruling A).
 ///
 /// Every edit runs in a transaction of the document's `ChangeLog`
 /// (`primitives.dart`), so an edit that fails leaves the body as it was.
@@ -62,6 +66,7 @@ import 'read_exception.dart';
 import 'read_limits.dart';
 import 'related_part.dart';
 import 'save_ids.dart';
+import 'save_plan.dart';
 import 'section_property_codecs.dart'
     show AddedSectionReference, SectionReference, SectionReferenceType;
 import 'settings_part.dart';
@@ -734,7 +739,27 @@ final class DocxDocument {
     try {
       _writeParts(zip);
     } finally {
+      // What the save related for what the model built leaves the package
+      // with it (plan Ruling A).
+      _saveIdsOfSave?.restoreRelationships();
       _saveIdsOfSave = null;
+    }
+  }
+
+  /// Relates what the API built in every part this save writes from the
+  /// model, the main part and each header and footer, new ones included, and
+  /// tells each part's writer the ids. It comes after the new parts are
+  /// created and before the package writes the relationships parts. Without
+  /// an edit nothing was built, and no part learns an id.
+  void _planBuilt(DocumentPart main) {
+    final SavePlan? plan = _edits.log.hasChanges
+        ? SavePlan(_package, _saveIds)
+        : null;
+    plan?.planPart(main.partName, main.blocks);
+    main.relationshipId = plan?.relationshipIdsOf(main.partName);
+    for (final StoryPart story in _storyParts) {
+      plan?.planPart(story.partName, story.blocks);
+      story.relationshipId = plan?.relationshipIdsOf(story.partName);
     }
   }
 
@@ -793,6 +818,7 @@ final class DocxDocument {
       slot.create(settings, reservedIds: _reservedFor(slot));
     }
     _createNewStories();
+    if (main != null) _planBuilt(main);
     final PropertiesState? properties = _properties;
     if (properties != null) {
       package.guard(package.mainPart, properties.sync);

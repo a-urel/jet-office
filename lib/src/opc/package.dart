@@ -114,6 +114,20 @@ final class DetachedPart {
   String get name => _part.name;
 }
 
+/// The relationships of one source as they stood at
+/// [OpcPackage.markRelationships], which [OpcPackage.restoreRelationships]
+/// puts back.
+///
+/// Opaque; give it back to the package that made it.
+final class RelationshipsMark {
+  RelationshipsMark._(this._key, this._entry, this._known, this._length);
+
+  final String _key;
+  final String? _entry;
+  final ({String source, Relationships rels, bool fromInput})? _known;
+  final int _length;
+}
+
 /// An OPC package held in memory.
 ///
 /// Parts load lazily; see the library documentation. Methods that take a part
@@ -540,6 +554,40 @@ final class OpcPackage {
       n++;
     }
     return rels.add(type, target, id: 'rId$n', external: external);
+  }
+
+  /// Marks the relationships of [source] (a part name, or `''` for the
+  /// package root) as they are now, for [restoreRelationships]: how what is
+  /// added for one write only is taken back after it. Reads nothing.
+  RelationshipsMark markRelationships(String source) {
+    final String key = _key(source);
+    final known = _rels[key];
+    return RelationshipsMark._(
+      key,
+      _relsEntries[key],
+      known,
+      known?.rels.items.length ?? 0,
+    );
+  }
+
+  /// Puts the relationships of the source of [mark] back as they were when
+  /// it was made, after relationships were only added to them: an input
+  /// entry never parsed then is copied from its bytes again, the
+  /// relationships parsed then keep those they had, and a source that had
+  /// none has none.
+  void restoreRelationships(RelationshipsMark mark) {
+    final String key = mark._key;
+    final String? entry = mark._entry;
+    final known = mark._known;
+    if (entry != null) {
+      _rels.remove(key);
+      _relsEntries[key] = entry;
+    } else if (known == null) {
+      _rels.remove(key);
+    } else {
+      _rels[key] = known;
+      known.rels.truncate(mark._length);
+    }
   }
 
   /// Removes the relationship [id] of [source] (a part name, or `''` for the

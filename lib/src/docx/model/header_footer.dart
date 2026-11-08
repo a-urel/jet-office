@@ -21,7 +21,10 @@
 ///
 /// The part's own relationships are not read: a read of the package parses
 /// them, and a parsed relationships part is written anew at save, which a
-/// story only read must not do.
+/// story only read must not do. A save that relates a hyperlink built in the
+/// story parses them for that save alone, and takes back what it added
+/// (`save_plan.dart`), so the part's relationships go out as read again once
+/// the hyperlink is gone.
 ///
 /// A section with no story of a type gets an empty one, kept by the document
 /// for that section and type, with a [StoryPart] of no name. Its first block,

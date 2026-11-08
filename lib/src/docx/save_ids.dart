@@ -23,7 +23,8 @@
 library;
 
 import '../opc/ooxml.dart' show ContentType, Ns, RelType;
-import '../opc/package.dart' show OpcPackage, OpcRelationship;
+import '../opc/package.dart'
+    show OpcPackage, OpcRelationship, RelationshipsMark;
 import '../xml/xml_pull_reader.dart';
 import 'docx_package.dart';
 import 'read_exception.dart';
@@ -39,6 +40,10 @@ final class SaveIds {
   int? _drawing;
   int? _bookmark;
   final Map<String, Set<String>> _references = <String, Set<String>>{};
+
+  /// The relationships of each part [addRelationship] added to, as they were
+  /// before the first, by the part's lower-cased name.
+  final Map<String, RelationshipsMark> _marks = <String, RelationshipsMark>{};
 
   /// The content types of the WordprocessingML story parts: the main part
   /// in each of its four types, headers, footers, footnotes, endnotes and
@@ -99,19 +104,40 @@ final class SaveIds {
   /// target is an outside address (`TargetMode="External"`).
   ///
   /// It parses the part's relationships, which the package then writes
-  /// anew; call it only for a part that gets something new.
+  /// anew; call it only for a part that gets something new. What it adds is
+  /// this save's alone: [restoreRelationships] takes it back once the
+  /// package is written (Ruling A). Throws an `OpcFormatException` when the
+  /// part's relationships cannot be read.
   String addRelationship(
     String part, {
     required String type,
     required String target,
     bool external = false,
-  }) => _package.package.addRelationship(
-    part,
-    type: type,
-    target: target,
-    external: external,
-    reservedIds: fileReferenceIds(part),
-  );
+  }) {
+    final OpcPackage opc = _package.package;
+    _marks.putIfAbsent(
+      (opc.canonicalPartName(part) ?? part).toLowerCase(),
+      () => opc.markRelationships(part),
+    );
+    return opc.addRelationship(
+      part,
+      type: type,
+      target: target,
+      external: external,
+      reservedIds: fileReferenceIds(part),
+    );
+  }
+
+  /// Takes back every relationship [addRelationship] added, so the package
+  /// holds the relationships it had before the save: a relationships part
+  /// of the file never parsed before is copied as read again.
+  void restoreRelationships() {
+    final OpcPackage opc = _package.package;
+    for (final RelationshipsMark mark in _marks.values.toList().reversed) {
+      opc.restoreRelationships(mark);
+    }
+    _marks.clear();
+  }
 
   /// Finds the highest drawing and bookmark ids of every story part.
   void _scanIds() {

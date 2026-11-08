@@ -596,6 +596,77 @@ void main() {
     });
   });
 
+  group('markRelationships', () {
+    Uint8List write(OpcPackage p) {
+      final ZipWriter w = ZipWriter();
+      p.writeTo(w);
+      return w.close()!;
+    }
+
+    String entry(OpcPackage p, String name) => utf8.decode(
+      ZipReader(
+        write(p),
+        maxEntries: 1000,
+        maxEntryBytes: 1 << 24,
+        maxTotalBytes: 1 << 26,
+        maxCompressionRatio: 1000,
+      ).read(name),
+    );
+
+    const String raw =
+        '<Relationships xmlns="$_relNs">'
+        '<Relationship Id="rId1" Type="t" Target="http://x" '
+        'TargetMode="External" extra="1"/></Relationships>';
+
+    test('an entry never parsed is copied as read again after a restore', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('word/header1.xml', '<h/>'),
+        ('word/_rels/header1.xml.rels', raw),
+      ]);
+      final RelationshipsMark mark = p.markRelationships('word/header1.xml');
+      p.addRelationship('word/header1.xml', type: 't', target: 'http://y');
+      expect(entry(p, 'word/_rels/header1.xml.rels'), contains('http://y'));
+      p.restoreRelationships(mark);
+      expect(entry(p, 'word/_rels/header1.xml.rels'), raw);
+      expect(p.relationshipsOf('word/header1.xml'), hasLength(1));
+    });
+
+    test('a parsed one loses only what was added after the mark', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('a.xml', '<a/>'),
+        ('_rels/a.xml.rels', raw),
+      ]);
+      p.addRelationship('a.xml', type: 't', target: 'b.xml');
+      final RelationshipsMark mark = p.markRelationships('a.xml');
+      p
+        ..addRelationship('a.xml', type: 't', target: 'c.xml')
+        ..addRelationship('a.xml', type: 't', target: 'd.xml');
+      p.restoreRelationships(mark);
+      expect(
+        p.relationshipsOf('a.xml').map((OpcRelationship r) => r.target),
+        <String>['http://x', 'b.xml'],
+      );
+      // The ids freed are free again.
+      expect(p.addRelationship('a.xml', type: 't', target: 'e.xml'), 'rId3');
+    });
+
+    test('a part without relationships writes none after a restore', () {
+      final OpcPackage p = _package(<(String, String)>[('a.xml', '<a/>')]);
+      final RelationshipsMark mark = p.markRelationships('a.xml');
+      p.addRelationship('a.xml', type: 't', target: 'http://y');
+      p.restoreRelationships(mark);
+      expect(p.relationshipsOf('a.xml'), isEmpty);
+      final ZipReader z = ZipReader(
+        write(p),
+        maxEntries: 1000,
+        maxEntryBytes: 1 << 24,
+        maxTotalBytes: 1 << 26,
+        maxCompressionRatio: 1000,
+      );
+      expect(z.contains('_rels/a.xml.rels'), isFalse);
+    });
+  });
+
   group('peekRelationships', () {
     Uint8List write(OpcPackage p) {
       final ZipWriter w = ZipWriter();

@@ -232,6 +232,54 @@ final class DocxParagraph extends DocxBlock {
     return field;
   }
 
+  /// Appends a hyperlink that shows [text] and links to [url], an address
+  /// outside the document, or to [anchor], the name of a bookmark of the
+  /// document ([DocxBookmarkStart.name]), and returns it. [tooltip] is shown
+  /// when the pointer rests on it.
+  ///
+  /// The hyperlink holds one run of [text], split and scrubbed as
+  /// [DocxRun.text] is when set, in the character style `Hyperlink`: the
+  /// document's own style of that name (`Kpr` in a Turkish Word file), or
+  /// Word's definition added when the document lacks it
+  /// (`DocxStyles.ensure`). In a paragraph of no document the run names
+  /// `Hyperlink`, which resolves the same way when the paragraph goes in one.
+  /// The run is an ordinary [DocxRun]: its text and properties can be set.
+  ///
+  /// The relationship of a [url] (`TargetMode="External"`) is not in the
+  /// model: each save adds one from the part the hyperlink is in (the body, a
+  /// header or a footer), a relationship for each hyperlink, as Word writes
+  /// two links to one address, and takes it back once the file is written.
+  ///
+  /// Give exactly one of [url] and [anchor]: both or neither throws
+  /// [ArgumentError], and so does a [url] that is not an absolute URI
+  /// (`Uri.tryParse` gives none, or one without a scheme such as `https:` or
+  /// `mailto:`), an empty [anchor], and a [url], [anchor] or [tooltip] that
+  /// holds a character XML forbids. A styles part that cannot be read throws
+  /// a `DocxReadException` naming it. Nothing changes when it throws;
+  /// otherwise the add is one edit.
+  DocxHyperlink addHyperlink(
+    String text, {
+    String? url,
+    String? anchor,
+    String? tooltip,
+  }) {
+    checkHyperlinkTargets(url: url, anchor: anchor, tooltip: tooltip);
+    final DocxRun run = DocxRun(text);
+    final DocxHyperlink link = newHyperlink(
+      run,
+      url: url,
+      anchor: anchor,
+      tooltip: tooltip,
+    );
+    _sink.atomically(() {
+      run.style =
+          _sink.ensureStyle(DocxBuiltInStyle.hyperlink) ??
+          DocxBuiltInStyle.hyperlink.id;
+      insertInline(_inlines.length, link);
+    });
+    return link;
+  }
+
   /// Appends the start of a bookmark named [name] and returns it.
   ///
   /// A [name] that breaks Word's rules is repaired as [repairBookmarkName]

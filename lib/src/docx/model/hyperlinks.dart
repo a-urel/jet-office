@@ -12,6 +12,12 @@
 /// A `w:hyperlink` inside another inline (a `w:ins`, another hyperlink) stays
 /// inside that opaque inline.
 ///
+/// A hyperlink the API builds ([DocxParagraph.addHyperlink], Ruling 9) holds
+/// its address, bookmark and tooltip instead of attributes, and one run. Its
+/// relationship is not in the model: each save adds one from the part the
+/// hyperlink is in and takes it back afterwards (Ruling A), so a built
+/// hyperlink works in any part of any document.
+///
 /// To a field around it, a hyperlink is what the opaque inline it was before
 /// D5 was: the reader records whether a run is inside it and whether the
 /// field marks inside it pair among themselves, so the fields of a paragraph
@@ -32,6 +38,8 @@ part of 'inlines.dart';
 /// A hyperlink read in one document and inserted in another keeps its `r:id`
 /// as read (plan D5, Ruling 13), which that document may lack or mean
 /// otherwise; [url] still gives the target the part it was read from names.
+/// One built with [DocxParagraph.addHyperlink] has no relationship until a
+/// save, which gives it one in the part it is in then, wherever that is.
 final class DocxHyperlink extends DocxInline {
   DocxHyperlink._read(
     this._attributes,
@@ -40,11 +48,25 @@ final class DocxHyperlink extends DocxInline {
     this._holdsRuns,
     this._breaksFields,
   ) : _inlines = inlines,
+      _built = null,
       super._() {
     for (final DocxInline inline in _inlines) {
       inline._hyperlink = this;
     }
   }
+
+  DocxHyperlink._built(this._built, DocxRun run)
+    : _attributes = const <KeptAttribute>[],
+      _inlines = <DocxInline>[run],
+      _resolveUrl = null,
+      _holdsRuns = true,
+      _breaksFields = false,
+      super._() {
+    run._hyperlink = this;
+  }
+
+  /// The targets the API gave a built hyperlink; `null` for one read.
+  final _BuiltTargets? _built;
 
   /// The attributes of `w:hyperlink` as read, written back as they are.
   final List<KeptAttribute> _attributes;
@@ -90,9 +112,12 @@ final class DocxHyperlink extends DocxInline {
   /// the save still copies them as they were (Ruling 12). A relationships part
   /// that cannot be read gives `null`, and throws nothing: the part's own
   /// content read, and the link still writes as read.
+  /// A built hyperlink gives the address it was built with.
   late final String? url = _findUrl();
 
   String? _findUrl() {
+    final _BuiltTargets? built = _built;
+    if (built != null) return built.url;
     final String? id = _attribute('id', Ns.rel);
     final String? Function(String)? resolve = _resolveUrl;
     if (id == null || resolve == null) return null;
@@ -100,11 +125,12 @@ final class DocxHyperlink extends DocxInline {
   }
 
   /// The bookmark the hyperlink links to (`w:anchor`), or `null`.
-  String? get anchor => _attribute('anchor');
+  String? get anchor => _built == null ? _attribute('anchor') : _built.anchor;
 
   /// The text shown when the pointer rests on the hyperlink (`w:tooltip`), or
   /// `null`.
-  String? get tooltip => _attribute('tooltip');
+  String? get tooltip =>
+      _built == null ? _attribute('tooltip') : _built.tooltip;
 
   /// The inlines the hyperlink holds, in order: runs, fields, bookmark marks
   /// and opaque inlines. The list cannot be modified.
@@ -148,3 +174,68 @@ DocxHyperlink readHyperlink({
 /// order.
 List<KeptAttribute> hyperlinkAttributesOf(DocxHyperlink link) =>
     link._attributes;
+
+/// What the API gives a built hyperlink: an address or a bookmark, and a
+/// tooltip.
+typedef _BuiltTargets = ({String? url, String? anchor, String? tooltip});
+
+/// A new hyperlink of one [run] to [url] or to the bookmark [anchor] (exactly
+/// one of them), with [tooltip], as `DocxParagraph.addHyperlink` builds it.
+///
+/// Throws [ArgumentError] when both or neither target is given, when [url]
+/// is not an absolute URI (`Uri.tryParse` gives none, or one without a
+/// scheme), when [anchor] is empty, and when [url], [anchor] or [tooltip]
+/// holds a character XML forbids.
+DocxHyperlink newHyperlink(
+  DocxRun run, {
+  String? url,
+  String? anchor,
+  String? tooltip,
+}) {
+  checkHyperlinkTargets(url: url, anchor: anchor, tooltip: tooltip);
+  return DocxHyperlink._built((
+    url: url,
+    anchor: anchor,
+    tooltip: tooltip,
+  ), run);
+}
+
+/// Throws as [newHyperlink] does for targets it refuses.
+void checkHyperlinkTargets({String? url, String? anchor, String? tooltip}) {
+  if ((url == null) == (anchor == null)) {
+    throw ArgumentError(
+      'Give exactly one of url and anchor: '
+      '${url == null ? 'neither' : 'both'} given.',
+    );
+  }
+  if (url != null) {
+    final Uri? uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme || _forbidden(url)) {
+      throw ArgumentError.value(
+        url,
+        'url',
+        'must be an absolute URI without a character XML forbids',
+      );
+    }
+  }
+  if (anchor != null && (anchor.isEmpty || _forbidden(anchor))) {
+    throw ArgumentError.value(
+      anchor,
+      'anchor',
+      'must not be empty or hold a character XML forbids',
+    );
+  }
+  if (tooltip != null && _forbidden(tooltip)) {
+    throw ArgumentError.value(
+      tooltip,
+      'tooltip',
+      'must not hold a character XML forbids',
+    );
+  }
+}
+
+/// Whether [text] holds a character XML forbids.
+bool _forbidden(String text) => scrubXmlText(text).removed > 0;
+
+/// Whether the API built [link]; otherwise it was read from a file.
+bool hyperlinkIsBuilt(DocxHyperlink link) => link._built != null;

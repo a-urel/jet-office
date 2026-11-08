@@ -326,5 +326,49 @@ void main() {
         _rels(<String>['rId1']),
       );
     });
+
+    test('restoreRelationships takes back every one added, as read', () {
+      const String footerRels =
+          '<Relationships xmlns="$packageRelsNs">'
+          '<Relationship Id="rId9" Type="t" Target="x.xml"/></Relationships>';
+      final DocxPackage package = _open(
+        _package(
+          _document('<w:p/>'),
+          mainRels: _rels(<String>['rId1']),
+          parts: <String, (String, String)>{
+            'word/footer1.xml': (
+              ContentType.wmlFooter,
+              '<w:ftr $_ns><w:p/></w:ftr>',
+            ),
+            'word/_rels/footer1.xml.rels': (
+              ContentType.relationships,
+              footerRels,
+            ),
+          },
+        ),
+      );
+      final SaveIds saveIds = SaveIds(package);
+      for (final String part in <String>[
+        '/word/document.xml',
+        '/word/footer1.xml',
+        '/word/footer1.xml',
+      ]) {
+        saveIds.addRelationship(
+          part,
+          type: RelType.hyperlink,
+          target: 'https://x.test/',
+          external: true,
+        );
+      }
+      saveIds.restoreRelationships();
+      expect(
+        package.package
+            .relationshipsOf('/word/document.xml')
+            .map((OpcRelationship r) => r.id),
+        <String>['rId1'],
+      );
+      final ZipReader zip = _zip(_write(package.package));
+      expect(utf8.decode(zip.read('word/_rels/footer1.xml.rels')), footerRels);
+    });
   });
 }

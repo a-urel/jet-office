@@ -76,6 +76,16 @@ final class Relationships {
       ..addAll(_items.map((OpcRelationship r) => r.id));
   }
 
+  /// Keeps the first [length] relationships and removes the rest; a
+  /// [length] at or past the end removes nothing.
+  void truncate(int length) {
+    if (length >= _items.length) return;
+    _items.length = length;
+    _ids
+      ..clear()
+      ..addAll(_items.map((OpcRelationship r) => r.id));
+  }
+
   /// Adds a relationship of [type] to [target] and returns its id.
   ///
   /// Without [id], the id is the first of `rId1`, `rId2`, ... that no

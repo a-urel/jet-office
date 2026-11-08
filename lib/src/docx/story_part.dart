@@ -145,6 +145,11 @@ final class StoryPart implements PartContent {
   /// before it writes the part.
   int Function(DocxBookmarkStart start)? bookmarkId;
 
+  /// The id of the relationship this save gave the part for what the API
+  /// built in it, such as a hyperlink to an address; `null` outside a save.
+  /// The save sets it before it writes the part.
+  String? Function(Object built)? relationshipId;
+
   /// The warnings the last [encode] raised, as
   /// `DocumentPart.encodeWarnings` says, at locations under the part's name,
   /// such as `word/header1.xml/p[0]/r[1]`.
@@ -171,7 +176,8 @@ final class StoryPart implements PartContent {
       warnings,
       listDefined,
       styleDefined,
-      bookmarkId,
+      bookmarkId: bookmarkId,
+      relationshipId: relationshipId,
     ).writeBlocks(blocks, _location);
     if (needsClosingParagraph(blocks, _readUnclosed)) {
       w
