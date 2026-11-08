@@ -83,7 +83,10 @@ M, G and F are 360 by 300 pt at font 10; C is 300 pt high at font 10.
 ## The CSV
 
 `tool/axis_oracle/run_excel.applescript <workbook> <csv> full` opens the workbook
-read-only, reads every chart and closes without saving. The file is
+read-only, reads every chart and closes without saving. Where Excel opens nothing
+through its dictionary, the script opens the file with `open -a`, which cannot
+ask for read-only, and waits for it by name; closing without saving keeps the
+file unchanged. The file is
 `axis_oracle_full.<region>.csv`, UTF-8, one row per chart:
 
 ```

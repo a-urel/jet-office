@@ -12,7 +12,9 @@
 -- number is a failure, like any other read that fails.
 --
 -- Paths are POSIX, absolute or relative to the current folder. The workbook
--- opens read-only and closes without saving. A chart Excel cannot answer for
+-- opens read-only and closes without saving; where Excel opens nothing through
+-- its dictionary, the script opens it with `open -a`, which cannot ask for
+-- read-only, and the close without saving keeps the file unchanged. A chart Excel cannot answer for
 -- gets no row: the rest are still written, and the script then stops with the
 -- failures named and exit code 1. Numbers use "." whatever the system's decimal
 -- separator; the CSV is UTF-8 with LF line ends.
@@ -37,15 +39,29 @@ on run argv
 	tell application "Microsoft Excel"
 		activate
 		-- Excel may wait for its file access prompt, so allow the owner time.
-		set theBook to missing value
+		-- Some Excel versions open nothing through open workbook and return no
+		-- value; the workbook is then opened as a document and waited for by
+		-- name, never taken as the active workbook.
+		set bookName to my baseName(workbookPath)
 		with timeout of 600 seconds
 			try
-				set theBook to open workbook workbook file name workbookPath read only true
+				open workbook workbook file name workbookPath read only true
 			end try
-			if theBook is missing value then set theBook to open workbook workbook file name (my hfsPath(workbookPath)) read only true
+			if bookName is not in my workbookNames() then
+				try
+					open workbook workbook file name (my hfsPath(workbookPath)) read only true
+				end try
+			end if
 		end timeout
-		if theBook is missing value then set theBook to active workbook
-		if name of theBook is not my baseName(workbookPath) then error "Excel did not open " & workbookPath number 1
+		if bookName is not in my workbookNames() then
+			my openWithExcel(workbookPath)
+			repeat 300 times
+				if bookName is in my workbookNames() then exit repeat
+				delay 2
+			end repeat
+		end if
+		if bookName is not in my workbookNames() then error "Excel did not open " & workbookPath number 1
+		set theBook to workbook bookName
 		repeat with sheetIndex from 1 to (count of worksheets of theBook)
 			set place to "sheet " & sheetIndex
 			try
@@ -124,6 +140,24 @@ on run argv
 	end if
 	return summary
 end run
+
+-- The names of Excel's open workbooks, or none.
+on workbookNames()
+	try
+		tell application "Microsoft Excel" to return name of every workbook
+	on error
+		return {}
+	end try
+end workbookNames
+
+-- Opens the file in Excel as a document, outside Excel's dictionary.
+on openWithExcel(thePath)
+	try
+		do shell script "open -a 'Microsoft Excel' " & quoted form of thePath
+	on error errorText number errorNumber
+		error "Excel did not open " & thePath & ": " & errorText number 1
+	end try
+end openWithExcel
 
 -- pure handlers: no Excel below this line
 

@@ -38,8 +38,8 @@ Komutların hepsi deponun kök klasöründen çalışır.
    `~/Documents/jet_charts_oracle/axis_oracle_full.xlsx` yap. CSV yolu aynı
    kalır.
 
-   Excel öne gelir, dosyayı salt okunur açar, sayfalar sırayla görünür ve dosya
-   kaydedilmeden kapanır. Birkaç dakika sürer; bu sırada Excel'e dokunma.
+   Excel öne gelir, dosyayı açar (salt okunur ya da değil), sayfalar sırayla
+   görünür ve dosya kaydedilmeden kapanır. Birkaç dakika sürer; bu sırada Excel'e dokunma.
    Beklenen çıktı: `239 rows written to ...`
 
    Ekrana şu sorular gelebilir (metinleri yaklaşıktır):
