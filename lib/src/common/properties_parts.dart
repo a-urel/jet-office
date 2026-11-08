@@ -801,10 +801,27 @@ final class PropertyParts {
     custom: Map<String, Object>.unmodifiable(custom.values),
   );
 
+  /// The kind of the first part, in the order core, app, custom, that is
+  /// untyped (its root is not the properties element of its namespace) and
+  /// would have to change for [next]: the part [withProperties] throws for.
+  /// `null` when there is none.
+  PropertyKind? untypedChange(OfficeProperties next) {
+    final OfficeProperties old = merged;
+    bool differs(List<_Field> fields) =>
+        fields.any((_Field f) => f.get(old) != f.get(next));
+    if (!core.isTyped && differs(_coreFields)) return PropertyKind.core;
+    if (!app.isTyped && differs(_appFields)) return PropertyKind.app;
+    if (!custom.isTyped && !_sameMap(old.custom, next.custom)) {
+      return PropertyKind.custom;
+    }
+    return null;
+  }
+
   /// These parts with [next] set over what they show now; see
   /// [CoreProperties.apply] and [CustomProperties.apply].
   ///
-  /// Throws a [StateError] when a part that must change is untyped.
+  /// Throws a [StateError] when a part that must change is untyped
+  /// ([untypedChange]).
   PropertyParts withProperties(OfficeProperties next) {
     final OfficeProperties old = merged;
     return PropertyParts(
@@ -982,6 +999,10 @@ final class PropertiesState {
 
   /// The parts now.
   PropertyParts get parts => _parts;
+
+  /// The name of the part of [kind] in the package, or the name the writer
+  /// gives it when the package has none.
+  String partName(PropertyKind kind) => _names[kind] ?? '/${kind.partName}';
 
   PartContent _content(PropertyParts parts, PropertyKind kind) =>
       switch (kind) {

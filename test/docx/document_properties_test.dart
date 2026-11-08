@@ -200,6 +200,51 @@ void main() {
       );
     });
 
+    // Found by fuzzing (seed 1 case 617): a core part whose root is in
+    // another namespace read empty, and setting a value it holds threw a
+    // StateError, which no file may cause.
+    test('a part whose root is not a properties part throws a read '
+        'exception naming it when a value of it is set', () {
+      final Map<String, String> parts = _parts(_withProperties());
+      parts['docProps/core.xml'] = parts['docProps/core.xml']!.replaceFirst(
+        'xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/'
+            'core-properties"',
+        'xmlns:cp="urn:other"',
+      );
+      final DocxDocument doc = _reopen(parts);
+      final OfficeProperties read = doc.properties;
+      expect(read.title, isNull);
+      expect(read.company, 'Acme');
+      expect(
+        () => doc.properties = _retitled(read, 'New'),
+        throwsA(
+          isA<DocxReadException>()
+              .having(
+                (DocxReadException e) => e.reason,
+                'reason',
+                DocxReadFailure.malformedXml,
+              )
+              .having(
+                (DocxReadException e) => e.part,
+                'part',
+                '/docProps/core.xml',
+              ),
+        ),
+      );
+      expect(
+        () => doc.properties = const OfficeProperties(revision: -1),
+        throwsArgumentError,
+      );
+      // A value of a part that is typed still changes.
+      doc.properties = OfficeProperties(
+        application: read.application,
+        company: 'Other',
+      );
+      expect(doc.properties.company, 'Other');
+      final Map<String, String> saved = _parts(doc.save().bytes);
+      expect(saved['docProps/core.xml'], parts['docProps/core.xml']);
+    });
+
     test('a transaction that throws leaves no part and no relationship', () {
       final DocxDocument doc = DocxDocument();
       expect(

@@ -297,9 +297,23 @@ final class DocxDocument {
   /// is one entry of the log, and an undo of it leaves no part behind. Sets
   /// nothing for a [value] equal to [properties]. Throws an [ArgumentError]
   /// for a value XML cannot hold (see [OfficeProperties]) and a
-  /// [DocxReadException] when a part cannot be read; nothing has changed then.
+  /// [DocxReadException] when a part cannot be read, or of
+  /// [DocxReadFailure.malformedXml] naming a part whose root is not the
+  /// properties element of its namespace when a value it would hold changes
+  /// (such a part reads no values); nothing has changed then.
   set properties(OfficeProperties value) {
     final PropertiesState state = _propertiesState();
+    if (value == state.parts.merged) return;
+    checkProperties(value);
+    final PropertyKind? untyped = state.parts.untypedChange(value);
+    if (untyped != null) {
+      throw DocxReadException(
+        DocxReadFailure.malformedXml,
+        'The document properties part has no properties root element, so it '
+        'cannot be changed.',
+        part: state.partName(untyped),
+      );
+    }
     _edits.transaction(() => setProperties(_edits.log, state, value));
   }
 
