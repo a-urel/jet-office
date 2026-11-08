@@ -141,6 +141,23 @@ List<ChartPrimitive> _bars(
   ChartTheme theme,
   MarkAxes axes,
 ) {
+  return <ChartPrimitive>[
+    for (final MarkAnchor a in _barAnchors(resolved, values, theme, axes))
+      RectPrimitive(
+        ids.seriesBarId(a.series, a.category),
+        a.bar!,
+        fill: resolved.colors[a.series],
+      ),
+  ];
+}
+
+/// The rectangle of every bar that has a value, in series then category order.
+List<MarkAnchor> _barAnchors(
+  ResolvedChart resolved,
+  List<List<double?>> values,
+  ChartTheme theme,
+  MarkAxes axes,
+) {
   final int n = values.length;
   final bool stacked = _stacked(resolved);
   // Excel's ranges: gap 0 to 500, overlap -100 to 100. Kept to them, the
@@ -151,7 +168,7 @@ List<ChartPrimitive> _bars(
       : _percent(theme.spacing.overlapPercent, -100, 100);
   final double band = axes.categoryLength / math.max(1, resolved.categoryCount);
   final double w = band / (g + n - (n - 1) * o);
-  final List<ChartPrimitive> out = <ChartPrimitive>[];
+  final List<MarkAnchor> out = <MarkAnchor>[];
   final List<double> up = List<double>.filled(resolved.categoryCount, 0);
   final List<double> down = List<double>.filled(resolved.categoryCount, 0);
   for (int s = 0; s < n; s++) {
@@ -173,13 +190,7 @@ List<ChartPrimitive> _bars(
           to = down[c] += v;
         }
       }
-      out.add(
-        RectPrimitive(
-          ids.seriesBarId(s, c),
-          axes.rect(along, w, from, to),
-          fill: resolved.colors[s],
-        ),
-      );
+      out.add(MarkAnchor(s, c, bar: axes.rect(along, w, from, to)));
     }
   }
   return out;
@@ -211,10 +222,10 @@ List<List<double?>> _cumulative(
   ];
 }
 
-List<ChartPrimitive> _lines(
+/// The point of every line value, per series and category (`null` for a gap).
+List<List<ChartPoint?>> _linePoints(
   ResolvedChart resolved,
   List<List<double?>> values,
-  ChartTheme theme,
   MarkAxes axes,
 ) {
   final List<List<double?>> tops = _cumulative(
@@ -223,6 +234,22 @@ List<ChartPrimitive> _lines(
     nullIsZero: false,
   );
   final double band = axes.categoryLength / math.max(1, resolved.categoryCount);
+  return <List<ChartPoint?>>[
+    for (final List<double?> series in tops)
+      <ChartPoint?>[
+        for (int c = 0; c < series.length; c++)
+          series[c] == null ? null : axes.point((c + 0.5) * band, series[c]!),
+      ],
+  ];
+}
+
+List<ChartPrimitive> _lines(
+  ResolvedChart resolved,
+  List<List<double?>> values,
+  ChartTheme theme,
+  MarkAxes axes,
+) {
+  final List<List<ChartPoint?>> tops = _linePoints(resolved, values, axes);
   final double h = theme.markerSize / 2;
   final List<ChartPrimitive> out = <ChartPrimitive>[];
   for (int s = 0; s < tops.length; s++) {
@@ -259,22 +286,25 @@ List<ChartPrimitive> _lines(
     }
 
     for (int c = 0; c < tops[s].length; c++) {
-      final double? v = tops[s][c];
-      if (v == null) {
+      final ChartPoint? p = tops[s][c];
+      if (p == null) {
         flush();
         continue;
       }
       if (points.isEmpty) {
         first = c;
       }
-      points.add(axes.point((c + 0.5) * band, v));
+      points.add(p);
     }
     flush();
   }
   return out;
 }
 
-List<ChartPrimitive> _areas(
+/// The top and the base of the area column under every value, per series.
+///
+/// A missing value counts as 0 for the area's outline and has no anchor.
+List<List<({ChartPoint top, ChartPoint base})>> _areaColumns(
   ResolvedChart resolved,
   List<List<double?>> values,
   MarkAxes axes,
@@ -286,28 +316,126 @@ List<ChartPrimitive> _areas(
   );
   final double band = axes.categoryLength / math.max(1, resolved.categoryCount);
   final bool stacked = _stacked(resolved);
+  return <List<({ChartPoint top, ChartPoint base})>>[
+    for (int s = 0; s < tops.length; s++)
+      <({ChartPoint top, ChartPoint base})>[
+        for (int c = 0; c < tops[s].length; c++)
+          (
+            top: axes.point((c + 0.5) * band, tops[s][c]!),
+            base: axes.point(
+              (c + 0.5) * band,
+              stacked && s > 0 ? tops[s - 1][c]! : axes.crossing,
+            ),
+          ),
+      ],
+  ];
+}
+
+List<ChartPrimitive> _areas(
+  ResolvedChart resolved,
+  List<List<double?>> values,
+  MarkAxes axes,
+) {
+  final List<List<({ChartPoint top, ChartPoint base})>> columns = _areaColumns(
+    resolved,
+    values,
+    axes,
+  );
   final List<ChartPrimitive> out = <ChartPrimitive>[];
-  for (int s = 0; s < tops.length; s++) {
-    final int count = tops[s].length;
-    if (count == 0) {
+  for (int s = 0; s < columns.length; s++) {
+    if (columns[s].isEmpty) {
       continue;
     }
-    final List<ChartPoint> points = <ChartPoint>[
-      for (int c = 0; c < count; c++) axes.point((c + 0.5) * band, tops[s][c]!),
-      for (int c = count - 1; c >= 0; c--)
-        axes.point(
-          (c + 0.5) * band,
-          stacked && s > 0 ? tops[s - 1][c]! : axes.crossing,
-        ),
-    ];
     out.add(
       PathPrimitive(
         ids.seriesAreaId(s),
-        points,
+        <ChartPoint>[
+          for (final column in columns[s]) column.top,
+          for (final column in columns[s].reversed) column.base,
+        ],
         closed: true,
         fill: resolved.colors[s],
       ),
     );
   }
   return out;
+}
+
+/// Where a value's mark is, for the data label that goes with it.
+final class MarkAnchor {
+  /// Creates the anchor of series [series] at [category]; a bar has [bar], a
+  /// line or area value has [point] and an area also its [base].
+  const MarkAnchor(
+    this.series,
+    this.category, {
+    this.bar,
+    this.point,
+    this.base,
+  });
+
+  /// The series' index.
+  final int series;
+
+  /// The category's index.
+  final int category;
+
+  /// The bar's rectangle, when the mark is a bar.
+  final ChartRect? bar;
+
+  /// The value's point, when the mark is a line or an area.
+  final ChartPoint? point;
+
+  /// The point on the area's base below [point], for an area.
+  final ChartPoint? base;
+}
+
+/// The anchors of every value that has a mark, in series then category order.
+///
+/// They are the geometry [layoutMarks] draws, so a label sits where its mark
+/// is. Kinds without marks have none.
+List<MarkAnchor> layoutAnchors(
+  Chart chart,
+  ResolvedChart resolved,
+  ChartTheme theme,
+  ChartRect plot,
+  ValueScale scale,
+) {
+  final MarkAxes axes = MarkAxes(
+    plot,
+    scale,
+    horizontal: chart.kind == ChartKind.bar,
+  );
+  final List<List<double?>> values = _shaped(resolved);
+  switch (chart.kind) {
+    case ChartKind.column:
+    case ChartKind.bar:
+      return _barAnchors(resolved, values, theme, axes);
+    case ChartKind.line:
+      final List<List<ChartPoint?>> points = _linePoints(
+        resolved,
+        values,
+        axes,
+      );
+      return <MarkAnchor>[
+        for (int s = 0; s < points.length; s++)
+          for (int c = 0; c < points[s].length; c++)
+            if (points[s][c] != null) MarkAnchor(s, c, point: points[s][c]),
+      ];
+    case ChartKind.area:
+      final List<List<({ChartPoint top, ChartPoint base})>> columns =
+          _areaColumns(resolved, values, axes);
+      return <MarkAnchor>[
+        for (int s = 0; s < columns.length; s++)
+          for (int c = 0; c < columns[s].length; c++)
+            if (values[s][c] != null)
+              MarkAnchor(
+                s,
+                c,
+                point: columns[s][c].top,
+                base: columns[s][c].base,
+              ),
+      ];
+    default:
+      return const <MarkAnchor>[];
+  }
 }

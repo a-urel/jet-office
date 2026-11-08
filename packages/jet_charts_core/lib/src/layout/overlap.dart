@@ -136,6 +136,11 @@ List<ChartOverlap> findOverlaps(
   return found;
 }
 
+/// Whether texts [a] and [b] share area, by the same test [findOverlaps]
+/// uses; a text with no area overlaps nothing.
+bool textsOverlap(TextPrimitive a, TextPrimitive b) =>
+    _hasArea(a.rect) && _hasArea(b.rect) && _overlaps(a.corners, b.corners);
+
 bool _hasArea(ChartRect r) => r.width > 0 && r.height > 0;
 
 List<ChartPoint> _corners(ChartRect r) => <ChartPoint>[

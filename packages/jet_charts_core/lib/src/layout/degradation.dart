@@ -20,7 +20,8 @@ import 'resolve.dart';
 /// does not fit. When no step can and the frame still does not fit, only the
 /// background is drawn.
 enum DegradeStep {
-  /// The data labels go. Task 8 fills this hook; until then it hides nothing.
+  /// The data labels go. They take no room from the frame, so dropping them
+  /// relieves only a frame with no room at all, but they go first.
   dataLabels,
 
   /// The legend goes.
@@ -122,7 +123,6 @@ final class FrameShown {
   void take(DegradeStep step) {
     switch (step) {
       case DegradeStep.dataLabels:
-        // Task 8: data labels are hidden here.
         dataLabels = false;
       case DegradeStep.legend:
         legend = false;
@@ -140,9 +140,10 @@ final class FrameShown {
 
   /// Whether taking [step] can relieve any of [misfits].
   ///
-  /// A step that hides nothing shown relieves nothing; neither does the data
-  /// labels' step yet (Task 8). Any other step frees space, so it relieves
-  /// [FrameMisfit.space]. The value labels collide less on a longer value
+  /// A step that hides nothing shown relieves nothing. The data labels' step
+  /// relieves [FrameMisfit.space] only in name: they take no room, but a frame
+  /// that has to lose parts loses them first, and they are listed as hidden.
+  /// Any other step frees space, so it relieves [FrameMisfit.space]. The value labels collide less on a longer value
   /// axis, and the category labels get a deeper band from more space across
   /// the category axis; both lie in the same direction, the plot's height for
   /// a column, line or area chart ([bar] false) and its width for a bar chart.
@@ -164,7 +165,7 @@ final class FrameShown {
         misfits.contains(FrameMisfit.categoryLabels);
     switch (step) {
       case DegradeStep.dataLabels:
-        return false;
+        return dataLabels && space;
       case DegradeStep.legend:
         final bool vertical =
             legendPosition == ChartLegendPosition.top ||

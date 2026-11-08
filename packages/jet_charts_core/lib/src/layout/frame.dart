@@ -113,9 +113,10 @@ FrameLayout layoutFrame(
       continue;
     }
     if (attempt.misfits.isEmpty) {
+      final painted = frame.paint(attempt, shown);
       return FrameLayout(
-        primitives: frame.paint(attempt, shown),
-        hidden: frame.hiddenTexts(wanted, shown, attempt),
+        primitives: painted.primitives,
+        hidden: frame.hiddenTexts(wanted, shown, attempt, painted.hiddenData),
         geometry: FrameGeometry(
           plot: attempt.plot!,
           scale: attempt.scale!,
@@ -140,7 +141,12 @@ FrameLayout layoutFrame(
       shown.hideAll();
       return FrameLayout(
         primitives: <ChartPrimitive>[frame.background()],
-        hidden: frame.hiddenTexts(wanted, shown, attempt),
+        hidden: frame.hiddenTexts(
+          wanted,
+          shown,
+          attempt,
+          const <(String, String)>[],
+        ),
       );
     }
     shown.take(next);

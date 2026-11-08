@@ -2,8 +2,8 @@
 /// of the attempt that fits.
 ///
 /// The paint order: background, title, legend, plot, grid lines, the marks'
-/// clip, axis lines, tick labels, category labels, (Task 8's
-/// data labels), axis titles.
+/// clip, axis lines, tick labels, category labels, axis titles, and last the
+/// data labels.
 library;
 
 import 'dart:math' as math;
@@ -16,6 +16,7 @@ import '../scale/value_scale.dart';
 import '../theme/chart_theme.dart';
 import 'axis_layout.dart';
 import 'chart_ids.dart' as ids;
+import 'data_labels.dart';
 import 'degradation.dart';
 import 'geometry.dart';
 import 'legend_layout.dart';
@@ -156,11 +157,14 @@ final class FrameContext {
 /// Painting a frame.
 extension FramePaint on FrameContext {
   /// What the frame of [a] draws with what [shown] allows, in paint order.
-  List<ChartPrimitive> paint(FrameAttempt a, FrameShown shown) {
+  ({List<ChartPrimitive> primitives, List<(String, String)> hiddenData}) paint(
+    FrameAttempt a,
+    FrameShown shown,
+  ) {
     final ChartRect plot = a.plot!;
     final ValueScale scale = a.scale!;
     final ChartRect inner = a.inner!;
-    return <ChartPrimitive>[
+    final List<ChartPrimitive> out = <ChartPrimitive>[
       background(),
       ...?a.title?.primitives,
       ...?a.legend?.primitives,
@@ -219,7 +223,6 @@ extension FramePaint on FrameContext {
           vertical: bar,
           offset: a.categoryOffset,
         ),
-      // Task 8: the data labels go here, above everything else.
       if (shown.valueTitle)
         _axisTitle(
           ids.axisTitleId(ids.valueAxis),
@@ -237,6 +240,23 @@ extension FramePaint on FrameContext {
           rotated: bar,
         ),
     ];
+    // Data labels go last, on top of everything else.
+    final DataLabelPlacement labels = shown.dataLabels
+        ? placeDataLabels(
+            chart: chart,
+            resolved: resolved,
+            theme: theme,
+            measurer: measurer,
+            formatter: formatter,
+            plot: plot,
+            scale: scale,
+            existing: out,
+          )
+        : const DataLabelPlacement(<TextPrimitive>[], <(String, String)>[]);
+    return (
+      primitives: <ChartPrimitive>[...out, ...labels.primitives],
+      hiddenData: labels.hidden,
+    );
   }
 
   /// An axis title: turned -90 degrees at the left of [inner], centred on the
@@ -278,7 +298,8 @@ extension FramePaint on FrameContext {
   }
 
   /// The texts [wanted] that [shown] leaves out, grouped in the order of
-  /// [DegradeStep]: legend entries, axis titles, title, category labels (every
+  /// [DegradeStep]: data labels (the ones [hiddenData] lists, or all of them
+  /// when [shown] has none), legend entries, axis titles, title, category labels (every
   /// one not shown and every cut one, with its full text), value labels.
   ///
   /// Value labels of an attempt with no room at all come from a fallback
@@ -287,6 +308,7 @@ extension FramePaint on FrameContext {
     FrameShown wanted,
     FrameShown shown,
     FrameAttempt a,
+    List<(String, String)> hiddenData,
   ) {
     final List<String> ticks = <String>[
       for (final MeasuredLabel label
@@ -301,7 +323,9 @@ extension FramePaint on FrameContext {
           a.plan!.shown[k]: a.plan!.labels[k].text,
     };
     return <(String, String)>[
-      // Task 8: hidden data labels come first.
+      ...(wanted.dataLabels && !shown.dataLabels
+          ? dataLabelTexts(chart, resolved, formatter)
+          : hiddenData),
       if (wanted.legend && !shown.legend)
         for (int s = 0; s < resolved.seriesNames.length; s++)
           (ids.legendTextId(s), resolved.seriesNames[s]),
