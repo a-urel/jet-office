@@ -16,9 +16,20 @@
 /// * the `TextMeasurer` a backend supplies, and a `FixedWidthTextMeasurer`
 ///   for tests.
 ///
-/// Milestone J2 adds the axis scales and the layout that turns a chart, a
-/// theme and a size into primitives: `layoutChart`, its `ChartLayout` and the
-/// `ChartHiddenLabel`s it leaves out.
+/// Milestone J2 adds:
+///
+/// * the value scale: `autoValueScale` chooses an axis' minimum, maximum and
+///   major unit as Excel for Mac does, from a `dataExtent` and the axis'
+///   length, and returns a `ValueScale`;
+/// * the layout: `layoutChart` turns a chart, a theme, a size and a
+///   `TextMeasurer` into a `ChartLayout` of primitives, with the
+///   `ChartHiddenLabel`s it left out. The scheme of the primitives' ids is
+///   documented on `ChartLayout.primitives`;
+/// * the overlap check: `findOverlaps` reports each `ChartOverlap`, of a
+///   `ChartOverlapKind`, between texts and marks of a layout.
+///
+/// Milestone J3 adds the Flutter renderer, in `jet_charts_flutter`; this
+/// package stays free of Flutter.
 library;
 
 export 'src/layout/chart_layout.dart'

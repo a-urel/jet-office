@@ -125,8 +125,9 @@ final class ValueScale {
 /// The result is rounded down and kept between 1 and 10: Excel took one
 /// interval on the shortest plots and never more than 10 (a 264 pt column
 /// plot that could hold 20 gave 10). Width never changed a column chart's
-/// scale (W). No length gives 1 and an infinite one 10; a font size of 0
-/// gives 10 on any length.
+/// scale (W). No length gives 1 and an infinite one 10. A font size of 0
+/// gives 10 on any horizontal length but 0, and `axisLength / 2` (kept
+/// between 1 and 10) on a vertical one.
 ///
 /// Throws an [ArgumentError] for a negative or `NaN` length, or a negative or
 /// non-finite font size.

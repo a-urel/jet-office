@@ -366,10 +366,12 @@ void main() {
       expect(horizontal(double.infinity, 9), 10);
     });
 
-    test('a font size of 0 gives 10 on any length, 1 on none', () {
+    test('a font size of 0: horizontal 10, vertical half the length', () {
       expect(vertical(100, 0), 10);
       expect(horizontal(100, 0), 10);
       expect(horizontal(0, 0), 1);
+      expect(vertical(10, 0), 5);
+      expect(excelMaxIntervals(10, horizontal: false, fontSize: 0), 5);
     });
 
     test('a negative or NaN length or font size throws', () {

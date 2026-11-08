@@ -73,7 +73,8 @@ one is met by the rule (`test/scale/axis_parity_test.dart`).
   - vertical value axis (column, line, area): `(plot height - font) /
     (font + 2)`: labels one font size tall, 2 pt apart, fit the axis. On
     `L10` at font 10 the unit goes 50, 20, 10, 5 as the plot grows from 24 to
-    144 pt; at about 100 pt font 8 holds 5 intervals and font 18 one.
+    144 pt; at a chart 100 pt high (plots of 68 and 44 pt) font 8 holds 5
+    intervals and font 18 one.
   - horizontal value axis (bar): `(plot width + 2 font) / (3.9 font)`. A bar
     chart needs a plot about three times as long as a column chart for the
     same unit (`B10` at font 10 reaches 5 only at 563 pt). The labels' width

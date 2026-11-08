@@ -277,19 +277,18 @@ const String ellipsis = '…';
 /// label for `N` = 1, 2; then -45 degrees for `N` = 1, 2, 3; then -90
 /// degrees for `N` = 1, 2, … until they fit. Level labels skip at most every
 /// second because Excel's label spacing never exceeded 2 in the owner's full
-/// run (the C group, 3 to 30 characters at 180 to 720 points wide). Shown labels fit when no two come
-/// closer than `minTextGap`, their band is no deeper than [maxDepth], and they
-/// reach no further than [roomBefore] before the axis' start and [roomAfter]
-/// past its end: the room the frame has there anyway, which the labels never
-/// widen, so the plot does not depend on them along the axis. At -45 and -90
-/// degrees, and beside a vertical axis, the room before is
-/// [turnedRoomBefore], which also holds what the frame keeps for a plan's
-/// [CategoryLabelPlan.reserveBefore]. A plan that fails only for want of room
-/// is [CategoryLabelPlan.cramped]. At -45 and -90
-/// degrees a label deeper than [maxDepth] is cut with `…`, and at -45 degrees
-/// also one that would reach further than [turnedRoomBefore]; at 0 degrees
-/// none is.
-/// A turned label's end sits at its tick.
+/// run (the C group, 3 to 30 characters at 180 to 720 points wide). Shown
+/// labels fit when no two come closer than `minTextGap`, their band is no
+/// deeper than [maxDepth], and they reach no further than [roomBefore]
+/// before the axis' start and [roomAfter] past its end: the room the frame
+/// has there anyway, which the labels never widen, so the plot does not
+/// depend on them along the axis. At -45 and -90 degrees, and beside a
+/// vertical axis, the room before is [turnedRoomBefore], which also holds
+/// what the frame keeps for a plan's [CategoryLabelPlan.reserveBefore]. A
+/// plan that fails only for want of room is [CategoryLabelPlan.cramped]. At
+/// -45 and -90 degrees a label deeper than [maxDepth] is cut with `…`, and
+/// at -45 degrees also one that would reach further than [turnedRoomBefore];
+/// at 0 degrees none is. A turned label's end sits at its tick.
 ///
 /// Beside a vertical axis (`vertical`, a bar chart) labels stay level: every
 /// label wider than [maxDepth] is cut, and every `N`th is shown for the least

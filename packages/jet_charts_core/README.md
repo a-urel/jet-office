@@ -26,13 +26,21 @@ root) records why. The packages share one repository, a pub workspace (decision
 
 ## Status
 
-Milestone J1 is done. The package exports the chart model, the theme (with the
-Office theme built in), the drawing primitives with their geometry, and
-the text measurer interface with a fixed-width one for tests.
+Milestone J2 is done. The package exports the chart model, the theme (with the
+Office theme built in), the drawing primitives with their geometry, and the
+text measurer interface with a fixed-width one for tests (J1), and now:
 
-Nothing draws yet: axis scales and layout are J2. The first Excel axis oracle
-(`test/fixtures/owner/axis/`) is committed and waits on the owner's run in
-Excel for Mac; `docs/axis-scaling.md` holds the question.
+- `autoValueScale`, the value axis' minimum, maximum and major unit as Excel
+  for Mac chooses them, fitted on the owner's Excel runs
+  (`docs/axis-scaling.md`);
+- `layoutChart`, which turns a chart, a theme, a size and a text measurer into
+  drawing primitives for column, bar, line and area charts of every grouping,
+  with axes, grid, titles, legend, data labels and category labels that turn,
+  skip or cut to fit;
+- `findOverlaps`, which checks a layout for texts that collide.
+
+`docs/parity.md` compares the layout with Excel and lists every difference.
+Nothing draws yet: the Flutter renderer is J3, in `jet_charts_flutter`.
 
 Not published to pub.dev. Use it as a git dependency:
 
