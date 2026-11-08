@@ -1,6 +1,7 @@
-/// The fixtures of DOCX milestones D1 to D4: new documents with paragraphs of
+/// The fixtures of DOCX milestones D1 to D5: new documents with paragraphs of
 /// text (D1), with run and paragraph formatting, styles and lists (D2), with
-/// tables (D3) and with sections, headers, footers and fields (D4).
+/// tables (D3), with sections, headers, footers and fields (D4) and with
+/// pictures, hyperlinks, bookmarks and document properties (D5).
 ///
 /// New in jet_office. Every fixture starts from `DocxDocument()`, the blank
 /// document, so what LibreOffice and the Open XML SDK see is what the model
@@ -12,6 +13,7 @@ import 'package:jet_office/jet_office.dart';
 
 import '../../tool/src/text_compare.dart' show docxFullText;
 import 'docx_fixture.dart';
+import 'm4_fixtures.dart' show jpeg3x5, png4x2;
 
 export 'docx_fixture.dart';
 
@@ -26,7 +28,7 @@ const List<(String?, String)> d1Paragraphs = <(String?, String)>[
   (null, 'Last.'),
 ];
 
-/// The fixtures of D1 to D4, in a fixed order.
+/// The fixtures of D1 to D5, in a fixed order.
 ///
 /// No fixture may end in a table: LibreOffice's text export of a document
 /// whose body ends in a table never ends, it writes the file without bound
@@ -146,6 +148,19 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
     () => _build(_fillFields),
     headerFooterText: _fieldsStories.join('\n'),
   ),
+  DocxFixture(
+    'd5_pictures',
+    _picturesText.join('\n'),
+    () => _build(_fillPictures),
+    headerFooterText: _picturesStories.join('\n'),
+  ),
+  DocxFixture(
+    'd5_links',
+    _linksText.join('\n'),
+    () => _build(_fillLinks),
+    headerFooterText: _linksStories.join('\n'),
+  ),
+  DocxFixture('d5_properties', _propertiesText, () => _build(_fillProperties)),
 ];
 
 /// The text of `d3_basic`, written by hand from what `_fillBasic` adds: the
@@ -826,4 +841,112 @@ void _fillFields(DocxDocument doc) {
   doc.body.addParagraph('A field the model has no helper for: ')
     ..addField(DocxField(' QUOTE "Custom text" ', result: 'Custom text'))
     ..addRun('.');
+}
+
+/// The text of `d5_pictures`, written by hand from what `_fillPictures` adds:
+/// a picture has no text, so a paragraph that holds only one is an empty line.
+const List<String> _picturesText = <String>[
+  'A PNG at its pixel size, 4 by 2 pixels, follows.',
+  '',
+  'Kind\tPicture',
+  'JPEG, 144 points wide\tThe JPEG, 3 by 5 pixels',
+  'After the pictures.',
+];
+
+/// What the header of `d5_pictures` shows: the logo has no text.
+const List<String> _picturesStories = <String>[
+  '1 header: Logo beside the header text',
+];
+
+/// Fills `d5_pictures`: the PNG [png4x2] in the body at its pixel size, the
+/// JPEG [jpeg3x5] 144 points wide (240 high, its ratio kept) in a table cell,
+/// and the same PNG as a logo in the header, beside text, which shares the
+/// body's media part.
+void _fillPictures(DocxDocument doc) {
+  final DocxBody body = doc.body;
+  body.addParagraph(_picturesText[0]);
+  body.addParagraph().addPicture(
+    OfficeImage(png4x2),
+    name: 'PNG',
+    description: 'A PNG of 4 by 2 pixels',
+  );
+  final DocxTable table = body.addTable(columns: 2)
+    ..addRow(<String?>['Kind', 'Picture'], header: true)
+    ..addRow(<String?>['JPEG, 144 points wide', null]);
+  // `addRow` gives the cell one empty paragraph: the picture goes there,
+  // followed by its caption.
+  (table.rows[1].cells[1].blocks.single as DocxParagraph)
+    ..addPicture(OfficeImage(jpeg3x5), widthPt: 144, name: 'JPEG')
+    ..addRun('The JPEG, 3 by 5 pixels');
+  doc.sections.last.header.addParagraph()
+    ..addPicture(OfficeImage(png4x2), name: 'Logo')
+    ..addRun('Logo beside the header text');
+  body.addParagraph(_picturesText[4]);
+}
+
+/// The text of `d5_links`, written by hand from what `_fillLinks` adds: a
+/// hyperlink's text is the text of its runs, a bookmark has none.
+const List<String> _linksText = <String>[
+  'Overview',
+  'Visit the project page for more.',
+  'Back to the overview.',
+  'After the links.',
+];
+
+/// What the footer of `d5_links` shows: the text of its link.
+const List<String> _linksStories = <String>[
+  '1 footer: Footer link: example.com',
+];
+
+/// Fills `d5_links`: a heading inside the bookmark `Overview`, an external
+/// link, an internal link to the bookmark, and an external link in the footer.
+void _fillLinks(DocxDocument doc) {
+  final DocxBody body = doc.body;
+  final DocxParagraph heading = body.addParagraph()
+    ..style = doc.styles.ensure(DocxBuiltInStyle.heading1);
+  final DocxBookmarkStart start = heading.addBookmarkStart('Overview');
+  heading
+    ..addRun(_linksText[0])
+    ..addBookmarkEnd(start);
+  body.addParagraph('Visit ')
+    ..addHyperlink(
+      'the project page',
+      url: 'https://example.com/jet-office',
+      tooltip: 'The project page',
+    )
+    ..addRun(' for more.');
+  body.addParagraph('Back to ')
+    ..addHyperlink('the overview', anchor: 'Overview')
+    ..addRun('.');
+  doc.sections.last.footer
+      .addParagraph('Footer link: ')
+      .addHyperlink('example.com', url: 'https://example.com/');
+  body.addParagraph(_linksText[3]);
+}
+
+/// The text of `d5_properties`.
+const String _propertiesText = 'This document has its properties set.';
+
+/// The properties of `d5_properties`: every core field, the company and the
+/// application, at given UTC times.
+final OfficeProperties d5Properties = OfficeProperties(
+  title: 'The D5 properties',
+  subject: 'Document properties',
+  creator: 'jet_office',
+  keywords: 'docx; properties; d5',
+  description: 'Every core property, the company and the application.',
+  lastModifiedBy: 'The fixture list',
+  revision: 3,
+  category: 'Fixtures',
+  contentStatus: 'Final',
+  created: DateTime.utc(2026, 11, 8, 9, 30),
+  modified: DateTime.utc(2026, 11, 8, 10, 45, 15),
+  company: 'Jet Office',
+  application: 'jet_office',
+);
+
+/// Fills `d5_properties`: one paragraph and [d5Properties].
+void _fillProperties(DocxDocument doc) {
+  doc.body.addParagraph(_propertiesText);
+  doc.properties = d5Properties;
 }

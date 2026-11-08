@@ -15,6 +15,7 @@ import '../docx/support/docx_builder.dart' show buildDocx, rewriteDocxPart;
 import '../docx/support/numbering_documents.dart';
 import '../docx/support/styles_documents.dart';
 import '../fixtures/docx_fixtures.dart';
+import '../fixtures/m4_fixtures.dart' show png4x2;
 
 /// The WordprocessingML namespace.
 const String _w = Ns.w;
@@ -296,6 +297,137 @@ void main() {
 
     test('a document without parts or content sets none', () {
       expect(readTypedProperties(DocxDocument.open(buildDocx())), 0);
+    });
+  });
+
+  group('D5', () {
+    Uint8List fixture(String name) => docxFixtures()
+        .singleWhere((DocxFixture f) => f.name == name)
+        .build()
+        .bytes;
+
+    /// [fill] applied to a new document, saved and opened again.
+    DocxDocument reopened(void Function(DocxDocument doc) fill) {
+      final DocxDocument doc = DocxDocument();
+      fill(doc);
+      return DocxDocument.open(doc.save().bytes);
+    }
+
+    test('readTypedProperties reads every field of the properties', () {
+      final DocxDocument bare = reopened(
+        (DocxDocument d) => d.body.addParagraph('x'),
+      );
+      final DocxDocument doc = reopened(
+        (DocxDocument d) => d
+          ..body.addParagraph('x')
+          ..properties = d5Properties,
+      );
+      // Eleven core fields, the company and the application.
+      expect(readTypedProperties(doc), readTypedProperties(bare) + 13);
+      final DocxDocument custom = reopened(
+        (DocxDocument d) => d
+          ..body.addParagraph('x')
+          ..properties = const OfficeProperties(
+            custom: <String, Object>{'a': 1, 'b': 'two'},
+          ),
+      );
+      expect(readTypedProperties(custom), readTypedProperties(bare) + 2);
+    });
+
+    test('readTypedProperties reads a picture: its size, name, description '
+        'and image', () {
+      final DocxDocument bare = reopened(
+        (DocxDocument d) => d.body.addParagraph().addRun('x'),
+      );
+      final DocxDocument doc = reopened(
+        (DocxDocument d) => d.body.addParagraph()
+          ..addRun('x')
+          ..addPicture(OfficeImage(png4x2), description: 'Alt'),
+      );
+      expect(readTypedProperties(doc), readTypedProperties(bare) + 5);
+    });
+
+    test('readTypedProperties reads the pictures of a header', () {
+      final DocxDocument bare = reopened(
+        (DocxDocument d) => d.sections.last.header.addParagraph('x'),
+      );
+      final DocxDocument doc = reopened(
+        (DocxDocument d) =>
+            d.sections.last.header.addParagraph('x')
+              ..addPicture(OfficeImage(png4x2)),
+      );
+      // No description.
+      expect(readTypedProperties(doc), readTypedProperties(bare) + 4);
+    });
+
+    test('readTypedProperties reads a bookmark\'s ids and name', () {
+      final DocxDocument bare = reopened(
+        (DocxDocument d) => d.body.addParagraph('x'),
+      );
+      final DocxDocument doc = reopened((DocxDocument d) {
+        final DocxParagraph p = d.body.addParagraph();
+        final DocxBookmarkStart start = p.addBookmarkStart('B');
+        p
+          ..addRun('x')
+          ..addBookmarkEnd(start);
+      });
+      expect(readTypedProperties(doc), readTypedProperties(bare) + 3);
+    });
+
+    test('encodedPropertiesDifferences finds none in the fixtures', () {
+      for (final DocxFixture f in docxFixtures()) {
+        expect(
+          encodedPropertiesDifferences(f.build().bytes),
+          isEmpty,
+          reason: f.name,
+        );
+      }
+    });
+
+    test('encodedPropertiesParts encodes the core and the extended part', () {
+      final Map<String, Uint8List> parts = encodedPropertiesParts(
+        fixture('d5_properties'),
+      );
+      expect(parts.keys, <String>['docProps/core.xml', 'docProps/app.xml']);
+      expect(
+        utf8.decode(parts['docProps/core.xml']!),
+        contains('<cp:revision>3</cp:revision>'),
+      );
+      expect(encodedPropertiesParts(fixture('d1_paragraphs')), isEmpty);
+    });
+
+    test('negative control: what the model drops is a difference', () {
+      final List<String> differences = encodedPropertiesDifferences(
+        rewriteDocxPart(
+          fixture('d5_properties'),
+          'docProps/core.xml',
+          (String x) => x.replaceFirst('<dc:title>', 'junk<dc:title>'),
+        ),
+      );
+      expect(differences, isNotEmpty);
+      expect(differences.first, startsWith('docProps/core.xml: '));
+    });
+
+    test('a broken properties part is one line, naming it', () {
+      final List<String> differences = encodedPropertiesDifferences(
+        rewriteDocxPart(
+          fixture('d5_properties'),
+          'docProps/app.xml',
+          (String x) => x.replaceFirst('</Properties>', ''),
+        ),
+      );
+      expect(differences, hasLength(1));
+      expect(differences.single, startsWith('docProps/app.xml: '));
+    });
+
+    test('a part that is not a properties part is not encoded', () {
+      final Uint8List docx = rewriteDocxPart(
+        fixture('d5_properties'),
+        'docProps/core.xml',
+        (String x) => '<other/>',
+      );
+      expect(encodedPropertiesParts(docx).keys, <String>['docProps/app.xml']);
+      expect(encodedPropertiesDifferences(docx), isEmpty);
     });
   });
 }

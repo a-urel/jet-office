@@ -1,4 +1,4 @@
-// Every D1 and D2 fixture (test/fixtures/docx_fixtures.dart) opens with the
+// Every DOCX fixture (test/fixtures/docx_fixtures.dart) opens with the
 // paragraphs it was built with, reports the warnings it should, and saves
 // to a package equal to its input by the comparer of tool/src/part_compare
 // (spec 4.2). A D2 fixture is also round-tripped with its styles and
@@ -10,6 +10,7 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
@@ -63,8 +64,8 @@ void main() {
         'd2_lists',
       ],
     );
-    expect(all, hasLength(17));
-    expect(<String>{for (final DocxFixture f in all) f.name}, hasLength(17));
+    expect(all, hasLength(20));
+    expect(<String>{for (final DocxFixture f in all) f.name}, hasLength(20));
   });
 
   test('the D3 fixtures are the five the plan names', () {
@@ -552,6 +553,134 @@ void main() {
       final DocxParagraph printed =
           doc.sections.last.footer.blocks.last as DocxParagraph;
       expect(printed.text, 'Printed on  at ');
+    });
+  });
+
+  group('D5', () {
+    final List<DocxFixture> d5 = <DocxFixture>[
+      for (final DocxFixture f in all)
+        if (f.name.startsWith('d5_')) f,
+    ];
+    DocxDocument open(String name) => DocxDocument.open(
+      d5.singleWhere((DocxFixture f) => f.name == name).build().bytes,
+    );
+    List<DocxPicture> pictures(List<DocxBlock> blocks) => <DocxPicture>[
+      for (final DocxBlock b in blocks)
+        ...switch (b) {
+          DocxParagraph() => <DocxPicture>[
+            for (final DocxInline i in b.inlines)
+              if (i is DocxRun) ...i.content.whereType<DocxPicture>(),
+          ],
+          DocxTable() => <DocxPicture>[
+            for (final DocxTableRow row in b.rows)
+              for (final DocxTableCell cell in row.cells)
+                ...pictures(cell.blocks),
+          ],
+          DocxOpaqueBlock() => const <DocxPicture>[],
+        },
+    ];
+
+    test('the D5 fixtures are the three the plan names', () {
+      expect(
+        <String>[for (final DocxFixture f in d5) f.name],
+        <String>['d5_pictures', 'd5_links', 'd5_properties'],
+      );
+    });
+
+    test('every D5 fixture builds the same bytes and no warnings, and '
+        'round-trips with everything read and encoded', () {
+      for (final DocxFixture f in d5) {
+        final DocxResult built = f.build();
+        expect(built.bytes, f.build().bytes, reason: f.name);
+        expect(built.warnings, isEmpty, reason: f.name);
+        final Uint8List input = built.bytes;
+        final DocxDocument doc = DocxDocument.open(input);
+        expect(docxFullText(doc), f.expectedText, reason: f.name);
+        expect(docxStoriesText(doc), f.headerFooterText ?? '', reason: f.name);
+        expect(readTypedProperties(doc), greaterThan(0), reason: f.name);
+        final DocxResult saved = doc.save();
+        expect(saved.warnings, isEmpty, reason: f.name);
+        final List<String> differences = <String>[
+          ...comparePackages(input, saved.bytes),
+          ...encodedPartDifferences(input),
+          ...encodedMainDifferences(input),
+          ...encodedStoryDifferences(input),
+          ...encodedPropertiesDifferences(input),
+        ];
+        expect(
+          differences,
+          isEmpty,
+          reason: '${f.name}\n${differences.join('\n')}',
+        );
+        expect(f.libreOfficeText, f.expectedText, reason: f.name);
+      }
+    });
+
+    test('d5_pictures reads back its pictures, sizes and one PNG part', () {
+      final DocxDocument doc = open('d5_pictures');
+      final List<DocxPicture> body = pictures(doc.body.blocks);
+      expect(
+        body.map(
+          (DocxPicture p) => (p.name, p.widthPt, p.heightPt, p.description),
+        ),
+        <Object>[
+          ('PNG', 3.0, 1.5, 'A PNG of 4 by 2 pixels'),
+          ('JPEG', 144.0, 240.0, null),
+        ],
+      );
+      expect(body[0].image!.format, OfficeImageFormat.png);
+      expect(body[1].image!.format, OfficeImageFormat.jpeg);
+      final DocxPicture logo = pictures(doc.sections.last.header.blocks).single;
+      expect((logo.name, logo.widthPt, logo.heightPt), ('Logo', 3.0, 1.5));
+      expect(logo.image, body[0].image);
+      final Archive package = ZipDecoder().decodeBytes(
+        d5
+            .singleWhere((DocxFixture f) => f.name == 'd5_pictures')
+            .build()
+            .bytes,
+      );
+      expect(
+        <String>[
+          for (final ArchiveFile f in package.files)
+            if (f.name.startsWith('word/media/')) f.name,
+        ]..sort(),
+        <String>['word/media/image1.png', 'word/media/image2.jpeg'],
+      );
+    });
+
+    test('d5_links reads back its links and the bookmark they name', () {
+      final DocxDocument doc = open('d5_links');
+      final List<DocxBlock> blocks = doc.body.blocks;
+      final DocxParagraph heading = blocks[0] as DocxParagraph;
+      final DocxBookmarkStart start =
+          heading.inlines.first as DocxBookmarkStart;
+      final DocxBookmarkEnd end = heading.inlines.last as DocxBookmarkEnd;
+      expect(start.name, 'Overview');
+      expect(start.id, isNotNull);
+      expect(end.id, start.id);
+      expect(heading.style, 'Heading1');
+      DocxHyperlink link(DocxParagraph p) =>
+          p.inlines.whereType<DocxHyperlink>().single;
+      final DocxHyperlink external = link(blocks[1] as DocxParagraph);
+      expect(
+        (external.url, external.anchor, external.tooltip, external.text),
+        (
+          'https://example.com/jet-office',
+          null,
+          'The project page',
+          'the project page',
+        ),
+      );
+      final DocxHyperlink internal = link(blocks[2] as DocxParagraph);
+      expect((internal.url, internal.anchor), (null, 'Overview'));
+      final DocxHyperlink footer = link(
+        doc.sections.last.footer.blocks.single as DocxParagraph,
+      );
+      expect(footer.url, 'https://example.com/');
+    });
+
+    test('d5_properties reads back every property it set', () {
+      expect(open('d5_properties').properties, d5Properties);
     });
   });
 }

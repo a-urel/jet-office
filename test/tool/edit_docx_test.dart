@@ -18,6 +18,8 @@ import '../docx/support/docx_builder.dart' show rewriteDocxPart;
 import '../docx/support/localized_document.dart';
 import '../docx/support/styles_documents.dart';
 import '../docx/support/word_document.dart';
+import '../fixtures/docx_fixtures.dart' show d5Properties;
+import '../fixtures/m4_fixtures.dart' show png4x2;
 
 void main() {
   late Directory temp;
@@ -82,7 +84,7 @@ void main() {
     final List<String> after = outline(
       File('${output.path}/word.docx').readAsBytesSync(),
     );
-    expect(after, hasLength(before.length + 4));
+    expect(after, hasLength(before.length + 5));
     // The first run with text is the title's.
     expect(before.first, 'Title:Fiyat listesiÜrün ');
     expect(after.first, 'Title:$editedTextÜrün ');
@@ -94,8 +96,10 @@ void main() {
     expect(after[after.length - 2], 'ListParagraph:$firstItemText');
     expect(after.last, 'ListParagraph:$secondItemText');
     expect(after.sublist(1, 10), before.sublist(1, 10));
-    // The appended table comes before the heading and the list.
-    expect(after[after.length - 4], 'table');
+    // The appended table and the paragraph of pictures and links come before
+    // the heading and the list.
+    expect(after[after.length - 5], 'table');
+    expect(after[after.length - 4], '-:$linksText');
   });
 
   group('sections', () {
@@ -175,8 +179,8 @@ void main() {
       expect(run(), 0);
       final DocxDocument doc = edited('d1_paragraphs.docx');
       final List<DocxBlock> blocks = doc.body.blocks;
-      // The last paragraph took the break, so there are four blocks more.
-      expect(blocks, hasLength(9));
+      // The last paragraph took the break, so there are five blocks more.
+      expect(blocks, hasLength(10));
       expect((blocks[4] as DocxParagraph).section, same(doc.sections.first));
       expect(blocks[5], isA<DocxTable>());
       for (final DocxParagraph b in blocks.skip(5).whereType<DocxParagraph>()) {
@@ -204,8 +208,8 @@ void main() {
       expect(run(out: out), 0, reason: '$out');
       final DocxDocument doc = edited('t.docx');
       final List<DocxBlock> blocks = doc.body.blocks;
-      // The source's two blocks, the paragraph of the break and four more.
-      expect(blocks, hasLength(7));
+      // The source's two blocks, the paragraph of the break and five more.
+      expect(blocks, hasLength(8));
       expect((blocks[2] as DocxParagraph).section, same(doc.sections.first));
       expect((blocks[2] as DocxParagraph).text, '');
     });
@@ -307,6 +311,149 @@ void main() {
     });
   });
 
+  group('pictures, links, bookmarks and properties', () {
+    DocxDocument edited(String name) =>
+        DocxDocument.open(File('${output.path}/$name').readAsBytesSync());
+
+    test('the new section gets a picture, two links and a bookmark, and the '
+        'title is set', () {
+      writeOnly(input, <String>{'d1_paragraphs.docx'});
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      final DocxDocument doc = edited('d1_paragraphs.docx');
+      final List<DocxBlock> blocks = doc.body.blocks;
+      final DocxParagraph links = blocks[blocks.length - 4] as DocxParagraph;
+      expect(links.text, linksText);
+      final DocxPicture picture = links.inlines
+          .whereType<DocxRun>()
+          .expand((DocxRun r) => r.content)
+          .whereType<DocxPicture>()
+          .single;
+      expect(picture.image, OfficeImage(png4x2));
+      expect((picture.widthPt, picture.heightPt), (3.0, 1.5));
+      final List<DocxHyperlink> hyperlinks = links.inlines
+          .whereType<DocxHyperlink>()
+          .toList();
+      expect(hyperlinks.map((DocxHyperlink h) => (h.url, h.anchor)), <Object>[
+        (externalUrl, null),
+        (null, bookmarkName),
+      ]);
+      final DocxParagraph heading = blocks[blocks.length - 3] as DocxParagraph;
+      expect(heading.text, addedText);
+      final DocxBookmarkStart start =
+          heading.inlines.first as DocxBookmarkStart;
+      final DocxBookmarkEnd end = heading.inlines.last as DocxBookmarkEnd;
+      expect(start.name, bookmarkName);
+      expect(start.id, isNotNull);
+      expect(end.id, start.id);
+      expect(doc.properties.title, editedText);
+      final Archive after = ZipDecoder().decodeBytes(
+        File('${output.path}/d1_paragraphs.docx').readAsBytesSync(),
+      );
+      expect(after.findFile('docProps/core.xml'), isNotNull);
+      expect(after.findFile('word/media/image1.png'), isNotNull);
+    });
+
+    test('a document that has the image shares its media part', () {
+      writeOnly(input, <String>{'d5_pictures.docx', 'd5_properties.docx'});
+      final StringBuffer out = StringBuffer();
+      expect(run(out: out), 0, reason: '$out');
+      final Archive after = ZipDecoder().decodeBytes(
+        File('${output.path}/d5_pictures.docx').readAsBytesSync(),
+      );
+      expect(
+        after.files
+            .where((ArchiveFile f) => f.name.startsWith('word/media/'))
+            .map((ArchiveFile f) => f.name),
+        unorderedEquals(<String>[
+          'word/media/image1.png',
+          'word/media/image2.jpeg',
+        ]),
+      );
+      final OfficeProperties properties = edited(
+        'd5_properties.docx',
+      ).properties;
+      expect(properties.title, editedText);
+      expect(properties.revision, d5Properties.revision);
+    });
+
+    String corrupted(String part, String Function(String) rewrite) {
+      writeOnly(input, <String>{'d1_paragraphs.docx'});
+      final StringBuffer out = StringBuffer();
+      final int code = editDocx(
+        <String>[input.path, output.path],
+        out: out,
+        err: StringBuffer(),
+        corruptForTest: (Uint8List saved) =>
+            rewriteDocxPart(saved, part, rewrite),
+      );
+      expect(code, 1, reason: '$out');
+      return out.toString();
+    }
+
+    test('reports a picture that does not read back', () {
+      expect(
+        corrupted(
+          'word/_rels/document.xml.rels',
+          (String x) => x.replaceFirst('media/image1.png', 'media/none.png'),
+        ),
+        contains('the added picture is missing'),
+      );
+    });
+
+    test('reports links that do not read back', () {
+      expect(
+        corrupted(
+          'word/_rels/document.xml.rels',
+          (String x) => x.replaceFirst(externalUrl, 'https://example.com/'),
+        ),
+        contains('the external link is missing'),
+      );
+      expect(
+        corrupted(
+          'word/document.xml',
+          (String x) =>
+              x.replaceFirst('w:anchor="$bookmarkName"', 'w:anchor="X"'),
+        ),
+        contains('the internal link is missing'),
+      );
+    });
+
+    test('reports a bookmark that does not read back', () {
+      expect(
+        corrupted(
+          'word/document.xml',
+          (String x) => x.replaceFirst('w:name="$bookmarkName"', 'w:name="X"'),
+        ),
+        contains('the bookmark is missing'),
+      );
+    });
+
+    test('reports a title that does not read back', () {
+      expect(
+        corrupted(
+          'docProps/core.xml',
+          (String x) => x.replaceFirst(editedText, 'Not edited'),
+        ),
+        contains('the title is missing'),
+      );
+    });
+
+    test('reports a relationship of a kind the edits do not add', () {
+      expect(
+        corrupted(
+          'word/_rels/document.xml.rels',
+          (String x) => x.replaceFirst(
+            '</Relationships>',
+            '<Relationship Id="rId99" Type="http://example.com/x" '
+                'Target="x.xml"/></Relationships>',
+          ),
+        ),
+        contains('a relationship the edits do not add'),
+      );
+    });
+  });
+
   group('tables', () {
     List<DocxBlock> edited(String name) => DocxDocument.open(
       File('${output.path}/$name').readAsBytesSync(),
@@ -319,7 +466,7 @@ void main() {
       for (final FileSystemEntity e in output.listSync()) {
         final String name = e.uri.pathSegments.last;
         final List<DocxBlock> blocks = edited(name);
-        final DocxTable table = blocks[blocks.length - 4] as DocxTable;
+        final DocxTable table = blocks[blocks.length - 5] as DocxTable;
         expect(table.rows, hasLength(3), reason: name);
         expect(table.rows[0].isHeader, isTrue, reason: name);
         expect(table.rows[0].cells.map((DocxTableCell c) => c.text), <String>[
@@ -547,8 +694,22 @@ void main() {
           ),
         ),
       );
-      expect(out, contains('a part outside the allowed set'));
+      expect(out, contains('a relationship the edits do not add'));
       expect(out, contains('word/_rels/document.xml.rels'));
+    });
+
+    test('is reported when a relationship of the main part goes', () {
+      final String out = editWith(
+        (Uint8List saved) =>
+            rewriteDocxPart(saved, 'word/_rels/document.xml.rels', (String x) {
+              final RegExp settings = RegExp(
+                r'<Relationship [^>]*/settings"[^>]*/>',
+              );
+              expect(x, contains(settings));
+              return x.replaceFirst(settings, '');
+            }),
+      );
+      expect(out, contains('a relationship the edits removed or changed'));
     });
 
     for (final (String name, String from, String to, String message)

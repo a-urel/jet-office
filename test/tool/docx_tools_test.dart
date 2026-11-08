@@ -386,6 +386,44 @@ void main() {
       expect(out.toString(), contains('All 3 documents round-trip.'));
     });
 
+    test('round-trips the D5 fixtures: exit 0', () {
+      writeOnly(dir, <String>{
+        'd5_pictures.docx',
+        'd5_links.docx',
+        'd5_properties.docx',
+      });
+      final StringBuffer out = StringBuffer();
+      final int code = roundTripDocx(
+        <String>[dir.path, '${temp.path}/out'],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 0, reason: '$out');
+      expect(out.toString(), contains('All 3 documents round-trip.'));
+    });
+
+    test('encodes the properties parts: what the model drops is named', () {
+      // A loaded properties part nothing changed is saved as read, so only
+      // the encoded comparison sees what the model would drop on a change.
+      writeOnly(dir, <String>{'d5_properties.docx'});
+      final File file = File('${dir.path}/d5_properties.docx');
+      file.writeAsBytesSync(
+        rewriteDocxPart(
+          file.readAsBytesSync(),
+          'docProps/core.xml',
+          (String xml) => xml.replaceFirst('<dc:title>', 'junk<dc:title>'),
+        ),
+      );
+      final StringBuffer out = StringBuffer();
+      final int code = roundTripDocx(
+        <String>[dir.path, '${temp.path}/out'],
+        out: out,
+        err: StringBuffer(),
+      );
+      expect(code, 1);
+      expect(out.toString(), contains('d5_properties.docx: docProps/core.xml'));
+    });
+
     test('a footer the model cannot read is refused with its name', () {
       writeOnly(dir, <String>{'d4_fields.docx'});
       final File file = File('${dir.path}/d4_fields.docx');

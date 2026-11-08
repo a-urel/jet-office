@@ -9,9 +9,11 @@
 /// the part in the file by `compareXmlParts`, the meaning-based comparison
 /// of `tool/src/part_compare.dart`; [encodedMainDifferences] does the same
 /// for the main part, and [encodedStoryDifferences] for the header and footer
+/// parts, and [encodedPropertiesDifferences] for the document properties
 /// parts. [readTypedProperties] reads every typed property of every paragraph,
-/// run, style, list level, section and story, so a value the model cannot read
-/// throws here and not in a user's program.
+/// run, picture, hyperlink, bookmark, style, list level, section and story and
+/// the document properties, so a value the model cannot read throws here and
+/// not in a user's program.
 ///
 /// Used by `tool/round_trip_docx.dart` and by the round-trip tests
 /// (`test/docx/round_trip_test.dart`, `test/docx/owner_files_test.dart`).
@@ -21,7 +23,8 @@
 /// `word/styles.xml` and `word/numbering.xml`; a package that keeps one
 /// elsewhere has it round-tripped as a copy, which the package comparison
 /// covers. Header and footer parts are the ones the relationships of
-/// `word/document.xml` name.
+/// `word/document.xml` name; the properties parts are the ones the package's
+/// relationships (`_rels/.rels`) name, as the model finds them.
 library;
 
 import 'dart:convert';
@@ -29,6 +32,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/common/properties_parts.dart';
 import 'package:jet_office/src/docx/document_part.dart';
 import 'package:jet_office/src/docx/model/inlines.dart' show visitInlines;
 import 'package:jet_office/src/docx/model/primitives.dart' show DocxEdits;
@@ -36,6 +40,7 @@ import 'package:jet_office/src/docx/numbering_part.dart';
 import 'package:jet_office/src/docx/story_part.dart';
 import 'package:jet_office/src/docx/styles_part.dart';
 import 'package:jet_office/src/docx/warnings.dart' show DocxWarningCollector;
+import 'package:jet_office/src/opc/package.dart' show OpcPackage;
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:xml/xml.dart';
 
@@ -174,6 +179,148 @@ List<String> encodedStoryDifferences(Uint8List docx) {
   return out;
 }
 
+/// The document properties parts of [docx] that are properties parts (their
+/// root is the one the model types), by part name (without a leading `/`),
+/// each read into its model and encoded again: what the model writes for the
+/// part when a property changes. Core, extended and custom, in that order;
+/// each is the part the package relationship of its kind names.
+///
+/// A part that cannot be read throws, as the model would.
+Map<String, Uint8List> encodedPropertiesParts(Uint8List docx) {
+  final Map<String, Uint8List> entries = _entries(docx);
+  return <String, Uint8List>{
+    for (final (String name, _PropertiesReader read) in _propertiesParts(
+      entries,
+    ))
+      if (entries[name] case final Uint8List original)
+        if (read(name, original) case final Uint8List encoded) name: encoded,
+  };
+}
+
+/// The differences between the document properties parts of [docx] and the
+/// same parts read into the model and encoded ([encodedPropertiesParts]), one
+/// line each, `'<part>: <what>'`; empty when they mean the same.
+///
+/// A part whose root is not a properties part is never written from the
+/// model, so it has nothing to compare. A part the model cannot read is one
+/// line, not an exception.
+List<String> encodedPropertiesDifferences(Uint8List docx) {
+  final Map<String, Uint8List> entries = _entries(docx);
+  final List<String> out = <String>[];
+  for (final (String name, _PropertiesReader read) in _propertiesParts(
+    entries,
+  )) {
+    final Uint8List? original = entries[name];
+    if (original == null) continue;
+    final Uint8List? encoded;
+    try {
+      encoded = read(name, original);
+    } on Object catch (e) {
+      out.add('$name: the model cannot read the part: $e');
+      continue;
+    }
+    if (encoded != null) out.addAll(compareXmlParts(name, original, encoded));
+  }
+  return out;
+}
+
+/// Reads the properties part [name], whose bytes are [original], and encodes
+/// it; `null` for a part whose root the model does not type.
+typedef _PropertiesReader =
+    Uint8List? Function(String name, Uint8List original);
+
+/// The properties parts the package relationships of [entries] name, each
+/// with its reader: the first relationship of each kind, as the model takes.
+List<(String, _PropertiesReader)> _propertiesParts(
+  Map<String, Uint8List> entries,
+) {
+  final Uint8List? rels = entries['_rels/.rels'];
+  if (rels == null) return const <(String, _PropertiesReader)>[];
+  final List<XmlElement> relationships = XmlDocument.parse(
+    utf8.decode(rels),
+  ).rootElement.childElements.toList();
+  final Uri root = Uri.parse('/');
+  void warn(String element) {}
+  final List<(String, _PropertiesReader)> kinds = <(String, _PropertiesReader)>[
+    (
+      PropertyKind.core.relationshipType,
+      (String name, Uint8List bytes) {
+        final CoreProperties part = CoreProperties.read(
+          _reader(bytes),
+          const _Limits(),
+          name,
+          warn,
+        );
+        return part.isTyped ? _join(part.encode()) : null;
+      },
+    ),
+    (
+      PropertyKind.app.relationshipType,
+      (String name, Uint8List bytes) {
+        final AppProperties part = AppProperties.read(
+          _reader(bytes),
+          const _Limits(),
+          name,
+          warn,
+        );
+        return part.isTyped ? _join(part.encode()) : null;
+      },
+    ),
+    (
+      PropertyKind.custom.relationshipType,
+      (String name, Uint8List bytes) {
+        final CustomProperties part = CustomProperties.read(
+          _reader(bytes),
+          const _Limits(),
+          name,
+          warn,
+        );
+        return part.isTyped ? _join(part.encode()) : null;
+      },
+    ),
+  ];
+  return <(String, _PropertiesReader)>[
+    for (final (String type, _PropertiesReader read) in kinds)
+      if (relationships
+              .where(
+                (XmlElement r) =>
+                    r.getAttribute('Type') == type &&
+                    r.getAttribute('TargetMode') != 'External',
+              )
+              .firstOrNull
+          case final XmlElement r)
+        (root.resolve(r.getAttribute('Target') ?? '').path.substring(1), read),
+  ];
+}
+
+XmlPullReader _reader(Uint8List bytes) => XmlPullReader(utf8.decode(bytes));
+
+/// The bounds a properties part is read within: none a real file reaches.
+final class _Limits implements PropertiesSource {
+  const _Limits();
+
+  @override
+  OpcPackage get package =>
+      throw UnsupportedError('A part is read here without its package.');
+
+  @override
+  int get maxChildren => 1 << 30;
+
+  @override
+  int get maxTextLength => 1 << 30;
+
+  @override
+  T guard<T>(String part, T Function() body) => body();
+
+  @override
+  XmlPullReader openXml(String part) =>
+      throw UnsupportedError('A part is read here without its package.');
+
+  @override
+  Never limitExceeded(String part, String message) =>
+      throw StateError('$part: $message');
+}
+
 /// The parts the main part's relationships name as a header (`true`) or a
 /// footer (`false`), by part name.
 Map<String, bool> _storyParts(Map<String, Uint8List> entries) {
@@ -194,13 +341,15 @@ Map<String, bool> _storyParts(Map<String, Uint8List> entries) {
 /// Reads every typed property of [doc]: of each paragraph of the body, in the
 /// cells of its tables too, and each of its runs and fields, of each table
 /// (and its grid), row and cell, of each section and of the blocks of each
-/// story it has as its own, of the document defaults and each style, and of
-/// each level of each abstract list definition. Returns how many were set.
+/// story it has as its own, of the document defaults and each style, of
+/// each level of each abstract list definition, and the document properties.
+/// The typed members of each picture, hyperlink and bookmark count too.
+/// Returns how many were set.
 ///
 /// A value the model cannot read throws. The styles, numbering and settings
 /// parts and every story a section names are loaded by this.
 int readTypedProperties(DocxDocument doc) {
-  int set = _blocks(doc.body.blocks);
+  int set = _blocks(doc.body.blocks) + _properties(doc.properties);
   set += _count(<Object?>[doc.evenAndOddHeaders ? true : null]);
   for (final DocxSection section in doc.sections) {
     set += _section(section);
@@ -252,7 +401,12 @@ int _blocks(List<DocxBlock> blocks) {
         for (final DocxInline inline in block.inlines) {
           set += _inline(inline);
           visitInlines(inline, (DocxInline held) {
-            if (held is DocxRun) set += _run(held.properties);
+            if (held is DocxRun) {
+              set += _run(held.properties);
+              for (final DocxRunContent content in held.content) {
+                if (content is DocxPicture) set += _picture(content);
+              }
+            }
           });
         }
       case DocxTable():
@@ -271,8 +425,8 @@ int _blocks(List<DocxBlock> blocks) {
   return set;
 }
 
-/// Reads the typed members of [inline] when it is a field or a hyperlink, and
-/// of the fields and hyperlinks it holds.
+/// Reads the typed members of [inline] when it is a field, a hyperlink or a
+/// bookmark mark, and of the fields and hyperlinks it holds.
 int _inline(DocxInline inline) => switch (inline) {
   DocxField() =>
     _count(<Object?>[inline.instruction, inline.text]) +
@@ -280,8 +434,39 @@ int _inline(DocxInline inline) => switch (inline) {
   DocxHyperlink() =>
     _count(<Object?>[inline.url, inline.anchor, inline.tooltip, inline.text]) +
         inline.inlines.fold(0, (int n, DocxInline i) => n + _inline(i)),
-  _ => 0,
+  DocxBookmarkStart() => _count(<Object?>[inline.id, inline.name]),
+  DocxBookmarkEnd() => _count(<Object?>[inline.id]),
+  DocxRun() || DocxOpaqueInline() => 0,
 };
+
+/// Reads the typed members of [picture], its image too.
+int _picture(DocxPicture picture) => _count(<Object?>[
+  picture.widthPt,
+  picture.heightPt,
+  picture.name,
+  picture.description,
+  picture.image,
+]);
+
+/// Reads the document properties [p]: every field, and each custom one.
+int _properties(OfficeProperties p) =>
+    _count(<Object?>[
+      p.title,
+      p.subject,
+      p.creator,
+      p.keywords,
+      p.description,
+      p.lastModifiedBy,
+      p.revision,
+      p.category,
+      p.company,
+      p.manager,
+      p.contentStatus,
+      p.application,
+      p.created,
+      p.modified,
+    ]) +
+    p.custom.length;
 
 /// Reads the values of [s] and the blocks of the stories it has as its own.
 int _section(DocxSection s) {

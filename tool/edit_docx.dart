@@ -31,29 +31,45 @@
 /// * it appends, in the new section, a table `addTable(columns: 2)`, whose
 ///   width follows the landscape page: a header row `Head one`, `Head two`, a
 ///   body row and a third row merged across both columns;
+/// * it appends a paragraph `A picture, links to jet_office and the added
+///   heading.`: a run `A picture`, a 4 by 2 pixel PNG picture
+///   (`addPicture`, 3 by 1.5 points), a run, an external link `jet_office` to
+///   `https://example.com/jet-office` and an internal link `the added heading`
+///   to the bookmark `Model_edit` (`addHyperlink`);
 /// * it appends a paragraph `Added by the model` styled with
 ///   `styles.ensure(DocxBuiltInStyle.heading1)`: the document's own heading
 ///   style, whatever its id (`Balk1` under a Turkish Word), or Word's
-///   definition added when it has none;
+///   definition added when it has none; its text is inside the bookmark
+///   `Model_edit` (`addBookmarkStart`, `addBookmarkEnd`);
 /// * it adds a bullet list (`numbering.addBulletList`) of two items at the
-///   end, `First item` and, at level 1, `Second item` (`addListItem`).
+///   end, `First item` and, at level 1, `Second item` (`addListItem`);
+/// * it sets the document properties' title to `Edited by the model`, keeping
+///   every other property.
 ///
 /// A document without such a run or such a paragraph skips that edit. It
 /// saves and writes the bytes to `<outDir>/<name>.docx`, then reads the
 /// saved file back with `DocxDocument`: the edits must be there, the body
-/// must have four blocks more than it had before the table (the table, the
-/// heading and the two items), and five when its last block could not take
-/// the break, a table or a paragraph with a break of its own, so `addSection`
-/// added a paragraph for it. The run must be bold, the heading must have the
-/// style `ensure` returned, the list items the new list's number, the
-/// document one section more, the footer its two fields, in both last sections,
+/// must have five blocks more than it had before the table (the table, the
+/// paragraph of the picture and links, the heading and the two items), and six
+/// when its last block could not take the break, a table or a paragraph with a
+/// break of its own, so `addSection` added a paragraph for it. The run must be
+/// bold, the heading must have the style `ensure` returned and the bookmark
+/// with an id its end shares, the picture the PNG at its size, the links their
+/// targets, the list items the new list's number, the document one section
+/// more and the title set, the footer its two fields, in both last sections,
 /// and the table the width of the landscape page. Last, `comparePackages` from
 /// `tool/src/part_compare.dart` must find differences only in the allowed
 /// parts: the main part (named by the root relationship, not assumed to be
 /// `word/document.xml`), the numbering part, the styles part when `ensure`
-/// added a style (`Heading1` or `TableGrid`), one footer part, and
-/// `[Content_Types].xml` and the main part's relationships when the edit
-/// created a part the file lacked, a footer among them.
+/// added a style (`Heading1`, `TableGrid` or `Hyperlink`), one footer part,
+/// the core properties part (and `_rels/.rels` when it is created, and the
+/// extended properties part when the file lacks one), at most one media part
+/// the file lacked (none when the file has the PNG already: the picture
+/// shares it), `[Content_Types].xml` when the edit created a part, and the
+/// main part's relationships, which may only gain relationships of the
+/// hyperlink and image types, and of the footer, styles and numbering types
+/// when the edit created such a part: a relationship that goes or changes, or
+/// one of another type, is a problem.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
 /// problem, 2 when the arguments are unusable or the input directory holds
@@ -77,6 +93,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/model/inlines.dart' show heldInlinesOf;
 import 'package:xml/xml.dart';
 
+import '../test/fixtures/m4_fixtures.dart' show png4x2;
 import 'src/part_compare.dart';
 
 void main(List<String> args) {
@@ -109,6 +126,22 @@ const String footerPageText = 'Page ';
 
 /// The text between the two fields of the footer paragraph.
 const String footerOfText = ' of ';
+
+/// The text of the paragraph of the picture and the links.
+const String linksText =
+    'A picture, links to jet_office and the added heading.';
+
+/// The address of the external link.
+const String externalUrl = 'https://example.com/jet-office';
+
+/// The text of the external link.
+const String externalLinkText = 'jet_office';
+
+/// The text of the internal link.
+const String internalLinkText = 'the added heading';
+
+/// The name of the bookmark over the added heading.
+const String bookmarkName = 'Model_edit';
 
 /// The namespace of the elements of a relationships part.
 const String _relsNs =
@@ -222,11 +255,19 @@ List<String> _edit(
     // The break's own paragraph comes before the table when one was added.
     final int tableBlock = body.blocks.length;
     _appendTable(body);
+    _appendLinks(body);
     final String heading = doc.styles.ensure(DocxBuiltInStyle.heading1);
-    body.addParagraph(addedText).style = heading;
+    final DocxParagraph headingParagraph = body.addParagraph()..style = heading;
+    final DocxBookmarkStart start = headingParagraph.addBookmarkStart(
+      bookmarkName,
+    );
+    headingParagraph
+      ..addRun(addedText)
+      ..addBookmarkEnd(start);
     final DocxNumberingInstance list = doc.numbering.addBulletList();
     body.addListItem(list, firstItemText);
     body.addListItem(list, secondItemText, level: 1);
+    doc.properties = _withTitle(doc.properties, editedText);
     edits = (
       blocks: blocks,
       run: run,
@@ -308,6 +349,38 @@ void _appendTable(DocxBody body) {
   table.mergeCells(firstRow: 2, firstColumn: 0, lastRow: 2, lastColumn: 1);
 }
 
+/// Appends the paragraph [linksText]: a picture of [png4x2], an external link
+/// and an internal link to [bookmarkName].
+void _appendLinks(DocxBody body) {
+  body.addParagraph('A picture')
+    ..addPicture(OfficeImage(png4x2), description: 'A PNG of 4 by 2 pixels')
+    ..addRun(', links to ')
+    ..addHyperlink(externalLinkText, url: externalUrl)
+    ..addRun(' and ')
+    ..addHyperlink(internalLinkText, anchor: bookmarkName)
+    ..addRun('.');
+}
+
+/// [p] with the title [title].
+OfficeProperties _withTitle(OfficeProperties p, String title) =>
+    OfficeProperties(
+      title: title,
+      subject: p.subject,
+      creator: p.creator,
+      keywords: p.keywords,
+      description: p.description,
+      lastModifiedBy: p.lastModifiedBy,
+      category: p.category,
+      company: p.company,
+      manager: p.manager,
+      contentStatus: p.contentStatus,
+      revision: p.revision,
+      application: p.application,
+      created: p.created,
+      modified: p.modified,
+      custom: p.custom,
+    );
+
 /// The problems of the parts [saved] changes: any difference outside the
 /// allowed set.
 List<String> _partProblems(Uint8List input, Uint8List saved, _Edits edits) {
@@ -320,25 +393,55 @@ List<String> _partProblems(Uint8List input, Uint8List saved, _Edits edits) {
   } on Object catch (e) {
     return <String>['reading the package layout failed: $e'];
   }
-  final bool created =
+  final bool partCreated =
       (edits.stylesAdded && !layout.has(layout.stylesPart)) ||
       !layout.has(layout.numberingPart) ||
       !layout.footerParts.containsAll(footers);
+  final String core = layout.corePart ?? 'docProps/core.xml';
+  final bool coreCreated = !layout.has(core);
+  final String app = layout.appPart ?? 'docProps/app.xml';
+  final Set<String> media = <String>{};
   final Set<String> allowed = <String>{
     layout.mainPart,
     layout.numberingPart,
     if (edits.stylesAdded) layout.stylesPart,
-    if (created) ...<String>['[Content_Types].xml', layout.mainRels],
+    core,
+    if (!layout.has(app)) app,
+    if (coreCreated) '_rels/.rels',
   };
+  bool contentTypes = false;
+  bool rels = false;
   final Set<String> changedFooters = <String>{};
   for (final String d in comparePackages(input, saved)) {
     final int colon = d.indexOf(': ');
     final String part = colon < 0 ? d : d.substring(0, colon);
     if (footers.contains(part)) {
       changedFooters.add(part);
+    } else if (part == '[Content_Types].xml') {
+      contentTypes = true;
+    } else if (part == layout.mainRels) {
+      rels = true;
+    } else if (part.startsWith(layout.mediaDir) &&
+        d == '$part: added to the actual package') {
+      media.add(part);
     } else if (!allowed.contains(part)) {
       problems.add('a part outside the allowed set: $d');
     }
+  }
+  if (media.length > 1) {
+    problems.add('more than one media part was added: $media');
+  }
+  final bool created = partCreated || coreCreated || media.isNotEmpty;
+  if (contentTypes && !created) {
+    problems.add(
+      'a part outside the allowed set: [Content_Types].xml, though no part '
+      'was created',
+    );
+  }
+  if (rels) {
+    problems.addAll(
+      _relationshipProblems(layout, _Layout(saved), allowCreated: partCreated),
+    );
   }
   if (changedFooters.length > 1) {
     problems.add('more than one footer part changed: $changedFooters');
@@ -346,17 +449,89 @@ List<String> _partProblems(Uint8List input, Uint8List saved, _Edits edits) {
   return problems;
 }
 
+/// The relationship types the edits add to the main part: a hyperlink's and
+/// a picture's, and, with [created], those of a footer, a styles and a
+/// numbering part.
+Set<String> _addedTypes({required bool created}) => <String>{
+  'hyperlink',
+  'image',
+  if (created) ...<String>['footer', 'styles', 'numbering'],
+};
+
+/// The problems of the main part's relationships in [after] against
+/// [before]: a relationship that went or changed, and one added of a type the
+/// edits do not add ([_addedTypes], those of a created part with
+/// [allowCreated]).
+List<String> _relationshipProblems(
+  _Layout before,
+  _Layout after, {
+  required bool allowCreated,
+}) {
+  String key(XmlElement r) => <String?>[
+    r.getAttribute('Id'),
+    r.getAttribute('Type'),
+    r.getAttribute('Target'),
+    r.getAttribute('TargetMode'),
+  ].join(' ');
+  final Map<String, XmlElement> old = <String, XmlElement>{
+    for (final XmlElement r in before.relationshipsOf(before.mainRels))
+      r.getAttribute('Id') ?? '': r,
+  };
+  final Set<String> types = _addedTypes(created: allowCreated);
+  final List<String> problems = <String>[];
+  for (final XmlElement r in after.relationshipsOf(before.mainRels)) {
+    final String id = r.getAttribute('Id') ?? '';
+    final XmlElement? was = old.remove(id);
+    if (was != null) {
+      if (key(was) != key(r)) {
+        problems.add(
+          'a relationship the edits removed or changed: '
+          '${before.mainRels}: ${key(was)}',
+        );
+      }
+      continue;
+    }
+    final String type = r.getAttribute('Type') ?? '';
+    if (!types.contains(type.substring(type.lastIndexOf('/') + 1))) {
+      problems.add(
+        'a relationship the edits do not add: ${before.mainRels}: ${key(r)}',
+      );
+    }
+  }
+  for (final XmlElement r in old.values) {
+    problems.add(
+      'a relationship the edits removed or changed: '
+      '${before.mainRels}: ${key(r)}',
+    );
+  }
+  return problems;
+}
+
 /// Where a package keeps the parts an edit may change.
 final class _Layout {
   _Layout(Uint8List docx) : _archive = ZipDecoder().decodeBytes(docx) {
-    final XmlElement? main = _relationships(
-      '_rels/.rels',
-    ).where((XmlElement r) => _type(r).endsWith('/officeDocument')).firstOrNull;
+    final List<XmlElement> root = _relationships('_rels/.rels');
+    final XmlElement? main = root
+        .where((XmlElement r) => _type(r).endsWith('/officeDocument'))
+        .firstOrNull;
     if (main == null) throw const FormatException('no officeDocument');
+    String? rooted(String type) {
+      for (final XmlElement r in root) {
+        if (_type(r).endsWith('/$type') &&
+            r.getAttribute('TargetMode') != 'External') {
+          return _resolve('', r.getAttribute('Target') ?? '');
+        }
+      }
+      return null;
+    }
+
+    corePart = rooted('core-properties');
+    appPart = rooted('extended-properties');
     mainPart = _resolve('', main.getAttribute('Target') ?? '');
     final int slash = mainPart.lastIndexOf('/');
     final String dir = slash < 0 ? '' : mainPart.substring(0, slash + 1);
     mainRels = '${dir}_rels/${mainPart.substring(slash + 1)}.rels';
+    mediaDir = '${dir}media/';
     String related(String type, String fallback) {
       for (final XmlElement r in _relationships(mainRels)) {
         if (_type(r).endsWith('/$type')) {
@@ -383,6 +558,15 @@ final class _Layout {
   /// The relationships of the main part.
   late final String mainRels;
 
+  /// Where the model puts a new media part: `media/` beside the main part.
+  late final String mediaDir;
+
+  /// The core properties part the root relationship names, or null.
+  late final String? corePart;
+
+  /// The extended properties part the root relationship names, or null.
+  late final String? appPart;
+
   /// The styles part, or where the model creates one.
   late final String stylesPart;
 
@@ -398,6 +582,10 @@ final class _Layout {
   List<int>? read(String part) => _archive.findFile(part)?.content;
 
   String _type(XmlElement r) => r.getAttribute('Type') ?? '';
+
+  /// The relationships of the relationships part [part], empty when the
+  /// package has none.
+  List<XmlElement> relationshipsOf(String part) => _relationships(part);
 
   List<XmlElement> _relationships(String part) {
     final List<int>? file = read(part);
@@ -639,15 +827,68 @@ bool _fills(DocxTable table, DocxSection section) {
   return table.gridColumnsPt?.first == (twips ~/ 2) / 20;
 }
 
+/// The picture, link, bookmark and title edits [doc] lacks when read back:
+/// [links] must be the paragraph [_appendLinks] added and [heading] must hold
+/// the bookmark.
+List<String> _checkLinks(DocxDocument doc, DocxBlock links, DocxBlock heading) {
+  final List<String> problems = <String>[];
+  final List<DocxInline> inlines = links is DocxParagraph
+      ? links.inlines
+      : const <DocxInline>[];
+  if (links is! DocxParagraph || links.text != linksText) {
+    problems.add('the paragraph of the picture and links is missing');
+  }
+  final DocxPicture? picture = inlines
+      .whereType<DocxRun>()
+      .expand((DocxRun r) => r.content)
+      .whereType<DocxPicture>()
+      .firstOrNull;
+  if (picture == null ||
+      picture.image != OfficeImage(png4x2) ||
+      picture.widthPt != 3 ||
+      picture.heightPt != 1.5) {
+    problems.add('the added picture is missing');
+  }
+  final List<DocxHyperlink> hyperlinks = inlines
+      .whereType<DocxHyperlink>()
+      .toList();
+  if (!hyperlinks.any(
+    (DocxHyperlink h) => h.url == externalUrl && h.text == externalLinkText,
+  )) {
+    problems.add('the external link is missing');
+  }
+  if (!hyperlinks.any(
+    (DocxHyperlink h) => h.anchor == bookmarkName && h.text == internalLinkText,
+  )) {
+    problems.add('the internal link is missing');
+  }
+  final List<DocxInline> marks = heading is DocxParagraph
+      ? heading.inlines
+      : const <DocxInline>[];
+  final DocxInline? first = marks.firstOrNull;
+  final DocxInline? last = marks.lastOrNull;
+  if (first is! DocxBookmarkStart ||
+      first.name != bookmarkName ||
+      first.id == null ||
+      last is! DocxBookmarkEnd ||
+      last.id != first.id) {
+    problems.add('the bookmark is missing');
+  }
+  if (doc.properties.title != editedText) {
+    problems.add('the title is missing');
+  }
+  return problems;
+}
+
 /// The edits [saved] lacks when read back with `DocxDocument`.
 List<String> _check(Uint8List saved, _Edits edits) {
   final List<String> problems = <String>[];
   try {
     final DocxDocument doc = DocxDocument.open(saved);
     final List<DocxBlock> blocks = doc.body.blocks;
-    // The table, the heading and the two items, after any paragraph
-    // `addSection` added for its break.
-    final int expected = edits.tableBlock + 4;
+    // The table, the paragraph of the picture and links, the heading and the
+    // two items, after any paragraph `addSection` added for its break.
+    final int expected = edits.tableBlock + 5;
     if (blocks.length != expected) {
       problems.add('the body has ${blocks.length} blocks, not $expected');
       return problems;
@@ -685,6 +926,7 @@ List<String> _check(Uint8List saved, _Edits edits) {
         heading.style != edits.style) {
       problems.add('the added ${edits.style} paragraph is missing');
     }
+    problems.addAll(_checkLinks(doc, blocks[blocks.length - 4], heading));
     final List<(String, int)> items = <(String, int)>[
       (firstItemText, 0),
       (secondItemText, 1),

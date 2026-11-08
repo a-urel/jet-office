@@ -370,7 +370,7 @@ It prints failures as the reader's run does. Pin a failure as a unit test in
 the owning `*_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
-600 cases each, over the fixtures (the `d3_*` and `d4_*` ones among them), a
+750 cases each, over the fixtures (the `d3_*`, `d4_*` and `d5_*` ones among them), a
 hand-made table with every element of the table values, a hand-made
 `sections_by_hand` (every section child, six stories, broken references and
 broken fields), and the producer variants of `test/docx/support/docx_fuzz.dart`: whole mutated files, with every
@@ -399,12 +399,14 @@ dart run tool/fuzz_docx.dart --seeds 1-200 --cases 1000
 It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
 1 on any. Pin a failure as a unit test in the owning `*_test.dart` first.
 
-The gate runs 600 cases per seed, not 150, for one reason: the seeds are fixed,
+The gate runs 750 cases per seed, not 150, for one reason: the seeds are fixed,
 so the cases must between them mutate every part name of the corpus
 (`every part name is mutated in some corpus entry`), and the D3 fixtures,
-`tables_by_hand`, the D4 fixtures, with their header and footer parts, and
-`sections_by_hand` joined the corpus and made fewer too few. When a new part name
-joins the corpus, run that test and raise the count again if it fails.
+`tables_by_hand`, the D4 fixtures, with their header and footer parts,
+`sections_by_hand` and the D5 fixtures joined the corpus and made fewer too few
+(with the D5 fixtures, 600 left `word/footer4.xml` of `d4_headers` unmutated).
+When a new part name or corpus entry joins the corpus, run that test and raise
+the count again if it fails.
 
 ## Hard rules
 
