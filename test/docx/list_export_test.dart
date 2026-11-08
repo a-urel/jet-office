@@ -109,6 +109,27 @@ void main() {
       );
     });
 
+    test('a date format that cannot be read', () {
+      rejects(
+        DocxListExport(_two, date: DateTime(2026, 11, 8), dateFormat: '[Red'),
+        'dateFormat',
+      );
+      rejects(DocxListExport(_two, dateFormat: '0.00"'), 'dateFormat');
+    });
+
+    test('a date format that can be read passes the checks', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(
+        _two,
+        date: DateTime(2026, 11, 8),
+        dateFormat: 'yyyy-mm-dd',
+      ).writeTo(doc, <List<Object?>>[]);
+      expect(
+        (doc.sections.last.header.blocks.single as DocxParagraph).text,
+        '\t\t2026-11-08',
+      );
+    });
+
     test('a logo height of 0', () {
       rejects(DocxListExport(_two, logoHeightPt: 0), 'logoHeightPt');
     });

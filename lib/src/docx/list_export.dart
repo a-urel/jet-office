@@ -148,7 +148,7 @@ final class DocxListExport {
   final DateTime? date;
 
   /// The Excel date code of the [date]; `null` for the [locale]'s short
-  /// date.
+  /// date. A code the formatter cannot read is refused.
   final String? dateFormat;
 
   /// The text above the table; `null` for none.
@@ -215,7 +215,8 @@ final class DocxListExport {
   /// header or one that repeats an earlier header ignoring case
   /// (`columns[i].header`), a width that is not finite or not greater than 0
   /// (`columns[i].widthPt`), a number format that cannot be read
-  /// (`columns[i].numberFormat`), a [logoHeightPt] that is not finite or not
+  /// (`columns[i].numberFormat`), a [dateFormat] that cannot be read
+  /// (`dateFormat`), a [logoHeightPt] that is not finite or not
   /// greater than 0 (`logoHeightPt`), a [headerShading] that is not six hex
   /// digits (`headerShading`), [totals] longer than [columns] (`totals`) and
   /// a [totals] value of an unsupported type (`totals[j]`). A row longer than
@@ -629,6 +630,16 @@ final class DocxListExport {
           'The number format cannot be read.',
         );
       }
+    }
+    final String? dateCode = dateFormat;
+    if (dateCode != null &&
+        formatter.format(0, numberFormat: dateCode).warning ==
+            FormatWarning.invalidCode) {
+      throw ArgumentError.value(
+        dateCode,
+        'dateFormat',
+        'The date format cannot be read.',
+      );
     }
     if (!logoHeightPt.isFinite || logoHeightPt <= 0) {
       throw ArgumentError.value(

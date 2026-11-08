@@ -451,7 +451,7 @@ enum DocxCellVerticalAlignment {
   /// At the top.
   top,
 
-  /// In the middle.
+  /// Centered.
   center,
 
   /// At the bottom.
