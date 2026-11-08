@@ -203,7 +203,9 @@ final class DocxListExport {
   /// [totals] value of an unsupported type (`totals[j]`). A row longer than
   /// [columns] throws [ArgumentError] named `rows[i]`, `i` counting from 0,
   /// and a value of an unsupported type named `rows[i][j]`, each before that
-  /// row is written. [rows] is read once, so the rows before it stay written.
+  /// row is written. Those two come after the page, header, footer, the
+  /// table and its header row are written, so they and the rows before the
+  /// bad one stay in [document]. [rows] is read once.
   ///
   /// **Page.** The last section gets [pageSize] (A4 portrait when `null`) and
   /// [margins] (Word's blank-document margins when `null`).
@@ -216,10 +218,15 @@ final class DocxListExport {
   /// a title alone is a tab and the title, and a date alone two tabs and the
   /// date. With none of the three the section's own default header is
   /// dropped, and none is created; the section may then still show an earlier
-  /// section's header, which it inherits. A section with a title page
-  /// (`DocxSection.titlePage`) has it turned off, so that its first page does
-  /// not hide the list's header behind a first-page header; the first-page and
-  /// even-page headers and footers themselves are left alone.
+  /// section's header, which it inherits.
+  ///
+  /// **Title page.** A section with a title page (`DocxSection.titlePage`)
+  /// has it turned off, whether or not a header is written, so that its first
+  /// page shows the list's header and footer and not a first-page one. The
+  /// first-page and even-page headers and footers themselves are left alone;
+  /// when the document has odd and even headers
+  /// (`DocxDocument.evenAndOddHeaders`), the even pages still show the
+  /// section's old even header and footer.
   ///
   /// **Footer.** The section's own default footer is replaced by one centred
   /// paragraph: [footerBefore], the `PAGE` field, [footerMiddle], the
@@ -309,6 +316,7 @@ final class DocxListExport {
         DocxHeaderFooterType.primary,
       );
       _clear(header);
+      // Non-null: the page size and margins were set just above.
       final double width = section.textWidthPt!;
       final DocxParagraph p = header.addParagraph();
       p.properties.tabs = <DocxTabStop>[
@@ -332,8 +340,8 @@ final class DocxListExport {
               .text,
         );
       }
-      if (section.titlePage) section.titlePage = false;
     }
+    if (section.titlePage) section.titlePage = false;
     final DocxHeaderFooter footer = section.ownFooter(
       DocxHeaderFooterType.primary,
     );

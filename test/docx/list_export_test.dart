@@ -629,15 +629,12 @@ void main() {
       final DocxDocument doc = written(DocxListExport(_two, title: null));
       expect(last(doc).header.isInherited, isFalse);
       expect(last(doc).header.blocks, isEmpty);
-      final Map<String, bool> parts = <String, bool>{
+      final Set<String> parts = <String>{
         for (final ArchiveFile f in ZipDecoder().decodeBytes(_saved(doc)).files)
-          f.name: true,
+          f.name,
       };
-      expect(parts.keys.where((String n) => n.contains('header')), isEmpty);
-      expect(
-        parts.keys.where((String n) => n.contains('footer')),
-        hasLength(1),
-      );
+      expect(parts.where((String n) => n.contains('header')), isEmpty);
+      expect(parts.where((String n) => n.contains('footer')), hasLength(1));
     });
 
     test('the footer is centred: Page, PAGE, of, NUMPAGES', () {
@@ -719,6 +716,16 @@ void main() {
         expect(doc.sections.last.titlePage, isFalse);
         final DocxDocument back = DocxDocument.open(doc.save().bytes);
         expect(back.sections.last.titlePage, isFalse);
+      });
+
+      test('a title page is turned off with no header to write too', () {
+        final DocxDocument doc = twoSections();
+        written(DocxListExport(_two, title: null, logo: null, date: null), doc);
+        expect(doc.sections.last.titlePage, isFalse);
+        expect(
+          DocxDocument.open(doc.save().bytes).sections.last.titlePage,
+          isFalse,
+        );
       });
 
       test('with nothing for the header the section\'s own is dropped', () {
@@ -923,6 +930,9 @@ void main() {
         'rows[2]',
       );
       expect(tables(doc).single.rows, hasLength(3));
+      // The page and the footer were written before the rows were read.
+      expect(doc.sections.last.footer.blocks, hasLength(1));
+      expect(doc.sections.last.pageSize, DocxPageSize.a4());
     });
 
     test('totals are checked before anything is written', () {
