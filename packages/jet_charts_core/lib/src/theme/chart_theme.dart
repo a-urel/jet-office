@@ -14,8 +14,9 @@ import 'office_theme.dart';
 final class ChartTheme {
   /// Creates a theme.
   ///
-  /// [palette] and [semantic] are copied and unmodifiable. Throws an
-  /// [ArgumentError] when [palette] is empty.
+  /// [palette] and [semantic] are copied and unmodifiable. [spacing] defaults
+  /// to the Office theme's `ChartSpacing()`. Throws an [ArgumentError] when
+  /// [palette] is empty.
   ChartTheme({
     required List<ChartColor> palette,
     Map<String, ChartColor> semantic = const <String, ChartColor>{},
@@ -29,10 +30,11 @@ final class ChartTheme {
     this.gapWidthPercent = 219,
     this.lineWidth = 2.25,
     this.markerSize = 5,
-    this.spacing = const ChartSpacing(),
+    ChartSpacing? spacing,
     this.exportColors = ChartExportColors.fixed,
   }) : palette = List<ChartColor>.unmodifiable(palette),
-       semantic = Map<String, ChartColor>.unmodifiable(semantic) {
+       semantic = Map<String, ChartColor>.unmodifiable(semantic),
+       spacing = spacing ?? ChartSpacing() {
     if (palette.isEmpty) {
       throw ArgumentError.value(palette, 'palette', 'must not be empty');
     }

@@ -166,17 +166,17 @@ void main() {
 
   test('spacing is part of theme equality', () {
     final ChartTheme a = custom();
-    expect(a.spacing, const ChartSpacing());
-    final ChartTheme b = a.copyWith(spacing: const ChartSpacing(padding: 12));
+    expect(a.spacing, ChartSpacing());
+    final ChartTheme b = a.copyWith(spacing: ChartSpacing(padding: 12));
     expect(b, isNot(a));
     expect(b.spacing.padding, 12);
-    expect(a, a.copyWith(spacing: const ChartSpacing()));
-    expect(a.hashCode, a.copyWith(spacing: const ChartSpacing()).hashCode);
+    expect(a, a.copyWith(spacing: ChartSpacing()));
+    expect(a.hashCode, a.copyWith(spacing: ChartSpacing()).hashCode);
     expect(b.hashCode, isNot(a.hashCode));
   });
 
   test('spacing defaults and copyWith', () {
-    const ChartSpacing s = ChartSpacing();
+    final ChartSpacing s = ChartSpacing();
     expect(s.padding, 8);
     expect(s.titleGap, 6);
     expect(s.legendGap, 6);
@@ -192,5 +192,38 @@ void main() {
     expect(s.copyWith(tickLength: 4).tickLength, 4);
     expect(s.copyWith(tickLength: 4), isNot(s));
     expect(ChartTheme.office.spacing, s);
+  });
+  test('a negative or non-finite spacing throws ArgumentError', () {
+    final ChartSpacing s = ChartSpacing();
+    final List<ChartSpacing Function(double)> fields =
+        <ChartSpacing Function(double)>[
+          (double v) => s.copyWith(padding: v),
+          (double v) => s.copyWith(titleGap: v),
+          (double v) => s.copyWith(legendGap: v),
+          (double v) => s.copyWith(legendSymbol: v),
+          (double v) => s.copyWith(legendItemGap: v),
+          (double v) => s.copyWith(labelGap: v),
+          (double v) => s.copyWith(minTextGap: v),
+          (double v) => s.copyWith(tickLength: v),
+          (double v) => s.copyWith(gridLineWidth: v),
+          (double v) => s.copyWith(axisLineWidth: v),
+        ];
+    for (int f = 0; f < fields.length; f++) {
+      for (final double bad in <double>[
+        -20,
+        double.nan,
+        double.infinity,
+        double.negativeInfinity,
+      ]) {
+        expect(() => fields[f](bad), throwsArgumentError, reason: '$f $bad');
+      }
+      expect(fields[f](0), isA<ChartSpacing>());
+    }
+    expect(() => ChartSpacing(padding: -20), throwsArgumentError);
+    // The overlap may be negative (a gap between bars), but must be finite.
+    expect(s.copyWith(overlapPercent: -150).overlapPercent, -150);
+    for (final double bad in <double>[double.nan, double.infinity]) {
+      expect(() => s.copyWith(overlapPercent: bad), throwsArgumentError);
+    }
   });
 }

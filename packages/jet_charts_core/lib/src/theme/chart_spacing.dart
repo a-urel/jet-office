@@ -12,7 +12,12 @@ import '../model/equality.dart';
 /// measures them.
 final class ChartSpacing {
   /// Creates a spacing; every field has the Office theme's default.
-  const ChartSpacing({
+  ///
+  /// Throws an [ArgumentError] when a field other than [overlapPercent] is
+  /// negative or not finite (a negative padding would put the title and the
+  /// legend outside the size), or when [overlapPercent] is not finite; it may
+  /// be negative, and the bars clamp it.
+  ChartSpacing({
     this.padding = 8,
     this.titleGap = 6,
     this.legendGap = 6,
@@ -24,7 +29,35 @@ final class ChartSpacing {
     this.gridLineWidth = 0.75,
     this.axisLineWidth = 0.75,
     this.overlapPercent = -27,
-  });
+  }) {
+    for (final (String name, double value) in <(String, double)>[
+      ('padding', padding),
+      ('titleGap', titleGap),
+      ('legendGap', legendGap),
+      ('legendSymbol', legendSymbol),
+      ('legendItemGap', legendItemGap),
+      ('labelGap', labelGap),
+      ('minTextGap', minTextGap),
+      ('tickLength', tickLength),
+      ('gridLineWidth', gridLineWidth),
+      ('axisLineWidth', axisLineWidth),
+    ]) {
+      if (!value.isFinite || value < 0) {
+        throw ArgumentError.value(
+          value,
+          name,
+          'must be finite and not negative',
+        );
+      }
+    }
+    if (!overlapPercent.isFinite) {
+      throw ArgumentError.value(
+        overlapPercent,
+        'overlapPercent',
+        'must be finite',
+      );
+    }
+  }
 
   /// The margin between the chart's edge and its content. Unconfirmed.
   final double padding;
@@ -47,7 +80,8 @@ final class ChartSpacing {
   /// The smallest gap left between two texts that share a line. Unconfirmed.
   final double minTextGap;
 
-  /// The length of an axis tick mark; 0 draws none. Unconfirmed.
+  /// The length of an axis tick mark. Reserved: milestone J2 draws no tick
+  /// marks whatever its value, so it changes nothing yet. Unconfirmed.
   final double tickLength;
 
   /// The width of a grid line. Unconfirmed.
