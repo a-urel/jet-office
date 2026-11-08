@@ -1,4 +1,6 @@
 import 'package:jet_charts_core/jet_charts_core.dart';
+import 'package:jet_charts_core/src/scale/value_scale.dart'
+    show provisionalMaxIntervals;
 import 'package:test/test.dart';
 
 /// The scale's three numbers, for compact expectations.

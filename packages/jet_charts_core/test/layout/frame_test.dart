@@ -2,6 +2,8 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
 import 'package:jet_charts_core/src/layout/degradation.dart';
 import 'package:jet_charts_core/src/layout/resolve.dart';
+import 'package:jet_charts_core/src/scale/value_scale.dart'
+    show provisionalMaxIntervals;
 import 'package:jet_core/jet_core.dart';
 import 'package:test/test.dart';
 

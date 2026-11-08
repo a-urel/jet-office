@@ -42,6 +42,13 @@ void main() {
     expect(_problems(barrel.readAsStringSync()), isEmpty);
   });
 
+  test('the provisional interval rule is not public', () {
+    // Task 11 replaces provisionalMaxIntervals; until then only the
+    // package's own code and tests use it, through src/.
+    final String source = File('lib/jet_charts_core.dart').readAsStringSync();
+    expect(source, isNot(contains('provisionalMaxIntervals')));
+  });
+
   test('the check flags a missing doc comment, show list or src/ path', () {
     const String good = '''
 /// Doc.
