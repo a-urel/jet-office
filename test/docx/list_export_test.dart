@@ -1004,20 +1004,45 @@ void main() {
       );
     });
 
-    test('a row longer than the columns is named and earlier rows stay', () {
+    test('a bad row is named and the document does not change', () {
+      for (final (List<List<Object?>>, String) c
+          in <(List<List<Object?>>, String)>[
+            (
+              <List<Object?>>[
+                <Object?>['A', 1],
+                <Object?>['B', 2],
+                <Object?>['C', 3, 4],
+              ],
+              'rows[2]',
+            ),
+            (
+              <List<Object?>>[
+                <Object?>['A', 1],
+                <Object?>['B', Uri.parse('https://example.com')],
+              ],
+              'rows[1][1]',
+            ),
+          ]) {
+        final DocxDocument doc = DocxDocument();
+        final Uint8List before = _saved(doc);
+        _throwsNamed(() => DocxListExport(_two).writeTo(doc, c.$1), c.$2);
+        expect(_saved(doc), before);
+        expect(doc.body.blocks.whereType<DocxTable>(), isEmpty);
+      }
+    });
+
+    test('rows are read once', () {
+      int reads = 0;
+      Iterable<List<Object?>> rows() sync* {
+        reads++;
+        yield <Object?>['A', 1];
+        yield <Object?>['B', 2];
+      }
+
       final DocxDocument doc = DocxDocument();
-      _throwsNamed(
-        () => DocxListExport(_two).writeTo(doc, <List<Object?>>[
-          <Object?>['A', 1],
-          <Object?>['B', 2],
-          <Object?>['C', 3, 4],
-        ]),
-        'rows[2]',
-      );
+      DocxListExport(_two).writeTo(doc, rows());
+      expect(reads, 1);
       expect(tables(doc).single.rows, hasLength(3));
-      // The page and the footer were written before the rows were read.
-      expect(doc.sections.last.footer.blocks, hasLength(1));
-      expect(doc.sections.last.pageSize, DocxPageSize.a4());
     });
 
     test('totals are checked before anything is written', () {

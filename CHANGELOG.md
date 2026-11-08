@@ -184,8 +184,12 @@
   `NumberFormatter` with the column's number format code and the export's
   locale. The totals are the caller's values (Word has no formulas), and the
   date is fixed text, not a `DATE` field. A bad column, header, width, number
-  or date format code, logo height, header shading or value throws
-  `ArgumentError` naming the field before the document changes; no new warning
+  or date format code, logo height, header shading, totals value, row that is
+  too long or value that cannot be shown throws `ArgumentError` naming the
+  field, and always before the document changes: every row is turned into its
+  cell texts first, so a bad row leaves the document as it was. The one error
+  that can come after the document changed is the `DocxReadException` of a
+  header or footer part of an opened file that cannot be read. No new warning
   code.
 - `OfficeProperties.copyWith` replaces the given fields and keeps the others
   (settles D5's gap; `tool/edit_docx.dart` and `tool/edit_model.dart` use it).

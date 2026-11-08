@@ -290,9 +290,10 @@ final DocxResult out = DocxListExport(
   field, which would show the day the file is opened.
 - **Programmer errors throw, data problems warn, as everywhere.** A bad column
   list, header, width, number or date format code, logo height, header
-  shading or totals value throws `ArgumentError` naming the field, before the
-  document changes; a control character in a text still warns
-  `invalidCharactersRemoved`. No new warning code.
+  shading or totals value, or a row too long or with a value that cannot be
+  shown, throws `ArgumentError` naming the field, before the document changes;
+  a control character in a text still warns `invalidCharactersRemoved`. No new
+  warning code.
 - **`OfficeProperties.copyWith`** replaces the fields it is given and keeps
   the others (it closes the gap of D5 that `tool/edit_docx.dart` had called
   `_withTitle`; it works for `XlsxWorkbook.properties` too).
@@ -588,13 +589,14 @@ final DocxResult out = DocxListExport(
   the section's own default header is removed and none is made, so the section
   may still show an earlier section's header (test: "with nothing for the
   header the section's own is dropped").
-- **A row that cannot be written stays half written.** `rows` is read once,
-  as it goes: a row longer than the columns or with a value of an unsupported
-  type throws after the page, caption and table were written, so the rows
-  before it stay in the document and the table has no totals row and no
-  closing paragraph. Everything that can be checked up front (columns, formats,
-  totals, the page) is, and throws before the document changes (test: "a row
-  longer than the columns is named and earlier rows stay").
+- **The rows are held as text for the call.** `writeTo` reads `rows` once and
+  turns every row into its cell texts before the document changes, so a row
+  longer than the columns or with a value of an unsupported type throws with
+  the document as it was (test: "a bad row is named and the document does not
+  change"). The price is that a very long list is held as strings for the
+  time of the call, as well as in the document afterwards. The one error that
+  can still come after the document changed is the `DocxReadException` of a
+  header or footer part of an opened file that cannot be read.
 - **Widths given in full are not held to the page.** When every column has a
   `widthPt`, they are written as given, even past the margins (test: "every
   width given is written as given, even past the page").
@@ -1145,7 +1147,7 @@ A list written by `DocxListExport` follows these rules. Tests are in
 | Writing into an opened document | The last section's header and footer are replaced; a title page is turned off whether or not a header is written, so page 1 shows the list's header and footer; the first-page stories are left alone | a first-page header would hide the list's header on page 1 | group "in an opened document" ("the last section's header and footer are replaced", "a title page is turned off so page 1 shows the header", "a title page is turned off with no header to write too") |
 | Even pages | With `DocxDocument.evenAndOddHeaders` on, the section's own even header and footer are written as the default ones (the own even header is dropped when the default one is); with it off the even stories are left alone | Word shows the even stories on even pages only then, and an old even header would sit over the list | group "in an opened document" ("with odd and even headers the even stories are replaced too", "with nothing for the header the own even header is dropped", "without odd and even headers the even stories stay") |
 | Cell values | A header row, the data rows and the totals row; a short row leaves its last cells empty; `null` is an empty cell; a string with a tab holds a `DocxTab`; a number, decimal, date, duration or boolean shows through `NumberFormatter` in the export's locale (`General` without a code; a boolean in `tr-TR`; a date without a code as the locale's short date) | the text is what Excel would show | group "values" ("a header row, the data rows and a totals row", "a short row leaves its last cells empty", "a number with a code in tr-TR", "the same decimal in en-US reads as the formatter gives it", "General without a code, and a boolean in tr-TR", "a date without a code is the locale short date", "a date with a code", "a duration with a code", "a string with a tab holds a DocxTab", "null is an empty cell") |
-| A value of another type, a row or totals longer than the columns | `ArgumentError` named `rows[i][j]`, `rows[i]`, `totals[j]` or `totals`; the totals are checked before anything is written, the rows as they are written (earlier rows stay) | a value that cannot be shown is the caller's mistake | group "values" ("a value of another type is named", "a row longer than the columns is named and earlier rows stay", "totals are checked before anything is written") |
+| A value of another type, a row or totals longer than the columns | `ArgumentError` named `rows[i][j]`, `rows[i]`, `totals[j]` or `totals`; the totals and every row are checked before anything is written, so the document is unchanged; `rows` is read once | a value that cannot be shown is the caller's mistake, and a half-written table would be worse | group "values" ("a value of another type is named", "a bad row is named and the document does not change", "rows are read once", "totals are checked before anything is written") |
 | The body | A caption (one bold 14 pt run), the table and one empty paragraph; no empty paragraph before the list in a new document; a last empty paragraph that ends a section or follows a table is kept; two lists written one after the other are two tables with a paragraph between; a letter before the list stays | Word wants a paragraph after a table, and two tables with none join | group "body" ("a caption, the table and one empty paragraph, no leading one", "without a caption the table comes first", "a body ending in a paragraph with a section break keeps it", "writing twice gives two tables with a paragraph between", "a second caption stands after the separating paragraph", "a letter before the list stays") |
 | Widths | A column's `widthPt` as given; columns without one share what is left of the text width of the page the list sets, equally, and the shares must exceed 1 pt each or `columns` throws before the document changes; every width given is written as given | nothing is measured | group "body" ("the grid has the given widths and shares the rest equally", "all widths null share the text width", "the widths follow the page the list sets", "widths that leave nothing throw before the document changes", "the check uses the page the list sets", "every width given is written as given, even past the page") |
 | The look | The header row repeats, never splits, holds bold runs and is shaded `headerShading` (none for `null`; lower case is stored as RGB); the totals row is bold and unshaded; a column with a number format is aligned `end`, header and totals too, and a column's `alignment` wins; an empty cell has no run to make bold | Table Grid with a grey header, as owner decision O5 | group "body" ("the header row repeats, holds bold runs and is shaded", "headerShading null leaves the header unshaded", "headerShading in lower case is stored as RGB", "a number format aligns to the end, header and cells", "a column alignment wins, header and totals too", "the totals row is last and bold, without shading", "no rows: the header and totals rows only", "an empty cell has no run to make bold") |

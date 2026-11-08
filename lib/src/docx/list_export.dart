@@ -219,13 +219,12 @@ final class DocxListExport {
   /// (`dateFormat`), a [logoHeightPt] that is not finite or not
   /// greater than 0 (`logoHeightPt`), a [headerShading] that is not six hex
   /// digits (`headerShading`), [totals] longer than [columns] (`totals`) and
-  /// a [totals] value of an unsupported type (`totals[j]`). A row longer than
-  /// [columns] throws [ArgumentError] named `rows[i]`, `i` counting from 0,
-  /// and a value of an unsupported type named `rows[i][j]`, each before that
-  /// row is written. Those two come after the page, header, footer, caption,
-  /// table and its header row are written, so they and the rows before the
-  /// bad one stay in [document]; the table is then left without the totals
-  /// row and the empty paragraph. [rows] is read once.
+  /// a [totals] value of an unsupported type (`totals[j]`), a row longer than
+  /// [columns] (`rows[i]`, `i` counting from 0) and a row value of an
+  /// unsupported type (`rows[i][j]`). All of them are found before
+  /// [document] changes: every row is turned into its cell texts first, so a
+  /// bad row leaves the document as it was, and a list too long for memory
+  /// is held as text for the time of the call. [rows] is read once.
   ///
   /// **Page.** The last section gets [pageSize] (A4 portrait when `null`) and
   /// [margins] (Word's blank-document margins when `null`).
@@ -256,7 +255,8 @@ final class DocxListExport {
   /// `NUMPAGES` field and [footerAfter], each text left out when empty.
   ///
   /// A header or footer part of an opened file that cannot be read throws the
-  /// model's `DocxReadException` naming it; the page values have been set by
+  /// model's `DocxReadException` naming it; that is the one error that can
+  /// come after [document] changed, since the page values have been set by
   /// then.
   void writeTo(
     DocxDocument document,
@@ -278,6 +278,21 @@ final class DocxListExport {
         for (int j = 0; j < totals.length; j++)
           _cellText(formatter, totals[j], columns[j], 'totals[$j]'),
       ];
+    }
+    final List<List<String>> rowTexts = <List<String>>[];
+    for (final List<Object?> row in rows) {
+      final int index = rowTexts.length;
+      if (row.length > columns.length) {
+        throw ArgumentError.value(
+          row.length,
+          'rows[$index]',
+          'The row has more values than the ${columns.length} columns.',
+        );
+      }
+      rowTexts.add(<String>[
+        for (int j = 0; j < row.length; j++)
+          _cellText(formatter, row[j], columns[j], 'rows[$index][$j]'),
+      ]);
     }
     final DocxSection section = document.sections.last;
     final List<double> widths = _widths(_textWidth());
@@ -304,20 +319,8 @@ final class DocxListExport {
       bold: true,
       shading: fill,
     );
-    int index = 0;
-    for (final List<Object?> row in rows) {
-      if (row.length > columns.length) {
-        throw ArgumentError.value(
-          row.length,
-          'rows[$index]',
-          'The row has more values than the ${columns.length} columns.',
-        );
-      }
-      _addRow(table, <String>[
-        for (int j = 0; j < row.length; j++)
-          _cellText(formatter, row[j], columns[j], 'rows[$index][$j]'),
-      ]);
-      index++;
+    for (final List<String> texts in rowTexts) {
+      _addRow(table, texts);
     }
     if (totalsTexts != null) _addRow(table, totalsTexts, bold: true);
     body.addParagraph();
