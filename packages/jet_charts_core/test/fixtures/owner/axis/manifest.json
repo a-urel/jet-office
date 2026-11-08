@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "region": "tr-TR",
+    "appleLocale": "tr_TR",
+    "excelLanguage": "Türkçe",
+    "excel": "Microsoft Excel 16.114.4 (26110224)",
+    "macos": "27.2",
+    "confirmedBy": "owner",
+    "csv": "axis_oracle.tr-TR.csv",
+    "notes": ""
+  }
+]
