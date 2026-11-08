@@ -29,7 +29,8 @@
 /// 6. Fixed values win; the free parts follow step 4 with the fixed bound in
 ///    place of the data's. A fixed maximum not above the minimum is ignored.
 ///    A fixed unit giving more than 1,000 intervals is multiplied by 10 until
-///    it does not.
+///    it does not (computed on the decimal exponent, so even `5e-324` gets
+///    there in a few steps).
 /// 7. Ticks are `min + i * unit`, each rounded to the unit's decimal places
 ///    plus two, so `0.1 * 3` prints `0.3`.
 library;
@@ -47,6 +48,12 @@ const double _wholeAbove = 9e15;
 
 /// The most intervals a fixed major unit may give.
 const int _fixedUnitIntervals = 1000;
+
+/// The most intervals [autoValueScale] takes; more are read as this.
+const int _maxIntervals = 1000;
+
+/// The most ticks a scale has: one more than [_fixedUnitIntervals].
+const int _maxTicks = _fixedUnitIntervals + 1;
 
 /// An axis scale: the bounds, the major unit and the ticks between them.
 ///
@@ -173,7 +180,9 @@ int provisionalMaxIntervals(double axisLength) {
 /// [fixedMax] and [fixedMajorUnit] are the chart's own settings and win over
 /// the rule; a [fixedMajorUnit] that is not a positive finite number is
 /// ignored. [percent] is a percent stacked axis. A [maxIntervals] below 1 is
-/// read as 1.
+/// read as 1 and one above 1,000 as 1,000; a scale never has more than 1,001
+/// ticks. A unit so fine that the top rounds onto the bottom (data near
+/// `1e15` a few units apart) is passed over for the next coarser one.
 ///
 /// A fixed maximum is ignored when it is not above the fixed minimum or, with
 /// no fixed minimum, not above the data's minimum (when there is data). A fixed
@@ -190,7 +199,7 @@ ValueScale autoValueScale({
   double? fixedMajorUnit,
   bool percent = false,
 }) {
-  final int limit = math.max(1, maxIntervals);
+  final int limit = maxIntervals.clamp(1, _maxIntervals);
   final double? fMin = _fixed(fixedMin);
   double? fMax = _fixed(fixedMax);
   final double? fUnit =
@@ -273,17 +282,32 @@ ValueScale autoValueScale({
   if (fUnit != null) {
     u = fUnit;
     bounds = _bounds(u, a, c, mFixB, mFixT);
-    for (
+    if (!(_intervals(bounds, u) <= _fixedUnitIntervals)) {
+      // Jump close to the first power of ten that fits, then step up by 10:
+      // the axis spans at most a little over the data's or fixed span, so
+      // that is a few steps, and the unit stays finite.
+      final double lowest = math.min(a, mFixB ?? a);
+      final double highest = math.max(c, mFixT ?? c);
+      final double span = math.max(highest - lowest, highest.abs());
       int n = 1;
-      (bounds.top - bounds.bottom) / u > _fixedUnitIntervals;
-      n++
-    ) {
-      final double next = _significant(fUnit * math.pow(10.0, n).toDouble());
-      if (!next.isFinite) {
-        break;
+      if (span > 0 && span.isFinite) {
+        final double decades =
+            math.log(span) / math.ln10 -
+            math.log(_fixedUnitIntervals) / math.ln10 -
+            math.log(fUnit) / math.ln10;
+        n = math.max(1, decades.floor() - 1);
       }
-      u = next;
-      bounds = _bounds(u, a, c, mFixB, mFixT);
+      for (int step = 0; step < 700; step++, n++) {
+        final double next = _decadesUp(fUnit, n);
+        if (!next.isFinite) {
+          break;
+        }
+        u = next;
+        bounds = _bounds(u, a, c, mFixB, mFixT);
+        if (_intervals(bounds, u) <= _fixedUnitIntervals) {
+          break;
+        }
+      }
     }
   } else {
     u = 1;
@@ -300,7 +324,10 @@ ValueScale autoValueScale({
             ? m / math.pow(10.0, -k).toDouble()
             : m * math.pow(10.0, k).toDouble();
         bounds = _bounds(u, a, c, mFixB, mFixT);
-        if ((bounds.top - bounds.bottom) / u <= limit + 1e-9) {
+        // A unit too fine for the bounds' float precision leaves the top
+        // on the bottom; the next coarser one is taken then.
+        if (bounds.top > bounds.bottom &&
+            (bounds.top - bounds.bottom) / u <= limit + 1e-9) {
           found = true;
           break;
         }
@@ -326,6 +353,19 @@ double? _fixed(double? value) =>
     value != null && value.isFinite ? _clamp(value) : null;
 
 double? _negate(double? value) => value == null ? null : -value;
+
+/// The number of intervals of [bounds] at the unit [u]; `NaN` or infinite
+/// when the bounds are.
+double _intervals(({double bottom, double top}) bounds, double u) =>
+    (bounds.top - bounds.bottom) / u;
+
+/// [unit] times `10^n`, to 15 significant digits, computed on the decimal
+/// exponent so that no power of ten overflows on the way; infinite when the
+/// result is.
+double _decadesUp(double unit, int n) {
+  final List<String> parts = unit.toStringAsExponential(14).split('e');
+  return double.parse('${parts.first}e${int.parse(parts.last) + n}');
+}
 
 /// The bottom and top of the axis for step [u], over the non-negative or
 /// mixed span [a] to [c] (the mirror of an all-negative span), with the fixed
@@ -413,6 +453,10 @@ double _snap(double value, double u) => _round(value, _decimals(u) + 2);
 /// The ticks from [min] to [max] by [u], snapped.
 List<double> _ticks(double min, double max, double u) {
   final int digits = math.max(_decimals(u), _decimals(min)) + 2;
-  final int count = _guard((max - min) / u).floor();
+  final double q = _guard((max - min) / u);
+  // A hard cap, so no scale can ask for an unbounded list.
+  final int count = q.isFinite && q >= 0
+      ? math.min(q.floor(), _maxTicks - 1)
+      : 0;
   return <double>[for (int i = 0; i <= count; i++) _round(min + i * u, digits)];
 }

@@ -466,4 +466,54 @@ void main() {
       expect(s.ticks, hasLength(6));
     });
   });
+  group('final review fixes', () {
+    test('a fixed unit of 1e-300 over data to 1e300 returns quickly', () {
+      final Stopwatch watch = Stopwatch()..start();
+      final ValueScale s = autoValueScale(
+        dataMin: 0,
+        dataMax: 1e300,
+        maxIntervals: 10,
+        fixedMajorUnit: 1e-300,
+      );
+      expect(watch.elapsedMilliseconds, lessThan(2000));
+      expect(s.ticks.length, lessThanOrEqualTo(1001));
+      expect(s.majorUnit.isFinite, isTrue);
+      expect((s.max - s.min) / s.majorUnit, lessThanOrEqualTo(1000 + 1e-6));
+      expect(s.max, greaterThanOrEqualTo(1e300));
+    });
+
+    test('a fixed unit of 5e-324 over data 0 to 1 returns quickly', () {
+      final Stopwatch watch = Stopwatch()..start();
+      final ValueScale s = autoValueScale(
+        dataMin: 0,
+        dataMax: 1,
+        maxIntervals: 10,
+        fixedMajorUnit: 5e-324,
+      );
+      expect(watch.elapsedMilliseconds, lessThan(2000));
+      expect(s.ticks.length, lessThanOrEqualTo(1001));
+      expect(s.min, 0);
+      expect(s.max, greaterThanOrEqualTo(1));
+    });
+
+    test('maxIntervals above 1,000 is read as 1,000', () {
+      final ValueScale s = autoValueScale(
+        dataMin: 0,
+        dataMax: 1,
+        maxIntervals: 1 << 40,
+      );
+      expect(s.ticks.length, lessThanOrEqualTo(1001));
+      expect(s, autoValueScale(dataMin: 0, dataMax: 1, maxIntervals: 1000));
+    });
+
+    test('near-equal huge values give a top above the bottom', () {
+      final ValueScale s = autoValueScale(
+        dataMin: 1e15,
+        dataMax: 1e15 + 3,
+        maxIntervals: 10,
+      );
+      expect(s.max, greaterThan(s.min));
+      expect(s.ticks.length, greaterThanOrEqualTo(2));
+    });
+  });
 }
