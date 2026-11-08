@@ -10,8 +10,8 @@ mobile, and on a Dart server. It has no editors, no rendering and no PDF.
 Pre-release (`0.1.0-dev.1`). The package is not published to pub.dev
 (`publish_to: none`) until the owner decides. Phase 1 writes XLSX files and
 phase 2 reads them, and phase 3 opens, edits and saves them. Phase 4, DOCX,
-is built (milestones D1 to D6): D1 to D5 are checked in Word, and D6, the list
-export, is built and pending the owner's Word check; see "DOCX" below.
+is built (milestones D1 to D6) and each milestone is checked in Word; see
+"DOCX" below.
 
 ## Installing
 

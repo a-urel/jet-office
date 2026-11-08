@@ -905,6 +905,14 @@ its recovery log.
 | 2026-11-08 | Word for Mac 16.114.4 | `build/d5/edited-owner/long.docx` | ok | Picture, external link, internal link to `Model_edit`, title `Edited by the model`; links in the file's own `Kpr` style. Values read by Claude in Word as well. |
 | 2026-11-08 | Word for Mac 16.114.4 | `build/d5/edited-owner/builtins.docx` | ok | Picture, external link, internal link to `Model_edit`, title `Edited by the model`; links in the file's own `Kpr` style. |
 | 2026-11-08 | Word for Mac 16.114.4 | Save in Word | ok | D5: no repair prompt in any file, nor on reopening one changed and saved in Word. |
+| 2026-11-08 | Word for Mac | `build/d6/fixtures/d6_list.docx` | ok | D6. Owner: "Hepsi sorunsuz" (all fine). |
+| 2026-11-08 | Word for Mac | `build/d6/fixtures/d6_list_landscape.docx` | ok | D6. Owner: "Hepsi sorunsuz" (all fine). |
+| 2026-11-08 | Word for Mac | `build/d6/model/d6_*.docx` | ok | D6. Owner: "Hepsi sorunsuz" (all fine). |
+| 2026-11-08 | Word for Mac | `build/d6/model-owner/*.docx` | ok | D6. Owner: "Hepsi sorunsuz" (all fine). |
+| 2026-11-08 | Word for Mac | `build/d6/edited-owner/*.docx` | ok | D6. Owner: "Hepsi sorunsuz" (all fine). |
+| 2026-11-08 | Word for Mac | `build/d6/list-into-owner/*.docx` | ok | D6. Owner: "Hepsi sorunsuz" (all fine). |
+| 2026-11-08 | Word for Mac | `build/d6/benchmark/large.docx` | ok | D6. Owner: "Hepsi sorunsuz" (all fine). |
+| 2026-11-08 | Word for Mac | Save in Word | ok | D6. Owner: "Hepsi sorunsuz" (all fine). |
 
 ## Final checklist
 
@@ -922,7 +930,7 @@ and the text the section lists (decision
 | D3 | the five `d3_*` fixtures, their round trips, the edited owner files, `d3_table_last`, save in Word | rows of 2026-11-07 | ok |
 | D4 | `d4_sections`, `d4_headers`, `d4_fields`, `d4_break_last`, the round trips and edited owner files, save in Word | rows of 2026-11-08 under `build/d4/` | ok |
 | D5 | `d5_pictures`, `d5_links`, `d5_properties`, the round trips and edited owner files, save in Word | rows of 2026-11-08 under `build/d5/` | ok |
-| D6 | `d6_list`, `d6_list_landscape`, their round trips, the round trips and edited owner files, the list written into the owner files, the benchmark's `large.docx`, save in Word | rows under `build/d6/` | pending |
+| D6 | `d6_list`, `d6_list_landscape`, their round trips, the round trips and edited owner files, the list written into the owner files, the benchmark's `large.docx`, save in Word | rows of 2026-11-08 under `build/d6/` | ok |
 
 ## Messages
 
