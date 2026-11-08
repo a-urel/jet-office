@@ -3,8 +3,10 @@ library;
 
 import 'dart:math' as math;
 
+import '../model/chart_series.dart';
 import '../model/equality.dart';
 import 'chart_color.dart';
+import 'chart_spacing.dart';
 import 'office_theme.dart';
 
 /// The look of a chart, one object that travels to every output so a chart
@@ -27,6 +29,7 @@ final class ChartTheme {
     this.gapWidthPercent = 219,
     this.lineWidth = 2.25,
     this.markerSize = 5,
+    this.spacing = const ChartSpacing(),
     this.exportColors = ChartExportColors.fixed,
   }) : palette = List<ChartColor>.unmodifiable(palette),
        semantic = Map<String, ChartColor>.unmodifiable(semantic) {
@@ -47,7 +50,8 @@ final class ChartTheme {
   /// family `Aptos Narrow` (the theme file names Aptos), the sizes (9 pt for
   /// axis labels, legend and data labels, 14 pt for the title), the text
   /// colour `595959`, the grid and axis line colour `D9D9D9`, the background
-  /// `FFFFFF`, and [gapWidthPercent], [lineWidth] and [markerSize].
+  /// `FFFFFF`, [gapWidthPercent], [lineWidth] and [markerSize], and every value
+  /// of [spacing].
   static final ChartTheme office = buildOfficeTheme();
 
   /// The series colours, in order. Never empty.
@@ -90,6 +94,9 @@ final class ChartTheme {
   /// `docs/excel-checks.md` for 5.
   final double markerSize;
 
+  /// The gaps, symbol sizes and line widths of the layout.
+  final ChartSpacing spacing;
+
   /// How the theme's colours are exported to a file.
   final ChartExportColors exportColors;
 
@@ -130,6 +137,16 @@ final class ChartTheme {
     return ChartColor.rgb(channel(16) << 16 | channel(8) << 8 | channel(0));
   }
 
+  /// The colour of [series], which is the series at [index].
+  ///
+  /// It is the series' own [ChartSeries.color], else the [semantic] colour
+  /// named by its [ChartSeries.colorKey], else [seriesColor] of [index]. A key
+  /// [semantic] does not hold falls to the palette. Throws a [RangeError] when
+  /// [index] is negative and the series has neither colour nor known key.
+  ChartColor colorOf(ChartSeries series, int index) {
+    return series.color ?? semantic[series.colorKey] ?? seriesColor(index);
+  }
+
   /// A copy with the given fields replaced.
   ///
   /// A field cannot be set to `null` this way: passing `null` keeps the
@@ -147,6 +164,7 @@ final class ChartTheme {
     double? gapWidthPercent,
     double? lineWidth,
     double? markerSize,
+    ChartSpacing? spacing,
     ChartExportColors? exportColors,
   }) {
     return ChartTheme(
@@ -162,6 +180,7 @@ final class ChartTheme {
       gapWidthPercent: gapWidthPercent ?? this.gapWidthPercent,
       lineWidth: lineWidth ?? this.lineWidth,
       markerSize: markerSize ?? this.markerSize,
+      spacing: spacing ?? this.spacing,
       exportColors: exportColors ?? this.exportColors,
     );
   }
@@ -181,6 +200,7 @@ final class ChartTheme {
         gapWidthPercent == other.gapWidthPercent &&
         lineWidth == other.lineWidth &&
         markerSize == other.markerSize &&
+        spacing == other.spacing &&
         exportColors == other.exportColors;
   }
 
@@ -198,6 +218,7 @@ final class ChartTheme {
     gapWidthPercent,
     lineWidth,
     markerSize,
+    spacing,
     exportColors,
   );
 

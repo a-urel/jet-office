@@ -6,6 +6,8 @@
 /// changed.
 library;
 
+import 'dart:math' as math;
+
 import '../model/equality.dart';
 import '../theme/chart_color.dart';
 import 'geometry.dart';
@@ -204,7 +206,8 @@ final class TextPrimitive extends ChartPrimitive {
   /// The text; it may hold line breaks.
   final String text;
 
-  /// The area the text is laid out in.
+  /// The unrotated box the text is laid out in. [rotationDegrees] turns it
+  /// clockwise about its centre.
   final ChartRect rect;
 
   /// The font, size and colour.
@@ -212,6 +215,55 @@ final class TextPrimitive extends ChartPrimitive {
 
   /// The clockwise rotation in degrees.
   final double rotationDegrees;
+
+  /// The four corners of [rect] after the rotation, clockwise from the top
+  /// left of the unrotated box.
+  List<ChartPoint> get corners {
+    final double cx = rect.left + rect.width / 2;
+    final double cy = rect.top + rect.height / 2;
+    final double radians = rotationDegrees * math.pi / 180;
+    final double cosine = math.cos(radians);
+    final double sine = math.sin(radians);
+    ChartPoint turn(double x, double y) {
+      final double dx = x - cx;
+      final double dy = y - cy;
+      return ChartPoint(
+        cx + dx * cosine - dy * sine,
+        cy + dx * sine + dy * cosine,
+      );
+    }
+
+    if (rotationDegrees == 0) {
+      return <ChartPoint>[
+        ChartPoint(rect.left, rect.top),
+        ChartPoint(rect.right, rect.top),
+        ChartPoint(rect.right, rect.bottom),
+        ChartPoint(rect.left, rect.bottom),
+      ];
+    }
+    return <ChartPoint>[
+      turn(rect.left, rect.top),
+      turn(rect.right, rect.top),
+      turn(rect.right, rect.bottom),
+      turn(rect.left, rect.bottom),
+    ];
+  }
+
+  /// The axis-aligned box that holds [corners].
+  ChartRect get bounds {
+    final List<ChartPoint> c = corners;
+    double minX = c.first.x;
+    double maxX = minX;
+    double minY = c.first.y;
+    double maxY = minY;
+    for (final ChartPoint p in c.skip(1)) {
+      minX = math.min(minX, p.x);
+      maxX = math.max(maxX, p.x);
+      minY = math.min(minY, p.y);
+      maxY = math.max(maxY, p.y);
+    }
+    return ChartRect(minX, minY, maxX - minX, maxY - minY);
+  }
 
   @override
   bool operator ==(Object other) {

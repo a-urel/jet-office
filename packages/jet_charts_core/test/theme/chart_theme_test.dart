@@ -163,4 +163,34 @@ void main() {
     expect(custom().semantic, isEmpty);
     expect(theme.semantic, <String, ChartColor>{'income': ChartColor.rgb(2)});
   });
+
+  test('spacing is part of theme equality', () {
+    final ChartTheme a = custom();
+    expect(a.spacing, const ChartSpacing());
+    final ChartTheme b = a.copyWith(spacing: const ChartSpacing(padding: 12));
+    expect(b, isNot(a));
+    expect(b.spacing.padding, 12);
+    expect(a, a.copyWith(spacing: const ChartSpacing()));
+    expect(a.hashCode, a.copyWith(spacing: const ChartSpacing()).hashCode);
+    expect(b.hashCode, isNot(a.hashCode));
+  });
+
+  test('spacing defaults and copyWith', () {
+    const ChartSpacing s = ChartSpacing();
+    expect(s.padding, 8);
+    expect(s.titleGap, 6);
+    expect(s.legendGap, 6);
+    expect(s.legendSymbol, 7);
+    expect(s.legendItemGap, 12);
+    expect(s.labelGap, 4);
+    expect(s.minTextGap, 2);
+    expect(s.tickLength, 0);
+    expect(s.gridLineWidth, 0.75);
+    expect(s.axisLineWidth, 0.75);
+    expect(s.overlapPercent, -27);
+    expect(s.copyWith(), s);
+    expect(s.copyWith(tickLength: 4).tickLength, 4);
+    expect(s.copyWith(tickLength: 4), isNot(s));
+    expect(ChartTheme.office.spacing, s);
+  });
 }

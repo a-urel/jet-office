@@ -92,4 +92,85 @@ void main() {
     expect(wide == narrow, isTrue);
     expect(narrow.hashCode, wide.hashCode);
   });
+
+  test('data equality is symmetric across type arguments', () {
+    final ChartData<String> a = ChartData<String>(values: <String?>['a']);
+    final ChartData<Object> b = ChartData<Object>(values: <Object?>['a']);
+    expect(a == b, isTrue);
+    expect(b == a, isTrue);
+    expect(a.hashCode, b.hashCode);
+  });
+
+  test('categories of String copy with Object values', () {
+    final ChartSeries s = ChartSeries(
+      name: ChartData<String>(values: <String?>['n']),
+      categories: ChartData<String>(values: <String?>['a', 'b']),
+      values: ChartData<double>(values: <double?>[1, 2]),
+    );
+    final ChartData<Object> copy = s.categories.copyWith(values: <Object?>[1]);
+    expect(copy.values, <Object?>[1]);
+    expect(s.categories.values, <Object?>['a', 'b']);
+  });
+
+  test('a series colour wins over its key and the palette', () {
+    final ChartTheme theme = ChartTheme.office.copyWith(
+      semantic: <String, ChartColor>{'income': ChartColor.rgb(0x00FF00)},
+    );
+    final ChartSeries base = series(<double?>[1]);
+    final ChartColor own = ChartColor.rgb(0x123456);
+    expect(
+      theme.colorOf(
+        ChartSeries(
+          name: base.name,
+          categories: base.categories,
+          values: base.values,
+          color: own,
+          colorKey: 'income',
+        ),
+        0,
+      ),
+      own,
+    );
+    expect(
+      theme.colorOf(
+        ChartSeries(
+          name: base.name,
+          categories: base.categories,
+          values: base.values,
+          colorKey: 'income',
+        ),
+        3,
+      ),
+      ChartColor.rgb(0x00FF00),
+    );
+    expect(theme.colorOf(base, 2), theme.seriesColor(2));
+  });
+
+  test('an unknown colour key falls to the palette', () {
+    final ChartSeries base = series(<double?>[1]);
+    final ChartSeries keyed = ChartSeries(
+      name: base.name,
+      categories: base.categories,
+      values: base.values,
+      colorKey: 'nope',
+    );
+    expect(ChartTheme.office.colorOf(keyed, 1), ChartTheme.office.palette[1]);
+  });
+
+  test('colour and key take part in equality and copyWith', () {
+    final ChartSeries base = series(<double?>[1]);
+    final ChartSeries a = base.copyWith(
+      color: ChartColor.rgb(1),
+      colorKey: 'k',
+    );
+    expect(a.color, ChartColor.rgb(1));
+    expect(a.colorKey, 'k');
+    expect(a, isNot(base));
+    expect(a, base.copyWith(color: ChartColor.rgb(1), colorKey: 'k'));
+    expect(
+      a.hashCode,
+      base.copyWith(color: ChartColor.rgb(1), colorKey: 'k').hashCode,
+    );
+    expect(a.copyWith(name: base.name).colorKey, 'k');
+  });
 }

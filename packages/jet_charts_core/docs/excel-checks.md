@@ -23,6 +23,11 @@ it did not save, so each is confirmed from a chart Excel made. The optional
 | Background `FFFFFF` | Unconfirmed | Recalled, no source |
 | Legend at the bottom | Unconfirmed | Spec'd, recalled, no source |
 | Value gridlines on | Unconfirmed | Recalled, no source |
+| Spacing: padding 8, title gap 6, legend gap 6 pt | Unconfirmed | Unconfirmed, no source yet; Task 11 of J2 measures |
+| Spacing: legend symbol 7, legend item gap 12 pt | Unconfirmed | Unconfirmed, no source yet; Task 11 of J2 measures |
+| Spacing: label gap 4, minimum text gap 2 pt | Unconfirmed | Unconfirmed, no source yet; Task 11 of J2 measures |
+| Spacing: tick length 0 (no ticks) | Unconfirmed | Unconfirmed, no source yet; Task 11 of J2 measures |
+| Spacing: grid and axis line width 0.75 pt | Unconfirmed | Unconfirmed, no source yet; Task 11 of J2 measures |
 
 ## Excel's palette past six colours
 
