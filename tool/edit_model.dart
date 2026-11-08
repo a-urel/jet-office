@@ -421,6 +421,8 @@ _Features _addFeatures(XlsxWorkbook book, XlsxSheet sheet, int row) {
     company: props.company,
     manager: props.manager,
     contentStatus: props.contentStatus,
+    revision: props.revision,
+    application: props.application,
     created: props.created,
     modified: props.modified,
     custom: props.custom,

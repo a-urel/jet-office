@@ -25,6 +25,7 @@ final OfficeProperties _m3 = OfficeProperties(
   contentStatus: 'Final',
   company: 'Jetronik',
   manager: 'Ayse Yilmaz',
+  application: 'jet_office',
   created: DateTime.utc(2026, 10, 24, 9, 30),
   modified: DateTime.utc(2026, 10, 25, 18, 45, 10),
   custom: <String, Object>{
@@ -35,6 +36,9 @@ final OfficeProperties _m3 = OfficeProperties(
     'Due': DateTime.utc(2026, 10, 24),
   },
 );
+
+/// The application a workbook of the model or the writer names.
+const String _jet = 'jet_office';
 
 const String _coreNs =
     'http://schemas.openxmlformats.org/package/2006/metadata/core-properties';
@@ -150,14 +154,18 @@ void main() {
           lastModifiedBy: 'jet_office',
           category: 'Reports',
           company: 'Jetronik',
+          application: 'jet_office',
           created: DateTime.utc(2026, 10, 24, 8, 30),
           modified: DateTime.utc(2026, 10, 24, 9, 45, 30),
         ),
       );
     });
 
-    test('a new workbook has no properties', () {
-      expect(XlsxWorkbook().properties, const OfficeProperties());
+    test('a new workbook has no properties but its application', () {
+      expect(
+        XlsxWorkbook().properties,
+        const OfficeProperties(application: 'jet_office'),
+      );
     });
 
     test('a file without the parts has no properties', () {
@@ -261,13 +269,16 @@ void main() {
         },
       );
       final XlsxWorkbook book = XlsxWorkbook.open(bytes);
-      expect(book.properties, const OfficeProperties());
+      expect(book.properties, const OfficeProperties(application: _jet));
       expect(comparePackages(bytes, book.save().bytes), isEmpty);
       expect(
-        () => book.properties = const OfficeProperties(title: 'T'),
+        () => book.properties = const OfficeProperties(
+          title: 'T',
+          application: _jet,
+        ),
         throwsStateError,
       );
-      expect(book.properties, const OfficeProperties());
+      expect(book.properties, const OfficeProperties(application: _jet));
       expect(comparePackages(bytes, book.save().bytes), isEmpty);
     });
 
@@ -295,6 +306,7 @@ void main() {
         book.properties,
         const OfficeProperties(
           title: 'Fine',
+          application: 'jet_office',
           custom: <String, Object>{'Ok': 7},
         ),
       );
@@ -412,7 +424,7 @@ void main() {
         parts: <String, String>{
           'docProps/core.xml': _core(
             '<dc:title>Old</dc:title><dc:language>tr-TR</dc:language>'
-            '<cp:revision>7</cp:revision>',
+            '<cp:lastPrinted>2026-01-01T00:00:00Z</cp:lastPrinted>',
           ),
           'docProps/app.xml': _app(
             '<Application>Microsoft Excel</Application>'
@@ -428,11 +440,12 @@ void main() {
         creator: 'Me',
         company: 'New Co',
         manager: 'Boss',
+        application: 'Microsoft Excel',
       );
       final String core = _part(book, 'docProps/core.xml');
       expect(core, contains('<dc:title>New</dc:title>'));
       expect(core, contains('<dc:language>tr-TR</dc:language>'));
-      expect(core, contains('<cp:revision>7</cp:revision>'));
+      expect(core, contains('<cp:lastPrinted>'));
       expect(core.indexOf('dc:title'), lessThan(core.indexOf('dc:language')));
       expect(core, contains('dc:creator'));
       final String app = _part(book, 'docProps/app.xml');
@@ -490,6 +503,7 @@ void main() {
       final Map<String, String> plain = readXlsx(book.save().bytes);
       expect(plain.containsKey('docProps/custom.xml'), isFalse);
       book.properties = const OfficeProperties(
+        application: 'jet_office',
         custom: <String, Object>{'A': 1, 'B': 'two'},
       );
       for (int i = 0; i < 2; i++) {
@@ -499,7 +513,7 @@ void main() {
         expect(parts['_rels/.rels'], contains('docProps/custom.xml'));
         expect(parts['[Content_Types].xml'], contains('/docProps/custom.xml'));
       }
-      book.properties = const OfficeProperties();
+      book.properties = const OfficeProperties(application: 'jet_office');
       for (int i = 0; i < 2; i++) {
         final Map<String, String> parts = readXlsx(book.save().bytes);
         expect(parts.containsKey('docProps/custom.xml'), isFalse);
@@ -655,6 +669,90 @@ void main() {
       expect(
         XlsxWorkbook.open(book.save().bytes).properties.custom,
         value.custom,
+      );
+    });
+  });
+
+  group('revision and application', () {
+    test('cp:revision reads as a number, a bad one as null, reported', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          parts: <String, String>{
+            'docProps/core.xml': _core('<cp:revision>7</cp:revision>'),
+            'docProps/app.xml': _app(
+              '<Application>Microsoft Excel</Application>',
+            ),
+          },
+        ),
+      );
+      expect(book.properties.revision, 7);
+      expect(book.properties.application, 'Microsoft Excel');
+      expect(book.warnings, isEmpty);
+      final Uint8List bad = _package(
+        parts: <String, String>{
+          'docProps/core.xml': _core('<cp:revision>x</cp:revision>'),
+        },
+      );
+      final XlsxWorkbook broken = XlsxWorkbook.open(bad);
+      expect(broken.properties.revision, isNull);
+      expect(
+        <String?>[
+          for (final XlsxWarning w in broken.warnings)
+            if (w.code == XlsxWarningCode.featureEntryInvalid) w.detail,
+        ],
+        <String?>['cp:revision'],
+      );
+      expect(comparePackages(bad, broken.save().bytes), isEmpty);
+    });
+
+    test('setting revision writes the child in place', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          parts: <String, String>{
+            'docProps/core.xml': _core(
+              '<dc:title>T</dc:title><cp:revision>1</cp:revision>'
+              '<dc:language>tr-TR</dc:language>',
+            ),
+          },
+        ),
+      );
+      final OfficeProperties now = book.properties;
+      book.properties = OfficeProperties(
+        title: now.title,
+        application: now.application,
+        revision: 2,
+      );
+      final String core = _part(book, 'docProps/core.xml');
+      expect(
+        core,
+        contains(
+          '<dc:title>T</dc:title><cp:revision>2</cp:revision>'
+          '<dc:language>tr-TR</dc:language>',
+        ),
+      );
+      expect(XlsxWorkbook.open(book.save().bytes).properties.revision, 2);
+    });
+
+    test('application is set, kept when unchanged and removed for null', () {
+      final XlsxWorkbook book = XlsxWorkbook()..addSheet('S');
+      book.properties = const OfficeProperties(
+        application: 'jet_office',
+        company: 'C',
+      );
+      expect(
+        _part(book, 'docProps/app.xml'),
+        contains('<Application>jet_office</Application><Company>C</Company>'),
+      );
+      book.properties = const OfficeProperties(application: 'Word');
+      expect(
+        _part(book, 'docProps/app.xml'),
+        contains('<Application>Word</Application>'),
+      );
+      book.properties = const OfficeProperties();
+      expect(_part(book, 'docProps/app.xml'), isNot(contains('Application')));
+      expect(
+        XlsxWorkbook.open(book.save().bytes).properties,
+        const OfficeProperties(),
       );
     });
   });

@@ -45,6 +45,8 @@ final class OfficeProperties {
     this.company,
     this.manager,
     this.contentStatus,
+    this.revision,
+    this.application,
     this.created,
     this.modified,
     this.custom = const <String, Object>{},
@@ -80,6 +82,18 @@ final class OfficeProperties {
   /// The status of the content, for example `Draft` or `Final`, written to
   /// the core properties as `cp:contentStatus`.
   final String? contentStatus;
+
+  /// How many times the file was saved, as Word counts it, written to the
+  /// core properties as `cp:revision`. Not negative: `checkProperties`, the
+  /// writer constructors and the setters throw an [ArgumentError] naming
+  /// `revision` for a negative one.
+  final int? revision;
+
+  /// The application that wrote the file, written to the extended
+  /// properties as `Application`. The workbook writers write `jet_office`
+  /// when it is null; a model writes it only when it is set, and removes it
+  /// for a null.
+  final String? application;
 
   /// When the workbook or document was created. Written in UTC with whole
   /// seconds. When null, no creation date is written, so the file is the
@@ -125,6 +139,8 @@ final class OfficeProperties {
         other.company != company ||
         other.manager != manager ||
         other.contentStatus != contentStatus ||
+        other.revision != revision ||
+        other.application != application ||
         other.created != created ||
         other.modified != modified ||
         other.custom.length != custom.length) {
@@ -154,6 +170,8 @@ final class OfficeProperties {
     company,
     manager,
     contentStatus,
+    revision,
+    application,
     created,
     modified,
     Object.hashAll(<Object>[
@@ -170,13 +188,15 @@ final class OfficeProperties {
       'keywords: $keywords, description: $description, '
       'lastModifiedBy: $lastModifiedBy, category: $category, '
       'company: $company, manager: $manager, '
-      'contentStatus: $contentStatus, created: $created, '
+      'contentStatus: $contentStatus, revision: $revision, '
+      'application: $application, created: $created, '
       'modified: $modified, custom: $custom)';
 }
 
 /// Throws what the writer constructors throw for a bad [p]: an
 /// [ArgumentError] naming the field when a text field holds characters XML
-/// forbids, naming `custom` or `custom["<name>"]` for a bad custom entry.
+/// forbids or the revision is negative, naming `custom` or
+/// `custom["<name>"]` for a bad custom entry.
 ///
 /// It runs the checks of [writeCoreProperties], [writeAppProperties] and
 /// [writeCustomProperties] without writing anything, so a setter can refuse
@@ -192,6 +212,8 @@ void checkProperties(OfficeProperties p) {
   _checkText('cp:contentStatus', p.contentStatus);
   _checkText('Company', p.company);
   _checkText('Manager', p.manager);
+  _checkText('Application', p.application);
+  _checkRevision(p.revision);
   final Set<String> seen = <String>{};
   for (final MapEntry<String, Object> e in p.custom.entries) {
     _checkCustomName(e.key, seen);
@@ -216,6 +238,7 @@ void writeCoreProperties(XmlWriter w, OfficeProperties p) {
   _text(w, 'cp:keywords', p.keywords);
   _text(w, 'dc:description', p.description);
   _text(w, 'cp:lastModifiedBy', p.lastModifiedBy);
+  _revision(w, p.revision);
   _text(w, 'cp:category', p.category);
   _text(w, 'cp:contentStatus', p.contentStatus);
   _date(w, 'dcterms:created', p.created);
@@ -226,13 +249,19 @@ void writeCoreProperties(XmlWriter w, OfficeProperties p) {
 /// Writes `docProps/app.xml`: the application name and, when set, the
 /// company and manager of [p].
 ///
-/// Throws [ArgumentError] when the company or manager holds forbidden
+/// The application is [OfficeProperties.application], or
+/// [fallbackApplication] when that is null (no `Application` when both are). Throws
+/// [ArgumentError] when the application, company or manager holds forbidden
 /// characters.
-void writeAppProperties(XmlWriter w, OfficeProperties p) {
+void writeAppProperties(
+  XmlWriter w,
+  OfficeProperties p, {
+  String? fallbackApplication = 'jet_office',
+}) {
   w.declaration();
   w.start('Properties');
   w.attribute('xmlns', Ns.extendedProperties);
-  _text(w, 'Application', 'jet_office');
+  _text(w, 'Application', p.application ?? fallbackApplication);
   _text(w, 'Company', p.company);
   _text(w, 'Manager', p.manager);
   w.end();
@@ -364,6 +393,20 @@ void _checkCustomValue(String name, Object value) {
         '${value.runtimeType}.',
       );
   }
+}
+
+void _checkRevision(int? value) {
+  if (value != null && value < 0) {
+    throw ArgumentError.value(value, 'revision', 'Must not be negative.');
+  }
+}
+
+void _revision(XmlWriter w, int? value) {
+  if (value == null) return;
+  _checkRevision(value);
+  w.start('cp:revision');
+  w.text('$value');
+  w.end();
 }
 
 void _checkText(String name, String? value) {

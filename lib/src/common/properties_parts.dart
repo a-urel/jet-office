@@ -6,7 +6,7 @@
 ///
 /// Each part is immutable and keeps its root's start tag and every child as
 /// an [OpaqueXml], so a loaded part is written back from the model with
-/// everything it held (`dc:language`, `cp:revision`, `TitlesOfParts`, a
+/// everything it held (`dc:language`, `cp:lastPrinted`, `TitlesOfParts`, a
 /// property of a type the model does not list). A part is found by the
 /// package relationship of its kind, never by name. The values a part shows
 /// are read from the first child of each kind; a value that cannot be read
@@ -147,7 +147,7 @@ final class _Field {
     this.namespace,
     this.local,
     this.get, {
-    this.isDate = false,
+    this.parse,
   });
 
   /// The element name as the writer writes it.
@@ -158,8 +158,9 @@ final class _Field {
   /// The field of [OfficeProperties].
   final Object? Function(OfficeProperties) get;
 
-  /// Whether the text is a W3CDTF date.
-  final bool isDate;
+  /// Reads the value from the element's text, `null` when it cannot; a
+  /// field without one takes the text as it is.
+  final Object? Function(String text)? parse;
 }
 
 final List<_Field> _coreFields = <_Field>[
@@ -185,6 +186,13 @@ final List<_Field> _coreFields = <_Field>[
     (OfficeProperties p) => p.lastModifiedBy,
   ),
   _Field(
+    'cp:revision',
+    Ns.core,
+    'revision',
+    (OfficeProperties p) => p.revision,
+    parse: _parseRevision,
+  ),
+  _Field(
     'cp:category',
     Ns.core,
     'category',
@@ -201,18 +209,24 @@ final List<_Field> _coreFields = <_Field>[
     Ns.dcterms,
     'created',
     (OfficeProperties p) => p.created,
-    isDate: true,
+    parse: parseW3cdtf,
   ),
   _Field(
     'dcterms:modified',
     Ns.dcterms,
     'modified',
     (OfficeProperties p) => p.modified,
-    isDate: true,
+    parse: parseW3cdtf,
   ),
 ];
 
 final List<_Field> _appFields = <_Field>[
+  _Field(
+    'Application',
+    Ns.extendedProperties,
+    'Application',
+    (OfficeProperties p) => p.application,
+  ),
   _Field(
     'Company',
     Ns.extendedProperties,
@@ -226,6 +240,18 @@ final List<_Field> _appFields = <_Field>[
     (OfficeProperties p) => p.manager,
   ),
 ];
+
+/// Reads a `cp:revision` text: digits only, at most the largest integer
+/// the web represents exactly, so the VM and the web agree; `null` for
+/// anything else.
+int? _parseRevision(String text) {
+  final String t = text.trim();
+  if (!_digits.hasMatch(t)) return null;
+  final int? n = int.tryParse(t);
+  return n == null || n > 9007199254740991 ? null : n;
+}
+
+final RegExp _digits = RegExp(r'^[0-9]+$');
 
 /// Reads the part [r] walks: its root when it is [local] in [ns] (`null`
 /// otherwise, for an untyped part) and its children, each captured whole.
@@ -454,7 +480,7 @@ final class AppProperties extends _PropertiesPart {
       _appFields,
       old,
       next,
-      (XmlWriter w) => writeAppProperties(w, next),
+      (XmlWriter w) => writeAppProperties(w, next, fallbackApplication: null),
     );
     return changed == null ? this : AppProperties._(_root, changed);
   }
@@ -475,15 +501,16 @@ Map<String, Object?> _readValues(
     );
     if (at < 0) continue;
     final String text = children[at].text;
-    if (!field.isDate) {
+    final Object? Function(String text)? parse = field.parse;
+    if (parse == null) {
       values[field.qualified] = text;
       continue;
     }
-    final DateTime? date = parseW3cdtf(text);
-    if (date == null) {
+    final Object? value = parse(text);
+    if (value == null) {
       warn?.call(field.qualified);
     } else {
-      values[field.qualified] = date;
+      values[field.qualified] = value;
     }
   }
   return values;
@@ -761,6 +788,8 @@ final class PropertyParts {
     keywords: core._values['cp:keywords'] as String?,
     description: core._values['dc:description'] as String?,
     lastModifiedBy: core._values['cp:lastModifiedBy'] as String?,
+    revision: core._values['cp:revision'] as int?,
+    application: app._values['Application'] as String?,
     category: core._values['cp:category'] as String?,
     company: app._values['Company'] as String?,
     manager: app._values['Manager'] as String?,
@@ -824,7 +853,13 @@ enum PropertyKind {
 /// ([sync]), so an edit, an undo and a save in any order leave the package
 /// right.
 final class PropertiesState {
-  PropertiesState._(this._package, this._parts, this._names, this._initial);
+  PropertiesState._(
+    this._package,
+    this._parts,
+    this._names,
+    this._initial,
+    this._asRead,
+  );
 
   /// Reads the three parts of the package of [source], each found by its
   /// relationship in the package root.
@@ -832,7 +867,16 @@ final class PropertiesState {
   /// Throws what [source] throws when a part cannot be read; then nothing
   /// is kept and [warn] has heard of nothing. [warn] hears of each value
   /// that cannot be read once.
-  factory PropertiesState.load(PropertiesSource source, PropertyWarn warn) {
+  ///
+  /// With [encodeOnLoad], each typed part loaded is written from the model
+  /// from now on (meaning-equal to the file); without it, a loaded part
+  /// keeps its bytes until [swap] gives it other parts, and gets them back
+  /// when a swap returns to the parts as loaded.
+  factory PropertiesState.load(
+    PropertiesSource source,
+    PropertyWarn warn, {
+    bool encodeOnLoad = true,
+  }) {
     final OpcPackage package = source.package;
     final List<OpcRelationship> rels = source.guard(
       '_rels/.rels',
@@ -881,6 +925,12 @@ final class PropertiesState {
           CustomProperties.read(r, source, name, hear),
       CustomProperties.empty,
     );
+    final Map<PropertyKind, Uint8List> asRead = <PropertyKind, Uint8List>{
+      if (!encodeOnLoad)
+        for (final PropertyKind kind in PropertyKind.values)
+          if (names[kind] case final String name)
+            kind: source.guard(name, () => package.originalBytes(name)),
+    };
     problems.forEach(warn);
     final PropertyParts parts = PropertyParts(core, app, custom);
     final PropertiesState state = PropertiesState._(
@@ -888,12 +938,15 @@ final class PropertiesState {
       parts,
       names,
       parts,
+      asRead,
     );
-    for (final PropertyKind kind in PropertyKind.values) {
-      final String? name = names[kind];
-      final PartContent content = state._content(parts, kind);
-      if (name != null && (content as _PropertiesPart).isTyped) {
-        package.setContent(name, content);
+    if (encodeOnLoad) {
+      for (final PropertyKind kind in PropertyKind.values) {
+        final String? name = names[kind];
+        final PartContent content = state._content(parts, kind);
+        if (name != null && (content as _PropertiesPart).isTyped) {
+          package.setContent(name, content);
+        }
       }
     }
     return state;
@@ -906,6 +959,10 @@ final class PropertiesState {
   /// The parts as loaded: a part that is still the one loaded is never
   /// removed, though it holds nothing.
   final PropertyParts _initial;
+
+  /// The bytes of each part loaded, kept when it is not encoded on load;
+  /// empty otherwise.
+  final Map<PropertyKind, Uint8List> _asRead;
 
   /// The kinds whose part this state added to the package.
   final Set<PropertyKind> _created = <PropertyKind>{};
@@ -928,7 +985,13 @@ final class PropertiesState {
       final String? name = _names[kind];
       final PartContent content = _content(next, kind);
       if (name != null && (content as _PropertiesPart).isTyped) {
-        _package.setContent(name, content);
+        final Uint8List? bytes = _asRead[kind];
+        _package.setContent(
+          name,
+          bytes != null && identical(content, _content(_initial, kind))
+              ? _Bytes(bytes)
+              : content,
+        );
       }
     }
   }
@@ -966,4 +1029,14 @@ final class PropertiesState {
       }
     }
   }
+}
+
+/// A part's bytes as read.
+final class _Bytes implements PartContent {
+  _Bytes(this._bytes);
+
+  final Uint8List _bytes;
+
+  @override
+  List<Uint8List> encode() => <Uint8List>[_bytes];
 }

@@ -355,6 +355,7 @@ OfficeProperties m1Properties() => OfficeProperties(
   lastModifiedBy: 'jet_office',
   category: 'Reports',
   company: 'Jetronik',
+  application: 'jet_office',
   created: DateTime.utc(2026, 10, 24, 8, 30),
   modified: DateTime.utc(2026, 10, 24, 9, 45, 30),
 );

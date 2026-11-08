@@ -300,6 +300,7 @@ XlsxWorkbook _featuresBook() {
     title: 'W3 sample',
     subject: 'Sheet and workbook features',
     creator: 'jet_office',
+    application: 'jet_office',
     custom: <String, Object>{'Project': 'Atlas', 'Reviewed': true},
   );
   return book;

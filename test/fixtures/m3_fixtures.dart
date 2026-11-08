@@ -712,6 +712,7 @@ OfficeProperties m3Properties() => OfficeProperties(
   contentStatus: 'Final',
   company: 'Jetronik',
   manager: 'Ayse Yilmaz',
+  application: 'jet_office',
   created: DateTime.utc(2026, 10, 24, 9, 30),
   modified: DateTime.utc(2026, 10, 25, 18, 45, 10),
   custom: <String, Object>{

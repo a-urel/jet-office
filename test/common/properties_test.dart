@@ -342,4 +342,88 @@ void main() {
       expect(s, contains('custom: {k: 1}'));
     });
   });
+
+  group('revision and application', () {
+    test('revision is written after cp:lastModifiedBy, in Excel order', () {
+      final String xml = _core(
+        OfficeProperties(
+          category: 'cat',
+          revision: 7,
+          lastModifiedBy: 'lmb',
+          created: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      expect(
+        xml,
+        contains(
+          '<cp:lastModifiedBy>lmb</cp:lastModifiedBy>'
+          '<cp:revision>7</cp:revision><cp:category>cat</cp:category>',
+        ),
+      );
+      expect(
+        _core(const OfficeProperties(revision: 0)),
+        contains('<cp:revision>0</cp:revision>'),
+      );
+      expect(_core(const OfficeProperties()), isNot(contains('revision')));
+    });
+
+    test('a negative revision throws ArgumentError naming revision', () {
+      expect(
+        () => checkProperties(const OfficeProperties(revision: -1)),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.name,
+            'name',
+            'revision',
+          ),
+        ),
+      );
+    });
+
+    test('application is written in place of jet_office when set', () {
+      expect(
+        _app(const OfficeProperties(application: 'Microsoft Office Word')),
+        contains('<Application>Microsoft Office Word</Application>'),
+      );
+      expect(
+        _app(const OfficeProperties()),
+        contains('<Application>jet_office</Application>'),
+      );
+      expect(
+        () => checkProperties(const OfficeProperties(application: 'a\u0000')),
+        throwsArgumentError,
+      );
+    });
+
+    test('XlsxWriter with no application still writes jet_office', () {
+      final XlsxWriter book = XlsxWriter(properties: const OfficeProperties());
+      book.addSheet('S');
+      final Map<String, String> parts = readXlsx(book.close().bytes);
+      expect(
+        parts['docProps/app.xml'],
+        contains('<Application>jet_office</Application>'),
+      );
+    });
+
+    test('==, hashCode and toString cover both', () {
+      expect(
+        const OfficeProperties(revision: 1),
+        isNot(const OfficeProperties(revision: 2)),
+      );
+      expect(
+        const OfficeProperties(application: 'a'),
+        isNot(const OfficeProperties(application: 'b')),
+      );
+      expect(
+        const OfficeProperties(revision: 3, application: 'x').hashCode,
+        const OfficeProperties(revision: 3, application: 'x').hashCode,
+      );
+      final String s = const OfficeProperties(
+        revision: 3,
+        application: 'Word',
+      ).toString();
+      expect(s, contains('revision: 3'));
+      expect(s, contains('application: Word'));
+    });
+  });
 }

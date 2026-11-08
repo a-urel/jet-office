@@ -156,7 +156,7 @@ final class XlsxWorkbook {
   /// Only the fields that differ from [properties] change, each in its own
   /// element, which is replaced where it is, appended when new, or removed
   /// for a `null`; every other element of the parts (`dc:language`,
-  /// `cp:revision`, `TitlesOfParts`, a property of a type that is not
+  /// `cp:lastPrinted`, `TitlesOfParts`, a property of a type that is not
   /// listed) stays. A custom property of an equal name and value stays as
   /// written; a new one takes the lowest free `pid`. A custom part joins
   /// the package when it first has a property and leaves when none is left
