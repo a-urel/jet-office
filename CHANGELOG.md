@@ -178,7 +178,9 @@
   header row that is bold, shaded, repeated on every page and never split, the
   data rows and a totals row; a column with a number format is aligned to the
   end. The page is A4 portrait with Word's blank-document margins unless the
-  caller gives others.
+  caller gives others. In a document that is opened, the last section's even
+  header and footer are written too when the document has odd and even
+  headers, and a section of several text columns is set to one.
 - Values show as Excel shows them: a `num`, `FormatDecimal` (so an
   `XlsxDecimal`), `DateTime`, `Duration` or `bool` goes through jet_core's
   `NumberFormatter` with the column's number format code and the export's

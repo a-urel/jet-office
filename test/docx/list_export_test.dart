@@ -736,6 +736,45 @@ void main() {
         expect((two.footer.blocks.single as DocxParagraph).text, 'Page 1 of 1');
       });
 
+      test('a section of several columns is set to one', () {
+        final DocxDocument doc = twoSections();
+        doc.sections.last.columns = DocxColumns(
+          count: 3,
+          spacingPt: 20,
+          separator: true,
+        );
+        written(DocxListExport(_two), doc);
+        expect(doc.sections.last.columns, DocxColumns(spacingPt: 20));
+        expect(
+          DocxDocument.open(doc.save().bytes).sections.last.columns?.count,
+          1,
+        );
+      });
+
+      test('a section of unequal columns is set to one', () {
+        final DocxDocument doc = twoSections();
+        doc.sections.last.columns = DocxColumns(
+          widths: <DocxColumn>[DocxColumn(100, spacingPt: 10), DocxColumn(200)],
+        );
+        written(DocxListExport(_two), doc);
+        expect(doc.sections.last.columns?.count, 1);
+        expect(doc.sections.last.columns?.widths, isNull);
+      });
+
+      test('one column, or none, stays as it is', () {
+        final DocxDocument doc = twoSections();
+        doc.sections.last.columns = DocxColumns(spacingPt: 12, separator: true);
+        written(DocxListExport(_two), doc);
+        expect(
+          doc.sections.last.columns,
+          DocxColumns(spacingPt: 12, separator: true),
+        );
+        final DocxDocument none = DocxDocument();
+        none.sections.last.columns = null;
+        written(DocxListExport(_two), none);
+        expect(none.sections.last.columns, isNull);
+      });
+
       test('a title page is turned off so page 1 shows the header', () {
         final DocxDocument doc = twoSections();
         written(DocxListExport(_two, title: 'List'), doc);

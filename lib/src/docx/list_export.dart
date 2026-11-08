@@ -227,7 +227,10 @@ final class DocxListExport {
   /// is held as text for the time of the call. [rows] is read once.
   ///
   /// **Page.** The last section gets [pageSize] (A4 portrait when `null`) and
-  /// [margins] (Word's blank-document margins when `null`).
+  /// [margins] (Word's blank-document margins when `null`). A section of more
+  /// than one text column (`DocxSection.columns`) is set to one column, the
+  /// space between columns kept, so the table is not squeezed into a column;
+  /// a section of one column, or none, is left as it is.
   ///
   /// **Header.** With a [logo], [title] or [date], the section's own
   /// default header (`DocxHeaderFooterType.primary`) is replaced by one
@@ -446,6 +449,10 @@ final class DocxListExport {
   }) {
     section.pageSize = pageSize ?? DocxPageSize.a4();
     section.margins = margins ?? _blankMargins;
+    final DocxColumns? cols = section.columns;
+    if (cols != null && cols.count > 1) {
+      section.columns = DocxColumns(spacingPt: cols.spacingPt);
+    }
     final OfficeImage? image = logo;
     final String? name = title;
     final DateTime? day = date;
