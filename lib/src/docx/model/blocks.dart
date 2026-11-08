@@ -184,8 +184,8 @@ final class DocxParagraph extends DocxBlock {
 
   /// The paragraph's visible text: the [DocxInline.text] of each inline, in
   /// order. A run gives its text, a field its result, a hyperlink the text of
-  /// its inlines and an opaque inline the visible text inside it, so inserted text counts and deleted text
-  /// does not.
+  /// its inlines and an opaque inline the visible text inside it, so inserted
+  /// text counts and deleted text does not.
   String get text {
     final StringBuffer out = StringBuffer();
     for (final DocxInline inline in _inlines) {

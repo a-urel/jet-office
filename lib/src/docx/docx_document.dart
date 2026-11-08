@@ -391,24 +391,32 @@ final class DocxDocument {
   /// The relationships are peeked, never registered for rewriting, so a
   /// story's stay unread and every part's are copied as read (Ruling 12); the
   /// main part's were read with the body. A relationships part that cannot be
-  /// read gives `null`: the hyperlink still writes as read. Of two
-  /// relationships with one id, the first counts.
-  String? Function(String id) _urlResolverOf(String part) => (String id) {
-    final List<OpcRelationship> relationships;
-    try {
-      relationships = _package.guard(
-        relationshipsPartOf(part),
-        () => _package.package.peekRelationships(part),
-      );
-    } on DocxReadException {
+  /// read gives `null`: the hyperlink still writes as read, and the failure
+  /// is remembered, so the part is not parsed again for each hyperlink. Of
+  /// two relationships with one id, the first counts.
+  String? Function(String id) _urlResolverOf(String part) {
+    bool unreadable = false;
+    return (String id) {
+      if (unreadable) return null;
+      final List<OpcRelationship> relationships;
+      try {
+        relationships = _package.guard(
+          relationshipsPartOf(part),
+          () => _package.package.peekRelationships(part),
+        );
+      } on DocxReadException {
+        unreadable = true;
+        return null;
+      }
+      for (final OpcRelationship rel in relationships) {
+        if (rel.id != id) continue;
+        return rel.type == RelType.hyperlink && rel.external
+            ? rel.target
+            : null;
+      }
       return null;
-    }
-    for (final OpcRelationship rel in relationships) {
-      if (rel.id != id) continue;
-      return rel.type == RelType.hyperlink && rel.external ? rel.target : null;
-    }
-    return null;
-  };
+    };
+  }
 
   /// Makes [section] the document's last section: it reports to [_edits].
   void _adoptLastSection(DocxSection section) {

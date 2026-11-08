@@ -78,7 +78,8 @@ final class StoryReader {
        _resolveUrl = resolveUrl;
 
   /// The pull reader the story is read from: the part's, or the one over a
-  /// hyperlink's slice while its inlines are read.
+  /// hyperlink's slice while its inlines are read. Read it at each use and
+  /// never keep it across a read of an inline: the reader swaps it.
   XmlPullReader get r => _r;
   XmlPullReader _r;
 

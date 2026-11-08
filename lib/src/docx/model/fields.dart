@@ -208,7 +208,8 @@ final class DocxField extends DocxInline {
   /// A member reads the first run of the field, the one that holds the
   /// `begin` mark. Setting one sets it on every run of the field, those of
   /// nested fields among them, as one edit: the instruction and the result
-  /// show in the one format, as Word formats a field. The runs an edit adds
+  /// show in the one format, as Word formats a field. The runs of a hyperlink
+  /// in the field's result are among them. The runs an edit adds
   /// ([resultText] on a field with no result, [instruction] on one with no
   /// instruction run) carry none of it.
   DocxRunProperties get properties => _properties;

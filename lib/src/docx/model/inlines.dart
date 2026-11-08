@@ -12,8 +12,8 @@
 ///
 /// A [DocxOpaqueInline] keeps an element the model does not type, such as a
 /// tracked change (`w:ins`, `w:del`), a content control or a hyperlink inside
-/// one of them, and carries its visible text ([VisibleTextCollector]), computed once
-/// when it is built.
+/// one of them, and carries its visible text ([VisibleTextCollector]),
+/// computed once when it is built.
 ///
 /// The top-level functions are the model's internal surface for the reader,
 /// the writer and the document; none of them is exported.

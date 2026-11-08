@@ -18,6 +18,8 @@ import 'package:test/test.dart';
 import '../../../tool/src/part_compare.dart';
 import '../../support/read_xlsx.dart';
 import '../support/docx_builder.dart';
+import '../support/localized_document.dart';
+import '../support/styles_documents.dart';
 import '../support/word_document.dart';
 
 const String _decls = 'xmlns:w="${Ns.w}" xmlns:r="${Ns.rel}"';
@@ -318,6 +320,68 @@ void main() {
       expect(p.inlines.first, same(link));
       run.text = 'moved';
       expect(_savedPart(doc, 'word/document.xml'), contains('moved'));
+    });
+
+    test('making a run of a link bold is one edit, and undoes', () {
+      final DocxDocument doc = open();
+      final DocxRun run =
+          (_first(doc).inlines[1] as DocxHyperlink).inlines.single as DocxRun;
+      final ChangeSet set = editsOf(doc).transaction(() {
+        run.properties.bold = true;
+      });
+      expect(set.changes, hasLength(1));
+      expect(run.properties.bold, isTrue);
+      expect(_savedPart(doc, 'word/document.xml'), contains('<w:b/>'));
+      changeLogOf(doc).revertSet(set);
+      expect(run.properties.bold, isNull);
+      expect(_savedPart(doc, 'word/document.xml'), _main(body));
+    });
+
+    test('a link removed and brought back by an undo records its runs', () {
+      final DocxDocument doc = open();
+      final DocxParagraph p = _first(doc);
+      final DocxHyperlink link = p.inlines[1] as DocxHyperlink;
+      final DocxRun run = link.inlines.single as DocxRun;
+      final ChangeSet removed = editsOf(doc).transaction(() {
+        p.removeInlineAt(1);
+      });
+      changeLogOf(doc).revertSet(removed);
+      expect(p.inlines[1], same(link));
+      final ChangeSet edit = editsOf(doc).transaction(() {
+        run.text = 'back';
+      });
+      expect(edit.changes, hasLength(1));
+      expect(_savedPart(doc, 'word/document.xml'), contains('back'));
+      changeLogOf(doc).revertSet(edit);
+      expect(_savedPart(doc, 'word/document.xml'), _main(body));
+    });
+
+    test('a link moved to another document edits and resolves there', () {
+      final DocxDocument from = open();
+      final DocxParagraph p = _first(from);
+      final DocxHyperlink link = p.inlines[1] as DocxHyperlink;
+      final DocxRun run = link.inlines.single as DocxRun;
+      p.removeInlineAt(1);
+      final DocxDocument to = DocxDocument.open(
+        docxWithStyles(
+          styles: stylesXmlOf(<String>[
+            styleXml('paragraph', 'Normal', 'Normal'),
+            styleXml('character', 'Kpr', 'Hyperlink'),
+          ]),
+        ),
+      );
+      final DocxParagraph target = to.body.addParagraph('x');
+      target.insertInline(1, link);
+      // A run read in another document counts as set, so its `Hyperlink`
+      // resolves to this document's own id for the built-in.
+      expect(run.style, 'Kpr');
+      final ChangeSet edit = editsOf(to).transaction(() {
+        run.text = 'there';
+      });
+      expect(edit.changes, hasLength(1));
+      final String saved = _savedPart(to, 'word/document.xml');
+      expect(saved, contains('there'));
+      expect(saved, contains('<w:rStyle w:val="Kpr"/>'));
     });
   });
 }
