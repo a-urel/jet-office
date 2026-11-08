@@ -58,6 +58,7 @@ import 'model/inlines.dart' show DocxBookmarkStart;
 import 'model/numbering.dart';
 import 'model/primitives.dart' as primitives;
 import 'model/primitives.dart' show DocxEdits;
+import 'model/run_content.dart' show DocxPicture;
 import 'model/section_formatting.dart' show DocxSectionStart;
 import 'model/sections.dart';
 import 'model/styles.dart';
@@ -788,25 +789,35 @@ final class DocxDocument {
     return numberingInstanceIds(numbering).contains;
   }
 
+  /// The plan of the save running now, from [_planBuilt]; `null` outside
+  /// a save and in a save that built nothing.
+  SavePlan? _planOfSave;
+
   void _write(ZipWriter zip) {
     _saveIdsOfSave = null;
+    _planOfSave = null;
     try {
       _writeParts(zip);
     } finally {
-      // What the save related for what the model built leaves the package
-      // with it (plan Ruling A).
+      // What the save related and added for what the model built leaves the
+      // package with it (plan Ruling A): the relationships first, then the
+      // media parts they pointed at.
       _saveIdsOfSave?.restoreRelationships();
       _saveIdsOfSave = null;
+      _planOfSave?.restore();
+      _planOfSave = null;
       // Nor does a part keep what the save told it about ids.
       final DocumentPart? main = _part;
       if (main != null) {
         main
           ..bookmarkId = null
+          ..drawingId = null
           ..relationshipId = null;
       }
       for (final StoryPart story in _storyParts) {
         story
           ..bookmarkId = null
+          ..drawingId = null
           ..relationshipId = null;
       }
     }
@@ -818,8 +829,8 @@ final class DocxDocument {
   /// created and before the package writes the relationships parts. Without
   /// an edit nothing was built, and no part learns an id.
   void _planBuilt(DocumentPart main) {
-    final SavePlan? plan = _edits.log.hasChanges
-        ? SavePlan(_package, _saveIds)
+    final SavePlan? plan = _planOfSave = _edits.log.hasChanges
+        ? SavePlan(_package, _saveIds, _mediaIndex)
         : null;
     plan?.planPart(main.partName, main.blocks);
     main.relationshipId = plan?.relationshipIdsOf(main.partName);
@@ -855,15 +866,21 @@ final class DocxDocument {
           Map<DocxBookmarkStart, int>.identity();
       int bookmarkId(DocxBookmarkStart start) =>
           bookmarkIds.putIfAbsent(start, () => _saveIds.nextBookmarkId());
+      // So is a built picture's wp:docPr id, which its default name repeats.
+      final Map<DocxPicture, int> drawingIds = Map<DocxPicture, int>.identity();
+      int drawingId(DocxPicture picture) =>
+          drawingIds.putIfAbsent(picture, () => _saveIds.nextDrawingId());
       main
         ..listDefined = listDefined
         ..styleDefined = styleDefined
-        ..bookmarkId = bookmarkId;
+        ..bookmarkId = bookmarkId
+        ..drawingId = drawingId;
       for (final StoryPart story in _storyParts) {
         story
           ..listDefined = listDefined
           ..styleDefined = styleDefined
-          ..bookmarkId = bookmarkId;
+          ..bookmarkId = bookmarkId
+          ..drawingId = drawingId;
       }
     }
     // A styles part the document lacked is added once it holds something

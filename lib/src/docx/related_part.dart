@@ -248,7 +248,7 @@ final class RelatedPart {
       _relationshipId = opc.addRelationship(
         _source,
         type: _relationshipType,
-        target: _targetFrom(_source, added),
+        target: relationshipTargetFrom(_source, added),
         reservedIds: reservedIds,
       );
     }
@@ -279,18 +279,6 @@ final class RelatedPart {
       }
     }
     return true;
-  }
-
-  /// The relationship target of [part] from [source]: relative when [part]
-  /// is in the folder of [source] or below, absolute otherwise.
-  static String _targetFrom(String source, String part) {
-    final int slash = source.lastIndexOf('/');
-    final String folder = source.substring(0, slash + 1);
-    final String absolute = part.startsWith('/') ? part : '/$part';
-    final String from = folder.startsWith('/') ? folder : '/$folder';
-    return absolute.toLowerCase().startsWith(from.toLowerCase())
-        ? absolute.substring(from.length)
-        : absolute;
   }
 }
 
@@ -333,4 +321,17 @@ final class _KeptUntilChanged implements PartContent {
     }
     return true;
   }
+}
+
+/// The relationship target of [part] from [source], both part names:
+/// relative when [part] is in the folder of [source] or below, absolute
+/// otherwise.
+String relationshipTargetFrom(String source, String part) {
+  final int slash = source.lastIndexOf('/');
+  final String folder = source.substring(0, slash + 1);
+  final String absolute = part.startsWith('/') ? part : '/$part';
+  final String from = folder.startsWith('/') ? folder : '/$folder';
+  return absolute.toLowerCase().startsWith(from.toLowerCase())
+      ? absolute.substring(from.length)
+      : absolute;
 }

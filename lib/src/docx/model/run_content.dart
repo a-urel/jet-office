@@ -14,8 +14,9 @@
 /// @docImport 'inlines.dart';
 library;
 
-import '../../common/image.dart' show OfficeImage;
+import '../../common/image.dart' show OfficeImage, checkImage;
 import '../../opc/opaque_xml.dart';
+import '../../xml/xml_escape.dart' show scrubXmlText;
 
 part 'pictures.dart';
 

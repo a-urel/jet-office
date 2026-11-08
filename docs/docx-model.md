@@ -804,6 +804,15 @@ changes anything.
 
 ## Port map
 
+D5 ports one writer. The file below names its Quds source path and commit in
+its library doc comment (AGENTS.md). Quds paths are relative to
+`../quds_office_suite/packages/quds_office_engine/lib/src/`, at commit
+`15c5d29`.
+
+| jet_office file (`lib/src/`) | Ported from Quds | Changes |
+|---|---|---|
+| `docx/drawing.dart` (`writeInlineDrawing`) | `word/serial/word_drawing_io.dart` (`WordDrawingIo.writeInline`, the inline branch of `_writeAnchorOrInline`) | Writes the `wp:inline` alone (the story writer wraps it in `w:drawing` and a run, not a paragraph); no anchor, wrapping, shadow, outline, cropping or aspect switch (a built picture is inline with its aspect locked); `descr` only when given; `pic:cNvPr` repeats the `wp:docPr` id; `pic:pic` comes from the shared `drawingml/picture.dart`; `wp`, `a`, `pic` and `r` are declared only where the bindings above lack them. The reader in the same file is jet_office's own. |
+
 D2 read Quds' `wml_properties.dart` and `word_styles.dart` and ported
 neither: the enumerations are transcribed from ECMA-376 (Part 1, §17.18),
 and the built-in style and list definitions take their values from Word's

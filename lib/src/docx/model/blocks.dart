@@ -28,6 +28,7 @@ library;
 
 import 'dart:collection';
 
+import '../../common/image.dart' show OfficeImage;
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart' show Ns;
 import '../../opc/opaque_xml.dart';
@@ -278,6 +279,49 @@ final class DocxParagraph extends DocxBlock {
       insertInline(_inlines.length, link);
     });
     return link;
+  }
+
+  /// Appends a run holding an inline picture of [image] and returns the
+  /// picture.
+  ///
+  /// The size is the image's pixels at 96 dots per inch (0.75 points each)
+  /// unless given: one of [widthPt] and [heightPt] scales the other by the
+  /// image's ratio, both are used as given. [name] is the picture's name and
+  /// [description] its alternative text. It works in the body, a table cell,
+  /// a header and a footer.
+  ///
+  /// The model holds the picture alone. Each save gives it what the file
+  /// needs and takes it back once the file is written: a media part shared
+  /// with any part of the document holding the same image (the same bytes),
+  /// else `word/media/image<n>.png` or `.jpeg` with the next free number and
+  /// a default content type for its extension; one image relationship of the
+  /// part it is in for each media part, however many pictures there show it;
+  /// a `wp:docPr` id unique across the document's parts; and, without
+  /// [name], the name `Picture <id>`.
+  ///
+  /// An image that is not a PNG or a JPEG (`checkImage`), and a [name] or
+  /// [description] that holds a character XML forbids, throw
+  /// [ArgumentError]; a side given or computed that is not finite, not above
+  /// 0 or above 1584 points (22 inches) throws [RangeError]. Nothing changes
+  /// when it throws; otherwise the add is one edit.
+  DocxPicture addPicture(
+    OfficeImage image, {
+    double? widthPt,
+    double? heightPt,
+    String? name,
+    String? description,
+  }) {
+    final DocxPicture picture = checkedPicture(
+      image,
+      widthPt: widthPt,
+      heightPt: heightPt,
+      name: name,
+      description: description,
+    );
+    final DocxRun run = DocxRun();
+    restoreRunText(run, (content: <DocxRunContent>[picture], removed: 0));
+    insertInline(_inlines.length, run);
+    return picture;
   }
 
   /// Appends the start of a bookmark named [name] and returns it.

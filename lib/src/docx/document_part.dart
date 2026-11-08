@@ -43,6 +43,7 @@ import '../xml/xml_writer.dart';
 import 'model/blocks.dart';
 import 'model/inlines.dart' show DocxBookmarkStart;
 import 'model/property_set.dart';
+import 'model/run_content.dart' show DocxPicture;
 import 'model/sections.dart';
 import 'model/styles.dart' show DocxStyleType;
 import 'part_root.dart';
@@ -149,8 +150,13 @@ final class DocumentPart implements PartContent {
   /// before it writes the part.
   int Function(DocxBookmarkStart start)? bookmarkId;
 
+  /// The `wp:docPr` id this save gives a built picture; `null` outside a
+  /// save. The save sets it before it writes the part.
+  int Function(DocxPicture picture)? drawingId;
+
   /// The id of the relationship this save gave the part for what the API
-  /// built in it, such as a hyperlink to an address; `null` outside a save.
+  /// built in it, such as a hyperlink to an address or a picture's media;
+  /// `null` outside a save.
   /// The save sets it before it writes the part.
   String? Function(Object built)? relationshipId;
 
@@ -223,6 +229,7 @@ final class DocumentPart implements PartContent {
         listDefined,
         styleDefined,
         bookmarkId: bookmarkId,
+        drawingId: drawingId,
         relationshipId: relationshipId,
       ),
       this,

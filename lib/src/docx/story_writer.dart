@@ -17,6 +17,7 @@ import '../opc/ooxml.dart' show Ns;
 import '../opc/opaque_xml.dart';
 import '../xml/xml_escape.dart' show scrubXmlText;
 import '../xml/xml_writer.dart';
+import 'drawing.dart' show writeInlineDrawing;
 import 'model/blocks.dart';
 import 'model/formatting.dart' show DocxNumberingRef;
 import 'model/inlines.dart';
@@ -73,8 +74,9 @@ final class StoryWriter {
   /// Writes to [_w] with the WordprocessingML prefix [_prefix] (with its colon
   /// as [_p]), the root's bindings [scope], and warnings for the part
   /// [_partName], asking [_listDefined] and [_styleDefined] about what the
-  /// API set, [bookmarkId] for the id of a built bookmark and
-  /// [relationshipId] for the relationship of a built hyperlink.
+  /// API set, [bookmarkId] for the id of a built bookmark, [drawingId] for
+  /// the `wp:docPr` id of a built picture and [relationshipId] for the
+  /// relationship of a built hyperlink or picture.
   StoryWriter(
     this._w,
     this._p,
@@ -85,8 +87,10 @@ final class StoryWriter {
     this._listDefined,
     this._styleDefined, {
     int Function(DocxBookmarkStart start)? bookmarkId,
+    int Function(DocxPicture picture)? drawingId,
     String? Function(Object built)? relationshipId,
   }) : _bookmarkId = bookmarkId,
+       _drawingId = drawingId,
        _relationshipId = relationshipId;
 
   final XmlWriter _w;
@@ -112,13 +116,19 @@ final class StoryWriter {
   /// from 0.
   final int Function(DocxBookmarkStart start)? _bookmarkId;
 
+  /// The `wp:docPr` id of a built picture in this save; `null` outside a
+  /// save, when the writer numbers them itself from 1.
+  final int Function(DocxPicture picture)? _drawingId;
+
   /// The id of the relationship this save gave the part for what the API
-  /// built, such as a hyperlink; `null` outside a save, and for what has none,
-  /// which is then written without one.
+  /// built, such as a hyperlink or a picture; `null` outside a save, and for
+  /// what has none, which is then written without one.
   final String? Function(Object built)? _relationshipId;
 
   final Map<DocxBookmarkStart, int> _ownBookmarkIds =
       Map<DocxBookmarkStart, int>.identity();
+
+  final Map<DocxPicture, int> _ownDrawingIds = Map<DocxPicture, int>.identity();
 
   /// The writer of the part's XML, for what surrounds the blocks.
   XmlWriter get writer => _w;
@@ -514,11 +524,36 @@ final class StoryWriter {
           w.end();
         }
       case DocxPicture():
-        pictureXml(c).writeTo(w, declaredAbove: scope);
+        final OpaqueXml? xml = pictureXml(c);
+        if (xml != null) {
+          xml.writeTo(w, declaredAbove: scope);
+        } else {
+          _builtPicture(c);
+        }
       case DocxOpaqueRunContent():
         opaqueRunContentXml(c).writeTo(w, declaredAbove: scope);
     }
   }
+
+  /// Writes the `w:drawing` of [picture], which the API built: the
+  /// `wp:docPr` id of this save, the name given or `Picture <id>`, and the
+  /// relationship this save gave its media in the part.
+  void _builtPicture(DocxPicture picture) {
+    final int id = (_drawingId ?? _ownDrawingId)(picture);
+    _w.start('${_p}drawing');
+    writeInlineDrawing(_w, (
+      id: id,
+      name: builtPictureName(picture) ?? 'Picture $id',
+      description: picture.description,
+      embedId: _relationshipId?.call(picture),
+      cx: _emu(picture.widthPt!),
+      cy: _emu(picture.heightPt!),
+    ), declaredAbove: scope);
+    _w.end();
+  }
+
+  int _ownDrawingId(DocxPicture picture) =>
+      _ownDrawingIds.putIfAbsent(picture, () => _ownDrawingIds.length + 1);
 
   /// Writes `w:<localName>` with the attributes [c] kept and no content.
   void _empty(String localName, DocxRunContent c) {
@@ -527,6 +562,9 @@ final class StoryWriter {
     _w.end();
   }
 }
+
+/// [points] in EMU, 12,700 to the point, rounded.
+int _emu(double points) => (points * 12700).round();
 
 /// Whether text set through the API needs `xml:space="preserve"`: it starts
 /// or ends with whitespace, or holds two spaces in a row, which a reader

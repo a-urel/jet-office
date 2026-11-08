@@ -141,7 +141,8 @@ DrawingPic? readDrawingPic(XmlPullReader r) {
 
 /// Writes the `pic` of [pic] to [w], its elements named with [prefix]
 /// (`xdr` for a spreadsheet drawing, `pic` for a word processing one); the
-/// `a:` and `r:` prefixes must be declared above.
+/// `a:` and `r:` prefixes must be declared above, or in [namespaces], the
+/// declarations (prefix to namespace) written on the `pic` element itself.
 ///
 /// It shows the media [DrawingPic.embedId] names, and the one of
 /// [DrawingPic.linkId] as `r:link` when given. [extent], given for a picture
@@ -152,8 +153,10 @@ void writeDrawingPic(
   DrawingPic pic, {
   required String prefix,
   ({int cx, int cy})? extent,
+  Map<String, String> namespaces = const <String, String>{},
 }) {
   w.start('$prefix:pic');
+  namespaces.forEach((String p, String uri) => w.attribute('xmlns:$p', uri));
   w.start('$prefix:nvPicPr');
   w.start('$prefix:cNvPr');
   w.attribute('id', '${pic.id}');
