@@ -243,10 +243,13 @@ final class DocxListExport {
   /// **Title page.** A section with a title page (`DocxSection.titlePage`)
   /// has it turned off, whether or not a header is written, so that its first
   /// page shows the list's header and footer and not a first-page one. The
-  /// first-page and even-page headers and footers themselves are left alone;
-  /// when the document has odd and even headers
-  /// (`DocxDocument.evenAndOddHeaders`), the even pages still show the
-  /// section's old even header and footer.
+  /// first-page headers and footers themselves are left alone.
+  ///
+  /// **Even pages.** When the document has odd and even headers
+  /// (`DocxDocument.evenAndOddHeaders`), the section's own even header and
+  /// footer are written exactly as the default ones (and the own even header
+  /// dropped when the default one is), so the even pages show the list's
+  /// page too. Without odd and even headers the even stories are left alone.
   ///
   /// **Footer.** The section's own default footer is replaced by one centred
   /// paragraph: [footerBefore], the `PAGE` field, [footerMiddle], the
@@ -278,7 +281,7 @@ final class DocxListExport {
     }
     final DocxSection section = document.sections.last;
     final List<double> widths = _widths(_textWidth());
-    _writePage(section, formatter);
+    _writePage(section, formatter, evenToo: document.evenAndOddHeaders);
     _removeTrailingEmptyParagraph(document.body);
     final DocxBody body = document.body;
     final String? text = caption;
@@ -430,19 +433,29 @@ final class DocxListExport {
     gutter: 0,
   );
 
-  /// Sets [section]'s page, header and footer; see [writeTo].
-  void _writePage(DocxSection section, NumberFormatter formatter) {
+  /// Sets [section]'s page, header and footer; see [writeTo]. [evenToo] is
+  /// the document's `evenAndOddHeaders`: the section's own even header and
+  /// footer are then written as the default ones.
+  void _writePage(
+    DocxSection section,
+    NumberFormatter formatter, {
+    required bool evenToo,
+  }) {
     section.pageSize = pageSize ?? DocxPageSize.a4();
     section.margins = margins ?? _blankMargins;
     final OfficeImage? image = logo;
     final String? name = title;
     final DateTime? day = date;
-    if (image == null && name == null && day == null) {
-      section.removeHeader(DocxHeaderFooterType.primary);
-    } else {
-      final DocxHeaderFooter header = section.ownHeader(
-        DocxHeaderFooterType.primary,
-      );
+    final List<DocxHeaderFooterType> types = <DocxHeaderFooterType>[
+      DocxHeaderFooterType.primary,
+      if (evenToo) DocxHeaderFooterType.even,
+    ];
+    for (final DocxHeaderFooterType type in types) {
+      if (image == null && name == null && day == null) {
+        section.removeHeader(type);
+        continue;
+      }
+      final DocxHeaderFooter header = section.ownHeader(type);
       _clear(header);
       // Non-null: the page size and margins were set just above.
       final double width = section.textWidthPt!;
@@ -470,17 +483,17 @@ final class DocxListExport {
       }
     }
     if (section.titlePage) section.titlePage = false;
-    final DocxHeaderFooter footer = section.ownFooter(
-      DocxHeaderFooterType.primary,
-    );
-    _clear(footer);
-    final DocxParagraph f = footer.addParagraph();
-    f.properties.alignment = DocxAlignment.center;
-    if (footerBefore.isNotEmpty) f.addRun(footerBefore);
-    f.addField(DocxField.page());
-    if (footerMiddle.isNotEmpty) f.addRun(footerMiddle);
-    f.addField(DocxField.numPages());
-    if (footerAfter.isNotEmpty) f.addRun(footerAfter);
+    for (final DocxHeaderFooterType type in types) {
+      final DocxHeaderFooter footer = section.ownFooter(type);
+      _clear(footer);
+      final DocxParagraph f = footer.addParagraph();
+      f.properties.alignment = DocxAlignment.center;
+      if (footerBefore.isNotEmpty) f.addRun(footerBefore);
+      f.addField(DocxField.page());
+      if (footerMiddle.isNotEmpty) f.addRun(footerMiddle);
+      f.addField(DocxField.numPages());
+      if (footerAfter.isNotEmpty) f.addRun(footerAfter);
+    }
   }
 
   /// Removes every block of [story].

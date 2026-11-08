@@ -761,6 +761,65 @@ void main() {
         expect(two.header.isInherited, isTrue);
         expect((two.header.blocks.single as DocxParagraph).text, 'H1');
       });
+
+      /// [twoSections] with its last section's own even header and footer,
+      /// and odd and even headers [on].
+      DocxDocument withEven({required bool on}) {
+        final DocxDocument doc = twoSections();
+        doc.sections.last.ownHeader(DocxHeaderFooterType.even)
+          ..addParagraph('Even header')
+          ..addParagraph('Second');
+        doc.sections.last
+            .ownFooter(DocxHeaderFooterType.even)
+            .addParagraph('Even footer');
+        doc.evenAndOddHeaders = on;
+        return DocxDocument.open(doc.save().bytes);
+      }
+
+      test('with odd and even headers the even stories are replaced too', () {
+        final DocxDocument doc = withEven(on: true);
+        written(DocxListExport(_two, title: 'List'), doc);
+        final DocxSection two = doc.sections.last;
+        expect(two.evenHeader.blocks, hasLength(1));
+        expect((two.evenHeader.blocks.single as DocxParagraph).text, '\tList');
+        expect(two.evenFooter.blocks, hasLength(1));
+        expect(
+          (two.evenFooter.blocks.single as DocxParagraph).text,
+          'Page 1 of 1',
+        );
+        final DocxDocument back = DocxDocument.open(doc.save().bytes);
+        expect(
+          (back.sections.last.evenHeader.blocks.single as DocxParagraph).text,
+          '\tList',
+        );
+        expect(back.evenAndOddHeaders, isTrue);
+      });
+
+      test('with nothing for the header the own even header is dropped', () {
+        final DocxDocument doc = withEven(on: true);
+        written(DocxListExport(_two, title: null), doc);
+        final DocxSection two = doc.sections.last;
+        expect(two.evenHeader.blocks, isEmpty);
+        expect(
+          two.evenFooter.blocks.map((DocxBlock b) => (b as DocxParagraph).text),
+          <String>['Page 1 of 1'],
+        );
+      });
+
+      test('without odd and even headers the even stories stay', () {
+        final DocxDocument doc = withEven(on: false);
+        written(DocxListExport(_two, title: 'List'), doc);
+        final DocxSection two = doc.sections.last;
+        expect(two.evenHeader.blocks, hasLength(2));
+        expect(
+          (two.evenHeader.blocks.first as DocxParagraph).text,
+          'Even header',
+        );
+        expect(
+          (two.evenFooter.blocks.single as DocxParagraph).text,
+          'Even footer',
+        );
+      });
     });
   });
 
