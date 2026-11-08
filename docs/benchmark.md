@@ -18,8 +18,9 @@ sixth, `benchmark/docx_benchmark_test.dart`, builds a table of 12 columns of
 text, 2,500 and 10,000 rows, with `addTable` and `addRow`, saves it, opens it
 and reads every cell
 ("DOCX table figures" below). A seventh,
-`benchmark/docx_model_benchmark_test.dart`, scales the owner's `long.docx` to about 40,000 paragraphs, opens it, changes
-one paragraph and saves ("DOCX document figures" below).
+`benchmark/docx_model_benchmark_test.dart`, scales the owner's `long.docx` to
+about 40,000 paragraphs, opens it, changes one paragraph and saves ("DOCX
+document figures" below).
 
 The figures below are records, not thresholds (spec section 5): nothing fails
 when a later run is slower, and they are not a promise.

@@ -104,10 +104,11 @@
   Word does. Each edit is atomic.
 - Kept as written, never typed: floating tables, table cell spacing, a table's
   own shading, captions, `w:cnfStyle`, `w:hMerge` and the revision children.
-- Verification: five D3 fixtures, a table that ends a body (`tool/write_table_last.dart`,
-  for Word alone), edited owner files with a table, and a fuzz corpus entry
-  with every element of the table values. The rules and the known gaps are in
-  `docs/docx-model.md`; the owner's Word check is in `docs/word-checks.md`.
+- Verification: five D3 fixtures, a table that ends a body
+  (`tool/write_table_last.dart`, for Word alone), edited owner files with a
+  table, and a fuzz corpus entry with every element of the table values. The
+  rules and the known gaps are in `docs/docx-model.md`; the owner's Word check
+  is in `docs/word-checks.md`.
 
 #### Phase 4, DOCX, D4 (sections, headers, footers and fields)
 

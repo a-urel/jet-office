@@ -309,9 +309,13 @@ final DocxResult out = DocxListExport(
   values `lrTbV`, `tbRlV` and `tbLrV` mirror `ST_TextDirection`; and
   `DocxAlignment` keeps the bare name, since a paragraph's `w:jc` is the common
   alignment.
-- **A benchmark of a large Word document** (`benchmark/docx_model_benchmark_test.dart`,
-  figures in [`benchmark.md`](benchmark.md)): the owner's `long.docx` repeated
-  to about 40,000 paragraphs is opened, loaded, changed and saved.
+- **A benchmark of a large Word document**
+  (`benchmark/docx_model_benchmark_test.dart`, figures in
+  [`benchmark.md`](benchmark.md)): the owner's `long.docx` repeated to about
+  40,000 paragraphs is opened, loaded, changed and saved. The scaling is
+  `scaledLongDocx` (`test/docx/support/large_document.dart`), and
+  `tool/write_large_docx.dart` writes the same document, with one paragraph
+  edited, for the owner's Word check.
 - **The fuzz** runs 900 cases a seed instead of 750, the D6 fixtures joining
   the corpus.
 
@@ -573,7 +577,7 @@ final DocxResult out = DocxListExport(
 - **The header's date is fixed text.** It shows the day the caller gave, not
   the day the file is opened (a deliberate choice, owner decision O2); a caller
   who wants Word's own date changes the header's paragraph after the export.
-- **A list goes in the last section only, and replaces what that section shows.**
+- **A list goes in the last section only and replaces what it shows.**
   `writeTo` sets the last section's page, header and footer. A cover or a
   letter before the list is the caller's, through `addSection`. With
   `DocxDocument.evenAndOddHeaders` on, the even pages still show the section's
@@ -1127,8 +1131,8 @@ letters are rulings its ledger made while the tasks ran.
 
 ### The list export
 
-A list written by `DocxListExport` follows these rules. Tests are in `test/docx/list_export_test.dart` unless
-named otherwise.
+A list written by `DocxListExport` follows these rules. Tests are in
+`test/docx/list_export_test.dart` unless named otherwise.
 
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
@@ -1159,7 +1163,7 @@ named otherwise.
 | `<name>.stories.txt` of both | the header (a tab, `Müşteri listesi`, a tab and `08.11.2026`; for the landscape one `Monthly figures` and `11/8/26`) and the footer as `Sayfa {PAGE} / {NUMPAGES}` (`Page {PAGE} of {NUMPAGES}`), compared with LibreOffice's re-save | a re-save keeps what a page shows | `test/tool/docx_tools_test.dart` ("writes the text of the stories, only for those that have it"), `test/tool/text_compare_test.dart`, group "docxStoriesText" |
 | `tool/edit_docx.dart` and `tool/edit_model.dart` | set the title with `properties.copyWith(title: ...)`, so every other property of the file is kept | the owner's files keep their authors and dates | `test/tool/edit_docx_test.dart`, group "pictures, links, bookmarks and properties" |
 | The fuzz | seeds 1 to 4 at 900 cases each (750 before): the D6 fixtures join the corpus, so the fixed seeds still mutate every part name | the corpus grew by two fixtures and their header and footer parts | `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry", "mutated files raise only DocxReadException") |
-| The benchmark | `benchmark/docx_model_benchmark_test.dart` repeats the body of `long.docx` to about 40,000 paragraphs, opens it, loads the body, changes a paragraph, saves and reopens; it records figures and judges none | the fidelity standard says nothing of speed; a large document must still open | run by hand (`AGENTS.md`, "Benchmark"; `benchmark.md`, "DOCX document figures") |
+| The benchmark and the large document | `benchmark/docx_model_benchmark_test.dart` repeats the body of `long.docx` (`scaledLongDocx`) to about 40,000 paragraphs, opens it, loads the body, changes a paragraph, saves and reopens; it records figures and judges none. `tool/write_large_docx.dart <dir>` writes the same document with the first paragraph after the middle set to `Edited by the model`, as `large.docx`, for the Word check | the fidelity standard says nothing of speed; a large document must still open | the benchmark by hand (`AGENTS.md`, "Benchmark"; `benchmark.md`, "DOCX document figures"); the tool: `test/tool/write_large_docx_test.dart` ("scales long.docx, with bookmark ids and _Toc names per copy", "a paragraph count below 1 throws", "editedLargeDocx changes one paragraph and reopens", "bad arguments exit 2") |
 
 ### Checks outside the unit tests
 
@@ -1171,8 +1175,8 @@ named otherwise.
 
 ## Port map
 
-D5 ports one writer (D6 none). The file below names its Quds source path and commit in
-its library doc comment (AGENTS.md). Quds paths are relative to
+D5 ports one writer (D6 none). The file below names its Quds source path and
+commit in its library doc comment (AGENTS.md). Quds paths are relative to
 `../quds_office_suite/packages/quds_office_engine/lib/src/`, at commit
 `15c5d29`.
 

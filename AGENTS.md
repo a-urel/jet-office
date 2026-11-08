@@ -291,6 +291,13 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 - `tool/draft_expected_docx.dart` drafts the `<name>.expected.txt` of an owner
   file from the model's own reading and prints a review list; it never
   overwrites an existing text.
+- `tool/write_large_docx.dart <out-dir>` writes `large.docx` for the owner's
+  Word check of D6: the owner's `long.docx` scaled to about 40,000 paragraphs
+  by `scaledLongDocx` (`test/docx/support/large_document.dart`, the
+  benchmark's own scaling), with one paragraph edited by the model. It is not
+  part of the CI chain; `dotnet run --project tool/ooxml_validate --
+  build/d6/benchmark` validates its output. Exit 2 on unusable arguments, 1 on
+  any error.
 - The number formatter's tools and its Excel oracle (the owner's Excel for
   Mac CSVs, the LibreOffice comparison, the oracle workbook writer) are in
   `jet_core` (decision 0012); see its `AGENTS.md` and `docs/number-format.md`.

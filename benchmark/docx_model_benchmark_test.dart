@@ -7,7 +7,9 @@
 /// Word for Mac; `test/fixtures/owner/docx/`): the children of its body, but
 /// for the final `w:sectPr`, are repeated until the body has about 40,000
 /// paragraphs, by string surgery on `word/document.xml`, and the package is
-/// repackaged with the same parts. Word's markup is kept as it is, with two
+/// repackaged with the same parts (`scaledLongDocx`,
+/// `test/docx/support/large_document.dart`, which `tool/write_large_docx.dart`
+/// uses too). Word's markup is kept as it is, with two
 /// changes so that no copy repeats what Word makes unique: the `w:id` of every
 /// bookmark and the numbers in the `_Toc` names (and so in the `PAGEREF` and
 /// hyperlink anchors that point to them) differ per copy, and the
@@ -25,21 +27,16 @@
 @Timeout(Duration(minutes: 10))
 library;
 
-import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:archive/archive.dart'
-    show Archive, ArchiveFile, ZipDecoder, ZipEncoder;
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../test/docx/support/large_document.dart';
 import 'src/memory_probe.dart';
 
 /// The owner's file, relative to the package root.
 const String _ownerFile = 'test/fixtures/owner/docx/long.docx';
-
-/// The main part of a Word package.
-const String _mainPart = 'word/document.xml';
 
 /// About how many paragraphs the large body has.
 const int _targetParagraphs = 40000;
@@ -58,59 +55,6 @@ Future<Uint8List> _readOwnerFile() async {
   ).stream;
   final Object? bytes = await stream.first;
   return Uint8List.fromList((bytes! as List<Object?>).cast<int>());
-}
-
-/// [xml], a main part, with the children of its body repeated until its body
-/// holds about [paragraphs] paragraphs, [perCopy] of them in each copy (the
-/// body's own paragraphs, as the model counts them); the children but for the
-/// last `w:sectPr`.
-String _scaled(String xml, int paragraphs, int perCopy) {
-  final int start = xml.indexOf('<w:body>') + '<w:body>'.length;
-  final int end = xml.lastIndexOf('<w:sectPr');
-  expect(start, greaterThan('<w:body>'.length));
-  expect(end, greaterThan(start));
-  final String children = xml.substring(start, end);
-  final int copies = (paragraphs / perCopy).ceil();
-  final StringBuffer out = StringBuffer(xml.substring(0, start));
-  for (int k = 0; k < copies; k++) {
-    out.write(_copy(children, k));
-  }
-  out.write(xml.substring(end));
-  return out.toString();
-}
-
-final RegExp _bookmarkId = RegExp(
-  r'(<w:bookmark(?:Start|End) [^>]*?w:id=")(\d+)',
-);
-final RegExp _tocName = RegExp(r'_Toc(\d+)');
-final RegExp _wordIds = RegExp(r' w14:(?:paraId|textId)="[^"]*"');
-
-/// Copy number [k] of [children]: bookmark ids shifted by 1,000 a copy, `_Toc`
-/// names suffixed with the copy number from the second copy on, and no
-/// `w14:paraId` or `w14:textId`.
-String _copy(String children, int k) {
-  String text = children.replaceAll(_wordIds, '');
-  if (k == 0) return text;
-  text = text.replaceAllMapped(
-    _bookmarkId,
-    (Match m) => '${m[1]}${int.parse(m[2]!) + k * 1000}',
-  );
-  return text.replaceAllMapped(_tocName, (Match m) => '_Toc${m[1]}_$k');
-}
-
-/// [source] with the main part replaced by [mainXml] and every other part as
-/// it was.
-Uint8List _repackaged(Uint8List source, String mainXml) {
-  final Archive input = ZipDecoder().decodeBytes(source);
-  final Archive output = Archive();
-  for (final ArchiveFile file in input) {
-    output.add(
-      file.name == _mainPart
-          ? ArchiveFile.bytes(file.name, utf8.encode(mainXml))
-          : ArchiveFile.bytes(file.name, file.content),
-    );
-  }
-  return Uint8List.fromList(ZipEncoder().encode(output));
 }
 
 /// The first run with text of [paragraph], or `null`.
@@ -153,23 +97,15 @@ void main() {
 
   test('open, load, change one paragraph, save and reopen', () async {
     final Uint8List original = await _readOwnerFile();
-    final DocxDocument originalDoc = DocxDocument.open(original);
-    final int originalParagraphs = originalDoc.body.blocks
-        .whereType<DocxParagraph>()
-        .length;
-    final String originalXml = utf8.decode(
-      ZipDecoder().decodeBytes(original).findFile(_mainPart)!.content,
+    final ScaledDocument scaled = scaledLongDocx(
+      original,
+      paragraphs: _targetParagraphs,
     );
-    final String scaledXml = _scaled(
-      originalXml,
-      _targetParagraphs,
-      originalParagraphs,
-    );
-    final Uint8List file = _repackaged(original, scaledXml);
+    final Uint8List file = scaled.bytes;
     line(
-      'input | long.docx ${original.length} bytes, $originalParagraphs '
-      'paragraphs | scaled file ${file.length} bytes | $_mainPart '
-      '${utf8.encode(scaledXml).length} bytes XML',
+      'input | long.docx ${original.length} bytes, ${scaled.sourceParagraphs} '
+      'paragraphs | scaled file ${file.length} bytes | '
+      '$largeDocumentMainPart ${scaled.mainXmlBytes} bytes XML',
     );
 
     final DocxDocument doc = phase('open', () => DocxDocument.open(file));

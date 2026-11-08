@@ -665,9 +665,9 @@ dart run tool/edit_docx.dart test/fixtures/owner/docx build/d6/edited-owner
 
 `tool/round_trip_docx.dart` and `tool/edit_docx.dart` print each problem and
 exit 1 on any, so expect none. The benchmark's document is written by
-`dart test benchmark/docx_model_benchmark_test.dart` to
-`build/d6/benchmark/large.docx`; if that file is not there, skip its check and
-leave its row `not checked`.
+`dart run tool/write_large_docx.dart build/d6/benchmark` to
+`build/d6/benchmark/large.docx` (the Chrome benchmark cannot write files);
+if that file is not there, skip its check and leave its row `not checked`.
 
 No repair prompt in any of them; then, per document, as below. As under D3 to
 D5, this section says what to look for: what each document should show comes
@@ -682,14 +682,14 @@ double clicking it; Option-F9 shows a field's code (Option-F9 again hides it).
 - `d6_list`: three A4 portrait pages (Layout > Size: A4) with margins of
   2.5 cm (Layout > Margins: Normal is 2.54 cm; here the top, bottom, left and
   right read 2.5 cm) and a header and footer of 1.25 cm from the edge.
-  - **The header, on every page.** One line: a small picture at the left (a
-    4 × 2 pixel PNG scaled to 20 pt high, so a thin stripe: 0.71 cm high, 1.41 cm
+  - **The header, on every page.** One line: a small picture at the left (a 4 ×
+    2 pixel PNG scaled to 20 pt high, so a thin stripe: 0.71 cm high, 1.41 cm
     wide), `Müşteri listesi` in bold in the middle of the line and the date
-    `08.11.2026` at the right edge. Click into the header and look at the
-    ruler: a centre tab stop at the middle of the text and a right tab stop at
-    its right edge. The date is plain text, not a field: it does not turn grey
-    when clicked and Option-F9 shows no code. Scroll to page 2 and page 3: the
-    same header.
+    `08.11.2026` at the right edge. Click into the header and look at the ruler:
+    a centre tab stop at the middle of the text and a right tab stop at its
+    right edge. The date is plain text, not a field: it does not turn grey when
+    clicked and Option-F9 shows no code. Scroll to page 2 and page 3: the same
+    header.
   - **The footer, on every page.** `Sayfa 1 / 3`, `Sayfa 2 / 3` and
     `Sayfa 3 / 3`, centred. `1`, `2` and `3` are `PAGE` fields and `3` is a
     `NUMPAGES` field: each turns grey when clicked, and Option-F9 shows ` PAGE `
@@ -697,10 +697,10 @@ double clicking it; Option-F9 shows a field's code (Option-F9 again hides it).
     are, press Cmd-A then F9 to update the fields and report both.
   - **The caption.** The first line of the body, `Kasım 2026 müşteri
     bakiyeleri`, is bold and 14 pt, above the table.
-  - **The table.** Five columns, `Kod`, `Müşteri`, `Tarih`, `Tutar` and `Pay`, in
-    `Table Grid` (thin black borders on every cell). Table Properties > Column
-    shows `Kod` 2.12 cm, `Tarih` 2.47 cm, `Tutar` 3.17 cm and `Pay` 1.76 cm
-    (60, 70, 90 and 50 pt), and `Müşteri` taking what is left of the text
+  - **The table.** Five columns, `Kod`, `Müşteri`, `Tarih`, `Tutar` and `Pay`,
+    in `Table Grid` (thin black borders on every cell). Table Properties >
+    Column shows `Kod` 2.12 cm, `Tarih` 2.47 cm, `Tutar` 3.17 cm and `Pay` 1.76
+    cm (60, 70, 90 and 50 pt), and `Müşteri` taking what is left of the text
     width. The header row is bold on light grey (Table Properties, Borders and
     Shading: Fill `D9D9D9`, or Table Design > Shading: White, Background 1,
     Darker 15%).
@@ -773,16 +773,17 @@ original's (author, company, dates, revision), none lost.
 
 ### The benchmark's document: `build/d6/benchmark/large.docx`
 
-About 40,000 paragraphs: the owner's `long.docx` repeated 385 times, one
-paragraph changed to `Changed by the benchmark` near the middle (block 20405),
-saved by the model. It is a stress test and not a design: nobody reads it.
+About 40,000 paragraphs: the owner's `long.docx` repeated 385 times, the first
+paragraph with text after the middle changed to `Edited by the model`, saved by
+the model (`tool/write_large_docx.dart`). It is a stress test and not a design:
+nobody reads it.
 
 - Word opens it without a repair prompt. It is long (15 pages repeated 385
   times, so some 5,800 pages; the exact number is Word's): report how long it
   took to open and the page count the status bar gives.
 - The table of contents of each copy jumps to its own copy's headings (Cmd-click
   a few entries): the bookmark ids and `_Toc` names were made unique per copy.
-- Search for `Changed by the benchmark` (Cmd-F): exactly one hit, near the
+- Search for `Edited by the model` (Cmd-F): exactly one hit, near the
   middle of the document.
 - Close without saving, or save in Word and reopen (see below).
 
