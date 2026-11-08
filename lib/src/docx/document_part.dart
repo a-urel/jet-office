@@ -93,6 +93,9 @@ final class DocumentPart implements PartContent {
   /// past [maxTableNesting], by its own path. A root that is not
   /// `w:document` throws one of [DocxReadFailure.malformedXml]. [warnings]
   /// receives the problems the reader repairs; D1 repairs none in this part.
+  /// [resolveUrl] gives each hyperlink read the target of an external
+  /// hyperlink relationship of the part by id (`DocxHyperlink.url`); without
+  /// it, every hyperlink's url is `null`.
   ///
   /// XML that is not well-formed, nested deeper than the reader allows or
   /// holds an entity that cannot be decoded throws [XmlParseException]:
@@ -103,8 +106,15 @@ final class DocumentPart implements PartContent {
     DocxWarningCollector warnings,
     String partName, {
     required DocxReadLimits limits,
+    String? Function(String id)? resolveUrl,
   }) => _PartReader(
-    StoryReader(r, partName, limits.maxTextLength, limits.maxDepth),
+    StoryReader(
+      r,
+      partName,
+      limits.maxTextLength,
+      limits.maxDepth,
+      resolveUrl: resolveUrl,
+    ),
     partName,
   ).read();
 

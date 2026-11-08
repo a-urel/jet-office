@@ -66,7 +66,7 @@ final class StoryPart implements PartContent {
   /// which root it must have, and one it does not have throws a
   /// [DocxReadException] of [DocxReadFailure.malformedXml]. [limits] bounds
   /// every text, as `DocumentPart.read` says, with the part's location in
-  /// place of `body`.
+  /// place of `body`; [resolveUrl] is as `DocumentPart.read` has it.
   ///
   /// XML that is not well-formed, nested deeper than the reader allows or
   /// holds an entity that cannot be decoded throws [XmlParseException]: call
@@ -77,6 +77,7 @@ final class StoryPart implements PartContent {
     String partName, {
     required bool isHeader,
     required DocxReadLimits limits,
+    String? Function(String id)? resolveUrl,
   }) {
     while (r.next()) {
       if (r.eventType == XmlEventType.startElement) break;
@@ -98,6 +99,7 @@ final class StoryPart implements PartContent {
       partName,
       limits.maxTextLength,
       limits.maxDepth,
+      resolveUrl: resolveUrl,
     );
     eachChild(r, () => story.readBlock(into));
     return StoryPart._(partName, root, blocks);

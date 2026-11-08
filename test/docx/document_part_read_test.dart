@@ -89,6 +89,11 @@ String _dump(DocumentPart part) {
               out.write('bs(${inline.id},${inline.name})');
             case DocxBookmarkEnd():
               out.write('be(${inline.id})');
+            case DocxHyperlink():
+              out.write(
+                'hl(${inline.anchor},${inline.inlines.length})'
+                '"${inline.text}"',
+              );
             case DocxOpaqueInline():
               out.write(
                 'oi:${inline.namespaceUri}|${inline.localName}'
@@ -305,7 +310,7 @@ void main() {
       DocxRun,
       DocxOpaqueInline,
       DocxOpaqueInline,
-      DocxOpaqueInline,
+      DocxHyperlink,
       DocxOpaqueInline,
       DocxOpaqueInline,
       DocxOpaqueInline,
@@ -315,8 +320,12 @@ void main() {
       p.inlines.whereType<DocxOpaqueInline>().map(
         (DocxOpaqueInline i) => i.text,
       ),
-      <String>['2', '3', '4\t', '5', '6\n', ''],
+      <String>['2', '3', '5', '6\n', ''],
     );
+    final DocxHyperlink link = p.inlines[3] as DocxHyperlink;
+    expect(link.anchor, 'a');
+    expect(link.text, '4\t');
+    expect(link.inlines.single, isA<DocxRun>());
   });
 
   test('del, moveFrom, del inside ins and stray delText give no text', () {

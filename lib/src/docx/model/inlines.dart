@@ -1,6 +1,6 @@
 /// The inlines of a paragraph, the children of `w:p`: runs, complex fields
-/// (`fields.dart`), bookmark marks (`bookmarks.dart`), and opaque inlines for
-/// everything else.
+/// (`fields.dart`), bookmark marks (`bookmarks.dart`), hyperlinks
+/// (`hyperlinks.dart`), and opaque inlines for everything else.
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -11,8 +11,8 @@
 /// save reports them.
 ///
 /// A [DocxOpaqueInline] keeps an element the model does not type, such as a
-/// tracked change (`w:ins`, `w:del`), a content control or a hyperlink until
-/// D5, and carries its visible text ([VisibleTextCollector]), computed once
+/// tracked change (`w:ins`, `w:del`), a content control or a hyperlink inside
+/// one of them, and carries its visible text ([VisibleTextCollector]), computed once
 /// when it is built.
 ///
 /// The top-level functions are the model's internal surface for the reader,
@@ -35,20 +35,27 @@ import 'run_properties.dart';
 
 part 'bookmarks.dart';
 part 'fields.dart';
+part 'hyperlinks.dart';
 
-/// One child of a paragraph, or an inline of a [DocxField].
+/// One child of a paragraph, or an inline of a [DocxField] or of a
+/// [DocxHyperlink].
 sealed class DocxInline {
   DocxInline._();
 
   /// The paragraph the inline is in, or `null` while it is in none. An
-  /// inline of a field is in the paragraph of the field.
+  /// inline of a field or of a hyperlink is in the paragraph of the field or
+  /// the hyperlink.
   DocxParagraph? _paragraph;
 
   /// The field that holds the inline, or `null`.
   DocxField? _field;
 
+  /// The hyperlink that holds the inline, or `null`. A hyperlink holds its
+  /// inlines for good.
+  DocxHyperlink? _hyperlink;
+
   /// The text the inline shows: the run's text, the visible text inside an
-  /// opaque inline, or a field's result.
+  /// opaque inline, a field's result, or a hyperlink's inlines' text.
   String get text;
 }
 
@@ -301,16 +308,25 @@ void restoreRunText(DocxRun run, DocxRunText state) {
 /// The paragraph [inline] is in, or `null`.
 DocxParagraph? paragraphOf(DocxInline inline) => inline._paragraph;
 
-/// Records that [inline], and every inline of it if it is a field, is now in
-/// [paragraph] (`null`: in none). Only the paragraph's own edits call it.
+/// Records that [inline], and every inline of it if it is a field or a
+/// hyperlink, is now in [paragraph] (`null`: in none). Only the paragraph's
+/// own edits call it.
 void setParagraphOf(DocxInline inline, DocxParagraph? paragraph) {
   inline._paragraph = paragraph;
-  if (inline is DocxField) {
-    for (final DocxInline held in inline._inlines) {
-      setParagraphOf(held, paragraph);
+  final List<DocxInline>? held = switch (inline) {
+    DocxField() => inline._inlines,
+    DocxHyperlink() => inline._inlines,
+    _ => null,
+  };
+  if (held != null) {
+    for (final DocxInline h in held) {
+      setParagraphOf(h, paragraph);
     }
   }
 }
+
+/// Whether [inline] is held by a hyperlink.
+bool isInHyperlink(DocxInline inline) => inline._hyperlink != null;
 
 /// An opaque inline for the element [xml] captured.
 ///
@@ -328,6 +344,12 @@ DocxOpaqueInline opaqueInline(
 
 /// The element [inline] keeps, for the writer.
 OpaqueXml opaqueInlineXml(DocxOpaqueInline inline) => inline._xml;
+
+/// Whether a run or a `w:fldSimple` is inside [inline].
+bool opaqueInlineHoldsRuns(DocxOpaqueInline inline) => inline._holdsRuns;
+
+/// Whether the field marks inside [inline] do not pair among themselves.
+bool opaqueInlineBreaksFields(DocxOpaqueInline inline) => inline._breaksFields;
 
 /// The local names, in WordprocessingML, of the containers whose runs are
 /// visible text.

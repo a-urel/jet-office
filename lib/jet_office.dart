@@ -283,6 +283,7 @@ export 'src/docx/model/inlines.dart'
         DocxBookmarkEnd,
         DocxBookmarkStart,
         DocxField,
+        DocxHyperlink,
         DocxInline,
         DocxOpaqueInline,
         DocxRun,

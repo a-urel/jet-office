@@ -177,7 +177,7 @@ void main() {
       expect(field.result.map((DocxInline i) => i.runtimeType), <Type>[
         DocxOpaqueInline,
         DocxRun,
-        DocxOpaqueInline,
+        DocxHyperlink,
       ]);
       expect(field.text, '12');
       expect(
@@ -186,7 +186,7 @@ void main() {
       );
     });
 
-    test('a complete field in a hyperlink of the result stays typed', () {
+    test('a complete field in a hyperlink of the result is typed in it', () {
       final DocxParagraph p = _first(
         _p(
           '$_begin${_instr('TOC')}$_separate'
@@ -194,7 +194,8 @@ void main() {
         ),
       );
       final DocxField field = p.inlines.single as DocxField;
-      expect(field.result.single, isA<DocxOpaqueInline>());
+      final DocxHyperlink link = field.result.single as DocxHyperlink;
+      expect(link.inlines.single, isA<DocxField>());
       expect(field.text, '4');
     });
 
@@ -543,7 +544,7 @@ void main() {
   group('marks inside an opaque inline', () {
     test('stay in it, and a whole field there is no DocxField', () {
       final String content =
-          '<w:hyperlink w:anchor="a">${_page('4')}</w:hyperlink>';
+          '<w:smartTag w:element="a">${_page('4')}</w:smartTag>';
       _expectRefused(content, '4');
       final DocxParagraph p = _first(_p(content));
       expect(p.inlines.single, isA<DocxOpaqueInline>());
@@ -551,9 +552,16 @@ void main() {
 
     test('do not touch a field after them', () {
       final DocxParagraph p = _first(
-        _p('<w:hyperlink w:anchor="a">$_begin</w:hyperlink>${_page('1')}'),
+        _p('<w:smartTag w:element="a">$_begin</w:smartTag>${_page('1')}'),
       );
       expect(_kinds(p), <Type>[DocxOpaqueInline, DocxField]);
+    });
+
+    test('a mark alone in a hyperlink does not touch a field after it', () {
+      final DocxParagraph p = _first(
+        _p('<w:hyperlink w:anchor="a">$_begin</w:hyperlink>${_page('1')}'),
+      );
+      expect(_kinds(p), <Type>[DocxHyperlink, DocxField]);
     });
   });
 

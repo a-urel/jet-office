@@ -463,6 +463,7 @@ typedef _StoryKey = (int, DocxHeaderFooterType, bool);
 /// Adds every field of [blocks], tables and nested fields included, to [out].
 void _fields(List<DocxBlock> blocks, List<DocxField> out) {
   void inline(DocxInline i) {
+    if (i is DocxHyperlink) i.inlines.forEach(inline);
     if (i is! DocxField) return;
     out.add(i);
     i.result.forEach(inline);
@@ -512,7 +513,8 @@ void _walk(List<DocxBlock> blocks) {
   }
 }
 
-/// Reads [inline] and, for a field, its instruction and what is in its result.
+/// Reads [inline] and, for a field, its instruction and what is in its result,
+/// and for a hyperlink, its url, anchor, tooltip and inlines.
 void _inline(DocxInline inline) {
   inline.text;
   inline.toString();
@@ -526,6 +528,10 @@ void _inline(DocxInline inline) {
   }
   if (inline is DocxBookmarkEnd) {
     <Object?>[inline.id, inline.start].toString();
+  }
+  if (inline is DocxHyperlink) {
+    <Object?>[inline.url, inline.anchor, inline.tooltip].toString();
+    inline.inlines.forEach(_inline);
   }
   if (inline is! DocxRun) return;
   inline.style;

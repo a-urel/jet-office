@@ -298,7 +298,9 @@ final class StoryWriter {
       pPr.writeTo(w, '${_p}pPr', prefix: _prefix, declaredAbove: scope);
     }
     // A field writes its inlines in order, and its runs count as they did when
-    // read, so a location does not depend on what was typed as a field.
+    // read, so a location does not depend on what was typed as a field. A
+    // hyperlink writes its start tag as read around its inlines, whose runs
+    // count among the paragraph's in file order.
     int runs = 0;
     void write(DocxInline inline) {
       switch (inline) {
@@ -311,13 +313,20 @@ final class StoryWriter {
         case DocxBookmarkEnd():
           _bookmarkEnd(inline);
         case DocxField():
-          throw StateError('visitInlines gives no field.');
+          heldInlinesOf(inline)!.forEach(write);
+        case DocxHyperlink():
+          final List<KeptAttribute> attributes = hyperlinkAttributesOf(inline);
+          w.start('${_p}hyperlink');
+          writeKeptAttributes(w, attributes, declaredAbove: scope);
+          final Map<String, String> around = scope;
+          scope = scopeInside(attributes, around);
+          inline.inlines.forEach(write);
+          scope = around;
+          w.end();
       }
     }
 
-    for (final DocxInline inline in p.inlines) {
-      visitInlines(inline, write);
-    }
+    p.inlines.forEach(write);
     scope = outer;
     w.end();
   }

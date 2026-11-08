@@ -81,7 +81,7 @@ void main() {
     expect(doc.save().warnings, isEmpty);
   });
 
-  test('long.docx keeps its TOC as runs, its PAGEREFs in hyperlinks', () {
+  test('long.docx keeps its TOC as runs, its PAGEREFs typed in hyperlinks', () {
     final DocxDocument doc = DocxDocument.open(
       File('$_dir/long.docx').readAsBytesSync(),
     );
@@ -110,12 +110,29 @@ void main() {
       ],
       <String>[' TOC \\o "1-1" \\h \\* MERGEFORMAT '],
     );
-    expect(
-      inlines.whereType<DocxOpaqueInline>().where(
-        (DocxOpaqueInline i) => i.localName == 'hyperlink',
-      ),
-      hasLength(13),
+    final List<DocxHyperlink> links = inlines
+        .whereType<DocxHyperlink>()
+        .toList();
+    expect(links, hasLength(13));
+    for (final DocxHyperlink link in links) {
+      expect(link.url, isNull);
+      expect(link.anchor, startsWith('_Toc'));
+      expect((link.inlines.last as DocxField).name, 'PAGEREF');
+    }
+    expect(links.first.text, '1. Genel Bakış\t4');
+  });
+
+  test('builtins.docx reads the url of its external link', () {
+    final DocxDocument doc = DocxDocument.open(
+      File('$_dir/builtins.docx').readAsBytesSync(),
     );
+    final DocxHyperlink link = <DocxHyperlink>[
+      for (final DocxBlock block in doc.body.blocks)
+        if (block is DocxParagraph) ...block.inlines.whereType<DocxHyperlink>(),
+    ].single;
+    expect(link.url, 'https://example.com/');
+    expect(link.anchor, isNull);
+    expect(link.text, 'Example link');
   });
 
   test('every owner file round-trips', () {

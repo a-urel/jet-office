@@ -10,7 +10,7 @@
 /// written, in place: other blocks (content controls, bookmarks) as opaque
 /// blocks, other children of `w:tbl` and `w:tr` (`w:tblGrid`, `w:tblPrEx`,
 /// content controls, bookmarks) as kept children, other paragraph children
-/// (tracked changes, hyperlinks, proofing marks) as opaque inlines, other run
+/// (tracked changes, proofing marks) as opaque inlines, other run
 /// children (drawings, `mc:AlternateContent`) as opaque run content, and
 /// unknown attributes on `w:tbl`, `w:tr`, `w:tc`, `w:p`, `w:r`, `w:t`,
 /// `w:tab`, `w:br` and `w:cr` as kept attributes. A `w:tbl` inside a kept
@@ -20,7 +20,13 @@
 ///
 /// `w:fldChar` and `w:instrText` are typed run content that keeps its element;
 /// when a paragraph is read, [groupFields] puts each plain field of its inlines
-/// in a `DocxField`.
+/// in a `DocxField`. `w:bookmarkStart` and `w:bookmarkEnd` children of a
+/// paragraph are typed marks. A `w:hyperlink` child of a paragraph is a
+/// `DocxHyperlink` whose children are read as a paragraph's (its own fields
+/// grouped inside it alone), except that a `w:hyperlink` among them stays
+/// opaque: it is captured once, as an opaque inline would be, for its visible
+/// text and what a field around it needs to know, and its slice is read again
+/// for its inlines.
 ///
 /// A property element is typed only before the rows, cells or blocks of its
 /// parent, and only the first of its name; one elsewhere is kept in place.
@@ -59,11 +65,24 @@ const int _maxGridColumnTwips = 999999999;
 /// One read of the blocks of a story.
 final class StoryReader {
   /// Reads a part from [r], naming it in errors, with texts bounded and XML
-  /// nested at most [maxDepth] deep.
-  StoryReader(this.r, this._partName, this._maxTextLength, this.maxDepth);
+  /// nested at most [maxDepth] deep. [resolveUrl] gives the target of an
+  /// external hyperlink relationship of the part by its id, for the
+  /// hyperlinks read; `null` when the part has no relationships to ask.
+  StoryReader(
+    XmlPullReader r,
+    this._partName,
+    this._maxTextLength,
+    this.maxDepth, {
+    String? Function(String id)? resolveUrl,
+  }) : _r = r,
+       _resolveUrl = resolveUrl;
 
-  /// The pull reader the story is read from.
-  final XmlPullReader r;
+  /// The pull reader the story is read from: the part's, or the one over a
+  /// hyperlink's slice while its inlines are read.
+  XmlPullReader get r => _r;
+  XmlPullReader _r;
+
+  final String? Function(String id)? _resolveUrl;
   final String _partName;
   final int _maxTextLength;
 
@@ -236,14 +255,8 @@ final class StoryReader {
     eachChild(r, () {
       if (properties == null && isW(r, 'pPr')) {
         properties = PropertyContainer.read(r, paragraphPropertiesSchema);
-      } else if (isW(r, 'r')) {
-        inlines.add(_readRun());
-      } else if (isW(r, 'bookmarkStart')) {
-        inlines.add(_readBookmarkStart());
-      } else if (isW(r, 'bookmarkEnd')) {
-        inlines.add(_readBookmarkEnd());
       } else {
-        inlines.add(_readOpaqueInline());
+        inlines.add(_readInline(inHyperlink: false));
       }
     });
     return readParagraph(
@@ -251,6 +264,42 @@ final class StoryReader {
       attributes: attributes,
       inlines: groupFields(inlines),
     );
+  }
+
+  /// Reads the inline the reader is on, a child of a paragraph or, when
+  /// [inHyperlink], of a hyperlink.
+  DocxInline _readInline({required bool inHyperlink}) {
+    final XmlPullReader r = this.r;
+    if (isW(r, 'r')) return _readRun();
+    if (isW(r, 'bookmarkStart')) return _readBookmarkStart();
+    if (isW(r, 'bookmarkEnd')) return _readBookmarkEnd();
+    if (!inHyperlink && isW(r, 'hyperlink')) return _readHyperlink();
+    return _readOpaqueInline();
+  }
+
+  /// Reads the `w:hyperlink` the reader is on: captured as an opaque inline
+  /// is, for what a field around it needs to know (and its text bound), then
+  /// its slice read again for its start tag and its inlines.
+  DocxHyperlink _readHyperlink() {
+    final DocxOpaqueInline captured = _readOpaqueInline();
+    final XmlPullReader outer = _r;
+    _r = readerOfCaptured(opaqueInlineXml(captured), maxDepth);
+    try {
+      final List<KeptAttribute> attributes = List<KeptAttribute>.unmodifiable(
+        keepAttributes(r),
+      );
+      final List<DocxInline> inlines = <DocxInline>[];
+      eachChild(r, () => inlines.add(_readInline(inHyperlink: true)));
+      return readHyperlink(
+        attributes: attributes,
+        inlines: groupFields(inlines),
+        resolveUrl: _resolveUrl,
+        holdsRuns: opaqueInlineHoldsRuns(captured),
+        breaksFields: opaqueInlineBreaksFields(captured),
+      );
+    } finally {
+      _r = outer;
+    }
   }
 
   /// The bookmark id the reader's element states: `null` unless `w:id` is a

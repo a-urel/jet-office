@@ -382,18 +382,28 @@ final class _FieldEdit implements Change {
   void reapply() => _field._restore(_after);
 }
 
-/// Calls [visit] with [inline], or for a field with every inline it holds, in
-/// file order: runs and opaque inlines, never a field. That order is the one
-/// the inlines were read in, whatever was typed as a field.
+/// Calls [visit] with [inline], or for a field or a hyperlink with every
+/// inline it holds, in file order: runs, bookmark marks and opaque inlines,
+/// never a field or a hyperlink. That order is the one the inlines were read
+/// in, whatever was typed as a field or a hyperlink.
 void visitInlines(DocxInline inline, void Function(DocxInline inline) visit) {
-  if (inline is DocxField) {
-    for (final DocxInline held in inline._inlines) {
-      visitInlines(held, visit);
-    }
-  } else {
+  final List<DocxInline>? held = heldInlinesOf(inline);
+  if (held == null) {
     visit(inline);
+    return;
+  }
+  for (final DocxInline h in held) {
+    visitInlines(h, visit);
   }
 }
+
+/// Every inline [inline] holds, in file order, when it is a field (from its
+/// `begin` run to its `end` run) or a hyperlink; `null` for any other.
+List<DocxInline>? heldInlinesOf(DocxInline inline) => switch (inline) {
+  DocxField() => inline._inlines,
+  DocxHyperlink() => inline._inlines,
+  _ => null,
+};
 
 /// Whether [inline] is held by a field, removed from a paragraph or not.
 bool isInField(DocxInline inline) => inline._field != null;
@@ -421,7 +431,11 @@ List<DocxInline> groupFields(List<DocxInline> inlines) {
       case final DocxRun run:
         pairs.run(i, run);
       case final DocxOpaqueInline inline:
-        pairs.opaque(inline);
+        pairs.opaque(inline._holdsRuns, inline._breaksFields);
+      case final DocxHyperlink link:
+        // As the opaque inline it was before D5: its own fields are grouped
+        // inside it, and what crosses its edge breaks a field around it.
+        pairs.opaque(link._holdsRuns, link._breaksFields);
       case DocxBookmarkStart() || DocxBookmarkEnd():
         // Holds no run and no mark: it sits anywhere in a field.
         break;
@@ -530,11 +544,13 @@ final class _FieldPairs {
     }
   }
 
-  /// Takes an inline that is no run.
-  void opaque(DocxOpaqueInline inline) {
-    if (inline._breaksFields) _breakOpen();
+  /// Takes an inline that is no run: an opaque inline or a hyperlink, which
+  /// [holdsRuns] when a run or a `w:fldSimple` is inside it and
+  /// [breaksFields] when the field marks inside it do not pair.
+  void opaque(bool holdsRuns, bool breaksFields) {
+    if (breaksFields) _breakOpen();
     final _OpenField? top = _top;
-    if (top != null && top.readsInstruction && inline._holdsRuns) {
+    if (top != null && top.readsInstruction && holdsRuns) {
       top.broken = true;
     }
   }

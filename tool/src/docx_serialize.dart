@@ -250,9 +250,7 @@ int _blocks(List<DocxBlock> blocks) {
       case DocxParagraph():
         set += _paragraph(block.properties);
         for (final DocxInline inline in block.inlines) {
-          if (inline is DocxField) {
-            set += _count(<Object?>[inline.instruction, inline.text]);
-          }
+          set += _inline(inline);
           visitInlines(inline, (DocxInline held) {
             if (held is DocxRun) set += _run(held.properties);
           });
@@ -272,6 +270,18 @@ int _blocks(List<DocxBlock> blocks) {
   }
   return set;
 }
+
+/// Reads the typed members of [inline] when it is a field or a hyperlink, and
+/// of the fields and hyperlinks it holds.
+int _inline(DocxInline inline) => switch (inline) {
+  DocxField() =>
+    _count(<Object?>[inline.instruction, inline.text]) +
+        inline.result.fold(0, (int n, DocxInline i) => n + _inline(i)),
+  DocxHyperlink() =>
+    _count(<Object?>[inline.url, inline.anchor, inline.tooltip, inline.text]) +
+        inline.inlines.fold(0, (int n, DocxInline i) => n + _inline(i)),
+  _ => 0,
+};
 
 /// Reads the values of [s] and the blocks of the stories it has as its own.
 int _section(DocxSection s) {

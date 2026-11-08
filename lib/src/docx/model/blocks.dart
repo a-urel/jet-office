@@ -183,8 +183,8 @@ final class DocxParagraph extends DocxBlock {
   List<DocxInline> get inlines => _inlinesView;
 
   /// The paragraph's visible text: the [DocxInline.text] of each inline, in
-  /// order. A run gives its text, a field its result and an opaque inline
-  /// the visible text inside it, so inserted text counts and deleted text
+  /// order. A run gives its text, a field its result, a hyperlink the text of
+  /// its inlines and an opaque inline the visible text inside it, so inserted text counts and deleted text
   /// does not.
   String get text {
     final StringBuffer out = StringBuffer();
@@ -206,9 +206,10 @@ final class DocxParagraph extends DocxBlock {
   ///
   /// An [index] out of that range throws [RangeError]. An [inline] that is
   /// already in a paragraph, this one or another, throws [StateError]:
-  /// remove it there first. So does one of a [DocxField], which goes with
-  /// its field. In a paragraph of a document, the style set on a run, one of
-  /// a field among them, is resolved against the document's styles
+  /// remove it there first. So does one of a [DocxField] or of a
+  /// [DocxHyperlink], which goes with its field or hyperlink. In a paragraph
+  /// of a document, the style set on a run, one of a field or a hyperlink
+  /// among them, is resolved against the document's styles
   /// (`DocxRun.style` has the rules), in the same edit; a styles part that
   /// cannot be read throws a `DocxReadException` naming it, and nothing
   /// changes. The `w:rStyle` of a run read in another document counts as set;
@@ -277,6 +278,9 @@ final class DocxParagraph extends DocxBlock {
     }
     if (isInField(inline)) {
       throw StateError('The inline is in a field.');
+    }
+    if (isInHyperlink(inline)) {
+      throw StateError('The inline is in a hyperlink.');
     }
   }
 }

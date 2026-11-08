@@ -74,7 +74,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
-import 'package:jet_office/src/docx/model/inlines.dart' show visitInlines;
+import 'package:jet_office/src/docx/model/inlines.dart' show heldInlinesOf;
 import 'package:xml/xml.dart';
 
 import 'src/part_compare.dart';
@@ -469,11 +469,19 @@ List<bool> _mustKeep(Uint8List docx, DocxBody body) {
 
 /// The inlines of [paragraph] as they are in the file: a field's runs count,
 /// so what the tool edits does not depend on what the model types as a field.
+/// A hyperlink is one inline, as the opaque inline it was before D5, so the
+/// run the tool edits is the one it edited then.
 List<DocxInline> _flat(DocxParagraph paragraph) {
   final List<DocxInline> out = <DocxInline>[];
-  for (final DocxInline inline in paragraph.inlines) {
-    visitInlines(inline, out.add);
+  void add(DocxInline inline) {
+    if (inline is DocxField) {
+      heldInlinesOf(inline)!.forEach(add);
+    } else {
+      out.add(inline);
+    }
   }
+
+  paragraph.inlines.forEach(add);
   return out;
 }
 
@@ -522,6 +530,8 @@ bool _isPlainRun(DocxInline inline) => switch (inline) {
   // A bookmark mark pairs with one outside the paragraph, as the opaque
   // inline it was before D5 did.
   DocxBookmarkStart() || DocxBookmarkEnd() => false,
+  // Not a proofing mark, as the opaque inline it was before D5.
+  DocxHyperlink() => false,
 };
 
 /// The table edits the read-back [blocks] lack.

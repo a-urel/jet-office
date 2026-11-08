@@ -370,6 +370,7 @@ final class DocxDocument {
         _loadWarnings,
         main,
         limits: package.limits,
+        resolveUrl: _urlResolverOf(main),
       ),
     );
     final DocxBody body = DocxBody._(_edits, part.blocks, this);
@@ -382,6 +383,32 @@ final class DocxDocument {
     _part = part;
     return _body = body;
   }
+
+  /// What a hyperlink read from [part] asks for its url: the target of the
+  /// relationship of [part] that an id names, when it is of the hyperlink
+  /// type and external, else `null` (plan D5, Ruling 8).
+  ///
+  /// The relationships are peeked, never registered for rewriting, so a
+  /// story's stay unread and every part's are copied as read (Ruling 12); the
+  /// main part's were read with the body. A relationships part that cannot be
+  /// read gives `null`: the hyperlink still writes as read. Of two
+  /// relationships with one id, the first counts.
+  String? Function(String id) _urlResolverOf(String part) => (String id) {
+    final List<OpcRelationship> relationships;
+    try {
+      relationships = _package.guard(
+        relationshipsPartOf(part),
+        () => _package.package.peekRelationships(part),
+      );
+    } on DocxReadException {
+      return null;
+    }
+    for (final OpcRelationship rel in relationships) {
+      if (rel.id != id) continue;
+      return rel.type == RelType.hyperlink && rel.external ? rel.target : null;
+    }
+    return null;
+  };
 
   /// Makes [section] the document's last section: it reports to [_edits].
   void _adoptLastSection(DocxSection section) {
