@@ -250,9 +250,9 @@ void writeCoreProperties(XmlWriter w, OfficeProperties p) {
 /// company and manager of [p].
 ///
 /// The application is [OfficeProperties.application], or
-/// [fallbackApplication] when that is null (no `Application` when both are). Throws
-/// [ArgumentError] when the application, company or manager holds forbidden
-/// characters.
+/// [fallbackApplication] when that is null (no `Application` when both
+/// are). Throws [ArgumentError] when the application, company or manager
+/// holds forbidden characters.
 void writeAppProperties(
   XmlWriter w,
   OfficeProperties p, {

@@ -25,5 +25,5 @@ String officeNameKey(String name) => name
     .replaceAll('ı', 'I')
     .replaceAll('ß', 'SS')
     .replaceAll('ẞ', 'SS')
-    .replaceAll('K', 'K')
+    .replaceAll('\u212A', 'K')
     .toUpperCase();

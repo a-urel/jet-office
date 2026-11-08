@@ -21,8 +21,9 @@
 /// parts: only the fields that differ change, each as the writer's own
 /// element rendered with the new value and captured, replaced in place, or
 /// appended, or removed for a `null`. [PropertiesState] holds the current
-/// parts of a workbook or a document and what they need at save: a part that is not in the
-/// package joins it, and a custom part that holds nothing leaves.
+/// parts of a workbook or a document and what they need at save: a part
+/// that is not in the package joins it, and a custom part that holds
+/// nothing leaves.
 library;
 
 import 'dart:convert';
@@ -978,12 +979,17 @@ final class PropertiesState {
       };
 
   /// Makes [next] the current parts, giving each part that is in the
-  /// package, and typed, its new content.
+  /// package, typed and different from the current one, its new content.
+  ///
+  /// A part [next] leaves as it is keeps what the package holds, so a part
+  /// kept as stored (without `encodeOnLoad`) stays a copy of its entry.
   void swap(PropertyParts next) {
+    final PropertyParts previous = _parts;
     _parts = next;
     for (final PropertyKind kind in PropertyKind.values) {
       final String? name = _names[kind];
       final PartContent content = _content(next, kind);
+      if (identical(content, _content(previous, kind))) continue;
       if (name != null && (content as _PropertiesPart).isTyped) {
         final Uint8List? bytes = _asRead[kind];
         _package.setContent(
