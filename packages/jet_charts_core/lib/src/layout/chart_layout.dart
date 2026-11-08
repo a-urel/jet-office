@@ -137,8 +137,8 @@ final class ChartLayout {
 /// labels, value labels), each step only when it can relieve what does not
 /// fit, and listed in [ChartLayout.hidden]; data labels take no room, so they
 /// go only one by one where they find no place, or all together when a chart
-/// too small for a 1 by 1 plot draws only its background. No text overlaps another and every primitive lies inside
-/// [size].
+/// too small for a 1 by 1 plot draws only its background. No text overlaps
+/// another and every primitive lies inside [size].
 ///
 /// Throws an [ArgumentError] for a negative or non-finite size. Bad data,
 /// tiny sizes and unknown kinds never throw.

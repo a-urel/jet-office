@@ -498,6 +498,27 @@ void main() {
       expect(s.max, greaterThanOrEqualTo(1));
     });
 
+    test('a fixed unit far below data far from 0 takes the first fitting '
+        'power of ten', () {
+      // The first x10 of the unit whose interval count is at most 1,000.
+      final ValueScale near = autoValueScale(
+        dataMin: 1000,
+        dataMax: 1001,
+        maxIntervals: 10,
+        fixedMajorUnit: 1e-4,
+      );
+      expect(near.majorUnit, closeTo(0.01, 1e-15));
+      expect(near.ticks.length, lessThanOrEqualTo(1001));
+      final ValueScale far = autoValueScale(
+        dataMin: 1e9,
+        dataMax: 1e9 + 1,
+        maxIntervals: 10,
+        fixedMajorUnit: 1e-9,
+      );
+      expect(far.majorUnit, closeTo(0.01, 1e-15));
+      expect(far.ticks.length, lessThanOrEqualTo(1001));
+    });
+
     test('maxIntervals above 1,000 is read as 1,000', () {
       final ValueScale s = autoValueScale(
         dataMin: 0,

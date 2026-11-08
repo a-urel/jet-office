@@ -283,19 +283,23 @@ ValueScale autoValueScale({
     u = fUnit;
     bounds = _bounds(u, a, c, mFixB, mFixT);
     if (!(_intervals(bounds, u) <= _fixedUnitIntervals)) {
-      // Jump close to the first power of ten that fits, then step up by 10:
-      // the axis spans at most a little over the data's or fixed span, so
-      // that is a few steps, and the unit stays finite.
+      // Jump a little below the first power of ten that fits, then step up
+      // by 10: the axis spans at most a little over the data's or fixed
+      // span, so that is a few steps, and the unit stays finite. The
+      // estimate is the span itself, not the distance from 0, so data far
+      // from 0 still get the finest unit that fits; |highest| stands in
+      // only when the span is 0.
       final double lowest = math.min(a, mFixB ?? a);
       final double highest = math.max(c, mFixT ?? c);
-      final double span = math.max(highest - lowest, highest.abs());
+      final double width = highest - lowest;
+      final double span = width > 0 ? width : highest.abs();
       int n = 1;
       if (span > 0 && span.isFinite) {
         final double decades =
             math.log(span) / math.ln10 -
             math.log(_fixedUnitIntervals) / math.ln10 -
             math.log(fUnit) / math.ln10;
-        n = math.max(1, decades.floor() - 1);
+        n = math.max(1, decades.floor() - 2);
       }
       for (int step = 0; step < 700; step++, n++) {
         final double next = _decadesUp(fUnit, n);
