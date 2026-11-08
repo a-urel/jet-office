@@ -575,3 +575,17 @@ its recovery log.
 | 2026-11-07 | Word for Mac 16.114.4 | `build/edited-docx-owner/builtins.docx` | ok |  |
 | 2026-11-07 | Word for Mac 16.114.4 | `build/table-last/d3_table_last.docx` | ok | Saved in Word, closed and reopened. |
 | 2026-11-07 | Word for Mac 16.114.4 | Save in Word | ok | D3: `d3_basic`, `d3_merges`, `d3_nested`, `d3_header_row` and one edited owner file. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/fixtures/d4_sections.docx` | ok | Four sections, sizes, margins, columns, numbering as listed; the Letter table 10 twips short of the text width. Values read by Claude in Word as well. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/fixtures/d4_headers.docx` | ok | Stories on pages 1 to 5 as the table says; links as listed. Values read by Claude in Word as well. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/fixtures/d4_fields.docx` | ok | Six fields; DATE and TIME empty in the file, filled by Word at open; a page break gives Page 1 of 2 and Page 2 of 2. Values read by Claude in Word as well. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/table-last/d4_break_last.docx` | ok | No repair prompt; Word adds an empty paragraph to the last section. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/model/d4_*.docx` | ok | Not opened: byte for byte the fixtures above. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/model-owner/blank.docx` | ok | Compared with the original, headers and footers included. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/model-owner/features.docx` | ok | Compared with the original, headers and footers included. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/model-owner/long.docx` | ok | Compared with the original, headers and footers included. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/model-owner/builtins.docx` | ok | Compared with the original, headers and footers included. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/edited-owner/blank.docx` | ok | Footer page numbers, last section landscape A4 with the table, heading and list. Values read by Claude in Word as well. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/edited-owner/features.docx` | ok | Footer page numbers, last section landscape A4 with the table, heading and list. Values read by Claude in Word as well. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/edited-owner/long.docx` | ok | Footer page numbers, last section landscape A4 with the table, heading and list. Values read by Claude in Word as well. |
+| 2026-11-08 | Word for Mac 16.114.4 | `build/d4/edited-owner/builtins.docx` | ok | Footer page numbers, last section landscape A4 with the table, heading and list. Values read by Claude in Word as well. |
+| 2026-11-08 | Word for Mac 16.114.4 | Save in Word | ok | D4: `d4_sections`, `d4_headers`, `d4_fields`, `d4_break_last` and an edited owner file. |
