@@ -17,7 +17,9 @@ and measures the store of a formula-dense sheet ("Model figures" below). A
 sixth, `benchmark/docx_benchmark_test.dart`, builds a table of 12 columns of
 text, 2,500 and 10,000 rows, with `addTable` and `addRow`, saves it, opens it
 and reads every cell
-("DOCX table figures" below).
+("DOCX table figures" below). A seventh, `benchmark/docx_model_benchmark_test.dart`,
+scales the owner's `long.docx` to about 40,000 paragraphs, opens it, changes
+one paragraph and saves ("DOCX document figures" below).
 
 The figures below are records, not thresholds (spec section 5): nothing fails
 when a later run is slower, and they are not a promise.
@@ -44,6 +46,8 @@ dart test benchmark/xlsx_model_benchmark_test.dart
 dart test -p chrome benchmark/xlsx_model_benchmark_test.dart
 dart test benchmark/docx_benchmark_test.dart
 dart test -p chrome benchmark/docx_benchmark_test.dart
+dart test benchmark/docx_model_benchmark_test.dart
+dart test -p chrome benchmark/docx_model_benchmark_test.dart
 ```
 
 The quality gate does not run it. `dart_test.yaml` starts Chrome with
@@ -814,3 +818,88 @@ chrome | 10000 rows | cells | 120012 | 5145557 characters | 109337 distinct text
 - The memory figures include garbage the collector has not yet freed (the
   VM's RSS never falls); the VM and Chrome figures measure different things
   and must not be compared (see "First figures").
+
+## DOCX document figures
+
+`benchmark/docx_model_benchmark_test.dart` opens a large Word-authored
+document, loads its body, changes the text of one paragraph near the middle,
+saves, reopens the saved bytes and reads that paragraph back (the test asserts
+its text). The owner supplied no large Word file, so the document is made from
+the owner's `test/fixtures/owner/docx/long.docx` (36,524 bytes, 15 pages, 104
+paragraphs among the body's blocks, written by Word for Mac): the test repeats
+the children of the body, but for the final `w:sectPr`, 385 times, by string
+surgery on `word/document.xml`, and repackages the package with every other
+part as it was. Word's markup is kept, with two changes: the `w:id` of each
+bookmark (shifted 1,000 a copy) and the number in each `_Toc` name (suffixed
+with the copy number, so the `PAGEREF` fields and hyperlink anchors pointing to
+the names follow) differ per copy; and the `w14:paraId` and `w14:textId`
+attributes, which are optional and meant to be unique, are dropped. The result
+has 40,810 blocks, 40,040 of them paragraphs, and a main part of 34,981,100
+bytes of XML. On the VM the bytes are read from disk and in Chrome by
+`spawnHybridUri` (`benchmark/src/owner_file_hybrid.dart`); each platform
+builds, deflates and opens its own bytes (decision
+[`0006`](decisions/0006-zip-bytes-may-differ-by-platform.md)). Each phase runs
+once. Memory is read as in "DOCX table figures"; the baseline is high because
+the test builds the document's 35 MB of XML first in the same process, so the
+"before" of the first phase already holds that.
+
+- Date: 2026-11-08.
+- Machine: Mac15,7, Apple M3 Pro, 36 GiB RAM.
+- OS: macOS 27.2.
+- Dart SDK 3.13.7 (stable); the VM runs the JIT, Chrome runs dart2js output.
+
+| Phase | VM (ms) | Chrome (ms) |
+|---|---|---|
+| Open | 96.9 | 294.2 |
+| Load the body | 1994.8 | 2971.4 |
+| Set the text of one paragraph | 0.9 | 0.3 |
+| Save | 932.2 | 2127.5 |
+| Reopen the saved bytes and load the body | 1949.2 | 3183.0 |
+
+| | VM (bytes) | Chrome (bytes) |
+|---|---|---|
+| Scaled input file | 4,854,346 | 5,061,552 |
+| Saved file | 3,813,003 | 3,828,909 |
+| Main part, uncompressed | 34,981,100 | 34,981,100 |
+
+Every line:
+
+```text
+vm | input | long.docx 36524 bytes, 104 paragraphs | scaled file 4854346 bytes | word/document.xml 34981100 bytes XML
+vm | phase | open | 96.9 ms | RSS before 565592064 | after 495878144 | peak RSS 615301120 (was 615301120)
+vm | phase | load the body | 1994.8 ms | RSS before 495878144 | after 945881088 | peak RSS 945881088 (was 615301120)
+vm | body | 40810 blocks | 40040 paragraphs
+vm | phase | set the text of block 20405 | 0.9 ms | RSS before 945913856 | after 945995776 | peak RSS 945995776 (was 945913856)
+vm | phase | save | 932.2 ms | RSS before 945995776 | after 1043038208 | peak RSS 1100201984 (was 945995776)
+vm | output | saved file 3813003 bytes
+vm | phase | reopen (and load the body) | 1949.2 ms | RSS before 1043038208 | after 1408909312 | peak RSS 1408909312 (was 1100201984)
+vm | read back | block 20405 | "Changed by the benchmark"
+chrome | input | long.docx 36524 bytes, 104 paragraphs | scaled file 5061552 bytes | word/document.xml 34981100 bytes XML
+chrome | phase | open | 294.2 ms | peak JS heap before 298158363 | after 220492847 | peak JS heap 220492863 (was 298159859)
+chrome | phase | load the body | 2971.4 ms | peak JS heap before 220496427 | after 498244795 | peak JS heap 498244811 (was 220496443)
+chrome | body | 40810 blocks | 40040 paragraphs
+chrome | phase | set the text of block 20405 | 0.3 ms | peak JS heap before 498277071 | after 498295823 | peak JS heap 498295839 (was 498277659)
+chrome | phase | save | 2127.5 ms | peak JS heap before 498298683 | after 596923140 | peak JS heap 596923156 (was 498298699)
+chrome | output | saved file 3828909 bytes
+chrome | phase | reopen (and load the body) | 3183.0 ms | peak JS heap before 596839848 | after 934916845 | peak JS heap 934916861 (was 596839864)
+chrome | read back | block 20405 | "Changed by the benchmark"
+```
+
+### Reading the figures
+
+- **Opening is cheap and loading the body is not.** `open` inflates and
+  checks the package and takes 97 ms on the VM and 294 ms in Chrome; loading
+  the 35 MB main part takes about 2.0 s on the VM and 3.0 s in Chrome, and
+  adds 450 MB of RSS on the VM and 278 MB of JS heap in Chrome, about 11 KB and
+  7 KB a paragraph of this markup (the figures include garbage not yet freed).
+- **Changing one paragraph costs nothing; saving costs half a load.**
+  The edit is under a millisecond. The save, 0.9 s on the VM and 2.1 s in
+  Chrome, re-encodes the main part from the model, since the body was loaded
+  and changed; a document whose body was never loaded is saved as read.
+- **Reopening the saved bytes takes as long as the first load**, 1.9 s and
+  3.2 s, as it loads the body again; the saved file is 21 percent smaller than
+  the input on the VM, as the repackaged input and the model's output are
+  deflated differently.
+- Two figures here are one run each on one machine, so they show the order of
+  magnitude and not a precise ratio, and the VM and Chrome memory figures
+  measure different things and must not be compared.

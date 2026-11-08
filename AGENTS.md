@@ -347,11 +347,13 @@ reads the largest single sheet the default limits accept (about 250 MiB of XML;
 about 20 s, and about 2.3 GB of heap in Chrome). Each prints time, file size and
 peak memory per run. `docx_benchmark_test.dart` builds a 10,000 x 12 table
 with `addTable` and `addRow`, saves it, opens the bytes and reads every cell,
-printing time, file size and memory per phase. `xlsx_format_benchmark_test.dart`
-times `NumberFormatter.formatCell` on every cell of the read file (the
+printing time, file size and memory per phase. `docx_model_benchmark_test.dart`
+scales the owner's `long.docx` to about 40,000 paragraphs, opens it, loads the
+body, changes one paragraph, saves and reopens the saved bytes, timing each
+phase. `xlsx_format_benchmark_test.dart` times `NumberFormatter.formatCell` on every cell of the read file (the
 benchmark of synthetic values is in `jet_core`). The quality gate does not run
 them; run them by hand on the VM and in Chrome (`dart test benchmark` runs all
-six). They record figures and fail on none (`docs/benchmark.md`):
+seven). They record figures and fail on none (`docs/benchmark.md`):
 
 ```bash
 dart test benchmark
