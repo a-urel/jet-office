@@ -21,6 +21,8 @@
 library;
 
 export 'src/layout/geometry.dart' show ChartPoint, ChartRect, ChartSize;
+export 'src/layout/overlap.dart'
+    show ChartOverlap, ChartOverlapKind, findOverlaps;
 export 'src/layout/primitives.dart'
     show
         ArcPrimitive,
