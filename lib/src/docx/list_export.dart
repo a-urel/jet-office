@@ -183,14 +183,30 @@ final class DocxListExport {
   /// [totals] as a last row when given.
   ///
   /// The list goes in the body's last section, whose page, header and footer
-  /// it sets first (below). Until the look is added in later steps of D6, the
-  /// list is a plain table appended to the end of the body: a header row
-  /// that repeats, the data rows and the totals row, each cell holding the
-  /// value as Excel shows it. A `String` is written as given, `null` as an
-  /// empty cell, and a `num`, [FormatDecimal], `DateTime`, `Duration` or
-  /// `bool` through [NumberFormatter] with the column's
+  /// it sets first (below), and is appended to the end of the body: the
+  /// [caption] as a paragraph of one bold 14 pt run, the table, and one empty
+  /// paragraph, which Word wants after a table and which keeps a list written
+  /// after this one from joining it. A last block that is an empty paragraph
+  /// with no section break is removed first, so a new document starts with
+  /// the list, unless it follows a table (it then separates the two). Each
+  /// cell holds the value as Excel shows it. A `String` is written as given,
+  /// `null` as an empty cell, and a `num`, [FormatDecimal], `DateTime`,
+  /// `Duration` or `bool` through [NumberFormatter] with the column's
   /// [DocxListColumn.numberFormat] and [locale] (`General` without a code, and
   /// the locale's short date for a `DateTime` without one).
+  ///
+  /// **Table.** The `Table Grid` style, one column per [columns] entry: each
+  /// [DocxListColumn.widthPt] as given, and the columns without one sharing
+  /// what the given widths leave of the text width of the page this list sets
+  /// ([pageSize] and [margins] less the gutter), equally. When every width is
+  /// given the page is not consulted: they are written as given, even past
+  /// the margins. The header row is bold, shaded [headerShading] (cell
+  /// shading, pattern clear), repeats on every page and does not split. The
+  /// totals row is bold and not shaded. A column's cells, header and totals
+  /// included, are aligned [DocxListColumn.alignment]; without one, a column
+  /// with a number format is aligned `DocxAlignment.end` (the right edge in
+  /// a left-to-right paragraph, the one Word writes as `w:jc w:val="end"`),
+  /// and any other is left as the paragraph default.
   ///
   /// Throws [ArgumentError], before [document] changes, for no columns or
   /// more than [maxTableColumns] (named `columns`), an empty header or one
@@ -203,9 +219,10 @@ final class DocxListExport {
   /// [totals] value of an unsupported type (`totals[j]`). A row longer than
   /// [columns] throws [ArgumentError] named `rows[i]`, `i` counting from 0,
   /// and a value of an unsupported type named `rows[i][j]`, each before that
-  /// row is written. Those two come after the page, header, footer, the
+  /// row is written. Those two come after the page, header, footer, caption,
   /// table and its header row are written, so they and the rows before the
-  /// bad one stay in [document]. [rows] is read once.
+  /// bad one stay in [document]; the table is then left without the totals
+  /// row and the empty paragraph. [rows] is read once.
   ///
   /// **Page.** The last section gets [pageSize] (A4 portrait when `null`) and
   /// [margins] (Word's blank-document margins when `null`).
@@ -256,11 +273,31 @@ final class DocxListExport {
           _cellText(formatter, totals[j], columns[j], 'totals[$j]'),
       ];
     }
-    _writePage(document.sections.last, formatter);
-    final DocxTable table = document.body.addTable(columns: columns.length);
-    table.addRow(<String>[
-      for (final DocxListColumn c in columns) c.header,
-    ], header: true);
+    final DocxSection section = document.sections.last;
+    final List<double> widths = _widths(_textWidth());
+    _writePage(section, formatter);
+    _removeTrailingEmptyParagraph(document.body);
+    final DocxBody body = document.body;
+    final String? text = caption;
+    if (text != null) {
+      final DocxRun run = body.addParagraph().addRun(text);
+      run.properties.bold = true;
+      run.properties.sizePt = 14;
+    }
+    final DocxTable table = body.addTable(
+      columns: columns.length,
+      columnWidthsPt: widths,
+    );
+    final DocxShading? fill = headerShading == null
+        ? null
+        : DocxShading(fill: DocxColor.rgb(headerShading!));
+    _addRow(
+      table,
+      <String>[for (final DocxListColumn c in columns) c.header],
+      header: true,
+      bold: true,
+      shading: fill,
+    );
     int index = 0;
     for (final List<Object?> row in rows) {
       if (row.length > columns.length) {
@@ -270,13 +307,97 @@ final class DocxListExport {
           'The row has more values than the ${columns.length} columns.',
         );
       }
-      table.addRow(<String>[
+      _addRow(table, <String>[
         for (int j = 0; j < row.length; j++)
           _cellText(formatter, row[j], columns[j], 'rows[$index][$j]'),
       ]);
       index++;
     }
-    if (totalsTexts != null) table.addRow(totalsTexts);
+    if (totalsTexts != null) _addRow(table, totalsTexts, bold: true);
+    body.addParagraph();
+  }
+
+  /// Adds a row of [values] to [table] and applies the look: bold runs and a
+  /// cell [shading] when given, and each column's alignment.
+  void _addRow(
+    DocxTable table,
+    List<String> values, {
+    bool header = false,
+    bool bold = false,
+    DocxShading? shading,
+  }) {
+    final DocxTableRow row = table.addRow(values, header: header);
+    for (int j = 0; j < columns.length; j++) {
+      final DocxTableCell cell = row.cells[j];
+      if (shading != null) cell.properties.shading = shading;
+      final DocxListColumn c = columns[j];
+      final DocxAlignment? alignment =
+          c.alignment ?? (c.numberFormat != null ? DocxAlignment.end : null);
+      for (final DocxBlock block in cell.blocks) {
+        if (block is! DocxParagraph) continue;
+        if (alignment != null) block.properties.alignment = alignment;
+        if (bold) {
+          for (final DocxInline inline in block.inlines) {
+            if (inline is DocxRun) inline.properties.bold = true;
+          }
+        }
+      }
+    }
+  }
+
+  /// The text width of the section the list is written to, from the page
+  /// and margins [_writePage] will set, in points.
+  double _textWidth() {
+    final DocxPageSize size = pageSize ?? DocxPageSize.a4();
+    final DocxPageMargins m = margins ?? _blankMargins;
+    return size.widthPt - m.leftPt - m.rightPt - m.gutterPt;
+  }
+
+  /// The grid of the table: the given widths, and the null ones sharing what
+  /// is left of [textWidth] equally. Throws [ArgumentError] named `columns`
+  /// when a share would be 1 point or less.
+  List<double> _widths(double textWidth) {
+    double given = 0;
+    int open = 0;
+    for (final DocxListColumn c in columns) {
+      final double? w = c.widthPt;
+      if (w == null) {
+        open++;
+      } else {
+        given += w;
+      }
+    }
+    double share = 0;
+    if (open > 0) {
+      share = (textWidth - given) / open;
+      if (share <= 1) {
+        throw ArgumentError.value(
+          columns.length,
+          'columns',
+          'The columns without a width would get ${_describe(share)} '
+              'points each: the text is ${_describe(textWidth)} points wide '
+              'and the given widths take ${_describe(given)}.',
+        );
+      }
+    }
+    return <double>[for (final DocxListColumn c in columns) c.widthPt ?? share];
+  }
+
+  /// Removes the body's last block when it is an empty paragraph that ends
+  /// no section and does not separate two tables, so a new document starts
+  /// with the list; an empty paragraph after a table stays, or the next list
+  /// would join that table.
+  static void _removeTrailingEmptyParagraph(DocxBody body) {
+    final List<DocxBlock> blocks = body.blocks;
+    if (blocks.isEmpty) return;
+    final DocxBlock last = blocks.last;
+    if (last is! DocxParagraph ||
+        last.inlines.isNotEmpty ||
+        last.section != null) {
+      return;
+    }
+    if (blocks.length > 1 && blocks[blocks.length - 2] is DocxTable) return;
+    body.removeBlockAt(blocks.length - 1);
   }
 
   /// A document of its own holding the list, with the document properties
@@ -292,20 +413,21 @@ final class DocxListExport {
     return document.save();
   }
 
+  /// Word's blank-document margins.
+  static final DocxPageMargins _blankMargins = DocxPageMargins(
+    top: 70.85,
+    right: 70.85,
+    bottom: 70.85,
+    left: 70.85,
+    header: 35.4,
+    footer: 35.4,
+    gutter: 0,
+  );
+
   /// Sets [section]'s page, header and footer; see [writeTo].
   void _writePage(DocxSection section, NumberFormatter formatter) {
     section.pageSize = pageSize ?? DocxPageSize.a4();
-    section.margins =
-        margins ??
-        DocxPageMargins(
-          top: 70.85,
-          right: 70.85,
-          bottom: 70.85,
-          left: 70.85,
-          header: 35.4,
-          footer: 35.4,
-          gutter: 0,
-        );
+    section.margins = margins ?? _blankMargins;
     final OfficeImage? image = logo;
     final String? name = title;
     final DateTime? day = date;

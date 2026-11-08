@@ -7,6 +7,8 @@ import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../../tool/src/part_compare.dart';
+
 const List<DocxListColumn> _two = <DocxListColumn>[
   DocxListColumn('Code'),
   DocxListColumn('Amount', numberFormat: '#,##0.00'),
@@ -979,6 +981,276 @@ void main() {
           f.name,
       ];
       expect(names.where((String n) => n.startsWith('docProps')), isEmpty);
+    });
+  });
+
+  group('body', () {
+    final List<List<Object?>> three = <List<Object?>>[
+      <Object?>['A', 1],
+      <Object?>['B', 2],
+      <Object?>['C', 3],
+    ];
+
+    DocxTable tableOf(DocxDocument d) =>
+        d.body.blocks.whereType<DocxTable>().single;
+
+    List<DocxRun> runsOf(DocxTableCell c) => <DocxRun>[
+      for (final DocxBlock b in c.blocks)
+        if (b is DocxParagraph) ...b.inlines.whereType<DocxRun>(),
+    ];
+
+    DocxAlignment? alignOf(DocxTableCell c) =>
+        (c.blocks.first as DocxParagraph).properties.alignment;
+
+    bool isBlank(DocxBlock b) =>
+        b is DocxParagraph && b.inlines.isEmpty && b.section == null;
+
+    test('a caption, the table and one empty paragraph, no leading one', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two, caption: 'Accounts').writeTo(doc, three);
+      final List<DocxBlock> blocks = doc.body.blocks;
+      expect(blocks, hasLength(3));
+      final DocxParagraph caption = blocks[0] as DocxParagraph;
+      expect(caption.text, 'Accounts');
+      expect(caption.inlines, hasLength(1));
+      final DocxRun run = caption.inlines.single as DocxRun;
+      expect(run.properties.bold, isTrue);
+      expect(run.properties.sizePt, 14);
+      expect(blocks[1], isA<DocxTable>());
+      expect(isBlank(blocks[2]), isTrue);
+    });
+
+    test('without a caption the table comes first', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two).writeTo(doc, three);
+      expect(doc.body.blocks, hasLength(2));
+      expect(doc.body.blocks.first, isA<DocxTable>());
+      expect(isBlank(doc.body.blocks.last), isTrue);
+    });
+
+    test('a body ending in a paragraph with a section break keeps it', () {
+      final DocxDocument doc = DocxDocument();
+      doc.body.addSection();
+      final int before = doc.body.blocks.length;
+      DocxListExport(_two).writeTo(doc, three);
+      expect(doc.body.blocks.length, before + 2);
+    });
+
+    test('the grid has the given widths and shares the rest equally', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(const <DocxListColumn>[
+        DocxListColumn('A', widthPt: 100),
+        DocxListColumn('B'),
+        DocxListColumn('C'),
+      ]).writeTo(doc, three);
+      final double text = doc.sections.last.textWidthPt!;
+      final List<double?> grid = tableOf(doc).gridColumnsPt!;
+      expect(grid, hasLength(3));
+      expect(grid[0], 100);
+      expect(grid[1], closeTo((text - 100) / 2, 0.1));
+      expect(grid[2], closeTo((text - 100) / 2, 0.1));
+    });
+
+    test('all widths null share the text width', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two).writeTo(doc, three);
+      final double text = doc.sections.last.textWidthPt!;
+      for (final double? w in tableOf(doc).gridColumnsPt!) {
+        expect(w, closeTo(text / 2, 0.1));
+      }
+    });
+
+    test('the widths follow the page the list sets', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(
+        _two,
+        pageSize: DocxPageSize.a4(landscape: true),
+      ).writeTo(doc, three);
+      final double text = doc.sections.last.textWidthPt!;
+      expect(tableOf(doc).gridColumnsPt!.first, closeTo(text / 2, 0.1));
+    });
+
+    test('widths that leave nothing throw before the document changes', () {
+      final DocxDocument doc = DocxDocument();
+      final Uint8List before = _saved(doc);
+      const List<DocxListColumn> cols = <DocxListColumn>[
+        DocxListColumn('A', widthPt: 453),
+        DocxListColumn('B'),
+      ];
+      _throwsNamed(() => DocxListExport(cols).writeTo(doc, three), 'columns');
+      expect(_saved(doc), before);
+      _throwsNamed(() => DocxListExport(cols).toDocx(three), 'columns');
+    });
+
+    test('the check uses the page the list sets', () {
+      final DocxDocument doc = DocxDocument();
+      // 400 leaves 53.6 pt on A4 portrait but nothing on a narrow page.
+      _throwsNamed(
+        () => DocxListExport(const <DocxListColumn>[
+          DocxListColumn('A', widthPt: 400),
+          DocxListColumn('B'),
+        ], pageSize: DocxPageSize(450, 600)).writeTo(doc, three),
+        'columns',
+      );
+    });
+
+    test('every width given is written as given, even past the page', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(const <DocxListColumn>[
+        DocxListColumn('A', widthPt: 400),
+        DocxListColumn('B', widthPt: 300),
+      ]).writeTo(doc, three);
+      expect(tableOf(doc).gridColumnsPt, <double?>[400, 300]);
+    });
+
+    test('the header row repeats, holds bold runs and is shaded', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two).writeTo(doc, three);
+      final DocxTableRow row = tableOf(doc).rows.first;
+      expect(row.properties.repeatAsHeader, isTrue);
+      expect(row.properties.cantSplit, isTrue);
+      for (final DocxTableCell c in row.cells) {
+        expect(runsOf(c).single.properties.bold, isTrue);
+        final DocxShading shading = c.properties.shading!;
+        expect(shading.pattern, DocxShadingPattern.clear);
+        expect(shading.fill, DocxColor.rgb('D9D9D9'));
+      }
+      for (final DocxTableCell c in tableOf(doc).rows[1].cells) {
+        expect(c.properties.shading, isNull);
+        expect(runsOf(c).single.properties.bold, isNot(isTrue));
+      }
+    });
+
+    test('headerShading null leaves the header unshaded', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two, headerShading: null).writeTo(doc, three);
+      for (final DocxTableCell c in tableOf(doc).rows.first.cells) {
+        expect(c.properties.shading, isNull);
+        expect(runsOf(c).single.properties.bold, isTrue);
+      }
+    });
+
+    test('headerShading in lower case is stored as RGB', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two, headerShading: 'ff8800').writeTo(doc, three);
+      expect(
+        tableOf(doc).rows.first.cells.first.properties.shading!.fill,
+        DocxColor.rgb('FF8800'),
+      );
+    });
+
+    test('a number format aligns to the end, header and cells', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two).writeTo(doc, three, totals: <Object?>['T', 6]);
+      for (final DocxTableRow r in tableOf(doc).rows) {
+        expect(alignOf(r.cells[0]), isNull);
+        expect(alignOf(r.cells[1]), DocxAlignment.end);
+      }
+    });
+
+    test('a column alignment wins, header and totals too', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(const <DocxListColumn>[
+        DocxListColumn('A', alignment: DocxAlignment.center),
+        DocxListColumn('B', numberFormat: '0', alignment: DocxAlignment.left),
+      ]).writeTo(doc, three, totals: <Object?>['T', 6]);
+      for (final DocxTableRow r in tableOf(doc).rows) {
+        expect(alignOf(r.cells[0]), DocxAlignment.center);
+        expect(alignOf(r.cells[1]), DocxAlignment.left);
+      }
+    });
+
+    test('the totals row is last and bold, without shading', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two).writeTo(doc, three, totals: <Object?>['T', 6]);
+      final DocxTableRow row = tableOf(doc).rows.last;
+      expect(row.cells.map((DocxTableCell c) => c.text), <String>['T', '6.00']);
+      for (final DocxTableCell c in row.cells) {
+        expect(runsOf(c).single.properties.bold, isTrue);
+        expect(c.properties.shading, isNull);
+      }
+      expect(row.properties.repeatAsHeader, isNot(isTrue));
+    });
+
+    test('no rows: the header and totals rows only', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(
+        _two,
+      ).writeTo(doc, const <List<Object?>>[], totals: <Object?>['T', 0]);
+      expect(tableOf(doc).rows, hasLength(2));
+    });
+
+    test('an empty cell has no run to make bold', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(
+        _two,
+      ).writeTo(doc, const <List<Object?>>[], totals: <Object?>['T']);
+      expect(tableOf(doc).rows.last.cells[1].text, '');
+    });
+
+    test('writing twice gives two tables with a paragraph between', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two).writeTo(doc, three);
+      DocxListExport(_two).writeTo(doc, three);
+      final List<DocxBlock> b = doc.body.blocks;
+      expect(b, hasLength(4));
+      expect(b[0], isA<DocxTable>());
+      expect(isBlank(b[1]), isTrue);
+      expect(b[2], isA<DocxTable>());
+      expect(isBlank(b[3]), isTrue);
+    });
+
+    test('a second caption stands after the separating paragraph', () {
+      final DocxDocument doc = DocxDocument();
+      DocxListExport(_two).writeTo(doc, three);
+      DocxListExport(_two, caption: 'Again').writeTo(doc, three);
+      final List<DocxBlock> b = doc.body.blocks;
+      expect(b, hasLength(5));
+      expect(isBlank(b[1]), isTrue);
+      expect((b[2] as DocxParagraph).text, 'Again');
+    });
+
+    test('a letter before the list stays', () {
+      final DocxDocument doc = DocxDocument();
+      doc.body.addParagraph().addRun('Letter');
+      DocxListExport(_two).writeTo(doc, three);
+      final List<DocxBlock> b = doc.body.blocks;
+      expect(b.whereType<DocxTable>(), hasLength(1));
+      expect(
+        b.any((DocxBlock x) => x is DocxParagraph && x.text == 'Letter'),
+        isTrue,
+      );
+      expect(isBlank(b.last), isTrue);
+    });
+
+    test('the saved bytes open without warnings and round trip', () {
+      final DocxResult out = DocxListExport(
+        _two,
+        title: 'T',
+        caption: 'Caption',
+      ).toDocx(three, totals: <Object?>['Total', 6]);
+      expect(out.warnings, isEmpty);
+      final DocxDocument back = DocxDocument.open(out.bytes);
+      expect(back.warnings, isEmpty);
+      expect(tableOf(back).rows, hasLength(5));
+      expect(comparePackages(out.bytes, back.save().bytes), isEmpty);
+    });
+
+    test('a control character warns', () {
+      final DocxResult out = DocxListExport(_two).toDocx(<List<Object?>>[
+        <Object?>['a\u0001b', 1],
+      ]);
+      expect(
+        out.warnings.map((DocxWarning w) => w.code),
+        contains(DocxWarningCode.invalidCharactersRemoved),
+      );
+    });
+
+    test('toDocx sets the title', () {
+      final DocxResult out = DocxListExport(
+        _two,
+      ).toDocx(three, properties: const OfficeProperties(title: 'X'));
+      expect(DocxDocument.open(out.bytes).properties.title, 'X');
     });
   });
 }
