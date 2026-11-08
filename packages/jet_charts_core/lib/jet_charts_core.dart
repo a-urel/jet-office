@@ -17,9 +17,12 @@
 ///   for tests.
 ///
 /// Milestone J2 adds the axis scales and the layout that turns a chart, a
-/// theme and a size into primitives.
+/// theme and a size into primitives: `layoutChart`, its `ChartLayout` and the
+/// `ChartHiddenLabel`s it leaves out.
 library;
 
+export 'src/layout/chart_layout.dart'
+    show ChartHiddenLabel, ChartLayout, layoutChart;
 export 'src/layout/geometry.dart' show ChartPoint, ChartRect, ChartSize;
 export 'src/layout/overlap.dart'
     show ChartOverlap, ChartOverlapKind, findOverlaps;
