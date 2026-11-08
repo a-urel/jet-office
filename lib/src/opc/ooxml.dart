@@ -305,6 +305,18 @@ abstract final class ContentType {
   static const String wmlFooter =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml';
 
+  /// The footnotes part of a Word document (`word/footnotes.xml`).
+  static const String wmlFootnotes =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml';
+
+  /// The endnotes part of a Word document (`word/endnotes.xml`).
+  static const String wmlEndnotes =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml';
+
+  /// The comments part of a Word document (`word/comments.xml`).
+  static const String wmlComments =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml';
+
   /// The numbering part of a Word document (`word/numbering.xml`).
   static const String wmlNumbering =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml';

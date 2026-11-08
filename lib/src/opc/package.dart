@@ -164,6 +164,10 @@ final class OpcPackage {
   // Parsed or created relationships by the same key, in first-use order.
   final Map<String, ({String source, Relationships rels, bool fromInput})>
   _rels = <String, ({String source, Relationships rels, bool fromInput})>{};
+  // What [peekRelationships] read of a relationships entry not parsed, by
+  // the entry's name: an input entry never changes, so neither does this.
+  final Map<String, List<OpcRelationship>> _peeked =
+      <String, List<OpcRelationship>>{};
 
   /// The names of the parts, in original ZIP order, then added parts in the
   /// order they were added. Absolute, as stored.
@@ -236,6 +240,26 @@ final class OpcPackage {
   List<OpcRelationship> relationshipsOf(String source) {
     final Relationships? rels = _relsOf(source, create: false);
     return rels == null ? const <OpcRelationship>[] : rels.items;
+  }
+
+  /// The relationships of [source] as [relationshipsOf] gives them, without
+  /// registering them for rewriting: relationships not parsed yet are read
+  /// from their entry and stay unparsed, so [writeTo] copies the entry byte
+  /// for byte. Relationships parsed or added since are given as they are now.
+  ///
+  /// [source] is a part name, or `''` for the package root; one without
+  /// relationships, or no part at all, has none. Throws an
+  /// [OpcFormatException] when the relationships part cannot be read.
+  List<OpcRelationship> peekRelationships(String source) {
+    final String key = _key(source);
+    final known = _rels[key];
+    if (known != null) return known.rels.items;
+    final String? entry = _relsEntries[key];
+    if (entry == null) return const <OpcRelationship>[];
+    return _peeked[entry] ??= _parseXml(
+      _relsName(_plain(source)),
+      () => Relationships.parse(_pull(_readEntry(_zip!, entry), _maxDepth)),
+    ).items;
   }
 
   /// The absolute part name that [target], a relationship target of

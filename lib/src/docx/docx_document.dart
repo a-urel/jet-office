@@ -38,8 +38,7 @@ import 'dart:typed_data';
 import '../common/properties.dart';
 import '../common/properties_parts.dart';
 import '../opc/change_log.dart';
-import '../opc/ooxml.dart' show ContentType, Ns, RelType;
-import '../opc/opaque_xml.dart' show KeptAttribute, keepAttributes;
+import '../opc/ooxml.dart' show ContentType, RelType;
 import '../opc/package.dart' show OpcPackage, OpcRelationship, PartContent;
 import '../xml/xml_pull_reader.dart';
 import '../zip/archive_adapter.dart';
@@ -61,6 +60,7 @@ import 'properties_source.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
 import 'related_part.dart';
+import 'save_ids.dart';
 import 'section_property_codecs.dart'
     show AddedSectionReference, SectionReference, SectionReferenceType;
 import 'settings_part.dart';
@@ -596,38 +596,22 @@ final class DocxDocument {
     ..._storiesToCreate,
   ].map((_Story s) => s.part).nonNulls;
 
-  /// The `r:id` of every `w:headerReference` and `w:footerReference` of the
-  /// main part in the file: a new relationship takes none of them, or a
-  /// reference that names nothing would name the new part. Those the model
-  /// does not type count, wherever they are, and so does one replaced, which
-  /// an undo brings back.
-  late final Set<String> _fileReferenceIds = _package.guard(
-    _package.mainPart,
-    () {
-      final XmlPullReader r = XmlPullReader.fromBytes(
-        _package.package.originalBytes(_package.mainPart),
-        maxDepth: _package.limits.maxDepth,
-      );
-      final Set<String> ids = <String>{};
-      while (r.next()) {
-        // The reader of the main part stops at the end of `w:document`; so
-        // does this, or what a file holds after it fails a save.
-        if (r.eventType == XmlEventType.endElement && r.depth == 0) break;
-        if (r.eventType != XmlEventType.startElement ||
-            r.namespaceUri != Ns.w ||
-            (r.localName != 'headerReference' &&
-                r.localName != 'footerReference')) {
-          continue;
-        }
-        for (final KeptAttribute a in keepAttributes(r)) {
-          if (a.namespaceUri == Ns.rel && a.qualifiedName.endsWith(':id')) {
-            ids.add(a.value);
-          }
-        }
-      }
-      return ids;
-    },
-  );
+  /// The ids of the save running now, made on first use and dropped when
+  /// it ends, so two saves never share one (plan Ruling A).
+  SaveIds? _saveIdsOfSave;
+
+  /// The ids of this save: drawing and bookmark ids for what the model
+  /// built, and new relationships that take no id the file's parts name.
+  /// Only [_write] may ask.
+  SaveIds get _saveIds => _saveIdsOfSave ??= SaveIds(_package);
+
+  /// The relationship ids the main part names in the file, which a new
+  /// relationship of it must not take ([SaveIds.fileReferenceIds]): one
+  /// that names nothing, such as a header reference with no relationship,
+  /// would come to name the new part. Those the model does not type count,
+  /// wherever they are, and so does one replaced, which an undo brings back.
+  Set<String> get _mainReferenceIds =>
+      _saveIds.fileReferenceIds(_package.mainPart);
 
   /// Finds the new stories a section of the document refers to and names
   /// their parts, without touching the package, so that a save that stops at
@@ -669,26 +653,20 @@ final class DocxDocument {
     _storiesToCreate = stories;
   }
 
-  /// The ids a new relationship of [slot] must not take: those of the header
-  /// and footer references of the main part, as [_fileReferenceIds]. None
-  /// when the part exists, and none when the main part cannot be read: it
-  /// is copied as it is, and a failure to read it is not this part's to
-  /// report.
-  Set<String> _reservedFor(RelatedPart slot) {
-    if (slot.exists) return const <String>{};
-    try {
-      return _fileReferenceIds;
-    } on DocxReadException {
-      return const <String>{};
-    }
-  }
+  /// The ids a new relationship of [slot] must not take: those the main
+  /// part names, as [_mainReferenceIds]. None when the part exists; those
+  /// read up to the point of failure when the main part cannot be read
+  /// ([SaveIds]): it is copied as it is, and a failure to read it is not
+  /// this part's to report.
+  Set<String> _reservedFor(RelatedPart slot) =>
+      slot.exists ? const <String>{} : _mainReferenceIds;
 
   /// Creates the parts [_nameNewStories] named, so that the main part, which
   /// the package writes after this, knows the ids.
   void _createNewStories() {
     if (_storiesToCreate.isEmpty) return;
     for (final _Story story in _storiesToCreate) {
-      story.create(_fileReferenceIds);
+      story.create(_mainReferenceIds);
       _stories[story.part!.partName] = story;
     }
     _storiesToCreate = const <_Story>[];
@@ -716,6 +694,15 @@ final class DocxDocument {
   }
 
   void _write(ZipWriter zip) {
+    _saveIdsOfSave = null;
+    try {
+      _writeParts(zip);
+    } finally {
+      _saveIdsOfSave = null;
+    }
+  }
+
+  void _writeParts(ZipWriter zip) {
     final DocxPackage package = _package;
     final DocumentPart? main = _part;
     if (main != null) {

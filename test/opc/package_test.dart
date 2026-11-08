@@ -596,6 +596,87 @@ void main() {
     });
   });
 
+  group('peekRelationships', () {
+    Uint8List write(OpcPackage p) {
+      final ZipWriter w = ZipWriter();
+      p.writeTo(w);
+      return w.close()!;
+    }
+
+    ZipReader open(Uint8List b) => ZipReader(
+      b,
+      maxEntries: 1000,
+      maxEntryBytes: 1 << 24,
+      maxTotalBytes: 1 << 26,
+      maxCompressionRatio: 1000,
+    );
+
+    const String raw =
+        '<Relationships xmlns="$_relNs">'
+        '<Relationship Id="rId3" Type="t" Target="http://x" '
+        'TargetMode="External" extra="1"/>'
+        '<Relationship Id="rId1" Type="u" Target="media/a.png"/>'
+        '</Relationships>';
+
+    test('reads the relationships and leaves the part byte equal', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('word/header1.xml', '<h/>'),
+        ('word/_rels/header1.xml.rels', raw),
+      ]);
+      final List<OpcRelationship> rels = p.peekRelationships(
+        '/word/header1.xml',
+      );
+      expect(rels.map((OpcRelationship r) => r.id), <String>['rId3', 'rId1']);
+      expect(rels.first.external, isTrue);
+      expect(rels.first.target, 'http://x');
+      expect(rels.last.type, 'u');
+      // A second peek, by another spelling, reads the same.
+      expect(p.peekRelationships('word/HEADER1.xml'), hasLength(2));
+      final ZipReader z = open(write(p));
+      expect(utf8.decode(z.read('word/_rels/header1.xml.rels')), raw);
+    });
+
+    test('is empty for a part without relationships and for none', () {
+      final OpcPackage p = _package(<(String, String)>[('a.xml', '<a/>')]);
+      expect(p.peekRelationships('/a.xml'), isEmpty);
+      expect(p.peekRelationships('/missing.xml'), isEmpty);
+      expect(open(write(p)).contains('_rels/a.xml.rels'), isFalse);
+    });
+
+    test('sees relationships parsed or added since', () {
+      final OpcPackage p = _package(<(String, String)>[
+        ('word/header1.xml', '<h/>'),
+        ('word/_rels/header1.xml.rels', raw),
+      ]);
+      expect(p.peekRelationships('/word/header1.xml'), hasLength(2));
+      final String id = p.addRelationship(
+        '/word/header1.xml',
+        type: 'v',
+        target: 'media/b.png',
+      );
+      expect(id, 'rId2');
+      expect(
+        p
+            .peekRelationships('/word/header1.xml')
+            .map((OpcRelationship r) => r.id),
+        <String>['rId3', 'rId1', 'rId2'],
+      );
+    });
+
+    test('a malformed part throws and stays as read', () {
+      const String bad = '<Relationships><Relationship';
+      final OpcPackage p = _package(<(String, String)>[
+        ('a.xml', '<a/>'),
+        ('_rels/a.xml.rels', bad),
+      ]);
+      expect(
+        () => p.peekRelationships('/a.xml'),
+        throwsA(isA<OpcFormatException>()),
+      );
+      expect(utf8.decode(open(write(p)).read('_rels/a.xml.rels')), bad);
+    });
+  });
+
   group('resolve', () {
     test('targets resolve relative, absolute, percent-encoded and with '
         'backslashes', () {
