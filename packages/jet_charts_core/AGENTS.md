@@ -72,7 +72,9 @@ findings.
   code is the part `tool/src/axis_oracle_full.dart`. `test/axis_oracle_test.dart`
   checks it as it checks the first; the first oracle's files stay as committed.
 
-`docs/excel-checks.md` lists the Office theme values Excel has not confirmed.
+`docs/excel-checks.md` lists the Office theme values Excel's default charts
+confirmed and those still unconfirmed; `docs/parity.md` compares layout with
+Excel and lists every deliberate difference.
 
 ## Fuzzing
 

@@ -131,5 +131,5 @@ for L and B, per set and font, the scale at each run of plot lengths (plot
 height for columns, plot width for bars), so the length at which the unit
 coarsens shows; for W whether width changed anything; for M, G and F Excel's
 `min`, `max` and `major` beside `autoValueScale`'s at Excel's own plot length
-through `provisionalMaxIntervals`, labelled provisional; for C the label spacing
-per width.
+and the case's font through `excelMaxIntervals`, the rule fitted on this run
+(`docs/axis-scaling.md`, "Findings"); for C the label spacing per width.

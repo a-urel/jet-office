@@ -634,8 +634,8 @@ double _plotLength(AxisFullCase kase, AxisFullRow row) =>
 /// - W: per data set and height, which of `min`, `max` and `major` differ
 ///   across width, or `same`.
 /// - M, G and F: Excel's scale beside `autoValueScale`'s at Excel's own plot
-///   length through `provisionalMaxIntervals`, labelled provisional: that
-///   rule is not Excel's yet.
+///   length and the case's font size through `excelMaxIntervals`, the rule
+///   fitted on the owner's full run.
 /// - C: per label set, the label spacing at each width (`-` for none).
 String axisFullReport(
   AxisFullCases cases,
@@ -718,8 +718,8 @@ String axisFullReport(
     });
 
     out.writeln(
-      'M, G, F: Excel beside the provisional rule '
-      '(provisionalMaxIntervals at Excel\'s plot length)',
+      'M, G, F: Excel beside the rule '
+      '(excelMaxIntervals at Excel\'s plot length and the case\'s font)',
     );
     for (final AxisFullCase kase in cases.cases) {
       if (!const <String>{'M', 'G', 'F'}.contains(kase.group)) continue;
@@ -734,7 +734,11 @@ String axisFullReport(
       final ValueScale rule = autoValueScale(
         dataMin: extent.min,
         dataMax: extent.max,
-        maxIntervals: provisionalMaxIntervals(length),
+        maxIntervals: excelMaxIntervals(
+          length,
+          horizontal: kase.valueAxisIsHorizontal,
+          fontSize: row.font,
+        ),
         fixedMin: kase.fixedMin,
         fixedMax: kase.fixedMax,
         fixedMajorUnit: kase.fixedMajor,
@@ -746,7 +750,7 @@ String axisFullReport(
           _close(rule.majorUnit, row.major);
       out.writeln(
         '${kase.id}: Excel ${_scaleText(row.min, row.max, row.major)}; '
-        'provisional ${_scaleText(rule.min, rule.max, rule.majorUnit)} '
+        'rule ${_scaleText(rule.min, rule.max, rule.majorUnit)} '
         'at plot ${_length(length)}: ${same ? 'same' : 'differs'}',
       );
     }

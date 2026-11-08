@@ -3,7 +3,7 @@ import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
 import 'package:jet_charts_core/src/layout/degradation.dart';
 import 'package:jet_charts_core/src/layout/resolve.dart';
 import 'package:jet_charts_core/src/scale/value_scale.dart'
-    show provisionalMaxIntervals;
+    show excelMaxIntervals;
 import 'package:jet_core/jet_core.dart';
 import 'package:test/test.dart';
 
@@ -244,7 +244,11 @@ void main() {
     final ValueScale expected = autoValueScale(
       dataMin: 3,
       dataMax: 12,
-      maxIntervals: provisionalMaxIntervals(plot.height),
+      maxIntervals: excelMaxIntervals(
+        plot.height,
+        horizontal: false,
+        fontSize: ChartTheme.office.axisLabels.size,
+      ),
     );
     expect(layout.valueScale, expected);
     final List<TextPrimitive> labels = textsStarting(

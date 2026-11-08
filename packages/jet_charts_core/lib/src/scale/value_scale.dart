@@ -7,7 +7,8 @@
 /// 2026-11-08 (`test/fixtures/owner/axis/`). Excel for Mac is the oracle; the
 /// run found the minimum and maximum to depend on the data only, and the
 /// major unit also on the axis length, which is why [autoValueScale] takes
-/// the most intervals the axis can hold.
+/// the most intervals the axis can hold ([excelMaxIntervals], fitted on the
+/// owner's full run of 2026-11-08, `test/fixtures/owner/axis_full/`).
 ///
 /// The steps, in order:
 ///
@@ -102,22 +103,65 @@ final class ValueScale {
       'ticks: ${ticks.length})';
 }
 
-/// The most major intervals an axis of [axisLength] can hold.
+/// The most major intervals Excel gives a value axis of [axisLength] whose
+/// tick labels are [fontSize] points.
 ///
-/// This is `(axisLength / 12.5).floor()` between 2 and 10. It is provisional:
-/// the owner's run did not record the plot length, and Task 11 replaces this
-/// with the rule the oracle gives.
+/// Fitted on the owner's full run of Excel for Mac (2026-11-08, `tr-TR`,
+/// `test/fixtures/owner/axis_full/`): every L, B, W, M, G and F row, with
+/// Excel's own plot height (vertical) or plot width (horizontal) as
+/// [axisLength] and the case's font size, gives Excel's unit through
+/// [autoValueScale] (`test/scale/axis_parity_test.dart`).
 ///
-/// Throws an [ArgumentError] for a negative or `NaN` length.
-int provisionalMaxIntervals(double axisLength) {
+/// - A vertical axis (column, line, area) holds
+///   `(axisLength - fontSize) / (fontSize + 2)` intervals: its labels, one
+///   font size tall each, stacked 2 points apart, fit the axis. Fonts 8, 10
+///   and 18 agree; the gap may lie anywhere from 1.96 to 2.32 points.
+/// - A horizontal axis (bar) holds `(axisLength + 2 * fontSize) /
+///   (3.9 * fontSize)` intervals. Fonts 8, 10 and 18 agree; the factors may
+///   lie from 3.83 to 3.93 and 1.85 to 2.38. The labels' width does not
+///   enter: the percent axes of G08 and G11, whose labels are twice as wide
+///   as the B sets', fit the same rule.
+///
+/// The result is rounded down and kept between 1 and 10: Excel took one
+/// interval on the shortest plots and never more than 10 (a 264 pt column
+/// plot that could hold 20 gave 10). Width never changed a column chart's
+/// scale (W). No length gives 1 and an infinite one 10; a font size of 0
+/// gives 10 on any length.
+///
+/// Throws an [ArgumentError] for a negative or `NaN` length, or a negative or
+/// non-finite font size.
+int excelMaxIntervals(
+  double axisLength, {
+  required bool horizontal,
+  required double fontSize,
+}) {
   if (axisLength.isNaN || axisLength < 0) {
     throw ArgumentError.value(axisLength, 'axisLength', 'must not be negative');
   }
-  if (axisLength.isInfinite) {
-    return 10;
+  if (!fontSize.isFinite || fontSize < 0) {
+    throw ArgumentError.value(
+      fontSize,
+      'fontSize',
+      'must be finite and not negative',
+    );
   }
-  return math.min(10, math.max(2, (axisLength / 12.5).floor()));
+  if (axisLength.isInfinite) {
+    return _excelIntervals;
+  }
+  final double q = horizontal
+      ? (axisLength + 2 * fontSize) / (3.9 * fontSize)
+      : (axisLength - fontSize) / (fontSize + 2);
+  if (q.isNaN) {
+    return 1;
+  }
+  if (q >= _excelIntervals) {
+    return _excelIntervals;
+  }
+  return math.max(1, q.floor());
 }
+
+/// The most intervals Excel's automatic unit takes.
+const int _excelIntervals = 10;
 
 /// The lowest and highest value a chart's [series] reach under [grouping].
 ///

@@ -42,10 +42,11 @@ void main() {
     expect(_problems(barrel.readAsStringSync()), isEmpty);
   });
 
-  test('the provisional interval rule is not public', () {
-    // Task 11 replaces provisionalMaxIntervals; until then only the
-    // package's own code and tests use it, through src/.
+  test('the interval rule is not public', () {
+    // excelMaxIntervals is the layout's own; only the package's code and
+    // tests use it, through src/. The provisional rule it replaced is gone.
     final String source = File('lib/jet_charts_core.dart').readAsStringSync();
+    expect(source, isNot(contains('excelMaxIntervals')));
     expect(source, isNot(contains('provisionalMaxIntervals')));
   });
 

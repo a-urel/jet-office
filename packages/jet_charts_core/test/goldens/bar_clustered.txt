@@ -9,16 +9,10 @@ rect legend/2/symbol 213.70,223.10 7.00x7.00 fill=196B24 stroke=- width=1.00
 text legend/2/text 224.70,221.20 21.60x10.80 rotation=0.00 size=9.00 color=595959 bold=false "West"
 rect plot 22.80,30.80 323.80x169.60 fill=- stroke=- width=1.00
 path grid/value/0 22.80,30.80 22.80,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/1 55.18,30.80 55.18,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/2 87.56,30.80 87.56,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/3 119.94,30.80 119.94,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/4 152.32,30.80 152.32,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/5 184.70,30.80 184.70,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/6 217.08,30.80 217.08,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/7 249.46,30.80 249.46,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/8 281.84,30.80 281.84,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/9 314.22,30.80 314.22,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/10 346.60,30.80 346.60,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/1 103.75,30.80 103.75,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/2 184.70,30.80 184.70,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/3 265.65,30.80 265.65,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/4 346.60,30.80 346.60,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 clip plot/clip 22.80,30.80 323.80x169.60
   rect series/0/bar/0 22.80,184.90 194.28x7.40 fill=156082 stroke=- width=1.00
   rect series/0/bar/1 22.80,142.50 291.42x7.40 fill=156082 stroke=- width=1.00
@@ -35,16 +29,10 @@ clip plot/clip 22.80,30.80 323.80x169.60
 path axis/value/line 22.80,200.40 346.60,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path axis/category/line 22.80,30.80 22.80,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 text axis/value/label/0 20.10,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
-text axis/value/label/1 52.48,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"
-text axis/value/label/2 84.86,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "4"
-text axis/value/label/3 117.24,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "6"
-text axis/value/label/4 149.62,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8"
-text axis/value/label/5 179.30,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
-text axis/value/label/6 211.68,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "12"
-text axis/value/label/7 244.06,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "14"
-text axis/value/label/8 276.44,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "16"
-text axis/value/label/9 308.82,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "18"
-text axis/value/label/10 341.20,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "20"
+text axis/value/label/1 101.05,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"
+text axis/value/label/2 179.30,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
+text axis/value/label/3 260.25,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "15"
+text axis/value/label/4 341.20,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "20"
 text axis/category/label/0 8.00,173.80 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q1"
 text axis/category/label/1 8.00,131.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q2"
 text axis/category/label/2 8.00,89.00 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q3"

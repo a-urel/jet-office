@@ -6,10 +6,10 @@ import '../model/equality.dart';
 /// The gaps, symbol sizes and line widths the layout uses, in the unit of the
 /// backend (points in the Office theme).
 ///
-/// Every default is the Office theme's value and every one is unconfirmed:
-/// none has been measured against Excel for Mac, and `docs/excel-checks.md`
-/// lists each as unconfirmed with no source yet. Task 11 of milestone J2
-/// measures them.
+/// Every default is the Office theme's value. Excel's default charts
+/// (`chart_defaults.xlsx`) verify the line widths, the overlap and the tick
+/// length; the gaps and the legend's sizes are unconfirmed, as Excel lays a
+/// chart out itself and writes none of them (`docs/excel-checks.md`).
 final class ChartSpacing {
   /// Creates a spacing; every field has the Office theme's default.
   ///
@@ -81,17 +81,18 @@ final class ChartSpacing {
   final double minTextGap;
 
   /// The length of an axis tick mark. Reserved: milestone J2 draws no tick
-  /// marks whatever its value, so it changes nothing yet. Unconfirmed.
+  /// marks whatever its value, so it changes nothing yet. Verified: Excel's
+  /// default axes have no tick marks.
   final double tickLength;
 
-  /// The width of a grid line. Unconfirmed.
+  /// The width of a grid line. Verified: 0.75 pt in Excel.
   final double gridLineWidth;
 
-  /// The width of an axis line. Unconfirmed.
+  /// The width of an axis line. Verified: 0.75 pt in Excel.
   final double axisLineWidth;
 
   /// The overlap of the bars of one category, as a percentage of a bar's
-  /// width; negative leaves a gap. Unconfirmed.
+  /// width; negative leaves a gap. Verified: -27 in Excel.
   final double overlapPercent;
 
   /// A copy with the given fields replaced.

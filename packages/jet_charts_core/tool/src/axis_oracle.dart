@@ -26,7 +26,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/scale/value_scale.dart'
-    show provisionalMaxIntervals;
+    show excelMaxIntervals;
 
 part 'axis_oracle_full.dart';
 

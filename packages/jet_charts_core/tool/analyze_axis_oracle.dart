@@ -14,7 +14,7 @@
 /// it prints per group what the data shows (`axisFullReport` in
 /// `tool/src/axis_oracle.dart`): for L and B the plot length at which the
 /// unit coarsens, for W whether width changed anything, for M, G and F
-/// Excel's scale beside the provisional rule's, and for C the label spacing
+/// Excel's scale beside the fitted rule's, and for C the label spacing
 /// per width.
 ///
 /// It exits 0, or 2 on unusable input: a file that does not read, or a CSV

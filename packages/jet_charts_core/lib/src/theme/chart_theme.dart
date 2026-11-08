@@ -47,13 +47,15 @@ final class ChartTheme {
   /// 2026-11-06 (dark 1 `000000`, light 1 `FFFFFF`, dark 2 `0E2841`, light 2
   /// `E8E8E8`). Its [exportColors] is [ChartExportColors.fileTheme].
   ///
-  /// Unconfirmed and still to be measured against Excel (`docs/excel-checks.md`
-  /// gives each value's source): the font
-  /// family `Aptos Narrow` (the theme file names Aptos), the sizes (9 pt for
-  /// axis labels, legend and data labels, 14 pt for the title), the text
-  /// colour `595959`, the grid and axis line colour `D9D9D9`, the background
-  /// `FFFFFF`, [gapWidthPercent], [lineWidth] and [markerSize], and every value
-  /// of [spacing].
+  /// Verified on Excel's default column and line charts
+  /// (`chart_defaults.xlsx`, 2026-11-08; `docs/excel-checks.md` gives each
+  /// value's source): the font family `Aptos Narrow` (the theme's minor
+  /// font), 9 pt axis labels and a 14 pt title, the text colour `595959`, the
+  /// grid and axis line colour `D9D9D9`, the background `FFFFFF`,
+  /// [gapWidthPercent] 219, [lineWidth] 2.25, [markerSize] 5, and of
+  /// [spacing] the line widths, the overlap and the tick length. Still
+  /// unconfirmed: 9 pt for the legend and data labels, and the other gaps of
+  /// [spacing].
   static final ChartTheme office = buildOfficeTheme();
 
   /// The series colours, in order. Never empty.
@@ -84,16 +86,16 @@ final class ChartTheme {
   final ChartColor background;
 
   /// The gap between the bars or columns of a category, as a percentage of a
-  /// bar's width. Excel's default is unconfirmed; see
-  /// `docs/excel-checks.md` for 219.
+  /// bar's width. Excel's default, 219, is verified; see
+  /// `docs/excel-checks.md`.
   final double gapWidthPercent;
 
-  /// The width of a line series, in points. Excel's default is unconfirmed;
-  /// see `docs/excel-checks.md` for 2.25.
+  /// The width of a line series, in points. Excel's default, 2.25, is
+  /// verified; see `docs/excel-checks.md`.
   final double lineWidth;
 
-  /// The size of a marker, in points. Excel's default is unconfirmed; see
-  /// `docs/excel-checks.md` for 5.
+  /// The size of a marker, in points. Excel's default, 5, is verified; see
+  /// `docs/excel-checks.md`.
   final double markerSize;
 
   /// The gaps, symbol sizes and line widths of the layout.

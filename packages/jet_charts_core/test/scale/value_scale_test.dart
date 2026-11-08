@@ -1,6 +1,6 @@
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/scale/value_scale.dart'
-    show provisionalMaxIntervals;
+    show excelMaxIntervals;
 import 'package:test/test.dart';
 
 /// The scale's three numbers, for compact expectations.
@@ -329,18 +329,55 @@ void main() {
     });
   });
 
-  group('provisionalMaxIntervals', () {
-    test('is the length over 12.5, between 2 and 10', () {
-      expect(provisionalMaxIntervals(150), 10);
-      expect(provisionalMaxIntervals(100), 8);
-      expect(provisionalMaxIntervals(10), 2);
-      expect(provisionalMaxIntervals(0), 2);
-      expect(provisionalMaxIntervals(double.infinity), 10);
+  group('excelMaxIntervals', () {
+    int vertical(double length, double font) =>
+        excelMaxIntervals(length, horizontal: false, fontSize: font);
+    int horizontal(double length, double font) =>
+        excelMaxIntervals(length, horizontal: true, fontSize: font);
+
+    test('a vertical axis holds (length - font) / (font + 2), 1 to 10', () {
+      // Excel's own plot heights (axis_oracle_full.tr-TR.csv).
+      expect(vertical(23.93, 10), 1);
+      expect(vertical(43.93, 10), 2);
+      expect(vertical(63.93, 10), 4);
+      expect(vertical(83.93, 10), 6);
+      expect(vertical(123.93, 10), 9);
+      expect(vertical(143.93, 10), 10);
+      expect(vertical(763.93, 10), 10);
+      expect(vertical(67.73, 8), 5);
+      expect(vertical(94.28, 18), 3);
     });
 
-    test('a negative or NaN length throws', () {
-      expect(() => provisionalMaxIntervals(-1), throwsArgumentError);
-      expect(() => provisionalMaxIntervals(double.nan), throwsArgumentError);
+    test('a horizontal axis holds (length + 2 font) / (3.9 font), 1 to 10', () {
+      expect(horizontal(43.13, 10), 1);
+      expect(horizontal(83.13, 10), 2);
+      expect(horizontal(143.13, 10), 4);
+      expect(horizontal(263.13, 10), 7);
+      expect(horizontal(363.13, 10), 9);
+      expect(horizontal(563.13, 10), 10);
+      expect(horizontal(267, 8), 9);
+      expect(horizontal(247.63, 18), 4);
+    });
+
+    test('no length gives 1, an infinite one 10', () {
+      expect(vertical(0, 9), 1);
+      expect(horizontal(0, 9), 1);
+      expect(vertical(double.infinity, 9), 10);
+      expect(horizontal(double.infinity, 9), 10);
+    });
+
+    test('a font size of 0 gives 10 on any length, 1 on none', () {
+      expect(vertical(100, 0), 10);
+      expect(horizontal(100, 0), 10);
+      expect(horizontal(0, 0), 1);
+    });
+
+    test('a negative or NaN length or font size throws', () {
+      expect(() => vertical(-1, 9), throwsArgumentError);
+      expect(() => horizontal(double.nan, 9), throwsArgumentError);
+      expect(() => vertical(100, -1), throwsArgumentError);
+      expect(() => horizontal(100, double.nan), throwsArgumentError);
+      expect(() => vertical(100, double.infinity), throwsArgumentError);
     });
   });
 

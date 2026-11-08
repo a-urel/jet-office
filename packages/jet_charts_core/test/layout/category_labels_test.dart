@@ -131,6 +131,24 @@ void main() {
     expect(findOverlaps(layout.primitives, layout.size), isEmpty);
   });
 
+  test('level labels skip at most every second, then turn', () {
+    // Excel's label spacing never exceeded 2 in the owner's full run (C
+    // group), so where every third level label would fit but not every
+    // second, they turn instead. 18 labels 48.6 wide on a plot about 360
+    // wide: two bands are too few, three would do at 0 degrees.
+    final List<String> cats = labelsOf(18, 9);
+    final ChartLayout layout = lay(cats, const ChartSize(400, 300));
+    final double band = layout.plotArea!.width / 18;
+    expect(2 * band, lessThan(48.6 + minTextGap));
+    expect(3 * band, greaterThanOrEqualTo(48.6 + minTextGap));
+    final Map<int, TextPrimitive> labels = categoryLabels(layout);
+    expect(labels.keys, List<int>.generate(18, (int i) => i));
+    for (final TextPrimitive t in labels.values) {
+      expect(t.rotationDegrees, -45);
+    }
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+
   test('long labels turn to 45 degrees', () {
     // 18 labels 64.8 wide: three bands are too few at 0 degrees, one band
     // holds a turned label and its neighbour.

@@ -8,7 +8,8 @@
 /// never the reverse.
 ///
 /// The value scale and the axis bands depend on each other: the scale's most
-/// intervals come from the plot's length (`provisionalMaxIntervals`), the
+/// intervals come from the plot's length and the tick labels' font size
+/// (`excelMaxIntervals`, fitted on the owner's full Excel run), the
 /// tick labels from the scale, and the bands from the labels. [layoutFrame]
 /// starts from the plot without bands and repeats until the scale and bands
 /// stay the same, at most 12 passes, keeping the last: the first four take
@@ -312,10 +313,18 @@ extension on FrameContext {
   }
 
   /// The most intervals of the value axis of [plot]; 1 when it has no length.
-
+  /// A theme's tick label size that is not a finite positive number is read
+  /// as 0, so layout never throws on it.
   int _maxIntervals(ChartRect plot) {
     final double length = bar ? plot.width : plot.height;
-    return length > 0 ? provisionalMaxIntervals(length) : 1;
+    final double size = theme.axisLabels.size;
+    return length > 0
+        ? excelMaxIntervals(
+            length,
+            horizontal: bar,
+            fontSize: size.isFinite && size > 0 ? size : 0,
+          )
+        : 1;
   }
 
   bool _valueLabelsFit(

@@ -318,7 +318,7 @@ extension FramePaint on FrameContext {
   /// out).
   ///
   /// Value labels of an attempt with no room at all come from a fallback
-  /// scale of at most `provisionalMaxIntervals(0)` intervals.
+  /// scale of at most `excelMaxIntervals(0, ...)` intervals: one.
   List<(String, String)> hiddenTexts(
     FrameShown wanted,
     FrameShown shown,
@@ -328,7 +328,7 @@ extension FramePaint on FrameContext {
     final List<String> ticks = <String>[
       for (final MeasuredLabel label
           in a.valueLabels.isEmpty && wanted.valueLabels
-              ? tickLabels(scaleFor(provisionalMaxIntervals(0)))
+              ? tickLabels(scaleFor(1))
               : a.valueLabels)
         label.text,
     ];

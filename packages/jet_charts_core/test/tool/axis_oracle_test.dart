@@ -10,7 +10,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/scale/value_scale.dart'
-    show provisionalMaxIntervals;
+    show excelMaxIntervals;
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
 
@@ -898,22 +898,22 @@ void _fullTests() {
         expect(lines, contains('W06 h300: across width: major'));
       });
 
-      test('M, G and F stand beside the provisional rule', () {
+      test('M, G and F stand beside the rule', () {
         final String m01 = lines.singleWhere(
           (String l) => l.startsWith('M01-w360-h300-f10:'),
         );
         expect(m01, startsWith('M01-w360-h300-f10: Excel 0 to 10 by 2; '));
-        expect(m01, contains('provisional'));
+        expect(m01, contains('; rule '));
         expect(m01, endsWith('at plot 240: differs'));
         final ValueScale g09 = autoValueScale(
           dataMin: 0,
           dataMax: 9,
-          maxIntervals: provisionalMaxIntervals(288),
+          maxIntervals: excelMaxIntervals(288, horizontal: true, fontSize: 10),
           percent: true,
         );
         expect(
           lines.singleWhere((String l) => l.startsWith('G08-')),
-          'G08-w360-h300-f10: Excel 0 to 10 by 2; provisional 0 to 1 by '
+          'G08-w360-h300-f10: Excel 0 to 10 by 2; rule 0 to 1 by '
           '${g09.majorUnit} at plot 288: differs',
         );
         expect(lines.where((String l) => l.startsWith('F')), hasLength(5));
