@@ -915,11 +915,14 @@ final class DocxDocument {
       slot.create(settings, reservedIds: _reservedFor(slot));
     }
     _createNewStories();
-    if (main != null) _planBuilt(main);
+    // Every part the save keeps (the stories, the slots above, the
+    // properties) is added before the parts it takes back after the write
+    // (media), so the next save finds them in the same order.
     final PropertiesState? properties = _properties;
     if (properties != null) {
       package.guard(package.mainPart, properties.sync);
     }
+    if (main != null) _planBuilt(main);
     package.guard(package.mainPart, () => package.package.writeTo(zip));
     final DocumentPart? part = _part;
     _warnings = List<DocxWarning>.unmodifiable(<DocxWarning>[

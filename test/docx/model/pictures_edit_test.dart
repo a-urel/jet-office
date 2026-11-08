@@ -547,6 +547,32 @@ void main() {
       expect(doc.save().bytes, withPictures);
     });
 
+    test('a picture and a first properties set save the same bytes twice', () {
+      // The properties parts are kept by the save, the media parts are taken
+      // back after it: kept parts must be added first, or the next save writes
+      // the media before the properties and the ZIP order differs.
+      final DocxDocument built = DocxDocument();
+      built.sections.single.footer.addParagraph();
+      final Uint8List input = built.save().bytes;
+      final DocxDocument doc = DocxDocument.open(input);
+      final DocxParagraph p = _first(doc);
+      final DocxParagraph foot =
+          doc.sections.single.footer.blocks.single as DocxParagraph;
+      final ChangeSet set = editsOf(doc).transaction(() {
+        p.addPicture(OfficeImage(png4x2));
+        foot.addHyperlink('site', url: 'https://x.test/');
+        foot.addPicture(OfficeImage(jpeg3x5));
+        doc.properties = const OfficeProperties(title: 'T');
+      });
+      final Uint8List first = doc.save().bytes;
+      expect(_media(_entries(first)), hasLength(2));
+      expect(doc.save().bytes, first);
+      changeLogOf(doc).revertSet(set);
+      expect(doc.save().bytes, input);
+      changeLogOf(doc).reapplySet(set);
+      expect(doc.save().bytes, first);
+    });
+
     test('a removed picture leaves no media part at the next save', () {
       final Uint8List input = DocxDocument().save().bytes;
       final DocxDocument doc = DocxDocument.open(input);
