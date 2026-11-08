@@ -23,12 +23,13 @@ dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 
 (The D2 and D3 sections below use the same commands; their folders hold the
 `d2_*` and `d3_*` documents as well. The D3 section adds one command, for a
-document that ends in a table. The D4 section has commands of its own, which
-write to `build/d4/`.)
+document that ends in a table. The D4 and D5 sections have commands of their
+own, which write to `build/d4/` and `build/d5/`.)
 
 `build/fixtures` also holds the workbooks of the Excel checks; open the
-`d1_*.docx` files (D1), the `d2_*.docx` files (D2), the `d3_*.docx` files
-(D3) and the `d4_*.docx` files (D4).
+`d1_*.docx` files (D1), the `d2_*.docx` files (D2) and the `d3_*.docx` files
+(D3); the `d4_*.docx` (D4) and `d5_*.docx` (D5) files are under `build/d4/` and
+`build/d5/`.
 `tool/round_trip_docx.dart` prints each difference between an input and the
 model's output and exits 1 on any, so run it first and expect none;
 `tool/edit_docx.dart` likewise prints each problem with an edited document
@@ -522,6 +523,129 @@ pages and the fields are as before: `d4_sections` still has its four sections,
 `d4_headers` its five pages with the table above, `d4_fields` its five fields
 (`DATE` and `TIME` now hold a result in the file), and the edited owner file its
 last page landscape.
+
+## D5
+
+D5 types pictures, hyperlinks, bookmarks and the document properties. Open the
+D5 fixtures, their round trips and the round trips and edits of the owner's
+files in Word for Mac. All of them are under `build/d5/`, the folder to open.
+Write them with:
+
+```bash
+dart run tool/write_fixtures.dart build/d5/fixtures
+dart run tool/round_trip_docx.dart build/d5/fixtures build/d5/model
+dart run tool/round_trip_docx.dart test/fixtures/owner/docx build/d5/model-owner
+dart run tool/edit_docx.dart test/fixtures/owner/docx build/d5/edited-owner
+```
+
+`tool/round_trip_docx.dart` and `tool/edit_docx.dart` print each problem and
+exit 1 on any, so expect none.
+
+No repair prompt in any of them; then, per document, as below. As under D3 and
+D4, this section says what to look for: what each document should show comes
+from the code that wrote it and from the SDK, not from Word, so read every
+statement here as what to expect until the owner has looked. The result is
+recorded under "Results", and none is recorded here before then. A picture's
+size is read in Picture Format > Size (or Format Picture > Size and Position),
+its name in the Selection Pane (Picture Format > Selection Pane) and its
+description with Control-click > View Alt Text. A link's address shows when
+the pointer rests on it; Cmd-click follows it. File > Properties shows the
+document properties (its Summary, Statistics and Custom tabs).
+
+### Fixtures: `build/d5/fixtures/d5_*.docx`
+
+- `d5_pictures`: one page.
+  - The body reads `A PNG at its pixel size, 4 by 2 pixels, follows.`, then a
+    paragraph holding only a picture, so small that it shows as a dot:
+    0.11 cm wide and 0.05 cm high (3 × 1.5 pt, its 4 × 2 pixels at 96 dpi),
+    named `PNG`, alt text `A PNG of 4 by 2 pixels`, inline with the text (Wrap
+    Text: In Line with Text) and with its aspect locked.
+  - A table in `Table Grid`, its first row a repeating header: `Kind`,
+    `Picture` / `JPEG, 144 points wide` and, in the second cell, a picture
+    5.08 cm wide and 8.47 cm high (144 × 240 pt, its 3 × 5 pixels scaled with
+    their ratio), named `JPEG`, followed in the same paragraph by `The JPEG, 3
+    by 5 pixels`.
+  - Then `After the pictures.`.
+  - **The header logo on every page.** The header holds the same 4 × 2 PNG, as
+    small, named `Logo`, then `Logo beside the header text`. Click at the end
+    of the body and press Cmd-Return: page 2 shows the logo and the text in
+    its header too. Undo the break, or close without saving.
+- `d5_links`: one page. The body reads:
+  - `Overview` in Heading 1, inside the bookmark `Overview` (Insert >
+    Bookmark lists it; Go To there selects the heading).
+  - `Visit the project page for more.`: `the project page` is a link in the
+    Hyperlink style (blue, underlined); resting on it shows the tooltip `The
+    project page`, and Cmd-click opens `https://example.com/jet-office` in the
+    browser.
+  - `Back to the overview.`: `the overview` is a link in the same style;
+    Cmd-click jumps to the heading `Overview`, and Edit Hyperlink shows it as a
+    place in this document, the bookmark `Overview`.
+  - `After the links.`.
+  - **The footer link.** The footer reads `Footer link: example.com`;
+    `example.com` is a link, and Cmd-click (or double click into the footer
+    first) opens `https://example.com/`.
+- `d5_properties`: one page, `This document has its properties set.`. File >
+  Properties:
+  - Summary: Title `The D5 properties`, Subject `Document properties`, Author
+    `jet_office`, Company `Jet Office`, Category `Fixtures`, Keywords `docx;
+    properties; d5`, Comments `Every core property, the company and the
+    application.`; Manager empty.
+  - Statistics: Created 8 November 2026 at 09:30 UTC and Modified 8 November
+    2026 at 10:45 UTC (Word shows the local time: 12:30 and 13:45 in Türkiye),
+    Last saved by `The fixture list`, Revision number `3`.
+  - The content status `Final` and the application `jet_office` are in the
+    file too; Word for Mac may not show them. Report where they show, if
+    anywhere.
+
+### Round trips: `build/d5/model/d5_*.docx` and `build/d5/model-owner/*.docx`
+
+The model opened each document, read the body, every property, every picture,
+link and bookmark, every section value and story and the document properties,
+and saved it, changing nothing; `tool/round_trip_docx.dart` prints any
+difference from the input. `build/d5/model/d5_properties.docx` is byte for
+byte the fixture, which `cmp` shows. `d5_pictures` and `d5_links` hold the same
+parts with the same bytes, but in another ZIP order: loading the body parses
+the main part's relationships, and a parsed relationships part is written after
+those never parsed, here the header's or footer's (as since D1; the D4 fixtures
+had no such part). Open those two as well: they must look as the fixtures do.
+Open every file of `build/d5/model-owner`: no repair prompt, and each
+looks and reads as the original, with File > Properties as the original's. In
+the owner's files the links are the ones to compare: `long.docx` keeps its
+table of contents, whose entries jump to their headings, and `builtins.docx`
+its external link.
+
+### Edited owner files: `build/d5/edited-owner/*.docx`
+
+`tool/edit_docx.dart` adds a picture, two links, a bookmark and a title to what
+it did under D1 to D4 (AGENTS.md has its rules). Open all four files. No repair
+prompt, and:
+
+- **The new page.** The last, landscape page holds, after the table, the
+  paragraph `A picture, links to jet_office and the added heading.`: after `A
+  picture` sits the 4 × 2 PNG as a dot (0.11 × 0.05 cm), `jet_office` is a
+  link to `https://example.com/jet-office` (Cmd-click opens it), and `the
+  added heading` is a link that jumps to `Added by the model`, the heading
+  below it.
+- **The bookmark.** Insert > Bookmark lists `Model_edit`, and Go To selects the
+  text of `Added by the model`. In `long.docx` it sits among the file's own
+  `_Toc` bookmarks (tick Hidden bookmarks to see those).
+- **The title.** File > Properties > Summary shows the title `Edited by the
+  model`; every other property is the original's.
+- The links take the document's own Hyperlink style: `long.docx` and
+  `builtins.docx` have it under the id `Kpr`, as Turkish Word writes it, and in
+  `blank.docx` and `features.docx`, which have none, Word's definition is
+  added (blue, underlined).
+- The rest is as under D4: the footer's `Page <n> of <m>`, the table, the
+  heading and the list, and the edits of the original body.
+
+### Save in Word
+
+For `d5_pictures`, `d5_links`, `d5_properties` and one edited owner file:
+change one word in the body, save in Word, close and reopen. No repair
+prompt, the edit is there, and the pictures (sizes, names, the header logo),
+the links (addresses, the jump to the bookmark, the footer link) and the
+properties (Word now updates Modified, Last saved by and Revision number, the
+rest stays) are as before.
 
 ## Results
 

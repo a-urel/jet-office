@@ -103,7 +103,7 @@
 /// control or a threaded comment beside them is kept as written, and removing
 /// a table that a formula names is refused.
 ///
-/// [DocxDocument] is the Word document model, in progress (milestones D1 to D4;
+/// [DocxDocument] is the Word document model, in progress (milestones D1 to D5;
 /// the API may change before D6). [DocxDocument.new] starts a document like
 /// Word for Mac's blank one: A4 portrait, Aptos 12, no document properties.
 /// [DocxDocument.open] reads a DOCX file within [DocxReadLimits]; a file it
@@ -154,6 +154,22 @@
 /// as it was. Characters XML forbids are removed from text when it is set and
 /// reported at save as a [DocxWarning]. The visible text of an opaque inline
 /// holding `mc:AlternateContent` or a text box is empty.
+///
+/// Pictures, hyperlinks, bookmarks and document properties are typed
+/// (milestone D5). An inline picture is a [DocxPicture], run content that gives
+/// its size in points, name, description and `OfficeImage`;
+/// [DocxParagraph.addPicture] adds a PNG or JPEG in the body, a cell, a header
+/// or a footer. A [DocxHyperlink] is an inline holding inlines, with its
+/// external `url` or internal `anchor`; [DocxParagraph.addHyperlink] adds one
+/// in the character style `Hyperlink`. [DocxBookmarkStart] and
+/// [DocxBookmarkEnd] mark a bookmark, added with
+/// [DocxParagraph.addBookmarkStart] and [DocxParagraph.addBookmarkEnd], and a
+/// name breaking Word's rules is repaired as [repairBookmarkName] says. The
+/// media parts, relationships and ids these need are given by each save and
+/// never stored in the model. [DocxDocument.properties] gives the core,
+/// extended and custom properties as `OfficeProperties`, the type
+/// [XlsxWorkbook.properties] gives too; a new document has none until one is
+/// set. A floating picture, a chart and a `w:fldSimple` stay opaque.
 ///
 /// [DocxDocument.styles] gives the document's [DocxStyles] (milestone D2):
 /// the [DocxDocumentDefaults] and each [DocxStyle] of the styles part, by

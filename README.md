@@ -11,8 +11,8 @@ rendering and no PDF.
 Pre-release (`0.1.0-dev.1`). The package is not published to pub.dev
 (`publish_to: none`) until the owner decides. Phase 1 writes XLSX files and
 phase 2 reads them, and phase 3 opens, edits and saves them. Phase 4, DOCX,
-is in progress (milestones D1 to D3 of D1 to D6 are built and checked in Word,
-and D4 is built, pending the owner's Word check; see "DOCX" below).
+is in progress (milestones D1 to D4 of D1 to D6 are built and checked in Word,
+and D5 is built, pending the owner's Word check; see "DOCX" below).
 
 ## Installing
 
@@ -210,10 +210,24 @@ sheet.body.addParagraph('Summary');
 final DocxResult paged = sheet.save();
 ```
 
+So are pictures, hyperlinks, bookmarks and the document properties
+(`OfficeProperties`, the type a workbook's properties have too):
+
+```dart
+final DocxDocument page = DocxDocument();
+page.body.addParagraph().addPicture(OfficeImage(logoPng), widthPt: 72);
+page.body.addParagraph('More at ')
+  ..addHyperlink('our site', url: 'https://example.com/')
+  ..addRun('.');
+page.properties = const OfficeProperties(title: 'Quarterly report');
+final DocxResult linked = page.save();
+```
+
 Paragraphs, runs and their text, tabs and breaks, their formatting, the
-styles, the numbering, tables, sections, headers, footers and complex fields
-are typed so far. Everything else in the file (content controls, tracked
-changes, drawings, hyperlinks, notes) is kept as written, so the file comes
+styles, the numbering, tables, sections, headers, footers, complex fields,
+inline pictures, hyperlinks, bookmarks and the document properties are typed
+so far. Everything else in the file (content controls, tracked changes,
+floating drawings, charts, notes) is kept as written, so the file comes
 back with only your changes. The file is untrusted input, as
 for XLSX: `DocxReadLimits`, and a file that cannot be read throws a
 `DocxReadException`. [`docs/docx-model.md`](docs/docx-model.md) has the rules
@@ -328,7 +342,9 @@ with lower bounds: time and memory follow the size of the XML.
 ## Limits
 
 - XLSX is complete; DOCX is in progress (paragraphs, text, formatting,
-  styles and lists; no tables, headers or pictures yet). The writer writes
+  styles, lists, tables, sections, headers, footers, fields, inline pictures,
+  hyperlinks, bookmarks and properties; no `DocxListExport`, floating pictures
+  or charts yet). The writer writes
   no charts, pivot tables, macros or encryption.
 - The reader reads values, formulas, number formats and merged ranges; it
   reads no other styles, notes, pictures or tables, and does not calculate

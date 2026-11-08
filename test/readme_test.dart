@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import 'fixtures/m4_fixtures.dart' show png4x2;
 import 'support/xlsx_checker.dart';
 
 XlsxResult quickStart() {
@@ -136,7 +137,38 @@ DocxResult docxSections() {
   return paged;
 }
 
+DocxResult docxPictures(Uint8List logoPng) {
+  final DocxDocument page = DocxDocument();
+  page.body.addParagraph().addPicture(OfficeImage(logoPng), widthPt: 72);
+  page.body.addParagraph('More at ')
+    ..addHyperlink('our site', url: 'https://example.com/')
+    ..addRun('.');
+  page.properties = const OfficeProperties(title: 'Quarterly report');
+  final DocxResult linked = page.save();
+  return linked;
+}
+
 void main() {
+  test('README DOCX pictures block saves a picture, a link and a title', () {
+    final DocxResult linked = docxPictures(png4x2);
+    expect(linked.warnings, isEmpty);
+    final DocxDocument reopened = DocxDocument.open(linked.bytes);
+    final List<DocxParagraph> paragraphs = reopened.body.blocks
+        .whereType<DocxParagraph>()
+        .toList();
+    final DocxPicture picture =
+        paragraphs[1].inlines.whereType<DocxRun>().single.content.single
+            as DocxPicture;
+    expect(picture.image, OfficeImage(png4x2));
+    expect((picture.widthPt, picture.heightPt), (72.0, 36.0));
+    expect(paragraphs[2].text, 'More at our site.');
+    expect(
+      paragraphs[2].inlines.whereType<DocxHyperlink>().single.url,
+      'https://example.com/',
+    );
+    expect(reopened.properties.title, 'Quarterly report');
+  });
+
   test('README DOCX sections block saves a table and a landscape section', () {
     final DocxResult paged = docxSections();
     expect(paged.warnings, isEmpty);

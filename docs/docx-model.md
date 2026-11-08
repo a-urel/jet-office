@@ -10,8 +10,9 @@ fidelity standard; it applies decision
 WordprocessingML.
 
 This page covers milestone D1, the foundation, milestone D2, formatting,
-styles and lists, milestone D3, tables, and milestone D4, sections, headers,
-footers and fields. **The DOCX API is in progress and
+styles and lists, milestone D3, tables, milestone D4, sections, headers,
+footers and fields, and milestone D5, pictures, hyperlinks, bookmarks and
+document properties. **The DOCX API is in progress and
 may change before D6**; the names are fixed at D6 (decision 0010).
 
 ```dart
@@ -55,6 +56,23 @@ report.footer.addParagraph('Page ')
   ..addRun(' of ')
   ..addField(DocxField.numPages());
 doc.body.addParagraph('The report.');
+```
+
+A picture, a bookmark, two hyperlinks and the document's title (D5):
+
+```dart
+final DocxDocument doc = DocxDocument();
+final DocxParagraph heading = doc.body.addParagraph()..style = 'Heading1';
+final DocxBookmarkStart top = heading.addBookmarkStart('Top');
+heading
+  ..addRun('Report')
+  ..addBookmarkEnd(top);
+doc.body.addParagraph().addPicture(OfficeImage(logoPng), widthPt: 72);
+doc.body.addParagraph('See ')
+  ..addHyperlink('the site', url: 'https://example.com/')
+  ..addRun(' or go back to ')
+  ..addHyperlink('the top', anchor: 'Top');
+doc.properties = const OfficeProperties(title: 'Report');
 ```
 
 ## What D1 does and does not do
@@ -177,13 +195,57 @@ doc.body.addParagraph('The report.');
   `invalidCharactersRemoved`. A warning in a story starts with the part's name:
   `word/header1.xml/p[0]/r[1]`.
 
+## What D5 does
+
+- **Document properties, typed.** `DocxDocument.properties` is an
+  `OfficeProperties`, the type `XlsxWorkbook.properties` gives too (it was
+  `XlsxProperties`; one value class, writers and change for both formats, in
+  `lib/src/common/`): the core part's title, subject, creator, keywords,
+  description, last modified by, `revision`, category, content status and the
+  two dates, the extended part's `application`, company and manager, and the
+  custom properties. The parts load on the first read, each found by its
+  package relationship; a set is one change and re-encodes only the children
+  it changes.
+- **Pictures, typed.** A `w:drawing` holding one `wp:inline` that shows one
+  `pic:pic` is a `DocxPicture`, run content that gives `widthPt`, `heightPt`,
+  `name`, `description` and `image` (`OfficeImage?`). A read picture is written
+  as read. `DocxParagraph.addPicture` adds a PNG or JPEG picture in the body, a
+  cell, a header or a footer, at its pixel size or a size given.
+- **Hyperlinks, typed.** A `w:hyperlink` that is a direct child of a paragraph
+  is a `DocxHyperlink`, an inline holding inlines as `DocxField` does: `url`
+  (the external target of its `r:id`), `anchor`, `tooltip`, `inlines` and
+  `text`. Its runs are ordinary `DocxRun`s, whose text and properties can be
+  set. `DocxParagraph.addHyperlink` adds an external or an internal link in
+  the character style `Hyperlink`.
+- **Bookmarks, typed.** `w:bookmarkStart` and `w:bookmarkEnd` in a paragraph
+  or a typed hyperlink are `DocxBookmarkStart` (`id`, `name`) and
+  `DocxBookmarkEnd` (`id`). `addBookmarkStart` and `addBookmarkEnd` add a
+  pair, whose start and end may be in different paragraphs; a name breaking
+  Word's rules is repaired (`repairBookmarkName`).
+- **Allocated at save, never stored.** Every relationship, media part,
+  `wp:docPr` id, bookmark id and default picture name a built picture, link or
+  bookmark needs is given by each save and taken back once the file is
+  written (Ruling A), as D4 creates story parts at save: the change log never
+  touches the package, two saves of one model give the same file, and an undo
+  leaves nothing behind.
+- **Two new warning codes:** `propertyValueInvalid` (a property value that
+  cannot be read; it reads `null` and stays) and `bookmarkNameRepaired`. No
+  new read limit.
+- **Still kept as written, never typed** (Ruling 15): floating pictures
+  (`wp:anchor`), charts, shapes, groups and `mc:AlternateContent` in a
+  drawing, `w:fldSimple`, a hyperlink's `w:tgtFrame`, `w:history` and
+  `w:docLocation` (kept on a read link, as read), `w14:paraId`, and a
+  bookmark between blocks or in a table row. A linked picture is typed, with
+  `image` `null`.
+
 ## Known gaps
 
 - **Visible text of some opaque inlines.** `mc:AlternateContent` and the text
   of a text box give `''` for an opaque inline's visible text, so a paragraph
   whose words are only there reads as empty.
-- **A new document has no `docProps`** until D5: no `core.xml`, no
-  `app.xml`.
+- **A new document has no `docProps`** until a property is set (Ruling 4 of
+  D5): `DocxDocument()` saves no `core.xml` and no `app.xml`, and the library
+  has no clock to fill `created` or `modified`.
 - **A new document's theme is plainer than Word's** (decision 0011): no
   per-script font list, a plain format scheme, and fewer latent styles
   named, so Word's Styles pane recommends fewer built-in styles until they
@@ -360,6 +422,57 @@ doc.body.addParagraph('The report.');
   an empty result until Word opens the file, and a document read by anything
   that does not compute fields shows nothing there.
 
+### Known gaps of D5
+
+- **A read hyperlink or picture moved to another part or document keeps its
+  `r:id` as read** (Ruling 13), as an opaque one did. Its `url` or `image`
+  still reads the target in the relationships of the part it was read from
+  (ledger Ruling G), and the resolver it holds keeps the source document
+  alive. A built one, not yet saved, works anywhere, since its relationship is
+  made at save (test: `test/docx/model/hyperlinks_read_test.dart`, "a link
+  moved to another document edits and resolves there";
+  `test/docx/model/hyperlinks_edit_test.dart`, "a built link works in a second
+  document after a save"; `test/docx/model/pictures_edit_test.dart`, "a built
+  picture works in a second document").
+- **The style of a link built in a paragraph of no document** is the id
+  `Hyperlink` until the paragraph goes in; then it resolves by id first, where
+  a link built in a document finds the style by name through `ensureStyle`.
+  The two differ only in a file whose style of id `Hyperlink` has another
+  name (test: `test/docx/model/hyperlinks_edit_test.dart`, group "a link built
+  in a paragraph of no document").
+- **An empty styles part stays after save, undo, save.** In a document with
+  no styles part, a link added and saved creates the part and its
+  relationship; an undo and a second save keep that part, as D4's created
+  parts stay (D4 Ruling 7; a pre-existing behaviour of D2 and D4).
+- **One unreadable media part blocks every new picture.** The media index
+  reads every media part of the package on the first new picture, to share
+  equal bytes, so a media part that cannot be read makes each save with a new
+  picture throw `DocxReadException` naming the main part. The index keeps the
+  bytes it read in memory while the document lives.
+- **A `pic:pic` whose `pic:cNvPr` id is missing or not a number** makes the
+  drawing opaque, not a typed picture (ledger Ruling K): one reader serves
+  pictures (test: `test/docx/model/pictures_read_test.dart`, "anchors, charts
+  and several graphics stay opaque").
+- **Setting a property held by a part whose root is not a properties part**
+  throws `DocxReadException` (`malformedXml`) naming the part in a document,
+  where a workbook throws `StateError`, as its dartdoc said before D5 (ledger
+  Ruling P; tests: `test/docx/document_properties_test.dart`, "a part whose
+  root is not a properties part throws a read exception naming it when a
+  value of it is set"; `test/xlsx/model/properties_test.dart`, "a part with
+  another root reads as nothing and is kept").
+- **Built ids are not stored back.** Bookmark ids, `wp:docPr` ids, default
+  picture names and relationship ids are allocated per save (ledger Ruling
+  A): a built bookmark's `id` reads `null`, a built picture's `name` reads
+  `''` without one given, and two saves may number them differently only when
+  the model changed between them (test: `test/docx/model/bookmarks_test.dart`,
+  "a start and an end in the next paragraph share one id";
+  `test/docx/model/hyperlinks_edit_test.dart`, "saving twice gives the same
+  file and stores no id").
+- **Not typed (Ruling 15):** floating pictures, `w:fldSimple`, a hyperlink's
+  `w:tgtFrame`, `w:history` and `w:docLocation` (kept as read), charts and
+  `w14:paraId`. A read picture or a read link's target cannot be changed in
+  D5; a read picture is removed with its run.
+
 ## Rules the model enforces
 
 A file the model cannot read at all throws a `DocxReadException` with a
@@ -402,10 +515,12 @@ dropped silently.
 | `w:p`, its runs, text, tabs, breaks and carriage returns | typed in place | the model's job in D1 | `test/docx/document_part_read_test.dart` |
 | A `w:br` of type `textWrapping` | read as a line break, and its type is kept | the type is the file's | `test/docx/document_part_read_test.dart` |
 | A table | a `DocxTable`, in place, typed (see "Tables") | D3 | `test/docx/document_part_read_test.dart` ("tables are typed and sdt blocks are opaque blocks, in place") |
-| A content control, a bookmark or any other block | an opaque block, in place | typed later (D5) or never | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
+| A content control, a bookmark or any other block | an opaque block, in place (a bookmark between blocks too: D5 types those in a paragraph) | never typed as a block | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
 | The final `w:sectPr` of the body | held by the body as its last section (see "Sections"); a `w:sectPr` in a paragraph's `w:pPr` is that paragraph's break; one that is not the last child of the body is a block | the last section belongs to the body | `test/docx/document_part_read_test.dart`, `test/docx/model/sections_test.dart` |
-| Any other child of a paragraph (tracked change, hyperlink, content control, smart tag, proofing mark) | an opaque inline, in place, with its visible text computed once | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
-| Any other child of a run (drawing, `w:delInstrText`, a `w:fldChar` of no known type, `mc:AlternateContent`) | opaque run content, in place; it adds nothing to the run's text | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/fields_read_test.dart` |
+| A `w:hyperlink`, `w:bookmarkStart` or `w:bookmarkEnd` child of a paragraph | `DocxHyperlink`, `DocxBookmarkStart`, `DocxBookmarkEnd` (see "Hyperlinks" and "Bookmarks") | D5 Rulings 8 and 10 | `test/docx/model/hyperlinks_read_test.dart`, `test/docx/model/bookmarks_test.dart` |
+| Any other child of a paragraph (tracked change, content control, smart tag, proofing mark) | an opaque inline, in place, with its visible text computed once | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/body_model_test.dart` |
+| A `w:drawing` of one inline picture | `DocxPicture` (see "Pictures") | D5 Ruling 5 | `test/docx/model/pictures_read_test.dart` |
+| Any other child of a run (another drawing, `w:delInstrText`, a `w:fldChar` of no known type, `mc:AlternateContent`) | opaque run content, in place; it adds nothing to the run's text | kept as written | `test/docx/document_part_read_test.dart`, `test/docx/model/fields_read_test.dart` |
 | `w:fldChar` and `w:instrText` in a run | `DocxFieldMark` and `DocxFieldInstruction`, keeping the element as read; no text | D4 Ruling 3 | `test/docx/model/fields_read_test.dart` |
 | A complex field of one paragraph's direct runs, each mark alone in its run, only `w:instrText` runs and inlines holding no run in the instruction | one `DocxField`; a field in a result is a `DocxField` of it; a run keeps the location it had when read, and a field writes its inlines in order, as read | D4 Ruling 2 | `test/docx/model/fields_read_test.dart` |
 | A `w:fldSimple` | an opaque inline; its visible text counts | D4 Ruling 1: an opaque inline already gives its text | `test/docx/model/body_model_test.dart` ("fldSimple contributes its runs") |
@@ -436,7 +551,7 @@ opaque inlines, in order.
 
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
-| `w:ins`, `w:moveTo`, `w:hyperlink`, `w:smartTag`, `w:customXml`, `w:fldSimple`, nested | contribute the text of their runs, in order | what a reader sees | `test/docx/model/body_model_test.dart` ("visible text of an opaque inline") |
+| `w:ins`, `w:moveTo`, `w:hyperlink` (one inside an opaque inline; a typed one gives its inlines' text), `w:smartTag`, `w:customXml`, `w:fldSimple`, nested | contribute the text of their runs, in order | what a reader sees | `test/docx/model/body_model_test.dart` ("visible text of an opaque inline") |
 | `w:sdt` | contributes `w:sdtContent` only, never the placeholder in `w:sdtPr` | the properties are not content | `test/docx/model/body_model_test.dart` |
 | `w:del`, `w:moveFrom`, and anything inside them (also within `w:ins` or `w:hyperlink`); `w:delText` and `w:delInstrText` outside a deletion | contribute nothing | deleted text is not shown | `test/docx/model/body_model_test.dart` |
 | `w:instrText`, drawings, and elements in another namespace | contribute nothing | not text | `test/docx/model/body_model_test.dart` |
@@ -794,6 +909,92 @@ changes anything.
 | `tool/edit_docx.dart` on sections | adds a footer paragraph `Page ` + `PAGE` + ` of ` + `NUMPAGES` to the last section's story, adds a next page section, landscape A4, with the table, heading and list in it, and checks them read back | CI validates the edited files with the Open XML SDK | `test/tool/edit_docx_test.dart`, group "sections" |
 | The fuzz | seeds 1 to 4 at 600 cases each: `sections_by_hand` (every section child, six stories, broken references and fields) and the D4 fixtures join the corpus; each section's values, its stories with their fields and `evenAndOddHeaders` are read, every field's `resultText` is set, a footer paragraph and a section are added, and only a `DocxReadException` from a part that cannot be read may come out | the typed exception is the contract | `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry", "mutated files raise only DocxReadException") |
 
+### Document properties
+
+The numbers are the plan's Rulings (`2026-11-08-phase-4-d5-pictures`); the
+letters are rulings its ledger made while the tasks ran.
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| One type for both formats | `OfficeProperties` (it was `XlsxProperties`), with `revision` (`cp:revision`) and `application` (`Application`); its value class, writers and state live in `lib/src/common/`, and a small `PropertiesSource` gives each format its package, bounds and failures; the workbook's behaviour is unchanged but the name | Ruling 1; §4.12: never two copies | `test/common/properties_test.dart`, `test/common/properties_parts_test.dart`, `test/xlsx/model/properties_test.dart` |
+| `revision` and `application` | written in Excel's order; a negative revision throws `ArgumentError`; set to `null` they remove their child, as every other field does; a new workbook and `XlsxWriter` still write `application ?? 'jet_office'`, the model only what the caller sets | Ruling 1, ledger Ruling C | `test/common/properties_test.dart`, group "revision and application"; `test/xlsx/model/properties_test.dart`, group "revision and application" |
+| Custom properties | read and set in a document too, by the workbook's rules | Ruling 2: a DOCX-only subset would be a second copy | `test/docx/document_properties_test.dart` ("custom properties are read and set") |
+| Finding the parts | core, app and custom each through its package relationship, never by name; they load on the first read of `properties` | Ruling 3 | `test/docx/document_properties_test.dart` ("a part is found by its root relationship, not its name", "reads the typed values of core and app") |
+| A part that is not XML | `properties` throws `DocxReadException`; `open` does not | a part breaks when it first loads | `test/docx/document_properties_test.dart` ("a part that is not XML throws from properties, not from open") |
+| A value the model cannot read (a `cp:revision` that is not a number, a bad date) | reads `null`, stays in the file as read, and is reported once per save as `propertyValueInvalid`, the element's name as detail | Ruling 3; data problems warn | `test/docx/document_properties_test.dart` ("a value that cannot be read reads null, is kept and warns once"), `test/docx/warnings_test.dart` ("propertyValueInvalid names the part and the element in every language") |
+| An unchanged save | every properties part saved as read, byte for byte, also after a read; a loaded part is not re-encoded until a set changes it | Ruling 3, layer 1 of decision 0009 | `test/docx/document_properties_test.dart` ("an opened file saved unchanged after reading is byte equal"), `test/common/properties_parts_test.dart` ("encodeOnLoad: false keeps a loaded part as read until a swap", "a swap that changes core leaves app and custom as stored") |
+| A set | one change of the log, re-encoding only the children that differ; every other child of the part stays as read; a value equal to what is read sets nothing | Ruling 3 | `test/docx/document_properties_test.dart` ("setting title changes only that child of core.xml") |
+| A new document | reads `OfficeProperties()` and saves no `docProps/`, so `DocxDocument()`'s bytes stay; once a property is set, core and app are added at save with their root relationships and content types; no clock: `created` and `modified` only when given | Ruling 4 | `test/docx/document_properties_test.dart` ("a new document reads empty properties and saves no docProps", "a new document with properties set gets core and app"), `test/docx/blank_document_oracle_test.dart` |
+| A value XML cannot hold | `ArgumentError` before anything changes | programmer error | `test/docx/document_properties_test.dart` ("a bad value throws and changes nothing") |
+| A part whose root is not a properties part | reads no values and is kept; a set that would change a value it holds throws `DocxReadException` (`malformedXml`) naming it, and nothing changes (a workbook throws `StateError`) | ledger Ruling P: in a document it is the file's content | `test/docx/document_properties_test.dart` ("a part whose root is not a properties part throws a read exception naming it when a value of it is set") |
+| Undo and failure | a transaction that throws leaves no part and no relationship; an undo leaves none and a redo brings them; the undo of a change to an opened file restores its bytes | Review Focus 3 | `test/docx/document_properties_test.dart` ("a transaction that throws leaves no part and no relationship", "an undo leaves no part and no relationship, a redo brings them", "the undo of a change to an opened file restores its bytes") |
+| The owner's Word file | `blank.docx` reads the properties Word wrote | the reading rests on Word's files | `test/docx/document_properties_owner_test.dart` |
+
+### Pictures
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| What is a picture | a `w:drawing` holding one `wp:inline` whose one `a:graphicData` holds one `pic:pic` with a numeric `pic:cNvPr` id; an anchor, a chart, a shape, a group, `mc:AlternateContent`, a second graphic and a `pic:cNvPr` id that is missing or not a number stay `DocxOpaqueRunContent` | Ruling 5, ledger Ruling K | `test/docx/model/pictures_read_test.dart` ("the Word-like sample: inline typed, anchored stays opaque", "anchors, charts and several graphics stay opaque", "a second a:graphic or a:graphicData makes the drawing opaque") |
+| A read picture's values | `widthPt` and `heightPt` from `wp:extent` (12,700 EMU to the point; `null` when not a non-negative whole number), `name` and `description` from `wp:docPr`; text `''`; written as read | Ruling 5 | `test/docx/model/pictures_read_test.dart` ("size, name, description and image of a hand-built picture", "a size that is not a non-negative whole number reads null", "a picture has no text and a GIF reads with no format") |
+| `image` | the media part its `r:embed` names in the relationships of its own part; `null` for no `r:embed` (a linked picture), a missing, external or wrongly typed relationship, a missing part, or relationships that cannot be read; a GIF reads with no format; pictures of one media part share one `OfficeImage` | Ruling 5, Review Focus 2 | `test/docx/model/pictures_read_test.dart` ("no r:embed, a missing part, a link, a wrong type, external", "two pictures of one media part give the same image") |
+| A picture in a header or footer | reads its image through the story's relationships, peeked and never marked for rewriting, so the part's bytes stay; a damaged relationships part reads `image` `null` | Ruling 12 | `test/docx/model/pictures_read_test.dart` ("a picture in a header reads through the header rels, untouched", "a damaged rels part of a header reads image null") |
+| A read picture edited | not in D5: setting its run's text removes it, and an undo restores it | Ruling 5 | `test/docx/model/pictures_read_test.dart` ("setting the text of its run removes a picture; undo restores") |
+| `addPicture` | a run holding a new picture, in the body, a cell, a header or a footer; PNG and JPEG only (`checkImage`, `ArgumentError` otherwise); a `name` or `description` XML cannot hold throws `ArgumentError`; both are written on `wp:docPr` and the name on `pic:cNvPr` | Ruling 6 | `test/docx/model/pictures_edit_test.dart` ("adds a media part, a png default, a relationship and an inline", "a name and a description are written on docPr and cNvPr", group "bad arguments throw and change nothing") |
+| A built picture's size | its pixels at 96 dpi (0.75 pt each); one side given scales the other by the image's ratio; both given are used as given; a side given must be finite, above 0 and at most 1584 pt (`RangeError`), and so must a side computed from one given; with no size, a side over 1584 pt scales the picture down by its ratio | Ruling 6, ledger Ruling L: Word scales a large picture too | `test/docx/model/pictures_edit_test.dart` ("one side given scales the other; both are used as given", "a large image with no size is scaled to fit 1584 pt", group "bad arguments throw and change nothing") |
+| The media part | shared with any part of the package holding the same image (identity, then equal bytes), the file's own media included; else `word/media/image<n>.png` or `.jpeg` with the next free number, past every name a relationship targets (a dangling one too) and with a `Default` content type for its extension | Ruling 7, ledger Ruling M: a dangling reference must not come to show the new image | `test/docx/model/pictures_edit_test.dart` ("equal bytes in another OfficeImage share the media part", "the image a file holds is shared, through its relationship", "a file whose media has image3.png gets image4.png", "a name a dangling relationship targets is skipped", "a JPEG takes .jpeg and its own default", "an unreadable relationships part does not block a picture") |
+| The image relationship | one per part and media part, reused by every picture of that part; the body and a body cell share one | Ruling 7, ledger Ruling N | `test/docx/model/pictures_edit_test.dart` ("body, a header cell and a footer: one media part, three rels", "the body and a body cell share one relationship") |
+| The `wp:inline` written | `writeInlineDrawing`, ported from Quds (see "Port map"): `wp:docPr` and `pic:cNvPr` share the id, `descr` only when given, `r:embed` only with an id, and `wp`, `a`, `pic` and `r` declared only where the bindings above lack them or bind them elsewhere; what it writes reads back as a picture | Ruling 6 | `test/docx/drawing_test.dart`, `test/docx/model/pictures_edit_test.dart` ("a, pic and wp are declared where the root does not") |
+| Saves | a picture in a header saved twice gives the same file; save, picture, save, undo, save gives the first file again; a removed picture leaves no media part at the next save; a transaction that throws leaves no media, type or relationship | Ruling A, Review Focus 1 and 3 | `test/docx/model/pictures_edit_test.dart` ("a picture in a header saved twice gives the same file", group "undo and saves") |
+| A picture built in a paragraph of no document | saves once it goes in one, and then in a second document as well; it reads back typed with its image | Ruling 13 | `test/docx/model/pictures_edit_test.dart` ("a picture built in a paragraph of no document saves once in one", "a picture reads back typed, with its image", "a built picture works in a second document") |
+
+### Hyperlinks
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| What is a hyperlink | every `w:hyperlink` that is a direct child of a paragraph; it writes its start tag as read and its inlines; a link inside another inline stays inside that opaque inline, and a link in a link stays opaque in it | Ruling 8 | `test/docx/model/hyperlinks_read_test.dart` ("the Word-like sample reads its external link", "bookmarks in a link are typed; a nested link stays opaque") |
+| Its inlines | read by a paragraph's rules: runs, bookmarks, opaque inlines and fields grouped inside it alone; a field crossing its edge stays runs; a link in a field's result is one inline of that result | Ruling 8 | `test/docx/model/hyperlinks_read_test.dart`, group "fields" |
+| `url`, `anchor`, `tooltip`, `text` | `url` is the external target of its `r:id` in its part's relationships, else `null` (an id naming nothing, an internal target or another type); `anchor` and `tooltip` are its attributes; `text` its inlines' text | Ruling 8, Review Focus 2 | `test/docx/model/hyperlinks_read_test.dart` ("an anchor link reads its anchor and tooltip, and no url", "an r:id naming nothing, an internal or another type reads null"), `test/docx/owner_files_test.dart` ("builtins.docx reads the url of its external link") |
+| A link in a header or footer | reads its url through the story's relationships, which stay as read; a damaged relationships part reads `url` `null` | Ruling 12 | `test/docx/model/hyperlinks_read_test.dart` ("a link in a footer reads its url; the footer rels stay as read", "a damaged relationships part of a story reads url null") |
+| The runs of a link | ordinary runs: setting one's text or properties saves only that run changed, one edit that undoes; a warning location `r[j]` counts the runs inside links | Ruling 9, ledger Ruling F, as D4 counts runs inside fields | `test/docx/model/hyperlinks_read_test.dart`, group "editing the runs of a link" |
+| The owner's Word files | `long.docx` keeps its `PAGEREF` fields typed in its hyperlinks and its `TOC` as runs | the reading rests on Word's files | `test/docx/owner_files_test.dart` ("long.docx keeps its TOC as runs, its PAGEREFs typed in hyperlinks") |
+| `addHyperlink` | exactly one of `url` and `anchor`; one run in the character style `Hyperlink` through `ensureStyle` (Word's definition added on demand, `Kpr` in a Turkish file); `w:tooltip` when given; `w:history="1"` as Word writes it | Ruling 9, ledger Ruling I | `test/docx/model/hyperlinks_edit_test.dart` ("saves a relationship of the main part and the Hyperlink style", "a tooltip is written as w:tooltip", "in a Turkish file the run takes Kpr and no style is added", "links to a built bookmark with w:anchor and no relationship") |
+| Bad arguments | both targets or neither, a `url` that is not an absolute URI (`Uri.tryParse`, a scheme), or holds whitespace, a control character or one XML forbids, an empty `anchor`, an `anchor` or `tooltip` XML cannot hold: `ArgumentError`, nothing changes | Ruling 9, ledger Ruling J | `test/docx/model/hyperlinks_edit_test.dart`, group "bad arguments" |
+| An external link's relationship | added at save from the part the link is in (`TargetMode="External"`), one per link even for one URL, as Word writes them; under an id no reference of the file names; a link in a cell or a nested cell is related from the main part, one in a header or footer from its own relationships | Ruling 9, Ruling 12 | `test/docx/model/hyperlinks_edit_test.dart` ("two links to one URL make two relationships, as Word does", "a new id takes none a reference of the file names", "a link in a table cell is related from the main part", "a link in a nested table cell is related from the main part", group "a link in a header or footer") |
+| Saves | two saves give the same file and store no id; a removed link leaves no relationship at the next save; save, link, save, undo, save gives the first file; relationships a save adds are taken back after it | Ruling A | `test/docx/model/hyperlinks_edit_test.dart` ("saving twice gives the same file and stores no id", "a removed link leaves no relationship at the next save", group "saves that add and take back relationships") |
+| A link built in a story whose relationships part cannot be read | the save throws `DocxReadException` naming that part and adds nothing | ledger Ruling H: a call that first loads a broken part throws it | `test/docx/model/hyperlinks_edit_test.dart` ("a save that fails on a broken footer rels part adds nothing") |
+| Undo and failure | a transaction that throws, or an undo, leaves no relationship and no style | Review Focus 3 | `test/docx/model/hyperlinks_edit_test.dart`, group "undo" |
+| A link built in a paragraph of no document | keeps `Hyperlink` until it goes in, then resolves there (adding Word's definition when the document has none); works in a second document after a save; a read link moved keeps its `r:id` (a known gap) | Ruling 13, ledger Ruling G | `test/docx/model/hyperlinks_edit_test.dart`, group "a link built in a paragraph of no document"; `test/docx/model/hyperlinks_read_test.dart` ("a link moved to another document edits and resolves there") |
+
+### Bookmarks
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| What is a bookmark | `w:bookmarkStart` and `w:bookmarkEnd` that are direct children of a paragraph or of a typed hyperlink: `DocxBookmarkStart` (`id`, `name`) and `DocxBookmarkEnd` (`id`), with no text; elsewhere (between blocks, in a table row) they stay opaque, in place; nothing pairs them at read | Ruling 10 | `test/docx/model/bookmarks_test.dart` ("a start and an end read typed, the text unchanged", "a block-level bookmark stays an opaque block", "a bookmark inside a field is kept in place") |
+| A read mark's values | an id that is not a number reads `null`, an absent name reads `''`; both written as read | data problems do not throw | `test/docx/model/bookmarks_test.dart` ("a bad id reads null, an absent name reads empty, both as read") |
+| `addBookmarkStart` and `addBookmarkEnd` | the end takes its start's id at save, in the same paragraph or another, also when it comes first in the document; an end of a read start takes that start's id; two bookmarks take two ids; an end whose start is in no part is written | Ruling 11 | `test/docx/model/bookmarks_test.dart` ("a start and an end in the next paragraph share one id", "an end written before its start in the document pairs with it", "two bookmarks get two ids, an end of a read start its id") |
+| A name breaking Word's rules | repaired when added (`repairBookmarkName`): every character but a letter, digit or `_` becomes `_`, a first character that is not a letter gets `B` in front (`_` too, so a built name is never one of Word's hidden ones), the result is cut to 40; every save reports `bookmarkNameRepaired` with the name given; a name that follows them is not reported; a name already used is not repaired | Ruling 11, ledger Ruling E | `test/docx/model/bookmarks_test.dart` ("a name is repaired, cut, and reported by every save", "a name that follows the rules is not reported", "repairBookmarkName") |
+| Undo and placement | an undo removes both marks and a redo puts them back; a mark sits in one paragraph once and goes with `removeInlineAt` | one transaction, one parent | `test/docx/model/bookmarks_test.dart` ("undo removes both marks, redo puts them back", "a mark sits in one paragraph once, and goes with removeInlineAt") |
+
+### Ids, relationships and media at save
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| A new `wp:docPr` id | one more than the highest found in the original bytes of every story part (document, headers, footers, footnotes, endnotes, comments, and a part of the generic XML type the main part names as a header or footer) and in pictures built before it; 1 with none | Ruling 7, Review Focus 4 | `test/docx/save_ids_test.dart`, group "drawing and bookmark ids"; `test/docx/model/pictures_edit_test.dart` ("a new docPr id goes past one held in a footer of the file") |
+| A new bookmark id | the same rule, from 0 with none; an id of eleven digits is still reserved; a story that breaks keeps the ids found before the break; the scan stops at the end of the root and loads no part as a model | Ruling 11, §4.5 | `test/docx/save_ids_test.dart`, group "drawing and bookmark ids"; `test/docx/model/bookmarks_test.dart` ("a built mark belongs to a document that holds its id elsewhere") |
+| A new relationship id | avoids every `r:id`, `r:embed` and `r:link` of the part's original bytes, so a dangling reference stays dangling; a story part gets its own, avoiding its own references | Ruling 12 | `test/docx/save_ids_test.dart`, group "relationship ids" |
+| What a save adds | taken back once the file is written: relationships (an entry never parsed is copied as read again, in its place), media parts and content types, so the model is unchanged and a second save adds none twice | Ruling A | `test/docx/save_ids_test.dart` ("restoreRelationships takes back every one added, as read"), `test/opc/package_test.dart`, group "markRelationships" |
+| Peeking at a story's relationships | reads them without marking the part for rewriting, so the bytes stay; sees what was parsed or added since; a malformed part throws and stays as read | Ruling 12 | `test/opc/package_test.dart`, group "peekRelationships" |
+
+### D5 fixtures and tools
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| The three D5 fixtures (`d5_pictures`, `d5_links`, `d5_properties`) | build the same bytes every time with no warnings and round-trip with everything read and encoded; `d5_pictures` holds the PNG at its pixel size, the JPEG 144 pt wide in a cell and the PNG as a header logo sharing the body's media part; `d5_links` a heading in the bookmark `Overview`, an external link with a tooltip, an internal link to it and a footer link; `d5_properties` every core field, the company and the application | the validation starts from them; the Word check looks for these | `test/docx/round_trip_test.dart`, group "D5" |
+| `<name>.stories.txt` of `d5_pictures` and `d5_links` | the header text beside the logo and the footer link's text, compared with LibreOffice's re-save | a re-save keeps what a page shows | `test/docx/round_trip_test.dart` ("every D5 fixture builds the same bytes and no warnings, and round-trips with everything read and encoded"), `test/tool/docx_tools_test.dart` ("writes the text of the stories, only for those that have it", "round-trips the D5 fixtures: exit 0") |
+| Pictures, links, bookmarks and properties in `tool/round_trip_docx.dart` | every picture's size, name, description and image, every link's target and inlines, every bookmark and every property field are read, and the properties parts are encoded from the model (`encodedPropertiesDifferences`); a part that is not a properties part is not encoded, and a broken one is one line naming it | a part nothing changed is saved as read, so the encoder needs its own check | `test/tool/docx_serialize_test.dart`, group "D5"; `test/tool/docx_tools_test.dart` ("encodes the properties parts: what the model drops is named") |
+| `tool/edit_docx.dart` on D5 | adds, in the new section, a paragraph with a 4 by 2 pixel PNG (3 by 1.5 pt), an external link and an internal link to the bookmark `Model_edit` around the heading, sets the title and keeps every other property; checks each reads back; the allowed changed parts grow by the core part (and `_rels/.rels` and the extended part when the file lacks a core part), at most one new media part, and relationships of the main part of the hyperlink and image types only | CI validates the edited files with the Open XML SDK | `test/tool/edit_docx_test.dart`, group "pictures, links, bookmarks and properties" |
+| The fuzz | seeds 1 to 4 at 750 cases each: the D5 fixtures and `drawings_by_hand` (inline, anchored, linked and broken pictures, broken links, bookmarks with bad ids, a header with a picture and a link, properties that cannot be read) join the corpus, and the values of the properties parts are mutated as element text as much as attributes; every picture, link, bookmark and property is read, the properties are set, a picture, a bookmark pair and two links are added to a body paragraph and to the last footer, and the saved file must hold them | the fixed seeds must mutate every part name of the corpus: 600 left one footer part of `d4_headers` unmutated | `test/docx/fuzz_test.dart` ("drawings_by_hand reads its pictures, links, bookmarks and properties", "values of the core, app and custom properties parts are replaced", "every part name is mutated in some corpus entry") |
+
 ### Checks outside the unit tests
 
 | Case | Behaviour | Why | Test |
@@ -837,14 +1038,14 @@ aggregator and the read guard (`lib/src/common/`), and the change log.
   owner's Word files with the Open XML SDK, compares LibreOffice's text
   export and re-save of every fixture with the expected texts, and proves
   each check rejects the deliberately broken `d1_corrupt.docx` (AGENTS.md,
-  "Validation"). The D2, D3 and D4 fixtures, the edits of `tool/edit_docx.dart`
-  and the model's own encoding of the styles, numbering, header and footer
-  parts go through the same checks; the LibreOffice re-save is validated with
-  `--libreoffice-resave`, which ignores only `w:val="true"` on `w:tblHeader`,
-  as LibreOffice writes it, and on `w:cantSplit`, of the same type: values the
-  model keeps as read.
+  "Validation"). The D2, D3, D4 and D5 fixtures, the edits of
+  `tool/edit_docx.dart` and the model's own encoding of the styles, numbering,
+  header, footer and properties parts go through the same checks; the
+  LibreOffice re-save is validated with `--libreoffice-resave`, which ignores
+  only `w:val="true"` on `w:tblHeader`, as LibreOffice writes it, and on
+  `w:cantSplit`, of the same type: values the model keeps as read.
 - Neither is Word. The owner opens each D milestone's fixtures and round
   trips in Word for Mac and records the result in
-  [`word-checks.md`](word-checks.md); its D2, D3 and D4 sections say what to
-  look for, D3 adds a document whose body ends in a table, and D4 one whose last
-  block carries a section break.
+  [`word-checks.md`](word-checks.md); its D2, D3, D4 and D5 sections say what
+  to look for, D3 adds a document whose body ends in a table, and D4 one whose
+  last block carries a section break.

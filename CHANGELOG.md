@@ -81,11 +81,41 @@
   attributes. The owner's Word check is in `docs/word-checks.md`; the rules,
   each with its test, are in `docs/docx-model.md`.
 
+#### Phase 4, DOCX, D5 (pictures, hyperlinks, bookmarks and properties; the API may change before D6)
+
+- `DocxDocument.properties`: the core, extended and custom document
+  properties as `OfficeProperties`, the type `XlsxWorkbook.properties` gives
+  too, with `revision` and `application` added. Found by their package
+  relationships, loaded on first use; a part nothing changed is saved byte
+  for byte, a set re-encodes only what it changes, and a new document gets
+  `docProps` only once a property is set.
+- `DocxPicture`: an inline picture, typed run content with its size, name,
+  description and image; `DocxParagraph.addPicture` adds a PNG or JPEG in the
+  body, a cell, a header or a footer, at its pixel size or a size given, with
+  media shared by equal bytes. Floating pictures and charts stay opaque.
+- `DocxHyperlink`: an inline holding inlines, with `url`, `anchor` and
+  `tooltip`; `DocxParagraph.addHyperlink` adds an external or internal link
+  in the `Hyperlink` style.
+- `DocxBookmarkStart` and `DocxBookmarkEnd`, with `addBookmarkStart`,
+  `addBookmarkEnd` and `repairBookmarkName`.
+- Media parts, relationships, drawing ids and bookmark ids are allocated at
+  each save and never stored in the model, so two saves agree and an undo
+  leaves nothing behind.
+- Two warnings: `propertyValueInvalid` and `bookmarkNameRepaired`, in
+  English, German and Turkish.
+- Verification: three D5 fixtures, the tools reading pictures, links,
+  bookmarks and properties and encoding the properties parts, edited owner
+  files with a picture, two links, a bookmark and a title, and a fuzz corpus
+  entry of broken pictures, links and properties. The rules, each with its
+  test, and the known gaps are in `docs/docx-model.md`; the owner's Word check
+  is in `docs/word-checks.md`.
+
 ### Changed
 
 - Renamed the format-neutral public types, with no aliases: `XlsxLocale` is
-  now `OfficeLocale`, `XlsxImage` is now `OfficeImage` and `XlsxImageFormat`
-  is now `OfficeImageFormat`. Update imports and uses; nothing else changed.
+  now `OfficeLocale`, `XlsxImage` is now `OfficeImage`, `XlsxImageFormat`
+  is now `OfficeImageFormat` and `XlsxProperties` is now `OfficeProperties`
+  (D5). Update imports and uses; nothing else changed.
 - The number format engine moved to the new package `jet_core` (decision
   0012), with neutral names and no aliases: `XlsxNumberFormatter` is now
   `NumberFormatter`, `XlsxFormatLocale` is `FormatLocale`,

@@ -95,13 +95,17 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   DOCX fixture of `docxFixtures()` (`test/fixtures/docx_fixtures.dart`) as
   `<name>.docx` and its expected text as `<name>.expected.txt`: the D1
   documents (`d1_*`), the D2 ones (`d2_*`), the D3 tables (`d3_basic`,
-  `d3_header_row`, `d3_merges`, `d3_formatting`, `d3_nested`) and the D4
+  `d3_header_row`, `d3_merges`, `d3_formatting`, `d3_nested`), the D4
   sections, headers and fields (`d4_sections`, four sections with a Letter one
-  last; `d4_headers`; `d4_fields`). A fixture with a
-  `DocxFixture.headerFooterText` also gets `<name>.stories.txt`, what its
-  headers and footers show. No fixture ends in a table, because LibreOffice's
-  text export of one never ends (see below), or in a section break, as the
-  model adds no block after one.
+  last; `d4_headers`; `d4_fields`) and the D5 pictures, links and properties
+  (`d5_pictures`, a PNG in the body, a JPEG in a cell and the PNG as a header
+  logo; `d5_links`, a bookmark, an external and an internal link and a footer
+  link; `d5_properties`, every core property, the company and the
+  application). A fixture with a `DocxFixture.headerFooterText` (`d4_headers`,
+  `d4_fields`, `d5_pictures`, `d5_links`) also gets `<name>.stories.txt`, what
+  its headers and footers show. No fixture ends in a table, because
+  LibreOffice's text export of one never ends (see below), or in a section
+  break, as the model adds no block after one.
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx` and
   `d1_corrupt.docx`, to prove every check still fails on a bad file. The
   `validate` job's negative-control step writes `m1_corrupt.xlsx` to
@@ -169,21 +173,21 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   taken), links the new string cell, adds a list validation, a cell-value
   rule and a data bar on free cells of the new row, sets a landscape A4 page
   setup that fits one page wide, a footer, an auto filter over the new row
-  (when no filter or table is in the way) and the workbook's title (no
-  protection: it would lock the owner's review), sets a rich text cell, a
-  note and a 4 by 2 pixel PNG picture on the next free columns of the new
-  row, adds a table `Model_table` (a number added when taken) over the two
-  rows below it, adds a sheet, saves to the second directory, and checks the
-  edits read back with `XlsxReader` and the model; it also writes the
+  (when no filter or table is in the way) and the workbook's title
+  (`OfficeProperties`; no protection: it would lock the owner's review), sets a
+  rich text cell, a note and a 4 by 2 pixel PNG picture on the next free columns
+  of the new row, adds a table `Model_table` (a number added when taken) over
+  the two rows below it, adds a sheet, saves to the second directory, and checks
+  the edits read back with `XlsxReader` and the model; it also writes the
   generated workbooks of `tool/write_model_sample.dart`, `w1_generated.xlsx`,
   `w2_generated.xlsx`, `w3_generated.xlsx` (a `Report` sheet with a filter, a
-  validation, the four conditional rule kinds, two links, print settings,
-  header and footer, and a formula using a workbook name; a protected
-  `Locked` sheet; workbook properties) and `w4_generated.xlsx` (an `Objects`
+  validation, the four conditional rule kinds, two links, print settings, header
+  and footer, and a formula using a workbook name; a protected `Locked` sheet;
+  workbook properties, `OfficeProperties`) and `w4_generated.xlsx` (an `Objects`
   sheet with rich text, a visible and a hidden note, a PNG and a JPEG as
-  one-cell and two-cell pictures, a picture moved to a larger size, a table
-  with totals and one without a style; a `Removed` sheet where a table and a
-  picture were added and removed again), there. It prints each
+  one-cell and two-cell pictures, a picture moved to a larger size, a table with
+  totals and one without a style; a `Removed` sheet where a table and a picture
+  were added and removed again), there. It prints each
   problem as `<file>: <problem>` and exits 1 on any, 2 on unusable
   arguments. CI runs it on the fixtures and validates the output with the
   Open XML SDK, so the model's edited and generated files are validated,
@@ -208,16 +212,20 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   unless `docxResaveAllowedWarnings` in `tool/src/read_compare.dart` names it
   with a reason. Exit codes as above.
 - `tool/round_trip_docx.dart` opens every `.docx` of a directory with
-  `DocxDocument`, reads the body, every typed property and every section value
-  and story (which loads `styles`, `numbering`, `settings` and the headers and
-  footers), saves to the second directory and prints
+  `DocxDocument`, reads the body, every typed property, every picture,
+  hyperlink and bookmark, every section value and story and the document
+  properties (which loads `styles`, `numbering`, `settings`, the headers and
+  footers and the `docProps` parts), saves to the second directory and prints
   each `comparePackages` difference (`tool/src/part_compare.dart`) as
   `<file>: <line>`; it exits 1 on any difference or error, 2 on unusable
   arguments. A loaded part nothing changed is saved as read, so it also
-  encodes the main, styles, numbering, header and footer parts from the model
-  and compares them with the input (`encodedPartDifferences`,
+  encodes the main, styles, numbering, header, footer and properties parts
+  from the model and compares them with the input (`encodedPartDifferences`,
   `encodedMainDifferences`, `encodedStoryDifferences`,
-  `tool/src/docx_serialize.dart`; the last two take the children of `w:pPr`,
+  `encodedPropertiesDifferences`, `tool/src/docx_serialize.dart`; a part whose
+  root is not a properties part is never written from the model and is not
+  compared; `encodedMainDifferences` and `encodedStoryDifferences` take the
+  children of `w:pPr`,
   `w:rPr`, `w:tblPr`, `w:trPr`, `w:tcPr` and `w:sectPr` in any order, as the
   model writes them in schema order). CI
   runs it on the fixtures, on LibreOffice's re-save and on the owner's Word
@@ -229,8 +237,8 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   `DocxDocument` and edits the body: it sets the text of the first run with
   text to `Edited by the model` and makes it bold in the theme colour accent
   1; it replaces the last paragraph of plain runs (or `w:proofErr` marks;
-  no field, drawing or `w:sectPr`), other than the edited one, with
-  `Replaced by the model`. In a document with a table (the
+  no other inline, field, drawing or `w:sectPr`), other than the edited one,
+  with `Replaced by the model`. In a document with a table (the
   first top-level `DocxTable` with a cell) it sets the text of the first
   cell's first paragraph to `Edited cell`, through that paragraph's first
   run or a new one, and appends a row `New row` when the table has a grid
@@ -240,29 +248,42 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   page) and makes the new last section landscape A4. In that section it appends
   a table `addTable(columns: 2)`, whose width follows the landscape page, of a
   header row `Head one`, `Head two`, a body row and a third row merged across
-  both columns; a paragraph `Added by the model` of the style
+  both columns; a paragraph `A picture, links to jet_office and the added
+  heading.` holding a 4 by 2 pixel PNG (`addPicture`, 3 by 1.5 points), an
+  external link `jet_office` to `https://example.com/jet-office` and an
+  internal link `the added heading` to the bookmark `Model_edit`
+  (`addHyperlink`); a paragraph `Added by the model` of the style
   `styles.ensure(DocxBuiltInStyle.heading1)` (`Balk1` in a Turkish Word file;
-  Word's definition when the file has none); and a bullet list
+  Word's definition when the file has none), its text inside the bookmark
+  `Model_edit` (`addBookmarkStart`, `addBookmarkEnd`); and a bullet list
   (`numbering.addBulletList`) of two items, `First item` and `Second item` at
-  level 1 (`addListItem`). It saves to the second directory, reads the saved
-  file back and checks the text, bold and accent of the run, the replacing
-  paragraph, the heading's style, each item's text, list number and level, the
-  cell text, the new row, the added table's rows (header flag, texts, merge) and
+  level 1 (`addListItem`). It sets the document properties' title to `Edited
+  by the model`, keeping every other property (`OfficeProperties`). It saves
+  to the second directory, reads the saved file back and checks the text, bold
+  and accent of the run, the replacing paragraph, the heading's style and its
+  bookmark (start and end sharing an id), the picture (the PNG at its size),
+  the two links' targets, each item's text, list number and level, the cell
+  text, the new row, the added table's rows (header flag, texts, merge) and
   width, the section count, the new section's page and start, the break before
   the table, the footer paragraph in the section that was last and, inherited,
-  in the new one, and that the body has four blocks more (the table, the
-  heading, the two items), or five when its last block could not take the break
-  (a table, or a paragraph with a break) and `addSection` added a paragraph.
-  `comparePackages` must find differences
-  only in the main part (named by the root relationship), the numbering
-  part, the styles part when `ensure` added a style (`Heading1`, or
-  `TableGrid` and `Normal Table`), one footer part, and `[Content_Types].xml`
-  with the main part's relationships when a part was created, a footer among
-  them. It prints each problem as
-  `<file>: <problem>` and exits 1 on any, 2 on unusable arguments. CI runs
-  it on the fixtures, on LibreOffice's re-save and on the owner's Word
-  files, and validates the three outputs with the Open XML SDK; the owner
-  opens the edited owner files in Word (`docs/word-checks.md`).
+  in the new one, the title, and that the body has five blocks more (the
+  table, the paragraph of the picture and links, the heading, the two items),
+  or six when its last block could not take the break (a table, or a paragraph
+  with a break) and `addSection` added a paragraph. `comparePackages` must
+  find differences only in the main part (named by the root relationship), the
+  numbering part, the styles part when `ensure` added a style (`Heading1`,
+  `TableGrid` and `Normal Table`, or `Hyperlink`), one footer part, the core
+  properties part (and, when the file lacks it, `_rels/.rels` and the extended
+  properties part when the file lacks that too), at most one media part the
+  file lacked (none when it has the PNG: the picture shares it),
+  `[Content_Types].xml` when a part was created, and the main part's
+  relationships, which may only gain relationships of the hyperlink and image
+  types, and of the footer, styles and numbering types when such a part was
+  created: one that goes or changes, or one of another type, is a problem. It
+  prints each problem as `<file>: <problem>` and exits 1 on any, 2 on unusable
+  arguments. CI runs it on the fixtures, on LibreOffice's re-save and on the
+  owner's Word files, and validates the three outputs with the Open XML SDK;
+  the owner opens the edited owner files in Word (`docs/word-checks.md`).
 - `tool/draft_expected_docx.dart` drafts the `<name>.expected.txt` of an owner
   file from the model's own reading and prints a review list; it never
   overwrites an existing text.
@@ -287,8 +308,9 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   (`tool/draft_expected.dart` drafts them). Never edit a committed owner file or
   its expected JSON without the owner.
 - Neither is Word. The owner opens each D milestone's fixtures
-  (`build/fixtures/d1_*.docx`, `d2_*`, `d3_*`, `d4_*`), the model's round trips of
-  them and of the owner's Word files, and the model's edits of the owner's
+  (`build/fixtures/d1_*.docx`, `d2_*`, `d3_*`, `d4_*`, `d5_*`; D4 and D5 write
+  theirs under `build/d4/` and `build/d5/`), the model's round trips of them
+  and of the owner's Word files, and the model's edits of the owner's
   Word files in Word for Mac, and records the result in
   `docs/word-checks.md`, which says how to write them. A repair prompt there
   is a model or writer bug, as in Excel's case. A body that ends in a table
@@ -370,26 +392,37 @@ It prints failures as the reader's run does. Pin a failure as a unit test in
 the owning `*_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4,
-750 cases each, over the fixtures (the `d3_*`, `d4_*` and `d5_*` ones among them), a
-hand-made table with every element of the table values, a hand-made
+750 cases each, over the fixtures (the `d3_*`, `d4_*` and `d5_*` ones among
+them), a hand-made table with every element of the table values, a hand-made
 `sections_by_hand` (every section child, six stories, broken references and
-broken fields), and the producer variants of `test/docx/support/docx_fuzz.dart`: whole mutated files, with every
-part name mutated somewhere, and about a third of the cases replacing the value
-of a `w:` attribute (`w:val`, `w:w`, `w:left` and the like) of the main, styles
-or numbering part by `abc`, twenty digits, `-` or `1in`; open, load the body,
-styles and numbering, then read every typed property (a throw there is a
-failure, even a `DocxReadException`), including every table's, row's and
-cell's properties and grid, walking cells and nested tables, and every
-section's typed values, `evenAndOddHeaders` and its six stories with their
-fields (a throw there is a failure, except a `DocxReadException` from the
-blocks of a story part that cannot be read, as from a load); call
-`styles.ensure` and `numbering.addBulletList` on what loaded; add a row to
+broken fields), a hand-made `drawings_by_hand` (inline, anchored, linked and
+broken pictures, external, anchor and broken hyperlinks, bookmarks with bad
+ids, a header with a picture and a link, and properties parts with values that
+cannot be read), and the producer variants of
+`test/docx/support/docx_fuzz.dart`: whole mutated files, with every part name
+mutated somewhere, and about a third of the cases replacing the value of a
+`w:` attribute (`w:val`, `w:w`, `w:left` and the like) of the main, styles or
+numbering part, or an attribute or element text of a `docProps` part, by
+`abc`, twenty digits, `-` or `1in`; open, load the body, styles, numbering and
+properties, then read every typed property (a throw there is a failure, even a
+`DocxReadException`), including every table's, row's and cell's properties
+and grid, walking cells and nested tables, every picture, hyperlink and
+bookmark, every property field, and every section's typed values,
+`evenAndOddHeaders` and its six stories with their fields (a throw there is a
+failure, except a `DocxReadException` from the blocks of a story part that
+cannot be read, as from a load); call `styles.ensure` and
+`numbering.addBulletList` on what loaded, and set the properties; add a row to
 each loaded table and merge ranges of its cells (only `ArgumentError` may
 come out of those two); set every field's `resultText`, add a footer
 paragraph and call `addSection` (nothing but that `DocxReadException` may come
-out of them); and save (never a `StateError`, even for a table the
-file left without rows), throw nothing but `DocxReadException` from a load),
-the same cases on the VM and in Chrome;
+out of them); add a picture, a bookmark pair and two hyperlinks to a body
+paragraph and to the last footer's paragraph; and save (never a `StateError`,
+even for a table the file left without rows; a `DocxReadException` naming a
+story's relationships part that cannot be read, when a picture or link went
+in that story, plan D5's ledger Ruling H, after which the walk takes them out
+and saves again), throw nothing but `DocxReadException` from a load), and
+check the saved file holds what was added, the same cases on the VM and in
+Chrome;
 longer runs by hand:
 
 ```bash
