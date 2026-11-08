@@ -31,9 +31,10 @@ typedef InlineDrawing = ({
 });
 
 /// Reads the `w:drawing` [r] is on, or `null` when it is not an inline
-/// picture: it must have exactly one element child, a `wp:inline` whose
-/// `a:graphic` holds an `a:graphicData` with exactly one element child, a
-/// `pic:pic` whose `cNvPr` has a whole number `id`.
+/// picture: it must have exactly one element child, a `wp:inline` with
+/// exactly one `a:graphic`, which holds exactly one `a:graphicData`, with
+/// exactly one element child, a `pic:pic` whose `cNvPr` has a whole number
+/// `id`.
 ///
 /// The size is `wp:extent`'s `cx` and `cy` in points, each `null` when it is
 /// not a non-negative whole number of EMU or the element is missing; the
@@ -77,7 +78,7 @@ InlineDrawing? _readInline(XmlPullReader r) {
   String? name;
   String? description;
   DrawingPic? pic;
-  bool graphic = false;
+  int graphics = 0;
   while (r.next()) {
     if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
     if (r.eventType != XmlEventType.startElement) continue;
@@ -92,16 +93,13 @@ InlineDrawing? _readInline(XmlPullReader r) {
     } else if (r.localName == 'docPr' && r.namespaceUri == Ns.wp) {
       name ??= r.getAttribute('name') ?? '';
       description ??= r.getAttribute('descr');
-    } else if (r.localName == 'graphic' &&
-        r.namespaceUri == Ns.drawingMain &&
-        !graphic &&
-        !r.isEmptyElement) {
-      graphic = true;
-      pic = _readGraphic(r);
+    } else if (r.localName == 'graphic' && r.namespaceUri == Ns.drawingMain) {
+      // A second graphic is not one picture: the drawing stays opaque.
+      if (++graphics == 1 && !r.isEmptyElement) pic = _readGraphic(r);
     }
     r.skip();
   }
-  if (pic == null) return null;
+  if (pic == null || graphics != 1) return null;
   return (
     widthPt: widthPt,
     heightPt: heightPt,
@@ -111,8 +109,9 @@ InlineDrawing? _readInline(XmlPullReader r) {
   );
 }
 
-/// The `pic` of the `a:graphic` [r] is on, when its `a:graphicData` holds
-/// that and nothing else; [r] is left on the graphic's end.
+/// The `pic` of the `a:graphic` [r] is on, when it holds one
+/// `a:graphicData` and that holds the `pic` and nothing else; [r] is left on
+/// the graphic's end.
 DrawingPic? _readGraphic(XmlPullReader r) {
   final int depth = r.depth;
   DrawingPic? pic;
@@ -123,14 +122,13 @@ DrawingPic? _readGraphic(XmlPullReader r) {
     if (r.depth == depth + 1 &&
         r.localName == 'graphicData' &&
         r.namespaceUri == Ns.drawingMain &&
-        data == 0 &&
+        ++data == 1 &&
         !r.isEmptyElement) {
-      data++;
       pic = _readGraphicData(r);
     }
     r.skip();
   }
-  return pic;
+  return data == 1 ? pic : null;
 }
 
 DrawingPic? _readGraphicData(XmlPullReader r) {

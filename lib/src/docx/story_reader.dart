@@ -10,8 +10,8 @@
 /// written, in place: other blocks (content controls, bookmarks) as opaque
 /// blocks, other children of `w:tbl` and `w:tr` (`w:tblGrid`, `w:tblPrEx`,
 /// content controls, bookmarks) as kept children, other paragraph children
-/// (tracked changes, proofing marks) as opaque inlines, other run
-/// children (anchored drawings, `mc:AlternateContent`) as opaque run content, and
+/// (tracked changes, proofing marks) as opaque inlines, other run children
+/// (anchored drawings, `mc:AlternateContent`) as opaque run content, and
 /// unknown attributes on `w:tbl`, `w:tr`, `w:tc`, `w:p`, `w:r`, `w:t`,
 /// `w:tab`, `w:br` and `w:cr` as kept attributes. A `w:tbl` inside a kept
 /// element stays kept. The visible text of an opaque inline is collected while

@@ -7,6 +7,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/docx/docx_document.dart'
+    show changeLogOf, editsOf;
+import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/opc/ooxml.dart';
 import 'package:test/test.dart';
 
@@ -205,6 +208,56 @@ void main() {
               .expand((DocxRun r) => r.content)
               .toList();
       expect(content, everyElement(isA<DocxOpaqueRunContent>()));
+    });
+
+    test('a second a:graphic or a:graphicData makes the drawing opaque', () {
+      const String graphic =
+          '<a:graphic><a:graphicData uri="$_pic"><pic:pic>'
+          '<pic:nvPicPr><pic:cNvPr id="1" name="p.png"/><pic:cNvPicPr/>'
+          '</pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/></pic:blipFill>'
+          '<pic:spPr/></pic:pic></a:graphicData></a:graphic>';
+      const String data =
+          '<a:graphicData uri="$_pic"><pic:pic>'
+          '<pic:nvPicPr><pic:cNvPr id="2" name="q.png"/><pic:cNvPicPr/>'
+          '</pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/></pic:blipFill>'
+          '<pic:spPr/></pic:pic></a:graphicData>';
+      final Uint8List input = _docx(
+        '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1" cy="1"/>'
+        '<wp:docPr id="1" name="Two graphics"/>$graphic$graphic</wp:inline>'
+        '</w:drawing></w:r>'
+        '<w:r><w:drawing><wp:inline><wp:extent cx="1" cy="1"/>'
+        '<wp:docPr id="2" name="Two data"/>'
+        '${graphic.replaceFirst('</a:graphic>', '$data</a:graphic>')}'
+        '</wp:inline></w:drawing></w:r></w:p>',
+        rels: _rel('rId4', 'media/image1.png'),
+        parts: <String, List<int>>{'word/media/image1.png': _png},
+      );
+      final DocxDocument doc = DocxDocument.open(input);
+      final List<DocxRunContent> content =
+          (doc.body.blocks.single as DocxParagraph).inlines
+              .whereType<DocxRun>()
+              .expand((DocxRun r) => r.content)
+              .toList();
+      expect(content, hasLength(2));
+      expect(content, everyElement(isA<DocxOpaqueRunContent>()));
+      expect(comparePackages(input, doc.save().bytes), isEmpty);
+    });
+
+    test('setting the text of its run removes a picture; undo restores', () {
+      final Uint8List input = _docx(
+        '<w:p><w:r>${_drawing()}</w:r></w:p>',
+        rels: _rel('rId4', 'media/image1.png'),
+        parts: <String, List<int>>{'word/media/image1.png': _png},
+      );
+      final DocxDocument doc = DocxDocument.open(input);
+      final DocxPicture picture = _picture(doc);
+      final DocxRun run =
+          (doc.body.blocks.single as DocxParagraph).inlines.single as DocxRun;
+      final ChangeSet set = editsOf(doc).transaction(() => run.text = 'words');
+      expect(run.content, <DocxRunContent>[const DocxText('words')]);
+      changeLogOf(doc).revertSet(set);
+      expect(run.content.single, same(picture));
+      expect(comparePackages(input, doc.save().bytes), isEmpty);
     });
 
     test('a picture in a header reads through the header rels, untouched', () {

@@ -127,13 +127,14 @@ final class DocxRun extends DocxInline {
 
   /// The run's text: each [DocxText] as it is, `\t` for a [DocxTab], `\n`
   /// for a [DocxBreak] of any type and for a [DocxCarriageReturn], and
-  /// nothing for opaque content.
+  /// nothing for a [DocxPicture] or opaque content.
   ///
   /// Setting it replaces the whole content: `\t` becomes a [DocxTab], and
   /// `\n`, `\r\n` and a lone `\r` each become one line [DocxBreak]. Whatever
-  /// else the run held is removed with it: opaque content (drawings, note
-  /// and comment references, `mc:AlternateContent`), the marks and instruction
-  /// of a field ([DocxFieldMark], [DocxFieldInstruction]) and carriage returns
+  /// else the run held is removed with it: an inline picture
+  /// ([DocxPicture]), opaque content (other drawings, note and comment
+  /// references, `mc:AlternateContent`), the marks and instruction of a field
+  /// ([DocxFieldMark], [DocxFieldInstruction]) and carriage returns
   /// ([DocxCarriageReturn]) are gone, so set the text of a run that holds
   /// only text. Characters XML forbids (control characters other than tab,
   /// LF and CR, U+FFFE, U+FFFF and lone surrogates) are removed; the save
