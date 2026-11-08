@@ -579,12 +579,12 @@ final DocxResult out = DocxListExport(
   the day the file is opened (a deliberate choice, owner decision O2); a caller
   who wants Word's own date changes the header's paragraph after the export.
 - **A list goes in the last section only and replaces what it shows.**
-  `writeTo` sets the last section's page, header and footer, and one column. A cover or a
-  letter before the list is the caller's, through `addSection`. The first-page
-  stories are left alone. A section with a title page
-  has it turned off, so that its first page shows the list's header (test:
-  `test/docx/list_export_test.dart`, "a title page is turned off so page 1
-  shows the header").
+  `writeTo` sets the last section's page, header and footer (the even ones too
+  with odd and even headers), and one column. A cover or a letter before the
+  list is the caller's, through `addSection`. The first-page stories are left
+  alone. A section with a title page has it turned off, so that its first page
+  shows the list's header (test: `test/docx/list_export_test.dart`, "a title
+  page is turned off so page 1 shows the header").
 - **No header written leaves an inherited one.** With no logo, title or date,
   the section's own default header is removed and none is made, so the section
   may still show an earlier section's header (test: "with nothing for the
