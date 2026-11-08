@@ -1,0 +1,37 @@
+rect background 0.00,0.00 360.00x240.00 fill=FFFFFF stroke=- width=1.00
+text title 96.00,8.00 168.00x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Long category labels"
+rect legend 155.60,221.20 48.80x10.80 fill=- stroke=- width=1.00
+rect legend/0/symbol 155.60,223.10 7.00x7.00 fill=156082 stroke=- width=1.00
+text legend/0/text 166.60,221.20 37.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Revenue"
+rect plot 57.28,36.20 294.72x110.51 fill=- stroke=- width=1.00
+path grid/value/0 57.28,146.71 352.00,146.71 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/1 57.28,132.89 352.00,132.89 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/2 57.28,119.08 352.00,119.08 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/3 57.28,105.27 352.00,105.27 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/4 57.28,91.45 352.00,91.45 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/5 57.28,77.64 352.00,77.64 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/6 57.28,63.83 352.00,63.83 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/7 57.28,50.01 352.00,50.01 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/8 57.28,36.20 352.00,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+clip plot/clip 57.28,36.20 294.72x110.51
+  rect series/0/bar/0 77.51,63.83 18.48x82.88 fill=156082 stroke=- width=1.00
+  rect series/0/bar/1 136.45,81.09 18.48x65.61 fill=156082 stroke=- width=1.00
+  rect series/0/bar/2 195.40,47.94 18.48x98.76 fill=156082 stroke=- width=1.00
+  rect series/0/bar/3 254.34,91.45 18.48x55.25 fill=156082 stroke=- width=1.00
+  rect series/0/bar/4 313.29,70.73 18.48x75.97 fill=156082 stroke=- width=1.00
+path axis/value/line 57.28,36.20 57.28,146.71 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path axis/category/line 57.28,146.71 352.00,146.71 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+text axis/value/label/0 47.88,141.31 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/value/label/1 42.48,127.49 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "20"
+text axis/value/label/2 42.48,113.68 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "40"
+text axis/value/label/3 42.48,99.87 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "60"
+text axis/value/label/4 42.48,86.05 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "80"
+text axis/value/label/5 37.08,72.24 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "100"
+text axis/value/label/6 37.08,58.43 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "120"
+text axis/value/label/7 37.08,44.61 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "140"
+text axis/value/label/8 37.08,30.80 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "160"
+text axis/category/label/0 22.22,179.25 75.60x10.80 rotation=-45.00 size=9.00 color=595959 bold=false "Northern regi…"
+text axis/category/label/1 81.16,179.25 75.60x10.80 rotation=-45.00 size=9.00 color=595959 bold=false "Southern regi…"
+text axis/category/label/2 140.11,179.25 75.60x10.80 rotation=-45.00 size=9.00 color=595959 bold=false "Western regio…"
+text axis/category/label/3 199.05,179.25 75.60x10.80 rotation=-45.00 size=9.00 color=595959 bold=false "Eastern regio…"
+text axis/category/label/4 258.00,179.25 75.60x10.80 rotation=-45.00 size=9.00 color=595959 bold=false "Central regio…"
