@@ -69,6 +69,10 @@ final class ChartOverlap {
 /// the chart. Each pair is reported once, in primitive order, with the earlier
 /// primitive as `firstId`. Without a `legend` rectangle no legend check is
 /// made, and without a `plot` rectangle no legend and plot check is made.
+///
+/// Text is checked only against other text, the chart's size and the legend
+/// against the plot: not against marks, clips or the plot rectangle, so a
+/// label over a bar or crossing the plot's edge is not reported.
 List<ChartOverlap> findOverlaps(
   List<ChartPrimitive> primitives,
   ChartSize size,

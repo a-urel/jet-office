@@ -1,6 +1,7 @@
 /// The ids of the primitives layout produces.
 ///
-/// The scheme is stable: the same chart, theme and size give the same ids, and
+/// The public statement of this scheme is the dartdoc of
+/// `ChartLayout.primitives`; keep the two in step. The scheme is stable: the same chart, theme and size give the same ids, and
 /// a later version keeps every id it has, so hit testing and golden tests can
 /// name a mark. An id is a path of `/`-separated parts; indexes count from 0.
 ///

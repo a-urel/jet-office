@@ -22,7 +22,8 @@ final class ChartHiddenLabel {
   /// Creates a hidden label of [text] that would have had the primitive [id].
   const ChartHiddenLabel(this.id, this.text);
 
-  /// The id the text's primitive would have had (`chart_ids.dart`'s scheme).
+  /// The id the text's primitive would have had, in the scheme that
+  /// [ChartLayout.primitives] describes.
   final String id;
 
   /// The text.
@@ -56,6 +57,26 @@ final class ChartLayout {
 
   /// What to draw, in paint order: the first is the `background` rectangle,
   /// which covers the size exactly.
+  ///
+  /// Every primitive has an id, and the scheme is stable: the same chart,
+  /// theme and size give the same ids, and a later version keeps every id it
+  /// has, so hit testing and golden tests can name a mark. An id is a path of
+  /// `/`-separated parts; indexes count from 0.
+  ///
+  /// * `background`, `title`, `legend`, `plot`, `plot/clip` (the clip that
+  ///   holds the series marks) and `placeholder` (the text of a kind this
+  ///   version does not draw): one each.
+  /// * `legend/<s>/symbol` and `legend/<s>/text`: the legend entry of series
+  ///   `<s>`.
+  /// * `axis/<a>/line`, `axis/<a>/label/<i>` and `axis/<a>/title`, where `<a>`
+  ///   is `value` or `category`: the axis line, its label `<i>` (a value
+  ///   axis' tick `<i>` from its minimum, a category axis' category `<i>`) and
+  ///   its title.
+  /// * `grid/<a>/<i>`: grid line `<i>` of axis `<a>`.
+  /// * `series/<s>/bar/<c>`, `series/<s>/line/<run>`, `series/<s>/marker/<c>`
+  ///   and `series/<s>/area`: the marks of series `<s>` at category `<c>`; a
+  ///   gap in the data starts a new line run.
+  /// * `label/<s>/<c>`: the data label of series `<s>` at category `<c>`.
   final List<ChartPrimitive> primitives;
 
   /// The plot area, or `null` when there is none: a kind this version does
@@ -66,11 +87,14 @@ final class ChartLayout {
   final ValueScale? valueScale;
 
   /// The texts left out because they did not fit, grouped in the
-  /// degradation order whatever the order they were taken away in: legend
-  /// entries, the value and category axis titles, the title, category labels
-  /// (every one not shown and every cut one, with its full text), value tick
-  /// labels; each group in index order. A kind this version does not draw
-  /// lists its title and its placeholder.
+  /// degradation order whatever the order they were taken away in: data
+  /// labels first (each one that found no place, or all of them when only
+  /// the background is drawn), then legend entries, the value and category
+  /// axis titles, the title, category labels (every one not shown and every
+  /// cut one, with its full text), and value tick labels (all of them when
+  /// they go, or the ones a fixed unit's thinning left out); each group in
+  /// index order. A kind this version does not draw lists its title and its
+  /// placeholder. Each id is one [primitives] describes.
   final List<ChartHiddenLabel> hidden;
 
   @override
@@ -107,11 +131,13 @@ final class ChartLayout {
 /// centred in what is left; the placeholder is hidden when it does not fit.
 ///
 /// Category labels that crowd are skipped, then turned, then cut with `…`.
-/// Content that still does not fit is taken away in a fixed order (data
-/// labels, legend, axis titles, title, category labels, value labels), each
-/// step only when it can relieve what does not fit, and listed in
-/// [ChartLayout.hidden]; a chart too small for a 1 by 1 plot draws only its
-/// background. No text overlaps another and every primitive lies inside
+/// Tick labels that crowd take a coarser unit, or, at a fixed unit, are
+/// thinned to every k-th label. Content that still does not fit is taken
+/// away in a fixed order (data labels, legend, axis titles, title, category
+/// labels, value labels), each step only when it can relieve what does not
+/// fit, and listed in [ChartLayout.hidden]; data labels take no room, so they
+/// go only one by one where they find no place, or all together when a chart
+/// too small for a 1 by 1 plot draws only its background. No text overlaps another and every primitive lies inside
 /// [size].
 ///
 /// Throws an [ArgumentError] for a negative or non-finite size. Bad data,
