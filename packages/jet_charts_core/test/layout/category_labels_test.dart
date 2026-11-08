@@ -25,12 +25,14 @@ ChartLayout lay(
   ChartKind kind = ChartKind.column,
   String? title,
   ChartLegend legend = const ChartLegend(visible: false),
+  ChartAxis valueAxis = const ChartAxis(),
 }) {
   return layoutChart(
     Chart(
       kind: kind,
       title: title == null ? null : ChartTitle(text: title),
       legend: legend,
+      valueAxis: valueAxis,
       series: <ChartSeries>[
         ChartSeries(
           name: ChartData<String>(values: <String?>['Sales']),
@@ -292,6 +294,9 @@ void main() {
             isEmpty,
             reason: '$kind $w x $h',
           );
+          if (w >= 400) {
+            expect(categoryLabels(layout), isNotEmpty, reason: '$kind $w x $h');
+          }
         }
       }
     }
@@ -306,6 +311,56 @@ void main() {
     );
     expect(drawn(layout, ids.title), isTrue);
     expect(drawn(layout, ids.legend), isTrue);
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+
+  test('a hidden value axis leaves room for the first and last label', () {
+    for (final ChartKind kind in <ChartKind>[ChartKind.column, ChartKind.bar]) {
+      for (final ChartLegendPosition position in ChartLegendPosition.values) {
+        for (final List<String> cats in <List<String>>[
+          labelsOf(60, 3),
+          labelsOf(200, 20),
+        ]) {
+          final ChartLayout layout = lay(
+            cats,
+            const ChartSize(400, 300),
+            kind: kind,
+            title: 'Revenue',
+            legend: ChartLegend(position: position),
+            valueAxis: const ChartAxis(visible: false),
+          );
+          final String reason = '$kind $position ${cats.length}';
+          expect(drawn(layout, ids.title), isTrue, reason: reason);
+          expect(drawn(layout, ids.legend), isTrue, reason: reason);
+          expect(categoryLabels(layout), isNotEmpty, reason: reason);
+          expect(
+            findOverlaps(layout.primitives, layout.size),
+            isEmpty,
+            reason: reason,
+          );
+        }
+      }
+    }
+  });
+
+  test('a last label a little wider than its band stays level', () {
+    // A last label 54 wide in a band of about 40: it reaches 7 past the
+    // plot's right, into the chart's padding, and no label is skipped.
+    final ChartLayout layout = lay(
+      <String>['Q1', 'Q2', 'Q3', 'Last label'],
+      const ChartSize(176, 200),
+      valueAxis: const ChartAxis(visible: false),
+    );
+    final double band = layout.plotArea!.width / 4;
+    expect(band, lessThan(54));
+    expect(band, greaterThanOrEqualTo((10.8 + 54) / 2 + minTextGap));
+    final Map<int, TextPrimitive> labels = categoryLabels(layout);
+    expect(labels.keys, <int>[0, 1, 2, 3]);
+    expect(
+      labels.values.every((TextPrimitive t) => t.rotationDegrees == 0),
+      isTrue,
+    );
+    expect(labels[3]!.rect.right, greaterThan(layout.plotArea!.right));
     expect(findOverlaps(layout.primitives, layout.size), isEmpty);
   });
 }

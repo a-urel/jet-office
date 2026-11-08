@@ -176,6 +176,7 @@ final class CategoryLabelPlan {
     this.before = 0,
     this.after = 0,
     this.reserveBefore = 0,
+    this.cramped = false,
   }) : shown = List<int>.unmodifiable(shown),
        labels = List<MeasuredLabel>.unmodifiable(labels);
 
@@ -210,11 +211,21 @@ final class CategoryLabelPlan {
   final double after;
 
   /// The room before the axis' start that the labels ask the frame to keep:
-  /// at -45 degrees, the reach of the first label cut to the band limit
-  /// alone, as if its tick were at the axis' start; 0 otherwise. Kept, it
-  /// lets the first label stand whole, and as it does not depend on the
-  /// axis' length, keeping it does not feed back into the plan.
+  /// the reach of the first label as if its tick were at the axis' start. At
+  /// -45 degrees it is that of the first label cut to the band limit alone;
+  /// at -90 degrees, and beside a bar chart's axis, half the label's height;
+  /// at 0 degrees under a horizontal axis 0, as those labels use only the
+  /// room the frame has anyway. Kept, it lets the first label stand whole,
+  /// and as it does not depend on the axis' length, keeping it does not feed
+  /// back into the plan.
   final double reserveBefore;
+
+  /// Whether a plan that does not fit failed only for want of room past the
+  /// axis' ends: some try kept its labels apart and within the band limit.
+  /// Such a plan's [reserveBefore] is the largest of those tries', so the
+  /// frame can keep the room and try again; if the room still lacks, only
+  /// hiding the category labels relieves it.
+  final bool cramped;
 
   @override
   bool operator ==(Object other) =>
@@ -225,6 +236,7 @@ final class CategoryLabelPlan {
       before == other.before &&
       after == other.after &&
       reserveBefore == other.reserveBefore &&
+      cramped == other.cramped &&
       listValueEquals(shown, other.shown) &&
       listValueEquals(labels, other.labels);
 
@@ -236,6 +248,7 @@ final class CategoryLabelPlan {
     before,
     after,
     reserveBefore,
+    cramped,
     listValueHash(shown),
     listValueHash(labels),
   );
@@ -259,9 +272,11 @@ const String ellipsis = '…';
 /// closer than `minTextGap`, their band is no deeper than [maxDepth], and they
 /// reach no further than [roomBefore] before the axis' start and [roomAfter]
 /// past its end: the room the frame has there anyway, which the labels never
-/// widen, so the plot does not depend on them along the axis. At -45 degrees
-/// the room before is [turnedRoomBefore], which also holds what the frame
-/// keeps for a plan's [CategoryLabelPlan.reserveBefore]. At -45 and -90
+/// widen, so the plot does not depend on them along the axis. At -45 and -90
+/// degrees, and beside a vertical axis, the room before is
+/// [turnedRoomBefore], which also holds what the frame keeps for a plan's
+/// [CategoryLabelPlan.reserveBefore]. A plan that fails only for want of room
+/// is [CategoryLabelPlan.cramped]. At -45 and -90
 /// degrees a label deeper than [maxDepth] is cut with `…`, and at -45 degrees
 /// also one that would reach further than [turnedRoomBefore]; at 0 degrees
 /// none is.
@@ -315,10 +330,17 @@ CategoryLabelPlan planCategoryLabels(
         : cut.putIfAbsent(angle, () => planner.cut(angle, measurer, style));
     final CategoryLabelPlan? plan = planner.attempt(drawn, angle, every);
     if (plan != null) {
-      return angle == 45 ? planner.reserved(plan, measurer, style) : plan;
+      return planner.reserved(plan, angle, measurer, style);
     }
   }
-  return CategoryLabelPlan(fits: false);
+  if (planner.crampedAngles.isEmpty) {
+    return CategoryLabelPlan(fits: false);
+  }
+  double reserve = 0;
+  for (final int angle in planner.crampedAngles) {
+    reserve = math.max(reserve, planner.reserve(angle, measurer, style));
+  }
+  return CategoryLabelPlan(fits: false, cramped: true, reserveBefore: reserve);
 }
 
 /// The tries of [planCategoryLabels]. Angles are counter-clockwise, in
@@ -346,6 +368,10 @@ final class _Planner {
   final bool vertical;
 
   static const double _tolerance = 1e-9;
+
+  /// The angles of the tries that failed only for want of room past the
+  /// axis' ends.
+  final Set<int> crampedAngles = <int>{};
 
   /// The depth across the axis of a label of [size] at [angle].
   double depth(ChartSize size, int angle) {
@@ -398,24 +424,34 @@ final class _Planner {
       cutOne(index, angle, measurer, style),
   ];
 
-  /// [plan] (at -45 degrees) with its [CategoryLabelPlan.reserveBefore].
+  /// [plan], tried at [angle], with its [CategoryLabelPlan.reserveBefore].
   CategoryLabelPlan reserved(
     CategoryLabelPlan plan,
+    int angle,
     TextMeasurer measurer,
     ChartTextStyle style,
-  ) {
-    final MeasuredLabel? first = cutOne(0, 45, measurer, style, room: false);
-    final ChartSize size = first?.size ?? const ChartSize(0, 0);
-    return CategoryLabelPlan(
-      fits: plan.fits,
-      thickness: plan.thickness,
-      rotationDegrees: plan.rotationDegrees,
-      shown: plan.shown,
-      labels: plan.labels,
-      before: plan.before,
-      after: plan.after,
-      reserveBefore: (size.width + size.height / 2) * math.sqrt1_2,
-    );
+  ) => CategoryLabelPlan(
+    fits: plan.fits,
+    thickness: plan.thickness,
+    rotationDegrees: plan.rotationDegrees,
+    shown: plan.shown,
+    labels: plan.labels,
+    before: plan.before,
+    after: plan.after,
+    reserveBefore: reserve(angle, measurer, style),
+  );
+
+  /// The [CategoryLabelPlan.reserveBefore] of a try at [angle].
+  double reserve(int angle, TextMeasurer measurer, ChartTextStyle style) {
+    if (vertical || angle == 90) {
+      return labels.first.size.height / 2;
+    }
+    if (angle == 45) {
+      final MeasuredLabel? first = cutOne(0, 45, measurer, style, room: false);
+      final ChartSize size = first?.size ?? const ChartSize(0, 0);
+      return (size.width + size.height / 2) * math.sqrt1_2;
+    }
+    return 0;
   }
 
   /// The label of category [index] cut with `…` until [whole] holds at
@@ -476,11 +512,12 @@ final class _Planner {
       before = math.max(before, -lo);
       after = math.max(after, hi - axisLength);
     }
-    if (thickness > maxDepth + _tolerance ||
-        before > (angle == 45 ? turnedRoomBefore : roomBefore) + _tolerance ||
-        after > roomAfter + _tolerance) {
+    if (thickness > maxDepth + _tolerance) {
       return null;
     }
+    final bool roomy =
+        before <= (angle == 0 ? roomBefore : turnedRoomBefore) + _tolerance &&
+        after <= roomAfter + _tolerance;
     final double distance = every * band;
     for (int k = 1; k < shown.length; k++) {
       final ChartSize a = drawn[shown[k - 1]]!.size;
@@ -497,6 +534,10 @@ final class _Planner {
       if (!apart) {
         return null;
       }
+    }
+    if (!roomy) {
+      crampedAngles.add(angle);
+      return null;
     }
     return CategoryLabelPlan(
       fits: true,

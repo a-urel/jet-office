@@ -23,6 +23,7 @@ import 'dart:math' as math;
 import 'package:jet_core/jet_core.dart';
 
 import '../model/chart.dart';
+import '../model/chart_kind.dart';
 import '../scale/value_scale.dart';
 import '../theme/chart_theme.dart';
 import 'axis_layout.dart';
@@ -208,6 +209,7 @@ extension on FrameContext {
     ValueScale? scale;
     List<MeasuredLabel> labels = const <MeasuredLabel>[];
     _Bands need(List<MeasuredLabel> labels, ChartRect plot) => _bandsFor(
+      inner,
       shown,
       labels,
       _plan(shown, inner, plot, labels, valueTitle, categoryTitle),
@@ -263,6 +265,7 @@ extension on FrameContext {
     bool settled = false;
     for (int i = 0; i < 4; i++) {
       final _Bands needed = _bandsFor(
+        inner,
         shown,
         labels,
         plan,
@@ -281,7 +284,8 @@ extension on FrameContext {
       if (!settled || !(plot.width >= 1 && plot.height >= 1)) FrameMisfit.space,
       if (shown.valueLabels && !_valueLabelsFit(labels, scale!, plot))
         FrameMisfit.valueLabels,
-      if (shown.categoryLabels && !plan.fits) FrameMisfit.categoryLabels,
+      if (shown.categoryLabels && !plan.fits)
+        plan.cramped ? FrameMisfit.categoryRoom : FrameMisfit.categoryLabels,
     };
     if (misfits.isEmpty) {
       if (valueTitle != null &&
@@ -345,13 +349,19 @@ extension on FrameContext {
     for (final MeasuredLabel label in labels) {
       widest = math.max(widest, label.size.width);
     }
-    // The room before the axis' start that the tick labels and the value
-    // title make, without what a column chart keeps for turned labels.
+    final (double edgeBefore, double edgeAfter) = _edges(shown, inner);
+    // The room before the axis' start: past [inner], the edge room; inside
+    // it, the band the tick labels and the value title make, and (for turned
+    // labels and a bar chart) what the frame keeps for the plan's reserve.
+    final double turnedRoom =
+        edgeBefore +
+        (bar ? inner.bottom - plot.bottom : plot.left - inner.left);
     final double room = bar
-        ? inner.bottom - plot.bottom
+        ? turnedRoom
         : math.min(
-            plot.left - inner.left,
-            (valueTitle == null ? 0 : valueTitle.height + gap) +
+            turnedRoom,
+            edgeBefore +
+                (valueTitle == null ? 0 : valueTitle.height + gap) +
                 (shown.valueLabels && labels.isNotEmpty ? widest + gap : 0),
           );
     final bool ticks = shown.valueLabels && labels.isNotEmpty;
@@ -370,12 +380,47 @@ extension on FrameContext {
       bar ? plot.height : plot.width,
       maxDepth: 0.4 * cross - _largestOffset(shown, labels),
       roomBefore: room,
-      turnedRoomBefore: bar ? room : plot.left - inner.left,
-      roomAfter: bar ? plot.top - inner.top : inner.right - plot.right,
+      turnedRoomBefore: turnedRoom,
+      roomAfter:
+          edgeAfter + (bar ? plot.top - inner.top : inner.right - plot.right),
       vertical: bar,
       spacing: theme.spacing,
       measurer: measurer,
       style: theme.axisLabels,
+    );
+  }
+
+  /// The room past [inner] before the category axis' start and past its
+  /// end that category labels may reach into: the chart's padding, or
+  /// beside a legend (or, above a bar chart's plot, under the title) its gap
+  /// less `minTextGap`. Nothing else stands there in the labels' way: under
+  /// a column chart's plot the turned value title ends at the plot's bottom,
+  /// and beside a bar chart's plot the value title starts at its left.
+  (double, double) _edges(FrameShown shown, ChartRect inner) {
+    final ChartLegendPosition? legend = shown.legend
+        ? chart.legend.position
+        : null;
+    double beside(double gapToIt) =>
+        math.max(0, gapToIt - theme.spacing.minTextGap);
+    if (bar) {
+      return (
+        legend == ChartLegendPosition.bottom
+            ? beside(theme.spacing.legendGap)
+            : size.height - inner.bottom,
+        legend == ChartLegendPosition.top
+            ? beside(theme.spacing.legendGap)
+            : shown.title
+            ? beside(theme.spacing.titleGap)
+            : inner.top,
+      );
+    }
+    return (
+      legend == ChartLegendPosition.left
+          ? beside(theme.spacing.legendGap)
+          : inner.left,
+      legend == ChartLegendPosition.right
+          ? beside(theme.spacing.legendGap)
+          : size.width - inner.right,
     );
   }
 
@@ -403,10 +448,11 @@ extension on FrameContext {
 
   /// The bands around the plot for the tick [labels], the category [plan] and
   /// the axis titles. The category labels' reach past the axis' ends stays
-  /// within the bands the tick labels and the value title make there, which
-  /// a column chart widens at its left to the labels'
-  /// [CategoryLabelPlan.reserveBefore].
+  /// within those bands and the edge room past [inner] (`_edges`); the band
+  /// before the axis' start widens to what the labels'
+  /// [CategoryLabelPlan.reserveBefore] needs beyond the edge room.
   _Bands _bandsFor(
+    ChartRect inner,
     FrameShown shown,
     List<MeasuredLabel> labels,
     CategoryLabelPlan plan,
@@ -429,6 +475,10 @@ extension on FrameContext {
       widest = math.max(widest, label.size.width);
       tallest = math.max(tallest, label.size.height);
     }
+    // What the plan's reserve needs inside [inner] past the edge room.
+    final double reserve = shown.categoryLabels
+        ? plan.reserveBefore - _edges(shown, inner).$1
+        : 0;
     if (bar) {
       return (
         left: math.max(
@@ -437,14 +487,11 @@ extension on FrameContext {
         ),
         top: 0,
         right: ticks ? labels.last.size.width / 2 : 0,
-        bottom: valueTitleBand + (ticks ? tallest + gap : 0),
+        bottom: math.max(valueTitleBand + (ticks ? tallest + gap : 0), reserve),
       );
     }
     return (
-      left: math.max(
-        valueTitleBand + (ticks ? widest + gap : 0),
-        shown.categoryLabels ? plan.reserveBefore : 0,
-      ),
+      left: math.max(valueTitleBand + (ticks ? widest + gap : 0), reserve),
       top: ticks ? labels.last.size.height / 2 : 0,
       right: 0,
       bottom: math.max(

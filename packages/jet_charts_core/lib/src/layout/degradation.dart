@@ -50,6 +50,10 @@ enum FrameMisfit {
   /// No plan of the category labels fits: their band limit (40% of the space
   /// left for the plot and the band) is too small even for a cut label.
   categoryLabels,
+
+  /// The category labels would fit apart and within their band limit but
+  /// for the room past the axis' ends; only hiding them relieves that.
+  categoryRoom,
 }
 
 /// A part that is hidden alone when it does not fit its own space.
@@ -146,7 +150,8 @@ final class FrameShown {
   /// column chart, or at the left or right of a bar chart; the axis titles
   /// when the category axis has a title (it stands across that direction);
   /// the title only on a column chart; and the category labels always. The
-  /// value labels relieve only their own collision and space.
+  /// value labels relieve only their own collision and space. Only the
+  /// category labels relieve [FrameMisfit.categoryRoom].
   bool relieves(
     DegradeStep step,
     Set<FrameMisfit> misfits, {
