@@ -2,12 +2,12 @@
 /// `docProps/app.xml` and `docProps/custom.xml`), shared by both formats.
 ///
 /// Ported from quds_office_engine `lib/src/office/office_document_properties.dart` at commit 15c5d29.
-/// Ported: the core and extended property parts. What changed: only the
-/// fields a workbook needs are kept, elements are written in the order Excel
-/// writes them, dates appear only when the caller gives them, and all text is
-/// checked for characters XML forbids. New: the manager, the content status
-/// and the custom properties (`docProps/custom.xml`), none of which Quds
-/// wrote.
+/// Ported: the core and extended property parts. What changed: the fields
+/// workbooks and documents share are kept, elements are written in one fixed
+/// order, the one Excel writes, for both formats, dates appear only when the
+/// caller gives them, and all text is checked for characters XML forbids.
+/// New: the manager, the content status, the revision, the application and
+/// the custom properties (`docProps/custom.xml`), none of which Quds wrote.
 library;
 
 import '../opc/ooxml.dart';

@@ -115,7 +115,10 @@
 - Renamed the format-neutral public types, with no aliases: `XlsxLocale` is
   now `OfficeLocale`, `XlsxImage` is now `OfficeImage`, `XlsxImageFormat`
   is now `OfficeImageFormat` and `XlsxProperties` is now `OfficeProperties`
-  (D5). Update imports and uses; nothing else changed.
+  (D5). Update imports and uses. One behaviour changed with it: setting the
+  properties of an XLSX workbook to a value whose `revision` or `application`
+  is null now removes `cp:revision` and `Application`, which were kept, untyped,
+  before.
 - The number format engine moved to the new package `jet_core` (decision
   0012), with neutral names and no aliases: `XlsxNumberFormatter` is now
   `NumberFormatter`, `XlsxFormatLocale` is `FormatLocale`,
