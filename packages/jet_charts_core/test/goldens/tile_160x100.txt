@@ -1,0 +1,23 @@
+rect background 0.00,0.00 160.00x100.00 fill=FFFFFF stroke=- width=1.00
+rect plot 22.80,13.40 129.20x63.80 fill=- stroke=- width=1.00
+path grid/value/0 22.80,77.20 152.00,77.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/1 22.80,61.25 152.00,61.25 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/2 22.80,45.30 152.00,45.30 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/3 22.80,29.35 152.00,29.35 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/4 22.80,13.40 152.00,13.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+clip plot/clip 22.80,13.40 129.20x63.80
+  rect series/0/bar/0 33.89,38.92 10.13x38.28 fill=156082 stroke=- width=1.00
+  rect series/0/bar/1 66.19,19.78 10.13x57.42 fill=156082 stroke=- width=1.00
+  rect series/0/bar/2 98.49,48.49 10.13x28.71 fill=156082 stroke=- width=1.00
+  rect series/0/bar/3 130.79,29.35 10.13x47.85 fill=156082 stroke=- width=1.00
+path axis/value/line 22.80,13.40 22.80,77.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path axis/category/line 22.80,77.20 152.00,77.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+text axis/value/label/0 13.40,71.80 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/value/label/1 13.40,55.85 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"
+text axis/value/label/2 8.00,39.90 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
+text axis/value/label/3 8.00,23.95 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "15"
+text axis/value/label/4 8.00,8.00 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "20"
+text axis/category/label/0 33.55,81.20 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q1"
+text axis/category/label/1 65.85,81.20 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q2"
+text axis/category/label/2 98.15,81.20 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q3"
+text axis/category/label/3 130.45,81.20 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q4"

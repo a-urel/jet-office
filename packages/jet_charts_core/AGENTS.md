@@ -7,9 +7,11 @@ lays out; `jet_office` writes and reads the model as a chart in XLSX and DOCX.
 The record of the design is the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md`.
 
-Milestone J1 is done, and the axis oracle's owner run is recorded
-(`docs/axis-scaling.md`, "Findings"): the package exports the model, the theme, the drawing primitives and the text
-measurer. Scales and layout are J2.
+Milestones J1 and J2 are done, and the owner's full axis oracle run is
+recorded (`docs/axis-scaling.md`, "Findings"). The package exports the model,
+the theme, the drawing primitives and the text measurer (J1), the value scale
+(`autoValueScale`), the layout (`layoutChart`) and the overlap check
+(`findOverlaps`) (J2). The renderer is J3, in `jet_charts_flutter`.
 
 ## The packages
 
@@ -66,8 +68,77 @@ findings.
   Excel.
 - `tool/analyze_axis_oracle.dart [folder]` prints what differs across height and
   font, and the answer.
+- The full oracle (J2, case list version 2) lives in `test/fixtures/owner/axis_full/`
+  with its own README and `TALIMATLAR.md`: `write_axis_oracle.dart --full`, the
+  script's third argument `full`, and `analyze_axis_oracle.dart --full`. Its
+  code is the part `tool/src/axis_oracle_full.dart`. The script's `full`
+  argument runs it; Excel may refuse to open the workbook through its
+  dictionary, and the script then falls back to `open -a 'Microsoft Excel'`. `test/axis_oracle_test.dart`
+  checks it as it checks the first; the first oracle's files stay as committed.
 
-`docs/excel-checks.md` lists the Office theme values Excel has not confirmed.
+`docs/excel-checks.md` lists the Office theme values Excel's default charts
+confirmed and those still unconfirmed; `docs/parity.md` compares layout with
+Excel and lists every deliberate difference.
+
+## The scale
+
+`autoValueScale` (`lib/src/scale/value_scale.dart`) is Excel's rule for the
+value axis: the minimum and maximum from the data extent (`dataExtent`), the
+major unit from the axis length, through `excelMaxIntervals` (rounded down,
+kept between 1 and 10). The rule was fitted on, and is tested against, the
+owner's oracle runs in `test/fixtures/owner/` (`axis_oracle_test.dart`); a
+change to it must keep every verified region passing. `docs/axis-scaling.md`
+states the rule and the findings.
+
+## The layout
+
+`layoutChart` (`lib/src/layout/`) turns a chart, a theme, a size and a
+`TextMeasurer` into a `ChartLayout`: `primitives` in paint order and `hidden`,
+the labels it left out (`ChartHiddenLabel`). Column, bar, line and area charts
+of every grouping are laid out; the frame comes first (`frame.dart`), the axes
+and category labels (`axis_layout.dart`), marks, data labels, legend.
+
+- Collision rules: category labels turn (0, -45, -90 degrees), skip every
+  `N`th or are cut with an ellipsis; a legend that does not fit shrinks to
+  fewer entries or moves; data labels give way to marks and each other, and
+  those that cannot be placed go to `hidden` (`degradation.dart` orders what
+  goes first). `findOverlaps` must find nothing in any layout.
+- Ids: every primitive has an id (`chart_ids.dart`), stable across layouts of
+  the same chart, for hit testing and tests. The scheme is documented in
+  `ChartLayout.primitives`; a public ids API is to be decided in J3.
+- `findOverlaps` (`overlap.dart`) reports texts that overlap each other or a
+  mark of the layout, as `ChartOverlap`s of a `ChartOverlapKind`. It is the
+  fuzz test's check and may be used by backends.
+- Goldens: `test/layout/golden_test.dart` compares the layout of each chart in
+  `test/support/gallery.dart` with `test/goldens/*.txt`. After an intended
+  change, rewrite them and review the diff:
+  `UPDATE_GOLDENS=1 dart test test/layout/golden_test.dart`.
+- Gallery: `dart run tool/write_gallery.dart build/gallery` writes
+  `gallery.html`, every gallery chart as inline SVG, to look at in a browser.
+- `docs/parity.md` compares the layout with Excel and lists every deliberate
+  difference; change it with the layout.
+
+## Fuzzing
+
+`test/layout/fuzz_test.dart` lays out seeded random charts
+(`test/layout/support/chart_fuzz.dart`: every kind, 0 to 12 series, 0 to 60
+text, number or date categories, `NaN`, infinite and huge values, long titles
+and line breaks in text, fixed bounds with a fixed major unit down to `5e-324`
+or one to ignore, format codes on axes, series and data labels, tiny to large
+sizes) and requires of each that `layoutChart` throws nothing,
+every number is finite, `findOverlaps` finds nothing and every primitive lies
+inside the size (marks inside a clip are checked for finiteness only). The gate
+runs seeds 1 to 4 with 100 cases each, the same cases on the VM and in Chrome
+(a fingerprint test proves it); longer runs by hand:
+
+```bash
+dart run tool/fuzz_layout.dart --seeds 1-200 --cases 1000
+```
+
+It prints each failure as `seed <s> case <i>: <problem>` and the chart, and
+exits 1 on any, 2 on unusable arguments. A failure is a layout defect: pin it
+as a unit test in the owning `test/layout/*_test.dart` with the input minimized
+by hand, then fix it.
 
 ## Hard rules
 
@@ -92,20 +163,35 @@ findings.
 - Follow the surrounding code: explicit types, dartdoc on every public member,
   plain sentences.
 
-## Open for J2 and C1
+## Open for J3 and C1
 
-- A series has no colour or semantic key, so `ChartTheme.semantic` has no
-  consumer and a file's series fill has nowhere to go.
-- The theme has colours but no line widths or dash for grid and axis, and no
-  spacing, tooltip or legend look. The design spec asks for them; the spec is
-  not tracked.
-- A scheme colour cannot carry `lumMod` or `lumOff`, so text, grid, and series
-  7 and up are fixed RGB even in the Office theme.
-- `ArcPrimitive` has no `strokeWidth`.
-- `TextPrimitive` must define what `rect` means under rotation before the
-  overlap check.
-- `ChartData<String>` used as `categories` can throw on `copyWith` with
-  `Object?` values, by covariance.
+- `lumMod`/`lumOff` on scheme colours (C1; `chart_defaults.xlsx` shows text
+  tx1 65/35 and grid tx1 15/85).
+- `ArcPrimitive.strokeWidth` (J4 pies).
+- Excel's time-scale date axis (owner decision O2; dates are categories in J2).
+- The en-US and de-DE oracle regions are unverified; so are fonts other than
+  8, 10 and 18, and plot margins.
+- The Excel side-by-side gallery check (owner decision O3) with the Flutter
+  renderer. Office look differences already known: Excel's default value axis
+  has no line and its chart area has a border; a one-series chart shows a
+  title and no legend.
+- The real `TextMeasurer` (Flutter `TextPainter`), and whether its widths keep
+  the fuzz clean.
+- Tooltips for `ChartLayout.hidden`; hit testing from ids (the scheme is
+  documented in `ChartLayout.primitives`; a public ids API is for J3).
+- Per-series kind, secondary axis, combination charts (J4).
+- Category labels: Excel's turning or wrapping beyond the label spacing
+  is unknown; long labels may wrap at 0 degrees as Excel does.
+- Known deferred defects: the value-position functions disagree beyond 2x the
+  span (`valuePosition` clamps to [0, 1], marks to [-1, 2]); the stacked line
+  or area extent with mixed signs is wider than needed; a side legend is
+  dropped whole for one long name; data-label placement is linear per
+  obstacle (about 1 s at 3,650 categories x 2 series); near-equal huge values
+  (relative spread about 1e-14) can put the data top above the axis; the
+  "data labels first" degradation is nominal; data labels are not checked
+  against marks; inside-end labels may straddle a short bar.
+- Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
+- Excel's palette past six colours is unverified.
 
 ## Reference
 

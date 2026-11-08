@@ -3,8 +3,10 @@ library;
 
 import 'dart:math' as math;
 
+import '../model/chart_series.dart';
 import '../model/equality.dart';
 import 'chart_color.dart';
+import 'chart_spacing.dart';
 import 'office_theme.dart';
 
 /// The look of a chart, one object that travels to every output so a chart
@@ -12,8 +14,9 @@ import 'office_theme.dart';
 final class ChartTheme {
   /// Creates a theme.
   ///
-  /// [palette] and [semantic] are copied and unmodifiable. Throws an
-  /// [ArgumentError] when [palette] is empty.
+  /// [palette] and [semantic] are copied and unmodifiable. [spacing] defaults
+  /// to the Office theme's `ChartSpacing()`. Throws an [ArgumentError] when
+  /// [palette] is empty.
   ChartTheme({
     required List<ChartColor> palette,
     Map<String, ChartColor> semantic = const <String, ChartColor>{},
@@ -27,9 +30,11 @@ final class ChartTheme {
     this.gapWidthPercent = 219,
     this.lineWidth = 2.25,
     this.markerSize = 5,
+    ChartSpacing? spacing,
     this.exportColors = ChartExportColors.fixed,
   }) : palette = List<ChartColor>.unmodifiable(palette),
-       semantic = Map<String, ChartColor>.unmodifiable(semantic) {
+       semantic = Map<String, ChartColor>.unmodifiable(semantic),
+       spacing = spacing ?? ChartSpacing() {
     if (palette.isEmpty) {
       throw ArgumentError.value(palette, 'palette', 'must not be empty');
     }
@@ -42,12 +47,15 @@ final class ChartTheme {
   /// 2026-11-06 (dark 1 `000000`, light 1 `FFFFFF`, dark 2 `0E2841`, light 2
   /// `E8E8E8`). Its [exportColors] is [ChartExportColors.fileTheme].
   ///
-  /// Unconfirmed and still to be measured against Excel (`docs/excel-checks.md`
-  /// gives each value's source): the font
-  /// family `Aptos Narrow` (the theme file names Aptos), the sizes (9 pt for
-  /// axis labels, legend and data labels, 14 pt for the title), the text
-  /// colour `595959`, the grid and axis line colour `D9D9D9`, the background
-  /// `FFFFFF`, and [gapWidthPercent], [lineWidth] and [markerSize].
+  /// Verified on Excel's default column and line charts
+  /// (`chart_defaults.xlsx`, 2026-11-08; `docs/excel-checks.md` gives each
+  /// value's source): the font family `Aptos Narrow` (the theme's minor
+  /// font), 9 pt axis labels and a 14 pt title, the text colour `595959`, the
+  /// grid and axis line colour `D9D9D9`, the background `FFFFFF`,
+  /// [gapWidthPercent] 219, [lineWidth] 2.25, [markerSize] 5, and of
+  /// [spacing] the line widths, the overlap and the tick length. Still
+  /// unconfirmed: 9 pt for the legend and data labels, and the other gaps of
+  /// [spacing].
   static final ChartTheme office = buildOfficeTheme();
 
   /// The series colours, in order. Never empty.
@@ -78,17 +86,20 @@ final class ChartTheme {
   final ChartColor background;
 
   /// The gap between the bars or columns of a category, as a percentage of a
-  /// bar's width. Excel's default is unconfirmed; see
-  /// `docs/excel-checks.md` for 219.
+  /// bar's width. Excel's default, 219, is verified; see
+  /// `docs/excel-checks.md`.
   final double gapWidthPercent;
 
-  /// The width of a line series, in points. Excel's default is unconfirmed;
-  /// see `docs/excel-checks.md` for 2.25.
+  /// The width of a line series, in points. Excel's default, 2.25, is
+  /// verified; see `docs/excel-checks.md`.
   final double lineWidth;
 
-  /// The size of a marker, in points. Excel's default is unconfirmed; see
-  /// `docs/excel-checks.md` for 5.
+  /// The size of a marker, in points. Excel's default, 5, is verified; see
+  /// `docs/excel-checks.md`.
   final double markerSize;
+
+  /// The gaps, symbol sizes and line widths of the layout.
+  final ChartSpacing spacing;
 
   /// How the theme's colours are exported to a file.
   final ChartExportColors exportColors;
@@ -130,6 +141,16 @@ final class ChartTheme {
     return ChartColor.rgb(channel(16) << 16 | channel(8) << 8 | channel(0));
   }
 
+  /// The colour of [series], which is the series at [index].
+  ///
+  /// It is the series' own [ChartSeries.color], else the [semantic] colour
+  /// named by its [ChartSeries.colorKey], else [seriesColor] of [index]. A key
+  /// [semantic] does not hold falls to the palette. Throws a [RangeError] when
+  /// [index] is negative and the series has neither colour nor known key.
+  ChartColor colorOf(ChartSeries series, int index) {
+    return series.color ?? semantic[series.colorKey] ?? seriesColor(index);
+  }
+
   /// A copy with the given fields replaced.
   ///
   /// A field cannot be set to `null` this way: passing `null` keeps the
@@ -147,6 +168,7 @@ final class ChartTheme {
     double? gapWidthPercent,
     double? lineWidth,
     double? markerSize,
+    ChartSpacing? spacing,
     ChartExportColors? exportColors,
   }) {
     return ChartTheme(
@@ -162,6 +184,7 @@ final class ChartTheme {
       gapWidthPercent: gapWidthPercent ?? this.gapWidthPercent,
       lineWidth: lineWidth ?? this.lineWidth,
       markerSize: markerSize ?? this.markerSize,
+      spacing: spacing ?? this.spacing,
       exportColors: exportColors ?? this.exportColors,
     );
   }
@@ -181,6 +204,7 @@ final class ChartTheme {
         gapWidthPercent == other.gapWidthPercent &&
         lineWidth == other.lineWidth &&
         markerSize == other.markerSize &&
+        spacing == other.spacing &&
         exportColors == other.exportColors;
   }
 
@@ -198,6 +222,7 @@ final class ChartTheme {
     gapWidthPercent,
     lineWidth,
     markerSize,
+    spacing,
     exportColors,
   );
 

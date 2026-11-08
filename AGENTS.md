@@ -17,7 +17,8 @@ location and names) and `0013` (one repository: a pub workspace, with
 under `packages/`, and a DrawingML layer here) before any design change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
-its own `AGENTS.md`, and this package does not depend on it until C1.
+its own `AGENTS.md`; milestone J2 is done (axis scales and the cartesian
+layout), and this package still does not depend on it until C1.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -396,6 +397,9 @@ owning `*_test.dart` with the input minimized by hand, then fix it.
 
 The number formatter's fuzz test and `tool/fuzz_formatter.dart` are in
 `jet_core` (decision 0012).
+
+The chart layout's fuzz test and `tool/fuzz_layout.dart` are in
+`packages/jet_charts_core` (its `AGENTS.md`, "Fuzzing").
 
 `test/xlsx/model/feature_fuzz_test.dart` fuzzes the model's sheet and
 workbook features (seeds 1 to 4, 100 cases each, over the `m3_*` and `m4_*`

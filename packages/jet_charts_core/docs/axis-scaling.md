@@ -56,3 +56,51 @@ So the major unit is an input of layout, not of the data alone: J2 chooses it
 with the plot area's height known, and scale and layout are one step for it.
 Neither the width nor a font change was tested, so this run says nothing of
 them; the other two regions stay `unverified`.
+
+### The full run
+
+The owner's full run of 2026-11-08 (`tr-TR`, Excel for Mac 16.114.4, 239
+charts, `test/fixtures/owner/axis_full/`; the manifest entry has the details)
+measured the plot area's inside box beside each axis. The owner compared the
+three charts of its `TALIMATLAR.md`, step 4, with their rows, and they matched.
+`tool/analyze_axis_oracle.dart --full` prints the runs below; every row but
+one is met by the rule (`test/scale/axis_parity_test.dart`).
+
+- **The major unit depends on the plot length and the tick labels' font
+  size.** Through `autoValueScale`, the most intervals Excel takes are
+  `excelMaxIntervals` (`lib/src/scale/value_scale.dart`), rounded down and
+  kept between 1 and 10:
+  - vertical value axis (column, line, area): `(plot height - font) /
+    (font + 2)`: labels one font size tall, 2 pt apart, fit the axis. On
+    `L10` at font 10 the unit goes 50, 20, 10, 5 as the plot grows from 24 to
+    144 pt; at a chart 100 pt high (plots of 68 and 44 pt) font 8 holds 5
+    intervals and font 18 one.
+  - horizontal value axis (bar): `(plot width + 2 font) / (3.9 font)`. A bar
+    chart needs a plot about three times as long as a column chart for the
+    same unit (`B10` at font 10 reaches 5 only at 563 pt). The labels' width
+    does not enter: the percent bars `G08` and `G11`, with labels twice as
+    wide, fit the same rule.
+  - never more than 10: a 264 pt column plot that could hold 20 took 10.
+
+  The constants are the simplest that meet every L, B, W, M, G and F row; the
+  data allow the gap from 1.96 to 2.32 pt, and the bar factors from 3.83 to
+  3.93 and 1.85 to 2.38.
+- **Width does not matter.** `W05` and `W06` at 150 and 300 pt high kept one
+  scale at every width from 120 to 720 pt.
+- **The minimum and maximum follow Task 3's rule** for every M row (the
+  one-sixth rule, single, equal, blank, wide and mixed-sign values, two
+  series, line and area) and for every grouping (G: stacked and percent
+  stacked, with negatives, as column, bar and area).
+- **Fixed bounds and unit** (F) follow the rule, with one exception: `F05`
+  fixes the minimum and the maximum both to 5, and Excel keeps an axis of no
+  length (5 to 5 by 0.5). The rule ignores the fixed maximum there and draws
+  5 to 11 by 1; `docs/parity.md` lists it.
+- **Category labels.** Excel's tick label spacing was 2 at 180 pt wide and 1
+  at 360 and 720 pt for labels of 3, 12 and 30 characters (`C`), never more
+  than 2; layout now skips at most every second level label before it turns
+  them.
+
+Still unverified: the other two regions (`en-US`, `de-DE`), whose number
+format could change label widths though not, by this rule, the unit; fonts
+other than Aptos Narrow; bar charts above 10 intervals (the run bounds them by
+12 only); and the plot box's own margins, which this rule takes as given.

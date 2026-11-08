@@ -139,4 +139,39 @@ void main() {
     expect(kindOf(TextPrimitive('t', '', a, style())), 'text');
     expect(kindOf(ClipPrimitive('c', a, const <ChartPrimitive>[])), 'clip');
   });
+
+  test('text corners turn about the centre', () {
+    final TextPrimitive turned = TextPrimitive(
+      't',
+      'x',
+      const ChartRect(0, 0, 20, 10),
+      style(),
+      rotationDegrees: 90,
+    );
+    final ChartRect b = turned.bounds;
+    expect(b.left, closeTo(5, 1e-9));
+    expect(b.top, closeTo(-5, 1e-9));
+    expect(b.width, closeTo(10, 1e-9));
+    expect(b.height, closeTo(20, 1e-9));
+    expect(turned.corners.length, 4);
+    // Top left of the box goes to the top right after a quarter turn.
+    expect(turned.corners[0].x, closeTo(15, 1e-9));
+    expect(turned.corners[0].y, closeTo(-5, 1e-9));
+  });
+
+  test('text bounds at 0 degrees are the rect', () {
+    final TextPrimitive t = TextPrimitive(
+      't',
+      'x',
+      const ChartRect(3, 4, 20, 10),
+      style(),
+    );
+    expect(t.bounds, const ChartRect(3, 4, 20, 10));
+    expect(t.corners, const <ChartPoint>[
+      ChartPoint(3, 4),
+      ChartPoint(23, 4),
+      ChartPoint(23, 14),
+      ChartPoint(3, 14),
+    ]);
+  });
 }

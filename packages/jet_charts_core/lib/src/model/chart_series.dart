@@ -1,6 +1,7 @@
 /// The data of a chart: [ChartData] and [ChartSeries].
 library;
 
+import '../theme/chart_color.dart';
 import 'chart_kind.dart';
 import 'equality.dart';
 
@@ -36,7 +37,7 @@ final class ChartData<T extends Object> {
 
   @override
   bool operator ==(Object other) {
-    return other is ChartData &&
+    return other is ChartData<Object> &&
         reference == other.reference &&
         listValueEquals(values, other.values);
   }
@@ -53,15 +54,25 @@ final class ChartSeries {
   /// Creates a series.
   ///
   /// [categories] hold `String`, `num` or `DateTime` entries. Their number
-  /// and the number of [values] may differ.
-  const ChartSeries({
+  /// and the number of [values] may differ. The categories are re-wrapped as
+  /// an exact `ChartData<Object>` (values copied), so a `ChartData<String>`
+  /// passed here does not make `categories.copyWith` throw by covariance.
+  ///
+  /// [color] is the series' own colour and [colorKey] names a colour of
+  /// `ChartTheme.semantic`; `ChartTheme.colorOf` resolves them.
+  ChartSeries({
     required this.name,
-    required this.categories,
+    required ChartData<Object> categories,
     required this.values,
     this.kind,
     this.axis = ChartAxisBinding.primary,
     this.formatCode,
-  });
+    this.color,
+    this.colorKey,
+  }) : categories = ChartData<Object>(
+         values: List<Object?>.of(categories.values),
+         reference: categories.reference,
+       );
 
   /// The series name, as a list of one entry.
   final ChartData<String> name;
@@ -82,6 +93,12 @@ final class ChartSeries {
   /// The number format of the values, as the text Excel stores, or `null`.
   final String? formatCode;
 
+  /// The colour of this series, or `null` to take it from the theme.
+  final ChartColor? color;
+
+  /// The name of a `ChartTheme.semantic` colour, or `null`.
+  final String? colorKey;
+
   /// A copy with the given fields replaced.
   ///
   /// A field cannot be set to `null` this way: passing `null` keeps the
@@ -93,6 +110,8 @@ final class ChartSeries {
     ChartKind? kind,
     ChartAxisBinding? axis,
     String? formatCode,
+    ChartColor? color,
+    String? colorKey,
   }) {
     return ChartSeries(
       name: name ?? this.name,
@@ -101,6 +120,8 @@ final class ChartSeries {
       kind: kind ?? this.kind,
       axis: axis ?? this.axis,
       formatCode: formatCode ?? this.formatCode,
+      color: color ?? this.color,
+      colorKey: colorKey ?? this.colorKey,
     );
   }
 
@@ -112,12 +133,22 @@ final class ChartSeries {
         values == other.values &&
         kind == other.kind &&
         axis == other.axis &&
-        formatCode == other.formatCode;
+        formatCode == other.formatCode &&
+        color == other.color &&
+        colorKey == other.colorKey;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(name, categories, values, kind, axis, formatCode);
+  int get hashCode => Object.hash(
+    name,
+    categories,
+    values,
+    kind,
+    axis,
+    formatCode,
+    color,
+    colorKey,
+  );
 
   @override
   String toString() => 'ChartSeries($name, $kind, $axis)';

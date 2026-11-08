@@ -2,32 +2,66 @@
 -- workbook and writes a CSV (test/fixtures/owner/axis/README.md).
 --
 --   osascript run_excel.applescript <workbook> <csv>
+--   osascript run_excel.applescript <workbook> <csv> full
+--
+-- With "full" it reads the full oracle's workbook and writes the CSV of case
+-- list version 2 (test/fixtures/owner/axis_full/README.md): the chart's width
+-- as well, the plot area's inside left, top, width and height, and the
+-- category axis' tick label spacing, left empty when the chart has no category
+-- labels. A chart with labels whose spacing Excel does not give as a whole
+-- number is a failure, like any other read that fails.
 --
 -- Paths are POSIX, absolute or relative to the current folder. The workbook
--- opens read-only and closes without saving. A chart Excel cannot answer for
+-- opens read-only and closes without saving; where Excel opens nothing through
+-- its dictionary, the script opens it with `open -a`, which cannot ask for
+-- read-only, and the close without saving keeps the file unchanged. A chart Excel cannot answer for
 -- gets no row: the rest are still written, and the script then stops with the
 -- failures named and exit code 1. Numbers use "." whatever the system's decimal
 -- separator; the CSV is UTF-8 with LF line ends.
 
 on run argv
-	if (count of argv) is not 2 then error "usage: osascript run_excel.applescript <workbook> <csv>" number 2
+	set argCount to count of argv
+	if argCount < 2 or argCount > 3 then error "usage: osascript run_excel.applescript <workbook> <csv> [full]" number 2
+	set fullRun to false
+	if argCount is 3 then
+		if item 3 of argv is not "full" then error "usage: osascript run_excel.applescript <workbook> <csv> [full]" number 2
+		set fullRun to true
+	end if
 	set workbookPath to my absolutePath(item 1 of argv)
 	set csvPath to my absolutePath(item 2 of argv)
-	set csvRows to {"case,height,font,min,max,major"}
+	if fullRun then
+		set csvRows to {"case,width,height,font,min,max,major,plotLeft,plotTop,plotWidth,plotHeight,labelSpacing"}
+	else
+		set csvRows to {"case,height,font,min,max,major"}
+	end if
 	set failures to {}
 	set unseen to {}
 	tell application "Microsoft Excel"
 		activate
 		-- Excel may wait for its file access prompt, so allow the owner time.
-		set theBook to missing value
+		-- Some Excel versions open nothing through open workbook and return no
+		-- value; the workbook is then opened as a document and waited for by
+		-- name, never taken as the active workbook.
+		set bookName to my baseName(workbookPath)
 		with timeout of 600 seconds
 			try
-				set theBook to open workbook workbook file name workbookPath read only true
+				open workbook workbook file name workbookPath read only true
 			end try
-			if theBook is missing value then set theBook to open workbook workbook file name (my hfsPath(workbookPath)) read only true
+			if bookName is not in my workbookNames() then
+				try
+					open workbook workbook file name (my hfsPath(workbookPath)) read only true
+				end try
+			end if
 		end timeout
-		if theBook is missing value then set theBook to active workbook
-		if name of theBook is not my baseName(workbookPath) then error "Excel did not open " & workbookPath number 1
+		if bookName is not in my workbookNames() then
+			my openWithExcel(workbookPath)
+			repeat 300 times
+				if bookName is in my workbookNames() then exit repeat
+				delay 2
+			end repeat
+		end if
+		if bookName is not in my workbookNames() then error "Excel did not open " & workbookPath number 1
+		set theBook to workbook bookName
 		repeat with sheetIndex from 1 to (count of worksheets of theBook)
 			set place to "sheet " & sheetIndex
 			try
@@ -55,13 +89,38 @@ on run argv
 					on error
 						set end of unseen to caseId
 					end try
-					set theAxis to get axis (chart of theObject) axis type value axis which axis primary axis
+					set theChart to chart of theObject
+					set theAxis to get axis theChart axis type value axis which axis primary axis
 					set theHeight to height of theObject
 					set theFont to font size of font object of tick labels of theAxis
 					set theMin to minimum scale of theAxis
 					set theMax to maximum scale of theAxis
 					set theMajor to major unit of theAxis
-					set end of csvRows to my csvRow(caseId, {theHeight, theFont, theMin, theMax, theMajor})
+					if fullRun then
+						set theWidth to width of theObject
+						set thePlot to plot area object of theChart
+						set plotLeft to inside left of thePlot
+						set plotTop to inside top of thePlot
+						set plotWidth to inside width of thePlot
+						set plotHeight to inside height of thePlot
+						-- A series formula names its categories second:
+						-- =SERIES(,,'sheet'!$B$1:$B$2,1) has none.
+						set spacingText to ""
+						set hasLabels to true
+						try
+							set theFormula to formula of series 1 of theChart
+							if theFormula starts with "=SERIES(,," or theFormula starts with "=SERIES(;;" then set hasLabels to false
+						end try
+						-- A chart with labels must give a whole number; a failed read
+						-- goes to the failures below and the chart gets no row.
+						if hasLabels then
+							set theSpacing to tick label spacing of (get axis theChart axis type category axis which axis primary axis)
+							set spacingText to my wholeText(theSpacing)
+						end if
+						set end of csvRows to my csvRow(caseId, {theWidth, theHeight, theFont, theMin, theMax, theMajor, plotLeft, plotTop, plotWidth, plotHeight}) & "," & spacingText
+					else
+						set end of csvRows to my csvRow(caseId, {theHeight, theFont, theMin, theMax, theMajor})
+					end if
 				on error errorText number errorNumber
 					set end of failures to caseId & ": " & errorText & " (" & errorNumber & ")"
 				end try
@@ -81,6 +140,24 @@ on run argv
 	end if
 	return summary
 end run
+
+-- The names of Excel's open workbooks, or none.
+on workbookNames()
+	try
+		tell application "Microsoft Excel" to return name of every workbook
+	on error
+		return {}
+	end try
+end workbookNames
+
+-- Opens the file in Excel as a document, outside Excel's dictionary.
+on openWithExcel(thePath)
+	try
+		do shell script "open -a 'Microsoft Excel' " & quoted form of thePath
+	on error errorText number errorNumber
+		error "Excel did not open " & thePath & ": " & errorText number 1
+	end try
+end openWithExcel
 
 -- pure handlers: no Excel below this line
 
@@ -111,6 +188,16 @@ on numberText(theNumber)
 	if class of theNumber is not in {real, integer} then error "not a number: " & (theNumber as text)
 	return my joined(my pieces(theNumber as text, ","), ".")
 end numberText
+
+-- A whole number as text without a decimal point; an integral real such as
+-- 2.0 is written 2. Anything else is an error.
+on wholeText(theNumber)
+	if class of theNumber is integer then return theNumber as text
+	if class of theNumber is real then
+		if theNumber mod 1 is 0 and theNumber > 0 and theNumber < 1.0E+9 then return (theNumber as integer) as text
+	end if
+	error "tick label spacing is not a whole number: " & (theNumber as text)
+end wholeText
 
 on pieces(theText, separator)
 	set saved to AppleScript's text item delimiters

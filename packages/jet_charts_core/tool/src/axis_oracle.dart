@@ -12,12 +12,23 @@
 /// (`archive`, a dev dependency): this package knows no file format and may
 /// not depend on `jet_office`. It writes one chart shape and nothing else.
 /// No `dart:io` here: the tests run in a browser as well.
+///
+/// The full oracle (case list version 2, `test/fixtures/owner/axis_full/`)
+/// is in the part `axis_oracle_full.dart`: charts of four kinds and three
+/// groupings at chosen widths and heights, with the plot area's box and the
+/// category labels' spacing read as well.
 library;
 
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:jet_charts_core/jet_charts_core.dart';
+import 'package:jet_charts_core/src/scale/value_scale.dart'
+    show excelMaxIntervals;
+
+part 'axis_oracle_full.dart';
 
 /// The regions an owner's run may come from, as jet_core's oracle has them.
 const List<String> axisOracleRegions = <String>['en-US', 'de-DE', 'tr-TR'];
@@ -203,15 +214,18 @@ const String _chartNs =
 const String _drawingNs =
     'http://schemas.openxmlformats.org/drawingml/2006/main';
 
-String _contentTypes(AxisOracleCases cases) {
+String _contentTypes(AxisOracleCases cases) =>
+    _contentTypesFor(cases.sets.length, cases.cases.length);
+
+String _contentTypesFor(int sheets, int charts) {
   const String office = 'application/vnd.openxmlformats-officedocument';
   return '$_xmlDecl<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
       '<Default Extension="xml" ContentType="application/xml"/>'
       '<Override PartName="/xl/workbook.xml" ContentType="$office.spreadsheetml.sheet.main+xml"/>'
       '${<String>[
-        for (int i = 1; i <= cases.sets.length; i++) ...<String>['<Override PartName="/xl/worksheets/sheet$i.xml" ContentType="$office.spreadsheetml.worksheet+xml"/>', '<Override PartName="/xl/drawings/drawing$i.xml" ContentType="$office.drawing+xml"/>'],
-        for (int i = 1; i <= cases.cases.length; i++) '<Override PartName="/xl/charts/chart$i.xml" ContentType="$office.drawingml.chart+xml"/>',
+        for (int i = 1; i <= sheets; i++) ...<String>['<Override PartName="/xl/worksheets/sheet$i.xml" ContentType="$office.spreadsheetml.worksheet+xml"/>', '<Override PartName="/xl/drawings/drawing$i.xml" ContentType="$office.drawing+xml"/>'],
+        for (int i = 1; i <= charts; i++) '<Override PartName="/xl/charts/chart$i.xml" ContentType="$office.drawingml.chart+xml"/>',
       ].join()}'
       '</Types>';
 }
@@ -224,8 +238,11 @@ String _rel(int id, String type, String target) =>
     '<Relationship Id="rId$id" Type="$_relNs/$type" Target="$target"/>';
 
 String _workbookXml(AxisOracleCases cases) =>
+    _workbookXmlFor(<String>[for (final AxisDataSet set in cases.sets) set.id]);
+
+String _workbookXmlFor(List<String> sheets) =>
     '$_xmlDecl<workbook xmlns="$_mainNs" xmlns:r="$_relNs"><sheets>'
-    '${<String>[for (int i = 1; i <= cases.sets.length; i++) '<sheet name="${cases.sets[i - 1].id}" sheetId="$i" r:id="rId$i"/>'].join()}'
+    '${<String>[for (int i = 1; i <= sheets.length; i++) '<sheet name="${sheets[i - 1]}" sheetId="$i" r:id="rId$i"/>'].join()}'
     '</sheets></workbook>';
 
 String _label(int index) => 'c${index + 1}';
@@ -237,20 +254,26 @@ String _sheetXml(AxisDataSet set) =>
           '<c r="B${i + 1}"><v>${set.values[i]}</v></c></row>'].join()}'
     '</sheetData><drawing r:id="rId1"/></worksheet>';
 
-String _drawingXml(List<AxisCase> charts, int width) {
+String _drawingXml(List<AxisCase> charts, int width) =>
+    _anchorsXml(<(String, int, int)>[
+      for (final AxisCase kase in charts) (kase.id, width, kase.height),
+    ]);
+
+/// A drawing of one chart per (name, width, height), stacked downwards.
+String _anchorsXml(List<(String, int, int)> charts) {
   final StringBuffer out = StringBuffer(
     '$_xmlDecl<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" '
     'xmlns:a="$_drawingNs">',
   );
   int top = _chartGap;
   for (int i = 0; i < charts.length; i++) {
-    final AxisCase kase = charts[i];
+    final (String name, int width, int height) = charts[i];
     out.write(
       '<xdr:absoluteAnchor>'
       '<xdr:pos x="${_chartLeft * _emu}" y="${top * _emu}"/>'
-      '<xdr:ext cx="${width * _emu}" cy="${kase.height * _emu}"/>'
+      '<xdr:ext cx="${width * _emu}" cy="${height * _emu}"/>'
       '<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr>'
-      '<xdr:cNvPr id="${i + 2}" name="${kase.id}"/><xdr:cNvGraphicFramePr/>'
+      '<xdr:cNvPr id="${i + 2}" name="$name"/><xdr:cNvGraphicFramePr/>'
       '</xdr:nvGraphicFramePr>'
       '<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>'
       '<a:graphic><a:graphicData uri="$_chartNs">'
@@ -258,7 +281,7 @@ String _drawingXml(List<AxisCase> charts, int width) {
       '</a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/>'
       '</xdr:absoluteAnchor>',
     );
-    top += kase.height + _chartGap;
+    top += height + _chartGap;
   }
   out.write('</xdr:wsDr>');
   return out.toString();
@@ -446,7 +469,8 @@ final class AxisManifestEntry {
   /// Always `owner`.
   final String confirmedBy;
 
-  /// The CSV file, `axis_oracle.<region>.csv`.
+  /// The CSV file, `axis_oracle.<region>.csv` (`axis_oracle_full.<region>.csv`
+  /// for the full oracle).
   final String csv;
 
   /// What Excel said or did, or empty.
@@ -469,8 +493,13 @@ const Set<String> _manifestKeys = <String>{
 /// Every field must be present, and no other; all but `notes` filled in, with
 /// no `<placeholder>` left. `region` must be one of [axisOracleRegions], at
 /// most once in the list, `confirmedBy` exactly `owner`, and `csv`
-/// `axis_oracle.<region>.csv`. Throws a [FormatException] otherwise.
-List<AxisManifestEntry> parseAxisManifest(String text) {
+/// `<csvStem>.<region>.csv`: `axis_oracle.<region>.csv` by default, and
+/// [axisFullCsvStem] for the full oracle. Throws a [FormatException]
+/// otherwise.
+List<AxisManifestEntry> parseAxisManifest(
+  String text, {
+  String csvStem = 'axis_oracle',
+}) {
   final Object? root = jsonDecode(text);
   if (root is! List<Object?>) throw const FormatException('expected a list');
   final Set<String> regions = <String>{};
@@ -499,8 +528,8 @@ List<AxisManifestEntry> parseAxisManifest(String text) {
     if (field('confirmedBy') != 'owner') {
       throw FormatException('[$i].confirmedBy: expected owner');
     }
-    if (field('csv') != 'axis_oracle.$region.csv') {
-      throw FormatException('[$i].csv: expected axis_oracle.$region.csv');
+    if (field('csv') != '$csvStem.$region.csv') {
+      throw FormatException('[$i].csv: expected $csvStem.$region.csv');
     }
     entries.add(
       AxisManifestEntry(

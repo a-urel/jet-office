@@ -1,0 +1,63 @@
+rect background 0.00,0.00 360.00x240.00 fill=FFFFFF stroke=- width=1.00
+text title 112.80,8.00 134.40x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Sales by quarter"
+rect legend 113.70,221.20 132.60x10.80 fill=- stroke=- width=1.00
+rect legend/0/symbol 113.70,223.10 7.00x7.00 fill=156082 stroke=- width=1.00
+text legend/0/text 124.70,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "North"
+rect legend/1/symbol 163.70,223.10 7.00x7.00 fill=E97132 stroke=- width=1.00
+text legend/1/text 174.70,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "South"
+rect legend/2/symbol 213.70,223.10 7.00x7.00 fill=196B24 stroke=- width=1.00
+text legend/2/text 224.70,221.20 21.60x10.80 rotation=0.00 size=9.00 color=595959 bold=false "West"
+rect plot 22.80,36.20 329.20x164.20 fill=- stroke=- width=1.00
+path grid/value/0 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/1 22.80,183.98 352.00,183.98 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/2 22.80,167.56 352.00,167.56 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/3 22.80,151.14 352.00,151.14 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/4 22.80,134.72 352.00,134.72 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/5 22.80,118.30 352.00,118.30 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/6 22.80,101.88 352.00,101.88 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/7 22.80,85.46 352.00,85.46 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/8 22.80,69.04 352.00,69.04 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/9 22.80,52.62 352.00,52.62 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/10 22.80,36.20 352.00,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+clip plot/clip 22.80,36.20 329.20x164.20
+  rect series/0/bar/0 38.53,101.88 14.36x98.52 fill=156082 stroke=- width=1.00
+  rect series/0/bar/1 120.83,52.62 14.36x147.78 fill=156082 stroke=- width=1.00
+  rect series/0/bar/2 203.13,126.51 14.36x73.89 fill=156082 stroke=- width=1.00
+  rect series/0/bar/3 285.43,77.25 14.36x123.15 fill=156082 stroke=- width=1.00
+  rect series/1/bar/0 56.77,134.72 14.36x65.68 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/1 139.07,110.09 14.36x90.31 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/2 221.37,85.46 14.36x114.94 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/3 303.67,118.30 14.36x82.10 fill=E97132 stroke=- width=1.00
+  rect series/2/bar/0 75.01,159.35 14.36x41.05 fill=196B24 stroke=- width=1.00
+  rect series/2/bar/1 157.31,142.93 14.36x57.47 fill=196B24 stroke=- width=1.00
+  rect series/2/bar/2 239.61,151.14 14.36x49.26 fill=196B24 stroke=- width=1.00
+  rect series/2/bar/3 321.91,93.67 14.36x106.73 fill=196B24 stroke=- width=1.00
+path axis/value/line 22.80,36.20 22.80,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path axis/category/line 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+text axis/value/label/0 13.40,195.00 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/value/label/1 13.40,178.58 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"
+text axis/value/label/2 13.40,162.16 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "4"
+text axis/value/label/3 13.40,145.74 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "6"
+text axis/value/label/4 13.40,129.32 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8"
+text axis/value/label/5 8.00,112.90 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
+text axis/value/label/6 8.00,96.48 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "12"
+text axis/value/label/7 8.00,80.06 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "14"
+text axis/value/label/8 8.00,63.64 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "16"
+text axis/value/label/9 8.00,47.22 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "18"
+text axis/value/label/10 8.00,30.80 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "20"
+text axis/category/label/0 58.55,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q1"
+text axis/category/label/1 140.85,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q2"
+text axis/category/label/2 223.15,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q3"
+text axis/category/label/3 305.45,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q4"
+text label/0/0 40.31,87.08 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "12"
+text label/0/1 122.61,37.82 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "18"
+text label/0/2 207.61,111.71 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "9"
+text label/0/3 287.21,62.45 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "15"
+text label/1/0 61.25,119.92 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8"
+text label/1/1 140.85,95.29 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "11"
+text label/1/2 223.15,70.66 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "14"
+text label/1/3 305.45,103.50 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
+text label/2/0 79.49,144.55 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"
+text label/2/1 161.79,128.13 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "7"
+text label/2/2 244.09,136.34 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "6"
+text label/2/3 323.69,78.87 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "13"

@@ -1,0 +1,75 @@
+rect background 0.00,0.00 360.00x240.00 fill=FFFFFF stroke=- width=1.00
+text title 129.60,8.00 100.80x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Eight series"
+rect legend 20.50,208.40 319.00x23.60 fill=- stroke=- width=1.00
+rect legend/0/symbol 20.50,210.30 7.00x7.00 fill=156082 stroke=- width=1.00
+text legend/0/text 31.50,208.40 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 1"
+rect legend/1/symbol 86.70,210.30 7.00x7.00 fill=E97132 stroke=- width=1.00
+text legend/1/text 97.70,208.40 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 2"
+rect legend/2/symbol 152.90,210.30 7.00x7.00 fill=196B24 stroke=- width=1.00
+text legend/2/text 163.90,208.40 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 3"
+rect legend/3/symbol 219.10,210.30 7.00x7.00 fill=0F9ED5 stroke=- width=1.00
+text legend/3/text 230.10,208.40 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 4"
+rect legend/4/symbol 285.30,210.30 7.00x7.00 fill=A02B93 stroke=- width=1.00
+text legend/4/text 296.30,208.40 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 5"
+rect legend/5/symbol 86.70,223.10 7.00x7.00 fill=4EA72E stroke=- width=1.00
+text legend/5/text 97.70,221.20 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 6"
+rect legend/6/symbol 152.90,223.10 7.00x7.00 fill=0D3A4E stroke=- width=1.00
+text legend/6/text 163.90,221.20 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 7"
+rect legend/7/symbol 219.10,223.10 7.00x7.00 fill=8C441E stroke=- width=1.00
+text legend/7/text 230.10,221.20 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 8"
+rect plot 22.80,36.20 329.20x151.40 fill=- stroke=- width=1.00
+path grid/value/0 22.80,187.60 352.00,187.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/1 22.80,165.97 352.00,165.97 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/2 22.80,144.34 352.00,144.34 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/3 22.80,122.71 352.00,122.71 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/4 22.80,101.09 352.00,101.09 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/5 22.80,79.46 352.00,79.46 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/6 22.80,57.83 352.00,57.83 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/7 22.80,36.20 352.00,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+clip plot/clip 22.80,36.20 329.20x151.40
+  rect series/0/bar/0 30.26,155.16 6.81x32.44 fill=156082 stroke=- width=1.00
+  rect series/0/bar/1 112.56,101.09 6.81x86.51 fill=156082 stroke=- width=1.00
+  rect series/0/bar/2 194.86,47.01 6.81x140.59 fill=156082 stroke=- width=1.00
+  rect series/0/bar/3 277.16,111.90 6.81x75.70 fill=156082 stroke=- width=1.00
+  rect series/1/bar/0 38.91,122.71 6.81x64.89 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/1 121.21,68.64 6.81x118.96 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/2 203.51,133.53 6.81x54.07 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/3 285.81,79.46 6.81x108.14 fill=E97132 stroke=- width=1.00
+  rect series/2/bar/0 47.56,90.27 6.81x97.33 fill=196B24 stroke=- width=1.00
+  rect series/2/bar/1 129.86,155.16 6.81x32.44 fill=196B24 stroke=- width=1.00
+  rect series/2/bar/2 212.16,101.09 6.81x86.51 fill=196B24 stroke=- width=1.00
+  rect series/2/bar/3 294.46,47.01 6.81x140.59 fill=196B24 stroke=- width=1.00
+  rect series/3/bar/0 56.22,57.83 6.81x129.77 fill=0F9ED5 stroke=- width=1.00
+  rect series/3/bar/1 138.52,122.71 6.81x64.89 fill=0F9ED5 stroke=- width=1.00
+  rect series/3/bar/2 220.82,68.64 6.81x118.96 fill=0F9ED5 stroke=- width=1.00
+  rect series/3/bar/3 303.12,133.53 6.81x54.07 fill=0F9ED5 stroke=- width=1.00
+  rect series/4/bar/0 64.87,144.34 6.81x43.26 fill=A02B93 stroke=- width=1.00
+  rect series/4/bar/1 147.17,90.27 6.81x97.33 fill=A02B93 stroke=- width=1.00
+  rect series/4/bar/2 229.47,155.16 6.81x32.44 fill=A02B93 stroke=- width=1.00
+  rect series/4/bar/3 311.77,101.09 6.81x86.51 fill=A02B93 stroke=- width=1.00
+  rect series/5/bar/0 73.52,111.90 6.81x75.70 fill=4EA72E stroke=- width=1.00
+  rect series/5/bar/1 155.82,57.83 6.81x129.77 fill=4EA72E stroke=- width=1.00
+  rect series/5/bar/2 238.12,122.71 6.81x64.89 fill=4EA72E stroke=- width=1.00
+  rect series/5/bar/3 320.42,68.64 6.81x118.96 fill=4EA72E stroke=- width=1.00
+  rect series/6/bar/0 82.17,79.46 6.81x108.14 fill=0D3A4E stroke=- width=1.00
+  rect series/6/bar/1 164.47,144.34 6.81x43.26 fill=0D3A4E stroke=- width=1.00
+  rect series/6/bar/2 246.77,90.27 6.81x97.33 fill=0D3A4E stroke=- width=1.00
+  rect series/6/bar/3 329.07,155.16 6.81x32.44 fill=0D3A4E stroke=- width=1.00
+  rect series/7/bar/0 90.83,47.01 6.81x140.59 fill=8C441E stroke=- width=1.00
+  rect series/7/bar/1 173.13,111.90 6.81x75.70 fill=8C441E stroke=- width=1.00
+  rect series/7/bar/2 255.43,57.83 6.81x129.77 fill=8C441E stroke=- width=1.00
+  rect series/7/bar/3 337.73,122.71 6.81x64.89 fill=8C441E stroke=- width=1.00
+path axis/value/line 22.80,36.20 22.80,187.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path axis/category/line 22.80,187.60 352.00,187.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+text axis/value/label/0 13.40,182.20 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/value/label/1 13.40,160.57 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"
+text axis/value/label/2 13.40,138.94 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "4"
+text axis/value/label/3 13.40,117.31 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "6"
+text axis/value/label/4 13.40,95.69 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8"
+text axis/value/label/5 8.00,74.06 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
+text axis/value/label/6 8.00,52.43 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "12"
+text axis/value/label/7 8.00,30.80 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "14"
+text axis/category/label/0 58.55,191.60 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q1"
+text axis/category/label/1 140.85,191.60 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q2"
+text axis/category/label/2 223.15,191.60 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q3"
+text axis/category/label/3 305.45,191.60 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q4"

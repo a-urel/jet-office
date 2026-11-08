@@ -3,7 +3,7 @@ description: >-
   Pure-Dart chart core: the chart model, theme, scales, layout and drawing
   primitives. It has no Flutter and no dart:io, so it runs on the web, desktop,
   mobile and server alike.
-version: 0.1.0-dev.2
+version: 0.1.0-dev.3
 repository: https://github.com/a-urel/jet-office
 issue_tracker: https://github.com/a-urel/jet-office/issues
 # Not published; publishing needs its own record.
