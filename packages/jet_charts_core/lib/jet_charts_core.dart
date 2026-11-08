@@ -38,6 +38,8 @@ export 'src/model/chart_kind.dart'
 export 'src/model/chart_parts.dart'
     show ChartDataLabels, ChartLegend, ChartTitle;
 export 'src/model/chart_series.dart' show ChartData, ChartSeries;
+export 'src/scale/value_scale.dart'
+    show ValueScale, autoValueScale, dataExtent, provisionalMaxIntervals;
 export 'src/theme/chart_color.dart'
     show ChartColor, ChartExportColors, ChartSchemeColor, ChartTextStyle;
 export 'src/theme/chart_spacing.dart' show ChartSpacing;
