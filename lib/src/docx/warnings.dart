@@ -45,6 +45,12 @@ enum DocxWarningCode {
   /// set, and Word shows the text in the default style. A reference read
   /// from the file is kept and never reported.
   styleNotFound,
+
+  /// A document property (core, extended or custom) has a value that cannot
+  /// be read as its type, such as a `cp:revision` that is not a number;
+  /// [DocxWarning.detail] is the element's name. It reads `null`, and the
+  /// element is kept as it is in the file.
+  propertyValueInvalid,
 }
 
 /// One data problem found while reading or writing a DOCX file, possibly
@@ -69,7 +75,8 @@ final class DocxWarning {
   /// was read as; [DocxWarningCode.mainPartContentTypeUnexpected] carries the
   /// content type the package declared; [DocxWarningCode.numberingNotFound]
   /// carries the id of the list; [DocxWarningCode.styleNotFound] carries the
-  /// id of the style.
+  /// id of the style; [DocxWarningCode.propertyValueInvalid] carries the
+  /// name of the property's element.
   String? get detail => _entry.detail;
 
   /// How many times the problem occurred in [part].

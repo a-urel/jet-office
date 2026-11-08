@@ -146,6 +146,8 @@ DocxWarning _docxSample(DocxWarningCode code, {bool one = false}) {
           detail: 'Foo',
         );
       }
+    case DocxWarningCode.propertyValueInvalid:
+      collector.add(code, part: '/docProps/core.xml', detail: 'cp:revision');
   }
   return collector.warnings.single;
 }
@@ -218,7 +220,9 @@ String warningMessagesMarkdown() {
     ..writeln('`application/xml` and `mainPartContentTypeUnexpected` names')
     ..writeln('`text/plain`; `numberingNotFound` counts 2, names `body/p[0]`')
     ..writeln('and `body/p[1]` and the list `7`; `styleNotFound` counts 2,')
-    ..writeln('names `body/p[0]` and `body/p[1]` and the style `Foo`. The')
+    ..writeln('names `body/p[0]` and `body/p[1]` and the style `Foo`;')
+    ..writeln('`propertyValueInvalid` names `/docProps/core.xml` and')
+    ..writeln('`cp:revision`. The')
     ..writeln('second `invalidCharactersRemoved`, `numberingNotFound` and')
     ..writeln('`styleNotFound` rows count 1 and name `body/p[0]`, for the')
     ..writeln('singular.')

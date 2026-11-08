@@ -107,5 +107,14 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
           : '$part$locations içindeki $count başvuru, belgenin '
                 'tanımlamadığı $detail stilini adlandırıyor; Word bunları '
                 'varsayılan stilde gösterir.',
+    (DocxWarningCode.propertyValueInvalid, OfficeLocale.en) =>
+      'Document property $detail in $part could not be read; it was kept as '
+          'it is.',
+    (DocxWarningCode.propertyValueInvalid, OfficeLocale.de) =>
+      'Die Dokumenteigenschaft $detail in $part konnte nicht gelesen '
+          'werden; sie wurde unverändert beibehalten.',
+    (DocxWarningCode.propertyValueInvalid, OfficeLocale.tr) =>
+      '$part içindeki $detail belge özelliği okunamadı; olduğu gibi '
+          'korundu.',
   };
 }

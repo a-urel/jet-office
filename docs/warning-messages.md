@@ -80,7 +80,9 @@ names `body/p[0]` and `body/p[1]`; `contentTypeMissing` names
 `application/xml` and `mainPartContentTypeUnexpected` names
 `text/plain`; `numberingNotFound` counts 2, names `body/p[0]`
 and `body/p[1]` and the list `7`; `styleNotFound` counts 2,
-names `body/p[0]` and `body/p[1]` and the style `Foo`. The
+names `body/p[0]` and `body/p[1]` and the style `Foo`;
+`propertyValueInvalid` names `/docProps/core.xml` and
+`cp:revision`. The
 second `invalidCharactersRemoved`, `numberingNotFound` and
 `styleNotFound` rows count 1 and name `body/p[0]`, for the
 singular.
@@ -95,3 +97,4 @@ singular.
 | `docx: numberingNotFound` (one) | 1 paragraph in /word/document.xml (body/p[0]) belongs to the list 7, which the document does not define; Word shows it without a number. | 1 Absatz in /word/document.xml (body/p[0]) gehört zur Liste 7, die das Dokument nicht definiert; Word zeigt ihn ohne Nummer. | /word/document.xml (body/p[0]) içindeki 1 paragraf, belgenin tanımlamadığı 7 listesine ait; Word onu numarasız gösterir. |
 | `docx: styleNotFound` | 2 references in /word/document.xml (body/p[0], body/p[1]) name the style Foo, which the document does not define; Word shows them in the default style. | 2 Verweise in /word/document.xml (body/p[0], body/p[1]) nennen die Formatvorlage Foo, die das Dokument nicht definiert; Word zeigt sie in der Standardformatvorlage. | /word/document.xml (body/p[0], body/p[1]) içindeki 2 başvuru, belgenin tanımlamadığı Foo stilini adlandırıyor; Word bunları varsayılan stilde gösterir. |
 | `docx: styleNotFound` (one) | 1 reference in /word/document.xml (body/p[0]) names the style Foo, which the document does not define; Word shows it in the default style. | 1 Verweis in /word/document.xml (body/p[0]) nennt die Formatvorlage Foo, die das Dokument nicht definiert; Word zeigt ihn in der Standardformatvorlage. | /word/document.xml (body/p[0]) içindeki 1 başvuru, belgenin tanımlamadığı Foo stilini adlandırıyor; Word onu varsayılan stilde gösterir. |
+| `docx: propertyValueInvalid` | Document property cp:revision in /docProps/core.xml could not be read; it was kept as it is. | Die Dokumenteigenschaft cp:revision in /docProps/core.xml konnte nicht gelesen werden; sie wurde unverändert beibehalten. | /docProps/core.xml içindeki cp:revision belge özelliği okunamadı; olduğu gibi korundu. |

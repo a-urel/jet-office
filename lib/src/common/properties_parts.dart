@@ -868,7 +868,9 @@ final class PropertiesState {
   ///
   /// Throws what [source] throws when a part cannot be read; then nothing
   /// is kept and [warn] has heard of nothing. [warn] hears of each value
-  /// that cannot be read once.
+  /// that cannot be read once; a host that needs the part too gives
+  /// [warnInPart] (the part's name and the element), which is then called
+  /// instead of [warn].
   ///
   /// With [encodeOnLoad], each typed part loaded is written from the model
   /// from now on (meaning-equal to the file); without it, a loaded part
@@ -878,6 +880,7 @@ final class PropertiesState {
     PropertiesSource source,
     PropertyWarn warn, {
     bool encodeOnLoad = true,
+    void Function(String part, String element)? warnInPart,
   }) {
     final OpcPackage package = source.package;
     final List<OpcRelationship> rels = source.guard(
@@ -897,8 +900,9 @@ final class PropertiesState {
         }
       }
     }
-    final List<String> problems = <String>[];
-    void hear(String element) => problems.add(element);
+    final List<(String, String)> problems = <(String, String)>[];
+    String? reading;
+    void hear(String element) => problems.add((reading!, element));
     T read<T>(
       PropertyKind kind,
       T Function(XmlPullReader r, String name) parse,
@@ -906,6 +910,7 @@ final class PropertiesState {
     ) {
       final String? name = names[kind];
       if (name == null) return absent();
+      reading = name;
       return source.guard(name, () => parse(source.openXml(name), name));
     }
 
@@ -933,7 +938,13 @@ final class PropertiesState {
           if (names[kind] case final String name)
             kind: source.guard(name, () => package.originalBytes(name)),
     };
-    problems.forEach(warn);
+    for (final (String part, String element) in problems) {
+      if (warnInPart != null) {
+        warnInPart(part, element);
+      } else {
+        warn(element);
+      }
+    }
     final PropertyParts parts = PropertyParts(core, app, custom);
     final PropertiesState state = PropertiesState._(
       package,

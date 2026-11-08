@@ -35,6 +35,8 @@ library;
 import 'dart:collection';
 import 'dart:typed_data';
 
+import '../common/properties.dart';
+import '../common/properties_parts.dart';
 import '../opc/change_log.dart';
 import '../opc/ooxml.dart' show ContentType, Ns, RelType;
 import '../opc/opaque_xml.dart' show KeptAttribute, keepAttributes;
@@ -55,6 +57,7 @@ import 'model/sections.dart';
 import 'model/styles.dart';
 import 'numbering_part.dart';
 import 'numbering_schemas.dart' show maxListLevel;
+import 'properties_source.dart';
 import 'read_exception.dart';
 import 'read_limits.dart';
 import 'related_part.dart';
@@ -263,6 +266,46 @@ final class DocxDocument {
     final SettingsPart part = _settingsPart();
     _edits.transaction(() => part.evenAndOddHeaders = value);
   }
+
+  /// The document properties: core (`docProps/core.xml`), extended
+  /// (`docProps/app.xml`) and custom (`docProps/custom.xml`), each found by
+  /// its relationship in the package root.
+  ///
+  /// They load on first use. A new document has none and reads
+  /// `OfficeProperties()`. A value that cannot be read (a `cp:revision`
+  /// that is not a number) reads `null`, stays in the file as it is, and
+  /// [save] reports it as [DocxWarningCode.propertyValueInvalid]. Throws a
+  /// [DocxReadException] when a properties part cannot be read.
+  OfficeProperties get properties => _propertiesState().parts.merged;
+
+  /// Sets the document properties to [value].
+  ///
+  /// Only the fields that differ from [properties] change, each in its own
+  /// element of its part; every other element of the part stays as it is, and
+  /// a part nothing changed is saved byte for byte. A document without the
+  /// parts gets them at [save], with their relationships and content types,
+  /// once a property is set (an empty `DocxDocument()` saves none). The change
+  /// is one entry of the log, and an undo of it leaves no part behind. Sets
+  /// nothing for a [value] equal to [properties]. Throws an [ArgumentError]
+  /// for a value XML cannot hold (see [OfficeProperties]) and a
+  /// [DocxReadException] when a part cannot be read; nothing has changed then.
+  set properties(OfficeProperties value) {
+    final PropertiesState state = _propertiesState();
+    _edits.transaction(() => setProperties(_edits.log, state, value));
+  }
+
+  PropertiesState? _properties;
+
+  PropertiesState _propertiesState() => _properties ??= PropertiesState.load(
+    DocxPropertiesSource(_package),
+    (String element) {},
+    encodeOnLoad: false,
+    warnInPart: (String part, String element) => _loadWarnings.add(
+      DocxWarningCode.propertyValueInvalid,
+      part: part,
+      detail: element,
+    ),
+  );
 
   /// What was repaired while opening and loading the document, followed by
   /// what the last [save] or [saveTo] repaired, in first-occurrence order.
@@ -719,6 +762,10 @@ final class DocxDocument {
       slot.create(settings, reservedIds: _reservedFor(slot));
     }
     _createNewStories();
+    final PropertiesState? properties = _properties;
+    if (properties != null) {
+      package.guard(package.mainPart, properties.sync);
+    }
     package.guard(package.mainPart, () => package.package.writeTo(zip));
     final DocumentPart? part = _part;
     _warnings = List<DocxWarning>.unmodifiable(<DocxWarning>[

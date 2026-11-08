@@ -328,4 +328,24 @@ void main() {
     expect(w.toString(), w.message(OfficeLocale.en));
     expect(w.toString(), contains('character'));
   });
+
+  test(
+    'propertyValueInvalid names the part and the element in every language',
+    () {
+      final DocxWarningCollector collector = DocxWarningCollector();
+      collector.add(
+        DocxWarningCode.propertyValueInvalid,
+        part: '/docProps/core.xml',
+        detail: 'cp:revision',
+      );
+      final DocxWarning w = collector.warnings.single;
+      expect(
+        w.message(),
+        'Document property cp:revision in /docProps/core.xml could not be '
+        'read; it was kept as it is.',
+      );
+      expect(w.message(OfficeLocale.de), contains('cp:revision'));
+      expect(w.message(OfficeLocale.tr), contains('/docProps/core.xml'));
+    },
+  );
 }
