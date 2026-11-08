@@ -2,7 +2,7 @@
 /// of the attempt that fits.
 ///
 /// The paint order: background, title, legend, plot, grid lines, the marks'
-/// clip (Task 6 fills it), axis lines, tick labels, category labels, (Task 8's
+/// clip, axis lines, tick labels, category labels, (Task 8's
 /// data labels), axis titles.
 library;
 
@@ -19,6 +19,7 @@ import 'chart_ids.dart' as ids;
 import 'degradation.dart';
 import 'geometry.dart';
 import 'legend_layout.dart';
+import 'marks.dart';
 import 'primitives.dart';
 import 'resolve.dart';
 import 'text_measurer.dart';
@@ -175,9 +176,11 @@ extension FramePaint on FrameContext {
           color: theme.gridLine,
           width: theme.spacing.gridLineWidth,
         ),
-      // Task 6: the series marks go inside this clip, after the grid and
-      // before the axis lines and labels.
-      ClipPrimitive(ids.plotClip, plot, const <ChartPrimitive>[]),
+      ClipPrimitive(
+        ids.plotClip,
+        plot,
+        layoutMarks(chart, resolved, theme, plot, scale),
+      ),
       if (chart.valueAxis.visible)
         valueAxisLine(
           plot,
