@@ -17,8 +17,9 @@
 /// Only bookmark ids and `_Toc` names are made unique per copy: other ids,
 /// such as `wp:docPr` ids and `_Ref` names, may repeat across copies, which
 /// the model does not check.
-/// The bytes are read from disk on the VM and by `spawnHybridUri` in Chrome
-/// (`src/owner_file_hybrid.dart`), then built once; each platform deflates and
+/// The bytes are read by `spawnHybridUri` on the VM and in Chrome alike
+/// (`src/owner_file_hybrid.dart`: its hybrid isolate reads the file from
+/// disk), then built once; each platform deflates and
 /// opens its own bytes (decision 0006). Phases: open, load the body, set the
 /// text of one paragraph near the middle, save, open the saved bytes and read
 /// that paragraph back. Run it with `dart test benchmark` and

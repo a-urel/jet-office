@@ -838,8 +838,9 @@ attributes, which are optional and meant to be unique, are dropped. Other ids
 (`wp:docPr` ids, `_Ref` names) repeat across copies; the model does not check
 them. The result
 has 40,810 blocks, 40,040 of them paragraphs, and a main part of 34,981,100
-bytes of XML. On the VM the bytes are read from disk and in Chrome by
-`spawnHybridUri` (`benchmark/src/owner_file_hybrid.dart`); each platform
+bytes of XML. On the VM and in Chrome alike the bytes come through
+`spawnHybridUri` (`benchmark/src/owner_file_hybrid.dart`, whose hybrid isolate
+reads the file from disk); each platform
 builds, deflates and opens its own bytes (decision
 [`0006`](decisions/0006-zip-bytes-may-differ-by-platform.md)). Each phase runs
 once. Memory is read as in "DOCX table figures"; the baseline is high because
