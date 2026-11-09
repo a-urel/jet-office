@@ -18,9 +18,8 @@ test-only dependency here: the XML code of this repository is its own, in
 ## Decision
 
 **`lib/src/drawingml/` imports only `dart:` libraries, its own files,
-`../opc/`, `../xml/`, `../common/`,
-`package:jet_charts_core/jet_charts_core.dart` and
-`package:jet_core/jet_core.dart`.** It never imports `lib/src/xlsx/`,
+`../opc/`, `../xml/`, `../common/`, `package:jet_charts_core/jet_charts_core.dart`
+and `package:jet_core/jet_core.dart`.** It never imports `lib/src/xlsx/`,
 `lib/src/docx/`, the public barrel, `package:archive` or the `src/` of any
 package. Its types keep the prefix `Drawing`.
 
