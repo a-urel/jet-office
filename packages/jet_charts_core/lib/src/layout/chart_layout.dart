@@ -167,10 +167,10 @@ final class ChartLayout {
 /// Pie and donut charts are laid out around a centre, with their data labels
 /// inside the slices or, in a pie, outside with leader lines, and a donut's
 /// centre text (`pie_layout.dart`). A sparkline draws only its lines, on the
-/// background and without a border (`sparkline_layout.dart`). Every other kind draws the background,
-/// the title if any, and a `placeholder` text of the chart's
-/// `unsupportedName`, else its kind's name, centred in what is left; the
-/// placeholder is hidden when it does not fit.
+/// background and without a border (`sparkline_layout.dart`). Every other
+/// kind draws the background, the title if any, and a `placeholder` text of
+/// the chart's `unsupportedName`, else its kind's name, centred in what is
+/// left; the placeholder is hidden when it does not fit.
 ///
 /// Category labels that crowd are skipped, then turned, then cut with `…`.
 /// Tick labels that crowd take a coarser unit, or, at a fixed unit, are

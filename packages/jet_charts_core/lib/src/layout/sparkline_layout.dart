@@ -42,7 +42,9 @@ typedef SparklineLayout = ({
 /// of side `sparklineWidth * 2` (`series/<s>/marker/<i>`). A series of
 /// `kind: ChartKind.area` also fills each run down to the plot's bottom, or to
 /// the value 0 when it lies inside the range, with the theme's `areaOpacity`
-/// (`series/<s>/area`, one path per run, all with that id), under the lines.
+/// (`series/<s>/area`), under the lines. The area is one closed path that
+/// runs along each run's line and drops to the base at each end of the run
+/// (base, run 1, base, base, run 2, base), so the span of a gap is empty.
 /// This is an estimate of Excel's sparkline, not checked in Excel.
 ///
 /// The bands are one per index, left to right, tiling the plot; the first and
@@ -129,6 +131,8 @@ SparklineLayout layoutSparkline(
     int run = 0;
     final List<ChartPoint> points = <ChartPoint>[];
     int first = 0;
+    // The area's outline: base, run, base, for each run in turn.
+    final List<ChartPoint> areaPath = <ChartPoint>[];
     void flush() {
       if (points.length > 1) {
         final List<ChartPoint> path = smooth
@@ -138,19 +142,10 @@ SparklineLayout layoutSparkline(
               ]
             : List<ChartPoint>.of(points);
         if (area) {
-          areas.add(
-            PathPrimitive(
-              ids.seriesAreaId(s),
-              <ChartPoint>[
-                ...path,
-                ChartPoint(path.last.x, base),
-                ChartPoint(path.first.x, base),
-              ],
-              closed: true,
-              fill: color,
-              fillOpacity: theme.areaOpacity,
-            ),
-          );
+          areaPath
+            ..add(ChartPoint(path.first.x, base))
+            ..addAll(path)
+            ..add(ChartPoint(path.last.x, base));
         }
         lines.add(
           PathPrimitive(
@@ -193,6 +188,17 @@ SparklineLayout layoutSparkline(
       points.add(ChartPoint(x(i), y(v)));
     }
     flush();
+    if (areaPath.isNotEmpty) {
+      areas.add(
+        PathPrimitive(
+          ids.seriesAreaId(s),
+          areaPath,
+          closed: true,
+          fill: color,
+          fillOpacity: theme.areaOpacity,
+        ),
+      );
+    }
   }
   primitives
     ..addAll(areas)

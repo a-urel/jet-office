@@ -365,7 +365,9 @@ final class _Source {
   String? _title(int category) {
     if (chart.kind == ChartKind.sparkline &&
         chart.series.first.categories.values.every((Object? c) => c == null)) {
-      // A sparkline's categories are not numbered when it has none.
+      // The labels come from the first series, as resolveChart takes them;
+      // when it has no category, resolveChart numbers them and a sparkline
+      // shows no title instead.
       return null;
     }
     final String text = resolved.categoryLabels[category];

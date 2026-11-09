@@ -1,6 +1,8 @@
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:test/test.dart';
 
+import '../support/gallery.dart';
+
 const ChartSize _size = ChartSize(120, 30);
 final ChartTheme _office = ChartTheme.office;
 final double _w = _office.sparklineWidth;
@@ -158,8 +160,8 @@ void main() {
     expect(area.closed, isTrue);
     expect(area.fillOpacity, 0.1);
     expect(area.points, hasLength(5));
-    expect(area.points[3], ChartPoint(plot.right, plot.bottom));
-    expect(area.points[4], ChartPoint(plot.left, plot.bottom));
+    expect(area.points[0], ChartPoint(plot.left, plot.bottom));
+    expect(area.points[4], ChartPoint(plot.right, plot.bottom));
     expect(layout.primitives.map((ChartPrimitive p) => p.id).toList(), <String>[
       'background',
       'series/0/area',
@@ -273,5 +275,76 @@ void main() {
       size: const ChartSize(40, 12),
     );
     expect(findOverlaps(small.primitives, small.size), isEmpty);
+  });
+
+  Iterable<ChartPrimitive> flat(List<ChartPrimitive> list) sync* {
+    for (final ChartPrimitive p in list) {
+      yield p;
+      if (p is ClipPrimitive) {
+        yield* flat(p.children);
+      }
+    }
+  }
+
+  void expectUniqueIds(ChartLayout layout) {
+    final List<String> all = <String>[
+      for (final ChartPrimitive p in flat(layout.primitives)) p.id,
+    ];
+    expect(all.toSet(), hasLength(all.length), reason: '$all');
+  }
+
+  test('a gapped area series is one area that is empty across the gap', () {
+    final ChartLayout layout = _lay(
+      _chart(<ChartSeries>[
+        _series(<double?>[1, null, 2, 3], kind: ChartKind.area),
+      ]),
+    );
+    final ChartRect plot = layout.plotArea!;
+    final List<PathPrimitive> areas = _paths(layout, 'series/0/area');
+    expect(areas, hasLength(1));
+    // Base, run, base for each run; the run [1] is a dot and has no area.
+    expect(areas.single.points, hasLength(4));
+    expect(areas.single.points.first.y, plot.bottom);
+    expect(areas.single.points.last.y, plot.bottom);
+    expectUniqueIds(layout);
+    final ChartLayout two = _lay(
+      _chart(<ChartSeries>[
+        _series(<double?>[1, 2, null, 3, 4], kind: ChartKind.area),
+      ]),
+    );
+    final PathPrimitive area = _paths(two, 'series/0/area').single;
+    expect(area.points, hasLength(8));
+    expect(area.points[3].y, plot.bottom);
+    expect(area.points[4].y, plot.bottom);
+    expect(area.points[3].x, lessThan(area.points[4].x));
+    expectUniqueIds(two);
+  });
+
+  test('the sparkline gallery charts have unique ids', () {
+    for (final GalleryChart g in galleryCharts()) {
+      if (g.chart.kind == ChartKind.sparkline) {
+        expectUniqueIds(g.layout(goldenSize));
+      }
+    }
+  });
+
+  test('a smooth area follows the smoothed, clamped line inside the plot', () {
+    final ChartLayout layout = _lay(
+      _chart(<ChartSeries>[
+        _series(<double?>[1, 9, 1, 9, 1], kind: ChartKind.area, smooth: true),
+      ]),
+    );
+    final ChartRect plot = layout.plotArea!;
+    final List<ChartPoint> line = _paths(
+      layout,
+      'series/0/line/',
+    ).single.points;
+    final List<ChartPoint> area = _paths(layout, 'series/0/area').single.points;
+    expect(line.length, greaterThan(5));
+    expect(area.sublist(1, area.length - 1), line);
+    for (final ChartPoint p in area) {
+      expect(p.x, inInclusiveRange(plot.left, plot.right));
+      expect(p.y, inInclusiveRange(plot.top, plot.bottom));
+    }
   });
 }

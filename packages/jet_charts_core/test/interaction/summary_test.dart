@@ -183,22 +183,20 @@ void main() {
   });
 
   test('a sparkline is summarized as a line chart is', () {
-    ChartSeries series(ChartKind kind) => ChartSeries(
+    ChartSeries series(ChartKind? kind) => ChartSeries(
       name: ChartData<String>(values: <String?>['Refunds']),
       categories: ChartData<Object>(values: <Object?>['a', 'b', 'c']),
       values: ChartData<double>(values: <double?>[2, 7, null]),
+      kind: kind,
     );
     final ChartSummary spark = summarizeChart(
       Chart(
         kind: ChartKind.sparkline,
-        series: <ChartSeries>[series(ChartKind.line)],
+        series: <ChartSeries>[series(ChartKind.area)],
       ),
     );
     final ChartSummary line = summarizeChart(
-      Chart(
-        kind: ChartKind.line,
-        series: <ChartSeries>[series(ChartKind.line)],
-      ),
+      Chart(kind: ChartKind.line, series: <ChartSeries>[series(null)]),
     );
     expect(spark.kind, ChartKind.sparkline);
     expect(spark.values, line.values);

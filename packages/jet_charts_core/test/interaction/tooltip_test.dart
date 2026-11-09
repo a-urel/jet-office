@@ -682,6 +682,70 @@ void main() {
       expect(tip.rows.map((ChartTooltipRow r) => r.value), <String>['2', '6']);
     });
 
+    test('over its own line and area gives the band tooltip', () {
+      final Chart chart = Chart(
+        kind: ChartKind.sparkline,
+        series: <ChartSeries>[
+          _series(
+            'Refunds',
+            <Object>['Mon', 'Tue', 'Wed'],
+            <double?>[1, 3, 2],
+          ).copyWith(kind: ChartKind.area),
+        ],
+      );
+      final ChartLayout layout = _layout(chart, size: const ChartSize(120, 30));
+      final PathPrimitive line = _byId(layout, 'series/0/line/0');
+      final ChartPoint onLine = line.points[1];
+      final ChartTooltip? atLine = chartTooltipAt(
+        chart,
+        layout,
+        onLine,
+        theme: _office,
+      );
+      expect(atLine!.sourceId, 'series/0/line/0');
+      expect(atLine.title, 'Tue');
+      final ChartPoint inArea = ChartPoint(
+        onLine.x,
+        layout.plotArea!.bottom - 0.5,
+      );
+      final ChartTooltip? atArea = chartTooltipAt(
+        chart,
+        layout,
+        inArea,
+        theme: _office,
+      );
+      expect(atArea!.sourceId, 'series/0/area');
+      expect(atArea.title, 'Tue');
+    });
+
+    test('takes its title from the first series, as resolveChart does', () {
+      Chart two(List<Object> a, List<Object> b) => Chart(
+        kind: ChartKind.sparkline,
+        series: <ChartSeries>[
+          _series('A', a, <double?>[1, 2]),
+          _series('B', b, <double?>[3, 4]),
+        ],
+      );
+      for (final (List<Object> a, List<Object> b, String? title)
+          in <(List<Object>, List<Object>, String?)>[
+            (<Object>[], <Object>['x', 'y'], null),
+            (<Object>['p', 'q'], <Object>[], 'p'),
+          ]) {
+        final Chart chart = two(a, b);
+        final ChartLayout layout = _layout(
+          chart,
+          size: const ChartSize(120, 30),
+        );
+        final ChartTooltip? tip = chartTooltipAt(
+          chart,
+          layout,
+          _centre(layout.categoryBands[0]),
+          theme: _office,
+        );
+        expect(tip!.title, title);
+      }
+    });
+
     test('off the bands has none', () {
       final Chart chart = spark();
       final ChartLayout layout = _layout(chart, size: const ChartSize(120, 30));
