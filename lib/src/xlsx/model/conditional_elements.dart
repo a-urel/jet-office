@@ -35,10 +35,12 @@ import '../comparison.dart';
 import '../conditional_format.dart';
 import '../conditional_format_x14.dart'
     show defaultBarAxisColor, defaultNegativeBarFill;
+import '../formula/formula_rewrite.dart';
 import '../range.dart';
 import 'item_group.dart' show GroupItem, readerOf;
 import 'style_elements.dart' show ReadStyleValue, readColor;
-import 'validation_elements.dart' show childText, parseSqref;
+import 'validation_elements.dart'
+    show childText, parseSqref, shiftedSqrefElement;
 
 /// The highest value of the `xsd:int` a `priority` is.
 const int maxRulePriority = 0x7FFFFFFF;
@@ -569,3 +571,28 @@ bool readFlag(String? text, {bool fallback = false}) => switch (text) {
   '0' || 'false' => false,
   _ => fallback,
 };
+
+/// The `<conditionalFormatting>` [source] after a structural edit, as
+/// `shiftedValidation` shifts a validation: its `sqref`, each rule's
+/// `formula`s and each `cfvo` of type `formula`'s `val`, relative to the
+/// first cell of the `sqref`; `null` when the edit empties the `sqref` (the
+/// `<dxf>`s of its rules stay in the styles part), [source] itself when
+/// nothing changes.
+OpaqueXml? shiftedConditionalFormatting(
+  OpaqueXml source,
+  ReferenceMapper mapper,
+  String host,
+  void Function(String text) onUnlexable,
+) => shiftedSqrefElement(
+  source,
+  mapper,
+  host,
+  onUnlexable,
+  isFormula: (XmlPullReader r, int level) =>
+      level == 2 && r.namespaceUri == Ns.main && r.localName == 'formula',
+  isFormulaValue: (XmlPullReader r, int level) =>
+      level == 3 &&
+      r.namespaceUri == Ns.main &&
+      r.localName == 'cfvo' &&
+      r.getAttribute('type', namespaceUri: '') == 'formula',
+);

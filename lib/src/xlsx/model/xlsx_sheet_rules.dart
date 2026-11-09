@@ -445,3 +445,142 @@ mixin _SheetRules {
     });
   }
 }
+
+/// The `dataValidations` holder of a sheet: each `<dataValidation>` as
+/// [shiftedValidation] shifts it, removed when its `sqref` empties, the
+/// group going with its last entry; `count` is recomputed when an entry
+/// goes. An entry that changes is read again.
+final class _ValidationHolder implements ReferenceHolder {
+  _ValidationHolder(this._log, this._part, this._sheetName, this._unlexable);
+
+  final ChangeLog _log;
+  final WorksheetPart _part;
+  final String Function() _sheetName;
+  final void Function(String text) _unlexable;
+
+  @override
+  String get holderName => 'dataValidations';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    final ItemGroup<XlsxDataValidation>? group = _part.dataValidationGroup;
+    if (group == null) return;
+    final String host = _sheetName();
+    bool changed = false;
+    bool removed = false;
+    final List<GroupItem<XlsxDataValidation>> items =
+        <GroupItem<XlsxDataValidation>>[];
+    for (final GroupItem<XlsxDataValidation> item in group.items) {
+      if (!item.counted) {
+        items.add(item);
+        continue;
+      }
+      final OpaqueXml? next = shiftedValidation(
+        item.source,
+        mapper,
+        host,
+        _unlexable,
+      );
+      if (identical(next, item.source)) {
+        items.add(item);
+      } else if (next == null) {
+        changed = removed = true;
+      } else {
+        changed = true;
+        items.add(
+          GroupItem<XlsxDataValidation>(readDataValidation(next).value, next),
+        );
+      }
+    }
+    if (!changed) return;
+    final ItemGroup<XlsxDataValidation>? next = !items.any((i) => i.counted)
+        ? null
+        : removed
+        ? group.withItems(items)
+        : ItemGroup<XlsxDataValidation>(
+            group.qualifiedName,
+            group.localName,
+            group.namespaces,
+            group.attributes,
+            items,
+            edited: group.edited,
+          );
+    editLayout(
+      _log,
+      _part,
+      'dataValidations',
+      () => _part.swapLayout('dataValidations', group, next),
+    );
+  }
+}
+
+/// The `conditionalFormats` holder of a sheet: each
+/// `<conditionalFormatting>` as [shiftedConditionalFormatting] shifts it,
+/// and each `x14:conditionalFormatting` of the `extLst` as
+/// [shiftedX14Element] does; one whose `sqref` empties goes, its rules'
+/// `<dxf>`s staying in the styles part.
+final class _ConditionalHolder implements ReferenceHolder {
+  _ConditionalHolder(this._log, this._part, this._sheetName, this._unlexable);
+
+  final ChangeLog _log;
+  final WorksheetPart _part;
+  final String Function() _sheetName;
+  final void Function(String text) _unlexable;
+
+  @override
+  String get holderName => 'conditionalFormats';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    final String host = _sheetName();
+    final CfBlock? block = _part.conditionalBlock;
+    if (block != null) {
+      bool changed = false;
+      final List<GroupItem<CfEntry>> items = <GroupItem<CfEntry>>[];
+      for (final GroupItem<CfEntry> item in block.items) {
+        final OpaqueXml? next = shiftedConditionalFormatting(
+          item.source,
+          mapper,
+          host,
+          _unlexable,
+        );
+        if (identical(next, item.source)) {
+          items.add(item);
+          continue;
+        }
+        changed = true;
+        if (next != null) {
+          items.add(
+            GroupItem<CfEntry>(readConditionalFormatting(next).value, next),
+          );
+        }
+      }
+      if (changed) {
+        editLayout(
+          _log,
+          _part,
+          'conditionalFormatting',
+          () => _part.swapLayout(
+            'conditionalFormatting',
+            block,
+            items.isEmpty ? null : CfBlock(items),
+          ),
+        );
+      }
+    }
+    final X14Block? x14 = _part.x14Block;
+    if (x14 == null) return;
+    final Object? extLst = _part.layoutElement('extLst');
+    final XmlNode? next = x14.withElements(
+      (X14Element element) =>
+          shiftedX14Element(element.source, mapper, host, _unlexable),
+    );
+    if (identical(next, extLst)) return;
+    editLayout(
+      _log,
+      _part,
+      'extLst',
+      () => _part.swapLayout('extLst', extLst, next),
+    );
+  }
+}

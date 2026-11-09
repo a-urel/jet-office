@@ -26,15 +26,18 @@ library;
 
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
+import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../color.dart';
 import '../conditional_format.dart';
 import '../conditional_format_x14.dart';
+import '../formula/formula_rewrite.dart';
 import '../range.dart';
 import 'conditional_elements.dart';
 import 'element_node.dart';
 import 'item_group.dart' show GroupItem, readerOf;
+import 'reference_holders.dart';
 import 'style_elements.dart'
     show
         ReadDifferentialStyle,
@@ -314,6 +317,28 @@ final class X14Block {
         );
       }
     }
+    return _withKept(kept);
+  }
+
+  /// The `extLst` with each element's source mapped by [map]: kept, replaced,
+  /// or removed (`null`), as [withoutRules] removes an element; the `extLst`'s
+  /// own node when nothing changes.
+  XmlNode? withElements(OpaqueXml? Function(X14Element element) map) {
+    bool changed = false;
+    final List<OpaqueXml> kept = <OpaqueXml>[];
+    for (final Object child in children) {
+      if (child is! X14Element) {
+        kept.add(child as OpaqueXml);
+        continue;
+      }
+      final OpaqueXml? next = map(child);
+      changed |= !identical(next, child.source);
+      if (next != null) kept.add(next);
+    }
+    return changed ? _withKept(kept) : _extLst;
+  }
+
+  XmlNode? _withKept(List<OpaqueXml> kept) {
     final List<Object> rest = <Object>[
       for (final Object c in _ext.children)
         if (!identical(c, _source))
@@ -937,3 +962,59 @@ List<JoinedFormat> joinConditionalFormats(
 /// The key of [ranges]: equal ranges in equal order have equal keys.
 String _sqrefKey(List<XlsxRange> ranges) =>
     ranges.map((XlsxRange r) => r.ref).join(' ');
+
+/// The `x14:conditionalFormatting` [source] after a structural edit, as
+/// `shiftedValidation` shifts a validation: its `xm:sqref`, and every
+/// `xm:f` of its rules relative to the first cell of the `xm:sqref`; `null`
+/// when the edit empties the `xm:sqref`, [source] itself when nothing
+/// changes (or it has no `xm:sqref`).
+OpaqueXml? shiftedX14Element(
+  OpaqueXml source,
+  ReferenceMapper mapper,
+  String host,
+  void Function(String text) onUnlexable,
+) {
+  String? sqref;
+  final XmlPullReader r = readerOf(source);
+  _eachChild(r, () {
+    if (sqref == null && r.namespaceUri == Ns.xm && r.localName == 'sqref') {
+      sqref = childText(r);
+    } else {
+      r.skip();
+    }
+  });
+  final String? read = sqref;
+  if (read == null) return source;
+  final String? nextSqref = rewriteSqref(
+    read.trim(),
+    mapper,
+    host,
+    onUnlexable: onUnlexable,
+  );
+  if (nextSqref != null && nextSqref.isEmpty) return null;
+  final String after = nextSqref ?? read;
+  String? formula(String text) => rewriteAnchoredFormula(
+    text,
+    mapper,
+    host,
+    read,
+    after,
+    onUnlexable: onUnlexable,
+  );
+  bool sqrefSeen = false;
+  return spliceElement(source, (XmlPullReader r, int level) {
+    if (r.namespaceUri != Ns.xm) return null;
+    if (level == 1 && r.localName == 'sqref' && !sqrefSeen) {
+      sqrefSeen = true;
+      return nextSqref == null
+          ? null
+          : SpliceEdit(text: (String _) => escapeXmlText(nextSqref));
+    }
+    if (r.localName == 'f') {
+      return SpliceEdit(
+        text: (String text) => rewrittenFormulaMarkup(text, formula),
+      );
+    }
+    return null;
+  });
+}

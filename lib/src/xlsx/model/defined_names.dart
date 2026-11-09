@@ -18,10 +18,13 @@ import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../defined_name.dart';
+import '../formula/formula_rewrite.dart';
+import '../formula/reference_shift.dart';
 import '../sheet_name.dart';
 import '../workbook_parts.dart' show writeDefinedName;
 import 'columns.dart' show replaceAttributes;
 import 'item_group.dart';
+import 'reference_holders.dart';
 import 'workbook_part.dart';
 
 /// A `<definedName>`, as the model reads it.
@@ -311,4 +314,76 @@ void removeNameIn(
   log.transaction(() {
     editNames(log, part, () => part.removeName(entry));
   });
+}
+
+/// The `definedNames` holder of a workbook: each readable name's formula
+/// goes through the rewriter, unqualified references read on the sheet of
+/// the name's scope (on none for a workbook name). Excel's built-in names
+/// are names too, so a print area shrinks with its rows and becomes
+/// `S!#REF!`, as Excel writes it, when they are all deleted. A changed
+/// name keeps its element but its text ([rewriteNameEntry]); a name that
+/// cannot be read, or whose formula cannot be lexed, stays as read.
+final class DefinedNameHolder implements ReferenceHolder {
+  /// The holder of the names of the part [_part] gives, recording to [_log].
+  DefinedNameHolder(this._log, this._part);
+
+  final ChangeLog _log;
+  final WorkbookPart Function() _part;
+
+  @override
+  String get holderName => 'definedNames';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    final WorkbookPart part = _part();
+    if (!part.isTyped) return;
+    final Object? group = part.element('definedNames');
+    if (group is! ItemGroup<NameEntry>) return;
+    final List<SheetEntry> sheets = part.sheets;
+    bool changed = false;
+    final List<GroupItem<NameEntry>> items = <GroupItem<NameEntry>>[
+      for (final GroupItem<NameEntry> item in group.items)
+        _shifted(item, mapper, sheets) ?? item,
+    ];
+    for (int i = 0; i < items.length; i++) {
+      changed |= !identical(items[i], group.items[i]);
+    }
+    if (!changed) return;
+    final ItemGroup<NameEntry> next = ItemGroup<NameEntry>(
+      group.qualifiedName,
+      group.localName,
+      group.namespaces,
+      group.attributes,
+      items,
+      edited: group.edited,
+    );
+    editNames(_log, part, () => part.swapElement('definedNames', group, next));
+  }
+
+  static GroupItem<NameEntry>? _shifted(
+    GroupItem<NameEntry> item,
+    ReferenceMapper mapper,
+    List<SheetEntry> sheets,
+  ) {
+    final NameEntry? entry = item.value;
+    if (entry == null) return null;
+    final int? scope = entry.localSheetId;
+    final String host = scope != null && scope < sheets.length
+        ? sheets[scope].name
+        : '';
+    final String? formula = rewriteFormula(entry.formula, mapper, host);
+    if (formula == null) return null;
+    final NameEntry next = NameEntry(
+      name: entry.name,
+      formula: formula,
+      localSheetId: entry.localSheetId,
+      hidden: entry.hidden,
+      comment: entry.comment,
+    );
+    return GroupItem<NameEntry>(
+      next,
+      rewriteNameEntry(item.source, entry, next),
+      counted: item.counted,
+    );
+  }
 }

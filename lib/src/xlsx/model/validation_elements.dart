@@ -22,9 +22,11 @@ import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../comparison.dart';
 import '../data_validation.dart';
+import '../formula/formula_rewrite.dart';
 import '../range.dart';
 import '../read/merge_reader.dart' show parseMergeRange;
 import 'item_group.dart' show readerOf;
+import 'reference_holders.dart';
 
 /// The ranges of [text], a space-separated list of references (`A1 C3:D4`),
 /// or `null` when the text is empty or any of its parts is not a range of
@@ -185,4 +187,82 @@ T? _byName<T extends Enum>(List<T> values, String name) {
     if (v.name == name) return v;
   }
   return null;
+}
+
+/// The `<dataValidation>` [source] after a structural edit: its `sqref`
+/// through [rewriteSqref], and its `formula1` and `formula2` through
+/// [rewriteAnchoredFormula], relative to the first cell of the `sqref`;
+/// `null` when the edit empties the `sqref`, [source] itself when nothing
+/// changes. Only the changed text is rewritten. [onUnlexable] gets each
+/// `sqref` or formula that cannot be lexed, which stays as read.
+OpaqueXml? shiftedValidation(
+  OpaqueXml source,
+  ReferenceMapper mapper,
+  String host,
+  void Function(String text) onUnlexable,
+) => shiftedSqrefElement(
+  source,
+  mapper,
+  host,
+  onUnlexable,
+  isFormula: (XmlPullReader r, int level) =>
+      level == 1 &&
+      r.namespaceUri == Ns.main &&
+      (r.localName == 'formula1' || r.localName == 'formula2'),
+);
+
+/// [source], an element whose `sqref` attribute says what it covers, after
+/// a structural edit, as [shiftedValidation] says, with the text of each
+/// descendant [isFormula] names as a formula relative to the `sqref`, and,
+/// when [isFormulaValue] names a descendant, its `val` attribute too.
+OpaqueXml? shiftedSqrefElement(
+  OpaqueXml source,
+  ReferenceMapper mapper,
+  String host,
+  void Function(String text) onUnlexable, {
+  required bool Function(XmlPullReader r, int level) isFormula,
+  bool Function(XmlPullReader r, int level)? isFormulaValue,
+}) {
+  final String? sqref = readerOf(
+    source,
+  ).getAttribute('sqref', namespaceUri: '');
+  if (sqref == null) return source;
+  final String? nextSqref = rewriteSqref(
+    sqref,
+    mapper,
+    host,
+    onUnlexable: onUnlexable,
+  );
+  if (nextSqref != null && nextSqref.isEmpty) return null;
+  final String after = nextSqref ?? sqref;
+  String? formula(String text) => rewriteAnchoredFormula(
+    text,
+    mapper,
+    host,
+    sqref,
+    after,
+    onUnlexable: onUnlexable,
+  );
+  return spliceElement(source, (XmlPullReader r, int level) {
+    if (level == 0) {
+      return nextSqref == null
+          ? null
+          : SpliceEdit(attributes: <String, String>{'sqref': nextSqref});
+    }
+    if (isFormula(r, level)) {
+      return SpliceEdit(
+        text: (String text) => rewrittenFormulaMarkup(text, formula),
+      );
+    }
+    if (isFormulaValue != null && isFormulaValue(r, level)) {
+      final String? value = r.getAttribute('val', namespaceUri: '');
+      final String? next = value == null ? null : formula(decodeXstring(value));
+      return next == null
+          ? null
+          : SpliceEdit(
+              attributes: <String, String>{'val': escapeXstring(next)},
+            );
+    }
+    return null;
+  });
 }

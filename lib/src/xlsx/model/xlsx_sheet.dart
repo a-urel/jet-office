@@ -315,6 +315,8 @@ bool sheetHasPart(XlsxSheet sheet) => sheet._partName != null;
 List<ReferenceHolder> sheetReferenceHolders(XlsxSheet sheet) {
   final WorksheetPart? part = sheet._load();
   if (part == null) return const <ReferenceHolder>[];
+  void unlexable(String text) =>
+      sheet._warn(XlsxWarningCode.formulaUnlexable, null, detail: text);
   return sheet._referenceHolders ??= <ReferenceHolder>[
     for (final String name in sheetHolderNames)
       if (name == 'cells')
@@ -328,6 +330,14 @@ List<ReferenceHolder> sheetReferenceHolders(XlsxSheet sheet) {
         _MergeHolder(sheet._host.log, part, () => sheet.name)
       else if (name == 'views')
         _ViewHolder(sheet._host.log, part, () => sheet.name)
+      else if (name == 'dataValidations')
+        _ValidationHolder(sheet._host.log, part, () => sheet.name, unlexable)
+      else if (name == 'conditionalFormats')
+        _ConditionalHolder(sheet._host.log, part, () => sheet.name, unlexable)
+      else if (name == 'hyperlinks')
+        _LinkHolder(sheet, part)
+      else if (name == 'autoFilter')
+        _FilterHolder(sheet._host.log, part, () => sheet.name)
       else
         PendingReferenceHolder(name),
   ];

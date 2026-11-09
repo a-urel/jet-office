@@ -530,3 +530,136 @@ mixin _SheetPrint {
         : null;
   }
 }
+
+/// The `autoFilter` holder of a sheet, which also moves its page breaks.
+///
+/// On a row or column edit of the sheet the filter's `ref` shifts
+/// ([ReferenceShift.shiftRange]) and the filter goes when the edit deletes
+/// it wholly; on a column edit each `filterColumn`'s `colId` is renumbered
+/// from the filter's new first column, and one whose column is deleted
+/// goes. A `brk` of `rowBreaks` (on a row edit) or `colBreaks` (on a
+/// column edit) names the first row or column of a page (0-based); it
+/// shifts with it and goes when it is deleted, `count` and
+/// `manualBreakCount` following. Only the changed attributes are rewritten.
+final class _FilterHolder implements ReferenceHolder {
+  _FilterHolder(this._log, this._part, this._sheetName);
+
+  final ChangeLog _log;
+  final WorksheetPart _part;
+  final String Function() _sheetName;
+
+  @override
+  String get holderName => 'autoFilter';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    if (edit == null || !_editsSheet(edit, _sheetName())) return;
+    _shiftFilter(edit);
+    _shiftBreaks(edit.axis == ShiftAxis.rows ? 'rowBreaks' : 'colBreaks', edit);
+  }
+
+  void _shiftFilter(ReferenceShift edit) {
+    final XmlNode? node = _part.layoutElement('autoFilter') as XmlNode?;
+    final String? ref = node?.attribute('ref');
+    final List<XlsxRange>? read = ref == null ? null : parseSqref(ref);
+    if (node == null || read == null || read.length != 1) return;
+    final XlsxRange range = read.single;
+    final XlsxRange? moved = edit.shiftRange(range);
+    XmlNode? next = moved == null
+        ? null
+        : node.withChanges(<String, String?>{
+            if (moved != range) 'ref': moved.ref,
+          });
+    if (next != null && moved != null && edit.axis == ShiftAxis.columns) {
+      bool changed = false;
+      final List<Object> children = <Object>[];
+      for (final Object c in node.children) {
+        final Object? kept = _shiftColumn(c, range, moved, edit);
+        changed |= !identical(kept, c);
+        if (kept != null) children.add(kept);
+      }
+      if (changed) next = next.withChildren(children);
+    }
+    if (identical(next, node)) return;
+    editLayout(_log, _part, 'autoFilter', () {
+      _part.setNode('autoFilter', next);
+    });
+  }
+
+  /// [child] of a filter over [range], now over [moved]: a `filterColumn`
+  /// renumbered, or `null` when its column is deleted; anything else as it
+  /// is.
+  static Object? _shiftColumn(
+    Object child,
+    XlsxRange range,
+    XlsxRange moved,
+    ReferenceShift edit,
+  ) {
+    if (child is! OpaqueXml ||
+        child.namespaceUri != Ns.main ||
+        child.localName != 'filterColumn') {
+      return child;
+    }
+    final int? id = parseSheetId(readerOf(child).getAttribute('colId'));
+    if (id == null) return child;
+    final ({int row, int column})? cell = edit.shiftCell(
+      range.firstRow,
+      range.firstColumn + id,
+    );
+    if (cell == null) return null;
+    final int next = cell.column - moved.firstColumn;
+    if (next == id) return child;
+    return spliceElement(
+      child,
+      (XmlPullReader r, int level) => level == 0
+          ? SpliceEdit(attributes: <String, String>{'colId': '$next'})
+          : null,
+    );
+  }
+
+  void _shiftBreaks(String slot, ReferenceShift edit) {
+    final XmlNode? node = _part.layoutElement(slot) as XmlNode?;
+    if (node == null) return;
+    final bool rows = edit.axis == ShiftAxis.rows;
+    bool changed = false;
+    final List<Object> children = <Object>[];
+    for (final Object c in node.children) {
+      final String? text = c is XmlNode && c.localName == 'brk'
+          ? c.attribute('id')
+          : null;
+      final int? id = text == null ? null : parseSheetId(text);
+      if (c is! XmlNode || id == null) {
+        children.add(c);
+        continue;
+      }
+      final ({int row, int column})? at = edit.shiftCell(
+        rows ? id : 0,
+        rows ? 0 : id,
+      );
+      if (at == null) {
+        changed = true;
+        continue;
+      }
+      final int moved = rows ? at.row : at.column;
+      final XmlNode next = c.withChanges(<String, String?>{
+        if (moved != id) 'id': '$moved',
+      });
+      changed |= !identical(next, c);
+      children.add(next);
+    }
+    if (!changed) return;
+    final List<XmlNode> breaks = <XmlNode>[
+      for (final Object c in children)
+        if (c is XmlNode && c.localName == 'brk') c,
+    ];
+    final XmlNode? next = breaks.isEmpty
+        ? null
+        : node.withChildren(children).withChanges(<String, String?>{
+            if (node.attribute('count') != null) 'count': '${breaks.length}',
+            if (node.attribute('manualBreakCount') != null)
+              'manualBreakCount':
+                  '${breaks.where((XmlNode b) => b.attribute('man') == '1' || b.attribute('man') == 'true').length}',
+          });
+    editLayout(_log, _part, slot, () => _part.setNode(slot, next));
+  }
+}

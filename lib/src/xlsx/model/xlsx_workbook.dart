@@ -555,6 +555,7 @@ final class _Book implements SheetHost {
   late final ReferenceRegistry references = ReferenceRegistry(
     log,
     () => _sheets,
+    workbookPart: () => workbook,
   );
   late final SheetNamer _namer = SheetNamer(warnings);
 

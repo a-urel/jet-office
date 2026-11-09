@@ -121,6 +121,8 @@ const NodeShape worksheetNodeShape = <String, Set<String>>{
   'sheetViews': <String>{'sheetView'},
   'sheetView': <String>{'pane', 'selection'},
   'headerFooter': <String>{},
+  'rowBreaks': <String>{'brk'},
+  'colBreaks': <String>{'brk'},
   'extLst': <String>{'ext'},
 };
 
@@ -134,6 +136,8 @@ const Set<String> _nodeSlots = <String>{
   'pageMargins',
   'pageSetup',
   'headerFooter',
+  'rowBreaks',
+  'colBreaks',
   'extLst',
 };
 

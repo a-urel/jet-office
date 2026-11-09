@@ -326,11 +326,123 @@ mixin _SheetLinks {
     for (int i = 0; i < group.items.length; i++) {
       final GroupItem<LinkEntry> item = group.items[i];
       if (i == skip || !item.counted) continue;
-      final String? used =
-          item.value?.relationshipId ??
-          readerOf(item.source).getAttribute('id', namespaceUri: Ns.rel);
-      if (used == id) return null;
+      if (_linkId(item) == id) return null;
     }
     return id;
+  }
+}
+
+/// The relationship id [item] names: its typed one, or, for an entry that
+/// cannot be read, its `r:id` as written.
+String? _linkId(GroupItem<LinkEntry> item) =>
+    item.value?.relationshipId ??
+    readerOf(item.source).getAttribute('id', namespaceUri: Ns.rel);
+
+/// The `hyperlinks` holder of a sheet: on a row or column edit of the sheet
+/// each link's `ref` shifts ([ReferenceShift.shiftRange]); a link the edit
+/// deletes wholly goes, with the relationship of its address when no other
+/// link of the sheet uses it, as `removeHyperlink` removes one. On every
+/// edit an internal `location` goes through the rewriter, on the sheet.
+/// Only the changed attributes are rewritten.
+final class _LinkHolder implements ReferenceHolder {
+  _LinkHolder(this._sheet, this._part);
+
+  final XlsxSheet _sheet;
+  final WorksheetPart _part;
+
+  @override
+  String get holderName => 'hyperlinks';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    final ItemGroup<LinkEntry>? group = _part.hyperlinkGroup;
+    if (group == null) return;
+    final String host = _sheet.name;
+    final ReferenceShift? local = edit != null && _editsSheet(edit, host)
+        ? edit
+        : null;
+    bool changed = false;
+    final List<String> gone = <String>[];
+    final List<GroupItem<LinkEntry>> items = <GroupItem<LinkEntry>>[];
+    for (final GroupItem<LinkEntry> item in group.items) {
+      if (!item.counted) {
+        items.add(item);
+        continue;
+      }
+      final XmlPullReader r = readerOf(item.source);
+      final String? location = r.getAttribute('location', namespaceUri: '');
+      final XlsxRange? range = item.value?.range;
+      String? nextRef;
+      if (local != null && range != null) {
+        final XlsxRange? moved = local.shiftRange(range);
+        if (moved == null) {
+          changed = true;
+          final String? id = _linkId(item);
+          if (id != null) gone.add(id);
+          continue;
+        }
+        if (moved != range) nextRef = moved.ref;
+      }
+      final String? nextLocation = location == null
+          ? null
+          : rewriteFormula(decodeXstring(location), mapper, host);
+      if (nextRef == null && nextLocation == null) {
+        items.add(item);
+        continue;
+      }
+      changed = true;
+      final OpaqueXml source = spliceElement(
+        item.source,
+        (XmlPullReader r, int level) => level == 0
+            ? SpliceEdit(
+                attributes: <String, String>{
+                  'ref': ?nextRef,
+                  if (nextLocation != null)
+                    'location': escapeXstring(nextLocation),
+                },
+              )
+            : null,
+      );
+      items.add(GroupItem<LinkEntry>(readLinkEntry(source).value, source));
+    }
+    if (!changed) return;
+    final ChangeLog log = _sheet._host.log;
+    final List<String> drop = <String>[
+      for (final String id in gone.toSet())
+        if (_unused(items, id)) id,
+    ];
+    editLayout(
+      log,
+      _part,
+      'hyperlinks',
+      () => _part.swapLayout(
+        'hyperlinks',
+        group,
+        items.any((GroupItem<LinkEntry> i) => i.counted)
+            ? group.withItems(items)
+            : null,
+      ),
+    );
+    for (final String id in drop) {
+      removeStoredRelationship(
+        log,
+        _sheet._host.reader.package,
+        _sheet._partName!,
+        id,
+      );
+    }
+  }
+
+  /// Whether [id] is a hyperlink relationship of the sheet, listed once,
+  /// that no entry of [items] names.
+  bool _unused(List<GroupItem<LinkEntry>> items, String id) {
+    int found = 0;
+    for (final OpcRelationship r in _sheet._readRelationships()) {
+      if (r.id == id && r.type == RelType.hyperlink) found++;
+    }
+    if (found != 1) return false;
+    return !items.any(
+      (GroupItem<LinkEntry> i) => i.counted && _linkId(i) == id,
+    );
   }
 }
