@@ -62,6 +62,22 @@ void main() {
       }
     });
 
+    test("agrees with the core's colour cycle on the Office accents", () {
+      // jet_charts_core repeats this calculation for seriesColor, as it
+      // cannot import jet_office: every variation of colors1 on the six
+      // accents must give the same RGB value here and there.
+      final ChartTheme office = ChartTheme.office;
+      for (int i = 0; i < 54; i++) {
+        final ChartColor base = office.palette[i % 6];
+        final ChartColor varied = office.seriesColor(i);
+        expect(
+          varied.rgb,
+          applyDrawingLuminance(base.rgb, varied.lumMod, varied.lumOff),
+          reason: 'series $i',
+        );
+      }
+    });
+
     test('clamps the luminance to 0 and 1', () {
       expect(applyDrawingLuminance(0xFFFFFF, 1, 1), 0xFFFFFF);
       expect(applyDrawingLuminance(0x808080, 1, 1), 0xFFFFFF);

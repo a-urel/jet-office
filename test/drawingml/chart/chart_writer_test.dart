@@ -182,7 +182,7 @@ void main() {
       expect(xml, contains('<a:latin typeface="Aptos Narrow"/>'));
     });
 
-    test('series 7 of the Office theme writes accent 1 lightened 40%', () {
+    test('series 7 of the Office theme writes accent 1 at lumMod 0.6', () {
       final List<ChartSeries> series = <ChartSeries>[
         for (int i = 0; i < 7; i++) _excelSeries(),
       ];
@@ -194,7 +194,7 @@ void main() {
         contains(
           '<c:idx val="6"/><c:order val="6"/><c:spPr><a:solidFill>'
           '<a:schemeClr val="accent1"><a:lumMod val="60000"/>'
-          '<a:lumOff val="40000"/></a:schemeClr></a:solidFill>',
+          '</a:schemeClr></a:solidFill>',
         ),
       );
       expect(xml, contains('<a:schemeClr val="accent6"/>'));

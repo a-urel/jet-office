@@ -18,7 +18,7 @@ const int _cases = 100;
 /// Chrome leg compares it, which proves a seed gives the same cases in a
 /// browser. A change to the writer, to the C1 fixtures' charts or to the
 /// mutations changes it.
-const int _casesDigest = 81417766;
+const int _casesDigest = 3743831555;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {

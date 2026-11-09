@@ -57,14 +57,27 @@ as what the file confirmed:
 ## Excel's palette past six colours
 
 Seen in the owner's J3 gallery check (2026-11-09, `column_eight_series`): Excel
-draws series 7 and 8 as a light grey-blue and a light salmon, lighter forms of
-accents 1 and 2, where `ChartTheme.seriesColor` drew a dark navy and a brown.
-The exact values were read from a screenshot, not a file. Seen in the owner's
-gallery check, value this library's estimate: `ChartTheme.seriesColor` now
-draws series 7 to 12 of a six-colour palette as Office's "lighter 40%" of each
-palette colour (`lumMod` 0.6, `lumOff` 0.4; accent 1 `73A0B4`, accent 2
-`F2AA84`), kept as a scheme colour on export. Series 13 and later are still
-unconfirmed: they keep this library's own darker and lighter rule.
+drew series 7 and 8 as a light grey-blue and a light salmon (about `8599A9` and
+`ECA28B` on the screenshot), where `ChartTheme.seriesColor` drew a dark navy
+and a brown. Those light colours came from the gallery workbook, not from
+Excel's default: the workbook wrote no chart colour-style part, and its series
+7 and 8 no colour, so Excel fell back to the legacy colour table of `c:style`
+2. The owner's Excel-saved copy, `gallery_saved.xlsx`, shows it: series 7 and 8
+keep no `c:spPr` and the file has no `colorsN.xml`.
+
+Excel's default is the colour cycle of its colour-style part, verified from
+`chart_defaults.xlsx`, `xl/charts/colors1.xml` (`cs:colorStyle` `meth="cycle"`
+`id="10"`): accents 1 to 6, then the same six varied once per pass by
+`lumMod` 60000; `lumMod` 80000 and `lumOff` 20000; `lumMod` 80000; `lumMod`
+60000 and `lumOff` 40000; `lumMod` 50000; `lumMod` 70000 and `lumOff` 30000;
+`lumMod` 70000; `lumMod` 50000 and `lumOff` 50000. `ChartTheme.seriesColor`
+follows it: series 7 is accent 1 at `lumMod` 0.6 (`0D3A4E`), series 8 accent
+2 at `lumMod` 0.6 (`994010`), series 13 accent 1 at `lumMod` 0.8 and
+`lumOff` 0.2 (`1F8EC0`). The file says nothing past the ninth variation; this
+library starts the cycle again there (series 55 is series 1's colour), which
+is unconfirmed. The gallery workbook now writes Excel's `colors1.xml` and
+`style1.xml` beside each chart; the owner's re-check of `column_eight_series`
+is pending.
 
 ## Milestone checks
 

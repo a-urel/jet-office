@@ -1,13 +1,12 @@
 /// The look of a chart: colours, fonts, lines and spacing.
 library;
 
-import 'dart:math' as math;
-
 import '../model/chart_series.dart';
 import '../model/equality.dart';
 import 'chart_color.dart';
 import 'chart_spacing.dart';
 import 'chart_tooltip_style.dart';
+import 'luminance.dart';
 import 'office_theme.dart';
 
 /// The look of a chart, one object that travels to every output so a chart
@@ -153,57 +152,60 @@ final class ChartTheme {
 
   /// The colour of the series at [index], counting from 0.
   ///
-  /// The first pass through [palette] gives its colours unchanged, scheme
-  /// slots included. The second pass (series 7 to 12 of a six-colour palette)
-  /// is Office's "lighter 40%" of each colour, as the owner's check of Excel
-  /// shows: a scheme-bound colour keeps its slot with `lumMod` 0.6 and `lumOff`
-  /// 0.4, so it exports as a scheme colour, and any other colour is the fixed
-  /// colour whose channels are `round(v * 0.6 + 255 * 0.4)`. Accent 1
-  /// (`156082`) gives `73A0B4`, accent 2 (`E97132`) `F2AA84`. A later pass `p`
-  /// (`index ~/ palette.length`) gives each colour of the palette, as a fixed
-  /// colour, derived by a rule that is this library's own and unconfirmed: for
-  /// `p` of 2 or more, an odd `p` multiplies each channel by
-  /// `0.6^((p + 1) / 2)` and an even `p` moves each channel toward 255 by
-  /// `1 - 0.6^(p / 2)`, with the passes 1 and 2 of that rule swapped (pass 2
-  /// is the darker 0.6, as pass 1 is the lighter). No repeat within the first
-  /// 24 series is checked for the office theme and for the five-colour palette
-  /// of the tests. Other palettes, greys, and palettes with black or white can
-  /// repeat derived colours, as scaling black or moving white toward 255
-  /// changes nothing. Any index is valid.
+  /// It is Excel's colour cycle, `xl/charts/colors1.xml` of the owner's
+  /// `chart_defaults.xlsx` (`cs:colorStyle` of `meth="cycle"`, `id="10"`):
+  /// the series takes the colour `index % palette.length` of [palette],
+  /// varied by the pass `index ~/ palette.length` through it. Pass 0 gives
+  /// the palette's colours unchanged; the passes 1 to 8 vary the colour's
+  /// luminance, as DrawingML's `lumMod` and `lumOff`, by `lumMod` 0.6;
+  /// `lumMod` 0.8 and `lumOff` 0.2; `lumMod` 0.8; `lumMod` 0.6 and `lumOff`
+  /// 0.4; `lumMod` 0.5; `lumMod` 0.7 and `lumOff` 0.3; `lumMod` 0.7; and
+  /// `lumMod` 0.5 and `lumOff` 0.5. The file lists these nine variations and
+  /// says nothing of what comes after them, so pass 9 starts the cycle again
+  /// (pass `p` varies as pass `p % 9`), as `colorStyle`'s `cycle` method
+  /// suggests: the Office theme's series 55 has series 1's colour.
+  ///
+  /// A scheme-bound colour keeps its slot and carries the variation's
+  /// `lumMod` and `lumOff`, so it exports as a scheme colour; its RGB value is
+  /// the variation applied to the colour's own RGB value in hue, saturation
+  /// and luminance (HSL). Accent 1 (`156082`) at `lumMod` 0.6 is `0D3A4E`,
+  /// accent 2 (`E97132`) `994010`. A fixed colour gives the fixed colour of
+  /// that RGB value. A scheme-bound colour that has a `lumMod` or `lumOff` of
+  /// its own composes with the variation when the two can be one: when its
+  /// `lumMod` plus `lumOff` is at most 1 (so its luminance is never clamped),
+  /// the result carries `lumMod` `m1 * m2` and `lumOff` `o1 * m2 + o2`; else
+  /// it is the fixed colour of the variation applied to its RGB value.
+  ///
+  /// A palette with black, white or greys can repeat a varied colour; the
+  /// Office theme repeats none in its 54 series of a cycle. Any index is
+  /// valid.
   ///
   /// Throws a [RangeError] when [index] is negative.
   ChartColor seriesColor(int index) {
     RangeError.checkNotNegative(index, 'index');
-    final int pass = index ~/ palette.length;
     final ChartColor base = palette[index % palette.length];
-    if (pass == 0) {
+    final (double mod, double off) =
+        _colorCycle[(index ~/ palette.length) % _colorCycle.length];
+    if (mod == 1 && off == 0) {
       return base;
     }
-    if (pass == 1) {
-      int lighter(int shift) {
-        final int value = (base.rgb >> shift) & 0xFF;
-        return (value * 0.6 + 255 * 0.4).round().clamp(0, 255);
-      }
-
-      final int rgb = lighter(16) << 16 | lighter(8) << 8 | lighter(0);
-      final ChartSchemeColor? slot = base.slot;
-      return slot == null
-          ? ChartColor.rgb(rgb)
-          : ChartColor.scheme(slot, rgb: rgb, lumMod: 0.6, lumOff: 0.4);
+    final int rgb = applyLuminance(base.rgb, mod, off);
+    final ChartSchemeColor? slot = base.slot;
+    if (slot == null) {
+      return ChartColor.rgb(rgb);
     }
-    final int rule = pass == 2 ? 1 : pass;
-    final bool odd = rule.isOdd;
-    final double factor =
-        math.pow(0.6, odd ? (rule + 1) ~/ 2 : rule ~/ 2) as double;
-    int channel(int shift) {
-      final int value = (base.rgb >> shift) & 0xFF;
-      final double derived = odd
-          ? value * factor
-          : value + (255 - value) * (1 - factor);
-      return derived.round().clamp(0, 255);
+    if (base.lumMod == 1 && base.lumOff == 0) {
+      return ChartColor.scheme(slot, rgb: rgb, lumMod: mod, lumOff: off);
     }
-
-    return ChartColor.rgb(channel(16) << 16 | channel(8) << 8 | channel(0));
+    if (base.lumMod + base.lumOff <= 1) {
+      return ChartColor.scheme(
+        slot,
+        rgb: rgb,
+        lumMod: base.lumMod * mod,
+        lumOff: base.lumOff * mod + off,
+      );
+    }
+    return ChartColor.rgb(rgb);
   }
 
   /// The colour of [series], which is the series at [index].
@@ -314,3 +316,18 @@ final class ChartTheme {
   @override
   String toString() => 'ChartTheme(${palette.length} colours, $exportColors)';
 }
+
+/// The variations of Excel's colour cycle as `lumMod` and `lumOff`, one per
+/// pass through the palette: `xl/charts/colors1.xml` of the owner's
+/// `chart_defaults.xlsx`.
+const List<(double, double)> _colorCycle = <(double, double)>[
+  (1, 0),
+  (0.6, 0),
+  (0.8, 0.2),
+  (0.8, 0),
+  (0.6, 0.4),
+  (0.5, 0),
+  (0.7, 0.3),
+  (0.7, 0),
+  (0.5, 0.5),
+];

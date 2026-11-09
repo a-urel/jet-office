@@ -65,6 +65,14 @@ void main() {
     }
   });
 
+  test('no repeat over the 54 series of the Office cycle', () {
+    final ChartTheme office = ChartTheme.office;
+    final Set<int> seen = <int>{
+      for (int i = 0; i < 54; i++) office.seriesColor(i).rgb,
+    };
+    expect(seen, hasLength(54));
+  });
+
   test('the first pass is the palette itself, slots kept', () {
     final ChartTheme office = ChartTheme.office;
     for (int i = 0; i < 6; i++) {
@@ -72,34 +80,83 @@ void main() {
     }
   });
 
-  test('series 7 to 12 are the palette lightened by 40 percent', () {
+  test("series 7 and 8 are Excel's colors1 variation lumMod 0.6", () {
+    // chart_defaults.xlsx, xl/charts/colors1.xml: the second variation.
     final ChartTheme office = ChartTheme.office;
-    final ChartColor seventh = office.seriesColor(6);
-    expect(seventh.slot, ChartSchemeColor.accent1);
-    expect(seventh.lumMod, 0.6);
-    expect(seventh.lumOff, 0.4);
-    expect(seventh.rgb, 0x73A0B4);
-    expect(office.seriesColor(7).rgb, 0xF2AA84);
-    expect(office.seriesColor(7).slot, ChartSchemeColor.accent2);
+    expect(
+      office.seriesColor(6),
+      ChartColor.scheme(ChartSchemeColor.accent1, rgb: 0x0D3A4E, lumMod: 0.6),
+    );
+    expect(
+      office.seriesColor(7),
+      ChartColor.scheme(ChartSchemeColor.accent2, rgb: 0x994010, lumMod: 0.6),
+    );
   });
 
-  test('a fixed palette lightens to a fixed colour', () {
+  test('series 13 is accent 1 at lumMod 0.8 and lumOff 0.2', () {
+    expect(
+      ChartTheme.office.seriesColor(12),
+      ChartColor.scheme(
+        ChartSchemeColor.accent1,
+        rgb: 0x1F8EC0,
+        lumMod: 0.8,
+        lumOff: 0.2,
+      ),
+    );
+  });
+
+  test('every pass follows the variations of colors1', () {
+    const List<(double, double)> variations = <(double, double)>[
+      (1, 0),
+      (0.6, 0),
+      (0.8, 0.2),
+      (0.8, 0),
+      (0.6, 0.4),
+      (0.5, 0),
+      (0.7, 0.3),
+      (0.7, 0),
+      (0.5, 0.5),
+    ];
+    final ChartTheme office = ChartTheme.office;
+    for (int i = 0; i < 60; i++) {
+      final (double mod, double off) = variations[(i ~/ 6) % 9];
+      final ChartColor color = office.seriesColor(i);
+      expect(color.slot, office.palette[i % 6].slot, reason: 'series $i');
+      expect(color.lumMod, mod, reason: 'series $i');
+      expect(color.lumOff, off, reason: 'series $i');
+    }
+    // Past the ninth variation the cycle starts again.
+    expect(office.seriesColor(54), office.palette[0]);
+  });
+
+  test('a fixed palette varies to a fixed colour', () {
     final ChartTheme theme = custom(
       palette: <ChartColor>[ChartColor.rgb(0x806040)],
     );
-    expect(theme.seriesColor(1), ChartColor.rgb(0xB3A08C));
+    expect(theme.seriesColor(1), ChartColor.rgb(0x4D3A26));
     expect(theme.seriesColor(1).slot, isNull);
   });
 
-  test('derived colours follow the rule', () {
+  test('a scheme colour with its own luminance composes', () {
     final ChartTheme theme = custom(
-      palette: <ChartColor>[ChartColor.rgb(0x806040)],
+      palette: <ChartColor>[
+        ChartColor.scheme(ChartSchemeColor.accent1, rgb: 0x156082, lumMod: 0.6),
+        ChartColor.scheme(
+          ChartSchemeColor.accent2,
+          rgb: 0xE97132,
+          lumMod: 0.75,
+          lumOff: 0.5,
+        ),
+      ],
     );
-    // p = 1: toward white by 0.4 (Excel's). p = 2: times 0.6. p = 3: times
-    // 0.36.
-    expect(theme.seriesColor(1).rgb, 0xB3A08C);
-    expect(theme.seriesColor(2).rgb, 0x4D3A26);
-    expect(theme.seriesColor(3).rgb, 0x2E2317);
+    // 0.6 then 0.6: L * 0.36, still a scheme colour.
+    final ChartColor composed = theme.seriesColor(2);
+    expect(composed.slot, ChartSchemeColor.accent1);
+    expect(composed.lumMod, closeTo(0.36, 1e-12));
+    expect(composed.lumOff, 0);
+    // 0.75 and 0.5 can pass 1 and be clamped: a fixed colour.
+    final ChartColor fixed = theme.seriesColor(3);
+    expect(fixed.slot, isNull);
   });
 
   test('seriesColor never throws past the palette', () {

@@ -29,10 +29,11 @@ is a live region and a screen reader announces each change of it.
 
 - The owner's J3 gallery check against Excel for Mac is done and recorded
   (`packages/jet_charts_core/docs/excel-checks.md`, "Milestone checks"); its
-  differences are fixed, but `column_negative` (kept). Series 7 to 12's
-  colours are an estimate from the owner's screenshot until an Excel-saved
-  copy of `gallery.xlsx` arrives. A later check's result goes there with the
-  owner, never without. The gallery has no screenshot of the running app: the
+  differences are fixed, but `column_negative` (kept). Series 7 and later
+  follow Excel's colour cycle (`colors1.xml`), and the gallery workbook writes
+  Excel's colour and style parts; the owner's re-check of
+  `column_eight_series` is pending. A later check's result goes there with
+  the owner, never without. The gallery has no screenshot of the running app: the
   machine that built it could not record the screen.
 - Whether a sandboxed macOS app sees Aptos Narrow (the gallery's header says
   which font it got); until known, goldens use Roboto.

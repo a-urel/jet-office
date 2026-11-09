@@ -193,10 +193,11 @@ by hand, then fix it.
   are fixed, but `column_negative` (kept, `docs/parity.md`). Still
   unconfirmed: Excel's gap width for clustered bars (182) and stacked ones
   (150, 100), written from memory in the gallery workbook (the check saw no
-  difference there, but read no file); the colours of series 7 to 12, an
-  estimate from the owner's screenshot that waits for an Excel-saved copy of
-  `gallery.xlsx`; Excel's palette from series 13; the spacing constants in
-  `docs/excel-checks.md`.
+  difference there, but read no file); what Excel's colour cycle does past
+  its nine variations (series 55 on); the spacing constants in
+  `docs/excel-checks.md`. Series 7 and later follow Excel's colour cycle,
+  `colors1.xml` of `chart_defaults.xlsx` (`ChartTheme.seriesColor`); the
+  owner's re-check of `column_eight_series` is pending.
 - Whether a sandboxed macOS app sees Aptos Narrow (Flutter side).
 - The tooltip box's spacing constants are not in `ChartTooltipStyle`, and
   `chartTooltipAt` resolves the chart again on each call (a caller that has

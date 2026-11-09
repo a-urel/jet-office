@@ -155,11 +155,12 @@ Each rule has the test that holds it.
 - **Dates are Excel serials** (the 1900 system, with its phantom 29 February
   1900), written in `m/d/yyyy` unless the category axis has a format.
   `chart_values_test.dart`, `chart_writer_test.dart` ("data").
-- **More than six series use `ChartTheme.colorOf`'s later passes:** series
-  7 to 12 of the Office theme are its accents lightened 40%, bound to the
-  scheme (`lumMod` 60000, `lumOff` 40000), after the owner's J3 gallery check,
-  their exact colour pending an Excel-saved copy of the gallery; series 13
-  on are derived fixed colours, this library's own rule. Ten series write and
+- **More than six series use `ChartTheme.colorOf`'s later passes:** Excel's
+  colour cycle (`colors1.xml` of the owner's `chart_defaults.xlsx`): series 7
+  to 12 of the Office theme are its accents at `lumMod` 60000, series 13 to 18
+  at `lumMod` 80000 and `lumOff` 20000, and so on through the file's nine
+  variations, each bound to the scheme; a fixed palette gives fixed colours
+  of the same variations. Ten series write and
   read back equal, and 10,000 points write and read in linear time.
   `chart_reader_test.dart` ("round trip"), `chart_writer_test.dart`
   ("colours").
@@ -242,9 +243,10 @@ chart that is only a view keeps its bytes until replaced.
 ## Open for both
 
 - The secondary axis, combination charts and the other kinds (J4).
-- Excel's palette past six series: series 7 to 12 await an Excel-saved copy
-  of the gallery (their colour is an estimate from the owner's screenshot);
-  from series 13 the colours are this library's own rule.
+- Excel's palette past 54 series: the colour cycle starts again after its
+  nine variations, which `colors1.xml` does not state (unconfirmed). The
+  owner's re-check of `column_eight_series` against the gallery workbook, now
+  with Excel's colour-style part, is pending.
 - The owner's reference workbook (`test/fixtures/owner/charts/`, steps in
   `TALIMATLAR.md`): every chart in it must read typed, and the writer's
   habits above are corrected against it. Until it arrives
