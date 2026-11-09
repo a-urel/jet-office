@@ -154,9 +154,10 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   children and a `cs:fontRef` holding `cs:schemeClr` for `a:schemeClr`, the
   two errors matched on their ids, the part's content type and the element.
   The `d1_corrupt.docx` negative control must still fail with it.
-  One error pair is ignored in every run, with or without the flag: the SDK 3.5.1 refuses the
-  `c:chart/c:extLst` extension `{56B9EC1D-385E-4148-901F-78D8002777C0}`
-  (`c16r3:dataDisplayOptions16`) that Excel itself writes in every chart part
+  One error pair is ignored in every run, with or without the flag: the SDK
+  3.5.1 refuses the `c:chart/c:extLst` extension
+  `{56B9EC1D-385E-4148-901F-78D8002777C0}` (`c16r3:dataDisplayOptions16`) that
+  Excel itself writes in every chart part
   (the owner's `chart_defaults.xlsx` fails the same way), so the tool ignores
   its `Sch_UndeclaredAttribute` and `Sch_InvalidElementContentExpectingComplex`
   on that `c:ext` of a chart part, at that path, holding exactly one

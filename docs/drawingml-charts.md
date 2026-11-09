@@ -52,7 +52,7 @@ Each rule has the test that holds it.
   form.** The bytes are held, not copied. `chart_part_test.dart`.
 - **Reading is lazy and never throws.** `chart`, `typed` and `issues` read on
   first use, once. Unreadable bytes give no chart and the issue `unreadable`.
-  `chart_part_test.dart`, `chart_reader_test.dart` ("unreadable input").
+  `chart_part_test.dart`, `chart_reader_test.dart` (the "unreadable input" test).
 - **A kind outside the model (a pie, a combination) or a third axis is
   `unsupportedKind`:** a view with the kind `unsupported`, no typed form.
   `chart_reader_test.dart`.
@@ -103,8 +103,9 @@ Each rule has the test that holds it.
   form writes a part that reads typed again, an opened part encodes its bytes.
   Longer runs: `dart run tool/fuzz_chart.dart --seeds 1-200 --cases 1000`.
   The XLSX fuzz corpora also hold `c1_kinds`, so every chart part name is
-  mutated there: the gate runs 500 cases per seed (`test/xlsx/read/fuzz_test.dart`,
-  "every part name is mutated in some corpus entry").
+  mutated there: the gate runs 500 cases per seed
+  (`test/xlsx/read/fuzz_test.dart`, "every part name is mutated in some corpus
+  entry").
 
 ### Writing
 
