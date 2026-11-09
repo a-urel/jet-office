@@ -1,5 +1,6 @@
 // Copied from packages/jet_charts_core/test/layout/support/chart_fuzz.dart
-// (commit ca1a64d), unchanged below this comment. `flutter test --platform
+// (as of commit ecfad8f plus the J4 fuzz change committed with this copy),
+// unchanged below this comment. `flutter test --platform
 // chrome` compiles only files under this package's `test/`, so the relative
 // import of the core's generator fails there. test/fuzz_copy_test.dart (VM)
 // fails when the copy and the core's file differ: copy the file again with
@@ -88,12 +89,36 @@ final class LayoutFuzzCase {
       )
       ..writeln('categoryAxis: ${_axis(chart.categoryAxis)}')
       ..writeln('valueAxis: ${_axis(chart.valueAxis)}');
+    final ChartAxis? secondary = chart.secondaryValueAxis;
+    out
+      ..writeln(
+        'secondaryValueAxis: ${secondary == null ? 'null' : _axis(secondary)}',
+      )
+      ..writeln(
+        'holeSizePercent: ${chart.holeSizePercent}, '
+        'centerText: ${_quote(chart.centerText)}',
+      )
+      ..writeln(
+        'dataLabels: showValue ${chart.dataLabels.showValue}, '
+        'showPercent ${chart.dataLabels.showPercent}, '
+        'minShare ${chart.dataLabels.minShare}',
+      )
+      ..writeln(
+        'theme: areaOpacity ${theme.areaOpacity}, '
+        'areaLine ${theme.areaLine}, '
+        'sliceBorderWidth ${theme.sliceBorderWidth}, '
+        'sparklineWidth ${theme.sparklineWidth}, '
+        'palette ${theme.palette.length}',
+      );
     for (int s = 0; s < chart.series.length; s++) {
       final ChartSeries series = chart.series[s];
       out
         ..writeln(
           'series $s: name ${series.name.values.map(_quote).toList()}, '
-          'formatCode ${_quote(series.formatCode)}',
+          'formatCode ${_quote(series.formatCode)}, '
+          'kind ${series.kind?.name}, axis ${series.axis.name}, '
+          'smooth ${series.smooth}, '
+          'pointColors ${series.pointColors.map((c) => c?.rgb).toList()}',
         )
         ..writeln(
           '  categories: '
@@ -317,7 +342,7 @@ LayoutFuzzCase layoutFuzzCase(int seed, int index) {
 
   final ChartAxis categoryAxis = axis(value: false);
   final ChartAxis valueAxis = axis(value: true);
-  final Chart chart = Chart(
+  final Chart base = Chart(
     kind: kind,
     grouping: grouping,
     series: series,
@@ -335,7 +360,7 @@ LayoutFuzzCase layoutFuzzCase(int seed, int index) {
     valueAxis: valueAxis,
   );
   final bool custom = r.nextBool();
-  final ChartTheme theme = custom
+  final ChartTheme baseTheme = custom
       ? ChartTheme.office.copyWith(
           palette: <ChartColor>[
             for (int i = 0; i < 3; i++) ChartColor.rgb(r.nextInt(0x1000000)),
@@ -357,15 +382,187 @@ LayoutFuzzCase layoutFuzzCase(int seed, int index) {
   ];
   final (String localeName, FormatLocale locale) =
       locales[r.nextInt(locales.length)];
+  // The J4 fields come from a second generator, so the cases above keep
+  // their values and the ones below do not depend on them.
+  final math.Random x = math.Random(seed * 7919 + index * 104729 + 13);
+  final Chart chart = _withJ4(x, base, categoryCount);
+  final (ChartTheme theme, String themeName) = _j4Theme(
+    x,
+    baseTheme,
+    custom ? 'custom' : 'office',
+  );
   return LayoutFuzzCase(
     chart: chart,
     theme: theme,
-    themeName: custom ? 'custom' : 'office',
+    themeName: themeName,
     size: size,
     measurer: measurer,
     locale: locale,
     localeName: localeName,
   );
+}
+
+/// The kinds a J4 case may draw, among them every kind of [ChartKind] the
+/// layout draws beyond the four framed ones.
+const List<ChartKind> _j4Kinds = <ChartKind>[
+  ChartKind.pie,
+  ChartKind.pie,
+  ChartKind.donut,
+  ChartKind.donut,
+  ChartKind.sparkline,
+  ChartKind.scatter,
+  ChartKind.scatter,
+  ChartKind.combination,
+  ChartKind.combination,
+  ChartKind.combination,
+];
+
+/// A colour or `null`, for a point colour.
+ChartColor? _pointColor(math.Random x) =>
+    x.nextInt(3) == 0 ? null : ChartColor.rgb(x.nextInt(0x1000000));
+
+/// Text for a centre: empty, short, long, or with line breaks.
+String _centerText(math.Random x) {
+  switch (x.nextInt(4)) {
+    case 0:
+      return '';
+    case 1:
+      return _text(x, 6);
+    case 2:
+      return _text(x, 300);
+    default:
+      return '${_text(x, 12)}\n${_text(x, 12)}\n${_text(x, 12)}';
+  }
+}
+
+/// [base] with the J4 fields drawn from [x]: more kinds, series kinds and
+/// axis bindings, a secondary axis, smooth lines, point colours, a hole, a
+/// centre text, and the pie data label options.
+Chart _withJ4(math.Random x, Chart base, int categoryCount) {
+  final ChartKind kind = x.nextInt(10) < 4
+      ? _j4Kinds[x.nextInt(_j4Kinds.length)]
+      : base.kind;
+  final bool combination = kind == ChartKind.combination;
+  // Series kinds: all of ChartKind in a combination (the layout draws any
+  // other as a column), now and then in other charts, which ignore them.
+  final bool seriesKinds = combination || x.nextInt(8) == 0;
+  final bool secondary = x.nextInt(3) != 0;
+  final bool smooth = x.nextInt(3) == 0;
+  final int pointMode = x.nextInt(4);
+  final List<ChartSeries> series = <ChartSeries>[
+    for (final ChartSeries s in base.series)
+      s.copyWith(
+        kind: seriesKinds && x.nextInt(8) != 0
+            ? ChartKind.values[x.nextInt(ChartKind.values.length)]
+            : null,
+        axis: secondary && x.nextInt(2) == 0
+            ? ChartAxisBinding.secondary
+            : ChartAxisBinding.primary,
+        smooth: smooth && x.nextInt(4) != 0,
+        pointColors: <ChartColor?>[
+          // None, fewer than the data, as many, or more.
+          if (pointMode != 0)
+            for (
+              int i = 0,
+                  n = switch (pointMode) {
+                    1 => x.nextInt(categoryCount + 1),
+                    2 => categoryCount,
+                    _ => categoryCount + 1 + x.nextInt(8),
+                  };
+              i < n;
+              i++
+            )
+              _pointColor(x),
+        ],
+      ),
+  ];
+  ChartAxis? secondaryAxis;
+  if (x.nextInt(3) != 0) {
+    double? min;
+    double? max;
+    double? majorUnit;
+    if (x.nextInt(4) == 0) {
+      min = _bound(x);
+      if (x.nextBool()) {
+        max = _bound(x);
+      }
+      if (x.nextBool()) {
+        majorUnit = _majorUnit(x);
+      }
+    }
+    secondaryAxis = ChartAxis(
+      title: x.nextInt(3) == 0 ? _text(x, 200) : null,
+      min: min,
+      max: max,
+      majorUnit: majorUnit,
+      formatCode: _formatCode(x),
+      visible: x.nextInt(5) != 0,
+      gridLines: x.nextBool(),
+    );
+  }
+  final ChartDataLabels labels = base.dataLabels;
+  return Chart(
+    kind: kind,
+    grouping: base.grouping,
+    series: series,
+    categoryAxis: base.categoryAxis,
+    valueAxis: base.valueAxis,
+    secondaryValueAxis: secondaryAxis,
+    title: base.title,
+    legend: base.legend,
+    dataLabels: ChartDataLabels(
+      visible: labels.visible,
+      formatCode: labels.formatCode,
+      showValue: x.nextInt(4) != 0,
+      showPercent: x.nextBool(),
+      minShare: switch (x.nextInt(4)) {
+        0 => 0,
+        1 => 1,
+        2 => x.nextDouble(),
+        _ => 0.05,
+      },
+    ),
+    holeSizePercent: x.nextBool() ? 10 + x.nextInt(81).toDouble() : 75,
+    centerText: x.nextInt(3) == 0 ? _centerText(x) : null,
+  );
+}
+
+/// [base] with the J4 theme values drawn from [x], or a theme of
+/// `ChartTheme.fromColors` in light or dark. Returns it with its name.
+(ChartTheme, String) _j4Theme(math.Random x, ChartTheme base, String name) {
+  ChartTheme theme = base;
+  String themeName = name;
+  switch (x.nextInt(4)) {
+    case 0:
+    case 1:
+      break;
+    default:
+      final bool dark = x.nextBool();
+      theme = ChartTheme.fromColors(
+        palette: <ChartColor>[
+          for (int i = 0, n = 1 + x.nextInt(8); i < n; i++)
+            ChartColor.rgb(x.nextInt(0x1000000)),
+        ],
+        fontFamily: 'Test',
+        text: ChartColor.rgb(dark ? 0xEEEEEE : 0x222222),
+        background: ChartColor.rgb(dark ? 0x121212 : 0xFFFFFF),
+        fontSize: 6 + x.nextInt(12).toDouble(),
+      );
+      themeName = dark ? 'fromColors-dark' : 'fromColors-light';
+  }
+  const List<double> widths = <double>[0, 0.75, 3, 40, 1e4];
+  theme = theme.copyWith(
+    areaOpacity: switch (x.nextInt(4)) {
+      0 => 1,
+      1 => 0.5,
+      2 => 1e-9,
+      _ => x.nextDouble() * 0.99 + 0.01,
+    },
+    areaLine: x.nextBool(),
+    sliceBorderWidth: widths[x.nextInt(widths.length)],
+    sparklineWidth: widths[x.nextInt(widths.length)],
+  );
+  return (theme, themeName);
 }
 
 /// An integer fingerprint of [c] that does not depend on the platform's
@@ -449,6 +646,37 @@ int layoutFuzzFingerprint(LayoutFuzzCase c) {
   for (final ChartColor color in c.theme.palette) {
     add(color.rgb);
   }
+  final ChartAxis? secondary = chart.secondaryValueAxis;
+  if (secondary == null) {
+    add(9);
+  } else {
+    addText(secondary.title);
+    addDouble(secondary.min);
+    addDouble(secondary.max);
+    addDouble(secondary.majorUnit);
+    addText(secondary.formatCode);
+    add(secondary.visible ? 1 : 0);
+    add(secondary.gridLines ? 1 : 0);
+  }
+  addDouble(chart.holeSizePercent);
+  addText(chart.centerText);
+  add(chart.dataLabels.showValue ? 1 : 0);
+  add(chart.dataLabels.showPercent ? 1 : 0);
+  addDouble(chart.dataLabels.minShare);
+  for (final ChartSeries s in chart.series) {
+    add(s.kind?.index ?? 99);
+    add(s.axis.index);
+    add(s.smooth ? 1 : 0);
+    add(s.pointColors.length);
+    for (final ChartColor? color in s.pointColors) {
+      add(color?.rgb ?? -1);
+    }
+  }
+  addDouble(c.theme.areaOpacity);
+  add(c.theme.areaLine ? 1 : 0);
+  addDouble(c.theme.sliceBorderWidth);
+  addDouble(c.theme.sparklineWidth);
+  addText(c.themeName);
   addDouble(c.size.width);
   addDouble(c.size.height);
   addDouble(c.measurer.charWidthFactor);

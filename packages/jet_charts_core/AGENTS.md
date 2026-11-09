@@ -152,7 +152,15 @@ and line breaks in text, fixed bounds with a fixed major unit down to `5e-324`
 or one to ignore, format codes on axes, series and data labels, tiny to large
 sizes) and requires of each that `layoutChart` throws nothing,
 every number is finite, `findOverlaps` finds nothing and every primitive lies
-inside the size (marks inside a clip are checked for finiteness only). The gate
+inside the size (marks inside a clip are checked for finiteness only). The J4
+fields come from a second `Random`, so they never move the cases above: pie,
+donut, sparkline, scatter and combination charts, series `kind`s of every
+`ChartKind` and random `axis` bindings with and without `secondaryValueAxis`,
+`smooth`, `pointColors` (null entries, shorter and longer than the data),
+`holeSizePercent` 10 to 90, `centerText` (empty, long, with line breaks),
+`showValue`, `showPercent` and `minShare`, and themes with `areaOpacity`,
+`areaLine`, `sliceBorderWidth` and `sparklineWidth` from 0 to 1e4, and
+`ChartTheme.fromColors` in light and dark. The gate
 runs seeds 1 to 4 with 100 cases each, the same cases on the VM and in Chrome
 (a fingerprint test proves it); longer runs by hand:
 

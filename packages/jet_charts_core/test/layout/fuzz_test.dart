@@ -11,7 +11,7 @@ const int _cases = 100;
 
 /// The fingerprint of the gate's cases, computed once on the VM. The Chrome
 /// leg compares it, which proves a browser draws the same cases.
-const int _fingerprint = 202916784;
+const int _fingerprint = 256557245;
 
 const ChartSize _size = ChartSize(100, 50);
 final ChartTextStyle _style = ChartTheme.office.axisLabels;
