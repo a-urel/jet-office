@@ -2,9 +2,10 @@
 /// workbook features (milestones W3 and W4).
 ///
 /// [featureCorpus] is its own corpus, so the reader's pinned one and its
-/// cases do not change: the `m3_*` and `m4_*` fixtures, [excelFeatureFile], a
-/// sheet as Excel writes it, with Excel 2010 rules, and [excelObjectsFile],
-/// with more objects than the model types. [featureFuzzCases] derives
+/// cases do not change: the `m3_*` and `m4_*` fixtures, `c1_kinds` (a
+/// drawing of chart parts, C1), [excelFeatureFile], a sheet as Excel writes
+/// it, with Excel 2010 rules, and [excelObjectsFile], with more objects than
+/// the model types. [featureFuzzCases] derives
 /// mutated copies with the machinery of `test/support/fuzz_mutations.dart`,
 /// and with mutations that keep the XML well formed, so most cases reach the
 /// features' own parsers instead of stopping at the XML reader.
@@ -26,6 +27,7 @@ import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 
 import '../../../../tool/src/part_compare.dart';
+import '../../../fixtures/c1_fixtures.dart';
 import '../../../fixtures/fixture.dart';
 import '../../../fixtures/m3_fixtures.dart';
 import '../../../fixtures/m4_fixtures.dart';
@@ -179,11 +181,17 @@ Uint8List excelFeatureFile() {
 }
 
 /// The packages the fuzzer mutates, in a fixed order, entries stored: every
-/// fixture of `m3Fixtures()` and `m4Fixtures()`, then [excelFeatureFile] as
-/// `excel_features` and [excelObjectsFile] as `excel_objects`.
+/// fixture of `m3Fixtures()` and `m4Fixtures()`, then `c1_kinds`, a drawing of
+/// twelve chart parts that the model keeps as they are (C1), then
+/// [excelFeatureFile] as `excel_features` and [excelObjectsFile] as
+/// `excel_objects`.
 List<({String name, Uint8List bytes})> featureCorpus() =>
     <({String name, Uint8List bytes})>[
-      for (final Fixture f in <Fixture>[...m3Fixtures(), ...m4Fixtures()])
+      for (final Fixture f in <Fixture>[
+        ...m3Fixtures(),
+        ...m4Fixtures(),
+        ...c1Fixtures().where((Fixture f) => f.name == 'c1_kinds'),
+      ])
         (name: f.name, bytes: _stored(f.build())),
       (name: 'excel_features', bytes: excelFeatureFile()),
       (name: 'excel_objects', bytes: _stored(excelObjectsFile().bytes)),

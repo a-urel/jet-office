@@ -83,6 +83,9 @@ final class DrawingChart implements PartContent {
   /// Replaces the part with [space], written with [theme] at once; later
   /// [encode] calls return the same bytes.
   ///
+  /// [theme] is the one the part is written with; the theme given to
+  /// [DrawingChart.opened], if any, is ignored here.
+  ///
   /// Throws an [ArgumentError] when the writer cannot express the chart, and
   /// then the part is as it was.
   void replace(DrawingChartSpace space, ChartTheme theme) {

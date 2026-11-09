@@ -77,7 +77,7 @@ void main() {
       expect(part.changed, isFalse);
     });
 
-    test('reading is lazy and happens once', () {
+    test('reads once: issues is the same list each time', () {
       final DrawingChart part = DrawingChart.opened(
         Uint8List.fromList(<int>[0xff, 0xfe]),
       );

@@ -26,8 +26,9 @@
 /// `exerciseFeatureCase`, which proves undo too and which
 /// `featureFuzzCases(s, i + 1)` reproduces.
 ///
-/// The quality gate runs seeds 1 to 4 with 100 cases each
-/// (`test/xlsx/read/fuzz_test.dart`, `test/xlsx/model/feature_fuzz_test.dart`).
+/// The quality gate runs seeds 1 to 4 with 500 cases each
+/// (`test/xlsx/read/fuzz_test.dart`) and with 100 cases each
+/// (`test/xlsx/model/feature_fuzz_test.dart`).
 library;
 
 import 'dart:io';

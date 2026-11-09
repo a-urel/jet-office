@@ -405,11 +405,15 @@ dart test -p chrome benchmark
 ## Fuzzing
 
 `test/xlsx/read/fuzz_test.dart` mutates a corpus of fixtures and producer
-files (`test/xlsx/read/support/fuzz.dart`) and requires the reader to throw
-nothing but `XlsxReadException`. The gate runs seeds 1 to 4 with 100 cases
-each, the same cases on the VM and in Chrome (except the two deflated
-corpus entries, whose cases may differ by platform, decision 0006). For
-longer runs, by hand:
+files (`test/xlsx/read/support/fuzz.dart`; `c1_kinds` among them, with its
+twelve chart parts) and requires the reader to throw nothing but
+`XlsxReadException`. The gate runs seeds 1 to 4 with 500 cases each, the same
+cases on the VM and in Chrome (except the two deflated corpus entries, whose
+cases may differ by platform, decision 0006). It ran 100 until `c1_kinds`
+joined the corpus: the fixed seeds must mutate every part name of the corpus
+(`every part name is mutated in some corpus entry`), and 400 left
+`xl/charts/chart12.xml` unmutated; raise the count again when a new entry
+makes that test fail. For longer runs, by hand:
 
 ```bash
 dart run tool/fuzz_reader.dart --seeds 1-200 --cases 1000
@@ -425,9 +429,31 @@ The number formatter's fuzz test and `tool/fuzz_formatter.dart` are in
 The chart layout's fuzz test and `tool/fuzz_layout.dart` are in
 `packages/jet_charts_core` (its `AGENTS.md`, "Fuzzing").
 
+`test/drawingml/chart/chart_fuzz_test.dart` fuzzes the chart reader and the
+chart part handle (C1, `test/drawingml/chart/support/chart_fuzz.dart`; seeds 1
+to 4, 100 cases each). Its corpus is text, never a ZIP: the two Excel parts of
+`excel_charts.dart` and every chart of `c1_kinds` and `c1_options` as the
+writer writes it, each read in its own theme. The mutations are the reader
+fuzz's on the part's bytes, and an attribute's value or an element's text
+replaced by `abc`, twenty digits, `-`, `NaN` or `1e999`.
+`readDrawingChartSpace` must throw nothing; a typed form must write a part
+that reads as the same typed form again; `DrawingChart.opened` must read as
+the reader does and encode the bytes unchanged. A fingerprint of the cases
+proves the VM and Chrome get the same ones; a change to the writer or to the
+C1 fixtures' charts changes it. Longer runs, by hand:
+
+```bash
+dart run tool/fuzz_chart.dart --seeds 1-200 --cases 1000
+```
+
+It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
+1 on any, 2 on bad arguments. Pin a failure as a unit test in the owning
+`*_test.dart` first.
+
 `test/xlsx/model/feature_fuzz_test.dart` fuzzes the model's sheet and
 workbook features (seeds 1 to 4, 100 cases each, over the `m3_*` and `m4_*`
-fixtures, a sheet as Excel writes it and the `excel_objects` producer file:
+fixtures, `c1_kinds`, a sheet as Excel writes it and the `excel_objects`
+producer file:
 whole mutated files, many of them well formed so they reach the features' own
 parsers; open, then reading, setting, undoing and saving every W3 and W4 member
 throw nothing but `XlsxReadException`, and undoing the edits of a file restores
