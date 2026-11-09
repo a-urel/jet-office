@@ -108,8 +108,9 @@ the labels it left out (`ChartHiddenLabel`). Column, bar, line and area charts
 of every grouping are laid out; the frame comes first (`frame.dart`), the axes
 and category labels (`axis_layout.dart`), marks, data labels, legend.
 
-- Collision rules: category labels turn (0, -45, -90 degrees), skip every
-  `N`th or are cut with an ellipsis; a legend that does not fit shrinks to
+- Collision rules: category labels wrap at spaces (level, at most three
+  lines), turn (0, -45, -90 degrees), skip every `N`th or are cut with an
+  ellipsis; a legend that does not fit shrinks to
   fewer entries or moves; data labels give way to marks and each other, and
   those that cannot be placed go to `hidden` (`degradation.dart` orders what
   goes first). `findOverlaps` must find nothing in any layout.
@@ -192,8 +193,9 @@ by hand, then fix it.
 - The tooltip box's spacing constants are not in `ChartTooltipStyle`, and
   `chartTooltipAt` resolves the chart again on each call (a caller that has
   hit tested passes `hits`, so the layout is not hit tested twice).
-- Category labels: Excel's turning or wrapping beyond the label spacing
-  is unknown; long labels may wrap at 0 degrees as Excel does.
+- Category labels: level labels wrap onto at most three lines before they
+  turn (the owner's J3 gallery check, `column_long_labels`); where Excel breaks
+  a line, how many lines it allows and when it turns instead are unknown.
 - Layout cost on large series: a 10,000-point line about 250 ms on the VM and
   520 ms in Chrome, 3,650 categories of two series about 100 and 190 ms
   (`packages/jet_charts_flutter/docs/benchmark.md`); data-label placement is

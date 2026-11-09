@@ -355,7 +355,8 @@ extension FramePaint on FrameContext {
       if (wanted.title && !shown.title) (ids.title, chart.title!.text),
       if (wanted.categoryLabels)
         for (int i = 0; i < resolved.categoryCount; i++)
-          if (drawn[i] != resolved.categoryLabels[i])
+          if (drawn[i] == null ||
+              !isWrappingOf(drawn[i]!, resolved.categoryLabels[i]))
             (ids.axisLabelId(ids.categoryAxis, i), resolved.categoryLabels[i]),
       if (wanted.valueLabels)
         for (int i = 0; i < ticks.length; i++)

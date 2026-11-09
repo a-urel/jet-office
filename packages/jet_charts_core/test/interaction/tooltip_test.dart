@@ -244,8 +244,10 @@ void main() {
   });
 
   test('a cut category label gives its full text', () {
+    // At 240 wide a word of these labels is wider than its slot, so they
+    // cannot wrap: they turn and are cut.
     final Chart chart = _chart('column_long_labels');
-    final ChartLayout layout = _layout(chart);
+    final ChartLayout layout = _layout(chart, size: const ChartSize(240, 240));
     final TextPrimitive label = _byId<TextPrimitive>(
       layout,
       'axis/category/label/1',

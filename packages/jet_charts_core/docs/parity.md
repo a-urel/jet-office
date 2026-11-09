@@ -25,7 +25,7 @@ theme's in `excel-checks.md`.
 | Value axis scale: minimum, maximum | Every row of both owner runs but `F05` | `F05` (fixed minimum equal to fixed maximum) |
 | Value axis major unit | Every row of the full run but `F05`, through `excelMaxIntervals` at Excel's plot length and font | Coarser when tick labels would touch; thinned at a fixed unit |
 | Value tick labels | Font, size, colour; number format | Coarsening and thinning |
-| Category labels | Level, then skipped at most every second (Excel's spacing never exceeded 2 in the C rows) | Placed in a band under the plot; turned and cut by this package's own order |
+| Category labels | Level, then skipped at most every second (Excel's spacing never exceeded 2 in the C rows); long labels stay level, wrapped onto lines at spaces (matched in the owner's J3 gallery check, `column_long_labels`: five labels on two lines each, the value axis 0 to 160 by 20) | Placed in a band under the plot; wrapped onto at most three lines, then turned and cut by this package's own order |
 | Grid lines | Value grid on, category grid off, 0.75 pt `D9D9D9` | None |
 | Axis lines | Category axis line, 0.75 pt `D9D9D9`, no value axis line | Same in the Office theme; other themes draw a value axis line unless `valueAxisLine` is false |
 | Bars | Gap width 219, overlap -27, no outline (Excel's clustered column default) | Gap and overlap clamped to Excel's ranges; the same gap and overlap for every bar kind and grouping (see below) |
@@ -83,12 +83,22 @@ theme's in `excel-checks.md`.
   by negative bars and chose to keep them under the plot.
 - **Turned labels sit `labelGap` below the plot** and move down to clear value
   label 0 where they would meet it.
-- **The order of tries is this package's**: level labels showing every label,
-  then every second; then turned 45 degrees for every first, second and third;
-  then turned 90 degrees, skipping as needed, cut with `…`. Excel's label
-  spacing in the C rows (2 at 180 pt wide, 1 at 360 and 720, for 3, 12 and 30
-  characters) is why level labels skip at most every second; how Excel turns
-  or wraps was not measured.
+- **The order of tries is this package's**: level labels showing every label;
+  level labels showing every label, each wrapped at spaces onto at most three
+  lines no wider than its slot (the distance between ticks less `minTextGap`);
+  level labels showing every second; then turned 45 degrees for every first,
+  second and third; then turned 90 degrees, skipping as needed, cut with `…`.
+  Excel's label spacing in the C rows (2 at 180 pt wide, 1 at 360 and 720, for
+  3, 12 and 30 characters) is why level labels skip at most every second. The
+  owner's J3 gallery check (`column_long_labels`, 360 by 216) saw Excel keep
+  five long labels level on two lines rather than turn them; where Excel
+  breaks a line, how many lines it allows and when it turns instead were not
+  measured. A word wider than its slot cannot wrap, so such labels turn. Each
+  line takes as many words as fit, so a line may break elsewhere than Excel's
+  (in Roboto, "Northern / region, first half" where Excel shows "Northern
+  region, / first half"). On tick marks (an area chart) a wrapped try that
+  lacks room past the axis' ends asks the frame for it only when the labels
+  would still keep apart on the shortened axis.
 
 ### Text that does not fit
 

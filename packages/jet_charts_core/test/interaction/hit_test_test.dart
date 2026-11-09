@@ -122,7 +122,11 @@ void main() {
   });
 
   test('a turned label is hit inside its corners only', () {
-    final ChartLayout layout = _gallery('column_long_labels');
+    // At 240 wide a word of these labels is wider than its slot, so they
+    // cannot wrap: they turn.
+    final ChartLayout layout = galleryCharts()
+        .firstWhere((GalleryChart g) => g.name == 'column_long_labels')
+        .layout(const ChartSize(240, 240));
     final TextPrimitive label = _byId<TextPrimitive>(
       layout,
       'axis/category/label/0',

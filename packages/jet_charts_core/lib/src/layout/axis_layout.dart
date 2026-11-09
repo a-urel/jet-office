@@ -5,8 +5,8 @@
 /// area charts and horizontal under it for bar charts; the category axis takes
 /// the other side. Tick labels sit outside the plot, `labelGap` from it, and
 /// never inside the plot. Category labels never collide: [planCategoryLabels]
-/// skips, then turns, then cuts them, and [placeCategoryLabels] puts them
-/// down.
+/// wraps, skips, then turns, then cuts them, and [placeCategoryLabels] puts
+/// them down.
 library;
 
 import 'dart:math' as math;
@@ -226,8 +226,9 @@ final class CategoryLabelPlan {
   /// The indexes of the categories whose labels are shown, ascending.
   final List<int> shown;
 
-  /// The shown labels as drawn, one for each of [shown]: the full text, or
-  /// the text cut with `…`.
+  /// The shown labels as drawn, one for each of [shown]: the full text, the
+  /// text wrapped onto lines at spaces (see [isWrappingOf]), or the text cut
+  /// with `…`.
   final List<MeasuredLabel> labels;
 
   /// How far the shown labels reach before the axis' start (the plot's left,
@@ -300,15 +301,42 @@ final class CategoryLabelPlan {
 /// The ellipsis a cut label ends in.
 const String ellipsis = '…';
 
+/// The most lines a level category label is wrapped onto.
+const int maxWrappedLines = 3;
+
+/// Whether [drawn] is [text] whole: equal to it, or wrapped, with some of
+/// its spaces turned into line breaks and nothing else changed.
+bool isWrappingOf(String drawn, String text) {
+  if (drawn == text) {
+    return true;
+  }
+  if (drawn.length != text.length) {
+    return false;
+  }
+  for (int i = 0; i < drawn.length; i++) {
+    final int a = drawn.codeUnitAt(i);
+    final int b = text.codeUnitAt(i);
+    if (a != b && (a != 0x0A || b != 0x20)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /// Plans the category [labels] along an axis of [axisLength], their band at
 /// most [maxDepth] deep (40% of the space left for the plot and the band,
 /// less the labels' offset from the plot).
 ///
-/// Under a horizontal axis it tries, in order, 0 degrees showing every `N`th
-/// label for `N` = 1, 2; then -45 degrees for `N` = 1, 2, 3; then -90
-/// degrees for `N` = 1, 2, … until they fit. Level labels skip at most every
-/// second because Excel's label spacing never exceeded 2 in the owner's full
-/// run (the C group, 3 to 30 characters at 180 to 720 points wide). Shown
+/// Under a horizontal axis it tries, in order, 0 degrees showing every label;
+/// 0 degrees showing every label, each wrapped at spaces onto at most
+/// [maxWrappedLines] lines no wider than its slot (the distance between
+/// ticks less `minTextGap`; a word wider than the slot cannot wrap and fails
+/// the try), as Excel for Mac keeps long labels level on two lines (the
+/// owner's J3 gallery check, `column_long_labels`); 0 degrees showing every
+/// second label; then -45 degrees for `N` = 1, 2, 3; then -90 degrees for
+/// `N` = 1, 2, … until they fit. Level labels skip at most every second
+/// because Excel's label spacing never exceeded 2 in the owner's full run
+/// (the C group, 3 to 30 characters at 180 to 720 points wide). Shown
 /// labels fit when no two come closer than `minTextGap`, their band is no
 /// deeper than [maxDepth], and they reach no further than [roomBefore]
 /// before the axis' start and [roomAfter] past its end: the room the frame
@@ -365,33 +393,53 @@ CategoryLabelPlan planCategoryLabels(
   if (!(planner.step > 0) || !(maxDepth > 0) || !axisLength.isFinite) {
     return CategoryLabelPlan(fits: false);
   }
-  final List<(int, int)> tries = vertical
-      ? <(int, int)>[for (int n = 1; n <= labels.length; n++) (0, n)]
-      : <(int, int)>[
-          for (int n = 1; n <= 2; n++) (0, n),
-          for (int n = 1; n <= 3; n++) (45, n),
-          for (int n = 1; n <= labels.length; n++) (90, n),
+  // A try is an angle, a stride and whether level labels are wrapped.
+  final List<(int, int, bool)> tries = vertical
+      ? <(int, int, bool)>[
+          for (int n = 1; n <= labels.length; n++) (0, n, false),
+        ]
+      : <(int, int, bool)>[
+          (0, 1, false),
+          (0, 1, true),
+          (0, 2, false),
+          for (int n = 1; n <= 3; n++) (45, n, false),
+          for (int n = 1; n <= labels.length; n++) (90, n, false),
         ];
   final Map<int, List<MeasuredLabel?>> cut = <int, List<MeasuredLabel?>>{};
-  for (final (int angle, int every) in tries) {
-    final List<MeasuredLabel?> drawn = angle == 0 && !vertical
-        ? labels
-        : cut.putIfAbsent(angle, () => planner.cut(angle, measurer, style));
+  List<MeasuredLabel>? wrapped;
+  bool wrapTried = false;
+  for (final (int angle, int every, bool wrap) in tries) {
+    final List<MeasuredLabel?> drawn;
+    if (wrap) {
+      if (!wrapTried) {
+        wrapTried = true;
+        wrapped = planner.wrap(measurer, style);
+      }
+      if (wrapped == null) {
+        continue;
+      }
+      drawn = wrapped;
+    } else {
+      drawn = angle == 0 && !vertical
+          ? labels
+          : cut.putIfAbsent(angle, () => planner.cut(angle, measurer, style));
+    }
     final CategoryLabelPlan? plan = planner.attempt(drawn, angle, every);
     if (plan != null) {
-      return planner.reserved(plan, angle, measurer, style);
+      return planner.reserved(plan, angle, drawn, measurer, style);
     }
   }
-  if (planner.crampedAngles.isEmpty) {
+  if (planner.cramped.isEmpty) {
     return CategoryLabelPlan(fits: false);
   }
   double reserve = 0;
   double reserveAfter = 0;
-  for (final int angle in planner.crampedAngles) {
-    reserve = math.max(reserve, planner.reserve(angle, measurer, style));
+  for (final (int angle, List<MeasuredLabel?> drawn, bool _)
+      in planner.cramped) {
+    reserve = math.max(reserve, planner.reserve(angle, drawn, measurer, style));
     reserveAfter = math.max(
       reserveAfter,
-      planner.reserveAfter(angle, measurer, style),
+      planner.reserveAfter(angle, drawn, measurer, style),
     );
   }
   return CategoryLabelPlan(
@@ -434,9 +482,11 @@ final class _Planner {
 
   static const double _tolerance = 1e-9;
 
-  /// The angles of the tries that failed only for want of room past the
-  /// axis' ends.
-  final Set<int> crampedAngles = <int>{};
+  /// The angles, the labels as drawn, and whether they would still keep
+  /// apart on the axis shortened by the room they lack, of the tries that
+  /// failed only for want of room past the axis' ends.
+  final List<(int, List<MeasuredLabel?>, bool)> cramped =
+      <(int, List<MeasuredLabel?>, bool)>[];
 
   /// The depth across the axis of a label of [size] at [angle].
   double depth(ChartSize size, int angle) {
@@ -494,26 +544,118 @@ final class _Planner {
       cutOne(index, angle, measurer, style),
   ];
 
-  /// [plan], tried at [angle], with its [CategoryLabelPlan.reserveBefore].
+  /// [labels], each wrapped at spaces onto at most [maxWrappedLines] lines
+  /// no wider than the slot ([step] less [minTextGap]); `null` when some
+  /// label cannot be, or when wrapping changes no label.
+  List<MeasuredLabel>? wrap(TextMeasurer measurer, ChartTextStyle style) {
+    final double slot = step - minTextGap;
+    if (!(slot > 0)) {
+      return null;
+    }
+    bool changed = false;
+    final List<MeasuredLabel> wrapped = <MeasuredLabel>[];
+    for (final MeasuredLabel label in labels) {
+      final MeasuredLabel? one = wrapOne(label, slot, measurer, style);
+      if (one == null) {
+        return null;
+      }
+      changed = changed || !identical(one, label);
+      wrapped.add(one);
+    }
+    return changed ? wrapped : null;
+  }
+
+  /// [label] wrapped at spaces onto lines no wider than [slot], each line
+  /// taking as many words as fit; [label] itself when it fits whole, and
+  /// `null` when a word is wider than [slot] or more than
+  /// [maxWrappedLines] lines are needed.
+  MeasuredLabel? wrapOne(
+    MeasuredLabel label,
+    double slot,
+    TextMeasurer measurer,
+    ChartTextStyle style,
+  ) {
+    if (label.size.width <= slot + _tolerance) {
+      return label;
+    }
+    bool fits(String text) =>
+        measurer.measure(text, style).width <= slot + _tolerance;
+    final List<String> lines = <String>[];
+    for (final String line in label.text.split('\n')) {
+      final List<String> words = line.split(' ');
+      String current = words.first;
+      for (final String word in words.skip(1)) {
+        final String joined = '$current $word';
+        if (fits(joined)) {
+          current = joined;
+        } else {
+          if (!fits(current)) {
+            return null;
+          }
+          lines.add(current);
+          current = word;
+        }
+        if (lines.length >= maxWrappedLines) {
+          return null;
+        }
+      }
+      if (!fits(current)) {
+        return null;
+      }
+      lines.add(current);
+      if (lines.length > maxWrappedLines) {
+        return null;
+      }
+    }
+    final String text = lines.join('\n');
+    return MeasuredLabel(text, measurer.measure(text, style));
+  }
+
+  /// [plan], tried at [angle] with the labels as [drawn], with its
+  /// [CategoryLabelPlan.reserveBefore] and [CategoryLabelPlan.reserveAfter].
+  ///
+  /// When an earlier level try failed only for want of room (on tick marks,
+  /// where level labels reach past the axis' ends) and would still keep
+  /// apart on the axis shortened by that room, the reserves are at least
+  /// that try's, so the frame keeps the room and the level labels fit on its
+  /// next plan.
   CategoryLabelPlan reserved(
     CategoryLabelPlan plan,
     int angle,
+    List<MeasuredLabel?> drawn,
     TextMeasurer measurer,
     ChartTextStyle style,
-  ) => CategoryLabelPlan(
-    fits: plan.fits,
-    thickness: plan.thickness,
-    rotationDegrees: plan.rotationDegrees,
-    shown: plan.shown,
-    labels: plan.labels,
-    before: plan.before,
-    after: plan.after,
-    reserveBefore: reserve(angle, measurer, style),
-    reserveAfter: reserveAfter(angle, measurer, style),
-  );
+  ) {
+    double before = reserve(angle, drawn, measurer, style);
+    double after = reserveAfter(angle, drawn, measurer, style);
+    for (final (int crampedAngle, List<MeasuredLabel?> level, bool shorter)
+        in cramped) {
+      if (crampedAngle == 0 && shorter) {
+        before = math.max(before, reserve(0, level, measurer, style));
+        after = math.max(after, reserveAfter(0, level, measurer, style));
+      }
+    }
+    return CategoryLabelPlan(
+      fits: plan.fits,
+      thickness: plan.thickness,
+      rotationDegrees: plan.rotationDegrees,
+      shown: plan.shown,
+      labels: plan.labels,
+      before: plan.before,
+      after: plan.after,
+      reserveBefore: before,
+      reserveAfter: after,
+    );
+  }
 
-  /// The [CategoryLabelPlan.reserveBefore] of a try at [angle].
-  double reserve(int angle, TextMeasurer measurer, ChartTextStyle style) {
+  /// The [CategoryLabelPlan.reserveBefore] of a try at [angle] with the
+  /// labels as [drawn] (level ones may be wrapped).
+  double reserve(
+    int angle,
+    List<MeasuredLabel?> drawn,
+    TextMeasurer measurer,
+    ChartTextStyle style,
+  ) {
     if (vertical || angle == 90) {
       return labels.first.size.height / 2;
     }
@@ -522,11 +664,17 @@ final class _Planner {
       final ChartSize size = first?.size ?? const ChartSize(0, 0);
       return (size.width + size.height / 2) * math.sqrt1_2;
     }
-    return onTicks ? labels.first.size.width / 2 : 0;
+    return onTicks ? (drawn.first ?? labels.first).size.width / 2 : 0;
   }
 
-  /// The [CategoryLabelPlan.reserveAfter] of a try at [angle].
-  double reserveAfter(int angle, TextMeasurer measurer, ChartTextStyle style) {
+  /// The [CategoryLabelPlan.reserveAfter] of a try at [angle] with the
+  /// labels as [drawn] (level ones may be wrapped).
+  double reserveAfter(
+    int angle,
+    List<MeasuredLabel?> drawn,
+    TextMeasurer measurer,
+    ChartTextStyle style,
+  ) {
     if (!onTicks) {
       return 0;
     }
@@ -544,7 +692,7 @@ final class _Planner {
       );
       return (label?.size.height ?? 0) / 2 * math.sqrt1_2;
     }
-    return labels[last].size.width / 2;
+    return (drawn[last] ?? labels[last]).size.width / 2;
   }
 
   /// The label of category [index] cut with `…` until [whole] holds at
@@ -608,30 +756,43 @@ final class _Planner {
     if (thickness > maxDepth + _tolerance) {
       return null;
     }
-    final bool roomy =
-        before <=
-            (angle == 0 && !onTicks ? roomBefore : turnedRoomBefore) +
-                _tolerance &&
-        after <= roomAfter + _tolerance;
-    final double distance = every * step;
-    for (int k = 1; k < shown.length; k++) {
-      final ChartSize a = drawn[shown[k - 1]]!.size;
-      final ChartSize b = drawn[shown[k]]!.size;
-      final bool apart = vertical
-          ? distance >= (a.height + b.height) / 2 + minTextGap
-          : switch (angle) {
-              0 => distance >= (a.width + b.width) / 2 + minTextGap,
-              90 => distance >= math.max(a.height, b.height) + minTextGap,
-              _ =>
-                distance * math.sqrt1_2 >=
-                    math.max(a.height, b.height) + minTextGap,
-            };
-      if (!apart) {
-        return null;
+    final double shortBefore = math.max(
+      0,
+      before - (angle == 0 && !onTicks ? roomBefore : turnedRoomBefore),
+    );
+    final double shortAfter = math.max(0, after - roomAfter);
+    final bool roomy = shortBefore <= _tolerance && shortAfter <= _tolerance;
+    bool apart(double distance) {
+      for (int k = 1; k < shown.length; k++) {
+        final ChartSize a = drawn[shown[k - 1]]!.size;
+        final ChartSize b = drawn[shown[k]]!.size;
+        final bool fits = vertical
+            ? distance >= (a.height + b.height) / 2 + minTextGap
+            : switch (angle) {
+                0 => distance >= (a.width + b.width) / 2 + minTextGap,
+                90 => distance >= math.max(a.height, b.height) + minTextGap,
+                _ =>
+                  distance * math.sqrt1_2 >=
+                      math.max(a.height, b.height) + minTextGap,
+              };
+        if (!fits) {
+          return false;
+        }
       }
+      return true;
+    }
+
+    final double distance = every * step;
+    if (!apart(distance)) {
+      return null;
     }
     if (!roomy) {
-      crampedAngles.add(angle);
+      // Whether the labels would still keep apart on the axis shortened by
+      // the room they lack, which the frame takes from the plot.
+      final double shorter = axisLength > 0
+          ? distance * (axisLength - shortBefore - shortAfter) / axisLength
+          : 0;
+      cramped.add((angle, drawn, apart(shorter)));
       return null;
     }
     return CategoryLabelPlan(

@@ -4,6 +4,8 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
 import 'package:test/test.dart';
 
+import '../support/gallery.dart';
+
 const FixedWidthTextMeasurer measurer = FixedWidthTextMeasurer();
 
 /// The axis labels' height under the fixed measurer: 9 pt times 1.2.
@@ -381,4 +383,182 @@ void main() {
     expect(labels[3]!.rect.right, greaterThan(layout.plotArea!.right));
     expect(findOverlaps(layout.primitives, layout.size), isEmpty);
   });
+
+  group('wrapped level labels', () {
+    // A measurer about as narrow as Aptos Narrow at 9 pt (3.6 per
+    // character); the default 0.6 is wider than any real font.
+    const FixedWidthTextMeasurer narrow = FixedWidthTextMeasurer(
+      charWidthFactor: 0.4,
+    );
+    const List<List<String>> lines = <List<String>>[
+      <String>['Northern region,', 'first half'],
+      <String>['Southern region,', 'first half'],
+      <String>['Western region,', 'second half'],
+      <String>['Eastern region,', 'second half'],
+      <String>['Central region,', 'whole year'],
+    ];
+
+    Chart longLabels({ChartKind kind = ChartKind.column}) {
+      final Chart chart = galleryCharts()
+          .firstWhere((GalleryChart g) => g.name == 'column_long_labels')
+          .chart;
+      return Chart(
+        kind: kind,
+        series: chart.series,
+        title: chart.title,
+        legend: chart.legend,
+      );
+    }
+
+    for (final ChartKind kind in <ChartKind>[
+      ChartKind.column,
+      ChartKind.line,
+      ChartKind.area,
+    ]) {
+      test('column_long_labels at 360 by 216 wraps onto two lines ($kind)', () {
+        // Excel for Mac keeps these five labels level, each on two lines
+        // (the owner's J3 gallery check).
+        final ChartLayout layout = layoutChart(
+          longLabels(kind: kind),
+          theme: ChartTheme.office,
+          size: const ChartSize(360, 216),
+          measurer: narrow,
+        );
+        final Map<int, TextPrimitive> labels = categoryLabels(layout);
+        expect(labels.keys, <int>[0, 1, 2, 3, 4]);
+        for (int i = 0; i < 5; i++) {
+          final TextPrimitive t = labels[i]!;
+          expect(t.rotationDegrees, 0);
+          expect(t.text.split('\n'), lines[i]);
+          expect(t.text, isNot(contains('…')));
+          expect(t.rect.height, closeTo(2 * 9 * 1.2, 1e-9));
+        }
+        expect(layout.hidden, isEmpty);
+        expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+        for (final ChartPrimitive p in flat(layout.primitives)) {
+          if (p is TextPrimitive) {
+            expect(p.bounds.left, greaterThanOrEqualTo(-1e-9), reason: p.id);
+            expect(p.bounds.right, lessThanOrEqualTo(360 + 1e-9), reason: p.id);
+          }
+        }
+      });
+    }
+
+    test('wrapped labels take their height from the plot', () {
+      final ChartLayout layout = layoutChart(
+        longLabels(),
+        theme: ChartTheme.office,
+        size: const ChartSize(360, 216),
+        measurer: narrow,
+      );
+      final ChartRect plot = layout.plotArea!;
+      for (final TextPrimitive t in categoryLabels(layout).values) {
+        expect(t.rect.top, closeTo(plot.bottom + labelGap, 1e-9));
+      }
+    });
+
+    test('a label of one word wider than its slot falls through to the '
+        'turned option', () {
+      // At 600 wide each band is about 108: the spaced labels wrap onto two
+      // lines, but the single word of 60 characters (216 wide here) cannot
+      // wrap, and every second level label does not fit either.
+      final String word = 'W' * 60;
+      final List<String> spaced = <String>[
+        'Northern region, first half',
+        'Southern region, first half',
+        'Western region, second half',
+        'Eastern region, second half',
+      ];
+      final ChartLayout wrapped = layoutChart(
+        _single(<String>[...spaced, 'Central region, whole year']),
+        theme: ChartTheme.office,
+        size: const ChartSize(600, 300),
+        measurer: measurer,
+      );
+      expect(
+        categoryLabels(
+          wrapped,
+        ).values.every((TextPrimitive t) => t.rotationDegrees == 0),
+        isTrue,
+      );
+      expect(categoryLabels(wrapped)[0]!.text, 'Northern region,\nfirst half');
+      expect(wrapped.hidden, isEmpty);
+
+      final ChartLayout turned = layoutChart(
+        _single(<String>[...spaced, word]),
+        theme: ChartTheme.office,
+        size: const ChartSize(600, 300),
+        measurer: measurer,
+      );
+      final Map<int, TextPrimitive> labels = categoryLabels(turned);
+      expect(labels, isNotEmpty);
+      for (final TextPrimitive t in labels.values) {
+        expect(t.rotationDegrees, isNot(0));
+        expect(t.text, isNot(contains('\n')));
+      }
+      expect(findOverlaps(turned.primitives, turned.size), isEmpty);
+    });
+
+    test('the default measurer wraps column_long_labels onto three lines', () {
+      // The default measurer (5.4 per character) is wider than Aptos Narrow,
+      // so "Western region," does not fit its slot of about 62.8 and each
+      // label takes three lines; the labels stay level and whole, and the
+      // value axis is scaled on the taller plot: 0 to 160 by 20, as Excel
+      // shows it.
+      final ChartLayout layout = layoutChart(
+        longLabels(),
+        theme: ChartTheme.office,
+        size: const ChartSize(360, 216),
+        measurer: measurer,
+      );
+      final Map<int, TextPrimitive> labels = categoryLabels(layout);
+      expect(labels.keys, <int>[0, 1, 2, 3, 4]);
+      expect(labels[2]!.text, 'Western\nregion,\nsecond half');
+      for (final TextPrimitive t in labels.values) {
+        expect(t.rotationDegrees, 0);
+        expect(t.text.split('\n'), hasLength(3));
+      }
+      expect(layout.hidden, isEmpty);
+      const String prefix = 'axis/value/label/';
+      expect(
+        <String>[
+          for (final TextPrimitive t in flat(
+            layout.primitives,
+          ).whereType<TextPrimitive>())
+            if (t.id.startsWith(prefix)) t.text,
+        ],
+        <String>['0', '20', '40', '60', '80', '100', '120', '140', '160'],
+      );
+      expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+    });
+
+    test('a label wrapped onto more than three lines is not wrapped', () {
+      // Four short words, each on its own line in a narrow slot: four lines
+      // are too many, so the labels turn.
+      final ChartLayout layout = lay(<String>[
+        for (int i = 0; i < 6; i++) 'Aaaaaa$i Bbbbbbb Ccccccc Ddddddd',
+      ], const ChartSize(400, 300));
+      for (final TextPrimitive t in categoryLabels(layout).values) {
+        expect(t.rotationDegrees, isNot(0));
+        expect(t.text, isNot(contains('\n')));
+      }
+      expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+    });
+  });
 }
+
+Chart _single(List<String> categories) => Chart(
+  kind: ChartKind.column,
+  legend: const ChartLegend(visible: false),
+  series: <ChartSeries>[
+    ChartSeries(
+      name: ChartData<String>(values: <String?>['Sales']),
+      categories: ChartData<Object>(values: categories),
+      values: ChartData<double>(
+        values: <double?>[
+          for (int c = 0; c < categories.length; c++) 3 + c * 2.5,
+        ],
+      ),
+    ),
+  ],
+);
