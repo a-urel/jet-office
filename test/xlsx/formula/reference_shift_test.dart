@@ -11,7 +11,6 @@ final ReferenceShift insRows = ReferenceShift.insert(
   ShiftAxis.rows,
   5,
   2,
-  sheetOrder: order,
 );
 
 /// Rows 5 and 6 deleted on `Data`.
@@ -20,7 +19,6 @@ final ReferenceShift delRows = ReferenceShift.delete(
   ShiftAxis.rows,
   5,
   2,
-  sheetOrder: order,
 );
 
 /// One column inserted at C on `Data`.
@@ -29,7 +27,6 @@ final ReferenceShift insCols = ReferenceShift.insert(
   ShiftAxis.columns,
   3,
   1,
-  sheetOrder: order,
 );
 
 /// Columns C and D deleted on `Data`.
@@ -38,7 +35,6 @@ final ReferenceShift delCols = ReferenceShift.delete(
   ShiftAxis.columns,
   3,
   2,
-  sheetOrder: order,
 );
 
 /// Rows 5 and 6 inserted on `Mid` (inside the span `Data:Other`).
@@ -47,7 +43,6 @@ final ReferenceShift insMid = ReferenceShift.insert(
   ShiftAxis.rows,
   5,
   2,
-  sheetOrder: order,
 );
 
 /// (edit, host sheet, formula, expected formula).
@@ -83,12 +78,14 @@ final List<(ReferenceShift, String, String, String)> table =
       (insRows, 'Other', "'Data'!A5:A9", "'Data'!A7:A11"),
       (insRows, 'Data', '[1]Data!A5', '[1]Data!A5'),
       (insRows, 'Data', 'SUM(A1:A10)+A5*Other!A5', 'SUM(A1:A12)+A7*Other!A5'),
-      // 3D spans.
-      (insRows, 'Mid', 'Data:Other!A5', 'Data:Other!A7'),
+      // 3D spans never shift, even on an end sheet.
+      (insRows, 'Other', 'Data:Data!A5', 'Data:Data!A7'),
+      (delRows, 'Other', 'Other:Data!A9', 'Other:Data!A9'),
+      (insRows, 'Mid', 'Data:Other!A5', 'Data:Other!A5'),
       (insRows, 'Mid', 'Mid:Last!A5', 'Mid:Last!A5'),
-      (insMid, 'Data', 'Data:Other!A5', 'Data:Other!A7'),
+      (insMid, 'Data', 'Data:Other!A5', 'Data:Other!A5'),
       (insMid, 'Data', 'Other:Last!A5', 'Other:Last!A5'),
-      (insMid, 'Data', 'Data:Mid!B1:B9', 'Data:Mid!B1:B11'),
+      (insMid, 'Data', 'Data:Mid!B1:B9', 'Data:Mid!B1:B9'),
       // Insert at first row, at the last row, past the last row.
       (ReferenceShift.insert('Data', ShiftAxis.rows, 1, 1), 'Data', 'A1', 'A2'),
       (
@@ -138,7 +135,7 @@ final List<(ReferenceShift, String, String, String)> table =
       (delRows, 'Data', '6:9', '5:7'),
       (delRows, 'Data', 'C:C', 'C:C'),
       (delRows, 'Other', 'A5', 'A5'),
-      (delRows, 'Mid', 'Data:Other!A5', 'Data:Other!#REF!'),
+      (delRows, 'Mid', 'Data:Other!A5', 'Data:Other!A5'),
       (delRows, 'Data', 'A1048576', 'A1048574'),
       // Insert one column at C.
       (insCols, 'Data', 'B1', 'B1'),
@@ -198,6 +195,10 @@ void main() {
     expect(delRows.shiftCell(6, 2), (row: 4, column: 2));
     expect(insCols.shiftCell(0, 2), (row: 0, column: 3));
     expect(insRows.shiftCell(1048574, 0), isNull);
+  });
+
+  test('a reversed range neither throws nor inverts', () {
+    expect(rewriteFormula('SUM(A5:A1)', delRows, 'Data'), isNull);
   });
 
   test('a count of zero or a bad index throws', () {

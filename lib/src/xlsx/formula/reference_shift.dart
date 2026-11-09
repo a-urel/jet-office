@@ -29,29 +29,21 @@ enum ShiftAxis {
 /// becomes `#REF!`; a range whose first edge stays on the sheet keeps its
 /// last edge at the sheet's end (so `A:A` written as `A1:A1048576` stays).
 ///
-/// Sheet names compare ignoring case, as Excel's. A 3D reference shifts when
-/// [sheet] lies within its span in [sheetOrder] (or is one of its ends);
-/// an external reference never shifts.
+/// Sheet names compare ignoring case, as Excel's. A 3D reference
+/// (`Sheet1:Sheet3!A5`) never shifts, as in Excel: the edit is on one sheet,
+/// not on every sheet of the span, even when [sheet] is one of its ends. An
+/// external reference never shifts, and neither does a reversed range
+/// (`A5:A1`), which is left as read.
 final class ReferenceShift implements ReferenceMapper {
   /// Inserts [count] rows or columns before [index] (1-based).
-  ReferenceShift.insert(
-    this.sheet,
-    this.axis,
-    this.index,
-    int count, {
-    this.sheetOrder = const <String>[],
-  }) : count = count {
+  ReferenceShift.insert(this.sheet, this.axis, this.index, int count)
+    : count = count {
     _check(index, count, 'count');
   }
 
   /// Deletes [count] rows or columns from [index] (1-based) on.
-  ReferenceShift.delete(
-    this.sheet,
-    this.axis,
-    this.index,
-    int count, {
-    this.sheetOrder = const <String>[],
-  }) : count = -count {
+  ReferenceShift.delete(this.sheet, this.axis, this.index, int count)
+    : count = -count {
     _check(index, count, 'count');
   }
 
@@ -71,9 +63,6 @@ final class ReferenceShift implements ReferenceMapper {
 
   /// Rows or columns inserted (positive) or deleted (negative).
   final int count;
-
-  /// The workbook's sheet names in tab order, for 3D spans.
-  final List<String> sheetOrder;
 
   int get _limit =>
       axis == ShiftAxis.rows ? XlsxLimits.maxRows : XlsxLimits.maxColumns;
@@ -125,16 +114,10 @@ final class ReferenceShift implements ReferenceMapper {
     if (ref.externalIndex != null) return false;
     final String target = _key(sheet);
     if (ref.sheet == null) return _key(hostSheet) == target;
-    if (ref.lastSheet == null) return _key(ref.sheet!) == target;
-    if (_key(ref.sheet!) == target || _key(ref.lastSheet!) == target) {
-      return true;
+    if (ref.lastSheet != null && _key(ref.lastSheet!) != _key(ref.sheet!)) {
+      return false;
     }
-    final List<String> keys = sheetOrder.map(_key).toList();
-    final int a = keys.indexOf(_key(ref.sheet!));
-    final int b = keys.indexOf(_key(ref.lastSheet!));
-    final int t = keys.indexOf(target);
-    if (a < 0 || b < 0 || t < 0) return false;
-    return (a < b ? a : b) <= t && t <= (a < b ? b : a);
+    return _key(ref.sheet!) == target;
   }
 
   @override
@@ -143,7 +126,7 @@ final class ReferenceShift implements ReferenceMapper {
     final bool rows = axis == ShiftAxis.rows;
     final int? first = rows ? ref.firstRow : ref.firstColumn;
     final int? last = rows ? ref.lastRow : ref.lastColumn;
-    if (first == null || last == null) return null;
+    if (first == null || last == null || first > last) return null;
     final (int, int)? s = _span(first, last);
     if (s == null) return const FormulaReferenceResult.refError();
     if (s.$1 == first && s.$2 == last) return null;
