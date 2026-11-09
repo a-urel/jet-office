@@ -80,4 +80,49 @@ void main() {
     expect(const ChartTitle(text: 'a').copyWith(text: 'b').text, 'b');
     expect(const ChartAxis(min: double.nan), const ChartAxis(min: double.nan));
   });
+
+  group('holeSizePercent and centerText', () {
+    Chart donut({double? hole, String? text}) => hole == null
+        ? Chart(kind: ChartKind.line, series: <ChartSeries>[])
+        : Chart(
+            kind: ChartKind.line,
+            series: <ChartSeries>[],
+            holeSizePercent: hole,
+            centerText: text,
+          );
+
+    test('defaults', () {
+      final Chart c = donut();
+      expect(c.holeSizePercent, 75);
+      expect(c.centerText, isNull);
+    });
+
+    test('copyWith sets and keeps them', () {
+      final Chart c = donut().copyWith(holeSizePercent: 50, centerText: 'T');
+      expect(c.holeSizePercent, 50);
+      expect(c.centerText, 'T');
+      final Chart kept = c.copyWith(kind: ChartKind.bar);
+      expect(kept.holeSizePercent, 50);
+      expect(kept.centerText, 'T');
+    });
+
+    test('they change == and hashCode', () {
+      final Chart a = donut();
+      final Chart b = a.copyWith(holeSizePercent: 50);
+      final Chart c = a.copyWith(centerText: 'T');
+      expect(a, isNot(b));
+      expect(a, isNot(c));
+      expect(a.hashCode, isNot(b.hashCode));
+      expect(a.hashCode, isNot(c.hashCode));
+    });
+
+    test('the hole size must be finite and within 10 to 90', () {
+      for (final double bad in <double>[9, 90.5, double.nan, double.infinity]) {
+        expect(() => donut(hole: bad), throwsArgumentError, reason: '$bad');
+      }
+      expect(donut(hole: 10).holeSizePercent, 10);
+      expect(donut(hole: 90).holeSizePercent, 90);
+      expect(() => donut().copyWith(holeSizePercent: 95), throwsArgumentError);
+    });
+  });
 }

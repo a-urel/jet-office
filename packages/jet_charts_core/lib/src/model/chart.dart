@@ -24,7 +24,19 @@ final class Chart {
     this.legend = const ChartLegend(),
     this.dataLabels = const ChartDataLabels(),
     this.unsupportedName,
-  }) : series = List<ChartSeries>.unmodifiable(series);
+    this.holeSizePercent = 75,
+    this.centerText,
+  }) : series = List<ChartSeries>.unmodifiable(series) {
+    if (!holeSizePercent.isFinite ||
+        holeSizePercent < 10 ||
+        holeSizePercent > 90) {
+      throw ArgumentError.value(
+        holeSizePercent,
+        'holeSizePercent',
+        'must be finite and within 10 to 90',
+      );
+    }
+  }
 
   /// What the chart draws.
   final ChartKind kind;
@@ -57,6 +69,19 @@ final class Chart {
   /// [ChartKind.unsupported], else `null`.
   final String? unsupportedName;
 
+  /// The donut hole's diameter as a percent of the outer diameter (Excel's
+  /// `c:holeSize`), within 10 to 90.
+  ///
+  /// Only a donut uses it. The default of 75 is an estimate, not checked in
+  /// Excel; the owner's check settles it.
+  final double holeSizePercent;
+
+  /// Text drawn in a donut's hole, such as a total, or `null` for none.
+  ///
+  /// Only a donut uses it. It is not an Excel element, so a file does not
+  /// carry it.
+  final String? centerText;
+
   /// A copy with the given fields replaced.
   ///
   /// A field cannot be set to `null` this way: passing `null` keeps the
@@ -72,6 +97,8 @@ final class Chart {
     ChartLegend? legend,
     ChartDataLabels? dataLabels,
     String? unsupportedName,
+    double? holeSizePercent,
+    String? centerText,
   }) {
     return Chart(
       kind: kind ?? this.kind,
@@ -84,6 +111,8 @@ final class Chart {
       legend: legend ?? this.legend,
       dataLabels: dataLabels ?? this.dataLabels,
       unsupportedName: unsupportedName ?? this.unsupportedName,
+      holeSizePercent: holeSizePercent ?? this.holeSizePercent,
+      centerText: centerText ?? this.centerText,
     );
   }
 
@@ -99,7 +128,9 @@ final class Chart {
         title == other.title &&
         legend == other.legend &&
         dataLabels == other.dataLabels &&
-        unsupportedName == other.unsupportedName;
+        unsupportedName == other.unsupportedName &&
+        holeSizePercent == other.holeSizePercent &&
+        centerText == other.centerText;
   }
 
   @override
@@ -114,6 +145,8 @@ final class Chart {
     legend,
     dataLabels,
     unsupportedName,
+    holeSizePercent,
+    centerText,
   );
 
   @override

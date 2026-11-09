@@ -69,7 +69,15 @@ final class ChartLegend {
 /// The value labels drawn on the data points of a chart.
 final class ChartDataLabels {
   /// Creates data labels, hidden unless told otherwise.
-  const ChartDataLabels({this.visible = false, this.formatCode});
+  ///
+  /// [showValue] and [showPercent] choose what a visible label says; with
+  /// both `false` no label is drawn even when [visible].
+  const ChartDataLabels({
+    this.visible = false,
+    this.formatCode,
+    this.showValue = true,
+    this.showPercent = false,
+  });
 
   /// Whether the labels are drawn.
   final bool visible;
@@ -78,14 +86,29 @@ final class ChartDataLabels {
   /// follow the data.
   final String? formatCode;
 
+  /// Whether a label shows the value.
+  final bool showValue;
+
+  /// Whether a label shows the share of the whole as a percent.
+  ///
+  /// Used by pie and donut charts only, as Excel allows it only there.
+  final bool showPercent;
+
   /// A copy with the given fields replaced.
   ///
   /// A field cannot be set to `null` this way: passing `null` keeps the
   /// current value.
-  ChartDataLabels copyWith({bool? visible, String? formatCode}) {
+  ChartDataLabels copyWith({
+    bool? visible,
+    String? formatCode,
+    bool? showValue,
+    bool? showPercent,
+  }) {
     return ChartDataLabels(
       visible: visible ?? this.visible,
       formatCode: formatCode ?? this.formatCode,
+      showValue: showValue ?? this.showValue,
+      showPercent: showPercent ?? this.showPercent,
     );
   }
 
@@ -93,11 +116,13 @@ final class ChartDataLabels {
   bool operator ==(Object other) {
     return other is ChartDataLabels &&
         visible == other.visible &&
-        formatCode == other.formatCode;
+        formatCode == other.formatCode &&
+        showValue == other.showValue &&
+        showPercent == other.showPercent;
   }
 
   @override
-  int get hashCode => Object.hash(visible, formatCode);
+  int get hashCode => Object.hash(visible, formatCode, showValue, showPercent);
 
   @override
   String toString() => 'ChartDataLabels(visible: $visible, $formatCode)';

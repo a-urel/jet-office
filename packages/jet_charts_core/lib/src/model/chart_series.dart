@@ -69,7 +69,10 @@ final class ChartSeries {
     this.formatCode,
     this.color,
     this.colorKey,
-  }) : categories = ChartData<Object>(
+    this.smooth = false,
+    List<ChartColor?> pointColors = const <ChartColor?>[],
+  }) : pointColors = List<ChartColor?>.unmodifiable(pointColors),
+       categories = ChartData<Object>(
          values: List<Object?>.of(categories.values),
          reference: categories.reference,
        );
@@ -99,6 +102,19 @@ final class ChartSeries {
   /// The name of a `ChartTheme.semantic` colour, or `null`.
   final String? colorKey;
 
+  /// Whether the line is drawn as a curve (Excel's `c:smooth`).
+  ///
+  /// Used by line, combination line and scatter series; other kinds ignore
+  /// it.
+  final bool smooth;
+
+  /// The colour of each point by index, `null` for automatic (Excel's
+  /// `c:dPt`). The list cannot be modified.
+  ///
+  /// Used for a pie or donut slice, a bar and a marker. Beyond the end of
+  /// the list a point's colour is automatic.
+  final List<ChartColor?> pointColors;
+
   /// A copy with the given fields replaced.
   ///
   /// A field cannot be set to `null` this way: passing `null` keeps the
@@ -112,6 +128,8 @@ final class ChartSeries {
     String? formatCode,
     ChartColor? color,
     String? colorKey,
+    bool? smooth,
+    List<ChartColor?>? pointColors,
   }) {
     return ChartSeries(
       name: name ?? this.name,
@@ -122,6 +140,8 @@ final class ChartSeries {
       formatCode: formatCode ?? this.formatCode,
       color: color ?? this.color,
       colorKey: colorKey ?? this.colorKey,
+      smooth: smooth ?? this.smooth,
+      pointColors: pointColors ?? this.pointColors,
     );
   }
 
@@ -135,7 +155,9 @@ final class ChartSeries {
         axis == other.axis &&
         formatCode == other.formatCode &&
         color == other.color &&
-        colorKey == other.colorKey;
+        colorKey == other.colorKey &&
+        smooth == other.smooth &&
+        listValueEquals(pointColors, other.pointColors);
   }
 
   @override
@@ -148,6 +170,8 @@ final class ChartSeries {
     formatCode,
     color,
     colorKey,
+    smooth,
+    listValueHash(pointColors),
   );
 
   @override
