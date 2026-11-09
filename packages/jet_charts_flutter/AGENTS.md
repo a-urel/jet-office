@@ -1,9 +1,9 @@
 # Working in jet_charts_flutter
 
 `jet_charts_flutter` is the Flutter backend of the jet_ chart family: it
-measures and draws what `packages/jet_charts_core` lays out, and will hold the
-`CustomPainter` renderer, the widget and interaction (milestone J3, done). It reads
-and writes no file format. The records of the design are the repository root's
+measures and draws what `packages/jet_charts_core` lays out, and holds the
+`CustomPainter` renderer, the widget and interaction (milestone J3, done). It
+reads and writes no file format. The records of the design are the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md` and
 `docs/decisions/0016-jet-charts-flutter-in-the-workspace.md`.
 

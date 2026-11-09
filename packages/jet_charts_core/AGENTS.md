@@ -185,8 +185,8 @@ by hand, then fix it.
   memory in the gallery workbook; Excel's palette past six colours; the
   spacing constants in `docs/excel-checks.md`.
 - Whether a sandboxed macOS app sees Aptos Narrow (Flutter side).
-- Tooltips for `ChartLayout.hidden`. The tooltip's box spacing is not yet in
-  `ChartTooltipStyle`; `chartTooltipAt` resolves the chart again on each call.
+- The tooltip box's spacing constants are not in `ChartTooltipStyle`, and
+  `chartTooltipAt` resolves the chart again on each call.
 - Category labels: Excel's turning or wrapping beyond the label spacing
   is unknown; long labels may wrap at 0 degrees as Excel does.
 - Layout cost on large series: a 10,000-point line about 250 ms on the VM and
