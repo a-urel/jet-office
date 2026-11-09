@@ -43,10 +43,15 @@
 // "expected: dispNaAsBlank"), as if the c:ext were the dataDisplayOptions16
 // element itself. Excel's own chart parts get both errors (the owner's
 // chart_defaults.xlsx, packages/jet_charts_core/test/fixtures/owner), so they
-// are the SDK's, not a writer's. Only those two error ids are ignored, on that
-// c:ext of a chart part, at that path, with that uri, holding exactly one
-// dataDisplayOptions16 whose children are all dispNaAsBlank; any other
-// content of the extension still counts.
+// are the SDK's, not a writer's. Only those two error ids are ignored, and only
+// on the c:ext at /c:chartSpace[1]/c:chart[1]/c:extLst[1]/c:ext[1] of a chart
+// part whose only attribute is uri, with exactly that value, whose only child
+// is one c16r3:dataDisplayOptions16, whose only child is one
+// c16r3:dispNaAsBlank, whose only attribute is an unqualified val of 1, 0,
+// true or false (xsd:boolean; Excel writes 1). Any other content of the
+// extension, a second or a missing dispNaAsBlank, another attribute or value,
+// still counts. tool/write_fixtures.dart --corrupt writes c1_corrupt.xlsx, a
+// chart whose extension holds two dispNaAsBlank, as the negative control.
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Validation;
@@ -86,10 +91,14 @@ static bool IsExcelDataDisplayOptions(ValidationErrorInfo e) =>
     && e.Part?.ContentType == chartContentType
     && e.Path?.XPath == "/c:chartSpace[1]/c:chart[1]/c:extLst[1]/c:ext[1]"
     && e.Node is { LocalName: "ext" } ext
-    && ext.GetAttributes().Any(a => a.LocalName == "uri" && a.Value == "{56B9EC1D-385E-4148-901F-78D8002777C0}")
+    && ext.GetAttributes() is [{ LocalName: "uri", NamespaceUri: "", Value: "{56B9EC1D-385E-4148-901F-78D8002777C0}" }]
     && ext.ChildElements.Count == 1
     && ext.ChildElements[0] is { LocalName: "dataDisplayOptions16", NamespaceUri: c16r3 } options
-    && options.ChildElements.All(c => c.LocalName == "dispNaAsBlank" && c.NamespaceUri == c16r3);
+    && options.GetAttributes().Count == 0
+    && options.ChildElements.Count == 1
+    && options.ChildElements[0] is { LocalName: "dispNaAsBlank", NamespaceUri: c16r3 } blank
+    && blank.ChildElements.Count == 0
+    && blank.GetAttributes() is [{ LocalName: "val", NamespaceUri: "", Value: "1" or "0" or "true" or "false" }];
 
 string[] files = Directory.GetFiles(paths[0], "*.xlsx")
     .Concat(Directory.GetFiles(paths[0], "*.docx"))
