@@ -23,8 +23,8 @@ resolving it needs Flutter's SDK) before any design change.
 its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
 testing, tooltip and summary), and this package depends on it from C1.
 Milestone C1 (the DrawingML chart layer, `docs/drawingml-charts.md`) is done
-except the owner's Excel check of the fixtures (Task 10, Step 4); every chart
-of the owner's `chart_reference.xlsx` but one reads typed.
+(the owner's Excel check is in `docs/excel-checks.md`); every chart of the
+owner's `chart_reference.xlsx` but one reads typed.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
 own `AGENTS.md`; milestone J3 is done. This package never depends on it.
 

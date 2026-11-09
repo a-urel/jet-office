@@ -1362,6 +1362,17 @@ picture's size from the anchor, so the old `a:xfrm` does no harm. The owner's
 files kept what they had: a chart, a text box, an arrow and a picture in one,
 a note and a threaded comment with replies in the other.
 
+## C1
+
+Charts written by the DrawingML chart layer (`docs/drawingml-charts.md`),
+drawn on a sheet by the test-only host of C1. Open `build/fixtures/c1_kinds.xlsx`
+(the 12 column, bar, line and area charts in three groupings, Office theme) and
+`build/fixtures/c1_options.xlsx` (six charts of the options, the last in an app
+theme with fixed colours) in Excel for Mac and record the result under
+"Results". A repair prompt is a writer bug. The owner's Excel reference
+workbook, `test/fixtures/owner/charts/chart_reference.xlsx`, is checked by
+`test/drawingml/chart/excel_reference_test.dart`, not here.
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that
@@ -1673,3 +1684,5 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `w4_generated` | ok | No repair prompt; `Objects` and `Removed` as the W4 list says. `Moved picture` shows 200 by 100 pixels, as the list requires. |
 | 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `Kitap1.xlsx` (chart, text box, arrow, picture), objects added, then picture and table removed | ok | No repair prompt on either file. The additions and the file's own content as the W4 list says. The Open XML SDK's two errors in `chart1.xml` are in Excel's own file too; the part is unchanged. |
 | 2026-11-07 | Microsoft 365, Excel for Mac (version not restated; 16.114.1 at W3) | W4: `Kitap2.xlsx` (note, threaded comment with replies), objects added, then picture and table removed | ok | No repair prompt on either file. The additions and the file's own content as the W4 list says. |
+| 2026-11-09 | Microsoft 365, Excel for Mac (16.0300 in the owner's `chart_reference.xlsx` of the same day) | C1: `c1_kinds` | ok | No repair prompt. The owner sent a screenshot and wrote "Bence sorun yok". The six column and bar charts and the line charts show with titles, legends and both series; the clustered bar's legend lists `Güney` before `Kuzey`, as Excel orders a horizontal bar's legend. |
+| 2026-11-09 | Microsoft 365, Excel for Mac (16.0300 in the owner's `chart_reference.xlsx` of the same day) | C1: `c1_options` | ok | No repair prompt. Screenshot and "Bence sorun yok". The title's two lines with `&` and quotes, the top legend, the axis titles, `100,00 TL` and `Oca 26` formats, the data labels `30,0`, the hidden axes, the literal data's gap, the `dd.mm.yyyy` dates and eight series show. Seen by Claude, not by the owner as a problem: the line chart's right-placed labels touch the line, and series 7 and 8 are dark blues near series 1 (the theme's own rule past six colours, unverified against Excel). |

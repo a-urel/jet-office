@@ -30,7 +30,7 @@ This repository is a pub workspace (decision 0013). The chart family:
 
 `jet_office` depends on this package from C1: its DrawingML layer writes and
 reads `c:chartSpace` for a `Chart` (`docs/drawingml-charts.md` at the root).
-C1 is done except the owner's Excel check of its fixtures; C2 and C3
+C1 is done; C2 and C3
 add the XLSX and DOCX hosts. `lumMod` and `lumOff` on scheme colours are in
 `ChartColor` (done in C1).
 

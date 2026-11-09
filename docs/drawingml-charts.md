@@ -8,8 +8,8 @@ back, and keeps an opened part byte for byte. Decision
 import. The layer knows neither XLSX nor DOCX. Its types carry the prefix
 `Drawing`.
 
-**Status of C1: done except the owner's Excel check of the fixtures (Task
-10, Step 4).** The owner's reference workbook is committed and every chart in
+**Status of C1: done** (the owner's Excel check of the fixtures is in
+`docs/excel-checks.md`). The owner's reference workbook is committed and every chart in
 it but one reads typed ("Excel's reference workbook" below). Nothing here
 is exported from `lib/jet_office.dart` yet: the public API arrives with the
 hosts, C2 (XLSX) and C3 (DOCX).
@@ -300,5 +300,6 @@ chart that is only a view keeps its bytes until replaced.
 ## Open for both
 
 - The secondary axis, combination charts and the other kinds (J4).
-- Excel's palette past six series.
-- The owner's Excel check of the C1 fixtures (`docs/excel-checks.md`).
+- Excel's palette past six series (in `c1_options` series 7 and 8 are dark
+  blues near series 1).
+- Right-placed line data labels touch the line in Excel (`c1_options`).
