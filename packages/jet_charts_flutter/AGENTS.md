@@ -48,6 +48,14 @@ copy it again, with its provenance comment, after the core's changes. A failure
 is a layout or measurer defect: pin it as a unit test in the owning test file
 with the input minimized, then fix it.
 
+## Benchmark
+
+`benchmark/chart_benchmark_test.dart` times layout (cold and warm text cache)
+and paint recording for dashboard charts and two large series. It records
+figures and fails on nothing; the gate does not run it. Run it with
+`flutter test benchmark`; how to run it in Chrome and the recorded figures are
+in `docs/benchmark.md`.
+
 ## The quality gate
 
 Run from this package's folder, `packages/jet_charts_flutter`, except the first
