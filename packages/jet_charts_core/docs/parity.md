@@ -122,12 +122,13 @@ theme's in `excel-checks.md`.
   hidden and listed.
 - **They never overlap other text or the legend**, keeping `minTextGap` from
   other text, and **never lie on a mark other than their own**: `findOverlaps`
-  reports text over a bar, a marker (by the square around it), a line (each
-  segment at its stroke width) or an area, except a data label on its own bar
-  or its own series' area. Whether Excel lets a label cover another mark was
-  not measured; this package hides such a label instead, so a label crowded
-  by a taller neighbouring bar, a steep line of its own series or the band
-  above a thin stacked area goes. Grid lines and axis lines do not count.
+  reports text over a bar, a marker (by the square around it) or a line
+  (each segment at its stroke width), except a data label on its own bar.
+  Whether Excel lets a label cover another bar or line was not measured; this
+  package hides such a label instead, so a label crowded by a taller
+  neighbouring bar or a steep line of its own series goes. Area fills, grid
+  lines and axis lines do not count: labels are painted over every mark, and
+  Excel draws data labels over area fills.
 - **Outside end may leave the plot** into the chart's area (inside its
   padding), clear of the title, the legend and the axis labels, as Excel's
   label of a bar near the axis' maximum sits above the plot. Line and area

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
 import 'package:test/test.dart';
@@ -195,7 +197,7 @@ void main() {
     expect(findOverlaps(l.primitives, const ChartSize(400, 300)), isEmpty);
   });
 
-  test('a label inside a bar lies wholly inside it', () {
+  test('a label that fits neither outside nor inside its bar is hidden', () {
     // The bar is too short for its label inside, and outside the label
     // would cover the taller bar beside it.
     final ChartLayout l = lay(
@@ -321,6 +323,63 @@ void main() {
     expect(
       label(l, 0, 1).rect.top + label(l, 0, 1).rect.height / 2,
       closeTo((top0.y + base0.y) / 2, tol),
+    );
+  });
+
+  test('an overlapping area chart keeps its labels over other areas', () {
+    // Standard grouping: S1's area lies wholly over S0's, and S0's labels
+    // lie inside S1's area. Labels are painted over area fills.
+    final ChartLayout l = lay(
+      <List<double?>>[
+        <double?>[80, 80, 80],
+        <double?>[60, 60, 60],
+      ],
+      kind: ChartKind.area,
+      valueAxis: fixed,
+    );
+    // The middle category's labels: those at the ends sit on the plot's
+    // edges (an area's points are on tick marks) and do not fit.
+    for (int s = 0; s < 2; s++) {
+      expect(has(l, ids.dataLabelId(s, 1)), isTrue, reason: 'label/$s/1');
+    }
+    expect(findOverlaps(l.primitives, const ChartSize(400, 300)), isEmpty);
+  });
+
+  test('a line of 10,000 points with data labels lays out in reasonable '
+      'time', () {
+    // A guard against checking every label against every segment, not a
+    // benchmark.
+    final List<double?> values = <double?>[
+      for (int i = 0; i < 10000; i++) 50 + 40 * math.sin(i / 50),
+    ];
+    final Stopwatch watch = Stopwatch()..start();
+    final ChartLayout l = layoutChart(
+      Chart(
+        kind: ChartKind.line,
+        dataLabels: const ChartDataLabels(visible: true),
+        legend: const ChartLegend(visible: false),
+        valueAxis: fixed,
+        series: <ChartSeries>[
+          ChartSeries(
+            name: ChartData<String>(values: <String?>['S0']),
+            categories: ChartData<Object>(
+              values: <Object>[for (int i = 0; i < 10000; i++) i],
+            ),
+            values: ChartData<double>(values: values),
+          ),
+        ],
+      ),
+      theme: theme,
+      size: const ChartSize(800, 400),
+      measurer: measurer,
+    );
+    watch.stop();
+    expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    expect(
+      flat(
+        l.primitives,
+      ).where((ChartPrimitive p) => p.id.startsWith(ids.dataLabelPrefix)),
+      isNotEmpty,
     );
   });
 

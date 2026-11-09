@@ -29,9 +29,9 @@ enum ChartOverlapKind {
   /// The legend and the plot area share area.
   legendPlot,
 
-  /// A text shares area with a series mark (a bar, a line, a marker or an
-  /// area) that is not its own: a data label may lie on its own bar and on
-  /// its own series' area.
+  /// A text shares area with a series mark (a bar, a line or a marker) that
+  /// is not its own: a data label may lie on its own bar. Area fills are not
+  /// marks here: labels are painted over them.
   textMark,
 }
 
@@ -78,12 +78,14 @@ final class ChartOverlap {
 /// Text is also checked against every series mark (a primitive whose id
 /// starts with `series/`), as far as the mark lies inside the clips that hold
 /// it: a bar by its rectangle, a marker (an arc) by the square around its
-/// outline, a line by each segment widened to its stroke width (and lengthened
-/// by half of it at both ends, for round caps), an area by its outline. A
-/// data label `label/<s>/<c>` may lie on its own bar `series/<s>/bar/<c>` and
-/// on its own series' area `series/<s>/area`; every other mark counts. Grid
-/// lines, axis lines, the background, the plot rectangle and legend symbols
-/// are not marks, and a text crossing the plot's edge is not reported.
+/// outline, a line (or a closed path's outline, when stroked) by each segment
+/// widened to its stroke width and lengthened by half of it at both ends, for
+/// round caps. A data label `label/<s>/<c>` may lie on its own bar
+/// `series/<s>/bar/<c>`; every other mark counts. The fill of a closed path
+/// (an area) does not count: data labels are painted after every mark, over
+/// area fills, as Excel draws them. Grid lines, axis lines, the background,
+/// the plot rectangle and legend symbols are not marks, and a text crossing
+/// the plot's edge is not reported.
 List<ChartOverlap> findOverlaps(
   List<ChartPrimitive> primitives,
   ChartSize size,
@@ -165,9 +167,50 @@ bool textsOverlap(TextPrimitive a, TextPrimitive b) =>
 bool _hasArea(ChartRect r) => r.width > 0 && r.height > 0;
 
 /// A series mark and the part of the chart its clips leave visible.
+///
+/// Its shapes are sorted by the left edge of their boxes, so that a text is
+/// compared only with the shapes whose boxes can reach it: a long line's
+/// segments are found by a binary search, not one by one.
 final class LaidMark {
   /// Creates the mark [mark], visible inside [clip] (everywhere when null).
-  LaidMark(this.mark, this.clip) : shapes = _shapes(mark), box = _box(mark);
+  factory LaidMark(ChartPrimitive mark, ChartRect? clip) {
+    final List<(List<ChartPoint>, ChartRect)> shapes =
+        <(List<ChartPoint>, ChartRect)>[
+          for (final List<ChartPoint> shape in _shapes(mark))
+            (shape, _boxOf(<List<ChartPoint>>[shape])),
+        ]..sort(
+          ((List<ChartPoint>, ChartRect) a, (List<ChartPoint>, ChartRect) b) =>
+              a.$2.left.compareTo(b.$2.left),
+        );
+    double widest = 0;
+    for (final (List<ChartPoint>, ChartRect) shape in shapes) {
+      widest = math.max(widest, shape.$2.width);
+    }
+    return LaidMark._(
+      mark,
+      clip,
+      <List<ChartPoint>>[
+        for (final (List<ChartPoint>, ChartRect) x in shapes) x.$1,
+      ],
+      <ChartRect>[for (final (List<ChartPoint>, ChartRect) x in shapes) x.$2],
+      widest,
+      shapes.isEmpty
+          ? null
+          : _boxOf(<List<ChartPoint>>[
+              for (final (List<ChartPoint>, ChartRect) x in shapes)
+                _corners(x.$2),
+            ]),
+    );
+  }
+
+  LaidMark._(
+    this.mark,
+    this.clip,
+    this.shapes,
+    this._boxes,
+    this._widest,
+    this.box,
+  );
 
   /// The mark.
   final ChartPrimitive mark;
@@ -175,11 +218,40 @@ final class LaidMark {
   /// The intersection of the clips that hold [mark], or null for none.
   final ChartRect? clip;
 
-  /// The shapes the mark covers, as polygons (see [findOverlaps]).
+  /// The shapes the mark covers, as polygons (see [findOverlaps]), sorted by
+  /// the left edge of their boxes.
   final List<List<ChartPoint>> shapes;
+
+  /// The box of each of [shapes].
+  final List<ChartRect> _boxes;
+
+  /// The width of the widest of [_boxes].
+  final double _widest;
 
   /// The axis-aligned box of [shapes], or null when there are none.
   final ChartRect? box;
+
+  /// The indexes of the shapes whose boxes may meet [bounds], in order.
+  Iterable<int> _near(ChartRect bounds) sync* {
+    // The first shape whose box's left edge is past bounds.left - widest:
+    // no earlier box reaches bounds.
+    int lo = 0;
+    int hi = _boxes.length;
+    final double from = bounds.left - _widest;
+    while (lo < hi) {
+      final int mid = (lo + hi) >> 1;
+      if (_boxes[mid].left < from) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    for (int i = lo; i < _boxes.length && _boxes[i].left < bounds.right; i++) {
+      if (_boxesMeet(bounds, _boxes[i])) {
+        yield i;
+      }
+    }
+  }
 }
 
 /// Every series mark of [primitives] (an id starting with `series/`), in
@@ -205,7 +277,7 @@ List<LaidMark> laidMarks(List<ChartPrimitive> primitives) {
 }
 
 /// Whether [markId] is the own mark of the text [textId]: the bar of a data
-/// label's value, or the area of its series.
+/// label's value.
 bool isOwnMark(String textId, String markId) {
   if (!textId.startsWith(ids.dataLabelPrefix)) {
     return false;
@@ -214,8 +286,7 @@ bool isOwnMark(String textId, String markId) {
   if (parts.length != 3) {
     return false;
   }
-  return markId == 'series/${parts[1]}/bar/${parts[2]}' ||
-      markId == 'series/${parts[1]}/area';
+  return markId == 'series/${parts[1]}/bar/${parts[2]}';
 }
 
 /// Whether [text] and the visible part of [mark] share area, by more than
@@ -245,7 +316,8 @@ bool textOverlapsMark(TextPrimitive text, LaidMark mark) {
     return false;
   }
   final ChartPoint centre = _centroid(region);
-  for (final List<ChartPoint> shape in mark.shapes) {
+  for (final int index in mark._near(bounds)) {
+    final List<ChartPoint> shape = mark.shapes[index];
     for (int i = 0; i < shape.length; i++) {
       if (_crosses(shape[i], shape[(i + 1) % shape.length], planes)) {
         return true;
@@ -287,9 +359,9 @@ List<List<ChartPoint>> _shapes(ChartPrimitive p) {
       ];
     case PathPrimitive():
       final List<ChartPoint> points = p.points;
-      final List<List<ChartPoint>> out = <List<ChartPoint>>[
-        if (p.closed && p.fill != null && points.length > 2) points,
-      ];
+      // A closed path's fill (an area) is not a shape: labels are painted
+      // over it.
+      final List<List<ChartPoint>> out = <List<ChartPoint>>[];
       final double half = math.max(0, p.strokeWidth) / 2;
       if (p.stroke != null && half > 0) {
         final int segments = p.closed && points.length > 2
@@ -331,11 +403,8 @@ List<ChartPoint>? _band(ChartPoint a, ChartPoint b, double half) {
   ];
 }
 
-ChartRect? _box(ChartPrimitive p) {
-  final List<List<ChartPoint>> shapes = _shapes(p);
-  if (shapes.isEmpty) {
-    return null;
-  }
+/// The axis-aligned box of the points of [shapes], none of them empty.
+ChartRect _boxOf(List<List<ChartPoint>> shapes) {
   double left = double.infinity;
   double top = double.infinity;
   double right = double.negativeInfinity;

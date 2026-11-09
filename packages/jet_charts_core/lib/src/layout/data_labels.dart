@@ -3,9 +3,9 @@
 /// A label takes the first of its candidate places that lies where that place
 /// allows (see [placeDataLabels]), keeps the minimum text gap from every text
 /// already drawn (axis labels, titles, the legend) and every label already
-/// placed, stays off the legend's rectangle and shares no area with a series
-/// mark other than its own bar or its own series' area (`findOverlaps`'s
-/// rule). Labels are placed in series order, then category order, so an
+/// placed, stays off the legend's rectangle and shares no area with a bar,
+/// marker or line other than its own bar (`findOverlaps`'s rule; area fills
+/// do not count). Labels are placed in series order, then category order, so an
 /// earlier one wins a place. A label with no such place is hidden.
 library;
 

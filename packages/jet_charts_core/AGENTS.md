@@ -110,22 +110,23 @@ and category labels (`axis_layout.dart`), marks, data labels, legend.
 
 - Collision rules: category labels wrap at spaces (level, at most three
   lines), turn (0, -45, -90 degrees), skip every `N`th or are cut with an
-  ellipsis; a legend that does not fit shrinks to
-  fewer entries or moves; data labels give way to text, the legend, marks
-  other than their own bar or area, and each other (a column or bar label
-  outside its bar's end may leave the plot, one inside a bar must fit in it
-  and is white on a dark bar), and those that cannot be placed go to
-  `hidden` (`degradation.dart` orders what goes first). `findOverlaps` must find nothing in any layout.
+  ellipsis; a legend that does not fit shrinks to fewer entries or moves;
+  data labels give way to text, the legend, bars, markers and lines other
+  than their own bar (not to area fills), and each other (a column or bar
+  label outside its bar's end may leave the plot, one inside a bar must fit
+  in it and is white on a dark bar), and those that cannot be placed go to
+  `hidden` (`degradation.dart` orders what goes first). `findOverlaps` must
+  find nothing in any layout.
 - Ids: every primitive has an id (`chart_ids.dart`), stable across layouts of
   the same chart, for hit testing and tests. The scheme is documented in
   `ChartLayout.primitives`; `ChartElementId` parses it and `hitTestLayout`
   finds the element at a point (a closed path is hit on its outline and
   stroke as well as its fill).
 - `findOverlaps` (`overlap.dart`) reports texts that overlap each other, the
-  legend, the chart's edge or a series mark other than a data label's own bar
-  or area (`ChartOverlapKind.textMark`), as `ChartOverlap`s of a
-  `ChartOverlapKind`. It is the
-  fuzz test's check and may be used by backends.
+  legend, the chart's edge or a bar, marker or line other than a data
+  label's own bar (`ChartOverlapKind.textMark`; area fills do not count), as
+  `ChartOverlap`s of a `ChartOverlapKind`. It is the fuzz test's check and
+  may be used by backends.
 - Goldens: `test/layout/golden_test.dart` compares the layout of each chart in
   `test/support/gallery.dart` with `test/goldens/*.txt`. After an intended
   change, rewrite them and review the diff:
@@ -202,8 +203,12 @@ by hand, then fix it.
   a line, how many lines it allows and when it turns instead are unknown.
 - Layout cost on large series: a 10,000-point line about 250 ms on the VM and
   520 ms in Chrome, 3,650 categories of two series about 100 and 190 ms
-  (`packages/jet_charts_flutter/docs/benchmark.md`); data-label placement is
-  linear per obstacle.
+  (`packages/jet_charts_flutter/docs/benchmark.md`). Data-label placement
+  checks each place against every text and label already placed, and against
+  the marks whose boxes can reach it (a mark's shapes, such as a line's
+  segments, are sorted by box and found by binary search); a 10,000-point line
+  with data labels lays out well within the 5 s that `data_labels_test.dart`
+  allows it on the VM (it took about 8 s before the sort).
 - Known deferred defects: the value-position functions disagree beyond 2x the
   span (`valuePosition` clamps to [0, 1], marks to [-1, 2]); the stacked line
   or area extent with mixed signs is wider than needed; a side legend is

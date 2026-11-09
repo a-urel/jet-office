@@ -333,49 +333,90 @@ void main() {
       );
     });
 
-    test('an area counts by its outline, except under its own labels', () {
-      // An L: the box in its notch overlaps nothing.
-      final PathPrimitive area = PathPrimitive(
-        ids.seriesAreaId(0),
-        const <ChartPoint>[
-          ChartPoint(0, 0),
-          ChartPoint(50, 0),
-          ChartPoint(50, 50),
-          ChartPoint(100, 50),
-          ChartPoint(100, 100),
-          ChartPoint(0, 100),
-        ],
-        closed: true,
-        fill: ink,
-      );
+    test('an area\'s fill does not count, a stroked outline does', () {
+      const List<ChartPoint> outline = <ChartPoint>[
+        ChartPoint(0, 0),
+        ChartPoint(50, 0),
+        ChartPoint(50, 50),
+        ChartPoint(100, 50),
+        ChartPoint(100, 100),
+        ChartPoint(0, 100),
+      ];
+      final List<TextPrimitive> labels = <TextPrimitive>[
+        // Wholly inside the area, away from its outline.
+        text(ids.dataLabelId(1, 0), const ChartRect(10, 10, 20, 10)),
+        // Across its edge at x = 50.
+        text(ids.dataLabelId(1, 1), const ChartRect(45, 30, 20, 10)),
+      ];
       expect(
         findOverlaps(<ChartPrimitive>[
-          clip(<ChartPrimitive>[area]),
-          text(ids.dataLabelId(1, 0), const ChartRect(60, 10, 20, 10)),
-          text(ids.dataLabelId(0, 0), const ChartRect(10, 10, 20, 10)),
+          clip(<ChartPrimitive>[
+            PathPrimitive(
+              ids.seriesAreaId(0),
+              outline,
+              closed: true,
+              fill: ink,
+            ),
+          ]),
+          ...labels,
         ], size),
         isEmpty,
       );
       expect(
         findOverlaps(<ChartPrimitive>[
-          clip(<ChartPrimitive>[area]),
-          // Wholly inside the area.
-          text(ids.dataLabelId(1, 0), const ChartRect(10, 10, 20, 10)),
-          // Across its edge.
-          text(ids.dataLabelId(1, 1), const ChartRect(45, 30, 20, 10)),
+          clip(<ChartPrimitive>[
+            PathPrimitive(
+              ids.seriesAreaId(0),
+              outline,
+              closed: true,
+              fill: ink,
+              stroke: ink,
+            ),
+          ]),
+          ...labels,
         ], size),
         <ChartOverlap>[
-          const ChartOverlap(
-            ChartOverlapKind.textMark,
-            'label/1/0',
-            'series/0/area',
-          ),
           const ChartOverlap(
             ChartOverlapKind.textMark,
             'label/1/1',
             'series/0/area',
           ),
         ],
+      );
+    });
+
+    test('a long line\'s segments are each checked', () {
+      // A zigzag of 2,000 points: a text between two segments' boxes meets
+      // nothing; one on the 1,500th segment meets the line.
+      final PathPrimitive line = PathPrimitive(
+        ids.seriesLineId(0, 0),
+        <ChartPoint>[
+          for (int i = 0; i < 2000; i++)
+            ChartPoint(i * 0.1, i.isEven ? 10 : 90),
+        ],
+        stroke: ink,
+      );
+      expect(
+        findOverlaps(<ChartPrimitive>[
+          ClipPrimitive(
+            ids.plotClip,
+            const ChartRect(0, 0, 200, 100),
+            <ChartPrimitive>[line],
+          ),
+          text(ids.dataLabelId(1, 0), const ChartRect(149.95, 50, 0.1, 1)),
+        ], size),
+        hasLength(1),
+      );
+      expect(
+        findOverlaps(<ChartPrimitive>[
+          ClipPrimitive(
+            ids.plotClip,
+            const ChartRect(0, 0, 200, 100),
+            <ChartPrimitive>[line],
+          ),
+          text(ids.dataLabelId(1, 0), const ChartRect(10, 92, 20, 5)),
+        ], size),
+        isEmpty,
       );
     });
 
