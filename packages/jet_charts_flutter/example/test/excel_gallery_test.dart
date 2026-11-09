@@ -174,6 +174,38 @@ void main() {
     }
   });
 
+  // Excel reads rot="-60000000" (its "automatic" angle) as vertical text
+  // outside an axis, so the legend and data labels take rot="0", as Excel
+  // writes them.
+  test('only axis labels take the automatic text angle', () {
+    for (int i = 1; i <= entries.length; i++) {
+      final XmlDocument doc = xml('xl/charts/chart$i.xml');
+      for (final String owner in <String>['c:legend', 'c:dLbls']) {
+        for (final XmlElement e in all(doc, owner)) {
+          for (final XmlElement body in all(e, 'a:bodyPr')) {
+            expect(
+              body.getAttribute('rot'),
+              '0',
+              reason: '${entries[i - 1].name}: $owner',
+            );
+          }
+        }
+      }
+      for (final String axis in <String>['c:catAx', 'c:valAx']) {
+        for (final XmlElement e in all(doc, axis)) {
+          final XmlElement txPr = e.childElements.firstWhere(
+            (XmlElement c) => c.name.qualified == 'c:txPr',
+          );
+          expect(
+            all(txPr, 'a:bodyPr').single.getAttribute('rot'),
+            '-60000000',
+            reason: '${entries[i - 1].name}: $axis',
+          );
+        }
+      }
+    }
+  });
+
   test('series 7 and 8 of column_eight_series carry no colour', () {
     final int index =
         entries.indexWhere(

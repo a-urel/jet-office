@@ -293,14 +293,28 @@ const String _greyLine =
 const String _noShape =
     '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr>';
 
-const String _bodyPr =
+/// The text body of axis labels: `rot="-60000000"` is Excel's automatic
+/// angle, which it honours on an axis only.
+const String _axisBodyPr =
     '<a:bodyPr rot="-60000000" spcFirstLastPara="1" vertOverflow="ellipsis" '
     'vert="horz" wrap="square" anchor="ctr" anchorCtr="1"/>';
 
+/// The text body of the legend, level as Excel writes it; Excel turns
+/// legend text written with the automatic angle on its side.
+const String _legendBodyPr =
+    '<a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" '
+    'vert="horz" wrap="square" anchor="ctr" anchorCtr="1"/>';
+
+/// The text body of data labels, as Excel writes it.
+const String _labelBodyPr =
+    '<a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" '
+    'vert="horz" wrap="square" lIns="38100" tIns="19050" rIns="38100" '
+    'bIns="19050" anchor="ctr" anchorCtr="1"><a:spAutoFit/></a:bodyPr>';
+
 /// The text properties of axis labels and the legend (9 pt, 65 and 35) and of
-/// data labels (9 pt, 75 and 25).
-String _txPr(int mod, int off) =>
-    '<c:txPr>$_bodyPr<a:lstStyle/><a:p><a:pPr><a:defRPr sz="900" b="0" i="0" '
+/// data labels (9 pt, 75 and 25), with the text body [bodyPr].
+String _txPr(int mod, int off, String bodyPr) =>
+    '<c:txPr>$bodyPr<a:lstStyle/><a:p><a:pPr><a:defRPr sz="900" b="0" i="0" '
     'u="none" strike="noStrike" kern="1200" baseline="0">'
     '${_textFill(mod, off)}$_fonts</a:defRPr></a:pPr>'
     '<a:endParaRPr lang="en-US"/></a:p></c:txPr>';
@@ -321,7 +335,7 @@ String _showFlags(bool value) =>
 
 /// A series' data labels, shown: Excel places them by the chart's kind.
 String get _seriesLabels =>
-    '<c:dLbls>$_noShape${_txPr(75000, 25000)}${_showFlags(true)}</c:dLbls>';
+    '<c:dLbls>$_noShape${_txPr(75000, 25000, _labelBodyPr)}${_showFlags(true)}</c:dLbls>';
 
 String _seriesShape(ChartKind kind, int index) {
   // Past the sixth series Excel chooses the colour (see the library comment).
@@ -409,7 +423,7 @@ String _chartXml(GalleryEntry entry) {
           ChartLegendPosition.bottom => 'b',
           ChartLegendPosition.left => 'l',
           ChartLegendPosition.right => 'r',
-        }}"/><c:overlay val="0"/>$_noShape${_txPr(65000, 35000)}</c:legend>';
+        }}"/><c:overlay val="0"/>$_noShape${_txPr(65000, 35000, _legendBodyPr)}</c:legend>';
   final String title = entry.excelTitle.isEmpty
       ? '<c:autoTitleDeleted val="1"/>'
       : '${_title(entry.excelTitle)}<c:autoTitleDeleted val="0"/>';
@@ -426,7 +440,7 @@ String _chartXml(GalleryEntry entry) {
       '<c:numFmt formatCode="General" sourceLinked="1"/>'
       '<c:majorTickMark val="none"/><c:minorTickMark val="none"/>'
       '<c:tickLblPos val="nextTo"/><c:spPr><a:noFill/>$_greyLine'
-      '<a:effectLst/></c:spPr>${_txPr(65000, 35000)}'
+      '<a:effectLst/></c:spPr>${_txPr(65000, 35000, _axisBodyPr)}'
       '<c:crossAx val="222222222"/><c:crosses val="autoZero"/><c:auto val="1"/>'
       '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/>'
       '</c:catAx>'
@@ -436,7 +450,7 @@ String _chartXml(GalleryEntry entry) {
       '<c:majorGridlines><c:spPr>$_greyLine<a:effectLst/></c:spPr>'
       '</c:majorGridlines>$valueFormat'
       '<c:majorTickMark val="none"/><c:minorTickMark val="none"/>'
-      '<c:tickLblPos val="nextTo"/>$_noShape${_txPr(65000, 35000)}'
+      '<c:tickLblPos val="nextTo"/>$_noShape${_txPr(65000, 35000, _axisBodyPr)}'
       '<c:crossAx val="111111111"/><c:crosses val="autoZero"/>'
       '<c:crossBetween val="${chart.kind == ChartKind.area ? 'midCat' : 'between'}"/>'
       '</c:valAx>$_noShape</c:plotArea>$legend'
