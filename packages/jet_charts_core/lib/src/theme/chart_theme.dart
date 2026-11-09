@@ -50,8 +50,10 @@ final class ChartTheme {
   /// Verified on Excel's default column and line charts
   /// (`chart_defaults.xlsx`, 2026-11-08; `docs/excel-checks.md` gives each
   /// value's source): the font family `Aptos Narrow` (the theme's minor
-  /// font), 9 pt axis labels and a 14 pt title, the text colour `595959`, the
-  /// grid and axis line colour `D9D9D9`, the background `FFFFFF`,
+  /// font), 9 pt axis labels and a 14 pt title, the text colour `595959`
+  /// (`tx1` with `lumMod` 0.65 and `lumOff` 0.35), the grid and axis line
+  /// colour `D9D9D9` (`tx1`, 0.15 and 0.85), the background `FFFFFF` (`bg1`),
+  /// each bound to the file theme,
   /// [gapWidthPercent] 219, [lineWidth] 2.25, [markerSize] 5, and of
   /// [spacing] the line widths, the overlap and the tick length. Still
   /// unconfirmed: 9 pt for the legend and data labels, and the other gaps of

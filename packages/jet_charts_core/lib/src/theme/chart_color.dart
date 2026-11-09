@@ -50,7 +50,7 @@ enum ChartExportColors {
 
 /// An opaque colour: an RGB value, optionally bound to a theme slot.
 final class ChartColor {
-  const ChartColor._(this.rgb, this.slot);
+  const ChartColor._(this.rgb, this.slot, [this.lumMod = 1, this.lumOff = 0]);
 
   /// A fixed colour of [rgb], the red, green and blue channels as
   /// `0xRRGGBB`.
@@ -64,10 +64,29 @@ final class ChartColor {
   /// A colour bound to [slot] of the file's theme, drawn as [rgb] until a file
   /// theme says otherwise.
   ///
-  /// Throws an [ArgumentError] when [rgb] is outside `0` to `0xFFFFFF`.
-  factory ChartColor.scheme(ChartSchemeColor slot, {required int rgb}) {
+  /// [lumMod] and [lumOff] are DrawingML's `lumMod` and `lumOff` as fractions
+  /// (Excel's `65000` is `0.65`): the slot's luminance is multiplied by
+  /// [lumMod], then [lumOff] is added. [rgb] is the result for the Office
+  /// theme and is what is drawn.
+  ///
+  /// Throws an [ArgumentError] when [rgb] is outside `0` to `0xFFFFFF`, or
+  /// when [lumMod] or [lumOff] is not finite or is outside `0` to `1`.
+  factory ChartColor.scheme(
+    ChartSchemeColor slot, {
+    required int rgb,
+    double lumMod = 1,
+    double lumOff = 0,
+  }) {
     _check(rgb);
-    return ChartColor._(rgb, slot);
+    _checkFraction(lumMod, 'lumMod');
+    _checkFraction(lumOff, 'lumOff');
+    return ChartColor._(rgb, slot, lumMod, lumOff);
+  }
+
+  static void _checkFraction(double value, String name) {
+    if (!value.isFinite || value < 0 || value > 1) {
+      throw ArgumentError.value(value, name, 'must be finite, within 0 to 1');
+    }
   }
 
   static void _check(int rgb) {
@@ -82,20 +101,37 @@ final class ChartColor {
   /// The theme slot the colour is bound to, or `null` for a fixed colour.
   final ChartSchemeColor? slot;
 
+  /// The fraction the slot's luminance is multiplied by, `1` unless set and
+  /// always `1` for a fixed colour.
+  final double lumMod;
+
+  /// The fraction added to the slot's luminance after [lumMod], `0` unless set
+  /// and always `0` for a fixed colour.
+  final double lumOff;
+
   @override
   bool operator ==(Object other) {
-    return other is ChartColor && rgb == other.rgb && slot == other.slot;
+    return other is ChartColor &&
+        rgb == other.rgb &&
+        slot == other.slot &&
+        lumMod == other.lumMod &&
+        lumOff == other.lumOff;
   }
 
   @override
-  int get hashCode => Object.hash(rgb, slot);
+  int get hashCode => Object.hash(rgb, slot, lumMod, lumOff);
+
+  static String _percent(double fraction) =>
+      (fraction * 100).round().toString();
 
   @override
   String toString() {
     final String hex = rgb.toRadixString(16).padLeft(6, '0').toUpperCase();
-    return slot == null
-        ? 'ChartColor($hex)'
-        : 'ChartColor($hex, ${slot!.name})';
+    if (slot == null) return 'ChartColor($hex)';
+    final String lum = lumMod == 1 && lumOff == 0
+        ? ''
+        : ' ${_percent(lumMod)}/${_percent(lumOff)}';
+    return 'ChartColor($hex, ${slot!.name}$lum)';
   }
 }
 
