@@ -23,7 +23,7 @@ import 'text_measurer.dart';
 ///   its sweep, then back along the inner circle (or to the centre when the
 ///   inner radius is 0), in degrees clockwise from three o'clock; a sweep of a
 ///   full turn or more is a whole circle or ring. It is filled, then stroked
-///   one unit wide;
+///   its stroke width wide;
 /// * a [TextPrimitive] is the measurer's laid-out painter for its text and
 ///   style, painted at its rect's top left, the canvas turned by its rotation
 ///   about the rect's centre;
@@ -176,8 +176,9 @@ void _paintArc(Canvas canvas, ArcPrimitive p) {
     path.close();
   }
   if (p.fill != null) canvas.drawPath(path, _fill(p.fill!));
-  // One unit wide until the primitive carries a width (J4).
-  if (p.stroke != null) canvas.drawPath(path, _stroke(p.stroke!, 1));
+  if (p.stroke != null) {
+    canvas.drawPath(path, _stroke(p.stroke!, p.strokeWidth));
+  }
 }
 
 void _paintText(Canvas canvas, TextPrimitive p, FlutterTextMeasurer measurer) {

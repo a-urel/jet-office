@@ -29,9 +29,9 @@ theme's in `excel-checks.md`.
 | Grid lines | Value grid on, category grid off, 0.75 pt `D9D9D9` | None |
 | Axis lines | Category axis line, 0.75 pt `D9D9D9`, no value axis line | Same in the Office theme; other themes draw a value axis line unless `valueAxisLine` is false |
 | Bars | Gap width 219, overlap -27, no outline (Excel's clustered column default) | Gap and overlap clamped to Excel's ranges; the same gap and overlap for every bar kind and grouping (see below) |
-| Lines and markers | 2.25 pt, circle markers of 5 pt | The layout gives no cap, join or marker outline; `jet_charts_flutter` draws lines and outlines with round caps and joins, and other backends choose |
+| Lines and markers | 2.25 pt, a circle marker of 5 pt with a 0.75 pt outline on every point (matched in the owner's J3 gallery check, `line_gap`) | The layout gives no cap or join; `jet_charts_flutter` draws lines and outlines with round caps and joins, and other backends choose |
 | Title | 14 pt `595959` Aptos Narrow | Shown only when the chart has one; no default title |
-| Legend | 9 pt text | Shown unless hidden, even for one series; dropped whole when a side legend does not fit |
+| Legend | 9 pt text; a line series' symbol is a line with a marker (matched in the owner's J3 gallery check, `line_gap`) | Shown unless hidden, even for one series; dropped whole when a side legend does not fit; the legend line's length, 16 pt, is this library's estimate |
 | Data labels | 9 pt text | Never overlap or leave the plot |
 | Axis titles | Shown when set | Use the axis label style |
 | Chart area | White background, 0.75 pt `D9D9D9` border | Same in the Office theme; other themes have no border unless `border` is set |

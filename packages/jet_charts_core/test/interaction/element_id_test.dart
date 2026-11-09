@@ -41,6 +41,7 @@ void main() {
       'plot/clip': _e(ChartElementKind.plotClip),
       'placeholder': _e(ChartElementKind.placeholder),
       'legend/2/symbol': _e(ChartElementKind.legendSymbol, series: 2),
+      'legend/0/marker': _e(ChartElementKind.legendSymbol, series: 0),
       'legend/0/text': _e(ChartElementKind.legendText, series: 0),
       'axis/value/line': _e(
         ChartElementKind.axisLine,
@@ -129,6 +130,9 @@ void main() {
       'legend/1',
       'legend/1/name',
       'legend/1/symbol/0',
+      'legend/1/marker/0',
+      'legend/x/marker',
+      'legend/01/marker',
       'plot/area',
       'plot/clip/0',
       'Background',
@@ -176,6 +180,17 @@ void main() {
         );
       }
     }
+  });
+
+  test("a line chart's legend marker is in the gallery and parses", () {
+    final ChartLayout layout = goldenLayouts()
+        .firstWhere(((String, ChartLayout) e) => e.$1 == 'line_gap')
+        .$2;
+    expect(_ids(layout.primitives), contains('legend/0/marker'));
+    expect(
+      ChartElementId.parse('legend/0/marker'),
+      isNot(ChartElementId.parse('legend/0/symbol')),
+    );
   });
 
   test('a theme with a value axis line gives an id that parses', () {

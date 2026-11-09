@@ -197,6 +197,39 @@ void main() {
       expect(m.stroke, b.stroke);
     });
 
+    test('a marker moves with its line', () {
+      final ChartLayout from = _layout(
+        _chart(<double>[1, 2, 3, 4], kind: ChartKind.line),
+      );
+      final ChartLayout to = _layout(
+        _chart(<double>[4, 3, 2, 1], kind: ChartKind.line),
+      );
+      final ArcPrimitive a =
+          _find(from.primitives, 'series/0/marker/1')! as ArcPrimitive;
+      final ArcPrimitive b =
+          _find(to.primitives, 'series/0/marker/1')! as ArcPrimitive;
+      final ArcPrimitive m =
+          _find(
+                lerpChartPrimitives(from.primitives, to.primitives, 0.25),
+                'series/0/marker/1',
+              )!
+              as ArcPrimitive;
+      expect(a.center.y, isNot(closeTo(b.center.y, 1)));
+      expect(
+        m.center.y,
+        closeTo(a.center.y + (b.center.y - a.center.y) * 0.25, 1e-9),
+      );
+      expect(
+        m.center.x,
+        closeTo(a.center.x + (b.center.x - a.center.x) * 0.25, 1e-9),
+      );
+      expect(m.radius, b.radius);
+      expect(m.sweepAngle, b.sweepAngle);
+      expect(m.fill, b.fill);
+      expect(m.stroke, b.stroke);
+      expect(m.strokeWidth, b.strokeWidth);
+    });
+
     test('a data label is absent at 0.5 and present at 1', () {
       final ChartLayout from = _layout(
         _chart(<double>[10, 20, 30, 40], labels: true),

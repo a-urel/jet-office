@@ -11,6 +11,7 @@ import 'dart:math' as math;
 import '../model/chart.dart';
 import '../model/chart_kind.dart';
 import '../scale/value_scale.dart';
+import '../theme/chart_color.dart';
 import '../theme/chart_theme.dart';
 import 'axis_layout.dart';
 import 'chart_ids.dart' as ids;
@@ -21,7 +22,9 @@ import 'resolve.dart';
 /// The marks of [chart] on [plot], in paint order, for the clip of the plot.
 ///
 /// Column and bar charts draw rectangles, line charts one path per run of
-/// values, area charts one closed path per series. Any other kind draws none.
+/// values and then, per series, a circle marker on every point (on a point
+/// with no neighbour only, when the theme's `lineMarkers` is off), area charts
+/// one closed path per series. Any other kind draws none.
 List<ChartPrimitive> layoutMarks(
   Chart chart,
   ResolvedChart resolved,
@@ -250,11 +253,13 @@ List<ChartPrimitive> _lines(
   MarkAxes axes,
 ) {
   final List<List<ChartPoint?>> tops = _linePoints(resolved, values, axes);
-  final double h = theme.markerSize / 2;
   final List<ChartPrimitive> out = <ChartPrimitive>[];
   for (int s = 0; s < tops.length; s++) {
+    final ChartColor color = resolved.colors[s];
     int run = 0;
     final List<ChartPoint> points = <ChartPoint>[];
+    // The categories that get a marker, drawn after the series' runs.
+    final List<int> marked = <int>[];
     int first = 0;
     void flush() {
       if (points.length > 1) {
@@ -262,25 +267,12 @@ List<ChartPrimitive> _lines(
           PathPrimitive(
             ids.seriesLineId(s, run++),
             points,
-            stroke: resolved.colors[s],
+            stroke: color,
             strokeWidth: theme.lineWidth,
           ),
         );
-      } else if (points.length == 1) {
-        final ChartPoint p = points.first;
-        out.add(
-          PathPrimitive(
-            ids.seriesMarkerId(s, first),
-            <ChartPoint>[
-              ChartPoint(p.x - h, p.y - h),
-              ChartPoint(p.x + h, p.y - h),
-              ChartPoint(p.x + h, p.y + h),
-              ChartPoint(p.x - h, p.y + h),
-            ],
-            closed: true,
-            fill: resolved.colors[s],
-          ),
-        );
+      } else if (points.length == 1 && !theme.lineMarkers) {
+        marked.add(first);
       }
       points.clear();
     }
@@ -295,11 +287,39 @@ List<ChartPrimitive> _lines(
         first = c;
       }
       points.add(p);
+      if (theme.lineMarkers) {
+        marked.add(c);
+      }
     }
     flush();
+    for (final int c in marked) {
+      out.add(lineMarker(ids.seriesMarkerId(s, c), tops[s][c]!, color, theme));
+    }
   }
   return out;
 }
+
+/// The width of a marker's outline: Excel's 0.75 pt (`chart_defaults.xlsx`).
+const double markerOutlineWidth = 0.75;
+
+/// The marker [id] of a line point at [center]: a full circle of the theme's
+/// `markerSize`, filled and outlined in [color].
+ArcPrimitive lineMarker(
+  String id,
+  ChartPoint center,
+  ChartColor color,
+  ChartTheme theme,
+) => ArcPrimitive(
+  id,
+  center,
+  theme.markerSize / 2,
+  0,
+  0,
+  360,
+  fill: color,
+  stroke: color,
+  strokeWidth: markerOutlineWidth,
+);
 
 /// The top and the base of the area column under every value, per series.
 ///

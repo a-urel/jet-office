@@ -71,7 +71,8 @@ final class ChartLayout {
   ///   holds the series marks) and `placeholder` (the text of a kind this
   ///   version does not draw): one each.
   /// * `legend/<s>/symbol` and `legend/<s>/text`: the legend entry of series
-  ///   `<s>`.
+  ///   `<s>`; a line series' entry also has `legend/<s>/marker`, the marker
+  ///   on its line, when the theme's `lineMarkers` is on.
   /// * `axis/<a>/line`, `axis/<a>/label/<i>` and `axis/<a>/title`, where `<a>`
   ///   is `value` or `category`: the axis line, its label `<i>` (a value
   ///   axis' tick `<i>` from its minimum, a category axis' category `<i>`) and
@@ -79,7 +80,8 @@ final class ChartLayout {
   /// * `grid/<a>/<i>`: grid line `<i>` of axis `<a>`.
   /// * `series/<s>/bar/<c>`, `series/<s>/line/<run>`, `series/<s>/marker/<c>`
   ///   and `series/<s>/area`: the marks of series `<s>` at category `<c>`; a
-  ///   gap in the data starts a new line run.
+  ///   gap in the data starts a new line run, and a marker is the circle on a
+  ///   line's point.
   /// * `label/<s>/<c>`: the data label of series `<s>` at category `<c>`.
   ///
   /// [ChartElementId.parse] is the exact inverse of this scheme: it reads

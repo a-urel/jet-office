@@ -177,8 +177,8 @@ by hand, then fix it.
 
 ## Open for J4 and C1
 
-- `ArcPrimitive.strokeWidth`, pies, donut, sparkline, scatter, combination
-  charts, per-series kind and the secondary axis (J4).
+- Pies, donut, sparkline, scatter, combination charts, per-series kind and
+  the secondary axis (J4).
 - Excel's time-scale date axis (owner decision O2; dates are categories).
 - The en-US and de-DE oracle regions are unverified; so are fonts other than
   8, 10 and 18, and plot margins.

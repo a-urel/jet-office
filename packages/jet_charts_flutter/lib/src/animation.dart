@@ -10,7 +10,8 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 /// `bar`, `line`, `marker` and `area`). A mark whose id is in both lists, as
 /// the same type of primitive, is interpolated: a rectangle by its left, top,
 /// width and height; a path point by point when both have as many points,
-/// else it is `to`'s path. Its colours, widths and dashes are `to`'s. A mark
+/// else it is `to`'s path; an arc (a line's marker) by its centre, radii and
+/// angles. Its colours, widths and dashes are `to`'s. A mark
 /// only in [to] shows from the start, and a mark only in [from] is dropped.
 /// Every other primitive is [to]'s, in [to]'s order, except data labels
 /// (`dataLabel`), which are left out until [t] is 1, so no text crosses a
@@ -114,6 +115,22 @@ ChartPrimitive _lerpMark(
       stroke: target.stroke,
       strokeWidth: target.strokeWidth,
       dash: target.dash,
+    );
+  }
+  if (source is ArcPrimitive && target is ArcPrimitive) {
+    return ArcPrimitive(
+      target.id,
+      ChartPoint(
+        _lerp(source.center.x, target.center.x, t),
+        _lerp(source.center.y, target.center.y, t),
+      ),
+      _lerp(source.radius, target.radius, t),
+      _lerp(source.innerRadius, target.innerRadius, t),
+      _lerp(source.startAngle, target.startAngle, t),
+      _lerp(source.sweepAngle, target.sweepAngle, t),
+      fill: target.fill,
+      stroke: target.stroke,
+      strokeWidth: target.strokeWidth,
     );
   }
   return target;

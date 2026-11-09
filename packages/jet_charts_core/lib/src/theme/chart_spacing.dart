@@ -29,6 +29,7 @@ final class ChartSpacing {
     this.gridLineWidth = 0.75,
     this.axisLineWidth = 0.75,
     this.overlapPercent = -27,
+    this.legendLineSymbol = 16,
   }) {
     for (final (String name, double value) in <(String, double)>[
       ('padding', padding),
@@ -41,6 +42,7 @@ final class ChartSpacing {
       ('tickLength', tickLength),
       ('gridLineWidth', gridLineWidth),
       ('axisLineWidth', axisLineWidth),
+      ('legendLineSymbol', legendLineSymbol),
     ]) {
       if (!value.isFinite || value < 0) {
         throw ArgumentError.value(
@@ -70,6 +72,12 @@ final class ChartSpacing {
 
   /// The side of a legend's colour symbol. Unconfirmed.
   final double legendSymbol;
+
+  /// The length of the line a line series' legend entry shows in place of
+  /// the square symbol. Seen in the owner's gallery check against Excel for
+  /// Mac; 16 is this library's estimate from its screenshot, as Excel writes
+  /// no such length.
+  final double legendLineSymbol;
 
   /// The gap between two legend entries. Unconfirmed.
   final double legendItemGap;
@@ -111,6 +119,7 @@ final class ChartSpacing {
     double? gridLineWidth,
     double? axisLineWidth,
     double? overlapPercent,
+    double? legendLineSymbol,
   }) {
     return ChartSpacing(
       padding: padding ?? this.padding,
@@ -124,6 +133,7 @@ final class ChartSpacing {
       gridLineWidth: gridLineWidth ?? this.gridLineWidth,
       axisLineWidth: axisLineWidth ?? this.axisLineWidth,
       overlapPercent: overlapPercent ?? this.overlapPercent,
+      legendLineSymbol: legendLineSymbol ?? this.legendLineSymbol,
     );
   }
 
@@ -140,7 +150,8 @@ final class ChartSpacing {
         valueEquals(tickLength, other.tickLength) &&
         valueEquals(gridLineWidth, other.gridLineWidth) &&
         valueEquals(axisLineWidth, other.axisLineWidth) &&
-        valueEquals(overlapPercent, other.overlapPercent);
+        valueEquals(overlapPercent, other.overlapPercent) &&
+        valueEquals(legendLineSymbol, other.legendLineSymbol);
   }
 
   @override
@@ -156,6 +167,7 @@ final class ChartSpacing {
     valueHash(gridLineWidth),
     valueHash(axisLineWidth),
     valueHash(overlapPercent),
+    valueHash(legendLineSymbol),
   );
 
   @override

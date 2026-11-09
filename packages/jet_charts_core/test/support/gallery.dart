@@ -213,7 +213,8 @@ void _write(List<ChartPrimitive> primitives, StringBuffer out, String indent) {
           '${indent}arc ${p.id} centre=${_n(p.center.x)},${_n(p.center.y)} '
           'radius=${_n(p.radius)} inner=${_n(p.innerRadius)} '
           'start=${_n(p.startAngle)} sweep=${_n(p.sweepAngle)} '
-          'fill=${_color(p.fill)} stroke=${_color(p.stroke)}',
+          'fill=${_color(p.fill)} stroke=${_color(p.stroke)} '
+          'width=${_n(p.strokeWidth)}',
         );
       case TextPrimitive():
         out.writeln(

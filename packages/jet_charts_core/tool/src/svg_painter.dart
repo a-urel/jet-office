@@ -141,7 +141,7 @@ String _arc(ArcPrimitive p) {
   }
   d.write('Z');
   final StringBuffer b = StringBuffer()..write('<path d="$d"');
-  _paintAttributes(b, p.fill, p.stroke, null, null);
+  _paintAttributes(b, p.fill, p.stroke, p.strokeWidth, null);
   b.write('/>');
   return b.toString();
 }

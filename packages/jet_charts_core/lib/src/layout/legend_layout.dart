@@ -9,6 +9,7 @@ import '../theme/chart_color.dart';
 import '../theme/chart_spacing.dart';
 import 'chart_ids.dart' as ids;
 import 'geometry.dart';
+import 'marks.dart' show markerOutlineWidth;
 import 'primitives.dart';
 import 'text_measurer.dart';
 
@@ -51,12 +52,20 @@ Placed? placeTitle(
   ], ChartRect(area.left, area.top + taken, area.width, area.height - taken));
 }
 
+/// How the legend draws the symbol of a line series: a line of
+/// `legendLineSymbol` long and `lineWidth` wide, with a marker of
+/// `markerSize` in its middle when `markers` is on.
+typedef LegendLineLook = ({double lineWidth, double markerSize, bool markers});
+
 /// Places a legend of [names] in [colors] on the [position] side of [area].
 ///
-/// An entry is a `legendSymbol` square, `labelGap`, then the name. On the top
-/// or bottom, entries run in rows `legendItemGap` apart that wrap at the
-/// width of [area], each row centred, rows `minTextGap` apart, at most a third
-/// of [limit]'s height in all. On the left or right, entries make one column,
+/// An entry is a symbol, `labelGap`, then the name. The symbol is a
+/// `legendSymbol` square, or for an entry [lines] marks (a line series) a
+/// horizontal line `legendLineSymbol` long at the entry's vertical middle,
+/// drawn as [lineLook] says, with its marker (`legend/<s>/marker`) over it.
+/// On the top or bottom, entries run in rows `legendItemGap` apart that wrap
+/// at the width of [area], each row centred, rows `minTextGap` apart, at most
+/// a third of [limit]'s height in all. On the left or right, entries make one column,
 /// at most a third of [limit]'s width wide and no taller than [area], centred
 /// on [area]'s height. The legend keeps `legendGap` from what is left.
 ///
@@ -70,20 +79,28 @@ Placed? placeLegend(
   ChartRect limit,
   ChartTextStyle style,
   TextMeasurer measurer,
-  ChartSpacing spacing,
-) {
+  ChartSpacing spacing, {
+  List<bool> lines = const <bool>[],
+  LegendLineLook lineLook = (lineWidth: 1, markerSize: 0, markers: false),
+}) {
   if (names.isEmpty) {
     return Placed(const <ChartPrimitive>[], area);
   }
+  bool isLine(int i) => i < lines.length && lines[i];
+  double symbolWidth(int i) =>
+      isLine(i) ? spacing.legendLineSymbol : spacing.legendSymbol;
   final List<ChartSize> sizes = <ChartSize>[
     for (final String name in names) measurer.measure(name, style),
   ];
   double rowHeight = spacing.legendSymbol;
+  if (lineLook.markers && lines.contains(true)) {
+    rowHeight = math.max(rowHeight, lineLook.markerSize);
+  }
   for (final ChartSize size in sizes) {
     rowHeight = math.max(rowHeight, size.height);
   }
   double entryWidth(int i) =>
-      spacing.legendSymbol + spacing.labelGap + sizes[i].width;
+      symbolWidth(i) + spacing.labelGap + sizes[i].width;
 
   // Each row is a list of entry indexes.
   final List<List<int>> rows = <List<int>>[];
@@ -150,24 +167,52 @@ Placed? placeLegend(
     double x = sideways ? left : left + (width - rowWidth) / 2;
     final double y = top + r * (rowHeight + spacing.minTextGap);
     for (final int i in row) {
-      entries.add(
-        RectPrimitive(
-          ids.legendSymbolId(i),
-          ChartRect(
-            x,
-            y + (rowHeight - spacing.legendSymbol) / 2,
-            spacing.legendSymbol,
-            spacing.legendSymbol,
+      if (isLine(i)) {
+        final double middle = y + rowHeight / 2;
+        final double length = spacing.legendLineSymbol;
+        entries.add(
+          PathPrimitive(
+            ids.legendSymbolId(i),
+            <ChartPoint>[ChartPoint(x, middle), ChartPoint(x + length, middle)],
+            stroke: colors[i],
+            strokeWidth: lineLook.lineWidth,
           ),
-          fill: colors[i],
-        ),
-      );
+        );
+        if (lineLook.markers) {
+          entries.add(
+            ArcPrimitive(
+              ids.legendMarkerId(i),
+              ChartPoint(x + length / 2, middle),
+              lineLook.markerSize / 2,
+              0,
+              0,
+              360,
+              fill: colors[i],
+              stroke: colors[i],
+              strokeWidth: markerOutlineWidth,
+            ),
+          );
+        }
+      } else {
+        entries.add(
+          RectPrimitive(
+            ids.legendSymbolId(i),
+            ChartRect(
+              x,
+              y + (rowHeight - spacing.legendSymbol) / 2,
+              spacing.legendSymbol,
+              spacing.legendSymbol,
+            ),
+            fill: colors[i],
+          ),
+        );
+      }
       entries.add(
         TextPrimitive(
           ids.legendTextId(i),
           names[i],
           ChartRect(
-            x + spacing.legendSymbol + spacing.labelGap,
+            x + symbolWidth(i) + spacing.labelGap,
             y + (rowHeight - sizes[i].height) / 2,
             sizes[i].width,
             sizes[i].height,

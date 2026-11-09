@@ -92,7 +92,7 @@ void main() {
         ]),
         '<path d="M70 25A20 20 0 0 1 50 45L50 25Z" fill="#00FF00"/>\n'
         '<path d="M70 25A20 20 0 0 1 50 45L50 35A10 10 0 0 0 60 25Z" '
-        'fill="none" stroke="#FFFFFF"/>',
+        'fill="none" stroke="#FFFFFF" stroke-width="1"/>',
       );
     });
 
@@ -111,6 +111,26 @@ void main() {
         ]),
         '<path d="M60 25A10 10 0 0 1 40 25A10 10 0 0 1 60 25Z" '
         'fill="#00FF00"/>',
+      );
+    });
+
+    test("an arc's outline has its stroke width", () {
+      expect(
+        _body(<ChartPrimitive>[
+          ArcPrimitive(
+            'a',
+            const ChartPoint(50, 25),
+            10,
+            0,
+            0,
+            360,
+            fill: ChartColor.rgb(0x00FF00),
+            stroke: ChartColor.rgb(0x00FF00),
+            strokeWidth: 0.75,
+          ),
+        ]),
+        '<path d="M60 25A10 10 0 0 1 40 25A10 10 0 0 1 60 25Z" '
+        'fill="#00FF00" stroke="#00FF00" stroke-width="0.75"/>',
       );
     });
 

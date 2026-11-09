@@ -29,6 +29,7 @@ import 'package:jet_core/jet_core.dart';
 
 import '../model/chart.dart';
 import '../model/chart_kind.dart';
+import '../model/chart_series.dart';
 import '../scale/value_scale.dart';
 import '../theme/chart_theme.dart';
 import 'axis_layout.dart';
@@ -187,6 +188,17 @@ extension on FrameContext {
         theme.legendText,
         measurer,
         theme.spacing,
+        lines: <bool>[
+          for (final ChartSeries series in chart.series)
+            chart.kind == ChartKind.line ||
+                (chart.kind == ChartKind.combination &&
+                    series.kind == ChartKind.line),
+        ],
+        lineLook: (
+          lineWidth: theme.lineWidth,
+          markerSize: theme.markerSize,
+          markers: theme.lineMarkers,
+        ),
       );
       if (legend == null) {
         return FrameAttempt(misfit: FramePart.legend);

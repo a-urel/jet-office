@@ -35,6 +35,7 @@ final class ChartTheme {
     this.gapWidthPercent = 219,
     this.lineWidth = 2.25,
     this.markerSize = 5,
+    this.lineMarkers = true,
     ChartSpacing? spacing,
     ChartTooltipStyle? tooltip,
     this.exportColors = ChartExportColors.fixed,
@@ -62,7 +63,7 @@ final class ChartTheme {
   /// colour `D9D9D9` (`tx1`, 0.15 and 0.85), a 0.75 pt [border] of the same
   /// colour, no [valueAxisLine] and the background `FFFFFF` (`bg1`), each
   /// colour bound to the file theme; also [gapWidthPercent] 219, [lineWidth]
-  /// 2.25, [markerSize] 5, and of [spacing] the line widths, the overlap and
+  /// 2.25, [markerSize] 5, [lineMarkers] on, and of [spacing] the line widths, the overlap and
   /// the tick length. Still unconfirmed: 9 pt for the legend and data labels,
   /// and the other gaps of [spacing].
   ///
@@ -126,6 +127,15 @@ final class ChartTheme {
   /// The size of a marker, in points. Excel's default, 5, is verified; see
   /// `docs/excel-checks.md`.
   final double markerSize;
+
+  /// Whether every point of a line series has a marker, a filled circle of
+  /// [markerSize] in the series' colour, also shown in the middle of the
+  /// series' legend line.
+  ///
+  /// Excel's default line chart has one (`c:marker`, a circle of size 5, in
+  /// `chart_defaults.xlsx`), so the default is `true`. When `false`, only a
+  /// point with no neighbour to join gets a marker, so it still shows.
+  final bool lineMarkers;
 
   /// The gaps, symbol sizes and line widths of the layout.
   final ChartSpacing spacing;
@@ -208,6 +218,7 @@ final class ChartTheme {
     double? gapWidthPercent,
     double? lineWidth,
     double? markerSize,
+    bool? lineMarkers,
     ChartSpacing? spacing,
     ChartTooltipStyle? tooltip,
     ChartExportColors? exportColors,
@@ -228,6 +239,7 @@ final class ChartTheme {
       gapWidthPercent: gapWidthPercent ?? this.gapWidthPercent,
       lineWidth: lineWidth ?? this.lineWidth,
       markerSize: markerSize ?? this.markerSize,
+      lineMarkers: lineMarkers ?? this.lineMarkers,
       spacing: spacing ?? this.spacing,
       tooltip: tooltip ?? this.tooltip,
       exportColors: exportColors ?? this.exportColors,
@@ -252,6 +264,7 @@ final class ChartTheme {
         gapWidthPercent == other.gapWidthPercent &&
         lineWidth == other.lineWidth &&
         markerSize == other.markerSize &&
+        lineMarkers == other.lineMarkers &&
         spacing == other.spacing &&
         tooltip == other.tooltip &&
         exportColors == other.exportColors;
@@ -274,6 +287,7 @@ final class ChartTheme {
     gapWidthPercent,
     lineWidth,
     markerSize,
+    lineMarkers,
     spacing,
     tooltip,
     exportColors,

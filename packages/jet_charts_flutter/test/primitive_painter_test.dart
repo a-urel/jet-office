@@ -171,6 +171,33 @@ void main() {
     expect(p.at(50, 50), _white);
   });
 
+  test('an arc is stroked as wide as its stroke width', () async {
+    // A circle of radius 30 stroked 3 wide: a ring from 28.5 to 31.5.
+    final _Pixels p = await _paint(<ChartPrimitive>[
+      ArcPrimitive(
+        'a',
+        const ChartPoint(50, 50),
+        30,
+        0,
+        0,
+        360,
+        stroke: _red,
+        strokeWidth: 3,
+      ),
+    ]);
+    for (final (int x, int y) in <(int, int)>[(79, 50), (80, 50), (50, 79)]) {
+      expect(p.at(x, y), 0xFF0000, reason: '($x, $y)');
+    }
+    expect(p.at(77, 50), _white);
+    expect(p.at(82, 50), _white);
+    expect(p.at(50, 50), _white);
+    // One unit wide, pixel 79 (29 to 30 from the centre) is only half inked.
+    final _Pixels thin = await _paint(<ChartPrimitive>[
+      ArcPrimitive('a', const ChartPoint(50, 50), 30, 0, 0, 360, stroke: _red),
+    ]);
+    expect(thin.at(79, 50), isNot(0xFF0000));
+  });
+
   test('a clip hides the part of a child outside it', () async {
     final _Pixels p = await _paint(<ChartPrimitive>[
       ClipPrimitive('c', const ChartRect(0, 0, 50, 100), <ChartPrimitive>[

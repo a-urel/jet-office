@@ -29,8 +29,9 @@ import '../layout/primitives.dart';
 /// * a text: inside its turned box, [TextPrimitive.corners], grown by
 ///   [tolerance] on every side;
 /// * an arc: at a distance from the centre between its inner radius less
-///   [tolerance] and its radius plus [tolerance], at an angle inside its
-///   sweep (the centre itself counts as inside the sweep).
+///   [tolerance] and its radius plus [tolerance] (each widened by half the
+///   stroke width when it has a stroke), at an angle inside its sweep (the
+///   centre itself counts as inside the sweep).
 ///
 /// A [point] with a coordinate that is not finite hits nothing. Throws an
 /// [ArgumentError] when [tolerance] is negative or not finite.
@@ -192,8 +193,13 @@ bool _hitsArc(ArcPrimitive arc, ChartPoint p, double tolerance) {
   final double dx = p.x - arc.center.x;
   final double dy = p.y - arc.center.y;
   final double distance = math.sqrt(dx * dx + dy * dy);
-  if (!(distance >= arc.innerRadius - tolerance &&
-      distance <= arc.radius + tolerance)) {
+  final double halfStroke =
+      arc.stroke != null && arc.strokeWidth.isFinite && arc.strokeWidth > 0
+      ? arc.strokeWidth / 2
+      : 0;
+  final double reach = tolerance + halfStroke;
+  if (!(distance >= arc.innerRadius - reach &&
+      distance <= arc.radius + reach)) {
     return false;
   }
   final double sweep = arc.sweepAngle;

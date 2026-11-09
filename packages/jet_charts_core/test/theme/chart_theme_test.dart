@@ -269,6 +269,18 @@ void main() {
     expect(office.copyWith(padding: 0).padding, 0);
   });
 
+  test('line markers are on by default and part of theme equality', () {
+    final ChartTheme office = ChartTheme.office;
+    expect(office.lineMarkers, isTrue);
+    expect(custom().lineMarkers, isTrue);
+    final ChartTheme off = office.copyWith(lineMarkers: false);
+    expect(off.lineMarkers, isFalse);
+    expect(off, isNot(office));
+    expect(off.hashCode, isNot(office.hashCode));
+    expect(off.copyWith(), off);
+    expect(off.copyWith(lineMarkers: true), office);
+  });
+
   test('spacing is part of theme equality', () {
     final ChartTheme a = custom();
     expect(a.spacing, ChartSpacing());
@@ -293,6 +305,10 @@ void main() {
     expect(s.gridLineWidth, 0.75);
     expect(s.axisLineWidth, 0.75);
     expect(s.overlapPercent, -27);
+    expect(s.legendLineSymbol, 16);
+    expect(s.copyWith(legendLineSymbol: 20).legendLineSymbol, 20);
+    expect(s.copyWith(legendLineSymbol: 20), isNot(s));
+    expect(s.copyWith(legendLineSymbol: 20).hashCode, isNot(s.hashCode));
     expect(s.copyWith(), s);
     expect(s.copyWith(tickLength: 4).tickLength, 4);
     expect(s.copyWith(tickLength: 4), isNot(s));
@@ -312,6 +328,7 @@ void main() {
           (double v) => s.copyWith(tickLength: v),
           (double v) => s.copyWith(gridLineWidth: v),
           (double v) => s.copyWith(axisLineWidth: v),
+          (double v) => s.copyWith(legendLineSymbol: v),
         ];
     for (int f = 0; f < fields.length; f++) {
       for (final double bad in <double>[

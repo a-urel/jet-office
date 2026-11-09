@@ -380,7 +380,7 @@ void main() {
       ],
     );
     final ChartLayout layout = _layout(chart);
-    final PathPrimitive marker = _byId<PathPrimitive>(
+    final ArcPrimitive marker = _byId<ArcPrimitive>(
       layout,
       'series/0/marker/2',
     );
@@ -396,12 +396,7 @@ void main() {
       sourceId: 'series/0/marker/2',
     );
     expect(
-      chartTooltipAt(
-        chart,
-        layout,
-        _along(marker.points[0], marker.points[2], 0.5),
-        theme: _office,
-      ),
+      chartTooltipAt(chart, layout, marker.center, theme: _office),
       expected,
     );
     expect(

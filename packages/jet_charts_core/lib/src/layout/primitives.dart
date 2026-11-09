@@ -140,6 +140,7 @@ final class ArcPrimitive extends ChartPrimitive {
     this.sweepAngle, {
     this.fill,
     this.stroke,
+    this.strokeWidth = 1,
   });
 
   /// The centre of the circle.
@@ -163,6 +164,9 @@ final class ArcPrimitive extends ChartPrimitive {
   /// The outline colour, or null for none.
   final ChartColor? stroke;
 
+  /// The outline width, centred on the outline.
+  final double strokeWidth;
+
   @override
   bool operator ==(Object other) {
     return other is ArcPrimitive &&
@@ -173,7 +177,8 @@ final class ArcPrimitive extends ChartPrimitive {
         valueEquals(startAngle, other.startAngle) &&
         valueEquals(sweepAngle, other.sweepAngle) &&
         fill == other.fill &&
-        stroke == other.stroke;
+        stroke == other.stroke &&
+        valueEquals(strokeWidth, other.strokeWidth);
   }
 
   @override
@@ -186,6 +191,7 @@ final class ArcPrimitive extends ChartPrimitive {
     valueHash(sweepAngle),
     fill,
     stroke,
+    valueHash(strokeWidth),
   );
 
   @override

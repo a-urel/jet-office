@@ -18,6 +18,8 @@ the line chart's; the workbook theme is Excel's default (Office, Aptos).
 | Accents 1 to 6, `dk`/`lt` colours | Verified | `Office Theme.thmx`, Excel for Mac 16.114.4; the workbook's `theme1.xml` has the same |
 | Line width 2.25 pt | Verified | chart2 series `a:ln w="28575" cap="rnd"` |
 | Marker size 5 | Verified | chart2 `c:marker`: `c:symbol` `circle`, `c:size` 5 |
+| A marker on every line point (`lineMarkers` on) | Verified | chart2 `c:lineChart` `c:marker` 1 and the series' `c:marker` circle; the owner's J3 gallery check shows a circle on every point |
+| Marker outline 0.75 pt of the series colour | Verified | chart2 series `c:marker` `c:spPr` `a:ln w="9525"` of the series colour |
 | Gap width 219 | Verified | chart1 `c:gapWidth` 219 |
 | Overlap -27 | Verified | chart1 `c:overlap` -27; `ChartSpacing.overlapPercent` |
 | Font Aptos Narrow | Verified | every `a:defRPr` names `+mn-lt`, the theme's minor font, which is `Aptos Narrow` in the workbook theme |
@@ -33,6 +35,8 @@ the line chart's; the workbook theme is Excel's default (Office, Aptos).
 | Legend at the bottom | Unconfirmed | A one-series default chart has no legend; recalled, no source |
 | Spacing: padding 8, title gap 6, legend gap 6 pt | Unconfirmed | Excel lays the chart out itself (`c:layout` empty); no source |
 | Spacing: legend symbol 7, legend item gap 12 pt | Unconfirmed | No source |
+| A line series' legend symbol: a line with a marker in its middle | Seen | The owner's J3 gallery check (2026-11-09, `line_gap`); Excel writes no legend symbol |
+| Spacing: legend line 16 pt (`legendLineSymbol`) | Estimate | Seen in the owner's gallery check, value this library's estimate from the screenshot |
 | Spacing: label gap 4, minimum text gap 2 pt | Unconfirmed | No source |
 
 What the file states that is not simply a theme value (`docs/parity.md` lists

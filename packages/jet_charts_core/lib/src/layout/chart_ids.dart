@@ -11,7 +11,8 @@
 /// * [background], [title], [legend], [plot], [plotClip], [placeholder]:
 ///   one each.
 /// * `legend/<s>/symbol` and `legend/<s>/text`: the legend entry of series
-///   `<s>` ([legendSymbolId], [legendTextId]).
+///   `<s>` ([legendSymbolId], [legendTextId]); a line series' entry also has
+///   `legend/<s>/marker`, the marker on its line ([legendMarkerId]).
 /// * `axis/<a>/line`, `axis/<a>/label/<i>` and `axis/<a>/title`, where `<a>` is
 ///   `value` or `category` ([axisLineId], [axisLabelId], [axisTitleId]).
 /// * `grid/<a>/<i>`: gridline `<i>` of axis `<a>` ([gridId]).
@@ -51,6 +52,9 @@ const String categoryAxis = 'category';
 
 /// The symbol of the legend entry of [series].
 String legendSymbolId(int series) => 'legend/$series/symbol';
+
+/// The marker on the line of the legend entry of [series], a line series.
+String legendMarkerId(int series) => 'legend/$series/marker';
 
 /// The text of the legend entry of [series].
 String legendTextId(int series) => 'legend/$series/text';

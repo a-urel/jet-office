@@ -250,6 +250,34 @@ void main() {
       expect(_hitIds(layout, const ChartPoint(50, 91)), isEmpty);
     });
 
+    test('a stroked arc is hit on half its stroke width too', () {
+      final ChartLayout layout = of(<ChartPrimitive>[
+        ArcPrimitive(
+          'a',
+          const ChartPoint(50, 50),
+          10,
+          0,
+          0,
+          360,
+          stroke: ChartColor.rgb(0x112233),
+          strokeWidth: 4,
+        ),
+        const ArcPrimitive(
+          'b',
+          ChartPoint(50, 20),
+          10,
+          0,
+          0,
+          360,
+          strokeWidth: 4,
+        ),
+      ]);
+      expect(_hitIds(layout, const ChartPoint(61.5, 50)), <String>['a']);
+      expect(_hitIds(layout, const ChartPoint(62.5, 50)), isEmpty);
+      // Without a stroke colour the width adds nothing.
+      expect(_hitIds(layout, const ChartPoint(61.5, 20)), isEmpty);
+    });
+
     test('topmost first: later primitives come before earlier ones', () {
       final ChartLayout layout = of(<ChartPrimitive>[
         const RectPrimitive('under', ChartRect(0, 0, 50, 50)),

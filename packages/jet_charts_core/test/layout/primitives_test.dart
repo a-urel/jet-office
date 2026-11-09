@@ -129,6 +129,39 @@ void main() {
     expect(make(), isNot(make(inner: 2)));
   });
 
+  test('an arc has a stroke width, 1 by default, part of its value', () {
+    const ArcPrimitive plain = ArcPrimitive('a', ChartPoint(5, 5), 5, 0, 0, 90);
+    expect(plain.strokeWidth, 1);
+    const ArcPrimitive thick = ArcPrimitive(
+      'a',
+      ChartPoint(5, 5),
+      5,
+      0,
+      0,
+      90,
+      strokeWidth: 3,
+    );
+    expect(thick.strokeWidth, 3);
+    expect(thick, isNot(plain));
+    expect(thick.hashCode, isNot(plain.hashCode));
+    expect(
+      thick,
+      const ArcPrimitive('a', ChartPoint(5, 5), 5, 0, 0, 90, strokeWidth: 3),
+    );
+    expect(
+      thick.hashCode,
+      const ArcPrimitive(
+        'a',
+        ChartPoint(5, 5),
+        5,
+        0,
+        0,
+        90,
+        strokeWidth: 3,
+      ).hashCode,
+    );
+  });
+
   test('an exhaustive switch over ChartPrimitive compiles', () {
     expect(kindOf(const RectPrimitive('r', a)), 'rect');
     expect(kindOf(PathPrimitive('p', const <ChartPoint>[])), 'path');

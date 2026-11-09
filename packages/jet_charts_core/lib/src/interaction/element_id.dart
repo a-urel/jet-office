@@ -19,7 +19,8 @@ enum ChartElementKind {
   /// The legend's rectangle, `legend`.
   legend,
 
-  /// The symbol of a series' legend entry, `legend/<s>/symbol`.
+  /// The symbol of a series' legend entry, `legend/<s>/symbol`, or the
+  /// marker on a line series' legend line, `legend/<s>/marker`.
   legendSymbol,
 
   /// The text of a series' legend entry, `legend/<s>/text`.
@@ -137,7 +138,7 @@ final class ChartElementId {
       case ['legend', final String s, final String part]:
         final int? series = _index(s);
         final ChartElementKind? kind = switch (part) {
-          'symbol' => ChartElementKind.legendSymbol,
+          'symbol' || 'marker' => ChartElementKind.legendSymbol,
           'text' => ChartElementKind.legendText,
           _ => null,
         };

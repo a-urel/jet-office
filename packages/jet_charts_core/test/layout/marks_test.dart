@@ -2,6 +2,8 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
 import 'package:test/test.dart';
 
+import '../support/gallery.dart';
+
 const FixedWidthTextMeasurer measurer = FixedWidthTextMeasurer();
 
 final ChartTheme theme = ChartTheme.office.copyWith(
@@ -24,6 +26,7 @@ ChartLayout lay(
   ChartKind kind = ChartKind.column,
   ChartGrouping grouping = ChartGrouping.clustered,
   ChartAxis valueAxis = const ChartAxis(),
+  ChartTheme? withTheme,
 }) {
   return layoutChart(
     Chart(
@@ -35,7 +38,7 @@ ChartLayout lay(
         for (int s = 0; s < data.length; s++) series('S$s', data[s]),
       ],
     ),
-    theme: theme,
+    theme: withTheme ?? theme,
     size: const ChartSize(400, 300),
     measurer: measurer,
   );
@@ -266,9 +269,13 @@ void main() {
   });
 
   test('a line breaks at null', () {
-    final ChartLayout l = lay(<List<double?>>[
-      <double?>[1, 2, null, 4, 5],
-    ], kind: ChartKind.line);
+    final ChartLayout l = lay(
+      <List<double?>>[
+        <double?>[1, 2, null, 4, 5],
+      ],
+      kind: ChartKind.line,
+      withTheme: theme.copyWith(lineMarkers: false),
+    );
     final ChartRect p = l.plotArea!;
     final double band = p.width / 5;
     final PathPrimitive r0 = byId<PathPrimitive>(l, ids.seriesLineId(0, 0));
@@ -286,29 +293,99 @@ void main() {
     expect(r1.points[1].x, near(p.left + band * 4.5));
     expect(has(l, ids.seriesLineId(0, 2)), isFalse);
     expect(
-      flat(l.primitives).whereType<PathPrimitive>().where(
-        (PathPrimitive q) => q.id.contains('marker'),
-      ),
+      flat(l.primitives).where((ChartPrimitive q) => q.id.contains('marker')),
       isEmpty,
     );
   });
 
-  test('a lone point gets a marker', () {
+  test('every point of a line gets a circle marker after its runs', () {
+    final GalleryChart g = galleryCharts().firstWhere(
+      (GalleryChart g) => g.name == 'line_gap',
+    );
+    final ChartLayout l = g.layout(goldenSize);
+    final ChartTheme office = ChartTheme.office;
+    final List<ChartPrimitive> marks = flat(
+      l.primitives,
+    ).where((ChartPrimitive q) => q.id.startsWith('series/')).toList();
+    int count = 0;
+    final ChartRect plot = l.plotArea!;
+    final double band = plot.width / 6;
+    for (int s = 0; s < g.chart.series.length; s++) {
+      final List<double?> values = g.chart.series[s].values.values;
+      final ChartColor color = office.seriesColor(s);
+      int lastRun = -1;
+      for (int i = 0; i < marks.length; i++) {
+        if (marks[i].id.startsWith('series/$s/line/')) {
+          lastRun = i;
+        }
+      }
+      for (int c = 0; c < values.length; c++) {
+        final String id = ids.seriesMarkerId(s, c);
+        if (values[c] == null) {
+          expect(has(l, id), isFalse, reason: id);
+          continue;
+        }
+        final int at = marks.indexWhere((ChartPrimitive q) => q.id == id);
+        expect(at, greaterThan(lastRun), reason: '$id after the runs');
+        final ArcPrimitive m = marks[at] as ArcPrimitive;
+        expect(m.radius, office.markerSize / 2);
+        expect(m.innerRadius, 0);
+        expect(m.startAngle, 0);
+        expect(m.sweepAngle, 360);
+        expect(m.fill, color);
+        expect(m.stroke, color);
+        expect(m.strokeWidth, 0.75);
+        expect(m.center.x, near(plot.left + band * (c + 0.5)));
+        expect(m.center.y, near(yOf(l, values[c]!)));
+        count++;
+      }
+      if (s + 1 < g.chart.series.length) {
+        final int nextLine = marks.indexWhere(
+          (ChartPrimitive q) => q.id.startsWith('series/${s + 1}/line/'),
+        );
+        final int lastMarker = marks.lastIndexWhere(
+          (ChartPrimitive q) => q.id.startsWith('series/$s/marker/'),
+        );
+        expect(lastMarker, lessThan(nextLine));
+      }
+    }
+    expect(count, 10);
+    // Markers sit inside the plot's clip.
+    final ClipPrimitive clip = l.primitives.whereType<ClipPrimitive>().single;
+    expect(
+      clip.children.whereType<ArcPrimitive>().map((ArcPrimitive a) => a.id),
+      hasLength(10),
+    );
+  });
+
+  test('without line markers only a lone point gets a marker', () {
+    final ChartLayout l = lay(
+      <List<double?>>[
+        <double?>[1, null, 3, 4],
+      ],
+      kind: ChartKind.line,
+      withTheme: theme.copyWith(lineMarkers: false),
+    );
+    final ChartRect p = l.plotArea!;
+    final double band = p.width / 4;
+    final ArcPrimitive m = byId<ArcPrimitive>(l, ids.seriesMarkerId(0, 0));
+    expect(m.center.x, near(p.left + band / 2));
+    expect(m.center.y, near(yOf(l, 1)));
+    expect(m.radius, theme.markerSize / 2);
+    expect(m.sweepAngle, 360);
+    expect(m.fill, theme.seriesColor(0));
+    expect(m.stroke, theme.seriesColor(0));
+    expect(m.strokeWidth, 0.75);
+    expect(has(l, ids.seriesMarkerId(0, 2)), isFalse);
+    expect(has(l, ids.seriesMarkerId(0, 3)), isFalse);
+    expect(has(l, ids.seriesLineId(0, 0)), isTrue);
+  });
+
+  test('a lone point gets a marker and no line', () {
     final ChartLayout l = lay(<List<double?>>[
       <double?>[1, null, 3, null],
     ], kind: ChartKind.line);
-    final ChartRect p = l.plotArea!;
-    final double band = p.width / 4;
-    final PathPrimitive m = byId<PathPrimitive>(l, ids.seriesMarkerId(0, 0));
-    final double h = theme.markerSize / 2;
-    final double cx = p.left + band / 2;
-    final double cy = yOf(l, 1);
-    expect(m.closed, isTrue);
-    expect(m.points, hasLength(4));
-    expect(m.points[0].x, near(cx - h));
-    expect(m.points[0].y, near(cy - h));
-    expect(m.points[2].x, near(cx + h));
-    expect(m.points[2].y, near(cy + h));
+    expect(byId<ArcPrimitive>(l, ids.seriesMarkerId(0, 0)).sweepAngle, 360);
     expect(has(l, ids.seriesMarkerId(0, 2)), isTrue);
     expect(has(l, ids.seriesLineId(0, 0)), isFalse);
   });
