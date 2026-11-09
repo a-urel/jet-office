@@ -192,7 +192,7 @@ by hand, then fix it.
   (`packages/jet_charts_flutter/example/TALIMATLAR.md`); record its result in
   `docs/excel-checks.md` with the owner. Unconfirmed until then: Excel's gap
   width for clustered bars (182) and stacked ones (150, 100), written from
-  memory in the gallery workbook; Excel's palette past six colours; the
+  memory in the gallery workbook; Excel's palette from series 13 (7 to 12 follow the owner's check, an estimate); the
   spacing constants in `docs/excel-checks.md`.
 - Whether a sandboxed macOS app sees Aptos Narrow (Flutter side).
 - The tooltip box's spacing constants are not in `ChartTooltipStyle`, and

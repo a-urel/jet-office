@@ -182,22 +182,19 @@ void main() {
       expect(xml, contains('<a:latin typeface="Aptos Narrow"/>'));
     });
 
-    test('series 7 of the Office theme writes the derived fixed colour', () {
+    test('series 7 of the Office theme writes accent 1 lightened 40%', () {
       final List<ChartSeries> series = <ChartSeries>[
         for (int i = 0; i < 7; i++) _excelSeries(),
       ];
       final String xml = _xml(_write(_chart(ChartKind.column, series: series)));
       final ChartColor seventh = _office.colorOf(series[6], 6);
-      expect(seventh.slot, isNull);
-      final String hex = seventh.rgb
-          .toRadixString(16)
-          .padLeft(6, '0')
-          .toUpperCase();
+      expect(seventh.slot, ChartSchemeColor.accent1);
       expect(
         xml,
         contains(
           '<c:idx val="6"/><c:order val="6"/><c:spPr><a:solidFill>'
-          '<a:srgbClr val="$hex"/></a:solidFill>',
+          '<a:schemeClr val="accent1"><a:lumMod val="60000"/>'
+          '<a:lumOff val="40000"/></a:schemeClr></a:solidFill>',
         ),
       );
       expect(xml, contains('<a:schemeClr val="accent6"/>'));

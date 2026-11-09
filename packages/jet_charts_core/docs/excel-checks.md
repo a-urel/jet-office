@@ -59,8 +59,12 @@ as what the file confirmed:
 Seen in the owner's J3 gallery check (2026-11-09, `column_eight_series`): Excel
 draws series 7 and 8 as a light grey-blue and a light salmon, lighter forms of
 accents 1 and 2, where `ChartTheme.seriesColor` drew a dark navy and a brown.
-The exact values were read from a screenshot, not a file; series 9 and later are
-still unconfirmed.
+The exact values were read from a screenshot, not a file. Seen in the owner's
+gallery check, value this library's estimate: `ChartTheme.seriesColor` now
+draws series 7 to 12 of a six-colour palette as Office's "lighter 40%" of each
+palette colour (`lumMod` 0.6, `lumOff` 0.4; accent 1 `73A0B4`, accent 2
+`F2AA84`), kept as a scheme colour on export. Series 13 and later are still
+unconfirmed: they keep this library's own darker and lighter rule.
 
 ## Milestone checks
 

@@ -70,17 +70,35 @@ void main() {
     for (int i = 0; i < 6; i++) {
       expect(office.seriesColor(i), office.palette[i]);
     }
-    expect(office.seriesColor(6).slot, isNull);
-    expect(office.seriesColor(6).rgb, isNot(office.palette[0].rgb));
+  });
+
+  test('series 7 to 12 are the palette lightened by 40 percent', () {
+    final ChartTheme office = ChartTheme.office;
+    final ChartColor seventh = office.seriesColor(6);
+    expect(seventh.slot, ChartSchemeColor.accent1);
+    expect(seventh.lumMod, 0.6);
+    expect(seventh.lumOff, 0.4);
+    expect(seventh.rgb, 0x73A0B4);
+    expect(office.seriesColor(7).rgb, 0xF2AA84);
+    expect(office.seriesColor(7).slot, ChartSchemeColor.accent2);
+  });
+
+  test('a fixed palette lightens to a fixed colour', () {
+    final ChartTheme theme = custom(
+      palette: <ChartColor>[ChartColor.rgb(0x806040)],
+    );
+    expect(theme.seriesColor(1), ChartColor.rgb(0xB3A08C));
+    expect(theme.seriesColor(1).slot, isNull);
   });
 
   test('derived colours follow the rule', () {
     final ChartTheme theme = custom(
       palette: <ChartColor>[ChartColor.rgb(0x806040)],
     );
-    // p = 1: times 0.6. p = 2: toward white by 0.4. p = 3: times 0.36.
-    expect(theme.seriesColor(1).rgb, 0x4D3A26);
-    expect(theme.seriesColor(2).rgb, 0xB3A08C);
+    // p = 1: toward white by 0.4 (Excel's). p = 2: times 0.6. p = 3: times
+    // 0.36.
+    expect(theme.seriesColor(1).rgb, 0xB3A08C);
+    expect(theme.seriesColor(2).rgb, 0x4D3A26);
     expect(theme.seriesColor(3).rgb, 0x2E2317);
   });
 

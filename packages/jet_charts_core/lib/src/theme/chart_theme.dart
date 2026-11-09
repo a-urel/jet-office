@@ -154,17 +154,22 @@ final class ChartTheme {
   /// The colour of the series at [index], counting from 0.
   ///
   /// The first pass through [palette] gives its colours unchanged, scheme
-  /// slots included. A later pass `p` (`index ~/ palette.length`) gives each
-  /// colour of the palette, as a fixed colour, derived by a fixed rule: an odd
-  /// `p` multiplies each channel by `0.6^((p + 1) / 2)`, an even `p` moves
-  /// each channel toward 255 by `1 - 0.6^(p / 2)`. No repeat within the
-  /// first 24 series is checked for the office theme and for the five-colour
-  /// palette of the tests. Other palettes, greys, and palettes with black or
-  /// white can repeat derived colours, as scaling black or moving white toward
-  /// 255 changes nothing. Any index is valid.
-  ///
-  /// This is this library's own rule. Excel's real rule for series 7 and up is
-  /// checked in the oracle gallery later and this rule follows it then.
+  /// slots included. The second pass (series 7 to 12 of a six-colour palette)
+  /// is Office's "lighter 40%" of each colour, as the owner's check of Excel
+  /// shows: a scheme-bound colour keeps its slot with `lumMod` 0.6 and `lumOff`
+  /// 0.4, so it exports as a scheme colour, and any other colour is the fixed
+  /// colour whose channels are `round(v * 0.6 + 255 * 0.4)`. Accent 1
+  /// (`156082`) gives `73A0B4`, accent 2 (`E97132`) `F2AA84`. A later pass `p`
+  /// (`index ~/ palette.length`) gives each colour of the palette, as a fixed
+  /// colour, derived by a rule that is this library's own and unconfirmed: for
+  /// `p` of 2 or more, an odd `p` multiplies each channel by
+  /// `0.6^((p + 1) / 2)` and an even `p` moves each channel toward 255 by
+  /// `1 - 0.6^(p / 2)`, with the passes 1 and 2 of that rule swapped (pass 2
+  /// is the darker 0.6, as pass 1 is the lighter). No repeat within the first
+  /// 24 series is checked for the office theme and for the five-colour palette
+  /// of the tests. Other palettes, greys, and palettes with black or white can
+  /// repeat derived colours, as scaling black or moving white toward 255
+  /// changes nothing. Any index is valid.
   ///
   /// Throws a [RangeError] when [index] is negative.
   ChartColor seriesColor(int index) {
@@ -174,9 +179,22 @@ final class ChartTheme {
     if (pass == 0) {
       return base;
     }
-    final bool odd = pass.isOdd;
+    if (pass == 1) {
+      int lighter(int shift) {
+        final int value = (base.rgb >> shift) & 0xFF;
+        return (value * 0.6 + 255 * 0.4).round().clamp(0, 255);
+      }
+
+      final int rgb = lighter(16) << 16 | lighter(8) << 8 | lighter(0);
+      final ChartSchemeColor? slot = base.slot;
+      return slot == null
+          ? ChartColor.rgb(rgb)
+          : ChartColor.scheme(slot, rgb: rgb, lumMod: 0.6, lumOff: 0.4);
+    }
+    final int rule = pass == 2 ? 1 : pass;
+    final bool odd = rule.isOdd;
     final double factor =
-        math.pow(0.6, odd ? (pass + 1) ~/ 2 : pass ~/ 2) as double;
+        math.pow(0.6, odd ? (rule + 1) ~/ 2 : rule ~/ 2) as double;
     int channel(int shift) {
       final int value = (base.rgb >> shift) & 0xFF;
       final double derived = odd

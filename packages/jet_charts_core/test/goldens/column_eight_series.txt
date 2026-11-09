@@ -13,9 +13,9 @@ rect legend/4/symbol 285.30,210.30 7.00x7.00 fill=A02B93 stroke=- width=1.00
 text legend/4/text 296.30,208.40 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 5"
 rect legend/5/symbol 86.70,223.10 7.00x7.00 fill=4EA72E stroke=- width=1.00
 text legend/5/text 97.70,221.20 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 6"
-rect legend/6/symbol 152.90,223.10 7.00x7.00 fill=0D3A4E stroke=- width=1.00
+rect legend/6/symbol 152.90,223.10 7.00x7.00 fill=73A0B4 stroke=- width=1.00
 text legend/6/text 163.90,221.20 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 7"
-rect legend/7/symbol 219.10,223.10 7.00x7.00 fill=8C441E stroke=- width=1.00
+rect legend/7/symbol 219.10,223.10 7.00x7.00 fill=F2AA84 stroke=- width=1.00
 text legend/7/text 230.10,221.20 43.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Series 8"
 rect plot 22.80,36.20 329.20x151.40 fill=- stroke=- width=1.00
 path grid/value/0 22.80,187.60 352.00,187.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
@@ -51,14 +51,14 @@ clip plot/clip 22.80,36.20 329.20x151.40
   rect series/5/bar/1 155.82,57.83 6.81x129.77 fill=4EA72E stroke=- width=1.00
   rect series/5/bar/2 238.12,122.71 6.81x64.89 fill=4EA72E stroke=- width=1.00
   rect series/5/bar/3 320.42,68.64 6.81x118.96 fill=4EA72E stroke=- width=1.00
-  rect series/6/bar/0 82.17,79.46 6.81x108.14 fill=0D3A4E stroke=- width=1.00
-  rect series/6/bar/1 164.47,144.34 6.81x43.26 fill=0D3A4E stroke=- width=1.00
-  rect series/6/bar/2 246.77,90.27 6.81x97.33 fill=0D3A4E stroke=- width=1.00
-  rect series/6/bar/3 329.07,155.16 6.81x32.44 fill=0D3A4E stroke=- width=1.00
-  rect series/7/bar/0 90.83,47.01 6.81x140.59 fill=8C441E stroke=- width=1.00
-  rect series/7/bar/1 173.13,111.90 6.81x75.70 fill=8C441E stroke=- width=1.00
-  rect series/7/bar/2 255.43,57.83 6.81x129.77 fill=8C441E stroke=- width=1.00
-  rect series/7/bar/3 337.73,122.71 6.81x64.89 fill=8C441E stroke=- width=1.00
+  rect series/6/bar/0 82.17,79.46 6.81x108.14 fill=73A0B4 stroke=- width=1.00
+  rect series/6/bar/1 164.47,144.34 6.81x43.26 fill=73A0B4 stroke=- width=1.00
+  rect series/6/bar/2 246.77,90.27 6.81x97.33 fill=73A0B4 stroke=- width=1.00
+  rect series/6/bar/3 329.07,155.16 6.81x32.44 fill=73A0B4 stroke=- width=1.00
+  rect series/7/bar/0 90.83,47.01 6.81x140.59 fill=F2AA84 stroke=- width=1.00
+  rect series/7/bar/1 173.13,111.90 6.81x75.70 fill=F2AA84 stroke=- width=1.00
+  rect series/7/bar/2 255.43,57.83 6.81x129.77 fill=F2AA84 stroke=- width=1.00
+  rect series/7/bar/3 337.73,122.71 6.81x64.89 fill=F2AA84 stroke=- width=1.00
 path axis/category/line 22.80,187.60 352.00,187.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 text axis/value/label/0 13.40,182.20 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
 text axis/value/label/1 13.40,160.57 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"
