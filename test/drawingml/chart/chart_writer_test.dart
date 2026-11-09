@@ -1168,6 +1168,13 @@ void main() {
         ),
       );
       expect(_count(xml, 'cap="rnd"'), 1);
+      expect(
+        xml,
+        contains(
+          '<a:ln w="28575" cap="rnd"><a:solidFill>'
+          '<a:schemeClr val="accent1"/></a:solidFill><a:round/></a:ln>',
+        ),
+      );
       // A column chart ignores both.
       final String column = _xml(
         _write(_chart(ChartKind.column), theme: theme),

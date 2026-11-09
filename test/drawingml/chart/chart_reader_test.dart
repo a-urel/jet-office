@@ -192,6 +192,27 @@ void main() {
       );
     });
 
+    test('a translucent colour outside a series fill reads as before', () {
+      final DrawingChartWritten written = writeDrawingChartSpace(
+        DrawingChartSpace(chart: _chart(ChartKind.column)),
+        _office,
+      );
+      final String xml = utf8
+          .decode(written.bytes)
+          .replaceFirst(
+            '<c:majorGridlines><c:spPr><a:ln w="9525" cap="flat" cmpd="sng" '
+                'algn="ctr"><a:solidFill><a:schemeClr val="tx1">',
+            '<c:majorGridlines><c:spPr><a:ln w="9525" cap="flat" cmpd="sng" '
+                'algn="ctr"><a:solidFill><a:schemeClr val="tx1"><a:alpha '
+                'val="50000"/>',
+          );
+      expect(xml, contains('<a:alpha val="50000"/>'));
+      final DrawingChartRead read = _read(xml);
+      expect(read.chart!.valueAxis.gridLines, isTrue);
+      // Not read as a colour, so the writer cannot reproduce the part.
+      expect(read.typed, isNull);
+    });
+
     test('an alpha the theme does not write leaves the part untyped', () {
       final ChartTheme alpha = _office.copyWith(areaOpacity: 0.25);
       final DrawingChartWritten written = writeDrawingChartSpace(

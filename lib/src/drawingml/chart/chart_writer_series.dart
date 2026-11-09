@@ -19,26 +19,14 @@ extension _SeriesWriting on _ChartWriter {
     final ChartColor color = theme.colorOf(series, index);
     w.start('c:spPr');
     if (chart.kind == ChartKind.line) {
-      w.start('a:ln');
-      w.attribute('w', (theme.lineWidth * _emuPerPoint).round().toString());
-      w.attribute('cap', 'rnd');
-      _solidFill(color);
-      w.empty('a:round');
-      w.end();
+      _seriesLine(color);
       w.empty('a:effectLst');
       w.end();
       w.start('c:marker');
       if (theme.lineMarkers) {
         _value('c:symbol', 'circle');
         _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
-        w.start('c:spPr');
-        _solidFill(color);
-        w.start('a:ln');
-        w.attribute('w', _markerLineWidth);
-        _solidFill(color);
-        w.end();
-        w.empty('a:effectLst');
-        w.end();
+        _markerShape(color);
       } else {
         // Excel's "Line" without markers. A lone point, which the layout
         // marks, has no marker here: a series' marker is all or nothing.
@@ -52,12 +40,7 @@ extension _SeriesWriting on _ChartWriter {
         alpha: area && theme.areaOpacity < 1 ? theme.areaOpacity : null,
       );
       if (area && theme.areaLine) {
-        w.start('a:ln');
-        w.attribute('w', (theme.lineWidth * _emuPerPoint).round().toString());
-        w.attribute('cap', 'rnd');
-        _solidFill(color);
-        w.empty('a:round');
-        w.end();
+        _seriesLine(color);
       } else {
         w.start('a:ln');
         w.empty('a:noFill');
@@ -99,6 +82,30 @@ extension _SeriesWriting on _ChartWriter {
     w.end();
   }
 
+  /// A series' `a:ln` of [color]: the theme's line width, a round cap and a
+  /// round join.
+  void _seriesLine(ChartColor color) {
+    w.start('a:ln');
+    w.attribute('w', (theme.lineWidth * _emuPerPoint).round().toString());
+    w.attribute('cap', 'rnd');
+    _solidFill(color);
+    w.empty('a:round');
+    w.end();
+  }
+
+  /// A marker's `c:spPr`: [color] as its fill and its line, and an empty
+  /// effect list.
+  void _markerShape(ChartColor color) {
+    w.start('c:spPr');
+    _solidFill(color);
+    w.start('a:ln');
+    w.attribute('w', _markerLineWidth);
+    _solidFill(color);
+    w.end();
+    w.empty('a:effectLst');
+    w.end();
+  }
+
   /// One `c:dPt` per point of [series] with its own colour, after the
   /// series' shape and marker (`c:dPt` follows `c:marker` and
   /// `c:invertIfNegative`, and precedes `c:dLbls`, in the schema).
@@ -122,25 +129,13 @@ extension _SeriesWriting on _ChartWriter {
         w.start('c:marker');
         _value('c:symbol', 'circle');
         _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
-        w.start('c:spPr');
-        _solidFill(color);
-        w.start('a:ln');
-        w.attribute('w', _markerLineWidth);
-        _solidFill(color);
-        w.end();
-        w.empty('a:effectLst');
-        w.end();
+        _markerShape(color);
         w.end();
       }
       _value('c:bubble3D', '0');
       w.start('c:spPr');
       if (chart.kind == ChartKind.line) {
-        w.start('a:ln');
-        w.attribute('w', (theme.lineWidth * _emuPerPoint).round().toString());
-        w.attribute('cap', 'rnd');
-        _solidFill(seriesColor);
-        w.empty('a:round');
-        w.end();
+        _seriesLine(seriesColor);
       } else {
         _solidFill(color);
         w.start('a:ln');

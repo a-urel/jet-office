@@ -129,8 +129,9 @@ Each rule has the test that holds it.
   default charts"), `excel_reference_test.dart`.
 - **Data problems are issues, programmer errors throw.** A chart the writer
   cannot express (a kind outside the J2 set, a secondary axis, a series of
-  another kind, centre text, which only a donut shows) is an `ArgumentError`; so are axis ids that are not distinct
-  unsigned 32-bit numbers and series ids that are not braced GUIDs.
+  another kind, centre text, which only a donut shows) is an `ArgumentError`;
+  so are axis ids that are not distinct unsigned 32-bit numbers and series
+  ids that are not braced GUIDs.
   `chart_writer_test.dart` ("ArgumentError", "ids").
 - **A theme value the part cannot hold is an `ArgumentError` naming the
   field:** a line width (`lineWidth`, the spacing's grid and axis line
@@ -216,8 +217,8 @@ checks what it shows. What it showed, each now what the writer writes:
   `A6A6A6` line (`tx1` 35000/65000), and no `c:dLblPos`; the group's
   `c:dLbls` keeps every flag off. The reader takes the first series' labels
   before the group's. Line and area charts use the same per-series form by
-  analogy; no Excel chart shows it. The data label colour is `404040`, now the Office
-  theme's.
+  analogy; no Excel chart shows it. The data label colour is `404040`, now
+  the Office theme's.
 - **J4 fields of the four kinds (estimates, not checked in Excel; the owner's
   J4 reference charts decide).** A line series' `smooth` is `c:smooth 1` (the
   group's stays 0). `pointColors` of a column, bar or line series are one
@@ -233,7 +234,8 @@ checks what it shows. What it showed, each now what the writer writes:
   is `c:showVal 0`; `showPercent` is always `c:showPercent 0` (Excel allows
   it in pies only), and a `holeSizePercent` is ignored outside a donut.
   The reader reads `smooth` and the point colours back, and reads (and drops)
-  an `a:alpha` of a colour, so the typed form still depends on writing the
+  an `a:alpha` of a series fill only (any other translucent colour reads as
+  no colour, as before), so the typed form still depends on writing the
   part again. Labels that are shown with `showValue: false` draw nothing, as
   hidden ones do: the reader gives them back as hidden, so such a chart reads
   untyped. `chart_writer_test.dart` and `chart_reader_test.dart` ("J4
