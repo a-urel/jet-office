@@ -55,6 +55,10 @@ final class DrawingChartWritten {
 /// styles, the grid, axis and background colours, the line widths, the
 /// marker size, the gap width and the overlap, and with its `exportColors`
 /// whether colours and fonts are written bound to the file's theme or fixed.
+/// A line series has a circle marker when the theme's `lineMarkers` is on,
+/// else the symbol `none` (Excel's line without markers): the layout's
+/// marker on a lone point is not written, as a series' marker in the part is
+/// all or nothing.
 ///
 /// The gap width is kept within 0 and 500 and a clustered chart's overlap
 /// within -100 and 100, Excel's ranges (as the layout keeps them), rounded to

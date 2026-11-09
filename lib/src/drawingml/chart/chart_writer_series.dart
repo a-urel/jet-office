@@ -28,16 +28,22 @@ extension _SeriesWriting on _ChartWriter {
       w.empty('a:effectLst');
       w.end();
       w.start('c:marker');
-      _value('c:symbol', 'circle');
-      _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
-      w.start('c:spPr');
-      _solidFill(color);
-      w.start('a:ln');
-      w.attribute('w', _markerLineWidth);
-      _solidFill(color);
-      w.end();
-      w.empty('a:effectLst');
-      w.end();
+      if (theme.lineMarkers) {
+        _value('c:symbol', 'circle');
+        _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
+        w.start('c:spPr');
+        _solidFill(color);
+        w.start('a:ln');
+        w.attribute('w', _markerLineWidth);
+        _solidFill(color);
+        w.end();
+        w.empty('a:effectLst');
+        w.end();
+      } else {
+        // Excel's "Line" without markers. A lone point, which the layout
+        // marks, has no marker here: a series' marker is all or nothing.
+        _value('c:symbol', 'none');
+      }
       w.end();
     } else {
       _solidFill(color);

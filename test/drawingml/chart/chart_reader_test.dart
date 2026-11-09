@@ -356,6 +356,21 @@ void main() {
       );
     });
 
+    test('a theme without line markers', () {
+      final ChartTheme plain = _office.copyWith(lineMarkers: false);
+      final DrawingChartSpace space = DrawingChartSpace(
+        chart: _chart(ChartKind.line),
+      );
+      _expectRoundTrip(space, theme: plain);
+      // The part is the theme's: read in the Office theme, whose lines have
+      // markers, it has no typed form.
+      final DrawingChartWritten written = writeDrawingChartSpace(space, plain);
+      expect(
+        readDrawingChartSpace(written.bytes, theme: _office).typed,
+        isNull,
+      );
+    });
+
     test('a series colour bound to another slot', () {
       _expectRoundTrip(
         DrawingChartSpace(

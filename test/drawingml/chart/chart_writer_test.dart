@@ -222,6 +222,51 @@ void main() {
     });
   });
 
+  group('markers', () {
+    const String circle =
+        '<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>';
+    const String none = '<c:marker><c:symbol val="none"/></c:marker>';
+
+    test('a line series has a circle marker when the theme has markers', () {
+      final String xml = _xml(_write(_chart(ChartKind.line)));
+      expect(_count(xml, circle), 1);
+      expect(xml, isNot(contains(none)));
+    });
+
+    test('a line series has no marker when the theme has none', () {
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.line,
+            series: <ChartSeries>[_excelSeries(), _excelSeries()],
+          ),
+          theme: _office.copyWith(lineMarkers: false),
+        ),
+      );
+      _expectWellFormed(xml);
+      // Excel's "Line" without markers: the symbol none, and no size or
+      // shape properties. A lone point gets no marker either (Excel cannot
+      // mark single points of a series).
+      expect(_count(xml, none), 2);
+      expect(xml, isNot(contains('<c:symbol val="circle"/>')));
+      expect(xml, isNot(contains('<c:size ')));
+      expect(xml, contains('<c:marker val="1"/>'));
+    });
+
+    test('other kinds have no series marker either way', () {
+      for (final ChartKind kind in <ChartKind>[
+        ChartKind.column,
+        ChartKind.bar,
+        ChartKind.area,
+      ]) {
+        final String xml = _xml(
+          _write(_chart(kind), theme: _office.copyWith(lineMarkers: false)),
+        );
+        expect(xml, isNot(contains('<c:marker>')), reason: kind.name);
+      }
+    });
+  });
+
   group('data', () {
     test('literal data writes strLit and numLit', () {
       final String xml = _xml(

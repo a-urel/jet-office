@@ -155,10 +155,21 @@ Each rule has the test that holds it.
 - **Dates are Excel serials** (the 1900 system, with its phantom 29 February
   1900), written in `m/d/yyyy` unless the category axis has a format.
   `chart_values_test.dart`, `chart_writer_test.dart` ("data").
-- **More than six series use derived fixed colours** from
-  `ChartTheme.colorOf`; ten series write and read back equal, and 10,000
-  points write and read in linear time. `chart_reader_test.dart`
-  ("round trip").
+- **More than six series use `ChartTheme.colorOf`'s later passes:** series
+  7 to 12 of the Office theme are its accents lightened 40%, bound to the
+  scheme (`lumMod` 60000, `lumOff` 40000), after the owner's J3 gallery check,
+  their exact colour pending an Excel-saved copy of the gallery; series 13
+  on are derived fixed colours, this library's own rule. Ten series write and
+  read back equal, and 10,000 points write and read in linear time.
+  `chart_reader_test.dart` ("round trip"), `chart_writer_test.dart`
+  ("colours").
+- **Line markers follow `ChartTheme.lineMarkers`:** on, each line series has
+  a circle of `markerSize`; off, `<c:marker><c:symbol val="none"/></c:marker>`,
+  Excel's line without markers. The layout still marks a lone point (a value
+  with no neighbour) when markers are off, so it shows; the part cannot say
+  that, as a series' marker is all or nothing, so Excel draws no marker
+  there. `chart_writer_test.dart` ("markers"), `chart_reader_test.dart` ("a
+  theme without line markers").
 - **The vertical axis title is turned** (`rot="-5400000"`), the chart title
   and the legend are flat. This follows Excel's known habit and is unconfirmed
   until the owner's reference workbook. `chart_writer_test.dart` ("vertical
@@ -231,7 +242,9 @@ chart that is only a view keeps its bytes until replaced.
 ## Open for both
 
 - The secondary axis, combination charts and the other kinds (J4).
-- Excel's palette past six series.
+- Excel's palette past six series: series 7 to 12 await an Excel-saved copy
+  of the gallery (their colour is an estimate from the owner's screenshot);
+  from series 13 the colours are this library's own rule.
 - The owner's reference workbook (`test/fixtures/owner/charts/`, steps in
   `TALIMATLAR.md`): every chart in it must read typed, and the writer's
   habits above are corrected against it. Until it arrives
