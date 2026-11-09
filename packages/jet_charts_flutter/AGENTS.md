@@ -7,8 +7,20 @@ and writes no file format. The records of the design are the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md` and
 `docs/decisions/0016-jet-charts-flutter-in-the-workspace.md`.
 
-Milestone J3 is under way. The package exports `FlutterTextMeasurer`; the rest
-of J3 adds to this file.
+Milestone J3 is under way. The package exports `FlutterTextMeasurer`,
+`paintChartPrimitives` and `ChartLayoutPainter`; the rest of J3 adds to this
+file.
+
+## Golden images
+
+`test/chart_goldens_test.dart` paints the charts of `test/support/charts.dart`
+(copies of the charts of the same names in
+`packages/jet_charts_core/test/support/gallery.dart`) into
+`test/goldens/<name>.png`, with `ChartTheme.office` set to the family `Roboto`
+(`test/fonts/`, Apache 2.0, loaded by `test/support/fonts.dart` with
+`dart:io`, so the file is `@TestOn('vm')`). After a deliberate change, run
+`flutter test --update-goldens --tags golden` and look at every image: no text
+overlaps, the chart border shows, no value axis line, lines with round caps.
 
 ## The quality gate
 

@@ -52,6 +52,24 @@ void main() {
     );
   });
 
+  test('the primitive painter is public', () {
+    final String source = File(
+      'lib/jet_charts_flutter.dart',
+    ).readAsStringSync();
+    expect(
+      source,
+      contains(
+        "export 'src/chart_layout_painter.dart' show ChartLayoutPainter;",
+      ),
+    );
+    expect(
+      source,
+      contains(
+        "export 'src/primitive_painter.dart' show paintChartPrimitives;",
+      ),
+    );
+  });
+
   test('the check flags a missing doc comment, show list or src/ path', () {
     const String good = '''
 /// Doc.
