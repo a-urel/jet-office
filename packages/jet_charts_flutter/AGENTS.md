@@ -19,6 +19,16 @@ its marks over `JetChart.animationDuration` (`lerpChartPrimitives`,
 `lib/src/animation.dart`, tested in `test/animation_test.dart`); hover and
 taps use the new layout throughout. The rest of J3 adds to this file.
 
+## The gallery app
+
+`example/` is the app `jet_charts_gallery` (macOS) for the owner's side-by-side
+check against Excel for Mac, with `example/tool/write_excel_gallery.dart`,
+which writes the same charts as Excel's own default charts; its README says
+what it holds and `example/TALIMATLAR.md` holds the owner's steps. It is a
+workspace member of its own, with `archive` as a dependency; this package's
+`lib/` and guard tests do not cover it. Its tests run with
+`(cd example && flutter test)`.
+
 ## Golden images
 
 `test/chart_goldens_test.dart` paints the charts of `test/support/charts.dart`
@@ -60,13 +70,14 @@ in `docs/benchmark.md`.
 
 Run from this package's folder, `packages/jet_charts_flutter`, except the first
 two, which the repository's gate also runs from its root. A clean checkout must
-pass all four:
+pass all five:
 
 ```bash
 dart format --output=none --set-exit-if-changed .
 dart analyze --fatal-infos
 flutter test
 flutter test --platform chrome --exclude-tags golden
+(cd example && flutter test)
 ```
 
 The tests need Flutter's engine (`TextPainter`), so they run with

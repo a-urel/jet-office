@@ -78,6 +78,10 @@ jobs:
         working-directory: packages/jet_charts_flutter
         run: flutter test --platform chrome --exclude-tags golden
 
+      - name: Run the chart gallery app's tests
+        working-directory: packages/jet_charts_flutter/example
+        run: flutter test
+
   validate:
     name: validate fixtures
     runs-on: ubuntu-24.04
@@ -230,6 +234,13 @@ jobs:
           dotnet run --project tool/ooxml_validate -- build/edited-docx-fixtures
           dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/edited-docx
           dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
+
+      # The chart gallery's workbook, the owner's side-by-side check against
+      # Excel (packages/jet_charts_flutter/example/TALIMATLAR.md).
+      - name: Write and validate the chart gallery's workbook
+        run: |
+          dart run packages/jet_charts_flutter/example/tool/write_excel_gallery.dart build/excel_gallery
+          dotnet run --project tool/ooxml_validate -- build/excel_gallery
 
       # Negative control: every check must reject m1_corrupt.xlsx (see
       # tool/write_fixtures.dart), except the model round trip, which passes

@@ -13,6 +13,7 @@ workspace:
   - packages/jet_core
   - packages/jet_charts_core
   - packages/jet_charts_flutter
+  - packages/jet_charts_flutter/example
 
 environment:
   # Matches Monépro's floor, the first consumer.

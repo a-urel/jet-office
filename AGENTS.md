@@ -40,6 +40,7 @@ dart test -p chrome
 (cd packages/jet_core && dart test && dart test -p chrome)
 (cd packages/jet_charts_core && dart test && dart test -p chrome)
 (cd packages/jet_charts_flutter && flutter test && flutter test --platform chrome --exclude-tags golden)
+(cd packages/jet_charts_flutter/example && flutter test)
 ```
 
 The workspace has a Flutter package, so resolving it (`flutter pub get` or
@@ -100,6 +101,8 @@ dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 dotnet run --project tool/ooxml_validate -- build/edited-docx-fixtures
 dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/edited-docx
 dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
+dart run packages/jet_charts_flutter/example/tool/write_excel_gallery.dart build/excel_gallery
+dotnet run --project tool/ooxml_validate -- build/excel_gallery
 ```
 
 - `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
@@ -320,6 +323,13 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   validates it). It is not part of the CI chain;
   `test/docx/list_into_owner_test.dart` (VM) holds the same check as tests.
   Exit 2 on unusable arguments, 1 on any error.
+- `packages/jet_charts_flutter/example/tool/write_excel_gallery.dart <dir>`
+  writes `gallery.xlsx`, the charts of the chart gallery app
+  (`packages/jet_charts_flutter/example`, its README) as Excel's own default
+  charts, for the owner's side-by-side check against Excel for Mac (steps in
+  its `TALIMATLAR.md`; the result goes in
+  `packages/jet_charts_core/docs/excel-checks.md`, from the owner only). The
+  Open XML SDK must report no error on it. Exit 2 on unusable arguments.
 - The number formatter's tools and its Excel oracle (the owner's Excel for
   Mac CSVs, the LibreOffice comparison, the oracle workbook writer) are in
   `jet_core` (decision 0012); see its `AGENTS.md` and `docs/number-format.md`.

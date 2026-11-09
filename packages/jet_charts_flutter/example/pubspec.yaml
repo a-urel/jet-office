@@ -1,0 +1,39 @@
+name: jet_charts_gallery
+description: >-
+  The gallery for the owner's side-by-side check of jet_charts_flutter against
+  Excel for Mac: a macOS app that draws the gallery's charts, and a tool that
+  writes the same charts as an Excel workbook of default Excel charts.
+version: 0.1.0
+# An example app, never published.
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+  flutter: '>=3.35.0'
+
+resolution: workspace
+
+# archive writes the workbook in lib/src/excel_gallery.dart. It is a dependency
+# of this app, not of jet_charts_flutter, whose runtime dependencies stay
+# flutter, jet_charts_core and jet_core.
+dependencies:
+  archive: ^4.0.9
+  flutter:
+    sdk: flutter
+  jet_charts_core:
+    path: ../../jet_charts_core
+  jet_charts_flutter:
+    path: ..
+  jet_core:
+    path: ../../jet_core
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # Lint rules for dart analyze (analysis_options.yaml).
+  lints: ^6.0.0
+  # Tests only: checks that every part of the workbook is well-formed XML.
+  xml: '>=6.5.0 <8.0.0'
+
+flutter:
+  uses-material-design: true
