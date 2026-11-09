@@ -374,6 +374,37 @@ void main() {
       expect(node.label, isNot(contains('Column chart')));
     });
 
+    testWidgets('a semanticsLabel without a full stop gets one', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          JetChart(
+            chart: _chart('column_clustered'),
+            semanticsLabel: 'Quarterly sales',
+          ),
+        ),
+      );
+      final SemanticsNode node = tester.getSemantics(
+        find.bySemanticsLabel(RegExp('North')),
+      );
+      expect(node.label, startsWith('Quarterly sales. Series (3): North'));
+      for (final String ending in <String>['!', '?', '…']) {
+        await tester.pumpWidget(
+          _app(
+            JetChart(
+              chart: _chart('column_clustered'),
+              semanticsLabel: 'Sales$ending',
+            ),
+          ),
+        );
+        expect(
+          tester.getSemantics(find.bySemanticsLabel(RegExp('North'))).label,
+          startsWith('Sales$ending Series (3)'),
+        );
+      }
+    });
+
     testWidgets('the locale formats the described numbers', (
       WidgetTester tester,
     ) async {

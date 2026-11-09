@@ -199,20 +199,22 @@ final class _MessagePainter extends CustomPainter {
       Offset.zero & size,
       Paint()..color = _color(theme.background),
     );
-    final double pad = theme.spacing.padding;
-    double top = pad;
-    final String? t = title;
-    if (t != null) {
-      final TextPainter p = measurer.textPainter(t, theme.titleText);
-      p.paint(canvas, Offset((size.width - p.width) / 2, top));
-      top += p.height + theme.spacing.titleGap;
-    }
-    final TextPainter p = measurer.textPainter(message, theme.axisLabels);
-    final double rest = size.height - pad - top;
-    p.paint(
-      canvas,
-      Offset((size.width - p.width) / 2, top + (rest - p.height) / 2),
+    final (Rect? titleRect, Rect? messageRect) = placeMessage(
+      size: size,
+      theme: theme,
+      measurer: measurer,
+      message: message,
+      title: title,
     );
+    final String? t = title;
+    if (t != null && titleRect != null) {
+      measurer.textPainter(t, theme.titleText).paint(canvas, titleRect.topLeft);
+    }
+    if (messageRect != null) {
+      measurer
+          .textPainter(message, theme.axisLabels)
+          .paint(canvas, messageRect.topLeft);
+    }
   }
 
   @override
@@ -221,4 +223,61 @@ final class _MessagePainter extends CustomPainter {
       !identical(measurer, oldDelegate.measurer) ||
       message != oldDelegate.message ||
       title != oldDelegate.title;
+}
+
+/// Where the message look draws its [title] and [message] in [size]: the
+/// title's box and the message's box, `null` for a text left out.
+///
+/// Both must fit inside the area left by the theme's padding, and never
+/// overlap. The message, in the axis label style, is centred in what the
+/// title leaves; a message wider or taller than the area is left out. The
+/// title, in the title style, is centred at the top and is left out when it
+/// does not fit, or when the message would no longer fit below it with the
+/// title gap between them.
+@visibleForTesting
+(Rect?, Rect?) placeMessage({
+  required Size size,
+  required ChartTheme theme,
+  required FlutterTextMeasurer measurer,
+  required String message,
+  String? title,
+}) {
+  final double pad = theme.spacing.padding;
+  final Rect area = Rect.fromLTWH(
+    pad,
+    pad,
+    math.max(0, size.width - 2 * pad),
+    math.max(0, size.height - 2 * pad),
+  );
+  final TextPainter m = measurer.textPainter(message, theme.axisLabels);
+  final bool messageFits = m.width <= area.width && m.height <= area.height;
+  Rect? titleRect;
+  if (title != null) {
+    final TextPainter t = measurer.textPainter(title, theme.titleText);
+    final double below = messageFits ? theme.spacing.titleGap + m.height : 0;
+    if (t.width <= area.width && t.height + below <= area.height) {
+      titleRect = Rect.fromLTWH(
+        area.left + (area.width - t.width) / 2,
+        area.top,
+        t.width,
+        t.height,
+      );
+    }
+  }
+  if (!messageFits) {
+    return (titleRect, null);
+  }
+  final double top = titleRect == null
+      ? area.top
+      : titleRect.bottom + theme.spacing.titleGap;
+  final double rest = area.bottom - top;
+  return (
+    titleRect,
+    Rect.fromLTWH(
+      area.left + (area.width - m.width) / 2,
+      top + (rest - m.height) / 2,
+      m.width,
+      m.height,
+    ),
+  );
 }

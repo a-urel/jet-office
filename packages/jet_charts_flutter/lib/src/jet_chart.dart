@@ -105,7 +105,8 @@ final class JetChart extends StatefulWidget {
   final JetChartErrorBuilder? errorBuilder;
 
   /// What a screen reader reads in place of the description's first
-  /// sentence (the kind and title), or `null` to keep it.
+  /// sentence (the kind and title), or `null` to keep it. A full stop is
+  /// added when it does not end in `.`, `!`, `?` or `…`.
   final String? semanticsLabel;
 
   @override
@@ -132,6 +133,16 @@ Size _chartSize(BoxConstraints constraints) {
     height = 216;
   }
   return constraints.constrain(Size(width, height));
+}
+
+/// [label] with a full stop added unless it ends in `.`, `!`, `?` or `…`,
+/// so it does not run into the next sentence.
+String _closed(String label) {
+  final String trimmed = label.trimRight();
+  if (trimmed.isEmpty || <String>['.', '!', '?', '…'].any(trimmed.endsWith)) {
+    return trimmed;
+  }
+  return '$trimmed.';
 }
 
 /// The state of [JetChart]: it owns the text measurer and caches the summary
@@ -273,7 +284,7 @@ final class JetChartState extends State<JetChart> {
     final List<String> sentences = strings.sentences(summary);
     final String? custom = widget.semanticsLabel;
     if (custom != null) {
-      sentences[0] = custom;
+      sentences[0] = _closed(custom);
     }
     final Widget paint;
     if (size.isEmpty) {
