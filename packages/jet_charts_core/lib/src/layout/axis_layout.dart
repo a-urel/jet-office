@@ -634,6 +634,53 @@ List<PathPrimitive> valueGridLines(
   ];
 }
 
+/// Edge [i] of the [categories] bands of [plot] along the category axis, from
+/// its start: an x for a horizontal axis (edge 0 the plot's left), a y for a
+/// [vertical] one (edge 0 the plot's bottom, as a bar chart's first category
+/// sits at the bottom). Edge `categories` is the axis' end. The category grid
+/// lines and [categoryBands] both take their edges from here.
+double categoryEdge(
+  int i,
+  int categories,
+  ChartRect plot, {
+  required bool vertical,
+}) => vertical
+    ? plot.bottom - i * plot.height / categories
+    : plot.left + i * plot.width / categories;
+
+/// The band of each of [categories] across [plot], in category order: the
+/// slice between [categoryEdge] `i` and `i + 1`, the plot's full height
+/// across a horizontal axis, its full width beside a [vertical] one. Empty
+/// for no categories.
+List<ChartRect> categoryBands(
+  int categories,
+  ChartRect plot, {
+  required bool vertical,
+}) {
+  if (categories <= 0) {
+    return const <ChartRect>[];
+  }
+  return <ChartRect>[
+    for (int i = 0; i < categories; i++)
+      if (vertical)
+        ChartRect(
+          plot.left,
+          categoryEdge(i + 1, categories, plot, vertical: true),
+          plot.width,
+          categoryEdge(i, categories, plot, vertical: true) -
+              categoryEdge(i + 1, categories, plot, vertical: true),
+        )
+      else
+        ChartRect(
+          categoryEdge(i, categories, plot, vertical: false),
+          plot.top,
+          categoryEdge(i + 1, categories, plot, vertical: false) -
+              categoryEdge(i, categories, plot, vertical: false),
+          plot.height,
+        ),
+  ];
+}
+
 /// A grid line at each edge between [categories] bands across [plot], the two
 /// outer edges included.
 List<PathPrimitive> categoryGridLines(
@@ -650,9 +697,7 @@ List<PathPrimitive> categoryGridLines(
     for (int i = 0; i <= categories; i++)
       _line(
         ids.gridId(ids.categoryAxis, i),
-        vertical
-            ? plot.bottom - i * plot.height / categories
-            : plot.left + i * plot.width / categories,
+        categoryEdge(i, categories, plot, vertical: vertical),
         plot,
         across: !vertical,
         color: color,

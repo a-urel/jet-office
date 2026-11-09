@@ -42,6 +42,23 @@ void main() {
     expect(_problems(barrel.readAsStringSync()), isEmpty);
   });
 
+  test('the ids API and hit testing are public', () {
+    final String source = File('lib/jet_charts_core.dart').readAsStringSync();
+    expect(
+      source,
+      contains(
+        "export 'src/interaction/element_id.dart'\n"
+        '    show ChartAxisRole, ChartElementId, ChartElementKind;',
+      ),
+    );
+    expect(
+      source,
+      contains("export 'src/interaction/hit_test.dart' show hitTestLayout;"),
+    );
+    // The writing side of the scheme stays private.
+    expect(source, isNot(contains('chart_ids.dart')));
+  });
+
   test('the interval rule is not public', () {
     // excelMaxIntervals is the layout's own; only the package's code and
     // tests use it, through src/. The provisional rule it replaced is gone.

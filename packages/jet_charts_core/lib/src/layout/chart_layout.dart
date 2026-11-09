@@ -4,6 +4,7 @@ library;
 
 import 'package:jet_core/jet_core.dart';
 
+import '../interaction/element_id.dart' show ChartElementId;
 import '../model/chart.dart';
 import '../model/chart_kind.dart';
 import '../model/equality.dart';
@@ -50,8 +51,10 @@ final class ChartLayout {
     this.plotArea,
     this.valueScale,
     List<ChartHiddenLabel> hidden = const <ChartHiddenLabel>[],
+    List<ChartRect> categoryBands = const <ChartRect>[],
   }) : primitives = List<ChartPrimitive>.unmodifiable(primitives),
-       hidden = List<ChartHiddenLabel>.unmodifiable(hidden);
+       hidden = List<ChartHiddenLabel>.unmodifiable(hidden),
+       categoryBands = List<ChartRect>.unmodifiable(categoryBands);
 
   /// The size laid out on.
   final ChartSize size;
@@ -78,6 +81,10 @@ final class ChartLayout {
   ///   and `series/<s>/area`: the marks of series `<s>` at category `<c>`; a
   ///   gap in the data starts a new line run.
   /// * `label/<s>/<c>`: the data label of series `<s>` at category `<c>`.
+  ///
+  /// [ChartElementId.parse] is the exact inverse of this scheme: it reads
+  /// every id above into its kind, axis, series, category and index, and
+  /// returns `null` for any other string. The two change together.
   final List<ChartPrimitive> primitives;
 
   /// The plot area, or `null` when there is none: a kind this version does
@@ -98,6 +105,15 @@ final class ChartLayout {
   /// placeholder. Each id is one [primitives] describes.
   final List<ChartHiddenLabel> hidden;
 
+  /// Each category's slice of [plotArea], in category order: band `i` is
+  /// category `i`'s. Across a horizontal category axis (column, line and
+  /// area charts) a band takes the plot's full height, from left to right;
+  /// beside a vertical one (a bar chart) it takes the full width, from the
+  /// bottom up. The bands tile the plot, and their edges are where the
+  /// category grid lines are drawn. Empty when there is no plot area or no
+  /// category. A backend uses them to find the category under a point.
+  final List<ChartRect> categoryBands;
+
   @override
   bool operator ==(Object other) =>
       other is ChartLayout &&
@@ -105,7 +121,8 @@ final class ChartLayout {
       plotArea == other.plotArea &&
       valueScale == other.valueScale &&
       listValueEquals(primitives, other.primitives) &&
-      listValueEquals(hidden, other.hidden);
+      listValueEquals(hidden, other.hidden) &&
+      listValueEquals(categoryBands, other.categoryBands);
 
   @override
   int get hashCode => Object.hash(
@@ -114,6 +131,7 @@ final class ChartLayout {
     valueScale,
     listValueHash(primitives),
     listValueHash(hidden),
+    listValueHash(categoryBands),
   );
 
   @override
@@ -181,6 +199,7 @@ ChartLayout layoutChart(
           for (final (String id, String text) in frame.hidden)
             ChartHiddenLabel(id, text),
         ],
+        categoryBands: frame.categoryBands,
       );
     case ChartKind.pie:
     case ChartKind.donut:

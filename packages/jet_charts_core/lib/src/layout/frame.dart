@@ -59,6 +59,7 @@ final class FrameLayout {
     required this.primitives,
     required this.hidden,
     this.geometry,
+    this.categoryBands = const <ChartRect>[],
   });
 
   /// What to draw, in paint order.
@@ -70,6 +71,11 @@ final class FrameLayout {
 
   /// The plot and scale, or `null` when only the background is drawn.
   final FrameGeometry? geometry;
+
+  /// Each category's band of the plot, in category order, from the edges the
+  /// category grid lines are drawn at (`categoryBands` of `axis_layout.dart`);
+  /// empty when only the background is drawn.
+  final List<ChartRect> categoryBands;
 }
 
 /// Lays out the frame of [chart] (column, bar, line or area), whose data is
@@ -104,6 +110,11 @@ FrameLayout layoutFrame(
         primitives: painted.primitives,
         hidden: frame.hiddenTexts(wanted, shown, attempt, painted.hiddenData),
         geometry: FrameGeometry(plot: attempt.plot!, scale: attempt.scale!),
+        categoryBands: categoryBands(
+          resolved.categoryCount,
+          attempt.plot!,
+          vertical: frame.bar,
+        ),
       );
     }
     DegradeStep? next;

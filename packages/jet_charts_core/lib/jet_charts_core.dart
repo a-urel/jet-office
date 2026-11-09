@@ -29,9 +29,19 @@
 ///   `ChartOverlapKind`, between texts and marks of a layout.
 ///
 /// Milestone J3 adds the Flutter renderer, in `jet_charts_flutter`; this
-/// package stays free of Flutter.
+/// package stays free of Flutter. For it, this package adds:
+///
+/// * the ids read back: `ChartElementId.parse` reads a primitive's id into
+///   its `ChartElementKind`, `ChartAxisRole`, series, category and index;
+/// * hit testing: `hitTestLayout` returns the primitives under a point,
+///   topmost first;
+/// * category bands: `ChartLayout.categoryBands`, each category's slice of
+///   the plot.
 library;
 
+export 'src/interaction/element_id.dart'
+    show ChartAxisRole, ChartElementId, ChartElementKind;
+export 'src/interaction/hit_test.dart' show hitTestLayout;
 export 'src/layout/chart_layout.dart'
     show ChartHiddenLabel, ChartLayout, layoutChart;
 export 'src/layout/geometry.dart' show ChartPoint, ChartRect, ChartSize;

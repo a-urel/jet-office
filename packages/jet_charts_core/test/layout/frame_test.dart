@@ -7,6 +7,8 @@ import 'package:jet_charts_core/src/scale/value_scale.dart'
 import 'package:jet_core/jet_core.dart';
 import 'package:test/test.dart';
 
+import '../support/gallery.dart';
+
 const FixedWidthTextMeasurer measurer = FixedWidthTextMeasurer();
 
 ChartSeries series(String name, List<double?> values, List<Object?> cats) {
@@ -714,5 +716,118 @@ void main() {
         }
       }
     }
+  });
+
+  group('category bands', () {
+    ChartLayout galleryLayout(String name) => galleryCharts()
+        .firstWhere((GalleryChart g) => g.name == name)
+        .layout(goldenSize);
+
+    test('column_clustered has 4 bands tiling the plot\'s width', () {
+      final ChartLayout layout = galleryLayout('column_clustered');
+      final ChartRect plot = layout.plotArea!;
+      final List<ChartRect> bands = layout.categoryBands;
+      expect(bands, hasLength(4));
+      expect(bands.first.left, closeTo(plot.left, 1e-9));
+      expect(bands.last.right, closeTo(plot.right, 1e-9));
+      for (int i = 0; i < bands.length; i++) {
+        expect(bands[i].top, plot.top);
+        expect(bands[i].height, plot.height);
+        expect(bands[i].width, closeTo(plot.width / 4, 1e-9));
+        if (i > 0) {
+          expect(bands[i].left, closeTo(bands[i - 1].right, 1e-9));
+        }
+      }
+      // Each bar lies in its category's band.
+      for (int s = 0; s < 3; s++) {
+        for (int c = 0; c < 4; c++) {
+          final RectPrimitive bar = byId<RectPrimitive>(
+            layout,
+            ids.seriesBarId(s, c),
+          );
+          expect(bands[c].contains(bar.rect), isTrue, reason: '$s/$c');
+        }
+      }
+      // The category grid lines run along the bands' edges.
+      final ChartLayout gridded = lay(
+        chart(categoryAxis: const ChartAxis(gridLines: true)),
+        goldenSize,
+      );
+      for (int i = 0; i <= 4; i++) {
+        final PathPrimitive line = byId<PathPrimitive>(
+          gridded,
+          ids.gridId(ids.categoryAxis, i),
+        );
+        expect(
+          line.points.first.x,
+          i < 4
+              ? gridded.categoryBands[i].left
+              : gridded.categoryBands[3].right,
+        );
+      }
+    });
+
+    test('bar_clustered has 4 bands tiling the plot\'s height, from the '
+        'bottom', () {
+      final ChartLayout layout = galleryLayout('bar_clustered');
+      final ChartRect plot = layout.plotArea!;
+      final List<ChartRect> bands = layout.categoryBands;
+      expect(bands, hasLength(4));
+      expect(bands.first.bottom, closeTo(plot.bottom, 1e-9));
+      expect(bands.last.top, closeTo(plot.top, 1e-9));
+      for (int i = 0; i < bands.length; i++) {
+        expect(bands[i].left, plot.left);
+        expect(bands[i].width, plot.width);
+        expect(bands[i].height, closeTo(plot.height / 4, 1e-9));
+        if (i > 0) {
+          expect(bands[i].bottom, closeTo(bands[i - 1].top, 1e-9));
+        }
+        final RectPrimitive bar = byId<RectPrimitive>(
+          layout,
+          ids.seriesBarId(0, i),
+        );
+        expect(bands[i].contains(bar.rect), isTrue, reason: '$i');
+      }
+    });
+
+    test('line and area charts have a band per category', () {
+      expect(galleryLayout('line_gap').categoryBands, hasLength(6));
+      expect(galleryLayout('area_stacked').categoryBands, hasLength(4));
+    });
+
+    test('a placeholder kind, or a chart without a plot, has none', () {
+      expect(
+        lay(chart(kind: ChartKind.pie), goldenSize).categoryBands,
+        isEmpty,
+      );
+      expect(lay(chart(), const ChartSize(8, 8)).categoryBands, isEmpty);
+    });
+
+    test('the bands are unmodifiable and part of the layout\'s value', () {
+      final ChartLayout layout = galleryLayout('column_clustered');
+      expect(
+        () => layout.categoryBands.add(const ChartRect(0, 0, 1, 1)),
+        throwsUnsupportedError,
+      );
+      final ChartLayout copy = ChartLayout(
+        size: layout.size,
+        primitives: layout.primitives,
+        plotArea: layout.plotArea,
+        valueScale: layout.valueScale,
+        hidden: layout.hidden,
+        categoryBands: layout.categoryBands,
+      );
+      expect(copy, layout);
+      expect(copy.hashCode, layout.hashCode);
+      final ChartLayout without = ChartLayout(
+        size: layout.size,
+        primitives: layout.primitives,
+        plotArea: layout.plotArea,
+        valueScale: layout.valueScale,
+        hidden: layout.hidden,
+      );
+      expect(without.categoryBands, isEmpty);
+      expect(without, isNot(layout));
+    });
   });
 }
