@@ -11,7 +11,10 @@ it did not save, so each is confirmed from a chart Excel made:
 chart and a default line chart with markers of one series, added through
 Office.js `charts.add` (not the Insert ribbon) and saved unedited, Excel for Mac
 16.114.4, `tr-TR`, 2026-11-08. "chart1" is the column chart's part, "chart2"
-the line chart's; the workbook theme is Excel's default (Office, Aptos).
+the line chart's; the workbook theme is Excel's default (Office, Aptos). The
+owner's `chart_reference.xlsx` (the repository root's
+`test/fixtures/owner/charts/`, 23 charts of two series made through Office.js,
+Excel for Mac 16.0300, `tr-TR`, 2026-11-09) confirms the rows that name it.
 
 | Value | Status | Source |
 |---|---|---|
@@ -19,18 +22,21 @@ the line chart's; the workbook theme is Excel's default (Office, Aptos).
 | Line width 2.25 pt | Verified | chart2 series `a:ln w="28575" cap="rnd"` |
 | Marker size 5 | Verified | chart2 `c:marker`: `c:symbol` `circle`, `c:size` 5 |
 | Gap width 219 | Verified | chart1 `c:gapWidth` 219 |
+| Gap width 150 for stacked and percent stacked bars and columns | Verified | `chart_reference.xlsx` charts 2, 3, 5 and 6 `c:gapWidth` 150, `c:overlap` 100; `ChartTheme.stackedGapWidthPercent` |
+| Gap width 182 and overlap 0 for clustered bars | Verified | `chart_reference.xlsx` chart 4 `c:gapWidth` 182 and no `c:overlap` (the schema's default, 0); `ChartTheme.barGapWidthPercent`, `ChartSpacing.barOverlapPercent` |
 | Overlap -27 | Verified | chart1 `c:overlap` -27; `ChartSpacing.overlapPercent` |
 | Font Aptos Narrow | Verified | every `a:defRPr` names `+mn-lt`, the theme's minor font, which is `Aptos Narrow` in the workbook theme |
 | Title size 14 pt | Verified | title `a:defRPr sz="1400"`, both charts |
 | Axis label size 9 pt | Verified | both axes' `a:defRPr sz="900"`, both charts |
-| Legend and data label size 9 pt | Unconfirmed | Neither chart has a legend or data labels; recalled, no source |
+| Legend and data label size 9 pt | Verified | `chart_reference.xlsx`: every legend's `a:defRPr sz="900"`, and the data labels' of charts 20 and 21 |
+| Data label colour `404040` | Verified | `chart_reference.xlsx` charts 20 and 21: `tx1` with `lumMod` 75000, `lumOff` 25000 (0.25 of 255 is `40`); the Office theme binds it to `dark1` with `lumMod` 0.75 and `lumOff` 0.25 |
 | Text colour `595959` | Verified | title and axis labels `tx1` with `lumMod` 65000, `lumOff` 35000; `tx1` is `dk1`, black: 0.35 of 255 is `59`; the Office theme binds it to `dark1` with `lumMod` 0.65 and `lumOff` 0.35 |
 | Line colour `D9D9D9` | Verified | gridlines, category axis line and chart border `tx1` with `lumMod` 15000, `lumOff` 85000: 0.85 of 255 is `D9`; the Office theme binds it to `dark1` with `lumMod` 0.15 and `lumOff` 0.85 |
 | Grid and axis line width 0.75 pt | Verified | gridlines and category axis line `a:ln w="9525"` |
 | Background `FFFFFF` | Verified | chart area `bg1`, which is `lt1`, white |
 | Value gridlines on | Verified | `c:valAx` has `c:majorGridlines`; `c:catAx` has none |
 | Tick length 0 (no ticks) | Verified | both axes `c:majorTickMark` and `c:minorTickMark` `none` |
-| Legend at the bottom | Unconfirmed | A one-series default chart has no legend; recalled, no source |
+| Legend at the bottom | Verified | `chart_reference.xlsx`: every chart of two series made unedited has `c:legendPos` `b` |
 | Spacing: padding 8, title gap 6, legend gap 6 pt | Unconfirmed | Excel lays the chart out itself (`c:layout` empty); no source |
 | Spacing: legend symbol 7, legend item gap 12 pt | Unconfirmed | No source |
 | Spacing: label gap 4, minimum text gap 2 pt | Unconfirmed | No source |

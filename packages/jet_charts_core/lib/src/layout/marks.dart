@@ -162,10 +162,17 @@ List<MarkAnchor> _barAnchors(
   final bool stacked = _stacked(resolved);
   // Excel's ranges: gap 0 to 500, overlap -100 to 100. Kept to them, the
   // width's denominator is at least 1 (one series, no gap) and never 0.
-  final double g = _percent(theme.gapWidthPercent, 0, 500);
+  // A bar chart's value axis runs left to right; the theme gives each kind
+  // and grouping its gap and overlap (Excel's defaults differ by both).
+  final ChartKind kind = axes.horizontal ? ChartKind.bar : ChartKind.column;
+  final double g = _percent(
+    theme.gapWidthPercentOf(kind, resolved.grouping),
+    0,
+    500,
+  );
   final double o = stacked
       ? 1
-      : _percent(theme.spacing.overlapPercent, -100, 100);
+      : _percent(theme.overlapPercentOf(kind, resolved.grouping), -100, 100);
   final double band = axes.categoryLength / math.max(1, resolved.categoryCount);
   final double w = band / (g + n - (n - 1) * o);
   final List<MarkAnchor> out = <MarkAnchor>[];

@@ -28,27 +28,15 @@ theme's in `excel-checks.md`.
 | Category labels | Level, then skipped at most every second (Excel's spacing never exceeded 2 in the C rows) | Placed in a band under the plot; turned and cut by this package's own order |
 | Grid lines | Value grid on, category grid off, 0.75 pt `D9D9D9` | None |
 | Axis lines | Category axis line, 0.75 pt `D9D9D9`, no value axis line | Same in the Office theme; other themes draw a value axis line unless `valueAxisLine` is false |
-| Bars | Gap width 219, overlap -27, no outline (Excel's clustered column default) | Gap and overlap clamped to Excel's ranges; the same gap and overlap for every bar kind and grouping (see below) |
+| Bars | Gap width 219 and overlap -27 for clustered columns, 182 and 0 for clustered bars, 150 and 100 for stacked kinds; no outline | Same (`ChartTheme.gapWidthPercentOf`, `overlapPercentOf`); gap and overlap clamped to Excel's ranges |
 | Lines and markers | 2.25 pt, circle markers of 5 pt | The layout gives no cap, join or marker outline; `jet_charts_flutter` draws lines and outlines with round caps and joins, and other backends choose |
 | Title | 14 pt `595959` Aptos Narrow | Shown only when the chart has one; no default title |
 | Legend | 9 pt text | Shown unless hidden, even for one series; dropped whole when a side legend does not fit |
-| Data labels | 9 pt text | Never overlap or leave the plot |
+| Data labels | 9 pt `404040` text | Never overlap or leave the plot |
 | Axis titles | Shown when set | Use the axis label style |
 | Chart area | White background, 0.75 pt `D9D9D9` border | Same in the Office theme; other themes have no border unless `border` is set |
 
 ## Deliberate differences
-
-### Bars
-
-- **One gap width and overlap for every bar kind.** The core uses the
-  theme's one gap width (219) and overlap (-27) for clustered, stacked and
-  percent stacked columns and bars alike. Only the clustered column's values
-  are verified (`chart_defaults.xlsx`). Excel's insert defaults for the others
-  are believed, unconfirmed, to be a gap of 182 and no overlap for clustered
-  (horizontal) bars and a gap of 150 and an overlap of 100 for the stacked
-  kinds (the gallery workbook writes these from memory). The owner's gallery check against
-  Excel for Mac (`packages/jet_charts_flutter/example/TALIMATLAR.md`) settles
-  it; if confirmed, a gap and an overlap per kind in the theme is J4.
 
 ### Scale
 

@@ -30,7 +30,7 @@ This repository is a pub workspace (decision 0013). The chart family:
 
 `jet_office` depends on this package from C1: its DrawingML layer writes and
 reads `c:chartSpace` for a `Chart` (`docs/drawingml-charts.md` at the root).
-C1 is done except the owner's reference workbook and Excel check; C2 and C3
+C1 is done except the owner's Excel check of its fixtures; C2 and C3
 add the XLSX and DOCX hosts. `lumMod` and `lumOff` on scheme colours are in
 `ChartColor` (done in C1).
 
@@ -184,10 +184,8 @@ by hand, then fix it.
   8, 10 and 18, and plot margins.
 - The owner's gallery check against Excel for Mac (decision O3) is pending
   (`packages/jet_charts_flutter/example/TALIMATLAR.md`); record its result in
-  `docs/excel-checks.md` with the owner. Unconfirmed until then: Excel's gap
-  width for clustered bars (182) and stacked ones (150, 100), written from
-  memory in the gallery workbook; Excel's palette past six colours; the
-  spacing constants in `docs/excel-checks.md`.
+  `docs/excel-checks.md` with the owner. Unconfirmed until then: Excel's
+  palette past six colours; the spacing constants in `docs/excel-checks.md`.
 - Whether a sandboxed macOS app sees Aptos Narrow (Flutter side).
 - The tooltip box's spacing constants are not in `ChartTooltipStyle`, and
   `chartTooltipAt` resolves the chart again on each call (a caller that has
@@ -205,12 +203,6 @@ by hand, then fix it.
   about 1e-14) can put the data top above the axis; the "data labels first"
   degradation is nominal; data labels are not checked against marks;
   inside-end labels may straddle a short bar.
-- Bars use one gap width (219) and overlap (-27) for every kind, verified for
-  clustered columns only; Excel's insert defaults are believed (unconfirmed)
-  to be gap 182 and no overlap for clustered (horizontal) bars, gap 150 and
-  overlap 100 for stacked kinds
-  (`docs/parity.md`, "Bars"). The owner's gallery check settles it; a gap and
-  overlap per kind in the theme is J4 if confirmed.
 - Minor: `public_api_test` asserts the exact formatted export text.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
 

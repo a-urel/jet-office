@@ -18,18 +18,18 @@ path grid/value/6 22.80,77.25 352.00,77.25 closed=false fill=- stroke=D9D9D9 wid
 path grid/value/7 22.80,56.73 352.00,56.73 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path grid/value/8 22.80,36.20 352.00,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 clip plot/clip 22.80,36.20 329.20x164.20
-  rect series/0/bar/0 51.05,151.14 25.80x49.26 fill=156082 stroke=- width=1.00
-  rect series/0/bar/1 133.35,126.51 25.80x73.89 fill=156082 stroke=- width=1.00
-  rect series/0/bar/2 215.65,163.45 25.80x36.94 fill=156082 stroke=- width=1.00
-  rect series/0/bar/3 297.95,138.82 25.80x61.57 fill=156082 stroke=- width=1.00
-  rect series/1/bar/0 51.05,118.30 25.80x32.84 fill=E97132 stroke=- width=1.00
-  rect series/1/bar/1 133.35,81.36 25.80x45.15 fill=E97132 stroke=- width=1.00
-  rect series/1/bar/2 215.65,105.99 25.80x57.47 fill=E97132 stroke=- width=1.00
-  rect series/1/bar/3 297.95,97.78 25.80x41.05 fill=E97132 stroke=- width=1.00
-  rect series/2/bar/0 51.05,97.78 25.80x20.52 fill=196B24 stroke=- width=1.00
-  rect series/2/bar/1 133.35,52.62 25.80x28.73 fill=196B24 stroke=- width=1.00
-  rect series/2/bar/2 215.65,81.36 25.80x24.63 fill=196B24 stroke=- width=1.00
-  rect series/2/bar/3 297.95,44.41 25.80x53.36 fill=196B24 stroke=- width=1.00
+  rect series/0/bar/0 47.49,151.14 32.92x49.26 fill=156082 stroke=- width=1.00
+  rect series/0/bar/1 129.79,126.51 32.92x73.89 fill=156082 stroke=- width=1.00
+  rect series/0/bar/2 212.09,163.45 32.92x36.94 fill=156082 stroke=- width=1.00
+  rect series/0/bar/3 294.39,138.82 32.92x61.57 fill=156082 stroke=- width=1.00
+  rect series/1/bar/0 47.49,118.30 32.92x32.84 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/1 129.79,81.36 32.92x45.15 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/2 212.09,105.99 32.92x57.47 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/3 294.39,97.78 32.92x41.05 fill=E97132 stroke=- width=1.00
+  rect series/2/bar/0 47.49,97.78 32.92x20.52 fill=196B24 stroke=- width=1.00
+  rect series/2/bar/1 129.79,52.62 32.92x28.73 fill=196B24 stroke=- width=1.00
+  rect series/2/bar/2 212.09,81.36 32.92x24.63 fill=196B24 stroke=- width=1.00
+  rect series/2/bar/3 294.39,44.41 32.92x53.36 fill=196B24 stroke=- width=1.00
 path axis/category/line 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 text axis/value/label/0 13.40,195.00 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
 text axis/value/label/1 13.40,174.47 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"

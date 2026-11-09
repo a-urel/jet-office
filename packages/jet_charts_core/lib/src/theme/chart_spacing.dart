@@ -8,15 +8,15 @@ import '../model/equality.dart';
 ///
 /// Every default is the Office theme's value. Excel's default charts
 /// (`chart_defaults.xlsx`) verify the line widths, the overlap and the tick
-/// length; the gaps and the legend's sizes are unconfirmed, as Excel lays a
+/// length, and the owner's `chart_reference.xlsx` the bar overlap; the gaps and the legend's sizes are unconfirmed, as Excel lays a
 /// chart out itself and writes none of them (`docs/excel-checks.md`).
 final class ChartSpacing {
   /// Creates a spacing; every field has the Office theme's default.
   ///
-  /// Throws an [ArgumentError] when a field other than [overlapPercent] is
-  /// negative or not finite (a negative padding would put the title and the
-  /// legend outside the size), or when [overlapPercent] is not finite; it may
-  /// be negative, and the bars clamp it.
+  /// Throws an [ArgumentError] when a field other than [overlapPercent] and
+  /// [barOverlapPercent] is negative or not finite (a negative padding would
+  /// put the title and the legend outside the size), or when one of those two
+  /// is not finite; they may be negative, and the bars clamp them.
   ChartSpacing({
     this.padding = 8,
     this.titleGap = 6,
@@ -29,6 +29,7 @@ final class ChartSpacing {
     this.gridLineWidth = 0.75,
     this.axisLineWidth = 0.75,
     this.overlapPercent = -27,
+    this.barOverlapPercent = 0,
   }) {
     for (final (String name, double value) in <(String, double)>[
       ('padding', padding),
@@ -50,12 +51,13 @@ final class ChartSpacing {
         );
       }
     }
-    if (!overlapPercent.isFinite) {
-      throw ArgumentError.value(
-        overlapPercent,
-        'overlapPercent',
-        'must be finite',
-      );
+    for (final (String name, double value) in <(String, double)>[
+      ('overlapPercent', overlapPercent),
+      ('barOverlapPercent', barOverlapPercent),
+    ]) {
+      if (!value.isFinite) {
+        throw ArgumentError.value(value, name, 'must be finite');
+      }
     }
   }
 
@@ -91,9 +93,17 @@ final class ChartSpacing {
   /// The width of an axis line. Verified: 0.75 pt in Excel.
   final double axisLineWidth;
 
-  /// The overlap of the bars of one category, as a percentage of a bar's
-  /// width; negative leaves a gap. Verified: -27 in Excel.
+  /// The overlap of the bars of one category in a clustered column chart, as
+  /// a percentage of a bar's width; negative leaves a gap. Verified: -27 in
+  /// Excel.
   final double overlapPercent;
+
+  /// The overlap of the bars of one category in a clustered bar chart (bars
+  /// along the horizontal axis), as [overlapPercent] is for columns.
+  /// Verified: 0 in Excel, which writes no `c:overlap` for its clustered bar
+  /// chart (`chart_reference.xlsx`). Stacked kinds always overlap fully
+  /// (`ChartTheme.overlapPercentOf`).
+  final double barOverlapPercent;
 
   /// A copy with the given fields replaced.
   ///
@@ -111,6 +121,7 @@ final class ChartSpacing {
     double? gridLineWidth,
     double? axisLineWidth,
     double? overlapPercent,
+    double? barOverlapPercent,
   }) {
     return ChartSpacing(
       padding: padding ?? this.padding,
@@ -124,6 +135,7 @@ final class ChartSpacing {
       gridLineWidth: gridLineWidth ?? this.gridLineWidth,
       axisLineWidth: axisLineWidth ?? this.axisLineWidth,
       overlapPercent: overlapPercent ?? this.overlapPercent,
+      barOverlapPercent: barOverlapPercent ?? this.barOverlapPercent,
     );
   }
 
@@ -140,7 +152,8 @@ final class ChartSpacing {
         valueEquals(tickLength, other.tickLength) &&
         valueEquals(gridLineWidth, other.gridLineWidth) &&
         valueEquals(axisLineWidth, other.axisLineWidth) &&
-        valueEquals(overlapPercent, other.overlapPercent);
+        valueEquals(overlapPercent, other.overlapPercent) &&
+        valueEquals(barOverlapPercent, other.barOverlapPercent);
   }
 
   @override
@@ -156,6 +169,7 @@ final class ChartSpacing {
     valueHash(gridLineWidth),
     valueHash(axisLineWidth),
     valueHash(overlapPercent),
+    valueHash(barOverlapPercent),
   );
 
   @override
