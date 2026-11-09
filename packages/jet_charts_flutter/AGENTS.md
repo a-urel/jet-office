@@ -2,12 +2,12 @@
 
 `jet_charts_flutter` is the Flutter backend of the jet_ chart family: it
 measures and draws what `packages/jet_charts_core` lays out, and will hold the
-`CustomPainter` renderer, the widget and interaction (milestone J3). It reads
+`CustomPainter` renderer, the widget and interaction (milestone J3, done). It reads
 and writes no file format. The records of the design are the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md` and
 `docs/decisions/0016-jet-charts-flutter-in-the-workspace.md`.
 
-Milestone J3 is under way. The package exports `FlutterTextMeasurer`,
+Milestone J3 is done. The package exports `FlutterTextMeasurer`,
 `paintChartPrimitives`, `ChartLayoutPainter`, and the widget `JetChart` with
 `JetChartStateBuilder`, `JetChartErrorBuilder` and `JetChartStrings` (its
 loading, empty and error texts and its screen reader description, in English,
@@ -17,7 +17,36 @@ Turkish and German), and `JetChartHit`, what `JetChart.onHover` and
 `test/interaction_test.dart`). A change of the chart at the same size moves
 its marks over `JetChart.animationDuration` (`lerpChartPrimitives`,
 `lib/src/animation.dart`, tested in `test/animation_test.dart`); hover and
-taps use the new layout throughout. The rest of J3 adds to this file.
+taps use the new layout throughout. A tap on the chart is left to the parent
+(a dashboard tile) unless `onTap` is set; only a change of the chart animates,
+a change of theme, locale or scale snaps, and reduced motion turns animation
+off.
+
+## Open for J4 and C1
+
+- The owner's gallery check against Excel for Mac is pending
+  (`example/TALIMATLAR.md`); its result goes in
+  `packages/jet_charts_core/docs/excel-checks.md` with the owner, never
+  without. The gallery has no screenshot of the running app: the machine that
+  built it could not record the screen.
+- Whether a sandboxed macOS app sees Aptos Narrow (the gallery's header says
+  which font it got); until known, goldens use Roboto.
+- Tooltip box spacing and border constants are in `lib/src/tooltip_view.dart`,
+  not in `ChartTooltipStyle`.
+- `strokeWidth: 0` paints a hairline in Flutter; the core never emits 0, a
+  theme could.
+- Large series cost: about 250 ms (VM) and 520 ms (Chrome) for a 10,000-point
+  line, about 100 and 190 ms for 3,650 categories of two series, almost all in
+  the core's layout (`docs/benchmark.md`).
+- The gallery's chart list duplicates the core's test gallery (an app's `lib/`
+  cannot import another package's test support): same names, drift is
+  possible. The measurer fuzz generator is a copy too (`fuzz_copy_test.dart`).
+- Minor and deferred: no test for the measurer's disposal or eviction; tooltip
+  and hit-test ids are parsed again on every pointer event; the layout cache
+  is dropped when a state look shows; the Chrome benchmark run copies the
+  file into `test/` by hand.
+- J4: pies, donut, sparkline, scatter, combination and secondary axis come
+  with the core's (`jet_charts_core/AGENTS.md`).
 
 ## The gallery app
 

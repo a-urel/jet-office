@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- J3: the Office theme has the chart border and no value axis line
+  (`ChartTheme.border`, `borderWidth`, `valueAxisLine`).
+- J3: `ChartElementId`, `ChartElementKind`, `ChartAxisRole` and
+  `hitTestLayout`: hit testing of a layout by element id.
+- J3: `ChartLayout.categoryBands`.
+- J3: `chartTooltipAt`, `chartTooltipFor`, `ChartTooltip`, `ChartTooltipRow`,
+  `ChartTooltipStyle` and `ChartTheme.tooltip`.
+- J3: `summarizeChart` and `ChartSummary`, the text a screen reader reads.
+
 ## 0.1.0-dev.3
 
 - J2: `autoValueScale`, `ValueScale` and `dataExtent`, the value axis as Excel

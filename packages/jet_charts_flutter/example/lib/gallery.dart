@@ -88,7 +88,7 @@ GalleryEntry _entry(String name, Chart chart) =>
 /// The format code of `turkish_amounts`.
 const String turkishAmountFormat = '#,##0 "₺"';
 
-/// The gallery: the 13 charts of `packages/jet_charts_core/test/support/
+/// The gallery: the 14 charts of `packages/jet_charts_core/test/support/
 /// gallery.dart` with the same names and data, then `one_series` (one series
 /// with a title and a legend: Excel's default chart of one series hides its
 /// legend) and `turkish_amounts` (Turkish month names, values in the format

@@ -19,10 +19,11 @@ under `packages/`, and a DrawingML layer here) and `0016`
 resolving it needs Flutter's SDK) before any design change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
-its own `AGENTS.md`; milestone J2 is done (axis scales and the cartesian
-layout), and this package still does not depend on it until C1.
+its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
+testing, tooltip and summary), and this package still does not depend on it
+until C1.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
-own `AGENTS.md`; milestone J3 builds it. This package never depends on it.
+own `AGENTS.md`; milestone J3 is done. This package never depends on it.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`

@@ -145,6 +145,7 @@ final class _EntryView extends StatelessWidget {
       measurer: measurer,
       locale: locale,
     );
+    // The count comes from a scale-1 layout of its own, not the painted one.
     final int overlaps = findOverlaps(layout.primitives, layout.size).length;
     final String hidden = layout.hidden.isEmpty
         ? 'none'

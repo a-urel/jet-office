@@ -7,7 +7,7 @@ import 'package:jet_charts_gallery/main.dart';
 import 'package:jet_core/jet_core.dart';
 
 void main() {
-  test('the gallery holds the 13 core charts, one_series and '
+  test('the gallery holds the 14 core charts, one_series and '
       'turkish_amounts, with unique names', () {
     final List<String> names = <String>[
       for (final GalleryEntry e in galleryEntries()) e.name,

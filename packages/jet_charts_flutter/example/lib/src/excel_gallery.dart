@@ -397,6 +397,7 @@ String _chartXml(GalleryEntry entry) {
           '$sers$groupLabels${_gapAndOverlap(horizontal, clustered)}'
           '$axIds</c:barChart>',
   };
+  // The value axis number format follows the first series.
   final String valueFormat = chart.grouping == ChartGrouping.percentStacked
       ? '<c:numFmt formatCode="0%" sourceLinked="0"/>'
       : '<c:numFmt formatCode="${_escape(chart.series.firstOrNull?.formatCode ?? 'General')}" '

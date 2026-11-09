@@ -65,10 +65,15 @@ Bilinen bir fark: `one_series`'te uygulama göstergeyi gösterir. Excel'in tek
 serili varsayılan grafiği göstermez; bu dosyada gösterge açıkça yazıldığı için
 Excel de gösterir. Bu farkı not etmen gerekmez.
 
-7. ve 8. serinin rengini Excel kendisi seçer (dosya bu iki seri için renk
+Yedinci ve sekizinci serinin rengini Excel kendisi seçer (dosya bu iki seri için renk
 yazmaz). İstersen bir de şunu yap: `column_eight_series` sayfasında `A1:I5`
 hücrelerini seç, Ekle sekmesinden kümelenmiş sütun grafiği ekle ve 7. ve 8.
 serinin rengine bak. Dosyayı kaydetme.
+
+Çubuk grafiklerinde çubuklar arasındaki boşluk (gap width) henüz Excel'den
+doğrulanmadı. `bar_clustered`, `column_stacked`, `column_percent` ve
+`area_stacked` için istersen sayfanın verisinden Excel'in kendi grafiğini ekle
+(renk adımındaki gibi) ve boşlukları karşılaştır.
 
 ## Ne gönderilecek
 

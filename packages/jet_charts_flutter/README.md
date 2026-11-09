@@ -10,9 +10,13 @@ system decides the rest.
 
 ## Status
 
-Milestone J3 is under way. The package exports `FlutterTextMeasurer`, the
-`TextMeasurer` that measures with the `TextPainter` the renderer paints with.
-The renderer, the widget and interaction follow.
+Milestone J3 is done. The package exports `FlutterTextMeasurer` (the
+`TextMeasurer` that measures with the `TextPainter` the renderer paints with),
+`paintChartPrimitives` and `ChartLayoutPainter`, and the widget `JetChart`:
+loading, empty and error states in English, Turkish and German, a screen
+reader description, hover and touch tooltips (`onHover`, `onTap`), light
+animation of marks when the data changes, and reduced motion. `example/` is a
+gallery app for comparing the charts with Excel for Mac.
 
 The package is a member of the repository's pub workspace (decisions 0013 and
 0016 in the repository root's `docs/decisions/`).

@@ -7,11 +7,14 @@ lays out; `jet_office` writes and reads the model as a chart in XLSX and DOCX.
 The record of the design is the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md`.
 
-Milestones J1 and J2 are done, and the owner's full axis oracle run is
+Milestones J1, J2 and J3 are done, and the owner's full axis oracle run is
 recorded (`docs/axis-scaling.md`, "Findings"). The package exports the model,
 the theme, the drawing primitives and the text measurer (J1), the value scale
 (`autoValueScale`), the layout (`layoutChart`) and the overlap check
-(`findOverlaps`) (J2). The renderer is J3, in `jet_charts_flutter`.
+(`findOverlaps`) (J2). J3 added element ids and `hitTestLayout`,
+`ChartLayout.categoryBands`, the tooltip (`chartTooltipAt`, `chartTooltipFor`,
+`ChartTooltipStyle`), `summarizeChart`, and the Office border and no value axis
+line; the renderer is `jet_charts_flutter`.
 
 ## The packages
 
@@ -106,7 +109,9 @@ and category labels (`axis_layout.dart`), marks, data labels, legend.
   goes first). `findOverlaps` must find nothing in any layout.
 - Ids: every primitive has an id (`chart_ids.dart`), stable across layouts of
   the same chart, for hit testing and tests. The scheme is documented in
-  `ChartLayout.primitives`; a public ids API is to be decided in J3.
+  `ChartLayout.primitives`; `ChartElementId` parses it and `hitTestLayout`
+  finds the element at a point (a closed path is hit on its outline and
+  stroke as well as its fill).
 - `findOverlaps` (`overlap.dart`) reports texts that overlap each other or a
   mark of the layout, as `ChartOverlap`s of a `ChartOverlapKind`. It is the
   fuzz test's check and may be used by backends.
@@ -164,35 +169,40 @@ by hand, then fix it.
 - Follow the surrounding code: explicit types, dartdoc on every public member,
   plain sentences.
 
-## Open for J3 and C1
+## Open for J4 and C1
 
 - `lumMod`/`lumOff` on scheme colours (C1; `chart_defaults.xlsx` shows text
   tx1 65/35 and grid tx1 15/85).
-- `ArcPrimitive.strokeWidth` (J4 pies).
-- Excel's time-scale date axis (owner decision O2; dates are categories in J2).
+- `ArcPrimitive.strokeWidth`, pies, donut, sparkline, scatter, combination
+  charts, per-series kind and the secondary axis (J4).
+- Excel's time-scale date axis (owner decision O2; dates are categories).
 - The en-US and de-DE oracle regions are unverified; so are fonts other than
   8, 10 and 18, and plot margins.
-- The Excel side-by-side gallery check (owner decision O3) with the Flutter
-  renderer. Office look differences already known: Excel's default value axis
-  has no line and its chart area has a border; a one-series chart shows a
-  title and no legend.
-- The real `TextMeasurer` (Flutter `TextPainter`), and whether its widths keep
-  the fuzz clean.
-- Tooltips for `ChartLayout.hidden`; hit testing from ids (the scheme is
-  documented in `ChartLayout.primitives`; a public ids API is for J3).
-- Per-series kind, secondary axis, combination charts (J4).
+- The owner's gallery check against Excel for Mac (decision O3) is pending
+  (`packages/jet_charts_flutter/example/TALIMATLAR.md`); record its result in
+  `docs/excel-checks.md` with the owner. Unconfirmed until then: Excel's gap
+  width for clustered bars (182) and stacked ones (150, 100), written from
+  memory in the gallery workbook; Excel's palette past six colours; the
+  spacing constants in `docs/excel-checks.md`.
+- Whether a sandboxed macOS app sees Aptos Narrow (Flutter side).
+- Tooltips for `ChartLayout.hidden`. The tooltip's box spacing is not yet in
+  `ChartTooltipStyle`; `chartTooltipAt` resolves the chart again on each call.
 - Category labels: Excel's turning or wrapping beyond the label spacing
   is unknown; long labels may wrap at 0 degrees as Excel does.
+- Layout cost on large series: a 10,000-point line about 250 ms on the VM and
+  520 ms in Chrome, 3,650 categories of two series about 100 and 190 ms
+  (`packages/jet_charts_flutter/docs/benchmark.md`); data-label placement is
+  linear per obstacle.
 - Known deferred defects: the value-position functions disagree beyond 2x the
   span (`valuePosition` clamps to [0, 1], marks to [-1, 2]); the stacked line
   or area extent with mixed signs is wider than needed; a side legend is
-  dropped whole for one long name; data-label placement is linear per
-  obstacle (about 1 s at 3,650 categories x 2 series); near-equal huge values
-  (relative spread about 1e-14) can put the data top above the axis; the
-  "data labels first" degradation is nominal; data labels are not checked
-  against marks; inside-end labels may straddle a short bar.
+  dropped whole for one long name; near-equal huge values (relative spread
+  about 1e-14) can put the data top above the axis; the "data labels first"
+  degradation is nominal; data labels are not checked against marks;
+  inside-end labels may straddle a short bar.
+- Minor: `public_api_test` asserts the exact formatted export text; no
+  tooltip test for the marker, data label and placeholder routes.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
-- Excel's palette past six colours is unverified.
 
 ## Reference
 

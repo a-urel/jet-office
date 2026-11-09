@@ -174,6 +174,26 @@ void main() {
     }
   });
 
+  test('series 7 and 8 of column_eight_series carry no colour', () {
+    final int index =
+        entries.indexWhere(
+          (GalleryEntry e) => e.name == 'column_eight_series',
+        ) +
+        1;
+    final List<XmlElement> sers = all(
+      xml('xl/charts/chart$index.xml'),
+      'c:ser',
+    ).toList();
+    expect(sers, hasLength(8));
+    for (int s = 0; s < 8; s++) {
+      expect(
+        all(sers[s], 'c:spPr'),
+        s < 6 ? isNotEmpty : isEmpty,
+        reason: '$s',
+      );
+    }
+  });
+
   test('format codes go on the cells and on the value axis', () {
     final int index =
         entries.indexWhere((GalleryEntry e) => e.name == 'turkish_amounts') + 1;
