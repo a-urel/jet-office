@@ -575,9 +575,15 @@ mixin _SheetPictures {
 
   /// The id of the drawing's relationship to the part [media], added when it
   /// has none.
+  ///
+  /// A relationship whose id holds a character XML cannot write (a `&#xFFFE;`
+  /// read from the file) is not shared: the new picture's `r:embed` could not
+  /// name it, so a relationship of its own is added.
   String _mediaRelationship(_PicturesRead read, String media) {
     for (final MapEntry<String, String> e in read.media.entries) {
-      if (_sameMedia(e.value, media)) return e.key;
+      if (_sameMedia(e.value, media) && scrubXmlText(e.key).removed == 0) {
+        return e.key;
+      }
     }
     final String source = '/${read.partName!}';
     final String id = addStoredRelationship(

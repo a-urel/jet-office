@@ -359,6 +359,26 @@ void main() {
       );
     });
 
+    test('a relationship whose id XML cannot hold is not shared', () {
+      // As the XLSX model's feature fuzz found (seed 9 case 446 of
+      // tool/fuzz_reader.dart --features): the id read is U+FFFE.
+      final DocxDocument doc = DocxDocument.open(
+        _withImage3And(
+          rels:
+              '<Relationship Id="&#xFFFE;" Type="${RelType.image}" '
+              'Target="media/image3.png"/>',
+        ),
+      );
+      _first(doc).addPicture(OfficeImage(Uint8List.fromList(png4x2)));
+      final Map<String, Uint8List> entries = _entries(doc.save().bytes);
+      expect(_media(entries), <String>['word/media/image3.png']);
+      final String main = utf8.decode(entries['word/document.xml']!);
+      final String id = _values(main, 'a:blip', 'r:embed').last;
+      expect(id, isNot('￾'));
+      final String rels = utf8.decode(entries['word/_rels/document.xml.rels']!);
+      expect(_images(rels), contains((id, 'media/image3.png')));
+    });
+
     test('a, pic and wp are declared where the root does not', () {
       // A new document's root declares wp but neither a nor pic.
       final DocxDocument doc = DocxDocument();

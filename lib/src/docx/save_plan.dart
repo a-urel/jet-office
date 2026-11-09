@@ -39,6 +39,7 @@ import '../drawingml/media.dart';
 import '../opc/ooxml.dart' show RelType;
 import '../opc/package.dart'
     show OpcFormatException, OpcPackage, OpcRelationship;
+import '../xml/xml_escape.dart' show scrubXmlText;
 import 'docx_package.dart';
 import 'model/blocks.dart';
 import 'model/inlines.dart';
@@ -145,6 +146,9 @@ final class SavePlan {
   /// The id of a relationship of [part] in the file that relates it to the
   /// image part [media], internal and of the image type, which a reference
   /// by that id finds (the first relationship of that id); `null` for none.
+  ///
+  /// An id holding a character XML cannot write (a `&#xFFFE;` read from the
+  /// file) is passed over: a picture's `r:embed` could not name it.
   String? _fileImageRelationship(String part, String media) {
     final OpcPackage opc = _package.package;
     final List<OpcRelationship> relationships = _package.guard(
@@ -154,7 +158,10 @@ final class SavePlan {
     final String key = media.toLowerCase();
     final Set<String> seen = <String>{};
     for (final OpcRelationship rel in relationships) {
-      if (!seen.add(rel.id) || rel.external || rel.type != RelType.image) {
+      if (!seen.add(rel.id) ||
+          rel.external ||
+          rel.type != RelType.image ||
+          scrubXmlText(rel.id).removed != 0) {
         continue;
       }
       final String? target = opc.canonicalPartName(
