@@ -65,6 +65,15 @@ enum XlsxWarningCode {
   /// are the formulas' cells.
   formulaUnlexable,
 
+  /// Editing: a structural edit (rows or columns inserted or deleted, a
+  /// sheet renamed or moved) met a part the model does not type that holds
+  /// a reference the edit could not update (a pivot cache whose range was
+  /// deleted, a slicer cache whose table changed, an unknown part with a
+  /// `ref`); the part is kept as written. The detail names the part and the
+  /// edit: `/xl/pivotTables/pivotTable1.xml: insert Sheet1!3:4`. One warning
+  /// per part and edit, no cell.
+  referenceNotShifted,
+
   /// Reading: a sheet is listed in the workbook but its part is missing from
   /// the package. The sheet is still listed; its rows are empty. One warning
   /// per sheet, no cell.

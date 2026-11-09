@@ -117,6 +117,18 @@ _expected = <(XlsxWarningCode, OfficeLocale), String>{
     OfficeLocale.tr,
   ): '“S” sayfasındaki 1 formül tam okunamadı; bu yüzden yapısal bir düzenleme başvurularını güncellemedi, formüller yazıldığı gibi korundu (A1).',
   (
+    XlsxWarningCode.referenceNotShifted,
+    OfficeLocale.en,
+  ): "A part of the workbook holds references that a structural edit on sheet 'S' could not update (27); it was kept as written.",
+  (
+    XlsxWarningCode.referenceNotShifted,
+    OfficeLocale.de,
+  ): 'Ein Teil der Arbeitsmappe enthält Bezüge, die eine strukturelle Änderung im Blatt „S“ nicht anpassen konnte (27); er wurde unverändert beibehalten.',
+  (
+    XlsxWarningCode.referenceNotShifted,
+    OfficeLocale.tr,
+  ): 'Çalışma kitabının bir bölümü, “S” sayfasındaki yapısal bir düzenlemenin güncelleyemediği başvurular içeriyor (27); bölüm yazıldığı gibi korundu.',
+  (
     XlsxWarningCode.sheetPartMissing,
     OfficeLocale.en,
   ): "Sheet 'S' is listed in the workbook but its part is missing; it reads as empty.",
@@ -479,14 +491,14 @@ void main() {
     );
   });
 
-  test('all 102 messages are worded exactly as specified', () {
+  test('all 105 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, OfficeLocale)> keys =
         <(XlsxWarningCode, OfficeLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final OfficeLocale locale in OfficeLocale.values)
               (code, locale),
         ];
-    expect(keys, hasLength(102));
+    expect(keys, hasLength(105));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, OfficeLocale) key in keys) {
       final XlsxWarning w =

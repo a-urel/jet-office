@@ -22,6 +22,7 @@ const List<String> _sheet = <String>[
   'drawings',
   'notes',
   'views',
+  'sparklines',
 ];
 
 void main() {
@@ -35,6 +36,8 @@ void main() {
       expect(names, <String>[
         for (final XlsxSheet _ in book.sheets) ..._sheet,
         'definedNames',
+        'charts',
+        'opaqueParts',
       ], reason: name);
       expect(book.sheets.every(isLoadedSheet), isTrue, reason: name);
     }

@@ -556,6 +556,8 @@ final class _Book implements SheetHost {
     log,
     () => _sheets,
     workbookPart: () => workbook,
+    reader: () => reader,
+    warnings: warnings,
   );
   late final SheetNamer _namer = SheetNamer(warnings);
 

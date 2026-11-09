@@ -11,8 +11,12 @@ import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../formula/formula_rewrite.dart';
 import '../formula/reference_shift.dart';
+import '../read/package_reader.dart';
+import '../warnings.dart';
+import 'chart_references.dart';
 import 'defined_names.dart' show DefinedNameHolder;
 import 'item_group.dart' show readerOf, rewrittenElement;
+import 'opaque_references.dart';
 import 'workbook_part.dart';
 import 'xlsx_sheet.dart';
 
@@ -59,10 +63,15 @@ const List<String> sheetHolderNames = <String>[
   'drawings',
   'notes',
   'views',
+  'sparklines',
 ];
 
 /// The holder names of the workbook, applied after every sheet's.
-const List<String> workbookHolderNames = <String>['definedNames'];
+const List<String> workbookHolderNames = <String>[
+  'definedNames',
+  'charts',
+  'opaqueParts',
+];
 
 /// The model files under `lib/src/xlsx/model/` that store a reference, a
 /// `sqref` or a formula, each with the holder that rewrites it. The
@@ -95,22 +104,41 @@ final class ReferenceRegistry {
   ///
   /// [workbookPart] gives the workbook part whose defined names the
   /// `definedNames` holder rewrites; without it that holder is pending.
+  /// [reader] gives the package whose charts and opaque parts the `charts`
+  /// and `opaqueParts` holders rewrite or warn about, into [warnings];
+  /// without both those holders are pending.
   ReferenceRegistry(
     this._log,
     this._sheets, {
     WorkbookPart Function()? workbookPart,
-  }) : _workbookHolders = <ReferenceHolder>[
-         for (final String name in workbookHolderNames)
-           if (name == 'definedNames' && workbookPart != null)
-             DefinedNameHolder(_log, workbookPart)
-           else
-             PendingReferenceHolder(name),
-       ];
+    PackageReader Function()? reader,
+    WarningCollector? warnings,
+  }) : _warnings = warnings {
+    final OpaqueScan? scan = reader == null || warnings == null
+        ? null
+        : OpaqueScan(_log, reader, _sheets, _warnPart);
+    _workbookHolders = <ReferenceHolder>[
+      for (final String name in workbookHolderNames)
+        if (name == 'definedNames' && workbookPart != null)
+          DefinedNameHolder(_log, workbookPart)
+        else if (name == 'charts' && scan != null)
+          ChartReferences(scan)
+        else if (name == 'opaqueParts' && scan != null)
+          OpaqueReferences(scan)
+        else
+          PendingReferenceHolder(name),
+    ];
+  }
 
   final ChangeLog _log;
   final List<XlsxSheet> Function() _sheets;
+  final WarningCollector? _warnings;
 
-  final List<ReferenceHolder> _workbookHolders;
+  late final List<ReferenceHolder> _workbookHolders;
+
+  /// The warnings of the [apply] running, and its mapper and edit.
+  List<XlsxWarning>? _applied;
+  ReferenceMapper? _mapper;
 
   /// The workbook-level holders.
   List<ReferenceHolder> get workbookHolders => _workbookHolders;
@@ -122,14 +150,76 @@ final class ReferenceRegistry {
   ];
 
   /// Runs [mapper] over every holder in one transaction: if one throws,
-  /// every change already made is reverted.
-  void apply(ReferenceMapper mapper, ReferenceShift? edit) {
-    _log.transaction(() {
-      for (final ReferenceHolder holder in holders()) {
-        holder.shiftReferences(mapper, edit);
-      }
-    });
+  /// every change already made is reverted. Returns the warnings the edit
+  /// gave: a formula that could not be read (`formulaUnlexable`) and a part
+  /// holding a reference the edit could not fix (`referenceNotShifted`,
+  /// once per part, its detail `<part>: <edit>`).
+  List<XlsxWarning> apply(ReferenceMapper mapper, ReferenceShift? edit) {
+    final List<XlsxWarning> applied = _applied = <XlsxWarning>[];
+    _mapper = mapper;
+    final int before = _warnings?.warnings.length ?? 0;
+    try {
+      _log.transaction(() {
+        final List<ReferenceHolder> all = holders().toList();
+        for (final ReferenceHolder holder in all) {
+          if (holder is PreparingReferenceHolder) {
+            holder.prepare(mapper, edit);
+          }
+        }
+        for (final ReferenceHolder holder in all) {
+          holder.shiftReferences(mapper, edit);
+        }
+      });
+    } finally {
+      _applied = null;
+      _mapper = null;
+    }
+    final List<XlsxWarning> all = _warnings?.warnings ?? const <XlsxWarning>[];
+    return <XlsxWarning>[
+      for (int i = before; i < all.length; i++)
+        if (!applied.contains(all[i])) all[i],
+      ...applied,
+    ];
   }
+
+  /// Reports the part [part] (a part name without a leading `/`) as holding
+  /// a reference the running edit could not fix.
+  void _warnPart(String part) {
+    final WarningCollector? warnings = _warnings;
+    final ReferenceMapper? mapper = _mapper;
+    final List<XlsxWarning>? applied = _applied;
+    if (warnings == null || mapper == null || applied == null) return;
+    final String sheet = editedSheetOf(mapper);
+    final String detail = '/$part: ${describeEdit(mapper)}';
+    warnings.add(
+      XlsxWarningCode.referenceNotShifted,
+      sheet: sheet,
+      detail: detail,
+    );
+    for (final XlsxWarning w in warnings.warnings.reversed) {
+      if (w.code == XlsxWarningCode.referenceNotShifted &&
+          w.sheet == sheet &&
+          w.detail == detail) {
+        if (!applied.contains(w)) applied.add(w);
+        return;
+      }
+    }
+    // An eleventh detail joins the warning without one.
+    for (final XlsxWarning w in warnings.warnings.reversed) {
+      if (w.code == XlsxWarningCode.referenceNotShifted && w.sheet == sheet) {
+        if (!applied.contains(w)) applied.add(w);
+        return;
+      }
+    }
+  }
+}
+
+/// A holder that looks at the workbook before any holder shifts (to see
+/// what the edit changes, a table's size, say).
+abstract interface class PreparingReferenceHolder implements ReferenceHolder {
+  /// Called with the edit's [mapper] and [edit] before any holder's
+  /// [shiftReferences].
+  void prepare(ReferenceMapper mapper, ReferenceShift? edit);
 }
 
 /// What [spliceElement] does to one element: give attributes without a
@@ -244,6 +334,71 @@ OpaqueXml spliceElement(
   if (!changed) return element;
   copyTo(r.eventEnd);
   return rewrittenElement(element, out.toString());
+}
+
+/// The source of [r] (a reader at the start of a document) with each start
+/// element edited as [edit] says, every other character copied as read;
+/// `null` when nothing changes. [edit] gets the reader on each start
+/// element and must not move it. Throws what the reader throws on XML that
+/// is not well formed.
+String? spliceDocument(
+  XmlPullReader r,
+  SpliceEdit? Function(XmlPullReader r) edit,
+) {
+  final StringBuffer out = StringBuffer();
+  int cursor = 0;
+  bool changed = false;
+  void copyTo(int at) {
+    out.write(r.sourceText(cursor, at));
+    cursor = at;
+  }
+
+  while (r.next()) {
+    if (r.eventType != XmlEventType.startElement) continue;
+    final SpliceEdit? e = edit(r);
+    if (e == null) continue;
+    if (e.remove || e.markup != null) {
+      copyTo(r.eventStart);
+      r.skip();
+      cursor = r.eventEnd;
+      if (e.markup != null) out.write(e.markup);
+      changed = true;
+      continue;
+    }
+    final String tag = r.sourceText(r.eventStart, r.eventEnd);
+    final String newTag = _withAttributes(tag, e.attributes);
+    if (newTag != tag) {
+      copyTo(r.eventStart);
+      out.write(newTag);
+      cursor = r.eventEnd;
+      changed = true;
+    }
+    final String? Function(String text)? text = e.text;
+    if (r.isEmptyElement || text == null) continue;
+    final int textStart = r.eventEnd;
+    final int depth = r.depth;
+    final StringBuffer read = StringBuffer();
+    bool nested = false;
+    while (r.next()) {
+      if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+      if (r.eventType == XmlEventType.startElement) {
+        nested = true;
+      } else if (r.eventType == XmlEventType.characters ||
+          r.eventType == XmlEventType.cdata) {
+        read.write(r.text);
+      }
+    }
+    final String? markup = nested ? null : text(read.toString());
+    if (markup != null) {
+      copyTo(textStart);
+      out.write(markup);
+      cursor = r.eventStart;
+      changed = true;
+    }
+  }
+  if (!changed) return null;
+  copyTo(r.sourceLength);
+  return out.toString();
 }
 
 /// [tag], a start tag as written, with the attributes of [values] (without

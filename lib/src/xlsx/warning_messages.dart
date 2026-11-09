@@ -120,6 +120,18 @@ String formatWarning(XlsxWarning w, OfficeLocale locale) {
       '“$sheet” sayfasındaki $count formül tam okunamadı; bu yüzden yapısal '
           'bir düzenleme başvurularını güncellemedi, formüller yazıldığı '
           'gibi korundu$cells.',
+    (XlsxWarningCode.referenceNotShifted, OfficeLocale.en) =>
+      'A part of the workbook holds references that a structural edit on '
+          "${book ? 'the workbook' : "sheet '$sheet'"} could not update "
+          '($id); it was kept as written.',
+    (XlsxWarningCode.referenceNotShifted, OfficeLocale.de) =>
+      'Ein Teil der Arbeitsmappe enthält Bezüge, die eine strukturelle '
+          'Änderung ${book ? 'der Arbeitsmappe' : 'im Blatt „$sheet“'} nicht '
+          'anpassen konnte ($id); er wurde unverändert beibehalten.',
+    (XlsxWarningCode.referenceNotShifted, OfficeLocale.tr) =>
+      'Çalışma kitabının bir bölümü, ${book ? 'çalışma kitabındaki' : '“$sheet” sayfasındaki'} '
+          'yapısal bir düzenlemenin güncelleyemediği başvurular içeriyor '
+          '($id); bölüm yazıldığı gibi korundu.',
     (XlsxWarningCode.tableHeaderAdjusted, OfficeLocale.en) =>
       "$count table header cell(s) on sheet '$sheet' were given a different "
           "text, because a table's column names must be unique and not "

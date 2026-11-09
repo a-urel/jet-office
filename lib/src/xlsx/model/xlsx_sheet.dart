@@ -109,6 +109,7 @@ import 'defined_names.dart';
 import 'drawing_part.dart';
 import 'element_node.dart';
 import 'item_group.dart' show GroupItem, ItemGroup, readerOf, renderElements;
+import 'opaque_references.dart' show SparklineHolder;
 import 'page_elements.dart';
 import 'primitives.dart';
 import 'protection_elements.dart';
@@ -306,6 +307,28 @@ SheetEntry entryOf(XlsxSheet sheet) => sheet._entry;
 /// Whether [sheet]'s worksheet part is loaded.
 bool isLoadedSheet(XlsxSheet sheet) => sheet._part != null;
 
+/// The name of [sheet]'s worksheet part, or `null` when it has none.
+String? sheetPartNameOf(XlsxSheet sheet) => sheet._partName;
+
+/// The comments, VML and drawing parts of [sheet] that the model could not
+/// type (lower-cased, without a leading `/`): a structural edit of the sheet
+/// cannot move what they hold. Reads the sheet's notes and pictures.
+Set<String> untypedObjectParts(XlsxSheet sheet) {
+  final _NotesRead notes = sheet._readNotes();
+  final _PicturesRead pictures = sheet._readPictures();
+  String key(String name) =>
+      (name.startsWith('/') ? name.substring(1) : name).toLowerCase();
+  return <String>{
+    if (notes.parts.commentsName case final String name
+        when notes.parts.comments == null)
+      key(name),
+    if (notes.parts.vmlName case final String name when notes.parts.vml == null)
+      key(name),
+    if (pictures.partName case final String name when pictures.part == null)
+      key(name),
+  };
+}
+
 /// Whether [sheet] has a worksheet part in the file.
 bool sheetHasPart(XlsxSheet sheet) => sheet._partName != null;
 
@@ -344,6 +367,8 @@ List<ReferenceHolder> sheetReferenceHolders(XlsxSheet sheet) {
         _NoteHolder(sheet, part)
       else if (name == 'tables')
         _TableHolder(sheet)
+      else if (name == 'sparklines')
+        SparklineHolder(sheet._host.log, part, () => sheet.name, unlexable)
       else
         PendingReferenceHolder(name),
   ];

@@ -62,6 +62,12 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
         return collector.warnings.last;
       }
       collector.add(code, sheet: 'Daten', detail: featureEntry);
+    case XlsxWarningCode.referenceNotShifted:
+      collector.add(
+        code,
+        sheet: 'Daten',
+        detail: '/xl/pivotTables/pivotTable1.xml: insert Daten!3:4',
+      );
     case XlsxWarningCode.styleEntryInvalid:
       if (detail == null) {
         for (var i = 0; i < 12; i++) {

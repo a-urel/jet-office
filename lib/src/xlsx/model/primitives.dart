@@ -699,6 +699,11 @@ void removeStoredPart(ChangeLog log, OpcPackage package, String name) {
   }
 }
 
+/// What the package writes for the file's part [name] when nothing changed
+/// it: its original bytes, read again on each save.
+PartContent originalPartContent(OpcPackage package, String name) =>
+    _OriginalContent(package, name);
+
 /// The content of a part of the file left as it was: its original bytes.
 final class _OriginalContent implements PartContent {
   _OriginalContent(this.package, this.name);
