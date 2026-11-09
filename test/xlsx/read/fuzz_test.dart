@@ -27,7 +27,7 @@ const Map<String, ({int length, int adler32})> _storedCorpus =
       'm1_formulas': (length: 5599, adler32: 2780369878),
       'm1_dates': (length: 5963, adler32: 3931601365),
       'm2_style_precedence': (length: 7276, adler32: 148506124),
-      'c1_kinds': (length: 120631, adler32: 3033451574),
+      'c1_kinds': (length: 120591, adler32: 1328529345),
       'libreoffice': (length: 17758, adler32: 3013262995),
       'google_sheets': (length: 10635, adler32: 3903365900),
       'dotnet_sdk': (length: 3072, adler32: 1661782054),

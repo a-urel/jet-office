@@ -255,14 +255,16 @@ jobs:
       # display options extension holds two dispNaAsBlank: the validator
       # ignores the SDK's errors on that extension only for Excel's exact
       # content, so it must reject this file (validated alone, in
-      # build/corrupt-chart).
+      # build/corrupt-chart). So must it c1_corrupt_labels.xlsx, a line chart
+      # whose data label leader line extension holds two showLeaderLines.
       - name: Prove the checks reject a corrupt file
         env:
           LC_ALL: C.UTF-8
         run: |
           dart run tool/write_fixtures.dart build/corrupt --corrupt
           mkdir -p build/corrupt-chart
-          mv build/corrupt/c1_corrupt.xlsx build/corrupt-chart/
+          mv build/corrupt/c1_corrupt.xlsx build/corrupt/c1_corrupt_labels.xlsx \
+            build/corrupt-chart/
           # Keep only the corrupt workbook, so nothing else can fail.
           find build/corrupt -type f ! -name 'm1_corrupt.*' -delete
           ls -1 build/corrupt build/corrupt-chart
@@ -276,6 +278,10 @@ jobs:
           fi
           if ! grep -q 'FAIL  c1_corrupt.xlsx' build/corrupt-chart-validate.log; then
             echo "::error::The Open XML SDK validator did not report c1_corrupt.xlsx."
+            exit 1
+          fi
+          if ! grep -q 'FAIL  c1_corrupt_labels.xlsx' build/corrupt-chart-validate.log; then
+            echo "::error::The Open XML SDK validator did not report c1_corrupt_labels.xlsx."
             exit 1
           fi
 

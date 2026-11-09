@@ -107,6 +107,36 @@ void main() {
     expect(File('${input.path}/c1_corrupt.expected.json').existsSync(), isTrue);
   });
 
+  test('--corrupt adds c1_corrupt_labels.xlsx: c1_options with two '
+      'showLeaderLines', () {
+    // The negative control of tool/ooxml_validate's narrow ignore of
+    // Excel's data label leader lines: only the line chart's part differs
+    // from c1_options, and only by a second showLeaderLines.
+    write_fixtures.main(<String>[input.path, '--corrupt']);
+    final Map<String, String> options = readXlsx(
+      File('${input.path}/c1_options.xlsx').readAsBytesSync(),
+    );
+    final Map<String, String> corrupt = readXlsx(
+      File('${input.path}/c1_corrupt_labels.xlsx').readAsBytesSync(),
+    );
+    expect(corrupt.keys, options.keys);
+    for (final String name in options.keys) {
+      if (name != 'xl/charts/chart2.xml') {
+        expect(corrupt[name], options[name], reason: name);
+      }
+    }
+    const String show = '<c15:showLeaderLines val="1"/>';
+    expect(options['xl/charts/chart2.xml'], contains(show));
+    expect(
+      corrupt['xl/charts/chart2.xml'],
+      options['xl/charts/chart2.xml']!.replaceFirst(show, '$show$show'),
+    );
+    expect(
+      File('${input.path}/c1_corrupt_labels.expected.json').existsSync(),
+      isTrue,
+    );
+  });
+
   test('an unreadable file is printed as <file>: <error>', () {
     // A workbook the model does not reproduce is hard to build from the
     // writer, so an unreadable file stands in: the tool names it.

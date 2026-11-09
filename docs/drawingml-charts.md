@@ -8,8 +8,9 @@ back, and keeps an opened part byte for byte. Decision
 import. The layer knows neither XLSX nor DOCX. Its types carry the prefix
 `Drawing`.
 
-**Status of C1: done except the owner's reference workbook and Excel check
-(Task 10).** Nothing here is exported from `lib/jet_office.dart` yet: the
+**Status of C1: done except the owner's Excel check of the fixtures (Task
+10, Step 4).** The owner's reference workbook is committed and every chart in
+it but one reads typed ("Excel's reference workbook" below). Nothing here is exported from `lib/jet_office.dart` yet: the
 public API arrives with the hosts, C2 (XLSX) and C3 (DOCX).
 
 ## What is in it
@@ -122,8 +123,9 @@ Each rule has the test that holds it.
 
 - **Excel's own output is the template.** `writeDrawingChartSpace` writes
   Excel's default column and line charts equal to `chart1.xml` and `chart2.xml`
-  of `chart_defaults.xlsx`. `chart_writer_test.dart` ("Excel's default
-  charts").
+  of `chart_defaults.xlsx`, and 22 of the 23 charts of the owner's
+  `chart_reference.xlsx` read typed. `chart_writer_test.dart` ("Excel's
+  default charts"), `excel_reference_test.dart`.
 - **Data problems are issues, programmer errors throw.** A chart the writer
   cannot express (a kind outside the J2 set, a secondary axis, a series of
   another kind) is an `ArgumentError`; so are axis ids that are not distinct
@@ -160,12 +162,65 @@ Each rule has the test that holds it.
   points write and read in linear time. `chart_reader_test.dart`
   ("round trip").
 - **The vertical axis title is turned** (`rot="-5400000"`), the chart title
-  and the legend are flat. This follows Excel's known habit and is unconfirmed
-  until the owner's reference workbook. `chart_writer_test.dart` ("vertical
-  axis titles").
-- **The legend and data labels use shapes known from Excel** (a legend
-  `bodyPr` with `rot="0"`; data labels inset with `spAutoFit`), also awaiting
-  the reference workbook. `text_test.dart`.
+  and the legend are flat, and an axis title's text has no `spc` (a chart
+  title's has `spc="0"`), as Excel writes them (`chart_reference.xlsx`, chart
+  17). `chart_writer_test.dart` ("vertical axis titles"), `text_test.dart`.
+- **The legend and data label blocks are Excel's**: a legend `bodyPr` with
+  `rot="0"` and no `spc` (every reference chart with a legend); data labels
+  inset with `spAutoFit`, 9 pt `tx1` 75000/25000 (charts 20 and 21).
+  `text_test.dart`.
+
+### Excel's reference workbook
+
+`test/fixtures/owner/charts/chart_reference.xlsx` holds 23 charts of
+`Veri!A1:C5` (two series), made through Office.js in Excel for Mac 16.0300 in
+the order of `TALIMATLAR.md`. `excel_reference_test.dart` reads each and
+checks what it shows. What it showed, each now what the writer writes:
+
+- **Gap width and overlap by kind and grouping.** Clustered column 219 and
+  -27 (chart 1); clustered bar 182 and no `c:overlap` (chart 4); stacked and
+  percent stacked columns and bars 150 and 100 (charts 2, 3, 5, 6). The values
+  are the Office theme's in `jet_charts_core`
+  (`ChartTheme.gapWidthPercentOf`, `overlapPercentOf`), so the layout draws
+  them too. The writer leaves out an overlap of 0, the schema's default.
+- **Blanks as zero** (`c:dispBlanksAs val="zero"`) in every area chart and in
+  the stacked and percent stacked line charts (charts 8 to 12); `gap`
+  elsewhere.
+- **A percent stacked value axis** is `c:numFmt formatCode="0%"
+  sourceLinked="1"` (charts 3, 6, 9, 12); the reader reads it as no format,
+  as for any linked format.
+- **An area chart's category axis** has `c:majorTickMark val="out"` (charts
+  10 to 12); the value axis keeps `none`. Area charts cross `midCat`, as the
+  writer already wrote.
+- **Markers on stacked lines**: Excel keeps them (charts 8, 9), as the writer
+  already wrote.
+- **Axis titles** have no `spc` in their run properties (chart 17); the
+  vertical one is turned `-5400000`, as already written.
+- **Shown data labels are each series' own `c:dLbls`** (charts 20, 21): the
+  format code when set, a bare shape, the data label block, `c:showVal 1`,
+  `c:showLeaderLines 0` and a `c15:leaderLines` extension of a 0.75 pt
+  `A6A6A6` line (`tx1` 35000/65000), and no `c:dLblPos`; the group's
+  `c:dLbls` keeps every flag off. The reader takes the first series' labels
+  before the group's. The data label colour is `404040`, now the Office
+  theme's.
+- **A hidden axis has no `c:spPr` and no `c:txPr`** (chart 22, the value
+  axis). The writer leaves both out of a hidden category axis too, by
+  analogy; no Excel chart shows that yet.
+- **The minimum, maximum and major unit** sit on the value axis only, as
+  written (chart 18); **format codes** are stored invariant (`#,##0.00`,
+  `0.0`; charts 19, 21).
+- **Every chart of two series made without a title has Excel's automatic
+  title** (a `c:title` without text, `c:autoTitleDeleted 0`), which the typed
+  form carries; the legend is at the bottom.
+- **Not typed: chart 13 (`Satışlar`).** Its title's run is `lang="en-US"`
+  while `c:lang` and every other text are `tr-TR`: Office.js set the text.
+  The typed form carries one language (ruling R3 of C1), so the chart gives a
+  view only and its bytes are kept. A title typed in Excel's own window may
+  carry the part's language; a chart made by hand would tell.
+- **Names.** Chart 23 used the name `Tutarlar` (`Veri!$B$2:$B$5`) as its
+  first series' values, but Office.js resolved it: the part's `c:f` is
+  `Veri!$B$2:$B$5`. Whether Excel writes `[0]!Tutarlar` for a name stays open
+  for C2: it needs a chart made by hand in Excel.
 
 ### Validation
 
@@ -174,7 +229,7 @@ Each rule has the test that holds it.
   `tool/ooxml_validate` in CI; `chart_fixtures_test.dart` checks they write
   without an issue, read back typed and equal, and that the drawing holds one
   graphic frame per chart.
-- **The tool ignores two SDK errors in every run:** `Sch_UndeclaredAttribute`
+- **The tool ignores three SDK errors in every run:** `Sch_UndeclaredAttribute`
   and `Sch_InvalidElementContentExpectingComplex` on Excel's own
   `c16r3:dataDisplayOptions16` extension, and only on the `c:ext` at
   `/c:chartSpace[1]/c:chart[1]/c:extLst[1]/c:ext[1]` of a chart part whose
@@ -185,7 +240,13 @@ Each rule has the test that holds it.
   there; Excel writes it. Another attribute, a second or no `dispNaAsBlank`,
   or another value still fails: `c1_corrupt.xlsx` (`write_fixtures.dart
   --corrupt`, two `dispNaAsBlank`) is the negative control CI requires the
-  tool to reject. With `--libreoffice-resave` it also ignores the two errors
+  tool to reject. It also ignores `Sch_UnexpectedElementContentExpectingComplex`
+  on Excel's data label leader lines (`c:dLbls/c:extLst/c:ext` of
+  `{CE6537A1-D6FC-4f65-9D91-7224C49458BB}` holding exactly one
+  `c15:showLeaderLines` and one `c15:leaderLines` of one `c:spPr`), which the
+  SDK refuses in Excel's own `chart_reference.xlsx`; `c1_corrupt_labels.xlsx`
+  (two `showLeaderLines`) is its negative control. With `--libreoffice-resave`
+  it also ignores the two errors
   on LibreOffice's chart style parts. Both are in `AGENTS.md`, "Validation". A
   real defect in those spots is hidden by the narrow match; keep the match
   narrow.
@@ -211,6 +272,12 @@ chart that is only a view keeps its bytes until replaced.
 - The file theme's `ThemeColors` passed to the reader.
 - The `chart_defaults` theme items still unconfirmed (`docs/excel-checks.md` of
   `jet_charts_core`).
+- Whether Excel writes `[0]!Name` in a series reference to a workbook name:
+  `chart_reference.xlsx`'s chart 23 was made through Office.js, which
+  resolved the name to its range. A chart made by hand in Excel answers it.
+- Whether a title typed in Excel carries the part's language (chart 13 of
+  `chart_reference.xlsx`, set through Office.js, has `en-US` in a `tr-TR`
+  part and is not typed).
 - A cap on a chart part's size before it is read. `readDrawingChartSpace`
   builds a node per element, so it holds several times the part's size in
   memory, and `ReadLimits` allows ZIP entries of 256 MiB: C2 must refuse a
@@ -232,7 +299,4 @@ chart that is only a view keeps its bytes until replaced.
 
 - The secondary axis, combination charts and the other kinds (J4).
 - Excel's palette past six series.
-- The owner's reference workbook (`test/fixtures/owner/charts/`, steps in
-  `TALIMATLAR.md`): every chart in it must read typed, and the writer's
-  habits above are corrected against it. Until it arrives
-  `excel_reference_test` skips the chart group.
+- The owner's Excel check of the C1 fixtures (`docs/excel-checks.md`).

@@ -1,11 +1,13 @@
 /// The owner's two Excel workbooks with charts: every chart part reads typed,
 /// and what it shows is what the owner's instructions made it show.
 ///
-/// `chart_defaults.xlsx` (two charts of one series) is committed. The second,
-/// `chart_reference.xlsx` (23 charts of `Veri!A1:C5`, built by the steps in
-/// `test/fixtures/owner/charts/TALIMATLAR.md`), has not arrived: its group is
-/// skipped until the file is committed, and then fails on any chart that does
-/// not read typed or does not match [_expectations].
+/// `chart_defaults.xlsx` (two charts of one series) and `chart_reference.xlsx`
+/// (23 charts of `Veri!A1:C5`, built by the steps in
+/// `test/fixtures/owner/charts/TALIMATLAR.md` through Office.js in Excel for
+/// Mac 16.0300) are committed. The reference group fails on any chart that
+/// does not read as [_expectations] says: typed (or, for the one chart the
+/// typed form cannot express, untyped with its reason) and showing what the
+/// owner's steps made it show.
 @TestOn('vm')
 library;
 
@@ -40,6 +42,8 @@ class _Expect {
     this.labelFormat,
     this.valueAxisVisible = true,
     this.gridLines = true,
+    this.autoTitle = true,
+    this.untypedReason,
   });
 
   final String name;
@@ -57,6 +61,14 @@ class _Expect {
   final String? labelFormat;
   final bool valueAxisVisible;
   final bool gridLines;
+
+  /// Whether the typed form has Excel's automatic title: every chart of two
+  /// series made through Office.js has one (a `c:title` without text and
+  /// `c:autoTitleDeleted` 0), except the one given a title.
+  final bool autoTitle;
+
+  /// Why the chart is not typed, or `null` when it must read typed.
+  final String? untypedReason;
 }
 
 const ChartLegend _hidden = ChartLegend(visible: false);
@@ -80,6 +92,11 @@ const List<_Expect> _expectations = <_Expect>[
     ChartKind.column,
     ChartGrouping.clustered,
     title: 'Satışlar',
+    autoTitle: false,
+    untypedReason:
+        "the title's run is `lang=\"en-US\"` while the part's `c:lang` and "
+        'every other text are `tr-TR` (Office.js set the text); the typed '
+        'form carries one language (ruling R3 of C1)',
   ),
   _Expect(
     '14 legend top',
@@ -214,7 +231,6 @@ void _expectSeries(Chart chart, String name) {
     expect(s.name.values, <String?>[names[i]], reason: '$name series $i');
     expect(s.name.reference, 'Veri!\$${columns[i]}\$1', reason: name);
     expect(s.categories.reference, 'Veri!\$A\$2:\$A\$5', reason: name);
-    if (name.startsWith('23') && i == 0) continue;
     expect(
       s.values.reference,
       'Veri!\$${columns[i]}\$2:\$${columns[i]}\$5',
@@ -296,65 +312,71 @@ void main() {
   });
 
   final File reference = File(_referencePath);
-  group(
-    'chart_reference.xlsx',
-    skip: reference.existsSync()
-        ? false
-        : "the owner's chart_reference.xlsx is not committed yet; see "
-              'test/fixtures/owner/charts/TALIMATLAR.md',
-    () {
-      late final Map<String, Uint8List> parts;
-      late final List<String> charts;
-      setUpAll(() {
-        parts = readXlsxBytes(reference.readAsBytesSync());
-        charts = _chartsInAnchorOrder(parts);
-      });
-
-      test('has 23 charts in the anchors', () {
-        expect(charts, hasLength(_expectations.length));
-        expect(charts.toSet(), hasLength(charts.length));
-      });
-
-      for (int i = 0; i < _expectations.length; i++) {
-        final _Expect e = _expectations[i];
-        test('chart ${e.name}', () {
-          final DrawingChartRead read = readDrawingChartSpace(
-            parts[charts[i]]!,
-          );
-          expect(read.issues, isEmpty, reason: charts[i]);
-          expect(read.typed, isNotNull, reason: charts[i]);
-          final Chart chart = read.chart!;
-          expect(chart.kind, e.kind, reason: e.name);
-          expect(chart.grouping, e.grouping, reason: e.name);
-          _expectSeries(chart, e.name);
-          expect(chart.title?.text, e.title, reason: e.name);
-          expect(chart.legend.visible, e.legend.visible, reason: e.name);
-          if (e.legend.visible) {
-            expect(chart.legend.position, e.legend.position, reason: e.name);
-          }
-          expect(chart.categoryAxis.title, e.categoryTitle, reason: e.name);
-          expect(chart.valueAxis.title, e.valueTitle, reason: e.name);
-          expect(chart.valueAxis.min, e.min, reason: e.name);
-          expect(chart.valueAxis.max, e.max, reason: e.name);
-          expect(chart.valueAxis.majorUnit, e.majorUnit, reason: e.name);
-          if (e.valueFormat != null) {
-            expect(chart.valueAxis.formatCode, e.valueFormat, reason: e.name);
-          }
-          expect(chart.dataLabels.visible, e.labels, reason: e.name);
-          if (e.labelFormat != null) {
-            expect(chart.dataLabels.formatCode, e.labelFormat, reason: e.name);
-          }
-          expect(chart.valueAxis.visible, e.valueAxisVisible, reason: e.name);
-          expect(chart.valueAxis.gridLines, e.gridLines, reason: e.name);
-          if (e.name.startsWith('23')) {
-            final String? f = chart.series.first.values.reference;
-            // The controller records what Excel wrote for the name.
-            // ignore: avoid_print
-            print('chart 23, first series values c:f: $f');
-            expect(f, contains('Tutarlar'));
-          }
-        });
+  group('chart_reference.xlsx', () {
+    late final Map<String, Uint8List> parts;
+    late final List<String> charts;
+    setUpAll(() {
+      if (!reference.existsSync()) {
+        fail(
+          "the owner's chart_reference.xlsx is missing; see "
+          'test/fixtures/owner/charts/TALIMATLAR.md',
+        );
       }
-    },
-  );
+      parts = readXlsxBytes(reference.readAsBytesSync());
+      charts = _chartsInAnchorOrder(parts);
+    });
+
+    test('has 23 charts in the anchors', () {
+      expect(charts, hasLength(_expectations.length));
+      expect(charts.toSet(), hasLength(charts.length));
+    });
+
+    for (int i = 0; i < _expectations.length; i++) {
+      final _Expect e = _expectations[i];
+      test('chart ${e.name}', () {
+        final DrawingChartRead read = readDrawingChartSpace(parts[charts[i]]!);
+        expect(read.issues, isEmpty, reason: charts[i]);
+        if (e.untypedReason == null) {
+          expect(read.typed, isNotNull, reason: charts[i]);
+          expect(read.typed!.autoTitle, e.autoTitle, reason: e.name);
+          expect(read.typed!.language, 'tr-TR', reason: e.name);
+        } else {
+          expect(read.typed, isNull, reason: e.untypedReason);
+        }
+        final Chart chart = read.chart!;
+        expect(chart.kind, e.kind, reason: e.name);
+        expect(chart.grouping, e.grouping, reason: e.name);
+        _expectSeries(chart, e.name);
+        expect(chart.title?.text, e.title, reason: e.name);
+        expect(chart.legend.visible, e.legend.visible, reason: e.name);
+        if (e.legend.visible) {
+          expect(chart.legend.position, e.legend.position, reason: e.name);
+        }
+        expect(chart.categoryAxis.title, e.categoryTitle, reason: e.name);
+        expect(chart.valueAxis.title, e.valueTitle, reason: e.name);
+        expect(chart.valueAxis.min, e.min, reason: e.name);
+        expect(chart.valueAxis.max, e.max, reason: e.name);
+        expect(chart.valueAxis.majorUnit, e.majorUnit, reason: e.name);
+        if (e.valueFormat != null) {
+          expect(chart.valueAxis.formatCode, e.valueFormat, reason: e.name);
+        }
+        expect(chart.dataLabels.visible, e.labels, reason: e.name);
+        if (e.labelFormat != null) {
+          expect(chart.dataLabels.formatCode, e.labelFormat, reason: e.name);
+        }
+        expect(chart.valueAxis.visible, e.valueAxisVisible, reason: e.name);
+        expect(chart.valueAxis.gridLines, e.gridLines, reason: e.name);
+        if (e.name.startsWith('23')) {
+          // Office.js resolved the name `Tutarlar` to its range, so this
+          // chart does not answer whether Excel writes `[0]!Tutarlar`
+          // (docs/drawingml-charts.md, "Open for C2").
+          expect(
+            chart.series.first.values.reference,
+            r'Veri!$B$2:$B$5',
+            reason: e.name,
+          );
+        }
+      });
+    }
+  });
 }

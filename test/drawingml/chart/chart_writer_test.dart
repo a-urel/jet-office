@@ -129,11 +129,19 @@ void main() {
           if (bars) {
             final String dir = kind == ChartKind.bar ? 'bar' : 'col';
             expect(xml, contains('<c:barDir val="$dir"/>'));
-            final String overlap = grouping == ChartGrouping.clustered
-                ? '-27'
-                : '100';
-            expect(xml, contains('<c:overlap val="$overlap"/>'));
-            expect(xml, contains('<c:gapWidth val="219"/>'));
+            // chart_reference.xlsx: 219 and -27 for clustered columns, 182
+            // and no overlap for clustered bars, 150 and 100 when stacked.
+            final (String gap, String? overlap) = switch ((kind, grouping)) {
+              (ChartKind.column, ChartGrouping.clustered) => ('219', '-27'),
+              (ChartKind.bar, ChartGrouping.clustered) => ('182', null),
+              _ => ('150', '100'),
+            };
+            expect(xml, contains('<c:gapWidth val="$gap"/>'));
+            if (overlap == null) {
+              expect(xml, isNot(contains('c:overlap')));
+            } else {
+              expect(xml, contains('<c:overlap val="$overlap"/>'));
+            }
             expect(xml, contains('<c:invertIfNegative val="0"/>'));
           } else {
             expect(xml, isNot(contains('barDir')));
@@ -153,6 +161,37 @@ void main() {
           expect(
             xml.contains('<c:crossBetween val="midCat"/>'),
             kind == ChartKind.area,
+          );
+          // An area chart and a stacked line show blanks as zero; an area's
+          // category axis ticks outside; a percent stacked value axis shows
+          // `0%` linked to the source (chart_reference.xlsx).
+          final bool zero =
+              kind == ChartKind.area ||
+              (kind == ChartKind.line && grouping != ChartGrouping.clustered);
+          expect(
+            xml,
+            contains('<c:dispBlanksAs val="${zero ? 'zero' : 'gap'}"/>'),
+          );
+          final String catAx = RegExp(
+            '<c:catAx>.*</c:catAx>',
+          ).firstMatch(xml)![0]!;
+          final String valAx = RegExp(
+            '<c:valAx>.*</c:valAx>',
+          ).firstMatch(xml)![0]!;
+          expect(
+            catAx,
+            contains(
+              '<c:majorTickMark val="${kind == ChartKind.area ? 'out' : 'none'}"/>',
+            ),
+          );
+          expect(valAx, contains('<c:majorTickMark val="none"/>'));
+          expect(
+            valAx,
+            contains(
+              '<c:numFmt formatCode="'
+              '${grouping == ChartGrouping.percentStacked ? '0%' : 'General'}'
+              '" sourceLinked="1"/>',
+            ),
           );
         });
       }
@@ -500,14 +539,17 @@ void main() {
       expect(xml, isNot(contains('<c:legend>')));
     });
 
-    test('visible data labels write the group dLbls', () {
-      for (final (ChartKind kind, ChartGrouping grouping, String? position)
-          in <(ChartKind, ChartGrouping, String?)>[
-            (ChartKind.column, ChartGrouping.clustered, 'outEnd'),
-            (ChartKind.bar, ChartGrouping.stacked, 'ctr'),
-            (ChartKind.column, ChartGrouping.percentStacked, 'ctr'),
-            (ChartKind.line, ChartGrouping.clustered, 'r'),
-            (ChartKind.area, ChartGrouping.stacked, null),
+    test('visible data labels are each series\' own dLbls', () {
+      // chart_reference.xlsx, charts 20 and 21: the group's flags stay off,
+      // each series has the format, the shape, the text, showVal 1, no
+      // position and Excel's leader lines.
+      for (final (ChartKind kind, ChartGrouping grouping)
+          in <(ChartKind, ChartGrouping)>[
+            (ChartKind.column, ChartGrouping.clustered),
+            (ChartKind.bar, ChartGrouping.stacked),
+            (ChartKind.column, ChartGrouping.percentStacked),
+            (ChartKind.line, ChartGrouping.clustered),
+            (ChartKind.area, ChartGrouping.stacked),
           ]) {
         final String xml = _xml(
           _write(
@@ -522,29 +564,65 @@ void main() {
           ),
         );
         _expectWellFormed(xml);
-        final String labels = RegExp(
+        final String group = RegExp(
           '</c:ser><c:dLbls>.*?</c:dLbls>',
         ).firstMatch(xml)![0]!;
         expect(
-          labels,
-          contains(
-            '<c:dLbls><c:numFmt formatCode="#,##0" sourceLinked="0"/>'
-            '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/>'
-            '</c:spPr><c:txPr><a:bodyPr rot="0" spcFirstLastPara="1" '
-            'vertOverflow="ellipsis" vert="horz" wrap="square" lIns="38100"',
-          ),
-        );
-        expect(
-          labels,
-          endsWith(
-            '${position == null ? '' : '<c:dLblPos val="$position"/>'}'
-            '<c:showLegendKey val="0"/><c:showVal val="1"/>'
-            '<c:showCatName val="0"/><c:showSerName val="0"/>'
-            '<c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>',
-          ),
+          group,
+          '</c:ser><c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/>'
+          '<c:showCatName val="0"/><c:showSerName val="0"/>'
+          '<c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>',
           reason: '$kind $grouping',
         );
+        final List<String> series = <String>[
+          for (final Match m in RegExp('<c:ser>.*?</c:ser>').allMatches(xml))
+            m[0]!,
+        ];
+        expect(series, isNotEmpty);
+        for (final String s in series) {
+          final String labels = RegExp(
+            '<c:dLbls>.*?</c:dLbls>',
+          ).firstMatch(s)![0]!;
+          expect(
+            labels,
+            startsWith(
+              '<c:dLbls><c:numFmt formatCode="#,##0" sourceLinked="0"/>'
+              '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/>'
+              '</c:spPr><c:txPr><a:bodyPr rot="0" spcFirstLastPara="1" '
+              'vertOverflow="ellipsis" vert="horz" wrap="square" lIns="38100"',
+            ),
+          );
+          expect(labels, isNot(contains('dLblPos')));
+          expect(
+            labels,
+            contains(
+              '<c:showLegendKey val="0"/><c:showVal val="1"/>'
+              '<c:showCatName val="0"/><c:showSerName val="0"/>'
+              '<c:showPercent val="0"/><c:showBubbleSize val="0"/>'
+              '<c:showLeaderLines val="0"/><c:extLst>',
+            ),
+          );
+          expect(labels, contains('<c15:showLeaderLines val="1"/>'));
+          expect(s.indexOf('<c:dLbls>'), lessThan(s.indexOf('<c:cat>')));
+        }
       }
+    });
+
+    test('a hidden axis has no shape and no labels block', () {
+      // chart_reference.xlsx, chart 22: the deleted value axis has no
+      // `c:spPr` and no `c:txPr`.
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.column,
+            valueAxis: const ChartAxis(visible: false, gridLines: false),
+          ),
+        ),
+      );
+      final String valAx = RegExp('<c:valAx>.*</c:valAx>').firstMatch(xml)![0]!;
+      expect(valAx, contains('<c:delete val="1"/>'));
+      expect(valAx, isNot(contains('<c:spPr>')));
+      expect(valAx, isNot(contains('<c:txPr>')));
     });
 
     test('data labels without a format write no numFmt', () {

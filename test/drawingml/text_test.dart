@@ -120,12 +120,17 @@ void main() {
     });
 
     test('writes the data label block as Excel does', () {
-      final String expected = excel[1].replaceFirst(
-        RegExp('<a:bodyPr[^>]*/>'),
-        '<a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" '
-        'vert="horz" wrap="square" lIns="38100" tIns="19050" rIns="38100" '
-        'bIns="19050" anchor="ctr" anchorCtr="1"><a:spAutoFit/></a:bodyPr>',
-      );
+      final String expected = excel[1]
+          .replaceFirst(
+            RegExp('<a:bodyPr[^>]*/>'),
+            '<a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" '
+            'vert="horz" wrap="square" lIns="38100" tIns="19050" rIns="38100" '
+            'bIns="19050" anchor="ctr" anchorCtr="1"><a:spAutoFit/></a:bodyPr>',
+          )
+          // Excel's data labels are `tx1` 75000 and 25000 (`404040`;
+          // chart_reference.xlsx, charts 20 and 21), not the axis labels' grey.
+          .replaceFirst('<a:lumMod val="65000"/>', '<a:lumMod val="75000"/>')
+          .replaceFirst('<a:lumOff val="35000"/>', '<a:lumOff val="25000"/>');
       expect(
         _difference(
           _body(
@@ -137,6 +142,39 @@ void main() {
         ),
         isNull,
       );
+    });
+
+    test('writes an axis title block without spc, turned when vertical', () {
+      // chart_reference.xlsx, chart 17: the axis titles' `a:defRPr` has no
+      // `spc`, the vertical one's `a:bodyPr` has `rot="-5400000"`.
+      final String flat = _body(
+        office.axisLabels,
+        DrawingTextUse.axisTitle,
+        ChartExportColors.fileTheme,
+      );
+      expect(flat, isNot(contains('spc="0"')));
+      expect(flat, contains('<a:bodyPr rot="0" '));
+      final StringBuffer out = StringBuffer();
+      writeDrawingTextBody(
+        XmlWriter(out),
+        office.axisLabels,
+        mode: ChartExportColors.fileTheme,
+        language: 'tr-TR',
+        use: DrawingTextUse.axisTitle,
+        vertical: true,
+      );
+      expect(out.toString(), contains('<a:bodyPr rot="-5400000" '));
+      final StringBuffer title = StringBuffer();
+      writeDrawingTextBody(
+        XmlWriter(title),
+        office.titleText,
+        mode: ChartExportColors.fileTheme,
+        language: 'tr-TR',
+        use: DrawingTextUse.title,
+        vertical: true,
+      );
+      expect(title.toString(), contains('<a:bodyPr rot="0" '));
+      expect(title.toString(), contains('spc="0"'));
     });
 
     test('writes the size in hundredths of a point and bold as b', () {
@@ -220,6 +258,39 @@ void main() {
       expect(paragraphs[3], isNot(contains('<a:r>')));
       expect(paragraphs[3], contains('<a:endParaRPr lang="tr-TR"/>'));
       expect(paragraphs[4], contains('<a:t>d</a:t>'));
+    });
+
+    test('an axis title has no spc and turns when vertical', () {
+      final StringBuffer out = StringBuffer();
+      writeDrawingRichText(
+        XmlWriter(out),
+        'Tutar',
+        office.axisLabels,
+        mode: ChartExportColors.fileTheme,
+        language: 'tr-TR',
+        use: DrawingTextUse.axisTitle,
+        vertical: true,
+      );
+      expect(out.toString(), isNot(contains('spc=')));
+      expect(out.toString(), contains('<a:bodyPr rot="-5400000" '));
+      expect(
+        _rich('T', office.titleText, ChartExportColors.fileTheme),
+        contains('spc="0"'),
+      );
+    });
+
+    test('another use throws an ArgumentError', () {
+      expect(
+        () => writeDrawingRichText(
+          XmlWriter(StringBuffer()),
+          'T',
+          office.titleText,
+          mode: ChartExportColors.fileTheme,
+          language: 'tr-TR',
+          use: DrawingTextUse.legend,
+        ),
+        throwsArgumentError,
+      );
     });
 
     test('escapes markup and is well formed', () {

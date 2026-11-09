@@ -39,6 +39,12 @@
 /// exactly one, so it must reject this file; CI validates it alone, in
 /// `build/corrupt-chart`, as the negative control of that ignore.
 ///
+/// And `c1_corrupt_labels.xlsx`: `c1_options` whose line chart
+/// (`xl/charts/chart2.xml`) holds two `c15:showLeaderLines` in the first
+/// series' data label leader line extension, which `tool/ooxml_validate`
+/// ignores only in Excel's exact form; CI validates it beside `c1_corrupt`,
+/// as the negative control of that ignore.
+///
 /// It writes `d1_corrupt.docx` with the `.expected.txt` of `d1_paragraphs`
 /// as well, for the same purpose: `d1_paragraphs` with a `w:r` directly
 /// under `w:body`, which the Open XML SDK rejects, and `first` spelled
@@ -117,9 +123,19 @@ void main(List<String> args) {
       json,
       kinds.expectedValues,
     );
+    final Fixture options = fixtures.singleWhere(
+      (Fixture f) => f.name == 'c1_options',
+    );
+    _write(
+      dir,
+      'c1_corrupt_labels',
+      _corruptLabels(options.build()),
+      json,
+      options.expectedValues,
+    );
   }
   stdout.writeln(
-    'Wrote ${fixtures.length + documents.length + (corrupt ? 3 : 0)} '
+    'Wrote ${fixtures.length + documents.length + (corrupt ? 4 : 0)} '
     'fixtures to ${dir.path}.',
   );
 }
@@ -191,6 +207,15 @@ Uint8List _corrupt(Uint8List bytes) => _rewritePart(
 
 /// [bytes] (the `c1_kinds` workbook) with a second `c16r3:dispNaAsBlank` in
 /// the display options extension of its first chart part.
+Uint8List _corruptLabels(Uint8List bytes) {
+  const String show = '<c15:showLeaderLines val="1"/>';
+  return _rewritePart(
+    bytes,
+    'xl/charts/chart2.xml',
+    (String xml) => _replaceOnce(xml, show, '$show$show'),
+  );
+}
+
 Uint8List _corruptChart(Uint8List bytes) {
   const String blank = '<c16r3:dispNaAsBlank val="1"/>';
   return _rewritePart(
