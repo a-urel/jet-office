@@ -347,8 +347,11 @@ void main() {
 
   test('a line of 10,000 points with data labels lays out in reasonable '
       'time', () {
-    // A guard against checking every label against every segment, not a
-    // benchmark.
+    // A guard against checking every label against every mark, segment or
+    // placed label, not a benchmark. On the VM it takes about 255 ms (it took
+    // about 2.85 s when every label went through every marker, about 8 s when
+    // also through every segment); 1.5 s keeps a margin of about 6. VM only:
+    // Chrome is slower and the guard is about the algorithm, not a platform.
     final List<double?> values = <double?>[
       for (int i = 0; i < 10000; i++) 50 + 40 * math.sin(i / 50),
     ];
@@ -374,14 +377,14 @@ void main() {
       measurer: measurer,
     );
     watch.stop();
-    expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    expect(watch.elapsed, lessThan(const Duration(milliseconds: 1500)));
     expect(
       flat(
         l.primitives,
       ).where((ChartPrimitive p) => p.id.startsWith(ids.dataLabelPrefix)),
       isNotEmpty,
     );
-  });
+  }, testOn: 'vm');
 
   test('labels that cannot fit are hidden and listed', () {
     final ChartLayout l = lay(

@@ -104,6 +104,12 @@ List<ChartOverlap> findOverlaps(
 
   final List<TextPrimitive> texts = flat.whereType<TextPrimitive>().toList();
   final List<LaidMark> marks = laidMarks(primitives);
+  final BoxGrid<int> markGrid = BoxGrid<int>();
+  for (int m = 0; m < marks.length; m++) {
+    if (marks[m].box != null) {
+      markGrid.add(m, marks[m].box!);
+    }
+  }
   ChartRect? legendRect;
   ChartRect? plotRect;
   for (final ChartPrimitive p in flat) {
@@ -141,7 +147,13 @@ List<ChartOverlap> findOverlaps(
         found.add(ChartOverlap(ChartOverlapKind.textText, a.id, other.id));
       }
     }
-    for (final LaidMark mark in marks) {
+    final Set<int> near = <int>{};
+    markGrid.any(a.bounds, (int m) {
+      near.add(m);
+      return false;
+    });
+    for (final int m in near.toList()..sort()) {
+      final LaidMark mark = marks[m];
       if (!isOwnMark(a.id, mark.mark.id) && textOverlapsMark(a, mark)) {
         found.add(ChartOverlap(ChartOverlapKind.textMark, a.id, mark.mark.id));
       }
@@ -165,6 +177,75 @@ bool textsOverlap(TextPrimitive a, TextPrimitive b) =>
     _hasArea(a.rect) && _hasArea(b.rect) && _overlaps(a.corners, b.corners);
 
 bool _hasArea(ChartRect r) => r.width > 0 && r.height > 0;
+
+/// Items filed by the cells of a square grid their boxes cover, so that a
+/// query looks only at the items near its box: placing data labels and
+/// checking text against marks stay near linear in the number of labels.
+final class BoxGrid<T> {
+  /// The side of a cell, in points: about a short label's size.
+  static const double _cell = 32;
+
+  /// The most cells one item is filed in; a larger one goes in [_wide].
+  static const int _maxCells = 4096;
+
+  final Map<int, List<T>> _cells = <int, List<T>>{};
+  final List<T> _wide = <T>[];
+
+  /// The cells [box] covers, or null when it is too large or not finite.
+  static (int, int, int, int)? _span(ChartRect box) {
+    final double x0 = (box.left / _cell).floorToDouble();
+    final double y0 = (box.top / _cell).floorToDouble();
+    final double x1 = (box.right / _cell).floorToDouble();
+    final double y1 = (box.bottom / _cell).floorToDouble();
+    for (final double v in <double>[x0, y0, x1, y1]) {
+      if (!v.isFinite || v.abs() > 1e6) {
+        return null;
+      }
+    }
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > _maxCells) {
+      return null;
+    }
+    return (x0.toInt(), y0.toInt(), x1.toInt(), y1.toInt());
+  }
+
+  static int _key(int x, int y) => (x + 2000000) * 4000001 + (y + 2000000);
+
+  /// Files [item], whose shapes lie within [box].
+  void add(T item, ChartRect box) {
+    final (int, int, int, int)? span = _span(box);
+    if (span == null) {
+      _wide.add(item);
+      return;
+    }
+    for (int x = span.$1; x <= span.$3; x++) {
+      for (int y = span.$2; y <= span.$4; y++) {
+        (_cells[_key(x, y)] ??= <T>[]).add(item);
+      }
+    }
+  }
+
+  /// Whether [test] holds for an item that may meet [box]; it is called on
+  /// every item filed in a cell [box] covers (an item may come more than
+  /// once) and every item too large to file, until it returns true.
+  bool any(ChartRect box, bool Function(T item) test) {
+    if (_wide.any(test)) {
+      return true;
+    }
+    final (int, int, int, int)? span = _span(box);
+    if (span == null) {
+      return _cells.values.any((List<T> cell) => cell.any(test));
+    }
+    for (int x = span.$1; x <= span.$3; x++) {
+      for (int y = span.$2; y <= span.$4; y++) {
+        final List<T>? cell = _cells[_key(x, y)];
+        if (cell != null && cell.any(test)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+}
 
 /// A series mark and the part of the chart its clips leave visible.
 ///

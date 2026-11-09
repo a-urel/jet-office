@@ -204,11 +204,12 @@ by hand, then fix it.
 - Layout cost on large series: a 10,000-point line about 250 ms on the VM and
   520 ms in Chrome, 3,650 categories of two series about 100 and 190 ms
   (`packages/jet_charts_flutter/docs/benchmark.md`). Data-label placement
-  checks each place against every text and label already placed, and against
-  the marks whose boxes can reach it (a mark's shapes, such as a line's
-  segments, are sorted by box and found by binary search); a 10,000-point line
-  with data labels lays out well within the 5 s that `data_labels_test.dart`
-  allows it on the VM (it took about 8 s before the sort).
+  checks each place only against the texts, labels and marks filed in the
+  cells of a 32 pt grid its box covers (`BoxGrid`), and within a mark only
+  against the shapes whose boxes can reach it (a line's segments, sorted by
+  box and found by binary search); a 10,000-point line with data labels lays
+  out in about 255 ms on the VM, and `data_labels_test.dart` (VM only) fails
+  it above 1.5 s.
 - Known deferred defects: the value-position functions disagree beyond 2x the
   span (`valuePosition` clamps to [0, 1], marks to [-1, 2]); the stacked line
   or area extent with mixed signs is wider than needed; a side legend is

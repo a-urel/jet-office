@@ -117,17 +117,22 @@ DataLabelPlacement placeDataLabels({
     ))
       ids.dataLabelId(a.series, a.category): a,
   };
-  final List<TextPrimitive> obstacles = <TextPrimitive>[
-    for (final ChartPrimitive p in _flat(existing))
-      if (p is TextPrimitive) p,
-  ];
-  // The legend's rectangle, as a text no label may enter.
+  // The texts already drawn, the legend's rectangle (as a text no label may
+  // enter) and, as they are placed, the labels.
+  final BoxGrid<TextPrimitive> taken = BoxGrid<TextPrimitive>();
   for (final ChartPrimitive p in _flat(existing)) {
-    if (p is RectPrimitive && p.id == ids.legend) {
-      obstacles.add(TextPrimitive(p.id, '', p.rect, theme.dataLabels));
+    if (p is TextPrimitive) {
+      taken.add(p, p.bounds);
+    } else if (p is RectPrimitive && p.id == ids.legend) {
+      taken.add(TextPrimitive(p.id, '', p.rect, theme.dataLabels), p.rect);
     }
   }
-  final List<LaidMark> marks = laidMarks(existing);
+  final BoxGrid<LaidMark> marks = BoxGrid<LaidMark>();
+  for (final LaidMark m in laidMarks(existing)) {
+    if (m.box != null) {
+      marks.add(m, m.box!);
+    }
+  }
   final bool bar = chart.kind == ChartKind.bar;
   final bool stacked = resolved.grouping != ChartGrouping.clustered;
   final double crossing = crossingValue(scale);
@@ -167,6 +172,7 @@ DataLabelPlacement placeDataLabels({
             : theme.dataLabels;
         final TextPrimitive label = TextPrimitive(t.$1, t.$2, candidate, style);
         if (marks.any(
+          label.bounds,
           (LaidMark m) =>
               !isOwnMark(t.$1, m.mark.id) && textOverlapsMark(label, m),
         )) {
@@ -183,8 +189,10 @@ DataLabelPlacement placeDataLabels({
           ),
           theme.dataLabels,
         );
-        if (obstacles.any((TextPrimitive o) => textsOverlap(probe, o)) ||
-            placed.any((TextPrimitive o) => textsOverlap(probe, o))) {
+        if (taken.any(
+          probe.bounds,
+          (TextPrimitive o) => textsOverlap(probe, o),
+        )) {
           continue;
         }
         chosen = label;
@@ -195,6 +203,7 @@ DataLabelPlacement placeDataLabels({
       hidden.add((t.$1, textById[t.$1]!));
     } else {
       placed.add(chosen);
+      taken.add(chosen, chosen.bounds);
     }
   }
   return DataLabelPlacement(placed, hidden);
