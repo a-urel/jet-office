@@ -8,8 +8,9 @@ import '../model/equality.dart';
 ///
 /// Every default is the Office theme's value. Excel's default charts
 /// (`chart_defaults.xlsx`) verify the line widths, the overlap and the tick
-/// length, and the owner's `chart_reference.xlsx` the bar overlap; the gaps and the legend's sizes are unconfirmed, as Excel lays a
-/// chart out itself and writes none of them (`docs/excel-checks.md`).
+/// length. The owner's `chart_reference.xlsx` verifies the bar overlap. The
+/// gaps and the legend's sizes are unconfirmed, as Excel lays a chart out
+/// itself and writes none of them (`docs/excel-checks.md`).
 final class ChartSpacing {
   /// Creates a spacing; every field has the Office theme's default.
   ///

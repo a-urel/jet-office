@@ -10,8 +10,9 @@ import. The layer knows neither XLSX nor DOCX. Its types carry the prefix
 
 **Status of C1: done except the owner's Excel check of the fixtures (Task
 10, Step 4).** The owner's reference workbook is committed and every chart in
-it but one reads typed ("Excel's reference workbook" below). Nothing here is exported from `lib/jet_office.dart` yet: the
-public API arrives with the hosts, C2 (XLSX) and C3 (DOCX).
+it but one reads typed ("Excel's reference workbook" below). Nothing here
+is exported from `lib/jet_office.dart` yet: the public API arrives with the
+hosts, C2 (XLSX) and C3 (DOCX).
 
 ## What is in it
 
@@ -201,7 +202,8 @@ checks what it shows. What it showed, each now what the writer writes:
   `c:showLeaderLines 0` and a `c15:leaderLines` extension of a 0.75 pt
   `A6A6A6` line (`tx1` 35000/65000), and no `c:dLblPos`; the group's
   `c:dLbls` keeps every flag off. The reader takes the first series' labels
-  before the group's. The data label colour is `404040`, now the Office
+  before the group's. Line and area charts use the same per-series form by
+  analogy; no Excel chart shows it. The data label colour is `404040`, now the Office
   theme's.
 - **A hidden axis has no `c:spPr` and no `c:txPr`** (chart 22, the value
   axis). The writer leaves both out of a hidden category axis too, by

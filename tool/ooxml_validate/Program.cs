@@ -66,7 +66,9 @@
 // part whose only attribute is uri, with exactly that value, and whose
 // children are exactly one c15:showLeaderLines (no children, only an
 // unqualified val of 1, 0, true or false) and then one c15:leaderLines with
-// no attributes and one c:spPr child. Anything else there still counts.
+// no attributes and one c:spPr child. Anything else there still counts, but
+// the match checks only that c15:leaderLines holds one c:spPr, not its
+// content, so the SDK may not validate that subtree.
 // tool/write_fixtures.dart --corrupt writes c1_corrupt_labels.xlsx, a chart
 // whose leader line extension holds two c15:showLeaderLines, as the negative
 // control.

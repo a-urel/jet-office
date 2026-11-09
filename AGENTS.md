@@ -140,7 +140,8 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   LibreOffice's text export of one never ends (see below), or in a section
   break, as the model adds no block after one.
   `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, `c1_corrupt.xlsx`,
-  `c1_corrupt_labels.xlsx` and `d1_corrupt.docx`, to prove every check still fails on a bad file. The
+  `c1_corrupt_labels.xlsx` and `d1_corrupt.docx`, to prove every check still
+  fails on a bad file. The
   `validate` job's negative-control step writes `m1_corrupt.xlsx` to
   `build/corrupt` and requires every check to reject it, except the model round
   trip (`tool/round_trip_model.dart`), which passes on it: the model keeps the

@@ -255,8 +255,8 @@ jobs:
       # display options extension holds two dispNaAsBlank: the validator
       # ignores the SDK's errors on that extension only for Excel's exact
       # content, so it must reject this file (validated alone, in
-      # build/corrupt-chart). So must it c1_corrupt_labels.xlsx, a line chart
-      # whose data label leader line extension holds two showLeaderLines.
+      # build/corrupt-chart). It must also reject c1_corrupt_labels.xlsx, a
+      # line chart whose data label leader line extension holds two showLeaderLines.
       - name: Prove the checks reject a corrupt file
         env:
           LC_ALL: C.UTF-8

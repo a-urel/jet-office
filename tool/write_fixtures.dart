@@ -207,21 +207,25 @@ Uint8List _corrupt(Uint8List bytes) => _rewritePart(
 
 /// [bytes] (the `c1_kinds` workbook) with a second `c16r3:dispNaAsBlank` in
 /// the display options extension of its first chart part.
-Uint8List _corruptLabels(Uint8List bytes) {
-  const String show = '<c15:showLeaderLines val="1"/>';
-  return _rewritePart(
-    bytes,
-    'xl/charts/chart2.xml',
-    (String xml) => _replaceOnce(xml, show, '$show$show'),
-  );
-}
-
 Uint8List _corruptChart(Uint8List bytes) {
   const String blank = '<c16r3:dispNaAsBlank val="1"/>';
   return _rewritePart(
     bytes,
     'xl/charts/chart1.xml',
     (String xml) => _replaceOnce(xml, blank, '$blank$blank'),
+  );
+}
+
+/// [bytes] (the `c1_options` workbook) with a second `c15:showLeaderLines` in
+/// the data label extension of the first series of chart 2
+/// (`xl/charts/chart2.xml`), the negative control of the validator's leader
+/// line ignore.
+Uint8List _corruptLabels(Uint8List bytes) {
+  const String show = '<c15:showLeaderLines val="1"/>';
+  return _rewritePart(
+    bytes,
+    'xl/charts/chart2.xml',
+    (String xml) => _replaceOnce(xml, show, '$show$show'),
   );
 }
 
