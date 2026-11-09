@@ -2,12 +2,15 @@
 // JetChart widget's animation.
 library;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_flutter/jet_charts_flutter.dart';
 import 'package:jet_charts_flutter/src/animation.dart';
 import 'package:jet_charts_flutter/src/jet_chart.dart' show JetChartState;
+import 'package:jet_charts_flutter/src/tooltip_view.dart' show TooltipView;
+import 'package:jet_core/jet_core.dart';
 
 const List<String> _quarters = <String>['Q1', 'Q2', 'Q3', 'Q4', 'Q5'];
 
@@ -66,19 +69,56 @@ ChartRect _bar(
   String id = 'series/0/bar/0',
 ]) => (_find(primitives, id)! as RectPrimitive).rect;
 
-Widget _app(Widget child, {bool disableAnimations = false}) => MediaQuery(
-  data: MediaQueryData(disableAnimations: disableAnimations),
+Widget _app(
+  Widget child, {
+  bool disableAnimations = false,
+  TextScaler textScaler = TextScaler.noScaling,
+}) => MediaQuery(
+  data: MediaQueryData(
+    disableAnimations: disableAnimations,
+    textScaler: textScaler,
+  ),
   child: Directionality(
     textDirection: TextDirection.ltr,
     child: Center(child: child),
   ),
 );
 
-Widget _sized(Chart chart, {double width = 360}) => SizedBox(
+Widget _sized(
+  Chart chart, {
+  double width = 360,
+  FormatLocale locale = FormatLocale.enUS,
+}) => SizedBox(
   width: width,
   height: 240,
-  child: JetChart(chart: chart),
+  child: JetChart(chart: chart, locale: locale),
 );
+
+/// A column chart of [count] series over four quarters.
+Chart _series(int count, {double scale = 1}) => Chart(
+  kind: ChartKind.column,
+  title: const ChartTitle(text: 'Sales'),
+  series: <ChartSeries>[
+    for (int s = 0; s < count; s++)
+      ChartSeries(
+        name: ChartData<String>(values: <String?>['Series $s']),
+        categories: ChartData<Object>(values: _quarters.take(4).toList()),
+        values: ChartData<double>(
+          values: <double?>[
+            for (int c = 0; c < 4; c++) (10 + 7 * s + 3 * c) * scale,
+          ],
+        ),
+      ),
+  ],
+);
+
+JetChartState _state(WidgetTester tester) =>
+    tester.state<JetChartState>(find.byType(JetChart));
+
+/// The painted primitives equal the target layout's.
+void _showsTarget(WidgetTester tester) {
+  expect(_painted(tester), _state(tester).currentLayout!.primitives);
+}
 
 /// The primitives the chart paints now.
 List<ChartPrimitive> _painted(WidgetTester tester) {
@@ -219,6 +259,40 @@ void main() {
       );
     });
 
+    test('clips recurse by id', () {
+      const ChartRect clipA = ChartRect(0, 0, 100, 100);
+      const ChartRect clipB = ChartRect(0, 0, 120, 100);
+      const ChartRect a = ChartRect(10, 50, 20, 50);
+      const ChartRect b = ChartRect(10, 20, 20, 80);
+      final List<ChartPrimitive> from = <ChartPrimitive>[
+        ClipPrimitive('plot/clip', clipA, <ChartPrimitive>[
+          const RectPrimitive('series/0/bar/0', a),
+          const RectPrimitive('label/0/0', a),
+        ]),
+      ];
+      final List<ChartPrimitive> to = <ChartPrimitive>[
+        ClipPrimitive('plot/clip', clipB, <ChartPrimitive>[
+          const RectPrimitive('series/0/bar/0', b),
+          const RectPrimitive('series/0/bar/1', b),
+          const RectPrimitive('label/0/0', b),
+        ]),
+        ClipPrimitive('other/clip', clipB, <ChartPrimitive>[
+          const RectPrimitive('series/1/bar/0', a),
+          const RectPrimitive('label/1/0', a),
+        ]),
+      ];
+      final List<ChartPrimitive> half = lerpChartPrimitives(from, to, 0.5);
+      expect(half, <ChartPrimitive>[
+        ClipPrimitive('plot/clip', clipB, <ChartPrimitive>[
+          const RectPrimitive('series/0/bar/0', ChartRect(10, 35, 20, 65)),
+          const RectPrimitive('series/0/bar/1', b),
+        ]),
+        ClipPrimitive('other/clip', clipB, <ChartPrimitive>[
+          const RectPrimitive('series/1/bar/0', a),
+        ]),
+      ]);
+    });
+
     test('a mark only in to shows; one only in from is dropped', () {
       final ChartLayout from = _layout(_chart(<double>[10, 20, 30]));
       final ChartLayout to = _layout(_chart(<double>[10, 20, 30, 40]));
@@ -351,6 +425,154 @@ void main() {
       final JetChartState state = tester.state(find.byType(JetChart));
       expect(state.currentLayout, _layout(after));
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('a swap to fewer series mid-animation ends on that chart', (
+      WidgetTester tester,
+    ) async {
+      final Chart three = _series(3);
+      final Chart one = _series(1, scale: 2);
+      await tester.pumpWidget(_app(_sized(three)));
+      final TestGesture mouse = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+      );
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      final ChartRect bar = _bar(
+        _state(tester).currentLayout!.primitives,
+        'series/2/bar/1',
+      );
+      final Offset origin = tester.getTopLeft(find.byType(JetChart));
+      final Offset local = Offset(
+        bar.left + bar.width / 2,
+        bar.top + bar.height / 2,
+      );
+      await mouse.moveTo(origin + local);
+      await tester.pump();
+      expect(find.byType(TooltipView), findsOneWidget);
+      await tester.pumpWidget(_app(_sized(_series(3, scale: 3))));
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpWidget(_app(_sized(one)));
+      expect(tester.takeException(), isNull);
+      final ChartLayout target = _state(tester).currentLayout!;
+      expect(target, _layout(one));
+      expect(_find(_painted(tester), 'series/2/bar/1'), isNull);
+      final ChartTooltip? expected = chartTooltipAt(
+        one,
+        target,
+        ChartPoint(local.dx, local.dy),
+        theme: ChartTheme.office,
+        tolerance: 2,
+      );
+      if (expected == null) {
+        expect(find.byType(TooltipView), findsNothing);
+      } else {
+        expect(
+          tester.widget<TooltipView>(find.byType(TooltipView)).tooltip,
+          expected,
+        );
+      }
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump(const Duration(milliseconds: 150));
+      _showsTarget(tester);
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a swap to an empty chart mid-animation stops it', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(_app(_sized(before)));
+      await tester.pumpWidget(_app(_sized(after)));
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpWidget(
+        _app(const SizedBox(width: 360, height: 240, child: JetChart())),
+      );
+      expect(find.bySemanticsLabel(JetChartStrings.en.empty), findsOneWidget);
+      expect(_state(tester).currentLayout, isNull);
+      expect(tester.binding.transientCallbackCount, 0);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('an error mid-animation stops it', (WidgetTester tester) async {
+      await tester.pumpWidget(_app(_sized(before)));
+      await tester.pumpWidget(_app(_sized(after)));
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpWidget(
+        _app(
+          SizedBox(
+            width: 360,
+            height: 240,
+            child: JetChart(chart: after, error: StateError('x')),
+          ),
+        ),
+      );
+      expect(_state(tester).currentLayout, isNull);
+      expect(tester.binding.transientCallbackCount, 0);
+    });
+
+    testWidgets('reduced motion turned on mid-animation shows the target', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(_app(_sized(before)));
+      await tester.pumpWidget(_app(_sized(after)));
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(_painted(tester), isNot(_layout(after).primitives));
+      await tester.pumpWidget(_app(_sized(after), disableAnimations: true));
+      _showsTarget(tester);
+      expect(_state(tester).currentLayout, _layout(after));
+      expect(tester.binding.transientCallbackCount, 0);
+    });
+
+    testWidgets('a text scale change mid-animation shows the new target', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(_app(_sized(before)));
+      await tester.pumpWidget(_app(_sized(after)));
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpWidget(
+        _app(_sized(after), textScaler: const TextScaler.linear(1.5)),
+      );
+      _showsTarget(tester);
+      expect(tester.binding.transientCallbackCount, 0);
+    });
+
+    testWidgets('a locale change mid-animation shows the new target', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(_app(_sized(before)));
+      await tester.pumpWidget(_app(_sized(after)));
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpWidget(_app(_sized(after, locale: FormatLocale.deDE)));
+      _showsTarget(tester);
+      expect(tester.binding.transientCallbackCount, 0);
+    });
+
+    testWidgets('a theme change mid-animation shows the new target', (
+      WidgetTester tester,
+    ) async {
+      Widget themed(Chart c, ChartTheme theme) => _app(
+        SizedBox(
+          width: 360,
+          height: 240,
+          child: JetChart(chart: c, theme: theme),
+        ),
+      );
+      await tester.pumpWidget(themed(before, ChartTheme.office));
+      await tester.pumpWidget(themed(after, ChartTheme.office));
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpWidget(
+        themed(
+          after,
+          ChartTheme.office.copyWith(
+            axisLabels: ChartTheme.office.axisLabels.copyWith(
+              fontFamily: 'Roboto',
+            ),
+          ),
+        ),
+      );
+      _showsTarget(tester);
+      expect(tester.binding.transientCallbackCount, 0);
     });
   });
 }

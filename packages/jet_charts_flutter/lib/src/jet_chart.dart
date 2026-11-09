@@ -78,9 +78,10 @@ typedef JetChartErrorBuilder =
 /// the rest of the chart shows its new look at once, and data labels show when
 /// the marks arrive. A change during an animation starts from the marks on
 /// screen. The first chart, a resize, and a change of theme, locale or text
-/// size do not animate, nor does anything when [animationDuration] is zero or
-/// `MediaQuery.disableAnimationsOf` is true. Hover and taps always use the
-/// new layout.
+/// size do not animate: they show the new layout at once, ending a running
+/// animation, as do a state look and turning `MediaQuery.disableAnimationsOf`
+/// on. Nothing animates when [animationDuration] is zero or animations are
+/// disabled. Hover and taps always use the new layout.
 final class JetChart extends StatefulWidget {
   /// Creates a chart widget.
   const JetChart({
@@ -346,7 +347,12 @@ final class JetChartState extends State<JetChart>
         _layoutScaler == scaler) {
       return cached;
     }
-    if (_layoutSize != size) {
+    // Only a change of the chart animates: a new size, theme, locale or text
+    // scale shows the new layout at once, even during an animation.
+    if (_layoutSize != size ||
+        _layoutTheme != theme ||
+        _layoutLocale != widget.locale ||
+        _layoutScaler != scaler) {
       _stopAnimation();
     }
     _layoutChart = chart;
