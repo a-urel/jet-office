@@ -198,8 +198,8 @@ by hand, then fix it.
   difference there, but read no file); what Excel's colour cycle does past
   its nine variations (series 55 on); the spacing constants in
   `docs/excel-checks.md`. Series 7 and later follow Excel's colour cycle,
-  `colors1.xml` of `chart_defaults.xlsx` (`ChartTheme.seriesColor`); the
-  owner's re-check of `column_eight_series` is pending.
+  `colors1.xml` of `chart_defaults.xlsx` (`ChartTheme.seriesColor`); series 7
+  and 8 checked by the owner against a new chart made in Excel (2026-11-09).
 - Whether a sandboxed macOS app sees Aptos Narrow (Flutter side).
 - The tooltip box's spacing constants are not in `ChartTooltipStyle`, and
   `chartTooltipAt` resolves the chart again on each call (a caller that has

@@ -208,7 +208,10 @@ void main() {
     }
   });
 
-  test('series 7 and 8 of column_eight_series carry no colour', () {
+  // Excel draws a series without c:spPr from its legacy colours, not from
+  // the colour cycle it gives a new chart (the owner's check, 2026-11-09), so
+  // series 7 and 8 name the cycle's colour as Excel writes it in a new chart.
+  test('series 7 and 8 of column_eight_series carry the cycle\'s colour', () {
     final int index =
         entries.indexWhere(
           (GalleryEntry e) => e.name == 'column_eight_series',
@@ -220,11 +223,13 @@ void main() {
     ).toList();
     expect(sers, hasLength(8));
     for (int s = 0; s < 8; s++) {
-      expect(
-        all(sers[s], 'c:spPr'),
-        s < 6 ? isNotEmpty : isEmpty,
-        reason: '$s',
-      );
+      final XmlElement fill = all(
+        all(sers[s], 'c:spPr').single,
+        'a:schemeClr',
+      ).first;
+      expect(fill.getAttribute('val'), 'accent${s % 6 + 1}', reason: '$s');
+      expect(val(fill, 'a:lumMod'), s < 6 ? isNull : '60000', reason: '$s');
+      expect(val(fill, 'a:lumOff'), isNull, reason: '$s');
     }
   });
 

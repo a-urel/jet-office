@@ -31,8 +31,8 @@ is a live region and a screen reader announces each change of it.
   (`packages/jet_charts_core/docs/excel-checks.md`, "Milestone checks"); its
   differences are fixed, but `column_negative` (kept). Series 7 and later
   follow Excel's colour cycle (`colors1.xml`), and the gallery workbook writes
-  Excel's colour and style parts; the owner's re-check of
-  `column_eight_series` is pending. A later check's result goes there with
+  Excel's colour and style parts and every series' colour; the owner's
+  re-check matched series 7 and 8. A later check's result goes there with
   the owner, never without. The gallery has no screenshot of the running app: the
   machine that built it could not record the screen.
 - Whether a sandboxed macOS app sees Aptos Narrow (the gallery's header says

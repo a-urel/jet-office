@@ -65,8 +65,18 @@ this repository), shows what the workbook had: its chart of
 `column_eight_series` keeps series 7 and 8 without `c:spPr`, has
 `c:style val="2"`, and the file has no colour-style part (`colorsN.xml`). Our
 reading is that Excel then fell back to the legacy colour table of `c:style`
-2, which would explain the light colours; Excel states no such rule, and this
-was not tested by adding the part and looking again.
+2, which would explain the light colours; Excel states no such rule. The
+owner's re-check (2026-11-09, below) showed the colour-style part does not
+change it: with `colors1.xml` and `style1.xml` beside the chart, Excel still
+drew series 7 and 8 light.
+
+What Excel gives a new chart was checked directly: the owner made a new
+clustered column chart in Excel from the cells of `column_eight_series`
+(A1:I5) and saw series 7 and 8 dark, as the app draws them; Claude for Excel,
+asked by the owner, read their fills as `0D3A4E` and `994010`, the colours
+`ChartTheme.seriesColor` gives. The gallery workbook therefore writes every
+series' colour, series 7 and on with the cycle's `lumMod` and `lumOff`, as
+Excel writes a new chart.
 
 Excel's default is the colour cycle of its colour-style part, verified from
 `chart_defaults.xlsx`, `xl/charts/colors1.xml` (`cs:colorStyle` `meth="cycle"`
@@ -81,9 +91,8 @@ that Excel's series 13 and later use the variations in that order was not
 checked, and neither was how Excel renders them. The file says nothing past
 the ninth variation; this
 library starts the cycle again there (series 55 is series 1's colour), which
-is unconfirmed. The gallery workbook now writes Excel's `colors1.xml` and
-`style1.xml` beside each chart; the owner's re-check of `column_eight_series`
-is pending.
+is unconfirmed. The gallery workbook writes Excel's `colors1.xml` and
+`style1.xml` (`style2.xml` for line charts) beside each chart, as Excel does.
 
 ## Milestone checks
 
@@ -92,3 +101,4 @@ The owner records each milestone's check here.
 | Milestone | Date | Excel | Result |
 |---|---|---|---|
 | J3 (`jet_charts_flutter` gallery, `gallery.xlsx` after `acd75e7`) | 2026-11-09 | Excel for Mac, `tr-TR` (version not recorded) | Owner compared all 16 charts side by side. Differences: `line_gap`, Excel draws a circle marker on every point and a line-and-circle legend symbol, the app none and a square; `area_stacked`, the app leaves space left and right of the area, Excel draws it edge to edge; `column_negative`, Excel puts the category labels at the zero line, covered by negative bars, the app under the plot (kept, deliberate: `parity.md`); `column_eight_series`, the app's legend wraps to two lines (the app had no Aptos Narrow) and series 7 and 8 differ in colour (above); `column_long_labels`, Excel keeps the labels level and wraps them onto two lines, the app turns them and cuts them; `column_data_labels`, the label 18 does not show in the app. No other difference. Fixes follow in a later commit. |
+| J3 re-check (`gallery.xlsx` after `6dc2dff`, the app on the same commit) | 2026-11-09 | Excel for Mac, `tr-TR` (version not recorded) | Owner compared the charts again. `line_gap`, `area_stacked`, `column_long_labels` and `column_data_labels` now match. `column_negative` keeps its deliberate difference. `column_eight_series`: the app's legend still wraps to two lines (no Aptos Narrow in the app); the gallery's series 7 and 8 still show light in Excel, but a new clustered column chart the owner made in Excel from the same cells shows them dark, the same colours as the app (`0D3A4E`, `994010`, read by Claude for Excel; above). |

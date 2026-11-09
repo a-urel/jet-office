@@ -19,14 +19,13 @@
 /// Excel writes them beside every chart it makes: the style part of its
 /// clustered column chart (201) for column charts and that of its line chart
 /// (332) for line charts. The owner's file has no Excel-saved bar or area
-/// chart, so those two kinds keep the column style. Series past the sixth
-/// carry no `c:spPr`, so Excel chooses their colours itself, from the colour
-/// cycle of `colorsN.xml`. Without that part, the owner's Excel-saved copy of
-/// an earlier gallery (`~/Documents/jet_charts_oracle/gallery_saved.xlsx`,
-/// not in the repository) kept series 7 and 8 without `c:spPr`, with
-/// `c:style` 2 and no colour-style part, and Excel drew them light; that they
-/// came from the legacy colours of `c:style` 2 is our reading, not a rule
-/// Excel states.
+/// chart, so those two kinds keep the column style. Every series names its
+/// colour of Excel's colour cycle (`colorsN.xml`), as Excel writes it in a new
+/// chart: series 7 is `accent1` with `lumMod` 60000. A series without
+/// `c:spPr` would not do: Excel drew series 7 and 8 of such a chart light
+/// even with the colour-style part beside it, while a chart the owner made
+/// new in Excel from the same cells drew them `0D3A4E` and `994010` (the
+/// owner's check, 2026-11-09, `docs/excel-checks.md` of `jet_charts_core`).
 library;
 
 import 'dart:convert';
@@ -369,9 +368,14 @@ String get _seriesLabels =>
     '<c:dLbls>$_noShape${_txPr(75000, 25000, _labelBodyPr)}${_showFlags(true)}</c:dLbls>';
 
 String _seriesShape(ChartKind kind, int index) {
-  // Past the sixth series Excel chooses the colour (see the library comment).
-  if (index >= 6) return '';
-  final String accent = '<a:schemeClr val="accent${index + 1}"/>';
+  // Every series names its colour of Excel's cycle (see the library comment).
+  final ChartColor color = ChartTheme.office.seriesColor(index);
+  String percent(double value) => '${(value * 100000).round()}';
+  final String accent =
+      '<a:schemeClr val="${color.slot!.name}">'
+      '${color.lumMod == 1 ? '' : '<a:lumMod val="${percent(color.lumMod)}"/>'}'
+      '${color.lumOff == 0 ? '' : '<a:lumOff val="${percent(color.lumOff)}"/>'}'
+      '</a:schemeClr>';
   if (kind == ChartKind.line) {
     return '<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill>$accent'
         '</a:solidFill><a:round/></a:ln><a:effectLst/></c:spPr>'

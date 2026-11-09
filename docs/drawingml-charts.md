@@ -245,9 +245,8 @@ chart that is only a view keeps its bytes until replaced.
 
 - The secondary axis, combination charts and the other kinds (J4).
 - Excel's palette past 54 series: the colour cycle starts again after its
-  nine variations, which `colors1.xml` does not state (unconfirmed). The
-  owner's re-check of `column_eight_series` against the gallery workbook, now
-  with Excel's colour-style part, is pending.
+  nine variations, which `colors1.xml` does not state (unconfirmed). Series 7
+  and 8 match a new chart made in Excel (the owner's check, 2026-11-09).
 - The owner's reference workbook (`test/fixtures/owner/charts/`, steps in
   `TALIMATLAR.md`): every chart in it must read typed, and the writer's
   habits above are corrected against it. Until it arrives
