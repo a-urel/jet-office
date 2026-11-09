@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_core/jet_core.dart';
 import 'package:test/test.dart';
@@ -47,6 +49,99 @@ ChartSeries _series(String name, List<Object> categories, List<double?> v) =>
     );
 
 void main() {
+  group('donut_center', () {
+    final Chart chart = _chart('donut_center');
+    final ChartLayout layout = _layout(chart);
+
+    // A point of the slice off its label, which sits in the ring's middle.
+    ChartPoint middle(ArcPrimitive a) {
+      final double angle = (a.startAngle + a.sweepAngle / 2) * math.pi / 180;
+      final double r = a.innerRadius + 0.15 * (a.radius - a.innerRadius);
+      return ChartPoint(
+        a.center.x + r * math.cos(angle),
+        a.center.y + r * math.sin(angle),
+      );
+    }
+
+    test('a slice gives its category, value and share', () {
+      final ArcPrimitive slice = _byId<ArcPrimitive>(
+        layout,
+        'series/0/slice/1',
+      );
+      final List<double> values = <double>[
+        for (final double? v in chart.series.first.values.values) v!.abs(),
+      ];
+      final double sum = values.fold(0, (double a, double b) => a + b);
+      final String share = '${(18 / sum * 100).round()}%';
+      final ChartTooltip expected = ChartTooltip(
+        title: 'Güney',
+        rows: <ChartTooltipRow>[
+          ChartTooltipRow(
+            color: slice.fill,
+            label: 'Satış',
+            value: '18 ($share)',
+          ),
+        ],
+        sourceId: 'series/0/slice/1',
+      );
+      expect(share, '40%');
+      expect(
+        chartTooltipAt(chart, layout, middle(slice), theme: _office),
+        expected,
+      );
+      expect(
+        chartTooltipFor(chart, layout, 'series/0/slice/1', theme: _office),
+        expected,
+      );
+      expect(
+        chartTooltipFor(chart, layout, 'label/0/1', theme: _office)!.rows,
+        expected.rows,
+      );
+    });
+
+    test('a legend entry gives its category', () {
+      final TextPrimitive text = _byId<TextPrimitive>(layout, 'legend/2/text');
+      expect(text.text, 'Doğu');
+      expect(
+        chartTooltipAt(chart, layout, _centre(text.rect), theme: _office),
+        ChartTooltip(
+          title: 'Doğu',
+          rows: const <ChartTooltipRow>[],
+          sourceId: 'legend/2/text',
+        ),
+      );
+    });
+
+    test('a hidden centre text shows in the background tooltip', () {
+      final ChartLayout small = _layout(chart, size: const ChartSize(120, 80));
+      expect(
+        small.hidden.map((ChartHiddenLabel h) => h.id),
+        contains('center'),
+      );
+      expect(
+        chartTooltipFor(chart, small, 'background', theme: _office)!.title,
+        chart.centerText,
+      );
+    });
+  });
+
+  test('a leader line gives its slice', () {
+    final Chart chart = _chart('pie_small_slices');
+    final ChartLayout layout = _layout(chart);
+    final PathPrimitive leader = _flat(layout.primitives)
+        .whereType<PathPrimitive>()
+        .firstWhere((PathPrimitive p) => p.id.endsWith('/leader'));
+    final ChartTooltip? tip = chartTooltipAt(
+      chart,
+      layout,
+      _along(leader.points.first, leader.points.last, 0.5),
+      theme: _office,
+    );
+    expect(tip, isNotNull);
+    expect(tip!.sourceId, leader.id);
+    expect(tip.rows, hasLength(1));
+  });
+
   group('column_clustered', () {
     final Chart chart = _chart('column_clustered');
     final ChartLayout layout = _layout(chart);
@@ -439,7 +534,8 @@ void main() {
 
   test('a hidden placeholder shows in the background tooltip', () {
     final Chart chart = Chart(
-      kind: ChartKind.pie,
+      kind: ChartKind.unsupported,
+      unsupportedName: 'bubble',
       series: <ChartSeries>[
         _series('Share', <Object>['A', 'B'], <double?>[1, 2]),
       ],
@@ -447,7 +543,7 @@ void main() {
     // Shown, the placeholder text has no tooltip, nor has the background.
     final ChartLayout shown = _layout(chart);
     final TextPrimitive text = _byId<TextPrimitive>(shown, 'placeholder');
-    expect(text.text, 'pie');
+    expect(text.text, 'bubble');
     expect(
       chartTooltipAt(chart, shown, _centre(text.rect), theme: _office),
       isNull,
@@ -460,10 +556,12 @@ void main() {
     final ChartLayout small = _layout(chart, size: const ChartSize(20, 20));
     expect(
       small.hidden,
-      contains(const ChartHiddenLabel('placeholder', 'pie')),
+      contains(const ChartHiddenLabel('placeholder', 'bubble')),
     );
     final ChartTooltip expected = ChartTooltip(
-      rows: <ChartTooltipRow>[const ChartTooltipRow(label: 'pie', value: '')],
+      rows: <ChartTooltipRow>[
+        const ChartTooltipRow(label: 'bubble', value: ''),
+      ],
       sourceId: 'background',
     );
     expect(

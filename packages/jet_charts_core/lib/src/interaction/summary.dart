@@ -3,6 +3,7 @@ library;
 
 import 'package:jet_core/jet_core.dart';
 
+import '../layout/pie_layout.dart' show sliceShares;
 import '../layout/resolve.dart';
 import '../model/chart.dart';
 import '../model/chart_kind.dart';
@@ -20,6 +21,8 @@ final class ChartSummary {
     required List<String> seriesNames,
     required List<String> categories,
     required List<List<String>> values,
+    List<List<String>> shares = const <List<String>>[],
+    this.centerText,
     this.minimum,
     this.maximum,
     required this.isEmpty,
@@ -27,6 +30,9 @@ final class ChartSummary {
        categories = List<String>.unmodifiable(categories),
        values = List<List<String>>.unmodifiable(<List<String>>[
          for (final List<String> v in values) List<String>.unmodifiable(v),
+       ]),
+       shares = List<List<String>>.unmodifiable(<List<String>>[
+         for (final List<String> v in shares) List<String>.unmodifiable(v),
        ]);
 
   /// The chart's kind.
@@ -44,6 +50,16 @@ final class ChartSummary {
   /// The values of each series, one text per category, formatted as tooltips
   /// format them; an empty text where there is no value.
   final List<List<String>> values;
+
+  /// The share of each value of each series in its series' whole, in `0%`,
+  /// as a pie's or donut's tooltip shows it; an empty text where there is no
+  /// value or the series sums to zero. One list per series; each is empty for
+  /// a kind other than pie and donut.
+  final List<List<String>> shares;
+
+  /// A donut's centre text, or `null` when there is none or the chart is not
+  /// a donut.
+  final String? centerText;
 
   /// The least finite value, formatted in its series' code; `null` when there
   /// is none.
@@ -64,13 +80,20 @@ final class ChartSummary {
         minimum != other.minimum ||
         maximum != other.maximum ||
         isEmpty != other.isEmpty ||
+        centerText != other.centerText ||
         !listValueEquals(seriesNames, other.seriesNames) ||
         !listValueEquals(categories, other.categories) ||
-        values.length != other.values.length) {
+        values.length != other.values.length ||
+        shares.length != other.shares.length) {
       return false;
     }
     for (int i = 0; i < values.length; i++) {
       if (!listValueEquals(values[i], other.values[i])) {
+        return false;
+      }
+    }
+    for (int i = 0; i < shares.length; i++) {
+      if (!listValueEquals(shares[i], other.shares[i])) {
         return false;
       }
     }
@@ -84,6 +107,8 @@ final class ChartSummary {
     listValueHash(seriesNames),
     listValueHash(categories),
     Object.hashAll(values.map(listValueHash)),
+    Object.hashAll(shares.map(listValueHash)),
+    centerText,
     minimum,
     maximum,
     isEmpty,
@@ -102,7 +127,9 @@ final class ChartSummary {
 /// format code, else the value axis' code, else `General`; no share), and a
 /// missing or non-finite value is an empty text. The minimum and maximum are
 /// those of the finite values, each formatted in the code of the first series
-/// that holds it.
+/// that holds it. In a pie or donut each value's share of its series' whole
+/// is given in `0%` (an empty text where there is none), and a donut's centre
+/// text is given.
 ChartSummary summarizeChart(
   Chart chart, {
   FormatLocale locale = FormatLocale.enUS,
@@ -134,13 +161,31 @@ ChartSummary summarizeChart(
     }
     values.add(texts);
   }
+  final bool polar =
+      chart.kind == ChartKind.pie || chart.kind == ChartKind.donut;
+  final List<List<String>> shares = <List<String>>[
+    for (final List<double?> v in resolved.values)
+      polar
+          ? <String>[
+              for (final double? share in sliceShares(v))
+                share == null
+                    ? ''
+                    : formatter.format(share, numberFormat: '0%').text,
+            ]
+          : const <String>[],
+  ];
   final String? title = chart.title?.text;
+  final String? center = chart.centerText;
   return ChartSummary(
     kind: chart.kind,
     title: title == null || title.isEmpty ? null : title,
     seriesNames: resolved.seriesNames,
     categories: resolved.categoryLabels,
     values: values,
+    shares: shares,
+    centerText: chart.kind == ChartKind.donut && center != null
+        ? (center.isEmpty ? null : center)
+        : null,
     minimum: low == null
         ? null
         : formatSeriesValue(chart, low.$1, low.$2, formatter),

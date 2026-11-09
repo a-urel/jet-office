@@ -15,6 +15,7 @@ import 'frame.dart';
 import 'frame_paint.dart' show backgroundPrimitive;
 import 'geometry.dart';
 import 'legend_layout.dart';
+import 'pie_layout.dart';
 import 'primitives.dart';
 import 'resolve.dart';
 import 'text_measurer.dart';
@@ -86,6 +87,12 @@ final class ChartLayout {
   ///   gap in the data starts a new line run, and a marker is the circle on a
   ///   line's point.
   /// * `label/<s>/<c>`: the data label of series `<s>` at category `<c>`.
+  /// * `series/<s>/slice/<c>`: the slice of series `<s>` at category `<c>` in
+  ///   a pie or donut; `label/<s>/<c>/leader`: the leader line (an open path)
+  ///   from that slice to its data label placed outside the pie; `center`: a
+  ///   donut's centre text.
+  /// * In a pie or donut a legend entry `legend/<i>/symbol`,
+  ///   `legend/<i>/text` is category `<i>`, as its legend lists categories.
   ///
   /// [ChartElementId.parse] is the exact inverse of this scheme: it reads
   /// every id above into its kind, axis, series, category and index, and
@@ -93,17 +100,19 @@ final class ChartLayout {
   final List<ChartPrimitive> primitives;
 
   /// The plot area, or `null` when there is none: a kind this version does
-  /// not draw, or a chart too small for one.
+  /// not draw, or a chart too small for one. In a pie or donut it is the
+  /// square that holds the pie.
   final ChartRect? plotArea;
 
-  /// The value axis' scale, or `null` when there is no plot area.
+  /// The value axis' scale, or `null` when there is no plot area or no value
+  /// axis (a pie or donut).
   final ValueScale? valueScale;
 
   /// The texts left out because they did not fit, grouped in the
   /// degradation order whatever the order they were taken away in: data
   /// labels first (each one that found no place, or all of them when only
   /// the background is drawn), then legend entries, the value and category
-  /// axis titles, the title, category labels (every one not shown and every
+  /// axis titles, the title, a donut's centre text, category labels (every one not shown and every
   /// cut one, with its full text), and value tick labels (all of them when
   /// they go, or the ones a fixed unit's thinning left out); each group in
   /// index order. A kind this version does not draw lists its title and its
@@ -118,8 +127,8 @@ final class ChartLayout {
   /// grid lines are drawn, except in an area chart, whose categories sit on
   /// the grid lines (on tick marks) and whose bands reach halfway to each
   /// neighbour, so the first and last are half as wide. Empty when there is
-  /// no plot area or no category. A backend uses them to find the category
-  /// under a point.
+  /// no plot area or no category, and in a pie or donut. A backend uses them
+  /// to find the category under a point.
   final List<ChartRect> categoryBands;
 
   @override
@@ -153,7 +162,9 @@ final class ChartLayout {
 ///
 /// Column, bar, line and area charts get a frame: background, title, legend,
 /// axis titles, tick and category labels, grid lines, axis lines and the plot.
-/// Every other kind draws the background, the title if any, and a
+/// Pie and donut charts are laid out around a centre, with their data labels
+/// inside the slices or, in a pie, outside with leader lines, and a donut's
+/// centre text (`pie_layout.dart`). Every other kind draws the background, the title if any, and a
 /// `placeholder` text of the chart's `unsupportedName`, else its kind's name,
 /// centred in what is left; the placeholder is hidden when it does not fit.
 ///
@@ -211,6 +222,23 @@ ChartLayout layoutChart(
       );
     case ChartKind.pie:
     case ChartKind.donut:
+      final PieLayout pie = layoutPie(
+        chart,
+        resolveChart(chart, theme, formatter),
+        theme: theme,
+        size: size,
+        measurer: measurer,
+        formatter: formatter,
+      );
+      return ChartLayout(
+        size: size,
+        primitives: pie.primitives,
+        plotArea: pie.plot,
+        hidden: <ChartHiddenLabel>[
+          for (final (String id, String text) in pie.hidden)
+            ChartHiddenLabel(id, text),
+        ],
+      );
     case ChartKind.scatter:
     case ChartKind.sparkline:
     case ChartKind.combination:

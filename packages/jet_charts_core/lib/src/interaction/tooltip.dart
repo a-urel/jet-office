@@ -8,9 +8,11 @@ import '../layout/chart_ids.dart' as ids;
 import '../layout/chart_layout.dart';
 import '../layout/geometry.dart';
 import '../layout/marks.dart' show shapedValues;
+import '../layout/pie_layout.dart' show sliceColor, sliceShares;
 import '../layout/primitives.dart';
 import '../layout/resolve.dart';
 import '../model/chart.dart';
+import '../model/chart_kind.dart';
 import '../model/equality.dart';
 import '../theme/chart_color.dart';
 import '../theme/chart_theme.dart';
@@ -88,14 +90,20 @@ final class ChartTooltip {
 ///
 /// * a bar, a marker or a data label: that point, its category's full text
 ///   as the title and one row of the series' colour, name and value;
+/// * in a pie or donut, a slice, its data label or its leader line: the
+///   category as the title and one row of the slice's colour, the series
+///   name, and the value followed by its share of the series' whole, in
+///   `0%`, in brackets;
 /// * a line, an area, a grid line or the plot (`plot/clip`, `plot/markers`,
 ///   `plot`): the
 ///   category whose `ChartLayout.categoryBands` band holds [point], every
 ///   series at it as a row;
 /// * a category label: that category, as above;
-/// * a legend entry: the series name as the title, and no row;
-/// * the background: the texts the layout hid of the title (as the title),
-///   the axis titles and a placeholder (as rows without a value), or nothing
+/// * a legend entry: the series name as the title (in a pie or donut, the
+///   category, as its legend lists categories), and no row;
+/// * the background: the texts the layout hid of the title and a donut's
+///   centre text (the first of them as the title, the other as a row), the
+///   axis titles and a placeholder (as rows without a value), or nothing
 ///   when none was hidden.
 ///
 /// A value is formatted with `NumberFormatter` of [locale] in the series'
@@ -106,11 +114,15 @@ final class ChartTooltip {
 ///
 /// Every kind of `ChartLayout.hidden` stays within reach:
 ///
-/// * data labels: their point's value is in the point and category tooltips;
-/// * legend entries: the series names are the labels of the rows;
+/// * data labels: their point's value is in the point and category tooltips
+///   (in a pie or donut, in the slice's tooltip, also for a slice whose
+///   share is below `minShare` and so has no label);
+/// * legend entries: the series names are the labels of the rows (in a pie
+///   or donut the categories, the titles of the slice tooltips);
 /// * category labels: the category tooltip's title is the full text, never
 ///   cut, even when the label was cut or skipped;
-/// * the title and the axis titles: in the background tooltip;
+/// * the title, a centre text and the axis titles: in the background
+///   tooltip;
 /// * a placeholder: in the background tooltip;
 /// * value tick labels: they are axis ticks, not data, and have no tooltip;
 ///   the exact values they would mark are in the data tooltips.
@@ -151,8 +163,8 @@ ChartTooltip? chartTooltipAt(
 /// [theme] in [locale], or `null` when it has none.
 ///
 /// It is what [chartTooltipAt] gives over that primitive, for the kinds whose
-/// tooltip does not depend on the point: a bar, a marker, a data label, a
-/// category label, a legend entry and the background. A line, an area, a grid
+/// tooltip does not depend on the point: a bar, a marker, a slice, a leader
+/// line, a data label, a category label, a legend entry and the background. A line, an area, a grid
 /// line and the plot have a tooltip only at a point, and give `null` here; so
 /// does an id the layout's chart does not have (a series or category out of
 /// range) or one that is not of the scheme.
@@ -195,6 +207,15 @@ final class _Source {
   late final ResolvedChart resolved = resolveChart(chart, _theme, formatter);
   late final List<List<double?>> shares = shapedValues(resolved);
 
+  /// Whether the chart is a pie or a donut.
+  late final bool polar =
+      chart.kind == ChartKind.pie || chart.kind == ChartKind.donut;
+
+  /// Each value's share of its series' whole, in a pie or donut.
+  late final List<List<double?>> sliceShareList = <List<double?>>[
+    for (final List<double?> v in resolved.values) sliceShares(v),
+  ];
+
   /// The tooltip of the primitive [id], found at [point] when one is given.
   ChartTooltip? tooltip(String id, ChartPoint? point) {
     final ChartElementId? element = ChartElementId.parse(id);
@@ -202,9 +223,15 @@ final class _Source {
       return null;
     }
     switch (element.kind) {
+      case ChartElementKind.slice:
+      case ChartElementKind.leaderLine:
+        return _slice(id, element.series!, element.category!);
+      case ChartElementKind.dataLabel:
+        return polar
+            ? _slice(id, element.series!, element.category!)
+            : _point(id, element.series!, element.category!);
       case ChartElementKind.bar:
       case ChartElementKind.marker:
-      case ChartElementKind.dataLabel:
         return _point(id, element.series!, element.category!);
       case ChartElementKind.axisLabel:
         return element.axis == ChartAxisRole.category
@@ -220,6 +247,16 @@ final class _Source {
         return category == null ? null : _category(id, category);
       case ChartElementKind.legendSymbol:
       case ChartElementKind.legendText:
+        if (polar) {
+          final int c = element.series!;
+          return c < resolved.categoryCount
+              ? ChartTooltip(
+                  title: resolved.categoryLabels[c],
+                  rows: const <ChartTooltipRow>[],
+                  sourceId: id,
+                )
+              : null;
+        }
         final int s = element.series!;
         return s < resolved.seriesNames.length
             ? ChartTooltip(
@@ -235,8 +272,39 @@ final class _Source {
       case ChartElementKind.placeholder:
       case ChartElementKind.axisLine:
       case ChartElementKind.axisTitle:
+      case ChartElementKind.centerText:
         return null;
     }
+  }
+
+  /// The tooltip of the slice of [series] at [category] in a pie or donut:
+  /// the category as the title, and a row of the slice's colour, the series
+  /// name and the value with its share in `0%`.
+  ChartTooltip? _slice(String id, int series, int category) {
+    if (series >= resolved.values.length ||
+        category >= resolved.categoryCount) {
+      return null;
+    }
+    final double? value = resolved.values[series][category];
+    final double? share = sliceShareList[series][category];
+    if (value == null) {
+      return null;
+    }
+    String text = formatSeriesValue(chart, series, value, formatter);
+    if (share != null) {
+      text += ' (${formatter.format(share, numberFormat: '0%').text})';
+    }
+    return ChartTooltip(
+      title: _title(category),
+      rows: <ChartTooltipRow>[
+        ChartTooltipRow(
+          color: sliceColor(chart.series[series], category, _theme),
+          label: resolved.seriesNames[series],
+          value: text,
+        ),
+      ],
+      sourceId: id,
+    );
   }
 
   ChartTooltip? _point(String id, int series, int category) {
@@ -311,6 +379,7 @@ final class _Source {
     final List<ChartTooltipRow> rows = <ChartTooltipRow>[];
     for (final String part in <String>[
       ids.title,
+      ids.centerTextId,
       ids.axisTitleId(ids.valueAxis),
       ids.axisTitleId(ids.categoryAxis),
       ids.placeholder,
@@ -319,7 +388,7 @@ final class _Source {
         if (hidden.id != part || hidden.text.isEmpty) {
           continue;
         }
-        if (part == ids.title) {
+        if (title == null && (part == ids.title || part == ids.centerTextId)) {
           title = hidden.text;
         } else {
           rows.add(ChartTooltipRow(label: hidden.text, value: ''));

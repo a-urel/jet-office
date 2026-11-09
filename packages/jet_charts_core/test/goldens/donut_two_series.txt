@@ -1,0 +1,20 @@
+rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
+text title 142.20,8.00 75.60x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Two years"
+rect legend 91.40,221.20 177.20x10.80 fill=- stroke=- width=1.00
+rect legend/0/symbol 91.40,223.10 7.00x7.00 fill=156082 stroke=- width=1.00
+text legend/0/text 102.40,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Kuzey"
+rect legend/1/symbol 141.40,223.10 7.00x7.00 fill=E97132 stroke=- width=1.00
+text legend/1/text 152.40,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Güney"
+rect legend/2/symbol 191.40,223.10 7.00x7.00 fill=196B24 stroke=- width=1.00
+text legend/2/text 202.40,221.20 21.60x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Doğu"
+rect legend/3/symbol 236.00,223.10 7.00x7.00 fill=0F9ED5 stroke=- width=1.00
+text legend/3/text 247.00,221.20 21.60x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Batı"
+rect plot 87.80,30.80 184.40x184.40 fill=- stroke=- width=1.00
+arc series/0/slice/0 centre=180.00,123.00 radius=80.35 inner=68.87 start=-90.00 sweep=80.00 fill=156082 stroke=FFFFFF width=0.75
+arc series/0/slice/1 centre=180.00,123.00 radius=80.35 inner=68.87 start=-10.00 sweep=120.00 fill=E97132 stroke=FFFFFF width=0.75
+arc series/0/slice/2 centre=180.00,123.00 radius=80.35 inner=68.87 start=110.00 sweep=60.00 fill=196B24 stroke=FFFFFF width=0.75
+arc series/0/slice/3 centre=180.00,123.00 radius=80.35 inner=68.87 start=170.00 sweep=100.00 fill=0F9ED5 stroke=FFFFFF width=0.75
+arc series/1/slice/0 centre=180.00,123.00 radius=91.82 inner=80.35 start=-90.00 sweep=93.33 fill=156082 stroke=FFFFFF width=0.75
+arc series/1/slice/1 centre=180.00,123.00 radius=91.82 inner=80.35 start=3.33 sweep=106.67 fill=E97132 stroke=FFFFFF width=0.75
+arc series/1/slice/2 centre=180.00,123.00 radius=91.82 inner=80.35 start=110.00 sweep=73.33 fill=196B24 stroke=FFFFFF width=0.75
+arc series/1/slice/3 centre=180.00,123.00 radius=91.82 inner=80.35 start=183.33 sweep=86.67 fill=0F9ED5 stroke=FFFFFF width=0.75

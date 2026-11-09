@@ -106,7 +106,12 @@ states the rule and the findings.
 `TextMeasurer` into a `ChartLayout`: `primitives` in paint order and `hidden`,
 the labels it left out (`ChartHiddenLabel`). Column, bar, line and area charts
 of every grouping are laid out; the frame comes first (`frame.dart`), the axes
-and category labels (`axis_layout.dart`), marks, data labels, legend.
+and category labels (`axis_layout.dart`), marks, data labels, legend. Pie and
+donut charts are laid out on the polar frame (`polar.dart`, clock angles from
+twelve o'clock, meant for later polar kinds too) by `pie_layout.dart`, their
+labels by `pie_labels.dart` (inside the slice, else outside a pie with a
+leader line, else hidden; `ChartDataLabels.minShare` leaves small slices
+unlabelled) and a donut's centre text in the hole.
 
 - Collision rules: category labels wrap at spaces (level, at most three
   lines), turn (0, -45, -90 degrees), skip every `N`th or are cut with an
@@ -185,8 +190,10 @@ by hand, then fix it.
 
 ## Open for J4 and C1
 
-- Pies, donut, sparkline, scatter, combination charts, per-series kind and
-  the secondary axis (J4).
+- Sparkline, scatter, combination charts, per-series kind and the secondary
+  axis (J4). Pies and donuts are laid out (J4 Task 5); their Excel values
+  (first slice angle, hole size, outline, colours) are estimates until the
+  owner's E1 file.
 - Excel's time-scale date axis (owner decision O2; dates are categories).
 - The en-US and de-DE oracle regions are unverified; so are fonts other than
   8, 10 and 18, and plot margins.

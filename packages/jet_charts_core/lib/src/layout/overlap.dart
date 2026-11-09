@@ -29,8 +29,9 @@ enum ChartOverlapKind {
   /// The legend and the plot area share area.
   legendPlot,
 
-  /// A text shares area with a series mark (a bar, a line or a marker) that
-  /// is not its own: a data label may lie on its own bar. Area fills are not
+  /// A text shares area with a series mark (a bar, a line, a marker or a
+  /// slice) or a leader line that is not its own: a data label may lie on
+  /// its own bar or slice and touch its own leader line. Area fills are not
   /// marks here: labels are painted over them.
   textMark,
 }
@@ -76,12 +77,16 @@ final class ChartOverlap {
 /// made, and without a `plot` rectangle no legend and plot check is made.
 ///
 /// Text is also checked against every series mark (a primitive whose id
-/// starts with `series/`), as far as the mark lies inside the clips that hold
-/// it: a bar by its rectangle, a marker (an arc) by the square around its
-/// outline, a line (or a closed path's outline, when stroked) by each segment
-/// widened to its stroke width and lengthened by half of it at both ends, for
-/// round caps. A data label `label/<s>/<c>` may lie on its own bar
-/// `series/<s>/bar/<c>`; every other mark counts. The fill of a closed path
+/// starts with `series/`) and leader line (`label/<s>/<c>/leader`), as far as
+/// the mark lies inside the clips that hold it: a bar by its rectangle, a
+/// marker (a full disc) by the square around its outline, a slice or ring
+/// (any other arc) by polygons of its sector that hold its outline
+/// (`arcShapeReach`), a line (or a closed path's outline, when stroked) by
+/// each segment widened to its stroke width and lengthened by half of it at
+/// both ends, for round caps. A data label `label/<s>/<c>` may lie on its own
+/// bar `series/<s>/bar/<c>` or slice `series/<s>/slice/<c>` and on its own
+/// leader line; every other mark counts (in a pie or donut, the slices of
+/// other labels, and every slice for the centre text). The fill of a closed path
 /// (an area) does not count: data labels are painted after every mark, over
 /// area fills, as Excel draws them. Grid lines, axis lines, the background,
 /// the plot rectangle and legend symbols are not marks, and a text crossing
@@ -335,8 +340,9 @@ final class LaidMark {
   }
 }
 
-/// Every series mark of [primitives] (an id starting with `series/`), in
-/// paint order, with the clips that hold it.
+/// Every series mark of [primitives] (an id starting with `series/`) and
+/// every leader line (`label/<s>/<c>/leader`), in paint order, with the clips
+/// that hold it.
 List<LaidMark> laidMarks(List<ChartPrimitive> primitives) {
   final List<LaidMark> out = <LaidMark>[];
   void collect(List<ChartPrimitive> list, ChartRect? clip) {
@@ -346,8 +352,11 @@ List<LaidMark> laidMarks(List<ChartPrimitive> primitives) {
           p.children,
           clip == null ? p.rect : _intersection(clip, p.rect),
         );
-      } else if (p.id.startsWith(ids.seriesPrefix) &&
-          (p is RectPrimitive || p is PathPrimitive || p is ArcPrimitive)) {
+      } else if ((p.id.startsWith(ids.seriesPrefix) &&
+              (p is RectPrimitive ||
+                  p is PathPrimitive ||
+                  p is ArcPrimitive)) ||
+          (p is PathPrimitive && _isLeader(p.id))) {
         out.add(LaidMark(p, clip));
       }
     }
@@ -357,8 +366,8 @@ List<LaidMark> laidMarks(List<ChartPrimitive> primitives) {
   return out;
 }
 
-/// Whether [markId] is the own mark of the text [textId]: the bar of a data
-/// label's value.
+/// Whether [markId] is the own mark of the text [textId]: the bar or the
+/// slice of a data label's value, or the label's leader line.
 bool isOwnMark(String textId, String markId) {
   if (!textId.startsWith(ids.dataLabelPrefix)) {
     return false;
@@ -367,8 +376,16 @@ bool isOwnMark(String textId, String markId) {
   if (parts.length != 3) {
     return false;
   }
-  return markId == 'series/${parts[1]}/bar/${parts[2]}';
+  return markId == 'series/${parts[1]}/bar/${parts[2]}' ||
+      markId == 'series/${parts[1]}/slice/${parts[2]}' ||
+      markId == '$textId/leader';
 }
+
+/// Whether [id] is a leader line's, `label/<s>/<c>/leader`.
+bool _isLeader(String id) =>
+    id.startsWith(ids.dataLabelPrefix) &&
+    id.endsWith('/leader') &&
+    id.split('/').length == 4;
 
 /// Whether [text] and the visible part of [mark] share area, by more than
 /// the overlap tolerance; a text with no area overlaps nothing.
@@ -430,14 +447,7 @@ List<List<ChartPoint>> _shapes(ChartPrimitive p) {
     case RectPrimitive(:final ChartRect rect):
       return _hasArea(rect) ? <List<ChartPoint>>[_corners(rect)] : const [];
     case ArcPrimitive():
-      final double r =
-          p.radius + (p.stroke == null ? 0 : math.max(0, p.strokeWidth) / 2);
-      if (!(r > 0)) {
-        return const <List<ChartPoint>>[];
-      }
-      return <List<ChartPoint>>[
-        _corners(ChartRect(p.center.x - r, p.center.y - r, 2 * r, 2 * r)),
-      ];
+      return _arcShapes(p);
     case PathPrimitive():
       final List<ChartPoint> points = p.points;
       // A closed path's fill (an area) is not a shape: labels are painted
@@ -463,6 +473,108 @@ List<List<ChartPoint>> _shapes(ChartPrimitive p) {
     default:
       return const <List<ChartPoint>>[];
   }
+}
+
+/// The most degrees one edge of an arc's polygon spans.
+const double _arcStep = 3;
+
+/// The pieces an arc's shape is cut into span at most this many degrees.
+const double _arcPiece = 90;
+
+/// How far the outline of an arc of [radius] drawn with a stroke of
+/// [strokeWidth] (none when [stroked] is false) may reach from its centre in
+/// [findOverlaps]: the radius and half the stroke, grown so that the polygon
+/// of edges of at most 3 degrees holds the circle.
+double arcShapeReach(
+  double radius,
+  double strokeWidth, {
+  bool stroked = true,
+}) =>
+    (radius + (stroked ? math.max(0, strokeWidth) / 2 : 0)) /
+    math.cos(_arcStep / 2 * math.pi / 180);
+
+/// The distance from an arc's centre within which [findOverlaps] finds none
+/// of its shape, for an arc of [innerRadius] drawn with a stroke of
+/// [strokeWidth] (none when [stroked] is false): the inner radius less half
+/// the stroke, less how far the chords of its polygon cut into the hole.
+double arcShapeClearance(
+  double innerRadius,
+  double strokeWidth, {
+  bool stroked = true,
+}) => math.max(
+  0,
+  (innerRadius - (stroked ? math.max(0, strokeWidth) / 2 : 0)) *
+      math.cos(_arcStep / 2 * math.pi / 180),
+);
+
+/// The shapes of [arc]: a full disc (a marker) by the square around its
+/// outline; any other arc (a slice or a ring) by polygons of its sector, cut
+/// in pieces of at most 90 degrees, whose outer edges span at most 3 degrees
+/// and hold the outline ([arcShapeReach]) and whose inner points lie on the
+/// inner radius less half the stroke ([arcShapeClearance]).
+List<List<ChartPoint>> _arcShapes(ArcPrimitive arc) {
+  final bool stroked = arc.stroke != null;
+  final double outer = arcShapeReach(
+    arc.radius,
+    arc.strokeWidth,
+    stroked: stroked,
+  );
+  final double sweep = arc.sweepAngle;
+  if (!(outer > 0) ||
+      !outer.isFinite ||
+      !sweep.isFinite ||
+      !arc.startAngle.isFinite ||
+      !arc.center.x.isFinite ||
+      !arc.center.y.isFinite) {
+    return const <List<ChartPoint>>[];
+  }
+  final double inner = math.max(
+    0,
+    arc.innerRadius - (stroked ? math.max(0, arc.strokeWidth) / 2 : 0),
+  );
+  if (inner <= 0 && sweep.abs() >= 360) {
+    final double r =
+        arc.radius + (stroked ? math.max(0, arc.strokeWidth) / 2 : 0);
+    return <List<ChartPoint>>[
+      _corners(ChartRect(arc.center.x - r, arc.center.y - r, 2 * r, 2 * r)),
+    ];
+  }
+  final double total = math.min(sweep.abs(), 360);
+  if (!(total > 0)) {
+    return const <List<ChartPoint>>[];
+  }
+  final double from = sweep >= 0 ? arc.startAngle : arc.startAngle - total;
+  ChartPoint at(double degrees, double r) {
+    final double a = degrees * math.pi / 180;
+    return ChartPoint(
+      arc.center.x + r * math.cos(a),
+      arc.center.y + r * math.sin(a),
+    );
+  }
+
+  final int pieces = (total / _arcPiece).ceil();
+  final List<List<ChartPoint>> out = <List<ChartPoint>>[];
+  for (int k = 0; k < pieces; k++) {
+    final double a0 = from + total * k / pieces;
+    final double span = total / pieces;
+    final int edges = math.max(1, (span / _arcStep).ceil());
+    final List<ChartPoint> shape = <ChartPoint>[
+      // The outer points sit on the grown reach, so the polygon's chords
+      // hold the arc.
+      at(a0, outer),
+      for (int i = 1; i < edges; i++) at(a0 + span * i / edges, outer),
+      at(a0 + span, outer),
+    ];
+    if (inner > 0) {
+      for (int i = edges; i >= 0; i--) {
+        shape.add(at(a0 + span * i / edges, inner));
+      }
+    } else {
+      shape.add(arc.center);
+    }
+    out.add(shape);
+  }
+  return out;
 }
 
 /// The segment from [a] to [b] widened by [half] on each side and lengthened

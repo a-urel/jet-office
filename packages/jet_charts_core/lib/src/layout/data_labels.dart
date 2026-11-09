@@ -183,11 +183,11 @@ DataLabelPlacement placeDataLabels({
           continue;
         }
         final ChartTextStyle style = switch (place.where) {
-          _Where.inside => _insideStyle(
+          _Where.inside => insideLabelStyle(
             theme.dataLabels,
             resolved.colors[anchor.series],
           ),
-          _ when chart.kind == ChartKind.area => _insideStyle(
+          _ when chart.kind == ChartKind.area => insideLabelStyle(
             theme.dataLabels,
             stacked
                 ? resolved.colors[anchor.series]
@@ -289,9 +289,10 @@ ChartRect _shiftInto(ChartRect rect, ChartRect bounds) {
   );
 }
 
-/// The colour a label inside a bar of [bar] colour is drawn in: white when
-/// the bar's relative luminance is below 0.5, else [style]'s own.
-ChartTextStyle _insideStyle(ChartTextStyle style, ChartColor bar) =>
+/// The style of a label drawn inside a bar, a slice or an area of the colour
+/// [bar]: white when the colour's relative luminance is below 0.5, else
+/// [style] as it is.
+ChartTextStyle insideLabelStyle(ChartTextStyle style, ChartColor bar) =>
     relativeLuminance(bar.rgb) < 0.5 ? style.copyWith(color: _white) : style;
 
 final ChartColor _white = ChartColor.rgb(0xFFFFFF);

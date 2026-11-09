@@ -13,6 +13,9 @@ final class Chart {
   ///
   /// [unsupportedName] is the name of a kind read from a file that the model
   /// does not draw; it goes with [ChartKind.unsupported].
+  ///
+  /// Throws an [ArgumentError] for a [holeSizePercent] outside 10 to 90, or
+  /// data labels whose `minShare` is not finite or not within 0 to 1.
   Chart({
     required this.kind,
     required List<ChartSeries> series,
@@ -36,6 +39,7 @@ final class Chart {
         'must be finite and within 10 to 90',
       );
     }
+    checkMinShare(dataLabels.minShare);
   }
 
   /// What the chart draws.

@@ -7,6 +7,45 @@ Chart _chart(String name) =>
     galleryCharts().firstWhere((GalleryChart g) => g.name == name).chart;
 
 void main() {
+  test('a pie gives the share of each value', () {
+    final ChartSummary summary = summarizeChart(
+      Chart(
+        kind: ChartKind.pie,
+        series: <ChartSeries>[
+          ChartSeries(
+            name: ChartData<String>(values: <String?>['Share']),
+            categories: ChartData<Object>(
+              values: <Object?>['a', 'b', 'c', 'd'],
+            ),
+            values: ChartData<double>(values: <double?>[1, 1, 2, null]),
+          ),
+        ],
+      ),
+    );
+    expect(summary.shares, <List<String>>[
+      <String>['25%', '25%', '50%', ''],
+    ]);
+    expect(summary.centerText, isNull);
+  });
+
+  test('a donut gives its centre text', () {
+    final ChartSummary summary = summarizeChart(_chart('donut_center'));
+    expect(summary.centerText, _chart('donut_center').centerText);
+    expect(summary.shares.first[1], '40%');
+    expect(
+      summary,
+      isNot(
+        summarizeChart(_chart('donut_center').copyWith(centerText: 'Other')),
+      ),
+    );
+  });
+
+  test('other kinds have no shares', () {
+    final ChartSummary summary = summarizeChart(_chart('column_clustered'));
+    expect(summary.shares, <List<String>>[<String>[], <String>[], <String>[]]);
+    expect(summary.centerText, isNull);
+  });
+
   test('column_clustered', () {
     final ChartSummary summary = summarizeChart(_chart('column_clustered'));
     expect(summary.kind, ChartKind.column);

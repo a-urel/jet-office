@@ -21,6 +21,11 @@
 ///   [seriesLineId], [seriesMarkerId], [seriesAreaId]).
 /// * `label/<s>/<c>`: the data label of series `<s>`, category `<c>`
 ///   ([dataLabelId]).
+/// * `series/<s>/slice/<c>`: the slice of series `<s>` at category `<c>` in a
+///   pie or donut ([seriesSliceId]); `label/<s>/<c>/leader`: the leader line
+///   of that slice's data label ([dataLabelLeaderId]); `center`: a donut's
+///   centre text ([centerTextId]). In a pie or donut a legend entry
+///   `legend/<i>/...` is category `<i>`.
 library;
 
 /// The chart's background rectangle.
@@ -41,6 +46,9 @@ const String plotClip = 'plot/clip';
 /// The clip that holds a line chart's markers: the plot grown by a marker's
 /// reach, so a marker on the plot's edge is drawn whole.
 const String markerClip = 'plot/markers';
+
+/// A donut's centre text.
+const String centerTextId = 'center';
 
 /// What is drawn when there is nothing to draw.
 const String placeholder = 'placeholder';
@@ -96,3 +104,11 @@ String seriesAreaId(int series) => 'series/$series/area';
 
 /// The data label of [series] at [category].
 String dataLabelId(int series, int category) => 'label/$series/$category';
+
+/// The slice of [series] at [category] in a pie or donut.
+String seriesSliceId(int series, int category) =>
+    'series/$series/slice/$category';
+
+/// The leader line of the data label of [series] at [category].
+String dataLabelLeaderId(int series, int category) =>
+    'label/$series/$category/leader';

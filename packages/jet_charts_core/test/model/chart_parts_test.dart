@@ -33,4 +33,61 @@ void main() {
       expect(a, const ChartDataLabels());
     });
   });
+
+  group('ChartDataLabels.minShare', () {
+    test('defaults to 0', () {
+      expect(const ChartDataLabels().minShare, 0);
+    });
+
+    test('copyWith sets and keeps it', () {
+      final ChartDataLabels set = const ChartDataLabels().copyWith(
+        minShare: 0.1,
+      );
+      expect(set.minShare, 0.1);
+      expect(set.copyWith(visible: true).minShare, 0.1);
+    });
+
+    test('copyWith throws outside 0 to 1 or when not finite', () {
+      for (final double bad in <double>[
+        -0.01,
+        1.01,
+        double.nan,
+        double.infinity,
+      ]) {
+        expect(
+          () => const ChartDataLabels().copyWith(minShare: bad),
+          throwsArgumentError,
+          reason: '$bad',
+        );
+      }
+      expect(const ChartDataLabels().copyWith(minShare: 1).minShare, 1);
+    });
+
+    test('the constructor, being const, takes any value', () {
+      expect(const ChartDataLabels(minShare: 2).minShare, 2);
+    });
+
+    test('a chart throws for data labels with a bad minShare', () {
+      for (final double bad in <double>[-0.5, 2, double.nan]) {
+        expect(
+          () => Chart(
+            kind: ChartKind.pie,
+            series: const <ChartSeries>[],
+            dataLabels: ChartDataLabels(minShare: bad),
+          ),
+          throwsArgumentError,
+          reason: '$bad',
+        );
+      }
+    });
+
+    test('it changes ==, hashCode and toString', () {
+      const ChartDataLabels a = ChartDataLabels();
+      const ChartDataLabels b = ChartDataLabels(minShare: 0.1);
+      expect(a, isNot(b));
+      expect(a.hashCode, isNot(b.hashCode));
+      expect(b, const ChartDataLabels(minShare: 0.1));
+      expect(b.toString(), contains('minShare: 0.1'));
+    });
+  });
 }

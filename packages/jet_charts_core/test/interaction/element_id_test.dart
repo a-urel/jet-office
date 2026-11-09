@@ -87,6 +87,13 @@ void main() {
       'series/2/area': _e(ChartElementKind.area, series: 2),
       'label/1/3': _e(ChartElementKind.dataLabel, series: 1, category: 3),
       'series/12/bar/365': _e(ChartElementKind.bar, series: 12, category: 365),
+      'series/1/slice/3': _e(ChartElementKind.slice, series: 1, category: 3),
+      'label/0/2/leader': _e(
+        ChartElementKind.leaderLine,
+        series: 0,
+        category: 2,
+      ),
+      'center': _e(ChartElementKind.centerText),
     };
     for (final MapEntry<String, _Expected> c in cases.entries) {
       test(c.key, () {
@@ -127,6 +134,13 @@ void main() {
       'grid/depth/0',
       'grid/value/0/1',
       'label/1/2/3',
+      'label/1/2/leader/0',
+      'label/x/2/leader',
+      'label/1/leader',
+      'series/1/slice',
+      'series/1/slice/x',
+      'center/0',
+      'centre',
       'label/1',
       'legend/1',
       'legend/1/name',

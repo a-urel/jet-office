@@ -629,11 +629,9 @@ void main() {
     expect(problems(layout), isEmpty);
   });
 
-  test('pie, scatter, combination and unsupported draw a placeholder', () {
+  test('scatter, combination and unsupported draw a placeholder', () {
     const ChartSize size = ChartSize(300, 200);
     for (final ChartKind kind in <ChartKind>[
-      ChartKind.pie,
-      ChartKind.donut,
       ChartKind.scatter,
       ChartKind.sparkline,
       ChartKind.combination,
@@ -661,7 +659,11 @@ void main() {
       expect(layout.valueScale, isNull);
     }
     final ChartLayout titled = lay(
-      chart(kind: ChartKind.pie, title: 'Share'),
+      chart(
+        kind: ChartKind.unsupported,
+        unsupportedName: 'bubbleChart',
+        title: 'Share',
+      ),
       size,
     );
     expect(titled.primitives.map((ChartPrimitive p) => p.id), <String>[
@@ -670,14 +672,14 @@ void main() {
       ids.placeholder,
     ]);
     final ChartLayout tiny = lay(
-      chart(kind: ChartKind.pie),
+      chart(kind: ChartKind.unsupported, unsupportedName: 'bubbleChart'),
       const ChartSize(20, 10),
     );
     expect(tiny.primitives.map((ChartPrimitive p) => p.id), <String>[
       ids.background,
     ]);
     expect(tiny.hidden, <ChartHiddenLabel>[
-      const ChartHiddenLabel(ids.placeholder, 'pie'),
+      const ChartHiddenLabel(ids.placeholder, 'bubbleChart'),
     ]);
   });
 
@@ -917,7 +919,10 @@ void main() {
 
     test('a placeholder kind, or a chart without a plot, has none', () {
       expect(
-        lay(chart(kind: ChartKind.pie), goldenSize).categoryBands,
+        lay(
+          chart(kind: ChartKind.unsupported, unsupportedName: 'bubbleChart'),
+          goldenSize,
+        ).categoryBands,
         isEmpty,
       );
       expect(lay(chart(), const ChartSize(8, 8)).categoryBands, isEmpty);

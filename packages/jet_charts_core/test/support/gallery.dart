@@ -44,6 +44,9 @@ const List<ChartSize> gallerySizes = <ChartSize>[
 
 const List<String> _quarters = <String>['Q1', 'Q2', 'Q3', 'Q4'];
 
+/// The categories of the owner's E1 table (`TALIMATLAR_J4.md`).
+const List<String> _regions = <String>['Kuzey', 'Güney', 'Doğu', 'Batı'];
+
 ChartSeries _series(
   String name,
   List<Object> categories,
@@ -79,7 +82,7 @@ Chart _column({
 /// The gallery's charts: clustered, stacked and percent columns; bars; a line
 /// with a gap; a stacked area; negative values; eight series; long category
 /// labels; data labels; a legend on the top, left and right (the bottom is the
-/// default of the rest); and a tile.
+/// default of the rest); pies and donuts; and a tile, which stays last.
 List<GalleryChart> galleryCharts() => <GalleryChart>[
   GalleryChart('column_clustered', _column()),
   GalleryChart('column_stacked', _column(grouping: ChartGrouping.stacked)),
@@ -195,6 +198,77 @@ List<GalleryChart> galleryCharts() => <GalleryChart>[
   GalleryChart(
     'legend_right',
     _column(legend: const ChartLegend(position: ChartLegendPosition.right)),
+  ),
+  GalleryChart(
+    'pie_basic',
+    Chart(
+      kind: ChartKind.pie,
+      title: const ChartTitle(text: 'Sales by region'),
+      series: <ChartSeries>[
+        _series('Sales', _regions, <double?>[12, 18, 9, 15]),
+      ],
+      dataLabels: const ChartDataLabels(visible: true),
+    ),
+  ),
+  GalleryChart(
+    'pie_small_slices',
+    Chart(
+      kind: ChartKind.pie,
+      title: const ChartTitle(text: 'Small slices'),
+      series: <ChartSeries>[
+        _series(
+          'Share',
+          <Object>['Main', 'Second', 'Third', 'Fourth', 'Fifth'],
+          <double?>[90, 4, 3, 2, 1],
+        ),
+      ],
+      dataLabels: const ChartDataLabels(visible: true, showPercent: true),
+    ),
+  ),
+  GalleryChart(
+    'pie_negative',
+    Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        _series('B', _regions, <double?>[12, 18, -4, 9]),
+      ],
+      dataLabels: const ChartDataLabels(visible: true),
+    ),
+  ),
+  GalleryChart(
+    'donut_center',
+    Chart(
+      kind: ChartKind.donut,
+      series: <ChartSeries>[
+        _series(
+          'Satış',
+          <Object>[..._regions, 'Merkez'],
+          <double?>[12, 18, 3, 9, 3],
+        ).copyWith(
+          pointColors: <ChartColor?>[null, null, ChartColor.rgb(0xC0392B)],
+        ),
+      ],
+      holeSizePercent: 55,
+      centerText: 'Toplam 45',
+      dataLabels: const ChartDataLabels(
+        visible: true,
+        showValue: false,
+        showPercent: true,
+        minShare: 0.1,
+      ),
+    ),
+  ),
+  GalleryChart(
+    'donut_two_series',
+    Chart(
+      kind: ChartKind.donut,
+      title: const ChartTitle(text: 'Two years'),
+      series: <ChartSeries>[
+        _series('2025', _regions, <double?>[12, 18, 9, 15]),
+        _series('2026', _regions, <double?>[14, 16, 11, 13]),
+      ],
+      dataLabels: const ChartDataLabels(visible: true),
+    ),
   ),
   GalleryChart(
     'tile',
