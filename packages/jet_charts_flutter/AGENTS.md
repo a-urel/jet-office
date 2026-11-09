@@ -23,7 +23,13 @@ a change of theme, locale or scale snaps, and reduced motion turns animation
 off. Under `IntrinsicHeight` or `IntrinsicWidth` the widget answers by its
 size rule (`JetChart`, "Size"). The default loading look repeats without
 end, so a test must not `pumpAndSettle` while a chart loads; the tooltip box
-is a live region and a screen reader announces each change of it.
+is a live region and a screen reader announces each change of it. The chart
+takes the keyboard's focus (`JetChart.focusable`, `focusNode`), walks its
+points with the arrows, Home and End, and gives a screen reader node per
+category, slice or scatter point, up to `JetChartStrings.maxPointNodes`
+(`lib/src/chart_semantics.dart`, tested in `test/accessibility_test.dart`);
+a test of the keyboard runs in a `WidgetsApp` under an autofocused
+`FocusScope`, as nothing holds the focus there without a navigator.
 
 ## Open for J4 and C1
 
