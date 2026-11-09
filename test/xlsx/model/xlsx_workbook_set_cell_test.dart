@@ -180,6 +180,21 @@ void main() {
     expect(sheet.cellAt(0, 3)?.value, XlsxDecimal('9'));
   });
 
+  test('setCell on a followed master with an unreadable ref refuses', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      buildWorkbook(<String, String>{
+        'S': worksheet(
+          '<row r="1"><c r="A1"><f t="shared" ref="bad" si="0">B1</f>'
+          '<v>1</v></c></row>'
+          '<row r="2"><c r="A2"><f t="shared" si="0"/><v>2</v></c></row>',
+        ),
+      }),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    expect(() => sheet.setCell(0, 0, 9), throwsStateError);
+    expect(sheet.cellAt(0, 0)?.value, XlsxDecimal('1'));
+  });
+
   test('setCell on a master unshares the group', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
       buildWorkbook(<String, String>{

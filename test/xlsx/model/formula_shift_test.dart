@@ -203,4 +203,53 @@ void main() {
     expect(warnings.single.count, 2);
     expect(warnings.single.cells, <String>['A1', 'B1']);
   });
+
+  test('deleting an unlexable shared master refuses, nothing changed', () {
+    final XlsxWorkbook book = _book(<String, String>{
+      'S':
+          '<row r="1"><c r="A1"><f t="shared" ref="A1:A2" si="0">B5+"x</f>'
+          '<v>1</v></c><c r="C1"><f>A9</f><v>1</v></c></row>'
+          '<row r="2"><c r="A2"><f t="shared" si="0"/><v>1</v></c></row>',
+    });
+    final XlsxSheet sheet = book.sheets.single;
+    expect(
+      () => _apply(book, _deleteRows('S', 1, 1)),
+      throwsA(
+        isA<StateError>().having(
+          (StateError e) => e.message,
+          'message',
+          contains('A1'),
+        ),
+      ),
+    );
+    expect(changeLogOf(book).hasChanges, isFalse);
+    expect(_f(sheet, 0, 2)?.text, 'A9');
+  });
+
+  test('a shared master with an unreadable ref refuses when followed', () {
+    final XlsxWorkbook followed = _book(<String, String>{
+      'S':
+          '<row r="1"><c r="A1"><f t="shared" ref="bad" si="0">B1</f>'
+          '<v>1</v></c></row>'
+          '<row r="2"><c r="A2"><f t="shared" si="0"/><v>1</v></c></row>',
+    });
+    expect(
+      () => _apply(followed, _insertRows('S', 1, 1)),
+      throwsA(
+        isA<StateError>().having(
+          (StateError e) => e.message,
+          'message',
+          contains('A1'),
+        ),
+      ),
+    );
+    expect(changeLogOf(followed).hasChanges, isFalse);
+    final XlsxWorkbook alone = _book(<String, String>{
+      'S':
+          '<row r="1"><c r="A1"><f t="shared" ref="bad" si="0">B1</f>'
+          '<v>1</v></c><c r="C1"><f>B1</f><v>1</v></c></row>',
+    });
+    _apply(alone, _insertRows('S', 1, 1));
+    expect(_f(alone.sheets.single, 0, 2)?.text, 'B2');
+  });
 }

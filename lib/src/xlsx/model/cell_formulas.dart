@@ -103,7 +103,12 @@ final class CellFormulaHolder implements ReferenceHolder {
       final RawFormula formula = f.cell.formula!;
       if (formula.type != FormulaType.shared || formula.ref == null) continue;
       final XlsxRange? range = _range(formula.ref!);
-      if (range == null) continue;
+      if (range == null) {
+        if ((followers[_siKey(formula.si)] ?? const <_Found>[]).isNotEmpty) {
+          throw _orphaning(f.row, f.column, host, 'its range cannot be read');
+        }
+        continue;
+      }
       final List<_Found> members = <_Found>[
         f,
         for (final _Found g
@@ -259,10 +264,19 @@ final class CellFormulaHolder implements ReferenceHolder {
       }
     }
     if (!readable) {
-      if (text != null) unlexable.add(_key(master.row, master.column));
-      // The text cannot be rewritten; the range still moves with the cells.
       final bool masterKept =
           kept.first.row == master.row && kept.first.column == master.column;
+      // No follower can take a text that cannot be translated.
+      if (!masterKept) {
+        throw _orphaning(
+          master.row,
+          master.column,
+          host,
+          'the edit deletes it and its formula cannot be read',
+        );
+      }
+      if (text != null) unlexable.add(_key(master.row, master.column));
+      // The text cannot be rewritten; the range still moves with the cells.
       if (masterKept && newRange.ref != formula.ref) {
         _set(master, _withRef(formula, newRange.ref));
       }
@@ -340,7 +354,24 @@ void unshareSharedGroup(
   final RawFormula master = store.cellAt(row, column)!.formula!;
   final XlsxRange? range = _range(master.ref!);
   final String? key = _siKey(master.si);
-  if (range == null || key == null) return;
+  if (key == null) return;
+  if (range == null) {
+    bool followed = false;
+    for (final int r in store.rowIndexes) {
+      store.forEachInRow(r, (int c, RawCell cell) {
+        final RawFormula? f = cell.formula;
+        followed |=
+            f != null &&
+            f.type == FormulaType.shared &&
+            f.ref == null &&
+            _siKey(f.si) == key;
+      });
+      if (followed) {
+        throw _orphaning(row, column, hostSheet, 'its range cannot be read');
+      }
+    }
+    return;
+  }
   final List<_Found> followers = <_Found>[];
   for (final int r in store.rowIndexes) {
     if (r < range.firstRow || r > range.lastRow) continue;
@@ -389,6 +420,14 @@ void unshareSharedGroup(
     );
   }
 }
+
+/// The refusal of an edit that would leave the followers of the shared
+/// master at [row], [column] without a master.
+StateError _orphaning(int row, int column, String sheet, String why) =>
+    StateError(
+      'Cannot change the shared formula master at ${cellRef(row, column)} '
+      'on sheet "$sheet": $why, and other cells of its group follow it.',
+    );
 
 /// [cell] with [formula] in place of its own.
 RawCell withFormula(RawCell cell, RawFormula formula) => RawCell(
