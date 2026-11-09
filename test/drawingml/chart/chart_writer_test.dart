@@ -713,6 +713,39 @@ void main() {
       ]);
     });
 
+    test('invalid characters in format codes are dropped and reported', () {
+      final DrawingChartWritten written = _write(
+        _chart(
+          ChartKind.column,
+          categoryAxis: const ChartAxis(formatCode: 'dd\u0001.mm.yyyy'),
+          valueAxis: const ChartAxis(formatCode: '0\u0002%'),
+          dataLabels: const ChartDataLabels(
+            visible: true,
+            formatCode: '#\u0003,##0',
+          ),
+          series: <ChartSeries>[
+            _excelSeries().copyWith(
+              formatCode: '0.0\u0004',
+              categories: ChartData<Object>(
+                values: <Object?>[DateTime(2026, 1, 1)],
+              ),
+            ),
+          ],
+        ),
+      );
+      final String xml = _xml(written);
+      _expectWellFormed(xml);
+      expect(xml, contains('<c:formatCode>dd.mm.yyyy</c:formatCode>'));
+      expect(xml, contains('<c:formatCode>0.0</c:formatCode>'));
+      expect(xml, contains('formatCode="dd.mm.yyyy"'));
+      expect(xml, contains('formatCode="0%"'));
+      expect(xml, contains('formatCode="#,##0"'));
+      expect(xml, isNot(matches(RegExp('[\u0001-\u0004]'))));
+      expect(written.issues, <DrawingChartIssue>[
+        DrawingChartIssue.invalidCharacter,
+      ]);
+    });
+
     test('a series past the ids has no c:extLst', () {
       final DrawingChartWritten written = writeDrawingChartSpace(
         DrawingChartSpace(

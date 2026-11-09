@@ -29,6 +29,16 @@ const String drawingChartContentType =
 const String drawingChartRelationshipType =
     'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart';
 
+/// A `c16:uniqueId` value: a GUID in braces.
+final RegExp _seriesId = RegExp(
+  r'^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-'
+  r'[0-9A-Fa-f]{12}\}$',
+);
+
+/// Whether [id] is a series id [DrawingChartIds] may hold: a GUID in braces,
+/// such as `{00000000-8918-7940-9A01-4B67489FEBC8}`, in either case.
+bool isDrawingChartSeriesId(String id) => _seriesId.hasMatch(id);
+
 /// The ids a chart part gives its axes and series.
 ///
 /// Excel picks the axis ids and the series' unique ids at random when it makes

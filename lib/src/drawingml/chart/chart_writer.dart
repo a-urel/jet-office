@@ -120,12 +120,6 @@ void _checkExpressible(Chart chart) {
 /// The largest `c:axId`, that of `xsd:unsignedInt`.
 const int _maxAxisId = 4294967295;
 
-/// A `c16:uniqueId` value: a GUID in braces.
-final RegExp _uniqueId = RegExp(
-  r'^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-'
-  r'[0-9A-Fa-f]{12}\}$',
-);
-
 void _checkIds(DrawingChartIds ids) {
   for (final (String name, int id) in <(String, int)>[
     ('ids.categoryAxis', ids.categoryAxis),
@@ -143,7 +137,7 @@ void _checkIds(DrawingChartIds ids) {
     );
   }
   for (int i = 0; i < ids.series.length; i++) {
-    if (!_uniqueId.hasMatch(ids.series[i])) {
+    if (!isDrawingChartSeriesId(ids.series[i])) {
       throw ArgumentError.value(
         ids.series[i],
         'ids.series[$i]',
