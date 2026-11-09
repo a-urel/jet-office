@@ -102,10 +102,29 @@ final RegExp _digits = RegExp(r'^[0-9]{1,6}$');
 /// and an `a:lumOff` child when `lumOff` is not 0, each of
 /// `(fraction * 100000).round()`. Otherwise it is `a:srgbClr` of the colour's
 /// `rgb` as six upper-case hexadecimal digits.
-void writeDrawingColor(XmlWriter w, ChartColor color, ChartExportColors mode) {
+///
+/// With an [alpha] (an opacity within 0 and 1, `null` for opaque) the element
+/// holds an `a:alpha` child of `(alpha * 100000).round()`, after any
+/// luminance children.
+void writeDrawingColor(
+  XmlWriter w,
+  ChartColor color,
+  ChartExportColors mode, {
+  double? alpha,
+}) {
   final ChartSchemeColor? slot = color.slot;
+  final String? alphaValue = alpha == null
+      ? null
+      : (alpha * 100000).round().toString();
   if (mode != ChartExportColors.fileTheme || slot == null) {
-    w.empty('a:srgbClr', <String, String>{'val': _hex(color.rgb)});
+    if (alphaValue == null) {
+      w.empty('a:srgbClr', <String, String>{'val': _hex(color.rgb)});
+    } else {
+      w.start('a:srgbClr');
+      w.attribute('val', _hex(color.rgb));
+      w.empty('a:alpha', <String, String>{'val': alphaValue});
+      w.end();
+    }
     return;
   }
   w.start('a:schemeClr');
@@ -119,6 +138,9 @@ void writeDrawingColor(XmlWriter w, ChartColor color, ChartExportColors mode) {
     w.empty('a:lumOff', <String, String>{
       'val': (color.lumOff * 100000).round().toString(),
     });
+  }
+  if (alphaValue != null) {
+    w.empty('a:alpha', <String, String>{'val': alphaValue});
   }
   w.end();
 }
@@ -138,11 +160,20 @@ String _hex(int rgb) => rgb.toRadixString(16).padLeft(6, '0').toUpperCase();
 /// writes back as a plain `a:srgbClr` of that result, so a part holding one is
 /// not reproduced by the writer (and is not offered as typed).
 ///
+/// An `a:alpha` child (within `0` to `100000`) is read and dropped when
+/// [allowAlpha], as a colour is opaque; the chart reader sets it, and the typed
+/// form is then checked by writing it again.
+///
 /// Returns `null` for any other element (which is skipped), for a slot or a
 /// value it cannot read, for a `lumMod` or `lumOff` outside `0` to `100000`,
-/// and for any other modifier (`alpha`, `shade`, `tint` and the rest). Never
+/// and for any other modifier (`alpha` unless [allowAlpha], `shade`, `tint`
+/// and the rest). Never
 /// throws except an [XmlParseException] from [r].
-ChartColor? readDrawingColor(XmlPullReader r, {ThemeColors? theme}) {
+ChartColor? readDrawingColor(
+  XmlPullReader r, {
+  ThemeColors? theme,
+  bool allowAlpha = false,
+}) {
   if (r.eventType != XmlEventType.startElement) {
     return null;
   }
@@ -153,7 +184,7 @@ ChartColor? readDrawingColor(XmlPullReader r, {ThemeColors? theme}) {
     return null;
   }
   final String? value = r.getAttribute(name == 'sysClr' ? 'lastClr' : 'val');
-  final _Luminance? luminance = _readModifiers(r);
+  final _Luminance? luminance = _readModifiers(r, allowAlpha);
   if (value == null || luminance == null) {
     return null;
   }
@@ -191,7 +222,7 @@ final class _Luminance {
 
 /// Reads the children of the colour element [r] stands on through its end;
 /// `null` when a child is not `a:lumMod` or `a:lumOff` with a readable value.
-_Luminance? _readModifiers(XmlPullReader r) {
+_Luminance? _readModifiers(XmlPullReader r, bool allowAlpha) {
   if (r.isEmptyElement) {
     r.next();
     return const _Luminance(1, 0);
@@ -212,13 +243,17 @@ _Luminance? _readModifiers(XmlPullReader r) {
     final String child = r.localName;
     final double? fraction =
         r.namespaceUri == drawingMainNamespace &&
-            (child == 'lumMod' || child == 'lumOff')
+            (child == 'lumMod' ||
+                child == 'lumOff' ||
+                (allowAlpha && child == 'alpha'))
         ? _fraction(r.getAttribute('val'))
         : null;
     if (fraction == null) {
       valid = false;
     } else if (child == 'lumMod') {
       lumMod = fraction;
+    } else if (child == 'alpha') {
+      // Read and dropped: a colour is opaque.
     } else {
       lumOff = fraction;
     }

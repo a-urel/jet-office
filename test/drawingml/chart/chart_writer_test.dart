@@ -1086,6 +1086,136 @@ void main() {
     });
   });
 
+  group('J4 fields', () {
+    ChartSeries series({
+      bool smooth = false,
+      List<ChartColor?> pointColors = const <ChartColor?>[],
+    }) => _excelSeries().copyWith(smooth: smooth, pointColors: pointColors);
+
+    test('a smooth line writes c:smooth 1 in the series', () {
+      final String xml = _xml(
+        _write(
+          _chart(ChartKind.line, series: <ChartSeries>[series(smooth: true)]),
+        ),
+      );
+      expect(xml, contains('</c:val><c:smooth val="1"/></c:ser>'));
+      expect(_count(xml, '<c:smooth val="1"/>'), 1);
+    });
+
+    test('point colours write one c:dPt per colour, before the labels', () {
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.column,
+            dataLabels: const ChartDataLabels(visible: true),
+            series: <ChartSeries>[
+              series(
+                pointColors: <ChartColor?>[null, ChartColor.rgb(0xFF0000)],
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(_count(xml, '<c:dPt>'), 1);
+      expect(
+        xml,
+        contains(
+          '<c:dPt><c:idx val="1"/><c:invertIfNegative val="0"/>'
+          '<c:bubble3D val="0"/><c:spPr><a:solidFill>'
+          '<a:srgbClr val="FF0000"/></a:solidFill>',
+        ),
+      );
+      expect(
+        xml.indexOf('<c:invertIfNegative'),
+        lessThan(xml.indexOf('<c:dPt')),
+      );
+      expect(xml.indexOf('<c:dPt'), lessThan(xml.indexOf('<c:dLbls')));
+    });
+
+    test('a line point colour writes the marker, then bubble3D', () {
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.line,
+            series: <ChartSeries>[
+              series(pointColors: <ChartColor?>[ChartColor.rgb(0x00FF00)]),
+            ],
+          ),
+        ),
+      );
+      final int dPt = xml.indexOf('<c:dPt>');
+      expect(dPt, greaterThan(xml.indexOf('</c:marker>')));
+      expect(xml.indexOf('<c:marker>', dPt), greaterThan(dPt));
+      expect(
+        xml.indexOf('<c:bubble3D', dPt),
+        greaterThan(xml.indexOf('</c:marker>', dPt)),
+      );
+      expect(xml, contains('<a:srgbClr val="00FF00"/>'));
+    });
+
+    test('area opacity and line write a:alpha and a:ln', () {
+      final ChartTheme theme = _office.copyWith(
+        areaOpacity: 0.25,
+        areaLine: true,
+      );
+      final String xml = _xml(_write(_chart(ChartKind.area), theme: theme));
+      expect(xml, contains('<a:alpha val="25000"/>'));
+      expect(xml, contains('<c:spPr><a:solidFill>'));
+      expect(
+        xml,
+        isNot(
+          contains('<a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr><c:cat>'),
+        ),
+      );
+      expect(_count(xml, 'cap="rnd"'), 1);
+      // A column chart ignores both.
+      final String column = _xml(
+        _write(_chart(ChartKind.column), theme: theme),
+      );
+      expect(column, isNot(contains('a:alpha')));
+    });
+
+    test('showValue false writes c:showVal 0 in the series labels', () {
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.column,
+            dataLabels: const ChartDataLabels(
+              visible: true,
+              showValue: false,
+              showPercent: true,
+            ),
+          ),
+        ),
+      );
+      expect(_count(xml, '<c:showVal val="1"/>'), 0);
+      expect(_count(xml, '<c:showPercent val="1"/>'), 0);
+      expect(_count(xml, '<c:showPercent val="0"/>'), 2);
+    });
+
+    test('centre text is an ArgumentError; a hole size is ignored', () {
+      expect(
+        () => _write(
+          Chart(
+            kind: ChartKind.column,
+            series: <ChartSeries>[_excelSeries()],
+            centerText: 'x',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      final Chart holed = Chart(
+        kind: ChartKind.column,
+        series: <ChartSeries>[_excelSeries()],
+        holeSizePercent: 50,
+      );
+      expect(
+        _xml(_write(holed)),
+        _xml(_write(Chart(kind: ChartKind.column, series: holed.series))),
+      );
+    });
+  });
+
   group('ArgumentError', () {
     test('for a theme value the part cannot hold, naming the field', () {
       final ChartTextStyle text = _office.axisLabels.copyWith(size: 9);

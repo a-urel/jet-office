@@ -65,7 +65,8 @@ final class DrawingChartWritten {
 /// whole numbers; a `NaN` gap width is 0.
 ///
 /// Throws an [ArgumentError] when the chart's kind is not column, bar, line
-/// or area, when it has a secondary value axis, when a series is bound to
+/// or area, when it has centre text (only a donut shows it; a hole size is
+/// ignored), when it has a secondary value axis, when a series is bound to
 /// the secondary axis or has a kind other than `null` or the chart's, when an
 /// axis id of `space.ids` is outside 0 to 4294967295 or the two are equal, or
 /// when one of its series ids is not a GUID in braces.
@@ -105,6 +106,13 @@ void _checkExpressible(Chart chart) {
         'chart.kind',
         'must be column, bar, line or area',
       );
+  }
+  if (chart.centerText != null) {
+    throw ArgumentError.value(
+      chart.centerText,
+      'chart.centerText',
+      'must be null: only a donut has centre text',
+    );
   }
   if (chart.secondaryValueAxis != null) {
     throw ArgumentError.value(
@@ -666,9 +674,9 @@ final class _ChartWriter {
   static String _percent(double value, double low, double high) =>
       (value.isNaN ? low : value.clamp(low, high)).round().toString();
 
-  void _solidFill(ChartColor color) {
+  void _solidFill(ChartColor color, {double? alpha}) {
     w.start('a:solidFill');
-    writeDrawingColor(w, color, mode);
+    writeDrawingColor(w, color, mode, alpha: alpha);
     w.end();
   }
 

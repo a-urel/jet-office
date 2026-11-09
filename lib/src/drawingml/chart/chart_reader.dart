@@ -190,7 +190,11 @@ _Node? _parse(Uint8List bytes, ThemeColors? themeColors) {
                 node.name == 'sysClr')) {
           // Consumes the element through its end event.
           node.isColor = true;
-          node.color = readDrawingColor(r, theme: themeColors);
+          node.color = readDrawingColor(
+            r,
+            theme: themeColors,
+            allowAlpha: true,
+          );
         } else {
           open.add(node);
         }
