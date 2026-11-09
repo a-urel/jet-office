@@ -59,6 +59,12 @@ enum XlsxWarningCode {
   /// does.
   tableHeaderAdjusted,
 
+  /// Editing: a structural edit (rows or columns inserted or deleted, a
+  /// sheet renamed or moved) met a cell formula it cannot read fully, so its
+  /// references were not rewritten; the formula is kept as read. The cells
+  /// are the formulas' cells.
+  formulaUnlexable,
+
   /// Reading: a sheet is listed in the workbook but its part is missing from
   /// the package. The sheet is still listed; its rows are empty. One warning
   /// per sheet, no cell.

@@ -57,7 +57,9 @@ void main() {
     );
     registry.apply(edit, edit);
     for (final ReferenceHolder h in registry.holders()) {
-      final PendingReferenceHolder p = h as PendingReferenceHolder;
+      // The written holders are tested on their own.
+      if (h is! PendingReferenceHolder) continue;
+      final PendingReferenceHolder p = h;
       expect(p.calls, hasLength(1), reason: h.holderName);
       expect(p.calls.single.mapper, same(edit));
       expect(p.calls.single.edit, same(edit));

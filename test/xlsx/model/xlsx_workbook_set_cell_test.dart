@@ -169,17 +169,6 @@ void main() {
       ),
     );
     expect(() => sheet.setCell(0, 2, 9), throwsStateError);
-    // A shared master.
-    expect(
-      () => sheet.setCell(0, 0, 9),
-      throwsA(
-        isA<UnsupportedError>().having(
-          (UnsupportedError e) => e.message,
-          'message',
-          'Changing a shared formula master arrives in W5.',
-        ),
-      ),
-    );
     // A shared child leaves the group; the others are unchanged.
     sheet.setCell(1, 0, 9);
     expect(sheet.cellAt(1, 0)?.formula, isNull);
@@ -189,6 +178,33 @@ void main() {
     // A cell in no group.
     sheet.setCell(0, 3, 9);
     expect(sheet.cellAt(0, 3)?.value, XlsxDecimal('9'));
+  });
+
+  test('setCell on a master unshares the group', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      buildWorkbook(<String, String>{
+        'S': worksheet(
+          '<row r="1"><c r="A1"><f t="shared" ref="A1:A3" si="0">B1*\$C\$1</f>'
+          '<v>1</v></c></row>'
+          '<row r="2"><c r="A2"><f t="shared" si="0"/><v>2</v></c></row>'
+          '<row r="3"><c r="A3"><f t="shared" si="0"/><v>3</v></c></row>',
+        ),
+      }),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    sheet.setCell(0, 0, 9);
+    expect(sheet.cellAt(0, 0)?.value, XlsxDecimal('9'));
+    expect(sheet.cellAt(0, 0)?.formula, isNull);
+    expect(sheet.cellAt(0, 0)?.formulaGroup, isNull);
+    // Every follower takes its own text, as Excel writes it.
+    expect(sheet.cellAt(1, 0)?.formula, r'B2*$C$1');
+    expect(sheet.cellAt(1, 0)?.formulaGroup, isNull);
+    expect(sheet.cellAt(1, 0)?.value, XlsxDecimal('2'));
+    expect(sheet.cellAt(2, 0)?.formula, r'B3*$C$1');
+    expect(book.warnings, isEmpty);
+    // One edit: undone at once.
+    final XlsxWorkbook again = XlsxWorkbook.open(book.save().bytes);
+    expect(again.sheets.single.cellAt(2, 0)?.formula, r'B3*$C$1');
   });
 
   test('setting 10,000 cells on a sheet with a formula takes linear '

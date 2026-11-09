@@ -24,7 +24,7 @@ abstract interface class ReferenceHolder {
 }
 
 /// A holder whose rewrite is not written yet: it only records each call.
-/// Tasks 5 to 9 of W5 replace these one by one.
+/// Tasks 6 to 9 of W5 replace these one by one.
 final class PendingReferenceHolder implements ReferenceHolder {
   /// A pending holder named [holderName].
   PendingReferenceHolder(this.holderName);
@@ -64,6 +64,7 @@ const List<String> workbookHolderNames = <String>['definedNames'];
 /// own allow-list, with a reason).
 const Map<String, String> referenceHolderSources = <String, String>{
   'cell_store.dart': 'cells',
+  'cell_formulas.dart': 'cells',
   'worksheet_part.dart': 'merges',
   'xlsx_sheet_merges.dart': 'merges',
   'conditional_elements.dart': 'conditionalFormats',

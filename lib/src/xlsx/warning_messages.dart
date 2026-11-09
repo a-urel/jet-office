@@ -108,6 +108,18 @@ String formatWarning(XlsxWarning w, OfficeLocale locale) {
       '“$sheet” sayfasında $count tablo başlık hücresi değiştirildi; '
           'sütunları da bu metinle yeniden adlandırıldı. Bir sütuna eski '
           'adıyla başvuran formüller güncellenmedi$cells.',
+    (XlsxWarningCode.formulaUnlexable, OfficeLocale.en) =>
+      "$count formula(s) on sheet '$sheet' could not be read fully, so a "
+          'structural edit did not update their references; they were kept '
+          'as written$cells.',
+    (XlsxWarningCode.formulaUnlexable, OfficeLocale.de) =>
+      '$count Formel(n) im Blatt „$sheet“ konnten nicht vollständig gelesen '
+          'werden, daher hat eine strukturelle Änderung ihre Bezüge nicht '
+          'angepasst; sie wurden unverändert beibehalten$cells.',
+    (XlsxWarningCode.formulaUnlexable, OfficeLocale.tr) =>
+      '“$sheet” sayfasındaki $count formül tam okunamadı; bu yüzden yapısal '
+          'bir düzenleme başvurularını güncellemedi, formüller yazıldığı '
+          'gibi korundu$cells.',
     (XlsxWarningCode.tableHeaderAdjusted, OfficeLocale.en) =>
       "$count table header cell(s) on sheet '$sheet' were given a different "
           "text, because a table's column names must be unique and not "

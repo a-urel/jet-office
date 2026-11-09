@@ -97,6 +97,7 @@ import '../worksheet_parts.dart'
         tablePartName,
         vmlDrawingPartName,
         writeHyperlink;
+import 'cell_formulas.dart';
 import 'cell_store.dart';
 import 'columns.dart';
 import 'comments_part.dart';
@@ -310,9 +311,19 @@ bool sheetHasPart(XlsxSheet sheet) => sheet._partName != null;
 /// its part; none for a sheet without a part. Throws an [XlsxReadException]
 /// when the part cannot be read.
 List<ReferenceHolder> sheetReferenceHolders(XlsxSheet sheet) {
-  if (sheet._load() == null) return const <ReferenceHolder>[];
+  final WorksheetPart? part = sheet._load();
+  if (part == null) return const <ReferenceHolder>[];
   return sheet._referenceHolders ??= <ReferenceHolder>[
-    for (final String name in sheetHolderNames) PendingReferenceHolder(name),
+    for (final String name in sheetHolderNames)
+      if (name == 'cells')
+        CellFormulaHolder(
+          sheet._host.log,
+          part.cells,
+          () => sheet.name,
+          (String cell) => sheet._warn(XlsxWarningCode.formulaUnlexable, cell),
+        )
+      else
+        PendingReferenceHolder(name),
   ];
 }
 
@@ -545,12 +556,16 @@ final class XlsxSheet
   /// place of its value and the style as above; an equal link of several
   /// cells throws there as any link on such a cell does.
   ///
-  /// A shared formula's follower may be set and leaves its group. Throws a
+  /// A shared formula's follower may be set and leaves its group; setting a
+  /// shared formula's master unshares the group, as Excel does: every other
+  /// cell of it takes its own formula, translated from the master's, in the
+  /// same change. Throws a
   /// [StateError] for a cell inside an array or data-table formula (Excel
-  /// refuses that too), for a sheet that is not a worksheet or has no part,
+  /// refuses that too), for a shared master whose formula cannot be read,
+  /// for a sheet that is not a worksheet or has no part,
   /// and for an [XlsxCell] or a link when the styles part is not a
   /// SpreadsheetML `styleSheet` and for a link on a cell a link of several
-  /// cells covers, an [UnsupportedError] for a shared formula's master (W5),
+  /// cells covers,
   /// an [ArgumentError] for any other type, a rich text without runs, a
   /// nested [XlsxCell], a value the encoder refuses, an invalid link (named
   /// by its field, as the writer's) or an invalid style (named by its field;
@@ -606,6 +621,7 @@ final class XlsxSheet
       return;
     }
     final CellStore store = part.cells;
+    bool unshare = false;
     switch (groupRoleAt(store, row, column)) {
       case GroupRole.arrayOrTableMember:
         throw StateError(
@@ -613,9 +629,7 @@ final class XlsxSheet
           '${cellRef(row, column)}.',
         );
       case GroupRole.sharedMaster:
-        throw UnsupportedError(
-          'Changing a shared formula master arrives in W5.',
-        );
+        unshare = true;
       case GroupRole.sharedChild || GroupRole.none:
         break;
     }
@@ -693,6 +707,9 @@ final class XlsxSheet
     final StylesPart? styles = target == null ? null : _stylesFor();
     final ChangeLog log = _host.log;
     log.transaction(() {
+      // Excel gives every other cell of a shared group its own formula
+      // when the master is edited.
+      if (unshare) unshareSharedGroup(log, store, row, column, name);
       if (link != null && !sameLink) {
         _applyLink(part, row, column, link, linkPlan!);
       }

@@ -105,6 +105,18 @@ _expected = <(XlsxWarningCode, OfficeLocale), String>{
     OfficeLocale.tr,
   ): '“S” sayfasındaki 1 tablo başlık hücresine farklı bir metin yazıldı, çünkü bir tablonun sütun adları benzersiz olmalı ve boş olamaz (A1).',
   (
+    XlsxWarningCode.formulaUnlexable,
+    OfficeLocale.en,
+  ): "1 formula(s) on sheet 'S' could not be read fully, so a structural edit did not update their references; they were kept as written (A1).",
+  (
+    XlsxWarningCode.formulaUnlexable,
+    OfficeLocale.de,
+  ): '1 Formel(n) im Blatt „S“ konnten nicht vollständig gelesen werden, daher hat eine strukturelle Änderung ihre Bezüge nicht angepasst; sie wurden unverändert beibehalten (A1).',
+  (
+    XlsxWarningCode.formulaUnlexable,
+    OfficeLocale.tr,
+  ): '“S” sayfasındaki 1 formül tam okunamadı; bu yüzden yapısal bir düzenleme başvurularını güncellemedi, formüller yazıldığı gibi korundu (A1).',
+  (
     XlsxWarningCode.sheetPartMissing,
     OfficeLocale.en,
   ): "Sheet 'S' is listed in the workbook but its part is missing; it reads as empty.",
@@ -467,14 +479,14 @@ void main() {
     );
   });
 
-  test('all 99 messages are worded exactly as specified', () {
+  test('all 102 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, OfficeLocale)> keys =
         <(XlsxWarningCode, OfficeLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final OfficeLocale locale in OfficeLocale.values)
               (code, locale),
         ];
-    expect(keys, hasLength(99));
+    expect(keys, hasLength(102));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, OfficeLocale) key in keys) {
       final XlsxWarning w =
