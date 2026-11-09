@@ -147,6 +147,7 @@ final class _Tokens {
   _Token? _pending;
   bool _done = false;
   bool _sawElement = false;
+  bool _afterStart = false;
 
   _Token next() {
     final _Token? p = _pending;
@@ -194,7 +195,11 @@ final class _Tokens {
   }
 
   _Token _flush(StringBuffer? text, bool allSpace, _Token then) {
-    if (text == null || allSpace) {
+    // Whitespace is significant only as the whole content of a leaf element
+    // (`<t> </t>`); between elements it is ignored (ruling R2).
+    final bool leaf = _afterStart && then.kind == _Kind.end;
+    _afterStart = then.kind == _Kind.start;
+    if (text == null || (allSpace && !leaf)) {
       return then;
     }
     _pending = then;

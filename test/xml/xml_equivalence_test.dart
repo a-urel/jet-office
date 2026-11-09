@@ -63,7 +63,29 @@ void main() {
 
   test('differs on leaf text exactly', () {
     expect(_diff('<a><v> a</v></a>', '<a><v>a</v></a>'), contains('/a/v'));
-    expect(_diff('<a><v> </v></a>', '<a><v/></a>'), isNull);
+  });
+
+  test('whitespace that is the whole content of a leaf is significant', () {
+    expect(_diff('<a><t> </t></a>', '<a><t/></a>'), contains('/a/t'));
+    expect(_diff('<a><t> </t></a>', '<a><t>  </t></a>'), contains('/a/t'));
+    expect(_diff('<a><t> </t></a>', '<a><t> </t></a>'), isNull);
+    expect(_diff('<a><t>\n</t></a>', '<a><t/></a>'), isNotNull);
+  });
+
+  test('whitespace between elements is ignored', () {
+    expect(_diff('<a>\r\n  <b/>\r\n  <c/>\r\n</a>', '<a><b/><c/></a>'), isNull);
+    expect(_diff('<a> <b/> </a>', '<a><b/></a>'), isNull);
+  });
+
+  test('text against a child element differs', () {
+    expect(_diff('<a>x</a>', '<a><b/></a>'), isNotNull);
+    expect(_diff('<a><b/></a>', '<a>x</a>'), isNotNull);
+  });
+
+  test('content after the root differs', () {
+    expect(_diff('<a/>', '<a/><b/>'), isNotNull);
+    expect(_diff('<a/><b/>', '<a/>'), isNotNull);
+    expect(_diff('<a/>', '<a/>x'), isNotNull);
   });
 
   test('differs on namespace URI with the same prefix', () {
