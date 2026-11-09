@@ -22,6 +22,20 @@ file.
 `flutter test --update-goldens --tags golden` and look at every image: no text
 overlaps, the chart border shows, no value axis line, lines with round caps.
 
+## Fuzzing
+
+`test/measurer_fuzz_test.dart` runs the core's layout fuzz (seeds 1 to 4, 100
+cases each) with `FlutterTextMeasurer` in the default font, on the VM and in
+Chrome; `test/measurer_fuzz_roboto_test.dart` runs the same cases in Roboto
+(VM only). Besides the core's check, each text's rectangle must be its
+painter's size within 0.01, and painting must throw nothing. The generator is
+`test/support/chart_fuzz.dart`, a copy of the core's
+`test/layout/support/chart_fuzz.dart` (Flutter's browser tests compile only
+files under `test/`); `test/fuzz_copy_test.dart` fails when the two differ, so
+copy it again, with its provenance comment, after the core's changes. A failure
+is a layout or measurer defect: pin it as a unit test in the owning test file
+with the input minimized, then fix it.
+
 ## The quality gate
 
 Run from this package's folder, `packages/jet_charts_flutter`, except the first

@@ -9,9 +9,10 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_flutter/jet_charts_flutter.dart';
 
 /// `ChartTheme.office` with every text style's family set to `Roboto`.
-final ChartTheme robotoOfficeTheme = _roboto(ChartTheme.office);
+final ChartTheme robotoOfficeTheme = robotoTheme(ChartTheme.office);
 
-ChartTheme _roboto(ChartTheme theme) => theme.copyWith(
+/// [theme] with every text style's family set to `Roboto`.
+ChartTheme robotoTheme(ChartTheme theme) => theme.copyWith(
   axisLabels: theme.axisLabels.copyWith(fontFamily: 'Roboto'),
   titleText: theme.titleText.copyWith(fontFamily: 'Roboto'),
   legendText: theme.legendText.copyWith(fontFamily: 'Roboto'),
