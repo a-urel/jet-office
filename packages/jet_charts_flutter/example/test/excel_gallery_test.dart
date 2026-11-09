@@ -30,6 +30,20 @@ void main() {
   String? val(XmlNode node, String name) =>
       all(node, name).firstOrNull?.getAttribute('val');
 
+  bool sparkline(GalleryEntry e) => e.chart.kind == ChartKind.sparkline;
+
+  /// The 1-based indexes of the entries that get a chart part.
+  final List<int> charted = <int>[
+    for (int i = 1; i <= entries.length; i++)
+      if (!sparkline(entries[i - 1])) i,
+  ];
+
+  int indexOf(String name) =>
+      entries.indexWhere((GalleryEntry e) => e.name == name) + 1;
+
+  XmlDocument chartOf(String name) =>
+      xml('xl/charts/chart${indexOf(name)}.xml');
+
   test('every part is well-formed XML', () {
     for (final ArchiveFile file in archive.files) {
       if (!file.isFile) continue;
@@ -41,7 +55,8 @@ void main() {
     }
   });
 
-  test('one sheet and one chart part per entry, named by the entry', () {
+  test('one sheet per entry, named by the entry, and one chart part per '
+      'entry but a sparkline', () {
     final XmlDocument workbook = xml('xl/workbook.xml');
     final List<String> names = <String>[
       for (final XmlElement sheet in all(workbook, 'sheet'))
@@ -53,8 +68,13 @@ void main() {
     ]);
     for (int i = 1; i <= entries.length; i++) {
       expect(archive.findFile('xl/worksheets/sheet$i.xml'), isNotNull);
-      expect(archive.findFile('xl/charts/chart$i.xml'), isNotNull);
+      expect(
+        archive.findFile('xl/charts/chart$i.xml'),
+        sparkline(entries[i - 1]) ? isNull : isNotNull,
+        reason: entries[i - 1].name,
+      );
     }
+    expect(charted, hasLength(entries.length - 2));
     expect(
       archive.findFile('xl/charts/chart${entries.length + 1}.xml'),
       isNull,
@@ -62,7 +82,7 @@ void main() {
   });
 
   test('each chart is anchored at 360 by 216 points', () {
-    for (int i = 1; i <= entries.length; i++) {
+    for (final int i in charted) {
       final XmlElement ext = all(
         xml('xl/drawings/drawing$i.xml'),
         'xdr:ext',
@@ -74,7 +94,7 @@ void main() {
 
   test('each chart has its entry\'s kind, grouping, title, legend and '
       'labels', () {
-    for (int i = 1; i <= entries.length; i++) {
+    for (final int i in charted) {
       final GalleryEntry entry = entries[i - 1];
       final Chart chart = entry.chart;
       final XmlDocument doc = xml('xl/charts/chart$i.xml');
@@ -88,7 +108,15 @@ void main() {
           );
           expect(val(doc, 'c:grouping'), chart.grouping.name, reason: reason);
         case ChartKind.line:
-          expect(all(doc, 'c:lineChart'), hasLength(1), reason: reason);
+          // One line group per value axis.
+          final bool secondary = chart.series.any(
+            (ChartSeries s) => s.axis == ChartAxisBinding.secondary,
+          );
+          expect(
+            all(doc, 'c:lineChart'),
+            hasLength(secondary ? 2 : 1),
+            reason: reason,
+          );
           expect(val(doc, 'c:grouping'), switch (chart.grouping) {
             ChartGrouping.clustered => 'standard',
             ChartGrouping.stacked => 'stacked',
@@ -97,12 +125,23 @@ void main() {
         case ChartKind.area:
           expect(all(doc, 'c:areaChart'), hasLength(1), reason: reason);
           expect(val(doc, 'c:grouping'), chart.grouping.name, reason: reason);
+        case ChartKind.pie:
+          expect(all(doc, 'c:pieChart'), hasLength(1), reason: reason);
+        case ChartKind.donut:
+          expect(all(doc, 'c:doughnutChart'), hasLength(1), reason: reason);
+        case ChartKind.scatter:
+          expect(all(doc, 'c:scatterChart'), hasLength(1), reason: reason);
+        case ChartKind.combination:
+          expect(all(doc, 'c:barChart'), hasLength(1), reason: reason);
+          expect(all(doc, 'c:lineChart'), hasLength(1), reason: reason);
         default:
           fail('$reason: unexpected kind ${chart.kind}');
       }
       final String title = <String>[
-        for (final XmlElement t in all(doc, 'c:title'))
-          for (final XmlElement r in all(t, 'a:t')) r.innerText,
+        // The chart's own title, not an axis title.
+        for (final XmlElement t in all(doc, 'c:chart').single.childElements)
+          if (t.name.qualified == 'c:title')
+            for (final XmlElement r in all(t, 'a:t')) r.innerText,
       ].join();
       expect(title, entry.excelTitle, reason: reason);
       expect(
@@ -123,10 +162,23 @@ void main() {
       final XmlElement? labels = all(doc, 'c:dLbls').firstOrNull;
       expect(
         labels == null ? '0' : val(labels, 'c:showVal'),
-        chart.dataLabels.visible ? '1' : '0',
+        chart.dataLabels.visible && chart.dataLabels.showValue ? '1' : '0',
         reason: reason,
       );
-      expect(all(doc, 'a:srgbClr'), isEmpty, reason: '$reason: own colours');
+      expect(
+        labels == null ? '0' : val(labels, 'c:showPercent'),
+        chart.dataLabels.visible && chart.dataLabels.showPercent ? '1' : '0',
+        reason: reason,
+      );
+      // Only a point colour the chart itself sets is written as an RGB.
+      final int ownColours = <ChartColor?>[
+        for (final ChartSeries series in chart.series) ...series.pointColors,
+      ].nonNulls.length;
+      expect(
+        all(doc, 'a:srgbClr'),
+        hasLength(ownColours),
+        reason: '$reason: own colours',
+      );
       expect(all(doc, 'c:manualLayout'), isEmpty, reason: '$reason: layout');
       for (final XmlElement latin in all(doc, 'a:latin')) {
         expect(
@@ -139,7 +191,7 @@ void main() {
   });
 
   test('series refer to their sheet\'s cells and cache the values', () {
-    for (int i = 1; i <= entries.length; i++) {
+    for (final int i in charted) {
       final GalleryEntry entry = entries[i - 1];
       final XmlDocument doc = xml('xl/charts/chart$i.xml');
       final List<XmlElement> sers = all(doc, 'c:ser').toList();
@@ -156,7 +208,8 @@ void main() {
           "'${entry.name}'!\$A\$2:\$A\$$last",
           "'${entry.name}'!\$$column\$2:\$$column\$$last",
         ], reason: entry.name);
-        final XmlElement cache = all(sers[s], 'c:numCache').single;
+        // A scatter series caches its x values first, its values last.
+        final XmlElement cache = all(sers[s], 'c:numCache').last;
         final List<double?> cached = List<double?>.filled(
           series.values.values.length,
           null,
@@ -180,7 +233,7 @@ void main() {
   // outside an axis, so the legend and data labels take rot="0", as Excel
   // writes them.
   test('only axis labels take the automatic text angle', () {
-    for (int i = 1; i <= entries.length; i++) {
+    for (final int i in charted) {
       final XmlDocument doc = xml('xl/charts/chart$i.xml');
       for (final String owner in <String>['c:legend', 'c:dLbls']) {
         for (final XmlElement e in all(doc, owner)) {
@@ -247,10 +300,10 @@ void main() {
     expect(excelLineChartStyleXml, owner('xl/charts/style2.xml'));
     const String office = 'http://schemas.microsoft.com/office/2011/';
     final String types = part('[Content_Types].xml');
-    for (int i = 1; i <= entries.length; i++) {
+    for (final int i in charted) {
       expect(part('xl/charts/colors$i.xml'), excelChartColorsXml);
       // A line chart has the style of Excel's default line chart (332);
-      // the owner's file has no bar or area sample, so those keep 201.
+      // the owner's file has no sample of the other kinds, so they keep 201.
       expect(
         part('xl/charts/style$i.xml'),
         entries[i - 1].chart.kind == ChartKind.line
@@ -290,7 +343,9 @@ void main() {
     final int index =
         entries.indexWhere((GalleryEntry e) => e.name == 'turkish_amounts') + 1;
     final XmlDocument styles = xml('xl/styles.xml');
-    final XmlElement numFmt = all(styles, 'numFmt').single;
+    final XmlElement numFmt = all(styles, 'numFmt').firstWhere(
+      (XmlElement e) => e.getAttribute('formatCode') == turkishAmountFormat,
+    );
     expect(numFmt.getAttribute('formatCode'), turkishAmountFormat);
     final String id = numFmt.getAttribute('numFmtId')!;
     final List<XmlElement> xfs = all(
@@ -314,6 +369,148 @@ void main() {
     ).single;
     expect(axisFormat.getAttribute('formatCode'), turkishAmountFormat);
     expect(axisFormat.getAttribute('sourceLinked'), '1');
+  });
+
+  test('a pie varies its colours, starts at 0 degrees and names each '
+      "slice's accent", () {
+    final String text = part('xl/charts/chart${indexOf('pie_basic')}.xml');
+    expect(text, contains('<c:pieChart>'));
+    expect(text, contains('<c:varyColors val="1"/>'));
+    final XmlDocument doc = XmlDocument.parse(text);
+    expect(val(doc, 'c:firstSliceAng'), '0');
+    expect(all(doc, 'c:catAx'), isEmpty);
+    expect(all(doc, 'c:valAx'), isEmpty);
+    final List<XmlElement> points = all(doc, 'c:dPt').toList();
+    expect(points, hasLength(4));
+    for (int p = 0; p < 4; p++) {
+      expect(val(points[p], 'c:idx'), '$p');
+      expect(
+        all(points[p], 'a:schemeClr').first.getAttribute('val'),
+        'accent${p + 1}',
+      );
+    }
+    expect(val(doc, 'c:dLblPos'), 'bestFit');
+    expect(val(doc, 'c:showLeaderLines'), '1');
+  });
+
+  test('a donut has a hole of the chart\'s size and no label position', () {
+    expect(val(chartOf('donut_center'), 'c:holeSize'), '55');
+    expect(val(chartOf('donut_two_series'), 'c:holeSize'), '75');
+    for (final String name in <String>['donut_center', 'donut_two_series']) {
+      final XmlDocument doc = chartOf(name);
+      expect(val(doc, 'c:varyColors'), '1', reason: name);
+      expect(val(doc, 'c:firstSliceAng'), '0', reason: name);
+      expect(all(doc, 'c:dLblPos'), isEmpty, reason: name);
+    }
+    expect(all(chartOf('donut_two_series'), 'c:ser'), hasLength(2));
+    // The slice donut_center colours itself.
+    final XmlElement third = all(chartOf('donut_center'), 'c:dPt').elementAt(2);
+    expect(all(third, 'a:srgbClr').single.getAttribute('val'), 'C0392B');
+  });
+
+  test('a scatter chart has markers only and two value axes', () {
+    for (final String name in <String>['scatter_basic', 'scatter_dates']) {
+      final XmlDocument doc = chartOf(name);
+      expect(val(doc, 'c:scatterStyle'), 'lineMarker', reason: name);
+      expect(all(doc, 'c:valAx'), hasLength(2), reason: name);
+      expect(all(doc, 'c:catAx'), isEmpty, reason: name);
+      for (final XmlElement ser in all(doc, 'c:ser')) {
+        final XmlElement ln = all(ser.getElement('c:spPr')!, 'a:ln').single;
+        expect(ln.getElement('a:noFill'), isNotNull, reason: name);
+        expect(all(ser, 'c:xVal'), hasLength(1), reason: name);
+        expect(all(ser, 'c:yVal'), hasLength(1), reason: name);
+      }
+      // Gridlines on the vertical axis only.
+      final List<XmlElement> axes = all(doc, 'c:valAx').toList();
+      expect(val(axes[0], 'c:axPos'), 'b', reason: name);
+      expect(all(axes[0], 'c:majorGridlines'), isEmpty, reason: name);
+      expect(all(axes[1], 'c:majorGridlines'), hasLength(1), reason: name);
+    }
+    final XmlElement xAxis = all(chartOf('scatter_dates'), 'c:valAx').first;
+    expect(xAxis.getElement('c:numFmt')!.getAttribute('formatCode'), 'd mmm');
+  });
+
+  test('the x values of scatter_dates are date serials in their format', () {
+    final int index = indexOf('scatter_dates');
+    final XmlDocument sheet = xml('xl/worksheets/sheet$index.xml');
+    final XmlElement a2 = all(
+      sheet,
+      'c',
+    ).firstWhere((XmlElement c) => c.getAttribute('r') == 'A2');
+    expect(a2.getAttribute('t'), isNull);
+    expect(all(a2, 'v').single.innerText, '46023');
+    final XmlDocument styles = xml('xl/styles.xml');
+    final XmlElement numFmt = all(
+      styles,
+      'numFmt',
+    ).firstWhere((XmlElement e) => e.getAttribute('formatCode') == 'd mmm');
+    final List<XmlElement> xfs = all(
+      all(styles, 'cellXfs').single,
+      'xf',
+    ).toList();
+    expect(
+      xfs[int.parse(a2.getAttribute('s')!)].getAttribute('numFmtId'),
+      numFmt.getAttribute('numFmtId'),
+    );
+  });
+
+  test('a series on the secondary axis gets a value axis on the right that '
+      'crosses at the maximum, and a deleted category axis', () {
+    for (final String name in <String>['combo_column_line', 'line_secondary']) {
+      final XmlDocument doc = chartOf(name);
+      final List<XmlElement> values = all(doc, 'c:valAx').toList();
+      expect(values, hasLength(2), reason: name);
+      expect(val(values[1], 'c:axPos'), 'r', reason: name);
+      expect(val(values[1], 'c:crosses'), 'max', reason: name);
+      expect(all(values[1], 'c:majorGridlines'), isEmpty, reason: name);
+      final List<XmlElement> categories = all(doc, 'c:catAx').toList();
+      expect(categories, hasLength(2), reason: name);
+      expect(val(categories[0], 'c:delete'), '0', reason: name);
+      expect(val(categories[1], 'c:delete'), '1', reason: name);
+      expect(
+        val(categories[1], 'c:crossAx'),
+        val(values[1], 'c:axId'),
+        reason: name,
+      );
+    }
+    final XmlElement secondary = all(chartOf('line_secondary'), 'c:valAx').last;
+    expect(
+      all(secondary.getElement('c:title')!, 'a:t').single.innerText,
+      'Units',
+    );
+    expect(all(chartOf('line_secondary'), 'c:lineChart'), hasLength(2));
+    // A combination with every series on the primary axis has one.
+    final XmlDocument plan = chartOf('combo_area_column_line');
+    expect(all(plan, 'c:valAx'), hasLength(1));
+    expect(all(plan, 'c:areaChart'), hasLength(1));
+  });
+
+  test('the smooth series of line_smooth is smooth, the other is not', () {
+    final List<XmlElement> sers = all(chartOf('line_smooth'), 'c:ser').toList();
+    expect(
+      part('xl/charts/chart${indexOf('line_smooth')}.xml'),
+      contains('<c:smooth val="1"/>'),
+    );
+    expect(val(sers[0], 'c:smooth'), '1');
+    expect(val(sers[1], 'c:smooth'), '0');
+  });
+
+  test('a sparkline is an Excel sparkline of its values beside them', () {
+    for (final String name in <String>['sparkline_line', 'sparkline_area']) {
+      final int index = indexOf(name);
+      final XmlDocument sheet = xml('xl/worksheets/sheet$index.xml');
+      expect(all(sheet, 'drawing'), isEmpty, reason: name);
+      final XmlElement group = all(sheet, 'x14:sparklineGroup').single;
+      expect(group.getAttribute('type'), isNull, reason: '$name: a line');
+      expect(group.getAttribute('minAxisType'), 'custom', reason: name);
+      expect(group.getAttribute('manualMin'), '0', reason: name);
+      expect(
+        all(group, 'xm:f').single.innerText,
+        "'$name'!B2:B8",
+        reason: name,
+      );
+      expect(all(group, 'xm:sqref').single.innerText, 'D2', reason: name);
+    }
   });
 
   test('the same entries give the same bytes', () {
