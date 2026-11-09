@@ -125,6 +125,8 @@ bool valueLabelsFit(
 ///
 /// Vertical, each is right-aligned `labelGap` left of the plot and centred on
 /// its tick; horizontal, each is centred under its tick, `labelGap` below.
+/// Their ids are those of [axis]'s labels: the value axis', or, for a
+/// scatter chart's horizontal value axis, `ids.categoryAxis`.
 List<TextPrimitive> valueLabelPrimitives(
   List<MeasuredLabel> labels,
   ValueScale scale,
@@ -133,6 +135,7 @@ List<TextPrimitive> valueLabelPrimitives(
   required bool horizontal,
   required double labelGap,
   int stride = 1,
+  String axis = ids.valueAxis,
 }) {
   return <TextPrimitive>[
     for (int i = 0; i < labels.length && i < scale.ticks.length; i += stride)
@@ -144,6 +147,7 @@ List<TextPrimitive> valueLabelPrimitives(
         style,
         horizontal: horizontal,
         labelGap: labelGap,
+        axis: axis,
       ),
   ];
 }
@@ -156,18 +160,14 @@ TextPrimitive _valueLabel(
   ChartTextStyle style, {
   required bool horizontal,
   required double labelGap,
+  required String axis,
 }) {
   final double w = label.size.width;
   final double h = label.size.height;
   final ChartRect rect = horizontal
       ? ChartRect(at - w / 2, plot.bottom + labelGap, w, h)
       : ChartRect(plot.left - labelGap - w, at - h / 2, w, h);
-  return TextPrimitive(
-    ids.axisLabelId(ids.valueAxis, index),
-    label.text,
-    rect,
-    style,
-  );
+  return TextPrimitive(ids.axisLabelId(axis, index), label.text, rect, style);
 }
 
 /// The position of category [index] of [categories] along a category axis of
@@ -867,18 +867,21 @@ List<TextPrimitive> placeCategoryLabels(
   return placed;
 }
 
-/// A grid line at each tick of [scale] across [plot].
+/// A grid line at each tick of [scale] across [plot], with the ids of
+/// [axis]'s grid lines: the value axis', or, for a scatter chart's horizontal
+/// value axis, `ids.categoryAxis`.
 List<PathPrimitive> valueGridLines(
   ValueScale scale,
   ChartRect plot, {
   required bool horizontal,
   required ChartColor color,
   required double width,
+  String axis = ids.valueAxis,
 }) {
   return <PathPrimitive>[
     for (int i = 0; i < scale.ticks.length; i++)
       _line(
-        ids.gridId(ids.valueAxis, i),
+        ids.gridId(axis, i),
         valuePosition(scale.ticks[i], scale, plot, horizontal: horizontal),
         plot,
         across: horizontal,
@@ -1021,16 +1024,28 @@ List<PathPrimitive> categoryGridLines(
 }
 
 /// The value axis' line along the plot's left edge (vertical) or bottom edge
-/// (horizontal).
+/// (horizontal); with a [crossScale], the scale of the other axis when it is
+/// a value axis too (a scatter chart), at that scale's [crossingValue]
+/// instead.
 PathPrimitive valueAxisLine(
   ChartRect plot, {
   required bool horizontal,
   required ChartColor color,
   required double width,
+  ValueScale? crossScale,
 }) {
   return _line(
     ids.axisLineId(ids.valueAxis),
-    horizontal ? plot.bottom : plot.left,
+    crossScale != null
+        ? valuePosition(
+            crossingValue(crossScale),
+            crossScale,
+            plot,
+            horizontal: !horizontal,
+          )
+        : horizontal
+        ? plot.bottom
+        : plot.left,
     plot,
     across: !horizontal,
     color: color,

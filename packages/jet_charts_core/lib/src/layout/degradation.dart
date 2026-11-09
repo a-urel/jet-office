@@ -83,7 +83,9 @@ final class FrameShown {
       title = (chart.title?.text ?? '').isNotEmpty,
       valueTitle = (chart.valueAxis.title ?? '').isNotEmpty,
       categoryTitle = (chart.categoryAxis.title ?? '').isNotEmpty,
-      categoryLabels = chart.categoryAxis.visible && resolved.categoryCount > 0,
+      categoryLabels =
+          chart.categoryAxis.visible &&
+          (chart.kind == ChartKind.scatter || resolved.categoryCount > 0),
       valueLabels = chart.valueAxis.visible;
 
   /// Whether the data labels are drawn.

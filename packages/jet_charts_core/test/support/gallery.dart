@@ -306,6 +306,46 @@ List<GalleryChart> galleryCharts() => <GalleryChart>[
     size: const ChartSize(120, 40),
   ),
   GalleryChart(
+    'scatter_basic',
+    Chart(
+      kind: ChartKind.scatter,
+      title: const ChartTitle(text: 'Price and volume'),
+      series: <ChartSeries>[
+        _series(
+          'North',
+          <Object>[1, 2, 3.5, 5, 7],
+          <double?>[12, 18, 9, 15, 21],
+        ),
+        _series(
+          'South',
+          <Object>[1.5, 3, 4, 6, 8],
+          <double?>[8, 11, 14, 10, 6],
+        ),
+      ],
+    ),
+  ),
+  GalleryChart(
+    'scatter_dates',
+    Chart(
+      kind: ChartKind.scatter,
+      title: const ChartTitle(text: 'Orders by day'),
+      series: <ChartSeries>[
+        _series(
+          'Orders',
+          <Object>[
+            DateTime(2026, 1, 1),
+            DateTime(2026, 1, 4),
+            DateTime(2026, 1, 9),
+            DateTime(2026, 1, 15),
+            DateTime(2026, 1, 22),
+          ],
+          <double?>[4, 7, 5, 9, 6],
+        ),
+      ],
+      categoryAxis: const ChartAxis(formatCode: 'd mmm'),
+    ),
+  ),
+  GalleryChart(
     'tile',
     _column(
       title: null,

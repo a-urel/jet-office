@@ -1,0 +1,43 @@
+rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
+text title 112.80,8.00 134.40x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Price and volume"
+rect legend 136.00,221.20 88.00x10.80 fill=- stroke=- width=1.00
+rect legend/0/symbol 136.00,223.10 7.00x7.00 fill=156082 stroke=- width=1.00
+text legend/0/text 147.00,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "North"
+rect legend/1/symbol 186.00,223.10 7.00x7.00 fill=E97132 stroke=- width=1.00
+text legend/1/text 197.00,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "South"
+rect plot 22.80,36.20 329.20x164.20 fill=- stroke=- width=1.00
+path grid/value/0 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/1 22.80,167.56 352.00,167.56 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/2 22.80,134.72 352.00,134.72 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/3 22.80,101.88 352.00,101.88 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/4 22.80,69.04 352.00,69.04 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/5 22.80,36.20 352.00,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+clip plot/clip 22.80,36.20 329.20x164.20
+clip plot/markers 19.92,33.33 334.95x169.95
+  arc series/0/marker/0 centre=59.38,121.58 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/1 centre=95.96,82.18 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/2 centre=150.82,141.29 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/3 centre=205.69,101.88 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/4 centre=278.84,62.47 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/1/marker/0 centre=77.67,147.86 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+  arc series/1/marker/1 centre=132.53,128.15 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+  arc series/1/marker/2 centre=169.11,108.45 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+  arc series/1/marker/3 centre=242.27,134.72 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+  arc series/1/marker/4 centre=315.42,160.99 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+path axis/category/line 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+text axis/value/label/0 13.40,195.00 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/value/label/1 13.40,162.16 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"
+text axis/value/label/2 8.00,129.32 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
+text axis/value/label/3 8.00,96.48 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "15"
+text axis/value/label/4 8.00,63.64 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "20"
+text axis/value/label/5 8.00,30.80 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "25"
+text axis/category/label/0 20.10,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/category/label/1 56.68,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "1"
+text axis/category/label/2 93.26,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"
+text axis/category/label/3 129.83,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "3"
+text axis/category/label/4 166.41,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "4"
+text axis/category/label/5 202.99,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"
+text axis/category/label/6 239.57,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "6"
+text axis/category/label/7 276.14,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "7"
+text axis/category/label/8 312.72,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8"
+text axis/category/label/9 349.30,204.40 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "9"

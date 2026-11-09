@@ -49,6 +49,68 @@ ChartSeries _series(String name, List<Object> categories, List<double?> v) =>
     );
 
 void main() {
+  group('scatter', () {
+    final Chart chart = Chart(
+      kind: ChartKind.scatter,
+      series: <ChartSeries>[
+        ChartSeries(
+          name: ChartData<String>(values: <String?>['Points']),
+          categories: ChartData<Object>(values: <Object?>[1, 2, 4]),
+          values: ChartData<double>(values: <double?>[10, 20, 15]),
+        ),
+      ],
+      dataLabels: const ChartDataLabels(visible: true),
+    );
+    final ChartLayout layout = _layout(chart);
+
+    test('a marker gives its series, X and Y', () {
+      final ArcPrimitive marker = _byId<ArcPrimitive>(
+        layout,
+        'series/0/marker/2',
+      );
+      final ChartTooltip tip = chartTooltipAt(
+        chart,
+        layout,
+        marker.center,
+        theme: _office,
+      )!;
+      expect(tip.title, 'Points');
+      expect(tip.rows, const <ChartTooltipRow>[
+        ChartTooltipRow(label: 'X', value: '4'),
+        ChartTooltipRow(label: 'Y', value: '15'),
+      ]);
+      expect(tip.sourceId, 'series/0/marker/2');
+    });
+
+    test('a data label gives its point', () {
+      final ChartTooltip tip = chartTooltipFor(
+        chart,
+        layout,
+        'label/0/1',
+        theme: _office,
+      )!;
+      expect(tip.title, 'Points');
+      expect(tip.rows.map((ChartTooltipRow r) => r.value), <String>['2', '20']);
+    });
+
+    test('the plot and an x tick label have no tooltip', () {
+      final ChartRect plot = layout.plotArea!;
+      expect(
+        chartTooltipAt(
+          chart,
+          layout,
+          ChartPoint(plot.left + 1, plot.top + 1),
+          theme: _office,
+        ),
+        isNull,
+      );
+      expect(
+        chartTooltipFor(chart, layout, 'axis/category/label/0', theme: _office),
+        isNull,
+      );
+    });
+  });
+
   group('donut_center', () {
     final Chart chart = _chart('donut_center');
     final ChartLayout layout = _layout(chart);

@@ -7,6 +7,41 @@ Chart _chart(String name) =>
     galleryCharts().firstWhere((GalleryChart g) => g.name == name).chart;
 
 void main() {
+  test('a scatter gives its x values per series and its y values', () {
+    ChartSeries series(String name, List<Object?> x, List<double?> y) =>
+        ChartSeries(
+          name: ChartData<String>(values: <String?>[name]),
+          categories: ChartData<Object>(values: x),
+          values: ChartData<double>(values: y),
+        );
+    final ChartSummary summary = summarizeChart(
+      Chart(
+        kind: ChartKind.scatter,
+        series: <ChartSeries>[
+          series('A', <Object?>[1, 2.5, 4], <double?>[10, 20, 15]),
+          series('B', <Object?>['a', 'b'], <double?>[3, null]),
+        ],
+      ),
+    );
+    expect(summary.xValues, <List<String>>[
+      <String>['1', '2.5', '4'],
+      <String>['1', '2', '3'],
+    ]);
+    expect(summary.categories, <String>['1', '2.5', '4']);
+    expect(summary.values, <List<String>>[
+      <String>['10', '20', '15'],
+      <String>['3', '', ''],
+    ]);
+  });
+
+  test('other kinds have no x values', () {
+    expect(summarizeChart(_chart('column_clustered')).xValues, <List<String>>[
+      <String>[],
+      <String>[],
+      <String>[],
+    ]);
+  });
+
   test('a pie gives the share of each value', () {
     final ChartSummary summary = summarizeChart(
       Chart(

@@ -94,6 +94,10 @@ final class ChartLayout {
   ///   donut's centre text.
   /// * In a pie or donut a legend entry `legend/<i>/symbol`,
   ///   `legend/<i>/text` is category `<i>`, as its legend lists categories.
+  /// * In a scatter chart the horizontal value axis keeps the category
+  ///   axis' ids: `axis/category/label/<i>` and `grid/category/<i>` are its
+  ///   tick `<i>` from its minimum, and `series/<s>/marker/<i>` and
+  ///   `label/<s>/<i>` are point `<i>` of series `<s>`.
   ///
   /// [ChartElementId.parse] is the exact inverse of this scheme: it reads
   /// every id above into its kind, axis, series, category and index, and
@@ -106,7 +110,7 @@ final class ChartLayout {
   final ChartRect? plotArea;
 
   /// The value axis' scale, or `null` when there is no plot area or no value
-  /// axis (a pie or donut).
+  /// axis (a pie or donut); in a scatter chart, the vertical axis' scale.
   final ValueScale? valueScale;
 
   /// The texts left out because they did not fit, grouped in the
@@ -129,7 +133,8 @@ final class ChartLayout {
   /// grid lines are drawn, except in an area chart, whose categories sit on
   /// the grid lines (on tick marks) and whose bands reach halfway to each
   /// neighbour, so the first and last are half as wide. Empty when there is
-  /// no plot area or no category, and in a pie or donut. A backend uses them
+  /// no plot area or no category, and in a pie, a donut or a scatter chart,
+  /// whose horizontal axis is a value axis. A backend uses them
   /// to find the category under a point.
   final List<ChartRect> categoryBands;
 
@@ -164,6 +169,8 @@ final class ChartLayout {
 ///
 /// Column, bar, line and area charts get a frame: background, title, legend,
 /// axis titles, tick and category labels, grid lines, axis lines and the plot.
+/// A scatter chart gets the same frame with a second value axis in place of
+/// the category axis, and a marker per point (`scatter_layout.dart`).
 /// Pie and donut charts are laid out around a centre, with their data labels
 /// inside the slices or, in a pie, outside with leader lines, and a donut's
 /// centre text (`pie_layout.dart`). A sparkline draws only its lines, on the
@@ -205,9 +212,14 @@ ChartLayout layoutChart(
     case ChartKind.bar:
     case ChartKind.line:
     case ChartKind.area:
+    case ChartKind.scatter:
+      // A scatter chart's points are not grouped: its grouping is ignored.
+      final Chart framed = chart.kind == ChartKind.scatter
+          ? chart.copyWith(grouping: ChartGrouping.clustered)
+          : chart;
       final FrameLayout frame = layoutFrame(
-        chart,
-        resolveChart(chart, theme, formatter),
+        framed,
+        resolveChart(framed, theme, formatter),
         theme: theme,
         size: size,
         measurer: measurer,
@@ -256,7 +268,6 @@ ChartLayout layoutChart(
         plotArea: spark.plot,
         categoryBands: spark.categoryBands,
       );
-    case ChartKind.scatter:
     case ChartKind.combination:
     case ChartKind.unsupported:
       return _placeholder(chart, theme, size, measurer);

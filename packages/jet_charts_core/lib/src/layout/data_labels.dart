@@ -81,8 +81,8 @@ List<(String, String)> dataLabelTexts(
 /// a bar that reaches the axis' maximum sits above the plot; a label inside a
 /// bar must lie wholly inside the bar's visible part, and is drawn white
 /// (`FFFFFF`) when the bar's colour has a relative luminance below 0.5, so
-/// it reads on a dark bar, else in the theme's data label colour. Line labels
-/// try above, below, right, then left of the point; an area label is centred
+/// it reads on a dark bar, else in the theme's data label colour. Line and
+/// scatter labels (a scatter chart's anchors need [xScale]) try above, below, right, then left of the point; an area label is centred
 /// on the column under its point, halfway between the point and the area's
 /// base, and moved inward, no further than needed, where that leaves the plot
 /// (the first and last points of an area sit on the plot's edges); both must
@@ -101,6 +101,7 @@ DataLabelPlacement placeDataLabels({
   required ChartRect area,
   required ValueScale scale,
   required List<ChartPrimitive> existing,
+  ValueScale? xScale,
 }) {
   final List<(String, String)> texts = dataLabelTexts(
     chart,
@@ -120,6 +121,7 @@ DataLabelPlacement placeDataLabels({
       theme,
       plot,
       scale,
+      xScale: xScale,
     ))
       ids.dataLabelId(a.series, a.category): a,
   };
@@ -379,6 +381,7 @@ List<_Candidate> _candidates(
               inside(ChartRect(cx - w / 2, r.top + gap, w, h)),
             ];
     case ChartKind.line:
+    case ChartKind.scatter:
       final ChartPoint p = anchor.point!;
       return <_Candidate>[
         inPlot(ChartRect(p.x - w / 2, p.y - markerGap - h, w, h)),

@@ -11,6 +11,7 @@ import '../layout/marks.dart' show shapedValues;
 import '../layout/pie_layout.dart' show sliceColor, sliceShares;
 import '../layout/primitives.dart';
 import '../layout/resolve.dart';
+import '../layout/scatter_layout.dart' show scatterXText, scatterXValues;
 import '../model/chart.dart';
 import '../model/chart_kind.dart';
 import '../model/equality.dart';
@@ -94,6 +95,12 @@ final class ChartTooltip {
 ///   category as the title and one row of the slice's colour, the series
 ///   name, and the value followed by its share of the series' whole, in
 ///   `0%`, in brackets;
+/// * in a scatter chart, a marker or its data label: the series name as the
+///   title and two rows without a colour, `X` with the point's x in the
+///   horizontal axis' format (the category axis' code, else a short date for
+///   dates, else `General`) and `Y` with its value; a scatter chart has no
+///   category bands, so nothing else of its plot, and none of its
+///   horizontal tick labels, has a tooltip;
 /// * a line, an area, a grid line or the plot (`plot/clip`, `plot/markers`,
 ///   `plot`), or, in a sparkline, which draws no plot rectangle, the
 ///   background: the
@@ -208,6 +215,15 @@ final class _Source {
   late final ResolvedChart resolved = resolveChart(chart, _theme, formatter);
   late final List<List<double?>> shares = shapedValues(resolved);
 
+  /// Whether the chart is a scatter chart.
+  late final bool scatter = chart.kind == ChartKind.scatter;
+
+  /// A scatter chart's x values (`scatterXValues`).
+  late final List<List<double>> xValues = scatterXValues(
+    chart,
+    resolved.categoryCount,
+  );
+
   /// Whether the chart is a pie or a donut.
   late final bool polar =
       chart.kind == ChartKind.pie || chart.kind == ChartKind.donut;
@@ -230,12 +246,16 @@ final class _Source {
       case ChartElementKind.dataLabel:
         return polar
             ? _slice(id, element.series!, element.category!)
+            : scatter
+            ? _scatterPoint(id, element.series!, element.category!)
             : _point(id, element.series!, element.category!);
       case ChartElementKind.bar:
       case ChartElementKind.marker:
-        return _point(id, element.series!, element.category!);
+        return scatter
+            ? _scatterPoint(id, element.series!, element.category!)
+            : _point(id, element.series!, element.category!);
       case ChartElementKind.axisLabel:
-        return element.axis == ChartAxisRole.category
+        return element.axis == ChartAxisRole.category && !scatter
             ? _category(id, element.category!)
             : null;
       case ChartElementKind.line:
@@ -309,6 +329,32 @@ final class _Source {
           color: sliceColor(chart.series[series], category, _theme),
           label: resolved.seriesNames[series],
           value: text,
+        ),
+      ],
+      sourceId: id,
+    );
+  }
+
+  /// The tooltip of point [index] of [series] in a scatter chart: the
+  /// series name as the title, and the rows `X` and `Y`.
+  ChartTooltip? _scatterPoint(String id, int series, int index) {
+    if (series >= resolved.values.length || index >= resolved.categoryCount) {
+      return null;
+    }
+    final double? y = resolved.values[series][index];
+    if (y == null) {
+      return null;
+    }
+    return ChartTooltip(
+      title: resolved.seriesNames[series],
+      rows: <ChartTooltipRow>[
+        ChartTooltipRow(
+          label: 'X',
+          value: scatterXText(xValues[series][index], chart, formatter),
+        ),
+        ChartTooltipRow(
+          label: 'Y',
+          value: formatSeriesValue(chart, series, y, formatter),
         ),
       ],
       sourceId: id,

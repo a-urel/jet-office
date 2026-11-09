@@ -21,6 +21,7 @@ import 'curve.dart';
 import 'geometry.dart';
 import 'primitives.dart';
 import 'resolve.dart';
+import 'scatter_layout.dart';
 
 /// The marks of [chart] on [plot], in paint order.
 ///
@@ -31,16 +32,18 @@ import 'resolve.dart';
 /// one closed path per series (with the theme's `areaOpacity`) and, when the
 /// theme's `areaLine` is on, an open path along each area's top, after all the
 /// areas. A series with `smooth` set draws its line runs as curves
-/// (`smoothPolyline`); an area never does. Any other kind draws none. The
-/// frame puts the markers in a clip of their own, after the others, which go
-/// in the plot's clip.
+/// (`smoothPolyline`); an area never does. A scatter chart, given the
+/// horizontal axis' [xScale], draws a marker per point (`scatterMarks`). Any
+/// other kind draws none. The frame puts the markers in a clip of their own,
+/// after the others, which go in the plot's clip.
 List<ChartPrimitive> layoutMarks(
   Chart chart,
   ResolvedChart resolved,
   ChartTheme theme,
   ChartRect plot,
-  ValueScale scale,
-) {
+  ValueScale scale, {
+  ValueScale? xScale,
+}) {
   final MarkAxes axes = MarkAxes(
     plot,
     scale,
@@ -55,6 +58,8 @@ List<ChartPrimitive> layoutMarks(
       return _lines(chart, resolved, values, theme, axes);
     case ChartKind.area:
       return _areas(resolved, values, theme, axes);
+    case ChartKind.scatter when xScale != null:
+      return scatterMarks(chart, resolved, theme, plot, scale, xScale);
     default:
       return const <ChartPrimitive>[];
   }
@@ -478,14 +483,16 @@ final class MarkAnchor {
 /// The anchors of every value that has a mark, in series then category order.
 ///
 /// They are the geometry [layoutMarks] draws, so a label sits where its mark
-/// is. Kinds without marks have none.
+/// is; a scatter chart needs the horizontal axis' [xScale] for them. Kinds
+/// without marks have none.
 List<MarkAnchor> layoutAnchors(
   Chart chart,
   ResolvedChart resolved,
   ChartTheme theme,
   ChartRect plot,
-  ValueScale scale,
-) {
+  ValueScale scale, {
+  ValueScale? xScale,
+}) {
   final MarkAxes axes = MarkAxes(
     plot,
     scale,
@@ -521,6 +528,8 @@ List<MarkAnchor> layoutAnchors(
                 base: columns[s][c].base,
               ),
       ];
+    case ChartKind.scatter when xScale != null:
+      return scatterAnchors(chart, resolved, plot, scale, xScale);
     default:
       return const <MarkAnchor>[];
   }

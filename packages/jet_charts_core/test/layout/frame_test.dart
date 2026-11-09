@@ -629,10 +629,9 @@ void main() {
     expect(problems(layout), isEmpty);
   });
 
-  test('scatter, combination and unsupported draw a placeholder', () {
+  test('combination and unsupported draw a placeholder', () {
     const ChartSize size = ChartSize(300, 200);
     for (final ChartKind kind in <ChartKind>[
-      ChartKind.scatter,
       ChartKind.combination,
       ChartKind.unsupported,
     ]) {
