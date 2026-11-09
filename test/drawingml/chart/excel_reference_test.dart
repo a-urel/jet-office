@@ -141,6 +141,13 @@ const List<_Expect> _expectations = <_Expect>[
 /// The chart part names of [parts] in the order of their anchors: each
 /// worksheet's drawing, its `c:chart` frames in document order, each
 /// resolved through the drawing's relationships.
+///
+/// It assumes that the anchors' document order is the order the owner made
+/// the charts in (`TALIMATLAR.md`: "Sırayı koru", keep the order), which is
+/// what Excel writes, and that the sheet and the drawing name their parts
+/// with the prefixes Excel writes (`r:id` on `drawing`, `c:chart` with
+/// `r:id`). A relationship target is resolved relative to the part's folder,
+/// or from the package root when it starts with `/` (`/xl/charts/...`).
 List<String> _chartsInAnchorOrder(Map<String, Uint8List> parts) {
   String text(String name) => utf8.decode(parts[name]!);
   String? target(String relsName, String id, String base) {
@@ -155,7 +162,9 @@ List<String> _chartsInAnchorOrder(Map<String, Uint8List> parts) {
           r'\bTarget="([^"]*)"',
         ).firstMatch(tag)?.group(1);
         if (t == null) return null;
-        return Uri.parse('$base/$t').normalizePath().path;
+        return t.startsWith('/')
+            ? Uri.parse(t).normalizePath().path.substring(1)
+            : Uri.parse('$base/$t').normalizePath().path;
       }
     }
     return null;
@@ -234,6 +243,33 @@ void main() {
 
     test('the anchor order finds both parts through the drawing', () {
       expect(_chartsInAnchorOrder(parts), <String>[
+        'xl/charts/chart1.xml',
+        'xl/charts/chart2.xml',
+      ]);
+    });
+
+    test('the anchor order resolves absolute targets too', () {
+      final Map<String, Uint8List> absolute = <String, Uint8List>{
+        for (final MapEntry<String, Uint8List> e in parts.entries)
+          e.key: e.key.endsWith('.xml.rels')
+              ? utf8.encode(
+                  utf8
+                      .decode(e.value)
+                      .replaceAll('Target="../charts/', 'Target="/xl/charts/')
+                      .replaceAll(
+                        'Target="../drawings/',
+                        'Target="/xl/drawings/',
+                      ),
+                )
+              : e.value,
+      };
+      expect(
+        absolute.values.any(
+          (Uint8List b) => utf8.decode(b).contains('Target="/xl/charts/'),
+        ),
+        isTrue,
+      );
+      expect(_chartsInAnchorOrder(absolute), <String>[
         'xl/charts/chart1.xml',
         'xl/charts/chart2.xml',
       ]);

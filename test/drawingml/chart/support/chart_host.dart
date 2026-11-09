@@ -60,8 +60,8 @@ final class _Bytes implements PartContent {
 /// [drawingChartContentType], shown by one `xdr:twoCellAnchor` graphic frame
 /// of 8 columns by 15 rows in a new `xl/drawings/drawing1.xml`. The frames
 /// form a grid of three across, starting in column A with one empty row
-/// below the sheet's `dimension`. The sheet gains `<drawing r:id="…"/>` at its schema
-/// place. The sheet must have no drawing yet.
+/// below the sheet's `dimension`. The sheet gains `<drawing r:id="…"/>` at its
+/// schema place. The sheet must have no drawing yet.
 Uint8List withCharts(Uint8List xlsx, String sheet, List<Uint8List> charts) {
   final OpcPackage package = OpcPackage.read(
     ZipReader(

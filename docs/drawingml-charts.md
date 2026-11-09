@@ -45,14 +45,22 @@ Each rule has the test that holds it.
   `test/drawingml/chart/chart_reader_test.dart` ("Excel's default charts"),
   `test/drawingml/chart/excel_charts_test.dart`.
 - **Another producer's part gives a view and no typed form, and its bytes are
-  kept.** A `dk1` where Excel writes `tx1`, an extra `c:dispUnits`, a part
-  without `c16` ids. `chart_reader_test.dart` ("parts that are not typed",
-  "variants of other producers"), `chart_part_test.dart` ("opened").
+  kept.** A `dk1` where Excel writes `tx1`, an extra `c:dispUnits`.
+  `chart_reader_test.dart` ("parts that are not typed", "variants of other
+  producers"), `chart_part_test.dart` ("opened"). A part without `c16` ids is
+  typed, with no series ids, since the writer writes such a series without
+  one (`chart_reader_test.dart`, "a part without c16 ids is read and typed,
+  with no series ids").
 - **An opened part is saved byte for byte until `replace` gives it a new typed
   form.** The bytes are held, not copied. `chart_part_test.dart`.
 - **Reading is lazy and never throws.** `chart`, `typed` and `issues` read on
   first use, once. Unreadable bytes give no chart and the issue `unreadable`.
-  `chart_part_test.dart`, `chart_reader_test.dart` (the "unreadable input" test).
+  `chart_part_test.dart`, `chart_reader_test.dart` (the "unreadable input"
+  test).
+- **The reader never throws, whatever theme it is given.** A theme the
+  writer refuses (below) gives a view and no typed form.
+  `chart_reader_test.dart` ("a theme the writer refuses gives a view only,
+  never a throw").
 - **A kind outside the model (a pie, a combination) or a third axis is
   `unsupportedKind`:** a view with the kind `unsupported`, no typed form.
   `chart_reader_test.dart`.
@@ -69,7 +77,10 @@ Each rule has the test that holds it.
   ("colours").
 - **`lumMod` and `lumOff` are fractions on a `ChartColor`.** Other colour
   modifiers read as no colour. `color_test.dart`, `jet_charts_core`'s
-  `test/theme/chart_color_test.dart`.
+  `test/theme/chart_color_test.dart`. A series colour the reader cannot
+  express (an `alpha` or another modifier, a `lumMod` above 100000) therefore
+  reads as `null`, and the view draws the theme's palette colour for that
+  series in its place; the part's bytes keep the real colour.
 
 ### Equality
 
@@ -117,7 +128,16 @@ Each rule has the test that holds it.
   cannot express (a kind outside the J2 set, a secondary axis, a series of
   another kind) is an `ArgumentError`; so are axis ids that are not distinct
   unsigned 32-bit numbers and series ids that are not braced GUIDs.
-  `chart_writer_test.dart` ("ArgumentError", "fix round 1").
+  `chart_writer_test.dart` ("ArgumentError", "ids").
+- **A theme value the part cannot hold is an `ArgumentError` naming the
+  field:** a line width (`lineWidth`, the spacing's grid and axis line
+  widths) that is not finite or outside 0 to 1584 points (`ST_LineWidth`), a
+  `markerSize` that is not finite or negative (it is then kept within 2 and
+  72), a text size that is not finite or outside 1 to 4000 points
+  (`ST_TextFontSize`, `sz` 100 to 400000). `chart_writer_test.dart`
+  ("ArgumentError").
+- **The gap width and overlap are clamped** to 0 to 500 and -100 to 100,
+  rounded; a `NaN` gap width is 0. `chart_writer_test.dart` ("clamping").
 - **Degenerate data writes a part and reports.** No series, a series without
   values, only `null`, `NaN` and infinite values: a well-formed part, issues
   `nonFiniteValue`, never a throw. `chart_writer_test.dart` ("Review Focus").
@@ -131,7 +151,7 @@ Each rule has the test that holds it.
   `c:formatCode` the writer writes `_x005F_` for the underscore of a
   look-alike, and the reader decodes it, as Excel does. `a:t` is not escaped
   (Excel's behaviour there is unknown). `chart_values_test.dart`,
-  `chart_writer_test.dart` ("fix round 1"), `chart_reader_test.dart`.
+  `chart_writer_test.dart` ("xstring escaping"), `chart_reader_test.dart`.
 - **Dates are Excel serials** (the 1900 system, with its phantom 29 February
   1900), written in `m/d/yyyy` unless the category axis has a format.
   `chart_values_test.dart`, `chart_writer_test.dart` ("data").
@@ -141,8 +161,8 @@ Each rule has the test that holds it.
   ("round trip").
 - **The vertical axis title is turned** (`rot="-5400000"`), the chart title
   and the legend are flat. This follows Excel's known habit and is unconfirmed
-  until the owner's reference workbook. `chart_writer_test.dart` ("fix round
-  1").
+  until the owner's reference workbook. `chart_writer_test.dart` ("vertical
+  axis titles").
 - **The legend and data labels use shapes known from Excel** (a legend
   `bodyPr` with `rot="0"`; data labels inset with `spAutoFit`), also awaiting
   the reference workbook. `text_test.dart`.
@@ -154,12 +174,21 @@ Each rule has the test that holds it.
   `tool/ooxml_validate` in CI; `chart_fixtures_test.dart` checks they write
   without an issue, read back typed and equal, and that the drawing holds one
   graphic frame per chart.
-- **The tool ignores two SDK errors in every run:** on Excel's own
-  `c16r3:dataDisplayOptions16` extension of `c:chart/c:extLst`, matched at its
-  path and content. The SDK has a schema gap there; Excel writes it. With
-  `--libreoffice-resave` it also ignores the two errors on LibreOffice's chart
-  style parts. Both are in `AGENTS.md`, "Validation". A real defect in those
-  spots is hidden by the narrow match; keep the match narrow.
+- **The tool ignores two SDK errors in every run:** `Sch_UndeclaredAttribute`
+  and `Sch_InvalidElementContentExpectingComplex` on Excel's own
+  `c16r3:dataDisplayOptions16` extension, and only on the `c:ext` at
+  `/c:chartSpace[1]/c:chart[1]/c:extLst[1]/c:ext[1]` of a chart part whose
+  only attribute is `uri="{56B9EC1D-385E-4148-901F-78D8002777C0}"`, whose only
+  child is one `c16r3:dataDisplayOptions16`, whose only child is one
+  `c16r3:dispNaAsBlank`, whose only attribute is an unqualified `val` of `1`,
+  `0`, `true` or `false` (Excel writes `1`). The SDK 3.5.1 has a schema gap
+  there; Excel writes it. Another attribute, a second or no `dispNaAsBlank`,
+  or another value still fails: `c1_corrupt.xlsx` (`write_fixtures.dart
+  --corrupt`, two `dispNaAsBlank`) is the negative control CI requires the
+  tool to reject. With `--libreoffice-resave` it also ignores the two errors
+  on LibreOffice's chart style parts. Both are in `AGENTS.md`, "Validation". A
+  real defect in those spots is hidden by the narrow match; keep the match
+  narrow.
 
 ## What C1 types, and why
 
@@ -182,6 +211,15 @@ chart that is only a view keeps its bytes until replaced.
 - The file theme's `ThemeColors` passed to the reader.
 - The `chart_defaults` theme items still unconfirmed (`docs/excel-checks.md` of
   `jet_charts_core`).
+- A cap on a chart part's size before it is read. `readDrawingChartSpace`
+  builds a node per element, so it holds several times the part's size in
+  memory, and `ReadLimits` allows ZIP entries of 256 MiB: C2 must refuse a
+  chart part above a size of its own choosing before reading it (or read it
+  streaming).
+- `DrawingChart.typed` after `created` or `replace` is the space as given,
+  which can differ from what reopening the bytes gives (a UTC date reads back
+  local, a category axis minimum the writer drops, scrubbed characters, `NaN`
+  scaling). A host that needs what the part holds reopens it.
 
 ## Open for C3
 

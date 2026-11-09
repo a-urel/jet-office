@@ -124,17 +124,21 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   what its headers and footers show. No fixture ends in a table, because
   LibreOffice's text export of one never ends (see below), or in a section
   break, as the model adds no block after one.
-  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx` and
-  `d1_corrupt.docx`, to prove every check still fails on a bad file. The
+  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, `c1_corrupt.xlsx`
+  and `d1_corrupt.docx`, to prove every check still fails on a bad file. The
   `validate` job's negative-control step writes `m1_corrupt.xlsx` to
-  `build/corrupt` and requires every check to reject it, except the model
-  round trip (`tool/round_trip_model.dart`), which passes on it: the model
-  keeps the file's stray content faithfully, so the Open XML SDK must reject
-  the model's output instead, and the round trip must reject a truncated
-  copy. A second step does the same for `d1_corrupt.docx` in
-  `build/corrupt-docx` (a `w:r` directly under `w:body`, and "first" spelled
-  "firzt"), with `tool/compare_text.dart`, `tool/compare_resaved_docx.dart`
-  and `tool/round_trip_docx.dart` in place of their XLSX counterparts.
+  `build/corrupt` and requires every check to reject it, except the model round
+  trip (`tool/round_trip_model.dart`), which passes on it: the model keeps the
+  file's stray content faithfully, so the Open XML SDK must reject the model's
+  output instead, and the round trip must reject a truncated copy. The same step
+  moves `c1_corrupt.xlsx` (`c1_kinds` whose first chart's
+  `c16r3:dataDisplayOptions16` holds two `dispNaAsBlank`) to
+  `build/corrupt-chart` and requires `tool/ooxml_validate` to reject it, so the
+  validator's ignore of that extension (below) stays narrow. A second step does
+  the same for `d1_corrupt.docx` in `build/corrupt-docx` (a `w:r` directly under
+  `w:body`, and "first" spelled "firzt"), with `tool/compare_text.dart`,
+  `tool/compare_resaved_docx.dart` and `tool/round_trip_docx.dart` in place of
+  their XLSX counterparts.
 - `tool/write_fixtures.dart` imports test helpers that use `package:archive`.
   That is allowed: the archive rule covers `lib/` only.
 - `tool/ooxml_validate` validates every `.xlsx` and `.docx` with the Open XML
@@ -157,12 +161,16 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   One error pair is ignored in every run, with or without the flag: the SDK
   3.5.1 refuses the `c:chart/c:extLst` extension
   `{56B9EC1D-385E-4148-901F-78D8002777C0}` (`c16r3:dataDisplayOptions16`) that
-  Excel itself writes in every chart part
-  (the owner's `chart_defaults.xlsx` fails the same way), so the tool ignores
-  its `Sch_UndeclaredAttribute` and `Sch_InvalidElementContentExpectingComplex`
-  on that `c:ext` of a chart part, at that path, holding exactly one
-  `dataDisplayOptions16` of `dispNaAsBlank` children; other content there
-  still counts. Every other error counts, in every run.
+  Excel itself writes in every chart part (the owner's `chart_defaults.xlsx`
+  fails the same way), so the tool ignores its `Sch_UndeclaredAttribute` and
+  `Sch_InvalidElementContentExpectingComplex` only on the `c:ext` at
+  `/c:chartSpace[1]/c:chart[1]/c:extLst[1]/c:ext[1]` of a chart part whose
+  only attribute is `uri` with exactly that value, whose only child is one
+  `c16r3:dataDisplayOptions16`, whose only child is one `c16r3:dispNaAsBlank`,
+  whose only attribute is an unqualified `val` of `1`, `0`, `true` or `false`
+  (Excel writes `1`). Anything else there (another attribute, a second or no
+  `dispNaAsBlank`, another value) still counts; `c1_corrupt.xlsx` (below) is
+  its negative control. Every other error counts, in every run.
 - LibreOffice's text export of a document whose body ends in a table never
   ends: it writes the file without bound. No fixture may end in a table (the
   fixture list says so), and the CI step and the command above cap the file

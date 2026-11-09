@@ -25,8 +25,8 @@ void main() {
     expect(
       _diff(
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
-            '<x xmlns="$c" xmlns:r="urn:r">\r\n  <y a="1" b="2"/>\r\n  <!-- c -->'
-            '<z/>\r\n</x>',
+            '<x xmlns="$c" xmlns:r="urn:r">\r\n  <y a="1" b="2"/>\r\n'
+            '  <!-- c --><z/>\r\n</x>',
         '<x xmlns="$c"><y b="2" a="1" xmlns:r="urn:r"/><z/></x>',
       ),
       isNull,

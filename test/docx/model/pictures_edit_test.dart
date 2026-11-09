@@ -374,7 +374,7 @@ void main() {
       expect(_media(entries), <String>['word/media/image3.png']);
       final String main = utf8.decode(entries['word/document.xml']!);
       final String id = _values(main, 'a:blip', 'r:embed').last;
-      expect(id, isNot('￾'));
+      expect(id, isNot('\uFFFE'));
       final String rels = utf8.decode(entries['word/_rels/document.xml.rels']!);
       expect(_images(rels), contains((id, 'media/image3.png')));
     });
@@ -504,7 +504,7 @@ void main() {
           'a name with U+0001': (DocxParagraph p) =>
               p.addPicture(OfficeImage(png4x2), name: 'a\u0001'),
           'a description with U+FFFE': (DocxParagraph p) =>
-              p.addPicture(OfficeImage(png4x2), description: 'a￾'),
+              p.addPicture(OfficeImage(png4x2), description: 'a\uFFFE'),
         };
     final Map<String, Matcher> errors = <String, Matcher>{
       'a GIF': throwsArgumentError,
