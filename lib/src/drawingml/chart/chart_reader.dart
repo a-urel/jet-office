@@ -511,17 +511,20 @@ final class _ChartReader {
     );
   }
 
-  /// The group's data labels, or the first series' when the group has none.
+  /// The first series' data labels that has its own, else the group's.
+  ///
+  /// Excel writes shown labels in each series and keeps the group's flags
+  /// off (`chart_reference.xlsx`, charts 20 and 21), so a series' labels
+  /// come first.
   static ChartDataLabels _dataLabels(_Node? group, List<_Node> seriesNodes) {
-    _Node? labels = group?.child('dLbls');
-    if (labels == null) {
-      for (final _Node node in seriesNodes) {
-        labels = node.child('dLbls');
-        if (labels != null) {
-          break;
-        }
+    _Node? labels;
+    for (final _Node node in seriesNodes) {
+      labels = node.child('dLbls');
+      if (labels != null) {
+        break;
       }
     }
+    labels ??= group?.child('dLbls');
     if (labels == null) {
       return const ChartDataLabels();
     }

@@ -56,6 +56,9 @@ extension _SeriesWriting on _ChartWriter {
         _value('c:invertIfNegative', '0');
       }
     }
+    if (chart.dataLabels.visible) {
+      _writeSeriesDataLabels();
+    }
     _writeCategories(series.categories);
     w.start('c:val');
     _writeNumbers(
@@ -77,6 +80,47 @@ extension _SeriesWriting on _ChartWriter {
       w.end();
       w.end();
     }
+    w.end();
+  }
+
+  /// The series' `c:dLbls` of shown labels, as Excel writes them
+  /// (`chart_reference.xlsx`, charts 20 and 21): the format when the labels
+  /// have one, a bare shape, the data label text, `c:showVal 1` among the
+  /// flags, `c:showLeaderLines 0`, and Excel's leader lines in a `c15`
+  /// extension. No position: Excel writes none, and draws each kind's
+  /// default.
+  void _writeSeriesDataLabels() {
+    w.start('c:dLbls');
+    final String? formatCode = chart.dataLabels.formatCode;
+    if (formatCode != null) {
+      w.empty('c:numFmt', <String, String>{
+        'formatCode': _scrub(formatCode),
+        'sourceLinked': '0',
+      });
+    }
+    _noFillShape();
+    writeDrawingTextBody(
+      w,
+      theme.dataLabels,
+      mode: mode,
+      language: language,
+      use: DrawingTextUse.dataLabel,
+    );
+    _writeLabelFlags(showValue: true);
+    _value('c:showLeaderLines', '0');
+    w.start('c:extLst');
+    w.start('c:ext');
+    w.attribute('uri', _leaderLinesExtension);
+    w.attribute('xmlns:c15', _c15Namespace);
+    _value('c15:showLeaderLines', '1');
+    w.start('c15:leaderLines');
+    w.start('c:spPr');
+    _line(_leaderLineColor, _leaderLineWidth);
+    w.empty('a:effectLst');
+    w.end();
+    w.end();
+    w.end();
+    w.end();
     w.end();
   }
 

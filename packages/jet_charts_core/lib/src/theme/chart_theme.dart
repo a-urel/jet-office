@@ -1,6 +1,7 @@
 /// The look of a chart: colours, fonts, lines and spacing.
 library;
 
+import '../model/chart_kind.dart';
 import '../model/chart_series.dart';
 import '../model/equality.dart';
 import 'chart_color.dart';
@@ -32,6 +33,8 @@ final class ChartTheme {
     this.borderWidth = 0.75,
     this.valueAxisLine = true,
     this.gapWidthPercent = 219,
+    this.stackedGapWidthPercent = 150,
+    this.barGapWidthPercent = 182,
     this.lineWidth = 2.25,
     this.markerSize = 5,
     this.lineMarkers = true,
@@ -63,8 +66,11 @@ final class ChartTheme {
   /// colour, no [valueAxisLine] and the background `FFFFFF` (`bg1`), each
   /// colour bound to the file theme; also [gapWidthPercent] 219, [lineWidth]
   /// 2.25, [markerSize] 5, [lineMarkers] on, and of [spacing] the line widths,
-  /// the overlap and the tick length. Still unconfirmed: 9 pt for the legend
-  /// and data labels, and the other gaps of [spacing].
+  /// the overlap and the tick length. The owner's `chart_reference.xlsx`
+  /// (2026-11-09) verifies [stackedGapWidthPercent] 150, [barGapWidthPercent]
+  /// 182 and the spacing's `barOverlapPercent` 0, 9 pt legend and data label
+  /// text, and the data label colour `404040` (`tx1` with `lumMod` 0.75 and
+  /// `lumOff` 0.25). Still unconfirmed: the other gaps of [spacing].
   ///
   /// Its [tooltip] is this library's own look, not an Excel value.
   static final ChartTheme office = buildOfficeTheme();
@@ -114,10 +120,21 @@ final class ChartTheme {
   /// the Office theme does not; other themes draw one unless they say not to.
   final bool valueAxisLine;
 
-  /// The gap between the bars or columns of a category, as a percentage of a
-  /// bar's width. Excel's default, 219, is verified; see
-  /// `docs/excel-checks.md`.
+  /// The gap between the columns of two categories in a clustered column
+  /// chart, as a percentage of a bar's width. Excel's default, 219, is
+  /// verified; see `docs/excel-checks.md`. [gapWidthPercentOf] gives the gap
+  /// of each kind and grouping.
   final double gapWidthPercent;
+
+  /// The gap of a stacked or percent stacked column or bar chart, as
+  /// [gapWidthPercent] is for clustered columns. Excel's default, 150, is
+  /// verified (`chart_reference.xlsx`).
+  final double stackedGapWidthPercent;
+
+  /// The gap of a clustered bar chart (bars along the horizontal axis), as
+  /// [gapWidthPercent] is for clustered columns. Excel's default, 182, is
+  /// verified (`chart_reference.xlsx`).
+  final double barGapWidthPercent;
 
   /// The width of a line series, in points. Excel's default, 2.25, is
   /// verified; see `docs/excel-checks.md`.
@@ -153,6 +170,32 @@ final class ChartTheme {
 
   /// How the theme's colours are exported to a file.
   final ChartExportColors exportColors;
+
+  /// The gap width of a chart of [kind] and [grouping], as a percentage of a
+  /// bar's width: [stackedGapWidthPercent] when it is stacked or percent
+  /// stacked, [barGapWidthPercent] for a clustered bar chart, and
+  /// [gapWidthPercent] otherwise (a clustered column chart; other kinds have
+  /// no bars).
+  double gapWidthPercentOf(ChartKind kind, ChartGrouping grouping) {
+    if (grouping != ChartGrouping.clustered) {
+      return stackedGapWidthPercent;
+    }
+    return kind == ChartKind.bar ? barGapWidthPercent : gapWidthPercent;
+  }
+
+  /// The overlap of the bars of one category in a chart of [kind] and
+  /// [grouping], as a percentage of a bar's width: 100 when it is stacked or
+  /// percent stacked (the bars of a category are one stack), the spacing's
+  /// `barOverlapPercent` for a clustered bar chart, and its `overlapPercent`
+  /// otherwise.
+  double overlapPercentOf(ChartKind kind, ChartGrouping grouping) {
+    if (grouping != ChartGrouping.clustered) {
+      return 100;
+    }
+    return kind == ChartKind.bar
+        ? spacing.barOverlapPercent
+        : spacing.overlapPercent;
+  }
 
   /// The colour of the series at [index], counting from 0.
   ///
@@ -240,6 +283,8 @@ final class ChartTheme {
     double? borderWidth,
     bool? valueAxisLine,
     double? gapWidthPercent,
+    double? stackedGapWidthPercent,
+    double? barGapWidthPercent,
     double? lineWidth,
     double? markerSize,
     bool? lineMarkers,
@@ -261,6 +306,9 @@ final class ChartTheme {
       borderWidth: borderWidth ?? this.borderWidth,
       valueAxisLine: valueAxisLine ?? this.valueAxisLine,
       gapWidthPercent: gapWidthPercent ?? this.gapWidthPercent,
+      stackedGapWidthPercent:
+          stackedGapWidthPercent ?? this.stackedGapWidthPercent,
+      barGapWidthPercent: barGapWidthPercent ?? this.barGapWidthPercent,
       lineWidth: lineWidth ?? this.lineWidth,
       markerSize: markerSize ?? this.markerSize,
       lineMarkers: lineMarkers ?? this.lineMarkers,
@@ -286,6 +334,8 @@ final class ChartTheme {
         borderWidth == other.borderWidth &&
         valueAxisLine == other.valueAxisLine &&
         gapWidthPercent == other.gapWidthPercent &&
+        stackedGapWidthPercent == other.stackedGapWidthPercent &&
+        barGapWidthPercent == other.barGapWidthPercent &&
         lineWidth == other.lineWidth &&
         markerSize == other.markerSize &&
         lineMarkers == other.lineMarkers &&
@@ -295,7 +345,7 @@ final class ChartTheme {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll(<Object?>[
     listValueHash(palette),
     mapValueHash(semantic),
     axisLabels,
@@ -309,13 +359,15 @@ final class ChartTheme {
     borderWidth,
     valueAxisLine,
     gapWidthPercent,
+    stackedGapWidthPercent,
+    barGapWidthPercent,
     lineWidth,
     markerSize,
     lineMarkers,
     spacing,
     tooltip,
     exportColors,
-  );
+  ]);
 
   @override
   String toString() => 'ChartTheme(${palette.length} colours, $exportColors)';

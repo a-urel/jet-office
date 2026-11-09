@@ -8,6 +8,8 @@ const FixedWidthTextMeasurer measurer = FixedWidthTextMeasurer();
 
 final ChartTheme theme = ChartTheme.office.copyWith(
   gapWidthPercent: 100,
+  stackedGapWidthPercent: 100,
+  barGapWidthPercent: 100,
   spacing: ChartTheme.office.spacing.copyWith(overlapPercent: 0),
 );
 
@@ -133,6 +135,42 @@ void main() {
         // Series s starts s * w * (1 - o) after the half gap.
         expect(r.left, near(p.left + c * band + 1.5 * w / 2 + s * w * 0.5));
       }
+    }
+  });
+
+  test('each kind and grouping takes its own gap and overlap', () {
+    // Office: clustered column 219 and -27, clustered bar 182 and 0, stacked
+    // 150 and 100 (chart_reference.xlsx).
+    for (final (ChartKind kind, ChartGrouping grouping, double g, double o)
+        in <(ChartKind, ChartGrouping, double, double)>[
+          (ChartKind.column, ChartGrouping.clustered, 2.19, -0.27),
+          (ChartKind.bar, ChartGrouping.clustered, 1.82, 0),
+          (ChartKind.column, ChartGrouping.stacked, 1.5, 1),
+          (ChartKind.bar, ChartGrouping.percentStacked, 1.5, 1),
+        ]) {
+      final ChartLayout l = layoutChart(
+        Chart(
+          kind: kind,
+          grouping: grouping,
+          legend: const ChartLegend(visible: false),
+          series: <ChartSeries>[
+            series('S0', <double?>[1, 2, 3]),
+            series('S1', <double?>[2, 3, 4]),
+          ],
+        ),
+        theme: ChartTheme.office,
+        size: const ChartSize(400, 300),
+        measurer: measurer,
+      );
+      final ChartRect p = l.plotArea!;
+      final double length = kind == ChartKind.bar ? p.height : p.width;
+      final double w = length / 3 / (g + 2 - o);
+      final ChartRect r = bar(l, 0, 0);
+      expect(
+        kind == ChartKind.bar ? r.height : r.width,
+        near(w),
+        reason: '$kind $grouping',
+      );
     }
   });
 

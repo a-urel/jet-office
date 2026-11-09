@@ -3,14 +3,14 @@
 ///
 /// Not ported from Quds; written for jet_office.
 ///
-/// The template is Excel's own output, the two charts of the owner's
-/// `chart_defaults.xlsx`: a part written from the typed form of either is
-/// equal to it by `xmlDifference` (and byte for byte). The elements are in the
-/// schema's order, and everything the typed form does not carry is fixed as
-/// Excel writes it. What those two charts do not show (other kinds and
-/// groupings, a legend, data labels, axis titles and scaling) follows
-/// ECMA-376 and Excel's known habits until the owner's reference workbook
-/// shows it (ruling R7 of C1).
+/// The template is Excel's own output: the two charts of the owner's
+/// `chart_defaults.xlsx`, whose typed forms write parts equal to them by
+/// `xmlDifference` (and byte for byte), and the 23 of
+/// `chart_reference.xlsx` (every kind and grouping, titles, legends, axis
+/// titles, scaling, formats, data labels, a hidden axis), all but one of
+/// which read typed (`docs/drawingml-charts.md`, "Excel's reference
+/// workbook"). The elements are in the schema's order, and everything the
+/// typed form does not carry is fixed as Excel writes it.
 ///
 /// Data problems never throw: a value that is `NaN` or infinite is left out
 /// and text loses the characters XML 1.0 forbids, each reported once as a
@@ -230,6 +230,25 @@ const int _emuPerPoint = 12700;
 /// The width of a marker's outline Excel writes, in EMU (0.75 pt).
 const String _markerLineWidth = '9525';
 
+/// The `uri` of the `c:ext` that holds a `c:dLbls`' `c15:leaderLines`.
+const String _leaderLinesExtension = '{CE6537A1-D6FC-4f65-9D91-7224C49458BB}';
+
+const String _c15Namespace =
+    'http://schemas.microsoft.com/office/drawing/2012/chart';
+
+/// The colour of Excel's data label leader lines, `A6A6A6`: `tx1` with
+/// `lumMod` 0.35 and `lumOff` 0.65 (`chart_reference.xlsx`, charts 20 and
+/// 21). No theme value: the layout draws no leader lines.
+final ChartColor _leaderLineColor = ChartColor.scheme(
+  ChartSchemeColor.dark1,
+  rgb: 0xA6A6A6,
+  lumMod: 0.35,
+  lumOff: 0.65,
+);
+
+/// The width of Excel's leader lines, in points (9525 EMU).
+const double _leaderLineWidth = 0.75;
+
 /// The size of an axis title's text Excel gives it, in points.
 const double _axisTitleSize = 10;
 
@@ -357,7 +376,17 @@ final class _ChartWriter {
       _writeLegend();
     }
     _value('c:plotVisOnly', '1');
-    _value('c:dispBlanksAs', 'gap');
+    // Excel shows a blank as zero where a gap would break a stack or an
+    // area: every area chart and the stacked line charts
+    // (`chart_reference.xlsx`, charts 8 to 12).
+    _value(
+      'c:dispBlanksAs',
+      chart.kind == ChartKind.area ||
+              (chart.kind == ChartKind.line &&
+                  chart.grouping != ChartGrouping.clustered)
+          ? 'zero'
+          : 'gap',
+    );
     _value('c:showDLblsOverMax', '0');
     w.start('c:extLst');
     w.start('c:ext');
@@ -372,13 +401,18 @@ final class _ChartWriter {
   }
 
   /// A `c:title` of [text] in [style], or Excel's automatic title (no
-  /// `c:tx`) when [text] is `null`; [vertical] turns it a quarter to the
-  /// left, as Excel writes a vertical axis' title.
+  /// `c:tx`) when [text] is `null`; an [axis] title has no `spc`, and
+  /// [vertical] turns it a quarter to the left, as Excel writes a vertical
+  /// axis' title.
   void _writeTitle(
     String? text,
     ChartTextStyle style, {
+    bool axis = false,
     bool vertical = false,
   }) {
+    final DrawingTextUse use = axis
+        ? DrawingTextUse.axisTitle
+        : DrawingTextUse.title;
     w.start('c:title');
     if (text != null) {
       w.start('c:tx');
@@ -388,6 +422,7 @@ final class _ChartWriter {
         style,
         mode: mode,
         language: language,
+        use: use,
         vertical: vertical,
       );
       w.end();
@@ -399,7 +434,7 @@ final class _ChartWriter {
       style,
       mode: mode,
       language: language,
-      use: DrawingTextUse.title,
+      use: use,
       vertical: vertical,
     );
     w.end();
@@ -426,13 +461,20 @@ final class _ChartWriter {
     }
     _writeGroupDataLabels();
     if (_bars) {
-      _value('c:gapWidth', _percent(theme.gapWidthPercent, 0, 500));
       _value(
-        'c:overlap',
-        chart.grouping == ChartGrouping.clustered
-            ? _percent(theme.spacing.overlapPercent, -100, 100)
-            : '100',
+        'c:gapWidth',
+        _percent(theme.gapWidthPercentOf(chart.kind, chart.grouping), 0, 500),
       );
+      final String overlap = _percent(
+        theme.overlapPercentOf(chart.kind, chart.grouping),
+        -100,
+        100,
+      );
+      // Excel writes no overlap of 0, the schema's default (its clustered bar
+      // chart, `chart_reference.xlsx` chart 4).
+      if (overlap != '0') {
+        _value('c:overlap', overlap);
+      }
     } else if (chart.kind == ChartKind.line) {
       _value('c:marker', '1');
       _value('c:smooth', '0');
@@ -442,47 +484,24 @@ final class _ChartWriter {
     w.end();
   }
 
-  /// The group's `c:dLbls`: all flags off when the labels are hidden, as in
-  /// Excel's default charts; when they are visible, the format, a bare shape,
-  /// the data label text, the position and `showVal 1`.
-  ///
-  /// The visible form is Excel's best known habit, not yet seen in an Excel
-  /// file; the owner's reference workbook corrects it (ruling R7 of C1).
+  /// The group's `c:dLbls`: every flag off, as Excel writes it whether the
+  /// labels are shown or not; shown labels are each series' own `c:dLbls`
+  /// (`chart_reference.xlsx`, charts 20 and 21).
   void _writeGroupDataLabels() {
-    final ChartDataLabels labels = chart.dataLabels;
     w.start('c:dLbls');
-    if (labels.visible) {
-      final String? formatCode = labels.formatCode;
-      if (formatCode != null) {
-        w.empty('c:numFmt', <String, String>{
-          'formatCode': _scrub(formatCode),
-          'sourceLinked': '0',
-        });
-      }
-      _noFillShape();
-      writeDrawingTextBody(
-        w,
-        theme.dataLabels,
-        mode: mode,
-        language: language,
-        use: DrawingTextUse.dataLabel,
-      );
-      final String? position = switch (chart.kind) {
-        ChartKind.line => 'r',
-        ChartKind.area => null,
-        _ => chart.grouping == ChartGrouping.clustered ? 'outEnd' : 'ctr',
-      };
-      if (position != null) {
-        _value('c:dLblPos', position);
-      }
-    }
+    _writeLabelFlags(showValue: false);
+    w.end();
+  }
+
+  /// The six `c:show*` flags of a `c:dLbls`, all off but `c:showVal` when
+  /// [showValue].
+  void _writeLabelFlags({required bool showValue}) {
     _value('c:showLegendKey', '0');
-    _value('c:showVal', labels.visible ? '1' : '0');
+    _value('c:showVal', showValue ? '1' : '0');
     _value('c:showCatName', '0');
     _value('c:showSerName', '0');
     _value('c:showPercent', '0');
     _value('c:showBubbleSize', '0');
-    w.end();
   }
 
   void _writeCategoryAxis() {
@@ -494,12 +513,14 @@ final class _ChartWriter {
       chart.kind == ChartKind.bar ? 'l' : 'b',
       value: false,
     );
-    w.start('c:spPr');
-    w.empty('a:noFill');
-    _line(theme.axisLine, theme.spacing.axisLineWidth);
-    w.empty('a:effectLst');
-    w.end();
-    _writeAxisLabels();
+    if (axis.visible) {
+      w.start('c:spPr');
+      w.empty('a:noFill');
+      _line(theme.axisLine, theme.spacing.axisLineWidth);
+      w.empty('a:effectLst');
+      w.end();
+      _writeAxisLabels();
+    }
     _value('c:crossAx', space.ids.valueAxis.toString());
     _value('c:crosses', 'autoZero');
     _value('c:auto', '1');
@@ -518,8 +539,10 @@ final class _ChartWriter {
       chart.kind == ChartKind.bar ? 'b' : 'l',
       value: true,
     );
-    _noFillShape();
-    _writeAxisLabels();
+    if (axis.visible) {
+      _noFillShape();
+      _writeAxisLabels();
+    }
     _value('c:crossAx', space.ids.categoryAxis.toString());
     _value('c:crosses', 'autoZero');
     _value(
@@ -571,6 +594,7 @@ final class _ChartWriter {
       _writeTitle(
         title,
         theme.axisLabels.copyWith(size: _axisTitleSize),
+        axis: true,
         // The value axis is vertical except in a bar chart, where the
         // category axis is.
         vertical: value != (chart.kind == ChartKind.bar),
@@ -578,10 +602,21 @@ final class _ChartWriter {
     }
     final String? formatCode = axis.formatCode;
     w.empty('c:numFmt', <String, String>{
-      'formatCode': formatCode == null ? 'General' : _scrub(formatCode),
+      'formatCode': formatCode != null
+          ? _scrub(formatCode)
+          // A percent stacked value axis is linked to the source but shows
+          // `0%` (`chart_reference.xlsx`, charts 3, 6, 9 and 12).
+          : (value && chart.grouping == ChartGrouping.percentStacked
+                ? '0%'
+                : 'General'),
       'sourceLinked': formatCode == null ? '1' : '0',
     });
-    _value('c:majorTickMark', 'none');
+    // Excel ticks an area chart's category axis outside
+    // (`chart_reference.xlsx`, charts 10 to 12).
+    _value(
+      'c:majorTickMark',
+      !value && chart.kind == ChartKind.area ? 'out' : 'none',
+    );
     _value('c:minorTickMark', 'none');
     _value('c:tickLblPos', 'nextTo');
   }

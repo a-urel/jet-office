@@ -18,7 +18,7 @@ const int _cases = 100;
 /// descriptions and bytes' lengths, computed once on the VM. The Chrome leg
 /// compares it, which proves a seed gives the same cases in a browser. A
 /// changed `m3_*`, `m4_*` or `c1_kinds` fixture changes it.
-const int _casesDigest = 3488221;
+const int _casesDigest = 1795111468;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {

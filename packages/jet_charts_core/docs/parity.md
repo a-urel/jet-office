@@ -28,28 +28,16 @@ theme's in `excel-checks.md`.
 | Category labels | Level, then skipped at most every second (Excel's spacing never exceeded 2 in the C rows); long labels stay level, wrapped onto lines at spaces (matched in the owner's J3 gallery check, `column_long_labels`: five labels on two lines each, the value axis 0 to 160 by 20) | Placed in a band under the plot; wrapped onto at most three lines, then turned and cut by this package's own order |
 | Grid lines | Value grid on, category grid off, 0.75 pt `D9D9D9` | None |
 | Axis lines | Category axis line, 0.75 pt `D9D9D9`, no value axis line | Same in the Office theme; other themes draw a value axis line unless `valueAxisLine` is false |
-| Bars | Gap width 219, overlap -27, no outline (Excel's clustered column default) | Gap and overlap clamped to Excel's ranges; the same gap and overlap for every bar kind and grouping (see below) |
+| Bars | Gap width 219 and overlap -27 for clustered columns, 182 and 0 for clustered bars, 150 and 100 for stacked kinds; no outline | Same (`ChartTheme.gapWidthPercentOf`, `overlapPercentOf`); gap and overlap clamped to Excel's ranges |
 | Lines and markers | 2.25 pt, a circle marker of 5 pt with a 0.75 pt outline on every point (matched in the owner's J3 gallery check, `line_gap`) | Dense lines carry no markers, this library's choice; Excel's behaviour on dense lines was not checked (see below). The layout gives no cap or join; `jet_charts_flutter` draws lines and outlines with round caps and joins, and other backends choose. Markers are drawn whole on the plot's edge (their clip is the plot grown by their reach) and above every series' line; whether Excel draws a series' markers under the next series' line was not checked |
 | Areas | On tick marks (`c:crossBetween midCat`, as this library writes an area chart): the first category at the plot's left, the last at its right, a lone one in the middle; category labels centred on those positions, the category grid lines through them (matched in the owner's J3 gallery check, `area_stacked`, which found the space this package left at both ends) | The first and last labels reach past the plot's ends, within the chart; the frame shrinks the plot for them and lowers the labels clear of the lowest value tick label. A tooltip's category band reaches halfway to each neighbour |
 | Title | 14 pt `595959` Aptos Narrow | Shown only when the chart has one; no default title |
 | Legend | 9 pt text; a line series' symbol is a line with a marker (matched in the owner's J3 gallery check, `line_gap`) | Shown unless hidden, even for one series; dropped whole when a side legend does not fit; the legend line's length, 16 pt, is this library's estimate |
-| Data labels | 9 pt text; a clustered column or bar label outside its bar's end, above the plot's top when the bar nearly reaches the axis' maximum (matched in the owner's J3 gallery check, `column_data_labels`, where Excel shows 18 above its bar on an axis to 20) | Never overlap text, the legend or another mark; inside a bar only when it fits there, white on a dark bar or a dark area fill; an area label at the plot's edge moved inward; hidden when no place is left |
+| Data labels | 9 pt `404040` text; a clustered column or bar label outside its bar's end, above the plot's top when the bar nearly reaches the axis' maximum (matched in the owner's J3 gallery check, `column_data_labels`, where Excel shows 18 above its bar on an axis to 20) | Never overlap text, the legend or another mark; inside a bar only when it fits there, white on a dark bar or a dark area fill; an area label at the plot's edge moved inward; hidden when no place is left |
 | Axis titles | Shown when set | Use the axis label style |
 | Chart area | White background, 0.75 pt `D9D9D9` border | Same in the Office theme; other themes have no border unless `border` is set |
 
 ## Deliberate differences
-
-### Bars
-
-- **One gap width and overlap for every bar kind.** The core uses the
-  theme's one gap width (219) and overlap (-27) for clustered, stacked and
-  percent stacked columns and bars alike. Only the clustered column's values
-  are verified (`chart_defaults.xlsx`). Excel's insert defaults for the others
-  are believed, unconfirmed, to be a gap of 182 and no overlap for clustered
-  (horizontal) bars and a gap of 150 and an overlap of 100 for the stacked
-  kinds (the gallery workbook writes these from memory). The owner's gallery check against
-  Excel for Mac (`packages/jet_charts_flutter/example/TALIMATLAR.md`) settles
-  it; if confirmed, a gap and an overlap per kind in the theme is J4.
 
 ### Lines
 

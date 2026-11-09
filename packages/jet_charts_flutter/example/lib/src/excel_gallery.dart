@@ -498,9 +498,9 @@ String _chartXml(GalleryEntry entry) {
 }
 
 /// The gap and overlap Excel gives a new chart: 219 and -27 for clustered
-/// columns (confirmed, `chart_defaults.xlsx`), 182 and none for clustered bars,
-/// 150 and 100 for stacked ones (Excel's insert defaults, not yet confirmed
-/// from a file).
+/// columns (`chart_defaults.xlsx`), 182 and none for clustered bars, 150 and
+/// 100 for stacked ones, each confirmed by the owner's `chart_reference.xlsx`
+/// (`ChartTheme.gapWidthPercentOf` and `overlapPercentOf` hold them).
 String _gapAndOverlap(bool horizontal, bool clustered) {
   if (!clustered) return '<c:gapWidth val="150"/><c:overlap val="100"/>';
   if (horizontal) return '<c:gapWidth val="182"/>';

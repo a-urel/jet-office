@@ -26,18 +26,22 @@ enum DrawingTextUse {
   /// A chart title: `a:bodyPr rot="0"` and `spc="0"` on the run properties.
   title,
 
+  /// An axis title: as a chart title, but without `spc`, as Excel writes it
+  /// (`chart_reference.xlsx`, chart 17), and turned a quarter to the left
+  /// when its axis is vertical.
+  axisTitle,
+
   /// An axis's labels: `a:bodyPr rot="-60000000"` and no `spc`.
   axis,
 
-  /// The legend: `a:bodyPr rot="0"` and no `spc`, Excel's known legend
-  /// block. Provisional until the owner's reference workbook shows it
-  /// (ruling R7 of C1).
+  /// The legend: `a:bodyPr rot="0"` and no `spc`, as Excel writes it
+  /// (`chart_reference.xlsx`, every chart with a legend).
   legend,
 
   /// The data labels: `a:bodyPr rot="0"` with Excel's insets (`lIns` and
   /// `rIns` 38100, `tIns` and `bIns` 19050) and an `a:spAutoFit` child, and
-  /// no `spc`, Excel's known data label block. Provisional until the owner's
-  /// reference workbook shows it (ruling R7 of C1).
+  /// no `spc`, as Excel writes them (`chart_reference.xlsx`, charts 20 and
+  /// 21).
   dataLabel,
 
   /// The chart space's own block: a bare `a:bodyPr` and `a:defRPr`, which
@@ -82,15 +86,15 @@ const Map<String, String> _dataLabelBodyAttributes = <String, String>{
 /// Excel's insets and an `a:spAutoFit` child), `a:lstStyle` and an `a:p`
 /// whose `a:pPr/a:defRPr` has the size as `sz` in hundredths of a point
 /// (`(size * 100).round()`), `b` from the bold flag, Excel's fixed `i`, `u`,
-/// `strike`, `kern` and `baseline` (and `spc="0"` for a title), a
+/// `strike`, `kern` and `baseline` (and `spc="0"` for a chart title), a
 /// `a:solidFill` of the colour (`writeDrawingColor` in [mode]) and the fonts
 /// of [mode]; the paragraph ends in `a:endParaRPr lang="[language]"`. The
 /// chart space's block is the bare `a:bodyPr`, `a:lstStyle` and `a:defRPr`
 /// with that `a:endParaRPr`, and does not show [style].
 ///
-/// [vertical] turns a title's block a quarter to the left
-/// (`rot="-5400000"`), as Excel writes the title of a vertical axis; it
-/// changes no other use.
+/// [vertical] turns an axis title's block a quarter to the left
+/// (`rot="-5400000"`), as Excel writes the title of a vertical axis
+/// (`chart_reference.xlsx`, chart 17); it changes no other use.
 ///
 /// The `c:` and `a:` prefixes must be declared by the part.
 void writeDrawingTextBody(
@@ -115,6 +119,7 @@ void writeDrawingTextBody(
     return;
   }
   final bool title = use == DrawingTextUse.title;
+  final bool axisTitle = use == DrawingTextUse.axisTitle;
   if (use == DrawingTextUse.dataLabel) {
     w.start('a:bodyPr');
     for (final MapEntry<String, String> e in _dataLabelBodyAttributes.entries) {
@@ -128,7 +133,7 @@ void writeDrawingTextBody(
       w,
       rot: use == DrawingTextUse.axis
           ? '-60000000'
-          : (vertical && title ? _verticalRotation : '0'),
+          : (vertical && axisTitle ? _verticalRotation : '0'),
     );
   }
   w.start('a:p');
@@ -141,6 +146,10 @@ void writeDrawingTextBody(
 /// Writes a `c:rich` of [text] in [style]: one `a:p` per line of [text]
 /// (split at CR LF, CR and LF), as Excel writes a typed title.
 ///
+/// [use] is [DrawingTextUse.title] (the default) or
+/// [DrawingTextUse.axisTitle], whose paragraphs have no `spc`, as their
+/// `c:txPr` has none; any other use throws an [ArgumentError].
+///
 /// The block opens as a title's `c:txPr` does (`a:bodyPr rot="0"` and
 /// `a:lstStyle`), and each paragraph has the title's `a:pPr`, then a run
 /// `a:r` of `a:rPr lang="[language]"` and the line as `a:t`; an empty line
@@ -148,22 +157,27 @@ void writeDrawingTextBody(
 ///
 /// [text] must hold only characters XML 1.0 allows (`scrubXmlText`); the
 /// writer escapes markup and throws an [ArgumentError] otherwise. [vertical]
-/// turns the block a quarter to the left (`rot="-5400000"`), as Excel writes
-/// the title of a vertical axis. The `c:` and `a:` prefixes must be declared
-/// by the part.
+/// turns an axis title's block a quarter to the left (`rot="-5400000"`), as
+/// Excel writes the title of a vertical axis. The `c:` and `a:` prefixes must
+/// be declared by the part.
 void writeDrawingRichText(
   XmlWriter w,
   String text,
   ChartTextStyle style, {
   required ChartExportColors mode,
   required String language,
+  DrawingTextUse use = DrawingTextUse.title,
   bool vertical = false,
 }) {
+  if (use != DrawingTextUse.title && use != DrawingTextUse.axisTitle) {
+    throw ArgumentError.value(use, 'use', 'must be title or axisTitle');
+  }
+  final bool axisTitle = use == DrawingTextUse.axisTitle;
   w.start('c:rich');
-  _writeBodyAndList(w, rot: vertical ? _verticalRotation : '0');
+  _writeBodyAndList(w, rot: vertical && axisTitle ? _verticalRotation : '0');
   for (final String line in text.split(_lineBreak)) {
     w.start('a:p');
-    _writeParagraphProperties(w, style, mode: mode, spacing: true);
+    _writeParagraphProperties(w, style, mode: mode, spacing: !axisTitle);
     if (line.isEmpty) {
       w.empty('a:endParaRPr', <String, String>{'lang': language});
     } else {

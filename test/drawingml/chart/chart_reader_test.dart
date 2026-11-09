@@ -754,6 +754,40 @@ void main() {
       expect(read.chart!.dataLabels.visible, isFalse);
     });
 
+    String labelled(String seriesLabels, String groupLabels) => part(
+      '<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>'
+      '<c:ser><c:idx val="0"/><c:order val="0"/>$seriesLabels'
+      '<c:val><c:numLit><c:ptCount val="1"/><c:pt idx="0"><c:v>1</c:v></c:pt>'
+      '</c:numLit></c:val></c:ser>$groupLabels'
+      '<c:axId val="1"/><c:axId val="2"/></c:barChart>$axes',
+    );
+
+    group('data labels of a series and of the group', () {
+      const String shown = '<c:dLbls><c:showVal val="1"/></c:dLbls>';
+      const String off = '<c:dLbls><c:showVal val="0"/></c:dLbls>';
+      const String deleted = '<c:dLbls><c:delete val="1"/></c:dLbls>';
+
+      test('a series with showVal 0 hides what the group shows', () {
+        final DrawingChartRead read = _read(labelled(off, shown));
+        expect(read.chart!.dataLabels.visible, isFalse);
+      });
+
+      test('a series with delete 1 hides what the group shows', () {
+        final DrawingChartRead read = _read(labelled(deleted, shown));
+        expect(read.chart!.dataLabels.visible, isFalse);
+      });
+
+      test('a series with showVal 1 shows what the group hides', () {
+        final DrawingChartRead read = _read(labelled(shown, off));
+        expect(read.chart!.dataLabels.visible, isTrue);
+      });
+
+      test('a series without its own labels takes the group\'s', () {
+        expect(_read(labelled('', shown)).chart!.dataLabels.visible, isTrue);
+        expect(_read(labelled('', off)).chart!.dataLabels.visible, isFalse);
+      });
+    });
+
     test(
       'a scheme colour of the file theme equal to the derived one is null',
       () {

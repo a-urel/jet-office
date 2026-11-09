@@ -23,7 +23,8 @@ resolving it needs Flutter's SDK) before any design change.
 its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
 testing, tooltip and summary), and this package depends on it from C1.
 Milestone C1 (the DrawingML chart layer, `docs/drawingml-charts.md`) is done
-except the owner's reference workbook and Excel check (Task 10).
+(the owner's Excel check is in `docs/excel-checks.md`); every chart of the
+owner's `chart_reference.xlsx` but one reads typed.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
 own `AGENTS.md`; milestone J3 is done. This package never depends on it.
 
@@ -138,8 +139,9 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   what its headers and footers show. No fixture ends in a table, because
   LibreOffice's text export of one never ends (see below), or in a section
   break, as the model adds no block after one.
-  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, `c1_corrupt.xlsx`
-  and `d1_corrupt.docx`, to prove every check still fails on a bad file. The
+  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, `c1_corrupt.xlsx`,
+  `c1_corrupt_labels.xlsx` and `d1_corrupt.docx`, to prove every check still
+  fails on a bad file. The
   `validate` job's negative-control step writes `m1_corrupt.xlsx` to
   `build/corrupt` and requires every check to reject it, except the model round
   trip (`tool/round_trip_model.dart`), which passes on it: the model keeps the
@@ -148,7 +150,10 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   moves `c1_corrupt.xlsx` (`c1_kinds` whose first chart's
   `c16r3:dataDisplayOptions16` holds two `dispNaAsBlank`) to
   `build/corrupt-chart` and requires `tool/ooxml_validate` to reject it, so the
-  validator's ignore of that extension (below) stays narrow. A second step does
+  validator's ignore of that extension (below) stays narrow, and
+  `c1_corrupt_labels.xlsx` (`c1_options` whose line chart's first leader line
+  extension holds two `c15:showLeaderLines`) beside it, for the leader line
+  ignore. A second step does
   the same for `d1_corrupt.docx` in `build/corrupt-docx` (a `w:r` directly under
   `w:body`, and "first" spelled "firzt"), with `tool/compare_text.dart`,
   `tool/compare_resaved_docx.dart` and `tool/round_trip_docx.dart` in place of
@@ -184,7 +189,17 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   whose only attribute is an unqualified `val` of `1`, `0`, `true` or `false`
   (Excel writes `1`). Anything else there (another attribute, a second or no
   `dispNaAsBlank`, another value) still counts; `c1_corrupt.xlsx` (below) is
-  its negative control. Every other error counts, in every run.
+  its negative control. One more error is ignored in every run: the SDK
+  refuses the data label leader lines Excel writes in each series' shown
+  labels (the owner's `chart_reference.xlsx`, charts 20 and 21, fails the same
+  way), so the tool ignores `Sch_UnexpectedElementContentExpectingComplex`
+  only on a `c:ext` at `.../c:ser[n]/c:dLbls[1]/c:extLst[1]/c:ext[1]` of a
+  bar, line or area group whose only attribute is `uri`
+  `{CE6537A1-D6FC-4f65-9D91-7224C49458BB}` and whose children are exactly one
+  `c15:showLeaderLines` (only `val` of `1`, `0`, `true` or `false`) and one
+  `c15:leaderLines` holding one `c:spPr`; `c1_corrupt_labels.xlsx` (two
+  `showLeaderLines`) is its negative control. Every other error counts, in
+  every run.
 - LibreOffice's text export of a document whose body ends in a table never
   ends: it writes the file without bound. No fixture may end in a table (the
   fixture list says so), and the CI step and the command above cap the file

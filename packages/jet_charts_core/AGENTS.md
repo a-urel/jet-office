@@ -30,7 +30,7 @@ This repository is a pub workspace (decision 0013). The chart family:
 
 `jet_office` depends on this package from C1: its DrawingML layer writes and
 reads `c:chartSpace` for a `Chart` (`docs/drawingml-charts.md` at the root).
-C1 is done except the owner's reference workbook and Excel check; C2 and C3
+C1 is done; C2 and C3
 add the XLSX and DOCX hosts. `lumMod` and `lumOff` on scheme colours are in
 `ChartColor` (done in C1).
 
@@ -193,13 +193,12 @@ by hand, then fix it.
 - The owner's J3 gallery check against Excel for Mac (decision O3) is done
   and recorded (`docs/excel-checks.md`, "Milestone checks"); its differences
   are fixed, but `column_negative` (kept, `docs/parity.md`). Still
-  unconfirmed: Excel's gap width for clustered bars (182) and stacked ones
-  (150, 100), written from memory in the gallery workbook (the check saw no
-  difference there, but read no file); what Excel's colour cycle does past
-  its nine variations (series 55 on); the spacing constants in
-  `docs/excel-checks.md`. Series 7 and later follow Excel's colour cycle,
-  `colors1.xml` of `chart_defaults.xlsx` (`ChartTheme.seriesColor`); series 7
-  and 8 checked by the owner against a new chart made in Excel (2026-11-09).
+  unconfirmed: what Excel's colour cycle does past its nine variations
+  (series 55 on); the spacing constants in `docs/excel-checks.md`. Series 7
+  and later follow Excel's colour cycle, `colors1.xml` of
+  `chart_defaults.xlsx` (`ChartTheme.seriesColor`); series 7 and 8 checked by
+  the owner against a new chart made in Excel (2026-11-09). The gap and
+  overlap per bar kind are verified by the owner's `chart_reference.xlsx`.
 - Whether a sandboxed macOS app sees Aptos Narrow (Flutter side).
 - The tooltip box's spacing constants are not in `ChartTooltipStyle`, and
   `chartTooltipAt` resolves the chart again on each call (a caller that has
@@ -222,13 +221,6 @@ by hand, then fix it.
   dropped whole for one long name; near-equal huge values (relative spread
   about 1e-14) can put the data top above the axis; the "data labels first"
   degradation is nominal.
-- Bars use one gap width (219) and overlap (-27) for every kind, verified for
-  clustered columns only; Excel's insert defaults are believed (unconfirmed)
-  to be gap 182 and no overlap for clustered (horizontal) bars, gap 150 and
-  overlap 100 for stacked kinds
-  (`docs/parity.md`, "Bars"). The owner's gallery check saw no difference but
-  read no file; an Excel-saved file settles it, and a gap and overlap per
-  kind in the theme is J4 if confirmed.
 - Minor: `public_api_test` asserts the exact formatted export text.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
 

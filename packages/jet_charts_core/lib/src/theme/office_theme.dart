@@ -33,7 +33,16 @@ ChartTheme buildOfficeTheme() {
     axisLabels: style(9),
     titleText: style(14),
     legendText: style(9),
-    dataLabels: style(9),
+    dataLabels: ChartTextStyle(
+      fontFamily: 'Aptos Narrow',
+      size: 9,
+      color: ChartColor.scheme(
+        ChartSchemeColor.dark1,
+        rgb: 0x404040,
+        lumMod: 0.75,
+        lumOff: 0.25,
+      ),
+    ),
     gridLine: line,
     axisLine: line,
     background: ChartColor.scheme(ChartSchemeColor.light1, rgb: 0xFFFFFF),

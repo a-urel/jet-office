@@ -52,6 +52,26 @@
 // extension, a second or a missing dispNaAsBlank, another attribute or value,
 // still counts. tool/write_fixtures.dart --corrupt writes c1_corrupt.xlsx, a
 // chart whose extension holds two dispNaAsBlank, as the negative control.
+//
+// One more error is ignored in every run: the SDK 3.5.1 refuses the leader
+// lines Excel writes in a series' shown data labels,
+// <c:dLbls>...<c:extLst><c:ext uri="{CE6537A1-D6FC-4f65-9D91-7224C49458BB}">
+// holding <c15:showLeaderLines val="1"/><c15:leaderLines><c:spPr>...,
+// with Sch_UnexpectedElementContentExpectingComplex on the c:ext ("unexpected
+// child element ... leaderLines"). Excel's own parts get it (the owner's
+// chart_reference.xlsx, charts 20 and 21, test/fixtures/owner/charts), so it
+// is the SDK's. Only that error id is ignored, and only on a c:ext at
+// /c:chartSpace[1]/c:chart[1]/c:plotArea[1]/c:<group>[1]/c:ser[n]/c:dLbls[1]/
+// c:extLst[1]/c:ext[1] (group barChart, lineChart or areaChart) of a chart
+// part whose only attribute is uri, with exactly that value, and whose
+// children are exactly one c15:showLeaderLines (no children, only an
+// unqualified val of 1, 0, true or false) and then one c15:leaderLines with
+// no attributes and one c:spPr child. Anything else there still counts, but
+// the match checks only that c15:leaderLines holds one c:spPr, not its
+// content, so the SDK may not validate that subtree.
+// tool/write_fixtures.dart --corrupt writes c1_corrupt_labels.xlsx, a chart
+// whose leader line extension holds two c15:showLeaderLines, as the negative
+// control.
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Validation;
@@ -100,6 +120,26 @@ static bool IsExcelDataDisplayOptions(ValidationErrorInfo e) =>
     && blank.ChildElements.Count == 0
     && blank.GetAttributes() is [{ LocalName: "val", NamespaceUri: "", Value: "1" or "0" or "true" or "false" }];
 
+// Excel's data label leader lines extension, see the header comment.
+const string c15 = "http://schemas.microsoft.com/office/drawing/2012/chart";
+const string chartNamespace = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+var leaderLinesPath = new System.Text.RegularExpressions.Regex(
+    @"^/c:chartSpace\[1\]/c:chart\[1\]/c:plotArea\[1\]/c:(barChart|lineChart|areaChart)\[1\]/c:ser\[[1-9][0-9]*\]/c:dLbls\[1\]/c:extLst\[1\]/c:ext\[1\]$");
+bool IsExcelLeaderLines(ValidationErrorInfo e) =>
+    e.Id == "Sch_UnexpectedElementContentExpectingComplex"
+    && e.Part?.ContentType == chartContentType
+    && e.Path?.XPath is string path && leaderLinesPath.IsMatch(path)
+    && e.Node is { LocalName: "ext", NamespaceUri: chartNamespace } ext
+    && ext.GetAttributes() is [{ LocalName: "uri", NamespaceUri: "", Value: "{CE6537A1-D6FC-4f65-9D91-7224C49458BB}" }]
+    && ext.ChildElements.Count == 2
+    && ext.ChildElements[0] is { LocalName: "showLeaderLines", NamespaceUri: c15 } show
+    && show.ChildElements.Count == 0
+    && show.GetAttributes() is [{ LocalName: "val", NamespaceUri: "", Value: "1" or "0" or "true" or "false" }]
+    && ext.ChildElements[1] is { LocalName: "leaderLines", NamespaceUri: c15 } lines
+    && lines.GetAttributes().Count == 0
+    && lines.ChildElements.Count == 1
+    && lines.ChildElements[0] is { LocalName: "spPr", NamespaceUri: chartNamespace };
+
 string[] files = Directory.GetFiles(paths[0], "*.xlsx")
     .Concat(Directory.GetFiles(paths[0], "*.docx"))
     .Where(f => !Path.GetFileName(f).StartsWith("~$", StringComparison.Ordinal))
@@ -126,6 +166,7 @@ foreach (string file in files)
             .Validate(document)
             .Where(e => !(libreOfficeResave && (IsLibreOfficeRowOnOffTrue(e) || IsLibreOfficeChartStyle(e))))
             .Where(e => !IsExcelDataDisplayOptions(e))
+            .Where(e => !IsExcelLeaderLines(e))
             .Select(e => $"{e.ErrorType} {e.Id} in {e.Part?.Uri} at {e.Path?.XPath}: {e.Description}")
             .ToList();
     }

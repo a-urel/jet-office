@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- C1: `ChartTheme.stackedGapWidthPercent` (150), `barGapWidthPercent` (182),
+  `ChartSpacing.barOverlapPercent` (0), `ChartTheme.gapWidthPercentOf` and
+  `overlapPercentOf`: Excel's gap width and overlap per bar kind and grouping,
+  confirmed by the owner's `chart_reference.xlsx`; the layout uses them, so
+  clustered bars and stacked columns and bars are wider than before.
+- C1: the Office theme's data labels are `404040` (`tx1` with `lumMod` 0.75
+  and `lumOff` 0.25), as Excel writes them.
 - J3: the Office theme has the chart border and no value axis line
   (`ChartTheme.border`, `borderWidth`, `valueAxisLine`).
 - J3: `ChartElementId`, `ChartElementKind`, `ChartAxisRole` and

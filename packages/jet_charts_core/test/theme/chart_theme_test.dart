@@ -218,6 +218,74 @@ void main() {
     expect(base.copyWith().hashCode, base.hashCode);
   });
 
+  test("each bar kind and grouping has Excel's gap width and overlap", () {
+    // The owner's chart_reference.xlsx (Excel for Mac 16.0300): clustered
+    // column 219 and -27, clustered bar 182 and no overlap (0), every stacked
+    // and percent stacked bar or column 150 and 100.
+    final ChartTheme office = ChartTheme.office;
+    expect(office.stackedGapWidthPercent, 150);
+    expect(office.barGapWidthPercent, 182);
+    expect(office.spacing.barOverlapPercent, 0);
+    for (final (ChartKind kind, ChartGrouping grouping, double gap, double o)
+        in <(ChartKind, ChartGrouping, double, double)>[
+          (ChartKind.column, ChartGrouping.clustered, 219, -27),
+          (ChartKind.column, ChartGrouping.stacked, 150, 100),
+          (ChartKind.column, ChartGrouping.percentStacked, 150, 100),
+          (ChartKind.bar, ChartGrouping.clustered, 182, 0),
+          (ChartKind.bar, ChartGrouping.stacked, 150, 100),
+          (ChartKind.bar, ChartGrouping.percentStacked, 150, 100),
+        ]) {
+      expect(office.gapWidthPercentOf(kind, grouping), gap, reason: '$kind');
+      expect(office.overlapPercentOf(kind, grouping), o, reason: '$kind');
+    }
+    final ChartTheme changed = office.copyWith(
+      gapWidthPercent: 100,
+      stackedGapWidthPercent: 60,
+      barGapWidthPercent: 80,
+      spacing: office.spacing.copyWith(
+        overlapPercent: 10,
+        barOverlapPercent: -20,
+      ),
+    );
+    expect(
+      changed.gapWidthPercentOf(ChartKind.column, ChartGrouping.clustered),
+      100,
+    );
+    expect(changed.gapWidthPercentOf(ChartKind.bar, ChartGrouping.stacked), 60);
+    expect(
+      changed.gapWidthPercentOf(ChartKind.bar, ChartGrouping.clustered),
+      80,
+    );
+    expect(
+      changed.overlapPercentOf(ChartKind.column, ChartGrouping.clustered),
+      10,
+    );
+    expect(
+      changed.overlapPercentOf(ChartKind.bar, ChartGrouping.clustered),
+      -20,
+    );
+    expect(changed.overlapPercentOf(ChartKind.bar, ChartGrouping.stacked), 100);
+    expect(changed, isNot(office));
+    expect(office.copyWith(stackedGapWidthPercent: 1), isNot(office));
+    expect(office.copyWith(barGapWidthPercent: 1), isNot(office));
+    expect(
+      office.copyWith(stackedGapWidthPercent: 1).hashCode,
+      isNot(office.hashCode),
+    );
+  });
+
+  test("office data labels are Excel's 404040", () {
+    // chart_reference.xlsx, charts 20 and 21: `tx1` with lumMod 75000 and
+    // lumOff 25000.
+    final ChartColor color = ChartTheme.office.dataLabels.color;
+    expect(color.rgb, 0x404040);
+    expect(color.slot, ChartSchemeColor.dark1);
+    expect(color.lumMod, 0.75);
+    expect(color.lumOff, 0.25);
+    expect(ChartTheme.office.dataLabels.size, 9);
+    expect(ChartTheme.office.legendText.size, 9);
+  });
+
   test("office theme has Excel's border and no value axis line", () {
     final ChartTheme office = ChartTheme.office;
     expect(office.border!.rgb, 0xD9D9D9);
@@ -384,6 +452,10 @@ void main() {
     expect(s.copyWith(legendLineSymbol: 20).legendLineSymbol, 20);
     expect(s.copyWith(legendLineSymbol: 20), isNot(s));
     expect(s.copyWith(legendLineSymbol: 20).hashCode, isNot(s.hashCode));
+    expect(s.barOverlapPercent, 0);
+    expect(s.copyWith(barOverlapPercent: 5).barOverlapPercent, 5);
+    expect(s.copyWith(barOverlapPercent: 5), isNot(s));
+    expect(s.copyWith(barOverlapPercent: 5).hashCode, isNot(s.hashCode));
     expect(s.copyWith(), s);
     expect(s.copyWith(tickLength: 4).tickLength, 4);
     expect(s.copyWith(tickLength: 4), isNot(s));
@@ -421,6 +493,8 @@ void main() {
     expect(s.copyWith(overlapPercent: -150).overlapPercent, -150);
     for (final double bad in <double>[double.nan, double.infinity]) {
       expect(() => s.copyWith(overlapPercent: bad), throwsArgumentError);
+      expect(() => s.copyWith(barOverlapPercent: bad), throwsArgumentError);
     }
+    expect(s.copyWith(barOverlapPercent: -150).barOverlapPercent, -150);
   });
 }
