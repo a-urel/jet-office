@@ -84,10 +84,10 @@ extension _SeriesWriting on _ChartWriter {
     }
     w.start('c:tx');
     if (reference == null) {
-      _element('c:v', _scrub(value!));
+      _element('c:v', _xstring(value!));
     } else {
       w.start('c:strRef');
-      _element('c:f', _scrub(reference));
+      _element('c:f', _xstring(reference));
       w.start('c:strCache');
       _value('c:ptCount', '1');
       if (value != null) {
@@ -159,7 +159,7 @@ extension _SeriesWriting on _ChartWriter {
   void _writeTexts(List<Object?> values, String? reference) {
     if (reference != null) {
       w.start('c:strRef');
-      _element('c:f', _scrub(reference));
+      _element('c:f', _xstring(reference));
       w.start('c:strCache');
     } else {
       w.start('c:strLit');
@@ -180,7 +180,7 @@ extension _SeriesWriting on _ChartWriter {
   void _writeTextPoint(int index, String text) {
     w.start('c:pt');
     w.attribute('idx', index.toString());
-    _element('c:v', _scrub(text));
+    _element('c:v', _xstring(text));
     w.end();
   }
 
@@ -196,12 +196,12 @@ extension _SeriesWriting on _ChartWriter {
   ) {
     if (reference != null) {
       w.start('c:numRef');
-      _element('c:f', _scrub(reference));
+      _element('c:f', _xstring(reference));
       w.start('c:numCache');
     } else {
       w.start('c:numLit');
     }
-    _element('c:formatCode', formatCode);
+    _element('c:formatCode', drawingEscapeXstring(formatCode));
     _value('c:ptCount', values.length.toString());
     for (int i = 0; i < values.length; i++) {
       final T? v = values[i];

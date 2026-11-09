@@ -720,18 +720,25 @@ void main() {
             ChartKind.column,
             series: <ChartSeries>[_excelSeries(), _excelSeries()],
           ),
-          ids: const DrawingChartIds(series: <String>['{A}']),
+          ids: const DrawingChartIds(
+            series: <String>['{00000000-0000-0000-0000-00000000000A}'],
+          ),
         ),
         _office,
       );
       final String xml = _xml(written);
       expect(_count(xml, '<c16:uniqueId '), 1);
-      expect(xml, contains('<c16:uniqueId val="{A}"/>'));
+      expect(
+        xml,
+        contains(
+          '<c16:uniqueId val="{00000000-0000-0000-0000-00000000000A}"/>',
+        ),
+      );
       expect(xml, contains('<c:axId val="500000001"/>'));
       expect(xml, contains('<c:axId val="500000002"/>'));
     });
 
-    test('10,000 points write in linear time', () {
+    test('writes 10,000 points', () {
       ChartSeries long(int n) => ChartSeries(
         name: ChartData<String>(values: const <String?>[]),
         categories: ChartData<Object>(
@@ -747,6 +754,176 @@ void main() {
       final String xml = _xml(written);
       _expectWellFormed(xml);
       expect(_count(xml, '<c:pt '), 20000);
+    });
+  });
+
+  group('fix round 1', () {
+    test('gap width and overlap are clamped to Excel ranges', () {
+      ChartTheme theme(double gap, double overlap) => _office.copyWith(
+        gapWidthPercent: gap,
+        spacing: _office.spacing.copyWith(overlapPercent: overlap),
+      );
+      String xml(ChartTheme t) =>
+          _xml(_write(_chart(ChartKind.column), theme: t));
+      final String high = xml(theme(600, 150));
+      expect(high, contains('<c:gapWidth val="500"/>'));
+      expect(high, contains('<c:overlap val="100"/>'));
+      final String low = xml(theme(-5, -150.4));
+      expect(low, contains('<c:gapWidth val="0"/>'));
+      expect(low, contains('<c:overlap val="-100"/>'));
+      final String fraction = xml(theme(150.6, -27.4));
+      expect(fraction, contains('<c:gapWidth val="151"/>'));
+      expect(fraction, contains('<c:overlap val="-27"/>'));
+      expect(xml(theme(double.nan, 0)), contains('<c:gapWidth val="0"/>'));
+    });
+
+    String axisTitleBodies(ChartKind kind, {required bool value}) {
+      final String xml = _xml(
+        _write(
+          _chart(
+            kind,
+            categoryAxis: const ChartAxis(title: 'Ay'),
+            valueAxis: const ChartAxis(title: 'Tutar'),
+          ),
+        ),
+      );
+      _expectWellFormed(xml);
+      return RegExp(
+        value ? '<c:valAx>.*</c:valAx>' : '<c:catAx>.*</c:catAx>',
+      ).firstMatch(xml)![0]!;
+    }
+
+    test('the vertical axis title is turned as Excel does', () {
+      for (final ChartKind kind in <ChartKind>[
+        ChartKind.column,
+        ChartKind.line,
+        ChartKind.area,
+        ChartKind.bar,
+      ]) {
+        final bool barChart = kind == ChartKind.bar;
+        final String vertical = axisTitleBodies(kind, value: !barChart);
+        final String horizontal = axisTitleBodies(kind, value: barChart);
+        final String title = RegExp(
+          '<c:title>.*?</c:title>',
+        ).firstMatch(vertical)![0]!;
+        expect(
+          _count(
+            title,
+            '<a:bodyPr rot="-5400000" spcFirstLastPara="1" '
+            'vertOverflow="ellipsis" vert="horz" ',
+          ),
+          2,
+          reason: '${kind.name}: c:rich and c:txPr',
+        );
+        final String flat = RegExp(
+          '<c:title>.*?</c:title>',
+        ).firstMatch(horizontal)![0]!;
+        expect(_count(flat, '<a:bodyPr rot="0" '), 2, reason: kind.name);
+        expect(flat, isNot(contains('-5400000')));
+      }
+    });
+
+    test('the chart title stays flat', () {
+      final String xml = _xml(
+        _write(_chart(ChartKind.column, title: const ChartTitle(text: 'T'))),
+      );
+      expect(xml, isNot(contains('-5400000')));
+    });
+
+    test('axis ids must be unsigned 32-bit and distinct', () {
+      for (final DrawingChartIds ids in <DrawingChartIds>[
+        const DrawingChartIds(categoryAxis: -1),
+        const DrawingChartIds(valueAxis: 4294967296),
+        const DrawingChartIds(categoryAxis: 7, valueAxis: 7),
+      ]) {
+        expect(
+          () => writeDrawingChartSpace(
+            DrawingChartSpace(chart: _chart(ChartKind.column), ids: ids),
+            _office,
+          ),
+          throwsArgumentError,
+          reason: '$ids',
+        );
+      }
+      expect(
+        writeDrawingChartSpace(
+          DrawingChartSpace(
+            chart: _chart(ChartKind.column),
+            ids: const DrawingChartIds(categoryAxis: 0, valueAxis: 4294967295),
+          ),
+          _office,
+        ).issues,
+        isEmpty,
+      );
+    });
+
+    test('series unique ids must be braced GUIDs', () {
+      for (final String id in <String>[
+        '00000000-8918-7940-9A01-4B67489FEBC8',
+        '{00000000-8918-7940-9A01-4B67489FEBC}',
+        '{G0000000-8918-7940-9A01-4B67489FEBC8}',
+        '{00000000-8918-7940-9A01-4B67489FEBC8}x',
+        '',
+      ]) {
+        expect(
+          () => writeDrawingChartSpace(
+            DrawingChartSpace(
+              chart: _chart(ChartKind.column),
+              ids: DrawingChartIds(series: <String>[id]),
+            ),
+            _office,
+          ),
+          throwsArgumentError,
+          reason: id,
+        );
+      }
+      // An id for a series the chart lacks is still checked.
+      expect(
+        () => writeDrawingChartSpace(
+          DrawingChartSpace(
+            chart: _chart(ChartKind.column),
+            ids: const DrawingChartIds(
+              series: <String>['{00000000-8918-7940-9a01-4b67489febc8}', 'x'],
+            ),
+          ),
+          _office,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('Xstring look-alikes are escaped in c:v, c:f and c:formatCode, not '
+        'in a:t', () {
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.column,
+            title: const ChartTitle(text: 'T_x0041_'),
+            series: <ChartSeries>[
+              ChartSeries(
+                name: ChartData<String>(
+                  values: const <String?>['n_x0041_'],
+                  reference: r"'_x0042_'!$B$1",
+                ),
+                categories: ChartData<Object>(
+                  values: const <Object?>['_x0043_'],
+                ),
+                values: ChartData<double>(
+                  values: const <double?>[1],
+                  reference: r"'_x0042_'!$B$2",
+                ),
+                formatCode: '0_x0044_',
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(xml, contains('<c:v>n_x005F_x0041_</c:v>'));
+      expect(xml, contains(r"<c:f>'_x005F_x0042_'!$B$1</c:f>"));
+      expect(xml, contains(r"<c:f>'_x005F_x0042_'!$B$2</c:f>"));
+      expect(xml, contains('<c:v>_x005F_x0043_</c:v>'));
+      expect(xml, contains('<c:formatCode>0_x005F_x0044_</c:formatCode>'));
+      expect(xml, contains('<a:t>T_x0041_</a:t>'));
     });
   });
 

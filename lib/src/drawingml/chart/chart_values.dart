@@ -13,6 +13,7 @@
 /// only, never `xlsx` or `docx` (decisions 0014 and 0015).
 library;
 
+import '../../xml/xml_escape.dart';
 import '../../xml/xml_number.dart';
 
 /// The text of [v] in a chart part: the shortest text that reads back as
@@ -69,7 +70,9 @@ double drawingSerialOf(DateTime d) {
 /// The date of [serial] in Excel's 1900 date system, the inverse of
 /// [drawingSerialOf], as a local [DateTime] of those wall-clock fields.
 ///
-/// The fraction is the time of day, rounded to the millisecond. Serial 59 is
+/// The fraction is the time of day, rounded to the millisecond (a time that
+/// rounds to midnight is the next day), and the result is built from its
+/// fields. Serial 59 is
 /// 1900-02-28 and 61 is 1900-03-01; Excel's phantom 29 February 1900 (60, and
 /// any time on it) reads as 1900-03-01, the day a [DateTime] makes of that
 /// date. Throws an [ArgumentError] when [serial] is not finite or beyond
@@ -78,13 +81,45 @@ DateTime drawingDateOf(double serial) {
   if (!serial.isFinite || serial.abs() > _maxSerial) {
     throw ArgumentError.value(serial, 'serial', 'is not a date serial');
   }
-  final int whole = serial.floor();
-  final int ms = ((serial - whole) * _msPerDay).round();
+  int whole = serial.floor();
+  int ms = ((serial - whole) * _msPerDay).round();
+  if (ms >= _msPerDay) {
+    // A time that rounds up to midnight is the next day.
+    whole += 1;
+    ms -= _msPerDay;
+  }
   if (whole == _phantomDay) {
-    return DateTime(1900, 3, 1);
+    whole = _firstMarch1900;
   }
   final DateTime day = _epoch.add(
     Duration(days: whole < _phantomDay ? whole + 1 : whole),
   );
-  return DateTime(day.year, day.month, day.day, 0, 0, 0, ms);
+  // Every field given, so a day of a daylight saving change cannot move the
+  // hour as adding milliseconds to midnight could.
+  return DateTime(
+    day.year,
+    day.month,
+    day.day,
+    ms ~/ 3600000,
+    ms ~/ 60000 % 60,
+    ms ~/ 1000 % 60,
+    ms % 1000,
+  );
 }
+
+/// [text] protected from ST_Xstring decoding, for the text of a chart part
+/// that Excel decodes: a `c:v` of a series name or a text category, a `c:f`
+/// and a `c:formatCode`.
+///
+/// Excel reads `_xHHHH_` (four hexadecimal digits) in such text as the
+/// character U+HHHH, so every `_` that starts one is written `_x005F_`, the
+/// escape of `_`: `_x0041_` is written `_x005F_x0041_`, as the cell writer
+/// writes cell text. The text of a typed title (`a:t`) is not ST_Xstring and
+/// is not escaped. Returns [text] itself when it holds no `_x`.
+String drawingEscapeXstring(String text) => escapeXstring(text);
+
+/// The inverse of [drawingEscapeXstring], for a reader: every `_xHHHH_` in
+/// [text] read as U+HHHH, left to right once, so `_x005F_x0041_` gives
+/// `_x0041_`; two escapes that spell a surrogate pair join into one
+/// character, and a lone surrogate escape is kept as written.
+String drawingUnescapeXstring(String text) => decodeXstring(text);

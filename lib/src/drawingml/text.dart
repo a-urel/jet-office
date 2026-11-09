@@ -56,6 +56,10 @@ const Map<String, String> _bodyAttributes = <String, String>{
   'anchorCtr': '1',
 };
 
+/// The `rot` of a vertical axis' title, turned a quarter to the left, as
+/// Excel writes it (with `vert="horz"`).
+const String _verticalRotation = '-5400000';
+
 /// The attributes of a data label's `a:bodyPr`, in Excel's order.
 const Map<String, String> _dataLabelBodyAttributes = <String, String>{
   'rot': '0',
@@ -84,6 +88,10 @@ const Map<String, String> _dataLabelBodyAttributes = <String, String>{
 /// chart space's block is the bare `a:bodyPr`, `a:lstStyle` and `a:defRPr`
 /// with that `a:endParaRPr`, and does not show [style].
 ///
+/// [vertical] turns a title's block a quarter to the left
+/// (`rot="-5400000"`), as Excel writes the title of a vertical axis; it
+/// changes no other use.
+///
 /// The `c:` and `a:` prefixes must be declared by the part.
 void writeDrawingTextBody(
   XmlWriter w,
@@ -91,6 +99,7 @@ void writeDrawingTextBody(
   required ChartExportColors mode,
   required String language,
   required DrawingTextUse use,
+  bool vertical = false,
 }) {
   w.start('c:txPr');
   if (use == DrawingTextUse.chartSpace) {
@@ -115,7 +124,12 @@ void writeDrawingTextBody(
     w.end();
     w.empty('a:lstStyle');
   } else {
-    _writeBodyAndList(w, rot: use == DrawingTextUse.axis ? '-60000000' : '0');
+    _writeBodyAndList(
+      w,
+      rot: use == DrawingTextUse.axis
+          ? '-60000000'
+          : (vertical && title ? _verticalRotation : '0'),
+    );
   }
   w.start('a:p');
   _writeParagraphProperties(w, style, mode: mode, spacing: title);
@@ -133,17 +147,20 @@ void writeDrawingTextBody(
 /// is a paragraph without a run that ends in `a:endParaRPr lang="[language]"`.
 ///
 /// [text] must hold only characters XML 1.0 allows (`scrubXmlText`); the
-/// writer escapes markup and throws an [ArgumentError] otherwise. The `c:`
-/// and `a:` prefixes must be declared by the part.
+/// writer escapes markup and throws an [ArgumentError] otherwise. [vertical]
+/// turns the block a quarter to the left (`rot="-5400000"`), as Excel writes
+/// the title of a vertical axis. The `c:` and `a:` prefixes must be declared
+/// by the part.
 void writeDrawingRichText(
   XmlWriter w,
   String text,
   ChartTextStyle style, {
   required ChartExportColors mode,
   required String language,
+  bool vertical = false,
 }) {
   w.start('c:rich');
-  _writeBodyAndList(w, rot: '0');
+  _writeBodyAndList(w, rot: vertical ? _verticalRotation : '0');
   for (final String line in text.split(_lineBreak)) {
     w.start('a:p');
     _writeParagraphProperties(w, style, mode: mode, spacing: true);

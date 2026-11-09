@@ -56,14 +56,21 @@ final class DrawingChartWritten {
 /// marker size, the gap width and the overlap, and with its `exportColors`
 /// whether colours and fonts are written bound to the file's theme or fixed.
 ///
+/// The gap width is kept within 0 and 500 and a clustered chart's overlap
+/// within -100 and 100, Excel's ranges (as the layout keeps them), rounded to
+/// whole numbers; a `NaN` gap width is 0.
+///
 /// Throws an [ArgumentError] when the chart's kind is not column, bar, line
-/// or area, when it has a secondary value axis, or when a series is bound to
-/// the secondary axis or has a kind other than `null` or the chart's.
+/// or area, when it has a secondary value axis, when a series is bound to
+/// the secondary axis or has a kind other than `null` or the chart's, when an
+/// axis id of `space.ids` is outside 0 to 4294967295 or the two are equal, or
+/// when one of its series ids is not a GUID in braces.
 DrawingChartWritten writeDrawingChartSpace(
   DrawingChartSpace space,
   ChartTheme theme,
 ) {
   _checkExpressible(space.chart);
+  _checkIds(space.ids);
   final StringBuffer out = StringBuffer();
   final _ChartWriter writer = _ChartWriter(XmlWriter(out), space, theme);
   writer.write();
@@ -105,6 +112,42 @@ void _checkExpressible(Chart chart) {
         series.kind,
         'chart.series[$i].kind',
         'must be null or ${chart.kind.name}',
+      );
+    }
+  }
+}
+
+/// The largest `c:axId`, that of `xsd:unsignedInt`.
+const int _maxAxisId = 4294967295;
+
+/// A `c16:uniqueId` value: a GUID in braces.
+final RegExp _uniqueId = RegExp(
+  r'^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-'
+  r'[0-9A-Fa-f]{12}\}$',
+);
+
+void _checkIds(DrawingChartIds ids) {
+  for (final (String name, int id) in <(String, int)>[
+    ('ids.categoryAxis', ids.categoryAxis),
+    ('ids.valueAxis', ids.valueAxis),
+  ]) {
+    if (id < 0 || id > _maxAxisId) {
+      throw ArgumentError.value(id, name, 'must be within 0 and $_maxAxisId');
+    }
+  }
+  if (ids.categoryAxis == ids.valueAxis) {
+    throw ArgumentError.value(
+      ids.valueAxis,
+      'ids.valueAxis',
+      'must differ from ids.categoryAxis',
+    );
+  }
+  for (int i = 0; i < ids.series.length; i++) {
+    if (!_uniqueId.hasMatch(ids.series[i])) {
+      throw ArgumentError.value(
+        ids.series[i],
+        'ids.series[$i]',
+        'must be a GUID in braces',
       );
     }
   }
@@ -169,6 +212,10 @@ final class _ChartWriter {
     }
     return result.text;
   }
+
+  /// [text] scrubbed ([_scrub]) and protected from ST_Xstring decoding
+  /// ([drawingEscapeXstring]), for a `c:v` of text and a `c:f`.
+  String _xstring(String text) => drawingEscapeXstring(_scrub(text));
 
   void _value(String name, String value) {
     w.empty(name, <String, String>{'val': value});
@@ -273,8 +320,13 @@ final class _ChartWriter {
   }
 
   /// A `c:title` of [text] in [style], or Excel's automatic title (no
-  /// `c:tx`) when [text] is `null`.
-  void _writeTitle(String? text, ChartTextStyle style) {
+  /// `c:tx`) when [text] is `null`; [vertical] turns it a quarter to the
+  /// left, as Excel writes a vertical axis' title.
+  void _writeTitle(
+    String? text,
+    ChartTextStyle style, {
+    bool vertical = false,
+  }) {
     w.start('c:title');
     if (text != null) {
       w.start('c:tx');
@@ -284,6 +336,7 @@ final class _ChartWriter {
         style,
         mode: mode,
         language: language,
+        vertical: vertical,
       );
       w.end();
     }
@@ -295,6 +348,7 @@ final class _ChartWriter {
       mode: mode,
       language: language,
       use: DrawingTextUse.title,
+      vertical: vertical,
     );
     w.end();
   }
@@ -320,11 +374,11 @@ final class _ChartWriter {
     }
     _writeGroupDataLabels();
     if (_bars) {
-      _value('c:gapWidth', theme.gapWidthPercent.round().toString());
+      _value('c:gapWidth', _percent(theme.gapWidthPercent, 0, 500));
       _value(
         'c:overlap',
         chart.grouping == ChartGrouping.clustered
-            ? theme.spacing.overlapPercent.round().toString()
+            ? _percent(theme.spacing.overlapPercent, -100, 100)
             : '100',
       );
     } else if (chart.kind == ChartKind.line) {
@@ -462,7 +516,13 @@ final class _ChartWriter {
     }
     final String? title = axis.title;
     if (title != null) {
-      _writeTitle(title, theme.axisLabels.copyWith(size: _axisTitleSize));
+      _writeTitle(
+        title,
+        theme.axisLabels.copyWith(size: _axisTitleSize),
+        // The value axis is vertical except in a bar chart, where the
+        // category axis is.
+        vertical: value != (chart.kind == ChartKind.bar),
+      );
     }
     final String? formatCode = axis.formatCode;
     w.empty('c:numFmt', <String, String>{
@@ -513,6 +573,11 @@ final class _ChartWriter {
     );
     w.end();
   }
+
+  /// [value] kept within [low] and [high] (`NaN` as [low]) and rounded, as
+  /// text: jet_charts_core's layout keeps the gap width and overlap so.
+  static String _percent(double value, double low, double high) =>
+      (value.isNaN ? low : value.clamp(low, high)).round().toString();
 
   void _solidFill(ChartColor color) {
     w.start('a:solidFill');
