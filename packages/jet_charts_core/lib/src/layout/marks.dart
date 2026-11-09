@@ -34,7 +34,7 @@ List<ChartPrimitive> layoutMarks(
     scale,
     horizontal: chart.kind == ChartKind.bar,
   );
-  final List<List<double?>> values = _shaped(resolved);
+  final List<List<double?>> values = shapedValues(resolved);
   switch (chart.kind) {
     case ChartKind.column:
     case ChartKind.bar:
@@ -107,8 +107,8 @@ final class MarkAxes {
 
 /// The values the marks use: the resolved ones, or on a percent stacked chart
 /// each as its share of the category's absolute sum (a category of sum 0 has
-/// no value).
-List<List<double?>> _shaped(ResolvedChart resolved) {
+/// no value). Tooltips read the share from here too.
+List<List<double?>> shapedValues(ResolvedChart resolved) {
   if (!resolved.percent) {
     return resolved.values;
   }
@@ -405,7 +405,7 @@ List<MarkAnchor> layoutAnchors(
     scale,
     horizontal: chart.kind == ChartKind.bar,
   );
-  final List<List<double?>> values = _shaped(resolved);
+  final List<List<double?>> values = shapedValues(resolved);
   switch (chart.kind) {
     case ChartKind.column:
     case ChartKind.bar:

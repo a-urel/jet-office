@@ -59,6 +59,34 @@ void main() {
     expect(source, isNot(contains('chart_ids.dart')));
   });
 
+  test('tooltips, their look and the summary are public', () {
+    final String source = File('lib/jet_charts_core.dart').readAsStringSync();
+    expect(
+      source,
+      contains(
+        "export 'src/interaction/summary.dart' show ChartSummary, "
+        'summarizeChart;',
+      ),
+    );
+    expect(
+      source,
+      contains(
+        "export 'src/interaction/tooltip.dart'\n"
+        '    show ChartTooltip, ChartTooltipRow, chartTooltipAt, '
+        'chartTooltipFor;',
+      ),
+    );
+    expect(
+      source,
+      contains(
+        "export 'src/theme/chart_tooltip_style.dart' show ChartTooltipStyle;",
+      ),
+    );
+    // The shared value formatting and the shares stay private.
+    expect(source, isNot(contains('formatSeriesValue')));
+    expect(source, isNot(contains('shapedValues')));
+  });
+
   test('the interval rule is not public', () {
     // excelMaxIntervals is the layout's own; only the package's code and
     // tests use it, through src/. The provisional rule it replaced is gone.

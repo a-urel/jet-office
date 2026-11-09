@@ -3,6 +3,7 @@ library;
 
 import 'chart_color.dart';
 import 'chart_theme.dart';
+import 'chart_tooltip_style.dart';
 
 /// Builds the theme `ChartTheme.office` holds; its values are documented there.
 ChartTheme buildOfficeTheme() {
@@ -28,6 +29,20 @@ ChartTheme buildOfficeTheme() {
     background: ChartColor.rgb(0xFFFFFF),
     border: line,
     valueAxisLine: false,
+    tooltip: buildOfficeTooltipStyle(),
     exportColors: ChartExportColors.fileTheme,
   );
 }
+
+/// The Office theme's tooltip look, also the default of `ChartTheme`'s
+/// constructor; its values are documented on `ChartTheme.tooltip`.
+ChartTooltipStyle buildOfficeTooltipStyle() => ChartTooltipStyle(
+  background: ChartColor.rgb(0xFFFFFF),
+  border: ChartColor.rgb(0xD9D9D9),
+  text: ChartTextStyle(
+    fontFamily: 'Aptos Narrow',
+    size: 10,
+    color: ChartColor.rgb(0x404040),
+  ),
+  padding: 6,
+);

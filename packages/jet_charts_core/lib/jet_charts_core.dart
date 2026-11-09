@@ -36,12 +36,21 @@
 /// * hit testing: `hitTestLayout` returns the primitives under a point,
 ///   topmost first;
 /// * category bands: `ChartLayout.categoryBands`, each category's slice of
-///   the plot.
+///   the plot;
+/// * tooltips: `chartTooltipAt` and `chartTooltipFor` give the
+///   `ChartTooltip`, of `ChartTooltipRow`s, at a point or for a primitive,
+///   and every text of `ChartLayout.hidden` stays within reach of one;
+///   `ChartTheme.tooltip` holds its look, a `ChartTooltipStyle`;
+/// * a data summary: `summarizeChart` gives a `ChartSummary`, the chart's
+///   data as text for a screen reader or a data table.
 library;
 
 export 'src/interaction/element_id.dart'
     show ChartAxisRole, ChartElementId, ChartElementKind;
 export 'src/interaction/hit_test.dart' show hitTestLayout;
+export 'src/interaction/summary.dart' show ChartSummary, summarizeChart;
+export 'src/interaction/tooltip.dart'
+    show ChartTooltip, ChartTooltipRow, chartTooltipAt, chartTooltipFor;
 export 'src/layout/chart_layout.dart'
     show ChartHiddenLabel, ChartLayout, layoutChart;
 export 'src/layout/geometry.dart' show ChartPoint, ChartRect, ChartSize;
@@ -69,3 +78,4 @@ export 'src/theme/chart_color.dart'
     show ChartColor, ChartExportColors, ChartSchemeColor, ChartTextStyle;
 export 'src/theme/chart_spacing.dart' show ChartSpacing;
 export 'src/theme/chart_theme.dart' show ChartTheme;
+export 'src/theme/chart_tooltip_style.dart' show ChartTooltipStyle;

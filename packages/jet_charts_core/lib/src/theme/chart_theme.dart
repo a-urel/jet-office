@@ -7,6 +7,7 @@ import '../model/chart_series.dart';
 import '../model/equality.dart';
 import 'chart_color.dart';
 import 'chart_spacing.dart';
+import 'chart_tooltip_style.dart';
 import 'office_theme.dart';
 
 /// The look of a chart, one object that travels to every output so a chart
@@ -15,7 +16,8 @@ final class ChartTheme {
   /// Creates a theme.
   ///
   /// [palette] and [semantic] are copied and unmodifiable. [spacing] defaults
-  /// to the Office theme's `ChartSpacing()`. Throws an [ArgumentError] when
+  /// to the Office theme's `ChartSpacing()` and [tooltip] to the Office
+  /// theme's tooltip look. Throws an [ArgumentError] when
   /// [palette] is empty.
   ChartTheme({
     required List<ChartColor> palette,
@@ -34,10 +36,12 @@ final class ChartTheme {
     this.lineWidth = 2.25,
     this.markerSize = 5,
     ChartSpacing? spacing,
+    ChartTooltipStyle? tooltip,
     this.exportColors = ChartExportColors.fixed,
   }) : palette = List<ChartColor>.unmodifiable(palette),
        semantic = Map<String, ChartColor>.unmodifiable(semantic),
-       spacing = spacing ?? ChartSpacing() {
+       spacing = spacing ?? ChartSpacing(),
+       tooltip = tooltip ?? buildOfficeTooltipStyle() {
     if (palette.isEmpty) {
       throw ArgumentError.value(palette, 'palette', 'must not be empty');
     }
@@ -60,6 +64,8 @@ final class ChartTheme {
   /// [spacing] the line widths, the overlap and the tick length. Still
   /// unconfirmed: 9 pt for the legend and data labels, and the other gaps of
   /// [spacing].
+  ///
+  /// Its [tooltip] is this library's own look, not an Excel value.
   static final ChartTheme office = buildOfficeTheme();
 
   /// The series colours, in order. Never empty.
@@ -118,6 +124,14 @@ final class ChartTheme {
 
   /// The gaps, symbol sizes and line widths of the layout.
   final ChartSpacing spacing;
+
+  /// The look of the tooltip a backend shows.
+  ///
+  /// The Office theme's values are this library's own, not Excel's (Excel's
+  /// hover box is a system tooltip, so it is not a parity item): a background
+  /// of `FFFFFF`, a border of `D9D9D9`, Aptos Narrow 10 pt text of `404040`
+  /// and a padding of 6. A theme that names no tooltip gets the same.
+  final ChartTooltipStyle tooltip;
 
   /// How the theme's colours are exported to a file.
   final ChartExportColors exportColors;
@@ -190,6 +204,7 @@ final class ChartTheme {
     double? lineWidth,
     double? markerSize,
     ChartSpacing? spacing,
+    ChartTooltipStyle? tooltip,
     ChartExportColors? exportColors,
   }) {
     return ChartTheme(
@@ -209,6 +224,7 @@ final class ChartTheme {
       lineWidth: lineWidth ?? this.lineWidth,
       markerSize: markerSize ?? this.markerSize,
       spacing: spacing ?? this.spacing,
+      tooltip: tooltip ?? this.tooltip,
       exportColors: exportColors ?? this.exportColors,
     );
   }
@@ -232,6 +248,7 @@ final class ChartTheme {
         lineWidth == other.lineWidth &&
         markerSize == other.markerSize &&
         spacing == other.spacing &&
+        tooltip == other.tooltip &&
         exportColors == other.exportColors;
   }
 
@@ -253,6 +270,7 @@ final class ChartTheme {
     lineWidth,
     markerSize,
     spacing,
+    tooltip,
     exportColors,
   );
 

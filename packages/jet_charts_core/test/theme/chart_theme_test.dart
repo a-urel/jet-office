@@ -168,6 +168,59 @@ void main() {
     expect(office.copyWith().hashCode, office.hashCode);
   });
 
+  test("office tooltip is this library's own look", () {
+    final ChartTooltipStyle office = ChartTheme.office.tooltip;
+    expect(office.background, ChartColor.rgb(0xFFFFFF));
+    expect(office.border, ChartColor.rgb(0xD9D9D9));
+    expect(
+      office.text,
+      ChartTextStyle(
+        fontFamily: 'Aptos Narrow',
+        size: 10,
+        color: ChartColor.rgb(0x404040),
+      ),
+    );
+    expect(office.padding, 6);
+    // An app theme that names no tooltip gets the same look.
+    expect(custom().tooltip, office);
+  });
+
+  test('tooltip style copies, compares and replaces in a theme', () {
+    final ChartTooltipStyle office = ChartTheme.office.tooltip;
+    final ChartTooltipStyle dark = office.copyWith(
+      background: ChartColor.rgb(0x202020),
+      padding: 8,
+    );
+    expect(dark.background, ChartColor.rgb(0x202020));
+    expect(dark.border, office.border);
+    expect(dark.text, office.text);
+    expect(dark.padding, 8);
+    expect(dark, isNot(office));
+    expect(office.copyWith(), office);
+    expect(office.copyWith().hashCode, office.hashCode);
+    expect(office.copyWith(border: ChartColor.rgb(1)), isNot(office));
+    expect(
+      office.copyWith(text: office.text.copyWith(bold: true)),
+      isNot(office),
+    );
+    expect(
+      ChartTooltipStyle(
+        background: ChartColor.rgb(0xFFFFFF),
+        border: ChartColor.rgb(0xD9D9D9),
+        text: office.text,
+        padding: 6,
+      ),
+      office,
+    );
+
+    final ChartTheme theme = ChartTheme.office.copyWith(tooltip: dark);
+    expect(theme.tooltip, dark);
+    expect(theme, isNot(ChartTheme.office));
+    expect(theme.copyWith(), theme);
+    expect(theme.copyWith().hashCode, theme.hashCode);
+    expect(ChartTheme.office.copyWith(tooltip: office), ChartTheme.office);
+  });
+
   test('palette and semantic are copied and unmodifiable', () {
     final List<ChartColor> palette = <ChartColor>[ChartColor.rgb(1)];
     final Map<String, ChartColor> semantic = <String, ChartColor>{
