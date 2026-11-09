@@ -70,6 +70,7 @@ import 'element_node.dart';
 import 'palette.dart';
 import 'primitives.dart';
 import 'protection_elements.dart';
+import 'reference_holders.dart';
 import 'styles_part.dart';
 import 'table_part.dart';
 import 'vml_part.dart';
@@ -82,6 +83,10 @@ OpcPackage packageOf(XlsxWorkbook book) => book._book.reader.package;
 
 /// The change log of [book], for tests.
 ChangeLog changeLogOf(XlsxWorkbook book) => book._book.log;
+
+/// The reference holders of [book], for structural edits and tests.
+ReferenceRegistry referenceRegistryOf(XlsxWorkbook book) =>
+    book._book.references;
 
 /// The shared strings of [book], or `null` before they load, for tests.
 SharedStrings? sharedStringsOf(XlsxWorkbook book) => book._book._strings;
@@ -544,6 +549,12 @@ final class _Book implements SheetHost {
   final List<XlsxSheet> _sheets = <XlsxSheet>[];
   late final List<XlsxSheet> sheetsView = UnmodifiableListView<XlsxSheet>(
     _sheets,
+  );
+
+  /// Every holder of a reference in the workbook, for structural edits.
+  late final ReferenceRegistry references = ReferenceRegistry(
+    log,
+    () => _sheets,
   );
   late final SheetNamer _namer = SheetNamer(warnings);
 

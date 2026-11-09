@@ -109,6 +109,7 @@ import 'item_group.dart' show GroupItem, ItemGroup, readerOf, renderElements;
 import 'page_elements.dart';
 import 'primitives.dart';
 import 'protection_elements.dart';
+import 'reference_holders.dart';
 import 'style_elements.dart' show ReadStyleValue, readColor;
 import 'styles_part.dart';
 import 'table_part.dart';
@@ -305,6 +306,16 @@ bool isLoadedSheet(XlsxSheet sheet) => sheet._part != null;
 /// Whether [sheet] has a worksheet part in the file.
 bool sheetHasPart(XlsxSheet sheet) => sheet._partName != null;
 
+/// The reference holders of [sheet], in [sheetHolderNames] order, loading
+/// its part; none for a sheet without a part. Throws an [XlsxReadException]
+/// when the part cannot be read.
+List<ReferenceHolder> sheetReferenceHolders(XlsxSheet sheet) {
+  if (sheet._load() == null) return const <ReferenceHolder>[];
+  return sheet._referenceHolders ??= <ReferenceHolder>[
+    for (final String name in sheetHolderNames) PendingReferenceHolder(name),
+  ];
+}
+
 /// The cells of [sheet], or `null` while its part is not loaded.
 CellStore? cellStoreOf(XlsxSheet sheet) => sheet._part?.cells;
 
@@ -360,6 +371,9 @@ final class XlsxSheet
   /// The tables of the sheet the model can type, read on the first
   /// [setCell]; `null` until then.
   List<({String partName, TablePart table})>? _tables;
+
+  /// The reference holders, made on the first [sheetReferenceHolders].
+  List<ReferenceHolder>? _referenceHolders;
 
   /// The names of the table parts the package writes from their typed parts,
   /// for `attachStoredPart`.
