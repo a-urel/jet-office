@@ -234,9 +234,19 @@ extension FramePaint on FrameContext {
     final ValueScale scale = a.scale!;
     final ChartRect inner = a.inner!;
     final ValueScale? xScale = a.xScale;
+    final ScatterAxis? scatterAxis = xScale == null
+        ? null
+        : (scale: xScale, values: xValues);
     final ({List<ChartPrimitive> shapes, List<ChartPrimitive> markers}) marks =
         _splitMarkers(
-          layoutMarks(chart, resolved, theme, plot, scale, xScale: xScale),
+          layoutMarks(
+            chart,
+            resolved,
+            theme,
+            plot,
+            scale,
+            scatterAxis: scatterAxis,
+          ),
         );
     final List<ChartPrimitive> out = <ChartPrimitive>[
       background(),
@@ -348,7 +358,7 @@ extension FramePaint on FrameContext {
             area: inner,
             scale: scale,
             existing: out,
-            xScale: xScale,
+            scatterAxis: scatterAxis,
           )
         : const DataLabelPlacement(<TextPrimitive>[], <(String, String)>[]);
     return (

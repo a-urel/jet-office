@@ -1,4 +1,6 @@
 import 'package:jet_charts_core/jet_charts_core.dart';
+import 'package:jet_charts_core/src/layout/scatter_layout.dart'
+    show excelSerialOf;
 import 'package:jet_charts_core/src/scale/value_scale.dart'
     show excelMaxIntervals;
 import 'package:test/test.dart';
@@ -220,6 +222,39 @@ void main() {
       ).map((TextPrimitive t) => t.text),
       contains('1 Jan'),
     );
+  });
+
+  test("a date's serial keeps the time of day and Excel's phantom day", () {
+    expect(excelSerialOf(DateTime(2026, 1, 1)), 46023);
+    expect(excelSerialOf(DateTime(2026, 1, 1, 12)), 46023.5);
+    expect(excelSerialOf(DateTime(1900, 2, 28)), 59);
+    expect(excelSerialOf(DateTime(1900, 3, 1)), 61);
+  });
+
+  test('the legend shows each series as its marker alone', () {
+    final ChartLayout layout = _lay(
+      _scatter(<ChartSeries>[
+        ...basic.series,
+        _series('More', <Object?>[3], <double?>[12]),
+      ]),
+    );
+    for (int s = 0; s < 2; s++) {
+      expect(_starting<ChartPrimitive>(layout, 'legend/$s/symbol'), isEmpty);
+      final ArcPrimitive marker = _starting<ArcPrimitive>(
+        layout,
+        'legend/$s/marker',
+      ).single;
+      expect(marker.radius, _office.markerSize / 2);
+      expect(marker.fill, _office.seriesColor(s));
+      expect(marker.stroke, _office.seriesColor(s));
+      final TextPrimitive text = _starting<TextPrimitive>(
+        layout,
+        'legend/$s/text',
+      ).single;
+      expect(marker.center.x + marker.radius, lessThan(text.rect.left));
+      expect(marker.center.y, closeTo(_centre(text.rect).y, 1e-9));
+    }
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
   });
 
   test('a null y draws no marker', () {

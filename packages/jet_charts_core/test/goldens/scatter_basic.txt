@@ -1,9 +1,9 @@
 rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
 text title 112.80,8.00 134.40x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Price and volume"
 rect legend 136.00,221.20 88.00x10.80 fill=- stroke=- width=1.00
-rect legend/0/symbol 136.00,223.10 7.00x7.00 fill=156082 stroke=- width=1.00
+arc legend/0/marker centre=139.50,226.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
 text legend/0/text 147.00,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "North"
-rect legend/1/symbol 186.00,223.10 7.00x7.00 fill=E97132 stroke=- width=1.00
+arc legend/1/marker centre=189.50,226.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
 text legend/1/text 197.00,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "South"
 rect plot 22.80,36.20 329.20x164.20 fill=- stroke=- width=1.00
 path grid/value/0 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-

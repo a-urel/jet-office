@@ -1,7 +1,7 @@
 rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
 text title 125.40,8.00 109.20x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Orders by day"
 rect legend 158.30,221.20 43.40x10.80 fill=- stroke=- width=1.00
-rect legend/0/symbol 158.30,223.10 7.00x7.00 fill=156082 stroke=- width=1.00
+arc legend/0/marker centre=161.80,226.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
 text legend/0/text 169.30,221.20 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Orders"
 rect plot 22.80,36.20 321.00x160.80 fill=- stroke=- width=1.00
 path grid/value/0 22.80,197.00 343.80,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-

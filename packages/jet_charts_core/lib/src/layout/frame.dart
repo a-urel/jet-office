@@ -218,6 +218,9 @@ extension on FrameContext {
           for (int i = 0; i < chart.series.length; i++)
             theme.areaLine && chart.kind == ChartKind.area,
         ],
+        markersOnly: <bool>[
+          for (int i = 0; i < chart.series.length; i++) scatter,
+        ],
         lineLook: (
           lineWidth: theme.lineWidth,
           markerSize: theme.markerSize,
@@ -287,7 +290,10 @@ extension on FrameContext {
       }
     }
     // The category labels' plan on the final plot must fit the bands kept
-    // for it; widen them a few times if not.
+    // for it; widen them a few times if not. A scatter chart's horizontal
+    // axis is found once per plot and goes into both its plan and the
+    // attempt.
+    _XAxis? x = scatter ? _xAxis(plot, shown: shown.categoryLabels) : null;
     CategoryLabelPlan plan = _plan(
       shown,
       inner,
@@ -295,6 +301,7 @@ extension on FrameContext {
       labels,
       valueTitle,
       categoryTitle,
+      x: x,
     );
     bool settled = false;
     for (int i = 0; i < 4; i++) {
@@ -312,7 +319,8 @@ extension on FrameContext {
       }
       bands = _widest(bands, needed);
       plot = _deflate(inner, bands);
-      plan = _plan(shown, inner, plot, labels, valueTitle, categoryTitle);
+      x = scatter ? _xAxis(plot, shown: shown.categoryLabels) : null;
+      plan = _plan(shown, inner, plot, labels, valueTitle, categoryTitle, x: x);
     }
     // A fixed unit cannot be coarsened: draw every stride-th tick label
     // instead, the smallest stride whose labels keep apart and stay inside
@@ -345,9 +353,6 @@ extension on FrameContext {
         return FrameAttempt(misfit: FramePart.categoryTitle);
       }
     }
-    final _XAxis? x = scatter
-        ? _xAxis(plot, shown: shown.categoryLabels)
-        : null;
     return FrameAttempt(
       xScale: x?.scale,
       xLabels: x?.labels ?? const <MeasuredLabel>[],
@@ -427,15 +432,17 @@ extension on FrameContext {
   /// space left for the plot and the band across the category axis: [inner]
   /// less the category title's band and the tick labels' overhang at the
   /// far end, less the label gap (or the larger offset of
-  /// [_categoryOffset]).
+  /// [_categoryOffset]). A scatter chart's plan takes its horizontal axis
+  /// [x] on [plot] when the caller has it, else finds it.
   CategoryLabelPlan _plan(
     FrameShown shown,
     ChartRect inner,
     ChartRect plot,
     List<MeasuredLabel> labels,
     ChartSize? valueTitle,
-    ChartSize? categoryTitle,
-  ) {
+    ChartSize? categoryTitle, {
+    _XAxis? x,
+  }) {
     if (!shown.categoryLabels) {
       return CategoryLabelPlan.none();
     }
@@ -472,7 +479,11 @@ extension on FrameContext {
     if (scatter) {
       return _xPlan(
         plot,
+        x ?? _xAxis(plot, shown: true),
         maxDepth: 0.4 * cross - _largestOffset(shown, labels),
+        // The first label is centred on the axis' start, as a category
+        // label on tick marks: it may reach into the y labels' band and the
+        // edge room, the room turned labels get.
         roomBefore: turnedRoom,
         roomAfter: edgeAfter + inner.right - plot.right,
       );
@@ -536,7 +547,8 @@ extension on FrameContext {
     return (scale: scale, labels: labels, stride: stride, apart: fit(stride));
   }
 
-  /// A scatter chart's horizontal tick labels on [plot] as a category label
+  /// A scatter chart's horizontal tick labels of [x] on [plot] (found with
+  /// its labels shown) as a category label
   /// plan, so the frame keeps their band and room as for labels on tick
   /// marks: level, each centred on its tick; its band as deep as the tallest
   /// label, which must be within [maxDepth]; reaching past the axis' ends no
@@ -544,13 +556,13 @@ extension on FrameContext {
   /// keep as its reserves. A plan whose labels keep apart and within the
   /// depth but lack that room is cramped.
   CategoryLabelPlan _xPlan(
-    ChartRect plot, {
+    ChartRect plot,
+    _XAxis x, {
     required double maxDepth,
     required double roomBefore,
     required double roomAfter,
   }) {
     const double tolerance = 1e-9;
-    final _XAxis x = _xAxis(plot, shown: true);
     final List<int> drawn = <int>[
       for (
         int i = 0;

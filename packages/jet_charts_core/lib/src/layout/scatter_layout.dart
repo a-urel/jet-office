@@ -28,15 +28,23 @@ import 'marks.dart';
 import 'primitives.dart';
 import 'resolve.dart';
 
+/// A scatter chart's horizontal axis as its marks need it: the axis'
+/// [ValueScale] and each point's x ([scatterXValues]), found once per
+/// layout.
+typedef ScatterAxis = ({ValueScale scale, List<List<double>> values});
+
 /// The x value of each point of each of [chart]'s series, [count] per
 /// series (the resolved category count).
 ///
-/// A series whose categories are all numbers takes them as they are, and a
-/// `DateTime` as its serial in Excel's 1900 date system ([excelSerialOf]).
-/// A series with any other category where it has a value (a `String`, a
-/// `null`, a missing or non-finite one) numbers its points `1, 2, 3, …` by
-/// index, as Excel does with text. A point past the series' values has its
-/// index number too; it has no value, so it draws nothing.
+/// The categories at the indexes of the series' values decide: when each of
+/// them is a finite number or a `DateTime`, the series takes them as they
+/// are, a `DateTime` as its serial in Excel's 1900 date system
+/// ([excelSerialOf]). When any of them is something else (a `String`, a
+/// `null`, a non-finite number, or missing because the categories are
+/// fewer than the values), the series numbers its points `1, 2, 3, …` by
+/// index, as Excel does with text, whether or not that index has a value. A
+/// series with no values takes index numbers. An index past the series'
+/// values gets its index number too; it has no value, so it draws nothing.
 List<List<double>> scatterXValues(Chart chart, int count) {
   final List<List<double>> out = <List<double>>[];
   for (final ChartSeries s in chart.series) {
@@ -166,14 +174,14 @@ List<ChartPrimitive> scatterMarks(
   ChartTheme theme,
   ChartRect plot,
   ValueScale scale,
-  ValueScale xScale,
+  ScatterAxis x,
 ) {
   final List<List<ChartPoint?>> points = scatterPoints(
     resolved,
-    scatterXValues(chart, resolved.categoryCount),
+    x.values,
     plot,
     scale,
-    xScale,
+    x.scale,
   );
   return <ChartPrimitive>[
     for (int s = 0; s < points.length; s++)
@@ -194,14 +202,14 @@ List<MarkAnchor> scatterAnchors(
   ResolvedChart resolved,
   ChartRect plot,
   ValueScale scale,
-  ValueScale xScale,
+  ScatterAxis x,
 ) {
   final List<List<ChartPoint?>> points = scatterPoints(
     resolved,
-    scatterXValues(chart, resolved.categoryCount),
+    x.values,
     plot,
     scale,
-    xScale,
+    x.scale,
   );
   return <MarkAnchor>[
     for (int s = 0; s < points.length; s++)

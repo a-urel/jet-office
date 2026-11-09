@@ -26,6 +26,7 @@ import 'marks.dart';
 import 'overlap.dart';
 import 'primitives.dart';
 import 'resolve.dart';
+import 'scatter_layout.dart' show ScatterAxis;
 import 'text_measurer.dart';
 
 /// The data labels that were placed, and the texts that were not.
@@ -82,7 +83,8 @@ List<(String, String)> dataLabelTexts(
 /// bar must lie wholly inside the bar's visible part, and is drawn white
 /// (`FFFFFF`) when the bar's colour has a relative luminance below 0.5, so
 /// it reads on a dark bar, else in the theme's data label colour. Line and
-/// scatter labels (a scatter chart's anchors need [xScale]) try above, below, right, then left of the point; an area label is centred
+/// scatter labels (a scatter chart's anchors need its [scatterAxis]) try
+/// above, below, right, then left of the point; an area label is centred
 /// on the column under its point, halfway between the point and the area's
 /// base, and moved inward, no further than needed, where that leaves the plot
 /// (the first and last points of an area sit on the plot's edges); both must
@@ -101,7 +103,7 @@ DataLabelPlacement placeDataLabels({
   required ChartRect area,
   required ValueScale scale,
   required List<ChartPrimitive> existing,
-  ValueScale? xScale,
+  ScatterAxis? scatterAxis,
 }) {
   final List<(String, String)> texts = dataLabelTexts(
     chart,
@@ -121,7 +123,7 @@ DataLabelPlacement placeDataLabels({
       theme,
       plot,
       scale,
-      xScale: xScale,
+      scatterAxis: scatterAxis,
     ))
       ids.dataLabelId(a.series, a.category): a,
   };

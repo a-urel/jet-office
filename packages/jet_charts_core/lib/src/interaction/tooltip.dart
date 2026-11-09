@@ -132,8 +132,10 @@ final class ChartTooltip {
 /// * the title, a centre text and the axis titles: in the background
 ///   tooltip;
 /// * a placeholder: in the background tooltip;
-/// * value tick labels: they are axis ticks, not data, and have no tooltip;
-///   the exact values they would mark are in the data tooltips.
+/// * value tick labels, and a scatter chart's horizontal tick labels
+///   (`axis/category/label/<i>` there): they are axis ticks, not data, and
+///   have no tooltip; the exact values they would mark are in the data
+///   tooltips (a scatter point's `X` and `Y` rows).
 ///
 /// A [point] with a coordinate that is not finite has no tooltip. Throws an
 /// [ArgumentError] when [hits] is `null` and [tolerance] is negative or not
