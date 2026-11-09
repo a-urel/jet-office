@@ -39,8 +39,8 @@ is a live region and a screen reader announces each change of it.
   which font it got); until known, goldens use Roboto.
 - Tooltip box spacing and border constants are in `lib/src/tooltip_view.dart`,
   not in `ChartTooltipStyle`.
-- `strokeWidth: 0` paints a hairline in Flutter; the core never emits 0, a
-  theme could.
+- A rect or path with `strokeWidth: 0` paints a hairline in Flutter; an arc
+  with 0 draws no stroke. The core never emits 0, a theme could.
 - Large series cost: about 250 ms (VM) and 520 ms (Chrome) for a 10,000-point
   line, about 100 and 190 ms for 3,650 categories of two series, almost all in
   the core's layout; the line has no markers, as its category step is under

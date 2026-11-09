@@ -134,6 +134,101 @@ List<ChartPrimitive> _painted(WidgetTester tester) {
 }
 
 void main() {
+  group('arcs', () {
+    ArcPrimitive slice(String id, double start, double sweep) => ArcPrimitive(
+      id,
+      const ChartPoint(100, 100),
+      80,
+      40,
+      start,
+      sweep,
+      fill: ChartColor.rgb(0xFF0000),
+    );
+
+    test('a slice present in both layouts moves by angle', () {
+      final List<ChartPrimitive> from = <ChartPrimitive>[
+        slice('series/0/slice/0', -90, 90),
+        slice('series/0/slice/1', 0, 270),
+      ];
+      final List<ChartPrimitive> to = <ChartPrimitive>[
+        slice('series/0/slice/0', -90, 180),
+        slice('series/0/slice/1', 90, 180),
+      ];
+      final List<ChartPrimitive> mid = lerpChartPrimitives(from, to, 0.5);
+      final ArcPrimitive a = mid[0] as ArcPrimitive;
+      expect(a.sweepAngle, closeTo(135, 1e-6));
+      expect(a.startAngle, closeTo(-90, 1e-6));
+      final ArcPrimitive b = mid[1] as ArcPrimitive;
+      expect(b.startAngle, closeTo(45, 1e-6));
+      expect(b.sweepAngle, closeTo(225, 1e-6));
+    });
+
+    test('radii move linearly', () {
+      const ArcPrimitive from = ArcPrimitive(
+        'series/0/slice/0',
+        ChartPoint(100, 100),
+        60,
+        20,
+        0,
+        90,
+      );
+      const ArcPrimitive to = ArcPrimitive(
+        'series/0/slice/0',
+        ChartPoint(100, 100),
+        80,
+        40,
+        0,
+        90,
+      );
+      final ArcPrimitive mid =
+          lerpChartPrimitives(
+                <ChartPrimitive>[from],
+                <ChartPrimitive>[to],
+                0.5,
+              ).single
+              as ArcPrimitive;
+      expect(mid.radius, closeTo(70, 1e-9));
+      expect(mid.innerRadius, closeTo(30, 1e-9));
+    });
+
+    test('a new slice grows from sweep 0 at its final start', () {
+      final List<ChartPrimitive> mid = lerpChartPrimitives(
+        <ChartPrimitive>[slice('series/0/slice/0', -90, 360)],
+        <ChartPrimitive>[
+          slice('series/0/slice/0', -90, 180),
+          slice('series/0/slice/1', 90, 180),
+        ],
+        0.5,
+      );
+      final ArcPrimitive grown = mid[1] as ArcPrimitive;
+      expect(grown.startAngle, closeTo(90, 1e-9));
+      expect(grown.sweepAngle, closeTo(90, 1e-9));
+      final ArcPrimitive start =
+          lerpChartPrimitives(
+                <ChartPrimitive>[slice('series/0/slice/0', -90, 360)],
+                <ChartPrimitive>[
+                  slice('series/0/slice/0', -90, 180),
+                  slice('series/0/slice/1', 90, 180),
+                ],
+                0,
+              )[1]
+              as ArcPrimitive;
+      expect(start.sweepAngle, 0);
+    });
+
+    test('a gone slice snaps away', () {
+      final List<ChartPrimitive> mid = lerpChartPrimitives(
+        <ChartPrimitive>[
+          slice('series/0/slice/0', -90, 180),
+          slice('series/0/slice/1', 90, 180),
+        ],
+        <ChartPrimitive>[slice('series/0/slice/0', -90, 360)],
+        0.5,
+      );
+      expect(mid, hasLength(1));
+    });
+  });
+
   group('lerpChartPrimitives', () {
     test('puts a bar halfway at 0.5', () {
       final ChartLayout from = _layout(_chart(<double>[10, 20, 30, 40]));

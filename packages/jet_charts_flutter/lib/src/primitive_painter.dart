@@ -29,7 +29,8 @@ import 'text_measurer.dart';
 ///   about the rect's centre;
 /// * a [ClipPrimitive] draws its children clipped to its rect.
 ///
-/// Colours are drawn opaque. The painters come from [measurer] at each call,
+/// A path's fill is drawn with its `fillOpacity`; every other colour is drawn
+/// opaque, and an arc with a stroke width of 0 has no stroke. The painters come from [measurer] at each call,
 /// so none is kept across paints.
 void paintChartPrimitives(
   Canvas canvas,
@@ -60,9 +61,16 @@ Color _color(ChartColor c) => Color(0xFF000000 | c.rgb);
 
 Rect _rect(ChartRect r) => Rect.fromLTWH(r.left, r.top, r.width, r.height);
 
-Paint _fill(ChartColor c) => Paint()
+Paint _fill(ChartColor c, [double opacity = 1]) => Paint()
   ..style = PaintingStyle.fill
-  ..color = _color(c);
+  ..color = opacity >= 1
+      ? _color(c)
+      : Color.fromARGB(
+          (opacity * 255).round().clamp(0, 255),
+          (c.rgb >> 16) & 0xFF,
+          (c.rgb >> 8) & 0xFF,
+          c.rgb & 0xFF,
+        );
 
 Paint _stroke(ChartColor c, double width) => Paint()
   ..style = PaintingStyle.stroke
@@ -90,7 +98,7 @@ void _paintPath(Canvas canvas, PathPrimitive p) {
     path.lineTo(q.x, q.y);
   }
   if (p.closed) path.close();
-  if (p.fill != null) canvas.drawPath(path, _fill(p.fill!));
+  if (p.fill != null) canvas.drawPath(path, _fill(p.fill!, p.fillOpacity));
   if (p.stroke != null) {
     final List<double>? dash = p.dash;
     canvas.drawPath(
@@ -176,7 +184,7 @@ void _paintArc(Canvas canvas, ArcPrimitive p) {
     path.close();
   }
   if (p.fill != null) canvas.drawPath(path, _fill(p.fill!));
-  if (p.stroke != null) {
+  if (p.stroke != null && p.strokeWidth > 0) {
     canvas.drawPath(path, _stroke(p.stroke!, p.strokeWidth));
   }
 }

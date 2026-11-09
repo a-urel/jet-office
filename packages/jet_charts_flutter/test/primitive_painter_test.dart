@@ -171,6 +171,54 @@ void main() {
     expect(p.at(50, 50), _white);
   });
 
+  test('a path fill with fillOpacity is blended over the background', () async {
+    final _Pixels p = await _paint(<ChartPrimitive>[
+      PathPrimitive(
+        'p',
+        const <ChartPoint>[
+          ChartPoint(10, 10),
+          ChartPoint(90, 10),
+          ChartPoint(90, 90),
+          ChartPoint(10, 90),
+        ],
+        closed: true,
+        fill: _red,
+        fillOpacity: 0.5,
+      ),
+    ]);
+    final int c = p.at(50, 50);
+    expect((c >> 16) & 0xFF, inInclusiveRange(253, 255));
+    expect((c >> 8) & 0xFF, inInclusiveRange(126, 130));
+    expect(c & 0xFF, inInclusiveRange(126, 130));
+  });
+
+  test('an arc with strokeWidth 0 draws no stroke', () async {
+    final _Pixels p = await _paint(<ChartPrimitive>[
+      ArcPrimitive(
+        'a',
+        const ChartPoint(50, 50),
+        40,
+        0,
+        0,
+        90,
+        fill: _red,
+        stroke: _blue,
+        strokeWidth: 0,
+      ),
+    ]);
+    // The slice's straight edge along the horizontal radius, y = 50.
+    for (int x = 60; x < 85; x++) {
+      expect(p.at(x, 50), isNot(0x0000FF), reason: 'x = $x');
+      expect(p.at(x, 49), _white, reason: 'x = $x');
+    }
+    // Its outer arc at (90, 50) has no blue pixel in a window around it.
+    for (int y = 48; y < 54; y++) {
+      for (int x = 87; x < 93; x++) {
+        expect(p.at(x, y), isNot(0x0000FF), reason: '($x, $y)');
+      }
+    }
+  });
+
   test('an arc is stroked as wide as its stroke width', () async {
     // A circle of radius 30 stroked 3 wide: a ring from 28.5 to 31.5.
     final _Pixels p = await _paint(<ChartPrimitive>[
