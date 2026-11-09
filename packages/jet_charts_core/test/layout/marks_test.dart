@@ -453,6 +453,68 @@ void main() {
     expect(has(l, ids.seriesLineId(0, 0)), isTrue);
   });
 
+  group('markers only where they fit', () {
+    // The plot of 400 by 300 with no legend is about 380 wide: a step of
+    // markerSize + 2 (7 pt) fits about 54 categories.
+    ChartLayout dense(int count, List<double?> Function(int c) value) {
+      return layoutChart(
+        Chart(
+          kind: ChartKind.line,
+          legend: const ChartLegend(visible: false),
+          series: <ChartSeries>[
+            ChartSeries(
+              name: ChartData<String>(values: <String?>['S']),
+              categories: ChartData<Object>(
+                values: <Object?>[for (int c = 0; c < count; c++) 'C$c'],
+              ),
+              values: ChartData<double>(
+                values: <double?>[for (int c = 0; c < count; c++) ...value(c)],
+              ),
+            ),
+          ],
+        ),
+        theme: ChartTheme.office,
+        size: const ChartSize(400, 300),
+        measurer: measurer,
+      );
+    }
+
+    int markers(ChartLayout l) => flat(
+      l.primitives,
+    ).where((ChartPrimitive p) => p.id.contains('/marker/')).length;
+
+    double step(ChartLayout l, int count) => l.plotArea!.width / count;
+
+    test('a line whose step fits a marker and a gap marks every point', () {
+      final ChartLayout l = dense(20, (int c) => <double?>[c.toDouble()]);
+      expect(step(l, 20), greaterThanOrEqualTo(7));
+      expect(markers(l), 20);
+    });
+
+    test('a line whose step is under markerSize + 2 has no markers', () {
+      final ChartLayout l = dense(80, (int c) => <double?>[c.toDouble()]);
+      expect(step(l, 80), lessThan(ChartTheme.office.markerSize + 2));
+      expect(markers(l), 0);
+      expect(has(l, ids.markerClip), isFalse);
+      expect(has(l, ids.seriesLineId(0, 0)), isTrue);
+    });
+
+    test('a dense line keeps the markers of its lone points', () {
+      // Every third value stands alone between two gaps.
+      final ChartLayout l = dense(
+        90,
+        (int c) => <double?>[c % 6 == 0 || c % 6 == 3 ? 1 : null],
+      );
+      expect(markers(l), 30);
+      expect(has(l, ids.seriesMarkerId(0, 3)), isTrue);
+    });
+
+    test('a 10,000-point line has no markers', () {
+      final ChartLayout l = dense(10000, (int c) => <double?>[c % 7.0]);
+      expect(markers(l), 0);
+    });
+  });
+
   test('a lone point gets a marker and no line', () {
     final ChartLayout l = lay(<List<double?>>[
       <double?>[1, null, 3, null],

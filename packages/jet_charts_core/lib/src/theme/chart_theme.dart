@@ -133,7 +133,10 @@ final class ChartTheme {
   ///
   /// Excel's default line chart has one (`c:marker`, a circle of size 5, in
   /// `chart_defaults.xlsx`), so the default is `true`. When `false`, only a
-  /// point with no neighbour to join gets a marker, so it still shows.
+  /// point with no neighbour to join gets a marker, so it still shows. When
+  /// `true`, the layout still leaves out the markers of a line whose category
+  /// step is under [markerSize] plus 2 pt, where they would touch, but those
+  /// of a point with no neighbour (Excel draws them all, `docs/parity.md`).
   final bool lineMarkers;
 
   /// The gaps, symbol sizes and line widths of the layout.

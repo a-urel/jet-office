@@ -115,8 +115,10 @@ and category labels (`axis_layout.dart`), marks, data labels, legend.
   than their own bar (not to area fills), and each other (a column or bar
   label outside its bar's end may leave the plot, one inside a bar must fit
   in it and is white on a dark bar), and those that cannot be placed go to
-  `hidden` (`degradation.dart` orders what goes first). `findOverlaps` must
-  find nothing in any layout.
+  `hidden` (`degradation.dart` orders what goes first). A line marks every
+  point only when its category step is at least `markerSize` plus 2 pt, else
+  only its lone points (`lineMarkersFit`; Excel marks them all, `parity.md`).
+  `findOverlaps` must find nothing in any layout.
 - Ids: every primitive has an id (`chart_ids.dart`), stable across layouts of
   the same chart, for hit testing and tests. The scheme is documented in
   `ChartLayout.primitives`; `ChartElementId` parses it and `hitTestLayout`

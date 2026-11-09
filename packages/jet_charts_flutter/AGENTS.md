@@ -43,8 +43,9 @@ is a live region and a screen reader announces each change of it.
   theme could.
 - Large series cost: about 250 ms (VM) and 520 ms (Chrome) for a 10,000-point
   line, about 100 and 190 ms for 3,650 categories of two series, almost all in
-  the core's layout; the line's 10,000 markers cost about 16 ms (VM) and 77 ms
-  (Chrome) to paint (`docs/benchmark.md`).
+  the core's layout; the line has no markers, as its category step is under
+  `markerSize` plus 2 pt, and records in about 0.4 ms (VM) and 4 ms (Chrome)
+  (`docs/benchmark.md`).
 - The gallery's chart list duplicates the core's test gallery (an app's `lib/`
   cannot import another package's test support): same names, drift is
   possible. The measurer fuzz generator is a copy too (`fuzz_copy_test.dart`).

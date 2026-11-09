@@ -25,7 +25,8 @@ import 'resolve.dart';
 ///
 /// Column and bar charts draw rectangles, line charts one path per run of
 /// values and then, per series, a circle marker on every point (on a point
-/// with no neighbour only, when the theme's `lineMarkers` is off), area charts
+/// with no neighbour only, when the theme's `lineMarkers` is off or the
+/// markers do not fit: [lineMarkersFit]), area charts
 /// one closed path per series. Any other kind draws none. The frame puts the
 /// markers in a clip of their own, after the others, which go in the plot's
 /// clip.
@@ -262,6 +263,9 @@ List<ChartPrimitive> _lines(
   MarkAxes axes,
 ) {
   final List<List<ChartPoint?>> tops = _linePoints(resolved, values, axes);
+  final bool everyPoint =
+      theme.lineMarkers &&
+      lineMarkersFit(axes.categoryLength, resolved.categoryCount, theme);
   final List<ChartPrimitive> out = <ChartPrimitive>[];
   for (int s = 0; s < tops.length; s++) {
     final ChartColor color = resolved.colors[s];
@@ -280,7 +284,7 @@ List<ChartPrimitive> _lines(
             strokeWidth: theme.lineWidth,
           ),
         );
-      } else if (points.length == 1 && !theme.lineMarkers) {
+      } else if (points.length == 1 && !everyPoint) {
         marked.add(first);
       }
       points.clear();
@@ -296,7 +300,7 @@ List<ChartPrimitive> _lines(
         first = c;
       }
       points.add(p);
-      if (theme.lineMarkers) {
+      if (everyPoint) {
         marked.add(c);
       }
     }
@@ -307,6 +311,24 @@ List<ChartPrimitive> _lines(
   }
   return out;
 }
+
+/// Whether a line's markers fit on every point: when the category step, the
+/// distance between neighbouring categories along the category axis
+/// ([categoryLength] over [categoryCount]), is at least the theme's
+/// `markerSize` plus 2 pt.
+///
+/// On a denser line the markers would touch and hide the line, and on a
+/// large series they cost far more to draw than the line, so only a point
+/// with no neighbour keeps its marker, as it would not show otherwise. Excel
+/// draws every marker however dense the line (`docs/parity.md`). The legend
+/// keeps its marker either way, and a written chart part says what the theme
+/// says.
+bool lineMarkersFit(
+  double categoryLength,
+  int categoryCount,
+  ChartTheme theme,
+) =>
+    categoryCount > 0 && categoryLength / categoryCount >= theme.markerSize + 2;
 
 /// The width of a marker's outline: Excel's 0.75 pt (`chart_defaults.xlsx`).
 const double markerOutlineWidth = 0.75;
