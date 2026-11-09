@@ -14,9 +14,12 @@
 /// `c:layout`, with that file's theme part. Nothing names a colour, a font or
 /// a position of its own. What a chart of the gallery sets (kind, grouping,
 /// title, legend position, data labels, the data and its format codes) is
-/// written as such. Series past the sixth carry no `c:spPr`, so Excel chooses
-/// their colours itself: that is the open question of Excel's palette past six
-/// colours.
+/// written as such. Beside each chart go Excel's colour-style and style parts
+/// of that file (`colorsN.xml`, `styleN.xml`, `excel_chart_style.dart`), as
+/// Excel writes them beside every chart it makes. Series past the sixth carry
+/// no `c:spPr`, so Excel chooses their colours itself, from the colour cycle
+/// of `colorsN.xml`; without that part Excel falls back to the legacy colours
+/// of `c:style` 2, lighter than its default.
 library;
 
 import 'dart:convert';
@@ -26,6 +29,7 @@ import 'package:archive/archive.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 
 import '../gallery.dart';
+import 'excel_chart_style.dart';
 import 'office_theme.dart';
 
 /// EMU per point.
@@ -103,6 +107,15 @@ Uint8List buildExcelGallery(List<GalleryEntry> entries) {
       _rels(<String>[_rel(1, 'chart', '../charts/chart$i.xml')]),
     );
     add('xl/charts/chart$i.xml', _chartXml(entry));
+    add(
+      'xl/charts/_rels/chart$i.xml.rels',
+      _rels(<String>[
+        _officeRel(2, 'chartColorStyle', 'colors$i.xml'),
+        _officeRel(1, 'chartStyle', 'style$i.xml'),
+      ]),
+    );
+    add('xl/charts/style$i.xml', excelChartStyleXml);
+    add('xl/charts/colors$i.xml', excelChartColorsXml);
   }
   return Uint8List.fromList(
     ZipEncoder().encodeBytes(archive, modified: DateTime.utc(2020)),
@@ -151,7 +164,7 @@ String _contentTypes(int sheets) {
       '<Override PartName="/xl/styles.xml" ContentType="$office.spreadsheetml.styles+xml"/>'
       '<Override PartName="/xl/theme/theme1.xml" ContentType="$office.theme+xml"/>'
       '${<String>[
-        for (int i = 1; i <= sheets; i++) ...<String>['<Override PartName="/xl/worksheets/sheet$i.xml" ContentType="$office.spreadsheetml.worksheet+xml"/>', '<Override PartName="/xl/drawings/drawing$i.xml" ContentType="$office.drawing+xml"/>', '<Override PartName="/xl/charts/chart$i.xml" ContentType="$office.drawingml.chart+xml"/>'],
+        for (int i = 1; i <= sheets; i++) ...<String>['<Override PartName="/xl/worksheets/sheet$i.xml" ContentType="$office.spreadsheetml.worksheet+xml"/>', '<Override PartName="/xl/drawings/drawing$i.xml" ContentType="$office.drawing+xml"/>', '<Override PartName="/xl/charts/chart$i.xml" ContentType="$office.drawingml.chart+xml"/>', '<Override PartName="/xl/charts/style$i.xml" ContentType="application/vnd.ms-office.chartstyle+xml"/>', '<Override PartName="/xl/charts/colors$i.xml" ContentType="application/vnd.ms-office.chartcolorstyle+xml"/>'],
       ].join()}'
       '</Types>';
 }
@@ -162,6 +175,12 @@ String _rels(List<String> relationships) =>
 
 String _rel(int id, String type, String target) =>
     '<Relationship Id="rId$id" Type="$_relNs/$type" Target="$target"/>';
+
+/// A relationship of Office 2011's types, as a chart's to its style parts.
+String _officeRel(int id, String type, String target) =>
+    '<Relationship Id="rId$id" '
+    'Type="http://schemas.microsoft.com/office/2011/relationships/$type" '
+    'Target="$target"/>';
 
 String _workbookXml(List<GalleryEntry> entries) =>
     '$_xmlDecl<workbook xmlns="$_mainNs" xmlns:r="$_relNs"><sheets>'

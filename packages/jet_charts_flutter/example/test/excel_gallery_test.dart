@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_gallery/gallery.dart';
+import 'package:jet_charts_gallery/src/excel_chart_style.dart';
 import 'package:jet_charts_gallery/src/excel_gallery.dart';
 import 'package:xml/xml.dart';
 
@@ -222,6 +224,50 @@ void main() {
         all(sers[s], 'c:spPr'),
         s < 6 ? isNotEmpty : isEmpty,
         reason: '$s',
+      );
+    }
+  });
+
+  test("each chart has Excel's colour and style parts", () {
+    // The owner's Excel-saved default chart, whose parts these are.
+    final Archive defaults = ZipDecoder().decodeBytes(
+      File(
+        '../../jet_charts_core/test/fixtures/owner/axis_full/'
+        'chart_defaults.xlsx',
+      ).readAsBytesSync(),
+    );
+    String owner(String name) => utf8.decode(defaults.findFile(name)!.content);
+    expect(excelChartColorsXml, owner('xl/charts/colors1.xml'));
+    expect(excelChartStyleXml, owner('xl/charts/style1.xml'));
+    const String office = 'http://schemas.microsoft.com/office/2011/';
+    final String types = part('[Content_Types].xml');
+    for (int i = 1; i <= entries.length; i++) {
+      expect(part('xl/charts/colors$i.xml'), excelChartColorsXml);
+      expect(part('xl/charts/style$i.xml'), excelChartStyleXml);
+      final Map<String, String> targets = <String, String>{
+        for (final XmlElement r in all(
+          xml('xl/charts/_rels/chart$i.xml.rels'),
+          'Relationship',
+        ))
+          r.getAttribute('Type')!: r.getAttribute('Target')!,
+      };
+      expect(targets, <String, String>{
+        '${office}relationships/chartColorStyle': 'colors$i.xml',
+        '${office}relationships/chartStyle': 'style$i.xml',
+      });
+      expect(
+        types,
+        contains(
+          '<Override PartName="/xl/charts/style$i.xml" '
+          'ContentType="application/vnd.ms-office.chartstyle+xml"/>',
+        ),
+      );
+      expect(
+        types,
+        contains(
+          '<Override PartName="/xl/charts/colors$i.xml" '
+          'ContentType="application/vnd.ms-office.chartcolorstyle+xml"/>',
+        ),
       );
     }
   });

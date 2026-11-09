@@ -66,7 +66,9 @@ serili varsayılan grafiği göstermez; bu dosyada gösterge açıkça yazıldı
 Excel de gösterir. Bu farkı not etmen gerekmez.
 
 Yedinci ve sekizinci serinin rengini Excel kendisi seçer (dosya bu iki seri için renk
-yazmaz). İstersen bir de şunu yap: `column_eight_series` sayfasında `A1:I5`
+yazmaz; her grafiğin yanına Excel'in kendi renk ve stil parçalarını,
+`colorsN.xml` ve `styleN.xml`, yazar, Excel rengi oradaki renk döngüsünden
+alır). İstersen bir de şunu yap: `column_eight_series` sayfasında `A1:I5`
 hücrelerini seç, Ekle sekmesinden kümelenmiş sütun grafiği ekle ve 7. ve 8.
 serinin rengine bak. Dosyayı kaydetme.
 
