@@ -38,8 +38,11 @@ bool _namesBarrel(String uri) =>
     uri == 'package:jet_office/jet_office.dart' ||
     (!uri.startsWith('package:') && uri.endsWith('jet_office.dart'));
 
-/// Whether [uri] reaches into jet_core's private `src/`.
-bool _namesCoreSource(String uri) => uri.startsWith('package:jet_core/src/');
+/// Whether [uri] reaches into the private `src/` of jet_core or
+/// jet_charts_core.
+bool _namesCoreSource(String uri) =>
+    uri.startsWith('package:jet_core/src/') ||
+    uri.startsWith('package:jet_charts_core/src/');
 
 Iterable<String> _uris(LibSource source) =>
     _directive.allMatches(source.code).map((RegExpMatch m) => m.group(1)!);
@@ -63,13 +66,28 @@ List<String> _docxOffenders(Iterable<LibSource> sources) => <String>[
       source.path,
 ];
 
+/// Whether [uri] is one the drawingml layer may import (decision 0015): a
+/// `dart:` library, a relative path that stays in `drawingml/` or names
+/// `../opc/`, `../xml/` or `../common/`, or exactly the two package barrels.
+bool _drawingmlAllows(String uri) {
+  if (uri.startsWith('dart:')) return true;
+  if (uri == 'package:jet_charts_core/jet_charts_core.dart' ||
+      uri == 'package:jet_core/jet_core.dart') {
+    return true;
+  }
+  if (uri.contains(':')) return false;
+  // Resolve against a file directly in lib/src/drawingml/.
+  final String path = Uri.parse('lib/src/drawingml/x.dart').resolve(uri).path;
+  return path.startsWith(_drawingml) ||
+      path.startsWith('lib/src/opc/') ||
+      path.startsWith('lib/src/xml/') ||
+      path.startsWith(_common);
+}
+
 List<String> _drawingmlOffenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
     if (source.path.startsWith(_drawingml) &&
-        _uris(source).any(
-          (String uri) =>
-              _names(uri, 'xlsx') || _names(uri, 'docx') || _namesBarrel(uri),
-        ))
+        !_uris(source).every(_drawingmlAllows))
       source.path,
 ];
 
@@ -176,7 +194,7 @@ void main() {
     expect(_docxOffenders(libSources()), isEmpty);
   });
 
-  test('nothing under drawingml imports xlsx or docx', () {
+  test('drawingml imports only what decision 0015 allows', () {
     final List<LibSource> sources = libSources();
     expect(
       sources.map((LibSource s) => s.path),
@@ -252,11 +270,39 @@ void main() {
         "import 'package:jet_office/jet_office.dart';",
       ),
       LibSource('lib/src/drawingml/s.dart', "import '../opc/package.dart';"),
+      LibSource(
+        'lib/src/drawingml/t.dart',
+        "import 'package:jet_charts_core/src/a.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/u.dart',
+        "import 'package:archive/archive.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/v.dart',
+        "import 'dart:typed_data';\n"
+            "import 'package:jet_charts_core/jet_charts_core.dart';\n"
+            "import 'package:jet_core/jet_core.dart';\n"
+            "import 'chart/x.dart';\n"
+            "import '../xml/xml_writer.dart';\n"
+            "import '../common/image.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/w.dart',
+        "import '../zip/archive_adapter.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/y.dart',
+        "// import '../xlsx/x.dart';\nconst int x = 0;",
+      ),
     ];
     expect(_drawingmlOffenders(fixtures), <String>[
       'lib/src/drawingml/p.dart',
       'lib/src/drawingml/q.dart',
       'lib/src/drawingml/r.dart',
+      'lib/src/drawingml/t.dart',
+      'lib/src/drawingml/u.dart',
+      'lib/src/drawingml/w.dart',
     ]);
     expect(_commonOffenders(fixtures), <String>[
       'lib/src/common/a.dart',
@@ -264,7 +310,10 @@ void main() {
       'lib/src/common/c.dart',
       'lib/src/common/j.dart',
     ]);
-    expect(_coreSourceOffenders(fixtures), <String>['lib/src/xlsx/n.dart']);
+    expect(_coreSourceOffenders(fixtures), <String>[
+      'lib/src/xlsx/n.dart',
+      'lib/src/drawingml/t.dart',
+    ]);
     expect(_docxOffenders(fixtures), <String>[
       'lib/src/docx/f.dart',
       'lib/src/docx/g.dart',

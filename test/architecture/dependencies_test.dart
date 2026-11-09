@@ -1,8 +1,8 @@
-// Architecture guard: jet_office's runtime dependencies are archive and
-// jet_core.
+// Architecture guard: jet_office's runtime dependencies are archive, jet_core
+// and jet_charts_core.
 //
-// `pubspec.yaml` lists exactly these two under `dependencies:` (decisions
-// 0001 and 0012), and no file under lib/ imports another package. Only
+// `pubspec.yaml` lists exactly these three under `dependencies:` (decisions
+// 0001, 0012 and 0014), and no file under lib/ imports another package. Only
 // lib/src/zip/archive_adapter.dart may import archive
 // (`archive_isolation_test.dart`).
 @TestOn('vm')
@@ -32,8 +32,10 @@ List<String> _dependencies(String pubspec) {
   return names;
 }
 
-/// A quoted `package:` URI of a package other than archive and jet_core.
-final RegExp _foreign = RegExp(r'''['"]package:(?!archive/|jet_core/)''');
+/// A quoted `package:` URI of a package other than archive, jet_core and jet_charts_core.
+final RegExp _foreign = RegExp(
+  r'''['"]package:(?!archive/|jet_core/|jet_charts_core/)''',
+);
 
 List<String> _offenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
@@ -41,10 +43,17 @@ List<String> _offenders(Iterable<LibSource> sources) => <String>[
 ];
 
 void main() {
-  test('pubspec.yaml depends on archive and jet_core only', () {
-    final String pubspec = File('pubspec.yaml').readAsStringSync();
-    expect(_dependencies(pubspec), <String>['archive', 'jet_core']);
-  });
+  test(
+    'pubspec.yaml depends on archive, jet_core and jet_charts_core only',
+    () {
+      final String pubspec = File('pubspec.yaml').readAsStringSync();
+      expect(_dependencies(pubspec), <String>[
+        'archive',
+        'jet_core',
+        'jet_charts_core',
+      ]);
+    },
+  );
 
   test('the check reads the names of the dependencies section only', () {
     const String pubspec = '''
@@ -78,6 +87,7 @@ dev_dependencies:
         "// import 'package:foo/foo.dart';\n"
             "import 'package:archive/archive.dart';\n"
             "import 'package:jet_core/jet_core.dart';\n"
+            "import 'package:jet_charts_core/jet_charts_core.dart';\n"
             "import 'dart:convert';\n"
             "import 'x.dart';",
       ),

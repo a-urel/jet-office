@@ -14,11 +14,13 @@ this library's own, with Word's values) and `0012` (the number format engine
 lives in `jet_core`; supersedes `0001`'s one runtime dependency and `0008`'s
 location and names) and `0013` (one repository: a pub workspace, with
 `jet_core` under `packages/`) and `0014` (the chart phase: `jet_charts_core`
-under `packages/`, and a DrawingML layer here) before any design change.
+under `packages/`, and a DrawingML layer here) and `0015` (what the DrawingML
+layer may import; supersedes that sentence of `0014`) before any design
+change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
 its own `AGENTS.md`; milestone J2 is done (axis scales and the cartesian
-layout), and this package still does not depend on it until C1.
+layout), and this package depends on it from C1.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -476,8 +478,9 @@ the count again if it fails.
 - **`package:archive` is reachable only from
   `lib/src/zip/archive_adapter.dart`.** Enforced by
   `test/architecture/archive_isolation_test.dart`.
-- **Runtime dependencies are `archive` and `jet_core`** (decision 0012), the
-  second a package of this workspace (`packages/jet_core`, decision 0013; it has
+- **Runtime dependencies are `archive`, `jet_core` and `jet_charts_core`**
+  (decisions 0012 and 0014), the last two packages of this workspace
+  (`packages/jet_core`, decision 0013, and `packages/jet_charts_core`; each has
   its own `AGENTS.md`). Enforced by `test/architecture/dependencies_test.dart`.
 - **The OPC layer does not know XLSX.** Nothing under `lib/src/opc` imports
   anything under `lib/src/xlsx`, so DOCX can share it (decision 0009).
@@ -485,8 +488,10 @@ the count again if it fails.
 - **The format layers depend one way.** Nothing under `lib/src/docx/` imports
   `lib/src/xlsx/` (the number formatter is `package:jet_core`, decision 0012);
   nothing under `lib/src/common/` imports `lib/src/xlsx/`, `lib/src/docx/` or
-  the barrel; nothing under `lib/src/drawingml/` (the DrawingML both formats
-  share, decision 0014) imports `lib/src/xlsx/`, `lib/src/docx/` or the barrel;
+  the barrel; `lib/src/drawingml/` (the DrawingML both formats
+  share, decision 0014) imports only `dart:`, its own files, `../opc/`,
+  `../xml/`, `../common/`, `package:jet_charts_core/jet_charts_core.dart` and
+  `package:jet_core/jet_core.dart` (decision 0015);
   nothing under `lib/src/` imports `lib/jet_office.dart`.
   Enforced by `test/architecture/layering_test.dart`.
 - **One cell encoder.** Only `lib/src/xlsx/cell_encoder.dart` writes `<c ` or
