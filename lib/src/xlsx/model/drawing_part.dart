@@ -138,8 +138,9 @@ final class DrawingEntry {
   /// distance from `from`; an `absoluteAnchor`, a `twoCellAnchor` with
   /// `editAs="absolute"` and anything else stay. Only the text of the
   /// markers' `row` or `col` and `rowOff` or `colOff` changes, whatever the
-  /// anchor holds (a picture, a shape, a chart, a group). Throws XML errors
-  /// as a reader does on what a file holds.
+  /// anchor holds (a picture, a shape, a chart, a group). Throws a
+  /// [StateError] when an insert would push a corner off the sheet (Excel
+  /// refuses), and XML errors as a reader does on what a file holds.
   DrawingEntry? shiftedBy(ReferenceShift edit) {
     if (source.namespaceUri != Ns.xdr) return null;
     final String kind = source.localName;
@@ -168,26 +169,28 @@ final class DrawingEntry {
         r.skip();
         continue;
       }
-      final XlsxAnchorPoint? point = _marker(r);
-      if (point == null) return null;
-      final int at = rows ? point.row : point.column;
-      final double pixels = rows ? point.offsetY : point.offsetX;
-      read[name] = (at: at, offset: (pixels * emuPerPixel).round());
+      final ({int at, int offset})? value = _rawMarker(r, cellName, offsetName);
+      if (value == null) return null;
+      read[name] = value;
     }
     final ({int at, int offset})? from = read['from'];
     if (from == null) return null;
-    final ({int at, int offset}) movedFrom = edit.shiftAnchor(
+    final ({int at, int offset})? shiftedFrom = edit.shiftAnchor(
       from.at,
       from.offset,
       end: false,
     );
+    if (shiftedFrom == null) throw _pushedOff();
+    final ({int at, int offset}) movedFrom = shiftedFrom;
     final Map<String, ({int at, int offset})> next =
         <String, ({int at, int offset})>{'from': movedFrom};
     final ({int at, int offset})? to = read['to'];
     if (to != null) {
-      next['to'] = sizes
+      final ({int at, int offset})? movedTo = sizes
           ? edit.shiftAnchor(to.at, to.offset, end: true)
           : (at: to.at + movedFrom.at - from.at, offset: to.offset);
+      if (movedTo == null || movedTo.at > edit.lastIndex) throw _pushedOff();
+      next['to'] = movedTo;
     }
     if (next['from'] == from && next['to'] == to) return null;
     String? marker;
@@ -213,6 +216,9 @@ final class DrawingEntry {
 }
 
 void _noWarning(String detail) {}
+
+StateError _pushedOff() =>
+    StateError('The insert would push a drawing object off the sheet.');
 
 /// The relationship ids [element] names: the value of every attribute in the
 /// relationships namespace, at any depth. Throws XML errors as a reader does
@@ -474,6 +480,41 @@ XlsxAnchorPoint? _marker(XmlPullReader r) {
     offsetX: offsetX / emuPerPixel,
     offsetY: offsetY / emuPerPixel,
   );
+}
+
+/// The [cellName] (`row` or `col`) and [offsetName] (EMU, as written) of
+/// the marker [r] is on, which it consumes; `null` when the cell is missing
+/// or either is not a whole number (an offset left out is 0).
+({int at, int offset})? _rawMarker(
+  XmlPullReader r,
+  String cellName,
+  String offsetName,
+) {
+  int? at;
+  int? offset = 0;
+  if (r.isEmptyElement) {
+    r.skip();
+    return null;
+  }
+  final int depth = r.depth;
+  while (r.next()) {
+    if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+    if (r.eventType != XmlEventType.startElement) continue;
+    if (r.depth != depth + 1 || r.namespaceUri != Ns.xdr) {
+      r.skip();
+      continue;
+    }
+    final String name = r.localName;
+    if (name == cellName) {
+      at = int.tryParse(_text(r).trim());
+    } else if (name == offsetName) {
+      offset = int.tryParse(_text(r).trim());
+    } else {
+      r.skip();
+    }
+  }
+  if (at == null || at < 0 || offset == null) return null;
+  return (at: at, offset: offset);
 }
 
 /// The text of the element [r] is on, which it consumes.

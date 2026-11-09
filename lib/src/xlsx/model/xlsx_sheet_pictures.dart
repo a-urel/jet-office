@@ -626,7 +626,9 @@ mixin _SheetPictures {
 /// The `drawings` holder of a sheet: on a row or column edit of the sheet
 /// every anchor of its drawing part moves as Excel moves it
 /// ([DrawingEntry.shiftedBy]): pictures, shapes, charts and groups alike, a
-/// picture whose cells are all deleted kept at zero size. A sheet rename or
+/// picture whose cells are all deleted kept at zero size; an insert that
+/// would push an anchor off the sheet throws a [StateError] before any
+/// change. A sheet rename or
 /// move changes no anchor. A drawing the model cannot type is left as
 /// written.
 final class _DrawingHolder implements ReferenceHolder {
@@ -645,13 +647,15 @@ final class _DrawingHolder implements ReferenceHolder {
     if (drawing == null) return;
     final PackageReader reader = _sheet._host.reader;
     final ChangeLog log = _sheet._host.log;
+    // Every move, and so every refusal, before any change.
+    final List<DrawingEntry?> moves = <DrawingEntry?>[
+      for (final DrawingEntry entry in drawing.entries)
+        reader.guardXml(read.partName!, () => entry.shiftedBy(edit)),
+    ];
     log.transaction(() {
-      for (int at = 0; at < drawing.entries.length; at++) {
+      for (int at = 0; at < moves.length; at++) {
         final DrawingEntry entry = drawing.entries[at];
-        final DrawingEntry? moved = reader.guardXml(
-          read.partName!,
-          () => entry.shiftedBy(edit),
-        );
+        final DrawingEntry? moved = moves[at];
         if (moved == null) continue;
         _sheet._attach(read, drawing);
         applyChange(log, _DrawingEntryChange(drawing, at, entry, moved));

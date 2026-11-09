@@ -109,13 +109,14 @@ final class ReferenceShift implements ReferenceMapper {
   /// when it reaches into that row or column (an offset above 0), so a
   /// picture ending at its top keeps its size. A corner in deleted rows or
   /// columns goes to the start of the first one after them, at offset 0, so a
-  /// picture whose cells are all deleted keeps zero height or width. Capped
-  /// at the sheet's last row or column.
-  ({int at, int offset}) shiftAnchor(int at, int offset, {required bool end}) {
+  /// picture whose cells are all deleted keeps zero height or width. `null`
+  /// when an insert pushes the corner past the sheet's last row or column.
+  ({int at, int offset})? shiftAnchor(int at, int offset, {required bool end}) {
     final int first = index - 1;
     if (count > 0) {
       if (at > first || (at == first && (!end || offset > 0))) {
-        return (at: _atMost(at + count, _limit - 1), offset: offset);
+        if (at + count > _limit - 1) return null;
+        return (at: at + count, offset: offset);
       }
       return (at: at, offset: offset);
     }
@@ -124,6 +125,9 @@ final class ReferenceShift implements ReferenceMapper {
     if (at >= first + n) return (at: at - n, offset: offset);
     return (at: first, offset: 0);
   }
+
+  /// The last 0-based row or column of the edited axis.
+  int get lastIndex => _limit - 1;
 
   /// The cell at 0-based ([row], [column]) on [sheet] after the edit, or
   /// `null` when it is deleted or pushed off the sheet.

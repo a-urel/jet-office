@@ -349,7 +349,8 @@ final class VmlPart implements PartContent {
   /// `<x:Anchor>` moves with its top-left corner
   /// ([ReferenceShift.shiftAnchor]), keeping its size. The rest of the shape
   /// stays as written. A note whose cell is deleted is not moved here: it
-  /// goes with its comment.
+  /// goes with its comment. Throws a [StateError] when an insert would push
+  /// the box off the sheet.
   VmlShape? shifted(VmlShape shape, ReferenceShift edit) {
     final bool rows = edit.axis == ShiftAxis.rows;
     final String open = _rootOpen;
@@ -413,11 +414,16 @@ final class VmlPart implements PartContent {
       for (final RegExpMatch m in numbers) int.parse(m[0]!),
     ];
     final int first = edit.axis == ShiftAxis.rows ? 2 : 0;
-    final ({int at, int offset}) start = edit.shiftAnchor(
+    final ({int at, int offset})? shifted = edit.shiftAnchor(
       values[first],
       values[first + 1],
       end: false,
     );
+    final int delta0 = shifted == null ? 0 : shifted.at - values[first];
+    if (shifted == null || values[first + 4] + delta0 > edit.lastIndex) {
+      throw StateError('The insert would push a VML shape off the sheet.');
+    }
+    final ({int at, int offset}) start = shifted;
     final int delta = start.at - values[first];
     if (delta == 0 && start.offset == values[first + 1]) return null;
     final Map<int, int> next = <int, int>{

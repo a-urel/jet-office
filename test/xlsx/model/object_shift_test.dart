@@ -270,6 +270,54 @@ void main() {
     expect(comparePackages(before, book.save().bytes), isEmpty);
   });
 
+  test('an insert that would push a one-cell anchor off the sheet refuses', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _withDrawing(
+        '<xdr:oneCellAnchor>${_marker('from', 1, 2)}'
+        '<xdr:ext cx="1" cy="1"/>${_pic(2)}<xdr:clientData/>'
+        '</xdr:oneCellAnchor>'
+        '<xdr:twoCellAnchor editAs="oneCell">'
+        '${_marker('from', 0, XlsxLimits.maxRows - 3)}'
+        '${_marker('to', 1, XlsxLimits.maxRows - 1)}${_pic(3)}'
+        '<xdr:clientData/></xdr:twoCellAnchor>',
+      ),
+    );
+    final Uint8List before = book.save().bytes;
+    expect(() => _edit(book, _insertRows(1, 1)), throwsStateError);
+    expect(comparePackages(before, book.save().bytes), isEmpty);
+  });
+
+  test('an insert that would push a two-cell anchor off the sheet refuses', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _withDrawing(
+        '<xdr:twoCellAnchor>${_marker('from', 0, 0)}'
+        '${_marker('to', XlsxLimits.maxColumns - 1, 3, colOff: 5)}${_pic(2)}'
+        '<xdr:clientData/></xdr:twoCellAnchor>',
+      ),
+    );
+    final Uint8List before = book.save().bytes;
+    expect(
+      () => _edit(book, ReferenceShift.insert('S', ShiftAxis.columns, 2, 1)),
+      throwsStateError,
+    );
+    expect(comparePackages(before, book.save().bytes), isEmpty);
+  });
+
+  test('an offset that is not whole pixels is kept byte for byte', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _withDrawing(
+        '<xdr:oneCellAnchor>${_marker('from', 1, 2, colOff: 12345, rowOff: 7)}'
+        '<xdr:ext cx="1" cy="1"/>${_pic(2)}<xdr:clientData/>'
+        '</xdr:oneCellAnchor>',
+      ),
+    );
+    _edit(book, _insertRows(1, 2));
+    expect(
+      _saved(book)[_drawingPart],
+      contains(_marker('from', 1, 4, colOff: 12345, rowOff: 7)),
+    );
+  });
+
   test('an insert that would push a note off the sheet refuses', () {
     final XlsxWorkbook book = XlsxWorkbook.open(_package(''));
     final XlsxSheet sheet = book.sheets.single;
