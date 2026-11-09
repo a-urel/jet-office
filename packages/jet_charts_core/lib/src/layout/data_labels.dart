@@ -5,7 +5,7 @@
 /// already drawn (axis labels, titles, the legend) and every label already
 /// placed, stays off the legend's rectangle and shares no area with a bar,
 /// marker or line other than its own bar (`findOverlaps`'s rule; area fills
-/// do not count). Labels are placed in series order, then category order, so an
+/// do not count, and a label on an area fill is drawn to read on it). Labels are placed in series order, then category order, so an
 /// earlier one wins a place. A label with no such place is hidden.
 library;
 
@@ -83,8 +83,13 @@ List<(String, String)> dataLabelTexts(
 /// it reads on a dark bar, else in the theme's data label colour. Line labels
 /// try above, below, right, then left of the point; an area label is centred
 /// on the column under its point, halfway between the point and the area's
-/// base; both must lie inside the plot. Nothing is placed unless the chart
-/// asks for data labels.
+/// base, and moved inward, no further than needed, where that leaves the plot
+/// (the first and last points of an area sit on the plot's edges); both must
+/// lie inside the plot. An area label is drawn by the rule of a label inside
+/// a bar, on the colour of the fill under it: its own series' when the chart
+/// is stacked, else the topmost area painted under the label's centre (the
+/// last series whose area holds it), its own when none does. Nothing is
+/// placed unless the chart asks for data labels.
 DataLabelPlacement placeDataLabels({
   required Chart chart,
   required ResolvedChart resolved,
@@ -127,6 +132,15 @@ DataLabelPlacement placeDataLabels({
       taken.add(TextPrimitive(p.id, '', p.rect, theme.dataLabels), p.rect);
     }
   }
+  // The areas, in paint order, for the colour under an area label.
+  final List<PathPrimitive> areas = <PathPrimitive>[
+    for (final ChartPrimitive p in _flat(existing))
+      if (p is PathPrimitive &&
+          p.fill != null &&
+          p.id.startsWith(ids.seriesPrefix) &&
+          p.id.endsWith('/area'))
+        p,
+  ];
   final BoxGrid<LaidMark> marks = BoxGrid<LaidMark>();
   for (final LaidMark m in laidMarks(existing)) {
     if (m.box != null) {
@@ -167,9 +181,20 @@ DataLabelPlacement placeDataLabels({
         if (!bounds.contains(candidate)) {
           continue;
         }
-        final ChartTextStyle style = place.where == _Where.inside
-            ? _insideStyle(theme.dataLabels, resolved.colors[anchor.series])
-            : theme.dataLabels;
+        final ChartTextStyle style = switch (place.where) {
+          _Where.inside => _insideStyle(
+            theme.dataLabels,
+            resolved.colors[anchor.series],
+          ),
+          _ when chart.kind == ChartKind.area => _insideStyle(
+            theme.dataLabels,
+            stacked
+                ? resolved.colors[anchor.series]
+                : _fillUnder(candidate, areas) ??
+                      resolved.colors[anchor.series],
+          ),
+          _ => theme.dataLabels,
+        };
         final TextPrimitive label = TextPrimitive(t.$1, t.$2, candidate, style);
         if (marks.any(
           label.bounds,
@@ -219,6 +244,48 @@ Iterable<ChartPrimitive> _flat(List<ChartPrimitive> list) sync* {
       yield* _flat(p.children);
     }
   }
+}
+
+/// The fill of the last of [areas] (in paint order) that holds the centre of
+/// [label], or `null` when none does.
+ChartColor? _fillUnder(ChartRect label, List<PathPrimitive> areas) {
+  final ChartPoint c = ChartPoint(
+    label.left + label.width / 2,
+    label.top + label.height / 2,
+  );
+  for (int i = areas.length - 1; i >= 0; i--) {
+    if (_holds(areas[i].points, c)) {
+      return areas[i].fill;
+    }
+  }
+  return null;
+}
+
+/// Whether [p] lies inside [polygon], by the even-odd rule.
+bool _holds(List<ChartPoint> polygon, ChartPoint p) {
+  bool inside = false;
+  for (int i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    final ChartPoint a = polygon[i];
+    final ChartPoint b = polygon[j];
+    if ((a.y > p.y) != (b.y > p.y) &&
+        p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/// [rect] moved, no further than needed, to lie inside [bounds] on each axis
+/// where it is no longer than [bounds] there; unmoved on an axis where it is.
+ChartRect _shiftInto(ChartRect rect, ChartRect bounds) {
+  double into(double start, double length, double from, double span) =>
+      length > span ? start : start.clamp(from, from + span - length);
+  return ChartRect(
+    into(rect.left, rect.width, bounds.left, bounds.width),
+    into(rect.top, rect.height, bounds.top, bounds.height),
+    rect.width,
+    rect.height,
+  );
 }
 
 /// The colour a label inside a bar of [bar] colour is drawn in: white when
@@ -320,7 +387,9 @@ List<_Candidate> _candidates(
     case ChartKind.area:
       final ChartPoint p = anchor.point!;
       final ChartPoint b = anchor.base!;
-      return <_Candidate>[inPlot(around((p.x + b.x) / 2, (p.y + b.y) / 2))];
+      return <_Candidate>[
+        inPlot(_shiftInto(around((p.x + b.x) / 2, (p.y + b.y) / 2), plot)),
+      ];
     default:
       return const <_Candidate>[];
   }

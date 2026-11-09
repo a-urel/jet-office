@@ -337,12 +337,103 @@ void main() {
       kind: ChartKind.area,
       valueAxis: fixed,
     );
-    // The middle category's labels: those at the ends sit on the plot's
-    // edges (an area's points are on tick marks) and do not fit.
+    // Every label: those at the ends, whose points sit on the plot's edges
+    // (an area's points are on tick marks), are moved inward.
     for (int s = 0; s < 2; s++) {
-      expect(has(l, ids.dataLabelId(s, 1)), isTrue, reason: 'label/$s/1');
+      for (int c = 0; c < 3; c++) {
+        expect(has(l, ids.dataLabelId(s, c)), isTrue, reason: 'label/$s/$c');
+      }
     }
     expect(findOverlaps(l.primitives, const ChartSize(400, 300)), isEmpty);
+  });
+
+  test('an area label at the plot\'s edge moves inward until it fits', () {
+    final ChartLayout l = lay(
+      <List<double?>>[
+        <double?>[10, 20, 30],
+      ],
+      kind: ChartKind.area,
+      valueAxis: fixed,
+    );
+    final ChartRect plot = l.plotArea!;
+    final PathPrimitive a = byId<PathPrimitive>(l, ids.seriesAreaId(0));
+    // Area points: tops for 0..2, then bases for 2..0.
+    final TextPrimitive first = label(l, 0, 0);
+    final TextPrimitive last = label(l, 0, 2);
+    expect(a.points[0].x, closeTo(plot.left, tol));
+    expect(a.points[2].x, closeTo(plot.right, tol));
+    expect(first.rect.left, closeTo(plot.left, tol));
+    expect(last.rect.right, closeTo(plot.right, tol));
+    // Still halfway between the point and the base, up and down.
+    expect(
+      first.rect.top + first.rect.height / 2,
+      closeTo((a.points[0].y + a.points[5].y) / 2, tol),
+    );
+    expect(
+      last.rect.top + last.rect.height / 2,
+      closeTo((a.points[2].y + a.points[3].y) / 2, tol),
+    );
+    expect(findOverlaps(l.primitives, l.size), isEmpty);
+  });
+
+  group('an area label reads on the fill under it', () {
+    final ChartColor light = ChartColor.rgb(0xFFFF99);
+    final ChartColor dark = ChartColor.rgb(0x000080);
+    ChartLayout areas(List<ChartColor> palette, ChartGrouping grouping) {
+      // Stacked, the two must fit the axis to 100 together.
+      final bool standard = grouping == ChartGrouping.clustered;
+      final double a = standard ? 80 : 40;
+      final double b = standard ? 60 : 30;
+      return layoutChart(
+        Chart(
+          kind: ChartKind.area,
+          grouping: grouping,
+          valueAxis: fixed,
+          dataLabels: const ChartDataLabels(visible: true),
+          legend: const ChartLegend(visible: false),
+          series: <ChartSeries>[
+            series('S0', <double?>[a, a, a]),
+            series('S1', <double?>[b, b, b]),
+          ],
+        ),
+        theme: theme.copyWith(palette: palette),
+        size: const ChartSize(400, 300),
+        measurer: measurer,
+      );
+    }
+
+    final ChartColor white = ChartColor.rgb(0xFFFFFF);
+
+    test('standard (clustered): the topmost area painted there', () {
+      // S1 is painted over S0, and S0's label (at 40) lies on S1's fill.
+      final ChartLayout overDark = areas(<ChartColor>[
+        light,
+        dark,
+      ], ChartGrouping.clustered);
+      expect(label(overDark, 0, 1).style.color, white);
+      expect(label(overDark, 1, 1).style.color, white);
+      final ChartLayout overLight = areas(<ChartColor>[
+        dark,
+        light,
+      ], ChartGrouping.clustered);
+      expect(label(overLight, 0, 1).style.color, theme.dataLabels.color);
+      expect(label(overLight, 1, 1).style.color, theme.dataLabels.color);
+    });
+
+    test('stacked: its own series', () {
+      final ChartLayout l = areas(<ChartColor>[
+        light,
+        dark,
+      ], ChartGrouping.stacked);
+      expect(label(l, 0, 1).style.color, theme.dataLabels.color);
+      expect(label(l, 1, 1).style.color, white);
+      final ChartLayout swapped = areas(<ChartColor>[
+        dark,
+        light,
+      ], ChartGrouping.stacked);
+      expect(label(swapped, 0, 1).style.color, white);
+      expect(label(swapped, 1, 1).style.color, theme.dataLabels.color);
+    });
   });
 
   test('a line of 10,000 points with data labels lays out in reasonable '
