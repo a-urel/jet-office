@@ -205,7 +205,7 @@ void main() {
     final String html = galleryHtml();
 
     test('has a heading and an svg for each chart and size', () {
-      expect('<svg '.allMatches(html).length, 14 * 3);
+      expect('<svg '.allMatches(html).length, 16 * 3);
       expect(html, contains('<h3>column_clustered, 360 x 240</h3>'));
       expect(html, contains('<h3>tile, 160 x 100</h3>'));
     });

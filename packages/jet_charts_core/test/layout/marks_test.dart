@@ -80,6 +80,7 @@ double xOf(ChartLayout l, double v) {
 Matcher near(double v) => closeTo(v, 1e-9);
 
 void main() {
+  _smoothAndTranslucent();
   test('two clustered series in a band', () {
     final ChartLayout l = lay(<List<double?>>[
       <double?>[1, 2, 3, 4],
@@ -666,4 +667,94 @@ void main() {
       });
     }
   }
+}
+
+void _smoothAndTranslucent() {
+  group('smooth lines and translucent areas', () {
+    GalleryChart gallery(String name) =>
+        galleryCharts().firstWhere((GalleryChart g) => g.name == name);
+
+    test('a smooth series draws a curve, a straight one its points', () {
+      final ChartLayout l = gallery('line_smooth').layout(goldenSize);
+      final List<PathPrimitive> smooth = <PathPrimitive>[
+        for (final ChartPrimitive p in flat(l.primitives))
+          if (p is PathPrimitive && p.id.startsWith('series/0/line/')) p,
+      ];
+      final List<PathPrimitive> straight = <PathPrimitive>[
+        for (final ChartPrimitive p in flat(l.primitives))
+          if (p is PathPrimitive && p.id.startsWith('series/1/line/')) p,
+      ];
+      const int categories = 5;
+      expect(
+        smooth.fold<int>(0, (int n, PathPrimitive p) => n + p.points.length),
+        greaterThan(categories),
+      );
+      // The straight series has a null: its runs hold exactly its points.
+      expect(
+        straight.fold<int>(0, (int n, PathPrimitive p) => n + p.points.length),
+        4,
+      );
+      expect(findOverlaps(l.primitives, goldenSize), isEmpty);
+    });
+
+    test('markers stay on the data points of a smooth series', () {
+      final ChartLayout smooth = gallery('line_smooth').layout(goldenSize);
+      final Chart chart = gallery('line_smooth').chart;
+      final Chart straightChart = chart.copyWith(
+        series: <ChartSeries>[
+          for (final ChartSeries s in chart.series) s.copyWith(smooth: false),
+        ],
+      );
+      final ChartLayout straight = layoutChart(
+        straightChart,
+        theme: ChartTheme.office,
+        size: goldenSize,
+        measurer: measurer,
+      );
+      for (final ChartPrimitive p in flat(straight.primitives)) {
+        if (p is ArcPrimitive && p.id.contains('/marker/')) {
+          expect(byId<ArcPrimitive>(smooth, p.id).center, p.center);
+        }
+      }
+      expect(flat(smooth.primitives).whereType<ArcPrimitive>(), isNotEmpty);
+    });
+
+    test('translucent areas carry the opacity and an edge line', () {
+      final GalleryChart g = gallery('area_translucent');
+      final ChartLayout l = g.layout(goldenSize);
+      final List<ChartPrimitive> all = flat(l.primitives).toList();
+      final List<int> areaAt = <int>[
+        for (int i = 0; i < all.length; i++)
+          if (all[i].id.endsWith('/area')) i,
+      ];
+      expect(areaAt, hasLength(3));
+      for (final int i in areaAt) {
+        expect((all[i] as PathPrimitive).fillOpacity, 0.25);
+      }
+      for (int s = 0; s < 3; s++) {
+        final int line = all.indexWhere(
+          (ChartPrimitive p) => p.id == 'series/$s/line/0',
+        );
+        expect(line, greaterThan(areaAt.last));
+        final PathPrimitive p = all[line] as PathPrimitive;
+        expect(p.closed, isFalse);
+        expect(p.fill, isNull);
+        expect(p.stroke, ChartTheme.office.seriesColor(s));
+      }
+      expect(findOverlaps(l.primitives, goldenSize), isEmpty);
+    });
+
+    test('the Office theme draws opaque areas without an edge line', () {
+      final ChartLayout l = lay(<List<double?>>[
+        <double?>[1, 2, 3],
+        <double?>[2, 1, 2],
+      ], kind: ChartKind.area);
+      for (final ChartPrimitive p in flat(l.primitives)) {
+        if (p is PathPrimitive && p.id.endsWith('/area')) {
+          expect(p.fillOpacity, 1);
+        }
+        expect(p.id.contains('/line/'), isFalse);
+      }
+    });
+  });
 }

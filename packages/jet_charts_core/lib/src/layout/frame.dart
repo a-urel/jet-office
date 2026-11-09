@@ -196,6 +196,10 @@ extension on FrameContext {
                 (chart.kind == ChartKind.combination &&
                     series.kind == ChartKind.line),
         ],
+        outlined: <bool>[
+          for (int i = 0; i < chart.series.length; i++)
+            theme.areaLine && chart.kind == ChartKind.area,
+        ],
         lineLook: (
           lineWidth: theme.lineWidth,
           markerSize: theme.markerSize,

@@ -11,7 +11,7 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 /// One chart of the gallery.
 final class GalleryChart {
   /// Creates a gallery chart named [name] (a file name stem) of [chart].
-  const GalleryChart(this.name, this.chart);
+  const GalleryChart(this.name, this.chart, {this.theme});
 
   /// The name, also the golden's file stem.
   final String name;
@@ -19,10 +19,14 @@ final class GalleryChart {
   /// The chart.
   final Chart chart;
 
+  /// The theme the chart is laid out in, or null for the Office theme, unless a chart
+  /// shows a theme value of its own.
+  final ChartTheme? theme;
+
   /// Lays the chart out on [size] as the goldens do.
   ChartLayout layout(ChartSize size) => layoutChart(
     chart,
-    theme: ChartTheme.office,
+    theme: theme ?? ChartTheme.office,
     size: size,
     measurer: const FixedWidthTextMeasurer(),
   );
@@ -106,6 +110,34 @@ List<GalleryChart> galleryCharts() => <GalleryChart>[
   GalleryChart(
     'area_stacked',
     _column(kind: ChartKind.area, grouping: ChartGrouping.stacked),
+  ),
+  GalleryChart(
+    'line_smooth',
+    _column(
+      kind: ChartKind.line,
+      title: 'A smooth and a straight line',
+      series: <ChartSeries>[
+        _series(
+          'Smooth',
+          <Object>['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+          <double?>[4, 9, 3, 8, 6],
+        ).copyWith(smooth: true),
+        _series(
+          'Straight',
+          <Object>['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+          <double?>[2, 5, null, 7, 9],
+        ),
+      ],
+    ),
+  ),
+  GalleryChart(
+    'area_translucent',
+    _column(
+      kind: ChartKind.area,
+      grouping: ChartGrouping.stacked,
+      title: 'Translucent areas',
+    ),
+    theme: ChartTheme.office.copyWith(areaOpacity: 0.25, areaLine: true),
   ),
   GalleryChart(
     'column_negative',

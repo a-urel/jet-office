@@ -69,6 +69,9 @@ typedef LegendLineLook = ({double lineWidth, double markerSize, bool markers});
 /// column, at most a third of [limit]'s width wide and no taller than [area],
 /// centred on [area]'s height. The legend keeps `legendGap` from what is left.
 ///
+/// An entry [outlined] marks (an area series whose theme draws an edge line)
+/// has its square outlined in its colour, `lineLook`'s line width thick.
+///
 /// Returns `null` when it does not fit. The `legend` rectangle holds the
 /// entries exactly and has no fill.
 Placed? placeLegend(
@@ -81,12 +84,14 @@ Placed? placeLegend(
   TextMeasurer measurer,
   ChartSpacing spacing, {
   List<bool> lines = const <bool>[],
+  List<bool> outlined = const <bool>[],
   LegendLineLook lineLook = (lineWidth: 1, markerSize: 0, markers: false),
 }) {
   if (names.isEmpty) {
     return Placed(const <ChartPrimitive>[], area);
   }
   bool isLine(int i) => i < lines.length && lines[i];
+  bool isOutlined(int i) => i < outlined.length && outlined[i];
   double symbolWidth(int i) =>
       isLine(i) ? spacing.legendLineSymbol : spacing.legendSymbol;
   final List<ChartSize> sizes = <ChartSize>[
@@ -204,6 +209,8 @@ Placed? placeLegend(
               spacing.legendSymbol,
             ),
             fill: colors[i],
+            stroke: isOutlined(i) ? colors[i] : null,
+            strokeWidth: isOutlined(i) ? lineLook.lineWidth : 1,
           ),
         );
       }

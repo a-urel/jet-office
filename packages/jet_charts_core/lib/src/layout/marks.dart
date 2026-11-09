@@ -17,6 +17,7 @@ import '../theme/chart_color.dart';
 import '../theme/chart_theme.dart';
 import 'axis_layout.dart';
 import 'chart_ids.dart' as ids;
+import 'curve.dart';
 import 'geometry.dart';
 import 'primitives.dart';
 import 'resolve.dart';
@@ -27,9 +28,12 @@ import 'resolve.dart';
 /// values and then, per series, a circle marker on every point (on a point
 /// with no neighbour only, when the theme's `lineMarkers` is off or the
 /// markers do not fit: [lineMarkersFit]), area charts
-/// one closed path per series. Any other kind draws none. The frame puts the
-/// markers in a clip of their own, after the others, which go in the plot's
-/// clip.
+/// one closed path per series (with the theme's `areaOpacity`) and, when the
+/// theme's `areaLine` is on, an open path along each area's top, after all the
+/// areas. A series with `smooth` set draws its line runs as curves
+/// (`smoothPolyline`); an area never does. Any other kind draws none. The
+/// frame puts the markers in a clip of their own, after the others, which go
+/// in the plot's clip.
 List<ChartPrimitive> layoutMarks(
   Chart chart,
   ResolvedChart resolved,
@@ -48,9 +52,9 @@ List<ChartPrimitive> layoutMarks(
     case ChartKind.bar:
       return _bars(resolved, values, theme, axes);
     case ChartKind.line:
-      return _lines(resolved, values, theme, axes);
+      return _lines(chart, resolved, values, theme, axes);
     case ChartKind.area:
-      return _areas(resolved, values, axes);
+      return _areas(resolved, values, theme, axes);
     default:
       return const <ChartPrimitive>[];
   }
@@ -264,6 +268,7 @@ List<List<ChartPoint?>> _linePoints(
 }
 
 List<ChartPrimitive> _lines(
+  Chart chart,
   ResolvedChart resolved,
   List<List<double?>> values,
   ChartTheme theme,
@@ -276,6 +281,7 @@ List<ChartPrimitive> _lines(
   final List<ChartPrimitive> out = <ChartPrimitive>[];
   for (int s = 0; s < tops.length; s++) {
     final ChartColor color = resolved.colors[s];
+    final bool smooth = chart.series[s].smooth;
     int run = 0;
     final List<ChartPoint> points = <ChartPoint>[];
     // The categories that get a marker, drawn after the series' runs.
@@ -286,7 +292,7 @@ List<ChartPrimitive> _lines(
         out.add(
           PathPrimitive(
             ids.seriesLineId(s, run++),
-            points,
+            smooth ? smoothPolyline(points) : points,
             stroke: color,
             strokeWidth: theme.lineWidth,
           ),
@@ -397,6 +403,7 @@ List<List<({ChartPoint top, ChartPoint base})>> _areaColumns(
 List<ChartPrimitive> _areas(
   ResolvedChart resolved,
   List<List<double?>> values,
+  ChartTheme theme,
   MarkAxes axes,
 ) {
   final List<List<({ChartPoint top, ChartPoint base})>> columns = _areaColumns(
@@ -418,8 +425,24 @@ List<ChartPrimitive> _areas(
         ],
         closed: true,
         fill: resolved.colors[s],
+        fillOpacity: theme.areaOpacity,
       ),
     );
+  }
+  if (theme.areaLine) {
+    // The edge line follows each area's top, over all the fills.
+    for (int s = 0; s < columns.length; s++) {
+      if (columns[s].length > 1) {
+        out.add(
+          PathPrimitive(
+            ids.seriesLineId(s, 0),
+            <ChartPoint>[for (final column in columns[s]) column.top],
+            stroke: resolved.colors[s],
+            strokeWidth: theme.lineWidth,
+          ),
+        );
+      }
+    }
   }
   return out;
 }
