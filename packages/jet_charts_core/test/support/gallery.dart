@@ -19,8 +19,8 @@ final class GalleryChart {
   /// The chart.
   final Chart chart;
 
-  /// The theme the chart is laid out in, or null for the Office theme, unless a chart
-  /// shows a theme value of its own.
+  /// The theme the chart is laid out in: null for the Office theme, unless
+  /// the chart shows a theme value of its own.
   final ChartTheme? theme;
 
   /// Lays the chart out on [size] as the goldens do.

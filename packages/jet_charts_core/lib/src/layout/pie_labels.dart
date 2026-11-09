@@ -99,8 +99,12 @@ final class PieLabelPlacement {
 ///    `minTextGap` (downwards first, then upwards from the bottom of
 ///    [bounds]), and each again drawn as close to the pie as the gap allows
 ///    at its new height. A label more than `labelGap` from its first place
-///    gets a leader line from its slice's outer edge, at the middle angle,
-///    to the nearest point of its box, in the theme's axis line colour and
+///    gets a leader line: from its slice's outer edge out along the middle
+///    angle to half `labelGap` beyond the slices' reach, then straight to
+///    the nearest point of the label's box. While that second segment would
+///    come closer to the centre than the radius and half the outline, the
+///    label moves away from the pie, a point at a time, so no part of the
+///    line enters the pie. It is drawn in the theme's axis line colour and
 ///    width (an estimate, not checked in Excel). The labels are then taken
 ///    in category order: one that leaves [bounds], meets another slice or
 ///    leader line, keeps less than `minTextGap` from a text, or whose leader
@@ -244,36 +248,48 @@ PieLabelPlacement placePieLabels({
     }
     for (final _Outside o in tryOutside) {
       final ChartRect first = _hug(o, o.firstTop, center, reach);
-      final ChartRect rect = _hug(o, o.top, center, reach);
+      ChartRect rect = _hug(o, o.top, center, reach);
+      PathPrimitive? leader;
+      final double moved = math.sqrt(
+        math.pow(rect.left - first.left, 2) + math.pow(rect.top - first.top, 2),
+      );
+      if (moved > gap) {
+        // Out along the middle angle to halfway into the gap, then
+        // straight to the nearest point of the label, which moves away from
+        // the pie, a point at a time, until that segment keeps clear of the
+        // pie's outline. No part of the line enters the pie.
+        final ArcPrimitive arc = o.slice.arc;
+        final double clear =
+            arc.radius + (arc.stroke == null ? 0 : arc.strokeWidth / 2);
+        final ChartPoint from = polarPoint(center, arc.radius, o.slice.middle);
+        final ChartPoint out = polarPoint(
+          center,
+          reach - gap / 2,
+          o.slice.middle,
+        );
+        ChartPoint nearest(ChartRect r) => ChartPoint(
+          out.x.clamp(r.left, r.right),
+          out.y.clamp(r.top, r.bottom),
+        );
+        final double step = o.right ? 1 : -1;
+        while (_segmentDistance(out, nearest(rect), center) < clear &&
+            rect.left >= bounds.left - o.size.width &&
+            rect.right <= bounds.right + o.size.width) {
+          rect = ChartRect(rect.left + step, rect.top, rect.width, rect.height);
+        }
+        leader = PathPrimitive(
+          ids.dataLabelLeaderId(o.slice.series, o.slice.category),
+          <ChartPoint>[from, out, nearest(rect)],
+          stroke: theme.axisLine,
+          strokeWidth: theme.spacing.axisLineWidth,
+        );
+      }
       final TextPrimitive label = TextPrimitive(
         o.slice.labelId,
         o.text,
         rect,
         style,
       );
-      PathPrimitive? leader;
-      final double moved = math.sqrt(
-        math.pow(rect.left - first.left, 2) + math.pow(rect.top - first.top, 2),
-      );
-      if (moved > gap) {
-        final ChartPoint from = polarPoint(
-          center,
-          o.slice.arc.radius,
-          o.slice.middle,
-        );
-        leader = PathPrimitive(
-          ids.dataLabelLeaderId(o.slice.series, o.slice.category),
-          <ChartPoint>[
-            from,
-            ChartPoint(
-              from.x.clamp(rect.left, rect.right),
-              from.y.clamp(rect.top, rect.bottom),
-            ),
-          ],
-          stroke: theme.axisLine,
-          strokeWidth: theme.spacing.axisLineWidth,
-        );
-      }
       final LaidMark? laid = leader == null ? null : LaidMark(leader, null);
       final bool fits =
           bounds.contains(rect) &&
@@ -382,4 +398,17 @@ bool _inRing(ChartRect rect, PieSlice slice) {
     return near >= arc.innerRadius;
   }
   return slice.sweep >= 360 || near > 0;
+}
+
+/// The least distance from [p] to the segment from [a] to [b].
+double _segmentDistance(ChartPoint a, ChartPoint b, ChartPoint p) {
+  final double dx = b.x - a.x;
+  final double dy = b.y - a.y;
+  final double lengthSquared = dx * dx + dy * dy;
+  final double t = lengthSquared > 0
+      ? (((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared).clamp(0.0, 1.0)
+      : 0;
+  final double x = a.x + t * dx - p.x;
+  final double y = a.y + t * dy - p.y;
+  return math.sqrt(x * x + y * y);
 }

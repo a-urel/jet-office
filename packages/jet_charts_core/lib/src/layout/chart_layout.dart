@@ -112,11 +112,12 @@ final class ChartLayout {
   /// degradation order whatever the order they were taken away in: data
   /// labels first (each one that found no place, or all of them when only
   /// the background is drawn), then legend entries, the value and category
-  /// axis titles, the title, a donut's centre text, category labels (every one not shown and every
-  /// cut one, with its full text), and value tick labels (all of them when
-  /// they go, or the ones a fixed unit's thinning left out); each group in
-  /// index order. A kind this version does not draw lists its title and its
-  /// placeholder. Each id is one [primitives] describes.
+  /// axis titles, the title, a donut's centre text, category labels (every
+  /// one not shown and every cut one, with its full text), and value tick
+  /// labels (all of them when they go, or the ones a fixed unit's thinning
+  /// left out); each group in index order. A kind this version does not draw
+  /// lists its title and its placeholder. Each id is one [primitives]
+  /// describes.
   final List<ChartHiddenLabel> hidden;
 
   /// Each category's slice of [plotArea], in category order: band `i` is
@@ -164,9 +165,10 @@ final class ChartLayout {
 /// axis titles, tick and category labels, grid lines, axis lines and the plot.
 /// Pie and donut charts are laid out around a centre, with their data labels
 /// inside the slices or, in a pie, outside with leader lines, and a donut's
-/// centre text (`pie_layout.dart`). Every other kind draws the background, the title if any, and a
-/// `placeholder` text of the chart's `unsupportedName`, else its kind's name,
-/// centred in what is left; the placeholder is hidden when it does not fit.
+/// centre text (`pie_layout.dart`). Every other kind draws the background,
+/// the title if any, and a `placeholder` text of the chart's
+/// `unsupportedName`, else its kind's name, centred in what is left; the
+/// placeholder is hidden when it does not fit.
 ///
 /// Category labels that crowd are skipped, then turned, then cut with `…`.
 /// Tick labels that crowd take a coarser unit, or, at a fixed unit, are

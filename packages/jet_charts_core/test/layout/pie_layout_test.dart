@@ -365,7 +365,15 @@ void main() {
         final double d = math.sqrt(
           math.pow(c.x - slice.center.x, 2) + math.pow(c.y - slice.center.y, 2),
         );
-        expect(d, lessThan(slice.innerRadius));
+        // It keeps the minimum text gap from the ring and its outline.
+        expect(
+          d,
+          lessThanOrEqualTo(
+            slice.innerRadius -
+                slice.strokeWidth / 2 -
+                _office.spacing.minTextGap,
+          ),
+        );
       }
       expect(_problems(layout), isEmpty);
     });
@@ -391,5 +399,28 @@ void main() {
       );
       expect(_problems(layout), isEmpty);
     });
+  });
+
+  test('a centre text that would come closer than minTextGap is hidden', () {
+    // The fixed-width measurer makes 'MMMM' 33.6 by 16.8 at 14 pt: a half
+    // diagonal of 18.78. A hole whose free radius is between that and that
+    // plus the gap must hide it.
+    const String text = 'MMMM';
+    bool shown(double side) => _flat(
+      _lay(
+        _chart(
+          <ChartSeries>[
+            _series(<double?>[1, 2]),
+          ],
+          kind: ChartKind.donut,
+          centerText: text,
+        ).copyWith(legend: const ChartLegend(visible: false)),
+        ChartSize(side + 16, side + 16),
+      ).primitives,
+    ).any((ChartPrimitive p) => p.id == 'center');
+    // Hole radius = 0.75 * (side / 2 - 0.375); free radius about that less
+    // 0.375. Half diagonal 18.78, plus 2 pt gap: 20.78.
+    expect(shown(58), isTrue); // free radius about 21.2
+    expect(shown(54), isFalse); // free radius about 19.7, less than 20.78
   });
 }

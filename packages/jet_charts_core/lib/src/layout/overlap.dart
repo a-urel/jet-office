@@ -86,11 +86,11 @@ final class ChartOverlap {
 /// both ends, for round caps. A data label `label/<s>/<c>` may lie on its own
 /// bar `series/<s>/bar/<c>` or slice `series/<s>/slice/<c>` and on its own
 /// leader line; every other mark counts (in a pie or donut, the slices of
-/// other labels, and every slice for the centre text). The fill of a closed path
-/// (an area) does not count: data labels are painted after every mark, over
-/// area fills, as Excel draws them. Grid lines, axis lines, the background,
-/// the plot rectangle and legend symbols are not marks, and a text crossing
-/// the plot's edge is not reported.
+/// other labels, and every slice for the centre text). The fill of a closed
+/// path (an area) does not count: data labels are painted after every mark,
+/// over area fills, as Excel draws them. Grid lines, axis lines, the
+/// background, the plot rectangle and legend symbols are not marks, and a
+/// text crossing the plot's edge is not reported.
 List<ChartOverlap> findOverlaps(
   List<ChartPrimitive> primitives,
   ChartSize size,

@@ -134,7 +134,7 @@ void main() {
     final ChartTooltip? tip = chartTooltipAt(
       chart,
       layout,
-      _along(leader.points.first, leader.points.last, 0.5),
+      _longestMiddle(leader.points),
       theme: _office,
     );
     expect(tip, isNotNull);
@@ -628,4 +628,20 @@ void main() {
       isNull,
     );
   });
+}
+
+/// The middle of the longest segment of the path through [points].
+ChartPoint _longestMiddle(List<ChartPoint> points) {
+  ChartPoint best = points.first;
+  double longest = -1;
+  for (int i = 0; i + 1 < points.length; i++) {
+    final double dx = points[i + 1].x - points[i].x;
+    final double dy = points[i + 1].y - points[i].y;
+    final double length = dx * dx + dy * dy;
+    if (length > longest) {
+      longest = length;
+      best = _along(points[i], points[i + 1], 0.5);
+    }
+  }
+  return best;
 }

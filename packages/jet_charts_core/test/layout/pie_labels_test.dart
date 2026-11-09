@@ -1,7 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:jet_charts_core/jet_charts_core.dart';
+import 'package:jet_charts_core/src/layout/overlap.dart' show arcShapeReach;
+import 'package:jet_charts_core/src/layout/polar.dart' show polarPoint;
 import 'package:test/test.dart';
+
+import '../support/gallery.dart';
 
 const ChartSize _size = ChartSize(360, 216);
 final ChartTheme _office = ChartTheme.office;
@@ -185,7 +189,7 @@ void main() {
     expect(leaderIds.toSet(), hasLength(leaderIds.length));
     for (final PathPrimitive leader in _leaders(layout)) {
       expect(leader.closed, isFalse);
-      expect(leader.points, hasLength(2));
+      expect(leader.points.length, greaterThanOrEqualTo(2));
       expect(labels.keys, contains(leader.id.replaceAll('/leader', '')));
     }
     expect(findOverlaps(layout.primitives, layout.size), isEmpty);
@@ -258,4 +262,173 @@ void main() {
     expect(labels, isNot(contains('label/0/4')));
     expect(findOverlaps(layout.primitives, layout.size), isEmpty);
   });
+
+  test('the data labels format code wins over the series code', () {
+    final ChartLayout layout = _lay(
+      _chart(
+        <double?>[40, 30, 20, 10],
+        formatCode: '0.0',
+        dataLabels: const ChartDataLabels(visible: true, formatCode: '0.00'),
+      ),
+    );
+    expect(_labels(layout)['label/0/0']!.text, '40.00');
+    final ChartLayout series = _lay(
+      _chart(<double?>[40, 30, 20, 10], formatCode: '0.0'),
+    );
+    expect(_labels(series)['label/0/0']!.text, '40.0');
+  });
+
+  test('no leader line enters the pie', () {
+    for (final ChartSize size in const <ChartSize>[
+      _size,
+      ChartSize(360, 240),
+      ChartSize(640, 400),
+      ChartSize(200, 140),
+    ]) {
+      for (final List<double?> values in <List<double?>>[
+        <double?>[90, 4, 3, 2, 1],
+        <double?>[60, 1, 1, 1, 1, 1, 1, 30, 1, 1, 1, 1],
+        <double?>[1, 1, 1, 97],
+      ]) {
+        final ChartLayout layout = _lay(
+          _chart(
+            values,
+            dataLabels: const ChartDataLabels(visible: true, showPercent: true),
+          ),
+          size,
+        );
+        final ArcPrimitive pie = _slice(layout, 0);
+        for (final PathPrimitive leader in _leaders(layout)) {
+          for (int i = 0; i + 1 < leader.points.length; i++) {
+            expect(
+              _segmentDistance(
+                leader.points[i],
+                leader.points[i + 1],
+                pie.center,
+              ),
+              greaterThanOrEqualTo(pie.radius - 1e-9),
+              reason: '$size $values ${leader.id}',
+            );
+          }
+        }
+        expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+      }
+    }
+  });
+
+  test('no leader line of a gallery chart enters its pie', () {
+    for (final (String name, ChartLayout layout) in goldenLayouts()) {
+      for (final PathPrimitive leader in _leaders(layout)) {
+        final ArcPrimitive pie = _slice(layout, 0);
+        for (int i = 0; i + 1 < leader.points.length; i++) {
+          expect(
+            _segmentDistance(
+              leader.points[i],
+              leader.points[i + 1],
+              pie.center,
+            ),
+            greaterThanOrEqualTo(pie.radius - 1e-9),
+            reason: '$name ${leader.id}',
+          );
+        }
+      }
+    }
+    expect(
+      goldenLayouts().any(
+        ((String, ChartLayout) e) => _leaders(e.$2).isNotEmpty,
+      ),
+      isTrue,
+    );
+  });
+
+  test('a label outside gets a leader only when it moved past labelGap', () {
+    final double gap = _office.spacing.labelGap;
+    final ChartLayout layout = _lay(
+      _chart(<double?>[
+        60,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        30,
+        1,
+        1,
+        1,
+        1,
+      ], dataLabels: const ChartDataLabels(visible: true, showPercent: true)),
+      const ChartSize(640, 400),
+    );
+    final ArcPrimitive pie = _slice(layout, 0);
+    final double reach = arcShapeReach(pie.radius, pie.strokeWidth) + gap;
+    final Set<String> led = <String>{
+      for (final PathPrimitive p in _leaders(layout))
+        p.id.replaceAll('/leader', ''),
+    };
+    int outside = 0;
+    for (final MapEntry<String, TextPrimitive> e in _labels(layout).entries) {
+      final int c = int.parse(e.key.split('/')[2]);
+      final ArcPrimitive slice = _slice(layout, c);
+      if (e.value.corners.every((ChartPoint p) => _inSector(slice, p))) {
+        continue;
+      }
+      outside++;
+      // The first place: the label's middle height from the reach along the
+      // middle angle, as close to the pie as the reach allows; and where it
+      // would stand that close at its final height.
+      final double clock = (slice.startAngle + 90 + slice.sweepAngle / 2) % 360;
+      final bool right = clock < 180;
+      final ChartPoint p = polarPoint(pie.center, reach, clock);
+      final double w = e.value.rect.width;
+      final double h = e.value.rect.height;
+      final double firstTop =
+          p.y - math.cos(clock * math.pi / 180) * h / 2 - h / 2;
+      ChartPoint hug(double top) {
+        final double cy = pie.center.y;
+        final double dy = cy < top
+            ? top - cy
+            : cy > top + h
+            ? cy - top - h
+            : 0;
+        final double dx = math.sqrt(math.max(0, reach * reach - dy * dy));
+        return ChartPoint(
+          right ? pie.center.x + dx : pie.center.x - dx - w,
+          top,
+        );
+      }
+
+      final bool moved = _distance(hug(firstTop), hug(e.value.rect.top)) > gap;
+      expect(led.contains(e.key), moved, reason: e.key);
+    }
+    expect(outside, greaterThan(0));
+    expect(led, isNotEmpty);
+  });
+
+  test('a label outside shrinks the radius once', () {
+    final ChartLayout inside = _lay(_chart(<double?>[20, 20, 20, 20, 20]));
+    final ChartLayout outside = _lay(_chart(<double?>[90, 4, 3, 2, 1]));
+    final double full = _slice(inside, 0).radius;
+    final double height = const FixedWidthTextMeasurer()
+        .measure('1', _office.dataLabels)
+        .height;
+    expect(
+      _slice(outside, 0).radius,
+      closeTo(
+        math.max(full / 2, full - height - _office.spacing.labelGap),
+        1e-9,
+      ),
+    );
+    expect(outside.plotArea!.width, lessThan(inside.plotArea!.width));
+  });
+}
+
+double _segmentDistance(ChartPoint a, ChartPoint b, ChartPoint p) {
+  final double dx = b.x - a.x;
+  final double dy = b.y - a.y;
+  final double l2 = dx * dx + dy * dy;
+  final double t = l2 == 0
+      ? 0
+      : (((p.x - a.x) * dx + (p.y - a.y) * dy) / l2).clamp(0.0, 1.0);
+  return _distance(ChartPoint(a.x + t * dx, a.y + t * dy), p);
 }

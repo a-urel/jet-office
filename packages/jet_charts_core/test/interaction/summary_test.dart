@@ -28,6 +28,32 @@ void main() {
     expect(summary.centerText, isNull);
   });
 
+  test('a pie gives no shares for the series it does not draw', () {
+    ChartSeries series(List<double?> v) => ChartSeries(
+      name: ChartData<String>(values: <String?>['S']),
+      categories: ChartData<Object>(values: <Object?>['a', 'b']),
+      values: ChartData<double>(values: v),
+    );
+    final Chart pie = Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        series(<double?>[1, 3]),
+        series(<double?>[2, 2]),
+      ],
+    );
+    expect(summarizeChart(pie).shares, <List<String>>[
+      <String>['25%', '75%'],
+      <String>['', ''],
+    ]);
+    expect(
+      summarizeChart(pie.copyWith(kind: ChartKind.donut)).shares,
+      <List<String>>[
+        <String>['25%', '75%'],
+        <String>['50%', '50%'],
+      ],
+    );
+  });
+
   test('a donut gives its centre text', () {
     final ChartSummary summary = summarizeChart(_chart('donut_center'));
     expect(summary.centerText, _chart('donut_center').centerText);

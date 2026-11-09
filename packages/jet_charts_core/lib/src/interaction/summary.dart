@@ -53,8 +53,9 @@ final class ChartSummary {
 
   /// The share of each value of each series in its series' whole, in `0%`,
   /// as a pie's or donut's tooltip shows it; an empty text where there is no
-  /// value or the series sums to zero. One list per series; each is empty for
-  /// a kind other than pie and donut.
+  /// value or the series sums to zero, and for every series of a pie but the
+  /// first, which a pie does not draw. One list per series; each is empty
+  /// for a kind other than pie and donut.
   final List<List<String>> shares;
 
   /// A donut's centre text, or `null` when there is none or the chart is not
@@ -164,15 +165,17 @@ ChartSummary summarizeChart(
   final bool polar =
       chart.kind == ChartKind.pie || chart.kind == ChartKind.donut;
   final List<List<String>> shares = <List<String>>[
-    for (final List<double?> v in resolved.values)
-      polar
-          ? <String>[
-              for (final double? share in sliceShares(v))
+    for (int s = 0; s < resolved.values.length; s++)
+      !polar
+          ? const <String>[]
+          : chart.kind == ChartKind.pie && s > 0
+          ? <String>[for (final double? _ in resolved.values[s]) '']
+          : <String>[
+              for (final double? share in sliceShares(resolved.values[s]))
                 share == null
                     ? ''
                     : formatter.format(share, numberFormat: '0%').text,
-            ]
-          : const <String>[],
+            ],
   ];
   final String? title = chart.title?.text;
   final String? center = chart.centerText;

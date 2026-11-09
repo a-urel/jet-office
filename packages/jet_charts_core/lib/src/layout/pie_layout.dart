@@ -58,9 +58,10 @@ ChartColor sliceColor(ChartSeries series, int category, ChartTheme theme) {
 }
 
 /// The text of a pie or donut data label of [value], whose share is
-/// [share]: the value in the series' format code, else the data labels',
-/// else the value axis', else `General`; the share in `0%`; or both on two
-/// lines, as [chart]'s data labels ask. `null` when they ask for neither.
+/// [share]: the value in the data labels' format code, else the series',
+/// else `General`, as a column chart's data label; the share in `0%`; or
+/// both on two lines, as [chart]'s data labels ask. `null` when they ask for
+/// neither.
 String? sliceLabelText(
   Chart chart,
   int series,
@@ -74,9 +75,8 @@ String? sliceLabelText(
     return null;
   }
   final String code =
-      chart.series[series].formatCode ??
       chart.dataLabels.formatCode ??
-      chart.valueAxis.formatCode ??
+      chart.series[series].formatCode ??
       'General';
   final String valueText = formatter.format(value, numberFormat: code).text;
   final String percentText = formatter.format(share, numberFormat: '0%').text;
@@ -120,9 +120,10 @@ typedef PieLayout = ({
 ///
 /// A donut's centre text, in the theme's `centerTextStyle`, is drawn centred
 /// when its box fits in the circle the slices leave free in the hole
-/// (`arcShapeClearance` of the hole: every corner inside it, so a wide text
-/// may use more of the hole than its inscribed square), else hidden; a pie
-/// draws none.
+/// (`arcShapeClearance` of the hole) shrunk by `minTextGap`: every corner
+/// inside it, so a wide text may use more of the hole than its inscribed
+/// square, and the text keeps `minTextGap` from the ring. Else it is hidden;
+/// a pie draws none.
 ///
 /// The hidden texts come in the order data labels, legend entries, title,
 /// centre text. A chart too small for a square of 1 pt plus the outline
@@ -265,9 +266,11 @@ PieLayout layoutPie(
       stroked: outlined,
     );
     final ChartSize s = measurer.measure(centerText, theme.centerTextStyle);
-    // The box fits when its corners lie within the free circle: its half
-    // diagonal is no longer than the circle's radius.
-    if (s.width * s.width + s.height * s.height <= 4 * clear * clear) {
+    // The box fits when its corners lie within the free circle shrunk by
+    // the minimum text gap: its half diagonal is no longer than that radius.
+    final double room = clear - theme.spacing.minTextGap;
+    if (room > 0 &&
+        s.width * s.width + s.height * s.height <= 4 * room * room) {
       centerPrimitive = TextPrimitive(
         ids.centerTextId,
         centerText,

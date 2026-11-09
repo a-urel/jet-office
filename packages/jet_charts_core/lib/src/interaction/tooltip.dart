@@ -164,10 +164,10 @@ ChartTooltip? chartTooltipAt(
 ///
 /// It is what [chartTooltipAt] gives over that primitive, for the kinds whose
 /// tooltip does not depend on the point: a bar, a marker, a slice, a leader
-/// line, a data label, a category label, a legend entry and the background. A line, an area, a grid
-/// line and the plot have a tooltip only at a point, and give `null` here; so
-/// does an id the layout's chart does not have (a series or category out of
-/// range) or one that is not of the scheme.
+/// line, a data label, a category label, a legend entry and the background.
+/// A line, an area, a grid line and the plot have a tooltip only at a point,
+/// and give `null` here; so does an id the layout's chart does not have (a
+/// series or category out of range) or one that is not of the scheme.
 ChartTooltip? chartTooltipFor(
   Chart chart,
   ChartLayout layout,
