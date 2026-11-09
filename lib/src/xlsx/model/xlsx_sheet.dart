@@ -337,7 +337,7 @@ List<ReferenceHolder> sheetReferenceHolders(XlsxSheet sheet) {
       else if (name == 'hyperlinks')
         _LinkHolder(sheet, part)
       else if (name == 'autoFilter')
-        _FilterHolder(sheet._host.log, part, () => sheet.name)
+        _FilterHolder(sheet, part)
       else
         PendingReferenceHolder(name),
   ];

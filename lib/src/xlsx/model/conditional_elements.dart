@@ -574,8 +574,7 @@ bool readFlag(String? text, {bool fallback = false}) => switch (text) {
 
 /// The `<conditionalFormatting>` [source] after a structural edit, as
 /// `shiftedValidation` shifts a validation: its `sqref`, each rule's
-/// `formula`s and each `cfvo` of type `formula`'s `val`, relative to the
-/// first cell of the `sqref`; `null` when the edit empties the `sqref` (the
+/// `formula`s and each `cfvo` of type `formula`'s `val`; `null` when the edit empties the `sqref` (the
 /// `<dxf>`s of its rules stay in the styles part), [source] itself when
 /// nothing changes.
 OpaqueXml? shiftedConditionalFormatting(

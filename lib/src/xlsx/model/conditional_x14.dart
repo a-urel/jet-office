@@ -963,9 +963,10 @@ List<JoinedFormat> joinConditionalFormats(
 String _sqrefKey(List<XlsxRange> ranges) =>
     ranges.map((XlsxRange r) => r.ref).join(' ');
 
-/// The `x14:conditionalFormatting` [source] after a structural edit, as
+/// The `x14:conditionalFormatting` or `x14:dataValidation` [source] after
+/// a structural edit, as
 /// `shiftedValidation` shifts a validation: its `xm:sqref`, and every
-/// `xm:f` of its rules relative to the first cell of the `xm:sqref`; `null`
+/// `xm:f` of its rules (or of a validation); `null`
 /// when the edit empties the `xm:sqref`, [source] itself when nothing
 /// changes (or it has no `xm:sqref`).
 OpaqueXml? shiftedX14Element(
@@ -992,15 +993,8 @@ OpaqueXml? shiftedX14Element(
     onUnlexable: onUnlexable,
   );
   if (nextSqref != null && nextSqref.isEmpty) return null;
-  final String after = nextSqref ?? read;
-  String? formula(String text) => rewriteAnchoredFormula(
-    text,
-    mapper,
-    host,
-    read,
-    after,
-    onUnlexable: onUnlexable,
-  );
+  String? formula(String text) =>
+      rewriteFormula(text, mapper, host, onUnlexable: onUnlexable);
   bool sqrefSeen = false;
   return spliceElement(source, (XmlPullReader r, int level) {
     if (r.namespaceUri != Ns.xm) return null;
@@ -1017,4 +1011,84 @@ OpaqueXml? shiftedX14Element(
     }
     return null;
   });
+}
+
+/// The `uri` of the `ext` holding Excel 2010 data validations.
+const String _x14ValidationUri = '{CCE6A557-97BC-4b89-ADB6-D9C93CAAB3DF}';
+
+/// [extLst] with the `x14:dataValidation`s of its Excel 2010 validations
+/// shifted as [shiftedX14Element] shifts them: one whose `xm:sqref` empties
+/// goes (`count` following), the group, its `ext` and the `extLst` going
+/// when left with nothing (`null`). [extLst] itself when nothing changes;
+/// only the changed text is rewritten.
+XmlNode? shiftedX14Validations(
+  XmlNode extLst,
+  ReferenceMapper mapper,
+  String host,
+  void Function(String text) onUnlexable,
+) {
+  XmlNode? result = extLst;
+  for (final Object e in extLst.children) {
+    if (e is! XmlNode ||
+        e.localName != 'ext' ||
+        e.attribute('uri')?.toUpperCase() != _x14ValidationUri.toUpperCase()) {
+      continue;
+    }
+    XmlNode ext = e;
+    for (final Object g in e.children) {
+      if (g is! OpaqueXml ||
+          g.namespaceUri != Ns.x14 ||
+          g.localName != 'dataValidations') {
+        continue;
+      }
+      final List<(OpaqueXml, OpaqueXml?)> shifted = <(OpaqueXml, OpaqueXml?)>[];
+      final XmlPullReader r = readerOf(g);
+      _eachChild(r, () {
+        final bool validation =
+            r.namespaceUri == Ns.x14 && r.localName == 'dataValidation';
+        final OpaqueXml child = OpaqueXml.capture(r);
+        if (validation) {
+          shifted.add((
+            child,
+            shiftedX14Element(child, mapper, host, onUnlexable),
+          ));
+        }
+      });
+      if (shifted.every(((OpaqueXml, OpaqueXml?) s) => identical(s.$1, s.$2))) {
+        continue;
+      }
+      final int left = shifted
+          .where(((OpaqueXml, OpaqueXml?) s) => s.$2 != null)
+          .length;
+      int index = 0;
+      final OpaqueXml? group = left == 0
+          ? null
+          : spliceElement(g, (XmlPullReader r, int level) {
+              if (level == 0) {
+                return left == shifted.length
+                    ? null
+                    : SpliceEdit(
+                        attributes: <String, String>{'count': '$left'},
+                      );
+              }
+              if (level != 1 ||
+                  r.namespaceUri != Ns.x14 ||
+                  r.localName != 'dataValidation') {
+                return null;
+              }
+              final (OpaqueXml was, OpaqueXml? next) = shifted[index++];
+              if (identical(was, next)) return null;
+              return next == null
+                  ? SpliceEdit.removal
+                  : SpliceEdit(markup: next.xml);
+            });
+      ext = ext.withChildren(<Object>[
+        for (final Object c in ext.children)
+          if (!identical(c, g)) c else ?group,
+      ]);
+    }
+    if (identical(ext, e)) continue;
+    result = result!.replacingChild(e, ext.children.isEmpty ? null : ext);
+  }
+  return result != null && result.children.isEmpty ? null : result;
 }

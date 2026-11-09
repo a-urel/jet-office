@@ -449,7 +449,8 @@ mixin _SheetRules {
 /// The `dataValidations` holder of a sheet: each `<dataValidation>` as
 /// [shiftedValidation] shifts it, removed when its `sqref` empties, the
 /// group going with its last entry; `count` is recomputed when an entry
-/// goes. An entry that changes is read again.
+/// goes. An entry that changes is read again. The Excel 2010 validations of
+/// the `extLst` shift as [shiftedX14Validations] says.
 final class _ValidationHolder implements ReferenceHolder {
   _ValidationHolder(this._log, this._part, this._sheetName, this._unlexable);
 
@@ -463,9 +464,28 @@ final class _ValidationHolder implements ReferenceHolder {
 
   @override
   void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    final String host = _sheetName();
+    _shiftGroup(mapper, host);
+    final XmlNode? extLst = _part.layoutElement('extLst') as XmlNode?;
+    if (extLst == null) return;
+    final XmlNode? next = shiftedX14Validations(
+      extLst,
+      mapper,
+      host,
+      _unlexable,
+    );
+    if (identical(next, extLst)) return;
+    editLayout(
+      _log,
+      _part,
+      'extLst',
+      () => _part.swapLayout('extLst', extLst, next),
+    );
+  }
+
+  void _shiftGroup(ReferenceMapper mapper, String host) {
     final ItemGroup<XlsxDataValidation>? group = _part.dataValidationGroup;
     if (group == null) return;
-    final String host = _sheetName();
     bool changed = false;
     bool removed = false;
     final List<GroupItem<XlsxDataValidation>> items =

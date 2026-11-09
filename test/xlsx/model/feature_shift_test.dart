@@ -143,35 +143,34 @@ void main() {
     expect(sheet, isNot(contains('dataValidation')));
   });
 
-  test("a validation's formulas go through the rewriter relative to the "
-      "sqref's first cell", () {
+  String validation(String sqref, String formula) =>
+      '<dataValidations count="1"><dataValidation type="custom" '
+      'sqref="$sqref"><formula1>$formula</formula1></dataValidation>'
+      '</dataValidations>';
+
+  test("a validation's formula shifts as written, as a cell formula of the "
+      'sheet does', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
-      _package(
-        '<dataValidations count="1">'
-        '<dataValidation type="custom" sqref="B5:B9">'
-        r'<formula1>A5&gt;$D$3</formula1></dataValidation>'
-        '</dataValidations>',
-      ),
+      _package(validation('A1:A10', 'B5&gt;0')),
     );
-    _edit(book, _insertRows(2, 1));
-    expect(
-      _sheet(book),
-      contains(
-        '<dataValidation type="custom" sqref="B6:B10">'
-        r'<formula1>A6&gt;$D$4</formula1></dataValidation>',
-      ),
+    _edit(book, _insertRows(3, 1));
+    expect(_sheet(book), contains(validation('A1:A11', 'B6&gt;0')));
+  });
+
+  test("a validation's formula before the insert stays", () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(validation('A5:A9', 'B2&gt;0')),
     );
-    // The first row of the range goes: the relative A6 still means the row
-    // of each cell, so it stays.
-    _edit(book, _deleteRows(6, 1));
-    expect(
-      _sheet(book),
-      contains(
-        '<dataValidation type="custom" sqref="B6:B9">'
-        r'<formula1>A6&gt;$D$4</formula1></dataValidation>',
-      ),
+    _edit(book, _insertRows(3, 1));
+    expect(_sheet(book), contains(validation('A6:A10', 'B2&gt;0')));
+  });
+
+  test("a validation's formula whose row is deleted becomes #REF!", () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(validation('A1:A10', r'B5&gt;$C$5')),
     );
-    expect(book.sheets.single.dataValidations.single.formula1, r'A6>$D$4');
+    _edit(book, _deleteRows(5, 1));
+    expect(_sheet(book), contains(validation('A1:A9', '#REF!&gt;#REF!')));
   });
 
   test("a rule's sqref and formulas shift relative to its first cell", () {
@@ -330,6 +329,96 @@ void main() {
       contains(
         '<rowBreaks count="1" manualBreakCount="1">'
         '<brk id="17" max="16383" man="1"/></rowBreaks>',
+      ),
+    );
+  });
+
+  test('an Excel 2010 validation shifts its xm:sqref and xm:f, goes when '
+      'wholly deleted, and undoes', () {
+    String ext(String validations) =>
+        '<extLst><ext uri="{CCE6A557-97BC-4b89-ADB6-D9C93CAAB3DF}" '
+        'xmlns:x14="$_x14"><x14:dataValidations count="2" '
+        'xmlns:xm="$_xm">$validations</x14:dataValidations></ext></extLst>';
+    String validation(String f, String sqref) =>
+        '<x14:dataValidation type="list"><x14:formula1><xm:f>$f</xm:f>'
+        '</x14:formula1><xm:sqref>$sqref</xm:sqref></x14:dataValidation>';
+    final String before = ext(
+      validation(r'Other!$A$1:$A$3', 'B2') +
+          validation(r'S!$D$5:$D$9', 'C5:C9'),
+    );
+    final XlsxWorkbook book = XlsxWorkbook.open(_package(before));
+    final ChangeSet set = _edit(book, _deleteRows(2, 2));
+    expect(
+      _sheet(book),
+      contains(
+        '<x14:dataValidations count="1" xmlns:xm="$_xm">'
+        '${validation(r'S!$D$3:$D$7', 'C3:C7')}</x14:dataValidations>',
+      ),
+    );
+    changeLogOf(book).revertSet(set);
+    expect(
+      _sheet(book),
+      contains(
+        '<x14:dataValidations count="2" xmlns:xm="$_xm">'
+        '${validation(r'Other!$A$1:$A$3', 'B2')}'
+        '${validation(r'S!$D$5:$D$9', 'C5:C9')}</x14:dataValidations>',
+      ),
+    );
+    _edit(book, _deleteRows(1, 20));
+    expect(_sheet(book), isNot(contains('extLst')));
+  });
+
+  test('a sort state shifts with its filter and goes with it', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(
+        '<autoFilter ref="A2:C9"><sortState ref="A3:C9">'
+        '<sortCondition ref="B3:B9"/></sortState></autoFilter>'
+        '<sortState ref="A3:C9"><sortCondition descending="1" ref="C3:C9"/>'
+        '<sortCondition ref="A3:A9"/></sortState>',
+        names:
+            '<definedName name="_xlnm._FilterDatabase" localSheetId="0" '
+            r'hidden="1">S!$A$2:$C$9</definedName>',
+      ),
+    );
+    _edit(book, _insertRows(1, 1));
+    _edit(book, _deleteColumns(1, 1));
+    expect(
+      _sheet(book),
+      contains(
+        '<autoFilter ref="A3:B10"><sortState ref="A4:B10">'
+        '<sortCondition ref="A4:A10"/></sortState></autoFilter>'
+        '<sortState ref="A4:B10"><sortCondition descending="1" '
+        'ref="B4:B10"/></sortState>',
+      ),
+    );
+    final ChangeSet set = _edit(book, _deleteRows(1, 20));
+    expect(_sheet(book), isNot(contains('autoFilter')));
+    expect(_sheet(book), isNot(contains('sortState')));
+    expect(_part(book, 'xl/workbook.xml'), isNot(contains('_FilterDatabase')));
+    changeLogOf(book).revertSet(set);
+    expect(_part(book, 'xl/workbook.xml'), contains('_FilterDatabase'));
+  });
+
+  test("a break's min and max shift on the other axis", () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(
+        '<rowBreaks count="1" manualBreakCount="1">'
+        '<brk id="10" min="2" max="6" man="1"/></rowBreaks>'
+        '<colBreaks count="2" manualBreakCount="2">'
+        '<brk id="4" max="1048575" man="1"/>'
+        '<brk id="5" min="3" max="20" man="1"/></colBreaks>',
+      ),
+    );
+    _edit(book, _insertRows(2, 2));
+    _edit(book, _deleteColumns(1, 2));
+    expect(
+      _sheet(book),
+      contains(
+        '<rowBreaks count="1" manualBreakCount="1">'
+        '<brk id="12" min="0" max="4" man="1"/></rowBreaks>'
+        '<colBreaks count="2" manualBreakCount="2">'
+        '<brk id="2" max="1048575" man="1"/>'
+        '<brk id="3" min="5" max="22" man="1"/></colBreaks>',
       ),
     );
   });

@@ -9,14 +9,10 @@ import '../../opc/change_log.dart';
 import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
-import '../formula/formula_reference.dart';
 import '../formula/formula_rewrite.dart';
 import '../formula/reference_shift.dart';
-import '../limits.dart';
-import '../range.dart';
 import 'defined_names.dart' show DefinedNameHolder;
 import 'item_group.dart' show readerOf, rewrittenElement;
-import 'validation_elements.dart' show parseSqref;
 import 'workbook_part.dart';
 import 'xlsx_sheet.dart';
 
@@ -145,6 +141,7 @@ final class SpliceEdit {
     this.attributes = const <String, String>{},
     this.text,
     this.remove = false,
+    this.markup,
   });
 
   /// Removes the element.
@@ -160,6 +157,10 @@ final class SpliceEdit {
 
   /// Whether the element goes.
   final bool remove;
+
+  /// Markup (an element written in the same scope) that takes the place of
+  /// the whole element, or `null`.
+  final String? markup;
 }
 
 /// [element] with each descendant (and itself, at level 0) edited as [edit]
@@ -195,10 +196,11 @@ OpaqueXml spliceElement(
       }
       continue;
     }
-    if (e.remove && !atRoot) {
+    if ((e.remove || e.markup != null) && !atRoot) {
       copyTo(r.eventStart);
       r.skip();
       cursor = r.eventEnd;
+      if (e.markup != null) out.write(e.markup);
       changed = true;
       continue;
     }
@@ -258,121 +260,6 @@ String _withAttributes(String tag, Map<String, String> values) {
     );
   });
   return next;
-}
-
-/// The formula [text] of something that covers [sqref] (before the edit)
-/// and [nextSqref] (after it), stored relative to the first cell of its
-/// first range as Excel stores the formulas of validations and rules,
-/// rewritten for [mapper]; `null` when it does not change.
-///
-/// On a row or column edit of [host], a relative row (column) of a
-/// reference to [host] keeps its offset from that first cell, so each
-/// covered cell keeps testing what it tested; an absolute one shifts as
-/// [ReferenceShift] shifts it (a `$` range as a span, a lone `$` end as one
-/// row or column, `#REF!` when deleted). Every other reference, and every
-/// reference for any other edit, goes through [mapper] as written.
-String? rewriteAnchoredFormula(
-  String text,
-  ReferenceMapper mapper,
-  String host,
-  String sqref,
-  String nextSqref, {
-  void Function(String formula)? onUnlexable,
-}) {
-  final ({int row, int column})? from = _firstCell(sqref);
-  final ({int row, int column})? to = _firstCell(nextSqref);
-  final ReferenceMapper used =
-      mapper is ReferenceShift &&
-          mapper.sheet.toLowerCase() == host.toLowerCase() &&
-          from != null &&
-          to != null
-      ? _AnchoredShift(
-          mapper,
-          host,
-          mapper.axis == ShiftAxis.rows
-              ? to.row - from.row
-              : to.column - from.column,
-        )
-      : mapper;
-  return rewriteFormula(text, used, host, onUnlexable: onUnlexable);
-}
-
-/// The first cell (1-based) of the first range of [sqref], or `null`.
-({int row, int column})? _firstCell(String sqref) =>
-    switch (parseSqref(sqref)) {
-      final List<XlsxRange> ranges => (
-        row: ranges.first.firstRow + 1,
-        column: ranges.first.firstColumn + 1,
-      ),
-      null => null,
-    };
-
-/// [_shift] with the relative rows (columns) of references to [_host]
-/// moved by [_delta] instead: see [rewriteAnchoredFormula].
-final class _AnchoredShift implements ReferenceMapper {
-  _AnchoredShift(this._shift, this._host, this._delta);
-
-  final ReferenceShift _shift;
-  final String _host;
-  final int _delta;
-
-  @override
-  FormulaReferenceResult? mapReference(FormulaReference ref, String hostSheet) {
-    final bool local =
-        ref.externalIndex == null &&
-        (ref.sheet == null ||
-            ref.lastSheet == null &&
-                ref.sheet!.toLowerCase() == _host.toLowerCase());
-    if (!local) return _shift.mapReference(ref, hostSheet);
-    final bool rows = _shift.axis == ShiftAxis.rows;
-    final int? first = rows ? ref.firstRow : ref.firstColumn;
-    final int? last = rows ? ref.lastRow : ref.lastColumn;
-    if (first == null || last == null) {
-      return _shift.mapReference(ref, hostSheet);
-    }
-    final bool absFirst = rows ? ref.absFirstRow : ref.absFirstColumn;
-    final bool absLast = rows ? ref.absLastRow : ref.absLastColumn;
-    if (absFirst && absLast) return _shift.mapReference(ref, hostSheet);
-    final int limit = rows ? XlsxLimits.maxRows : XlsxLimits.maxColumns;
-    int? moved(int value, bool absolute) {
-      if (absolute) {
-        final XlsxRange? r = _shift.shiftRange(
-          rows ? XlsxRange(value - 1, 0) : XlsxRange(0, value - 1),
-        );
-        if (r == null) return null;
-        return (rows ? r.firstRow : r.firstColumn) + 1;
-      }
-      final int next = value + _delta;
-      return next < 1 || next > limit ? null : next;
-    }
-
-    final int? f = moved(first, absFirst);
-    final int? l = moved(last, absLast);
-    if (f == null || l == null) return const FormulaReferenceResult.refError();
-    if (f == first && l == last) return null;
-    return FormulaReferenceResult.to(
-      FormulaReference(
-        form: ref.form,
-        sheet: ref.sheet,
-        lastSheet: ref.lastSheet,
-        externalIndex: ref.externalIndex,
-        firstRow: rows ? f : ref.firstRow,
-        lastRow: rows ? l : ref.lastRow,
-        firstColumn: rows ? ref.firstColumn : f,
-        lastColumn: rows ? ref.lastColumn : l,
-        absFirstRow: ref.absFirstRow,
-        absLastRow: ref.absLastRow,
-        absFirstColumn: ref.absFirstColumn,
-        absLastColumn: ref.absLastColumn,
-      ),
-    );
-  }
-
-  @override
-  String? mapSheetName(String sheet) => null;
-
-  @override
-  String? mapStructured(String table, String spec, String hostSheet) => null;
 }
 
 /// [text], a formula decoded as read, rewritten by [rewrite] (on its

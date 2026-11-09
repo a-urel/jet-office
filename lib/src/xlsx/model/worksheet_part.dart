@@ -132,6 +132,7 @@ const Set<String> _nodeSlots = <String>{
   'sheetViews',
   'sheetProtection',
   'autoFilter',
+  'sortState',
   'printOptions',
   'pageMargins',
   'pageSetup',

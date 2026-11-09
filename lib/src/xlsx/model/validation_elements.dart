@@ -191,7 +191,8 @@ T? _byName<T extends Enum>(List<T> values, String name) {
 
 /// The `<dataValidation>` [source] after a structural edit: its `sqref`
 /// through [rewriteSqref], and its `formula1` and `formula2` through
-/// [rewriteAnchoredFormula], relative to the first cell of the `sqref`;
+/// the rewriter as written (Excel evaluates them at the `sqref`'s first
+/// cell, so they shift as a cell formula of the sheet does);
 /// `null` when the edit empties the `sqref`, [source] itself when nothing
 /// changes. Only the changed text is rewritten. [onUnlexable] gets each
 /// `sqref` or formula that cannot be lexed, which stays as read.
@@ -213,7 +214,7 @@ OpaqueXml? shiftedValidation(
 
 /// [source], an element whose `sqref` attribute says what it covers, after
 /// a structural edit, as [shiftedValidation] says, with the text of each
-/// descendant [isFormula] names as a formula relative to the `sqref`, and,
+/// descendant [isFormula] names as a formula, and,
 /// when [isFormulaValue] names a descendant, its `val` attribute too.
 OpaqueXml? shiftedSqrefElement(
   OpaqueXml source,
@@ -234,15 +235,8 @@ OpaqueXml? shiftedSqrefElement(
     onUnlexable: onUnlexable,
   );
   if (nextSqref != null && nextSqref.isEmpty) return null;
-  final String after = nextSqref ?? sqref;
-  String? formula(String text) => rewriteAnchoredFormula(
-    text,
-    mapper,
-    host,
-    sqref,
-    after,
-    onUnlexable: onUnlexable,
-  );
+  String? formula(String text) =>
+      rewriteFormula(text, mapper, host, onUnlexable: onUnlexable);
   return spliceElement(source, (XmlPullReader r, int level) {
     if (level == 0) {
       return nextSqref == null

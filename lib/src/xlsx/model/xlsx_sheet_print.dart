@@ -531,73 +531,98 @@ mixin _SheetPrint {
   }
 }
 
-/// The `autoFilter` holder of a sheet, which also moves its page breaks.
+/// The `autoFilter` holder of a sheet, which also moves its sort state and
+/// page breaks.
 ///
 /// On a row or column edit of the sheet the filter's `ref` shifts
-/// ([ReferenceShift.shiftRange]) and the filter goes when the edit deletes
-/// it wholly; on a column edit each `filterColumn`'s `colId` is renumbered
-/// from the filter's new first column, and one whose column is deleted
-/// goes. A `brk` of `rowBreaks` (on a row edit) or `colBreaks` (on a
-/// column edit) names the first row or column of a page (0-based); it
-/// shifts with it and goes when it is deleted, `count` and
-/// `manualBreakCount` following. Only the changed attributes are rewritten.
+/// ([ReferenceShift.shiftRange]); when the edit deletes it wholly the
+/// filter goes, with its `_xlnm._FilterDatabase` name and the sheet's
+/// `sortState`. On a column edit each `filterColumn`'s `colId` is
+/// renumbered from the filter's new first column, and one whose column is
+/// deleted goes. A `sortState` (the sheet's, or the filter's) shifts its
+/// `ref` and each `sortCondition`'s; a condition wholly deleted goes, and
+/// the state goes with its range or its last condition. A `brk` of
+/// `rowBreaks` (on a row edit) or `colBreaks` (on a column edit) names the
+/// first row or column of a page (0-based); it shifts with it and goes when
+/// it is deleted, `count` and `manualBreakCount` following; on the other
+/// axis its `min` and `max` shift as a range does. Only the changed
+/// attributes are rewritten.
 final class _FilterHolder implements ReferenceHolder {
-  _FilterHolder(this._log, this._part, this._sheetName);
+  _FilterHolder(this._sheet, this._part);
 
-  final ChangeLog _log;
+  final XlsxSheet _sheet;
   final WorksheetPart _part;
-  final String Function() _sheetName;
+
+  ChangeLog get _log => _sheet._host.log;
 
   @override
   String get holderName => 'autoFilter';
 
   @override
   void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
-    if (edit == null || !_editsSheet(edit, _sheetName())) return;
-    _shiftFilter(edit);
-    _shiftBreaks(edit.axis == ShiftAxis.rows ? 'rowBreaks' : 'colBreaks', edit);
+    if (edit == null || !_editsSheet(edit, _sheet.name)) return;
+    final bool filterGone = _shiftFilter(edit);
+    _shiftSheetSort(edit, filterGone);
+    final bool rows = edit.axis == ShiftAxis.rows;
+    _shiftBreaks(rows ? 'rowBreaks' : 'colBreaks', edit);
+    _shiftExtents(rows ? 'colBreaks' : 'rowBreaks', edit);
   }
 
-  void _shiftFilter(ReferenceShift edit) {
+  /// Shifts the filter; whether the edit removed it.
+  bool _shiftFilter(ReferenceShift edit) {
     final XmlNode? node = _part.layoutElement('autoFilter') as XmlNode?;
     final String? ref = node?.attribute('ref');
     final List<XlsxRange>? read = ref == null ? null : parseSqref(ref);
-    if (node == null || read == null || read.length != 1) return;
+    if (node == null || read == null || read.length != 1) return false;
     final XlsxRange range = read.single;
     final XlsxRange? moved = edit.shiftRange(range);
-    XmlNode? next = moved == null
-        ? null
-        : node.withChanges(<String, String?>{
-            if (moved != range) 'ref': moved.ref,
-          });
-    if (next != null && moved != null && edit.axis == ShiftAxis.columns) {
-      bool changed = false;
-      final List<Object> children = <Object>[];
-      for (final Object c in node.children) {
-        final Object? kept = _shiftColumn(c, range, moved, edit);
-        changed |= !identical(kept, c);
-        if (kept != null) children.add(kept);
-      }
-      if (changed) next = next.withChildren(children);
+    if (moved == null) {
+      _sheet._editBuiltIn(_SheetPrint._filterName, null);
+      editLayout(_log, _part, 'autoFilter', () {
+        _part.setNode('autoFilter', null);
+      });
+      return true;
     }
-    if (identical(next, node)) return;
+    XmlNode next = node.withChanges(<String, String?>{
+      if (moved != range) 'ref': moved.ref,
+    });
+    bool changed = false;
+    final List<Object> children = <Object>[];
+    for (final Object c in node.children) {
+      final Object? kept = _shiftChild(c, range, moved, edit);
+      changed |= !identical(kept, c);
+      if (kept != null) children.add(kept);
+    }
+    if (changed) next = next.withChildren(children);
+    if (identical(next, node)) return false;
     editLayout(_log, _part, 'autoFilter', () {
       _part.setNode('autoFilter', next);
     });
+    return false;
   }
 
   /// [child] of a filter over [range], now over [moved]: a `filterColumn`
-  /// renumbered, or `null` when its column is deleted; anything else as it
-  /// is.
-  static Object? _shiftColumn(
+  /// renumbered on a column edit, or `null` when its column is deleted; a
+  /// `sortState` shifted, or `null` when it goes; anything else as it is.
+  static Object? _shiftChild(
     Object child,
     XlsxRange range,
     XlsxRange moved,
     ReferenceShift edit,
   ) {
-    if (child is! OpaqueXml ||
-        child.namespaceUri != Ns.main ||
-        child.localName != 'filterColumn') {
+    if (child is XmlNode && child.localName == 'sortState') {
+      return _shiftSort(child, edit);
+    }
+    if (child is! OpaqueXml || child.namespaceUri != Ns.main) return child;
+    if (child.localName == 'sortState') {
+      final XmlNode node = XmlNode.read(
+        readerOf(child),
+        const <String, Set<String>>{},
+      );
+      final XmlNode? next = _shiftSort(node, edit);
+      return identical(next, node) ? child : next;
+    }
+    if (child.localName != 'filterColumn' || edit.axis != ShiftAxis.columns) {
       return child;
     }
     final int? id = parseSheetId(readerOf(child).getAttribute('colId'));
@@ -609,12 +634,73 @@ final class _FilterHolder implements ReferenceHolder {
     if (cell == null) return null;
     final int next = cell.column - moved.firstColumn;
     if (next == id) return child;
-    return spliceElement(
-      child,
-      (XmlPullReader r, int level) => level == 0
-          ? SpliceEdit(attributes: <String, String>{'colId': '$next'})
-          : null,
-    );
+    return _withAttribute(child, 'colId', '$next');
+  }
+
+  static OpaqueXml _withAttribute(OpaqueXml element, String name, String to) =>
+      spliceElement(
+        element,
+        (XmlPullReader r, int level) => level == 0
+            ? SpliceEdit(attributes: <String, String>{name: to})
+            : null,
+      );
+
+  /// [sort] shifted, `null` when its range or its last condition goes;
+  /// [sort] itself when nothing changes or its `ref` cannot be read.
+  static XmlNode? _shiftSort(XmlNode sort, ReferenceShift edit) {
+    final XlsxRange? range = _single(sort.attribute('ref'));
+    if (range == null) return sort;
+    final XlsxRange? moved = edit.shiftRange(range);
+    if (moved == null) return null;
+    bool changed = false;
+    bool hadCondition = false;
+    final List<Object> children = <Object>[];
+    for (final Object c in sort.children) {
+      if (c is! OpaqueXml ||
+          c.namespaceUri != Ns.main ||
+          c.localName != 'sortCondition') {
+        children.add(c);
+        continue;
+      }
+      hadCondition = true;
+      final XlsxRange? at = _single(
+        readerOf(c).getAttribute('ref', namespaceUri: ''),
+      );
+      final XlsxRange? to = at == null ? at : edit.shiftRange(at);
+      if (at != null && to == null) {
+        changed = true;
+      } else if (at != null && to != at) {
+        changed = true;
+        children.add(_withAttribute(c, 'ref', to!.ref));
+      } else {
+        children.add(c);
+      }
+    }
+    if (hadCondition &&
+        !children.any(
+          (Object c) => c is OpaqueXml && c.localName == 'sortCondition',
+        )) {
+      return null;
+    }
+    final XmlNode next = sort.withChanges(<String, String?>{
+      if (moved != range) 'ref': moved.ref,
+    });
+    return changed ? next.withChildren(children) : next;
+  }
+
+  static XlsxRange? _single(String? ref) {
+    final List<XlsxRange>? read = ref == null ? null : parseSqref(ref);
+    return read == null || read.length != 1 ? null : read.single;
+  }
+
+  void _shiftSheetSort(ReferenceShift edit, bool filterGone) {
+    final XmlNode? node = _part.layoutElement('sortState') as XmlNode?;
+    if (node == null) return;
+    final XmlNode? next = filterGone ? null : _shiftSort(node, edit);
+    if (identical(next, node)) return;
+    editLayout(_log, _part, 'sortState', () {
+      _part.setNode('sortState', next);
+    });
   }
 
   void _shiftBreaks(String slot, ReferenceShift edit) {
@@ -652,14 +738,56 @@ final class _FilterHolder implements ReferenceHolder {
       for (final Object c in children)
         if (c is XmlNode && c.localName == 'brk') c,
     ];
+    final int manual = breaks
+        .where(
+          (XmlNode b) =>
+              b.attribute('man') == '1' || b.attribute('man') == 'true',
+        )
+        .length;
     final XmlNode? next = breaks.isEmpty
         ? null
         : node.withChildren(children).withChanges(<String, String?>{
             if (node.attribute('count') != null) 'count': '${breaks.length}',
             if (node.attribute('manualBreakCount') != null)
-              'manualBreakCount':
-                  '${breaks.where((XmlNode b) => b.attribute('man') == '1' || b.attribute('man') == 'true').length}',
+              'manualBreakCount': '$manual',
           });
+    editLayout(_log, _part, slot, () => _part.setNode(slot, next));
+  }
+
+  /// Shifts the `min` and `max` (0-based, on the edit's axis) of each `brk`
+  /// of [slot] as a range; a span the edit deletes wholly stays as read,
+  /// and one that reaches the sheet's end keeps reaching it.
+  void _shiftExtents(String slot, ReferenceShift edit) {
+    final XmlNode? node = _part.layoutElement(slot) as XmlNode?;
+    if (node == null) return;
+    final bool rows = edit.axis == ShiftAxis.rows;
+    XmlNode next = node;
+    for (final Object c in node.children) {
+      if (c is! XmlNode || c.localName != 'brk') continue;
+      final String? minText = c.attribute('min');
+      final String? maxText = c.attribute('max');
+      final int? min = minText == null ? 0 : parseSheetId(minText);
+      final int? max = maxText == null ? min : parseSheetId(maxText);
+      final int limit = rows ? XlsxLimits.maxRows : XlsxLimits.maxColumns;
+      if (min == null || max == null || min > max || max >= limit) continue;
+      final XlsxRange? moved = edit.shiftRange(
+        rows ? XlsxRange(min, 0, max, 0) : XlsxRange(0, min, 0, max),
+      );
+      if (moved == null) continue;
+      final int first = rows ? moved.firstRow : moved.firstColumn;
+      // A span to the sheet's end stays there, as a whole row or column.
+      final int last = max == limit - 1
+          ? max
+          : rows
+          ? moved.lastRow
+          : moved.lastColumn;
+      final XmlNode shifted = c.withChanges(<String, String?>{
+        if (minText != null && first != min) 'min': '$first',
+        if (maxText != null && last != max) 'max': '$last',
+      });
+      if (!identical(shifted, c)) next = next.replacingChild(c, shifted);
+    }
+    if (identical(next, node)) return;
     editLayout(_log, _part, slot, () => _part.setNode(slot, next));
   }
 }
