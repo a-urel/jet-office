@@ -181,4 +181,31 @@ void main() {
     expect(summary.minimum, '25%');
     expect(summary.maximum, '3');
   });
+
+  test('a sparkline is summarized as a line chart is', () {
+    ChartSeries series(ChartKind kind) => ChartSeries(
+      name: ChartData<String>(values: <String?>['Refunds']),
+      categories: ChartData<Object>(values: <Object?>['a', 'b', 'c']),
+      values: ChartData<double>(values: <double?>[2, 7, null]),
+    );
+    final ChartSummary spark = summarizeChart(
+      Chart(
+        kind: ChartKind.sparkline,
+        series: <ChartSeries>[series(ChartKind.line)],
+      ),
+    );
+    final ChartSummary line = summarizeChart(
+      Chart(
+        kind: ChartKind.line,
+        series: <ChartSeries>[series(ChartKind.line)],
+      ),
+    );
+    expect(spark.kind, ChartKind.sparkline);
+    expect(spark.values, line.values);
+    expect(spark.categories, line.categories);
+    expect(spark.minimum, '2');
+    expect(spark.maximum, '7');
+    expect(spark.shares, line.shares);
+    expect(spark.isEmpty, isFalse);
+  });
 }

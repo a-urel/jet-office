@@ -18,6 +18,7 @@ import 'legend_layout.dart';
 import 'pie_layout.dart';
 import 'primitives.dart';
 import 'resolve.dart';
+import 'sparkline_layout.dart';
 import 'text_measurer.dart';
 
 /// A text the layout did not draw, kept so a tooltip can still show it.
@@ -165,7 +166,8 @@ final class ChartLayout {
 /// axis titles, tick and category labels, grid lines, axis lines and the plot.
 /// Pie and donut charts are laid out around a centre, with their data labels
 /// inside the slices or, in a pie, outside with leader lines, and a donut's
-/// centre text (`pie_layout.dart`). Every other kind draws the background,
+/// centre text (`pie_layout.dart`). A sparkline draws only its lines, on the
+/// background and without a border (`sparkline_layout.dart`). Every other kind draws the background,
 /// the title if any, and a `placeholder` text of the chart's
 /// `unsupportedName`, else its kind's name, centred in what is left; the
 /// placeholder is hidden when it does not fit.
@@ -241,8 +243,20 @@ ChartLayout layoutChart(
             ChartHiddenLabel(id, text),
         ],
       );
-    case ChartKind.scatter:
     case ChartKind.sparkline:
+      final SparklineLayout spark = layoutSparkline(
+        chart,
+        resolveChart(chart, theme, formatter),
+        theme: theme,
+        size: size,
+      );
+      return ChartLayout(
+        size: size,
+        primitives: spark.primitives,
+        plotArea: spark.plot,
+        categoryBands: spark.categoryBands,
+      );
+    case ChartKind.scatter:
     case ChartKind.combination:
     case ChartKind.unsupported:
       return _placeholder(chart, theme, size, measurer);

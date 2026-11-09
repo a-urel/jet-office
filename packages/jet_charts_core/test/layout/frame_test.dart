@@ -633,7 +633,6 @@ void main() {
     const ChartSize size = ChartSize(300, 200);
     for (final ChartKind kind in <ChartKind>[
       ChartKind.scatter,
-      ChartKind.sparkline,
       ChartKind.combination,
       ChartKind.unsupported,
     ]) {

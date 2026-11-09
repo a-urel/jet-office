@@ -628,6 +628,74 @@ void main() {
       isNull,
     );
   });
+  group('a sparkline', () {
+    Chart spark({bool categories = true}) => Chart(
+      kind: ChartKind.sparkline,
+      series: <ChartSeries>[
+        _series(
+          'Refunds',
+          categories ? <Object>['Mon', 'Tue', 'Wed'] : <Object>[],
+          <double?>[1, 3, 2],
+        ),
+        _series(
+          'Sales',
+          categories ? <Object>['Mon', 'Tue', 'Wed'] : <Object>[],
+          <double?>[4, null, 6],
+        ),
+      ],
+    );
+
+    test('over a band shows the category and each series value', () {
+      final Chart chart = spark();
+      final ChartLayout layout = _layout(chart, size: const ChartSize(120, 30));
+      final ChartRect band = layout.categoryBands[1];
+      final ChartTooltip? tip = chartTooltipAt(
+        chart,
+        layout,
+        _centre(band),
+        theme: _office,
+      );
+      expect(tip!.title, 'Tue');
+      expect(tip.rows.map((ChartTooltipRow r) => r.label), <String>['Refunds']);
+      expect(tip.rows.single.value, '3');
+      final ChartTooltip? first = chartTooltipAt(
+        chart,
+        layout,
+        _centre(layout.categoryBands[0]),
+        theme: _office,
+      );
+      expect(first!.title, 'Mon');
+      expect(first.rows, hasLength(2));
+      expect(first.rows.last.value, '4');
+    });
+
+    test('has no title when the series has no categories', () {
+      final Chart chart = spark(categories: false);
+      final ChartLayout layout = _layout(chart, size: const ChartSize(120, 30));
+      final ChartTooltip? tip = chartTooltipAt(
+        chart,
+        layout,
+        _centre(layout.categoryBands[2]),
+        theme: _office,
+      );
+      expect(tip!.title, isNull);
+      expect(tip.rows.map((ChartTooltipRow r) => r.value), <String>['2', '6']);
+    });
+
+    test('off the bands has none', () {
+      final Chart chart = spark();
+      final ChartLayout layout = _layout(chart, size: const ChartSize(120, 30));
+      expect(
+        chartTooltipAt(
+          chart,
+          layout,
+          const ChartPoint(0.1, 0.1),
+          theme: _office,
+        ),
+        isNull,
+      );
+    });
+  });
 }
 
 /// The middle of the longest segment of the path through [points].

@@ -95,7 +95,8 @@ final class ChartTooltip {
 ///   name, and the value followed by its share of the series' whole, in
 ///   `0%`, in brackets;
 /// * a line, an area, a grid line or the plot (`plot/clip`, `plot/markers`,
-///   `plot`): the
+///   `plot`), or, in a sparkline, which draws no plot rectangle, the
+///   background: the
 ///   category whose `ChartLayout.categoryBands` band holds [point], every
 ///   series at it as a row;
 /// * a category label: that category, as above;
@@ -266,6 +267,13 @@ final class _Source {
               )
             : null;
       case ChartElementKind.background:
+        if (chart.kind == ChartKind.sparkline && point != null) {
+          // A sparkline has no plot rectangle: its bands are what is hovered.
+          final int? category = _band(point);
+          if (category != null) {
+            return _category(id, category);
+          }
+        }
         return _background(id);
       case ChartElementKind.title:
       case ChartElementKind.legend:
@@ -355,6 +363,11 @@ final class _Source {
 
   /// The full text of [category], or `null` when it is empty.
   String? _title(int category) {
+    if (chart.kind == ChartKind.sparkline &&
+        chart.series.first.categories.values.every((Object? c) => c == null)) {
+      // A sparkline's categories are not numbered when it has none.
+      return null;
+    }
     final String text = resolved.categoryLabels[category];
     return text.isEmpty ? null : text;
   }

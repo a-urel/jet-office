@@ -11,7 +11,7 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 /// One chart of the gallery.
 final class GalleryChart {
   /// Creates a gallery chart named [name] (a file name stem) of [chart].
-  const GalleryChart(this.name, this.chart, {this.theme});
+  const GalleryChart(this.name, this.chart, {this.theme, this.size});
 
   /// The name, also the golden's file stem.
   final String name;
@@ -23,11 +23,16 @@ final class GalleryChart {
   /// the chart shows a theme value of its own.
   final ChartTheme? theme;
 
-  /// Lays the chart out on [size] as the goldens do.
+  /// The size the chart is laid out on instead of the gallery's, for a mark
+  /// that is small by nature, or null.
+  final ChartSize? size;
+
+  /// Lays the chart out on [size] as the goldens do, or on this chart's own
+  /// [GalleryChart.size] when it has one.
   ChartLayout layout(ChartSize size) => layoutChart(
     chart,
     theme: theme ?? ChartTheme.office,
-    size: size,
+    size: this.size ?? size,
     measurer: const FixedWidthTextMeasurer(),
   );
 }
@@ -269,6 +274,36 @@ List<GalleryChart> galleryCharts() => <GalleryChart>[
       ],
       dataLabels: const ChartDataLabels(visible: true),
     ),
+  ),
+  GalleryChart(
+    'sparkline_line',
+    Chart(
+      kind: ChartKind.sparkline,
+      series: <ChartSeries>[
+        _series('Refunds', const <Object>[], <double?>[4, 7, 5, 9, 6, 11, 8]),
+      ],
+      valueAxis: const ChartAxis(min: 0),
+    ),
+  ),
+  GalleryChart(
+    'sparkline_area',
+    Chart(
+      kind: ChartKind.sparkline,
+      series: <ChartSeries>[
+        _series('Refunds', const <Object>[], <double?>[
+          4,
+          7,
+          5,
+          9,
+          6,
+          11,
+          8,
+        ]).copyWith(kind: ChartKind.area),
+      ],
+      valueAxis: const ChartAxis(min: 0),
+    ),
+    theme: ChartTheme.office.copyWith(areaOpacity: 0.1),
+    size: const ChartSize(120, 40),
   ),
   GalleryChart(
     'tile',
