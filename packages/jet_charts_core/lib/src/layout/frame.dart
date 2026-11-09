@@ -73,9 +73,10 @@ final class FrameLayout {
   /// The plot and scale, or `null` when only the background is drawn.
   final FrameGeometry? geometry;
 
-  /// Each category's band of the plot, in category order, from the edges the
-  /// category grid lines are drawn at (`categoryBands` of `axis_layout.dart`);
-  /// empty when only the background is drawn.
+  /// Each category's band of the plot, in category order (`categoryBands` of
+  /// `axis_layout.dart`): between the category grid lines, except in an area
+  /// chart, whose grid lines go through the categories and whose bands reach
+  /// halfway to each neighbour; empty when only the background is drawn.
   final List<ChartRect> categoryBands;
 }
 

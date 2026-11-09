@@ -114,9 +114,12 @@ final class ChartLayout {
   /// category `i`'s. Across a horizontal category axis (column, line and
   /// area charts) a band takes the plot's full height, from left to right;
   /// beside a vertical one (a bar chart) it takes the full width, from the
-  /// bottom up. The bands tile the plot, and their edges are where the
-  /// category grid lines are drawn. Empty when there is no plot area or no
-  /// category. A backend uses them to find the category under a point.
+  /// bottom up. The bands tile the plot. Their edges are where the category
+  /// grid lines are drawn, except in an area chart, whose categories sit on
+  /// the grid lines (on tick marks) and whose bands reach halfway to each
+  /// neighbour, so the first and last are half as wide. Empty when there is
+  /// no plot area or no category. A backend uses them to find the category
+  /// under a point.
   final List<ChartRect> categoryBands;
 
   @override

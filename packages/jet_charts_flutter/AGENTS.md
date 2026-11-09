@@ -27,11 +27,13 @@ is a live region and a screen reader announces each change of it.
 
 ## Open for J4 and C1
 
-- The owner's gallery check against Excel for Mac is pending
-  (`example/TALIMATLAR.md`); its result goes in
-  `packages/jet_charts_core/docs/excel-checks.md` with the owner, never
-  without. The gallery has no screenshot of the running app: the machine that
-  built it could not record the screen.
+- The owner's J3 gallery check against Excel for Mac is done and recorded
+  (`packages/jet_charts_core/docs/excel-checks.md`, "Milestone checks"); its
+  differences are fixed, but `column_negative` (kept). Series 7 to 12's
+  colours are an estimate from the owner's screenshot until an Excel-saved
+  copy of `gallery.xlsx` arrives. A later check's result goes there with the
+  owner, never without. The gallery has no screenshot of the running app: the
+  machine that built it could not record the screen.
 - Whether a sandboxed macOS app sees Aptos Narrow (the gallery's header says
   which font it got); until known, goldens use Roboto.
 - Tooltip box spacing and border constants are in `lib/src/tooltip_view.dart`,
@@ -40,7 +42,8 @@ is a live region and a screen reader announces each change of it.
   theme could.
 - Large series cost: about 250 ms (VM) and 520 ms (Chrome) for a 10,000-point
   line, about 100 and 190 ms for 3,650 categories of two series, almost all in
-  the core's layout (`docs/benchmark.md`).
+  the core's layout; the line's 10,000 markers cost about 16 ms (VM) and 77 ms
+  (Chrome) to paint (`docs/benchmark.md`).
 - The gallery's chart list duplicates the core's test gallery (an app's `lib/`
   cannot import another package's test support): same names, drift is
   possible. The measurer fuzz generator is a copy too (`fuzz_copy_test.dart`).
@@ -51,9 +54,9 @@ is a live region and a screen reader announces each change of it.
 - Each `JetChart` owns a `FlutterTextMeasurer` whose cache holds up to 2048
   painters; consider one shared measurer per text scaler, and measure a
   dashboard's memory.
-- Merge order with C1: J3's Office `border` reuses the grid line colour
-  (`D9D9D9`); when C1's `lumMod`/`lumOff` scheme colour lands, the chart border
-  and the tooltip border should follow it.
+- The Office chart border is the grid line colour, `dark1` with `lumMod`
+  0.15 and `lumOff` 0.85 (`D9D9D9`), bound to the file theme; the tooltip's
+  border is a fixed `D9D9D9`, as the tooltip is this library's own look.
 - J4: pies, donut, sparkline, scatter, combination and secondary axis come
   with the core's (`jet_charts_core/AGENTS.md`).
 

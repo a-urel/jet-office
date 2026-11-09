@@ -188,12 +188,15 @@ by hand, then fix it.
 - Excel's time-scale date axis (owner decision O2; dates are categories).
 - The en-US and de-DE oracle regions are unverified; so are fonts other than
   8, 10 and 18, and plot margins.
-- The owner's gallery check against Excel for Mac (decision O3) is pending
-  (`packages/jet_charts_flutter/example/TALIMATLAR.md`); record its result in
-  `docs/excel-checks.md` with the owner. Unconfirmed until then: Excel's gap
-  width for clustered bars (182) and stacked ones (150, 100), written from
-  memory in the gallery workbook; Excel's palette from series 13 (7 to 12 follow the owner's check, an estimate); the
-  spacing constants in `docs/excel-checks.md`.
+- The owner's J3 gallery check against Excel for Mac (decision O3) is done
+  and recorded (`docs/excel-checks.md`, "Milestone checks"); its differences
+  are fixed, but `column_negative` (kept, `docs/parity.md`). Still
+  unconfirmed: Excel's gap width for clustered bars (182) and stacked ones
+  (150, 100), written from memory in the gallery workbook (the check saw no
+  difference there, but read no file); the colours of series 7 to 12, an
+  estimate from the owner's screenshot that waits for an Excel-saved copy of
+  `gallery.xlsx`; Excel's palette from series 13; the spacing constants in
+  `docs/excel-checks.md`.
 - Whether a sandboxed macOS app sees Aptos Narrow (Flutter side).
 - The tooltip box's spacing constants are not in `ChartTooltipStyle`, and
   `chartTooltipAt` resolves the chart again on each call (a caller that has
@@ -220,8 +223,9 @@ by hand, then fix it.
   clustered columns only; Excel's insert defaults are believed (unconfirmed)
   to be gap 182 and no overlap for clustered (horizontal) bars, gap 150 and
   overlap 100 for stacked kinds
-  (`docs/parity.md`, "Bars"). The owner's gallery check settles it; a gap and
-  overlap per kind in the theme is J4 if confirmed.
+  (`docs/parity.md`, "Bars"). The owner's gallery check saw no difference but
+  read no file; an Excel-saved file settles it, and a gap and overlap per
+  kind in the theme is J4 if confirmed.
 - Minor: `public_api_test` asserts the exact formatted export text.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
 
