@@ -7,14 +7,21 @@ lays out; `jet_office` writes and reads the model as a chart in XLSX and DOCX.
 The record of the design is the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md`.
 
-Milestones J1, J2 and J3 are done, and the owner's full axis oracle run is
+Milestones J1, J2 and J3 are done, and J4 is done but its Excel check
+(E1, the owner's `chart_reference_j4.xlsx`, and E2, the J4 gallery side by
+side: `docs/excel-checks.md`, "J4 values"), and the owner's full axis oracle run is
 recorded (`docs/axis-scaling.md`, "Findings"). The package exports the model,
 the theme, the drawing primitives and the text measurer (J1), the value scale
 (`autoValueScale`), the layout (`layoutChart`) and the overlap check
 (`findOverlaps`) (J2). J3 added element ids and `hitTestLayout`,
 `ChartLayout.categoryBands`, the tooltip (`chartTooltipAt`, `chartTooltipFor`,
 `ChartTooltipStyle`), `summarizeChart`, and the Office border and no value axis
-line; the renderer is `jet_charts_flutter`.
+line; the renderer is `jet_charts_flutter`. J4 added pies, donuts,
+sparklines, scatter and combination charts, per-series kind, the secondary
+value axis, smooth lines, point colours, translucent areas with an edge line,
+pie data labels with `minShare`, `ChartTheme.fromColors` and `ChartSummary`'s
+shares, centre text and x values; `docs/parity.md` lists their deliberate
+differences.
 
 ## The packages
 
@@ -196,13 +203,24 @@ by hand, then fix it.
 - Follow the surrounding code: explicit types, dartdoc on every public member,
   plain sentences.
 
-## Open for J4 and C1
+## Open for J5, C2 and C3
 
-- Sparkline, scatter, combination charts, per-series kind and the secondary
-  axis (J4). Pies and donuts are laid out (J4 Task 5); their Excel values
-  (first slice angle, hole size, outline, colours) are estimates until the
-  owner's E1 file.
-- Excel's time-scale date axis (owner decision O2; dates are categories).
+- J4's Excel values (first slice angle, hole size, outline, colours, scatter
+  and secondary axis defaults, sparkline width, the smooth curve, the label
+  leader line) are estimates, not checked in Excel, until the owner's E1 and
+  E2 (`docs/excel-checks.md`, "J4 values"); J4 is "done but its Excel check".
+- Not done: Excel's other scatter styles (lines with or without markers,
+  smooth), a bar chart's secondary axis, rounded bar corners (a Monépro
+  nice-to-have), gradient fills, and a pie's data label threshold as Excel
+  has it (`minShare` is screen only). Every other Excel chart kind
+  (3D, `cx:` kinds, bubble, stock, radar, surface, trendlines, error bars) is
+  covered eventually (decision 0017): J4 kept the model's enums open, the
+  polar layout in its own module, and the axis roles and ids extensible by
+  name.
+- Writing pie, donut, scatter, combination and secondary-axis charts in
+  DrawingML is C2 and C3; the writer refuses them until then.
+- Excel's time-scale date axis (owner decision O2; dates are categories, a
+  scatter chart's dates are serials on a value axis).
 - The en-US and de-DE oracle regions are unverified; so are fonts other than
   8, 10 and 18, and plot margins.
 - The owner's J3 gallery check against Excel for Mac (decision O3) is done
@@ -236,6 +254,15 @@ by hand, then fix it.
   dropped whole for one long name; near-equal huge values (relative spread
   about 1e-14) can put the data top above the axis; the "data labels first"
   degradation is nominal.
+- Deferred J4 minors: `ChartDataLabels.toString` omits the new flags and the
+  text goldens do not print `fillOpacity`; a pie's 3 % label can be hidden
+  behind a 4 % slice's leader line (no overlap; Excel shows both); percent
+  stacked combination lines are drawn from raw values (Excel unchecked);
+  `fromColors` takes the Office tooltip padding; a scatter `DateTime` becomes
+  its serial through `jet_core`'s General text, as it exports no serial
+  function; a line series' point colour with markers off writes a lone circle
+  marker in the file (Excel unchecked); labels shown with `showValue: false`
+  read back hidden (the chart reads untyped).
 - Minor: `public_api_test` asserts the exact formatted export text.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
 

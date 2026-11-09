@@ -10,12 +10,16 @@ system decides the rest.
 
 ## Status
 
-Milestone J3 is done. The package exports `FlutterTextMeasurer` (the
+Milestones J3 and J4 are done (J4 but its Excel check: the new kinds'
+Excel values are estimates until the owner's E1 and E2). The package exports `FlutterTextMeasurer` (the
 `TextMeasurer` that measures with the `TextPainter` the renderer paints with),
 `paintChartPrimitives` and `ChartLayoutPainter`, and the widget `JetChart`:
 loading, empty and error states in English, Turkish and German, a screen
 reader description, hover and touch tooltips (`onHover`, `onTap`), light
-animation of marks when the data changes, and reduced motion. `example/` is a
+animation of marks when the data changes, and reduced motion. It paints
+column, bar, line, area, pie, donut, sparkline, scatter and combination
+charts, smooth lines and translucent areas, and the keyboard walks a chart's
+points (arrows, Home, End) while a screen reader reads a node per point. `example/` is a
 gallery app for comparing the charts with Excel for Mac.
 
 The package is a member of the repository's pub workspace (decisions 0013 and
@@ -52,3 +56,10 @@ final Widget chart = JetChart(
 
 While `loading` is true the default loading look animates without end, so a
 widget test must pump a fixed duration rather than `pumpAndSettle`.
+
+## Themes
+
+`docs/app-themes.md` shows how an app builds its light and dark theme with
+`ChartTheme.fromColors`, a donut with a total, a sparkline, smooth lines and
+translucent areas, compact amounts and dates in Turkish, and how to test a
+chart with animations disabled.

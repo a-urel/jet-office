@@ -7,7 +7,9 @@ reads and writes no file format. The records of the design are the
 repository root's `docs/decisions/0014-chart-phase-and-drawingml-layer.md`
 and `docs/decisions/0016-jet-charts-flutter-in-the-workspace.md`.
 
-Milestone J3 is done. The package exports `FlutterTextMeasurer`,
+Milestone J3 is done, and J4 is done but its Excel check (E1 and E2, owner's:
+`packages/jet_charts_core/docs/excel-checks.md`, "J4 values"). The package
+exports `FlutterTextMeasurer`,
 `paintChartPrimitives`, `ChartLayoutPainter`, and the widget `JetChart` with
 `JetChartStateBuilder`, `JetChartErrorBuilder` and `JetChartStrings` (its
 loading, empty and error texts and its screen reader description, in English,
@@ -34,7 +36,13 @@ category, slice or scatter point, up to `JetChartStrings.maxPointNodes`
 a test of the keyboard runs in a `WidgetsApp` under an autofocused
 `FocusScope`, as nothing holds the focus there without a navigator.
 
-## Open for J4 and C1
+J4 added the painting of pies, donuts (arcs), sparklines, scatter and
+combination charts and of translucent fills (`PathPrimitive.fillOpacity`), the
+animation of arcs and opacity, keyboard and screen reader points of the new
+kinds, the strings, the gallery's J4 charts and `docs/app-themes.md` (how an
+app builds its themes; its code is `test/app_themes_doc_test.dart`).
+
+## Open for J5, C2 and C3
 
 - The owner's J3 gallery check against Excel for Mac is done and recorded
   (`packages/jet_charts_core/docs/excel-checks.md`, "Milestone checks"); its
@@ -67,9 +75,24 @@ a test of the keyboard runs in a `WidgetsApp` under an autofocused
   dashboard's memory.
 - The Office chart border is the grid line colour, `dark1` with `lumMod`
   0.15 and `lumOff` 0.85 (`D9D9D9`), bound to the file theme; the tooltip's
-  border is a fixed `D9D9D9`, as the tooltip is this library's own look.
-- J4: pies, donut, sparkline, scatter, combination and secondary axis come
-  with the core's (`jet_charts_core/AGENTS.md`).
+  border is the theme's own (`ChartTooltipStyle.border`): the Office theme sets
+  `D9D9D9`, and another theme (`ChartTheme.fromColors` sets its grid line
+  colour) sets its own.
+- J4: the Excel values of the new kinds are estimates until the owner's E1
+  and E2 (the core's `AGENTS.md`, "Open for J5, C2 and C3", lists what else is
+  open: other scatter styles, a bar chart's secondary axis, rounded corners,
+  gradients, writing the kinds in DrawingML).
+- Minor and deferred from J4: `JetChart._onFocusChange` calls `setState`
+  every time, and the focus tests need two pumps; no tests for a leader line
+  hidden before the end of an animation or for `fillOpacity` kept in the lerp;
+  a `NaN` `fillOpacity` would throw in `_fill` (the core never emits one); the
+  dark golden charts copy the light ones' data; some doc lines in
+  `animation.dart` and `primitive_painter.dart` are over 80 columns; the
+  Flutter copy of the fuzz generator has no commit hash in its provenance;
+  the gallery's pie, doughnut and combination charts use the column chart's
+  colour and style parts in the Excel workbook, the sparkline column width is
+  approximate (`x14` sparklines are cell features, so `sparkline_area` shows
+  as a line in Excel) and the page's palette is not Monépro's own.
 
 ## The gallery app
 
@@ -113,7 +136,8 @@ with the input minimized, then fix it.
 ## Benchmark
 
 `benchmark/chart_benchmark_test.dart` times layout (cold and warm text cache)
-and paint recording for dashboard charts and two large series. It records
+and paint recording for dashboard charts, two large series, a 10,000-point
+scatter chart and a pie of 60 slices. It records
 figures and fails on nothing; the gate does not run it. Run it with
 `flutter test benchmark`; how to run it in Chrome and the recorded figures are
 in `docs/benchmark.md`.

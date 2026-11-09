@@ -21,10 +21,20 @@ root) records why. The packages share one repository, a pub workspace (decision
 | `jet_office` (repository root) | `c:chartSpace` read and write, host adapters for XLSX, DOCX | `jet_core`, `jet_charts_core` (from C1, decision 0014) |
 | `jet_print` (later) | PDF painter, its own measurer | core |
 
-`jet_charts_flutter` and `jet_print`'s painter do not exist yet, and
-`jet_office` does not use this package yet.
+`jet_charts_flutter` is the Flutter backend and `jet_office` reads and writes
+the model as a chart part (milestone C1); `jet_print`'s painter does not exist
+yet.
 
 ## Status
+
+Milestone J4 is done but its Excel check (E1 and E2, the owner's; the values
+are estimates until then, `docs/excel-checks.md`): pie, donut, sparkline,
+scatter and combination charts, a series' own kind, the secondary value axis,
+smooth lines, point colours, translucent areas with an edge line, percent data
+labels with `minShare`, a donut's `holeSizePercent` and `centerText`, and
+`ChartTheme.fromColors` for an app's own light and dark themes
+(`packages/jet_charts_flutter/docs/app-themes.md`). The J2 notes below stay
+true.
 
 Milestone J2 is done. The package exports the chart model, the theme (with the
 Office theme built in), the drawing primitives with their geometry, and the

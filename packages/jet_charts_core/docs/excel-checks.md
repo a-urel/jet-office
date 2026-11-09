@@ -108,3 +108,37 @@ The owner records each milestone's check here.
 |---|---|---|---|
 | J3 (`jet_charts_flutter` gallery, `gallery.xlsx` after `acd75e7`) | 2026-11-09 | Excel for Mac, `tr-TR` (version not recorded) | Owner compared all 16 charts side by side. Differences: `line_gap`, Excel draws a circle marker on every point and a line-and-circle legend symbol, the app none and a square; `area_stacked`, the app leaves space left and right of the area, Excel draws it edge to edge; `column_negative`, Excel puts the category labels at the zero line, covered by negative bars, the app under the plot (kept, deliberate: `parity.md`); `column_eight_series`, the app's legend wraps to two lines (the app had no Aptos Narrow) and series 7 and 8 differ in colour (above); `column_long_labels`, Excel keeps the labels level and wraps them onto two lines, the app turns them and cuts them; `column_data_labels`, the label 18 does not show in the app. No other difference. Fixes follow in a later commit. |
 | J3 re-check (`gallery.xlsx` after `6dc2dff`, the app on the same commit) | 2026-11-09 | Excel for Mac, `tr-TR` (version not recorded) | Owner compared the charts again. `line_gap`, `area_stacked`, `column_long_labels` and `column_data_labels` now match. `column_negative` keeps its deliberate difference. `column_eight_series`: the app's legend still wraps to two lines (no Aptos Narrow in the app); the gallery's series 7 and 8 still show light in Excel, but a new clustered column chart the owner made in Excel from the same cells shows them dark, the same colours as the app (`0D3A4E`, `994010`, read by Claude for Excel; above). |
+
+## J4 values (estimates)
+
+Milestone J4 added the kinds below. None of their values has been read from
+Excel: the owner's E1 file (`chart_reference_j4.xlsx`, steps in
+`test/fixtures/owner/charts/TALIMATLAR_J4.md`) and E2 (the J4 gallery of
+`packages/jet_charts_flutter/example` side by side, its `TALIMATLAR.md`) have
+not been run. Every row is this library's estimate, not checked in Excel,
+pending E1 or E2; the owner's result goes here, from the owner only, and this
+page then changes the status. The sources are what this library chose.
+
+| Value | Status | Source |
+|---|---|---|
+| First slice starts at 12 o'clock and slices run clockwise | Estimate, not checked in Excel; pending E1 | This library's choice (the schema's `c:firstSliceAng` default is 0); the DrawingML writer does not write pies yet (C2/C3) |
+| Donut hole 75 % (`Chart.holeSizePercent`) | Estimate, not checked in Excel; pending E1 | This library's choice for a modern donut (the schema's `c:holeSize` default is 10); the writer does not write donuts yet (C2/C3) |
+| Slice outline in the background colour, 0.75 pt (`sliceBorderWidth`) | Estimate, not checked in Excel; pending E1 | This library's choice |
+| A pie of one series varies colours by category, palette order | Estimate, not checked in Excel; pending E1 | This library's choice, from the usual look of an Excel pie |
+| Legend of a pie or donut at the bottom, one entry per category | Estimate, not checked in Excel; pending E1 | Same rule as the other kinds (verified for them) |
+| A negative slice drawn as its absolute value | Estimate, not checked in Excel; pending E1 | This library's choice |
+| The first donut series is the innermost ring | Estimate, not checked in Excel; pending E1 | This library's choice |
+| Pie label leader line in the axis line colour and width | Estimate, not checked in Excel; pending E1 | This library's choice |
+| Pie and donut labels inside a slice at 0.6 of the radius (pie) or mid-ring (donut) | Estimate, not checked in Excel; pending E1 | This library's choice |
+| Scatter: both axes automatic by `autoValueScale`, horizontal grid lines only, markers only | Estimate, not checked in Excel; pending E1 | The J2 rule (verified for value axes) used on the x axis; Excel's scatter styles are not read |
+| Scatter: a text x value numbers the points 1, 2, 3 | Estimate, not checked in Excel; pending E1 | This library's choice, from the usual behaviour of Excel with text x values |
+| Secondary value axis on the right, no grid lines | Estimate, not checked in Excel; pending E1 | This library's choice |
+| Combination: columns, areas, then lines; primary before secondary within a kind | Estimate, not checked in Excel; pending E1 | This library's choice, from Excel's usual group order |
+| Sparkline line 0.75 pt (`sparklineWidth`); area fill under it | Estimate, not checked in Excel; pending E1/E2 | This library's choice; Excel's sparkline is a cell feature (`x14`) |
+| Smooth line: Catmull-Rom spline | Estimate, not checked in Excel; pending E1/E2 | Excel's smoothing is not documented |
+| Area `areaOpacity` as `a:alpha`; `areaLine` as the series line | Estimate, not checked in Excel; pending E1 | The DrawingML schema's alpha and `a:ln` |
+| `c:dPt` for point colours (bar fill; line marker) | Estimate, not checked in Excel; pending E1 | The schema's order; Excel's own file decides |
+| `showValue: false` as `c:showVal 0`; `showPercent` written as 0 | Estimate, not checked in Excel; pending E1 | The schema |
+| Pie, donut and combination parts in the gallery workbook use the column chart's colour and style parts | Estimate, not checked in Excel; pending E2 | Task 12 of J4 |
+
+No row of the Milestone checks table above is for J4 yet.

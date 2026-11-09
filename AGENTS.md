@@ -21,12 +21,17 @@ resolving it needs Flutter's SDK) before any design change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
 its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
-testing, tooltip and summary), and this package depends on it from C1.
+testing, tooltip and summary), and J4 is done but its Excel check (E1, E2: the
+kinds pie, donut, sparkline, scatter, combination, the secondary axis, smooth
+lines; `packages/jet_charts_core/docs/excel-checks.md`), and this package
+depends on it from C1.
 Milestone C1 (the DrawingML chart layer, `docs/drawingml-charts.md`) is done
 (the owner's Excel check is in `docs/excel-checks.md`); every chart of the
 owner's `chart_reference.xlsx` but one reads typed.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
-own `AGENTS.md`; milestone J3 is done. This package never depends on it.
+own `AGENTS.md`; milestones J3 and J4 are done (J4 but its Excel check). This
+package never depends on it. `packages/jet_charts_flutter/docs/app-themes.md`
+is the guide for an app's themes and charts.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
