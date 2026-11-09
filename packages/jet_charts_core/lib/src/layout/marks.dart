@@ -319,8 +319,8 @@ List<ChartPrimitive> _lines(
 ///
 /// On a denser line the markers would touch and hide the line, and on a
 /// large series they cost far more to draw than the line, so only a point
-/// with no neighbour keeps its marker, as it would not show otherwise. Excel
-/// draws every marker however dense the line (`docs/parity.md`). The legend
+/// with no neighbour keeps its marker, as it would not show otherwise. Excel's
+/// behaviour on dense lines was not checked (`docs/parity.md`). The legend
 /// keeps its marker either way, and a written chart part says what the theme
 /// says.
 bool lineMarkersFit(

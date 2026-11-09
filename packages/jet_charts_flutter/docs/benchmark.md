@@ -107,7 +107,7 @@ column clustered 2x3650   1280x720       135   192.60    204.70    212.90    220
   them), and the markers touched and hid the line. A line now gets markers
   only where its category step is at least `markerSize` plus 2 pt, so this
   line has none and records in 0.41 ms on the VM and 4 ms in Chrome again;
-  its `prims` is one fewer, as the marker clip is left out. Excel draws
-  every marker (`jet_charts_core/docs/parity.md`).
+  its `prims` is one fewer, as the marker clip is left out. Excel's
+  behaviour on dense lines was not checked (`jet_charts_core/docs/parity.md`).
 - Data labels are off: the core's label placement is linear per obstacle and
   takes about 1 s at 3,650 categories by 2 series.

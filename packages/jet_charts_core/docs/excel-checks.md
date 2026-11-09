@@ -58,12 +58,15 @@ as what the file confirmed:
 
 Seen in the owner's J3 gallery check (2026-11-09, `column_eight_series`): Excel
 drew series 7 and 8 as a light grey-blue and a light salmon (about `8599A9` and
-`ECA28B` on the screenshot), where `ChartTheme.seriesColor` drew a dark navy
-and a brown. Those light colours came from the gallery workbook, not from
-Excel's default: the workbook wrote no chart colour-style part, and its series
-7 and 8 no colour, so Excel fell back to the legacy colour table of `c:style`
-2. The owner's Excel-saved copy, `gallery_saved.xlsx`, shows it: series 7 and 8
-keep no `c:spPr` and the file has no `colorsN.xml`.
+`ECA28B`, measured from the owner's screenshot), where `ChartTheme.seriesColor`
+drew a dark navy and a brown. The owner's Excel-saved copy of that workbook,
+`~/Documents/jet_charts_oracle/gallery_saved.xlsx` (the owner's file, not in
+this repository), shows what the workbook had: its chart of
+`column_eight_series` keeps series 7 and 8 without `c:spPr`, has
+`c:style val="2"`, and the file has no colour-style part (`colorsN.xml`). Our
+reading is that Excel then fell back to the legacy colour table of `c:style`
+2, which would explain the light colours; Excel states no such rule, and this
+was not tested by adding the part and looking again.
 
 Excel's default is the colour cycle of its colour-style part, verified from
 `chart_defaults.xlsx`, `xl/charts/colors1.xml` (`cs:colorStyle` `meth="cycle"`
@@ -73,7 +76,10 @@ Excel's default is the colour cycle of its colour-style part, verified from
 `lumMod` 70000; `lumMod` 50000 and `lumOff` 50000. `ChartTheme.seriesColor`
 follows it: series 7 is accent 1 at `lumMod` 0.6 (`0D3A4E`), series 8 accent
 2 at `lumMod` 0.6 (`994010`), series 13 accent 1 at `lumMod` 0.8 and
-`lumOff` 0.2 (`1F8EC0`). The file says nothing past the ninth variation; this
+`lumOff` 0.2 (`1F8EC0`). Only the list of variations is from Excel's file:
+that Excel's series 13 and later use the variations in that order was not
+checked, and neither was how Excel renders them. The file says nothing past
+the ninth variation; this
 library starts the cycle again there (series 55 is series 1's colour), which
 is unconfirmed. The gallery workbook now writes Excel's `colors1.xml` and
 `style1.xml` beside each chart; the owner's re-check of `column_eight_series`

@@ -159,8 +159,9 @@ Each rule has the test that holds it.
   colour cycle (`colors1.xml` of the owner's `chart_defaults.xlsx`): series 7
   to 12 of the Office theme are its accents at `lumMod` 60000, series 13 to 18
   at `lumMod` 80000 and `lumOff` 20000, and so on through the file's nine
-  variations, each bound to the scheme; a fixed palette gives fixed colours
-  of the same variations. Ten series write and
+  variations, each bound to the scheme (only the list of variations is from Excel's
+  file; Excel's own rendering of series 13 and later is unchecked); a fixed
+  palette gives fixed colours of the same variations. Ten series write and
   read back equal, and 10,000 points write and read in linear time.
   `chart_reader_test.dart` ("round trip"), `chart_writer_test.dart`
   ("colours").

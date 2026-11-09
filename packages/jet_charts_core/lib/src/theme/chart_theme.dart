@@ -136,7 +136,8 @@ final class ChartTheme {
   /// point with no neighbour to join gets a marker, so it still shows. When
   /// `true`, the layout still leaves out the markers of a line whose category
   /// step is under [markerSize] plus 2 pt, where they would touch, but those
-  /// of a point with no neighbour (Excel draws them all, `docs/parity.md`).
+  /// of a point with no neighbour (this library's choice; Excel's behaviour
+  /// on dense lines was not checked, `docs/parity.md`).
   final bool lineMarkers;
 
   /// The gaps, symbol sizes and line widths of the layout.

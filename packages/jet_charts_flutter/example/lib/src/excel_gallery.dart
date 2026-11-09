@@ -16,10 +16,17 @@
 /// title, legend position, data labels, the data and its format codes) is
 /// written as such. Beside each chart go Excel's colour-style and style parts
 /// of that file (`colorsN.xml`, `styleN.xml`, `excel_chart_style.dart`), as
-/// Excel writes them beside every chart it makes. Series past the sixth carry
-/// no `c:spPr`, so Excel chooses their colours itself, from the colour cycle
-/// of `colorsN.xml`; without that part Excel falls back to the legacy colours
-/// of `c:style` 2, lighter than its default.
+/// Excel writes them beside every chart it makes: the style part of its
+/// clustered column chart (201) for column charts and that of its line chart
+/// (332) for line charts. The owner's file has no Excel-saved bar or area
+/// chart, so those two kinds keep the column style. Series past the sixth
+/// carry no `c:spPr`, so Excel chooses their colours itself, from the colour
+/// cycle of `colorsN.xml`. Without that part, the owner's Excel-saved copy of
+/// an earlier gallery (`~/Documents/jet_charts_oracle/gallery_saved.xlsx`,
+/// not in the repository) kept series 7 and 8 without `c:spPr`, with
+/// `c:style` 2 and no colour-style part, and Excel drew them light; that they
+/// came from the legacy colours of `c:style` 2 is our reading, not a rule
+/// Excel states.
 library;
 
 import 'dart:convert';
@@ -114,7 +121,12 @@ Uint8List buildExcelGallery(List<GalleryEntry> entries) {
         _officeRel(1, 'chartStyle', 'style$i.xml'),
       ]),
     );
-    add('xl/charts/style$i.xml', excelChartStyleXml);
+    add(
+      'xl/charts/style$i.xml',
+      entry.chart.kind == ChartKind.line
+          ? excelLineChartStyleXml
+          : excelChartStyleXml,
+    );
     add('xl/charts/colors$i.xml', excelChartColorsXml);
   }
   return Uint8List.fromList(

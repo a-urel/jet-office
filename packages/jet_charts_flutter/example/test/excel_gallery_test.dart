@@ -239,11 +239,20 @@ void main() {
     String owner(String name) => utf8.decode(defaults.findFile(name)!.content);
     expect(excelChartColorsXml, owner('xl/charts/colors1.xml'));
     expect(excelChartStyleXml, owner('xl/charts/style1.xml'));
+    expect(excelLineChartStyleXml, owner('xl/charts/style2.xml'));
     const String office = 'http://schemas.microsoft.com/office/2011/';
     final String types = part('[Content_Types].xml');
     for (int i = 1; i <= entries.length; i++) {
       expect(part('xl/charts/colors$i.xml'), excelChartColorsXml);
-      expect(part('xl/charts/style$i.xml'), excelChartStyleXml);
+      // A line chart has the style of Excel's default line chart (332);
+      // the owner's file has no bar or area sample, so those keep 201.
+      expect(
+        part('xl/charts/style$i.xml'),
+        entries[i - 1].chart.kind == ChartKind.line
+            ? excelLineChartStyleXml
+            : excelChartStyleXml,
+        reason: entries[i - 1].name,
+      );
       final Map<String, String> targets = <String, String>{
         for (final XmlElement r in all(
           xml('xl/charts/_rels/chart$i.xml.rels'),
