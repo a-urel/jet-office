@@ -242,6 +242,33 @@ void main() {
     expect(theme.semantic, <String, ChartColor>{'income': ChartColor.rgb(2)});
   });
 
+  test('a tooltip padding that is negative or not finite throws', () {
+    final ChartTooltipStyle office = ChartTheme.office.tooltip;
+    for (final double padding in <double>[
+      -1,
+      double.nan,
+      double.infinity,
+      double.negativeInfinity,
+    ]) {
+      expect(
+        () => ChartTooltipStyle(
+          background: office.background,
+          border: office.border,
+          text: office.text,
+          padding: padding,
+        ),
+        throwsArgumentError,
+        reason: '$padding',
+      );
+      expect(
+        () => office.copyWith(padding: padding),
+        throwsArgumentError,
+        reason: '$padding',
+      );
+    }
+    expect(office.copyWith(padding: 0).padding, 0);
+  });
+
   test('spacing is part of theme equality', () {
     final ChartTheme a = custom();
     expect(a.spacing, ChartSpacing());

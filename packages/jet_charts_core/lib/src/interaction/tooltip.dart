@@ -115,7 +115,14 @@ final class ChartTooltip {
 ///   the exact values they would mark are in the data tooltips.
 ///
 /// A [point] with a coordinate that is not finite has no tooltip. Throws an
-/// [ArgumentError] when [tolerance] is negative or not finite.
+/// [ArgumentError] when [hits] is `null` and [tolerance] is negative or not
+/// finite.
+///
+/// A caller that has already hit tested [point] (to report the topmost
+/// primitive, say) passes that list as [hits], topmost first, so the layout is
+/// not hit tested twice; it is then used as given, and [tolerance] is not
+/// read. When [hits] is `null`, `hitTestLayout(layout, point, tolerance:
+/// tolerance)` gives them.
 ChartTooltip? chartTooltipAt(
   Chart chart,
   ChartLayout layout,
@@ -123,12 +130,9 @@ ChartTooltip? chartTooltipAt(
   required ChartTheme theme,
   FormatLocale locale = FormatLocale.enUS,
   double tolerance = 0,
+  List<ChartPrimitive>? hits,
 }) {
-  final List<ChartPrimitive> hits = hitTestLayout(
-    layout,
-    point,
-    tolerance: tolerance,
-  );
+  hits ??= hitTestLayout(layout, point, tolerance: tolerance);
   if (hits.isEmpty) {
     return null;
   }

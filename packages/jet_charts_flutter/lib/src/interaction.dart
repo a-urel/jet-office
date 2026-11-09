@@ -61,6 +61,8 @@ final class JetChartHit {
 
 /// The hit at [position] of [layout], the layout of [chart] in [theme] and
 /// [locale], with [tolerance]; `null` when no primitive is under it.
+///
+/// The layout is hit tested once: the tooltip is found among the same hits.
 JetChartHit? chartHitAt(
   Chart chart,
   ChartLayout layout,
@@ -88,7 +90,7 @@ JetChartHit? chartHitAt(
       point,
       theme: theme,
       locale: locale,
-      tolerance: tolerance,
+      hits: hits,
     ),
     position: position,
   );

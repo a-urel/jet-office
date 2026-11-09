@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/widgets.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_core/jet_core.dart';
@@ -33,11 +34,45 @@ typedef JetChartErrorBuilder =
 /// the layout does not draw yet (a pie in this version) shows the layout's
 /// placeholder, not the empty look.
 ///
+/// An app depends on `jet_charts_flutter`, `jet_charts_core` (the chart
+/// model and themes) and `jet_core` (`FormatLocale`). A Turkish app sets both
+/// [locale] and [strings]:
+///
+/// ```dart
+/// JetChart(
+///   chart: Chart(
+///     kind: ChartKind.column,
+///     title: const ChartTitle(text: 'Satışlar'),
+///     series: <ChartSeries>[
+///       ChartSeries(
+///         name: ChartData<String>(values: <String?>['Kuzey']),
+///         categories: ChartData<Object>(values: <Object?>['Ç1', 'Ç2']),
+///         values: ChartData<double>(values: <double?>[1250.5, 1800]),
+///       ),
+///     ],
+///   ),
+///   locale: FormatLocale.trTR,
+///   strings: JetChartStrings.tr,
+/// )
+/// ```
+///
 /// **Size.** A bounded side of the constraints is used as is. An unbounded
 /// width is 360 (Excel's 5 inch default), or the height divided by 0.6 when
 /// the height is bounded; an unbounded height is 216, or the width times 0.6
 /// when the width is bounded. The result is then fitted to the constraints'
 /// minimums. A size with no area paints nothing.
+///
+/// Asked for its intrinsic size (under an `IntrinsicHeight` or an
+/// `IntrinsicWidth`, as in a dashboard row of equal heights), the chart
+/// answers by the same rule: its minimum and maximum intrinsic height for a
+/// given width are the width times 0.6, or 216 for an unbounded width; its
+/// minimum and maximum intrinsic width for a given height are the height
+/// divided by 0.6, or 360 for an unbounded height.
+///
+/// **Loading.** The default loading look repeats its animation for as long
+/// as [loading] is `true` (unless animations are disabled), so a widget test
+/// must not call `pumpAndSettle` while a chart loads: it never settles. Pump
+/// a fixed duration instead.
 ///
 /// **Text.** Text is measured and drawn with a `FlutterTextMeasurer` that
 /// scales by `MediaQuery.textScalerOf`, so a user's larger text size gives
@@ -65,7 +100,9 @@ typedef JetChartErrorBuilder =
 /// side of it when it would leave the chart. Under an `Overlay` it is shown in
 /// that overlay (`OverlayPortal`), so it may extend past a small chart, kept
 /// inside the overlay; with no `Overlay` above the chart it is drawn over the
-/// chart and kept inside it. It is a live region for screen readers.
+/// chart and kept inside it. It is a live region for screen readers, so a
+/// screen reader announces it each time its text changes, as the pointer
+/// moves from one point to the next.
 ///
 /// When the chart, its size, its theme or its locale changes while the box
 /// shows, the tooltip is found again at the same pointer position in the new
@@ -209,6 +246,13 @@ final class JetChartState extends State<JetChart>
   Chart? _summaryChart;
   FormatLocale? _summaryLocale;
 
+  /// The screen reader label of [_labelSummary] in [_labelStrings] with
+  /// [_labelCustom] in place of its first sentence.
+  String? _label;
+  ChartSummary? _labelSummary;
+  JetChartStrings? _labelStrings;
+  String? _labelCustom;
+
   ChartLayout? _layout;
   Chart? _layoutChart;
   ChartTheme? _layoutTheme;
@@ -217,17 +261,12 @@ final class JetChartState extends State<JetChart>
   TextScaler? _layoutScaler;
   int _layoutCount = 0;
 
-  /// Runs the animation of the marks after a change of the chart.
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: widget.animationDuration,
-  );
+  /// Runs the animation of the marks after a change of the chart. Created in
+  /// [initState], so [dispose] never creates a ticker.
+  late final AnimationController _controller;
 
   /// [_controller] on the ease out cubic curve.
-  late final CurvedAnimation _curve = CurvedAnimation(
-    parent: _controller,
-    curve: Curves.easeOutCubic,
-  );
+  late final CurvedAnimation _curve;
 
   /// The primitives the running animation starts from, or `null` when none
   /// runs: the painted ones are [_layout]'s.
@@ -267,6 +306,11 @@ final class JetChartState extends State<JetChart>
   @override
   void initState() {
     super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.animationDuration,
+    );
+    _curve = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
     _portal.show();
   }
 
@@ -329,6 +373,29 @@ final class JetChartState extends State<JetChart>
     _summaryChart = chart;
     _summaryLocale = locale;
     return _summary = summarizeChart(chart, locale: locale);
+  }
+
+  /// The screen reader label of [summary]: see "Screen readers" on
+  /// [JetChart]. Computed again only when the summary (the chart or the
+  /// locale), the strings or [JetChart.semanticsLabel] changed.
+  String _labelOf(ChartSummary summary) {
+    final String? cached = _label;
+    final JetChartStrings strings = widget.strings;
+    final String? custom = widget.semanticsLabel;
+    if (cached != null &&
+        identical(_labelSummary, summary) &&
+        _labelStrings == strings &&
+        _labelCustom == custom) {
+      return cached;
+    }
+    final List<String> sentences = strings.sentences(summary);
+    if (custom != null) {
+      sentences[0] = _closed(custom);
+    }
+    _labelSummary = summary;
+    _labelStrings = strings;
+    _labelCustom = custom;
+    return _label = sentences.join(' ');
   }
 
   ChartLayout _layoutOf(
@@ -572,15 +639,17 @@ final class JetChartState extends State<JetChart>
       _stopAnimation();
     }
     final FlutterTextMeasurer measurer = _measurerFor(scaler);
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final Size size = _chartSize(constraints);
-        return SizedBox(
-          width: size.width,
-          height: size.height,
-          child: _look(context, theme, scaler, measurer, size),
-        );
-      },
+    return _ChartSizing(
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final Size size = _chartSize(constraints);
+          return SizedBox(
+            width: size.width,
+            height: size.height,
+            child: _look(context, theme, scaler, measurer, size),
+          );
+        },
+      ),
     );
   }
 
@@ -623,11 +692,7 @@ final class JetChartState extends State<JetChart>
             title: summary?.title,
           );
     }
-    final List<String> sentences = strings.sentences(summary);
-    final String? custom = widget.semanticsLabel;
-    if (custom != null) {
-      sentences[0] = _closed(custom);
-    }
+    final String label = _labelOf(summary);
     final Widget paint;
     if (size.isEmpty) {
       _layout = null;
@@ -667,8 +732,50 @@ final class JetChartState extends State<JetChart>
     return Semantics(
       container: true,
       textDirection: Directionality.maybeOf(context) ?? TextDirection.ltr,
-      label: sentences.join(' '),
+      label: label,
       child: paint,
     );
   }
+}
+
+/// Answers intrinsic size and dry layout queries for [JetChart] by its size
+/// rule, which a `LayoutBuilder` cannot answer: see "Size" on [JetChart].
+final class _ChartSizing extends SingleChildRenderObjectWidget {
+  const _ChartSizing({required Widget super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderChartSizing();
+}
+
+/// The render object of [_ChartSizing]: it lays its child out as a proxy and
+/// answers the queries the child cannot.
+final class _RenderChartSizing extends RenderProxyBox {
+  /// The width of a chart [height] high: [height] / 0.6, or 360 when
+  /// [height] is unbounded.
+  static double _width(double height) => height.isFinite ? height / 0.6 : 360;
+
+  /// The height of a chart [width] wide: [width] times 0.6, or 216 when
+  /// [width] is unbounded.
+  static double _height(double width) => width.isFinite ? width * 0.6 : 216;
+
+  @override
+  double computeMinIntrinsicWidth(double height) => _width(height);
+
+  @override
+  double computeMaxIntrinsicWidth(double height) => _width(height);
+
+  @override
+  double computeMinIntrinsicHeight(double width) => _height(width);
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => _height(width);
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) => _chartSize(constraints);
+
+  @override
+  double? computeDryBaseline(
+    BoxConstraints constraints,
+    TextBaseline baseline,
+  ) => null;
 }

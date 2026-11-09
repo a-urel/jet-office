@@ -20,3 +20,35 @@ gallery app for comparing the charts with Excel for Mac.
 
 The package is a member of the repository's pub workspace (decisions 0013 and
 0016 in the repository root's `docs/decisions/`).
+
+## Usage
+
+An app depends on `jet_charts_flutter`, `jet_charts_core` (the chart model
+and themes) and `jet_core` (`FormatLocale`); they are not published, so
+depend on them by path or git. A Turkish app sets both `locale` and
+`strings`:
+
+```dart
+import 'package:jet_charts_core/jet_charts_core.dart';
+import 'package:jet_charts_flutter/jet_charts_flutter.dart';
+import 'package:jet_core/jet_core.dart';
+
+final Widget chart = JetChart(
+  chart: Chart(
+    kind: ChartKind.column,
+    title: const ChartTitle(text: 'Satışlar'),
+    series: <ChartSeries>[
+      ChartSeries(
+        name: ChartData<String>(values: <String?>['Kuzey']),
+        categories: ChartData<Object>(values: <Object?>['Ç1', 'Ç2']),
+        values: ChartData<double>(values: <double?>[1250.5, 1800]),
+      ),
+    ],
+  ),
+  locale: FormatLocale.trTR,
+  strings: JetChartStrings.tr,
+);
+```
+
+While `loading` is true the default loading look animates without end, so a
+widget test must pump a fixed duration rather than `pumpAndSettle`.

@@ -186,7 +186,8 @@ by hand, then fix it.
   spacing constants in `docs/excel-checks.md`.
 - Whether a sandboxed macOS app sees Aptos Narrow (Flutter side).
 - The tooltip box's spacing constants are not in `ChartTooltipStyle`, and
-  `chartTooltipAt` resolves the chart again on each call.
+  `chartTooltipAt` resolves the chart again on each call (a caller that has
+  hit tested passes `hits`, so the layout is not hit tested twice).
 - Category labels: Excel's turning or wrapping beyond the label spacing
   is unknown; long labels may wrap at 0 degrees as Excel does.
 - Layout cost on large series: a 10,000-point line about 250 ms on the VM and
@@ -200,8 +201,13 @@ by hand, then fix it.
   about 1e-14) can put the data top above the axis; the "data labels first"
   degradation is nominal; data labels are not checked against marks;
   inside-end labels may straddle a short bar.
-- Minor: `public_api_test` asserts the exact formatted export text; no
-  tooltip test for the marker, data label and placeholder routes.
+- Bars use one gap width (219) and overlap (-27) for every kind, verified for
+  clustered columns only; Excel's insert defaults are believed (unconfirmed)
+  to be gap 182 and no overlap for clustered (horizontal) bars, gap 150 and
+  overlap 100 for stacked kinds
+  (`docs/parity.md`, "Bars"). The owner's gallery check settles it; a gap and
+  overlap per kind in the theme is J4 if confirmed.
+- Minor: `public_api_test` asserts the exact formatted export text.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
 
 ## Reference

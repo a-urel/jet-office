@@ -3,9 +3,9 @@
 `jet_charts_flutter` is the Flutter backend of the jet_ chart family: it
 measures and draws what `packages/jet_charts_core` lays out, and holds the
 `CustomPainter` renderer, the widget and interaction (milestone J3, done). It
-reads and writes no file format. The records of the design are the repository root's
-`docs/decisions/0014-chart-phase-and-drawingml-layer.md` and
-`docs/decisions/0016-jet-charts-flutter-in-the-workspace.md`.
+reads and writes no file format. The records of the design are the
+repository root's `docs/decisions/0014-chart-phase-and-drawingml-layer.md`
+and `docs/decisions/0016-jet-charts-flutter-in-the-workspace.md`.
 
 Milestone J3 is done. The package exports `FlutterTextMeasurer`,
 `paintChartPrimitives`, `ChartLayoutPainter`, and the widget `JetChart` with
@@ -20,7 +20,10 @@ its marks over `JetChart.animationDuration` (`lerpChartPrimitives`,
 taps use the new layout throughout. A tap on the chart is left to the parent
 (a dashboard tile) unless `onTap` is set; only a change of the chart animates,
 a change of theme, locale or scale snaps, and reduced motion turns animation
-off.
+off. Under `IntrinsicHeight` or `IntrinsicWidth` the widget answers by its
+size rule (`JetChart`, "Size"). The default loading look repeats without
+end, so a test must not `pumpAndSettle` while a chart loads; the tooltip box
+is a live region and a screen reader announces each change of it.
 
 ## Open for J4 and C1
 
@@ -41,10 +44,16 @@ off.
 - The gallery's chart list duplicates the core's test gallery (an app's `lib/`
   cannot import another package's test support): same names, drift is
   possible. The measurer fuzz generator is a copy too (`fuzz_copy_test.dart`).
-- Minor and deferred: no test for the measurer's disposal or eviction; tooltip
-  and hit-test ids are parsed again on every pointer event; the layout cache
-  is dropped when a state look shows; the Chrome benchmark run copies the
-  file into `test/` by hand.
+- Minor and deferred: element ids are parsed again on every pointer event
+  (the layout is hit tested once per event); the layout cache is dropped when
+  a state look shows; the Chrome benchmark run copies the file into `test/` by
+  hand.
+- Each `JetChart` owns a `FlutterTextMeasurer` whose cache holds up to 2048
+  painters; consider one shared measurer per text scaler, and measure a
+  dashboard's memory.
+- Merge order with C1: J3's Office `border` reuses the grid line colour
+  (`D9D9D9`); when C1's `lumMod`/`lumOff` scheme colour lands, the chart border
+  and the tooltip border should follow it.
 - J4: pies, donut, sparkline, scatter, combination and secondary axis come
   with the core's (`jet_charts_core/AGENTS.md`).
 

@@ -18,7 +18,10 @@ const double _valueGap = 12;
 
 Color _color(ChartColor c) => Color(0xFF000000 | c.rgb);
 
+/// The text style of the box: [style]'s font, size and colour, bold or not,
+/// and nothing from the host's `DefaultTextStyle` (`inherit: false`).
 TextStyle _textStyle(ChartTextStyle style, {required bool bold}) => TextStyle(
+  inherit: false,
   fontFamily: style.fontFamily,
   fontSize: style.size,
   fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
@@ -42,6 +45,11 @@ String tooltipText(ChartTooltip tooltip) => <String>[
 /// right-aligned with the other rows' values. A row without a colour has no
 /// square, and a row without a value is its label alone. The box takes the
 /// width its widest line needs, so no text wraps or overflows.
+///
+/// It looks the same whatever the host's `DefaultTextStyle` is: its text
+/// styles inherit nothing (no decoration, letter or word spacing, line height
+/// or shadow of the host's), and every text shows in full (no `maxLines`, no
+/// ellipsis, aligned to the start).
 ///
 /// It is one screen reader node, a live region, whose label is
 /// [tooltipText].
@@ -80,23 +88,30 @@ final class TooltipView extends StatelessWidget {
       liveRegion: true,
       label: tooltipText(tooltip),
       child: ExcludeSemantics(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: _color(style.background),
-            border: Border.all(color: _color(style.border)),
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(style.padding),
-            child: IntrinsicWidth(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  for (int i = 0; i < lines.length; i++) ...<Widget>[
-                    if (i > 0) const SizedBox(height: _lineGap),
-                    lines[i],
+        child: DefaultTextStyle(
+          style: plain,
+          textAlign: TextAlign.start,
+          overflow: TextOverflow.visible,
+          textWidthBasis: TextWidthBasis.parent,
+          textHeightBehavior: const TextHeightBehavior(),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: _color(style.background),
+              border: Border.all(color: _color(style.border)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(style.padding),
+              child: IntrinsicWidth(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    for (int i = 0; i < lines.length; i++) ...<Widget>[
+                      if (i > 0) const SizedBox(height: _lineGap),
+                      lines[i],
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

@@ -110,6 +110,96 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('under IntrinsicHeight, in a Row, it takes 0.6 of its width', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          Center(
+            child: SizedBox(
+              width: 400,
+              child: IntrinsicHeight(
+                child: Row(
+                  children: <Widget>[
+                    const SizedBox(width: 100),
+                    Expanded(
+                      child: JetChart(chart: _chart('column_clustered')),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.byType(JetChart)), const Size(300, 180));
+      expect(_state(tester).currentLayout, isNotNull);
+      expect(_state(tester).currentLayout!.size, const ChartSize(300, 180));
+    });
+
+    testWidgets('under IntrinsicWidth, in a Row, it takes its height / 0.6', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          Center(
+            child: SizedBox(
+              height: 180,
+              child: IntrinsicWidth(
+                child: Row(
+                  children: <Widget>[
+                    JetChart(chart: _chart('column_clustered')),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.byType(JetChart)), const Size(300, 180));
+      expect(_state(tester).currentLayout!.size, const ChartSize(300, 180));
+    });
+
+    testWidgets('its intrinsic sizes follow the size rule', (
+      WidgetTester tester,
+    ) async {
+      for (final Widget chart in <Widget>[
+        JetChart(chart: _chart('column_clustered')),
+        const JetChart(loading: true),
+      ]) {
+        await tester.pumpWidget(_app(Center(child: chart)));
+        final RenderBox box = tester.renderObject<RenderBox>(
+          find.byType(JetChart),
+        );
+        expect(box.getMinIntrinsicHeight(300), 180);
+        expect(box.getMaxIntrinsicHeight(300), 180);
+        expect(box.getMinIntrinsicHeight(double.infinity), 216);
+        expect(box.getMaxIntrinsicHeight(double.infinity), 216);
+        expect(box.getMinIntrinsicWidth(180), 300);
+        expect(box.getMaxIntrinsicWidth(180), 300);
+        expect(box.getMinIntrinsicWidth(double.infinity), 360);
+        expect(box.getMaxIntrinsicWidth(double.infinity), 360);
+        expect(
+          box.getDryLayout(const BoxConstraints(maxWidth: 400)),
+          const Size(400, 240),
+        );
+        expect(tester.takeException(), isNull);
+      }
+    });
+
+    testWidgets('built and removed before layout, it disposes cleanly', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(JetChart(chart: _chart('column_clustered'))),
+        phase: EnginePhase.build,
+      );
+      await tester.pumpWidget(_app(const SizedBox()));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a zero size paints and throws nothing', (
       WidgetTester tester,
     ) async {

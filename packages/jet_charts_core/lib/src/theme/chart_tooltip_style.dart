@@ -9,12 +9,22 @@ import 'chart_color.dart';
 /// The core only describes the look; a backend draws the box.
 final class ChartTooltipStyle {
   /// Creates a tooltip style.
-  const ChartTooltipStyle({
+  ///
+  /// Throws an [ArgumentError] when [padding] is negative or not finite.
+  ChartTooltipStyle({
     required this.background,
     required this.border,
     required this.text,
     required this.padding,
-  });
+  }) {
+    if (!padding.isFinite || padding < 0) {
+      throw ArgumentError.value(
+        padding,
+        'padding',
+        'must be finite and not negative',
+      );
+    }
+  }
 
   /// The colour that fills the box.
   final ChartColor background;
@@ -31,7 +41,7 @@ final class ChartTooltipStyle {
   /// A copy with the given fields replaced.
   ///
   /// A field cannot be set to `null` this way: passing `null` keeps the
-  /// current value.
+  /// current value. Throws an [ArgumentError] as the constructor does.
   ChartTooltipStyle copyWith({
     ChartColor? background,
     ChartColor? border,

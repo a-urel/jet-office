@@ -370,6 +370,152 @@ void main() {
     expect(tip.rows, isNotEmpty);
   });
 
+  test('a marker gives its point', () {
+    // A point with no neighbour is drawn as a marker.
+    final Chart chart = Chart(
+      kind: ChartKind.line,
+      series: <ChartSeries>[
+        _series('Visits', <Object>['Mon', 'Tue', 'Wed'], <double?>[4, null, 6]),
+        _series('Orders', <Object>['Mon', 'Tue', 'Wed'], <double?>[2, 3, 5]),
+      ],
+    );
+    final ChartLayout layout = _layout(chart);
+    final PathPrimitive marker = _byId<PathPrimitive>(
+      layout,
+      'series/0/marker/2',
+    );
+    final ChartTooltip expected = ChartTooltip(
+      title: 'Wed',
+      rows: <ChartTooltipRow>[
+        ChartTooltipRow(
+          color: _office.seriesColor(0),
+          label: 'Visits',
+          value: '6',
+        ),
+      ],
+      sourceId: 'series/0/marker/2',
+    );
+    expect(
+      chartTooltipAt(
+        chart,
+        layout,
+        _along(marker.points[0], marker.points[2], 0.5),
+        theme: _office,
+      ),
+      expected,
+    );
+    expect(
+      chartTooltipFor(chart, layout, 'series/0/marker/2', theme: _office),
+      expected,
+    );
+    // A marker of a category out of range has none.
+    expect(
+      chartTooltipFor(chart, layout, 'series/0/marker/3', theme: _office),
+      isNull,
+    );
+  });
+
+  test('a data label gives its point', () {
+    final Chart chart = _chart('column_data_labels');
+    final ChartLayout layout = _layout(chart);
+    final TextPrimitive label = _byId<TextPrimitive>(layout, 'label/1/2');
+    final ChartTooltip expected = ChartTooltip(
+      title: 'Q3',
+      rows: <ChartTooltipRow>[
+        ChartTooltipRow(
+          color: _office.seriesColor(1),
+          label: 'South',
+          value: '14',
+        ),
+      ],
+      sourceId: 'label/1/2',
+    );
+    expect(
+      chartTooltipAt(chart, layout, _centre(label.rect), theme: _office),
+      expected,
+    );
+    expect(
+      chartTooltipFor(chart, layout, 'label/1/2', theme: _office),
+      expected,
+    );
+  });
+
+  test('a hidden placeholder shows in the background tooltip', () {
+    final Chart chart = Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        _series('Share', <Object>['A', 'B'], <double?>[1, 2]),
+      ],
+    );
+    // Shown, the placeholder text has no tooltip, nor has the background.
+    final ChartLayout shown = _layout(chart);
+    final TextPrimitive text = _byId<TextPrimitive>(shown, 'placeholder');
+    expect(text.text, 'pie');
+    expect(
+      chartTooltipAt(chart, shown, _centre(text.rect), theme: _office),
+      isNull,
+    );
+    expect(
+      chartTooltipFor(chart, shown, 'placeholder', theme: _office),
+      isNull,
+    );
+    // Hidden, it is a row of the background tooltip.
+    final ChartLayout small = _layout(chart, size: const ChartSize(20, 20));
+    expect(
+      small.hidden,
+      contains(const ChartHiddenLabel('placeholder', 'pie')),
+    );
+    final ChartTooltip expected = ChartTooltip(
+      rows: <ChartTooltipRow>[const ChartTooltipRow(label: 'pie', value: '')],
+      sourceId: 'background',
+    );
+    expect(
+      chartTooltipAt(chart, small, const ChartPoint(10, 10), theme: _office),
+      expected,
+    );
+    expect(
+      chartTooltipFor(chart, small, 'background', theme: _office),
+      expected,
+    );
+  });
+
+  test('given hits give the tooltip of a hit test of their own', () {
+    final Chart chart = _chart('line_gap');
+    final ChartLayout layout = _layout(chart);
+    final PathPrimitive line = _byId<PathPrimitive>(layout, 'series/0/line/0');
+    for (final ChartPoint p in <ChartPoint>[
+      _along(line.points[0], line.points[1], 0.25),
+      line.points[1],
+      const ChartPoint(2, 2),
+      const ChartPoint(-50, -50),
+    ]) {
+      final List<ChartPrimitive> hits = hitTestLayout(layout, p, tolerance: 2);
+      expect(
+        chartTooltipAt(
+          chart,
+          layout,
+          p,
+          theme: _office,
+          tolerance: 2,
+          hits: hits,
+        ),
+        chartTooltipAt(chart, layout, p, theme: _office, tolerance: 2),
+        reason: '$p',
+      );
+    }
+    // The hits are used as given: none gives no tooltip.
+    expect(
+      chartTooltipAt(
+        chart,
+        layout,
+        _along(line.points[0], line.points[1], 0.25),
+        theme: _office,
+        hits: const <ChartPrimitive>[],
+      ),
+      isNull,
+    );
+  });
+
   test('a point outside the chart gives null', () {
     final Chart chart = _chart('column_clustered');
     final ChartLayout layout = _layout(chart);

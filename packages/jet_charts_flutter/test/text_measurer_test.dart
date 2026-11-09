@@ -131,6 +131,31 @@ void main() {
     expect(identical(measurer.textPainter('text 0', _style), first), isFalse);
   });
 
+  test(
+    'after eviction the input gets a new painter that measures the same',
+    () {
+      final FlutterTextMeasurer small = FlutterTextMeasurer(cacheSize: 1);
+      addTearDown(small.dispose);
+      final TextPainter first = small.textPainter('Revenue', _style);
+      final ChartSize size = small.measure('Revenue', _style);
+      small.measure('other', _style);
+      final TextPainter again = small.textPainter('Revenue', _style);
+      expect(identical(again, first), isFalse);
+      // Laid out: its size is readable, and it is the size measured before.
+      expect(ChartSize(again.width, again.height), size);
+      expect(small.measure('Revenue', _style), size);
+    },
+  );
+
+  test('dispose empties the cache and the measurer stays usable', () {
+    final TextPainter first = measurer.textPainter('Revenue', _style);
+    final ChartSize size = measurer.measure('Revenue', _style);
+    measurer.dispose();
+    final TextPainter again = measurer.textPainter('Revenue', _style);
+    expect(identical(again, first), isFalse);
+    expect(ChartSize(again.width, again.height), size);
+  });
+
   test('using an entry keeps it in the cache', () {
     final FlutterTextMeasurer small = FlutterTextMeasurer(cacheSize: 2);
     addTearDown(small.dispose);

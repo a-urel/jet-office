@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -206,6 +207,92 @@ void main() {
       expect(node.label, contains('South'));
       expect(node.label, contains('14'));
       handle.dispose();
+    });
+
+    testWidgets("the box ignores the host's DefaultTextStyle", (
+      WidgetTester tester,
+    ) async {
+      final ChartTheme theme = ChartTheme.office;
+      final ChartTooltip tooltip = ChartTooltip(
+        title: 'Q3\nsecond line',
+        rows: <ChartTooltipRow>[
+          ChartTooltipRow(
+            color: theme.seriesColor(0),
+            label: 'North',
+            value: '12',
+          ),
+          ChartTooltipRow(
+            color: theme.seriesColor(1),
+            label: 'South',
+            value: '14',
+          ),
+        ],
+        sourceId: 'plot',
+      );
+      Future<Size> boxIn(TextStyle? host) async {
+        final Widget box = Align(
+          alignment: Alignment.topLeft,
+          child: TooltipView(
+            tooltip: tooltip,
+            style: theme.tooltip,
+            symbolSize: theme.spacing.legendSymbol,
+            symbolGap: theme.spacing.labelGap,
+          ),
+        );
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: host == null
+                ? box
+                : DefaultTextStyle(
+                    style: host,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    child: box,
+                  ),
+          ),
+        );
+        return tester.getSize(find.byType(TooltipView));
+      }
+
+      final Size plain = await boxIn(null);
+      final Size hosted = await boxIn(
+        const TextStyle(
+          decoration: TextDecoration.underline,
+          letterSpacing: 3,
+          height: 2,
+          fontStyle: FontStyle.italic,
+          wordSpacing: 5,
+          shadows: <Shadow>[Shadow(blurRadius: 2)],
+        ),
+      );
+      expect(hosted, plain);
+      final Iterable<RenderParagraph> paragraphs = tester
+          .renderObjectList<RenderParagraph>(
+            find.descendant(
+              of: find.byType(TooltipView),
+              matching: find.byType(RichText),
+            ),
+          );
+      // The title, and a label and a value per row: every line shows.
+      expect(paragraphs, hasLength(5));
+      for (final RenderParagraph p in paragraphs) {
+        final TextStyle style = p.text.style!;
+        expect(style.decoration, isNull);
+        expect(style.letterSpacing, isNull);
+        expect(style.wordSpacing, isNull);
+        expect(style.height, isNull);
+        expect(style.fontStyle, isNull);
+        expect(style.shadows, isNull);
+        expect(p.maxLines, isNull);
+        expect(p.softWrap, isTrue);
+        expect(p.overflow, TextOverflow.visible);
+        expect(p.textAlign, TextAlign.start);
+        expect(p.didExceedMaxLines, isFalse);
+      }
+      expect(_inBox('Q3\nsecond line'), findsOneWidget);
     });
 
     testWidgets('tooltips: false keeps the callback and shows no box', (

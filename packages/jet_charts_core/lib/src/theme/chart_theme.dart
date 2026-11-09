@@ -99,6 +99,10 @@ final class ChartTheme {
   ///
   /// The border is drawn inside the chart's size. The Office theme has the
   /// colour of Excel's default, `D9D9D9`; see `docs/excel-checks.md`.
+  ///
+  /// To drop the Office border, use `ChartTheme.office.copyWith(borderWidth:
+  /// 0)`, as [copyWith] cannot set this field to `null`, or build a theme
+  /// whose [border] is `null` (the constructor's default).
   final ChartColor? border;
 
   /// The width of the border, in points. Excel's default, 0.75, is verified;
