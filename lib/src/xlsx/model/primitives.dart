@@ -159,6 +159,78 @@ void setStoredCell(
   }
 }
 
+/// The move of a store's rows or columns: one change however many cells
+/// move, so inserting a row above 100,000 rows records one change and its
+/// undo is one revert.
+final class MoveCellsChange implements Change {
+  /// A move of [store]'s rows (or columns, when [rows] is false) from
+  /// [from] (0-based) on by [delta], as [CellStore.moveRows] does.
+  MoveCellsChange(
+    this.store, {
+    required this.rows,
+    required this.from,
+    required this.delta,
+  });
+
+  /// The store the cells live in.
+  final CellStore store;
+
+  /// Whether rows move; columns otherwise.
+  final bool rows;
+
+  /// The first row or column moved, 0-based.
+  final int from;
+
+  /// How far they move; a negative move deletes `-delta` first.
+  final int delta;
+
+  StoreMove? _removed;
+
+  @override
+  void reapply() {
+    _removed = rows
+        ? store.moveRows(from, delta)
+        : store.moveColumns(from, delta);
+  }
+
+  @override
+  void revert() {
+    if (rows) {
+      store.moveRows(from, -delta);
+    } else {
+      store.moveColumns(from, -delta);
+    }
+    final StoreMove? removed = _removed;
+    if (removed != null) store.restore(removed);
+    _removed = null;
+  }
+}
+
+/// Moves [store]'s rows (or columns) from [from] on by [delta] and records
+/// the change in [log]. Must run inside `log.transaction`; a move that
+/// throws (cells pushed off the sheet) changes nothing.
+void moveStoredCells(
+  ChangeLog log,
+  CellStore store, {
+  required bool rows,
+  required int from,
+  required int delta,
+}) {
+  final MoveCellsChange change = MoveCellsChange(
+    store,
+    rows: rows,
+    from: from,
+    delta: delta,
+  );
+  change.reapply();
+  try {
+    log.record(change);
+  } catch (_) {
+    change.revert();
+    rethrow;
+  }
+}
+
 /// The change of one row's `<row>` attributes: before and after.
 ///
 /// An empty list is a row without attributes, which the store drops when it

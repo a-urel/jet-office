@@ -54,6 +54,8 @@ import '../drawing.dart'
         XlsxPicture,
         checkAnchor,
         checkPicture;
+import '../formula/formula_rewrite.dart';
+import '../formula/reference_shift.dart';
 import '../formula_text.dart' show quotedSheetRef;
 import '../header_footer.dart';
 import '../hyperlink.dart';
@@ -322,6 +324,10 @@ List<ReferenceHolder> sheetReferenceHolders(XlsxSheet sheet) {
           () => sheet.name,
           (String cell) => sheet._warn(XlsxWarningCode.formulaUnlexable, cell),
         )
+      else if (name == 'merges')
+        _MergeHolder(sheet._host.log, part, () => sheet.name)
+      else if (name == 'views')
+        _ViewHolder(sheet._host.log, part, () => sheet.name)
       else
         PendingReferenceHolder(name),
   ];

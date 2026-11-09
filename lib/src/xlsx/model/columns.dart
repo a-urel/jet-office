@@ -355,3 +355,77 @@ int? _column(String value) {
   final int column = int.parse(value);
   return column >= 1 && column <= XlsxLimits.maxColumns ? column : null;
 }
+
+/// The attributes a row or column inserted next to [attributes] takes, as
+/// Excel's "Format same as above" (or "as left") gives it: all but
+/// `hidden` and `collapsed`.
+List<KeptAttribute> insertedFormat(List<KeptAttribute> attributes) =>
+    <KeptAttribute>[
+      for (final KeptAttribute a in attributes)
+        if (a.namespaceUri.isNotEmpty ||
+            (a.qualifiedName != 'hidden' && a.qualifiedName != 'collapsed'))
+          a,
+    ];
+
+/// [runs] (1-based, ascending) after [count] columns are inserted before
+/// column [index] (1-based), or deleted from it on when [count] is
+/// negative.
+///
+/// Runs after the edit shift; a run the edit cuts splits around an insert
+/// or shrinks for a delete, and a run wholly deleted goes. The inserted
+/// columns take the format of the column to their left ([insertedFormat]):
+/// the run holding it grows when that leaves its attributes as they are,
+/// else a run of its own holds them. Runs pushed past the last column go
+/// or are cut there. Runs the edit misses are kept as they are.
+List<ColRun> shiftColumnRuns(List<ColRun> runs, int index, int count) {
+  const int limit = XlsxLimits.maxColumns;
+  int atMost(int v) => v > limit ? limit : v;
+  final List<ColRun> out = <ColRun>[];
+  if (count < 0) {
+    final int end = index - count - 1;
+    for (final ColRun run in runs) {
+      if (run.max < index) {
+        out.add(run);
+      } else if (run.min > end) {
+        out.add(run.over(run.min + count, run.max + count));
+      } else {
+        final int first = run.min < index ? run.min : index;
+        final int last = run.max > end ? run.max + count : index - 1;
+        if (last >= first) out.add(run.over(first, last));
+      }
+    }
+    return out;
+  }
+  final int lastNew = atMost(index + count - 1);
+  for (final ColRun run in runs) {
+    final bool left = run.min <= index - 1 && index - 1 <= run.max;
+    final List<KeptAttribute> inherited = left
+        ? insertedFormat(run.attributes)
+        : const <KeptAttribute>[];
+    final bool grows = left && sameAttributes(inherited, run.attributes);
+    if (run.max < index) {
+      if (grows) {
+        out.add(run.over(run.min, lastNew));
+      } else {
+        out.add(run);
+        if (inherited.isNotEmpty) {
+          out.add(ColRun(index, lastNew, run.qualifiedName, inherited));
+        }
+      }
+    } else if (run.min >= index) {
+      if (run.min + count > limit) continue;
+      out.add(run.over(run.min + count, atMost(run.max + count)));
+    } else if (grows) {
+      out.add(run.over(run.min, atMost(run.max + count)));
+    } else {
+      out.add(run.over(run.min, index - 1));
+      if (inherited.isNotEmpty) {
+        out.add(ColRun(index, lastNew, run.qualifiedName, inherited));
+      }
+      if (index + count <= limit) {
+        out.add(run.over(index + count, atMost(run.max + count)));
+      }
+    }
+  }
+  return out;
+}

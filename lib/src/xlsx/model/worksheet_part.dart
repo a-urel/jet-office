@@ -1053,6 +1053,37 @@ final class WorksheetPart implements PartContent {
     }
   }
 
+  /// Maps every readable merge of the first `<mergeCells>` through [map]:
+  /// a merge it gives back unchanged stays as read, a moved one is written
+  /// anew, and one it maps to `null` or to a single cell goes; the
+  /// `<mergeCells>` goes with its last child. Changes nothing when no merge
+  /// moves. Must run inside `editLayout` of slot `mergeCells`.
+  void mapMerges(XlsxRange? Function(XlsxRange range) map) {
+    final MergeGroup? group = _mergeGroup;
+    if (group == null) return;
+    bool changed = false;
+    final List<MergeItem> next = <MergeItem>[];
+    for (final MergeItem item in group.items) {
+      final XlsxRange? range = item.range;
+      final XlsxRange? moved = range == null ? null : map(range);
+      if (range == null || moved == range) {
+        next.add(item);
+        continue;
+      }
+      changed = true;
+      if (moved != null && !moved.isSingleCell) {
+        next.add(MergeItem.made(moved));
+      }
+    }
+    if (!changed) return;
+    final int index = _children.indexOf(group);
+    if (next.isEmpty) {
+      _children.removeAt(index);
+    } else {
+      _children[index] = group.withItems(next);
+    }
+  }
+
   // -- Sheet properties and views --------------------------------------------
 
   /// The typed first element of [slot], one of [_nodeSlots], or `null`.

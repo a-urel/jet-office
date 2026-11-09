@@ -272,6 +272,28 @@ final class _Block {
   }
 }
 
+/// What [CellStore.moveRows] or [CellStore.moveColumns] took out of a
+/// store, for [CellStore.restore] to give back: whole blocks of rows, or
+/// the cells of deleted columns.
+final class StoreMove {
+  StoreMove._({
+    List<_Block> blocks = const <_Block>[],
+    List<({int row, int column, RawCell cell})> cells =
+        const <({int row, int column, RawCell cell})>[],
+  }) : _blocks = blocks,
+       _cells = cells;
+
+  final List<_Block> _blocks;
+  final List<({int row, int column, RawCell cell})> _cells;
+  final Map<int, _Extras> _extras = <int, _Extras>{};
+  final Map<int, RawFormula> _masters = <int, RawFormula>{};
+  final Map<int, List<KeptAttribute>> _rowAttributes =
+      <int, List<KeptAttribute>>{};
+  final Map<int, List<OpaqueXml>> _rowChildren = <int, List<OpaqueXml>>{};
+  int _cellCount = 0;
+  int _formulaCount = 0;
+}
+
 /// The cells and row attributes of one loaded worksheet, without an object
 /// per cell.
 ///
@@ -657,6 +679,251 @@ final class CellStore {
     final _Block b = _blocks[bi];
     final int r = b.findRow(row);
     if (r >= 0 && b.rowStart[r] == b.rowStart[r + 1]) _removeRow(bi, r);
+  }
+
+  // ---------------------------------------------------------------------
+  // Moving rows and columns.
+
+  /// Moves every row from [from] (0-based) on by [delta] rows, with its
+  /// cells, attributes and children, and returns what the move took out.
+  ///
+  /// A negative [delta] deletes the rows `from` to `from - delta - 1`
+  /// first; a positive one drops the rows it would push past the last row,
+  /// which must hold no cell (a [StateError] otherwise, nothing moved).
+  /// Rows move as whole blocks and only their indexes change, so the cost
+  /// is linear in the rows and blocks, never a [RawCell] per cell. The
+  /// inverse is `moveRows(from, -delta)` followed by [restore] of the
+  /// result.
+  StoreMove moveRows(int from, int delta) {
+    _checkRow(from);
+    if (delta == 0) return StoreMove._();
+    if (delta > 0) {
+      final int cut = XlsxLimits.maxRows - delta;
+      if (_hasCellsFrom(cut < from ? from : cut)) {
+        throw StateError(
+          'Inserting $delta rows would push cells past the last row.',
+        );
+      }
+      final StoreMove removed = _detachRows(
+        cut < from ? from : cut,
+        XlsxLimits.maxRows,
+      );
+      _shiftRowsFrom(from, delta);
+      return removed;
+    }
+    final int end = from - delta > XlsxLimits.maxRows
+        ? XlsxLimits.maxRows
+        : from - delta;
+    final StoreMove removed = _detachRows(from, end);
+    _shiftRowsFrom(end, delta);
+    return removed;
+  }
+
+  /// Moves every cell from column [from] (0-based) on by [delta] columns in
+  /// every row, and returns what the move took out: the cells of a deleted
+  /// column (`from` to `from - delta - 1` for a negative [delta]). A
+  /// positive [delta] that would push a cell past the last column throws a
+  /// [StateError], nothing moved. A row left without cells, attributes or
+  /// children goes. The inverse is `moveColumns(from, -delta)` followed by
+  /// [restore] of the result.
+  StoreMove moveColumns(int from, int delta) {
+    RangeError.checkValueInInterval(from, 0, XlsxLimits.maxColumns - 1, 'from');
+    if (delta == 0) return StoreMove._();
+    if (delta > 0) {
+      final int lastColumn = bounds?.lastColumn ?? -1;
+      if (lastColumn >= from && lastColumn + delta >= XlsxLimits.maxColumns) {
+        throw StateError(
+          'Inserting $delta columns would push cells past the last column.',
+        );
+      }
+    }
+    final int end = delta < 0 ? from - delta : from;
+    final List<({int row, int column, RawCell cell})> dropped =
+        <({int row, int column, RawCell cell})>[];
+    for (int bi = 0; bi < _blocks.length; bi++) {
+      final _Block b = _blocks[bi];
+      final Int32List? formulas = b.formulas;
+      int write = 0;
+      int keptRows = 0;
+      for (int r = 0; r < b.rowCount; r++) {
+        final int row = b.rows[r];
+        final int start = b.rowStart[r];
+        final int stop = b.rowStart[r + 1];
+        final int rowFirst = write;
+        for (int at = start; at < stop; at++) {
+          final int column = b.words[at] >> _columnShift;
+          if (column >= from && column < end) {
+            dropped.add((
+              row: row,
+              column: column,
+              cell: _build(b, at, row, column),
+            ));
+            _dropCellData(b, at, row, column);
+            _cellCount--;
+            continue;
+          }
+          int word = b.words[at];
+          if (column >= end) {
+            word =
+                ((column + delta) << _columnShift) |
+                (word & ((1 << _columnShift) - 1));
+          }
+          b.words[write] = word;
+          b.styles[write] = b.styles[at];
+          b.values[write] = b.values[at];
+          if (formulas != null) formulas[write] = formulas[at];
+          write++;
+        }
+        if (write == rowFirst && start != stop && !_hasRowExtras(row)) {
+          continue; // The row lost its last cell and holds nothing else.
+        }
+        b.rows[keptRows] = row;
+        b.rowStart[keptRows] = rowFirst;
+        keptRows++;
+      }
+      if (formulas != null) {
+        formulas.fillRange(write, b.cellCount, 0);
+      }
+      b.rowCount = keptRows;
+      b.rowStart[keptRows] = write;
+      b.cellCount = write;
+      if (keptRows == 0) _blocks.removeAt(bi--);
+    }
+    _rekey(_extras, (int row, int column) => column >= end, 0, delta);
+    _rekey(_groupMasters, (int row, int column) => column >= end, 0, delta);
+    return StoreMove._(cells: dropped);
+  }
+
+  /// Gives back what a move took out, after the inverse move made room.
+  void restore(StoreMove removed) {
+    final List<_Block> blocks = removed._blocks;
+    if (blocks.isNotEmpty) {
+      final int at = _splitBefore(blocks.first.firstRow);
+      _blocks.insertAll(at, blocks);
+      _extras.addAll(removed._extras);
+      _groupMasters.addAll(removed._masters);
+      _rowAttributes.addAll(removed._rowAttributes);
+      _rowChildren.addAll(removed._rowChildren);
+      _cellCount += removed._cellCount;
+      _formulaCount += removed._formulaCount;
+    }
+    for (final ({int row, int column, RawCell cell}) c in removed._cells) {
+      put(c.row, c.column, c.cell);
+    }
+  }
+
+  /// Whether a row from [row] on holds a cell.
+  bool _hasCellsFrom(int row) {
+    for (int bi = _blocks.length - 1; bi >= 0; bi--) {
+      final _Block b = _blocks[bi];
+      for (int r = b.rowCount - 1; r >= 0; r--) {
+        if (b.rows[r] < row) return false;
+        if (b.rowStart[r] != b.rowStart[r + 1]) return true;
+      }
+    }
+    return false;
+  }
+
+  /// The index of the first block whose rows are all at or after [row],
+  /// splitting the block that holds rows on both sides.
+  int _splitBefore(int row) {
+    final int bi = _blockFor(row);
+    if (bi < 0) return 0;
+    final _Block b = _blocks[bi];
+    int r = b.findRow(row);
+    if (r < 0) r = -r - 1;
+    if (r == 0) return bi;
+    if (r >= b.rowCount) return bi + 1;
+    _blocks.insert(bi + 1, b.splitAt(r));
+    return bi + 1;
+  }
+
+  /// Takes the rows [first] to [end] (exclusive) out of the store, as whole
+  /// blocks with their cells' rare parts, formulas and row extras.
+  StoreMove _detachRows(int first, int end) {
+    final int lo = _splitBefore(first);
+    final int hi = end >= XlsxLimits.maxRows
+        ? _blocks.length
+        : _splitBefore(end);
+    if (lo >= hi) return StoreMove._();
+    final List<_Block> blocks = _blocks.sublist(lo, hi);
+    _blocks.removeRange(lo, hi);
+    final StoreMove removed = StoreMove._(blocks: blocks);
+    for (final _Block b in blocks) {
+      removed._cellCount += b.cellCount;
+      final Int32List? formulas = b.formulas;
+      if (formulas != null) {
+        for (int at = 0; at < b.cellCount; at++) {
+          if (formulas[at] != 0) removed._formulaCount++;
+        }
+      }
+    }
+    _cellCount -= removed._cellCount;
+    _formulaCount -= removed._formulaCount;
+    bool inside(int row, int column) => row >= first && row < end;
+    _take(_extras, removed._extras, inside);
+    _take(_groupMasters, removed._masters, inside);
+    _takeRows(_rowAttributes, removed._rowAttributes, first, end);
+    _takeRows(_rowChildren, removed._rowChildren, first, end);
+    return removed;
+  }
+
+  /// Adds [delta] to every row from [row] on: the blocks' indexes and the
+  /// keys of the maps that hold rows. The rows the move lands on are empty.
+  void _shiftRowsFrom(int row, int delta) {
+    for (final _Block b in _blocks) {
+      if (b.lastRow < row) continue;
+      for (int r = 0; r < b.rowCount; r++) {
+        if (b.rows[r] >= row) b.rows[r] += delta;
+      }
+    }
+    _rekey(_extras, (int r, int c) => r >= row, delta, 0);
+    _rekey(_groupMasters, (int r, int c) => r >= row, delta, 0);
+    _rekeyRows(_rowAttributes, row, delta);
+    _rekeyRows(_rowChildren, row, delta);
+  }
+
+  static void _take<V>(
+    Map<int, V> from,
+    Map<int, V> to,
+    bool Function(int row, int column) test,
+  ) {
+    for (final int key in from.keys.toList()) {
+      if (test(key ~/ XlsxLimits.maxColumns, key % XlsxLimits.maxColumns)) {
+        to[key] = from.remove(key) as V;
+      }
+    }
+  }
+
+  static void _takeRows<V>(Map<int, V> from, Map<int, V> to, int lo, int hi) {
+    for (final int row in from.keys.toList()) {
+      if (row >= lo && row < hi) to[row] = from.remove(row) as V;
+    }
+  }
+
+  /// Moves the entries of [map] (keyed by [_key]) that pass [test] by
+  /// [rows] and [columns].
+  static void _rekey<V>(
+    Map<int, V> map,
+    bool Function(int row, int column) test,
+    int rows,
+    int columns,
+  ) {
+    final Map<int, V> moved = <int, V>{};
+    _take(map, moved, test);
+    moved.forEach((int key, V value) {
+      map[_key(
+            key ~/ XlsxLimits.maxColumns + rows,
+            key % XlsxLimits.maxColumns + columns,
+          )] =
+          value;
+    });
+  }
+
+  static void _rekeyRows<V>(Map<int, V> map, int from, int delta) {
+    final Map<int, V> moved = <int, V>{};
+    _takeRows(map, moved, from, XlsxLimits.maxRows);
+    moved.forEach((int row, V value) => map[row + delta] = value);
   }
 
   // ---------------------------------------------------------------------

@@ -79,3 +79,34 @@ mixin _SheetMerges {
     });
   }
 }
+
+/// The `merges` holder of a sheet: on a row or column edit of the sheet,
+/// each merge shifts, grows when an insert crosses it, shrinks when a
+/// delete cuts it, and goes when the edit deletes it wholly or leaves one
+/// cell of it ([ReferenceShift.shiftRange]).
+final class _MergeHolder implements ReferenceHolder {
+  _MergeHolder(this._log, this._part, this._sheetName);
+
+  final ChangeLog _log;
+  final WorksheetPart _part;
+  final String Function() _sheetName;
+
+  @override
+  String get holderName => 'merges';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    if (edit == null || !_editsSheet(edit, _sheetName())) return;
+    if (_part.merges.isEmpty) return;
+    editLayout(
+      _log,
+      _part,
+      'mergeCells',
+      () => _part.mapMerges(edit.shiftRange),
+    );
+  }
+}
+
+/// Whether [edit] edits the sheet named [name] (ignoring case, as Excel).
+bool _editsSheet(ReferenceShift edit, String name) =>
+    edit.sheet.toLowerCase() == name.toLowerCase();

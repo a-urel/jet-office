@@ -7,6 +7,73 @@
 /// [XlsxSheet] mixes [_SheetLayout] in, so these are members of the sheet.
 part of 'xlsx_sheet.dart';
 
+/// Moves [sheet]'s cells, row formats and column runs for [edit], a row or
+/// column edit of this sheet, in one transaction.
+///
+/// It runs after the reference holders, which work on the positions before
+/// the edit: the cells move by block, as one change ([moveStoredCells]),
+/// and the cells the edit deletes go, a shared master a holder promoted
+/// away from among them. Inserted rows take the format of the row above
+/// (Excel's "Format same as above": its style and height, not `hidden` or
+/// `collapsed`); the `<cols>` runs split, shift and shrink
+/// ([shiftColumnRuns]), inserted columns taking the column to the left's.
+/// The `<dimension>` and each row's `spans` are recomputed on save. Throws
+/// a [StateError] when an insert would push a cell off the sheet, or the
+/// sheet is not a worksheet; nothing changes then.
+void moveSheetGeometry(XlsxSheet sheet, ReferenceShift edit) {
+  final bool rows = edit.axis == ShiftAxis.rows;
+  final WorksheetPart part = sheet._editablePart(rows ? 'rows' : 'columns');
+  final CellStore store = part.cells;
+  final ChangeLog log = sheet._host.log;
+  final int from = edit.index - 1;
+  log.transaction(() {
+    moveStoredCells(log, store, rows: rows, from: from, delta: edit.count);
+    if (rows) {
+      if (edit.count > 0 && from > 0) _copyRowFormat(log, store, from, edit);
+      return;
+    }
+    if (!part.columnsEditable || part.columnRuns.isEmpty) return;
+    final List<ColRun> next = shiftColumnRuns(
+      part.columnRuns,
+      edit.index,
+      edit.count,
+    );
+    if (sameRuns(part.columnRuns, next)) return;
+    editLayout(log, part, 'cols', () => part.setColumnRuns(next));
+  });
+}
+
+/// Gives the rows [edit] inserted at [from] the format of the row above.
+void _copyRowFormat(
+  ChangeLog log,
+  CellStore store,
+  int from,
+  ReferenceShift edit,
+) {
+  final List<KeptAttribute> format = insertedFormat(
+    store.rowAttributes(from - 1),
+  );
+  const Set<String> formatting = <String>{
+    's',
+    'customFormat',
+    'ht',
+    'customHeight',
+    'outlineLevel',
+  };
+  if (!format.any(
+    (KeptAttribute a) =>
+        a.namespaceUri.isEmpty && formatting.contains(a.qualifiedName),
+  )) {
+    return;
+  }
+  final int end = from + edit.count > XlsxLimits.maxRows
+      ? XlsxLimits.maxRows
+      : from + edit.count;
+  for (int row = from; row < end; row++) {
+    setStoredRowAttributes(log, store, row, format);
+  }
+}
+
 /// The layout half of [XlsxSheet].
 mixin _SheetLayout {
   // What the sheet gives its layout half.

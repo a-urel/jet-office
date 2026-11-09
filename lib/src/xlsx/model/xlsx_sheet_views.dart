@@ -453,3 +453,136 @@ mixin _SheetViews {
     };
   }
 }
+
+/// The `views` holder of a sheet: on a row or column edit of the sheet,
+/// every `<sheetView>` follows. Its `topLeftCell` and its pane's shift; a
+/// frozen pane grows by the rows (or columns) inserted above (left of) its
+/// split and shrinks by those deleted there, as Excel does; each
+/// selection's `activeCell` shifts and its `sqref` goes through the
+/// rewriter, a range wholly deleted dropped (an emptied `sqref` becomes the
+/// active cell). A deleted cell moves to the first row (column) after the
+/// deletion, and one pushed off the sheet to the last. Text that cannot be
+/// read stays as read; a split pane, in twips, is not a cell position and
+/// stays too.
+final class _ViewHolder implements ReferenceHolder {
+  _ViewHolder(this._log, this._part, this._sheetName);
+
+  final ChangeLog _log;
+  final WorksheetPart _part;
+  final String Function() _sheetName;
+
+  @override
+  String get holderName => 'views';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    final String host = _sheetName();
+    if (edit == null || !_editsSheet(edit, host)) return;
+    final XmlNode? views = _part.sheetViews;
+    if (views == null) return;
+    XmlNode next = views;
+    for (final Object c in views.children) {
+      if (c is! XmlNode || c.localName != 'sheetView') continue;
+      final XmlNode moved = _shiftView(c, edit, host);
+      if (!identical(moved, c)) next = next.replacingChild(c, moved);
+    }
+    if (identical(next, views)) return;
+    editLayout(_log, _part, 'sheetViews', () {
+      _part.setNode('sheetViews', next);
+    });
+  }
+
+  static XmlNode _shiftView(XmlNode view, ReferenceShift edit, String host) {
+    XmlNode next = view.withChanges(<String, String?>{
+      if (_cellOf(view, 'topLeftCell', edit) case final String cell)
+        'topLeftCell': cell,
+    });
+    for (final Object c in view.children) {
+      if (c is! XmlNode) continue;
+      final XmlNode moved = switch (c.localName) {
+        'pane' => _shiftPane(c, edit),
+        'selection' => _shiftSelection(c, edit, host),
+        _ => c,
+      };
+      if (!identical(moved, c)) next = next.replacingChild(c, moved);
+    }
+    return next;
+  }
+
+  static XmlNode _shiftPane(XmlNode pane, ReferenceShift edit) {
+    final String? state = pane.attribute('state');
+    final bool frozen = state == 'frozen' || state == 'frozenSplit';
+    final String axis = edit.axis == ShiftAxis.rows ? 'ySplit' : 'xSplit';
+    final String? text = pane.attribute(axis);
+    final int? split = frozen && text != null && _wholeNumber.hasMatch(text)
+        ? int.tryParse(text)
+        : null;
+    int? grown;
+    if (split != null && split > 0 && edit.index <= split) {
+      if (edit.count > 0) {
+        grown = split + edit.count;
+      } else {
+        final int end = edit.index - edit.count - 1;
+        grown = split - ((end < split ? end : split) - edit.index + 1);
+      }
+      final int limit = edit.axis == ShiftAxis.rows
+          ? XlsxLimits.maxRows - 1
+          : XlsxLimits.maxColumns - 1;
+      if (grown > limit) grown = limit;
+    }
+    return pane.withChanges(<String, String?>{
+      if (grown != null) axis: grown == 0 ? null : '$grown',
+      if (_cellOf(pane, 'topLeftCell', edit) case final String cell)
+        'topLeftCell': cell,
+    });
+  }
+
+  static XmlNode _shiftSelection(
+    XmlNode selection,
+    ReferenceShift edit,
+    String host,
+  ) {
+    final String? active = _cellOf(selection, 'activeCell', edit);
+    final String? sqref = selection.attribute('sqref');
+    String? nextSqref = sqref == null ? null : rewriteSqref(sqref, edit, host);
+    if (nextSqref != null && nextSqref.isEmpty) {
+      nextSqref = active ?? selection.attribute('activeCell') ?? 'A1';
+    }
+    return selection.withChanges(<String, String?>{
+      'activeCell': ?active,
+      'sqref': ?nextSqref,
+    });
+  }
+
+  /// The cell [attribute] of [node] names after [edit], or `null` when it
+  /// does not change or cannot be read.
+  static String? _cellOf(XmlNode node, String attribute, ReferenceShift edit) {
+    final String? text = node.attribute(attribute);
+    if (text == null) return null;
+    final ({int row, int column}) cell;
+    try {
+      cell = parseCellRef(text);
+    } on FormatException {
+      return null;
+    } on ArgumentError {
+      return null;
+    }
+    final ({int row, int column}) moved =
+        edit.shiftCell(cell.row, cell.column) ?? _landing(cell, edit);
+    final String ref = cellRef(moved.row, moved.column);
+    return ref == text ? null : ref;
+  }
+
+  /// Where a cell [edit] deletes or pushes off the sheet lands: the first
+  /// row (column) after a deletion, the last one of the sheet otherwise.
+  static ({int row, int column}) _landing(
+    ({int row, int column}) cell,
+    ReferenceShift edit,
+  ) {
+    final bool rows = edit.axis == ShiftAxis.rows;
+    final int limit = rows ? XlsxLimits.maxRows : XlsxLimits.maxColumns;
+    int at = edit.count < 0 ? edit.index - 1 : limit - 1;
+    if (at > limit - 1) at = limit - 1;
+    return rows ? (row: at, column: cell.column) : (row: cell.row, column: at);
+  }
+}
