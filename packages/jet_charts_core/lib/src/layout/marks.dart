@@ -1,7 +1,9 @@
 /// The series marks: columns and bars, lines and areas.
 ///
 /// A category's band is the plot's length along the category axis over the
-/// category count. Every coordinate is finite: a value outside the axis range
+/// category count. Columns, bars and lines sit in the middle of their bands;
+/// an area's points sit on tick marks (`categoryPosition`), from the plot's
+/// one edge to the other, as Excel draws one. Every coordinate is finite: a value outside the axis range
 /// is mapped no further than one plot length beyond the plot's edge, where the
 /// plot's clip cuts it off.
 library;
@@ -236,12 +238,17 @@ List<List<ChartPoint?>> _linePoints(
     values,
     nullIsZero: false,
   );
-  final double band = axes.categoryLength / math.max(1, resolved.categoryCount);
+  double along(int c) => categoryPosition(
+    c,
+    resolved.categoryCount,
+    axes.categoryLength,
+    onTicks: false,
+  );
   return <List<ChartPoint?>>[
     for (final List<double?> series in tops)
       <ChartPoint?>[
         for (int c = 0; c < series.length; c++)
-          series[c] == null ? null : axes.point((c + 0.5) * band, series[c]!),
+          series[c] == null ? null : axes.point(along(c), series[c]!),
       ],
   ];
 }
@@ -334,16 +341,21 @@ List<List<({ChartPoint top, ChartPoint base})>> _areaColumns(
     values,
     nullIsZero: true,
   );
-  final double band = axes.categoryLength / math.max(1, resolved.categoryCount);
+  double along(int c) => categoryPosition(
+    c,
+    resolved.categoryCount,
+    axes.categoryLength,
+    onTicks: true,
+  );
   final bool stacked = _stacked(resolved);
   return <List<({ChartPoint top, ChartPoint base})>>[
     for (int s = 0; s < tops.length; s++)
       <({ChartPoint top, ChartPoint base})>[
         for (int c = 0; c < tops[s].length; c++)
           (
-            top: axes.point((c + 0.5) * band, tops[s][c]!),
+            top: axes.point(along(c), tops[s][c]!),
             base: axes.point(
-              (c + 0.5) * band,
+              along(c),
               stacked && s > 0 ? tops[s - 1][c]! : axes.crossing,
             ),
           ),

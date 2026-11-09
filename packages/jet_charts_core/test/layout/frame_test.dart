@@ -65,6 +65,8 @@ Iterable<ChartPrimitive> flat(List<ChartPrimitive> list) sync* {
 T byId<T extends ChartPrimitive>(ChartLayout layout, String id) =>
     flat(layout.primitives).firstWhere((ChartPrimitive p) => p.id == id) as T;
 
+double midX(ChartRect r) => r.left + r.width / 2;
+
 List<TextPrimitive> textsStarting(ChartLayout layout, String prefix) =>
     flat(layout.primitives)
         .whereType<TextPrimitive>()
@@ -793,6 +795,124 @@ void main() {
     test('line and area charts have a band per category', () {
       expect(galleryLayout('line_gap').categoryBands, hasLength(6));
       expect(galleryLayout('area_stacked').categoryBands, hasLength(4));
+    });
+
+    group('an area chart lies on tick marks', () {
+      test('area_stacked runs from the plot\'s left to its right', () {
+        final ChartLayout layout = galleryLayout('area_stacked');
+        final ChartRect plot = layout.plotArea!;
+        for (int s = 0; s < 3; s++) {
+          final PathPrimitive area = byId<PathPrimitive>(
+            layout,
+            ids.seriesAreaId(s),
+          );
+          for (int c = 0; c < 4; c++) {
+            final double x = plot.left + c * plot.width / 3;
+            expect(area.points[c].x, closeTo(x, 1e-9), reason: '$s/$c');
+            expect(area.points[7 - c].x, closeTo(x, 1e-9), reason: '$s/$c');
+          }
+          expect(area.points.first.x, closeTo(plot.left, 1e-9));
+          expect(area.points[3].x, closeTo(plot.right, 1e-9));
+        }
+      });
+
+      test('its labels are centred on the categories, inside the chart', () {
+        final ChartLayout layout = galleryLayout('area_stacked');
+        final ChartRect plot = layout.plotArea!;
+        final TextPrimitive q1 = byId<TextPrimitive>(
+          layout,
+          ids.axisLabelId(ids.categoryAxis, 0),
+        );
+        final TextPrimitive q4 = byId<TextPrimitive>(
+          layout,
+          ids.axisLabelId(ids.categoryAxis, 3),
+        );
+        expect(q1.text, 'Q1');
+        expect(q4.text, 'Q4');
+        expect(midX(q1.rect), closeTo(plot.left, 1e-9));
+        expect(midX(q4.rect), closeTo(plot.right, 1e-9));
+        expect(q1.bounds.left, greaterThanOrEqualTo(0));
+        expect(q4.bounds.right, lessThanOrEqualTo(goldenSize.width));
+        expect(problems(layout), isEmpty);
+      });
+
+      test('its bands tile the plot with edges halfway between categories', () {
+        final ChartLayout layout = galleryLayout('area_stacked');
+        final ChartRect plot = layout.plotArea!;
+        final List<ChartRect> bands = layout.categoryBands;
+        final double step = plot.width / 3;
+        expect(bands, hasLength(4));
+        expect(bands.first.left, closeTo(plot.left, 1e-9));
+        expect(bands.last.right, closeTo(plot.right, 1e-9));
+        for (int i = 0; i < 4; i++) {
+          expect(bands[i].top, plot.top);
+          expect(bands[i].height, plot.height);
+          if (i > 0) {
+            expect(bands[i].left, closeTo(plot.left + (i - 0.5) * step, 1e-9));
+            expect(bands[i].left, closeTo(bands[i - 1].right, 1e-9));
+          }
+        }
+        expect(bands.first.width, closeTo(step / 2, 1e-9));
+        expect(bands[1].width, closeTo(step, 1e-9));
+      });
+
+      test('its category grid lines run through the categories', () {
+        final ChartLayout layout = lay(
+          chart(
+            kind: ChartKind.area,
+            categoryAxis: const ChartAxis(gridLines: true),
+          ),
+          goldenSize,
+        );
+        final ChartRect plot = layout.plotArea!;
+        for (int i = 0; i < 4; i++) {
+          final PathPrimitive line = byId<PathPrimitive>(
+            layout,
+            ids.gridId(ids.categoryAxis, i),
+          );
+          expect(
+            line.points.first.x,
+            closeTo(plot.left + i * plot.width / 3, 1e-9),
+          );
+        }
+        expect(
+          flat(
+            layout.primitives,
+          ).any((ChartPrimitive p) => p.id == ids.gridId(ids.categoryAxis, 4)),
+          isFalse,
+        );
+      });
+
+      test('a one-category area is centred, its band the whole plot', () {
+        final ChartLayout layout = lay(
+          chart(kind: ChartKind.area, categories: const <Object?>['Q1']),
+          goldenSize,
+        );
+        final ChartRect plot = layout.plotArea!;
+        final PathPrimitive area = byId<PathPrimitive>(
+          layout,
+          ids.seriesAreaId(0),
+        );
+        for (final ChartPoint p in area.points) {
+          expect(p.x, closeTo(midX(plot), 1e-9));
+        }
+        final TextPrimitive q1 = byId<TextPrimitive>(
+          layout,
+          ids.axisLabelId(ids.categoryAxis, 0),
+        );
+        expect(midX(q1.rect), closeTo(midX(plot), 1e-9));
+        expect(layout.categoryBands, <ChartRect>[plot]);
+      });
+
+      test('a column, bar or line chart keeps band middles', () {
+        final ChartLayout layout = galleryLayout('line_gap');
+        final ChartRect plot = layout.plotArea!;
+        final TextPrimitive first = byId<TextPrimitive>(
+          layout,
+          ids.axisLabelId(ids.categoryAxis, 0),
+        );
+        expect(midX(first.rect), closeTo(plot.left + plot.width / 12, 1e-9));
+      });
     });
 
     test('a placeholder kind, or a chart without a plot, has none', () {

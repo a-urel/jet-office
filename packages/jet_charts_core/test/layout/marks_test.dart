@@ -395,15 +395,12 @@ void main() {
       <double?>[2, null, 4],
     ], kind: ChartKind.area);
     final ChartRect p = l.plotArea!;
-    final double band = p.width / 3;
     final PathPrimitive a = byId<PathPrimitive>(l, ids.seriesAreaId(0));
     expect(a.closed, isTrue);
     expect(a.points, hasLength(6));
-    final List<double> xs = <double>[
-      p.left + band / 2,
-      p.left + band * 1.5,
-      p.left + band * 2.5,
-    ];
+    // On tick marks: the first value at the plot's left, the last at its
+    // right.
+    final List<double> xs = <double>[p.left, p.left + p.width / 2, p.right];
     final List<double> ys = <double>[yOf(l, 2), yOf(l, 0), yOf(l, 4)];
     for (int i = 0; i < 3; i++) {
       expect(a.points[i].x, near(xs[i]));

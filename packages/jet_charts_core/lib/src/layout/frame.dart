@@ -115,6 +115,7 @@ FrameLayout layoutFrame(
           resolved.categoryCount,
           attempt.plot!,
           vertical: frame.bar,
+          onTicks: frame.onTicks,
         ),
       );
     }
@@ -451,6 +452,7 @@ extension on FrameContext {
       spacing: theme.spacing,
       measurer: measurer,
       style: theme.axisLabels,
+      onTicks: onTicks,
     );
   }
 
@@ -539,9 +541,13 @@ extension on FrameContext {
       widest = math.max(widest, label.size.width);
       tallest = math.max(tallest, label.size.height);
     }
-    // What the plan's reserve needs inside [inner] past the edge room.
+    // What the plan's reserves need inside [inner] past the edge room.
+    final (double edgeBefore, double edgeAfter) = _edges(shown, inner);
     final double reserve = shown.categoryLabels
-        ? plan.reserveBefore - _edges(shown, inner).$1
+        ? plan.reserveBefore - edgeBefore
+        : 0;
+    final double reserveAfter = shown.categoryLabels
+        ? plan.reserveAfter - edgeAfter
         : 0;
     if (bar) {
       return (
@@ -549,7 +555,7 @@ extension on FrameContext {
           categoryTitleBand + categoryBand,
           ticks ? labels.first.size.width / 2 : 0,
         ),
-        top: 0,
+        top: math.max(0, reserveAfter),
         right: ticks ? labels.last.size.width / 2 : 0,
         bottom: math.max(valueTitleBand + (ticks ? tallest + gap : 0), reserve),
       );
@@ -557,7 +563,7 @@ extension on FrameContext {
     return (
       left: math.max(valueTitleBand + (ticks ? widest + gap : 0), reserve),
       top: ticks ? labels.last.size.height / 2 : 0,
-      right: 0,
+      right: math.max(0, reserveAfter),
       bottom: math.max(
         categoryTitleBand + categoryBand,
         ticks ? labels.first.size.height / 2 : 0,

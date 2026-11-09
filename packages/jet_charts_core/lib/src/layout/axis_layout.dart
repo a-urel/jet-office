@@ -170,6 +170,26 @@ TextPrimitive _valueLabel(
   );
 }
 
+/// The position of category [index] of [categories] along a category axis of
+/// [length], from the axis' start.
+///
+/// Between tick marks (columns, bars and lines), a category sits in the middle
+/// of its band, `(index + 0.5) * length / categories`. On tick marks
+/// ([onTicks], an area chart, as Excel draws one: `c:crossBetween midCat`), the
+/// first category sits at the axis' start and the last at its end,
+/// `index * length / (categories - 1)`; a lone category sits in the middle.
+double categoryPosition(
+  int index,
+  int categories,
+  double length, {
+  required bool onTicks,
+}) {
+  if (onTicks && categories > 1) {
+    return index * length / (categories - 1);
+  }
+  return (index + 0.5) * length / math.max(1, categories);
+}
+
 /// How the category labels go: which are shown, how they are turned and cut,
 /// how deep their band is and how far they reach past the axis' ends.
 final class CategoryLabelPlan {
@@ -183,6 +203,7 @@ final class CategoryLabelPlan {
     this.before = 0,
     this.after = 0,
     this.reserveBefore = 0,
+    this.reserveAfter = 0,
     this.cramped = false,
   }) : shown = List<int>.unmodifiable(shown),
        labels = List<MeasuredLabel>.unmodifiable(labels);
@@ -227,6 +248,14 @@ final class CategoryLabelPlan {
   /// back into the plan.
   final double reserveBefore;
 
+  /// The room past the axis' end that the labels ask the frame to keep: on
+  /// tick marks, the reach of the last label as if its tick were at the axis'
+  /// end (half its width at 0 degrees, half its height at -90 degrees and
+  /// beside a vertical axis, and at -45 degrees that of its turned box's
+  /// lower corner); between tick marks 0, as those labels use only the room
+  /// the frame has anyway.
+  final double reserveAfter;
+
   /// Whether a plan that does not fit failed only for want of room past the
   /// axis' ends: some try kept its labels apart and within the band limit.
   /// Such a plan's [reserveBefore] is the largest of those tries', so the
@@ -243,6 +272,7 @@ final class CategoryLabelPlan {
       before == other.before &&
       after == other.after &&
       reserveBefore == other.reserveBefore &&
+      reserveAfter == other.reserveAfter &&
       cramped == other.cramped &&
       listValueEquals(shown, other.shown) &&
       listValueEquals(labels, other.labels);
@@ -255,6 +285,7 @@ final class CategoryLabelPlan {
     before,
     after,
     reserveBefore,
+    reserveAfter,
     cramped,
     listValueHash(shown),
     listValueHash(labels),
@@ -294,6 +325,14 @@ const String ellipsis = '…';
 /// label wider than [maxDepth] is cut, and every `N`th is shown for the least
 /// `N` that keeps them apart and within the room.
 ///
+/// On tick marks ([onTicks], an area chart) each label's tick is its
+/// category's [categoryPosition], so the first and last labels reach past
+/// the axis' ends: shown labels are kept apart by the distance between their
+/// ticks, the room before is [turnedRoomBefore] at every angle, and the plan
+/// asks the frame for [CategoryLabelPlan.reserveBefore] and
+/// [CategoryLabelPlan.reserveAfter] so that both stand whole within the
+/// chart.
+///
 /// The plan does not fit when no try does: the band limit is too small for a
 /// label (or a lone `…`), or the axis has no length.
 CategoryLabelPlan planCategoryLabels(
@@ -307,6 +346,7 @@ CategoryLabelPlan planCategoryLabels(
   required ChartSpacing spacing,
   required TextMeasurer measurer,
   required ChartTextStyle style,
+  bool onTicks = false,
 }) {
   if (labels.isEmpty) {
     return CategoryLabelPlan.none();
@@ -320,8 +360,9 @@ CategoryLabelPlan planCategoryLabels(
     roomAfter,
     spacing.minTextGap,
     vertical: vertical,
+    onTicks: onTicks,
   );
-  if (!(planner.band > 0) || !(maxDepth > 0) || !axisLength.isFinite) {
+  if (!(planner.step > 0) || !(maxDepth > 0) || !axisLength.isFinite) {
     return CategoryLabelPlan(fits: false);
   }
   final List<(int, int)> tries = vertical
@@ -345,10 +386,20 @@ CategoryLabelPlan planCategoryLabels(
     return CategoryLabelPlan(fits: false);
   }
   double reserve = 0;
+  double reserveAfter = 0;
   for (final int angle in planner.crampedAngles) {
     reserve = math.max(reserve, planner.reserve(angle, measurer, style));
+    reserveAfter = math.max(
+      reserveAfter,
+      planner.reserveAfter(angle, measurer, style),
+    );
   }
-  return CategoryLabelPlan(fits: false, cramped: true, reserveBefore: reserve);
+  return CategoryLabelPlan(
+    fits: false,
+    cramped: true,
+    reserveBefore: reserve,
+    reserveAfter: reserveAfter,
+  );
 }
 
 /// The tries of [planCategoryLabels]. Angles are counter-clockwise, in
@@ -363,17 +414,23 @@ final class _Planner {
     this.roomAfter,
     this.minTextGap, {
     required this.vertical,
-  }) : band = axisLength / labels.length;
+    required this.onTicks,
+  }) : step = onTicks && labels.length > 1
+           ? axisLength / (labels.length - 1)
+           : axisLength / labels.length;
 
   final List<MeasuredLabel> labels;
   final double axisLength;
-  final double band;
+
+  /// The distance between adjacent categories' ticks.
+  final double step;
   final double maxDepth;
   final double roomBefore;
   final double turnedRoomBefore;
   final double roomAfter;
   final double minTextGap;
   final bool vertical;
+  final bool onTicks;
 
   static const double _tolerance = 1e-9;
 
@@ -396,7 +453,12 @@ final class _Planner {
   /// The extent along the axis, from the axis' start, of a label of [size]
   /// at [angle] whose tick is that of category [index].
   (double, double) extent(ChartSize size, int angle, int index) {
-    final double tick = (index + 0.5) * band;
+    final double tick = categoryPosition(
+      index,
+      labels.length,
+      axisLength,
+      onTicks: onTicks,
+    );
     if (vertical) {
       return (tick - size.height / 2, tick + size.height / 2);
     }
@@ -447,6 +509,7 @@ final class _Planner {
     before: plan.before,
     after: plan.after,
     reserveBefore: reserve(angle, measurer, style),
+    reserveAfter: reserveAfter(angle, measurer, style),
   );
 
   /// The [CategoryLabelPlan.reserveBefore] of a try at [angle].
@@ -459,7 +522,29 @@ final class _Planner {
       final ChartSize size = first?.size ?? const ChartSize(0, 0);
       return (size.width + size.height / 2) * math.sqrt1_2;
     }
-    return 0;
+    return onTicks ? labels.first.size.width / 2 : 0;
+  }
+
+  /// The [CategoryLabelPlan.reserveAfter] of a try at [angle].
+  double reserveAfter(int angle, TextMeasurer measurer, ChartTextStyle style) {
+    if (!onTicks) {
+      return 0;
+    }
+    final int last = labels.length - 1;
+    if (vertical || angle == 90) {
+      return labels[last].size.height / 2;
+    }
+    if (angle == 45) {
+      final MeasuredLabel? label = cutOne(
+        last,
+        45,
+        measurer,
+        style,
+        room: false,
+      );
+      return (label?.size.height ?? 0) / 2 * math.sqrt1_2;
+    }
+    return labels[last].size.width / 2;
   }
 
   /// The label of category [index] cut with `…` until [whole] holds at
@@ -524,9 +609,11 @@ final class _Planner {
       return null;
     }
     final bool roomy =
-        before <= (angle == 0 ? roomBefore : turnedRoomBefore) + _tolerance &&
+        before <=
+            (angle == 0 && !onTicks ? roomBefore : turnedRoomBefore) +
+                _tolerance &&
         after <= roomAfter + _tolerance;
-    final double distance = every * band;
+    final double distance = every * step;
     for (int k = 1; k < shown.length; k++) {
       final ChartSize a = drawn[shown[k - 1]]!.size;
       final ChartSize b = drawn[shown[k]]!.size;
@@ -566,8 +653,9 @@ final class _Planner {
 /// right edge, at the tick; the top of every label's turned box is [offset]
 /// below the plot. Beside a vertical one (a bar chart) each is right-aligned
 /// [offset] left of the plot and centred on its band, the first category at
-/// the bottom, as Excel draws it. A label keeps its category's index in its
-/// id.
+/// the bottom, as Excel draws it. On tick marks ([onTicks], an area chart)
+/// a label's tick is its category's [categoryPosition] instead of its band's
+/// middle. A label keeps its category's index in its id.
 List<TextPrimitive> placeCategoryLabels(
   CategoryLabelPlan plan,
   int categoryCount,
@@ -575,6 +663,7 @@ List<TextPrimitive> placeCategoryLabels(
   ChartTextStyle style, {
   required bool vertical,
   required double offset,
+  bool onTicks = false,
 }) {
   final List<TextPrimitive> placed = <TextPrimitive>[];
   final double radians = -plan.rotationDegrees * math.pi / 180;
@@ -587,10 +676,14 @@ List<TextPrimitive> placeCategoryLabels(
     final double h = label.size.height;
     final ChartRect rect;
     if (vertical) {
-      final double cy = plot.bottom - (i + 0.5) * plot.height / categoryCount;
+      final double cy =
+          plot.bottom -
+          categoryPosition(i, categoryCount, plot.height, onTicks: onTicks);
       rect = ChartRect(plot.left - offset - w, cy - h / 2, w, h);
     } else {
-      final double tick = plot.left + (i + 0.5) * plot.width / categoryCount;
+      final double tick =
+          plot.left +
+          categoryPosition(i, categoryCount, plot.width, onTicks: onTicks);
       final double top = plot.bottom + offset;
       if (plan.rotationDegrees == 0) {
         rect = ChartRect(tick - w / 2, top, w, h);
@@ -637,25 +730,41 @@ List<PathPrimitive> valueGridLines(
 /// Edge [i] of the [categories] bands of [plot] along the category axis, from
 /// its start: an x for a horizontal axis (edge 0 the plot's left), a y for a
 /// [vertical] one (edge 0 the plot's bottom, as a bar chart's first category
-/// sits at the bottom). Edge `categories` is the axis' end. The category grid
-/// lines and [categoryBands] both take their edges from here.
+/// sits at the bottom). Edge `categories` is the axis' end. Between tick
+/// marks the category grid lines and [categoryBands] both take their edges
+/// from here. On tick marks ([onTicks], an area chart) an inner edge lies
+/// halfway between the [categoryPosition]s of its two categories, and the
+/// outer edges are the axis' ends.
 double categoryEdge(
   int i,
   int categories,
   ChartRect plot, {
   required bool vertical,
-}) => vertical
-    ? plot.bottom - i * plot.height / categories
-    : plot.left + i * plot.width / categories;
+  bool onTicks = false,
+}) {
+  final double length = vertical ? plot.height : plot.width;
+  final double along;
+  if (!onTicks || i <= 0 || i >= categories) {
+    along = i * length / categories;
+  } else {
+    along =
+        (categoryPosition(i - 1, categories, length, onTicks: true) +
+            categoryPosition(i, categories, length, onTicks: true)) /
+        2;
+  }
+  return vertical ? plot.bottom - along : plot.left + along;
+}
 
 /// The band of each of [categories] across [plot], in category order: the
 /// slice between [categoryEdge] `i` and `i + 1`, the plot's full height
-/// across a horizontal axis, its full width beside a [vertical] one. Empty
-/// for no categories.
+/// across a horizontal axis, its full width beside a [vertical] one. On tick
+/// marks ([onTicks]) the edges lie halfway between categories, so a point
+/// falls in the band of the nearest category. Empty for no categories.
 List<ChartRect> categoryBands(
   int categories,
   ChartRect plot, {
   required bool vertical,
+  bool onTicks = false,
 }) {
   if (categories <= 0) {
     return const <ChartRect>[];
@@ -665,33 +774,77 @@ List<ChartRect> categoryBands(
       if (vertical)
         ChartRect(
           plot.left,
-          categoryEdge(i + 1, categories, plot, vertical: true),
+          categoryEdge(
+            i + 1,
+            categories,
+            plot,
+            vertical: true,
+            onTicks: onTicks,
+          ),
           plot.width,
-          categoryEdge(i, categories, plot, vertical: true) -
-              categoryEdge(i + 1, categories, plot, vertical: true),
+          categoryEdge(i, categories, plot, vertical: true, onTicks: onTicks) -
+              categoryEdge(
+                i + 1,
+                categories,
+                plot,
+                vertical: true,
+                onTicks: onTicks,
+              ),
         )
       else
         ChartRect(
-          categoryEdge(i, categories, plot, vertical: false),
+          categoryEdge(i, categories, plot, vertical: false, onTicks: onTicks),
           plot.top,
-          categoryEdge(i + 1, categories, plot, vertical: false) -
-              categoryEdge(i, categories, plot, vertical: false),
+          categoryEdge(
+                i + 1,
+                categories,
+                plot,
+                vertical: false,
+                onTicks: onTicks,
+              ) -
+              categoryEdge(
+                i,
+                categories,
+                plot,
+                vertical: false,
+                onTicks: onTicks,
+              ),
           plot.height,
         ),
   ];
 }
 
 /// A grid line at each edge between [categories] bands across [plot], the two
-/// outer edges included.
+/// outer edges included; on tick marks ([onTicks], an area chart) one through
+/// each category's [categoryPosition] instead.
 List<PathPrimitive> categoryGridLines(
   int categories,
   ChartRect plot, {
   required bool vertical,
   required ChartColor color,
   required double width,
+  bool onTicks = false,
 }) {
   if (categories <= 0) {
     return const <PathPrimitive>[];
+  }
+  if (onTicks) {
+    final double length = vertical ? plot.height : plot.width;
+    return <PathPrimitive>[
+      for (int i = 0; i < categories; i++)
+        _line(
+          ids.gridId(ids.categoryAxis, i),
+          vertical
+              ? plot.bottom -
+                    categoryPosition(i, categories, length, onTicks: true)
+              : plot.left +
+                    categoryPosition(i, categories, length, onTicks: true),
+          plot,
+          across: !vertical,
+          color: color,
+          width: width,
+        ),
+    ];
   }
   return <PathPrimitive>[
     for (int i = 0; i <= categories; i++)

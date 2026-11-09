@@ -90,6 +90,7 @@ final class FrameContext {
     this.measurer,
     this.formatter,
   ) : bar = chart.kind == ChartKind.bar,
+      onTicks = chart.kind == ChartKind.area,
       extent = dataExtent(resolved.values, resolved.grouping),
       categoryLabels = measureLabels(
         resolved.categoryLabels,
@@ -117,6 +118,10 @@ final class FrameContext {
 
   /// Whether the value axis is horizontal: a bar chart.
   final bool bar;
+
+  /// Whether the categories sit on tick marks, as Excel draws an area chart
+  /// (`categoryPosition`): from the plot's one edge to the other.
+  final bool onTicks;
 
   /// The data's extent under the chart's grouping.
   final ({double min, double max}) extent;
@@ -185,6 +190,7 @@ extension FramePaint on FrameContext {
           vertical: bar,
           color: theme.gridLine,
           width: theme.spacing.gridLineWidth,
+          onTicks: onTicks,
         ),
       if (chart.valueAxis.gridLines)
         ...valueGridLines(
@@ -232,6 +238,7 @@ extension FramePaint on FrameContext {
           theme.axisLabels,
           vertical: bar,
           offset: a.categoryOffset,
+          onTicks: onTicks,
         ),
       if (shown.valueTitle)
         _axisTitle(
