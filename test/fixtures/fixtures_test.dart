@@ -7,6 +7,7 @@ import 'package:xml/xml.dart';
 import '../../tool/src/csv_compare.dart' show decodeXstring;
 import '../support/read_xlsx.dart';
 import '../support/xlsx_checker.dart';
+import 'c1_fixtures.dart';
 import 'fixtures.dart';
 import 'm1_fixtures.dart';
 import 'm2_fixtures.dart';
@@ -119,12 +120,14 @@ void main() {
       'm4_objects',
     ]);
     expect(names(m5Fixtures()), <String>['m5_list_plain', 'm5_list_table']);
+    expect(names(c1Fixtures()), <String>['c1_kinds', 'c1_options']);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
       ...names(m3Fixtures()),
       ...names(m4Fixtures()),
       ...names(m5Fixtures()),
+      ...names(c1Fixtures()),
     ]);
   });
 

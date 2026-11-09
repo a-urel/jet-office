@@ -109,8 +109,9 @@
 ///     `_x0000_s{n}`, n ÷ 1024 is a block of its drawing's `o:idmap`;
 /// 30. a sheet's `drawing/@r:id` names a drawing relationship of the
 ///     sheet; in every drawing part, each `oneCellAnchor` has the
-///     children `from`, `ext`, `pic` and `clientData`, each
-///     `twoCellAnchor` `from`, `to`, `pic` and `clientData`; each anchor's
+///     children `from`, `ext`, `pic` (or a chart's `graphicFrame`) and
+///     `clientData`, each `twoCellAnchor` `from`, `to`, `pic` (or
+///     `graphicFrame`) and `clientData`; each anchor's
 ///     `from` and `to` are four integers whose cell lies inside the sheet
 ///     (`col` within 0..16383, `row` within 0..1048575), and its `to` is
 ///     not before its `from` on either axis, by cell and then by offset;
@@ -118,7 +119,9 @@
 ///     and `a:ext` has a positive integer `cx` and `cy`; the `cNvPr` ids
 ///     are unique in the part; and every `a:blip/@r:embed` names an image
 ///     relationship of the drawing whose target exists and whose content
-///     type is `image/png` or `image/jpeg`;
+///     type is `image/png` or `image/jpeg`; and every `c:chart/@r:id` names
+///     a chart relationship of the drawing whose target exists and whose
+///     content type is the chart part's;
 /// 31. table ids are unique across the workbook; table names are unique
 ///     ignoring case, among tables and against defined names; each table's
 ///     `ref` is a range inside its sheet with rows for the header (unless
@@ -1842,6 +1845,17 @@ const String _imageRelType =
     'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
     'image';
 
+const String _chartRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'chart';
+
+const String _chartContentType =
+    'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
+
+/// The DrawingML chart namespace (`c:`).
+const String _chartNamespace =
+    'http://schemas.openxmlformats.org/drawingml/2006/chart';
+
 /// The DrawingML namespaces (`xdr:`, `a:`) and the relationships one
 /// (`r:`).
 const String _xdr =
@@ -1954,6 +1968,32 @@ void _checkDrawings(
         );
       }
     }
+    for (final XmlElement chart in _elementsIn(doc, _chartNamespace, 'chart')) {
+      final String id =
+          chart.getAttribute('id', namespaceUri: _relNamespace) ?? '';
+      final XmlElement? rel = rels[id];
+      if (rel == null || _attr(rel, 'Type') != _chartRelType) {
+        violations.add(
+          '$where: c:chart r:id "$id" is not a chart relationship of '
+          '$relsName',
+        );
+        continue;
+      }
+      final String target = _resolve(_dirOf(part), _attr(rel, 'Target'));
+      if (!raw.containsKey(target)) {
+        violations.add(
+          '$where: c:chart r:id "$id" points at $target, which does not exist',
+        );
+        continue;
+      }
+      final String? type = _contentTypeOf(docs, target);
+      if (type != _chartContentType) {
+        violations.add(
+          '$where: c:chart r:id "$id" points at $target, whose content type '
+          '"$type" is not a chart part\'s',
+        );
+      }
+    }
   });
 }
 
@@ -1961,16 +2001,20 @@ void _checkDrawings(
 /// inside the sheet, and `to` is not before `from`.
 void _checkAnchor(XmlElement anchor, String where, List<String> violations) {
   final String kind = anchor.name.local;
+  bool has(String child) => anchor.childElements.any(
+    (XmlElement e) => e.name.local == child && e.name.namespaceUri == _xdr,
+  );
   for (final String child in <String>[
     'from',
     if (kind == 'oneCellAnchor') 'ext' else 'to',
-    'pic',
     'clientData',
   ]) {
-    final bool has = anchor.childElements.any(
-      (XmlElement e) => e.name.local == child && e.name.namespaceUri == _xdr,
+    if (!has(child)) violations.add('$where: <xdr:$kind> has no <xdr:$child>');
+  }
+  if (!has('pic') && !has('graphicFrame')) {
+    violations.add(
+      '$where: <xdr:$kind> has no <xdr:pic> or <xdr:graphicFrame>',
     );
-    if (!has) violations.add('$where: <xdr:$kind> has no <xdr:$child>');
   }
   final Map<String, List<int>> markers = <String, List<int>>{};
   for (final String name in <String>['from', 'to']) {

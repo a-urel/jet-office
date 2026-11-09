@@ -5,6 +5,7 @@
 /// validated without further wiring.
 library;
 
+import 'c1_fixtures.dart';
 import 'fixture.dart';
 import 'm1_fixtures.dart';
 import 'm2_fixtures.dart';
@@ -14,11 +15,13 @@ import 'm5_fixtures.dart';
 
 export 'fixture.dart';
 
-/// The fixtures of all milestones, in milestone order.
+/// The fixtures of all milestones, in milestone order: the workbook
+/// milestones M1 to M5, then the chart milestone C1.
 List<Fixture> allFixtures() => <Fixture>[
   ...m1Fixtures(),
   ...m2Fixtures(),
   ...m3Fixtures(),
   ...m4Fixtures(),
   ...m5Fixtures(),
+  ...c1Fixtures(),
 ];

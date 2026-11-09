@@ -136,8 +136,10 @@ jobs:
       - name: Validate the model's output with the Open XML SDK
         run: dotnet run --project tool/ooxml_validate -- build/model
 
+      # --libreoffice-resave: LibreOffice's chart style parts, which the
+      # model keeps as read (tool/ooxml_validate/Program.cs).
       - name: Validate the model's output for the re-saved fixtures
-        run: dotnet run --project tool/ooxml_validate -- build/model-resaved
+        run: dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/model-resaved
 
       # What the model saves after a change must be valid too: every
       # fixture with a date, a date-time, a formula and a string set, styled

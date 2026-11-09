@@ -67,7 +67,7 @@ dart run tool/compare_resaved.dart build/fixtures build/resaved
 dart run tool/round_trip_model.dart build/fixtures build/model
 dart run tool/round_trip_model.dart build/resaved build/model-resaved
 dotnet run --project tool/ooxml_validate -- build/model
-dotnet run --project tool/ooxml_validate -- build/model-resaved
+dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/model-resaved
 dart run tool/edit_model.dart build/fixtures build/model-edited
 dotnet run --project tool/ooxml_validate -- build/model-edited
 (ulimit -f 500000; LC_ALL=C.UTF-8 soffice --headless \
@@ -94,7 +94,16 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 
 - `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
-  `<name>.xlsx` and its expected values as `<name>.expected.json`, and each
+  `<name>.xlsx` and its expected values as `<name>.expected.json`, the C1
+  chart fixtures among them (`c1_kinds`, the sheet `Data` with the 12 column,
+  bar, line and area charts in the three groupings, Office theme; `c1_options`,
+  the sheet `O'Brien` with six charts of the options: title, the four legend
+  positions and a hidden legend, axis titles, a fixed range, format codes, data
+  labels, hidden axes, literal data, date categories, an automatic title and
+  eight series in an app theme with fixed colours), whose chart parts of
+  `writeDrawingChartSpace` the test-only host `withCharts`
+  (`test/drawingml/chart/support/chart_host.dart`, replaced by C2's host) draws
+  on the sheet, and each
   DOCX fixture of `docxFixtures()` (`test/fixtures/docx_fixtures.dart`) as
   `<name>.docx` and its expected text as `<name>.expected.txt`: the D1
   documents (`d1_*`), the D2 ones (`d2_*`), the D3 tables (`d3_basic`,
@@ -136,9 +145,22 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   only `on` and `off` there) and the model keeps as read. `w:cantSplit` has the
   same type, so the flag covers `w:val="true"` there too, though the
   LibreOffice checked writes it bare. The flag ignores that one error on those
-  two elements, matched on the element and its exact value; every other error,
-  and every run without the flag, counts. The `d1_corrupt.docx` negative
-  control must still fail with it.
+  two elements, matched on the element and its exact value. For
+  `build/model-resaved` it covers LibreOffice's chart style parts
+  (`xl/charts/styleN.xml`), which LibreOffice writes beside every chart it
+  re-saves and the model keeps as read: a `cs:dataPointMarkerLayout` with
+  children and a `cs:fontRef` holding `cs:schemeClr` for `a:schemeClr`, the
+  two errors matched on their ids, the part's content type and the element.
+  Every other error, and every run without the flag, counts. The
+  `d1_corrupt.docx` negative control must still fail with it.
+  One error pair is ignored in every run: the SDK 3.5.1 refuses the
+  `c:chart/c:extLst` extension `{56B9EC1D-385E-4148-901F-78D8002777C0}`
+  (`c16r3:dataDisplayOptions16`) that Excel itself writes in every chart part
+  (the owner's `chart_defaults.xlsx` fails the same way), so the tool ignores
+  its `Sch_UndeclaredAttribute` and `Sch_InvalidElementContentExpectingComplex`
+  on that `c:ext` of a chart part, at that path, holding exactly one
+  `dataDisplayOptions16` of `dispNaAsBlank` children; other content there
+  still counts.
 - LibreOffice's text export of a document whose body ends in a table never
   ends: it writes the file without bound. No fixture may end in a table (the
   fixture list says so), and the CI step and the command above cap the file
