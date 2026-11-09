@@ -265,6 +265,7 @@ void main() {
         '<a:schemeClr val="tx1"><a:lumMod val="120000"/></a:schemeClr>',
         '<a:schemeClr val="tx1"><a:lumOff val="-1"/></a:schemeClr>',
         '<a:schemeClr val="tx1"><a:lumMod/></a:schemeClr>',
+        '<a:srgbClr val="000000">x</a:srgbClr>',
       ]) {
         expect(_read(xml), isNull, reason: xml);
       }

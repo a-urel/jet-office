@@ -101,20 +101,42 @@ void main() {
       );
     });
 
-    test('writes the legend and data label blocks in the axis shape', () {
-      for (final DrawingTextUse use in <DrawingTextUse>[
-        DrawingTextUse.legend,
-        DrawingTextUse.dataLabel,
-      ]) {
-        expect(
-          _difference(
-            _body(office.legendText, use, ChartExportColors.fileTheme),
-            excel[1],
+    test('writes the legend block as Excel does', () {
+      final String expected = excel[1].replaceFirst(
+        'rot="-60000000"',
+        'rot="0"',
+      );
+      expect(
+        _difference(
+          _body(
+            office.legendText,
+            DrawingTextUse.legend,
+            ChartExportColors.fileTheme,
           ),
-          isNull,
-          reason: use.name,
-        );
-      }
+          expected,
+        ),
+        isNull,
+      );
+    });
+
+    test('writes the data label block as Excel does', () {
+      final String expected = excel[1].replaceFirst(
+        RegExp('<a:bodyPr[^>]*/>'),
+        '<a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" '
+        'vert="horz" wrap="square" lIns="38100" tIns="19050" rIns="38100" '
+        'bIns="19050" anchor="ctr" anchorCtr="1"><a:spAutoFit/></a:bodyPr>',
+      );
+      expect(
+        _difference(
+          _body(
+            office.dataLabels,
+            DrawingTextUse.dataLabel,
+            ChartExportColors.fileTheme,
+          ),
+          expected,
+        ),
+        isNull,
+      );
     });
 
     test('writes the size in hundredths of a point and bold as b', () {

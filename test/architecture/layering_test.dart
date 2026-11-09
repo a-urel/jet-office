@@ -70,28 +70,32 @@ List<String> _docxOffenders(Iterable<LibSource> sources) => <String>[
       source.path,
 ];
 
-/// Whether [uri] is one the drawingml layer may import (decision 0015): a
-/// `dart:` library, a relative path that stays in `drawingml/` or names
-/// `../opc/`, `../xml/` or `../common/`, or exactly the two package barrels.
-bool _drawingmlAllows(String uri) {
+/// Whether [uri], imported by the file at [path], is one the drawingml layer
+/// may import (decision 0015): a `dart:` library, a relative path that stays
+/// in `drawingml/` or names `lib/src/opc/`, `lib/src/xml/` or
+/// `lib/src/common/` (resolved against [path], so a file under
+/// `drawingml/chart/` reaches them by `../../`), or exactly the two package
+/// barrels.
+bool _drawingmlAllows(String path, String uri) {
   if (uri.startsWith('dart:')) return true;
   if (uri == 'package:jet_charts_core/jet_charts_core.dart' ||
       uri == 'package:jet_core/jet_core.dart') {
     return true;
   }
   if (uri.contains(':')) return false;
-  // Resolve against a file directly in lib/src/drawingml/.
-  final String path = Uri.parse('lib/src/drawingml/x.dart').resolve(uri).path;
-  return path.startsWith(_drawingml) ||
-      path.startsWith('lib/src/opc/') ||
-      path.startsWith('lib/src/xml/') ||
-      path.startsWith(_common);
+  final String target = Uri.parse(path).resolve(uri).path;
+  return target.startsWith(_drawingml) ||
+      target.startsWith('lib/src/opc/') ||
+      target.startsWith('lib/src/xml/') ||
+      target.startsWith(_common);
 }
 
 List<String> _drawingmlOffenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
     if (source.path.startsWith(_drawingml) &&
-        !_uris(source).every(_drawingmlAllows))
+        !_uris(
+          source,
+        ).every((String uri) => _drawingmlAllows(source.path, uri)))
       source.path,
 ];
 
@@ -296,6 +300,16 @@ void main() {
         "import '../zip/archive_adapter.dart';",
       ),
       LibSource(
+        'lib/src/drawingml/chart/x.dart',
+        "import '../color.dart';\n"
+            "import '../../xml/xml_writer.dart';\n"
+            "import '../../common/image.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/chart/z.dart',
+        "import '../../xlsx/range.dart';",
+      ),
+      LibSource(
         'lib/src/drawingml/y.dart',
         "// import '../xlsx/x.dart';\nconst int x = 0;",
       ),
@@ -307,6 +321,7 @@ void main() {
       'lib/src/drawingml/t.dart',
       'lib/src/drawingml/u.dart',
       'lib/src/drawingml/w.dart',
+      'lib/src/drawingml/chart/z.dart',
     ]);
     expect(_commonOffenders(fixtures), <String>[
       'lib/src/common/a.dart',

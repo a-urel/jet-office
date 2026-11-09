@@ -134,7 +134,9 @@ String _hex(int rgb) => rgb.toRadixString(16).padLeft(6, '0').toUpperCase();
 /// [theme], or in [drawingOfficeSchemeRgb] when [theme] is `null` or lacks
 /// it. `a:lumMod` and `a:lumOff` children are applied with
 /// [applyDrawingLuminance]; a scheme colour also keeps them, a fixed one keeps
-/// only the result.
+/// only the result. A fixed colour with `a:lumMod` or `a:lumOff` therefore
+/// writes back as a plain `a:srgbClr` of that result, so a part holding one is
+/// not reproduced by the writer (and is not offered as typed).
 ///
 /// Returns `null` for any other element (which is skipped), for a slot or a
 /// value it cannot read, for a `lumMod` or `lumOff` outside `0` to `100000`,

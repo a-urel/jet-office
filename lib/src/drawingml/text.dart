@@ -29,11 +29,15 @@ enum DrawingTextUse {
   /// An axis's labels: `a:bodyPr rot="-60000000"` and no `spc`.
   axis,
 
-  /// The legend; written in the axis shape until an Excel file shows its own.
+  /// The legend: `a:bodyPr rot="0"` and no `spc`, Excel's known legend
+  /// block. Provisional until the owner's reference workbook shows it
+  /// (ruling R7 of C1).
   legend,
 
-  /// The data labels; written in the axis shape until an Excel file shows
-  /// their own.
+  /// The data labels: `a:bodyPr rot="0"` with Excel's insets (`lIns` and
+  /// `rIns` 38100, `tIns` and `bIns` 19050) and an `a:spAutoFit` child, and
+  /// no `spc`, Excel's known data label block. Provisional until the owner's
+  /// reference workbook shows it (ruling R7 of C1).
   dataLabel,
 
   /// The chart space's own block: a bare `a:bodyPr` and `a:defRPr`, which
@@ -52,10 +56,26 @@ const Map<String, String> _bodyAttributes = <String, String>{
   'anchorCtr': '1',
 };
 
+/// The attributes of a data label's `a:bodyPr`, in Excel's order.
+const Map<String, String> _dataLabelBodyAttributes = <String, String>{
+  'rot': '0',
+  'spcFirstLastPara': '1',
+  'vertOverflow': 'ellipsis',
+  'vert': 'horz',
+  'wrap': 'square',
+  'lIns': '38100',
+  'tIns': '19050',
+  'rIns': '38100',
+  'bIns': '19050',
+  'anchor': 'ctr',
+  'anchorCtr': '1',
+};
+
 /// Writes a `c:txPr` of [style] for [use], as Excel writes it.
 ///
 /// Every use but [DrawingTextUse.chartSpace] writes `a:bodyPr` (with `rot`
-/// `0` for a title and `-60000000` otherwise), `a:lstStyle` and an `a:p`
+/// `-60000000` for an axis and `0` otherwise; a data label's also has
+/// Excel's insets and an `a:spAutoFit` child), `a:lstStyle` and an `a:p`
 /// whose `a:pPr/a:defRPr` has the size as `sz` in hundredths of a point
 /// (`(size * 100).round()`), `b` from the bold flag, Excel's fixed `i`, `u`,
 /// `strike`, `kern` and `baseline` (and `spc="0"` for a title), a
@@ -86,7 +106,17 @@ void writeDrawingTextBody(
     return;
   }
   final bool title = use == DrawingTextUse.title;
-  _writeBodyAndList(w, rot: title ? '0' : '-60000000');
+  if (use == DrawingTextUse.dataLabel) {
+    w.start('a:bodyPr');
+    for (final MapEntry<String, String> e in _dataLabelBodyAttributes.entries) {
+      w.attribute(e.key, e.value);
+    }
+    w.empty('a:spAutoFit');
+    w.end();
+    w.empty('a:lstStyle');
+  } else {
+    _writeBodyAndList(w, rot: use == DrawingTextUse.axis ? '-60000000' : '0');
+  }
   w.start('a:p');
   _writeParagraphProperties(w, style, mode: mode, spacing: title);
   w.empty('a:endParaRPr', <String, String>{'lang': language});
