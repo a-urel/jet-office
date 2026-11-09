@@ -15,7 +15,8 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 ///
 /// Painters are cached by text and style. The cache holds at most the
 /// constructor's `cacheSize` painters; when it is full the least recently used
-/// one leaves it and is disposed. Call [dispose] when the measurer is no longer used.
+/// one leaves it and is disposed. Call [dispose] when the measurer is no
+/// longer used.
 final class FlutterTextMeasurer implements TextMeasurer {
   /// Creates a measurer that scales text by [textScaler], falls back to the
   /// fonts of [fontFamilyFallback] in order, and caches up to [cacheSize]

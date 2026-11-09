@@ -171,6 +171,32 @@ void main() {
       );
     });
 
+    test('a line that snaps takes its markers with it', () {
+      // The point count changes, so the line snaps to `to`'s; its markers,
+      // which exist in both, snap too rather than move off the line.
+      final ChartLayout from = _layout(
+        _chart(<double>[1, 2, 3, 4], kind: ChartKind.line),
+      );
+      final ChartLayout to = _layout(
+        _chart(<double>[4, 3, 2, 1, 5], kind: ChartKind.line),
+      );
+      final List<ChartPrimitive> half = lerpChartPrimitives(
+        from.primitives,
+        to.primitives,
+        0.5,
+      );
+      for (int c = 0; c < 5; c++) {
+        final String id = 'series/0/marker/$c';
+        expect(_find(half, id), _find(to.primitives, id), reason: id);
+      }
+      expect(
+        (_find(from.primitives, 'series/0/marker/1')! as ArcPrimitive).center,
+        isNot(
+          (_find(to.primitives, 'series/0/marker/1')! as ArcPrimitive).center,
+        ),
+      );
+    });
+
     test('a line with the same point count moves point by point', () {
       final ChartLayout from = _layout(
         _chart(<double>[1, 2, 3, 4], kind: ChartKind.line),
