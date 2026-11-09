@@ -62,7 +62,8 @@ const int _rowPoints = 20;
 const int _firstCustomFormat = 164;
 
 /// Writes `gallery.xlsx` for [entries]: a sheet per entry, named by its name
-/// cut to 31 characters, with the categories in column A from row 2, a column
+/// cut to 31 characters, with the categories in column A from row 2 (a
+/// scatter series' x values in a column of its own, left of its values), a column
 /// per series from column B with the series' name in row 1, and below them one
 /// chart of [gallerySize] (Excel's default 360 by 216 points). The same
 /// [entries] give the same bytes.
@@ -187,9 +188,21 @@ String _numText(double value) =>
 
 String _column(int index) => String.fromCharCode('A'.codeUnitAt(0) + index);
 
+/// The column index of series [s]'s values: B on for most charts; a
+/// scatter series has its own x column, so its values are in B, D, F and on.
+int _valueColumn(Chart chart, int s) =>
+    chart.kind == ChartKind.scatter ? 2 * s + 1 : s + 1;
+
+/// The column index of series [s]'s categories or x values: A, or a
+/// scatter series' own column left of its values (A, C, E and on).
+int _xColumn(Chart chart, int s) => chart.kind == ChartKind.scatter ? 2 * s : 0;
+
 int _rowCount(Chart chart) => <int>[
   for (final ChartSeries s in chart.series) s.values.values.length,
-  if (chart.series.isNotEmpty) chart.series.first.categories.values.length,
+  if (chart.kind == ChartKind.scatter)
+    for (final ChartSeries s in chart.series) s.categories.values.length
+  else if (chart.series.isNotEmpty)
+    chart.series.first.categories.values.length,
 ].fold(0, (int a, int b) => a > b ? a : b);
 
 String _contentTypes(List<GalleryEntry> entries) {
@@ -275,7 +288,7 @@ String _sheetXml(Chart chart, List<String> codes) {
   out.write('<row r="1">');
   for (int s = 0; s < chart.series.length; s++) {
     out.write(
-      '<c r="${_column(s + 1)}1" t="inlineStr"><is><t>'
+      '<c r="${_column(_valueColumn(chart, s))}1" t="inlineStr"><is><t>'
       '${_escape(_seriesName(chart.series[s], s))}</t></is></c>',
     );
   }
@@ -287,23 +300,28 @@ String _sheetXml(Chart chart, List<String> codes) {
     final int r = i + 2;
     out.write('<row r="$r">');
     final Object? category = i < categories.length ? categories[i] : null;
-    if (chart.kind == ChartKind.scatter) {
-      // A scatter chart's x values are numbers, a date as its serial in the
-      // category axis' format.
-      if (_xNumber(category) case final double x) {
-        final String? code = chart.categoryAxis.formatCode;
-        final String style = code == null
-            ? ''
-            : ' s="${codes.indexOf(code) + 1}"';
-        out.write('<c r="A$r"$style><v>${_numText(x)}</v></c>');
-      }
-    } else if (category != null) {
+    if (chart.kind != ChartKind.scatter && category != null) {
       out.write(
         '<c r="A$r" t="inlineStr"><is><t>${_escape('$category')}</t></is></c>',
       );
     }
     for (int s = 0; s < chart.series.length; s++) {
       final ChartSeries series = chart.series[s];
+      if (chart.kind == ChartKind.scatter) {
+        // A scatter series' x values are numbers in its own column, a date
+        // as its serial in the category axis' format.
+        final List<Object?> xs = series.categories.values;
+        if (_xNumber(i < xs.length ? xs[i] : null) case final double x) {
+          final String? code = chart.categoryAxis.formatCode;
+          final String style = code == null
+              ? ''
+              : ' s="${codes.indexOf(code) + 1}"';
+          out.write(
+            '<c r="${_column(_xColumn(chart, s))}$r"$style>'
+            '<v>${_numText(x)}</v></c>',
+          );
+        }
+      }
       final List<double?> values = series.values.values;
       final double? value = i < values.length ? values[i] : null;
       if (value == null || !value.isFinite) continue;
@@ -311,7 +329,8 @@ String _sheetXml(Chart chart, List<String> codes) {
           ? ''
           : ' s="${codes.indexOf(series.formatCode!) + 1}"';
       out.write(
-        '<c r="${_column(s + 1)}$r"$style><v>${_numText(value)}</v></c>',
+        '<c r="${_column(_valueColumn(chart, s))}$r"$style>'
+        '<v>${_numText(value)}</v></c>',
       );
     }
     out.write('</row>');
@@ -657,14 +676,15 @@ String _chartXml(GalleryEntry entry) {
   for (int s = 0; s < chart.series.length; s++) {
     final ChartSeries series = chart.series[s];
     final ChartKind kind = _drawnKind(chart, series);
-    final String column = _column(s + 1);
+    final String column = _column(_valueColumn(chart, s));
+    final String xColumn = _column(_xColumn(chart, s));
     final List<double?> values = series.values.values;
     final String name = _escape(_seriesName(series, s));
     final String tx =
         '<c:tx><c:strRef><c:f>$sheet!\$$column\$1</c:f><c:strCache>'
         '<c:ptCount val="1"/><c:pt idx="0"><c:v>$name</c:v></c:pt>'
         '</c:strCache></c:strRef></c:tx>';
-    final String range = '$sheet!\$A\$2:\$A\$$last';
+    final String range = '$sheet!\$$xColumn\$2:\$$xColumn\$$last';
     final String cat = scatter
         ? '<c:xVal><c:numRef><c:f>$range</c:f><c:numCache><c:formatCode>'
               '${_escape(chart.categoryAxis.formatCode ?? 'General')}'

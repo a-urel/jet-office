@@ -198,14 +198,19 @@ void main() {
       expect(sers, hasLength(entry.chart.series.length), reason: entry.name);
       for (int s = 0; s < sers.length; s++) {
         final ChartSeries series = entry.chart.series[s];
-        final String column = String.fromCharCode(66 + s);
+        // A scatter series has its own x column before its values.
+        final bool scatter = entry.chart.kind == ChartKind.scatter;
+        final String column = String.fromCharCode(
+          scatter ? 66 + 2 * s : 66 + s,
+        );
+        final String x = scatter ? String.fromCharCode(65 + 2 * s) : 'A';
         final int last = series.values.values.length + 1;
         final List<String> refs = <String>[
           for (final XmlElement f in all(sers[s], 'c:f')) f.innerText,
         ];
         expect(refs, <String>[
           "'${entry.name}'!\$$column\$1",
-          "'${entry.name}'!\$A\$2:\$A\$$last",
+          "'${entry.name}'!\$$x\$2:\$$x\$$last",
           "'${entry.name}'!\$$column\$2:\$$column\$$last",
         ], reason: entry.name);
         // A scatter series caches its x values first, its values last.
@@ -452,6 +457,51 @@ void main() {
       xfs[int.parse(a2.getAttribute('s')!)].getAttribute('numFmtId'),
       numFmt.getAttribute('numFmtId'),
     );
+  });
+
+  test('each scatter series\' x and y caches equal the cells they name', () {
+    for (final String name in <String>['scatter_basic', 'scatter_dates']) {
+      final int index = indexOf(name);
+      final Map<String, double> cells = <String, double>{
+        for (final XmlElement c in all(
+          xml('xl/worksheets/sheet$index.xml'),
+          'c',
+        ))
+          if (c.getAttribute('t') == null)
+            c.getAttribute('r')!: double.parse(all(c, 'v').single.innerText),
+      };
+      final List<XmlElement> sers = all(chartOf(name), 'c:ser').toList();
+      expect(sers, hasLength(entries[index - 1].chart.series.length));
+      for (final XmlElement ser in sers) {
+        for (final String tag in <String>['c:xVal', 'c:yVal']) {
+          final XmlElement ref = all(ser, tag).single;
+          final RegExpMatch m = RegExp(
+            r'!\$([A-Z])\$(\d+):\$([A-Z])\$(\d+)$',
+          ).firstMatch(all(ref, 'c:f').single.innerText)!;
+          expect(m[1], m[3], reason: '$name $tag');
+          final int first = int.parse(m[2]!);
+          final int last = int.parse(m[4]!);
+          final Map<int, double> cached = <int, double>{
+            for (final XmlElement pt in all(ref, 'c:pt'))
+              int.parse(pt.getAttribute('idx')!): double.parse(
+                all(pt, 'c:v').single.innerText,
+              ),
+          };
+          expect(cached, <int, double>{
+            for (int r = first; r <= last; r++)
+              if (cells['${m[1]}$r'] case final double v) r - first: v,
+          }, reason: '$name $tag');
+          expect(cached, isNotEmpty, reason: '$name $tag');
+        }
+      }
+      // The x columns of two series differ.
+      if (sers.length > 1) {
+        expect(
+          all(all(sers[0], 'c:xVal').single, 'c:f').single.innerText,
+          isNot(all(all(sers[1], 'c:xVal').single, 'c:f').single.innerText),
+        );
+      }
+    }
   });
 
   test('a series on the secondary axis gets a value axis on the right that '

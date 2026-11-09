@@ -96,11 +96,15 @@ saydam alan. Aynı `gallery.xlsx` ve aynı uygulama kullanılır; sayfalar ve
 uygulamadaki grafikler J3'ün 16 grafiğinden sonra gelir.
 
 Bu grafiklerde Excel'in kendi kaydettiği bir dosya henüz yok. Dosyadaki XML,
-Excel'in Ekle menüsünün yazdığı bilinen değerlerle yazıldı; bu değerlerin hiçbiri
-kontrol edilmedi. Excel'in kendi varsayılanlarını okumak için ayrı adımlar
+Excel'in Ekle menüsünün ne yazdığına dair tahminlerle yazıldı (dilim kenarı,
+etiket yeri, işaretçiler, kılavuz çizgileri, ikincil eksen, mini grafik
+renkleri); bunların hiçbiri kontrol edilmedi. Yani bu bölümde hem dosya hem
+uygulama tahmindir. Excel'in kendi varsayılanlarını okumak için ayrı adımlar
 `test/fixtures/owner/charts/TALIMATLAR_J4.md` dosyasında (E1). O dosya gelince
 buradaki tahminler Excel'in yazdığı değerlerle değişir. Bu yüzden bu bölümde
-bulduğun her fark değerlidir: ya uygulama ya dosya yanlıştır.
+bulduğun her fark değerlidir: ya uygulama ya dosya yanlıştır, belki ikisi de.
+Hangisinin doğru olduğunu Excel'in kendi grafiği söyler (aşağıdaki
+"Excel'in kendi grafiği" adımı).
 
 Uygulamanın kendi tahminleri de kontrol edilmedi: ilk dilim saat 12'de başlar
 ve saat yönünde gider; halka deliği %75'tir; dilim kenarı arka plan renginde
@@ -128,7 +132,10 @@ serili halkada ilk seri en içteki halkadır; mini grafik çizgisi 0,75 punttur.
    ```
 
 3. `gallery.xlsx` dosyasını Excel'de aç. Excel onarım önerirse kabul etme, dur
-   ve iletiyi aynen yaz. Yakınlaştırmayı %100 yap. İki pencereyi yan yana koy.
+   ve iletiyi kelimesi kelimesine aynen yaz; özellikle `sparkline_line` ve
+   `sparkline_area` sayfalarındaki `D2` hücresinin mini grafiği için (bu,
+   dosyanın ilk kez yazdığı bir parçadır). Onarım iletisi, dosyayı yazan kodun
+   hatasıdır. Yakınlaştırmayı %100 yap. İki pencereyi yan yana koy.
 
 ### Karşılaştırma
 
@@ -140,17 +147,21 @@ Her grafikte J3'teki genel noktalara (renkler, gösterge, başlık, yazı tipi,
   - dilimlerin sırası ve ilk dilimin başladığı yer (saat 12 mi, saat yönünde
     mi);
   - dilim renkleri (`accent1`'den başlayarak);
-  - dilim kenarı: rengi ve kalınlığı. Dosya Excel'in bilinen değerini yazar
-    (beyaz, 1,5 punt), uygulama tahmini çizer (arka plan rengi, 0,75 punt);
-    hangisinin Excel'in kendi grafiğine uyduğunu yaz;
-  - veri etiketlerinin yeri ve kılavuz çizgileri (leader lines); dosyada
-    etiket yeri "En İyi Sığdırma"dır;
+  - dilim kenarı: rengi ve kalınlığı. Dosya da bir tahmin yazar (beyaz, 1,5
+    punt; kontrol edilmedi), uygulama da kendi tahminini çizer (arka plan
+    rengi, 0,75 punt; kontrol edilmedi); hangisinin Excel'in kendi grafiğine
+    uyduğunu yaz;
+  - veri etiketlerinin yeri; dosyada etiket yeri "En İyi Sığdırma"dır
+    (kontrol edilmedi);
+  - etiketlerin kılavuz çizgileri (leader lines); dosyada açıktır (kontrol
+    edilmedi);
   - `pie_small_slices`: küçük dilimlerin etiketleri ve yüzdeler;
   - `pie_negative`: `-4` nasıl çizildi (mutlak değer mi, hiç mi); etiketi ne
     yazıyor.
 - `donut_center`, `donut_two_series` (halka):
-  - delik büyüklüğü. `donut_center`'da delik %55, `donut_two_series`'te %75
-    (tahmin);
+  - delik büyüklüğü. `donut_center`'da delik %55 (grafiğin kendi değeri),
+    `donut_two_series`'te %75 (tahmin, kontrol edilmedi);
+  - ilk dilimin yeri ve dilim kenarı, pastadaki gibi (kontrol edilmedi);
   - ortadaki metin (`Toplam 45`): Excel'de yoktur. Bunu karşılaştırma, geri
     kalanını karşılaştır;
   - `donut_center`'ın üçüncü dilimi bilerek kırmızıdır (`C0392B`);
@@ -160,28 +171,59 @@ Her grafikte J3'teki genel noktalara (renkler, gösterge, başlık, yazı tipi,
 - `sparkline_line`, `sparkline_area` (mini grafik): Excel'de grafik değil,
   `D2` hücresindeki mini grafiktir (Ekle > Mini Grafikler > Çizgi). Uygulamada
   120 x 40 noktadır; hücre de yaklaşık bu boyuttadır. Çizgi kalınlığına,
-  rengine ve en küçük değerin 0 olmasına bak. Excel'de alan mini grafiği
+  rengine (dosyadaki renkler tahmin, kontrol edilmedi) ve en küçük değerin 0
+  olmasına bak. Excel'de alan mini grafiği
   yoktur: `sparkline_area` Excel'de çizgidir, alan dolgusunu karşılaştırma.
 - `scatter_basic`, `scatter_dates` (dağılım):
   - iki eksenin aralığı ve adımı;
-  - kılavuz çizgileri (yalnızca yatay mı);
-  - işaretçiler; noktalar arasında çizgi olmamalı;
+  - kılavuz çizgileri: dosyada da uygulamada da yalnızca yatay (kontrol
+    edilmedi);
+  - işaretçiler; dosyada noktalar arasında çizgi yok (kontrol edilmedi);
+  - `scatter_basic`: `North` ve `South` serisinin noktaları kendi x
+    değerlerinde mi (her serinin x değerleri sayfada kendi sütunundadır);
   - `scatter_dates`: yatay eksendeki tarihlerin biçimi (`d mmm`, örneğin
     `1 Jan`).
 - `combo_column_line`, `line_secondary` (ikincil eksen):
-  - ikincil eksenin yeri (sağda mı) ve aralığı;
-  - ikincil eksende kılavuz çizgisi olmamalı;
-  - `combo_column_line`: çizgide işaretçi var mı (dosyada yok, uygulamada
-    var); negatif sütun (`-4`);
+  - ikincil eksenin yeri (dosyada da uygulamada da sağda; kontrol edilmedi)
+    ve aralığı;
+  - ikincil eksende kılavuz çizgisi: dosyada da uygulamada da yok (kontrol
+    edilmedi);
+  - `combo_column_line`: çizgide işaretçi var mı. Dosyada yok, uygulamada
+    var; ikisi de tahmin (kontrol edilmedi). Negatif sütun (`-4`);
   - `line_secondary`: ikincil eksenin başlığı (`Units`).
 - `combo_area_column_line` (alan, sütun ve çizgi tek eksende): çizim sırası
-  (alan arkada, çizgi önde), renkler ve çizgideki işaretçiler.
+  (alan arkada, çizgi önde), renkler ve çizgideki işaretçiler (dosyada yok,
+  uygulamada var; kontrol edilmedi).
 - `line_smooth` (düzgün çizgi): `Smooth` serisinin eğrisinin biçimi; tepe
   noktalarını aşıyor mu. `Straight` serisi düz kalmalı ve boşluğu (Çarşamba)
   korumalı.
 - `area_translucent` (yarı saydam alan): Excel'in varsayılan alanı yarı saydam
   değildir; dosyada bu sayfa düz yığılmış alandır. Saydamlığı karşılaştırma;
   yalnızca eksenlere, renklere ve göstergeye bak.
+
+### Excel'in kendi grafiği
+
+J3'te çubuk boşlukları için yaptığın gibi, tahminleri Excel'in kendi
+grafiğiyle karşılaştır. Her adımda yalnızca grafiği ekle, hiçbir ayarı
+değiştirme. Menü adları Türkçe Excel'e göredir; yanında İngilizcesi var.
+
+1. `pie_basic` sayfasında `A1:B5` hücrelerini seç. **Ekle > Grafik > Pasta**
+   (Insert > Chart > Pie), ilk 2-B pasta. Sonra **Grafik Tasarımı > Grafik
+   Öğesi Ekle > Veri Etiketleri > En İyi Sığdırma** (Add Chart Element > Data
+   Labels > Best Fit).
+2. `donut_two_series` sayfasında `A1:C5` hücrelerini seç. **Ekle > Grafik >
+   Halka** (Doughnut).
+3. `combo_column_line` sayfasında `A1:C5` hücrelerini seç. **Ekle > Grafik >
+   Birleşik > Kümelenmiş Sütun - İkincil Eksende Çizgi** (Combo > Clustered
+   Column - Line on Secondary Axis).
+
+Her eklenen grafiği hem dosyadaki grafikle hem uygulamadakiyle karşılaştır:
+dilim kenarının rengi ve kalınlığı, delik büyüklüğü, ilk dilimin yeri ve yönü,
+etiketlerin yeri ve kılavuz çizgileri, ikincil eksenin yeri ve kılavuz
+çizgileri, çizgideki işaretçiler. Her fark için hangisinin (dosya mı, uygulama
+mı) Excel'in kendi grafiğinden ayrıldığını yaz, örneğin
+`pie_basic: Excel'in kendi pastasında kenar beyaz ve kalın; uygulamada ince`.
+Dosyayı kaydetme.
 
 ### Monépro görünümü
 
