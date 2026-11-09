@@ -27,14 +27,14 @@ theme's in `excel-checks.md`.
 | Value tick labels | Font, size, colour; number format | Coarsening and thinning |
 | Category labels | Level, then skipped at most every second (Excel's spacing never exceeded 2 in the C rows) | Placed in a band under the plot; turned and cut by this package's own order |
 | Grid lines | Value grid on, category grid off, 0.75 pt `D9D9D9` | None |
-| Axis lines | Category axis line, 0.75 pt `D9D9D9` | A value axis line is drawn; Excel's default has none |
+| Axis lines | Category axis line, 0.75 pt `D9D9D9`, no value axis line | Same in the Office theme; other themes draw a value axis line unless `valueAxisLine` is false |
 | Bars | Gap width 219, overlap -27, no outline | Gap and overlap clamped to Excel's ranges |
 | Lines and markers | 2.25 pt, circle markers of 5 pt | Cap and marker outline are a backend's matter |
 | Title | 14 pt `595959` Aptos Narrow | Shown only when the chart has one; no default title |
 | Legend | 9 pt text | Shown unless hidden, even for one series; dropped whole when a side legend does not fit |
 | Data labels | 9 pt text | Never overlap or leave the plot |
 | Axis titles | Shown when set | Use the axis label style |
-| Chart area | White background | No border |
+| Chart area | White background, 0.75 pt `D9D9D9` border | Same in the Office theme; other themes have no border unless `border` is set |
 
 ## Deliberate differences
 
@@ -107,9 +107,6 @@ theme's in `excel-checks.md`.
   shows the chart's own title when it has one, and the legend unless the
   chart hides it. Which to show is the caller's (`jet_office` reads it from
   the file).
-- **The value axis has a line, and the chart area no border.** Excel's
-  default value axis has none (`a:noFill`) and its chart area has a 0.75 pt
-  `D9D9D9` border. The theme has no setting for either yet.
 - **Clamping and stacked lines.** A value's position is clamped to the plot
   slightly differently from where its mark is, and stacked lines take the
   extent of the stacked sums; neither has been compared with Excel, and

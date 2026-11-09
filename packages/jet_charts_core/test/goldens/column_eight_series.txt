@@ -1,4 +1,4 @@
-rect background 0.00,0.00 360.00x240.00 fill=FFFFFF stroke=- width=1.00
+rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
 text title 129.60,8.00 100.80x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Eight series"
 rect legend 20.50,208.40 319.00x23.60 fill=- stroke=- width=1.00
 rect legend/0/symbol 20.50,210.30 7.00x7.00 fill=156082 stroke=- width=1.00
@@ -59,7 +59,6 @@ clip plot/clip 22.80,36.20 329.20x151.40
   rect series/7/bar/1 173.13,111.90 6.81x75.70 fill=8C441E stroke=- width=1.00
   rect series/7/bar/2 255.43,57.83 6.81x129.77 fill=8C441E stroke=- width=1.00
   rect series/7/bar/3 337.73,122.71 6.81x64.89 fill=8C441E stroke=- width=1.00
-path axis/value/line 22.80,36.20 22.80,187.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path axis/category/line 22.80,187.60 352.00,187.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 text axis/value/label/0 13.40,182.20 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
 text axis/value/label/1 13.40,160.57 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"

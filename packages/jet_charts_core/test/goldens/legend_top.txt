@@ -1,4 +1,4 @@
-rect background 0.00,0.00 360.00x240.00 fill=FFFFFF stroke=- width=1.00
+rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
 text title 112.80,8.00 134.40x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Sales by quarter"
 rect legend 113.70,30.80 132.60x10.80 fill=- stroke=- width=1.00
 rect legend/0/symbol 113.70,32.70 7.00x7.00 fill=156082 stroke=- width=1.00
@@ -32,7 +32,6 @@ clip plot/clip 22.80,53.00 329.20x164.20
   rect series/2/bar/1 157.31,159.73 14.36x57.47 fill=196B24 stroke=- width=1.00
   rect series/2/bar/2 239.61,167.94 14.36x49.26 fill=196B24 stroke=- width=1.00
   rect series/2/bar/3 321.91,110.47 14.36x106.73 fill=196B24 stroke=- width=1.00
-path axis/value/line 22.80,53.00 22.80,217.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path axis/category/line 22.80,217.20 352.00,217.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 text axis/value/label/0 13.40,211.80 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
 text axis/value/label/1 13.40,195.38 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"

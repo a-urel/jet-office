@@ -1,4 +1,4 @@
-rect background 0.00,0.00 360.00x240.00 fill=FFFFFF stroke=- width=1.00
+rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
 text title 117.00,8.00 126.00x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Profit and loss"
 rect legend 136.00,221.20 88.00x10.80 fill=- stroke=- width=1.00
 rect legend/0/symbol 136.00,223.10 7.00x7.00 fill=156082 stroke=- width=1.00
@@ -23,7 +23,6 @@ clip plot/clip 28.20,36.20 323.80x164.20
   rect series/1/bar/1 152.08,92.50 18.15x37.53 fill=E97132 stroke=- width=1.00
   rect series/1/bar/2 233.03,130.03 18.15x56.30 fill=E97132 stroke=- width=1.00
   rect series/1/bar/3 313.98,106.57 18.15x23.46 fill=E97132 stroke=- width=1.00
-path axis/value/line 28.20,36.20 28.20,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path axis/category/line 28.20,130.03 352.00,130.03 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 text axis/value/label/0 8.00,195.00 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "-15"
 text axis/value/label/1 8.00,171.54 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "-10"

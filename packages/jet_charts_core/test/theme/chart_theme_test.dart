@@ -143,6 +143,31 @@ void main() {
     expect(base.copyWith().hashCode, base.hashCode);
   });
 
+  test("office theme has Excel's border and no value axis line", () {
+    final ChartTheme office = ChartTheme.office;
+    expect(office.border!.rgb, 0xD9D9D9);
+    expect(office.borderWidth, 0.75);
+    expect(office.valueAxisLine, isFalse);
+    final ChartTheme plain = custom();
+    expect(plain.border, isNull);
+    expect(plain.borderWidth, 0.75);
+    expect(plain.valueAxisLine, isTrue);
+    final ChartTheme changed = office.copyWith(
+      border: ChartColor.rgb(0x112233),
+      borderWidth: 2,
+      valueAxisLine: true,
+    );
+    expect(changed.border!.rgb, 0x112233);
+    expect(changed.borderWidth, 2);
+    expect(changed.valueAxisLine, isTrue);
+    expect(changed, isNot(office));
+    expect(office.copyWith(valueAxisLine: true), isNot(office));
+    expect(office.copyWith(borderWidth: 1), isNot(office));
+    expect(office.copyWith(border: ChartColor.rgb(1)), isNot(office));
+    expect(office.copyWith(), office);
+    expect(office.copyWith().hashCode, office.hashCode);
+  });
+
   test('palette and semantic are copied and unmodifiable', () {
     final List<ChartColor> palette = <ChartColor>[ChartColor.rgb(1)];
     final Map<String, ChartColor> semantic = <String, ChartColor>{

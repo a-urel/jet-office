@@ -26,6 +26,8 @@ ChartTheme buildOfficeTheme() {
     gridLine: line,
     axisLine: line,
     background: ChartColor.rgb(0xFFFFFF),
+    border: line,
+    valueAxisLine: false,
     exportColors: ChartExportColors.fileTheme,
   );
 }

@@ -13,6 +13,7 @@ import 'package:jet_core/jet_core.dart';
 import '../model/chart.dart';
 import '../model/chart_kind.dart';
 import '../scale/value_scale.dart';
+import '../theme/chart_color.dart';
 import '../theme/chart_theme.dart';
 import 'axis_layout.dart';
 import 'chart_ids.dart' as ids;
@@ -127,11 +128,7 @@ final class FrameContext {
   double get gap => theme.spacing.labelGap;
 
   /// The background, which fills the size.
-  RectPrimitive background() => RectPrimitive(
-    ids.background,
-    ChartRect(0, 0, size.width, size.height),
-    fill: theme.background,
-  );
+  RectPrimitive background() => backgroundPrimitive(theme, size);
 
   /// The scale with at most [maxIntervals] intervals.
   ValueScale scaleFor(int maxIntervals) => autoValueScale(
@@ -202,7 +199,7 @@ extension FramePaint on FrameContext {
         plot,
         layoutMarks(chart, resolved, theme, plot, scale),
       ),
-      if (chart.valueAxis.visible)
+      if (chart.valueAxis.visible && theme.valueAxisLine)
         valueAxisLine(
           plot,
           horizontal: bar,
@@ -359,4 +356,29 @@ extension FramePaint on FrameContext {
             (ids.axisLabelId(ids.valueAxis, i), ticks[i]),
     ];
   }
+}
+
+/// The background of a chart of [size]: the theme's fill over the whole size.
+///
+/// When the theme has a border, the rectangle carries it as its stroke. The
+/// rectangle is inset by half the border's width, so the stroke stays inside
+/// [size]; when the size is no larger than the border's width, no stroke is
+/// drawn.
+RectPrimitive backgroundPrimitive(ChartTheme theme, ChartSize size) {
+  final ChartColor? border = theme.border;
+  final double w = theme.borderWidth;
+  if (border == null || !(w > 0) || size.width <= w || size.height <= w) {
+    return RectPrimitive(
+      ids.background,
+      ChartRect(0, 0, size.width, size.height),
+      fill: theme.background,
+    );
+  }
+  return RectPrimitive(
+    ids.background,
+    ChartRect(w / 2, w / 2, size.width - w, size.height - w),
+    fill: theme.background,
+    stroke: border,
+    strokeWidth: w,
+  );
 }

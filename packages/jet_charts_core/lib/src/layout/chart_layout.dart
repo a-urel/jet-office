@@ -11,6 +11,7 @@ import '../scale/value_scale.dart';
 import '../theme/chart_theme.dart';
 import 'chart_ids.dart' as ids;
 import 'frame.dart';
+import 'frame_paint.dart' show backgroundPrimitive;
 import 'geometry.dart';
 import 'legend_layout.dart';
 import 'primitives.dart';
@@ -199,11 +200,7 @@ ChartLayout _placeholder(
   TextMeasurer measurer,
 ) {
   final List<ChartPrimitive> primitives = <ChartPrimitive>[
-    RectPrimitive(
-      ids.background,
-      ChartRect(0, 0, size.width, size.height),
-      fill: theme.background,
-    ),
+    backgroundPrimitive(theme, size),
   ];
   final List<ChartHiddenLabel> hidden = <ChartHiddenLabel>[];
   final double p = theme.spacing.padding;

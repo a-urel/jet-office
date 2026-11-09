@@ -36,7 +36,9 @@ the line chart's; the workbook theme is Excel's default (Office, Aptos).
 | Spacing: label gap 4, minimum text gap 2 pt | Unconfirmed | No source |
 
 What the file states that the theme has no value for (`docs/parity.md` lists
-each as a difference):
+each as a difference); the value axis line and the chart border below are
+theme values now (`ChartTheme.valueAxisLine`, `border`, `borderWidth`; the
+Office theme has no value axis line and a 0.75 pt `D9D9D9` border):
 
 - A chart of one series shows a title (`c:autoTitleDeleted` 0, Excel's text
   "Grafik Başlığı") and no legend.

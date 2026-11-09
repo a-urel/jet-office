@@ -1,4 +1,4 @@
-rect background 0.00,0.00 360.00x240.00 fill=FFFFFF stroke=- width=1.00
+rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
 rect plot 22.80,13.40 329.20x203.80 fill=- stroke=- width=1.00
 path grid/value/0 22.80,217.20 352.00,217.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path grid/value/1 22.80,196.82 352.00,196.82 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
@@ -16,7 +16,6 @@ clip plot/clip 22.80,13.40 329.20x203.80
   rect series/0/bar/1 133.35,33.78 25.80x183.42 fill=156082 stroke=- width=1.00
   rect series/0/bar/2 215.65,125.49 25.80x91.71 fill=156082 stroke=- width=1.00
   rect series/0/bar/3 297.95,64.35 25.80x152.85 fill=156082 stroke=- width=1.00
-path axis/value/line 22.80,13.40 22.80,217.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path axis/category/line 22.80,217.20 352.00,217.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 text axis/value/label/0 13.40,211.80 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
 text axis/value/label/1 13.40,191.42 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"

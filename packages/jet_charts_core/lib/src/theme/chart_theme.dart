@@ -27,6 +27,9 @@ final class ChartTheme {
     required this.gridLine,
     required this.axisLine,
     required this.background,
+    this.border,
+    this.borderWidth = 0.75,
+    this.valueAxisLine = true,
     this.gapWidthPercent = 219,
     this.lineWidth = 2.25,
     this.markerSize = 5,
@@ -51,7 +54,8 @@ final class ChartTheme {
   /// (`chart_defaults.xlsx`, 2026-11-08; `docs/excel-checks.md` gives each
   /// value's source): the font family `Aptos Narrow` (the theme's minor
   /// font), 9 pt axis labels and a 14 pt title, the text colour `595959`, the
-  /// grid and axis line colour `D9D9D9`, the background `FFFFFF`,
+  /// grid and axis line colour `D9D9D9`, the background `FFFFFF`, a 0.75 pt
+  /// [border] of `D9D9D9` and no [valueAxisLine],
   /// [gapWidthPercent] 219, [lineWidth] 2.25, [markerSize] 5, and of
   /// [spacing] the line widths, the overlap and the tick length. Still
   /// unconfirmed: 9 pt for the legend and data labels, and the other gaps of
@@ -84,6 +88,20 @@ final class ChartTheme {
 
   /// The colour behind the chart.
   final ChartColor background;
+
+  /// The colour of the chart area's border, or null for none.
+  ///
+  /// The border is drawn inside the chart's size. The Office theme has the
+  /// colour of Excel's default, `D9D9D9`; see `docs/excel-checks.md`.
+  final ChartColor? border;
+
+  /// The width of the border, in points. Excel's default, 0.75, is verified;
+  /// it is drawn only when [border] is set.
+  final double borderWidth;
+
+  /// Whether the value axis has a line. Excel's default chart has none, so
+  /// the Office theme does not; other themes draw one unless they say not to.
+  final bool valueAxisLine;
 
   /// The gap between the bars or columns of a category, as a percentage of a
   /// bar's width. Excel's default, 219, is verified; see
@@ -165,6 +183,9 @@ final class ChartTheme {
     ChartColor? gridLine,
     ChartColor? axisLine,
     ChartColor? background,
+    ChartColor? border,
+    double? borderWidth,
+    bool? valueAxisLine,
     double? gapWidthPercent,
     double? lineWidth,
     double? markerSize,
@@ -181,6 +202,9 @@ final class ChartTheme {
       gridLine: gridLine ?? this.gridLine,
       axisLine: axisLine ?? this.axisLine,
       background: background ?? this.background,
+      border: border ?? this.border,
+      borderWidth: borderWidth ?? this.borderWidth,
+      valueAxisLine: valueAxisLine ?? this.valueAxisLine,
       gapWidthPercent: gapWidthPercent ?? this.gapWidthPercent,
       lineWidth: lineWidth ?? this.lineWidth,
       markerSize: markerSize ?? this.markerSize,
@@ -201,6 +225,9 @@ final class ChartTheme {
         gridLine == other.gridLine &&
         axisLine == other.axisLine &&
         background == other.background &&
+        border == other.border &&
+        borderWidth == other.borderWidth &&
+        valueAxisLine == other.valueAxisLine &&
         gapWidthPercent == other.gapWidthPercent &&
         lineWidth == other.lineWidth &&
         markerSize == other.markerSize &&
@@ -219,6 +246,9 @@ final class ChartTheme {
     gridLine,
     axisLine,
     background,
+    border,
+    borderWidth,
+    valueAxisLine,
     gapWidthPercent,
     lineWidth,
     markerSize,

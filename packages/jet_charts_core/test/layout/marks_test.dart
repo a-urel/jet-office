@@ -370,7 +370,7 @@ void main() {
     );
     expect(
       order.indexOf(ids.plotClip),
-      lessThan(order.indexOf(ids.axisLineId(ids.valueAxis))),
+      lessThan(order.indexOf(ids.axisLineId(ids.categoryAxis))),
     );
   });
 

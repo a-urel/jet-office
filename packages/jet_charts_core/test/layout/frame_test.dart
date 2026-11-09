@@ -507,6 +507,48 @@ void main() {
     }
   });
 
+  test("the Office theme draws Excel's border and no value axis line", () {
+    final ChartLayout layout = lay(chart(), const ChartSize(480, 288));
+    final RectPrimitive back = layout.primitives.first as RectPrimitive;
+    expect(back.id, ids.background);
+    expect(back.fill, ChartTheme.office.background);
+    expect(back.stroke!.rgb, 0xD9D9D9);
+    expect(back.strokeWidth, 0.75);
+    expect(back.rect, const ChartRect(0.375, 0.375, 479.25, 287.25));
+    expect(
+      flat(layout.primitives).map((ChartPrimitive p) => p.id),
+      isNot(contains('axis/value/line')),
+    );
+    expect(problems(layout), isEmpty);
+  });
+
+  test('a theme without border and with a value axis line draws both ways', () {
+    final ChartTheme old = ChartTheme.office.copyWith(valueAxisLine: true);
+    final ChartTheme plain = ChartTheme(
+      palette: old.palette,
+      axisLabels: old.axisLabels,
+      titleText: old.titleText,
+      legendText: old.legendText,
+      dataLabels: old.dataLabels,
+      gridLine: old.gridLine,
+      axisLine: old.axisLine,
+      background: old.background,
+    );
+    final ChartLayout layout = layoutChart(
+      chart(),
+      theme: plain,
+      size: const ChartSize(480, 288),
+      measurer: measurer,
+    );
+    final RectPrimitive back = layout.primitives.first as RectPrimitive;
+    expect(back.stroke, isNull);
+    expect(back.rect, const ChartRect(0, 0, 480, 288));
+    expect(
+      flat(layout.primitives).map((ChartPrimitive p) => p.id),
+      contains('axis/value/line'),
+    );
+  });
+
   test('a tiny chart draws only its background', () {
     for (final ChartSize size in const <ChartSize>[
       ChartSize(0, 0),
@@ -517,7 +559,18 @@ void main() {
       expect(layout.primitives, hasLength(1), reason: '$size');
       final RectPrimitive back = layout.primitives.single as RectPrimitive;
       expect(back.id, ids.background);
-      expect(back.rect, ChartRect(0, 0, size.width, size.height));
+      expect(back.fill, ChartTheme.office.background);
+      // The border's stroke stays inside the size, so a size no larger than
+      // its width has none.
+      if (size.width <= 0.75 || size.height <= 0.75) {
+        expect(back.rect, ChartRect(0, 0, size.width, size.height));
+        expect(back.stroke, isNull);
+      } else {
+        expect(
+          back.rect,
+          ChartRect(0.375, 0.375, size.width - 0.75, size.height - 0.75),
+        );
+      }
       expect(layout.plotArea, isNull);
       expect(
         layout.hidden.map((ChartHiddenLabel h) => h.id),
