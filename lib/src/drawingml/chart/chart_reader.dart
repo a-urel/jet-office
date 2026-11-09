@@ -66,8 +66,12 @@ final class DrawingChartRead {
 /// writing it in [theme]. [themeColors] are the file theme's colours, which
 /// give a scheme colour its RGB value (the Office theme's when `null`).
 ///
-/// Never throws. Bytes that are not well-formed UTF-8 XML, or whose root is
-/// not `c:chartSpace` with a `c:chart`, give no chart and
+/// Never throws, whatever [theme] holds: when the writer refuses it (a line
+/// width, marker size or text size the part cannot hold), the part is read
+/// with no typed form.
+///
+/// Bytes that are not well-formed UTF-8 XML, or whose root is not
+/// `c:chartSpace` with a `c:chart`, give no chart and
 /// [DrawingChartIssue.unreadable]. A kind the model does not draw gives a
 /// [ChartKind.unsupported] chart and [DrawingChartIssue.unsupportedKind]; its
 /// `unsupportedName` is the names of the plot area's groups joined by `+`
@@ -346,8 +350,9 @@ final class _ChartReader {
     );
   }
 
-  /// The typed form of the part, or `null` when its ids cannot be written or
-  /// writing it does not give [bytes] again.
+  /// The typed form of the part, or `null` when its ids cannot be written,
+  /// the writer refuses [theme] (an [ArgumentError]), or writing it does not
+  /// give [bytes] again.
   DrawingChartSpace? _typed(
     Uint8List bytes,
     Chart chart,
@@ -384,7 +389,14 @@ final class _ChartReader {
       ),
       autoTitle: autoTitle,
     );
-    final DrawingChartWritten written = writeDrawingChartSpace(space, theme);
+    final DrawingChartWritten written;
+    try {
+      written = writeDrawingChartSpace(space, theme);
+    } on ArgumentError {
+      // The writer refuses the reader's theme (a line width, marker size or
+      // text size the part cannot hold): the part is read but not typed.
+      return null;
+    }
     return xmlDifference(written.bytes, bytes) == null ? space : null;
   }
 

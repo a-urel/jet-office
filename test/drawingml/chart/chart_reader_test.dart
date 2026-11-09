@@ -426,6 +426,28 @@ void main() {
   });
 
   group('parts that are not typed', () {
+    test('a theme the writer refuses gives a view only, never a throw', () {
+      final ChartTextStyle text = _office.titleText;
+      for (final ChartTheme theme in <ChartTheme>[
+        _office.copyWith(lineWidth: double.nan),
+        _office.copyWith(markerSize: double.infinity),
+        _office.copyWith(markerSize: -1),
+        _office.copyWith(titleText: text.copyWith(size: double.nan)),
+        _office.copyWith(axisLabels: text.copyWith(size: 0.5)),
+        _office.copyWith(legendText: text.copyWith(size: 4001)),
+      ]) {
+        for (final String xml in <String>[excelColumnChart, excelLineChart]) {
+          final DrawingChartRead read = readDrawingChartSpace(
+            _bytes(xml),
+            theme: theme,
+          );
+          expect(read.chart, _read(xml).chart);
+          expect(read.typed, isNull);
+          expect(read.issues, isEmpty);
+        }
+      }
+    });
+
     test('dk1 in place of tx1 gives a view only', () {
       final DrawingChartRead read = _read(
         excelColumnChart.replaceAll('"tx1"', '"dk1"'),
@@ -447,7 +469,7 @@ void main() {
       expect(read.typed, isNull);
     });
 
-    test('a part without c16 ids is read but not typed', () {
+    test('a part without c16 ids is read and typed, with no series ids', () {
       final String xml = excelColumnChart.replaceFirst(
         RegExp('<c:extLst><c:ext uri="{C3380CC4.*?</c:extLst>'),
         '',

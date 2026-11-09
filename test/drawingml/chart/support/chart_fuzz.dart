@@ -236,8 +236,8 @@ void exerciseChartCase(FuzzCase c) {
 /// `readDrawingChartSpace` must not throw. When it gives a typed form,
 /// `writeDrawingChartSpace` must write it without a throw, and reading what
 /// it wrote must give the same typed form again. `DrawingChart.opened` of
-/// [bytes] must give the reader's chart, typed form and issues without a
-/// throw, and encode [bytes] unchanged.
+/// [bytes] must give the reader's chart, typed form and issues (the same
+/// issues in the same order) without a throw, and encode [bytes] unchanged.
 ///
 /// Returns normally or throws a [StateError] naming the step that failed.
 void exerciseChart(Uint8List bytes, String entry) {
@@ -269,22 +269,42 @@ void exerciseChart(Uint8List bytes, String entry) {
       );
     }
   }
-  final DrawingChart part = DrawingChart.opened(bytes, theme: theme);
+  final DrawingChart part;
   try {
-    if (part.chart != read.chart ||
-        part.typed != read.typed ||
-        part.issues.length != read.issues.length) {
-      throw StateError('DrawingChart.opened read differently from the reader');
-    }
-  } on StateError {
-    rethrow;
+    part = DrawingChart.opened(bytes, theme: theme);
   } on Object catch (e) {
     throw StateError('DrawingChart.opened threw: $e');
   }
-  final List<Uint8List> encoded = part.encode();
+  final bool same;
+  try {
+    same =
+        part.chart == read.chart &&
+        part.typed == read.typed &&
+        _sameIssues(part.issues, read.issues);
+  } on Object catch (e) {
+    throw StateError('reading DrawingChart.opened threw: $e');
+  }
+  if (!same) {
+    throw StateError('DrawingChart.opened read differently from the reader');
+  }
+  final List<Uint8List> encoded;
+  try {
+    encoded = part.encode();
+  } on Object catch (e) {
+    throw StateError('DrawingChart.opened(...).encode() threw: $e');
+  }
   if (encoded.length != 1 || !_equal(encoded.single, bytes)) {
     throw StateError('DrawingChart.opened(...).encode() changed the bytes');
   }
+}
+
+/// Whether [a] and [b] hold the same issues in the same order.
+bool _sameIssues(List<DrawingChartIssue> a, List<DrawingChartIssue> b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 bool _equal(List<int> a, List<int> b) {

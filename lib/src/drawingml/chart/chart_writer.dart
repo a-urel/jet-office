@@ -65,12 +65,23 @@ final class DrawingChartWritten {
 /// the secondary axis or has a kind other than `null` or the chart's, when an
 /// axis id of `space.ids` is outside 0 to 4294967295 or the two are equal, or
 /// when one of its series ids is not a GUID in braces.
+///
+/// Also throws an [ArgumentError], naming the field (`theme.lineWidth`,
+/// `theme.spacing.gridLineWidth`, `theme.titleText.size` and the like), when
+/// a value of [theme] the part cannot hold is not finite or outside its
+/// range: the line widths ([ChartTheme.lineWidth] and the spacing's grid and
+/// axis line widths) within 0 and 1584 points (`ST_LineWidth`, 0 to 20116800
+/// EMU), [ChartTheme.markerSize] not negative (it is then kept within 2 and
+/// 72, Excel's range), and the size of each of the four text styles within 1
+/// and 4000 points (`ST_TextFontSize`, 100 to 400000 hundredths). The theme is
+/// checked whatever the chart uses of it.
 DrawingChartWritten writeDrawingChartSpace(
   DrawingChartSpace space,
   ChartTheme theme,
 ) {
   _checkExpressible(space.chart);
   _checkIds(space.ids);
+  _checkTheme(theme);
   final StringBuffer out = StringBuffer();
   final _ChartWriter writer = _ChartWriter(XmlWriter(out), space, theme);
   writer.write();
@@ -114,6 +125,49 @@ void _checkExpressible(Chart chart) {
         'must be null or ${chart.kind.name}',
       );
     }
+  }
+}
+
+/// The widest line `ST_LineWidth` holds, 20116800 EMU, in points.
+const double _maxLineWidth = 1584;
+
+/// The smallest and largest text size `ST_TextFontSize` holds (100 and
+/// 400000 hundredths of a point), in points.
+const double _minTextSize = 1;
+const double _maxTextSize = 4000;
+
+void _checkTheme(ChartTheme theme) {
+  void within(double value, String name, double low, double high) {
+    if (!value.isFinite || value < low || value > high) {
+      throw ArgumentError.value(
+        value,
+        'theme.$name',
+        'must be finite, within $low and $high',
+      );
+    }
+  }
+
+  within(theme.lineWidth, 'lineWidth', 0, _maxLineWidth);
+  within(theme.markerSize, 'markerSize', 0, double.maxFinite);
+  within(
+    theme.spacing.gridLineWidth,
+    'spacing.gridLineWidth',
+    0,
+    _maxLineWidth,
+  );
+  within(
+    theme.spacing.axisLineWidth,
+    'spacing.axisLineWidth',
+    0,
+    _maxLineWidth,
+  );
+  for (final (String name, ChartTextStyle style) in <(String, ChartTextStyle)>[
+    ('titleText', theme.titleText),
+    ('axisLabels', theme.axisLabels),
+    ('legendText', theme.legendText),
+    ('dataLabels', theme.dataLabels),
+  ]) {
+    within(style.size, '$name.size', _minTextSize, _maxTextSize);
   }
 }
 

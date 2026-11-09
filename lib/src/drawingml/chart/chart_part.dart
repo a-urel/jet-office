@@ -1,5 +1,6 @@
-/// The handle of a chart part (`xl/charts/chartN.xml`, `word/charts/chartN.xml`)
-/// the XLSX and DOCX hosts hold as its [PartContent].
+/// The handle of a chart part (`xl/charts/chartN.xml`,
+/// `word/charts/chartN.xml`) the XLSX and DOCX hosts hold as its
+/// [PartContent].
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -11,7 +12,7 @@
 /// and never throw.
 ///
 /// This layer imports `opc`, `xml`, `common`, `jet_charts_core` and `jet_core`
-/// only (decision 0014).
+/// only, never `xlsx` or `docx` (decisions 0014 and 0015).
 library;
 
 import 'dart:typed_data';
@@ -70,6 +71,13 @@ final class DrawingChart implements PartContent {
 
   /// The part in typed form: `null` for an opened part the writer would not
   /// reproduce; after [replace], the given space.
+  ///
+  /// The given space is returned as it was given, which can differ from what
+  /// reopening the encoded bytes gives: a UTC date reads back as a local one,
+  /// a category axis minimum the writer drops is gone, characters XML 1.0
+  /// forbids are scrubbed from the text, and a `NaN` in the axis scaling is
+  /// not written. Reopen the bytes ([DrawingChart.opened]) to see what the
+  /// part holds.
   DrawingChartSpace? get typed => _changed ? _space : _opened.typed;
 
   /// The data problems of the reader (opened part) or of the writer (after

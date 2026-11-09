@@ -790,7 +790,7 @@ void main() {
     });
   });
 
-  group('fix round 1', () {
+  group('clamping', () {
     test('gap width and overlap are clamped to Excel ranges', () {
       ChartTheme theme(double gap, double overlap) => _office.copyWith(
         gapWidthPercent: gap,
@@ -809,7 +809,9 @@ void main() {
       expect(fraction, contains('<c:overlap val="-27"/>'));
       expect(xml(theme(double.nan, 0)), contains('<c:gapWidth val="0"/>'));
     });
+  });
 
+  group('vertical axis titles', () {
     String axisTitleBodies(ChartKind kind, {required bool value}) {
       final String xml = _xml(
         _write(
@@ -862,7 +864,9 @@ void main() {
       );
       expect(xml, isNot(contains('-5400000')));
     });
+  });
 
+  group('ids', () {
     test('axis ids must be unsigned 32-bit and distinct', () {
       for (final DrawingChartIds ids in <DrawingChartIds>[
         const DrawingChartIds(categoryAxis: -1),
@@ -924,7 +928,9 @@ void main() {
         throwsArgumentError,
       );
     });
+  });
 
+  group('xstring escaping', () {
     test('Xstring look-alikes are escaped in c:v, c:f and c:formatCode, not '
         'in a:t', () {
       final String xml = _xml(
@@ -961,6 +967,100 @@ void main() {
   });
 
   group('ArgumentError', () {
+    test('for a theme value the part cannot hold, naming the field', () {
+      final ChartTextStyle text = _office.axisLabels.copyWith(size: 9);
+      final Map<String, ChartTheme> themes = <String, ChartTheme>{
+        for (final double v in <double>[double.nan, double.infinity, -1, 1585])
+          'lineWidth $v': _office.copyWith(lineWidth: v),
+        for (final double v in <double>[double.nan, double.infinity, -1])
+          'markerSize $v': _office.copyWith(markerSize: v),
+        'spacing.gridLineWidth 1585': _office.copyWith(
+          spacing: _office.spacing.copyWith(gridLineWidth: 1585),
+        ),
+        'spacing.axisLineWidth 1585': _office.copyWith(
+          spacing: _office.spacing.copyWith(axisLineWidth: 1585),
+        ),
+        for (final double v in <double>[
+          double.nan,
+          double.infinity,
+          0.5,
+          -9,
+          4001,
+        ]) ...<String, ChartTheme>{
+          'titleText.size $v': _office.copyWith(
+            titleText: text.copyWith(size: v),
+          ),
+          'axisLabels.size $v': _office.copyWith(
+            axisLabels: text.copyWith(size: v),
+          ),
+          'legendText.size $v': _office.copyWith(
+            legendText: text.copyWith(size: v),
+          ),
+          'dataLabels.size $v': _office.copyWith(
+            dataLabels: text.copyWith(size: v),
+          ),
+        },
+      };
+      themes.forEach((String label, ChartTheme theme) {
+        final String field = label.substring(0, label.indexOf(' '));
+        for (final ChartKind kind in <ChartKind>[
+          ChartKind.column,
+          ChartKind.line,
+        ]) {
+          expect(
+            () => _write(_chart(kind), theme: theme),
+            throwsA(
+              isA<ArgumentError>().having(
+                (ArgumentError e) => e.name,
+                'name',
+                'theme.$field',
+              ),
+            ),
+            reason: '$label, ${kind.name}',
+          );
+        }
+      });
+    });
+
+    test('not for theme values at the bounds the part can hold', () {
+      final ChartTextStyle text = _office.axisLabels.copyWith(size: 1);
+      for (final ChartTheme theme in <ChartTheme>[
+        _office.copyWith(
+          lineWidth: 0,
+          markerSize: 0,
+          titleText: text,
+          axisLabels: text,
+          legendText: text,
+          dataLabels: text,
+        ),
+        _office.copyWith(
+          lineWidth: 1584,
+          markerSize: 1e300,
+          spacing: _office.spacing.copyWith(
+            gridLineWidth: 1584,
+            axisLineWidth: 1584,
+          ),
+          titleText: text.copyWith(size: 4000),
+          axisLabels: text.copyWith(size: 4000),
+          legendText: text.copyWith(size: 4000),
+          dataLabels: text.copyWith(size: 4000),
+        ),
+      ]) {
+        final String xml = _xml(
+          _write(
+            _chart(
+              ChartKind.line,
+              title: const ChartTitle(text: 'T'),
+              legend: const ChartLegend(),
+              dataLabels: const ChartDataLabels(visible: true),
+            ),
+            theme: theme,
+          ),
+        );
+        _expectWellFormed(xml);
+      }
+    });
+
     test('for a kind the writer cannot express', () {
       for (final ChartKind kind in <ChartKind>[
         ChartKind.pie,

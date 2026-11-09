@@ -29,7 +29,7 @@ extension _SeriesWriting on _ChartWriter {
       w.end();
       w.start('c:marker');
       _value('c:symbol', 'circle');
-      _value('c:size', theme.markerSize.round().clamp(2, 72).toString());
+      _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
       w.start('c:spPr');
       _solidFill(color);
       w.start('a:ln');
