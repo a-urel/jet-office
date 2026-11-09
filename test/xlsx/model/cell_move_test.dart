@@ -235,14 +235,18 @@ void main() {
       final Uint8List before = book.save().bytes;
       for (final XlsxSheet sheet in book.sheets) {
         if (!sheetIsWorksheet(sheet)) continue;
-        _edit(
-          book,
+        // A note on the last row or column (m4_notes) refuses the insert,
+        // as Excel does; the refusal changes nothing either.
+        for (final ReferenceShift edit in <ReferenceShift>[
           ReferenceShift.insert(sheet.name, ShiftAxis.rows, 1048000, 3),
-        );
-        _edit(
-          book,
           ReferenceShift.insert(sheet.name, ShiftAxis.columns, 16000, 2),
-        );
+        ]) {
+          try {
+            _edit(book, edit);
+          } on StateError {
+            expect(f.name, 'm4_notes');
+          }
+        }
       }
       expect(
         comparePackages(before, book.save().bytes, ignoreBookkeeping: true),

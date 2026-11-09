@@ -103,6 +103,28 @@ final class ReferenceShift implements ReferenceMapper {
     return XlsxRange(range.firstRow, s.$1 - 1, range.lastRow, s.$2 - 1);
   }
 
+  /// A drawing corner on the edited axis after the edit: [at] is its 0-based
+  /// row or column and [offset] its offset into it. A start corner on the
+  /// first inserted row or column moves; an [end] corner there moves only
+  /// when it reaches into that row or column (an offset above 0), so a
+  /// picture ending at its top keeps its size. A corner in deleted rows or
+  /// columns goes to the start of the first one after them, at offset 0, so a
+  /// picture whose cells are all deleted keeps zero height or width. Capped
+  /// at the sheet's last row or column.
+  ({int at, int offset}) shiftAnchor(int at, int offset, {required bool end}) {
+    final int first = index - 1;
+    if (count > 0) {
+      if (at > first || (at == first && (!end || offset > 0))) {
+        return (at: _atMost(at + count, _limit - 1), offset: offset);
+      }
+      return (at: at, offset: offset);
+    }
+    final int n = -count;
+    if (at < first) return (at: at, offset: offset);
+    if (at >= first + n) return (at: at - n, offset: offset);
+    return (at: first, offset: 0);
+  }
+
   /// The cell at 0-based ([row], [column]) on [sheet] after the edit, or
   /// `null` when it is deleted or pushed off the sheet.
   ({int row, int column})? shiftCell(int row, int column) {

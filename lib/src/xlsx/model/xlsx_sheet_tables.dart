@@ -354,6 +354,18 @@ mixin _SheetTablesApi {
         'formulas arrives in W5.',
       );
     }
+    _dropTable(part, entry);
+  }
+
+  /// Takes the table of [entry] out of the sheet, its `<tablePart>`, its
+  /// relationship and, when nothing else names it, its part.
+  void _dropTable(
+    WorksheetPart part,
+    ({String partName, TablePart table}) entry,
+  ) {
+    final PackageReader reader = _host.reader;
+    final OpcPackage package = reader.package;
+    final String partName = entry.partName;
     final String sheetPart = _partName!;
     final List<String> ids = <String>[
       for (final PartRelationship rel in reader.relationshipsOf(
@@ -446,4 +458,56 @@ mixin _SheetTablesApi {
     for (final ({String partName, TablePart table}) t in tables)
       (name: t.table.displayName, range: t.table.range),
   ];
+}
+
+/// The `tables` holder of a sheet: on a row or column edit of the sheet each
+/// table's range shifts by Excel's rules ([TablePart.shiftedRange]), with
+/// its filter, sort state and columns ([TablePart.shiftedText]); a table
+/// whose every row or column is deleted goes, as `removeTable` takes it
+/// (its users become `#REF!` through the formula holders). On every edit
+/// each `calculatedColumnFormula` and `totalsRowFormula` goes through the
+/// rewriter, on the sheet.
+final class _TableHolder implements ReferenceHolder {
+  _TableHolder(this._sheet);
+
+  final XlsxSheet _sheet;
+
+  @override
+  String get holderName => 'tables';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    final String host = _sheet.name;
+    final ReferenceShift? local = edit != null && _editsSheet(edit, host)
+        ? edit
+        : null;
+    final List<({String partName, TablePart table})> tables =
+        List<({String partName, TablePart table})>.of(_sheet._sheetTables());
+    if (tables.isEmpty) return;
+    final PackageReader reader = _sheet._host.reader;
+    // Every refusal before any change.
+    final List<XlsxRange?> ranges = <XlsxRange?>[
+      for (final ({String partName, TablePart table}) t in tables)
+        local == null ? t.table.range : t.table.shiftedRange(local),
+    ];
+    _sheet._host.log.transaction(() {
+      for (int i = 0; i < tables.length; i++) {
+        final ({String partName, TablePart table}) entry = tables[i];
+        final XlsxRange? to = ranges[i];
+        if (to == null) {
+          if (reader.package.hasPart(entry.partName)) {
+            _sheet._dropTable(_sheet._editablePart('tables'), entry);
+          }
+          continue;
+        }
+        final String? text = entry.table.shiftedText(
+          local,
+          to,
+          (String formula) => rewriteFormula(formula, mapper, host),
+        );
+        if (text == null) continue;
+        _sheet._editTable(entry, () => entry.table.replaceText(text));
+      }
+    });
+  }
 }

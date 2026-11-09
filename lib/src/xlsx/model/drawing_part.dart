@@ -25,10 +25,12 @@ import '../../xml/utf8_buffer.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../drawing.dart';
+import '../formula/reference_shift.dart';
 import '../read/read_limits.dart';
 import 'comments_part.dart' show WarnFn;
 import 'item_group.dart'
     show checkListRoom, readerOf, renderElements, rewrittenElement;
+import 'reference_holders.dart' show SpliceEdit, spliceElement;
 
 /// One child of a drawing's root: the element as written and, for a picture
 /// the model lists, where it sits and what it is.
@@ -126,6 +128,87 @@ final class DrawingEntry {
       ..raw(r.sourceText(at, r.eventStart))
       ..end();
     return _entry(rewrittenElement(source, out.toString()), ids, _noWarning);
+  }
+
+  /// This entry after [edit], a row or column edit of its sheet, or `null`
+  /// when it does not move. Excel's three cases: a `twoCellAnchor` (its
+  /// `editAs` left out or `twoCell`) moves and resizes with its cells, both
+  /// markers shifting ([ReferenceShift.shiftAnchor]); a `oneCellAnchor`, or
+  /// a `twoCellAnchor` with `editAs="oneCell"`, moves, its `to` keeping its
+  /// distance from `from`; an `absoluteAnchor`, a `twoCellAnchor` with
+  /// `editAs="absolute"` and anything else stay. Only the text of the
+  /// markers' `row` or `col` and `rowOff` or `colOff` changes, whatever the
+  /// anchor holds (a picture, a shape, a chart, a group). Throws XML errors
+  /// as a reader does on what a file holds.
+  DrawingEntry? shiftedBy(ReferenceShift edit) {
+    if (source.namespaceUri != Ns.xdr) return null;
+    final String kind = source.localName;
+    if (kind != 'oneCellAnchor' && kind != 'twoCellAnchor') return null;
+    final String? editAs = kind == 'twoCellAnchor'
+        ? readerOf(source).getAttribute('editAs')
+        : null;
+    if (editAs == 'absolute') return null;
+    final bool sizes = kind == 'twoCellAnchor' && editAs != 'oneCell';
+    final bool rows = edit.axis == ShiftAxis.rows;
+    final String cellName = rows ? 'row' : 'col';
+    final String offsetName = rows ? 'rowOff' : 'colOff';
+    final Map<String, ({int at, int offset})> read =
+        <String, ({int at, int offset})>{};
+    final XmlPullReader r = readerOf(source);
+    final int depth = r.depth;
+    if (r.isEmptyElement) return null;
+    while (r.next()) {
+      if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+      if (r.eventType != XmlEventType.startElement) continue;
+      final String name = r.localName;
+      if (r.depth != depth + 1 ||
+          r.namespaceUri != Ns.xdr ||
+          (name != 'from' && name != 'to') ||
+          read.containsKey(name)) {
+        r.skip();
+        continue;
+      }
+      final XlsxAnchorPoint? point = _marker(r);
+      if (point == null) return null;
+      final int at = rows ? point.row : point.column;
+      final double pixels = rows ? point.offsetY : point.offsetX;
+      read[name] = (at: at, offset: (pixels * emuPerPixel).round());
+    }
+    final ({int at, int offset})? from = read['from'];
+    if (from == null) return null;
+    final ({int at, int offset}) movedFrom = edit.shiftAnchor(
+      from.at,
+      from.offset,
+      end: false,
+    );
+    final Map<String, ({int at, int offset})> next =
+        <String, ({int at, int offset})>{'from': movedFrom};
+    final ({int at, int offset})? to = read['to'];
+    if (to != null) {
+      next['to'] = sizes
+          ? edit.shiftAnchor(to.at, to.offset, end: true)
+          : (at: to.at + movedFrom.at - from.at, offset: to.offset);
+    }
+    if (next['from'] == from && next['to'] == to) return null;
+    String? marker;
+    final OpaqueXml moved = spliceElement(source, (XmlPullReader r, int level) {
+      if (level == 1) {
+        marker = r.namespaceUri == Ns.xdr ? r.localName : null;
+        return null;
+      }
+      if (level != 2 || r.namespaceUri != Ns.xdr) return null;
+      final ({int at, int offset})? value = next[marker];
+      final ({int at, int offset})? was = read[marker];
+      if (value == null || was == null) return null;
+      if (r.localName == cellName && value.at != was.at) {
+        return SpliceEdit(text: (String _) => '${value.at}');
+      }
+      if (r.localName == offsetName && value.offset != was.offset) {
+        return SpliceEdit(text: (String _) => '${value.offset}');
+      }
+      return null;
+    });
+    return _entry(moved, ids, _noWarning);
   }
 }
 

@@ -35,8 +35,10 @@ import '../../opc/package.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
+import '../formula/reference_shift.dart';
 import '../range.dart';
 import '../table.dart';
+import 'reference_holders.dart' show rewrittenFormulaMarkup;
 
 /// One `<tableColumn>`: its decoded name, its totals and where its `name`
 /// attribute sits.
@@ -410,6 +412,359 @@ final class TablePart implements PartContent {
       ),
     );
   }
+
+  /// The cells the table covers after [edit], a row or column edit of its
+  /// sheet, or `null` when the edit deletes every row or column of it (the
+  /// table goes). Excel's rules (W5 Ruling 5): rows inserted inside grow it,
+  /// rows inserted right below it do not; deleting every body row keeps one
+  /// empty body row. Throws a [StateError], as Excel refuses, for deleting
+  /// the header row while body rows stay, and (not ruled yet) for deleting
+  /// the totals row, or every body row of a table with one, while the rest
+  /// stays.
+  XlsxRange? shiftedRange(ReferenceShift edit) {
+    final XlsxRange old = range;
+    final XlsxRange? moved = edit.shiftRange(old);
+    if (moved == null || edit.axis != ShiftAxis.rows || edit.count > 0) {
+      return moved;
+    }
+    final int first = edit.index - 1;
+    final int last = first - edit.count - 1;
+    bool deleted(int row) => row >= first && row <= last;
+    if (hasHeader && deleted(old.firstRow)) {
+      throw StateError(
+        'The header row of the table "$displayName" cannot be deleted while '
+        'its other rows stay.',
+      );
+    }
+    final int bodyFirst = old.firstRow + (hasHeader ? 1 : 0);
+    final int bodyLast = old.lastRow - (totalsRow ? 1 : 0);
+    final bool everyBodyRow = first <= bodyFirst && last >= bodyLast;
+    if (totalsRow && (deleted(old.lastRow) || everyBodyRow)) {
+      throw StateError(
+        'The totals row or every body row of the table "$displayName" cannot '
+        'be deleted while the rest of it stays.',
+      );
+    }
+    final int least = (hasHeader ? 1 : 0) + 1;
+    if (moved.rowCount >= least) return moved;
+    return XlsxRange(
+      moved.firstRow,
+      moved.firstColumn,
+      moved.firstRow + least - 1,
+      moved.lastColumn,
+    );
+  }
+
+  /// The part's text with [to] (from [shiftedRange]) as the table's range
+  /// after [edit], or with only its formulas rewritten when [edit] is
+  /// `null` (an edit of another sheet, a rename or a move); `null` when
+  /// nothing changes. The `ref` of the table and of its `<autoFilter>`
+  /// change; a column edit drops the `<tableColumn>` of each deleted column
+  /// and adds one, named `Column1` and on as Excel names them, for each
+  /// inserted inside, renumbering `count` and each `<filterColumn>`'s
+  /// `colId` (dropping a deleted column's); a `<sortState>` and its
+  /// conditions shift, one wholly deleted going. Every
+  /// `calculatedColumnFormula` and `totalsRowFormula` goes through
+  /// [rewrite], which gets the formula decoded and returns `null` for no
+  /// change. Every other character stays as written.
+  String? shiftedText(
+    ReferenceShift? edit,
+    XlsxRange? to,
+    String? Function(String formula) rewrite,
+  ) {
+    final String source = _text();
+    final XlsxRange old = range;
+    final XlsxRange next = to ?? old;
+    final bool columnEdit = edit != null && edit.axis == ShiftAxis.columns;
+    final List<(int, int, String)> edits = <(int, int, String)>[];
+    // The columns inserted before old column `insertAt`, for a column edit.
+    int insertAt = -1;
+    int inserted = 0;
+    if (columnEdit && edit.count > 0) {
+      inserted = next.columnCount - old.columnCount;
+      insertAt = edit.index - 1 - old.firstColumn;
+    }
+    bool columnDeleted(int i) {
+      if (!columnEdit || edit.count > 0) return false;
+      final int column = old.firstColumn + i;
+      return column >= edit.index - 1 && column < edit.index - 1 - edit.count;
+    }
+
+    final Set<String> names = <String>{
+      for (final _Column c in _columns) c.name.toLowerCase(),
+    };
+    int maxId = 0;
+    int nameNumber = 0;
+    String newColumns(String prefix) {
+      final StringBuffer out = StringBuffer();
+      for (int k = 0; k < inserted; k++) {
+        String name;
+        do {
+          name = 'Column${++nameNumber}';
+        } while (names.contains(name.toLowerCase()));
+        names.add(name.toLowerCase());
+        out.write(
+          '<${prefix}tableColumn id="${++maxId}" '
+          'name="${escapeXmlAttribute(escapeXstring(name))}"/>',
+        );
+      }
+      return out.toString();
+    }
+
+    final XmlPullReader r = XmlPullReader(source, maxDepth: 0x7FFFFFFF);
+    // First pass: the highest column id.
+    while (r.next()) {
+      if (r.eventType == XmlEventType.startElement &&
+          r.depth == 3 &&
+          r.localName == 'tableColumn' &&
+          r.namespaceUri == Ns.main) {
+        final int? id = int.tryParse(r.getAttribute('id')?.trim() ?? '');
+        if (id != null && id > maxId) maxId = id;
+      }
+    }
+    final XmlPullReader p = XmlPullReader(source, maxDepth: 0x7FFFFFFF);
+    bool inFilter = false;
+    bool inColumns = false;
+    bool filterSeen = false;
+    int columnsSeen = 0;
+    int column = -1;
+    XlsxRange? filter;
+    XlsxRange? filterTo;
+    String tag() => p.sourceText(p.eventStart, p.eventEnd);
+    void setRef(XlsxRange value) => edits.add((
+      p.eventStart,
+      p.eventEnd,
+      _withAttribute(tag(), 'ref', value.ref),
+    ));
+    void dropElement() {
+      final int start = p.eventStart;
+      final int tagEnd = p.eventEnd;
+      final bool empty = p.isEmptyElement;
+      p.skip();
+      edits.add((start, empty ? tagEnd : p.eventEnd, ''));
+    }
+
+    while (p.next()) {
+      final XmlEventType type = p.eventType;
+      if (type == XmlEventType.endElement &&
+          p.depth == 1 &&
+          p.localName == 'tableColumns' &&
+          inColumns &&
+          inserted > 0 &&
+          insertAt >= column + 1) {
+        final String name = p.qualifiedName;
+        final String prefix = name.substring(
+          0,
+          name.length - p.localName.length,
+        );
+        edits.add((p.eventStart, p.eventStart, newColumns(prefix)));
+        inserted = 0;
+      }
+      if (type != XmlEventType.startElement) continue;
+      final bool main = p.namespaceUri == Ns.main;
+      final int depth = p.depth;
+      if (depth == 1) {
+        if (next != old) setRef(next);
+        continue;
+      }
+      if (depth == 2) {
+        inFilter = false;
+        inColumns = false;
+        if (!main) continue;
+        switch (p.localName) {
+          case 'autoFilter' when !filterSeen:
+            filterSeen = true;
+            inFilter = true;
+            filter = _range(p.getAttribute('ref'));
+            if (filter != null && edit != null) {
+              filterTo = _filterAfter(filter, old, next, edit);
+              if (filterTo != null && filterTo != filter) setRef(filterTo);
+            }
+          case 'sortState' when edit != null:
+            _shiftSort(p, edit, edits, dropElement);
+          case 'tableColumns':
+            inColumns = ++columnsSeen == 1;
+            if (inColumns && next.columnCount != old.columnCount) {
+              edits.add((
+                p.eventStart,
+                p.eventEnd,
+                _withAttribute(tag(), 'count', '${next.columnCount}'),
+              ));
+            }
+        }
+        continue;
+      }
+      if (!main) continue;
+      if (inFilter && depth == 3 && edit != null) {
+        if (p.localName == 'sortState') {
+          _shiftSort(p, edit, edits, dropElement);
+        } else if (p.localName == 'filterColumn' &&
+            columnEdit &&
+            filter != null &&
+            filterTo != null) {
+          final int? id = int.tryParse(p.getAttribute('colId')?.trim() ?? '');
+          if (id == null) continue;
+          final ({int row, int column})? cell = edit.shiftCell(
+            filter.firstRow,
+            filter.firstColumn + id,
+          );
+          if (cell == null) {
+            dropElement();
+          } else if (cell.column - filterTo.firstColumn != id) {
+            edits.add((
+              p.eventStart,
+              p.eventEnd,
+              _withAttribute(
+                tag(),
+                'colId',
+                '${cell.column - filterTo.firstColumn}',
+              ),
+            ));
+          }
+        }
+        continue;
+      }
+      if (inColumns && depth == 3 && p.localName == 'tableColumn') {
+        column++;
+        if (inserted > 0 && insertAt == column) {
+          final String name = p.qualifiedName;
+          final String prefix = name.substring(
+            0,
+            name.length - p.localName.length,
+          );
+          edits.add((p.eventStart, p.eventStart, newColumns(prefix)));
+          inserted = 0;
+        }
+        if (columnDeleted(column)) dropElement();
+        continue;
+      }
+      if (inColumns &&
+          depth == 4 &&
+          (p.localName == 'calculatedColumnFormula' ||
+              p.localName == 'totalsRowFormula') &&
+          !p.isEmptyElement) {
+        final int start = p.eventEnd;
+        final StringBuffer text = StringBuffer();
+        bool nested = false;
+        while (p.next()) {
+          if (p.eventType == XmlEventType.endElement && p.depth < depth) {
+            break;
+          }
+          if (p.eventType == XmlEventType.characters ||
+              p.eventType == XmlEventType.cdata) {
+            text.write(p.text);
+          } else if (p.eventType == XmlEventType.startElement) {
+            nested = true;
+          }
+        }
+        if (nested) continue;
+        final String? markup = rewrittenFormulaMarkup(text.toString(), rewrite);
+        if (markup != null) edits.add((start, p.eventStart, markup));
+      }
+    }
+    if (edits.isEmpty) return null;
+    edits.sort(
+      ((int, int, String) a, (int, int, String) b) => a.$1.compareTo(b.$1),
+    );
+    final StringBuffer out = StringBuffer();
+    int at = 0;
+    for (final (int start, int end, String text) in edits) {
+      out
+        ..write(source.substring(at, start))
+        ..write(text);
+      at = end;
+    }
+    out.write(source.substring(at));
+    return out.toString();
+  }
+
+  /// The `<autoFilter>` range [filter] of a table over [old], now over
+  /// [next], after [edit]: the table's range less its totals row when it
+  /// was so before, else [filter] shifted.
+  XlsxRange? _filterAfter(
+    XlsxRange filter,
+    XlsxRange old,
+    XlsxRange next,
+    ReferenceShift edit,
+  ) {
+    XlsxRange body(XlsxRange table) => XlsxRange(
+      table.firstRow,
+      table.firstColumn,
+      table.lastRow - (totalsRow ? 1 : 0),
+      table.lastColumn,
+    );
+    if (filter == body(old)) return body(next);
+    return edit.shiftRange(filter);
+  }
+
+  /// Records in [edits] the shift of the `<sortState>` [p] is on: its `ref`
+  /// and each `<sortCondition>`'s; a condition wholly deleted goes, and the
+  /// state goes ([drop]) with its range or its last condition.
+  static void _shiftSort(
+    XmlPullReader p,
+    ReferenceShift edit,
+    List<(int, int, String)> edits,
+    void Function() drop,
+  ) {
+    final XlsxRange? range = _range(p.getAttribute('ref'));
+    if (range == null) return;
+    final XlsxRange? moved = edit.shiftRange(range);
+    if (moved == null) {
+      drop();
+      return;
+    }
+    final int mark = edits.length;
+    final int start = p.eventStart;
+    final String stateTag = p.sourceText(p.eventStart, p.eventEnd);
+    if (moved != range) {
+      edits.add((
+        start,
+        p.eventEnd,
+        _withAttribute(stateTag, 'ref', moved.ref),
+      ));
+    }
+    if (p.isEmptyElement) return;
+    final int depth = p.depth;
+    int conditions = 0;
+    int kept = 0;
+    while (p.next()) {
+      if (p.eventType == XmlEventType.endElement && p.depth < depth) break;
+      if (p.eventType != XmlEventType.startElement) continue;
+      final bool condition =
+          p.depth == depth + 1 &&
+          p.localName == 'sortCondition' &&
+          p.namespaceUri == Ns.main;
+      if (!condition) {
+        p.skip();
+        continue;
+      }
+      conditions++;
+      final XlsxRange? at = _range(p.getAttribute('ref'));
+      final XlsxRange? to = at == null ? null : edit.shiftRange(at);
+      final int cStart = p.eventStart;
+      final int cTagEnd = p.eventEnd;
+      final String cTag = p.sourceText(cStart, cTagEnd);
+      final bool empty = p.isEmptyElement;
+      p.skip();
+      final int cEnd = empty ? cTagEnd : p.eventEnd;
+      if (at != null && to == null) {
+        edits.add((cStart, cEnd, ''));
+        continue;
+      }
+      kept++;
+      if (at != null && to != at) {
+        edits.add((cStart, cTagEnd, _withAttribute(cTag, 'ref', to!.ref)));
+      }
+    }
+    if (conditions > 0 && kept == 0) {
+      edits
+        ..removeRange(mark, edits.length)
+        ..add((start, p.eventEnd, ''));
+    }
+  }
+
+  /// Makes [source], text from [shiftedText], what the part holds.
+  void replaceText(String source) => _reread(source);
 
   /// Makes [source], an edit of this part's text, what the part holds. The
   /// text was read under the file's depth limit, so none applies here.

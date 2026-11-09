@@ -338,6 +338,12 @@ List<ReferenceHolder> sheetReferenceHolders(XlsxSheet sheet) {
         _LinkHolder(sheet, part)
       else if (name == 'autoFilter')
         _FilterHolder(sheet, part)
+      else if (name == 'drawings')
+        _DrawingHolder(sheet)
+      else if (name == 'notes')
+        _NoteHolder(sheet, part)
+      else if (name == 'tables')
+        _TableHolder(sheet)
       else
         PendingReferenceHolder(name),
   ];

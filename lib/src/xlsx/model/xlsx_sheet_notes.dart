@@ -751,3 +751,135 @@ mixin _SheetNotes {
     return _notesRead = read;
   }
 }
+
+/// The `notes` holder of a sheet: on a row or column edit of the sheet each
+/// note moves with its cell (its `<comment>`'s `ref`, and its box's
+/// `<x:Row>` or `<x:Column>` and `<x:Anchor>`), and the note of a deleted
+/// cell goes, as Excel does, with its box ([_SheetNotes._removeNote]). An
+/// insert that would push a note off the sheet throws a [StateError], as
+/// Excel refuses it for a cell that is not empty, before any change.
+/// Other shapes of the VML drawing (form controls) move their anchor too.
+/// Parts the model cannot type are left as written.
+final class _NoteHolder implements ReferenceHolder {
+  _NoteHolder(this._sheet, this._part);
+
+  final XlsxSheet _sheet;
+  final WorksheetPart _part;
+
+  @override
+  String get holderName => 'notes';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    if (edit == null || !_editsSheet(edit, _sheet.name)) return;
+    final _NotesRead read = _sheet._readNotes();
+    if (read.parts.comments == null && read.parts.vml == null) return;
+    if (edit.count > 0) {
+      for (final CommentEntry e
+          in read.parts.comments?.entries ?? const <CommentEntry>[]) {
+        if (e.row == null || edit.shiftCell(e.row!, e.column!) != null) {
+          continue;
+        }
+        throw StateError(
+          'The insert would push the note on cell '
+          '${cellRef(e.row!, e.column!)} of sheet "${_sheet.name}" off the '
+          'sheet.',
+        );
+      }
+    }
+    final ChangeLog log = _sheet._host.log;
+    log.transaction(() {
+      final CommentsPart? comments = read.parts.comments;
+      if (comments != null) _moveComments(read, comments, edit);
+      final VmlPart? vml = read.parts.vml;
+      if (vml != null) _moveShapes(read, vml, edit);
+    });
+  }
+
+  void _moveComments(
+    _NotesRead read,
+    CommentsPart comments,
+    ReferenceShift edit,
+  ) {
+    final ChangeLog log = _sheet._host.log;
+    for (final CommentEntry entry in List<CommentEntry>.of(comments.entries)) {
+      if (entry.row == null) continue;
+      if (edit.shiftCell(entry.row!, entry.column!) != null) continue;
+      _sheet._removeNote(_part, read, entry);
+    }
+    final CommentsPart? left = read.parts.comments;
+    if (left == null) return;
+    final bool rows = edit.axis == ShiftAxis.rows;
+    int position(CommentEntry e) => rows ? e.row! : e.column!;
+    // Moved in the order that never puts one on a cell another still holds,
+    // which the index of notes by cell would lose.
+    final List<CommentEntry> moving =
+        <CommentEntry>[
+          for (final CommentEntry e in left.entries)
+            if (e.row != null) e,
+        ]..sort((CommentEntry a, CommentEntry b) {
+          final int order = position(a).compareTo(position(b));
+          return edit.count > 0 ? -order : order;
+        });
+    bool attached = false;
+    for (final CommentEntry entry in moving) {
+      final ({int row, int column}) cell = edit.shiftCell(
+        entry.row!,
+        entry.column!,
+      )!;
+      if (cell.row == entry.row && cell.column == entry.column) continue;
+      if (!attached) {
+        attachStoredPart(
+          log,
+          _sheet._host.reader.package,
+          read.attached,
+          read.parts.commentsName!,
+          left,
+        );
+        attached = true;
+      }
+      applyChange(
+        log,
+        _CommentChange(
+          read,
+          left,
+          left.entries.indexOf(entry),
+          entry,
+          entry.movedTo(cell.row, cell.column),
+        ),
+      );
+    }
+  }
+
+  void _moveShapes(_NotesRead read, VmlPart vml, ReferenceShift edit) {
+    final ChangeLog log = _sheet._host.log;
+    if (!identical(read.parts.vml, vml)) return;
+    final bool rows = edit.axis == ShiftAxis.rows;
+    int position(int at) =>
+        (rows ? vml.shapes[at].row : vml.shapes[at].column) ?? -1;
+    // As for comments: the cells of shown boxes are kept by cell.
+    final List<int> order =
+        <int>[for (int at = 0; at < vml.shapes.length; at++) at]
+          ..sort((int a, int b) {
+            final int by = position(a).compareTo(position(b));
+            return edit.count > 0 ? -by : by;
+          });
+    bool attached = false;
+    for (final int at in order) {
+      final VmlShape shape = vml.shapes[at];
+      final VmlShape? moved = vml.shifted(shape, edit);
+      if (moved == null) continue;
+      if (!attached) {
+        attachStoredPart(
+          log,
+          _sheet._host.reader.package,
+          read.attached,
+          read.parts.vmlName!,
+          vml,
+        );
+        attached = true;
+      }
+      applyChange(log, _ShapeChange(read, vml, at, shape, moved));
+    }
+  }
+}

@@ -21,6 +21,7 @@ import '../../opc/ooxml.dart';
 import '../../opc/package.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
+import '../formula/reference_shift.dart';
 import '../note.dart';
 import '../read/read_limits.dart';
 import 'item_group.dart' show checkListRoom;
@@ -342,6 +343,97 @@ final class VmlPart implements PartContent {
     );
   }
 
+  /// [shape] after [edit], a row or column edit of its sheet, or `null` when
+  /// it does not move: the `<x:Row>` or `<x:Column>` of a note's cell
+  /// follows the cell ([ReferenceShift.shiftCell]), and the box's
+  /// `<x:Anchor>` moves with its top-left corner
+  /// ([ReferenceShift.shiftAnchor]), keeping its size. The rest of the shape
+  /// stays as written. A note whose cell is deleted is not moved here: it
+  /// goes with its comment.
+  VmlShape? shifted(VmlShape shape, ReferenceShift edit) {
+    final bool rows = edit.axis == ShiftAxis.rows;
+    final String open = _rootOpen;
+    final XmlPullReader r = XmlPullReader('$open${shape.source}</$_rootName>');
+    final List<(int, int, String)> edits = <(int, int, String)>[];
+    while (r.next()) {
+      if (r.eventType != XmlEventType.startElement ||
+          r.depth != 4 ||
+          r.namespaceUri != Ns.vmlExcel) {
+        continue;
+      }
+      final String name = r.localName;
+      if (name != 'Row' && name != 'Column' && name != 'Anchor') continue;
+      if (r.isEmptyElement) continue;
+      final int start = r.eventEnd;
+      final StringBuffer text = StringBuffer();
+      bool plain = true;
+      final int depth = r.depth;
+      while (r.next()) {
+        if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+        if (r.eventType == XmlEventType.characters) {
+          text.write(r.text);
+        } else {
+          plain = false;
+        }
+      }
+      if (!plain) continue;
+      final int end = r.eventStart;
+      String? next;
+      if (name == 'Anchor') {
+        next = _shiftedAnchor(text.toString(), edit);
+      } else if ((name == 'Row') == rows && shape.isNote) {
+        final int? row = shape.row;
+        final int? column = shape.column;
+        if (row == null || column == null) continue;
+        final ({int row, int column})? cell = edit.shiftCell(row, column);
+        if (cell == null) continue;
+        final int value = rows ? cell.row : cell.column;
+        if (value != (rows ? row : column)) next = '$value';
+      }
+      if (next != null) {
+        edits.add((start - open.length, end - open.length, next));
+      }
+    }
+    if (edits.isEmpty) return null;
+    String source = shape.source;
+    for (final (int start, int end, String text) in edits.reversed) {
+      source = source.replaceRange(start, end, text);
+    }
+    return _parse(source, shape.after);
+  }
+
+  /// The text of an `<x:Anchor>` (left column and offset, top row and
+  /// offset, right column and offset, bottom row and offset) moved by
+  /// [edit], or `null` when it does not move or is not eight numbers. The
+  /// separators stay as written.
+  static String? _shiftedAnchor(String text, ReferenceShift edit) {
+    final List<RegExpMatch> numbers = _anchorNumber.allMatches(text).toList();
+    if (numbers.length != 8) return null;
+    final List<int> values = <int>[
+      for (final RegExpMatch m in numbers) int.parse(m[0]!),
+    ];
+    final int first = edit.axis == ShiftAxis.rows ? 2 : 0;
+    final ({int at, int offset}) start = edit.shiftAnchor(
+      values[first],
+      values[first + 1],
+      end: false,
+    );
+    final int delta = start.at - values[first];
+    if (delta == 0 && start.offset == values[first + 1]) return null;
+    final Map<int, int> next = <int, int>{
+      first: start.at,
+      first + 1: start.offset,
+      first + 4: values[first + 4] + delta,
+    };
+    String out = text;
+    for (int i = 7; i >= 0; i--) {
+      final int? value = next[i];
+      if (value == null) continue;
+      out = out.replaceRange(numbers[i].start, numbers[i].end, '$value');
+    }
+    return out;
+  }
+
   /// [text] as a shape followed by [after], read under the part's root.
   VmlShape _parse(String text, String after) => _read(
     '$_rootOpen$text</$_rootName>',
@@ -423,6 +515,9 @@ final RegExp _styleAttribute = RegExp(
   r'''(?<![\w:.-])style\s*=\s*(?:"([^"]*)"|'([^']*)')''',
 );
 final RegExp _visibilityPattern = RegExp(r'visibility\s*:[^;]*');
+
+/// A number of an `<x:Anchor>`.
+final RegExp _anchorNumber = RegExp(r'\d{1,9}');
 
 int? _number(String text) {
   final String trimmed = text.trim();

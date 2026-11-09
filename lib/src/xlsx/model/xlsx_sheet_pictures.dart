@@ -622,3 +622,40 @@ mixin _SheetPictures {
   static bool _sameMedia(String a, String b) =>
       a.toLowerCase() == b.toLowerCase();
 }
+
+/// The `drawings` holder of a sheet: on a row or column edit of the sheet
+/// every anchor of its drawing part moves as Excel moves it
+/// ([DrawingEntry.shiftedBy]): pictures, shapes, charts and groups alike, a
+/// picture whose cells are all deleted kept at zero size. A sheet rename or
+/// move changes no anchor. A drawing the model cannot type is left as
+/// written.
+final class _DrawingHolder implements ReferenceHolder {
+  _DrawingHolder(this._sheet);
+
+  final XlsxSheet _sheet;
+
+  @override
+  String get holderName => 'drawings';
+
+  @override
+  void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
+    if (edit == null || !_editsSheet(edit, _sheet.name)) return;
+    final _PicturesRead read = _sheet._readPictures();
+    final DrawingPart? drawing = read.part;
+    if (drawing == null) return;
+    final PackageReader reader = _sheet._host.reader;
+    final ChangeLog log = _sheet._host.log;
+    log.transaction(() {
+      for (int at = 0; at < drawing.entries.length; at++) {
+        final DrawingEntry entry = drawing.entries[at];
+        final DrawingEntry? moved = reader.guardXml(
+          read.partName!,
+          () => entry.shiftedBy(edit),
+        );
+        if (moved == null) continue;
+        _sheet._attach(read, drawing);
+        applyChange(log, _DrawingEntryChange(drawing, at, entry, moved));
+      }
+    });
+  }
+}

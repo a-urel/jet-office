@@ -30,6 +30,7 @@ import '../read/read_limits.dart';
 import '../rich_text.dart';
 import 'item_group.dart'
     show checkListRoom, readerOf, renderElements, rewrittenElement;
+import 'reference_holders.dart' show SpliceEdit, spliceElement;
 
 /// Reports a problem with an entry the part could not read, by detail:
 /// `comment` for a `<comment>` whose cell or author cannot be read and
@@ -75,6 +76,23 @@ final class CommentEntry {
     source: renderElements(
       (XmlWriter w) => writeCommentEntry(w, note, authorId),
     ).single,
+  );
+
+  /// This entry on the cell at [row] and [column] (zero-based): only the
+  /// `ref` of its `<comment>` changes. Must be an entry on a cell.
+  CommentEntry movedTo(int row, int column) => CommentEntry(
+    row: row,
+    column: column,
+    text: text,
+    author: author,
+    source: spliceElement(
+      source,
+      (XmlPullReader r, int level) => level == 0
+          ? SpliceEdit(
+              attributes: <String, String>{'ref': cellRef(row, column)},
+            )
+          : null,
+    ),
   );
 
   /// This entry with the text and author of [note], whose author is entry
