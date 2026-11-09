@@ -84,6 +84,10 @@ enum ChartAxisRole {
 
   /// The category axis, `category` in an id.
   category,
+
+  /// The secondary value axis, `secondary` in an id: the value axis on the
+  /// right that series bound to it are measured on.
+  secondaryValue,
 }
 
 /// An id of a primitive of a `ChartLayout`, read into its parts.
@@ -283,6 +287,7 @@ final class ChartElementId {
 ChartAxisRole? _axis(String part) => switch (part) {
   ids.valueAxis => ChartAxisRole.value,
   ids.categoryAxis => ChartAxisRole.category,
+  ids.secondaryAxis => ChartAxisRole.secondaryValue,
   _ => null,
 };
 

@@ -124,8 +124,10 @@ bool valueLabelsFit(
 /// of them, from the first.
 ///
 /// Vertical, each is right-aligned `labelGap` left of the plot and centred on
-/// its tick; horizontal, each is centred under its tick, `labelGap` below.
-/// Their ids are those of [axis]'s labels: the value axis', or, for a
+/// its tick, or, on the [far] side (the secondary value axis), left-aligned
+/// `labelGap` right of it; horizontal, each is centred under its tick,
+/// `labelGap` below. Their ids are those of [axis]'s labels: the value
+/// axis', the secondary value axis' (`ids.secondaryAxis`), or, for a
 /// scatter chart's horizontal value axis, `ids.categoryAxis`.
 List<TextPrimitive> valueLabelPrimitives(
   List<MeasuredLabel> labels,
@@ -136,6 +138,7 @@ List<TextPrimitive> valueLabelPrimitives(
   required double labelGap,
   int stride = 1,
   String axis = ids.valueAxis,
+  bool far = false,
 }) {
   return <TextPrimitive>[
     for (int i = 0; i < labels.length && i < scale.ticks.length; i += stride)
@@ -148,6 +151,7 @@ List<TextPrimitive> valueLabelPrimitives(
         horizontal: horizontal,
         labelGap: labelGap,
         axis: axis,
+        far: far,
       ),
   ];
 }
@@ -161,11 +165,14 @@ TextPrimitive _valueLabel(
   required bool horizontal,
   required double labelGap,
   required String axis,
+  required bool far,
 }) {
   final double w = label.size.width;
   final double h = label.size.height;
   final ChartRect rect = horizontal
       ? ChartRect(at - w / 2, plot.bottom + labelGap, w, h)
+      : far
+      ? ChartRect(plot.right + labelGap, at - h / 2, w, h)
       : ChartRect(plot.left - labelGap - w, at - h / 2, w, h);
   return TextPrimitive(ids.axisLabelId(axis, index), label.text, rect, style);
 }
@@ -1026,17 +1033,22 @@ List<PathPrimitive> categoryGridLines(
 /// The value axis' line along the plot's left edge (vertical) or bottom edge
 /// (horizontal); with a [crossScale], the scale of the other axis when it is
 /// a value axis too (a scatter chart), at that scale's [crossingValue]
-/// instead.
+/// instead. A vertical line on the [far] side (the secondary value axis)
+/// runs along the plot's right edge. Its id is [axis]'s line.
 PathPrimitive valueAxisLine(
   ChartRect plot, {
   required bool horizontal,
   required ChartColor color,
   required double width,
   ValueScale? crossScale,
+  String axis = ids.valueAxis,
+  bool far = false,
 }) {
   return _line(
-    ids.axisLineId(ids.valueAxis),
-    crossScale != null
+    ids.axisLineId(axis),
+    far && !horizontal
+        ? plot.right
+        : crossScale != null
         ? valuePosition(
             crossingValue(crossScale),
             crossScale,

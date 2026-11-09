@@ -14,7 +14,8 @@
 ///   `<s>` ([legendSymbolId], [legendTextId]); a line series' entry also has
 ///   `legend/<s>/marker`, the marker on its line ([legendMarkerId]).
 /// * `axis/<a>/line`, `axis/<a>/label/<i>` and `axis/<a>/title`, where `<a>` is
-///   `value` or `category` ([axisLineId], [axisLabelId], [axisTitleId]).
+///   `value`, `category` or `secondary` (the secondary value axis)
+///   ([axisLineId], [axisLabelId], [axisTitleId]).
 /// * `grid/<a>/<i>`: gridline `<i>` of axis `<a>` ([gridId]).
 /// * `series/<s>/bar/<c>`, `series/<s>/line/<run>`, `series/<s>/marker/<c>` and
 ///   `series/<s>/area`: the marks of series `<s>` ([seriesBarId],
@@ -68,6 +69,9 @@ const String valueAxis = 'value';
 /// The axis names used in ids.
 const String categoryAxis = 'category';
 
+/// The axis names used in ids: the secondary value axis.
+const String secondaryAxis = 'secondary';
+
 /// The symbol of the legend entry of [series].
 String legendSymbolId(int series) => 'legend/$series/symbol';
 
@@ -77,7 +81,7 @@ String legendMarkerId(int series) => 'legend/$series/marker';
 /// The text of the legend entry of [series].
 String legendTextId(int series) => 'legend/$series/text';
 
-/// The line of [axis] (`value` or `category`).
+/// The line of [axis] (`value`, `category` or `secondary`).
 String axisLineId(String axis) => 'axis/$axis/line';
 
 /// Label [index] of [axis].

@@ -1,0 +1,59 @@
+rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
+text title 117.00,8.00 126.00x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Sales and units"
+rect legend 127.00,221.20 106.00x10.80 fill=- stroke=- width=1.00
+path legend/0/symbol 127.00,226.60 143.00,226.60 closed=false fill=- stroke=156082 width=2.25 dash=-
+arc legend/0/marker centre=135.00,226.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+text legend/0/text 147.00,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Sales"
+path legend/1/symbol 186.00,226.60 202.00,226.60 closed=false fill=- stroke=E97132 width=2.25 dash=-
+arc legend/1/marker centre=194.00,226.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+text legend/1/text 206.00,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Units"
+rect plot 22.80,36.20 294.20x164.20 fill=- stroke=- width=1.00
+path grid/value/0 22.80,200.40 317.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/1 22.80,183.98 317.00,183.98 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/2 22.80,167.56 317.00,167.56 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/3 22.80,151.14 317.00,151.14 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/4 22.80,134.72 317.00,134.72 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/5 22.80,118.30 317.00,118.30 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/6 22.80,101.88 317.00,101.88 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/7 22.80,85.46 317.00,85.46 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/8 22.80,69.04 317.00,69.04 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/9 22.80,52.62 317.00,52.62 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/10 22.80,36.20 317.00,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+clip plot/clip 22.80,36.20 294.20x164.20
+  path series/0/line/0 59.57,101.88 133.13,52.62 206.68,126.51 280.23,77.25 closed=false fill=- stroke=156082 width=2.25 dash=-
+  path series/1/line/0 59.57,77.25 133.13,102.91 206.68,56.73 280.23,118.30 closed=false fill=- stroke=E97132 width=2.25 dash=-
+clip plot/markers 19.92,33.33 299.95x169.95
+  arc series/0/marker/0 centre=59.57,101.88 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/1 centre=133.13,52.62 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/2 centre=206.68,126.51 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/3 centre=280.23,77.25 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/1/marker/0 centre=59.57,77.25 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+  arc series/1/marker/1 centre=133.13,102.91 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+  arc series/1/marker/2 centre=206.68,56.73 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+  arc series/1/marker/3 centre=280.23,118.30 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
+path axis/category/line 22.80,200.40 317.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+text axis/value/label/0 13.40,195.00 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/value/label/1 13.40,178.58 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"
+text axis/value/label/2 13.40,162.16 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "4"
+text axis/value/label/3 13.40,145.74 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "6"
+text axis/value/label/4 13.40,129.32 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8"
+text axis/value/label/5 8.00,112.90 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
+text axis/value/label/6 8.00,96.48 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "12"
+text axis/value/label/7 8.00,80.06 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "14"
+text axis/value/label/8 8.00,63.64 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "16"
+text axis/value/label/9 8.00,47.22 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "18"
+text axis/value/label/10 8.00,30.80 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "20"
+text axis/secondary/label/0 321.00,195.00 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/secondary/label/1 321.00,174.47 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "20"
+text axis/secondary/label/2 321.00,153.95 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "40"
+text axis/secondary/label/3 321.00,133.42 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "60"
+text axis/secondary/label/4 321.00,112.90 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "80"
+text axis/secondary/label/5 321.00,92.38 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "100"
+text axis/secondary/label/6 321.00,71.85 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "120"
+text axis/secondary/label/7 321.00,51.33 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "140"
+text axis/secondary/label/8 321.00,30.80 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "160"
+text axis/category/label/0 54.17,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q1"
+text axis/category/label/1 127.72,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q2"
+text axis/category/label/2 201.28,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q3"
+text axis/category/label/3 274.83,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q4"
+text axis/secondary/title 333.10,112.90 27.00x10.80 rotation=-90.00 size=9.00 color=595959 bold=false "Units"

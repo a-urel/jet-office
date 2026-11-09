@@ -463,6 +463,34 @@ void main() {
     ]);
   });
 
+  test('a percent stacked combination shares columns, not the line', () {
+    final Chart chart = Chart(
+      kind: ChartKind.combination,
+      grouping: ChartGrouping.percentStacked,
+      series: <ChartSeries>[
+        _series('A', <Object>['Q1'], <double?>[1]),
+        _series('B', <Object>['Q1'], <double?>[3]),
+        _series(
+          'Line',
+          <Object>['Q1'],
+          <double?>[0.5],
+        ).copyWith(kind: ChartKind.line),
+      ],
+    );
+    final ChartLayout layout = _layout(chart);
+    final ChartTooltip tip = chartTooltipFor(
+      chart,
+      layout,
+      'axis/category/label/0',
+      theme: _office,
+    )!;
+    expect(tip.rows.map((ChartTooltipRow r) => r.value), <String>[
+      '1 (25%)',
+      '3 (75%)',
+      '0.5',
+    ]);
+  });
+
   test('null and non-finite values make no row; no row left is null', () {
     final Chart chart = Chart(
       kind: ChartKind.column,

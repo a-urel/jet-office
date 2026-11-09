@@ -6,6 +6,10 @@
 /// one edge to the other, as Excel draws one. Every coordinate is finite: a
 /// value outside the axis range is mapped no further than one plot length
 /// beyond the plot's edge, where the plot's clip cuts it off.
+///
+/// The series are drawn in groups ([markGroups]): the series of one drawn
+/// kind on one value axis. A column, bar, line or area chart has one group
+/// per axis; a combination chart one per kind and axis.
 library;
 
 import 'dart:math' as math;
@@ -31,11 +35,18 @@ import 'scatter_layout.dart';
 /// markers do not fit: [lineMarkersFit]), area charts
 /// one closed path per series (with the theme's `areaOpacity`) and, when the
 /// theme's `areaLine` is on, an open path along each area's top, after all the
-/// areas. A series with `smooth` set draws its line runs as curves
-/// (`smoothPolyline`); an area never does. A scatter chart, given the
-/// horizontal axis [scatterAxis], draws a marker per point (`scatterMarks`). Any
-/// other kind draws none. The frame puts the markers in a clip of their own,
-/// after the others, which go in the plot's clip.
+/// areas of its group. A series with `smooth` set draws its line runs as
+/// curves (`smoothPolyline`); an area never does. A scatter chart, given the
+/// horizontal axis [scatterAxis], draws a marker per point (`scatterMarks`).
+/// Any other kind draws none. The frame puts the markers in a clip of their
+/// own, after the others, which go in the plot's clip.
+///
+/// The groups of [markGroups] are drawn in their order: areas, then columns
+/// or bars, then lines, the primary axis' group of a kind before the
+/// secondary axis' one. A secondary group is measured on
+/// [secondaryScale] (on [scale] when that is `null`). In a combination chart
+/// each group is drawn as a chart of its own kind of only its series would
+/// be, on the category positions of [categoriesOnTicks].
 List<ChartPrimitive> layoutMarks(
   Chart chart,
   ResolvedChart resolved,
@@ -43,33 +54,167 @@ List<ChartPrimitive> layoutMarks(
   ChartRect plot,
   ValueScale scale, {
   ScatterAxis? scatterAxis,
+  ValueScale? secondaryScale,
 }) {
-  final MarkAxes axes = MarkAxes(
-    plot,
-    scale,
-    horizontal: chart.kind == ChartKind.bar,
-  );
-  final List<List<double?>> values = shapedValues(resolved);
-  switch (chart.kind) {
-    case ChartKind.column:
-    case ChartKind.bar:
-      return _bars(resolved, values, theme, axes);
-    case ChartKind.line:
-      return _lines(chart, resolved, values, theme, axes);
-    case ChartKind.area:
-      return _areas(resolved, values, theme, axes);
-    case ChartKind.scatter when scatterAxis != null:
-      return scatterMarks(chart, resolved, theme, plot, scale, scatterAxis);
-    default:
-      return const <ChartPrimitive>[];
+  if (chart.kind == ChartKind.scatter) {
+    return scatterAxis == null
+        ? const <ChartPrimitive>[]
+        : scatterMarks(chart, resolved, theme, plot, scale, scatterAxis);
   }
+  final List<List<double?>> values = shapedValues(resolved);
+  final bool onTicks = categoriesOnTicks(chart, resolved);
+  final List<ChartPrimitive> out = <ChartPrimitive>[];
+  for (final MarkGroup group in markGroups(resolved)) {
+    final MarkAxes axes = MarkAxes(
+      plot,
+      group.secondary ? secondaryScale ?? scale : scale,
+      horizontal: chart.kind == ChartKind.bar,
+      onTicks: onTicks,
+    );
+    switch (group.kind) {
+      case ChartKind.column:
+      case ChartKind.bar:
+        out.addAll(_bars(group, resolved, values, theme, axes));
+      case ChartKind.line:
+        out.addAll(_lines(group, chart, resolved, values, theme, axes));
+      case ChartKind.area:
+        out.addAll(_areas(group, resolved, values, theme, axes));
+      default:
+        break;
+    }
+  }
+  return out;
 }
+
+/// Whether [chart]'s categories sit on tick marks (`categoryPosition`): an
+/// area chart, as Excel draws one (`c:crossBetween midCat`), and a
+/// combination chart with an area series and no column series. With a
+/// column series the categories sit between tick marks, and the areas and
+/// lines go through the middle of the bands; a combination of lines alone
+/// sits between them too, as a line chart does.
+bool categoriesOnTicks(Chart chart, ResolvedChart resolved) {
+  if (chart.kind == ChartKind.area) {
+    return true;
+  }
+  if (chart.kind != ChartKind.combination) {
+    return false;
+  }
+  return !resolved.seriesKinds.contains(ChartKind.column) &&
+      resolved.seriesKinds.contains(ChartKind.area);
+}
+
+/// The series of one drawn kind on one value axis, drawn together: columns
+/// of a group share the category's slot, and a stacked group's values add
+/// up.
+final class MarkGroup {
+  /// Creates the group of the series [members] (indexes, in series order)
+  /// drawn as [kind].
+  const MarkGroup(
+    this.kind,
+    this.members, {
+    required this.secondary,
+    required this.grouping,
+  });
+
+  /// The kind the group is drawn as.
+  final ChartKind kind;
+
+  /// The indexes of the group's series, in series order.
+  final List<int> members;
+
+  /// Whether the group is measured on the secondary value axis.
+  final bool secondary;
+
+  /// How the group's series share a category.
+  final ChartGrouping grouping;
+
+  /// Whether the group's values add up.
+  bool get stacked => grouping != ChartGrouping.clustered;
+}
+
+/// The order kinds are drawn in: areas under columns and bars, lines on
+/// top. A kind not listed (a later one) is drawn after these, in the order
+/// its series first appear.
+const List<ChartKind> _drawOrder = <ChartKind>[
+  ChartKind.area,
+  ChartKind.column,
+  ChartKind.bar,
+  ChartKind.line,
+];
+
+/// The groups of [resolved]'s series, in paint order: per kind (areas,
+/// columns, bars, lines, then any other), the primary axis' group, then the
+/// secondary axis' one; each group's series in series order. A group's
+/// grouping is its series' (`ResolvedChart.seriesGroupings`). An empty
+/// group is left out.
+List<MarkGroup> markGroups(ResolvedChart resolved) {
+  final int n = resolved.values.length;
+  final List<ChartKind> kinds = <ChartKind>[..._drawOrder];
+  for (int s = 0; s < n; s++) {
+    if (!kinds.contains(resolved.kindOf(s))) {
+      kinds.add(resolved.kindOf(s));
+    }
+  }
+  return <MarkGroup>[
+    for (final ChartKind kind in kinds)
+      for (final bool secondary in <bool>[false, true])
+        if (<int>[
+              for (int s = 0; s < n; s++)
+                if (resolved.kindOf(s) == kind &&
+                    resolved.isSecondary(s) == secondary)
+                  s,
+            ]
+            case final List<int> members when members.isNotEmpty)
+          MarkGroup(
+            kind,
+            members,
+            secondary: secondary,
+            grouping: resolved.groupingOf(members.first),
+          ),
+  ];
+}
+
+/// The extent of the values measured on the primary value axis, or on the
+/// [secondary] one: of each group on it (`dataExtent` of the group's values
+/// under its grouping), joined. With no finite value both ends are `NaN`.
+({double min, double max}) axisExtent(
+  ResolvedChart resolved, {
+  required bool secondary,
+}) {
+  double min = double.nan;
+  double max = double.nan;
+  for (final MarkGroup group in markGroups(resolved)) {
+    if (group.secondary != secondary) {
+      continue;
+    }
+    final ({double min, double max}) e = dataExtent(<List<double?>>[
+      for (final int s in group.members) resolved.values[s],
+    ], group.grouping);
+    if (e.min.isNaN) {
+      continue;
+    }
+    min = min.isNaN ? e.min : math.min(min, e.min);
+    max = max.isNaN ? e.max : math.max(max, e.max);
+  }
+  return (min: min, max: max);
+}
+
+/// Whether [resolved] has a secondary value axis to draw: some series is
+/// measured on it and has a finite value.
+bool hasSecondaryAxis(ResolvedChart resolved) =>
+    resolved.hasSecondary && !axisExtent(resolved, secondary: true).min.isNaN;
 
 /// The value axis and the category bands a chart's marks are placed on.
 final class MarkAxes {
   /// Creates the axes of [plot] with [scale]; [horizontal] is a value axis
-  /// that runs left to right (a bar chart).
-  MarkAxes(this.plot, this.scale, {required this.horizontal});
+  /// that runs left to right (a bar chart), and [onTicks] puts the
+  /// categories of lines and areas on tick marks (`categoryPosition`).
+  MarkAxes(
+    this.plot,
+    this.scale, {
+    required this.horizontal,
+    this.onTicks = false,
+  });
 
   /// The plot area.
   final ChartRect plot;
@@ -79,6 +224,9 @@ final class MarkAxes {
 
   /// Whether the value axis is horizontal.
   final bool horizontal;
+
+  /// Whether the points of lines and areas sit on tick marks.
+  final bool onTicks;
 
   /// The value the category axis crosses at.
   double get crossing => crossingValue(scale);
@@ -122,27 +270,35 @@ final class MarkAxes {
   }
 }
 
-/// The values the marks use: the resolved ones, or on a percent stacked chart
-/// each as its share of the category's absolute sum (a category of sum 0 has
-/// no value). Tooltips read the share from here too.
+/// The values the marks use: the resolved ones, or in a percent stacked
+/// group (`markGroups`) each as its share of the category's absolute sum
+/// over the group's series (a category of sum 0 has no value). Tooltips read
+/// the share from here too.
 List<List<double?>> shapedValues(ResolvedChart resolved) {
   if (!resolved.percent) {
     return resolved.values;
   }
-  final List<double> sums = <double>[
-    for (int c = 0; c < resolved.categoryCount; c++)
-      resolved.values.fold<double>(
-        0,
-        (double sum, List<double?> v) => sum + (v[c] ?? 0).abs(),
-      ),
-  ];
-  return <List<double?>>[
-    for (final List<double?> series in resolved.values)
-      <double?>[
+  final List<List<double?>> out = <List<double?>>[...resolved.values];
+  for (final MarkGroup group in markGroups(resolved)) {
+    if (group.grouping != ChartGrouping.percentStacked) {
+      continue;
+    }
+    final List<double> sums = <double>[
+      for (int c = 0; c < resolved.categoryCount; c++)
+        group.members.fold<double>(
+          0,
+          (double sum, int s) => sum + (resolved.values[s][c] ?? 0).abs(),
+        ),
+    ];
+    for (final int s in group.members) {
+      final List<double?> series = resolved.values[s];
+      out[s] = <double?>[
         for (int c = 0; c < series.length; c++)
           series[c] == null || !(sums[c] > 0) ? null : series[c]! / sums[c],
-      ],
-  ];
+      ];
+    }
+  }
+  return out;
 }
 
 /// [value] percent as a fraction, kept between [low] and [high] percent; a
@@ -150,16 +306,21 @@ List<List<double?>> shapedValues(ResolvedChart resolved) {
 double _percent(double value, double low, double high) =>
     (value.isNaN ? low : value.clamp(low, high)) / 100;
 
-bool _stacked(ResolvedChart r) => r.grouping != ChartGrouping.clustered;
-
 List<ChartPrimitive> _bars(
+  MarkGroup group,
   ResolvedChart resolved,
   List<List<double?>> values,
   ChartTheme theme,
   MarkAxes axes,
 ) {
   return <ChartPrimitive>[
-    for (final MarkAnchor a in _barAnchors(resolved, values, theme, axes))
+    for (final MarkAnchor a in _barAnchors(
+      group,
+      resolved,
+      values,
+      theme,
+      axes,
+    ))
       RectPrimitive(
         ids.seriesBarId(a.series, a.category),
         a.bar!,
@@ -168,41 +329,45 @@ List<ChartPrimitive> _bars(
   ];
 }
 
-/// The rectangle of every bar that has a value, in series then category order.
+/// The rectangle of every bar of [group] that has a value, in series then
+/// category order. The group's series share each category's slot as a chart
+/// of them alone would.
 List<MarkAnchor> _barAnchors(
+  MarkGroup group,
   ResolvedChart resolved,
   List<List<double?>> values,
   ChartTheme theme,
   MarkAxes axes,
 ) {
-  final int n = values.length;
-  final bool stacked = _stacked(resolved);
+  final int n = group.members.length;
+  final bool stacked = group.stacked;
   // Excel's ranges: gap 0 to 500, overlap -100 to 100. Kept to them, the
   // width's denominator is at least 1 (one series, no gap) and never 0.
   // A bar chart's value axis runs left to right; the theme gives each kind
   // and grouping its gap and overlap (Excel's defaults differ by both).
   final ChartKind kind = axes.horizontal ? ChartKind.bar : ChartKind.column;
   final double g = _percent(
-    theme.gapWidthPercentOf(kind, resolved.grouping),
+    theme.gapWidthPercentOf(kind, group.grouping),
     0,
     500,
   );
   final double o = stacked
       ? 1
-      : _percent(theme.overlapPercentOf(kind, resolved.grouping), -100, 100);
+      : _percent(theme.overlapPercentOf(kind, group.grouping), -100, 100);
   final double band = axes.categoryLength / math.max(1, resolved.categoryCount);
   final double w = band / (g + n - (n - 1) * o);
   final List<MarkAnchor> out = <MarkAnchor>[];
   final List<double> up = List<double>.filled(resolved.categoryCount, 0);
   final List<double> down = List<double>.filled(resolved.categoryCount, 0);
-  for (int s = 0; s < n; s++) {
+  for (int k = 0; k < n; k++) {
+    final int s = group.members[k];
     for (int c = 0; c < values[s].length; c++) {
       final double? v = values[s][c];
       if (v == null) {
         continue;
       }
       final double along =
-          c * band + g * w / 2 + (stacked ? 0 : s * w * (1 - o));
+          c * band + g * w / 2 + (stacked ? 0 : k * w * (1 - o));
       double from = axes.crossing;
       double to = v;
       if (stacked) {
@@ -220,39 +385,46 @@ List<MarkAnchor> _barAnchors(
   return out;
 }
 
-/// The values of a line or an area, stacked when the chart is: each is the
-/// running sum over the series so far, a `null` adding 0.
+/// The values of [group]'s lines or areas, one list per member, stacked when
+/// the group is: each is the running sum over the group's series so far, a
+/// `null` adding 0.
 List<List<double?>> _cumulative(
+  MarkGroup group,
   ResolvedChart resolved,
   List<List<double?>> values, {
   required bool nullIsZero,
 }) {
-  if (!_stacked(resolved)) {
+  if (!group.stacked) {
     return <List<double?>>[
-      for (final List<double?> v in values)
-        <double?>[for (final double? x in v) x ?? (nullIsZero ? 0 : null)],
+      for (final int s in group.members)
+        <double?>[
+          for (final double? x in values[s]) x ?? (nullIsZero ? 0 : null),
+        ],
     ];
   }
   final List<double> sum = List<double>.filled(resolved.categoryCount, 0);
   return <List<double?>>[
-    for (final List<double?> v in values)
+    for (final int s in group.members)
       <double?>[
-        for (int c = 0; c < v.length; c++)
+        for (int c = 0; c < values[s].length; c++)
           () {
-            sum[c] += v[c] ?? 0;
-            return v[c] == null && !nullIsZero ? null : sum[c];
+            sum[c] += values[s][c] ?? 0;
+            return values[s][c] == null && !nullIsZero ? null : sum[c];
           }(),
       ],
   ];
 }
 
-/// The point of every line value, per series and category (`null` for a gap).
+/// The point of every line value of [group], one list per member, per
+/// category (`null` for a gap).
 List<List<ChartPoint?>> _linePoints(
+  MarkGroup group,
   ResolvedChart resolved,
   List<List<double?>> values,
   MarkAxes axes,
 ) {
   final List<List<double?>> tops = _cumulative(
+    group,
     resolved,
     values,
     nullIsZero: false,
@@ -261,7 +433,7 @@ List<List<ChartPoint?>> _linePoints(
     c,
     resolved.categoryCount,
     axes.categoryLength,
-    onTicks: false,
+    onTicks: axes.onTicks,
   );
   return <List<ChartPoint?>>[
     for (final List<double?> series in tops)
@@ -273,18 +445,25 @@ List<List<ChartPoint?>> _linePoints(
 }
 
 List<ChartPrimitive> _lines(
+  MarkGroup group,
   Chart chart,
   ResolvedChart resolved,
   List<List<double?>> values,
   ChartTheme theme,
   MarkAxes axes,
 ) {
-  final List<List<ChartPoint?>> tops = _linePoints(resolved, values, axes);
+  final List<List<ChartPoint?>> tops = _linePoints(
+    group,
+    resolved,
+    values,
+    axes,
+  );
   final bool everyPoint =
       theme.lineMarkers &&
       lineMarkersFit(axes.categoryLength, resolved.categoryCount, theme);
   final List<ChartPrimitive> out = <ChartPrimitive>[];
-  for (int s = 0; s < tops.length; s++) {
+  for (int k = 0; k < tops.length; k++) {
+    final int s = group.members[k];
     final ChartColor color = resolved.colors[s];
     final bool smooth = chart.series[s].smooth;
     int run = 0;
@@ -308,8 +487,8 @@ List<ChartPrimitive> _lines(
       points.clear();
     }
 
-    for (int c = 0; c < tops[s].length; c++) {
-      final ChartPoint? p = tops[s][c];
+    for (int c = 0; c < tops[k].length; c++) {
+      final ChartPoint? p = tops[k][c];
       if (p == null) {
         flush();
         continue;
@@ -324,7 +503,7 @@ List<ChartPrimitive> _lines(
     }
     flush();
     for (final int c in marked) {
-      out.add(lineMarker(ids.seriesMarkerId(s, c), tops[s][c]!, color, theme));
+      out.add(lineMarker(ids.seriesMarkerId(s, c), tops[k][c]!, color, theme));
     }
   }
   return out;
@@ -370,15 +549,18 @@ ArcPrimitive lineMarker(
   strokeWidth: markerOutlineWidth,
 );
 
-/// The top and the base of the area column under every value, per series.
+/// The top and the base of the area column under every value of [group],
+/// one list per member.
 ///
 /// A missing value counts as 0 for the area's outline and has no anchor.
 List<List<({ChartPoint top, ChartPoint base})>> _areaColumns(
+  MarkGroup group,
   ResolvedChart resolved,
   List<List<double?>> values,
   MarkAxes axes,
 ) {
   final List<List<double?>> tops = _cumulative(
+    group,
     resolved,
     values,
     nullIsZero: true,
@@ -387,18 +569,18 @@ List<List<({ChartPoint top, ChartPoint base})>> _areaColumns(
     c,
     resolved.categoryCount,
     axes.categoryLength,
-    onTicks: true,
+    onTicks: axes.onTicks,
   );
-  final bool stacked = _stacked(resolved);
+  final bool stacked = group.stacked;
   return <List<({ChartPoint top, ChartPoint base})>>[
-    for (int s = 0; s < tops.length; s++)
+    for (int k = 0; k < tops.length; k++)
       <({ChartPoint top, ChartPoint base})>[
-        for (int c = 0; c < tops[s].length; c++)
+        for (int c = 0; c < tops[k].length; c++)
           (
-            top: axes.point(along(c), tops[s][c]!),
+            top: axes.point(along(c), tops[k][c]!),
             base: axes.point(
               along(c),
-              stacked && s > 0 ? tops[s - 1][c]! : axes.crossing,
+              stacked && k > 0 ? tops[k - 1][c]! : axes.crossing,
             ),
           ),
       ],
@@ -406,27 +588,30 @@ List<List<({ChartPoint top, ChartPoint base})>> _areaColumns(
 }
 
 List<ChartPrimitive> _areas(
+  MarkGroup group,
   ResolvedChart resolved,
   List<List<double?>> values,
   ChartTheme theme,
   MarkAxes axes,
 ) {
   final List<List<({ChartPoint top, ChartPoint base})>> columns = _areaColumns(
+    group,
     resolved,
     values,
     axes,
   );
   final List<ChartPrimitive> out = <ChartPrimitive>[];
-  for (int s = 0; s < columns.length; s++) {
-    if (columns[s].isEmpty) {
+  for (int k = 0; k < columns.length; k++) {
+    if (columns[k].isEmpty) {
       continue;
     }
+    final int s = group.members[k];
     out.add(
       PathPrimitive(
         ids.seriesAreaId(s),
         <ChartPoint>[
-          for (final column in columns[s]) column.top,
-          for (final column in columns[s].reversed) column.base,
+          for (final column in columns[k]) column.top,
+          for (final column in columns[k].reversed) column.base,
         ],
         closed: true,
         fill: resolved.colors[s],
@@ -435,13 +620,14 @@ List<ChartPrimitive> _areas(
     );
   }
   if (theme.areaLine) {
-    // The edge line follows each area's top, over all the fills.
-    for (int s = 0; s < columns.length; s++) {
-      if (columns[s].length > 1) {
+    // The edge line follows each area's top, over all the group's fills.
+    for (int k = 0; k < columns.length; k++) {
+      if (columns[k].length > 1) {
+        final int s = group.members[k];
         out.add(
           PathPrimitive(
             ids.seriesLineId(s, 0),
-            <ChartPoint>[for (final column in columns[s]) column.top],
+            <ChartPoint>[for (final column in columns[k]) column.top],
             stroke: resolved.colors[s],
             strokeWidth: theme.lineWidth,
           ),
@@ -480,11 +666,12 @@ final class MarkAnchor {
   final ChartPoint? base;
 }
 
-/// The anchors of every value that has a mark, in series then category order.
+/// The anchors of every value that has a mark, by group (`markGroups`),
+/// each in series then category order.
 ///
-/// They are the geometry [layoutMarks] draws, so a label sits where its mark
-/// is; a scatter chart needs its horizontal axis [scatterAxis] for them. Kinds
-/// without marks have none.
+/// They are the geometry [layoutMarks] draws, with the same [scatterAxis]
+/// and [secondaryScale], so a label sits where its mark is. Kinds without
+/// marks have none.
 List<MarkAnchor> layoutAnchors(
   Chart chart,
   ResolvedChart resolved,
@@ -492,45 +679,62 @@ List<MarkAnchor> layoutAnchors(
   ChartRect plot,
   ValueScale scale, {
   ScatterAxis? scatterAxis,
+  ValueScale? secondaryScale,
 }) {
-  final MarkAxes axes = MarkAxes(
-    plot,
-    scale,
-    horizontal: chart.kind == ChartKind.bar,
-  );
-  final List<List<double?>> values = shapedValues(resolved);
-  switch (chart.kind) {
-    case ChartKind.column:
-    case ChartKind.bar:
-      return _barAnchors(resolved, values, theme, axes);
-    case ChartKind.line:
-      final List<List<ChartPoint?>> points = _linePoints(
-        resolved,
-        values,
-        axes,
-      );
-      return <MarkAnchor>[
-        for (int s = 0; s < points.length; s++)
-          for (int c = 0; c < points[s].length; c++)
-            if (points[s][c] != null) MarkAnchor(s, c, point: points[s][c]),
-      ];
-    case ChartKind.area:
-      final List<List<({ChartPoint top, ChartPoint base})>> columns =
-          _areaColumns(resolved, values, axes);
-      return <MarkAnchor>[
-        for (int s = 0; s < columns.length; s++)
-          for (int c = 0; c < columns[s].length; c++)
-            if (values[s][c] != null)
-              MarkAnchor(
-                s,
-                c,
-                point: columns[s][c].top,
-                base: columns[s][c].base,
-              ),
-      ];
-    case ChartKind.scatter when scatterAxis != null:
-      return scatterAnchors(chart, resolved, plot, scale, scatterAxis);
-    default:
-      return const <MarkAnchor>[];
+  if (chart.kind == ChartKind.scatter) {
+    return scatterAxis == null
+        ? const <MarkAnchor>[]
+        : scatterAnchors(chart, resolved, plot, scale, scatterAxis);
   }
+  final List<List<double?>> values = shapedValues(resolved);
+  final bool onTicks = categoriesOnTicks(chart, resolved);
+  final List<MarkAnchor> out = <MarkAnchor>[];
+  for (final MarkGroup group in markGroups(resolved)) {
+    final MarkAxes axes = MarkAxes(
+      plot,
+      group.secondary ? secondaryScale ?? scale : scale,
+      horizontal: chart.kind == ChartKind.bar,
+      onTicks: onTicks,
+    );
+    switch (group.kind) {
+      case ChartKind.column:
+      case ChartKind.bar:
+        out.addAll(_barAnchors(group, resolved, values, theme, axes));
+      case ChartKind.line:
+        final List<List<ChartPoint?>> points = _linePoints(
+          group,
+          resolved,
+          values,
+          axes,
+        );
+        for (int k = 0; k < points.length; k++) {
+          for (int c = 0; c < points[k].length; c++) {
+            if (points[k][c] != null) {
+              out.add(MarkAnchor(group.members[k], c, point: points[k][c]));
+            }
+          }
+        }
+      case ChartKind.area:
+        final List<List<({ChartPoint top, ChartPoint base})>> columns =
+            _areaColumns(group, resolved, values, axes);
+        for (int k = 0; k < columns.length; k++) {
+          final int s = group.members[k];
+          for (int c = 0; c < columns[k].length; c++) {
+            if (values[s][c] != null) {
+              out.add(
+                MarkAnchor(
+                  s,
+                  c,
+                  point: columns[k][c].top,
+                  base: columns[k][c].base,
+                ),
+              );
+            }
+          }
+        }
+      default:
+        break;
+    }
+  }
+  return out;
 }

@@ -93,6 +93,12 @@ List<(String, String)> dataLabelTexts(
 /// is stacked, else the topmost area painted under the label's centre (the
 /// last series whose area holds it), its own when none does. Nothing is
 /// placed unless the chart asks for data labels.
+///
+/// Each label follows the kind its series is drawn as
+/// (`ResolvedChart.seriesKinds`) and its series' grouping, so in a
+/// combination chart a column's label goes as a column chart's and a line's
+/// as a line chart's; a series on the secondary value axis is placed on
+/// [secondaryScale].
 DataLabelPlacement placeDataLabels({
   required Chart chart,
   required ResolvedChart resolved,
@@ -104,6 +110,7 @@ DataLabelPlacement placeDataLabels({
   required ValueScale scale,
   required List<ChartPrimitive> existing,
   ScatterAxis? scatterAxis,
+  ValueScale? secondaryScale,
 }) {
   final List<(String, String)> texts = dataLabelTexts(
     chart,
@@ -124,6 +131,7 @@ DataLabelPlacement placeDataLabels({
       plot,
       scale,
       scatterAxis: scatterAxis,
+      secondaryScale: secondaryScale,
     ))
       ids.dataLabelId(a.series, a.category): a,
   };
@@ -153,8 +161,8 @@ DataLabelPlacement placeDataLabels({
     }
   }
   final bool bar = chart.kind == ChartKind.bar;
-  final bool stacked = resolved.grouping != ChartGrouping.clustered;
   final double crossing = crossingValue(scale);
+  final double secondaryCrossing = crossingValue(secondaryScale ?? scale);
   final double gap = theme.spacing.labelGap;
   final double apart = theme.spacing.minTextGap;
   final List<TextPrimitive> placed = <TextPrimitive>[];
@@ -165,14 +173,21 @@ DataLabelPlacement placeDataLabels({
     TextPrimitive? chosen;
     if (anchor != null) {
       final double value = _valueOf(resolved, anchor);
+      final ChartKind kind = resolved.kindOf(anchor.series);
+      final bool stacked =
+          resolved.groupingOf(anchor.series) != ChartGrouping.clustered;
       for (final _Candidate place in _candidates(
-        chart.kind,
+        kind,
         anchor,
         size,
         plot,
         stacked: stacked,
         bar: bar,
-        negative: value < crossing,
+        negative:
+            value <
+            (resolved.isSecondary(anchor.series)
+                ? secondaryCrossing
+                : crossing),
         gap: gap,
         markerGap: gap + theme.markerSize / 2,
         sideGap: gap + theme.markerSize / 2 + apart,
@@ -191,7 +206,7 @@ DataLabelPlacement placeDataLabels({
             theme.dataLabels,
             resolved.colors[anchor.series],
           ),
-          _ when chart.kind == ChartKind.area => insideLabelStyle(
+          _ when kind == ChartKind.area => insideLabelStyle(
             theme.dataLabels,
             stacked
                 ? resolved.colors[anchor.series]

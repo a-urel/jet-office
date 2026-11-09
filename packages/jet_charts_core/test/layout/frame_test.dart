@@ -629,12 +629,9 @@ void main() {
     expect(problems(layout), isEmpty);
   });
 
-  test('combination and unsupported draw a placeholder', () {
+  test('unsupported draws a placeholder', () {
     const ChartSize size = ChartSize(300, 200);
-    for (final ChartKind kind in <ChartKind>[
-      ChartKind.combination,
-      ChartKind.unsupported,
-    ]) {
+    for (final ChartKind kind in <ChartKind>[ChartKind.unsupported]) {
       final ChartLayout layout = lay(
         chart(
           kind: kind,

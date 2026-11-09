@@ -88,9 +88,19 @@ final class ChartSeries {
 
   /// The kind this series is drawn as in a combination chart, or `null` to
   /// follow the chart.
+  ///
+  /// A combination chart draws [ChartKind.column], [ChartKind.line] and
+  /// [ChartKind.area] series as such; a `null` kind, or any other, is drawn
+  /// as a column. Other charts ignore it, but for a sparkline's area.
   final ChartKind? kind;
 
   /// The value axis the series is measured on.
+  ///
+  /// Column, line, area and combination charts measure a series bound to
+  /// [ChartAxisBinding.secondary] on a second value axis on the plot's
+  /// right, when some series is bound to the primary one; with none, every
+  /// series is measured on the primary axis. A bar chart, as every other
+  /// kind, measures every series on the primary axis.
   final ChartAxisBinding axis;
 
   /// The number format of the values, as the text Excel stores, or `null`.

@@ -25,7 +25,14 @@ final class ResolvedChart {
     required List<ChartColor> colors,
     required this.tickFormatCode,
     required this.grouping,
-  }) : values = List<List<double?>>.unmodifiable(<List<double?>>[
+    List<ChartKind> seriesKinds = const <ChartKind>[],
+    List<bool> secondary = const <bool>[],
+    List<ChartGrouping> seriesGroupings = const <ChartGrouping>[],
+    this.secondaryTickFormatCode = 'General',
+  }) : seriesKinds = List<ChartKind>.unmodifiable(seriesKinds),
+       secondary = List<bool>.unmodifiable(secondary),
+       seriesGroupings = List<ChartGrouping>.unmodifiable(seriesGroupings),
+       values = List<List<double?>>.unmodifiable(<List<double?>>[
          for (final List<double?> v in values) List<double?>.unmodifiable(v),
        ]),
        categoryLabels = List<String>.unmodifiable(categoryLabels),
@@ -50,6 +57,39 @@ final class ResolvedChart {
 
   /// How the series share a category.
   final ChartGrouping grouping;
+
+  /// The kind each series is drawn as (`drawnKinds`): the chart's kind,
+  /// or in a combination chart the series' own column, line or area.
+  final List<ChartKind> seriesKinds;
+
+  /// Whether each series is measured on the secondary value axis
+  /// (`onSecondaryAxis`).
+  final List<bool> secondary;
+
+  /// How each series shares a category with the others of its kind on its
+  /// axis: the chart's grouping, except a line series of a combination
+  /// chart, which is never stacked.
+  final List<ChartGrouping> seriesGroupings;
+
+  /// The number format code of the secondary value axis' tick labels: its
+  /// own code, else on a percent stacked axis `0%`, else the first
+  /// secondary series' code, else `General`.
+  final String secondaryTickFormatCode;
+
+  /// Whether some series is measured on the secondary value axis.
+  bool get hasSecondary => secondary.contains(true);
+
+  /// Whether series [s] is measured on the secondary value axis.
+  bool isSecondary(int s) => s < secondary.length && secondary[s];
+
+  /// The grouping of series [s] (`seriesGroupings`), or the chart's.
+  ChartGrouping groupingOf(int s) =>
+      s < seriesGroupings.length ? seriesGroupings[s] : grouping;
+
+  /// The kind series [s] is drawn as (`seriesKinds`).
+  /// A series beyond the list (none) counts as a column.
+  ChartKind kindOf(int s) =>
+      s < seriesKinds.length ? seriesKinds[s] : ChartKind.column;
 
   /// Whether the value axis is a percent stacked one, from 0 to 100 percent.
   bool get percent => grouping == ChartGrouping.percentStacked;
@@ -106,6 +146,15 @@ ResolvedChart resolveChart(
     for (int s = 0; s < series.length; s++) _name(series[s], s),
   ];
   final bool percent = chart.grouping == ChartGrouping.percentStacked;
+  final List<ChartKind> kinds = drawnKinds(chart);
+  final List<bool> secondary = onSecondaryAxis(chart);
+  String? secondaryCode;
+  for (int s = 0; s < series.length; s++) {
+    if (secondary[s]) {
+      secondaryCode = series[s].formatCode;
+      break;
+    }
+  }
   final String tickCode =
       chart.valueAxis.formatCode ??
       (percent ? '0%' : null) ??
@@ -120,7 +169,61 @@ ResolvedChart resolveChart(
     ],
     tickFormatCode: tickCode,
     grouping: chart.grouping,
+    seriesKinds: kinds,
+    secondary: secondary,
+    seriesGroupings: <ChartGrouping>[
+      for (final ChartKind kind in kinds)
+        chart.kind == ChartKind.combination && kind == ChartKind.line
+            ? ChartGrouping.clustered
+            : chart.grouping,
+    ],
+    secondaryTickFormatCode:
+        chart.secondaryValueAxis?.formatCode ??
+        (percent ? '0%' : null) ??
+        secondaryCode ??
+        'General',
   );
+}
+
+/// The kind each series of [chart] is drawn as.
+///
+/// In a combination chart each series is drawn as its own `kind` when that
+/// is [ChartKind.column], [ChartKind.line] or [ChartKind.area]; a `null`
+/// kind, or any other, draws as [ChartKind.column]. In any other chart each
+/// series is drawn as the chart's kind.
+List<ChartKind> drawnKinds(Chart chart) => <ChartKind>[
+  for (final ChartSeries s in chart.series)
+    chart.kind != ChartKind.combination
+        ? chart.kind
+        : switch (s.kind) {
+            ChartKind.line => ChartKind.line,
+            ChartKind.area => ChartKind.area,
+            _ => ChartKind.column,
+          },
+];
+
+/// Whether each series of [chart] is measured on the secondary value axis.
+///
+/// Only column, line, area and combination charts have one; a bar chart, as
+/// any other kind, measures every series on the primary axis. A series bound
+/// to the secondary axis is measured on it only when some series is bound to
+/// the primary axis: with none, every series is measured on the primary
+/// axis and no secondary axis shows.
+List<bool> onSecondaryAxis(Chart chart) {
+  final bool axes = switch (chart.kind) {
+    ChartKind.column ||
+    ChartKind.line ||
+    ChartKind.area ||
+    ChartKind.combination => true,
+    _ => false,
+  };
+  final bool anyPrimary = chart.series.any(
+    (ChartSeries s) => s.axis == ChartAxisBinding.primary,
+  );
+  return <bool>[
+    for (final ChartSeries s in chart.series)
+      axes && anyPrimary && s.axis == ChartAxisBinding.secondary,
+  ];
 }
 
 /// The label text of the category [value] (see [resolveChart]).

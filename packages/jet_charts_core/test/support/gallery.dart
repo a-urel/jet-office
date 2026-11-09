@@ -87,7 +87,9 @@ Chart _column({
 /// The gallery's charts: clustered, stacked and percent columns; bars; a line
 /// with a gap; a stacked area; negative values; eight series; long category
 /// labels; data labels; a legend on the top, left and right (the bottom is the
-/// default of the rest); pies and donuts; and a tile, which stays last.
+/// default of the rest); pies and donuts; sparklines; scatter charts;
+/// combination charts and a secondary value axis; and a tile, which stays
+/// last.
 List<GalleryChart> galleryCharts() => <GalleryChart>[
   GalleryChart('column_clustered', _column()),
   GalleryChart('column_stacked', _column(grouping: ChartGrouping.stacked)),
@@ -343,6 +345,60 @@ List<GalleryChart> galleryCharts() => <GalleryChart>[
         ),
       ],
       categoryAxis: const ChartAxis(formatCode: 'd mmm'),
+    ),
+  ),
+  GalleryChart(
+    'combo_column_line',
+    Chart(
+      kind: ChartKind.combination,
+      series: <ChartSeries>[
+        _series('Satış', _regions, <double?>[12, 18, -4, 9]),
+        _series('Adet', _regions, <double?>[
+          120,
+          95,
+          140,
+          80,
+        ]).copyWith(kind: ChartKind.line, axis: ChartAxisBinding.secondary),
+      ],
+    ),
+  ),
+  GalleryChart(
+    'combo_area_column_line',
+    Chart(
+      kind: ChartKind.combination,
+      title: const ChartTitle(text: 'Plan, sales and trend'),
+      series: <ChartSeries>[
+        _series('Plan', _quarters, <double?>[
+          14,
+          16,
+          11,
+          13,
+        ]).copyWith(kind: ChartKind.area),
+        _series('Sales', _quarters, <double?>[12, 18, 9, 15]),
+        _series('Trend', _quarters, <double?>[
+          10,
+          13,
+          12,
+          14,
+        ]).copyWith(kind: ChartKind.line),
+      ],
+    ),
+  ),
+  GalleryChart(
+    'line_secondary',
+    Chart(
+      kind: ChartKind.line,
+      title: const ChartTitle(text: 'Sales and units'),
+      series: <ChartSeries>[
+        _series('Sales', _quarters, <double?>[12, 18, 9, 15]),
+        _series('Units', _quarters, <double?>[
+          120,
+          95,
+          140,
+          80,
+        ]).copyWith(axis: ChartAxisBinding.secondary),
+      ],
+      secondaryValueAxis: const ChartAxis(title: 'Units'),
     ),
   ),
   GalleryChart(

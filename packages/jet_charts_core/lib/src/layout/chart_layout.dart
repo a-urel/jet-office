@@ -52,6 +52,7 @@ final class ChartLayout {
     required List<ChartPrimitive> primitives,
     this.plotArea,
     this.valueScale,
+    this.secondaryValueScale,
     List<ChartHiddenLabel> hidden = const <ChartHiddenLabel>[],
     List<ChartRect> categoryBands = const <ChartRect>[],
   }) : primitives = List<ChartPrimitive>.unmodifiable(primitives),
@@ -83,7 +84,11 @@ final class ChartLayout {
   ///   is `value` or `category`: the axis line, its label `<i>` (a value
   ///   axis' tick `<i>` from its minimum, a category axis' category `<i>`) and
   ///   its title.
-  /// * `grid/<a>/<i>`: grid line `<i>` of axis `<a>`.
+  /// * `axis/secondary/line`, `axis/secondary/label/<i>` and
+  ///   `axis/secondary/title`: the secondary value axis, on the plot's
+  ///   right, of a chart with series bound to it.
+  /// * `grid/<a>/<i>`: grid line `<i>` of axis `<a>` (`value`, `category` or
+  ///   `secondary`).
   /// * `series/<s>/bar/<c>`, `series/<s>/line/<run>`, `series/<s>/marker/<c>`
   ///   and `series/<s>/area`: the marks of series `<s>` at category `<c>`; a
   ///   gap in the data starts a new line run, and a marker is the circle on a
@@ -112,16 +117,24 @@ final class ChartLayout {
 
   /// The value axis' scale, or `null` when there is no plot area or no value
   /// axis (a pie or donut); in a scatter chart, the vertical axis' scale.
+  /// With a secondary value axis it is the primary one's.
   final ValueScale? valueScale;
+
+  /// The secondary value axis' scale, or `null` when none is drawn: no
+  /// series is measured on it (see `ChartSeries.axis`; a bar chart, or a
+  /// chart whose every series is bound to it, measures all on the primary
+  /// axis), none of its series has a finite value, or there is no plot.
+  final ValueScale? secondaryValueScale;
 
   /// The texts left out because they did not fit, grouped in the
   /// degradation order whatever the order they were taken away in: data
   /// labels first (each one that found no place, or all of them when only
-  /// the background is drawn), then legend entries, the value and category
-  /// axis titles, the title, a donut's centre text, category labels (every
-  /// one not shown and every cut one, with its full text), and value tick
-  /// labels (all of them when they go, or the ones a fixed unit's thinning
-  /// left out); each group in index order. A kind this version does not draw
+  /// the background is drawn), then legend entries, the value, category and
+  /// secondary value axis titles, the title, a donut's centre text, category
+  /// labels (every one not shown and every cut one, with its full text), and
+  /// value tick labels (all of them when they go, or the ones a fixed unit's
+  /// thinning left out), then the secondary value axis' tick labels
+  /// likewise; each group in index order. A kind this version does not draw
   /// lists its title and its placeholder. Each id is one [primitives]
   /// describes.
   final List<ChartHiddenLabel> hidden;
@@ -145,6 +158,7 @@ final class ChartLayout {
       size == other.size &&
       plotArea == other.plotArea &&
       valueScale == other.valueScale &&
+      secondaryValueScale == other.secondaryValueScale &&
       listValueEquals(primitives, other.primitives) &&
       listValueEquals(hidden, other.hidden) &&
       listValueEquals(categoryBands, other.categoryBands);
@@ -154,6 +168,7 @@ final class ChartLayout {
     size,
     plotArea,
     valueScale,
+    secondaryValueScale,
     listValueHash(primitives),
     listValueHash(hidden),
     listValueHash(categoryBands),
@@ -172,6 +187,12 @@ final class ChartLayout {
 /// axis titles, tick and category labels, grid lines, axis lines and the plot.
 /// A scatter chart gets the same frame with a second value axis in place of
 /// the category axis, and a marker per point (`scatter_layout.dart`).
+/// A combination chart is framed as a column chart, each series drawn as
+/// its own column, line or area (`drawnKinds`): areas first, then columns,
+/// then lines. Series bound to the secondary axis (in a column, line, area
+/// or combination chart, when some series is bound to the primary one) are
+/// measured on a second value axis on the plot's right, `secondaryValueAxis`
+/// (no gridlines unless set; an estimate, not checked in Excel).
 /// Pie and donut charts are laid out around a centre, with their data labels
 /// inside the slices or, in a pie, outside with leader lines, and a donut's
 /// centre text (`pie_layout.dart`). A sparkline draws only its lines, on the
@@ -214,6 +235,7 @@ ChartLayout layoutChart(
     case ChartKind.line:
     case ChartKind.area:
     case ChartKind.scatter:
+    case ChartKind.combination:
       // A scatter chart's points are not grouped: its grouping is ignored.
       final Chart framed = chart.kind == ChartKind.scatter
           ? chart.copyWith(grouping: ChartGrouping.clustered)
@@ -231,6 +253,7 @@ ChartLayout layoutChart(
         primitives: frame.primitives,
         plotArea: frame.geometry?.plot,
         valueScale: frame.geometry?.scale,
+        secondaryValueScale: frame.geometry?.secondaryScale,
         hidden: <ChartHiddenLabel>[
           for (final (String id, String text) in frame.hidden)
             ChartHiddenLabel(id, text),
@@ -269,7 +292,6 @@ ChartLayout layoutChart(
         plotArea: spark.plot,
         categoryBands: spark.categoryBands,
       );
-    case ChartKind.combination:
     case ChartKind.unsupported:
       return _placeholder(chart, theme, size, measurer);
   }

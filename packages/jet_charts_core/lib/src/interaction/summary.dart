@@ -144,7 +144,9 @@ final class ChartSummary {
 ///
 /// Series names and categories are the texts the layout shows, in full, never
 /// cut. Each value is formatted as `chartTooltipAt` formats it (the series'
-/// format code, else the value axis' code, else `General`; no share), and a
+/// format code, else the code of the value axis it is measured on, the
+/// secondary value axis' for a series measured there, else `General`; no
+/// share), and a
 /// missing or non-finite value is an empty text. The minimum and maximum are
 /// those of the finite values, each formatted in the code of the first series
 /// that holds it. In a pie or donut each value's share of its series' whole

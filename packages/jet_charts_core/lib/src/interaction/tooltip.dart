@@ -115,10 +115,12 @@ final class ChartTooltip {
 ///   when none was hidden.
 ///
 /// A value is formatted with `NumberFormatter` of [locale] in the series'
-/// format code, else the value axis' code, else `General`; in a percent
-/// stacked chart it is followed by its share of the category, in `0%`, in
-/// brackets. A `null` or non-finite value makes no row, and a category with no
-/// row left has no tooltip.
+/// format code, else the code of the value axis it is measured on (a
+/// series on the secondary value axis takes that axis' code), else
+/// `General`; in a percent stacked chart (in a combination chart, a column
+/// or area series of one) it is followed by its share of the category over
+/// its group's series, in `0%`, in brackets. A `null` or non-finite value
+/// makes no row, and a category with no row left has no tooltip.
 ///
 /// Every kind of `ChartLayout.hidden` stays within reach:
 ///
@@ -132,7 +134,8 @@ final class ChartTooltip {
 /// * the title, a centre text and the axis titles: in the background
 ///   tooltip;
 /// * a placeholder: in the background tooltip;
-/// * value tick labels, and a scatter chart's horizontal tick labels
+/// * value tick labels (the secondary value axis' too), and a scatter
+///   chart's horizontal tick labels
 ///   (`axis/category/label/<i>` there): they are axis ticks, not data, and
 ///   have no tooltip; the exact values they would mark are in the data
 ///   tooltips (a scatter point's `X` and `Y` rows).
@@ -187,7 +190,9 @@ ChartTooltip? chartTooltipFor(
 }) => _Source(chart, layout, theme, locale).tooltip(id, null);
 
 /// [value] of [chart]'s series [series] formatted as a tooltip shows it: in
-/// the series' format code, else the value axis' code, else `General`.
+/// the series' format code, else the code of the value axis it is measured
+/// on (the secondary value axis' for a series measured there,
+/// `onSecondaryAxis`), else `General`.
 String formatSeriesValue(
   Chart chart,
   int series,
@@ -198,7 +203,9 @@ String formatSeriesValue(
       value,
       numberFormat:
           chart.series[series].formatCode ??
-          chart.valueAxis.formatCode ??
+          (onSecondaryAxis(chart)[series]
+              ? chart.secondaryValueAxis?.formatCode
+              : chart.valueAxis.formatCode) ??
           'General',
     )
     .text;
@@ -396,7 +403,7 @@ final class _Source {
       return null;
     }
     String text = formatSeriesValue(chart, series, value, formatter);
-    if (resolved.percent) {
+    if (resolved.groupingOf(series) == ChartGrouping.percentStacked) {
       final double? share = shares[series][category];
       if (share != null) {
         text += ' (${formatter.format(share, numberFormat: '0%').text})';
@@ -445,6 +452,7 @@ final class _Source {
       ids.centerTextId,
       ids.axisTitleId(ids.valueAxis),
       ids.axisTitleId(ids.categoryAxis),
+      ids.axisTitleId(ids.secondaryAxis),
       ids.placeholder,
     ]) {
       for (final ChartHiddenLabel hidden in layout.hidden) {
