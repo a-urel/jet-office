@@ -41,12 +41,88 @@ final class ChartTheme {
     ChartSpacing? spacing,
     ChartTooltipStyle? tooltip,
     this.exportColors = ChartExportColors.fixed,
+    this.areaOpacity = 1,
+    this.areaLine = false,
+    this.sliceBorderWidth = 0.75,
+    this.centerText,
+    this.sparklineWidth = 0.75,
   }) : palette = List<ChartColor>.unmodifiable(palette),
        semantic = Map<String, ChartColor>.unmodifiable(semantic),
        spacing = spacing ?? ChartSpacing(),
        tooltip = tooltip ?? buildOfficeTooltipStyle() {
     if (palette.isEmpty) {
       throw ArgumentError.value(palette, 'palette', 'must not be empty');
+    }
+    if (!(areaOpacity > 0 && areaOpacity <= 1)) {
+      throw ArgumentError.value(
+        areaOpacity,
+        'areaOpacity',
+        'must be above 0 and at most 1',
+      );
+    }
+    _checkWidth(sliceBorderWidth, 'sliceBorderWidth');
+    _checkWidth(sparklineWidth, 'sparklineWidth');
+  }
+
+  /// An app's theme in one call, from its own colours and font.
+  ///
+  /// [palette] is the series colours and [semantic] the named ones. Axis
+  /// labels, legend and data labels are [fontSize] points (9 by default) in
+  /// [fontFamily] and [text]; the title is `fontSize * 14 / 9`, 14 pt for the
+  /// default. [gridLine] defaults to [text] blended 15 % over [background]
+  /// (per channel, rounded), and is also the axis line colour and the
+  /// tooltip's border. The tooltip's background is [background] and its text
+  /// is [fontFamily] at `fontSize + 1` in [text]. There is no [border] and no
+  /// [valueAxisLine], and [exportColors] is [ChartExportColors.fixed]. Every
+  /// other value is the Office theme's. Dark mode is the same call with dark
+  /// colours.
+  ///
+  /// Throws an [ArgumentError] when [palette] is empty or [fontSize] is not
+  /// finite and positive.
+  static ChartTheme fromColors({
+    required List<ChartColor> palette,
+    required String fontFamily,
+    required ChartColor text,
+    required ChartColor background,
+    ChartColor? gridLine,
+    Map<String, ChartColor> semantic = const <String, ChartColor>{},
+    double fontSize = 9,
+  }) {
+    if (!fontSize.isFinite || fontSize <= 0) {
+      throw ArgumentError.value(
+        fontSize,
+        'fontSize',
+        'must be finite and positive',
+      );
+    }
+    ChartTextStyle style(double size) =>
+        ChartTextStyle(fontFamily: fontFamily, size: size, color: text);
+    final ChartColor grid =
+        gridLine ?? blendChartColors(text, background, 0.15);
+    return ChartTheme(
+      palette: palette,
+      semantic: semantic,
+      axisLabels: style(fontSize),
+      titleText: style(fontSize * 14 / 9),
+      legendText: style(fontSize),
+      dataLabels: style(fontSize),
+      gridLine: grid,
+      axisLine: grid,
+      background: background,
+      valueAxisLine: false,
+      tooltip: ChartTooltipStyle(
+        background: background,
+        border: grid,
+        text: style(fontSize + 1),
+        padding: office.tooltip.padding,
+      ),
+      exportColors: ChartExportColors.fixed,
+    );
+  }
+
+  static void _checkWidth(double value, String name) {
+    if (!value.isFinite || value < 0) {
+      throw ArgumentError.value(value, name, 'must be finite, not negative');
     }
   }
 
@@ -73,6 +149,10 @@ final class ChartTheme {
   /// `lumOff` 0.25). Still unconfirmed: the other gaps of [spacing].
   ///
   /// Its [tooltip] is this library's own look, not an Excel value.
+  ///
+  /// The J4 values are [areaOpacity] 1, [areaLine] off, [centerText] null,
+  /// and [sliceBorderWidth] and [sparklineWidth] 0.75: the two widths are
+  /// estimates, not checked in Excel.
   static final ChartTheme office = buildOfficeTheme();
 
   /// The series colours, in order. Never empty.
@@ -170,6 +250,33 @@ final class ChartTheme {
 
   /// How the theme's colours are exported to a file.
   final ChartExportColors exportColors;
+
+  /// The opacity of an area's fill, above 0 and at most 1; 1 is opaque, as
+  /// Excel's default area.
+  final double areaOpacity;
+
+  /// Whether an area also draws its top edge as a line of [lineWidth] in the
+  /// series colour, a line over a light fill. Excel's area has none, so the
+  /// Office theme does not.
+  final bool areaLine;
+
+  /// The width of the outline of each pie or donut slice, in points, drawn in
+  /// [background]; 0 draws none. The Office theme's 0.75 is an estimate, not
+  /// checked in Excel.
+  final double sliceBorderWidth;
+
+  /// The style of `Chart.centerText`, or null for [titleText]. Read
+  /// [centerTextStyle] for the effective style.
+  ///
+  /// [copyWith] cannot set this field back to null.
+  final ChartTextStyle? centerText;
+
+  /// The width of a sparkline's line, in points. The Office theme's 0.75 is
+  /// an estimate, not checked in Excel.
+  final double sparklineWidth;
+
+  /// The style of `Chart.centerText`: [centerText], else [titleText].
+  ChartTextStyle get centerTextStyle => centerText ?? titleText;
 
   /// The gap width of a chart of [kind] and [grouping], as a percentage of a
   /// bar's width: [stackedGapWidthPercent] when it is stacked or percent
@@ -291,6 +398,11 @@ final class ChartTheme {
     ChartSpacing? spacing,
     ChartTooltipStyle? tooltip,
     ChartExportColors? exportColors,
+    double? areaOpacity,
+    bool? areaLine,
+    double? sliceBorderWidth,
+    ChartTextStyle? centerText,
+    double? sparklineWidth,
   }) {
     return ChartTheme(
       palette: palette ?? this.palette,
@@ -315,6 +427,11 @@ final class ChartTheme {
       spacing: spacing ?? this.spacing,
       tooltip: tooltip ?? this.tooltip,
       exportColors: exportColors ?? this.exportColors,
+      areaOpacity: areaOpacity ?? this.areaOpacity,
+      areaLine: areaLine ?? this.areaLine,
+      sliceBorderWidth: sliceBorderWidth ?? this.sliceBorderWidth,
+      centerText: centerText ?? this.centerText,
+      sparklineWidth: sparklineWidth ?? this.sparklineWidth,
     );
   }
 
@@ -341,7 +458,12 @@ final class ChartTheme {
         lineMarkers == other.lineMarkers &&
         spacing == other.spacing &&
         tooltip == other.tooltip &&
-        exportColors == other.exportColors;
+        exportColors == other.exportColors &&
+        areaOpacity == other.areaOpacity &&
+        areaLine == other.areaLine &&
+        sliceBorderWidth == other.sliceBorderWidth &&
+        centerText == other.centerText &&
+        sparklineWidth == other.sparklineWidth;
   }
 
   @override
@@ -367,6 +489,11 @@ final class ChartTheme {
     spacing,
     tooltip,
     exportColors,
+    areaOpacity,
+    areaLine,
+    sliceBorderWidth,
+    centerText,
+    sparklineWidth,
   ]);
 
   @override

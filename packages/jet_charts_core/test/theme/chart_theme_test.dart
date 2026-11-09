@@ -497,4 +497,73 @@ void main() {
     }
     expect(s.copyWith(barOverlapPercent: -150).barOverlapPercent, -150);
   });
+
+  group('J4 theme values', () {
+    test('Office values', () {
+      final ChartTheme office = ChartTheme.office;
+      expect(office.areaOpacity, 1);
+      expect(office.areaLine, isFalse);
+      expect(office.sliceBorderWidth, 0.75);
+      expect(office.centerText, isNull);
+      expect(office.centerTextStyle, office.titleText);
+      expect(office.sparklineWidth, 0.75);
+    });
+
+    test('copyWith round trip and equality', () {
+      final ChartTextStyle style = text(ChartColor.rgb(0x112233));
+      final ChartTheme changed = custom().copyWith(
+        areaOpacity: 0.4,
+        areaLine: true,
+        sliceBorderWidth: 2,
+        centerText: style,
+        sparklineWidth: 1.5,
+      );
+      expect(changed.areaOpacity, 0.4);
+      expect(changed.areaLine, isTrue);
+      expect(changed.sliceBorderWidth, 2);
+      expect(changed.centerText, style);
+      expect(changed.centerTextStyle, style);
+      expect(changed.sparklineWidth, 1.5);
+      expect(changed, isNot(custom()));
+      expect(changed.copyWith(), changed);
+      expect(changed.copyWith().hashCode, changed.hashCode);
+      expect(custom().copyWith(areaOpacity: 0.5), isNot(custom()));
+      expect(custom().copyWith(areaLine: true), isNot(custom()));
+      expect(custom().copyWith(sliceBorderWidth: 1), isNot(custom()));
+      expect(custom().copyWith(sparklineWidth: 1), isNot(custom()));
+    });
+
+    test('out of range values throw', () {
+      ChartTheme build({
+        double areaOpacity = 1,
+        double sliceBorderWidth = 0.75,
+        double sparklineWidth = 0.75,
+      }) {
+        final ChartTextStyle t = text(ChartColor.rgb(0));
+        return ChartTheme(
+          palette: <ChartColor>[ChartColor.rgb(0)],
+          axisLabels: t,
+          titleText: t,
+          legendText: t,
+          dataLabels: t,
+          gridLine: ChartColor.rgb(0),
+          axisLine: ChartColor.rgb(0),
+          background: ChartColor.rgb(0),
+          areaOpacity: areaOpacity,
+          sliceBorderWidth: sliceBorderWidth,
+          sparklineWidth: sparklineWidth,
+        );
+      }
+
+      expect(build(areaOpacity: 0.01).areaOpacity, 0.01);
+      expect(build(sliceBorderWidth: 0).sliceBorderWidth, 0);
+      for (final double bad in <double>[0, -0.1, 1.1, double.nan]) {
+        expect(() => build(areaOpacity: bad), throwsArgumentError);
+      }
+      for (final double bad in <double>[-1, double.nan, double.infinity]) {
+        expect(() => build(sliceBorderWidth: bad), throwsArgumentError);
+        expect(() => build(sparklineWidth: bad), throwsArgumentError);
+      }
+    });
+  });
 }

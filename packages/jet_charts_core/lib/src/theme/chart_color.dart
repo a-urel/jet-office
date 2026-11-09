@@ -136,6 +136,22 @@ final class ChartColor {
   }
 }
 
+/// [foreground] blended over [background] by [fraction] (0 to 1), per
+/// channel, rounded, as a fixed colour. Internal to the package.
+ChartColor blendChartColors(
+  ChartColor foreground,
+  ChartColor background,
+  double fraction,
+) {
+  int channel(int shift) {
+    final int f = (foreground.rgb >> shift) & 0xFF;
+    final int b = (background.rgb >> shift) & 0xFF;
+    return ((f - b) * fraction + b).round();
+  }
+
+  return ChartColor.rgb((channel(16) << 16) | (channel(8) << 8) | channel(0));
+}
+
 /// The font, size and colour of a piece of chart text.
 final class ChartTextStyle {
   /// Creates a text style.
