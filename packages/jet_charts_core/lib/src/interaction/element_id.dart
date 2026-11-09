@@ -32,6 +32,10 @@ enum ChartElementKind {
   /// The clip that holds the series marks, `plot/clip`.
   plotClip,
 
+  /// The clip that holds a line chart's markers, `plot/markers`: the plot
+  /// grown by a marker's reach.
+  markerClip,
+
   /// The text of a kind the layout does not draw, `placeholder`.
   placeholder,
 
@@ -135,6 +139,8 @@ final class ChartElementId {
         return ChartElementId._(id, ChartElementKind.placeholder);
       case [ids.plot, 'clip']:
         return ChartElementId._(id, ChartElementKind.plotClip);
+      case [ids.plot, 'markers']:
+        return ChartElementId._(id, ChartElementKind.markerClip);
       case ['legend', final String s, final String part]:
         final int? series = _index(s);
         final ChartElementKind? kind = switch (part) {

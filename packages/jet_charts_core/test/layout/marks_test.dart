@@ -339,23 +339,95 @@ void main() {
         expect(m.center.y, near(yOf(l, values[c]!)));
         count++;
       }
-      if (s + 1 < g.chart.series.length) {
-        final int nextLine = marks.indexWhere(
-          (ChartPrimitive q) => q.id.startsWith('series/${s + 1}/line/'),
-        );
-        final int lastMarker = marks.lastIndexWhere(
-          (ChartPrimitive q) => q.id.startsWith('series/$s/marker/'),
-        );
-        expect(lastMarker, lessThan(nextLine));
-      }
     }
     expect(count, 10);
-    // Markers sit inside the plot's clip.
-    final ClipPrimitive clip = l.primitives.whereType<ClipPrimitive>().single;
-    expect(
-      clip.children.whereType<ArcPrimitive>().map((ArcPrimitive a) => a.id),
-      hasLength(10),
+    // Markers sit in their own clip, after the plot's clip, in series then
+    // category order.
+    final List<ClipPrimitive> clips = l.primitives
+        .whereType<ClipPrimitive>()
+        .toList();
+    expect(clips.map((ClipPrimitive c) => c.id), <String>[
+      ids.plotClip,
+      ids.markerClip,
+    ]);
+    expect(clips[0].children.whereType<ArcPrimitive>(), isEmpty);
+    final List<String> markers = <String>[
+      for (final ChartPrimitive m in clips[1].children) m.id,
+    ];
+    expect(markers, hasLength(10));
+    expect(markers, <String>[
+      for (int s = 0; s < g.chart.series.length; s++)
+        for (int c = 0; c < g.chart.series[s].values.values.length; c++)
+          if (g.chart.series[s].values.values[c] != null)
+            ids.seriesMarkerId(s, c),
+    ]);
+  });
+
+  test('a marker on the plot\'s edge is drawn whole', () {
+    // A 0 on an axis from 0: the marker's centre is on the plot's bottom.
+    final ChartLayout l = lay(
+      <List<double?>>[
+        <double?>[0, 50, 100],
+      ],
+      kind: ChartKind.line,
+      valueAxis: const ChartAxis(min: 0, max: 100),
     );
+    final ChartRect plot = l.plotArea!;
+    final ArcPrimitive low = byId<ArcPrimitive>(l, ids.seriesMarkerId(0, 0));
+    final ArcPrimitive high = byId<ArcPrimitive>(l, ids.seriesMarkerId(0, 2));
+    expect(low.center.y, near(plot.bottom));
+    expect(high.center.y, near(plot.top));
+    final ClipPrimitive clip = byId<ClipPrimitive>(l, ids.markerClip);
+    final double reach = theme.markerSize / 2 + 0.75 / 2;
+    expect(
+      clip.rect,
+      ChartRect(
+        plot.left - reach,
+        plot.top - reach,
+        plot.width + 2 * reach,
+        plot.height + 2 * reach,
+      ),
+    );
+    for (final ArcPrimitive m in <ArcPrimitive>[low, high]) {
+      expect(m.center.y + reach, lessThanOrEqualTo(clip.rect.bottom + 1e-9));
+      expect(m.center.y - reach, greaterThanOrEqualTo(clip.rect.top - 1e-9));
+    }
+    // The line itself stays in the plot's clip.
+    expect(
+      byId<ClipPrimitive>(
+        l,
+        ids.plotClip,
+      ).children.map((ChartPrimitive c) => c.id),
+      <String>[ids.seriesLineId(0, 0)],
+    );
+    expect(findOverlaps(l.primitives, l.size), isEmpty);
+  });
+
+  test('the marker clip stays inside the chart', () {
+    final ChartLayout l = layoutChart(
+      Chart(
+        kind: ChartKind.line,
+        valueAxis: const ChartAxis(min: 0, max: 100),
+        legend: const ChartLegend(visible: false),
+        series: <ChartSeries>[
+          series('S0', <double?>[0, 100]),
+        ],
+      ),
+      theme: theme.copyWith(
+        spacing: theme.spacing.copyWith(padding: 1),
+        markerSize: 20,
+      ),
+      size: const ChartSize(400, 300),
+      measurer: measurer,
+    );
+    final ChartRect clip = byId<ClipPrimitive>(l, ids.markerClip).rect;
+    // The plot grown by the reach (10 + 0.375) would leave the chart.
+    expect(l.plotArea!.right + 10.375, greaterThan(400));
+    expect(clip.right, 400);
+    expect(clip.left, greaterThanOrEqualTo(0));
+    expect(clip.top, greaterThanOrEqualTo(0));
+    expect(clip.right, lessThanOrEqualTo(400));
+    expect(clip.bottom, lessThanOrEqualTo(300));
   });
 
   test('without line markers only a lone point gets a marker', () {

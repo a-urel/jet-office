@@ -63,9 +63,9 @@ final class ChartTheme {
   /// colour `D9D9D9` (`tx1`, 0.15 and 0.85), a 0.75 pt [border] of the same
   /// colour, no [valueAxisLine] and the background `FFFFFF` (`bg1`), each
   /// colour bound to the file theme; also [gapWidthPercent] 219, [lineWidth]
-  /// 2.25, [markerSize] 5, [lineMarkers] on, and of [spacing] the line widths, the overlap and
-  /// the tick length. Still unconfirmed: 9 pt for the legend and data labels,
-  /// and the other gaps of [spacing].
+  /// 2.25, [markerSize] 5, [lineMarkers] on, and of [spacing] the line widths,
+  /// the overlap and the tick length. Still unconfirmed: 9 pt for the legend
+  /// and data labels, and the other gaps of [spacing].
   ///
   /// Its [tooltip] is this library's own look, not an Excel value.
   static final ChartTheme office = buildOfficeTheme();

@@ -39,6 +39,7 @@ void main() {
       'legend': _e(ChartElementKind.legend),
       'plot': _e(ChartElementKind.plot),
       'plot/clip': _e(ChartElementKind.plotClip),
+      'plot/markers': _e(ChartElementKind.markerClip),
       'placeholder': _e(ChartElementKind.placeholder),
       'legend/2/symbol': _e(ChartElementKind.legendSymbol, series: 2),
       'legend/0/marker': _e(ChartElementKind.legendSymbol, series: 0),

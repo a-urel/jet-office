@@ -68,8 +68,11 @@ final class ChartLayout {
   /// `/`-separated parts; indexes count from 0.
   ///
   /// * `background`, `title`, `legend`, `plot`, `plot/clip` (the clip that
-  ///   holds the series marks) and `placeholder` (the text of a kind this
-  ///   version does not draw): one each.
+  ///   holds the series marks), `plot/markers` (the clip that holds a line
+  ///   chart's markers, the plot grown by a marker's reach, so a marker on
+  ///   the plot's edge is drawn whole; only when there is a marker) and
+  ///   `placeholder` (the text of a kind this version does not draw): one
+  ///   each.
   /// * `legend/<s>/symbol` and `legend/<s>/text`: the legend entry of series
   ///   `<s>`; a line series' entry also has `legend/<s>/marker`, the marker
   ///   on its line, when the theme's `lineMarkers` is on.

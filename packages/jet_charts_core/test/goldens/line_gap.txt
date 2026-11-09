@@ -18,13 +18,14 @@ path grid/value/6 22.80,36.20 352.00,36.20 closed=false fill=- stroke=D9D9D9 wid
 clip plot/clip 22.80,36.20 329.20x164.20
   path series/0/line/0 50.23,145.67 105.10,104.62 closed=false fill=- stroke=156082 width=2.25 dash=-
   path series/0/line/1 214.83,77.25 269.70,118.30 324.57,49.88 closed=false fill=- stroke=156082 width=2.25 dash=-
+  path series/1/line/0 50.23,173.03 105.10,159.35 159.97,145.67 closed=false fill=- stroke=E97132 width=2.25 dash=-
+  path series/1/line/1 269.70,131.98 324.57,118.30 closed=false fill=- stroke=E97132 width=2.25 dash=-
+clip plot/markers 19.92,33.33 334.95x169.95
   arc series/0/marker/0 centre=50.23,145.67 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
   arc series/0/marker/1 centre=105.10,104.62 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
   arc series/0/marker/3 centre=214.83,77.25 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
   arc series/0/marker/4 centre=269.70,118.30 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
   arc series/0/marker/5 centre=324.57,49.88 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
-  path series/1/line/0 50.23,173.03 105.10,159.35 159.97,145.67 closed=false fill=- stroke=E97132 width=2.25 dash=-
-  path series/1/line/1 269.70,131.98 324.57,118.30 closed=false fill=- stroke=E97132 width=2.25 dash=-
   arc series/1/marker/0 centre=50.23,173.03 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
   arc series/1/marker/1 centre=105.10,159.35 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
   arc series/1/marker/2 centre=159.97,145.67 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75

@@ -178,6 +178,8 @@ extension FramePaint on FrameContext {
     final ChartRect plot = a.plot!;
     final ValueScale scale = a.scale!;
     final ChartRect inner = a.inner!;
+    final ({List<ChartPrimitive> shapes, List<ChartPrimitive> markers}) marks =
+        _splitMarkers(layoutMarks(chart, resolved, theme, plot, scale));
     final List<ChartPrimitive> out = <ChartPrimitive>[
       background(),
       ...?a.title?.primitives,
@@ -200,11 +202,9 @@ extension FramePaint on FrameContext {
           color: theme.gridLine,
           width: theme.spacing.gridLineWidth,
         ),
-      ClipPrimitive(
-        ids.plotClip,
-        plot,
-        layoutMarks(chart, resolved, theme, plot, scale),
-      ),
+      ClipPrimitive(ids.plotClip, plot, marks.shapes),
+      if (marks.markers.isNotEmpty)
+        ClipPrimitive(ids.markerClip, _markerClip(plot), marks.markers),
       if (chart.valueAxis.visible && theme.valueAxisLine)
         valueAxisLine(
           plot,
@@ -274,6 +274,36 @@ extension FramePaint on FrameContext {
     return (
       primitives: <ChartPrimitive>[...out, ...labels.primitives],
       hiddenData: labels.hidden,
+    );
+  }
+
+  /// [marks] parted into the line markers and every other mark, each in
+  /// paint order.
+  ({List<ChartPrimitive> shapes, List<ChartPrimitive> markers}) _splitMarkers(
+    List<ChartPrimitive> marks,
+  ) {
+    final List<ChartPrimitive> shapes = <ChartPrimitive>[];
+    final List<ChartPrimitive> markers = <ChartPrimitive>[];
+    for (final ChartPrimitive m in marks) {
+      (m is ArcPrimitive ? markers : shapes).add(m);
+    }
+    return (shapes: shapes, markers: markers);
+  }
+
+  /// The clip of the line markers: [plot] grown on every side by a marker's
+  /// reach (half the theme's `markerSize` and half its outline), so a marker
+  /// centred on the plot's edge is drawn whole, and kept inside the chart.
+  ChartRect _markerClip(ChartRect plot) {
+    final double reach = theme.markerSize / 2 + markerOutlineWidth / 2;
+    final double left = math.max(0, plot.left - reach);
+    final double top = math.max(0, plot.top - reach);
+    final double right = math.min(size.width, plot.right + reach);
+    final double bottom = math.min(size.height, plot.bottom + reach);
+    return ChartRect(
+      left,
+      top,
+      math.max(0, right - left),
+      math.max(0, bottom - top),
     );
   }
 

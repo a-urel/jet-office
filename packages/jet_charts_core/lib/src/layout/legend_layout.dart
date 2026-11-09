@@ -65,9 +65,9 @@ typedef LegendLineLook = ({double lineWidth, double markerSize, bool markers});
 /// drawn as [lineLook] says, with its marker (`legend/<s>/marker`) over it.
 /// On the top or bottom, entries run in rows `legendItemGap` apart that wrap
 /// at the width of [area], each row centred, rows `minTextGap` apart, at most
-/// a third of [limit]'s height in all. On the left or right, entries make one column,
-/// at most a third of [limit]'s width wide and no taller than [area], centred
-/// on [area]'s height. The legend keeps `legendGap` from what is left.
+/// a third of [limit]'s height in all. On the left or right, entries make one
+/// column, at most a third of [limit]'s width wide and no taller than [area],
+/// centred on [area]'s height. The legend keeps `legendGap` from what is left.
 ///
 /// Returns `null` when it does not fit. The `legend` rectangle holds the
 /// entries exactly and has no fill.

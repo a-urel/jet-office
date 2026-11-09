@@ -3,6 +3,7 @@ library;
 
 import 'dart:math' as math;
 
+import '../layout/chart_ids.dart' as ids;
 import '../layout/chart_layout.dart';
 import '../layout/geometry.dart';
 import '../layout/primitives.dart';
@@ -13,7 +14,10 @@ import '../layout/primitives.dart';
 /// [point] lies inside its rectangle (edges included): its children come
 /// first, topmost first, then the clip itself; outside it neither the clip
 /// nor any child is hit, so a mark that overflows the clip is not hit where
-/// it is not drawn.
+/// it is not drawn. The clip of a line chart's markers (`plot/markers`) is
+/// entered the same way but is never hit itself: it only lets the markers
+/// reach past the plot, and the plot's clip (`plot/clip`) under it is hit
+/// instead.
 ///
 /// Each kind is hit as follows, edges included, with [tolerance] the extra
 /// distance a point may be away:
@@ -65,7 +69,9 @@ void _hitAll(
     if (primitive is ClipPrimitive) {
       if (_inRect(primitive.rect, p, 0)) {
         _hitAll(primitive.children, p, tolerance, hits);
-        hits.add(primitive);
+        if (primitive.id != ids.markerClip) {
+          hits.add(primitive);
+        }
       }
     } else if (_hits(primitive, p, tolerance)) {
       hits.add(primitive);

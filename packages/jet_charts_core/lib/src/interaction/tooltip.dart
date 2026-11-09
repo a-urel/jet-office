@@ -88,7 +88,8 @@ final class ChartTooltip {
 ///
 /// * a bar, a marker or a data label: that point, its category's full text
 ///   as the title and one row of the series' colour, name and value;
-/// * a line, an area, a grid line or the plot (`plot/clip`, `plot`): the
+/// * a line, an area, a grid line or the plot (`plot/clip`, `plot/markers`,
+///   `plot`): the
 ///   category whose `ChartLayout.categoryBands` band holds [point], every
 ///   series at it as a row;
 /// * a category label: that category, as above;
@@ -214,6 +215,7 @@ final class _Source {
       case ChartElementKind.gridLine:
       case ChartElementKind.plot:
       case ChartElementKind.plotClip:
+      case ChartElementKind.markerClip:
         final int? category = point == null ? null : _band(point);
         return category == null ? null : _category(id, category);
       case ChartElementKind.legendSymbol:

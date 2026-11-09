@@ -3,9 +3,9 @@
 /// A category's band is the plot's length along the category axis over the
 /// category count. Columns, bars and lines sit in the middle of their bands;
 /// an area's points sit on tick marks (`categoryPosition`), from the plot's
-/// one edge to the other, as Excel draws one. Every coordinate is finite: a value outside the axis range
-/// is mapped no further than one plot length beyond the plot's edge, where the
-/// plot's clip cuts it off.
+/// one edge to the other, as Excel draws one. Every coordinate is finite: a
+/// value outside the axis range is mapped no further than one plot length
+/// beyond the plot's edge, where the plot's clip cuts it off.
 library;
 
 import 'dart:math' as math;
@@ -21,12 +21,14 @@ import 'geometry.dart';
 import 'primitives.dart';
 import 'resolve.dart';
 
-/// The marks of [chart] on [plot], in paint order, for the clip of the plot.
+/// The marks of [chart] on [plot], in paint order.
 ///
 /// Column and bar charts draw rectangles, line charts one path per run of
 /// values and then, per series, a circle marker on every point (on a point
 /// with no neighbour only, when the theme's `lineMarkers` is off), area charts
-/// one closed path per series. Any other kind draws none.
+/// one closed path per series. Any other kind draws none. The frame puts the
+/// markers in a clip of their own, after the others, which go in the plot's
+/// clip.
 List<ChartPrimitive> layoutMarks(
   Chart chart,
   ResolvedChart resolved,

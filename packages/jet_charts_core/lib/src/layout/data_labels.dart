@@ -5,8 +5,9 @@
 /// already drawn (axis labels, titles, the legend) and every label already
 /// placed, stays off the legend's rectangle and shares no area with a bar,
 /// marker or line other than its own bar (`findOverlaps`'s rule; area fills
-/// do not count, and a label on an area fill is drawn to read on it). Labels are placed in series order, then category order, so an
-/// earlier one wins a place. A label with no such place is hidden.
+/// do not count, and a label on an area fill is drawn to read on it). Labels
+/// are placed in series order, then category order, so an earlier one wins a
+/// place. A label with no such place is hidden.
 library;
 
 import 'dart:math' as math;

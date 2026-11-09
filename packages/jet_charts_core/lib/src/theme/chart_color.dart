@@ -1,7 +1,8 @@
 /// Colours and text styles of a chart theme.
 library;
 
-/// A slot of a file's colour theme, whose names (`dk1`, `lt1` and the rest) map to DrawingML's.
+/// A slot of a file's colour theme, whose names (`dk1`, `lt1` and the rest)
+/// map to DrawingML's.
 ///
 /// A [ChartColor] bound to a slot is exported as `schemeClr`, so the chart
 /// follows the theme of the file that holds it.

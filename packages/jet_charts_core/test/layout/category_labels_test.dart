@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:jet_charts_core/jet_charts_core.dart';
+import 'package:jet_charts_core/src/layout/axis_layout.dart' show isWrappingOf;
 import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
 import 'package:test/test.dart';
 
@@ -90,6 +91,28 @@ double tickX(ChartLayout layout, int i, int n) {
 }
 
 void main() {
+  group('isWrappingOf', () {
+    test('a text is a wrapping of itself', () {
+      expect(isWrappingOf('North region', 'North region'), isTrue);
+      expect(isWrappingOf('', ''), isTrue);
+    });
+
+    test('spaces turned into line breaks are a wrapping', () {
+      expect(isWrappingOf('North\nregion', 'North region'), isTrue);
+      expect(isWrappingOf('a\nb c\nd', 'a b c d'), isTrue);
+    });
+
+    test('any other change is not', () {
+      // A cut text, a line break where the text has none, a space where it
+      // has a break, another letter and a longer text.
+      expect(isWrappingOf('North…', 'North region'), isFalse);
+      expect(isWrappingOf('Nor\nh', 'North'), isFalse);
+      expect(isWrappingOf('a b', 'a\nb'), isFalse);
+      expect(isWrappingOf('North regiom', 'North region'), isFalse);
+      expect(isWrappingOf('North region ', 'North region'), isFalse);
+    });
+  });
+
   test('short labels stay horizontal', () {
     final List<String> cats = <String>['Q1', 'Q2', 'Q3', 'Q4'];
     final ChartLayout layout = lay(cats, const ChartSize(400, 300));

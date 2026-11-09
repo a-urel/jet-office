@@ -8,8 +8,8 @@
 /// every id it has, so hit testing and golden tests can name a mark. An id is
 /// a path of `/`-separated parts; indexes count from 0.
 ///
-/// * [background], [title], [legend], [plot], [plotClip], [placeholder]:
-///   one each.
+/// * [background], [title], [legend], [plot], [plotClip], [markerClip] (when
+///   a line chart has markers), [placeholder]: one each.
 /// * `legend/<s>/symbol` and `legend/<s>/text`: the legend entry of series
 ///   `<s>` ([legendSymbolId], [legendTextId]); a line series' entry also has
 ///   `legend/<s>/marker`, the marker on its line ([legendMarkerId]).
@@ -37,6 +37,10 @@ const String plot = 'plot';
 
 /// The clip that holds the series marks.
 const String plotClip = 'plot/clip';
+
+/// The clip that holds a line chart's markers: the plot grown by a marker's
+/// reach, so a marker on the plot's edge is drawn whole.
+const String markerClip = 'plot/markers';
 
 /// What is drawn when there is nothing to draw.
 const String placeholder = 'placeholder';
