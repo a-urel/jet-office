@@ -52,9 +52,11 @@ as what the file confirmed:
 
 ## Excel's palette past six colours
 
-Unconfirmed. `ChartTheme.seriesColor` derives colours past the sixth by lightening
-and darkening the accents; the steps have not been compared with what Excel does
-for a seventh series.
+Seen in the owner's J3 gallery check (2026-11-09, `column_eight_series`): Excel
+draws series 7 and 8 as a light grey-blue and a light salmon, lighter forms of
+accents 1 and 2, where `ChartTheme.seriesColor` drew a dark navy and a brown.
+The exact values were read from a screenshot, not a file; series 9 and later are
+still unconfirmed.
 
 ## Milestone checks
 
@@ -62,3 +64,4 @@ The owner records each milestone's check here.
 
 | Milestone | Date | Excel | Result |
 |---|---|---|---|
+| J3 (`jet_charts_flutter` gallery, `gallery.xlsx` after `acd75e7`) | 2026-11-09 | Excel for Mac, `tr-TR` (version not recorded) | Owner compared all 16 charts side by side. Differences: `line_gap`, Excel draws a circle marker on every point and a line-and-circle legend symbol, the app none and a square; `area_stacked`, the app leaves space left and right of the area, Excel draws it edge to edge; `column_negative`, Excel puts the category labels at the zero line, covered by negative bars, the app under the plot (kept, deliberate: `parity.md`); `column_eight_series`, the app's legend wraps to two lines (the app had no Aptos Narrow) and series 7 and 8 differ in colour (above); `column_long_labels`, Excel keeps the labels level and wraps them onto two lines, the app turns them and cuts them; `column_data_labels`, the label 18 does not show in the app. No other difference. Fixes follow in a later commit. |

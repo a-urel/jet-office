@@ -77,7 +77,9 @@ theme's in `excel-checks.md`.
 
 - **In a band under the plot.** Excel puts them "next to axis", at the value
   axis' crossing; this package puts them in a band under (or, for bars, beside)
-  the plot, so negative values never push them into the bars.
+  the plot, so negative values never push them into the bars. The owner's
+  gallery check (J3, `column_negative`, 2026-11-09) saw Excel's labels covered
+  by negative bars and chose to keep them under the plot.
 - **Turned labels sit `labelGap` below the plot** and move down to clear value
   label 0 where they would meet it.
 - **The order of tries is this package's**: level labels showing every label,
