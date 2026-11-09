@@ -12,7 +12,6 @@ library;
 
 import '../model/chart.dart';
 import '../model/chart_kind.dart';
-import 'marks.dart' show hasSecondaryAxis;
 import 'resolve.dart';
 
 /// The steps that take content away when it does not fit, in order.
@@ -94,10 +93,10 @@ final class FrameShown {
           (chart.kind == ChartKind.scatter || resolved.categoryCount > 0),
       valueLabels = chart.valueAxis.visible,
       secondaryTitle =
-          hasSecondaryAxis(resolved) &&
+          resolved.drawsSecondaryAxis &&
           (chart.secondaryValueAxis?.title ?? '').isNotEmpty,
       secondaryLabels =
-          hasSecondaryAxis(resolved) &&
+          resolved.drawsSecondaryAxis &&
           (chart.secondaryValueAxis?.visible ?? true);
 
   /// Whether the data labels are drawn.

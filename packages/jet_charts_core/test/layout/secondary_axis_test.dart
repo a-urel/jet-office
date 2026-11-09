@@ -240,6 +240,88 @@ void main() {
     );
   });
 
+  group('a percent stacked combination', () {
+    test('a secondary axis of lines alone is not a percent axis', () {
+      final Chart chart = Chart(
+        kind: ChartKind.combination,
+        grouping: ChartGrouping.percentStacked,
+        series: <ChartSeries>[
+          _series('A', _column),
+          _series('B', const <double>[8, 11, 14, 10]),
+          _series(
+            'Revenue',
+            _line,
+            kind: ChartKind.line,
+            axis: ChartAxisBinding.secondary,
+          ),
+        ],
+      );
+      final ChartLayout layout = _lay(chart);
+      final ChartRect plot = layout.plotArea!;
+      // The columns' axis is a percent one; the line's is not.
+      expect(layout.valueScale!.max, 1);
+      expect(
+        _starting<TextPrimitive>(layout, 'axis/value/label/').last.text,
+        '100%',
+      );
+      final ValueScale secondary = layout.secondaryValueScale!;
+      expect(secondary.max, greaterThanOrEqualTo(1400));
+      expect(
+        _starting<TextPrimitive>(
+          layout,
+          'axis/secondary/label/',
+        ).map((TextPrimitive t) => t.text),
+        everyElement(isNot(endsWith('%'))),
+      );
+      for (final ArcPrimitive m in _starting<ArcPrimitive>(
+        layout,
+        'series/2/marker/',
+      )) {
+        expect(m.center.y, inInclusiveRange(plot.top, plot.bottom));
+      }
+      expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+    });
+
+    test('a primary axis of lines alone is not a percent axis', () {
+      final Chart chart = Chart(
+        kind: ChartKind.combination,
+        grouping: ChartGrouping.percentStacked,
+        series: <ChartSeries>[
+          _series('Revenue', _line, kind: ChartKind.line),
+          _series('A', _column, axis: ChartAxisBinding.secondary),
+          _series('B', const <double>[
+            8,
+            11,
+            14,
+            10,
+          ], axis: ChartAxisBinding.secondary),
+        ],
+      );
+      final ChartLayout layout = _lay(chart);
+      final ChartRect plot = layout.plotArea!;
+      expect(layout.valueScale!.max, greaterThanOrEqualTo(1400));
+      expect(
+        _starting<TextPrimitive>(
+          layout,
+          'axis/value/label/',
+        ).map((TextPrimitive t) => t.text),
+        everyElement(isNot(endsWith('%'))),
+      );
+      expect(layout.secondaryValueScale!.max, 1);
+      expect(
+        _starting<TextPrimitive>(layout, 'axis/secondary/label/').last.text,
+        '100%',
+      );
+      for (final ArcPrimitive m in _starting<ArcPrimitive>(
+        layout,
+        'series/0/marker/',
+      )) {
+        expect(m.center.y, inInclusiveRange(plot.top, plot.bottom));
+      }
+      expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+    });
+  });
+
   test('every id parses', () {
     final ChartLayout layout = _lay(
       _chart(secondaryValueAxis: const ChartAxis(gridLines: true, title: 'T')),

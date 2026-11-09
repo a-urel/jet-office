@@ -7,7 +7,6 @@ import 'package:jet_core/jet_core.dart';
 import '../layout/chart_ids.dart' as ids;
 import '../layout/chart_layout.dart';
 import '../layout/geometry.dart';
-import '../layout/marks.dart' show shapedValues;
 import '../layout/pie_layout.dart' show sliceColor, sliceShares;
 import '../layout/primitives.dart';
 import '../layout/resolve.dart';
@@ -191,19 +190,20 @@ ChartTooltip? chartTooltipFor(
 
 /// [value] of [chart]'s series [series] formatted as a tooltip shows it: in
 /// the series' format code, else the code of the value axis it is measured
-/// on (the secondary value axis' for a series measured there,
-/// `onSecondaryAxis`), else `General`.
+/// on (the secondary value axis' when [secondary], as
+/// `ResolvedChart.isSecondary` tells), else `General`.
 String formatSeriesValue(
   Chart chart,
   int series,
   double value,
-  NumberFormatter formatter,
-) => formatter
+  NumberFormatter formatter, {
+  required bool secondary,
+}) => formatter
     .format(
       value,
       numberFormat:
           chart.series[series].formatCode ??
-          (onSecondaryAxis(chart)[series]
+          (secondary
               ? chart.secondaryValueAxis?.formatCode
               : chart.valueAxis.formatCode) ??
           'General',
@@ -222,7 +222,7 @@ final class _Source {
   final ChartTheme _theme;
 
   late final ResolvedChart resolved = resolveChart(chart, _theme, formatter);
-  late final List<List<double?>> shares = shapedValues(resolved);
+  late final List<List<double?>> shares = resolved.shaped;
 
   /// Whether the chart is a scatter chart.
   late final bool scatter = chart.kind == ChartKind.scatter;
@@ -327,7 +327,13 @@ final class _Source {
     if (value == null) {
       return null;
     }
-    String text = formatSeriesValue(chart, series, value, formatter);
+    String text = formatSeriesValue(
+      chart,
+      series,
+      value,
+      formatter,
+      secondary: resolved.isSecondary(series),
+    );
     if (share != null) {
       text += ' (${formatter.format(share, numberFormat: '0%').text})';
     }
@@ -363,7 +369,13 @@ final class _Source {
         ),
         ChartTooltipRow(
           label: 'Y',
-          value: formatSeriesValue(chart, series, y, formatter),
+          value: formatSeriesValue(
+            chart,
+            series,
+            y,
+            formatter,
+            secondary: resolved.isSecondary(series),
+          ),
         ),
       ],
       sourceId: id,
@@ -402,7 +414,13 @@ final class _Source {
     if (value == null) {
       return null;
     }
-    String text = formatSeriesValue(chart, series, value, formatter);
+    String text = formatSeriesValue(
+      chart,
+      series,
+      value,
+      formatter,
+      secondary: resolved.isSecondary(series),
+    );
     if (resolved.groupingOf(series) == ChartGrouping.percentStacked) {
       final double? share = shares[series][category];
       if (share != null) {

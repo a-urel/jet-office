@@ -123,10 +123,10 @@ final class FrameContext {
   ) : bar = chart.kind == ChartKind.bar,
       onTicks = categoriesOnTicks(chart, resolved),
       scatter = chart.kind == ChartKind.scatter,
-      secondary = hasSecondaryAxis(resolved),
+      secondary = resolved.drawsSecondaryAxis,
       secondaryAxis = chart.secondaryValueAxis ?? const ChartAxis(),
-      extent = axisExtent(resolved, secondary: false),
-      secondaryExtent = axisExtent(resolved, secondary: true),
+      extent = resolved.primaryExtent,
+      secondaryExtent = resolved.secondaryExtent,
       xValues = chart.kind == ChartKind.scatter
           ? scatterXValues(chart, resolved.categoryCount)
           : const <List<double>>[],
@@ -160,7 +160,7 @@ final class FrameContext {
   final bool onTicks;
 
   /// Whether the chart has a secondary value axis to draw
-  /// (`hasSecondaryAxis`), on the plot's right.
+  /// (`ResolvedChart.drawsSecondaryAxis`), on the plot's right.
   final bool secondary;
 
   /// The secondary value axis' settings: the chart's, else an axis with no
@@ -220,7 +220,7 @@ final class FrameContext {
     fixedMin: secondaryAxis.min,
     fixedMax: secondaryAxis.max,
     fixedMajorUnit: secondaryAxis.majorUnit,
-    percent: resolved.percent,
+    percent: resolved.secondaryPercent,
   );
 
   /// Whether the chart fixes the secondary value axis' major unit.

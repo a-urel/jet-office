@@ -174,7 +174,15 @@ ChartSummary summarizeChart(
         texts.add('');
         continue;
       }
-      texts.add(formatSeriesValue(chart, s, value, formatter));
+      texts.add(
+        formatSeriesValue(
+          chart,
+          s,
+          value,
+          formatter,
+          secondary: resolved.isSecondary(s),
+        ),
+      );
       if (low == null || value < low.$2) {
         low = (s, value);
       }
@@ -227,10 +235,22 @@ ChartSummary summarizeChart(
         : null,
     minimum: low == null
         ? null
-        : formatSeriesValue(chart, low.$1, low.$2, formatter),
+        : formatSeriesValue(
+            chart,
+            low.$1,
+            low.$2,
+            formatter,
+            secondary: resolved.isSecondary(low.$1),
+          ),
     maximum: high == null
         ? null
-        : formatSeriesValue(chart, high.$1, high.$2, formatter),
+        : formatSeriesValue(
+            chart,
+            high.$1,
+            high.$2,
+            formatter,
+            secondary: resolved.isSecondary(high.$1),
+          ),
     isEmpty: low == null,
   );
 }

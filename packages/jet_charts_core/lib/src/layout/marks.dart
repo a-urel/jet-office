@@ -7,7 +7,7 @@
 /// value outside the axis range is mapped no further than one plot length
 /// beyond the plot's edge, where the plot's clip cuts it off.
 ///
-/// The series are drawn in groups ([markGroups]): the series of one drawn
+/// The series are drawn in groups (`markGroups`): the series of one drawn
 /// kind on one value axis. A column, bar, line or area chart has one group
 /// per axis; a combination chart one per kind and axis.
 library;
@@ -41,7 +41,7 @@ import 'scatter_layout.dart';
 /// Any other kind draws none. The frame puts the markers in a clip of their
 /// own, after the others, which go in the plot's clip.
 ///
-/// The groups of [markGroups] are drawn in their order: areas, then columns
+/// The groups of `markGroups` are drawn in their order: areas, then columns
 /// or bars, then lines, the primary axis' group of a kind before the
 /// secondary axis' one. A secondary group is measured on
 /// [secondaryScale] (on [scale] when that is `null`). In a combination chart
@@ -61,10 +61,10 @@ List<ChartPrimitive> layoutMarks(
         ? const <ChartPrimitive>[]
         : scatterMarks(chart, resolved, theme, plot, scale, scatterAxis);
   }
-  final List<List<double?>> values = shapedValues(resolved);
+  final List<List<double?>> values = resolved.shaped;
   final bool onTicks = categoriesOnTicks(chart, resolved);
   final List<ChartPrimitive> out = <ChartPrimitive>[];
-  for (final MarkGroup group in markGroups(resolved)) {
+  for (final MarkGroup group in resolved.groups) {
     final MarkAxes axes = MarkAxes(
       plot,
       group.secondary ? secondaryScale ?? scale : scale,
@@ -102,107 +102,6 @@ bool categoriesOnTicks(Chart chart, ResolvedChart resolved) {
   return !resolved.seriesKinds.contains(ChartKind.column) &&
       resolved.seriesKinds.contains(ChartKind.area);
 }
-
-/// The series of one drawn kind on one value axis, drawn together: columns
-/// of a group share the category's slot, and a stacked group's values add
-/// up.
-final class MarkGroup {
-  /// Creates the group of the series [members] (indexes, in series order)
-  /// drawn as [kind].
-  const MarkGroup(
-    this.kind,
-    this.members, {
-    required this.secondary,
-    required this.grouping,
-  });
-
-  /// The kind the group is drawn as.
-  final ChartKind kind;
-
-  /// The indexes of the group's series, in series order.
-  final List<int> members;
-
-  /// Whether the group is measured on the secondary value axis.
-  final bool secondary;
-
-  /// How the group's series share a category.
-  final ChartGrouping grouping;
-
-  /// Whether the group's values add up.
-  bool get stacked => grouping != ChartGrouping.clustered;
-}
-
-/// The order kinds are drawn in: areas under columns and bars, lines on
-/// top. A kind not listed (a later one) is drawn after these, in the order
-/// its series first appear.
-const List<ChartKind> _drawOrder = <ChartKind>[
-  ChartKind.area,
-  ChartKind.column,
-  ChartKind.bar,
-  ChartKind.line,
-];
-
-/// The groups of [resolved]'s series, in paint order: per kind (areas,
-/// columns, bars, lines, then any other), the primary axis' group, then the
-/// secondary axis' one; each group's series in series order. A group's
-/// grouping is its series' (`ResolvedChart.seriesGroupings`). An empty
-/// group is left out.
-List<MarkGroup> markGroups(ResolvedChart resolved) {
-  final int n = resolved.values.length;
-  final List<ChartKind> kinds = <ChartKind>[..._drawOrder];
-  for (int s = 0; s < n; s++) {
-    if (!kinds.contains(resolved.kindOf(s))) {
-      kinds.add(resolved.kindOf(s));
-    }
-  }
-  return <MarkGroup>[
-    for (final ChartKind kind in kinds)
-      for (final bool secondary in <bool>[false, true])
-        if (<int>[
-              for (int s = 0; s < n; s++)
-                if (resolved.kindOf(s) == kind &&
-                    resolved.isSecondary(s) == secondary)
-                  s,
-            ]
-            case final List<int> members when members.isNotEmpty)
-          MarkGroup(
-            kind,
-            members,
-            secondary: secondary,
-            grouping: resolved.groupingOf(members.first),
-          ),
-  ];
-}
-
-/// The extent of the values measured on the primary value axis, or on the
-/// [secondary] one: of each group on it (`dataExtent` of the group's values
-/// under its grouping), joined. With no finite value both ends are `NaN`.
-({double min, double max}) axisExtent(
-  ResolvedChart resolved, {
-  required bool secondary,
-}) {
-  double min = double.nan;
-  double max = double.nan;
-  for (final MarkGroup group in markGroups(resolved)) {
-    if (group.secondary != secondary) {
-      continue;
-    }
-    final ({double min, double max}) e = dataExtent(<List<double?>>[
-      for (final int s in group.members) resolved.values[s],
-    ], group.grouping);
-    if (e.min.isNaN) {
-      continue;
-    }
-    min = min.isNaN ? e.min : math.min(min, e.min);
-    max = max.isNaN ? e.max : math.max(max, e.max);
-  }
-  return (min: min, max: max);
-}
-
-/// Whether [resolved] has a secondary value axis to draw: some series is
-/// measured on it and has a finite value.
-bool hasSecondaryAxis(ResolvedChart resolved) =>
-    resolved.hasSecondary && !axisExtent(resolved, secondary: true).min.isNaN;
 
 /// The value axis and the category bands a chart's marks are placed on.
 final class MarkAxes {
@@ -268,37 +167,6 @@ final class MarkAxes {
         ? ChartRect(low, plot.bottom - along - width, length, width)
         : ChartRect(plot.left + along, low, width, length);
   }
-}
-
-/// The values the marks use: the resolved ones, or in a percent stacked
-/// group (`markGroups`) each as its share of the category's absolute sum
-/// over the group's series (a category of sum 0 has no value). Tooltips read
-/// the share from here too.
-List<List<double?>> shapedValues(ResolvedChart resolved) {
-  if (!resolved.percent) {
-    return resolved.values;
-  }
-  final List<List<double?>> out = <List<double?>>[...resolved.values];
-  for (final MarkGroup group in markGroups(resolved)) {
-    if (group.grouping != ChartGrouping.percentStacked) {
-      continue;
-    }
-    final List<double> sums = <double>[
-      for (int c = 0; c < resolved.categoryCount; c++)
-        group.members.fold<double>(
-          0,
-          (double sum, int s) => sum + (resolved.values[s][c] ?? 0).abs(),
-        ),
-    ];
-    for (final int s in group.members) {
-      final List<double?> series = resolved.values[s];
-      out[s] = <double?>[
-        for (int c = 0; c < series.length; c++)
-          series[c] == null || !(sums[c] > 0) ? null : series[c]! / sums[c],
-      ];
-    }
-  }
-  return out;
 }
 
 /// [value] percent as a fraction, kept between [low] and [high] percent; a
@@ -686,10 +554,10 @@ List<MarkAnchor> layoutAnchors(
         ? const <MarkAnchor>[]
         : scatterAnchors(chart, resolved, plot, scale, scatterAxis);
   }
-  final List<List<double?>> values = shapedValues(resolved);
+  final List<List<double?>> values = resolved.shaped;
   final bool onTicks = categoriesOnTicks(chart, resolved);
   final List<MarkAnchor> out = <MarkAnchor>[];
-  for (final MarkGroup group in markGroups(resolved)) {
+  for (final MarkGroup group in resolved.groups) {
     final MarkAxes axes = MarkAxes(
       plot,
       group.secondary ? secondaryScale ?? scale : scale,

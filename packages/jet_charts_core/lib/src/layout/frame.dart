@@ -96,7 +96,7 @@ final class FrameLayout {
 /// k-th label, as the vertical axis' labels; its labels go where category
 /// labels on tick marks would, and have no category bands.
 ///
-/// A secondary value axis (`hasSecondaryAxis`) stands on the plot's right:
+/// A secondary value axis (`ResolvedChart.drawsSecondaryAxis`) stands on the plot's right:
 /// its scale is `autoValueScale` of its series' extent at the same plot
 /// height, coarsened or thinned as the primary one, and its tick labels and
 /// title take the right side's band before the plot is fixed. Category
