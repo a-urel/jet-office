@@ -52,12 +52,11 @@ final class ChartTheme {
   /// value's source): the font family `Aptos Narrow` (the theme's minor
   /// font), 9 pt axis labels and a 14 pt title, the text colour `595959`
   /// (`tx1` with `lumMod` 0.65 and `lumOff` 0.35), the grid and axis line
-  /// colour `D9D9D9` (`tx1`, 0.15 and 0.85), the background `FFFFFF` (`bg1`),
-  /// each bound to the file theme,
-  /// [gapWidthPercent] 219, [lineWidth] 2.25, [markerSize] 5, and of
-  /// [spacing] the line widths, the overlap and the tick length. Still
-  /// unconfirmed: 9 pt for the legend and data labels, and the other gaps of
-  /// [spacing].
+  /// colour `D9D9D9` (`tx1`, 0.15 and 0.85) and the background `FFFFFF`
+  /// (`bg1`), each bound to the file theme; also [gapWidthPercent] 219,
+  /// [lineWidth] 2.25, [markerSize] 5, and of [spacing] the line widths, the
+  /// overlap and the tick length. Still unconfirmed: 9 pt for the legend and
+  /// data labels, and the other gaps of [spacing].
   static final ChartTheme office = buildOfficeTheme();
 
   /// The series colours, in order. Never empty.

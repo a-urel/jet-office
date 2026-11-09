@@ -20,7 +20,9 @@ change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
 its own `AGENTS.md`; milestone J2 is done (axis scales and the cartesian
-layout), and this package depends on it from C1.
+layout), and this package depends on it from C1. Milestone C1 (the DrawingML
+chart layer, `docs/drawingml-charts.md`) is done except the owner's reference
+workbook and Excel check (Task 10).
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -151,16 +153,15 @@ dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
   re-saves and the model keeps as read: a `cs:dataPointMarkerLayout` with
   children and a `cs:fontRef` holding `cs:schemeClr` for `a:schemeClr`, the
   two errors matched on their ids, the part's content type and the element.
-  Every other error, and every run without the flag, counts. The
-  `d1_corrupt.docx` negative control must still fail with it.
-  One error pair is ignored in every run: the SDK 3.5.1 refuses the
+  The `d1_corrupt.docx` negative control must still fail with it.
+  One error pair is ignored in every run, with or without the flag: the SDK 3.5.1 refuses the
   `c:chart/c:extLst` extension `{56B9EC1D-385E-4148-901F-78D8002777C0}`
   (`c16r3:dataDisplayOptions16`) that Excel itself writes in every chart part
   (the owner's `chart_defaults.xlsx` fails the same way), so the tool ignores
   its `Sch_UndeclaredAttribute` and `Sch_InvalidElementContentExpectingComplex`
   on that `c:ext` of a chart part, at that path, holding exactly one
   `dataDisplayOptions16` of `dispNaAsBlank` children; other content there
-  still counts.
+  still counts. Every other error counts, in every run.
 - LibreOffice's text export of a document whose body ends in a table never
   ends: it writes the file without bound. No fixture may end in a table (the
   fixture list says so), and the CI step and the command above cap the file
@@ -565,7 +566,8 @@ the count again if it fails.
 ## Reference
 
 The DOCX model's rules, each with its test, are in `docs/docx-model.md`; the
-Word check is in `docs/word-checks.md`.
+Word check is in `docs/word-checks.md`. The chart layer's rules and what C2 and
+C3 must do are in `docs/drawingml-charts.md`.
 
 Quds is cloned read-only next to this repo at `../quds_office_suite`. The port
 map for the writer is in `docs/xlsx-writer.md`, "Port map"; the reader's is in
