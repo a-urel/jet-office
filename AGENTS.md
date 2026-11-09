@@ -19,7 +19,9 @@ layer may import; supersedes that sentence of `0014`) and `0016`
 (`jet_charts_flutter`, the Flutter backend, is a member of the workspace, so
 resolving it needs Flutter's SDK) and `0017` (every Excel chart kind is
 covered in the end, Monépro's first; supersedes the design's chart non-goals)
-before any design change.
+and `0018` (what phase 3 leaves opaque, formula evaluation and encryption are
+covered in the end; macros and other formats stay out; supersedes part of
+`0009`) before any design change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
 its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
