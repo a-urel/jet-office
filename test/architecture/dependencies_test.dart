@@ -32,7 +32,8 @@ List<String> _dependencies(String pubspec) {
   return names;
 }
 
-/// A quoted `package:` URI of a package other than archive, jet_core and jet_charts_core.
+/// A quoted `package:` URI of a package other than archive, jet_core and
+/// jet_charts_core.
 final RegExp _foreign = RegExp(
   r'''['"]package:(?!archive/|jet_core/|jet_charts_core/)''',
 );

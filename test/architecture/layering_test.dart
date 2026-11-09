@@ -5,9 +5,13 @@
 // lib/src/xlsx nor lib/src/docx. lib/src/docx may import nothing of
 // lib/src/xlsx: the number formatter is in jet_core (decision 0012). Neither
 // layer may import the public barrel, lib/jet_office.dart, which exports
-// xlsx. lib/src/drawingml holds what XLSX and DOCX share of DrawingML, so it
-// imports neither (decision 0014). No file under lib/ may reach into jet_core's `src/`: its public
-// barrel, `package:jet_core/jet_core.dart`, is the only way in.
+// xlsx. lib/src/drawingml holds what XLSX and DOCX share of DrawingML. It
+// imports only an allow-list (decision 0015): dart: libraries, its own files,
+// ../opc/, ../xml/, ../common/ and the barrels of jet_charts_core and
+// jet_core; so it imports neither format layer. No file under lib/ may reach
+// into jet_core's `src/` or jet_charts_core's `src/`: their public barrels
+// (`package:jet_core/jet_core.dart`,
+// `package:jet_charts_core/jet_charts_core.dart`) are the only way in.
 @TestOn('vm')
 library;
 
