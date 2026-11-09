@@ -5,7 +5,8 @@ name: CI
 # LibreOffice (decision 0003), compares LibreOffice's re-save with the reader
 # and the models, and proves that each check rejects a corrupt file (the model
 # round trips excepted: the validator rejects the models' output of it). A
-# clean checkout must pass both jobs.
+# clean checkout must pass both jobs. Every job sets up Flutter, not only Dart:
+# the workspace holds a Flutter package (decision 0016).
 on:
   push:
     branches: [main]
@@ -28,13 +29,16 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v5
 
-      - name: Set up Dart
-        uses: dart-lang/setup-dart@v1
+      # The workspace holds a Flutter package, so resolving it needs
+      # Flutter's SDK, whose dart the later steps use (decision 0016).
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          sdk: 3.13.5
+          flutter-version: 3.47.9
+          channel: stable
 
       - name: Resolve dependencies
-        run: dart pub get
+        run: flutter pub get
 
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed .
@@ -64,6 +68,16 @@ jobs:
         working-directory: packages/jet_charts_core
         run: dart test -p chrome
 
+      # Golden image tests run on macOS only: their pixels differ by platform
+      # (decision 0016).
+      - name: Run jet_charts_flutter's tests
+        working-directory: packages/jet_charts_flutter
+        run: flutter test --exclude-tags golden
+
+      - name: Run jet_charts_flutter's tests on Chrome
+        working-directory: packages/jet_charts_flutter
+        run: flutter test --platform chrome --exclude-tags golden
+
   validate:
     name: validate fixtures
     runs-on: ubuntu-24.04
@@ -73,13 +87,16 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v5
 
-      - name: Set up Dart
-        uses: dart-lang/setup-dart@v1
+      # The workspace holds a Flutter package, so resolving it needs
+      # Flutter's SDK, whose dart the later steps use (decision 0016).
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          sdk: 3.13.5
+          flutter-version: 3.47.9
+          channel: stable
 
       - name: Resolve dependencies
-        run: dart pub get
+        run: flutter pub get
 
       - name: Write the fixtures
         run: dart run tool/write_fixtures.dart build/fixtures
@@ -442,13 +459,16 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v5
 
-      - name: Set up Dart
-        uses: dart-lang/setup-dart@v1
+      # The workspace holds a Flutter package, so resolving it needs
+      # Flutter's SDK, whose dart the later steps use (decision 0016).
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          sdk: 3.13.5
+          flutter-version: 3.47.9
+          channel: stable
 
       - name: Resolve dependencies
-        run: dart pub get
+        run: flutter pub get
 
       - name: Install LibreOffice
         run: |

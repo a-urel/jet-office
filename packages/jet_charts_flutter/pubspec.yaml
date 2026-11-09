@@ -1,0 +1,32 @@
+name: jet_charts_flutter
+description: >-
+  Flutter backend of the jet_ chart family: it measures and draws what
+  jet_charts_core lays out.
+version: 0.1.0-dev.1
+repository: https://github.com/a-urel/jet-office
+issue_tracker: https://github.com/a-urel/jet-office/issues
+# Not published; publishing needs its own record.
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+  flutter: '>=3.35.0'
+
+resolution: workspace
+
+# flutter, jet_charts_core and jet_core are the only runtime dependencies
+# (AGENTS.md, "Hard rules"). test/architecture/dependencies_test.dart enforces
+# it.
+dependencies:
+  flutter:
+    sdk: flutter
+  jet_charts_core:
+    path: ../jet_charts_core
+  jet_core:
+    path: ../jet_core
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # Lint rules for dart analyze (analysis_options.yaml).
+  lints: ^6.0.0

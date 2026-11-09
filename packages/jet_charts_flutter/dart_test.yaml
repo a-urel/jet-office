@@ -1,0 +1,5 @@
+# Golden image tests carry the tag `golden`. Their pixels differ by platform,
+# so the local gate on macOS runs them and CI and the Chrome leg skip them
+# (`--exclude-tags golden`; decision 0016).
+tags:
+  golden:

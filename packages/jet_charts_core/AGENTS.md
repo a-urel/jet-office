@@ -26,7 +26,8 @@ This repository is a pub workspace (decision 0013). The chart family:
 | `jet_print` (later) | PDF painter, its own measurer | core |
 
 `jet_charts_core` must not depend on `jet_office`, or the two form a cycle.
-What both need goes in `jet_core`. `jet_charts_flutter` is not created yet.
+What both need goes in `jet_core`. `jet_charts_flutter` is
+`packages/jet_charts_flutter` (decision 0016), with its own `AGENTS.md`.
 
 ## The quality gate
 

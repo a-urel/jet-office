@@ -14,11 +14,15 @@ this library's own, with Word's values) and `0012` (the number format engine
 lives in `jet_core`; supersedes `0001`'s one runtime dependency and `0008`'s
 location and names) and `0013` (one repository: a pub workspace, with
 `jet_core` under `packages/`) and `0014` (the chart phase: `jet_charts_core`
-under `packages/`, and a DrawingML layer here) before any design change.
+under `packages/`, and a DrawingML layer here) and `0016`
+(`jet_charts_flutter`, the Flutter backend, is a member of the workspace, so
+resolving it needs Flutter's SDK) before any design change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
 its own `AGENTS.md`; milestone J2 is done (axis scales and the cartesian
 layout), and this package still does not depend on it until C1.
+`packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
+own `AGENTS.md`; milestone J3 builds it. This package never depends on it.
 
 Consumers: Monépro (list and dashboard export, spreadsheet import, document
 templates) and later `jet_print` (report export to XLSX/DOCX). `jet_office`
@@ -35,7 +39,15 @@ dart test
 dart test -p chrome
 (cd packages/jet_core && dart test && dart test -p chrome)
 (cd packages/jet_charts_core && dart test && dart test -p chrome)
+(cd packages/jet_charts_flutter && flutter test && flutter test --platform chrome --exclude-tags golden)
 ```
+
+The workspace has a Flutter package, so resolving it (`flutter pub get` or
+Flutter's `dart pub get` at the root) needs Flutter's SDK, 3.47.9 in CI, and
+`dart` must be Flutter's (decision 0016). `jet_charts_flutter`'s tests need
+Flutter's engine and run with `flutter test`. Its golden image tests (tag
+`golden`) run on macOS only: the local `flutter test` runs them, and CI and the
+Chrome leg skip them.
 
 The Chrome leg runs every test that is not marked `@TestOn('vm')` in a
 browser, which proves the library is web-safe at run time and not only by its
