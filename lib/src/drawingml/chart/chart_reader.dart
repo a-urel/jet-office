@@ -17,7 +17,10 @@
 /// the part again by `xmlDifference` (ruling R2 of C1), so whatever the reader
 /// cannot carry (an element the writer does not write, a `dk1` for `tx1`, a
 /// number spelled another way) leaves the part untyped instead of losing it.
-/// Reading and that check are linear in the size of the part.
+/// Reading and that check are linear in the size of the part: every cache
+/// draws its entries, the points it lacks included, from one budget of
+/// 1,048,576 plus the part's size in bytes, and a number text longer than
+/// 400 characters is not parsed.
 ///
 /// This layer imports `opc`, `xml`, `common`, `jet_charts_core` and `jet_core`
 /// only, never `xlsx` or `docx` (decisions 0014 and 0015).
@@ -71,7 +74,11 @@ final class DrawingChartRead {
 /// (`barChart+lineChart`), or `null` when it has none. A number that cannot
 /// be read is an empty point (or an unset value) and
 /// [DrawingChartIssue.badNumber], as is a point index or count beyond
-/// 1,048,576, the rows of a sheet: such a count is cut to that limit.
+/// 1,048,576, the rows of a sheet: such a count is cut to that limit. All
+/// the caches of the part (names, categories and values) share one budget
+/// of 1,048,576 entries plus the part's size in bytes; a cache whose count
+/// would exceed what is left is cut to its last point, with
+/// [DrawingChartIssue.badNumber].
 DrawingChartRead readDrawingChartSpace(
   Uint8List bytes, {
   ChartTheme? theme,
@@ -92,7 +99,12 @@ DrawingChartRead readDrawingChartSpace(
   if (chart == null) {
     return _unreadable;
   }
-  return _ChartReader(root, chart, theme ?? ChartTheme.office).read(bytes);
+  return _ChartReader(
+    root,
+    chart,
+    theme ?? ChartTheme.office,
+    _maxPoints + bytes.length,
+  ).read(bytes);
 }
 
 const DrawingChartRead _unreadable = DrawingChartRead(
@@ -223,12 +235,16 @@ bool _flag(_Node? node, {required bool absent}) {
 }
 
 final class _ChartReader {
-  _ChartReader(this.root, this.chartNode, this.theme);
+  _ChartReader(this.root, this.chartNode, this.theme, this.pointBudget);
 
   final _Node root;
   final _Node chartNode;
   final ChartTheme theme;
   final List<DrawingChartIssue> issues = <DrawingChartIssue>[];
+
+  /// The entries the caches of the part may still fill, points they lack
+  /// included: 1,048,576 plus the size of the part in bytes at the start.
+  int pointBudget;
 
   void _report(DrawingChartIssue issue) {
     if (!issues.contains(issue)) {
@@ -314,6 +330,7 @@ final class _ChartReader {
     );
     final DrawingChartSpace? typed = kind == ChartKind.unsupported
         ? null
+        // A supported kind needs both axes, so neither is null here.
         : _typed(
             bytes,
             chart,

@@ -12,10 +12,14 @@ part of 'chart_reader.dart';
 const int _maxPoints = 1 << 20;
 
 /// A number as a chart part may spell it: `xsd:double` without `INF` and
-/// `NaN`.
+/// `NaN`. Each character can match one way only, so matching is linear.
 final RegExp _numberText = RegExp(
-  r'^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$',
+  r'^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$',
 );
+
+/// The longest number text read; a longer one is a bad number. Excel's
+/// numbers have at most 17 significant digits.
+const int _maxNumberLength = 400;
 
 final RegExp _countText = RegExp(r'^[0-9]+$');
 
@@ -170,18 +174,27 @@ extension _SeriesReading on _ChartReader {
   ///
   /// A count or index that cannot be read, or one beyond [_maxPoints], is
   /// [DrawingChartIssue.badNumber]: the count is cut to the limit and the
-  /// point left out.
+  /// point left out. Every cache of the part draws its entries from one
+  /// budget ([_ChartReader.pointBudget]); a cache whose count would exceed
+  /// what is left is cut to its last point (within what is left), with
+  /// [DrawingChartIssue.badNumber], so a part cannot ask for more entries
+  /// than its size allows.
   List<String?> _points(_Node node) {
-    int length = 0;
+    int declared = 0;
     final _Node? count = node.child('ptCount');
     if (count != null) {
       final int? n = _count(count.val);
       if (n == null) {
         _report(DrawingChartIssue.badNumber);
       }
-      length = n ?? 0;
+      declared = n ?? 0;
+    }
+    if (declared > _maxPoints) {
+      _report(DrawingChartIssue.badNumber);
+      declared = _maxPoints;
     }
     final List<(int, String?)> points = <(int, String?)>[];
+    int needed = 0;
     for (final _Node point in node.all('pt')) {
       final int? index = _count(point.attributes['idx']);
       if (index == null || index >= _maxPoints) {
@@ -189,17 +202,21 @@ extension _SeriesReading on _ChartReader {
         continue;
       }
       points.add((index, point.child('v')?.text));
-      if (index >= length) {
-        length = index + 1;
+      if (index >= needed) {
+        needed = index + 1;
       }
     }
-    if (length > _maxPoints) {
+    int length = declared > needed ? declared : needed;
+    if (length > pointBudget) {
       _report(DrawingChartIssue.badNumber);
-      length = _maxPoints;
+      length = needed < pointBudget ? needed : pointBudget;
     }
+    pointBudget -= length;
     final List<String?> texts = List<String?>.filled(length, null);
     for (final (int index, String? text) in points) {
-      texts[index] = text;
+      if (index < length) {
+        texts[index] = text;
+      }
     }
     return texts;
   }
@@ -223,7 +240,10 @@ extension _SeriesReading on _ChartReader {
 
   /// [text] as a finite number, or `null` and [DrawingChartIssue.badNumber].
   double? _number(String text) {
-    final double? n = _numberText.hasMatch(text) ? double.tryParse(text) : null;
+    final double? n =
+        text.length <= _maxNumberLength && _numberText.hasMatch(text)
+        ? double.tryParse(text)
+        : null;
     if (n == null || !n.isFinite) {
       _report(DrawingChartIssue.badNumber);
       return null;

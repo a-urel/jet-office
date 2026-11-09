@@ -14,6 +14,9 @@ import 'support/excel_charts.dart';
 
 final ChartTheme _office = ChartTheme.office;
 
+/// The digits of the long number test: a megabyte.
+const int _longDigits = 1 << 20;
+
 Uint8List _bytes(String xml) => utf8.encode(xml);
 
 DrawingChartRead _read(String xml, {ChartTheme? theme}) =>
@@ -555,6 +558,55 @@ void main() {
       );
       expect(binary.chart, isNull);
       expect(binary.issues, <DrawingChartIssue>[DrawingChartIssue.unreadable]);
+    });
+
+    test('a long run of digits is read promptly as a bad number', () {
+      final String digits = '1' * _longDigits;
+      final Stopwatch watch = Stopwatch()..start();
+      final DrawingChartRead read = _read(
+        excelColumnChart.replaceFirst('<c:v>2</c:v>', '<c:v>${digits}x</c:v>'),
+      );
+      watch.stop();
+      expect(read.chart!.series.single.values.values, <double?>[1, null, 3]);
+      expect(read.issues, <DrawingChartIssue>[DrawingChartIssue.badNumber]);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+    });
+
+    test('declared point counts share one budget per part', () {
+      const String count = '<c:ptCount val="1048576"/>';
+      final String series = List<String>.generate(
+        100,
+        (int i) =>
+            '<c:ser><c:idx val="$i"/><c:order val="$i"/>'
+            '<c:cat><c:strLit>$count<c:pt idx="0"><c:v>A</c:v></c:pt>'
+            '</c:strLit></c:cat>'
+            '<c:val><c:numLit>$count<c:pt idx="1"><c:v>1</c:v></c:pt>'
+            '</c:numLit></c:val></c:ser>',
+      ).join();
+      final String xml =
+          '<c:chartSpace xmlns:c="$drawingChartNamespace"><c:chart>'
+          '<c:plotArea><c:barChart>$series</c:barChart>'
+          '<c:catAx><c:axId val="1"/></c:catAx>'
+          '<c:valAx><c:axId val="2"/></c:valAx></c:plotArea></c:chart>'
+          '</c:chartSpace>';
+      final Uint8List bytes = _bytes(xml);
+      final Stopwatch watch = Stopwatch()..start();
+      final DrawingChartRead read = readDrawingChartSpace(bytes);
+      watch.stop();
+      final Chart chart = read.chart!;
+      expect(chart.series, hasLength(100));
+      int entries = 0;
+      for (final ChartSeries s in chart.series) {
+        entries += s.categories.values.length + s.values.values.length;
+      }
+      expect(entries, lessThanOrEqualTo((1 << 20) + bytes.length));
+      // The first caches keep their count; the later ones are cut to their
+      // points.
+      expect(chart.series.first.categories.values, hasLength(1 << 20));
+      expect(chart.series.last.categories.values, <Object?>['A']);
+      expect(chart.series.last.values.values, <double?>[null, 1]);
+      expect(read.issues, <DrawingChartIssue>[DrawingChartIssue.badNumber]);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
     });
 
     test('a plot area without groups is unsupported', () {
