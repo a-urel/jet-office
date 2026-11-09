@@ -1,4 +1,5 @@
-// Golden images of JetChart's default loading, empty and error looks.
+// Golden images of JetChart's default loading, empty and error looks, and
+// of a chart with its tooltip box open.
 //
 // Pixels differ by platform, so these run on macOS only (tag `golden`,
 // decision 0016); the fonts load with `dart:io`, so the file is VM only.
@@ -8,10 +9,12 @@
 @Tags(<String>['golden'])
 library;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_flutter/jet_charts_flutter.dart';
+import 'package:jet_charts_flutter/src/jet_chart.dart' show JetChartState;
 
 import 'support/charts.dart';
 import 'support/fonts.dart';
@@ -72,6 +75,39 @@ void main() {
     await expectLater(
       find.byType(RepaintBoundary).first,
       matchesGoldenFile('goldens/jet_chart_error.png'),
+    );
+  });
+
+  testWidgets('jet_chart_tooltip', (WidgetTester tester) async {
+    final Chart chart = goldenCharts()
+        .firstWhere(
+          ((String, Chart, ChartSize) g) => g.$1 == 'column_clustered',
+        )
+        .$2;
+    await _pump(tester, JetChart(theme: robotoOfficeTheme, chart: chart));
+    final ChartLayout layout = tester
+        .state<JetChartState>(find.byType(JetChart))
+        .currentLayout!;
+    final ChartRect bar = layout.primitives
+        .expand(
+          (ChartPrimitive p) =>
+              p is ClipPrimitive ? p.children : <ChartPrimitive>[p],
+        )
+        .whereType<RectPrimitive>()
+        .firstWhere((RectPrimitive p) => p.id == 'series/1/bar/2')
+        .rect;
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(
+      Offset(bar.left + bar.width / 2, bar.top + bar.height / 2),
+    );
+    await tester.pump();
+    await expectLater(
+      find.byType(RepaintBoundary).first,
+      matchesGoldenFile('goldens/jet_chart_tooltip.png'),
     );
   });
 }

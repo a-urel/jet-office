@@ -11,7 +11,10 @@ Milestone J3 is under way. The package exports `FlutterTextMeasurer`,
 `paintChartPrimitives`, `ChartLayoutPainter`, and the widget `JetChart` with
 `JetChartStateBuilder`, `JetChartErrorBuilder` and `JetChartStrings` (its
 loading, empty and error texts and its screen reader description, in English,
-Turkish and German); the rest of J3 adds to this file.
+Turkish and German), and `JetChartHit`, what `JetChart.onHover` and
+`JetChart.onTap` report (hover, touch and the tooltip box:
+`lib/src/interaction.dart`, `lib/src/tooltip_view.dart`, tested in
+`test/interaction_test.dart`); the rest of J3 adds to this file.
 
 ## Golden images
 
@@ -21,7 +24,9 @@ Turkish and German); the rest of J3 adds to this file.
 `test/goldens/<name>.png`, with `ChartTheme.office` set to the family `Roboto`
 (`test/fonts/`, Apache 2.0, loaded by `test/support/fonts.dart` with
 `dart:io`, so the file is `@TestOn('vm')`). `test/jet_chart_golden_test.dart`
-paints `JetChart`'s default loading, empty and error looks the same way. After
+paints `JetChart`'s default loading, empty and error looks the same way, and
+`column_clustered` with the tooltip of `series/1/bar/2` open
+(`jet_chart_tooltip.png`). After
 a deliberate change, run `flutter test --update-goldens --tags golden` and look
 at every image: no text overlaps, the chart border shows, no value axis line,
 lines with round caps.
