@@ -111,16 +111,20 @@ and category labels (`axis_layout.dart`), marks, data labels, legend.
 - Collision rules: category labels wrap at spaces (level, at most three
   lines), turn (0, -45, -90 degrees), skip every `N`th or are cut with an
   ellipsis; a legend that does not fit shrinks to
-  fewer entries or moves; data labels give way to marks and each other, and
-  those that cannot be placed go to `hidden` (`degradation.dart` orders what
-  goes first). `findOverlaps` must find nothing in any layout.
+  fewer entries or moves; data labels give way to text, the legend, marks
+  other than their own bar or area, and each other (a column or bar label
+  outside its bar's end may leave the plot, one inside a bar must fit in it
+  and is white on a dark bar), and those that cannot be placed go to
+  `hidden` (`degradation.dart` orders what goes first). `findOverlaps` must find nothing in any layout.
 - Ids: every primitive has an id (`chart_ids.dart`), stable across layouts of
   the same chart, for hit testing and tests. The scheme is documented in
   `ChartLayout.primitives`; `ChartElementId` parses it and `hitTestLayout`
   finds the element at a point (a closed path is hit on its outline and
   stroke as well as its fill).
-- `findOverlaps` (`overlap.dart`) reports texts that overlap each other or a
-  mark of the layout, as `ChartOverlap`s of a `ChartOverlapKind`. It is the
+- `findOverlaps` (`overlap.dart`) reports texts that overlap each other, the
+  legend, the chart's edge or a series mark other than a data label's own bar
+  or area (`ChartOverlapKind.textMark`), as `ChartOverlap`s of a
+  `ChartOverlapKind`. It is the
   fuzz test's check and may be used by backends.
 - Goldens: `test/layout/golden_test.dart` compares the layout of each chart in
   `test/support/gallery.dart` with `test/goldens/*.txt`. After an intended
@@ -205,8 +209,7 @@ by hand, then fix it.
   or area extent with mixed signs is wider than needed; a side legend is
   dropped whole for one long name; near-equal huge values (relative spread
   about 1e-14) can put the data top above the axis; the "data labels first"
-  degradation is nominal; data labels are not checked against marks;
-  inside-end labels may straddle a short bar.
+  degradation is nominal.
 - Bars use one gap width (219) and overlap (-27) for every kind, verified for
   clustered columns only; Excel's insert defaults are believed (unconfirmed)
   to be gap 182 and no overlap for clustered (horizontal) bars, gap 150 and

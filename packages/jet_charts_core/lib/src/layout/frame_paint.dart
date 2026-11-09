@@ -266,6 +266,7 @@ extension FramePaint on FrameContext {
             measurer: measurer,
             formatter: formatter,
             plot: plot,
+            area: inner,
             scale: scale,
             existing: out,
           )

@@ -44,6 +44,12 @@ const String placeholder = 'placeholder';
 /// The prefix of every legend entry's id.
 const String legendPrefix = 'legend/';
 
+/// The prefix of every series mark's id.
+const String seriesPrefix = 'series/';
+
+/// The prefix of every data label's id.
+const String dataLabelPrefix = 'label/';
+
 /// The axis names used in ids.
 const String valueAxis = 'value';
 

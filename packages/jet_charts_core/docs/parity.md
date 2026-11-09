@@ -33,7 +33,7 @@ theme's in `excel-checks.md`.
 | Areas | On tick marks (`c:crossBetween midCat`, as this library writes an area chart): the first category at the plot's left, the last at its right, a lone one in the middle; category labels centred on those positions, the category grid lines through them (matched in the owner's J3 gallery check, `area_stacked`, which found the space this package left at both ends) | The first and last labels reach past the plot's ends, within the chart; the frame shrinks the plot for them and lowers the labels clear of the lowest value tick label. A tooltip's category band reaches halfway to each neighbour |
 | Title | 14 pt `595959` Aptos Narrow | Shown only when the chart has one; no default title |
 | Legend | 9 pt text; a line series' symbol is a line with a marker (matched in the owner's J3 gallery check, `line_gap`) | Shown unless hidden, even for one series; dropped whole when a side legend does not fit; the legend line's length, 16 pt, is this library's estimate |
-| Data labels | 9 pt text | Never overlap or leave the plot |
+| Data labels | 9 pt text; a clustered column or bar label outside its bar's end, above the plot's top when the bar nearly reaches the axis' maximum (matched in the owner's J3 gallery check, `column_data_labels`, where Excel shows 18 above its bar on an axis to 20) | Never overlap text, the legend or another mark; inside a bar only when it fits there, white on a dark bar; hidden when no place is left |
 | Axis titles | Shown when set | Use the axis label style |
 | Chart area | White background, 0.75 pt `D9D9D9` border | Same in the Office theme; other themes have no border unless `border` is set |
 
@@ -115,11 +115,29 @@ theme's in `excel-checks.md`.
 
 ### Data labels
 
-- **They never overlap other text or leave the plot**, keeping `minTextGap`
-  from other text; a label with no place is hidden and listed.
-- **They are not checked against marks**: a label may lie over another
-  series' line or bar.
-- Inside-end and centre labels can straddle a short bar's edge.
+- **Order of places.** A clustered column or bar label tries outside its
+  bar's end, then inside it; a stacked one only the middle of its bar. Line
+  labels try above, below, right and left of the point; an area label sits
+  halfway between its point and the area's base. A label with no place is
+  hidden and listed.
+- **They never overlap other text or the legend**, keeping `minTextGap` from
+  other text, and **never lie on a mark other than their own**: `findOverlaps`
+  reports text over a bar, a marker (by the square around it), a line (each
+  segment at its stroke width) or an area, except a data label on its own bar
+  or its own series' area. Whether Excel lets a label cover another mark was
+  not measured; this package hides such a label instead, so a label crowded
+  by a taller neighbouring bar, a steep line of its own series or the band
+  above a thin stacked area goes. Grid lines and axis lines do not count.
+- **Outside end may leave the plot** into the chart's area (inside its
+  padding), clear of the title, the legend and the axis labels, as Excel's
+  label of a bar near the axis' maximum sits above the plot. Line and area
+  labels and labels inside a bar stay inside the plot.
+- **Inside a bar, readable.** A label inside a bar lies wholly inside the
+  bar's visible part (else it is not placed there) and is white (`FFFFFF`)
+  when the bar's colour has a WCAG relative luminance below 0.5, else the
+  theme's data label colour. The rule is this package's, not measured from
+  Excel, after the owner's J3 gallery check, where 18 was unreadable dark
+  grey on dark blue.
 
 ### Look
 

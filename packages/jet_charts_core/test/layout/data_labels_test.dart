@@ -2,6 +2,8 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
 import 'package:test/test.dart';
 
+import '../support/gallery.dart';
+
 const FixedWidthTextMeasurer measurer = FixedWidthTextMeasurer();
 
 final ChartTheme theme = ChartTheme.office.copyWith(
@@ -117,6 +119,95 @@ void main() {
     // The other label still fits outside.
     final ChartRect bar1 = byId<RectPrimitive>(l, ids.seriesBarId(0, 1)).rect;
     expect(label(l, 0, 1).rect.bottom, closeTo(bar1.top - gap, tol));
+  });
+
+  test('column_data_labels at 360 by 216 puts 18 above its bar', () {
+    // The owner's gallery check: North, Q2 = 18 on an axis to 20. The bar
+    // ends 14 points below the plot's top, less than the label and its gap
+    // need, so the label sits above the plot's top edge, clear of the title.
+    const ChartSize size = ChartSize(360, 216);
+    final ChartLayout l = galleryCharts()
+        .firstWhere((GalleryChart g) => g.name == 'column_data_labels')
+        .layout(size);
+    final ChartRect bar = byId<RectPrimitive>(l, ids.seriesBarId(0, 1)).rect;
+    final TextPrimitive t = label(l, 0, 1);
+    expect(t.text, '18');
+    expect(t.rect.bottom, closeTo(bar.top - gap, tol));
+    expect(t.rect.top, lessThan(l.plotArea!.top));
+    expect(t.style, ChartTheme.office.dataLabels);
+    expect(findOverlaps(l.primitives, size), isEmpty);
+  });
+
+  test(
+    'a label inside a dark bar is white, inside a light one the theme\'s',
+    () {
+      for (final (int rgb, ChartColor expected) in <(int, ChartColor)>[
+        (0x156082, ChartColor.rgb(0xFFFFFF)),
+        (0xF2F2F2, theme.dataLabels.color),
+      ]) {
+        final ChartLayout l = layoutChart(
+          Chart(
+            kind: ChartKind.column,
+            dataLabels: const ChartDataLabels(visible: true),
+            legend: const ChartLegend(visible: false),
+            valueAxis: fixed,
+            series: <ChartSeries>[
+              series('S0', <double?>[100, 50]),
+            ],
+          ),
+          theme: theme.copyWith(palette: <ChartColor>[ChartColor.rgb(rgb)]),
+          size: const ChartSize(400, 300),
+          measurer: measurer,
+        );
+        final ChartRect bar = byId<RectPrimitive>(
+          l,
+          ids.seriesBarId(0, 0),
+        ).rect;
+        final TextPrimitive inside = label(l, 0, 0);
+        expect(bar.contains(inside.rect), isTrue);
+        expect(inside.style, theme.dataLabels.copyWith(color: expected));
+        // A label outside its bar keeps the theme's colour.
+        expect(label(l, 0, 1).style, theme.dataLabels);
+      }
+    },
+  );
+
+  test('a label never lies on another series\' bar', () {
+    // Five categories of two series: bars about 25 wide, a label 48.6 wide.
+    // Above its bar the label of S0 would cover S1's taller bar, and it is
+    // wider than its own bar, so it is hidden.
+    final ChartLayout l = lay(
+      <List<double?>>[
+        <double?>[50, 50, 50, 50, 50],
+        <double?>[90, 90, 90, 90, 90],
+      ],
+      valueAxis: fixed,
+      codes: <String?>['0.000000', null],
+    );
+    for (int c = 0; c < 5; c++) {
+      expect(has(l, ids.dataLabelId(0, c)), isFalse);
+      expect(
+        l.hidden,
+        contains(ChartHiddenLabel(ids.dataLabelId(0, c), '50.000000')),
+      );
+      expect(has(l, ids.dataLabelId(1, c)), isTrue);
+    }
+    expect(findOverlaps(l.primitives, const ChartSize(400, 300)), isEmpty);
+  });
+
+  test('a label inside a bar lies wholly inside it', () {
+    // The bar is too short for its label inside, and outside the label
+    // would cover the taller bar beside it.
+    final ChartLayout l = lay(
+      <List<double?>>[
+        <double?>[3, 3, 3, 3, 3],
+        <double?>[90, 90, 90, 90, 90],
+      ],
+      valueAxis: fixed,
+      codes: <String?>['0.000000', null],
+    );
+    expect(has(l, ids.dataLabelId(0, 0)), isFalse);
+    expect(findOverlaps(l.primitives, const ChartSize(400, 300)), isEmpty);
   });
 
   test('a negative column label sits below its bar', () {
@@ -241,17 +332,21 @@ void main() {
       kind: ChartKind.line,
       valueAxis: fixed,
     );
+    // Above and below the five lines are free; beside a point lie the
+    // other lines, so beside labels go, but at the ends, where no line is
+    // on the outer side.
     for (int c = 0; c < 5; c++) {
       expect(has(l, ids.dataLabelId(4, c)), isFalse);
       expect(l.hidden, contains(ChartHiddenLabel(ids.dataLabelId(4, c), '50')));
-      for (int s = 0; s < 4; s++) {
+      for (int s = 0; s < 2; s++) {
         expect(has(l, ids.dataLabelId(s, c)), isTrue);
       }
+      expect(has(l, ids.dataLabelId(2, c)), c == 0 || c == 4);
     }
     expect(findOverlaps(l.primitives, const ChartSize(400, 300)), isEmpty);
   });
 
-  test('a label outside the plot is hidden', () {
+  test('a label that does not fit the chart is hidden', () {
     final ChartLayout l = lay(
       <List<double?>>[
         <double?>[10, 20, 30],
@@ -267,7 +362,10 @@ void main() {
         isTrue,
       );
       if (drawn) {
-        expect(l.plotArea!.contains(label(l, 0, c).rect), isTrue);
+        expect(
+          const ChartRect(0, 0, 400, 40).contains(label(l, 0, c).rect),
+          isTrue,
+        );
       }
     }
   });
@@ -358,7 +456,8 @@ void main() {
     expect(findOverlaps(l.primitives, l.size), isEmpty);
   });
 
-  test('every label of a sweep lies inside the plot and apart', () {
+  test('every label of a sweep lies apart, and inside the plot but for a '
+      'column or bar label beyond its bar\'s end', () {
     for (final ChartKind kind in <ChartKind>[
       ChartKind.column,
       ChartKind.bar,
@@ -382,9 +481,16 @@ void main() {
             isEmpty,
             reason: '$kind $g $w',
           );
+          final bool bars = kind == ChartKind.column || kind == ChartKind.bar;
           for (final ChartPrimitive p in flat(l.primitives)) {
             if (p is TextPrimitive && p.id.startsWith('label/')) {
-              expect(l.plotArea!.contains(p.rect), isTrue, reason: p.id);
+              expect(
+                (bars ? ChartRect(0, 0, w, w * 0.7) : l.plotArea!).contains(
+                  p.rect,
+                ),
+                isTrue,
+                reason: p.id,
+              );
             }
           }
         }
