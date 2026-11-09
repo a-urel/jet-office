@@ -124,49 +124,76 @@ extension on ArcPrimitive {
   double get sweep => sweepAngle.clamp(-360, 360).toDouble();
 }
 
-/// The points of [layout], the layout of [chart], in the order the keyboard
-/// walks them: see "Keyboard" on `JetChart`.
-///
-/// In a sparkline they are its category bands, left to right. In every other
-/// kind they are the primitives whose id is a bar, a marker or a slice
-/// (`ChartElementId.parse`), series-major: series 0's by category, then
-/// series 1's, whatever kind each series is drawn as.
-List<ChartKeyPoint> chartKeyPoints(Chart chart, ChartLayout layout) {
-  if (chart.kind == ChartKind.sparkline) {
-    return <ChartKeyPoint>[
-      for (int i = 0; i < layout.categoryBands.length; i++)
-        ChartKeyPoint(
-          key: 'band/$i',
-          bounds: _rect(layout.categoryBands[i]),
-          band: i,
-        ),
-    ];
-  }
+/// The category bands of [layout] as points, in category order.
+List<ChartKeyPoint> _bandPoints(ChartLayout layout) => <ChartKeyPoint>[
+  for (int i = 0; i < layout.categoryBands.length; i++)
+    ChartKeyPoint(
+      key: 'band/$i',
+      bounds: _rect(layout.categoryBands[i]),
+      band: i,
+    ),
+];
+
+/// The primitives of [layout] whose id is of [kind] (and of series 0 when
+/// [firstSeries]), series-major: series 0's by category, then series 1's.
+List<ChartKeyPoint> _primitivePoints(
+  ChartLayout layout,
+  ChartElementKind kind, {
+  bool firstSeries = false,
+}) {
   final List<(int, int, ChartKeyPoint)> found = <(int, int, ChartKeyPoint)>[];
   final Set<String> seen = <String>{};
   for (final ChartPrimitive p in _flat(layout.primitives)) {
     final ChartElementId? element = ChartElementId.parse(p.id);
-    if (element == null || !seen.add(p.id)) {
+    if (element == null ||
+        element.kind != kind ||
+        (firstSeries && element.series != 0) ||
+        !seen.add(p.id)) {
       continue;
     }
-    switch (element.kind) {
-      case ChartElementKind.bar:
-      case ChartElementKind.marker:
-      case ChartElementKind.slice:
-        found.add((
-          element.series!,
-          element.category!,
-          ChartKeyPoint(key: p.id, bounds: primitiveBounds(p), id: p.id),
-        ));
-      default:
-        break;
-    }
+    found.add((
+      element.series!,
+      element.category!,
+      ChartKeyPoint(key: p.id, bounds: primitiveBounds(p), id: p.id),
+    ));
   }
   found.sort(
     ((int, int, ChartKeyPoint) a, (int, int, ChartKeyPoint) b) =>
         a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2),
   );
   return <ChartKeyPoint>[for (final (int, int, ChartKeyPoint) f in found) f.$3];
+}
+
+/// The points of [layout], the layout of [chart], in the order the keyboard
+/// walks them: see "Keyboard" on `JetChart`.
+///
+/// A column or bar chart walks its bars, series-major (series 0's by
+/// category, then series 1's); a pie or donut the slices of its first
+/// series; a scatter chart its markers, series-major. A line, area,
+/// combination chart or sparkline walks its category bands in category
+/// order, whatever markers it draws. Another kind has none.
+List<ChartKeyPoint> chartKeyPoints(Chart chart, ChartLayout layout) {
+  switch (chart.kind) {
+    case ChartKind.column:
+    case ChartKind.bar:
+      return _primitivePoints(layout, ChartElementKind.bar);
+    case ChartKind.pie:
+    case ChartKind.donut:
+      return _primitivePoints(
+        layout,
+        ChartElementKind.slice,
+        firstSeries: true,
+      );
+    case ChartKind.scatter:
+      return _primitivePoints(layout, ChartElementKind.marker);
+    case ChartKind.line:
+    case ChartKind.area:
+    case ChartKind.combination:
+    case ChartKind.sparkline:
+      return _bandPoints(layout);
+    default:
+      return const <ChartKeyPoint>[];
+  }
 }
 
 /// The tooltip of category [category] of [layout]: every series at it.
@@ -187,7 +214,12 @@ ChartTooltip? _categoryTooltip(
       ChartPoint(band.left + band.width / 2, band.top + band.height / 2),
       theme: theme,
       locale: locale,
-      hits: <ChartPrimitive>[layout.primitives.first],
+      hits: <ChartPrimitive>[
+        layout.primitives.firstWhere(
+          (ChartPrimitive p) => p.id == 'background',
+          orElse: () => layout.primitives.first,
+        ),
+      ],
     );
   }
   return chartTooltipFor(
@@ -258,20 +290,9 @@ List<ChartPointNode> chartPointNodes(
     case ChartKind.area:
     case ChartKind.combination:
     case ChartKind.sparkline:
-      points = <ChartKeyPoint>[
-        for (int i = 0; i < layout.categoryBands.length; i++)
-          ChartKeyPoint(
-            key: 'band/$i',
-            bounds: _rect(layout.categoryBands[i]),
-            band: i,
-          ),
-      ];
+      points = _bandPoints(layout);
     case ChartKind.pie:
     case ChartKind.donut:
-      points = <ChartKeyPoint>[
-        for (final ChartKeyPoint p in chartKeyPoints(chart, layout))
-          if (ChartElementId.parse(p.id!)?.series == 0) p,
-      ];
     case ChartKind.scatter:
       points = chartKeyPoints(chart, layout);
     default:

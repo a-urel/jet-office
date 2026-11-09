@@ -102,15 +102,17 @@ typedef JetChartErrorBuilder =
 /// focus, Right or Down moves to the next point, Left or Up to the previous
 /// one (from no point, Right goes to the first and Left to the last), Home
 /// to the first and End to the last; the first and last points stay where
-/// they are. The points are the chart's bars, markers and slices,
-/// series-major: series 0's points by category, then series 1's, in a
-/// combination chart too, whatever each series is drawn as; a donut's rings
-/// one after the other. A line drawn without markers has no point of its
-/// own. In a sparkline the points are its category bands, left to right.
+/// they are. A column or bar chart walks its bars, series-major: series 0's
+/// bars by category, then series 1's. A pie or donut walks the slices of its
+/// first series, and a scatter chart its markers, series-major. A line,
+/// area or combination chart and a sparkline walk their category bands, in
+/// category order, each showing the category's tooltip with every series
+/// (a combination's columns too), whatever markers the lines draw.
 /// The focused point's tooltip shows as on hover (`chartTooltipFor` of the
 /// point's primitive, or a band's category tooltip), with the box placed at
-/// the point's centre, so a screen reader announces it; a focus ring of 1.5
-/// pixels in the theme's axis label colour is drawn around the point.
+/// the point's (the bar's, slice's, marker's or band's) centre, so a screen
+/// reader announces it; a focus ring of 1.5 pixels in the theme's axis label
+/// colour is drawn around the point.
 /// Escape closes the box and the ring, as does focus leaving the chart, a
 /// state look, and a hover or tap that opens or closes the box. When the
 /// layout changes, the same point (by its id) stays focused, or the focus

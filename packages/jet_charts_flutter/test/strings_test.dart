@@ -236,6 +236,21 @@ void main() {
     expect(JetChartStrings.en.centerText, 'Center: {text}');
   });
 
+  test('share and centerText default to the English texts', () {
+    const JetChartStrings own = JetChartStrings(
+      loading: 'l',
+      empty: 'e',
+      error: 'x',
+      kindNames: <ChartKind, String>{},
+      seriesCount: '{n}',
+      categoryRange: '{n}',
+      valueRange: '{min}',
+      moreValues: '{n}',
+    );
+    expect(own.share, JetChartStrings.en.share);
+    expect(own.centerText, JetChartStrings.en.centerText);
+  });
+
   test('value equality', () {
     const JetChartStrings copy = JetChartStrings(
       loading: 'Loading chart…',

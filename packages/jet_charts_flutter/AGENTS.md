@@ -25,7 +25,10 @@ size rule (`JetChart`, "Size"). The default loading look repeats without
 end, so a test must not `pumpAndSettle` while a chart loads; the tooltip box
 is a live region and a screen reader announces each change of it. The chart
 takes the keyboard's focus (`JetChart.focusable`, `focusNode`), walks its
-points with the arrows, Home and End, and gives a screen reader node per
+points with the arrows, Home and End (a column or bar chart its bars, a pie
+or donut its first series' slices, a scatter chart its markers, and a line,
+area or combination chart or a sparkline its category bands, markers or
+not), and gives a screen reader node per
 category, slice or scatter point, up to `JetChartStrings.maxPointNodes`
 (`lib/src/chart_semantics.dart`, tested in `test/accessibility_test.dart`);
 a test of the keyboard runs in a `WidgetsApp` under an autofocused

@@ -2,6 +2,8 @@
 // nodes.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/rendering.dart'
     show DebugSemanticsDumpOrder, SemanticsNode;
 import 'package:flutter/services.dart';
@@ -277,6 +279,139 @@ void main() {
       await _key(tester, LogicalKeyboardKey.arrowRight);
       expect(_shown(tester), isNull);
       expect(find.byType(CustomPaint).evaluate().where(_isRing), hasLength(1));
+    });
+
+    /// Walks [chart] in [theme] from Home to End and expects each step to
+    /// show its category band's tooltip, every series in it.
+    Future<void> expectBands(
+      WidgetTester tester,
+      Chart chart, {
+      ChartTheme? theme,
+    }) async {
+      await tester.pumpWidget(
+        _app(<Widget>[JetChart(chart: chart, theme: theme)]),
+      );
+      await _key(tester, LogicalKeyboardKey.tab);
+      final ChartLayout layout = _state(tester).currentLayout!;
+      final int count = layout.categoryBands.length;
+      expect(count, greaterThan(1));
+      for (int i = 0; i < count; i++) {
+        await _key(
+          tester,
+          i == 0 ? LogicalKeyboardKey.home : LogicalKeyboardKey.arrowRight,
+        );
+        final ChartTooltip expected = chartTooltipFor(
+          chart,
+          layout,
+          'axis/category/label/$i',
+          theme: theme ?? ChartTheme.office,
+        )!;
+        final ChartTooltip shown = _shown(tester)!;
+        expect(shown.title, expected.title);
+        expect(shown.rows, expected.rows);
+        final ChartRect band = layout.categoryBands[i];
+        expect(
+          _ring(tester).rect.center.dx,
+          closeTo(band.left + band.width / 2, 0.01),
+        );
+      }
+      // The last band stays the last.
+      await _key(tester, LogicalKeyboardKey.arrowRight);
+      expect(
+        _shown(tester)!.title,
+        chartTooltipFor(
+          chart,
+          layout,
+          'axis/category/label/${count - 1}',
+          theme: theme ?? ChartTheme.office,
+        )!.title,
+      );
+    }
+
+    testWidgets('an area chart walks its bands', (WidgetTester tester) async {
+      await expectBands(tester, _golden('area_stacked'));
+    });
+
+    testWidgets('a line with markers walks its bands', (
+      WidgetTester tester,
+    ) async {
+      final Chart chart = _golden('line_smooth');
+      await expectBands(tester, chart);
+      expect(
+        _state(tester).currentLayout!.primitives
+            .expand(_flat)
+            .any((ChartPrimitive p) => p.id.contains('/marker/')),
+        isTrue,
+      );
+    });
+
+    testWidgets('a line with lineMarkers off walks its bands', (
+      WidgetTester tester,
+    ) async {
+      await expectBands(
+        tester,
+        _golden('line_smooth'),
+        theme: ChartTheme.office.copyWith(lineMarkers: false),
+      );
+    });
+
+    testWidgets('a combination chart walks its bands, columns included', (
+      WidgetTester tester,
+    ) async {
+      final Chart chart = _golden('combo_column_line');
+      await expectBands(tester, chart);
+      expect(_shown(tester)!.rows, hasLength(chart.series.length));
+    });
+
+    testWidgets('a donut walks the slices of its first series', (
+      WidgetTester tester,
+    ) async {
+      final Chart chart = Chart(
+        kind: ChartKind.donut,
+        series: <ChartSeries>[
+          _series('Inner', <Object>['a', 'b'], <double?>[1, 3]),
+          _series('Outer', <Object>['a', 'b'], <double?>[2, 2]),
+        ],
+      );
+      await tester.pumpWidget(_app(<Widget>[JetChart(chart: chart)]));
+      await _key(tester, LogicalKeyboardKey.tab);
+      await _key(tester, LogicalKeyboardKey.end);
+      expect(_shown(tester), _expectedFor(tester, chart, 'series/0/slice/1'));
+    });
+
+    testWidgets('the ring holds a pie slice', (WidgetTester tester) async {
+      final Chart chart = _golden('pie_basic');
+      await tester.pumpWidget(_app(<Widget>[JetChart(chart: chart)]));
+      await _key(tester, LogicalKeyboardKey.tab);
+      await _key(tester, LogicalKeyboardKey.arrowRight);
+      final ArcPrimitive slice = _state(tester).currentLayout!.primitives
+          .expand(_flat)
+          .whereType<ArcPrimitive>()
+          .firstWhere((ArcPrimitive p) => p.id == 'series/0/slice/0');
+      final Rect ring = _ring(tester).rect;
+      // Points along the slice's outline, at every degree of its sweep and
+      // its centre side, all lie inside the ring.
+      final int steps = slice.sweepAngle.abs().ceil();
+      for (int i = 0; i <= steps; i++) {
+        final double a =
+            (slice.startAngle + slice.sweepAngle * i / steps) * math.pi / 180;
+        for (final double r in <double>[slice.innerRadius, slice.radius]) {
+          final Offset p = Offset(
+            slice.center.x + r * math.cos(a),
+            slice.center.y + r * math.sin(a),
+          );
+          expect(ring.inflate(0.01).contains(p), isTrue, reason: '$p');
+        }
+      }
+      // And the ring is tight: within its margin of the outline's extremes.
+      double top = double.infinity;
+      for (int i = 0; i <= steps; i++) {
+        final double a =
+            (slice.startAngle + slice.sweepAngle * i / steps) * math.pi / 180;
+        top = math.min(top, slice.center.y + slice.radius * math.sin(a));
+        top = math.min(top, slice.center.y);
+      }
+      expect(ring.top, closeTo(math.max(top - 1.75, 0.75), 0.05));
     });
 
     testWidgets('a pie walks its slices', (WidgetTester tester) async {

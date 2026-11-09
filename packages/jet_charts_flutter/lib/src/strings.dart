@@ -26,8 +26,8 @@ final class JetChartStrings {
     required this.categoryRange,
     required this.valueRange,
     required this.moreValues,
-    required this.share,
-    required this.centerText,
+    this.share = '{value} ({percent})',
+    this.centerText = 'Center: {text}',
   });
 
   /// English.
@@ -141,10 +141,11 @@ final class JetChartStrings {
   final String moreValues;
 
   /// A value of a pie or donut with its share of its series' whole, with
-  /// `{value}` and `{percent}`, such as `{value} ({percent})`.
+  /// `{value}` and `{percent}`; `{value} ({percent})` unless given.
   final String share;
 
-  /// A donut's centre text, with `{text}`, such as `Center: {text}`.
+  /// A donut's centre text, with `{text}`; the English `Center: {text}`
+  /// unless given.
   final String centerText;
 
   /// The description of [summary] for a screen reader, in sentences: the
