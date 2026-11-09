@@ -14,7 +14,10 @@ loading, empty and error texts and its screen reader description, in English,
 Turkish and German), and `JetChartHit`, what `JetChart.onHover` and
 `JetChart.onTap` report (hover, touch and the tooltip box:
 `lib/src/interaction.dart`, `lib/src/tooltip_view.dart`, tested in
-`test/interaction_test.dart`); the rest of J3 adds to this file.
+`test/interaction_test.dart`). A change of the chart at the same size moves
+its marks over `JetChart.animationDuration` (`lerpChartPrimitives`,
+`lib/src/animation.dart`, tested in `test/animation_test.dart`); hover and
+taps use the new layout throughout. The rest of J3 adds to this file.
 
 ## Golden images
 

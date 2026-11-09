@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_core/jet_core.dart';
 
+import 'animation.dart';
 import 'chart_layout_painter.dart';
 import 'interaction.dart';
 import 'states.dart';
@@ -70,6 +71,16 @@ typedef JetChartErrorBuilder =
 /// shows, the tooltip is found again at the same pointer position in the new
 /// layout, and the box closes when there is none there. No state look shows
 /// a box.
+///
+/// **Animation.** When [chart] changes and the chart keeps its size, its marks
+/// (bars, lines, markers and areas) move from where they are on screen to
+/// their new places over [animationDuration] with an ease out cubic curve;
+/// the rest of the chart shows its new look at once, and data labels show when
+/// the marks arrive. A change during an animation starts from the marks on
+/// screen. The first chart, a resize, and a change of theme, locale or text
+/// size do not animate, nor does anything when [animationDuration] is zero or
+/// `MediaQuery.disableAnimationsOf` is true. Hover and taps always use the
+/// new layout.
 final class JetChart extends StatefulWidget {
   /// Creates a chart widget.
   const JetChart({
@@ -116,8 +127,8 @@ final class JetChart extends StatefulWidget {
   /// [onHover] and [onTap] are still called, their hits with the tooltip.
   final bool tooltips;
 
-  /// How long a change of [chart] animates. Animation is wired in a later
-  /// version; the value is kept for it.
+  /// How long a change of [chart] animates its marks; zero shows the new
+  /// chart at once. See "Animation" on [JetChart].
   final Duration animationDuration;
 
   /// Replaces the default loading look, or `null` for the default. It
@@ -189,7 +200,8 @@ String _closed(String label) {
 /// and the layout.
 ///
 /// Not exported; tests reach it through its library.
-final class JetChartState extends State<JetChart> {
+final class JetChartState extends State<JetChart>
+    with SingleTickerProviderStateMixin {
   FlutterTextMeasurer? _measurer;
 
   ChartSummary? _summary;
@@ -203,6 +215,26 @@ final class JetChartState extends State<JetChart> {
   FormatLocale? _layoutLocale;
   TextScaler? _layoutScaler;
   int _layoutCount = 0;
+
+  /// Runs the animation of the marks after a change of the chart.
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: widget.animationDuration,
+  );
+
+  /// [_controller] on the ease out cubic curve.
+  late final CurvedAnimation _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  /// The primitives the running animation starts from, or `null` when none
+  /// runs: the painted ones are [_layout]'s.
+  List<ChartPrimitive>? _from;
+
+  /// Whether the last build saw animations disabled
+  /// (`MediaQuery.disableAnimationsOf`).
+  bool _reduceMotion = false;
 
   /// Shows the tooltip box in the nearest `Overlay`, when there is one. It is
   /// shown once and for all; the box's widget is empty while no tooltip is
@@ -238,7 +270,41 @@ final class JetChartState extends State<JetChart> {
   }
 
   @override
+  void didUpdateWidget(JetChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.duration = widget.animationDuration;
+    final ChartLayout? shown = _layout;
+    if (oldWidget.chart == widget.chart || shown == null) {
+      return;
+    }
+    if (_reduceMotion || widget.animationDuration == Duration.zero) {
+      _stopAnimation();
+      return;
+    }
+    _from = _painted(shown);
+    _controller.forward(from: 0);
+  }
+
+  /// Ends the running animation, if any, so the new layout shows at once.
+  void _stopAnimation() {
+    _controller.stop();
+    _from = null;
+  }
+
+  /// The primitives to paint for [layout], the target: between [_from] and
+  /// [layout]'s while an animation runs.
+  List<ChartPrimitive> _painted(ChartLayout layout) {
+    final List<ChartPrimitive>? from = _from;
+    if (from == null || !_controller.isAnimating) {
+      return layout.primitives;
+    }
+    return lerpChartPrimitives(from, layout.primitives, _curve.value);
+  }
+
+  @override
   void dispose() {
+    _curve.dispose();
+    _controller.dispose();
     _measurer?.dispose();
     super.dispose();
   }
@@ -279,6 +345,9 @@ final class JetChartState extends State<JetChart> {
         _layoutLocale == widget.locale &&
         _layoutScaler == scaler) {
       return cached;
+    }
+    if (_layoutSize != size) {
+      _stopAnimation();
     }
     _layoutChart = chart;
     _layoutTheme = theme;
@@ -492,6 +561,10 @@ final class JetChartState extends State<JetChart> {
   Widget build(BuildContext context) {
     final ChartTheme theme = widget.theme ?? ChartTheme.office;
     final TextScaler scaler = MediaQuery.textScalerOf(context);
+    _reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (_reduceMotion) {
+      _stopAnimation();
+    }
     final FlutterTextMeasurer measurer = _measurerFor(scaler);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -517,12 +590,14 @@ final class JetChartState extends State<JetChart> {
     final Chart? chart = widget.chart;
     if (error != null) {
       _layout = null;
+      _stopAnimation();
       _setTip(null, Offset.zero, mouseTolerance);
       return widget.errorBuilder?.call(context, theme, error) ??
           MessageLook(theme: theme, measurer: measurer, message: strings.error);
     }
     if (widget.loading) {
       _layout = null;
+      _stopAnimation();
       _setTip(null, Offset.zero, mouseTolerance);
       return widget.loadingBuilder?.call(context, theme) ??
           LoadingLook(theme: theme, label: strings.loading);
@@ -532,6 +607,7 @@ final class JetChartState extends State<JetChart> {
         : _summaryOf(chart, widget.locale);
     if (chart == null || summary == null || summary.isEmpty) {
       _layout = null;
+      _stopAnimation();
       _setTip(null, Offset.zero, mouseTolerance);
       return widget.emptyBuilder?.call(context, theme) ??
           MessageLook(
@@ -549,6 +625,7 @@ final class JetChartState extends State<JetChart> {
     final Widget paint;
     if (size.isEmpty) {
       _layout = null;
+      _stopAnimation();
       _setTip(null, Offset.zero, mouseTolerance);
       paint = const ExcludeSemantics(child: SizedBox.expand());
     } else {
@@ -568,11 +645,14 @@ final class JetChartState extends State<JetChart> {
         theme,
         size,
         ExcludeSemantics(
-          child: CustomPaint(
-            size: size,
-            painter: ChartLayoutPainter(
-              primitives: layout.primitives,
-              measurer: measurer,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (BuildContext context, Widget? child) => CustomPaint(
+              size: size,
+              painter: ChartLayoutPainter(
+                primitives: _painted(layout),
+                measurer: measurer,
+              ),
             ),
           ),
         ),
