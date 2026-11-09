@@ -303,9 +303,9 @@ The file is untrusted (decision 0007). Three tests hold that:
   4-minute timeout, which names no case, and `tool/fuzz_reader.dart
   --verbose` writes each case to stderr before it runs so the last line names
   it. The gate runs seeds 1 to 4
-  with 100 cases each; `tool/fuzz_reader.dart` runs any range by hand
-  (AGENTS.md, "Fuzzing"). A defect that needs more than 400 cases is found
-  only by hand runs.
+  with 500 cases each (100 until C1's `c1_kinds` joined the corpus);
+  `tool/fuzz_reader.dart` runs any range by hand (AGENTS.md, "Fuzzing"). A
+  defect that needs more than 2,000 cases is found only by hand runs.
 - **Timing bounds** of the row-sort and formula-group scale tests are
   relative to a baseline measured in the same run (`test/support/timing.dart`),
   so a slow machine does not fail them. `hostile_files_test.dart` (1 s and

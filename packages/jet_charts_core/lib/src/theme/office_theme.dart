@@ -7,10 +7,20 @@ import 'chart_tooltip_style.dart';
 
 /// Builds the theme `ChartTheme.office` holds; its values are documented there.
 ChartTheme buildOfficeTheme() {
-  final ChartColor text = ChartColor.rgb(0x595959);
+  final ChartColor text = ChartColor.scheme(
+    ChartSchemeColor.dark1,
+    rgb: 0x595959,
+    lumMod: 0.65,
+    lumOff: 0.35,
+  );
   ChartTextStyle style(double size) =>
       ChartTextStyle(fontFamily: 'Aptos Narrow', size: size, color: text);
-  final ChartColor line = ChartColor.rgb(0xD9D9D9);
+  final ChartColor line = ChartColor.scheme(
+    ChartSchemeColor.dark1,
+    rgb: 0xD9D9D9,
+    lumMod: 0.15,
+    lumOff: 0.85,
+  );
   return ChartTheme(
     palette: <ChartColor>[
       ChartColor.scheme(ChartSchemeColor.accent1, rgb: 0x156082),
@@ -26,7 +36,7 @@ ChartTheme buildOfficeTheme() {
     dataLabels: style(9),
     gridLine: line,
     axisLine: line,
-    background: ChartColor.rgb(0xFFFFFF),
+    background: ChartColor.scheme(ChartSchemeColor.light1, rgb: 0xFFFFFF),
     border: line,
     valueAxisLine: false,
     tooltip: buildOfficeTooltipStyle(),

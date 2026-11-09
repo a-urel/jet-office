@@ -19,15 +19,19 @@ environment:
   # Matches Monépro's floor, the first consumer.
   sdk: ^3.9.0
 
-# archive and jet_core are the only runtime dependencies (decisions 0001 and
-# 0012). archive's lower bound is the version Monépro and jet_print already
-# lock, so neither gets a forced bump. Only lib/src/zip/archive_adapter.dart
-# may import archive. jet_core, the number format engine, is a package of this
-# repository's workspace (decision 0013).
+# archive, jet_core and jet_charts_core are the only runtime dependencies
+# (decisions 0001, 0012 and 0014). archive's lower bound is the version Monépro
+# and jet_print already lock, so neither gets a forced bump. Only
+# lib/src/zip/archive_adapter.dart may import archive. jet_core, the number
+# format engine, is a package of this repository's workspace (decision 0013),
+# and so is jet_charts_core, the chart model, which the DrawingML layer uses
+# from C1 (decision 0014).
 dependencies:
   archive: ^4.0.9
   jet_core:
     path: packages/jet_core
+  jet_charts_core:
+    path: packages/jet_charts_core
 
 dev_dependencies:
   lints: ^6.0.0

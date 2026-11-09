@@ -14,14 +14,16 @@ this library's own, with Word's values) and `0012` (the number format engine
 lives in `jet_core`; supersedes `0001`'s one runtime dependency and `0008`'s
 location and names) and `0013` (one repository: a pub workspace, with
 `jet_core` under `packages/`) and `0014` (the chart phase: `jet_charts_core`
-under `packages/`, and a DrawingML layer here) and `0016`
+under `packages/`, and a DrawingML layer here) and `0015` (what the DrawingML
+layer may import; supersedes that sentence of `0014`) and `0016`
 (`jet_charts_flutter`, the Flutter backend, is a member of the workspace, so
 resolving it needs Flutter's SDK) before any design change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
 its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
-testing, tooltip and summary), and this package still does not depend on it
-until C1.
+testing, tooltip and summary), and this package depends on it from C1.
+Milestone C1 (the DrawingML chart layer, `docs/drawingml-charts.md`) is done
+except the owner's reference workbook and Excel check (Task 10).
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
 own `AGENTS.md`; milestone J3 is done. This package never depends on it.
 
@@ -79,7 +81,7 @@ dart run tool/compare_resaved.dart build/fixtures build/resaved
 dart run tool/round_trip_model.dart build/fixtures build/model
 dart run tool/round_trip_model.dart build/resaved build/model-resaved
 dotnet run --project tool/ooxml_validate -- build/model
-dotnet run --project tool/ooxml_validate -- build/model-resaved
+dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/model-resaved
 dart run tool/edit_model.dart build/fixtures build/model-edited
 dotnet run --project tool/ooxml_validate -- build/model-edited
 (ulimit -f 500000; LC_ALL=C.UTF-8 soffice --headless \
@@ -108,7 +110,16 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
 
 - `tool/write_fixtures.dart` writes each fixture of `allFixtures()`
   (`test/fixtures/fixtures.dart`, which joins the milestone lists) as
-  `<name>.xlsx` and its expected values as `<name>.expected.json`, and each
+  `<name>.xlsx` and its expected values as `<name>.expected.json`, the C1
+  chart fixtures among them (`c1_kinds`, the sheet `Data` with the 12 column,
+  bar, line and area charts in the three groupings, Office theme; `c1_options`,
+  the sheet `O'Brien` with six charts of the options: title, the four legend
+  positions and a hidden legend, axis titles, a fixed range, format codes, data
+  labels, hidden axes, literal data, date categories, an automatic title and
+  eight series in an app theme with fixed colours), whose chart parts of
+  `writeDrawingChartSpace` the test-only host `withCharts`
+  (`test/drawingml/chart/support/chart_host.dart`, replaced by C2's host) draws
+  on the sheet, and each
   DOCX fixture of `docxFixtures()` (`test/fixtures/docx_fixtures.dart`) as
   `<name>.docx` and its expected text as `<name>.expected.txt`: the D1
   documents (`d1_*`), the D2 ones (`d2_*`), the D3 tables (`d3_basic`,
@@ -127,17 +138,21 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   what its headers and footers show. No fixture ends in a table, because
   LibreOffice's text export of one never ends (see below), or in a section
   break, as the model adds no block after one.
-  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx` and
-  `d1_corrupt.docx`, to prove every check still fails on a bad file. The
+  `--corrupt` adds a deliberately broken `m1_corrupt.xlsx`, `c1_corrupt.xlsx`
+  and `d1_corrupt.docx`, to prove every check still fails on a bad file. The
   `validate` job's negative-control step writes `m1_corrupt.xlsx` to
-  `build/corrupt` and requires every check to reject it, except the model
-  round trip (`tool/round_trip_model.dart`), which passes on it: the model
-  keeps the file's stray content faithfully, so the Open XML SDK must reject
-  the model's output instead, and the round trip must reject a truncated
-  copy. A second step does the same for `d1_corrupt.docx` in
-  `build/corrupt-docx` (a `w:r` directly under `w:body`, and "first" spelled
-  "firzt"), with `tool/compare_text.dart`, `tool/compare_resaved_docx.dart`
-  and `tool/round_trip_docx.dart` in place of their XLSX counterparts.
+  `build/corrupt` and requires every check to reject it, except the model round
+  trip (`tool/round_trip_model.dart`), which passes on it: the model keeps the
+  file's stray content faithfully, so the Open XML SDK must reject the model's
+  output instead, and the round trip must reject a truncated copy. The same step
+  moves `c1_corrupt.xlsx` (`c1_kinds` whose first chart's
+  `c16r3:dataDisplayOptions16` holds two `dispNaAsBlank`) to
+  `build/corrupt-chart` and requires `tool/ooxml_validate` to reject it, so the
+  validator's ignore of that extension (below) stays narrow. A second step does
+  the same for `d1_corrupt.docx` in `build/corrupt-docx` (a `w:r` directly under
+  `w:body`, and "first" spelled "firzt"), with `tool/compare_text.dart`,
+  `tool/compare_resaved_docx.dart` and `tool/round_trip_docx.dart` in place of
+  their XLSX counterparts.
 - `tool/write_fixtures.dart` imports test helpers that use `package:archive`.
   That is allowed: the archive rule covers `lib/` only.
 - `tool/ooxml_validate` validates every `.xlsx` and `.docx` with the Open XML
@@ -150,9 +165,26 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   only `on` and `off` there) and the model keeps as read. `w:cantSplit` has the
   same type, so the flag covers `w:val="true"` there too, though the
   LibreOffice checked writes it bare. The flag ignores that one error on those
-  two elements, matched on the element and its exact value; every other error,
-  and every run without the flag, counts. The `d1_corrupt.docx` negative
-  control must still fail with it.
+  two elements, matched on the element and its exact value. For
+  `build/model-resaved` it covers LibreOffice's chart style parts
+  (`xl/charts/styleN.xml`), which LibreOffice writes beside every chart it
+  re-saves and the model keeps as read: a `cs:dataPointMarkerLayout` with
+  children and a `cs:fontRef` holding `cs:schemeClr` for `a:schemeClr`, the
+  two errors matched on their ids, the part's content type and the element.
+  The `d1_corrupt.docx` negative control must still fail with it.
+  One error pair is ignored in every run, with or without the flag: the SDK
+  3.5.1 refuses the `c:chart/c:extLst` extension
+  `{56B9EC1D-385E-4148-901F-78D8002777C0}` (`c16r3:dataDisplayOptions16`) that
+  Excel itself writes in every chart part (the owner's `chart_defaults.xlsx`
+  fails the same way), so the tool ignores its `Sch_UndeclaredAttribute` and
+  `Sch_InvalidElementContentExpectingComplex` only on the `c:ext` at
+  `/c:chartSpace[1]/c:chart[1]/c:extLst[1]/c:ext[1]` of a chart part whose
+  only attribute is `uri` with exactly that value, whose only child is one
+  `c16r3:dataDisplayOptions16`, whose only child is one `c16r3:dispNaAsBlank`,
+  whose only attribute is an unqualified `val` of `1`, `0`, `true` or `false`
+  (Excel writes `1`). Anything else there (another attribute, a second or no
+  `dispNaAsBlank`, another value) still counts; `c1_corrupt.xlsx` (below) is
+  its negative control. Every other error counts, in every run.
 - LibreOffice's text export of a document whose body ends in a table never
   ends: it writes the file without bound. No fixture may end in a table (the
   fixture list says so), and the CI step and the command above cap the file
@@ -404,11 +436,15 @@ dart test -p chrome benchmark
 ## Fuzzing
 
 `test/xlsx/read/fuzz_test.dart` mutates a corpus of fixtures and producer
-files (`test/xlsx/read/support/fuzz.dart`) and requires the reader to throw
-nothing but `XlsxReadException`. The gate runs seeds 1 to 4 with 100 cases
-each, the same cases on the VM and in Chrome (except the two deflated
-corpus entries, whose cases may differ by platform, decision 0006). For
-longer runs, by hand:
+files (`test/xlsx/read/support/fuzz.dart`; `c1_kinds` among them, with its
+twelve chart parts) and requires the reader to throw nothing but
+`XlsxReadException`. The gate runs seeds 1 to 4 with 500 cases each, the same
+cases on the VM and in Chrome (except the two deflated corpus entries, whose
+cases may differ by platform, decision 0006). It ran 100 until `c1_kinds`
+joined the corpus: the fixed seeds must mutate every part name of the corpus
+(`every part name is mutated in some corpus entry`), and 400 left
+`xl/charts/chart12.xml` unmutated; raise the count again when a new entry
+makes that test fail. For longer runs, by hand:
 
 ```bash
 dart run tool/fuzz_reader.dart --seeds 1-200 --cases 1000
@@ -424,9 +460,31 @@ The number formatter's fuzz test and `tool/fuzz_formatter.dart` are in
 The chart layout's fuzz test and `tool/fuzz_layout.dart` are in
 `packages/jet_charts_core` (its `AGENTS.md`, "Fuzzing").
 
+`test/drawingml/chart/chart_fuzz_test.dart` fuzzes the chart reader and the
+chart part handle (C1, `test/drawingml/chart/support/chart_fuzz.dart`; seeds 1
+to 4, 100 cases each). Its corpus is text, never a ZIP: the two Excel parts of
+`excel_charts.dart` and every chart of `c1_kinds` and `c1_options` as the
+writer writes it, each read in its own theme. The mutations are the reader
+fuzz's on the part's bytes, and an attribute's value or an element's text
+replaced by `abc`, twenty digits, `-`, `NaN` or `1e999`.
+`readDrawingChartSpace` must throw nothing; a typed form must write a part
+that reads as the same typed form again; `DrawingChart.opened` must read as
+the reader does and encode the bytes unchanged. A fingerprint of the cases
+proves the VM and Chrome get the same ones; a change to the writer or to the
+C1 fixtures' charts changes it. Longer runs, by hand:
+
+```bash
+dart run tool/fuzz_chart.dart --seeds 1-200 --cases 1000
+```
+
+It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
+1 on any, 2 on bad arguments. Pin a failure as a unit test in the owning
+`*_test.dart` first.
+
 `test/xlsx/model/feature_fuzz_test.dart` fuzzes the model's sheet and
 workbook features (seeds 1 to 4, 100 cases each, over the `m3_*` and `m4_*`
-fixtures, a sheet as Excel writes it and the `excel_objects` producer file:
+fixtures, `c1_kinds`, a sheet as Excel writes it and the `excel_objects`
+producer file:
 whole mutated files, many of them well formed so they reach the features' own
 parsers; open, then reading, setting, undoing and saving every W3 and W4 member
 throw nothing but `XlsxReadException`, and undoing the edits of a file restores
@@ -499,8 +557,9 @@ the count again if it fails.
 - **`package:archive` is reachable only from
   `lib/src/zip/archive_adapter.dart`.** Enforced by
   `test/architecture/archive_isolation_test.dart`.
-- **Runtime dependencies are `archive` and `jet_core`** (decision 0012), the
-  second a package of this workspace (`packages/jet_core`, decision 0013; it has
+- **Runtime dependencies are `archive`, `jet_core` and `jet_charts_core`**
+  (decisions 0012 and 0014), the last two packages of this workspace
+  (`packages/jet_core`, decision 0013, and `packages/jet_charts_core`; each has
   its own `AGENTS.md`). Enforced by `test/architecture/dependencies_test.dart`.
 - **The OPC layer does not know XLSX.** Nothing under `lib/src/opc` imports
   anything under `lib/src/xlsx`, so DOCX can share it (decision 0009).
@@ -508,8 +567,10 @@ the count again if it fails.
 - **The format layers depend one way.** Nothing under `lib/src/docx/` imports
   `lib/src/xlsx/` (the number formatter is `package:jet_core`, decision 0012);
   nothing under `lib/src/common/` imports `lib/src/xlsx/`, `lib/src/docx/` or
-  the barrel; nothing under `lib/src/drawingml/` (the DrawingML both formats
-  share, decision 0014) imports `lib/src/xlsx/`, `lib/src/docx/` or the barrel;
+  the barrel; `lib/src/drawingml/` (the DrawingML both formats
+  share, decision 0014) imports only `dart:`, its own files, `../opc/`,
+  `../xml/`, `../common/`, `package:jet_charts_core/jet_charts_core.dart` and
+  `package:jet_core/jet_core.dart` (decision 0015);
   nothing under `lib/src/` imports `lib/jet_office.dart`.
   Enforced by `test/architecture/layering_test.dart`.
 - **One cell encoder.** Only `lib/src/xlsx/cell_encoder.dart` writes `<c ` or
@@ -535,7 +596,8 @@ the count again if it fails.
 ## Reference
 
 The DOCX model's rules, each with its test, are in `docs/docx-model.md`; the
-Word check is in `docs/word-checks.md`.
+Word check is in `docs/word-checks.md`. The chart layer's rules and what C2 and
+C3 must do are in `docs/drawingml-charts.md`.
 
 Quds is cloned read-only next to this repo at `../quds_office_suite`. The port
 map for the writer is in `docs/xlsx-writer.md`, "Port map"; the reader's is in

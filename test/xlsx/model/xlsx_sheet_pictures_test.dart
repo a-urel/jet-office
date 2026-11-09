@@ -557,6 +557,32 @@ void main() {
       );
     });
 
+    test('a relationship whose id XML cannot hold is not shared', () {
+      // Fuzz: tool/fuzz_reader.dart --features, seed 9 case 446.
+      final Map<String, Uint8List> parts = readXlsxBytes(_fixture('m4_images'));
+      const String rels = 'xl/drawings/_rels/drawing2.xml.rels';
+      parts[rels] = Uint8List.fromList(
+        utf8.encode(
+          utf8
+              .decode(parts[rels]!)
+              .replaceFirst(RegExp('Id="[^"]*"'), 'Id="&#xFFFE;"'),
+        ),
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(buildZip(parts));
+      book.sheets[1].addPicture(_sized());
+      final Uint8List saved = book.save().bytes;
+      expect(
+        RegExp('<Relationship ').allMatches(_drawingRels(saved, 2)),
+        hasLength(2),
+      );
+      // rId1 stays taken: the file's own picture still names it.
+      expect(_drawingOf(saved, 2), contains('r:embed="rId2"'));
+      expect(
+        _drawingRels(saved, 2),
+        contains('Id="rId2" Type="$relNs/image" Target="../media/image1.png"'),
+      );
+    });
+
     test('a new extension adds a Default and takes the next number', () {
       final XlsxWorkbook book = XlsxWorkbook.open(
         buildWorkbook(<String, String>{'S': worksheet('')}),

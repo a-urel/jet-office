@@ -8,8 +8,11 @@ import 'support/fuzz.dart';
 /// The seeds the quality gate fuzzes, each with [_cases] cases.
 const List<int> _seeds = <int>[1, 2, 3, 4];
 
-/// The cases per seed in the quality gate.
-const int _cases = 100;
+/// The cases per seed in the quality gate: enough that the fixed seeds
+/// mutate every part name of the corpus (`every part name is mutated in some
+/// corpus entry`). It was 100 until `c1_kinds` joined the corpus with its
+/// twelve chart parts; 400 left `xl/charts/chart12.xml` unmutated.
+const int _cases = 500;
 
 /// The length and Adler-32 checksum of every stored corpus entry, computed
 /// once on the VM. The Chrome leg compares them, which proves the corpus
@@ -24,6 +27,7 @@ const Map<String, ({int length, int adler32})> _storedCorpus =
       'm1_formulas': (length: 5599, adler32: 2780369878),
       'm1_dates': (length: 5963, adler32: 3931601365),
       'm2_style_precedence': (length: 7276, adler32: 148506124),
+      'c1_kinds': (length: 120631, adler32: 3033451574),
       'libreoffice': (length: 17758, adler32: 3013262995),
       'google_sheets': (length: 10635, adler32: 3903365900),
       'dotnet_sdk': (length: 3072, adler32: 1661782054),
@@ -66,6 +70,7 @@ void main() {
         'm1_formulas',
         'm1_dates',
         'm2_style_precedence',
+        'c1_kinds',
         'libreoffice',
         'google_sheets',
         'dotnet_sdk',

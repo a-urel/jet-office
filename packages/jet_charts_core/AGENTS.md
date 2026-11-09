@@ -28,6 +28,12 @@ This repository is a pub workspace (decision 0013). The chart family:
 | `jet_office` (repository root) | `c:chartSpace` read and write, host adapters for XLSX, DOCX | `jet_core`, `jet_charts_core` (from C1, decision 0014) |
 | `jet_print` (later) | PDF painter, its own measurer | core |
 
+`jet_office` depends on this package from C1: its DrawingML layer writes and
+reads `c:chartSpace` for a `Chart` (`docs/drawingml-charts.md` at the root).
+C1 is done except the owner's reference workbook and Excel check; C2 and C3
+add the XLSX and DOCX hosts. `lumMod` and `lumOff` on scheme colours are in
+`ChartColor` (done in C1).
+
 `jet_charts_core` must not depend on `jet_office`, or the two form a cycle.
 What both need goes in `jet_core`. `jet_charts_flutter` is
 `packages/jet_charts_flutter` (decision 0016), with its own `AGENTS.md`.
@@ -171,8 +177,6 @@ by hand, then fix it.
 
 ## Open for J4 and C1
 
-- `lumMod`/`lumOff` on scheme colours (C1; `chart_defaults.xlsx` shows text
-  tx1 65/35 and grid tx1 15/85).
 - `ArcPrimitive.strokeWidth`, pies, donut, sparkline, scatter, combination
   charts, per-series kind and the secondary axis (J4).
 - Excel's time-scale date axis (owner decision O2; dates are categories).

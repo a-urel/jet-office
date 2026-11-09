@@ -57,13 +57,14 @@ final class ChartTheme {
   /// Verified on Excel's default column and line charts
   /// (`chart_defaults.xlsx`, 2026-11-08; `docs/excel-checks.md` gives each
   /// value's source): the font family `Aptos Narrow` (the theme's minor
-  /// font), 9 pt axis labels and a 14 pt title, the text colour `595959`, the
-  /// grid and axis line colour `D9D9D9`, the background `FFFFFF`, a 0.75 pt
-  /// [border] of `D9D9D9` and no [valueAxisLine],
-  /// [gapWidthPercent] 219, [lineWidth] 2.25, [markerSize] 5, and of
-  /// [spacing] the line widths, the overlap and the tick length. Still
-  /// unconfirmed: 9 pt for the legend and data labels, and the other gaps of
-  /// [spacing].
+  /// font), 9 pt axis labels and a 14 pt title, the text colour `595959`
+  /// (`tx1` with `lumMod` 0.65 and `lumOff` 0.35), the grid and axis line
+  /// colour `D9D9D9` (`tx1`, 0.15 and 0.85), a 0.75 pt [border] of the same
+  /// colour, no [valueAxisLine] and the background `FFFFFF` (`bg1`), each
+  /// colour bound to the file theme; also [gapWidthPercent] 219, [lineWidth]
+  /// 2.25, [markerSize] 5, and of [spacing] the line widths, the overlap and
+  /// the tick length. Still unconfirmed: 9 pt for the legend and data labels,
+  /// and the other gaps of [spacing].
   ///
   /// Its [tooltip] is this library's own look, not an Excel value.
   static final ChartTheme office = buildOfficeTheme();

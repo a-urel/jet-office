@@ -11,6 +11,7 @@ import 'package:test/test.dart';
 
 import '../../tool/round_trip_model.dart';
 import '../../tool/write_fixtures.dart' as write_fixtures;
+import '../support/read_xlsx.dart';
 
 void main() {
   late Directory temp;
@@ -78,6 +79,32 @@ void main() {
     );
     expect(code, 0);
     expect(File('${output.path}/m1_corrupt.xlsx').existsSync(), isTrue);
+  });
+
+  test('--corrupt adds c1_corrupt.xlsx: c1_kinds with two dispNaAsBlank', () {
+    // The Open XML SDK negative control of tool/ooxml_validate's narrow
+    // ignore of Excel's chart display options: only the first chart part
+    // differs from c1_kinds, and only by a second dispNaAsBlank.
+    write_fixtures.main(<String>[input.path, '--corrupt']);
+    final Map<String, String> kinds = readXlsx(
+      File('${input.path}/c1_kinds.xlsx').readAsBytesSync(),
+    );
+    final Map<String, String> corrupt = readXlsx(
+      File('${input.path}/c1_corrupt.xlsx').readAsBytesSync(),
+    );
+    expect(corrupt.keys, kinds.keys);
+    for (final String name in kinds.keys) {
+      if (name != 'xl/charts/chart1.xml') {
+        expect(corrupt[name], kinds[name], reason: name);
+      }
+    }
+    const String blank = '<c16r3:dispNaAsBlank val="1"/>';
+    expect(
+      corrupt['xl/charts/chart1.xml'],
+      kinds['xl/charts/chart1.xml']!.replaceFirst(blank, '$blank$blank'),
+    );
+    expect(kinds['xl/charts/chart1.xml'], contains(blank));
+    expect(File('${input.path}/c1_corrupt.expected.json').existsSync(), isTrue);
   });
 
   test('an unreadable file is printed as <file>: <error>', () {

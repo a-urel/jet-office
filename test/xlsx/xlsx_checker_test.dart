@@ -5,6 +5,8 @@ import 'package:archive/archive.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../fixtures/c1_fixtures.dart';
+import '../fixtures/fixture.dart';
 import '../fixtures/m4_fixtures.dart' show jpeg3x5, png4x2;
 import '../support/xlsx_checker.dart';
 
@@ -2630,6 +2632,90 @@ void main() {
     });
   });
 
+  group('rule 30: charts', () {
+    const String drawing1 = 'xl/drawings/drawing1.xml';
+    const String drawingRels1 = 'xl/drawings/_rels/drawing1.xml.rels';
+    const String types = '[Content_Types].xml';
+
+    /// `c1_kinds`: twelve chart frames on one sheet.
+    Uint8List chartsBook() =>
+        c1Fixtures().firstWhere((Fixture f) => f.name == 'c1_kinds').build();
+
+    Uint8List tamper(String part, String Function(String xml) edit) => _rebuild(
+      chartsBook(),
+      edit: <String, String? Function(String)>{part: edit},
+    );
+
+    void expectViolation(Uint8List bytes, String fragment) {
+      final List<String> violations = checkXlsx(bytes);
+      expect(
+        violations.where(
+          (String v) => v.startsWith('rule 30:') && v.contains(fragment),
+        ),
+        isNotEmpty,
+        reason: 'violations: $violations',
+      );
+    }
+
+    test('a workbook with chart frames is clean', () {
+      expect(checkXlsx(chartsBook()), isEmpty);
+    });
+    test('an anchor with neither a picture nor a frame', () {
+      expectViolation(
+        tamper(
+          drawing1,
+          (String x) => x.replaceFirst(
+            RegExp('<xdr:graphicFrame .*?</xdr:graphicFrame>'),
+            '',
+          ),
+        ),
+        '<xdr:twoCellAnchor> has no <xdr:pic>',
+      );
+    });
+    test('a chart r:id the drawing does not declare', () {
+      expectViolation(
+        tamper(
+          drawing1,
+          (String x) => x.replaceFirst('r:id="rId1"', 'r:id="rId99"'),
+        ),
+        'c:chart r:id "rId99" is not a chart relationship',
+      );
+    });
+    test('a chart r:id of another relationship type', () {
+      expectViolation(
+        tamper(
+          drawingRels1,
+          (String x) => x.replaceFirst(_chartRelType, _imageRelType),
+        ),
+        'is not a chart relationship',
+      );
+    });
+    test('a chart whose part is missing', () {
+      expectViolation(
+        tamper(
+          drawingRels1,
+          (String x) =>
+              x.replaceFirst('../charts/chart1.xml', '../charts/chart99.xml'),
+        ),
+        'xl/charts/chart99.xml, which does not exist',
+      );
+    });
+    test('a chart part of another content type', () {
+      expectViolation(
+        tamper(
+          types,
+          (String x) => x.replaceFirst(
+            '<Override PartName="/xl/charts/chart1.xml" '
+                'ContentType="application/vnd.openxmlformats-officedocument.'
+                'drawingml.chart+xml"/>',
+            '',
+          ),
+        ),
+        'xl/charts/chart1.xml, whose content type',
+      );
+    });
+  });
+
   group('rule 31: tables', () {
     const String table1 = 'xl/tables/table1.xml';
     const String table2 = 'xl/tables/table2.xml';
@@ -2883,3 +2969,7 @@ const String _drawingRelType =
 const String _imageRelType =
     'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
     'image';
+
+const String _chartRelType =
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    'chart';

@@ -32,6 +32,13 @@
 /// flag with a separate directory, `build/corrupt`, as a standing negative
 /// control and requires both checks to reject that file.
 ///
+/// It also writes `c1_corrupt.xlsx` and its `.expected.json`: `c1_kinds`
+/// whose first chart part holds two `c16r3:dispNaAsBlank` in Excel's
+/// `c16r3:dataDisplayOptions16` extension. `tool/ooxml_validate` ignores the
+/// two errors the Open XML SDK gives on that extension only when it holds
+/// exactly one, so it must reject this file; CI validates it alone, in
+/// `build/corrupt-chart`, as the negative control of that ignore.
+///
 /// It writes `d1_corrupt.docx` with the `.expected.txt` of `d1_paragraphs`
 /// as well, for the same purpose: `d1_paragraphs` with a `w:r` directly
 /// under `w:body`, which the Open XML SDK rejects, and `first` spelled
@@ -100,9 +107,19 @@ void main(List<String> args) {
       json,
       values.expectedValues,
     );
+    final Fixture kinds = fixtures.singleWhere(
+      (Fixture f) => f.name == 'c1_kinds',
+    );
+    _write(
+      dir,
+      'c1_corrupt',
+      _corruptChart(kinds.build()),
+      json,
+      kinds.expectedValues,
+    );
   }
   stdout.writeln(
-    'Wrote ${fixtures.length + documents.length + (corrupt ? 2 : 0)} '
+    'Wrote ${fixtures.length + documents.length + (corrupt ? 3 : 0)} '
     'fixtures to ${dir.path}.',
   );
 }
@@ -162,18 +179,39 @@ Uint8List _corruptDocx(Uint8List bytes) => rewriteDocxPart(
 
 /// [bytes] (the `m1_values` workbook) with a cell after `</sheetData>` and
 /// its `42` stored as `41`.
-Uint8List _corrupt(Uint8List bytes) {
-  const String sheet = 'xl/worksheets/sheet1.xml';
-  final Map<String, String> parts = readXlsx(bytes);
-  final String xml = parts[sheet]!;
-  final String bad = _replaceOnce(
+Uint8List _corrupt(Uint8List bytes) => _rewritePart(
+  bytes,
+  'xl/worksheets/sheet1.xml',
+  (String xml) => _replaceOnce(
     _replaceOnce(xml, '</sheetData>', '</sheetData><c r="A3"><v>1</v></c>'),
     '<v>42</v>',
     '<v>41</v>',
+  ),
+);
+
+/// [bytes] (the `c1_kinds` workbook) with a second `c16r3:dispNaAsBlank` in
+/// the display options extension of its first chart part.
+Uint8List _corruptChart(Uint8List bytes) {
+  const String blank = '<c16r3:dispNaAsBlank val="1"/>';
+  return _rewritePart(
+    bytes,
+    'xl/charts/chart1.xml',
+    (String xml) => _replaceOnce(xml, blank, '$blank$blank'),
   );
+}
+
+/// [bytes], an XLSX file without media parts, with the part [name] replaced
+/// by [rewrite] of its text.
+Uint8List _rewritePart(
+  Uint8List bytes,
+  String name,
+  String Function(String xml) rewrite,
+) {
+  final Map<String, String> parts = readXlsx(bytes);
+  final String bad = rewrite(parts[name]!);
   final ZipWriter zip = ZipWriter();
-  parts.forEach((String name, String text) {
-    zip.add(name, utf8.encode(name == sheet ? bad : text));
+  parts.forEach((String part, String text) {
+    zip.add(part, utf8.encode(part == name ? bad : text));
   });
   return zip.close()!;
 }

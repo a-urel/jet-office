@@ -5,9 +5,13 @@
 // lib/src/xlsx nor lib/src/docx. lib/src/docx may import nothing of
 // lib/src/xlsx: the number formatter is in jet_core (decision 0012). Neither
 // layer may import the public barrel, lib/jet_office.dart, which exports
-// xlsx. lib/src/drawingml holds what XLSX and DOCX share of DrawingML, so it
-// imports neither (decision 0014). No file under lib/ may reach into jet_core's `src/`: its public
-// barrel, `package:jet_core/jet_core.dart`, is the only way in.
+// xlsx. lib/src/drawingml holds what XLSX and DOCX share of DrawingML. It
+// imports only an allow-list (decision 0015): dart: libraries, its own files,
+// ../opc/, ../xml/, ../common/ and the barrels of jet_charts_core and
+// jet_core; so it imports neither format layer. No file under lib/ may reach
+// into jet_core's `src/` or jet_charts_core's `src/`: their public barrels
+// (`package:jet_core/jet_core.dart`,
+// `package:jet_charts_core/jet_charts_core.dart`) are the only way in.
 @TestOn('vm')
 library;
 
@@ -38,8 +42,11 @@ bool _namesBarrel(String uri) =>
     uri == 'package:jet_office/jet_office.dart' ||
     (!uri.startsWith('package:') && uri.endsWith('jet_office.dart'));
 
-/// Whether [uri] reaches into jet_core's private `src/`.
-bool _namesCoreSource(String uri) => uri.startsWith('package:jet_core/src/');
+/// Whether [uri] reaches into the private `src/` of jet_core or
+/// jet_charts_core.
+bool _namesCoreSource(String uri) =>
+    uri.startsWith('package:jet_core/src/') ||
+    uri.startsWith('package:jet_charts_core/src/');
 
 Iterable<String> _uris(LibSource source) =>
     _directive.allMatches(source.code).map((RegExpMatch m) => m.group(1)!);
@@ -63,13 +70,32 @@ List<String> _docxOffenders(Iterable<LibSource> sources) => <String>[
       source.path,
 ];
 
+/// Whether [uri], imported by the file at [path], is one the drawingml layer
+/// may import (decision 0015): a `dart:` library, a relative path that stays
+/// in `drawingml/` or names `lib/src/opc/`, `lib/src/xml/` or
+/// `lib/src/common/` (resolved against [path], so a file under
+/// `drawingml/chart/` reaches them by `../../`), or exactly the two package
+/// barrels.
+bool _drawingmlAllows(String path, String uri) {
+  if (uri.startsWith('dart:')) return true;
+  if (uri == 'package:jet_charts_core/jet_charts_core.dart' ||
+      uri == 'package:jet_core/jet_core.dart') {
+    return true;
+  }
+  if (uri.contains(':')) return false;
+  final String target = Uri.parse(path).resolve(uri).path;
+  return target.startsWith(_drawingml) ||
+      target.startsWith('lib/src/opc/') ||
+      target.startsWith('lib/src/xml/') ||
+      target.startsWith(_common);
+}
+
 List<String> _drawingmlOffenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
     if (source.path.startsWith(_drawingml) &&
-        _uris(source).any(
-          (String uri) =>
-              _names(uri, 'xlsx') || _names(uri, 'docx') || _namesBarrel(uri),
-        ))
+        !_uris(
+          source,
+        ).every((String uri) => _drawingmlAllows(source.path, uri)))
       source.path,
 ];
 
@@ -176,7 +202,7 @@ void main() {
     expect(_docxOffenders(libSources()), isEmpty);
   });
 
-  test('nothing under drawingml imports xlsx or docx', () {
+  test('drawingml imports only what decision 0015 allows', () {
     final List<LibSource> sources = libSources();
     expect(
       sources.map((LibSource s) => s.path),
@@ -252,11 +278,50 @@ void main() {
         "import 'package:jet_office/jet_office.dart';",
       ),
       LibSource('lib/src/drawingml/s.dart', "import '../opc/package.dart';"),
+      LibSource(
+        'lib/src/drawingml/t.dart',
+        "import 'package:jet_charts_core/src/a.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/u.dart',
+        "import 'package:archive/archive.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/v.dart',
+        "import 'dart:typed_data';\n"
+            "import 'package:jet_charts_core/jet_charts_core.dart';\n"
+            "import 'package:jet_core/jet_core.dart';\n"
+            "import 'chart/x.dart';\n"
+            "import '../xml/xml_writer.dart';\n"
+            "import '../common/image.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/w.dart',
+        "import '../zip/archive_adapter.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/chart/x.dart',
+        "import '../color.dart';\n"
+            "import '../../xml/xml_writer.dart';\n"
+            "import '../../common/image.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/chart/z.dart',
+        "import '../../xlsx/range.dart';",
+      ),
+      LibSource(
+        'lib/src/drawingml/y.dart',
+        "// import '../xlsx/x.dart';\nconst int x = 0;",
+      ),
     ];
     expect(_drawingmlOffenders(fixtures), <String>[
       'lib/src/drawingml/p.dart',
       'lib/src/drawingml/q.dart',
       'lib/src/drawingml/r.dart',
+      'lib/src/drawingml/t.dart',
+      'lib/src/drawingml/u.dart',
+      'lib/src/drawingml/w.dart',
+      'lib/src/drawingml/chart/z.dart',
     ]);
     expect(_commonOffenders(fixtures), <String>[
       'lib/src/common/a.dart',
@@ -264,7 +329,10 @@ void main() {
       'lib/src/common/c.dart',
       'lib/src/common/j.dart',
     ]);
-    expect(_coreSourceOffenders(fixtures), <String>['lib/src/xlsx/n.dart']);
+    expect(_coreSourceOffenders(fixtures), <String>[
+      'lib/src/xlsx/n.dart',
+      'lib/src/drawingml/t.dart',
+    ]);
     expect(_docxOffenders(fixtures), <String>[
       'lib/src/docx/f.dart',
       'lib/src/docx/g.dart',
