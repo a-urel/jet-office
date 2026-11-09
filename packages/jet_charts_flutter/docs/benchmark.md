@@ -123,12 +123,12 @@ pie 60 slices             1280x720       247    12.50     12.90      9.80     10
   behaviour on dense lines was not checked (`jet_charts_core/docs/parity.md`).
 - Data labels are off: the core's label placement is linear per obstacle and
   takes about 1 s at 3,650 categories by 2 series.
-- J4 cases. The 10,000-point scatter chart lays out in about 16 ms on the VM
-  and 25 ms in Chrome, far cheaper than the line (its markers are children of
-  the plot's clip, so `prims` is 38). Its cost is
-  in painting: 10,000 markers record in about 12 ms on the VM and 73 ms in
-  Chrome (30 and 76 ms worst), which is over a 16 ms frame in Chrome; a chart
-  this large should be decimated by the caller. The pie of 60 slices, labels and leader lines
-  included, lays out in about 2 to 4 ms on the VM and 6 to 12 ms in Chrome
-  and records in under 1.2 ms. The scatter and pie rows were run once and the
-  VM's worst figures are one-off spikes, not a trend.
+- J4 cases. The 10,000-point scatter chart lays out in about 16 ms on the VM and
+  25 ms in Chrome, far cheaper than the line (its markers are children of the
+  plot's clip, so `prims` is 38). Its cost is in painting: 10,000 markers record
+  in about 12 ms on the VM and 73 ms in Chrome (30 and 76 ms worst), which is
+  over a 16 ms frame in Chrome; a chart this large should be decimated by the
+  caller. The pie of 60 slices, labels and leader lines included, lays out in
+  about 2 to 4 ms on the VM and 6 to 12 ms in Chrome and records in under 1.2
+  ms. The scatter and pie rows were run once and the VM's worst figures are
+  one-off spikes, not a trend.

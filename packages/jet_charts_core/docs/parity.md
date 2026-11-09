@@ -1,10 +1,10 @@
 # Parity with Excel
 
-How `layoutChart` (milestones J2 and J4) compares with Excel for Mac, the oracle, and
-every place it differs on purpose. The rule of the package: on screen, no
-overlap beats matching Excel, and a bad input gives a defined picture rather
-than a throw. Each difference below says which of the two it serves, or why
-else it exists. The axis scale's own evidence is in `axis-scaling.md`, the
+How `layoutChart` (milestones J2 and J4) compares with Excel for Mac, the
+oracle, and every place it differs on purpose. The rule of the package: on
+screen, no overlap beats matching Excel, and a bad input gives a defined picture
+rather than a throw. Each difference below says which of the two it serves, or
+why else it exists. The axis scale's own evidence is in `axis-scaling.md`, the
 theme's in `excel-checks.md`.
 
 ## Kinds
@@ -179,14 +179,15 @@ TALIMATLAR_J4.md`) and E2 (the J4 gallery side by side) are recorded in
 `excel-checks.md`; this page never states an Excel result the owner has not
 given.
 
-- **Centre text of a donut.** Excel's doughnut has no such element (a text box
-  over the chart does the same). `Chart.centerText` is drawn in the theme's
-  `centerTextStyle` (the title style by default) when its box fits in the free
-  circle of the hole, shrunk by `minTextGap`; else it is hidden and listed in
-  `ChartLayout.hidden`. It is not written to a file.
+- **Centre text of a donut.** Excel's doughnut has no such element, as far as
+  this library knows (not checked in Excel; a text box over the chart does the
+  same). `Chart.centerText` is drawn in the theme's `centerTextStyle` (the title
+  style by default) when every corner of its box lies inside the hole's free
+  circle (the hole less the slice outline) shrunk by `minTextGap`; else it is
+  hidden and listed in `ChartLayout.hidden`. It is not written to a file.
 - **Area translucency and an edge line.** `ChartTheme.areaOpacity` and
-  `areaLine` are not Excel defaults (Excel's area is opaque and has no line);
-  the file writer can express both.
+  `areaLine` are not Excel defaults (Excel's default area is opaque and has no
+  line; not checked in Excel); the file writer can express both.
 - **Outside label placement of a pie.** A label that does not fit in its slice
   is placed outside along the slice's middle angle, on the right when the angle
   is under 180 degrees, else on the left, pushed apart from the others; a label
@@ -194,30 +195,37 @@ given.
   moves away from the pie until no part of the line enters it. A label that
   still meets a text or another slice or line is hidden and listed. A small
   slice's label can therefore be hidden where Excel shows it (the 3 % slice of
-  `pie_small_slices` behind the 4 % one's leader line: no overlap, Excel would
-  show both). `findOverlaps` leaves out a label's own leader line and own
-  slice, as it does a bar label's own bar.
+  `pie_small_slices` behind the 4 % one's leader line: no overlap; Excel would
+  show both, not checked in Excel). `findOverlaps` leaves out a label's own
+  leader line and own slice, as it does a bar label's own bar.
 - **A donut has no outside labels.** A label that does not fit its ring is
-  hidden; Excel's doughnut has none outside either.
+  hidden; Excel's doughnut has none outside either (not checked in Excel).
 - **`ChartDataLabels.minShare` is screen only.** A pie or donut slice whose
-  share is under it has no label, for Monépro's "labels above 10 %"; a file
-  has no such option, so the file shows every label. The value is validated
-  by `copyWith` and the `Chart` constructor, not by the const constructor.
+  share is under it has no label, for Monépro's "labels above 10 %"; a file has
+  no such option, so the file shows every label. The value is validated by
+  `copyWith` and the `Chart` constructor, not by the const constructor.
 - **Data label format order.** A pie or donut label's text takes the labels'
   format code, else the series', else `General`, as a cartesian label does.
 - **Scatter lines are not drawn.** Only markers: a scatter series has no
   connecting line, whatever the file's `c:scatterStyle`. Excel's other scatter
-  styles (lines with and without markers, smooth) are open. The x values are
-  the series' categories: numbers, or dates as Excel's serial; text numbers the
-  points 1, 2, 3, as Excel does. The date axis is a value axis (no time scale).
+  styles (lines with and without markers, smooth) are open. The x values are the
+  series' categories: numbers, or dates as Excel's serial; text numbers the
+  points 1, 2, 3 (estimate, not checked in Excel; pending E1). The date axis is
+  a value axis (no time scale).
 - **A bar chart has no secondary axis.** A column, line, area or combination
-  chart does; its series bound to the secondary axis are drawn after the
-  primary ones of the same kind.
+  chart does; its series bound to the secondary axis are drawn after the primary
+  ones of the same kind.
+- **Combination category labels.** The category labels sit on tick marks only
+  with an area series and no column series; lines alone sit between ticks, as in
+  a line chart (this package's rule; Excel not checked, pending E1).
+- **A gapped sparkline area.** The area of a sparkline series with gaps is one
+  closed path per series that drops to the base at each gap (unique ids: an id
+  identifies one primitive).
 - **Sparklines always draw the background**, with no border, title or legend.
 - **Point colours.** `ChartSeries.pointColors` colours single bars, markers and
   slices; an entry `null` or past the end keeps the series colour. In the file a
-  line's point colour changes its marker only (`c:dPt`; estimate, not checked
-  in Excel).
+  line's point colour changes its marker only (`c:dPt`; estimate, not checked in
+  Excel).
 - **Overlap guarantee.** `findOverlaps` finds nothing in the J4 layouts, as in
-  the others, and every hidden text of a pie, donut or sparkline stays
-  reachable through a tooltip.
+  the others, and every hidden text of a pie, donut or sparkline stays reachable
+  through a tooltip.

@@ -3,10 +3,10 @@
 ## Unreleased
 
 - J4: pie, donut, sparkline, scatter and combination charts are laid out
-  (`layoutChart`), with `ChartSeries.kind` and `axis`, `Chart.secondaryValueAxis`
-  (column, line, area and combination charts), smooth lines
-  (`ChartSeries.smooth`) and `ChartSeries.pointColors`. Their Excel values are
-  estimates, not checked in Excel, until the owner's E1 and E2.
+  (`layoutChart`), with `ChartSeries.kind` and `axis`,
+  `Chart.secondaryValueAxis` (column, line, area and combination charts), smooth
+  lines (`ChartSeries.smooth`) and `ChartSeries.pointColors`. Their Excel values
+  are estimates, not checked in Excel, until the owner's E1 and E2.
 - J4: `ChartDataLabels.showValue`, `showPercent` and `minShare` (screen only),
   `Chart.holeSizePercent` and `centerText`, `PathPrimitive.fillOpacity`.
 - J4: `ChartTheme.areaOpacity`, `areaLine`, `sliceBorderWidth`, `centerText`

@@ -1,4 +1,4 @@
-// The code of docs/app-themes.md, compiled and run: the charts of that page
+// The code of docs/app-themes.md, mirrored: the charts of that page
 // are built here exactly as the page shows them, laid out in both themes
 // without an overlap, and one is shown with animations disabled.
 library;
@@ -132,6 +132,14 @@ final Chart trendArea = Chart(
   valueAxis: trend.valueAxis,
 );
 
+/// The widget, as the page shows it.
+Widget trendWidget() => JetChart(
+  chart: trend,
+  theme: lightTheme,
+  locale: FormatLocale.trTR,
+  strings: JetChartStrings.tr,
+);
+
 // --- the tests --------------------------------------------------------
 
 void main() {
@@ -226,16 +234,7 @@ void main() {
         child: Directionality(
           textDirection: TextDirection.ltr,
           child: Center(
-            child: SizedBox(
-              width: 360,
-              height: 216,
-              child: JetChart(
-                chart: trend,
-                theme: lightTheme,
-                locale: FormatLocale.trTR,
-                strings: JetChartStrings.tr,
-              ),
-            ),
+            child: SizedBox(width: 360, height: 216, child: trendWidget()),
           ),
         ),
       ),

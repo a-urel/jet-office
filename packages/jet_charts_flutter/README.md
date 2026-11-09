@@ -10,17 +10,17 @@ system decides the rest.
 
 ## Status
 
-Milestones J3 and J4 are done (J4 but its Excel check: the new kinds'
-Excel values are estimates until the owner's E1 and E2). The package exports `FlutterTextMeasurer` (the
-`TextMeasurer` that measures with the `TextPainter` the renderer paints with),
-`paintChartPrimitives` and `ChartLayoutPainter`, and the widget `JetChart`:
-loading, empty and error states in English, Turkish and German, a screen
-reader description, hover and touch tooltips (`onHover`, `onTap`), light
-animation of marks when the data changes, and reduced motion. It paints
-column, bar, line, area, pie, donut, sparkline, scatter and combination
+Milestones J3 and J4 are done (J4 but its Excel check: the new kinds' Excel
+values are estimates until the owner's E1 and E2). The package exports
+`FlutterTextMeasurer` (the `TextMeasurer` that measures with the `TextPainter`
+the renderer paints with), `paintChartPrimitives` and `ChartLayoutPainter`, and
+the widget `JetChart`: loading, empty and error states in English, Turkish and
+German, a screen reader description, hover and touch tooltips (`onHover`,
+`onTap`), light animation of marks when the data changes, and reduced motion. It
+paints column, bar, line, area, pie, donut, sparkline, scatter and combination
 charts, smooth lines and translucent areas, and the keyboard walks a chart's
-points (arrows, Home, End) while a screen reader reads a node per point. `example/` is a
-gallery app for comparing the charts with Excel for Mac.
+points (arrows, Home, End) while a screen reader reads a node per point.
+`example/` is a gallery app for comparing the charts with Excel for Mac.
 
 The package is a member of the repository's pub workspace (decisions 0013 and
 0016 in the repository root's `docs/decisions/`).

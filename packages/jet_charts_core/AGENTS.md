@@ -7,21 +7,20 @@ lays out; `jet_office` writes and reads the model as a chart in XLSX and DOCX.
 The record of the design is the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md`.
 
-Milestones J1, J2 and J3 are done, and J4 is done but its Excel check
-(E1, the owner's `chart_reference_j4.xlsx`, and E2, the J4 gallery side by
-side: `docs/excel-checks.md`, "J4 values"), and the owner's full axis oracle run is
+Milestones J1, J2 and J3 are done, and J4 is done but its Excel check (E1, the
+owner's `chart_reference_j4.xlsx`, and E2, the J4 gallery side by side:
+`docs/excel-checks.md`, "J4 values"), and the owner's full axis oracle run is
 recorded (`docs/axis-scaling.md`, "Findings"). The package exports the model,
 the theme, the drawing primitives and the text measurer (J1), the value scale
 (`autoValueScale`), the layout (`layoutChart`) and the overlap check
 (`findOverlaps`) (J2). J3 added element ids and `hitTestLayout`,
 `ChartLayout.categoryBands`, the tooltip (`chartTooltipAt`, `chartTooltipFor`,
 `ChartTooltipStyle`), `summarizeChart`, and the Office border and no value axis
-line; the renderer is `jet_charts_flutter`. J4 added pies, donuts,
-sparklines, scatter and combination charts, per-series kind, the secondary
-value axis, smooth lines, point colours, translucent areas with an edge line,
-pie data labels with `minShare`, `ChartTheme.fromColors` and `ChartSummary`'s
-shares, centre text and x values; `docs/parity.md` lists their deliberate
-differences.
+line; the renderer is `jet_charts_flutter`. J4 added pies, donuts, sparklines,
+scatter and combination charts, per-series kind, the secondary value axis,
+smooth lines, point colours, translucent areas with an edge line, pie data
+labels with `minShare`, `ChartTheme.fromColors` and `ChartSummary`'s shares,
+centre text and x values; `docs/parity.md` lists their deliberate differences.
 
 ## The packages
 

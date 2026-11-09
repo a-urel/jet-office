@@ -1,8 +1,9 @@
 # Themes and charts for an app
 
 How an app gives `jet_charts_flutter` its own look and builds the charts a
-dashboard needs. The code on this page is compiled and run by
-`test/app_themes_doc_test.dart`, so it stays true.
+dashboard needs. The code on this page is mirrored by
+`test/app_themes_doc_test.dart`, which builds the same themes and charts and
+lays them out, so a change to the API that breaks it fails a test.
 
 ## One theme per brightness
 
@@ -63,15 +64,16 @@ final ChartTheme darkTheme = ChartTheme.fromColors(
 ## A donut with a total
 
 `holeSizePercent` (10 to 90, 75 by default; 75 is an estimate, not checked in
-Excel) sets the hole, and `centerText` is drawn in it. The text is not shrunk: it is
-drawn when it fits in the hole with a small gap to the ring, else it is
-hidden, and a hidden text is listed in the layout's `hidden` and reachable
-through the tooltip. Choose a text and a `holeSizePercent` that fit at the
-tile's size. `ChartDataLabels(showPercent: true)` writes
-each slice's share, `showValue: false` leaves the amount out, and
-`minShare: 0.1` leaves slices under 10 % unlabelled (a screen-only option: a
-file written by `jet_office` does not carry it). Slice gaps are the theme's
-`sliceBorderWidth`, the outline of every slice in the background colour.
+Excel) sets the hole, and `centerText` is drawn in it. The text is not shrunk:
+it is drawn when every corner of its box lies inside the hole's free circle (the
+hole less the slice outline) shrunk by a small gap, else it is hidden, and a
+hidden text is listed in the layout's `hidden` and reachable through the
+tooltip. Choose a text and a `holeSizePercent` that fit at the tile's size.
+`ChartDataLabels(showPercent: true)` writes each slice's share, `showValue:
+false` leaves the amount out, and `minShare: 0.1` leaves slices under 10 %
+unlabelled (a screen-only option: a file written by `jet_office` does not carry
+it). Slice gaps are the theme's `sliceBorderWidth`, the outline of every slice
+in the background colour.
 
 A sparkline has no axes, title, legend or labels. Draw it at the size of its
 tile (for example 120 by 40). An `area` series in it is a filled line, and
@@ -82,10 +84,10 @@ theme's `areaOpacity`.
 
 `ChartSeries.smooth` draws a line as a smooth curve. The curve is a Catmull-Rom
 spline through the points, this library's estimate of Excel's smoothing (not
-checked in Excel); it can pass a little above or below a point. `ChartTheme.areaOpacity` (above 0,
-at most 1) makes every area fill translucent, and `areaLine: true` draws the
-series colour as a line along the top of the fill. This is the usual look for a
-line over a light fill.
+checked in Excel); it can pass a little above or below a point.
+`ChartTheme.areaOpacity` (above 0, at most 1) makes every area fill translucent,
+and `areaLine: true` draws the series colour as a line along the top of the
+fill. This is the usual look for a line over a light fill.
 
 Format codes are Excel's. `#,##0.0,," Mn"` shows 2300000 as `2,3 Mn` in
 `FormatLocale.trTR` (each trailing comma divides by a thousand). `d mmm` shows
