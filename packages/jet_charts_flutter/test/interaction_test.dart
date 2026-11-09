@@ -7,6 +7,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_flutter/jet_charts_flutter.dart';
+import 'package:jet_charts_flutter/src/interaction.dart'
+    show mouseTolerance, touchTolerance;
 import 'package:jet_charts_flutter/src/jet_chart.dart' show JetChartState;
 import 'package:jet_charts_flutter/src/tooltip_view.dart'
     show TooltipView, tooltipOrigin;
@@ -91,6 +93,44 @@ Future<TestGesture> _mouse(WidgetTester tester) async {
   await gesture.addPointer(location: const Offset(1, 1));
   addTearDown(gesture.removePointer);
   return gesture;
+}
+
+/// The tooltip [chart]'s current layout has at the surface point [pointer].
+ChartTooltip? _expectedAt(
+  WidgetTester tester,
+  Chart chart,
+  Offset pointer, {
+  required double tolerance,
+  ChartTheme? theme,
+}) {
+  final Offset local = pointer - _origin;
+  return chartTooltipAt(
+    chart,
+    _state(tester).currentLayout!,
+    ChartPoint(local.dx, local.dy),
+    theme: theme ?? ChartTheme.office,
+    tolerance: tolerance,
+  );
+}
+
+/// Expects no box when [expected] is `null`, else a box of its title and
+/// rows.
+void _expectBox(WidgetTester tester, ChartTooltip? expected) {
+  if (expected == null) {
+    expect(find.byType(TooltipView), findsNothing);
+    return;
+  }
+  expect(
+    tester.widget<TooltipView>(find.byType(TooltipView)).tooltip,
+    expected,
+  );
+  if (expected.title case final String title) {
+    expect(_inBox(title), findsOneWidget);
+  }
+  for (final ChartTooltipRow row in expected.rows) {
+    expect(_inBox(row.label), findsOneWidget);
+    expect(_inBox(row.value), findsOneWidget);
+  }
 }
 
 void main() {
@@ -243,6 +283,38 @@ void main() {
       expect(find.byType(TooltipView), findsNothing);
     });
 
+    testWidgets('a tappable parent keeps its taps', (
+      WidgetTester tester,
+    ) async {
+      int parentTaps = 0;
+      await tester.pumpWidget(
+        _app(
+          GestureDetector(
+            onTap: () => parentTaps++,
+            child: JetChart(chart: _chart('column_clustered')),
+          ),
+        ),
+      );
+      await tester.tapAt(_centreOf(tester, 'series/1/bar/2'));
+      await tester.pump();
+      expect(_inBox('South'), findsOneWidget);
+      expect(parentTaps, 1);
+    });
+
+    testWidgets('a drag past the touch slop does not toggle the box', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(JetChart(chart: _chart('column_clustered'))),
+      );
+      final Offset bar = _centreOf(tester, 'series/1/bar/2');
+      final TestGesture finger = await tester.startGesture(bar);
+      await finger.moveBy(const Offset(0, 40));
+      await finger.up();
+      await tester.pump();
+      expect(find.byType(TooltipView), findsNothing);
+    });
+
     testWidgets('tooltips: false keeps onTap and shows no box', (
       WidgetTester tester,
     ) async {
@@ -362,13 +434,13 @@ void main() {
   });
 
   group('changes while the box shows', () {
-    testWidgets('a chart of one series closes the box or shows the new point', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('a chart of one series shows what the new layout has at '
+        'the pointer', (WidgetTester tester) async {
       final Chart chart = _chart('column_clustered');
       await tester.pumpWidget(_app(JetChart(chart: chart)));
       final TestGesture mouse = await _mouse(tester);
-      await mouse.moveTo(_centreOf(tester, 'series/1/bar/2'));
+      final Offset pointer = _centreOf(tester, 'series/1/bar/2');
+      await mouse.moveTo(pointer);
       await tester.pump();
       expect(_inBox('South'), findsOneWidget);
 
@@ -378,9 +450,14 @@ void main() {
       );
       await tester.pumpWidget(_app(JetChart(chart: one)));
       expect(tester.takeException(), isNull);
+      // No new hover: the box is what the new layout has at the pointer.
+      _expectBox(
+        tester,
+        _expectedAt(tester, one, pointer, tolerance: mouseTolerance),
+      );
       expect(_inBox('South'), findsNothing);
 
-      // The pointer is still there: the box follows the new layout.
+      // The pointer moves on: the box follows the new layout.
       await mouse.moveTo(_centreOf(tester, 'series/0/bar/2'));
       await tester.pump();
       expect(_inBox('North'), findsOneWidget);
@@ -391,9 +468,11 @@ void main() {
     ) async {
       final Chart chart = _chart('column_clustered');
       await tester.pumpWidget(_app(JetChart(chart: chart)));
-      await tester.tapAt(_centreOf(tester, 'series/1/bar/2'));
+      final Offset pointer = _centreOf(tester, 'series/1/bar/2');
+      await tester.tapAt(pointer);
       await tester.pump();
       expect(_inBox('South'), findsOneWidget);
+      expect(_inBox('14'), findsOneWidget);
 
       // Same chart, new values: the same pointer gives the new value.
       final Chart changed = Chart(
@@ -415,13 +494,56 @@ void main() {
       );
       await tester.pumpWidget(_app(JetChart(chart: changed)));
       expect(tester.takeException(), isNull);
-      if (find.byType(TooltipView).evaluate().isNotEmpty) {
-        expect(_inBox('14'), findsNothing);
-      }
+      final ChartTooltip? expected = _expectedAt(
+        tester,
+        changed,
+        pointer,
+        tolerance: touchTolerance,
+      );
+      expect(expected, isNotNull);
+      expect(expected!.rows.single.value, '14.5');
+      _expectBox(tester, expected);
 
       await tester.pumpWidget(_app(const JetChart()));
       expect(tester.takeException(), isNull);
       expect(find.byType(TooltipView), findsNothing);
+    });
+
+    testWidgets('a new theme refreshes the open box', (
+      WidgetTester tester,
+    ) async {
+      final Chart chart = _chart('column_clustered');
+      await tester.pumpWidget(_app(JetChart(chart: chart)));
+      final TestGesture mouse = await _mouse(tester);
+      final Offset pointer = _centreOf(tester, 'series/1/bar/2');
+      await mouse.moveTo(pointer);
+      await tester.pump();
+      expect(_inBox('South'), findsOneWidget);
+      final ChartLayout before = _state(tester).currentLayout!;
+
+      final ChartTheme theme = ChartTheme.office.copyWith(
+        spacing: ChartSpacing(padding: 30),
+        tooltip: ChartTheme.office.tooltip.copyWith(padding: 10),
+      );
+      await tester.pumpWidget(_app(JetChart(chart: chart, theme: theme)));
+      expect(tester.takeException(), isNull);
+      expect(_state(tester).currentLayout, isNot(before));
+      _expectBox(
+        tester,
+        _expectedAt(
+          tester,
+          chart,
+          pointer,
+          tolerance: mouseTolerance,
+          theme: theme,
+        ),
+      );
+      if (find.byType(TooltipView).evaluate().isNotEmpty) {
+        expect(
+          tester.widget<TooltipView>(find.byType(TooltipView)).style,
+          theme.tooltip,
+        );
+      }
     });
   });
 }

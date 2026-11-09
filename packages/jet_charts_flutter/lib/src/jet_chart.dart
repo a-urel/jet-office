@@ -51,12 +51,14 @@ typedef JetChartErrorBuilder =
 /// **Hover and touch.** A mouse over the chart finds the primitives within 2
 /// pixels of it (`hitTestLayout`) and shows the tooltip there
 /// (`chartTooltipAt`) in a box of the theme's `ChartTheme.tooltip` look; it
-/// reports the topmost hit to [onHover], and `null` when it leaves. A tap
-/// reports its hit to [onTap]. A tap of a touch (or a stylus) finds within 8
-/// pixels and toggles the box: a tap where there is a tooltip shows it, and a
-/// tap where there is none, or anywhere outside the chart (`TapRegion`),
-/// closes it. With [tooltips] `false` no box shows, and the callbacks are
-/// still called.
+/// reports the topmost hit to [onHover], and `null` when it leaves. A tap of
+/// a touch (or a stylus) finds within 8 pixels and toggles the box: a tap
+/// where there is a tooltip shows it, and a tap where there is none, or
+/// anywhere outside the chart (`TapRegion`), closes it. A touch is a tap when
+/// it lifts within the touch slop of where it went down. The toggle only
+/// listens to the pointer and takes no part in the gesture arena, so a
+/// tappable parent (a card, a dashboard tile) still receives the tap. With
+/// [tooltips] `false` no box shows, and the callbacks are still called.
 ///
 /// The box sits 12 pixels right of and below the pointer, and on the other
 /// side of it when it would leave the chart. Under an `Overlay` it is shown in
@@ -139,7 +141,12 @@ final class JetChart extends StatefulWidget {
   /// `null` when it leaves.
   final ValueChanged<JetChartHit?>? onHover;
 
-  /// Called with the hit of a tap on the chart.
+  /// Called with the hit of a tap on the chart, by mouse or touch.
+  ///
+  /// When it is set, the chart recognizes taps in the gesture arena and so
+  /// takes them: a tappable parent no longer receives a tap on the chart.
+  /// When it is `null`, the chart recognizes no tap, and the touch toggle of
+  /// the tooltip box leaves the tap to the parent.
   final ValueChanged<JetChartHit>? onTap;
 
   @override
@@ -209,6 +216,11 @@ final class JetChartState extends State<JetChart> {
   Offset _tipPointer = Offset.zero;
   double _tipTolerance = mouseTolerance;
   ChartLayout? _tipLayout;
+
+  /// The touch that went down on the chart and may become a tap: its
+  /// pointer and where it went down; `null` when none is in progress.
+  int? _touchPointer;
+  Offset _touchDown = Offset.zero;
 
   /// The layout the chart paints, or `null` while a state look shows or the
   /// size has no area.
@@ -338,13 +350,39 @@ final class JetChartState extends State<JetChart> {
 
   void _onTapUp(TapUpDetails details) {
     final bool mouse = details.kind == PointerDeviceKind.mouse;
-    final double tolerance = mouse ? mouseTolerance : touchTolerance;
-    final JetChartHit? hit = _hitAt(details.localPosition, tolerance);
-    if (!mouse && widget.tooltips) {
-      setState(() => _setTip(hit?.tooltip, details.localPosition, tolerance));
-    }
+    final JetChartHit? hit = _hitAt(
+      details.localPosition,
+      mouse ? mouseTolerance : touchTolerance,
+    );
     if (hit != null) {
       widget.onTap?.call(hit);
+    }
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return;
+    }
+    _touchPointer = event.pointer;
+    _touchDown = event.localPosition;
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    if (event.pointer != _touchPointer) {
+      return;
+    }
+    _touchPointer = null;
+    if ((event.localPosition - _touchDown).distance > kTouchSlop) {
+      return;
+    }
+    final JetChartHit? hit = _hitAt(event.localPosition, touchTolerance);
+    setState(() => _setTip(hit?.tooltip, event.localPosition, touchTolerance));
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    if (event.pointer == _touchPointer) {
+      _touchPointer = null;
     }
   }
 
@@ -422,7 +460,15 @@ final class JetChartState extends State<JetChart> {
         ],
       );
     }
-    if (widget.tooltips || widget.onTap != null) {
+    if (widget.tooltips) {
+      content = Listener(
+        onPointerDown: _onPointerDown,
+        onPointerUp: _onPointerUp,
+        onPointerCancel: _onPointerCancel,
+        child: content,
+      );
+    }
+    if (widget.onTap != null) {
       content = GestureDetector(
         behavior: HitTestBehavior.opaque,
         excludeFromSemantics: true,
