@@ -1,11 +1,14 @@
 # Shapes, text boxes and icons
 
-**Status: analysis only, nothing planned.** On 2026-11-10 the owner looked at
-Excel for Mac's Insert > Shapes gallery and the Icons pane, and asked whether
-`jet_office` supports them. This page answers that, and says what supporting
-them would take. No level is chosen. Until one is, shapes, text boxes and
-icons stay as `0009` and `0010` keep everything the models do not type:
-byte for byte.
+**Status: parked.** On 2026-11-10 the owner looked at Excel for Mac's
+Insert > Shapes gallery and the Icons pane, and asked whether `jet_office` supports
+them. The same day the owner decided that they will come later: it is too
+early to plan them. The level of support and the order are not decided, and
+need not be yet. Until then shapes, text boxes and icons stay opaque, kept
+byte for byte (decisions `0009` and `0010`). Decision `0021` records that
+they are covered in the end.
+
+This page keeps the analysis of 2026-11-10, so the next plan starts from it.
 
 **How far the evidence goes.**
 
@@ -314,19 +317,14 @@ Under AGENTS.md's hard rules and decision `0015`:
   `wp:anchor` model (position, wrapping, z-order) is the same for a chart, a
   floating picture and a shape. Whichever comes first builds it once.
 
-### A decision record
+### Decision records
 
-**Needed once a level beyond reading is chosen, and better at the start.**
-
-- `0010` puts text boxes and floating pictures among what "stay opaque" in
-  phase 4. Typing them supersedes that part of its list, as `0019` did for
-  equations; `0010` is not edited.
-- `0009` does not name shapes. Its rule that milestones move content from
-  opaque to typed covers an XLSX read, but the record should still name the
-  scope.
-- It should name the milestone letter, which levels are in, where the public
-  value types sit, the fallback rules (VML, SVG's PNG) and the icon licence
-  point.
+- **`0021`** records that shapes, text boxes and icons are covered in the
+  end, superseding the words of `0010` that kept text boxes and floating
+  pictures opaque. It decides no level or order.
+- **When a level is planned**, a further record should name the milestone
+  letter, which levels are in, where the public value types sit, the fallback
+  rules (VML, SVG's PNG) and the icon licence point.
 - No import changes, so `0015` stands.
 
 ## 5. Recommendation

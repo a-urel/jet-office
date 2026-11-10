@@ -24,7 +24,9 @@ covered in the end; macros and other formats stay out; supersedes part of
 `0009`) and `0019` (equations are covered in the end; level, order and
 editor undecided; supersedes 0010's "equations stay opaque") and `0020` (ink
 from the Draw tab is covered in the end; level, order and drawing surface
-undecided) before any design change.
+undecided) and `0021` (shapes, text boxes and icons are covered in the end;
+level and order undecided; supersedes 0010's "text boxes and floating
+pictures stay opaque") before any design change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
 its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
@@ -664,8 +666,8 @@ Word check is in `docs/word-checks.md`. The chart layer's rules and what C2 and
 C3 must do are in `docs/drawingml-charts.md`.
 Equations (OMML), parked for later (decision 0019), are analysed in
 `docs/equations.md`.
-Shapes, text boxes and icons (Insert > Shapes and Icons) are analysed in
-`docs/shapes.md`; nothing is planned.
+Shapes, text boxes and icons (Insert > Shapes and Icons), parked for later
+(decision 0021), are analysed in `docs/shapes.md`.
 
 Quds is cloned read-only next to this repo at `../quds_office_suite`. The port
 map for the writer is in `docs/xlsx-writer.md`, "Port map"; the reader's is in
