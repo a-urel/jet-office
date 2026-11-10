@@ -566,7 +566,9 @@ final class _ChartWriter {
 
   /// An axis from `c:axId` through `c:tickLblPos`: the scaling (with the
   /// minimum and maximum of a [value] axis), `c:delete`, the position, the
-  /// grid lines, the title, the number format and Excel's tick settings.
+  /// grid lines, the title, the number format and Excel's tick settings
+  /// (`low` labels on a category axis that crosses inside the plot,
+  /// [_crossesInside]).
   void _writeAxisStart(
     ChartAxis axis,
     int id,
@@ -626,7 +628,23 @@ final class _ChartWriter {
       !value && chart.kind == ChartKind.area ? 'out' : 'none',
     );
     _value('c:minorTickMark', 'none');
-    _value('c:tickLblPos', 'nextTo');
+    _value('c:tickLblPos', !value && _crossesInside ? 'low' : 'nextTo');
+  }
+
+  /// Whether the category axis crosses the value axis inside the plot: a
+  /// series has a negative value or the value axis starts below zero. Its
+  /// labels then go `low`, under the plot (left of a bar chart's), as the
+  /// layout draws them, where Excel's `nextTo` would put them at the zero
+  /// line under the negative bars (the owner's choice, J3 and J4 gallery
+  /// checks).
+  bool get _crossesInside {
+    final double? min = chart.valueAxis.min;
+    if (min != null && min < 0) {
+      return true;
+    }
+    return chart.series.any(
+      (ChartSeries s) => s.values.values.any((double? v) => v != null && v < 0),
+    );
   }
 
   void _writeAxisLabels() {

@@ -229,7 +229,8 @@ by hand, then fix it.
   8, 10 and 18, and plot margins.
 - The owner's J3 gallery check against Excel for Mac (decision O3) is done
   and recorded (`docs/excel-checks.md`, "Milestone checks"); its differences
-  are fixed, but `column_negative` (kept, `docs/parity.md`). Still
+  are fixed, but `column_negative` (kept, `docs/parity.md`; since the J4
+  check the files write its labels `low`, so Excel matches). Still
   unconfirmed: what Excel's colour cycle does past its nine variations
   (series 55 on); the spacing constants in `docs/excel-checks.md`. Series 7
   and later follow Excel's colour cycle, `colors1.xml` of

@@ -48,7 +48,9 @@ its themes; its code is `test/app_themes_doc_test.dart`).
 
 - The owner's J3 gallery check against Excel for Mac is done and recorded
   (`packages/jet_charts_core/docs/excel-checks.md`, "Milestone checks"); its
-  differences are fixed, but `column_negative` (kept). Series 7 and later
+  differences are fixed, but `column_negative` (kept; since the J4 check the
+  workbook writes its category labels `low`, so Excel draws them under the
+  plot as the app does). Series 7 and later
   follow Excel's colour cycle (`colors1.xml`), and the gallery workbook writes
   Excel's colour and style parts and every series' colour; the owner's
   re-check matched series 7 and 8. A later check's result goes there with

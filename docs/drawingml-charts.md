@@ -207,6 +207,14 @@ checks what it shows. What it showed, each now what the writer writes:
 - **An area chart's category axis** has `c:majorTickMark val="out"` (charts
   10 to 12); the value axis keeps `none`. Area charts cross `midCat`, as the
   writer already wrote.
+- **A category axis that crosses inside the plot** (a series has a negative
+  value, or the value axis' minimum is below zero) has `c:tickLblPos
+  val="low"`, so Excel draws its labels under the plot (beside it for bars),
+  as `jet_charts_core` does, not at the zero line under the negative bars;
+  `nextTo`, Excel's default, otherwise and on every value axis. Not Excel's
+  default: the owner's choice after the J4 gallery check (2026-11-10;
+  `packages/jet_charts_core/docs/parity.md`, "Category labels"). The reader
+  does not read the position.
 - **Markers on stacked lines**: Excel keeps them (charts 8, 9), as the writer
   already wrote.
 - **Axis titles** have no `spc` in their run properties (chart 17); the

@@ -1173,6 +1173,60 @@ void main() {
       );
     });
 
+    test('a chart with a negative value puts its category labels low', () {
+      String tickLabels(String xml, String axis) => RegExp(
+        '<c:$axis>.*?<c:tickLblPos val="([a-zA-Z]+)"/>',
+      ).firstMatch(xml)![1]!;
+      final ChartSeries negative = _excelSeries().copyWith(
+        values: ChartData<double>(
+          values: const <double?>[4, -2, null],
+          reference: r'Sayfa1!$B$1:$B$3',
+        ),
+      );
+      for (final ChartKind kind in <ChartKind>[
+        ChartKind.column,
+        ChartKind.bar,
+        ChartKind.line,
+        ChartKind.area,
+      ]) {
+        final String below = _xml(
+          _write(_chart(kind, series: <ChartSeries>[negative])),
+        );
+        expect(tickLabels(below, 'catAx'), 'low', reason: kind.name);
+        expect(tickLabels(below, 'valAx'), 'nextTo', reason: kind.name);
+        final String plain = _xml(_write(_chart(kind)));
+        expect(tickLabels(plain, 'catAx'), 'nextTo', reason: kind.name);
+      }
+      // A value axis that starts below zero crosses inside the plot too.
+      final String fixed = _xml(
+        _write(
+          _chart(
+            ChartKind.column,
+            valueAxis: const ChartAxis(gridLines: true, min: -5),
+          ),
+        ),
+      );
+      expect(tickLabels(fixed, 'catAx'), 'low');
+      // A value axis that ends at or below zero has the labels at its top,
+      // where the category axis crosses; low moves them under the plot.
+      final String allNegative = _xml(
+        _write(
+          _chart(
+            ChartKind.column,
+            series: <ChartSeries>[
+              _excelSeries().copyWith(
+                values: ChartData<double>(
+                  values: const <double?>[-1, -2, -3],
+                  reference: r'Sayfa1!$B$1:$B$3',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(tickLabels(allNegative, 'catAx'), 'low');
+    });
+
     test('a line point colour writes the marker, then bubble3D', () {
       final String xml = _xml(
         _write(

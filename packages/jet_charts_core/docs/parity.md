@@ -89,7 +89,11 @@ theme's in `excel-checks.md`.
   axis' crossing; this package puts them in a band under (or, for bars, beside)
   the plot, so negative values never push them into the bars. The owner's
   gallery check (J3, `column_negative`, 2026-11-09) saw Excel's labels covered
-  by negative bars and chose to keep them under the plot.
+  by negative bars and chose to keep them under the plot. After the J4
+  gallery check (2026-11-10) the owner chose the same for the files: the
+  DrawingML writer and the gallery workbook write a category axis' labels
+  `low` (`c:tickLblPos`) when a value is negative or the value axis starts
+  below zero, so Excel draws them under the plot too; `nextTo` otherwise.
 - **Turned labels sit `labelGap` below the plot** and move down to clear value
   label 0 where they would meet it.
 - **The order of tries is this package's**: level labels showing every label;

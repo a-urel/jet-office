@@ -598,14 +598,24 @@ const int _secondaryCatId = 333333333;
 const int _secondaryValId = 444444444;
 
 /// A category axis as Excel writes it; a secondary one is deleted (an
-/// estimate, not checked in Excel, pending E1).
-String _catAx(int id, int cross, {required String pos, bool deleted = false}) =>
+/// estimate, not checked in Excel, pending E1). Its labels are [low], under
+/// the plot, when a value is negative, as the app draws them, not at the zero
+/// line under the negative bars (the owner's choice, J3 and J4 checks; the
+/// library's writer does the same).
+String _catAx(
+  int id,
+  int cross, {
+  required String pos,
+  bool deleted = false,
+  bool low = false,
+}) =>
     '<c:catAx><c:axId val="$id"/>'
     '<c:scaling><c:orientation val="minMax"/></c:scaling>'
     '<c:delete val="${deleted ? 1 : 0}"/><c:axPos val="$pos"/>'
     '<c:numFmt formatCode="General" sourceLinked="1"/>'
     '<c:majorTickMark val="${deleted ? 'out' : 'none'}"/>'
-    '<c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'
+    '<c:minorTickMark val="none"/>'
+    '<c:tickLblPos val="${low ? 'low' : 'nextTo'}"/>'
     '${deleted ? '' : '<c:spPr><a:noFill/>$_greyLine<a:effectLst/></c:spPr>'}'
     '${_txPr(65000, 35000, _axisBodyPr)}'
     '<c:crossAx val="$cross"/><c:crosses val="autoZero"/><c:auto val="1"/>'
@@ -827,7 +837,15 @@ String _chartXml(GalleryEntry entry) {
         ? 'midCat'
         : 'between';
     axes =
-        _catAx(_catId, _valId, pos: horizontal ? 'l' : 'b') +
+        _catAx(
+          _catId,
+          _valId,
+          pos: horizontal ? 'l' : 'b',
+          low: chart.series.any(
+            (ChartSeries s) =>
+                s.values.values.any((double? v) => v != null && v < 0),
+          ),
+        ) +
         _valAx(
           _valId,
           _catId,

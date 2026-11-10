@@ -535,6 +535,36 @@ void main() {
     expect(all(plan, 'c:areaChart'), hasLength(1));
   });
 
+  test('a chart with a negative value puts its category labels low', () {
+    for (final GalleryEntry entry in entries.where(
+      (GalleryEntry e) => !sparkline(e),
+    )) {
+      final XmlDocument doc = chartOf(entry.name);
+      final List<XmlElement> categories = all(doc, 'c:catAx').toList();
+      if (categories.isEmpty) continue;
+      final bool negative = entry.chart.series.any(
+        (ChartSeries s) =>
+            s.values.values.any((double? v) => v != null && v < 0),
+      );
+      expect(
+        val(categories.first, 'c:tickLblPos'),
+        negative ? 'low' : 'nextTo',
+        reason: entry.name,
+      );
+      for (final XmlElement axis in all(doc, 'c:valAx')) {
+        expect(val(axis, 'c:tickLblPos'), 'nextTo', reason: entry.name);
+      }
+    }
+    expect(
+      val(all(chartOf('column_negative'), 'c:catAx').first, 'c:tickLblPos'),
+      'low',
+    );
+    expect(
+      val(all(chartOf('combo_column_line'), 'c:catAx').first, 'c:tickLblPos'),
+      'low',
+    );
+  });
+
   test('the smooth series of line_smooth is smooth, the other is not', () {
     final List<XmlElement> sers = all(chartOf('line_smooth'), 'c:ser').toList();
     expect(
