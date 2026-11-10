@@ -69,22 +69,23 @@ mixin _SheetPrint {
   /// that is not a worksheet or has no part and an [XlsxReadException] when
   /// the sheet cannot be read; nothing has changed then. A print area asks
   /// Excel for no recalculation.
-  set printArea(List<XlsxRange> ranges) {
-    checkPrintAreaRanges(ranges);
-    _editablePart('print area');
-    final List<XlsxRange> current = printArea;
-    if (current.length == ranges.length) {
-      bool same = true;
-      for (int i = 0; i < ranges.length; i++) {
-        if (current[i] != ranges[i]) same = false;
-      }
-      if (same) return;
-    }
-    _setBuiltIn(
-      _areaName,
-      ranges.isEmpty ? null : printAreaFormula(name, ranges),
-    );
-  }
+  set printArea(List<XlsxRange> ranges) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        checkPrintAreaRanges(ranges);
+        _editablePart('print area');
+        final List<XlsxRange> current = printArea;
+        if (current.length == ranges.length) {
+          bool same = true;
+          for (int i = 0; i < ranges.length; i++) {
+            if (current[i] != ranges[i]) same = false;
+          }
+          if (same) return;
+        }
+        _setBuiltIn(
+          _areaName,
+          ranges.isEmpty ? null : printAreaFormula(name, ranges),
+        );
+      });
 
   /// The rows and columns repeated on every printed page, as inclusive
   /// 0-based spans, or `null` for each the sheet does not repeat.
@@ -118,18 +119,19 @@ mixin _SheetPrint {
   /// for a sheet that is not a worksheet or has no part and an
   /// [XlsxReadException] when the sheet cannot be read; nothing has changed
   /// then.
-  void setPrintTitles({(int, int)? rows, (int, int)? columns}) {
-    checkPrintTitles(rows: rows, columns: columns);
-    _editablePart('print titles');
-    final ({(int, int)? rows, (int, int)? columns}) current = printTitles;
-    if (current.rows == rows && current.columns == columns) return;
-    _setBuiltIn(
-      _titlesName,
-      rows == null && columns == null
-          ? null
-          : printTitlesFormula(name, rows: rows, columns: columns),
-    );
-  }
+  void setPrintTitles({(int, int)? rows, (int, int)? columns}) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        checkPrintTitles(rows: rows, columns: columns);
+        _editablePart('print titles');
+        final ({(int, int)? rows, (int, int)? columns}) current = printTitles;
+        if (current.rows == rows && current.columns == columns) return;
+        _setBuiltIn(
+          _titlesName,
+          rows == null && columns == null
+              ? null
+              : printTitlesFormula(name, rows: rows, columns: columns),
+        );
+      });
 
   // -- Page setup, headers and footers -----------------------------------
 
@@ -168,29 +170,30 @@ mixin _SheetPrint {
   /// negative margin, ...), a [StateError] for a sheet that is not a
   /// worksheet or has no part and an [XlsxReadException] when the sheet
   /// cannot be read. Whatever it throws, nothing has changed.
-  set pageSetup(XlsxPageSetup? value) {
-    if (value != null) checkPageSetup(value);
-    final WorksheetPart part = _editablePart('page setup');
-    final PageSetupNodes old = _pageNodes(part);
-    if (value == readPageSetup(old, _reportInvalid)) return;
-    final String prefix = part.elementPrefix;
-    final PageSetupNodes applied = value == null
-        ? removePageSetup(old)
-        : applyPageSetup(old, value, prefix);
-    final XmlNode? sheetPr = sheetPrFit(
-      old.sheetPr,
-      value != null && pageSetupFitsToPage(value),
-      prefix,
-      _sheetPrOrder,
-    );
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      _swapNode(part, 'sheetPr', old.sheetPr, sheetPr);
-      _swapNode(part, 'printOptions', old.options, applied.options);
-      _swapNode(part, 'pageMargins', old.margins, applied.margins);
-      _swapNode(part, 'pageSetup', old.setup, applied.setup);
-    });
-  }
+  set pageSetup(XlsxPageSetup? value) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        if (value != null) checkPageSetup(value);
+        final WorksheetPart part = _editablePart('page setup');
+        final PageSetupNodes old = _pageNodes(part);
+        if (value == readPageSetup(old, _reportInvalid)) return;
+        final String prefix = part.elementPrefix;
+        final PageSetupNodes applied = value == null
+            ? removePageSetup(old)
+            : applyPageSetup(old, value, prefix);
+        final XmlNode? sheetPr = sheetPrFit(
+          old.sheetPr,
+          value != null && pageSetupFitsToPage(value),
+          prefix,
+          _sheetPrOrder,
+        );
+        final ChangeLog log = _host.log;
+        log.transaction(() {
+          _swapNode(part, 'sheetPr', old.sheetPr, sheetPr);
+          _swapNode(part, 'printOptions', old.options, applied.options);
+          _swapNode(part, 'pageMargins', old.margins, applied.margins);
+          _swapNode(part, 'pageSetup', old.setup, applied.setup);
+        });
+      });
 
   /// The headers and footers of the sheet, from its `headerFooter`, or
   /// `null` when it has none.
@@ -220,20 +223,21 @@ mixin _SheetPrint {
   /// refuses, a [StateError] for a sheet that is not a worksheet or has no
   /// part and an [XlsxReadException] when the sheet cannot be read.
   /// Whatever it throws, nothing has changed.
-  set headerFooter(XlsxHeaderFooter? value) {
-    if (value != null) checkHeaderFooter(value);
-    final WorksheetPart part = _editablePart('header and footer');
-    final XmlNode? old = part.layoutElement('headerFooter') as XmlNode?;
-    final XlsxHeaderFooter? current = old == null
-        ? null
-        : readHeaderFooter(old, _reportInvalid);
-    if (value == current) return;
-    final XmlNode? next = value == null
-        ? null
-        : applyHeaderFooter(old, value, part.elementPrefix);
-    final ChangeLog log = _host.log;
-    log.transaction(() => _swapNode(part, 'headerFooter', old, next));
-  }
+  set headerFooter(XlsxHeaderFooter? value) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        if (value != null) checkHeaderFooter(value);
+        final WorksheetPart part = _editablePart('header and footer');
+        final XmlNode? old = part.layoutElement('headerFooter') as XmlNode?;
+        final XlsxHeaderFooter? current = old == null
+            ? null
+            : readHeaderFooter(old, _reportInvalid);
+        if (value == current) return;
+        final XmlNode? next = value == null
+            ? null
+            : applyHeaderFooter(old, value, part.elementPrefix);
+        final ChangeLog log = _host.log;
+        log.transaction(() => _swapNode(part, 'headerFooter', old, next));
+      });
 
   /// The typed first element of each slot of the page setup.
   PageSetupNodes _pageNodes(WorksheetPart part) {
@@ -285,7 +289,12 @@ mixin _SheetPrint {
   /// (a table has its own filter), a [StateError] for a sheet that is not a
   /// worksheet or has no part and an [XlsxReadException] when the sheet
   /// cannot be read. Whatever it throws, nothing has changed.
-  set autoFilter(XlsxRange? range) => _setAutoFilter(range);
+  set autoFilter(XlsxRange? range) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.featureChanged,
+    range: range,
+    () => _setAutoFilter(range),
+  );
 
   void _setAutoFilter(XlsxRange? range, {void Function()? afterName}) {
     if (range != null) validateRange(range, 'range');

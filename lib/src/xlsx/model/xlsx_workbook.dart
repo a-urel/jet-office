@@ -67,6 +67,7 @@ import '../workbook_parts.dart';
 import '../worksheet_parts.dart';
 import '../xlsx_writer.dart';
 import 'cell_store.dart';
+import 'change_set.dart';
 import 'defined_names.dart';
 import 'element_node.dart';
 import 'palette.dart';
@@ -178,7 +179,11 @@ final class XlsxWorkbook {
   /// or exceeds a limit; nothing has changed then.
   set properties(OfficeProperties value) {
     final PropertiesState state = _book.propertiesState();
-    _book.log.transaction(() => setProperties(_book.log, state, value));
+    recordEdit(
+      _book.log,
+      () => const XlsxChange(XlsxChangeKind.partChanged),
+      () => _book.log.transaction(() => setProperties(_book.log, state, value)),
+    );
   }
 
   final _Book _book;
@@ -212,8 +217,18 @@ final class XlsxWorkbook {
   /// throws an [XlsxReadException] when they cannot be read; a [RangeError]
   /// named `position` for a position past the last tab. Nothing changes
   /// when it throws.
-  XlsxSheet addSheet(String name, {int? position}) =>
-      _book.addSheet(name, position: position);
+  XlsxSheet addSheet(String name, {int? position}) {
+    late XlsxSheet added;
+    return recordEdit(
+      _book.log,
+      () => XlsxChange(
+        XlsxChangeKind.sheetAdded,
+        sheet: added.name,
+        index: sheets.indexOf(added),
+      ),
+      () => added = _book.addSheet(name, position: position),
+    );
+  }
 
   /// Renames [sheet] to [newName], as Excel's Rename does: every reference
   /// to the sheet by name (formulas, names, rules, validations, charts and
@@ -230,8 +245,18 @@ final class XlsxWorkbook {
   /// only in case is a rename. Throws an [ArgumentError] for a sheet of
   /// another workbook, and an [XlsxReadException] when a sheet cannot be
   /// read; nothing changes then.
-  void renameSheet(XlsxSheet sheet, String newName) =>
-      _book.renameSheet(sheet, newName);
+  void renameSheet(XlsxSheet sheet, String newName) {
+    final String old = sheet.name;
+    recordEdit(
+      _book.log,
+      () => XlsxChange(
+        XlsxChangeKind.sheetRenamed,
+        sheet: sheet.name,
+        oldSheet: old,
+      ),
+      () => _book.renameSheet(sheet, newName),
+    );
+  }
 
   /// Moves [sheet] to the tab index [position] (0-based, in the order after
   /// the move), as Excel's Move does: each name scoped to a sheet stays on
@@ -245,8 +270,15 @@ final class XlsxWorkbook {
   /// Throws a [RangeError] named `position` for a position past the last
   /// tab, an [ArgumentError] for a sheet of another workbook, and an
   /// [XlsxReadException] when a sheet cannot be read; nothing changes then.
-  void moveSheet(XlsxSheet sheet, int position) =>
-      _book.moveSheet(sheet, position);
+  void moveSheet(XlsxSheet sheet, int position) => recordEdit(
+    _book.log,
+    () => XlsxChange(
+      XlsxChangeKind.sheetMoved,
+      sheet: sheet.name,
+      index: sheets.indexOf(sheet),
+    ),
+    () => _book.moveSheet(sheet, position),
+  );
 
   /// The sheet Excel opens on: the one at the first `workbookView`'s
   /// `activeTab`, or the first sheet when there is no such attribute or it
@@ -276,12 +308,16 @@ final class XlsxWorkbook {
   /// A defined name changes what formulas show as a changed cell does, so
   /// the save asks Excel to recalculate every formula (`fullCalcOnLoad`)
   /// when the workbook has formulas; the calculation chain stays.
-  void defineName(XlsxDefinedName name) => defineNameIn(
+  void defineName(XlsxDefinedName name) => recordEdit(
     _book.log,
-    _book.workbook,
-    null,
-    name,
-    _book.checkNotTableName,
+    () => const XlsxChange(XlsxChangeKind.nameChanged),
+    () => defineNameIn(
+      _book.log,
+      _book.workbook,
+      null,
+      name,
+      _book.checkNotTableName,
+    ),
   );
 
   /// Removes the workbook name [name], compared ignoring case.
@@ -289,8 +325,11 @@ final class XlsxWorkbook {
   /// Throws an [ArgumentError] named `name` when the workbook has no such
   /// name (a built-in name is none); nothing changes then. The save asks
   /// for recalculation as [defineName] does.
-  void removeName(String name) =>
-      removeNameIn(_book.log, _book.workbook, null, name, 'the workbook');
+  void removeName(String name) => recordEdit(
+    _book.log,
+    () => const XlsxChange(XlsxChangeKind.nameChanged),
+    () => removeNameIn(_book.log, _book.workbook, null, name, 'the workbook'),
+  );
 
   /// Makes [sheet] the sheet Excel opens on: sets `activeTab`, `tabSelected`
   /// on its view, and clears `tabSelected` on the sheet that was active
@@ -302,7 +341,11 @@ final class XlsxWorkbook {
   /// Throws an [ArgumentError] for a sheet of another workbook and a
   /// [StateError] for a sheet that is not visible; nothing changes then.
   /// Throws an [XlsxReadException] when a sheet to load cannot be read.
-  set activeSheet(XlsxSheet sheet) => _book.setActiveSheet(sheet);
+  set activeSheet(XlsxSheet sheet) => recordEdit(
+    _book.log,
+    () => const XlsxChange(XlsxChangeKind.partChanged),
+    () => _book.setActiveSheet(sheet),
+  );
 
   /// Whether the workbook counts dates from 1904, as files from old Mac
   /// versions of Excel do; dates are set and read in its system.
@@ -342,14 +385,18 @@ final class XlsxWorkbook {
     final XmlNode? next = value == null
         ? null
         : applyWorkbookProtection(old, value, part.elementPrefix);
-    _book.log.transaction(() {
-      editWorkbook(
-        _book.log,
-        part,
-        'workbookProtection',
-        () => part.swapElement('workbookProtection', old, next),
-      );
-    });
+    recordEdit(
+      _book.log,
+      () => const XlsxChange(XlsxChangeKind.partChanged),
+      () => _book.log.transaction(() {
+        editWorkbook(
+          _book.log,
+          part,
+          'workbookProtection',
+          () => part.swapElement('workbookProtection', old, next),
+        );
+      }),
+    );
   }
 
   /// Whether the workbook's `<workbookProtection>` stores a password: a
@@ -388,6 +435,36 @@ final class XlsxWorkbook {
   /// and saving, aggregated per sheet and [XlsxWarningCode]. An unmodifiable
   /// live view.
   List<XlsxWarning> get warnings => _book.warnings.warnings;
+
+  /// Runs [body] as one edit and returns the change set of its edits: one
+  /// [XlsxChange] per call of a public edit that changed anything, in order.
+  ///
+  /// If [body] throws, every edit it made is undone and the error is
+  /// rethrown unchanged, so the workbook is as it was (its warnings may
+  /// have grown). A transaction inside another joins it: the inner call
+  /// returns an empty set and the outer set holds every edit; a throw inside
+  /// undoes the whole outer transaction unless the outer body catches it.
+  ///
+  /// An edit made outside a transaction is a set of its own that is not
+  /// returned: no set before it can be undone any more.
+  XlsxChangeSet transaction(void Function() body) {
+    final ChangeLog log = _book.log;
+    if (log.inTransaction) {
+      body();
+      return publicChangeSet(ChangeSet(const <Change>[]));
+    }
+    return publicChangeSet(log.transaction(body, keep: true));
+  }
+
+  /// Undoes [set], which must be the last set [transaction] returned that is
+  /// applied and not undone; otherwise throws a [StateError] and changes
+  /// nothing, as undoing out of order would corrupt the parts. Saving does
+  /// not end undo. Also throws a [StateError] inside a transaction.
+  void undo(XlsxChangeSet set) => _book.log.undo(internalChangeSet(set));
+
+  /// Redoes [set], which must be the last set [undo] undid, with no edit
+  /// since; otherwise throws a [StateError] and changes nothing.
+  void redo(XlsxChangeSet set) => _book.log.redo(internalChangeSet(set));
 
   /// Saves the workbook and returns the file with the warnings so far.
   ///

@@ -101,14 +101,15 @@ mixin _SheetViews {
   /// an [XlsxReadException] when the sheet cannot be read. Whatever it
   /// throws, nothing has changed, except that reading warnings are
   /// reported on first read.
-  set view(XlsxSheetView value) {
-    checkSheetView(value);
-    final WorksheetPart part = _editablePart('view');
-    final XlsxSheetView current = _readView(part);
-    if (current == value) return;
-    final XmlNode next = _viewNode(part, current, value);
-    _editViews(part, next);
-  }
+  set view(XlsxSheetView value) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        checkSheetView(value);
+        final WorksheetPart part = _editablePart('view');
+        final XlsxSheetView current = _readView(part);
+        if (current == value) return;
+        final XmlNode next = _viewNode(part, current, value);
+        _editViews(part, next);
+      });
 
   /// The colour of the sheet's tab, from `sheetPr/tabColor`, or `null` for
   /// none.
@@ -135,22 +136,23 @@ mixin _SheetViews {
   /// SpreadsheetML's limits, a [StateError] for a sheet that is not a
   /// worksheet or has no part and an [XlsxReadException] when the sheet
   /// cannot be read. Whatever it throws, nothing has changed.
-  set tabColor(XlsxColor? value) {
-    if (value != null) validateColor(value, 'tabColor');
-    final WorksheetPart part = _editablePart('tab colour');
-    // A colour that cannot be read reads null, and null still removes it.
-    final bool unreadable =
-        value == null && part.sheetPr?.child('tabColor') != null;
-    if (_readTabColor(part) == value && !unreadable) return;
-    final XmlNode? tab = value == null
-        ? null
-        : XmlNode.made(
-            part.elementPrefix,
-            'tabColor',
-            attributes: _colorAttributes(value),
-          );
-    _editSheetPr(part, 'tabColor', tab);
-  }
+  set tabColor(XlsxColor? value) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        if (value != null) validateColor(value, 'tabColor');
+        final WorksheetPart part = _editablePart('tab colour');
+        // A colour that cannot be read reads null, and null still removes it.
+        final bool unreadable =
+            value == null && part.sheetPr?.child('tabColor') != null;
+        if (_readTabColor(part) == value && !unreadable) return;
+        final XmlNode? tab = value == null
+            ? null
+            : XmlNode.made(
+                part.elementPrefix,
+                'tabColor',
+                attributes: _colorAttributes(value),
+              );
+        _editSheetPr(part, 'tabColor', tab);
+      });
 
   /// Where the summary rows and columns of the outline sit, from
   /// `sheetPr/outlinePr`: `below` is true when the summary row is below its
@@ -175,7 +177,10 @@ mixin _SheetViews {
   /// Throws a [StateError] for a sheet that is not a worksheet or has no
   /// part and an [XlsxReadException] when the sheet cannot be read.
   /// Whatever it throws, nothing has changed.
-  void setOutlineSummary({bool below = true, bool right = true}) {
+  void setOutlineSummary({
+    bool below = true,
+    bool right = true,
+  }) => _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
     final WorksheetPart part = _editablePart('outline summary');
     final ({bool below, bool right}) current = _readOutline(part);
     if (current.below == below && current.right == right) return;
@@ -186,7 +191,7 @@ mixin _SheetViews {
           if (current.right != right) 'summaryRight': right ? null : '0',
         });
     _editSheetPr(part, 'outlinePr', next.isBare ? null : next);
-  }
+  });
 
   // -- Reading ---------------------------------------------------------------
 

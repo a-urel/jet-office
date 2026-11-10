@@ -64,42 +64,46 @@ mixin _SheetRules {
   /// for a sheet that is not a worksheet or has no part and an
   /// [XlsxReadException] when the sheet cannot be read. Whatever it throws,
   /// nothing has changed.
-  void addDataValidation(XlsxDataValidation validation) {
-    final WorksheetPart part = _editablePart('data validations');
-    final ItemGroup<XlsxDataValidation>? group = part.dataValidationGroup;
-    checkDataValidation(
-      validation,
-      group?.values ?? const <XlsxDataValidation>[],
-    );
-    final GroupItem<XlsxDataValidation> item = GroupItem<XlsxDataValidation>(
-      normalizedValidation(validation),
-      renderElements(
-        (XmlWriter w) => writeDataValidation(w, validation),
-      ).single,
-    );
-    final ItemGroup<XlsxDataValidation> next = group == null
-        ? ItemGroup<XlsxDataValidation>(
-            '${part.elementPrefix}dataValidations',
-            'dataValidations',
-            const <String, String>{},
-            const <KeptAttribute>[],
-            <GroupItem<XlsxDataValidation>>[item],
-            edited: true,
-          )
-        : group.withItems(<GroupItem<XlsxDataValidation>>[
-            ...group.items,
-            item,
-          ]);
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      editLayout(
-        log,
-        part,
-        'dataValidations',
-        () => part.swapLayout('dataValidations', group, next),
+  void addDataValidation(XlsxDataValidation validation) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.featureChanged,
+    () {
+      final WorksheetPart part = _editablePart('data validations');
+      final ItemGroup<XlsxDataValidation>? group = part.dataValidationGroup;
+      checkDataValidation(
+        validation,
+        group?.values ?? const <XlsxDataValidation>[],
       );
-    });
-  }
+      final GroupItem<XlsxDataValidation> item = GroupItem<XlsxDataValidation>(
+        normalizedValidation(validation),
+        renderElements(
+          (XmlWriter w) => writeDataValidation(w, validation),
+        ).single,
+      );
+      final ItemGroup<XlsxDataValidation> next = group == null
+          ? ItemGroup<XlsxDataValidation>(
+              '${part.elementPrefix}dataValidations',
+              'dataValidations',
+              const <String, String>{},
+              const <KeptAttribute>[],
+              <GroupItem<XlsxDataValidation>>[item],
+              edited: true,
+            )
+          : group.withItems(<GroupItem<XlsxDataValidation>>[
+              ...group.items,
+              item,
+            ]);
+      final ChangeLog log = _host.log;
+      log.transaction(() {
+        editLayout(
+          log,
+          part,
+          'dataValidations',
+          () => part.swapLayout('dataValidations', group, next),
+        );
+      });
+    },
+  );
 
   /// Removes the first validation of [dataValidations] equal to
   /// [validation], the group going with its last entry. The other entries,
@@ -111,43 +115,44 @@ mixin _SheetRules {
   /// Throws an [ArgumentError] when none is equal, a [StateError] for a sheet
   /// that is not a worksheet or has no part and an [XlsxReadException] when
   /// the sheet cannot be read. Whatever it throws, nothing has changed.
-  void removeDataValidation(XlsxDataValidation validation) {
-    final WorksheetPart part = _editablePart('data validations');
-    final ItemGroup<XlsxDataValidation>? group = part.dataValidationGroup;
-    final XlsxDataValidation wanted = normalizedValidation(validation);
-    int at = -1;
-    if (group != null) {
-      for (int i = 0; i < group.items.length; i++) {
-        final XlsxDataValidation? listed = group.items[i].value;
-        if (listed != null && normalizedValidation(listed) == wanted) {
-          at = i;
-          break;
+  void removeDataValidation(XlsxDataValidation validation) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        final WorksheetPart part = _editablePart('data validations');
+        final ItemGroup<XlsxDataValidation>? group = part.dataValidationGroup;
+        final XlsxDataValidation wanted = normalizedValidation(validation);
+        int at = -1;
+        if (group != null) {
+          for (int i = 0; i < group.items.length; i++) {
+            final XlsxDataValidation? listed = group.items[i].value;
+            if (listed != null && normalizedValidation(listed) == wanted) {
+              at = i;
+              break;
+            }
+          }
         }
-      }
-    }
-    if (group == null || at < 0) {
-      throw ArgumentError.value(
-        validation,
-        'validation',
-        'The sheet "$name" has no equal data validation.',
-      );
-    }
-    final List<GroupItem<XlsxDataValidation>> rest =
-        <GroupItem<XlsxDataValidation>>[...group.items]..removeAt(at);
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      editLayout(
-        log,
-        part,
-        'dataValidations',
-        () => part.swapLayout(
-          'dataValidations',
-          group,
-          rest.isEmpty ? null : group.withItems(rest),
-        ),
-      );
-    });
-  }
+        if (group == null || at < 0) {
+          throw ArgumentError.value(
+            validation,
+            'validation',
+            'The sheet "$name" has no equal data validation.',
+          );
+        }
+        final List<GroupItem<XlsxDataValidation>> rest =
+            <GroupItem<XlsxDataValidation>>[...group.items]..removeAt(at);
+        final ChangeLog log = _host.log;
+        log.transaction(() {
+          editLayout(
+            log,
+            part,
+            'dataValidations',
+            () => part.swapLayout(
+              'dataValidations',
+              group,
+              rest.isEmpty ? null : group.withItems(rest),
+            ),
+          );
+        });
+      });
 
   /// The conditional formats of the sheet in file order, as the sheet
   /// writer's `conditionalFormat` takes them.
@@ -242,84 +247,88 @@ mixin _SheetRules {
   /// or has no part or a styles part the model cannot edit and an
   /// [XlsxReadException] when the sheet cannot be read. Whatever it throws,
   /// nothing has changed.
-  void addConditionalFormat(XlsxConditionalFormat format) {
-    final WorksheetPart part = _editablePart('conditional formats');
-    checkConditionalFormat(format);
-    final int firstPriority = part.highestConditionalPriority + 1;
-    if (firstPriority + format.rules.length - 1 > maxRulePriority) {
-      throw XlsxLimitError('conditional format priorities', maxRulePriority);
-    }
-    final List<XlsxStyle?> ruleStyles = <XlsxStyle?>[
-      for (final XlsxConditionalRule rule in format.rules)
-        conditionalRuleStyle(rule),
-    ];
-    final StylesPart? styles = ruleStyles.nonNulls.isEmpty
-        ? null
-        : _stylesFor();
-    final int sheetNumber = _x14SheetNumber(part, format, firstPriority);
-    final CfBlock? block = part.conditionalBlock;
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      final List<int?> dxfIds = <int?>[
-        for (int i = 0; i < ruleStyles.length; i++)
-          if (ruleStyles[i] == null)
-            null
-          else
-            _appendRuleStyle(log, styles!, ruleStyles[i]!, i),
+  void addConditionalFormat(XlsxConditionalFormat format) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.featureChanged,
+    () {
+      final WorksheetPart part = _editablePart('conditional formats');
+      checkConditionalFormat(format);
+      final int firstPriority = part.highestConditionalPriority + 1;
+      if (firstPriority + format.rules.length - 1 > maxRulePriority) {
+        throw XlsxLimitError('conditional format priorities', maxRulePriority);
+      }
+      final List<XlsxStyle?> ruleStyles = <XlsxStyle?>[
+        for (final XlsxConditionalRule rule in format.rules)
+          conditionalRuleStyle(rule),
       ];
-      final List<WorksheetConditionalFormat> written =
-          <WorksheetConditionalFormat>[
-            (format: format, dxfIds: dxfIds, firstPriority: firstPriority),
-          ];
-      final List<OpaqueXml> sources = renderElements(
-        (XmlWriter w) => writeConditionalFormats(w, written, sheetNumber),
-      );
-      if (sources.isNotEmpty) {
-        final List<XlsxConditionalRule> rules = normalizedConditionalFormat(
-          format,
-        ).rules;
-        final CfEntry entry = CfEntry(format.ranges, <CfRuleEntry>[
-          for (int i = 0; i < rules.length; i++)
-            if (!isX14OnlyRule(rules[i]))
-              CfRuleEntry(
-                withRuleStyle(rules[i], null),
-                firstPriority + i,
-                dxfId: dxfIds[i],
-                x14Id: rules[i] is XlsxDataBar
-                    ? x14RuleId(sheetNumber, firstPriority + i - 1)
-                    : null,
-              ),
-        ], sources.single);
-        final CfBlock next = CfBlock(<GroupItem<CfEntry>>[
-          ...?block?.items,
-          GroupItem<CfEntry>(entry, sources.single),
-        ]);
-        editLayout(
-          log,
-          part,
-          'conditionalFormatting',
-          () => part.swapLayout('conditionalFormatting', block, next),
+      final StylesPart? styles = ruleStyles.nonNulls.isEmpty
+          ? null
+          : _stylesFor();
+      final int sheetNumber = _x14SheetNumber(part, format, firstPriority);
+      final CfBlock? block = part.conditionalBlock;
+      final ChangeLog log = _host.log;
+      log.transaction(() {
+        final List<int?> dxfIds = <int?>[
+          for (int i = 0; i < ruleStyles.length; i++)
+            if (ruleStyles[i] == null)
+              null
+            else
+              _appendRuleStyle(log, styles!, ruleStyles[i]!, i),
+        ];
+        final List<WorksheetConditionalFormat> written =
+            <WorksheetConditionalFormat>[
+              (format: format, dxfIds: dxfIds, firstPriority: firstPriority),
+            ];
+        final List<OpaqueXml> sources = renderElements(
+          (XmlWriter w) => writeConditionalFormats(w, written, sheetNumber),
         );
-      }
-      final List<OpaqueXml> extension = renderElements(
-        (XmlWriter w) => writeX14ConditionalFormats(w, written, sheetNumber),
-      );
-      if (extension.isNotEmpty) {
-        final XmlNode? extLst = part.layoutElement('extLst') as XmlNode?;
-        final XmlNode next = withX14Format(
-          extLst,
-          extension.single,
-          part.elementPrefix,
+        if (sources.isNotEmpty) {
+          final List<XlsxConditionalRule> rules = normalizedConditionalFormat(
+            format,
+          ).rules;
+          final CfEntry entry = CfEntry(format.ranges, <CfRuleEntry>[
+            for (int i = 0; i < rules.length; i++)
+              if (!isX14OnlyRule(rules[i]))
+                CfRuleEntry(
+                  withRuleStyle(rules[i], null),
+                  firstPriority + i,
+                  dxfId: dxfIds[i],
+                  x14Id: rules[i] is XlsxDataBar
+                      ? x14RuleId(sheetNumber, firstPriority + i - 1)
+                      : null,
+                ),
+          ], sources.single);
+          final CfBlock next = CfBlock(<GroupItem<CfEntry>>[
+            ...?block?.items,
+            GroupItem<CfEntry>(entry, sources.single),
+          ]);
+          editLayout(
+            log,
+            part,
+            'conditionalFormatting',
+            () => part.swapLayout('conditionalFormatting', block, next),
+          );
+        }
+        final List<OpaqueXml> extension = renderElements(
+          (XmlWriter w) => writeX14ConditionalFormats(w, written, sheetNumber),
         );
-        editLayout(
-          log,
-          part,
-          'extLst',
-          () => part.swapLayout('extLst', extLst, next),
-        );
-      }
-    });
-  }
+        if (extension.isNotEmpty) {
+          final XmlNode? extLst = part.layoutElement('extLst') as XmlNode?;
+          final XmlNode next = withX14Format(
+            extLst,
+            extension.single,
+            part.elementPrefix,
+          );
+          editLayout(
+            log,
+            part,
+            'extLst',
+            () => part.swapLayout('extLst', extLst, next),
+          );
+        }
+      });
+    },
+  );
 
   /// The sheet number for `x14RuleId`: the sheet's place, raised until no id
   /// of the rules of [format], numbered from [firstPriority], is in use.
@@ -386,64 +395,67 @@ mixin _SheetRules {
   /// sheet that is not a worksheet or has no part and an
   /// [XlsxReadException] when the sheet cannot be read. Whatever it throws,
   /// nothing has changed.
-  void removeConditionalFormat(XlsxConditionalFormat format) {
-    final WorksheetPart part = _editablePart('conditional formats');
-    final XlsxConditionalFormat written = normalizedConditionalFormat(format);
-    final List<JoinedFormat> formats = _joinedFormats(part);
-    final int at = formats.indexWhere((JoinedFormat joined) {
-      final XlsxConditionalFormat listed = _conditionalFormatOf(joined);
-      return listed == format || listed == written;
-    });
-    if (at < 0) {
-      throw ArgumentError.value(
-        format,
-        'format',
-        'The sheet "$name" has no equal conditional format.',
-      );
-    }
-    final JoinedFormat found = formats[at];
-    final CfBlock? block = part.conditionalBlock;
-    final X14Block? x14 = part.x14Block;
-    // A half another rule still names stays, with that rule.
-    final Set<String?> named = <String?>{
-      for (final String id in part.unlistedX14Links) id.toUpperCase(),
-      for (final JoinedFormat other in formats)
-        if (!identical(other, found))
-          for (final JoinedRule rule in other.rules)
-            rule.entry?.x14Id?.toUpperCase(),
-    };
-    final Set<OpaqueXml> gone = <OpaqueXml>{
-      for (final JoinedRule rule in found.rules)
-        for (final X14Rule half in rule.halves)
-          if (rule.entry == null ||
-              !named.contains(rule.entry!.x14Id?.toUpperCase()))
-            half.source,
-    };
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      if (found.item != null) {
-        final CfBlock next = CfBlock(<GroupItem<CfEntry>>[
-          for (final GroupItem<CfEntry> item in block!.items)
-            if (!identical(item, found.item)) item,
-        ]);
-        editLayout(
-          log,
-          part,
-          'conditionalFormatting',
-          () => part.swapLayout('conditionalFormatting', block, next),
+  void removeConditionalFormat(XlsxConditionalFormat format) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        final WorksheetPart part = _editablePart('conditional formats');
+        final XlsxConditionalFormat written = normalizedConditionalFormat(
+          format,
         );
-      }
-      if (x14 != null && gone.isNotEmpty) {
-        final Object? extLst = part.layoutElement('extLst');
-        editLayout(
-          log,
-          part,
-          'extLst',
-          () => part.swapLayout('extLst', extLst, x14.withoutRules(gone)),
-        );
-      }
-    });
-  }
+        final List<JoinedFormat> formats = _joinedFormats(part);
+        final int at = formats.indexWhere((JoinedFormat joined) {
+          final XlsxConditionalFormat listed = _conditionalFormatOf(joined);
+          return listed == format || listed == written;
+        });
+        if (at < 0) {
+          throw ArgumentError.value(
+            format,
+            'format',
+            'The sheet "$name" has no equal conditional format.',
+          );
+        }
+        final JoinedFormat found = formats[at];
+        final CfBlock? block = part.conditionalBlock;
+        final X14Block? x14 = part.x14Block;
+        // A half another rule still names stays, with that rule.
+        final Set<String?> named = <String?>{
+          for (final String id in part.unlistedX14Links) id.toUpperCase(),
+          for (final JoinedFormat other in formats)
+            if (!identical(other, found))
+              for (final JoinedRule rule in other.rules)
+                rule.entry?.x14Id?.toUpperCase(),
+        };
+        final Set<OpaqueXml> gone = <OpaqueXml>{
+          for (final JoinedRule rule in found.rules)
+            for (final X14Rule half in rule.halves)
+              if (rule.entry == null ||
+                  !named.contains(rule.entry!.x14Id?.toUpperCase()))
+                half.source,
+        };
+        final ChangeLog log = _host.log;
+        log.transaction(() {
+          if (found.item != null) {
+            final CfBlock next = CfBlock(<GroupItem<CfEntry>>[
+              for (final GroupItem<CfEntry> item in block!.items)
+                if (!identical(item, found.item)) item,
+            ]);
+            editLayout(
+              log,
+              part,
+              'conditionalFormatting',
+              () => part.swapLayout('conditionalFormatting', block, next),
+            );
+          }
+          if (x14 != null && gone.isNotEmpty) {
+            final Object? extLst = part.layoutElement('extLst');
+            editLayout(
+              log,
+              part,
+              'extLst',
+              () => part.swapLayout('extLst', extLst, x14.withoutRules(gone)),
+            );
+          }
+        });
+      });
 }
 
 /// The `dataValidations` holder of a sheet: each `<dataValidation>` as

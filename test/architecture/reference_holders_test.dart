@@ -17,7 +17,11 @@ import 'support/lib_sources.dart';
 const String _model = 'lib/src/xlsx/model/';
 
 /// Model files that match the scan but need no holder, each with a reason.
-const Map<String, String> _allowed = <String, String>{};
+const Map<String, String> _allowed = <String, String>{
+  'change_set.dart':
+      'a change record names the cells an edit changed, after it; it is '
+      'never shifted by a later edit',
+};
 
 /// A class field (two-space indent) that stores a reference or a formula.
 final List<RegExp> _fields = <RegExp>[

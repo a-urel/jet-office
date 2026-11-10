@@ -117,60 +117,71 @@ mixin _SheetTablesApi {
   /// the sheet, its relationships or a table part it needs cannot be read.
   /// Whatever it throws, nothing has changed, except that reading warnings
   /// are reported on first read.
-  void addTable(XlsxTable table) {
-    checkTable(table);
-    final WorksheetPart part = _editablePart('tables');
-    _host.checkTableNameFree(table.name);
-    final List<({String partName, TablePart table})> list = _sheetTables();
-    final XlsxRange range = table.range;
-    checkTablePlace(table.name, range, _tableRanges(list), autoFilter, merges);
-    final List<({int row, int column, Object? value})> cells = _tableCells(
-      table,
-    );
-    final ChangeLog log = _host.log;
-    final OpcPackage package = _host.reader.package;
-    final String sheetPart = _partName!;
-    // Read here, so that a broken part throws XlsxReadException: inside the
-    // transaction `addStoredRelationship` would throw the package's own error.
-    _host.reader.relationshipsOf(sheetPart.substring(1));
-    log.transaction(() {
-      for (final ({int row, int column, Object? value}) c in cells) {
-        setCell(c.row, c.column, c.value);
-      }
-      final int id = _host.takeTableId();
-      final StringBuffer xml = StringBuffer();
-      writeTable(XmlWriter(xml), id, table);
-      final TablePart typed = TablePart.read(XmlPullReader(xml.toString()))!;
-      final String added = addStoredPart(
-        log,
-        package,
-        '/${tablePartName(id)}',
-        ContentType.table,
-        typed,
+  void addTable(XlsxTable table) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.tableChanged,
+    range: table.range,
+    () {
+      checkTable(table);
+      final WorksheetPart part = _editablePart('tables');
+      _host.checkTableNameFree(table.name);
+      final List<({String partName, TablePart table})> list = _sheetTables();
+      final XlsxRange range = table.range;
+      checkTablePlace(
+        table.name,
+        range,
+        _tableRanges(list),
+        autoFilter,
+        merges,
       );
-      final String relationship = addStoredRelationship(
-        log,
-        package,
-        sheetPart,
-        type: RelType.table,
-        target: relationshipTarget(sheetPart, added),
+      final List<({int row, int column, Object? value})> cells = _tableCells(
+        table,
       );
-      editLayout(
-        log,
-        part,
-        'tableParts',
-        () => part.addTablePart(relationship),
-      );
-      markStoredPart(log, _attachedTables, added.substring(1));
-      applyChange(
-        log,
-        _TableListChange(list, list.length, (
-          partName: added.substring(1),
-          table: typed,
-        ), added: true),
-      );
-    });
-  }
+      final ChangeLog log = _host.log;
+      final OpcPackage package = _host.reader.package;
+      final String sheetPart = _partName!;
+      // Read here, so that a broken part throws XlsxReadException: inside the
+      // transaction `addStoredRelationship` would throw the package's own error.
+      _host.reader.relationshipsOf(sheetPart.substring(1));
+      log.transaction(() {
+        for (final ({int row, int column, Object? value}) c in cells) {
+          setCell(c.row, c.column, c.value);
+        }
+        final int id = _host.takeTableId();
+        final StringBuffer xml = StringBuffer();
+        writeTable(XmlWriter(xml), id, table);
+        final TablePart typed = TablePart.read(XmlPullReader(xml.toString()))!;
+        final String added = addStoredPart(
+          log,
+          package,
+          '/${tablePartName(id)}',
+          ContentType.table,
+          typed,
+        );
+        final String relationship = addStoredRelationship(
+          log,
+          package,
+          sheetPart,
+          type: RelType.table,
+          target: relationshipTarget(sheetPart, added),
+        );
+        editLayout(
+          log,
+          part,
+          'tableParts',
+          () => part.addTablePart(relationship),
+        );
+        markStoredPart(log, _attachedTables, added.substring(1));
+        applyChange(
+          log,
+          _TableListChange(list, list.length, (
+            partName: added.substring(1),
+            table: typed,
+          ), added: true),
+        );
+      });
+    },
+  );
 
   /// The cells [table] writes over what the sheet holds, with their values:
   /// each header cell and totals cell that changes. Throws an [ArgumentError]
@@ -220,15 +231,19 @@ mixin _SheetTablesApi {
   /// name and change its flags); a [StateError] for a sheet that is not a
   /// worksheet or has no part; and an [XlsxReadException] when the sheet
   /// cannot be read. Whatever it throws, nothing has changed.
-  void setTableStyle(String name, XlsxTableStyle? style) {
-    _editablePart('tables');
-    final ({String partName, TablePart table}) entry = _tableNamed(name);
-    final TablePart table = entry.table;
-    final XlsxTableStyle? current = table.style;
-    if (style == current) return;
-    if (style != null && style.name != current?.name) checkTableStyle(style);
-    _editTable(entry, () => table.setStyle(style));
-  }
+  void setTableStyle(String name, XlsxTableStyle? style) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.tableChanged,
+    () {
+      _editablePart('tables');
+      final ({String partName, TablePart table}) entry = _tableNamed(name);
+      final TablePart table = entry.table;
+      final XlsxTableStyle? current = table.style;
+      if (style == current) return;
+      if (style != null && style.name != current?.name) checkTableStyle(style);
+      _editTable(entry, () => table.setStyle(style));
+    },
+  );
 
   /// Moves the last row of the table [name], so that it covers [range].
   ///
@@ -253,84 +268,89 @@ mixin _SheetTablesApi {
   /// table formula, and for a sheet that is not a worksheet or has no part;
   /// and an [XlsxReadException] when the sheet cannot be read. Whatever it
   /// throws, nothing has changed.
-  void resizeTable(String name, XlsxRange range) {
-    validateRange(range, 'range');
-    _editablePart('tables');
-    final ({String partName, TablePart table}) entry = _tableNamed(name);
-    final TablePart table = entry.table;
-    final XlsxRange old = table.range;
-    if (range == old) return;
-    final String tableName = table.displayName;
-    if (range.firstRow != old.firstRow ||
-        range.firstColumn != old.firstColumn ||
-        range.lastColumn != old.lastColumn) {
-      throw ArgumentError.value(
-        range,
-        'range',
-        'Only the last row of the table "$tableName" over ${old.ref} may '
-            'move.',
-      );
-    }
-    final int least = (table.hasHeader ? 1 : 0) + (table.totalsRow ? 1 : 0);
-    if (range.rowCount < least + 1) {
-      throw ArgumentError.value(
-        range,
-        'range',
-        'The table "$tableName" needs at least one data row.',
-      );
-    }
-    checkTablePlace(
-      tableName,
-      range,
-      _tableRanges(<({String partName, TablePart table})>[
-        for (final ({String partName, TablePart table}) t in _sheetTables())
-          if (!identical(t.table, table)) t,
-      ]),
-      autoFilter,
-      merges,
-    );
-    final CellStore store = cellStoreOf(this as XlsxSheet)!;
-    final int from = old.lastRow;
-    final int to = range.lastRow;
-    if (table.totalsRow) {
-      for (int c = old.firstColumn; c <= old.lastColumn; c++) {
-        final RawCell? target = store.cellAt(to, c);
-        if (target != null &&
-            (target.value != null ||
-                target.formula != null ||
-                target.inline != null)) {
-          throw StateError(
-            'The totals row of the table "$tableName" cannot move onto cell '
-            '${cellRef(to, c)} on sheet "${this.name}": it is not empty.',
-          );
-        }
-        final RawFormula? f = store.cellAt(from, c)?.formula;
-        if (f != null && f.type != FormulaType.normal) {
-          throw StateError(
-            'The totals cell ${cellRef(from, c)} of the table "$tableName" '
-            'is part of a shared, array or data table formula; it cannot '
-            'move.',
-          );
-        }
+  void resizeTable(String name, XlsxRange range) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.tableChanged,
+    range: range,
+    () {
+      validateRange(range, 'range');
+      _editablePart('tables');
+      final ({String partName, TablePart table}) entry = _tableNamed(name);
+      final TablePart table = entry.table;
+      final XlsxRange old = table.range;
+      if (range == old) return;
+      final String tableName = table.displayName;
+      if (range.firstRow != old.firstRow ||
+          range.firstColumn != old.firstColumn ||
+          range.lastColumn != old.lastColumn) {
+        throw ArgumentError.value(
+          range,
+          'range',
+          'Only the last row of the table "$tableName" over ${old.ref} may '
+              'move.',
+        );
       }
-    }
-    final ChangeLog log = _host.log;
-    log.transaction(() {
+      final int least = (table.hasHeader ? 1 : 0) + (table.totalsRow ? 1 : 0);
+      if (range.rowCount < least + 1) {
+        throw ArgumentError.value(
+          range,
+          'range',
+          'The table "$tableName" needs at least one data row.',
+        );
+      }
+      checkTablePlace(
+        tableName,
+        range,
+        _tableRanges(<({String partName, TablePart table})>[
+          for (final ({String partName, TablePart table}) t in _sheetTables())
+            if (!identical(t.table, table)) t,
+        ]),
+        autoFilter,
+        merges,
+      );
+      final CellStore store = cellStoreOf(this as XlsxSheet)!;
+      final int from = old.lastRow;
+      final int to = range.lastRow;
       if (table.totalsRow) {
         for (int c = old.firstColumn; c <= old.lastColumn; c++) {
-          final RawCell? cell = store.cellAt(from, c);
-          if (cell == null) continue;
-          setStoredCell(log, store, to, c, cell);
-          setStoredCell(log, store, from, c, null);
+          final RawCell? target = store.cellAt(to, c);
+          if (target != null &&
+              (target.value != null ||
+                  target.formula != null ||
+                  target.inline != null)) {
+            throw StateError(
+              'The totals row of the table "$tableName" cannot move onto cell '
+              '${cellRef(to, c)} on sheet "${this.name}": it is not empty.',
+            );
+          }
+          final RawFormula? f = store.cellAt(from, c)?.formula;
+          if (f != null && f.type != FormulaType.normal) {
+            throw StateError(
+              'The totals cell ${cellRef(from, c)} of the table "$tableName" '
+              'is part of a shared, array or data table formula; it cannot '
+              'move.',
+            );
+          }
         }
-        _host.workbookPart.structureEdits++;
-        log.record(StructureEditChange(_host.workbookPart));
       }
-      _editTable(entry, () => table.resize(range));
-      _host.workbookPart.tableEdits++;
-      log.record(TableResizeChange(_host.workbookPart));
-    });
-  }
+      final ChangeLog log = _host.log;
+      log.transaction(() {
+        if (table.totalsRow) {
+          for (int c = old.firstColumn; c <= old.lastColumn; c++) {
+            final RawCell? cell = store.cellAt(from, c);
+            if (cell == null) continue;
+            setStoredCell(log, store, to, c, cell);
+            setStoredCell(log, store, from, c, null);
+          }
+          _host.workbookPart.structureEdits++;
+          log.record(StructureEditChange(_host.workbookPart));
+        }
+        _editTable(entry, () => table.resize(range));
+        _host.workbookPart.tableEdits++;
+        log.record(TableResizeChange(_host.workbookPart));
+      });
+    },
+  );
 
   /// Gives the table [name] the name [newName], and every structured
   /// reference to it (`Sales[Amount]` becomes `Revenue[Amount]`) in a cell
@@ -345,45 +365,46 @@ mixin _SheetTablesApi {
   /// for a sheet that is not a worksheet or has no part; and an
   /// [XlsxReadException] when a sheet cannot be read. Whatever it throws,
   /// nothing has changed and no warning is kept.
-  void renameTable(String name, String newName) {
-    _editablePart('tables');
-    final ({String partName, TablePart table}) entry = _tableNamed(name);
-    final TablePart table = entry.table;
-    final String old = table.displayName;
-    if (newName == old) return;
-    final XlsxTable value = table.value;
-    try {
-      checkTable(
-        XlsxTable(
-          newName,
-          value.range,
-          value.columns,
-          headerRow: value.headerRow,
-          totalsRow: value.totalsRow,
-          autoFilter: value.autoFilter,
-          style: value.style,
-        ),
-      );
-      if (sheetNameKey(newName) != sheetNameKey(old)) {
-        _host.checkTableNameFree(newName);
-      }
-    } on ArgumentError catch (e) {
-      throw ArgumentError.value(newName, 'newName', e.message);
-    }
-    _refusePivot(old);
-    final StructuredTable structured = _structured(table);
-    final ChangeLog log = _host.log;
-    _host.warnings.keepOnSuccess(
-      () => log.transaction(() {
-        _host.references.apply(
-          StructuredRename(structured, newName: newName),
-          null,
+  void renameTable(String name, String newName) =>
+      _recordSheetEdit(this, XlsxChangeKind.tableChanged, () {
+        _editablePart('tables');
+        final ({String partName, TablePart table}) entry = _tableNamed(name);
+        final TablePart table = entry.table;
+        final String old = table.displayName;
+        if (newName == old) return;
+        final XlsxTable value = table.value;
+        try {
+          checkTable(
+            XlsxTable(
+              newName,
+              value.range,
+              value.columns,
+              headerRow: value.headerRow,
+              totalsRow: value.totalsRow,
+              autoFilter: value.autoFilter,
+              style: value.style,
+            ),
+          );
+          if (sheetNameKey(newName) != sheetNameKey(old)) {
+            _host.checkTableNameFree(newName);
+          }
+        } on ArgumentError catch (e) {
+          throw ArgumentError.value(newName, 'newName', e.message);
+        }
+        _refusePivot(old);
+        final StructuredTable structured = _structured(table);
+        final ChangeLog log = _host.log;
+        _host.warnings.keepOnSuccess(
+          () => log.transaction(() {
+            _host.references.apply(
+              StructuredRename(structured, newName: newName),
+              null,
+            );
+            _host.forgetTablePart(entry.partName);
+            _editTable(entry, () => table.rename(newName));
+          }),
         );
-        _host.forgetTablePart(entry.partName);
-        _editTable(entry, () => table.rename(newName));
-      }),
-    );
-  }
+      });
 
   /// The table [table] of this sheet as its structured references see it.
   StructuredTable _structured(TablePart table) => StructuredTable(
@@ -450,44 +471,48 @@ mixin _SheetTablesApi {
   /// and an [XlsxReadException] when a sheet cannot be read. Whatever it
   /// throws, nothing has changed and no warning is kept, except that
   /// reading warnings are reported on first read.
-  void removeTable(String name) {
-    final WorksheetPart part = _editablePart('tables');
-    final ({String partName, TablePart table}) entry = _tableNamed(name);
-    final String tableName = entry.table.displayName;
-    final PackageReader reader = _host.reader;
-    final OpcPackage package = reader.package;
-    final String partName = entry.partName;
-    if (!package.hasPart(partName)) {
-      throw StateError(
-        'The table "$tableName" cannot be removed: a sheet on the same part '
-        'removed it.',
+  void removeTable(String name) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.tableChanged,
+    () {
+      final WorksheetPart part = _editablePart('tables');
+      final ({String partName, TablePart table}) entry = _tableNamed(name);
+      final String tableName = entry.table.displayName;
+      final PackageReader reader = _host.reader;
+      final OpcPackage package = reader.package;
+      final String partName = entry.partName;
+      if (!package.hasPart(partName)) {
+        throw StateError(
+          'The table "$tableName" cannot be removed: a sheet on the same part '
+          'removed it.',
+        );
+      }
+      if (reader
+          .guardXml(partName, () => package.relationshipsOf(partName))
+          .isNotEmpty) {
+        throw StateError(
+          'The table "$tableName" has relationships of its own (a query table, '
+          'say); it cannot be removed.',
+        );
+      }
+      final String? slicer = _slicerOf(reader, package, entry.table.id);
+      if (slicer != null) {
+        throw StateError(
+          'The table "$tableName" cannot be removed: the slicer cache '
+          '"$slicer" is on it.',
+        );
+      }
+      _refusePivot(tableName);
+      final StructuredTable structured = _structured(entry.table);
+      final ChangeLog log = _host.log;
+      _host.warnings.keepOnSuccess(
+        () => log.transaction(() {
+          _host.references.apply(TableToRange(structured), null);
+          _dropTable(part, entry);
+        }),
       );
-    }
-    if (reader
-        .guardXml(partName, () => package.relationshipsOf(partName))
-        .isNotEmpty) {
-      throw StateError(
-        'The table "$tableName" has relationships of its own (a query table, '
-        'say); it cannot be removed.',
-      );
-    }
-    final String? slicer = _slicerOf(reader, package, entry.table.id);
-    if (slicer != null) {
-      throw StateError(
-        'The table "$tableName" cannot be removed: the slicer cache '
-        '"$slicer" is on it.',
-      );
-    }
-    _refusePivot(tableName);
-    final StructuredTable structured = _structured(entry.table);
-    final ChangeLog log = _host.log;
-    _host.warnings.keepOnSuccess(
-      () => log.transaction(() {
-        _host.references.apply(TableToRange(structured), null);
-        _dropTable(part, entry);
-      }),
-    );
-  }
+    },
+  );
 
   /// Takes the table of [entry] out of the sheet, its `<tablePart>`, its
   /// relationship and, when nothing else names it, its part.

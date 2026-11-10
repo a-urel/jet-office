@@ -102,6 +102,7 @@ import '../worksheet_parts.dart'
         writeHyperlink;
 import 'cell_formulas.dart';
 import 'cell_store.dart';
+import 'change_set.dart';
 import 'columns.dart';
 import 'comments_part.dart';
 import 'conditional_elements.dart';
@@ -341,6 +342,30 @@ int reportedCellCount(XlsxSheet sheet) => sheet._reported.length;
 /// `column`, and the `note`.
 typedef XlsxCellNote = ({int row, int column, XlsxNote note});
 
+/// Runs [edit], a public edit of the sheet [self], recording its
+/// [XlsxChange] of [kind] (`recordEdit`).
+T _recordSheetEdit<T>(
+  Object self,
+  XlsxChangeKind kind,
+  T Function() edit, {
+  XlsxRange? range,
+  int? index,
+  int? count,
+}) {
+  final XlsxSheet sheet = self as XlsxSheet;
+  return recordEdit(
+    sheet._host.log,
+    () => XlsxChange(
+      kind,
+      sheet: sheet.name,
+      range: range,
+      index: index,
+      count: count,
+    ),
+    edit,
+  );
+}
+
 /// One sheet of a workbook, opened or created.
 ///
 /// Rows and columns are 0-based: row 0 is Excel's row 1 and column 0 is
@@ -407,8 +432,11 @@ final class XlsxSheet
   /// Hiding the active sheet makes the first visible sheet active, as Excel
   /// does. Throws a [StateError] when this is the last visible sheet and
   /// [value] is not visible; nothing changes then.
-  set visibility(XlsxSheetVisibility value) =>
-      _host.setVisibility(_entry, value);
+  set visibility(XlsxSheetVisibility value) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.featureChanged,
+    () => _host.setVisibility(_entry, value),
+  );
 
   /// What the sheet's protection allows, or `null` when the sheet is not
   /// protected: it has no `<sheetProtection>`, or its `sheet` is `0`.
@@ -443,24 +471,25 @@ final class XlsxSheet
   /// it), a [StateError] for a sheet that is not a worksheet or has no part
   /// and an [XlsxReadException] when the sheet cannot be read. Whatever it
   /// throws, nothing has changed.
-  set protection(XlsxSheetProtection? value) {
-    checkProtectionPassword(value?.password);
-    final WorksheetPart part = _editablePart('protection');
-    if (value == protection) return;
-    final XmlNode? old = part.layoutElement('sheetProtection') as XmlNode?;
-    final XmlNode? next = value == null
-        ? null
-        : applySheetProtection(old, value, part.elementPrefix);
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      editLayout(
-        log,
-        part,
-        'sheetProtection',
-        () => part.setNode('sheetProtection', next),
-      );
-    });
-  }
+  set protection(XlsxSheetProtection? value) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        checkProtectionPassword(value?.password);
+        final WorksheetPart part = _editablePart('protection');
+        if (value == protection) return;
+        final XmlNode? old = part.layoutElement('sheetProtection') as XmlNode?;
+        final XmlNode? next = value == null
+            ? null
+            : applySheetProtection(old, value, part.elementPrefix);
+        final ChangeLog log = _host.log;
+        log.transaction(() {
+          editLayout(
+            log,
+            part,
+            'sheetProtection',
+            () => part.setNode('sheetProtection', next),
+          );
+        });
+      });
 
   /// Whether the sheet's `<sheetProtection>` stores a password: a `password`
   /// or a `hashValue`, whether or not the protection is on. The password
@@ -580,210 +609,221 @@ final class XlsxSheet
   /// reading warnings (such as `styleEntryInvalid` for a style entry read for
   /// the first time) are reported on first read.
   @override
-  void setCell(int row, int column, Object? value) {
-    _checkCell(row, column);
-    // Programmer errors first, so they throw whatever the sheet holds; only a
-    // link the writer refuses looks at the sheet, which may hold it.
-    final bool styled = value is XlsxCell;
-    final XlsxStyle? cellStyle = value is XlsxCell ? value.style : null;
-    final Object? plain = value is XlsxCell ? value.value : value;
-    switch (plain) {
-      case XlsxHyperlink():
-        try {
-          checkHyperlink(plain);
-        } on ArgumentError {
-          // A file may hold a link the writer refuses: set back, it is no
-          // edit.
-          if (hyperlinkAt(row, column) != plain) rethrow;
-        }
-      case XlsxCell():
-        throw ArgumentError(
-          'Cell ${cellRef(row, column)} on sheet "$name" nests an XlsxCell '
-          'inside an XlsxCell.',
-        );
-      case null ||
-          String() ||
-          num() ||
-          bool() ||
-          XlsxRichText() ||
-          DateTime() ||
-          XlsxDate() ||
-          XlsxDecimal() ||
-          XlsxFormula():
-        break;
-      default:
-        throw ArgumentError(
-          'Cell ${cellRef(row, column)} on sheet "$name" holds a '
-          '${plain.runtimeType}, which is not a supported cell value.',
-        );
-    }
-    final WorksheetPart part = _editablePart('cells');
-    final bool sameLink =
-        plain is XlsxHyperlink && hyperlinkAt(row, column) == plain;
-    if (sameLink && !styled) return;
-    if (plain is XlsxRichText && !styled && richTextAt(row, column) == plain) {
-      return;
-    }
-    final CellStore store = part.cells;
-    bool unshare = false;
-    switch (groupRoleAt(store, row, column)) {
-      case GroupRole.arrayOrTableMember:
-        throw StateError(
-          'Cannot change part of an array or data table formula at '
-          '${cellRef(row, column)}.',
-        );
-      case GroupRole.sharedMaster:
-        unshare = true;
-      case GroupRole.sharedChild || GroupRole.none:
-        break;
-    }
-    Object? stored = plain;
-    final ({String partName, TablePart table, int index})? header = _headerAt(
-      row,
-      column,
-    );
-    String? rename;
-    bool adjusted = false;
-    if (header != null) {
-      final String text = switch (plain) {
-        null => '',
-        final String text => scrubXmlText(text).text,
-        _ => throw StateError(
-          'Cell ${cellRef(row, column)} on sheet "$name" is a header cell of '
-          'the table "${header.table.displayName}"; it holds the column name '
-          'and takes only text.',
-        ),
-      };
-      // Excel's limit for a table column name.
-      if (text.length > 255) {
-        throw ArgumentError(
-          'Cell ${cellRef(row, column)} on sheet "$name" is a header cell of '
-          'the table "${header.table.displayName}"; a column name has at most '
-          '255 characters.',
-        );
-      }
-      final String unique = _uniqueColumnName(
-        header.table,
-        header.index,
-        text.isEmpty ? 'Column${header.index + 1}' : text,
-      );
-      adjusted = unique != text;
-      stored = unique;
-      if (unique != header.table.columnName(header.index)) rename = unique;
-    }
-    final RawCell? current = store.cellAt(row, column);
-    if (stored == null && current == null && cellStyle == null) return;
-    // A link: the cell holds its text, and the sheet its element, found
-    // before anything is recorded.
-    final XlsxHyperlink? link = plain is XlsxHyperlink ? plain : null;
-    final _LinkPlan? linkPlan = link == null
-        ? null
-        : _planLink(part, row, column, link);
-    if (link != null) stored = link.text;
-    final CellEncoder encoder = _host.loadTables();
-    // The writer's layers, column under row under cell, and the style the
-    // cell takes:
-    // none for an XlsxCell of null without a style, as the writer; the
-    // date format for a date that sets none. Without a style the styles
-    // part is not needed.
-    final XlsxStyle? layered = styled
-        ? _layer(
-            _columnLayer(store, row, column),
-            _rowStyle(store, row),
-            cellStyle,
-          )
-        : null;
-    final XlsxStyle? target = link != null
-        ? withHyperlinkFont(
-            styled
-                ? layered
-                : _styleOfIndex(
-                    current == null
-                        ? _inheritedIndex(store, row, column)
-                        : current.style,
-                  ),
-          )
-        : !styled
-        ? null
-        : stored == null
-        ? (cellStyle == null ? null : layered)
-        : _withDateFormat(layered, stored);
-    final StylesPart? styles = target == null ? null : _stylesFor();
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      // Excel gives every other cell of a shared group its own formula
-      // when the master is edited.
-      if (unshare) unshareSharedGroup(log, store, row, column, name);
-      if (link != null && !sameLink) {
-        _applyLink(part, row, column, link, linkPlan!);
-      }
-      if (header != null && rename != null) {
-        final TablePart table = header.table;
-        // Every structured reference to the column follows its name.
-        _host.references.apply(
-          StructuredRename(
-            _structured(table),
-            oldColumn: table.columnName(header.index),
-            newColumn: rename,
-          ),
-          null,
-        );
-        attachStoredPart(
-          log,
-          _host.reader.package,
-          _attachedTables,
-          header.partName,
-          table,
-        );
-        editTable(log, table, () => table.setColumnName(header.index, rename!));
-      }
-      RawCell? base = current ?? _cellOfInheritedStyle(store, row, column);
-      int? Function(int? style, {required bool withTime}) dateStyle =
-          _host.dateStyle;
-      if (styled || link != null) {
-        final int id = styles == null ? 0 : appendStyle(log, styles, target);
-        if (stored == null) {
-          // As the writer: an XlsxCell of null writes an empty cell of the
-          // layered style, or nothing when that is the default or the
-          // XlsxCell has no style.
-          setStoredCell(
-            log,
-            store,
-            row,
-            column,
-            id == 0 ? null : RawCell(kind: RawCellKind.number, style: id),
+  void setCell(int row, int column, Object? value) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.cellsSet,
+    range: XlsxRange(row, column),
+    () {
+      _checkCell(row, column);
+      // Programmer errors first, so they throw whatever the sheet holds; only a
+      // link the writer refuses looks at the sheet, which may hold it.
+      final bool styled = value is XlsxCell;
+      final XlsxStyle? cellStyle = value is XlsxCell ? value.style : null;
+      final Object? plain = value is XlsxCell ? value.value : value;
+      switch (plain) {
+        case XlsxHyperlink():
+          try {
+            checkHyperlink(plain);
+          } on ArgumentError {
+            // A file may hold a link the writer refuses: set back, it is no
+            // edit.
+            if (hyperlinkAt(row, column) != plain) rethrow;
+          }
+        case XlsxCell():
+          throw ArgumentError(
+            'Cell ${cellRef(row, column)} on sheet "$name" nests an XlsxCell '
+            'inside an XlsxCell.',
           );
-          return;
-        }
-        base = RawCell(kind: RawCellKind.number, style: id == 0 ? null : id);
-        // The date format is in the style already, or the layers set a
-        // format, which a date keeps as in the writer.
-        dateStyle = (int? style, {required bool withTime}) => null;
+        case null ||
+            String() ||
+            num() ||
+            bool() ||
+            XlsxRichText() ||
+            DateTime() ||
+            XlsxDate() ||
+            XlsxDecimal() ||
+            XlsxFormula():
+          break;
+        default:
+          throw ArgumentError(
+            'Cell ${cellRef(row, column)} on sheet "$name" holds a '
+            '${plain.runtimeType}, which is not a supported cell value.',
+          );
       }
-      final RawCell prepared = encoder.prepare(
-        stored,
-        sheet: name,
-        row: row,
-        column: column,
-        current: base,
-        currentFormat: _host.styleTable.formatOf(_styleText(base)),
-        date1904: _host.date1904,
-        dateStyle: dateStyle,
-        cellFont: stored is XlsxRichText
-            ? (styled ? target : _styleOfIndex(base?.style))?.font
-            : null,
+      final WorksheetPart part = _editablePart('cells');
+      final bool sameLink =
+          plain is XlsxHyperlink && hyperlinkAt(row, column) == plain;
+      if (sameLink && !styled) return;
+      if (plain is XlsxRichText &&
+          !styled &&
+          richTextAt(row, column) == plain) {
+        return;
+      }
+      final CellStore store = part.cells;
+      bool unshare = false;
+      switch (groupRoleAt(store, row, column)) {
+        case GroupRole.arrayOrTableMember:
+          throw StateError(
+            'Cannot change part of an array or data table formula at '
+            '${cellRef(row, column)}.',
+          );
+        case GroupRole.sharedMaster:
+          unshare = true;
+        case GroupRole.sharedChild || GroupRole.none:
+          break;
+      }
+      Object? stored = plain;
+      final ({String partName, TablePart table, int index})? header = _headerAt(
+        row,
+        column,
       );
-      final bool remove = stored == null && prepared.style == null;
-      setStoredCell(log, store, row, column, remove ? null : prepared);
-    });
-    _reported.remove(row * XlsxLimits.maxColumns + column);
-    if (rename != null) {
-      _warn(XlsxWarningCode.tableColumnRenamed, cellRef(row, column));
-    }
-    if (adjusted) {
-      _warn(XlsxWarningCode.tableHeaderAdjusted, cellRef(row, column));
-    }
-  }
+      String? rename;
+      bool adjusted = false;
+      if (header != null) {
+        final String text = switch (plain) {
+          null => '',
+          final String text => scrubXmlText(text).text,
+          _ => throw StateError(
+            'Cell ${cellRef(row, column)} on sheet "$name" is a header cell of '
+            'the table "${header.table.displayName}"; it holds the column name '
+            'and takes only text.',
+          ),
+        };
+        // Excel's limit for a table column name.
+        if (text.length > 255) {
+          throw ArgumentError(
+            'Cell ${cellRef(row, column)} on sheet "$name" is a header cell of '
+            'the table "${header.table.displayName}"; a column name has at most '
+            '255 characters.',
+          );
+        }
+        final String unique = _uniqueColumnName(
+          header.table,
+          header.index,
+          text.isEmpty ? 'Column${header.index + 1}' : text,
+        );
+        adjusted = unique != text;
+        stored = unique;
+        if (unique != header.table.columnName(header.index)) rename = unique;
+      }
+      final RawCell? current = store.cellAt(row, column);
+      if (stored == null && current == null && cellStyle == null) return;
+      // A link: the cell holds its text, and the sheet its element, found
+      // before anything is recorded.
+      final XlsxHyperlink? link = plain is XlsxHyperlink ? plain : null;
+      final _LinkPlan? linkPlan = link == null
+          ? null
+          : _planLink(part, row, column, link);
+      if (link != null) stored = link.text;
+      final CellEncoder encoder = _host.loadTables();
+      // The writer's layers, column under row under cell, and the style the
+      // cell takes:
+      // none for an XlsxCell of null without a style, as the writer; the
+      // date format for a date that sets none. Without a style the styles
+      // part is not needed.
+      final XlsxStyle? layered = styled
+          ? _layer(
+              _columnLayer(store, row, column),
+              _rowStyle(store, row),
+              cellStyle,
+            )
+          : null;
+      final XlsxStyle? target = link != null
+          ? withHyperlinkFont(
+              styled
+                  ? layered
+                  : _styleOfIndex(
+                      current == null
+                          ? _inheritedIndex(store, row, column)
+                          : current.style,
+                    ),
+            )
+          : !styled
+          ? null
+          : stored == null
+          ? (cellStyle == null ? null : layered)
+          : _withDateFormat(layered, stored);
+      final StylesPart? styles = target == null ? null : _stylesFor();
+      final ChangeLog log = _host.log;
+      log.transaction(() {
+        // Excel gives every other cell of a shared group its own formula
+        // when the master is edited.
+        if (unshare) unshareSharedGroup(log, store, row, column, name);
+        if (link != null && !sameLink) {
+          _applyLink(part, row, column, link, linkPlan!);
+        }
+        if (header != null && rename != null) {
+          final TablePart table = header.table;
+          // Every structured reference to the column follows its name.
+          _host.references.apply(
+            StructuredRename(
+              _structured(table),
+              oldColumn: table.columnName(header.index),
+              newColumn: rename,
+            ),
+            null,
+          );
+          attachStoredPart(
+            log,
+            _host.reader.package,
+            _attachedTables,
+            header.partName,
+            table,
+          );
+          editTable(
+            log,
+            table,
+            () => table.setColumnName(header.index, rename!),
+          );
+        }
+        RawCell? base = current ?? _cellOfInheritedStyle(store, row, column);
+        int? Function(int? style, {required bool withTime}) dateStyle =
+            _host.dateStyle;
+        if (styled || link != null) {
+          final int id = styles == null ? 0 : appendStyle(log, styles, target);
+          if (stored == null) {
+            // As the writer: an XlsxCell of null writes an empty cell of the
+            // layered style, or nothing when that is the default or the
+            // XlsxCell has no style.
+            setStoredCell(
+              log,
+              store,
+              row,
+              column,
+              id == 0 ? null : RawCell(kind: RawCellKind.number, style: id),
+            );
+            return;
+          }
+          base = RawCell(kind: RawCellKind.number, style: id == 0 ? null : id);
+          // The date format is in the style already, or the layers set a
+          // format, which a date keeps as in the writer.
+          dateStyle = (int? style, {required bool withTime}) => null;
+        }
+        final RawCell prepared = encoder.prepare(
+          stored,
+          sheet: name,
+          row: row,
+          column: column,
+          current: base,
+          currentFormat: _host.styleTable.formatOf(_styleText(base)),
+          date1904: _host.date1904,
+          dateStyle: dateStyle,
+          cellFont: stored is XlsxRichText
+              ? (styled ? target : _styleOfIndex(base?.style))?.font
+              : null,
+        );
+        final bool remove = stored == null && prepared.style == null;
+        setStoredCell(log, store, row, column, remove ? null : prepared);
+      });
+      _reported.remove(row * XlsxLimits.maxColumns + column);
+      if (rename != null) {
+        _warn(XlsxWarningCode.tableColumnRenamed, cellRef(row, column));
+      }
+      if (adjusted) {
+        _warn(XlsxWarningCode.tableHeaderAdjusted, cellRef(row, column));
+      }
+    },
+  );
 
   /// The runs of the rich text in the cell at [row] and [column], or `null`
   /// when the cell is no string, a plain string, or a string whose item has
@@ -900,45 +940,50 @@ final class XlsxSheet
   /// nothing has changed, except that a style entry read for the first
   /// time that cannot be read exactly has been reported
   /// (`styleEntryInvalid`): reading warnings are reported on first read.
-  void setStyle(int row, int column, XlsxStyle? style) {
-    _checkCell(row, column);
-    final CellStore store = _editableCells('styles');
-    final RawCell? current = store.cellAt(row, column);
-    final StylesPart? loaded = _host.styles;
-    if (loaded != null && !loaded.isTyped) throw _untypedStyles();
-    final int? index = _hasInvalidStyle(current) ? null : current?.style ?? 0;
-    if (style == null && index == 0) return;
-    if (style != null &&
-        loaded != null &&
-        index != null &&
-        index < loaded.cellFormatCount &&
-        loaded.styleOf(index) == style) {
-      return;
-    }
-    final StylesPart? styles = style == null ? null : _stylesFor();
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      final int id = styles == null ? 0 : appendStyle(log, styles, style);
-      final RawCell base = current ?? const RawCell(kind: RawCellKind.number);
-      final RawCell cell = RawCell(
-        kind: base.kind,
-        style: id == 0 ? null : id,
-        value: base.value,
-        formula: base.formula,
-        inline: base.inline,
-        typeText: base.typeText,
-        attributes: <KeptAttribute>[
-          for (final KeptAttribute a in base.attributes)
-            if (a.qualifiedName != 's' || a.namespaceUri.isNotEmpty) a,
-        ],
-        extraChildren: base.extraChildren,
-      );
-      final bool remove = id == 0 && cell.isEmpty && cell.attributes.isEmpty;
-      if (remove && current == null) return;
-      setStoredCell(log, store, row, column, remove ? null : cell);
-    });
-    _reported.remove(row * XlsxLimits.maxColumns + column);
-  }
+  void setStyle(int row, int column, XlsxStyle? style) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.cellsSet,
+    range: XlsxRange(row, column),
+    () {
+      _checkCell(row, column);
+      final CellStore store = _editableCells('styles');
+      final RawCell? current = store.cellAt(row, column);
+      final StylesPart? loaded = _host.styles;
+      if (loaded != null && !loaded.isTyped) throw _untypedStyles();
+      final int? index = _hasInvalidStyle(current) ? null : current?.style ?? 0;
+      if (style == null && index == 0) return;
+      if (style != null &&
+          loaded != null &&
+          index != null &&
+          index < loaded.cellFormatCount &&
+          loaded.styleOf(index) == style) {
+        return;
+      }
+      final StylesPart? styles = style == null ? null : _stylesFor();
+      final ChangeLog log = _host.log;
+      log.transaction(() {
+        final int id = styles == null ? 0 : appendStyle(log, styles, style);
+        final RawCell base = current ?? const RawCell(kind: RawCellKind.number);
+        final RawCell cell = RawCell(
+          kind: base.kind,
+          style: id == 0 ? null : id,
+          value: base.value,
+          formula: base.formula,
+          inline: base.inline,
+          typeText: base.typeText,
+          attributes: <KeptAttribute>[
+            for (final KeptAttribute a in base.attributes)
+              if (a.qualifiedName != 's' || a.namespaceUri.isNotEmpty) a,
+          ],
+          extraChildren: base.extraChildren,
+        );
+        final bool remove = id == 0 && cell.isEmpty && cell.attributes.isEmpty;
+        if (remove && current == null) return;
+        setStoredCell(log, store, row, column, remove ? null : cell);
+      });
+      _reported.remove(row * XlsxLimits.maxColumns + column);
+    },
+  );
 
   /// The cells of the loaded worksheet part, to set their [what]. Throws a
   /// [StateError] for a sheet without a part or that is not a worksheet.
@@ -1432,14 +1477,25 @@ final class XlsxSheet
         ? ReferenceShift.insert(name, axis, index + 1, count)
         : ReferenceShift.delete(name, axis, index + 1, count);
     final ChangeLog log = _host.log;
+    final XlsxChangeKind kind = rows
+        ? (insert ? XlsxChangeKind.rowsInserted : XlsxChangeKind.rowsDeleted)
+        : (insert
+              ? XlsxChangeKind.columnsInserted
+              : XlsxChangeKind.columnsDeleted);
     _host.warnings.keepOnSuccess(
-      () => log.transaction(() {
-        _host.references.apply(edit, edit);
-        moveSheetGeometry(this, edit);
-        if (insert && !rows) _nameInsertedTableColumns(index, count);
-        _host.workbookPart.structureEdits++;
-        log.record(StructureEditChange(_host.workbookPart));
-      }),
+      () => _recordSheetEdit(
+        this,
+        kind,
+        index: index,
+        count: count,
+        () => log.transaction(() {
+          _host.references.apply(edit, edit);
+          moveSheetGeometry(this, edit);
+          if (insert && !rows) _nameInsertedTableColumns(index, count);
+          _host.workbookPart.structureEdits++;
+          log.record(StructureEditChange(_host.workbookPart));
+        }),
+      ),
     );
   }
 

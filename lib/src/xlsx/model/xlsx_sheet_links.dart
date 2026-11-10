@@ -92,40 +92,45 @@ mixin _SheetLinks {
   /// outside Excel's grid and an [XlsxReadException] when the sheet, or its
   /// relationships when the link names one, cannot be read. Whatever it
   /// throws, nothing has changed.
-  void removeHyperlink(int row, int column) {
-    XlsxSheet._checkCell(row, column);
-    final WorksheetPart? part = _load();
-    final ItemGroup<LinkEntry>? group = part?.hyperlinkGroup;
-    final int at = group == null ? -1 : _linkIndex(group, row, column);
-    if (part == null || group == null || at < 0) {
-      throw ArgumentError.value(
-        cellRef(row, column),
-        'cell',
-        'The cell has no hyperlink on the sheet "$name".',
-      );
-    }
-    final String? id = group.items[at].value!.relationshipId;
-    final String? drop = id == null ? null : _unusedId(group, at, id);
-    final ChangeLog log = _host.log;
-    final List<GroupItem<LinkEntry>> rest = <GroupItem<LinkEntry>>[
-      ...group.items,
-    ]..removeAt(at);
-    log.transaction(() {
-      editLayout(
-        log,
-        part,
-        'hyperlinks',
-        () => part.swapLayout(
-          'hyperlinks',
-          group,
-          rest.isEmpty ? null : group.withItems(rest),
-        ),
-      );
-      if (drop != null) {
-        removeStoredRelationship(log, _host.reader.package, _partName!, drop);
+  void removeHyperlink(int row, int column) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.cellsSet,
+    range: XlsxRange(row, column),
+    () {
+      XlsxSheet._checkCell(row, column);
+      final WorksheetPart? part = _load();
+      final ItemGroup<LinkEntry>? group = part?.hyperlinkGroup;
+      final int at = group == null ? -1 : _linkIndex(group, row, column);
+      if (part == null || group == null || at < 0) {
+        throw ArgumentError.value(
+          cellRef(row, column),
+          'cell',
+          'The cell has no hyperlink on the sheet "$name".',
+        );
       }
-    });
-  }
+      final String? id = group.items[at].value!.relationshipId;
+      final String? drop = id == null ? null : _unusedId(group, at, id);
+      final ChangeLog log = _host.log;
+      final List<GroupItem<LinkEntry>> rest = <GroupItem<LinkEntry>>[
+        ...group.items,
+      ]..removeAt(at);
+      log.transaction(() {
+        editLayout(
+          log,
+          part,
+          'hyperlinks',
+          () => part.swapLayout(
+            'hyperlinks',
+            group,
+            rest.isEmpty ? null : group.withItems(rest),
+          ),
+        );
+        if (drop != null) {
+          removeStoredRelationship(log, _host.reader.package, _partName!, drop);
+        }
+      });
+    },
+  );
 
   /// The checks and reads `setCell` makes of [link] for the cell at [row]
   /// and [column] of [part], before it records anything.

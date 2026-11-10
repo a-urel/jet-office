@@ -32,12 +32,16 @@ mixin _SheetNames {
   /// name that a table has, ignoring case; nothing changes then. The save
   /// asks Excel to recalculate every formula, as for
   /// [XlsxWorkbook.defineName].
-  void defineName(XlsxDefinedName name) => defineNameIn(
-    _host.log,
-    _host.workbookPart,
-    _host.sheetIndexOf(this as XlsxSheet),
-    name,
-    _host.checkNotTableName,
+  void defineName(XlsxDefinedName name) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.nameChanged,
+    () => defineNameIn(
+      _host.log,
+      _host.workbookPart,
+      _host.sheetIndexOf(this as XlsxSheet),
+      name,
+      _host.checkNotTableName,
+    ),
   );
 
   /// Removes this sheet's name [name], compared ignoring case.
@@ -46,11 +50,15 @@ mixin _SheetNames {
   /// (a built-in name is none, and a workbook name is not the sheet's);
   /// nothing changes then. The save asks for recalculation as
   /// [defineName] does.
-  void removeName(String name) => removeNameIn(
-    _host.log,
-    _host.workbookPart,
-    _host.sheetIndexOf(this as XlsxSheet),
-    name,
-    'the sheet "${this.name}"',
+  void removeName(String name) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.nameChanged,
+    () => removeNameIn(
+      _host.log,
+      _host.workbookPart,
+      _host.sheetIndexOf(this as XlsxSheet),
+      name,
+      'the sheet "${this.name}"',
+    ),
   );
 }

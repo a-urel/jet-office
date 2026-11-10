@@ -275,77 +275,86 @@ mixin _SheetNotes {
   /// and for VML that is not well formed; and an [XlsxReadException] when
   /// the sheet, its relationships or the note parts cannot be read. Whatever
   /// it throws, nothing has changed.
-  void setNote(int row, int column, XlsxNote? note) {
-    if (note == null) {
-      XlsxSheet._checkCell(row, column);
-    } else {
-      try {
-        checkNote(name, row, column, note);
-      } on ArgumentError catch (error) {
-        // A file may hold a note the writer refuses: set back, it is no edit.
-        if (error.name == 'row' ||
-            error.name == 'column' ||
-            noteAt(row, column) != note) {
-          rethrow;
+  void setNote(int row, int column, XlsxNote? note) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.featureChanged,
+    range: XlsxRange(row, column),
+    () {
+      if (note == null) {
+        XlsxSheet._checkCell(row, column);
+      } else {
+        try {
+          checkNote(name, row, column, note);
+        } on ArgumentError catch (error) {
+          // A file may hold a note the writer refuses: set back, it is no edit.
+          if (error.name == 'row' ||
+              error.name == 'column' ||
+              noteAt(row, column) != note) {
+            rethrow;
+          }
+          return;
         }
-        return;
       }
-    }
-    final WorksheetPart part = _editablePart('notes');
-    final _NotesRead read = _readNotes();
-    final CommentEntry? entry =
-        read.index[row * XlsxLimits.maxColumns + column];
-    final String ref = cellRef(row, column);
-    final XlsxNote? current = entry == null ? null : read.noteOf(entry).note;
-    if (note == current) return;
-    if (entry != null && entry.author.startsWith('tc=')) {
-      throw StateError(
-        'The note on cell $ref on sheet "$name" belongs to a threaded '
-        'comment; it cannot be set or removed.',
-      );
-    }
-    if (note != null && entry == null && note.author.startsWith('tc=')) {
-      throw ArgumentError.value(
-        note.author,
-        'author',
-        'An author that starts with "tc=" belongs to a threaded comment, '
-            'whose note this model does not create.',
-      );
-    }
-    final List<XlsxWarningCode> repairs = <XlsxWarningCode>[];
-    final WorksheetNote? wanted = note == null
-        ? null
-        : cleanNote(row, column, note, repairs.add);
-    final XlsxNote? next = wanted == null
-        ? null
-        : XlsxNote(wanted.text, author: wanted.author, visible: wanted.visible);
-    if (current != next) {
-      final _NoteParts parts = read.parts;
-      if (parts.commentsName != null && parts.comments == null) {
+      final WorksheetPart part = _editablePart('notes');
+      final _NotesRead read = _readNotes();
+      final CommentEntry? entry =
+          read.index[row * XlsxLimits.maxColumns + column];
+      final String ref = cellRef(row, column);
+      final XlsxNote? current = entry == null ? null : read.noteOf(entry).note;
+      if (note == current) return;
+      if (entry != null && entry.author.startsWith('tc=')) {
         throw StateError(
-          'The comments part of sheet "$name" is not SpreadsheetML; its notes '
-          'cannot be set.',
+          'The note on cell $ref on sheet "$name" belongs to a threaded '
+          'comment; it cannot be set or removed.',
         );
       }
-      if (parts.vmlName != null && parts.vml == null) {
-        throw StateError(
-          'The VML drawing of sheet "$name" is not well formed; its notes '
-          'cannot be set.',
+      if (note != null && entry == null && note.author.startsWith('tc=')) {
+        throw ArgumentError.value(
+          note.author,
+          'author',
+          'An author that starts with "tc=" belongs to a threaded comment, '
+              'whose note this model does not create.',
         );
       }
-      final WorksheetNote? value = wanted;
-      _host.log.transaction(() {
-        if (value == null) {
-          _removeNote(part, read, entry!);
-        } else {
-          _putNote(part, read, value, entry);
+      final List<XlsxWarningCode> repairs = <XlsxWarningCode>[];
+      final WorksheetNote? wanted = note == null
+          ? null
+          : cleanNote(row, column, note, repairs.add);
+      final XlsxNote? next = wanted == null
+          ? null
+          : XlsxNote(
+              wanted.text,
+              author: wanted.author,
+              visible: wanted.visible,
+            );
+      if (current != next) {
+        final _NoteParts parts = read.parts;
+        if (parts.commentsName != null && parts.comments == null) {
+          throw StateError(
+            'The comments part of sheet "$name" is not SpreadsheetML; its notes '
+            'cannot be set.',
+          );
         }
-      });
-    }
-    for (final XlsxWarningCode code in repairs) {
-      _warn(code, ref);
-    }
-  }
+        if (parts.vmlName != null && parts.vml == null) {
+          throw StateError(
+            'The VML drawing of sheet "$name" is not well formed; its notes '
+            'cannot be set.',
+          );
+        }
+        final WorksheetNote? value = wanted;
+        _host.log.transaction(() {
+          if (value == null) {
+            _removeNote(part, read, entry!);
+          } else {
+            _putNote(part, read, value, entry);
+          }
+        });
+      }
+      for (final XlsxWarningCode code in repairs) {
+        _warn(code, ref);
+      }
+    },
+  );
 
   /// Gives the cell of [note] that note, in the comments and the VML drawing,
   /// creating them when the sheet has none. [entry] is the one replaced.

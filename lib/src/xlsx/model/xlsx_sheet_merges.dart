@@ -42,18 +42,19 @@ mixin _SheetMerges {
   /// that is not a worksheet or has no part; and an [XlsxReadException]
   /// when the sheet cannot be read. Whatever it throws, nothing has
   /// changed, except that reading warnings are reported on first read.
-  void merge(XlsxRange range) {
-    validateRange(range, 'range');
-    final WorksheetPart part = _editablePart('merged ranges');
-    checkMerge(range, part.merges, <({String name, XlsxRange range})>[
-      for (final ({String partName, TablePart table}) t in _sheetTables())
-        (name: t.table.displayName, range: t.table.range),
-    ]);
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      editLayout(log, part, 'mergeCells', () => part.addMerge(range));
-    });
-  }
+  void merge(XlsxRange range) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, range: range, () {
+        validateRange(range, 'range');
+        final WorksheetPart part = _editablePart('merged ranges');
+        checkMerge(range, part.merges, <({String name, XlsxRange range})>[
+          for (final ({String partName, TablePart table}) t in _sheetTables())
+            (name: t.table.displayName, range: t.table.range),
+        ]);
+        final ChangeLog log = _host.log;
+        log.transaction(() {
+          editLayout(log, part, 'mergeCells', () => part.addMerge(range));
+        });
+      });
 
   /// Splits the merged range [range], which must be one of [merges]
   /// exactly. The cells keep their values, as Excel's own unmerge keeps
@@ -64,20 +65,25 @@ mixin _SheetMerges {
   /// [StateError] for a sheet that is not a worksheet or has no part and an
   /// [XlsxReadException] when the sheet cannot be read. Whatever it throws,
   /// nothing has changed.
-  void unmerge(XlsxRange range) {
-    final WorksheetPart part = _editablePart('merged ranges');
-    if (!part.merges.contains(range)) {
-      throw ArgumentError.value(
-        range,
-        'range',
-        'The range ${range.ref} is not a merged range of the sheet "$name".',
-      );
-    }
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      editLayout(log, part, 'mergeCells', () => part.removeMerge(range));
-    });
-  }
+  void unmerge(XlsxRange range) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.featureChanged,
+    range: range,
+    () {
+      final WorksheetPart part = _editablePart('merged ranges');
+      if (!part.merges.contains(range)) {
+        throw ArgumentError.value(
+          range,
+          'range',
+          'The range ${range.ref} is not a merged range of the sheet "$name".',
+        );
+      }
+      final ChangeLog log = _host.log;
+      log.transaction(() {
+        editLayout(log, part, 'mergeCells', () => part.removeMerge(range));
+      });
+    },
+  );
 }
 
 /// The `merges` holder of a sheet: on a row or column edit of the sheet,

@@ -130,38 +130,39 @@ mixin _SheetLayout {
   /// [RangeError] outside Excel's rows, and an [XlsxReadException] when the
   /// sheet cannot be read. Whatever it throws, nothing has changed, except
   /// that reading warnings are reported on first read.
-  void setRowFormat(int row, XlsxRowFormat format) {
-    RangeError.checkValueInInterval(row, 0, XlsxLimits.maxRows - 1, 'row');
-    final double? height = format.height;
-    if (height != null) checkRowHeight(height, 'height');
-    checkOutlineLevel(format.outlineLevel, 'outlineLevel');
-    final CellStore store = _editableCells('row formats');
-    final StylesPart? loaded = _host.styles;
-    if (loaded != null && !loaded.isTyped && format.style != null) {
-      throw _untypedStyles();
-    }
-    final XlsxRowFormat current = _readRowFormat(store, row);
-    if (current == format) return;
-    final bool styleChanged = format.style != current.style;
-    final StylesPart? styles = styleChanged && format.style != null
-        ? _stylesFor()
-        : null;
-    final List<KeptAttribute> old = store.rowAttributes(row);
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      final int id = styles == null
-          ? 0
-          : appendStyle(log, styles, format.style);
-      final List<KeptAttribute> next = _rowAttributesFor(
-        old,
-        current,
-        format,
-        styleId: styleChanged ? id : null,
-      );
-      if (sameAttributes(old, next)) return;
-      setStoredRowAttributes(log, store, row, next);
-    });
-  }
+  void setRowFormat(int row, XlsxRowFormat format) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        RangeError.checkValueInInterval(row, 0, XlsxLimits.maxRows - 1, 'row');
+        final double? height = format.height;
+        if (height != null) checkRowHeight(height, 'height');
+        checkOutlineLevel(format.outlineLevel, 'outlineLevel');
+        final CellStore store = _editableCells('row formats');
+        final StylesPart? loaded = _host.styles;
+        if (loaded != null && !loaded.isTyped && format.style != null) {
+          throw _untypedStyles();
+        }
+        final XlsxRowFormat current = _readRowFormat(store, row);
+        if (current == format) return;
+        final bool styleChanged = format.style != current.style;
+        final StylesPart? styles = styleChanged && format.style != null
+            ? _stylesFor()
+            : null;
+        final List<KeptAttribute> old = store.rowAttributes(row);
+        final ChangeLog log = _host.log;
+        log.transaction(() {
+          final int id = styles == null
+              ? 0
+              : appendStyle(log, styles, format.style);
+          final List<KeptAttribute> next = _rowAttributesFor(
+            old,
+            current,
+            format,
+            styleId: styleChanged ? id : null,
+          );
+          if (sameAttributes(old, next)) return;
+          setStoredRowAttributes(log, store, row, next);
+        });
+      });
 
   /// How column [index] (0 for A) looks: its width, style, visibility,
   /// outline level and collapsed mark, read from the `<col>` holding it
@@ -231,79 +232,80 @@ mixin _SheetLayout {
   /// an [XlsxReadException] when the sheet cannot be read. Whatever it
   /// throws, nothing has changed, except that reading warnings are reported
   /// on first read.
-  void setColumn(int index, XlsxColumn? column) {
-    RangeError.checkValueInInterval(
-      index,
-      0,
-      XlsxLimits.maxColumns - 1,
-      'index',
-    );
-    if (column != null) {
-      final double? width = column.width;
-      if (width != null) checkColumnWidth(width, 'column.width');
-      checkOutlineLevel(column.outlineLevel, 'column.outlineLevel');
-    }
-    final WorksheetPart part = _editablePart('columns');
-    if (!part.columnsEditable) {
-      throw StateError(
-        'The sheet "$name" has a <cols> that is not plain (a <col> with '
-        'children, an invalid or overlapping range, ...); its columns '
-        'cannot be set.',
-      );
-    }
-    final StylesPart? loaded = _host.styles;
-    if (loaded != null && !loaded.isTyped && column?.style != null) {
-      throw _untypedStyles();
-    }
-    final ColRun? run = part.columnRunAt(index + 1);
-    final XlsxColumn current = run == null
-        ? const XlsxColumn()
-        : _readColumn(run);
-    final XlsxColumn next = column ?? const XlsxColumn();
-    if (current == next) return;
-    final bool styleChanged = next.style != current.style;
-    final StylesPart? styles = styleChanged && next.style != null
-        ? _stylesFor()
-        : null;
-    final String defaultWidth = formatXmlDouble(_defaultColumnWidth(part));
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      int id = 0;
-      if (styles != null) {
-        try {
-          id = appendStyle(log, styles, next.style);
-        } on ArgumentError catch (error, stack) {
-          final String? field = error.name;
-          Error.throwWithStackTrace(
-            ArgumentError.value(
-              error.invalidValue,
-              field == null ? 'column.style' : 'column.style.$field',
-              error.message,
-            ),
-            stack,
+  void setColumn(int index, XlsxColumn? column) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        RangeError.checkValueInInterval(
+          index,
+          0,
+          XlsxLimits.maxColumns - 1,
+          'index',
+        );
+        if (column != null) {
+          final double? width = column.width;
+          if (width != null) checkColumnWidth(width, 'column.width');
+          checkOutlineLevel(column.outlineLevel, 'column.outlineLevel');
+        }
+        final WorksheetPart part = _editablePart('columns');
+        if (!part.columnsEditable) {
+          throw StateError(
+            'The sheet "$name" has a <cols> that is not plain (a <col> with '
+            'children, an invalid or overlapping range, ...); its columns '
+            'cannot be set.',
           );
         }
-      }
-      editLayout(log, part, 'cols', () {
-        final List<ColRun> runs = setColumnInRuns(
-          part.columnRuns,
-          index + 1,
-          '${part.elementPrefix}col',
-          (List<KeptAttribute>? old) => next == const XlsxColumn()
-              ? null
-              : _columnAttributesFor(
-                  old,
-                  current,
-                  next,
-                  styleId: styleChanged ? id : null,
-                  defaultWidth: defaultWidth,
+        final StylesPart? loaded = _host.styles;
+        if (loaded != null && !loaded.isTyped && column?.style != null) {
+          throw _untypedStyles();
+        }
+        final ColRun? run = part.columnRunAt(index + 1);
+        final XlsxColumn current = run == null
+            ? const XlsxColumn()
+            : _readColumn(run);
+        final XlsxColumn next = column ?? const XlsxColumn();
+        if (current == next) return;
+        final bool styleChanged = next.style != current.style;
+        final StylesPart? styles = styleChanged && next.style != null
+            ? _stylesFor()
+            : null;
+        final String defaultWidth = formatXmlDouble(_defaultColumnWidth(part));
+        final ChangeLog log = _host.log;
+        log.transaction(() {
+          int id = 0;
+          if (styles != null) {
+            try {
+              id = appendStyle(log, styles, next.style);
+            } on ArgumentError catch (error, stack) {
+              final String? field = error.name;
+              Error.throwWithStackTrace(
+                ArgumentError.value(
+                  error.invalidValue,
+                  field == null ? 'column.style' : 'column.style.$field',
+                  error.message,
                 ),
-        );
-        // A column that reads differently can still write the same <col>.
-        if (!sameRuns(part.columnRuns, runs)) part.setColumnRuns(runs);
+                stack,
+              );
+            }
+          }
+          editLayout(log, part, 'cols', () {
+            final List<ColRun> runs = setColumnInRuns(
+              part.columnRuns,
+              index + 1,
+              '${part.elementPrefix}col',
+              (List<KeptAttribute>? old) => next == const XlsxColumn()
+                  ? null
+                  : _columnAttributesFor(
+                      old,
+                      current,
+                      next,
+                      styleId: styleChanged ? id : null,
+                      defaultWidth: defaultWidth,
+                    ),
+            );
+            // A column that reads differently can still write the same <col>.
+            if (!sameRuns(part.columnRuns, runs)) part.setColumnRuns(runs);
+          });
+        });
       });
-    });
-  }
 
   /// The column a `<col>` describes, reporting what cannot be read.
   XlsxColumn _readColumn(ColRun run) {
@@ -492,47 +494,49 @@ mixin _SheetLayout {
   /// a `sheetFormatPr` with element children, and an [XlsxReadException]
   /// when the sheet cannot be read. Whatever it throws, nothing has
   /// changed, except that reading warnings are reported on first read.
-  void setDefaultSizes({double? rowHeight, double? columnWidth}) {
-    if (rowHeight != null) checkRowHeight(rowHeight, 'rowHeight');
-    if (columnWidth != null) checkColumnWidth(columnWidth, 'columnWidth');
-    final WorksheetPart part = _editablePart('default sizes');
-    final ({double? rowHeight, double? columnWidth}) current =
-        _readDefaultSizes(part);
-    if (current.rowHeight == rowHeight && current.columnWidth == columnWidth) {
-      return;
-    }
-    if (!part.sheetFormatEditable) {
-      throw StateError(
-        'The sheet "$name" has a sheetFormatPr with element children; its '
-        'default sizes cannot be set.',
-      );
-    }
-    final Map<String, String?> changes = <String, String?>{};
-    if (columnWidth != current.columnWidth) {
-      changes['defaultColWidth'] = columnWidth == null
-          ? null
-          : formatXmlDouble(columnWidth);
-    }
-    if (rowHeight != current.rowHeight || !part.hasSheetFormat) {
-      if (rowHeight != null) {
-        changes['defaultRowHeight'] = formatXmlDouble(rowHeight);
-        changes['customHeight'] = '1';
-      } else {
-        // As the writer writes no custom height: the standard one.
-        changes['defaultRowHeight'] = formatXmlDouble(standardRowHeight);
-        changes['customHeight'] = null;
-      }
-    }
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      editLayout(
-        log,
-        part,
-        'sheetFormatPr',
-        () => part.changeSheetFormat(changes),
-      );
-    });
-  }
+  void setDefaultSizes({double? rowHeight, double? columnWidth}) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        if (rowHeight != null) checkRowHeight(rowHeight, 'rowHeight');
+        if (columnWidth != null) checkColumnWidth(columnWidth, 'columnWidth');
+        final WorksheetPart part = _editablePart('default sizes');
+        final ({double? rowHeight, double? columnWidth}) current =
+            _readDefaultSizes(part);
+        if (current.rowHeight == rowHeight &&
+            current.columnWidth == columnWidth) {
+          return;
+        }
+        if (!part.sheetFormatEditable) {
+          throw StateError(
+            'The sheet "$name" has a sheetFormatPr with element children; its '
+            'default sizes cannot be set.',
+          );
+        }
+        final Map<String, String?> changes = <String, String?>{};
+        if (columnWidth != current.columnWidth) {
+          changes['defaultColWidth'] = columnWidth == null
+              ? null
+              : formatXmlDouble(columnWidth);
+        }
+        if (rowHeight != current.rowHeight || !part.hasSheetFormat) {
+          if (rowHeight != null) {
+            changes['defaultRowHeight'] = formatXmlDouble(rowHeight);
+            changes['customHeight'] = '1';
+          } else {
+            // As the writer writes no custom height: the standard one.
+            changes['defaultRowHeight'] = formatXmlDouble(standardRowHeight);
+            changes['customHeight'] = null;
+          }
+        }
+        final ChangeLog log = _host.log;
+        log.transaction(() {
+          editLayout(
+            log,
+            part,
+            'sheetFormatPr',
+            () => part.changeSheetFormat(changes),
+          );
+        });
+      });
 
   /// The format of [row] from its attributes, reporting what cannot be
   /// read.

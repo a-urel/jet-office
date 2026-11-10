@@ -215,35 +215,40 @@ mixin _SheetPictures {
   /// a `<drawing>` whose part is missing or is not a spreadsheet drawing; and
   /// an [XlsxReadException] when the sheet, its relationships, the drawing or
   /// a media part cannot be read. Whatever it throws, nothing has changed.
-  void addPicture(XlsxPicture picture) {
-    final WorksheetPart part = _editablePart('pictures');
-    final _PicturesRead read = _editablePictures(part);
-    final WorksheetPicture checked = checkPicture(
-      name,
-      _listed(read).length + 1,
-      picture,
-    );
-    final PackageReader reader = _host.reader;
-    final String? shared = reader.guardXml(
-      reader.workbookPart,
-      () => _host.mediaIndex.partFor(checked.image),
-    );
-    _host.log.transaction(() {
-      final DrawingPart drawing = read.part ?? _addDrawing(part, read);
-      final String media = shared ?? _addMedia(checked);
-      final String embedId = _mediaRelationship(read, media);
-      _attach(read, drawing);
-      applyChange(
-        _host.log,
-        _DrawingEntryChange(
-          drawing,
-          drawing.entries.length,
-          null,
-          DrawingEntry.rendered(checked, id: drawing.nextId, embedId: embedId),
-        ),
-      );
-    });
-  }
+  void addPicture(XlsxPicture picture) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        final WorksheetPart part = _editablePart('pictures');
+        final _PicturesRead read = _editablePictures(part);
+        final WorksheetPicture checked = checkPicture(
+          name,
+          _listed(read).length + 1,
+          picture,
+        );
+        final PackageReader reader = _host.reader;
+        final String? shared = reader.guardXml(
+          reader.workbookPart,
+          () => _host.mediaIndex.partFor(checked.image),
+        );
+        _host.log.transaction(() {
+          final DrawingPart drawing = read.part ?? _addDrawing(part, read);
+          final String media = shared ?? _addMedia(checked);
+          final String embedId = _mediaRelationship(read, media);
+          _attach(read, drawing);
+          applyChange(
+            _host.log,
+            _DrawingEntryChange(
+              drawing,
+              drawing.entries.length,
+              null,
+              DrawingEntry.rendered(
+                checked,
+                id: drawing.nextId,
+                embedId: embedId,
+              ),
+            ),
+          );
+        });
+      });
 
   /// Moves the picture at [index] of [pictures] to [anchor], which may be of
   /// the other kind.
@@ -260,40 +265,44 @@ mixin _SheetPictures {
   /// a `<drawing>` whose part is missing or is not a spreadsheet drawing; and
   /// an [XlsxReadException] when the sheet, its relationships, the drawing or
   /// the media part cannot be read. Whatever it throws, nothing has changed.
-  void movePicture(int index, XlsxAnchor anchor) {
-    final WorksheetPart part = _editablePart('pictures');
-    final _PicturesRead read = _editablePictures(part);
-    final List<int> listed = _listed(read);
-    RangeError.checkValidIndex(index, listed, 'index');
-    final DrawingPart drawing = read.part!;
-    final int at = listed[index];
-    final DrawingEntry entry = drawing.entries[at];
-    if (entry.anchor == anchor) return;
-    final String which = 'Picture ${index + 1} on sheet "$name"';
-    final ({int cx, int cy})? extent = checkAnchor(
-      anchor,
-      _sizeFor(anchor, read.media[entry.pic!.embedId]!, which),
-      which,
-    );
-    final XlsxAnchor placed = anchor is XlsxOneCellAnchor
-        ? XlsxOneCellAnchor(
-            anchor.from,
-            width: extent!.cx / emuPerPixel,
-            height: extent.cy / emuPerPixel,
-          )
-        : anchor;
-    if (entry.anchor == placed) return;
-    final PackageReader reader = _host.reader;
-    final String drawingName = read.partName!;
-    final DrawingEntry moved = reader.guardXml(
-      drawingName,
-      () => entry.movedTo(anchor, extent),
-    );
-    _host.log.transaction(() {
-      _attach(read, drawing);
-      applyChange(_host.log, _DrawingEntryChange(drawing, at, entry, moved));
-    });
-  }
+  void movePicture(int index, XlsxAnchor anchor) => _recordSheetEdit(
+    this,
+    XlsxChangeKind.featureChanged,
+    () {
+      final WorksheetPart part = _editablePart('pictures');
+      final _PicturesRead read = _editablePictures(part);
+      final List<int> listed = _listed(read);
+      RangeError.checkValidIndex(index, listed, 'index');
+      final DrawingPart drawing = read.part!;
+      final int at = listed[index];
+      final DrawingEntry entry = drawing.entries[at];
+      if (entry.anchor == anchor) return;
+      final String which = 'Picture ${index + 1} on sheet "$name"';
+      final ({int cx, int cy})? extent = checkAnchor(
+        anchor,
+        _sizeFor(anchor, read.media[entry.pic!.embedId]!, which),
+        which,
+      );
+      final XlsxAnchor placed = anchor is XlsxOneCellAnchor
+          ? XlsxOneCellAnchor(
+              anchor.from,
+              width: extent!.cx / emuPerPixel,
+              height: extent.cy / emuPerPixel,
+            )
+          : anchor;
+      if (entry.anchor == placed) return;
+      final PackageReader reader = _host.reader;
+      final String drawingName = read.partName!;
+      final DrawingEntry moved = reader.guardXml(
+        drawingName,
+        () => entry.movedTo(anchor, extent),
+      );
+      _host.log.transaction(() {
+        _attach(read, drawing);
+        applyChange(_host.log, _DrawingEntryChange(drawing, at, entry, moved));
+      });
+    },
+  );
 
   /// Removes the picture at [index] of [pictures].
   ///
@@ -310,40 +319,41 @@ mixin _SheetPictures {
   /// `<drawing>` whose part is missing or is not a spreadsheet drawing; and
   /// an [XlsxReadException] when the sheet, the drawing or any relationships
   /// of the package cannot be read. Whatever it throws, nothing has changed.
-  void removePicture(int index) {
-    final WorksheetPart part = _editablePart('pictures');
-    final _PicturesRead read = _editablePictures(part);
-    final List<int> listed = _listed(read);
-    RangeError.checkValidIndex(index, listed, 'index');
-    final DrawingPart drawing = read.part!;
-    final int at = listed[index];
-    final DrawingEntry entry = drawing.entries[at];
-    final PackageReader reader = _host.reader;
-    final String drawingName = read.partName!;
-    final Set<String> unused = reader.guardXml(drawingName, () {
-      final Set<String> ids = <String>{...entry.relationshipIds};
-      for (final DrawingEntry other in drawing.entries) {
-        if (!identical(other, entry)) ids.removeAll(other.relationshipIds);
-      }
-      return ids;
-    });
-    final Map<String, String> targets = _relationshipTargets(drawingName);
-    final ChangeLog log = _host.log;
-    log.transaction(() {
-      _attach(read, drawing);
-      applyChange(log, _DrawingEntryChange(drawing, at, entry, null));
-      for (final String id in unused) {
-        removeStoredRelationship(log, reader.package, drawingName, id);
-        final String? media = read.media[id];
-        if (media != null) {
-          applyChange(log, _DrawingMediaChange(read, id, media, null));
-        }
-        final String? target = targets[id];
-        if (target != null) _dropTarget(target);
-      }
-      if (drawing.entries.isEmpty) _dropDrawing(part, read);
-    });
-  }
+  void removePicture(int index) =>
+      _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
+        final WorksheetPart part = _editablePart('pictures');
+        final _PicturesRead read = _editablePictures(part);
+        final List<int> listed = _listed(read);
+        RangeError.checkValidIndex(index, listed, 'index');
+        final DrawingPart drawing = read.part!;
+        final int at = listed[index];
+        final DrawingEntry entry = drawing.entries[at];
+        final PackageReader reader = _host.reader;
+        final String drawingName = read.partName!;
+        final Set<String> unused = reader.guardXml(drawingName, () {
+          final Set<String> ids = <String>{...entry.relationshipIds};
+          for (final DrawingEntry other in drawing.entries) {
+            if (!identical(other, entry)) ids.removeAll(other.relationshipIds);
+          }
+          return ids;
+        });
+        final Map<String, String> targets = _relationshipTargets(drawingName);
+        final ChangeLog log = _host.log;
+        log.transaction(() {
+          _attach(read, drawing);
+          applyChange(log, _DrawingEntryChange(drawing, at, entry, null));
+          for (final String id in unused) {
+            removeStoredRelationship(log, reader.package, drawingName, id);
+            final String? media = read.media[id];
+            if (media != null) {
+              applyChange(log, _DrawingMediaChange(read, id, media, null));
+            }
+            final String? target = targets[id];
+            if (target != null) _dropTarget(target);
+          }
+          if (drawing.entries.isEmpty) _dropDrawing(part, read);
+        });
+      });
 
   /// The size in pixels of the image of the part [media] when [anchor] leaves
   /// a size to it, else `null`.
