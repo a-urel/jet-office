@@ -114,7 +114,7 @@ final class ReferenceRegistry {
     PackageReader Function()? reader,
     WarningCollector? warnings,
   }) : _warnings = warnings {
-    final OpaqueScan? scan = reader == null || warnings == null
+    final OpaqueScan? scan = _scan = reader == null || warnings == null
         ? null
         : OpaqueScan(_log, reader, _sheets, _warnPart);
     _workbookHolders = <ReferenceHolder>[
@@ -133,6 +133,9 @@ final class ReferenceRegistry {
   final ChangeLog _log;
   final List<XlsxSheet> Function() _sheets;
   final WarningCollector? _warnings;
+
+  /// What the `charts` and `opaqueParts` holders read, once per edit.
+  OpaqueScan? _scan;
 
   late final List<ReferenceHolder> _workbookHolders;
 
@@ -158,6 +161,7 @@ final class ReferenceRegistry {
     final List<XlsxWarning> applied = _applied = <XlsxWarning>[];
     _mapper = mapper;
     final int before = _warnings?.warnings.length ?? 0;
+    _scan?.begin();
     try {
       _log.transaction(() {
         final List<ReferenceHolder> all = holders().toList();

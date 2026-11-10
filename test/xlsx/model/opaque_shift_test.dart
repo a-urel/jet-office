@@ -12,6 +12,7 @@ import 'package:jet_office/src/xlsx/formula/reference_shift.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 import 'package:test/test.dart';
 
+import '../../../tool/src/part_compare.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/workbook_builder.dart';
 import '../read/support/zip_builder.dart';
@@ -230,16 +231,17 @@ void main() {
 
     test('an edit through a pivot table refuses', () {
       final XlsxWorkbook book = open();
-      final Map<String, String> before = _saved(book);
+      final Uint8List before = book.save().bytes;
       for (final ReferenceShift edit in <ReferenceShift>[
         _insertRows(5, 1),
         ReferenceShift.delete('S', ShiftAxis.rows, 7, 2),
         ReferenceShift.delete('S', ShiftAxis.columns, 2, 1),
       ]) {
         expect(() => _edit(book, edit), throwsStateError);
-        final Map<String, String> after = _saved(book);
-        expect(after[pivot], before[pivot]);
-        expect(after['xl/worksheets/sheet1.xml'], contains('SUM(A3:B7)'));
+        expect(
+          comparePackages(before, book.save().bytes, ignoreBookkeeping: true),
+          isEmpty,
+        );
       }
     });
 
@@ -391,5 +393,52 @@ void main() {
     expect(_saved(book)[ctrl], contains('fmlaLink="B3"'));
     changeLogOf(book).revertSet(one);
     expect(_saved(book)[ctrl], xml);
+  });
+
+  test("an edit of another sheet leaves a sheet's relationships as read", () {
+    final Uint8List input = _package(
+      '',
+      rels:
+          _rel('rId1', '$relNs/comments', '../comments1.xml') +
+          _rel('rId2', 'urn:x/thing', '../custom/thing.xml'),
+      parts: <String, String>{
+        'xl/comments1.xml':
+            '<comments xmlns="$mainNs"><authors><author>a</author>'
+            '</authors><commentList><comment ref="B2" authorId="0"><text>'
+            '<t>x</t></text></comment></commentList></comments>',
+        'xl/custom/thing.xml': '<thing xmlns="urn:x"><i ref="A1"/></thing>',
+      },
+    );
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    expect(
+      _edit(book, ReferenceShift.insert('Other', ShiftAxis.rows, 1, 1)),
+      isEmpty,
+    );
+    final Map<String, Uint8List> saved = readXlsxBytes(book.save().bytes);
+    expect(saved[_sheetRels], readXlsxBytes(input)[_sheetRels]);
+  });
+
+  test('a comments part the model cannot type warns and the edit goes on', () {
+    const String comments = '<notes xmlns="urn:x"><n ref="B2"/></notes>';
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(
+        '',
+        data: '<row r="3"><c r="A3"><f>B2</f></c></row>',
+        rels: _rel('rId1', '$relNs/comments', '../comments1.xml'),
+        parts: <String, String>{'xl/comments1.xml': comments},
+      ),
+    );
+    final List<XlsxWarning> warnings = _edit(book, _insertRows(1, 1));
+    expect(
+      warnings
+          .where(
+            (XlsxWarning w) => w.code == XlsxWarningCode.referenceNotShifted,
+          )
+          .map((XlsxWarning w) => w.detail),
+      <String>['/xl/comments1.xml: insert S!1:1'],
+    );
+    final Map<String, String> saved = _saved(book);
+    expect(saved['xl/comments1.xml'], comments);
+    expect(saved['xl/worksheets/sheet1.xml'], contains('<f>B3</f>'));
   });
 }

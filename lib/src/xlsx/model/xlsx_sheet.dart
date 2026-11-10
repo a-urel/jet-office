@@ -312,19 +312,21 @@ String? sheetPartNameOf(XlsxSheet sheet) => sheet._partName;
 
 /// The comments, VML and drawing parts of [sheet] that the model could not
 /// type (lower-cased, without a leading `/`): a structural edit of the sheet
-/// cannot move what they hold. Reads the sheet's notes and pictures.
+/// cannot move what they hold. Reads nothing: only what the sheet's notes
+/// and pictures have read (the holders read them on an edit of the sheet).
 Set<String> untypedObjectParts(XlsxSheet sheet) {
-  final _NotesRead notes = sheet._readNotes();
-  final _PicturesRead pictures = sheet._readPictures();
+  final _NotesRead? notes = sheet._notesRead;
+  final _PicturesRead? pictures = sheet._picturesRead;
   String key(String name) =>
       (name.startsWith('/') ? name.substring(1) : name).toLowerCase();
   return <String>{
-    if (notes.parts.commentsName case final String name
-        when notes.parts.comments == null)
+    if (notes?.parts.commentsName case final String name
+        when notes!.parts.comments == null)
       key(name),
-    if (notes.parts.vmlName case final String name when notes.parts.vml == null)
+    if (notes?.parts.vmlName case final String name
+        when notes!.parts.vml == null)
       key(name),
-    if (pictures.partName case final String name when pictures.part == null)
+    if (pictures?.partName case final String name when pictures!.part == null)
       key(name),
   };
 }
@@ -1129,9 +1131,23 @@ final class XlsxSheet
         <({String partName, TablePart table})>[];
     final PackageReader reader = _host.reader;
     try {
-      for (final PartRelationship rel in reader.relationshipsOf(
-        _partName!.substring(1),
-      )) {
+      // Peeked, not registered: reading the tables (as every structural
+      // edit does, for structured references) must leave the sheet's
+      // relationships part as read.
+      final OpcPackage package = reader.package;
+      final String source = _partName!.substring(1);
+      final List<OpcRelationship> peeked = reader.guardXml(
+        source,
+        () => package.peekRelationships(source),
+      );
+      for (final OpcRelationship r in peeked) {
+        if (r.external) continue;
+        final String resolved = package.resolve(source, r.target);
+        final PartRelationship rel = PartRelationship(
+          r.id,
+          r.type,
+          resolved.startsWith('/') ? resolved.substring(1) : resolved,
+        );
         if (rel.type != RelType.table || !reader.hasPart(rel.target)) {
           continue;
         }

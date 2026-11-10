@@ -106,19 +106,41 @@ final class OpaqueScan {
   /// The package's reader.
   PackageReader get reader => _reader();
 
-  /// The sheets with a part: their name, part name and the comments, VML
-  /// and drawing parts of theirs the model could not type.
-  List<({String name, String part, Set<String> untyped})> sheets() =>
-      <({String name, String part, Set<String> untyped})>[
-        for (final XlsxSheet s in _sheets())
-          if (sheetPartNameOf(s) case final String part)
-            (name: s.name, part: _key(part), untyped: untypedObjectParts(s)),
-      ];
+  /// What one edit has read: the parts, their roots and owners, shared by
+  /// the holders of the edit.
+  List<String>? _parts;
+  Map<String, String>? _owners;
+  final Map<String, ({String ns, String name})?> _roots =
+      <String, ({String ns, String name})?>{};
+
+  /// Starts an edit: forgets what the last one read.
+  void begin() {
+    _parts = null;
+    _owners = null;
+    _roots.clear();
+  }
+
+  /// The sheets with a part: their name and part name (a key).
+  List<({String name, String part})> sheets() => <({String name, String part})>[
+    for (final XlsxSheet s in _sheets())
+      if (sheetPartNameOf(s) case final String part)
+        (name: s.name, part: _key(part)),
+  ];
+
+  /// The comments, VML and drawing parts of the sheet [name] the model could
+  /// not type, as far as the sheet's holders have read them (keys).
+  Set<String> untypedOf(String name) => <String>{
+    for (final XlsxSheet s in _sheets())
+      if (s.name.toLowerCase() == name.toLowerCase()) ...untypedObjectParts(s),
+  };
 
   /// The sheet each part belongs to, by key: the parts a worksheet relates
   /// to, and the parts those relate to (a drawing's charts, a table's query
-  /// table). A part of two sheets belongs to the first.
-  Map<String, String> owners() {
+  /// table). A part of two sheets belongs to the first. Relationships are
+  /// peeked, never registered, so the package writes them as read.
+  Map<String, String> owners() => _owners ??= _readOwners();
+
+  Map<String, String> _readOwners() {
     final PackageReader reader = this.reader;
     final Map<String, String> owners = <String, String>{};
     for (final XlsxSheet sheet in _sheets()) {
@@ -151,7 +173,13 @@ final class OpaqueScan {
   }
 
   /// The XML parts under `xl/` (not relationships), by key.
+  /// Parts an earlier holder of the edit removed are left out.
   List<String> xmlParts() => <String>[
+    for (final String part in _parts ??= _readParts())
+      if (reader.hasPart(part)) part,
+  ];
+
+  List<String> _readParts() => <String>[
     for (final String name in reader.package.partNames)
       if (_key(name) case final String k
           when k.startsWith('xl/') &&
@@ -162,7 +190,12 @@ final class OpaqueScan {
 
   /// The namespace and local name of [part]'s root element, or `null` when
   /// the part is not readable XML.
-  ({String ns, String name})? rootOf(String part) {
+  ({String ns, String name})? rootOf(String part) => _roots.containsKey(part)
+      ? _roots[part]
+      : (_roots[part] = _readRoot(part));
+
+  ({String ns, String name})? _readRoot(String part) {
+    if (!reader.hasPart(part)) return null;
     try {
       final XmlPullReader r = reader.openXml(part);
       return reader.guardXml(part, () {
@@ -299,6 +332,57 @@ final class OpaqueReferences implements PreparingReferenceHolder {
     _tablesBefore = edit == null
         ? const <String, ({String? id, int rows, int columns})>{}
         : _tables();
+    if (edit != null) _refusePivotEdits(edit);
+  }
+
+  /// Throws a [StateError] when [edit] would resize or delete a pivot table
+  /// of its sheet, as Excel refuses it, before any holder changes anything.
+  void _refusePivotEdits(ReferenceShift edit) {
+    final String edited = edit.sheet.toLowerCase();
+    final PackageReader reader = _scan.reader;
+    _scan.owners().forEach((String part, String owner) {
+      if (owner.toLowerCase() != edited || !reader.hasPart(part)) return;
+      if (!part.endsWith('.xml')) return;
+      final ({String ns, String name})? root = _scan.rootOf(part);
+      if (root == null ||
+          root.ns != Ns.main ||
+          root.name != 'pivotTableDefinition') {
+        return;
+      }
+      String? name;
+      XlsxRange? range;
+      try {
+        final XmlPullReader r = reader.openXml(part);
+        reader.guardXml(part, () {
+          while (r.next()) {
+            if (r.eventType != XmlEventType.startElement ||
+                r.namespaceUri != Ns.main) {
+              continue;
+            }
+            if (r.localName == 'pivotTableDefinition') {
+              name = r.getAttribute('name');
+            } else if (r.localName == 'location') {
+              range = _range(r.getAttribute('ref', namespaceUri: ''));
+              return;
+            }
+          }
+        });
+      } on XlsxReadException {
+        return;
+      }
+      final XlsxRange? was = range;
+      if (was == null) return;
+      final XlsxRange? moved = edit.shiftRange(was);
+      if (moved == null ||
+          moved.lastRow - moved.firstRow != was.lastRow - was.firstRow ||
+          moved.lastColumn - moved.firstColumn !=
+              was.lastColumn - was.firstColumn) {
+        throw StateError(
+          'The edit would change part of the PivotTable "${name ?? ''}" on '
+          'sheet "$owner" (${was.ref}).',
+        );
+      }
+    });
   }
 
   Map<String, ({String? id, int rows, int columns})> _tables() {
@@ -342,10 +426,9 @@ final class OpaqueReferences implements PreparingReferenceHolder {
     if (mapper is SheetMove) return;
     final String edited = editedSheetOf(mapper).toLowerCase();
     final Map<String, String> owners = _scan.owners();
-    final Set<String> untyped = <String>{
-      for (final s in _scan.sheets())
-        if (s.name.toLowerCase() == edited && edit != null) ...s.untyped,
-    };
+    final Set<String> untyped = edit == null
+        ? const <String>{}
+        : _scan.untypedOf(edit.sheet);
     final Set<String> sheetParts = <String>{
       for (final s in _scan.sheets()) s.part,
     };
@@ -369,7 +452,7 @@ final class OpaqueReferences implements PreparingReferenceHolder {
       if (ns == Ns.main && name == 'pivotCacheDefinition') {
         _pivotCache(part, mapper);
       } else if (ns == Ns.main && name == 'pivotTableDefinition') {
-        if (ownedByEdited && edit != null) _pivotTable(part, edit, owner!);
+        if (ownedByEdited && edit != null) _pivotTable(part, edit);
       } else if (ns == _threaded && name == 'ThreadedComments') {
         if (ownedByEdited && edit != null) _threadedComments(part, edit);
       } else if (ns == Ns.x14 && name == 'formControlPr') {
@@ -456,38 +539,23 @@ final class OpaqueReferences implements PreparingReferenceHolder {
     if (!read || unfixed) _scan.warn(part);
   }
 
-  void _pivotTable(String part, ReferenceShift edit, String sheet) {
+  /// Moves a pivot table's `location`; [prepare] has refused an edit
+  /// through it.
+  void _pivotTable(String part, ReferenceShift edit) {
     bool unfixed = false;
     final bool read = _scan.splice(part, (XmlPullReader r) {
-      if (r.namespaceUri != Ns.main) return null;
-      if (r.localName == 'pivotTableDefinition') {
-        // Read for the message below.
-        _pivotName = r.getAttribute('name');
-        return null;
-      }
-      if (r.localName != 'location') return null;
+      if (r.namespaceUri != Ns.main || r.localName != 'location') return null;
       final XlsxRange? range = _range(r.getAttribute('ref', namespaceUri: ''));
       if (range == null) {
         unfixed = true;
         return null;
       }
       final XlsxRange? moved = edit.shiftRange(range);
-      if (moved == null ||
-          moved.lastRow - moved.firstRow != range.lastRow - range.firstRow ||
-          moved.lastColumn - moved.firstColumn !=
-              range.lastColumn - range.firstColumn) {
-        throw StateError(
-          'The edit would change part of the PivotTable '
-          '"${_pivotName ?? ''}" on sheet "$sheet" (${range.ref}).',
-        );
-      }
-      if (moved == range) return null;
+      if (moved == null || moved == range) return null;
       return SpliceEdit(attributes: <String, String>{'ref': moved.ref});
     });
     if (!read || unfixed) _scan.warn(part);
   }
-
-  String? _pivotName;
 
   void _threadedComments(String part, ReferenceShift edit) {
     bool unfixed = false;
