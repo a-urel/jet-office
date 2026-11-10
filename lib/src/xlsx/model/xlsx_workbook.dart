@@ -865,35 +865,6 @@ final class _Book implements SheetHost {
   }
 
   @override
-  String? firstTableUse(TablePart table) {
-    // A file's name may hold anything; the syntax characters are escaped.
-    final String key = sheetNameKey(table.displayName).replaceAllMapped(
-      RegExp(r'[\\^$.*+?()[\]{}|/]'),
-      (Match m) => '\\${m[0]}',
-    );
-    // Letters, marks, digits and these three go on a name.
-    final RegExp reference = RegExp(
-      r'(?<![\p{L}\p{M}\p{N}_.\\?])'
-      '$key\\[',
-      unicode: true,
-    );
-    for (final XlsxSheet s in _sheets) {
-      final String? cell = firstFormulaMatching(s, reference);
-      if (cell != null) return cell;
-    }
-    for (final XlsxSheet s in _sheets) {
-      final String? column = firstColumnFormulaMatching(s, reference, table);
-      if (column != null) return column;
-    }
-    for (final NameEntry e in workbook.names) {
-      if (sheetNameKey(e.formula).contains(reference)) {
-        return 'the defined name "${e.name}"';
-      }
-    }
-    return null;
-  }
-
-  @override
   StyleTable get styleTable => _styles?.table ?? StyleTable.empty;
 
   @override

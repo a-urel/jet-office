@@ -1576,23 +1576,6 @@ void main() {
       expect(b.sheets[1].cellAt(0, 0)!.formula, 'SUM(Sales[Amount])');
     });
 
-    test('header rename rewrites [Col] and [@Col]', () {
-      final XlsxWorkbook b = book();
-      final XlsxSheet data = b.sheets[0];
-      final XlsxSheet other = b.sheets[1];
-      other.setCell(0, 0, const XlsxFormula('SUM(Sales[amount])'));
-      other.setCell(
-        1,
-        0,
-        const XlsxFormula('Sales[[#Headers],[Region]:[Amount]]'),
-      );
-      data.setCell(0, 1, 'Net Total');
-      expect(formula(other, 0, 0), 'SUM(Sales[Net Total])');
-      expect(formula(other, 1, 0), 'Sales[[#Headers],[Region]:[Net Total]]');
-      expect(formula(data, 1, 2), '[@[Net Total]]*2');
-      expect(formula(data, 3, 2), '[@[Net Total]]*2');
-    });
-
     test('removeTable converts users to ranges', () {
       final XlsxWorkbook b = book();
       final XlsxSheet data = b.sheets[0];
@@ -1614,12 +1597,45 @@ void main() {
       expect(formula(other, 2, 0), r'SUM(Data!$A$1:$B$4)');
       expect(formula(other, 3, 0), '#REF!');
       expect(formula(data, 6, 0), r'SUM($B$2:$B$4)');
-      expect(formula(data, 2, 2), 'B3*2');
+      expect(formula(data, 2, 2), r'$B3*2');
       expect(
         b.definedNames
             .singleWhere((XlsxDefinedName n) => n.name == 'Tot')
             .formula,
         r'SUM(Data!$B$2:$B$4)',
+      );
+    });
+
+    test('a this-row reference converts by its row', () {
+      final XlsxWorkbook b = book();
+      final XlsxSheet data = b.sheets[0];
+      final XlsxSheet other = b.sheets[1];
+      other.setCell(2, 0, const XlsxFormula('Sales[@Amount]'));
+      other.setCell(
+        2,
+        1,
+        const XlsxFormula('Sales[[#This Row],[Region]:[Amount]]'),
+      );
+      data.setCell(9, 0, const XlsxFormula('Sales[@Amount]'));
+      data.setCell(3, 4, const XlsxFormula('Sales[@Region]'));
+      data.removeTable('Sales');
+      expect(formula(data, 3, 2), r'$B4*2');
+      expect(formula(other, 2, 0), r'Data!$B3');
+      expect(formula(other, 2, 1), r'Data!$A3:$B3');
+      expect(formula(data, 9, 0), '#VALUE!');
+      expect(formula(data, 3, 4), r'$A4');
+    });
+
+    test('a column range with a missing end names it', () {
+      final XlsxWorkbook b = book();
+      b.sheets[1].setCell(
+        0,
+        0,
+        const XlsxFormula('SUM(Sales[[Region]:[Gone]])'),
+      );
+      expect(
+        () => b.sheets[0].removeTable('Sales'),
+        _state(contains('"Gone"')),
       );
     });
 

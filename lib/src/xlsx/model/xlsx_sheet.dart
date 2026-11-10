@@ -176,13 +176,6 @@ abstract interface class SheetHost {
   /// `log.transaction`, before the part leaves.
   void forgetTablePart(String name);
 
-  /// Where a formula first uses [table] as `name[`, ignoring case and not
-  /// after a character of a name: a cell of a sheet, in tab order, then a
-  /// column formula of another table, then a defined name; `null` when none
-  /// does. Loads every sheet. Throws an [XlsxReadException] when one cannot
-  /// be read.
-  String? firstTableUse(TablePart table);
-
   /// The opened package, for reading parts.
   PackageReader get reader;
 
@@ -261,49 +254,6 @@ Iterable<int> sheetTableIds(XlsxSheet sheet) => sheet._partName == null
             in sheet._sheetTables())
           t.table.id,
       ];
-
-/// The first column formula of a table of [sheet] other than [except] that
-/// [reference] matches in its [sheetNameKey]: `the column "C" of the table
-/// "T"`, or `null` for none.
-String? firstColumnFormulaMatching(
-  XlsxSheet sheet,
-  Pattern reference,
-  TablePart except,
-) {
-  if (sheet._partName == null) return null;
-  for (final ({String partName, TablePart table}) t in sheet._sheetTables()) {
-    if (identical(t.table, except)) continue;
-    for (final ({String column, String formula}) f in t.table.columnFormulas) {
-      if (sheetNameKey(f.formula).contains(reference)) {
-        return 'the column "${f.column}" of the table '
-            '"${t.table.displayName}"';
-      }
-    }
-  }
-  return null;
-}
-
-/// The first cell of [sheet], in row order, whose formula text [reference]
-/// matches in its [sheetNameKey]: `cell B2 of the sheet "S"`, or `null` for
-/// none. A shared formula's follower has no text; its master holds it. Loads
-/// the sheet.
-String? firstFormulaMatching(XlsxSheet sheet, Pattern reference) {
-  final CellStore? store = sheet._load()?.cells;
-  if (store == null || !store.hasFormulas) return null;
-  for (final int row in store.rowIndexes) {
-    String? found;
-    store.forEachInRow(row, (int column, RawCell cell) {
-      final String? text = cell.formula?.text;
-      if (found == null &&
-          text != null &&
-          sheetNameKey(text).contains(reference)) {
-        found = 'cell ${cellRef(row, column)} of the sheet "${sheet.name}"';
-      }
-    });
-    if (found != null) return found;
-  }
-  return null;
-}
 
 /// The workbook part's entry of [sheet].
 SheetEntry entryOf(XlsxSheet sheet) => sheet._entry;

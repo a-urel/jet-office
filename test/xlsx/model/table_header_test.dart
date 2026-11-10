@@ -41,6 +41,37 @@ List<String> _columnNames(String tableXml) => <String>[
 TablePart _part(String xml) => TablePart.read(XmlPullReader(xml))!;
 
 void main() {
+  test('header rename rewrites [Col] and [@Col]', () {
+    final XlsxWorkbook book = XlsxWorkbook();
+    final XlsxSheet data = book.addSheet('Data');
+    final XlsxSheet other = book.addSheet('Other');
+    for (int r = 1; r <= 3; r++) {
+      data.setCell(r, 0, 'R$r');
+      data.setCell(r, 1, r * 10);
+      data.setCell(r, 2, const XlsxFormula('[@Amount]*2'));
+    }
+    data.addTable(
+      XlsxTable('Sales', XlsxRange.parse('A1:C4'), const <XlsxTableColumn>[
+        XlsxTableColumn('Region'),
+        XlsxTableColumn('Amount'),
+        XlsxTableColumn('Double'),
+      ]),
+    );
+    other.setCell(0, 0, const XlsxFormula('SUM(Sales[amount])'));
+    other.setCell(
+      1,
+      0,
+      const XlsxFormula('Sales[[#Headers],[Region]:[Amount]]'),
+    );
+    data.setCell(0, 1, 'Net Total');
+    expect(other.cellAt(0, 0)!.formula, 'SUM(Sales[Net Total])');
+    expect(
+      other.cellAt(1, 0)!.formula,
+      'Sales[[#Headers],[Region]:[Net Total]]',
+    );
+    expect(data.cellAt(1, 2)!.formula, '[@[Net Total]]*2');
+    expect(data.cellAt(3, 2)!.formula, '[@[Net Total]]*2');
+  });
   group('TablePart', () {
     const String excelTable =
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'

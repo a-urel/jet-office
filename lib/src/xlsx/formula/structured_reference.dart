@@ -290,7 +290,7 @@ final class StructuredRename implements PositionedStructuredMapper {
 
 /// The table [table] removed: every structured reference to it becomes the
 /// plain range it covers (`Sales[Amount]` is `Sheet1!$B$2:$B$4` from
-/// another sheet, `$B$2:$B$4` from its own; `[@Amount]` is `B3`), as Excel's
+/// another sheet, `$B$2:$B$4` from its own; `[@Amount]` in row 3 is `$B3`, `#VALUE!` from a row outside the data), as Excel's
 /// "Convert to Range" does. A reference to an item the table lacks (the
 /// totals of a table without them) becomes `#REF!`.
 ///
@@ -342,9 +342,11 @@ final class TableToRange implements PositionedStructuredMapper {
         for (final StructuredColumn c in parsed.columns)
           this.table.columnIndex(c.name),
       ];
-      if (at.contains(-1)) {
+      final int missing = at.indexOf(-1);
+      if (missing >= 0) {
         throw StateError(
-          'The reference "$table$spec" names a column the table '
+          'The reference "$table$spec" names the column '
+          '"${parsed.columns[missing].name}", which the table '
           '"${this.table.name}" lacks, so it cannot become a range.',
         );
       }
@@ -356,6 +358,9 @@ final class TableToRange implements PositionedStructuredMapper {
     final bool sameSheet =
         hostSheet.toLowerCase() == this.table.sheet.toLowerCase();
     final String prefix = sameSheet ? '' : renderSheetPrefix(this.table.sheet);
+    final int header = r.firstRow;
+    final int bodyFirst = r.firstRow + (this.table.headerRow ? 1 : 0);
+    final int bodyLast = r.lastRow - (this.table.totalsRow ? 1 : 0);
     if (parsed.thisRow) {
       if (row == null) {
         throw StateError(
@@ -363,14 +368,13 @@ final class TableToRange implements PositionedStructuredMapper {
           'has no cell, so it cannot become a range.',
         );
       }
-      final String first = cellRef(row, firstColumn);
+      // Outside the data rows implicit intersection gives #VALUE! already.
+      if (row < bodyFirst || row > bodyLast) return '#VALUE!';
+      String at(int column) => '\$${columnName(column)}${row + 1}';
       return firstColumn == lastColumn
-          ? '$prefix$first'
-          : '$prefix$first:${cellRef(row, lastColumn)}';
+          ? '$prefix${at(firstColumn)}'
+          : '$prefix${at(firstColumn)}:${at(lastColumn)}';
     }
-    final int header = r.firstRow;
-    final int bodyFirst = r.firstRow + (this.table.headerRow ? 1 : 0);
-    final int bodyLast = r.lastRow - (this.table.totalsRow ? 1 : 0);
     final Set<String> items = parsed.items.isEmpty
         ? <String>{'#data'}
         : parsed.items;
