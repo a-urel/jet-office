@@ -218,6 +218,22 @@ final class TableResizeChange implements Change {
   void reapply() => part.tableEdits++;
 }
 
+/// The mark a row or column insert or delete leaves on the workbook:
+/// [WorkbookPart.structureEdits] one higher while the edit is in force.
+final class StructureEditChange implements Change {
+  /// A change that raised the count of [part], already applied.
+  StructureEditChange(this.part);
+
+  /// The workbook part.
+  final WorkbookPart part;
+
+  @override
+  void revert() => part.structureEdits--;
+
+  @override
+  void reapply() => part.structureEdits++;
+}
+
 /// Runs [edit], which changes the names of [part] through
 /// [WorkbookPart.addName] or [WorkbookPart.removeName], and records the
 /// change in [log] as a name edit, which makes the save ask Excel to

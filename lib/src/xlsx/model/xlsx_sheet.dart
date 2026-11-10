@@ -147,6 +147,9 @@ abstract interface class SheetHost {
   /// The workbook part, which holds the defined names.
   WorkbookPart get workbookPart;
 
+  /// Every reference holder of the workbook, for a row or column edit.
+  ReferenceRegistry get references;
+
   /// The tab index of [sheet] in `<sheets>`.
   int sheetIndexOf(XlsxSheet sheet);
 
@@ -1409,6 +1412,85 @@ final class XlsxSheet
       }
     }
     return false;
+  }
+
+  /// Inserts [count] empty rows before the row [row] (1-based, as Excel
+  /// numbers rows), as Excel's Insert Sheet Rows does.
+  ///
+  /// Every sheet is loaded, and everything that refers to a cell moves
+  /// with it: formulas on every sheet, defined names, merges, conditional
+  /// formats, validations, links, the filter, tables, notes, pictures,
+  /// views and chart series. The inserted rows take the format of the row
+  /// above. A part the model cannot rewrite is kept as read and reported
+  /// (`referenceNotShifted`). The save drops `calcChain` and asks Excel to
+  /// recalculate when the workbook has formulas. All of it is one change.
+  ///
+  /// Throws an [ArgumentError] named `row` for a row below 1 or past
+  /// `XlsxLimits.maxRows`, named `count` for a count below 1 or one that
+  /// reaches past the last row; a [StateError] for an edit Excel refuses
+  /// (a cell, note or picture pushed off the sheet, an array formula or a
+  /// table cut in a way Excel does not allow) and for a sheet that is not a
+  /// worksheet; an [XlsxReadException] when a sheet cannot be read.
+  /// Whatever it throws, nothing has changed.
+  void insertRows(int row, [int count = 1]) =>
+      _structuralEdit(ShiftAxis.rows, row, count, insert: true);
+
+  /// Deletes [count] rows from the row [row] (1-based) on, as Excel's
+  /// Delete Sheet Rows does: the rows below move up, and a reference to a
+  /// deleted cell becomes `#REF!`. Otherwise as [insertRows].
+  void deleteRows(int row, [int count = 1]) =>
+      _structuralEdit(ShiftAxis.rows, row, count, insert: false);
+
+  /// Inserts [count] empty columns before the column [column] (1-based: A
+  /// is 1), as [insertRows] inserts rows. A column inserted inside a table
+  /// becomes a table column, its header cell named as Excel names it
+  /// (`Column1`).
+  void insertColumns(int column, [int count = 1]) =>
+      _structuralEdit(ShiftAxis.columns, column, count, insert: true);
+
+  /// Deletes [count] columns from the column [column] (1-based) on, as
+  /// [deleteRows] deletes rows.
+  void deleteColumns(int column, [int count = 1]) =>
+      _structuralEdit(ShiftAxis.columns, column, count, insert: false);
+
+  void _structuralEdit(
+    ShiftAxis axis,
+    int index,
+    int count, {
+    required bool insert,
+  }) {
+    final bool rows = axis == ShiftAxis.rows;
+    final String indexName = rows ? 'row' : 'column';
+    final int limit = rows ? XlsxLimits.maxRows : XlsxLimits.maxColumns;
+    RangeError.checkValueInInterval(index, 1, limit, indexName);
+    RangeError.checkValueInInterval(count, 1, limit - index + 1, 'count');
+    final ReferenceShift edit = insert
+        ? ReferenceShift.insert(name, axis, index, count)
+        : ReferenceShift.delete(name, axis, index, count);
+    final ChangeLog log = _host.log;
+    log.transaction(() {
+      _host.references.apply(edit, edit);
+      moveSheetGeometry(this, edit);
+      if (insert && !rows) _nameInsertedTableColumns(index - 1, count);
+      _host.workbookPart.structureEdits++;
+      log.record(StructureEditChange(_host.workbookPart));
+    });
+  }
+
+  /// Writes the name of each table column inserted at the columns [from]
+  /// (0-based) to [from] + [count] - 1 into its header cell, which the move
+  /// left empty.
+  void _nameInsertedTableColumns(int from, int count) {
+    if (_partName == null) return;
+    for (final ({String partName, TablePart table}) t in _sheetTables()) {
+      final TablePart table = t.table;
+      if (!table.value.headerRow) continue;
+      final XlsxRange range = table.range;
+      for (int c = from; c < from + count; c++) {
+        if (c <= range.firstColumn || c > range.lastColumn) continue;
+        setCell(range.firstRow, c, table.columnName(c - range.firstColumn));
+      }
+    }
   }
 
   static void _checkCell(int row, int column) {

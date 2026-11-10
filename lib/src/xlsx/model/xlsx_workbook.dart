@@ -552,6 +552,7 @@ final class _Book implements SheetHost {
   );
 
   /// Every holder of a reference in the workbook, for structural edits.
+  @override
   late final ReferenceRegistry references = ReferenceRegistry(
     log,
     () => _sheets,
@@ -1047,9 +1048,10 @@ final class _Book implements SheetHost {
     );
     // Only a changed cell value or formula (spec section 4.4) makes the
     // calculation chain and cached results stale.
-    final bool valueEdited = _sheets.any(
-      (XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0,
-    );
+    // A row or column edit moves cells, so it does too.
+    final bool valueEdited =
+        workbook.structureEdits > 0 ||
+        _sheets.any((XlsxSheet s) => (cellStoreOf(s)?.valueEdits ?? 0) > 0);
     // A defined name that was defined or removed, or a table that was
     // resized, changes results as a changed cell does, but the chain of
     // cells stays as it was.

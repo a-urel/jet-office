@@ -483,6 +483,11 @@ final class WorkbookPart implements PartContent {
   /// raises it again.
   int tableEdits = 0;
 
+  /// How many row and column inserts and deletes are in force
+  /// (`StructureEditChange`): they move cells, so the save drops `calcChain`
+  /// and asks Excel to recalculate. Undo lowers it, redo raises it again.
+  int structureEdits = 0;
+
   /// Adds [entry] after the other names, as the writer writes a name; the
   /// `<definedNames>` is made in schema position when the part has none.
   ///
