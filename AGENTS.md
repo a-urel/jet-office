@@ -26,7 +26,10 @@ editor undecided; supersedes 0010's "equations stay opaque") and `0020` (ink
 from the Draw tab is covered in the end; level, order and drawing surface
 undecided) and `0021` (shapes, text boxes and icons are covered in the end;
 level and order undecided; supersedes 0010's "text boxes and floating
-pictures stay opaque") before any design change.
+pictures stay opaque") and `0022` (what phase 4 leaves opaque, tracked
+changes, comments, notes, content controls and a table of contents, is
+covered in the end; template fill first; macros stay out; supersedes part of
+`0010`) before any design change.
 
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
 its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
