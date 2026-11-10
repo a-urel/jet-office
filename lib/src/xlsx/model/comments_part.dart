@@ -305,7 +305,7 @@ final class CommentsPart implements PartContent {
       for (final String author in authors) {
         w
           ..start('${prefix}author')
-          ..text(escapeXstring(author))
+          ..text(escapeXstring(scrubXmlText(author).text))
           ..end();
       }
       w.end();

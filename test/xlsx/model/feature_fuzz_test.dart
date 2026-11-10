@@ -163,6 +163,46 @@ void main() {
     });
   });
 
+  test('removing a table whose users name a column it lacks is a refusal', () {
+    // Seed 7 case 328 of the long run: a mutated tableColumn name leaves
+    // `Stock[[#This Row],[Qty]]` naming no column, so removeTable refuses.
+    final FuzzCase c = featureFuzzCases(7, 329).last;
+    expect(c.mutation, contains('xl/tables/table1.xml'));
+    expect(() => exerciseFeatureCase(c), returnsNormally);
+  });
+
+  test('a table formula that cannot be read throws XlsxReadException', () {
+    // Seed 31 case 104 of the long run: a stray `&` in a calculated column
+    // formula made a table edit throw the XML parser's own exception.
+    final FuzzCase c = featureFuzzCases(31, 105).last;
+    expect(c.mutation, contains('xl/tables/table1.xml'));
+    expect(
+      () => exerciseFeatureCase(c),
+      anyOf(returnsNormally, throwsA(isA<XlsxReadException>())),
+    );
+  });
+
+  test('a comments author XML forbids does not crash a table removal', () {
+    // Seed 39 case 267 of the long run (and seed 30 case 354).
+    for (final (int seed, int index) in <(int, int)>[(39, 267), (30, 354)]) {
+      final FuzzCase c = featureFuzzCases(seed, index + 1).last;
+      expect(
+        () => exerciseFeatureCase(c),
+        anyOf(returnsNormally, throwsA(isA<XlsxReadException>())),
+        reason: c.mutation,
+      );
+    }
+  });
+
+  test('a part name whose case a mutation flipped compares as the same', () {
+    // Seed 36 case 204 of the long run: `xl/worksheets/Sheet1.xml` beside
+    // `xl/worksheets/_rels/sheet1.xml.rels`; undo writes the relationships
+    // part after the source's spelling, which OPC takes as the same name.
+    final FuzzCase c = featureFuzzCases(36, 205).last;
+    expect(c.mutation, contains('(archive)'));
+    expect(() => exerciseFeatureCase(c), returnsNormally);
+  });
+
   test('mutated files raise only XlsxReadException', () {
     final List<String> failures = <String>[];
     for (final int seed in _seeds) {

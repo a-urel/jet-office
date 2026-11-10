@@ -1,5 +1,5 @@
 // Tests tool/write_model_sample.dart: the generated workbooks of the W1, W2
-// W3 and W4 Excel checks. It writes files, so it runs on the VM only.
+// W3, W4 and W5 Excel checks. It writes files, so it runs on the VM only.
 @TestOn('vm')
 library;
 
@@ -111,7 +111,7 @@ void main() {
       );
       addTearDown(() => temp.deleteSync(recursive: true));
       final List<String> paths = writeModelSample('${temp.path}/out');
-      expect(paths, hasLength(4));
+      expect(paths, hasLength(5));
       expect(paths[2], endsWith('w3_generated.xlsx'));
       book = XlsxWorkbook.open(File(paths[2]).readAsBytesSync());
       report = book.sheet('Report');
@@ -197,8 +197,8 @@ void main() {
       );
       addTearDown(() => temp.deleteSync(recursive: true));
       final List<String> paths = writeModelSample('${temp.path}/out');
-      expect(paths.last, endsWith('w4_generated.xlsx'));
-      bytes = File(paths.last).readAsBytesSync();
+      expect(paths[3], endsWith('w4_generated.xlsx'));
+      bytes = File(paths[3]).readAsBytesSync();
       book = XlsxWorkbook.open(bytes);
       objects = book.sheet('Objects');
     });
@@ -300,6 +300,103 @@ void main() {
           (String n) => RegExp(r'^xl/tables/table\d+\.xml$').hasMatch(n),
         ),
         hasLength(2),
+      );
+    });
+  });
+
+  group('w5_generated.xlsx', () {
+    late Uint8List bytes;
+    late XlsxWorkbook book;
+    late XlsxSheet data;
+    late XlsxSheet summary;
+
+    setUpAll(() {
+      final Directory temp = Directory.systemTemp.createTempSync(
+        'model_sample',
+      );
+      addTearDown(() => temp.deleteSync(recursive: true));
+      final List<String> paths = writeModelSample('${temp.path}/out');
+      expect(paths.last, endsWith('w5_generated.xlsx'));
+      bytes = File(paths.last).readAsBytesSync();
+      book = XlsxWorkbook.open(bytes);
+      data = book.sheet('Veri 2026');
+      summary = book.sheet('Summary');
+    });
+
+    String text(String part) {
+      final Archive archive = ZipDecoder().decodeBytes(bytes);
+      return String.fromCharCodes(archive.findFile(part)!.content);
+    }
+
+    test('has Data renamed Veri 2026 and moved last, with no warning', () {
+      expect(book.sheets.map((XlsxSheet s) => s.name), <String>[
+        'Summary',
+        'Veri 2026',
+      ]);
+      expect(book.warnings, isEmpty);
+    });
+
+    test('grew the table by the two rows inserted inside it', () {
+      final XlsxTable sales = data.tables.single;
+      expect(sales.name, 'Sales');
+      expect(sales.range, XlsxRange.parse('A1:C8'));
+      expect(data.cellAt(2, 0)?.value, 'Feb');
+      expect(data.cellAt(3, 0), isNull);
+      expect(data.cellAt(5, 0)?.value, 'Mar');
+    });
+
+    test('kept the Tax column one shared group over the new rows', () {
+      final String sheet = text('xl/worksheets/sheet1.xml');
+      expect(sheet, contains('<f t="shared" ref="C2:C8" si="0">B2*Rate</f>'));
+      expect(data.cellAt(7, 2)?.formulaGroup?.range, XlsxRange.parse('C2:C8'));
+    });
+
+    test('moved the rate left with the deleted column, and the names', () {
+      expect(data.cellAt(0, 8)?.value, XlsxDecimal('0.2'));
+      expect(
+        <String, String>{
+          for (final XlsxDefinedName n in book.definedNames) n.name: n.formula,
+        },
+        <String, String>{
+          'Rate': r"'Veri 2026'!$I$1",
+          'Amounts': r"'Veri 2026'!$B$2:$B$8",
+        },
+      );
+    });
+
+    test('points the chart, the validation and the rule at the new cells', () {
+      expect(
+        text('xl/charts/chart1.xml'),
+        contains(r"<c:f>'Veri 2026'!$B$2:$B$8</c:f>"),
+      );
+      expect(data.dataValidations.single.ranges, <XlsxRange>[
+        XlsxRange.parse('B2:B8'),
+      ]);
+      expect(data.conditionalFormats.single.ranges, <XlsxRange>[
+        XlsxRange.parse('B2:B8'),
+      ]);
+      expect(data.noteAt(0, 0), isNotNull);
+      expect(data.pictures.single.anchor.from, const XlsxAnchorPoint(0, 10));
+    });
+
+    test("rewrote Summary's formulas and turned Extra's uses into ranges", () {
+      expect(
+        <String?>[for (int r = 0; r < 5; r++) summary.cellAt(r, 1)?.formula],
+        <String>[
+          'SUM(Sales[Amount])',
+          "'Veri 2026'!B3",
+          'SUM(Amounts)*Rate',
+          "SUM('Summary:Veri 2026'!B2)",
+          r"SUM('Veri 2026'!$F$2:$F$3)",
+        ],
+      );
+    });
+
+    test('asks Excel to recalculate and keeps no calculation chain', () {
+      expect(text('xl/workbook.xml'), contains('fullCalcOnLoad="1"'));
+      expect(
+        ZipDecoder().decodeBytes(bytes).findFile('xl/calcChain.xml'),
+        isNull,
       );
     });
   });

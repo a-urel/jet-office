@@ -14,6 +14,10 @@ import '../../tool/edit_model.dart';
 import '../../tool/write_fixtures.dart' as write_fixtures;
 import '../fixtures/m4_fixtures.dart' show png4x2;
 
+/// How far below the input's last row the new row is: the last row moves
+/// two rows down, and the probe takes the row after it.
+const int _newRowOffset = 4;
+
 void main() {
   late Directory temp;
   late Directory input;
@@ -59,6 +63,7 @@ void main() {
         'w2_generated.xlsx',
         'w3_generated.xlsx',
         'w4_generated.xlsx',
+        'w5_generated.xlsx',
       ]),
     );
     expect(out.toString(), contains('All 2 workbooks edited'));
@@ -82,11 +87,12 @@ void main() {
       File('${output.path}/m1_values.xlsx').readAsBytesSync(),
     );
     expect(edited.sheets, hasLength(original.sheets.length + 1));
-    expect(edited.sheets.last.name, 'Model edit');
+    expect(edited.sheets.first.name, 'Model edit');
+    expect(edited.sheets.last.name, 'Model edit 2');
     final int lastRow = original.rowsAt(0).last.index;
     final XlsxReadRow row = edited
         .rowsAt(0)
-        .firstWhere((XlsxReadRow r) => r.index > lastRow);
+        .firstWhere((XlsxReadRow r) => r.index == lastRow + _newRowOffset);
     final List<Object?> values = <Object?>[
       for (final XlsxReadCell c in row.cells) c.value,
     ];
@@ -125,7 +131,7 @@ void main() {
       final Uint8List bytes = File(
         '${output.path}/${file.key}',
       ).readAsBytesSync();
-      final int row = file.value + 1;
+      final int row = file.value + _newRowOffset;
       final XlsxSheet sheet = XlsxWorkbook.open(bytes).sheets.first;
       for (int column = 0; column < 4; column++) {
         final XlsxStyle? style = sheet.styleAt(row, column);
@@ -174,7 +180,7 @@ void main() {
         XlsxReader(
           File('${input.path}/m1_values.xlsx').readAsBytesSync(),
         ).rowsAt(0).last.index +
-        1;
+        _newRowOffset;
     final XlsxWorkbook book = editedBook('m1_values.xlsx');
     final XlsxSheet sheet = book.sheets.first;
     expect(
@@ -204,12 +210,13 @@ void main() {
     expect(book.warnings, isEmpty);
   });
 
-  /// The first row after the last one [name] lists in the input.
+  /// The new row of [name]: after the input's last row, the probe and the
+  /// two rows inserted above that last row.
   int newRow(String name) =>
       XlsxReader(
         File('${input.path}/$name').readAsBytesSync(),
       ).rowsAt(0).last.index +
-      1;
+      _newRowOffset;
 
   test(
     'an edited workbook holds a rich text, a note, a picture and a table',
@@ -239,6 +246,43 @@ void main() {
       }
     },
   );
+
+  test('the structural edits move the probe and its formula follows', () {
+    writeOnly(input, <String>{'m1_values.xlsx'});
+    final XlsxReader original = XlsxReader(
+      File('${input.path}/m1_values.xlsx').readAsBytesSync(),
+    );
+    final int lastRow = original.rowsAt(0).last.index;
+    final List<Object?> lastValues = <Object?>[
+      for (final XlsxReadCell c in original.rowsAt(0).last.cells) c.value,
+    ];
+    expect(
+      editModel(
+        <String>[input.path, output.path],
+        out: StringBuffer(),
+        err: StringBuffer(),
+      ),
+      0,
+    );
+    final XlsxReader edited = XlsxReader(
+      File('${output.path}/m1_values.xlsx').readAsBytesSync(),
+    );
+    expect(edited.sheets.first.name, 'Model edit');
+    final List<XlsxReadRow> rows = edited.rowsAt(0).toList();
+    // The last row moved two rows down; its column A stayed, the rest moved
+    // one column right.
+    final XlsxReadRow moved = rows.firstWhere(
+      (XlsxReadRow r) => r.index == lastRow + 2,
+    );
+    expect(moved.cells.first.value, lastValues.first);
+    expect(moved.cells.map((XlsxReadCell c) => c.column), isNot(contains(1)));
+    final XlsxReadRow probe = rows.firstWhere(
+      (XlsxReadRow r) => r.index == lastRow + 3,
+    );
+    expect(probe.cells.first.formula, 'D${lastRow + 4}&"!"');
+    expect(probe.cells.last.column, 3);
+    expect(probe.cells.last.value, 'moved by the model');
+  });
 
   test('the table takes a number when its name is taken', () {
     final XlsxWorkbook source = XlsxWorkbook();
@@ -272,13 +316,23 @@ void main() {
     ]);
   });
 
-  test('an auto filter in the way is left alone', () {
+  test('an auto filter in the way is left alone by the features', () {
     writeOnly(input, <String>{'m2_merges_filter.xlsx'});
     final XlsxRange? before = XlsxWorkbook.open(
       File('${input.path}/m2_merges_filter.xlsx').readAsBytesSync(),
     ).sheets.first.autoFilter;
     expect(before, isNotNull);
-    expect(editedBook('m2_merges_filter.xlsx').sheets.first.autoFilter, before);
+    // Only the structural edits move it: two rows inserted above the last
+    // row inside it and a column at B.
+    expect(
+      editedBook('m2_merges_filter.xlsx').sheets.first.autoFilter,
+      XlsxRange(
+        before!.firstRow,
+        before.firstColumn,
+        before.lastRow + 2,
+        before.lastColumn + 1,
+      ),
+    );
   });
 
   test('setting a width keeps what the column already had', () {

@@ -492,6 +492,7 @@ void exerciseFeatures(
   if (proveUndo) run.before = _save(book, 'save() before the edits');
   run.read('workbook', () => _readWorkbook(book));
   final Set<int> unreadable = <int>{};
+  final List<XlsxSheet> sheetsBefore = book.sheets.toList();
   for (int i = 0; i < book.sheets.length; i++) {
     final XlsxSheet sheet = book.sheets[i];
     if (!run.read(sheet.name, () => _readSheet(sheet))) unreadable.add(i);
@@ -500,6 +501,7 @@ void exerciseFeatures(
   for (int i = 0; i < book.sheets.length; i++) {
     if (!unreadable.contains(i)) run.editSheet(book.sheets[i]);
   }
+  run.editStructure();
   for (final XlsxWarning warning in book.warnings) {
     for (final OfficeLocale locale in OfficeLocale.values) {
       warning.message(locale);
@@ -519,7 +521,14 @@ void exerciseFeatures(
     }
   }
   run.redo();
-  run.reopen(_save(book, 'save()'), unreadable);
+  // A sheet move changed the tab order: the saved file's indexes are those
+  // of the sheets now.
+  final List<XlsxSheet> read = <XlsxSheet>[
+    for (final int i in unreadable) sheetsBefore[i],
+  ];
+  run.reopen(_save(book, 'save()'), <int>{
+    for (final XlsxSheet sheet in read) book.sheets.indexOf(sheet),
+  });
   run.undo();
   _save(book, 'save() after a save and undo');
   final XlsxReadException? first = run.first;
@@ -645,8 +654,39 @@ bool _lossyRelationships(String text) =>
     });
 
 /// The parts of [zip] without what [undoDifferences] leaves out of its text,
-/// [mutated] being the part a case changed.
+/// [mutated] being the part a case changed, and each relationships part
+/// named after its source part as the package spells it.
 Map<String, Uint8List> _normalized(Uint8List zip, String? mutated) =>
+    _relationshipsByCase(_normalizedText(zip, mutated));
+
+/// [parts] with each relationships part whose source part's name differs
+/// only in case (an archive mutation flipped a bit of a name: OPC part names
+/// ignore case) named after the source part as [parts] spells it. A part
+/// written afresh takes its relationships part's name from its source.
+Map<String, Uint8List> _relationshipsByCase(Map<String, Uint8List> parts) {
+  final Map<String, String> byLower = <String, String>{
+    for (final String name in parts.keys) name.toLowerCase(): name,
+  };
+  String named(String name) {
+    final RegExpMatch? m = RegExp(
+      r'^(.*/)?_rels/([^/]+)\.rels$',
+    ).firstMatch(name);
+    if (m == null) return name;
+    final String source = '${m.group(1) ?? ''}${m.group(2)}';
+    final String? spelled = byLower[source.toLowerCase()];
+    if (spelled == null || spelled == source) return name;
+    final int slash = spelled.lastIndexOf('/');
+    return '${spelled.substring(0, slash + 1)}_rels/'
+        '${spelled.substring(slash + 1)}.rels';
+  }
+
+  return <String, Uint8List>{
+    for (final MapEntry<String, Uint8List> e in parts.entries)
+      named(e.key): e.value,
+  };
+}
+
+Map<String, Uint8List> _normalizedText(Uint8List zip, String? mutated) =>
     <String, Uint8List>{
       for (final MapEntry<String, Uint8List> e in readXlsxBytes(zip).entries)
         e.key: Uint8List.fromList(
@@ -734,13 +774,24 @@ final RegExp _refusedStates = RegExp(
   'part of an array|is a header cell|is covered by|'
   'belongs to a threaded comment|comments part of sheet|VML drawing of sheet|'
   'drawing of sheet|has a totals row|has a sort state|'
-  'has relationships of its own|cannot be removed:',
+  'has relationships of its own|cannot be removed:|cannot become a range|'
+  'cannot be renamed or removed',
 );
 
 /// The fields an [ArgumentError] of an edit names.
 final RegExp _refusedFields = RegExp(
   r'^(name|formula\d?|comment|cell|validation|format|ranges?(\[\d+\].*)?|'
-  r'runs.*|author|style|columns.*|values.*)$',
+  r'runs.*|author|style|columns.*|values.*|newName)$',
+);
+
+/// The [StateError]s a structural edit documents for what it refuses
+/// (Ruling 4): an edit cutting through an array, a data table, a shared
+/// master that cannot follow, a PivotTable or a table's rows, or pushing an
+/// object off the sheet.
+final RegExp _refusedStructure = RegExp(
+  'Cannot change part of|Cannot change the shared formula master|'
+  'would change part of the PivotTable|cannot be deleted while|'
+  'would push|The totals (row|cell)',
 );
 
 /// One [exerciseFeatures] over a workbook: the edits it made and the first
@@ -792,7 +843,12 @@ final class _Run {
   /// [ArgumentError] only when [refusable], naming a field, and a
   /// [StateError] matching [_refusedStates]. Any other, a [RangeError] or
   /// an [IndexError] above all, is an internal crash.
-  ChangeSet? _edit(String what, void Function() body, bool refusable) {
+  ChangeSet? _edit(
+    String what,
+    void Function() body,
+    bool refusable, {
+    bool structural = false,
+  }) {
     try {
       final ChangeSet set = log.transaction(body);
       if (!set.isEmpty) sets.add(set);
@@ -806,7 +862,8 @@ final class _Run {
     } on RangeError catch (e) {
       throw StateError('$what threw: $e');
     } on StateError catch (e) {
-      if (!_refusedStates.hasMatch(e.message)) {
+      if (!_refusedStates.hasMatch(e.message) &&
+          !(structural && _refusedStructure.hasMatch(e.message))) {
         throw StateError('$what threw: $e');
       }
     } on ArgumentError catch (e) {
@@ -818,6 +875,33 @@ final class _Run {
       throw StateError('$what threw: $e');
     }
     return null;
+  }
+
+  /// Inserts two rows at row 2 and deletes column B of the first sheet,
+  /// renames it and moves it last: each may refuse as Ruling 4 says, and
+  /// loads every sheet, so an unreadable one throws [XlsxReadException].
+  void editStructure() {
+    if (book.sheets.isEmpty) return;
+    final XlsxSheet first = book.sheets.first;
+    _edit('insertRows', () => first.insertRows(1, 2), true, structural: true);
+    _edit(
+      'deleteColumns',
+      () => first.deleteColumns(1),
+      true,
+      structural: true,
+    );
+    _edit(
+      'renameSheet',
+      () => book.renameSheet(first, 'Fuzz sheet'),
+      true,
+      structural: true,
+    );
+    _edit(
+      'moveSheet',
+      () => book.moveSheet(first, book.sheets.length - 1),
+      true,
+      structural: true,
+    );
   }
 
   void editWorkbook() {

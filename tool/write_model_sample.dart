@@ -1,13 +1,12 @@
-/// Writes the workbooks the owner opens in the W1, W2, W3 and W4 Excel checks:
-/// each made from nothing with `XlsxWorkbook`.
+/// Writes the workbooks the owner opens in the W1 to W5 Excel checks: each
+/// made from nothing with `XlsxWorkbook`.
 ///
 /// ```bash
 /// dart run tool/write_model_sample.dart build/model_generated
 /// ```
 ///
-/// The files are `<dir>/w1_generated.xlsx`, `<dir>/w2_generated.xlsx` and
-/// `<dir>/w3_generated.xlsx` and `<dir>/w4_generated.xlsx` (the directory is
-/// created).
+/// The files are `<dir>/w1_generated.xlsx` to `<dir>/w5_generated.xlsx`
+/// (the directory is created).
 ///
 /// The sheet `Values` of `w1_generated.xlsx` holds, in row 1, text, an
 /// integer, a double, an `XlsxDecimal`, a boolean, a date, a date and time
@@ -38,14 +37,34 @@
 /// style. The sheet `Removed` had a table and a picture added and removed
 /// again. `docs/excel-checks.md`, "W4", says what Excel shows.
 ///
+/// `w5_generated.xlsx` is made, then edited structurally. The sheet `Data`
+/// has a table `Sales` (A1:C6) whose `Tax` column is one shared formula
+/// group, a table `Extra` (F1:G3), the rate in J1, a column chart over
+/// `Sales` (drawn by the test host `withCharts`, as the model adds no chart
+/// yet, and the group shared by hand, as the model writes none), a validation
+/// and a rule on the amounts, a note on A1 and a picture. The sheet `Summary`
+/// holds formulas into `Data`, the names `Rate` and `Amounts`, a 3D sum
+/// (`Data:Summary`) and a sum of `Extra[Qty]`. Then two rows are inserted
+/// inside `Sales`, column D is deleted, `Data` is renamed `Veri 2026` and
+/// moved last, and `Extra` is removed, which turns its uses into ranges.
+/// `docs/excel-checks.md`, "W5", says what Excel shows.
+///
 /// Not ported from Quds; written for jet_office.
 library;
 
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/drawingml/chart/chart_space.dart';
+import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
 
+import '../test/drawingml/chart/support/chart_host.dart';
 import '../test/fixtures/m4_fixtures.dart' show jpeg3x5, png4x2;
+import '../test/support/read_xlsx.dart';
+import '../test/xlsx/read/support/zip_builder.dart';
 
 void main(List<String> args) {
   if (args.length != 1) {
@@ -56,13 +75,14 @@ void main(List<String> args) {
   writeModelSample(args.single).forEach(stdout.writeln);
 }
 
-/// Writes `w1_generated.xlsx`, `w2_generated.xlsx`, `w3_generated.xlsx` and
-/// `w4_generated.xlsx` to [dir] and returns their paths, in that order.
+/// Writes `w1_generated.xlsx` to `w5_generated.xlsx` to [dir] and returns
+/// their paths, in that order.
 List<String> writeModelSample(String dir) => <String>[
   _writeBook('$dir/w1_generated.xlsx', _valuesBook()),
   _writeBook('$dir/w2_generated.xlsx', _reportBook()),
   _writeBook('$dir/w3_generated.xlsx', _featuresBook()),
   _writeBook('$dir/w4_generated.xlsx', _objectsBook()),
+  _writeBook('$dir/w5_generated.xlsx', _structureBook()),
 ];
 
 /// Saves [book] to [path], making its directory, and returns [path].
@@ -446,3 +466,170 @@ XlsxWorkbook _objectsBook() {
     ..removeTable('Gone');
   return book;
 }
+
+/// The months and amounts of the table `Sales` of `w5_generated.xlsx`.
+const List<(String, int)> _sales = <(String, int)>[
+  ('Jan', 100),
+  ('Feb', 200),
+  ('Mar', 300),
+  ('Apr', 400),
+  ('May', 500),
+];
+
+/// The workbook of the W5 check, made and then edited structurally.
+XlsxWorkbook _structureBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  final XlsxSheet data = book.addSheet('Data');
+  final XlsxSheet summary = book.addSheet('Summary');
+  data
+    ..setCell(0, 0, 'Month')
+    ..setCell(0, 1, 'Amount')
+    ..setCell(0, 2, 'Tax')
+    ..setCell(0, 8, 'Rate')
+    ..setCell(0, 9, 0.2);
+  for (int i = 0; i < _sales.length; i++) {
+    data
+      ..setCell(i + 1, 0, _sales[i].$1)
+      ..setCell(i + 1, 1, _sales[i].$2)
+      ..setCell(
+        i + 1,
+        2,
+        XlsxFormula('B${i + 2}*Rate', cached: _sales[i].$2 / 5),
+      );
+  }
+  data
+    ..addTable(
+      XlsxTable('Sales', const XlsxRange(0, 0, 5, 2), <XlsxTableColumn>[
+        const XlsxTableColumn('Month'),
+        const XlsxTableColumn('Amount'),
+        const XlsxTableColumn('Tax'),
+      ]),
+    )
+    ..setCell(1, 5, 'Bolts')
+    ..setCell(1, 6, 40)
+    ..setCell(2, 5, 'Nuts')
+    ..setCell(2, 6, 60)
+    ..addTable(
+      XlsxTable('Extra', const XlsxRange(0, 5, 2, 6), <XlsxTableColumn>[
+        const XlsxTableColumn('Item'),
+        const XlsxTableColumn('Qty'),
+      ]),
+    )
+    ..addDataValidation(
+      XlsxDataValidation(
+        <XlsxRange>[XlsxRange.parse('B2:B6')],
+        XlsxValidationType.whole,
+        comparison: XlsxComparison.greaterThanOrEqual,
+        formula1: '0',
+      ),
+    )
+    ..addConditionalFormat(
+      XlsxConditionalFormat(
+        <XlsxRange>[XlsxRange.parse('B2:B6')],
+        <XlsxConditionalRule>[
+          const XlsxCellValueRule(
+            XlsxComparison.greaterThan,
+            r'$J$1*1000',
+            style: XlsxStyle(fill: XlsxFill.solid(XlsxColor.rgb(0xFFC7CE))),
+          ),
+        ],
+      ),
+    )
+    ..setNote(
+      0,
+      0,
+      XlsxNote.plain('Two rows go in after Feb.', author: 'jet_office'),
+    );
+  book
+    ..defineName(const XlsxDefinedName('Rate', r'Data!$J$1'))
+    ..defineName(const XlsxDefinedName('Amounts', r'Data!$B$2:$B$6'));
+  summary
+    ..setCell(0, 0, 'Total')
+    ..setCell(0, 1, const XlsxFormula('SUM(Sales[Amount])', cached: 1500))
+    ..setCell(1, 0, 'February')
+    ..setCell(1, 1, const XlsxFormula('Data!B3', cached: 200))
+    ..setCell(2, 0, 'Named')
+    ..setCell(2, 1, const XlsxFormula('SUM(Amounts)*Rate', cached: 300))
+    ..setCell(3, 0, '3D sum')
+    ..setCell(3, 1, const XlsxFormula('SUM(Data:Summary!B2)', cached: 100))
+    ..setCell(4, 0, 'Extra')
+    ..setCell(4, 1, const XlsxFormula('SUM(Extra[Qty])', cached: 100));
+
+  final XlsxWorkbook edited = XlsxWorkbook.open(
+    withCharts(_shareTax(book.save().bytes), 'Data', <Uint8List>[
+      writeDrawingChartSpace(_salesChart(), ChartTheme.office).bytes,
+    ]),
+  );
+  final XlsxSheet sheet = edited.sheet('Data');
+  sheet.addPicture(
+    XlsxPicture(
+      OfficeImage(png4x2),
+      const XlsxOneCellAnchor(XlsxAnchorPoint(0, 11), width: 120, height: 60),
+      name: 'Picture',
+      description: 'A 4 by 2 pixel gradient right of the rate',
+    ),
+  );
+  edited.transaction(() {
+    sheet
+      ..insertRows(3, 2)
+      ..deleteColumns(3);
+    edited
+      ..renameSheet(sheet, 'Veri 2026')
+      ..moveSheet(sheet, edited.sheets.length - 1);
+    sheet.removeTable('Extra');
+  });
+  return edited;
+}
+
+/// [xlsx] with the `Tax` formulas of `Data` (C2:C6) made one shared group,
+/// as Excel writes a filled-down formula.
+Uint8List _shareTax(Uint8List xlsx) {
+  const String part = 'xl/worksheets/sheet1.xml';
+  final Map<String, Uint8List> parts = readXlsxBytes(xlsx);
+  String text = utf8.decode(parts[part]!);
+  for (int row = 2; row <= 6; row++) {
+    final String plain = '<f>B$row*Rate</f>';
+    if (!text.contains(plain)) {
+      throw StateError('The Tax formula of row $row is not $plain.');
+    }
+    text = text.replaceFirst(
+      plain,
+      row == 2
+          ? '<f t="shared" ref="C2:C6" si="0">B2*Rate</f>'
+          : '<f t="shared" si="0"/>',
+    );
+  }
+  return buildZipOrdered(<(String, List<int>)>[
+    for (final MapEntry<String, Uint8List> e in parts.entries)
+      (e.key, e.key == part ? utf8.encode(text) : e.value),
+  ]);
+}
+
+/// A column chart of the amounts of `Sales`, by month.
+DrawingChartSpace _salesChart() => DrawingChartSpace(
+  chart: Chart(
+    kind: ChartKind.column,
+    title: const ChartTitle(text: 'Sales'),
+    series: <ChartSeries>[
+      ChartSeries(
+        name: ChartData<String>(
+          values: <String?>['Amount'],
+          reference: r'Data!$B$1',
+        ),
+        categories: ChartData<Object>(
+          values: <Object>[for (final (String m, int _) in _sales) m],
+          reference: r'Data!$A$2:$A$6',
+        ),
+        values: ChartData<double>(
+          values: <double?>[for (final (String _, int a) in _sales) a * 1.0],
+          reference: r'Data!$B$2:$B$6',
+        ),
+      ),
+    ],
+  ),
+  ids: const DrawingChartIds(
+    categoryAxis: 500001,
+    valueAxis: 500002,
+    series: <String>['{00000000-00C5-0000-0000-000000000001}'],
+  ),
+);

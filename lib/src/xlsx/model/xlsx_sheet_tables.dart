@@ -657,20 +657,25 @@ final class _TableHolder implements ReferenceHolder {
           }
           continue;
         }
-        final String? text = entry.table.shiftedText(
-          local,
-          to,
-          (String formula, int column, {required bool totals}) =>
-              rewriteFormula(
-                formula,
-                mapper,
-                host,
-                row: totals
-                    ? entry.table.range.lastRow
-                    : entry.table.range.firstRow +
-                          (entry.table.hasHeader ? 1 : 0),
-                column: entry.table.range.firstColumn + column,
-              ),
+        // The part's text is parsed again here: XML it cannot read is a
+        // file problem, an XlsxReadException naming the part.
+        final String? text = reader.guardXml(
+          entry.partName,
+          () => entry.table.shiftedText(
+            local,
+            to,
+            (String formula, int column, {required bool totals}) =>
+                rewriteFormula(
+                  formula,
+                  mapper,
+                  host,
+                  row: totals
+                      ? entry.table.range.lastRow
+                      : entry.table.range.firstRow +
+                            (entry.table.hasHeader ? 1 : 0),
+                  column: entry.table.range.firstColumn + column,
+                ),
+          ),
         );
         if (text == null) continue;
         _sheet._editTable(entry, () => entry.table.replaceText(text));

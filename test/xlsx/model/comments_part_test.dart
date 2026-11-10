@@ -49,6 +49,16 @@ void main() {
       expect(_text(part), contains('<ext uri="u"/>'));
     });
 
+    test('an author holding a character XML forbids encodes scrubbed', () {
+      // Feature fuzz, seed 30 case 354 of the long run: `&#1;` in an author
+      // made encode throw when a structural edit's scan opened the part.
+      const String xml =
+          '<comments xmlns="$_ns"><authors><author>A&#1;B</author></authors>'
+          '<commentList/></comments>';
+      final CommentsPart part = _read(xml)!;
+      expect(_text(part), contains('<author>AB</author>'));
+    });
+
     test("encodes the fixture's comments and VML part as written", () {
       final Map<String, String> parts = readXlsx(
         allFixtures().firstWhere((Fixture f) => f.name == 'm4_notes').build(),

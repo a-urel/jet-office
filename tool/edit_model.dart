@@ -16,8 +16,15 @@
 /// style with a red fill over the style they have, so the dates keep their
 /// format, sets column B's width to 30 and the new row's height to 24,
 /// merges the two cells right of the new values, freezes the first row and
-/// sets a tab colour. It then adds a sheet `Model edit` (`Model edit 2` and
-/// so on when the name is taken) holding one string, saves, and writes the
+/// sets a tab colour. Before all of that it edits the structure: it sets a
+/// probe in the row after the last row, the string `moved by the model` in
+/// C and the formula `C<n>&"!"` pointing at it in A, inserts two rows above
+/// the sheet's last row (row 1 when it has none) and one column at B, and
+/// renames the sheet `Model edit` (`Model edit 2` and so on when the name
+/// is taken); `XlsxReader` must find the probe two rows lower, the string in
+/// D and the formula pointing at its new cell. The new row is the one after
+/// the probe. It then adds a sheet named as the first one would be (so
+/// `Model edit 2`, or the next free number) holding one string, saves, and writes the
 /// bytes to `<outDir>/<name>.xlsx`. The saved file is read back with
 /// `XlsxReader` (values, number formats, merges) and with `XlsxWorkbook`
 /// (styles, width, height, merges, pane, tab colour), and the edits must be
@@ -36,8 +43,8 @@
 /// row, a header and a data row (left out when a cell there is not free). Each
 /// is read back through the model. Last it writes the workbooks
 /// `tool/write_model_sample.dart` makes, `w1_generated.xlsx`,
-/// `w2_generated.xlsx`, `w3_generated.xlsx` and `w4_generated.xlsx`, to the
-/// same directory.
+/// `w2_generated.xlsx`, `w3_generated.xlsx`, `w4_generated.xlsx` and
+/// `w5_generated.xlsx`, to the same directory.
 ///
 /// Each problem is printed as `<file>: <problem>`. The exit code is 1 on any
 /// problem, 2 when the arguments are unusable or the input directory holds
@@ -161,8 +168,8 @@ int editModel(
   out.writeln(
     failed == 0
         ? 'All ${files.length} workbooks edited, and w1_generated.xlsx, '
-              'w2_generated.xlsx, w3_generated.xlsx and w4_generated.xlsx '
-              'written.'
+              'w2_generated.xlsx, w3_generated.xlsx, w4_generated.xlsx and '
+              'w5_generated.xlsx written.'
         : '$failed failed.',
   );
   return failed == 0 ? 0 : 1;
@@ -176,9 +183,11 @@ List<String> _edit(File file, Directory output, String name) {
   final String added;
   final _Features features;
   final String? table;
+  final _Structure structure;
   try {
     final XlsxWorkbook book = XlsxWorkbook.open(file.readAsBytesSync());
     final XlsxSheet sheet = book.sheets.first;
+    structure = _editStructure(book, sheet);
     row = _freeRow(sheet);
     formatted = <int>{
       for (final int column in <int>[0, 1])
@@ -199,7 +208,69 @@ List<String> _edit(File file, Directory output, String name) {
     return <String>['the edit failed: $e'];
   }
   File('${output.path}/$name').writeAsBytesSync(saved);
-  return _check(saved, row, added, formatted, features, table);
+  return <String>[
+    ..._checkStructure(saved, structure),
+    ..._check(saved, row, added, formatted, features, table),
+  ];
+}
+
+/// The probe's row after the structural edits, and the first sheet's new
+/// name.
+typedef _Structure = ({int row, String name});
+
+/// The probe string and the structural edits' sheet name.
+const String _probeText = 'moved by the model';
+const String _renamed = 'Model edit';
+
+/// Sets the probe on [sheet], inserts two rows above its last row and a
+/// column at B, and renames it.
+_Structure _editStructure(XlsxWorkbook book, XlsxSheet sheet) {
+  final int probe = _freeRow(sheet);
+  final List<int> rows = <int>[for (final XlsxReadRow r in sheet.rows) r.index];
+  sheet
+    ..setCell(probe, 2, _probeText)
+    ..setCell(
+      probe,
+      0,
+      XlsxFormula('C${probe + 1}&"!"', cached: '$_probeText!'),
+    )
+    ..insertRows(rows.isEmpty || rows.last > probe ? 0 : rows.last, 2)
+    ..insertColumns(1);
+  final String name = _freeName(book, _renamed);
+  book.renameSheet(sheet, name);
+  return (row: probe + 2, name: name);
+}
+
+/// The structural edits [saved] lacks when read back with `XlsxReader`.
+List<String> _checkStructure(Uint8List saved, _Structure structure) {
+  final List<String> problems = <String>[];
+  try {
+    final XlsxReader reader = XlsxReader(saved);
+    if (reader.sheets.first.name != structure.name) {
+      problems.add('the first sheet is not renamed ${structure.name}');
+    }
+    final List<XlsxReadCell> cells = <XlsxReadCell>[
+      for (final XlsxReadRow r in reader.rowsAt(0))
+        if (r.index == structure.row) ...r.cells,
+    ];
+    XlsxReadCell? at(int column) {
+      for (final XlsxReadCell c in cells) {
+        if (c.column == column) return c;
+      }
+      return null;
+    }
+
+    if (at(3)?.value != _probeText) {
+      problems.add('the probe string did not move to D${structure.row + 1}');
+    }
+    final String follows = 'D${structure.row + 1}&"!"';
+    if (at(0)?.formula != follows) {
+      problems.add('the probe formula is ${at(0)?.formula}, not $follows');
+    }
+  } on Object catch (e) {
+    problems.add('reading the structural edits failed: $e');
+  }
+  return problems;
 }
 
 /// Whether [style] sets a number format that shows no date: not General,
