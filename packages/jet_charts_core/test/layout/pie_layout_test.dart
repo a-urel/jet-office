@@ -126,7 +126,7 @@ void main() {
           expect(slices[i].sweepAngle, closeTo(<double>[90, 90, 180][i], 1e-9));
           expect(slices[i].fill, _office.seriesColor(i));
           expect(slices[i].stroke, _office.background);
-          expect(slices[i].strokeWidth, 0.75);
+          expect(slices[i].strokeWidth, 1.5);
           expect(slices[i].innerRadius, 0);
           if (i > 0) {
             expect(
@@ -459,9 +459,10 @@ void main() {
         ChartSize(side + 16, side + 16),
       ).primitives,
     ).any((ChartPrimitive p) => p.id == 'center');
-    // Hole radius = 0.75 * (side / 2 - 0.375); free radius about that less
-    // 0.375. Half diagonal 18.78, plus 2 pt gap: 20.78.
-    expect(shown(58), isTrue); // free radius about 21.2
-    expect(shown(54), isFalse); // free radius about 19.7, less than 20.78
+    // The Office slice outline is 1.5 pt: hole radius = 0.75 * (side / 2 -
+    // 0.75); free radius about that less 0.75. Half diagonal 18.78, plus
+    // 2 pt gap: 20.78.
+    expect(shown(60), isTrue); // free radius about 21.2
+    expect(shown(56), isFalse); // free radius about 19.7, less than 20.78
   });
 }

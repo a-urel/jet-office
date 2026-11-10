@@ -16,6 +16,16 @@
   and scatter markers; tooltips and `ChartSummary` (`shares`, `centerText`,
   `xValues`) for the new kinds.
 - J4: the layout fuzz covers the new kinds and fields.
+- J4, after the owner's E1 file (`chart_reference_j4.xlsx`): the slice
+  outline is 1.5 pt (`ChartTheme.sliceBorderWidth`'s default, was 0.75);
+  `ChartTheme.leaderLine` (pie leader lines; `axisLine` when not given, the
+  Office theme's `A6A6A6`); `combinationLineMarkers` (off: a combination
+  chart's lines have no markers, as Excel's) and `lineMarkersOf`;
+  `combinationGapWidthPercent` (150, with no overlap, for a clustered
+  combination's columns); `scatterAxisLine` (the Office theme's `BFBFBF`:
+  a scatter chart draws both axis lines in it); `sliceLabelContrast` (on by
+  default; the Office theme turns it off, so a label inside a slice is
+  `404040`, as Excel writes it).
 - J4 (for Monépro): `ChartSeries.pointColorKeys`, a `ChartTheme.semantic`
   colour per point, resolved by `ChartTheme.pointColorOf` (a point colour
   wins); `ChartTooltip.series` and `category`.

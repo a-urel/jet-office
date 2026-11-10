@@ -5,9 +5,12 @@
 /// category axis is a second value axis: its scale comes from
 /// `autoValueScale` on the extent of the x values and the plot's width, and
 /// its tick labels are the value axis' labels laid horizontally
-/// (`valueLabelPrimitives`), with the category axis' ids. Both axes being
-/// automatic, and only horizontal grid lines by default, is an estimate of
-/// Excel's scatter chart, not checked in Excel.
+/// (`valueLabelPrimitives`), with the category axis' ids. Both axes are
+/// automatic. Excel's default scatter chart has grid lines on both axes and
+/// both axis lines (the owner's E1 file, chart 4): the vertical grid lines
+/// are `Chart.categoryAxis.gridLines`, which the model leaves off by
+/// default, so a chart that wants Excel's look sets it; the axis lines are
+/// the theme's `scatterAxisLine`, set in the Office theme.
 ///
 /// The x values are each series' categories; nothing else of the model
 /// carries a meaning here, so a later kind (a bubble chart's sizes) adds its

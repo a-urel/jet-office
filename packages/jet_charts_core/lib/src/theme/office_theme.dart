@@ -45,11 +45,27 @@ ChartTheme buildOfficeTheme() {
     ),
     gridLine: line,
     axisLine: line,
+    leaderLine: ChartColor.scheme(
+      ChartSchemeColor.dark1,
+      rgb: 0xA6A6A6,
+      lumMod: 0.35,
+      lumOff: 0.65,
+    ),
     background: ChartColor.scheme(ChartSchemeColor.light1, rgb: 0xFFFFFF),
     border: line,
     valueAxisLine: false,
     tooltip: buildOfficeTooltipStyle(),
     exportColors: ChartExportColors.fileTheme,
+    sliceBorderWidth: 1.5,
+    combinationLineMarkers: false,
+    combinationGapWidthPercent: 150,
+    sliceLabelContrast: false,
+    scatterAxisLine: ChartColor.scheme(
+      ChartSchemeColor.dark1,
+      rgb: 0xBFBFBF,
+      lumMod: 0.25,
+      lumOff: 0.75,
+    ),
   );
 }
 

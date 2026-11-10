@@ -503,7 +503,7 @@ void main() {
       final ChartTheme office = ChartTheme.office;
       expect(office.areaOpacity, 1);
       expect(office.areaLine, isFalse);
-      expect(office.sliceBorderWidth, 0.75);
+      expect(office.sliceBorderWidth, 1.5);
       expect(office.centerText, isNull);
       expect(office.centerTextStyle, office.titleText);
       expect(office.sparklineWidth, 0.75);
@@ -564,6 +564,131 @@ void main() {
         expect(() => build(sliceBorderWidth: bad), throwsArgumentError);
         expect(() => build(sparklineWidth: bad), throwsArgumentError);
       }
+    });
+  });
+
+  group('E1 values', () {
+    test('the Office theme has Excel\'s E1 values', () {
+      final ChartTheme office = ChartTheme.office;
+      expect(office.sliceBorderWidth, 1.5);
+      expect(
+        office.leaderLine,
+        ChartColor.scheme(
+          ChartSchemeColor.dark1,
+          rgb: 0xA6A6A6,
+          lumMod: 0.35,
+          lumOff: 0.65,
+        ),
+      );
+      expect(office.combinationLineMarkers, isFalse);
+      expect(office.combinationGapWidthPercent, 150);
+      expect(office.sliceLabelContrast, isFalse);
+      expect(
+        office.scatterAxisLine,
+        ChartColor.scheme(
+          ChartSchemeColor.dark1,
+          rgb: 0xBFBFBF,
+          lumMod: 0.25,
+          lumOff: 0.75,
+        ),
+      );
+    });
+
+    test('defaults keep an existing theme\'s look', () {
+      final ChartTheme theme = custom();
+      expect(theme.sliceBorderWidth, 1.5);
+      expect(theme.leaderLine, theme.axisLine);
+      expect(theme.combinationLineMarkers, isFalse);
+      expect(theme.combinationGapWidthPercent, 150);
+      expect(theme.scatterAxisLine, isNull);
+      expect(theme.sliceLabelContrast, isTrue);
+      final ChartTheme app = ChartTheme.fromColors(
+        palette: <ChartColor>[ChartColor.rgb(0x112233)],
+        fontFamily: 'Test',
+        text: ChartColor.rgb(0x333333),
+        background: ChartColor.rgb(0xFFFFFF),
+      );
+      expect(app.leaderLine, app.axisLine);
+      expect(app.scatterAxisLine, isNull);
+      expect(app.sliceLabelContrast, isTrue);
+    });
+
+    test('copyWith and equality cover the E1 fields', () {
+      final ChartTheme base = custom();
+      final ChartTheme changed = base.copyWith(
+        leaderLine: ChartColor.rgb(0x010203),
+        combinationLineMarkers: true,
+        combinationGapWidthPercent: 80,
+        scatterAxisLine: ChartColor.rgb(0x040506),
+      );
+      expect(changed.leaderLine, ChartColor.rgb(0x010203));
+      expect(changed.combinationLineMarkers, isTrue);
+      expect(changed.combinationGapWidthPercent, 80);
+      expect(changed.scatterAxisLine, ChartColor.rgb(0x040506));
+      expect(changed.copyWith(), changed);
+      expect(changed.copyWith().hashCode, changed.hashCode);
+      expect(base.copyWith(leaderLine: ChartColor.rgb(1)), isNot(base));
+      expect(base.copyWith(combinationLineMarkers: true), isNot(base));
+      expect(base.copyWith(sliceLabelContrast: false), isNot(base));
+      expect(
+        base.copyWith(sliceLabelContrast: false).hashCode,
+        isNot(base.hashCode),
+      );
+      expect(
+        base.copyWith(sliceLabelContrast: false).copyWith(),
+        base.copyWith(sliceLabelContrast: false),
+      );
+      expect(base.copyWith(combinationGapWidthPercent: 1), isNot(base));
+      expect(base.copyWith(scatterAxisLine: ChartColor.rgb(1)), isNot(base));
+      expect(
+        base.copyWith(combinationGapWidthPercent: 1).hashCode,
+        isNot(base.hashCode),
+      );
+    });
+
+    test('a combination\'s columns take its own gap and no overlap', () {
+      final ChartTheme office = ChartTheme.office;
+      expect(
+        office.gapWidthPercentOf(
+          ChartKind.combination,
+          ChartGrouping.clustered,
+        ),
+        150,
+      );
+      expect(
+        office.overlapPercentOf(ChartKind.combination, ChartGrouping.clustered),
+        0,
+      );
+      expect(
+        office.gapWidthPercentOf(ChartKind.combination, ChartGrouping.stacked),
+        office.stackedGapWidthPercent,
+      );
+      expect(
+        office.overlapPercentOf(ChartKind.combination, ChartGrouping.stacked),
+        100,
+      );
+      expect(
+        office.gapWidthPercentOf(ChartKind.column, ChartGrouping.clustered),
+        219,
+      );
+    });
+
+    test('lineMarkersOf: a combination\'s lines need both flags', () {
+      final ChartTheme office = ChartTheme.office;
+      expect(office.lineMarkersOf(ChartKind.line), isTrue);
+      expect(office.lineMarkersOf(ChartKind.combination), isFalse);
+      expect(
+        office
+            .copyWith(combinationLineMarkers: true)
+            .lineMarkersOf(ChartKind.combination),
+        isTrue,
+      );
+      final ChartTheme off = office.copyWith(
+        lineMarkers: false,
+        combinationLineMarkers: true,
+      );
+      expect(off.lineMarkersOf(ChartKind.combination), isFalse);
+      expect(off.lineMarkersOf(ChartKind.line), isFalse);
     });
   });
 

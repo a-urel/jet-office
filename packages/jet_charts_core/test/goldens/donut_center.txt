@@ -11,12 +11,12 @@ text legend/3/text 219.30,221.20 21.60x10.80 rotation=0.00 size=9.00 color=59595
 rect legend/4/symbol 252.90,223.10 7.00x7.00 fill=A02B93 stroke=- width=1.00
 text legend/4/text 263.90,221.20 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Merkez"
 rect plot 76.40,8.00 207.20x207.20 fill=- stroke=- width=1.00
-arc series/0/slice/0 centre=180.00,111.60 radius=103.22 inner=56.77 start=-90.00 sweep=96.00 fill=156082 stroke=FFFFFF width=0.75
-arc series/0/slice/1 centre=180.00,111.60 radius=103.22 inner=56.77 start=6.00 sweep=144.00 fill=E97132 stroke=FFFFFF width=0.75
-arc series/0/slice/2 centre=180.00,111.60 radius=103.22 inner=56.77 start=150.00 sweep=24.00 fill=C0392B stroke=FFFFFF width=0.75
-arc series/0/slice/3 centre=180.00,111.60 radius=103.22 inner=56.77 start=174.00 sweep=72.00 fill=0F9ED5 stroke=FFFFFF width=0.75
-arc series/0/slice/4 centre=180.00,111.60 radius=103.22 inner=56.77 start=246.00 sweep=24.00 fill=A02B93 stroke=FFFFFF width=0.75
+arc series/0/slice/0 centre=180.00,111.60 radius=102.85 inner=56.57 start=-90.00 sweep=96.00 fill=156082 stroke=FFFFFF width=1.50
+arc series/0/slice/1 centre=180.00,111.60 radius=102.85 inner=56.57 start=6.00 sweep=144.00 fill=E97132 stroke=FFFFFF width=1.50
+arc series/0/slice/2 centre=180.00,111.60 radius=102.85 inner=56.57 start=150.00 sweep=24.00 fill=C0392B stroke=FFFFFF width=1.50
+arc series/0/slice/3 centre=180.00,111.60 radius=102.85 inner=56.57 start=174.00 sweep=72.00 fill=0F9ED5 stroke=FFFFFF width=1.50
+arc series/0/slice/4 centre=180.00,111.60 radius=102.85 inner=56.57 start=246.00 sweep=24.00 fill=A02B93 stroke=FFFFFF width=1.50
 text center 142.20,103.20 75.60x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Toplam 45"
-text label/0/0 231.35,52.67 16.20x10.80 rotation=0.00 size=9.00 color=FFFFFF bold=false "27%"
-text label/0/1 188.53,184.45 16.20x10.80 rotation=0.00 size=9.00 color=FFFFFF bold=false "40%"
-text label/0/3 102.62,66.20 16.20x10.80 rotation=0.00 size=9.00 color=FFFFFF bold=false "20%"
+text label/0/0 231.14,52.86 16.20x10.80 rotation=0.00 size=9.00 color=404040 bold=false "27%"
+text label/0/1 188.47,184.17 16.20x10.80 rotation=0.00 size=9.00 color=404040 bold=false "40%"
+text label/0/3 102.87,66.35 16.20x10.80 rotation=0.00 size=9.00 color=404040 bold=false "20%"

@@ -3,7 +3,6 @@ rect legend 134.20,221.20 91.60x10.80 fill=- stroke=- width=1.00
 rect legend/0/symbol 134.20,223.10 7.00x7.00 fill=156082 stroke=- width=1.00
 text legend/0/text 145.20,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Satış"
 path legend/1/symbol 184.20,226.60 200.20,226.60 closed=false fill=- stroke=E97132 width=2.25 dash=-
-arc legend/1/marker centre=192.20,226.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
 text legend/1/text 204.20,221.20 21.60x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Adet"
 rect plot 28.20,13.40 303.60x187.00 fill=- stroke=- width=1.00
 path grid/value/0 28.20,200.40 331.80,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
@@ -14,16 +13,11 @@ path grid/value/4 28.20,75.73 331.80,75.73 closed=false fill=- stroke=D9D9D9 wid
 path grid/value/5 28.20,44.57 331.80,44.57 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path grid/value/6 28.20,13.40 331.80,13.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 clip plot/clip 28.20,13.40 303.60x187.00
-  rect series/0/bar/0 54.25,63.27 23.79x74.80 fill=156082 stroke=- width=1.00
-  rect series/0/bar/1 130.15,25.87 23.79x112.20 fill=156082 stroke=- width=1.00
-  rect series/0/bar/2 206.05,138.07 23.79x24.93 fill=156082 stroke=- width=1.00
-  rect series/0/bar/3 281.95,81.97 23.79x56.10 fill=156082 stroke=- width=1.00
+  rect series/0/bar/0 50.97,63.27 30.36x74.80 fill=156082 stroke=- width=1.00
+  rect series/0/bar/1 126.87,25.87 30.36x112.20 fill=156082 stroke=- width=1.00
+  rect series/0/bar/2 202.77,138.07 30.36x24.93 fill=156082 stroke=- width=1.00
+  rect series/0/bar/3 278.67,81.97 30.36x56.10 fill=156082 stroke=- width=1.00
   path series/1/line/0 66.15,60.15 142.05,89.37 217.95,36.78 293.85,106.90 closed=false fill=- stroke=E97132 width=2.25 dash=-
-clip plot/markers 25.32,10.52 309.35x192.75
-  arc series/1/marker/0 centre=66.15,60.15 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
-  arc series/1/marker/1 centre=142.05,89.37 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
-  arc series/1/marker/2 centre=217.95,36.78 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
-  arc series/1/marker/3 centre=293.85,106.90 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
 path axis/category/line 28.20,138.07 331.80,138.07 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 text axis/value/label/0 8.00,195.00 16.20x10.80 rotation=0.00 size=9.00 color=595959 bold=false "-10"
 text axis/value/label/1 13.40,163.83 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "-5"

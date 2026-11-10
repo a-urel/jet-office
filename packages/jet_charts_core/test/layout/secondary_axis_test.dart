@@ -5,7 +5,11 @@ import 'package:jet_core/jet_core.dart';
 import 'package:test/test.dart';
 
 const ChartSize _size = ChartSize(360, 216);
-final ChartTheme _office = ChartTheme.office;
+// Markers on a combination's lines, as the tests of mark positions need
+// them; the Office theme's combination lines have none.
+final ChartTheme _office = ChartTheme.office.copyWith(
+  combinationLineMarkers: true,
+);
 const List<String> _quarters = <String>['Q1', 'Q2', 'Q3', 'Q4'];
 
 ChartSeries _series(

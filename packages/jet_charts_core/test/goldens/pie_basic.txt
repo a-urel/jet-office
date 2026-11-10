@@ -10,11 +10,11 @@ text legend/2/text 202.40,221.20 21.60x10.80 rotation=0.00 size=9.00 color=59595
 rect legend/3/symbol 236.00,223.10 7.00x7.00 fill=0F9ED5 stroke=- width=1.00
 text legend/3/text 247.00,221.20 21.60x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Batı"
 rect plot 87.80,30.80 184.40x184.40 fill=- stroke=- width=1.00
-arc series/0/slice/0 centre=180.00,123.00 radius=91.82 inner=0.00 start=-90.00 sweep=80.00 fill=156082 stroke=FFFFFF width=0.75
-arc series/0/slice/1 centre=180.00,123.00 radius=91.82 inner=0.00 start=-10.00 sweep=120.00 fill=E97132 stroke=FFFFFF width=0.75
-arc series/0/slice/2 centre=180.00,123.00 radius=91.82 inner=0.00 start=110.00 sweep=60.00 fill=196B24 stroke=FFFFFF width=0.75
-arc series/0/slice/3 centre=180.00,123.00 radius=91.82 inner=0.00 start=170.00 sweep=100.00 fill=0F9ED5 stroke=FFFFFF width=0.75
-text label/0/0 210.01,75.39 10.80x10.80 rotation=0.00 size=9.00 color=FFFFFF bold=false "12"
-text label/0/1 210.01,159.81 10.80x10.80 rotation=0.00 size=9.00 color=FFFFFF bold=false "18"
-text label/0/2 135.09,153.01 5.40x10.80 rotation=0.00 size=9.00 color=FFFFFF bold=false "9"
-text label/0/3 132.39,82.19 10.80x10.80 rotation=0.00 size=9.00 color=FFFFFF bold=false "15"
+arc series/0/slice/0 centre=180.00,123.00 radius=91.45 inner=0.00 start=-90.00 sweep=80.00 fill=156082 stroke=FFFFFF width=1.50
+arc series/0/slice/1 centre=180.00,123.00 radius=91.45 inner=0.00 start=-10.00 sweep=120.00 fill=E97132 stroke=FFFFFF width=1.50
+arc series/0/slice/2 centre=180.00,123.00 radius=91.45 inner=0.00 start=110.00 sweep=60.00 fill=196B24 stroke=FFFFFF width=1.50
+arc series/0/slice/3 centre=180.00,123.00 radius=91.45 inner=0.00 start=170.00 sweep=100.00 fill=0F9ED5 stroke=FFFFFF width=1.50
+text label/0/0 209.87,75.57 10.80x10.80 rotation=0.00 size=9.00 color=404040 bold=false "12"
+text label/0/1 209.87,159.63 10.80x10.80 rotation=0.00 size=9.00 color=404040 bold=false "18"
+text label/0/2 135.27,152.87 5.40x10.80 rotation=0.00 size=9.00 color=404040 bold=false "9"
+text label/0/3 132.57,82.33 10.80x10.80 rotation=0.00 size=9.00 color=404040 bold=false "15"

@@ -240,7 +240,7 @@ extension on FrameContext {
         lineLook: (
           lineWidth: theme.lineWidth,
           markerSize: theme.markerSize,
-          markers: theme.lineMarkers,
+          markers: theme.lineMarkersOf(chart.kind),
         ),
       );
       if (legend == null) {

@@ -128,12 +128,6 @@ void main() {
     expect(findOverlaps(layout.primitives, layout.size), isEmpty);
   });
 
-  test('a label inside a dark slice is white', () {
-    final ChartLayout layout = _lay(_chart(<double?>[40, 30, 20, 10]));
-    // Accent 1 of the Office theme is dark; accent 4 (gold) is light.
-    expect(_labels(layout)['label/0/0']!.style.color, ChartColor.rgb(0xFFFFFF));
-  });
-
   test('in a dark theme a label inside a light slice takes the background', () {
     // The dark theme of docs/app-themes.md (jet_charts_flutter): the third
     // colour, FBBF24, is light, E5E7EB text on it would read at about 1.3:1.
@@ -220,6 +214,38 @@ void main() {
     }
     expect(findOverlaps(layout.primitives, layout.size), isEmpty);
     _expectInsideSize(layout);
+  });
+
+  test('a leader line takes the theme\'s leaderLine colour', () {
+    final ChartLayout layout = _lay(_chart(<double?>[90, 4, 3, 2, 1]));
+    expect(_leaders(layout), isNotEmpty);
+    for (final PathPrimitive leader in _leaders(layout)) {
+      expect(leader.stroke, _office.leaderLine);
+      expect(leader.stroke, isNot(_office.axisLine));
+      expect(leader.strokeWidth, _office.spacing.axisLineWidth);
+    }
+  });
+
+  test('the Office theme writes slice labels in its data label colour', () {
+    // Excel writes a pie's labels 404040 whatever the slice (E1, chart 7).
+    final ChartLayout layout = _lay(_chart(<double?>[40, 30, 20, 10]));
+    final Map<String, TextPrimitive> labels = _labels(layout);
+    expect(labels, isNotEmpty);
+    for (final TextPrimitive label in labels.values) {
+      expect(label.style, _office.dataLabels);
+      expect(label.style.color.rgb, 0x404040);
+    }
+  });
+
+  test('sliceLabelContrast keeps a slice label readable on a dark slice', () {
+    final ChartLayout layout = layoutChart(
+      _chart(<double?>[40, 30, 20, 10]),
+      theme: _office.copyWith(sliceLabelContrast: true),
+      size: _size,
+      measurer: const FixedWidthTextMeasurer(),
+    );
+    // Accent 1 of the Office theme is dark: its label is white.
+    expect(_labels(layout)['label/0/0']!.style.color, ChartColor.rgb(0xFFFFFF));
   });
 
   test('a small chart hides each label it cannot place', () {

@@ -31,7 +31,8 @@ import 'scatter_layout.dart';
 ///
 /// Column and bar charts draw rectangles, line charts one path per run of
 /// values and then, per series, a circle marker on every point (on a point
-/// with no neighbour only, when the theme's `lineMarkers` is off or the
+/// with no neighbour only, when the theme's `lineMarkersOf` the chart's kind
+/// is off, as for a combination chart's lines in the Office theme, or the
 /// markers do not fit: [lineMarkersFit]), area charts
 /// one closed path per series (with the theme's `areaOpacity`) and, when the
 /// theme's `areaLine` is on, an open path along each area's top, after all the
@@ -76,7 +77,7 @@ List<ChartPrimitive> layoutMarks(
     switch (group.kind) {
       case ChartKind.column:
       case ChartKind.bar:
-        out.addAll(_bars(group, resolved, values, theme, axes));
+        out.addAll(_bars(group, chart, resolved, values, theme, axes));
       case ChartKind.line:
         out.addAll(_lines(group, chart, resolved, values, theme, axes));
       case ChartKind.area:
@@ -178,6 +179,7 @@ double _percent(double value, double low, double high) =>
 
 List<ChartPrimitive> _bars(
   MarkGroup group,
+  Chart chart,
   ResolvedChart resolved,
   List<List<double?>> values,
   ChartTheme theme,
@@ -186,6 +188,7 @@ List<ChartPrimitive> _bars(
   return <ChartPrimitive>[
     for (final MarkAnchor a in _barAnchors(
       group,
+      chart,
       resolved,
       values,
       theme,
@@ -201,9 +204,11 @@ List<ChartPrimitive> _bars(
 
 /// The rectangle of every bar of [group] that has a value, in series then
 /// category order. The group's series share each category's slot as a chart
-/// of them alone would.
+/// of them alone would, but with a combination chart's own gap and overlap
+/// (`ChartTheme.gapWidthPercentOf`), as Excel's combination has.
 List<MarkAnchor> _barAnchors(
   MarkGroup group,
+  Chart chart,
   ResolvedChart resolved,
   List<List<double?>> values,
   ChartTheme theme,
@@ -214,8 +219,13 @@ List<MarkAnchor> _barAnchors(
   // Excel's ranges: gap 0 to 500, overlap -100 to 100. Kept to them, the
   // width's denominator is at least 1 (one series, no gap) and never 0.
   // A bar chart's value axis runs left to right; the theme gives each kind
-  // and grouping its gap and overlap (Excel's defaults differ by both).
-  final ChartKind kind = axes.horizontal ? ChartKind.bar : ChartKind.column;
+  // and grouping its gap and overlap (Excel's defaults differ by both), and
+  // a combination chart's columns their own.
+  final ChartKind kind = chart.kind == ChartKind.combination
+      ? ChartKind.combination
+      : axes.horizontal
+      ? ChartKind.bar
+      : ChartKind.column;
   final double g = _percent(
     theme.gapWidthPercentOf(kind, group.grouping),
     0,
@@ -329,7 +339,7 @@ List<ChartPrimitive> _lines(
     axes,
   );
   final bool everyPoint =
-      theme.lineMarkers &&
+      theme.lineMarkersOf(chart.kind) &&
       lineMarkersFit(axes.categoryLength, resolved.categoryCount, theme);
   final List<ChartPrimitive> out = <ChartPrimitive>[];
   for (int k = 0; k < tops.length; k++) {
@@ -606,7 +616,7 @@ List<MarkAnchor> layoutAnchors(
     switch (group.kind) {
       case ChartKind.column:
       case ChartKind.bar:
-        out.addAll(_barAnchors(group, resolved, values, theme, axes));
+        out.addAll(_barAnchors(group, chart, resolved, values, theme, axes));
       case ChartKind.line:
         final List<List<ChartPoint?>> points = _linePoints(
           group,

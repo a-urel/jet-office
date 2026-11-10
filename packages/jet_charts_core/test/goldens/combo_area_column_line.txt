@@ -6,7 +6,6 @@ text legend/0/text 120.20,221.20 21.60x10.80 rotation=0.00 size=9.00 color=59595
 rect legend/1/symbol 153.80,223.10 7.00x7.00 fill=E97132 stroke=- width=1.00
 text legend/1/text 164.80,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Sales"
 path legend/2/symbol 203.80,226.60 219.80,226.60 closed=false fill=- stroke=196B24 width=2.25 dash=-
-arc legend/2/marker centre=211.80,226.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=196B24 stroke=196B24 width=0.75
 text legend/2/text 223.80,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Trend"
 rect plot 22.80,36.20 329.20x164.20 fill=- stroke=- width=1.00
 path grid/value/0 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
@@ -22,16 +21,11 @@ path grid/value/9 22.80,52.62 352.00,52.62 closed=false fill=- stroke=D9D9D9 wid
 path grid/value/10 22.80,36.20 352.00,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 clip plot/clip 22.80,36.20 329.20x164.20
   path series/0/area 63.95,85.46 146.25,69.04 228.55,110.09 310.85,93.67 310.85,200.40 228.55,200.40 146.25,200.40 63.95,200.40 closed=true fill=156082 stroke=- width=1.00 dash=-
-  rect series/1/bar/0 51.05,101.88 25.80x98.52 fill=E97132 stroke=- width=1.00
-  rect series/1/bar/1 133.35,52.62 25.80x147.78 fill=E97132 stroke=- width=1.00
-  rect series/1/bar/2 215.65,126.51 25.80x73.89 fill=E97132 stroke=- width=1.00
-  rect series/1/bar/3 297.95,77.25 25.80x123.15 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/0 47.49,101.88 32.92x98.52 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/1 129.79,52.62 32.92x147.78 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/2 212.09,126.51 32.92x73.89 fill=E97132 stroke=- width=1.00
+  rect series/1/bar/3 294.39,77.25 32.92x123.15 fill=E97132 stroke=- width=1.00
   path series/2/line/0 63.95,118.30 146.25,93.67 228.55,101.88 310.85,85.46 closed=false fill=- stroke=196B24 width=2.25 dash=-
-clip plot/markers 19.92,33.33 334.95x169.95
-  arc series/2/marker/0 centre=63.95,118.30 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=196B24 stroke=196B24 width=0.75
-  arc series/2/marker/1 centre=146.25,93.67 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=196B24 stroke=196B24 width=0.75
-  arc series/2/marker/2 centre=228.55,101.88 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=196B24 stroke=196B24 width=0.75
-  arc series/2/marker/3 centre=310.85,85.46 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=196B24 stroke=196B24 width=0.75
 path axis/category/line 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 text axis/value/label/0 13.40,195.00 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
 text axis/value/label/1 13.40,178.58 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"

@@ -12,14 +12,14 @@ text legend/3/text 219.30,221.20 32.40x10.80 rotation=0.00 size=9.00 color=59595
 rect legend/4/symbol 263.70,223.10 7.00x7.00 fill=A02B93 stroke=- width=1.00
 text legend/4/text 274.70,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Fifth"
 rect plot 113.40,56.40 133.20x133.20 fill=- stroke=- width=1.00
-arc series/0/slice/0 centre=180.00,123.00 radius=66.22 inner=0.00 start=-90.00 sweep=324.00 fill=156082 stroke=FFFFFF width=0.75
-arc series/0/slice/1 centre=180.00,123.00 radius=66.22 inner=0.00 start=234.00 sweep=14.40 fill=E97132 stroke=FFFFFF width=0.75
-arc series/0/slice/2 centre=180.00,123.00 radius=66.22 inner=0.00 start=248.40 sweep=10.80 fill=196B24 stroke=FFFFFF width=0.75
-arc series/0/slice/3 centre=180.00,123.00 radius=66.22 inner=0.00 start=259.20 sweep=7.20 fill=0F9ED5 stroke=FFFFFF width=0.75
-arc series/0/slice/4 centre=180.00,123.00 radius=66.22 inner=0.00 start=266.40 sweep=3.60 fill=A02B93 stroke=FFFFFF width=0.75
-path label/0/1/leader 148.10,64.97 146.94,62.87 104.38,101.62 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path label/0/3/leader 171.70,57.30 171.40,54.92 127.27,54.92 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-text label/0/0 184.18,149.99 16.20x21.60 rotation=0.00 size=9.00 color=FFFFFF bold=false "90\n90%"
+arc series/0/slice/0 centre=180.00,123.00 radius=65.85 inner=0.00 start=-90.00 sweep=324.00 fill=156082 stroke=FFFFFF width=1.50
+arc series/0/slice/1 centre=180.00,123.00 radius=65.85 inner=0.00 start=234.00 sweep=14.40 fill=E97132 stroke=FFFFFF width=1.50
+arc series/0/slice/2 centre=180.00,123.00 radius=65.85 inner=0.00 start=248.40 sweep=10.80 fill=196B24 stroke=FFFFFF width=1.50
+arc series/0/slice/3 centre=180.00,123.00 radius=65.85 inner=0.00 start=259.20 sweep=7.20 fill=0F9ED5 stroke=FFFFFF width=1.50
+arc series/0/slice/4 centre=180.00,123.00 radius=65.85 inner=0.00 start=266.40 sweep=3.60 fill=A02B93 stroke=FFFFFF width=1.50
+path label/0/1/leader 148.28,65.30 146.94,62.87 104.38,101.62 closed=false fill=- stroke=A6A6A6 width=0.75 dash=-
+path label/0/3/leader 171.75,57.67 171.40,54.92 127.27,54.92 closed=false fill=- stroke=A6A6A6 width=0.75 dash=-
+text label/0/0 184.11,149.78 16.20x21.60 rotation=0.00 size=9.00 color=404040 bold=false "90\n90%"
 text label/0/1 93.58,101.62 10.80x21.60 rotation=0.00 size=9.00 color=404040 bold=false "4\n4%"
 text label/0/3 116.47,54.42 10.80x21.60 rotation=0.00 size=9.00 color=404040 bold=false "2\n2%"
 text label/0/4 166.82,30.82 10.80x21.60 rotation=0.00 size=9.00 color=404040 bold=false "1\n1%"

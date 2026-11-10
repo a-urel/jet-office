@@ -15,11 +15,11 @@ theme's in `excel-checks.md`.
 | Bar, the same groupings | Laid out | Scale checked on the full run (B and G rows) |
 | Line, the same groupings | Laid out | Scale checked (M16, M18); default line and marker from `chart_defaults.xlsx` |
 | Area, the same groupings | Laid out | Scale checked (M17, M19, G03, G06, G09, G12) |
-| Pie | Laid out (J4) | Estimate, not checked in Excel (pending E1): first slice at 12 o'clock, clockwise; one colour per category in palette order; 0.75 pt outline in the background colour; legend lists the categories at the bottom; a negative value drawn as its absolute value |
+| Pie | Laid out (J4) | Matched by E1 (`excel-checks.md`, "J4 values"): first slice at 12 o'clock, clockwise; one colour per category in palette order; a 1.5 pt outline in the background colour (Excel's white `lt1`); legend lists the categories at the bottom. Pending the owner's look: a negative value drawn as its absolute value |
 | Donut | Laid out (J4) | Estimate, not checked in Excel (pending E1): hole 75 % (`Chart.holeSizePercent`); the first series is the innermost ring; centre text is this library's own |
 | Sparkline | Laid out (J4) | Estimate, not checked in Excel (pending E1/E2): 0.75 pt line, no axes, title, legend or text; Excel's sparkline is a cell feature, not a chart (`x14`), so the file side is the owner's gallery only |
-| Scatter | Laid out (J4) | Estimate, not checked in Excel (pending E1): both axes automatic by `autoValueScale`, horizontal grid lines only; markers only, no lines; each series has its own x column |
-| Combination (per-series kind) | Laid out (J4) | Estimate, not checked in Excel (pending E1): columns, then areas, then lines, primary-axis series before secondary ones within a kind |
+| Scatter | Laid out (J4) | Matched by E1 (chart 4): markers only, no lines; both axis lines `BFBFBF` (`ChartTheme.scatterAxisLine`); grid lines on both axes when the chart sets `categoryAxis.gridLines`, as Excel's default has (the model leaves it off). Estimate: both axes automatic by `autoValueScale`; each series has its own x column |
+| Combination (per-series kind) | Laid out (J4) | Matched by E1 (chart 5) for columns then a line: the columns' gap 150 and no overlap (`combinationGapWidthPercent`), the line without markers (`combinationLineMarkers` off). Estimate: areas before columns, primary-axis series before secondary ones within a kind |
 | Secondary value axis | Laid out (J4) for column, line, area and combination charts | Estimate, not checked in Excel (pending E1): on the right, no grid lines; a bar chart has none |
 | Smooth lines | Laid out (J4), a line series' `smooth`; an area series' `smooth` curves its top on screen only (below) | Estimate, not checked in Excel (pending E1/E2): a Catmull-Rom spline through the points; Excel's smoothing is not documented |
 | Unsupported (a file's chart this model does not know) | Placeholder: the title and `unsupportedName` | Excel draws it; this package cannot |
@@ -43,7 +43,7 @@ theme's in `excel-checks.md`.
 | Axis titles | Shown when set | Use the axis label style |
 | Chart area | White background, 0.75 pt `D9D9D9` border | Same in the Office theme; other themes have no border unless `border` is set |
 | Areas, J4 | Fill and no line (`areaOpacity` 1, `areaLine` off) | `areaOpacity` below 1 and `areaLine` are this library's own look for an app (Monépro's trend tiles); the file writes them as `a:alpha` and the series `a:ln` (estimate, not checked in Excel) |
-| Data labels of a pie or donut | Value, percent or both (`showValue`, `showPercent`) | `minShare` is screen only; placement is this package's own rule (below); the leader line colour and width (the axis line's) are estimates, not checked in Excel |
+| Data labels of a pie or donut | Value, percent or both (`showValue`, `showPercent`) | `minShare` is screen only; placement is this package's own rule (below); the leader line is Excel's `A6A6A6` (`ChartTheme.leaderLine`) at 0.75 pt (E1, chart 7); in the Office theme the labels are `404040` on every slice, as Excel's (below) |
 
 ## Deliberate differences
 
@@ -181,12 +181,19 @@ theme's in `excel-checks.md`.
 
 ### J4 kinds
 
-Every Excel value named here is "estimate, not checked in Excel" until the
+An Excel value named here is "estimate, not checked in Excel" unless the
 owner's E1 (`chart_reference_j4.xlsx`, `test/fixtures/owner/charts/
-TALIMATLAR_J4.md`) and E2 (the J4 gallery side by side) are recorded in
-`excel-checks.md`; this page never states an Excel result the owner has not
-given.
+TALIMATLAR_J4.md`) or E2 (the J4 gallery side by side), recorded in
+`excel-checks.md`, settled it; this page never states an Excel result the
+owner has not given.
 
+- **Pie labels inside a slice (E1, chart 7, 2026-11-10).** Excel writes a
+  pie's labels dark (`404040`, `tx1` at `lumMod` 0.75 and `lumOff` 0.25)
+  whatever the slice, and since E1 the Office theme does the same
+  (`ChartTheme.sliceLabelContrast` off). An app's theme keeps the readable
+  rule by default (`sliceLabelContrast` on, as `fromColors` has it): a label
+  inside a dark slice takes the lighter of the label colour and the
+  background, as a label inside a bar does.
 - **Centre text of a donut.** Excel's doughnut has no such element, as far as
   this library knows (not checked in Excel; a text box over the chart does the
   same). `Chart.centerText` is drawn in the theme's `centerTextStyle` (the title

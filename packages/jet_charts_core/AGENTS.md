@@ -209,10 +209,18 @@ by hand, then fix it.
 
 ## Open for J5, C2 and C3
 
-- J4's Excel values (first slice angle, hole size, outline, colours, scatter
-  and secondary axis defaults, sparkline width, the smooth curve, the label
-  leader line) are estimates, not checked in Excel, until the owner's E1 and
-  E2 (`docs/excel-checks.md`, "J4 values"); J4 is "done but its Excel check".
+- J4's Excel check: the owner's E1 file and E2 gallery check are recorded
+  (`docs/excel-checks.md`, "J4 values"), and what they showed is fixed: the
+  1.5 pt slice outline, `ChartTheme.leaderLine`, a combination's lines
+  without markers (`combinationLineMarkers`) and its columns' gap 150 with no
+  overlap (`combinationGapWidthPercent`), a scatter chart's axis lines
+  (`scatterAxisLine`) and its grid lines on both axes (the model's
+  `categoryAxis.gridLines`; the galleries set it), and the gallery workbook's
+  style parts, and pie labels in `404040` on every slice in the Office theme
+  (`sliceLabelContrast` off; on by default for an app's themes,
+  `docs/parity.md`). Still unread: a secondary axis, a numeric scatter's
+  axes, a negative slice, a two-series donut's ring order, the smooth curve's
+  shape and the sparkline width (pending the owner's look).
 - Not done: Excel's other scatter styles (lines with or without markers,
   smooth), a bar chart's secondary axis, rounded bar corners (a Monépro
   nice-to-have), gradient fills, and a pie's data label threshold as Excel

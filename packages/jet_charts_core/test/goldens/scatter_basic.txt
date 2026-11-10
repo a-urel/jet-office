@@ -6,6 +6,16 @@ text legend/0/text 147.00,221.20 27.00x10.80 rotation=0.00 size=9.00 color=59595
 arc legend/1/marker centre=189.50,226.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
 text legend/1/text 197.00,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "South"
 rect plot 22.80,36.20 329.20x164.20 fill=- stroke=- width=1.00
+path grid/category/0 22.80,36.20 22.80,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/1 59.38,36.20 59.38,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/2 95.96,36.20 95.96,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/3 132.53,36.20 132.53,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/4 169.11,36.20 169.11,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/5 205.69,36.20 205.69,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/6 242.27,36.20 242.27,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/7 278.84,36.20 278.84,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/8 315.42,36.20 315.42,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/9 352.00,36.20 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path grid/value/0 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path grid/value/1 22.80,167.56 352.00,167.56 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
 path grid/value/2 22.80,134.72 352.00,134.72 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
@@ -24,7 +34,8 @@ clip plot/markers 19.92,33.33 334.95x169.95
   arc series/1/marker/2 centre=169.11,108.45 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
   arc series/1/marker/3 centre=242.27,134.72 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
   arc series/1/marker/4 centre=315.42,160.99 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=E97132 stroke=E97132 width=0.75
-path axis/category/line 22.80,200.40 352.00,200.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path axis/value/line 22.80,36.20 22.80,200.40 closed=false fill=- stroke=BFBFBF width=0.75 dash=-
+path axis/category/line 22.80,200.40 352.00,200.40 closed=false fill=- stroke=BFBFBF width=0.75 dash=-
 text axis/value/label/0 13.40,195.00 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
 text axis/value/label/1 13.40,162.16 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"
 text axis/value/label/2 8.00,129.32 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"

@@ -89,7 +89,9 @@ final class PieLabelPlacement {
 ///    centre unless the slice is the whole disc), shares no area with
 ///    another slice or leader line (as `findOverlaps` reads them) and keeps
 ///    `minTextGap` from every text. Inside a slice its colour reads against
-///    the fill (`insideLabelStyle`), as a label inside a bar does.
+///    the fill (`insideLabelStyle`), as a label inside a bar does, when the
+///    theme's `sliceLabelContrast` is on; else it is the data label style,
+///    as Excel's (the Office theme).
 /// 2. In a donut ([outside] false) a label that does not fit is hidden.
 /// 3. In a pie the others are tried outside: first at `labelGap` beyond the
 ///    slices' reach (`arcShapeReach`) along the middle angle, on the right
@@ -187,7 +189,9 @@ PieLabelPlacement placePieLabels({
       slice.labelId,
       text,
       rect,
-      insideLabelStyle(style, theme.background, arc.fill ?? style.color),
+      theme.sliceLabelContrast
+          ? insideLabelStyle(style, theme.background, arc.fill ?? style.color)
+          : style,
     );
     if (_inRing(rect, slice) &&
         bounds.contains(rect) &&
@@ -280,7 +284,7 @@ PieLabelPlacement placePieLabels({
         leader = PathPrimitive(
           ids.dataLabelLeaderId(o.slice.series, o.slice.category),
           <ChartPoint>[from, out, nearest(rect)],
-          stroke: theme.axisLine,
+          stroke: theme.leaderLine,
           strokeWidth: theme.spacing.axisLineWidth,
         );
       }

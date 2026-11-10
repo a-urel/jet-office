@@ -78,7 +78,9 @@ final class ChartLayout {
   ///   each.
   /// * `legend/<s>/symbol` and `legend/<s>/text`: the legend entry of series
   ///   `<s>`; a line series' entry also has `legend/<s>/marker`, the marker
-  ///   on its line, when the theme's `lineMarkers` is on; a scatter series'
+  ///   on its line, when the theme's `lineMarkersOf` the chart's kind is on
+  ///   (a combination chart's lines need `combinationLineMarkers` too); a
+  ///   scatter series'
   ///   entry is `legend/<s>/marker`, its marker alone, and its text.
   /// * `axis/<a>/line`, `axis/<a>/label/<i>` and `axis/<a>/title`, where `<a>`
   ///   is `value` or `category`: the axis line, its label `<i>` (a value

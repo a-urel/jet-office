@@ -16,9 +16,9 @@ final class ChartTheme {
   /// Creates a theme.
   ///
   /// [palette] and [semantic] are copied and unmodifiable. [spacing] defaults
-  /// to the Office theme's `ChartSpacing()` and [tooltip] to the Office
-  /// theme's tooltip look. Throws an [ArgumentError] when
-  /// [palette] is empty.
+  /// to the Office theme's `ChartSpacing()`, [tooltip] to the Office theme's
+  /// tooltip look and [leaderLine] to [axisLine]. Throws an [ArgumentError]
+  /// when [palette] is empty.
   ChartTheme({
     required List<ChartColor> palette,
     Map<String, ChartColor> semantic = const <String, ChartColor>{},
@@ -28,6 +28,7 @@ final class ChartTheme {
     required this.dataLabels,
     required this.gridLine,
     required this.axisLine,
+    ChartColor? leaderLine,
     required this.background,
     this.border,
     this.borderWidth = 0.75,
@@ -43,11 +44,16 @@ final class ChartTheme {
     this.exportColors = ChartExportColors.fixed,
     this.areaOpacity = 1,
     this.areaLine = false,
-    this.sliceBorderWidth = 0.75,
+    this.sliceBorderWidth = 1.5,
     this.centerText,
     this.sparklineWidth = 0.75,
+    this.combinationLineMarkers = false,
+    this.combinationGapWidthPercent = 150,
+    this.scatterAxisLine,
+    this.sliceLabelContrast = true,
   }) : palette = List<ChartColor>.unmodifiable(palette),
        semantic = Map<String, ChartColor>.unmodifiable(semantic),
+       leaderLine = leaderLine ?? axisLine,
        spacing = spacing ?? ChartSpacing(),
        tooltip = tooltip ?? buildOfficeTooltipStyle() {
     if (palette.isEmpty) {
@@ -71,10 +77,10 @@ final class ChartTheme {
   /// [fontFamily] and [text]; the title is `fontSize * 14 / 9`, 14 pt for the
   /// default. [gridLine] defaults to [text] blended 15 % over [background]
   /// (per channel, rounded), and is also the axis line colour and the
-  /// tooltip's border. The tooltip's background is [background] and its text
+  /// tooltip's border, and the leader line colour. The tooltip's background is [background] and its text
   /// is [fontFamily] at `fontSize + 1` in [text]. There is no [border] and no
-  /// [valueAxisLine], and [exportColors] is [ChartExportColors.fixed]. Every
-  /// other value is the Office theme's. Dark mode is the same call with dark
+  /// [valueAxisLine] and no [scatterAxisLine], and [exportColors] is
+  /// [ChartExportColors.fixed]. Every other value is the Office theme's. Dark mode is the same call with dark
   /// colours.
   ///
   /// Throws an [ArgumentError] when [palette] is empty or [fontSize] is not
@@ -150,9 +156,17 @@ final class ChartTheme {
   ///
   /// Its [tooltip] is this library's own look, not an Excel value.
   ///
-  /// The J4 values are [areaOpacity] 1, [areaLine] off, [centerText] null,
-  /// and [sliceBorderWidth] and [sparklineWidth] 0.75: the two widths are
-  /// estimates, not checked in Excel.
+  /// The J4 values are [areaOpacity] 1, [areaLine] off, [centerText] null
+  /// and [sparklineWidth] 0.75 (an estimate, not checked in Excel). The
+  /// owner's E1 file (`chart_reference_j4.xlsx`, Excel for Mac 16.114.4,
+  /// 2026-11-10) verifies [sliceBorderWidth] 1.5 in the [background] (`lt1`),
+  /// the [leaderLine] `A6A6A6` (`tx1` with `lumMod` 0.35 and `lumOff` 0.65),
+  /// a combination's lines without markers ([combinationLineMarkers] off)
+  /// and its columns' gap of 150 with no overlap
+  /// ([combinationGapWidthPercent]), a scatter chart's two axis lines in
+  /// `BFBFBF` ([scatterAxisLine], `tx1` with `lumMod` 0.25 and `lumOff`
+  /// 0.75), and pie labels in the data label colour on every slice
+  /// ([sliceLabelContrast] off).
   static final ChartTheme office = buildOfficeTheme();
 
   /// The series colours, in order. Never empty.
@@ -178,6 +192,12 @@ final class ChartTheme {
 
   /// The colour of axis lines.
   final ChartColor axisLine;
+
+  /// The colour of a pie label's leader line, drawn the spacing's
+  /// `axisLineWidth` wide. A theme that names none takes [axisLine]; the
+  /// Office theme's is Excel's `A6A6A6` (`tx1` with `lumMod` 0.35 and
+  /// `lumOff` 0.65), verified by E1 (chart 7).
+  final ChartColor leaderLine;
 
   /// The colour behind the chart.
   final ChartColor background;
@@ -261,8 +281,8 @@ final class ChartTheme {
   final bool areaLine;
 
   /// The width of the outline of each pie or donut slice, in points, drawn in
-  /// [background]; 0 draws none. The Office theme's 0.75 is an estimate, not
-  /// checked in Excel.
+  /// [background]; 0 draws none. Excel's 1.5 in `lt1` (white), the default,
+  /// is verified by E1 (`a:ln w="19050"` on every slice).
   final double sliceBorderWidth;
 
   /// The style of `Chart.centerText`, or null for [titleText]. Read
@@ -275,33 +295,83 @@ final class ChartTheme {
   /// an estimate, not checked in Excel.
   final double sparklineWidth;
 
+  /// Whether the line series of a combination chart mark every point, when
+  /// [lineMarkers] is on too ([lineMarkersOf]).
+  ///
+  /// Excel's "Clustered Column - Line" draws its line without markers
+  /// (`c:symbol none`, E1 chart 5), so the default is `false`. A plain line
+  /// chart, with a secondary axis or not, keeps [lineMarkers] alone. A
+  /// point with no neighbour keeps its marker either way, so it shows.
+  final bool combinationLineMarkers;
+
+  /// The gap of the clustered columns of a combination chart, as
+  /// [gapWidthPercent] is for a clustered column chart; their overlap is 0.
+  /// Excel's default, 150 with no `c:overlap`, is verified by E1 (chart 5).
+  /// A stacked combination takes [stackedGapWidthPercent].
+  final double combinationGapWidthPercent;
+
+  /// The colour of a scatter chart's two axis lines, or null to draw them as
+  /// any chart's (in [axisLine], the vertical one only with [valueAxisLine]).
+  ///
+  /// When set, a scatter chart draws both its axis lines in it, the vertical
+  /// one even when [valueAxisLine] is off. Excel's default scatter chart has
+  /// both, `BFBFBF` (`tx1` with `lumMod` 0.25 and `lumOff` 0.75), and grid
+  /// lines on both axes (E1 chart 4); the vertical grid lines are the model's
+  /// `Chart.categoryAxis.gridLines`. [copyWith] cannot set this field back
+  /// to null.
+  final ChartColor? scatterAxisLine;
+
+  /// Whether a data label inside a pie or donut slice reads against the
+  /// slice: the lighter or darker of [dataLabels]' colour and [background],
+  /// whichever contrasts more with the fill, as a label inside a bar does.
+  ///
+  /// When `false`, a label inside a slice takes [dataLabels] as it is.
+  /// Excel writes a pie's labels in its data label colour whatever the
+  /// slice (`404040`, E1 chart 7), so the Office theme sets `false`; the
+  /// default, `true`, keeps the readable rule for an app's themes (and
+  /// [fromColors]). A label outside a pie takes [dataLabels] either way.
+  final bool sliceLabelContrast;
+
+  /// Whether the line series of a chart of [kind] mark every point:
+  /// [lineMarkers], and in a combination chart [combinationLineMarkers] too.
+  bool lineMarkersOf(ChartKind kind) =>
+      lineMarkers && (kind != ChartKind.combination || combinationLineMarkers);
+
   /// The style of `Chart.centerText`: [centerText], else [titleText].
   ChartTextStyle get centerTextStyle => centerText ?? titleText;
 
   /// The gap width of a chart of [kind] and [grouping], as a percentage of a
   /// bar's width: [stackedGapWidthPercent] when it is stacked or percent
-  /// stacked, [barGapWidthPercent] for a clustered bar chart, and
-  /// [gapWidthPercent] otherwise (a clustered column chart; other kinds have
-  /// no bars).
+  /// stacked, [barGapWidthPercent] for a clustered bar chart,
+  /// [combinationGapWidthPercent] for the columns of a clustered combination
+  /// chart, and [gapWidthPercent] otherwise (a clustered column chart; other
+  /// kinds have no bars).
   double gapWidthPercentOf(ChartKind kind, ChartGrouping grouping) {
     if (grouping != ChartGrouping.clustered) {
       return stackedGapWidthPercent;
     }
-    return kind == ChartKind.bar ? barGapWidthPercent : gapWidthPercent;
+    return switch (kind) {
+      ChartKind.bar => barGapWidthPercent,
+      ChartKind.combination => combinationGapWidthPercent,
+      _ => gapWidthPercent,
+    };
   }
 
   /// The overlap of the bars of one category in a chart of [kind] and
   /// [grouping], as a percentage of a bar's width: 100 when it is stacked or
   /// percent stacked (the bars of a category are one stack), the spacing's
-  /// `barOverlapPercent` for a clustered bar chart, and its `overlapPercent`
-  /// otherwise.
+  /// `barOverlapPercent` for a clustered bar chart, 0 for the columns of a
+  /// clustered combination chart (Excel's, E1 chart 5), and the spacing's
+  /// `overlapPercent` otherwise.
   double overlapPercentOf(ChartKind kind, ChartGrouping grouping) {
     if (grouping != ChartGrouping.clustered) {
       return 100;
     }
-    return kind == ChartKind.bar
-        ? spacing.barOverlapPercent
-        : spacing.overlapPercent;
+    return switch (kind) {
+      ChartKind.bar => spacing.barOverlapPercent,
+      ChartKind.combination => 0,
+      _ => spacing.overlapPercent,
+    };
   }
 
   /// The colour of the series at [index], counting from 0.
@@ -410,6 +480,7 @@ final class ChartTheme {
     ChartTextStyle? dataLabels,
     ChartColor? gridLine,
     ChartColor? axisLine,
+    ChartColor? leaderLine,
     ChartColor? background,
     ChartColor? border,
     double? borderWidth,
@@ -428,6 +499,10 @@ final class ChartTheme {
     double? sliceBorderWidth,
     ChartTextStyle? centerText,
     double? sparklineWidth,
+    bool? combinationLineMarkers,
+    double? combinationGapWidthPercent,
+    ChartColor? scatterAxisLine,
+    bool? sliceLabelContrast,
   }) {
     return ChartTheme(
       palette: palette ?? this.palette,
@@ -438,6 +513,7 @@ final class ChartTheme {
       dataLabels: dataLabels ?? this.dataLabels,
       gridLine: gridLine ?? this.gridLine,
       axisLine: axisLine ?? this.axisLine,
+      leaderLine: leaderLine ?? this.leaderLine,
       background: background ?? this.background,
       border: border ?? this.border,
       borderWidth: borderWidth ?? this.borderWidth,
@@ -457,6 +533,12 @@ final class ChartTheme {
       sliceBorderWidth: sliceBorderWidth ?? this.sliceBorderWidth,
       centerText: centerText ?? this.centerText,
       sparklineWidth: sparklineWidth ?? this.sparklineWidth,
+      combinationLineMarkers:
+          combinationLineMarkers ?? this.combinationLineMarkers,
+      combinationGapWidthPercent:
+          combinationGapWidthPercent ?? this.combinationGapWidthPercent,
+      scatterAxisLine: scatterAxisLine ?? this.scatterAxisLine,
+      sliceLabelContrast: sliceLabelContrast ?? this.sliceLabelContrast,
     );
   }
 
@@ -471,6 +553,7 @@ final class ChartTheme {
         dataLabels == other.dataLabels &&
         gridLine == other.gridLine &&
         axisLine == other.axisLine &&
+        leaderLine == other.leaderLine &&
         background == other.background &&
         border == other.border &&
         borderWidth == other.borderWidth &&
@@ -488,7 +571,11 @@ final class ChartTheme {
         areaLine == other.areaLine &&
         sliceBorderWidth == other.sliceBorderWidth &&
         centerText == other.centerText &&
-        sparklineWidth == other.sparklineWidth;
+        sparklineWidth == other.sparklineWidth &&
+        combinationLineMarkers == other.combinationLineMarkers &&
+        combinationGapWidthPercent == other.combinationGapWidthPercent &&
+        scatterAxisLine == other.scatterAxisLine &&
+        sliceLabelContrast == other.sliceLabelContrast;
   }
 
   @override
@@ -501,6 +588,7 @@ final class ChartTheme {
     dataLabels,
     gridLine,
     axisLine,
+    leaderLine,
     background,
     border,
     borderWidth,
@@ -519,6 +607,10 @@ final class ChartTheme {
     sliceBorderWidth,
     centerText,
     sparklineWidth,
+    combinationLineMarkers,
+    combinationGapWidthPercent,
+    scatterAxisLine,
+    sliceLabelContrast,
   ]);
 
   @override

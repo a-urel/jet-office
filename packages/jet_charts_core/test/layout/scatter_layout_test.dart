@@ -33,12 +33,13 @@ Chart _scatter(
   dataLabels: dataLabels,
 );
 
-ChartLayout _lay(Chart chart, {ChartSize size = _size}) => layoutChart(
-  chart,
-  theme: _office,
-  size: size,
-  measurer: const FixedWidthTextMeasurer(),
-);
+ChartLayout _lay(Chart chart, {ChartSize size = _size, ChartTheme? theme}) =>
+    layoutChart(
+      chart,
+      theme: theme ?? _office,
+      size: size,
+      measurer: const FixedWidthTextMeasurer(),
+    );
 
 Iterable<ChartPrimitive> _flat(List<ChartPrimitive> list) sync* {
   for (final ChartPrimitive p in list) {
@@ -74,6 +75,61 @@ void main() {
   final Chart basic = _scatter(<ChartSeries>[
     _series('Points', <Object?>[1, 2, 4], <double?>[10, 20, 15]),
   ]);
+
+  PathPrimitive? line(ChartLayout layout, String axis) {
+    for (final ChartPrimitive p in _flat(layout.primitives)) {
+      if (p is PathPrimitive && p.id == 'axis/$axis/line') {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  test('the Office theme draws both scatter axis lines in BFBFBF', () {
+    final ChartLayout layout = _lay(
+      _scatter(<ChartSeries>[
+        _series('Points', <Object?>[1, 2, 4], <double?>[10, 20, 15]),
+      ], categoryAxis: const ChartAxis(gridLines: true)),
+    );
+    final ChartColor expected = _office.scatterAxisLine!;
+    expect(expected.rgb, 0xBFBFBF);
+    expect(line(layout, 'value')!.stroke, expected);
+    expect(line(layout, 'category')!.stroke, expected);
+    expect(line(layout, 'value')!.strokeWidth, 0.75);
+    expect(line(layout, 'category')!.strokeWidth, 0.75);
+    // Excel's default scatter: grid lines on both axes (E1, chart 4).
+    expect(_starting<PathPrimitive>(layout, 'grid/category/'), isNotEmpty);
+    expect(_starting<PathPrimitive>(layout, 'grid/value/'), isNotEmpty);
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+
+  test('without scatterAxisLine a scatter draws its axes as before', () {
+    final ChartTheme plain = ChartTheme.fromColors(
+      palette: <ChartColor>[ChartColor.rgb(0x2563EB)],
+      fontFamily: 'Test',
+      text: ChartColor.rgb(0x333333),
+      background: ChartColor.rgb(0xFFFFFF),
+    );
+    final ChartLayout layout = _lay(basic, theme: plain);
+    expect(line(layout, 'value'), isNull);
+    expect(line(layout, 'category')!.stroke, plain.axisLine);
+  });
+
+  test('a column chart keeps the Office theme without a value axis line', () {
+    final ChartLayout layout = layoutChart(
+      Chart(
+        kind: ChartKind.column,
+        series: <ChartSeries>[
+          _series('Points', <Object?>['a', 'b'], <double?>[1, 2]),
+        ],
+      ),
+      theme: _office,
+      size: _size,
+      measurer: const FixedWidthTextMeasurer(),
+    );
+    expect(line(layout, 'value'), isNull);
+    expect(line(layout, 'category')!.stroke, _office.axisLine);
+  });
 
   test('three points draw three markers on two value axes', () {
     final ChartLayout layout = _lay(basic);

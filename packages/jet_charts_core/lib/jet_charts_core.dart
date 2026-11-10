@@ -57,7 +57,11 @@
 ///   fills of `PathPrimitive.fillOpacity`;
 /// * theme values `areaOpacity`, `areaLine`, `sliceBorderWidth`, `centerText`
 ///   and `sparklineWidth`, and `ChartTheme.fromColors`, an app's theme from
-///   its palette, font and colours.
+///   its palette, font and colours;
+/// * after the owner's E1 file, theme values `leaderLine`,
+///   `combinationLineMarkers`, `combinationGapWidthPercent`,
+///   `scatterAxisLine` and `sliceLabelContrast`, and
+///   `ChartTheme.lineMarkersOf`.
 library;
 
 export 'src/interaction/element_id.dart'

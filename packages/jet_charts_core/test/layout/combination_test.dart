@@ -2,7 +2,12 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:test/test.dart';
 
 const ChartSize _size = ChartSize(360, 240);
-final ChartTheme _office = ChartTheme.office;
+// The Office theme with markers on a combination's lines, as the tests of
+// mark positions need them; Excel's own look has none (`_excel`).
+final ChartTheme _office = ChartTheme.office.copyWith(
+  combinationLineMarkers: true,
+);
+final ChartTheme _excel = ChartTheme.office;
 const List<String> _quarters = <String>['Q1', 'Q2', 'Q3', 'Q4'];
 
 ChartSeries _series(String name, List<double?> values, {ChartKind? kind}) =>
@@ -24,12 +29,13 @@ Chart _combo(
   dataLabels: dataLabels,
 );
 
-ChartLayout _lay(Chart chart, {ChartSize size = _size}) => layoutChart(
-  chart,
-  theme: _office,
-  size: size,
-  measurer: const FixedWidthTextMeasurer(),
-);
+ChartLayout _lay(Chart chart, {ChartSize size = _size, ChartTheme? theme}) =>
+    layoutChart(
+      chart,
+      theme: theme ?? _office,
+      size: size,
+      measurer: const FixedWidthTextMeasurer(),
+    );
 
 Iterable<ChartPrimitive> _flat(List<ChartPrimitive> list) sync* {
   for (final ChartPrimitive p in list) {
@@ -205,6 +211,88 @@ void main() {
     expect(markers[0].center.y, closeTo(y(10), 1e-9));
     expect(markers[3].center.y, closeTo(y(16), 1e-9));
     expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+
+  test('the Office theme draws a combination line without markers', () {
+    final ChartLayout layout = _lay(columnLine, theme: _excel);
+    final List<String> ids = _ids(layout);
+    expect(ids, contains('series/1/line/0'));
+    expect(_starting<ArcPrimitive>(layout, 'series/1/marker/'), isEmpty);
+    expect(ids, contains('legend/1/symbol'));
+    expect(ids, isNot(contains('legend/1/marker')));
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
+
+  test('a lone combination line point keeps its marker', () {
+    final ChartLayout layout = _lay(
+      _combo(<ChartSeries>[
+        _series('Sales', <double?>[12, 18, 9, 15]),
+        _series('Trend', <double?>[10, null, 12, 16], kind: ChartKind.line),
+      ]),
+      theme: _excel,
+    );
+    expect(
+      _starting<ArcPrimitive>(
+        layout,
+        'series/1/marker/',
+      ).map((ArcPrimitive m) => m.id),
+      <String>['series/1/marker/0'],
+    );
+  });
+
+  test('a line chart with a secondary axis keeps its markers', () {
+    final ChartLayout layout = _lay(
+      Chart(
+        kind: ChartKind.line,
+        series: <ChartSeries>[
+          _series('A', <double?>[12, 18, 9, 15]),
+          ChartSeries(
+            name: ChartData<String>(values: <String?>['B']),
+            categories: ChartData<Object>(values: _quarters),
+            values: ChartData<double>(values: <double?>[1, 2, 3, 4]),
+            axis: ChartAxisBinding.secondary,
+          ),
+        ],
+        secondaryValueAxis: const ChartAxis(),
+      ),
+      theme: _excel,
+    );
+    expect(_starting<ArcPrimitive>(layout, 'series/0/marker/'), hasLength(4));
+    expect(_starting<ArcPrimitive>(layout, 'series/1/marker/'), hasLength(4));
+  });
+
+  test('combination columns have Excel\'s gap 150 and no overlap', () {
+    final ChartLayout layout = _lay(
+      _combo(<ChartSeries>[
+        _series('A', <double?>[12, 18, 9, 15]),
+        _series('B', <double?>[8, 11, 14, 10]),
+        _series('Trend', <double?>[10, 14, 12, 16], kind: ChartKind.line),
+      ]),
+      theme: _excel,
+    );
+    final ChartRect plot = layout.plotArea!;
+    final double band = plot.width / 4;
+    final List<RectPrimitive> a = _starting<RectPrimitive>(layout, 'series/0/');
+    final List<RectPrimitive> b = _starting<RectPrimitive>(layout, 'series/1/');
+    for (int c = 0; c < 4; c++) {
+      // Two bars and a gap of 1.5 bars fill the band, side by side.
+      expect(a[c].rect.width, closeTo(band / 3.5, 1e-9));
+      expect(b[c].rect.left, closeTo(a[c].rect.right, 1e-9));
+    }
+  });
+
+  test('stacked combination columns keep the stacked gap', () {
+    final ChartLayout layout = _lay(
+      _combo(<ChartSeries>[
+        _series('A', <double?>[12, 18, 9, 15]),
+        _series('B', <double?>[8, 11, 14, 10]),
+      ], grouping: ChartGrouping.stacked),
+      theme: _excel,
+    );
+    final double band = layout.plotArea!.width / 4;
+    final List<RectPrimitive> a = _starting<RectPrimitive>(layout, 'series/0/');
+    // One stack and a gap of 1.5 bars.
+    expect(a.first.rect.width, closeTo(band / 2.5, 1e-9));
   });
 
   test('the legend draws a line series as a line, columns as squares', () {

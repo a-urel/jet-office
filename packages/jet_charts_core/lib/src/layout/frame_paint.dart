@@ -293,6 +293,11 @@ extension FramePaint on FrameContext {
     final ScatterAxis? scatterAxis = xScale == null
         ? null
         : (scale: xScale, values: xValues);
+    // A scatter chart draws both axis lines in the theme's scatter axis
+    // colour when it has one, as Excel's default scatter chart does.
+    final ChartColor? scatterLine = xScale == null
+        ? null
+        : theme.scatterAxisLine;
     final ({List<ChartPrimitive> shapes, List<ChartPrimitive> markers}) marks =
         _splitMarkers(
           layoutMarks(
@@ -348,11 +353,12 @@ extension FramePaint on FrameContext {
       ClipPrimitive(ids.plotClip, plot, marks.shapes),
       if (marks.markers.isNotEmpty)
         ClipPrimitive(ids.markerClip, _markerClip(plot), marks.markers),
-      if (chart.valueAxis.visible && theme.valueAxisLine)
+      if (chart.valueAxis.visible &&
+          (theme.valueAxisLine || scatterLine != null))
         valueAxisLine(
           plot,
           horizontal: bar,
-          color: theme.axisLine,
+          color: scatterLine ?? theme.axisLine,
           width: theme.spacing.axisLineWidth,
           crossScale: xScale,
         ),
@@ -372,7 +378,7 @@ extension FramePaint on FrameContext {
           scale,
           plot,
           horizontal: bar,
-          color: theme.axisLine,
+          color: scatterLine ?? theme.axisLine,
           width: theme.spacing.axisLineWidth,
         ),
       if (shown.valueLabels)
