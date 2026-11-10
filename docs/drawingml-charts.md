@@ -223,7 +223,9 @@ checks what it shows. What it showed, each now what the writer writes:
   J4 reference charts decide).** A line series' `smooth` is `c:smooth 1` (the
   group's stays 0); an area series' `smooth` writes nothing, as Excel's area
   has no `c:smooth` (the curved top is screen only, `parity.md`), and reads
-  back as not smooth. `pointColors` of a column, bar or line series are one
+  back as not smooth. `pointColors` of a column, bar or line series, and the
+  theme's colours of its `pointColorKeys` (`ChartTheme.pointColorOf`; the
+  file holds no key, so the colour reads back as a point colour), are one
   `c:dPt` per colour, after `c:marker` or `c:invertIfNegative` and before
   `c:dLbls` (the schema's order): `c:idx`, `c:invertIfNegative 0` of a bar,
   for a line the marker filled and lined in the colour, `c:bubble3D 0`, and

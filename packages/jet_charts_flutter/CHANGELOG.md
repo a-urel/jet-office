@@ -9,6 +9,9 @@
 - J4: `docs/app-themes.md`, the gallery app's J4 charts and the Excel
   gallery's, and benchmark cases for a 10,000-point scatter chart and a pie of
   60 slices.
+- J4 (for Monépro): `JetChart.tooltipLines` (`JetChartTooltipLines`), the
+  app's own lines under a tooltip's rows, in the box and the screen reader
+  nodes.
 
 ## 0.1.0-dev.1
 

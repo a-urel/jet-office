@@ -5,6 +5,37 @@ import 'package:flutter/widgets.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_core/jet_core.dart';
 
+/// The extra lines `JetChart.tooltipLines` adds under [tooltip]'s rows, as
+/// the app words them; empty for none.
+///
+/// [tooltip] is the chart's own (`chartTooltipAt`, `chartTooltipFor`): its
+/// `ChartTooltip.series` and `ChartTooltip.category` say which point or
+/// category it is of.
+typedef JetChartTooltipLines = List<String> Function(ChartTooltip tooltip);
+
+/// [tooltip] with [lines]' lines added under its rows, each as a row of its
+/// label alone (no colour, no value); [tooltip] itself when [lines] is
+/// `null` or gives none.
+ChartTooltip withTooltipLines(
+  ChartTooltip tooltip,
+  JetChartTooltipLines? lines,
+) {
+  final List<String> extra = lines == null ? const <String>[] : lines(tooltip);
+  if (extra.isEmpty) {
+    return tooltip;
+  }
+  return ChartTooltip(
+    title: tooltip.title,
+    rows: <ChartTooltipRow>[
+      ...tooltip.rows,
+      for (final String line in extra) ChartTooltipRow(label: line, value: ''),
+    ],
+    sourceId: tooltip.sourceId,
+    series: tooltip.series,
+    category: tooltip.category,
+  );
+}
+
 /// How far, in logical pixels, a mouse pointer may be from a primitive and
 /// still hit it.
 const double mouseTolerance = 2;

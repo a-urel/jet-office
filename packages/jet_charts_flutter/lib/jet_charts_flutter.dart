@@ -12,7 +12,7 @@
 library;
 
 export 'src/chart_layout_painter.dart' show ChartLayoutPainter;
-export 'src/interaction.dart' show JetChartHit;
+export 'src/interaction.dart' show JetChartHit, JetChartTooltipLines;
 export 'src/jet_chart.dart'
     show JetChart, JetChartErrorBuilder, JetChartStateBuilder;
 export 'src/primitive_painter.dart' show paintChartPrimitives;

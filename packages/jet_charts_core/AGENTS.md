@@ -18,9 +18,11 @@ the theme, the drawing primitives and the text measurer (J1), the value scale
 `ChartTooltipStyle`), `summarizeChart`, and the Office border and no value axis
 line; the renderer is `jet_charts_flutter`. J4 added pies, donuts, sparklines,
 scatter and combination charts, per-series kind, the secondary value axis,
-smooth lines, point colours, translucent areas with an edge line, pie data
-labels with `minShare`, `ChartTheme.fromColors` and `ChartSummary`'s shares,
-centre text and x values; `docs/parity.md` lists their deliberate differences.
+smooth lines, point colours and point colour keys (`pointColorKeys`, through
+`ChartTheme.pointColorOf`), translucent areas with an edge line, pie data
+labels with `minShare`, `ChartTheme.fromColors`, `ChartTooltip`'s `series` and
+`category`, and `ChartSummary`'s shares, centre text and x values;
+`docs/parity.md` lists their deliberate differences.
 
 ## The packages
 
@@ -264,7 +266,8 @@ by hand, then fix it.
   its serial through `jet_core`'s General text, as it exports no serial
   function; a line series' point colour with markers off draws and writes a
   lone circle marker (Excel unchecked); labels shown with `showValue: false`
-  read back hidden (the chart reads untyped).
+  read back hidden (the chart reads untyped); the layout fuzz does not draw
+  `pointColorKeys` (adding it to the J4 `Random` would move every J4 case).
 - Minor: `public_api_test` asserts the exact formatted export text.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
 

@@ -47,6 +47,34 @@ final ChartTheme darkTheme = ChartTheme.fromColors(
 
 // --- docs/app-themes.md: the charts -----------------------------------
 
+/// Invoice statuses, coloured by the theme's semantic keys.
+final Chart statuses = Chart(
+  kind: ChartKind.donut,
+  series: <ChartSeries>[
+    ChartSeries(
+      name: ChartData<String>(values: <String?>['Faturalar']),
+      categories: ChartData<Object>(
+        values: <Object?>['Ödendi', 'Gecikmiş', 'Taslak'],
+      ),
+      values: ChartData<double>(values: <double?>[42, 7, 5]),
+      pointColorKeys: <String?>['success', 'destructive', 'muted'],
+    ),
+  ],
+);
+
+/// Sales by hour, and the number of sales in each hour for the tooltip.
+final Chart hours = Chart(
+  kind: ChartKind.column,
+  series: <ChartSeries>[
+    ChartSeries(
+      name: ChartData<String>(values: <String?>['Satış']),
+      categories: ChartData<Object>(values: <Object?>['09', '10', '11']),
+      values: ChartData<double>(values: <double?>[840, 1210, 990]),
+    ),
+  ],
+);
+const List<int> counts = <int>[9, 12, 10];
+
 ChartSeries _series(String name, List<Object?> categories, List<double?> v) =>
     ChartSeries(
       name: ChartData<String>(values: <String?>[name]),
@@ -223,6 +251,53 @@ void main() {
     ];
     expect(texts, contains('2,0 Mn'));
     expect(texts, contains('2 Mar'));
+  });
+
+  test('status slices follow the theme by key', () {
+    final ChartTheme light = lightTheme.copyWith(
+      semantic: <String, ChartColor>{
+        'success': ChartColor.rgb(0x059669),
+        'destructive': ChartColor.rgb(0xDC2626),
+      },
+    );
+    final ChartTheme dark = darkTheme.copyWith(
+      semantic: <String, ChartColor>{
+        'success': ChartColor.rgb(0x34D399),
+        'destructive': ChartColor.rgb(0xF87171),
+      },
+    );
+    final ChartSeries series = statuses.series.single;
+    expect(light.pointColorOf(series, 0), ChartColor.rgb(0x059669));
+    expect(dark.pointColorOf(series, 1), ChartColor.rgb(0xF87171));
+    // 'muted' is in neither theme: the slice is automatic.
+    expect(light.pointColorOf(series, 2), isNull);
+  });
+
+  testWidgets('tooltipLines adds the count under the hour', (
+    WidgetTester tester,
+  ) async {
+    final SemanticsHandle handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: SizedBox(
+            width: 360,
+            height: 240,
+            child: JetChart(
+              chart: hours,
+              theme: lightTheme,
+              tooltipLines: (ChartTooltip tooltip) => <String>[
+                if (tooltip.category case final int hour)
+                  '${counts[hour]} işlem',
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.bySemanticsLabel(RegExp('12 işlem')), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('with animations disabled a chart settles at once', (

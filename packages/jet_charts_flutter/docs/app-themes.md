@@ -80,6 +80,46 @@ tile (for example 120 by 40). An `area` series in it is a filled line, and
 `valueAxis: ChartAxis(min: 0)` keeps the baseline at zero. A light fill is the
 theme's `areaOpacity`.
 
+## Status slices and extra tooltip lines
+
+A slice that means a status takes its colour from the theme by name:
+`ChartSeries.pointColorKeys` names a `semantic` colour per point, as
+`colorKey` does for a series, so the same chart follows the light and dark
+theme. A `pointColors` entry wins over a key, and a key the theme lacks gives
+the automatic colour. A file written by `jet_office` holds the colour the key
+had in the theme it was written with.
+
+```dart
+final Chart statuses = Chart(
+  kind: ChartKind.donut,
+  series: <ChartSeries>[
+    ChartSeries(
+      name: ChartData<String>(values: <String?>['Faturalar']),
+      categories: ChartData<Object>(
+        values: <Object?>['Ödendi', 'Gecikmiş', 'Taslak'],
+      ),
+      values: ChartData<double>(values: <double?>[42, 7, 5]),
+      pointColorKeys: <String?>['success', 'destructive', 'muted'],
+    ),
+  ],
+);
+```
+
+`JetChart.tooltipLines` adds the app's own lines under a tooltip's rows, in
+the box and in the screen reader's text. It gets the chart's tooltip, whose
+`series` and `category` say which point or category it is of; the hits of
+`onHover` and `onTap` keep the chart's own tooltip.
+
+```dart
+JetChart(
+  chart: hours,
+  theme: theme,
+  tooltipLines: (ChartTooltip tooltip) => <String>[
+    if (tooltip.category case final int hour) '${counts[hour]} işlem',
+  ],
+)
+```
+
 ## Smooth lines, translucent areas, compact amounts and dates
 
 `ChartSeries.smooth` draws a line as a smooth curve. The curve is a Catmull-Rom

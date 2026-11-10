@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_core/jet_core.dart';
 
+import 'interaction.dart';
 import 'strings.dart';
 
 /// A point of a chart that the keyboard walks: a primitive (a bar, a marker
@@ -274,13 +275,15 @@ String tooltipText(ChartTooltip tooltip) {
 /// One per category band in a column, bar, line, area, combination chart or
 /// sparkline; one per slice of the first series in a pie or donut; one per
 /// marker in a scatter chart; none in another kind. Each is labelled by
-/// [tooltipText] of its tooltip; a point with no tooltip has no node. More
-/// than [JetChartStrings.maxPointNodes] give none.
+/// [tooltipText] of its tooltip, with [lines]' lines added
+/// ([withTooltipLines]); a point with no tooltip has no node. More than
+/// [JetChartStrings.maxPointNodes] give none.
 List<ChartPointNode> chartPointNodes(
   Chart chart,
   ChartLayout layout, {
   required ChartTheme theme,
   required FormatLocale locale,
+  JetChartTooltipLines? lines,
 }) {
   final List<ChartKeyPoint> points;
   switch (chart.kind) {
@@ -305,7 +308,7 @@ List<ChartPointNode> chartPointNodes(
     for (final ChartKeyPoint p in points)
       if (keyPointTooltip(chart, layout, p, theme: theme, locale: locale)
           case final ChartTooltip tooltip)
-        (rect: p.bounds, label: tooltipText(tooltip)),
+        (rect: p.bounds, label: tooltipText(withTooltipLines(tooltip, lines))),
   ];
 }
 

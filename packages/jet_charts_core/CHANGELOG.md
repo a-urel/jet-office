@@ -16,6 +16,9 @@
   and scatter markers; tooltips and `ChartSummary` (`shares`, `centerText`,
   `xValues`) for the new kinds.
 - J4: the layout fuzz covers the new kinds and fields.
+- J4 (for Monépro): `ChartSeries.pointColorKeys`, a `ChartTheme.semantic`
+  colour per point, resolved by `ChartTheme.pointColorOf` (a point colour
+  wins); `ChartTooltip.series` and `category`.
 
 - C1: `ChartTheme.stackedGapWidthPercent` (150), `barGapWidthPercent` (182),
   `ChartSpacing.barOverlapPercent` (0), `ChartTheme.gapWidthPercentOf` and

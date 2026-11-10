@@ -55,6 +55,8 @@ final class ChartTooltip {
     this.title,
     required List<ChartTooltipRow> rows,
     required this.sourceId,
+    this.series,
+    this.category,
   }) : rows = List<ChartTooltipRow>.unmodifiable(rows);
 
   /// The title: a category's full text, a series name or a hidden title; or
@@ -68,18 +70,34 @@ final class ChartTooltip {
   /// `ChartLayout.primitives` describes.
   final String sourceId;
 
+  /// The index of the series the tooltip is of, or `null`: set for a point
+  /// (a bar, a marker, a slice, a scatter point, or its data label) and for
+  /// a legend entry of a series; `null` for a category with every series,
+  /// a pie's legend entry and the background.
+  final int? series;
+
+  /// The index of the category the tooltip is of (in a scatter chart, the
+  /// point's index), or `null`: set for a point, a category with every
+  /// series and a pie's legend entry; `null` for a series' legend entry and
+  /// the background.
+  final int? category;
+
   @override
   bool operator ==(Object other) =>
       other is ChartTooltip &&
       title == other.title &&
       sourceId == other.sourceId &&
+      series == other.series &&
+      category == other.category &&
       listValueEquals(rows, other.rows);
 
   @override
-  int get hashCode => Object.hash(title, sourceId, listValueHash(rows));
+  int get hashCode =>
+      Object.hash(title, sourceId, series, category, listValueHash(rows));
 
   @override
-  String toString() => 'ChartTooltip($title, $rows, from $sourceId)';
+  String toString() =>
+      'ChartTooltip($title, $rows, from $sourceId, $series/$category)';
 }
 
 /// The tooltip at [point] of [layout], the layout of [chart] with [theme] in
@@ -284,6 +302,7 @@ final class _Source {
                   title: resolved.categoryLabels[c],
                   rows: const <ChartTooltipRow>[],
                   sourceId: id,
+                  category: c,
                 )
               : null;
         }
@@ -293,6 +312,7 @@ final class _Source {
                 title: resolved.seriesNames[s],
                 rows: const <ChartTooltipRow>[],
                 sourceId: id,
+                series: s,
               )
             : null;
       case ChartElementKind.background:
@@ -347,6 +367,8 @@ final class _Source {
         ),
       ],
       sourceId: id,
+      series: series,
+      category: category,
     );
   }
 
@@ -379,6 +401,8 @@ final class _Source {
         ),
       ],
       sourceId: id,
+      series: series,
+      category: index,
     );
   }
 
@@ -394,6 +418,8 @@ final class _Source {
             title: _title(category),
             rows: <ChartTooltipRow>[row],
             sourceId: id,
+            series: series,
+            category: category,
           );
   }
 
@@ -406,7 +432,12 @@ final class _Source {
     ];
     return rows.isEmpty
         ? null
-        : ChartTooltip(title: _title(category), rows: rows, sourceId: id);
+        : ChartTooltip(
+            title: _title(category),
+            rows: rows,
+            sourceId: id,
+            category: category,
+          );
   }
 
   ChartTooltipRow? _row(int series, int category) {
