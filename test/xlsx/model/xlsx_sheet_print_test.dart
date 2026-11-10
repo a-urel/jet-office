@@ -204,8 +204,11 @@ void main() {
   });
 
   test('a range outside the sheet or a bad span throws; nothing changes', () {
-    final XlsxWorkbook book = XlsxWorkbook();
-    final XlsxSheet sheet = book.addSheet('S');
+    // addSheet is a change: the log starts clean on the saved file.
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      (XlsxWorkbook()..addSheet('S')).save().bytes,
+    );
+    final XlsxSheet sheet = book.sheets.single;
     final String before = _workbookXml(book);
     expect(
       () => sheet.printArea = <XlsxRange>[

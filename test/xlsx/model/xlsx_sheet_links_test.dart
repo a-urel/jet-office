@@ -635,8 +635,11 @@ void main() {
     });
 
     test('an invalid link throws ArgumentError and nothing changes', () {
-      final XlsxWorkbook book = XlsxWorkbook();
-      final XlsxSheet sheet = book.addSheet('S');
+      // addSheet is a change: the log starts clean on the saved file.
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        (XlsxWorkbook()..addSheet('S')).save().bytes,
+      );
+      final XlsxSheet sheet = book.sheets.single;
       expect(
         () => sheet.setCell(0, 0, const XlsxHyperlink(text: 'no target')),
         throwsArgumentError,

@@ -34,6 +34,7 @@ import '../opc/ooxml.dart';
 import '../opc/opaque_xml.dart';
 import '../opc/package.dart';
 import '../xml/utf8_buffer.dart';
+import '../xml/xml_escape.dart';
 import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'name_key.dart';
@@ -486,6 +487,55 @@ final class AppProperties extends _PropertiesPart {
     );
     return changed == null ? this : AppProperties._(_root, changed);
   }
+
+  /// This part with each title of `TitlesOfParts` that is exactly [from]
+  /// (a sheet's name, as Excel lists them) made [to]; this part itself when
+  /// none is, or the part is untyped. The rest of the element stays as
+  /// written.
+  AppProperties withTitleRenamed(String from, String to) {
+    if (!isTyped) return this;
+    final int at = children.indexWhere(
+      (PropertyChild c) => c.isElement(Ns.extendedProperties, 'TitlesOfParts'),
+    );
+    if (at < 0) return this;
+    final OpaqueXml xml = children[at].xml;
+    bool changed = false;
+    final String text = xml.xml.replaceAllMapped(_lpstr, (Match m) {
+      if (_characters(m[2]!) != from) return m[0]!;
+      changed = true;
+      return '${m[1]}${escapeXmlText(to)}${m[3]}';
+    });
+    if (!changed) return this;
+    final List<PropertyChild> fresh = _rendered((XmlWriter w) {
+      w.start('wrapper');
+      writeNamespaceDeclarations(w, xml.inheritedNamespaces);
+      w
+        ..raw(text)
+        ..end();
+    });
+    return AppProperties._(
+      _root,
+      List<PropertyChild>.of(children)..[at] = fresh.single,
+    );
+  }
+}
+
+/// A `vt:lpstr` element (any prefix, or none) holding only text: its start
+/// tag, its content and its end tag.
+final RegExp _lpstr = RegExp(
+  r'(<(?:[A-Za-z_][\w.-]*:)?lpstr(?:\s[^>]*)?>)'
+  r'([^<]*)'
+  r'(</(?:[A-Za-z_][\w.-]*:)?lpstr\s*>)',
+);
+
+/// The character data [content], escaped as XML writes it, decoded.
+String _characters(String content) {
+  final XmlPullReader r = XmlPullReader('<x>$content</x>');
+  final StringBuffer out = StringBuffer();
+  while (r.next()) {
+    if (r.eventType == XmlEventType.characters) out.write(r.text);
+  }
+  return out.toString();
 }
 
 /// The value of each field of [fields], read from the first child of its

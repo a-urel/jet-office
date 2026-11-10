@@ -124,11 +124,9 @@ final Map<String, XlsxResult Function()> _scripted =
 /// is compared.
 final Map<String, Uint8List Function(Uint8List)> _allowed =
     <String, Uint8List Function(Uint8List)>{
-      // `addSheet` has no `position` until W5's sheet moves: the writer's
-      // last sheet sits first, and the model's stays last. The active sheet
-      // is the fifth part (see [_tabSelected]).
+      // The active sheet is the fifth part (see [_tabSelected]).
       'm1_sheets': (Uint8List bytes) =>
-          _tabSelected(_lastTabLast(bytes), 'xl/worksheets/sheet5.xml'),
+          _tabSelected(bytes, 'xl/worksheets/sheet5.xml'),
       'm2_views': (Uint8List bytes) =>
           _tabSelected(bytes, 'xl/worksheets/sheet3.xml'),
     };
@@ -154,22 +152,6 @@ Uint8List _tabSelected(Uint8List bytes, String part) => _edited(
   (String text) =>
       text.replaceFirst('<sheetView ', '<sheetView tabSelected="1" '),
 );
-
-/// [bytes] with its first tab moved to the end, and the active tab with it.
-Uint8List _lastTabLast(Uint8List bytes) =>
-    _edited(bytes, (String name) => name == 'xl/workbook.xml', (String text) {
-      final Iterable<RegExpMatch> tabs = RegExp(
-        r'<sheet [^>]*/>',
-      ).allMatches(text);
-      final String first = tabs.first.group(0)!;
-      final String last = tabs.last.group(0)!;
-      final Match active = RegExp(r'activeTab="(\d+)"').firstMatch(text)!;
-      final int tab = int.parse(active.group(1)!);
-      return text
-          .replaceFirst(first, '')
-          .replaceFirst(last, '$last$first')
-          .replaceFirst(active.group(0)!, 'activeTab="${tab - 1}"');
-    });
 
 /// Writes [rows] to [sheet] from row 0, as the writer's `row` writes them:
 /// the row's attributes first, then each cell, a row's style laid under the
@@ -218,7 +200,7 @@ XlsxResult _sheetsBook() {
     sheet.setCell(0, 0, 'asked: $asked');
     if (got == 'şube (2)') active = sheet;
   }
-  book.addSheet('Başlangıç').setCell(0, 0, 'asked: Başlangıç');
+  book.addSheet('Başlangıç', position: 0).setCell(0, 0, 'asked: Başlangıç');
   book.activeSheet = active!;
   return book.save();
 }

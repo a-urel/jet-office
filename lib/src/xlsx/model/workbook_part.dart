@@ -382,6 +382,84 @@ final class WorkbookPart implements PartContent {
     return entry;
   }
 
+  /// The items of `<sheets>` (its sheet entries and what it holds besides)
+  /// in order, a copy, for [restoreSheetItems]; empty without `<sheets>`.
+  List<Object> sheetItems() => List<Object>.of(_sheets?.items ?? <Object>[]);
+
+  /// Puts back the items of `<sheets>` that [sheetItems] gave. Changes
+  /// nothing for a part without `<sheets>`.
+  void restoreSheetItems(List<Object> items) {
+    final _Sheets? group = _sheets;
+    if (group == null) return;
+    group.items
+      ..clear()
+      ..addAll(items);
+  }
+
+  /// Moves the sheet at tab index [from] to the tab index [to] (both in
+  /// the order of [sheets]; [to] in the order after the move). The entry
+  /// goes before the entry that ends up after it, or after the last entry.
+  ///
+  /// Throws a [RangeError] for an index past the sheets and a [StateError]
+  /// for an untyped part.
+  void moveSheet(int from, int to) {
+    _requireTyped();
+    final List<SheetEntry> order = sheets;
+    RangeError.checkValidIndex(from, order, 'from');
+    RangeError.checkValidIndex(to, order, 'to');
+    if (from == to) return;
+    final List<Object> items = _sheets!.items;
+    final SheetEntry moved = order[from];
+    items.remove(moved);
+    final List<SheetEntry> rest = order.toList()..removeAt(from);
+    if (to < rest.length) {
+      items.insert(items.indexOf(rest[to]), moved);
+    } else {
+      items.insert(items.indexOf(rest.last) + 1, moved);
+    }
+  }
+
+  /// The `<bookViews>` with the `activeTab` and `firstSheet` of each
+  /// `<workbookView>` given the tab index [map] gives (an absent `activeTab`
+  /// reads as 0, and is written only when it changes; an absent
+  /// `firstSheet` stays absent); `null` when nothing
+  /// changes. An index that is not a number, or that [map] maps to `null`,
+  /// stays as written. Does not change the part: give the result to
+  /// [swapBookViews].
+  XmlNode? remappedBookViews(int? Function(int index) map) {
+    final XmlNode? views = bookViews;
+    if (views == null) return null;
+    bool changed = false;
+    final List<Object> children = <Object>[
+      for (final Object c in views.children)
+        if (c is XmlNode && c.localName == 'workbookView')
+          () {
+            final Map<String, String?> edits = <String, String?>{};
+            for (final String name in const <String>[
+              'activeTab',
+              'firstSheet',
+            ]) {
+              final String? text = c.attribute(name);
+              // An absent `firstSheet` shows the tabs from the first one,
+              // wherever the sheets move; an absent `activeTab` is the first
+              // sheet, which may move.
+              if (text == null && name == 'firstSheet') continue;
+              final int? index = text == null ? 0 : parseSheetId(text);
+              if (index == null) continue;
+              final int? next = map(index);
+              if (next == null || next == index) continue;
+              edits[name] = '$next';
+            }
+            if (edits.isEmpty) return c;
+            changed = true;
+            return c.withChanges(edits);
+          }()
+        else
+          c,
+    ];
+    return changed ? views.withChildren(children) : null;
+  }
+
   /// Sets `fullCalcOnLoad="1"` on `<calcPr>` so Excel recalculates every
   /// formula on opening, creating the element in schema position when it is
   /// absent. Other attributes are kept. Throws a [StateError] for an untyped

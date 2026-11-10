@@ -48,6 +48,7 @@ import '../../zip/archive_adapter.dart';
 import '../cell_encoder.dart';
 import '../color.dart';
 import '../defined_name.dart';
+import '../formula/reference_shift.dart';
 import '../number_format.dart';
 import '../raw_cell.dart';
 import '../read/package_reader.dart';
@@ -196,14 +197,51 @@ final class XlsxWorkbook {
     throw ArgumentError.value(name, 'name', 'No such sheet.');
   }
 
-  /// Adds a visible sheet named [name] after the last tab and returns it.
+  /// Adds a visible sheet named [name] at the tab index [position]
+  /// (0-based; after the last tab when `null`) and returns it.
   ///
   /// The name is made valid and unique as `XlsxWriter.addSheet` makes it,
   /// against the sheets the workbook already has, and a changed name is
   /// reported as a warning. The sheet's part and relationship take a name
-  /// and an id the package does not use yet. Loads the shared strings and
-  /// styles, so it throws an [XlsxReadException] when they cannot be read.
-  XlsxSheet addSheet(String name) => _book.addSheet(name);
+  /// and an id the package does not use yet. A sheet placed before others
+  /// leaves every tab index on its sheet: a sheet's names, the active tab
+  /// and the first tab shown. Undone, the part, its relationship and its
+  /// content type go again. Loads the shared strings and styles, so it
+  /// throws an [XlsxReadException] when they cannot be read; a [RangeError]
+  /// named `position` for a position past the last tab. Nothing changes
+  /// when it throws.
+  XlsxSheet addSheet(String name, {int? position}) =>
+      _book.addSheet(name, position: position);
+
+  /// Renames [sheet] to [newName], as Excel's Rename does: every reference
+  /// to the sheet by name (formulas, names, rules, validations, charts and
+  /// the parts the structural edits rewrite) names it anew, quoted when the
+  /// name needs it, and the sheet's title in `docProps/app.xml`
+  /// (`TitlesOfParts`) follows. Nothing else changes.
+  ///
+  /// [newName] must be a name the writer would keep as it is: valid, at
+  /// most 31 characters, and no other sheet's name or `History`, ignoring
+  /// case; otherwise an [ArgumentError] named `newName` is thrown and
+  /// nothing changes. The same name changes nothing; a name that differs
+  /// only in case is a rename. Throws an [ArgumentError] for a sheet of
+  /// another workbook, and an [XlsxReadException] when a sheet cannot be
+  /// read; nothing changes then.
+  void renameSheet(XlsxSheet sheet, String newName) =>
+      _book.renameSheet(sheet, newName);
+
+  /// Moves [sheet] to the tab index [position] (0-based, in the order after
+  /// the move), as Excel's Move does: each name scoped to a sheet stays on
+  /// it (`localSheetId`), the active tab and the first tab shown stay on
+  /// their sheets, and a 3D reference whose first sheet comes after its
+  /// last has its ends swapped. The save asks Excel to recalculate, since a
+  /// 3D reference may now span other sheets. The same position changes
+  /// nothing.
+  ///
+  /// Throws a [RangeError] named `position` for a position past the last
+  /// tab, an [ArgumentError] for a sheet of another workbook, and an
+  /// [XlsxReadException] when a sheet cannot be read; nothing changes then.
+  void moveSheet(XlsxSheet sheet, int position) =>
+      _book.moveSheet(sheet, position);
 
   /// The sheet Excel opens on: the one at the first `workbookView`'s
   /// `activeTab`, or the first sheet when there is no such attribute or it
@@ -436,6 +474,52 @@ final class _TableHeadChange implements Change {
   void reapply() => heads.remove(part);
 }
 
+/// The change of a sheet's name.
+final class _RenameChange implements Change {
+  _RenameChange(this.entry, this.before, this.after);
+
+  final SheetEntry entry;
+  final String before;
+  final String after;
+
+  @override
+  void revert() => entry.name = before;
+
+  @override
+  void reapply() => entry.name = after;
+}
+
+/// The change of the order of the sheets: the workbook part's `<sheets>`
+/// items and the model's sheets, before and after.
+final class _OrderChange implements Change {
+  _OrderChange(
+    this.book,
+    this.itemsBefore,
+    this.itemsAfter,
+    this.sheetsBefore,
+    this.sheetsAfter,
+  );
+
+  final _Book book;
+  final List<Object> itemsBefore;
+  final List<Object> itemsAfter;
+  final List<XlsxSheet> sheetsBefore;
+  final List<XlsxSheet> sheetsAfter;
+
+  void _set(List<Object> items, List<XlsxSheet> sheets) {
+    book.workbook.restoreSheetItems(items);
+    book._sheets
+      ..clear()
+      ..addAll(sheets);
+  }
+
+  @override
+  void revert() => _set(itemsBefore, sheetsBefore);
+
+  @override
+  void reapply() => _set(itemsAfter, sheetsAfter);
+}
+
 /// The shared strings as a part's content.
 ///
 /// [_root] and [_trailing] are the opened part's `<sst>` start tag and its
@@ -509,7 +593,6 @@ final class _Book implements SheetHost {
         r.id: r.target,
     };
     for (final SheetEntry entry in part.sheets) {
-      _namer.reserve(entry.name);
       final String? target = targets[entry.relationshipId];
       final String? partName = target == null
           ? null
@@ -560,7 +643,6 @@ final class _Book implements SheetHost {
     reader: () => reader,
     warnings: warnings,
   );
-  late final SheetNamer _namer = SheetNamer(warnings);
 
   CellEncoder? _encoder;
   SharedStrings? _strings;
@@ -900,14 +982,22 @@ final class _Book implements SheetHost {
     return _sheets[i < _sheets.length ? i : 0];
   }
 
-  void setActiveSheet(XlsxSheet sheet) {
-    if (!_sheets.any((XlsxSheet s) => identical(s, sheet))) {
+  /// The tab index of [sheet]; throws an [ArgumentError] named `sheet`
+  /// for a sheet of another workbook.
+  int _indexOf(XlsxSheet sheet) {
+    final int index = sheetIndexOf(sheet);
+    if (index < 0) {
       throw ArgumentError.value(
         sheet.name,
         'sheet',
         'The sheet belongs to another workbook.',
       );
     }
+    return index;
+  }
+
+  void setActiveSheet(XlsxSheet sheet) {
+    _indexOf(sheet);
     if (sheet.visibility != XlsxSheetVisibility.visible) {
       throw StateError(
         'The ${sheet.visibility.name} sheet "${sheet.name}" cannot be the '
@@ -962,34 +1052,179 @@ final class _Book implements SheetHost {
     });
   }
 
-  XlsxSheet addSheet(String requested) {
+  XlsxSheet addSheet(String requested, {int? position}) {
+    final int count = _sheets.length;
+    if (position != null) {
+      RangeError.checkValueInInterval(position, 0, count, 'position');
+    }
     final CellEncoder encoder = loadTables();
-    final String name = _namer.assign(requested);
-    final int number = _sheets.length + 1;
-    final WorksheetSettings settings = WorksheetSettings(sheetNumber: number);
-    final WorksheetPart part = WorksheetPart.read(
-      XmlPullReader(
-        worksheetHeader(settings, hasRows: false) +
-            worksheetTrailer(settings, hasRows: false),
+    return warnings.keepOnSuccess(() {
+      final SheetNamer namer = SheetNamer(warnings);
+      for (final XlsxSheet s in _sheets) {
+        namer.reserve(s.name);
+      }
+      final String name = namer.assign(requested);
+      final int number = count + 1;
+      final WorksheetSettings settings = WorksheetSettings(sheetNumber: number);
+      final WorksheetPart part = WorksheetPart.read(
+        XmlPullReader(
+          worksheetHeader(settings, hasRows: false) +
+              worksheetTrailer(settings, hasRows: false),
+        ),
+        part: 'worksheets/sheet$number.xml',
+        limits: reader.limits,
+        warn: (XlsxWarningCode code, String? cell, {String? detail}) {},
+      )..bindEncoder(encoder);
+      late XlsxSheet sheet;
+      log.transaction(() {
+        final String folder = workbookName.substring(
+          0,
+          workbookName.lastIndexOf('/') + 1,
+        );
+        final String partName = addStoredPart(
+          log,
+          _package,
+          '${folder}worksheets/sheet$number.xml',
+          ContentType.worksheet,
+          part,
+        );
+        final String id = addStoredRelationship(
+          log,
+          _package,
+          workbookName,
+          type: RelType.worksheet,
+          target: partName.startsWith(folder)
+              ? partName.substring(folder.length)
+              : partName,
+        );
+        final int at = position ?? count;
+        _reorder(() {
+          sheet = newSheet(
+            this,
+            workbook.addSheet(name, id),
+            partName,
+            part: part,
+          );
+          _sheets.add(sheet);
+          if (at != count) {
+            workbook.moveSheet(count, at);
+            _sheets.insert(at, _sheets.removeLast());
+          }
+        });
+        if (at != count) _remapIndexes((int i) => i >= at ? i + 1 : i);
+      });
+      return sheet;
+    });
+  }
+
+  void renameSheet(XlsxSheet sheet, String newName) {
+    _indexOf(sheet);
+    final String old = sheet.name;
+    if (newName == old) return;
+    final SheetNamer namer = SheetNamer(WarningCollector());
+    for (final XlsxSheet s in _sheets) {
+      if (!identical(s, sheet)) namer.reserve(s.name);
+    }
+    if (namer.assign(newName) != newName) {
+      throw ArgumentError.value(
+        newName,
+        'newName',
+        'Not a valid sheet name, or another sheet has it, ignoring case.',
+      );
+    }
+    PropertiesState? properties;
+    try {
+      properties = propertiesState();
+    } on XlsxReadException {
+      properties = null; // A part that cannot be read keeps its titles.
+    }
+    warnings.keepOnSuccess(
+      () => log.transaction(() {
+        references.apply(SheetRename(old, newName), null);
+        applyChange(log, _RenameChange(entryOf(sheet), old, newName));
+        if (properties != null) {
+          final PropertyParts before = properties.parts;
+          final AppProperties app = before.app.withTitleRenamed(old, newName);
+          if (!identical(app, before.app)) {
+            applyChange(
+              log,
+              SetPropertiesChange(
+                properties,
+                before,
+                PropertyParts(before.core, app, before.custom),
+              ),
+            );
+          }
+        }
+      }),
+    );
+  }
+
+  void moveSheet(XlsxSheet sheet, int position) {
+    final int from = _indexOf(sheet);
+    RangeError.checkValidIndex(position, _sheets, 'position');
+    if (from == position) return;
+    final List<String> order = <String>[
+      for (final XlsxSheet s in _sheets) s.name,
+    ];
+    final int count = _sheets.length;
+    int? moved(int i) {
+      if (i >= count) return null;
+      if (i == from) return position;
+      if (from < position && i > from && i <= position) return i - 1;
+      if (position < from && i >= position && i < from) return i + 1;
+      return i;
+    }
+
+    warnings.keepOnSuccess(
+      () => log.transaction(() {
+        references.apply(SheetMove(order, from, position), null);
+        _reorder(() {
+          workbook.moveSheet(from, position);
+          _sheets.insert(position, _sheets.removeAt(from));
+        });
+        _remapIndexes(moved);
+        workbook.structureEdits++;
+        log.record(StructureEditChange(workbook));
+      }),
+    );
+  }
+
+  /// Runs [body], which changes the order of the sheets (the workbook
+  /// part's `<sheets>` and [_sheets] together), and records the change.
+  void _reorder(void Function() body) {
+    final List<Object> itemsBefore = workbook.sheetItems();
+    final List<XlsxSheet> sheetsBefore = List<XlsxSheet>.of(_sheets);
+    try {
+      body();
+    } catch (_) {
+      workbook.restoreSheetItems(itemsBefore);
+      _sheets
+        ..clear()
+        ..addAll(sheetsBefore);
+      rethrow;
+    }
+    log.record(
+      _OrderChange(
+        this,
+        itemsBefore,
+        workbook.sheetItems(),
+        sheetsBefore,
+        List<XlsxSheet>.of(_sheets),
       ),
-      part: 'worksheets/sheet$number.xml',
-      limits: reader.limits,
-      warn: (XlsxWarningCode code, String? cell, {String? detail}) {},
-    )..bindEncoder(encoder);
-    final (String partName, String id) = _addWorkbookPart(
-      'worksheets/sheet$number.xml',
-      ContentType.worksheet,
-      RelType.worksheet,
-      part,
     );
-    final XlsxSheet sheet = newSheet(
-      this,
-      workbook.addSheet(name, id),
-      partName,
-      part: part,
-    );
-    _sheets.add(sheet);
-    return sheet;
+  }
+
+  /// Gives every tab index the workbook part holds (a name's
+  /// `localSheetId`, a view's `activeTab` and `firstSheet`) the index [map]
+  /// gives it, recording the changes.
+  void _remapIndexes(int? Function(int) map) {
+    remapNameScopes(log, workbook, map);
+    final XmlNode? before = workbook.bookViews;
+    final XmlNode? after = workbook.remappedBookViews(map);
+    if (after != null) {
+      applyChange(log, SetBookViewsChange(workbook, before, after));
+    }
   }
 
   /// Adds [content] as a part of [contentType] named [name] in the

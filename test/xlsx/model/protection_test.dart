@@ -338,7 +338,10 @@ void main() {
       );
       book.protection = const XlsxWorkbookProtection(lockStructure: false);
       expect(_workbookXml(book), isNot(contains('workbookProtection')));
-      final XlsxWorkbook fresh = XlsxWorkbook()..addSheet('S');
+      // addSheet is a change: the log starts clean on the saved file.
+      final XlsxWorkbook fresh = XlsxWorkbook.open(
+        (XlsxWorkbook()..addSheet('S')).save().bytes,
+      );
       fresh.protection = const XlsxWorkbookProtection(lockStructure: false);
       expect(_workbookXml(fresh), isNot(contains('workbookProtection')));
       expect(changeLogOf(fresh).hasChanges, isFalse);

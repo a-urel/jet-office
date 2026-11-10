@@ -148,13 +148,14 @@ OpaqueXml rewriteNameEntry(OpaqueXml source, NameEntry old, NameEntry entry) {
   writeNamespaceDeclarations(w, source.inheritedNamespaces);
   w.start(r.qualifiedName);
   writeNamespaceDeclarations(w, namespaces);
+  final Map<String, String?> changes = <String, String?>{
+    if (old.hidden != entry.hidden) 'hidden': entry.hidden ? '1' : null,
+    if (old.localSheetId != entry.localSheetId)
+      'localSheetId': entry.localSheetId?.toString(),
+  };
   writeKeptAttributes(
     w,
-    old.hidden == entry.hidden
-        ? kept
-        : replaceAttributes(kept, <String, String?>{
-            'hidden': entry.hidden ? '1' : null,
-          }),
+    changes.isEmpty ? kept : replaceAttributes(kept, changes),
     declaredAbove: inner,
   );
   w
@@ -402,4 +403,71 @@ final class DefinedNameHolder implements ReferenceHolder {
       counted: item.counted,
     );
   }
+}
+
+/// Gives each name of [part] scoped to a sheet the tab index [map] gives
+/// its sheet's index, after the sheets moved, recording the change in
+/// [log]; a name whose index [map] leaves alone (`null`, or the same index),
+/// or a name that cannot be read, stays as read.
+///
+/// A name stays on its sheet, so the change is not counted in
+/// [WorkbookPart.nameEdits]. Must run inside `log.transaction`.
+void remapNameScopes(ChangeLog log, WorkbookPart part, int? Function(int) map) {
+  if (!part.isTyped) return;
+  final Object? group = part.element('definedNames');
+  if (group is! ItemGroup<NameEntry>) return;
+  bool changed = false;
+  final List<GroupItem<NameEntry>> items = <GroupItem<NameEntry>>[
+    for (final GroupItem<NameEntry> item in group.items)
+      if (item.value case final NameEntry entry?
+          when entry.localSheetId != null &&
+              map(entry.localSheetId!) != null &&
+              map(entry.localSheetId!) != entry.localSheetId)
+        () {
+          changed = true;
+          final NameEntry next = NameEntry(
+            name: entry.name,
+            formula: entry.formula,
+            localSheetId: map(entry.localSheetId!),
+            hidden: entry.hidden,
+            comment: entry.comment,
+          );
+          return GroupItem<NameEntry>(
+            next,
+            rewriteNameEntry(item.source, entry, next),
+            counted: item.counted,
+          );
+        }()
+      else
+        item,
+  ];
+  if (!changed) return;
+  final ItemGroup<NameEntry> next = ItemGroup<NameEntry>(
+    group.qualifiedName,
+    group.localName,
+    group.namespaces,
+    group.attributes,
+    items,
+    edited: group.edited,
+  );
+  final int position = part.elementPosition(group);
+  part.swapElement('definedNames', group, next);
+  log.record(_ScopeChange(part, group, next, position));
+}
+
+/// The change of [remapNameScopes]: the `<definedNames>` before and after.
+final class _ScopeChange implements Change {
+  _ScopeChange(this.part, this.before, this.after, this.position);
+
+  final WorkbookPart part;
+  final Object before;
+  final Object after;
+  final int position;
+
+  @override
+  void revert() =>
+      part.swapElement('definedNames', after, before, position: position);
+
+  @override
+  void reapply() => part.swapElement('definedNames', before, after);
 }
