@@ -1145,6 +1145,34 @@ void main() {
       expect(xml.indexOf('<c:dPt'), lessThan(xml.indexOf('<c:dLbls')));
     });
 
+    test('a point colour key writes the theme colour as a c:dPt', () {
+      final ChartTheme theme = _office.copyWith(
+        semantic: <String, ChartColor>{'paid': ChartColor.rgb(0x16A34A)},
+      );
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.column,
+            series: <ChartSeries>[
+              _excelSeries().copyWith(
+                pointColorKeys: <String?>['draft', 'paid'],
+              ),
+            ],
+          ),
+          theme: theme,
+        ),
+      );
+      expect(_count(xml, '<c:dPt>'), 1);
+      expect(
+        xml,
+        contains(
+          '<c:dPt><c:idx val="1"/><c:invertIfNegative val="0"/>'
+          '<c:bubble3D val="0"/><c:spPr><a:solidFill>'
+          '<a:srgbClr val="16A34A"/></a:solidFill>',
+        ),
+      );
+    });
+
     test('a line point colour writes the marker, then bubble3D', () {
       final String xml = _xml(
         _write(

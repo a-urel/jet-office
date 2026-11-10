@@ -887,6 +887,38 @@ void main() {
       );
     }
   });
+  test('a slice and a bar row show the colour of a point colour key', () {
+    final ChartColor paid = ChartColor.rgb(0x16A34A);
+    final ChartTheme theme = _office.copyWith(
+      semantic: <String, ChartColor>{'paid': paid},
+    );
+    for (final ChartKind kind in <ChartKind>[ChartKind.pie, ChartKind.column]) {
+      final Chart chart = Chart(
+        kind: kind,
+        series: <ChartSeries>[
+          _series(
+            'Sales',
+            <Object>['A', 'B'],
+            <double?>[1, 2],
+          ).copyWith(pointColorKeys: <String?>[null, 'paid']),
+        ],
+      );
+      final ChartLayout layout = layoutChart(
+        chart,
+        theme: theme,
+        size: const ChartSize(400, 300),
+        measurer: const FixedWidthTextMeasurer(),
+      );
+      final String id = kind == ChartKind.pie
+          ? 'series/0/slice/1'
+          : 'series/0/bar/1';
+      expect(
+        chartTooltipFor(chart, layout, id, theme: theme)!.rows.single.color,
+        paid,
+        reason: kind.name,
+      );
+    }
+  });
 }
 
 /// The middle of the longest segment of the path through [points].

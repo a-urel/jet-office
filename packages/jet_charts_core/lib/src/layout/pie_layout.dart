@@ -47,14 +47,12 @@ List<double?> sliceShares(List<double?> values) {
   ];
 }
 
-/// The colour of the slice of [series] at [category]: its point colour,
-/// else [theme]'s colour of [category] (a pie of one series varies its
+/// The colour of the slice of [series] at [category]: its point colour
+/// (`ChartTheme.pointColorOf`), else [theme]'s colour of [category] (a pie of one series varies its
 /// colours by category, in palette order: an estimate, not checked in
 /// Excel).
 ChartColor sliceColor(ChartSeries series, int category, ChartTheme theme) {
-  final List<ChartColor?> points = series.pointColors;
-  return (category < points.length ? points[category] : null) ??
-      theme.seriesColor(category);
+  return theme.pointColorOf(series, category) ?? theme.seriesColor(category);
 }
 
 /// The text of a pie or donut data label of [value], whose share is

@@ -61,7 +61,7 @@ List<ChartPrimitive> layoutMarks(
   if (chart.kind == ChartKind.scatter) {
     return scatterAxis == null
         ? const <ChartPrimitive>[]
-        : scatterMarks(chart, resolved, theme, plot, scale, scatterAxis);
+        : scatterMarks(resolved, theme, plot, scale, scatterAxis);
   }
   final List<List<double?>> values = resolved.shaped;
   final bool onTicks = categoriesOnTicks(chart, resolved);

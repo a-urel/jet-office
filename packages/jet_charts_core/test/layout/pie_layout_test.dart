@@ -188,6 +188,47 @@ void main() {
       expect(symbol.fill, ChartColor.rgb(0x00FF00));
     });
 
+    test('takes a point colour key from the theme, light or dark', () {
+      final Chart chart = _chart(<ChartSeries>[
+        _series(<double?>[
+          1,
+          1,
+          2,
+        ]).copyWith(pointColorKeys: <String?>['paid', null, 'overdue']),
+      ], kind: ChartKind.donut);
+      ChartLayout lay(ChartTheme theme) => layoutChart(
+        chart,
+        theme: theme,
+        size: _size,
+        measurer: const FixedWidthTextMeasurer(),
+      );
+      final ChartTheme light = _office.copyWith(
+        semantic: <String, ChartColor>{
+          'paid': ChartColor.rgb(0x16A34A),
+          'overdue': ChartColor.rgb(0xDC2626),
+        },
+      );
+      final ChartTheme dark = _office.copyWith(
+        semantic: <String, ChartColor>{
+          'paid': ChartColor.rgb(0x4ADE80),
+          'overdue': ChartColor.rgb(0xF87171),
+        },
+      );
+      final List<ArcPrimitive> lit = _slices(lay(light));
+      expect(lit[0].fill, ChartColor.rgb(0x16A34A));
+      expect(lit[1].fill, _office.seriesColor(1));
+      expect(lit[2].fill, ChartColor.rgb(0xDC2626));
+      final ChartLayout night = lay(dark);
+      expect(_slices(night)[0].fill, ChartColor.rgb(0x4ADE80));
+      expect(
+        _flat(night.primitives)
+            .whereType<RectPrimitive>()
+            .firstWhere((RectPrimitive r) => r.id == 'legend/2/symbol')
+            .fill,
+        ChartColor.rgb(0xF87171),
+      );
+    });
+
     test('of one value is a full disc', () {
       final List<ArcPrimitive> slices = _slices(
         _lay(
