@@ -10,8 +10,8 @@ system decides the rest.
 
 ## Status
 
-Milestones J3 and J4 are done (J4 but its Excel check: the new kinds' Excel
-values are estimates until the owner's E1 and E2). The package exports
+Milestones J3 and J4 are done (J4's Excel values checked by the owner's E1 and
+E2; the secondary axis and a numeric scatter not yet). The package exports
 `FlutterTextMeasurer` (the `TextMeasurer` that measures with the `TextPainter`
 the renderer paints with), `paintChartPrimitives` and `ChartLayoutPainter`, and
 the widget `JetChart`: loading, empty and error states in English, Turkish and

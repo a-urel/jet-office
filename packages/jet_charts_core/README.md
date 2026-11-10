@@ -27,8 +27,8 @@ yet.
 
 ## Status
 
-Milestone J4 is done but its Excel check (E1 and E2, the owner's; the values
-are estimates until then, `docs/excel-checks.md`): pie, donut, sparkline,
+Milestone J4 is done, its values checked against Excel for Mac (E1 and E2,
+`docs/excel-checks.md`; the secondary axis and a numeric scatter not yet): pie, donut, sparkline,
 scatter and combination charts, a series' own kind, the secondary value axis,
 smooth lines, point colours, translucent areas with an edge line, percent data
 labels with `minShare`, a donut's `holeSizePercent` and `centerText`, and

@@ -7,9 +7,11 @@ lays out; `jet_office` writes and reads the model as a chart in XLSX and DOCX.
 The record of the design is the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md`.
 
-Milestones J1, J2 and J3 are done, and J4 is done but its Excel check (E1, the
-owner's `chart_reference_j4.xlsx`, and E2, the J4 gallery side by side:
-`docs/excel-checks.md`, "J4 values"), and the owner's full axis oracle run is
+Milestones J1, J2, J3 and J4 are done; J4's Excel checks (E1, the owner's
+`chart_reference_j4.xlsx`, and E2, the J4 gallery side by side) are recorded
+and followed (`docs/excel-checks.md`, "J4 values"; the secondary axis and a
+numeric scatter wait for E3, `TALIMATLAR_E3.md` of the root's
+`test/fixtures/owner/charts/`), and the owner's full axis oracle run is
 recorded (`docs/axis-scaling.md`, "Findings"). The package exports the model,
 the theme, the drawing primitives and the text measurer (J1), the value scale
 (`autoValueScale`), the layout (`layoutChart`) and the overlap check

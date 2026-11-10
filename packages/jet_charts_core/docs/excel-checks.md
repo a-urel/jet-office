@@ -129,16 +129,16 @@ names the value that now holds Excel's.
 | Slice outline in the background colour, 1.5 pt (`sliceBorderWidth`) | Differed (E1): Excel outlines each slice `lt1` (white), 1.5 pt (`a:ln w="19050"`, every `c:dPt`), where the app drew 0.75 pt; now Excel's (`sliceBorderWidth` 1.5 by default and in the Office theme) | E1 |
 | A pie of one series varies colours by category, palette order | Confirmed by E1: `c:varyColors 1`, a `c:dPt` per slice of `accent1` to `accent4`; in a donut of two series each ring starts again at `accent1` | This library's choice, from the usual look of an Excel pie |
 | Legend of a pie or donut at the bottom, one entry per category | Confirmed by E1: `c:legendPos b`; an automatic title (the series name, 14 pt) on every chart | Same rule as the other kinds (verified for them) |
-| A negative slice drawn as its absolute value | Not readable from the E1 file (the cache keeps `-4`); pending the owner's look | This library's choice |
-| The first donut series is the innermost ring | Not readable from the E1 file (chart 3 writes `Satış` first); pending the owner's look | This library's choice |
+| A negative slice drawn as its absolute value | Confirmed by the owner's screenshot of the E1 sheet (2026-11-10): in charts 1 and 3 Doğu's `-4` is a slice of about 9 % (4 of 43), its absolute value | This library's choice |
+| The first donut series is the innermost ring | Confirmed by the screenshot: in chart 3 the inner ring is `Satış`, the first series (its Doğu slice short, 9 %), the outer `Adet` (Doğu 32 %) | This library's choice |
 | Pie label leader line, 0.75 pt, `A6A6A6` (`ChartTheme.leaderLine`) | Differed (E1, chart 7): Excel's `c:leaderLines` is 0.75 pt `tx1` at `lumMod` 0.35 and `lumOff` 0.65 (`A6A6A6`), where the app used the axis line (`D9D9D9`); now Excel's (the Office theme's `leaderLine`; the gallery workbook writes the same `c:leaderLines`) | E1 |
 | Pie and donut labels inside a slice at 0.6 of the radius (pie) or mid-ring (donut) | Differed in colour (E1, chart 7): Excel's labels are `bestFit`, 9 pt, `tx1` at `lumMod` 0.75 and `lumOff` 0.25 (`404040`) with no fill, as the gallery workbook writes, where the app drew a label inside a dark slice white; now Excel's in the Office theme (`ChartTheme.sliceLabelContrast` off; an app's theme keeps the contrast rule by default, `parity.md`). Where `bestFit` puts each label is Excel's own and not in the file | This library's choice |
 | Scatter: both axes automatic by `autoValueScale`, grid lines and an axis line on both axes, markers only | Markers only confirmed (E1, chart 4: `c:scatterStyle lineMarker`, the series line `a:noFill` 3 pt, circle markers of 5). Differed: Excel draws grid lines on both axes and both axis lines (`tx1` at `lumMod` 0.25, `lumOff` 0.75, `BFBFBF`, 0.75 pt), both crossing `midCat`, the x axis without `c:numFmt`; now Excel's: the Office theme's `scatterAxisLine` draws both lines, the galleries set `categoryAxis.gridLines` (the model's default stays off), and the gallery workbook writes both axes so. The axis ranges stay this library's rule, pending a numeric scatter | The J2 rule (verified for value axes) used on the x axis; Excel's scatter styles are not read |
-| Scatter: a text x value numbers the points 1, 2, 3 | Not readable from the file; chart 4 took the text `A2:A5` as its x values (the owner's selection, see below); pending the owner's look | This library's choice, from the usual behaviour of Excel with text x values |
-| Secondary value axis on the right, no grid lines | Still pending: chart 5 of the E1 file has no secondary axis (see below) | This library's choice |
+| Scatter: a text x value numbers the points 1, 2, 3 | Confirmed by the screenshot: chart 4 took the text `A2:A5` as its x values and draws the points at 1, 2, 3, 4 (x axis 0 to 4.5 by 0.5, vertical grid lines shown). A scatter of numeric x values: kontrol edilmedi (not checked; E3) | This library's choice, from the usual behaviour of Excel with text x values |
+| Secondary value axis on the right, no grid lines | Kontrol edilmedi (not checked): chart 5 of the E1 file has no secondary axis; E3 (below) redoes it | This library's choice |
 | Combination: columns, areas, then lines; primary before secondary within a kind | Confirmed for columns then a line (E1, chart 5). Differed: its columns have `c:gapWidth 150` and no overlap (not the clustered chart's 219 and -27), its line is 2.25 pt with no marker (`c:symbol none`), where the app drew markers and the clustered gap; now Excel's (`ChartTheme.combinationGapWidthPercent` 150 with overlap 0, `combinationLineMarkers` off; the gallery workbook writes gap 150 and no overlap) | This library's choice, from Excel's usual group order |
 | Sparkline line 0.75 pt (`sparklineWidth`); area fill under it; a lone value a disc of diameter `2 * sparklineWidth` | Estimate, not checked in Excel; pending E1/E2 | This library's choice; Excel's sparkline is a cell feature (`x14`) |
-| Smooth line: Catmull-Rom spline | The file confirms only `c:smooth 1` on the series (E1, chart 6; the line keeps its circle markers of 5 and 2.25 pt); the curve's shape is Excel's own, pending the owner's look | Excel's smoothing is not documented |
+| Smooth line: Catmull-Rom spline | The file confirms only `c:smooth 1` on the series (E1, chart 6; the line keeps its circle markers of 5 and 2.25 pt); the screenshot shows the curve passing through each marker with its lowest point at Güney's marker (95); whether it overshoots a peak is covered by the About box there: kontrol edilmedi (not checked) | Excel's smoothing is not documented |
 | A smooth area series curves its top on screen and writes no `c:smooth` | Estimate, not checked in Excel; pending E1 | Excel's area has no `c:smooth` in the schema |
 | Area `areaOpacity` as `a:alpha`; `areaLine` as the series line | Estimate, not checked in Excel; pending E1 | The DrawingML schema's alpha and `a:ln` |
 | `c:dPt` for point colours (bar fill; line marker, written and drawn even with `lineMarkers` off) | Estimate, not checked in Excel; pending E1 | The schema's order; Excel's own file decides |
@@ -158,6 +158,16 @@ Line" with both series on one axis, not the secondary axis variant. The
 secondary axis and a numeric scatter stay unread. Every value above marked
 E1 comes from this file; the rows still pending need the owner's eye on the
 drawn chart, not the XML.
+
+The owner's screenshot of the sheet (2026-11-10, charts 1 to 4 and part of
+6) also shows the automatic titles: the series name (`Satış`) on a chart of
+one series, `Grafik Başlığı` on a chart of two.
+
+### E3: what is left (later, owner's)
+
+J4 closes without it. Two values stay kontrol edilmedi (not checked): the
+secondary value axis and a scatter chart of numeric x values. The owner's
+steps for a later check are `test/fixtures/owner/charts/TALIMATLAR_E3.md`.
 
 ### E2: the J4 gallery
 

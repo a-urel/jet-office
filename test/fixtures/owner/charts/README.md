@@ -68,4 +68,5 @@ from the Insert menu:
 `test/drawingml/chart/excel_reference_j4_test.dart` (VM) pins what Excel
 wrote; `packages/jet_charts_core/docs/excel-checks.md`, "J4 values", says what
 each value confirmed or changed. A secondary axis and a scatter of numeric x
-values need a new file from the owner.
+values need a new file from the owner: the steps are `TALIMATLAR_E3.md`
+(`chart_reference_e3.xlsx`, later).
