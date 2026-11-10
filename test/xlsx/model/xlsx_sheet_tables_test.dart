@@ -1617,12 +1617,15 @@ void main() {
         const XlsxFormula('Sales[[#This Row],[Region]:[Amount]]'),
       );
       data.setCell(9, 0, const XlsxFormula('Sales[@Amount]'));
+      other.setCell(9, 0, const XlsxFormula('Sales[@Amount]'));
       data.setCell(3, 4, const XlsxFormula('Sales[@Region]'));
       data.removeTable('Sales');
       expect(formula(data, 3, 2), r'$B4*2');
       expect(formula(other, 2, 0), r'Data!$B3');
       expect(formula(other, 2, 1), r'Data!$A3:$B3');
-      expect(formula(data, 9, 0), '#VALUE!');
+      // Outside the data rows Excel writes the whole body (W5 check, 1c).
+      expect(formula(data, 9, 0), r'$A2:$C4');
+      expect(formula(other, 9, 0), r'Data!$A2:$C4');
       expect(formula(data, 3, 4), r'$A4');
     });
 

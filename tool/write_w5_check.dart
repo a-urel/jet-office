@@ -182,7 +182,7 @@ XlsxWorkbook _rowsBook() {
     ..setCell(4, 0, 'Outside')
     ..setCell(4, 4, const XlsxFormula('Conv[[#This Row],[Qty]]'))
     ..setCell(4, 5, '#VALUE!')
-    ..setCell(4, 6, '=#VALUE!')
+    ..setCell(4, 6, r'=$A2:$C3')
     ..setCell(5, 0, 'Sum')
     ..setCell(5, 4, const XlsxFormula('SUM(Conv[Double])'))
     ..setCell(5, 5, 70)

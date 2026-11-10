@@ -83,7 +83,7 @@ void main() {
       4,
     );
     expect(converted['Bolt'], r'$B2');
-    expect(converted['Outside'], '#VALUE!');
+    expect(converted['Outside'], r'$A2:$C3');
     expect(converted['Sum'], r'SUM($C$2:$C$3)');
   });
 

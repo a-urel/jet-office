@@ -290,8 +290,8 @@ final class StructuredRename implements PositionedStructuredMapper {
 
 /// The table [table] removed: every structured reference to it becomes the
 /// plain range it covers (`Sales[Amount]` is `Sheet1!$B$2:$B$4` from another
-/// sheet, `$B$2:$B$4` from its own; `[@Amount]` in row 3 is `$B3`, `#VALUE!`
-/// from a row outside the data), as Excel's "Convert to Range" does. A
+/// sheet, `$B$2:$B$4` from its own; `[@Amount]` in row 3 is `$B3`, the whole
+/// body `$A2:$C4` from a row outside the data, as Excel writes it), as Excel's "Convert to Range" does. A
 /// reference to an item the table lacks (the totals of a table without them)
 /// becomes `#REF!`.
 ///
@@ -369,8 +369,12 @@ final class TableToRange implements PositionedStructuredMapper {
           'has no cell, so it cannot become a range.',
         );
       }
-      // Outside the data rows implicit intersection gives #VALUE! already.
-      if (row < bodyFirst || row > bodyLast) return '#VALUE!';
+      // Outside the data rows Excel writes the whole body, rows relative,
+      // where implicit intersection gives #VALUE! (the owner's W5 check).
+      if (row < bodyFirst || row > bodyLast) {
+        return '$prefix\$${columnName(r.firstColumn)}${bodyFirst + 1}:'
+            '\$${columnName(r.lastColumn)}${bodyLast + 1}';
+      }
       String at(int column) => '\$${columnName(column)}${row + 1}';
       return firstColumn == lastColumn
           ? '$prefix${at(firstColumn)}'

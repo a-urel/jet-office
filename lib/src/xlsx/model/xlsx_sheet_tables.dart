@@ -455,8 +455,9 @@ mixin _SheetTablesApi {
   /// becomes the plain range it covers: `Sales[Amount]` is `Data!$B$2:$B$4`
   /// from another sheet or a defined name, `$B$2:$B$4` from its own sheet,
   /// `[@Amount]` in a cell of a data row is that row's cell, column absolute
-  /// (`$B3`), and `#VALUE!` from a row outside the data, and an item the table
-  /// lacks (`Sales[#Totals]` without a totals row) is `#REF!`. A reference
+  /// (`$B3`), and the table's whole body (`$A2:$C4`) from a row outside the
+  /// data, as Excel writes it, and an item the table lacks (`Sales[#Totals]`
+  /// without a totals row) is `#REF!`. A reference
   /// behind a workbook prefix (`[1]!Sales[A]`) names another workbook's table
   /// and stays. Every sheet loads.
   ///

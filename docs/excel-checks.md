@@ -1403,8 +1403,8 @@ The files, all in `build/w5/`:
   comment, the picture, the chart and the control moved down one row.
 
 Result: ok, 2026-11-10, no repair prompt in any file (see "Results"). Excel's
-own edits differed from the model's in two cases, both under "Open issues",
-W5.
+Convert to Range wrote a different formula for `[@Col]` outside the data rows;
+closed under "Open issues", W5.
 
 ## C1
 
@@ -1423,18 +1423,13 @@ Problems a check found that the owner deferred. Each names the milestone that
 must close it. A closed issue stays here, marked closed, with the commit that
 closed it.
 
-### Deleting every body row of a table (W5, open)
-
-Excel's own delete of every body row (the W5 check, 1b) keeps the table with
-one empty body row; the model refuses the edit (`StateError`, nothing
-changed). Close it by doing what Excel does.
-
-### `[@Col]` outside the data rows on Convert to Range (W5, open)
+### `[@Col]` outside the data rows on Convert to Range (W5, closed, 2026-11-10)
 
 Excel's Convert to Range (the W5 check, 1c) turns `Conv[@Qty]` outside the
 table's data rows into the body range (`$A2:$B3`, giving `#VALUE!` by implicit
 intersection); the model writes `#VALUE!`. The values agree, but Excel's
-formula recovers when moved into the rows. Close it by writing the body range.
+formula recovers when moved into the rows. Closed: `removeTable` writes the
+table's whole body with relative rows (`$A2:$C4`), as Excel does.
 
 ### Setting a table header cell leaves the column name (closed, 2026-11-03)
 
@@ -1744,7 +1739,7 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-11-09 | Microsoft 365, Excel for Mac (16.0300 in the owner's `chart_reference.xlsx` of the same day) | C1: `c1_kinds` | ok | No repair prompt. The owner sent a screenshot and wrote "Bence sorun yok". The six column and bar charts and the line charts show with titles, legends and both series; the clustered bar's legend lists `Güney` before `Kuzey`, as Excel orders a horizontal bar's legend. |
 | 2026-11-09 | Microsoft 365, Excel for Mac (16.0300 in the owner's `chart_reference.xlsx` of the same day) | C1: `c1_options` | ok | No repair prompt. Screenshot and "Bence sorun yok". The title's two lines with `&` and quotes, the top legend, the axis titles, `100,00 TL` and `Oca 26` formats, the data labels `30,0`, the hidden axes, the literal data's gap, the `dd.mm.yyyy` dates and eight series show. Seen by Claude, not by the owner as a problem: the line chart's right-placed labels touch the line, and series 7 and 8 are dark blues near series 1 (the theme's own rule past six colours, unverified against Excel). |
 | 2026-11-10 | Microsoft 365, Excel for Mac (version not restated) | W5: `w5_rows`, `Checks` | ok | No repair prompt (none in any W5 file, per the owner). Screenshots: every formula and value as column D and C expect; the only differences are Excel's localized names (`TOPLA` for `SUM`, `#BAŞV!` for `#REF!`). |
-| 2026-11-10 | Microsoft 365, Excel for Mac (version not restated) | W5: Excel's own insert (1b), run by the Claude add-in in Excel on a new workbook | ok (one difference) | After inserting two rows at 3 in `Data`: `=Data!A7`, `=SUM(Data!A1:A12)`, `=SUM(Data!A7:A1048576)` (capped), `=SUM(Data!A:A)`, `=SUM(Data:Other!A5)` unchanged (1003); C1 `=A7*2`; new rows 3 and 4 at 30 points and bold, as row 2. An insert directly below the table left it `A1:B3`, as the model does. Deleting row 3 then row 2 (every body row) left the table `A1:B2` with one empty body row; the model refuses that edit instead (see "Open issues", W5). |
+| 2026-11-10 | Microsoft 365, Excel for Mac (version not restated) | W5: Excel's own insert (1b), run by the Claude add-in in Excel on a new workbook | ok | After inserting two rows at 3 in `Data`: `=Data!A7`, `=SUM(Data!A1:A12)`, `=SUM(Data!A7:A1048576)` (capped), `=SUM(Data!A:A)`, `=SUM(Data:Other!A5)` unchanged (1003); C1 `=A7*2`; new rows 3 and 4 at 30 points and bold, as row 2. An insert directly below the table left it `A1:B3`, as the model does. Deleting row 3 then row 2 (every body row) left the table `A1:B2` with one empty body row. The model does the same for a table without a totals row (`test/xlsx/model/object_shift_test.dart`); the step list wrongly said it refuses, which it does only for a table with a totals row. |
 | 2026-11-10 | Microsoft 365, Excel for Mac (version not restated) | W5: `w5_rows`, `Data`, `Del`, `Convert` (1c), read by the Claude add-in | ok | `Data` A1:A12 1, 2, empty, empty, 3 to 10; C1 `=A7*2` 10; validation A1:A12 whole number >= 0; the rule on A1:A12 (greater than `$C$1`), no cell red; rows 3 and 4 at 30 points, bold. `Del` 1, 2, 3, 5 to 10. `Convert` has no table; E2 `=$B2` 10, E5 `=#VALUE!`, E6 `=SUM($C$2:$C$3)` 70. |
 | 2026-11-10 | Microsoft 365, Excel for Mac (version not restated) | W5: Excel's own Convert to Range (1c), run by the Claude add-in on a new workbook | ok (one difference) | Table `Conv` A1:B3 unlisted: E2 `=Conv[@Qty]` became `=Sayfa1!$B2` (10); E5, outside the data rows, `=Sayfa1!$A2:$B3` (#VALUE!), where the model writes `=#VALUE!`; E6 `=SUM(Sayfa1!$B$2:$B$3)` (35). The values agree; E5's formula does not (see "Open issues", W5). |
 | 2026-11-10 | Microsoft 365, Excel for Mac (version not restated) | W5: `w5_generated` | ok | "Her şey beklendiği gibi." |
