@@ -93,6 +93,8 @@ const Map<String, String> referenceHolderSources = <String, String>{
   'xlsx_sheet_pictures.dart': 'drawings',
   'comments_part.dart': 'notes',
   'vml_part.dart': 'notes',
+  'xlsx_sheet_notes.dart': 'notes',
+  'opaque_references.dart': 'opaqueParts',
   'xlsx_sheet_views.dart': 'views',
   'defined_names.dart': 'definedNames',
 };

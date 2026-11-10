@@ -555,12 +555,12 @@ final class XlsxSheet
   /// A table's header cell holds its column's name, which Excel requires to
   /// equal the cell's text, so setting it renames the column too
   /// (`tableColumnRenamed`), and every structured reference to the column
-  /// (`Sales[Amount]`, `[@Amount]` inside the table) takes the new name;
-  /// every sheet loads for that. It takes only text: an empty text or `null` becomes
-  /// `ColumnN` (N the column's place in the table), and a name another
-  /// column has, ignoring case, gets a number appended, as Excel does
-  /// (`tableHeaderAdjusted`). Any other value throws a [StateError], and
-  /// text of more than 255 characters an [ArgumentError].
+  /// (`Sales[Amount]`, `[@Amount]` inside the table) takes the new name; every
+  /// sheet loads for that. It takes only text: an empty text or `null` becomes
+  /// `ColumnN` (N the column's place in the table), and a name another column
+  /// has, ignoring case, gets a number appended, as Excel does
+  /// (`tableHeaderAdjusted`). Any other value throws a [StateError], and text
+  /// of more than 255 characters an [ArgumentError].
   ///
   /// An [XlsxCell] sets its value as above and gives the cell the style the
   /// writer gives it: the row's style (when the row has
@@ -693,8 +693,8 @@ final class XlsxSheet
         if (text.length > 255) {
           throw ArgumentError(
             'Cell ${cellRef(row, column)} on sheet "$name" is a header cell of '
-            'the table "${header.table.displayName}"; a column name has at most '
-            '255 characters.',
+            'the table "${header.table.displayName}"; a column name has at '
+            'most 255 characters.',
           );
         }
         final String unique = _uniqueColumnName(
@@ -1431,15 +1431,13 @@ final class XlsxSheet
   /// (`referenceNotShifted`). The save drops `calcChain` and asks Excel to
   /// recalculate when the workbook has formulas. All of it is one change.
   ///
-  /// Throws an [ArgumentError] named `row` for a row below 0 or past the
-  /// last (`XlsxLimits.maxRows` - 1), named `count` for a count below 1 or
-  /// one that
-  /// reaches past the last row; a [StateError] for an edit Excel refuses
-  /// (a cell, note or picture pushed off the sheet, an array formula or a
-  /// table cut in a way Excel does not allow) and for a sheet that is not a
-  /// worksheet; an [XlsxReadException] when a sheet cannot be read.
-  /// Whatever it throws, nothing has changed, the workbook's warnings
-  /// included.
+  /// Throws an [ArgumentError] named `row` for a row below 0 or past the last
+  /// (`XlsxLimits.maxRows` - 1), named `count` for a count below 1 or one that
+  /// reaches past the last row; a [StateError] for an edit Excel refuses (a
+  /// cell, note or picture pushed off the sheet, an array formula or a table
+  /// cut in a way Excel does not allow) and for a sheet that is not a
+  /// worksheet; an [XlsxReadException] when a sheet cannot be read. Whatever it
+  /// throws, nothing has changed, the workbook's warnings included.
   void insertRows(int row, [int count = 1]) =>
       _structuralEdit(ShiftAxis.rows, row, count, insert: true);
 

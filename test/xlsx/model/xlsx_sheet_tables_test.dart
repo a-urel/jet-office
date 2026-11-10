@@ -1756,4 +1756,25 @@ void main() {
       );
     });
   });
+
+  test('a calculated column whose XML cannot be read refuses a row insert '
+      'with XlsxReadException', () {
+    // Pinned from the feature fuzz (seed 31, case 104): a stray `&` in a
+    // calculated column formula made the shift throw the XML parser's
+    // own exception.
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _listed(<String>[_excelTable.replaceFirst('A2*2', 'A2&*2')]),
+    );
+    final XlsxSheet sheet = book.sheets.single;
+    expect(
+      () => sheet.insertRows(0, 1),
+      throwsA(
+        isA<XlsxReadException>().having(
+          (XlsxReadException e) => '$e',
+          'message',
+          contains('xl/tables/table1.xml'),
+        ),
+      ),
+    );
+  });
 }

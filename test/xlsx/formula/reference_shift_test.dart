@@ -197,6 +197,19 @@ void main() {
     expect(insRows.shiftCell(1048574, 0), isNull);
   });
 
+  test('an area with a name half is left as read', () {
+    // `Rate:B2` is a range between a defined name and a cell, not a cell
+    // range: a row insert above it must not shift B2 (nor the name).
+    final ReferenceShift above = ReferenceShift.insert(
+      'Data',
+      ShiftAxis.rows,
+      1,
+      1,
+    );
+    expect(rewriteFormula('SUM(Rate:B2)', above, 'Data'), isNull);
+    expect(rewriteFormula('SUM(Rate:B2)+B2', above, 'Data'), 'SUM(Rate:B2)+B3');
+  });
+
   test('a reversed range neither throws nor inverts', () {
     expect(rewriteFormula('SUM(A5:A1)', delRows, 'Data'), isNull);
   });

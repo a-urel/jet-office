@@ -141,7 +141,8 @@ mixin _SheetTablesApi {
       final OpcPackage package = _host.reader.package;
       final String sheetPart = _partName!;
       // Read here, so that a broken part throws XlsxReadException: inside the
-      // transaction `addStoredRelationship` would throw the package's own error.
+      // transaction `addStoredRelationship` would throw the package's own
+      // error.
       _host.reader.relationshipsOf(sheetPart.substring(1));
       log.transaction(() {
         for (final ({int row, int column, Object? value}) c in cells) {
@@ -451,13 +452,13 @@ mixin _SheetTablesApi {
   /// part go, and the `<tableParts>` with its last entry. The cells stay.
   ///
   /// As Excel's "Convert to Range", every structured reference to the table
-  /// becomes the plain range it covers: `Sales[Amount]` is
-  /// `Data!$B$2:$B$4` from another sheet or a defined name, `$B$2:$B$4`
-  /// from its own sheet, `[@Amount]` in a cell of a data row is that row's cell, column
-  /// absolute (`$B3`), and `#VALUE!` from a row outside the data,
-  /// and an item the table lacks (`Sales[#Totals]` without a totals row) is
-  /// `#REF!`. A reference behind a workbook prefix (`[1]!Sales[A]`) names
-  /// another workbook's table and stays. Every sheet loads.
+  /// becomes the plain range it covers: `Sales[Amount]` is `Data!$B$2:$B$4`
+  /// from another sheet or a defined name, `$B$2:$B$4` from its own sheet,
+  /// `[@Amount]` in a cell of a data row is that row's cell, column absolute
+  /// (`$B3`), and `#VALUE!` from a row outside the data, and an item the table
+  /// lacks (`Sales[#Totals]` without a totals row) is `#REF!`. A reference
+  /// behind a workbook prefix (`[1]!Sales[A]`) names another workbook's table
+  /// and stays. Every sheet loads.
   ///
   /// Throws an [ArgumentError] named `name` when the sheet has no table
   /// [name], ignoring case; a [StateError] when a reference cannot become a

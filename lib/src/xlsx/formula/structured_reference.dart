@@ -289,10 +289,11 @@ final class StructuredRename implements PositionedStructuredMapper {
 }
 
 /// The table [table] removed: every structured reference to it becomes the
-/// plain range it covers (`Sales[Amount]` is `Sheet1!$B$2:$B$4` from
-/// another sheet, `$B$2:$B$4` from its own; `[@Amount]` in row 3 is `$B3`, `#VALUE!` from a row outside the data), as Excel's
-/// "Convert to Range" does. A reference to an item the table lacks (the
-/// totals of a table without them) becomes `#REF!`.
+/// plain range it covers (`Sales[Amount]` is `Sheet1!$B$2:$B$4` from another
+/// sheet, `$B$2:$B$4` from its own; `[@Amount]` in row 3 is `$B3`, `#VALUE!`
+/// from a row outside the data), as Excel's "Convert to Range" does. A
+/// reference to an item the table lacks (the totals of a table without them)
+/// becomes `#REF!`.
 ///
 /// Throws a [StateError] for a reference it cannot convert: a span it
 /// cannot read, a column the table lacks, or the formula's own row where

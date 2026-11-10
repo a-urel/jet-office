@@ -256,6 +256,27 @@ List<String> _undoneDifferences(
   );
 }
 
+/// The edits of the structural round trip each file refuses (a
+/// `StateError`, as Excel refuses them): the edit's label and a fragment of
+/// the message, in the order the edits run.
+const Map<String, List<(String, String)>> _expectedRefusals =
+    <String, List<(String, String)>>{
+      // Its notes sit on the last column and the last row on purpose: an
+      // insert before them would push them off the sheet.
+      'm4_notes': <(String, String)>[
+        ('Right insertColumns', 'push the note on cell XFD1'),
+        ('Bottom insertRows', 'push the note on cell A1048576'),
+      ],
+      // Row 1 is the header of a table with body rows; Excel keeps a
+      // header while the table has rows, so deleting row 1 is refused.
+      'm4_tables': <(String, String)>[
+        ('Sales deleteRows', 'header row of the table "Sales"'),
+      ],
+      'excel_objects': <(String, String)>[
+        ('Objects deleteRows', 'header row of the table "Stock"'),
+      ],
+    };
+
 /// Runs [edit] as a transaction of [book]; the set when it was allowed,
 /// `null` when Excel refuses it (a [StateError]: an array formula or a table
 /// in the way), which changes nothing.
@@ -415,10 +436,6 @@ void main() {
           for (final Fixture f in allFixtures()) f.name: f.build,
           for (final ProducerFile p in producerFiles()) p.name: () => p.bytes,
         };
-    // Files where Excel refuses an edit (a StateError) skip that edit; the
-    // floor below keeps the skips from hiding a model that refuses too much.
-    final List<String> refused = <String>[];
-
     files.forEach((String name, Uint8List Function() build) {
       test(
         '$name: insert, delete, rename, move, undo all equals the input',
@@ -426,32 +443,40 @@ void main() {
           final Uint8List input = build();
           final XlsxWorkbook book = XlsxWorkbook.open(input);
           final List<XlsxChangeSet> sets = <XlsxChangeSet>[];
-          bool refusedOne = false;
-          void run(void Function() edit) {
-            final XlsxChangeSet? set = _tryEdit(book, edit);
-            if (set == null) {
-              refusedOne = true;
-            } else if (!set.isEmpty) {
-              sets.add(set);
+          final List<String> refusals = <String>[];
+          void run(String label, void Function() edit) {
+            try {
+              final XlsxChangeSet set = book.transaction(edit);
+              if (!set.isEmpty) sets.add(set);
+            } on StateError catch (e) {
+              refusals.add('$label: ${e.message}');
             }
           }
 
           for (final XlsxSheet sheet in _worksheets(book)) {
-            run(() => sheet.insertRows(1, 2));
-            run(() => sheet.insertColumns(1, 2));
-            run(() => sheet.deleteRows(0));
-            run(() => sheet.deleteColumns(0));
+            final String at = sheet.name;
+            run('$at insertRows', () => sheet.insertRows(1, 2));
+            run('$at insertColumns', () => sheet.insertColumns(1, 2));
+            run('$at deleteRows', () => sheet.deleteRows(0));
+            run('$at deleteColumns', () => sheet.deleteColumns(0));
           }
           for (int i = 0; i < book.sheets.length; i++) {
             final XlsxSheet sheet = book.sheets[i];
-            run(() => book.renameSheet(sheet, 'Renamed$i'));
+            run('renameSheet $i', () => book.renameSheet(sheet, 'Renamed$i'));
           }
           if (book.sheets.length > 1) {
             run(
+              'moveSheet',
               () => book.moveSheet(book.sheets.first, book.sheets.length - 1),
             );
           }
-          if (refusedOne) refused.add(name);
+          final List<(String, String)> expected =
+              _expectedRefusals[name] ?? const <(String, String)>[];
+          expect(refusals, hasLength(expected.length), reason: '$refusals');
+          for (int i = 0; i < expected.length; i++) {
+            expect(refusals[i], startsWith('${expected[i].$1}: '));
+            expect(refusals[i], contains(expected[i].$2));
+          }
           for (final XlsxChangeSet set in sets.reversed) {
             book.undo(set);
           }
@@ -497,17 +522,6 @@ void main() {
         3,
       );
       insertThenDelete('insert then delete the same rows in the data', 0, 3);
-    });
-
-    tearDownAll(() {
-      final int total = files.length;
-      final int clean = total - refused.length;
-      // ignore: avoid_print
-      print(
-        'structural edits: $clean of $total files took every edit; '
-        'refused in: ${refused.join(', ')}',
-      );
-      expect(clean, greaterThanOrEqualTo(30), reason: refused.join(', '));
     });
   });
 

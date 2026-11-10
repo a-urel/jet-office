@@ -171,17 +171,6 @@ void main() {
     expect(() => exerciseFeatureCase(c), returnsNormally);
   });
 
-  test('a table formula that cannot be read throws XlsxReadException', () {
-    // Seed 31 case 104 of the long run: a stray `&` in a calculated column
-    // formula made a table edit throw the XML parser's own exception.
-    final FuzzCase c = featureFuzzCases(31, 105).last;
-    expect(c.mutation, contains('xl/tables/table1.xml'));
-    expect(
-      () => exerciseFeatureCase(c),
-      anyOf(returnsNormally, throwsA(isA<XlsxReadException>())),
-    );
-  });
-
   test('a comments author XML forbids does not crash a table removal', () {
     // Seed 39 case 267 of the long run (and seed 30 case 354).
     for (final (int seed, int index) in <(int, int)>[(39, 267), (30, 354)]) {

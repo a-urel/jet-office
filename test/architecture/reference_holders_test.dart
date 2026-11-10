@@ -3,7 +3,9 @@
 // cannot leave one pointing at the wrong cells.
 //
 // A file under lib/src/xlsx/model/ with a field typed `XlsxRange`, a
-// `String sqref` field or a field named `formula...` must be listed in
+// `String` field named `ref`, `sqref`, `location`, `anchor` or `cellRef`
+// (any indent, so a record or nested class counts) or a field named
+// `formula...` must be listed in
 // `referenceHolderSources` (lib/src/xlsx/model/reference_holders.dart) or in
 // `_allowed` below, with the reason it needs no holder.
 @TestOn('vm')
@@ -29,7 +31,11 @@ final List<RegExp> _fields = <RegExp>[
     r'^  (?:final |late )*(?:XlsxRange|List<XlsxRange>)\?? _?\w+\s*[;=]',
     multiLine: true,
   ),
-  RegExp(r'^  (?:final |late )*String\?? _?sqref\s*[;=]', multiLine: true),
+  RegExp(
+    r'^ +(?:final |late )*String\?? _?(?:ref|sqref|location|anchor|cellRef)'
+    r'\s*[;=]',
+    multiLine: true,
+  ),
   RegExp(
     r'^  (?:final |late )*\w[\w<>?, ]* _?formula\w*\s*[;=]',
     multiLine: true,
@@ -76,11 +82,20 @@ void main() {
       LibSource('lib/src/xlsx/model/c.dart', '  final String formula;'),
       LibSource('lib/src/xlsx/model/d.dart', '    final String formula = x;'),
       LibSource('lib/src/xlsx/model/cell_store.dart', '  String formula;'),
+      LibSource('lib/src/xlsx/model/e.dart', '  final String ref;'),
+      LibSource('lib/src/xlsx/model/f.dart', '      final String? location;'),
+      LibSource('lib/src/xlsx/model/g.dart', '  String anchor = x;'),
+      LibSource('lib/src/xlsx/model/h.dart', '    late String _cellRef;'),
+      LibSource('lib/src/xlsx/model/i.dart', '  final String refName;'),
     ];
     expect(_unregistered(fixtures), <String>[
       'lib/src/xlsx/model/a.dart',
       'lib/src/xlsx/model/b.dart',
       'lib/src/xlsx/model/c.dart',
+      'lib/src/xlsx/model/e.dart',
+      'lib/src/xlsx/model/f.dart',
+      'lib/src/xlsx/model/g.dart',
+      'lib/src/xlsx/model/h.dart',
     ]);
   });
 }

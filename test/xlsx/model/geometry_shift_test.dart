@@ -25,7 +25,7 @@ ChangeSet _edit(XlsxWorkbook book, ReferenceShift edit) =>
     changeLogOf(book).transaction(() {
       referenceRegistryOf(book).apply(edit, edit);
       moveSheetGeometry(book.sheets.single, edit);
-    });
+    }, keep: true);
 
 String _saved(XlsxWorkbook book) =>
     partText(book.save().bytes, 'xl/worksheets/sheet1.xml');
@@ -123,6 +123,75 @@ void main() {
     _edit(book, ReferenceShift.insert('S', ShiftAxis.columns, 1, 1));
     expect(sheet.view.pane, const XlsxPane.frozen(rows: 3, columns: 2));
     expect(_saved(book), contains('topLeftCell="C4"'));
+  });
+
+  test('deleting every frozen row and column unfreezes', () {
+    const String views =
+        '<sheetViews><sheetView workbookViewId="0">'
+        '<pane xSplit="1" ySplit="2" topLeftCell="B3" '
+        'activePane="bottomRight" state="frozen"/>'
+        '<selection pane="topRight" activeCell="B1" sqref="B1"/>'
+        '<selection pane="bottomLeft" activeCell="A3" sqref="A3"/>'
+        '<selection pane="bottomRight" activeCell="C5" sqref="C5"/>'
+        '</sheetView></sheetViews>';
+    final XlsxWorkbook book = _book(_sheet(views: views));
+    final XlsxSheet sheet = book.sheets.single;
+    // Deleting the frozen rows leaves frozen columns: the pane splits
+    // only columns, its active pane is topRight, and selections of the
+    // bottom panes move up (the first one for a pane wins).
+    _edit(book, ReferenceShift.delete('S', ShiftAxis.rows, 1, 2));
+    expect(sheet.view.pane, const XlsxPane.frozen(rows: 0, columns: 1));
+    final String frozenColumns = _saved(book);
+    expect(
+      frozenColumns,
+      contains(
+        '<pane xSplit="1" topLeftCell="B1" activePane="topRight" '
+        'state="frozen"/>'
+        '<selection pane="topRight" activeCell="B1" sqref="B1"/>'
+        '<selection activeCell="A1" sqref="A1"/></sheetView>',
+      ),
+    );
+    // Deleting the frozen column too removes the pane, and no selection
+    // names a pane.
+    final ChangeSet columns = _edit(
+      book,
+      ReferenceShift.delete('S', ShiftAxis.columns, 1, 1),
+    );
+    expect(sheet.view.pane, isNull);
+    final String xml = _saved(book);
+    expect(xml, isNot(contains('<pane')));
+    expect(xml, isNot(contains('pane=')));
+    expect(xml, contains('<selection activeCell="A1" sqref="A1"/>'));
+    // Undo brings the pane and the selections' panes back.
+    changeLogOf(book).undo(columns);
+    expect(sheet.view.pane, const XlsxPane.frozen(rows: 0, columns: 1));
+    expect(_saved(book), frozenColumns);
+  });
+
+  test('deleting the frozen columns keeps frozen rows', () {
+    final XlsxWorkbook book = _book(
+      _sheet(
+        views:
+            '<sheetViews><sheetView workbookViewId="0">'
+            '<pane xSplit="2" ySplit="1" topLeftCell="C2" '
+            'activePane="bottomRight" state="frozen"/>'
+            '<selection pane="bottomRight" activeCell="D4" sqref="D4"/>'
+            '</sheetView></sheetViews>',
+      ),
+    );
+    _edit(book, ReferenceShift.delete('S', ShiftAxis.columns, 1, 3));
+    expect(
+      book.sheets.single.view.pane,
+      const XlsxPane.frozen(rows: 1, columns: 0),
+    );
+    expect(
+      _saved(book),
+      contains(
+        '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" '
+        'state="frozen"/>'
+        '<selection pane="bottomLeft" activeCell="A4" sqref="A4"/>',
+      ),
+    );
   });
 
   test('selection follows', () {

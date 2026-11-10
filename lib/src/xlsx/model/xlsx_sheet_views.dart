@@ -511,6 +511,78 @@ final class _ViewHolder implements ReferenceHolder {
       };
       if (!identical(moved, c)) next = next.replacingChild(c, moved);
     }
+    final XmlNode? before = view.child('pane');
+    final XmlNode? after = next.child('pane');
+    final String axis = edit.axis == ShiftAxis.rows ? 'ySplit' : 'xSplit';
+    if (before != null &&
+        after != null &&
+        _frozen(after) &&
+        before.attribute(axis) != null &&
+        after.attribute(axis) == null) {
+      next = _settlePane(next, after);
+    }
+    return next;
+  }
+
+  static bool _frozen(XmlNode pane) {
+    final String? state = pane.attribute('state');
+    return state == 'frozen' || state == 'frozenSplit';
+  }
+
+  /// [view] after a deletion took every frozen row or column of [pane]:
+  /// Excel unfreezes when no split is left (the pane goes, and no
+  /// selection names a pane), and otherwise keeps the one split, its
+  /// active pane and selections the quadrants that split still has
+  /// (a selection of a quadrant that went joins the one it collapses
+  /// into, unless that one has a selection already).
+  static XmlNode _settlePane(XmlNode view, XmlNode pane) {
+    bool split(String attribute) {
+      final String? text = pane.attribute(attribute);
+      return text != null && text != '0';
+    }
+
+    final bool rows = split('ySplit');
+    final bool columns = split('xSplit');
+    String? collapse(String? name) {
+      if (name == null) return null;
+      final bool bottom = rows && name.startsWith('bottom');
+      final bool right = columns && name.endsWith('Right');
+      if (!bottom && !right) return null;
+      return '${bottom ? 'bottom' : 'top'}${right ? 'Right' : 'Left'}';
+    }
+
+    final String? active = collapse(pane.attribute('activePane'));
+    XmlNode next = (!rows && !columns)
+        ? view.replacingChild(pane, null)
+        : view.replacingChild(
+            pane,
+            pane.withChanges(<String, String?>{'activePane': active}),
+          );
+    final List<XmlNode> selections = <XmlNode>[
+      for (final Object c in next.children)
+        if (c is XmlNode && c.localName == 'selection') c,
+    ];
+    // A selection keeps its pane when that pane is left; null stands for
+    // the top left pane, which Excel writes without the attribute.
+    bool kept(String? name) => name != 'topLeft' && collapse(name) == name;
+    final Set<String?> taken = <String?>{
+      for (final XmlNode s in selections)
+        if (kept(s.attribute('pane'))) s.attribute('pane'),
+    };
+    for (final XmlNode s in selections) {
+      final String? name = s.attribute('pane');
+      if (kept(name)) continue;
+      final String? target = collapse(name);
+      if (taken.contains(target)) {
+        next = next.replacingChild(s, null);
+      } else {
+        taken.add(target);
+        next = next.replacingChild(
+          s,
+          s.withChanges(<String, String?>{'pane': target}),
+        );
+      }
+    }
     return next;
   }
 

@@ -544,18 +544,17 @@ mixin _SheetPrint {
 /// page breaks.
 ///
 /// On a row or column edit of the sheet the filter's `ref` shifts
-/// ([ReferenceShift.shiftRange]); when the edit deletes it wholly the
-/// filter goes, with its `_xlnm._FilterDatabase` name and the sheet's
-/// `sortState`. On a column edit each `filterColumn`'s `colId` is
-/// renumbered from the filter's new first column, and one whose column is
-/// deleted goes. A `sortState` (the sheet's, or the filter's) shifts its
-/// `ref` and each `sortCondition`'s; a condition wholly deleted goes, and
-/// the state goes with its range or its last condition. A `brk` of
-/// `rowBreaks` (on a row edit) or `colBreaks` (on a column edit) names the
-/// first row or column of a page (0-based); it shifts with it and goes when
-/// it is deleted, `count` and `manualBreakCount` following; on the other
-/// axis its `min` and `max` shift as a range does. Only the changed
-/// attributes are rewritten.
+/// ([ReferenceShift.shiftRange]); when the edit deletes it wholly the filter
+/// goes, with its `_xlnm._FilterDatabase` name. On a column edit each
+/// `filterColumn`'s `colId` is renumbered from the filter's new first column,
+/// and one whose column is deleted goes. A `sortState` (the sheet's, or the
+/// filter's) shifts its `ref` and each `sortCondition`'s; a condition wholly
+/// deleted goes, and the state goes with its range or its last condition. A
+/// `brk` of `rowBreaks` (on a row edit) or `colBreaks` (on a column edit) names
+/// the first row or column of a page (0-based); it shifts with it and goes when
+/// it is deleted, `count` and `manualBreakCount` following; on the other axis
+/// its `min` and `max` shift as a range does, and it goes when that span is
+/// wholly deleted. Only the changed attributes are rewritten.
 final class _FilterHolder implements ReferenceHolder {
   _FilterHolder(this._sheet, this._part);
 
@@ -570,19 +569,19 @@ final class _FilterHolder implements ReferenceHolder {
   @override
   void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
     if (edit == null || !_editsSheet(edit, _sheet.name)) return;
-    final bool filterGone = _shiftFilter(edit);
-    _shiftSheetSort(edit, filterGone);
+    _shiftFilter(edit);
+    _shiftSheetSort(edit);
     final bool rows = edit.axis == ShiftAxis.rows;
     _shiftBreaks(rows ? 'rowBreaks' : 'colBreaks', edit);
     _shiftExtents(rows ? 'colBreaks' : 'rowBreaks', edit);
   }
 
-  /// Shifts the filter; whether the edit removed it.
-  bool _shiftFilter(ReferenceShift edit) {
+  /// Shifts the filter, or removes it when the edit deletes it wholly.
+  void _shiftFilter(ReferenceShift edit) {
     final XmlNode? node = _part.layoutElement('autoFilter') as XmlNode?;
     final String? ref = node?.attribute('ref');
     final List<XlsxRange>? read = ref == null ? null : parseSqref(ref);
-    if (node == null || read == null || read.length != 1) return false;
+    if (node == null || read == null || read.length != 1) return;
     final XlsxRange range = read.single;
     final XlsxRange? moved = edit.shiftRange(range);
     if (moved == null) {
@@ -590,7 +589,7 @@ final class _FilterHolder implements ReferenceHolder {
       editLayout(_log, _part, 'autoFilter', () {
         _part.setNode('autoFilter', null);
       });
-      return true;
+      return;
     }
     XmlNode next = node.withChanges(<String, String?>{
       if (moved != range) 'ref': moved.ref,
@@ -603,11 +602,11 @@ final class _FilterHolder implements ReferenceHolder {
       if (kept != null) children.add(kept);
     }
     if (changed) next = next.withChildren(children);
-    if (identical(next, node)) return false;
+    if (identical(next, node)) return;
     editLayout(_log, _part, 'autoFilter', () {
       _part.setNode('autoFilter', next);
     });
-    return false;
+    return;
   }
 
   /// [child] of a filter over [range], now over [moved]: a `filterColumn`
@@ -702,10 +701,12 @@ final class _FilterHolder implements ReferenceHolder {
     return read == null || read.length != 1 ? null : read.single;
   }
 
-  void _shiftSheetSort(ReferenceShift edit, bool filterGone) {
+  /// Shifts the sheet's own `sortState`, which goes only when the edit
+  /// deletes its range or its last condition, not with the filter.
+  void _shiftSheetSort(ReferenceShift edit) {
     final XmlNode? node = _part.layoutElement('sortState') as XmlNode?;
     if (node == null) return;
-    final XmlNode? next = filterGone ? null : _shiftSort(node, edit);
+    final XmlNode? next = _shiftSort(node, edit);
     if (identical(next, node)) return;
     editLayout(_log, _part, 'sortState', () {
       _part.setNode('sortState', next);
@@ -743,6 +744,12 @@ final class _FilterHolder implements ReferenceHolder {
       children.add(next);
     }
     if (!changed) return;
+    _setBreaks(slot, node, children);
+  }
+
+  /// Sets [slot] to [node] holding [children], its `count` and
+  /// `manualBreakCount` following; removes it when no `brk` is left.
+  void _setBreaks(String slot, XmlNode node, List<Object> children) {
     final List<XmlNode> breaks = <XmlNode>[
       for (final Object c in children)
         if (c is XmlNode && c.localName == 'brk') c,
@@ -764,14 +771,17 @@ final class _FilterHolder implements ReferenceHolder {
   }
 
   /// Shifts the `min` and `max` (0-based, on the edit's axis) of each `brk`
-  /// of [slot] as a range; a span the edit deletes wholly stays as read,
-  /// and one that reaches the sheet's end keeps reaching it.
+  /// of [slot] as a range; a break whose span the edit deletes wholly goes
+  /// (as [_shiftBreaks] counts), and a span that reaches the sheet's end
+  /// keeps reaching it.
   void _shiftExtents(String slot, ReferenceShift edit) {
     final XmlNode? node = _part.layoutElement(slot) as XmlNode?;
     if (node == null) return;
     final bool rows = edit.axis == ShiftAxis.rows;
-    XmlNode next = node;
+    bool changed = false;
+    final List<Object> children = <Object>[];
     for (final Object c in node.children) {
+      children.add(c);
       if (c is! XmlNode || c.localName != 'brk') continue;
       final String? minText = c.attribute('min');
       final String? maxText = c.attribute('max');
@@ -782,7 +792,11 @@ final class _FilterHolder implements ReferenceHolder {
       final XlsxRange? moved = edit.shiftRange(
         rows ? XlsxRange(min, 0, max, 0) : XlsxRange(0, min, 0, max),
       );
-      if (moved == null) continue;
+      if (moved == null) {
+        children.removeLast();
+        changed = true;
+        continue;
+      }
       final int first = rows ? moved.firstRow : moved.firstColumn;
       // A span to the sheet's end stays there, as a whole row or column.
       final int last = max == limit - 1
@@ -794,9 +808,12 @@ final class _FilterHolder implements ReferenceHolder {
         if (minText != null && first != min) 'min': '$first',
         if (maxText != null && last != max) 'max': '$last',
       });
-      if (!identical(shifted, c)) next = next.replacingChild(c, shifted);
+      if (!identical(shifted, c)) {
+        children.last = shifted;
+        changed = true;
+      }
     }
-    if (identical(next, node)) return;
-    editLayout(_log, _part, slot, () => _part.setNode(slot, next));
+    if (!changed) return;
+    _setBreaks(slot, node, children);
   }
 }

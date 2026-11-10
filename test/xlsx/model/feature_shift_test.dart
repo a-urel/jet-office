@@ -422,4 +422,56 @@ void main() {
       ),
     );
   });
+
+  test("the sheet's sort state goes only with its own range", () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(
+        '<autoFilter ref="A2:C5"/>'
+        '<sortState ref="A8:C9"><sortCondition ref="B8:B9"/></sortState>',
+        names:
+            '<definedName name="_xlnm._FilterDatabase" localSheetId="0" '
+            r'hidden="1">S!$A$2:$C$5</definedName>',
+      ),
+    );
+    // Rows 2 to 5 go with the filter; the sort state below moves up.
+    _edit(book, _deleteRows(2, 4));
+    expect(_sheet(book), isNot(contains('autoFilter')));
+    expect(
+      _sheet(book),
+      contains(
+        '<sortState ref="A4:C5"><sortCondition ref="B4:B5"/></sortState>',
+      ),
+    );
+    // Deleting its own rows takes it.
+    _edit(book, _deleteRows(4, 2));
+    expect(_sheet(book), isNot(contains('sortState')));
+  });
+
+  test('a break whose span on the other axis is wholly deleted goes', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _package(
+        '<rowBreaks count="2" manualBreakCount="2">'
+        '<brk id="10" min="2" max="4" man="1"/>'
+        '<brk id="20" max="16383" man="1"/></rowBreaks>'
+        '<colBreaks count="1" manualBreakCount="1">'
+        '<brk id="3" min="5" max="6" man="1"/></colBreaks>',
+      ),
+    );
+    // Columns C:E (0-based 2 to 4) go: the first row break's span with
+    // them; the one to the sheet's end stays.
+    final ChangeSet set = _edit(book, _deleteColumns(3, 3));
+    expect(
+      _sheet(book),
+      contains(
+        '<rowBreaks count="1" manualBreakCount="1">'
+        '<brk id="20" max="16383" man="1"/></rowBreaks>',
+      ),
+    );
+    changeLogOf(book).revertSet(set);
+    expect(_sheet(book), contains('<brk id="10" min="2" max="4" man="1"/>'));
+    // Rows 6 and 7 (0-based 5 and 6) go: the only column break goes, and
+    // its element with it.
+    _edit(book, _deleteRows(6, 2));
+    expect(_sheet(book), isNot(contains('colBreaks')));
+  });
 }

@@ -208,15 +208,15 @@ final class XlsxWorkbook {
   ///
   /// The name is made valid and unique as `XlsxWriter.addSheet` makes it,
   /// against the sheets the workbook already has, and a changed name is
-  /// reported as a warning. The sheet's part and relationship take a name
-  /// and an id the package does not use yet. A sheet placed before others
-  /// leaves every tab index on its sheet: a sheet's names, the active tab
-  /// and the first tab shown. Its title joins the sheet titles of
-  /// `docProps/app.xml` at its place. Undone, the part, its relationship and its
-  /// content type go again. Loads the shared strings and styles, so it
-  /// throws an [XlsxReadException] when they cannot be read; a [RangeError]
-  /// named `position` for a position past the last tab. Nothing changes
-  /// when it throws.
+  /// reported as a warning. The sheet's part and relationship take a name and
+  /// an id the package does not use yet. A sheet placed before others leaves
+  /// every tab index on its sheet: a sheet's names, the active tab and the
+  /// first tab shown. Its title joins the sheet titles of `docProps/app.xml` at
+  /// its place. Undone, the part, its relationship and its content type go
+  /// again. Loads the shared strings and styles, so it throws an
+  /// [XlsxReadException] when they cannot be read; a [RangeError] named
+  /// `position` for a position past the last tab. Nothing changes when it
+  /// throws.
   XlsxSheet addSheet(String name, {int? position}) {
     late XlsxSheet added;
     return recordEdit(
@@ -237,14 +237,14 @@ final class XlsxWorkbook {
   /// (`TitlesOfParts`: the sheet's own and its named ranges', as
   /// `Data!Print_Area`). Nothing else changes.
   ///
-  /// [newName] must be a name the writer would keep as it is: no character
-  /// of `[ ] : * ? / \` or that XML cannot hold, no space or apostrophe
-  /// at either end, not empty, at most 31 characters, and no other sheet's
-  /// name or `History`, ignoring case; otherwise an [ArgumentError] named `newName` is thrown and
-  /// nothing changes. The same name changes nothing; a name that differs
-  /// only in case is a rename. Throws an [ArgumentError] for a sheet of
-  /// another workbook, and an [XlsxReadException] when a sheet cannot be
-  /// read; nothing changes then.
+  /// [newName] must be a name the writer would keep as it is: no character of
+  /// `[ ] : * ? / \` or that XML cannot hold, no space or apostrophe at either
+  /// end, not empty, at most 31 characters, and no other sheet's name or
+  /// `History`, ignoring case; otherwise an [ArgumentError] named `newName` is
+  /// thrown and nothing changes. The same name changes nothing; a name that
+  /// differs only in case is a rename. Throws an [ArgumentError] for a sheet of
+  /// another workbook, and an [XlsxReadException] when a sheet cannot be read;
+  /// nothing changes then.
   void renameSheet(XlsxSheet sheet, String newName) {
     final String old = sheet.name;
     recordEdit(

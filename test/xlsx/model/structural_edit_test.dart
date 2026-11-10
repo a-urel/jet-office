@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
@@ -8,8 +9,10 @@ import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
 import '../../fixtures/fixtures.dart';
+import '../../fixtures/m4_fixtures.dart' show png4x2;
 import '../../support/read_xlsx.dart';
 import '../read/support/workbook_builder.dart';
+import '../read/support/zip_builder.dart';
 import 'support/workbook_support.dart';
 
 /// A workbook of one sheet `S` with a value column, a formula, a name, a
@@ -209,6 +212,60 @@ void main() {
     expect(parts['xl/workbook.xml'], contains('fullCalcOnLoad="1"'));
   });
 
+  test('an edit on one sheet leaves the relationships of another as read', () {
+    // Sheet B relates notes, a picture, a link and a table; the holders
+    // read them during an edit of A, which must not re-encode them.
+    final XlsxWorkbook made = XlsxWorkbook();
+    made.addSheet('A')
+      ..setCell(0, 0, 1)
+      ..setCell(1, 0, const XlsxFormula('A1+B!A1'));
+    made.addSheet('B')
+      ..setCell(0, 0, XlsxHyperlink.url('https://example.com', text: 'x'))
+      ..setNote(1, 1, XlsxNote.plain('A note', author: 'jet_office'))
+      ..addPicture(
+        XlsxPicture(
+          OfficeImage(png4x2),
+          const XlsxOneCellAnchor(XlsxAnchorPoint(4, 4), width: 40, height: 20),
+        ),
+      )
+      ..addTable(
+        XlsxTable('T', const XlsxRange(6, 0, 8, 0), <XlsxTableColumn>[
+          const XlsxTableColumn('C'),
+        ]),
+      );
+    // Relationships as another producer spaces them, which a re-encode
+    // would not keep.
+    final Map<String, Uint8List> written = readXlsxBytes(made.save().bytes);
+    for (final String name in written.keys.toList()) {
+      if (name.endsWith('.rels')) {
+        written[name] = Uint8List.fromList(
+          utf8.encode(utf8.decode(written[name]!).replaceAll('><', '>\n  <')),
+        );
+      }
+    }
+    final Uint8List input = buildZip(written);
+    final Map<String, Uint8List> before = readXlsxBytes(input);
+    final List<String> rels = <String>[
+      for (final String name in before.keys)
+        if (name.contains('_rels/') &&
+            !name.startsWith('_rels/') &&
+            !name.startsWith('xl/_rels/') &&
+            name != 'xl/worksheets/_rels/sheet1.xml.rels')
+          name,
+    ];
+    expect(rels, contains('xl/worksheets/_rels/sheet2.xml.rels'));
+    expect(rels, hasLength(2)); // the sheet's and its drawing's
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    book.sheets.first.insertRows(0);
+    book.sheets.first.deleteColumns(0);
+    book.renameSheet(book.sheets.first, 'Renamed');
+    book.moveSheet(book.sheets.first, 1);
+    final Map<String, Uint8List> after = readXlsxBytes(book.save().bytes);
+    for (final String name in rels) {
+      expect(after[name], before[name], reason: name);
+    }
+  });
+
   test('undo restores bytes on every fixture', () {
     for (final Fixture f in allFixtures()) {
       final XlsxWorkbook book = XlsxWorkbook.open(f.build());
@@ -224,8 +281,18 @@ void main() {
         final ChangeSet set;
         try {
           set = changeLogOf(book).transaction(edit);
-        } on StateError {
-          continue; // An edit Excel refuses.
+        } on StateError catch (e) {
+          // An edit Excel refuses: a note pushed off the sheet, or a
+          // table's header row deleted alone.
+          expect(
+            e.message,
+            anyOf(
+              contains('off the sheet'),
+              contains('cannot be deleted while its other rows stay'),
+            ),
+            reason: f.name,
+          );
+          continue;
         }
         changeLogOf(book).revertSet(set);
         expect(
