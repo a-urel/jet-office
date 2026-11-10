@@ -901,22 +901,7 @@ void main() {
       );
     });
 
-    test('resize refuses totals, sortState, other corners and no data row', () {
-      final XlsxWorkbook totals = XlsxWorkbook.open(_fixture('m4_tables'));
-      expect(
-        () => totals.sheets[0].resizeTable('Sales', XlsxRange.parse('A1:C9')),
-        _state(contains('totals')),
-      );
-      final String sorted = _excelTable.replaceFirst(
-        '<tableColumns',
-        '<sortState ref="A2:B3"><sortCondition ref="A2:A3"/></sortState>'
-            '<tableColumns',
-      );
-      final XlsxWorkbook book = XlsxWorkbook.open(_listed(<String>[sorted]));
-      expect(
-        () => book.sheets.single.resizeTable('T', XlsxRange.parse('A1:B9')),
-        _state(contains('sort')),
-      );
+    test('resize refuses other corners and no data row', () {
       final XlsxSheet sheet = XlsxWorkbook.open(
         _listed(<String>[_excelTable]),
       ).sheets.single;
@@ -1019,16 +1004,14 @@ void main() {
       sheet.addTable(_plain('A5:B6', name: 'T'));
     });
 
-    test('a formula using the table refuses removal, named cell in the '
-        'message', () {
+    test('a formula using the table becomes a range', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m4_tables'));
       final XlsxSheet other = book.sheets[1];
       other.setCell(6, 3, const XlsxFormula('SUM(sALES[Amount])'));
-      expect(
-        () => book.sheets[0].removeTable('Sales'),
-        _state(allOf(contains('D7'), contains(other.name))),
-      );
-      expect(book.sheets[0].tables, hasLength(2));
+      book.sheets[0].removeTable('Sales');
+      expect(book.sheets[0].tables, hasLength(1));
+      expect(other.cellAt(6, 3)!.formula, isNot(contains('[')));
+      expect(other.cellAt(6, 3)!.formula, contains(r'$'));
     });
 
     test('a shared formula is found in its master', () {
@@ -1041,15 +1024,8 @@ void main() {
               '<row r="6"><c r="D6"><f t="shared" si="0"/><v>1</v></c></row>',
         ),
       );
-      expect(() => book.sheets.single.removeTable('T'), _state(contains('D5')));
-    });
-
-    test('a string holding the text refuses too', () {
-      final XlsxSheet sheet = XlsxWorkbook.open(
-        _listed(<String>[_excelTable]),
-      ).sheets.single;
-      sheet.setCell(9, 0, const XlsxFormula('"T[x]"'));
-      expect(() => sheet.removeTable('T'), _state(contains('A10')));
+      book.sheets.single.removeTable('T');
+      expect(book.sheets.single.cellAt(4, 3)!.formula, r'SUM($A$2:$A$3)');
     });
 
     test('a name without the bracket does not refuse', () {
@@ -1061,20 +1037,23 @@ void main() {
       expect(sheet.tables, isEmpty);
     });
 
-    test('a defined name using it refuses', () {
+    test('a defined name using it becomes a range', () {
       final XlsxWorkbook book = XlsxWorkbook.open(
         _listed(<String>[_excelTable]),
       );
       book.defineName(const XlsxDefinedName('Uses', 't[A]'));
-      expect(
-        () => book.sheets.single.removeTable('T'),
-        _state(contains('"Uses"')),
-      );
-      book.removeName('Uses');
       book.sheets.single.defineName(const XlsxDefinedName('Local', 'T[B]'));
+      book.sheets.single.removeTable('T');
+      final List<XlsxDefinedName> names = book.definedNames;
       expect(
-        () => book.sheets.single.removeTable('T'),
-        _state(contains('"Local"')),
+        names.singleWhere((XlsxDefinedName n) => n.name == 'Uses').formula,
+        endsWith(r'!$A$2:$A$3'),
+      );
+      expect(
+        book.sheets.single.definedNames
+            .singleWhere((XlsxDefinedName n) => n.name == 'Local')
+            .formula,
+        endsWith(r'$B$2:$B$3'),
       );
     });
 
@@ -1329,56 +1308,48 @@ void main() {
       }
     });
 
-    test('what may stand before the name refuses', () {
-      for (final String formula in <String>[
-        'T[A]',
-        '1+T[A]',
-        'SUM(t[A])',
-        '[1]!T[A]',
-        'Book.xlsx!T[A]',
+    test('what may stand before the name converts; another workbook stays', () {
+      for (final (String formula, String converted) in <(String, String)>[
+        ('T[A]', r'$A$2:$A$3'),
+        ('1+T[A]', r'1+$A$2:$A$3'),
+        ('SUM(t[A])', r'SUM($A$2:$A$3)'),
+        ('[1]!T[A]', '[1]!T[A]'),
+        ('Book.xlsx!T[A]', 'Book.xlsx!T[A]'),
       ]) {
         final XlsxSheet sheet = XlsxWorkbook.open(
           _listed(<String>[_excelTable]),
         ).sheets.single;
         sheet.setCell(9, 0, XlsxFormula(formula));
-        expect(
-          () => sheet.removeTable('T'),
-          _state(contains('A10')),
-          reason: formula,
-        );
+        sheet.removeTable('T');
+        expect(sheet.cellAt(9, 0)!.formula, converted, reason: formula);
       }
     });
 
-    test('a name of a file with syntax characters is matched as text', () {
-      final XlsxSheet sheet = XlsxWorkbook.open(
-        _listed(<String>[
-          _excelTable.replaceAll('displayName="T"', 'displayName="T(1"'),
-        ]),
-      ).sheets.single;
-      sheet.setCell(9, 0, const XlsxFormula('T(1[A]'));
-      expect(() => sheet.removeTable('T(1'), _state(contains('A10')));
-    });
-
-    test('a calculated column of another table refuses', () {
-      final XlsxSheet sheet = XlsxWorkbook.open(
+    test('a calculated column of another table converts', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
         withColumn(
           '<calculatedColumnFormula>SUM(T[A])</calculatedColumnFormula>',
         ),
-      ).sheets.single;
+      );
+      book.sheets.single.removeTable('T');
       expect(
-        () => sheet.removeTable('T'),
-        _state(allOf(contains('"C"'), contains('"Other"'))),
+        partText(book.save().bytes, 'xl/tables/table2.xml'),
+        contains(r'SUM($A$2:$A$3)'),
       );
     });
 
-    test('a totals formula of another table refuses', () {
+    test('a totals formula of another table converts', () {
       final XlsxSheet sheet = XlsxWorkbook.open(
         withColumn('<totalsRowFormula>SUM(T[A])</totalsRowFormula>'),
       ).sheets.single;
-      expect(() => sheet.removeTable('T'), _state(contains('"Other"')));
+      sheet.removeTable('T');
+      expect(
+        sheet.tables.single.columns.single.totalsFormula,
+        r'SUM($A$2:$A$3)',
+      );
     });
 
-    test('a table on another sheet refuses', () {
+    test('a table on another sheet converts', () {
       final XlsxWorkbook book = XlsxWorkbook();
       final XlsxSheet first = book.addSheet('S');
       final XlsxSheet second = book.addSheet('O');
@@ -1393,7 +1364,11 @@ void main() {
           ),
         ], totalsRow: true),
       );
-      expect(() => first.removeTable('T'), _state(contains('"U"')));
+      first.removeTable('T');
+      expect(
+        second.tables.single.columns.single.totalsFormula,
+        r'SUM(S!$A$2:$A$3)',
+      );
     });
 
     test("the table's own column formula does not refuse", () {
@@ -1476,15 +1451,15 @@ void main() {
 
   group('a backslash in a table name', () {
     for (final String name in <String>[r'\Sales', r'\quarter']) {
-      test('$name is matched as text and refuses removal', () {
+      test('$name is matched as text and converts', () {
         final XlsxSheet sheet = XlsxWorkbook.open(
           _listed(<String>[
             _excelTable.replaceAll('displayName="T"', 'displayName="$name"'),
           ]),
         ).sheets.single;
         sheet.setCell(9, 0, XlsxFormula('SUM($name[A])'));
-        expect(() => sheet.removeTable(name), _state(contains('A10')));
-        expect(sheet.tables, hasLength(1));
+        sheet.removeTable(name);
+        expect(sheet.cellAt(9, 0)!.formula, r'SUM($A$2:$A$3)');
       });
     }
   });
@@ -1518,6 +1493,222 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(withSlicer('4'));
       book.sheets.single.removeTable('T');
       expect(book.sheets.single.tables, isEmpty);
+    });
+  });
+
+  group('structured references (W5)', () {
+    /// `Data` with `Sales` over A1:C4 (Region, Amount, Double; C2:C4 hold
+    /// `[@Amount]*2`), and `Other`.
+    XlsxWorkbook book() {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet data = book.addSheet('Data');
+      book.addSheet('Other');
+      for (int r = 1; r <= 3; r++) {
+        data.setCell(r, 0, 'R$r');
+        data.setCell(r, 1, r * 10);
+        data.setCell(r, 2, const XlsxFormula('[@Amount]*2'));
+      }
+      data.addTable(
+        XlsxTable('Sales', XlsxRange.parse('A1:C4'), const <XlsxTableColumn>[
+          XlsxTableColumn('Region'),
+          XlsxTableColumn('Amount'),
+          XlsxTableColumn('Double'),
+        ]),
+      );
+      return book;
+    }
+
+    String? formula(XlsxSheet s, int r, int c) => s.cellAt(r, c)!.formula;
+
+    test('renameTable rewrites every structured ref, across sheets, in names '
+        'and column formulas', () {
+      final XlsxWorkbook b = book();
+      final XlsxSheet data = b.sheets[0];
+      final XlsxSheet other = b.sheets[1];
+      other.setCell(0, 0, const XlsxFormula('SUM(sales[Amount])+"Sales[x]"'));
+      data.setCell(6, 0, const XlsxFormula('Sales[[#Totals],[Amount]]'));
+      b.defineName(const XlsxDefinedName('Tot', 'SUM(Sales[#All])'));
+      other.setCell(2, 5, 1);
+      other.addTable(
+        XlsxTable('U', XlsxRange.parse('F1:F3'), const <XlsxTableColumn>[
+          XlsxTableColumn(
+            'C',
+            totalsFunction: XlsxTotalsFunction.custom,
+            totalsFormula: 'SUM(Sales[Amount])',
+          ),
+        ], totalsRow: true),
+      );
+      data.renameTable('SALES', 'Revenue');
+      expect(data.tables.single.name, 'Revenue');
+      expect(formula(other, 0, 0), 'SUM(Revenue[Amount])+"Sales[x]"');
+      expect(formula(data, 6, 0), 'Revenue[[#Totals],[Amount]]');
+      expect(formula(data, 1, 2), '[@Amount]*2');
+      expect(
+        b.definedNames
+            .singleWhere((XlsxDefinedName n) => n.name == 'Tot')
+            .formula,
+        'SUM(Revenue[#All])',
+      );
+      expect(
+        other.tables.single.columns.single.totalsFormula,
+        'SUM(Revenue[Amount])',
+      );
+      final Map<String, String> parts = readXlsx(b.save().bytes);
+      expect(
+        parts.values.where((String p) => p.contains('displayName="Revenue"')),
+        hasLength(1),
+      );
+      // The old name is free, the new one taken.
+      other.addTable(_plain('D1:E2', name: 'Sales'));
+      expect(() => other.renameTable('Sales', 'revenue'), _argument('newName'));
+      expect(() => other.renameTable('Nope', 'X'), _argument('name'));
+    });
+
+    test('renameTable undoes as one change', () {
+      final XlsxWorkbook b = book();
+      b.sheets[1].setCell(0, 0, const XlsxFormula('SUM(Sales[Amount])'));
+      final ChangeLog log = changeLogOf(b);
+      final ChangeSet set = log.transaction(
+        () => b.sheets[0].renameTable('Sales', 'Rev'),
+      );
+      log.revertSet(set);
+      expect(b.sheets[0].tables.single.name, 'Sales');
+      expect(b.sheets[1].cellAt(0, 0)!.formula, 'SUM(Sales[Amount])');
+    });
+
+    test('header rename rewrites [Col] and [@Col]', () {
+      final XlsxWorkbook b = book();
+      final XlsxSheet data = b.sheets[0];
+      final XlsxSheet other = b.sheets[1];
+      other.setCell(0, 0, const XlsxFormula('SUM(Sales[amount])'));
+      other.setCell(
+        1,
+        0,
+        const XlsxFormula('Sales[[#Headers],[Region]:[Amount]]'),
+      );
+      data.setCell(0, 1, 'Net Total');
+      expect(formula(other, 0, 0), 'SUM(Sales[Net Total])');
+      expect(formula(other, 1, 0), 'Sales[[#Headers],[Region]:[Net Total]]');
+      expect(formula(data, 1, 2), '[@[Net Total]]*2');
+      expect(formula(data, 3, 2), '[@[Net Total]]*2');
+    });
+
+    test('removeTable converts users to ranges', () {
+      final XlsxWorkbook b = book();
+      final XlsxSheet data = b.sheets[0];
+      final XlsxSheet other = b.sheets[1];
+      other.setCell(0, 0, const XlsxFormula('SUM(Sales[Amount])'));
+      other.setCell(1, 0, const XlsxFormula('Sales[#Headers]'));
+      other.setCell(
+        2,
+        0,
+        const XlsxFormula('SUM(Sales[[#All],[Region]:[Amount]])'),
+      );
+      other.setCell(3, 0, const XlsxFormula('Sales[#Totals]'));
+      data.setCell(6, 0, const XlsxFormula('SUM(Sales[Amount])'));
+      b.defineName(const XlsxDefinedName('Tot', 'SUM(Sales[Amount])'));
+      data.removeTable('Sales');
+      expect(data.tables, isEmpty);
+      expect(formula(other, 0, 0), r'SUM(Data!$B$2:$B$4)');
+      expect(formula(other, 1, 0), r'Data!$A$1:$C$1');
+      expect(formula(other, 2, 0), r'SUM(Data!$A$1:$B$4)');
+      expect(formula(other, 3, 0), '#REF!');
+      expect(formula(data, 6, 0), r'SUM($B$2:$B$4)');
+      expect(formula(data, 2, 2), 'B3*2');
+      expect(
+        b.definedNames
+            .singleWhere((XlsxDefinedName n) => n.name == 'Tot')
+            .formula,
+        r'SUM(Data!$B$2:$B$4)',
+      );
+    });
+
+    test('a column the table lacks refuses removal, nothing changed', () {
+      final XlsxWorkbook b = book();
+      b.sheets[1].setCell(0, 0, const XlsxFormula('Sales[Nope]'));
+      expect(() => b.sheets[0].removeTable('Sales'), _state(contains('Nope')));
+      expect(b.sheets[0].tables, hasLength(1));
+      expect(formula(b.sheets[0], 1, 2), '[@Amount]*2');
+    });
+
+    test('a string holding the name no longer refuses', () {
+      final XlsxSheet sheet = XlsxWorkbook.open(
+        _listed(<String>[_excelTable]),
+      ).sheets.single;
+      sheet.setCell(9, 0, const XlsxFormula('"T[x]"'));
+      sheet.removeTable('T');
+      expect(sheet.tables, isEmpty);
+      expect(sheet.cellAt(9, 0)!.formula, '"T[x]"');
+    });
+
+    test('a pivot cache naming the table refuses', () {
+      const String pivotType =
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.'
+          'pivotCacheDefinition+xml';
+      final XlsxWorkbook b = XlsxWorkbook.open(
+        _listed(
+          <String>[_excelTable],
+          extraTypes:
+              '<Override PartName="/xl/pivotCache/pivotCacheDefinition1.xml" '
+              'ContentType="$pivotType"/>',
+          extra: <String, String>{
+            'xl/pivotCache/pivotCacheDefinition1.xml':
+                '<pivotCacheDefinition xmlns="$mainNsForTables"><cacheSource '
+                'type="worksheet"><worksheetSource name="t"/></cacheSource>'
+                '</pivotCacheDefinition>',
+          },
+        ),
+      );
+      expect(() => b.sheets.single.removeTable('T'), _state(contains('pivot')));
+      expect(
+        () => b.sheets.single.renameTable('T', 'V'),
+        _state(contains('pivot')),
+      );
+      expect(changeLogOf(b).hasChanges, isFalse);
+    });
+
+    test('resize with totals moves the totals row', () {
+      final XlsxSheet sheet = XlsxWorkbook().addSheet('S');
+      sheet.addTable(_sales());
+      expect(sheet.cellAt(3, 0)!.value, 'Total');
+      sheet.resizeTable('Sales', XlsxRange.parse('A1:B6'));
+      expect(sheet.tables.single.range, XlsxRange.parse('A1:B6'));
+      expect(sheet.cellAt(5, 0)!.value, 'Total');
+      expect(sheet.cellAt(5, 1)!.formula, contains('SUBTOTAL'));
+      expect(sheet.cellAt(3, 0)?.value, isNull);
+      expect(sheet.cellAt(3, 1)?.formula, isNull);
+      sheet.resizeTable('Sales', XlsxRange.parse('A1:B3'));
+      expect(sheet.cellAt(2, 0)!.value, 'Total');
+      expect(sheet.cellAt(5, 0)?.value, isNull);
+    });
+
+    test('resize into occupied cells refuses', () {
+      final XlsxSheet sheet = XlsxWorkbook().addSheet('S');
+      sheet.addTable(_sales());
+      sheet.setCell(5, 1, 7);
+      expect(
+        () => sheet.resizeTable('Sales', XlsxRange.parse('A1:B6')),
+        _state(contains('B6')),
+      );
+      expect(sheet.tables.single.range, XlsxRange.parse('A1:B4'));
+      expect(sheet.cellAt(3, 0)!.value, 'Total');
+    });
+
+    test('resize moves the sort state', () {
+      final String sorted = _excelTable.replaceFirst(
+        '<tableColumns',
+        '<sortState ref="A2:B3"><sortCondition ref="A2:A3"/></sortState>'
+            '<tableColumns',
+      );
+      final XlsxWorkbook b = XlsxWorkbook.open(_listed(<String>[sorted]));
+      b.sheets.single.resizeTable('T', XlsxRange.parse('A1:B9'));
+      expect(
+        partText(b.save().bytes, 'xl/tables/table1.xml'),
+        sorted
+            .replaceAll('ref="A1:B3"', 'ref="A1:B9"')
+            .replaceAll('ref="A2:B3"', 'ref="A2:B9"')
+            .replaceAll('ref="A2:A3"', 'ref="A2:A9"'),
+      );
     });
   });
 }

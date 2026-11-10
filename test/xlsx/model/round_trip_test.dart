@@ -485,8 +485,11 @@ void main() {
       expect(readXlsx(saved)['xl/tables/table1.xml'], contains('xr:uid'));
     });
 
-    test('the table its own formulas use cannot be removed', () {
-      expect(() => sheet.removeTable('Stock'), throwsStateError);
+    test('the table its own formulas use is removed, its users ranges', () {
+      sheet.removeTable('Stock');
+      final Map<String, String> parts = readXlsx(book.save().bytes);
+      expect(parts.keys, isNot(contains('xl/tables/table1.xml')));
+      expect(parts[sheetPart], isNot(contains('Stock[')));
     });
 
     test('restyling and resizing the table keep its calculated column', () {

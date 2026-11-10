@@ -56,6 +56,7 @@ import '../drawing.dart'
         checkPicture;
 import '../formula/formula_rewrite.dart';
 import '../formula/reference_shift.dart';
+import '../formula/structured_reference.dart';
 import '../formula_text.dart' show quotedSheetRef;
 import '../header_footer.dart';
 import '../hyperlink.dart';
@@ -574,8 +575,9 @@ final class XlsxSheet
   ///
   /// A table's header cell holds its column's name, which Excel requires to
   /// equal the cell's text, so setting it renames the column too
-  /// (`tableColumnRenamed`; formulas that use the old name are not
-  /// updated). It takes only text: an empty text or `null` becomes
+  /// (`tableColumnRenamed`), and every structured reference to the column
+  /// (`Sales[Amount]`, `[@Amount]` inside the table) takes the new name;
+  /// every sheet loads for that. It takes only text: an empty text or `null` becomes
   /// `ColumnN` (N the column's place in the table), and a name another
   /// column has, ignoring case, gets a number appended, as Excel does
   /// (`tableHeaderAdjusted`). Any other value throws a [StateError], and
@@ -767,6 +769,15 @@ final class XlsxSheet
       }
       if (header != null && rename != null) {
         final TablePart table = header.table;
+        // Every structured reference to the column follows its name.
+        _host.references.apply(
+          StructuredRename(
+            _structured(table),
+            oldColumn: table.columnName(header.index),
+            newColumn: rename,
+          ),
+          null,
+        );
         attachStoredPart(
           log,
           _host.reader.package,

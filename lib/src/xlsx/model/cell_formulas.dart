@@ -74,6 +74,8 @@ final class CellFormulaHolder implements ReferenceHolder {
       mapper,
       host,
       onUnlexable: (_) => unlexable.add(_key(row, column)),
+      row: row,
+      column: column,
     );
     final Map<String, List<_Found>> followers = <String, List<_Found>>{};
     for (final _Found f in found) {

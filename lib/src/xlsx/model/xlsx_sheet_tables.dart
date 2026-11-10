@@ -13,9 +13,9 @@
 /// list is edited by the changes, so `merge`, `autoFilter` and `setCell` see
 /// a table at once and an undo takes it away again.
 ///
-/// Renaming a table and turning a totals row on or off are W5's: they need
-/// the formula lexer and cell moves. So are resizing a table with a totals
-/// row or a sort state and removing a table that formulas use.
+/// W5 renames a table and rewrites every structured reference to it,
+/// resizes a table with a totals row or a sort state, and removes a table
+/// whose users become plain ranges, as Excel's "Convert to Range".
 part of 'xlsx_sheet.dart';
 
 /// The change of the sheet's list of tables: [entry] went in at [index], or
@@ -52,6 +52,11 @@ final class _TableListChange implements Change {
 
 /// The content type of a slicer cache part, which names its table by id.
 const String _slicerCacheType = 'application/vnd.ms-excel.slicerCache+xml';
+
+/// The content type of a pivot cache definition part.
+const String _pivotCacheType =
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.'
+    'pivotCacheDefinition+xml';
 
 /// The table half of [XlsxSheet].
 mixin _SheetTablesApi {
@@ -227,22 +232,27 @@ mixin _SheetTablesApi {
 
   /// Moves the last row of the table [name], so that it covers [range].
   ///
-  /// The `ref` of the table and of its `<autoFilter>` change; cells stay. A
-  /// [range] equal to the table's is no edit.
+  /// The `ref` of the table and of its `<autoFilter>` change (the filter
+  /// leaves out a totals row); a `<sortState>` and its conditions whose last
+  /// row is the last body row follow it. Cells stay, except a totals row's:
+  /// its cells within the table's columns move to the new last row, as
+  /// they are (style and formula). A [range] equal to the table's is no edit.
   ///
   /// A formula over the table (`SUM(T[A])`) has another result, so the save
   /// sets `fullCalcOnLoad` when the workbook has formulas, as a name edit
-  /// does; `calcChain` stays. Undoing the resize takes that back.
+  /// does; `calcChain` stays, unless a totals row moved (its cells are
+  /// elsewhere: the save drops it). Undoing the resize takes that back.
   ///
   /// Throws an [ArgumentError] named `name` when the sheet has no table
   /// [name], ignoring case; named `range` for a range outside the sheet or in
   /// reverse, one whose first row, first column or last column differ from
   /// the table's, one that leaves no data row, or an overlap with another
   /// table, the auto filter or a merge (the message names both); a
-  /// [StateError] for a table with a totals row or a `<sortState>` (W5 moves
-  /// them) and for a sheet that is not a worksheet or has no part; and an
-  /// [XlsxReadException] when the sheet cannot be read. Whatever it throws,
-  /// nothing has changed.
+  /// [StateError] naming the cell when a totals row would move onto a cell
+  /// that is not empty, or a totals cell is part of a shared, array or data
+  /// table formula, and for a sheet that is not a worksheet or has no part;
+  /// and an [XlsxReadException] when the sheet cannot be read. Whatever it
+  /// throws, nothing has changed.
   void resizeTable(String name, XlsxRange range) {
     validateRange(range, 'range');
     _editablePart('tables');
@@ -251,16 +261,6 @@ mixin _SheetTablesApi {
     final XlsxRange old = table.range;
     if (range == old) return;
     final String tableName = table.displayName;
-    if (table.totalsRow) {
-      throw StateError(
-        'The table "$tableName" has a totals row; resizing it arrives in W5.',
-      );
-    }
-    if (table.hasSortState) {
-      throw StateError(
-        'The table "$tableName" has a sort state; resizing it arrives in W5.',
-      );
-    }
     if (range.firstRow != old.firstRow ||
         range.firstColumn != old.firstColumn ||
         range.lastColumn != old.lastColumn) {
@@ -271,7 +271,8 @@ mixin _SheetTablesApi {
             'move.',
       );
     }
-    if (range.rowCount < (table.hasHeader ? 2 : 1)) {
+    final int least = (table.hasHeader ? 1 : 0) + (table.totalsRow ? 1 : 0);
+    if (range.rowCount < least + 1) {
       throw ArgumentError.value(
         range,
         'range',
@@ -288,37 +289,166 @@ mixin _SheetTablesApi {
       autoFilter,
       merges,
     );
-    _host.log.transaction(() {
+    final CellStore store = cellStoreOf(this as XlsxSheet)!;
+    final int from = old.lastRow;
+    final int to = range.lastRow;
+    if (table.totalsRow) {
+      for (int c = old.firstColumn; c <= old.lastColumn; c++) {
+        final RawCell? target = store.cellAt(to, c);
+        if (target != null &&
+            (target.value != null ||
+                target.formula != null ||
+                target.inline != null)) {
+          throw StateError(
+            'The totals row of the table "$tableName" cannot move onto cell '
+            '${cellRef(to, c)} on sheet "${this.name}": it is not empty.',
+          );
+        }
+        final RawFormula? f = store.cellAt(from, c)?.formula;
+        if (f != null && f.type != FormulaType.normal) {
+          throw StateError(
+            'The totals cell ${cellRef(from, c)} of the table "$tableName" '
+            'is part of a shared, array or data table formula; it cannot '
+            'move.',
+          );
+        }
+      }
+    }
+    final ChangeLog log = _host.log;
+    log.transaction(() {
+      if (table.totalsRow) {
+        for (int c = old.firstColumn; c <= old.lastColumn; c++) {
+          final RawCell? cell = store.cellAt(from, c);
+          if (cell == null) continue;
+          setStoredCell(log, store, to, c, cell);
+          setStoredCell(log, store, from, c, null);
+        }
+        _host.workbookPart.structureEdits++;
+        log.record(StructureEditChange(_host.workbookPart));
+      }
       _editTable(entry, () => table.resize(range));
       _host.workbookPart.tableEdits++;
-      _host.log.record(TableResizeChange(_host.workbookPart));
+      log.record(TableResizeChange(_host.workbookPart));
     });
+  }
+
+  /// Gives the table [name] the name [newName], and every structured
+  /// reference to it (`Sales[Amount]` becomes `Revenue[Amount]`) in a cell
+  /// formula of any sheet, a defined name, a column formula of any table,
+  /// a rule, a validation or a chart follows. Every sheet loads. A [newName]
+  /// equal to the name is no edit; one differing only in case renames.
+  ///
+  /// Throws an [ArgumentError] named `name` when the sheet has no table
+  /// [name], ignoring case; named `newName` for a name `checkTable` refuses
+  /// or one a table or a defined name has, ignoring case; a [StateError]
+  /// when a pivot cache names the table (its `worksheetSource name`), and
+  /// for a sheet that is not a worksheet or has no part; and an
+  /// [XlsxReadException] when a sheet cannot be read. Whatever it throws,
+  /// nothing has changed and no warning is kept.
+  void renameTable(String name, String newName) {
+    _editablePart('tables');
+    final ({String partName, TablePart table}) entry = _tableNamed(name);
+    final TablePart table = entry.table;
+    final String old = table.displayName;
+    if (newName == old) return;
+    final XlsxTable value = table.value;
+    try {
+      checkTable(
+        XlsxTable(
+          newName,
+          value.range,
+          value.columns,
+          headerRow: value.headerRow,
+          totalsRow: value.totalsRow,
+          autoFilter: value.autoFilter,
+          style: value.style,
+        ),
+      );
+      if (sheetNameKey(newName) != sheetNameKey(old)) {
+        _host.checkTableNameFree(newName);
+      }
+    } on ArgumentError catch (e) {
+      throw ArgumentError.value(newName, 'newName', e.message);
+    }
+    _refusePivot(old);
+    final StructuredTable structured = _structured(table);
+    final ChangeLog log = _host.log;
+    _host.warnings.keepOnSuccess(
+      () => log.transaction(() {
+        _host.references.apply(
+          StructuredRename(structured, newName: newName),
+          null,
+        );
+        _host.forgetTablePart(entry.partName);
+        _editTable(entry, () => table.rename(newName));
+      }),
+    );
+  }
+
+  /// The table [table] of this sheet as its structured references see it.
+  StructuredTable _structured(TablePart table) => StructuredTable(
+    sheet: name,
+    name: table.displayName,
+    range: table.range,
+    columns: <String>[
+      for (int i = 0; i < table.columnCount; i++) table.columnName(i),
+    ],
+    headerRow: table.hasHeader,
+    totalsRow: table.totalsRow,
+  );
+
+  /// Throws a [StateError] when a pivot cache definition names the table
+  /// [tableName] in its `worksheetSource name`, ignoring case. Throws an
+  /// [XlsxReadException] when such a part cannot be read.
+  void _refusePivot(String tableName) {
+    final PackageReader reader = _host.reader;
+    final OpcPackage package = reader.package;
+    final String key = sheetNameKey(tableName);
+    for (final String part in package.partNames.toList()) {
+      if (package.contentTypeOf(part) != _pivotCacheType) continue;
+      final bool found = reader.guardXml(part, () {
+        final XmlPullReader r = reader.openXml(part);
+        while (r.next()) {
+          if (r.eventType == XmlEventType.startElement &&
+              r.localName == 'worksheetSource') {
+            final String? source = r.getAttribute('name', namespaceUri: '');
+            if (source != null && sheetNameKey(source) == key) return true;
+          }
+        }
+        return false;
+      });
+      if (found) {
+        throw StateError(
+          'The pivot cache "$part" names the table "$tableName" as its '
+          'source; the table cannot be renamed or removed.',
+        );
+      }
+    }
   }
 
   /// Removes the table [name]: its `<tablePart>`, its relationship and its
   /// part go, and the `<tableParts>` with its last entry. The cells stay.
   ///
-  /// Every sheet loads, to look for a use of the table.
+  /// As Excel's "Convert to Range", every structured reference to the table
+  /// becomes the plain range it covers: `Sales[Amount]` is
+  /// `Data!$B$2:$B$4` from another sheet or a defined name, `$B$2:$B$4`
+  /// from its own sheet, `[@Amount]` in a cell is that row's cell (`B3`),
+  /// and an item the table lacks (`Sales[#Totals]` without a totals row) is
+  /// `#REF!`. A reference behind a workbook prefix (`[1]!Sales[A]`) names
+  /// another workbook's table and stays. Every sheet loads.
   ///
   /// Throws an [ArgumentError] named `name` when the sheet has no table
-  /// [name], ignoring case; a [StateError] naming the first use when a cell
-  /// formula, a defined name of any sheet or a `calculatedColumnFormula` or
-  /// `totalsRowFormula` of another table holds `name[`, ignoring case, not
-  /// after a character of a name (`MySales[` does not use `Sales`; Excel
-  /// repairs a file whose formula names a table it lacks; a string in a
-  /// formula that holds the text refuses too, until W5's lexer tells them
-  /// apart), when the table part has relationships of its own (a query
-  /// table) or a tab on the same sheet part removed it, and for a sheet that
-  /// is not a worksheet or has no part; and an
-  /// [XlsxReadException] when a sheet cannot be read. Whatever it throws,
-  /// nothing has changed, except that reading warnings are reported on first
-  /// read.
-  ///
-  /// A slicer cache part (content type
-  /// `application/vnd.ms-excel.slicerCache+xml`) whose `tableId` is the
-  /// table's `id` refuses too, with a [StateError]: Excel would find a
-  /// slicer on a table the file lacks. Every such part is read. A pivot
-  /// cache that names the table is not checked.
+  /// [name], ignoring case; a [StateError] when a reference cannot become a
+  /// range (a column the table lacks, a span that cannot be read, or the
+  /// formula's own row where the formula has no cell: a defined name or a
+  /// rule), when the table part has relationships of its own (a query
+  /// table) or a tab on the same sheet part removed it, when a slicer cache
+  /// part (content type `application/vnd.ms-excel.slicerCache+xml`, whose
+  /// `tableId` is the table's `id`) or a pivot cache (`worksheetSource
+  /// name`) uses it, and for a sheet that is not a worksheet or has no part;
+  /// and an [XlsxReadException] when a sheet cannot be read. Whatever it
+  /// throws, nothing has changed and no warning is kept, except that
+  /// reading warnings are reported on first read.
   void removeTable(String name) {
     final WorksheetPart part = _editablePart('tables');
     final ({String partName, TablePart table}) entry = _tableNamed(name);
@@ -347,14 +477,15 @@ mixin _SheetTablesApi {
         '"$slicer" is on it.',
       );
     }
-    final String? use = _host.firstTableUse(entry.table);
-    if (use != null) {
-      throw StateError(
-        'The table "$tableName" cannot be removed: $use uses it, and rewriting '
-        'formulas arrives in W5.',
-      );
-    }
-    _dropTable(part, entry);
+    _refusePivot(tableName);
+    final StructuredTable structured = _structured(entry.table);
+    final ChangeLog log = _host.log;
+    _host.warnings.keepOnSuccess(
+      () => log.transaction(() {
+        _host.references.apply(TableToRange(structured), null);
+        _dropTable(part, entry);
+      }),
+    );
   }
 
   /// Takes the table of [entry] out of the sheet, its `<tablePart>`, its
@@ -503,7 +634,17 @@ final class _TableHolder implements ReferenceHolder {
         final String? text = entry.table.shiftedText(
           local,
           to,
-          (String formula) => rewriteFormula(formula, mapper, host),
+          (String formula, int column, {required bool totals}) =>
+              rewriteFormula(
+                formula,
+                mapper,
+                host,
+                row: totals
+                    ? entry.table.range.lastRow
+                    : entry.table.range.firstRow +
+                          (entry.table.hasHeader ? 1 : 0),
+                column: entry.table.range.firstColumn + column,
+              ),
         );
         if (text == null) continue;
         _sheet._editTable(entry, () => entry.table.replaceText(text));

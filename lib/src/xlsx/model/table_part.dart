@@ -92,9 +92,11 @@ final class TableState {
     this._range,
     this._filter,
     this._style,
+    this._name,
   );
 
   final String _source;
+  final String _name;
   final List<_Column> _columns;
   final XlsxRange _range;
   final XlsxRange? _filter;
@@ -105,7 +107,6 @@ final class TableState {
 final class TablePart implements PartContent {
   TablePart._(
     this._state,
-    this.displayName,
     this.hasHeader,
     this.id,
     this.totalsRow,
@@ -230,8 +231,8 @@ final class TablePart implements PartContent {
         range,
         autoFilterRange,
         style,
+        displayName!,
       ),
-      displayName!,
       hasHeader,
       id,
       totalsRow,
@@ -251,7 +252,7 @@ final class TablePart implements PartContent {
   void restore(TableState state) => _state = state;
 
   /// The table's name in formulas.
-  final String displayName;
+  String get displayName => _state._name;
 
   /// The cells the table covers, header and totals rows included.
   XlsxRange get range => _state._range;
@@ -350,7 +351,22 @@ final class TablePart implements PartContent {
       s._range,
       s._filter,
       s._style,
+      s._name,
     );
+  }
+
+  /// Gives the table the name [name], which the caller has checked: the
+  /// root's `displayName` is set and its `name`, when it has one.
+  void rename(String name) {
+    final String source = _text();
+    final _Places at = _Places(source);
+    String root = source.substring(at.rootStart, at.rootTagEnd);
+    final String value = escapeXstring(name);
+    if (_attribute.allMatches(root).any((RegExpMatch m) => m[1] == 'name')) {
+      root = _withAttribute(root, 'name', value);
+    }
+    root = _withAttribute(root, 'displayName', value);
+    _reread(source.replaceRange(at.rootStart, at.rootTagEnd, root));
   }
 
   /// Gives the table the look [style], which the caller has checked: the
@@ -388,29 +404,73 @@ final class TablePart implements PartContent {
   }
 
   /// Makes [range] what the table covers, which the caller has checked: the
-  /// `ref` of the table and, when it has one, of its `<autoFilter>` change.
+  /// `ref` of the table and, when it has one, of its `<autoFilter>` change
+  /// (to the range less its totals row, when it was so before). A
+  /// `<sortState>` and its conditions whose last row is the last body row
+  /// follow it.
   void resize(XlsxRange range) {
-    String source = _text();
-    final _Places at = _Places(source);
-    final int filter = at.filterStart;
-    if (filter >= 0) {
-      final String tag = source.substring(filter, at.filterTagEnd);
-      if (_attribute.allMatches(tag).any((RegExpMatch m) => m[1] == 'ref')) {
-        source = source.replaceRange(
-          filter,
-          at.filterTagEnd,
+    final String source = _text();
+    final XlsxRange old = this.range;
+    XlsxRange body(XlsxRange t) => XlsxRange(
+      t.firstRow,
+      t.firstColumn,
+      t.lastRow - (totalsRow ? 1 : 0),
+      t.lastColumn,
+    );
+    final int oldLast = body(old).lastRow;
+    final int newLast = body(range).lastRow;
+    final List<(int, int, String)> edits = <(int, int, String)>[];
+    final XmlPullReader p = XmlPullReader(source, maxDepth: 0x7FFFFFFF);
+    bool filterSeen = false;
+    while (p.next()) {
+      if (p.eventType != XmlEventType.startElement) continue;
+      final String tag = p.sourceText(p.eventStart, p.eventEnd);
+      if (p.depth == 1) {
+        edits.add((
+          p.eventStart,
+          p.eventEnd,
           _withAttribute(tag, 'ref', range.ref),
+        ));
+        continue;
+      }
+      if (p.namespaceUri != Ns.main) continue;
+      final XlsxRange? ref = _range(p.getAttribute('ref'));
+      if (ref == null) continue;
+      final String local = p.localName;
+      if (p.depth == 2 && local == 'autoFilter' && !filterSeen) {
+        filterSeen = true;
+        final XlsxRange to = ref == body(old) ? body(range) : range;
+        edits.add((
+          p.eventStart,
+          p.eventEnd,
+          _withAttribute(tag, 'ref', to.ref),
+        ));
+      } else if ((local == 'sortState' || local == 'sortCondition') &&
+          ref.lastRow == oldLast &&
+          p.depth <= 4) {
+        final XlsxRange to = XlsxRange(
+          ref.firstRow,
+          ref.firstColumn,
+          newLast,
+          ref.lastColumn,
         );
+        edits.add((
+          p.eventStart,
+          p.eventEnd,
+          _withAttribute(tag, 'ref', to.ref),
+        ));
       }
     }
-    final String root = source.substring(at.rootStart, at.rootTagEnd);
-    _reread(
-      source.replaceRange(
-        at.rootStart,
-        at.rootTagEnd,
-        _withAttribute(root, 'ref', range.ref),
-      ),
-    );
+    final StringBuffer out = StringBuffer();
+    int at = 0;
+    for (final (int start, int end, String text) in edits) {
+      out
+        ..write(source.substring(at, start))
+        ..write(text);
+      at = end;
+    }
+    out.write(source.substring(at));
+    _reread(out.toString());
   }
 
   /// The cells the table covers after [edit], a row or column edit of its
@@ -465,12 +525,14 @@ final class TablePart implements PartContent {
   /// `colId` (dropping a deleted column's); a `<sortState>` and its
   /// conditions shift, one wholly deleted going. Every
   /// `calculatedColumnFormula` and `totalsRowFormula` goes through
-  /// [rewrite], which gets the formula decoded and returns `null` for no
-  /// change. Every other character stays as written.
+  /// [rewrite], which gets the formula decoded, the index of its column
+  /// (0 is the first) and whether it is the totals row's, and returns `null`
+  /// for no change. Every other character stays as written.
   String? shiftedText(
     ReferenceShift? edit,
     XlsxRange? to,
-    String? Function(String formula) rewrite,
+    String? Function(String formula, int column, {required bool totals})
+    rewrite,
   ) {
     final String source = _text();
     final XlsxRange old = range;
@@ -643,6 +705,8 @@ final class TablePart implements PartContent {
           (p.localName == 'calculatedColumnFormula' ||
               p.localName == 'totalsRowFormula') &&
           !p.isEmptyElement) {
+        final bool totals = p.localName == 'totalsRowFormula';
+        final int index = column;
         final int start = p.eventEnd;
         final StringBuffer text = StringBuffer();
         bool nested = false;
@@ -658,7 +722,10 @@ final class TablePart implements PartContent {
           }
         }
         if (nested) continue;
-        final String? markup = rewrittenFormulaMarkup(text.toString(), rewrite);
+        final String? markup = rewrittenFormulaMarkup(
+          text.toString(),
+          (String f) => rewrite(f, index, totals: totals),
+        );
         if (markup != null) edits.add((start, p.eventStart, markup));
       }
     }

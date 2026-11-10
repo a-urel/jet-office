@@ -7,6 +7,7 @@ library;
 import 'formula_lexer.dart';
 import 'formula_reference.dart';
 import 'formula_token.dart';
+import 'structured_reference.dart';
 
 /// What a reference becomes when it changes: another reference, or
 /// `#REF!` (Excel's error for a reference whose cells are gone).
@@ -44,11 +45,18 @@ abstract interface class ReferenceMapper {
 ///
 /// A formula that cannot be lexed (it holds an `invalid` token) is left
 /// alone: the result is `null` and [onUnlexable] gets [formula] once.
+///
+/// [row] and [column] (0-based) are the cell the formula lives in, when it
+/// has one; a [PositionedStructuredMapper] gets them with each structured
+/// reference. A structured reference behind a sheet or workbook prefix
+/// (`[1]!T[A]`) names another workbook's table and is never mapped.
 String? rewriteFormula(
   String formula,
   ReferenceMapper mapper,
   String hostSheet, {
   void Function(String formula)? onUnlexable,
+  int? row,
+  int? column,
 }) {
   final List<XlsxFormulaToken> tokens = lexFormula(formula);
   if (_hasInvalid(tokens)) {
@@ -85,12 +93,19 @@ String? rewriteFormula(
       continue;
     }
     if (t.kind == XlsxFormulaTokenKind.structured) {
+      final XlsxFormulaToken? before = i > 0 ? tokens[i - 1] : null;
+      if (before != null &&
+          before.kind == XlsxFormulaTokenKind.sheetPrefix &&
+          before.end == t.start) {
+        out.write(t.text);
+        continue;
+      }
       final int open = t.text.indexOf('[');
-      final String? text = mapper.mapStructured(
-        t.text.substring(0, open),
-        t.text.substring(open),
-        hostSheet,
-      );
+      final String table = t.text.substring(0, open);
+      final String spec = t.text.substring(open);
+      final String? text = mapper is PositionedStructuredMapper
+          ? mapper.mapStructuredAt(table, spec, hostSheet, row, column)
+          : mapper.mapStructured(table, spec, hostSheet);
       out.write(text ?? t.text);
       changed |= text != null && text != t.text;
       continue;

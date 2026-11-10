@@ -31,6 +31,7 @@ import '../../xml/xml_pull_reader.dart';
 import '../cell_ref.dart';
 import '../formula/formula_rewrite.dart';
 import '../formula/reference_shift.dart';
+import '../formula/structured_reference.dart';
 import '../range.dart';
 import '../read/package_reader.dart';
 import '../read/read_exception.dart';
@@ -52,6 +53,8 @@ const String _sparklineUri = '{05C60535-1F16-4FD2-B633-F4F36F0B64E0}';
 String editedSheetOf(ReferenceMapper mapper) => switch (mapper) {
   final ReferenceShift s => s.sheet,
   final SheetRename r => r.from,
+  final StructuredRename r => r.table.sheet,
+  final TableToRange r => r.table.sheet,
   _ => '',
 };
 
@@ -68,6 +71,12 @@ String describeEdit(ReferenceMapper mapper) {
       return '$verb ${s.sheet}!$span';
     case final SheetRename r:
       return 'rename ${r.from} to ${r.to}';
+    case final StructuredRename r:
+      return r.newName != null
+          ? 'rename table ${r.table.name} to ${r.newName}'
+          : 'rename column ${r.oldColumn} of ${r.table.name} to ${r.newColumn}';
+    case final TableToRange r:
+      return 'remove table ${r.table.name}';
     default:
       return 'move';
   }
