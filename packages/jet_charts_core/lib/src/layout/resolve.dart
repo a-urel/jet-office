@@ -60,8 +60,9 @@ final class ResolvedChart {
   /// The colour of each series (`ChartTheme.colorOf`).
   final List<ChartColor> colors;
 
-  /// The point colours of each series (`ChartSeries.pointColors`), as
-  /// given: shorter or longer than the data, with `null` entries; a series
+  /// The point colours of each series (`ChartTheme.pointColorOf`: its
+  /// `ChartSeries.pointColors`, else its `ChartSeries.pointColorKeys` in the
+  /// theme), shorter or longer than the data, with `null` entries; a series
   /// past the list's end has none.
   final List<List<ChartColor?>> pointColors;
 
@@ -248,7 +249,11 @@ ResolvedChart resolveChart(
       for (int s = 0; s < series.length; s++) theme.colorOf(series[s], s),
     ],
     pointColors: <List<ChartColor?>>[
-      for (final ChartSeries one in series) one.pointColors,
+      for (final ChartSeries one in series)
+        <ChartColor?>[
+          for (int i = 0; i < theme.pointColorCount(one); i++)
+            theme.pointColorOf(one, i),
+        ],
     ],
     tickFormatCode: tickCode,
     grouping: chart.grouping,

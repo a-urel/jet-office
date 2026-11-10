@@ -467,6 +467,29 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('tooltipLines add to the nodes and the keyboard box', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      final Chart chart = _columns();
+      List<String> lines(ChartTooltip tooltip) => <String>[
+        '${tooltip.category! + 1} işlem',
+      ];
+      await tester.pumpWidget(
+        _app(<Widget>[JetChart(chart: chart, tooltipLines: lines)]),
+      );
+      final SemanticsNode node = _chartNode(tester, 'Column chart');
+      expect(_children(node).map((SemanticsNode n) => n.label), <String>[
+        'Q1: North 12, South 9, 1 işlem',
+        'Q2: North 18, South 11, 2 işlem',
+        'Q3: North 7, South 14, 3 işlem',
+      ]);
+      await _key(tester, LogicalKeyboardKey.tab);
+      await _key(tester, LogicalKeyboardKey.arrowRight);
+      expect(_shown(tester)!.rows.last.label, endsWith('işlem'));
+      handle.dispose();
+    });
+
     testWidgets('a donut has a node per slice with its share', (
       WidgetTester tester,
     ) async {

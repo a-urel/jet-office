@@ -633,4 +633,65 @@ void main() {
       }
     });
   });
+
+  group('tooltipLines', () {
+    testWidgets('adds its lines under the rows of the box', (
+      WidgetTester tester,
+    ) async {
+      final List<ChartTooltip> asked = <ChartTooltip>[];
+      final List<JetChartHit?> hovers = <JetChartHit?>[];
+      await tester.pumpWidget(
+        _app(
+          JetChart(
+            chart: _chart('column_clustered'),
+            onHover: hovers.add,
+            tooltipLines: (ChartTooltip tooltip) {
+              asked.add(tooltip);
+              return <String>['12 işlem', 'Ort. sepet ₺84,20'];
+            },
+          ),
+        ),
+      );
+      final TestGesture mouse = await _mouse(tester);
+      await mouse.moveTo(_centreOf(tester, 'series/1/bar/2'));
+      await tester.pump();
+
+      expect(_inBox('14'), findsOneWidget);
+      expect(_inBox('12 işlem'), findsOneWidget);
+      expect(_inBox('Ort. sepet ₺84,20'), findsOneWidget);
+      expect((asked.last.series, asked.last.category), (1, 2));
+      final ChartTooltip shown = tester
+          .widget<TooltipView>(find.byType(TooltipView))
+          .tooltip;
+      expect(shown.rows.map((ChartTooltipRow r) => r.label), <String>[
+        'South',
+        '12 işlem',
+        'Ort. sepet ₺84,20',
+      ]);
+      expect(shown.rows.last.color, isNull);
+      expect(shown.rows.last.value, isEmpty);
+      // The hit reports the chart's own tooltip, without the lines.
+      expect(hovers.last!.tooltip!.rows, hasLength(1));
+    });
+
+    testWidgets('no lines leave the box as it was', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          JetChart(
+            chart: _chart('column_clustered'),
+            tooltipLines: (ChartTooltip tooltip) => const <String>[],
+          ),
+        ),
+      );
+      final TestGesture mouse = await _mouse(tester);
+      await mouse.moveTo(_centreOf(tester, 'series/1/bar/2'));
+      await tester.pump();
+      expect(
+        tester.widget<TooltipView>(find.byType(TooltipView)).tooltip.rows,
+        hasLength(1),
+      );
+    });
+  });
 }

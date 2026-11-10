@@ -792,6 +792,29 @@ void _smoothAndTranslucent() {
       });
     }
 
+    test('a bar takes a point colour key from the theme', () {
+      final ChartLayout l = layoutChart(
+        Chart(
+          kind: ChartKind.column,
+          legend: const ChartLegend(visible: false),
+          series: <ChartSeries>[
+            series('S0', <double?>[
+              10,
+              20,
+            ]).copyWith(pointColorKeys: <String?>[null, 'paid']),
+          ],
+        ),
+        theme: theme.copyWith(semantic: <String, ChartColor>{'paid': gold}),
+        size: const ChartSize(400, 300),
+        measurer: measurer,
+      );
+      expect(
+        byId<RectPrimitive>(l, ids.seriesBarId(0, 0)).fill,
+        theme.seriesColor(0),
+      );
+      expect(byId<RectPrimitive>(l, ids.seriesBarId(0, 1)).fill, gold);
+    });
+
     test('a line draws a marker of a point colour', () {
       final ChartLayout l = pointed(ChartKind.line);
       ArcPrimitive marker(int c) =>

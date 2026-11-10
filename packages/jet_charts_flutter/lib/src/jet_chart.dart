@@ -174,6 +174,7 @@ final class JetChart extends StatefulWidget {
     this.onTap,
     this.focusable = true,
     this.focusNode,
+    this.tooltipLines,
   });
 
   /// The chart to draw, or `null` for the empty look.
@@ -244,6 +245,17 @@ final class JetChart extends StatefulWidget {
   /// chart sets its `canRequestFocus` and `skipTraversal` by [focusable],
   /// and its key handler.
   final FocusNode? focusNode;
+
+  /// Extra lines for a tooltip, under its rows, or `null` for none.
+  ///
+  /// Called with the chart's own tooltip whenever the box opens on one (by
+  /// hover, tap or keyboard) and for each screen reader point node; each
+  /// line it returns shows as a row of its label alone, in the box and in
+  /// the node's text, after the rows. The app words and formats the lines
+  /// itself, such as `12 işlem` under a value. The hits [onHover] and
+  /// [onTap] report keep the chart's own tooltip, without the lines, and the
+  /// lines are never written to a file.
+  final JetChartTooltipLines? tooltipLines;
 
   @override
   State<JetChart> createState() => JetChartState();
@@ -388,6 +400,9 @@ final class JetChartState extends State<JetChart>
   void didUpdateWidget(JetChart oldWidget) {
     super.didUpdateWidget(oldWidget);
     _controller.duration = widget.animationDuration;
+    if (oldWidget.tooltipLines != widget.tooltipLines) {
+      _nodes = null;
+    }
     final ChartLayout? shown = _layout;
     if (oldWidget.chart == widget.chart || shown == null) {
       return;
@@ -575,6 +590,7 @@ final class JetChartState extends State<JetChart>
       layout,
       theme: theme,
       locale: widget.locale,
+      lines: widget.tooltipLines,
     );
   }
 
@@ -745,7 +761,7 @@ final class JetChartState extends State<JetChart>
   ) {
     final ChartTooltip? tip = _tip;
     Widget box(ChartTooltip tooltip) => TooltipView(
-      tooltip: tooltip,
+      tooltip: withTooltipLines(tooltip, widget.tooltipLines),
       style: theme.tooltip,
       symbolSize: theme.spacing.legendSymbol,
       symbolGap: theme.spacing.labelGap,

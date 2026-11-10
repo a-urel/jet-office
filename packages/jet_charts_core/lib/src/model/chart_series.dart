@@ -59,7 +59,9 @@ final class ChartSeries {
   /// passed here does not make `categories.copyWith` throw by covariance.
   ///
   /// [color] is the series' own colour and [colorKey] names a colour of
-  /// `ChartTheme.semantic`; `ChartTheme.colorOf` resolves them.
+  /// `ChartTheme.semantic`; `ChartTheme.colorOf` resolves them. A point's
+  /// [pointColors] entry and its [pointColorKeys] entry are the same pair
+  /// for one point; `ChartTheme.pointColorOf` resolves them.
   ChartSeries({
     required this.name,
     required ChartData<Object> categories,
@@ -71,7 +73,9 @@ final class ChartSeries {
     this.colorKey,
     this.smooth = false,
     List<ChartColor?> pointColors = const <ChartColor?>[],
+    List<String?> pointColorKeys = const <String?>[],
   }) : pointColors = List<ChartColor?>.unmodifiable(pointColors),
+       pointColorKeys = List<String?>.unmodifiable(pointColorKeys),
        categories = ChartData<Object>(
          values: List<Object?>.of(categories.values),
          reference: categories.reference,
@@ -133,6 +137,17 @@ final class ChartSeries {
   /// automatic.
   final List<ChartColor?> pointColors;
 
+  /// The name of a `ChartTheme.semantic` colour for each point by index,
+  /// `null` for none. The list cannot be modified.
+  ///
+  /// A point whose [pointColors] entry is `null` takes the theme's colour of
+  /// this key, so a status slice follows the app's light and dark theme
+  /// without a fixed colour in the chart; a key the theme does not hold is
+  /// automatic. It colours what [pointColors] colours. A written chart
+  /// holds the colour the key had in the theme it was written with: the file
+  /// has no keys, and reads back with point colours.
+  final List<String?> pointColorKeys;
+
   /// A copy with the given fields replaced.
   ///
   /// A field cannot be set to `null` this way: passing `null` keeps the
@@ -148,6 +163,7 @@ final class ChartSeries {
     String? colorKey,
     bool? smooth,
     List<ChartColor?>? pointColors,
+    List<String?>? pointColorKeys,
   }) {
     return ChartSeries(
       name: name ?? this.name,
@@ -160,6 +176,7 @@ final class ChartSeries {
       colorKey: colorKey ?? this.colorKey,
       smooth: smooth ?? this.smooth,
       pointColors: pointColors ?? this.pointColors,
+      pointColorKeys: pointColorKeys ?? this.pointColorKeys,
     );
   }
 
@@ -175,7 +192,8 @@ final class ChartSeries {
         color == other.color &&
         colorKey == other.colorKey &&
         smooth == other.smooth &&
-        listValueEquals(pointColors, other.pointColors);
+        listValueEquals(pointColors, other.pointColors) &&
+        listValueEquals(pointColorKeys, other.pointColorKeys);
   }
 
   @override
@@ -190,6 +208,7 @@ final class ChartSeries {
     colorKey,
     smooth,
     listValueHash(pointColors),
+    listValueHash(pointColorKeys),
   );
 
   @override

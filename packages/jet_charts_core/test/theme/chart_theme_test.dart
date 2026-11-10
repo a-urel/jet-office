@@ -566,4 +566,56 @@ void main() {
       }
     });
   });
+
+  group('pointColorOf', () {
+    final ChartColor green = ChartColor.rgb(0x16A34A);
+    final ChartColor red = ChartColor.rgb(0xDC2626);
+    final ChartTheme theme = custom().copyWith(
+      semantic: <String, ChartColor>{'paid': green, 'overdue': red},
+    );
+    ChartSeries keyed({
+      List<ChartColor?> colors = const <ChartColor?>[],
+      List<String?> keys = const <String?>[],
+    }) => ChartSeries(
+      name: ChartData<String>(values: <String?>['S']),
+      categories: ChartData<Object>(values: <Object?>['a', 'b', 'c']),
+      values: ChartData<double>(values: <double?>[1, 2, 3]),
+      pointColors: colors,
+      pointColorKeys: keys,
+    );
+
+    test('resolves a key through semantic', () {
+      final ChartSeries s = keyed(keys: <String?>['paid', null, 'overdue']);
+      expect(theme.pointColorOf(s, 0), green);
+      expect(theme.pointColorOf(s, 1), isNull);
+      expect(theme.pointColorOf(s, 2), red);
+    });
+
+    test('a point colour wins over a key', () {
+      final ChartColor gold = ChartColor.rgb(0xFBBF24);
+      final ChartSeries s = keyed(
+        colors: <ChartColor?>[gold],
+        keys: <String?>['paid'],
+      );
+      expect(theme.pointColorOf(s, 0), gold);
+    });
+
+    test(
+      'an unknown key, a negative index and one past both lists are null',
+      () {
+        final ChartSeries s = keyed(keys: <String?>['draft']);
+        expect(theme.pointColorOf(s, 0), isNull);
+        expect(theme.pointColorOf(s, -1), isNull);
+        expect(theme.pointColorOf(s, 5), isNull);
+      },
+    );
+
+    test('the same key follows the theme', () {
+      final ChartSeries s = keyed(keys: <String?>['paid']);
+      final ChartTheme dark = theme.copyWith(
+        semantic: <String, ChartColor>{'paid': ChartColor.rgb(0x4ADE80)},
+      );
+      expect(dark.pointColorOf(s, 0), ChartColor.rgb(0x4ADE80));
+    });
+  });
 }

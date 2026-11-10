@@ -106,7 +106,9 @@ extension _SeriesWriting on _ChartWriter {
     w.end();
   }
 
-  /// One `c:dPt` per point of [series] with its own colour, after the
+  /// One `c:dPt` per point of [series] with its own colour
+  /// (`ChartTheme.pointColorOf`: a point colour key is written as the
+  /// theme's colour of it), after the
   /// series' shape and marker (`c:dPt` follows `c:marker` and
   /// `c:invertIfNegative`, and precedes `c:dLbls`, in the schema).
   ///
@@ -116,8 +118,8 @@ extension _SeriesWriting on _ChartWriter {
   /// recoloured) for a line. The layout is an estimate, not checked in Excel
   /// (pending E1).
   void _writePointColors(ChartSeries series, ChartColor seriesColor) {
-    for (int i = 0; i < series.pointColors.length; i++) {
-      final ChartColor? color = series.pointColors[i];
+    for (int i = 0; i < theme.pointColorCount(series); i++) {
+      final ChartColor? color = theme.pointColorOf(series, i);
       if (color == null) {
         continue;
       }

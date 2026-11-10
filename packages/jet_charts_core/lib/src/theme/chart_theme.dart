@@ -372,6 +372,31 @@ final class ChartTheme {
     return series.color ?? semantic[series.colorKey] ?? seriesColor(index);
   }
 
+  /// The colour of point [index] of [series], or `null` when it is
+  /// automatic.
+  ///
+  /// It is the series' [ChartSeries.pointColors] entry, else the [semantic]
+  /// colour named by its [ChartSeries.pointColorKeys] entry. A key
+  /// [semantic] does not hold, a negative index and one past both lists are
+  /// `null`.
+  ChartColor? pointColorOf(ChartSeries series, int index) {
+    if (index < 0) {
+      return null;
+    }
+    final List<ChartColor?> colors = series.pointColors;
+    final List<String?> keys = series.pointColorKeys;
+    return (index < colors.length ? colors[index] : null) ??
+        (index < keys.length ? semantic[keys[index]] : null);
+  }
+
+  /// How many points of [series] may have a colour of their own
+  /// ([pointColorOf]): the longer of its point colours and point colour
+  /// keys.
+  int pointColorCount(ChartSeries series) =>
+      series.pointColors.length > series.pointColorKeys.length
+      ? series.pointColors.length
+      : series.pointColorKeys.length;
+
   /// A copy with the given fields replaced.
   ///
   /// A field cannot be set to `null` this way: passing `null` keeps the

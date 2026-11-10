@@ -337,4 +337,26 @@ void main() {
       expect(findOverlaps(layout.primitives, layout.size), isEmpty);
     }
   });
+
+  test('a marker takes a point colour key from the theme', () {
+    final ChartColor paid = ChartColor.rgb(0x16A34A);
+    final ChartLayout layout = layoutChart(
+      _scatter(<ChartSeries>[
+        _series(
+          'P',
+          <Object?>[1, 2],
+          <double?>[3, 4],
+        ).copyWith(pointColorKeys: <String?>['paid']),
+      ]),
+      theme: _office.copyWith(semantic: <String, ChartColor>{'paid': paid}),
+      size: _size,
+      measurer: const FixedWidthTextMeasurer(),
+    );
+    ChartColor? fill(int i) => _flat(layout.primitives)
+        .whereType<ArcPrimitive>()
+        .firstWhere((ArcPrimitive a) => a.id == 'series/0/marker/$i')
+        .fill;
+    expect(fill(0), paid);
+    expect(fill(1), _office.seriesColor(0));
+  });
 }

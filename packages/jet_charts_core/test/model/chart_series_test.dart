@@ -224,4 +224,30 @@ void main() {
       expect(b, a.copyWith(pointColors: <ChartColor?>[ChartColor.rgb(1)]));
     });
   });
+
+  group('pointColorKeys', () {
+    test('defaults to empty', () {
+      expect(series(<double?>[1]).pointColorKeys, isEmpty);
+    });
+
+    test('is copied, unmodifiable and kept by copyWith', () {
+      final List<String?> source = <String?>['paid', null];
+      final ChartSeries s = series(<double?>[
+        1,
+        2,
+      ]).copyWith(pointColorKeys: source);
+      source[0] = 'void';
+      expect(s.pointColorKeys, <String?>['paid', null]);
+      expect(() => s.pointColorKeys.add(null), throwsUnsupportedError);
+      expect(s.copyWith(smooth: true).pointColorKeys, s.pointColorKeys);
+    });
+
+    test('changes == and hashCode', () {
+      final ChartSeries a = series(<double?>[1]);
+      final ChartSeries b = a.copyWith(pointColorKeys: <String?>['paid']);
+      expect(a, isNot(b));
+      expect(a.hashCode, isNot(b.hashCode));
+      expect(b, a.copyWith(pointColorKeys: <String?>['paid']));
+    });
+  });
 }

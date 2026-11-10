@@ -39,8 +39,10 @@ a test of the keyboard runs in a `WidgetsApp` under an autofocused
 J4 added the painting of pies, donuts (arcs), sparklines, scatter and
 combination charts and of translucent fills (`PathPrimitive.fillOpacity`), the
 animation of arcs and opacity, keyboard and screen reader points of the new
-kinds, the strings, the gallery's J4 charts and `docs/app-themes.md` (how an
-app builds its themes; its code is `test/app_themes_doc_test.dart`).
+kinds, the strings, the gallery's J4 charts, `JetChart.tooltipLines` (an
+app's own lines under a tooltip's rows, in the box and the screen reader
+nodes; `lib/src/interaction.dart`) and `docs/app-themes.md` (how an app builds
+its themes; its code is `test/app_themes_doc_test.dart`).
 
 ## Open for J5, C2 and C3
 

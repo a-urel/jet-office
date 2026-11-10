@@ -20,7 +20,6 @@ import '../model/chart.dart';
 import '../model/chart_kind.dart';
 import '../model/chart_series.dart';
 import '../scale/value_scale.dart';
-import '../theme/chart_color.dart';
 import '../theme/chart_theme.dart';
 import 'chart_ids.dart' as ids;
 import 'geometry.dart';
@@ -153,24 +152,11 @@ List<List<ChartPoint?>> scatterPoints(
   ];
 }
 
-/// The colour of [chart]'s series [series] at point [index]: its point
-/// colour, else [seriesColor].
-ChartColor scatterPointColor(
-  Chart chart,
-  int series,
-  int index,
-  ChartColor seriesColor,
-) {
-  final List<ChartColor?> points = chart.series[series].pointColors;
-  return (index < points.length ? points[index] : null) ?? seriesColor;
-}
-
 /// The markers of a scatter chart, one per point with a value: a line
 /// chart's marker (`lineMarker`) `series/<s>/marker/<i>` in the point's
-/// colour ([scatterPointColor]), in series then point order. No lines are
+/// colour (`ResolvedChart.colorAt`), in series then point order. No lines are
 /// drawn.
 List<ChartPrimitive> scatterMarks(
-  Chart chart,
   ResolvedChart resolved,
   ChartTheme theme,
   ChartRect plot,
@@ -191,7 +177,7 @@ List<ChartPrimitive> scatterMarks(
           lineMarker(
             ids.seriesMarkerId(s, i),
             points[s][i]!,
-            scatterPointColor(chart, s, i, resolved.colors[s]),
+            resolved.colorAt(s, i),
             theme,
           ),
   ];

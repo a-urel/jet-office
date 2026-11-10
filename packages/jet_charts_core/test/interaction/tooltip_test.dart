@@ -145,6 +145,8 @@ void main() {
           ),
         ],
         sourceId: 'series/0/slice/1',
+        series: 0,
+        category: 1,
       );
       expect(share, '40%');
       expect(
@@ -170,6 +172,7 @@ void main() {
           title: 'Doğu',
           rows: const <ChartTooltipRow>[],
           sourceId: 'legend/2/text',
+          category: 2,
         ),
       );
     });
@@ -230,6 +233,8 @@ void main() {
             ),
           ],
           sourceId: 'series/1/bar/2',
+          series: 1,
+          category: 2,
         ),
       );
       expect(
@@ -581,6 +586,8 @@ void main() {
         ),
       ],
       sourceId: 'series/0/marker/2',
+      series: 0,
+      category: 2,
     );
     expect(
       chartTooltipAt(chart, layout, marker.center, theme: _office),
@@ -611,6 +618,8 @@ void main() {
         ),
       ],
       sourceId: 'label/1/2',
+      series: 1,
+      category: 2,
     );
     expect(
       chartTooltipAt(chart, layout, _centre(label.rect), theme: _office),
@@ -886,6 +895,90 @@ void main() {
         _office.seriesColor(0),
       );
     }
+  });
+  test('a slice and a bar row show the colour of a point colour key', () {
+    final ChartColor paid = ChartColor.rgb(0x16A34A);
+    final ChartTheme theme = _office.copyWith(
+      semantic: <String, ChartColor>{'paid': paid},
+    );
+    for (final ChartKind kind in <ChartKind>[ChartKind.pie, ChartKind.column]) {
+      final Chart chart = Chart(
+        kind: kind,
+        series: <ChartSeries>[
+          _series(
+            'Sales',
+            <Object>['A', 'B'],
+            <double?>[1, 2],
+          ).copyWith(pointColorKeys: <String?>[null, 'paid']),
+        ],
+      );
+      final ChartLayout layout = layoutChart(
+        chart,
+        theme: theme,
+        size: const ChartSize(400, 300),
+        measurer: const FixedWidthTextMeasurer(),
+      );
+      final String id = kind == ChartKind.pie
+          ? 'series/0/slice/1'
+          : 'series/0/bar/1';
+      expect(
+        chartTooltipFor(chart, layout, id, theme: theme)!.rows.single.color,
+        paid,
+        reason: kind.name,
+      );
+    }
+  });
+
+  test('a tooltip names its series and category', () {
+    final Chart columns = Chart(
+      kind: ChartKind.column,
+      series: <ChartSeries>[
+        _series('North', <Object>['Q1', 'Q2'], <double?>[1, 2]),
+        _series('South', <Object>['Q1', 'Q2'], <double?>[3, 4]),
+      ],
+    );
+    final ChartLayout layout = _layout(columns);
+    ChartTooltip tip(Chart chart, ChartLayout layout, String id) =>
+        chartTooltipFor(chart, layout, id, theme: _office)!;
+    final ChartTooltip bar = tip(columns, layout, 'series/1/bar/0');
+    expect((bar.series, bar.category), (1, 0));
+    final ChartTooltip band = tip(columns, layout, 'axis/category/label/1');
+    expect((band.series, band.category), (null, 1));
+    final ChartTooltip legend = tip(columns, layout, 'legend/1/text');
+    expect((legend.series, legend.category), (1, null));
+
+    final Chart pie = columns.copyWith(kind: ChartKind.pie);
+    final ChartLayout pieLayout = _layout(pie);
+    final ChartTooltip slice = tip(pie, pieLayout, 'series/0/slice/1');
+    expect((slice.series, slice.category), (0, 1));
+    final ChartTooltip entry = tip(pie, pieLayout, 'legend/1/text');
+    expect((entry.series, entry.category), (null, 1));
+
+    final Chart scatter = columns.copyWith(
+      kind: ChartKind.scatter,
+      series: <ChartSeries>[
+        _series('P', <Object>[1, 2], <double?>[3, 4]),
+      ],
+    );
+    final ChartTooltip point = tip(
+      scatter,
+      _layout(scatter),
+      'series/0/marker/1',
+    );
+    expect((point.series, point.category), (0, 1));
+  });
+
+  test('series and category change == and hashCode', () {
+    ChartTooltip make({int? series, int? category}) => ChartTooltip(
+      rows: const <ChartTooltipRow>[],
+      sourceId: 'x',
+      series: series,
+      category: category,
+    );
+    expect(make(series: 1), isNot(make()));
+    expect(make(category: 1), isNot(make()));
+    expect(make(series: 1).hashCode, isNot(make().hashCode));
+    expect(make(series: 1, category: 2), make(series: 1, category: 2));
   });
 }
 
