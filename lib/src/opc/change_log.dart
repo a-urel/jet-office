@@ -7,8 +7,11 @@
 /// edit wraps its primitives in [ChangeLog.transaction]: if the body throws,
 /// the records made so far are reverted in reverse order and the error is
 /// rethrown, so the model is never left half-changed. The library keeps no
-/// history; a transaction returns a [ChangeSet] that an editor may hand to
-/// [ChangeLog.revertSet] and [ChangeLog.reapplySet].
+/// history of its own; a transaction returns a [ChangeSet] that an editor may
+/// hand to [ChangeLog.undo] and [ChangeLog.redo], which enforce the order
+/// (only the last kept set, and only while nothing came after it), or to
+/// [ChangeLog.revertSet] and [ChangeLog.reapplySet], which do not. A set also
+/// carries the records a format layer noted with [ChangeLog.note].
 ///
 /// [ChangeLog.hasChanges] is how a save learns that the model was edited.
 library;
@@ -24,12 +27,19 @@ abstract interface class Change {
 
 /// The changes one transaction made, in the order they were recorded.
 final class ChangeSet {
-  /// Wraps [changes]; the list is copied and cannot be modified.
-  ChangeSet(Iterable<Change> changes)
-    : changes = List<Change>.unmodifiable(changes);
+  /// Wraps [changes] and [records]; both lists are copied and cannot be
+  /// modified.
+  ChangeSet(Iterable<Change> changes, [Iterable<Object?> records = const []])
+    : changes = List<Change>.unmodifiable(changes),
+      records = List<Object?>.unmodifiable(records);
 
   /// The changes, oldest first.
   final List<Change> changes;
+
+  /// The records noted with [ChangeLog.note] while the transaction ran,
+  /// oldest first: what the edits were, for a caller, beside [changes], which
+  /// know how to undo them.
+  final List<Object?> records;
 
   /// Whether the transaction recorded nothing.
   bool get isEmpty => changes.isEmpty;
@@ -38,6 +48,9 @@ final class ChangeSet {
 /// Collects [Change]s and runs edits atomically.
 final class ChangeLog {
   final List<Change> _open = <Change>[];
+  final List<Object?> _records = <Object?>[];
+  final List<ChangeSet> _applied = <ChangeSet>[];
+  final List<ChangeSet> _undone = <ChangeSet>[];
   int _depth = 0;
   bool _hasChanges = false;
 
@@ -61,7 +74,27 @@ final class ChangeLog {
     _open.add(change);
   }
 
+  /// Whether a [transaction] is running.
+  bool get inTransaction => _depth > 0;
+
+  /// Notes [record], a description of an edit for the caller of the running
+  /// transaction; it is part of that transaction's [ChangeSet.records].
+  ///
+  /// Throws a [StateError] outside a transaction.
+  void note(Object? record) {
+    if (_depth == 0) {
+      throw StateError('A record must be noted inside a transaction.');
+    }
+    _records.add(record);
+  }
+
   /// Runs [body] and returns the changes it recorded.
+  ///
+  /// When the transaction is the outermost one and succeeds, a [keep] set
+  /// becomes the last set [undo] takes, and a new edit can no longer be
+  /// redone. An outermost set that is not kept and recorded anything ends
+  /// both: no set before it can be undone or redone, as it would undo out of
+  /// order. [keep] is ignored on an inner transaction.
   ///
   /// If [body] throws, those changes are reverted in reverse order,
   /// [hasChanges] returns to its value from before the transaction, and the
@@ -71,16 +104,31 @@ final class ChangeLog {
   /// failure; the model may be inconsistent. A transaction started inside
   /// another folds into it: its changes are part of both sets, and if it fails
   /// only its own changes are reverted.
-  ChangeSet transaction(void Function() body) {
+  ChangeSet transaction(void Function() body, {bool keep = false}) {
     final int start = _open.length;
+    final int recordStart = _records.length;
     final bool hadChanges = _hasChanges;
     _depth++;
     try {
       body();
-      return ChangeSet(_open.sublist(start));
+      final ChangeSet set = ChangeSet(
+        _open.sublist(start),
+        _records.sublist(recordStart),
+      );
+      if (_depth == 1) {
+        if (keep) {
+          _applied.add(set);
+          _undone.clear();
+        } else if (!set.isEmpty) {
+          _applied.clear();
+          _undone.clear();
+        }
+      }
+      return set;
     } catch (error) {
       final List<Change> mine = _open.sublist(start);
       _open.length = start;
+      _records.length = recordStart;
       final List<Object> failures = <Object>[];
       for (final Change change in mine.reversed) {
         try {
@@ -98,7 +146,47 @@ final class ChangeLog {
       );
     } finally {
       _depth--;
-      if (_depth == 0) _open.clear();
+      if (_depth == 0) {
+        _open.clear();
+        _records.clear();
+      }
+    }
+  }
+
+  /// Reverts [set], which must be the last kept set applied and not undone;
+  /// otherwise throws a [StateError] and changes nothing, as undoing out of
+  /// order would corrupt the parts.
+  void undo(ChangeSet set) {
+    _checkIdle();
+    if (_applied.isEmpty || !identical(_applied.last, set)) {
+      throw StateError(
+        'Only the last change set applied and not undone can be undone.',
+      );
+    }
+    revertSet(set);
+    _undone.add(_applied.removeLast());
+  }
+
+  /// Reapplies [set], which must be the last set [undo] reverted, with
+  /// nothing recorded since; otherwise throws a [StateError] and changes
+  /// nothing.
+  void redo(ChangeSet set) {
+    _checkIdle();
+    if (_undone.isEmpty || !identical(_undone.last, set)) {
+      throw StateError(
+        'Only the last change set undone, with no edit since, can be redone.',
+      );
+    }
+    reapplySet(set);
+    _applied.add(_undone.removeLast());
+  }
+
+  void _checkIdle() {
+    if (_depth > 0) {
+      throw StateError(
+        'A change set cannot be undone or redone inside a '
+        'transaction.',
+      );
     }
   }
 

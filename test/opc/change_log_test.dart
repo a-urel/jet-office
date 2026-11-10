@@ -210,4 +210,83 @@ void main() {
       throwsUnsupportedError,
     );
   });
+
+  test('a transaction carries the records noted in it', () {
+    final ChangeLog changes = ChangeLog();
+    late ChangeSet inner;
+    final ChangeSet set = changes.transaction(() {
+      changes.note('a');
+      inner = changes.transaction(() => changes.note('b'));
+      expect(
+        () => changes.transaction(() {
+          changes.note('c');
+          throw StateError('boom');
+        }),
+        throwsStateError,
+      );
+    });
+    expect(set.records, <Object?>['a', 'b']);
+    expect(inner.records, <Object?>['b']);
+    expect(() => changes.note('x'), throwsStateError);
+  });
+
+  group('undo and redo of a kept set', () {
+    late List<String> log;
+    late ChangeLog changes;
+    ChangeSet kept(String name) =>
+        changes.transaction(() => changes.record(_Fake(name, log)), keep: true);
+    setUp(() {
+      log = <String>[];
+      changes = ChangeLog();
+    });
+
+    test('undo takes the last set, then the one before', () {
+      final ChangeSet one = kept('1');
+      final ChangeSet two = kept('2');
+      expect(() => changes.undo(one), throwsStateError);
+      expect(log, isEmpty);
+      changes.undo(two);
+      changes.undo(one);
+      expect(log, <String>['r2', 'r1']);
+      expect(() => changes.redo(two), throwsStateError);
+      changes.redo(one);
+      changes.redo(two);
+      expect(log, <String>['r2', 'r1', 'a1', 'a2']);
+      expect(() => changes.redo(two), throwsStateError);
+    });
+
+    test('a new edit ends redo; an unkept edit ends undo', () {
+      final ChangeSet one = kept('1');
+      changes.undo(one);
+      kept('2');
+      expect(() => changes.redo(one), throwsStateError);
+      final ChangeSet three = kept('3');
+      changes.transaction(() => changes.record(_Fake('4', log)));
+      expect(() => changes.undo(three), throwsStateError);
+      changes.transaction(() {});
+      expect(log, <String>['r1']);
+    });
+
+    test('a failed transaction leaves the sets as they were', () {
+      final ChangeSet one = kept('1');
+      expect(
+        () => changes.transaction(() {
+          changes.record(_Fake('2', log));
+          throw StateError('boom');
+        }),
+        throwsStateError,
+      );
+      changes.undo(one);
+      expect(log, <String>['r2', 'r1']);
+    });
+
+    test('a kept transaction inside another joins it', () {
+      final ChangeSet outer = changes.transaction(() {
+        changes.record(_Fake('1', log));
+        changes.transaction(() => changes.record(_Fake('2', log)), keep: true);
+      }, keep: true);
+      changes.undo(outer);
+      expect(log, <String>['r2', 'r1']);
+    });
+  });
 }
