@@ -71,16 +71,17 @@ final class XlsxChange {
   /// The sheet's name before a rename; `null` otherwise.
   final String? oldSheet;
 
-  /// The cells affected, or `null` when the edit is not bound to cells (a
-  /// row or column edit, which [index] and [count] describe, or a
-  /// whole-sheet or workbook-wide edit).
+  /// The cells affected. `null` with a [sheet] means the whole sheet (or,
+  /// for a row or column edit or a row or column format, the rows or
+  /// columns [index] and [count] give); `null` without a [sheet] means the
+  /// whole workbook.
   final XlsxRange? range;
 
-  /// The first row or column (0-based) of a row or column edit, or the tab
-  /// index of a moved or added sheet.
+  /// The first row or column (0-based) of a row or column edit or of a row
+  /// or column format, or the tab index of a moved or added sheet.
   final int? index;
 
-  /// The number of rows or columns of a row or column edit.
+  /// The number of rows or columns of a row or column edit or format.
   final int? count;
 
   @override

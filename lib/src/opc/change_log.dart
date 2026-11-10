@@ -36,6 +36,16 @@ final class ChangeSet {
   /// The changes, oldest first.
   final List<Change> changes;
 
+  // Undo bookkeeping of a kept set (ChangeLog.transaction with keep): its
+  // sequence id, the generation it was made in, the id of the set that was
+  // the last applied when it was made, and, while it is undone, the id of
+  // the set that was the last undone before it. The log keeps ids only, so
+  // a set the editor drops can be collected.
+  int? _id;
+  int _generation = 0;
+  int? _predecessor;
+  int? _undonePredecessor;
+
   /// The records noted with [ChangeLog.note] while the transaction ran,
   /// oldest first: what the edits were, for a caller, beside [changes], which
   /// know how to undo them.
@@ -45,12 +55,17 @@ final class ChangeSet {
   bool get isEmpty => changes.isEmpty;
 }
 
+// Unique across logs, so a set of another log never matches.
+int _nextSetId = 0;
+
 /// Collects [Change]s and runs edits atomically.
 final class ChangeLog {
   final List<Change> _open = <Change>[];
   final List<Object?> _records = <Object?>[];
-  final List<ChangeSet> _applied = <ChangeSet>[];
-  final List<ChangeSet> _undone = <ChangeSet>[];
+  // Ids, never sets: the log holds no history (decision 0009).
+  int _generation = 0;
+  int? _topApplied;
+  int? _topUndone;
   int _depth = 0;
   bool _hasChanges = false;
 
@@ -117,11 +132,16 @@ final class ChangeLog {
       );
       if (_depth == 1) {
         if (keep) {
-          _applied.add(set);
-          _undone.clear();
+          set
+            .._id = _nextSetId++
+            .._generation = _generation
+            .._predecessor = _topApplied;
+          _topApplied = set._id;
+          _topUndone = null;
         } else if (!set.isEmpty) {
-          _applied.clear();
-          _undone.clear();
+          _generation++;
+          _topApplied = null;
+          _topUndone = null;
         }
       }
       return set;
@@ -158,13 +178,17 @@ final class ChangeLog {
   /// order would corrupt the parts.
   void undo(ChangeSet set) {
     _checkIdle();
-    if (_applied.isEmpty || !identical(_applied.last, set)) {
+    if (set._id == null ||
+        set._id != _topApplied ||
+        set._generation != _generation) {
       throw StateError(
         'Only the last change set applied and not undone can be undone.',
       );
     }
     revertSet(set);
-    _undone.add(_applied.removeLast());
+    set._undonePredecessor = _topUndone;
+    _topUndone = set._id;
+    _topApplied = set._predecessor;
   }
 
   /// Reapplies [set], which must be the last set [undo] reverted, with
@@ -172,13 +196,17 @@ final class ChangeLog {
   /// nothing.
   void redo(ChangeSet set) {
     _checkIdle();
-    if (_undone.isEmpty || !identical(_undone.last, set)) {
+    if (set._id == null ||
+        set._id != _topUndone ||
+        set._generation != _generation) {
       throw StateError(
         'Only the last change set undone, with no edit since, can be redone.',
       );
     }
     reapplySet(set);
-    _applied.add(_undone.removeLast());
+    _topUndone = set._undonePredecessor;
+    set._undonePredecessor = null;
+    _topApplied = set._id;
   }
 
   void _checkIdle() {

@@ -143,6 +143,8 @@ void setStoredCell(
   int column,
   RawCell? cell,
 ) {
+  // Setting what the cell holds already is no edit.
+  if (_sameCell(store.cellAt(row, column), cell)) return;
   final SetCellChange change = SetCellChange(
     store,
     row,
@@ -1109,4 +1111,23 @@ void setActiveTab(ChangeLog log, WorkbookPart part, int index) {
     part.swapBookViews(after, before);
     rethrow;
   }
+}
+
+/// Whether [a] and [b] would write the same cell: both absent, or plain
+/// cells (no formula, inline string, attribute or child kept) of the same
+/// kind, style, value and type text.
+bool _sameCell(RawCell? a, RawCell? b) {
+  if (a == null || b == null) return a == null && b == null;
+  return a.kind == b.kind &&
+      a.style == b.style &&
+      a.value == b.value &&
+      a.typeText == b.typeText &&
+      a.formula == null &&
+      b.formula == null &&
+      a.inline == null &&
+      b.inline == null &&
+      a.attributes.isEmpty &&
+      b.attributes.isEmpty &&
+      a.extraChildren.isEmpty &&
+      b.extraChildren.isEmpty;
 }

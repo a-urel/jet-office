@@ -288,5 +288,12 @@ void main() {
       changes.undo(outer);
       expect(log, <String>['r2', 'r1']);
     });
+
+    test('a set made elsewhere or never kept cannot be undone', () {
+      kept('1');
+      expect(() => changes.undo(ChangeSet(const <Change>[])), throwsStateError);
+      final ChangeSet other = ChangeLog().transaction(() {}, keep: true);
+      expect(() => changes.undo(other), throwsStateError);
+    });
   });
 }

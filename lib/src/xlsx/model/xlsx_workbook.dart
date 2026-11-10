@@ -443,14 +443,17 @@ final class XlsxWorkbook {
   /// rethrown unchanged, so the workbook is as it was (its warnings may
   /// have grown). A transaction inside another joins it: the inner call
   /// returns an empty set and the outer set holds every edit; a throw inside
-  /// undoes the whole outer transaction unless the outer body catches it.
+  /// undoes the inner body's edits and, unless the outer body catches it,
+  /// the whole outer transaction.
   ///
   /// An edit made outside a transaction is a set of its own that is not
   /// returned: no set before it can be undone any more.
   XlsxChangeSet transaction(void Function() body) {
     final ChangeLog log = _book.log;
     if (log.inTransaction) {
-      body();
+      // Its own transaction, so that a throw the outer body catches undoes
+      // this body's edits; its records join the outer set.
+      log.transaction(body);
       return publicChangeSet(ChangeSet(const <Change>[]));
     }
     return publicChangeSet(log.transaction(body, keep: true));

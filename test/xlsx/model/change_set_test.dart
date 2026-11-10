@@ -197,4 +197,42 @@ void main() {
     expect(set.isEmpty, isTrue);
     expect(set.changes, isEmpty);
   });
+
+  test('a caught throw in a nested transaction undoes only its edits', () {
+    final XlsxChangeSet outer = book.transaction(() {
+      s.setCell(0, 0, 10);
+      try {
+        book.transaction(() {
+          s.setCell(1, 0, 20);
+          s.insertRows(0);
+          throw StateError('boom');
+        });
+      } on StateError {
+        // caught: the outer goes on
+      }
+    });
+    expect(outer.changes, const <XlsxChange>[
+      XlsxChange(XlsxChangeKind.cellsSet, sheet: 'S', range: XlsxRange(0, 0)),
+    ]);
+    expect(s.cellAt(1, 0)?.value, XlsxDecimal('2'));
+    book.undo(outer);
+    expectSame(book.save().bytes);
+  });
+
+  test('setting the value a cell holds records nothing', () {
+    final XlsxChangeSet set = book.transaction(() => s.setCell(0, 0, 1));
+    expect(set.isEmpty, isTrue);
+    expect(set.changes, isEmpty);
+  });
+
+  test('row and column formats record their index', () {
+    final XlsxChangeSet set = book.transaction(() {
+      s.setRowFormat(3, const XlsxRowFormat(height: 30));
+      s.setColumn(2, const XlsxColumn(width: 20));
+    });
+    expect(set.changes, const <XlsxChange>[
+      XlsxChange(XlsxChangeKind.featureChanged, sheet: 'S', index: 3, count: 1),
+      XlsxChange(XlsxChangeKind.featureChanged, sheet: 'S', index: 2, count: 1),
+    ]);
+  });
 }
