@@ -10,8 +10,10 @@ This page covers milestone W1, the foundation: open and save with no loss, and
 generate values; milestone W2, styles and layout typed; milestone W3,
 sheet and workbook features typed (defined names, print settings, filters,
 protection, hyperlinks, data validations, conditional formats and document
-properties); and milestone W4, objects (rich text, notes, pictures and
-tables). Structural editing (W5) remains.
+properties); milestone W4, objects (rich text, notes, pictures and
+tables); and milestone W5, structural editing (rows and columns inserted and
+deleted, sheets renamed, moved and added, tables renamed and removed, and
+change sets with undo and redo).
 
 ```dart
 final XlsxWorkbook book = XlsxWorkbook.open(bytes);
@@ -35,7 +37,8 @@ written back, with the namespace declarations it needs.
   `XlsxDate`, `XlsxDecimal`, an `XlsxFormula` without a group, or `null`.
   Rich text is typed since W4 (`richTextAt`, `setCell` of an `XlsxRichText`);
   hyperlinks are typed since W3
-  (see "What W3 adds"). Editing a shared formula's master throws until W5.
+  (see "What W3 adds"). Since W5 editing a shared formula's master unshares
+  its group: each follower gets its own translated formula.
   Since W2 `setCell` also takes an `XlsxCell`, layered as the writer layers it
   (see "What W2 adds").
 - **Fidelity.** An opened workbook saved without a change is semantically
@@ -75,9 +78,9 @@ written back, with the namespace declarations it needs.
   formulas are kept as interned templates and pooled text, with a 4-byte
   reference per cell. Reading every row leaves nothing per cell behind; only
   a cell with a reading problem is remembered, to report it once.
-- **`addSheet` is not yet a change.** It does not go through the change log
-  until W5, so a workbook opened, given a sheet with `addSheet` and saved
-  without a `setCell` keeps its `calcChain` and gets no `fullCalcOnLoad`.
+- **`addSheet` is a change since W5.** It goes through the change log (an
+  undo removes the sheet and gives the package back), and `position` places
+  the new tab.
 - **Nothing is compacted.** Shared strings and cell formats that no cell
   uses any more stay in their parts; W1 appends and never removes.
 
@@ -253,6 +256,57 @@ sheet
 - **Warnings.** One code, `featureEntryInvalid`, with the detail `rPr`,
   `comment`, `legacyDrawing`, `pic`, `drawing` or `table`, once per sheet.
 
+## What W5 adds
+
+`XlsxSheet` inserts and deletes rows and columns, `XlsxWorkbook` renames,
+moves and adds sheets, and tables are renamed and removed, with every
+reference to what moved rewritten as Excel rewrites it. Edits can be grouped
+into change sets that are undone and redone.
+
+```dart
+final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+final XlsxSheet data = book.sheet('Data');
+final XlsxChangeSet set = book.transaction(() {
+  data
+    ..insertRows(2, 3) // three rows before row 3
+    ..deleteColumns(4); // column E
+  book.renameSheet(data, 'Q1 Sales');
+});
+book.undo(set);
+```
+
+- **Members.** On a sheet: `insertRows`, `deleteRows`, `insertColumns`,
+  `deleteColumns`, `renameTable`; on the workbook: `renameSheet`, `moveSheet`,
+  `addSheet(name, position:)`, `transaction`, `undo`, `redo`. The formula
+  lexer is public as `lexFormula` (`XlsxFormulaToken`,
+  `XlsxFormulaTokenKind`); a change set lists its `XlsxChange`s by
+  `XlsxChangeKind`.
+- **0-based, as the rest of the API.** A row or column index is 0-based like
+  `setCell` and `XlsxRange`: `insertRows(2)` inserts before row 3.
+- **What follows an edit.** Cell, shared and array formulas, data tables,
+  defined names, data validations and conditional formats (Excel 2010's too),
+  merges, panes and selections, column widths, the dimension, the filter and
+  its sort state, page breaks, print names, hyperlinks, tables, notes,
+  threaded comments, picture, shape and chart anchors, chart series formulas,
+  sparklines, form control links and pivot cache sources. A part the model
+  does not type that names the sheet (a slicer cache of a reshaped table, an
+  unknown part with a `ref`) is kept as written and reported by
+  `referenceNotShifted`.
+- **Atomic.** An edit, and a whole transaction, either completes or leaves the
+  package semantically equal to what it was (`sharedStrings` may re-encode);
+  a refused edit keeps no warning. A workbook with a sheet or comments part
+  that cannot be read refuses every structural edit with `XlsxReadException`,
+  as the edit cannot be correct without reading every holder.
+- **Recalculation.** A structural edit drops `calcChain` and sets
+  `fullCalcOnLoad`; so does `moveSheet` (a 3D range may cover other sheets).
+  Cached results are kept until Excel recalculates.
+- **No undo stack in the library** (decision 0009). `transaction` returns an
+  `XlsxChangeSet`; the caller keeps them and calls `undo` and `redo` in order
+  (the last applied set first). The change log keeps only ids.
+- **Two warning codes.** `referenceNotShifted` (a part names the edited sheet
+  but is not typed, so its references stay as written) and
+  `formulaUnlexable` (a formula the lexer cannot read stays as written).
+
 ## Rules the model enforces
 
 A file the model cannot open throws `XlsxReadException` with the reader's
@@ -303,7 +357,7 @@ Nothing is dropped silently.
 | A table's header cell | takes only text: the column's `name` in the table part is set to it (`tableColumnRenamed`), the rest of the part kept character for character; empty text or `null` becomes `ColumnN`, a name another column has (ignoring case) gets a number (`tableHeaderAdjusted`); another value is a `StateError`, over 255 characters an `ArgumentError`; every structured reference to the column (`Sales[Amount]`, `[@Amount]` inside the table) takes the new name (W5, `StructuredRename`); undo restores the name | Excel repairs a table whose header cell and column name differ (W1 Excel check, 2026-11-03) | `test/xlsx/model/table_header_test.dart` |
 | A cell inside an array or data-table formula, its master included | `StateError`, permanent | Excel refuses it too | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups"), `test/xlsx/model/primitives_test.dart` |
 | A shared formula's child | leaves the group; the others stay | the child's formula stays correct | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
-| A shared formula's master | `UnsupportedError` until W5 | the children need reference shifting | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("editing formula groups") |
+| A shared formula's master | unshares the group: each follower gets its own formula, translated to its cell, then the master takes the new value; a master whose formula cannot be translated (it does not lex, its `ref` cannot be read) while followers depend on it is a `StateError`, nothing changed | the followers keep what they computed | `test/xlsx/model/xlsx_workbook_set_cell_test.dart` ("setCell on a master unshares the group", "setCell on a followed master with an unreadable ref refuses") |
 | `XlsxRichText` (also inside an `XlsxCell`) | stored as the writer stores it (runs cleaned with `invalidCharactersRemoved`/`textTruncated`, run fonts merged over the cell's font, `ArgumentError` for no runs); equal to `richTextAt` with no style it is no edit, so a phonetic `<si>` survives; a table header cell refuses it (`StateError`) | the writer's rich text, without losing phonetic runs | `test/xlsx/model/xlsx_sheet_rich_text_test.dart` |
 | `XlsxCell(value, style: s)` | the value is set as a bare one; the style is the writer's layering, the row's style (with `customFormat="1"`) merged with `s`, appended when no cell format matches; a date takes the writer's date format only when that style sets none; an `XlsxCell` of `null` leaves an empty cell of that style, or none when it has no style or the default | the model and the writer give the same cell format | `test/xlsx/model/xlsx_sheet_style_test.dart` ("XlsxCell layers like the writer", "XlsxCell dates take the writer format rule", "an XlsxCell of null") |
 | `styleAt` | the cell's own style when the cell exists, else the row's with `customFormat="1"`; index 0 is `null` | what Excel shows there | `test/xlsx/model/xlsx_sheet_style_test.dart` ("styleAt reads cell and row styles") |
@@ -423,13 +477,42 @@ Nothing is dropped silently.
 | Tables read | `tables` lists each table part of the sheet's table relationships in order; a part the model cannot type (a root that is not `table`, a bad `ref`, columns that do not match it) is kept, unlisted, and its name and id stay taken; an unknown `totalsRowFunction` reads none and warns (`table`); calculated columns, `dataDxfId`, `xr:uid`, filter criteria and sort state stay as written | nothing lost | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("reads the fixture's tables", "an untypable part stays unlisted and its name stays taken", "a bad function warns once and reads none") |
 | `addTable` | rendered by the writer with the `id` one above the highest of the package, the part `xl/tables/table{id}.xml` (the next number when taken); `<tableParts>` made in schema position, `count` recomputed; an empty header cell takes the column's name, an empty totals cell the label or `SUBTOTAL`; a header cell that holds another text, a formula in a header cell or a name taken (a table of any sheet, loaded or not, listed or not; a defined name) throws `ArgumentError` with nothing changed; an overlap with a table, the auto filter or a merge throws naming both | a table is cells, a part and a name in one | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("adds a table and writes its header and totals", "tableParts is made in schema position", "a name taken by a table on an unloaded sheet throws", "a defined name throws", "an overlap with merge, filter and table throw naming both", "ids stay unique over the package", "a part name taken by another part is bumped") |
 | `setTableStyle` | the `name` and the flags that differ are set in place, everything else of the part stays; a table without `<tableStyleInfo>` gains it after `<tableColumns>`, `null` removes it; an equal style is no edit; a style Excel lacks throws `ArgumentError` (a custom style the table already has may change its flags) | a typed member edits what it types | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("restyle keeps xr:uid", "null style removes tableStyleInfo", "a table without a style gains the element after its columns", "equal is no edit", "a custom style of the file takes new flags") |
-| `resizeTable` | moves the last row: `ref` of the table and its `<autoFilter>` change, cells stay; the first row and the columns stay; an overlap with another table, a merge or the auto filter throws; a totals row's cells move, as they are, to the new last row (a target cell that is not empty, or a shared or array totals formula, throws `StateError`; the save drops `calcChain`); the filter leaves out the totals row; a `sortState` and its conditions ending on the last body row follow (W5); an equal range is no edit. It rewrites no cached result, so a recorded count (`WorkbookPart.tableEdits`, as `nameEdits`) makes the save set `fullCalcOnLoad` when the workbook has formulas; `calcChain` stays, undo takes the count back, and `setTableStyle` and an equal resize ask nothing | a `SUM(T[A])` over a resized table has another result, as a name edit's formulas do; W5 owns what moves with it | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("resize moves both refs", "resizeTable asks for recalculation, keeps calcChain, undo clears it", "an equal resize asks for nothing", "resize refuses totals, sortState, other corners and no data row", "resize refuses an overlap with a table, a merge or the filter", "addTable drops calcChain, setTableStyle does not") |
+| `resizeTable` | moves the last row: `ref` of the table and its `<autoFilter>` change, cells stay; the first row and the columns stay; an overlap with another table, a merge or the auto filter throws; a totals row's cells move, as they are, to the new last row (a target cell that is not empty, or a shared or array totals formula, throws `StateError`; the save drops `calcChain`); the filter leaves out the totals row; a `sortState` and its conditions ending on the last body row follow (W5); an equal range is no edit. It rewrites no cached result, so a recorded count (`WorkbookPart.tableEdits`, as `nameEdits`) makes the save set `fullCalcOnLoad` when the workbook has formulas; `calcChain` stays, undo takes the count back, and `setTableStyle` and an equal resize ask nothing | a `SUM(T[A])` over a resized table has another result, as a name edit's formulas do; what a structural edit moves is under "Structural edits (W5)" | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("resize moves both refs", "resizeTable asks for recalculation, keeps calcChain, undo clears it", "an equal resize asks for nothing", "resize refuses totals, sortState, other corners and no data row", "resize refuses an overlap with a table, a merge or the filter", "addTable drops calcChain, setTableStyle does not") |
 | `removeTable` converts users to ranges | it removes the `<tablePart>`, the relationship and the part, and the cells stay; as Excel's "Convert to Range" (W5 Ruling 6) every structured reference becomes a plain range: `Sales[Amount]` is `Data!$B$2:$B$4` from another sheet or a defined name, `$B$2:$B$4` from its own sheet, `[@Amount]` in a cell of a data row that row's `$B3` (sheet-qualified from another sheet), `#VALUE!` from a row outside the data (what implicit intersection gives), an item the table lacks `#REF!`; a reference behind a workbook prefix (`[1]!T[A]`) and text in a string stay. A column the table lacks, an unreadable span or a this-row reference without a cell throws `StateError`; so do a query table, a tab on the same part that removed it, a slicer cache (`tableSlicerCache tableId`) and a pivot cache (`worksheetSource name`) naming it; nothing changes and no warning is kept | Excel repairs a file whose formula names a table it lacks | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("removeTable converts users to ranges", "a defined name using it becomes a range", "what may stand before the name converts; another workbook stays", "a string holding the name no longer refuses", "a pivot cache naming the table refuses", "a slicer cache naming the table refuses removal", "a query table refuses") |
 | `renameTable` | sets `displayName` (and `name`) in place; every structured reference to the table, in cells of every sheet, defined names, other tables' column formulas, rules and charts, follows; a taken or invalid name throws `ArgumentError` (`newName`), a pivot cache naming the table `StateError`; one change, undone whole | a table's name is its formulas' | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("renameTable rewrites every structured ref, across sheets, in names and column formulas", "renameTable undoes as one change") |
 | A part name used again after a removal | every cache keyed by a part name is edited in a recorded change (`markStoredPart`, `forgetTablePart`), so a part that takes a removed name starts clean and an undo restores the old state: a later restyle, rename, note or picture edit reaches the file | a removed part's name is free for the next part | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("a part name used again after a removal", "a later restyle reaches the file", "a later header rename reaches the part"), `test/xlsx/model/xlsx_sheet_notes_test.dart` and `test/xlsx/model/xlsx_sheet_pictures_test.dart` ("a part name used again after a removal keeps later edits") |
 | Undo across parts | adding or removing a note, picture or table, one or the last, and undoing it restores the file: parts, relationships, content types and the parts' bytes (by `attachStoredPart`), also after a failed edit | one change per edit, parts included | `test/xlsx/model/round_trip_test.dart` ("undoing object edits restores the file"), `test/xlsx/model/xlsx_sheet_notes_test.dart`, `xlsx_sheet_pictures_test.dart` and `xlsx_sheet_tables_test.dart` (groups "undo of ...", "the bytes of ...") |
 | A file with more than this model types | a drawing with charts and shapes, a VML part with form controls, a table with calculated columns: adding or removing one picture, note or table changes only its own parts; the thread's note cannot be set or removed; the table its own formulas use cannot be removed | the owner's files hold much the model does not type | `test/xlsx/model/round_trip_test.dart` ("a file with more than the model types") |
 | Fuzzing | the feature fuzz also reads, sets, undoes and saves every W4 member over `m4_*` and `excel_objects` | the file is untrusted input | `test/xlsx/model/feature_fuzz_test.dart` |
+
+### Structural edits (W5)
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| Indexes | 0-based, as `setCell`: `insertRows(r, n)` inserts `n` rows before row `r`; a negative index, a count below 1 or an edit reaching past the last row or column is an `ArgumentError` | one convention in the public API | `test/xlsx/model/structural_edit_test.dart` ("arguments throw named") |
+| A cell reference after the edit | moves with its cell; a reference into deleted rows or columns becomes `#REF!` (`Del!#REF!`); a range loses only its deleted part; absolute and relative references move alike; an external reference (`[1]Sheet!A1`) never moves; a reversed range (`A5:A1`) is left as read; rewritten references are upper case | as Excel's Insert and Delete | `test/xlsx/formula/reference_shift_test.dart` ("the shift table", "a reference moved off the sheet is #REF!", "a reversed range neither throws nor inverts") |
+| A range reaching the last row or column | is capped there: `A5:A1048576` after two rows inserted above it is `A7:A1048576`, not cut to `#REF!` | Excel keeps whole-column style ranges; to be confirmed in the owner's Excel check (W5) | `test/xlsx/formula/reference_shift_test.dart` ("the shift table") |
+| A 3D reference (`Sheet1:Sheet3!A1`) | never shifts on a row or column edit of one sheet; a rename or a move rewrites its ends, a move swaps reversed ends | Excel adjusts 3D references only when the edit covers the whole span (grouped sheets), which the model has no API for; to be confirmed in the owner's Excel check | `test/xlsx/formula/reference_shift_test.dart` ("move swaps 3D ends"), `sheet_move_test.dart` ("3D spans follow a move") |
+| A formula that cannot be lexed | stays as written; warns `formulaUnlexable` once | never rewrite what cannot be read | `test/xlsx/model/formula_shift_test.dart` ("an unlexable formula stays and warns formulaUnlexable once") |
+| A shared formula group | its `ref` grows or shrinks; deleting the master promotes the next follower with its translated formula; a group whose followers would no longer translate is unshared; a master that cannot be translated (unlexable, bad `ref`, no `si`) with live followers refuses (`StateError`), nothing changed | untranslated text would be silently wrong | `test/xlsx/model/formula_shift_test.dart` ("an insert through a shared group grows its ref", "deleting the master promotes the next follower with translated text", "a group whose followers would translate wrongly is unshared", "deleting an unlexable shared master refuses, nothing changed", "a shared master with an unreadable ref refuses when followed") |
+| An array formula or a data table cut by the edit | refuses (`StateError`), nothing changed; one moved or grown whole follows | Excel refuses to change part of an array | `test/xlsx/model/formula_shift_test.dart` ("array formula ref shifts; partial delete refuses, nothing changed", "data table r1 r2 shift") |
+| Inserted rows and columns | take the format of the row above or the column to the left (height, width, style), not its hidden or collapsed state | as Excel | `test/xlsx/model/cell_move_test.dart` ("inserted rows copy the format above"), `geometry_shift_test.dart` ("the column left of an insert gives its width to the new ones") |
+| Cells, notes or anchors pushed off the sheet | an insert that would push a cell, a note or a picture, shape or chart anchor past the last row or column refuses (`StateError`), nothing changed | Excel refuses; a silent cap would lose or resize | `test/xlsx/model/structural_edit_test.dart` ("cells pushed past the last row throw StateError, nothing changed"), `object_shift_test.dart` ("an insert that would push a note off the sheet refuses", "an insert that would push a one-cell anchor off the sheet refuses", "an insert that would push a two-cell anchor off the sheet refuses") |
+| Merges, panes, selections | shift and grow; a merge shrunk to one cell or wholly deleted goes | as Excel | `test/xlsx/model/geometry_shift_test.dart` ("merges shift, grow, shrink and vanish", "frozen pane grows", "selection follows") |
+| Validations, rules, breaks, print names, filters | their `sqref` and formulas shift (the stored A1 text of a rule's formula is shifted as it is, as Excel stores it relative to the top-left cell); one wholly deleted goes (a rule keeps its `dxf`); a wholly deleted print area becomes `#REF!`; a wholly deleted filter goes with its sort state and `_FilterDatabase` | never silently stale (0009) | `test/xlsx/model/feature_shift_test.dart` (all) |
+| Tables | grow with an insert inside; an insert directly below leaves them as they are; a column inserted inside gets a header named as Excel names it (`Column1`); deleting a column drops its `tableColumn`; deleting a table's totals row or all its body rows refuses (`StateError`) | Excel's own behaviour differs by case and is unchecked; refusing is safe | `test/xlsx/model/object_shift_test.dart` ("table grows with an insert inside", "inserting right below a table does not grow it", "deleting a table column drops tableColumn"), `structural_edit_test.dart` ("a column inserted inside a table takes its header name", "an inserted table column takes a name no other column has") |
+| Pictures, shapes, charts, notes | a two-cell anchor resizes, a one-cell anchor moves, an absolute one stays; EMU offsets are kept as written; chart series formulas (`c:f`, `cx:f`) follow and their caches stay; an unreadable chart part warns `referenceNotShifted` and is kept | as Excel | `test/xlsx/model/object_shift_test.dart` ("two-cell anchor resizes, one-cell moves, absolute stays", "a shape and a chart anchor move like pictures"), `chart_shift_test.dart` (all) |
+| Pivot tables | a pivot cache's source shifts and renames; an edit outside a pivot table moves it; an edit through one refuses (`StateError`) | the model does not rebuild a pivot table | `test/xlsx/model/opaque_shift_test.dart` ("pivot cache source shifts and renames", "an edit through a pivot table refuses", "an edit outside a pivot table moves it") |
+| Parts the model does not type | sparklines, threaded comments and form control links shift; a slicer cache naming a reshaped table, an unknown part with a `ref` and a workbook part naming the sheet warn `referenceNotShifted` and stay | never silent | `test/xlsx/model/opaque_shift_test.dart` ("sparklines shift", "an unknown part with a ref warns", "a slicer cache naming a reshaped table warns") |
+| A refused edit | leaves the package semantically equal to before (`sharedStrings` may re-encode) and keeps no warning; a sheet or comments part that cannot be read makes every structural edit throw `XlsxReadException` and roll back | the transaction is the model's atomicity guarantee | `test/xlsx/model/structural_edit_test.dart` ("a refused edit leaves no warning behind", "undo restores bytes on every fixture") |
+| Recalculation | a structural edit drops `calcChain` and sets `fullCalcOnLoad` | cached results are stale after a move | `test/xlsx/model/structural_edit_test.dart` ("the calculation chain goes and full calculation is asked") |
+| `renameSheet` | rewrites formulas, names, rules, validations, charts and `app.xml` titles, quoting a name that needs it (`'Q1 Sales'!A1`) and unquoting one that no longer does; a taken name (ignoring case), or one with leading or trailing spaces, throws; a refused rename leaves the package byte-equal | as Excel | `test/xlsx/model/sheet_rename_test.dart` (all) |
+| `moveSheet` | keeps `localSheetId`, `firstSheet` and 3D spans on their sheets, keeps `app.xml` titles right, and asks for recalculation (`calcChain` dropped) | a 3D range may cover other sheets after a move | `test/xlsx/model/sheet_move_test.dart` ("move keeps localSheetId pointing at the same sheet", "firstSheet follows its sheet", "3D spans follow a move", "app.xml titles follow a move and an added sheet") |
+| `addSheet` | is a recorded change since W5 (undo removes it, byte-equal); `position` places the tab and keeps indexes on their sheets | per 0009 every edit goes through the log | `test/xlsx/model/sheet_move_test.dart` ("addSheet places the sheet and keeps indexes on their sheets", "addSheet undo restores bytes") |
+| `renameTable` and a header rename | rewrite every structured reference (`Sales[Amount]`, `[@Amount]`), across sheets, in names and rules; one undo; a header rename loads every sheet to find them; `renameTable` refuses (`StateError`) when a pivot cache names the table | a reference must not dangle | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("renameTable rewrites every structured ref, across sheets, in names and column formulas", "renameTable undoes as one change", "a pivot cache naming the table refuses"), `table_header_test.dart` ("header rename rewrites [Col] and [@Col]") |
+| `removeTable` | converts users to ranges as Excel's Convert to Range: `[@Qty]` in a data row becomes `$B<row>` (sheet-qualified from another sheet), outside the data rows `#VALUE!`; refuses (`StateError`) on a `[@Col]` in a name, rule or validation (no cell to resolve), a column the table lacks, a slicer or pivot cache naming it; a reference to another workbook's table stays | Excel's Convert to Range and implicit intersection; to be confirmed in the owner's Excel check | `test/xlsx/model/xlsx_sheet_tables_test.dart` ("removeTable converts users to ranges", "a this-row reference converts by its row", "a this-row reference in a name or a rule refuses removal", "a column the table lacks refuses removal, nothing changed") |
+| Change sets | `transaction` returns one `XlsxChangeSet` of every edit in it; a throw reverts and rethrows; a nested transaction joins the outer one, and a caught throw inside undoes only its own edits; `undo` takes the last applied set, out of order is a `StateError`; an edit outside a transaction ends undo of the sets before it; `redo` after another edit throws; setting the value a cell holds records nothing | the library keeps no undo stack (0009): the caller holds the sets | `test/xlsx/model/change_set_test.dart` (all), `test/architecture/change_log_history_test.dart` |
+| Fuzzing | the feature fuzz inserts and deletes rows and columns, renames and moves sheets and undoes them over its corpus; the lexer fuzz (`test/xlsx/formula/formula_lexer_fuzz_test.dart`) requires the lexer never to throw and its tokens to join back to the input | files and formulas are untrusted input | `test/xlsx/model/feature_fuzz_test.dart`, `test/xlsx/formula/formula_lexer_fuzz_test.dart` |
 
 ### What W3 reads and edits less than it might
 
@@ -457,7 +540,6 @@ Nothing is dropped silently.
 |---|---|---|---|
 | A fixture rebuilt with the model | semantically equal to the writer's: `m1_values`, `m1_dates`, `m1_sheets`, `m1_properties`, `m2_styles`, `m2_columns_rows`, `m2_style_precedence`, `m2_views`, `m2_merges_filter`, `m2_formula_xstring`, `m3_names`, `m3_hyperlinks`, `m3_validation`, `m3_conditional`, `m3_conditional_x14`, `m3_page_setup`, `m3_header_footer`, `m3_protection`, `m3_properties`, `m4_rich_text`, `m4_notes`, `m4_images`, `m4_tables` and `m4_objects`, apart from the two named differences below | one way to write a value | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
 | `tabSelected` (named difference) | setting the model's `activeSheet` to another sheet writes `tabSelected="1"`, the writer never does; Excel selects the active tab either way (`m1_sheets` and `m2_views`) | an opened file's old `tabSelected` must move, and the writer's output is pinned | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
-| The tab position of `m1_sheets` (named difference) | the writer's `addSheet(position: 0)` has no model equivalent until W5, so the expected `workbook.xml` moves the first tab last and lowers `activeTab` | structural editing is W5 | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
 | Re-setting what was read | every style, row format, column, default size, view, tab colour, outline summary and merge, and of W3 `protection`, `pageSetup`, `headerFooter`, `autoFilter`, `printArea`, `setPrintTitles` and the workbook's `protection` and `properties`, set back to what it reads changes nothing, on every writer fixture and producer file; a dangling or invalid `s` is the exception (see "Setting cells"). Validations and conditional formats have no setter of their list: removing each and adding it back keeps the getters' values, in the model and after a reopen. Links have their own test | typing must not alter output | `test/xlsx/model/round_trip_test.dart` ("re-setting what was read changes nothing", "removing and re-adding keeps the meaning"), `test/xlsx/model/xlsx_sheet_links_test.dart` ("an equal link is no edit") |
 
 ### Reading
@@ -505,13 +587,22 @@ by `jet_office` and a 4 by 2 pixel PNG picture on the next free columns of the
 new row and a table `Model_table` (a number added when taken) of two columns
 over the two rows below it, adds a sheet, saves to `<outDir>` and reads the
 edits back with `XlsxReader` and the model; it also writes the generated
-workbooks of `tool/write_model_sample.dart`, `w1_generated.xlsx`,
-`w2_generated.xlsx`, `w3_generated.xlsx` and `w4_generated.xlsx`, there. CI
+workbooks of `tool/write_model_sample.dart`, `w1_generated.xlsx` to
+`w5_generated.xlsx`, there. Since W5 it also sets a probe text and a formula
+using it on a free row, inserts two rows above the sheet's last row and a
+column at B, renames the sheet `Model edit` (a number added when taken) and
+checks that the probe, its formula and the new name read back. CI
 runs it on the writer fixtures and validates the output with the Open XML SDK
 (spec section 9).
 
 ## Port map
 
 W1 to W4 port nothing from Quds (spec section 8): every file is new and
-says "Not ported from Quds; written for jet_office." Ports start in W5
-(formula reference shifting) and are listed here when they land.
+says "Not ported from Quds; written for jet_office." W5 ports two files, each
+with its provenance in its library comment; the rest of the formula layer
+(`lib/src/xlsx/formula/`) is new.
+
+| jet_office | Quds (`packages/quds_office_engine/lib/src/sheet/formula/`, `15c5d29`) |
+|---|---|
+| `formula_token.dart` | `formula_ast.dart` (`FormulaTokenKind`, `FormulaToken`), widened to every token of a file's formula, with exact text and offsets |
+| `formula_lexer.dart` | `formula_eval.dart` (`FormulaLexer.tokenize`), rewritten to keep whitespace, strings, `;` and sheet prefixes, so the tokens join back to the input |

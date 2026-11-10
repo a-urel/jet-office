@@ -101,7 +101,8 @@
 /// ([XlsxSheet.tables], [XlsxSheet.addTable], [XlsxSheet.setTableStyle],
 /// [XlsxSheet.resizeTable], [XlsxSheet.removeTable]). A chart, a shape, a form
 /// control or a threaded comment beside them is kept as written, and removing
-/// a table that a formula names is refused.
+/// a table turns the formulas that name it into plain ranges, as Excel's
+/// Convert to Range does.
 ///
 /// A sheet edits its structure: [XlsxSheet.insertRows], [XlsxSheet.deleteRows],
 /// [XlsxSheet.insertColumns] and [XlsxSheet.deleteColumns] move cells,
@@ -114,7 +115,9 @@
 /// drops the calculation chain and asks Excel to recalculate on load.
 /// [XlsxWorkbook.transaction] runs edits as one [XlsxChangeSet], an
 /// all-or-nothing group of [XlsxChange] records that [XlsxWorkbook.undo] and
-/// [XlsxWorkbook.redo] take back and reapply. [lexFormula] splits a formula
+/// [XlsxWorkbook.redo] take back and reapply; the library keeps no undo
+/// stack, the caller holds the sets. Row and column indexes are 0-based, as
+/// everywhere in the API. [lexFormula] splits a formula
 /// into [XlsxFormulaToken]s of an [XlsxFormulaTokenKind], whose texts joined
 /// give the formula back.
 ///

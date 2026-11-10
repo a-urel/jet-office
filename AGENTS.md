@@ -249,8 +249,11 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   (`OfficeProperties`; no protection: it would lock the owner's review), sets a
   rich text cell, a note and a 4 by 2 pixel PNG picture on the next free columns
   of the new row, adds a table `Model_table` (a number added when taken) over
-  the two rows below it, adds a sheet, saves to the second directory, and checks
-  the edits read back with `XlsxReader` and the model; it also writes the
+  the two rows below it, adds a sheet, then (W5) sets a probe text and a
+  formula using it on a free row, inserts two rows above the sheet's last row
+  and a column at B and renames the sheet `Model edit` (a number added when
+  taken), saves to the second directory, and checks the edits read back with
+  `XlsxReader` and the model; it also writes the
   generated workbooks of `tool/write_model_sample.dart`, `w1_generated.xlsx`,
   `w2_generated.xlsx`, `w3_generated.xlsx` (a `Report` sheet with a filter, a
   validation, the four conditional rule kinds, two links, print settings, header
@@ -259,11 +262,25 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   sheet with rich text, a visible and a hidden note, a PNG and a JPEG as
   one-cell and two-cell pictures, a picture moved to a larger size, a table with
   totals and one without a style; a `Removed` sheet where a table and a picture
-  were added and removed again), there. It prints each
+  were added and removed again) and `w5_generated.xlsx` (a `Data` sheet with
+  two tables, a shared formula group, a chart, a validation, a rule, a note and
+  a picture, and a `Summary` sheet of formulas, names, a 3D sum and a table
+  sum, then two rows inserted, a column deleted, `Data` renamed `Veri 2026` and
+  moved last and a table removed), there. It prints each
   problem as `<file>: <problem>` and exits 1 on any, 2 on unusable
   arguments. CI runs it on the fixtures and validates the output with the
   Open XML SDK, so the model's edited and generated files are validated,
   not only its unchanged round trips.
+- `tool/write_w5_check.dart <out-dir>` writes the workbooks of the owner's W5
+  Excel check (`build/w5`): `w5_generated.xlsx`, `w5_rows.xlsx` (each row and
+  column edge as a formula beside the value and formula Excel should give),
+  `w5_charts.xlsx` (`c1_kinds` with a row inserted in the data),
+  `w5_rename.xlsx` (sheet names that need quotes, a moved tab, an undone
+  edit), and the owner's `chart_reference.xlsx` and the `excel_objects`
+  producer file with a row inserted and the sheet renamed. It is not part of
+  the CI chain; `dotnet run --project tool/ooxml_validate -- build/w5`
+  validates its output, and the owner's steps are in `docs/excel-checks.md`,
+  "W5". Exit 2 on unusable arguments.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX
   fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, or its
   `<name>.libreoffice.txt` (`DocxFixture.libreOfficeText`: list labels such as
@@ -507,8 +524,10 @@ producer file:
 whole mutated files, many of them well formed so they reach the features' own
 parsers; open, then reading, setting, undoing and saving every W3 and W4 member
 throw nothing but `XlsxReadException`, and undoing the edits of a file restores
-it, all but what the mutated part itself may lose: `undoDifferences`), the same
-cases on the VM and in Chrome;
+it, all but what the mutated part itself may lose: `undoDifferences`; since W5
+it also inserts rows, deletes a column, renames and moves the first sheet and
+removes a table, where only the `StateError`s a structural edit documents for
+what it refuses may come out besides), the same cases on the VM and in Chrome;
 longer runs by hand:
 
 ```bash
@@ -517,6 +536,16 @@ dart run tool/fuzz_reader.dart --features --seeds 1-200 --cases 1000
 
 It prints failures as the reader's run does. Pin a failure as a unit test in
 the owning `*_test.dart` first.
+
+`test/xlsx/formula/formula_lexer_fuzz_test.dart` fuzzes the formula lexer
+(W5; seeds 1 to 4, 1000 strings each, mutated from formulas as the fixtures,
+producer files and Excel's documentation write them, over an alphabet of
+reference, string, error, array and structured reference characters, a
+non-ASCII letter and a lone surrogate): the lexer must never throw, and its
+tokens must join back to the input with no gap or empty token. A digest of the
+cases proves the VM and Chrome get the same strings and tokens, and a formula
+past the length limit must lex in bounded time. Pin a failure as a unit test
+in `test/xlsx/formula/formula_lexer_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4, 900
 cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*` and `d6_*` ones among
@@ -597,6 +626,12 @@ the count again if it fails.
 - **One cell decoder.** Only `lib/src/xlsx/read/cell_decoder.dart`
   interprets a cell's or a formula's `t` attribute (decision 0007). Enforced by
   `test/architecture/cell_decoder_test.dart`.
+- **Every reference is held.** Every model file that stores a range, a
+  `sqref` or a formula is covered by a reference holder, so a structural edit
+  (W5) moves it. Enforced by `test/architecture/reference_holders_test.dart`.
+- **No undo stack in the library** (decision 0009): the change log keeps ids
+  of change sets, never the sets. Enforced by
+  `test/architecture/change_log_history_test.dart`.
 - **Every warning code has a message in `en`, `de` and `tr`.** Enforced by
   `test/architecture/warning_messages_test.dart`.
 - **Tests come first.** Write the failing test, watch it fail, then implement.

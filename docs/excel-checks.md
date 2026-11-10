@@ -1362,6 +1362,48 @@ picture's size from the anchor, so the old `a:xfrm` does no harm. The owner's
 files kept what they had: a chart, a text box, an arrow and a picture in one,
 a note and a threaded comment with replies in the other.
 
+## W5
+
+Structural editing: rows and columns inserted and deleted, sheets renamed,
+moved and added, tables removed, change sets undone. Open each file in Excel
+for Mac and record the result under "Results". A repair prompt is a model bug.
+The owner's step list, in Turkish, is
+`docs/superpowers/plans/2026-11-10-phase-3-w5-excel-check.md`. Run this first:
+
+```bash
+dart run tool/write_w5_check.dart build/w5
+dotnet run --project tool/ooxml_validate -- build/w5
+```
+
+The files, all in `build/w5/`:
+
+- `w5_generated.xlsx`: made by the model, then two rows inserted inside the
+  table `Sales`, column D deleted, `Data` renamed `Veri 2026` and moved last,
+  and the table `Extra` removed. `Summary` must show the totals of the moved
+  data, and `SUM(Extra[Qty])` must now be a plain range giving 100.
+- `w5_rows.xlsx`: the sheet `Checks` lists each case with its formula, the
+  value and the formula Excel should give, and an empty column `Excel?`.
+  `Convert` does the same for the removed table (`[@Qty]` beside a data row
+  becomes `$B2`, outside the data rows `#VALUE!`). The authoritative check:
+  in a copy of the file as it was before the edit (`Data` with 1 to 10 in
+  A1:A10), insert two rows at row 3 with Excel's own Insert and compare each
+  formula bar with `Checks`, column D. This settles the rulings that a range
+  reaching the last row is capped there, that a 3D reference is not shifted by
+  an edit of one sheet, that inserted rows take the row above's format and
+  that a table is not grown by an insert directly below it.
+- `w5_charts.xlsx`: `c1_kinds` with a row inserted at row 3; every chart still
+  draws the four quarters and the empty new row.
+- `w5_rename.xlsx`: tabs `2026`, `Q1 Sales`, `Keep`, `Checks`; the formulas
+  quote the names (`'Q1 Sales'!A1`, `'2026'!A1`); `Keep` is unchanged (its
+  insert and rename were undone).
+- `w5_chart_reference.xlsx`: the owner's chart reference with a row inserted
+  at row 3 of `Veri`, renamed `Veri Yeni`; every chart still draws its data.
+- `w5_objects.xlsx`: the producer file `excel_objects` with a row inserted at
+  row 2 and the sheet renamed `Nesneler`; the table, the notes, the threaded
+  comment, the picture, the chart and the control moved down one row.
+
+Result: pending (the owner's run).
+
 ## C1
 
 Charts written by the DrawingML chart layer (`docs/drawingml-charts.md`),

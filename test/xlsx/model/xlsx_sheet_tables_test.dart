@@ -1647,6 +1647,35 @@ void main() {
       expect(formula(b.sheets[0], 1, 2), '[@Amount]*2');
     });
 
+    test('a this-row reference in a name or a rule refuses removal', () {
+      final XlsxWorkbook named = book()
+        ..defineName(
+          const XlsxDefinedName('Here', 'Sales[[#This Row],[Amount]]'),
+        );
+      expect(
+        () => named.sheets[0].removeTable('Sales'),
+        _state(contains('has no cell')),
+      );
+      expect(named.sheets[0].tables, hasLength(1));
+      final XlsxWorkbook ruled = book();
+      ruled.sheets[1].addConditionalFormat(
+        XlsxConditionalFormat(
+          <XlsxRange>[XlsxRange.parse('A1')],
+          const <XlsxConditionalRule>[
+            XlsxExpressionRule(
+              'Sales[[#This Row],[Amount]]>1',
+              style: XlsxStyle(font: XlsxFont(bold: true)),
+            ),
+          ],
+        ),
+      );
+      expect(
+        () => ruled.sheets[0].removeTable('Sales'),
+        _state(contains('has no cell')),
+      );
+      expect(ruled.sheets[0].tables, hasLength(1));
+    });
+
     test('a string holding the name no longer refuses', () {
       final XlsxSheet sheet = XlsxWorkbook.open(
         _listed(<String>[_excelTable]),

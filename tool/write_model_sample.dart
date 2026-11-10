@@ -82,7 +82,7 @@ List<String> writeModelSample(String dir) => <String>[
   _writeBook('$dir/w2_generated.xlsx', _reportBook()),
   _writeBook('$dir/w3_generated.xlsx', _featuresBook()),
   _writeBook('$dir/w4_generated.xlsx', _objectsBook()),
-  _writeBook('$dir/w5_generated.xlsx', _structureBook()),
+  _writeBook('$dir/w5_generated.xlsx', structureBook()),
 ];
 
 /// Saves [book] to [path], making its directory, and returns [path].
@@ -477,7 +477,7 @@ const List<(String, int)> _sales = <(String, int)>[
 ];
 
 /// The workbook of the W5 check, made and then edited structurally.
-XlsxWorkbook _structureBook() {
+XlsxWorkbook structureBook() {
   final XlsxWorkbook book = XlsxWorkbook();
   final XlsxSheet data = book.addSheet('Data');
   final XlsxSheet summary = book.addSheet('Summary');
