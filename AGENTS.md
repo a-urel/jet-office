@@ -610,6 +610,17 @@ with the D6 ones, 750 left `word/_rels/footer1.xml.rels` unmutated).
 When a new part name or corpus entry joins the corpus, run that test and raise
 the count again if it fails.
 
+In Chrome the runner loads every suite in a same-origin iframe of one page,
+so all suites share one thread. A test that holds it for over 30 seconds makes
+whatever suite is loading meanwhile fail with "Timed out waiting for browser
+to load test suite", though nothing is wrong with that suite. The DOCX fuzz
+loop's 3,600 cases held it for about a minute, and on 2026-11-10
+`test/docx/model/list_helpers_test.dart` and `test/docx/round_trip_test.dart`
+failed to load that way (exit code 1). So every long fuzz loop awaits
+`EventLoopBreather.breathe()` (`test/support/event_loop.dart`) after each
+case, which gives the other suites a turn about once a second. A new long
+synchronous loop must do the same.
+
 ## Hard rules
 
 - **Pure Dart, web-safe.** Nothing under `lib/` imports `dart:io`, `dart:ui`,

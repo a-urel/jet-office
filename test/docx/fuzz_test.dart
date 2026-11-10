@@ -4,6 +4,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import '../fixtures/m4_fixtures.dart' show png4x2;
+import '../support/event_loop.dart';
 import 'support/docx_fuzz.dart';
 import 'support/drawings_document.dart';
 import 'support/table_document.dart';
@@ -244,8 +245,9 @@ void main() {
     expect(parts.difference(mutated), isEmpty);
   });
 
-  test('mutated files raise only DocxReadException', () {
+  test('mutated files raise only DocxReadException', () async {
     final List<String> failures = <String>[];
+    final EventLoopBreather breather = EventLoopBreather();
     for (final int seed in _seeds) {
       for (final FuzzCase c in docxFuzzCases(seed, _cases)) {
         final Stopwatch watch = Stopwatch()..start();
@@ -262,6 +264,8 @@ void main() {
             '${watch.elapsedMilliseconds} ms',
           );
         }
+        // Chrome runs every suite on this thread: give the others a turn.
+        await breather.breathe();
       }
     }
     expect(failures, isEmpty);

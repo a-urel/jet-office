@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../../support/event_loop.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/zip_builder.dart';
 import 'support/feature_fuzz.dart';
@@ -192,8 +193,9 @@ void main() {
     expect(() => exerciseFeatureCase(c), returnsNormally);
   });
 
-  test('mutated files raise only XlsxReadException', () {
+  test('mutated files raise only XlsxReadException', () async {
     final List<String> failures = <String>[];
+    final EventLoopBreather breather = EventLoopBreather();
     for (final int seed in _seeds) {
       for (final FuzzCase c in featureFuzzCases(seed, _cases)) {
         final Stopwatch watch = Stopwatch()..start();
@@ -210,6 +212,8 @@ void main() {
             '${watch.elapsedMilliseconds} ms',
           );
         }
+        // Chrome runs every suite on this thread: give the others a turn.
+        await breather.breathe();
       }
     }
     expect(failures, isEmpty);

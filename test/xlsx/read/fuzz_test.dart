@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../../support/event_loop.dart';
 import 'support/fuzz.dart';
 
 /// The seeds the quality gate fuzzes, each with [_cases] cases.
@@ -122,8 +123,9 @@ void main() {
     expect(parts.difference(mutated), isEmpty);
   });
 
-  test('mutated files raise only XlsxReadException', () {
+  test('mutated files raise only XlsxReadException', () async {
     final List<String> failures = <String>[];
+    final EventLoopBreather breather = EventLoopBreather();
     for (final int seed in _seeds) {
       for (final FuzzCase c in fuzzCases(seed, _cases)) {
         final Stopwatch watch = Stopwatch()..start();
@@ -140,6 +142,8 @@ void main() {
             '${watch.elapsedMilliseconds} ms',
           );
         }
+        // Chrome runs every suite on this thread: give the others a turn.
+        await breather.breathe();
       }
     }
     expect(failures, isEmpty);
