@@ -43,6 +43,21 @@
 ///   `ChartTheme.tooltip` holds its look, a `ChartTooltipStyle`;
 /// * a data summary: `summarizeChart` gives a `ChartSummary`, the chart's
 ///   data as text for a screen reader or a data table.
+///
+/// Milestone J4 adds, with their Excel values estimates until the owner's
+/// check:
+///
+/// * pie, donut, sparkline, scatter and combination charts laid out by
+///   `layoutChart`, a series' own `kind` and `axis`, and `Chart`'s
+///   `secondaryValueAxis`;
+/// * smooth lines (`ChartSeries.smooth`), point colours
+///   (`ChartSeries.pointColors`), percent data labels (`ChartDataLabels`'s
+///   `showValue`, `showPercent` and `minShare`), a donut's
+///   `Chart.holeSizePercent` and `Chart.centerText`, and the translucent
+///   fills of `PathPrimitive.fillOpacity`;
+/// * theme values `areaOpacity`, `areaLine`, `sliceBorderWidth`, `centerText`
+///   and `sparklineWidth`, and `ChartTheme.fromColors`, an app's theme from
+///   its palette, font and colours.
 library;
 
 export 'src/interaction/element_id.dart'

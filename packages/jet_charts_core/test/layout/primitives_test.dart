@@ -207,4 +207,38 @@ void main() {
       ChartPoint(3, 14),
     ]);
   });
+
+  group('PathPrimitive.fillOpacity', () {
+    const List<ChartPoint> points = <ChartPoint>[ChartPoint(0, 0)];
+
+    test('defaults to 1', () {
+      expect(PathPrimitive('p', points).fillOpacity, 1);
+    });
+
+    test('changes == and hashCode', () {
+      final PathPrimitive a = PathPrimitive('p', points);
+      final PathPrimitive b = PathPrimitive('p', points, fillOpacity: 0.5);
+      expect(a, isNot(b));
+      expect(a.hashCode, isNot(b.hashCode));
+      expect(b, PathPrimitive('p', points, fillOpacity: 0.5));
+    });
+
+    test('must be above 0, at most 1 and finite', () {
+      for (final double bad in <double>[
+        0,
+        1.5,
+        -0.1,
+        double.nan,
+        double.infinity,
+      ]) {
+        expect(
+          () => PathPrimitive('p', points, fillOpacity: bad),
+          throwsArgumentError,
+          reason: '$bad',
+        );
+      }
+      expect(PathPrimitive('p', points, fillOpacity: 0.1).fillOpacity, 0.1);
+      expect(PathPrimitive('p', points, fillOpacity: 1).fillOpacity, 1);
+    });
+  });
 }

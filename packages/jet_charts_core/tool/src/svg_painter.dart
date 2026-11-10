@@ -88,6 +88,9 @@ String _path(PathPrimitive p) {
   if (p.closed && p.points.isNotEmpty) d.write('Z');
   final StringBuffer b = StringBuffer()..write('<path d="$d"');
   _paintAttributes(b, p.fill, p.stroke, p.strokeWidth, p.dash);
+  if (p.fillOpacity != 1) {
+    b.write(' fill-opacity="${_n(p.fillOpacity)}"');
+  }
   b.write('/>');
   return b.toString();
 }

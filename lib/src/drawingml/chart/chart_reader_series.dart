@@ -62,7 +62,48 @@ extension _SeriesReading on _ChartReader {
             ),
       formatCode: formatCode == 'General' ? null : formatCode,
       color: _seriesColor(node.child('spPr'), index, lines: lines),
+      smooth: _flag(node.child('smooth'), absent: false),
+      pointColors: _pointColors(node, lines: lines),
     );
+  }
+
+  /// The colours of the series' `c:dPt` points, by index: a line's from the
+  /// marker's fill, a bar's from the shape's fill; `null` for a point
+  /// without one. The list ends at the last point with a colour, and an
+  /// index beyond [_maxPoints] is [DrawingChartIssue.badNumber].
+  List<ChartColor?> _pointColors(_Node series, {required bool lines}) {
+    final List<ChartColor?> colors = <ChartColor?>[];
+    for (final _Node point in series.all('dPt')) {
+      final int? index = _count(point.child('idx')?.val);
+      if (index == null || index >= _maxPoints) {
+        _report(DrawingChartIssue.badNumber);
+        continue;
+      }
+      final _Node? shape = lines
+          ? point.child('marker')?.child('spPr')
+          : point.child('spPr');
+      final ChartColor? color = shape
+          ?.child('solidFill', drawingMainNamespace)
+          ?.children
+          .where((_Node n) => n.isColor)
+          .firstOrNull
+          ?.color;
+      if (color == null) {
+        continue;
+      }
+      if (index >= colors.length) {
+        final int growth = index + 1 - colors.length;
+        if (growth > pointBudget) {
+          // The list draws from the budget of the part's data, as a cache.
+          _report(DrawingChartIssue.badNumber);
+          continue;
+        }
+        pointBudget -= growth;
+        colors.addAll(List<ChartColor?>.filled(growth, null));
+      }
+      colors[index] = color;
+    }
+    return colors;
   }
 
   /// The series name of the `c:tx` [node]: the reference and the cached text

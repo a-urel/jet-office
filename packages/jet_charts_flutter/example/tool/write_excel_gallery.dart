@@ -5,13 +5,15 @@
 /// ```
 ///
 /// It writes `gallery.xlsx` to the directory given: every chart of the
-/// app's gallery (`lib/gallery.dart`) as Excel's own default chart, by
+/// app's gallery (`lib/gallery.dart`) as Excel's own default chart (a
+/// sparkline as Excel's own sparkline in a cell), by
 /// `buildExcelGallery` (`lib/src/excel_gallery.dart`). `TALIMATLAR.md` says
 /// how the owner compares it with the app. Exit 2 on unusable arguments.
 library;
 
 import 'dart:io';
 
+import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_gallery/gallery.dart';
 import 'package:jet_charts_gallery/src/excel_gallery.dart';
 
@@ -24,7 +26,11 @@ void main(List<String> args) {
   final List<GalleryEntry> entries = galleryEntries();
   final Directory dir = Directory(args.single)..createSync(recursive: true);
   File('${dir.path}/gallery.xlsx').writeAsBytesSync(buildExcelGallery(entries));
+  final int sparklines = entries
+      .where((GalleryEntry e) => e.chart.kind == ChartKind.sparkline)
+      .length;
   stdout.writeln(
-    'Wrote gallery.xlsx with ${entries.length} charts to ${dir.path}.',
+    'Wrote gallery.xlsx with ${entries.length - sparklines} charts and '
+    '$sparklines sparklines to ${dir.path}.',
   );
 }

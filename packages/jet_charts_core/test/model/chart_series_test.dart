@@ -173,4 +173,55 @@ void main() {
     );
     expect(a.copyWith(name: base.name).colorKey, 'k');
   });
+
+  group('smooth and pointColors', () {
+    test('defaults', () {
+      final ChartSeries s = series(<double?>[1]);
+      expect(s.smooth, isFalse);
+      expect(s.pointColors, isEmpty);
+    });
+
+    test('copyWith sets and keeps smooth', () {
+      final ChartSeries s = series(<double?>[1]).copyWith(smooth: true);
+      expect(s.smooth, isTrue);
+      expect(
+        s.copyWith(name: ChartData<String>(values: <String?>['x'])).smooth,
+        isTrue,
+      );
+    });
+
+    test('smooth changes == and hashCode', () {
+      final ChartSeries a = series(<double?>[1]);
+      final ChartSeries b = a.copyWith(smooth: true);
+      expect(a, isNot(b));
+      expect(a.hashCode, isNot(b.hashCode));
+    });
+
+    test('pointColors is copied, unmodifiable and kept by copyWith', () {
+      final List<ChartColor?> source = <ChartColor?>[
+        ChartColor.rgb(0xFF0000),
+        null,
+      ];
+      final ChartSeries s = ChartSeries(
+        name: ChartData<String>(values: <String?>['S']),
+        categories: ChartData<Object>(values: <Object?>['a', 'b']),
+        values: ChartData<double>(values: <double?>[1, 2]),
+        pointColors: source,
+      );
+      source[0] = ChartColor.rgb(0x00FF00);
+      expect(s.pointColors, <ChartColor?>[ChartColor.rgb(0xFF0000), null]);
+      expect(() => s.pointColors.add(null), throwsUnsupportedError);
+      expect(s.copyWith(smooth: true).pointColors, s.pointColors);
+    });
+
+    test('pointColors changes == and hashCode', () {
+      final ChartSeries a = series(<double?>[1]);
+      final ChartSeries b = a.copyWith(
+        pointColors: <ChartColor?>[ChartColor.rgb(1)],
+      );
+      expect(a, isNot(b));
+      expect(a.hashCode, isNot(b.hashCode));
+      expect(b, a.copyWith(pointColors: <ChartColor?>[ChartColor.rgb(1)]));
+    });
+  });
 }

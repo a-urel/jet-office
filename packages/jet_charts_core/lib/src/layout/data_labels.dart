@@ -26,6 +26,7 @@ import 'marks.dart';
 import 'overlap.dart';
 import 'primitives.dart';
 import 'resolve.dart';
+import 'scatter_layout.dart' show ScatterAxis;
 import 'text_measurer.dart';
 
 /// The data labels that were placed, and the texts that were not.
@@ -79,10 +80,11 @@ List<(String, String)> dataLabelTexts(
 /// stacked one only the centre of its bar. Outside end may leave the plot
 /// but not [area] (the chart's area inside its padding), as Excel's label of
 /// a bar that reaches the axis' maximum sits above the plot; a label inside a
-/// bar must lie wholly inside the bar's visible part, and is drawn white
-/// (`FFFFFF`) when the bar's colour has a relative luminance below 0.5, so
-/// it reads on a dark bar, else in the theme's data label colour. Line labels
-/// try above, below, right, then left of the point; an area label is centred
+/// bar must lie wholly inside the bar's visible part, and its colour reads
+/// against the bar's (`insideLabelStyle`): white on a dark bar in the Office
+/// theme, else the theme's data label colour. Line and
+/// scatter labels (a scatter chart's anchors need its [scatterAxis]) try
+/// above, below, right, then left of the point; an area label is centred
 /// on the column under its point, halfway between the point and the area's
 /// base, and moved inward, no further than needed, where that leaves the plot
 /// (the first and last points of an area sit on the plot's edges); both must
@@ -91,6 +93,12 @@ List<(String, String)> dataLabelTexts(
 /// is stacked, else the topmost area painted under the label's centre (the
 /// last series whose area holds it), its own when none does. Nothing is
 /// placed unless the chart asks for data labels.
+///
+/// Each label follows the kind its series is drawn as
+/// (`ResolvedChart.seriesKinds`) and its series' grouping, so in a
+/// combination chart a column's label goes as a column chart's and a line's
+/// as a line chart's; a series on the secondary value axis is placed on
+/// [secondaryScale].
 DataLabelPlacement placeDataLabels({
   required Chart chart,
   required ResolvedChart resolved,
@@ -101,6 +109,8 @@ DataLabelPlacement placeDataLabels({
   required ChartRect area,
   required ValueScale scale,
   required List<ChartPrimitive> existing,
+  ScatterAxis? scatterAxis,
+  ValueScale? secondaryScale,
 }) {
   final List<(String, String)> texts = dataLabelTexts(
     chart,
@@ -120,6 +130,8 @@ DataLabelPlacement placeDataLabels({
       theme,
       plot,
       scale,
+      scatterAxis: scatterAxis,
+      secondaryScale: secondaryScale,
     ))
       ids.dataLabelId(a.series, a.category): a,
   };
@@ -149,8 +161,8 @@ DataLabelPlacement placeDataLabels({
     }
   }
   final bool bar = chart.kind == ChartKind.bar;
-  final bool stacked = resolved.grouping != ChartGrouping.clustered;
   final double crossing = crossingValue(scale);
+  final double secondaryCrossing = crossingValue(secondaryScale ?? scale);
   final double gap = theme.spacing.labelGap;
   final double apart = theme.spacing.minTextGap;
   final List<TextPrimitive> placed = <TextPrimitive>[];
@@ -161,14 +173,21 @@ DataLabelPlacement placeDataLabels({
     TextPrimitive? chosen;
     if (anchor != null) {
       final double value = _valueOf(resolved, anchor);
+      final ChartKind kind = resolved.kindOf(anchor.series);
+      final bool stacked =
+          resolved.groupingOf(anchor.series) != ChartGrouping.clustered;
       for (final _Candidate place in _candidates(
-        chart.kind,
+        kind,
         anchor,
         size,
         plot,
         stacked: stacked,
         bar: bar,
-        negative: value < crossing,
+        negative:
+            value <
+            (resolved.isSecondary(anchor.series)
+                ? secondaryCrossing
+                : crossing),
         gap: gap,
         markerGap: gap + theme.markerSize / 2,
         sideGap: gap + theme.markerSize / 2 + apart,
@@ -183,12 +202,14 @@ DataLabelPlacement placeDataLabels({
           continue;
         }
         final ChartTextStyle style = switch (place.where) {
-          _Where.inside => _insideStyle(
+          _Where.inside => insideLabelStyle(
             theme.dataLabels,
-            resolved.colors[anchor.series],
+            theme.background,
+            resolved.colorAt(anchor.series, anchor.category),
           ),
-          _ when chart.kind == ChartKind.area => _insideStyle(
+          _ when kind == ChartKind.area => insideLabelStyle(
             theme.dataLabels,
+            theme.background,
             stacked
                 ? resolved.colors[anchor.series]
                 : _fillUnder(candidate, areas) ??
@@ -289,12 +310,39 @@ ChartRect _shiftInto(ChartRect rect, ChartRect bounds) {
   );
 }
 
-/// The colour a label inside a bar of [bar] colour is drawn in: white when
-/// the bar's relative luminance is below 0.5, else [style]'s own.
-ChartTextStyle _insideStyle(ChartTextStyle style, ChartColor bar) =>
-    relativeLuminance(bar.rgb) < 0.5 ? style.copyWith(color: _white) : style;
+/// The style of a label drawn inside a bar, a slice or an area of the colour
+/// [fill], in a chart of the background [background].
+///
+/// The label takes one of two colours, [style]'s own and [background]: the
+/// lighter of the two on a fill whose relative luminance is below 0.5, else
+/// the darker, unless that one reads below 3:1 against [fill] (WCAG 2's
+/// contrast ratio) and the other reads better, which then wins. In the Office
+/// theme that is white on a dark fill and the theme's dark grey on a light
+/// one; in a dark theme the background colour on a light fill. [style] is
+/// returned as it is when its own colour wins; the background is taken by its
+/// RGB value.
+ChartTextStyle insideLabelStyle(
+  ChartTextStyle style,
+  ChartColor background,
+  ChartColor fill,
+) {
+  final double f = relativeLuminance(fill.rgb);
+  final double own = relativeLuminance(style.color.rgb);
+  final double back = relativeLuminance(background.rgb);
+  final bool ownIsLighter = own >= back;
+  bool useOwn = (f < 0.5) == ownIsLighter;
+  final double preferred = contrastRatio(f, useOwn ? own : back);
+  final double other = contrastRatio(f, useOwn ? back : own);
+  if (preferred < 3 && other > preferred) {
+    useOwn = !useOwn;
+  }
+  return useOwn ? style : style.copyWith(color: ChartColor.rgb(background.rgb));
+}
 
-final ChartColor _white = ChartColor.rgb(0xFFFFFF);
+/// WCAG 2's contrast ratio of two relative luminances [a] and [b], from 1 to
+/// 21.
+double contrastRatio(double a, double b) =>
+    a > b ? (a + 0.05) / (b + 0.05) : (b + 0.05) / (a + 0.05);
 
 /// The relative luminance of the colour [rgb] (`0xRRGGBB`), from 0 (black)
 /// to 1 (white), as WCAG 2 defines it for sRGB.
@@ -378,6 +426,7 @@ List<_Candidate> _candidates(
               inside(ChartRect(cx - w / 2, r.top + gap, w, h)),
             ];
     case ChartKind.line:
+    case ChartKind.scatter:
       final ChartPoint p = anchor.point!;
       return <_Candidate>[
         inPlot(ChartRect(p.x - w / 2, p.y - markerGap - h, w, h)),

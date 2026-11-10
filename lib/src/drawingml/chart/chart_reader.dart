@@ -190,7 +190,19 @@ _Node? _parse(Uint8List bytes, ThemeColors? themeColors) {
                 node.name == 'sysClr')) {
           // Consumes the element through its end event.
           node.isColor = true;
-          node.color = readDrawingColor(r, theme: themeColors);
+          // Only a series' fill may carry an alpha (the area opacity); any
+          // other colour with one is not read, as before.
+          final bool seriesFill =
+              open.length >= 4 &&
+              open.last.name == 'solidFill' &&
+              open[open.length - 2].name == 'spPr' &&
+              open[open.length - 3].name == 'ser' &&
+              open[open.length - 3].uri == drawingChartNamespace;
+          node.color = readDrawingColor(
+            r,
+            theme: themeColors,
+            allowAlpha: seriesFill,
+          );
         } else {
           open.add(node);
         }

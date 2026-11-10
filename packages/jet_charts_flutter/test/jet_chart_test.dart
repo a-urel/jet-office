@@ -355,22 +355,26 @@ void main() {
       expect(find.bySemanticsLabel('Veri yok'), findsOneWidget);
     });
 
-    testWidgets('a pie chart shows the placeholder, not empty', (
+    testWidgets('an unsupported chart shows the placeholder, not empty', (
       WidgetTester tester,
     ) async {
-      final Chart pie = Chart(
-        kind: ChartKind.pie,
+      final Chart unsupported = Chart(
+        kind: ChartKind.unsupported,
+        unsupportedName: 'bubbleChart',
         series: _chart('column_clustered').series.take(1).toList(),
       );
-      await tester.pumpWidget(_app(JetChart(chart: pie)));
+      await tester.pumpWidget(_app(JetChart(chart: unsupported)));
       expect(find.bySemanticsLabel(RegExp('No data')), findsNothing);
-      expect(find.bySemanticsLabel(RegExp('^Pie chart')), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp('^Unsupported chart')),
+        findsOneWidget,
+      );
       final ChartLayout layout = _state(tester).currentLayout!;
       expect(
         layout.primitives.whereType<TextPrimitive>().map(
           (TextPrimitive t) => t.text,
         ),
-        contains('pie'),
+        contains('bubbleChart'),
       );
     });
 
@@ -435,7 +439,7 @@ void main() {
         _app(JetChart(chart: _chart('column_clustered'))),
       );
       final SemanticsNode node = tester.getSemantics(
-        find.bySemanticsLabel(RegExp('North')),
+        find.bySemanticsLabel(RegExp(r'Series \(3\): North')),
       );
       expect(node.label, contains('South'));
       expect(node.label, contains('West'));
@@ -458,7 +462,7 @@ void main() {
         ),
       );
       final SemanticsNode node = tester.getSemantics(
-        find.bySemanticsLabel(RegExp('North')),
+        find.bySemanticsLabel(RegExp(r'Series \(3\): North')),
       );
       expect(node.label, startsWith('Quarterly sales. Series (3): North'));
       expect(node.label, isNot(contains('Column chart')));
@@ -476,7 +480,7 @@ void main() {
         ),
       );
       final SemanticsNode node = tester.getSemantics(
-        find.bySemanticsLabel(RegExp('North')),
+        find.bySemanticsLabel(RegExp(r'Series \(3\): North')),
       );
       expect(node.label, startsWith('Quarterly sales. Series (3): North'));
       for (final String ending in <String>['!', '?', '…']) {
@@ -489,7 +493,11 @@ void main() {
           ),
         );
         expect(
-          tester.getSemantics(find.bySemanticsLabel(RegExp('North'))).label,
+          tester
+              .getSemantics(
+                find.bySemanticsLabel(RegExp(r'Series \(3\): North')),
+              )
+              .label,
           startsWith('Sales$ending Series (3)'),
         );
       }

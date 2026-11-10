@@ -11,7 +11,7 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 /// One chart of the gallery.
 final class GalleryChart {
   /// Creates a gallery chart named [name] (a file name stem) of [chart].
-  const GalleryChart(this.name, this.chart);
+  const GalleryChart(this.name, this.chart, {this.theme, this.size});
 
   /// The name, also the golden's file stem.
   final String name;
@@ -19,11 +19,20 @@ final class GalleryChart {
   /// The chart.
   final Chart chart;
 
-  /// Lays the chart out on [size] as the goldens do.
+  /// The theme the chart is laid out in: null for the Office theme, unless
+  /// the chart shows a theme value of its own.
+  final ChartTheme? theme;
+
+  /// The size the chart is laid out on instead of the gallery's, for a mark
+  /// that is small by nature, or null.
+  final ChartSize? size;
+
+  /// Lays the chart out on [size] as the goldens do, or on this chart's own
+  /// [GalleryChart.size] when it has one.
   ChartLayout layout(ChartSize size) => layoutChart(
     chart,
-    theme: ChartTheme.office,
-    size: size,
+    theme: theme ?? ChartTheme.office,
+    size: this.size ?? size,
     measurer: const FixedWidthTextMeasurer(),
   );
 }
@@ -39,6 +48,9 @@ const List<ChartSize> gallerySizes = <ChartSize>[
 ];
 
 const List<String> _quarters = <String>['Q1', 'Q2', 'Q3', 'Q4'];
+
+/// The categories of the owner's E1 table (`TALIMATLAR_J4.md`).
+const List<String> _regions = <String>['Kuzey', 'Güney', 'Doğu', 'Batı'];
 
 ChartSeries _series(
   String name,
@@ -75,7 +87,9 @@ Chart _column({
 /// The gallery's charts: clustered, stacked and percent columns; bars; a line
 /// with a gap; a stacked area; negative values; eight series; long category
 /// labels; data labels; a legend on the top, left and right (the bottom is the
-/// default of the rest); and a tile.
+/// default of the rest); pies and donuts; sparklines; scatter charts;
+/// combination charts and a secondary value axis; and a tile, which stays
+/// last.
 List<GalleryChart> galleryCharts() => <GalleryChart>[
   GalleryChart('column_clustered', _column()),
   GalleryChart('column_stacked', _column(grouping: ChartGrouping.stacked)),
@@ -106,6 +120,34 @@ List<GalleryChart> galleryCharts() => <GalleryChart>[
   GalleryChart(
     'area_stacked',
     _column(kind: ChartKind.area, grouping: ChartGrouping.stacked),
+  ),
+  GalleryChart(
+    'line_smooth',
+    _column(
+      kind: ChartKind.line,
+      title: 'A smooth and a straight line',
+      series: <ChartSeries>[
+        _series(
+          'Smooth',
+          <Object>['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+          <double?>[4, 9, 3, 8, 6],
+        ).copyWith(smooth: true),
+        _series(
+          'Straight',
+          <Object>['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+          <double?>[2, 5, null, 7, 9],
+        ),
+      ],
+    ),
+  ),
+  GalleryChart(
+    'area_translucent',
+    _column(
+      kind: ChartKind.area,
+      grouping: ChartGrouping.stacked,
+      title: 'Translucent areas',
+    ),
+    theme: ChartTheme.office.copyWith(areaOpacity: 0.25, areaLine: true),
   ),
   GalleryChart(
     'column_negative',
@@ -165,6 +207,201 @@ List<GalleryChart> galleryCharts() => <GalleryChart>[
     _column(legend: const ChartLegend(position: ChartLegendPosition.right)),
   ),
   GalleryChart(
+    'pie_basic',
+    Chart(
+      kind: ChartKind.pie,
+      title: const ChartTitle(text: 'Sales by region'),
+      series: <ChartSeries>[
+        _series('Sales', _regions, <double?>[12, 18, 9, 15]),
+      ],
+      dataLabels: const ChartDataLabels(visible: true),
+    ),
+  ),
+  GalleryChart(
+    'pie_small_slices',
+    Chart(
+      kind: ChartKind.pie,
+      title: const ChartTitle(text: 'Small slices'),
+      series: <ChartSeries>[
+        _series(
+          'Share',
+          <Object>['Main', 'Second', 'Third', 'Fourth', 'Fifth'],
+          <double?>[90, 4, 3, 2, 1],
+        ),
+      ],
+      dataLabels: const ChartDataLabels(visible: true, showPercent: true),
+    ),
+  ),
+  GalleryChart(
+    'pie_negative',
+    Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        _series('B', _regions, <double?>[12, 18, -4, 9]),
+      ],
+      dataLabels: const ChartDataLabels(visible: true),
+    ),
+  ),
+  GalleryChart(
+    'donut_center',
+    Chart(
+      kind: ChartKind.donut,
+      series: <ChartSeries>[
+        _series(
+          'Satış',
+          <Object>[..._regions, 'Merkez'],
+          <double?>[12, 18, 3, 9, 3],
+        ).copyWith(
+          pointColors: <ChartColor?>[null, null, ChartColor.rgb(0xC0392B)],
+        ),
+      ],
+      holeSizePercent: 55,
+      centerText: 'Toplam 45',
+      dataLabels: const ChartDataLabels(
+        visible: true,
+        showValue: false,
+        showPercent: true,
+        minShare: 0.1,
+      ),
+    ),
+  ),
+  GalleryChart(
+    'donut_two_series',
+    Chart(
+      kind: ChartKind.donut,
+      title: const ChartTitle(text: 'Two years'),
+      series: <ChartSeries>[
+        _series('2025', _regions, <double?>[12, 18, 9, 15]),
+        _series('2026', _regions, <double?>[14, 16, 11, 13]),
+      ],
+      dataLabels: const ChartDataLabels(visible: true),
+    ),
+  ),
+  GalleryChart(
+    'sparkline_line',
+    Chart(
+      kind: ChartKind.sparkline,
+      series: <ChartSeries>[
+        _series('Refunds', const <Object>[], <double?>[4, 7, 5, 9, 6, 11, 8]),
+      ],
+      valueAxis: const ChartAxis(min: 0),
+    ),
+  ),
+  GalleryChart(
+    'sparkline_area',
+    Chart(
+      kind: ChartKind.sparkline,
+      series: <ChartSeries>[
+        _series('Refunds', const <Object>[], <double?>[
+          4,
+          7,
+          5,
+          9,
+          6,
+          11,
+          8,
+        ]).copyWith(kind: ChartKind.area),
+      ],
+      valueAxis: const ChartAxis(min: 0),
+    ),
+    theme: ChartTheme.office.copyWith(areaOpacity: 0.1),
+    size: const ChartSize(120, 40),
+  ),
+  GalleryChart(
+    'scatter_basic',
+    Chart(
+      kind: ChartKind.scatter,
+      title: const ChartTitle(text: 'Price and volume'),
+      series: <ChartSeries>[
+        _series(
+          'North',
+          <Object>[1, 2, 3.5, 5, 7],
+          <double?>[12, 18, 9, 15, 21],
+        ),
+        _series(
+          'South',
+          <Object>[1.5, 3, 4, 6, 8],
+          <double?>[8, 11, 14, 10, 6],
+        ),
+      ],
+    ),
+  ),
+  GalleryChart(
+    'scatter_dates',
+    Chart(
+      kind: ChartKind.scatter,
+      title: const ChartTitle(text: 'Orders by day'),
+      series: <ChartSeries>[
+        _series(
+          'Orders',
+          <Object>[
+            DateTime(2026, 1, 1),
+            DateTime(2026, 1, 4),
+            DateTime(2026, 1, 9),
+            DateTime(2026, 1, 15),
+            DateTime(2026, 1, 22),
+          ],
+          <double?>[4, 7, 5, 9, 6],
+        ),
+      ],
+      categoryAxis: const ChartAxis(formatCode: 'd mmm'),
+    ),
+  ),
+  GalleryChart(
+    'combo_column_line',
+    Chart(
+      kind: ChartKind.combination,
+      series: <ChartSeries>[
+        _series('Satış', _regions, <double?>[12, 18, -4, 9]),
+        _series('Adet', _regions, <double?>[
+          120,
+          95,
+          140,
+          80,
+        ]).copyWith(kind: ChartKind.line, axis: ChartAxisBinding.secondary),
+      ],
+    ),
+  ),
+  GalleryChart(
+    'combo_area_column_line',
+    Chart(
+      kind: ChartKind.combination,
+      title: const ChartTitle(text: 'Plan, sales and trend'),
+      series: <ChartSeries>[
+        _series('Plan', _quarters, <double?>[
+          14,
+          16,
+          11,
+          13,
+        ]).copyWith(kind: ChartKind.area),
+        _series('Sales', _quarters, <double?>[12, 18, 9, 15]),
+        _series('Trend', _quarters, <double?>[
+          10,
+          13,
+          12,
+          14,
+        ]).copyWith(kind: ChartKind.line),
+      ],
+    ),
+  ),
+  GalleryChart(
+    'line_secondary',
+    Chart(
+      kind: ChartKind.line,
+      title: const ChartTitle(text: 'Sales and units'),
+      series: <ChartSeries>[
+        _series('Sales', _quarters, <double?>[12, 18, 9, 15]),
+        _series('Units', _quarters, <double?>[
+          120,
+          95,
+          140,
+          80,
+        ]).copyWith(axis: ChartAxisBinding.secondary),
+      ],
+      secondaryValueAxis: const ChartAxis(title: 'Units'),
+    ),
+  ),
+  GalleryChart(
     'tile',
     _column(
       title: null,
@@ -184,8 +421,9 @@ List<(String, ChartLayout)> goldenLayouts() => <(String, ChartLayout)>[
   ('tile_160x100', galleryCharts().last.layout(const ChartSize(160, 100))),
 ];
 
-/// [primitives] as text, one line per primitive, numbers to two decimals; the
-/// children of a clip are indented below it. This is the golden files' format.
+/// [primitives] as text, one line per primitive, numbers to two decimals; a
+/// path's fill opacity is printed only when it is not 1, and the children of
+/// a clip are indented below it. This is the golden files' format.
 String primitivesToText(List<ChartPrimitive> primitives) {
   final StringBuffer out = StringBuffer();
   _write(primitives, out, '');
@@ -206,7 +444,8 @@ void _write(List<ChartPrimitive> primitives, StringBuffer out, String indent) {
           '${p.points.map((ChartPoint q) => '${_n(q.x)},${_n(q.y)}').join(' ')} '
           'closed=${p.closed} fill=${_color(p.fill)} '
           'stroke=${_color(p.stroke)} width=${_n(p.strokeWidth)} '
-          'dash=${p.dash == null ? '-' : p.dash!.map(_n).join(',')}',
+          'dash=${p.dash == null ? '-' : p.dash!.map(_n).join(',')}'
+          '${p.fillOpacity == 1 ? '' : ' opacity=${_n(p.fillOpacity)}'}',
         );
       case ArcPrimitive():
         out.writeln(

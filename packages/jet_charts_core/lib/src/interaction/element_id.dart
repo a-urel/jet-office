@@ -66,6 +66,15 @@ enum ChartElementKind {
 
   /// A data label, `label/<s>/<c>`.
   dataLabel,
+
+  /// A pie or donut slice, `series/<s>/slice/<c>`.
+  slice,
+
+  /// The leader line from a slice to its data label, `label/<s>/<c>/leader`.
+  leaderLine,
+
+  /// A donut's centre text, `center`.
+  centerText,
 }
 
 /// Which axis an id names.
@@ -75,6 +84,10 @@ enum ChartAxisRole {
 
   /// The category axis, `category` in an id.
   category,
+
+  /// The secondary value axis, `secondary` in an id: the value axis on the
+  /// right that series bound to it are measured on.
+  secondaryValue,
 }
 
 /// An id of a primitive of a `ChartLayout`, read into its parts.
@@ -101,11 +114,13 @@ final class ChartElementId {
   /// every other kind.
   final ChartAxisRole? axis;
 
-  /// The series of a legend entry, a mark or a data label; `null` for every
-  /// other kind.
+  /// The series of a legend entry, a mark, a data label or a leader line;
+  /// `null` for every other kind. In a pie or donut a legend entry's number
+  /// is a category, not a series: the chart's kind tells which.
   final int? series;
 
-  /// The category of a bar, a marker, a data label or a category axis label;
+  /// The category of a bar, a slice, a marker, a data label, a leader line or
+  /// a category axis label;
   /// `null` for every other kind. For a category axis label it equals
   /// [index].
   final int? category;
@@ -137,6 +152,8 @@ final class ChartElementId {
         return ChartElementId._(id, ChartElementKind.plot);
       case [ids.placeholder]:
         return ChartElementId._(id, ChartElementKind.placeholder);
+      case [ids.centerTextId]:
+        return ChartElementId._(id, ChartElementKind.centerText);
       case [ids.plot, 'clip']:
         return ChartElementId._(id, ChartElementKind.plotClip);
       case [ids.plot, 'markers']:
@@ -208,6 +225,12 @@ final class ChartElementId {
             series: series,
             category: n,
           ),
+          'slice' => ChartElementId._(
+            id,
+            ChartElementKind.slice,
+            series: series,
+            category: n,
+          ),
           'line' => ChartElementId._(
             id,
             ChartElementKind.line,
@@ -224,6 +247,17 @@ final class ChartElementId {
             : ChartElementId._(
                 id,
                 ChartElementKind.dataLabel,
+                series: series,
+                category: category,
+              );
+      case ['label', final String s, final String c, 'leader']:
+        final int? series = _index(s);
+        final int? category = _index(c);
+        return series == null || category == null
+            ? null
+            : ChartElementId._(
+                id,
+                ChartElementKind.leaderLine,
                 series: series,
                 category: category,
               );
@@ -253,6 +287,7 @@ final class ChartElementId {
 ChartAxisRole? _axis(String part) => switch (part) {
   ids.valueAxis => ChartAxisRole.value,
   ids.categoryAxis => ChartAxisRole.category,
+  ids.secondaryAxis => ChartAxisRole.secondaryValue,
   _ => null,
 };
 

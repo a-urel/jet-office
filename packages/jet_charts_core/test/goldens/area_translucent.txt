@@ -1,0 +1,40 @@
+rect background 0.38,0.38 359.25x239.25 fill=FFFFFF stroke=D9D9D9 width=0.75
+text title 108.60,8.00 142.80x16.80 rotation=0.00 size=14.00 color=595959 bold=false "Translucent areas"
+rect legend 113.70,221.20 132.60x10.80 fill=- stroke=- width=1.00
+rect legend/0/symbol 113.70,223.10 7.00x7.00 fill=156082 stroke=156082 width=2.25
+text legend/0/text 124.70,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "North"
+rect legend/1/symbol 163.70,223.10 7.00x7.00 fill=E97132 stroke=E97132 width=2.25
+text legend/1/text 174.70,221.20 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "South"
+rect legend/2/symbol 213.70,223.10 7.00x7.00 fill=196B24 stroke=196B24 width=2.25
+text legend/2/text 224.70,221.20 21.60x10.80 rotation=0.00 size=9.00 color=595959 bold=false "West"
+rect plot 22.80,36.20 329.20x160.80 fill=- stroke=- width=1.00
+path grid/value/0 22.80,197.00 352.00,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/1 22.80,176.90 352.00,176.90 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/2 22.80,156.80 352.00,156.80 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/3 22.80,136.70 352.00,136.70 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/4 22.80,116.60 352.00,116.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/5 22.80,96.50 352.00,96.50 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/6 22.80,76.40 352.00,76.40 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/7 22.80,56.30 352.00,56.30 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/8 22.80,36.20 352.00,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+clip plot/clip 22.80,36.20 329.20x160.80
+  path series/0/area 22.80,148.76 132.53,124.64 242.27,160.82 352.00,136.70 352.00,197.00 242.27,197.00 132.53,197.00 22.80,197.00 closed=true fill=156082 stroke=- width=1.00 dash=- opacity=0.25
+  path series/1/area 22.80,116.60 132.53,80.42 242.27,104.54 352.00,96.50 352.00,136.70 242.27,160.82 132.53,124.64 22.80,148.76 closed=true fill=E97132 stroke=- width=1.00 dash=- opacity=0.25
+  path series/2/area 22.80,96.50 132.53,52.28 242.27,80.42 352.00,44.24 352.00,96.50 242.27,104.54 132.53,80.42 22.80,116.60 closed=true fill=196B24 stroke=- width=1.00 dash=- opacity=0.25
+  path series/0/line/0 22.80,148.76 132.53,124.64 242.27,160.82 352.00,136.70 closed=false fill=- stroke=156082 width=2.25 dash=-
+  path series/1/line/0 22.80,116.60 132.53,80.42 242.27,104.54 352.00,96.50 closed=false fill=- stroke=E97132 width=2.25 dash=-
+  path series/2/line/0 22.80,96.50 132.53,52.28 242.27,80.42 352.00,44.24 closed=false fill=- stroke=196B24 width=2.25 dash=-
+path axis/category/line 22.80,197.00 352.00,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+text axis/value/label/0 13.40,191.60 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/value/label/1 13.40,171.50 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"
+text axis/value/label/2 8.00,151.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
+text axis/value/label/3 8.00,131.30 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "15"
+text axis/value/label/4 8.00,111.20 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "20"
+text axis/value/label/5 8.00,91.10 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "25"
+text axis/value/label/6 8.00,71.00 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "30"
+text axis/value/label/7 8.00,50.90 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "35"
+text axis/value/label/8 8.00,30.80 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "40"
+text axis/category/label/0 17.40,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q1"
+text axis/category/label/1 127.13,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q2"
+text axis/category/label/2 236.87,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q3"
+text axis/category/label/3 346.60,204.40 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Q4"

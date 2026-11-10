@@ -7,6 +7,147 @@ Chart _chart(String name) =>
     galleryCharts().firstWhere((GalleryChart g) => g.name == name).chart;
 
 void main() {
+  test('a scatter gives its x values per series and its y values', () {
+    ChartSeries series(String name, List<Object?> x, List<double?> y) =>
+        ChartSeries(
+          name: ChartData<String>(values: <String?>[name]),
+          categories: ChartData<Object>(values: x),
+          values: ChartData<double>(values: y),
+        );
+    final ChartSummary summary = summarizeChart(
+      Chart(
+        kind: ChartKind.scatter,
+        series: <ChartSeries>[
+          series('A', <Object?>[1, 2.5, 4], <double?>[10, 20, 15]),
+          series('B', <Object?>['a', 'b'], <double?>[3, null]),
+        ],
+      ),
+    );
+    expect(summary.xValues, <List<String>>[
+      <String>['1', '2.5', '4'],
+      <String>['1', '2', '3'],
+    ]);
+    expect(summary.categories, <String>['1', '2.5', '4']);
+    expect(summary.values, <List<String>>[
+      <String>['10', '20', '15'],
+      <String>['3', '', ''],
+    ]);
+  });
+
+  test('other kinds have no x values', () {
+    expect(summarizeChart(_chart('column_clustered')).xValues, <List<String>>[
+      <String>[],
+      <String>[],
+      <String>[],
+    ]);
+  });
+
+  test('a pie gives the share of each value', () {
+    final ChartSummary summary = summarizeChart(
+      Chart(
+        kind: ChartKind.pie,
+        series: <ChartSeries>[
+          ChartSeries(
+            name: ChartData<String>(values: <String?>['Share']),
+            categories: ChartData<Object>(
+              values: <Object?>['a', 'b', 'c', 'd'],
+            ),
+            values: ChartData<double>(values: <double?>[1, 1, 2, null]),
+          ),
+        ],
+      ),
+    );
+    expect(summary.shares, <List<String>>[
+      <String>['25%', '25%', '50%', ''],
+    ]);
+    expect(summary.centerText, isNull);
+  });
+
+  test('a pie gives no shares for the series it does not draw', () {
+    ChartSeries series(List<double?> v) => ChartSeries(
+      name: ChartData<String>(values: <String?>['S']),
+      categories: ChartData<Object>(values: <Object?>['a', 'b']),
+      values: ChartData<double>(values: v),
+    );
+    final Chart pie = Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        series(<double?>[1, 3]),
+        series(<double?>[2, 2]),
+      ],
+    );
+    expect(summarizeChart(pie).shares, <List<String>>[
+      <String>['25%', '75%'],
+      <String>['', ''],
+    ]);
+    expect(
+      summarizeChart(pie.copyWith(kind: ChartKind.donut)).shares,
+      <List<String>>[
+        <String>['25%', '75%'],
+        <String>['50%', '50%'],
+      ],
+    );
+  });
+
+  test('a pie gives values and a range of its first series only', () {
+    ChartSeries series(String name, List<double?> v) => ChartSeries(
+      name: ChartData<String>(values: <String?>[name]),
+      categories: ChartData<Object>(values: <Object?>['a', 'b']),
+      values: ChartData<double>(values: v),
+    );
+    final Chart pie = Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        series('Drawn', <double?>[1, 3]),
+        series('Not drawn', <double?>[100, -5]),
+      ],
+    );
+    final ChartSummary summary = summarizeChart(pie);
+    expect(summary.values, <List<String>>[
+      <String>['1', '3'],
+      <String>['', ''],
+    ]);
+    expect(summary.minimum, '1');
+    expect(summary.maximum, '3');
+    expect(summary.isEmpty, isFalse);
+    final ChartSummary donut = summarizeChart(
+      pie.copyWith(kind: ChartKind.donut),
+    );
+    expect(donut.values.last, <String>['100', '-5']);
+    expect(donut.minimum, '-5');
+    expect(donut.maximum, '100');
+    // A pie whose first series has no value draws nothing: it is empty.
+    expect(
+      summarizeChart(
+        pie.copyWith(
+          series: <ChartSeries>[
+            series('Drawn', <double?>[null, null]),
+            series('Not drawn', <double?>[1, 2]),
+          ],
+        ),
+      ).isEmpty,
+      isTrue,
+    );
+  });
+
+  test('a donut gives its centre text', () {
+    final ChartSummary summary = summarizeChart(_chart('donut_center'));
+    expect(summary.centerText, _chart('donut_center').centerText);
+    expect(summary.shares.first[1], '40%');
+    expect(
+      summary,
+      isNot(
+        summarizeChart(_chart('donut_center').copyWith(centerText: 'Other')),
+      ),
+    );
+  });
+
+  test('other kinds have no shares', () {
+    final ChartSummary summary = summarizeChart(_chart('column_clustered'));
+    expect(summary.shares, <List<String>>[<String>[], <String>[], <String>[]]);
+    expect(summary.centerText, isNull);
+  });
+
   test('column_clustered', () {
     final ChartSummary summary = summarizeChart(_chart('column_clustered'));
     expect(summary.kind, ChartKind.column);
@@ -115,5 +256,30 @@ void main() {
     ]);
     expect(summary.minimum, '25%');
     expect(summary.maximum, '3');
+  });
+
+  test('a sparkline is summarized as a line chart is', () {
+    ChartSeries series(ChartKind? kind) => ChartSeries(
+      name: ChartData<String>(values: <String?>['Refunds']),
+      categories: ChartData<Object>(values: <Object?>['a', 'b', 'c']),
+      values: ChartData<double>(values: <double?>[2, 7, null]),
+      kind: kind,
+    );
+    final ChartSummary spark = summarizeChart(
+      Chart(
+        kind: ChartKind.sparkline,
+        series: <ChartSeries>[series(ChartKind.area)],
+      ),
+    );
+    final ChartSummary line = summarizeChart(
+      Chart(kind: ChartKind.line, series: <ChartSeries>[series(null)]),
+    );
+    expect(spark.kind, ChartKind.sparkline);
+    expect(spark.values, line.values);
+    expect(spark.categories, line.categories);
+    expect(spark.minimum, '2');
+    expect(spark.maximum, '7');
+    expect(spark.shares, line.shares);
+    expect(spark.isEmpty, isFalse);
   });
 }

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- J4: pie, donut, sparkline, scatter and combination charts are laid out
+  (`layoutChart`), with `ChartSeries.kind` and `axis`,
+  `Chart.secondaryValueAxis` (column, line, area and combination charts), smooth
+  lines (`ChartSeries.smooth`) and `ChartSeries.pointColors`. Their Excel values
+  are estimates, not checked in Excel, until the owner's E1 and E2.
+- J4: `ChartDataLabels.showValue`, `showPercent` and `minShare` (screen only),
+  `Chart.holeSizePercent` and `centerText`, `PathPrimitive.fillOpacity`.
+- J4: `ChartTheme.areaOpacity`, `areaLine`, `sliceBorderWidth`, `centerText`
+  (and `centerTextStyle`), `sparklineWidth`, and `ChartTheme.fromColors`, an
+  app's theme from its palette, font and colours.
+- J4: element ids and hit testing for slices, leader lines, the centre text
+  and scatter markers; tooltips and `ChartSummary` (`shares`, `centerText`,
+  `xValues`) for the new kinds.
+- J4: the layout fuzz covers the new kinds and fields.
+
 - C1: `ChartTheme.stackedGapWidthPercent` (150), `barGapWidthPercent` (182),
   `ChartSpacing.barOverlapPercent` (0), `ChartTheme.gapWidthPercentOf` and
   `overlapPercentOf`: Excel's gap width and overlap per bar kind and grouping,

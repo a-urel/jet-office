@@ -14,13 +14,19 @@
 ///   `<s>` ([legendSymbolId], [legendTextId]); a line series' entry also has
 ///   `legend/<s>/marker`, the marker on its line ([legendMarkerId]).
 /// * `axis/<a>/line`, `axis/<a>/label/<i>` and `axis/<a>/title`, where `<a>` is
-///   `value` or `category` ([axisLineId], [axisLabelId], [axisTitleId]).
+///   `value`, `category` or `secondary` (the secondary value axis)
+///   ([axisLineId], [axisLabelId], [axisTitleId]).
 /// * `grid/<a>/<i>`: gridline `<i>` of axis `<a>` ([gridId]).
 /// * `series/<s>/bar/<c>`, `series/<s>/line/<run>`, `series/<s>/marker/<c>` and
 ///   `series/<s>/area`: the marks of series `<s>` ([seriesBarId],
 ///   [seriesLineId], [seriesMarkerId], [seriesAreaId]).
 /// * `label/<s>/<c>`: the data label of series `<s>`, category `<c>`
 ///   ([dataLabelId]).
+/// * `series/<s>/slice/<c>`: the slice of series `<s>` at category `<c>` in a
+///   pie or donut ([seriesSliceId]); `label/<s>/<c>/leader`: the leader line
+///   of that slice's data label ([dataLabelLeaderId]); `center`: a donut's
+///   centre text ([centerTextId]). In a pie or donut a legend entry
+///   `legend/<i>/...` is category `<i>`.
 library;
 
 /// The chart's background rectangle.
@@ -42,6 +48,9 @@ const String plotClip = 'plot/clip';
 /// reach, so a marker on the plot's edge is drawn whole.
 const String markerClip = 'plot/markers';
 
+/// A donut's centre text.
+const String centerTextId = 'center';
+
 /// What is drawn when there is nothing to draw.
 const String placeholder = 'placeholder';
 
@@ -60,6 +69,9 @@ const String valueAxis = 'value';
 /// The axis names used in ids.
 const String categoryAxis = 'category';
 
+/// The axis names used in ids: the secondary value axis.
+const String secondaryAxis = 'secondary';
+
 /// The symbol of the legend entry of [series].
 String legendSymbolId(int series) => 'legend/$series/symbol';
 
@@ -69,7 +81,7 @@ String legendMarkerId(int series) => 'legend/$series/marker';
 /// The text of the legend entry of [series].
 String legendTextId(int series) => 'legend/$series/text';
 
-/// The line of [axis] (`value` or `category`).
+/// The line of [axis] (`value`, `category` or `secondary`).
 String axisLineId(String axis) => 'axis/$axis/line';
 
 /// Label [index] of [axis].
@@ -96,3 +108,11 @@ String seriesAreaId(int series) => 'series/$series/area';
 
 /// The data label of [series] at [category].
 String dataLabelId(int series, int category) => 'label/$series/$category';
+
+/// The slice of [series] at [category] in a pie or donut.
+String seriesSliceId(int series, int category) =>
+    'series/$series/slice/$category';
+
+/// The leader line of the data label of [series] at [category].
+String dataLabelLeaderId(int series, int category) =>
+    'label/$series/$category/leader';

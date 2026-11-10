@@ -80,7 +80,7 @@ Each rule has the test that holds it.
 - **`lumMod` and `lumOff` are fractions on a `ChartColor`.** Other colour
   modifiers read as no colour. `color_test.dart`, `jet_charts_core`'s
   `test/theme/chart_color_test.dart`. A series colour the reader cannot
-  express (an `alpha` or another modifier, a `lumMod` above 100000) therefore
+  express (a modifier other than `alpha`, a `lumMod` above 100000) therefore
   reads as `null`, and the view draws the theme's palette colour for that
   series in its place; the part's bytes keep the real colour.
 
@@ -129,8 +129,9 @@ Each rule has the test that holds it.
   default charts"), `excel_reference_test.dart`.
 - **Data problems are issues, programmer errors throw.** A chart the writer
   cannot express (a kind outside the J2 set, a secondary axis, a series of
-  another kind) is an `ArgumentError`; so are axis ids that are not distinct
-  unsigned 32-bit numbers and series ids that are not braced GUIDs.
+  another kind, centre text, which only a donut shows) is an `ArgumentError`;
+  so are axis ids that are not distinct unsigned 32-bit numbers and series
+  ids that are not braced GUIDs.
   `chart_writer_test.dart` ("ArgumentError", "ids").
 - **A theme value the part cannot hold is an `ArgumentError` naming the
   field:** a line width (`lineWidth`, the spacing's grid and axis line
@@ -216,8 +217,31 @@ checks what it shows. What it showed, each now what the writer writes:
   `A6A6A6` line (`tx1` 35000/65000), and no `c:dLblPos`; the group's
   `c:dLbls` keeps every flag off. The reader takes the first series' labels
   before the group's. Line and area charts use the same per-series form by
-  analogy; no Excel chart shows it. The data label colour is `404040`, now the Office
-  theme's.
+  analogy; no Excel chart shows it. The data label colour is `404040`, now
+  the Office theme's.
+- **J4 fields of the four kinds (estimates, not checked in Excel; the owner's
+  J4 reference charts decide).** A line series' `smooth` is `c:smooth 1` (the
+  group's stays 0); an area series' `smooth` writes nothing, as Excel's area
+  has no `c:smooth` (the curved top is screen only, `parity.md`), and reads
+  back as not smooth. `pointColors` of a column, bar or line series are one
+  `c:dPt` per colour, after `c:marker` or `c:invertIfNegative` and before
+  `c:dLbls` (the schema's order): `c:idx`, `c:invertIfNegative 0` of a bar,
+  for a line the marker filled and lined in the colour, `c:bubble3D 0`, and
+  `c:spPr` (a bar's fill; a line keeps the series' own line, so only the
+  marker changes, as on screen). An area chart is never given `c:dPt`. In an
+  area chart, `ChartTheme.areaOpacity` below 1 adds `a:alpha` of
+  `(opacity * 100000).round()` after the fill colour's luminance children,
+  and `areaLine` writes the series' `a:ln` (series colour, `lineWidth`,
+  round cap) in place of no line; other kinds ignore both. `showValue: false`
+  is `c:showVal 0`; `showPercent` is always `c:showPercent 0` (Excel allows
+  it in pies only), and a `holeSizePercent` is ignored outside a donut.
+  The reader reads `smooth` and the point colours back, and reads (and drops)
+  an `a:alpha` of a series fill only (any other translucent colour reads as
+  no colour, as before), so the typed form still depends on writing the
+  part again. Labels that are shown with `showValue: false` draw nothing, as
+  hidden ones do: the reader gives them back as hidden, so such a chart reads
+  untyped. `chart_writer_test.dart` and `chart_reader_test.dart` ("J4
+  fields").
 - **A hidden axis has no `c:spPr` and no `c:txPr`** (chart 22, the value
   axis). The writer leaves both out of a hidden category axis too, by
   analogy; no Excel chart shows that yet.
@@ -312,7 +336,8 @@ chart that is only a view keeps its bytes until replaced.
 
 ## Open for both
 
-- The secondary axis, combination charts and the other kinds (J4).
+- The secondary axis, combination charts and the other kinds (J4; C2 and C3
+  write them, and the writer refuses them until then).
 - Excel's palette past 54 series: the colour cycle starts again after its
   nine variations, which `colors1.xml` does not state (unconfirmed). Series 7
   and 8 match a new chart made in Excel (the owner's check, 2026-11-09).

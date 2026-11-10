@@ -57,6 +57,24 @@ void main() {
     }
   });
 
+  test('the text form prints a fill opacity other than 1', () {
+    PathPrimitive area(double opacity) => PathPrimitive(
+      'series/0/area',
+      const <ChartPoint>[ChartPoint(0, 0), ChartPoint(1, 1)],
+      closed: true,
+      fill: ChartColor.rgb(0x112233),
+      fillOpacity: opacity,
+    );
+    expect(
+      primitivesToText(<ChartPrimitive>[area(0.25)]),
+      contains(' opacity=0.25'),
+    );
+    expect(
+      primitivesToText(<ChartPrimitive>[area(1)]),
+      isNot(contains('opacity')),
+    );
+  });
+
   test('there is a golden for each gallery chart and none without one', () {
     if (update) return;
     final Set<String> expected = <String>{

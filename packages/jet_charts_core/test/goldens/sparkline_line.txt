@@ -1,0 +1,2 @@
+rect background 0.00,0.00 360.00x240.00 fill=FFFFFF stroke=- width=1.00
+path series/0/line/0 0.75,152.52 60.50,87.48 120.25,130.84 180.00,44.11 239.75,109.16 299.50,0.75 359.25,65.80 closed=false fill=- stroke=156082 width=0.75 dash=-

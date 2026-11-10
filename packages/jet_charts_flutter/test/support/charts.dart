@@ -22,6 +22,31 @@ ChartTheme robotoTheme(ChartTheme theme) => theme.copyWith(
   ),
 );
 
+/// The app theme of the dark goldens: five colours of this test's choosing, the
+/// family `Roboto`, light text on a near black background.
+final ChartTheme darkAppTheme = ChartTheme.fromColors(
+  palette: <ChartColor>[
+    ChartColor.rgb(0x60A5FA),
+    ChartColor.rgb(0x34D399),
+    ChartColor.rgb(0xFBBF24),
+    ChartColor.rgb(0xF87171),
+    ChartColor.rgb(0xA78BFA),
+  ],
+  fontFamily: 'Roboto',
+  text: ChartColor.rgb(0xE5E7EB),
+  background: ChartColor.rgb(0x0B0F19),
+);
+
+/// The themes of the goldens that do not use [robotoOfficeTheme], by name.
+final Map<String, ChartTheme> goldenThemes = <String, ChartTheme>{
+  'area_translucent': robotoTheme(
+    ChartTheme.office.copyWith(areaOpacity: 0.25, areaLine: true),
+  ),
+  'sparkline_area': robotoTheme(ChartTheme.office.copyWith(areaOpacity: 0.1)),
+  'donut_center_dark': darkAppTheme,
+  'combo_column_line_dark': darkAppTheme,
+};
+
 /// The size of every golden but the tile's.
 const ChartSize goldenSize = ChartSize(360, 240);
 
@@ -29,6 +54,9 @@ const ChartSize goldenSize = ChartSize(360, 240);
 const ChartSize tileSize = ChartSize(160, 100);
 
 const List<String> _quarters = <String>['Q1', 'Q2', 'Q3', 'Q4'];
+
+/// The categories of the owner's E1 table.
+const List<String> _regions = <String>['Kuzey', 'Güney', 'Doğu', 'Batı'];
 
 ChartSeries _series(
   String name,
@@ -133,6 +161,182 @@ List<(String, Chart, ChartSize)> goldenCharts() => <(String, Chart, ChartSize)>[
     goldenSize,
   ),
   (
+    'line_smooth',
+    _column(
+      kind: ChartKind.line,
+      title: 'A smooth and a straight line',
+      series: <ChartSeries>[
+        _series(
+          'Smooth',
+          <Object>['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+          <double?>[4, 9, 3, 8, 6],
+        ).copyWith(smooth: true),
+        _series(
+          'Straight',
+          <Object>['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+          <double?>[2, 5, null, 7, 9],
+        ),
+      ],
+    ),
+    goldenSize,
+  ),
+  (
+    'area_translucent',
+    _column(
+      kind: ChartKind.area,
+      grouping: ChartGrouping.stacked,
+      title: 'Translucent areas',
+    ),
+    goldenSize,
+  ),
+  (
+    'pie_basic',
+    Chart(
+      kind: ChartKind.pie,
+      title: const ChartTitle(text: 'Sales by region'),
+      series: <ChartSeries>[
+        _series('Sales', _regions, <double?>[12, 18, 9, 15]),
+      ],
+      dataLabels: const ChartDataLabels(visible: true),
+    ),
+    goldenSize,
+  ),
+  (
+    'pie_small_slices',
+    Chart(
+      kind: ChartKind.pie,
+      title: const ChartTitle(text: 'Small slices'),
+      series: <ChartSeries>[
+        _series(
+          'Share',
+          <Object>['Main', 'Second', 'Third', 'Fourth', 'Fifth'],
+          <double?>[90, 4, 3, 2, 1],
+        ),
+      ],
+      dataLabels: const ChartDataLabels(visible: true, showPercent: true),
+    ),
+    goldenSize,
+  ),
+  (
+    'donut_center',
+    Chart(
+      kind: ChartKind.donut,
+      series: <ChartSeries>[
+        _series(
+          'Satış',
+          <Object>[..._regions, 'Merkez'],
+          <double?>[12, 18, 3, 9, 3],
+        ).copyWith(
+          pointColors: <ChartColor?>[null, null, ChartColor.rgb(0xC0392B)],
+        ),
+      ],
+      holeSizePercent: 55,
+      centerText: 'Toplam 45',
+      dataLabels: const ChartDataLabels(
+        visible: true,
+        showValue: false,
+        showPercent: true,
+        minShare: 0.1,
+      ),
+    ),
+    goldenSize,
+  ),
+  (
+    'sparkline_area',
+    Chart(
+      kind: ChartKind.sparkline,
+      series: <ChartSeries>[
+        _series('Refunds', const <Object>[], <double?>[
+          4,
+          7,
+          5,
+          9,
+          6,
+          11,
+          8,
+        ]).copyWith(kind: ChartKind.area),
+      ],
+      valueAxis: const ChartAxis(min: 0),
+    ),
+    const ChartSize(120, 40),
+  ),
+  (
+    'scatter_basic',
+    Chart(
+      kind: ChartKind.scatter,
+      title: const ChartTitle(text: 'Price and volume'),
+      series: <ChartSeries>[
+        _series(
+          'North',
+          <Object>[1, 2, 3.5, 5, 7],
+          <double?>[12, 18, 9, 15, 21],
+        ),
+        _series(
+          'South',
+          <Object>[1.5, 3, 4, 6, 8],
+          <double?>[8, 11, 14, 10, 6],
+        ),
+      ],
+    ),
+    goldenSize,
+  ),
+  (
+    'combo_column_line',
+    Chart(
+      kind: ChartKind.combination,
+      series: <ChartSeries>[
+        _series('Satış', _regions, <double?>[12, 18, -4, 9]),
+        _series('Adet', _regions, <double?>[
+          120,
+          95,
+          140,
+          80,
+        ]).copyWith(kind: ChartKind.line, axis: ChartAxisBinding.secondary),
+      ],
+    ),
+    goldenSize,
+  ),
+  (
+    'donut_center_dark',
+    Chart(
+      kind: ChartKind.donut,
+      series: <ChartSeries>[
+        _series(
+          'Satış',
+          <Object>[..._regions, 'Merkez'],
+          <double?>[12, 18, 3, 9, 3],
+        ).copyWith(
+          pointColors: <ChartColor?>[null, null, ChartColor.rgb(0xC0392B)],
+        ),
+      ],
+      holeSizePercent: 55,
+      centerText: 'Toplam 45',
+      dataLabels: const ChartDataLabels(
+        visible: true,
+        showValue: false,
+        showPercent: true,
+        minShare: 0.1,
+      ),
+    ),
+    goldenSize,
+  ),
+  (
+    'combo_column_line_dark',
+    Chart(
+      kind: ChartKind.combination,
+      series: <ChartSeries>[
+        _series('Satış', _regions, <double?>[12, 18, -4, 9]),
+        _series('Adet', _regions, <double?>[
+          120,
+          95,
+          140,
+          80,
+        ]).copyWith(kind: ChartKind.line, axis: ChartAxisBinding.secondary),
+      ],
+    ),
+    goldenSize,
+  ),
+  (
     'tile',
     _column(
       title: null,
@@ -145,7 +349,8 @@ List<(String, Chart, ChartSize)> goldenCharts() => <(String, Chart, ChartSize)>[
   ),
 ];
 
-/// Every golden chart laid out with [robotoOfficeTheme] and [measurer] on its
+/// Every golden chart laid out with its theme ([robotoOfficeTheme] unless
+/// [goldenThemes] names it) and [measurer] on its
 /// size: the name, the size and the layout.
 List<(String, ChartSize, ChartLayout)> galleryForGoldens(
   FlutterTextMeasurer measurer,
@@ -156,7 +361,7 @@ List<(String, ChartSize, ChartLayout)> galleryForGoldens(
       size,
       layoutChart(
         chart,
-        theme: robotoOfficeTheme,
+        theme: goldenThemes[name] ?? robotoOfficeTheme,
         size: size,
         measurer: measurer,
       ),

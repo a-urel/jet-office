@@ -73,8 +73,17 @@ final class PathPrimitive extends ChartPrimitive {
     this.stroke,
     this.strokeWidth = 1,
     List<double>? dash,
+    this.fillOpacity = 1,
   }) : points = List<ChartPoint>.unmodifiable(points),
-       dash = dash == null ? null : List<double>.unmodifiable(dash);
+       dash = dash == null ? null : List<double>.unmodifiable(dash) {
+    if (!fillOpacity.isFinite || fillOpacity <= 0 || fillOpacity > 1) {
+      throw ArgumentError.value(
+        fillOpacity,
+        'fillOpacity',
+        'must be finite, above 0 and at most 1',
+      );
+    }
+  }
 
   /// The vertices, in order.
   final List<ChartPoint> points;
@@ -94,6 +103,9 @@ final class PathPrimitive extends ChartPrimitive {
   /// The lengths of the dashes and gaps, alternating, or null for a solid line.
   final List<double>? dash;
 
+  /// The fill's opacity, above 0 and at most 1. The stroke stays opaque.
+  final double fillOpacity;
+
   @override
   bool operator ==(Object other) {
     return other is PathPrimitive &&
@@ -105,7 +117,8 @@ final class PathPrimitive extends ChartPrimitive {
         valueEquals(strokeWidth, other.strokeWidth) &&
         (dash == null
             ? other.dash == null
-            : other.dash != null && listValueEquals(dash!, other.dash!));
+            : other.dash != null && listValueEquals(dash!, other.dash!)) &&
+        valueEquals(fillOpacity, other.fillOpacity);
   }
 
   @override
@@ -117,6 +130,7 @@ final class PathPrimitive extends ChartPrimitive {
     stroke,
     valueHash(strokeWidth),
     dash == null ? null : listValueHash(dash!),
+    valueHash(fillOpacity),
   );
 
   @override

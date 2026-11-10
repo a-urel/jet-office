@@ -156,6 +156,115 @@ void main() {
     expect(JetChartStrings.en.error, 'The chart could not be shown');
   });
 
+  test('Turkish describes a donut with its centre text and shares', () {
+    final Chart chart = Chart(
+      kind: ChartKind.donut,
+      centerText: 'Toplam 12.450 ₺',
+      series: <ChartSeries>[
+        _series(
+          'Satış',
+          <Object>['Kuzey', 'Güney', 'Doğu'],
+          <double?>[12, 18, 15],
+        ),
+      ],
+    );
+    final String text = JetChartStrings.tr.describe(
+      summarizeChart(chart, locale: FormatLocale.trTR),
+    );
+    expect(text, startsWith('Halka grafik. Orta: Toplam 12.450 ₺.'));
+    expect(text, contains('Güney 18 (40%)'));
+    expect(
+      text,
+      endsWith('Satış: Kuzey 12 (27%), Güney 18 (40%), Doğu 15 (33%).'),
+    );
+    expect(
+      JetChartStrings.en.describe(summarizeChart(chart)),
+      contains('Center: Toplam 12.450 ₺.'),
+    );
+    expect(
+      JetChartStrings.de.describe(
+        summarizeChart(chart, locale: FormatLocale.deDE),
+      ),
+      contains('Mitte: Toplam 12.450 ₺.'),
+    );
+  });
+
+  test('a pie reads each share after its value', () {
+    final Chart chart = Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        _series('Sales', <Object>['a', 'b'], <double?>[1, 3]),
+      ],
+    );
+    expect(
+      JetChartStrings.en.describe(summarizeChart(chart)),
+      endsWith('Sales: a 1 (25%), b 3 (75%).'),
+    );
+  });
+
+  test('a pie reads only the series it draws', () {
+    final Chart chart = Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        _series('Sales', <Object>['a', 'b'], <double?>[1, 3]),
+        _series('Hidden', <Object>['a', 'b'], <double?>[100, -5]),
+      ],
+    );
+    final String text = JetChartStrings.en.describe(summarizeChart(chart));
+    expect(text, isNot(contains('Hidden')));
+    expect(text, isNot(contains('100')));
+    expect(text, endsWith('Sales: a 1 (25%), b 3 (75%).'));
+  });
+
+  test('a scatter chart reads (x, y) pairs and no category range', () {
+    final Chart chart = Chart(
+      kind: ChartKind.scatter,
+      series: <ChartSeries>[
+        _series('Trial', <Object>[1.5, 2, 4], <double?>[10, null, 30]),
+      ],
+    );
+    final String text = JetChartStrings.en.describe(summarizeChart(chart));
+    expect(text, endsWith('Trial: (1.5, 10), (4, 30).'));
+    expect(text, isNot(contains('Categories')));
+  });
+
+  test('the built-ins name the J4 kinds', () {
+    expect(
+      JetChartStrings.tr.kindNames,
+      containsPair(ChartKind.sparkline, 'Mini grafik'),
+    );
+    expect(JetChartStrings.tr.kindNames[ChartKind.scatter], 'Dağılım grafiği');
+    expect(
+      JetChartStrings.de.kindNames[ChartKind.combination],
+      'Kombinationsdiagramm',
+    );
+    for (final JetChartStrings strings in <JetChartStrings>[
+      JetChartStrings.en,
+      JetChartStrings.tr,
+      JetChartStrings.de,
+    ]) {
+      expect(strings.share, '{value} ({percent})');
+    }
+    expect(JetChartStrings.tr.centerText, 'Orta: {text}');
+    expect(JetChartStrings.de.centerText, 'Mitte: {text}');
+    expect(JetChartStrings.en.centerText, 'Center: {text}');
+  });
+
+  test('share and centerText default to the English texts', () {
+    const JetChartStrings own = JetChartStrings(
+      loading: 'l',
+      empty: 'e',
+      error: 'x',
+      kindNames: <ChartKind, String>{},
+      seriesCount: '{n}',
+      categoryRange: '{n}',
+      valueRange: '{min}',
+      moreValues: '{n}',
+    );
+    expect(own.share, JetChartStrings.en.share);
+    expect(own.centerText, JetChartStrings.en.centerText);
+  });
+
   test('value equality', () {
     const JetChartStrings copy = JetChartStrings(
       loading: 'Loading chart…',
@@ -166,6 +275,8 @@ void main() {
       categoryRange: 'Categories ({n}): {first} to {last}',
       valueRange: 'Values from {min} to {max}',
       moreValues: 'and {n} more',
+      share: '{value} ({percent})',
+      centerText: 'Center: {text}',
     );
     const JetChartStrings same = JetChartStrings(
       loading: 'Loading chart…',
@@ -176,6 +287,8 @@ void main() {
       categoryRange: 'Categories ({n}): {first} to {last}',
       valueRange: 'Values from {min} to {max}',
       moreValues: 'and {n} more',
+      share: '{value} ({percent})',
+      centerText: 'Center: {text}',
     );
     expect(copy, same);
     expect(copy.hashCode, same.hashCode);

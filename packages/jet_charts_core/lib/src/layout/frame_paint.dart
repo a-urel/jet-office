@@ -11,6 +11,7 @@ import 'dart:math' as math;
 import 'package:jet_core/jet_core.dart';
 
 import '../model/chart.dart';
+import '../model/chart_axis.dart';
 import '../model/chart_kind.dart';
 import '../scale/value_scale.dart';
 import '../theme/chart_color.dart';
@@ -24,6 +25,7 @@ import 'legend_layout.dart';
 import 'marks.dart';
 import 'primitives.dart';
 import 'resolve.dart';
+import 'scatter_layout.dart';
 import 'text_measurer.dart';
 
 /// One try at the frame with what [FrameShown] allows.
@@ -41,6 +43,12 @@ final class FrameAttempt {
     this.valueStride = 1,
     this.plan,
     this.categoryOffset = 0,
+    this.xScale,
+    this.xLabels = const <MeasuredLabel>[],
+    this.xStride = 1,
+    this.secondaryScale,
+    this.secondaryLabels = const <MeasuredLabel>[],
+    this.secondaryStride = 1,
   });
 
   /// A part that does not fit its own space, to hide before trying again.
@@ -77,6 +85,29 @@ final class FrameAttempt {
 
   /// The distance of the category labels from the plot.
   final double categoryOffset;
+
+  /// A scatter chart's horizontal value axis' scale; `null` for another kind.
+  final ValueScale? xScale;
+
+  /// A scatter chart's horizontal tick labels, measured: every one of
+  /// [xScale]'s ticks, drawn or not.
+  final List<MeasuredLabel> xLabels;
+
+  /// Every how many horizontal tick labels one is drawn, from the first, as
+  /// [valueStride] for the vertical ones.
+  final int xStride;
+
+  /// The secondary value axis' scale; `null` when the chart has none to
+  /// draw.
+  final ValueScale? secondaryScale;
+
+  /// The secondary value axis' tick labels, measured: every one of
+  /// [secondaryScale]'s ticks, drawn or not.
+  final List<MeasuredLabel> secondaryLabels;
+
+  /// Every how many secondary tick labels one is drawn, from the first, as
+  /// [valueStride] for the primary ones.
+  final int secondaryStride;
 }
 
 /// The inputs of a frame and what is derived from them once.
@@ -90,13 +121,18 @@ final class FrameContext {
     this.measurer,
     this.formatter,
   ) : bar = chart.kind == ChartKind.bar,
-      onTicks = chart.kind == ChartKind.area,
-      extent = dataExtent(resolved.values, resolved.grouping),
-      categoryLabels = measureLabels(
-        resolved.categoryLabels,
-        theme.axisLabels,
-        measurer,
-      );
+      onTicks = categoriesOnTicks(chart, resolved),
+      scatter = chart.kind == ChartKind.scatter,
+      secondary = resolved.drawsSecondaryAxis,
+      secondaryAxis = chart.secondaryValueAxis ?? const ChartAxis(),
+      extent = resolved.primaryExtent,
+      secondaryExtent = resolved.secondaryExtent,
+      xValues = chart.kind == ChartKind.scatter
+          ? scatterXValues(chart, resolved.categoryCount)
+          : const <List<double>>[],
+      categoryLabels = chart.kind == ChartKind.scatter
+          ? const <MeasuredLabel>[]
+          : measureLabels(resolved.categoryLabels, theme.axisLabels, measurer);
 
   /// The chart.
   final Chart chart;
@@ -120,11 +156,36 @@ final class FrameContext {
   final bool bar;
 
   /// Whether the categories sit on tick marks, as Excel draws an area chart
-  /// (`categoryPosition`): from the plot's one edge to the other.
+  /// (`categoriesOnTicks`): from the plot's one edge to the other.
   final bool onTicks;
 
-  /// The data's extent under the chart's grouping.
+  /// Whether the chart has a secondary value axis to draw
+  /// (`ResolvedChart.drawsSecondaryAxis`), on the plot's right.
+  final bool secondary;
+
+  /// The secondary value axis' settings: the chart's, else an axis with no
+  /// gridlines.
+  final ChartAxis secondaryAxis;
+
+  /// The extent of the values measured on the secondary value axis.
+  final ({double min, double max}) secondaryExtent;
+
+  /// Whether the chart is a scatter chart, whose category axis is a second
+  /// value axis, horizontal, of the x values (`scatter_layout.dart`).
+  final bool scatter;
+
+  /// The extent of the values measured on the primary value axis, each
+  /// group under its grouping (`axisExtent`).
   final ({double min, double max}) extent;
+
+  /// A scatter chart's x values (`scatterXValues`); empty for another kind.
+  final List<List<double>> xValues;
+
+  /// The extent of a scatter chart's x values (`scatterXExtent`).
+  late final ({double min, double max}) xExtent = scatterXExtent(
+    xValues,
+    resolved.values,
+  );
 
   /// The category labels, measured.
   final List<MeasuredLabel> categoryLabels;
@@ -148,10 +209,60 @@ final class FrameContext {
 
   /// Whether the chart fixes the value axis' major unit, which coarsening
   /// cannot change.
-  bool get fixedUnit {
-    final double? unit = chart.valueAxis.majorUnit;
-    return unit != null && unit.isFinite && unit > 0;
-  }
+  bool get fixedUnit => _fixed(chart.valueAxis.majorUnit);
+
+  /// The secondary value axis' scale with at most [maxIntervals] intervals,
+  /// from the extent of its series and its own bounds and unit.
+  ValueScale secondaryScaleFor(int maxIntervals) => autoValueScale(
+    dataMin: secondaryExtent.min,
+    dataMax: secondaryExtent.max,
+    maxIntervals: maxIntervals,
+    fixedMin: secondaryAxis.min,
+    fixedMax: secondaryAxis.max,
+    fixedMajorUnit: secondaryAxis.majorUnit,
+    percent: resolved.secondaryPercent,
+  );
+
+  /// Whether the chart fixes the secondary value axis' major unit.
+  bool get fixedSecondaryUnit => _fixed(secondaryAxis.majorUnit);
+
+  /// The secondary value axis' tick labels of [scale], measured.
+  List<MeasuredLabel> secondaryTickLabels(ValueScale scale) => measureLabels(
+    <String>[
+      for (final double tick in scale.ticks)
+        formatTick(tick, resolved.secondaryTickFormatCode, formatter),
+    ],
+    theme.axisLabels,
+    measurer,
+  );
+
+  /// A scatter chart's horizontal scale with at most [maxIntervals]
+  /// intervals, from the x values' extent and the category axis' bounds and
+  /// unit.
+  ValueScale xScaleFor(int maxIntervals) => autoValueScale(
+    dataMin: xExtent.min,
+    dataMax: xExtent.max,
+    maxIntervals: maxIntervals,
+    fixedMin: chart.categoryAxis.min,
+    fixedMax: chart.categoryAxis.max,
+    fixedMajorUnit: chart.categoryAxis.majorUnit,
+  );
+
+  /// Whether a scatter chart fixes its horizontal axis' major unit.
+  bool get fixedXUnit => _fixed(chart.categoryAxis.majorUnit);
+
+  static bool _fixed(double? unit) => unit != null && unit.isFinite && unit > 0;
+
+  /// A scatter chart's horizontal tick labels of [scale] (`scatterXText`),
+  /// measured.
+  List<MeasuredLabel> xTickLabels(ValueScale scale) => measureLabels(
+    <String>[
+      for (final double tick in scale.ticks)
+        scatterXText(tick, chart, formatter),
+    ],
+    theme.axisLabels,
+    measurer,
+  );
 
   /// The tick labels of [scale], measured.
   List<MeasuredLabel> tickLabels(ValueScale scale) => measureLabels(
@@ -178,14 +289,37 @@ extension FramePaint on FrameContext {
     final ChartRect plot = a.plot!;
     final ValueScale scale = a.scale!;
     final ChartRect inner = a.inner!;
+    final ValueScale? xScale = a.xScale;
+    final ScatterAxis? scatterAxis = xScale == null
+        ? null
+        : (scale: xScale, values: xValues);
     final ({List<ChartPrimitive> shapes, List<ChartPrimitive> markers}) marks =
-        _splitMarkers(layoutMarks(chart, resolved, theme, plot, scale));
+        _splitMarkers(
+          layoutMarks(
+            chart,
+            resolved,
+            theme,
+            plot,
+            scale,
+            scatterAxis: scatterAxis,
+            secondaryScale: a.secondaryScale,
+          ),
+        );
     final List<ChartPrimitive> out = <ChartPrimitive>[
       background(),
       ...?a.title?.primitives,
       ...?a.legend?.primitives,
       RectPrimitive(ids.plot, plot),
-      if (chart.categoryAxis.gridLines)
+      if (chart.categoryAxis.gridLines && xScale != null)
+        ...valueGridLines(
+          xScale,
+          plot,
+          horizontal: true,
+          color: theme.gridLine,
+          width: theme.spacing.gridLineWidth,
+          axis: ids.categoryAxis,
+        )
+      else if (chart.categoryAxis.gridLines)
         ...categoryGridLines(
           resolved.categoryCount,
           plot,
@@ -202,6 +336,15 @@ extension FramePaint on FrameContext {
           color: theme.gridLine,
           width: theme.spacing.gridLineWidth,
         ),
+      if (a.secondaryScale != null && secondaryAxis.gridLines)
+        ...valueGridLines(
+          a.secondaryScale!,
+          plot,
+          horizontal: false,
+          color: theme.gridLine,
+          width: theme.spacing.gridLineWidth,
+          axis: ids.secondaryAxis,
+        ),
       ClipPrimitive(ids.plotClip, plot, marks.shapes),
       if (marks.markers.isNotEmpty)
         ClipPrimitive(ids.markerClip, _markerClip(plot), marks.markers),
@@ -211,6 +354,18 @@ extension FramePaint on FrameContext {
           horizontal: bar,
           color: theme.axisLine,
           width: theme.spacing.axisLineWidth,
+          crossScale: xScale,
+        ),
+      if (a.secondaryScale != null &&
+          secondaryAxis.visible &&
+          theme.valueAxisLine)
+        valueAxisLine(
+          plot,
+          horizontal: false,
+          color: theme.axisLine,
+          width: theme.spacing.axisLineWidth,
+          axis: ids.secondaryAxis,
+          far: true,
         ),
       if (chart.categoryAxis.visible)
         categoryAxisLine(
@@ -230,7 +385,30 @@ extension FramePaint on FrameContext {
           labelGap: gap,
           stride: a.valueStride,
         ),
-      if (shown.categoryLabels)
+      if (shown.secondaryLabels && a.secondaryScale != null)
+        ...valueLabelPrimitives(
+          a.secondaryLabels,
+          a.secondaryScale!,
+          plot,
+          theme.axisLabels,
+          horizontal: false,
+          labelGap: gap,
+          stride: a.secondaryStride,
+          axis: ids.secondaryAxis,
+          far: true,
+        ),
+      if (shown.categoryLabels && xScale != null)
+        ...valueLabelPrimitives(
+          a.xLabels,
+          xScale,
+          plot,
+          theme.axisLabels,
+          horizontal: true,
+          labelGap: a.categoryOffset,
+          stride: a.xStride,
+          axis: ids.categoryAxis,
+        )
+      else if (shown.categoryLabels)
         ...placeCategoryLabels(
           a.plan!,
           resolved.categoryCount,
@@ -256,6 +434,15 @@ extension FramePaint on FrameContext {
           plot,
           rotated: bar,
         ),
+      if (shown.secondaryTitle)
+        _axisTitle(
+          ids.axisTitleId(ids.secondaryAxis),
+          secondaryAxis.title!,
+          inner,
+          plot,
+          rotated: true,
+          far: true,
+        ),
     ];
     // Data labels go last, on top of everything else.
     final DataLabelPlacement labels = shown.dataLabels
@@ -269,6 +456,8 @@ extension FramePaint on FrameContext {
             area: inner,
             scale: scale,
             existing: out,
+            scatterAxis: scatterAxis,
+            secondaryScale: a.secondaryScale,
           )
         : const DataLabelPlacement(<TextPrimitive>[], <(String, String)>[]);
     return (
@@ -307,15 +496,18 @@ extension FramePaint on FrameContext {
     );
   }
 
-  /// An axis title: turned -90 degrees at the left of [inner], centred on the
-  /// plot's height as far as its span allows, or level at the bottom of
-  /// [inner], centred on the plot's width.
+  /// An axis title: turned -90 degrees at the left of [inner] (at its right
+  /// on the [far] side, the secondary value axis'), centred on the plot's
+  /// height as far as its span allows, or level at the bottom of [inner],
+  /// centred on the plot's width. The secondary title's turn is an estimate,
+  /// not checked in Excel.
   TextPrimitive _axisTitle(
     String id,
     String text,
     ChartRect inner,
     ChartRect plot, {
     required bool rotated,
+    bool far = false,
   }) {
     final ChartSize s = measurer.measure(text, theme.axisLabels);
     if (rotated) {
@@ -323,7 +515,9 @@ extension FramePaint on FrameContext {
         inner.top + s.width / 2,
         math.max(inner.top + s.width / 2, plot.bottom - s.width / 2),
       );
-      final double cx = inner.left + s.height / 2;
+      final double cx = far
+          ? inner.right - s.height / 2
+          : inner.left + s.height / 2;
       return TextPrimitive(
         id,
         text,
@@ -348,9 +542,10 @@ extension FramePaint on FrameContext {
   /// The texts [wanted] that [shown] leaves out, grouped in the order of
   /// [DegradeStep]: data labels (the ones [hiddenData] lists, or all of them
   /// when [shown] has none), legend entries, axis titles, title, category
-  /// labels (every one not shown and every cut one, with its full text),
-  /// value labels (all of them when not shown, else the ones thinning left
-  /// out).
+  /// labels (every one not shown and every cut one, with its full text; a
+  /// scatter chart's horizontal tick labels as the value labels), value
+  /// labels (all of them when not shown, else the ones thinning left
+  /// out), then the secondary value axis' tick labels in the same way.
   ///
   /// Value labels of an attempt with no room at all come from a fallback
   /// scale of at most `excelMaxIntervals(0, ...)` intervals: one.
@@ -367,6 +562,23 @@ extension FramePaint on FrameContext {
               : a.valueLabels)
         label.text,
     ];
+    final List<String> secondaryTicks = <String>[
+      if (secondary)
+        for (final MeasuredLabel label
+            in a.secondaryLabels.isEmpty && wanted.secondaryLabels
+                ? secondaryTickLabels(secondaryScaleFor(1))
+                : a.secondaryLabels)
+          label.text,
+    ];
+    final List<String> xTicks = !scatter
+        ? const <String>[]
+        : <String>[
+            for (final MeasuredLabel label
+                in a.xLabels.isEmpty && wanted.categoryLabels
+                    ? xTickLabels(xScaleFor(1))
+                    : a.xLabels)
+              label.text,
+          ];
     final Map<int, String> drawn = <int, String>{
       if (shown.categoryLabels && a.plan != null)
         for (int k = 0; k < a.plan!.shown.length; k++)
@@ -383,8 +595,14 @@ extension FramePaint on FrameContext {
         (ids.axisTitleId(ids.valueAxis), chart.valueAxis.title!),
       if (wanted.categoryTitle && !shown.categoryTitle)
         (ids.axisTitleId(ids.categoryAxis), chart.categoryAxis.title!),
+      if (wanted.secondaryTitle && !shown.secondaryTitle)
+        (ids.axisTitleId(ids.secondaryAxis), secondaryAxis.title!),
       if (wanted.title && !shown.title) (ids.title, chart.title!.text),
-      if (wanted.categoryLabels)
+      if (wanted.categoryLabels && scatter)
+        for (int i = 0; i < xTicks.length; i++)
+          if (!shown.categoryLabels || i % a.xStride != 0)
+            (ids.axisLabelId(ids.categoryAxis, i), xTicks[i]),
+      if (wanted.categoryLabels && !scatter)
         for (int i = 0; i < resolved.categoryCount; i++)
           if (drawn[i] == null ||
               !isWrappingOf(drawn[i]!, resolved.categoryLabels[i]))
@@ -393,6 +611,10 @@ extension FramePaint on FrameContext {
         for (int i = 0; i < ticks.length; i++)
           if (!shown.valueLabels || i % a.valueStride != 0)
             (ids.axisLabelId(ids.valueAxis, i), ticks[i]),
+      if (wanted.secondaryLabels)
+        for (int i = 0; i < secondaryTicks.length; i++)
+          if (!shown.secondaryLabels || i % a.secondaryStride != 0)
+            (ids.axisLabelId(ids.secondaryAxis, i), secondaryTicks[i]),
     ];
   }
 }

@@ -6,17 +6,19 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 /// The primitives shown at [t] of the way from [from] to [to], two layouts of
 /// a chart at the same size.
 ///
-/// Only marks move: bars, lines, markers and areas (`ChartElementId.kind`
-/// `bar`, `line`, `marker` and `area`). A mark whose id is in both lists, as
+/// Only marks move: bars, lines, markers, areas and pie or donut slices
+/// (`ChartElementId.kind` `bar`, `line`, `marker`, `area` and `slice`). A mark whose id is in both lists, as
 /// the same type of primitive, is interpolated: a rectangle by its left, top,
 /// width and height; a path point by point when both have as many points,
 /// else it is `to`'s path; an arc (a line's marker) by its centre, radii and
-/// angles. Its colours, widths and dashes are `to`'s. A mark
+/// angles (a slice is an arc: its start and sweep angles and its radii move
+/// linearly; one only in [to] grows from a sweep of 0 at its final start
+/// angle). Its colours, widths and dashes are `to`'s. A mark
 /// only in [to] shows from the start, and a mark only in [from] is dropped.
 /// A series' markers are `to`'s when any run of its line is `to`'s (its point
 /// count changed, or the run is only in [to]), so they never leave the line.
 /// Every other primitive is [to]'s, in [to]'s order, except data labels
-/// (`dataLabel`), which are left out until [t] is 1, so no text crosses a
+/// (`dataLabel`) and their leader lines (`leaderLine`), which are left out until [t] is 1, so no text crosses a
 /// moving mark. A clip holds what this gives for its children and the
 /// children of the clip of the same id in [from].
 ///
@@ -94,14 +96,17 @@ List<ChartPrimitive> _lerpList(
     }
     final ChartElementId? element = ChartElementId.parse(target.id);
     switch (element?.kind) {
-      case ChartElementKind.dataLabel:
+      case ChartElementKind.dataLabel || ChartElementKind.leaderLine:
         break;
+      case ChartElementKind.slice when source == null && target is ArcPrimitive:
+        result.add(_grownSlice(target, t));
       case ChartElementKind.marker when snapped.contains(element!.series):
         result.add(target);
       case ChartElementKind.bar ||
           ChartElementKind.line ||
           ChartElementKind.marker ||
-          ChartElementKind.area:
+          ChartElementKind.area ||
+          ChartElementKind.slice:
         result.add(source == null ? target : _lerpMark(source, target, t));
       default:
         result.add(target);
@@ -109,6 +114,20 @@ List<ChartPrimitive> _lerpList(
   }
   return result;
 }
+
+/// A slice that only [target] has, [t] of the way grown: it keeps its final
+/// start angle and sweeps [t] of its final sweep.
+ArcPrimitive _grownSlice(ArcPrimitive target, double t) => ArcPrimitive(
+  target.id,
+  target.center,
+  target.radius,
+  target.innerRadius,
+  target.startAngle,
+  target.sweepAngle * t,
+  fill: target.fill,
+  stroke: target.stroke,
+  strokeWidth: target.strokeWidth,
+);
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
@@ -149,6 +168,7 @@ ChartPrimitive _lerpMark(
       ],
       closed: target.closed,
       fill: target.fill,
+      fillOpacity: target.fillOpacity,
       stroke: target.stroke,
       strokeWidth: target.strokeWidth,
       dash: target.dash,

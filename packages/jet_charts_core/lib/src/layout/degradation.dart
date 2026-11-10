@@ -28,7 +28,7 @@ enum DegradeStep {
   /// The legend goes.
   legend,
 
-  /// The axis titles go.
+  /// The axis titles go, the secondary value axis' among them.
   axisTitles,
 
   /// The chart title goes.
@@ -37,7 +37,8 @@ enum DegradeStep {
   /// The category labels go.
   categoryLabels,
 
-  /// The value axis' tick labels go.
+  /// The value axis' tick labels go, and the secondary value axis' with
+  /// them.
   valueLabels,
 }
 
@@ -46,7 +47,8 @@ enum FrameMisfit {
   /// The plot would be under 1 by 1, or the bands around it do not settle.
   space,
 
-  /// The value axis' tick labels collide, at the coarsest scale it allows
+  /// The value axis' (or the secondary value axis') tick labels collide, at
+  /// the coarsest scale it allows
   /// (an automatic unit; a fixed one is thinned instead).
   valueLabels,
 
@@ -72,6 +74,9 @@ enum FramePart {
 
   /// The category axis' title.
   categoryTitle,
+
+  /// The secondary value axis' title.
+  secondaryTitle,
 }
 
 /// What the frame draws: each flag is true while its part is shown.
@@ -83,8 +88,16 @@ final class FrameShown {
       title = (chart.title?.text ?? '').isNotEmpty,
       valueTitle = (chart.valueAxis.title ?? '').isNotEmpty,
       categoryTitle = (chart.categoryAxis.title ?? '').isNotEmpty,
-      categoryLabels = chart.categoryAxis.visible && resolved.categoryCount > 0,
-      valueLabels = chart.valueAxis.visible;
+      categoryLabels =
+          chart.categoryAxis.visible &&
+          (chart.kind == ChartKind.scatter || resolved.categoryCount > 0),
+      valueLabels = chart.valueAxis.visible,
+      secondaryTitle =
+          resolved.drawsSecondaryAxis &&
+          (chart.secondaryValueAxis?.title ?? '').isNotEmpty,
+      secondaryLabels =
+          resolved.drawsSecondaryAxis &&
+          (chart.secondaryValueAxis?.visible ?? true);
 
   /// Whether the data labels are drawn.
   bool dataLabels;
@@ -107,6 +120,14 @@ final class FrameShown {
   /// Whether the value axis' tick labels are drawn.
   bool valueLabels;
 
+  /// Whether the secondary value axis' title is drawn; false when the chart
+  /// has no secondary value axis to draw.
+  bool secondaryTitle;
+
+  /// Whether the secondary value axis' tick labels are drawn; false when
+  /// the chart has no secondary value axis to draw.
+  bool secondaryLabels;
+
   /// Hides [part], which does not fit its own space.
   void hide(FramePart part) {
     switch (part) {
@@ -118,6 +139,8 @@ final class FrameShown {
         valueTitle = false;
       case FramePart.categoryTitle:
         categoryTitle = false;
+      case FramePart.secondaryTitle:
+        secondaryTitle = false;
     }
   }
 
@@ -131,12 +154,14 @@ final class FrameShown {
       case DegradeStep.axisTitles:
         valueTitle = false;
         categoryTitle = false;
+        secondaryTitle = false;
       case DegradeStep.title:
         title = false;
       case DegradeStep.categoryLabels:
         categoryLabels = false;
       case DegradeStep.valueLabels:
         valueLabels = false;
+        secondaryLabels = false;
     }
   }
 
@@ -179,7 +204,7 @@ final class FrameShown {
             legendPosition == ChartLegendPosition.bottom;
         return legend && (space || along && vertical != bar);
       case DegradeStep.axisTitles:
-        return (valueTitle || categoryTitle) &&
+        return (valueTitle || categoryTitle || secondaryTitle) &&
             (space || along && categoryTitle);
       case DegradeStep.title:
         return title && (space || along && !bar);
@@ -187,7 +212,7 @@ final class FrameShown {
         return categoryLabels &&
             (space || along || misfits.contains(FrameMisfit.categoryRoom));
       case DegradeStep.valueLabels:
-        return valueLabels &&
+        return (valueLabels || secondaryLabels) &&
             (space || misfits.contains(FrameMisfit.valueLabels));
     }
   }

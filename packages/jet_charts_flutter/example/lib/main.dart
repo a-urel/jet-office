@@ -1,7 +1,7 @@
 /// The gallery app of the owner's side-by-side check against Excel for Mac:
 /// every chart of `gallery.dart` drawn by `JetChart` at Excel's default size,
 /// with the overlaps `findOverlaps` finds (none, or the layout is wrong) and
-/// the labels the layout hid.
+/// the labels the layout hid, and a "Monépro look" page (`monepro.dart`).
 library;
 
 import 'package:flutter/material.dart';
@@ -10,6 +10,7 @@ import 'package:jet_charts_flutter/jet_charts_flutter.dart';
 import 'package:jet_core/jet_core.dart';
 
 import 'gallery.dart';
+import 'monepro.dart';
 
 void main() {
   runApp(const GalleryApp());
@@ -88,6 +89,16 @@ final class _GalleryPageState extends State<GalleryPage> {
       appBar: AppBar(
         title: const Text('jet_charts gallery'),
         actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (BuildContext context) =>
+                    MoneproPage(measurer: _measurer),
+              ),
+            ),
+            child: const Text('Monépro look'),
+          ),
+          const SizedBox(width: 16),
           const Text('Türkçe (tr-TR)'),
           Switch(
             value: _turkish,
@@ -112,7 +123,10 @@ final class _GalleryPageState extends State<GalleryPage> {
           const SizedBox(height: 16),
           for (final GalleryEntry entry in _entries)
             _EntryView(
-              entry: entry,
+              caption: entry.name,
+              chart: entry.chart,
+              theme: entry.theme,
+              size: entry.size,
               locale: locale,
               strings: _turkish ? JetChartStrings.tr : JetChartStrings.en,
               measurer: _measurer,
@@ -125,13 +139,19 @@ final class _GalleryPageState extends State<GalleryPage> {
 
 final class _EntryView extends StatelessWidget {
   const _EntryView({
-    required this.entry,
+    required this.caption,
+    required this.chart,
+    required this.theme,
+    required this.size,
     required this.locale,
     required this.strings,
     required this.measurer,
   });
 
-  final GalleryEntry entry;
+  final String caption;
+  final Chart chart;
+  final ChartTheme theme;
+  final ChartSize size;
   final FormatLocale locale;
   final JetChartStrings strings;
   final FlutterTextMeasurer measurer;
@@ -139,9 +159,9 @@ final class _EntryView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ChartLayout layout = layoutChart(
-      entry.chart,
-      theme: ChartTheme.office,
-      size: gallerySize,
+      chart,
+      theme: theme,
+      size: size,
       measurer: measurer,
       locale: locale,
     );
@@ -155,14 +175,14 @@ final class _EntryView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(entry.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(caption, style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           SizedBox(
-            width: gallerySize.width,
-            height: gallerySize.height,
+            width: size.width,
+            height: size.height,
             child: JetChart(
-              chart: entry.chart,
-              theme: ChartTheme.office,
+              chart: chart,
+              theme: theme,
               locale: locale,
               strings: strings,
             ),
@@ -174,6 +194,70 @@ final class _EntryView extends StatelessWidget {
               color: overlaps == 0 ? null : const Color(0xFFB00020),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The "Monépro look" page: the charts of [moneproCharts] in
+/// [moneproLightTheme] and [moneproDarkTheme], side by side, with a line that
+/// says whether the font [moneproFontFamily] was found. Excel has no such
+/// theme: this page is compared with nothing, only looked at.
+final class MoneproPage extends StatelessWidget {
+  /// Creates the page, measuring with [measurer].
+  const MoneproPage({required this.measurer, super.key});
+
+  /// The measurer of the overlap counts and the font check.
+  final FlutterTextMeasurer measurer;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool found = fontFound(measurer, moneproFontFamily);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Monépro look')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: <Widget>[
+          Text(
+            found
+                ? 'Font $moneproFontFamily found.'
+                : 'Font $moneproFontFamily not found: Flutter draws a '
+                      'fallback font.',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          for (final GalleryEntry entry in moneproCharts())
+            Wrap(
+              spacing: 24,
+              children: <Widget>[
+                for (final (String look, ChartTheme theme)
+                    in <(String, ChartTheme)>[
+                      ('light', moneproLightTheme),
+                      ('dark', moneproDarkTheme),
+                    ])
+                  ColoredBox(
+                    color: Color(0xFF000000 | theme.background.rgb),
+                    child: DefaultTextStyle.merge(
+                      style: TextStyle(
+                        color: Color(0xFF000000 | theme.axisLabels.color.rgb),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: _EntryView(
+                          caption: '${entry.name} ($look)',
+                          chart: entry.chart,
+                          theme: moneproTheme(theme, entry),
+                          size: entry.size,
+                          locale: FormatLocale.trTR,
+                          strings: JetChartStrings.tr,
+                          measurer: measurer,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
         ],
       ),
     );

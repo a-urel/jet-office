@@ -69,6 +69,17 @@ typedef LegendLineLook = ({double lineWidth, double markerSize, bool markers});
 /// column, at most a third of [limit]'s width wide and no taller than [area],
 /// centred on [area]'s height. The legend keeps `legendGap` from what is left.
 ///
+/// An entry [outlined] marks (an area series whose theme draws an edge line)
+/// has its square outlined in its colour, `lineLook`'s line width thick.
+///
+/// An entry [markersOnly] marks (a scatter series, drawn as markers without
+/// a line) is its marker alone (`legend/<s>/marker`, no
+/// `legend/<s>/symbol`): a circle of `lineLook`'s marker size in its colour,
+/// centred in a slot as wide as the larger of the square and the marker,
+/// whatever `lineLook.markers` says. That this is how Excel's legend shows a
+/// marker-only scatter series is an estimate, not checked in Excel (pending
+/// E1).
+///
 /// Returns `null` when it does not fit. The `legend` rectangle holds the
 /// entries exactly and has no fill.
 Placed? placeLegend(
@@ -81,19 +92,29 @@ Placed? placeLegend(
   TextMeasurer measurer,
   ChartSpacing spacing, {
   List<bool> lines = const <bool>[],
+  List<bool> outlined = const <bool>[],
+  List<bool> markersOnly = const <bool>[],
   LegendLineLook lineLook = (lineWidth: 1, markerSize: 0, markers: false),
 }) {
   if (names.isEmpty) {
     return Placed(const <ChartPrimitive>[], area);
   }
   bool isLine(int i) => i < lines.length && lines[i];
-  double symbolWidth(int i) =>
-      isLine(i) ? spacing.legendLineSymbol : spacing.legendSymbol;
+  bool isOutlined(int i) => i < outlined.length && outlined[i];
+  bool isMarker(int i) => i < markersOnly.length && markersOnly[i];
+  double symbolWidth(int i) => isMarker(i)
+      ? math.max(spacing.legendSymbol, lineLook.markerSize)
+      : isLine(i)
+      ? spacing.legendLineSymbol
+      : spacing.legendSymbol;
   final List<ChartSize> sizes = <ChartSize>[
     for (final String name in names) measurer.measure(name, style),
   ];
   double rowHeight = spacing.legendSymbol;
   if (lineLook.markers && lines.contains(true)) {
+    rowHeight = math.max(rowHeight, lineLook.markerSize);
+  }
+  if (markersOnly.contains(true)) {
     rowHeight = math.max(rowHeight, lineLook.markerSize);
   }
   for (final ChartSize size in sizes) {
@@ -167,7 +188,21 @@ Placed? placeLegend(
     double x = sideways ? left : left + (width - rowWidth) / 2;
     final double y = top + r * (rowHeight + spacing.minTextGap);
     for (final int i in row) {
-      if (isLine(i)) {
+      if (isMarker(i)) {
+        entries.add(
+          ArcPrimitive(
+            ids.legendMarkerId(i),
+            ChartPoint(x + symbolWidth(i) / 2, y + rowHeight / 2),
+            lineLook.markerSize / 2,
+            0,
+            0,
+            360,
+            fill: colors[i],
+            stroke: colors[i],
+            strokeWidth: markerOutlineWidth,
+          ),
+        );
+      } else if (isLine(i)) {
         final double middle = y + rowHeight / 2;
         final double length = spacing.legendLineSymbol;
         entries.add(
@@ -204,6 +239,8 @@ Placed? placeLegend(
               spacing.legendSymbol,
             ),
             fill: colors[i],
+            stroke: isOutlined(i) ? colors[i] : null,
+            strokeWidth: isOutlined(i) ? lineLook.lineWidth : 1,
           ),
         );
       }

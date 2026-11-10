@@ -7,14 +7,20 @@ lays out; `jet_office` writes and reads the model as a chart in XLSX and DOCX.
 The record of the design is the repository root's
 `docs/decisions/0014-chart-phase-and-drawingml-layer.md`.
 
-Milestones J1, J2 and J3 are done, and the owner's full axis oracle run is
+Milestones J1, J2 and J3 are done, and J4 is done but its Excel check (E1, the
+owner's `chart_reference_j4.xlsx`, and E2, the J4 gallery side by side:
+`docs/excel-checks.md`, "J4 values"), and the owner's full axis oracle run is
 recorded (`docs/axis-scaling.md`, "Findings"). The package exports the model,
 the theme, the drawing primitives and the text measurer (J1), the value scale
 (`autoValueScale`), the layout (`layoutChart`) and the overlap check
 (`findOverlaps`) (J2). J3 added element ids and `hitTestLayout`,
 `ChartLayout.categoryBands`, the tooltip (`chartTooltipAt`, `chartTooltipFor`,
 `ChartTooltipStyle`), `summarizeChart`, and the Office border and no value axis
-line; the renderer is `jet_charts_flutter`.
+line; the renderer is `jet_charts_flutter`. J4 added pies, donuts, sparklines,
+scatter and combination charts, per-series kind, the secondary value axis,
+smooth lines, point colours, translucent areas with an edge line, pie data
+labels with `minShare`, `ChartTheme.fromColors` and `ChartSummary`'s shares,
+centre text and x values; `docs/parity.md` lists their deliberate differences.
 
 ## The packages
 
@@ -106,7 +112,12 @@ states the rule and the findings.
 `TextMeasurer` into a `ChartLayout`: `primitives` in paint order and `hidden`,
 the labels it left out (`ChartHiddenLabel`). Column, bar, line and area charts
 of every grouping are laid out; the frame comes first (`frame.dart`), the axes
-and category labels (`axis_layout.dart`), marks, data labels, legend.
+and category labels (`axis_layout.dart`), marks, data labels, legend. Pie and
+donut charts are laid out on the polar frame (`polar.dart`, clock angles from
+twelve o'clock, meant for later polar kinds too) by `pie_layout.dart`, their
+labels by `pie_labels.dart` (inside the slice, else outside a pie with a
+leader line, else hidden; `ChartDataLabels.minShare` leaves small slices
+unlabelled) and a donut's centre text in the hole.
 
 - Collision rules: category labels wrap at spaces (level, at most three
   lines), turn (0, -45, -90 degrees), skip every `N`th or are cut with an
@@ -114,7 +125,8 @@ and category labels (`axis_layout.dart`), marks, data labels, legend.
   data labels give way to text, the legend, bars, markers and lines other
   than their own bar (not to area fills), and each other (a column or bar
   label outside its bar's end may leave the plot, one inside a bar must fit
-  in it and is white on a dark bar), and those that cannot be placed go to
+  in it and reads against the bar: the lighter or darker of the label colour
+  and the background, `insideLabelStyle`), and those that cannot be placed go to
   `hidden` (`degradation.dart` orders what goes first). A line marks every
   point only when its category step is at least `markerSize` plus 2 pt, else
   only its lone points (`lineMarkersFit`; Excel marks them all, `parity.md`).
@@ -147,9 +159,19 @@ and line breaks in text, fixed bounds with a fixed major unit down to `5e-324`
 or one to ignore, format codes on axes, series and data labels, tiny to large
 sizes) and requires of each that `layoutChart` throws nothing,
 every number is finite, `findOverlaps` finds nothing and every primitive lies
-inside the size (marks inside a clip are checked for finiteness only). The gate
+inside the size (marks inside a clip are checked for finiteness only). The J4
+fields come from a second `Random`, so they never move the cases above: pie,
+donut, sparkline, scatter and combination charts, series `kind`s of every
+`ChartKind` and random `axis` bindings with and without `secondaryValueAxis`,
+`smooth`, `pointColors` (null entries, shorter and longer than the data),
+`holeSizePercent` 10 to 90, `centerText` (empty, long, with line breaks),
+`showValue`, `showPercent` and `minShare`, and themes with `areaOpacity`,
+`areaLine`, `sliceBorderWidth` and `sparklineWidth` from 0 to 1e4, and
+`ChartTheme.fromColors` in light and dark. The gate
 runs seeds 1 to 4 with 100 cases each, the same cases on the VM and in Chrome
-(a fingerprint test proves it); longer runs by hand:
+(a fingerprint test proves it), and a test counts that those cases draw each
+J4 kind, a secondary series, a donut's centre text and a `fromColors` theme;
+longer runs by hand:
 
 ```bash
 dart run tool/fuzz_layout.dart --seeds 1-200 --cases 1000
@@ -183,11 +205,24 @@ by hand, then fix it.
 - Follow the surrounding code: explicit types, dartdoc on every public member,
   plain sentences.
 
-## Open for J4 and C1
+## Open for J5, C2 and C3
 
-- Pies, donut, sparkline, scatter, combination charts, per-series kind and
-  the secondary axis (J4).
-- Excel's time-scale date axis (owner decision O2; dates are categories).
+- J4's Excel values (first slice angle, hole size, outline, colours, scatter
+  and secondary axis defaults, sparkline width, the smooth curve, the label
+  leader line) are estimates, not checked in Excel, until the owner's E1 and
+  E2 (`docs/excel-checks.md`, "J4 values"); J4 is "done but its Excel check".
+- Not done: Excel's other scatter styles (lines with or without markers,
+  smooth), a bar chart's secondary axis, rounded bar corners (a Monépro
+  nice-to-have), gradient fills, and a pie's data label threshold as Excel
+  has it (`minShare` is screen only). Every other Excel chart kind
+  (3D, `cx:` kinds, bubble, stock, radar, surface, trendlines, error bars) is
+  covered eventually (decision 0017): J4 kept the model's enums open, the
+  polar layout in its own module, and the axis roles and ids extensible by
+  name.
+- Writing pie, donut, scatter, combination and secondary-axis charts in
+  DrawingML is C2 and C3; the writer refuses them until then.
+- Excel's time-scale date axis (owner decision O2; dates are categories, a
+  scatter chart's dates are serials on a value axis).
 - The en-US and de-DE oracle regions are unverified; so are fonts other than
   8, 10 and 18, and plot margins.
 - The owner's J3 gallery check against Excel for Mac (decision O3) is done
@@ -221,6 +256,15 @@ by hand, then fix it.
   dropped whole for one long name; near-equal huge values (relative spread
   about 1e-14) can put the data top above the axis; the "data labels first"
   degradation is nominal.
+- Deferred J4 minors: `ChartDataLabels.toString` omits the new flags; a
+  pie's 3 % label can be hidden behind a 4 % slice's leader line (no
+  overlap; Excel shows both); percent
+  stacked combination lines are drawn from raw values (Excel unchecked);
+  `fromColors` takes the Office tooltip padding; a scatter `DateTime` becomes
+  its serial through `jet_core`'s General text, as it exports no serial
+  function; a line series' point colour with markers off draws and writes a
+  lone circle marker (Excel unchecked); labels shown with `showValue: false`
+  read back hidden (the chart reads untyped).
 - Minor: `public_api_test` asserts the exact formatted export text.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
 

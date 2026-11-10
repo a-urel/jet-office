@@ -15,8 +15,10 @@ import 'frame.dart';
 import 'frame_paint.dart' show backgroundPrimitive;
 import 'geometry.dart';
 import 'legend_layout.dart';
+import 'pie_layout.dart';
 import 'primitives.dart';
 import 'resolve.dart';
+import 'sparkline_layout.dart';
 import 'text_measurer.dart';
 
 /// A text the layout did not draw, kept so a tooltip can still show it.
@@ -50,6 +52,7 @@ final class ChartLayout {
     required List<ChartPrimitive> primitives,
     this.plotArea,
     this.valueScale,
+    this.secondaryValueScale,
     List<ChartHiddenLabel> hidden = const <ChartHiddenLabel>[],
     List<ChartRect> categoryBands = const <ChartRect>[],
   }) : primitives = List<ChartPrimitive>.unmodifiable(primitives),
@@ -75,17 +78,32 @@ final class ChartLayout {
   ///   each.
   /// * `legend/<s>/symbol` and `legend/<s>/text`: the legend entry of series
   ///   `<s>`; a line series' entry also has `legend/<s>/marker`, the marker
-  ///   on its line, when the theme's `lineMarkers` is on.
+  ///   on its line, when the theme's `lineMarkers` is on; a scatter series'
+  ///   entry is `legend/<s>/marker`, its marker alone, and its text.
   /// * `axis/<a>/line`, `axis/<a>/label/<i>` and `axis/<a>/title`, where `<a>`
   ///   is `value` or `category`: the axis line, its label `<i>` (a value
   ///   axis' tick `<i>` from its minimum, a category axis' category `<i>`) and
   ///   its title.
-  /// * `grid/<a>/<i>`: grid line `<i>` of axis `<a>`.
+  /// * `axis/secondary/line`, `axis/secondary/label/<i>` and
+  ///   `axis/secondary/title`: the secondary value axis, on the plot's
+  ///   right, of a chart with series bound to it.
+  /// * `grid/<a>/<i>`: grid line `<i>` of axis `<a>` (`value`, `category` or
+  ///   `secondary`).
   /// * `series/<s>/bar/<c>`, `series/<s>/line/<run>`, `series/<s>/marker/<c>`
   ///   and `series/<s>/area`: the marks of series `<s>` at category `<c>`; a
   ///   gap in the data starts a new line run, and a marker is the circle on a
   ///   line's point.
   /// * `label/<s>/<c>`: the data label of series `<s>` at category `<c>`.
+  /// * `series/<s>/slice/<c>`: the slice of series `<s>` at category `<c>` in
+  ///   a pie or donut; `label/<s>/<c>/leader`: the leader line (an open path)
+  ///   from that slice to its data label placed outside the pie; `center`: a
+  ///   donut's centre text.
+  /// * In a pie or donut a legend entry `legend/<i>/symbol`,
+  ///   `legend/<i>/text` is category `<i>`, as its legend lists categories.
+  /// * In a scatter chart the horizontal value axis keeps the category
+  ///   axis' ids: `axis/category/label/<i>` and `grid/category/<i>` are its
+  ///   tick `<i>` from its minimum, and `series/<s>/marker/<i>` and
+  ///   `label/<s>/<i>` are point `<i>` of series `<s>`.
   ///
   /// [ChartElementId.parse] is the exact inverse of this scheme: it reads
   /// every id above into its kind, axis, series, category and index, and
@@ -93,21 +111,32 @@ final class ChartLayout {
   final List<ChartPrimitive> primitives;
 
   /// The plot area, or `null` when there is none: a kind this version does
-  /// not draw, or a chart too small for one.
+  /// not draw, or a chart too small for one. In a pie or donut it is the
+  /// square that holds the pie.
   final ChartRect? plotArea;
 
-  /// The value axis' scale, or `null` when there is no plot area.
+  /// The value axis' scale, or `null` when there is no plot area or no value
+  /// axis (a pie or donut); in a scatter chart, the vertical axis' scale.
+  /// With a secondary value axis it is the primary one's.
   final ValueScale? valueScale;
+
+  /// The secondary value axis' scale, or `null` when none is drawn: no
+  /// series is measured on it (see `ChartSeries.axis`; a bar chart, or a
+  /// chart whose every series is bound to it, measures all on the primary
+  /// axis), none of its series has a finite value, or there is no plot.
+  final ValueScale? secondaryValueScale;
 
   /// The texts left out because they did not fit, grouped in the
   /// degradation order whatever the order they were taken away in: data
   /// labels first (each one that found no place, or all of them when only
-  /// the background is drawn), then legend entries, the value and category
-  /// axis titles, the title, category labels (every one not shown and every
-  /// cut one, with its full text), and value tick labels (all of them when
-  /// they go, or the ones a fixed unit's thinning left out); each group in
-  /// index order. A kind this version does not draw lists its title and its
-  /// placeholder. Each id is one [primitives] describes.
+  /// the background is drawn), then legend entries, the value, category and
+  /// secondary value axis titles, the title, a donut's centre text, category
+  /// labels (every one not shown and every cut one, with its full text), and
+  /// value tick labels (all of them when they go, or the ones a fixed unit's
+  /// thinning left out), then the secondary value axis' tick labels
+  /// likewise; each group in index order. A kind this version does not draw
+  /// lists its title and its placeholder. Each id is one [primitives]
+  /// describes.
   final List<ChartHiddenLabel> hidden;
 
   /// Each category's slice of [plotArea], in category order: band `i` is
@@ -118,8 +147,9 @@ final class ChartLayout {
   /// grid lines are drawn, except in an area chart, whose categories sit on
   /// the grid lines (on tick marks) and whose bands reach halfway to each
   /// neighbour, so the first and last are half as wide. Empty when there is
-  /// no plot area or no category. A backend uses them to find the category
-  /// under a point.
+  /// no plot area or no category, and in a pie, a donut or a scatter chart,
+  /// whose horizontal axis is a value axis. A backend uses them
+  /// to find the category under a point.
   final List<ChartRect> categoryBands;
 
   @override
@@ -128,6 +158,7 @@ final class ChartLayout {
       size == other.size &&
       plotArea == other.plotArea &&
       valueScale == other.valueScale &&
+      secondaryValueScale == other.secondaryValueScale &&
       listValueEquals(primitives, other.primitives) &&
       listValueEquals(hidden, other.hidden) &&
       listValueEquals(categoryBands, other.categoryBands);
@@ -137,6 +168,7 @@ final class ChartLayout {
     size,
     plotArea,
     valueScale,
+    secondaryValueScale,
     listValueHash(primitives),
     listValueHash(hidden),
     listValueHash(categoryBands),
@@ -153,9 +185,21 @@ final class ChartLayout {
 ///
 /// Column, bar, line and area charts get a frame: background, title, legend,
 /// axis titles, tick and category labels, grid lines, axis lines and the plot.
-/// Every other kind draws the background, the title if any, and a
-/// `placeholder` text of the chart's `unsupportedName`, else its kind's name,
-/// centred in what is left; the placeholder is hidden when it does not fit.
+/// A scatter chart gets the same frame with a second value axis in place of
+/// the category axis, and a marker per point (`scatter_layout.dart`).
+/// A combination chart is framed as a column chart, each series drawn as
+/// its own column, line or area (`drawnKinds`): areas first, then columns,
+/// then lines. Series bound to the secondary axis (in a column, line, area
+/// or combination chart, when some series is bound to the primary one) are
+/// measured on a second value axis on the plot's right, `secondaryValueAxis`
+/// (no gridlines unless set; an estimate, not checked in Excel).
+/// Pie and donut charts are laid out around a centre, with their data labels
+/// inside the slices or, in a pie, outside with leader lines, and a donut's
+/// centre text (`pie_layout.dart`). A sparkline draws only its lines, on the
+/// background and without a border (`sparkline_layout.dart`). Every other
+/// kind draws the background, the title if any, and a `placeholder` text of
+/// the chart's `unsupportedName`, else its kind's name, centred in what is
+/// left; the placeholder is hidden when it does not fit.
 ///
 /// Category labels that crowd are skipped, then turned, then cut with `…`.
 /// Tick labels that crowd take a coarser unit, or, at a fixed unit, are
@@ -190,9 +234,15 @@ ChartLayout layoutChart(
     case ChartKind.bar:
     case ChartKind.line:
     case ChartKind.area:
+    case ChartKind.scatter:
+    case ChartKind.combination:
+      // A scatter chart's points are not grouped: its grouping is ignored.
+      final Chart framed = chart.kind == ChartKind.scatter
+          ? chart.copyWith(grouping: ChartGrouping.clustered)
+          : chart;
       final FrameLayout frame = layoutFrame(
-        chart,
-        resolveChart(chart, theme, formatter),
+        framed,
+        resolveChart(framed, theme, formatter),
         theme: theme,
         size: size,
         measurer: measurer,
@@ -203,6 +253,7 @@ ChartLayout layoutChart(
         primitives: frame.primitives,
         plotArea: frame.geometry?.plot,
         valueScale: frame.geometry?.scale,
+        secondaryValueScale: frame.geometry?.secondaryScale,
         hidden: <ChartHiddenLabel>[
           for (final (String id, String text) in frame.hidden)
             ChartHiddenLabel(id, text),
@@ -211,9 +262,36 @@ ChartLayout layoutChart(
       );
     case ChartKind.pie:
     case ChartKind.donut:
-    case ChartKind.scatter:
+      final PieLayout pie = layoutPie(
+        chart,
+        resolveChart(chart, theme, formatter),
+        theme: theme,
+        size: size,
+        measurer: measurer,
+        formatter: formatter,
+      );
+      return ChartLayout(
+        size: size,
+        primitives: pie.primitives,
+        plotArea: pie.plot,
+        hidden: <ChartHiddenLabel>[
+          for (final (String id, String text) in pie.hidden)
+            ChartHiddenLabel(id, text),
+        ],
+      );
     case ChartKind.sparkline:
-    case ChartKind.combination:
+      final SparklineLayout spark = layoutSparkline(
+        chart,
+        resolveChart(chart, theme, formatter),
+        theme: theme,
+        size: size,
+      );
+      return ChartLayout(
+        size: size,
+        primitives: spark.primitives,
+        plotArea: spark.plot,
+        categoryBands: spark.categoryBands,
+      );
     case ChartKind.unsupported:
       return _placeholder(chart, theme, size, measurer);
   }

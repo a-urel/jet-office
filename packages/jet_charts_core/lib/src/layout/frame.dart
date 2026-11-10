@@ -29,7 +29,6 @@ import 'package:jet_core/jet_core.dart';
 
 import '../model/chart.dart';
 import '../model/chart_kind.dart';
-import '../model/chart_series.dart';
 import '../scale/value_scale.dart';
 import '../theme/chart_theme.dart';
 import 'axis_layout.dart';
@@ -44,13 +43,20 @@ import 'text_measurer.dart';
 /// Where the frame put the plot and its scale.
 final class FrameGeometry {
   /// Creates the geometry of a laid out frame.
-  const FrameGeometry({required this.plot, required this.scale});
+  const FrameGeometry({
+    required this.plot,
+    required this.scale,
+    this.secondaryScale,
+  });
 
   /// The plot area.
   final ChartRect plot;
 
   /// The value axis' scale.
   final ValueScale scale;
+
+  /// The secondary value axis' scale, or `null` when there is none to draw.
+  final ValueScale? secondaryScale;
 }
 
 /// A laid out frame.
@@ -80,8 +86,22 @@ final class FrameLayout {
   final List<ChartRect> categoryBands;
 }
 
-/// Lays out the frame of [chart] (column, bar, line or area), whose data is
-/// [resolved], on [size].
+/// Lays out the frame of [chart] (column, bar, line, area or scatter), whose
+/// data is [resolved], on [size].
+///
+/// A scatter chart's category axis is a second value axis, horizontal under
+/// the plot: its scale is `autoValueScale` of the x values' extent at the
+/// plot's width (`excelMaxIntervals`, horizontal), taking the next coarser
+/// step while its tick labels collide, or, at a fixed unit, thinned to every
+/// k-th label, as the vertical axis' labels; its labels go where category
+/// labels on tick marks would, and have no category bands.
+///
+/// A secondary value axis (`ResolvedChart.drawsSecondaryAxis`) stands on the plot's right:
+/// its scale is `autoValueScale` of its series' extent at the same plot
+/// height, coarsened or thinned as the primary one, and its tick labels and
+/// title take the right side's band before the plot is fixed. Category
+/// labels that reach past the plot's right then keep clear of its lowest
+/// tick label, as they do of the primary one's on the left.
 FrameLayout layoutFrame(
   Chart chart,
   ResolvedChart resolved, {
@@ -111,13 +131,19 @@ FrameLayout layoutFrame(
       return FrameLayout(
         primitives: painted.primitives,
         hidden: frame.hiddenTexts(wanted, shown, attempt, painted.hiddenData),
-        geometry: FrameGeometry(plot: attempt.plot!, scale: attempt.scale!),
-        categoryBands: categoryBands(
-          resolved.categoryCount,
-          attempt.plot!,
-          vertical: frame.bar,
-          onTicks: frame.onTicks,
+        geometry: FrameGeometry(
+          plot: attempt.plot!,
+          scale: attempt.scale!,
+          secondaryScale: attempt.secondaryScale,
         ),
+        categoryBands: frame.scatter
+            ? const <ChartRect>[]
+            : categoryBands(
+                resolved.categoryCount,
+                attempt.plot!,
+                vertical: frame.bar,
+                onTicks: frame.onTicks,
+              ),
       );
     }
     DegradeStep? next;
@@ -147,6 +173,16 @@ FrameLayout layoutFrame(
     shown.take(next);
   }
 }
+
+/// A value axis other than the primary one (a scatter chart's horizontal
+/// axis, the secondary value axis): its scale, every tick label, every
+/// how many of them are drawn, and whether those keep apart.
+typedef _XAxis = ({
+  ValueScale scale,
+  List<MeasuredLabel> labels,
+  int stride,
+  bool apart,
+});
 
 /// The insets of the plot from the area the axes share with it.
 typedef _Bands = ({double left, double top, double right, double bottom});
@@ -191,10 +227,15 @@ extension on FrameContext {
         measurer,
         theme.spacing,
         lines: <bool>[
-          for (final ChartSeries series in chart.series)
-            chart.kind == ChartKind.line ||
-                (chart.kind == ChartKind.combination &&
-                    series.kind == ChartKind.line),
+          for (int i = 0; i < chart.series.length; i++)
+            resolved.kindOf(i) == ChartKind.line,
+        ],
+        outlined: <bool>[
+          for (int i = 0; i < chart.series.length; i++)
+            theme.areaLine && resolved.kindOf(i) == ChartKind.area,
+        ],
+        markersOnly: <bool>[
+          for (int i = 0; i < chart.series.length; i++) scatter,
         ],
         lineLook: (
           lineWidth: theme.lineWidth,
@@ -216,18 +257,38 @@ extension on FrameContext {
       shown.categoryTitle,
       chart.categoryAxis.title,
     );
+    final ChartSize? secondaryTitle = titleSize(
+      shown.secondaryTitle,
+      secondaryAxis.title,
+    );
+    _XAxis? second(ChartRect plot) =>
+        secondary ? _secondAxis(plot, shown: shown.secondaryLabels) : null;
 
     _Bands bands = (left: 0, top: 0, right: 0, bottom: 0);
     ValueScale? scale;
     List<MeasuredLabel> labels = const <MeasuredLabel>[];
-    _Bands need(List<MeasuredLabel> labels, ChartRect plot) => _bandsFor(
-      inner,
-      shown,
-      labels,
-      _plan(shown, inner, plot, labels, valueTitle, categoryTitle),
-      valueTitle,
-      categoryTitle,
-    );
+    _Bands need(List<MeasuredLabel> labels, ChartRect plot) {
+      final _XAxis? y2 = second(plot);
+      return _bandsFor(
+        inner,
+        shown,
+        labels,
+        _plan(
+          shown,
+          inner,
+          plot,
+          labels,
+          valueTitle,
+          categoryTitle,
+          secondary: y2,
+        ),
+        valueTitle,
+        categoryTitle,
+        secondary: y2,
+        secondaryTitle: secondaryTitle,
+      );
+    }
+
     // At most 12 passes: from the fifth the bands only widen, so the plot
     // only shrinks and the passes settle.
     for (int pass = 0; pass < 12; pass++) {
@@ -265,7 +326,11 @@ extension on FrameContext {
       }
     }
     // The category labels' plan on the final plot must fit the bands kept
-    // for it; widen them a few times if not.
+    // for it; widen them a few times if not. A scatter chart's horizontal
+    // axis is found once per plot and goes into both its plan and the
+    // attempt.
+    _XAxis? x = scatter ? _xAxis(plot, shown: shown.categoryLabels) : null;
+    _XAxis? y2 = second(plot);
     CategoryLabelPlan plan = _plan(
       shown,
       inner,
@@ -273,6 +338,8 @@ extension on FrameContext {
       labels,
       valueTitle,
       categoryTitle,
+      x: x,
+      secondary: y2,
     );
     bool settled = false;
     for (int i = 0; i < 4; i++) {
@@ -283,6 +350,8 @@ extension on FrameContext {
         plan,
         valueTitle,
         categoryTitle,
+        secondary: y2,
+        secondaryTitle: secondaryTitle,
       );
       if (_within(needed, bands)) {
         settled = true;
@@ -290,7 +359,18 @@ extension on FrameContext {
       }
       bands = _widest(bands, needed);
       plot = _deflate(inner, bands);
-      plan = _plan(shown, inner, plot, labels, valueTitle, categoryTitle);
+      x = scatter ? _xAxis(plot, shown: shown.categoryLabels) : null;
+      y2 = second(plot);
+      plan = _plan(
+        shown,
+        inner,
+        plot,
+        labels,
+        valueTitle,
+        categoryTitle,
+        x: x,
+        secondary: y2,
+      );
     }
     // A fixed unit cannot be coarsened: draw every stride-th tick label
     // instead, the smallest stride whose labels keep apart and stay inside
@@ -309,7 +389,9 @@ extension on FrameContext {
     }
     final Set<FrameMisfit> misfits = <FrameMisfit>{
       if (!settled || !(plot.width >= 1 && plot.height >= 1)) FrameMisfit.space,
-      if (shown.valueLabels && !valueLabelsFit()) FrameMisfit.valueLabels,
+      if (shown.valueLabels && !valueLabelsFit() ||
+          shown.secondaryLabels && y2 != null && !y2.apart)
+        FrameMisfit.valueLabels,
       if (shown.categoryLabels && !plan.fits)
         plan.cramped ? FrameMisfit.categoryRoom : FrameMisfit.categoryLabels,
     };
@@ -322,8 +404,18 @@ extension on FrameContext {
           categoryTitle.width > _titleSpan(inner, plot, rotated: bar)) {
         return FrameAttempt(misfit: FramePart.categoryTitle);
       }
+      if (secondaryTitle != null &&
+          secondaryTitle.width > _titleSpan(inner, plot, rotated: true)) {
+        return FrameAttempt(misfit: FramePart.secondaryTitle);
+      }
     }
     return FrameAttempt(
+      xScale: x?.scale,
+      xLabels: x?.labels ?? const <MeasuredLabel>[],
+      xStride: x?.stride ?? 1,
+      secondaryScale: y2?.scale,
+      secondaryLabels: y2?.labels ?? const <MeasuredLabel>[],
+      secondaryStride: y2?.stride ?? 1,
       misfits: misfits,
       title: title,
       legend: legend,
@@ -333,7 +425,7 @@ extension on FrameContext {
       valueLabels: labels,
       valueStride: stride,
       plan: plan,
-      categoryOffset: _categoryOffset(shown, labels, plan),
+      categoryOffset: _categoryOffset(shown, labels, plan, y2),
     );
   }
 
@@ -399,15 +491,18 @@ extension on FrameContext {
   /// space left for the plot and the band across the category axis: [inner]
   /// less the category title's band and the tick labels' overhang at the
   /// far end, less the label gap (or the larger offset of
-  /// [_categoryOffset]).
+  /// [_categoryOffset]). A scatter chart's plan takes its horizontal axis
+  /// [x] on [plot] when the caller has it, else finds it.
   CategoryLabelPlan _plan(
     FrameShown shown,
     ChartRect inner,
     ChartRect plot,
     List<MeasuredLabel> labels,
     ChartSize? valueTitle,
-    ChartSize? categoryTitle,
-  ) {
+    ChartSize? categoryTitle, {
+    _XAxis? x,
+    _XAxis? secondary,
+  }) {
     if (!shown.categoryLabels) {
       return CategoryLabelPlan.none();
     }
@@ -441,10 +536,22 @@ extension on FrameContext {
         : categoryTitle.height + gap;
     final double cross =
         (bar ? inner.width : inner.height) - overhang - titleBand;
+    if (scatter) {
+      return _xPlan(
+        plot,
+        x ?? _xAxis(plot, shown: true),
+        maxDepth: 0.4 * cross - _largestOffset(shown, labels, secondary),
+        // The first label is centred on the axis' start, as a category
+        // label on tick marks: it may reach into the y labels' band and the
+        // edge room, the room turned labels get.
+        roomBefore: turnedRoom,
+        roomAfter: edgeAfter + inner.right - plot.right,
+      );
+    }
     return planCategoryLabels(
       categoryLabels,
       bar ? plot.height : plot.width,
-      maxDepth: 0.4 * cross - _largestOffset(shown, labels),
+      maxDepth: 0.4 * cross - _largestOffset(shown, labels, secondary),
       roomBefore: room,
       turnedRoomBefore: turnedRoom,
       roomAfter:
@@ -454,6 +561,145 @@ extension on FrameContext {
       measurer: measurer,
       style: theme.axisLabels,
       onTicks: onTicks,
+    );
+  }
+
+  /// A scatter chart's horizontal axis on [plot]: the scale of the most
+  /// intervals the plot's width allows, and when its tick labels are
+  /// [shown], the next coarser step while they collide, or at a fixed unit
+  /// every k-th of them (its `stride`); whether those keep apart.
+  _XAxis _xAxis(ChartRect plot, {required bool shown}) {
+    final double size = theme.axisLabels.size;
+    final int most = plot.width > 0
+        ? excelMaxIntervals(
+            plot.width,
+            horizontal: true,
+            fontSize: size.isFinite && size > 0 ? size : 0,
+          )
+        : 1;
+    ValueScale scale = xScaleFor(most);
+    List<MeasuredLabel> labels = xTickLabels(scale);
+    if (!shown) {
+      return (scale: scale, labels: labels, stride: 1, apart: true);
+    }
+    bool fit(int stride) => valueLabelsFit(
+      labels,
+      scale,
+      plot,
+      horizontal: true,
+      minTextGap: theme.spacing.minTextGap,
+      stride: stride,
+    );
+    for (int intervals = most - 1; intervals >= 1 && !fit(1); intervals--) {
+      final ValueScale coarser = xScaleFor(intervals);
+      if (coarser == scale) {
+        continue;
+      }
+      scale = coarser;
+      labels = xTickLabels(coarser);
+    }
+    int stride = 1;
+    if (fixedXUnit) {
+      while (stride < labels.length && !fit(stride)) {
+        stride++;
+      }
+    }
+    return (scale: scale, labels: labels, stride: stride, apart: fit(stride));
+  }
+
+  /// The secondary value axis on [plot], found as the primary one: the
+  /// scale of the most intervals the plot's height allows, and when its
+  /// tick labels are [shown], the next coarser step while they collide, or
+  /// at a fixed unit every k-th of them; whether those keep apart and,
+  /// at a fixed unit, inside the chart.
+  _XAxis _secondAxis(ChartRect plot, {required bool shown}) {
+    ValueScale scale = secondaryScaleFor(_maxIntervals(plot));
+    List<MeasuredLabel> labels = secondaryTickLabels(scale);
+    if (!shown) {
+      return (scale: scale, labels: labels, stride: 1, apart: true);
+    }
+    bool fit(int stride) => valueLabelsFit(
+      labels,
+      scale,
+      plot,
+      horizontal: false,
+      minTextGap: theme.spacing.minTextGap,
+      stride: stride,
+    );
+    for (
+      int intervals = _maxIntervals(plot) - 1;
+      intervals >= 1 && !fit(1);
+      intervals--
+    ) {
+      final ValueScale coarser = secondaryScaleFor(intervals);
+      if (coarser == scale) {
+        continue;
+      }
+      scale = coarser;
+      labels = secondaryTickLabels(coarser);
+    }
+    int stride = 1;
+    if (fixedSecondaryUnit) {
+      while (stride < labels.length && !fit(stride)) {
+        stride++;
+      }
+    }
+    return (scale: scale, labels: labels, stride: stride, apart: fit(stride));
+  }
+
+  /// A scatter chart's horizontal tick labels of [x] on [plot] (found with
+  /// its labels shown) as a category label
+  /// plan, so the frame keeps their band and room as for labels on tick
+  /// marks: level, each centred on its tick; its band as deep as the tallest
+  /// label, which must be within [maxDepth]; reaching past the axis' ends no
+  /// further than [roomBefore] and [roomAfter], which it asks the frame to
+  /// keep as its reserves. A plan whose labels keep apart and within the
+  /// depth but lack that room is cramped.
+  CategoryLabelPlan _xPlan(
+    ChartRect plot,
+    _XAxis x, {
+    required double maxDepth,
+    required double roomBefore,
+    required double roomAfter,
+  }) {
+    const double tolerance = 1e-9;
+    final List<int> drawn = <int>[
+      for (
+        int i = 0;
+        i < x.labels.length && i < x.scale.ticks.length;
+        i += x.stride
+      )
+        i,
+    ];
+    double thickness = 0;
+    double before = 0;
+    double after = 0;
+    for (final int i in drawn) {
+      final ChartSize s = x.labels[i].size;
+      final double at = valuePosition(
+        x.scale.ticks[i],
+        x.scale,
+        plot,
+        horizontal: true,
+      );
+      thickness = math.max(thickness, s.height);
+      before = math.max(before, plot.left - (at - s.width / 2));
+      after = math.max(after, at + s.width / 2 - plot.right);
+    }
+    final bool deep = thickness <= maxDepth + tolerance;
+    final bool roomy =
+        before <= roomBefore + tolerance && after <= roomAfter + tolerance;
+    final bool apart = x.apart && plot.width > 0;
+    return CategoryLabelPlan(
+      fits: apart && deep && roomy,
+      thickness: thickness,
+      shown: drawn,
+      labels: <MeasuredLabel>[for (final int i in drawn) x.labels[i]],
+      before: before,
+      after: after,
+      reserveBefore: before,
+      reserveAfter: after,
+      cramped: apart && deep && !roomy,
     );
   }
 
@@ -492,26 +738,48 @@ extension on FrameContext {
   }
 
   /// The category labels' offset from the plot when they reach past the
-  /// axis' start under the first tick label: clear of that label.
-  double _largestOffset(FrameShown shown, List<MeasuredLabel> labels) {
-    if (!shown.valueLabels || labels.isEmpty) {
-      return gap;
+  /// axis' start under the first tick label: clear of that label, and of
+  /// the [secondary] value axis' first tick label at the plot's right when
+  /// its labels are shown.
+  double _largestOffset(
+    FrameShown shown,
+    List<MeasuredLabel> labels, [
+    _XAxis? secondary,
+  ]) {
+    double offset = gap;
+    if (shown.valueLabels && labels.isNotEmpty) {
+      final ChartSize first = labels.first.size;
+      offset = math.max(
+        offset,
+        (bar ? first.width : first.height) / 2 + theme.spacing.minTextGap,
+      );
     }
-    final ChartSize first = labels.first.size;
-    return math.max(
-      gap,
-      (bar ? first.width : first.height) / 2 + theme.spacing.minTextGap,
-    );
+    if (shown.secondaryLabels &&
+        secondary != null &&
+        secondary.labels.isNotEmpty) {
+      offset = math.max(
+        offset,
+        secondary.labels.first.size.height / 2 + theme.spacing.minTextGap,
+      );
+    }
+    return offset;
   }
 
   /// The category labels' offset from the plot: the label gap, or clear of
   /// the first tick label (at the axis' start) when [plan]'s labels reach
-  /// further than the label gap past that start.
+  /// further than the label gap past that start, or clear of the
+  /// [secondary] value axis' first tick label when they reach further than
+  /// the label gap past the axis' end.
   double _categoryOffset(
     FrameShown shown,
     List<MeasuredLabel> labels,
-    CategoryLabelPlan plan,
-  ) => plan.before > gap ? _largestOffset(shown, labels) : gap;
+    CategoryLabelPlan plan, [
+    _XAxis? secondary,
+  ]) =>
+      plan.before > gap ||
+          (shown.secondaryLabels && secondary != null && plan.after > gap)
+      ? _largestOffset(shown, labels, secondary)
+      : gap;
 
   /// The bands around the plot for the tick [labels], the category [plan] and
   /// the axis titles. The category labels' reach past the axis' ends stays
@@ -524,8 +792,10 @@ extension on FrameContext {
     List<MeasuredLabel> labels,
     CategoryLabelPlan plan,
     ChartSize? valueTitle,
-    ChartSize? categoryTitle,
-  ) {
+    ChartSize? categoryTitle, {
+    _XAxis? secondary,
+    ChartSize? secondaryTitle,
+  }) {
     final bool ticks = shown.valueLabels && labels.isNotEmpty;
     final double valueTitleBand = valueTitle == null
         ? 0
@@ -534,7 +804,7 @@ extension on FrameContext {
         ? 0
         : categoryTitle.height + gap;
     final double categoryBand = shown.categoryLabels
-        ? _categoryOffset(shown, labels, plan) + plan.thickness
+        ? _categoryOffset(shown, labels, plan, secondary) + plan.thickness
         : 0;
     double widest = 0;
     double tallest = 0;
@@ -561,13 +831,31 @@ extension on FrameContext {
         bottom: math.max(valueTitleBand + (ticks ? tallest + gap : 0), reserve),
       );
     }
+    // The secondary value axis' tick labels and title, on the right.
+    final List<MeasuredLabel> second =
+        shown.secondaryLabels && secondary != null
+        ? secondary.labels
+        : const <MeasuredLabel>[];
+    double secondWidest = 0;
+    for (final MeasuredLabel label in second) {
+      secondWidest = math.max(secondWidest, label.size.width);
+    }
+    final double secondBand =
+        (second.isEmpty ? 0 : secondWidest + gap) +
+        (secondaryTitle == null ? 0 : secondaryTitle.height + gap);
     return (
       left: math.max(valueTitleBand + (ticks ? widest + gap : 0), reserve),
-      top: ticks ? labels.last.size.height / 2 : 0,
-      right: math.max(0, reserveAfter),
+      top: math.max(
+        ticks ? labels.last.size.height / 2 : 0,
+        second.isEmpty ? 0 : second.last.size.height / 2,
+      ),
+      right: math.max(math.max(0, reserveAfter), secondBand),
       bottom: math.max(
-        categoryTitleBand + categoryBand,
-        ticks ? labels.first.size.height / 2 : 0,
+        math.max(
+          categoryTitleBand + categoryBand,
+          ticks ? labels.first.size.height / 2 : 0,
+        ),
+        second.isEmpty ? 0 : second.first.size.height / 2,
       ),
     );
   }

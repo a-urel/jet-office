@@ -19,26 +19,14 @@ extension _SeriesWriting on _ChartWriter {
     final ChartColor color = theme.colorOf(series, index);
     w.start('c:spPr');
     if (chart.kind == ChartKind.line) {
-      w.start('a:ln');
-      w.attribute('w', (theme.lineWidth * _emuPerPoint).round().toString());
-      w.attribute('cap', 'rnd');
-      _solidFill(color);
-      w.empty('a:round');
-      w.end();
+      _seriesLine(color);
       w.empty('a:effectLst');
       w.end();
       w.start('c:marker');
       if (theme.lineMarkers) {
         _value('c:symbol', 'circle');
         _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
-        w.start('c:spPr');
-        _solidFill(color);
-        w.start('a:ln');
-        w.attribute('w', _markerLineWidth);
-        _solidFill(color);
-        w.end();
-        w.empty('a:effectLst');
-        w.end();
+        _markerShape(color);
       } else {
         // Excel's "Line" without markers. A lone point, which the layout
         // marks, has no marker here: a series' marker is all or nothing.
@@ -46,15 +34,26 @@ extension _SeriesWriting on _ChartWriter {
       }
       w.end();
     } else {
-      _solidFill(color);
-      w.start('a:ln');
-      w.empty('a:noFill');
-      w.end();
+      final bool area = chart.kind == ChartKind.area;
+      _solidFill(
+        color,
+        alpha: area && theme.areaOpacity < 1 ? theme.areaOpacity : null,
+      );
+      if (area && theme.areaLine) {
+        _seriesLine(color);
+      } else {
+        w.start('a:ln');
+        w.empty('a:noFill');
+        w.end();
+      }
       w.empty('a:effectLst');
       w.end();
       if (_bars) {
         _value('c:invertIfNegative', '0');
       }
+    }
+    if (chart.kind != ChartKind.area) {
+      _writePointColors(series, color);
     }
     if (chart.dataLabels.visible) {
       _writeSeriesDataLabels();
@@ -69,7 +68,7 @@ extension _SeriesWriting on _ChartWriter {
     );
     w.end();
     if (chart.kind == ChartKind.line) {
-      _value('c:smooth', '0');
+      _value('c:smooth', series.smooth ? '1' : '0');
     }
     if (index < space.ids.series.length) {
       w.start('c:extLst');
@@ -81,6 +80,73 @@ extension _SeriesWriting on _ChartWriter {
       w.end();
     }
     w.end();
+  }
+
+  /// A series' `a:ln` of [color]: the theme's line width, a round cap and a
+  /// round join.
+  void _seriesLine(ChartColor color) {
+    w.start('a:ln');
+    w.attribute('w', (theme.lineWidth * _emuPerPoint).round().toString());
+    w.attribute('cap', 'rnd');
+    _solidFill(color);
+    w.empty('a:round');
+    w.end();
+  }
+
+  /// A marker's `c:spPr`: [color] as its fill and its line, and an empty
+  /// effect list.
+  void _markerShape(ChartColor color) {
+    w.start('c:spPr');
+    _solidFill(color);
+    w.start('a:ln');
+    w.attribute('w', _markerLineWidth);
+    _solidFill(color);
+    w.end();
+    w.empty('a:effectLst');
+    w.end();
+  }
+
+  /// One `c:dPt` per point of [series] with its own colour, after the
+  /// series' shape and marker (`c:dPt` follows `c:marker` and
+  /// `c:invertIfNegative`, and precedes `c:dLbls`, in the schema).
+  ///
+  /// Each holds the index, `c:invertIfNegative 0` of a bar, for a line the
+  /// marker with the colour as its fill and line, `c:bubble3D 0` and the
+  /// shape, a fill for a bar and the series' own line (the segment is not
+  /// recoloured) for a line. The layout is an estimate, not checked in Excel
+  /// (pending E1).
+  void _writePointColors(ChartSeries series, ChartColor seriesColor) {
+    for (int i = 0; i < series.pointColors.length; i++) {
+      final ChartColor? color = series.pointColors[i];
+      if (color == null) {
+        continue;
+      }
+      w.start('c:dPt');
+      _value('c:idx', i.toString());
+      if (_bars) {
+        _value('c:invertIfNegative', '0');
+      }
+      if (chart.kind == ChartKind.line) {
+        w.start('c:marker');
+        _value('c:symbol', 'circle');
+        _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
+        _markerShape(color);
+        w.end();
+      }
+      _value('c:bubble3D', '0');
+      w.start('c:spPr');
+      if (chart.kind == ChartKind.line) {
+        _seriesLine(seriesColor);
+      } else {
+        _solidFill(color);
+        w.start('a:ln');
+        w.empty('a:noFill');
+        w.end();
+      }
+      w.empty('a:effectLst');
+      w.end();
+      w.end();
+    }
   }
 
   /// The series' `c:dLbls` of shown labels, as Excel writes them
@@ -106,7 +172,7 @@ extension _SeriesWriting on _ChartWriter {
       language: language,
       use: DrawingTextUse.dataLabel,
     );
-    _writeLabelFlags(showValue: true);
+    _writeLabelFlags(showValue: chart.dataLabels.showValue);
     _value('c:showLeaderLines', '0');
     w.start('c:extLst');
     w.start('c:ext');

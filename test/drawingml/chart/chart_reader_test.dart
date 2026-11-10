@@ -135,6 +135,97 @@ void main() {
     });
   });
 
+  group('J4 fields', () {
+    final ChartColor red = ChartColor.rgb(0xFF0000);
+
+    test('a smooth line reads typed', () {
+      _expectRoundTrip(
+        DrawingChartSpace(
+          chart: _chart(
+            ChartKind.line,
+            series: <ChartSeries>[_series().copyWith(smooth: true)],
+          ),
+        ),
+      );
+    });
+
+    test('point colours of a column, a bar and a line read typed', () {
+      for (final ChartKind kind in <ChartKind>[
+        ChartKind.column,
+        ChartKind.bar,
+        ChartKind.line,
+      ]) {
+        final DrawingChartSpace space = DrawingChartSpace(
+          chart: _chart(
+            kind,
+            series: <ChartSeries>[
+              _series().copyWith(pointColors: <ChartColor?>[null, red]),
+            ],
+          ),
+        );
+        _expectRoundTrip(space);
+        expect(
+          _roundTrip(space).chart!.series.single.pointColors,
+          <ChartColor?>[null, red],
+          reason: kind.name,
+        );
+      }
+    });
+
+    test('area opacity and line read typed in their theme', () {
+      final ChartTheme theme = _office.copyWith(
+        areaOpacity: 0.25,
+        areaLine: true,
+      );
+      _expectRoundTrip(
+        DrawingChartSpace(
+          chart: _chart(
+            ChartKind.area,
+            series: <ChartSeries>[_series(color: red)],
+          ),
+        ),
+        theme: theme,
+      );
+      _expectRoundTrip(
+        DrawingChartSpace(chart: _chart(ChartKind.area)),
+        theme: theme,
+      );
+    });
+
+    test('a translucent colour outside a series fill reads as before', () {
+      final DrawingChartWritten written = writeDrawingChartSpace(
+        DrawingChartSpace(chart: _chart(ChartKind.column)),
+        _office,
+      );
+      final String xml = utf8
+          .decode(written.bytes)
+          .replaceFirst(
+            '<c:majorGridlines><c:spPr><a:ln w="9525" cap="flat" cmpd="sng" '
+                'algn="ctr"><a:solidFill><a:schemeClr val="tx1">',
+            '<c:majorGridlines><c:spPr><a:ln w="9525" cap="flat" cmpd="sng" '
+                'algn="ctr"><a:solidFill><a:schemeClr val="tx1"><a:alpha '
+                'val="50000"/>',
+          );
+      expect(xml, contains('<a:alpha val="50000"/>'));
+      final DrawingChartRead read = _read(xml);
+      expect(read.chart!.valueAxis.gridLines, isTrue);
+      // Not read as a colour, so the writer cannot reproduce the part.
+      expect(read.typed, isNull);
+    });
+
+    test('an alpha the theme does not write leaves the part untyped', () {
+      final ChartTheme alpha = _office.copyWith(areaOpacity: 0.25);
+      final DrawingChartWritten written = writeDrawingChartSpace(
+        DrawingChartSpace(chart: _chart(ChartKind.area)),
+        alpha,
+      );
+      expect(
+        readDrawingChartSpace(written.bytes, theme: _office).typed,
+        isNull,
+      );
+    });
+  });
+
   group('round trip', () {
     for (final ChartKind kind in <ChartKind>[
       ChartKind.column,

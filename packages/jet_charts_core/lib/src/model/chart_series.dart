@@ -69,7 +69,10 @@ final class ChartSeries {
     this.formatCode,
     this.color,
     this.colorKey,
-  }) : categories = ChartData<Object>(
+    this.smooth = false,
+    List<ChartColor?> pointColors = const <ChartColor?>[],
+  }) : pointColors = List<ChartColor?>.unmodifiable(pointColors),
+       categories = ChartData<Object>(
          values: List<Object?>.of(categories.values),
          reference: categories.reference,
        );
@@ -85,9 +88,19 @@ final class ChartSeries {
 
   /// The kind this series is drawn as in a combination chart, or `null` to
   /// follow the chart.
+  ///
+  /// A combination chart draws [ChartKind.column], [ChartKind.line] and
+  /// [ChartKind.area] series as such; a `null` kind, or any other, is drawn
+  /// as a column. Other charts ignore it, but for a sparkline's area.
   final ChartKind? kind;
 
   /// The value axis the series is measured on.
+  ///
+  /// Column, line, area and combination charts measure a series bound to
+  /// [ChartAxisBinding.secondary] on a second value axis on the plot's
+  /// right, when some series is bound to the primary one; with none, every
+  /// series is measured on the primary axis. A bar chart, as every other
+  /// kind, measures every series on the primary axis.
   final ChartAxisBinding axis;
 
   /// The number format of the values, as the text Excel stores, or `null`.
@@ -98,6 +111,27 @@ final class ChartSeries {
 
   /// The name of a `ChartTheme.semantic` colour, or `null`.
   final String? colorKey;
+
+  /// Whether the line is drawn as a curve (Excel's `c:smooth`).
+  ///
+  /// Used by line and combination line series and by a sparkline's series.
+  /// An area series (in an area or combination chart) curves its top and
+  /// edge line on screen only: Excel's area has no `c:smooth`, so a written
+  /// chart's area is straight. A scatter chart draws markers without lines,
+  /// so it, as every other kind, ignores it.
+  final bool smooth;
+
+  /// The colour of each point by index, `null` for automatic (Excel's
+  /// `c:dPt`). The list cannot be modified.
+  ///
+  /// Used for a pie or donut slice, a column or bar, and a line or scatter
+  /// marker; an area, a sparkline and the legend keep the series colour. A
+  /// line point with a point colour is marked even when the line marks no
+  /// other point, as the written chart holds a marker there too. A bar's
+  /// inside data label reads against the point colour, and the point's
+  /// tooltip row shows it. Beyond the end of the list a point's colour is
+  /// automatic.
+  final List<ChartColor?> pointColors;
 
   /// A copy with the given fields replaced.
   ///
@@ -112,6 +146,8 @@ final class ChartSeries {
     String? formatCode,
     ChartColor? color,
     String? colorKey,
+    bool? smooth,
+    List<ChartColor?>? pointColors,
   }) {
     return ChartSeries(
       name: name ?? this.name,
@@ -122,6 +158,8 @@ final class ChartSeries {
       formatCode: formatCode ?? this.formatCode,
       color: color ?? this.color,
       colorKey: colorKey ?? this.colorKey,
+      smooth: smooth ?? this.smooth,
+      pointColors: pointColors ?? this.pointColors,
     );
   }
 
@@ -135,7 +173,9 @@ final class ChartSeries {
         axis == other.axis &&
         formatCode == other.formatCode &&
         color == other.color &&
-        colorKey == other.colorKey;
+        colorKey == other.colorKey &&
+        smooth == other.smooth &&
+        listValueEquals(pointColors, other.pointColors);
   }
 
   @override
@@ -148,6 +188,8 @@ final class ChartSeries {
     formatCode,
     color,
     colorKey,
+    smooth,
+    listValueHash(pointColors),
   );
 
   @override

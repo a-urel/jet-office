@@ -3,7 +3,9 @@ library;
 
 import 'package:jet_core/jet_core.dart';
 
+import '../layout/pie_layout.dart' show sliceShares;
 import '../layout/resolve.dart';
+import '../layout/scatter_layout.dart' show scatterXText, scatterXValues;
 import '../model/chart.dart';
 import '../model/chart_kind.dart';
 import '../model/equality.dart';
@@ -20,6 +22,9 @@ final class ChartSummary {
     required List<String> seriesNames,
     required List<String> categories,
     required List<List<String>> values,
+    List<List<String>> shares = const <List<String>>[],
+    List<List<String>> xValues = const <List<String>>[],
+    this.centerText,
     this.minimum,
     this.maximum,
     required this.isEmpty,
@@ -27,6 +32,12 @@ final class ChartSummary {
        categories = List<String>.unmodifiable(categories),
        values = List<List<String>>.unmodifiable(<List<String>>[
          for (final List<String> v in values) List<String>.unmodifiable(v),
+       ]),
+       shares = List<List<String>>.unmodifiable(<List<String>>[
+         for (final List<String> v in shares) List<String>.unmodifiable(v),
+       ]),
+       xValues = List<List<String>>.unmodifiable(<List<String>>[
+         for (final List<String> v in xValues) List<String>.unmodifiable(v),
        ]);
 
   /// The chart's kind.
@@ -38,22 +49,42 @@ final class ChartSummary {
   /// The name of each series, as the legend shows it in full.
   final List<String> seriesNames;
 
-  /// The text of each category, as the category axis shows it in full.
+  /// The text of each category, as the category axis shows it in full; in
+  /// a scatter chart, the first series' [xValues].
   final List<String> categories;
 
+  /// The x value of each point of each series of a scatter chart, one text
+  /// per value of [values], formatted as its tooltip formats it (the
+  /// category axis' code, else a short date for dates, else `General`). One
+  /// list per series; each is empty for a kind other than scatter.
+  final List<List<String>> xValues;
+
   /// The values of each series, one text per category, formatted as tooltips
-  /// format them; an empty text where there is no value.
+  /// format them; an empty text where there is no value, and for every
+  /// series of a pie but the first, which a pie does not draw.
   final List<List<String>> values;
 
+  /// The share of each value of each series in its series' whole, in `0%`,
+  /// as a pie's or donut's tooltip shows it; an empty text where there is no
+  /// value or the series sums to zero, and for every series of a pie but the
+  /// first, which a pie does not draw. One list per series; each is empty
+  /// for a kind other than pie and donut.
+  final List<List<String>> shares;
+
+  /// A donut's centre text, or `null` when there is none or the chart is not
+  /// a donut.
+  final String? centerText;
+
   /// The least finite value, formatted in its series' code; `null` when there
-  /// is none.
+  /// is none. A pie's is its first series' only.
   final String? minimum;
 
   /// The greatest finite value, formatted in its series' code; `null` when
-  /// there is none.
+  /// there is none. A pie's is its first series' only.
   final String? maximum;
 
-  /// Whether no series has a finite value.
+  /// Whether no series has a finite value; for a pie, whether its first
+  /// series, the one it draws, has none.
   final bool isEmpty;
 
   @override
@@ -64,13 +95,26 @@ final class ChartSummary {
         minimum != other.minimum ||
         maximum != other.maximum ||
         isEmpty != other.isEmpty ||
+        centerText != other.centerText ||
         !listValueEquals(seriesNames, other.seriesNames) ||
         !listValueEquals(categories, other.categories) ||
-        values.length != other.values.length) {
+        values.length != other.values.length ||
+        shares.length != other.shares.length ||
+        xValues.length != other.xValues.length) {
       return false;
+    }
+    for (int i = 0; i < xValues.length; i++) {
+      if (!listValueEquals(xValues[i], other.xValues[i])) {
+        return false;
+      }
     }
     for (int i = 0; i < values.length; i++) {
       if (!listValueEquals(values[i], other.values[i])) {
+        return false;
+      }
+    }
+    for (int i = 0; i < shares.length; i++) {
+      if (!listValueEquals(shares[i], other.shares[i])) {
         return false;
       }
     }
@@ -84,6 +128,9 @@ final class ChartSummary {
     listValueHash(seriesNames),
     listValueHash(categories),
     Object.hashAll(values.map(listValueHash)),
+    Object.hashAll(shares.map(listValueHash)),
+    Object.hashAll(xValues.map(listValueHash)),
+    centerText,
     minimum,
     maximum,
     isEmpty,
@@ -99,10 +146,17 @@ final class ChartSummary {
 ///
 /// Series names and categories are the texts the layout shows, in full, never
 /// cut. Each value is formatted as `chartTooltipAt` formats it (the series'
-/// format code, else the value axis' code, else `General`; no share), and a
+/// format code, else the code of the value axis it is measured on, the
+/// secondary value axis' for a series measured there, else `General`; no
+/// share), and a
 /// missing or non-finite value is an empty text. The minimum and maximum are
 /// those of the finite values, each formatted in the code of the first series
-/// that holds it.
+/// that holds it. A pie draws its first series only, so the values of its
+/// other series are empty texts and do not count for the minimum, the maximum
+/// or [ChartSummary.isEmpty] (a donut draws every series and counts them). In a pie or donut each value's share of its series' whole
+/// is given in `0%` (an empty text where there is none), and a donut's centre
+/// text is given. In a scatter chart each point's x is given per series, as
+/// its tooltip shows it, and the categories are the first series' x values.
 ChartSummary summarizeChart(
   Chart chart, {
   FormatLocale locale = FormatLocale.enUS,
@@ -117,14 +171,24 @@ ChartSummary summarizeChart(
   (int, double)? low;
   (int, double)? high;
   final List<List<String>> values = <List<String>>[];
+  // A pie draws its first series only; the others give empty texts.
+  final bool pie = chart.kind == ChartKind.pie;
   for (int s = 0; s < resolved.values.length; s++) {
     final List<String> texts = <String>[];
     for (final double? value in resolved.values[s]) {
-      if (value == null) {
+      if (value == null || (pie && s > 0)) {
         texts.add('');
         continue;
       }
-      texts.add(formatSeriesValue(chart, s, value, formatter));
+      texts.add(
+        formatSeriesValue(
+          chart,
+          s,
+          value,
+          formatter,
+          secondary: resolved.isSecondary(s),
+        ),
+      );
       if (low == null || value < low.$2) {
         low = (s, value);
       }
@@ -134,19 +198,65 @@ ChartSummary summarizeChart(
     }
     values.add(texts);
   }
+  final bool polar =
+      chart.kind == ChartKind.pie || chart.kind == ChartKind.donut;
+  final List<List<String>> shares = <List<String>>[
+    for (int s = 0; s < resolved.values.length; s++)
+      !polar
+          ? const <String>[]
+          : chart.kind == ChartKind.pie && s > 0
+          ? <String>[for (final double? _ in resolved.values[s]) '']
+          : <String>[
+              for (final double? share in sliceShares(resolved.values[s]))
+                share == null
+                    ? ''
+                    : formatter.format(share, numberFormat: '0%').text,
+            ],
+  ];
+  final bool scatter = chart.kind == ChartKind.scatter;
+  final List<List<double>> xs = scatter
+      ? scatterXValues(chart, resolved.categoryCount)
+      : const <List<double>>[];
+  final List<List<String>> xValues = <List<String>>[
+    for (int s = 0; s < resolved.values.length; s++)
+      <String>[
+        if (scatter)
+          for (final double x in xs[s]) scatterXText(x, chart, formatter),
+      ],
+  ];
   final String? title = chart.title?.text;
+  final String? center = chart.centerText;
   return ChartSummary(
     kind: chart.kind,
     title: title == null || title.isEmpty ? null : title,
     seriesNames: resolved.seriesNames,
-    categories: resolved.categoryLabels,
+    categories: scatter && xValues.isNotEmpty
+        ? xValues.first
+        : resolved.categoryLabels,
     values: values,
+    shares: shares,
+    xValues: xValues,
+    centerText: chart.kind == ChartKind.donut && center != null
+        ? (center.isEmpty ? null : center)
+        : null,
     minimum: low == null
         ? null
-        : formatSeriesValue(chart, low.$1, low.$2, formatter),
+        : formatSeriesValue(
+            chart,
+            low.$1,
+            low.$2,
+            formatter,
+            secondary: resolved.isSecondary(low.$1),
+          ),
     maximum: high == null
         ? null
-        : formatSeriesValue(chart, high.$1, high.$2, formatter),
+        : formatSeriesValue(
+            chart,
+            high.$1,
+            high.$2,
+            formatter,
+            secondary: resolved.isSecondary(high.$1),
+          ),
     isEmpty: low == null,
   );
 }

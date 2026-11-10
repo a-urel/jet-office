@@ -3,7 +3,8 @@
 // ignore_for_file: avoid_print
 
 /// Times `layoutChart` and `paintChartPrimitives` on dashboard charts and on
-/// two large series.
+/// large series: a 10,000-point line, 3,650 categories of two columns, a
+/// 10,000-point scatter chart and a pie of 60 slices.
 ///
 /// Records figures and fails on nothing (`docs/benchmark.md`). Run it with
 /// `flutter test benchmark` from this package's folder; the gate does not run
@@ -52,6 +53,46 @@ Chart _chart(
   title: const ChartTitle(text: 'Benchmark'),
   legend: const ChartLegend(),
   dataLabels: const ChartDataLabels(),
+);
+
+/// A scatter chart of one series of [count] points.
+Chart _scatter(int count) => Chart(
+  kind: ChartKind.scatter,
+  series: <ChartSeries>[
+    ChartSeries(
+      name: ChartData<String>(values: <String?>['Points']),
+      categories: ChartData<Object>(
+        values: <Object?>[for (int i = 0; i < count; i++) (i * 37 % 1000) / 10],
+      ),
+      values: ChartData<double>(
+        values: <double?>[
+          for (int i = 0; i < count; i++)
+            50 + 30 * ((i * 7) % 17) / 17 + i % 11,
+        ],
+      ),
+    ),
+  ],
+  title: const ChartTitle(text: 'Benchmark'),
+  legend: const ChartLegend(),
+);
+
+/// A pie of one series of [count] slices, with percent labels.
+Chart _pie(int count) => Chart(
+  kind: ChartKind.pie,
+  series: <ChartSeries>[
+    ChartSeries(
+      name: ChartData<String>(values: <String?>['Share']),
+      categories: ChartData<Object>(
+        values: <Object?>[for (int i = 0; i < count; i++) 'Slice ${i + 1}'],
+      ),
+      values: ChartData<double>(
+        values: <double?>[for (int i = 0; i < count; i++) 1 + (i * 7) % 13],
+      ),
+    ),
+  ],
+  title: const ChartTitle(text: 'Benchmark'),
+  legend: const ChartLegend(),
+  dataLabels: const ChartDataLabels(visible: true, showPercent: true),
 );
 
 /// The time of one call of [run], in microseconds.
@@ -125,6 +166,16 @@ void main() {
             'column clustered 2x3650',
             _chart(ChartKind.column, ChartGrouping.clustered, 2, 3650),
             const <ChartSize>[ChartSize(1280, 720)],
+          ),
+          (
+            'scatter 1x10000',
+            _scatter(10000),
+            const <ChartSize>[ChartSize(1280, 720)],
+          ),
+          (
+            'pie 60 slices',
+            _pie(60),
+            const <ChartSize>[ChartSize(360, 240), ChartSize(1280, 720)],
           ),
         ];
 
