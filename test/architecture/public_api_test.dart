@@ -83,6 +83,19 @@ void main() {
     }
   });
 
+  test('every export of the barrel has a show list', () {
+    final int directives = RegExp(
+      r'^export\s',
+      multiLine: true,
+    ).allMatches(barrel).length;
+    expect(directives, greaterThan(0));
+    expect(
+      exports.length,
+      directives,
+      reason: 'an export without show would make a whole file public',
+    );
+  });
+
   test('the barrel exports no part of the change log', () {
     expect(barrel, isNot(contains('opc/change_log.dart')));
   });

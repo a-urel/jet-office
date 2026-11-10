@@ -273,26 +273,42 @@ List<XlsxSheet> _worksheets(XlsxWorkbook book) => <XlsxSheet>[
     if (sheetIsWorksheet(s)) s,
 ];
 
-/// A workbook without `calcPr` gains it for `fullCalcOnLoad`: one child more.
-final RegExp _workbookGainsOneChild = RegExp(
-  r'^xl/workbook\.xml: /workbook: (\d+) children vs (\d+)$',
-);
+/// The lines of `comparePackages` a structural edit causes on purpose, each
+/// a part's child count going from `n` to `n + delta` (`delta` is signed):
+/// the content type override and the relationship of the dropped calculation
+/// chain (one child fewer) and, in a workbook without `calcPr`, the one it
+/// gains for `fullCalcOnLoad` (one child more).
+final List<(RegExp, int)> _countLines = <(RegExp, int)>[
+  (RegExp(r'^\[Content_Types\]\.xml: /Types: (\d+) children vs (\d+)$'), -1),
+  (
+    RegExp(
+      r'^xl/_rels/workbook\.xml\.rels: /Relationships: '
+      r'(\d+) children vs (\d+)$',
+    ),
+    -1,
+  ),
+  (RegExp(r'^xl/workbook\.xml: /workbook: (\d+) children vs (\d+)$'), 1),
+];
 
-/// Whether [line] says the workbook element gained exactly one child.
-bool _gainsOneChild(String line) {
-  final RegExpMatch? m = _workbookGainsOneChild.firstMatch(line);
-  return m != null && int.parse(m.group(2)!) == int.parse(m.group(1)!) + 1;
+/// Whether [line] of `comparePackages` is one of the five a structural edit
+/// causes on purpose: the calculation chain part gone, its content type
+/// override and its relationship gone, and `calcPr` gained with
+/// `fullCalcOnLoad="1"`. Nothing broader.
+bool _isRecalcBookkeeping(String line) {
+  if (line == 'xl/calcChain.xml: missing from the actual package' ||
+      line ==
+          'xl/workbook.xml: /workbook/calcPr: '
+              'attribute fullCalcOnLoad missing vs "1"') {
+    return true;
+  }
+  for (final (RegExp pattern, int delta) in _countLines) {
+    final RegExpMatch? m = pattern.firstMatch(line);
+    if (m != null && int.parse(m.group(2)!) == int.parse(m.group(1)!) + delta) {
+      return true;
+    }
+  }
+  return false;
 }
-
-/// Whether [line] of `comparePackages` is about what a structural edit drops
-/// or sets on purpose: the calculation chain and `fullCalcOnLoad`.
-bool _isRecalcBookkeeping(String line) =>
-    line.contains('calcChain') ||
-    line.contains('fullCalcOnLoad') ||
-    line.contains('calcPr') ||
-    _gainsOneChild(line) ||
-    line.contains('[Content_Types].xml') ||
-    line.contains('workbook.xml.rels');
 
 /// The parts that differ between [before] and [after], by name.
 Set<String> _partsChanged(Uint8List before, Uint8List after) => <String>{
@@ -399,6 +415,10 @@ void main() {
           for (final Fixture f in allFixtures()) f.name: f.build,
           for (final ProducerFile p in producerFiles()) p.name: () => p.bytes,
         };
+    // Files where Excel refuses an edit (a StateError) skip that edit; the
+    // floor below keeps the skips from hiding a model that refuses too much.
+    final List<String> refused = <String>[];
+
     files.forEach((String name, Uint8List Function() build) {
       test(
         '$name: insert, delete, rename, move, undo all equals the input',
@@ -406,9 +426,14 @@ void main() {
           final Uint8List input = build();
           final XlsxWorkbook book = XlsxWorkbook.open(input);
           final List<XlsxChangeSet> sets = <XlsxChangeSet>[];
+          bool refusedOne = false;
           void run(void Function() edit) {
             final XlsxChangeSet? set = _tryEdit(book, edit);
-            if (set != null && !set.isEmpty) sets.add(set);
+            if (set == null) {
+              refusedOne = true;
+            } else if (!set.isEmpty) {
+              sets.add(set);
+            }
           }
 
           for (final XlsxSheet sheet in _worksheets(book)) {
@@ -426,6 +451,7 @@ void main() {
               () => book.moveSheet(book.sheets.first, book.sheets.length - 1),
             );
           }
+          if (refusedOne) refused.add(name);
           for (final XlsxChangeSet set in sets.reversed) {
             book.undo(set);
           }
@@ -440,23 +466,48 @@ void main() {
         },
       );
 
-      test('$name: insert then delete the same rows equals the input but '
-          'for calcChain and fullCalcOnLoad', () {
-        final Uint8List input = build();
-        final XlsxWorkbook book = XlsxWorkbook.open(input);
-        for (final XlsxSheet sheet in _worksheets(book)) {
-          // Rows past every fixture's data, then the same rows deleted: no
-          // reference moves for good. A refused insert changes nothing.
-          if (_tryEdit(book, () => sheet.insertRows(1500, 3)) == null) continue;
-          book.transaction(() => sheet.deleteRows(1500, 3));
-        }
-        final List<String> differences = comparePackages(
-          _roundTrip(input),
-          book.save().bytes,
-          ignoreBookkeeping: true,
-        ).where((String line) => !_isRecalcBookkeeping(line)).toList();
-        expect(differences, isEmpty);
-      });
+      /// Inserts [count] rows at [at] on every worksheet, deletes them again
+      /// and compares with the input but for the recalculation bookkeeping.
+      void insertThenDelete(String label, int at, int count) {
+        test('$name: $label equals the input but for calcChain and '
+            'fullCalcOnLoad', () {
+          final Uint8List input = build();
+          final XlsxWorkbook book = XlsxWorkbook.open(input);
+          for (final XlsxSheet sheet in _worksheets(book)) {
+            // A refused insert changes nothing.
+            if (_tryEdit(book, () => sheet.insertRows(at, count)) == null) {
+              continue;
+            }
+            book.transaction(() => sheet.deleteRows(at, count));
+          }
+          final List<String> differences = comparePackages(
+            _roundTrip(input),
+            book.save().bytes,
+            ignoreBookkeeping: true,
+          ).where((String line) => !_isRecalcBookkeeping(line)).toList();
+          expect(differences, isEmpty);
+        });
+      }
+
+      // Past every fixture's data: nothing moves. Inside the data region:
+      // references move out and back.
+      insertThenDelete(
+        'insert then delete the same rows past the data',
+        1500,
+        3,
+      );
+      insertThenDelete('insert then delete the same rows in the data', 0, 3);
+    });
+
+    tearDownAll(() {
+      final int total = files.length;
+      final int clean = total - refused.length;
+      // ignore: avoid_print
+      print(
+        'structural edits: $clean of $total files took every edit; '
+        'refused in: ${refused.join(', ')}',
+      );
+      expect(clean, greaterThanOrEqualTo(30), reason: refused.join(', '));
     });
   });
 
