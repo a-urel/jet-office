@@ -103,6 +103,21 @@
 /// control or a threaded comment beside them is kept as written, and removing
 /// a table that a formula names is refused.
 ///
+/// A sheet edits its structure: [XlsxSheet.insertRows], [XlsxSheet.deleteRows],
+/// [XlsxSheet.insertColumns] and [XlsxSheet.deleteColumns] move cells,
+/// formats, merges, tables, notes, pictures and every reference to them, in
+/// every formula, name, rule, chart and table, as Excel does, and
+/// [XlsxSheet.renameTable] renames a table in the formulas that name it.
+/// [XlsxWorkbook.renameSheet], [XlsxWorkbook.moveSheet] and
+/// [XlsxWorkbook.addSheet] (with a position) do the same for sheets. An edit
+/// Excel refuses throws a [StateError] and changes nothing. A structural edit
+/// drops the calculation chain and asks Excel to recalculate on load.
+/// [XlsxWorkbook.transaction] runs edits as one [XlsxChangeSet], an
+/// all-or-nothing group of [XlsxChange] records that [XlsxWorkbook.undo] and
+/// [XlsxWorkbook.redo] take back and reapply. [lexFormula] splits a formula
+/// into [XlsxFormulaToken]s of an [XlsxFormulaTokenKind], whose texts joined
+/// give the formula back.
+///
 /// [DocxDocument] is the Word document model. [DocxDocument.new] starts a
 /// document like Word for Mac's blank one: A4 portrait, Aptos 12, no document
 /// properties.
@@ -230,9 +245,12 @@
 /// @docImport 'src/xlsx/cell_formatting.dart';
 /// @docImport 'src/xlsx/color.dart';
 /// @docImport 'src/xlsx/column.dart';
+/// @docImport 'src/xlsx/formula/formula_lexer.dart';
+/// @docImport 'src/xlsx/formula/formula_token.dart';
 /// @docImport 'src/xlsx/hyperlink.dart';
 /// @docImport 'src/xlsx/limits.dart';
 /// @docImport 'src/xlsx/list_export.dart';
+/// @docImport 'src/xlsx/model/change_set.dart';
 /// @docImport 'src/xlsx/model/xlsx_sheet.dart';
 /// @docImport 'src/xlsx/model/xlsx_workbook.dart';
 /// @docImport 'src/xlsx/read/read_cell.dart';
@@ -435,10 +453,15 @@ export 'src/xlsx/fill.dart'
         XlsxPatternType;
 export 'src/xlsx/font.dart'
     show XlsxFont, XlsxFontScheme, XlsxFontScript, XlsxUnderline;
+export 'src/xlsx/formula/formula_lexer.dart' show lexFormula;
+export 'src/xlsx/formula/formula_token.dart'
+    show XlsxFormulaToken, XlsxFormulaTokenKind;
 export 'src/xlsx/header_footer.dart' show XlsxHeaderFooter;
 export 'src/xlsx/hyperlink.dart' show XlsxHyperlink;
 export 'src/xlsx/limits.dart' show XlsxLimitError, XlsxLimits;
 export 'src/xlsx/list_export.dart' show XlsxListColumn, XlsxListExport;
+export 'src/xlsx/model/change_set.dart'
+    show XlsxChange, XlsxChangeKind, XlsxChangeSet;
 export 'src/xlsx/model/xlsx_sheet.dart' show XlsxCellNote, XlsxSheet;
 export 'src/xlsx/model/xlsx_workbook.dart' show XlsxWorkbook;
 export 'src/xlsx/note.dart' show XlsxNote;

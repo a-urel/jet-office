@@ -256,6 +256,44 @@ List<String> _undoneDifferences(
   );
 }
 
+/// Runs [edit] as a transaction of [book]; the set when it was allowed,
+/// `null` when Excel refuses it (a [StateError]: an array formula or a table
+/// in the way), which changes nothing.
+XlsxChangeSet? _tryEdit(XlsxWorkbook book, void Function() edit) {
+  try {
+    return book.transaction(edit);
+  } on StateError {
+    return null;
+  }
+}
+
+/// The worksheets of [book].
+List<XlsxSheet> _worksheets(XlsxWorkbook book) => <XlsxSheet>[
+  for (final XlsxSheet s in book.sheets)
+    if (sheetIsWorksheet(s)) s,
+];
+
+/// A workbook without `calcPr` gains it for `fullCalcOnLoad`: one child more.
+final RegExp _workbookGainsOneChild = RegExp(
+  r'^xl/workbook\.xml: /workbook: (\d+) children vs (\d+)$',
+);
+
+/// Whether [line] says the workbook element gained exactly one child.
+bool _gainsOneChild(String line) {
+  final RegExpMatch? m = _workbookGainsOneChild.firstMatch(line);
+  return m != null && int.parse(m.group(2)!) == int.parse(m.group(1)!) + 1;
+}
+
+/// Whether [line] of `comparePackages` is about what a structural edit drops
+/// or sets on purpose: the calculation chain and `fullCalcOnLoad`.
+bool _isRecalcBookkeeping(String line) =>
+    line.contains('calcChain') ||
+    line.contains('fullCalcOnLoad') ||
+    line.contains('calcPr') ||
+    _gainsOneChild(line) ||
+    line.contains('[Content_Types].xml') ||
+    line.contains('workbook.xml.rels');
+
 /// The parts that differ between [before] and [after], by name.
 Set<String> _partsChanged(Uint8List before, Uint8List after) => <String>{
   for (final String line in comparePackages(
@@ -352,6 +390,73 @@ void main() {
         ),
         isEmpty,
       );
+    });
+  });
+
+  group('structural edits', () {
+    final Map<String, Uint8List Function()> files =
+        <String, Uint8List Function()>{
+          for (final Fixture f in allFixtures()) f.name: f.build,
+          for (final ProducerFile p in producerFiles()) p.name: () => p.bytes,
+        };
+    files.forEach((String name, Uint8List Function() build) {
+      test(
+        '$name: insert, delete, rename, move, undo all equals the input',
+        () {
+          final Uint8List input = build();
+          final XlsxWorkbook book = XlsxWorkbook.open(input);
+          final List<XlsxChangeSet> sets = <XlsxChangeSet>[];
+          void run(void Function() edit) {
+            final XlsxChangeSet? set = _tryEdit(book, edit);
+            if (set != null && !set.isEmpty) sets.add(set);
+          }
+
+          for (final XlsxSheet sheet in _worksheets(book)) {
+            run(() => sheet.insertRows(1, 2));
+            run(() => sheet.insertColumns(1, 2));
+            run(() => sheet.deleteRows(0));
+            run(() => sheet.deleteColumns(0));
+          }
+          for (int i = 0; i < book.sheets.length; i++) {
+            final XlsxSheet sheet = book.sheets[i];
+            run(() => book.renameSheet(sheet, 'Renamed$i'));
+          }
+          if (book.sheets.length > 1) {
+            run(
+              () => book.moveSheet(book.sheets.first, book.sheets.length - 1),
+            );
+          }
+          for (final XlsxChangeSet set in sets.reversed) {
+            book.undo(set);
+          }
+          expect(
+            comparePackages(
+              _roundTrip(input),
+              book.save().bytes,
+              ignoreBookkeeping: true,
+            ),
+            isEmpty,
+          );
+        },
+      );
+
+      test('$name: insert then delete the same rows equals the input but '
+          'for calcChain and fullCalcOnLoad', () {
+        final Uint8List input = build();
+        final XlsxWorkbook book = XlsxWorkbook.open(input);
+        for (final XlsxSheet sheet in _worksheets(book)) {
+          // Rows past every fixture's data, then the same rows deleted: no
+          // reference moves for good. A refused insert changes nothing.
+          if (_tryEdit(book, () => sheet.insertRows(1500, 3)) == null) continue;
+          book.transaction(() => sheet.deleteRows(1500, 3));
+        }
+        final List<String> differences = comparePackages(
+          _roundTrip(input),
+          book.save().bytes,
+          ignoreBookkeeping: true,
+        ).where((String line) => !_isRecalcBookkeeping(line)).toList();
+        expect(differences, isEmpty);
+      });
     });
   });
 
