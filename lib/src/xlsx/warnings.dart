@@ -339,6 +339,21 @@ final class WarningCollector {
   /// the same object on every call, that shows warnings added later.
   List<XlsxWarning> get warnings => _warningsView;
 
+  /// Runs [body]; when it throws, every warning it added (or counted
+  /// again) is taken back before the error goes on, so a refused edit
+  /// leaves the warnings as they were.
+  T keepOnSuccess<T>(T Function() body) {
+    final WarningSnapshot snapshot = _aggregator.mark();
+    final int length = _warnings.length;
+    try {
+      return body();
+    } catch (_) {
+      _aggregator.restore(snapshot);
+      _warnings.removeRange(length, _warnings.length);
+      rethrow;
+    }
+  }
+
   /// Drops every warning added under [key], keeping the order of the rest.
   ///
   /// [key] is the `key` given to [add], or the sheet name when none was.

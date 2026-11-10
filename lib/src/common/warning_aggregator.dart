@@ -156,6 +156,39 @@ final class WarningAggregator<C extends Enum> {
     );
   }
 
+  /// The state of every entry now, for [restore].
+  WarningSnapshot mark() => WarningSnapshot._(
+    List<Object>.of(_all),
+    Map<Object, Object>.of(_aggregated),
+    Map<Object, int>.of(_details),
+    <Object, (int, int, int)>{
+      for (final AggregatedWarning<C> w in _all)
+        w: (w._count, w._locationsOffered, w._locations.length),
+    },
+  );
+
+  /// Puts every entry back as it was at [snapshot], a [mark] of this
+  /// aggregator: entries added since go, counts and locations return.
+  void restore(WarningSnapshot snapshot) {
+    _all
+      ..clear()
+      ..addAll(snapshot._all.cast<AggregatedWarning<C>>());
+    _aggregated
+      ..clear()
+      ..addAll(
+        snapshot._aggregated.cast<(Object, C, String?), AggregatedWarning<C>>(),
+      );
+    _details
+      ..clear()
+      ..addAll(snapshot._details.cast<(Object, C), int>());
+    for (final AggregatedWarning<C> w in _all) {
+      final (int count, int offered, int kept) = snapshot._entries[w]!;
+      w._count = count;
+      w._locationsOffered = offered;
+      w._locations.removeRange(kept, w._locations.length);
+    }
+  }
+
   static void _record(AggregatedWarning<Enum> entry, String? location, int n) {
     entry._count += n;
     if (location == null) return;
@@ -164,4 +197,14 @@ final class WarningAggregator<C extends Enum> {
       entry._locations.add(location);
     }
   }
+}
+
+/// What [WarningAggregator.mark] saw, for [WarningAggregator.restore].
+final class WarningSnapshot {
+  WarningSnapshot._(this._all, this._aggregated, this._details, this._entries);
+
+  final List<Object> _all;
+  final Map<Object, Object> _aggregated;
+  final Map<Object, int> _details;
+  final Map<Object, (int, int, int)> _entries;
 }
