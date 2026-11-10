@@ -73,7 +73,11 @@ tooltip. Choose a text and a `holeSizePercent` that fit at the tile's size.
 false` leaves the amount out, and `minShare: 0.1` leaves slices under 10 %
 unlabelled (a screen-only option: a file written by `jet_office` does not carry
 it). Slice gaps are the theme's `sliceBorderWidth`, the outline of every slice
-in the background colour.
+in the background colour (1.5 pt by default, Excel's). A pie's leader lines are
+the theme's `leaderLine` (its `axisLine` unless the theme names one). A label
+inside a slice reads against it (the lighter or darker of the label colour and
+the background) while the theme's `sliceLabelContrast` is on, its default; the
+Office theme turns it off and writes every label `404040`, as Excel does.
 
 A sparkline has no axes, title, legend or labels. Draw it at the size of its
 tile (for example 120 by 40). An `area` series in it is a filled line, and
@@ -266,8 +270,12 @@ and font.
 
 ## Defaults that are estimates
 
-The pie's first slice at 12 o'clock going clockwise, the donut's 75 % hole,
-the 0.75 pt slice outline in the background colour, one colour per slice, the
-sparkline's 0.75 pt line and the scatter and secondary axis defaults are this
-library's estimates until the owner's check against Excel for Mac
-(`packages/jet_charts_core/docs/excel-checks.md`).
+The owner's E1 file confirmed the pie's first slice at 12 o'clock going
+clockwise, the donut's 75 % hole, one colour per slice, the 1.5 pt slice
+outline, the leader line colour, a combination chart's lines without markers
+(`combinationLineMarkers`) and its columns' gap (`combinationGapWidthPercent`),
+and a scatter chart's two axis lines (`scatterAxisLine`; the Office theme
+sets it, `fromColors` does not) and grid lines on both axes (set
+`categoryAxis: ChartAxis(gridLines: true)` for the vertical ones). The
+sparkline's 0.75 pt line and the secondary axis defaults are still this
+library's estimates (`packages/jet_charts_core/docs/excel-checks.md`).

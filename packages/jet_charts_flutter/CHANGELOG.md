@@ -9,6 +9,12 @@
 - J4: `docs/app-themes.md`, the gallery app's J4 charts and the Excel
   gallery's, and benchmark cases for a 10,000-point scatter chart and a pie of
   60 slices.
+- J4, after the owner's E1 file: the goldens of the pies, donuts,
+  combination and scatter charts follow the core's new Office values (1.5 pt
+  slice outlines, `A6A6A6` leader lines, `404040` slice labels, combination lines without markers
+  and columns at gap 150, both scatter axis lines and grid lines); the Excel
+  gallery writes Excel's style parts 251, 240 and 322, the combination's gap
+  150, the scatter axes' lines and grid lines and the pie's leader lines.
 - J4 (for Monépro): `JetChart.tooltipLines` (`JetChartTooltipLines`), the
   app's own lines under a tooltip's rows, in the box and the screen reader
   nodes.

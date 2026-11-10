@@ -106,10 +106,17 @@ bulduğun her fark değerlidir: ya uygulama ya dosya yanlıştır, belki ikisi d
 Hangisinin doğru olduğunu Excel'in kendi grafiği söyler (aşağıdaki
 "Excel'in kendi grafiği" adımı).
 
+E1 dosyası (`chart_reference_j4.xlsx`, 2026-11-10) geldi ve şunları kesinleştirdi;
+artık hem dosya hem uygulama Excel'in değerini kullanır: dilim kenarı beyaz,
+1,5 punt; etiket kılavuz çizgileri `A6A6A6`, 0,75 punt; dağılımda iki eksende
+de kılavuz çizgisi ve `BFBFBF` eksen çizgisi; birleşik grafikte çizgide
+işaretçi yok, sütun boşluğu 150 ve örtüşme yok; pasta, halka, dağılım ve
+birleşik grafiğin stil parçaları (251, 240, 322); pasta etiketleri her
+dilimde koyu (`404040`), Excel'deki gibi.
+
 Uygulamanın kendi tahminleri de kontrol edilmedi: ilk dilim saat 12'de başlar
-ve saat yönünde gider; halka deliği %75'tir; dilim kenarı arka plan renginde
-0,75 punttur; negatif dilim mutlak değeriyle çizilir; dağılımda yalnızca yatay
-kılavuz çizgileri vardır; ikincil eksen sağdadır ve kılavuz çizgisi yoktur; iki
+ve saat yönünde gider; halka deliği %75'tir (bu ikisini E1 doğruladı);
+negatif dilim mutlak değeriyle çizilir; ikincil eksen sağdadır ve kılavuz çizgisi yoktur; iki
 serili halkada ilk seri en içteki halkadır; mini grafik çizgisi 0,75 punttur.
 
 ### Hazırlık
@@ -147,14 +154,11 @@ Her grafikte J3'teki genel noktalara (renkler, gösterge, başlık, yazı tipi,
   - dilimlerin sırası ve ilk dilimin başladığı yer (saat 12 mi, saat yönünde
     mi);
   - dilim renkleri (`accent1`'den başlayarak);
-  - dilim kenarı: rengi ve kalınlığı. Dosya da bir tahmin yazar (beyaz, 1,5
-    punt; kontrol edilmedi), uygulama da kendi tahminini çizer (arka plan
-    rengi, 0,75 punt; kontrol edilmedi); hangisinin Excel'in kendi grafiğine
-    uyduğunu yaz;
+  - dilim kenarı: ikisinde de beyaz, 1,5 punt (E1);
   - veri etiketlerinin yeri; dosyada etiket yeri "En İyi Sığdırma"dır
     (kontrol edilmedi);
-  - etiketlerin kılavuz çizgileri (leader lines); dosyada açıktır (kontrol
-    edilmedi);
+  - etiketlerin kılavuz çizgileri (leader lines): ikisinde de `A6A6A6`,
+    0,75 punt (E1);
   - `pie_small_slices`: küçük dilimlerin etiketleri ve yüzdeler;
   - `pie_negative`: `-4` nasıl çizildi (mutlak değer mi, hiç mi); etiketi ne
     yazıyor.
@@ -176,8 +180,8 @@ Her grafikte J3'teki genel noktalara (renkler, gösterge, başlık, yazı tipi,
   yoktur: `sparkline_area` Excel'de çizgidir, alan dolgusunu karşılaştırma.
 - `scatter_basic`, `scatter_dates` (dağılım):
   - iki eksenin aralığı ve adımı;
-  - kılavuz çizgileri: dosyada da uygulamada da yalnızca yatay (kontrol
-    edilmedi);
+  - kılavuz çizgileri: ikisinde de iki eksende, eksen çizgileri `BFBFBF`
+    (E1);
   - işaretçiler; dosyada noktalar arasında çizgi yok (kontrol edilmedi);
   - `scatter_basic`: `North` ve `South` serisinin noktaları kendi x
     değerlerinde mi (her serinin x değerleri sayfada kendi sütunundadır);
@@ -188,12 +192,11 @@ Her grafikte J3'teki genel noktalara (renkler, gösterge, başlık, yazı tipi,
     ve aralığı;
   - ikincil eksende kılavuz çizgisi: dosyada da uygulamada da yok (kontrol
     edilmedi);
-  - `combo_column_line`: çizgide işaretçi var mı. Dosyada yok, uygulamada
-    var; ikisi de tahmin (kontrol edilmedi). Negatif sütun (`-4`);
+  - `combo_column_line`: çizgide işaretçi yok, sütun boşluğu 150 (E1;
+    ikisinde de). Negatif sütun (`-4`);
   - `line_secondary`: ikincil eksenin başlığı (`Units`).
 - `combo_area_column_line` (alan, sütun ve çizgi tek eksende): çizim sırası
-  (alan arkada, çizgi önde), renkler ve çizgideki işaretçiler (dosyada yok,
-  uygulamada var; kontrol edilmedi).
+  (alan arkada, çizgi önde), renkler; çizgide işaretçi yok (E1; ikisinde de).
 - `line_smooth` (düzgün çizgi): `Smooth` serisinin eğrisinin biçimi; tepe
   noktalarını aşıyor mu. `Straight` serisi düz kalmalı ve boşluğu (Çarşamba)
   korumalı.

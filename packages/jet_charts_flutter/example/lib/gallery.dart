@@ -409,6 +409,8 @@ List<GalleryEntry> j4Entries() => <GalleryEntry>[
           <double?>[8, 11, 14, 10, 6],
         ),
       ],
+      // Excel's default scatter has grid lines on both axes (E1, chart 4).
+      categoryAxis: const ChartAxis(gridLines: true),
     ),
   ),
   _entry(
@@ -429,7 +431,7 @@ List<GalleryEntry> j4Entries() => <GalleryEntry>[
           <double?>[4, 7, 5, 9, 6],
         ),
       ],
-      categoryAxis: const ChartAxis(formatCode: 'd mmm'),
+      categoryAxis: const ChartAxis(formatCode: 'd mmm', gridLines: true),
     ),
   ),
   _entry(

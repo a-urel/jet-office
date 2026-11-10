@@ -82,10 +82,10 @@ its themes; its code is `test/app_themes_doc_test.dart`).
   border is the theme's own (`ChartTooltipStyle.border`): the Office theme sets
   `D9D9D9`, and another theme (`ChartTheme.fromColors` sets its grid line
   colour) sets its own.
-- J4: the Excel values of the new kinds are estimates until the owner's E1
-  and E2 (the core's `AGENTS.md`, "Open for J5, C2 and C3", lists what else is
-  open: other scatter styles, a bar chart's secondary axis, rounded corners,
-  gradients, writing the kinds in DrawingML).
+- J4: the owner's E1 and E2 are recorded and their differences fixed (the
+  core's `AGENTS.md`, "Open for J5, C2 and C3", lists what stays unread and
+  what else is open: other scatter styles, a bar chart's secondary axis,
+  rounded corners, gradients, writing the kinds in DrawingML).
 - Minor and deferred from J4: `JetChart._onFocusChange` calls `setState`
   every time, and the focus tests need two pumps; no tests for a leader line
   hidden before the end of an animation or for `fillOpacity` kept in the lerp;
@@ -93,8 +93,7 @@ its themes; its code is `test/app_themes_doc_test.dart`).
   dark golden charts copy the light ones' data; some doc lines in
   `animation.dart` and `primitive_painter.dart` are over 80 columns; the
   Flutter copy of the fuzz generator has no commit hash in its provenance;
-  the gallery's pie, doughnut and combination charts use the column chart's
-  colour and style parts in the Excel workbook, the sparkline column width is
+  the sparkline column width is
   approximate (`x14` sparklines are cell features, so `sparkline_area` shows
   as a line in Excel) and the page's palette is not Monépro's own.
 

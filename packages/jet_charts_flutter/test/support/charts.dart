@@ -277,6 +277,8 @@ List<(String, Chart, ChartSize)> goldenCharts() => <(String, Chart, ChartSize)>[
           <double?>[8, 11, 14, 10, 6],
         ),
       ],
+      // Excel's default scatter has grid lines on both axes (E1, chart 4).
+      categoryAxis: const ChartAxis(gridLines: true),
     ),
     goldenSize,
   ),

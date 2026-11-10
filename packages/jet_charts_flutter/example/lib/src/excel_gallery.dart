@@ -18,8 +18,10 @@
 /// of that file (`colorsN.xml`, `styleN.xml`, `excel_chart_style.dart`), as
 /// Excel writes them beside every chart it makes: the style part of its
 /// clustered column chart (201) for column charts and that of its line chart
-/// (332) for line charts. The owner's file has no Excel-saved bar or area
-/// chart, so those two kinds keep the column style. Every series names its
+/// (332) for line charts, smoothed or not; the owner's E1 file
+/// (`chart_reference_j4.xlsx`) gives a pie or doughnut 251, a scatter chart
+/// 240 and the combination 322. The owner's files have no Excel-saved bar or
+/// area chart, so those two kinds keep the column style. Every series names its
 /// colour of Excel's colour cycle (`colorsN.xml`), as Excel writes it in a new
 /// chart: series 7 is `accent1` with `lumMod` 60000. A series without
 /// `c:spPr` would not do: Excel drew series 7 and 8 of such a chart light
@@ -28,14 +30,12 @@
 /// owner's check, 2026-11-09, `docs/excel-checks.md` of `jet_charts_core`).
 ///
 /// The J4 kinds (pie, doughnut, scatter, a combination of column, line and
-/// area groups, a secondary value axis, a smooth line and the sparkline) have
-/// no Excel-saved sample yet: the owner's `chart_reference_j4.xlsx` (E1,
-/// `test/fixtures/owner/charts/TALIMATLAR_J4.md` of the repository) is
-/// pending. Their XML is what Excel's Insert menu is known to write, and each
-/// such value is marked in a comment as an estimate, not checked in Excel,
-/// pending E1; after E1 the values Excel wrote replace them. They keep the
-/// column chart's style part (201), as bar and area charts do, but a line
-/// chart, which keeps the line chart's (332).
+/// area groups, a secondary value axis, a smooth line and the sparkline) are
+/// written as the owner's E1 file (`chart_reference_j4.xlsx`,
+/// `test/fixtures/owner/charts/TALIMATLAR_J4.md` of the repository, read
+/// 2026-11-10) shows Excel's Insert menu writes them. What that file does not
+/// hold (a secondary axis, an area group in a combination, a numeric scatter)
+/// stays an estimate, marked so in a comment.
 library;
 
 import 'dart:convert';
@@ -147,12 +147,13 @@ Uint8List buildExcelGallery(List<GalleryEntry> entries) {
         _officeRel(1, 'chartStyle', 'style$i.xml'),
       ]),
     );
-    add(
-      'xl/charts/style$i.xml',
-      entry.chart.kind == ChartKind.line
-          ? excelLineChartStyleXml
-          : excelChartStyleXml,
-    );
+    add('xl/charts/style$i.xml', switch (entry.chart.kind) {
+      ChartKind.line => excelLineChartStyleXml,
+      ChartKind.pie || ChartKind.donut => excelPieChartStyleXml,
+      ChartKind.scatter => excelScatterChartStyleXml,
+      ChartKind.combination => excelComboChartStyleXml,
+      _ => excelChartStyleXml,
+    });
     add('xl/charts/colors$i.xml', excelChartColorsXml);
   }
   return Uint8List.fromList(
@@ -452,6 +453,22 @@ const String _greyLine =
     '<a:schemeClr val="tx1"><a:lumMod val="15000"/><a:lumOff val="85000"/>'
     '</a:schemeClr></a:solidFill><a:round/></a:ln>';
 
+/// The darker grey line of a scatter chart's two axes, `tx1` at 25 and 75
+/// (`BFBFBF`), as Excel writes them (E1, chart 4).
+const String _scatterAxisLine =
+    '<c:spPr><a:noFill/><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr">'
+    '<a:solidFill><a:schemeClr val="tx1"><a:lumMod val="25000"/>'
+    '<a:lumOff val="75000"/></a:schemeClr></a:solidFill><a:round/></a:ln>'
+    '<a:effectLst/></c:spPr>';
+
+/// A pie's leader lines, `tx1` at 35 and 65 (`A6A6A6`), 0.75 pt, as Excel
+/// writes them in a series' data labels (E1, chart 7).
+const String _leaderLines =
+    '<c:leaderLines><c:spPr><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr">'
+    '<a:solidFill><a:schemeClr val="tx1"><a:lumMod val="35000"/>'
+    '<a:lumOff val="65000"/></a:schemeClr></a:solidFill><a:round/></a:ln>'
+    '<a:effectLst/></c:spPr></c:leaderLines>';
+
 const String _noShape =
     '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr>';
 
@@ -515,8 +532,8 @@ String _circleMarker(String accent) =>
 
 /// The shape of a series drawn as [kind] (column, line or area) at [index].
 /// A line of a combination chart has no marker, as Excel's combination
-/// "Clustered Column - Line" draws it ([combination]; an estimate, not
-/// checked in Excel, pending E1).
+/// "Clustered Column - Line" draws it ([combination]; `c:symbol none`, E1
+/// chart 5).
 String _seriesShape(ChartKind kind, int index, {bool combination = false}) {
   final String accent = _accent(index);
   if (kind == ChartKind.line) {
@@ -531,10 +548,9 @@ String _seriesShape(ChartKind kind, int index, {bool combination = false}) {
 /// A slice of a pie or donut at [index]: its colour of the cycle, or the one
 /// the series names in its `pointColors`, outlined in `lt1` at 1.5 pt.
 ///
-/// The outline is an estimate, not checked in Excel, pending E1: Excel's
-/// pie and doughnut styles (251) outline a slice in `lt1` at 19050 EMU, as
-/// files Excel 2013 and later wrote show. The theme's own estimate is 0.75 pt
-/// in the background colour; the owner's E1 file settles both.
+/// Excel's pie and doughnut style (251) outlines a slice in `lt1` at 19050
+/// EMU, as the owner's E1 file shows on every `c:dPt`; the Office theme's
+/// `sliceBorderWidth` is the same 1.5 pt in its background, white.
 String _slicePoint(ChartSeries series, int index) {
   final ChartColor? own = index < series.pointColors.length
       ? series.pointColors[index]
@@ -598,7 +614,7 @@ const int _secondaryCatId = 333333333;
 const int _secondaryValId = 444444444;
 
 /// A category axis as Excel writes it; a secondary one is deleted (an
-/// estimate, not checked in Excel, pending E1). Its labels are [low], under
+/// estimate, not checked in Excel: the E1 file has no secondary axis). Its labels are [low], under
 /// the plot, when a value is negative, as the app draws them, not at the zero
 /// line under the negative bars (the owner's choice, J3 and J4 checks; the
 /// library's writer does the same).
@@ -624,9 +640,10 @@ String _catAx(
 
 /// A value axis as Excel writes it: at [pos], with gridlines when
 /// [gridlines], the number format [format], the title [title] (none when
-/// null), crossing its [cross] axis at [crosses] and, with a line when
-/// [line], as a scatter chart's horizontal axis. A secondary axis and a
-/// scatter chart's axes are estimates, not checked in Excel, pending E1.
+/// null), crossing its [cross] axis at [crosses] and with the shape
+/// [shape] (none by default; a scatter chart's axes have Excel's line). A
+/// secondary axis is an estimate, not checked in Excel (the E1 file has
+/// none); a scatter chart's axes are Excel's (E1, chart 4).
 String _valAx(
   int id,
   int cross, {
@@ -636,7 +653,7 @@ String _valAx(
   required String crosses,
   required String crossBetween,
   String? title,
-  bool line = false,
+  String shape = _noShape,
 }) =>
     '<c:valAx><c:axId val="$id"/>'
     '<c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>'
@@ -645,7 +662,7 @@ String _valAx(
     '${title == null ? '' : _axisTitle(title, vertical: pos == 'l' || pos == 'r')}'
     '$format<c:majorTickMark val="none"/><c:minorTickMark val="none"/>'
     '<c:tickLblPos val="nextTo"/>'
-    '${line ? '<c:spPr><a:noFill/>$_greyLine<a:effectLst/></c:spPr>' : _noShape}'
+    '$shape'
     '${_txPr(65000, 35000, _axisBodyPr)}'
     '<c:crossAx val="$cross"/><c:crosses val="$crosses"/>'
     '<c:crossBetween val="$crossBetween"/></c:valAx>';
@@ -673,10 +690,11 @@ String _chartXml(GalleryEntry entry) {
       '<c:showPercent val="${shown && dataLabels.showPercent ? 1 : 0}"/>'
       '<c:showBubbleSize val="0"/>'
       // A pie's and a donut's labels have leader lines, as Excel writes
-      // them (an estimate, not checked in Excel, pending E1).
-      '${round ? '<c:showLeaderLines val="1"/>' : ''}';
-  // A pie's labels go where Excel finds best ("Best Fit"; an estimate, not
-  // checked in Excel, pending E1); a doughnut takes no label position.
+      // them, and the series' shown labels Excel's line (E1, chart 7).
+      '${round ? '<c:showLeaderLines val="1"/>' : ''}'
+      '${round && shown ? _leaderLines : ''}';
+  // A pie's labels go where Excel finds best ("Best Fit", E1 chart 7); a
+  // doughnut takes no label position.
   final String seriesLabels = !labels
       ? ''
       : '<c:dLbls>$_noShape${_txPr(75000, 25000, _labelBodyPr)}'
@@ -717,7 +735,7 @@ String _chartXml(GalleryEntry entry) {
         '${<String>[for (int i = 0; i < count; i++) _slicePoint(series, i)].join()}'
             '$seriesLabels$cat$val',
       // Excel's scatter chart with markers only: the series line has no
-      // fill (an estimate, not checked in Excel, pending E1).
+      // fill (E1, chart 4).
       ChartKind.scatter =>
         '<c:spPr><a:ln w="25400" cap="rnd"><a:noFill/><a:round/></a:ln>'
             '<a:effectLst/></c:spPr>${_circleMarker(_accent(s))}'
@@ -739,7 +757,7 @@ String _chartXml(GalleryEntry entry) {
   final String axes;
   if (round) {
     // Excel's pie and doughnut: colours vary by slice, the first slice
-    // starts at 12 o'clock (an estimate, not checked in Excel, pending E1).
+    // starts at 12 o'clock (E1, charts 1, 2, 3 and 7).
     plot = pie
         ? '<c:pieChart><c:varyColors val="1"/>${sers.join()}$groupLabels'
               '<c:firstSliceAng val="0"/></c:pieChart>'
@@ -753,19 +771,22 @@ String _chartXml(GalleryEntry entry) {
         '<c:scatterChart><c:scatterStyle val="lineMarker"/>'
         '<c:varyColors val="0"/>${sers.join()}$groupLabels'
         '<c:axId val="$_catId"/><c:axId val="$_valId"/></c:scatterChart>';
-    // Gridlines on the vertical axis only (an estimate, not checked in
-    // Excel, pending E1).
+    // Excel's scatter chart (E1, chart 4): gridlines and a BFBFBF line on
+    // both axes, the x axis without a number format unless its values are
+    // dates. The x axis' gridlines follow the chart's category axis, which
+    // the gallery's scatter charts turn on, as Excel's default has them.
+    final String? xFormat = chart.categoryAxis.formatCode;
     axes =
         _valAx(
           _catId,
           _valId,
           pos: 'b',
-          gridlines: false,
-          format: _numFmt(chart.categoryAxis.formatCode),
+          gridlines: chart.categoryAxis.gridLines,
+          format: xFormat == null ? '' : _numFmt(xFormat),
           crosses: 'autoZero',
           crossBetween: 'midCat',
           title: chart.categoryAxis.title,
-          line: true,
+          shape: _scatterAxisLine,
         ) +
         _valAx(
           _valId,
@@ -776,6 +797,7 @@ String _chartXml(GalleryEntry entry) {
           crosses: 'autoZero',
           crossBetween: 'midCat',
           title: chart.valueAxis.title,
+          shape: _scatterAxisLine,
         );
   } else {
     final bool horizontal = chart.kind == ChartKind.bar;
@@ -817,7 +839,8 @@ String _chartXml(GalleryEntry entry) {
           _ =>
             '<c:barChart><c:barDir val="${horizontal ? 'bar' : 'col'}"/>'
                 '<c:grouping val="${chart.grouping.name}"/><c:varyColors val="0"/>'
-                '$own$groupLabels${_gapAndOverlap(horizontal, clustered)}'
+                '$own$groupLabels'
+                '${_gapAndOverlap(horizontal, clustered, combination: chart.kind == ChartKind.combination)}'
                 '$axIds</c:barChart>',
         });
       }
@@ -858,7 +881,8 @@ String _chartXml(GalleryEntry entry) {
         ) +
         // Excel's secondary axis: a value axis on the right without
         // gridlines that crosses its own deleted category axis at the
-        // maximum (an estimate, not checked in Excel, pending E1).
+        // maximum (an estimate, not checked in Excel: the E1 file has no
+        // secondary axis).
         (anySecondary
             ? _valAx(
                     _secondaryValId,
@@ -906,10 +930,16 @@ String _chartXml(GalleryEntry entry) {
 
 /// The gap and overlap Excel gives a new chart: 219 and -27 for clustered
 /// columns (`chart_defaults.xlsx`), 182 and none for clustered bars, 150 and
-/// 100 for stacked ones, each confirmed by the owner's `chart_reference.xlsx`
-/// (`ChartTheme.gapWidthPercentOf` and `overlapPercentOf` hold them).
-String _gapAndOverlap(bool horizontal, bool clustered) {
+/// 100 for stacked ones, each confirmed by the owner's `chart_reference.xlsx`,
+/// and 150 and none for the clustered columns of a [combination] (E1, chart
+/// 5) (`ChartTheme.gapWidthPercentOf` and `overlapPercentOf` hold them).
+String _gapAndOverlap(
+  bool horizontal,
+  bool clustered, {
+  bool combination = false,
+}) {
   if (!clustered) return '<c:gapWidth val="150"/><c:overlap val="100"/>';
   if (horizontal) return '<c:gapWidth val="182"/>';
+  if (combination) return '<c:gapWidth val="150"/>';
   return '<c:gapWidth val="219"/><c:overlap val="-27"/>';
 }

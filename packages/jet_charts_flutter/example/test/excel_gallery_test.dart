@@ -303,19 +303,38 @@ void main() {
     expect(excelChartColorsXml, owner('xl/charts/colors1.xml'));
     expect(excelChartStyleXml, owner('xl/charts/style1.xml'));
     expect(excelLineChartStyleXml, owner('xl/charts/style2.xml'));
+    // The owner's E1 file: its pie (251), scatter (240), combination (322)
+    // and smoothed line (332) charts' parts.
+    final Archive j4 = ZipDecoder().decodeBytes(
+      File(
+        '../../../test/fixtures/owner/charts/chart_reference_j4.xlsx',
+      ).readAsBytesSync(),
+    );
+    String e1(String name) => utf8.decode(j4.findFile(name)!.content);
+    expect(excelPieChartStyleXml, e1('xl/charts/style1.xml'));
+    expect(excelPieChartStyleXml, e1('xl/charts/style2.xml'));
+    expect(excelScatterChartStyleXml, e1('xl/charts/style4.xml'));
+    expect(excelComboChartStyleXml, e1('xl/charts/style5.xml'));
+    expect(excelLineChartStyleXml, e1('xl/charts/style6.xml'));
+    expect(excelChartColorsXml, e1('xl/charts/colors4.xml'));
+    expect(excelPieChartStyleXml, contains('id="251"'));
+    expect(excelScatterChartStyleXml, contains('id="240"'));
+    expect(excelComboChartStyleXml, contains('id="322"'));
     const String office = 'http://schemas.microsoft.com/office/2011/';
     final String types = part('[Content_Types].xml');
     for (final int i in charted) {
       expect(part('xl/charts/colors$i.xml'), excelChartColorsXml);
-      // A line chart has the style of Excel's default line chart (332);
-      // the owner's file has no sample of the other kinds, so they keep 201.
-      expect(
-        part('xl/charts/style$i.xml'),
-        entries[i - 1].chart.kind == ChartKind.line
-            ? excelLineChartStyleXml
-            : excelChartStyleXml,
-        reason: entries[i - 1].name,
-      );
+      // Each kind has the style Excel gives it: a line chart, smoothed or
+      // not, 332; a pie or donut 251; a scatter chart 240; a combination
+      // 322. The owner's files have no bar or area sample, so those two
+      // keep the column chart's 201.
+      expect(part('xl/charts/style$i.xml'), switch (entries[i - 1].chart.kind) {
+        ChartKind.line => excelLineChartStyleXml,
+        ChartKind.pie || ChartKind.donut => excelPieChartStyleXml,
+        ChartKind.scatter => excelScatterChartStyleXml,
+        ChartKind.combination => excelComboChartStyleXml,
+        _ => excelChartStyleXml,
+      }, reason: entries[i - 1].name);
       final Map<String, String> targets = <String, String>{
         for (final XmlElement r in all(
           xml('xl/charts/_rels/chart$i.xml.rels'),
@@ -396,6 +415,50 @@ void main() {
     }
     expect(val(doc, 'c:dLblPos'), 'bestFit');
     expect(val(doc, 'c:showLeaderLines'), '1');
+    // The series' labels have Excel's leader lines, 0.75 pt tx1 at 35 and
+    // 65 (E1, chart 7), right after showLeaderLines; the group's have none.
+    final XmlElement series = all(all(doc, 'c:ser').single, 'c:dLbls').single;
+    final List<String> names = <String>[
+      for (final XmlElement e in series.childElements) e.name.qualified,
+    ];
+    expect(
+      names.indexOf('c:leaderLines'),
+      names.indexOf('c:showLeaderLines') + 1,
+    );
+    final XmlElement leader = series.getElement('c:leaderLines')!;
+    expect(
+      leader.toXmlString(),
+      '<c:leaderLines><c:spPr><a:ln w="9525" cap="flat" cmpd="sng" '
+      'algn="ctr"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="35000"/>'
+      '<a:lumOff val="65000"/></a:schemeClr></a:solidFill><a:round/></a:ln>'
+      '<a:effectLst/></c:spPr></c:leaderLines>',
+    );
+    expect(all(doc, 'c:leaderLines'), hasLength(1));
+    // Each slice is outlined in lt1 at 1.5 pt, as Excel's.
+    for (final XmlElement point in points) {
+      final XmlElement ln = all(point, 'a:ln').single;
+      expect(ln.getAttribute('w'), '19050');
+      expect(all(ln, 'a:schemeClr').single.getAttribute('val'), 'lt1');
+    }
+  });
+
+  test('a combination chart\'s columns have gap 150 and no overlap', () {
+    for (final GalleryEntry entry in entries) {
+      if (entry.chart.kind != ChartKind.combination) continue;
+      final XmlElement bars = all(chartOf(entry.name), 'c:barChart').single;
+      if (entry.chart.grouping == ChartGrouping.clustered) {
+        expect(val(bars, 'c:gapWidth'), '150', reason: entry.name);
+        expect(all(bars, 'c:overlap'), isEmpty, reason: entry.name);
+      } else {
+        expect(val(bars, 'c:overlap'), '100', reason: entry.name);
+      }
+      // Its lines have no marker.
+      for (final XmlElement line in all(chartOf(entry.name), 'c:lineChart')) {
+        for (final XmlElement ser in all(line, 'c:ser')) {
+          expect(val(ser, 'c:symbol'), 'none', reason: entry.name);
+        }
+      }
+    }
   });
 
   test('a donut has a hole of the chart\'s size and no label position', () {
@@ -425,14 +488,28 @@ void main() {
         expect(all(ser, 'c:xVal'), hasLength(1), reason: name);
         expect(all(ser, 'c:yVal'), hasLength(1), reason: name);
       }
-      // Gridlines on the vertical axis only.
+      // Gridlines and a BFBFBF line on both axes, as Excel's (E1, chart 4).
       final List<XmlElement> axes = all(doc, 'c:valAx').toList();
       expect(val(axes[0], 'c:axPos'), 'b', reason: name);
-      expect(all(axes[0], 'c:majorGridlines'), isEmpty, reason: name);
-      expect(all(axes[1], 'c:majorGridlines'), hasLength(1), reason: name);
+      for (final XmlElement axis in axes) {
+        expect(all(axis, 'c:majorGridlines'), hasLength(1), reason: name);
+        expect(
+          axis.getElement('c:spPr')!.toXmlString(),
+          '<c:spPr><a:noFill/><a:ln w="9525" cap="flat" cmpd="sng" '
+          'algn="ctr"><a:solidFill><a:schemeClr val="tx1"><a:lumMod '
+          'val="25000"/><a:lumOff val="75000"/></a:schemeClr></a:solidFill>'
+          '<a:round/></a:ln><a:effectLst/></c:spPr>',
+          reason: name,
+        );
+      }
     }
+    // The x axis has no number format unless its values are dates.
     final XmlElement xAxis = all(chartOf('scatter_dates'), 'c:valAx').first;
     expect(xAxis.getElement('c:numFmt')!.getAttribute('formatCode'), 'd mmm');
+    expect(
+      all(chartOf('scatter_basic'), 'c:valAx').first.getElement('c:numFmt'),
+      isNull,
+    );
   });
 
   test('the x values of scatter_dates are date serials in their format', () {
