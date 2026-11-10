@@ -110,10 +110,11 @@ extension _SeriesWriting on _ChartWriter {
   /// series' shape and marker (`c:dPt` follows `c:marker` and
   /// `c:invertIfNegative`, and precedes `c:dLbls`, in the schema).
   ///
-  /// As Excel writes a point colour: the index, `c:invertIfNegative 0` of a
-  /// bar, for a line the marker with the colour as its fill and line,
-  /// `c:bubble3D 0` and the shape, a fill for a bar and the series' own line
-  /// (the segment is not recoloured) for a line.
+  /// Each holds the index, `c:invertIfNegative 0` of a bar, for a line the
+  /// marker with the colour as its fill and line, `c:bubble3D 0` and the
+  /// shape, a fill for a bar and the series' own line (the segment is not
+  /// recoloured) for a line. The layout is an estimate, not checked in Excel
+  /// (pending E1).
   void _writePointColors(ChartSeries series, ChartColor seriesColor) {
     for (int i = 0; i < series.pointColors.length; i++) {
       final ChartColor? color = series.pointColors[i];

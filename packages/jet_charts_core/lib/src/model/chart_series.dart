@@ -114,15 +114,23 @@ final class ChartSeries {
 
   /// Whether the line is drawn as a curve (Excel's `c:smooth`).
   ///
-  /// Used by line, combination line and scatter series; other kinds ignore
-  /// it.
+  /// Used by line and combination line series and by a sparkline's series.
+  /// An area series (in an area or combination chart) curves its top and
+  /// edge line on screen only: Excel's area has no `c:smooth`, so a written
+  /// chart's area is straight. A scatter chart draws markers without lines,
+  /// so it, as every other kind, ignores it.
   final bool smooth;
 
   /// The colour of each point by index, `null` for automatic (Excel's
   /// `c:dPt`). The list cannot be modified.
   ///
-  /// Used for a pie or donut slice, a bar and a marker. Beyond the end of
-  /// the list a point's colour is automatic.
+  /// Used for a pie or donut slice, a column or bar, and a line or scatter
+  /// marker; an area, a sparkline and the legend keep the series colour. A
+  /// line point with a point colour is marked even when the line marks no
+  /// other point, as the written chart holds a marker there too. A bar's
+  /// inside data label reads against the point colour, and the point's
+  /// tooltip row shows it. Beyond the end of the list a point's colour is
+  /// automatic.
   final List<ChartColor?> pointColors;
 
   /// A copy with the given fields replaced.

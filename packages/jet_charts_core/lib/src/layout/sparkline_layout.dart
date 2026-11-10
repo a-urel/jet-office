@@ -38,8 +38,9 @@ typedef SparklineLayout = ({
 ///
 /// Each series is one open path per run of finite values
 /// (`series/<s>/line/<run>`, `sparklineWidth` wide, curved when the series is
-/// `smooth`; a gap starts a run). A run of one value is a dot, a closed square
-/// of side `sparklineWidth * 2` (`series/<s>/marker/<i>`). A series of
+/// `smooth`; a gap starts a run). A run of one value is a dot, a disc of
+/// diameter `sparklineWidth * 2` centred on the point
+/// (`series/<s>/marker/<i>`, an `ArcPrimitive`). A series of
 /// `kind: ChartKind.area` also fills each run down to the plot's bottom, or to
 /// the value 0 when it lies inside the range, with the theme's `areaOpacity`
 /// (`series/<s>/area`), under the lines. The area is one closed path that
@@ -156,18 +157,14 @@ SparklineLayout layoutSparkline(
           ),
         );
       } else if (points.length == 1) {
-        final ChartPoint p = points.single;
-        final double r = theme.sparklineWidth;
         lines.add(
-          PathPrimitive(
+          ArcPrimitive(
             ids.seriesMarkerId(s, first),
-            <ChartPoint>[
-              ChartPoint(p.x - r, p.y - r),
-              ChartPoint(p.x + r, p.y - r),
-              ChartPoint(p.x + r, p.y + r),
-              ChartPoint(p.x - r, p.y + r),
-            ],
-            closed: true,
+            points.single,
+            theme.sparklineWidth,
+            0,
+            0,
+            360,
             fill: color,
           ),
         );

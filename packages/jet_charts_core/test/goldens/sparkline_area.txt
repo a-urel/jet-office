@@ -1,3 +1,3 @@
 rect background 0.00,0.00 120.00x40.00 fill=FFFFFF stroke=- width=1.00
-path series/0/area 0.75,39.25 0.75,25.25 20.50,14.75 40.25,21.75 60.00,7.75 79.75,18.25 99.50,0.75 119.25,11.25 119.25,39.25 closed=true fill=156082 stroke=- width=1.00 dash=-
+path series/0/area 0.75,39.25 0.75,25.25 20.50,14.75 40.25,21.75 60.00,7.75 79.75,18.25 99.50,0.75 119.25,11.25 119.25,39.25 closed=true fill=156082 stroke=- width=1.00 dash=- opacity=0.10
 path series/0/line/0 0.75,25.25 20.50,14.75 40.25,21.75 60.00,7.75 79.75,18.25 99.50,0.75 119.25,11.25 closed=false fill=- stroke=156082 width=0.75 dash=-

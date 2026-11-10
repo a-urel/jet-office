@@ -89,6 +89,47 @@ void main() {
     );
   });
 
+  test('a pie gives values and a range of its first series only', () {
+    ChartSeries series(String name, List<double?> v) => ChartSeries(
+      name: ChartData<String>(values: <String?>[name]),
+      categories: ChartData<Object>(values: <Object?>['a', 'b']),
+      values: ChartData<double>(values: v),
+    );
+    final Chart pie = Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        series('Drawn', <double?>[1, 3]),
+        series('Not drawn', <double?>[100, -5]),
+      ],
+    );
+    final ChartSummary summary = summarizeChart(pie);
+    expect(summary.values, <List<String>>[
+      <String>['1', '3'],
+      <String>['', ''],
+    ]);
+    expect(summary.minimum, '1');
+    expect(summary.maximum, '3');
+    expect(summary.isEmpty, isFalse);
+    final ChartSummary donut = summarizeChart(
+      pie.copyWith(kind: ChartKind.donut),
+    );
+    expect(donut.values.last, <String>['100', '-5']);
+    expect(donut.minimum, '-5');
+    expect(donut.maximum, '100');
+    // A pie whose first series has no value draws nothing: it is empty.
+    expect(
+      summarizeChart(
+        pie.copyWith(
+          series: <ChartSeries>[
+            series('Drawn', <double?>[null, null]),
+            series('Not drawn', <double?>[1, 2]),
+          ],
+        ),
+      ).isEmpty,
+      isTrue,
+    );
+  });
+
   test('a donut gives its centre text', () {
     final ChartSummary summary = summarizeChart(_chart('donut_center'));
     expect(summary.centerText, _chart('donut_center').centerText);

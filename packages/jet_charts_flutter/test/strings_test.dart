@@ -202,6 +202,20 @@ void main() {
     );
   });
 
+  test('a pie reads only the series it draws', () {
+    final Chart chart = Chart(
+      kind: ChartKind.pie,
+      series: <ChartSeries>[
+        _series('Sales', <Object>['a', 'b'], <double?>[1, 3]),
+        _series('Hidden', <Object>['a', 'b'], <double?>[100, -5]),
+      ],
+    );
+    final String text = JetChartStrings.en.describe(summarizeChart(chart));
+    expect(text, isNot(contains('Hidden')));
+    expect(text, isNot(contains('100')));
+    expect(text, endsWith('Sales: a 1 (25%), b 3 (75%).'));
+  });
+
   test('a scatter chart reads (x, y) pairs and no category range', () {
     final Chart chart = Chart(
       kind: ChartKind.scatter,

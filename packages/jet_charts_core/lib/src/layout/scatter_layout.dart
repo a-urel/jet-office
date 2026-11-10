@@ -42,7 +42,8 @@ typedef ScatterAxis = ({ValueScale scale, List<List<double>> values});
 /// ([excelSerialOf]). When any of them is something else (a `String`, a
 /// `null`, a non-finite number, or missing because the categories are
 /// fewer than the values), the series numbers its points `1, 2, 3, …` by
-/// index, as Excel does with text, whether or not that index has a value. A
+/// index, whether or not that index has a value (Excel's handling of text x
+/// values: an estimate, not checked in Excel, pending E1). A
 /// series with no values takes index numbers. An index past the series'
 /// values gets its index number too; it has no value, so it draws nothing.
 List<List<double>> scatterXValues(Chart chart, int count) {

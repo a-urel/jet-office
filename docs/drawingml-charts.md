@@ -221,7 +221,9 @@ checks what it shows. What it showed, each now what the writer writes:
   the Office theme's.
 - **J4 fields of the four kinds (estimates, not checked in Excel; the owner's
   J4 reference charts decide).** A line series' `smooth` is `c:smooth 1` (the
-  group's stays 0). `pointColors` of a column, bar or line series are one
+  group's stays 0); an area series' `smooth` writes nothing, as Excel's area
+  has no `c:smooth` (the curved top is screen only, `parity.md`), and reads
+  back as not smooth. `pointColors` of a column, bar or line series are one
   `c:dPt` per colour, after `c:marker` or `c:invertIfNegative` and before
   `c:dLbls` (the schema's order): `c:idx`, `c:invertIfNegative 0` of a bar,
   for a line the marker filled and lined in the colour, `c:bubble3D 0`, and

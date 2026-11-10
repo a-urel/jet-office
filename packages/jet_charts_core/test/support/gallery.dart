@@ -421,8 +421,9 @@ List<(String, ChartLayout)> goldenLayouts() => <(String, ChartLayout)>[
   ('tile_160x100', galleryCharts().last.layout(const ChartSize(160, 100))),
 ];
 
-/// [primitives] as text, one line per primitive, numbers to two decimals; the
-/// children of a clip are indented below it. This is the golden files' format.
+/// [primitives] as text, one line per primitive, numbers to two decimals; a
+/// path's fill opacity is printed only when it is not 1, and the children of
+/// a clip are indented below it. This is the golden files' format.
 String primitivesToText(List<ChartPrimitive> primitives) {
   final StringBuffer out = StringBuffer();
   _write(primitives, out, '');
@@ -443,7 +444,8 @@ void _write(List<ChartPrimitive> primitives, StringBuffer out, String indent) {
           '${p.points.map((ChartPoint q) => '${_n(q.x)},${_n(q.y)}').join(' ')} '
           'closed=${p.closed} fill=${_color(p.fill)} '
           'stroke=${_color(p.stroke)} width=${_n(p.strokeWidth)} '
-          'dash=${p.dash == null ? '-' : p.dash!.map(_n).join(',')}',
+          'dash=${p.dash == null ? '-' : p.dash!.map(_n).join(',')}'
+          '${p.fillOpacity == 1 ? '' : ' opacity=${_n(p.fillOpacity)}'}',
         );
       case ArcPrimitive():
         out.writeln(

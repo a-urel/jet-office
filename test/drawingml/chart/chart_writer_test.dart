@@ -1102,6 +1102,19 @@ void main() {
       expect(_count(xml, '<c:smooth val="1"/>'), 1);
     });
 
+    test('a smooth area writes no c:smooth: the curve is screen only', () {
+      final String plain = _xml(
+        _write(_chart(ChartKind.area, series: <ChartSeries>[series()])),
+      );
+      final String smooth = _xml(
+        _write(
+          _chart(ChartKind.area, series: <ChartSeries>[series(smooth: true)]),
+        ),
+      );
+      expect(smooth, isNot(contains('c:smooth')));
+      expect(smooth, plain);
+    });
+
     test('point colours write one c:dPt per colour, before the labels', () {
       final String xml = _xml(
         _write(

@@ -73,10 +73,12 @@ typedef LegendLineLook = ({double lineWidth, double markerSize, bool markers});
 /// has its square outlined in its colour, `lineLook`'s line width thick.
 ///
 /// An entry [markersOnly] marks (a scatter series, drawn as markers without
-/// a line, as Excel's marker-only scatter chart's legend shows it) is its
-/// marker alone (`legend/<s>/marker`, no `legend/<s>/symbol`): a circle of
-/// `lineLook`'s marker size in its colour, centred in a slot as wide as the
-/// larger of the square and the marker, whatever `lineLook.markers` says.
+/// a line) is its marker alone (`legend/<s>/marker`, no
+/// `legend/<s>/symbol`): a circle of `lineLook`'s marker size in its colour,
+/// centred in a slot as wide as the larger of the square and the marker,
+/// whatever `lineLook.markers` says. That this is how Excel's legend shows a
+/// marker-only scatter series is an estimate, not checked in Excel (pending
+/// E1).
 ///
 /// Returns `null` when it does not fit. The `legend` rectangle holds the
 /// entries exactly and has no fill.

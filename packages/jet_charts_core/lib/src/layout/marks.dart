@@ -35,8 +35,10 @@ import 'scatter_layout.dart';
 /// markers do not fit: [lineMarkersFit]), area charts
 /// one closed path per series (with the theme's `areaOpacity`) and, when the
 /// theme's `areaLine` is on, an open path along each area's top, after all the
-/// areas of its group. A series with `smooth` set draws its line runs as
-/// curves (`smoothPolyline`); an area never does. A scatter chart, given the
+/// areas of its group. A series with `smooth` set draws its line runs, or its
+/// area's top and edge line, as curves (`smoothPolyline`; an area's curve is
+/// screen only, as Excel's area has no `c:smooth`), and a stacked area sits
+/// on the top of the one below it, curved or not. A scatter chart, given the
 /// horizontal axis [scatterAxis], draws a marker per point (`scatterMarks`).
 /// Any other kind draws none. The frame puts the markers in a clip of their
 /// own, after the others, which go in the plot's clip.
@@ -78,7 +80,7 @@ List<ChartPrimitive> layoutMarks(
       case ChartKind.line:
         out.addAll(_lines(group, chart, resolved, values, theme, axes));
       case ChartKind.area:
-        out.addAll(_areas(group, resolved, values, theme, axes));
+        out.addAll(_areas(group, chart, resolved, values, theme, axes));
       default:
         break;
     }
@@ -192,7 +194,7 @@ List<ChartPrimitive> _bars(
       RectPrimitive(
         ids.seriesBarId(a.series, a.category),
         a.bar!,
-        fill: resolved.colors[a.series],
+        fill: resolved.colorAt(a.series, a.category),
       ),
   ];
 }
@@ -370,8 +372,27 @@ List<ChartPrimitive> _lines(
       }
     }
     flush();
+    // A point with a point colour keeps its marker, in that colour, even
+    // when the line marks no other point: the DrawingML writer writes a
+    // marker there too, so the screen shows what the file does.
+    final Set<int> drawn = marked.toSet();
+    for (int c = 0; c < tops[k].length; c++) {
+      if (tops[k][c] != null &&
+          resolved.pointColorAt(s, c) != null &&
+          drawn.add(c)) {
+        marked.add(c);
+      }
+    }
+    marked.sort();
     for (final int c in marked) {
-      out.add(lineMarker(ids.seriesMarkerId(s, c), tops[k][c]!, color, theme));
+      out.add(
+        lineMarker(
+          ids.seriesMarkerId(s, c),
+          tops[k][c]!,
+          resolved.colorAt(s, c),
+          theme,
+        ),
+      );
     }
   }
   return out;
@@ -457,6 +478,7 @@ List<List<({ChartPoint top, ChartPoint base})>> _areaColumns(
 
 List<ChartPrimitive> _areas(
   MarkGroup group,
+  Chart chart,
   ResolvedChart resolved,
   List<List<double?>> values,
   ChartTheme theme,
@@ -468,6 +490,15 @@ List<ChartPrimitive> _areas(
     values,
     axes,
   );
+  // The top of each area: a smooth series' is its curve. A stacked area
+  // sits on the top of the one below it, curve or not, so the two share
+  // their edge.
+  final List<List<ChartPoint>> tops = <List<ChartPoint>>[
+    for (int k = 0; k < columns.length; k++)
+      _areaTop(<ChartPoint>[
+        for (final column in columns[k]) column.top,
+      ], smooth: chart.series[group.members[k]].smooth),
+  ];
   final List<ChartPrimitive> out = <ChartPrimitive>[];
   for (int k = 0; k < columns.length; k++) {
     if (columns[k].isEmpty) {
@@ -478,8 +509,11 @@ List<ChartPrimitive> _areas(
       PathPrimitive(
         ids.seriesAreaId(s),
         <ChartPoint>[
-          for (final column in columns[k]) column.top,
-          for (final column in columns[k].reversed) column.base,
+          ...tops[k],
+          if (group.stacked && k > 0)
+            ...tops[k - 1].reversed
+          else
+            for (final column in columns[k].reversed) column.base,
         ],
         closed: true,
         fill: resolved.colors[s],
@@ -495,7 +529,7 @@ List<ChartPrimitive> _areas(
         out.add(
           PathPrimitive(
             ids.seriesLineId(s, 0),
-            <ChartPoint>[for (final column in columns[k]) column.top],
+            tops[k],
             stroke: resolved.colors[s],
             strokeWidth: theme.lineWidth,
           ),
@@ -505,6 +539,11 @@ List<ChartPrimitive> _areas(
   }
   return out;
 }
+
+/// The top edge of an area through [points]: their curve when [smooth]
+/// (`smoothPolyline`), else the points themselves.
+List<ChartPoint> _areaTop(List<ChartPoint> points, {required bool smooth}) =>
+    smooth ? smoothPolyline(points) : points;
 
 /// Where a value's mark is, for the data label that goes with it.
 final class MarkAnchor {

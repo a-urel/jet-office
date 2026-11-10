@@ -155,7 +155,8 @@ final class JetChartStrings {
   /// [moreValues] counting the rest.
   ///
   /// In a pie or donut each value that has a share is read by [share], as
-  /// `category value (percent)`. A scatter chart has no categories: its
+  /// `category value (percent)`; a pie names and reads its first series
+  /// only, the one it draws. A scatter chart has no categories: its
   /// category sentence is left out, and each series reads `(x, y)` pairs of
   /// its points.
   ///
@@ -175,7 +176,11 @@ final class JetChartStrings {
       out.add('${_fill(centerText, <String, String>{'text': center})}.');
     }
     final bool scatter = summary.kind == ChartKind.scatter;
-    final List<String> names = summary.seriesNames;
+    // A pie draws its first series only (its summary's other values are
+    // empty), so only that one is named.
+    final List<String> names = summary.kind == ChartKind.pie
+        ? summary.seriesNames.take(1).toList()
+        : summary.seriesNames;
     if (names.isNotEmpty) {
       out.add(
         '${_fill(seriesCount, <String, String>{'n': '${names.length}'})}: '

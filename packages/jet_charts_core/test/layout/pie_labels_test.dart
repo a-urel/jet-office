@@ -134,6 +134,32 @@ void main() {
     expect(_labels(layout)['label/0/0']!.style.color, ChartColor.rgb(0xFFFFFF));
   });
 
+  test('in a dark theme a label inside a light slice takes the background', () {
+    // The dark theme of docs/app-themes.md (jet_charts_flutter): the third
+    // colour, FBBF24, is light, E5E7EB text on it would read at about 1.3:1.
+    final ChartTheme dark = ChartTheme.fromColors(
+      palette: <ChartColor>[
+        ChartColor.rgb(0x60A5FA),
+        ChartColor.rgb(0x34D399),
+        ChartColor.rgb(0xFBBF24),
+        ChartColor.rgb(0xF87171),
+        ChartColor.rgb(0x1E3A8A),
+      ],
+      fontFamily: 'Inter',
+      text: ChartColor.rgb(0xE5E7EB),
+      background: ChartColor.rgb(0x111827),
+    );
+    final ChartLayout layout = layoutChart(
+      _chart(<double?>[25, 20, 25, 15, 15]),
+      theme: dark,
+      size: _size,
+      measurer: const FixedWidthTextMeasurer(),
+    );
+    final Map<String, TextPrimitive> labels = _labels(layout);
+    expect(labels['label/0/2']!.style.color.rgb, 0x111827);
+    expect(labels['label/0/4']!.style.color.rgb, 0xE5E7EB);
+  });
+
   test('value and percent read on two lines', () {
     final ChartLayout layout = _lay(
       _chart(

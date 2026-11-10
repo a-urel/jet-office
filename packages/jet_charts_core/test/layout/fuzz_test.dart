@@ -13,6 +13,15 @@ const int _cases = 100;
 /// leg compares it, which proves a browser draws the same cases.
 const int _fingerprint = 256557245;
 
+/// The kinds J4 added; the gate's cases must draw each of them.
+const List<ChartKind> _j4Kinds = <ChartKind>[
+  ChartKind.pie,
+  ChartKind.donut,
+  ChartKind.sparkline,
+  ChartKind.scatter,
+  ChartKind.combination,
+];
+
 const ChartSize _size = ChartSize(100, 50);
 final ChartTextStyle _style = ChartTheme.office.axisLabels;
 
@@ -103,6 +112,38 @@ void main() {
         <String>['overlap: ChartOverlap(textText, a, b)'],
       );
     });
+  });
+
+  test('the gate\'s cases reach every J4 kind and option', () {
+    final Map<String, int> counts = <String, int>{
+      for (final ChartKind k in _j4Kinds) k.name: 0,
+      'secondary series': 0,
+      'donut centre text': 0,
+      'fromColors theme': 0,
+    };
+    for (final int seed in _seeds) {
+      for (int i = 0; i < _cases; i++) {
+        final LayoutFuzzCase c = layoutFuzzCase(seed, i);
+        final Chart chart = c.chart;
+        if (_j4Kinds.contains(chart.kind)) {
+          counts.update(chart.kind.name, (int n) => n + 1);
+        }
+        if (chart.series.any(
+          (ChartSeries s) => s.axis == ChartAxisBinding.secondary,
+        )) {
+          counts.update('secondary series', (int n) => n + 1);
+        }
+        if (chart.kind == ChartKind.donut && chart.centerText != null) {
+          counts.update('donut centre text', (int n) => n + 1);
+        }
+        if (c.themeName.startsWith('fromColors')) {
+          counts.update('fromColors theme', (int n) => n + 1);
+        }
+      }
+    }
+    for (final MapEntry<String, int> e in counts.entries) {
+      expect(e.value, greaterThan(0), reason: '${e.key}: $counts');
+    }
   });
 
   test('the generator draws the same cases on every platform', () {

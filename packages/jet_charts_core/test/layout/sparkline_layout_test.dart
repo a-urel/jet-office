@@ -99,27 +99,26 @@ void main() {
     }
   });
 
-  test('one value is a square dot and no line', () {
+  test('one value is a disc and no line', () {
     final ChartLayout layout = _lay(
       _chart(<ChartSeries>[
         _series(<double?>[5]),
       ]),
     );
     expect(_paths(layout, 'series/0/line/'), isEmpty);
-    final PathPrimitive dot = _paths(layout, 'series/0/marker/').single;
+    expect(_paths(layout, 'series/0/marker/'), isEmpty);
+    final List<ArcPrimitive> dots = <ArcPrimitive>[
+      for (final ChartPrimitive p in layout.primitives)
+        if (p is ArcPrimitive && p.id.startsWith('series/0/marker/')) p,
+    ];
+    final ArcPrimitive dot = dots.single;
     expect(dot.id, 'series/0/marker/0');
-    expect(dot.closed, isTrue);
+    expect(dot.radius, closeTo(_w, 1e-9));
+    expect(dot.innerRadius, 0);
+    expect(dot.sweepAngle, 360);
     expect(dot.fill, isNotNull);
-    final List<double> xs = <double>[for (final p in dot.points) p.x];
-    final List<double> ys = <double>[for (final p in dot.points) p.y];
-    expect(
-      xs.reduce((a, b) => a > b ? a : b) - xs.reduce((a, b) => a < b ? a : b),
-      closeTo(2 * _w, 1e-9),
-    );
-    expect(
-      ys.reduce((a, b) => a > b ? a : b) - ys.reduce((a, b) => a < b ? a : b),
-      closeTo(2 * _w, 1e-9),
-    );
+    final ChartRect plot = layout.plotArea!;
+    expect(dot.center.x, closeTo(plot.left + plot.width / 2, 1e-9));
     expect(findOverlaps(layout.primitives, layout.size), isEmpty);
   });
 
@@ -129,7 +128,10 @@ void main() {
         _series(<double?>[1, null, 2, 3]),
       ]),
     );
-    expect(_paths(layout, 'series/0/marker/').single.id, 'series/0/marker/0');
+    expect(
+      layout.primitives.whereType<ArcPrimitive>().single.id,
+      'series/0/marker/0',
+    );
     expect(_paths(layout, 'series/0/line/').single.id, 'series/0/line/0');
   });
 

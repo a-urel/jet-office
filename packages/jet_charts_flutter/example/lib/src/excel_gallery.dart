@@ -597,7 +597,8 @@ const int _valId = 222222222;
 const int _secondaryCatId = 333333333;
 const int _secondaryValId = 444444444;
 
-/// A category axis as Excel writes it; a secondary one is deleted.
+/// A category axis as Excel writes it; a secondary one is deleted (an
+/// estimate, not checked in Excel, pending E1).
 String _catAx(int id, int cross, {required String pos, bool deleted = false}) =>
     '<c:catAx><c:axId val="$id"/>'
     '<c:scaling><c:orientation val="minMax"/></c:scaling>'
@@ -614,7 +615,8 @@ String _catAx(int id, int cross, {required String pos, bool deleted = false}) =>
 /// A value axis as Excel writes it: at [pos], with gridlines when
 /// [gridlines], the number format [format], the title [title] (none when
 /// null), crossing its [cross] axis at [crosses] and, with a line when
-/// [line], as a scatter chart's horizontal axis.
+/// [line], as a scatter chart's horizontal axis. A secondary axis and a
+/// scatter chart's axes are estimates, not checked in Excel, pending E1.
 String _valAx(
   int id,
   int cross, {

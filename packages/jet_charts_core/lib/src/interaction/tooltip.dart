@@ -428,7 +428,7 @@ final class _Source {
       }
     }
     return ChartTooltipRow(
-      color: resolved.colors[series],
+      color: resolved.colorAt(series, category),
       label: resolved.seriesNames[series],
       value: text,
     );

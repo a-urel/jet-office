@@ -60,7 +60,8 @@ final class ChartSummary {
   final List<List<String>> xValues;
 
   /// The values of each series, one text per category, formatted as tooltips
-  /// format them; an empty text where there is no value.
+  /// format them; an empty text where there is no value, and for every
+  /// series of a pie but the first, which a pie does not draw.
   final List<List<String>> values;
 
   /// The share of each value of each series in its series' whole, in `0%`,
@@ -75,14 +76,15 @@ final class ChartSummary {
   final String? centerText;
 
   /// The least finite value, formatted in its series' code; `null` when there
-  /// is none.
+  /// is none. A pie's is its first series' only.
   final String? minimum;
 
   /// The greatest finite value, formatted in its series' code; `null` when
-  /// there is none.
+  /// there is none. A pie's is its first series' only.
   final String? maximum;
 
-  /// Whether no series has a finite value.
+  /// Whether no series has a finite value; for a pie, whether its first
+  /// series, the one it draws, has none.
   final bool isEmpty;
 
   @override
@@ -149,7 +151,9 @@ final class ChartSummary {
 /// share), and a
 /// missing or non-finite value is an empty text. The minimum and maximum are
 /// those of the finite values, each formatted in the code of the first series
-/// that holds it. In a pie or donut each value's share of its series' whole
+/// that holds it. A pie draws its first series only, so the values of its
+/// other series are empty texts and do not count for the minimum, the maximum
+/// or [ChartSummary.isEmpty] (a donut draws every series and counts them). In a pie or donut each value's share of its series' whole
 /// is given in `0%` (an empty text where there is none), and a donut's centre
 /// text is given. In a scatter chart each point's x is given per series, as
 /// its tooltip shows it, and the categories are the first series' x values.
@@ -167,10 +171,12 @@ ChartSummary summarizeChart(
   (int, double)? low;
   (int, double)? high;
   final List<List<String>> values = <List<String>>[];
+  // A pie draws its first series only; the others give empty texts.
+  final bool pie = chart.kind == ChartKind.pie;
   for (int s = 0; s < resolved.values.length; s++) {
     final List<String> texts = <String>[];
     for (final double? value in resolved.values[s]) {
-      if (value == null) {
+      if (value == null || (pie && s > 0)) {
         texts.add('');
         continue;
       }

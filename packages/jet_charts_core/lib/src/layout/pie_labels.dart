@@ -88,8 +88,8 @@ final class PieLabelPlacement {
 ///    radius and outside its inner one (and, in a pie, does not hold the
 ///    centre unless the slice is the whole disc), shares no area with
 ///    another slice or leader line (as `findOverlaps` reads them) and keeps
-///    `minTextGap` from every text. Inside a slice it is drawn white on a
-///    dark fill, as a label inside a bar is.
+///    `minTextGap` from every text. Inside a slice its colour reads against
+///    the fill (`insideLabelStyle`), as a label inside a bar does.
 /// 2. In a donut ([outside] false) a label that does not fit is hidden.
 /// 3. In a pie the others are tried outside: first at `labelGap` beyond the
 ///    slices' reach (`arcShapeReach`) along the middle angle, on the right
@@ -187,7 +187,7 @@ PieLabelPlacement placePieLabels({
       slice.labelId,
       text,
       rect,
-      insideLabelStyle(style, arc.fill ?? style.color),
+      insideLabelStyle(style, theme.background, arc.fill ?? style.color),
     );
     if (_inRing(rect, slice) &&
         bounds.contains(rect) &&

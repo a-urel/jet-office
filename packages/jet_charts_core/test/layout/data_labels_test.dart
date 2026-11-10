@@ -174,6 +174,64 @@ void main() {
     },
   );
 
+  test('in a dark theme a label inside a light bar takes the background, '
+      'inside a dark one the theme\'s light text', () {
+    // The dark theme of docs/app-themes.md (jet_charts_flutter).
+    final ChartTheme dark = ChartTheme.fromColors(
+      palette: <ChartColor>[ChartColor.rgb(0xFBBF24)],
+      fontFamily: 'Inter',
+      text: ChartColor.rgb(0xE5E7EB),
+      background: ChartColor.rgb(0x111827),
+    );
+    for (final (int rgb, int expected) in <(int, int)>[
+      (0xFBBF24, 0x111827),
+      (0x1E3A8A, 0xE5E7EB),
+    ]) {
+      final ChartLayout l = layoutChart(
+        Chart(
+          kind: ChartKind.column,
+          dataLabels: const ChartDataLabels(visible: true),
+          legend: const ChartLegend(visible: false),
+          valueAxis: fixed,
+          series: <ChartSeries>[
+            series('S0', <double?>[100, 50]),
+          ],
+        ),
+        theme: dark.copyWith(palette: <ChartColor>[ChartColor.rgb(rgb)]),
+        size: const ChartSize(400, 300),
+        measurer: measurer,
+      );
+      final ChartRect bar = byId<RectPrimitive>(l, ids.seriesBarId(0, 0)).rect;
+      final TextPrimitive inside = label(l, 0, 0);
+      expect(bar.contains(inside.rect), isTrue);
+      expect(inside.style.color.rgb, expected, reason: rgb.toRadixString(16));
+      expect(label(l, 0, 1).style, dark.dataLabels);
+    }
+  });
+
+  test('a label inside a bar reads against the bar\'s point colour', () {
+    final ChartLayout l = layoutChart(
+      Chart(
+        kind: ChartKind.column,
+        dataLabels: const ChartDataLabels(visible: true),
+        legend: const ChartLegend(visible: false),
+        valueAxis: fixed,
+        series: <ChartSeries>[
+          series('S0', <double?>[
+            100,
+            100,
+          ]).copyWith(pointColors: <ChartColor?>[ChartColor.rgb(0xF2F2F2)]),
+        ],
+      ),
+      theme: theme,
+      size: const ChartSize(400, 300),
+      measurer: measurer,
+    );
+    // Bar 0 is light by its point colour, bar 1 the dark accent 1.
+    expect(label(l, 0, 0).style, theme.dataLabels);
+    expect(label(l, 0, 1).style.color, ChartColor.rgb(0xFFFFFF));
+  });
+
   test('a label never lies on another series\' bar', () {
     // Five categories of two series: bars about 25 wide, a label 48.6 wide.
     // Above its bar the label of S0 would cover S1's taller bar, and it is

@@ -84,7 +84,9 @@ theme's `areaOpacity`.
 
 `ChartSeries.smooth` draws a line as a smooth curve. The curve is a Catmull-Rom
 spline through the points, this library's estimate of Excel's smoothing (not
-checked in Excel); it can pass a little above or below a point.
+checked in Excel); it can pass a little above or below a point. An area series
+with `smooth` curves its top and edge line the same way, on screen only: Excel's
+area has no smoothing, so a file written by `jet_office` holds a straight area.
 `ChartTheme.areaOpacity` (above 0, at most 1) makes every area fill translucent,
 and `areaLine: true` draws the series colour as a line along the top of the
 fill. This is the usual look for a line over a light fill.

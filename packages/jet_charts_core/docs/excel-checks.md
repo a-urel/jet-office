@@ -134,10 +134,11 @@ page then changes the status. The sources are what this library chose.
 | Scatter: a text x value numbers the points 1, 2, 3 | Estimate, not checked in Excel; pending E1 | This library's choice, from the usual behaviour of Excel with text x values |
 | Secondary value axis on the right, no grid lines | Estimate, not checked in Excel; pending E1 | This library's choice |
 | Combination: columns, areas, then lines; primary before secondary within a kind | Estimate, not checked in Excel; pending E1 | This library's choice, from Excel's usual group order |
-| Sparkline line 0.75 pt (`sparklineWidth`); area fill under it | Estimate, not checked in Excel; pending E1/E2 | This library's choice; Excel's sparkline is a cell feature (`x14`) |
+| Sparkline line 0.75 pt (`sparklineWidth`); area fill under it; a lone value a disc of diameter `2 * sparklineWidth` | Estimate, not checked in Excel; pending E1/E2 | This library's choice; Excel's sparkline is a cell feature (`x14`) |
 | Smooth line: Catmull-Rom spline | Estimate, not checked in Excel; pending E1/E2 | Excel's smoothing is not documented |
+| A smooth area series curves its top on screen and writes no `c:smooth` | Estimate, not checked in Excel; pending E1 | Excel's area has no `c:smooth` in the schema |
 | Area `areaOpacity` as `a:alpha`; `areaLine` as the series line | Estimate, not checked in Excel; pending E1 | The DrawingML schema's alpha and `a:ln` |
-| `c:dPt` for point colours (bar fill; line marker) | Estimate, not checked in Excel; pending E1 | The schema's order; Excel's own file decides |
+| `c:dPt` for point colours (bar fill; line marker, written and drawn even with `lineMarkers` off) | Estimate, not checked in Excel; pending E1 | The schema's order; Excel's own file decides |
 | `showValue: false` as `c:showVal 0`; `showPercent` written as 0 | Estimate, not checked in Excel; pending E1 | The schema |
 | Pie, donut and combination parts in the gallery workbook use the column chart's colour and style parts | Estimate, not checked in Excel; pending E2 | Task 12 of J4 |
 

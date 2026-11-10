@@ -1,5 +1,6 @@
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
+import 'package:jet_charts_core/src/layout/curve.dart' show smoothPolyline;
 import 'package:test/test.dart';
 
 import '../support/gallery.dart';
@@ -755,6 +756,124 @@ void _smoothAndTranslucent() {
         }
         expect(p.id.contains('/line/'), isFalse);
       }
+    });
+  });
+  group('point colours', () {
+    final ChartColor gold = ChartColor.rgb(0xFBBF24);
+    final ChartColor navy = ChartColor.rgb(0x1E3A8A);
+
+    ChartLayout pointed(ChartKind kind, {ChartTheme? withTheme}) => layoutChart(
+      Chart(
+        kind: kind,
+        legend: const ChartLegend(visible: false),
+        series: <ChartSeries>[
+          series('S0', <double?>[
+            10,
+            20,
+            30,
+            40,
+          ]).copyWith(pointColors: <ChartColor?>[null, gold, null, navy]),
+        ],
+      ),
+      theme: withTheme ?? theme,
+      size: const ChartSize(400, 300),
+      measurer: measurer,
+    );
+
+    for (final ChartKind kind in <ChartKind>[ChartKind.column, ChartKind.bar]) {
+      test('a ${kind.name} fills a bar with its point colour', () {
+        final ChartLayout l = pointed(kind);
+        ChartColor? fill(int c) =>
+            byId<RectPrimitive>(l, ids.seriesBarId(0, c)).fill;
+        expect(fill(0), theme.seriesColor(0));
+        expect(fill(1), gold);
+        expect(fill(2), theme.seriesColor(0));
+        expect(fill(3), navy);
+      });
+    }
+
+    test('a line draws a marker of a point colour', () {
+      final ChartLayout l = pointed(ChartKind.line);
+      ArcPrimitive marker(int c) =>
+          byId<ArcPrimitive>(l, ids.seriesMarkerId(0, c));
+      expect(marker(0).fill, theme.seriesColor(0));
+      expect(marker(1).fill, gold);
+      expect(marker(1).stroke, gold);
+      expect(marker(3).fill, navy);
+    });
+
+    test('a line without markers still marks a point with a point colour', () {
+      final ChartLayout l = pointed(
+        ChartKind.line,
+        withTheme: theme.copyWith(lineMarkers: false),
+      );
+      expect(has(l, ids.seriesMarkerId(0, 0)), isFalse);
+      expect(has(l, ids.seriesMarkerId(0, 2)), isFalse);
+      expect(byId<ArcPrimitive>(l, ids.seriesMarkerId(0, 1)).fill, gold);
+      expect(byId<ArcPrimitive>(l, ids.seriesMarkerId(0, 3)).fill, navy);
+      expect(findOverlaps(l.primitives, l.size), isEmpty);
+    });
+  });
+  group('smooth areas', () {
+    ChartLayout area(
+      List<bool> smooth, {
+      ChartGrouping grouping = ChartGrouping.clustered,
+    }) => layoutChart(
+      Chart(
+        kind: ChartKind.area,
+        grouping: grouping,
+        legend: const ChartLegend(visible: false),
+        series: <ChartSeries>[
+          for (int s = 0; s < smooth.length; s++)
+            series('S$s', <double?>[
+              10,
+              30,
+              15,
+              25,
+              20,
+            ]).copyWith(smooth: smooth[s]),
+        ],
+      ),
+      theme: theme.copyWith(areaLine: true),
+      size: const ChartSize(400, 300),
+      measurer: measurer,
+    );
+
+    List<ChartPoint> fill(ChartLayout l, int s) =>
+        byId<PathPrimitive>(l, ids.seriesAreaId(s)).points;
+
+    List<ChartPoint> edge(ChartLayout l, int s) =>
+        byId<PathPrimitive>(l, ids.seriesLineId(s, 0)).points;
+
+    test('a smooth area\'s top and edge line follow the curve', () {
+      final ChartLayout plain = area(<bool>[false]);
+      final ChartLayout smooth = area(<bool>[true]);
+      final List<ChartPoint> curve = smoothPolyline(edge(plain, 0));
+      expect(curve.length, greaterThan(5));
+      expect(edge(smooth, 0), curve);
+      expect(fill(smooth, 0).sublist(0, curve.length), curve);
+      // The base stays the straight baseline under the plain area.
+      expect(fill(smooth, 0).sublist(curve.length), fill(plain, 0).sublist(5));
+    });
+
+    test('a stacked area sits on the curve of the smooth one below it', () {
+      final ChartLayout l = area(<bool>[
+        true,
+        false,
+      ], grouping: ChartGrouping.stacked);
+      final List<ChartPoint> below = edge(l, 0);
+      expect(below.length, greaterThan(5));
+      final List<ChartPoint> top = fill(l, 1);
+      // Five straight top points, then the lower curve, reversed.
+      expect(top.length, 5 + below.length);
+      expect(top.sublist(5), below.reversed.toList());
+      expect(edge(l, 1).length, 5);
+    });
+
+    test('a plain area is unchanged', () {
+      final ChartLayout l = area(<bool>[false]);
+      expect(fill(l, 0).length, 10);
+      expect(edge(l, 0).length, 5);
     });
   });
 }

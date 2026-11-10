@@ -850,6 +850,43 @@ void main() {
       );
     });
   });
+
+  test('a bar\'s and a marker\'s row take the point colour', () {
+    final ChartColor gold = ChartColor.rgb(0xFBBF24);
+    for (final ChartKind kind in <ChartKind>[
+      ChartKind.column,
+      ChartKind.line,
+    ]) {
+      final Chart chart = Chart(
+        kind: kind,
+        series: <ChartSeries>[
+          _series(
+            'Sales',
+            <Object>['A', 'B', 'C'],
+            <double?>[1, 2, 3],
+          ).copyWith(pointColors: <ChartColor?>[null, gold]),
+        ],
+      );
+      final ChartLayout layout = _layout(chart);
+      final String id = kind == ChartKind.column
+          ? 'series/0/bar/1'
+          : 'series/0/marker/1';
+      expect(
+        chartTooltipFor(chart, layout, id, theme: _office)!.rows.single.color,
+        gold,
+        reason: kind.name,
+      );
+      expect(
+        chartTooltipFor(
+          chart,
+          layout,
+          id.replaceFirst('/1', '/0'),
+          theme: _office,
+        )!.rows.single.color,
+        _office.seriesColor(0),
+      );
+    }
+  });
 }
 
 /// The middle of the longest segment of the path through [points].

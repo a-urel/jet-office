@@ -32,7 +32,12 @@ final class ResolvedChart {
     required this.secondaryTickFormatCode,
     required this.percent,
     required this.secondaryPercent,
-  }) : seriesKinds = List<ChartKind>.unmodifiable(seriesKinds),
+    List<List<ChartColor?>> pointColors = const <List<ChartColor?>>[],
+  }) : pointColors = List<List<ChartColor?>>.unmodifiable(<List<ChartColor?>>[
+         for (final List<ChartColor?> p in pointColors)
+           List<ChartColor?>.unmodifiable(p),
+       ]),
+       seriesKinds = List<ChartKind>.unmodifiable(seriesKinds),
        secondary = List<bool>.unmodifiable(secondary),
        seriesGroupings = List<ChartGrouping>.unmodifiable(seriesGroupings),
        values = List<List<double?>>.unmodifiable(<List<double?>>[
@@ -54,6 +59,25 @@ final class ResolvedChart {
 
   /// The colour of each series (`ChartTheme.colorOf`).
   final List<ChartColor> colors;
+
+  /// The point colours of each series (`ChartSeries.pointColors`), as
+  /// given: shorter or longer than the data, with `null` entries; a series
+  /// past the list's end has none.
+  final List<List<ChartColor?>> pointColors;
+
+  /// The point colour of series [s] at category [c], or `null` when it has
+  /// none.
+  ChartColor? pointColorAt(int s, int c) {
+    if (s >= pointColors.length) {
+      return null;
+    }
+    final List<ChartColor?> points = pointColors[s];
+    return c < points.length ? points[c] : null;
+  }
+
+  /// The colour series [s] is drawn in at category [c]: its point colour
+  /// there, else the series colour.
+  ChartColor colorAt(int s, int c) => pointColorAt(s, c) ?? colors[s];
 
   /// The number format code of the value axis' tick labels.
   final String tickFormatCode;
@@ -222,6 +246,9 @@ ResolvedChart resolveChart(
     seriesNames: names,
     colors: <ChartColor>[
       for (int s = 0; s < series.length; s++) theme.colorOf(series[s], s),
+    ],
+    pointColors: <List<ChartColor?>>[
+      for (final ChartSeries one in series) one.pointColors,
     ],
     tickFormatCode: tickCode,
     grouping: chart.grouping,

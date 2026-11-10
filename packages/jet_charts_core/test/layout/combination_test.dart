@@ -249,4 +249,37 @@ void main() {
       expect(findOverlaps(layout.primitives, layout.size), isEmpty);
     }
   });
+  test('point colours fill a column and mark a line point', () {
+    final ChartColor gold = ChartColor.rgb(0xFBBF24);
+    final ChartColor navy = ChartColor.rgb(0x1E3A8A);
+    final ChartLayout layout = _lay(
+      _combo(<ChartSeries>[
+        _series('Sales', <double?>[
+          12,
+          18,
+          9,
+          15,
+        ]).copyWith(pointColors: <ChartColor?>[null, gold]),
+        _series(
+          'Trend',
+          <double?>[10, 14, 12, 16],
+          kind: ChartKind.line,
+        ).copyWith(pointColors: <ChartColor?>[null, null, navy]),
+      ]),
+    );
+    final Map<String, ChartPrimitive> byId = <String, ChartPrimitive>{
+      for (final ChartPrimitive p in _flat(layout.primitives)) p.id: p,
+    };
+    expect(
+      (byId['series/0/bar/0']! as RectPrimitive).fill,
+      _office.seriesColor(0),
+    );
+    expect((byId['series/0/bar/1']! as RectPrimitive).fill, gold);
+    expect(
+      (byId['series/1/marker/0']! as ArcPrimitive).fill,
+      _office.seriesColor(1),
+    );
+    expect((byId['series/1/marker/2']! as ArcPrimitive).fill, navy);
+    expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+  });
 }

@@ -21,7 +21,7 @@ theme's in `excel-checks.md`.
 | Scatter | Laid out (J4) | Estimate, not checked in Excel (pending E1): both axes automatic by `autoValueScale`, horizontal grid lines only; markers only, no lines; each series has its own x column |
 | Combination (per-series kind) | Laid out (J4) | Estimate, not checked in Excel (pending E1): columns, then areas, then lines, primary-axis series before secondary ones within a kind |
 | Secondary value axis | Laid out (J4) for column, line, area and combination charts | Estimate, not checked in Excel (pending E1): on the right, no grid lines; a bar chart has none |
-| Smooth lines | Laid out (J4), a line series' `smooth` | Estimate, not checked in Excel (pending E1/E2): a Catmull-Rom spline through the points; Excel's smoothing is not documented |
+| Smooth lines | Laid out (J4), a line series' `smooth`; an area series' `smooth` curves its top on screen only (below) | Estimate, not checked in Excel (pending E1/E2): a Catmull-Rom spline through the points; Excel's smoothing is not documented |
 | Unsupported (a file's chart this model does not know) | Placeholder: the title and `unsupportedName` | Excel draws it; this package cannot |
 
 ## Elements
@@ -39,7 +39,7 @@ theme's in `excel-checks.md`.
 | Areas | On tick marks (`c:crossBetween midCat`, as this library writes an area chart): the first category at the plot's left, the last at its right, a lone one in the middle; category labels centred on those positions, the category grid lines through them (matched in the owner's J3 gallery check, `area_stacked`, which found the space this package left at both ends) | The first and last labels reach past the plot's ends, within the chart; the frame shrinks the plot for them and lowers the labels clear of the lowest value tick label. A tooltip's category band reaches halfway to each neighbour |
 | Title | 14 pt `595959` Aptos Narrow | Shown only when the chart has one; no default title |
 | Legend | 9 pt text; a line series' symbol is a line with a marker (matched in the owner's J3 gallery check, `line_gap`) | Shown unless hidden, even for one series; dropped whole when a side legend does not fit; the legend line's length, 16 pt, is this library's estimate |
-| Data labels | 9 pt `404040` text; a clustered column or bar label outside its bar's end, above the plot's top when the bar nearly reaches the axis' maximum (matched in the owner's J3 gallery check, `column_data_labels`, where Excel shows 18 above its bar on an axis to 20) | Never overlap text, the legend or another mark; inside a bar only when it fits there, white on a dark bar or a dark area fill; an area label at the plot's edge moved inward; hidden when no place is left |
+| Data labels | 9 pt `404040` text; a clustered column or bar label outside its bar's end, above the plot's top when the bar nearly reaches the axis' maximum (matched in the owner's J3 gallery check, `column_data_labels`, where Excel shows 18 above its bar on an axis to 20) | Never overlap text, the legend or another mark; inside a bar only when it fits there, in the light or dark of the label colour and the background, whichever reads on the bar or area fill; an area label at the plot's edge moved inward; hidden when no place is left |
 | Axis titles | Shown when set | Use the axis label style |
 | Chart area | White background, 0.75 pt `D9D9D9` border | Same in the Office theme; other themes have no border unless `border` is set |
 | Areas, J4 | Fill and no line (`areaOpacity` 1, `areaLine` off) | `areaOpacity` below 1 and `areaLine` are this library's own look for an app (Monépro's trend tiles); the file writes them as `a:alpha` and the series `a:ln` (estimate, not checked in Excel) |
@@ -145,11 +145,15 @@ theme's in `excel-checks.md`.
   label of a bar near the axis' maximum sits above the plot. Line and area
   labels and labels inside a bar stay inside the plot.
 - **Inside a bar, readable.** A label inside a bar lies wholly inside the
-  bar's visible part (else it is not placed there) and is white (`FFFFFF`)
-  when the bar's colour has a WCAG relative luminance below 0.5, else the
-  theme's data label colour. The rule is this package's, not measured from
-  Excel, after the owner's J3 gallery check, where 18 was unreadable dark
-  grey on dark blue.
+  bar's visible part (else it is not placed there) and takes the lighter of
+  the theme's data label colour and its background when the bar's colour (its
+  point colour, if it has one) has a WCAG relative luminance below 0.5, else
+  the darker, unless that one reads below 3:1 against the bar and the other
+  reads better (`insideLabelStyle`). In the Office theme that is white
+  (`FFFFFF`) on a dark bar and the data label colour on a light one; in a dark
+  app theme the background on a light bar. Slices follow the same rule. The
+  rule is this package's, not measured from Excel, after the owner's J3
+  gallery check, where 18 was unreadable dark grey on dark blue.
 - **On an area, readable.** An area label follows the same rule on the fill
   under it: its own series' in a stacked chart, else the topmost area painted
   under the label's centre (the last series whose area holds it), its own
@@ -222,10 +226,19 @@ given.
   closed path per series that drops to the base at each gap (unique ids: an id
   identifies one primitive).
 - **Sparklines always draw the background**, with no border, title or legend.
-- **Point colours.** `ChartSeries.pointColors` colours single bars, markers and
-  slices; an entry `null` or past the end keeps the series colour. In the file a
-  line's point colour changes its marker only (`c:dPt`; estimate, not checked in
-  Excel).
+- **Smooth areas, screen only.** An area series with `smooth` set draws its
+  fill's top and its edge line (`areaLine`) as the curve of a smooth line, and
+  a stacked area sits on the curve of the one below it. Excel's area has no
+  `c:smooth`, so a written chart's area is straight: the DrawingML writer
+  writes nothing for it.
+- **Point colours.** `ChartSeries.pointColors` colours single bars, line and
+  scatter markers and slices; an entry `null` or past the end keeps the series
+  colour. A bar's inside data label reads against its point colour, and the
+  tooltip row of a point takes it. A line's point colour changes its marker
+  only, and a point with a point colour keeps its marker even where the line
+  marks no other point (`lineMarkers` off, or markers that do not fit), as the
+  file then holds a lone marker there too (`c:dPt`; estimate, not checked in
+  Excel). The legend keeps the series colour.
 - **Overlap guarantee.** `findOverlaps` finds nothing in the J4 layouts, as in
   the others, and every hidden text of a pie, donut or sparkline stays reachable
   through a tooltip.

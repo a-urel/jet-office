@@ -80,9 +80,9 @@ List<(String, String)> dataLabelTexts(
 /// stacked one only the centre of its bar. Outside end may leave the plot
 /// but not [area] (the chart's area inside its padding), as Excel's label of
 /// a bar that reaches the axis' maximum sits above the plot; a label inside a
-/// bar must lie wholly inside the bar's visible part, and is drawn white
-/// (`FFFFFF`) when the bar's colour has a relative luminance below 0.5, so
-/// it reads on a dark bar, else in the theme's data label colour. Line and
+/// bar must lie wholly inside the bar's visible part, and its colour reads
+/// against the bar's (`insideLabelStyle`): white on a dark bar in the Office
+/// theme, else the theme's data label colour. Line and
 /// scatter labels (a scatter chart's anchors need its [scatterAxis]) try
 /// above, below, right, then left of the point; an area label is centred
 /// on the column under its point, halfway between the point and the area's
@@ -204,10 +204,12 @@ DataLabelPlacement placeDataLabels({
         final ChartTextStyle style = switch (place.where) {
           _Where.inside => insideLabelStyle(
             theme.dataLabels,
-            resolved.colors[anchor.series],
+            theme.background,
+            resolved.colorAt(anchor.series, anchor.category),
           ),
           _ when kind == ChartKind.area => insideLabelStyle(
             theme.dataLabels,
+            theme.background,
             stacked
                 ? resolved.colors[anchor.series]
                 : _fillUnder(candidate, areas) ??
@@ -309,12 +311,38 @@ ChartRect _shiftInto(ChartRect rect, ChartRect bounds) {
 }
 
 /// The style of a label drawn inside a bar, a slice or an area of the colour
-/// [bar]: white when the colour's relative luminance is below 0.5, else
-/// [style] as it is.
-ChartTextStyle insideLabelStyle(ChartTextStyle style, ChartColor bar) =>
-    relativeLuminance(bar.rgb) < 0.5 ? style.copyWith(color: _white) : style;
+/// [fill], in a chart of the background [background].
+///
+/// The label takes one of two colours, [style]'s own and [background]: the
+/// lighter of the two on a fill whose relative luminance is below 0.5, else
+/// the darker, unless that one reads below 3:1 against [fill] (WCAG 2's
+/// contrast ratio) and the other reads better, which then wins. In the Office
+/// theme that is white on a dark fill and the theme's dark grey on a light
+/// one; in a dark theme the background colour on a light fill. [style] is
+/// returned as it is when its own colour wins; the background is taken by its
+/// RGB value.
+ChartTextStyle insideLabelStyle(
+  ChartTextStyle style,
+  ChartColor background,
+  ChartColor fill,
+) {
+  final double f = relativeLuminance(fill.rgb);
+  final double own = relativeLuminance(style.color.rgb);
+  final double back = relativeLuminance(background.rgb);
+  final bool ownIsLighter = own >= back;
+  bool useOwn = (f < 0.5) == ownIsLighter;
+  final double preferred = contrastRatio(f, useOwn ? own : back);
+  final double other = contrastRatio(f, useOwn ? back : own);
+  if (preferred < 3 && other > preferred) {
+    useOwn = !useOwn;
+  }
+  return useOwn ? style : style.copyWith(color: ChartColor.rgb(background.rgb));
+}
 
-final ChartColor _white = ChartColor.rgb(0xFFFFFF);
+/// WCAG 2's contrast ratio of two relative luminances [a] and [b], from 1 to
+/// 21.
+double contrastRatio(double a, double b) =>
+    a > b ? (a + 0.05) / (b + 0.05) : (b + 0.05) / (a + 0.05);
 
 /// The relative luminance of the colour [rgb] (`0xRRGGBB`), from 0 (black)
 /// to 1 (white), as WCAG 2 defines it for sRGB.

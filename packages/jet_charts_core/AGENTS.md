@@ -125,7 +125,8 @@ unlabelled) and a donut's centre text in the hole.
   data labels give way to text, the legend, bars, markers and lines other
   than their own bar (not to area fills), and each other (a column or bar
   label outside its bar's end may leave the plot, one inside a bar must fit
-  in it and is white on a dark bar), and those that cannot be placed go to
+  in it and reads against the bar: the lighter or darker of the label colour
+  and the background, `insideLabelStyle`), and those that cannot be placed go to
   `hidden` (`degradation.dart` orders what goes first). A line marks every
   point only when its category step is at least `markerSize` plus 2 pt, else
   only its lone points (`lineMarkersFit`; Excel marks them all, `parity.md`).
@@ -168,7 +169,9 @@ donut, sparkline, scatter and combination charts, series `kind`s of every
 `areaLine`, `sliceBorderWidth` and `sparklineWidth` from 0 to 1e4, and
 `ChartTheme.fromColors` in light and dark. The gate
 runs seeds 1 to 4 with 100 cases each, the same cases on the VM and in Chrome
-(a fingerprint test proves it); longer runs by hand:
+(a fingerprint test proves it), and a test counts that those cases draw each
+J4 kind, a secondary series, a donut's centre text and a `fromColors` theme;
+longer runs by hand:
 
 ```bash
 dart run tool/fuzz_layout.dart --seeds 1-200 --cases 1000
@@ -253,14 +256,14 @@ by hand, then fix it.
   dropped whole for one long name; near-equal huge values (relative spread
   about 1e-14) can put the data top above the axis; the "data labels first"
   degradation is nominal.
-- Deferred J4 minors: `ChartDataLabels.toString` omits the new flags and the
-  text goldens do not print `fillOpacity`; a pie's 3 % label can be hidden
-  behind a 4 % slice's leader line (no overlap; Excel shows both); percent
+- Deferred J4 minors: `ChartDataLabels.toString` omits the new flags; a
+  pie's 3 % label can be hidden behind a 4 % slice's leader line (no
+  overlap; Excel shows both); percent
   stacked combination lines are drawn from raw values (Excel unchecked);
   `fromColors` takes the Office tooltip padding; a scatter `DateTime` becomes
   its serial through `jet_core`'s General text, as it exports no serial
-  function; a line series' point colour with markers off writes a lone circle
-  marker in the file (Excel unchecked); labels shown with `showValue: false`
+  function; a line series' point colour with markers off draws and writes a
+  lone circle marker (Excel unchecked); labels shown with `showValue: false`
   read back hidden (the chart reads untyped).
 - Minor: `public_api_test` asserts the exact formatted export text.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
