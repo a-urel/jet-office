@@ -44,3 +44,28 @@ legend, axes and gap values.
     whether it writes `[0]!Tutarlar`.
 
 Only the owner's run counts; no result is invented.
+
+## J4: `chart_reference_j4.xlsx`
+
+The owner's E1 workbook for milestone J4, saved on 2026-11-10 in Microsoft
+Excel for Mac 16.114.4 (26110224), Microsoft 365, from the steps in
+`TALIMATLAR_J4.md`. The Claude Excel add-in typed the sheet `Veri` (A1 empty,
+B1 `Satış`, C1 `Adet`, A2:A5 `Kuzey`, `Güney`, `Doğu`, `Batı`, B2:C5
+`12 120; 18 95; -4 140; 9 80`) and left its task pane parts
+(`xl/webextensions/`) in the file; the owner added the seven charts by hand
+from the Insert menu:
+
+1. Pie of A1:B5.
+2. Doughnut of A1:B5.
+3. Doughnut of A1:C5 (two rings).
+4. Scatter with markers only. The selection took the text A2:A5 as x values
+   and `Satış` and `Adet` as two series, not B2:C5 as one series.
+5. Combination "Clustered Column - Line", both series on one axis: not the
+   secondary axis variant of the steps.
+6. Line with markers of A1:A5 and C1:C5, smoothed.
+7. Pie of A1:B5 with best fit data labels.
+
+`test/drawingml/chart/excel_reference_j4_test.dart` (VM) pins what Excel
+wrote; `packages/jet_charts_core/docs/excel-checks.md`, "J4 values", says what
+each value confirmed or changed. A secondary axis and a scatter of numeric x
+values need a new file from the owner.
