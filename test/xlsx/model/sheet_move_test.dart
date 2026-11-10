@@ -10,6 +10,7 @@ import '../../../tool/src/part_compare.dart';
 import '../../fixtures/fixtures.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/zip_builder.dart';
+import 'support/app_titles.dart';
 
 /// Sheets `A` to `D`; `A` sums `B:C`, `C` has a name of its own and is
 /// active.
@@ -112,6 +113,55 @@ void main() {
     );
   });
 
+  test('app.xml titles follow a move and an added sheet', () {
+    final XlsxWorkbook book = XlsxWorkbook.open(
+      _withPart(
+        _book(),
+        'docProps/app.xml',
+        appXml(
+          <(String, int)>[('Worksheets', 4), ('Named Ranges', 1)],
+          <String>['A', 'B', 'C', 'D', 'C!Local'],
+        ),
+      ),
+    );
+    String app() => readXlsx(book.save().bytes)['docProps/app.xml']!;
+    final String before = app();
+    final ChangeLog log = changeLogOf(book);
+    final ChangeSet move = log.transaction(
+      () => book.moveSheet(book.sheet('D'), 0),
+    );
+    expect(appTitles(app()), <String>['D', 'A', 'B', 'C', 'C!Local']);
+    final ChangeSet add = log.transaction(
+      () => book.addSheet('New', position: 2),
+    );
+    expect(appTitles(app()), <String>['D', 'A', 'New', 'B', 'C', 'C!Local']);
+    expect(appCounts(app()), ('5', '6'));
+    expect(XlsxReader(book.save().bytes).warnings, isEmpty);
+    log
+      ..revertSet(add)
+      ..revertSet(move);
+    expect(app(), before);
+  });
+
+  test('addSheet takes a free part name among oddly named parts', () {
+    // Sheets in sheet1.xml and sheet3.xml: the third sheet's name is taken.
+    final Uint8List odd = _renamedPart(
+      _book(),
+      'xl/worksheets/sheet2.xml',
+      'xl/worksheets/sheet5.xml',
+    );
+    final XlsxWorkbook book = XlsxWorkbook.open(odd);
+    book.addSheet('New').setCell(0, 0, 'new');
+    final Uint8List saved = book.save().bytes;
+    final Map<String, String> parts = readXlsx(saved);
+    expect(parts.keys, contains('xl/worksheets/sheet5.xml'));
+    final XlsxWorkbook reopened = XlsxWorkbook.open(saved);
+    expect(_names(reopened), <String>['A', 'B', 'C', 'D', 'New']);
+    expect(reopened.sheet('New').cellAt(0, 0)?.value, 'new');
+    expect(reopened.sheet('B').cellAt(0, 0), isNull);
+    expect(XlsxReader(saved).warnings, isEmpty);
+  });
+
   test('addSheet undo restores bytes', () {
     for (final Fixture f in allFixtures()) {
       final XlsxWorkbook book = XlsxWorkbook.open(f.build());
@@ -135,3 +185,28 @@ Uint8List _withPart(Uint8List bytes, String name, String text) =>
       for (final MapEntry<String, Uint8List> p in readXlsxBytes(bytes).entries)
         (p.key, p.key == name ? utf8.encode(text) : p.value),
     ]);
+
+/// [bytes] with the part [from] stored as [to], its relationship and
+/// content type following.
+Uint8List _renamedPart(Uint8List bytes, String from, String to) {
+  final String fromTarget = from.substring('xl/'.length);
+  final String toTarget = to.substring('xl/'.length);
+  return buildZipOrdered(<(String, List<int>)>[
+    for (final MapEntry<String, Uint8List> p in readXlsxBytes(bytes).entries)
+      if (p.key == from)
+        (to, p.value)
+      else if (p.key == 'xl/_rels/workbook.xml.rels' ||
+          p.key == '[Content_Types].xml')
+        (
+          p.key,
+          utf8.encode(
+            utf8
+                .decode(p.value)
+                .replaceAll('/$from"', '/$to"')
+                .replaceAll('"$fromTarget"', '"$toTarget"'),
+          ),
+        )
+      else
+        (p.key, p.value),
+  ]);
+}

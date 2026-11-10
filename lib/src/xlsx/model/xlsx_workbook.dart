@@ -48,6 +48,7 @@ import '../../zip/archive_adapter.dart';
 import '../cell_encoder.dart';
 import '../color.dart';
 import '../defined_name.dart';
+import '../formula/formula_reference.dart' show renderSheetPrefix;
 import '../formula/reference_shift.dart';
 import '../number_format.dart';
 import '../raw_cell.dart';
@@ -205,7 +206,8 @@ final class XlsxWorkbook {
   /// reported as a warning. The sheet's part and relationship take a name
   /// and an id the package does not use yet. A sheet placed before others
   /// leaves every tab index on its sheet: a sheet's names, the active tab
-  /// and the first tab shown. Undone, the part, its relationship and its
+  /// and the first tab shown. Its title joins the sheet titles of
+  /// `docProps/app.xml` at its place. Undone, the part, its relationship and its
   /// content type go again. Loads the shared strings and styles, so it
   /// throws an [XlsxReadException] when they cannot be read; a [RangeError]
   /// named `position` for a position past the last tab. Nothing changes
@@ -216,12 +218,14 @@ final class XlsxWorkbook {
   /// Renames [sheet] to [newName], as Excel's Rename does: every reference
   /// to the sheet by name (formulas, names, rules, validations, charts and
   /// the parts the structural edits rewrite) names it anew, quoted when the
-  /// name needs it, and the sheet's title in `docProps/app.xml`
-  /// (`TitlesOfParts`) follows. Nothing else changes.
+  /// name needs it, and the sheet's titles in `docProps/app.xml` follow
+  /// (`TitlesOfParts`: the sheet's own and its named ranges', as
+  /// `Data!Print_Area`). Nothing else changes.
   ///
-  /// [newName] must be a name the writer would keep as it is: valid, at
-  /// most 31 characters, and no other sheet's name or `History`, ignoring
-  /// case; otherwise an [ArgumentError] named `newName` is thrown and
+  /// [newName] must be a name the writer would keep as it is: no character
+  /// of `[ ] : * ? / \` or that XML cannot hold, no space or apostrophe
+  /// at either end, not empty, at most 31 characters, and no other sheet's
+  /// name or `History`, ignoring case; otherwise an [ArgumentError] named `newName` is thrown and
   /// nothing changes. The same name changes nothing; a name that differs
   /// only in case is a rename. Throws an [ArgumentError] for a sheet of
   /// another workbook, and an [XlsxReadException] when a sheet cannot be
@@ -233,7 +237,8 @@ final class XlsxWorkbook {
   /// the move), as Excel's Move does: each name scoped to a sheet stays on
   /// it (`localSheetId`), the active tab and the first tab shown stay on
   /// their sheets, and a 3D reference whose first sheet comes after its
-  /// last has its ends swapped. The save asks Excel to recalculate, since a
+  /// last has its ends swapped, and the sheet titles of `docProps/app.xml`
+  /// take the new order. The save asks Excel to recalculate, since a
   /// 3D reference may now span other sheets. The same position changes
   /// nothing.
   ///
@@ -487,6 +492,35 @@ final class _RenameChange implements Change {
 
   @override
   void reapply() => entry.name = after;
+}
+
+/// The loading of the document properties by an edit: undone, the
+/// workbook has not loaded them, and each properties part of the file
+/// writes its bytes from the file again.
+final class _PropertiesLoadChange implements Change {
+  _PropertiesLoadChange(this.book, this.state)
+    : parts = <String>[
+        for (final PropertyKind kind in PropertyKind.values)
+          if (book._package.hasPart(state.partName(kind))) state.partName(kind),
+      ];
+
+  final _Book book;
+  final PropertiesState state;
+
+  /// The properties parts the file has.
+  final List<String> parts;
+
+  @override
+  void revert() {
+    book._properties = null;
+    final OpcPackage package = book._package;
+    for (final String name in parts) {
+      package.setContent(name, originalPartContent(package, name));
+    }
+  }
+
+  @override
+  void reapply() => book._properties = state;
 }
 
 /// The change of the order of the sheets: the workbook part's `<sheets>`
@@ -1112,6 +1146,13 @@ final class _Book implements SheetHost {
           }
         });
         if (at != count) _remapIndexes((int i) => i >= at ? i + 1 : i);
+        _editSheetTitles(
+          <String>[
+            for (final XlsxSheet s in _sheets)
+              if (!identical(s, sheet)) s.name,
+          ],
+          <String>[for (final XlsxSheet s in _sheets) s.name],
+        );
       });
       return sheet;
     });
@@ -1132,30 +1173,19 @@ final class _Book implements SheetHost {
         'Not a valid sheet name, or another sheet has it, ignoring case.',
       );
     }
-    PropertiesState? properties;
-    try {
-      properties = propertiesState();
-    } on XlsxReadException {
-      properties = null; // A part that cannot be read keeps its titles.
-    }
+    final List<String> before = <String>[
+      for (final XlsxSheet s in _sheets) s.name,
+    ];
     warnings.keepOnSuccess(
       () => log.transaction(() {
         references.apply(SheetRename(old, newName), null);
         applyChange(log, _RenameChange(entryOf(sheet), old, newName));
-        if (properties != null) {
-          final PropertyParts before = properties.parts;
-          final AppProperties app = before.app.withTitleRenamed(old, newName);
-          if (!identical(app, before.app)) {
-            applyChange(
-              log,
-              SetPropertiesChange(
-                properties,
-                before,
-                PropertyParts(before.core, app, before.custom),
-              ),
-            );
-          }
-        }
+        _editSheetTitles(
+          before,
+          <String>[for (final XlsxSheet s in _sheets) s.name],
+          renamedFrom: old,
+          renamedTo: newName,
+        );
       }),
     );
   }
@@ -1184,9 +1214,51 @@ final class _Book implements SheetHost {
           _sheets.insert(position, _sheets.removeAt(from));
         });
         _remapIndexes(moved);
+        _editSheetTitles(order, <String>[
+          for (final XlsxSheet s in _sheets) s.name,
+        ]);
         workbook.structureEdits++;
         log.record(StructureEditChange(workbook));
       }),
+    );
+  }
+
+  /// Makes the sheet titles of `docProps/app.xml` list [after] where they
+  /// listed [before] (`AppProperties.withSheetTitles`), recording the
+  /// change. The properties load here, inside the edit's transaction, and
+  /// the load itself is recorded: a failed or undone edit gives every
+  /// properties part its bytes from the file back. A part that cannot be
+  /// read keeps its titles.
+  void _editSheetTitles(
+    List<String> before,
+    List<String> after, {
+    String? renamedFrom,
+    String? renamedTo,
+  }) {
+    final bool loaded = _properties != null;
+    final PropertiesState state;
+    try {
+      state = propertiesState();
+    } on XlsxReadException {
+      return;
+    }
+    if (!loaded) log.record(_PropertiesLoadChange(this, state));
+    final PropertyParts parts = state.parts;
+    final AppProperties app = parts.app.withSheetTitles(
+      before: before,
+      after: after,
+      prefix: renderSheetPrefix,
+      renamedFrom: renamedFrom,
+      renamedTo: renamedTo,
+    );
+    if (identical(app, parts.app)) return;
+    applyChange(
+      log,
+      SetPropertiesChange(
+        state,
+        parts,
+        PropertyParts(parts.core, app, parts.custom),
+      ),
     );
   }
 

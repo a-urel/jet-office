@@ -34,7 +34,6 @@ import '../opc/ooxml.dart';
 import '../opc/opaque_xml.dart';
 import '../opc/package.dart';
 import '../xml/utf8_buffer.dart';
-import '../xml/xml_escape.dart';
 import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'name_key.dart';
@@ -488,54 +487,238 @@ final class AppProperties extends _PropertiesPart {
     return changed == null ? this : AppProperties._(_root, changed);
   }
 
-  /// This part with each title of `TitlesOfParts` that is exactly [from]
-  /// (a sheet's name, as Excel lists them) made [to]; this part itself when
-  /// none is, or the part is untyped. The rest of the element stays as
-  /// written.
-  AppProperties withTitleRenamed(String from, String to) {
+  /// This part with the sheet titles of `TitlesOfParts` edited: the
+  /// worksheets slice, which lists [before] (the sheets' names in tab
+  /// order), lists [after] instead, and its count in `HeadingPairs` and the
+  /// vector `size` follow. When [renamedFrom] is given, every other title
+  /// that starts with [renamedFrom]'s prefix (a named range, such as
+  /// `Data!Print_Area`; [prefix] gives a sheet's prefix with its `!`, quoted
+  /// as Excel quotes it) starts with [renamedTo]'s.
+  ///
+  /// The worksheets slice is the heading pair `Worksheets` whose titles are
+  /// [before], or else the one pair whose titles are. When the two elements
+  /// cannot be read together (an unknown shape, counts that disagree with
+  /// the titles, no such slice), both are removed: Excel rebuilds them.
+  /// This part itself when it has neither element, or is untyped.
+  AppProperties withSheetTitles({
+    required List<String> before,
+    required List<String> after,
+    required String Function(String sheet) prefix,
+    String? renamedFrom,
+    String? renamedTo,
+  }) {
     if (!isTyped) return this;
-    final int at = children.indexWhere(
-      (PropertyChild c) => c.isElement(Ns.extendedProperties, 'TitlesOfParts'),
+    int find(String local) => children.indexWhere(
+      (PropertyChild c) => c.isElement(Ns.extendedProperties, local),
     );
-    if (at < 0) return this;
-    final OpaqueXml xml = children[at].xml;
-    bool changed = false;
-    final String text = xml.xml.replaceAllMapped(_lpstr, (Match m) {
-      if (_characters(m[2]!) != from) return m[0]!;
-      changed = true;
-      return '${m[1]}${escapeXmlText(to)}${m[3]}';
-    });
-    if (!changed) return this;
+    final int pairsAt = find('HeadingPairs');
+    final int titlesAt = find('TitlesOfParts');
+    if (pairsAt < 0 && titlesAt < 0) return this;
+    List<PropertyChild> without() => <PropertyChild>[
+      for (int i = 0; i < children.length; i++)
+        if (i != pairsAt && i != titlesAt) children[i],
+    ];
+    if (pairsAt < 0 || titlesAt < 0) return AppProperties._(_root, without());
+    final List<(String, int)>? pairs = _readPairs(children[pairsAt].xml);
+    final List<String>? titles = _readTitles(children[titlesAt].xml);
+    if (pairs == null || titles == null) {
+      return AppProperties._(_root, without());
+    }
+    int total = 0;
+    for (final (String, int) p in pairs) {
+      total += p.$2;
+    }
+    if (total != titles.length) return AppProperties._(_root, without());
+    bool isSlice(int pair) {
+      int start = 0;
+      for (int i = 0; i < pair; i++) {
+        start += pairs[i].$2;
+      }
+      if (pairs[pair].$2 != before.length) return false;
+      for (int i = 0; i < before.length; i++) {
+        if (titles[start + i] != before[i]) return false;
+      }
+      return true;
+    }
+
+    int slice = -1;
+    for (int i = 0; i < pairs.length && slice < 0; i++) {
+      if (pairs[i].$1 == 'Worksheets' && isSlice(i)) slice = i;
+    }
+    for (int i = 0; i < pairs.length && slice < 0; i++) {
+      if (isSlice(i)) slice = i;
+    }
+    if (slice < 0) return AppProperties._(_root, without());
+    final List<String> nextTitles = <String>[];
+    final List<(String, int)> nextPairs = <(String, int)>[];
+    final String? oldPrefix = renamedFrom == null ? null : prefix(renamedFrom);
+    int at = 0;
+    for (int i = 0; i < pairs.length; i++) {
+      final (String name, int count) = pairs[i];
+      if (i == slice) {
+        nextTitles.addAll(after);
+        nextPairs.add((name, after.length));
+      } else {
+        for (int t = at; t < at + count; t++) {
+          final String title = titles[t];
+          nextTitles.add(
+            oldPrefix != null && title.startsWith(oldPrefix)
+                ? '${prefix(renamedTo!)}${title.substring(oldPrefix.length)}'
+                : title,
+          );
+        }
+        nextPairs.add((name, count));
+      }
+      at += count;
+    }
+    if (_sameTitles(titles, nextTitles) && after.length == before.length) {
+      return this;
+    }
     final List<PropertyChild> fresh = _rendered((XmlWriter w) {
-      w.start('wrapper');
-      writeNamespaceDeclarations(w, xml.inheritedNamespaces);
+      w.start('Properties');
+      w.attribute('xmlns', Ns.extendedProperties);
+      w.attribute('xmlns:vt', Ns.docPropsVTypes);
+      w.start('HeadingPairs');
+      w.start('vt:vector');
+      w.attribute('size', '${nextPairs.length * 2}');
+      w.attribute('baseType', 'variant');
+      for (final (String name, int count) in nextPairs) {
+        w
+          ..start('vt:variant')
+          ..start('vt:lpstr')
+          ..text(name)
+          ..end()
+          ..end()
+          ..start('vt:variant')
+          ..start('vt:i4')
+          ..text('$count')
+          ..end()
+          ..end();
+      }
       w
-        ..raw(text)
+        ..end()
+        ..end()
+        ..start('TitlesOfParts')
+        ..start('vt:vector');
+      w.attribute('size', '${nextTitles.length}');
+      w.attribute('baseType', 'lpstr');
+      for (final String title in nextTitles) {
+        w
+          ..start('vt:lpstr')
+          ..text(title)
+          ..end();
+      }
+      w
+        ..end()
+        ..end()
         ..end();
     });
     return AppProperties._(
       _root,
-      List<PropertyChild>.of(children)..[at] = fresh.single,
+      List<PropertyChild>.of(children)
+        ..[pairsAt] = fresh[0]
+        ..[titlesAt] = fresh[1],
     );
   }
 }
 
-/// A `vt:lpstr` element (any prefix, or none) holding only text: its start
-/// tag, its content and its end tag.
-final RegExp _lpstr = RegExp(
-  r'(<(?:[A-Za-z_][\w.-]*:)?lpstr(?:\s[^>]*)?>)'
-  r'([^<]*)'
-  r'(</(?:[A-Za-z_][\w.-]*:)?lpstr\s*>)',
-);
-
-/// The character data [content], escaped as XML writes it, decoded.
-String _characters(String content) {
-  final XmlPullReader r = XmlPullReader('<x>$content</x>');
-  final StringBuffer out = StringBuffer();
-  while (r.next()) {
-    if (r.eventType == XmlEventType.characters) out.write(r.text);
+bool _sameTitles(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
   }
-  return out.toString();
+  return true;
+}
+
+/// A reader over [xml], with the bindings it inherits declared, on the
+/// element's start.
+XmlPullReader _readerOf(OpaqueXml xml) {
+  final Utf8Buffer out = Utf8Buffer();
+  final XmlWriter w = XmlWriter(out)..start('wrapper');
+  writeNamespaceDeclarations(w, xml.inheritedNamespaces);
+  w
+    ..raw(xml.xml)
+    ..end();
+  final XmlPullReader r = XmlPullReader.fromBytes(out.takeBytes());
+  int starts = 0;
+  while (r.next()) {
+    if (r.eventType == XmlEventType.startElement && ++starts == 2) break;
+  }
+  return r;
+}
+
+/// The leaf values of the `vt:` elements under [xml] in order, as (local
+/// name, text), or `null` for any other element, or one at another depth
+/// than [depth] below [xml].
+List<(String, String)>? _leaves(OpaqueXml xml, int depth) {
+  final XmlPullReader r;
+  try {
+    r = _readerOf(xml);
+  } on Object {
+    return null;
+  }
+  final int top = r.depth;
+  final List<(String, String)> out = <(String, String)>[];
+  String? leaf;
+  final StringBuffer text = StringBuffer();
+  try {
+    while (r.next()) {
+      if (r.eventType == XmlEventType.endElement && r.depth < top) break;
+      switch (r.eventType) {
+        case XmlEventType.startElement:
+          if (r.namespaceUri != Ns.docPropsVTypes) return null;
+          final int d = r.depth - top;
+          if (d == depth) {
+            leaf = r.localName;
+            text.clear();
+          } else if (d > depth) {
+            return null;
+          }
+        case XmlEventType.characters || XmlEventType.cdata:
+          if (leaf != null) text.write(r.text);
+        case XmlEventType.endElement:
+          // An end event is at its parent's depth.
+          if (leaf != null && r.depth - top == depth - 1) {
+            out.add((leaf, text.toString()));
+            leaf = null;
+          }
+        default:
+      }
+    }
+  } on Object {
+    return null;
+  }
+  return out;
+}
+
+/// The heading pairs of `HeadingPairs` [xml] (a name, then a count), or
+/// `null` for another shape.
+List<(String, int)>? _readPairs(OpaqueXml xml) {
+  final List<(String, String)>? leaves = _leaves(xml, 3);
+  if (leaves == null || leaves.length.isOdd) return null;
+  final List<(String, int)> pairs = <(String, int)>[];
+  for (int i = 0; i < leaves.length; i += 2) {
+    final (String nameKind, String name) = leaves[i];
+    final (String countKind, String countText) = leaves[i + 1];
+    final int? count = int.tryParse(countText.trim());
+    if (nameKind != 'lpstr' && nameKind != 'bstr') return null;
+    if (!countKind.startsWith('i') && !countKind.startsWith('ui')) return null;
+    if (count == null || count < 0) return null;
+    pairs.add((name, count));
+  }
+  return pairs;
+}
+
+/// The titles of `TitlesOfParts` [xml], or `null` for another shape.
+List<String>? _readTitles(OpaqueXml xml) {
+  final List<(String, String)>? leaves = _leaves(xml, 2);
+  if (leaves == null) return null;
+  final List<String> titles = <String>[];
+  for (final (String kind, String text) in leaves) {
+    if (kind != 'lpstr' && kind != 'bstr') return null;
+    titles.add(text);
+  }
+  return titles;
 }
 
 /// The value of each field of [fields], read from the first child of its

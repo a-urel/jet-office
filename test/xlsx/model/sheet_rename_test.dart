@@ -10,6 +10,7 @@ import '../../../tool/src/part_compare.dart';
 import '../../fixtures/fixtures.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/zip_builder.dart';
+import 'support/app_titles.dart';
 
 /// Two sheets, `Data` and `Other`, where `Other` points at `Data` from a
 /// formula, a name, a validation and a conditional format.
@@ -110,18 +111,16 @@ void main() {
     );
   });
 
-  test('app.xml titles follow', () {
-    // Excel lists the sheets, then the names, in `TitlesOfParts`.
-    const String app =
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<Properties xmlns="$_extended" xmlns:vt="$_vTypes">'
-        '<Application>Microsoft Excel</Application>'
-        '<TitlesOfParts><vt:vector size="3" baseType="lpstr">'
-        '<vt:lpstr>Data</vt:lpstr><vt:lpstr>Other</vt:lpstr>'
-        '<vt:lpstr>Rng</vt:lpstr></vt:vector></TitlesOfParts>'
-        '</Properties>';
+  test('app.xml titles follow, named ranges too', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
-      _withPart(_book(), 'docProps/app.xml', app),
+      _withPart(
+        _book(),
+        'docProps/app.xml',
+        appXml(
+          <(String, int)>[('Worksheets', 2), ('Named Ranges', 2)],
+          <String>['Data', 'Other', 'Data!Print_Area', 'Other!Data'],
+        ),
+      ),
     );
     final String before = readXlsx(book.save().bytes)['docProps/app.xml']!;
     final ChangeLog log = changeLogOf(book);
@@ -130,13 +129,79 @@ void main() {
       () => book.renameSheet(data, 'R & D'),
     );
     final String renamed = readXlsx(book.save().bytes)['docProps/app.xml']!;
-    expect(renamed, contains('<vt:lpstr>R &amp; D</vt:lpstr>'));
-    expect(renamed, contains('<vt:lpstr>Other</vt:lpstr>'));
-    expect(renamed, isNot(contains('<vt:lpstr>Data</vt:lpstr>')));
+    expect(appTitles(renamed), <String>[
+      'R & D',
+      'Other',
+      "'R & D'!Print_Area",
+      'Other!Data',
+    ]);
+    expect(renamed, contains('<vt:i4>2</vt:i4>'));
     expect(XlsxReader(book.save().bytes).warnings, isEmpty);
     log.revertSet(set);
     expect(readXlsx(book.save().bytes)['docProps/app.xml'], before);
     expect(data.name, 'Data');
+  });
+
+  test('titles that cannot be read together are removed', () {
+    for (final String app in <String>[
+      // The counts disagree with the titles.
+      appXml(<(String, int)>[('Worksheets', 3)], <String>['Data', 'Other']),
+      // No slice lists the sheets.
+      appXml(<(String, int)>[('Worksheets', 2)], <String>['Data', 'Gone']),
+      // Titles without heading pairs.
+      appXml(null, <String>['Data', 'Other']),
+    ]) {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withPart(_book(), 'docProps/app.xml', app),
+      );
+      book.renameSheet(book.sheet('Data'), 'Facts');
+      final String out = readXlsx(book.save().bytes)['docProps/app.xml']!;
+      expect(out, isNot(contains('TitlesOfParts')));
+      expect(out, isNot(contains('HeadingPairs')));
+      expect(out, contains('<Application>Microsoft Excel</Application>'));
+    }
+  });
+
+  test('a rename that throws leaves the package byte-equal', () {
+    final Uint8List input = _withPart(
+      _withPart(
+        _book(),
+        'docProps/app.xml',
+        appXml(<(String, int)>[('Worksheets', 2)], <String>['Data', 'Other']),
+      ),
+      'xl/worksheets/sheet2.xml',
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/'
+          '2006/main"><sheetData><row>',
+    );
+    final XlsxWorkbook book = XlsxWorkbook.open(input);
+    final Uint8List before = book.save().bytes;
+    expect(
+      () => book.renameSheet(book.sheet('Data'), 'Facts'),
+      throwsA(isA<XlsxReadException>()),
+    );
+    expect(book.sheet('Data').name, 'Data');
+    final Uint8List after = book.save().bytes;
+    // The properties, loaded inside the edit, are written from the file's
+    // bytes again.
+    final Map<String, Uint8List> was = readXlsxBytes(before);
+    final Map<String, Uint8List> now = readXlsxBytes(after);
+    for (final String part in <String>[
+      'docProps/app.xml',
+      'docProps/core.xml',
+      'xl/workbook.xml',
+      'xl/_rels/workbook.xml.rels',
+      '[Content_Types].xml',
+    ]) {
+      expect(now[part], was[part], reason: part);
+    }
+    // The registry loaded the shared strings, which are then written from
+    // the model: equal in meaning (an unreadable sheet compares as one).
+    expect(comparePackages(before, after), <String>[
+      'xl/worksheets/sheet2.xml: the expected part is not well-formed XML '
+          'or not UTF-8',
+      'xl/worksheets/sheet2.xml: the actual part is not well-formed XML or '
+          'not UTF-8',
+    ]);
   });
 
   test('undo restores bytes', () {
@@ -153,11 +218,6 @@ void main() {
     );
   });
 }
-
-const String _extended =
-    'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties';
-const String _vTypes =
-    'http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes';
 
 /// [bytes] with the part [name] replaced by [text].
 Uint8List _withPart(Uint8List bytes, String name, String text) =>
