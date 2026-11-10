@@ -664,6 +664,8 @@ Word check is in `docs/word-checks.md`. The chart layer's rules and what C2 and
 C3 must do are in `docs/drawingml-charts.md`.
 Equations (OMML), parked for later (decision 0019), are analysed in
 `docs/equations.md`.
+Shapes, text boxes and icons (Insert > Shapes and Icons) are analysed in
+`docs/shapes.md`; nothing is planned.
 
 Quds is cloned read-only next to this repo at `../quds_office_suite`. The port
 map for the writer is in `docs/xlsx-writer.md`, "Port map"; the reader's is in

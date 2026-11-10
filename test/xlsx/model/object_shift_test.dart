@@ -464,4 +464,130 @@ void main() {
         'DrawingEntry.shiftedBy moves only a bare anchor. Unskip with the '
         "fix, once the owner's equations_shifted.xlsx shows what Excel does.",
   );
+
+  // Shapes and icons (docs/shapes.md). Hand-made XML as ECMA-376 and
+  // Microsoft describe it; no owner file confirms these yet.
+  group('shapes and icons', () {
+    const String shapeBody =
+        '<xdr:sp macro="" textlink=""><xdr:nvSpPr>'
+        '<xdr:cNvPr id="2" name="Oval 1"/><xdr:cNvSpPr/></xdr:nvSpPr>'
+        '<xdr:spPr><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>'
+        '<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></xdr:spPr>'
+        '<xdr:txBody><a:bodyPr/><a:p><a:r><a:t>Oval</a:t></a:r></a:p>'
+        '</xdr:txBody></xdr:sp><xdr:clientData/>';
+    const String connectorBody =
+        '<xdr:cxnSp macro=""><xdr:nvCxnSpPr>'
+        '<xdr:cNvPr id="3" name="Straight Connector 2"/><xdr:cNvCxnSpPr>'
+        '<a:stCxn id="2" idx="6"/></xdr:cNvCxnSpPr></xdr:nvCxnSpPr>'
+        '<xdr:spPr><a:prstGeom prst="line"><a:avLst/></a:prstGeom>'
+        '</xdr:spPr></xdr:cxnSp><xdr:clientData/>';
+    const String groupBody =
+        '<xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="Group 3"/>'
+        '<xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr/>'
+        '<xdr:sp macro="" textlink=""><xdr:nvSpPr>'
+        '<xdr:cNvPr id="5" name="Rectangle 4"/><xdr:cNvSpPr/></xdr:nvSpPr>'
+        '<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+        '</xdr:spPr></xdr:sp></xdr:grpSp><xdr:clientData/>';
+    const String iconBody =
+        '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="6" name="Graphic 5"/>'
+        '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>'
+        '</xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId1"><a:extLst>'
+        '<a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}">'
+        '<asvg:svgBlip xmlns:asvg='
+        '"http://schemas.microsoft.com/office/drawing/2016/SVG/main" '
+        'r:embed="rId2"/></a:ext></a:extLst></a:blip><a:stretch>'
+        '<a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr>'
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>'
+        '</xdr:pic><xdr:clientData/>';
+
+    String anchors(int shift) =>
+        '<xdr:twoCellAnchor>${_marker('from', 1, 2 + shift)}'
+        '${_marker('to', 3, 5 + shift)}$shapeBody</xdr:twoCellAnchor>'
+        '<xdr:twoCellAnchor>${_marker('from', 4, 2 + shift)}'
+        '${_marker('to', 6, 3 + shift)}$connectorBody</xdr:twoCellAnchor>'
+        '<xdr:twoCellAnchor>${_marker('from', 1, 8 + shift)}'
+        '${_marker('to', 3, 10 + shift)}$groupBody</xdr:twoCellAnchor>'
+        '<xdr:twoCellAnchor editAs="oneCell">'
+        '${_marker('from', 5, 8 + shift)}${_marker('to', 6, 9 + shift)}'
+        '$iconBody</xdr:twoCellAnchor>';
+
+    test('a shape, a connector, a group and an icon move on an insert', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_withDrawing(anchors(0)));
+      _edit(book, _insertRows(1, 2));
+      expect(
+        _saved(book)[_drawingPart],
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<xdr:wsDr $_xdr>${anchors(2)}</xdr:wsDr>',
+      );
+    });
+
+    test('an icon is listed as its PNG fallback, and removing it drops '
+        'both media parts', () {
+      final Map<String, Uint8List> all = readXlsxBytes(
+        _withDrawing(anchors(0)),
+      );
+      all['xl/drawings/_rels/drawing1.xml.rels'] = Uint8List.fromList(
+        utf8.encode(
+          '<Relationships xmlns="$pkgRelNs"><Relationship Id="rId1" '
+          'Type="$relNs/image" Target="../media/image1.png"/>'
+          '<Relationship Id="rId2" Type="$relNs/image" '
+          'Target="../media/image2.svg"/></Relationships>',
+        ),
+      );
+      all['xl/media/image1.png'] = png4x2;
+      all['xl/media/image2.svg'] = Uint8List.fromList(
+        utf8.encode('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+      );
+      final String types = utf8.decode(all['[Content_Types].xml']!);
+      all['[Content_Types].xml'] = Uint8List.fromList(
+        utf8.encode(
+          types.replaceFirst(
+            '<Default ',
+            '<Default Extension="png" ContentType="image/png"/>'
+                '<Default Extension="svg" ContentType="image/svg+xml"/>'
+                '<Default ',
+          ),
+        ),
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        buildZip(<String, List<int>>{...all}),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      expect(sheet.pictures.single.image.format, OfficeImageFormat.png);
+      sheet.removePicture(0);
+      final Map<String, Uint8List> saved = readXlsxBytes(book.save().bytes);
+      expect(saved.keys, isNot(contains('xl/media/image1.png')));
+      expect(saved.keys, isNot(contains('xl/media/image2.svg')));
+    });
+
+    test(
+      "a shape's textlink moves with the cell it names",
+      () {
+        // Excel stores a shape whose text is linked to a cell (select the
+        // shape, type =A1 in the formula bar) as textlink="$A$1", by
+        // ECMA-376. A row inserted above A1 must make it $A$2.
+        String linked(String link, int row) =>
+            '<xdr:twoCellAnchor>${_marker('from', 1, row)}'
+            '${_marker('to', 3, row + 2)}<xdr:sp macro="" '
+            'textlink="$link"><xdr:nvSpPr><xdr:cNvPr id="2" '
+            'name="Rectangle 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr>'
+            '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>'
+            '</xdr:sp><xdr:clientData/></xdr:twoCellAnchor>';
+        final XlsxWorkbook book = XlsxWorkbook.open(
+          _withDrawing(linked(r'$A$1', 4)),
+        );
+        _edit(book, _insertRows(1, 1));
+        expect(
+          _saved(book)[_drawingPart],
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+          '<xdr:wsDr $_xdr>${linked(r'$A$2', 5)}</xdr:wsDr>',
+        );
+      },
+      skip:
+          "Known gap (docs/shapes.md): a drawing's textlink is not a held "
+          'reference, so a structural edit leaves it naming the old cell. '
+          "Unskip with the fix, once the owner's shapes_shifted.xlsx shows "
+          'what Excel does.',
+    );
+  });
 }
