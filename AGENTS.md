@@ -661,6 +661,8 @@ the count again if it fails.
 The DOCX model's rules, each with its test, are in `docs/docx-model.md`; the
 Word check is in `docs/word-checks.md`. The chart layer's rules and what C2 and
 C3 must do are in `docs/drawingml-charts.md`.
+Equations (OMML), parked for later (decision 0019), are analysed in
+`docs/equations.md`.
 
 Quds is cloned read-only next to this repo at `../quds_office_suite`. The port
 map for the writer is in `docs/xlsx-writer.md`, "Port map"; the reader's is in

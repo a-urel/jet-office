@@ -17,6 +17,9 @@ import 'support/workbook_support.dart';
 const String _sheetRels = 'xl/worksheets/_rels/sheet1.xml.rels';
 const String _tablePart = 'xl/tables/table1.xml';
 const String _drawingPart = 'xl/drawings/drawing1.xml';
+const String _mcNs =
+    'http://schemas.openxmlformats.org/markup-compatibility/2006';
+const String _a14Ns = 'http://schemas.microsoft.com/office/drawing/2010/main';
 
 const String _xdr =
     'xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" '
@@ -430,4 +433,35 @@ void main() {
       '</xdr:oneCellAnchor></xdr:wsDr>',
     );
   });
+
+  test(
+    'an anchor inside mc:AlternateContent moves like a bare one',
+    () {
+      // The structure of an equation text box as ECMA-376 and Microsoft
+      // describe it: the whole anchor wrapped in mc:AlternateContent, an a14
+      // choice and a fallback. No owner file confirms it yet.
+      const String body =
+          '<xdr:sp macro="" textlink=""><xdr:nvSpPr>'
+          '<xdr:cNvPr id="7" name="TextBox 6"/><xdr:cNvSpPr txBox="1"/>'
+          '</xdr:nvSpPr><xdr:spPr/></xdr:sp><xdr:clientData/>';
+      String wrapped(int from, int to) =>
+          '<mc:AlternateContent xmlns:mc="$_mcNs"><mc:Choice '
+          'xmlns:a14="$_a14Ns" Requires="a14"><xdr:twoCellAnchor>'
+          '${_marker('from', from, 2)}${_marker('to', to, 4)}$body'
+          '</xdr:twoCellAnchor></mc:Choice><mc:Fallback><xdr:twoCellAnchor>'
+          '${_marker('from', from, 2)}${_marker('to', to, 4)}$body'
+          '</xdr:twoCellAnchor></mc:Fallback></mc:AlternateContent>';
+      final XlsxWorkbook book = XlsxWorkbook.open(_withDrawing(wrapped(4, 7)));
+      _edit(book, ReferenceShift.insert('S', ShiftAxis.columns, 1, 1));
+      expect(
+        _saved(book)[_drawingPart],
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<xdr:wsDr $_xdr>${wrapped(5, 8)}</xdr:wsDr>',
+      );
+    },
+    skip:
+        'Known W5 gap (docs/xlsx-model.md, docs/equations.md): '
+        'DrawingEntry.shiftedBy moves only a bare anchor. Unskip with the '
+        "fix, once the owner's equations_shifted.xlsx shows what Excel does.",
+  );
 }
