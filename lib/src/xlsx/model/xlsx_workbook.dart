@@ -181,7 +181,7 @@ final class XlsxWorkbook {
     final PropertiesState state = _book.propertiesState();
     recordEdit(
       _book.log,
-      () => const XlsxChange(XlsxChangeKind.partChanged),
+      () => createChange(XlsxChangeKind.partChanged),
       () => _book.log.transaction(() => setProperties(_book.log, state, value)),
     );
   }
@@ -221,7 +221,7 @@ final class XlsxWorkbook {
     late XlsxSheet added;
     return recordEdit(
       _book.log,
-      () => XlsxChange(
+      () => createChange(
         XlsxChangeKind.sheetAdded,
         sheet: added.name,
         index: sheets.indexOf(added),
@@ -249,7 +249,7 @@ final class XlsxWorkbook {
     final String old = sheet.name;
     recordEdit(
       _book.log,
-      () => XlsxChange(
+      () => createChange(
         XlsxChangeKind.sheetRenamed,
         sheet: sheet.name,
         oldSheet: old,
@@ -272,7 +272,7 @@ final class XlsxWorkbook {
   /// [XlsxReadException] when a sheet cannot be read; nothing changes then.
   void moveSheet(XlsxSheet sheet, int position) => recordEdit(
     _book.log,
-    () => XlsxChange(
+    () => createChange(
       XlsxChangeKind.sheetMoved,
       sheet: sheet.name,
       index: sheets.indexOf(sheet),
@@ -310,7 +310,7 @@ final class XlsxWorkbook {
   /// when the workbook has formulas; the calculation chain stays.
   void defineName(XlsxDefinedName name) => recordEdit(
     _book.log,
-    () => const XlsxChange(XlsxChangeKind.nameChanged),
+    () => createChange(XlsxChangeKind.nameChanged),
     () => defineNameIn(
       _book.log,
       _book.workbook,
@@ -327,7 +327,7 @@ final class XlsxWorkbook {
   /// for recalculation as [defineName] does.
   void removeName(String name) => recordEdit(
     _book.log,
-    () => const XlsxChange(XlsxChangeKind.nameChanged),
+    () => createChange(XlsxChangeKind.nameChanged),
     () => removeNameIn(_book.log, _book.workbook, null, name, 'the workbook'),
   );
 
@@ -343,7 +343,7 @@ final class XlsxWorkbook {
   /// Throws an [XlsxReadException] when a sheet to load cannot be read.
   set activeSheet(XlsxSheet sheet) => recordEdit(
     _book.log,
-    () => const XlsxChange(XlsxChangeKind.partChanged),
+    () => createChange(XlsxChangeKind.partChanged),
     () => _book.setActiveSheet(sheet),
   );
 
@@ -387,7 +387,7 @@ final class XlsxWorkbook {
         : applyWorkbookProtection(old, value, part.elementPrefix);
     recordEdit(
       _book.log,
-      () => const XlsxChange(XlsxChangeKind.partChanged),
+      () => createChange(XlsxChangeKind.partChanged),
       () => _book.log.transaction(() {
         editWorkbook(
           _book.log,

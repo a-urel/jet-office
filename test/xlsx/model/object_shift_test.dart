@@ -625,7 +625,7 @@ void main() {
       );
       final XlsxSheet sheet = book.sheets.single;
       expect(sheet.pictures.single.image.format, OfficeImageFormat.png);
-      sheet.removePicture(0);
+      sheet.removePictureAt(0);
       final Map<String, Uint8List> saved = readXlsxBytes(book.save().bytes);
       expect(saved.keys, isNot(contains('xl/media/image1.png')));
       expect(saved.keys, isNot(contains('xl/media/image2.svg')));

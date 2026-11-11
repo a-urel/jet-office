@@ -413,7 +413,7 @@ XlsxWorkbook _objectsBook() {
         description: 'Added 40 by 20 pixels, then moved to 200 by 100',
       ),
     )
-    ..movePicture(
+    ..movePictureAt(
       4,
       const XlsxOneCellAnchor(XlsxAnchorPoint(4, 11), width: 200, height: 100),
     )
@@ -462,7 +462,7 @@ XlsxWorkbook _objectsBook() {
         const XlsxTableColumn('Second'),
       ]),
     )
-    ..removePicture(0)
+    ..removePictureAt(0)
     ..removeTable('Gone');
   return book;
 }

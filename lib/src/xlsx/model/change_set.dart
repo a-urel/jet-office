@@ -52,8 +52,7 @@ enum XlsxChangeKind {
 /// One edit of an `XlsxWorkbook`, as a calculation engine needs it to know
 /// what to invalidate.
 final class XlsxChange {
-  /// A record of [kind] on [sheet].
-  const XlsxChange(
+  const XlsxChange._(
     this.kind, {
     this.sheet,
     this.oldSheet,
@@ -107,6 +106,23 @@ final class XlsxChange {
       '${count == null ? '' : ', count: $count'}'
       ')';
 }
+
+/// A record of [kind] on [sheet]; only the library makes changes.
+XlsxChange createChange(
+  XlsxChangeKind kind, {
+  String? sheet,
+  String? oldSheet,
+  XlsxRange? range,
+  int? index,
+  int? count,
+}) => XlsxChange._(
+  kind,
+  sheet: sheet,
+  oldSheet: oldSheet,
+  range: range,
+  index: index,
+  count: count,
+);
 
 /// The edits one `XlsxWorkbook.transaction` made, to hand to
 /// `XlsxWorkbook.undo` and `XlsxWorkbook.redo`.

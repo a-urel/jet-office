@@ -107,7 +107,7 @@
 /// ([XlsxSheet.richTextAt], and [XlsxSheet.setCell] with an [XlsxRichText]),
 /// notes ([XlsxSheet.notes], [XlsxSheet.noteAt], [XlsxSheet.setNote]),
 /// pictures ([XlsxSheet.pictures], [XlsxSheet.addPicture],
-/// [XlsxSheet.movePicture], [XlsxSheet.removePicture]) and tables
+/// [XlsxSheet.movePictureAt], [XlsxSheet.removePictureAt]) and tables
 /// ([XlsxSheet.tables], [XlsxSheet.addTable], [XlsxSheet.setTableStyle],
 /// [XlsxSheet.resizeTable], [XlsxSheet.removeTable]). A chart, a shape, a form
 /// control or a threaded comment beside them is kept as written, and removing

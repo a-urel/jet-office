@@ -395,8 +395,8 @@ XlsxReadException? _editObjects(XlsxSheet sheet, int row) {
     final List<XlsxCellNote> notes = sheet.notes;
     if (notes.isNotEmpty) sheet.setNote(notes[0].row, notes[0].column, null);
   });
-  step('removePicture', () {
-    if (sheet.pictures.isNotEmpty) sheet.removePicture(0);
+  step('removePictureAt', () {
+    if (sheet.pictures.isNotEmpty) sheet.removePictureAt(0);
   });
   step('removeTable', () {
     final List<XlsxTable> tables = sheet.tables;

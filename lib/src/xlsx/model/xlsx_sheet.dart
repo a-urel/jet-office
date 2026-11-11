@@ -355,7 +355,7 @@ T _recordSheetEdit<T>(
   final XlsxSheet sheet = self as XlsxSheet;
   return recordEdit(
     sheet._host.log,
-    () => XlsxChange(
+    () => createChange(
       kind,
       sheet: sheet.name,
       range: range,

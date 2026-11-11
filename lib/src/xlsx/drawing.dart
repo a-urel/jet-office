@@ -43,7 +43,7 @@ export '../drawingml/picture.dart' show emuPerPixel, pixelsToEmu;
 /// pixel is 9,525 EMU, the unit the file stores. The `const` constructor
 /// cannot check anything; the sheet writer does when the picture is added
 /// (see `XlsxSheetWriter.picture`), and so do `XlsxSheet.addPicture` and
-/// `XlsxSheet.movePicture`.
+/// `XlsxSheet.movePictureAt`.
 final class XlsxAnchorPoint {
   /// The cell ([row], [column]), both zero-based, and the offset of the
   /// corner from the cell's top-left corner: [offsetX] pixels right and

@@ -84,9 +84,9 @@ final class _FormulaLexer {
       case 0x40: // @
         return _emit(XlsxFormulaTokenKind.implicitIntersection, start, _i + 1);
       case 0x28:
-        return _emit(XlsxFormulaTokenKind.open, start, _i + 1);
+        return _emit(XlsxFormulaTokenKind.parenOpen, start, _i + 1);
       case 0x29:
-        return _emit(XlsxFormulaTokenKind.close, start, _i + 1);
+        return _emit(XlsxFormulaTokenKind.parenClose, start, _i + 1);
       case 0x7B:
         _arrayDepth++;
         return _emit(XlsxFormulaTokenKind.arrayOpen, start, _i + 1);

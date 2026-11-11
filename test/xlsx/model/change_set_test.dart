@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/model/change_set.dart' show createChange;
 import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
@@ -42,25 +43,25 @@ void main() {
     });
     expect(set.isEmpty, isFalse);
     expect(set.changes, <XlsxChange>[
-      const XlsxChange(
+      createChange(
         XlsxChangeKind.cellsSet,
         sheet: 'S',
-        range: XlsxRange(4, 1),
+        range: const XlsxRange(4, 1),
       ),
-      const XlsxChange(
+      createChange(
         XlsxChangeKind.cellsSet,
         sheet: 'S',
-        range: XlsxRange(4, 1),
+        range: const XlsxRange(4, 1),
       ),
-      const XlsxChange(
+      createChange(
         XlsxChangeKind.featureChanged,
         sheet: 'S',
-        range: XlsxRange(6, 0, 6, 1),
+        range: const XlsxRange(6, 0, 6, 1),
       ),
-      const XlsxChange(XlsxChangeKind.nameChanged),
-      const XlsxChange(XlsxChangeKind.sheetRenamed, sheet: 'U', oldSheet: 'T'),
-      const XlsxChange(XlsxChangeKind.sheetMoved, sheet: 'U', index: 0),
-      const XlsxChange(XlsxChangeKind.sheetAdded, sheet: 'V', index: 2),
+      createChange(XlsxChangeKind.nameChanged),
+      createChange(XlsxChangeKind.sheetRenamed, sheet: 'U', oldSheet: 'T'),
+      createChange(XlsxChangeKind.sheetMoved, sheet: 'U', index: 0),
+      createChange(XlsxChangeKind.sheetAdded, sheet: 'V', index: 2),
     ]);
     expect(() => set.changes.clear(), throwsUnsupportedError);
   });
@@ -155,25 +156,15 @@ void main() {
       s.deleteColumns(4, 1);
     });
     expect(set.changes, <XlsxChange>[
-      const XlsxChange(
-        XlsxChangeKind.rowsInserted,
-        sheet: 'S',
-        index: 2,
-        count: 3,
-      ),
-      const XlsxChange(
-        XlsxChangeKind.rowsDeleted,
-        sheet: 'S',
-        index: 1,
-        count: 1,
-      ),
-      const XlsxChange(
+      createChange(XlsxChangeKind.rowsInserted, sheet: 'S', index: 2, count: 3),
+      createChange(XlsxChangeKind.rowsDeleted, sheet: 'S', index: 1, count: 1),
+      createChange(
         XlsxChangeKind.columnsInserted,
         sheet: 'S',
         index: 0,
         count: 2,
       ),
-      const XlsxChange(
+      createChange(
         XlsxChangeKind.columnsDeleted,
         sheet: 'S',
         index: 4,
@@ -210,8 +201,12 @@ void main() {
         // caught: the outer goes on
       }
     });
-    expect(outer.changes, const <XlsxChange>[
-      XlsxChange(XlsxChangeKind.cellsSet, sheet: 'S', range: XlsxRange(0, 0)),
+    expect(outer.changes, <XlsxChange>[
+      createChange(
+        XlsxChangeKind.cellsSet,
+        sheet: 'S',
+        range: const XlsxRange(0, 0),
+      ),
     ]);
     expect(s.cellAt(1, 0)?.value, XlsxDecimal('2'));
     book.undo(outer);
@@ -229,9 +224,19 @@ void main() {
       s.setRowFormat(3, const XlsxRowFormat(height: 30));
       s.setColumn(2, const XlsxColumn(width: 20));
     });
-    expect(set.changes, const <XlsxChange>[
-      XlsxChange(XlsxChangeKind.featureChanged, sheet: 'S', index: 3, count: 1),
-      XlsxChange(XlsxChangeKind.featureChanged, sheet: 'S', index: 2, count: 1),
+    expect(set.changes, <XlsxChange>[
+      createChange(
+        XlsxChangeKind.featureChanged,
+        sheet: 'S',
+        index: 3,
+        count: 1,
+      ),
+      createChange(
+        XlsxChangeKind.featureChanged,
+        sheet: 'S',
+        index: 2,
+        count: 1,
+      ),
     ]);
   });
 }

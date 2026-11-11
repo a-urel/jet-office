@@ -956,7 +956,7 @@ final class _Run {
       }
       final List<XlsxPicture> pictures = s.pictures;
       for (int i = 0; i < pictures.length; i++) {
-        back('movePicture', () => s.movePicture(i, pictures[i].anchor));
+        back('movePictureAt', () => s.movePictureAt(i, pictures[i].anchor));
       }
       for (final XlsxTable t in s.tables) {
         back('setTableStyle', () => s.setTableStyle(t.name, t.style));
@@ -971,7 +971,7 @@ final class _Run {
         change('setNote', () => s.setNote(n.row, n.column, n.note));
       }
       for (final XlsxPicture p in s.pictures.take(1).toList()) {
-        remove('removePicture', () => s.removePicture(0));
+        remove('removePictureAt', () => s.removePictureAt(0));
         change('addPicture', () => s.addPicture(p));
       }
       for (final XlsxTable t in s.tables.take(1).toList()) {
@@ -1005,10 +1005,13 @@ final class _Run {
     read('new picture', () {
       final int last = s.pictures.length - 1;
       if (last < 0) return;
-      change('movePicture', () {
-        s.movePicture(last, const XlsxOneCellAnchor(XlsxAnchorPoint(1101, 31)));
+      change('movePictureAt', () {
+        s.movePictureAt(
+          last,
+          const XlsxOneCellAnchor(XlsxAnchorPoint(1101, 31)),
+        );
       });
-      change('removePicture', () => s.removePicture(last));
+      change('removePictureAt', () => s.removePictureAt(last));
     });
     change('addPicture', () => s.addPicture(picture));
     change('addTable', () {

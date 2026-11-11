@@ -174,7 +174,7 @@ void main() {
     final XlsxWorkbook book = XlsxWorkbook.open(input);
     final ChangeLog log = changeLogOf(book);
     final ChangeSet set = log.transaction(
-      () => book.sheets.single.removePicture(0),
+      () => book.sheets.single.removePictureAt(0),
     );
     log.revertSet(set);
     _unchanged(input, book);
@@ -647,7 +647,7 @@ void main() {
       _unchanged(input, book);
     });
   });
-  group('movePicture', () {
+  group('movePictureAt', () {
     const XlsxAnchorPoint from = XlsxAnchorPoint(3, 4);
     const XlsxAnchorPoint to = XlsxAnchorPoint(6, 7, offsetX: 2);
 
@@ -675,7 +675,7 @@ void main() {
         to,
         resize: XlsxPictureResize.none,
       );
-      sheet.movePicture(0, anchor);
+      sheet.movePictureAt(0, anchor);
       expect(sheet.pictures.single.anchor, anchor);
       final Uint8List saved = book.save().bytes;
       final String drawing = _drawingOf(saved);
@@ -709,7 +709,7 @@ void main() {
         ),
       );
       final XlsxSheet sheet = book.sheets.single;
-      sheet.movePicture(0, const XlsxOneCellAnchor(from, height: 4));
+      sheet.movePictureAt(0, const XlsxOneCellAnchor(from, height: 4));
       expect(
         sheet.pictures.single.anchor,
         const XlsxOneCellAnchor(from, width: 8, height: 4),
@@ -730,7 +730,10 @@ void main() {
         ),
       );
       final XlsxSheet sheet = book.sheets.single;
-      sheet.movePicture(1, const XlsxOneCellAnchor(from, width: 1, height: 1));
+      sheet.movePictureAt(
+        1,
+        const XlsxOneCellAnchor(from, width: 1, height: 1),
+      );
       expect(sheet.pictures[1].name, 'B');
       expect(sheet.pictures[1].anchor.from, from);
       expect(sheet.pictures[0].anchor.from, isNot(from));
@@ -752,7 +755,7 @@ void main() {
             },
           ),
         );
-        book.sheets.single.movePicture(0, const XlsxTwoCellAnchor(from, to));
+        book.sheets.single.movePictureAt(0, const XlsxTwoCellAnchor(from, to));
         final XlsxWorkbook again = XlsxWorkbook.open(book.save().bytes);
         expect(
           again.sheets.single.pictures.single.anchor,
@@ -779,7 +782,7 @@ void main() {
         XlsxOneCellAnchor(from, height: 5),
       ]) {
         expect(
-          () => sheet.movePicture(0, anchor),
+          () => sheet.movePictureAt(0, anchor),
           throwsA(
             isA<ArgumentError>().having(
               (ArgumentError e) => e.name,
@@ -792,9 +795,9 @@ void main() {
       expect(changeLogOf(book).hasChanges, isFalse);
       _unchanged(input, book);
       const XlsxAnchor sized = XlsxOneCellAnchor(from, width: 5, height: 6);
-      sheet.movePicture(0, sized);
+      sheet.movePictureAt(0, sized);
       expect(sheet.pictures.single.anchor, sized);
-      sheet.movePicture(0, const XlsxTwoCellAnchor(from, to));
+      sheet.movePictureAt(0, const XlsxTwoCellAnchor(from, to));
       expect(sheet.pictures.single.anchor, const XlsxTwoCellAnchor(from, to));
     });
 
@@ -802,9 +805,9 @@ void main() {
       final Uint8List input = _fixture('m4_images');
       final XlsxWorkbook book = XlsxWorkbook.open(input);
       final XlsxSheet sheet = book.sheets.first;
-      sheet.movePicture(2, sheet.pictures[2].anchor);
-      sheet.movePicture(0, sheet.pictures[0].anchor);
-      sheet.movePicture(0, XlsxOneCellAnchor(sheet.pictures[0].anchor.from));
+      sheet.movePictureAt(2, sheet.pictures[2].anchor);
+      sheet.movePictureAt(0, sheet.pictures[0].anchor);
+      sheet.movePictureAt(0, XlsxOneCellAnchor(sheet.pictures[0].anchor.from));
       expect(changeLogOf(book).hasChanges, isFalse);
       _unchanged(input, book);
     });
@@ -814,15 +817,15 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(input);
       final XlsxSheet sheet = book.sheets.first;
       expect(
-        () => sheet.movePicture(3, const XlsxOneCellAnchor(from)),
+        () => sheet.movePictureAt(3, const XlsxOneCellAnchor(from)),
         throwsRangeError,
       );
       expect(
-        () => sheet.movePicture(-1, const XlsxOneCellAnchor(from)),
+        () => sheet.movePictureAt(-1, const XlsxOneCellAnchor(from)),
         throwsRangeError,
       );
       expect(
-        () => sheet.movePicture(0, const XlsxTwoCellAnchor(to, from)),
+        () => sheet.movePictureAt(0, const XlsxTwoCellAnchor(to, from)),
         throwsA(
           isA<ArgumentError>().having(
             (ArgumentError e) => e.name,
@@ -832,7 +835,7 @@ void main() {
         ),
       );
       expect(
-        () => sheet.movePicture(
+        () => sheet.movePictureAt(
           0,
           const XlsxOneCellAnchor(XlsxAnchorPoint(-1, 0)),
         ),
@@ -856,7 +859,8 @@ void main() {
         ),
       );
       expect(
-        () => book.sheets.single.movePicture(1, const XlsxOneCellAnchor(from)),
+        () =>
+            book.sheets.single.movePictureAt(1, const XlsxOneCellAnchor(from)),
         throwsRangeError,
       );
     });
@@ -866,19 +870,20 @@ void main() {
         buildWorkbook(<String, String?>{'C': '<chartsheet xmlns="$mainNs"/>'}),
       );
       expect(
-        () => book.sheets.single.movePicture(0, const XlsxOneCellAnchor(from)),
+        () =>
+            book.sheets.single.movePictureAt(0, const XlsxOneCellAnchor(from)),
         throwsStateError,
       );
     });
   });
-  group('removePicture', () {
+  group('removePictureAt', () {
     Iterable<String> mediaOf(Uint8List bytes) => readXlsxBytes(
       bytes,
     ).keys.where((String name) => name.startsWith('xl/media/'));
 
     test("removes and keeps media another sheet's unloaded drawing shows", () {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m4_images'));
-      book.sheets[1].removePicture(0);
+      book.sheets[1].removePictureAt(0);
       final Uint8List saved = book.save().bytes;
       expect(mediaOf(saved), contains('xl/media/image1.png'));
       final XlsxWorkbook again = XlsxWorkbook.open(saved);
@@ -890,7 +895,7 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m4_images'));
       final XlsxSheet sheet = book.sheets[0];
       expect(sheet.pictures[1].image.bytes, jpeg3x5);
-      sheet.removePicture(1);
+      sheet.removePictureAt(1);
       expect(sheet.pictures, hasLength(2));
       final Uint8List saved = book.save().bytes;
       expect(mediaOf(saved), <String>['xl/media/image1.png']);
@@ -911,7 +916,7 @@ void main() {
     test('keeps a relationship another picture of the drawing names', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m4_images'));
       final XlsxSheet sheet = book.sheets[0];
-      sheet.removePicture(0);
+      sheet.removePictureAt(0);
       final Uint8List saved = book.save().bytes;
       expect(_drawingRels(saved), contains('../media/image1.png'));
       expect(sheet.pictures.last.image.bytes, png4x2);
@@ -929,7 +934,7 @@ void main() {
           media: <String, (String, List<int>)>{'rId1': ('image1.png', png4x2)},
         ),
       );
-      book.sheets.single.removePicture(0);
+      book.sheets.single.removePictureAt(0);
       final Uint8List saved = book.save().bytes;
       expect(_drawingOf(saved), contains(shape));
       expect(_drawingOf(saved), isNot(contains('<xdr:pic>')));
@@ -949,7 +954,7 @@ void main() {
           },
         ),
       );
-      book.sheets.single.removePicture(0);
+      book.sheets.single.removePictureAt(0);
       final Uint8List saved = book.save().bytes;
       expect(mediaOf(saved), isEmpty);
       expect(_drawingRels(saved), isNot(contains('Relationship ')));
@@ -958,7 +963,7 @@ void main() {
     test('removing the last entry removes the drawing', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('m4_images'));
       final XlsxSheet sheet = book.sheets[1];
-      sheet.removePicture(0);
+      sheet.removePictureAt(0);
       final Uint8List saved = book.save().bytes;
       final Map<String, Uint8List> parts = readXlsxBytes(saved);
       expect(parts, isNot(contains('xl/drawings/drawing2.xml')));
@@ -996,7 +1001,7 @@ void main() {
           media: <String, (String, List<int>)>{'rId1': ('image1.png', png4x2)},
         ),
       );
-      book.sheets.single.removePicture(0);
+      book.sheets.single.removePictureAt(0);
       final Uint8List saved = book.save().bytes;
       expect(_drawingOf(saved), contains(chart));
       expect(partText(saved, 'xl/worksheets/sheet1.xml'), contains('<drawing'));
@@ -1013,15 +1018,15 @@ void main() {
           },
         ),
       );
-      book.sheets.single.removePicture(0);
+      book.sheets.single.removePictureAt(0);
       expect(mediaOf(book.save().bytes), isEmpty);
     });
 
     test('a bad index throws and nothing changes', () {
       final Uint8List input = _fixture('m4_images');
       final XlsxWorkbook book = XlsxWorkbook.open(input);
-      expect(() => book.sheets[0].removePicture(3), throwsRangeError);
-      expect(() => book.sheets[0].removePicture(-1), throwsRangeError);
+      expect(() => book.sheets[0].removePictureAt(3), throwsRangeError);
+      expect(() => book.sheets[0].removePictureAt(-1), throwsRangeError);
       expect(changeLogOf(book).hasChanges, isFalse);
       _unchanged(input, book);
     });
@@ -1030,7 +1035,7 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(
         buildWorkbook(<String, String?>{'C': '<chartsheet xmlns="$mainNs"/>'}),
       );
-      expect(() => book.sheets.single.removePicture(0), throwsStateError);
+      expect(() => book.sheets.single.removePictureAt(0), throwsStateError);
     });
 
     test('unreadable relationships of another part fail with no change', () {
@@ -1042,7 +1047,7 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(input);
       final XlsxSheet sheet = book.sheets[0];
       final int count = sheet.pictures.length;
-      expect(() => sheet.removePicture(1), throwsA(isA<XlsxReadException>()));
+      expect(() => sheet.removePictureAt(1), throwsA(isA<XlsxReadException>()));
       expect(sheet.pictures, hasLength(count));
       expect(changeLogOf(book).hasChanges, isFalse);
     });
@@ -1099,25 +1104,25 @@ void main() {
     test('move', () {
       undone(_fixture('m4_images'), (XlsxSheet s) {
         s
-          ..movePicture(
+          ..movePictureAt(
             0,
             const XlsxTwoCellAnchor(
               XlsxAnchorPoint(0, 0),
               XlsxAnchorPoint(1, 1),
             ),
           )
-          ..movePicture(2, const XlsxOneCellAnchor(XlsxAnchorPoint(9, 9)));
+          ..movePictureAt(2, const XlsxOneCellAnchor(XlsxAnchorPoint(9, 9)));
       });
     });
 
     test('remove', () {
-      undone(_fixture('m4_images'), (XlsxSheet s) => s.removePicture(1));
-      undone(_fixture('m4_images'), (XlsxSheet s) => s.removePicture(0));
+      undone(_fixture('m4_images'), (XlsxSheet s) => s.removePictureAt(1));
+      undone(_fixture('m4_images'), (XlsxSheet s) => s.removePictureAt(0));
       undone(_fixture('m4_images'), (XlsxSheet s) {
         s
-          ..removePicture(2)
-          ..removePicture(1)
-          ..removePicture(0);
+          ..removePictureAt(2)
+          ..removePictureAt(1)
+          ..removePictureAt(0);
       });
     });
 
@@ -1125,7 +1130,7 @@ void main() {
       undone(_bare(), (XlsxSheet s) {
         s
           ..addPicture(jpeg)
-          ..removePicture(0);
+          ..removePictureAt(0);
       });
     });
 
@@ -1177,7 +1182,7 @@ void main() {
           },
         ),
       );
-      book.sheets.single.removePicture(0);
+      book.sheets.single.removePictureAt(0);
       expect(mediaOf(book.save().bytes), isEmpty);
     });
 
@@ -1190,7 +1195,7 @@ void main() {
           extraParts: hdphoto,
         ),
       );
-      book.sheets.single.removePicture(0);
+      book.sheets.single.removePictureAt(0);
       final Uint8List saved = book.save().bytes;
       expect(_drawingRels(saved), isNot(contains('hdphoto')));
       expect(mediaOf(saved), isEmpty);
@@ -1205,7 +1210,7 @@ void main() {
           extraParts: hdphoto,
         ),
       );
-      book.sheets.single.removePicture(0);
+      book.sheets.single.removePictureAt(0);
       expect(mediaOf(book.save().bytes), isEmpty);
     });
 
@@ -1219,7 +1224,7 @@ void main() {
       final XlsxWorkbook book = XlsxWorkbook.open(input);
       final ChangeLog log = changeLogOf(book);
       final ChangeSet set = log.transaction(
-        () => book.sheets.single.removePicture(0),
+        () => book.sheets.single.removePictureAt(0),
       );
       log.revertSet(set);
       _unchanged(input, book);
@@ -1242,9 +1247,11 @@ void main() {
       test('stay after a failed edit', () {
         for (final void Function(XlsxSheet) edit in <void Function(XlsxSheet)>[
           (XlsxSheet s) => s.addPicture(_sized()),
-          (XlsxSheet s) =>
-              s.movePicture(0, const XlsxOneCellAnchor(XlsxAnchorPoint(9, 9))),
-          (XlsxSheet s) => s.removePicture(0),
+          (XlsxSheet s) => s.movePictureAt(
+            0,
+            const XlsxOneCellAnchor(XlsxAnchorPoint(9, 9)),
+          ),
+          (XlsxSheet s) => s.removePictureAt(0),
         ]) {
           final Uint8List bytes = input();
           final XlsxWorkbook book = XlsxWorkbook.open(bytes);
@@ -1269,7 +1276,7 @@ void main() {
         final Uint8List bytes = buildZip(<String, List<int>>{...parts});
         final XlsxWorkbook book = XlsxWorkbook.open(bytes);
         expect(
-          () => book.sheets.single.removePicture(0),
+          () => book.sheets.single.removePictureAt(0),
           throwsA(isA<XlsxReadException>()),
         );
         same(bytes, book.save().bytes);
@@ -1313,7 +1320,7 @@ void main() {
         final XlsxWorkbook book = XlsxWorkbook.open(bytes);
         final ChangeLog log = changeLogOf(book);
         final ChangeSet set = log.transaction(
-          () => book.sheets.single.removePicture(0),
+          () => book.sheets.single.removePictureAt(0),
         );
         log.revertSet(set);
         same(bytes, book.save().bytes);
@@ -1339,7 +1346,7 @@ void main() {
       final ChangeLog log = changeLogOf(book);
       final ChangeSet set = log.transaction(() {
         sheet
-          ..removePicture(1)
+          ..removePictureAt(1)
           ..addPicture(
             XlsxPicture(
               OfficeImage(Uint8List.fromList(png4x2)),
@@ -1364,7 +1371,7 @@ void main() {
     final XlsxWorkbook book = XlsxWorkbook.open(made.save().bytes);
     final XlsxSheet sheet = book.sheets.single;
     final ChangeLog log = changeLogOf(book);
-    final ChangeSet removed = log.transaction(() => sheet.removePicture(0));
+    final ChangeSet removed = log.transaction(() => sheet.removePictureAt(0));
     final ChangeSet added = log.transaction(
       () => sheet.addPicture(_sized(name: 'Other')),
     );
@@ -1375,7 +1382,7 @@ void main() {
       width: 8,
       height: 4,
     );
-    sheet.movePicture(0, moved);
+    sheet.movePictureAt(0, moved);
     expect(
       XlsxWorkbook.open(book.save().bytes).sheets.single.pictures.single.anchor,
       moved,

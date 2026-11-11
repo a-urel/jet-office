@@ -1242,7 +1242,7 @@ On `Objects`:
   filling H11:J15; the two PNGs show the same image, and so do the two JPEGs.
   Format Picture > Alt Text of each reads its description.
 - The picture `Moved picture` at L5 was added 40 by 20 pixels and then moved to
-  200 by 100 pixels with `movePicture`. Excel must show it 200 by 100 pixels
+  200 by 100 pixels with `movePictureAt`. Excel must show it 200 by 100 pixels
   (Format Picture > Size: about 5.29 cm wide and 2.65 cm high, the aspect
   locked), not 40 by 20. The library leaves the `a:xfrm` inside the picture at
   its old 40 by 20 and expects Excel to take the size from the anchor; record
@@ -1315,7 +1315,7 @@ void main(List<String> args) {
       >[const XlsxTableColumn('First'), const XlsxTableColumn('Second')]),
     );
   // Grow the picture: Excel must show 240 by 160 pixels.
-  sheet.movePicture(
+  sheet.movePictureAt(
     sheet.pictures.length - 1,
     XlsxOneCellAnchor(XlsxAnchorPoint(row, 3), width: 240, height: 160),
   );
@@ -1323,7 +1323,7 @@ void main(List<String> args) {
   // Remove the picture and the table again, from a reopened copy.
   final XlsxWorkbook again = XlsxWorkbook.open(File(args[1]).readAsBytesSync());
   again.sheets.first
-    ..removePicture(again.sheets.first.pictures.length - 1)
+    ..removePictureAt(again.sheets.first.pictures.length - 1)
     ..removeTable('Owner_table');
   File(args[2]).writeAsBytesSync(again.save().bytes);
 }
@@ -1340,7 +1340,7 @@ Open `build/objects.xlsx` in Excel. Check:
 - below the last row: `Rich text` with `Rich ` bold; a note in the cell right
   of it (hover: `Added by the model.`); the table `Owner_table` with `First`
   and `Second`; the picture at D of that row, 240 by 160 pixels (after
-  `movePicture`; if it shows 60 by 40, record it);
+  `movePictureAt`; if it shows 60 by 40, record it);
 - everything the original had is as it was: the chart (same series, same
   place and size, same title and colours), every shape and text box, each
   picture the file had, every note (hover; the ones that were always shown

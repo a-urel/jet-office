@@ -118,14 +118,14 @@ Pinned by tests (hand-made XML):
 | What | Result | Test |
 |---|---|---|
 | XLSX: a preset shape with text, a connector, a group and an icon | move with a row insert; everything else of the part as written | `object_shift_test.dart`, "a shape, a connector, a group and an icon move on an insert" |
-| XLSX: an icon | `pictures` lists it as a PNG picture (its fallback); `removePicture` takes both the PNG and the SVG part out | "an icon is listed as its PNG fallback, and removing it drops both media parts" |
+| XLSX: an icon | `pictures` lists it as a PNG picture (its fallback); `removePictureAt` takes both the PNG and the SVG part out | "an icon is listed as its PNG fallback, and removing it drops both media parts" |
 | DOCX: a floating text box (`wps` with VML fallback) and an inline icon | `word/document.xml` and the SVG part saved byte for byte | `test/docx/shapes_test.dart`, "a text box and an icon round-trip byte for byte" |
 | DOCX: the text box's paragraph | its text is `Before  after`: the box's text is not in it; the box is one `DocxOpaqueRunContent` | "a text box's text is not in its paragraph's text" |
 | DOCX: an inline icon | reads as `DocxPicture`, image the PNG fallback, the description kept | "an inline icon reads as a picture of its PNG fallback" |
 | DOCX: a new picture beside a text box | takes `wp:docPr id` 8, past the box's 7 | "a new picture's id passes the text box's docPr id" |
 
 `addPicture` takes PNG and JPEG only (`OfficeImageFormat` in
-`lib/src/common/image.dart`), in both formats. `movePicture` on an icon
+`lib/src/common/image.dart`), in both formats. `movePictureAt` on an icon
 rewrites only the markers, so the SVG extension stays.
 
 ### Not typed

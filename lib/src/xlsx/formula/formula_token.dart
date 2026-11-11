@@ -49,10 +49,10 @@ enum XlsxFormulaTokenKind {
   function,
 
   /// `(`.
-  open,
+  parenOpen,
 
   /// `)`.
-  close,
+  parenClose,
 
   /// `{`, which opens an array constant.
   arrayOpen,

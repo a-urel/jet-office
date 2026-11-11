@@ -265,7 +265,7 @@ mixin _SheetPictures {
   /// a `<drawing>` whose part is missing or is not a spreadsheet drawing; and
   /// an [XlsxReadException] when the sheet, its relationships, the drawing or
   /// the media part cannot be read. Whatever it throws, nothing has changed.
-  void movePicture(int index, XlsxAnchor anchor) => _recordSheetEdit(
+  void movePictureAt(int index, XlsxAnchor anchor) => _recordSheetEdit(
     this,
     XlsxChangeKind.featureChanged,
     () {
@@ -319,7 +319,7 @@ mixin _SheetPictures {
   /// `<drawing>` whose part is missing or is not a spreadsheet drawing; and
   /// an [XlsxReadException] when the sheet, the drawing or any relationships
   /// of the package cannot be read. Whatever it throws, nothing has changed.
-  void removePicture(int index) =>
+  void removePictureAt(int index) =>
       _recordSheetEdit(this, XlsxChangeKind.featureChanged, () {
         final WorksheetPart part = _editablePart('pictures');
         final _PicturesRead read = _editablePictures(part);

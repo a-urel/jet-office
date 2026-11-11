@@ -132,7 +132,7 @@ void _setWhatWasRead(XlsxSheet sheet) {
   }
   final List<XlsxPicture> pictures = sheet.pictures;
   for (int i = 0; i < pictures.length; i++) {
-    sheet.movePicture(i, pictures[i].anchor);
+    sheet.movePictureAt(i, pictures[i].anchor);
   }
   for (final XlsxTable table in sheet.tables) {
     sheet.setTableStyle(table.name, table.style);
@@ -224,7 +224,7 @@ void _removeEveryObject(XlsxSheet sheet) {
     if (!n.note.author.startsWith('tc=')) sheet.setNote(n.row, n.column, null);
   }
   for (int i = sheet.pictures.length - 1; i >= 0; i--) {
-    sheet.removePicture(i);
+    sheet.removePictureAt(i);
   }
   for (final XlsxTable table in sheet.tables) {
     try {
@@ -617,7 +617,7 @@ void main() {
     });
 
     test('the picture removed leaves the chart and the shape', () {
-      sheet.removePicture(0);
+      sheet.removePictureAt(0);
       final Uint8List saved = book.save().bytes;
       expect(_partsChanged(input, saved), <String>{
         'xl/drawings/drawing1.xml',

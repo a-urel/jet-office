@@ -105,7 +105,12 @@ void main() {
       "'My Sheet'!A1": <String>["sheetPrefix:'My Sheet'!", 'cell:A1'],
       'T[Qty]': <String>['structured:T[Qty]'],
       'Rate': <String>['name:Rate'],
-      'SUM(1)': <String>['function:SUM', 'open:(', 'number:1', 'close:)'],
+      'SUM(1)': <String>[
+        'function:SUM',
+        'parenOpen:(',
+        'number:1',
+        'parenClose:)',
+      ],
       '{1,2;3}': <String>[
         'arrayOpen:{',
         'number:1',
@@ -229,15 +234,15 @@ void main() {
   test('_xlfn. and _xlws. functions', () {
     expect(lexed('_xlfn._xlws.FILTER(A:A,1)').take(2), <String>[
       'function:_xlfn._xlws.FILTER',
-      'open:(',
+      'parenOpen:(',
     ]);
     expect(lexed('_xlfn.LET(_xlpm.x,1)'), <String>[
       'function:_xlfn.LET',
-      'open:(',
+      'parenOpen:(',
       'name:_xlpm.x',
       'comma:,',
       'number:1',
-      'close:)',
+      'parenClose:)',
     ]);
     expect(lexed('TRUE()').first, 'function:TRUE');
   });
@@ -260,10 +265,10 @@ void main() {
   test('spill and @', () {
     expect(lexed('SUM(A2#)'), <String>[
       'function:SUM',
-      'open:(',
+      'parenOpen:(',
       'cell:A2',
       'spill:#',
-      'close:)',
+      'parenClose:)',
     ]);
     expect(lexed('Rate#'), <String>['name:Rate', 'spill:#']);
     expect(lexed('@Rate'), <String>['implicitIntersection:@', 'name:Rate']);
