@@ -1420,6 +1420,7 @@ owner's step list, in Turkish, is
 dart run tool/write_w6_check.dart build/w6
 dotnet run --project tool/ooxml_validate -- build/w6
 dotnet run --project tool/ooxml_validate -- build/w6/final
+dotnet run --project tool/ooxml_validate -- build/w6/final/owner
 ```
 
 The files, all in `build/w6/`:
@@ -1437,10 +1438,10 @@ The files, all in `build/w6/`:
 - `w6_wrapped.xlsx`: a text box `Kutu` in `mc:AlternateContent` (Choice and
   Fallback) over B3:D6, then a row and a column inserted at the start of `S`:
   it must lie over C4:E7.
-- `final/`: every fixture of `allFixtures()` and every `.xlsx` of
-  `test/fixtures/owner`, edited by `tool/edit_model.dart`, with its
-  `w1_generated.xlsx` to `w5_generated.xlsx`. Each opens without a repair
-  prompt.
+- `final/`: every fixture of `allFixtures()` edited by `tool/edit_model.dart`,
+  with the `w1_generated.xlsx` to `w5_generated.xlsx` it writes; `final/owner/`:
+  every `.xlsx` of `test/fixtures/owner` edited the same way (its own folder,
+  so a name cannot collide). Each opens without a repair prompt.
 
 Excel's own behaviour: the owner saves `shapes_shifted.xlsx` (steps of
 `docs/shapes.md`, section 6, step 10) and `equations_shifted.xlsx` (steps of

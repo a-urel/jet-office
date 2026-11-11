@@ -73,7 +73,10 @@ enum XlsxWarningCode {
   /// table removed) met a part the model does not type that holds
   /// a reference the edit could not update (a pivot cache whose range was
   /// deleted, a slicer cache whose table changed, an unknown part with a
-  /// `ref`); the part is kept as written. The detail names the part and the
+  /// `ref`), or a drawing whose alternate content or contents it cannot
+  /// shift (an `mc:AlternateContent` that is mixed or holds no anchor, a
+  /// drawing that cannot be read during another sheet's edit); the part is
+  /// kept as written. The detail names the part and the
   /// edit: `/xl/pivotTables/pivotTable1.xml: insert Sheet1!3:4`. One warning
   /// per part and edit, no cell.
   referenceNotShifted,

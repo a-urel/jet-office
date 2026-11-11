@@ -167,9 +167,9 @@ Uint8List _tabSelected(Uint8List bytes, String part) => _edited(
 );
 
 /// Writes [rows] to [sheet] from row 0, as the writer's `row` writes them:
-/// the row's attributes first, then each cell, a row's style laid under the
-/// cell's (a row's `style` is merged into its cells, not written on the
-/// row). Every cell is an `XlsxCell`, so the column's style is laid under.
+/// the row's attributes first (no style: `setRowFormat` gets none), then each
+/// cell. A row's `style` is merged under the cell's own by hand, and `setCell`
+/// lays the column's style under that result, as the writer does.
 void _writeRows(XlsxSheet sheet, List<M2LayoutRow> rows) {
   for (int r = 0; r < rows.length; r++) {
     final M2LayoutRow row = rows[r];

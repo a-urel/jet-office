@@ -508,7 +508,8 @@ What each step answers:
    type of `jet_office`'s own?
 6. When writing DOCX shapes: write Word's VML fallback, or leave it out if
    Word for Mac opens the file without it?
-7. (Answered: fixed now to the standard's behaviour, W6; Excel's to be
-   confirmed by `shapes_shifted.xlsx`.) May the `textlink` gap be fixed as a
-   W5 follow-up once `shapes_shifted.xlsx` exists?
+7. May the `textlink` gap be fixed as a W5 follow-up once
+   `shapes_shifted.xlsx` exists? Answered by W6: it is fixed, to the
+   standard's behaviour, without waiting for the file; Excel's own behaviour
+   is still to be confirmed by the owner's `shapes_shifted.xlsx`.
 8. Is the letter S acceptable?

@@ -518,6 +518,26 @@ void main() {
       expect(_saved(book)[_drawingPart], '<xdr:wsDr $_xdr>$anchors</xdr:wsDr>');
     });
 
+    test('each branch moves by the bare rules: an absolute Choice stays, the '
+        'Fallback moves', () {
+      String branch(String editAs, int row) =>
+          '<xdr:twoCellAnchor editAs="$editAs">'
+          '${_marker('from', 1, row)}${_marker('to', 3, row + 2)}$body'
+          '</xdr:twoCellAnchor>';
+      String entry(String choice, String fallback) =>
+          '<mc:AlternateContent xmlns:mc="$_mcNs"><mc:Choice '
+          'xmlns:a14="$_a14Ns" Requires="a14">$choice</mc:Choice>'
+          '<mc:Fallback>$fallback</mc:Fallback></mc:AlternateContent>';
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withDrawing(entry(branch('absolute', 4), branch('twoCell', 4))),
+      );
+      _edit(book, _insertRows(1, 2));
+      expect(
+        _saved(book)[_drawingPart],
+        saved(entry(branch('absolute', 4), branch('twoCell', 6))),
+      );
+    });
+
     test("undo of a wrapped anchor's move restores the drawing byte-equal", () {
       final String anchors =
           '${wrapped(4, 7)}<xdr:twoCellAnchor>'

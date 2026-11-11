@@ -30,8 +30,8 @@ writes values as the writers do. What the model does not type (W1 types only
 cells, the workbook's sheet list and `date1904`, the shared strings and the
 number formats of the styles; W2 adds the rest of the styles, rows, columns,
 merges, views and tab colours; W3 adds the features listed under "What W3
-adds"; W4 adds rich text, notes, pictures and tables) is kept as opaque XML at its position and
-written back, with the namespace declarations it needs.
+adds"; W4 adds rich text, notes, pictures and tables) is kept as opaque XML
+at its position and written back, with the namespace declarations it needs.
 
 ## What W1 does and does not do
 
@@ -290,10 +290,11 @@ book.undo(set);
   merges, panes and selections, column widths, the dimension, the filter and
   its sort state, page breaks, print names, hyperlinks, tables, notes,
   threaded comments, picture, shape and chart anchors, shape `textlink`s,
-  chart series formulas, sparklines, form control links and pivot cache sources. A part the model
-  does not type that names the sheet (a slicer cache of a reshaped table, an
-  unknown part with a `ref`) is kept as written and reported by
-  `referenceNotShifted`.
+  chart series formulas, sparklines, form control links and pivot cache
+  sources. A part the model does not type that names the sheet (a slicer cache
+  of a reshaped table, an unknown part with a `ref`), and a drawing whose
+  alternate content or contents it cannot shift, is kept as written and
+  reported by `referenceNotShifted`.
 - **Atomic.** An edit, and a whole transaction, either completes or leaves the
   package semantically equal to what it was (`sharedStrings` may re-encode);
   a refused edit keeps no warning. A workbook with a sheet or comments part
@@ -316,7 +317,8 @@ book.undo(set);
   `XlsxChangeSet`; the caller keeps them and calls `undo` and `redo` in order
   (the last applied set first). The change log keeps only ids.
 - **Two warning codes.** `referenceNotShifted` (a part names the edited sheet
-  but is not typed, so its references stay as written) and
+  but is not typed, or a drawing's alternate content or contents cannot be
+  shifted, so its references stay as written) and
   `formulaUnlexable` (a formula the lexer cannot read stays as written).
 
 ## What W6 does

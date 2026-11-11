@@ -4,7 +4,6 @@
 @TestOn('vm')
 library;
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:jet_office/jet_office.dart';
@@ -53,14 +52,34 @@ void main() {
     ];
     expect(finals, isNotEmpty);
     expect(
-      finals.where((String p) => p.endsWith('chart_reference.xlsx')),
+      finals.where(
+        (String p) => p.endsWith('/final/owner/chart_reference.xlsx'),
+      ),
       hasLength(1),
     );
     expect(
-      finals.where((String p) => p.endsWith('c1_kinds.xlsx')),
+      finals.where((String p) => p.endsWith('/final/c1_kinds.xlsx')),
       hasLength(1),
     );
+    expect(
+      finals.where((String p) => p.endsWith('/final/w1_generated.xlsx')),
+      hasLength(1),
+    );
+    expect(finals.where((String p) => p.contains('/final/owner/')), isNotEmpty);
   });
+
+  test(
+    'the owner files are written to final/owner, apart from the fixtures',
+    () {
+      final Set<String> fixtureNames = <String>{
+        for (final String p in written)
+          if (p.contains('/final/') && !p.contains('/final/owner/'))
+            p.split('/').last,
+      };
+      expect(fixtureNames, contains('c1_kinds.xlsx'));
+      expect(fixtureNames, isNot(contains('chart_reference.xlsx')));
+    },
+  );
 
   test('every written workbook opens with the model', () {
     for (final String p in written) {
@@ -111,6 +130,5 @@ void main() {
         '<xdr:row>7</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>';
     expect(from.allMatches(xml), hasLength(2));
     expect(to.allMatches(xml), hasLength(2));
-    expect(utf8.encode(xml), isNotEmpty);
   });
 }

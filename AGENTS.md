@@ -305,9 +305,12 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   (the benchmark's workload, generated with the model), `w6_shapes.xlsx` (two
   rectangles with `textlink`, shifted by edits and a sheet rename),
   `w6_wrapped.xlsx` (a text box in `mc:AlternateContent` moved by edits) and
-  `final/` (`tool/edit_model.dart` run on the fixtures and on the owner's
-  workbooks). It is not part of the CI chain; `dotnet run --project
-  tool/ooxml_validate -- build/w6` and `... -- build/w6/final` validate its
+  `final/` (`tool/edit_model.dart` run on the fixtures, with the
+  `w1_generated.xlsx` to `w5_generated.xlsx` it writes, and `final/owner/`, the
+  same run on the owner's workbooks; two owner workbooks of one name are an
+  error). It is not part of the CI chain; `dotnet run --project
+  tool/ooxml_validate -- build/w6`, `... -- build/w6/final` and
+  `... -- build/w6/final/owner` validate its
   output, and the owner's steps are in `docs/excel-checks.md`, "W6". Exit 2 on
   unusable arguments, 1 on any error.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX

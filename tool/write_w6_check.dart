@@ -266,7 +266,9 @@ XlsxWorkbook _wrappedBook() {
 }
 
 /// Writes the fixtures and the owner's workbooks to temporary folders, runs
-/// `tool/edit_model.dart` on both into [out] and returns the files written.
+/// `tool/edit_model.dart` on the fixtures into [out] and on the owner's into
+/// `[out]/owner`, and returns the files written. Throws a [StateError] when
+/// two owner workbooks share a name.
 List<String> _writeFinal(String out) {
   final Directory work = Directory.systemTemp.createTempSync('w6_final');
   try {
@@ -275,18 +277,31 @@ List<String> _writeFinal(String out) {
       File('${fixtures.path}/${f.name}.xlsx').writeAsBytesSync(f.build());
     }
     final Directory owner = Directory('${work.path}/owner')..createSync();
+    final Set<String> seen = <String>{};
     for (final File file
         in Directory('test/fixtures/owner')
             .listSync(recursive: true)
             .whereType<File>()
             .where((File f) => f.path.endsWith('.xlsx'))) {
-      file.copySync('${owner.path}/${file.uri.pathSegments.last}');
+      final String name = file.uri.pathSegments.last;
+      if (!seen.add(name)) {
+        throw StateError(
+          'two owner workbooks are named $name; the final run keeps one '
+          'file per name',
+        );
+      }
+      file.copySync('${owner.path}/$name');
     }
-    for (final Directory input in <Directory>[fixtures, owner]) {
+    final Directory ownerOut = Directory('$out/owner')
+      ..createSync(recursive: true);
+    for (final (Directory input, String target) in <(Directory, String)>[
+      (fixtures, out),
+      (owner, ownerOut.path),
+    ]) {
       final StringBuffer out0 = StringBuffer();
       final StringBuffer err = StringBuffer();
       final int code = editModel(
-        <String>[input.path, out],
+        <String>[input.path, target],
         out: out0,
         err: err,
       );
@@ -298,7 +313,9 @@ List<String> _writeFinal(String out) {
     work.deleteSync(recursive: true);
   }
   return <String>[
-    for (final File f in Directory(out).listSync().whereType<File>())
+    for (final File f in Directory(
+      out,
+    ).listSync(recursive: true).whereType<File>())
       if (f.path.endsWith('.xlsx')) f.path,
   ]..sort();
 }

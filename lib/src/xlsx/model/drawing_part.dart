@@ -143,8 +143,9 @@ final class DrawingEntry {
   ///
   /// An `mc:AlternateContent` entry (an equation's text box, say) moves each
   /// `oneCellAnchor` and `twoCellAnchor` that is a direct child of one of its
-  /// `mc:Choice` elements or its `mc:Fallback` by the same rules, so its
-  /// branches stay alike. When a branch holds anything else, or no branch
+  /// `mc:Choice` elements or its `mc:Fallback` by the same rules as a
+  /// bare anchor, each on its own (an `editAs="absolute"` anchor stays while
+  /// the other branch's anchor moves). When a branch holds anything else, or no branch
   /// holds an anchor, the entry stays as written and [onNotShifted] gets a
   /// detail.
   ///
