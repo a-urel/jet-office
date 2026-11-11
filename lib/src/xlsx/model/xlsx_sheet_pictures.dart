@@ -638,33 +638,6 @@ mixin _SheetPictures {
       a.toLowerCase() == b.toLowerCase();
 }
 
-/// The internal relationships of [source] (a part name without a leading
-/// `/`) as [PackageReader.relationshipsOf] gives them, peeked
-/// ([OpcPackage.peekRelationships]) so the relationships part stays as read.
-List<PartRelationship> _peekedRelationships(
-  PackageReader reader,
-  String source,
-) {
-  final OpcPackage package = reader.package;
-  final List<OpcRelationship> peeked = reader.guardXml(
-    source,
-    () => package.peekRelationships(source),
-  );
-  final List<PartRelationship> found = <PartRelationship>[];
-  for (final OpcRelationship r in peeked) {
-    if (r.external) continue;
-    final String target = package.resolve(source, r.target);
-    found.add(
-      PartRelationship(
-        r.id,
-        r.type,
-        target.startsWith('/') ? target.substring(1) : target,
-      ),
-    );
-  }
-  return found;
-}
-
 /// The `drawings` holder of a sheet: on a row or column edit of the sheet
 /// every anchor of its drawing part moves as Excel moves it
 /// ([DrawingEntry.shiftedBy]): pictures, shapes, charts and groups alike, a
@@ -679,7 +652,7 @@ List<PartRelationship> _peekedRelationships(
 /// cannot read stays and is reported once (`formulaUnlexable`). A sheet
 /// without a drawing loads none; for another sheet's edit the drawing's
 /// relationships are peeked, not registered, and a drawing that cannot be
-/// read is left as written. A drawing the model cannot type is left as
+/// read is left as written and warned about (`referenceNotShifted`). A drawing the model cannot type is left as
 /// written.
 final class _DrawingHolder implements ReferenceHolder {
   _DrawingHolder(this._sheet);
@@ -697,11 +670,17 @@ final class _DrawingHolder implements ReferenceHolder {
     final _PicturesRead read;
     try {
       read = _sheet._readPictures(peek: local == null);
-    } on XlsxReadException {
+    } on XlsxReadException catch (error) {
       // A drawing that cannot be read blocks an edit of its own sheet only;
-      // for another sheet's edit it stays as written, as before textlinks
-      // were held.
+      // for another sheet's edit it stays as written and, as it may hold a
+      // textlink the edit should fix, is warned about.
       if (local != null) rethrow;
+      final String part = error.part ?? _sheet._partName!.substring(1);
+      final String name =
+          _sheet._host.reader.package.canonicalPartName(part) ?? part;
+      _sheet._host.references.warnPart(
+        name.startsWith('/') ? name.substring(1) : name,
+      );
       return;
     }
     final DrawingPart? drawing = read.part;

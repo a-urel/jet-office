@@ -1143,20 +1143,10 @@ final class XlsxSheet
       // Peeked, not registered: reading the tables (as every structural
       // edit does, for structured references) must leave the sheet's
       // relationships part as read.
-      final OpcPackage package = reader.package;
-      final String source = _partName!.substring(1);
-      final List<OpcRelationship> peeked = reader.guardXml(
-        source,
-        () => package.peekRelationships(source),
-      );
-      for (final OpcRelationship r in peeked) {
-        if (r.external) continue;
-        final String resolved = package.resolve(source, r.target);
-        final PartRelationship rel = PartRelationship(
-          r.id,
-          r.type,
-          resolved.startsWith('/') ? resolved.substring(1) : resolved,
-        );
+      for (final PartRelationship rel in _peekedRelationships(
+        reader,
+        _partName!.substring(1),
+      )) {
         if (rel.type != RelType.table || !reader.hasPart(rel.target)) {
           continue;
         }
@@ -1536,4 +1526,32 @@ String _uniqueColumnName(TablePart table, int index, String name) {
     candidate = '$name$n';
   }
   return candidate;
+}
+
+/// The internal relationships of [source] (a part name without a leading
+/// `/`) as [PackageReader.relationshipsOf] gives them, peeked
+/// ([OpcPackage.peekRelationships]) so the relationships part stays as read.
+/// Throws an [XlsxReadException] when they cannot be read.
+List<PartRelationship> _peekedRelationships(
+  PackageReader reader,
+  String source,
+) {
+  final OpcPackage package = reader.package;
+  final List<OpcRelationship> peeked = reader.guardXml(
+    source,
+    () => package.peekRelationships(source),
+  );
+  final List<PartRelationship> found = <PartRelationship>[];
+  for (final OpcRelationship r in peeked) {
+    if (r.external) continue;
+    final String target = package.resolve(source, r.target);
+    found.add(
+      PartRelationship(
+        r.id,
+        r.type,
+        target.startsWith('/') ? target.substring(1) : target,
+      ),
+    );
+  }
+  return found;
 }

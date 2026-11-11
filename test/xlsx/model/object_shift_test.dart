@@ -745,13 +745,28 @@ void main() {
         otherSheet: 'Veri 2',
       );
       final XlsxWorkbook book = XlsxWorkbook.open(input);
-      _edit(book, ReferenceShift.insert('Veri 2', ShiftAxis.rows, 1, 1));
+      final ReferenceShift insert = ReferenceShift.insert(
+        'Veri 2',
+        ShiftAxis.rows,
+        1,
+        1,
+      );
+      final List<XlsxWarning> warnings = referenceRegistryOf(
+        book,
+      ).apply(insert, insert);
+      expect(warnings, hasLength(1));
+      expect(warnings.single.code, XlsxWarningCode.referenceNotShifted);
+      expect(warnings.single.sheet, 'Veri 2');
+      expect(warnings.single.detail, '/$_drawingPart: insert Veri 2!1:1');
       book.renameSheet(book.sheet('Veri 2'), 'Veri 3');
       expect(_saved(book)[_drawingPart], readXlsx(input)[_drawingPart]);
+      // An edit of the drawing's own sheet still refuses, keeping no warning.
+      final List<XlsxWarning> kept = book.warnings.toList();
       expect(
         () => _edit(book, _insertRows(1, 1)),
         throwsA(isA<XlsxReadException>()),
       );
+      expect(book.warnings, kept);
     });
 
     test('undo of a textlink rewrite restores the drawing byte-equal', () {
