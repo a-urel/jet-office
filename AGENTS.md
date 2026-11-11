@@ -300,6 +300,16 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   the CI chain; `dotnet run --project tool/ooxml_validate -- build/w5`
   validates its output, and the owner's steps are in `docs/excel-checks.md`,
   "W5". Exit 2 on unusable arguments.
+- `tool/write_w6_check.dart <out-dir>` writes the files of the owner's W6
+  Excel check (`build/w6`): `w6_generated_100k.xlsx` and `w6_generated_1m.xlsx`
+  (the benchmark's workload, generated with the model), `w6_shapes.xlsx` (two
+  rectangles with `textlink`, shifted by edits and a sheet rename),
+  `w6_wrapped.xlsx` (a text box in `mc:AlternateContent` moved by edits) and
+  `final/` (`tool/edit_model.dart` run on the fixtures and on the owner's
+  workbooks). It is not part of the CI chain; `dotnet run --project
+  tool/ooxml_validate -- build/w6` and `... -- build/w6/final` validate its
+  output, and the owner's steps are in `docs/excel-checks.md`, "W6". Exit 2 on
+  unusable arguments, 1 on any error.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX
   fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, or its
   `<name>.libreoffice.txt` (`DocxFixture.libreOfficeText`: list labels such as

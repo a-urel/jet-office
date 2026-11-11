@@ -1406,6 +1406,63 @@ Result: ok, 2026-11-10, no repair prompt in any file (see "Results"). Excel's
 Convert to Range wrote a different formula for `[@Col]` outside the data rows;
 closed under "Open issues", W5.
 
+## W6
+
+Proof and release readiness: the model's biggest generated files, a shape's
+linked text and a wrapped text box moved by structural edits, and every
+fixture and owner file edited by the model. Open each file in Excel for Mac
+and record the result under "Results". A repair prompt is a model bug. The
+owner's step list, in Turkish, is
+`docs/superpowers/plans/2026-11-11-phase-3-w6-excel-check.md`. Run this first
+(a few minutes: it writes 1,000,000 rows):
+
+```bash
+dart run tool/write_w6_check.dart build/w6
+dotnet run --project tool/ooxml_validate -- build/w6
+dotnet run --project tool/ooxml_validate -- build/w6/final
+```
+
+The files, all in `build/w6/`:
+
+- `w6_generated_100k.xlsx`, `w6_generated_1m.xlsx`: 100,000 and 1,000,000 data
+  rows of the benchmark's 12 mixed columns, generated with `XlsxWorkbook()`.
+  Each must open without a repair prompt; record the open time. The last
+  row's `Id` is `C-100000` and `C-1000000`, `Amount` and `Money` show as
+  `#,##0.00`, `Stamp` and `Date` as dates.
+- `w6_shapes.xlsx`: the sheet `S` holds two rectangles with linked text
+  (`textlink="$A$1"` and `textlink="'Veri 2'!$B$2"`); the model inserted a row
+  and a column at the start of `S`, a row at the start of `Veri 2` and renamed
+  it `Veri 3`. The shapes must show `Bir` and `İki`, and their formula bars
+  `=$B$2` and `='Veri 3'!$B$3`.
+- `w6_wrapped.xlsx`: a text box `Kutu` in `mc:AlternateContent` (Choice and
+  Fallback) over B3:D6, then a row and a column inserted at the start of `S`:
+  it must lie over C4:E7.
+- `final/`: every fixture of `allFixtures()` and every `.xlsx` of
+  `test/fixtures/owner`, edited by `tool/edit_model.dart`, with its
+  `w1_generated.xlsx` to `w5_generated.xlsx`. Each opens without a repair
+  prompt.
+
+Excel's own behaviour: the owner saves `shapes_shifted.xlsx` (steps of
+`docs/shapes.md`, section 6, step 10) and `equations_shifted.xlsx` (steps of
+`docs/equations.md`, section 7, step 9) and sends them to Claude, who compares
+them with what the model does. W6's shifts of a shape's `textlink` and of
+anchors inside `mc:AlternateContent` follow the standard's rules until then.
+
+Result: not yet run by the owner (see "Results").
+
+### W6: native-speaker check
+
+The messages the W4 and W5 work added are in `docs/warning-messages.md`. A
+native speaker reads the column of their language for these seven codes and
+notes corrections: `tableColumnRenamed`, `tableHeaderAdjusted`,
+`formulaUnlexable`, `referenceNotShifted`, `styleEntryInvalid`,
+`layoutInvalid` and `featureEntryInvalid`. Record the result here.
+
+| Language | Reviewer | Date | Corrections |
+|---|---|---|---|
+| de | not named | not checked | |
+| tr | Ahmet Urel (owner) | not checked | |
+
 ## C1
 
 Charts written by the DrawingML chart layer (`docs/drawingml-charts.md`),
