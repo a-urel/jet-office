@@ -678,7 +678,9 @@ XlsxSheet _listSheet(
       ),
     );
     // The table fills in its header and totals cells, the count in the
-    // column's date format; the writer's count is General.
+    // column's date format (the writer's own `table` does the same). The
+    // list export chooses General for a count total (`_plainNumber` in
+    // list_export.dart), so a model caller sets that style after the table.
     sheet.setCell(lastData + 1, 3, count);
   }
   // After the filter: the writer lists `_FilterDatabase` before the titles.
