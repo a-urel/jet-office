@@ -138,63 +138,156 @@ final class DrawingEntry {
   /// distance from `from`; an `absoluteAnchor`, a `twoCellAnchor` with
   /// `editAs="absolute"` and anything else stay. Only the text of the
   /// markers' `row` or `col` and `rowOff` or `colOff` changes, whatever the
-  /// anchor holds (a picture, a shape, a chart, a group). Throws a
-  /// [StateError] when an insert would push a corner off the sheet (Excel
-  /// refuses), and XML errors as a reader does on what a file holds.
-  DrawingEntry? shiftedBy(ReferenceShift edit) {
-    if (source.namespaceUri != Ns.xdr) return null;
-    final String kind = source.localName;
-    if (kind != 'oneCellAnchor' && kind != 'twoCellAnchor') return null;
-    final String? editAs = kind == 'twoCellAnchor'
-        ? readerOf(source).getAttribute('editAs')
-        : null;
-    if (editAs == 'absolute') return null;
-    final bool sizes = kind == 'twoCellAnchor' && editAs != 'oneCell';
-    final bool rows = edit.axis == ShiftAxis.rows;
-    final String cellName = rows ? 'row' : 'col';
-    final String offsetName = rows ? 'rowOff' : 'colOff';
-    final Map<String, ({int at, int offset})> read =
-        <String, ({int at, int offset})>{};
-    final XmlPullReader r = readerOf(source);
-    final int depth = r.depth;
-    if (r.isEmptyElement) return null;
-    while (r.next()) {
-      if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
-      if (r.eventType != XmlEventType.startElement) continue;
-      final String name = r.localName;
-      if (r.depth != depth + 1 ||
-          r.namespaceUri != Ns.xdr ||
-          (name != 'from' && name != 'to') ||
-          read.containsKey(name)) {
-        r.skip();
-        continue;
-      }
-      final ({int at, int offset})? value = _rawMarker(r, cellName, offsetName);
-      if (value == null) return null;
-      read[name] = value;
+  /// anchor holds (a picture, a shape, a chart, a group).
+  ///
+  /// An `mc:AlternateContent` entry (an equation's text box, say) moves each
+  /// `oneCellAnchor` and `twoCellAnchor` that is a direct child of one of its
+  /// `mc:Choice` elements or its `mc:Fallback` by the same rules, so its
+  /// branches stay alike. When a branch holds anything else, or no branch
+  /// holds an anchor, the entry stays as written and [onNotShifted] gets a
+  /// detail.
+  ///
+  /// Throws a [StateError] when an insert would push a corner off the sheet
+  /// (Excel refuses), and XML errors as a reader does on what a file holds.
+  DrawingEntry? shiftedBy(
+    ReferenceShift edit, {
+    void Function(String detail)? onNotShifted,
+  }) {
+    if (source.namespaceUri == Ns.mc &&
+        source.localName == 'AlternateContent') {
+      return _wrappedShiftedBy(edit, onNotShifted);
     }
-    final ({int at, int offset})? from = read['from'];
-    if (from == null) return null;
-    final ({int at, int offset})? shiftedFrom = edit.shiftAnchor(
-      from.at,
-      from.offset,
-      end: false,
+    if (!_isAnchor(source.namespaceUri, source.localName)) return null;
+    final _AnchorMove? move = _anchorMove(
+      readerOf(source),
+      edit,
+      onPushedOff: () => throw _pushedOff(),
     );
-    if (shiftedFrom == null) throw _pushedOff();
-    final ({int at, int offset}) movedFrom = shiftedFrom;
-    final Map<String, ({int at, int offset})> next =
-        <String, ({int at, int offset})>{'from': movedFrom};
-    final ({int at, int offset})? to = read['to'];
-    if (to != null) {
-      final ({int at, int offset})? movedTo = sizes
-          ? edit.shiftAnchor(to.at, to.offset, end: true)
-          : (at: to.at + movedFrom.at - from.at, offset: to.offset);
-      if (movedTo == null || movedTo.at > edit.lastIndex) throw _pushedOff();
-      next['to'] = movedTo;
+    if (move == null) return null;
+    final OpaqueXml moved = spliceElement(source, move.markerSplice());
+    return _entry(moved, ids, _noWarning);
+  }
+
+  /// [shiftedBy] for an `mc:AlternateContent` entry.
+  DrawingEntry? _wrappedShiftedBy(
+    ReferenceShift edit,
+    void Function(String detail)? onNotShifted,
+  ) {
+    final List<_AnchorMove?> moves = <_AnchorMove?>[];
+    bool pushedOff = false;
+    final bool anchorsOnly = walkWrappedAnchors(
+      readerOf(source),
+      (XmlPullReader r) =>
+          moves.add(_anchorMove(r, edit, onPushedOff: () => pushedOff = true)),
+    );
+    if (!anchorsOnly) {
+      onNotShifted?.call(
+        'An mc:AlternateContent holds something other than a cell anchor.',
+      );
+      return null;
     }
-    if (next['from'] == from && next['to'] == to) return null;
+    if (pushedOff) throw _pushedOff();
+    if (moves.every((_AnchorMove? m) => m == null)) return null;
+    final OpaqueXml moved = spliceElement(
+      source,
+      wrappedAnchorSplice((int anchor) => moves[anchor]?.markerSplice()),
+    );
+    return _entry(moved, ids, _noWarning);
+  }
+}
+
+/// Whether an element of [namespace] named [localName] is a cell anchor, a
+/// `oneCellAnchor` or a `twoCellAnchor`.
+bool _isAnchor(String namespace, String localName) =>
+    namespace == Ns.xdr &&
+    (localName == 'oneCellAnchor' || localName == 'twoCellAnchor');
+
+/// Whether the element [r] is on is an `mc:Choice` or an `mc:Fallback`.
+bool _isBranch(XmlPullReader r) =>
+    r.namespaceUri == Ns.mc &&
+    (r.localName == 'Choice' || r.localName == 'Fallback');
+
+/// Walks the `mc:AlternateContent` [r] is on: calls [onAnchor] on each cell
+/// anchor that is a direct child of an `mc:Choice` or the `mc:Fallback`, in
+/// file order, with the reader on its start tag ([onAnchor] must leave it on
+/// that anchor's end, or not move it from an empty one). Other children of
+/// the root are passed over. Returns `false` when a branch holds an element
+/// that is no cell anchor, or no branch holds an anchor. Throws XML errors as
+/// a reader does.
+bool walkWrappedAnchors(
+  XmlPullReader r,
+  void Function(XmlPullReader r) onAnchor,
+) {
+  if (r.isEmptyElement) return false;
+  final int depth = r.depth;
+  int anchors = 0;
+  bool other = false;
+  while (r.next()) {
+    if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+    if (r.eventType != XmlEventType.startElement) continue;
+    if (r.depth == depth + 1) {
+      if (!_isBranch(r)) r.skip();
+      continue;
+    }
+    if (r.depth == depth + 2 && _isAnchor(r.namespaceUri, r.localName)) {
+      anchors++;
+      final bool empty = r.isEmptyElement;
+      onAnchor(r);
+      if (empty && r.eventType == XmlEventType.startElement) r.skip();
+      continue;
+    }
+    other = true;
+    r.skip();
+  }
+  return anchors > 0 && !other;
+}
+
+/// A [spliceElement] edit over an `mc:AlternateContent`: the `n`th cell
+/// anchor that [walkWrappedAnchors] visits gets the edit `inAnchor(n)` (none
+/// when `null`), called on the anchor's descendants with their level below
+/// the anchor.
+SpliceEdit? Function(XmlPullReader r, int level) wrappedAnchorSplice(
+  SpliceEdit? Function(XmlPullReader r, int level)? Function(int anchor)
+  inAnchor,
+) {
+  bool inBranch = false;
+  int anchor = -1;
+  SpliceEdit? Function(XmlPullReader r, int level)? current;
+  return (XmlPullReader r, int level) {
+    if (level == 1) {
+      inBranch = _isBranch(r);
+      current = null;
+    } else if (level == 2) {
+      current = null;
+      if (inBranch && _isAnchor(r.namespaceUri, r.localName)) {
+        current = inAnchor(++anchor);
+      }
+    } else if (level > 2) {
+      return current?.call(r, level - 2);
+    }
+    return null;
+  };
+}
+
+/// Where one cell anchor's markers go on an edit: their [read] values and
+/// the [next] ones, by marker (`from`, `to`), in the edit's axis.
+final class _AnchorMove {
+  _AnchorMove(this.cellName, this.offsetName, this.read, this.next);
+
+  /// `row` or `col`.
+  final String cellName;
+
+  /// `rowOff` or `colOff`.
+  final String offsetName;
+
+  final Map<String, ({int at, int offset})> read;
+  final Map<String, ({int at, int offset})> next;
+
+  /// A [spliceElement] edit of the anchor (its markers at level 1, their
+  /// values at level 2) that gives the markers their [next] values.
+  SpliceEdit? Function(XmlPullReader r, int level) markerSplice() {
     String? marker;
-    final OpaqueXml moved = spliceElement(source, (XmlPullReader r, int level) {
+    return (XmlPullReader r, int level) {
       if (level == 1) {
         marker = r.namespaceUri == Ns.xdr ? r.localName : null;
         return null;
@@ -210,9 +303,84 @@ final class DrawingEntry {
         return SpliceEdit(text: (String _) => '${value.offset}');
       }
       return null;
-    });
-    return _entry(moved, ids, _noWarning);
+    };
   }
+}
+
+/// How the cell anchor [r] is on moves on [edit] ([DrawingEntry.shiftedBy]'s
+/// rules), or `null` when it does not move: it is absolute, a marker cannot
+/// be read, it has no `from`, or the edit leaves it where it is. Calls
+/// [onPushedOff] and returns `null` when the edit would push a corner off
+/// the sheet. Leaves the reader on the anchor's end, or on the start tag of
+/// an empty anchor.
+_AnchorMove? _anchorMove(
+  XmlPullReader r,
+  ReferenceShift edit, {
+  required void Function() onPushedOff,
+}) {
+  final String kind = r.localName;
+  final String? editAs = kind == 'twoCellAnchor'
+      ? r.getAttribute('editAs')
+      : null;
+  if (r.isEmptyElement) return null;
+  if (editAs == 'absolute') {
+    r.skip();
+    return null;
+  }
+  final bool sizes = kind == 'twoCellAnchor' && editAs != 'oneCell';
+  final bool rows = edit.axis == ShiftAxis.rows;
+  final String cellName = rows ? 'row' : 'col';
+  final String offsetName = rows ? 'rowOff' : 'colOff';
+  final Map<String, ({int at, int offset})> read =
+      <String, ({int at, int offset})>{};
+  bool unreadable = false;
+  final int depth = r.depth;
+  while (r.next()) {
+    if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+    if (r.eventType != XmlEventType.startElement) continue;
+    final String name = r.localName;
+    if (unreadable ||
+        r.depth != depth + 1 ||
+        r.namespaceUri != Ns.xdr ||
+        (name != 'from' && name != 'to') ||
+        read.containsKey(name)) {
+      r.skip();
+      continue;
+    }
+    final ({int at, int offset})? value = _rawMarker(r, cellName, offsetName);
+    if (value == null) {
+      unreadable = true;
+    } else {
+      read[name] = value;
+    }
+  }
+  if (unreadable) return null;
+  final ({int at, int offset})? from = read['from'];
+  if (from == null) return null;
+  final ({int at, int offset})? movedFrom = edit.shiftAnchor(
+    from.at,
+    from.offset,
+    end: false,
+  );
+  if (movedFrom == null) {
+    onPushedOff();
+    return null;
+  }
+  final Map<String, ({int at, int offset})> next =
+      <String, ({int at, int offset})>{'from': movedFrom};
+  final ({int at, int offset})? to = read['to'];
+  if (to != null) {
+    final ({int at, int offset})? movedTo = sizes
+        ? edit.shiftAnchor(to.at, to.offset, end: true)
+        : (at: to.at + movedFrom.at - from.at, offset: to.offset);
+    if (movedTo == null || movedTo.at > edit.lastIndex) {
+      onPushedOff();
+      return null;
+    }
+    next['to'] = movedTo;
+  }
+  if (next['from'] == from && next['to'] == to) return null;
+  return _AnchorMove(cellName, offsetName, read, next);
 }
 
 void _noWarning(String detail) {}

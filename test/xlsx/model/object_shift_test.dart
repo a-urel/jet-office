@@ -434,36 +434,103 @@ void main() {
     );
   });
 
-  test(
-    'an anchor inside mc:AlternateContent moves like a bare one',
-    () {
-      // The structure of an equation text box as ECMA-376 and Microsoft
-      // describe it: the whole anchor wrapped in mc:AlternateContent, an a14
-      // choice and a fallback. No owner file confirms it yet.
-      const String body =
-          '<xdr:sp macro="" textlink=""><xdr:nvSpPr>'
-          '<xdr:cNvPr id="7" name="TextBox 6"/><xdr:cNvSpPr txBox="1"/>'
-          '</xdr:nvSpPr><xdr:spPr/></xdr:sp><xdr:clientData/>';
-      String wrapped(int from, int to) =>
-          '<mc:AlternateContent xmlns:mc="$_mcNs"><mc:Choice '
-          'xmlns:a14="$_a14Ns" Requires="a14"><xdr:twoCellAnchor>'
-          '${_marker('from', from, 2)}${_marker('to', to, 4)}$body'
-          '</xdr:twoCellAnchor></mc:Choice><mc:Fallback><xdr:twoCellAnchor>'
-          '${_marker('from', from, 2)}${_marker('to', to, 4)}$body'
-          '</xdr:twoCellAnchor></mc:Fallback></mc:AlternateContent>';
+  // The structure of an equation text box as ECMA-376 and Microsoft describe
+  // it: the whole anchor wrapped in mc:AlternateContent, an a14 choice and a
+  // fallback. Moved by the standard's rules; Excel's own behaviour is to be
+  // confirmed by the owner's equations_shifted.xlsx (W6 check).
+  group('anchors inside mc:AlternateContent', () {
+    const String body =
+        '<xdr:sp macro="" textlink=""><xdr:nvSpPr>'
+        '<xdr:cNvPr id="7" name="TextBox 6"/><xdr:cNvSpPr txBox="1"/>'
+        '</xdr:nvSpPr><xdr:spPr/></xdr:sp><xdr:clientData/>';
+    String wrapped(int from, int to, {int toRow = 4}) =>
+        '<mc:AlternateContent xmlns:mc="$_mcNs"><mc:Choice '
+        'xmlns:a14="$_a14Ns" Requires="a14"><xdr:twoCellAnchor>'
+        '${_marker('from', from, 2)}${_marker('to', to, toRow)}$body'
+        '</xdr:twoCellAnchor></mc:Choice><mc:Fallback><xdr:twoCellAnchor>'
+        '${_marker('from', from, 2)}${_marker('to', to, toRow)}$body'
+        '</xdr:twoCellAnchor></mc:Fallback></mc:AlternateContent>';
+    String saved(String anchors) =>
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<xdr:wsDr $_xdr>$anchors</xdr:wsDr>';
+
+    test('an anchor inside mc:AlternateContent moves like a bare one', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_withDrawing(wrapped(4, 7)));
       _edit(book, ReferenceShift.insert('S', ShiftAxis.columns, 1, 1));
-      expect(
-        _saved(book)[_drawingPart],
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<xdr:wsDr $_xdr>${wrapped(5, 8)}</xdr:wsDr>',
+      expect(_saved(book)[_drawingPart], saved(wrapped(5, 8)));
+    });
+
+    test('a wrapped oneCellAnchor moves and keeps its extent', () {
+      String oneCell(int row) =>
+          '<mc:AlternateContent xmlns:mc="$_mcNs"><mc:Choice '
+          'xmlns:a14="$_a14Ns" Requires="a14"><xdr:oneCellAnchor>'
+          '${_marker('from', 1, row, rowOff: 12700)}'
+          '<xdr:ext cx="914400" cy="457200"/>$body</xdr:oneCellAnchor>'
+          '</mc:Choice><mc:Fallback><xdr:oneCellAnchor>'
+          '${_marker('from', 1, row, rowOff: 12700)}'
+          '<xdr:ext cx="914400" cy="457200"/>$body</xdr:oneCellAnchor>'
+          '</mc:Fallback></mc:AlternateContent>';
+      final XlsxWorkbook book = XlsxWorkbook.open(_withDrawing(oneCell(6)));
+      _edit(book, _insertRows(2, 3));
+      expect(_saved(book)[_drawingPart], saved(oneCell(9)));
+      _edit(book, _deleteRows(1, 2));
+      expect(_saved(book)[_drawingPart], saved(oneCell(7)));
+    });
+
+    test('a wrapped anchor pushed off the sheet refuses, nothing changed', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withDrawing(wrapped(4, XlsxLimits.maxColumns - 1)),
       );
-    },
-    skip:
-        'Known W5 gap (docs/xlsx-model.md, docs/equations.md): '
-        'DrawingEntry.shiftedBy moves only a bare anchor. Unskip with the '
-        "fix, once the owner's equations_shifted.xlsx shows what Excel does.",
-  );
+      final Uint8List before = book.save().bytes;
+      expect(
+        () => _edit(book, ReferenceShift.insert('S', ShiftAxis.columns, 1, 1)),
+        throwsStateError,
+      );
+      expect(comparePackages(before, book.save().bytes), isEmpty);
+    });
+
+    test('an mc:AlternateContent holding no anchor warns referenceNotShifted '
+        'once and stays', () {
+      const String noAnchor =
+          '<mc:AlternateContent xmlns:mc="$_mcNs"><mc:Choice '
+          'xmlns:a14="$_a14Ns" Requires="a14"><a14:foo/></mc:Choice>'
+          '</mc:AlternateContent>';
+      // A choice holding an anchor and something else stays whole too.
+      final String mixed =
+          '<mc:AlternateContent xmlns:mc="$_mcNs"><mc:Choice '
+          'xmlns:a14="$_a14Ns" Requires="a14"><xdr:twoCellAnchor>'
+          '${_marker('from', 4, 2)}${_marker('to', 7, 4)}$body'
+          '</xdr:twoCellAnchor><a14:foo/></mc:Choice></mc:AlternateContent>';
+      final String anchors = '$noAnchor$mixed$noAnchor';
+      final XlsxWorkbook book = XlsxWorkbook.open(_withDrawing(anchors));
+      final List<XlsxWarning> warnings = referenceRegistryOf(
+        book,
+      ).apply(_insertRows(1, 1), _insertRows(1, 1));
+      expect(warnings, hasLength(1));
+      expect(warnings.single.code, XlsxWarningCode.referenceNotShifted);
+      expect(warnings.single.sheet, 'S');
+      expect(warnings.single.detail, '/$_drawingPart: insert S!1:1');
+      expect(book.warnings, contains(warnings.single));
+      expect(_saved(book)[_drawingPart], '<xdr:wsDr $_xdr>$anchors</xdr:wsDr>');
+    });
+
+    test("undo of a wrapped anchor's move restores the drawing byte-equal", () {
+      final String anchors =
+          '${wrapped(4, 7)}<xdr:twoCellAnchor>'
+          '${_marker('from', 0, 0)}${_marker('to', 2, 3)}${_pic(2)}'
+          '<xdr:clientData/></xdr:twoCellAnchor>';
+      final XlsxWorkbook book = XlsxWorkbook.open(_withDrawing(anchors));
+      final Uint8List before = book.save().bytes;
+      final ChangeSet set = _edit(
+        book,
+        ReferenceShift.delete('S', ShiftAxis.columns, 1, 1),
+      );
+      expect(_saved(book)[_drawingPart], contains(wrapped(3, 6)));
+      changeLogOf(book).revertSet(set);
+      expect(_saved(book)[_drawingPart], '<xdr:wsDr $_xdr>$anchors</xdr:wsDr>');
+      expect(comparePackages(before, book.save().bytes), isEmpty);
+    });
+  });
 
   // Shapes and icons (docs/shapes.md). Hand-made XML as ECMA-376 and
   // Microsoft describe it; no owner file confirms these yet.

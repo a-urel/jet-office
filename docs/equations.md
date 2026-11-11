@@ -94,24 +94,28 @@ anything in another namespace. So an equation adds nothing to
 - a paragraph `Inline ` + equation + ` end` reads `Inline  end`;
 - a display equation's paragraph reads `''`.
 
-### A shape inside `mc:AlternateContent` does not move (unconfirmed)
+### A shape inside `mc:AlternateContent` moves (unconfirmed)
 
-`DrawingEntry.shiftedBy` moves only an `xdr:oneCellAnchor` or
-`xdr:twoCellAnchor` that is a direct child of the root. An anchor wrapped in
-`mc:AlternateContent` stays where it was on a row or column insert or delete,
-while its cells move.
+`DrawingEntry.shiftedBy` moves every `xdr:oneCellAnchor` or
+`xdr:twoCellAnchor` that is a direct child of the drawing's root, or of an
+`mc:Choice` or the `mc:Fallback` of an `mc:AlternateContent` there, by the
+same rules, so the equation's two anchors move together on a row or column
+insert or delete, as their cells move. An `mc:AlternateContent` whose branches
+hold anything else, or no anchor, stays as written and warns
+`referenceNotShifted`.
 
-- On the hand-made workbook, `tool/edit_model.dart` inserted a column at B.
-  Every chart moved, and the equation's two anchors stayed at col 4.
-- **The gap is wider than equations.** It affects any object Excel wraps that
-  way, likely including other objects that need Office 2010 and possibly ink.
-- **Unconfirmed.** The expected behaviour (Excel moves the box, as it moves a
-  bare two-cell shape) waits for the owner's `equations_shifted.xlsx`
-  (section 7).
-- `test/xlsx/model/object_shift_test.dart` pins it, skipped with that reason:
-  "an anchor inside mc:AlternateContent moves like a bare one".
-- `docs/xlsx-model.md`, "Structural edits (W5)", lists it as a known gap. Its
-  fix is a W5 matter, not an equation milestone.
+- Until W6, on the hand-made workbook, `tool/edit_model.dart` inserted a
+  column at B: every chart moved, and the equation's two anchors stayed at
+  col 4. That gap is fixed.
+- **It is wider than equations.** It covers any object Excel wraps that way,
+  likely including other objects that need Office 2010 and possibly ink.
+- **Unconfirmed.** The behaviour follows the standard (Excel moves the box, as
+  it moves a bare two-cell shape); Excel's behaviour is to be confirmed by the
+  owner's `equations_shifted.xlsx` (W6 check, section 7).
+- `test/xlsx/model/object_shift_test.dart` pins it, in the group "anchors
+  inside mc:AlternateContent" ("an anchor inside mc:AlternateContent moves
+  like a bare one" and four more).
+- `docs/xlsx-model.md`, "Structural edits (W5)", lists it.
 
 ### LibreOffice in the validation chain (risk, untested)
 
@@ -333,7 +337,7 @@ What each step answers:
 | Word 7 | whether anything of the LaTeX or UnicodeMath input is stored. Expected: OMML only |
 | Excel 3 to 6 | the place of the wrapper, the fallback, `a:rPr` in math runs, and mixed text and math |
 | Excel 7 | `editAs="oneCell"` on an equation |
-| Excel 9 | whether Excel moves equation boxes on insert: the oracle for the W5 gap in section 2 |
+| Excel 9 | whether Excel moves equation boxes on insert: the oracle for the wrapped-anchor move in section 2 |
 
 ## 8. Open questions for the owner (when it is planned)
 
@@ -342,7 +346,9 @@ What each step answers:
 2. An equation's text: a linear form (`y=a/b`, `x^2`), or joined characters
    (`yab`)?
 3. If writing comes: a builder API only, LaTeX, or UnicodeMath too?
-4. May the W5 shift gap be fixed once `equations_shifted.xlsx` exists?
+4. ~~May the W5 shift gap be fixed once `equations_shifted.xlsx` exists?~~
+   Answered: fixed in W6 to the standard's behaviour (section 2);
+   `equations_shifted.xlsx` will confirm Excel's.
 5. Should new documents get Word's `m:mathPr`?
 6. Is the letter Q acceptable?
 7. Is an editor a Monépro need or a general one, and should its preview be

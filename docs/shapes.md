@@ -160,15 +160,17 @@ rename (`Veri!$B$2`); that case is not tested.
   it looks at model files that store a formula, and this one is inside opaque
   XML.
 
-### Wrapped anchors (the equations gap)
+### Wrapped anchors
 
-`DrawingEntry.shiftedBy` moves only a bare anchor (`docs/equations.md`,
-`object_shift_test.dart`, "an anchor inside mc:AlternateContent moves like a
-bare one", skipped). **Shapes and icons, as the standard describes them, do
-not hit it**: their anchors are bare, and the icon's SVG is an `a:extLst`
-extension, not `mc:AlternateContent`. The test above shows them moving. If
-the owner's file shows Excel wrapping a gallery shape, the same fix covers it.
-DOCX has no structural edit, so the gap does not exist there.
+`DrawingEntry.shiftedBy` moves an anchor wrapped in `mc:AlternateContent` as
+it moves a bare one, since W6 (`docs/equations.md`, `object_shift_test.dart`,
+group "anchors inside mc:AlternateContent"); Excel's behaviour is to be
+confirmed by the owner's `equations_shifted.xlsx`. **Shapes and icons, as the
+standard describes them, do not need it**: their anchors are bare, and the
+icon's SVG is an `a:extLst` extension, not `mc:AlternateContent`. The test
+above shows them moving. If the owner's file shows Excel wrapping a gallery
+shape, the same walk covers it.
+DOCX has no structural edit, so the question does not arise there.
 
 ### LibreOffice in the validation chain (risk, untested)
 

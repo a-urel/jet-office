@@ -118,7 +118,7 @@ final class ReferenceRegistry {
   }) : _warnings = warnings {
     final OpaqueScan? scan = _scan = reader == null || warnings == null
         ? null
-        : OpaqueScan(_log, reader, _sheets, _warnPart);
+        : OpaqueScan(_log, reader, _sheets, warnPart);
     _workbookHolders = <ReferenceHolder>[
       for (final String name in workbookHolderNames)
         if (name == 'definedNames' && workbookPart != null)
@@ -188,9 +188,10 @@ final class ReferenceRegistry {
     ];
   }
 
-  /// Reports the part [part] (a part name without a leading `/`) as holding
-  /// a reference the running edit could not fix.
-  void _warnPart(String part) {
+  /// Reports the part [part] (a part name as stored, without a leading `/`)
+  /// as holding a reference the running edit could not fix, once per part
+  /// per edit (`referenceNotShifted`). Outside [apply] it does nothing.
+  void warnPart(String part) {
     final WarningCollector? warnings = _warnings;
     final ReferenceMapper? mapper = _mapper;
     final List<XlsxWarning>? applied = _applied;

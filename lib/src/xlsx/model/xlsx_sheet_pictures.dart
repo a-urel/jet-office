@@ -638,9 +638,10 @@ mixin _SheetPictures {
 /// ([DrawingEntry.shiftedBy]): pictures, shapes, charts and groups alike, a
 /// picture whose cells are all deleted kept at zero size; an insert that
 /// would push an anchor off the sheet throws a [StateError] before any
-/// change. A sheet rename or
-/// move changes no anchor. A drawing the model cannot type is left as
-/// written.
+/// change. An anchor inside `mc:AlternateContent` moves as a bare one; one
+/// whose branches hold anything else stays and the drawing part is warned
+/// about (`referenceNotShifted`). A sheet rename or move changes no anchor.
+/// A drawing the model cannot type is left as written.
 final class _DrawingHolder implements ReferenceHolder {
   _DrawingHolder(this._sheet);
 
@@ -657,11 +658,26 @@ final class _DrawingHolder implements ReferenceHolder {
     if (drawing == null) return;
     final PackageReader reader = _sheet._host.reader;
     final ChangeLog log = _sheet._host.log;
+    final String partName = read.partName!;
+    bool notShifted = false;
     // Every move, and so every refusal, before any change.
     final List<DrawingEntry?> moves = <DrawingEntry?>[
       for (final DrawingEntry entry in drawing.entries)
-        reader.guardXml(read.partName!, () => entry.shiftedBy(edit)),
+        reader.guardXml(
+          partName,
+          () => entry.shiftedBy(
+            edit,
+            onNotShifted: (String _) => notShifted = true,
+          ),
+        ),
     ];
+    if (notShifted) {
+      final String name =
+          reader.package.canonicalPartName(partName) ?? partName;
+      _sheet._host.references.warnPart(
+        name.startsWith('/') ? name.substring(1) : name,
+      );
+    }
     log.transaction(() {
       for (int at = 0; at < moves.length; at++) {
         final DrawingEntry entry = drawing.entries[at];
